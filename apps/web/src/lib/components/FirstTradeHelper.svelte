@@ -148,9 +148,12 @@
 		<p class="mt-3 text-xs text-ink-500 dark:text-ink-500">
 			<a
 				href={lp('/faq#how_to_trade_walkthrough')}
-				class="underline hover:text-blue-700 dark:hover:text-blue-300"
+				class="group underline transition hover:text-blue-700 dark:hover:text-blue-300"
 			>
-				{$_('first_trade_helper.faq_link')}
+				{$_('first_trade_helper.faq_link')} <span
+					class="nav-arrow nav-arrow-right"
+					aria-hidden="true">⇨</span
+				>
 			</a>
 		</p>
 	</div>

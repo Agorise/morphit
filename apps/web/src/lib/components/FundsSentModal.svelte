@@ -570,6 +570,7 @@
 			<input
 				type="text"
 				bind:value={txid}
+				maxlength="128"
 				placeholder={$_('chat.funds_sent.txid_placeholder') as string}
 				autocomplete="off"
 				autocapitalize="none"
@@ -598,6 +599,7 @@
 			<input
 				type="text"
 				bind:value={amount}
+				maxlength="32"
 				inputmode="decimal"
 				autocomplete="off"
 				class="mt-1 w-full rounded-lg border border-ink-300 bg-white px-3 py-2 font-mono text-sm dark:border-ink-700 dark:bg-ink-900"

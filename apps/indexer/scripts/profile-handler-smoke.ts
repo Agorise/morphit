@@ -53,16 +53,28 @@ await scenario('rejects non-object payload', async () => {
 	assertEqual(r, { ok: false, reason: 'payload_not_object' }, 'result');
 });
 
-await scenario('rejects missing display_name', async () => {
-	const mock = makeMockClient();
+await scenario('allows missing display_name (avatar/links-only profile)', async () => {
+	const mock = makeMockClient([
+		{ match: 'SELECT json_metadata' },
+		{ match: 'INSERT INTO profiles' }
+	]);
 	const r = await handler(makeCtx({ payload: {} }), mock.client);
+	assertEqual(r, { ok: true }, 'result');
+});
+
+await scenario('rejects a non-string display_name', async () => {
+	const mock = makeMockClient();
+	const r = await handler(makeCtx({ payload: { display_name: 42 } }), mock.client);
 	assertEqual(r, { ok: false, reason: 'display_name_not_string' }, 'result');
 });
 
-await scenario('rejects empty display_name (whitespace only)', async () => {
-	const mock = makeMockClient();
+await scenario('allows empty display_name (whitespace only → no name)', async () => {
+	const mock = makeMockClient([
+		{ match: 'SELECT json_metadata' },
+		{ match: 'INSERT INTO profiles' }
+	]);
 	const r = await handler(makeCtx({ payload: { display_name: '   ' } }), mock.client);
-	assertEqual(r, { ok: false, reason: 'display_name_too_short' }, 'result');
+	assertEqual(r, { ok: true }, 'result');
 });
 
 // ─── Length validation ───────────────────────────────────────────
@@ -74,7 +86,10 @@ await scenario('rejects display_name > 64 codepoints', async () => {
 });
 
 await scenario('accepts 64 emoji (1 codepoint each)', async () => {
-	const mock = makeMockClient([{ match: 'INSERT INTO profiles' }]);
+	const mock = makeMockClient([
+		{ match: 'SELECT json_metadata' },
+		{ match: 'INSERT INTO profiles' }
+	]);
 	const r = await handler(makeCtx({ payload: { display_name: '👋'.repeat(64) } }), mock.client);
 	assertEqual(r, { ok: true }, 'result');
 });
@@ -82,13 +97,16 @@ await scenario('accepts 64 emoji (1 codepoint each)', async () => {
 // ─── O3.1 — NFC normalization ────────────────────────────────────
 
 await scenario('O3.1: NFC-normalizes before length check (decomposed → 64)', async () => {
-	const mock = makeMockClient([{ match: 'INSERT INTO profiles' }]);
+	const mock = makeMockClient([
+		{ match: 'SELECT json_metadata' },
+		{ match: 'INSERT INTO profiles' }
+	]);
 	// 64 NFC chars decomposed = 128 codepoints, which would have
 	// failed pre-O3.1 even though the user-perceived length is 64.
 	const decomposed = 'e\u0301'.repeat(64);
 	const r = await handler(makeCtx({ payload: { display_name: decomposed } }), mock.client);
 	assertEqual(r, { ok: true }, 'result');
-	const stored = mock.queries[0]!.params[1] as string;
+	const stored = mock.queries[1]!.params[1] as string;
 	if ([...stored].length !== 64) {
 		throw new Error(`stored codepoint count: expected 64, got ${[...stored].length}`);
 	}
@@ -180,7 +198,10 @@ await scenario('rejects json_metadata > 8KB serialized', async () => {
 // ─── Happy paths ─────────────────────────────────────────────────
 
 await scenario('upserts a valid payload', async () => {
-	const mock = makeMockClient([{ match: 'INSERT INTO profiles' }]);
+	const mock = makeMockClient([
+		{ match: 'SELECT json_metadata' },
+		{ match: 'INSERT INTO profiles' }
+	]);
 	const r = await handler(
 		makeCtx({
 			signer: 'alice',
@@ -195,7 +216,10 @@ await scenario('legitimate operator using their own reserved name passes', async
 	// Byte-equal match is the legitimate-operator escape from the
 	// homograph regex — they own the reserved name and should be
 	// able to use it.
-	const mock = makeMockClient([{ match: 'INSERT INTO profiles' }]);
+	const mock = makeMockClient([
+		{ match: 'SELECT json_metadata' },
+		{ match: 'INSERT INTO profiles' }
+	]);
 	const r = await handler(
 		makeCtx({
 			signer: 'morphit-fees',
@@ -207,7 +231,10 @@ await scenario('legitimate operator using their own reserved name passes', async
 });
 
 await scenario('accepts json_metadata with avatar fields', async () => {
-	const mock = makeMockClient([{ match: 'INSERT INTO profiles' }]);
+	const mock = makeMockClient([
+		{ match: 'SELECT json_metadata' },
+		{ match: 'INSERT INTO profiles' }
+	]);
 	const r = await handler(
 		makeCtx({
 			payload: {

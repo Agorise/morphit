@@ -396,11 +396,11 @@
 
 <section
 	class="card border border-morphit-emerald/30 bg-emerald-50/30 dark:border-morphit-emerald/40 dark:bg-emerald-950/20"
-	aria-label={$_('profile.my_balance.section_label')}
+	aria-label={$_('profile.my_balance.section_label', { values: { account } })}
 >
 	<header class="mb-3 flex items-center justify-between">
 		<h2 class="font-display text-base font-bold">
-			{$_('profile.my_balance.title')}
+			{$_('profile.my_balance.title', { values: { account } })}
 		</h2>
 		<div class="flex items-center gap-2">
 			<span class="text-xs text-ink-500 dark:text-ink-400">

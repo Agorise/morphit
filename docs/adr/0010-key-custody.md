@@ -127,7 +127,7 @@ The user-facing flow, landed in its final form:
    `account_create` op, paying the chain's `account_creation_fee`
    inline from its liquid BLURT (the ACT model was disabled at HF2 —
    see the amendment banner).
-4. Relay sends the user **1 BLURT dust** via `transfer` so their
+4. Relay sends the user **2 BLURT dust** via `transfer` so their
    fresh account has enough on-chain bandwidth to post their
    first Morphit order.
 5. User's first order is a BUY (any supported asset). The
@@ -179,7 +179,7 @@ refill; extraction is slow.
   *(Amended: the relay can no longer run at near-zero balance — it pays
   the ~100 BLURT `account_creation_fee` inline per signup, whereas the
   ACT model pre-paid it at mint time.)* The working balance covers one
-  week of: per-signup creation fees (~100 BLURT each) + 1 BLURT dust
+  week of: per-signup creation fees (~100 BLURT each) + 2 BLURT dust
   each + the week's expected welcome bonuses (~10 BLURT liquid per
   completed-trade signup). At 500 signups/week that is on the order of
   50,000 BLURT in fees + ~500 dust + ~5,000 welcome bonuses. Signup
@@ -238,7 +238,7 @@ holds the decrypted active key in memory — the attacker can:
    ~1 week of ACT buffer (say 50 tickets early, 500 later), the
    attacker can create that many junk accounts. Morphit loses
    the prepaid claim cost (~$10-100 of BLURT). Each junk account
-   also triggers a 1 BLURT dust, increasing the loss.
+   also triggers a 2 BLURT dust, increasing the loss.
 2. **Transfer the working liquid BLURT balance** to an attacker-
    controlled account. At the sizing above, ~$0.10-$11 of direct
    theft depending on weekly rate.
@@ -358,7 +358,7 @@ gain at our scale.
   works.
 - Grifter economics are negative-sum: welcome bonuses are
   delayed until first paid trade, so spam-signup yields at most
-  the 1 BLURT dust ($0.002 per attempt) until real trades are
+  the 2 BLURT dust ($0.004 per attempt) until real trades are
   completed.
 - `@morphit-relay`'s BLURT balance is kept near-zero during
   normal operation; worst-case compromise damage is ~$25-150

@@ -761,6 +761,15 @@ export function broadcastSignOut(): void {
 	// convenience cache would force the user to re-enter their account name
 	// every session. The name-clear is the mark of an EXPLICIT sign-out.
 	clearUserBlurtAccount();
+	// Also drop the cached self-avatar (the logged-in user's own avatar,
+	// shown in the menu + their IdentityLabels). Dynamically imported to
+	// keep selfProfile's profileCache/profileProps deps out of this
+	// store's static graph. Like the name-clear above, this belongs to an
+	// EXPLICIT sign-out only — reset()/lockSession keep it (public data,
+	// re-shown on unlock; the AvatarMenu effect refreshes per account).
+	void import('$lib/stores/selfProfile').then((mod) => {
+		mod.clearSelfProfile();
+	});
 }
 
 if (browser) {

@@ -68,9 +68,12 @@
 			</span>
 			<a
 				href={lp('/faq#lost_keys')}
-				class="font-semibold underline decoration-dotted underline-offset-2 hover:decoration-solid"
+				class="group font-semibold underline decoration-dotted underline-offset-2 transition hover:decoration-solid"
 			>
-				{$_('seed_backup_nudge.show_me_how')}
+				{$_('seed_backup_nudge.show_me_how')} <span
+					class="nav-arrow nav-arrow-right"
+					aria-hidden="true">⇨</span
+				>
 			</a>
 			<button
 				type="button"

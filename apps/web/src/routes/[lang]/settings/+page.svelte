@@ -17,6 +17,7 @@
 	import EndpointList from '$components/EndpointList.svelte';
 	import Head from '$components/Head.svelte';
 	import BusyButton from '$components/BusyButton.svelte';
+	import ConfirmModal from '$components/ConfirmModal.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
 	import WriteBlockedReadOnly from '$components/WriteBlockedReadOnly.svelte';
 	import NotificationSettings from '$components/NotificationSettings.svelte';
@@ -53,6 +54,7 @@
 	import { fetchAccountKeys } from '$blurt/accountKeys';
 	import { ChainRejectedError } from '$blurt/broadcastTransport';
 	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
+	import { setSelfAvatar } from '$lib/stores/selfProfile';
 	import { broadcastUnblock } from '$blurt/ops/block';
 	import { blockedAccounts, loadBlocks, refreshBlocks, markUnblocked } from '$lib/chat/blocks';
 	import { showToast } from '$lib/stores/toast';
@@ -119,6 +121,11 @@
 				values: { reason: err.message }
 			});
 		}
+		if (err instanceof BroadcastError && err.code === 'key_mismatch') {
+			return $_('settings.display_name.broadcast_err.key_mismatch', {
+				values: { account: getUserBlurtAccount() ?? '' }
+			});
+		}
 		if (err instanceof BroadcastError && (err.code === 'no_account' || err.code === 'locked')) {
 			return $_(`settings.display_name.broadcast_err.${err.code}`);
 		}
@@ -163,6 +170,15 @@
 	let accountVerifying = $state(false);
 	let accountVerifyError = $state('');
 	let accountSavedToast = $state(false);
+	// Live red-border check: flag any character outside the Blurt
+	// account-name charset [a-z0-9.-] so the field paints red as the user
+	// types (a half-typed valid name stays green). Tested on the
+	// lowercased value since the name is lowercased on verify anyway, so
+	// typing/pasting uppercase isn't treated as an error.
+	const ACCOUNT_INVALID_CHAR = /[^a-z0-9.-]/;
+	const accountInputInvalid = $derived(
+		accountInput.trim().length > 0 && ACCOUNT_INVALID_CHAR.test(accountInput.trim().toLowerCase())
+	);
 	/** Sally finding H2 (Part 68): true when the user just landed
 	 *  here from a seed/keyfile import, which doesn't carry an
 	 *  account name.  Triggers an explanatory banner above the
@@ -226,6 +242,13 @@
 	 *  false (button hidden) until a profile fetch confirms one exists, so
 	 *  a failed/slow fetch errs toward hiding rather than a no-op button. */
 	let hasCustomAvatar = $state(false);
+	/** The avatar currently on chain (mirrors hasCustomAvatar). Used to
+	 *  show a thumbnail next to the "Remove avatar" button so the user
+	 *  sees exactly what they're about to remove. */
+	let currentAvatarSvg = $state<string | null>(null);
+	let currentAvatarDataUri = $state<string | null>(null);
+	/** Drives the "Remove avatar?" confirmation modal. */
+	let confirmRemoveAvatarOpen = $state(false);
 	let avatarExistenceChecked = false;
 
 	// Rehydrate from localStorage on mount.
@@ -290,6 +313,8 @@
 							if (r.ok) {
 								const props = extractLabelPropsFromProfile(r.data);
 								hasCustomAvatar = !!(props.avatarSvg || props.avatarDataUri);
+								currentAvatarSvg = props.avatarSvg;
+								currentAvatarDataUri = props.avatarDataUri;
 								// Only fill from on-chain where the user has no pending
 								// local draft for this account.
 								if (noLocalName && props.displayName) {
@@ -545,42 +570,12 @@
 		setTimeout(() => (blurtMediaSavedToast = false), 1800);
 	}
 
-	/** Auto-save the Blurt.media URL locally when the field loses focus.
-	 *  Silent (no spinner, no artificial delay) and a no-op when the value
-	 *  hasn't actually changed, so tabbing through the form doesn't spam a
-	 *  "Saved" toast. Invalid input is left untouched for the user to fix
-	 *  (the inline error stays visible). This complements the explicit
-	 *  "Save locally only" button (cp344) — tabbing away saves silently; the
-	 *  button is the discoverable affordance — while broadcasting to chain
-	 *  stays a deliberate, separate action. */
-	function persistBlurtMediaOnBlur(): void {
-		if (!blurtMediaIsValid) return;
-		const cleaned = blurtMediaIsEmpty ? '' : blurtMediaCleaned;
-		if (cleaned === blurtMediaSaved) {
-			blurtMediaInput = cleaned; // normalize display only
-			return;
-		}
-		try {
-			if (cleaned) window.localStorage.setItem(BLURT_MEDIA_URL_STORAGE_KEY, cleaned);
-			else window.localStorage.removeItem(BLURT_MEDIA_URL_STORAGE_KEY);
-		} catch {
-			// Private mode — in-memory only.
-		}
-		blurtMediaSaved = cleaned;
-		blurtMediaInput = cleaned;
-		blurtMediaSavedToast = true;
-		setTimeout(() => (blurtMediaSavedToast = false), 1800);
-	}
 
 	async function saveAndBroadcastBlurtMedia(): Promise<void> {
 		await saveBlurtMediaLocal();
 		const live = $liveIdentity;
 		if (!live) return;
 		const displayName = saved || (validation.ok ? validation.cleaned : '');
-		if (!displayName) {
-			blurtMediaBroadcastError = $_('settings.blurt_media_url.need_display_name');
-			return;
-		}
 		blurtMediaBroadcasting = true;
 		blurtMediaBroadcastError = '';
 		blurtMediaBroadcastOk = false;
@@ -637,28 +632,6 @@
 		setTimeout(() => (nostrSavedToast = false), 1800);
 	}
 
-	/** Auto-save the Nostr URL locally on blur. Same contract as
-	 *  persistBlurtMediaOnBlur — silent, change-detected, invalid input
-	 *  left for the user to fix. Complements the explicit "Save locally only"
-	 *  button (cp344); "Save & broadcast" stays a deliberate action. */
-	function persistNostrOnBlur(): void {
-		if (!nostrIsValid) return;
-		const cleaned = nostrIsEmpty ? '' : nostrCleaned;
-		if (cleaned === nostrSaved) {
-			nostrInput = cleaned; // normalize display only
-			return;
-		}
-		try {
-			if (cleaned) window.localStorage.setItem(NOSTR_URL_STORAGE_KEY, cleaned);
-			else window.localStorage.removeItem(NOSTR_URL_STORAGE_KEY);
-		} catch {
-			// Private mode — in-memory only.
-		}
-		nostrSaved = cleaned;
-		nostrInput = cleaned;
-		nostrSavedToast = true;
-		setTimeout(() => (nostrSavedToast = false), 1800);
-	}
 
 	async function saveAndBroadcastNostr(): Promise<void> {
 		await saveNostrLocal();
@@ -666,14 +639,10 @@
 		if (!live) return;
 		// Broadcast requires a display_name (indexer validates
 		// min length 1). Use the saved one, or fall back to the
-		// user's current input if they haven't saved yet. If
-		// neither is set, surface an error — they need a display
-		// name before they can broadcast any profile fields.
+		// Broadcast the full profile bag so we don't orphan any
+		// previously-set field. A missing display name is fine —
+		// the field is simply omitted from json_metadata.
 		const displayName = saved || (validation.ok ? validation.cleaned : '');
-		if (!displayName) {
-			nostrBroadcastError = $_('settings.nostr_url.need_display_name');
-			return;
-		}
 		nostrBroadcasting = true;
 		nostrBroadcastError = '';
 		nostrBroadcastOk = false;
@@ -761,13 +730,7 @@
 	async function broadcastAvatar(): Promise<void> {
 		const live = $liveIdentity;
 		if (!live) return;
-		// Need a display_name on-chain first; same gating as
-		// nostr_url / blurt_media_url.
 		const displayName = saved || (validation.ok ? validation.cleaned : '');
-		if (!displayName) {
-			avatarBroadcastError = $_('settings.avatar.need_display_name');
-			return;
-		}
 		avatarBroadcasting = true;
 		avatarBroadcastError = '';
 		avatarBroadcastOk = false;
@@ -784,6 +747,12 @@
 				avatar_data_uri: avatarStagedDataUri
 			});
 			hasCustomAvatar = true;
+			currentAvatarSvg = avatarStagedSvg || null;
+			currentAvatarDataUri = avatarStagedDataUri || null;
+			// Confirmed on-chain — publish to the shared self-profile
+			// store so the avatar menu + every IdentityLabel of self
+			// update instantly (don't wait for the indexer to catch up).
+			setSelfAvatar(getUserBlurtAccount() ?? '', avatarStagedSvg || null, avatarStagedDataUri || null);
 			avatarBroadcastOk = true;
 			setTimeout(() => (avatarBroadcastOk = false), 3000);
 		} catch (err) {
@@ -803,10 +772,6 @@
 		const live = $liveIdentity;
 		if (!live) return;
 		const displayName = saved || (validation.ok ? validation.cleaned : '');
-		if (!displayName) {
-			avatarBroadcastError = $_('settings.avatar.need_display_name');
-			return;
-		}
 		avatarBroadcasting = true;
 		avatarBroadcastError = '';
 		avatarBroadcastOk = false;
@@ -820,6 +785,11 @@
 				avatar_data_uri: ''
 			});
 			hasCustomAvatar = false;
+			currentAvatarSvg = null;
+			currentAvatarDataUri = null;
+			// Confirmed removal on-chain — clear the shared self avatar
+			// so menu + labels fall back to the identicon immediately.
+			setSelfAvatar(getUserBlurtAccount() ?? '', null, null);
 			// Clear any local staging — the on-chain state is now
 			// "no avatar", and the UI should reflect that.
 			avatarStagedSvg = '';
@@ -1173,12 +1143,27 @@
 				</span>
 				<input
 					bind:value={accountInput}
+					oninput={(e) => {
+						const el = e.currentTarget;
+						const stripped = el.value.replace(/@/g, '');
+						if (stripped !== el.value) {
+							const removed = el.value.length - stripped.length;
+							const caret = (el.selectionStart ?? stripped.length) - removed;
+							el.value = stripped;
+							accountInput = stripped;
+							const p = Math.max(0, caret);
+							el.setSelectionRange(p, p);
+						}
+					}}
+					maxlength="16"
 					type="text"
 					autocomplete="off"
 					autocapitalize="off"
 					spellcheck="false"
 					placeholder={$_('settings.account_name.input_placeholder')}
-					class="input w-full font-mono"
+					class="input w-full font-mono {accountInputInvalid
+						? 'border-red-400 focus:ring-red-400 dark:border-red-500'
+						: ''}"
 					disabled={!$isUnlocked || accountVerifying}
 				/>
 			</label>
@@ -1341,14 +1326,34 @@
 				</BusyButton>
 			{/if}
 			{#if $isUnlocked && !avatarStagedSvg && !avatarStagedDataUri && hasCustomAvatar}
-				<BusyButton
-					variant="ghost"
-					busy={avatarBroadcasting}
-					busyLabel={$_('settings.avatar.remove_pending')}
-					onclick={broadcastRemoveAvatar}
-				>
-					{$_('settings.avatar.remove')}
-				</BusyButton>
+				<div class="flex items-center gap-3">
+					{#if currentAvatarSvg}
+						<span
+							class="h-12 w-12 flex-none overflow-hidden rounded-full bg-ink-100 ring-1 ring-ink-200 [&>svg]:h-full [&>svg]:w-full dark:bg-ink-800 dark:ring-ink-700"
+							aria-hidden="true"
+						>
+							{@html currentAvatarSvg}
+						</span>
+					{:else if currentAvatarDataUri}
+						<img
+							src={currentAvatarDataUri}
+							alt=""
+							width="48"
+							height="48"
+							class="h-12 w-12 flex-none rounded-full bg-ink-100 object-cover ring-1 ring-ink-200 dark:bg-ink-800 dark:ring-ink-700"
+							aria-hidden="true"
+							decoding="async"
+						/>
+					{/if}
+					<BusyButton
+						variant="ghost"
+						busy={avatarBroadcasting}
+						busyLabel={$_('settings.avatar.remove_pending')}
+						onclick={() => (confirmRemoveAvatarOpen = true)}
+					>
+						{$_('settings.avatar.remove')}
+					</BusyButton>
+				</div>
 			{/if}
 		</div>
 
@@ -1357,6 +1362,21 @@
 				<StatusLine kind="error">{avatarBroadcastError}</StatusLine>
 			</div>
 		{/if}
+
+		<ConfirmModal
+			bind:open={confirmRemoveAvatarOpen}
+			title={$_('settings.avatar.remove_confirm_title')}
+			body={$_('settings.avatar.remove_confirm_body')}
+			confirmLabel={$_('settings.avatar.remove')}
+			cancelLabel={$_('settings.avatar.cancel')}
+			variant="destructive"
+			busyLabel={$_('settings.avatar.remove_pending')}
+			onConfirm={async () => {
+				await broadcastRemoveAvatar();
+				confirmRemoveAvatarOpen = false;
+			}}
+			onCancel={() => (confirmRemoveAvatarOpen = false)}
+		/>
 	</section>
 
 	<!-- ─── Display name ─── -->
@@ -1600,7 +1620,7 @@
 			inputmode="url"
 			spellcheck="false"
 			bind:value={blurtMediaInput}
-			onblur={persistBlurtMediaOnBlur}
+			maxlength="512"
 			placeholder={$_('settings.blurt_media_url.placeholder')}
 			aria-invalid={!blurtMediaIsValid}
 			aria-describedby="blurt-media-url-help"
@@ -1733,7 +1753,7 @@
 			inputmode="url"
 			spellcheck="false"
 			bind:value={nostrInput}
-			onblur={persistNostrOnBlur}
+			maxlength="512"
 			placeholder={$_('settings.nostr_url.placeholder')}
 			aria-invalid={!nostrIsValid}
 			aria-describedby="nostr-url-help"
@@ -1879,8 +1899,14 @@
 						<li>{$_('settings.install.manual_firefox')}</li>
 					</ul>
 					<p class="mt-3 text-xs text-ink-500">
-						<a href={lp('/faq#iphone_install')} class="underline hover:text-morphit-emerald">
-							{$_('settings.install.iphone_link')}
+						<a
+							href={lp('/faq#iphone_install')}
+							class="group underline transition hover:text-morphit-emerald"
+						>
+							{$_('settings.install.iphone_link')} <span
+								class="nav-arrow nav-arrow-right"
+								aria-hidden="true">⇨</span
+							>
 						</a>
 					</p>
 				</div>

@@ -51,6 +51,7 @@
 	// (condenser_api.get_transaction) onto every page's baseline. It only runs
 	// on an explicit lock action, never at first paint.
 	import { getUserBlurtAccount, blurtAccountName } from '$blurt/ops/profile';
+	import { selfProfile, refreshSelfProfile } from '$lib/stores/selfProfile';
 	import ConfirmModal from './ConfirmModal.svelte';
 
 	let open = $state(false);
@@ -120,6 +121,23 @@
 		if (live) return identiconDataUri(live.posting.publicKey, 40);
 		return '';
 	});
+
+	// The account whose avatar this menu represents.
+	const activeAccount = $derived($blurtAccountName ?? $pairedReadOnly?.account ?? null);
+
+	// Keep the shared self-profile avatar in sync with the active account
+	// so the user's uploaded avatar shows here (not just on their profile
+	// page). Cheap: getProfileCached dedupes + caches.
+	$effect(() => {
+		void refreshSelfProfile(activeAccount);
+	});
+
+	// The user's own avatar for the active account, if one is on-chain.
+	const selfAvatar = $derived(
+		activeAccount && $selfProfile.account === activeAccount
+			? { svg: $selfProfile.avatarSvg, dataUri: $selfProfile.avatarDataUri }
+			: { svg: null, dataUri: null }
+	);
 
 	const total = $derived(totalUnread($unreadCount));
 	const badgeText = $derived(total > 9 ? '9+' : String(total));
@@ -280,15 +298,37 @@
 				: $_('avatar_menu.open')}
 			class="relative flex h-10 w-10 items-center justify-center rounded-full ring-1 ring-ink-300 transition hover:ring-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:ring-ink-700"
 		>
-			<img
-				src={avatarSrc}
-				alt=""
-				width="40"
-				height="40"
-				class="rounded-full bg-ink-200/50 dark:bg-ink-800/50"
-				aria-hidden="true"
-				decoding="async"
-			/>
+			{#if selfAvatar.svg}
+				<!-- User's uploaded SVG avatar (sanitized on read by
+				     profileProps → sanitizeSvg). Same {@html} treatment as
+				     the profile-page hero and IdentityLabel. -->
+				<span
+					class="block h-10 w-10 overflow-hidden rounded-full bg-ink-200/50 [&>svg]:h-full [&>svg]:w-full dark:bg-ink-800/50"
+					aria-hidden="true"
+				>
+					{@html selfAvatar.svg}
+				</span>
+			{:else if selfAvatar.dataUri}
+				<img
+					src={selfAvatar.dataUri}
+					alt=""
+					width="40"
+					height="40"
+					class="rounded-full bg-ink-200/50 object-cover dark:bg-ink-800/50"
+					aria-hidden="true"
+					decoding="async"
+				/>
+			{:else}
+				<img
+					src={avatarSrc}
+					alt=""
+					width="40"
+					height="40"
+					class="rounded-full bg-ink-200/50 dark:bg-ink-800/50"
+					aria-hidden="true"
+					decoding="async"
+				/>
+			{/if}
 
 			{#if $isPairedReadOnly}
 				<!-- Paired-readonly indicator pill (ADR-0022 QR-pair).  A
@@ -440,9 +480,13 @@
 						<a
 							href={lp('/settings#notifications')}
 							onclick={close}
-							class="text-xs font-semibold text-morphit-emerald hover:underline"
+							class="group inline-flex items-center text-xs font-semibold text-morphit-emerald transition hover:brightness-110"
 						>
 							{$_('avatar_menu.notification_settings')}
+							<span
+								class="nav-arrow nav-arrow-right"
+								aria-hidden="true">⇨</span
+							>
 						</a>
 					</div>
 				{:else}

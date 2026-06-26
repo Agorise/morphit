@@ -597,6 +597,7 @@
 					id="pm-name"
 					type="text"
 					bind:value={pmName}
+					maxlength="80"
 					class="mt-1 w-full rounded-lg border border-ink-200 bg-white p-2 text-sm dark:border-ink-700 dark:bg-ink-950"
 					placeholder="My Local Method"
 				/>
@@ -610,6 +611,7 @@
 				<textarea
 					id="pm-description"
 					bind:value={pmDescription}
+					maxlength="280"
 					rows="2"
 					class="mt-1 w-full rounded-lg border border-ink-200 bg-white p-2 text-sm dark:border-ink-700 dark:bg-ink-950"
 				></textarea>
@@ -640,6 +642,7 @@
 					id="pm-url"
 					type="url"
 					bind:value={pmUrl}
+					maxlength="512"
 					class="mt-1 w-full rounded-lg border border-ink-200 bg-white p-2 font-mono text-sm dark:border-ink-700 dark:bg-ink-950"
 					placeholder="https://example.com"
 				/>

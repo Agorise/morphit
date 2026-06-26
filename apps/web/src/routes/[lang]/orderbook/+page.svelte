@@ -838,8 +838,14 @@
 		     still render on /my/orders post-Part-116 shell refactor)
 		     also see the recovery link. -->
 		<p class="mb-4 text-xs text-ink-500 dark:text-ink-400">
-			<a href={lp('/my/orders#fee-status')} class="underline hover:no-underline">
-				{$_('orderbook.fee_rejected_check')}
+			<a
+				href={lp('/my/orders#fee-status')}
+				class="group underline transition hover:no-underline"
+			>
+				{$_('orderbook.fee_rejected_check')} <span
+					class="nav-arrow nav-arrow-right"
+					aria-hidden="true">⇨</span
+				>
 			</a>
 		</p>
 	{/if}

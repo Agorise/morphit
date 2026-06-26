@@ -187,9 +187,12 @@
 		<p class="mt-3 text-xs text-ink-500 dark:text-ink-500">
 			<a
 				href={lp('/faq#how_to_trade_walkthrough')}
-				class="underline hover:text-morphit-emerald"
+				class="group underline transition hover:text-morphit-emerald"
 			>
-				{$_('first_post_starter.faq_link')}
+				{$_('first_post_starter.faq_link')} <span
+					class="nav-arrow nav-arrow-right"
+					aria-hidden="true">⇨</span
+				>
 			</a>
 		</p>
 	</aside>

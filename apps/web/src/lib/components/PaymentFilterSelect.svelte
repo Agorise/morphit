@@ -186,6 +186,7 @@
 		<input
 			bind:this={inputEl}
 			bind:value={query}
+			maxlength="64"
 			type="text"
 			autocomplete="off"
 			role="combobox"
