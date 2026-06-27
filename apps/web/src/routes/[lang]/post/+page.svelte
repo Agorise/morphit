@@ -64,6 +64,7 @@
 		isDaiNetwork
 	} from '$lib/assets/networks';
 	import { instanceAdditions } from '$lib/stores/instanceAdditions';
+	import { displayNamesForMethods } from '$lib/payments/display';
 	import { getInstanceSnapshot } from '$lib/stores/instance';
 
 	import { identity, isUnlocked, isPairedReadOnly } from '$stores/identity';
@@ -350,11 +351,19 @@
 	/** Heuristic: does the draft actually contain anything worth
 	 *  restoring? An all-defaults snapshot is not worth announcing
 	 *  to the user ("Restored from 2 minutes ago" when nothing was
-	 *  typed is just noise). */
+	 *  typed is just noise).
+	 *
+	 *  side/asset are deliberately NOT counted: for a first-time
+	 *  account the lock effect force-sets side='buy'/asset='BLURT'
+	 *  without the user typing anything, so counting them made the
+	 *  restore banner appear on a pristine first-trade form.  For
+	 *  everyone else they're single-tap picks, trivially re-made —
+	 *  not "content" worth a restore prompt.  They are still saved
+	 *  and restored as part of the snapshot; this only governs
+	 *  whether the banner/auto-save fires.  Real content is the
+	 *  fields the user actually fills in. */
 	function draftHasContent(d: ComposeDraft): boolean {
 		return (
-			d.side !== null ||
-			d.asset !== null ||
 			d.fiat.length > 0 ||
 			d.amountMin.length > 0 ||
 			d.amountMax.length > 0 ||
@@ -386,7 +395,7 @@
 		pmDraft = '';
 		region = '';
 		terms = '';
-		expiresDays = 14;
+		expiresDays = 90;
 		syndicateToBlog = false;
 		feeMethodChoice = 'blurt';
 		externalTxId = '';
@@ -1007,6 +1016,32 @@
 			(asset !== 'DAI' || daiNetwork !== null)
 	);
 
+	/** Strip a raw input string down to a bare decimal — digits and at
+	 *  most one dot.  Applied on the amount + fixed-price fields so a
+	 *  user physically cannot type letters, a second dot, currency
+	 *  symbols, or scientific-notation "e": the field only ever holds a
+	 *  clean number-shaped string (or '').  Pairs with inputmode
+	 *  "decimal" (numeric keypad on mobile) and a maxlength cap. */
+	function keepDecimal(raw: string): string {
+		let seenDot = false;
+		let out = '';
+		for (const ch of raw) {
+			if (ch >= '0' && ch <= '9') out += ch;
+			else if (ch === '.' && !seenDot) {
+				out += ch;
+				seenDot = true;
+			}
+		}
+		return out;
+	}
+
+	/** Like keepDecimal but allows a single leading minus — the spread
+	 *  field accepts negative percentages (e.g. -5 = 5% below market). */
+	function keepSignedDecimal(raw: string): string {
+		const neg = raw.trimStart().startsWith('-');
+		return (neg ? '-' : '') + keepDecimal(raw);
+	}
+
 	const fiatError = $derived.by(() => {
 		if (fiat.length === 0) return '';
 		const trimmed = fiat.trim().toUpperCase();
@@ -1544,7 +1579,7 @@
 		pmDraft = '';
 		region = '';
 		terms = '';
-		expiresDays = 14;
+		expiresDays = 90;
 		syndicateToBlog = false;
 		syndicationStatus = null;
 		successPermlink = null;
@@ -1562,6 +1597,71 @@
 	// [lang]/+layout.svelte for design rationale.
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
 	const lp = $derived((path: string) => localePath(path, currentLang));
+
+	/** A live, plain-language recap of the order the user is composing,
+	 *  shown just above the Notes field in the last step.  Assembled
+	 *  from per-locale fragments (amount clause / price clause) slotted
+	 *  into a side-specific template, so word order stays natural in
+	 *  every locale — the template controls slot order, the fragments
+	 *  carry the grammar.  Payment methods join via Intl.ListFormat
+	 *  (locale-aware "A, B, or C") using the SAME display names the
+	 *  picker shows (registry names, instance-addition names).  When no
+	 *  method is picked yet the list shows a neutral "…" placeholder
+	 *  that fills in as the user selects.  Empty until an asset exists
+	 *  (the card only renders in step 3, where asset is already set). */
+	const summarySentence = $derived.by((): string => {
+		if (!asset) return '';
+		const fiatCode = fiat.trim().toUpperCase();
+		const hasMin = amountMin.trim() !== '';
+		const hasMax = amountMax.trim() !== '';
+
+		let amountClause: string;
+		if (hasMin && hasMax) {
+			amountClause = $_('post_order.summary.amount_min_max', {
+				values: { min: amountMin.trim(), max: amountMax.trim(), fiat: fiatCode, asset }
+			}) as string;
+		} else if (!hasMin && hasMax) {
+			amountClause = $_('post_order.summary.amount_up_to', {
+				values: { max: amountMax.trim(), fiat: fiatCode, asset }
+			}) as string;
+		} else if (hasMin && !hasMax) {
+			amountClause = $_('post_order.summary.amount_min_plus', {
+				values: { min: amountMin.trim(), fiat: fiatCode, asset }
+			}) as string;
+		} else {
+			amountClause = $_('post_order.summary.amount_any', { values: { asset } }) as string;
+		}
+
+		let priceClause: string;
+		if (priceModelKind === 'fixed') {
+			priceClause = $_('post_order.summary.price_fixed', {
+				values: { price: fixedPrice.trim() || '—', fiat: fiatCode, asset }
+			}) as string;
+		} else {
+			priceClause = $_('post_order.summary.price_market') as string;
+		}
+
+		const names = displayNamesForMethods(
+			paymentMethods,
+			(key) => $instanceAdditions.find((e) => e.key === key)?.name
+		);
+		let methodsClause: string;
+		if (names.length > 0) {
+			try {
+				methodsClause = new Intl.ListFormat(currentLang, { type: 'disjunction' }).format(names);
+			} catch {
+				methodsClause = names.join(', ');
+			}
+		} else {
+			methodsClause = '…';
+		}
+
+		const tmplKey =
+			side === 'sell' ? 'post_order.summary.sentence_sell' : 'post_order.summary.sentence_buy';
+		return $_(tmplKey, {
+			values: { amount: amountClause, price: priceClause, methods: methodsClause }
+		}) as string;
+	});
 </script>
 
 <Head routeKey="post_order" noindex />
@@ -1572,9 +1672,11 @@
 		<h1 class="font-display text-3xl font-extrabold">
 			<span class="brand-gradient-text">{$_('post_order.heading')}</span>
 		</h1>
-		<p class="mt-2 text-ink-700 dark:text-ink-200">
-			{$_('post_order.subtitle')}
-		</p>
+		{#if !isFirstTrade}
+			<p class="mt-2 text-ink-700 dark:text-ink-200">
+				{$_('post_order.subtitle')}
+			</p>
+		{/if}
 	</header>
 
 	<!-- Tier 2.5 (Part 93): green-tinted starter-pack helper for
@@ -1667,7 +1769,9 @@
 		<!-- Step 1 -->
 		<section class="card mb-4" aria-labelledby="step1-heading">
 			<h2 id="step1-heading" class="mb-4 font-display text-lg font-bold">
-				{$_('post_order.form.step_1_heading')}
+				{#if isFirstTrade}{$_('post_order.form.step_1_heading_first')}{:else}{$_(
+						'post_order.form.step_1_heading'
+					)}{/if}
 			</h2>
 			{#if isFirstTrade}
 				<!-- O#1 (cp295): first-trade lock. The only useful thing a
@@ -1874,30 +1978,40 @@
 				<div class="grid gap-4 sm:grid-cols-2">
 					<label class="block">
 						<span class="mb-1 block text-sm font-semibold">
-							{$_('post_order.form.amount_min_label')}
+							{fiat
+								? $_('post_order.form.amount_min_label_in_fiat', { values: { fiat } })
+								: $_('post_order.form.amount_min_label')}
 						</span>
 						<input
-							type="number"
-							min="0"
-							step="0.01"
-							bind:value={amountMin}
+							type="text"
+							inputmode="decimal"
+							maxlength="16"
+							value={amountMin}
+							oninput={(e) => (amountMin = keepDecimal(e.currentTarget.value))}
 							aria-invalid={!!amountError}
 							aria-describedby={amountError ? 'amount-error' : undefined}
-							class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+							class="w-full rounded-xl border-2 {amountError
+								? 'border-red-500 dark:border-red-500'
+								: 'border-ink-200 dark:border-ink-700'} bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:bg-ink-900"
 						/>
 					</label>
 					<label class="block">
 						<span class="mb-1 block text-sm font-semibold">
-							{$_('post_order.form.amount_max_label')}
+							{fiat
+								? $_('post_order.form.amount_max_label_in_fiat', { values: { fiat } })
+								: $_('post_order.form.amount_max_label')}
 						</span>
 						<input
-							type="number"
-							min="0"
-							step="0.01"
-							bind:value={amountMax}
+							type="text"
+							inputmode="decimal"
+							maxlength="16"
+							value={amountMax}
+							oninput={(e) => (amountMax = keepDecimal(e.currentTarget.value))}
 							aria-invalid={!!amountError}
 							aria-describedby={amountError ? 'amount-error' : undefined}
-							class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+							class="w-full rounded-xl border-2 {amountError
+								? 'border-red-500 dark:border-red-500'
+								: 'border-ink-200 dark:border-ink-700'} bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:bg-ink-900"
 						/>
 					</label>
 				</div>
@@ -1946,14 +2060,16 @@
 								{#if priceModelKind === 'spread'}
 									<div class="mt-2 flex items-center gap-2">
 										<input
-											type="number"
-											step="0.1"
-											min="-50"
-											max="50"
-											bind:value={spreadPercent}
+											type="text"
+											inputmode="decimal"
+											maxlength="6"
+											value={spreadPercent}
+											oninput={(e) => (spreadPercent = keepSignedDecimal(e.currentTarget.value))}
 											aria-invalid={!!priceModelError}
 											aria-describedby={priceModelError ? 'price-model-error' : undefined}
-											class="w-24 rounded-lg border-2 border-ink-200 bg-white px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+											class="w-24 rounded-lg border-2 {priceModelError
+												? 'border-red-500 dark:border-red-500'
+												: 'border-ink-200 dark:border-ink-700'} bg-white px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:bg-ink-900"
 											aria-label={$_('post_order.form.price_model_spread_aria') as string}
 										/>
 										<span class="text-sm text-ink-600 dark:text-ink-300">%</span>
@@ -1988,13 +2104,16 @@
 								{#if priceModelKind === 'fixed'}
 									<div class="mt-2 flex items-center gap-2">
 										<input
-											type="number"
-											step="0.01"
-											min="0"
-											bind:value={fixedPrice}
+											type="text"
+											inputmode="decimal"
+											maxlength="16"
+											value={fixedPrice}
+											oninput={(e) => (fixedPrice = keepDecimal(e.currentTarget.value))}
 											aria-invalid={!!priceModelError}
 											aria-describedby={priceModelError ? 'fixed-price-error' : undefined}
-											class="w-32 rounded-lg border-2 border-ink-200 bg-white px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+											class="w-32 rounded-lg border-2 {priceModelError
+												? 'border-red-500 dark:border-red-500'
+												: 'border-ink-200 dark:border-ink-700'} bg-white px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:bg-ink-900"
 											placeholder={$_('post_order.form.price_model_fixed_placeholder') as string}
 											aria-label={$_('post_order.form.price_model_fixed_aria') as string}
 										/>
@@ -2080,6 +2199,22 @@
 					/>
 					<p class="mt-1 text-xs text-ink-500">{$_('post_order.form.region_hint')}</p>
 				</label>
+
+				{#if summarySentence}
+					<div
+						class="mb-4 rounded-xl border-2 border-morphit-emerald/40 bg-morphit-emerald/5 p-3"
+						role="status"
+						aria-live="polite"
+					>
+						<p class="text-sm text-ink-800 dark:text-ink-100">
+							<span aria-hidden="true">📝</span>
+							{summarySentence}
+						</p>
+						<p class="mt-1 text-sm font-medium text-ink-700 dark:text-ink-200">
+							{$_('post_order.summary.see_notes')}
+						</p>
+					</div>
+				{/if}
 
 				<label class="mb-4 block">
 					<span class="mb-1 block text-sm font-semibold">{$_('post_order.form.terms_label')}</span>

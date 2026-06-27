@@ -187,7 +187,7 @@
 		<p class="mt-3 text-xs text-ink-500 dark:text-ink-500">
 			<a
 				href={lp('/faq#how_to_trade_walkthrough')}
-				class="group underline transition hover:text-morphit-emerald"
+				class="group font-medium text-ink-800 no-underline transition hover:text-morphit-emerald dark:text-white"
 			>
 				{$_('first_post_starter.faq_link')} <span
 					class="nav-arrow nav-arrow-right"

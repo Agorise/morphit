@@ -1764,8 +1764,8 @@
     "tip_small_body": "Mała pierwsza transakcja (poniżej 50 $) ogranicza to, co możesz stracić, jeśli coś pójdzie nie tak. Możesz publikować większe zlecenia, gdy zbudujesz reputację dzięki ukończonym transakcjom.",
     "tip_expiry_label": "Wygaśnięcie po 7 dniach.",
     "tip_expiry_body": "Ustawiliśmy wygaśnięcie na 7 dni zamiast domyślnych 90. Krótsze okno oznacza, że nieaktualne oferty nie zalegają, jeśli zmienisz zdanie.",
-    "tip_payment_label": "Wskazówki dotyczące metod płatności.",
-    "tip_payment_body": "Dodaj metody płatności, które faktycznie akceptujesz. Partnerzy handlowi wybiorą, co im odpowiada. Popularne punkty wyjścia: PayPal, Wise, przelew bankowy, gotówka osobiście.",
+    "tip_payment_label": "Metoda płatności.",
+    "tip_payment_body": "Dodaj metody płatności, którymi możesz zapłacić. Twoi partnerzy wybiorą tę, która im odpowiada. Typowe punkty wyjścia: PayPal, Wise, przelew bankowy, gotówka osobiście.",
     "faq_link": "Przeczytaj pełny przewodnik pierwszej transakcji",
     "dismiss_aria": "Zamknij ten pakiet startowy"
   },
@@ -2909,7 +2909,7 @@
   },
   "post_order": {
     "heading": "Opublikuj zlecenie",
-    "subtitle": "Powiedz traderom, co chcesz kupić lub sprzedać i jak cię znaleźć. Opłata pokrywa 14 dni w księdze zleceń.",
+    "subtitle": "Powiedz traderom, co chcesz kupić lub sprzedać i jak cię znaleźć. Opłata pokrywa 90 dni w księdze zleceń.",
     "back_to_orderbook": "Wróć do księgi",
     "no_account": {
       "title": "Najpierw potrzebujesz konta",
@@ -2928,16 +2928,16 @@
       "side_sell": "Chcę SPRZEDAĆ kryptowalutę",
       "asset_label": "Które aktywo?",
       "step_2_heading": "Ile i po jakiej cenie?",
-      "fiat_label": "Waluta fiat",
-      "amount_min_label": "Minimum (fiat)",
-      "amount_max_label": "Maksimum (fiat)",
+      "fiat_label": "W jakiej walucie fiat będzie wyrażona Twoja płatność?",
+      "amount_min_label": "Wartość minimalna",
+      "amount_max_label": "Wartość maksymalna",
       "amount_optional_hint": "Pozostaw puste, aby brak limitu.",
       "step_3_heading": "Jak zapłacisz?",
       "payment_methods_label": "Mogę zapłacić przez",
       "payment_methods_hint": "Dodaj ich tyle, ile chcesz — partnerzy transakcji wybiorą ten, który im odpowiada.",
       "region_label": "Region (opcjonalnie)",
       "region_hint": "Gdzie chcesz handlować. Pomaga osobom w pobliżu Cię znaleźć.",
-      "terms_label": "Dodatkowe warunki (opcjonalnie)",
+      "terms_label": "Warunki / Szczegóły / Notatki",
       "terms_placeholder": "np. „Tylko w weekendy\" lub „Tylko gotówka dla kwot poniżej 100 $\"",
       "expires_label": "Listing wygasa",
       "expires_1d": "Za 1 dzień",
@@ -2946,7 +2946,7 @@
       "expires_14d": "Za 14 dni",
       "expires_30d": "Za 30 dni",
       "waiver_asset_locked_title": "Twoje zwolnienie pierwszego zlecenia dotyczy tylko BLURT",
-      "waiver_asset_hint": "Twoje pierwsze zlecenie jest darmowe, ale musi to być zakup BLURT — to sprawia, że BLURT trafia do Twojego portfela, abyś mógł płacić opłaty za przyszłe zlecenia i zdobywać nagrody lojalnościowe.",
+      "waiver_asset_hint": "Twoje pierwsze zlecenie jest darmowe, ale musi to być mały zakup BLURT — dzięki temu BLURT trafia do Twojego portfela, więc możesz płacić niewielkie opłaty za publikację zleceń i zdobywać nagrody lojalnościowe.",
       "expires_60d": "Za 60 dni",
       "expires_90d": "Za 90 dni (domyślnie)",
       "asset_explainer": {
@@ -2967,10 +2967,10 @@
         "eth": "Ethereum (ETH) — platforma smart-kontraktów Proof-of-Stake. Przejrzysta warstwa bazowa; brak natywnego protokołu miksowania. Uważaj na odbiorców kontraktów (wysłanie ETH do kontraktu bez `payable receive()` lub `fallback()` zostanie cofnięte; monety nie są stracone, ale transakcja zawodzi i płacisz gaz). Tylko handel na Morphit: nie może opłacać prowizji od ogłoszeń.",
         "xrp": "Ripple (XRP) — kryptowaluta Federated Byzantine Agreement na XRP Ledger zorientowana na płatności. Przejrzysta warstwa bazowa; brak prywatności na poziomie protokołu. Destination tag to identyfikator (do routingu giełd), nie funkcja prywatności. Rotacja adresów po stronie portfela to główna dźwignia prywatności. Tylko handel na Morphit: nie może opłacać prowizji od ogłoszeń."
       },
-      "waiver_fiat_hint": "💡 BLURT jest słabo wymieniany na scentralizowanych giełdach, więc większość transakcji BLURT-za-fiat na Morphit odbywa się z aktywnymi użytkownikami sieci społecznościowej Blurt, istniejącymi operatorami lub przez wymianę barterową. Wskazówka: wybierz walutę fiat, której używa twoja lokalna sieć (USD, EUR, MXN itd.), lub sprawdź metodę płatności Osobiście → Wymiana (towary) w kroku 3, jeśli chcesz zaoferować coś innego o wartości. Księga zleceń jest na razie mała — twoje zlecenie kupna pomaga ją zbudować.",
+      "waiver_fiat_hint": "💡 Większość transakcji BLURT na Morphit odbywa się z aktywnymi użytkownikami sieci społecznościowej Blurt, istniejącymi operatorami lub poprzez barter. Wybierz więc walutę fiat, której używasz lokalnie (USD, EUR, MXN itd.) i zaproponuj metody płatności osobiście lub barter (towary/usługi), jeśli chcesz zaoferować coś innego o wartości.",
       "waiver_benefits_heading": "Co odblokowuje twój zakup:",
       "price_model_legend": "Cena",
-      "price_model_hint": "Jak ustalana jest twoja cena? Większość używa ceny rynkowej; cena stała jest na wypadek, gdy chcesz konkretnej kwoty niezależnie od ruchów rynku.",
+      "price_model_hint": "Na czym opierają się Twoje wartości minimalna i maksymalna? Większość używa ceny rynkowej; cena stała jest wtedy, gdy chcesz konkretną kwotę niezależnie od ruchów rynku.",
       "price_model_spread_label": "Cena rynkowa",
       "price_model_spread_help": "Powiązana z bieżącym kursem w momencie każdej transakcji. Opcjonalnie: dodaj mały spread +/-.",
       "price_model_spread_aria": "Procent spreadu (dodatni lub ujemny)",
@@ -2981,8 +2981,11 @@
       "price_model_fixed_placeholder": "np. 100000",
       "price_model_fiat_placeholder": "fiat",
       "first_trade_title": "Twoja pierwsza transakcja: kup BLURT",
-      "first_trade_body": "Morphit działa na BLURT, a opłaty za ogłoszenia są w nim płacone. Dlatego Twoja pierwsza transakcja to mały zakup BLURT, aby zasilić konto — gdy już go masz, możesz wystawiać i handlować czymkolwiek. Ten pierwszy zakup jest darmowy (opłata za ogłoszenie jest zniesiona), a ogłoszenie wygasa po 7 dniach.",
-      "first_trade_expiry_note": "Pierwsze ogłoszenia wygasają po 7 dniach."
+      "first_trade_body": "Morphit działa na BLURT, a opłaty za publikację są w nim opłacane. Dlatego Twoja pierwsza transakcja musi być małym zakupem BLURT, aby zasilić konto — gdy już go masz, możesz wystawiać i handlować czymkolwiek.",
+      "first_trade_expiry_note": "Pierwsze ogłoszenia wygasają po 7 dniach.",
+      "step_1_heading_first": "Zaczynajmy!",
+      "amount_min_label_in_fiat": "Wartość minimalna w {fiat}",
+      "amount_max_label_in_fiat": "Wartość maksymalna w {fiat}"
     },
     "errors": {
       "fiat_empty": "Wybierz walutę fiat (np. USD lub EUR).",
@@ -3113,6 +3116,17 @@
       "tier_2000": "{amount} BLURT — hojne saldo początkowe + przestrzeń do aktywnego handlu",
       "tier_10000": "{amount} BLURT — blisko pierwszego kamienia milowego lojalności 10 BP",
       "tier_50000": "{amount} BLURT — mocny start; znaczna waga głosu w Blurt od pierwszego dnia"
+    },
+    "summary": {
+      "sentence_buy": "Kupię {amount} {price} i zapłacę przez {methods}.",
+      "sentence_sell": "Sprzedam {amount} {price} i przyjmę {methods}.",
+      "amount_up_to": "do {max} {fiat} w {asset}",
+      "amount_min_max": "od {min} do {max} {fiat} w {asset}",
+      "amount_min_plus": "{min} {fiat} lub więcej w {asset}",
+      "amount_any": "dowolną ilość {asset}",
+      "price_market": "po cenie rynkowej",
+      "price_fixed": "po stałej cenie {price} {fiat} za {asset}",
+      "see_notes": "Dodaj warunki, szczegóły lub notatki w polu poniżej:"
     }
   },
   "prices": {

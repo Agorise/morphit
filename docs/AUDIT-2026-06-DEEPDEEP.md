@@ -531,3 +531,78 @@ policy has a dedicated smoke and the compliant pattern was visible in the very
 paired-readonly heading I'd read; it slipped because the full 387-smoke battery can't
 run in-sandbox. Lesson for future welcome-back/handle edits: render handles via
 `IdentityLabel` or an i18n-string placeholder, never raw `@{var}` markup.
+
+---
+
+## cp360 — grandma-friendly /post overhaul: deep-deep + five-persona walkthrough
+
+Scope: the new-order page (`/post`) made first-time-trader-friendly + a live
+order-summary card, plus two Ken-reported bug fixes. No schema/payload change
+(verified: OrderPayload/OrderFormInput already carry side/asset/fiat/min-max/
+price-model/payment-methods/terms — orderbook, RSS, API and MCP already consume the
+full shape, so this was pure form-UX + copy + bug fixes).
+
+DEEP-DEEP findings (all resolved/clean):
+- FiatCurrencySelect consumers. Two: `/post` (single mode — changed to inline
+  plain-text display) and `/orderbook` (multi mode, NO `single` prop — UNCHANGED,
+  keeps removable chips). PaymentFilterSelect/AssetFilterSelect only reference it in
+  comments. No multi-mode regression.
+- Shared i18n keys. `post_order.form.{fiat_label,amount_min_label,amount_max_label,
+  price_model_hint,terms_label}` are consumed by BOTH `/post` and `/post/edit`.
+  Re-read `/post/edit` with the new wording — all render sensibly in the edit
+  context (the bare amount labels are the no-fiat fallback the post page also uses).
+  The orderbook + settings "fiat_label" hits are SEPARATE namespaces
+  (`orderbook.filters.fiat_label`, `settings.preferences.fiat_label`) — unaffected
+  by the `post_order.form.fiat_label` value change.
+- Bug 1 (Ken-reported) — draft-restore banner on a pristine first-trade form.
+  `draftHasContent` counted d.side/d.asset, but the first-trade lock force-sets
+  side='buy'/asset='BLURT' on a brand-new account → the snapshot read non-empty with
+  nothing typed → spurious "restored draft" banner. FIX: dropped side/asset from the
+  heuristic (still snapshotted + restored; just one-tap re-selections, not content
+  "worth announcing"). Locked by the new regression smoke.
+- Bug 2 (Ken-reported) — "Enter a flat price." leaking into market mode.
+  Investigated: the CURRENT code is already correct. `priceModelError` is a
+  `$derived` returning '' for an empty/zero spread, and each error StatusLine renders
+  INSIDE its own `priceModelKind === …` block, so fixed→market recomputes to '' and
+  the fixed-error StatusLine unmounts. The stale error Ken saw was on deployed
+  beta.32; the current beta.33+ tree clears it. Locked structurally by the new smoke
+  rather than a no-op code change.
+- Summary card. Uses the route locale (`currentLang`, valid BCP-47) for
+  `Intl.ListFormat` and resolves method names via the SAME `displayNamesForMethods`
+  the picker uses, so the recap matches the picker exactly. Per-locale fragment
+  templates control slot order so the assembled sentence reads naturally per language.
+
+NEW REGRESSION SMOKE: `post-form-grandma-regression-smoke` (9 source-structural
+scenarios, registered, canonical pass line) locks both bug fixes plus the
+summary/Oxford-or, numeric sanitisers, dynamic fiat labels, and first-trade
+subtitle/heading conditionals.
+
+FIVE-PERSONA WALKTHROUGH: Sally-user (first-trade lock → "Let's trade!" heading,
+buy/BLURT forced, waiver auto-applied → new waiver hints + benefits ladder, dynamic
+fiat labels, summary "buy … BLURT … pay with …", Terms/Details/Notes textarea,
+canReview submit; subtitle hidden) — the target persona, fully exercised. Bob
+(experienced → subtitle "90 days", normal heading, full picker, summary
+"sell … accept …"; no waiver hints). Sally-operator / Josie / Charlie unaffected —
+this turn touched only the web post page; no ops-cli, MCP, indexer, relay,
+operator-doc or schema change.
+
+NOT run in-sandbox (deferred to deploy/CI): FULL 388-smoke battery + full vitest; web
+`vite build`; a real-browser eyeball of the first-time `/post` flow + the summary
+card in all 10 locales (esp. fa RTL + the two Chinese variants — Claude-authored,
+native QA still owed).
+
+---
+
+## cp361 — beta.34 release cut (mechanical)
+
+Pure release cut of the cp360 working tree: all 19 version touchpoints bumped
+beta.33 → beta.34 (root + 13 workspace package.json, the relay/indexer/mcp VERSION
+constants, docs/API.md, apps/indexer/README.md), package-lock synced (15 → 15;
+`npm audit fix` not run — banned), and RELEASE-NOTES-v1.0.0-beta.34.md written (no
+asset-count claims). No code change beyond the bump + RELEASE-NOTES — the cp360
+deep-deep + five-persona walkthrough above already cover every functional change in
+this release. Verified: version-consistency 19/19 + RELEASE-NOTES present;
+lockfile-sync 3/3; asset-count-parity 3/3; svelte-check 0/0; indexer tsc 0; i18n
+10/10 @ 3239; post-form-grandma-regression 9/9; maxlength 3/3; price-model-picker
+13/13. BETA → Forgejo only; the full 388-smoke battery + vitest + typecheck-sweep
+run at CI on push.

@@ -1764,8 +1764,8 @@
     "tip_small_body": "Une première transaction modeste (moins de 50 $) limite ce que vous pouvez perdre si quelque chose tourne mal. Vous pourrez publier des ordres plus importants une fois que vous aurez construit une réputation grâce à des transactions complétées.",
     "tip_expiry_label": "Expiration à 7 jours.",
     "tip_expiry_body": "Nous avons défini l'expiration à 7 jours au lieu des 90 par défaut. Une fenêtre plus courte signifie que les offres obsolètes ne s'attardent pas si vous changez d'avis.",
-    "tip_payment_label": "Conseils sur les modes de paiement.",
-    "tip_payment_body": "Ajoutez les modes de paiement que vous acceptez réellement. Les partenaires commerciaux choisissent celui qui leur convient. Points de départ courants : PayPal, Wise, virement bancaire, espèces en personne.",
+    "tip_payment_label": "Moyen de paiement.",
+    "tip_payment_body": "Ajoutez les moyens de paiement avec lesquels vous pouvez payer. Vos partenaires choisissent celui qui leur convient. Points de départ courants : PayPal, Wise, virement bancaire, espèces en personne.",
     "faq_link": "Lire le guide complet de la première transaction",
     "dismiss_aria": "Fermer ce pack de démarrage"
   },
@@ -2909,7 +2909,7 @@
   },
   "post_order": {
     "heading": "Publier un ordre",
-    "subtitle": "Indiquez aux traders ce que vous voulez acheter ou vendre et comment vous joindre. Les frais couvrent 14 jours dans le carnet d'ordres.",
+    "subtitle": "Indiquez aux traders ce que vous voulez acheter ou vendre et comment vous joindre. Les frais couvrent 90 jours dans le carnet d'ordres.",
     "back_to_orderbook": "Retour au carnet",
     "no_account": {
       "title": "Vous avez besoin d'un compte d'abord",
@@ -2928,16 +2928,16 @@
       "side_sell": "Je veux VENDRE de la crypto",
       "asset_label": "Quel actif ?",
       "step_2_heading": "Combien et à quel prix ?",
-      "fiat_label": "Monnaie fiat",
-      "amount_min_label": "Minimum (fiat)",
-      "amount_max_label": "Maximum (fiat)",
+      "fiat_label": "Dans quelle monnaie fiat votre paiement sera-t-il libellé ?",
+      "amount_min_label": "Valeur minimale",
+      "amount_max_label": "Valeur maximale",
       "amount_optional_hint": "Laissez vide pour aucune limite.",
       "step_3_heading": "Comment allez-vous payer ?",
       "payment_methods_label": "Je peux payer via",
       "payment_methods_hint": "Ajoutez-en autant que vous voulez — vos partenaires d'échange choisiront celui qui leur convient.",
       "region_label": "Région (optionnel)",
       "region_hint": "Où vous êtes prêt à échanger. Aide les gens proches à vous trouver.",
-      "terms_label": "Conditions supplémentaires (optionnel)",
+      "terms_label": "Conditions / Détails / Notes",
       "terms_placeholder": "p. ex. « Week-ends seulement » ou « Espèces uniquement pour les montants inférieurs à 100 $ »",
       "expires_label": "L'annonce expire",
       "expires_1d": "Dans 1 jour",
@@ -2946,7 +2946,7 @@
       "expires_14d": "Dans 14 jours",
       "expires_30d": "Dans 30 jours",
       "waiver_asset_locked_title": "Ta remise de première commande est réservée à BLURT",
-      "waiver_asset_hint": "Ta première commande est gratuite, mais elle doit être un achat de BLURT — cela fait entrer des BLURT dans ton portefeuille pour que tu puisses payer les frais des futures commandes et gagner des récompenses de fidélité.",
+      "waiver_asset_hint": "Votre première annonce est gratuite, mais ce doit être un petit achat de BLURT — cela amène du BLURT dans votre portefeuille pour payer les petits frais de publication des annonces et gagner des récompenses de fidélité.",
       "expires_60d": "Dans 60 jours",
       "expires_90d": "Dans 90 jours (par défaut)",
       "asset_explainer": {
@@ -2967,10 +2967,10 @@
         "eth": "Ethereum (ETH) — cryptomonnaie Proof-of-Stake. Transfert natif d'ETH (pas d'ETH enveloppé ni de tokens ERC-20). Adresses hex de 42 caractères préfixées 0x (même forme que USDT-ERC20, USDC-ERC20, DAI-ERC20 et toute adresse de compte de token EVM ; les champs `asset` et `network` lèvent l'ambiguïté). Uniquement échangeable sur Morphit ; les frais de listage restent en BLURT/BTC/XMR.",
         "xrp": "Ripple (XRP) — cryptomonnaie à consensus Federated Byzantine Agreement sur le XRP Ledger. Adresses base58 de 24-34 caractères commençant par `r`. Les destination tags (entiers 32 bits) sont obligatoires lors de l'envoi vers des adresses hébergées par des exchanges — votre contrepartie pair-à-pair n'en a généralement pas besoin. Les comptes XRPL nécessitent ≥1 XRP de réserve de base pour exister. Uniquement échangeable sur Morphit ; les frais de listage restent en BLURT/BTC/XMR."
       },
-      "waiver_fiat_hint": "💡 BLURT est peu échangé sur les bourses centralisées, donc la plupart des trades BLURT-pour-fiat sur Morphit se font avec des utilisateurs actifs du réseau social Blurt, des opérateurs existants, ou par troc. Astuce : choisissez une devise fiat que votre réseau local utilise (USD, EUR, MXN, etc.), ou consultez la méthode de paiement En personne → Troc (biens) à l'étape 3 si vous voulez offrir autre chose de valeur. Le carnet d'ordres est petit pour l'instant — votre ordre d'achat aide à le construire.",
+      "waiver_fiat_hint": "💡 La plupart des échanges de BLURT sur Morphit se font avec des utilisateurs actifs du réseau social Blurt, des opérateurs existants ou par troc. Choisissez donc la monnaie fiat que vous utilisez localement (USD, EUR, MXN, etc.) et proposez des moyens de paiement en personne ou par troc (biens/services) si vous souhaitez offrir autre chose de valeur.",
       "waiver_benefits_heading": "Ce que votre achat débloque :",
       "price_model_legend": "Prix",
-      "price_model_hint": "Comment ton prix est-il fixé ? La plupart utilisent le prix du marché ; le prix fixe est pour quand tu veux un montant précis quoi que fasse le marché.",
+      "price_model_hint": "Sur quoi reposent vos valeurs minimale et maximale ? La plupart utilisent le prix du marché ; le prix fixe sert quand vous voulez un montant précis quels que soient les mouvements du marché.",
       "price_model_spread_label": "Prix du marché",
       "price_model_spread_help": "Ancré au taux actuel au moment de chaque échange. Optionnel : ajoute un petit spread +/-.",
       "price_model_spread_aria": "Pourcentage de spread (positif ou négatif)",
@@ -2981,8 +2981,11 @@
       "price_model_fixed_placeholder": "ex. 100000",
       "price_model_fiat_placeholder": "fiat",
       "first_trade_title": "Votre première transaction : acheter du BLURT",
-      "first_trade_body": "Morphit fonctionne avec du BLURT, et les frais de publication se paient en BLURT. Votre toute première transaction est donc un petit achat de BLURT pour approvisionner votre compte : une fois que vous en avez, vous pouvez publier et échanger n'importe quoi. Ce premier achat est gratuit (les frais de publication sont offerts) et l'annonce expire dans 7 jours.",
-      "first_trade_expiry_note": "Les premières annonces expirent au bout de 7 jours."
+      "first_trade_body": "Morphit fonctionne avec du BLURT, et les frais de publication sont payés en BLURT. Votre toute première transaction doit donc être un petit achat de BLURT pour approvisionner votre compte — une fois que vous en détenez, vous pouvez publier et échanger n'importe quoi.",
+      "first_trade_expiry_note": "Les premières annonces expirent au bout de 7 jours.",
+      "step_1_heading_first": "C'est parti !",
+      "amount_min_label_in_fiat": "Valeur minimale en {fiat}",
+      "amount_max_label_in_fiat": "Valeur maximale en {fiat}"
     },
     "errors": {
       "fiat_empty": "Choisissez une monnaie fiat (comme USD ou EUR).",
@@ -3113,6 +3116,17 @@
       "tier_2000": "{amount} BLURT — solde de départ généreux + marge pour trader activement",
       "tier_10000": "{amount} BLURT — proche de votre premier palier de fidélité 10 BP",
       "tier_50000": "{amount} BLURT — démarrage costaud ; poids de vote substantiel sur Blurt dès le premier jour"
+    },
+    "summary": {
+      "sentence_buy": "Je vais acheter {amount} {price} et je paierai avec {methods}.",
+      "sentence_sell": "Je vais vendre {amount} {price} et j'accepterai {methods}.",
+      "amount_up_to": "jusqu'à {max} {fiat} de {asset}",
+      "amount_min_max": "de {min} à {max} {fiat} de {asset}",
+      "amount_min_plus": "{min} {fiat} ou plus de {asset}",
+      "amount_any": "n'importe quelle quantité de {asset}",
+      "price_market": "au prix du marché",
+      "price_fixed": "à un prix fixe de {price} {fiat} par {asset}",
+      "see_notes": "Ajoutez vos conditions, détails ou notes dans le champ ci-dessous :"
     }
   },
   "prices": {

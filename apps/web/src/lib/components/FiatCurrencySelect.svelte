@@ -138,6 +138,15 @@
 		return () => document.removeEventListener('pointerdown', onDocPointerDown, true);
 	});
 
+	// Single-select with a pre-filled value (draft restore / saved
+	// preference) needs the currency dataset loaded so the inline label
+	// can show the full NAME, not just the bare ISO code — otherwise the
+	// field reads "MXN" until the user happens to focus it.  Cheap: one
+	// lazy import on mount, only when there is something to label.
+	$effect(() => {
+		if (single && value.length > 0 && !mod) void ensureLoaded();
+	});
+
 	//
 	// The root z is conditional — z-30 while open, z-10 while closed —
 	// because the orderbook stacks three of these selects on one page
@@ -170,22 +179,35 @@
 			? 'ring-2 ring-morphit-emerald'
 			: ''} bg-white px-2 py-1.5 dark:bg-ink-900"
 	>
-		{#each value as code (code)}
-			<span
-				class="inline-flex items-center gap-1 rounded-lg bg-morphit-emerald/10 px-2 py-0.5 text-sm font-medium text-morphit-emerald"
-				title={nameFor(code)}
-			>
-				{code}
-				<button
-					type="button"
-					onclick={() => remove(code)}
-					aria-label={`${$_('orderbook.filters.fiat_remove')} ${code}`}
-					class="leading-none opacity-70 hover:opacity-100"
+		{#if single}
+			<!-- Single-select (compose-order fiat field): the one choice
+			     reads as plain inline text, NOT a removable "×" chip,
+			     because a chip implies you can add more than one.  While
+			     the field is focused the label yields to the search box so
+			     the user can type a replacement (picking one REPLACES). -->
+			{#if value.length === 1 && !focused}
+				<span class="px-1 py-0.5 text-sm font-medium text-ink-900 dark:text-ink-50">
+					{value[0]}{#if mod && nameFor(value[0]) !== value[0]} — {nameFor(value[0])}{/if}
+				</span>
+			{/if}
+		{:else}
+			{#each value as code (code)}
+				<span
+					class="inline-flex items-center gap-1 rounded-lg bg-morphit-emerald/10 px-2 py-0.5 text-sm font-medium text-morphit-emerald"
+					title={nameFor(code)}
 				>
-					×
-				</button>
-			</span>
-		{/each}
+					{code}
+					<button
+						type="button"
+						onclick={() => remove(code)}
+						aria-label={`${$_('orderbook.filters.fiat_remove')} ${code}`}
+						class="leading-none opacity-70 hover:opacity-100"
+					>
+						×
+					</button>
+				</span>
+			{/each}
+		{/if}
 		<input
 			bind:this={inputEl}
 			bind:value={query}
@@ -203,7 +225,13 @@
 				activeIndex = 0;
 			}}
 			onkeydown={onKeydown}
-			placeholder={value.length ? '' : $_('orderbook.filters.fiat_search_placeholder')}
+			placeholder={single
+				? value.length === 0 || focused
+					? ($_('orderbook.filters.fiat_search_placeholder') as string)
+					: ''
+				: value.length
+					? ''
+					: ($_('orderbook.filters.fiat_search_placeholder') as string)}
 			class="grow border-0 bg-transparent px-1 py-0.5 text-sm focus:outline-none focus:ring-0"
 		/>
 	</div>

@@ -1764,8 +1764,8 @@
     "tip_small_body": "A small first trade (under $50) limits what you can lose if something goes wrong. You can post bigger orders once you've built reputation through completed trades.",
     "tip_expiry_label": "7-day expiry.",
     "tip_expiry_body": "We've set the expiry to 7 days instead of the default 90. A shorter window means stale offers don't linger if you change your mind.",
-    "tip_payment_label": "Payment method tips.",
-    "tip_payment_body": "Add the payment methods you actually accept. Trade partners pick which works for them. Common starting points: PayPal, Wise, bank transfer, cash in person.",
+    "tip_payment_label": "Payment method.",
+    "tip_payment_body": "Add the payment methods that you can pay with. Trade partners pick which works for them. Common starting points: PayPal, Wise, bank transfer, cash in person.",
     "faq_link": "Read the full first-trade walkthrough",
     "dismiss_aria": "Dismiss this starter pack"
   },
@@ -2909,7 +2909,7 @@
   },
   "post_order": {
     "heading": "Post an order",
-    "subtitle": "Tell traders what you want to buy or sell and how to reach you. The listing fee pays for 14 days in the orderbook.",
+    "subtitle": "Tell traders what you want to buy or sell and how to reach you. The listing fee pays for 90 days in the orderbook.",
     "back_to_orderbook": "Back to orderbook",
     "no_account": {
       "title": "You need an account first",
@@ -2928,16 +2928,16 @@
       "side_sell": "I want to SELL crypto",
       "asset_label": "Which asset?",
       "step_2_heading": "How much and at what price?",
-      "fiat_label": "Fiat currency",
-      "amount_min_label": "Minimum trade (fiat)",
-      "amount_max_label": "Maximum trade (fiat)",
+      "fiat_label": "Which fiat currency will your payment be denominated in?",
+      "amount_min_label": "Minimum value",
+      "amount_max_label": "Maximum value",
       "amount_optional_hint": "Leave blank for no limit.",
       "step_3_heading": "How will you pay?",
       "payment_methods_label": "I can pay via",
       "payment_methods_hint": "Add as many as you like — trade partners pick which works for them.",
       "region_label": "Region (optional)",
       "region_hint": "Where you're willing to trade. Helps people find you nearby.",
-      "terms_label": "Extra terms (optional)",
+      "terms_label": "Terms / Details / Notes",
       "terms_placeholder": "e.g. \"Weekends only\" or \"Cash only for amounts under $100\"",
       "expires_label": "Listing expires",
       "expires_1d": "In 1 day",
@@ -2946,7 +2946,7 @@
       "expires_14d": "In 14 days",
       "expires_30d": "In 30 days",
       "waiver_asset_locked_title": "Your first-order waiver is BLURT-only",
-      "waiver_asset_hint": "Your first order is free, but it must be a BLURT buy — this pulls BLURT into your wallet so you can pay fees on future orders and earn loyalty rewards.",
+      "waiver_asset_hint": "Your first order is free, but it must be a small buy of BLURT — this pulls BLURT into your wallet so you can pay the tiny listing fees on orders and earn loyalty rewards.",
       "expires_60d": "In 60 days",
       "expires_90d": "In 90 days (default)",
       "asset_explainer": {
@@ -2967,10 +2967,10 @@
         "eth": "Ethereum (ETH) — Proof-of-Stake cryptocurrency. Native ETH transfer (not wrapped ETH or ERC-20 tokens). 42-character 0x-prefixed hex addresses (same shape as USDT-ERC20, USDC-ERC20, DAI-ERC20, and every EVM token-account address; asset field + network field disambiguate). Trade-only on Morphit; listing fees stay BLURT/BTC/XMR.",
         "xrp": "Ripple (XRP) — Federated Byzantine Agreement cryptocurrency on the XRP Ledger. 24-34 character base58 addresses starting with `r`. Destination tags (32-bit integers) are required when sending to exchange-hosted addresses — your peer-to-peer counterparty typically does not need one. XRPL accounts need ≥1 XRP base reserve to exist. Trade-only on Morphit; listing fees stay BLURT/BTC/XMR."
       },
-      "waiver_fiat_hint": "💡 BLURT trades thinly on centralized exchanges, so most BLURT-for-fiat trades on Morphit happen with active Blurt social-network users, existing operators, or via barter. Tip: pick a fiat your local network uses (USD, EUR, MXN, etc.), or check the In-Person → Barter (goods/services) payment method in step 3 if you want to offer something else of value. The orderbook is small for now — your buy order helps build it.",
+      "waiver_fiat_hint": "💡 Most BLURT trades on Morphit happen with active Blurt social-network users, existing operators, or via barter. So, pick the fiat denomination that you use locally (USD, EUR, MXN, etc), and offer In-Person or Barter (goods/services) payment methods if you want to offer something else of value.",
       "waiver_benefits_heading": "What your buy unlocks:",
       "price_model_legend": "Price",
-      "price_model_hint": "How is your asking price set? Most traders use market rate; flat-price is for when you want a specific number regardless of market moves.",
+      "price_model_hint": "What are your Minimum and Maximum values based on? Most traders use market price; flat price is for when you want a specific number regardless of market moves.",
       "price_model_spread_label": "Market price",
       "price_model_spread_help": "Anchored to current exchange rate when each trade happens. Optionally add a small +/- spread.",
       "price_model_spread_aria": "Spread percent (positive or negative)",
@@ -2981,8 +2981,11 @@
       "price_model_fixed_placeholder": "e.g. 100000",
       "price_model_fiat_placeholder": "fiat",
       "first_trade_title": "Your first trade: buy BLURT",
-      "first_trade_body": "Morphit runs on BLURT, and listing fees are paid in it. So your very first trade is a small purchase of BLURT to fund your account — once you hold some, you can list and trade anything. This first buy is free (the listing fee is waived) and the listing expires in 7 days.",
-      "first_trade_expiry_note": "First listings are set to expire in 7 days."
+      "first_trade_body": "Morphit runs on BLURT, and listing fees are paid in it. So your very first trade must be a small purchase of BLURT to fund your account — once you hold some, you can list and trade anything.",
+      "first_trade_expiry_note": "First listings are set to expire in 7 days.",
+      "step_1_heading_first": "Let's trade!",
+      "amount_min_label_in_fiat": "Minimum value in {fiat}",
+      "amount_max_label_in_fiat": "Maximum value in {fiat}"
     },
     "errors": {
       "fiat_empty": "Pick a fiat currency (like USD or EUR).",
@@ -3113,6 +3116,17 @@
       "tier_2000": "{amount} BLURT — generous starter balance + room to be actively trading",
       "tier_10000": "{amount} BLURT — close to your first 10 BP loyalty milestone",
       "tier_50000": "{amount} BLURT — heavy starter; substantial Blurt voting weight from day one"
+    },
+    "summary": {
+      "sentence_buy": "I will buy {amount} {price}, and pay with {methods}.",
+      "sentence_sell": "I will sell {amount} {price}, and accept {methods}.",
+      "amount_up_to": "up to {max} {fiat} worth of {asset}",
+      "amount_min_max": "{min} to {max} {fiat} worth of {asset}",
+      "amount_min_plus": "{min} {fiat} or more worth of {asset}",
+      "amount_any": "any amount of {asset}",
+      "price_market": "at market price",
+      "price_fixed": "at a fixed price of {price} {fiat} per {asset}",
+      "see_notes": "Add any terms, details, or notes in the field below:"
     }
   },
   "prices": {
