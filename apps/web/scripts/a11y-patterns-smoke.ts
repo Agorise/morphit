@@ -127,13 +127,17 @@ const scenarios: readonly Scenario[] = [
 		name: '/post fiat StatusLine has id="fiat-error"',
 		ok: /<StatusLine[^>]*id="fiat-error"[^>]*>\{fiatError\}/.test(POST)
 	},
+	// NB /post's amount + price inputs are one-way `value={…}` +
+	// `oninput` (cp360: the decimal sanitiser keepDecimal/keepSignedDecimal
+	// can't run cleanly through a two-way bind), so these match `value={…}`
+	// not `bind:value={…}`.  /post/edit (below) still uses bind:value.
 	{
 		name: '/post amountMin input has aria-invalid',
-		ok: /bind:value=\{amountMin\}[\s\S]{0,300}aria-invalid=\{!!amountError\}/.test(POST)
+		ok: /value=\{amountMin\}[\s\S]{0,300}aria-invalid=\{!!amountError\}/.test(POST)
 	},
 	{
 		name: '/post amountMax input has aria-invalid',
-		ok: /bind:value=\{amountMax\}[\s\S]{0,300}aria-invalid=\{!!amountError\}/.test(POST)
+		ok: /value=\{amountMax\}[\s\S]{0,300}aria-invalid=\{!!amountError\}/.test(POST)
 	},
 	{
 		name: '/post amount StatusLine has id="amount-error"',
@@ -141,11 +145,11 @@ const scenarios: readonly Scenario[] = [
 	},
 	{
 		name: '/post spread price input has aria-invalid',
-		ok: /bind:value=\{spreadPercent\}[\s\S]{0,300}aria-invalid=\{!!priceModelError\}/.test(POST)
+		ok: /value=\{spreadPercent\}[\s\S]{0,300}aria-invalid=\{!!priceModelError\}/.test(POST)
 	},
 	{
 		name: '/post fixed price input has aria-invalid',
-		ok: /bind:value=\{fixedPrice\}[\s\S]{0,300}aria-invalid=\{!!priceModelError\}/.test(POST)
+		ok: /value=\{fixedPrice\}[\s\S]{0,300}aria-invalid=\{!!priceModelError\}/.test(POST)
 	},
 	{
 		name: '/post payment-methods StatusLine has id',

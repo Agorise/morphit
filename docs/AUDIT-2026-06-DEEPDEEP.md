@@ -606,3 +606,27 @@ lockfile-sync 3/3; asset-count-parity 3/3; svelte-check 0/0; indexer tsc 0; i18n
 10/10 @ 3239; post-form-grandma-regression 9/9; maxlength 3/3; price-model-picker
 13/13. BETA → Forgejo only; the full 388-smoke battery + vitest + typecheck-sweep
 run at CI on push.
+
+---
+
+## cp362 — beta.34 CI fix: a11y-patterns-smoke stale bind:value anchor
+
+The cp361 beta.34 tag push failed BOTH CI runners on `a11y-patterns-smoke`: 4 of 36
+scenarios — "/post amountMin/amountMax/spread/fixed input has aria-invalid". Root
+cause: cp360 deliberately switched those four inputs from `bind:value={…}` to one-way
+`value={…}` + `oninput` so the decimal sanitiser (keepDecimal/keepSignedDecimal) can
+run — a two-way bind would fight the sanitiser. The a11y smoke matched
+`bind:value=\{X\}[\s\S]{0,300}aria-invalid=…`, which no longer matched once the
+`bind:` prefix was gone. The a11y itself was intact the whole time — all four inputs
+still carry `aria-invalid={!!amountError|priceModelError}` + `aria-describedby`; only
+the smoke's binding-syntax anchor was stale. Fixed by anchoring the 4 `/post`
+matchers on `value=\{X\}` (which also matches `bind:value={X}`, a superstring); the 2
+`/post/edit` matchers keep `bind:value` because the edit route was untouched in cp360.
+
+Honest miss: same class as the cp359 identity-label-policy miss — `a11y-patterns-smoke`
+runs only in the full battery (not the in-sandbox subset). The discipline going
+forward: when restructuring an input/markup pattern, grep the smoke suite for
+anchors on that exact pattern (bind:value, type=, id=, the i18n key) BEFORE cutting a
+release. This turn I swept all 12 smokes that read the /post source; only
+a11y-patterns anchored on the changed binding, and it is now fixed. beta.34 is
+unchanged (no version bump); the beta.34 tag moves to the cp362 commit.
