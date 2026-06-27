@@ -130,7 +130,7 @@ Liveness check — also exposes block lag and indexer version.
 ```json
 {
   "status": "ok",
-  "version": "1.0.0-beta.34",
+  "version": "1.0.0-beta.35",
   "uptime_sec": 3742,
   "chain_head_block": 17234569,
   "indexed_block": 17234567,
@@ -138,7 +138,14 @@ Liveness check — also exposes block lag and indexer version.
   "lag_blocks_note": "0–30 is normal (~90s behind; Blurt makes a block every 3s)",
   "stale": false,
   "rpc_endpoints_healthy": 4,
-  "rpc_endpoints_total": 4
+  "rpc_endpoints_total": 4,
+  "price_feed": {
+    "enabled": true,
+    "blurt_fiat": 0.00130526,
+    "denomination_fiat": "USD",
+    "source": "coingecko",
+    "stale": false
+  }
 }
 ```
 
@@ -167,6 +174,20 @@ reachable (out of cooldown) versus configured in total.  If
 `rpc_endpoints_healthy` reads `0` while the node is behind, the
 RPC endpoints — not the indexer — are the problem.  Per-endpoint
 URLs and detail stay in the operator-opt-in verbose block below.
+
+`price_feed` summarises the BLURT/USD price feed that powers the
+UI's fiat echoes (the same number served as `blurt_price_fiat` on
+`/v1/listing-fee`, so nothing here is more sensitive than that).
+`enabled` is `false` when the operator has
+`MORPHIT_INDEXER_PRICE_FEED_ENABLED=false` (the UI then shows
+BLURT only).  When enabled, `blurt_fiat` is the current 1-BLURT
+price, `denomination_fiat` is the fiat ticker it's quoted in
+(`MORPHIT_INDEXER_PRICE_FEED_DENOMINATION_FIAT`, default `USD`),
+`source` is the upstream currently serving (`klingex`,
+`coingecko`, or `static_floor`), and `stale` is `true` when no
+live upstream has succeeded and the indexer is falling back to the
+static floor.  The per-upstream forensic detail (drift,
+disagreement, peer comparison) stays in the verbose block.
 
 Operators who set `MORPHIT_INDEXER_VERBOSE_HEALTH=1` may also see
 a `diagnostics` block in the response with breaker snapshots,

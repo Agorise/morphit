@@ -268,6 +268,25 @@ if (resetBody && /clearSelfProfile/.test(resetBody)) {
 	pass(`SAFETY: reset() does not clear the self-avatar (persists across lock/tab-close)`);
 }
 
+// ── #11: broadcastSignOut clears the keystore SYNCHRONOUSLY (cp363) ──────────
+// The signed-out header CTA reads hasPersistedKeystore() inside a $derived
+// whose only reactive trigger is $hasAnySession — which flips synchronously
+// inside reset(). If the disk clear is deferred (reset()'s async clearDisk
+// dynamic-import path), it lands a microtask AFTER that single re-run, so the
+// button stays stuck on "Unlock" post-sign-out (AvatarMenu lives in the
+// layout, so the navigation home doesn't remount it to re-read, and
+// hasPersistedKeystore() is a plain localStorage read, not a reactive dep).
+// broadcastSignOut must therefore call clearKeystore() synchronously in its
+// own body, before reset() runs.
+if (broadcastBody && /\bclearKeystore\s*\(\s*\)/.test(broadcastBody)) {
+	pass(`broadcastSignOut clears the keystore synchronously (header CTA reverts to Sign in, not Unlock)`);
+} else if (broadcastBody) {
+	fail(
+		`broadcastSignOut does not clear the keystore synchronously`,
+		`call clearKeystore() directly in broadcastSignOut — relying only on reset()'s async clearDisk path leaves the signed-out header button stuck on "Unlock"`
+	);
+}
+
 console.log(`\n${passes} passed, ${failures} failed`);
 if (failures > 0) process.exit(1);
 console.log(`✓ all ${passes} cross-tab-signout-propagation scenarios passed`);

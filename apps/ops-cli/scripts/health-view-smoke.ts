@@ -27,6 +27,7 @@ import {
 	resolveHealthUrl,
 	resolveRelayHealthUrl,
 	summarizeHealth,
+	parsePriceFeed,
 	classifyHealthResult,
 	bridgeGatewayHosts,
 	candidateHealthUrls,
@@ -134,7 +135,14 @@ expect('HV-1e an unparseable string passes through', ensureHealthPath('not a url
 		rpc_endpoints_healthy: 3,
 		rpc_endpoints_total: 4,
 		web_push: true,
-		blurt_balance: '9000.000 BLURT'
+		blurt_balance: '9000.000 BLURT',
+		price_feed: {
+			enabled: true,
+			blurt_fiat: 0.0013,
+			denomination_fiat: 'USD',
+			source: 'coingecko',
+			stale: false
+		}
 	});
 	expect(
 		'HV-3a full healthy body parsed',
@@ -149,6 +157,11 @@ expect('HV-1e an unparseable string passes through', ensureHealthPath('not a url
 			full.rpcTotal === 4 &&
 			full.webPush === true &&
 			full.relayBalance === '9000.000 BLURT' &&
+			full.priceFeed !== null &&
+			full.priceFeed.enabled &&
+			full.priceFeed.blurtFiat === 0.0013 &&
+			full.priceFeed.source === 'coingecko' &&
+			!full.priceFeed.stale &&
 			!full.rpcAllDown,
 		JSON.stringify(full)
 	);
@@ -169,6 +182,7 @@ expect('HV-1e an unparseable string passes through', ensureHealthPath('not a url
 			missing.rpcTotal === null &&
 			missing.webPush === null &&
 			missing.relayBalance === null &&
+			missing.priceFeed === null &&
 			!missing.rpcAllDown &&
 			missing.synced,
 		JSON.stringify(missing)
@@ -181,6 +195,42 @@ expect('HV-1e an unparseable string passes through', ensureHealthPath('not a url
 	expect(
 		'HV-3g non-object body tolerated',
 		summarizeHealth(null).status === 'unknown' && summarizeHealth(42).synced
+	);
+	// cp365 — parsePriceFeed: tolerant of every shape the indexer (or an
+	// older build) might send for the non-verbose `price_feed`.
+	const pfOn = parsePriceFeed({
+		enabled: true,
+		blurt_fiat: 0.0013,
+		denomination_fiat: 'USD',
+		source: 'coingecko',
+		stale: false
+	});
+	expect(
+		'HV-3i parsePriceFeed: live feed parsed',
+		pfOn !== null &&
+			pfOn.enabled &&
+			pfOn.blurtFiat === 0.0013 &&
+			pfOn.denomination === 'USD' &&
+			pfOn.source === 'coingecko' &&
+			!pfOn.stale,
+		JSON.stringify(pfOn)
+	);
+	const pfOff = parsePriceFeed({ enabled: false });
+	expect(
+		'HV-3j parsePriceFeed: disabled feed → enabled:false, no price',
+		pfOff !== null && !pfOff.enabled && pfOff.blurtFiat === null && pfOff.stale === false
+	);
+	const pfStale = parsePriceFeed({ enabled: true, blurt_fiat: 0.0015, source: 'static_floor', stale: true });
+	expect(
+		'HV-3k parsePriceFeed: stale upstream flagged',
+		pfStale !== null && pfStale.enabled && pfStale.stale && pfStale.source === 'static_floor'
+	);
+	expect(
+		'HV-3l parsePriceFeed: absent/non-object → null (pre-field indexer, relay health)',
+		parsePriceFeed(undefined) === null &&
+			parsePriceFeed(null) === null &&
+			parsePriceFeed(42) === null &&
+			parsePriceFeed({ enabled: 'yes' }) === null
 	);
 }
 

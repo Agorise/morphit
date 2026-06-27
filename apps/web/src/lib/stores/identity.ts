@@ -39,7 +39,7 @@ import { writable, derived, get, type Readable } from 'svelte/store';
 import { browser } from '$app/environment';
 import { decryptIdentity, type KeystoreEnvelope } from '$crypto/keystore';
 import { toLiveIdentity, wipeLiveIdentity, type LiveIdentity } from '$crypto/identity-core';
-import { KEYSTORE_ENVELOPE_STORAGE_KEY } from '$crypto/persistentKeystore';
+import { KEYSTORE_ENVELOPE_STORAGE_KEY, clearKeystore } from '$crypto/persistentKeystore';
 import {
 	PAIRED_SESSION_STORAGE_KEY,
 	writePairedSession,
@@ -749,7 +749,18 @@ export function broadcastSignOut(): void {
 			// Channel error — local reset still runs below.
 		}
 	}
-	reset({ clearDisk: true });
+	// EXPLICIT sign-out wipes disk for real. Done SYNCHRONOUSLY here (not via
+	// reset()'s clearDisk dynamic-import path) so hasPersistedKeystore() is
+	// already false when the signed-out header CTA's $derived re-runs on the
+	// $hasAnySession flip inside reset() below. The async clearDisk path lands
+	// a microtask later — AFTER that single re-run — which left the header
+	// button stuck on "Unlock" after sign-out (AvatarMenu lives in the layout,
+	// so the post-sign-out navigation doesn't remount it to re-read, and
+	// hasPersistedKeystore() is a plain localStorage read, not a reactive dep).
+	// No import cycle: persistentKeystore/pairedSession don't import this store.
+	clearKeystore();
+	clearPairedSession();
+	reset();
 	// Forget the persisted account name on an EXPLICIT sign-out so the
 	// login page's signed-in gate (getUserBlurtAccount(), which reads the
 	// shared-across-tabs `morphit.blurtAccount` localStorage key) no longer

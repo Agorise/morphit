@@ -2952,7 +2952,7 @@
       "asset_explainer": {
         "btc": "Bitcoin (BTC) — oryginalna kryptowaluta, używana na całym świecie. Publiczna księga; transakcje są widoczne. Opłaty sieciowe i czas potwierdzenia zmieniają się z popytem.",
         "xmr": "Monero (XMR) — kryptowaluta zorientowana na prywatność. Domyślnie ukrywa kwoty, nadawcę i odbiorcę. Idealna, jeśli zależy ci na prywatności.",
-        "blurt": "BLURT — blockchain społecznościowy, na którym działa Morphit. Szybki (3-sekundowe bloki), transfery bez opłat, ale mała kapitalizacja. Przydatny do małych kwot i napiwków; mniej do przechowywania dużej wartości.",
+        "blurt": "BLURT — społecznościowy blockchain, na którym działa Morphit. Szybki (3-sekundowe bloki), transfery bez opłat i wbudowany system nagród. Idealny do budowania reputacji, trwałego zapisu Twoich transakcji i nawiązywania kontaktu z podobnie myślącymi ludźmi.",
         "usdt": "Tether (USDT) — stablecoin powiązany 1:1 z USD. Kontrolowany centralnie — Tether Inc. może zamrozić każdy adres. Tylko handel na Morphit: nie może płacić opłat za wystawianie.",
         "bch": "Bitcoin Cash (BCH). Forknięty z Bitcoina w 2017 r., aby preferować większe bloki i niższe opłaty transakcyjne ponad dynamikę rynku opłat. Przejrzysty rejestr jak BTC; żaden emitent nie może zamrozić adresów. Tylko do handlu na Morphit — opłaty za wystawienie nadal płacone w BLURT, BTC lub XMR.",
         "ltc": "Litecoin (LTC). Fork Bitcoina z 2011 r. z szybszymi 2,5-minutowymi blokami i wydobyciem Scrypt. Przezroczysty jak Bitcoin — każda transakcja jest publicznie widoczna w łańcuchu. Brak centralnego emitenta; nikt nie może zamrozić twoich adresów.",
