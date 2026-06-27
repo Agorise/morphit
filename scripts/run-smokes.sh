@@ -151,6 +151,7 @@ SMOKES=(
 	"apps/web:voucher-locale-parity-smoke"
 	"apps/web:price-model-display-smoke"
 	"apps/web:price-model-picker-parity-smoke"
+	"apps/web:post-form-grandma-regression-smoke"
 	"apps/web:composite-price-provider-smoke"
 	"apps/web:desktop-pairing-crypto-smoke"
 	"apps/web:paired-readonly-lifecycle-smoke"

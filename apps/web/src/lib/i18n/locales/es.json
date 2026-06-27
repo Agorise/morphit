@@ -1764,8 +1764,8 @@
     "tip_small_body": "Una primera operación pequeña (menos de $50) limita lo que puedes perder si algo sale mal. Puedes publicar órdenes más grandes una vez que hayas construido reputación con operaciones completadas.",
     "tip_expiry_label": "Expira en 7 días.",
     "tip_expiry_body": "Hemos puesto la expiración en 7 días en lugar de los 90 predeterminados. Una ventana más corta significa que las ofertas obsoletas no se quedan si cambias de opinión.",
-    "tip_payment_label": "Consejos sobre métodos de pago.",
-    "tip_payment_body": "Añade los métodos de pago que realmente aceptas. Los socios comerciales eligen el que les funcione. Puntos de partida comunes: PayPal, Wise, transferencia bancaria, efectivo en persona.",
+    "tip_payment_label": "Método de pago.",
+    "tip_payment_body": "Añade los métodos de pago con los que puedes pagar. Tus contrapartes eligen el que les sirva. Puntos de partida comunes: PayPal, Wise, transferencia bancaria, efectivo en persona.",
     "faq_link": "Lee el tutorial completo de la primera operación",
     "dismiss_aria": "Descartar este pack de inicio"
   },
@@ -2909,7 +2909,7 @@
   },
   "post_order": {
     "heading": "Publicar una orden",
-    "subtitle": "Cuenta a los traders qué quieres comprar o vender y cómo contactarte. La tarifa cubre 14 días en el libro de órdenes.",
+    "subtitle": "Cuenta a los traders qué quieres comprar o vender y cómo contactarte. La tarifa cubre 90 días en el libro de órdenes.",
     "back_to_orderbook": "Volver al libro",
     "no_account": {
       "title": "Necesitas una cuenta primero",
@@ -2928,16 +2928,16 @@
       "side_sell": "Quiero VENDER cripto",
       "asset_label": "¿Qué activo?",
       "step_2_heading": "¿Cuánto y a qué precio?",
-      "fiat_label": "Moneda fiat",
-      "amount_min_label": "Mínimo (fiat)",
-      "amount_max_label": "Máximo (fiat)",
+      "fiat_label": "¿En qué moneda fiat estará denominado tu pago?",
+      "amount_min_label": "Valor mínimo",
+      "amount_max_label": "Valor máximo",
       "amount_optional_hint": "Déjalo en blanco si no hay límite.",
       "step_3_heading": "¿Cómo vas a pagar?",
       "payment_methods_label": "Puedo pagar con",
       "payment_methods_hint": "Añade tantos como quieras: los compañeros de intercambio eligen el que les funcione.",
       "region_label": "Región (opcional)",
       "region_hint": "Dónde estás dispuesto a operar. Ayuda a que la gente cercana te encuentre.",
-      "terms_label": "Condiciones extra (opcional)",
+      "terms_label": "Términos / Detalles / Notas",
       "terms_placeholder": "p. ej., \"Solo fines de semana\" o \"Solo efectivo para montos menores a $100\"",
       "expires_label": "El listado vence",
       "expires_1d": "En 1 día",
@@ -2946,7 +2946,7 @@
       "expires_14d": "En 14 días",
       "expires_30d": "En 30 días",
       "waiver_asset_locked_title": "Tu exención de primera orden es solo para BLURT",
-      "waiver_asset_hint": "Tu primera orden es gratis, pero debe ser una compra de BLURT — esto trae BLURT a tu cartera para que puedas pagar comisiones en órdenes futuras y ganar recompensas de fidelidad.",
+      "waiver_asset_hint": "Tu primera orden es gratis, pero debe ser una pequeña compra de BLURT — así llevas BLURT a tu monedero para poder pagar las pequeñas comisiones de publicación de las órdenes y ganar recompensas por fidelidad.",
       "expires_60d": "En 60 días",
       "expires_90d": "En 90 días (predeterminado)",
       "asset_explainer": {
@@ -2967,10 +2967,10 @@
         "eth": "Ethereum (ETH) — criptomoneda Proof-of-Stake. Transferencia nativa de ETH (no ETH envuelto ni tokens ERC-20). Direcciones hex de 42 caracteres con prefijo 0x (misma forma que USDT-ERC20, USDC-ERC20, DAI-ERC20 y cualquier dirección de cuenta de token EVM; los campos `asset` y `network` desambiguan). Solo intercambiable en Morphit; las comisiones de listado se mantienen en BLURT/BTC/XMR.",
         "xrp": "Ripple (XRP) — criptomoneda con consenso Federated Byzantine Agreement en el XRP Ledger. Direcciones base58 de 24-34 caracteres que comienzan por `r`. Las etiquetas de destino (destination tags, enteros de 32 bits) son obligatorias al enviar a direcciones alojadas por exchanges — tu contraparte peer-to-peer normalmente no necesita una. Las cuentas XRPL requieren ≥1 XRP de reserva base para existir. Solo intercambiable en Morphit; las comisiones de listado se mantienen en BLURT/BTC/XMR."
       },
-      "waiver_fiat_hint": "💡 BLURT se comercia poco en exchanges centralizados, así que la mayoría de las operaciones BLURT-por-fiat en Morphit ocurren con usuarios activos de la red social Blurt, operadores existentes, o por trueque. Consejo: elige una moneda fiat que tu red local use (USD, EUR, MXN, etc.), o revisa el método de pago En persona → Trueque (bienes) en el paso 3 si quieres ofrecer algo más de valor. El libro de órdenes es pequeño por ahora — tu orden de compra ayuda a construirlo.",
+      "waiver_fiat_hint": "💡 La mayoría de los intercambios de BLURT en Morphit se hacen con usuarios activos de la red social Blurt, operadores existentes o mediante trueque. Así que elige la moneda fiat que usas localmente (USD, EUR, MXN, etc.) y ofrece métodos de pago en persona o de trueque (bienes/servicios) si quieres ofrecer algo más de valor.",
       "waiver_benefits_heading": "Lo que desbloquea tu compra:",
       "price_model_legend": "Precio",
-      "price_model_hint": "¿Cómo se fija tu precio? La mayoría usa precio de mercado; el precio fijo es para cuando quieres un número específico sin que importe el mercado.",
+      "price_model_hint": "¿En qué se basan tus valores mínimo y máximo? La mayoría usa el precio de mercado; el precio fijo es para cuando quieres un número concreto sin importar los movimientos del mercado.",
       "price_model_spread_label": "Precio de mercado",
       "price_model_spread_help": "Anclado al tipo de cambio actual al momento de cada operación. Opcional: añade un pequeño +/- spread.",
       "price_model_spread_aria": "Porcentaje de spread (positivo o negativo)",
@@ -2981,8 +2981,11 @@
       "price_model_fixed_placeholder": "p. ej. 100000",
       "price_model_fiat_placeholder": "fiat",
       "first_trade_title": "Tu primera operación: comprar BLURT",
-      "first_trade_body": "Morphit funciona con BLURT, y las tarifas de publicación se pagan con él. Por eso tu primera operación es una pequeña compra de BLURT para financiar tu cuenta: cuando tengas algo, podrás publicar e intercambiar lo que quieras. Esta primera compra es gratis (se exime la tarifa de publicación) y la publicación caduca en 7 días.",
-      "first_trade_expiry_note": "Las primeras publicaciones caducan en 7 días."
+      "first_trade_body": "Morphit funciona con BLURT, y las comisiones de publicación se pagan en BLURT. Por eso tu primera operación debe ser una pequeña compra de BLURT para financiar tu cuenta — una vez que tengas algo, puedes publicar e intercambiar lo que quieras.",
+      "first_trade_expiry_note": "Las primeras publicaciones caducan en 7 días.",
+      "step_1_heading_first": "¡A intercambiar!",
+      "amount_min_label_in_fiat": "Valor mínimo en {fiat}",
+      "amount_max_label_in_fiat": "Valor máximo en {fiat}"
     },
     "errors": {
       "fiat_empty": "Elige una moneda fiat (como USD o EUR).",
@@ -3113,6 +3116,17 @@
       "tier_2000": "{amount} BLURT — saldo inicial generoso + espacio para operar activamente",
       "tier_10000": "{amount} BLURT — cerca de tu primer hito de fidelidad de 10 BP",
       "tier_50000": "{amount} BLURT — inicio robusto; peso de voto sustancial en Blurt desde el primer día"
+    },
+    "summary": {
+      "sentence_buy": "Voy a comprar {amount} {price} y pagaré con {methods}.",
+      "sentence_sell": "Voy a vender {amount} {price} y aceptaré {methods}.",
+      "amount_up_to": "hasta {max} {fiat} en {asset}",
+      "amount_min_max": "de {min} a {max} {fiat} en {asset}",
+      "amount_min_plus": "{min} {fiat} o más en {asset}",
+      "amount_any": "cualquier cantidad de {asset}",
+      "price_market": "a precio de mercado",
+      "price_fixed": "a un precio fijo de {price} {fiat} por {asset}",
+      "see_notes": "Añade cualquier término, detalle o nota en el campo de abajo:"
     }
   },
   "prices": {

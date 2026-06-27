@@ -1764,8 +1764,8 @@
     "tip_small_body": "小额首次交易(不到 $50)可以限制如果出现问题时您可能失去的金额。一旦您通过完成的交易建立了信誉,就可以发布更大的订单。",
     "tip_expiry_label": "7 天后过期。",
     "tip_expiry_body": "我们将到期时间设置为 7 天,而非默认的 90 天。更短的窗口意味着如果您改变主意,过时的报价不会滞留。",
-    "tip_payment_label": "付款方式提示。",
-    "tip_payment_body": "添加您实际接受的付款方式。交易伙伴会选择对他们有用的方式。常见起点:PayPal、Wise、银行转账、当面现金。",
+    "tip_payment_label": "付款方式。",
+    "tip_payment_body": "添加您可以用来付款的支付方式。交易对手会选择适合他们的方式。常见的起点：PayPal、Wise、银行转账、当面现金。",
     "faq_link": "阅读完整的首次交易演练",
     "dismiss_aria": "关闭此入门包"
   },
@@ -2909,7 +2909,7 @@
   },
   "post_order": {
     "heading": "发布订单",
-    "subtitle": "告诉交易者您想买或卖什么以及如何联系您。挂单费涵盖 14 天。",
+    "subtitle": "告诉交易者您想买或卖什么以及如何联系您。挂单费涵盖 90 天。",
     "back_to_orderbook": "返回订单簿",
     "no_account": {
       "title": "你需要先创建账户",
@@ -2928,16 +2928,16 @@
       "side_sell": "我想卖加密货币",
       "asset_label": "哪种资产?",
       "step_2_heading": "金额和价格?",
-      "fiat_label": "法币",
-      "amount_min_label": "最少(法币)",
-      "amount_max_label": "最多(法币)",
+      "fiat_label": "您的付款以哪种法定货币计价？",
+      "amount_min_label": "最小值",
+      "amount_max_label": "最大值",
       "amount_optional_hint": "留空表示无限制。",
       "step_3_heading": "你将如何付款？",
       "payment_methods_label": "我可以通过以下方式付款",
       "payment_methods_hint": "想加多少就加多少——交易对手会选择适合他们的方式。",
       "region_label": "地区 (可选)",
       "region_hint": "您愿意在哪里交易。帮助附近的人找到您。",
-      "terms_label": "附加条件 (可选)",
+      "terms_label": "条款 / 详情 / 备注",
       "terms_placeholder": "例如 \"仅周末\" 或 \"100 美元以下仅限现金\"",
       "expires_label": "挂单到期",
       "expires_1d": "1 天后",
@@ -2946,7 +2946,7 @@
       "expires_14d": "14 天后",
       "expires_30d": "30 天后",
       "waiver_asset_locked_title": "你的首单免费仅适用于 BLURT",
-      "waiver_asset_hint": "你的第一单是免费的，但必须是 BLURT 买单——这会把 BLURT 引入你的钱包，让你能支付未来订单的手续费并赢得忠诚奖励。",
+      "waiver_asset_hint": "您的第一笔订单是免费的，但必须是少量购买 BLURT — 这会把 BLURT 存入您的钱包，让您可以支付订单的微小挂单费并赚取忠诚度奖励。",
       "expires_60d": "60 天后",
       "expires_90d": "90 天后(默认)",
       "asset_explainer": {
@@ -2967,10 +2967,10 @@
         "eth": "Ethereum (ETH) — Proof-of-Stake 智能合约平台。透明基础层；无原生混合协议。注意合约接收者（向没有 `payable receive()` 或 `fallback()` 的合约发送 ETH 将被回滚；币没丢失，但交易失败且您支付 gas）。在 Morphit 上仅交易：不能支付挂单费用。",
         "xrp": "Ripple (XRP) — XRP Ledger 上面向支付的联邦拜占庭协议加密货币。透明基础层；协议层没有隐私。destination tag 是标识符（用于交易所路由），不是隐私功能。钱包端地址轮换是主要的隐私手段。在 Morphit 上仅交易：不能支付挂单费用。"
       },
-      "waiver_fiat_hint": "💡 BLURT 在中心化交易所交易稀少，所以 Morphit 上的大多数 BLURT 兑法币交易发生在活跃的 Blurt 社交网络用户、现有运营商，或通过易货之间。提示：选择你本地网络使用的法币（USD、EUR、MXN 等），或在步骤 3 中查看面对面 → 易货（商品）支付方式，如果你想提供其他有价值的东西。订单簿目前较小——你的买单有助于建立它。",
+      "waiver_fiat_hint": "💡 Morphit 上大多数 BLURT 交易发生在活跃的 Blurt 社交网络用户、现有运营者之间，或通过易货进行。因此，请选择您本地使用的法定货币（USD、EUR、MXN 等），如果您想提供其他有价值的东西，可提供当面或易货（商品/服务）付款方式。",
       "waiver_benefits_heading": "你的购买能解锁：",
       "price_model_legend": "价格",
-      "price_model_hint": "你的报价怎么定?大多数交易者使用市场价;固定价格用于你想要一个特定数字、无视市场波动的情况。",
+      "price_model_hint": "您的最小和最大值基于什么？大多数交易者使用市场价格；固定价格适用于无论市场如何波动都想要一个特定数字的情况。",
       "price_model_spread_label": "市场价",
       "price_model_spread_help": "在每笔交易发生时锚定当前汇率。可选:加一个小的 +/- 价差。",
       "price_model_spread_aria": "价差百分比(正或负)",
@@ -2981,8 +2981,11 @@
       "price_model_fixed_placeholder": "例如 100000",
       "price_model_fiat_placeholder": "法币",
       "first_trade_title": "你的第一笔交易：购买 BLURT",
-      "first_trade_body": "Morphit 以 BLURT 运行，挂单手续费也用它支付。因此你的第一笔交易是少量购买 BLURT 来为账户注资——只要持有一些，你就能挂单并交易任何资产。这第一笔购买是免费的（挂单费已豁免），挂单将在 7 天后到期。",
-      "first_trade_expiry_note": "首次挂单将在 7 天后到期。"
+      "first_trade_body": "Morphit 基于 BLURT 运行，挂单费也用它支付。因此您的第一笔交易必须是少量购买 BLURT 来为账户注资 — 一旦持有，您就可以挂单并交易任何资产。",
+      "first_trade_expiry_note": "首次挂单将在 7 天后到期。",
+      "step_1_heading_first": "开始交易吧！",
+      "amount_min_label_in_fiat": "最小值（{fiat}）",
+      "amount_max_label_in_fiat": "最大值（{fiat}）"
     },
     "errors": {
       "fiat_empty": "请选择一种法币(如 USD 或 EUR)。",
@@ -3113,6 +3116,17 @@
       "tier_2000": "{amount} BLURT — 丰厚的起始余额 + 积极交易的空间",
       "tier_10000": "{amount} BLURT — 接近第一个 10 BP 忠诚度里程碑",
       "tier_50000": "{amount} BLURT — 强势起步；从第一天起在 Blurt 拥有可观的投票权重"
+    },
+    "summary": {
+      "sentence_buy": "我将{price}购买{amount}，并使用 {methods} 付款。",
+      "sentence_sell": "我将{price}出售{amount}，并接受 {methods}。",
+      "amount_up_to": "价值最多 {max} {fiat} 的 {asset}",
+      "amount_min_max": "价值 {min} 至 {max} {fiat} 的 {asset}",
+      "amount_min_plus": "价值 {min} {fiat} 或以上的 {asset}",
+      "amount_any": "任意数量的 {asset}",
+      "price_market": "以市场价格",
+      "price_fixed": "以 {price} {fiat}/{asset} 的固定价格",
+      "see_notes": "在下方栏位中添加任何条款、详情或备注："
     }
   },
   "prices": {
