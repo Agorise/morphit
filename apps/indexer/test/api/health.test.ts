@@ -125,7 +125,7 @@ async function getHealth(
 	cfg: Config,
 	poller: Poller,
 	query = '',
-	priceSource: BlurtPriceSource = fakePriceSource()
+	priceSource: BlurtPriceSource | null = fakePriceSource()
 ): Promise<{ status: number; body: Record<string, unknown>; headers: Headers }> {
 	const app = healthRoute(cfg, poller, priceSource);
 	const url = `http://localhost/${query ? '?' + query : ''}`;
@@ -197,6 +197,38 @@ describe('healthRoute — baseline shape', () => {
 	it('sets cache-control: no-store', async () => {
 		const { headers } = await getHealth(fakeConfig(), fakePoller());
 		expect(headers.get('cache-control')).toBe('no-store');
+	});
+
+	it('includes a non-verbose price_feed summary when a price source is present', async () => {
+		// cp365 — `morphit-ops health` reads this without the verbose
+		// token.  Nothing sensitive: the price is already public via
+		// /v1/listing-fee.
+		const { body } = await getHealth(fakeConfig(), fakePoller());
+		expect(body.price_feed).toMatchObject({
+			enabled: true,
+			blurt_fiat: 0.002,
+			source: 'test_static',
+			stale: false
+		});
+	});
+
+	it('reports price_feed.enabled=false when the feed is disabled (null source)', async () => {
+		const { body } = await getHealth(fakeConfig(), fakePoller(), '', null);
+		expect(body.price_feed).toEqual({ enabled: false });
+	});
+
+	it('price_feed.stale reflects a stale upstream (static-floor fallback)', async () => {
+		const { body } = await getHealth(
+			fakeConfig(),
+			fakePoller(),
+			'',
+			fakePriceSource({ stale: true, price: 0.0015, source: 'static_floor' })
+		);
+		expect(body.price_feed).toMatchObject({
+			enabled: true,
+			stale: true,
+			source: 'static_floor'
+		});
 	});
 });
 

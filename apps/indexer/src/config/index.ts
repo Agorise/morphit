@@ -862,13 +862,17 @@ const envSchema = z.object({
 	MORPHIT_INDEXER_ACCOUNT_CREATION_FEE_BLURT: z.coerce.number().positive().default(100),
 	MORPHIT_INDEXER_ATTESTATION_PHASE: z.enum(['launch', 'steady']).default('launch'),
 
-	// Optional BLURT/USD price feed.  Off by default: fee
-	// verification doesn't need it after the BLURT-native refactor.
-	// Turn on if your frontend wants to surface USD echoes next to
-	// BLURT amounts.
+	// Optional BLURT/USD price feed.  ON by default: it powers the USD
+	// equivalents the Morphit frontend shows next to BLURT amounts (the
+	// profile balance card + the listing-fee fiat echo).  Source is the
+	// layered external chain — Klingex, then CoinGecko — with a static-
+	// floor fallback; a server-side call from the operator's box, never
+	// user-facing.  Operators who want a fully self-contained instance
+	// that makes zero external price calls can set this to false (the UI
+	// then shows BLURT only).
 	MORPHIT_INDEXER_PRICE_FEED_ENABLED: z
 		.enum(['true', 'false'])
-		.default('false')
+		.default('true')
 		.transform((s) => s === 'true'),
 	MORPHIT_INDEXER_PRICE_FEED_STATIC_FLOOR: z.coerce.number().positive().default(0.002),
 	MORPHIT_INDEXER_PRICE_REFRESH_INTERVAL_MS: z.coerce

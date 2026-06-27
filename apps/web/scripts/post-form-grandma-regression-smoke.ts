@@ -45,6 +45,16 @@ const POST_PAGE = join(
 
 const src = readFileSync(POST_PAGE, 'utf8');
 
+const STARTER_PACK = join(
+	__dirname,
+	'..',
+	'src',
+	'lib',
+	'components',
+	'FirstPostStarterPack.svelte'
+);
+const starterSrc = readFileSync(STARTER_PACK, 'utf8');
+
 interface Scenario {
 	readonly name: string;
 	/** Returns null when the invariant holds, else a failure reason. */
@@ -163,6 +173,103 @@ const SCENARIOS: Scenario[] = [
 				return 'subtitle is not wrapped in {#if !isFirstTrade}';
 			if (!/post_order\.form\.step_1_heading_first/.test(src))
 				return 'first-trade step-1 heading key not referenced';
+			return null;
+		}
+	},
+	{
+		// cp364 Ken-reported: a first-time trader saw the asset card but
+		// NOTHING below it (no Step 2, no nav). Root: Step 2 is gated
+		// `{#if step1Done}` (needs side!==null && asset!==null), but the
+		// only thing forcing side='buy'/asset='BLURT' was a post-render
+		// $effect that lands a flush AFTER the template reads step1Done off
+		// the just-resolved isFirstTrade. The fix forces the shape
+		// SYNCHRONOUSLY in the checkWaiverEligibility resolution handler,
+		// the same tick isFirstTrade flips, so step1Done is consistent and
+		// the submitted order carries the right shape (not just the gate).
+		name: 'eligibility resolution force-sets side=buy/asset=BLURT in the same tick (not only via the post-render lock effect)',
+		check: () => {
+			// Grab the checkWaiverEligibility(...).then(...) handler body.
+			const m = src.match(
+				/checkWaiverEligibility\([\s\S]*?\.then\(\(r\)\s*=>\s*\{([\s\S]*?)\n\t\t\t\t\}\)/
+			);
+			if (m === null) return 'checkWaiverEligibility(...).then handler not found';
+			const body = m[1];
+			if (!/waiverEligibility\s*=\s*r/.test(body))
+				return 'handler does not assign waiverEligibility = r';
+			if (!/eligible_unknown_account/.test(body))
+				return 'handler does not branch on the eligible kinds';
+			if (!/side\s*=\s*'buy'/.test(body))
+				return "handler does not force side = 'buy' on eligibility (step1Done could stay false)";
+			if (!/asset\s*=\s*'BLURT'/.test(body))
+				return "handler does not force asset = 'BLURT' on eligibility";
+			return null;
+		}
+	},
+	{
+		// cp364 (root cause of the vanishing form, found via Ken's console
+		// `…trim is not a function`): a stale/old-schema restored draft could
+		// put a NON-STRING into fiatArr/amounts, and a downstream `.trim()`
+		// (step2Done reads fiat.trim() the instant step1Done flips) threw an
+		// uncaught TypeError that aborted the render flush → form blank below
+		// Step 1. applyDraft must coerce, and the `fiat` derived must guard.
+		name: 'restored-draft fields are type-coerced so .trim() can never throw',
+		check: () => {
+			const body = functionBody('applyDraft');
+			if (body === null) return 'applyDraft function not found';
+			if (/fiatArr\s*=\s*d\.fiat\s*\?\s*\[d\.fiat\]/.test(body))
+				return 'applyDraft still passes d.fiat through unchecked (non-string would reach .trim())';
+			if (!/typeof\s+v\s*===\s*'string'/.test(body) && !/str\(/.test(body))
+				return 'applyDraft does not string-coerce its fields';
+			if (!/str\(d\.amountMin\)/.test(body) || !/str\(d\.amountMax\)/.test(body))
+				return 'applyDraft does not coerce the amount fields';
+			if (!/const fiat = \$derived\(typeof fiatArr\[0\] === 'string'/.test(src))
+				return 'fiat derived does not guard typeof string (a non-string fiatArr[0] could still throw)';
+			return null;
+		}
+	},
+	{
+		// cp364 Ken-reported: the "Your first order? Some safer defaults"
+		// starter-pack card must RE-APPEAR on a later /post visit if the
+		// user still hasn't placed their first order. The X is a per-VIEW
+		// "not now", never a persisted dismissal — so dismiss() must NOT
+		// touch sessionStorage/localStorage, and onMount must not consult a
+		// stored "dismissed" flag (the zero-orders check is the real
+		// stop-showing signal).
+		name: 'FirstPostStarterPack dismiss is in-memory only (re-appears on return visits until first order)',
+		check: () => {
+			if (/sessionStorage|localStorage/.test(starterSrc))
+				return 'starter-pack still touches web storage — dismissal would persist and not re-appear';
+			if (/readDismissed|writeDismissed|DISMISSED_KEY/.test(starterSrc))
+				return 'starter-pack still has persisted-dismissal plumbing (readDismissed/writeDismissed/DISMISSED_KEY)';
+			const dm = starterSrc.match(/function dismiss\(\)\s*:\s*void\s*\{([\s\S]*?)\n\t\}/);
+			if (dm === null) return 'dismiss() not found';
+			if (!/visible\s*=\s*false/.test(dm[1]))
+				return 'dismiss() does not set visible = false';
+			// The zero-orders gate must remain the real visibility signal.
+			if (!/getOrdersByAccount/.test(starterSrc))
+				return 'starter-pack no longer gates on the zero-orders check';
+			return null;
+		}
+	},
+	{
+		// cp365 Ken-reported: the "Read the full first-trade walkthrough ⇨"
+		// link must turn the TEXT emerald on hover, not just the arrow.
+		// In dark mode the link defaults to white (`dark:text-white`), which
+		// out-specifies a plain `hover:text-morphit-emerald`, so the combined
+		// `dark:hover:` variant is required for the text to flip (the arrow
+		// already turns emerald via the .nav-arrow CSS, so without this the
+		// line went two-tone on hover — green arrow, white text).
+		name: 'walkthrough link text turns emerald on hover in dark mode (not just the arrow)',
+		check: () => {
+			const m = starterSrc.match(/first_post_starter\.faq_link[\s\S]{0,200}/);
+			// The faq_link anchor carries the hover classes just above the key.
+			const anchor = starterSrc.match(/<a[\s\S]*?first_post_starter\.faq_link/);
+			const cls = anchor ? anchor[0] : '';
+			if (!/hover:text-morphit-emerald/.test(cls))
+				return 'walkthrough link missing light-mode hover:text-morphit-emerald';
+			if (!/dark:hover:text-morphit-emerald/.test(cls))
+				return 'walkthrough link missing dark:hover:text-morphit-emerald — text stays white on hover in dark mode';
+			if (m === null) return 'first_post_starter.faq_link not found';
 			return null;
 		}
 	}

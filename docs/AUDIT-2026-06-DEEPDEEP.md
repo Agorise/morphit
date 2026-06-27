@@ -630,3 +630,213 @@ anchors on that exact pattern (bind:value, type=, id=, the i18n key) BEFORE cutt
 release. This turn I swept all 12 smokes that read the /post source; only
 a11y-patterns anchored on the changed binding, and it is now fixed. beta.34 is
 unchanged (no version bump); the beta.34 tag moves to the cp362 commit.
+
+---
+
+## cp363 — sign-out "Unlock"-label fix (reactivity/timing) + BLURT info-text rewrite
+
+Working-tree (post-beta.34, no tarball cut — Ken deferred).
+
+BLURT asset-explainer copy (`post_order.form.asset_explainer.blurt`) rewritten across
+all 10 locales per Ken (new framing emphasising zero-fee transfers, the built-in
+rewards system, reputation-building, trade posterity, and connecting with
+like-minded people; corrected the "pople" typo to "people"; value-only change, parity
+3239 unchanged).
+
+Sign-out "Unlock"-label bug (Ken-reported with screenshot). After an EXPLICIT sign-out
+the avatar-menu/header CTA still read "Unlock" — implying a remembered locked account
+— but clicking it landed on the FULL sign-in page (the persisted account name was
+already cleared by clearUserBlurtAccount), an inconsistency. Root cause is a
+reactivity/timing gap: AvatarMenu's `signedOutCtaLabel` is
+`$derived(!$hasAnySession && hasPersistedKeystore() ? nav.unlock : nav.start)`.
+`hasPersistedKeystore()` is a plain localStorage read, not a reactive dependency; the
+$derived's only reactive trigger is `$hasAnySession`, which flips synchronously inside
+`reset()`. But `broadcastSignOut` cleared the keystore through
+`reset({clearDisk:true})`'s ASYNC dynamic-import path, which resolves a microtask AFTER
+that single re-run. AvatarMenu lives in the root layout, so the post-sign-out
+navigation home does not remount it to re-read — the label is captured once (keystore
+still present → "Unlock") and never refreshed.
+
+Fix: `broadcastSignOut` clears the keystore + paired marker SYNCHRONOUSLY
+(`clearKeystore(); clearPairedSession(); reset();`) before the `$hasAnySession` flip, so
+`hasPersistedKeystore()` is already false when the $derived re-runs → the CTA reverts
+to "Sign in", consistent with /login then rendering the full sign-in. `clearKeystore`
+was added to the existing `$crypto/persistentKeystore` import; `clearPairedSession` was
+already imported. No import cycle (persistentKeystore/pairedSession don't import the
+identity store — `reset` used a dynamic import only for static-graph trimming), and the
+crypto-blurt + libsodium baseline-closure byte-budget smokes stay 7/7 + 6/6, confirming
+the static import didn't enlarge the every-page closure. The reset() clearDisk path is
+left intact for its other caller (the paired→keystore upgrade).
+
+Regression: cross-tab-signout-propagation #11 asserts broadcastSignOut clears the
+keystore synchronously (a revert to the async-only path turns it red). 11/11.
+
+Verified GREEN: svelte-check 0/0; cross-tab-signout 11/11; autolock-settings 8/8;
+locked-session-ux 13/13; paired-readonly lifecycle 18/18 + affordance-surfaces 13/13;
+crypto-blurt/libsodium baseline-closure 7/7 + 6/6; i18n parity 10/10 @ 3239 +
+completeness 4/4 + key-coverage 2/2 + native-floor 11/11 + hardcoded-english 1/1;
+a11y-patterns 36/36. NOT run in-sandbox: FULL battery + vitest → CI; a real-browser
+confirm of the CTA flip + the new BLURT copy in all 10 locales.
+
+---
+
+## cp364 — three live-beta.34 bug fixes (Ken's /post screenshot) + investigation notes
+
+Ken logged in (keyfile+password) on the live beta.34 and reported five things. Three
+addressed here; two stay open.
+
+(1) 🔴 First-trade /post form vanished below the asset card. Step 2 is gated
+`{#if step1Done}` and step1Done needs side!==null && asset!==null. For a first-trade,
+side/asset are FORCED to buy/BLURT — but the only forcing mechanism was a post-render
+`$effect` (the lock effect), which lands a flush AFTER the template recomputes
+step1Done off the just-resolved isFirstTrade. The selected BLURT chip in the screenshot
+is the tell: a SEPARATE waiver `$effect` sets asset='BLURT' (when asset===null) WITHOUT
+side, so asset reads selected while side can stay null → step1Done false → Step 2 +
+step nav stay hidden. Static analysis says the lock effect should converge (waiverOffered
+=== isFirstTrade are identical expressions; waiverEligibility is a one-shot onMount fetch,
+not a reactive churn), and I could NOT reproduce the precise runtime trigger in-sandbox
+(no browser). The cp360 walkthrough only REASONED "step1Done auto-satisfies" and never
+browser-tested it — recorded as the miss. FIX (deterministic): in onMount's
+checkWaiverEligibility(...).then((r) => {...}), right after waiverEligibility = r, force
+side='buy'/asset='BLURT'/expiresDays=7 when r.kind is eligible/eligible_unknown_account.
+Runs in the SAME tick isFirstTrade flips, so step1Done is consistent within the flush and
+the submitted order carries the right shape — not merely the gate. Runs after the
+synchronous onMount draft-restore (wins over a null-side restored draft); only fires when
+eligible (non-first-trade drafts untouched); lock effect kept as backstop; guards make it
+idempotent.
+
+(2) Starter-pack card re-appears on return visits. FirstPostStarterPack persisted its
+dismissal in sessionStorage (morphit.firstPostStarterPack.dismissedThisSession) and stayed
+hidden on remount within the session. Ken wants it back on a later /post visit until the
+first order is placed. FIX: removed the persistence entirely — dismiss() is in-memory only
+(visible=false); dropped readDismissed/writeDismissed/DISMISSED_KEY + the onMount
+dismissed-gate. The getOrdersByAccount zero-orders check is now the sole stop-showing
+signal; the X is a per-VIEW "not now".
+
+(3) Balance-card USD line — SERVER-SIDE, no frontend change. Frontend verified correct:
+loadPrice() is wired in MyBalanceCard onMount; fetchListingFee returns {kind:'ok',quote}
+and the card's r.kind==='ok' matches; usdLabel gates only on blurtPriceFiat!==null &&
+Number.isFinite(blurtBalance). The indexer (api/listingFeeBody.ts) echoes blurt_price_fiat
+ONLY when priceSource!==null && !detail.stale && detail.price>0 — a disabled native feed
+OR a stale cached price omits the field (used as oracle input only when stale; staleness =
+age > refreshIntervalMs×2 in compositeSource.ts). Actionable: curl /v1/listing-fee; if
+blurt_price_fiat absent, check MORPHIT_INDEXER_PRICE_FEED_ENABLED +
+MORPHIT_INDEXER_PRICE_FEED_NATIVE_ENABLED + the indexer log for a stale-price warning.
+
+(4) OPEN — "snackbar shows up twice." ToastRegion is mounted exactly once
+([lang]/+layout.svelte:649; confirmed by service-worker-single-registration 13/13), and
+/post fires no showToast (no showToast caller matches post/draft/order). So it is neither a
+double-mounted toast region nor a /post toast. Could not identify which snackbar from the
+description → asked Ken which page + text. (5) Sign-out CTA — already fixed in cp363;
+Ken's homepage cold-refresh test (Start replaced Unlock) confirms the diagnosis; cp363
+makes the flip happen without a refresh. Acknowledged.
+
+REGRESSION SMOKE: post-form-grandma-regression-smoke 9 → 11. +1 asserts the
+checkWaiverEligibility(...).then handler force-sets side='buy'/asset='BLURT' on the eligible
+kinds (first-trade form never gated solely on the post-render lock effect). +1 reads
+FirstPostStarterPack.svelte and asserts no sessionStorage/localStorage, no
+readDismissed/writeDismissed/DISMISSED_KEY, dismiss() sets visible=false, and the
+getOrdersByAccount zero-orders gate remains.
+
+NOT run in-sandbox (deferred to deploy/CI): FULL 388-smoke battery + vitest; web vite build;
+a real-browser confirm that the first-trade /post form renders Step 2 + step nav (the #1
+fix's exact trigger could not be reproduced in-sandbox) and that the starter-pack card
+re-appears on a return visit.
+
+### cp364 UPDATE — real root cause of the vanishing form (Ken's DevTools console)
+
+Ken's console settled #4 definitively. The MaxListenersExceededWarning + ObjectMultiplex
+("orphaned data … / malformed chunk") lines are all from contentscript.js:14083 = a browser
+WALLET extension (MetaMask-class @metamask/object-multiplex), not Morphit — ignorable. The
+real one is `Uncaught TypeError: e(...).trim is not a function` in the hashed bundle.
+
+So the form was NOT a timing problem (step1Done WAS becoming true — the BLURT chip rendered
+selected). The crash is a `.trim()` on a NON-string from the STALE 3h draft: applyDraft did
+`fiatArr = d.fiat ? [d.fiat] : []` and `fiat = $derived(fiatArr[0] ?? '')`, so an
+old-/changed-schema draft storing `fiat` (or an amount) as an array/number/object put a
+non-string into `fiat`. The instant step1Done flipped true, the `{#if step1Done && step2Done}`
+gate evaluated step2Done → `fiat.trim()` (line ~1234) → uncaught throw aborted the render
+flush → everything below Step 1 stayed blank. (Last turn's eligibility-force was real but
+addressed a non-problem; kept as harmless defense.)
+
+FIX: hardened applyDraft to type-coerce every restored field — local `str()` helper for the 9
+string fields (fiat/amountMin/amountMax/spreadPercent/fixedPrice/pmDraft/region/terms/
+externalTxId/txProof), enum guards for side/asset/priceModelKind/feeMethodChoice,
+Array.isArray+filter for paymentMethods, finite clamp (1..90) for expiresDays, ===true for
+syndicateToBlog. A well-formed current-schema draft passes through byte-identically; a stale
+one degrades gracefully. PLUS a single-read-point backstop `fiat = $derived(typeof fiatArr[0]
+=== 'string' ? fiatArr[0] : '')`, and a typeof==='string' guard on the getPreferencesSnapshot
+fiat/region injection (the other unguarded path). Proven in a standalone node sim: old path
+throws exactly `fiat.trim is not a function` on array/number/object fiat; new path returns '';
+valid "MXN" unchanged.
+
+#3 USD line — CONFIRMED server-side: Ken ran `curl -s https://morphit.io/v1/listing-fee |
+grep -o 'blurt_price_fiat…'` on the VPS → empty. The indexer is not echoing blurt_price_fiat,
+so the native price feed is disabled or stale (listingFeeBody.ts only echoes when
+priceSource!==null && !detail.stale && detail.price>0). Frontend correct; Ken to enable/repair
+the feed (MORPHIT_INDEXER_PRICE_FEED_ENABLED + …_NATIVE_ENABLED + check the stale-price log).
+
+Regression: post-form-grandma-regression-smoke 9 → 12 (eligibility-force, draft-coercion,
+starter-pack-no-persist). #1 snackbar: Ken will note which page it doubles on after the next
+release. Verified GREEN: svelte-check 0/0; grandma 12/12; node sim; cross-tab-signout 11/11;
+meta-smokes; service-worker-single-registration 13/13.
+
+### cp365 — three Ken-reported fixes + deep-deep + five-persona walkthroughs
+
+WORK (all wired + tested):
+1. Price feed ON by default for all operators. `MORPHIT_INDEXER_PRICE_FEED_ENABLED`
+   default flipped false→true in apps/indexer/src/config/index.ts +
+   ops/env/indexer.env.example. Powers the UI's USD echoes (balance card + listing-fee
+   fiat); source is the layered external chain (Klingex → CoinGecko) with a static-floor
+   fallback, server-side, never user-facing; toggleable off for a fully self-contained
+   instance.
+2. Price-feed status on `morphit-ops health` (main-menu #13). Added a compact, non-
+   sensitive `price_feed` summary to the NON-verbose /v1/health body (the price is already
+   public via /v1/listing-fee), rendered as a "Price feed:" line in the Node-health Indexer
+   block (on+live with price/source, on-but-stale, or off). JSON mode picks it up via
+   indexer.summary automatically. Documented in docs/API.md.
+3. Walkthrough-link hover. FirstPostStarterPack faq_link ("Read the full first-trade
+   walkthrough ⇨") gained `dark:hover:text-morphit-emerald` so the TEXT turns emerald with
+   the arrow in dark mode (the arrow already did via .nav-arrow; `dark:text-white` was
+   out-specifying the plain hover variant). Sibling FirstTradeHelper already did this right.
+
+DEEP-DEEP FINDINGS (scope: the cp363/364/365 delta + the price-feed-default ripples +
+release-readiness; not a from-scratch full-repo re-audit — cp308/cp276 covered that):
+- F1 (fixed): my first-pass comment said the price source was "CoinGecko"; the chain is
+  actually Klingex → CoinGecko → static_floor (health.ts:151, FAQ price_source_chain).
+  Corrected the config comment + env.example wording.
+- F2 (resolved by the flip): the detailed FAQ already describes the "~$0.12" USD subtext as
+  PRESENT, but with the old default-off a fresh instance produced no subtext at all — a
+  latent copy/behavior mismatch. Defaulting the feed on makes the shipped FAQ accurate.
+- F3 (fixed): the new /v1/health `price_feed` field was undocumented; added it to the
+  docs/API.md /v1/health JSON example + a field-by-field description.
+- F4 (no change): MyBalanceCard degrades gracefully when blurt_price_fiat is absent
+  (blurtPriceFiat null → usdLabel omitted → BLURT-only) — verified in code.
+- F5 (no break): operator-doc-env-var-parity is presence-based, not value-based → the
+  env.example value change keeps it green (114/114).
+- F6 (safe flip): no test asserts the schema default false; the indexer testutils context
+  sets priceFeedEnabled:false as an explicit mock (not a default assertion), unaffected.
+
+FIVE-PERSONA WALKTHROUGHS:
+- Sally-operator (fresh node): now gets USD on by default — the init wizard copies
+  env.example (=true) and no init step writes PRICE_FEED_ENABLED=false. If the box can't
+  reach CoinGecko/Klingex, the feed degrades to the static floor and `morphit-ops health`
+  shows "on but stale" (the new line aids diagnosis). Static floor remains wizard-editable.
+- Josie (sysadmin): `sudo morphit-ops` → #13 Node health now shows "Price feed: on — 1
+  BLURT ≈ <px> <DENOM> (<source>)" / "on but stale …" / "off …". `--json` includes it.
+- Sally-user (no crypto, first trade): /post first-trade renders Step 2 + nav (cp364 draft
+  coercion — no .trim() throw), starter-pack tips show, walkthrough link hovers emerald
+  (text + arrow, cp365).
+- Bob (returning Blurt trader): the eligibility-force is gated to kind
+  eligible/eligible_unknown_account, so it does NOT fire for a returning trader; his draft
+  is restored + cp364-coerced with no first-trade shape forcing.
+- Charlie (MCP read-only): no MCP code touched this session; the price is already public
+  via /v1/listing-fee, so the new health field is no new exposure; the 5 read-only tools
+  are unchanged.
+
+VERIFICATION (all GREEN): svelte-check 0/0; post-form-grandma-regression 13/13;
+indexer health.test 30/30 (incl. 3 new price_feed cases); ops-cli health-view-smoke 50/50
+(incl. parsePriceFeed cases); indexer + ops-cli tsc --noEmit clean; operator-doc-env-var-
+parity 114/114; smoke-registration-integrity 4/4 (381 files — no new file); smoke-pass-line-
+canonical 10/10 (388 registered). NOT run in-sandbox: full 388-smoke battery + vitest suite
++ vite build → CI; real-browser eyeball of the hover + first-trade flow → post-deploy.

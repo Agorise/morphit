@@ -1,6 +1,6 @@
 {
 	"name": "@morphit/release-schema",
-	"version": "1.0.0-beta.34",
+	"version": "1.0.0-beta.35",
 	"private": true,
 	"type": "module",
 	"description": "Shared morphit_release_v1 op schema (types) + validator. The frontend (apps/web) and the indexer (its release-handler parity test, release-build and release-validator scripts) both import from here, so the validator is one canonical source of truth instead of the indexer reaching across into apps/web source.",

@@ -2952,7 +2952,7 @@
       "asset_explainer": {
         "btc": "Bitcoin (BTC) — la criptomoneda original, usada mundialmente. Libro mayor público; las transacciones son visibles. Las comisiones de red y el tiempo de confirmación varían con la demanda.",
         "xmr": "Monero (XMR) — criptomoneda privacy-first. Oculta cantidades, remitente y destinatario por defecto. Ideal si la privacidad te importa.",
-        "blurt": "BLURT — la blockchain social en la que se ejecuta Morphit. Rápida (bloques de 3 segundos), transferencias sin comisión, pero capitalización pequeña. Útil para pequeñas cantidades y propinas; menos útil para almacenar gran valor.",
+        "blurt": "BLURT — la blockchain social sobre la que funciona Morphit. Rápida (bloques de 3 segundos), transferencias sin comisiones y sistema de recompensas integrado. Perfecta para construir reputación, dejar constancia de tus operaciones y conectar con personas afines.",
         "usdt": "Tether (USDT) — una stablecoin vinculada 1:1 al USD. Controlada centralmente — Tether Inc. puede congelar cualquier dirección. Solo para trading en Morphit: no puede pagar tarifas de listado.",
         "bch": "Bitcoin Cash (BCH). Bifurcado de Bitcoin en 2017 para favorecer bloques más grandes y comisiones por transacción más bajas frente a la dinámica del mercado de comisiones. Libro mayor transparente como BTC; ningún emisor puede congelar direcciones. Solo para operar en Morphit — las tarifas de listado se siguen pagando en BLURT, BTC o XMR.",
         "ltc": "Litecoin (LTC). Bifurcación de Bitcoin de 2011 con bloques más rápidos (2,5 min) y minería Scrypt. Transparente como Bitcoin — cada transacción es públicamente visible en la cadena. Sin emisor central; nadie puede congelar tus direcciones.",

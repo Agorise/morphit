@@ -2952,7 +2952,7 @@
       "asset_explainer": {
         "btc": "Bitcoin (BTC) — the original cryptocurrency, used worldwide. Public ledger; transactions are visible. Network fees and confirmation time vary with network demand.",
         "xmr": "Monero (XMR) — privacy-first cryptocurrency. Hides amounts, sender, and recipient by default. Ideal if privacy matters to you.",
-        "blurt": "BLURT — the social blockchain Morphit runs on. Fast (3-second blocks), zero-fee transfers, but small market cap. Useful for small amounts and tipping; less useful for storing large value.",
+        "blurt": "BLURT — the social blockchain Morphit runs on. Fast (3-second blocks), zero-fee transfers, built-in rewards system. Perfect for reputation-building, trade posterity and connecting with like-minded people.",
         "usdt": "Tether (USDT) — a stablecoin pegged 1:1 to USD. Centrally controlled — Tether Inc. can freeze any address. Trade-only on Morphit: cannot pay listing fees.",
         "bch": "Bitcoin Cash (BCH). Forked from Bitcoin in 2017 to favor bigger blocks and lower per-transaction fees over fee-market dynamics. Transparent ledger like BTC; no issuer can freeze addresses. Trade-only on Morphit — listing fees still paid in BLURT, BTC, or XMR.",
         "ltc": "Litecoin (LTC). Forked from Bitcoin in 2011 with faster 2.5-minute blocks and Scrypt mining. Transparent like Bitcoin — every transaction is publicly visible on the chain. No central issuer; nobody can freeze your addresses.",

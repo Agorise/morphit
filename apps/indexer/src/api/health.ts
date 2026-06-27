@@ -32,7 +32,7 @@ import { chatEventBus } from '$indexer/chatEventBus';
 // update all 10 package.json files + this constant +
 // apps/relay/src/api/health.ts VERSION + the example response
 // in docs/API.md in the same commit.
-const INDEXER_VERSION = '1.0.0-beta.34';
+const INDEXER_VERSION = '1.0.0-beta.35';
 
 // Blurt produces one block every 3 seconds. Used to translate the
 // block-lag count into a human "seconds behind" figure in the
@@ -96,6 +96,30 @@ export function healthRoute(
 			rpc_endpoints_healthy: rpcEndpointsHealthy,
 			rpc_endpoints_total: rpcSnap.length
 		};
+
+		// Compact price-feed state on the PUBLIC (non-verbose) body so
+		// `morphit-ops health` can show whether the BLURT/USD feed is on
+		// and serving a live price, without needing the gated verbose
+		// token.  Nothing sensitive here — the price itself is already
+		// public via /v1/listing-fee (`blurt_price_fiat`); the per-
+		// upstream/forensic detail (drift, disagreement, peer) stays in
+		// the verbose `diagnostics.price` block below.  `enabled:false`
+		// means the operator has MORPHIT_INDEXER_PRICE_FEED_ENABLED off
+		// (the UI shows BLURT only); `stale:true` means the feed is on
+		// but no live upstream has succeeded (serving the static floor).
+		body.price_feed =
+			priceSource !== null
+				? (() => {
+						const d = priceSource.currentDetailed();
+						return {
+							enabled: true as const,
+							blurt_fiat: d.price,
+							denomination_fiat: config.priceFeedDenominationFiat,
+							source: d.source,
+							stale: d.stale
+						};
+					})()
+				: { enabled: false as const };
 
 		// Audit 2026-05 finding NEW-9-8: verbose mode now requires
 		// the server-side MORPHIT_INDEXER_VERBOSE_HEALTH flag to be

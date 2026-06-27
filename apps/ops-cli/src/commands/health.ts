@@ -292,6 +292,23 @@ export interface HealthSummary {
 	 *  account_creation_fee is paid inline per signup, so this balance
 	 *  gates signup readiness. null when absent (e.g. indexer health). */
 	readonly relayBalance: string | null;
+	/** Indexer only: BLURT/USD price-feed state from the non-verbose
+	 *  body's `price_feed`.  null when the field is absent (relay health,
+	 *  or an indexer built before this field existed). */
+	readonly priceFeed: PriceFeedSummary | null;
+}
+
+/** Compact BLURT/USD price-feed state surfaced on the non-verbose
+ *  `/v1/health` body (`price_feed`).  `enabled:false` → the operator
+ *  has the feed switched off (UI shows BLURT only).  `stale:true` →
+ *  the feed is on but no live upstream has succeeded (serving the
+ *  static floor). */
+export interface PriceFeedSummary {
+	readonly enabled: boolean;
+	readonly blurtFiat: number | null;
+	readonly denomination: string | null;
+	readonly source: string | null;
+	readonly stale: boolean;
 }
 
 function numOrNull(v: unknown): number | null {
@@ -320,7 +337,24 @@ export function summarizeHealth(body: unknown): HealthSummary {
 		rpcTotal,
 		rpcAllDown: rpcTotal !== null && rpcTotal > 0 && rpcHealthy === 0,
 		webPush: typeof b.web_push === 'boolean' ? b.web_push : null,
-		relayBalance: typeof b.blurt_balance === 'string' ? b.blurt_balance : null
+		relayBalance: typeof b.blurt_balance === 'string' ? b.blurt_balance : null,
+		priceFeed: parsePriceFeed(b.price_feed)
+	};
+}
+
+/** Interpret the `price_feed` object on a `/v1/health` body.  PURE.
+ *  Returns null when the field is absent or not an object with a
+ *  boolean `enabled` (relay health, or a pre-field indexer build). */
+export function parsePriceFeed(v: unknown): PriceFeedSummary | null {
+	if (v === null || typeof v !== 'object') return null;
+	const p = v as Record<string, unknown>;
+	if (typeof p.enabled !== 'boolean') return null;
+	return {
+		enabled: p.enabled,
+		blurtFiat: numOrNull(p.blurt_fiat),
+		denomination: typeof p.denomination_fiat === 'string' ? p.denomination_fiat : null,
+		source: typeof p.source === 'string' ? p.source : null,
+		stale: p.stale === true
 	};
 }
 
@@ -621,6 +655,21 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 		console.log(`      Blurt RPC:     ${s.rpcAllDown ? c.red(rpcStr) : rpcStr}`);
 		console.log(`      Uptime:        ${fmtUptime(s.uptimeSec)}`);
 		if (s.version !== null) console.log(`      Version:       ${safe(s.version)}`);
+		if (s.priceFeed !== null) {
+			const pf = s.priceFeed;
+			let pfLine: string;
+			if (!pf.enabled) {
+				pfLine = c.dim('off (USD display disabled — UI shows BLURT only)');
+			} else if (pf.stale) {
+				pfLine = c.yellow('on but stale — no live upstream (serving static floor)');
+			} else {
+				const denom = pf.denomination ?? 'USD';
+				const px = pf.blurtFiat !== null ? `1 BLURT \u2248 ${pf.blurtFiat} ${denom}` : 'live';
+				const src = pf.source !== null ? ` (${pf.source})` : '';
+				pfLine = `${c.green('on')} \u2014 ${px}${src}`;
+			}
+			console.log(`      Price feed:    ${pfLine}`);
+		}
 	} else if (indexer.kind === 'unreachable') {
 		console.log(`      ${c.dim('Not reachable on loopback or any bridge gateway. If it binds')}`);
 		console.log(`      ${c.dim('a non-default address, pass --url or set MORPHIT_OPS_HEALTH_URL.')}`);

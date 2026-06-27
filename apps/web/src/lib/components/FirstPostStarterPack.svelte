@@ -38,14 +38,20 @@
 	 * (broadcast orders that nobody matched).  The two
 	 * helpers cover the two distinct moments.
 	 *
-	 * Dismissible per session (sessionStorage).  Once
-	 * dismissed, doesn't re-show until the next tab/session.
+	 * Dismissible per VIEW (in-memory only — NOT persisted).
+	 * Closing the card hides it for the current /post visit, but
+	 * it re-appears on a later visit so long as the user still
+	 * hasn't placed their first order.  Ken's call (cp364): a
+	 * first-timer who closes the card and comes back later should
+	 * be reminded again until they've actually posted once.  The
+	 * orders-on-record check below is the real "stop showing this"
+	 * signal; the X is just a per-view "not now".
 	 *
 	 * Renders only when:
 	 *   - The user has an account name (anonymous browsers
 	 *     can't post anyway).
 	 *   - The user has zero orders on record.
-	 *   - The user hasn't dismissed it this session.
+	 *   - The user hasn't closed it during THIS view.
 	 */
 
 	import { _ } from 'svelte-i18n';
@@ -68,40 +74,18 @@
 
 	let { onFirstTimeStatus }: Props = $props();
 
-	const DISMISSED_KEY = 'morphit.firstPostStarterPack.dismissedThisSession';
-
-	function readDismissed(): boolean {
-		if (!browser) return false;
-		try {
-			return window.sessionStorage.getItem(DISMISSED_KEY) === '1';
-		} catch {
-			return false;
-		}
-	}
-
-	function writeDismissed(): void {
-		if (!browser) return;
-		try {
-			window.sessionStorage.setItem(DISMISSED_KEY, '1');
-		} catch {
-			// ignore quota errors
-		}
-	}
-
 	let visible = $state(false);
 	let loaded = $state(false);
 
 	function dismiss(): void {
-		writeDismissed();
+		// In-memory only: hides for THIS view.  Deliberately NOT
+		// persisted — a return visit re-evaluates the orders check
+		// and shows again until the user has placed their first order.
 		visible = false;
 	}
 
 	onMount(() => {
 		if (!browser) {
-			loaded = true;
-			return;
-		}
-		if (readDismissed()) {
 			loaded = true;
 			return;
 		}
@@ -187,7 +171,7 @@
 		<p class="mt-3 text-xs text-ink-500 dark:text-ink-500">
 			<a
 				href={lp('/faq#how_to_trade_walkthrough')}
-				class="group font-medium text-ink-800 no-underline transition hover:text-morphit-emerald dark:text-white"
+				class="group font-medium text-ink-800 no-underline transition hover:text-morphit-emerald dark:text-white dark:hover:text-morphit-emerald"
 			>
 				{$_('first_post_starter.faq_link')} <span
 					class="nav-arrow nav-arrow-right"

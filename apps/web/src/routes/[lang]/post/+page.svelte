@@ -140,7 +140,7 @@
 	// price-model) is unchanged. The three former `fiat = …` writes now
 	// set `fiatArr`.
 	let fiatArr = $state<string[]>([]);
-	const fiat = $derived(fiatArr[0] ?? '');
+	const fiat = $derived(typeof fiatArr[0] === 'string' ? fiatArr[0] : '');
 	let amountMin: string = $state(''); // kept as string so empty distinguishes from 0
 	let amountMax: string = $state('');
 	type PriceModelKind = 'spread' | 'fixed';
@@ -326,26 +326,49 @@
 	}
 
 	function applyDraft(d: ComposeDraft): void {
-		side = d.side;
-		asset = d.asset;
-		fiatArr = d.fiat ? [d.fiat] : [];
-		amountMin = d.amountMin;
-		amountMax = d.amountMax;
-		priceModelKind = d.priceModelKind;
-		spreadPercent = d.spreadPercent;
-		fixedPrice = d.fixedPrice;
-		paymentMethods = [...d.paymentMethods];
-		pmDraft = d.pmDraft;
-		region = d.region;
-		terms = d.terms;
-		expiresDays = d.expiresDays;
-		syndicateToBlog = d.syndicateToBlog;
-		feeMethodChoice = d.feeMethodChoice;
-		externalTxId = d.externalTxId;
-		// Restore txProof if present in the draft — back-compat:
-		// drafts saved before Part 108++ won't have this key,
-		// fall back to empty string.
-		txProof = d.txProof ?? '';
+		// Defensive coercion (cp364) — a draft persisted by an OLDER build's
+		// schema, or a hand-edited / corrupted localStorage slot, can carry a
+		// field whose RUNTIME type no longer matches its declared type (e.g.
+		// `fiat` saved as an array, or an amount saved as a number). The form
+		// calls `.trim()` on the string fields downstream (fiat in step2Done /
+		// fiatError, the amounts + spread/fixed in the validators + summary);
+		// a non-string there throws an UNCAUGHT `…trim is not a function`
+		// that aborts the whole Svelte render flush — which on /post shows up
+		// as everything below Step 1 silently vanishing (Ken's beta.34
+		// first-trade screenshot + the console TypeError). Coercing each field
+		// to its declared type here lets a stale draft degrade gracefully but
+		// never poison the form. A well-formed current-schema draft passes
+		// through byte-identically (string→string, enum→enum, array→array).
+		const str = (v: unknown): string => (typeof v === 'string' ? v : '');
+		side = d.side === 'buy' || d.side === 'sell' ? d.side : null;
+		asset = isAssetTicker(d.asset) ? d.asset : null;
+		const f = str(d.fiat);
+		fiatArr = f ? [f] : [];
+		amountMin = str(d.amountMin);
+		amountMax = str(d.amountMax);
+		priceModelKind = d.priceModelKind === 'fixed' ? 'fixed' : 'spread';
+		spreadPercent = str(d.spreadPercent);
+		fixedPrice = str(d.fixedPrice);
+		paymentMethods = Array.isArray(d.paymentMethods)
+			? d.paymentMethods.filter((m): m is string => typeof m === 'string')
+			: [];
+		pmDraft = str(d.pmDraft);
+		region = str(d.region);
+		terms = str(d.terms);
+		expiresDays =
+			typeof d.expiresDays === 'number' && Number.isFinite(d.expiresDays)
+				? Math.max(1, Math.min(90, Math.floor(d.expiresDays)))
+				: 90;
+		syndicateToBlog = d.syndicateToBlog === true;
+		feeMethodChoice =
+			d.feeMethodChoice === 'blurt' ||
+			d.feeMethodChoice === 'waived_first_buy' ||
+			d.feeMethodChoice === 'btc' ||
+			d.feeMethodChoice === 'xmr'
+				? d.feeMethodChoice
+				: 'blurt';
+		externalTxId = str(d.externalTxId);
+		txProof = str(d.txProof);
 	}
 
 	/** Heuristic: does the draft actually contain anything worth
@@ -806,6 +829,24 @@
 			void checkWaiverEligibility(resolveOrigin(MORPHIT_INDEXER_ORIGIN), blurtAccount)
 				.then((r) => {
 					waiverEligibility = r;
+					// First-trade lock — force the funding-buy shape (buy BLURT,
+					// 7-day expiry) SYNCHRONOUSLY here, in the same tick
+					// waiverEligibility resolves and isFirstTrade flips true.
+					// The reactive lock effect ($effect, below) also enforces
+					// this, but a post-render effect lands a beat AFTER the
+					// template recomputes step1Done off the just-flipped
+					// isFirstTrade — so Step 2 (gated `{#if step1Done}`) and the
+					// step nav could stay hidden, leaving a first-time trader
+					// with just the asset card and nothing below it. Setting
+					// side/asset at the SAME point isFirstTrade becomes true
+					// keeps step1Done consistent within the flush and guarantees
+					// the submitted order carries the right shape, not just the
+					// gate. Mirror of the lock effect's guards (idempotent).
+					if (r.kind === 'eligible' || r.kind === 'eligible_unknown_account') {
+						if (side !== 'buy') side = 'buy';
+						if (asset !== 'BLURT') asset = 'BLURT';
+						if (expiresDays !== 7) expiresDays = 7;
+					}
 				})
 				.catch(() => {
 					waiverEligibility = { kind: 'error', message: '' };
@@ -936,8 +977,12 @@
 		// new user) are silently no-op.
 		try {
 			const prefs = getPreferencesSnapshot();
-			if (fiat === '' && prefs.fiat !== '') fiatArr = [prefs.fiat];
-			if (region === '' && prefs.region !== '') region = prefs.region;
+			// Same non-string guard as applyDraft: stored prefs feed fiatArr /
+			// region, which are .trim()'d downstream — coerce to avoid a throw.
+			if (fiat === '' && typeof prefs.fiat === 'string' && prefs.fiat !== '')
+				fiatArr = [prefs.fiat];
+			if (region === '' && typeof prefs.region === 'string' && prefs.region !== '')
+				region = prefs.region;
 		} catch {
 			// localStorage unavailable / quota issues / private
 			// browsing — preferences are best-effort, never block

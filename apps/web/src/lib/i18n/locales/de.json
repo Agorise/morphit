@@ -2952,7 +2952,7 @@
       "asset_explainer": {
         "btc": "Bitcoin (BTC) — die originale Kryptowährung, weltweit verwendet. Öffentliches Hauptbuch; Transaktionen sind sichtbar. Netzwerkgebühren und Bestätigungszeit variieren mit der Nachfrage.",
         "xmr": "Monero (XMR) — datenschutz-orientierte Kryptowährung. Verbirgt Beträge, Absender und Empfänger standardmäßig. Ideal, wenn Privatsphäre dir wichtig ist.",
-        "blurt": "BLURT — die soziale Blockchain, auf der Morphit läuft. Schnell (3-Sekunden-Blöcke), gebührenfreie Transfers, aber geringe Marktkapitalisierung. Nützlich für kleine Beträge und Trinkgelder; weniger nützlich zum Speichern großer Werte.",
+        "blurt": "BLURT — die soziale Blockchain, auf der Morphit läuft. Schnell (3-Sekunden-Blöcke), gebührenfreie Überweisungen und ein integriertes Belohnungssystem. Perfekt, um Reputation aufzubauen, deine Trades dauerhaft festzuhalten und dich mit Gleichgesinnten zu vernetzen.",
         "usdt": "Tether (USDT) — ein Stablecoin 1:1 an den USD gekoppelt. Zentral kontrolliert — Tether Inc. kann jede Adresse einfrieren. Nur Handel auf Morphit: kann keine Listungsgebühren bezahlen.",
         "bch": "Bitcoin Cash (BCH). 2017 von Bitcoin abgespalten, um größere Blöcke und niedrigere Transaktionsgebühren statt einer Gebührenmarkt-Dynamik zu bevorzugen. Transparentes Ledger wie BTC; kein Herausgeber kann Adressen einfrieren. Nur handelbar auf Morphit — Listing-Gebühren werden weiterhin in BLURT, BTC oder XMR bezahlt.",
         "ltc": "Litecoin (LTC). 2011 von Bitcoin abgespalten mit schnelleren 2,5-Minuten-Blöcken und Scrypt-Mining. Transparent wie Bitcoin — jede Transaktion ist öffentlich auf der Chain sichtbar. Kein zentraler Herausgeber; niemand kann deine Adressen einfrieren.",
