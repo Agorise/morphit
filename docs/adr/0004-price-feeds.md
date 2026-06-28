@@ -4,16 +4,24 @@
 **Date:** 2026-04-17 (proposed); 2026-05-06 (status updated — Phase 3 indexer-side shipped); 2026-05-25 (cp138 — frontend wiring partially complete; live prices on indexer at `/v1/price/...`, frontend still fallback-only pending an `ApiRelayProvider` + Settings opt-in)
 **Deciders:** project maintainer
 
-> **2026 forward note (cp367 — Klingex removed):** This ADR was
+> **2026 forward note (cp367 — Klingex removed; cp376 — multi-source
+> median):** This ADR was
 > written when Klingex (the Blurt-community-run CEX) was BLURT's
 > primary external upstream. Klingex went out of business in 2026.
 > The Klingex fetcher, its `MORPHIT_INDEXER_KLINGEX_BASE_URL`
-> config, and its slot in the chain were removed. **CoinGecko is
-> now the sole external price source for every asset** (BLURT, BTC,
-> XMR), with the opt-in self-sovereign `morphit_native` source and
-> the static floor behind it. References to Klingex below are
-> retained as the original decision-record context; read "Klingex →
-> Coingecko" as "Coingecko" for current behavior.
+> config, and its slot in the chain were removed. Initially CoinGecko
+> became the sole external source; cp376 then replaced that
+> single-upstream risk with an **outlier-rejected median across many
+> independent external feeds** (Coingecko, CoinPaprika, CryptoCompare
+> for every asset; plus Kraken/Binance/Coinbase/OKX/Bybit where the
+> asset is listed; plus CoinLore and the key-gated CoinCap/Messari
+> when configured), with the opt-in self-sovereign `morphit_native`
+> source and the static floor behind it. Any feed that returns
+> nothing is dropped from the median, so no single provider can ban,
+> rate-limit, or skew the published price. References to Klingex
+> below are retained as the original decision-record context; read
+> "Klingex → Coingecko" as "the external-feed median" for current
+> behavior.
 
 ## Context
 

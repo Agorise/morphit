@@ -203,7 +203,7 @@
 		<BusyButton
 			variant="primary"
 			busy={submitting}
-			busyLabel={$_('feature_bid.submitting')}
+			busyLabel={$_('common.broadcasting')}
 			onclick={submit}
 		>
 			{$_('feature_bid.submit_button')}

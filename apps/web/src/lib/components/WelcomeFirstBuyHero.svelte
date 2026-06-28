@@ -207,7 +207,7 @@
 						href={lp('/faq#first_order_free')}
 						class="text-sm font-semibold text-morphit-emerald hover:underline"
 					>
-						{$_('welcome_first_buy.learn_more')}
+						{$_('common.learn_more')}
 					</a>
 				</div>
 			</div>

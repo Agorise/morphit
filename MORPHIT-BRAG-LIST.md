@@ -65,7 +65,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 15. **Your broadcasts go through your operator's node, not a stranger's.** Posting an order, sending a chat, or editing your profile is signed on your device and relayed to the chain by the same-origin indexer — so your IP and your exact on-chain action aren't handed to a third-party Blurt RPC operator you didn't choose, and your keys never leave your device (only the signed message is forwarded). The read side already worked this way; if your operator's node is briefly unreachable the browser falls back to a public RPC node so the broadcast still lands.
 
-16. **We encourage VPN, Tor, Lokinet, and I2P access.** Anything that hides your IP from the server you're talking to is a good idea. Our anti-abuse defenses are deliberately designed not to punish privacy-conscious users — rate limits are coarse, easy to evade with a VPN rotation, and we accept more abuse rather than make privacy-conscious users feel unwelcome. The Tor `.onion`, I2P b32, and Lokinet endpoints are first-class citizens, not afterthoughts.
+16. **We encourage VPN, Tor, Lokinet, and I2P access.** Anything that hides your IP from the server you're talking to is a good idea. Our anti-abuse defenses are deliberately designed not to punish privacy-conscious users — rate limits are coarse, easy to evade with a VPN rotation, and we accept more abuse rather than make privacy-conscious users feel unwelcome. The Tor `.onion`, I2P b32, and Lokinet endpoints are first-class citizens, not afterthoughts — every instance now generates and serves a Tor `.onion` automatically, advertised via an `Onion-Location` header so Tor Browser offers it.
 
 17. **No central key store.** Your Blurt private keys never leave your device. There's no key database for anyone — including a future-bankrupt operator — to leak.
 
@@ -229,7 +229,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 95. **Indexer cross-verifies via multiple Blurt RPCs.** No single chain provider is a trust anchor.
 
-96. **Self-sovereign Blurt pricing from on-platform trade data** (opt-in). Operators can flip on a price source that derives Blurt/USD from real verified-fee trades happening on Morphit instead of asking Coingecko. Survives any external feed shutting down: tiered anchors prefer direct Blurt-vs-USD orders, fall back to Blurt-vs-stablecoin orders with cross-stablecoin depeg detection, then combine both pools when each alone is thin. Same Sybil filters as reputation; one-vote-per-trader medians; manipulation defenses at every layer.
+96. **Self-sovereign Blurt pricing from on-platform trade data** (opt-in). Operators can flip on a price source that derives Blurt/USD from real verified-fee trades happening on Morphit instead of leaning on outside price feeds. Survives any external feed shutting down: tiered anchors prefer direct Blurt-vs-USD orders, fall back to Blurt-vs-stablecoin orders with cross-stablecoin depeg detection, then combine both pools when each alone is thin. Same Sybil filters as reputation; one-vote-per-trader medians; manipulation defenses at every layer.
 
 97. **Publicly verifiable price receipt.** Fetch `GET /v1/price/morphit-native/receipt` and you get exactly which on-platform traders contributed to the current native price, which tier was used, the live cross-stablecoin depeg report, the plausibility envelope settings, and a loud NOT-AN-ORACLE warning. Anyone can audit; nothing about price derivation is opaque.
 
@@ -237,7 +237,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 99. **Cross-instance peer-disagreement detector (Defense F).** Opt-in monitor that periodically queries peer Morphit instances' price-receipt endpoint, computes the federation median, and alerts on sustained 25%+ disagreement vs your own derived price. Catches the case where YOUR indexer is the one being manipulated — pressured operator, captured server, geographic isolation — rather than the trader-level manipulation the cp127 sybil filters address. Uses median (not mean) so a single bad peer can't swing the result, requires ≥3 peers minimum, and filters by same-denomination so EUR-vs-USD instances aren't compared apples-to-oranges (which closes the last open item from cp127's 8-defense black-hat table).
 
-100. **Multi-asset self-sovereign pricing.** The cp127 morphit_native price source (which derives Blurt/USD from on-platform trade data when external feeds are unavailable) extends to BTC and XMR in cp130 — each asset has its own composite chain (Coingecko + native + static floor; Klingex, the former BLURT-only upstream, went out of business in 2026 and was removed). The receipt endpoint `/v1/price/morphit-native/receipt?asset=BTC` now returns a real BTC/USD derivation that operators can inspect, and per-asset peer monitoring extends Defense F to alert on BTC and XMR disagreement independently.
+100. **Multi-asset self-sovereign pricing.** The cp127 morphit_native price source (Blurt/USD derived from on-platform trade data) extends to BTC and XMR in cp130 — each asset has its own composite chain: an outlier-rejected **median across many independent external feeds** (Coingecko, CoinPaprika, CryptoCompare, plus exchanges like Kraken/Binance/Coinbase/OKX/Bybit where listed) → morphit_native → static floor. Any feed that's down, rate-limiting us, or wrong is dropped from the median, so no single provider can move the published price. The receipt endpoint `/v1/price/morphit-native/receipt?asset=BTC` returns a real BTC/USD derivation operators can inspect.
 
 101. **Wallet developers can embed Morphit's orderbook directly inside their wallet UI** — the same kind of integration Mycelium famously did with LocalBitcoins years ago. Morphit publishes a stable public REST + SSE API (`/v1/openapi.json` on any instance) covering the orderbook, profiles, feedback, and chat — federation-aware, so the wallet can point at any operator's instance or a self-hosted one. Any wallet supporting Morphit's 16 tradable assets can offer peer-to-peer trading without making users leave it. AGPL-3.0 like the rest of the project; integrators ship under their own license.
 
@@ -362,7 +362,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 156. **Source code at git.agorise.net/agorise/morphit.** Self-hosted Forgejo (Git forge), not GitHub. The project's own infrastructure is decentralized too.
 
-157. **45 ADRs** (Architectural Decision Records) in `docs/adr/`, files numbered 0001 through 0046 (0016 retracted, that work shipped as ADR-0022). Each records a major design choice, the alternatives considered, and the tradeoff rationale. Topics span key custody (0010), chat reputation + crypto (0014, 0015), YubiKey unlock (0017), release trust anchor (0019), QR pairing (0022), one ADR per tradable-asset addition (0023–0036), cash-by-mail (0037), reputation hardening (0038), self-sovereign pricing (0039–0042), opt-in TOTP 2FA (0043), AI-agent integration via Model Context Protocol (0044), shared network-defense primitives (0045), and migrating Blurt signing off the unmaintained `elliptic` library (0046).
+157. **46 ADRs** (Architectural Decision Records) in `docs/adr/`, files numbered 0001 through 0047 (0016 retracted). Each records a major design choice, the alternatives considered, and the tradeoff rationale. Topics span key custody (0010), chat reputation + crypto (0014, 0015), YubiKey unlock (0017), release trust anchor (0019), QR pairing (0022), one ADR per tradable-asset addition (0023–0036), cash-by-mail (0037), reputation hardening (0038), self-sovereign pricing (0039–0042), opt-in TOTP 2FA (0043), AI-agent integration via Model Context Protocol (0044), shared network-defense primitives (0045), migrating Blurt signing off `elliptic` (0046), and Tor-onion + host-hardening on by default (0047).
 
 158. **49 design and operations documents** in `docs/`. Architecture, operations runbook, security model, fees-and-rewards reference, threat model, metadata-leak catalog, integration test design, automation audit — all public.
 
@@ -562,7 +562,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 ## 18. Operator setup — even your grandma can run a node
 
-247. **Beautiful CLI setup wizard.** The wizard walks new operators through everything: pre-flight system check, ELI5-friendly prompts for the basics (instance name, accounts, networks), review-and-confirm screen, write the config. End-to-end in about 15 minutes.
+247. **Beautiful CLI setup wizard.** The wizard walks new operators through everything: pre-flight system check, ELI5-friendly prompts for the basics (instance name, accounts, networks), review-and-confirm screen, write the config. End-to-end in about 15 minutes. It also generates a Tor `.onion` for you in the background (no waiting, no key-grinding) and hand-holds you through server hardening — SSH lockdown, firewall + fail2ban, automatic security updates, kernel hardening, and intrusion detection — as a short run of one-keystroke "yes" confirmations; the shipped Ansible role applies all of it by default.
 
 248. **Browser setup-wizard for live config tweaks.** Once your instance is up, visit `/admin/setup-wizard` on your domain to toggle which assets you list and to add or remove per-instance payment methods. The page emits the exact env-var line or CLI command — paste into `morphit.config.env` (then restart the indexer) or into your terminal (no restart). Read-only by design — never mutates your server, no auth-gating attack surface to maintain; full operator UX walkthrough in `docs/RUN-A-MORPHIT-NODE.md`.
 
@@ -742,7 +742,7 @@ Every claim in this document is verifiable. The repository is at **git.agorise.n
 
 - **Smoke suite**: `bash scripts/run-smokes.sh` — runs several thousand self-checks across ~280 runners, triple-pulse stable
 - **Audit log**: `docs/AUDIT-2026-05.md`
-- **Architecture decisions**: `docs/adr/0001-*.md` through `docs/adr/0046-*.md` (45 ADRs; 0016 was retracted and the number isn't reused)
+- **Architecture decisions**: `docs/adr/0001-*.md` through `docs/adr/0047-*.md` (46 ADRs; 0016 was retracted and the number isn't reused)
 - **Fees and rewards**: `docs/FEES-AND-REWARDS.md` (line-cited to source)
 - **Public API**: `docs/API.md`
 - **Operator runbook**: `docs/OPERATIONS.md`

@@ -322,7 +322,7 @@
 					disabled={!canShare || sending}
 					class="rounded-lg bg-morphit-btn px-4 py-2 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-50"
 				>
-					{sending ? $_('shipment_modal.sending') : $_('shipment_modal.share_button')}
+					{sending ? $_('common.sending') : $_('shipment_modal.share_button')}
 				</button>
 			</div>
 		</div>

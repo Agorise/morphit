@@ -69,8 +69,8 @@
 		<button
 			type="button"
 			onclick={() => copyValue(id, value)}
-			aria-label={copiedId === id ? $_('backup_keys_panel.copied') : $_('backup_keys_panel.copy')}
-			title={copiedId === id ? $_('backup_keys_panel.copied') : $_('backup_keys_panel.copy')}
+			aria-label={copiedId === id ? $_('common.copied') : $_('common.copy')}
+			title={copiedId === id ? $_('common.copied') : $_('common.copy')}
 			class="inline-flex h-9 w-9 flex-none items-center justify-center rounded-lg border border-ink-300 bg-white text-ink-700 transition hover:bg-ink-50 dark:border-ink-600 dark:bg-ink-800 dark:text-ink-100 dark:hover:bg-ink-700"
 		>
 			{#if copiedId === id}

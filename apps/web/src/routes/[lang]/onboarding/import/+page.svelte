@@ -566,7 +566,7 @@
 		// Seed: the session envelope uses an ephemeral random key, so collect
 		// + validate a real password and re-encrypt the identity with it.
 		if (rememberPassword.length < 8) {
-			errorMsg = $_('onboarding.import.remember_me.error.password_too_short');
+			errorMsg = $_('common.password_too_short');
 			return;
 		}
 		if (rememberPassword !== rememberPasswordConfirm) {
@@ -620,7 +620,7 @@
 			return;
 		}
 		if (postingNewPassword.length < 8) {
-			errorMsg = $_('onboarding.import.posting_only.error.password_too_short');
+			errorMsg = $_('common.password_too_short');
 			return;
 		}
 		if (postingNewPassword !== postingNewPasswordConfirm) {
@@ -1303,7 +1303,7 @@
 					busy={working}
 					disabled={rememberContinueDisabled}
 					onclick={finalizeImportChoice}
-					busyLabel={$_('onboarding.import.remember_me.submit_pending')}
+					busyLabel={$_('common.saving')}
 					fullWidth
 				>
 					{rememberMe

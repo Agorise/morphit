@@ -149,7 +149,7 @@
 		</p>
 	{:else if !verify}
 		<p class="text-ink-500">
-			{$_('about_this_instance.loading')}
+			{$_('common.loading')}
 		</p>
 	{:else}
 		<!-- The verify.json contents, presented as a readable card -->

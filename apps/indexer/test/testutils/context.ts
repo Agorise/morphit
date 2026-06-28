@@ -99,6 +99,14 @@ export function fakeConfig(overrides: Partial<Config> = {}): Config {
 		// cp372 additional crypto sources + outlier tolerance.
 		coinpaprikaBaseUrl: 'https://api.coinpaprika.com/v1',
 		krakenBaseUrl: 'https://api.kraken.com/0/public',
+		cryptocompareBaseUrl: 'https://min-api.cryptocompare.com',
+		binanceBaseUrl: 'https://api.binance.com',
+		coinbaseBaseUrl: 'https://api.exchange.coinbase.com',
+		okxBaseUrl: 'https://www.okx.com',
+		bybitBaseUrl: 'https://api.bybit.com',
+		coinloreBaseUrl: 'https://api.coinlore.net',
+		coincapBaseUrl: 'https://rest.coincap.io/v3',
+		messariBaseUrl: 'https://data.messari.io',
 		priceOutlierTolerance: 0.05,
 		priceRefreshIntervalMs: 300_000,
 		// cp372 FX feed defaults — disabled in tests by default (the

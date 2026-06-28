@@ -1405,7 +1405,11 @@ mode needed.
 ## 13. Responding to a stale BLURT/USD price feed
 
 Under Phase 5, the indexer runs a composite BLURT/USD price
-source with a Coingecko → static floor fallback chain. Values refresh every 5 minutes in the background. When
+source: an outlier-rejected **median across several external
+feeds** (Coingecko, CoinPaprika, CryptoCompare, and — for assets
+they list — Kraken/Binance/Coinbase/OKX/Bybit and the optional
+key-gated CoinCap/Messari), then `morphit_native`, then the
+static floor. Values refresh every 5 minutes in the background. When
 every upstream fails, the indexer keeps serving the last good
 value with `stale=true`. If no upstream has ever succeeded
 since boot, it falls back to the static floor
@@ -1442,11 +1446,18 @@ below.  See ADR-0041.
 **cp130 update — multi-asset morphit_native (BTC + XMR added
 alongside BLURT)**: when the price feed is enabled, the indexer
 now creates three independent composite price sources at boot —
-one per asset.  Every asset (BLURT, BTC, XMR) uses the same
-3-tier chain (Coingecko → morphit_native → static floor).
+one per asset.  Every asset (BLURT, BTC, XMR) prices from the
+same tiered design: an outlier-rejected **median across several
+external feeds**, then `morphit_native`, then the static floor.
 Klingex, the former BLURT-only upstream, went out of business
-in 2026 and was removed, so Coingecko is the sole external
-source for all assets now.
+in 2026 and was removed; rather than fall back to a single
+replacement, the external tier now averages many independent
+feeds (Coingecko + CoinPaprika + CryptoCompare for every asset;
+plus Kraken/Binance/Coinbase/OKX/Bybit where the asset is listed;
+plus CoinLore and the key-gated CoinCap/Messari when configured).
+A single provider banning us, rate-limiting us, or returning a
+bad number can no longer move the published price — any feed that
+returns nothing is simply dropped from the median.
 Each source has its own cache and refresh schedule.  Two new
 env vars set per-asset static floors:
 `MORPHIT_INDEXER_PRICE_FEED_BTC_STATIC_FLOOR` (default 60000) and
@@ -1603,10 +1614,11 @@ Example all-upstreams-failed-since-boot:
    A 429 response means you're rate-limited; the free tier
    allows ~10-30 req/min shared across all callers from your
    IP. With a 5-minute refresh this should be comfortable, but
-   a shared IP (NAT, proxy) can exhaust it. Coingecko is the
-   only external upstream now (Klingex, the former BLURT
-   primary, went out of business in 2026), so a Coingecko
-   outage means the indexer serves the last cached price, then
+   a shared IP (NAT, proxy) can exhaust it. The price is a
+   median across many external feeds now (Klingex, the former
+   BLURT primary, went out of business in 2026), so one feed
+   rate-limiting or going down just drops it from the median;
+   if ALL external feeds fail the indexer serves the last cached price, then
    the static floor.
 
 3. **Has the Coingecko API shape drifted?** Our Coingecko
@@ -4385,6 +4397,21 @@ easiest to most low-level:
    Enter to accept the bundled defaults, or paste a
    comma-separated list of your preferred endpoints.
 
+   **Save-as-you-go / resume.**  The wizard records your
+   NON-SECRET answers as you go to `~/.morphit-init-progress.json`
+   (written mode 0600).  If a run is interrupted, re-running
+   `morphit-ops init` detects that file and offers to resume from
+   it — reusing your saved answers and re-asking only the two
+   things deliberately NEVER written there: the **database
+   connection string** (it embeds the DB password) and the
+   **relay's active key**.  Those re-prompts exist because a
+   private key / DB password sitting in a predictable home-dir
+   file after an interrupted run would be a dangling secret; the
+   progress type structurally omits both and `saveProgress` hard-
+   strips them as defense-in-depth (regression-guarded by
+   `init-progress-smoke`).  The file is deleted automatically once
+   setup completes successfully, or when you choose "start fresh".
+
 2. **Edit `morphit.env` by hand.**  Find the
    `MORPHIT_INDEXER_RPC_ENDPOINTS=` line and replace the
    comma-separated value.  Same atomic-replace discipline
@@ -4758,6 +4785,8 @@ cd /opt/morphit/apps/indexer && npx tsx scripts/fee-status-filter-lint.ts
 ```
 
 ### Alt-network addresses (Tor / Lokinet / I2P / Nostr / ENS) — the `alt-address` wizard
+
+> **Tor onion is automatic (cp378).** Every instance gets a **basic v3 `.onion` by default** — privacy is the first priority. The setup wizard **generates one in the background** while you answer the other steps (a plain non-vanity address, instant — you never wait), writes `MORPHIT_INSTANCE_TOR_ADDRESS` so the **footer pill + the `Onion-Location` auto-redirect** light up automatically, and saves the Tor hidden-service key files to a `tor-hidden-service/` directory (`hs_ed25519_secret_key` 0600, `hs_ed25519_public_key`, `hostname`). The wizard **never asks** about Tor and **never overwrites** an address you set yourself — if `MORPHIT_INSTANCE_TOR_ADDRESS` is already in your environment or an existing config, that value is kept. To actually *serve* the onion, the `tor` Ansible role (`enable_tor`, default-on in `ops/ansible/group_vars/all.yml`) installs Tor and points its `HiddenServiceDir` at those generated keys; set `morphit_tor_key_src` to the `tor-hidden-service/` directory so Tor serves the **same** address the site advertises. A custom **vanity** `.onion` is still a manual step (generate with `scripts/generate-onion.sh` on your own hardware and paste it below) — neither the wizard nor this menu grinds vanity keys for you; pasting a vanity address simply replaces the basic one (and, being a manual value, is never overwritten).
 
 `morphit-ops alt-address` (also the **"Set up a Tor / Lokinet / I2P address"** main-menu item) is a guided **CRUD** tool for your privacy-network addresses. Pick an address type and it **shows the current value**, then offers **Replace · Delete · Back** (Delete removes the line from `morphit.config.env` and the pill from the footer). I2P now appears as **two separate menu choices** — the always-resolvable **b32** (`DOMAIN.b32.i2p`, generated) and an optional **vanity name** (`DOMAIN.i2p`, which you *register* with an i2p naming service and paste — not generated). For Tor / Lokinet / I2P-b32, "Replace" walks you through *generating* the address; the **I2P vanity name**, **Nostr** (cp311), and **ENS** (`DOMAIN.eth`, cp334) are values you already own/register elsewhere, so they just prompt for the value. An instance may set neither, one, or both i2p addresses. The relevant knobs:
 
@@ -8486,7 +8515,7 @@ If your goal is "absolute minimum BLURT loss, accept user friction," this is the
 
 This section is the operator-grade reference for issues that come up only when your Morphit instance is running on a residential internet connection (Pi or laptop in the operator's house, as opposed to a rented VPS).
 
-The grandma-friendly setup walkthrough — CGNAT detection, DDNS hostname registration, port forwarding, lid-closed laptop config, UPS sizing, dynamic IP + Let's Encrypt — is in `docs/RUN-A-MORPHIT-NODE.md` §3a, the section new operators read before §4. **§3a is the soup-to-nuts walkthrough; THIS section is the ongoing-operations reference for after the box is online.**
+The grandma-friendly setup walkthrough — CGNAT detection, DDNS hostname registration, port forwarding, fixed local IP, HTTPS — is in `docs/RUN-A-MORPHIT-NODE.md` §3 (the home-hosting section new operators read before §4). **§3 is the quick first-time setup; THIS section is the deeper ongoing-operations reference for after the box is online** (residential-WiFi Postgres binding, IPv6, energy cost, off-site backups, Tor fronting).
 
 ### 39.1 Uptime monitoring over a flaky home link
 
@@ -8499,7 +8528,7 @@ A residential internet connection has more outages and more ISP-driven hiccups t
 
 Cover all three legs of the restart story:
 
-- **The hardware** — BIOS / UEFI "AC Power Recovery" set to "Power On" or "Last State" (laptop), or default Pi auto-boot. Verified at install time per `RUN-A-MORPHIT-NODE.md §3a.6`.
+- **The hardware** — BIOS / UEFI "AC Power Recovery" set to "Power On" or "Last State" (laptop), or default Pi auto-boot. Set this when you first provision the machine so it comes back up after a power blip.
 - **The OS services** — `systemctl is-enabled morphit-indexer morphit-relay morphit-backup.timer` should all return `enabled`. If any are `disabled`, run `systemctl enable` for them. Test annually by issuing `sudo reboot` and confirming everything comes back without manual intervention.
 - **The encrypted-key passphrase** — if you're using the encrypted-envelope form for `MORPHIT_RELAY_ACTIVE_KEY_FILE` (`apps/relay/scripts/encrypt-active-key.ts`), the relay prompts for the passphrase on stdin at boot. **A reboot from outside your house — for example, the UPS dying during a long outage — will leave the relay waiting for the passphrase indefinitely.** Two mitigations:
   1. Configure the relay's systemd unit with `StandardInput=tty-force` AND a wrapper service that emails you when the relay is stuck waiting for input. You then SSH in and supply the passphrase.
@@ -8518,14 +8547,14 @@ If your ISP does send a TOS warning, the diplomatic response is "I'm running a p
 
 A home-hosted instance is tied to your physical address until you do something about it. When you move:
 
-- **If you're moving to a new home WITH a non-CGNAT ISP**, the migration is straightforward: power down at the old address, transport the hardware, plug in at the new address, repeat the §3a.4 router port-forward setup (the new router won't have your old rules), update DDNS (the script will pick up the new IP automatically within 5 minutes). Total downtime: a few hours during transport.
-- **If you're moving to an apartment with CGNAT or a hotel for a month**, you can't host from there. Two options: (a) leave the hardware powered on at the old address temporarily if you have a friend/family at that address willing to host it for a few weeks, or (b) migrate to a VPS. The migration to VPS is documented at the end of `RUN-A-MORPHIT-NODE.md §3` (Option B's "you can always migrate to a Pi later" sentence inverted) — set up the new VPS using §5–§9 of the grandma doc, point your domain at the VPS's IP (Path A in §4), and decommission the home machine. Your operator account, your fees account, and your reputation all stay the same — **users see no change** because nothing about the service identity is tied to the IP.
+- **If you're moving to a new home WITH a non-CGNAT ISP**, the migration is straightforward: power down at the old address, transport the hardware, plug in at the new address, repeat the router port-forward setup from `RUN-A-MORPHIT-NODE.md §3` (the new router won't have your old rules), update DDNS (the script will pick up the new IP automatically within 5 minutes). Total downtime: a few hours during transport.
+- **If you're moving to an apartment with CGNAT or a hotel for a month**, you can't host from there. Two options: (a) leave the hardware powered on at the old address temporarily if you have a friend/family at that address willing to host it for a few weeks, or (b) migrate to a VPS. To migrate: pick the VPS path in `RUN-A-MORPHIT-NODE.md §2`, set up the new VPS using §5–§9 of that guide, point your domain at the VPS's IP (the A-record step in §4), and decommission the home machine. Your operator account, your fees account, and your reputation all stay the same — **users see no change** because nothing about the service identity is tied to the IP.
 
 ### 39.5 Cleartext local Postgres traffic in a residential WiFi context
 
 OPERATIONS.md §14 establishes that the indexer and relay listen on `127.0.0.1` only (loopback) and Postgres connections are loopback-only. **This is still correct for home hosting** — but home networks have a quirk worth flagging.
 
-If your Pi or laptop is on a wired ethernet connection to your router, Postgres-on-loopback is exactly as private as on a VPS. **If it's on WiFi**, the situation is the same as long as Postgres is bound to `127.0.0.1` (which is the default per `RUN-A-MORPHIT-NODE.md §7`'s setup) — WiFi doesn't change anything because the loopback interface doesn't traverse WiFi.
+If your Pi or laptop is on a wired ethernet connection to your router, Postgres-on-loopback is exactly as private as on a VPS. **If it's on WiFi**, the situation is the same as long as Postgres is bound to `127.0.0.1` (which is the default per `RUN-A-MORPHIT-NODE.md §5`'s setup) — WiFi doesn't change anything because the loopback interface doesn't traverse WiFi.
 
 The risk only emerges if you accidentally bind Postgres to `0.0.0.0`. Verify periodically:
 
@@ -8546,7 +8575,7 @@ Many residential ISPs are IPv6-by-default now. Two quick checks:
 
 If you have IPv6 and want to publish AAAA records alongside your CNAME, add an `AAAA` record at `@` and `www` pointing at your machine's GUA address. Modern browsers prefer IPv6 when available, which can improve user experience for IPv6-enabled visitors and reduce the load on your IPv4 NAT.
 
-Most home operators leave IPv6 disabled at the router level and run IPv4-only — that's also fine. The walkthrough in `RUN-A-MORPHIT-NODE.md §3a` works either way.
+Most home operators leave IPv6 disabled at the router level and run IPv4-only — that's also fine. The home-setup walkthrough in `RUN-A-MORPHIT-NODE.md §3` works either way.
 
 ### 39.7 Energy-cost monitoring
 
@@ -8560,7 +8589,7 @@ A $20 plug-in power meter (Kill-A-Watt or equivalent) gives you the actual numbe
 
 ### 39.8 Backups — the off-site copy is mandatory for home operators
 
-OPERATIONS.md §31 documents the daily local Postgres backup (`/home/morphit/backups/`). The companion `RUN-A-MORPHIT-NODE.md §10` has a sidebar emphasizing that for home hosters, **the off-site backup is mandatory, not optional**. The reason is the threat model: a VPS operator who loses the local backup still has the VPS provider's snapshot of the disk. A home operator who loses the local backup to a fire / flood / theft has lost everything.
+OPERATIONS.md §31 documents the daily local Postgres backup (`/home/morphit/backups/`). For home hosters specifically, **the off-site backup is mandatory, not optional**. The reason is the threat model: a VPS operator who loses the local backup still has the VPS provider's snapshot of the disk. A home operator who loses the local backup to a fire / flood / theft has lost everything.
 
 The recommended off-site backup pattern:
 
@@ -8574,7 +8603,7 @@ Whatever you pick: **test the restore at least once a quarter.** Untested backup
 
 A home-hosted Morphit instance leaks **your home's public IP address to every user who connects**. Most users don't care, but for an operator with a public-facing role under their real name, this can be a low-grade privacy concern. Mitigations:
 
-- **Front the instance with a Tor onion service** (covered in OPERATIONS.md §11 reference and `RUN-A-MORPHIT-NODE.md §11`). Users who care can connect via the onion address; the home IP is only revealed to clearnet users. The Tor onion address itself reveals nothing about your home IP.
+- **Front the instance with a Tor onion service** (covered in OPERATIONS.md §11). Users who care can connect via the onion address; the home IP is only revealed to clearnet users. The Tor onion address itself reveals nothing about your home IP.
 - **Front the instance with Cloudflare Tunnel.** Cloudflare's IP is what users see; your home IP is only known to Cloudflare. The tradeoff is that you're trusting Cloudflare to relay traffic without logging it long-term — which is a privacy regression for some operators and an improvement for others. Read Cloudflare's data-retention policies before adopting.
 - **Move to a VPS.** The VPS provider sees your home IP (because that's where you SSH in from), but users see only the VPS IP. This is the path most operators take when home-hosting visibility becomes a concern.
 

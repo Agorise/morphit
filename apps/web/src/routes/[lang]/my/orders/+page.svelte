@@ -516,7 +516,7 @@
 			<p class="mt-2 text-ink-600 dark:text-ink-300">{$_('my_orders.locked.body')}</p>
 			<div class="mt-4">
 				<BusyButton variant="primary" onclick={() => gotoLocale('/onboarding/import')}>
-					{$_('my_orders.locked.unlock')}
+					{$_('common.unlock')}
 				</BusyButton>
 			</div>
 		</section>
@@ -534,7 +534,7 @@
 			<p class="mt-1 text-xs text-amber-700 dark:text-amber-300">{errorMessage}</p>
 			<div class="mt-4">
 				<BusyButton variant="primary" onclick={load}>
-					{$_('my_orders.retry')}
+					{$_('common.retry')}
 				</BusyButton>
 			</div>
 		</section>
@@ -669,7 +669,7 @@
 										href={lp('/faq#order_fee_rejected')}
 										class="text-ink-500 underline hover:no-underline"
 									>
-										{$_('my_orders.order.fee_learn_more')}
+										{$_('common.learn_more')}
 									</a>
 								{/if}
 								<span class="text-ink-500">

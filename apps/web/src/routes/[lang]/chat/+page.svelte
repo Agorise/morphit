@@ -493,7 +493,7 @@
 									values: { peer: convo.peer }
 								}) as string}
 							>
-								{$_('chat.inbox.dismiss')}
+								{$_('common.dismiss')}
 							</button>
 						{/if}
 					</li>

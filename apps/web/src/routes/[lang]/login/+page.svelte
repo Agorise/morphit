@@ -632,7 +632,7 @@
 					busyLabel={$_('login.welcome_back.unlocking')}
 					onclick={handleUnlock}
 				>
-					{$_('login.welcome_back.unlock')}
+					{$_('common.unlock')}
 				</BusyButton>
 
 				{#if envelopeHasYubikey && webhidSupported}
@@ -784,7 +784,7 @@
 		title={$_('login.signout_before_switch_modal.title')}
 		body={$_('login.signout_before_switch_modal.body', { values: { account: pendingAccount } })}
 		confirmLabel={$_('login.signout_before_switch_modal.confirm')}
-		cancelLabel={$_('login.signout_before_switch_modal.cancel')}
+		cancelLabel={$_('common.cancel')}
 		onConfirm={confirmSwitch}
 		onCancel={cancelSwitch}
 	/>

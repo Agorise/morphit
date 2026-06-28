@@ -638,11 +638,11 @@
 							type="button"
 							class="flex-none rounded-md border border-current px-2 py-1 text-xs font-semibold opacity-70 hover:opacity-100"
 							onclick={() => copyText(p.address, 'address')}
-							aria-label={$_('chat.address.pill_copy') as string}
+							aria-label={$_('common.copy') as string}
 						>
 							{copiedKind === 'address'
 								? $_('chat.address.pill_copied')
-								: $_('chat.address.pill_copy')}
+								: $_('common.copy')}
 						</button>
 					</div>
 					{#if p.method === 'usdt' && usdtNetworkValid}
@@ -733,7 +733,7 @@
 								>
 									{copiedKind === 'memo'
 										? $_('chat.address.pill_copied')
-										: $_('chat.address.pill_copy')}
+										: $_('common.copy')}
 								</button>
 							</div>
 							<p class="mt-2 text-xs text-amber-900 dark:text-amber-100">
@@ -979,11 +979,11 @@
 							type="button"
 							class="flex-none rounded-md border border-current px-2 py-1 text-xs font-semibold opacity-70 hover:opacity-100"
 							onclick={() => copyText(p.txid, 'txid')}
-							aria-label={$_('chat.address.pill_copy') as string}
+							aria-label={$_('common.copy') as string}
 						>
 							{copiedKind === 'txid'
 								? $_('chat.address.pill_copied')
-								: $_('chat.address.pill_copy')}
+								: $_('common.copy')}
 						</button>
 					</div>
 					{#if p.note}
@@ -1186,7 +1186,7 @@
 					href={lp('/faq#chat_key_changed')}
 					class="text-xs text-red-700 underline hover:no-underline dark:text-red-300"
 				>
-					{$_('chat.security.learn_more')}
+					{$_('common.learn_more')}
 				</a>
 			{/if}
 		{/if}

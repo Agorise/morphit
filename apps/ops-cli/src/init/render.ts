@@ -32,6 +32,7 @@
  */
 
 import { writeFileSync, chmodSync, mkdirSync } from 'node:fs';
+import type { OnionV3 } from './torOnion.ts';
 import { join, isAbsolute, resolve } from 'node:path';
 import { MORPHIT_GENESIS_BLOCK } from '@morphit/operator-config';
 import { safeCwd } from '../lib/repoRoot.ts';
@@ -108,6 +109,13 @@ export interface WizardAnswers {
 	 *  path baked in) sequencing the shipped Ansible/nginx/ops
 	 *  artifacts with safe SSH-lockout ordering. */
 	readonly hardening: HardeningResult;
+	/** The basic Tor v3 onion service generated for this instance, or
+	 *  null when the operator already had MORPHIT_INSTANCE_TOR_ADDRESS set
+	 *  (we never overwrite a manual address, and never regenerate over an
+	 *  existing one).  When present, writeWizardOutput writes its three
+	 *  Tor HS files; the .onion address itself rides in `altNetworks.tor`.
+	 *  Carries the HS SECRET KEY, so it is never put in the resume file. */
+	readonly torOnion?: OnionV3 | null;
 }
 
 /** Matrix-surfaces wizard result.  Both fields are optional
@@ -150,7 +158,7 @@ export interface ListingFeeResult {
 	/** Computed XMR fee amount in piconero. */
 	readonly xmrPiconero: number;
 	/** Fallback BLURT/USD price used by the indexer's price
-	 *  source when both Klingex and Coingecko are unreachable.
+	 *  source when the live price upstreams are unreachable.
 	 *  Display-only at the indexer (fee verification is
 	 *  BLURT-native); operators set this so quoted USD prices
 	 *  during an upstream outage are still in the right
@@ -186,6 +194,13 @@ export interface WriteResult {
 	 *  it is a runbook), unlike the 0600 config/keystore files. */
 	readonly hardeningChecklistPath: string | null;
 	readonly hardeningChecklistBytes: number;
+	/** Directory holding the generated Tor HS files (hs_ed25519_secret_key,
+	 *  hs_ed25519_public_key, hostname), or null when no onion was generated
+	 *  (operator already had one).  The operator installs this directory as
+	 *  Tor's HiddenServiceDir. */
+	readonly torHsDir: string | null;
+	/** The generated .onion address (for the post-install summary), or null. */
+	readonly torHsAddress: string | null;
 }
 
 /** Render the wizard answers into the two env files + keystore,
@@ -210,6 +225,30 @@ export function writeWizardOutput(answers: WizardAnswers, repoRoot: string): Wri
 	}
 	writeFileSync(keystorePath, keystoreContent, { mode: 0o600 });
 	chmodSync(keystorePath, 0o600);
+
+	// ─── Tor hidden-service files (basic v3 onion, generated for this
+	// instance) ──  Written in Tor's exact on-disk layout so the operator
+	// can install this directory as their HiddenServiceDir and Tor serves
+	// the address we already advertise.  The secret key is 0600; only
+	// written when an onion was generated (never when the operator already
+	// had MORPHIT_INSTANCE_TOR_ADDRESS — we don't clobber a manual setup).
+	let torHsDir: string | null = null;
+	let torHsAddress: string | null = null;
+	if (answers.torOnion) {
+		torHsDir = join(repoRoot, 'tor-hidden-service');
+		torHsAddress = answers.torOnion.address;
+		mkdirSync(torHsDir, { recursive: true, mode: 0o700 });
+		chmodSync(torHsDir, 0o700);
+		const secPath = join(torHsDir, 'hs_ed25519_secret_key');
+		const pubPath = join(torHsDir, 'hs_ed25519_public_key');
+		const hostPath = join(torHsDir, 'hostname');
+		writeFileSync(secPath, answers.torOnion.secretKeyFile, { mode: 0o600 });
+		chmodSync(secPath, 0o600);
+		writeFileSync(pubPath, answers.torOnion.publicKeyFile, { mode: 0o600 });
+		chmodSync(pubPath, 0o600);
+		writeFileSync(hostPath, answers.torOnion.hostnameFile, { mode: 0o644 });
+		chmodSync(hostPath, 0o644);
+	}
 
 	// ─── morphit.config.env (operator-tunable) ──
 	const configContent = renderConfig(answers);
@@ -251,7 +290,14 @@ export function writeWizardOutput(answers: WizardAnswers, repoRoot: string): Wri
 		const checklistContent = renderHardeningChecklist({
 			instanceName: answers.instanceName,
 			origin: answers.origin,
-			bunkerWebEnabled: answers.bunkerWeb.enabled
+			bunkerWebEnabled: answers.bunkerWeb.enabled,
+			confirmed: {
+				sshLockdown: answers.hardening.sshLockdown,
+				firewall: answers.hardening.firewall,
+				autoUpdates: answers.hardening.autoUpdates,
+				kernelHardening: answers.hardening.kernelHardening,
+				intrusionDetection: answers.hardening.intrusionDetection
+			}
 		});
 		writeFileSync(hardeningChecklistPath, checklistContent, { mode: 0o644 });
 		chmodSync(hardeningChecklistPath, 0o644);
@@ -265,6 +311,8 @@ export function writeWizardOutput(answers: WizardAnswers, repoRoot: string): Wri
 		backupEnvPath,
 		hardeningChecklistPath,
 		hardeningChecklistBytes,
+		torHsDir,
+		torHsAddress,
 		configBytes: Buffer.byteLength(configContent, 'utf8'),
 		envBytes: Buffer.byteLength(envContent, 'utf8'),
 		keystoreBytes: Buffer.byteLength(keystoreContent, 'utf8'),
@@ -289,6 +337,16 @@ export interface HardeningChecklistInput {
 	readonly instanceName: string;
 	readonly origin: string | null;
 	readonly bunkerWebEnabled: boolean;
+	/** cp378 — the operator's hardening-pillar confirmations from the
+	 *  wizard.  When present, the checklist opens with a short "you
+	 *  confirmed" summary.  Optional. */
+	readonly confirmed?: {
+		readonly sshLockdown?: boolean;
+		readonly firewall?: boolean;
+		readonly autoUpdates?: boolean;
+		readonly kernelHardening?: boolean;
+		readonly intrusionDetection?: boolean;
+	};
 }
 
 export function renderHardeningChecklist(input: HardeningChecklistInput): string {
@@ -315,6 +373,25 @@ export function renderHardeningChecklist(input: HardeningChecklistInput): string
 	L.push('> SECOND terminal.  If you cannot, do NOT proceed: a typo in');
 	L.push('> sshd_config will lock you out of your own server.');
 	L.push('');
+	if (input.confirmed) {
+		const c = input.confirmed;
+		const rows: Array<readonly [boolean | undefined, string]> = [
+			[c.sshLockdown, 'SSH lockdown (key-only, no root, no passwords)'],
+			[c.firewall, 'Firewall (UFW) + fail2ban'],
+			[c.autoUpdates, 'Automatic security updates'],
+			[c.kernelHardening, 'Kernel + system hardening (sysctl, auditd, AppArmor)'],
+			[c.intrusionDetection, 'Intrusion detection (AIDE + rkhunter)']
+		];
+		L.push('## During setup you confirmed');
+		L.push('');
+		for (const [yes, label] of rows) {
+			L.push(`- [${yes === false ? ' ' : 'x'}] ${label}${yes === false ? '  — you chose to skip; strongly reconsider' : ''}`);
+		}
+		L.push('');
+		L.push('The Ansible playbook applies ALL of these regardless; the list');
+		L.push('above is your by-hand intent.');
+		L.push('');
+	}
 	L.push('## 1. Ubuntu host');
 	L.push('');
 	L.push('- [ ] **Run as a non-root sudo user**, never as root.  Create one with');
@@ -994,7 +1071,9 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	);
 	lines.push('');
 	lines.push('# Fallback BLURT/USD price.  The indexer runs a composite');
-	lines.push('# price source: Klingex → Coingecko → static floor (this).');
+	lines.push('# price source: an outlier-rejected median across several');
+	lines.push('# external feeds (Coingecko, CoinPaprika, CryptoCompare, …)');
+	lines.push('# → morphit_native → static floor (this).');
 	lines.push('# Only consulted when both live upstreams have failed AND no');
 	lines.push('# value has cached successfully since boot.  Display-only at');
 	lines.push("# the indexer; fee verification doesn't touch USD prices.");

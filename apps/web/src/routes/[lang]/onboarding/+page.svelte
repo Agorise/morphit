@@ -794,7 +794,7 @@
 					{:else if keystoreMode === null}
 						{$_('onboarding.unlock_mode.must_choose')}
 					{:else if keystoreMode === 'password' && !isPasswordAcceptable(password)}
-						{$_('onboarding.unlock_mode.password_too_short')}
+						{$_('common.password_too_short')}
 					{/if}
 				</p>
 				<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

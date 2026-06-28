@@ -212,7 +212,7 @@
 						class="mt-2 text-sm font-semibold text-morphit-emerald"
 						onclick={openFaq}
 					>
-						{$_('tooltip.learn_more')} <span class="nav-arrow nav-arrow-right" aria-hidden="true">⇨</span>
+						{$_('common.learn_more')} <span class="nav-arrow nav-arrow-right" aria-hidden="true">⇨</span>
 					</button>
 				{/if}
 			</div>

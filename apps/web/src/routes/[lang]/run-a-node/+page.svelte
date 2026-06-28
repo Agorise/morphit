@@ -252,7 +252,7 @@
 						variant="primary"
 						busy={submitting}
 						disabled={!canSubmit}
-						busyLabel={$_('run_a_node.register.broadcasting')}
+						busyLabel={$_('common.broadcasting')}
 						onclick={register}
 					>
 						{$_('run_a_node.register.submit')}

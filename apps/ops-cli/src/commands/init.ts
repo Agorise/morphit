@@ -23,8 +23,10 @@
 
 import { resolve } from 'node:path';
 import { defaultRepoRoot } from '../lib/repoRoot.ts';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { runSystemCheck, renderSystemCheck } from '../init/systemCheck.ts';
+import { generateOnionV3, type OnionV3 } from '../init/torOnion.ts';
+import { validateAltAddress } from '../lib/altAddressValidate.ts';
 import { sanitizeForTerm } from '../render/term.ts';
 import {
 	stepInstanceName,
@@ -54,6 +56,14 @@ import {
 } from '../init/steps.ts';
 import { writeWizardOutput, resolveOutputPath } from '../init/render.ts';
 import type { WizardAnswers } from '../init/render.ts';
+import {
+	type WizardProgress,
+	loadProgress,
+	loadProgressSavedAt,
+	saveProgress,
+	clearProgress,
+	describeAge
+} from '../init/progress.ts';
 import { ask, askYesNo, askChoice } from '../init/prompt.ts';
 import { runEdit } from './edit.ts';
 
@@ -61,6 +71,33 @@ export interface InitCtx {
 	readonly flags: Readonly<Record<string, string>>;
 	readonly positional: readonly string[];
 	readonly colorEnabled: boolean;
+}
+
+/** Resolve an EXISTING Tor onion address the operator already set, so we
+ *  never overwrite a manual one: first the env var (the "value in that env
+ *  variable" case), then a manual line in an existing config (the overwrite
+ *  path).  Returns the validated address, or null → the wizard generates a
+ *  fresh basic onion. */
+function resolveExistingTorAddress(existingConfigPath: string): string | null {
+	const envVal = (process.env.MORPHIT_INSTANCE_TOR_ADDRESS ?? '').trim();
+	if (envVal) {
+		const v = validateAltAddress('tor', envVal);
+		if (v.ok) return v.value;
+	}
+	try {
+		if (existsSync(existingConfigPath)) {
+			const txt = readFileSync(existingConfigPath, 'utf8');
+			const m = txt.match(/^\s*MORPHIT_INSTANCE_TOR_ADDRESS\s*=\s*"?([^"\n#]+?)"?\s*$/m);
+			const cap = m?.[1];
+			if (cap) {
+				const v = validateAltAddress('tor', cap.trim());
+				if (v.ok) return v.value;
+			}
+		}
+	} catch {
+		/* unreadable → treat as none */
+	}
+	return null;
 }
 
 export async function runInit(ctx: InitCtx): Promise<number> {
@@ -163,45 +200,159 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 		}
 	}
 
+	// ─── Resume? (save-as-you-go) ────────────────────────────────────
+	// The wizard remembers your NON-SECRET answers as you go (see
+	// init/progress.ts).  If a previous run was interrupted, offer to
+	// pick up where you left off — reusing those answers and re-asking
+	// only the two things never written to disk: the database connection
+	// and the relay's active key.
+	const saved = loadProgress();
+	let progress: WizardProgress = {};
+	let resuming = false;
+	if (saved && Object.keys(saved).length > 0) {
+		console.log('');
+		console.log('━'.repeat(58));
+		console.log('  Found a setup already in progress');
+		console.log('━'.repeat(58));
+		console.log('');
+		console.log(`  It looks like you started setting up before (${describeAge(loadProgressSavedAt())}).`);
+		if (saved.instanceName) console.log(`    Instance:      ${sanitizeForTerm(saved.instanceName)}`);
+		if (saved.relayAccount?.name) console.log(`    Relay account: @${sanitizeForTerm(saved.relayAccount.name)}`);
+		console.log('');
+		console.log('  I can pick up where you left off — your answers are remembered,');
+		console.log('  and you only re-enter the two things that are NEVER saved to disk:');
+		console.log('  the database connection and your relay account\u2019s active key.');
+		console.log('');
+		const resume = await askYesNo('Resume from your saved answers?', true);
+		if (resume) {
+			resuming = true;
+			progress = { ...saved };
+			console.log('\n  \u2713 Resuming. I\u2019ll reuse your saved answers below.\n');
+		} else {
+			clearProgress();
+			console.log('\n  Starting fresh.\n');
+		}
+	}
+
+	// Friendly labels for the "reusing your saved …" lines on resume.
+	const SAVED_LABELS: Partial<Record<keyof WizardProgress, string>> = {
+		instanceName: 'instance name',
+		tagline: 'tagline',
+		relayAccount: 'relay account',
+		feesAccount: 'fees account',
+		dailyCeiling: 'daily signup ceiling',
+		contactUrl: 'contact URL',
+		origin: 'public address (origin)',
+		altNetworks: 'alt-network settings',
+		feeExplorers: 'fee block-explorer choices',
+		chatLinkExplorers: 'block-explorer choices',
+		disabledAssets: 'asset choices',
+		disabledPaymentMethods: 'payment-method choices',
+		listingFee: 'listing-fee settings',
+		seo: 'description / SEO',
+		backup: 'backup settings',
+		operatorTag: 'operator tag',
+		matrix: 'Matrix alert settings',
+		blurtRpcEndpoints: 'Blurt RPC endpoints',
+		mcpServer: 'MCP server choice',
+		bunkerWeb: 'BunkerWeb choice',
+		hardening: 'hardening checklist choice'
+	};
+	function usedSaved(key: keyof WizardProgress): void {
+		console.log(`  \u2713 Using your saved ${SAVED_LABELS[key] ?? String(key)} from last time.`);
+	}
+
+	// `recall` wraps a NON-SECRET step: on resume it returns the saved
+	// answer (skipping the prompt); otherwise it runs the step and then
+	// persists progress.  The two SECRET steps (database, active key) are
+	// called directly below — always asked, never saved.
+	async function recall<K extends keyof WizardProgress>(
+		key: K,
+		run: () => Promise<Exclude<WizardProgress[K], undefined>>
+	): Promise<Exclude<WizardProgress[K], undefined>> {
+		if (resuming && progress[key] !== undefined) {
+			usedSaved(key);
+			return progress[key] as Exclude<WizardProgress[K], undefined>;
+		}
+		const result = await run();
+		Object.assign(progress, { [key]: result });
+		saveProgress(progress);
+		return result;
+	}
+
+	// On resume, a one-line reminder before each re-asked secret so the
+	// operator understands why it isn't pre-filled.
+	function secretResumeNote(what: string): void {
+		if (resuming) {
+			console.log(`\n  \u2139 Re-enter your ${what} (secrets are never saved to disk).`);
+		}
+	}
+
+	// Tor onion: every instance gets a basic .onion by default (privacy is
+	// the first priority).  If the operator already set one (env var or an
+	// existing config) we keep it; otherwise generate one in the BACKGROUND
+	// now so they never wait at the end.  Basic, non-vanity — instant.
+	const existingTorAddress = resolveExistingTorAddress(existingConfig);
+	const onionPromise: Promise<OnionV3> | null = existingTorAddress
+		? null
+		: Promise.resolve().then(() => generateOnionV3());
+
 	// ─── Run the configuration steps (see TOTAL_STEPS in steps.ts) ────
-	const instanceName = await stepInstanceName();
-	const tagline = await stepTagline();
-	const databaseUrl = await stepDatabase();
-	const relayAccount = await stepRelayAccount();
-	const activeKey = await stepActiveKey(relayAccount.name);
-	const feesAccount = await stepFeesAccount(relayAccount.name);
-	const dailyCeiling = await stepDailyCeiling(relayAccount.account);
-	const contactUrl = await stepContactUrl();
-	const origin = await stepOrigin();
-	const altNetworks = await stepAltNetworks();
-	const feeExplorers = await stepFeeExplorers();
-	const chatLinkExplorers = await stepChatLinkExplorers();
-	const disabledAssets = await stepDisabledAssets();
-	const disabledPaymentMethods = await stepDisabledPaymentMethods();
-	const listingFee = await stepListingFee();
-	const seo = await stepSeo();
-	const backup = await stepBackup();
-	const operatorTag = await stepOperatorTag(origin);
-	const matrix = await stepMatrixSurfaces();
+	const instanceName = await recall('instanceName', () => stepInstanceName());
+	const tagline = await recall('tagline', () => stepTagline());
+	secretResumeNote('database connection');
+	const databaseUrl = await stepDatabase(); // SECRET — always asked, never saved
+	const relayAccount = await recall('relayAccount', () => stepRelayAccount());
+	secretResumeNote("relay account\u2019s active key");
+	const activeKey = await stepActiveKey(relayAccount.name); // SECRET — always asked, never saved
+	const feesAccount = await recall('feesAccount', () => stepFeesAccount(relayAccount.name));
+	const dailyCeiling = await recall('dailyCeiling', () => stepDailyCeiling(relayAccount.account));
+	const contactUrl = await recall('contactUrl', () => stepContactUrl());
+	const origin = await recall('origin', () => stepOrigin());
+	const altNetworks = await recall('altNetworks', () => stepAltNetworks());
+	const feeExplorers = await recall('feeExplorers', () => stepFeeExplorers());
+	const chatLinkExplorers = await recall('chatLinkExplorers', () => stepChatLinkExplorers());
+	const disabledAssets = await recall('disabledAssets', () => stepDisabledAssets());
+	const disabledPaymentMethods = await recall('disabledPaymentMethods', () =>
+		stepDisabledPaymentMethods()
+	);
+	const listingFee = await recall('listingFee', () => stepListingFee());
+	const seo = await recall('seo', () => stepSeo());
+	const backup = await recall('backup', () => stepBackup());
+	const operatorTag = await recall('operatorTag', () => stepOperatorTag(origin));
+	const matrix = await recall('matrix', () => stepMatrixSurfaces());
 	// 19th step (F-2 from the cp136 walkthrough): RPC endpoints.
 	// Defaults to DEFAULT_BLURT_RPC_ENDPOINTS — operators with a
 	// witness preference or self-hosted RPC override here.  Pressing
 	// Enter accepts the defaults; this is opt-in customization,
 	// not mandatory configuration.
-	const blurtRpcEndpoints = await stepRpcEndpoints(null);
+	const blurtRpcEndpoints = await recall('blurtRpcEndpoints', () => stepRpcEndpoints(null));
 
 	// Step 20 — opt-out for MCP installation (Model Context Protocol).
 	// Default-on so AI agents (Claude Desktop, Cursor, etc.) can
 	// discover the operator's instance and surface it in user queries.
-	const mcpServer = await stepMcpServer();
+	const mcpServer = await recall('mcpServer', () => stepMcpServer());
 
 	// Step 21 — BunkerWeb WAF / reverse-proxy decision.  Drives
 	// MORPHIT_RELAY_TRUSTED_PROXY_IPS (set only when opted in).
-	const bunkerWeb = await stepBunkerWeb();
+	const bunkerWeb = await recall('bunkerWeb', () => stepBunkerWeb());
 
 	// Step 22 — host hardening checklist.  Tailored to the BunkerWeb
 	// choice; optionally writes a personalized morphit-hardening-checklist.md.
-	const hardening = await stepHardening(bunkerWeb.enabled);
+	const hardening = await recall('hardening', () => stepHardening(bunkerWeb.enabled));
+
+	// Resolve the Tor onion: an existing manual address, or our background-
+	// generated one.  The address rides in altNetworks.tor (→ the env var,
+	// pill + Onion-Location); the HS key files ride in torOnion and are
+	// written by writeWizardOutput on the success path only (an aborted
+	// wizard leaves no orphan keys).
+	let torOnion: OnionV3 | null = null;
+	let torAddress: string | null = existingTorAddress;
+	if (!existingTorAddress && onionPromise) {
+		torOnion = await onionPromise;
+		torAddress = torOnion.address;
+	}
+	const altNetworksWithTor = { ...altNetworks, tor: torAddress };
 
 	const answers: WizardAnswers = {
 		instanceName,
@@ -214,7 +365,7 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 		dailyCeiling,
 		contactUrl,
 		origin,
-		altNetworks,
+		altNetworks: altNetworksWithTor,
 		listingFee,
 		feeExplorers,
 		chatLinkExplorers,
@@ -226,7 +377,8 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 		matrix,
 		mcpServer,
 		bunkerWeb,
-		hardening
+		hardening,
+		torOnion
 	};
 
 	// ─── Review ────
@@ -265,6 +417,10 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 			`  ✓ wrote ${result.hardeningChecklistBytes} bytes to ${sanitizeForTerm(result.hardeningChecklistPath)} (0644 — readable runbook, no secrets)`
 		);
 	}
+
+	// Setup completed — remove the save-as-you-go resume file so a future
+	// `init` starts clean rather than offering to resume a done setup.
+	clearProgress();
 
 	printNextSteps(answers, result);
 
@@ -416,6 +572,8 @@ function printNextSteps(
 		keystorePath: string;
 		backupEnvPath: string | null;
 		hardeningChecklistPath: string | null;
+		torHsDir: string | null;
+		torHsAddress: string | null;
 	}
 ): void {
 	const rule = '━'.repeat(58);
@@ -587,6 +745,32 @@ function printNextSteps(
 	console.log('enable_* flags in ops/ansible/group_vars/all.yml).  Overview in');
 	console.log('docs/RUN-A-MORPHIT-NODE.md §11.');
 	console.log('');
+
+	// ─── Tor onion ──────────────────────────────────────────────
+	if (result.torHsDir && result.torHsAddress) {
+		console.log('━'.repeat(58));
+		console.log('Your Tor onion address (generated for you)');
+		console.log('━'.repeat(58));
+		console.log('');
+		console.log(`  ${sanitizeForTerm(result.torHsAddress)}`);
+		console.log('');
+		console.log('Your site already advertises this (footer pill + Onion-Location');
+		console.log('auto-redirect for Tor Browser).  To actually SERVE it, install the');
+		console.log('generated key directory as Tor\u2019s HiddenServiceDir:');
+		console.log(`  ${sanitizeForTerm(result.torHsDir)}/`);
+		console.log('  → copy it to e.g. /var/lib/tor/morphit/ (owned by the tor user,');
+		console.log('    mode 0700), then in torrc:');
+		console.log('      HiddenServiceDir /var/lib/tor/morphit/');
+		console.log('      HiddenServicePort 80 127.0.0.1:8080');
+		console.log('  and restart Tor.  The Ansible "tor" role (enable_tor in');
+		console.log('  group_vars/all.yml) does this for you.  Keep the secret key safe;');
+		console.log('  losing it means a new address.');
+		console.log('');
+		console.log('Want a custom VANITY onion instead? Generate one with');
+		console.log('scripts/generate-onion.sh on your own machine and set it via');
+		console.log('`morphit-ops alt-address` — that replaces this basic one.');
+		console.log('');
+	}
 
 	console.log('Have fun.');
 	console.log('');

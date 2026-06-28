@@ -224,7 +224,7 @@
 					class="rounded-lg border border-ink-300 px-4 py-2 text-sm font-semibold hover:border-ink-400 dark:border-ink-700"
 					onclick={onCancel}
 				>
-					{$_('chat.pay_blurt.close')}
+					{$_('common.close')}
 				</button>
 			</div>
 		{:else}
@@ -280,7 +280,7 @@
 						class="rounded-lg border border-ink-300 px-4 py-2 text-sm font-semibold hover:border-ink-400 dark:border-ink-700"
 						onclick={onCancel}
 					>
-						{$_('chat.pay_blurt.close')}
+						{$_('common.close')}
 					</button>
 				</div>
 			{:else}
@@ -311,7 +311,7 @@
 						onclick={onCancel}
 						disabled={phase.kind === 'paying'}
 					>
-						{$_('chat.pay_blurt.cancel')}
+						{$_('common.cancel')}
 					</button>
 					<button
 						type="button"

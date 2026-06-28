@@ -271,6 +271,20 @@ tls_acme_email: "operator@example.com"
 tls_use_staging: false
 
 
+# ─── Tor onion (privacy by default) ──────────────────────────────
+# Every instance gets a basic v3 .onion (the wizard generates one and
+# the site advertises it via MORPHIT_INSTANCE_TOR_ADDRESS — the footer
+# pill + Onion-Location auto-redirect).  This role makes Tor actually
+# SERVE it.  Set morphit_tor_key_src to the wizard's tor-hidden-service/
+# directory (copied to the control node) so Tor serves the SAME address
+# the site advertises; otherwise Tor self-generates a different one.
+enable_tor: true
+morphit_tor_hs_dir: /var/lib/tor/morphit
+morphit_tor_local_host: 127.0.0.1
+morphit_tor_local_port: 8080
+morphit_tor_key_src: ""
+
+
 # ─── BunkerWeb (§32) ─────────────────────────────────────────────
 
 enable_bunkerweb: true

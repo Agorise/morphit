@@ -81,7 +81,7 @@
 	 *  "Start". Keyed off $hasAnySession so it re-evaluates when the
 	 *  session is locked (e.g. after a refresh) or restored. */
 	const signedOutCtaLabel = $derived(
-		!$hasAnySession && hasPersistedKeystore() ? $_('nav.unlock') : $_('nav.start')
+		!$hasAnySession && hasPersistedKeystore() ? $_('common.unlock') : $_('nav.start')
 	);
 
 	/** Whether to show the View profile menu item.  Sally finding

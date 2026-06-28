@@ -193,7 +193,7 @@
 		</p>
 
 		{#if volumeStatus === 'loading'}
-			<p class="text-sm text-ink-500">{$_('explorer.activity.loading')}</p>
+			<p class="text-sm text-ink-500">{$_('common.loading')}</p>
 		{:else if volumeStatus === 'error'}
 			<p class="text-sm text-amber-700 dark:text-amber-300">
 				{$_('explorer.activity.error_label')}: {volumeError}
@@ -252,7 +252,7 @@
 		</header>
 
 		{#if listingsStatus === 'loading'}
-			<p class="text-sm text-ink-500">{$_('explorer.activity.loading')}</p>
+			<p class="text-sm text-ink-500">{$_('common.loading')}</p>
 		{:else if listingsStatus === 'error'}
 			<p class="text-sm text-amber-700 dark:text-amber-300">
 				{$_('explorer.activity.error_label')}: {listingsError}

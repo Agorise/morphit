@@ -1030,18 +1030,26 @@ handling secrets. High-threat-model operators should use
 host physical security to the fee volume they process. See
 ADR-0010 §4 for the relay's in-memory key posture.
 
-### Coingecko price-feed posture
+### Price-feed posture
 
-The indexer's price feed reads BLURT/USD from Coingecko, the
-sole external upstream. (Klingex, the former BLURT-only primary,
-went out of business in 2026 and was removed.) The USD echo on
+The indexer's price feed reads BLURT/USD as an outlier-rejected
+**median across several independent external feeds** (Coingecko,
+CoinPaprika, CryptoCompare, and — for the assets they list —
+Kraken/Binance/Coinbase/OKX/Bybit, plus the optional key-gated
+CoinCap/Messari). (Klingex, the former BLURT-only primary, went
+out of business in 2026 and was removed; rather than depend on a
+single replacement, the external tier averages many feeds.) No
+single provider banning us, rate-limiting us to nothing, or
+returning a bad number can move the published price — any feed
+that returns nothing is dropped from the median, never
+substituted with a guess. The USD echo on
 Morphit's benefits ladder and other UI surfaces is
 **display-only** — not a settlement reference. Operators who
-anticipate a Coingecko outage or compromise can disable the
+anticipate an upstream outage or compromise can disable the
 price feed entirely; the BLURT-denominated fees and amounts
-continue to work without the USD overlay. Behind Coingecko sit
-the opt-in self-sovereign morphit_native source and the static
-floor, so the chain degrades rather than breaks.
+continue to work without the USD overlay. Behind the external
+median sit the opt-in self-sovereign morphit_native source and
+the static floor, so the chain degrades rather than breaks.
 
 Operator-trust assumption (BATCH14-4): a malicious operator
 can lie about the fiat price displayed alongside BLURT amounts

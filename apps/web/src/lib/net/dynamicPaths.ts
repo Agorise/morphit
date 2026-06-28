@@ -19,7 +19,7 @@
  *
  * The dynamic same-origin paths, in the colocated single-host topology
  * where one reverse proxy serves the SPA and proxies the rest to the
- * loopback-bound indexer/relay (docs/RUN-A-MORPHIT-NODE.md §8):
+ * loopback-bound indexer/relay (docs/RUN-A-MORPHIT-NODE.md §5):
  *
  *   • /v1/*        indexer read API — instance branding, accounts,
  *                  balances, profiles, chain-fee, and the SSE streams.

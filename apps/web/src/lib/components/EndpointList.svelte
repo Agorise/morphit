@@ -316,7 +316,7 @@
 					class="rounded-lg border border-ink-300 px-3 py-1.5 text-sm font-semibold dark:border-ink-700"
 					onclick={() => (confirmingReset = false)}
 				>
-					{$_('settings.endpoints.reset_confirm_cancel')}
+					{$_('common.cancel')}
 				</button>
 			</div>
 		{/if}

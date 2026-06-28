@@ -1323,11 +1323,11 @@
 					variant="primary"
 					busy={avatarBroadcasting}
 					done={avatarBroadcastOk}
-					busyLabel={$_('settings.avatar.broadcast_pending')}
+					busyLabel={$_('common.broadcasting')}
 					onclick={broadcastAvatar}
 				>
 					{#if avatarBroadcastOk}
-						{$_('settings.avatar.broadcast_ok')}
+						{$_('common.broadcasted')}
 					{:else}
 						{$_('settings.avatar.broadcast')}
 					{/if}
@@ -1443,7 +1443,7 @@
 				busy={saving}
 				done={savedToast}
 				disabled={!validation.ok || validation.cleaned === saved}
-				busyLabel={$_('settings.display_name.save_pending')}
+				busyLabel={$_('common.saving')}
 				onclick={saveLocal}
 			>
 				{#if savedToast}
@@ -1462,7 +1462,7 @@
 					onclick={saveAndBroadcast}
 				>
 					{#if broadcastOk}
-						{$_('settings.display_name.broadcast_ok')}
+						{$_('common.broadcasted')}
 					{:else}
 						{$_('settings.display_name.save_and_broadcast')}
 					{/if}
@@ -1569,7 +1569,7 @@
 				busy={bioSaving}
 				done={bioSavedToast}
 				disabled={!bioValidation.ok || bioValidation.cleaned === bioSaved}
-				busyLabel={$_('settings.display_name.save_pending')}
+				busyLabel={$_('common.saving')}
 				onclick={saveBioLocal}
 			>
 				{#if bioSavedToast}
@@ -1588,7 +1588,7 @@
 					onclick={saveAndBroadcastBio}
 				>
 					{#if bioBroadcastOk}
-						{$_('settings.display_name.broadcast_ok')}
+						{$_('common.broadcasted')}
 					{:else}
 						{$_('settings.display_name.save_and_broadcast')}
 					{/if}
@@ -1694,7 +1694,7 @@
 				done={blurtMediaSavedToast}
 				disabled={!blurtMediaIsValid ||
 					(blurtMediaIsEmpty ? '' : blurtMediaCleaned) === blurtMediaSaved}
-				busyLabel={$_('settings.display_name.save_pending')}
+				busyLabel={$_('common.saving')}
 				onclick={saveBlurtMediaLocal}
 			>
 				{#if blurtMediaSavedToast}
@@ -1709,11 +1709,11 @@
 					busy={blurtMediaBroadcasting}
 					done={blurtMediaBroadcastOk}
 					disabled={!blurtMediaIsValid}
-					busyLabel={$_('settings.blurt_media_url.broadcast_pending')}
+					busyLabel={$_('common.broadcasting')}
 					onclick={saveAndBroadcastBlurtMedia}
 				>
 					{#if blurtMediaBroadcastOk}
-						{$_('settings.blurt_media_url.broadcast_ok')}
+						{$_('common.broadcasted')}
 					{:else}
 						{$_('settings.blurt_media_url.save_and_broadcast')}
 					{/if}
@@ -1817,7 +1817,7 @@
 				busy={nostrSaving}
 				done={nostrSavedToast}
 				disabled={!nostrIsValid || (nostrIsEmpty ? '' : nostrCleaned) === nostrSaved}
-				busyLabel={$_('settings.display_name.save_pending')}
+				busyLabel={$_('common.saving')}
 				onclick={saveNostrLocal}
 			>
 				{#if nostrSavedToast}
@@ -1836,7 +1836,7 @@
 					onclick={saveAndBroadcastNostr}
 				>
 					{#if nostrBroadcastOk}
-						{$_('settings.nostr_url.broadcast_ok')}
+						{$_('common.broadcasted')}
 					{:else}
 						{$_('settings.nostr_url.save_and_broadcast')}
 					{/if}
@@ -2223,7 +2223,7 @@
 					</p>
 					<a
 						href={localePath('/settings/security/2fa', ($page.params.lang as LocaleCode) ?? DEFAULT_LOCALE)}
-						class="mt-3 inline-block rounded-xl border border-ink-300 px-4 py-2 text-sm font-semibold transition hover:bg-ink-50 dark:border-ink-700 dark:hover:bg-ink-900"
+						class="mt-3 inline-block rounded-xl border border-ink-300 px-4 py-2 text-sm font-semibold transition hover:border-morphit-emerald hover:bg-morphit-emerald/5 hover:text-morphit-emerald dark:border-ink-700 dark:hover:border-morphit-emerald dark:hover:bg-morphit-emerald/10"
 					>
 						{$_('settings.totp.enroll.cta')} <span class="nav-arrow nav-arrow-right" aria-hidden="true">⇨</span>
 					</a>
