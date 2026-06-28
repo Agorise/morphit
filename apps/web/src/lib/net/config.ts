@@ -90,7 +90,7 @@ export const MORPHIT_RELAY_ORIGIN = '/relay';
  * the empty string = same origin, which is correct for the
  * colocated single-host topology where one reverse proxy serves
  * the SPA and proxies `/v1/*` and `/rss/*` to the loopback-bound
- * indexer (see docs/RUN-A-MORPHIT-NODE.md §8).
+ * indexer (see docs/RUN-A-MORPHIT-NODE.md §5).
  *
  * Operators running a split topology (indexer on its own
  * subdomain like `indexer.example.com`) set this to that

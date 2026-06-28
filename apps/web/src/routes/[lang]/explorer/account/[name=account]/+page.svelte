@@ -586,7 +586,7 @@
 								<path d="M21 12a9 9 0 1 1-2.64-6.36" />
 								<path d="M21 3v6h-6" />
 							</svg>
-							{$_('explorer.account.loading_more')}
+							{$_('common.loading')}
 						{:else}
 							{$_('explorer.account.load_more')}
 						{/if}

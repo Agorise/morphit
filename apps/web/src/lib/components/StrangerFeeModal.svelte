@@ -262,7 +262,7 @@
 						onclick={onCancel}
 						class="rounded-lg border border-ink-300 px-3 py-1 text-sm font-semibold hover:border-ink-400 dark:border-ink-700"
 					>
-						{$_('chat.stranger_fee.cancel')}
+						{$_('common.cancel')}
 					</button>
 				</div>
 			</div>
@@ -363,7 +363,7 @@
 					disabled={phase.kind === 'paying'}
 					class="rounded-xl border-2 border-ink-300 bg-white px-4 py-2 font-semibold hover:bg-ink-100 disabled:opacity-50 dark:border-ink-600 dark:bg-ink-900 dark:hover:bg-ink-800"
 				>
-					{$_('chat.stranger_fee.cancel')}
+					{$_('common.cancel')}
 				</button>
 			</div>
 		{/if}

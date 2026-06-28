@@ -280,7 +280,7 @@
 		<BusyButton
 			variant="primary"
 			busy={sending}
-			busyLabel={$_('chat.composer.sending') as string}
+			busyLabel={$_('common.sending') as string}
 			disabled={!canSend}
 			onclick={send}
 		>

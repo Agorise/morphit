@@ -49,12 +49,20 @@
 	import ProtectedTextarea from '$components/ProtectedTextarea.svelte';
 	// cp165: lazy below (showTermsKeyWarning guard)
 	// import PrivateKeyWarningModal from '$components/PrivateKeyWarningModal.svelte';
-	import PaymentMethodsPicker from '$components/PaymentMethodsPicker.svelte';
-	import FiatCurrencySelect from '$components/FiatCurrencySelect.svelte';
+	// cp376 byte-budget: these five render only after step 1 (or only
+	// when a stablecoin asset is chosen), so their JS is deferred out of
+	// the initial post-page bundle and loaded the moment the step that
+	// needs them appears (lazy-loaders defined below; in Svelte 5 the
+	// {#await} block evaluates each loader once when the step first
+	// renders, so the control mounts once and isn't remounted on typing).
+	//   - FiatCurrencySelect, PaymentMethodsPicker — step 2 / step 3
+	//   - Usdt/Usdc/DaiNetworkPicker — step-1 stablecoin branch only
+	// import PaymentMethodsPicker from '$components/PaymentMethodsPicker.svelte';
+	// import FiatCurrencySelect from '$components/FiatCurrencySelect.svelte';
 	import PrivacyWarningChip from '$components/PrivacyWarningChip.svelte';
-	import UsdtNetworkPicker from '$components/UsdtNetworkPicker.svelte';
-	import UsdcNetworkPicker from '$components/UsdcNetworkPicker.svelte';
-	import DaiNetworkPicker from '$components/DaiNetworkPicker.svelte';
+	// import UsdtNetworkPicker from '$components/UsdtNetworkPicker.svelte';
+	// import UsdcNetworkPicker from '$components/UsdcNetworkPicker.svelte';
+	// import DaiNetworkPicker from '$components/DaiNetworkPicker.svelte';
 	import {
 		type UsdtNetwork,
 		type UsdcNetwork,
@@ -112,6 +120,22 @@
 		import('$components/ListingFeeAddressPanel.svelte').then((m) => m.default);
 	const loadPrivateKeyWarningModal = () =>
 		import('$components/PrivateKeyWarningModal.svelte').then((m) => m.default);
+	// cp376 step lazy-loaders — defer step-2 / step-3 / stablecoin-branch
+	// component JS out of the initial post-page bundle.  Same shape as the
+	// cp165 loaders above; in Svelte 5 the {#await loadX() then C} block
+	// evaluates the loader once when the step's enclosing {#if} first
+	// renders it, so the control mounts once and inner reactive updates
+	// (the user typing in that step) never remount it.
+	const loadFiatCurrencySelect = () =>
+		import('$components/FiatCurrencySelect.svelte').then((m) => m.default);
+	const loadPaymentMethodsPicker = () =>
+		import('$components/PaymentMethodsPicker.svelte').then((m) => m.default);
+	const loadUsdtNetworkPicker = () =>
+		import('$components/UsdtNetworkPicker.svelte').then((m) => m.default);
+	const loadUsdcNetworkPicker = () =>
+		import('$components/UsdcNetworkPicker.svelte').then((m) => m.default);
+	const loadDaiNetworkPicker = () =>
+		import('$components/DaiNetworkPicker.svelte').then((m) => m.default);
 	// Part 121 — when asset=USDT, the user MUST pick a network
 	// (ERC-20/TRC-20/SPL/BEP-20).  Null when asset is not USDT
 	// OR when USDT is picked but the user hasn't chosen yet.
@@ -1290,11 +1314,23 @@
 		// on-chain indexer rejection code (`waiver_requires_min_usd`)
 		// stays as-is — a protocol constant not worth churning.
 		if (feeMethodChoice === 'waived_first_buy') {
+			// cp377 (E10): name the actual floor + fiat in the message
+			// ("...at least 18 MXN") instead of the vague "floor shown
+			// above".  The floor is $1-USD-equivalent in the order's fiat,
+			// from the same `firstOrderMinInFiat` the hint above uses.  On a
+			// USD instance / FX feed off, fall back to the plain "$1" wording.
+			const floor = firstOrderMinInFiat(fxTable, fiat);
+			const msg =
+				floor === null || fiat.trim() === '' || fiat.trim().toUpperCase() === 'USD'
+					? $_('post_order.errors.waiver_min_required_usd')
+					: $_('post_order.errors.waiver_min_required', {
+							values: { amount: String(floor), fiat }
+						});
 			if (amountMinNum === null) {
-				return $_('post_order.errors.waiver_min_required');
+				return msg;
 			}
 			if (waiverMinUsd !== null && waiverMinUsd < WAIVER_MIN_FIAT_USD) {
-				return $_('post_order.errors.waiver_min_required');
+				return msg;
 			}
 		}
 		return '';
@@ -1356,7 +1392,28 @@
 	const firstOrderMinHint = $derived.by(() => {
 		if (!isFirstTrade || fiat === '') return '';
 		const eq = firstOrderMinInFiat(fxTable, fiat);
-		if (eq === null || fiat.trim().toUpperCase() === 'USD') {
+		const isUsd = fiat.trim().toUpperCase() === 'USD';
+		// cp377 (E12): once she enters an amount ABOVE the floor, the hint
+		// reflects HER value and what it's worth in USD (grandma sees her
+		// own number, not a static restatement of the floor).  USD orders
+		// skip this — the amount already IS USD, so there's no conversion
+		// worth showing; they keep the plain floor line.
+		if (
+			!isUsd &&
+			eq !== null &&
+			amountMinNum !== null &&
+			Number.isFinite(amountMinNum) &&
+			amountMinNum > eq
+		) {
+			return $_('post_order.form.amount_entered_usd_hint', {
+				values: {
+					amount: String(amountMinNum),
+					fiat,
+					usd: formatFiat(waiverMinUsd ?? amountMinNum, denominationFiat)
+				}
+			});
+		}
+		if (eq === null || isUsd) {
 			return $_('post_order.form.first_order_min_hint_usd');
 		}
 		return $_('post_order.form.first_order_min_hint', {
@@ -1470,12 +1527,19 @@
 			readonly text: string;
 			readonly unlocked: boolean;
 		}> => {
-			const n = amountMinNum ?? 0;
+			// cp377: the tier breakpoints (`WAIVER_BENEFIT_TIERS`) are USD
+			// values ($1/$4/$20/$100), but `amountMin` is denominated in the
+			// order's selected fiat.  Comparing the raw fiat amount to the USD
+			// tiers was wrong (e.g. 30 MXN ≈ $1.67 was lighting up the $4 and
+			// $20 rows as if it were $30).  Compare the USD-equivalent of the
+			// entered amount — `waiverMinUsd`, the same value the indexer's
+			// authoritative $1 floor check uses — against the USD tiers.
+			const enteredUsd = waiverMinUsd ?? 0;
 			return WAIVER_BENEFIT_TIERS.map((tier) => ({
 				text: $_(tier.key, {
 					values: { amount: formatFiat(tier.at, denominationFiat) }
 				}) as string,
-				unlocked: n >= tier.at
+				unlocked: enteredUsd >= tier.at
 			}));
 		}
 	);
@@ -1499,7 +1563,18 @@
 
 	const step3Done = $derived(paymentMethods.length > 0 && paymentMethodsError === '');
 
-	const canReview = $derived(step1Done && step2Done && step3Done);
+	// cp377 (F17): order terms soft cap.  TERMS_MAX mirrors the indexer's
+	// authoritative `terms_too_long` rejection (>2048 in order.ts /
+	// orderReplace.ts).  The textarea's hard `maxlength` is set higher
+	// (TERMS_HARD_MAX) so the user CAN type past the soft cap and SEE the
+	// over-limit warning (red counter + red border) rather than having
+	// input silently truncated; the disabled Continue + the server check
+	// are the real backstops.
+	const TERMS_MAX = 2048;
+	const TERMS_HARD_MAX = TERMS_MAX * 2;
+	const termsOverLimit = $derived(terms.length > TERMS_MAX);
+
+	const canReview = $derived(step1Done && step2Done && step3Done && !termsOverLimit);
 
 	// ─── Transition handlers ───────────────────────────────────────
 	function goToReview(): void {
@@ -2004,7 +2079,7 @@
 			<p class="mt-2 text-ink-600 dark:text-ink-300">{$_('post_order.locked.body')}</p>
 			<div class="mt-4">
 				<BusyButton variant="primary" onclick={() => gotoLocale('/onboarding/import')}>
-					{$_('post_order.locked.unlock')}
+					{$_('common.unlock')}
 				</BusyButton>
 			</div>
 		</section>
@@ -2029,7 +2104,7 @@
 				</p>
 				<button
 					type="button"
-					class="flex-none rounded-lg border border-ink-300 bg-white px-3 py-1.5 text-xs font-semibold text-ink-700 transition hover:border-red-500 hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:border-ink-600 dark:bg-ink-900 dark:text-ink-200"
+					class="flex-none rounded-lg border border-ink-300 bg-white px-3 py-1.5 text-xs font-semibold text-ink-700 transition hover:border-red-500 hover:bg-red-50 hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:border-ink-600 dark:bg-ink-900 dark:text-ink-200 dark:hover:bg-red-500/10"
 					onclick={discardDraft}
 				>
 					{$_('post_order.draft.discard')}
@@ -2192,7 +2267,9 @@
 				     time, because cross-network sends lose funds.
 				     canSubmit gates on usdtNetwork !== null above. -->
 				<div class="mt-3">
-					<UsdtNetworkPicker bind:network={usdtNetwork} />
+					{#await loadUsdtNetworkPicker() then UsdtNetworkPicker}
+						<UsdtNetworkPicker bind:network={usdtNetwork} />
+					{/await}
 				</div>
 			{/if}
 			{#if asset === 'USDC'}
@@ -2202,7 +2279,9 @@
 				     share the EVM 0x address format, so the picker
 				     is the only thing disambiguating which chain. -->
 				<div class="mt-3">
-					<UsdcNetworkPicker bind:network={usdcNetwork} />
+					{#await loadUsdcNetworkPicker() then UsdcNetworkPicker}
+						<UsdcNetworkPicker bind:network={usdcNetwork} />
+					{/await}
 				</div>
 			{/if}
 			{#if asset === 'DAI'}
@@ -2219,7 +2298,9 @@
 				     mounted from the post page.  canSubmit gates
 				     on daiNetwork !== null above. -->
 				<div class="mt-3">
-					<DaiNetworkPicker bind:network={daiNetwork} />
+					{#await loadDaiNetworkPicker() then DaiNetworkPicker}
+						<DaiNetworkPicker bind:network={daiNetwork} />
+					{/await}
 				</div>
 			{/if}
 		</section>
@@ -2240,12 +2321,14 @@
 					<span class="mb-1 block text-sm font-semibold">
 						{$_('post_order.form.fiat_label')}
 					</span>
-					<FiatCurrencySelect
-						single
-						bind:value={fiatArr}
-						invalid={!!fiatError}
-						describedById={fiatError ? 'fiat-error' : undefined}
-					/>
+					{#await loadFiatCurrencySelect() then FiatCurrencySelect}
+						<FiatCurrencySelect
+							single
+							bind:value={fiatArr}
+							invalid={!!fiatError}
+							describedById={fiatError ? 'fiat-error' : undefined}
+						/>
+					{/await}
 					{#if fiatError}
 						<StatusLine kind="warn" id="fiat-error">{fiatError}</StatusLine>
 					{:else if fiat === ''}
@@ -2278,8 +2361,8 @@
 							aria-invalid={amountTouched && amountMinHasError}
 							aria-describedby={amountTouched && amountError ? 'amount-error' : undefined}
 							class="w-full rounded-xl border-2 {amountTouched && amountMinHasError
-								? 'border-red-500 dark:border-red-500'
-								: 'border-ink-200 dark:border-ink-700'} bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:bg-ink-900"
+								? 'border-red-500 focus:ring-red-500 dark:border-red-500'
+								: 'border-ink-200 focus:ring-morphit-emerald dark:border-ink-700'} bg-white px-3 py-2 focus:outline-none focus:ring-2 dark:bg-ink-900"
 						/>
 						{#if firstOrderMinHint}
 							<span class="mt-1 block text-xs text-ink-500 dark:text-ink-400">
@@ -2304,12 +2387,14 @@
 							aria-invalid={amountTouched && amountMaxHasError}
 							aria-describedby={amountTouched && amountError ? 'amount-error' : undefined}
 							class="w-full rounded-xl border-2 {amountTouched && amountMaxHasError
-								? 'border-red-500 dark:border-red-500'
-								: 'border-ink-200 dark:border-ink-700'} bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:bg-ink-900"
+								? 'border-red-500 focus:ring-red-500 dark:border-red-500'
+								: 'border-ink-200 focus:ring-morphit-emerald dark:border-ink-700'} bg-white px-3 py-2 focus:outline-none focus:ring-2 dark:bg-ink-900"
 						/>
+						<span class="mt-1 block text-xs text-ink-500 dark:text-ink-400">
+							{$_('post_order.form.amount_optional_hint')}
+						</span>
 					</label>
 				</div>
-				<p class="mt-1 text-xs text-ink-500">{$_('post_order.form.amount_optional_hint')}</p>
 
 				<!-- Price model picker.  Two shapes shipped: 'spread'
 				     (relative to current market rate, with an optional
@@ -2364,8 +2449,8 @@
 											aria-invalid={!!priceModelError}
 											aria-describedby={priceModelError ? 'price-model-error' : undefined}
 											class="w-24 rounded-lg border-2 {priceModelError
-												? 'border-red-500 dark:border-red-500'
-												: 'border-ink-200 dark:border-ink-700'} bg-white px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:bg-ink-900"
+												? 'border-red-500 focus:ring-red-500 dark:border-red-500'
+												: 'border-ink-200 focus:ring-morphit-emerald dark:border-ink-700'} bg-white px-2 py-1 text-sm focus:outline-none focus:ring-2 dark:bg-ink-900"
 											aria-label={$_('post_order.form.price_model_spread_aria') as string}
 										/>
 										<span class="text-sm text-ink-600 dark:text-ink-300">%</span>
@@ -2412,8 +2497,8 @@
 												? 'fixed-price-error'
 												: undefined}
 											class="w-32 rounded-lg border-2 {fixedPriceTouched && priceModelError
-												? 'border-red-500 dark:border-red-500'
-												: 'border-ink-200 dark:border-ink-700'} bg-white px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:bg-ink-900"
+												? 'border-red-500 focus:ring-red-500 dark:border-red-500'
+												: 'border-ink-200 focus:ring-morphit-emerald dark:border-ink-700'} bg-white px-2 py-1 text-sm focus:outline-none focus:ring-2 dark:bg-ink-900"
 											placeholder={$_('post_order.form.price_model_fixed_placeholder') as string}
 											aria-label={$_('post_order.form.price_model_fixed_aria') as string}
 										/>
@@ -2481,13 +2566,16 @@
 				<div class="mb-4">
 					<p class="mb-1 text-sm font-semibold">{$_('post_order.form.payment_methods_label')}</p>
 					<p class="mb-2 text-xs text-ink-500">{$_('post_order.form.payment_methods_hint')}</p>
-					<PaymentMethodsPicker
-						bind:selected={paymentMethods}
-						excludeForAsset={asset ?? undefined}
-						instanceAdditions={$instanceAdditions}
-						invalid={!!paymentMethodsError}
-						describedById="payment-methods-error"
-					/>
+					{#await loadPaymentMethodsPicker() then PaymentMethodsPicker}
+						<PaymentMethodsPicker
+							bind:selected={paymentMethods}
+							excludeForAsset={asset ?? undefined}
+							instanceAdditions={$instanceAdditions}
+							invalid={!!paymentMethodsError}
+							describedById="payment-methods-error"
+							firstTrade={isFirstTrade}
+						/>
+					{/await}
 					{#if paymentMethodsError}
 						<StatusLine kind="warn" id="payment-methods-error">{paymentMethodsError}</StatusLine>
 					{/if}
@@ -2527,8 +2615,10 @@
 						name="order-terms"
 						onDetect={handleTermsKeyDetect}
 						rows={3}
-						maxlength={2048}
+						maxlength={TERMS_HARD_MAX}
+						counterLimit={TERMS_MAX}
 						showCounter
+						counterAlwaysVisible
 						placeholder={termsPlaceholder}
 					/>
 				</label>
@@ -3031,7 +3121,7 @@
 					<span class="nav-arrow nav-arrow-left" aria-hidden="true">⇦</span> {$_('common.cancel')}
 				</BusyButton>
 				<BusyButton variant="primary" disabled={password.length < 8} onclick={submitBroadcast}>
-					{$_('post_order.locked.unlock')}
+					{$_('common.unlock')}
 				</BusyButton>
 			</div>
 		</section>
@@ -3195,7 +3285,7 @@
 			</p>
 			<div class="mt-4">
 				<BusyButton variant="primary" onclick={retryFromError}>
-					{$_('post_order.broadcast_error.retry')}
+					{$_('common.retry')}
 				</BusyButton>
 			</div>
 		</section>

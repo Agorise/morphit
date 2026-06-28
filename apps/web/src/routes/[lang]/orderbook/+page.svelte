@@ -1108,7 +1108,7 @@
 			</p>
 			<div class="mt-4">
 				<BusyButton variant="primary" onclick={fetchFirstPage}>
-					{$_('orderbook.retry')}
+					{$_('common.retry')}
 				</BusyButton>
 			</div>
 		</section>
@@ -1426,7 +1426,7 @@
 					<BusyButton
 						variant="secondary"
 						busy={loadingMore}
-						busyLabel={$_('orderbook.load_more_pending')}
+						busyLabel={$_('common.loading')}
 						onclick={loadMore}
 					>
 						{$_('orderbook.load_more')}

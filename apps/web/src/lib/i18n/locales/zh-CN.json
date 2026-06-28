@@ -6,7 +6,6 @@
   "about_this_instance": {
     "heading": "关于此实例",
     "lede": "此 Morphit 实例对自己的声明,供你验证。",
-    "loading": "加载中…",
     "error": {
       "fetch_failed": "无法获取此实例的验证信息。",
       "malformed": "verify.json 存在但格式错误。请谨慎对待此实例。",
@@ -64,9 +63,7 @@
       "eyebrow": "运营者设置向导",
       "heading": "配置你的实例",
       "intro": "此向导帮助你生成自定义此 Morphit 实例所需的配置行和 CLI 命令。本页面不会修改你的服务器 — 你将输出复制到 morphit.env 文件或终端,然后重启服务。",
-      "copy_button": "复制",
       "copy_button_aria": "复制生成的输出到剪贴板",
-      "copied": "已复制",
       "assets": {
         "heading": "已列资产",
         "intro": "选择你的实例上架交易的加密资产。BTC、XMR 和 BLURT 始终启用 — 联邦依赖于它们。",
@@ -374,7 +371,6 @@
       "locked_hint": "请先解锁会话才能发送消息。",
       "placeholder": "发给 @{peer} 的消息…",
       "send": "发送",
-      "sending": "发送中…",
       "acct_reminder": {
         "heading": "无法撤回。",
         "body": "聊天中的账号会永久写入 Blurt 区块链。发送前请仔细核对。",
@@ -405,7 +401,6 @@
       "tabs_aria": "收件箱选项卡",
       "requests_empty_heading": "暂无请求",
       "requests_empty_body": "当没有聊过的人联系你时,他们的消息会出现在这里,直到你回复为止。",
-      "dismiss": "忽略",
       "dismiss_aria": "忽略来自 {peer} 的请求",
       "dismiss_toast": "已隐藏 @{peer}。在 设置 → 隐藏的账户 中撤销。"
     },
@@ -426,8 +421,7 @@
           "title": "取消屏蔽 @{peer}?",
           "body": "对方将可以再次向你发送消息。",
           "yes": "取消屏蔽 @{peer}"
-        },
-        "cancel": "取消"
+        }
       }
     },
     "stranger_fee": {
@@ -438,7 +432,6 @@
       "password_label": "解锁你的活跃密钥",
       "password_placeholder": "你的 Morphit 密码",
       "confirm": "支付并发送",
-      "cancel": "取消",
       "retry": "重试",
       "paying": "支付中…",
       "quoting": "加载网络费用中…",
@@ -465,7 +458,6 @@
       "pub_pin_older_indexer_ref": "无法安全发送:你的索引器正在报告一条比你已经见过的更旧的聊天密钥记录。在只能向前推进的链上这种情况不应发生。请尝试刷新或切换到另一个 Morphit 实例。",
       "pub_pin_chain_reports_none": "无法安全发送:你的索引器说该收件人有聊天密钥,但 Blurt 链上找不到。索引器可能不同步,或在伪造数据。请尝试另一个 Morphit 实例,或稍后重试。",
       "pub_pin_chain_older_than_pin": "无法安全发送:Blurt 链报告此收件人的聊天密钥比你已经见过的更旧。这在逻辑上是矛盾的。请尝试另一个 Morphit 实例或另一个 Blurt RPC 端点。",
-      "learn_more": "了解更多",
       "pub_pin_malformed_indexer_response": "无法安全发送:你的索引器为该收件人的聊天密钥记录返回了格式错误的数据。可能是它运行的是旧版本,或配置有误。请尝试另一个 Morphit 实例。"
     },
     "live": "实时",
@@ -489,10 +481,8 @@
       "note_placeholder": "例如:下午 3 点现金交付",
       "note_too_long": "备注必须为 100 个字符或更少。",
       "send": "共享地址",
-      "cancel": "取消",
       "pill_method_btc": "比特币地址",
       "pill_method_xmr": "门罗币地址",
-      "pill_copy": "复制",
       "pill_copied": "已复制!",
       "pill_for_order": "用于订单",
       "verify_warning": "发送前务必核实地址。加密货币交易无法撤销。",
@@ -600,7 +590,6 @@
       "txid_invalid": "这看起来不像一个有效的交易 ID。",
       "amount_label": "发送金额(可选)",
       "send": "标记已发送",
-      "cancel": "取消",
       "pill_title_btc": "比特币已发送",
       "pill_title_xmr": "门罗币已发送",
       "pill_txid_label": "交易",
@@ -653,8 +642,6 @@
       "from_label": "付款人",
       "no_memo_notice": "不会包含链上备注 — 您的交易上下文留在此加密聊天中。",
       "password_label": "活动密钥密码",
-      "cancel": "取消",
-      "close": "关闭",
       "confirm": "发送 BLURT",
       "paying": "正在发送…",
       "success_toast": "BLURT 已发送。收据已发布到聊天。",
@@ -703,8 +690,7 @@
       "compare_body": "通过语音通话、当面或其他可信渠道把这 8 个词读给联系人。不要在本聊天里比对。哪怕只有一个词不同，也应将对话视为已被破坏。",
       "why_show": "为什么这很重要？",
       "why_hide": "隐藏说明",
-      "why_body": "默认情况下，Morphit 聊天信任索引器递送的对方聊天密钥。恶意索引器可能换上攻击者控制的密钥并读取你的消息。8 个词的指纹是基于双方真实聊天密钥在本地计算的——如果双方看到相同的词，则不存在中间人攻击。这只防御中间人攻击；它不能证明电话另一端的人就是其声称的身份。",
-      "close": "关闭"
+      "why_body": "默认情况下，Morphit 聊天信任索引器递送的对方聊天密钥。恶意索引器可能换上攻击者控制的密钥并读取你的消息。8 个词的指纹是基于双方真实聊天密钥在本地计算的——如果双方看到相同的词，则不存在中间人攻击。这只防御中间人攻击；它不能证明电话另一端的人就是其声称的身份。"
     },
     "order_context_label": "关于此订单",
     "boot_failed": "无法加载聊天。请刷新页面。",
@@ -798,7 +784,19 @@
     "download": "下载",
     "downloaded": "已下载!",
     "downloading": "正在准备文件…",
-    "retry": "重试"
+    "retry": "重试",
+    "loading": "加载中…",
+    "saving": "保存中…",
+    "sending": "发送中…",
+    "broadcasting": "广播中…",
+    "broadcasted": "已广播",
+    "copy": "复制",
+    "copied": "已复制",
+    "dismiss": "忽略",
+    "close": "关闭",
+    "learn_more": "了解更多",
+    "unlock": "解锁",
+    "password_too_short": "密码至少需要 8 个字符。"
   },
   "compare": {
     "heading": "比较 orderbook",
@@ -923,7 +921,6 @@
     "time_remaining_prefix": "可编辑时间:",
     "time_remaining_expired": "已过期",
     "save_button": "保存",
-    "saving": "保存中…",
     "save_success_title": "您的更改已上线",
     "save_success_body": "订单簿将在几秒内更新。",
     "save_error_title": "更改未保存",
@@ -966,7 +963,6 @@
       "realtime_label": "每 5 秒轮询",
       "no_ops": "尚无操作记录。",
       "load_more": "加载更早的操作",
-      "loading_more": "加载中…",
       "error": {
         "load_failed": "无法加载此账户的历史。",
         "load_more_failed": "无法加载更早的历史。"
@@ -1028,7 +1024,6 @@
       "subheading": "已完成交易数和当前挂单,按资产分类。",
       "volume_heading": "交易量",
       "volume_caveat": "交易量是根据每个已完成订单数量范围的中点估算的——链上没有携带精确的成交金额。交易笔数是精确的。",
-      "loading": "加载中…",
       "no_trades": "此时间段内尚无已完成交易。",
       "col_asset": "资产",
       "col_trades": "交易",
@@ -1238,7 +1233,7 @@
       },
       "where_does_blurt_price_come_from": {
         "q": "Morphit 上显示的 Blurt 价格来自哪里?",
-        "a": "你在 Morphit 上挂单费旁边看到的 Blurt/USD 价格（Blurt 金额旁的「~$0.125」小字）来自一条分层的价格来源链，其设计目的是减少对任何单一外部服务的依赖。\n\n**这条链，按优先级排列：**\n\n1. **Coingecko** —— 跨多家交易所聚合 Blurt 价格。\n\n2. **morphit_native** —— 一种从平台内交易数据推导出来的自主主权价格（按运营者选择启用；在你的实例拥有足够交易量支撑它之前默认关闭）。启用后，这个抓取器会查看最近那些以 Blurt 兑换美元法币或稳定币、且费用已验证的订单，施加多层抗操纵防护，并在不同交易者之间计算中位数。它被安插在 Coingecko 与静态下限之间——外部来源仍是首选，直到运营者明确选择在出现分歧时偏向采用本地价格。\n\n3. **静态兜底** —— 一个由运营者设定的下限值（默认 $0.002），在所有上游都失败时使用。可在设置向导中编辑。\n\n**为什么用一条链而不是单一来源？** 没有任何单一价格源可以被无条件信任。Coingecko 也可能如此。静态兜底会偏离现实。这条链意味着，除非整个互联网瘫痪，否则 Blurt 的定价在任何情形下都能继续工作。\n\n**morphit_native 如何运作**（启用时——完整设计见 ADR-0039）：\n\n- **分级锚点**：Tier 1（最高优先级）使用 Blurt 兑美元的直接订单（银行转账、现金等）；Tier 2 以 Blurt 兑稳定币（USDT/USDC/DAI）的订单作为补充；Tier 3 在各自单独都过于稀薄时合并两个池子。\n- **跨稳定币脱锚检测**：Morphit 上 USDT/USDC/DAI 之间的独立比率可识别其中任何一个何时脱离锚定。脱锚的稳定币会被排除出 Tier 2；Tier 1（不依赖稳定币锚定假设）继续工作。\n- **抗 Sybil**：每个作出贡献的交易者必须至少有一笔此前已完成、费用已验证的交易，并且不得出现在任何 cp123-cp125 声誉信号表（suspicious_reciprocity、related_accounts、one_way_pile_on、review_concentration）中。操纵价格所需的努力程度与操纵声誉相同。\n- **每交易者贡献上限**：每个不同账户贡献一票（它自己的价格中位数），无论它发布了多少订单。一个有 50 笔订单的巨鲸仍然是 N 票中的 1 票。\n- **订单年龄宽限期**：订单必须存在至少 10 分钟才有资格，从而挫败「发布即撤单」的操纵竞速。\n- **平滑上限**：每个周期内的大幅价格波动会被抑制，以防止闪电式操纵。\n- **长期漂移监测**：一条 7 天的指数基线可捕捉缓慢漂移攻击——其中每一次单独的波动都很小，但累计漂移很大。\n- **跨来源分歧检测器**：当 morphit_native 与外部来源分歧超过 25% 并持续 4 小时以上时，会在索引器日志和 `/v1/health` 中触发警报。\n- **硬编码的外层合理性包络**：运营者配置可以收紧价格区间过滤器，但无法将其放宽到超出硬编码的边界，从而防止一个被控制的运营者显示离谱错误的价格。\n\n**「自己验证」端点**：`GET /v1/price/morphit-native/receipt` 会返回产生当前本地价格的全套输入——使用了哪个 tier、哪些交易者作出了贡献（仅账户名；他们的订单本就已在订单簿中公开可见）、跨稳定币脱锚报告、合理性包络设置，以及一则「这不是预言机」的警告。任何人都可以审计；无需任何不透明的「相信索引器」。\n\n**重要：morphit_native 并非设计用作其他系统的预言机。** 它仅出于便利用于 Morphit 内部的美元显示。不要把它用作借贷协议、DEX 或任何承载价值的系统的价格输入。该价格在显示用途上抗操纵（在那里小的不准确是可容忍的），但面对一个意志坚定的对手在真金白银取决于数值正确性时所发动的那种攻击，它并非刀枪不入。威胁模型见 ADR-0039。\n\n**这对你的交易为何重要**：以 Blurt 支付的挂单费锚定美元，而非固定的 Blurt 数量——Morphit 报出的是按当前价格约合 $0.125 的 Blurt 数量，因此这笔费用的美元价值保持稳定，无论 Blurt 价格涨跌。你在签名前会看到确切的 Blurt 数量，并在链上时间结算。在后台，索引器会将该数量与一个锚定在链上的下限（附带一个小的容差区间）进行核对，从而让所有实例对应付金额达成一致，且无法通过喂入错误价格来操纵金额。价格来源的唯一职责是让这个换算对 Morphit 的显示而言是准确的——绝不充当任何下游金融系统的真相来源。\n\n**上线前说明**：在平台上积累足够交易量、使 morphit_native 达到资格之前（需要在过去 8 小时内有 ≥3 名不同的、费用已验证的交易者发布过 Blurt 兑美元或 Blurt 兑稳定币的订单），每个实例都会回退到 Coingecko/静态。当运营者的数据成熟时，他们通过 `MORPHIT_INDEXER_PRICE_FEED_NATIVE_ENABLED=true` 开启 morphit_native。\n\n**cp128 更新——计价单位可由运营者配置。** 尽管上面的讨论以美元为例，索引器显示的单位并非硬编码为美元。运营者将 `MORPHIT_INDEXER_PRICE_FEED_DENOMINATION_FIAT`（默认 `USD`）设为任意 3 到 8 个字符的大写代码——`EUR`（欧元）、`GBP`（英镑）、`JPY`（日元）、`BRL`（巴西雷亚尔）、`CNY`（人民币）、`INR`（印度卢比）、`RUB`（俄罗斯卢布）、`AED`（阿联酋迪拉姆）、`XDR`（国际货币基金组织特别提款权篮子）、`XAU`（黄金盎司，一种硬通货对冲），或他们市场使用的任何其他代码。挂单费响应携带一个 `denomination_fiat` 字段，告诉前端 `blurt_price_fiat` + `base_fee_fiat` 这些数字使用的是哪种单位，以便 UI 渲染相应的符号与格式（美元用「$0.125」、欧元用「€0.11」、黄金用「XAU 0.0000023」等）。这不仅是为了假设的美元崩溃情形——服务于非美元本位市场的运营者今天就能受益。"
+        "a": "你在 Morphit 上挂单费旁边看到的 Blurt/USD 价格（Blurt 金额旁的「~$0.125」小字）来自一条分层的价格来源链，其设计目的是减少对任何单一外部服务的依赖。\n\n**这条链，按优先级排列：**\n\n1. **外部市场中位数** —— Blurt/USD 价格会同时从多个独立的公开价格源读取——Coingecko、CoinPaprika、CryptoCompare，以及（对于它们收录的资产）Kraken/Binance/Coinbase/OKX/Bybit 等主流交易所——再用一个剔除离群值的中位数加以合并。任何宕机、对我们限流或返回错误数字的来源都会被直接丢弃，因此没有任何单一服务能够封锁或扭曲价格。\n\n2. **morphit_native** —— 一种从平台内交易数据推导出来的自主主权价格（按运营者选择启用；在你的实例拥有足够交易量支撑它之前默认关闭）。启用后，这个抓取器会查看最近那些以 Blurt 兑换美元法币或稳定币、且费用已验证的订单，施加多层抗操纵防护，并在不同交易者之间计算中位数。它被安插在外部市场中位数与静态下限之间——外部来源仍是首选，直到运营者明确选择在出现分歧时偏向采用本地价格。\n\n3. **静态兜底** —— 一个由运营者设定的下限值（默认 $0.002），在所有上游都失败时使用。可在设置向导中编辑。\n\n**为什么用一条链而不是单一来源？** 没有任何单一价格源可以被无条件信任。因此第一层本身就是多个独立来源的中位数。静态兜底会偏离现实。这条链意味着，除非整个互联网瘫痪，否则 Blurt 的定价在任何情形下都能继续工作。\n\n**morphit_native 如何运作**（启用时——完整设计见 ADR-0039）：\n\n- **分级锚点**：Tier 1（最高优先级）使用 Blurt 兑美元的直接订单（银行转账、现金等）；Tier 2 以 Blurt 兑稳定币（USDT/USDC/DAI）的订单作为补充；Tier 3 在各自单独都过于稀薄时合并两个池子。\n- **跨稳定币脱锚检测**：Morphit 上 USDT/USDC/DAI 之间的独立比率可识别其中任何一个何时脱离锚定。脱锚的稳定币会被排除出 Tier 2；Tier 1（不依赖稳定币锚定假设）继续工作。\n- **抗 Sybil**：每个作出贡献的交易者必须至少有一笔此前已完成、费用已验证的交易，并且不得出现在任何 cp123-cp125 声誉信号表（suspicious_reciprocity、related_accounts、one_way_pile_on、review_concentration）中。操纵价格所需的努力程度与操纵声誉相同。\n- **每交易者贡献上限**：每个不同账户贡献一票（它自己的价格中位数），无论它发布了多少订单。一个有 50 笔订单的巨鲸仍然是 N 票中的 1 票。\n- **订单年龄宽限期**：订单必须存在至少 10 分钟才有资格，从而挫败「发布即撤单」的操纵竞速。\n- **平滑上限**：每个周期内的大幅价格波动会被抑制，以防止闪电式操纵。\n- **长期漂移监测**：一条 7 天的指数基线可捕捉缓慢漂移攻击——其中每一次单独的波动都很小，但累计漂移很大。\n- **跨来源分歧检测器**：当 morphit_native 与外部来源分歧超过 25% 并持续 4 小时以上时，会在索引器日志和 `/v1/health` 中触发警报。\n- **硬编码的外层合理性包络**：运营者配置可以收紧价格区间过滤器，但无法将其放宽到超出硬编码的边界，从而防止一个被控制的运营者显示离谱错误的价格。\n\n**「自己验证」端点**：`GET /v1/price/morphit-native/receipt` 会返回产生当前本地价格的全套输入——使用了哪个 tier、哪些交易者作出了贡献（仅账户名；他们的订单本就已在订单簿中公开可见）、跨稳定币脱锚报告、合理性包络设置，以及一则「这不是预言机」的警告。任何人都可以审计；无需任何不透明的「相信索引器」。\n\n**重要：morphit_native 并非设计用作其他系统的预言机。** 它仅出于便利用于 Morphit 内部的美元显示。不要把它用作借贷协议、DEX 或任何承载价值的系统的价格输入。该价格在显示用途上抗操纵（在那里小的不准确是可容忍的），但面对一个意志坚定的对手在真金白银取决于数值正确性时所发动的那种攻击，它并非刀枪不入。威胁模型见 ADR-0039。\n\n**这对你的交易为何重要**：以 Blurt 支付的挂单费锚定美元，而非固定的 Blurt 数量——Morphit 报出的是按当前价格约合 $0.125 的 Blurt 数量，因此这笔费用的美元价值保持稳定，无论 Blurt 价格涨跌。你在签名前会看到确切的 Blurt 数量，并在链上时间结算。在后台，索引器会将该数量与一个锚定在链上的下限（附带一个小的容差区间）进行核对，从而让所有实例对应付金额达成一致，且无法通过喂入错误价格来操纵金额。价格来源的唯一职责是让这个换算对 Morphit 的显示而言是准确的——绝不充当任何下游金融系统的真相来源。\n\n**上线前说明**：在平台上积累足够交易量、使 morphit_native 达到资格之前（需要在过去 8 小时内有 ≥3 名不同的、费用已验证的交易者发布过 Blurt 兑美元或 Blurt 兑稳定币的订单），每个实例都会回退到 外部市场中位数（以及其后的静态下限）。当运营者的数据成熟时，他们通过 `MORPHIT_INDEXER_PRICE_FEED_NATIVE_ENABLED=true` 开启 morphit_native。\n\n**cp128 更新——计价单位可由运营者配置。** 尽管上面的讨论以美元为例，索引器显示的单位并非硬编码为美元。运营者将 `MORPHIT_INDEXER_PRICE_FEED_DENOMINATION_FIAT`（默认 `USD`）设为任意 3 到 8 个字符的大写代码——`EUR`（欧元）、`GBP`（英镑）、`JPY`（日元）、`BRL`（巴西雷亚尔）、`CNY`（人民币）、`INR`（印度卢比）、`RUB`（俄罗斯卢布）、`AED`（阿联酋迪拉姆）、`XDR`（国际货币基金组织特别提款权篮子）、`XAU`（黄金盎司，一种硬通货对冲），或他们市场使用的任何其他代码。挂单费响应携带一个 `denomination_fiat` 字段，告诉前端 `blurt_price_fiat` + `base_fee_fiat` 这些数字使用的是哪种单位，以便 UI 渲染相应的符号与格式（美元用「$0.125」、欧元用「€0.11」、黄金用「XAU 0.0000023」等）。这不仅是为了假设的美元崩溃情形——服务于非美元本位市场的运营者今天就能受益。"
       },
       "where_to_buy_blurt": {
         "q": "我在哪里买 Blurt 来支付网络费用？",
@@ -1658,7 +1653,6 @@
     "cost_label": "总费用",
     "cost_detail": "{per_hour} BLURT/小时 × {hours} 小时",
     "submit_button": "支付并推广",
-    "submitting": "广播中…",
     "cancel_button": "取消",
     "success": "⭐ 订单已推广 — 已支付 {blurt} BLURT",
     "error_locked": "需要解锁 Active 密钥以支付推广费用。",
@@ -1965,8 +1959,7 @@
         "title": "交易任何东西",
         "body": "16+ 种加密货币加上直接的商品、服务，甚至以物易物。跨资产、跨网络、跨媒介。"
       },
-      "card_aria_label": "{title} — 在我们的常见问题中了解更多",
-      "learn_more": "了解更多"
+      "card_aria_label": "{title} — 在我们的常见问题中了解更多"
     }
   },
   "identity": {
@@ -2069,7 +2062,6 @@
       "title_named": "欢迎回来 @{account}",
       "body": "用你设置的密码解锁加密 keystore。",
       "password_label": "密码",
-      "unlock": "解锁",
       "unlocking": "解锁中…",
       "alternatives_heading": "忘记密码?",
       "alternatives_body": "没有密码重置 — Morphit 是非托管的,没人能恢复它。但如果你记下了 12 词 助记词,仍然可以用它登录。",
@@ -2083,8 +2075,7 @@
     "signout_before_switch_modal": {
       "title": "退出登录",
       "body": "登录其他账户会先让你退出当前的 @{account} 账户。确定吗？",
-      "confirm": "确定",
-      "cancel": "取消"
+      "confirm": "确定"
     }
   },
   "login_qr": {
@@ -2100,12 +2091,10 @@
     "expires_in": "{seconds} 秒后过期",
     "no_phone_scanner_heading": "没有二维码扫描器?",
     "no_phone_scanner_body": "在手机上打开 Morphit,前往登录 → 「从其他设备」,按提示操作。",
-    "cancel": "取消",
     "received_heading": "已登录!",
     "received_body": "欢迎,@{account}。正在进入交易簿…",
     "expired_heading": "此码已过期",
     "expired_body": "码只有效 5 分钟。点击下方获取新码。",
-    "try_again": "再试一次",
     "rejected_heading": "无法验证登录",
     "rejected_body": "有些信息不匹配。点击下方用新码再试。",
     "cancelled": "已取消。"
@@ -2133,8 +2122,7 @@
     "note_label": "给交易伙伴的备注",
     "note_help": "送货说明、对讲机代码等。",
     "optional_marker": "(可选)",
-    "share_button": "分享地址",
-    "sending": "发送中…"
+    "share_button": "分享地址"
   },
   "my_balance": {
     "error": {
@@ -2151,7 +2139,6 @@
     "empty_cta": "发布您的第一个订单",
     "error_title": "无法加载您的订单",
     "error_body": "索引器没有响应。请稍后重试。",
-    "retry": "重试",
     "filter": {
       "heading": "显示",
       "all": "全部",
@@ -2182,7 +2169,6 @@
       "fee_reused": "不在订单簿中 — 付款已使用",
       "fee_missing": "不在订单簿中 — 未收到费用支付",
       "fee_underpaid": "不在订单簿中 — 费用支付不足",
-      "fee_learn_more": "了解更多",
       "viewed_count": "{count} 次查看",
       "viewed_tooltip": "此报价大致被查看的次数。仅你可见。",
       "action_relist": "重新发布",
@@ -2220,8 +2206,7 @@
     },
     "locked": {
       "title": "解锁以查看您的订单",
-      "body": "您的订单历史记录受您的解锁保护，因此锁定的设备绝不会泄露您的交易。请输入密码以查看。",
-      "unlock": "解锁"
+      "body": "您的订单历史记录受您的解锁保护，因此锁定的设备绝不会泄露您的交易。请输入密码以查看。"
     }
   },
   "nav": {
@@ -2233,7 +2218,6 @@
     "privacy_terms": "隐私",
     "post_now": "立即发布",
     "start": "开始",
-    "unlock": "解锁",
     "glossary": "术语表",
     "cheat_sheet": "速查表"
   },
@@ -2320,7 +2304,6 @@
         "new_password_confirm_label": "确认密码",
         "error": {
           "bad_account": "账户名使用小写字母、数字、连字符和点。",
-          "password_too_short": "密码至少需要 8 个字符。",
           "passwords_mismatch": "密码不匹配。请重新输入两次。",
           "account_not_found": "在 Blurt 链上找不到 @{account}。检查拼写后重试。",
           "key_not_on_account": "你输入的 posting 密钥与 @{account} 链上的 posting 密钥不匹配。检查是否复制了正确的 WIF。",
@@ -2363,9 +2346,7 @@
         "password_strength_common": "此密码出现在常见密码列表中。选择更难猜测的内容。",
         "submit_remembered": "记住我并继续",
         "submit_session_only": "跳过 — 仅在此会话中保持登录",
-        "submit_pending": "正在保存…",
         "error": {
-          "password_too_short": "密码必须至少 8 个字符。",
           "passwords_mismatch": "密码不匹配。",
           "password_weak": "密码太弱。使用更长或不太可预测的内容。"
         },
@@ -2434,7 +2415,6 @@
         "daily_ceiling_reached": "此实例已达到每日注册上限。请明天再试,或尝试其他 Morphit 镜像。",
         "invite_problem": "您的注册令牌已过期或已被使用。请重试。",
         "altcha_problem": "人机验证失败。请重试。",
-        "learn_more": "了解更多",
         "daily_ceiling_voucher_heading": "现在就需要一个账号？",
         "daily_ceiling_voucher_intro": "如果你不想等也不想换实例，有一条快速通道：从 Agorise 社区拿到一个 voucher 码，在另一个服务上创建你的 Blurt 账号，然后回到这里登录。",
         "daily_ceiling_voucher_step_1": "加入我们的 Agorise Matrix 房间 {matrix_open}#agorise:matrix.org{matrix_close}。社区成员会给你一个 voucher 码。",
@@ -2468,8 +2448,7 @@
       "password_body": "设置密码。你的加密 keystore 留在此设备上,下次访问时只用密码即可解锁 — 无需 12 词 助记词。你也可以从头像菜单使用锁定会话而不丢失数据。为你的个人电脑选择此项。",
       "seed_only_label": "每次都用 助记词(最私密)",
       "seed_only_body": "此设备上不保存任何东西。每次新会话都要重新输入 12 词 助记词。最私密 — 没有加密 keystore 可攻击,公共电脑上没有数据需擦除。为公共或共享设备选择此项,或如果你宁愿用一点便利换最大隐私。",
-      "must_choose": "继续之前请选择一种解锁方式。",
-      "password_too_short": "密码至少需要 8 个字符。"
+      "must_choose": "继续之前请选择一种解锁方式。"
     },
     "leave_confirm": {
       "title": "离开引导?",
@@ -2616,9 +2595,7 @@
     "empty_body": "试着放宽某个筛选,或稍后再看 — 订单簿每几秒就会更新。",
     "error_title": "无法连接索引器",
     "error_body": "索引器暂时无法访问。请稍后再试。",
-    "retry": "重试",
     "load_more": "加载更多",
-    "load_more_pending": "正在加载…",
     "indexed_block_label": "已索引区块",
     "order": {
       "buying": "买入 {asset}",
@@ -2728,7 +2705,8 @@
       "description": "Dogecoin：2013 年公平启动的 PoW 链，透明的基础层，与 Litecoin 合并挖矿。"
     },
     "barter_goods": {
-      "description": "直接以商品换取资产 — 在订单条款中描述你提供或想要的(例如「橙子树」「二手自行车」「自家种的大蒜」)。"
+      "description": "直接以商品或服务换取资产 — 在下方的「条款」字段中描述您提供或想要的内容（如「2米高的橙子树」「车道清洁」「洗车」等）。",
+      "description_first_trade": "直接以商品或服务换取 BLURT — 在下方的「条款」字段中描述您提供的内容（如「2米高的橙子树」「车道清洁」「洗车」等）。"
     },
     "cash_by_mail": {
       "description": "通过邮政或快递服务寄送现金。使用可追踪、有保险的承运商;将现金用锡纸包裹放入普通信封;国际寄送需考虑海关规定。"
@@ -2919,8 +2897,7 @@
     "locked": {
       "title": "解锁您的会话以继续",
       "body": "Morphit 从不保存您的密码。请输入密码以签署订单。",
-      "password_label": "会话密码",
-      "unlock": "解锁"
+      "password_label": "会话密码"
     },
     "form": {
       "step_1_heading": "您想交易什么?",
@@ -2967,14 +2944,14 @@
         "eth": "Ethereum (ETH) — Proof-of-Stake 智能合约平台。透明基础层；无原生混合协议。注意合约接收者（向没有 `payable receive()` 或 `fallback()` 的合约发送 ETH 将被回滚；币没丢失，但交易失败且您支付 gas）。在 Morphit 上仅交易：不能支付挂单费用。",
         "xrp": "Ripple (XRP) — XRP Ledger 上面向支付的联邦拜占庭协议加密货币。透明基础层；协议层没有隐私。destination tag 是标识符（用于交易所路由），不是隐私功能。钱包端地址轮换是主要的隐私手段。在 Morphit 上仅交易：不能支付挂单费用。"
       },
-      "waiver_fiat_hint": "💡 Morphit 上大多数 BLURT 交易发生在活跃的 Blurt 社交网络用户、现有运营者之间，或通过易货进行。因此，请选择您本地使用的法定货币（USD、EUR、MXN 等），如果您想提供其他有价值的东西，可提供当面或易货（商品/服务）付款方式。",
+      "waiver_fiat_hint": "💡 Morphit 上大多数 BLURT 交易发生在活跃的 Blurt 社交网络用户、现有运营者之间，或通过易货进行。因此，请选择您本地使用的法定货币（USD、EUR、MXN 等），如果您想提供其他有价值的东西，可在第 3 步提供当面或易货（商品/服务）付款方式。",
       "waiver_benefits_heading": "你的购买能解锁：",
       "price_model_legend": "价格",
       "price_model_hint": "您的最小和最大值基于什么？大多数交易者使用市场价格；固定价格适用于无论市场如何波动都想要一个特定数字的情况。",
       "price_model_spread_label": "市场价",
       "price_model_spread_help": "在每笔交易发生时锚定当前汇率。可选:加一个小的 +/- 价差。",
       "price_model_spread_aria": "价差百分比(正或负)",
-      "price_model_spread_unit_hint": "0 = 纯市场价;+5 = 市场加 5%",
+      "price_model_spread_unit_hint": "0 或留空 = 纯市场价;+5 = 市场加 5%",
       "price_model_fixed_label": "固定价",
       "price_model_fixed_help": "每单位固定的法币价格。市场波动时订单不动。",
       "price_model_fixed_aria": "每单位的法币固定价",
@@ -2987,10 +2964,11 @@
       "amount_min_label_in_fiat": "最小值（{fiat}）",
       "amount_max_label_in_fiat": "最大值（{fiat}）",
       "continue_locked_hint": "请填写上方字段以继续。",
-      "first_order_min_hint": "首次下单有一个很小的最低额：约 {amount} {fiat}（≈ 1 美元）。",
-      "first_order_min_hint_usd": "首次下单有约 1 美元的最低额。",
+      "first_order_min_hint": "初始最低额为 {amount} {fiat}（≈ 1 美元）。",
+      "first_order_min_hint_usd": "初始最低额约为 1 美元。",
       "step_counter": "第 {n} 步，共 {total} 步",
-      "fiat_required_hint": "选择你为这笔交易定价所用的货币——用你当地的货币就很好。"
+      "fiat_required_hint": "选择你为这笔交易定价所用的货币。",
+      "amount_entered_usd_hint": "{amount} {fiat}（≈ {usd}）"
     },
     "errors": {
       "fiat_empty": "请选择一种法币(如 USD 或 EUR)。",
@@ -3002,7 +2980,7 @@
       "payment_methods_empty": "至少添加一种收款方式。",
       "payment_methods_too_many": "超过 12 种收款方式了。请挑选最常用的。",
       "payment_method_too_long": "每种收款方式请保持简短(32 个字符以内)。",
-      "waiver_min_required": "免除需要最低订单规模。将金额设置为至少上面显示的下限。",
+      "waiver_min_required": "上架费减免需要最低订单规模。请将最低值设置为至少 {amount} {fiat}。",
       "spread_not_a_number": "价差必须是数字。",
       "spread_out_of_range": "价差必须在 -50% 和 +50% 之间。",
       "fixed_price_required": "请输入固定价。",
@@ -3010,7 +2988,8 @@
       "fee_not_ready": "费用报价还未就绪。请稍等片刻后再试。",
       "amount_min_too_large": "最小值太大。请选择较小的值。",
       "amount_max_too_large": "最大值太大。请选择较小的值。",
-      "fixed_price_too_large": "固定价格太大。请选择较小的值。"
+      "fixed_price_too_large": "固定价格太大。请选择较小的值。",
+      "waiver_min_required_usd": "上架费减免需要最低订单规模。请将最低值设置为至少 1 美元。"
     },
     "fee": {
       "heading": "挂单费",
@@ -3053,7 +3032,6 @@
       "body_generic": "区块链未接受广播。未扣费。请重试或检查您的连接。",
       "body_insufficient_funds": "您的账户没有足够的 BLURT 来支付挂单费。",
       "body_locked": "会话已锁定。请解锁密码后重试。",
-      "retry": "重试",
       "body_bad_password": "该密码未解锁你的 keystore。请重试。",
       "body_missing_external_tx_id": "BTC 和 XMR 费用支付需要外部交易 ID。"
     },
@@ -3104,7 +3082,6 @@
       "fee_address_amount_btc": "金额:{amount} BTC ({sats} 聪)",
       "fee_address_amount_xmr": "金额:{amount} XMR",
       "fee_address_copy": "复制地址",
-      "fee_address_copied": "已复制",
       "fee_address_show_qr": "显示二维码",
       "fee_address_hide_qr": "隐藏二维码",
       "fee_address_chain_pinned": "由 {account} 在链上锚定 — 每个 Morphit 实例都依据此地址验证费用。",
@@ -3502,7 +3479,6 @@
       "display_name_help": "在运营商目录和你托管的实例上显示的可读名称。",
       "contact_url_label": "联系 URL(可选)",
       "contact_url_help": "你自己的网站、联系页面或 onion 服务。必须是 https:// 或 http://。",
-      "broadcasting": "广播中…",
       "submit": "注册运营商",
       "err_generic": "注册失败。请重试。",
       "err_unknown": "意外错误。请重试。",
@@ -3544,7 +3520,6 @@
     "no_camera_body": "此设备没有相机。用其他方式登录,例如助记词。",
     "scanning_heading": "把相机对准码",
     "scanning_hint": "码在你想登录的电脑上。",
-    "try_again": "再试一次",
     "confirm_heading": "登录 Morphit?",
     "confirm_body_1": "一台电脑请求以你的身份登录。",
     "confirm_website_label": "网站",
@@ -3793,7 +3768,6 @@
       "reminder_title": "💡 显示名称不是唯一的。",
       "reminder_body": "任何人都可以用任何名字。真正识别你的是括号里的短公钥,别人复制不了。交易时务必看公钥。",
       "save_and_broadcast": "保存并广播",
-      "broadcast_ok": "已广播",
       "broadcast_err": {
         "no_account": "已本地保存。注册账户后即可发布。",
         "locked": "会话已锁定。请重新登录以广播。",
@@ -3801,7 +3775,6 @@
         "rejected": "网络拒绝了此次广播：{reason}",
         "key_mismatch": "已解锁的身份无权为 @{account} 发布。请确认解锁的是正确的账户，且记录的账户名与之匹配，然后重试。"
       },
-      "save_pending": "正在保存…",
       "broadcast_pending": "发布中…",
       "clear_confirm_prompt": "要从这台设备移除您的显示名吗?您随时可以再设置一次。",
       "clear_confirm_yes": "是的,移除",
@@ -3827,7 +3800,6 @@
       "remove_aria": "移除 {url}",
       "reset_confirm_prompt": "将所有自定义 RPC 端点重置为默认值？",
       "reset_confirm_yes": "是，重置",
-      "reset_confirm_cancel": "取消",
       "timed_out": "超时",
       "unreachable": "无法连接"
     },
@@ -3859,11 +3831,9 @@
       },
       "preview_label": "预览",
       "save": "本地保存",
-      "save_pending": "保存中…",
       "saved_toast": "已保存 ✓",
       "save_and_broadcast": "保存并广播",
       "broadcast_pending": "发布中…",
-      "broadcast_ok": "已广播",
       "clear": "清除",
       "reminder_title": "它会出现在哪里",
       "reminder_body": "一旦发布,Nostr 图标会出现在你的用户名旁边——在每个订单、每条反馈条目、每条聊天消息上,在每个 Morphit 实例上,不只是这个。其他用户点击它会在他们喜欢的客户端中打开你的 Nostr 个人资料。"
@@ -3883,11 +3853,8 @@
       },
       "preview_label": "预览:",
       "save": "本地保存",
-      "save_pending": "保存中…",
       "saved_toast": "已保存到此设备。",
       "save_and_broadcast": "保存并广播",
-      "broadcast_pending": "广播中…",
-      "broadcast_ok": "已广播",
       "clear": "清除",
       "reminder_title": "可选 — 您可以跳过。",
       "reminder_body": "没有这个网址，你的 Morphit 身份也能正常使用。它只是一个礼节性链接，方便那些可能也想看你的视频或播客的人。"
@@ -3985,8 +3952,6 @@
       "preview_size": "{bytes} / {cap} 上限",
       "preview_getting_large": "接近大小限制——考虑更简单的图像或更小的源。",
       "broadcast": "广播头像",
-      "broadcast_pending": "广播中…",
-      "broadcast_ok": "已广播",
       "cancel": "丢弃",
       "remove": "移除头像",
       "remove_pending": "移除中…",
@@ -4101,7 +4066,6 @@
       "harden_submit": "硬化为仅-YubiKey",
       "soften_submit": "添加密码",
       "enroll_submit": "绑定 YubiKey",
-      "cancel": "取消",
       "new_password_label": "新密码(至少 8 个字符)",
       "confirm_password_label": "确认新密码",
       "enroll_success": "YubiKey 已绑定。",
@@ -4116,7 +4080,6 @@
       "error": {
         "enroll_verify_failed": "无法验证你的 YubiKey。请确认插槽 2 已配置为 HMAC-SHA1 质询-响应模式，换一个 USB 端口，然后重新注册。",
         "confirm_backup": "继续前请确认助记词已备份。",
-        "password_too_short": "密码必须至少 8 个字符。",
         "passwords_mismatch": "两个密码不一致。",
         "webhid_unsupported": "你的浏览器不支持 WebHID。请尝试 Chrome、Edge 或 Brave。",
         "no_device": "未选择 YubiKey。",
@@ -4219,7 +4182,6 @@
         "step4_body": "如果您丢失了身份验证器,这十个代码将让您登录。每个代码精确地工作一次。将它们保存在安全的地方 — 密码管理器、打印并锁起来,或写在纸上。我们不会再次显示它们。",
         "backup_acknowledge": "我已将这些备份代码保存在安全的地方。",
         "backup_continue": "完成设置",
-        "cancel": "取消",
         "err_invalid_code": "该代码未能验证。检查您的设备时间是否同步,然后重试。",
         "err_internal": "出现问题。您的 keystore 未更改;请重试。",
         "err_locked": "您的会话已锁定。请先解锁,然后重试。"
@@ -4242,7 +4204,6 @@
         "code_label": "当前 6 位代码(用于确认)",
         "submit": "生成新代码",
         "submit_busy": "生成中…",
-        "cancel": "取消",
         "success": "新备份代码已生成。立即保存它们。",
         "err_invalid_code": "该代码未能验证。请重试。"
       },
@@ -4253,7 +4214,6 @@
         "code_placeholder": "000000 或 XXXX-XXXX",
         "submit": "继续",
         "submit_busy": "验证中…",
-        "cancel": "取消",
         "err_invalid_code": "该代码未能验证。检查您的设备时间是否同步,或尝试备份代码。",
         "err_locked_out": "太多无效尝试。在 {seconds} 秒后重试。",
         "backup_code_redeemed_warning": "刚刚使用了一个备份代码。剩余 {remaining} 个备份代码。"
@@ -4293,7 +4253,6 @@
       },
       "confirm_password_to_begin": "确认您的密码以开始",
       "confirm_password": "确认您的密码",
-      "copy_secret": "复制",
       "yubikey_protected": "此 keystore 受 YubiKey 保护。此版本不支持将基于 TOTP 的 2FA 添加到受 YubiKey 保护的 keystore。您的 YubiKey 已经提供了比 TOTP 更强的加密身份验证。"
     }
   },
@@ -4320,8 +4279,7 @@
     "tracking_help": "由承运商提供。接受字母、数字、空格和连字符。",
     "note_label": "备注",
     "optional_marker": "(可选)",
-    "share_button": "分享发货",
-    "sending": "发送中…"
+    "share_button": "分享发货"
   },
   "support": {
     "heading": "帮助与支持",
@@ -4376,11 +4334,7 @@
     "opt_in_pitch": "辛迪加发布交易至关重要。更多眼睛看到您的报价 = 更多交易伙伴,加上点赞奖励直接进入您的 Blurt 钱包。"
   },
   "toast": {
-    "dismiss": "关闭",
     "view_action": "查看"
-  },
-  "tooltip": {
-    "learn_more": "了解更多"
   },
   "trade_status": {
     "address_shared": "已共享地址",
@@ -4408,7 +4362,6 @@
     "bullet_bp_stake": "<strong>你立即解锁 1 BP 欢迎权益</strong>，就在你第一笔以 BLURT 支付的上架费触发的那一刻。第一笔成功的交易后，这会变成 10 BLURT liquid + 10 BLURT Power——在网络中产生被动收入的权益。",
     "why_blurt_minimum": "为什么免费交易要用 BLURT 而不是 BTC 或 XMR？因为你钱包里的 BLURT 是你之后在 Morphit 上做所有其他事情的关键——为未来的交易支付上架费（半价！）、参与 Blurt 社交层、赚取忠诚度奖励。我们希望你能积极参与，而不是带着空余额被困住。",
     "cta_compose": "撰写我的免费首次购买",
-    "learn_more": "了解更多",
     "collapse_aria": "收起此欢迎卡片",
     "expand_aria": "展开此欢迎卡片"
   },
@@ -4417,11 +4370,11 @@
     "prompt": "想在 @{peer} 回复时收到提醒吗——即使关闭了此标签页？",
     "turn_on": "开启聊天通知",
     "not_now": "暂不",
-    "dismiss_aria": "关闭",
     "enabling": "正在开启…",
     "enabled": "已完成——有新消息时会通知你。",
     "error": "无法开启通知。你可以在“设置 → 通知”中启用。",
-    "privacy_note": "使用浏览器的私密通知——无需邮箱或电话号码，随时可以关闭。"
+    "privacy_note": "使用浏览器的私密通知——无需邮箱或电话号码，随时可以关闭。",
+    "dismiss_aria": "忽略"
   },
   "backup_keys_panel": {
     "warning_title": "请保密",
@@ -4441,8 +4394,6 @@
     },
     "public_label": "公钥",
     "private_label": "私钥（WIF）",
-    "copy": "复制",
-    "copied": "已复制",
     "download": "下载为文本文件",
     "downloaded": "已保存",
     "no_master_password": "没有主密码。Morphit 从不创建或使用主密码——你的 12 个单词和这些密钥就是全部。",

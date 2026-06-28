@@ -583,7 +583,7 @@
 			<p class="mt-2 text-ink-600 dark:text-ink-300">{$_('post_order.locked.body')}</p>
 			<div class="mt-4">
 				<BusyButton variant="primary" onclick={() => gotoLocale('/onboarding/import')}>
-					{$_('post_order.locked.unlock')}
+					{$_('common.unlock')}
 				</BusyButton>
 			</div>
 		</section>
@@ -689,7 +689,7 @@
 						void load();
 					}}
 				>
-					{$_('post_order.broadcast_error.retry')}
+					{$_('common.retry')}
 				</BusyButton>
 			</div>
 		</section>
@@ -1011,7 +1011,7 @@
 			<BusyButton
 				variant="primary"
 				busy={phase === 'saving'}
-				busyLabel={$_('edit_order.saving')}
+				busyLabel={$_('common.saving')}
 				disabled={!canSave}
 				onclick={save}
 			>

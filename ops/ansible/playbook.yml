@@ -112,6 +112,13 @@
       tags: [bunkerweb]
       when: enable_bunkerweb | default(true)
 
+    # Basic Tor v3 onion by default (privacy is the first priority).
+    # Serves the address the wizard generated + the site advertises;
+    # set morphit_tor_key_src to the wizard's tor-hidden-service/ dir.
+    - role: tor
+      tags: [tor]
+      when: enable_tor | default(true)
+
     # ─── Optional sidecar monitors ────────────────────────────
     # All disabled by default — set enable_<name>: true in
     # group_vars/all.yml (or per-host in inventory) to opt in.

@@ -14,14 +14,40 @@
  *
  * Per-asset composition
  * ─────────────────────
- *   BLURT/USD:  Coingecko → morphit_native → static floor
- *   BTC/USD:    Coingecko → morphit_native → static floor
- *   XMR/USD:    Coingecko → morphit_native → static floor
+ * EXTERNAL tier (queried together, then median-anchored + averaged
+ * with outlier rejection so no single off/stale provider can swing
+ * the committed price), then a FALLBACK tier (morphit_native, kept
+ * OUT of the average so the external-vs-native cross-check stays
+ * meaningful), then the static floor:
+ *
+ *   BLURT/USD:  Coingecko + CoinPaprika + CryptoCompare
+ *               (+ CoinCap/Messari when keyed, + CoinLore when id set)
+ *               → morphit_native → static floor
+ *   BTC/USD:    Coingecko + CoinPaprika + Kraken + Binance + Coinbase
+ *               + OKX + Bybit + CryptoCompare
+ *               (+ CoinCap/CoinLore/Messari when configured)
+ *               → morphit_native → static floor
+ *   XMR/USD:    Coingecko + CoinPaprika + Kraken + CryptoCompare
+ *               (+ CoinCap/CoinLore/Messari when configured)
+ *               → morphit_native → static floor
+ *
+ * Multi-source rationale: a single upstream is an availability AND
+ * accuracy risk (it can ban us, rate-limit us to nothing, or simply
+ * be wrong).  Querying many and taking the outlier-rejected median
+ * survives any one provider failing and tightens accuracy.  Each
+ * extra source contributes only when it returns a positive number;
+ * a wrong id / dead endpoint / missing listing / required-but-unset
+ * key returns null and is silently excluded — it can never corrupt
+ * the price.  CEX sources quote USDT or USD and only join when the
+ * instance prices in USD.  (XMR is delisted from most CEXes, so
+ * only Kraken covers it there; the aggregators carry XMR + BLURT.
+ * DEX trackers like DexScreener/GeckoTerminal/Birdeye are not wired
+ * — BLURT/BTC/XMR are not DEX-traded pairs there.)
  *
  * (Klingex — the Blurt-community exchange that used to be BLURT's
- * primary external upstream — went out of business in 2026, so it
- * was removed: Coingecko is now the sole external price source for
- * every asset, with morphit_native and the static floor behind it.)
+ * primary external upstream — went out of business in 2026 and was
+ * removed; the multi-source set above replaced the single-upstream
+ * design.)
  *
  * The factory returns a BlurtPriceSource per asset, each started-
  * ready; caller must invoke source.start() and source.stop() for
@@ -54,6 +80,14 @@ import { CompositeCachedPriceSource } from '$indexer/price/compositeSource';
 import { createCoingeckoFetcher } from '$indexer/price/coingeckoFetcher';
 import { createCoinpaprikaFetcher } from '$indexer/price/coinpaprikaFetcher';
 import { createKrakenFetcher } from '$indexer/price/krakenFetcher';
+import { createCryptocompareFetcher } from '$indexer/price/cryptocompareFetcher';
+import { createBinanceFetcher } from '$indexer/price/binanceFetcher';
+import { createCoinbaseFetcher } from '$indexer/price/coinbaseFetcher';
+import { createOkxFetcher } from '$indexer/price/okxFetcher';
+import { createBybitFetcher } from '$indexer/price/bybitFetcher';
+import { createCoincapFetcher } from '$indexer/price/coincapFetcher';
+import { createCoinloreFetcher } from '$indexer/price/coinloreFetcher';
+import { createMessariFetcher } from '$indexer/price/messariFetcher';
 import { createMorphitNativeFetcher } from '$indexer/price/morphitNativeFetcher';
 import { DisagreementMonitor } from '$indexer/price/disagreementMonitor';
 
@@ -76,6 +110,31 @@ export interface AssetPriceSourceOptions {
 	/** Kraken USD pair for the multi-source average (USD only), e.g.
 	 *  'XBTUSD'.  Omit for assets Kraken doesn't list (e.g. BLURT). */
 	readonly krakenPair?: string;
+	/** CryptoCompare ticker symbol (USD only), e.g. 'BTC'.  Symbol-
+	 *  keyed, no numeric-id lookup; covers BLURT/BTC/XMR. */
+	readonly cryptocompareSymbol?: string;
+	/** Binance spot symbol (USD only), e.g. 'BTCUSDT'.  Omit for
+	 *  assets Binance doesn't list (XMR delisted; no BLURT). */
+	readonly binanceSymbol?: string;
+	/** Coinbase product id (USD only), e.g. 'BTC-USD'.  Omit for
+	 *  assets Coinbase doesn't list (no XMR; no BLURT). */
+	readonly coinbaseProduct?: string;
+	/** OKX instrument id (USD only), e.g. 'BTC-USDT'.  Omit for
+	 *  assets OKX doesn't list (XMR delisted; no BLURT). */
+	readonly okxInstId?: string;
+	/** Bybit spot symbol (USD only), e.g. 'BTCUSDT'.  Omit for
+	 *  assets Bybit doesn't list (XMR delisted; no BLURT). */
+	readonly bybitSymbol?: string;
+	/** CoinCap asset id (USD only; KEY-GATED), e.g. 'bitcoin'.
+	 *  Only joins when an operator CoinCap key is configured. */
+	readonly coincapId?: string;
+	/** CoinLore numeric asset id as a string (USD only), e.g. '90'
+	 *  for Bitcoin.  Opaque per-provider id — must be verified
+	 *  against CoinLore; assets without a known id don't wire it. */
+	readonly coinloreId?: string;
+	/** Messari asset slug (USD only; KEY-GATED), e.g. 'bitcoin'.
+	 *  Only joins when an operator Messari key is configured. */
+	readonly messariSlug?: string;
 	/** Per-asset plausibility window for a committed price.  MUST be
 	 *  asset-appropriate — BLURT's tight [0.0001, 0.1] would reject
 	 *  every real BTC/XMR quote, so each asset sets its own. */
@@ -110,9 +169,15 @@ export const CP130_ASSET_DEFAULTS: Record<string, AssetPriceSourceOptions> = {
 		asset: 'BLURT',
 		coingeckoCoinId: 'blurt',
 		coinpaprikaId: 'blurt-blurt',
-		// Kraken/Coinbase don't list BLURT — it averages across
-		// Coingecko + CoinPaprika (when up), with morphit_native as the
-		// fallback tier + cross-check.
+		// CEXes (Kraken/Binance/Coinbase/OKX/Bybit) don't list BLURT —
+		// it averages across the aggregators (Coingecko + CoinPaprika +
+		// CryptoCompare, plus CoinCap/Messari when keyed), with
+		// morphit_native as the fallback tier + cross-check.  These ids
+		// are best-effort and must be verified against each live API on
+		// deploy; a wrong id returns null and is harmlessly excluded.
+		cryptocompareSymbol: 'BLURT',
+		coincapId: 'blurt',
+		messariSlug: 'blurt',
 		staticFloor: 0.002,
 		plausibleMin: 0.0001,
 		plausibleMax: 0.1
@@ -122,6 +187,14 @@ export const CP130_ASSET_DEFAULTS: Record<string, AssetPriceSourceOptions> = {
 		coingeckoCoinId: 'bitcoin',
 		coinpaprikaId: 'btc-bitcoin',
 		krakenPair: 'XBTUSD',
+		cryptocompareSymbol: 'BTC',
+		binanceSymbol: 'BTCUSDT',
+		coinbaseProduct: 'BTC-USD',
+		okxInstId: 'BTC-USDT',
+		bybitSymbol: 'BTCUSDT',
+		coincapId: 'bitcoin',
+		coinloreId: '90', // CoinLore's stable numeric id for Bitcoin
+		messariSlug: 'bitcoin',
 		staticFloor: 60_000,
 		plausibleMin: 1_000,
 		plausibleMax: 10_000_000
@@ -131,6 +204,13 @@ export const CP130_ASSET_DEFAULTS: Record<string, AssetPriceSourceOptions> = {
 		coingeckoCoinId: 'monero',
 		coinpaprikaId: 'xmr-monero',
 		krakenPair: 'XMRUSD',
+		// Binance/Coinbase/OKX/Bybit have delisted or never listed XMR;
+		// Kraken is the CEX that still covers it, plus the aggregators.
+		// (coinloreId omitted — verify CoinLore's XMR numeric id on
+		// deploy before wiring it; until then CoinLore skips XMR.)
+		cryptocompareSymbol: 'XMR',
+		coincapId: 'monero',
+		messariSlug: 'monero',
 		staticFloor: 200,
 		plausibleMin: 1,
 		plausibleMax: 100_000
@@ -190,6 +270,92 @@ export function createAssetPriceSource(
 			fetch: createKrakenFetcher({
 				baseUrl: config.krakenBaseUrl,
 				pair: options.krakenPair,
+				timeoutMs: 5_000
+			})
+		});
+	}
+	if (isUsd && options.cryptocompareSymbol) {
+		upstreams.push({
+			name: 'cryptocompare',
+			fetch: createCryptocompareFetcher({
+				baseUrl: config.cryptocompareBaseUrl,
+				symbol: options.cryptocompareSymbol,
+				apiKey: config.cryptocompareApiKey,
+				timeoutMs: 5_000
+			})
+		});
+	}
+	if (isUsd && options.binanceSymbol) {
+		upstreams.push({
+			name: 'binance',
+			fetch: createBinanceFetcher({
+				baseUrl: config.binanceBaseUrl,
+				symbol: options.binanceSymbol,
+				timeoutMs: 5_000
+			})
+		});
+	}
+	if (isUsd && options.coinbaseProduct) {
+		upstreams.push({
+			name: 'coinbase',
+			fetch: createCoinbaseFetcher({
+				baseUrl: config.coinbaseBaseUrl,
+				product: options.coinbaseProduct,
+				timeoutMs: 5_000
+			})
+		});
+	}
+	if (isUsd && options.okxInstId) {
+		upstreams.push({
+			name: 'okx',
+			fetch: createOkxFetcher({
+				baseUrl: config.okxBaseUrl,
+				instId: options.okxInstId,
+				timeoutMs: 5_000
+			})
+		});
+	}
+	if (isUsd && options.bybitSymbol) {
+		upstreams.push({
+			name: 'bybit',
+			fetch: createBybitFetcher({
+				baseUrl: config.bybitBaseUrl,
+				symbol: options.bybitSymbol,
+				timeoutMs: 5_000
+			})
+		});
+	}
+	if (isUsd && options.coinloreId) {
+		upstreams.push({
+			name: 'coinlore',
+			fetch: createCoinloreFetcher({
+				baseUrl: config.coinloreBaseUrl,
+				assetId: options.coinloreId,
+				timeoutMs: 5_000
+			})
+		});
+	}
+	// KEY-GATED aggregators — only join the average when the operator
+	// has configured the provider's API key (otherwise they'd 401 →
+	// null on every call, which is harmless but pointless traffic).
+	if (isUsd && options.coincapId && config.coincapApiKey) {
+		upstreams.push({
+			name: 'coincap',
+			fetch: createCoincapFetcher({
+				baseUrl: config.coincapBaseUrl,
+				assetId: options.coincapId,
+				apiKey: config.coincapApiKey,
+				timeoutMs: 5_000
+			})
+		});
+	}
+	if (isUsd && options.messariSlug && config.messariApiKey) {
+		upstreams.push({
+			name: 'messari',
+			fetch: createMessariFetcher({
+				baseUrl: config.messariBaseUrl,
+				slug: options.messariSlug,
+				apiKey: config.messariApiKey,
 				timeoutMs: 5_000
 			})
 		});

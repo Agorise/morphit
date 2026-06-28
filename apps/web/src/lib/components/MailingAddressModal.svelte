@@ -379,7 +379,7 @@
 					class="rounded-lg bg-morphit-btn px-4 py-2 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-50"
 				>
 					{sending
-						? $_('mailing_address_modal.sending')
+						? $_('common.sending')
 						: $_('mailing_address_modal.share_button')}
 				</button>
 			</div>

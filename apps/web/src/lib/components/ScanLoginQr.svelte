@@ -288,7 +288,7 @@
 				{$_('scan_login.camera_denied_body')}
 			</p>
 			<button type="button" class="btn-primary mt-4" onclick={rescan}>
-				{$_('scan_login.try_again')}
+				{$_('common.retry')}
 			</button>
 		</header>
 	{:else if phase === 'no_camera'}
@@ -398,7 +398,7 @@
 				{$_('scan_login.invalid_body')}
 			</p>
 			<button type="button" class="btn-primary mt-4" onclick={rescan}>
-				{$_('scan_login.try_again')}
+				{$_('common.retry')}
 			</button>
 		</header>
 	{:else if phase === 'sending'}
@@ -451,7 +451,7 @@
 				</button>
 			{:else}
 				<button type="button" class="btn-primary mt-4" onclick={rescan}>
-					{$_('scan_login.try_again')}
+					{$_('common.retry')}
 				</button>
 			{/if}
 		</div>

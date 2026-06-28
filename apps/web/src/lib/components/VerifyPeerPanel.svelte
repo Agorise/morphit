@@ -328,7 +328,7 @@
 				class="rounded-lg border-2 border-ink-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-ink-100 dark:border-ink-600 dark:bg-ink-900 dark:hover:bg-ink-800"
 				onclick={onClose}
 			>
-				{$_('chat.verify_peer.close')}
+				{$_('common.close')}
 			</button>
 		</div>
 	</div>

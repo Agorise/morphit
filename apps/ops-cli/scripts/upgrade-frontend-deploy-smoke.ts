@@ -6,7 +6,7 @@
  * build` output needs rebuilding + publishing). This smoke covers:
  *
  *   - resolveWebRoot: MORPHIT_WEB_ROOT override + the /var/www/morphit-frontend
- *     default (matching docs/RUN-A-MORPHIT-NODE.md §8).
+ *     default (matching docs/RUN-A-MORPHIT-NODE.md §5).
  *   - deployFrontendBuild: a REAL filesystem round-trip against temp dirs —
  *     fresh deploy lands index.html + nested assets; an overwrite updates
  *     index.html while leaving unrelated existing files; a missing build or a

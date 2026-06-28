@@ -112,7 +112,7 @@
 					type="button"
 					onclick={() => dismissToast(toast.id)}
 					class="flex-none rounded text-ink-500 hover:text-ink-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:text-ink-400 dark:hover:text-ink-100"
-					aria-label={$_('toast.dismiss') as string}
+					aria-label={$_('common.dismiss') as string}
 				>
 					<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
 						<path
@@ -185,7 +185,7 @@
 					type="button"
 					onclick={() => dismissToast(toast.id)}
 					class="flex-none rounded text-ink-500 hover:text-ink-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:text-ink-400 dark:hover:text-ink-100"
-					aria-label={$_('toast.dismiss') as string}
+					aria-label={$_('common.dismiss') as string}
 				>
 					<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
 						<path

@@ -6,7 +6,6 @@
   "about_this_instance": {
     "heading": "À propos de cette instance",
     "lede": "Ce que cette instance Morphit affirme à propos d'elle-même, pour que vous puissiez vérifier.",
-    "loading": "Chargement…",
     "error": {
       "fetch_failed": "Impossible de récupérer les infos de vérification de cette instance.",
       "malformed": "verify.json est présent mais malformé. Traitez cette instance avec prudence.",
@@ -64,9 +63,7 @@
       "eyebrow": "Assistant de configuration pour opérateurs",
       "heading": "Configurez votre instance",
       "intro": "Cet assistant vous aide à générer les lignes de configuration et les commandes CLI dont vous avez besoin pour personnaliser cette instance Morphit. Rien sur cette page ne modifie votre serveur — vous copierez la sortie dans votre fichier morphit.env ou votre terminal, puis redémarrerez vos services.",
-      "copy_button": "Copier",
       "copy_button_aria": "Copier la sortie générée dans le presse-papiers",
-      "copied": "Copié",
       "assets": {
         "heading": "Actifs listés",
         "intro": "Choisissez les cryptoactifs que votre instance liste pour le trading. BTC, XMR et BLURT sont toujours activés — la fédération en dépend.",
@@ -374,7 +371,6 @@
       "locked_hint": "Déverrouillez votre session pour envoyer des messages.",
       "placeholder": "Message à @{peer}…",
       "send": "Envoyer",
-      "sending": "Envoi…",
       "acct_reminder": {
         "heading": "Permanent.",
         "body": "Les numéros de compte dans le chat restent sur la chaîne Blurt pour toujours. Vérifiez attentivement avant d'envoyer.",
@@ -405,7 +401,6 @@
       "tabs_aria": "Onglets de boîte de réception",
       "requests_empty_heading": "Aucune demande",
       "requests_empty_body": "Quand quelqu'un avec qui vous n'avez jamais discuté vous contacte, son message arrivera ici jusqu'à ce que vous répondiez.",
-      "dismiss": "Ignorer",
       "dismiss_aria": "Ignorer la demande de {peer}",
       "dismiss_toast": "@{peer} masqué. Annuler dans Paramètres → Comptes masqués."
     },
@@ -426,8 +421,7 @@
           "title": "Débloquer @{peer}?",
           "body": "Cette personne pourra de nouveau vous envoyer des messages.",
           "yes": "Débloquer @{peer}"
-        },
-        "cancel": "Annuler"
+        }
       }
     },
     "stranger_fee": {
@@ -438,7 +432,6 @@
       "password_label": "Déverrouillez votre clé active",
       "password_placeholder": "Votre mot de passe Morphit",
       "confirm": "Payer et envoyer",
-      "cancel": "Annuler",
       "retry": "Réessayer",
       "paying": "Paiement…",
       "quoting": "Chargement des frais de réseau…",
@@ -465,7 +458,6 @@
       "pub_pin_older_indexer_ref": "Envoi sécurisé impossible : votre indexeur signale un enregistrement de clé de chat plus ancien que celui que vous aviez déjà vu. Cela ne devrait pas arriver sur une chaîne qui n'avance que vers l'avant. Essayez d'actualiser ou de passer à une autre instance Morphit.",
       "pub_pin_chain_reports_none": "Envoi sécurisé impossible : votre indexeur affirme que ce destinataire a une clé de chat, mais la chaîne Blurt n'en signale aucune. L'indexeur est peut-être désynchronisé, ou fabrique des données. Essayez une autre instance Morphit, ou attendez et réessayez.",
       "pub_pin_chain_older_than_pin": "Envoi sécurisé impossible : la chaîne Blurt signale pour ce destinataire une clé de chat plus ancienne que celle que vous aviez déjà vue. C'est incohérent. Essayez une autre instance Morphit ou un autre endpoint RPC Blurt.",
-      "learn_more": "En savoir plus",
       "pub_pin_malformed_indexer_response": "Envoi sécurisé impossible : votre indexeur a renvoyé des données mal formées pour l'enregistrement de la clé de chat de ce destinataire. Il fonctionne peut-être avec une version plus ancienne ou est mal configuré. Essayez une autre instance Morphit."
     },
     "live": "En direct",
@@ -489,10 +481,8 @@
       "note_placeholder": "Par exemple : espèces en main à 15h",
       "note_too_long": "La note doit faire 100 caractères au maximum.",
       "send": "Partager l'adresse",
-      "cancel": "Annuler",
       "pill_method_btc": "Adresse Bitcoin",
       "pill_method_xmr": "Adresse Monero",
-      "pill_copy": "Copier",
       "pill_copied": "Copié !",
       "pill_for_order": "Pour l'ordre",
       "verify_warning": "Vérifiez toujours l'adresse avant d'envoyer. Les transactions crypto ne peuvent pas être annulées.",
@@ -600,7 +590,6 @@
       "txid_invalid": "Cela ne ressemble pas à un identifiant de transaction valide.",
       "amount_label": "Montant envoyé (facultatif)",
       "send": "Marquer envoyé",
-      "cancel": "Annuler",
       "pill_title_btc": "Bitcoin envoyé",
       "pill_title_xmr": "Monero envoyé",
       "pill_txid_label": "Transaction",
@@ -653,8 +642,6 @@
       "from_label": "De",
       "no_memo_notice": "Aucun mémo on-chain ne sera inclus — le contexte de votre échange reste dans cette discussion chiffrée.",
       "password_label": "Mot de passe de la clé active",
-      "cancel": "Annuler",
-      "close": "Fermer",
       "confirm": "Envoyer BLURT",
       "paying": "Envoi…",
       "success_toast": "BLURT envoyé. Reçu publié dans la discussion.",
@@ -703,8 +690,7 @@
       "compare_body": "Lisez les 8 mots à votre contact par appel vocal, en personne ou via un autre canal de confiance. NE les comparez PAS dans ce chat. Si un seul mot diffère, considérez la conversation comme compromise.",
       "why_show": "Pourquoi est-ce important ?",
       "why_hide": "Masquer l'explication",
-      "why_body": "Par défaut, le chat Morphit fait confiance à l'indexer pour délivrer la bonne clé de chat de votre contact. Un indexer hostile pourrait substituer des clés contrôlées par un attaquant et lire vos messages. L'empreinte de 8 mots est calculée localement à partir des vraies clés des deux côtés — si vous voyez tous les deux les mêmes mots, pas de MITM. Cela protège uniquement contre le MITM ; cela NE PROUVE PAS que la personne à l'autre bout du téléphone est bien celle qu'elle prétend être.",
-      "close": "Fermer"
+      "why_body": "Par défaut, le chat Morphit fait confiance à l'indexer pour délivrer la bonne clé de chat de votre contact. Un indexer hostile pourrait substituer des clés contrôlées par un attaquant et lire vos messages. L'empreinte de 8 mots est calculée localement à partir des vraies clés des deux côtés — si vous voyez tous les deux les mêmes mots, pas de MITM. Cela protège uniquement contre le MITM ; cela NE PROUVE PAS que la personne à l'autre bout du téléphone est bien celle qu'elle prétend être."
     },
     "order_context_label": "À propos de cette commande",
     "boot_failed": "Impossible de charger le chat. Essaie de rafraîchir la page.",
@@ -798,7 +784,19 @@
     "download": "Télécharger",
     "downloaded": "Téléchargé !",
     "downloading": "Préparation du fichier…",
-    "retry": "Réessayer"
+    "retry": "Réessayer",
+    "loading": "Chargement…",
+    "saving": "Enregistrement…",
+    "sending": "Envoi…",
+    "broadcasting": "Diffusion…",
+    "broadcasted": "Diffusé",
+    "copy": "Copier",
+    "copied": "Copié",
+    "dismiss": "Ignorer",
+    "close": "Fermer",
+    "learn_more": "En savoir plus",
+    "unlock": "Déverrouiller",
+    "password_too_short": "Le mot de passe doit faire au moins 8 caractères."
   },
   "compare": {
     "heading": "Comparer les orderbooks",
@@ -923,7 +921,6 @@
     "time_remaining_prefix": "Temps pour modifier :",
     "time_remaining_expired": "expiré",
     "save_button": "Enregistrer",
-    "saving": "Enregistrement…",
     "save_success_title": "Vos modifications sont en ligne",
     "save_success_body": "Le carnet d'ordres se mettra à jour dans quelques secondes.",
     "save_error_title": "Les modifications n'ont pas été enregistrées",
@@ -966,7 +963,6 @@
       "realtime_label": "interrogation toutes les 5 secondes",
       "no_ops": "Aucune opération enregistrée pour le moment.",
       "load_more": "Charger les opérations plus anciennes",
-      "loading_more": "Chargement…",
       "error": {
         "load_failed": "Impossible de charger l'historique de ce compte.",
         "load_more_failed": "Impossible de charger l'historique plus ancien."
@@ -1028,7 +1024,6 @@
       "subheading": "Nombre d'échanges complétés et annonces actuelles, par actif.",
       "volume_heading": "Volume d'échanges",
       "volume_caveat": "Le volume est estimé à partir du point médian de la fourchette de chaque ordre complété — la chaîne ne porte pas les montants d'exécution exacts. Le nombre d'échanges est exact.",
-      "loading": "Chargement…",
       "no_trades": "Aucun échange complété dans cette fenêtre.",
       "col_asset": "Actif",
       "col_trades": "Échanges",
@@ -1238,7 +1233,7 @@
       },
       "where_does_blurt_price_come_from": {
         "q": "D'où vient le prix Blurt affiché sur Morphit ?",
-        "a": "Le prix Blurt/USD que vous voyez à côté des frais de listing sur Morphit (le sous-texte « ~0,125 $ » près du montant en Blurt) provient d'une chaîne de sources de prix en couches, conçue pour réduire la dépendance à un quelconque service externe unique.\n\n**La chaîne, par ordre de priorité :**\n\n1. **Coingecko** — Agrège les prix Blurt sur plusieurs bourses.\n\n2. **morphit_native** — Un prix AUTO-SOUVERAIN dérivé des données de transactions sur la plateforme (activable par opérateur ; désactivé par défaut jusqu'à ce que votre instance ait assez de volume pour le soutenir). Quand il est activé, ce récupérateur examine les ordres récents à frais vérifiés ayant échangé du Blurt contre du fiat-USD ou des stablecoins, applique plusieurs couches de défense anti-manipulation, et calcule une médiane sur des traders distincts. Inséré entre Coingecko et le plancher statique — les sources externes restent primaires jusqu'à ce qu'un opérateur choisisse explicitement de préférer la valeur native en cas de désaccord.\n\n3. **Repli statique** — Une valeur plancher fixée par l'opérateur (par défaut 0,002 $) utilisée quand toutes les sources amont ont échoué. Modifiable dans l'assistant de configuration.\n\n**Pourquoi une chaîne plutôt qu'une seule source ?** Aucun flux de prix ne peut être digne de confiance sans condition. Coingecko pourrait l'être aussi. Un repli statique dérive de la réalité. La chaîne signifie que la tarification du Blurt continue de fonctionner dans tous les scénarios, sauf si tout l'internet tombe.\n\n**Comment fonctionne morphit_native** (quand il est activé — voir ADR-0039 pour la conception complète) :\n\n- **Ancres à paliers** : le Tier 1 (priorité la plus élevée) utilise les ordres directs Blurt-contre-USD (virement bancaire, espèces, etc.) ; le Tier 2 complète avec les ordres Blurt-contre-stablecoin (USDT/USDC/DAI) ; le Tier 3 combine les deux pools quand chacun seul est trop mince.\n- **Détection de dépeg inter-stablecoins** : des ratios indépendants entre USDT/USDC/DAI sur Morphit identifient quand l'un d'eux décroche de sa parité. Les stablecoins dépeggés sont exclus du Tier 2 ; le Tier 1 (qui ne dépend pas des hypothèses de parité des stablecoins) continue de fonctionner.\n- **Résistance Sybil** : chaque trader contributeur doit avoir au moins une transaction antérieure complétée à frais vérifiés ET ne doit apparaître dans aucune des tables de signaux de réputation cp123-cp125 (suspicious_reciprocity, related_accounts, one_way_pile_on, review_concentration). Manipuler le prix exige le même niveau d'effort que manipuler la réputation.\n- **Plafond de contribution par trader** : chaque compte distinct contribue UNE voix (sa propre médiane de prix) quel que soit le nombre d'ordres qu'il a publiés. Une baleine avec 50 ordres reste 1 voix sur N.\n- **Période de grâce sur l'âge des ordres** : les ordres doivent avoir existé au moins 10 minutes avant de se qualifier, ce qui déjoue les courses de manipulation « publier-et-annuler ».\n- **Plafond de lissage** : les grands mouvements de prix par cycle sont amortis pour empêcher la manipulation éclair.\n- **Moniteur de dérive à long terme** : une ligne de base exponentielle sur 7 jours attrape les attaques par dérive lente où chaque mouvement individuel est petit mais la dérive cumulée est grande.\n- **Détecteur de désaccord inter-sources** : quand morphit_native et les sources externes divergent de plus de 25 % pendant 4 h ou plus, une alerte se déclenche dans les journaux de l'indexeur et sur `/v1/health`.\n- **Enveloppe de plausibilité externe codée en dur** : la config de l'opérateur peut resserrer le filtre de plage de prix mais ne peut pas l'élargir au-delà des bornes codées en dur, ce qui empêche un opérateur compromis d'afficher des prix totalement faux.\n\n**Le point de terminaison « vérifiez vous-même »** : `GET /v1/price/morphit-native/receipt` renvoie l'ensemble complet des entrées qui ont produit le prix natif actuel — quel tier a été utilisé, quels traders ont contribué (juste les noms de compte ; leurs ordres sont déjà publiquement visibles dans le carnet d'ordres), le rapport de dépeg inter-stablecoins, les réglages de l'enveloppe de plausibilité, et un avertissement CE-N'EST-PAS-UN-ORACLE. N'importe qui peut auditer ; aucun « faites confiance à l'indexeur » opaque n'est requis.\n\n**IMPORTANT : morphit_native n'est PAS conçu pour être un oracle pour d'autres systèmes.** Il sert uniquement à l'affichage USD interne de Morphit, par courtoisie. Ne l'utilisez pas comme entrée de prix pour des protocoles de prêt, des DEX, ou tout système porteur de valeur. Le prix résiste à la manipulation à des fins d'AFFICHAGE (où de petites inexactitudes sont tolérables) mais n'est pas à toute épreuve contre le genre d'attaque qu'un adversaire déterminé monte quand de l'argent réel dépend de l'exactitude de la valeur. Voir ADR-0039 pour le modèle de menace.\n\n**Pourquoi cela compte pour vos transactions** : les frais de listing payés en Blurt sont indexés sur le dollar, et non fixés en un montant de Blurt — Morphit indique le montant de Blurt valant environ 0,125 $ au prix actuel, de sorte que la valeur en dollars des frais reste stable, que le prix du Blurt monte ou descende. Le montant exact en Blurt est affiché avant que vous ne signiez et est réglé à l'heure de la chaîne. En coulisses, l'indexeur accepte ce montant par rapport à un plancher ancré sur la chaîne, avec une petite marge de tolérance, de sorte que toutes les instances s'accordent sur ce qui est dû et que le montant ne peut pas être faussé en injectant un mauvais prix. Le seul rôle de la source de prix est de rendre cette conversion exacte pour l'affichage de Morphit — jamais une source de vérité pour un quelconque système financier en aval.\n\n**Note de pré-lancement** : tant qu'il n'existe pas assez de volume de transactions sur la plateforme pour que morphit_native se qualifie (il faut ≥3 traders distincts à frais vérifiés ayant publié des ordres Blurt-contre-USD ou Blurt-contre-stablecoin durant les 8 dernières heures), chaque instance se replie sur Coingecko/statique. Les opérateurs activent morphit_native via `MORPHIT_INDEXER_PRICE_FEED_NATIVE_ENABLED=true` quand leurs données sont mûres.\n\n**Mise à jour cp128 — la dénomination est configurable par l'opérateur.** Bien que la discussion ci-dessus utilise l'USD comme exemple, l'unité affichée par l'indexeur n'est pas codée en dur sur l'USD. Les opérateurs règlent `MORPHIT_INDEXER_PRICE_FEED_DENOMINATION_FIAT` (par défaut `USD`) sur n'importe quel ticker en majuscules de 3 à 8 caractères — `EUR` (euro), `GBP` (livre sterling), `JPY` (yen japonais), `BRL` (real brésilien), `CNY` (yuan chinois), `INR` (roupie indienne), `RUB` (rouble russe), `AED` (dirham des Émirats), `XDR` (panier de droits de tirage spéciaux du FMI), `XAU` (onces d'or, une couverture en monnaie forte), ou tout autre ticker utilisé par leur marché. La réponse de frais de listing porte un champ `denomination_fiat` indiquant au frontend dans quelle unité sont les nombres `blurt_price_fiat` + `base_fee_fiat`, afin que l'UI affiche le symbole et le formatage appropriés (« 0,125 $ » pour l'USD, « 0,11 € » pour l'euro, « XAU 0,0000023 » pour l'or, etc.). Ce n'est pas seulement pour le scénario hypothétique d'un effondrement de l'USD — les opérateurs servant des marchés non libellés en USD en bénéficient dès aujourd'hui."
+        "a": "Le prix Blurt/USD que vous voyez à côté des frais de listing sur Morphit (le sous-texte « ~0,125 $ » près du montant en Blurt) provient d'une chaîne de sources de prix en couches, conçue pour réduire la dépendance à un quelconque service externe unique.\n\n**La chaîne, par ordre de priorité :**\n\n1. **Médiane du marché externe** — Le prix Blurt/USD est lu simultanément depuis plusieurs sources publiques indépendantes — Coingecko, CoinPaprika, CryptoCompare et (pour les actifs qu'elles listent) de grandes bourses comme Kraken/Binance/Coinbase/OKX/Bybit — puis combiné via une médiane avec rejet des valeurs aberrantes. Toute source hors service, qui nous limite ou qui renvoie un chiffre erroné est simplement écartée, de sorte qu'aucun service ne peut à lui seul bloquer ou fausser le prix.\n\n2. **morphit_native** — Un prix AUTO-SOUVERAIN dérivé des données de transactions sur la plateforme (activable par opérateur ; désactivé par défaut jusqu'à ce que votre instance ait assez de volume pour le soutenir). Quand il est activé, ce récupérateur examine les ordres récents à frais vérifiés ayant échangé du Blurt contre du fiat-USD ou des stablecoins, applique plusieurs couches de défense anti-manipulation, et calcule une médiane sur des traders distincts. Inséré entre la médiane du marché externe et le plancher statique — les sources externes restent primaires jusqu'à ce qu'un opérateur choisisse explicitement de préférer la valeur native en cas de désaccord.\n\n3. **Repli statique** — Une valeur plancher fixée par l'opérateur (par défaut 0,002 $) utilisée quand toutes les sources amont ont échoué. Modifiable dans l'assistant de configuration.\n\n**Pourquoi une chaîne plutôt qu'une seule source ?** Aucun flux de prix ne peut être digne de confiance sans condition. C'est pourquoi le premier niveau est lui-même une médiane de nombreuses sources indépendantes. Un repli statique dérive de la réalité. La chaîne signifie que la tarification du Blurt continue de fonctionner dans tous les scénarios, sauf si tout l'internet tombe.\n\n**Comment fonctionne morphit_native** (quand il est activé — voir ADR-0039 pour la conception complète) :\n\n- **Ancres à paliers** : le Tier 1 (priorité la plus élevée) utilise les ordres directs Blurt-contre-USD (virement bancaire, espèces, etc.) ; le Tier 2 complète avec les ordres Blurt-contre-stablecoin (USDT/USDC/DAI) ; le Tier 3 combine les deux pools quand chacun seul est trop mince.\n- **Détection de dépeg inter-stablecoins** : des ratios indépendants entre USDT/USDC/DAI sur Morphit identifient quand l'un d'eux décroche de sa parité. Les stablecoins dépeggés sont exclus du Tier 2 ; le Tier 1 (qui ne dépend pas des hypothèses de parité des stablecoins) continue de fonctionner.\n- **Résistance Sybil** : chaque trader contributeur doit avoir au moins une transaction antérieure complétée à frais vérifiés ET ne doit apparaître dans aucune des tables de signaux de réputation cp123-cp125 (suspicious_reciprocity, related_accounts, one_way_pile_on, review_concentration). Manipuler le prix exige le même niveau d'effort que manipuler la réputation.\n- **Plafond de contribution par trader** : chaque compte distinct contribue UNE voix (sa propre médiane de prix) quel que soit le nombre d'ordres qu'il a publiés. Une baleine avec 50 ordres reste 1 voix sur N.\n- **Période de grâce sur l'âge des ordres** : les ordres doivent avoir existé au moins 10 minutes avant de se qualifier, ce qui déjoue les courses de manipulation « publier-et-annuler ».\n- **Plafond de lissage** : les grands mouvements de prix par cycle sont amortis pour empêcher la manipulation éclair.\n- **Moniteur de dérive à long terme** : une ligne de base exponentielle sur 7 jours attrape les attaques par dérive lente où chaque mouvement individuel est petit mais la dérive cumulée est grande.\n- **Détecteur de désaccord inter-sources** : quand morphit_native et les sources externes divergent de plus de 25 % pendant 4 h ou plus, une alerte se déclenche dans les journaux de l'indexeur et sur `/v1/health`.\n- **Enveloppe de plausibilité externe codée en dur** : la config de l'opérateur peut resserrer le filtre de plage de prix mais ne peut pas l'élargir au-delà des bornes codées en dur, ce qui empêche un opérateur compromis d'afficher des prix totalement faux.\n\n**Le point de terminaison « vérifiez vous-même »** : `GET /v1/price/morphit-native/receipt` renvoie l'ensemble complet des entrées qui ont produit le prix natif actuel — quel tier a été utilisé, quels traders ont contribué (juste les noms de compte ; leurs ordres sont déjà publiquement visibles dans le carnet d'ordres), le rapport de dépeg inter-stablecoins, les réglages de l'enveloppe de plausibilité, et un avertissement CE-N'EST-PAS-UN-ORACLE. N'importe qui peut auditer ; aucun « faites confiance à l'indexeur » opaque n'est requis.\n\n**IMPORTANT : morphit_native n'est PAS conçu pour être un oracle pour d'autres systèmes.** Il sert uniquement à l'affichage USD interne de Morphit, par courtoisie. Ne l'utilisez pas comme entrée de prix pour des protocoles de prêt, des DEX, ou tout système porteur de valeur. Le prix résiste à la manipulation à des fins d'AFFICHAGE (où de petites inexactitudes sont tolérables) mais n'est pas à toute épreuve contre le genre d'attaque qu'un adversaire déterminé monte quand de l'argent réel dépend de l'exactitude de la valeur. Voir ADR-0039 pour le modèle de menace.\n\n**Pourquoi cela compte pour vos transactions** : les frais de listing payés en Blurt sont indexés sur le dollar, et non fixés en un montant de Blurt — Morphit indique le montant de Blurt valant environ 0,125 $ au prix actuel, de sorte que la valeur en dollars des frais reste stable, que le prix du Blurt monte ou descende. Le montant exact en Blurt est affiché avant que vous ne signiez et est réglé à l'heure de la chaîne. En coulisses, l'indexeur accepte ce montant par rapport à un plancher ancré sur la chaîne, avec une petite marge de tolérance, de sorte que toutes les instances s'accordent sur ce qui est dû et que le montant ne peut pas être faussé en injectant un mauvais prix. Le seul rôle de la source de prix est de rendre cette conversion exacte pour l'affichage de Morphit — jamais une source de vérité pour un quelconque système financier en aval.\n\n**Note de pré-lancement** : tant qu'il n'existe pas assez de volume de transactions sur la plateforme pour que morphit_native se qualifie (il faut ≥3 traders distincts à frais vérifiés ayant publié des ordres Blurt-contre-USD ou Blurt-contre-stablecoin durant les 8 dernières heures), chaque instance se replie sur la médiane du marché externe (et le plancher statique). Les opérateurs activent morphit_native via `MORPHIT_INDEXER_PRICE_FEED_NATIVE_ENABLED=true` quand leurs données sont mûres.\n\n**Mise à jour cp128 — la dénomination est configurable par l'opérateur.** Bien que la discussion ci-dessus utilise l'USD comme exemple, l'unité affichée par l'indexeur n'est pas codée en dur sur l'USD. Les opérateurs règlent `MORPHIT_INDEXER_PRICE_FEED_DENOMINATION_FIAT` (par défaut `USD`) sur n'importe quel ticker en majuscules de 3 à 8 caractères — `EUR` (euro), `GBP` (livre sterling), `JPY` (yen japonais), `BRL` (real brésilien), `CNY` (yuan chinois), `INR` (roupie indienne), `RUB` (rouble russe), `AED` (dirham des Émirats), `XDR` (panier de droits de tirage spéciaux du FMI), `XAU` (onces d'or, une couverture en monnaie forte), ou tout autre ticker utilisé par leur marché. La réponse de frais de listing porte un champ `denomination_fiat` indiquant au frontend dans quelle unité sont les nombres `blurt_price_fiat` + `base_fee_fiat`, afin que l'UI affiche le symbole et le formatage appropriés (« 0,125 $ » pour l'USD, « 0,11 € » pour l'euro, « XAU 0,0000023 » pour l'or, etc.). Ce n'est pas seulement pour le scénario hypothétique d'un effondrement de l'USD — les opérateurs servant des marchés non libellés en USD en bénéficient dès aujourd'hui."
       },
       "where_to_buy_blurt": {
         "q": "Où acheter du Blurt pour payer les frais de réseau ?",
@@ -1658,7 +1653,6 @@
     "cost_label": "Coût total",
     "cost_detail": "{per_hour} BLURT/heure × {hours} heures",
     "submit_button": "Payer et promouvoir",
-    "submitting": "Diffusion…",
     "cancel_button": "Annuler",
     "success": "⭐ Ordre en vedette — {blurt} BLURT payés",
     "error_locked": "Déverrouillage de la clé active requis pour payer les frais de mise en vedette.",
@@ -1965,8 +1959,7 @@
         "title": "Échangez n’importe quoi",
         "body": "Plus de 16 cryptos plus des biens, services et même du troc en direct. Inter-actifs, inter-réseaux, inter-médias."
       },
-      "card_aria_label": "{title} — en savoir plus dans notre FAQ",
-      "learn_more": "En savoir plus"
+      "card_aria_label": "{title} — en savoir plus dans notre FAQ"
     }
   },
   "identity": {
@@ -2069,7 +2062,6 @@
       "title_named": "Bon retour @{account}",
       "body": "Déverrouillez votre keystore chiffré avec le mot de passe que vous avez défini.",
       "password_label": "Mot de passe",
-      "unlock": "Déverrouiller",
       "unlocking": "Déverrouillage…",
       "alternatives_heading": "Mot de passe oublié ?",
       "alternatives_body": "Pas de réinitialisation — Morphit est non-custodial et personne ne peut le récupérer. Mais si vous avez noté votre phrase seed de 12 mots, vous pouvez toujours vous connecter avec elle.",
@@ -2083,8 +2075,7 @@
     "signout_before_switch_modal": {
       "title": "Se déconnecter",
       "body": "Se connecter à un autre compte vous déconnectera d'abord de votre compte @{account}. D'accord ?",
-      "confirm": "OK",
-      "cancel": "Annuler"
+      "confirm": "OK"
     }
   },
   "login_qr": {
@@ -2100,12 +2091,10 @@
     "expires_in": "Expire dans {seconds} secondes",
     "no_phone_scanner_heading": "Pas de scanner QR ?",
     "no_phone_scanner_body": "Ouvre Morphit sur ton téléphone, va sur Se connecter → « Depuis un autre appareil » et suis les instructions.",
-    "cancel": "Annuler",
     "received_heading": "Connecté !",
     "received_body": "Bienvenue, @{account}. Direction l'orderbook…",
     "expired_heading": "Ce code a expiré",
     "expired_body": "Les codes ne durent que 5 minutes. Touche ci-dessous pour un nouveau.",
-    "try_again": "Réessayer",
     "rejected_heading": "Impossible de vérifier la connexion",
     "rejected_body": "Quelque chose ne correspondait pas. Touche ci-dessous pour un nouveau code.",
     "cancelled": "Annulé."
@@ -2133,8 +2122,7 @@
     "note_label": "Note pour votre partenaire",
     "note_help": "Instructions de livraison, code d'interphone, etc.",
     "optional_marker": "(optionnel)",
-    "share_button": "Partager l'adresse",
-    "sending": "Envoi…"
+    "share_button": "Partager l'adresse"
   },
   "my_balance": {
     "error": {
@@ -2151,7 +2139,6 @@
     "empty_cta": "Publier votre premier ordre",
     "error_title": "Impossible de charger vos ordres",
     "error_body": "L'indexeur n'a pas répondu. Réessayez dans un instant.",
-    "retry": "Réessayer",
     "filter": {
       "heading": "Afficher",
       "all": "Tous",
@@ -2182,7 +2169,6 @@
       "fee_reused": "Hors carnet d'ordres — paiement déjà utilisé",
       "fee_missing": "Hors du carnet d'ordres — paiement de la commission non reçu",
       "fee_underpaid": "Hors du carnet d'ordres — commission insuffisante",
-      "fee_learn_more": "En savoir plus",
       "viewed_count": "{count} vues",
       "viewed_tooltip": "Décompte approximatif du nombre de fois où cette offre a été vue. Visible uniquement par vous.",
       "action_relist": "Republier cet ordre",
@@ -2220,8 +2206,7 @@
     },
     "locked": {
       "title": "Déverrouillez pour voir vos ordres",
-      "body": "Votre historique d'ordres reste protégé par votre déverrouillage, afin qu'un appareil verrouillé ne révèle jamais vos transactions. Saisissez votre mot de passe pour le voir.",
-      "unlock": "Déverrouiller"
+      "body": "Votre historique d'ordres reste protégé par votre déverrouillage, afin qu'un appareil verrouillé ne révèle jamais vos transactions. Saisissez votre mot de passe pour le voir."
     }
   },
   "nav": {
@@ -2233,7 +2218,6 @@
     "privacy_terms": "Confidentialité",
     "post_now": "Publier maintenant",
     "start": "Commencer",
-    "unlock": "Déverrouiller",
     "glossary": "Glossaire",
     "cheat_sheet": "Aide-mémoire"
   },
@@ -2320,7 +2304,6 @@
         "new_password_confirm_label": "Confirme le mot de passe",
         "error": {
           "bad_account": "Les noms de compte utilisent des lettres minuscules, chiffres, tirets et points.",
-          "password_too_short": "Le mot de passe doit faire au moins 8 caractères.",
           "passwords_mismatch": "Les mots de passe ne correspondent pas. Retape les deux.",
           "account_not_found": "On n'a pas trouvé @{account} sur la chaîne Blurt. Vérifie l'orthographe et réessaie.",
           "key_not_on_account": "La clé de posting saisie ne correspond pas à la clé de posting on-chain de @{account}. Vérifie que tu as copié la bonne WIF.",
@@ -2363,9 +2346,7 @@
         "password_strength_common": "Ce mot de passe figure sur des listes de mots de passe courants. Choisis quelque chose de moins devinable.",
         "submit_remembered": "Se souvenir et continuer",
         "submit_session_only": "Passer — me garder connecté seulement pour cette session",
-        "submit_pending": "Enregistrement…",
         "error": {
-          "password_too_short": "Le mot de passe doit comporter au moins 8 caractères.",
           "passwords_mismatch": "Les mots de passe ne correspondent pas.",
           "password_weak": "Mot de passe trop faible. Utilise quelque chose de plus long ou moins prévisible."
         },
@@ -2434,7 +2415,6 @@
         "daily_ceiling_reached": "Cette instance a atteint sa limite d'inscriptions du jour. Réessayez demain ou utilisez un autre miroir Morphit.",
         "invite_problem": "Votre jeton d'inscription a expiré ou a déjà été utilisé. Réessayez.",
         "altcha_problem": "La vérification humaine a échoué. Réessayez.",
-        "learn_more": "En savoir plus",
         "daily_ceiling_voucher_heading": "Besoin d'un compte tout de suite ?",
         "daily_ceiling_voucher_intro": "Si vous ne voulez pas attendre ni changer d'instance, voici un raccourci : obtenez un code voucher auprès de la communauté Agorise et créez votre compte Blurt via un autre service, puis revenez ici pour vous connecter.",
         "daily_ceiling_voucher_step_1": "Rejoignez-nous dans le salon Matrix d'Agorise {matrix_open}#agorise:matrix.org{matrix_close}. Un membre de la communauté vous fournira un code voucher.",
@@ -2468,8 +2448,7 @@
       "password_body": "Définissez un mot de passe. Votre keystore chiffré reste sur cet appareil et vous pouvez déverrouiller juste avec le mot de passe à la prochaine visite — pas besoin de phrase seed de 12 mots. Vous pouvez aussi utiliser Verrouiller la session depuis le menu avatar sans perdre vos données. Choisissez ça pour votre ordinateur personnel.",
       "seed_only_label": "Phrase seed à chaque fois (le plus privé)",
       "seed_only_body": "Rien n'est stocké sur cet appareil. Chaque nouvelle session commence avec votre phrase seed de 12 mots. Le plus privé — pas de keystore chiffré à attaquer, pas de données à effacer sur ordinateurs publics. Choisissez ça pour des appareils publics ou partagés, ou si vous préférez échanger un peu de commodité contre une confidentialité maximale.",
-      "must_choose": "Choisissez une méthode de déverrouillage avant de continuer.",
-      "password_too_short": "Le mot de passe doit comporter au moins 8 caractères."
+      "must_choose": "Choisissez une méthode de déverrouillage avant de continuer."
     },
     "leave_confirm": {
       "title": "Quitter l'intégration ?",
@@ -2616,9 +2595,7 @@
     "empty_body": "Essayez de relâcher un filtre, ou revenez bientôt — le carnet se met à jour toutes les quelques secondes.",
     "error_title": "Impossible de joindre l'indexeur",
     "error_body": "L'indexeur est injoignable pour le moment. Réessaie dans un petit moment.",
-    "retry": "Réessayer",
     "load_more": "Charger plus",
-    "load_more_pending": "Chargement…",
     "indexed_block_label": "Bloc indexé",
     "order": {
       "buying": "achète {asset}",
@@ -2728,7 +2705,8 @@
       "description": "Dogecoin : chaîne PoW lancée en 2013, couche de base transparente, minée en parallèle avec Litecoin."
     },
     "barter_goods": {
-      "description": "Échange de biens directement contre l'actif — décris ce que tu offres ou ce que tu veux dans le champ « conditions » de l'annonce (p. ex. « orangers », « vélo d'occasion », « ail maison »)."
+      "description": "Échangez des biens ou des services directement contre l’actif — décrivez ce que vous offrez ou ce que vous voulez dans le champ « Conditions » ci-dessous (« orangers de 2 mètres », « nettoyage d’allée », « lavage de voiture », etc.).",
+      "description_first_trade": "Échangez des biens ou des services directement contre BLURT — décrivez ce que vous offrez dans le champ « Conditions » ci-dessous (« orangers de 2 mètres », « nettoyage d’allée », « lavage de voiture », etc.)."
     },
     "cash_by_mail": {
       "description": "Espèces envoyées par la poste ou un service de messagerie. Utilisez un transporteur suivi et assuré ; enveloppez les espèces dans du papier aluminium à l'intérieur d'une enveloppe ordinaire ; tenez compte des règles douanières pour les envois internationaux."
@@ -2919,8 +2897,7 @@
     "locked": {
       "title": "Déverrouillez votre session pour continuer",
       "body": "Morphit ne conserve jamais votre mot de passe. Saisissez-le pour signer l'ordre.",
-      "password_label": "Mot de passe de session",
-      "unlock": "Déverrouiller"
+      "password_label": "Mot de passe de session"
     },
     "form": {
       "step_1_heading": "Que voulez-vous échanger ?",
@@ -2967,14 +2944,14 @@
         "eth": "Ethereum (ETH) — cryptomonnaie Proof-of-Stake. Transfert natif d'ETH (pas d'ETH enveloppé ni de tokens ERC-20). Adresses hex de 42 caractères préfixées 0x (même forme que USDT-ERC20, USDC-ERC20, DAI-ERC20 et toute adresse de compte de token EVM ; les champs `asset` et `network` lèvent l'ambiguïté). Uniquement échangeable sur Morphit ; les frais de listage restent en BLURT/BTC/XMR.",
         "xrp": "Ripple (XRP) — cryptomonnaie à consensus Federated Byzantine Agreement sur le XRP Ledger. Adresses base58 de 24-34 caractères commençant par `r`. Les destination tags (entiers 32 bits) sont obligatoires lors de l'envoi vers des adresses hébergées par des exchanges — votre contrepartie pair-à-pair n'en a généralement pas besoin. Les comptes XRPL nécessitent ≥1 XRP de réserve de base pour exister. Uniquement échangeable sur Morphit ; les frais de listage restent en BLURT/BTC/XMR."
       },
-      "waiver_fiat_hint": "💡 La plupart des échanges de BLURT sur Morphit se font avec des utilisateurs actifs du réseau social Blurt, des opérateurs existants ou par troc. Choisissez donc la monnaie fiat que vous utilisez localement (USD, EUR, MXN, etc.) et proposez des moyens de paiement en personne ou par troc (biens/services) si vous souhaitez offrir autre chose de valeur.",
+      "waiver_fiat_hint": "💡 La plupart des échanges de BLURT sur Morphit se font avec des utilisateurs actifs du réseau social Blurt, des opérateurs existants ou par troc. Choisissez donc la monnaie fiat que vous utilisez localement (USD, EUR, MXN, etc.) et proposez des moyens de paiement en personne ou par troc (biens/services) à l'étape 3 si vous souhaitez offrir autre chose de valeur.",
       "waiver_benefits_heading": "Ce que votre achat débloque :",
       "price_model_legend": "Prix",
       "price_model_hint": "Sur quoi reposent vos valeurs minimale et maximale ? La plupart utilisent le prix du marché ; le prix fixe sert quand vous voulez un montant précis quels que soient les mouvements du marché.",
       "price_model_spread_label": "Prix du marché",
       "price_model_spread_help": "Ancré au taux actuel au moment de chaque échange. Optionnel : ajoute un petit spread +/-.",
       "price_model_spread_aria": "Pourcentage de spread (positif ou négatif)",
-      "price_model_spread_unit_hint": "0 = marché exact ; +5 = marché plus 5%",
+      "price_model_spread_unit_hint": "0 ou vide = marché exact ; +5 = marché plus 5%",
       "price_model_fixed_label": "Prix fixe",
       "price_model_fixed_help": "Un prix fixe en fiat par unité. L'ordre ne bouge pas quand le marché bouge.",
       "price_model_fixed_aria": "Prix fixe par unité en fiat",
@@ -2987,10 +2964,11 @@
       "amount_min_label_in_fiat": "Valeur minimale en {fiat}",
       "amount_max_label_in_fiat": "Valeur maximale en {fiat}",
       "continue_locked_hint": "Complétez les champs ci-dessus pour continuer.",
-      "first_order_min_hint": "Les premières commandes ont un petit minimum : environ {amount} {fiat} (≈ 1 $ US).",
-      "first_order_min_hint_usd": "Les premières commandes ont un minimum d’environ 1 $ US.",
+      "first_order_min_hint": "Le minimum initial est de {amount} {fiat} (≈ 1 $ US).",
+      "first_order_min_hint_usd": "Le minimum initial est d’environ 1 $ US.",
       "step_counter": "Étape {n} sur {total}",
-      "fiat_required_hint": "Choisissez la devise dans laquelle vous fixerez le prix de cet échange — votre monnaie locale convient parfaitement."
+      "fiat_required_hint": "Choisissez la devise dans laquelle vous fixerez le prix de cet échange.",
+      "amount_entered_usd_hint": "{amount} {fiat} (≈ {usd})"
     },
     "errors": {
       "fiat_empty": "Choisissez une monnaie fiat (comme USD ou EUR).",
@@ -3002,7 +2980,7 @@
       "payment_methods_empty": "Ajoutez au moins un moyen de paiement.",
       "payment_methods_too_many": "Cela fait plus de 12 moyens de paiement. Choisissez vos préférés.",
       "payment_method_too_long": "Gardez chaque moyen de paiement court (moins de 32 caractères).",
-      "waiver_min_required": "La dispense exige une taille de commande minimale. Réglez le montant au moins au plancher affiché ci-dessus.",
+      "waiver_min_required": "La dispense de frais d'annonce exige une taille de commande minimale. Réglez la valeur minimale à au moins {amount} {fiat}.",
       "spread_not_a_number": "Le spread doit être un nombre.",
       "spread_out_of_range": "Le spread doit être entre -50% et +50%.",
       "fixed_price_required": "Saisis un prix fixe.",
@@ -3010,7 +2988,8 @@
       "fee_not_ready": "Le devis de frais n'est pas encore prêt. Patiente un instant et réessaie.",
       "amount_min_too_large": "Le minimum est trop grand. Choisis une valeur plus petite.",
       "amount_max_too_large": "Le maximum est trop grand. Choisis une valeur plus petite.",
-      "fixed_price_too_large": "Le prix fixe est trop grand. Choisis une valeur plus petite."
+      "fixed_price_too_large": "Le prix fixe est trop grand. Choisis une valeur plus petite.",
+      "waiver_min_required_usd": "La dispense de frais d'annonce exige une taille de commande minimale. Réglez la valeur minimale à au moins 1 $ US."
     },
     "fee": {
       "heading": "Frais d'inscription",
@@ -3053,7 +3032,6 @@
       "body_generic": "La chaîne n'a pas accepté la diffusion. Rien n'a été payé. Réessayez ou vérifiez votre connexion.",
       "body_insufficient_funds": "Votre compte n'a pas assez de BLURT pour payer les frais de listing.",
       "body_locked": "La session est verrouillée. Déverrouillez votre mot de passe pour réessayer.",
-      "retry": "Réessayer",
       "body_bad_password": "Ce mot de passe n'a pas déverrouillé ton keystore. Réessaie.",
       "body_missing_external_tx_id": "Un ID de transaction externe est requis pour les paiements de frais en BTC et XMR."
     },
@@ -3104,7 +3082,6 @@
       "fee_address_amount_btc": "Montant : {amount} BTC ({sats} sats)",
       "fee_address_amount_xmr": "Montant : {amount} XMR",
       "fee_address_copy": "Copier l'adresse",
-      "fee_address_copied": "Copié",
       "fee_address_show_qr": "Afficher le code QR",
       "fee_address_hide_qr": "Masquer le code QR",
       "fee_address_chain_pinned": "Ancré sur la chaîne par {account} — chaque instance Morphit vérifie les frais contre cette adresse.",
@@ -3502,7 +3479,6 @@
       "display_name_help": "Nom lisible affiché dans le répertoire d'opérateurs et sur votre instance hébergée.",
       "contact_url_label": "URL de contact (optionnelle)",
       "contact_url_help": "Votre propre site, une page de contact, ou un service onion. Doit être https:// ou http://.",
-      "broadcasting": "Diffusion…",
       "submit": "Inscrire l'opérateur",
       "err_generic": "Inscription échouée. Veuillez réessayer.",
       "err_unknown": "Erreur inattendue. Veuillez réessayer.",
@@ -3544,7 +3520,6 @@
     "no_camera_body": "Cet appareil n'a pas de caméra. Connecte-toi autrement, par exemple avec ta phrase de sauvegarde.",
     "scanning_heading": "Pointe ta caméra vers le code",
     "scanning_hint": "Le code est sur l'ordi où tu veux te connecter.",
-    "try_again": "Réessayer",
     "confirm_heading": "Se connecter à Morphit ?",
     "confirm_body_1": "Un ordi demande à se connecter en ton nom.",
     "confirm_website_label": "Site web",
@@ -3793,7 +3768,6 @@
       "reminder_title": "💡 Les noms d'affichage ne sont pas uniques.",
       "reminder_body": "N'importe qui peut utiliser n'importe quel nom. La clé courte entre parenthèses est ce qui vous identifie vraiment, et personne d'autre ne peut la copier. Vérifiez toujours la clé lorsque vous tradez.",
       "save_and_broadcast": "Enregistrer et diffuser",
-      "broadcast_ok": "Diffusé",
       "broadcast_err": {
         "no_account": "Enregistré localement. La publication sera disponible une fois votre compte enregistré.",
         "locked": "Session verrouillée. Reconnectez-vous pour publier.",
@@ -3801,7 +3775,6 @@
         "rejected": "Diffusion refusée par le réseau : {reason}",
         "key_mismatch": "L'identité déverrouillée n'est pas autorisée à publier pour @{account}. Vérifiez que le bon compte est déverrouillé et que le nom de compte enregistré correspond, puis réessayez."
       },
-      "save_pending": "Enregistrement…",
       "broadcast_pending": "Publication…",
       "clear_confirm_prompt": "Retirer votre nom d'affichage de cet appareil ? Vous pourrez le redéfinir à tout moment.",
       "clear_confirm_yes": "Oui, retirer",
@@ -3827,7 +3800,6 @@
       "remove_aria": "Retirer {url}",
       "reset_confirm_prompt": "Réinitialiser tous les endpoints RPC personnalisés aux valeurs par défaut ?",
       "reset_confirm_yes": "Oui, réinitialiser",
-      "reset_confirm_cancel": "Annuler",
       "timed_out": "délai dépassé",
       "unreachable": "injoignable"
     },
@@ -3859,11 +3831,9 @@
       },
       "preview_label": "Aperçu",
       "save": "Enregistrer localement",
-      "save_pending": "Enregistrement…",
       "saved_toast": "Enregistré ✓",
       "save_and_broadcast": "Enregistrer et diffuser",
       "broadcast_pending": "Publication…",
-      "broadcast_ok": "Diffusé",
       "clear": "Effacer",
       "reminder_title": "Où ça apparaît",
       "reminder_body": "Une fois publié, l'icône Nostr apparaît à côté de votre nom d'utilisateur sur chaque ordre, chaque entrée de feedback, chaque message de chat — sur chaque instance Morphit, pas seulement celle-ci. Les autres utilisateurs la touchent pour ouvrir votre profil Nostr dans leur client préféré."
@@ -3883,11 +3853,8 @@
       },
       "preview_label": "Aperçu :",
       "save": "Enregistrer localement",
-      "save_pending": "Enregistrement…",
       "saved_toast": "Enregistré sur cet appareil.",
       "save_and_broadcast": "Enregistrer et diffuser",
-      "broadcast_pending": "Diffusion…",
-      "broadcast_ok": "Diffusé",
       "clear": "Effacer",
       "reminder_title": "Optionnel — vous pouvez ignorer.",
       "reminder_body": "Votre identité Morphit fonctionne très bien sans cette URL. C'est un lien de courtoisie pour les personnes qui voudraient peut-être aussi voir vos vidéos ou podcasts."
@@ -3985,8 +3952,6 @@
       "preview_size": "{bytes} sur {cap} maximum",
       "preview_getting_large": "Proche de la limite de taille — envisage une image plus simple ou une source plus petite.",
       "broadcast": "Diffuser l'avatar",
-      "broadcast_pending": "Diffusion…",
-      "broadcast_ok": "Diffusé",
       "cancel": "Abandonner",
       "remove": "Supprimer l'avatar",
       "remove_pending": "Suppression…",
@@ -4101,7 +4066,6 @@
       "harden_submit": "Durcir vers YubiKey uniquement",
       "soften_submit": "Ajouter un mot de passe",
       "enroll_submit": "Lier la YubiKey",
-      "cancel": "Annuler",
       "new_password_label": "Nouveau mot de passe (au moins 8 caractères)",
       "confirm_password_label": "Confirme le nouveau mot de passe",
       "enroll_success": "YubiKey liée.",
@@ -4116,7 +4080,6 @@
       "error": {
         "enroll_verify_failed": "Impossible de vérifier votre YubiKey. Assurez-vous que l'emplacement 2 est configuré pour le défi-réponse HMAC-SHA1, essayez un autre port USB, puis réenregistrez-la.",
         "confirm_backup": "Confirme que ta phrase de récupération est sauvegardée avant de continuer.",
-        "password_too_short": "Le mot de passe doit faire au moins 8 caractères.",
         "passwords_mismatch": "Les deux mots de passe ne correspondent pas.",
         "webhid_unsupported": "Ton navigateur ne prend pas en charge WebHID. Essaie Chrome, Edge ou Brave.",
         "no_device": "Aucune YubiKey n'a été sélectionnée.",
@@ -4219,7 +4182,6 @@
         "step4_body": "Ces dix codes vous permettront de vous connecter si vous perdez votre authentificateur. Chaque code fonctionne exactement UNE fois. Sauvegardez-les en lieu sûr — un gestionnaire de mots de passe, imprimés et rangés, ou écrits sur papier. Nous ne les afficherons plus.",
         "backup_acknowledge": "J’ai sauvegardé ces codes de secours en lieu sûr.",
         "backup_continue": "Terminer la configuration",
-        "cancel": "Annuler",
         "err_invalid_code": "Ce code n’a pas été vérifié. Vérifiez que l’heure de votre appareil est synchronisée et réessayez.",
         "err_internal": "Quelque chose s’est mal passé. Votre porte-clés est inchangé ; veuillez réessayer.",
         "err_locked": "Votre session est verrouillée. Déverrouillez d’abord, puis réessayez."
@@ -4242,7 +4204,6 @@
         "code_label": "Code actuel à 6 chiffres (pour confirmer)",
         "submit": "Générer de nouveaux codes",
         "submit_busy": "Génération…",
-        "cancel": "Annuler",
         "success": "Nouveaux codes de secours générés. Sauvegardez-les maintenant.",
         "err_invalid_code": "Ce code n’a pas été vérifié. Réessayez."
       },
@@ -4253,7 +4214,6 @@
         "code_placeholder": "000000 ou XXXX-XXXX",
         "submit": "Continuer",
         "submit_busy": "Vérification…",
-        "cancel": "Annuler",
         "err_invalid_code": "Ce code n’a pas été vérifié. Vérifiez que l’heure de votre appareil est synchronisée, ou essayez un code de secours.",
         "err_locked_out": "Trop de tentatives invalides. Réessayez dans {seconds} secondes.",
         "backup_code_redeemed_warning": "Un code de secours vient d’être utilisé. Il vous reste {remaining} codes de secours."
@@ -4293,7 +4253,6 @@
       },
       "confirm_password_to_begin": "Confirmez votre mot de passe pour commencer",
       "confirm_password": "Confirmez votre mot de passe",
-      "copy_secret": "Copier",
       "yubikey_protected": "Ce porte-clés est protégé par une YubiKey. L’ajout du 2FA basé sur TOTP à un porte-clés protégé par YubiKey n’est pas pris en charge dans cette version. Votre YubiKey fournit déjà une authentification cryptographiquement plus forte que ne le ferait TOTP."
     }
   },
@@ -4320,8 +4279,7 @@
     "tracking_help": "Tel que fourni par le transporteur. Lettres, chiffres, espaces et tirets acceptés.",
     "note_label": "Remarque",
     "optional_marker": "(optionnel)",
-    "share_button": "Partager l'envoi",
-    "sending": "Envoi…"
+    "share_button": "Partager l'envoi"
   },
   "support": {
     "heading": "Aide et support",
@@ -4376,11 +4334,7 @@
     "opt_in_pitch": "La syndication de tes échanges, c'est tout. Plus d'yeux sur tes offres = plus de partenaires de trade, plus de récompenses upvote directement dans ton portefeuille Blurt."
   },
   "toast": {
-    "dismiss": "Fermer",
     "view_action": "Voir"
-  },
-  "tooltip": {
-    "learn_more": "En savoir plus"
   },
   "trade_status": {
     "address_shared": "Adresse partagée",
@@ -4408,7 +4362,6 @@
     "bullet_bp_stake": "<strong>Vous débloquez 1 BP de participation de bienvenue instantanément</strong> au moment où votre première commission d'inscription payée en BLURT se déclenche. Après votre premier trade réussi, cela devient 10 BLURT liquid + 10 BLURT Power — une participation génératrice de revenus passifs sur le réseau.",
     "why_blurt_minimum": "Pourquoi BLURT et non BTC ou XMR pour le trade gratuit ? Parce que le BLURT dans votre portefeuille est ce qui vous permet de faire tout le reste sur Morphit ensuite — payer les frais d'inscription pour les futurs trades (à moitié prix !), participer à la couche sociale Blurt, et gagner des récompenses de fidélité. Nous voulons que vous soyez prêt à être actif, pas bloqué avec un solde vide.",
     "cta_compose": "Composer mon premier achat gratuit",
-    "learn_more": "En savoir plus",
     "collapse_aria": "Replier cette carte de bienvenue",
     "expand_aria": "Déplier cette carte de bienvenue"
   },
@@ -4417,11 +4370,11 @@
     "prompt": "Vous voulez être prévenu lorsque @{peer} répond, même avec cet onglet fermé ?",
     "turn_on": "Activer les notifications de chat",
     "not_now": "Pas maintenant",
-    "dismiss_aria": "Ignorer",
     "enabling": "Activation…",
     "enabled": "C'est fait : vous serez notifié à l'arrivée d'un nouveau message.",
     "error": "Impossible d'activer les notifications. Vous pouvez les activer dans Paramètres → Notifications.",
-    "privacy_note": "Utilise les notifications privées du navigateur : sans e-mail ni numéro de téléphone, et désactivables à tout moment."
+    "privacy_note": "Utilise les notifications privées du navigateur : sans e-mail ni numéro de téléphone, et désactivables à tout moment.",
+    "dismiss_aria": "Ignorer"
   },
   "backup_keys_panel": {
     "warning_title": "Garde-les privées",
@@ -4441,8 +4394,6 @@
     },
     "public_label": "Clé publique",
     "private_label": "Clé privée (WIF)",
-    "copy": "Copier",
-    "copied": "Copiée",
     "download": "Télécharger en fichier texte",
     "downloaded": "Enregistré",
     "no_master_password": "Il n'y a pas de mot de passe maître. Morphit n'en crée ni n'en utilise jamais — tes 12 mots et ces clés sont tout ce qu'il faut.",

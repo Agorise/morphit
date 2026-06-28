@@ -237,7 +237,7 @@
 				class="rounded-md border border-ink-300 bg-white px-3 py-1.5 text-sm font-medium text-ink-700 hover:bg-ink-50 dark:border-ink-600 dark:bg-ink-800 dark:text-ink-100 dark:hover:bg-ink-700"
 			>
 				{copyAddrFlash
-					? $_('post_order.fee_method.fee_address_copied')
+					? $_('common.copied')
 					: $_('post_order.fee_method.fee_address_copy')}
 			</button>
 			<button

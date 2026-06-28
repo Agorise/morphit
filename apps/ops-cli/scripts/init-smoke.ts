@@ -21,6 +21,7 @@ import { validateBlurtAccountName } from '../src/init/chainCheck.ts';
 import { checkPassphraseStrength } from '../src/init/encrypt.ts';
 import { resolveOutputPath, writeWizardOutput } from '../src/init/render.ts';
 import type { WizardAnswers } from '../src/init/render.ts';
+import { generateOnionV3 } from '../src/init/torOnion.ts';
 import { loadOperatorConfig } from '@morphit/operator-config';
 
 let failures = 0;
@@ -373,6 +374,76 @@ scenario('writeWizardOutput: omits optional keys when null', () => {
 		const result = writeWizardOutput(noOpt, tmp);
 		const content = readFileSync(result.configPath, 'utf8');
 		assertTrue(!content.includes('MORPHIT_INSTANCE_CONTACT_URL'), 'no contact url line');
+	} finally {
+		rmSync(tmp, { recursive: true, force: true });
+	}
+});
+
+scenario('writeWizardOutput: writes the 3 Tor HS files + the address env var when torOnion present', () => {
+	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+	try {
+		const onion = generateOnionV3();
+		const withTor: WizardAnswers = {
+			...sampleAnswers,
+			altNetworks: { ...sampleAnswers.altNetworks, tor: onion.address },
+			torOnion: onion
+		};
+		const result = writeWizardOutput(withTor, tmp);
+		assertTrue(result.torHsDir !== null, 'torHsDir reported');
+		assertTrue(result.torHsAddress === onion.address, 'torHsAddress reported');
+		const dir = result.torHsDir as string;
+		const sec = join(dir, 'hs_ed25519_secret_key');
+		const pub = join(dir, 'hs_ed25519_public_key');
+		const host = join(dir, 'hostname');
+		assertTrue(existsSync(sec) && statSync(sec).size === 96, 'secret key is 96 bytes');
+		assertTrue((statSync(sec).mode & 0o077) === 0, 'secret key is owner-only');
+		assertTrue(existsSync(pub) && statSync(pub).size === 64, 'public key is 64 bytes');
+		assertTrue(readFileSync(host, 'utf8') === onion.address + '\n', 'hostname = address + newline');
+		const cfg = readFileSync(result.configPath, 'utf8');
+		assertTrue(
+			cfg.includes('MORPHIT_INSTANCE_TOR_ADDRESS=') && cfg.includes(onion.address),
+			'config carries the tor address env var'
+		);
+	} finally {
+		rmSync(tmp, { recursive: true, force: true });
+	}
+});
+
+scenario('writeWizardOutput: no Tor HS dir when no onion was generated', () => {
+	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+	try {
+		const noTor: WizardAnswers = { ...sampleAnswers, torOnion: null };
+		const result = writeWizardOutput(noTor, tmp);
+		assertTrue(result.torHsDir === null, 'no torHsDir reported');
+		assertTrue(!existsSync(join(tmp, 'tor-hidden-service')), 'no tor-hidden-service directory written');
+	} finally {
+		rmSync(tmp, { recursive: true, force: true });
+	}
+});
+
+scenario('writeWizardOutput: hardening checklist reflects the operator\u2019s pillar confirmations', () => {
+	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+	try {
+		const withHard: WizardAnswers = {
+			...sampleAnswers,
+			hardening: {
+				generateChecklist: true,
+				sshLockdown: true,
+				firewall: true,
+				autoUpdates: true,
+				kernelHardening: true,
+				intrusionDetection: false
+			}
+		};
+		const result = writeWizardOutput(withHard, tmp);
+		assertTrue(result.hardeningChecklistPath !== null, 'checklist written');
+		const md = readFileSync(result.hardeningChecklistPath as string, 'utf8');
+		assertTrue(md.includes('During setup you confirmed'), 'confirmation summary present');
+		assertTrue(md.includes('[x] SSH lockdown'), 'a confirmed pillar is checked');
+		assertTrue(
+			md.includes('[ ] Intrusion detection') && md.includes('strongly reconsider'),
+			'a declined pillar is unchecked + flagged'
+		);
 	} finally {
 		rmSync(tmp, { recursive: true, force: true });
 	}

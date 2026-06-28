@@ -101,7 +101,7 @@
 			return;
 		}
 		if (enrollPassword.length < 8) {
-			enrollError = $_('settings.hardware_key.error.password_too_short');
+			enrollError = $_('common.password_too_short');
 			return;
 		}
 		enrollBusy = true;
@@ -208,7 +208,7 @@
 	async function doSoften(): Promise<void> {
 		if (!layered) return;
 		if (softenPassword.length < 8) {
-			softenError = $_('settings.hardware_key.error.password_too_short');
+			softenError = $_('common.password_too_short');
 			return;
 		}
 		if (softenPassword !== softenPasswordConfirm) {
@@ -513,7 +513,7 @@
 									resetEnrollForm();
 								}}
 							>
-								{$_('settings.hardware_key.cancel')}
+								{$_('common.cancel')}
 							</BusyButton>
 						</div>
 					</div>
@@ -568,7 +568,7 @@
 									hardenError = '';
 								}}
 							>
-								{$_('settings.hardware_key.cancel')}
+								{$_('common.cancel')}
 							</BusyButton>
 						</div>
 					</div>
@@ -648,7 +648,7 @@
 									resetSoftenForm();
 								}}
 							>
-								{$_('settings.hardware_key.cancel')}
+								{$_('common.cancel')}
 							</BusyButton>
 						</div>
 					</div>

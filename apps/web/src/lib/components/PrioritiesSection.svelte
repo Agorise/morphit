@@ -187,7 +187,7 @@
 					<!-- "Learn more" affordance.  Visually subtle but signals
 					     the card is interactive.  Arrow glyph shifts on hover. -->
 					<span class="priorities-card-cta" aria-hidden="true">
-						{$_('home.priorities.learn_more')}
+						{$_('common.learn_more')}
 						<span class="nav-arrow nav-arrow-right">⇨</span>
 					</span>
 				</a>

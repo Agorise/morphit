@@ -43,7 +43,13 @@
 	import Tooltip from '$components/Tooltip.svelte';
 	import IdentityLabel from '$components/IdentityLabel.svelte';
 	import BusyButton from '$components/BusyButton.svelte';
-	import ConfirmModal from '$components/ConfirmModal.svelte';
+	// cp376 byte-budget: ConfirmModal is the leave-guard modal — it only
+	// renders if the user tries to navigate away with an unclaimed name
+	// (an edge interaction, not part of the Step 1/Step 2 flow), so its
+	// JS is deferred out of the initial register-name bundle and loaded
+	// only when the guard actually fires (loader defined below).  Same
+	// pattern as onboarding/.
+	// import ConfirmModal from '$components/ConfirmModal.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
 	import FocusedField from '$components/FocusedField.svelte';
 	import { identiconDataUri, identiconDataUriFromString } from '$crypto/identicon';
@@ -59,6 +65,12 @@
 		type SignupPhase,
 		type SignupError
 	} from '$lib/auth/signupClient';
+
+	// cp376: lazy-loader for the leave-guard ConfirmModal (see import
+	// block note).  Gated in the template behind {#if leaveGuard.open}
+	// so the dynamic import fires only when the guard actually triggers.
+	const loadConfirmModal = () =>
+		import('$components/ConfirmModal.svelte').then((m) => m.default);
 
 	// ─── Session identity ────────────────────────────────────────────
 	// liveIdentity is a Readable<LiveIdentity | null>. The onboarding-
@@ -652,7 +664,7 @@
 					</p>
 					<p class="mt-2 text-sm text-amber-800 dark:text-amber-200">
 						<a href={lp('/faq#signup_stuck')} class="underline hover:no-underline">
-							{$_('onboarding.register_name.errors.learn_more')}
+							{$_('common.learn_more')}
 						</a>
 					</p>
 				</div>
@@ -789,13 +801,17 @@
      leaving isn't destructive (keys are kept; they can finish later), it's
      just a "wait, you didn't claim it yet" nudge. Focus defaults to the
      safe "Stay" button. -->
-<ConfirmModal
-	bind:open={leaveGuard.open}
-	variant="neutral"
-	title={$_('onboarding.register_name.leave_guard.title')}
-	body={$_('onboarding.register_name.leave_guard.body')}
-	confirmLabel={$_('onboarding.register_name.leave_guard.confirm')}
-	cancelLabel={$_('onboarding.register_name.leave_guard.cancel')}
-	onConfirm={confirmLeave}
-	onCancel={cancelLeave}
-/>
+{#if leaveGuard.open}
+	{#await loadConfirmModal() then ConfirmModal}
+		<ConfirmModal
+			bind:open={leaveGuard.open}
+			variant="neutral"
+			title={$_('onboarding.register_name.leave_guard.title')}
+			body={$_('onboarding.register_name.leave_guard.body')}
+			confirmLabel={$_('onboarding.register_name.leave_guard.confirm')}
+			cancelLabel={$_('onboarding.register_name.leave_guard.cancel')}
+			onConfirm={confirmLeave}
+			onCancel={cancelLeave}
+		/>
+	{/await}
+{/if}

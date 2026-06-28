@@ -64,6 +64,13 @@
 		 *  90-99%, and red at/above 100%. Defaults to false so
 		 *  existing call sites are unaffected. */
 		showCounter?: boolean;
+		/** When true, the counter is always visible (faint) instead of
+		 *  only appearing above 75% of the limit, and renders just the
+		 *  limit number alone while the field is empty ("2048" rather
+		 *  than "0/2048"). Used where the cap is part of the field's
+		 *  contract the user should always see (order terms). Defaults
+		 *  to false so existing call sites are unaffected. */
+		counterAlwaysVisible?: boolean;
 		/** How the counter computes "length":
 		 *  - 'codepoint' counts emoji and combined characters as 1
 		 *    each. Use this when the real limit is codepoint-based
@@ -91,6 +98,7 @@
 		name,
 		class: cls = '',
 		showCounter = false,
+		counterAlwaysVisible = false,
 		counterMode = 'utf16',
 		counterLimit
 	}: Props = $props();
@@ -217,8 +225,16 @@
 		if (ratio >= 1) return 'red';
 		if (ratio >= 0.9) return 'amber';
 		if (ratio >= 0.75) return 'faint';
-		return 'hidden';
+		return counterAlwaysVisible ? 'faint' : 'hidden';
 	});
+
+	/** Strictly over the soft limit (not merely at it). Reddens the
+	 *  textarea border and is the signal the parent reads to disable
+	 *  submission. Only reachable when `maxlength` is a larger hard
+	 *  ceiling than the soft `counterLimit` — otherwise the browser
+	 *  caps input at the limit and this never fires (so existing call
+	 *  sites where maxlength === the limit are unaffected). */
+	const isOver = $derived(effectiveLimit > 0 && currentLength > effectiveLimit);
 
 	/** aria-live only announces the counter when it actually matters.
 	 *  A polite live-region on every keystroke is noise for screen
@@ -246,7 +262,9 @@
 		{disabled}
 		aria-label={ariaLabel}
 		{name}
-		class="pk-textarea w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+		class="pk-textarea w-full rounded-xl border-2 {isOver
+			? 'border-red-500 focus:ring-red-500 dark:border-red-500'
+			: 'border-ink-200 focus:ring-morphit-emerald dark:border-ink-700'} bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 dark:bg-ink-900"
 	></textarea>
 
 	<!-- Inline character counter. Absolute-positioned bottom-right
@@ -264,7 +282,9 @@
 			aria-live={counterLive}
 			aria-hidden={counterTier === 'hidden' ? 'true' : undefined}
 		>
-			{currentLength}/{effectiveLimit}
+			{counterAlwaysVisible && currentLength === 0
+				? effectiveLimit
+				: `${currentLength}/${effectiveLimit}`}
 		</span>
 	{/if}
 </div>

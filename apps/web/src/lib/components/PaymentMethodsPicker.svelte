@@ -68,6 +68,10 @@
 		 *  this prop is supplied — pointing at a missing id is
 		 *  itself an a11y bug per Memory fact #46. */
 		describedById?: string;
+		/** True on the user's first trade (always a BLURT buy).  Only
+		 *  affects the `barter_goods` description, which then reads
+		 *  "…directly for BLURT" instead of the generic "…for the asset". */
+		firstTrade?: boolean;
 	}
 
 	let {
@@ -77,7 +81,8 @@
 		max = 12,
 		onchange,
 		invalid = false,
-		describedById
+		describedById,
+		firstTrade = false
 	}: Props = $props();
 
 	let query = $state('');
@@ -96,12 +101,26 @@
 	/** i18n description lookup.  Returns the translated string
 	 *  for `payment_method.<key>.description` or null if no
 	 *  description i18n key exists.  svelte-i18n returns the
-	 *  key itself on miss; we detect that and report null. */
+	 *  key itself on miss; we detect that and report null.
+	 *
+	 *  `barter_goods` is the one method whose copy depends on the
+	 *  trade: on a first trade (always a BLURT buy) it reads
+	 *  "…directly for BLURT" via the `_first_trade` variant; on any
+	 *  other trade it uses the generic "…for the asset" wording.  The
+	 *  variant falls back to the base description if it's ever missing
+	 *  so the row is never left without a description. */
 	function descFor(key: string): string | null {
-		const i18nKey = `payment_method.${key}.description`;
-		const v = $_(i18nKey);
-		if (typeof v !== 'string' || v === i18nKey || v.length === 0) return null;
-		return v;
+		const lookup = (k: string): string | null => {
+			const v = $_(k);
+			return typeof v === 'string' && v !== k && v.length > 0 ? v : null;
+		};
+		if (key === 'barter_goods' && firstTrade) {
+			return (
+				lookup('payment_method.barter_goods.description_first_trade') ??
+				lookup('payment_method.barter_goods.description')
+			);
+		}
+		return lookup(`payment_method.${key}.description`);
 	}
 
 	/** Canonical payment-method keys the operator disabled on this
@@ -256,7 +275,7 @@
 						type="button"
 						onclick={() => toggle(entry.key)}
 						disabled={!isSelected(entry.key) && maxReached}
-						class="flex w-full items-center justify-between gap-3 rounded-lg border border-ink-200 px-3 py-2 text-left text-sm transition cursor-pointer hover:border-morphit-emerald disabled:cursor-not-allowed disabled:opacity-50 dark:border-ink-800 {isSelected(
+						class="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm hover-subtle cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 {isSelected(
 							entry.key
 						)
 							? 'bg-emerald-50 dark:bg-ink-800'
@@ -300,7 +319,7 @@
 					<button
 						type="button"
 						onclick={() => (collapsed[cat] = !collapsed[cat])}
-						class="flex w-full items-center justify-between px-3 py-2 text-left text-sm font-semibold"
+						class="hover-subtle flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm font-semibold"
 						aria-expanded={!collapsed[cat]}
 					>
 						<span>{categoryLabel(cat)}</span>
@@ -316,7 +335,7 @@
 										type="button"
 										onclick={() => toggle(entry.key)}
 										disabled={!isSelected(entry.key) && maxReached}
-										class="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition cursor-pointer hover:bg-ink-50 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-ink-900 {isSelected(
+										class="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover-subtle rounded-lg cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 {isSelected(
 											entry.key
 										)
 											? 'bg-emerald-50 dark:bg-ink-800'
@@ -353,7 +372,7 @@
 				<button
 					type="button"
 					onclick={() => (collapsed.instance = !collapsed.instance)}
-					class="flex w-full items-center justify-between px-3 py-2 text-left text-sm font-semibold"
+					class="hover-subtle flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm font-semibold"
 					aria-expanded={!collapsed.instance}
 				>
 					<span>
@@ -374,7 +393,7 @@
 									type="button"
 									onclick={() => toggle(entry.key)}
 									disabled={!isSelected(entry.key) && maxReached}
-									class="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition cursor-pointer hover:bg-ink-50 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-ink-900 {isSelected(
+									class="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover-subtle rounded-lg cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 {isSelected(
 										entry.key
 									)
 										? 'bg-emerald-50 dark:bg-ink-800'

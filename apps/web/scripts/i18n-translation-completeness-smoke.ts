@@ -89,6 +89,17 @@ const nonEn = locales.filter((l) => l !== 'en');
 
 interface AllowEntry { key: string; locale: string; reason: string }
 const ALLOW_LIST: AllowEntry[] = [
+	// ─── post-order amount hint: the value "{amount} {fiat} (≈ {usd})" is
+	//     ENTIRELY interpolation placeholders + a math symbol (≈) + ASCII
+	//     parens — there is no translatable word, so byte-identity with EN
+	//     is correct for the native-translation locales (de/es/fr). zh-CN/HK
+	//     legitimately differ (full-width parens （）); it/pl/ru/fa are
+	//     policy-fallback (skipped above). The smoke's "pure format" skip
+	//     (no [a-zA-Z]) misses this because the placeholder NAMES contain
+	//     letters. (b) invariant.
+	{ key: 'post_order.form.amount_entered_usd_hint', locale: 'de', reason: '(b) pure interpolation placeholders + math symbol (≈) — no translatable text' },
+	{ key: 'post_order.form.amount_entered_usd_hint', locale: 'es', reason: '(b) pure interpolation placeholders + math symbol (≈) — no translatable text' },
+	{ key: 'post_order.form.amount_entered_usd_hint', locale: 'fr', reason: '(b) pure interpolation placeholders + math symbol (≈) — no translatable text' },
 	// ─── cp321 explorer-account Public Keys card: the four Blurt key-role
 	//     names (Owner / Active / Posting / Memo) are technical identifiers
 	//     kept in English in EVERY locale by project convention — exactly as

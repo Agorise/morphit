@@ -535,7 +535,7 @@
 			<div class="manual">
 				<p>{$_('settings.totp.enroll.manual_label')}</p>
 				<code>{pendingSecretB32}</code>
-				<button type="button" onclick={copySecret}>{$_('settings.totp.copy_secret')}</button>
+				<button type="button" onclick={copySecret}>{$_('common.copy')}</button>
 			</div>
 
 			<h2>{$_('settings.totp.enroll.step3_title')}</h2>
@@ -562,7 +562,7 @@
 				{#if errorMsg}<p class="error" role="alert">{errorMsg}</p>{/if}
 				<BusyButton {busy} type="submit">{$_('settings.totp.enroll.confirm_cta')}</BusyButton>
 				<button type="button" onclick={cancelEnrollment} disabled={busy}
-					>{$_('settings.totp.enroll.cancel')}</button
+					>{$_('common.cancel')}</button
 				>
 			</form>
 		</section>
@@ -678,7 +678,7 @@
 					{$_('settings.totp.regenerate.submit')}
 				</BusyButton>
 				<button type="button" onclick={cancelEnrollment} disabled={busy}
-					>{$_('settings.totp.regenerate.cancel')}</button
+					>{$_('common.cancel')}</button
 				>
 			</form>
 		</section>

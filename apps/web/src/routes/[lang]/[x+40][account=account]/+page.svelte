@@ -35,6 +35,9 @@
 	import StatusLine from '$components/StatusLine.svelte';
 	import BusyButton from '$components/BusyButton.svelte';
 	import IdentityLabel from '$components/IdentityLabel.svelte';
+	import AltNetworkIcon from '$components/AltNetworkIcon.svelte';
+	import { validateNostrUrlForRender } from '$utils/nostrUrl';
+	import { validateBlurtMediaUrlForRender } from '$utils/blurtMediaUrl';
 	// cp165 byte-budget: MyBalanceCard renders only on a viewer's
 	// OWN profile (rare path — most profile-page traffic is people
 	// looking at counterparties).  RespondToFeedbackForm renders
@@ -302,6 +305,12 @@
 	const labelProps = $derived(extractLabelPropsFromProfile(profile));
 	const nostrUrl = $derived(labelProps.nostrUrl);
 	const blurtMediaUrl = $derived(labelProps.blurtMediaUrl);
+
+	// cp377 — render-safe validation for the hero's avatar-corner glyphs.
+	// Mirrors IdentityLabel's own render guard so an unsafe or malformed
+	// URL can never reach an <a href> on this page either.
+	const validatedNostrUrl = $derived(validateNostrUrlForRender(nostrUrl));
+	const validatedBlurtMediaUrl = $derived(validateBlurtMediaUrlForRender(blurtMediaUrl));
 	/** Optional short bio from the profile's json_metadata blob. */
 	const shortBio = $derived.by(() => {
 		const md = profile?.json_metadata;
@@ -431,53 +440,73 @@
 <div class="mx-auto max-w-3xl px-4 py-10 md:py-14">
 	<!-- ─── Hero: avatar + display name + account + links ────── -->
 	<section class="mb-8 flex flex-col items-center text-center">
-		{#if avatarSvg}
-			<span
-				class="mb-3 flex h-24 w-24 items-center justify-center overflow-hidden rounded-2xl bg-ink-800/50 ring-1 ring-ink-700 dark:bg-ink-800"
-				aria-hidden="true"
-			>
-				<!-- The avatar_svg value was produced by sanitizeSvg
-				     on the uploader's device, then broadcast to chain,
-				     then indexed. It reaches this render path having
-				     already passed allowlist sanitization; we trust
-				     that chokepoint and inline it. -->
-				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-				{@html avatarSvg}
-			</span>
-		{:else if avatarDataUri}
-			<img
-				src={avatarDataUri}
-				alt=""
-				width="96"
-				height="96"
-				class="mb-3 rounded-2xl object-cover"
-				loading="lazy"
-				decoding="async"
-			/>
-		{:else}
-			<img src={heroAvatar} alt="" width="96" height="96" class="mb-3 rounded-2xl" loading="lazy" decoding="async" />
-		{/if}
+		<!-- Avatar with the user's social-link glyphs (Nostr / Blurt.media)
+		     stacked at its bottom-right corner.  The avatar and the glyph
+		     column are centered together as one unit (items-end aligns the
+		     column's bottom to the avatar's bottom), so when glyphs are
+		     present the avatar sits slightly left of centre and the pair
+		     stays centred on the page.  Nostr renders first (top); Blurt.media
+		     second (bottom).  With a single glyph the column collapses to one
+		     icon which bottom-aligns into that same corner spot. -->
+		<div class="mb-3 flex items-end justify-center gap-2">
+			{#if avatarSvg}
+				<span
+					class="flex h-24 w-24 items-center justify-center overflow-hidden rounded-2xl bg-ink-800/50 ring-1 ring-ink-700 dark:bg-ink-800"
+					aria-hidden="true"
+				>
+					<!-- The avatar_svg value was produced by sanitizeSvg
+					     on the uploader's device, then broadcast to chain,
+					     then indexed. It reaches this render path having
+					     already passed allowlist sanitization; we trust
+					     that chokepoint and inline it. -->
+					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+					{@html avatarSvg}
+				</span>
+			{:else if avatarDataUri}
+				<img
+					src={avatarDataUri}
+					alt=""
+					width="96"
+					height="96"
+					class="rounded-2xl object-cover"
+					loading="lazy"
+					decoding="async"
+				/>
+			{:else}
+				<img src={heroAvatar} alt="" width="96" height="96" class="rounded-2xl" loading="lazy" decoding="async" />
+			{/if}
+			{#if validatedNostrUrl || validatedBlurtMediaUrl}
+				<div class="flex flex-col gap-2 pb-1">
+					{#if validatedNostrUrl}
+						<a
+							href={validatedNostrUrl}
+							target="_blank"
+							rel="noopener noreferrer external"
+							aria-label={$_('identity.nostr_link_aria')}
+							title={$_('identity.nostr_link_tooltip')}
+							class="inline-flex h-7 w-7 flex-none items-center justify-center rounded-lg text-ink-500 transition hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:text-ink-400"
+						>
+							<AltNetworkIcon network="nostr" size={18} class="h-[18px] w-[18px]" />
+						</a>
+					{/if}
+					{#if validatedBlurtMediaUrl}
+						<a
+							href={validatedBlurtMediaUrl}
+							target="_blank"
+							rel="noopener noreferrer external"
+							aria-label={$_('identity.blurt_media_link_aria')}
+							title={$_('identity.blurt_media_link_tooltip')}
+							class="inline-flex h-7 w-7 flex-none items-center justify-center rounded-lg text-ink-500 transition hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:text-ink-400"
+						>
+							<AltNetworkIcon network="blurt" size={18} class="h-[18px] w-[18px]" />
+						</a>
+					{/if}
+				</div>
+			{/if}
+		</div>
 		<h1 class="font-display text-3xl font-extrabold">
 			{effectiveDisplayName}
 		</h1>
-		<!-- The @-handle is already conveyed by the display-name heading
-		     above (or its @account fallback) and the page URL, so we don't
-		     repeat it under the avatar. We still surface the nostr /
-		     blurt.media link glyphs when the profile has them (handle
-		     hidden). -->
-		{#if nostrUrl || blurtMediaUrl}
-			<div class="mt-2 flex justify-center">
-				<IdentityLabel
-					{account}
-					displayName={null}
-					{nostrUrl}
-					{blurtMediaUrl}
-					hideAvatar={true}
-					hideHandle={true}
-					weight="normal"
-				/>
-			</div>
-		{/if}
 		{#if shortBio}
 			<p class="mt-3 max-w-prose text-pretty text-ink-600 dark:text-ink-300">
 				{shortBio}

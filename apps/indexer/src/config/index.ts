@@ -226,6 +226,26 @@ export interface Config {
 	 *  committed price. */
 	readonly coinpaprikaBaseUrl: string;
 	readonly krakenBaseUrl: string;
+	/** CryptoCompare (symbol-keyed aggregator; covers BLURT too).
+	 *  Optional key raises the rate limit; basic price works without. */
+	readonly cryptocompareBaseUrl: string;
+	readonly cryptocompareApiKey?: string;
+	/** CEX public-ticker sources (BTC; XMR is delisted from most, so
+	 *  the factory only wires them where the asset has a symbol). */
+	readonly binanceBaseUrl: string;
+	readonly coinbaseBaseUrl: string;
+	readonly okxBaseUrl: string;
+	readonly bybitBaseUrl: string;
+	/** CoinLore (no-key, numeric-id aggregator). */
+	readonly coinloreBaseUrl: string;
+	/** CoinCap (v3) — KEY-GATED aggregator; only joins the average
+	 *  when coincapApiKey is set. */
+	readonly coincapBaseUrl: string;
+	readonly coincapApiKey?: string;
+	/** Messari — KEY-GATED aggregator; only joins when
+	 *  messariApiKey is set. */
+	readonly messariBaseUrl: string;
+	readonly messariApiKey?: string;
 	/** Relative outlier band for the crypto external average, e.g.
 	 *  0.05 = drop sources >5% off the median before averaging. */
 	readonly priceOutlierTolerance: number;
@@ -910,6 +930,19 @@ const envSchema = z.object({
 	// Additional no-key crypto→USD sources (averaged with Coingecko).
 	MORPHIT_INDEXER_COINPAPRIKA_BASE_URL: z.string().default('https://api.coinpaprika.com/v1'),
 	MORPHIT_INDEXER_KRAKEN_BASE_URL: z.string().default('https://api.kraken.com/0/public'),
+	MORPHIT_INDEXER_CRYPTOCOMPARE_BASE_URL: z
+		.string()
+		.default('https://min-api.cryptocompare.com'),
+	MORPHIT_INDEXER_CRYPTOCOMPARE_API_KEY: z.string().optional(),
+	MORPHIT_INDEXER_BINANCE_BASE_URL: z.string().default('https://api.binance.com'),
+	MORPHIT_INDEXER_COINBASE_BASE_URL: z.string().default('https://api.exchange.coinbase.com'),
+	MORPHIT_INDEXER_OKX_BASE_URL: z.string().default('https://www.okx.com'),
+	MORPHIT_INDEXER_BYBIT_BASE_URL: z.string().default('https://api.bybit.com'),
+	MORPHIT_INDEXER_COINLORE_BASE_URL: z.string().default('https://api.coinlore.net'),
+	MORPHIT_INDEXER_COINCAP_BASE_URL: z.string().default('https://rest.coincap.io/v3'),
+	MORPHIT_INDEXER_COINCAP_API_KEY: z.string().optional(),
+	MORPHIT_INDEXER_MESSARI_BASE_URL: z.string().default('https://data.messari.io'),
+	MORPHIT_INDEXER_MESSARI_API_KEY: z.string().optional(),
 	MORPHIT_INDEXER_PRICE_OUTLIER_TOLERANCE: z.coerce.number().positive().max(1).default(0.05),
 
 	// ─── USD→fiat FX feed (multi-currency $1-equivalent floor) ──
@@ -1535,6 +1568,17 @@ export function loadConfig(): Config {
 		coingeckoApiKey: e.MORPHIT_INDEXER_COINGECKO_API_KEY,
 		coinpaprikaBaseUrl: e.MORPHIT_INDEXER_COINPAPRIKA_BASE_URL,
 		krakenBaseUrl: e.MORPHIT_INDEXER_KRAKEN_BASE_URL,
+		cryptocompareBaseUrl: e.MORPHIT_INDEXER_CRYPTOCOMPARE_BASE_URL,
+		cryptocompareApiKey: e.MORPHIT_INDEXER_CRYPTOCOMPARE_API_KEY,
+		binanceBaseUrl: e.MORPHIT_INDEXER_BINANCE_BASE_URL,
+		coinbaseBaseUrl: e.MORPHIT_INDEXER_COINBASE_BASE_URL,
+		okxBaseUrl: e.MORPHIT_INDEXER_OKX_BASE_URL,
+		bybitBaseUrl: e.MORPHIT_INDEXER_BYBIT_BASE_URL,
+		coinloreBaseUrl: e.MORPHIT_INDEXER_COINLORE_BASE_URL,
+		coincapBaseUrl: e.MORPHIT_INDEXER_COINCAP_BASE_URL,
+		coincapApiKey: e.MORPHIT_INDEXER_COINCAP_API_KEY,
+		messariBaseUrl: e.MORPHIT_INDEXER_MESSARI_BASE_URL,
+		messariApiKey: e.MORPHIT_INDEXER_MESSARI_API_KEY,
 		priceOutlierTolerance: e.MORPHIT_INDEXER_PRICE_OUTLIER_TOLERANCE,
 		// USD→fiat FX feed
 		fxFeedEnabled: e.MORPHIT_INDEXER_FX_FEED_ENABLED,

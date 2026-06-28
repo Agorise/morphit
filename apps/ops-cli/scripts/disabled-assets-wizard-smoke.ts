@@ -214,7 +214,8 @@ const scenarios: Scenario[] = [
 			);
 			return (
 				initSrc.includes('stepDisabledAssets,') &&
-				initSrc.includes('await stepDisabledAssets()') &&
+				initSrc.includes('stepDisabledAssets()') &&
+				initSrc.includes("recall('disabledAssets'") &&
 				initSrc.includes('disabledAssets,')
 			);
 		}

@@ -609,13 +609,13 @@ The Blurt/USD price you see next to listing fees on Morphit (the "~$0.125" subte
 
 **The chain, in priority order:**
 
-1. **Coingecko** — Aggregates Blurt prices across multiple exchanges.
+1. **External market median** — Blurt/USD is read from several independent public price sources at once — Coingecko, CoinPaprika, CryptoCompare, and (for assets they list) major exchanges like Kraken/Binance/Coinbase/OKX/Bybit — and combined with an outlier-rejected median. Any source that's down, rate-limiting us, or returning a bad number is simply dropped, so no single service can block or skew the price.
 
-2. **morphit_native** — A SELF-SOVEREIGN price derived from on-platform trade data (opt-in per operator; off by default until your instance has enough volume to support it). When enabled, this fetcher looks at recent verified-fee orders that traded Blurt against USD-fiat or stablecoins, applies several layers of manipulation defense, and computes a median across distinct traders. Slotted between Coingecko and the static floor — external sources remain primary until an operator explicitly opts in to preferring the native value during disagreement.
+2. **morphit_native** — A SELF-SOVEREIGN price derived from on-platform trade data (opt-in per operator; off by default until your instance has enough volume to support it). When enabled, this fetcher looks at recent verified-fee orders that traded Blurt against USD-fiat or stablecoins, applies several layers of manipulation defense, and computes a median across distinct traders. Slotted between the external market median and the static floor — external sources remain primary until an operator explicitly opts in to preferring the native value during disagreement.
 
 3. **Static fallback** — An operator-set floor value (default $0.002) used when all upstreams have failed. Editable in the setup wizard.
 
-**Why a chain instead of one source?** No single price feed can be trusted unconditionally. Coingecko could be the same. A static fallback drifts from reality. The chain means Blurt pricing keeps working in every scenario short of the entire internet going down.
+**Why a chain instead of one source?** No single price feed can be trusted unconditionally — any one service can go down, rate-limit us, or be wrong. That's why the first tier is itself a median of many independent feeds, and a static fallback sits behind it for the worst case. The chain means Blurt pricing keeps working in every scenario short of the entire internet going down.
 
 **How morphit_native works** (when enabled — see ADR-0039 for full design):
 
@@ -635,7 +635,7 @@ The Blurt/USD price you see next to listing fees on Morphit (the "~$0.125" subte
 
 **Why this matters for your trades**: Blurt-paid listing fees are USD-targeted, not a fixed Blurt amount — Morphit quotes the Blurt worth about $0.125 at the current price, so the fee's dollar value stays steady as Blurt moves up or down. The exact Blurt amount is shown before you sign and settles at chain time. Behind the scenes the indexer accepts that amount against a chain-pinned floor with a small tolerance band, so every instance agrees on what's owed and the amount can't be gamed by feeding in a bad price. The price source's only job is to make that conversion accurate for Morphit's display — never a source of truth for any downstream financial system.
 
-**Pre-launch note**: Until enough on-platform trade volume exists for morphit_native to qualify (requires ≥3 distinct verified-fee traders posting Blurt-vs-USD or Blurt-vs-stablecoin orders in the last 8 hours), every instance falls back to Coingecko/static. Operators turn on morphit_native via `MORPHIT_INDEXER_PRICE_FEED_NATIVE_ENABLED=true` when their data is mature.
+**Pre-launch note**: Until enough on-platform trade volume exists for morphit_native to qualify (requires ≥3 distinct verified-fee traders posting Blurt-vs-USD or Blurt-vs-stablecoin orders in the last 8 hours), every instance falls back to the external market median (and the static floor behind it). Operators turn on morphit_native via `MORPHIT_INDEXER_PRICE_FEED_NATIVE_ENABLED=true` when their data is mature.
 
 **cp128 update — denomination is operator-configurable.** Although the discussion above uses USD as the example, the indexer's displayed unit isn't hardcoded to USD. Operators set `MORPHIT_INDEXER_PRICE_FEED_DENOMINATION_FIAT` (default `USD`) to any 3-8 character uppercase ticker — `EUR` (Euro), `GBP` (British Pound), `JPY` (Japanese Yen), `BRL` (Brazilian Real), `CNY` (Chinese Yuan), `INR` (Indian Rupee), `RUB` (Russian Ruble), `AED` (UAE Dirham), `XDR` (IMF Special Drawing Rights basket), `XAU` (gold ounces, a hard-currency hedge), or any other ticker their market uses. The listing-fee response carries a `denomination_fiat` field telling the frontend which unit the `blurt_price_fiat` + `base_fee_fiat` numbers are in, so the UI renders the appropriate symbol and formatting ("$0.125" for USD, "€0.11" for EUR, "XAU 0.0000023" for gold, etc.). This isn't just for the hypothetical USD-collapse scenario — operators serving non-USD-native markets benefit today.
 

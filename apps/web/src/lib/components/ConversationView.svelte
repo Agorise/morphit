@@ -1143,7 +1143,7 @@
 		confirmLabel={$_(`chat.block.confirm.${action}.yes`, {
 			values: { peer }
 		}) as string}
-		cancelLabel={$_('chat.block.confirm.cancel') as string}
+		cancelLabel={$_('common.cancel') as string}
 		variant="destructive"
 		busyLabel={$_('chat.block.busy') as string}
 		onConfirm={onConfirmBlock}

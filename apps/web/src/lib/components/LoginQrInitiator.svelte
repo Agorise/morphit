@@ -275,7 +275,7 @@
 				href={lp('/login')}
 				class="text-sm text-ink-500 underline hover:text-ink-700 dark:text-ink-400 dark:hover:text-ink-200"
 			>
-				{$_('login_qr.cancel')}
+				{$_('common.cancel')}
 			</a>
 		</div>
 	{:else if pairingState.kind === 'received'}
@@ -297,7 +297,7 @@
 				{$_('login_qr.expired_body')}
 			</p>
 			<button type="button" class="btn-primary mt-4" onclick={tryAgain}>
-				{$_('login_qr.try_again')}
+				{$_('common.retry')}
 			</button>
 		</div>
 	{:else if pairingState.kind === 'rejected'}
@@ -309,7 +309,7 @@
 				{$_('login_qr.rejected_body')}
 			</p>
 			<button type="button" class="btn-primary mt-4" onclick={tryAgain}>
-				{$_('login_qr.try_again')}
+				{$_('common.retry')}
 			</button>
 		</div>
 	{:else if pairingState.kind === 'cancelled'}

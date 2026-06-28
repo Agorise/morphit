@@ -637,7 +637,7 @@
 				onclick={onCancel}
 				disabled={sending}
 			>
-				{$_('chat.funds_sent.cancel')}
+				{$_('common.cancel')}
 			</button>
 			<button
 				type="button"
