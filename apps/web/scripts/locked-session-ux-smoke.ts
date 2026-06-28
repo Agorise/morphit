@@ -7,7 +7,7 @@
  * intact; they only need to re-enter their password. cp340 makes that obvious
  * instead of looking like a full logout:
  *
- *   1. The header CTA reads "Unlock" (nav.unlock), not "Start", when this
+ *   1. The header CTA reads "Unlock" (common.unlock), not "Start", when this
  *      device has a remembered keystore — a click lands on the welcome-back
  *      unlock screen, not a fresh import.
  *   2. Refreshing while locked on a protected page (Settings) routes to the
@@ -57,8 +57,8 @@ check(
 	/signedOutCtaLabel\s*=\s*\$derived\([\s\S]*?hasPersistedKeystore\(\)/.test(avatar)
 );
 check(
-	'signed-out CTA chooses nav.unlock (remembered) vs nav.start (fresh)',
-	/signedOutCtaLabel\s*=\s*\$derived\([\s\S]*?nav\.unlock[\s\S]*?nav\.start/.test(avatar)
+	'signed-out CTA chooses common.unlock (remembered) vs nav.start (fresh)',
+	/signedOutCtaLabel\s*=\s*\$derived\([\s\S]*?common\.unlock[\s\S]*?nav\.start/.test(avatar)
 );
 check(
 	'the header sign-in button renders {signedOutCtaLabel}, not a hardcoded nav.start',
@@ -116,11 +116,11 @@ check(
 	(login.match(/viewBox="-1 -1 2002 2002"/g) || []).length >= 2
 );
 
-// ── 4. nav.unlock locale key exists ──────────────────────────────────────────
+// ── 4. common.unlock locale key exists ───────────────────────────────────────
 check(
-	'nav.unlock exists in en',
-	typeof (en.nav as { unlock?: string })?.unlock === 'string' &&
-		(en.nav as { unlock: string }).unlock.length > 0
+	'common.unlock exists in en',
+	typeof (en.common as { unlock?: string })?.unlock === 'string' &&
+		(en.common as { unlock: string }).unlock.length > 0
 );
 
 // ── 5. Welcome-back autofocuses the password field (cp343) ───────────────────
