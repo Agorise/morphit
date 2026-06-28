@@ -211,6 +211,8 @@
 		<input
 			bind:this={inputEl}
 			bind:value={query}
+			id="fiat-currency-search"
+			name="fiat_currency_search"
 			maxlength="64"
 			type="text"
 			autocomplete="off"

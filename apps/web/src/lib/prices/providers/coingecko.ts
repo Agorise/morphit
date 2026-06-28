@@ -19,7 +19,7 @@
  *   → { "bitcoin": { "usd": 95000 }, "monero": { "usd": 180 } }
  *
  * BLURT is handled server-side by the indexer's composite price
- * source (klingex → coingecko → static floor) because fee-
+ * source (coingecko → static floor) because fee-
  * verification needs a single canonical value. This frontend
  * provider is for the user-facing "how much USD is that BTC?"
  * estimation on the compose-order page and order cards.

@@ -2,9 +2,8 @@
  * Hardened fetch helper for price-feed upstreams (cp159
  * F-indexer-1/2/3).
  *
- * The price fetchers (coingeckoFetcher.ts, klingexFetcher.ts)
- * fetch from operator-configured upstream HTTP APIs (Coingecko,
- * Klingex).  The URL is trusted (operator picks it; defaults to
+ * The price fetcher (coingeckoFetcher.ts) fetches from the
+ * operator-configured upstream HTTP API (Coingecko).  The URL is trusted (operator picks it; defaults to
  * the known-good public API endpoint), so SSRF defense isn't
  * the threat model here — the @morphit/net-defense fetchJson
  * stack covers the federation case where URLs come from

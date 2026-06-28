@@ -48,6 +48,7 @@ import {
 	computeFeeAmounts,
 	fetchBtcXmrPricesFromCoingecko
 } from '../../../indexer/src/lib/feeAmountCalc.ts';
+import { LISTING_FEE_USD } from '@morphit/asset-registry';
 import type { ListingFeeResult } from './render.ts';
 
 export const TOTAL_STEPS = 23;
@@ -1882,7 +1883,11 @@ export async function stepDisabledPaymentMethods(): Promise<DisabledPaymentMetho
  *      fee verification is BLURT-native.
  */
 
-const DEFAULT_LISTING_FEE_TARGET_USD = 0.25;
+// Canonical USD target (single source of truth — @morphit/asset-registry
+// @morphit/asset-registry LISTING_FEE_USD).  The sat/piconero defaults below are the
+// deployed at-reference amounts; the wizard recomputes them from live
+// prices when Coingecko is reachable, falling back to these otherwise.
+const DEFAULT_LISTING_FEE_TARGET_USD = LISTING_FEE_USD.btc;
 const DEFAULT_LISTING_FEE_BTC_SATOSHIS = 416;
 const DEFAULT_LISTING_FEE_XMR_PICONERO = 781_250_000;
 const DEFAULT_FALLBACK_BLURT_PRICE_USD = 0.002;

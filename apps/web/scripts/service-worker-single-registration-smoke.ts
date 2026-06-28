@@ -256,28 +256,43 @@ const root = resolve(import.meta.dirname, '..');
 // ─── 10. UpdateBanner wires the consent → apply → reload flow ───
 // The page must refresh ONLY when the user clicks "Load it now" — never on its
 // own. So: posts APPLY_UPDATE (asks the SW to skipWaiting), offers Later/apply,
-// has NO controllerchange auto-reload listener, and the single location.reload()
-// lives inside applyUpdate().
+// and the single location.reload() lives inside applyUpdate(). cp368: applyUpdate
+// now also waits for controllerchange before reloading (one tap lands the new
+// bundle on mobile) — that listener is allowed, but ONLY inside applyUpdate,
+// never at module/effect scope where it would auto-reload behind the user's back.
 {
 	const path = resolve(root, 'src/lib/components/UpdateBanner.svelte');
 	const exists = existsSync(path);
 	const text = exists ? readFileSync(path, 'utf8') : '';
 	const postsApply = /postMessage\(\s*\{\s*type:\s*['"]APPLY_UPDATE['"]/.test(text);
-	const noControllerChangeListener = !/addEventListener\(\s*['"]controllerchange['"]/.test(text);
 	const applyIdx = text.indexOf('function applyUpdate');
 	const dismissIdx = text.indexOf('function dismiss');
 	const reloadIdx = text.indexOf('location.reload()');
+	// applyUpdate body bound: from its start to the next top-level fn / $effect.
+	const applyStop = (() => {
+		if (applyIdx < 0) return -1;
+		const nextFn = text.indexOf('\n\tfunction ', applyIdx + 1);
+		const nextEffect = text.indexOf('\n\t$effect', applyIdx + 1);
+		const ends = [nextFn, nextEffect].filter((i) => i !== -1);
+		return ends.length ? Math.min(...ends) : text.length;
+	})();
+	const applyBody = applyIdx >= 0 ? text.slice(applyIdx, applyStop) : '';
+	const ccRe = /addEventListener\(\s*['"]controllerchange['"]/g;
+	const ccTotal = [...text.matchAll(ccRe)].length;
+	const ccInApply = [...applyBody.matchAll(ccRe)].length;
+	// A controllerchange listener may exist now, but only inside applyUpdate.
+	const controllerChangeConsentGated = ccTotal === ccInApply;
 	const reloadIsUserConsentOnly =
 		applyIdx >= 0 && reloadIdx > applyIdx && (dismissIdx === -1 || reloadIdx < dismissIdx);
 	const offersChoice = /update\.apply/.test(text) && /update\.later/.test(text);
 	const ok =
-		exists && postsApply && noControllerChangeListener && reloadIsUserConsentOnly && offersChoice;
+		exists && postsApply && controllerChangeConsentGated && reloadIsUserConsentOnly && offersChoice;
 	results.push({
-		name: 'UpdateBanner offers Load-it-now/Later, posts APPLY_UPDATE, reloads only on user consent (no controllerchange auto-reload)',
+		name: 'UpdateBanner offers Load-it-now/Later, posts APPLY_UPDATE, reloads only on user consent (controllerchange only inside applyUpdate)',
 		ok,
 		detail: ok
 			? undefined
-			: `exists: ${exists}; posts APPLY_UPDATE: ${postsApply}; no controllerchange auto-reload: ${noControllerChangeListener}; reload lives inside applyUpdate only: ${reloadIsUserConsentOnly}; offers apply+later: ${offersChoice}. The page must refresh ONLY when the user clicks "Load it now" — never on its own.`
+			: `exists: ${exists}; posts APPLY_UPDATE: ${postsApply}; controllerchange only inside applyUpdate (${ccInApply}/${ccTotal}): ${controllerChangeConsentGated}; reload lives inside applyUpdate only: ${reloadIsUserConsentOnly}; offers apply+later: ${offersChoice}. The page must refresh ONLY when the user clicks "Load it now"; a controllerchange listener outside applyUpdate auto-reloads behind the user's back.`
 	});
 }
 
@@ -303,10 +318,11 @@ const root = resolve(import.meta.dirname, '..');
 }
 
 // ─── 12. "Load it now" reliably reloads — exactly one reload site ───
-// applyUpdate() posts APPLY_UPDATE (skipWaiting) then reloads. Navigations are
-// network-first, so the reload pulls the fresh shell regardless of SW state —
-// no controllerchange / 'activated' listeners are needed, so there is exactly
-// ONE reload site and thus no double-reload to guard against.
+// applyUpdate() posts APPLY_UPDATE (skipWaiting), waits for controllerchange,
+// then reloads (with a setTimeout fallback if the handoff stalls). Navigations
+// are network-first, so the reload pulls the fresh shell regardless of SW state.
+// There is exactly ONE reload site (a single reloadOnce guard), so there is no
+// double-reload to guard against even with the controllerchange + fallback paths.
 {
 	const path = resolve(root, 'src/lib/components/UpdateBanner.svelte');
 	const text = existsSync(path) ? readFileSync(path, 'utf8') : '';

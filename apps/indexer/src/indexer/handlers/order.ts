@@ -29,7 +29,7 @@ import { attributeBlurtFeeToOperator } from '$indexer/operatorEarnings';
 import { checkJsonbSize } from '$indexer/payloadSize';
 import { validateOrderPermlink } from '$indexer/permlink';
 import { logger } from '$log';
-import { ASSET_TICKERS_SET, type AssetTicker } from '@morphit/asset-registry';
+import { ASSET_TICKERS_SET, FIRST_ORDER_MIN_USD, FEE_PRICE_TOLERANCE, type AssetTicker } from '@morphit/asset-registry';
 
 const log = logger('order-handler');
 
@@ -617,28 +617,44 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		if (v.asset !== 'BLURT') {
 			return { ok: false, reason: 'waiver_requires_blurt' };
 		}
-		// Phase 3: enforce a $1 USD minimum on the buy amount so the
-		// user ends up with a meaningfully-sized BLURT balance (~500
-		// BLURT at $0.002/BLURT) — enough to fund ~8 future listings.
-		// A null amount_min would let a user take the waiver on a
-		// listing with only an upper bound, bypassing the floor.
+		// Phase 3 / cp369: enforce a $1 USD-equivalent minimum on the
+		// first-buy VALUE.  amount_min is a fiat value (the orderbook
+		// renders it as "{min} – {max} {fiat_currency}"), so this is a
+		// fiat-to-fiat check — no price feed in the critical path.  A
+		// $1 first buy still leaves the user a meaningful BLURT balance
+		// (~500 BLURT at ~$0.002) — enough to fund ~8 future listings
+		// at the ~$0.125 BLURT listing fee.  A null amount_min would
+		// let a user take the waiver on an upper-bound-only listing,
+		// bypassing the floor.
 		if (v.amount_min === null) {
 			return { ok: false, reason: 'waiver_requires_min_usd' };
 		}
-		// BLURT-native waiver floor.  After the §F.11 BLURT-
-		// denomination refactor, the waiver minimum is 500 BLURT —
-		// matches the frontend's WAIVER_MIN_BLURT constant in
-		// $lib/orders/fee.  Originally pegged to "$1 USD-equivalent"
-		// via the live price feed; under the BLURT-native model
-		// there's no price feed in the critical path, so the floor
-		// is a flat BLURT amount the user must hit.  500 BLURT is
-		// roughly $1 at typical recent BLURT prices and lines up
-		// nicely with the 60 BLURT listing fee (a 500-BLURT waiver-
-		// buy covers ~8 future listing fees).  Without this floor,
-		// a user could take the waiver on a tiny 1-BLURT buy and
-		// leave the flow with effectively-zero starter balance.
-		const WAIVER_MIN_BLURT = 500;
-		if (v.amount_min < WAIVER_MIN_BLURT) {
+		// cp369 reverses the §F.11 "BLURT-denomination" regression that
+		// compared this fiat-valued amount against a flat 500-BLURT
+		// constant (so a "$1" order read as "1 BLURT < 500" and got
+		// rejected).  The floor is fiat — no price feed needed, which
+		// was §F.11's only stated reason for going BLURT-native here.
+		// $1 is exact for a USD-denominated instance; a non-USD
+		// instance would want a per-currency $1 conversion (a multi-
+		// currency-pricing follow-up).  Without a floor a user could
+		// take the waiver on a $0.001 buy and leave with ~nothing.
+		// cp369/cp370: the $1 floor is the canonical FIRST_ORDER_MIN_USD
+		// from @morphit/asset-registry — the single source of truth the
+		// frontend quote and this validation both import.
+		const WAIVER_MIN_FIAT_USD = FIRST_ORDER_MIN_USD;
+		// cp372: FX-aware floor.  amount_min is denominated in
+		// v.fiat_currency (the orderbook renders "{min}–{max} {fiat}"),
+		// so for a non-USD order "1.20" might be 1.20 AUD ≈ $0.79 — below
+		// the $1 floor.  Convert to USD via the indexer's FX source
+		// before comparing.  This closes the non-USD gap that the cp369
+		// comment flagged as a "multi-currency-pricing follow-up".
+		// fiatToUsd returns null when the currency can't be converted
+		// (FX feed disabled AND non-USD, or a currency outside both the
+		// live and static tables) — fall back to the documented direct
+		// comparison (treat amount_min as USD-equivalent), which is no
+		// worse than the pre-cp372 behaviour and exact for USD instances.
+		const minUsd = ctx.fiatToUsd(v.amount_min, v.fiat_currency) ?? v.amount_min;
+		if (minUsd < WAIVER_MIN_FIAT_USD) {
 			return { ok: false, reason: 'waiver_requires_min_usd' };
 		}
 		// Has this account posted before? Even a rejected prior
@@ -889,14 +905,27 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		// (count + 1)-th.
 		const existingCount = await countForSybilTier(client, ctx.signer, ctx.blockTime);
 		const nth = existingCount + 1;
-		// BLURT-native fee: pure function of the configured base
-		// times the tier multiplier.  No price-feed dependency —
-		// frontend computes the same value with the same constants,
-		// so no TOCTOU window between quote and verification.  The
-		// feeTolerance band (default 0.001 = 0.1%) only absorbs
-		// floating-point rounding in the formatted BLURT amount.
-		const expected = expectedFeeBlurt(nth, ctx.config.feeBaseBlurt);
-		const minAcceptable = expected * (1 - ctx.config.feeTolerance);
+		// BLURT-native fee (Model A, cp372): the ENFORCED amount stays
+		// a pure function of the pinned base × tier — NO price read
+		// here, so no TOCTOU and the floor is deterministic across the
+		// federation.  The base is now resolved through ctx.feeAmounts
+		// (chain-pin > env), exactly like the BTC/XMR amounts, so every
+		// indexer enforces the SAME BLURT floor; the maintainer's
+		// release-broadcaster auto-re-pins it as BLURT/USD drifts, so
+		// operators never hand-tune it.  ctx.config.feeBaseBlurt is the
+		// Plan-B fallback when no value was resolved (e.g. a unit
+		// context that doesn't populate feeAmounts).
+		//
+		// The displayed amount (served by /v1/listing-fee) tracks the
+		// canonical USD target live, and can sit up to
+		// FEE_PRICE_TOLERANCE below the pinned base between re-pins — so
+		// the acceptance floor relaxes by FEE_PRICE_TOLERANCE.  Still a
+		// floor (overpayment fine); an operator who set feeTolerance
+		// wider than 15% keeps it.  Bounded + not fork-controllable.
+		const feeBaseBlurt = ctx.feeAmounts.blurtBase ?? ctx.config.feeBaseBlurt;
+		const expected = expectedFeeBlurt(nth, feeBaseBlurt);
+		const tolerance = Math.max(ctx.config.feeTolerance, FEE_PRICE_TOLERANCE);
+		const minAcceptable = expected * (1 - tolerance);
 		if (transfer.amountBlurt < minAcceptable) {
 			feeStatus = 'underpaid';
 		} else {

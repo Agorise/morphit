@@ -27,6 +27,39 @@
 > and `docs/ADDING-A-COIN.md` §"2026-05-13 architectural update"
 > for the full rationale.
 
+> **2026-06-27 forward note (cp370 — canonical economics
+> source of truth):** the USD figures this ADR describes — the
+> ~$0.25 BTC/XMR listing fee, the ~$0.125 (50%-discounted) BLURT
+> listing fee, the $1 first-order minimum, and the Sybil
+> multipliers — are now hardcoded in ONE place:
+> `packages/asset-registry/src/index.ts` (the canonical economics
+> was briefly factored into an `economics.ts` at cp370 but
+> RE-INLINED into `index.ts` the same session — the package is
+> consumed as raw source by the built mcp-server, which plain-Node
+> ESM resolution requires to be a single self-contained file)
+> (`LISTING_FEE_USD`, `FIRST_ORDER_MIN_USD`, `FEE_PRICE_TOLERANCE`,
+> `FEE_FALLBACK`, and the `listingFee*` derivation helpers),
+> imported by both the frontend (quote) and the indexer
+> (validation) so the two cannot drift.  The
+> `economics-canonical-smoke.ts` locks the numbers + the
+> 50%-BLURT-discount invariant + black-hat garbage-price
+> handling.
+>
+> **2026-06-27 forward note (cp372 — live tracking + chain-pinned
+> BLURT base shipped):** the deferral below is now RESOLVED.  cp372
+> built the BTC/XMR USD price subsystem (multi-source averaging +
+> feed-health), made the *displayed* listing fee track the live
+> canonical USD target (Model-A Option 1), chain-pinned the BLURT
+> base in the `morphit_release_v1` `treasury.blurt.base` (so the
+> BLURT floor is deterministic across the federation like BTC/XMR),
+> and added an automated auto-re-pin (maintainer timer, failsafes, a
+> manual Plan B) that keeps the on-chain amounts on their USD
+> targets.  The enforced amount stays a fixed chain-pin (no price
+> read in the verifier → no fork, no quote→pay race);
+> `FEE_PRICE_TOLERANCE` absorbs the drift between re-pins.  See the
+> cp372 entries in TARBALL.md / docs/REVISIT-LIST.md and
+> `OPERATIONS.md §40.3a`.
+
 ## Context
 
 ADR-0009 established Morphit's order-posting fee model:

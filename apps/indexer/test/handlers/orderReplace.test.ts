@@ -221,9 +221,10 @@ describe('orderReplace handler', () => {
 	// ─── B1 regression: waiver substance protection ────────────────
 
 	it('B1: rejects replace below waiver floor when target is waived_first_buy', async () => {
-		// User created a 500-BLURT waived first-buy order (passes waiver
+		// User created a $1+ waived first-buy order (passes the waiver
 		// floor in order.ts handler), now tries to replace with
-		// amount_min=1 to dial back the commitment.
+		// amount_min=$0.50 to dial back the commitment below the
+		// $1 USD-equivalent floor (cp369: fiat floor, not 500 BLURT).
 		const createdAt = new Date('2026-05-01T12:00:00Z');
 		const blockTime = new Date('2026-05-01T12:01:00Z');
 		const mock = makeMockClient([
@@ -252,8 +253,8 @@ describe('orderReplace handler', () => {
 					asset: 'BLURT',
 					asset_network: null,
 					fiat_currency: 'USD',
-					amount_min: 1, // ← below 500-BLURT floor
-					amount_max: 500,
+					amount_min: 0.5, // ← below the $1 USD-equivalent floor
+					amount_max: 50,
 					price_model: { kind: 'fixed', price: 0.002 },
 					payment_methods: ['sepa']
 				}
@@ -295,7 +296,7 @@ describe('orderReplace handler', () => {
 					asset: 'BLURT',
 					asset_network: null,
 					fiat_currency: 'USD',
-					amount_min: 500, // ← at the floor
+					amount_min: 1, // ← at the $1 USD-equivalent floor
 					amount_max: 1000,
 					price_model: { kind: 'fixed', price: 0.002 },
 					payment_methods: ['sepa']
@@ -375,7 +376,7 @@ describe('orderReplace handler', () => {
 				blockTime,
 				payload: {
 					...validPayload(),
-					amount_min: 1 // would fail if waiver-floor logic mis-fired
+					amount_min: 0.5 // below the $1 floor; allowed since target isn't waived
 				}
 			}),
 			mock.client

@@ -4,6 +4,17 @@
 **Date:** 2026-04-17 (proposed); 2026-05-06 (status updated — Phase 3 indexer-side shipped); 2026-05-25 (cp138 — frontend wiring partially complete; live prices on indexer at `/v1/price/...`, frontend still fallback-only pending an `ApiRelayProvider` + Settings opt-in)
 **Deciders:** project maintainer
 
+> **2026 forward note (cp367 — Klingex removed):** This ADR was
+> written when Klingex (the Blurt-community-run CEX) was BLURT's
+> primary external upstream. Klingex went out of business in 2026.
+> The Klingex fetcher, its `MORPHIT_INDEXER_KLINGEX_BASE_URL`
+> config, and its slot in the chain were removed. **CoinGecko is
+> now the sole external price source for every asset** (BLURT, BTC,
+> XMR), with the opt-in self-sovereign `morphit_native` source and
+> the static floor behind it. References to Klingex below are
+> retained as the original decision-record context; read "Klingex →
+> Coingecko" as "Coingecko" for current behavior.
+
 ## Context
 
 Morphit needs USD-equivalent prices for BTC, XMR, and BLURT so that:

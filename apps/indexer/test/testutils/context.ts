@@ -10,6 +10,7 @@
 import type { BlurtClient } from '$blurt/client';
 import type { Config } from '$config';
 import type { OpContext } from '$indexer/handler-contract';
+import { FEE_FALLBACK } from '@morphit/asset-registry';
 
 /** A BlurtClient stand-in that throws if any method is called.
  *  Handlers that don't touch the chain get one of these; any
@@ -62,8 +63,22 @@ export function fakeConfig(overrides: Partial<Config> = {}): Config {
 		officialAccountName: 'morphit',
 		operatorAccountName: 'morphit',
 		feeRecipient: 'morphit-fees',
-		feeBaseBlurt: 60,
+		// cp370: mock the BLURT base at the CANONICAL on-target value
+		// (LISTING_FEE_USD.blurt ÷ reference price = 62.5 BLURT,
+		// exported as FEE_FALLBACK.blurtBase) so fee-amount tests anchor
+		// to the source of truth rather than a magic constant.  NOTE the
+		// deployed config DEFAULT is still 60 (the historical ≈12¢
+		// approximation).  cp372 Model A: the /v1/listing-fee DISPLAY
+		// now live-tracks the operator's USD-equivalent fee, and the
+		// order handler accepts the pinned base ± FEE_PRICE_TOLERANCE
+		// (15%); enforcement stays BLURT-native (no price read).
+		feeBaseBlurt: FEE_FALLBACK.blurtBase,
 		feeTolerance: 0.001,
+		// cp372: pinned BTC/XMR fee amounts, anchored to the canonical
+		// fallbacks (≈$0.25 at the reference prices) so listing-fee
+		// display tests have realistic bases to live-scale.
+		btcFeeSatoshis: FEE_FALLBACK.satoshis,
+		xmrFeePiconero: FEE_FALLBACK.piconero,
 		// Part 121 — empty by default, meaning every canonical
 		// registry asset is enabled.  Tests that exercise the
 		// instance-wide disable gate override with e.g.
@@ -79,10 +94,21 @@ export function fakeConfig(overrides: Partial<Config> = {}): Config {
 		priceFeedBtcStaticFloor: 60_000,
 		priceFeedXmrStaticFloor: 200,
 		// cp130 factory needs these — sane defaults for tests.
-		klingexBaseUrl: 'https://klingex.io',
 		coingeckoBaseUrl: 'https://api.coingecko.com/api/v3',
 		coingeckoApiKey: '',
+		// cp372 additional crypto sources + outlier tolerance.
+		coinpaprikaBaseUrl: 'https://api.coinpaprika.com/v1',
+		krakenBaseUrl: 'https://api.kraken.com/0/public',
+		priceOutlierTolerance: 0.05,
 		priceRefreshIntervalMs: 300_000,
+		// cp372 FX feed defaults — disabled in tests by default (the
+		// FX-aware floor uses ctx.fiatToUsd, which makeCtx stubs).
+		fxFeedEnabled: false,
+		fxRefreshIntervalMs: 3_600_000,
+		fxFetchTimeoutMs: 5_000,
+		fxFrankfurterBaseUrl: 'https://api.frankfurter.dev/v1',
+		fxErApiBaseUrl: 'https://open.er-api.com/v6',
+		fxCurrencyApiBaseUrl: 'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1',
 		// cp127 native fetcher defaults (factory consults when
 		// priceFeedNativeEnabled).
 		priceFeedNativeEnabled: false,
@@ -124,6 +150,12 @@ export function makeCtx(overrides: Partial<OpContext> = {}): OpContext {
 		// "operator hasn't configured this method" and the order
 		// handler rejects with `fee_amount_not_configured_<method>`.
 		feeAmounts: {},
+		// cp372 — FX-aware first-order floor converter.  Default is the
+		// identity (treat the amount as its own USD value), which makes
+		// existing USD-denominated floor tests behave exactly as before.
+		// Tests exercising non-USD conversion override with a concrete
+		// rate (e.g. (a, f) => f === 'AUD' ? a / 1.52 : a).
+		fiatToUsd: (amount: number) => (Number.isFinite(amount) ? amount : null),
 		// Phase E — orderbook event bus.  No-op default; tests that
 		// want to assert emission count override with a tracking
 		// stub.  Without this default, every handler that calls

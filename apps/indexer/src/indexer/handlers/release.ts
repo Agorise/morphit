@@ -176,9 +176,31 @@ function validateTreasury(
 		xmr = { address: addr, piconero: pn };
 	}
 
+	// cp372 — optional chain-pinned BLURT fee base.  No address
+	// (BLURT fees are transfers to the operator's fee recipient);
+	// only the tier-1 base amount is pinned.  Mirrors the
+	// release-schema package's validateTreasury().
+	let blurt: { base: number } | null = null;
+	if (t.blurt !== undefined && t.blurt !== null) {
+		if (!isPlainObject(t.blurt)) return { reason: 'treasury_blurt_not_object' };
+		const base = t.blurt.base;
+		if (typeof base !== 'number' || !Number.isFinite(base) || base <= 0) {
+			return { reason: 'treasury_blurt_base_invalid' };
+		}
+		// Sanity ceiling: ~12.5¢ is ≈62.5 BLURT; even an extreme
+		// crash to $0.000001 needs only ~125,000 BLURT.  10M leaves
+		// generous headroom while rejecting absurd / hostile values.
+		if (base > 10_000_000) {
+			return { reason: 'treasury_blurt_base_too_large' };
+		}
+		blurt = { base };
+	}
+
 	// Both null is fine — it's a structurally valid "I declare
 	// no treasury pin" payload, equivalent to omitting the field.
-	const value: Record<string, unknown> = { btc, xmr };
+	// Attach `blurt` only when present so a release with no BLURT
+	// pin serializes byte-identically to the pre-cp372 shape.
+	const value: Record<string, unknown> = blurt !== null ? { btc, xmr, blurt } : { btc, xmr };
 	const sizeCheck = checkJsonbSize(value);
 	if (!sizeCheck.ok) return { reason: 'treasury_too_large' };
 	return { value };

@@ -14,13 +14,14 @@
  *
  * Per-asset composition
  * ─────────────────────
- *   BLURT/USD:  Klingex → Coingecko → morphit_native → static floor
- *   BTC/USD:                Coingecko → morphit_native → static floor
- *   XMR/USD:                Coingecko → morphit_native → static floor
+ *   BLURT/USD:  Coingecko → morphit_native → static floor
+ *   BTC/USD:    Coingecko → morphit_native → static floor
+ *   XMR/USD:    Coingecko → morphit_native → static floor
  *
- * Klingex is BLURT-only (the exchange's flagship pair is BLURT/USDT;
- * it doesn't trade BTC/USDT or XMR/USDT at scale, so we don't query
- * it for non-BLURT assets).
+ * (Klingex — the Blurt-community exchange that used to be BLURT's
+ * primary external upstream — went out of business in 2026, so it
+ * was removed: Coingecko is now the sole external price source for
+ * every asset, with morphit_native and the static floor behind it.)
  *
  * The factory returns a BlurtPriceSource per asset, each started-
  * ready; caller must invoke source.start() and source.stop() for
@@ -50,8 +51,9 @@ import type { Config } from '$config';
 import type { Database } from '$db/pool';
 import type { BlurtPriceSource, PriceFetch } from '$indexer/price/source';
 import { CompositeCachedPriceSource } from '$indexer/price/compositeSource';
-import { createKlingexFetcher } from '$indexer/price/klingexFetcher';
 import { createCoingeckoFetcher } from '$indexer/price/coingeckoFetcher';
+import { createCoinpaprikaFetcher } from '$indexer/price/coinpaprikaFetcher';
+import { createKrakenFetcher } from '$indexer/price/krakenFetcher';
 import { createMorphitNativeFetcher } from '$indexer/price/morphitNativeFetcher';
 import { DisagreementMonitor } from '$indexer/price/disagreementMonitor';
 
@@ -68,10 +70,17 @@ export interface AssetPriceSourceOptions {
 	/** Coingecko's internal coin id for this asset, e.g. 'blurt',
 	 *  'bitcoin', 'monero'. */
 	readonly coingeckoCoinId: string;
-	/** Whether to include the Klingex upstream.  True for BLURT
-	 *  (Klingex's flagship pair); false for BTC/XMR (Klingex
-	 *  doesn't trade these at scale). */
-	readonly enableKlingex: boolean;
+	/** CoinPaprika coin id for the multi-source average (USD only),
+	 *  e.g. 'btc-bitcoin'.  Omit for assets CoinPaprika doesn't list. */
+	readonly coinpaprikaId?: string;
+	/** Kraken USD pair for the multi-source average (USD only), e.g.
+	 *  'XBTUSD'.  Omit for assets Kraken doesn't list (e.g. BLURT). */
+	readonly krakenPair?: string;
+	/** Per-asset plausibility window for a committed price.  MUST be
+	 *  asset-appropriate — BLURT's tight [0.0001, 0.1] would reject
+	 *  every real BTC/XMR quote, so each asset sets its own. */
+	readonly plausibleMin: number;
+	readonly plausibleMax: number;
 	/** Static fallback price for this asset, in the configured
 	 *  denomination fiat.  Used when all upstreams fail and no
 	 *  cached value exists since boot.  Per-asset defaults:
@@ -100,20 +109,31 @@ export const CP130_ASSET_DEFAULTS: Record<string, AssetPriceSourceOptions> = {
 	BLURT: {
 		asset: 'BLURT',
 		coingeckoCoinId: 'blurt',
-		enableKlingex: true,
-		staticFloor: 0.002
+		coinpaprikaId: 'blurt-blurt',
+		// Kraken/Coinbase don't list BLURT — it averages across
+		// Coingecko + CoinPaprika (when up), with morphit_native as the
+		// fallback tier + cross-check.
+		staticFloor: 0.002,
+		plausibleMin: 0.0001,
+		plausibleMax: 0.1
 	},
 	BTC: {
 		asset: 'BTC',
 		coingeckoCoinId: 'bitcoin',
-		enableKlingex: false,
-		staticFloor: 60_000
+		coinpaprikaId: 'btc-bitcoin',
+		krakenPair: 'XBTUSD',
+		staticFloor: 60_000,
+		plausibleMin: 1_000,
+		plausibleMax: 10_000_000
 	},
 	XMR: {
 		asset: 'XMR',
 		coingeckoCoinId: 'monero',
-		enableKlingex: false,
-		staticFloor: 200
+		coinpaprikaId: 'xmr-monero',
+		krakenPair: 'XMRUSD',
+		staticFloor: 200,
+		plausibleMin: 1,
+		plausibleMax: 100_000
 	}
 };
 
@@ -122,7 +142,6 @@ export const CP130_ASSET_DEFAULTS: Record<string, AssetPriceSourceOptions> = {
  *  parameters.
  *
  *  Composes:
- *   - Klingex (if enableKlingex)
  *   - Coingecko (always; needs the per-asset coinId)
  *   - morphit_native (if priceFeedNativeEnabled AND db provided)
  *   - Static floor
@@ -134,52 +153,63 @@ export function createAssetPriceSource(
 	options: AssetPriceSourceOptions,
 	db?: Database
 ): BlurtPriceSource {
-	const upstreams: Array<{ name: string; fetch: () => Promise<number | null> }> = [];
+	const isUsd = config.priceFeedDenominationFiat.toUpperCase() === 'USD';
 
-	if (options.enableKlingex) {
+	// ── EXTERNAL tier (averaged all-at-once) ──
+	// Coingecko always (it supports any vs_currency).  CoinPaprika +
+	// Kraken return USD quotes, so they only join the average when the
+	// instance prices in USD AND the asset has a known symbol there.
+	// Pulling from several at once + median-anchored averaging means a
+	// single off/stale provider can't swing the committed price.
+	const upstreams: Array<{ name: string; fetch: PriceFetch }> = [
+		{
+			name: 'coingecko',
+			fetch: createCoingeckoFetcher({
+				baseUrl: config.coingeckoBaseUrl,
+				apiKey: config.coingeckoApiKey,
+				coinId: options.coingeckoCoinId,
+				vsCurrency: config.priceFeedDenominationFiat,
+				timeoutMs: 5_000
+			})
+		}
+	];
+	if (isUsd && options.coinpaprikaId) {
 		upstreams.push({
-			name: 'klingex',
-			fetch: createKlingexFetcher({
-				baseUrl: config.klingexBaseUrl,
+			name: 'coinpaprika',
+			fetch: createCoinpaprikaFetcher({
+				baseUrl: config.coinpaprikaBaseUrl,
+				coinId: options.coinpaprikaId,
+				vsCurrency: 'USD',
+				timeoutMs: 5_000
+			})
+		});
+	}
+	if (isUsd && options.krakenPair) {
+		upstreams.push({
+			name: 'kraken',
+			fetch: createKrakenFetcher({
+				baseUrl: config.krakenBaseUrl,
+				pair: options.krakenPair,
 				timeoutMs: 5_000
 			})
 		});
 	}
 
-	// cp130: Coingecko now takes vsCurrency from operator config
-	// (was hardcoded 'usd' pre-cp130).  Coingecko's own free-tier
-	// supports many vs_currencies — usd, eur, gbp, jpy, brl, cny,
-	// inr, rub, etc.
-	upstreams.push({
-		name: 'coingecko',
-		fetch: createCoingeckoFetcher({
-			baseUrl: config.coingeckoBaseUrl,
-			apiKey: config.coingeckoApiKey,
-			coinId: options.coingeckoCoinId,
-			vsCurrency: config.priceFeedDenominationFiat,
-			timeoutMs: 5_000
-		})
-	});
-
-	// morphit_native (cp127), routed to this asset+denomination pair.
-	// Slotted between coingecko and the static floor — external
-	// sources remain primary; native fires when external is
-	// unavailable (or operators opt into preferring native via the
-	// disagreement-monitor priority flip).  See ADR-0039.
-	//
-	// cp233: built via the shared buildMorphitNativeFetch helper so
-	// defense C's cross-check reuses the EXACT same construction (same
-	// config args) — no drift between the upstream and the monitor.
-	// The helper returns null when native is disabled or no db is
-	// available, which folds the old `priceFeedNativeEnabled && db`
-	// guard into the null check.
+	// ── FALLBACK tier (native) — NOT blended into the external
+	// average, so defense C's external-vs-native cross-check stays
+	// meaningful.  Tried only when every external is down.
+	const fallbackUpstreams: Array<{ name: string; fetch: PriceFetch }> = [];
 	const nativeFetch = buildMorphitNativeFetch(config, options.asset, db);
 	if (nativeFetch) {
-		upstreams.push({ name: 'morphit_native', fetch: nativeFetch });
+		fallbackUpstreams.push({ name: 'morphit_native', fetch: nativeFetch });
 	}
 
 	return new CompositeCachedPriceSource({
 		upstreams,
+		fallbackUpstreams,
+		outlierTolerance: config.priceOutlierTolerance,
+		plausibleMin: options.plausibleMin,
+		plausibleMax: options.plausibleMax,
 		staticFloor: options.staticFloor,
 		refreshIntervalMs: config.priceRefreshIntervalMs,
 		// cp233 — Defense B (slow-drift) wiring: pass db + asset +

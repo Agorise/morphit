@@ -193,11 +193,6 @@ const scenarios: Scenario[] = [
 		expectedTier: 'WARN'
 	},
 	{
-		name: 'price-klingex feed_stale → WARN',
-		alert: a('price-klingex', 'feed_stale', { last_update_age_min: 60 }),
-		expectedTier: 'WARN'
-	},
-	{
 		name: 'signup-anomaly single_ip_spike → WARN',
 		alert: a('signup-anomaly', 'single_ip_spike', {
 			ip: '198.51.100.1',

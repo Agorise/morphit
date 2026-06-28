@@ -1,10 +1,11 @@
 /**
  * Coingecko BLURT/USD price fetcher.
  *
- * Secondary upstream, after Klingex. Free tier exists but is
- * aggressively rate-limited (~10-30 req/min); paid API is
- * ~$129/mo. For a single indexer refreshing every 5 minutes,
- * the free tier is comfortable (12 req/hour per instance).
+ * The sole external upstream (Klingex, the prior primary, went out
+ * of business in 2026). Free tier exists but is aggressively
+ * rate-limited (~10-30 req/min); paid API is ~$129/mo. For a
+ * single indexer refreshing every 5 minutes, the free tier is
+ * comfortable (12 req/hour per instance).
  *
  * Endpoint: GET /api/v3/simple/price?ids=blurt&vs_currencies=usd
  * Response: { "blurt": { "usd": 0.00237 } }
@@ -14,17 +15,16 @@
  * (pro-api.coingecko.com). Configurable via the `apiKey` +
  * `baseUrl` options.
  *
- * ⚠ DATA QUALITY NOTE (2026-05): With ProBit defunct, BLURT
- * trades primarily on Klingex (BLURT/USDT).  Coingecko
- * aggregates whatever exchanges it sees BLURT on; the resulting
- * BLURT/USD figure is occasionally stale (CG sometimes reports
- * "no trade in last 24h").  Klingex remains Morphit's primary
- * upstream for fresher data; Coingecko is kept as fallback for
- * Klingex-only outages, but operators should expect occasional
- * staleness.
+ * ⚠ DATA QUALITY NOTE (2026): with both ProBit and Klingex
+ * defunct, Coingecko is the only external BLURT/USD source.  It
+ * aggregates whatever exchanges it still sees BLURT on; the
+ * resulting figure is occasionally stale (CG sometimes reports
+ * "no trade in last 24h").  Behind it sit morphit_native (the
+ * self-sovereign on-platform price, opt-in) and the static floor,
+ * so a Coingecko outage degrades gracefully rather than breaking
+ * the USD display.  Operators should expect occasional staleness.
  *
- * Contract matches KlingexFetcher: never throws; returns a
- * positive number or null.
+ * Contract: never throws; returns a positive number or null.
  */
 
 import { logger } from '$log';

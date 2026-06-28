@@ -393,7 +393,7 @@
 				aria-autocomplete="list"
 				autocomplete="off"
 				placeholder={$_('faq.search_placeholder')}
-				class="w-full rounded-2xl border-2 border-ink-200 bg-white py-4 pe-4 ps-12 text-base shadow-morphit-card transition hover:border-ink-300 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900 dark:hover:border-white/35"
+				class="w-full rounded-2xl border-2 border-ink-200 bg-white py-4 pe-4 ps-12 text-base shadow-morphit-card transition hover:border-ink-300 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900 dark:hover:border-white/15"
 			/>
 		</div>
 
@@ -438,7 +438,7 @@
 		{#each $faqEntries as entry (entry.key)}
 			{@const isOpen = expanded.has(entry.key)}
 			{@const justCopied = copiedKey === entry.key}
-			<li id="faq-{entry.key}" class="card p-0 border border-transparent transition-colors hover:border-ink-300 dark:hover:border-white/35">
+			<li id="faq-{entry.key}" class="card p-0 scroll-mt-24 hover-subtle">
 				<!--
 					Inline-anchor target without the `faq-` prefix.  Many
 					internal "Learn more →" links spell their target as

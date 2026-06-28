@@ -112,6 +112,24 @@ export interface ReleaseTreasuryBlock {
 		 *  for large fees. */
 		readonly piconero: string;
 	} | null;
+	/** cp372 — chain-pinned BLURT listing-fee base (tier-1 amount,
+	 *  before the Sybil multiplier).  Unlike BTC/XMR there is no
+	 *  address: the BLURT fee is a transfer to the operator's fee
+	 *  recipient account, so only the amount needs pinning.  Pinning
+	 *  it on-chain makes the BLURT floor deterministic across every
+	 *  federated indexer (the same anti-fork property the BTC/XMR
+	 *  amounts already had); before cp372 it was an env-only per-
+	 *  operator value, the one fee input that could diverge between
+	 *  nodes.  Optional + nullable: releases without it (pre-cp372, or
+	 *  operators who never pin BLURT) leave every indexer on its env
+	 *  fallback (`MORPHIT_INDEXER_FEE_BASE_BLURT`).  The maintainer's
+	 *  release-broadcaster auto-computes this from the canonical USD
+	 *  target ÷ live price, so operators never hand-tune it. */
+	readonly blurt?: {
+		/** Tier-1 listing-fee base, in whole BLURT (3-decimal
+		 *  precision, e.g. 62.5).  Positive, finite. */
+		readonly base: number;
+	} | null;
 }
 
 /**

@@ -18,10 +18,10 @@
  *      refreshes in the background, not on every call.
  *   3. Operator-overridable. An operator who doesn't want Coingecko
  *      traffic from their VPS can configure their own stack
- *      (Klingex only, or static-only) via env vars.
- *   4. No hard dependency on any single provider. Klingex may go
- *      down; Coingecko may rate-limit; the static floor is always
- *      there.
+ *      (static-floor-only) via env vars.
+ *   4. No hard dependency on any single provider. Coingecko may
+ *      rate-limit or go down; morphit_native and the static floor
+ *      are always there.
  *
  * USAGE:
  *   const source = createPriceSource(config);
@@ -73,4 +73,21 @@ export interface BlurtPriceSource {
 	 *  Optional on the interface because only the composite source
 	 *  computes it; other implementations may omit it. */
 	driftStatus?(): DriftCheckResult | null;
+
+	/** cp372 — per-external-source health for the morphit-ops
+	 *  node-health view: which crypto providers answered, when each
+	 *  last succeeded, and their last reading.  Optional — only the
+	 *  composite implements it. */
+	sourceStatus?(): Array<{
+		name: string;
+		ok: boolean;
+		lastOkAt: Date | null;
+		lastTriedAt: Date | null;
+		lastValue: number | null;
+	}>;
+
+	/** cp372 — true iff the last committed external average dropped
+	 *  at least one source as an outlier (provider disagreement).
+	 *  Optional — only the composite implements it. */
+	outlierRejected?(): boolean;
 }

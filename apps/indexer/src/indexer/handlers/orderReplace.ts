@@ -19,7 +19,7 @@ import type pg from 'pg';
 import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contract';
 import { checkJsonbSize } from '$indexer/payloadSize';
 import { validateOrderPermlink } from '$indexer/permlink';
-import { ASSET_TICKERS_SET, type AssetTicker } from '@morphit/asset-registry';
+import { ASSET_TICKERS_SET, FIRST_ORDER_MIN_USD, type AssetTicker } from '@morphit/asset-registry';
 
 const SIDES = new Set(['buy', 'sell']);
 
@@ -366,20 +366,31 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	// B1 audit fix — waiver substance protection.
 	// If the original order was created under fee_method='waived_first_buy',
 	// the replace must not let the user dial back the substance that
-	// earned the waiver.  The waiver floor (500 BLURT amount_min) is
-	// only enforced at create-time in order.ts; without this check,
-	// a user could create an order at amount_min=500 to claim the
-	// waiver, then replace within the 15-minute window with
-	// amount_min=1, leaving a tiny "waived first buy" order on the
-	// orderbook that defeats the floor policy.
+	// earned the waiver.  The waiver floor ($1 USD-equivalent first-buy
+	// VALUE — amount_min is a fiat value) is only enforced at create-
+	// time in order.ts; without this check, a user could create an
+	// order at amount_min=$1 to claim the waiver, then replace within
+	// the 15-minute window with amount_min=0.01, leaving a tiny "waived
+	// first buy" order on the orderbook that defeats the floor policy.
 	//
 	// side/asset/fiat are already locked above.  We only re-verify
 	// the amount-floor here; the rest of the waiver shape (side='buy',
 	// asset='BLURT') is implied by the substance-equals checks
-	// because the original passed them at create-time.
-	const WAIVER_MIN_BLURT = 500;
+	// because the original passed them at create-time.  cp369: fiat
+	// floor (was a 500-BLURT constant under the §F.11 regression).
+	// cp370: canonical FIRST_ORDER_MIN_USD (@morphit/asset-registry).
+	const WAIVER_MIN_FIAT_USD = FIRST_ORDER_MIN_USD;
 	if (target.fee_method === 'waived_first_buy') {
-		if (v.amount_min === null || v.amount_min < WAIVER_MIN_BLURT) {
+		// cp372: FX-aware floor, identical conversion to create-time in
+		// order.ts — amount_min is in v.fiat_currency; convert to USD
+		// before the $1 check.  null (unconvertible) falls back to the
+		// direct comparison (documented).  A null amount_min still fails
+		// the floor outright (can't claim the waiver on an unbounded min).
+		const minUsd =
+			v.amount_min === null
+				? null
+				: (ctx.fiatToUsd(v.amount_min, v.fiat_currency) ?? v.amount_min);
+		if (minUsd === null || minUsd < WAIVER_MIN_FIAT_USD) {
 			return { ok: false, reason: 'replace_below_waiver_floor' };
 		}
 	}

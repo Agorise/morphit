@@ -3,15 +3,15 @@
  *
  * The black-hat scenario this defends against
  * ───────────────────────────────────────────
- * Klingex (and possibly the Coingecko aggregation pipeline that
- * draws from it) gets compromised and starts returning prices with
- * a slow bias.  morphit_native continues to show real on-platform
- * prices.  The composite source's priority order is:
+ * The Coingecko aggregation pipeline gets compromised and starts
+ * returning prices with a slow bias.  morphit_native continues to
+ * show real on-platform prices.  The composite source's priority
+ * order is:
  *
- *   Klingex > Coingecko > morphit_native > static floor
+ *   Coingecko > morphit_native > static floor
  *
  * Because external is preferred when available, we'd publish the
- * MANIPULATED Klingex price even when our own data disagrees.
+ * MANIPULATED Coingecko price even when our own data disagrees.
  *
  * The disagreement monitor detects when morphit_native and any
  * external source diverge materially for a sustained period.  It
@@ -213,7 +213,7 @@ export class DisagreementMonitor {
  *  prevents a false "disagreement" alarm from comparing the native
  *  price against the tiny static floor while external sources are
  *  briefly unreachable. */
-const EXTERNAL_MARKET_SOURCES: ReadonlySet<string> = new Set(['klingex', 'coingecko']);
+const EXTERNAL_MARKET_SOURCES: ReadonlySet<string> = new Set(['coingecko', 'external_avg']);
 
 /** Run config for the cp233 disagreement-monitor loop.  Mirrors the
  *  shape of the peer-price monitor's config (defense F) so the two

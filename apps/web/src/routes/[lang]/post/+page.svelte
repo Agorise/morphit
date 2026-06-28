@@ -74,12 +74,14 @@
 	import { broadcastNewOrder, BroadcastError } from '$blurt/ops/order';
 	import { computeFee, BASE_FEE_BLURT, type FeeQuote } from '$lib/orders/fee';
 	import { getOrdersByAccount } from '$lib/indexer/client';
-	import { ASSET_TICKERS, isAssetTicker, type AssetTicker } from '@morphit/asset-registry';
+	import { ASSET_TICKERS, FIRST_ORDER_MIN_USD, isAssetTicker, type AssetTicker } from '@morphit/asset-registry';
 	import {
 		checkWaiverEligibility,
 		fetchListingFee,
 		type WaiverEligibility
 	} from '$lib/orders/listingFee';
+	import { fetchFxRates, fiatToUsd, firstOrderMinInFiat } from '$lib/orders/fx';
+	import type { FxResponse } from '@morphit/indexer-client';
 	import { MORPHIT_INDEXER_ORIGIN, resolveOrigin } from '$net/config';
 	import type { OrderFormInput } from '$lib/orders/payload';
 	import { makeExpiryFlooredUtcDay } from '$lib/orders/payload';
@@ -143,6 +145,13 @@
 	const fiat = $derived(typeof fiatArr[0] === 'string' ? fiatArr[0] : '');
 	let amountMin: string = $state(''); // kept as string so empty distinguishes from 0
 	let amountMax: string = $state('');
+	// cp368: error styling on the amount + fixed-price fields is gated on the
+	// user having actually typed in them, so a pristine form (and a just-revealed
+	// flat-price field) never shows a scary red border before any input. The
+	// validators still drive step gating; these only gate the red border + the
+	// inline message DISPLAY.
+	let amountTouched: boolean = $state(false);
+	let fixedPriceTouched: boolean = $state(false);
 	type PriceModelKind = 'spread' | 'fixed';
 	let priceModelKind = $state<PriceModelKind>('spread');
 	let spreadPercent = $state('0');
@@ -153,6 +162,77 @@
 	let pmDraft = $state('');
 	let region = $state('');
 	let terms = $state('');
+
+	// cp372 — animated "typewriter" placeholder for the Terms field.
+	// A deliberately MULTI-LINGUAL, UNTRANSLATED set of example terms:
+	// seeing real-world notes in several languages cycle through tells
+	// grandma at a glance that this free-text field accepts whatever
+	// she wants to write, in her own words / language.  These are
+	// examples, NOT UI copy, so they are intentionally not localized.
+	const TERMS_PLACEHOLDER_PHRASES = [
+		'Please leave your dog at home',
+		'Proszę usunąć pojazdy przed rozpoczęciem prac',
+		'Weekends only',
+		'На трибунах баскетбольной площадки',
+		"Next to Biggie's Cafe",
+		'Debajo del puente',
+		'Banana trees at least 1 meter tall',
+		'请在工作开始前取走您的个人物品'
+	];
+	let termsPlaceholder = $state(TERMS_PLACEHOLDER_PHRASES[0]);
+
+	// Drive the typewriter on mount.  Self-contained + fully cleaned
+	// up on unmount.  Honors prefers-reduced-motion: motion-sensitive
+	// users get a plain cycle (no per-character animation) instead.
+	onMount(() => {
+		const phrases = TERMS_PLACEHOLDER_PHRASES;
+		const reduce =
+			typeof window !== 'undefined' &&
+			window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+		if (reduce) {
+			let i = 0;
+			const id = setInterval(() => {
+				i = (i + 1) % phrases.length;
+				termsPlaceholder = phrases[i];
+			}, 5000);
+			return () => clearInterval(id);
+		}
+
+		let phraseIdx = 0;
+		let charIdx = 0;
+		let mode: 'typing' | 'holding' | 'erasing' = 'typing';
+		let timer: ReturnType<typeof setTimeout>;
+		const tick = (): void => {
+			const phrase = phrases[phraseIdx];
+			if (phrase === undefined) return;
+			if (mode === 'typing') {
+				charIdx++;
+				termsPlaceholder = phrase.slice(0, charIdx);
+				if (charIdx >= phrase.length) {
+					mode = 'holding';
+					timer = setTimeout(tick, 2400);
+				} else {
+					timer = setTimeout(tick, 55);
+				}
+			} else if (mode === 'holding') {
+				mode = 'erasing';
+				timer = setTimeout(tick, 28);
+			} else {
+				charIdx--;
+				termsPlaceholder = phrase.slice(0, Math.max(0, charIdx));
+				if (charIdx <= 0) {
+					phraseIdx = (phraseIdx + 1) % phrases.length;
+					mode = 'typing';
+					timer = setTimeout(tick, 350);
+				} else {
+					timer = setTimeout(tick, 26);
+				}
+			}
+		};
+		timer = setTimeout(tick, 900);
+		return () => clearTimeout(timer);
+	});
 	let expiresDays = $state(90);
 	/** Per-order opt-in: also post this order's announcement to the
 	 *  user's own Blurt blog. Defaults false so users actively opt
@@ -349,6 +429,12 @@
 		priceModelKind = d.priceModelKind === 'fixed' ? 'fixed' : 'spread';
 		spreadPercent = str(d.spreadPercent);
 		fixedPrice = str(d.fixedPrice);
+		// cp368: a loaded draft carries real values, so treat the
+		// amount / fixed-price fields as touched when non-empty —
+		// an invalid saved value should show its error on resume
+		// rather than hide behind the pristine-form gate.
+		amountTouched = amountMin !== '' || amountMax !== '';
+		fixedPriceTouched = fixedPrice !== '';
 		paymentMethods = Array.isArray(d.paymentMethods)
 			? d.paymentMethods.filter((m): m is string => typeof m === 'string')
 			: [];
@@ -414,6 +500,9 @@
 		priceModelKind = 'spread';
 		spreadPercent = '0';
 		fixedPrice = '';
+		amountTouched = false;
+		fixedPriceTouched = false;
+		lastSeededFiat = '';
 		paymentMethods = [];
 		pmDraft = '';
 		region = '';
@@ -518,6 +607,26 @@
 	 *  configures the denomination (USD/EUR/XDR/XAU/…). */
 	let fiatPerBlurt: number | null = $state(null);
 	let denominationFiat: string = $state('USD');
+	// cp372: the indexer's USD→fiat table (/v1/fx).  Powers the
+	// FX-aware first-order floor (so the client's pre-submit check
+	// matches the indexer's authoritative one for ANY currency, not
+	// just USD) and the live "$1-equivalent" Min-value default in the
+	// user's own fiat.  Null = FX feed disabled / fetch failed → the
+	// floor falls back to treating amount_min as already-USD (exactly
+	// like the indexer), and no default is seeded.
+	let fxTable: FxResponse | null = $state(null);
+	// Tracks which fiat the Min-value default was last seeded for, so
+	// the seed re-syncs when the user switches currency (while the
+	// field is still untouched) but never fights a user-typed value.
+	let lastSeededFiat = $state('');
+	// cp372 Model A: live BTC/XMR fee amounts + USD echoes from
+	// /v1/listing-fee, fed to ListingFeeAddressPanel so the BTC/XMR
+	// quote tracks the operator's USD-equivalent fee instead of a fixed
+	// crypto constant.  Undefined → panel quotes the chain-pinned amount.
+	let btcFeeSatoshisLive: number | undefined = $state(undefined);
+	let xmrFeePiconeroLive: string | undefined = $state(undefined);
+	let btcFeeFiat: number | undefined = $state(undefined);
+	let xmrFeeFiat: number | undefined = $state(undefined);
 	let feeLoading = $state(false);
 	let feeError = $state('');
 
@@ -688,49 +797,60 @@
 		}
 	});
 
-	/** Minimum BLURT amount for a waiver-eligible buy, so the
-	 *  user's first trade pulls a meaningful starter balance into
-	 *  their wallet.  500 BLURT is roughly $1 at typical recent
-	 *  BLURT prices and lines up nicely with the 60 BLURT listing
-	 *  fee (a waiver-buy of 500 BLURT covers ~8 future listings,
-	 *  so the new user has room to be active).  This is the
-	 *  *floor* — enforced on the indexer; orders below it are
-	 *  rejected with `waiver_requires_min_usd`.  We don't expose
-	 *  this floor in the UI by default; instead we suggest a
-	 *  more generous default (`WAIVER_SUGGESTED_DEFAULT`) that
-	 *  positions the user well in the loyalty-milestone curve. */
-	const WAIVER_MIN_BLURT = 500;
-	/** Suggested first-buy amount for the welcome flow.  2,000
-	 *  BLURT crosses two thresholds at once: it carries the user
-	 *  past the first 500-BLURT loyalty milestone (10 BP delegated
-	 *  → see `loyalty_milestones` FAQ) AND gives them roughly 33
-	 *  future listings at the discounted BLURT rate.  We pre-fill
-	 *  this when the user comes through the orderbook welcome
-	 *  hero; users who type a smaller value (down to the 500
-	 *  floor) are still accepted silently.  The UI never tells
-	 *  the user "minimum 500" — it tells them what they GET at
-	 *  different sizes, which encourages a bigger buy without
-	 *  feeling like a tax. */
-	const WAIVER_SUGGESTED_DEFAULT = 2000;
+	/** Minimum first-order VALUE for a waiver-eligible buy, in the
+	 *  order's fiat (the field the user fills, e.g. "Minimum value
+	 *  in USD").  amount_min IS a fiat value everywhere in the
+	 *  system — the orderbook renders it as "{min} – {max}
+	 *  {fiat_currency}" — so the floor is a fiat-to-fiat check, no
+	 *  price feed required.  Grandma thinks in her local currency,
+	 *  NOT in BLURT: the requirement is "$1 USD-equivalent", shown
+	 *  and checked in her currency, never "buy 500 BLURT" (which
+	 *  sounds like a fortune and scares newcomers off).  $1 of BLURT
+	 *  at ~$0.002 is ~500 BLURT and funds ~8 future listings at the
+	 *  ~$0.125 BLURT listing fee, so a $1 first buy still leaves the
+	 *  new user with room to be active.  This is the *floor* — also
+	 *  enforced on the indexer; orders below it are rejected.
+	 *
+	 *  cp369: reverses the §F.11 "BLURT-denomination" regression
+	 *  that compared this fiat-valued amount against a flat 500-BLURT
+	 *  constant (so "$1" was read as "1 BLURT < 500" and rejected).
+	 *  NOTE: $1-USD-equivalent is exact when the order's fiat is USD
+	 *  (the default denomination); for a non-USD instance the precise
+	 *  per-currency $1 conversion needs a USD↔local rate the single-
+	 *  denomination price feed doesn't yet carry — tracked as a
+	 *  multi-currency-pricing enhancement. */
+	const WAIVER_MIN_FIAT_USD = FIRST_ORDER_MIN_USD;
+	/** Suggested first-buy VALUE for the welcome flow, in the order's
+	 *  fiat: ~$4 (≈ the old 2,000-BLURT suggestion at ~$0.002).  Pre-
+	 *  filled when the user arrives via the orderbook welcome hero;
+	 *  users who type a smaller value down to the $1 floor are still
+	 *  accepted silently.  The UI never says "minimum $1" as a tax —
+	 *  it shows what they GET at increasing sizes, which encourages a
+	 *  bigger buy without feeling like a gate. */
+	const WAIVER_SUGGESTED_DEFAULT = 4;
 
 	/** Tier breakpoints for the first-buy benefits ladder.  Each
-	 *  entry pairs a minimum-amount threshold with an i18n key
-	 *  describing what the user gets at that level.  The ladder
-	 *  is rendered in step 2 when the waiver is offered.  Every
-	 *  row whose threshold ≤ the user's current `amountMin` shows
-	 *  as "unlocked" (✓, emerald-bold); higher rows show as
-	 *  "available if you increase" (○, muted).  500 is at the
-	 *  bottom because it's the indexer's silent floor — anything
-	 *  smaller is rejected; anything ≥ 500 lights at least this
-	 *  row.  Tiers chosen to align with the loyalty-milestone
-	 *  thresholds (`loyalty_milestones` FAQ): 500 (~8 listings),
-	 *  2000 (matches a 100-BLURT loyalty milestone if user later
-	 *  spends fees), 10000 (heavy starter), 50000 (whale buy). */
+	 *  entry pairs a minimum first-order VALUE (in the order's fiat)
+	 *  with an i18n key describing what the user gets at that level.
+	 *  The ladder is rendered in step 2 when the waiver is offered.
+	 *  Every row whose threshold ≤ the user's current `amountMin`
+	 *  (also a fiat value) shows as "unlocked" (✓, emerald-bold);
+	 *  higher rows show as "available if you increase" (○, muted).
+	 *  $1 is at the bottom because it's the indexer's floor — orders
+	 *  below it are rejected; $1+ lights at least this row.
+	 *
+	 *  cp369: the breakpoints are now fiat (USD-equivalent), not raw
+	 *  BLURT quantities — the §F.11 BLURT-denomination regression had
+	 *  them at 500/2000/10000/50000 BLURT, which never lit up against
+	 *  a fiat-valued `amountMin` like $1.  The USD-equivalents at
+	 *  ~$0.002/BLURT are ~$1/$4/$20/$100 (the legacy key names keep
+	 *  their numeric suffix as a stable identifier only).  Descriptions
+	 *  still hold: $1 ÷ ~$0.125 per listing ≈ 8 future listings. */
 	const WAIVER_BENEFIT_TIERS: ReadonlyArray<{ readonly at: number; readonly key: string }> = [
-		{ at: 500, key: 'post_order.waiver_benefits.tier_500' },
-		{ at: 2000, key: 'post_order.waiver_benefits.tier_2000' },
-		{ at: 10_000, key: 'post_order.waiver_benefits.tier_10000' },
-		{ at: 50_000, key: 'post_order.waiver_benefits.tier_50000' }
+		{ at: 1, key: 'post_order.waiver_benefits.tier_1' },
+		{ at: 4, key: 'post_order.waiver_benefits.tier_4' },
+		{ at: 20, key: 'post_order.waiver_benefits.tier_20' },
+		{ at: 100, key: 'post_order.waiver_benefits.tier_100' }
 	];
 
 	/** Operator's configured base fee per listing in BLURT, as
@@ -777,6 +897,12 @@
 			// the price feed enabled.
 			const lfPromise = fetchListingFee(resolveOrigin(MORPHIT_INDEXER_ORIGIN));
 
+			// cp372: fetch the USD→fiat table in parallel.  Best-effort —
+			// a disabled feed / failure just leaves fxTable null and the
+			// floor falls back to the USD-assumption (the indexer remains
+			// authoritative either way).
+			const fxPromise = fetchFxRates(resolveOrigin(MORPHIT_INDEXER_ORIGIN));
+
 			const result = await ordersPromise;
 			if (!result.ok) {
 				throw new Error(result.message);
@@ -808,9 +934,20 @@
 				if (typeof lf.quote.denomination_fiat === 'string') {
 					denominationFiat = lf.quote.denomination_fiat;
 				}
+				// cp372 Model A: live BTC/XMR fee amounts + USD echoes.
+				btcFeeSatoshisLive =
+					typeof lf.quote.btc_fee_satoshis === 'number' ? lf.quote.btc_fee_satoshis : undefined;
+				xmrFeePiconeroLive =
+					typeof lf.quote.xmr_fee_piconero === 'string' ? lf.quote.xmr_fee_piconero : undefined;
+				btcFeeFiat = typeof lf.quote.btc_fee_fiat === 'number' ? lf.quote.btc_fee_fiat : undefined;
+				xmrFeeFiat = typeof lf.quote.xmr_fee_fiat === 'number' ? lf.quote.xmr_fee_fiat : undefined;
 			}
 
 			feeQuote = computeFee(activeCount + 1, operatorBaseBlurt);
+
+			// cp372: settle the FX table (best-effort).
+			const fx = await fxPromise;
+			if (fx.kind === 'ok') fxTable = fx.table;
 		} catch (err) {
 			feeError = err instanceof Error ? err.message : String(err);
 			feeQuote = null;
@@ -944,12 +1081,12 @@
 
 		// ?welcome=1 query param — landed here from the orderbook's
 		// WelcomeFirstBuyHero CTA. Set the new-user-friendly
-		// defaults: side=buy, asset=BLURT, amountMin=2000 (the
-		// first loyalty-milestone threshold — see WAIVER_SUGGESTED_DEFAULT
-		// below for rationale).  The actual gate floor is 500 BLURT
+		// defaults: side=buy, asset=BLURT, amountMin=$4 (a generous
+		// starter value — see WAIVER_SUGGESTED_DEFAULT below for
+		// rationale).  The actual gate floor is $1 USD-equivalent
 		// (enforced silently on the indexer); users who type a
 		// smaller value are still accepted as long as they're at
-		// or above 500.  Don't overwrite anything the draft or
+		// or above $1.  Don't overwrite anything the draft or
 		// PREFILL already populated; only fill empties so a user
 		// who half-composed something earlier isn't surprised.
 		try {
@@ -1097,6 +1234,19 @@
 	});
 
 	const amountMinNum = $derived(amountMin === '' ? null : Number(amountMin));
+
+	/** cp372 — the entered minimum converted to USD for the
+	 *  first-order ($1) floor.  amount_min is denominated in the
+	 *  selected `fiat`, so "1.20" on an AUD order is 1.20 AUD ≈
+	 *  $0.79 — below the floor.  This MUST mirror the indexer's
+	 *  authoritative check (order.ts): `fiatToUsd(amount_min, fiat)
+	 *  ?? amount_min` — i.e. convert via the FX table, and on an
+	 *  unknown currency / disabled feed fall back to treating the
+	 *  amount as already-USD (no worse than pre-cp372, exact for
+	 *  USD).  Null only when nothing is entered yet. */
+	const waiverMinUsd = $derived(
+		amountMinNum === null ? null : (fiatToUsd(fxTable, amountMinNum, fiat) ?? amountMinNum)
+	);
 	const amountMaxNum = $derived(amountMax === '' ? null : Number(amountMax));
 
 	/** Sanity cap.  Mirror of indexer's MAX_AMOUNT in
@@ -1127,28 +1277,128 @@
 		if (amountMinNum !== null && amountMaxNum !== null && amountMinNum > amountMaxNum) {
 			return $_('post_order.errors.amount_min_exceeds_max');
 		}
-		// Phase 3: waiver-path orders must have amount_min set AND
-		// ≥ WAIVER_MIN_BLURT BLURT. Mirrors the indexer's
+		// Phase 3 / cp369: waiver-path orders must have amount_min set
+		// AND ≥ $1 USD-equivalent (a fiat value). Mirrors the indexer's
 		// `waiver_requires_min_usd` rejection so the user fails the
 		// client-side gate before broadcast.
 		//
-		// cp129 i18n-key rename: the key was `waiver_min_usd_required`
-		// (historical, from when the floor was thought of as a USD
-		// constant).  Renamed to `waiver_min_required` since the
-		// underlying constant is BLURT-denominated and denomination-
-		// independent.  The on-chain indexer rejection code
-		// (`waiver_requires_min_usd`) stays as-is — that's a protocol
-		// constant we shouldn't churn on without consensus.
+		// cp129/cp369: the user-facing key is `waiver_min_required`.
+		// The floor is "$1 USD-equivalent" in the order's fiat — a
+		// fiat-to-fiat check (amount_min is a fiat value), no price
+		// feed needed.  (cp369 reverses the §F.11 regression that
+		// compared this fiat amount to a 500-BLURT constant.)  The
+		// on-chain indexer rejection code (`waiver_requires_min_usd`)
+		// stays as-is — a protocol constant not worth churning.
 		if (feeMethodChoice === 'waived_first_buy') {
 			if (amountMinNum === null) {
 				return $_('post_order.errors.waiver_min_required');
 			}
-			if (amountMinNum < WAIVER_MIN_BLURT) {
+			if (waiverMinUsd !== null && waiverMinUsd < WAIVER_MIN_FIAT_USD) {
 				return $_('post_order.errors.waiver_min_required');
 			}
 		}
 		return '';
 	});
+
+	/** Per-field error attribution for the red border. The combined
+	 *  `amountError` above still drives step gating + the single
+	 *  bottom message, but the border should only redden the field
+	 *  that's actually at fault — previously a min-only problem (e.g.
+	 *  the waiver floor) reddened BOTH inputs. The cross-field
+	 *  min>max condition reddens the max field (where the user can
+	 *  fix it by raising the ceiling). */
+	const amountMinHasError = $derived.by(() => {
+		if (amountMinNum !== null) {
+			if (!Number.isFinite(amountMinNum) || amountMinNum < 0) return true;
+			if (amountMinNum > MAX_AMOUNT) return true;
+		}
+		if (feeMethodChoice === 'waived_first_buy') {
+			if (amountMinNum === null || (waiverMinUsd !== null && waiverMinUsd < WAIVER_MIN_FIAT_USD))
+				return true;
+		}
+		return false;
+	});
+	const amountMaxHasError = $derived.by(() => {
+		if (amountMaxNum !== null) {
+			if (!Number.isFinite(amountMaxNum) || amountMaxNum < 0) return true;
+			if (amountMaxNum > MAX_AMOUNT) return true;
+		}
+		if (amountMinNum !== null && amountMaxNum !== null && amountMinNum > amountMaxNum) {
+			return true;
+		}
+		return false;
+	});
+
+	/** cp372 — live "$1-equivalent" Min-value default.  Grandma thinks
+	 *  in HER local currency, not BLURT and not USD, so on a first
+	 *  (waiver) trade we pre-fill the Minimum-value field with $1-worth
+	 *  of her selected fiat (rounded UP to a clean, friendly step so it
+	 *  always clears the floor).  Safe-by-construction against the
+	 *  cp364-class bugs: it touches NOTHING that gates a step, never
+	 *  reads `amountMin` (so it can't loop), stops the instant the user
+	 *  types (`amountTouched`), and re-seeds only when the user SWITCHES
+	 *  currency while still untouched (tracked via `lastSeededFiat`).  A
+	 *  restored draft sets `amountTouched`, so it is never re-seeded. */
+	$effect(() => {
+		if (!isFirstTrade || fxTable === null || fiat === '' || amountTouched) return;
+		if (fiat === lastSeededFiat) return;
+		const seed = firstOrderMinInFiat(fxTable, fiat);
+		if (seed === null) return;
+		amountMin = String(seed);
+		lastSeededFiat = fiat;
+	});
+
+	/** cp372 — grandma-facing explanation of the first-order minimum,
+	 *  in HER currency.  Shown only on a first (waiver) trade once a
+	 *  fiat is chosen.  With FX we show the converted "$1-equivalent"
+	 *  (e.g. "about 18 MXN"); without FX (USD instance / feed off) we
+	 *  show the plain $1 floor. */
+	const firstOrderMinHint = $derived.by(() => {
+		if (!isFirstTrade || fiat === '') return '';
+		const eq = firstOrderMinInFiat(fxTable, fiat);
+		if (eq === null || fiat.trim().toUpperCase() === 'USD') {
+			return $_('post_order.form.first_order_min_hint_usd');
+		}
+		return $_('post_order.form.first_order_min_hint', {
+			values: { amount: String(eq), fiat }
+		});
+	});
+
+	/** Input handlers for the number fields. Each sanitizes the raw
+	 *  value and — crucially — writes the cleaned string back onto the
+	 *  DOM element when it differs, so typed letters can't linger
+	 *  visually. With one-way `value={…}` binding, when the cleaned
+	 *  result equals the current state (e.g. typing letters into an
+	 *  empty field both yield ''), Svelte sees no state change and
+	 *  skips re-rendering the input — leaving the letters on screen
+	 *  while the bound value stays empty, so validation never fired.
+	 *  Forcing `currentTarget.value` keeps the box numeric. (cp368) */
+	function syncCleaned(el: HTMLInputElement, clean: string): void {
+		if (el.value !== clean) el.value = clean;
+	}
+	function handleAmountMinInput(e: Event & { currentTarget: HTMLInputElement }): void {
+		amountTouched = true;
+		const clean = keepDecimal(e.currentTarget.value);
+		syncCleaned(e.currentTarget, clean);
+		amountMin = clean;
+	}
+	function handleAmountMaxInput(e: Event & { currentTarget: HTMLInputElement }): void {
+		amountTouched = true;
+		const clean = keepDecimal(e.currentTarget.value);
+		syncCleaned(e.currentTarget, clean);
+		amountMax = clean;
+	}
+	function handleSpreadInput(e: Event & { currentTarget: HTMLInputElement }): void {
+		const clean = keepSignedDecimal(e.currentTarget.value);
+		syncCleaned(e.currentTarget, clean);
+		spreadPercent = clean;
+	}
+	function handleFixedPriceInput(e: Event & { currentTarget: HTMLInputElement }): void {
+		fixedPriceTouched = true;
+		const clean = keepDecimal(e.currentTarget.value);
+		syncCleaned(e.currentTarget, clean);
+		fixedPrice = clean;
+	}
 
 	/** Validation for the price-model picker.
 	 *
@@ -1201,59 +1451,32 @@
 	 *  Populated only when the waiver is offered (the surrounding
 	 *  UI gates the render).  Computed once per amountMin change.
 	 *
-	 *  When the operator's price feed is enabled and a fresh
-	 *  BLURT/fiat value is available (`fiatPerBlurt`), each tier
-	 *  row shows the live fiat equivalent of that tier amount —
-	 *  e.g. "500 BLURT (~$1) — ~8 future listings covered".
-	 *  Without fiat context, rows fall back to BLURT-only labels.
-	 *  This way a new user immediately understands the dollar
-	 *  weight of each option rather than guessing.  Fiat figures
-	 *  are formatted with locale-aware grouping and 2 decimals
-	 *  (or 0 decimals if the figure is ≥ 10, where cents are noise).
+	 *  cp369: the ladder is now FIAT-FIRST.  `amountMin` and the tier
+	 *  breakpoints (`WAIVER_BENEFIT_TIERS`) are both fiat values, so
+	 *  each row shows the threshold in the order's fiat — e.g. "$1 —
+	 *  ~8 future listings covered" — which is what grandma reads on
+	 *  the field above.  The row lights up (✓) once her entered value
+	 *  reaches the threshold.  No BLURT quantities are shown; that was
+	 *  the §F.11 regression ("500 BLURT (~$1)") that confused the
+	 *  fiat-valued amount with a BLURT amount.  Figures use locale-
+	 *  aware formatting via `formatFiat`.
 	 *
-	 *  cp128 rename: `_with_usd` → `_with_fiat` since the
-	 *  denomination is now operator-configurable.  The
-	 *  `{denomination_fiat}` interpolation placeholder lets the
-	 *  i18n string carry the unit (e.g. "{amount} BLURT (~{fiat}
-	 *  {denomination_fiat})").  Today the `_with_fiat` keys don't
-	 *  exist in the locale files — the lookup gracefully degrades
-	 *  to the BLURT-only label — but the future correct shape is
-	 *  in place. */
+	 *  The tier amounts are USD-equivalents; on the default USD
+	 *  instance the formatted unit matches exactly.  (A non-USD
+	 *  instance would want the per-currency $1 conversion — see the
+	 *  WAIVER_MIN_FIAT_USD note — a multi-currency-pricing follow-up.) */
 	const waiverBenefitRows = $derived.by(
 		(): ReadonlyArray<{
 			readonly text: string;
 			readonly unlocked: boolean;
 		}> => {
 			const n = amountMinNum ?? 0;
-			const formatBlurt = (amount: number): string =>
-				amount.toLocaleString(undefined, { maximumFractionDigits: 0 });
-			const formatFiatNumber = (amount: number): string => {
-				const decimals = amount >= 10 ? 0 : 2;
-				return amount.toLocaleString(undefined, {
-					minimumFractionDigits: decimals,
-					maximumFractionDigits: decimals
-				});
-			};
-			return WAIVER_BENEFIT_TIERS.map((tier) => {
-				const fiatAmount =
-					fiatPerBlurt !== null && fiatPerBlurt > 0 ? tier.at * fiatPerBlurt : null;
-				// Pick the with-fiat i18n variant when we have a live
-				// price; fall back to the plain BLURT-only key when
-				// we don't.  Both keys interpolate {amount}; the
-				// with-fiat variant also interpolates {fiat} and
-				// {denomination_fiat}.
-				const i18nKey = fiatAmount !== null ? `${tier.key}_with_fiat` : tier.key;
-				return {
-					text: $_(i18nKey, {
-						values: {
-							amount: formatBlurt(tier.at),
-							fiat: fiatAmount !== null ? formatFiatNumber(fiatAmount) : '',
-							denomination_fiat: denominationFiat
-						}
-					}) as string,
-					unlocked: n >= tier.at
-				};
-			});
+			return WAIVER_BENEFIT_TIERS.map((tier) => ({
+				text: $_(tier.key, {
+					values: { amount: formatFiat(tier.at, denominationFiat) }
+				}) as string,
+				unlocked: n >= tier.at
+			}));
 		}
 	);
 
@@ -1620,6 +1843,9 @@
 		priceModelKind = 'spread';
 		spreadPercent = '0';
 		fixedPrice = '';
+		amountTouched = false;
+		fixedPriceTouched = false;
+		lastSeededFiat = '';
 		paymentMethods = [];
 		pmDraft = '';
 		region = '';
@@ -1813,11 +2039,16 @@
 
 		<!-- Step 1 -->
 		<section class="card mb-4" aria-labelledby="step1-heading">
-			<h2 id="step1-heading" class="mb-4 font-display text-lg font-bold">
-				{#if isFirstTrade}{$_('post_order.form.step_1_heading_first')}{:else}{$_(
-						'post_order.form.step_1_heading'
-					)}{/if}
-			</h2>
+			<div class="mb-4 flex items-baseline justify-between gap-3">
+				<h2 id="step1-heading" class="font-display text-lg font-bold">
+					{#if isFirstTrade}{$_('post_order.form.step_1_heading_first')}{:else}{$_(
+							'post_order.form.step_1_heading'
+						)}{/if}
+				</h2>
+				<span class="shrink-0 text-xs font-medium text-ink-400 dark:text-ink-500">
+					{$_('post_order.form.step_counter', { values: { n: 1, total: 3 } })}
+				</span>
+			</div>
 			{#if isFirstTrade}
 				<!-- O#1 (cp295): first-trade lock. The only useful thing a
 				     brand-new account can do is BUY BLURT to fund itself
@@ -1996,9 +2227,14 @@
 		<!-- Step 2 (only appears after step 1 answered) -->
 		{#if step1Done}
 			<section class="card mb-4 animate-fade-up" aria-labelledby="step2-heading">
-				<h2 id="step2-heading" class="mb-4 font-display text-lg font-bold">
-					{$_('post_order.form.step_2_heading')}
-				</h2>
+				<div class="mb-4 flex items-baseline justify-between gap-3">
+					<h2 id="step2-heading" class="font-display text-lg font-bold">
+						{$_('post_order.form.step_2_heading')}
+					</h2>
+					<span class="shrink-0 text-xs font-medium text-ink-400 dark:text-ink-500">
+						{$_('post_order.form.step_counter', { values: { n: 2, total: 3 } })}
+					</span>
+				</div>
 
 				<div class="mb-4">
 					<span class="mb-1 block text-sm font-semibold">
@@ -2012,6 +2248,10 @@
 					/>
 					{#if fiatError}
 						<StatusLine kind="warn" id="fiat-error">{fiatError}</StatusLine>
+					{:else if fiat === ''}
+						<p class="mt-1 text-xs text-ink-500 dark:text-ink-400">
+							{$_('post_order.form.fiat_required_hint')}
+						</p>
 					{/if}
 					{#if feeMethodChoice === 'waived_first_buy'}
 						<p class="mt-2 text-xs text-ink-600 dark:text-ink-300">
@@ -2031,14 +2271,21 @@
 							type="text"
 							inputmode="decimal"
 							maxlength="16"
+							id="post-amount-min"
+							name="amount_min"
 							value={amountMin}
-							oninput={(e) => (amountMin = keepDecimal(e.currentTarget.value))}
-							aria-invalid={!!amountError}
-							aria-describedby={amountError ? 'amount-error' : undefined}
-							class="w-full rounded-xl border-2 {amountError
+							oninput={handleAmountMinInput}
+							aria-invalid={amountTouched && amountMinHasError}
+							aria-describedby={amountTouched && amountError ? 'amount-error' : undefined}
+							class="w-full rounded-xl border-2 {amountTouched && amountMinHasError
 								? 'border-red-500 dark:border-red-500'
 								: 'border-ink-200 dark:border-ink-700'} bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:bg-ink-900"
 						/>
+						{#if firstOrderMinHint}
+							<span class="mt-1 block text-xs text-ink-500 dark:text-ink-400">
+								{firstOrderMinHint}
+							</span>
+						{/if}
 					</label>
 					<label class="block">
 						<span class="mb-1 block text-sm font-semibold">
@@ -2050,11 +2297,13 @@
 							type="text"
 							inputmode="decimal"
 							maxlength="16"
+							id="post-amount-max"
+							name="amount_max"
 							value={amountMax}
-							oninput={(e) => (amountMax = keepDecimal(e.currentTarget.value))}
-							aria-invalid={!!amountError}
-							aria-describedby={amountError ? 'amount-error' : undefined}
-							class="w-full rounded-xl border-2 {amountError
+							oninput={handleAmountMaxInput}
+							aria-invalid={amountTouched && amountMaxHasError}
+							aria-describedby={amountTouched && amountError ? 'amount-error' : undefined}
+							class="w-full rounded-xl border-2 {amountTouched && amountMaxHasError
 								? 'border-red-500 dark:border-red-500'
 								: 'border-ink-200 dark:border-ink-700'} bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:bg-ink-900"
 						/>
@@ -2108,8 +2357,10 @@
 											type="text"
 											inputmode="decimal"
 											maxlength="6"
+											id="post-spread-percent"
+											name="spread_percent"
 											value={spreadPercent}
-											oninput={(e) => (spreadPercent = keepSignedDecimal(e.currentTarget.value))}
+											oninput={handleSpreadInput}
 											aria-invalid={!!priceModelError}
 											aria-describedby={priceModelError ? 'price-model-error' : undefined}
 											class="w-24 rounded-lg border-2 {priceModelError
@@ -2152,11 +2403,15 @@
 											type="text"
 											inputmode="decimal"
 											maxlength="16"
+											id="post-fixed-price"
+											name="fixed_price"
 											value={fixedPrice}
-											oninput={(e) => (fixedPrice = keepDecimal(e.currentTarget.value))}
-											aria-invalid={!!priceModelError}
-											aria-describedby={priceModelError ? 'fixed-price-error' : undefined}
-											class="w-32 rounded-lg border-2 {priceModelError
+											oninput={handleFixedPriceInput}
+											aria-invalid={fixedPriceTouched && !!priceModelError}
+											aria-describedby={fixedPriceTouched && priceModelError
+												? 'fixed-price-error'
+												: undefined}
+											class="w-32 rounded-lg border-2 {fixedPriceTouched && priceModelError
 												? 'border-red-500 dark:border-red-500'
 												: 'border-ink-200 dark:border-ink-700'} bg-white px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:bg-ink-900"
 											placeholder={$_('post_order.form.price_model_fixed_placeholder') as string}
@@ -2166,7 +2421,7 @@
 											{fiat || $_('post_order.form.price_model_fiat_placeholder')}
 										</span>
 									</div>
-									{#if priceModelError}
+									{#if fixedPriceTouched && priceModelError}
 										<StatusLine kind="warn" id="fixed-price-error">{priceModelError}</StatusLine>
 									{/if}
 								{/if}
@@ -2177,16 +2432,16 @@
 
 				{#if feeMethodChoice === 'waived_first_buy'}
 					<!-- First-buy benefits ladder (Q10 follow-up).  Rather
-					     than expose the 500-BLURT floor as a "minimum"
+					     than expose the $1 floor as a "minimum"
 					     constraint (which feels like a tax), we show the
 					     user what they GET at increasing buy sizes.  The
 					     current amount lights up the row that bracket
 					     contains it; rows above show as "you'll also
 					     unlock if you increase".  Pure presentation —
-					     the indexer keeps enforcing the 500 floor
-					     silently.  Users who type below 500 see the
+					     the indexer keeps enforcing the $1 USD-equivalent
+					     floor silently.  Users who type below $1 see the
 					     amountError validator surface a generic message,
-					     not a "minimum 500" callout. -->
+					     not a "minimum $1" callout. -->
 					<div class="mt-2 rounded-lg border border-morphit-emerald/30 bg-morphit-emerald/5 p-3">
 						<p class="text-xs font-semibold text-morphit-emerald">
 							{$_('post_order.form.waiver_benefits_heading')}
@@ -2205,7 +2460,7 @@
 						</ul>
 					</div>
 				{/if}
-				{#if amountError}
+				{#if amountTouched && amountError}
 					<StatusLine kind="warn" id="amount-error">{amountError}</StatusLine>
 				{/if}
 			</section>
@@ -2214,9 +2469,14 @@
 		<!-- Step 3 -->
 		{#if step1Done && step2Done}
 			<section class="card mb-4 animate-fade-up" aria-labelledby="step3-heading">
-				<h2 id="step3-heading" class="mb-4 font-display text-lg font-bold">
-					{$_('post_order.form.step_3_heading')}
-				</h2>
+				<div class="mb-4 flex items-baseline justify-between gap-3">
+					<h2 id="step3-heading" class="font-display text-lg font-bold">
+						{$_('post_order.form.step_3_heading')}
+					</h2>
+					<span class="shrink-0 text-xs font-medium text-ink-400 dark:text-ink-500">
+						{$_('post_order.form.step_counter', { values: { n: 3, total: 3 } })}
+					</span>
+				</div>
 
 				<div class="mb-4">
 					<p class="mb-1 text-sm font-semibold">{$_('post_order.form.payment_methods_label')}</p>
@@ -2237,6 +2497,8 @@
 					<span class="mb-1 block text-sm font-semibold">{$_('post_order.form.region_label')}</span>
 					<input
 						type="text"
+						id="post-region"
+						name="region"
 						bind:value={region}
 						maxlength="128"
 						class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
@@ -2255,9 +2517,6 @@
 							<span aria-hidden="true">📝</span>
 							{summarySentence}
 						</p>
-						<p class="mt-1 text-sm font-medium text-ink-700 dark:text-ink-200">
-							{$_('post_order.summary.see_notes')}
-						</p>
 					</div>
 				{/if}
 
@@ -2265,11 +2524,12 @@
 					<span class="mb-1 block text-sm font-semibold">{$_('post_order.form.terms_label')}</span>
 					<ProtectedTextarea
 						bind:value={terms}
+						name="order-terms"
 						onDetect={handleTermsKeyDetect}
 						rows={3}
 						maxlength={2048}
 						showCounter
-						placeholder={$_('post_order.form.terms_placeholder') as string}
+						placeholder={termsPlaceholder}
 					/>
 				</label>
 
@@ -2277,6 +2537,8 @@
 					<span class="mb-1 block text-sm font-semibold">{$_('post_order.form.expires_label')}</span
 					>
 					<select
+						id="post-expires-days"
+						name="expires_days"
 						bind:value={expiresDays}
 						disabled={isFirstTrade}
 						class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald disabled:cursor-not-allowed disabled:opacity-60 dark:border-ink-700 dark:bg-ink-900"
@@ -2313,6 +2575,8 @@
 				>
 					<input
 						type="checkbox"
+						id="post-syndicate"
+						name="syndicate"
 						bind:checked={syndicateToBlog}
 						class="mt-0.5 h-4 w-4 flex-none accent-morphit-emerald"
 					/>
@@ -2337,6 +2601,17 @@
 					{$_('common.continue')}
 				</BusyButton>
 			</div>
+		{/if}
+
+		<!-- cp368: when step 1 is complete but step 2 isn't yet valid,
+		     Step 3 + the Continue button are intentionally hidden
+		     (progressive disclosure). Without a cue that's a silent
+		     dead-end — the user can't see that finishing the fields
+		     above unlocks the rest. Show a neutral nudge (never red). -->
+		{#if step1Done && !step2Done}
+			<p class="mt-6 text-center text-sm text-ink-500 dark:text-ink-400">
+				{$_('post_order.form.continue_locked_hint')}
+			</p>
 		{/if}
 	{:else if phase === 'reviewing'}
 		<!-- Review: fee + summary + post button. -->
@@ -2491,7 +2766,13 @@
 			     could social-engineer a hostile address into the
 			     user's flow. -->
 			{#await loadListingFeeAddressPanel() then ListingFeeAddressPanel}
-				<ListingFeeAddressPanel method={feeMethodChoice} />
+				<ListingFeeAddressPanel
+					method={feeMethodChoice}
+					liveSatoshis={feeMethodChoice === 'btc' ? btcFeeSatoshisLive : undefined}
+					livePiconero={feeMethodChoice === 'xmr' ? xmrFeePiconeroLive : undefined}
+					feeFiat={feeMethodChoice === 'btc' ? btcFeeFiat : xmrFeeFiat}
+					{denominationFiat}
+				/>
 			{/await}
 
 			<section class="card mb-4" aria-labelledby="txid-heading">

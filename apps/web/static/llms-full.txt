@@ -605,19 +605,17 @@ Morphit itself isn't a wallet, so we don't hold or move your Blurt for you; powe
 
 **FAQ key:** `where_does_blurt_price_come_from`
 
-The Blurt/USD price you see next to listing fees on Morphit (the "~$0.12" subtext beside the Blurt amount) comes from a layered price-source chain designed to reduce reliance on any single external service.
+The Blurt/USD price you see next to listing fees on Morphit (the "~$0.125" subtext beside the Blurt amount) comes from a layered price-source chain designed to reduce reliance on any single external service.
 
 **The chain, in priority order:**
 
-1. **Klingex.io** — A Centralised Exchange (CEX). Provides Blurt/USDT live prices.
+1. **Coingecko** — Aggregates Blurt prices across multiple exchanges.
 
-2. **Coingecko** — Aggregates Blurt prices across multiple exchanges. Used when Klingex is unavailable or rate-limited.
+2. **morphit_native** — A SELF-SOVEREIGN price derived from on-platform trade data (opt-in per operator; off by default until your instance has enough volume to support it). When enabled, this fetcher looks at recent verified-fee orders that traded Blurt against USD-fiat or stablecoins, applies several layers of manipulation defense, and computes a median across distinct traders. Slotted between Coingecko and the static floor — external sources remain primary until an operator explicitly opts in to preferring the native value during disagreement.
 
-3. **morphit_native** — A SELF-SOVEREIGN price derived from on-platform trade data (opt-in per operator; off by default until your instance has enough volume to support it). When enabled, this fetcher looks at recent verified-fee orders that traded Blurt against USD-fiat or stablecoins, applies several layers of manipulation defense, and computes a median across distinct traders. Slotted between Coingecko and the static floor — external sources remain primary until an operator explicitly opts in to preferring the native value during disagreement.
+3. **Static fallback** — An operator-set floor value (default $0.002) used when all upstreams have failed. Editable in the setup wizard.
 
-4. **Static fallback** — An operator-set floor value (default $0.002) used when all upstreams have failed. Editable in the setup wizard.
-
-**Why a chain instead of one source?** No single price feed can be trusted unconditionally. Klingex could be rate-limited, taken down by its host's regulator, or compromised. Coingecko could be the same. A static fallback drifts from reality. The chain means Blurt pricing keeps working in every scenario short of the entire internet going down.
+**Why a chain instead of one source?** No single price feed can be trusted unconditionally. Coingecko could be the same. A static fallback drifts from reality. The chain means Blurt pricing keeps working in every scenario short of the entire internet going down.
 
 **How morphit_native works** (when enabled — see ADR-0039 for full design):
 
@@ -635,11 +633,11 @@ The Blurt/USD price you see next to listing fees on Morphit (the "~$0.12" subtex
 
 **IMPORTANT: morphit_native is NOT designed to be an oracle for other systems.** It's for Morphit's internal USD display courtesy only. Don't use it as a price input to lending protocols, DEXes, or any value-bearing system. The price is manipulation-resistant for DISPLAY purposes (where small inaccuracies are tolerable) but not bulletproof against the kind of attack a determined adversary mounts when real money depends on the value being correct. See ADR-0039 for the threat model.
 
-**Why this matters for your trades**: Blurt-paid listing fees are denominated in Blurt directly, not USD. The USD echo you see ("~$0.12 USD") is a visual courtesy — it can be slightly off without breaking anything. Your actual fee is whatever Blurt amount the indexer quotes, settled at chain time. The price source's job is to make that USD echo informative, not to be a source of truth for downstream financial systems.
+**Why this matters for your trades**: Blurt-paid listing fees are USD-targeted, not a fixed Blurt amount — Morphit quotes the Blurt worth about $0.125 at the current price, so the fee's dollar value stays steady as Blurt moves up or down. The exact Blurt amount is shown before you sign and settles at chain time. Behind the scenes the indexer accepts that amount against a chain-pinned floor with a small tolerance band, so every instance agrees on what's owed and the amount can't be gamed by feeding in a bad price. The price source's only job is to make that conversion accurate for Morphit's display — never a source of truth for any downstream financial system.
 
-**Pre-launch note**: Until enough on-platform trade volume exists for morphit_native to qualify (requires ≥3 distinct verified-fee traders posting Blurt-vs-USD or Blurt-vs-stablecoin orders in the last 8 hours), every instance falls back to Klingex/Coingecko/static. Operators turn on morphit_native via `MORPHIT_INDEXER_PRICE_FEED_NATIVE_ENABLED=true` when their data is mature.
+**Pre-launch note**: Until enough on-platform trade volume exists for morphit_native to qualify (requires ≥3 distinct verified-fee traders posting Blurt-vs-USD or Blurt-vs-stablecoin orders in the last 8 hours), every instance falls back to Coingecko/static. Operators turn on morphit_native via `MORPHIT_INDEXER_PRICE_FEED_NATIVE_ENABLED=true` when their data is mature.
 
-**cp128 update — denomination is operator-configurable.** Although the discussion above uses USD as the example, the indexer's displayed unit isn't hardcoded to USD. Operators set `MORPHIT_INDEXER_PRICE_FEED_DENOMINATION_FIAT` (default `USD`) to any 3-8 character uppercase ticker — `EUR` (Euro), `GBP` (British Pound), `JPY` (Japanese Yen), `BRL` (Brazilian Real), `CNY` (Chinese Yuan), `INR` (Indian Rupee), `RUB` (Russian Ruble), `AED` (UAE Dirham), `XDR` (IMF Special Drawing Rights basket), `XAU` (gold ounces, a hard-currency hedge), or any other ticker their market uses. The listing-fee response carries a `denomination_fiat` field telling the frontend which unit the `blurt_price_fiat` + `base_fee_fiat` numbers are in, so the UI renders the appropriate symbol and formatting ("$0.12" for USD, "€0.11" for EUR, "XAU 0.0000023" for gold, etc.). This isn't just for the hypothetical USD-collapse scenario — operators serving non-USD-native markets benefit today.
+**cp128 update — denomination is operator-configurable.** Although the discussion above uses USD as the example, the indexer's displayed unit isn't hardcoded to USD. Operators set `MORPHIT_INDEXER_PRICE_FEED_DENOMINATION_FIAT` (default `USD`) to any 3-8 character uppercase ticker — `EUR` (Euro), `GBP` (British Pound), `JPY` (Japanese Yen), `BRL` (Brazilian Real), `CNY` (Chinese Yuan), `INR` (Indian Rupee), `RUB` (Russian Ruble), `AED` (UAE Dirham), `XDR` (IMF Special Drawing Rights basket), `XAU` (gold ounces, a hard-currency hedge), or any other ticker their market uses. The listing-fee response carries a `denomination_fiat` field telling the frontend which unit the `blurt_price_fiat` + `base_fee_fiat` numbers are in, so the UI renders the appropriate symbol and formatting ("$0.125" for USD, "€0.11" for EUR, "XAU 0.0000023" for gold, etc.). This isn't just for the hypothetical USD-collapse scenario — operators serving non-USD-native markets benefit today.
 
 ---
 
@@ -651,8 +649,6 @@ The Blurt/USD price you see next to listing fees on Morphit (the "~$0.12" subtex
 
 **Your first order is free.** New users get a one-time waiver that covers the listing fee on their first Blurt buy — see "Is my first order really free?" for details. So your first Blurt acquisition can also be your first trade on Morphit, with no exchange account, no card, and no KYC required. The waiver is offered automatically when you compose your first order.
 
-**Last-resort alternative:** if you genuinely cannot find a counterparty on the Morphit orderbook (the orderbook is small in some regions), Klingex.io runs a Blurt/USDT trading pair as a centralized-exchange fallback. We mention it for completeness but treat it as an emergency option — every Blurt bought through Klingex is a trade Morphit didn't get, and the goal of the project is to grow the peer-to-peer orderbook, not to send users off-site. If you do go this route, the trade page is at https://klingex.io/trade/Blurt-USDT and you'll need to deposit USDT to swap into Blurt. Withdraw to your own Blurt wallet immediately rather than leaving funds on the exchange.
-
 **Once you have Blurt in your wallet**, paying a Morphit listing fee is automatic — choose "Pay in Blurt" on the post-order screen and Morphit deducts the configured fee directly from your Blurt balance with no extra steps.
 
 ---
@@ -661,24 +657,24 @@ The Blurt/USD price you see next to listing fees on Morphit (the "~$0.12" subtex
 
 **FAQ key:** `first_order_free`
 
-Yes — and it's a really generous one. Your first order on Morphit is a free buy of at least 500 Blurt (~$1). We cover the listing fee. One free order per account, for life.
+Yes — and it's a really generous one. Your first order on Morphit is a free buy worth at least $1 USD of Blurt. You enter the order in your own local currency and Morphit checks it against $1 USD-equivalent — you never have to think in Blurt. We cover the listing fee. One free order per account, for life.
 
-**Why Blurt specifically, and not BTC or XMR?** Because the Blurt in your wallet is what makes you an active participant in everything else on Morphit. With 500+ Blurt, you can:
+**Why Blurt specifically, and not BTC or XMR?** Because the Blurt in your wallet is what makes you an active participant in everything else on Morphit. With about $1 of Blurt, you can:
 
-- Pay listing fees on ~8 future orders at the discounted Blurt rate (60 Blurt each — 50% off the BTC/XMR rate)
+- Pay listing fees on ~8 future orders at the discounted Blurt rate (about 12.5¢ each — 50% off the BTC/XMR rate)
 - Vote on Blurt social content at blurt.blog, blurt.media, etc. and earn curation rewards. You also earn Blurt coins when people click "Like" on your posts.
 - Receive a 1 BP delegation as your welcome stake (fires automatically on your first Blurt-paid listing fee)
 - After your first completed trade, receive 10 Blurt liquid + 10 Blurt Power as the welcome bonus
 
-Without the Blurt in your wallet, you'd start with no way to pay future listing fees at the discount, no Blurt voting weight, and no path into the loyalty-milestone reward tiers. We thought a long time about this — handing new users some Blurt instead of "any first crypto" sets you up to be active rather than stranded.
+Without the Blurt in your wallet, you'd start with no way to pay future listing fees at the discount, no Blurt voting weight, and no path into the loyalty-milestone reward tiers. We thought a long time about this — handing new users a dollar's worth of Blurt instead of "any first crypto" sets you up to be active rather than stranded.
 
-**Why a 500 Blurt minimum?** That's the threshold that makes the rest of the math work: enough to cover ~8 future listings at the discounted rate. If we let the waiver apply to a tiny 1-Blurt buy, you'd leave the flow with effectively no starter balance and the bonus wouldn't help you. 500 Blurt (~$1 at typical recent prices) is the minimum that turns the waiver into a meaningful starter pack.
+**Why a $1 minimum?** That's the threshold that makes the rest of the math work: a dollar of Blurt covers ~8 future listings at the discounted rate. If we let the waiver apply to a tiny few-cent buy, you'd leave the flow with effectively no starter balance and the bonus wouldn't help you. A dollar's worth is the minimum that turns the waiver into a meaningful starter pack. Because you enter the order in your own currency, $1 stays $1 whether Blurt's price is up or down that day.
 
 **The waiver is offered automatically** when you visit /post and start composing your first order. The Review step shows a green "🌱 First order is free" panel with the waiver pre-selected. You can decline if you'd rather save the waiver for a future trade — it never expires.
 
 **What "free" means here:** Morphit covers the listing fee for this one order. You don't pay any network fee. The trade itself happens off-platform between you and your counterparty (they send you Blurt, you pay them whatever fiat or other thing you agreed on); Morphit doesn't touch your funds at any point.
 
-**After your first trade:** the waiver is consumed and the normal fee structure applies — $0.25 in BTC/XMR or $0.125 in Blurt (the 50% Blurt discount is permanent). See "What are the fees?" for the full pricing.
+**After your first trade:** the waiver is consumed and the normal fee structure applies — about 25¢ in BTC/XMR or about 12.5¢ in Blurt (the 50% Blurt discount is permanent). See "What are the fees?" for the full pricing.
 
 ---
 

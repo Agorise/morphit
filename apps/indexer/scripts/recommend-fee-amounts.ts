@@ -30,10 +30,13 @@ import {
 	computeFeeAmounts,
 	fetchBtcXmrPricesFromCoingecko
 } from '../src/lib/feeAmountCalc';
+// Canonical USD target — the single source of truth (the canonical
+// economics in @morphit/asset-registry).
+import { LISTING_FEE_USD } from '@morphit/asset-registry';
 
 function parseTargetUsd(argv: readonly string[]): number {
 	const idx = argv.indexOf('--target-usd');
-	if (idx === -1) return 0.25;
+	if (idx === -1) return LISTING_FEE_USD.btc;
 	const next = argv[idx + 1];
 	if (!next) {
 		console.error('--target-usd requires a value (e.g. --target-usd 0.50)');
@@ -54,7 +57,7 @@ async function main(): Promise<void> {
 			[
 				'Usage: tsx apps/indexer/scripts/recommend-fee-amounts.ts [--target-usd N]',
 				'',
-				'  --target-usd N    Target USD value per fee (default 0.25)',
+				`  --target-usd N    Target USD value per fee (default ${LISTING_FEE_USD.btc})`,
 				'',
 				'Pulls live BTC/USD and XMR/USD from Coingecko and prints',
 				'copy-pasteable env-var lines for morphit.config.env.'

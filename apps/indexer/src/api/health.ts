@@ -20,6 +20,8 @@ import { Hono } from 'hono';
 import type { Config } from '$config';
 import type { Poller } from '$indexer/poller';
 import type { BlurtPriceSource } from '$indexer/price/source';
+import type { FxRateSource } from '$indexer/fx/source';
+import { buildPriceFeedsHealth } from '$api/priceFeedsHealth';
 import type { DisagreementMonitor } from '$indexer/price/disagreementMonitor';
 import type { PeerSampleCycleResult } from '$indexer/price/peerPriceMonitor';
 import { orderbookEventBus } from '$indexer/orderbookEventBus';
@@ -32,7 +34,7 @@ import { chatEventBus } from '$indexer/chatEventBus';
 // update all 10 package.json files + this constant +
 // apps/relay/src/api/health.ts VERSION + the example response
 // in docs/API.md in the same commit.
-const INDEXER_VERSION = '1.0.0-beta.35';
+const INDEXER_VERSION = '1.0.0-beta.36';
 
 // Blurt produces one block every 3 seconds. Used to translate the
 // block-lag count into a human "seconds behind" figure in the
@@ -54,7 +56,12 @@ export function healthRoute(
 	// cp233 — Defense F: latest peer-monitor cycle result per asset,
 	// read for the verbose price block's `peer` surface.  Defaulted so
 	// a caller that doesn't wire it sees an empty map (→ peer null).
-	peerMonitorResults: ReadonlyMap<string, PeerSampleCycleResult> = new Map()
+	peerMonitorResults: ReadonlyMap<string, PeerSampleCycleResult> = new Map(),
+	// cp372 — multi-source FX + crypto feed status for the verbose
+	// `price_feeds` block (morphit-ops node-health view).  Defaulted so
+	// callers that don't wire them see fx disabled / no crypto feeds.
+	fxSource: FxRateSource | null = null,
+	multiAssetSources: ReadonlyMap<string, BlurtPriceSource> = new Map()
 ): Hono {
 	const app = new Hono();
 	const bootTime = Date.now();
@@ -172,7 +179,7 @@ export function healthRoute(
 			}
 
 			// Price source diagnostics. The source's currentDetailed()
-			// returns which upstream is serving right now (klingex,
+			// returns which upstream is serving right now (
 			// coingecko, or static_floor), when it was last refreshed,
 			// and a stale flag. Operators triaging USD-display issues
 			// can see at a glance whether they're on a live feed or
@@ -311,6 +318,15 @@ export function healthRoute(
 				rpc_endpoints,
 				explorers,
 				price,
+				// cp372 — multi-source FX + crypto feed health: which
+				// providers are up, seconds since each last answered,
+				// staleness, and provider-disagreement (outlier dropped).
+				// This is what the morphit-ops node-health view renders.
+				price_feeds: buildPriceFeedsHealth(
+					fxSource,
+					multiAssetSources,
+					() => now
+				),
 				operator_balances,
 				// SSE subscriber counts.  Useful for operators
 				// triaging "is anyone watching the live orderbook

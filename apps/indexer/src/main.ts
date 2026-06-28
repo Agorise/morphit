@@ -28,6 +28,8 @@ import { seedFederationDirectory } from '$indexer/federationSeed';
 import { BlurtClient } from '$blurt/client';
 import { Poller } from '$indexer/poller';
 import { createMultiAssetPriceSources, createDisagreementMonitor } from '$indexer/price/factory';
+import { createFxRateSource } from '$indexer/fx/factory';
+import type { FxRateSource } from '$indexer/fx/source';
 import { startPeerPriceMonitor, type PeerSampleCycleResult } from '$indexer/price/peerPriceMonitor';
 import {
 	startDisagreementMonitor,
@@ -64,6 +66,7 @@ import { broadcastRoute } from '$api/broadcast';
 import { feedbackByAccountRoute } from '$api/feedback';
 import { reputationReceiptRoute } from '$api/reputationReceipt';
 import { releaseRoute } from '$api/release';
+import { fxRoute } from '$api/fx';
 import { chatRoute } from '$api/chat';
 import { chatStreamRoute } from '$api/chatStream';
 import { chatIdentityRoute } from '$api/chatIdentity';
@@ -215,6 +218,17 @@ async function main(): Promise<void> {
 	const priceSource: BlurtPriceSource | null =
 		multiAssetSources.get('BLURT') ?? null;
 
+	// ─── USD→fiat FX source (FX-aware first-order floor) ────────
+	// Powers the "$1 USD-equivalent" first-buy minimum for users
+	// posting in a non-USD fiat, and the Min-value field default in
+	// the user's currency.  ON by default (config.fxFeedEnabled);
+	// null when the operator disables it (floor then degrades to
+	// USD-only — see the poller's fiatToUsd converter).  A single
+	// generic table fetch (base=USD) — no per-user query, privacy
+	// preserved.  Started here; stopped in the shutdown block below.
+	const fxSource: FxRateSource | null = createFxRateSource(config);
+	if (fxSource) fxSource.start();
+
 	// cp129 — Defense F: cross-instance peer price monitor.  Opt-in
 	// via MORPHIT_INDEXER_PEER_PRICE_MONITOR_ENABLED.  Requires
 	// priceSource to be live (otherwise nothing to compare against),
@@ -252,7 +266,7 @@ async function main(): Promise<void> {
 	// cp233 — Defense C: single-instance native-vs-external price
 	// disagreement monitor.  Where F needs ≥3 federation peers to say
 	// anything, C protects a LONE instance with no peers — it
-	// cross-checks the published external price (klingex/coingecko)
+	// cross-checks the published external price (coingecko)
 	// against the self-sovereign morphit_native price every refresh
 	// cycle and alerts on sustained (>4h) >25% divergence.  On by
 	// default whenever native pricing is enabled (createDisagreement-
@@ -280,7 +294,7 @@ async function main(): Promise<void> {
 	}
 
 	// ─── 6. Poller ─────────────────────────────────────────────
-	const poller = new Poller(config, db, blurt, priceSource);
+	const poller = new Poller(config, db, blurt, priceSource, fxSource);
 	// Fire-and-forget; the promise only resolves on shutdown.
 	const pollerPromise = poller.run().catch((err) => {
 		pollerLog.error('fatal', {}, err);
@@ -302,7 +316,7 @@ async function main(): Promise<void> {
 	// list, feedback list, chat history) at the lower `list` limit;
 	// single-resource endpoints (profile, release) at the higher
 	// `resource` limit.
-	app.route('/v1/health', healthRoute(config, poller, priceSource, disagreementMonitors, peerMonitorResults));
+	app.route('/v1/health', healthRoute(config, poller, priceSource, disagreementMonitors, peerMonitorResults, fxSource, multiAssetSources));
 	app.route('/v1/instance', instanceRoute(config, () => poller.currentTreasuryAddresses()));
 	app.route('/v1/instances/stream', instancesStreamRoute(db));
 	app.route('/v1/instances', instancesRoute(db));
@@ -319,7 +333,7 @@ async function main(): Promise<void> {
 
 	const listingFeeApp = new Hono();
 	listingFeeApp.use('*', rateLimit('resource', config.resourceRatePerMin));
-	listingFeeApp.route('/', listingFeeRoute(config, priceSource));
+	listingFeeApp.route('/', listingFeeRoute(config, priceSource, multiAssetSources.get('BTC') ?? null, multiAssetSources.get('XMR') ?? null));
 	app.route('/v1/listing-fee', listingFeeApp);
 
 	// cp127: price-derivation receipt endpoint.  Resource-rate-
@@ -439,6 +453,15 @@ async function main(): Promise<void> {
 	releaseApp.use('*', rateLimit('resource', config.resourceRatePerMin));
 	releaseApp.route('/', releaseRoute(db));
 	app.route('/v1/release', releaseApp);
+
+	// cp372 — public USD→fiat table for the client's "$1-equivalent"
+	// first-order floor + fiat echoes.  Resource-tier (one cached
+	// read).  Serves the WHOLE table so the client picks its currency
+	// locally — the indexer never learns which fiat a user chose.
+	const fxApp = new Hono();
+	fxApp.use('*', rateLimit('resource', config.resourceRatePerMin));
+	fxApp.route('/', fxRoute(fxSource));
+	app.route('/v1/fx', fxApp);
 
 	// Phase E.5 — chat SSE.  Mounted at /v1/chat/:a/:b/stream
 	// BEFORE the rate-limited /v1/chat so the more-specific
@@ -638,6 +661,9 @@ async function main(): Promise<void> {
 		for (const source of multiAssetSources.values()) {
 			source.stop();
 		}
+		// Stop the FX source's background refresh (same shape: no
+		// in-flight work to drain, just clear the interval timer).
+		if (fxSource) fxSource.stop();
 
 		// cp129 — Stop the peer-price monitor's recurring tick.
 		// Same shape as priceSource.stop(): no in-flight work to

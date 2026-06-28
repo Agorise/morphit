@@ -51,6 +51,11 @@
 		maxlength?: number;
 		disabled?: boolean;
 		ariaLabel?: string;
+		/** `name` attribute for the underlying <textarea>. Gives the
+		 *  field a stable form-field identity so it isn't flagged by
+		 *  the "a form field should have an id or name" autofill
+		 *  warning. Omitted attribute when not provided. */
+		name?: string;
 		/** Extra classes applied to the wrapping element. */
 		class?: string;
 		/** Show the inline character counter in the bottom-right of
@@ -83,6 +88,7 @@
 		maxlength,
 		disabled = false,
 		ariaLabel,
+		name,
 		class: cls = '',
 		showCounter = false,
 		counterMode = 'utf16',
@@ -239,6 +245,7 @@
 		{placeholder}
 		{disabled}
 		aria-label={ariaLabel}
+		{name}
 		class="pk-textarea w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 	></textarea>
 

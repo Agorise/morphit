@@ -62,6 +62,35 @@ export interface ListingFeeResponse {
 	readonly base_fee_fiat?: number;
 	readonly blurt_price_fiat?: number;
 	readonly denomination_fiat?: string;
+	/** cp372 Model A: true when `base_fee_blurt` is the live
+	 *  USD-tracked amount (canonical LISTING_FEE_USD.blurt re-priced at
+	 *  the current rate), false/absent when it's the pinned fallback
+	 *  (price feed off/stale, or a non-USD denomination). */
+	readonly base_fee_blurt_live?: boolean;
+	/** cp372 Model A: live BTC fee amount the UI should quote — the
+	 *  canonical USD target (LISTING_FEE_USD.btc ≈ $0.25) converted at
+	 *  the current BTC/USD rate.  Present iff USD-denominated, the BTC
+	 *  price feed is live, and the operator accepts BTC for fees.  The
+	 *  verifier still enforces the chain-pinned amount ±
+	 *  FEE_PRICE_TOLERANCE (authoritative + deterministic). */
+	readonly btc_fee_satoshis?: number;
+	/** USD value of `btc_fee_satoshis` (≈ operator target, constant as
+	 *  BTC moves). */
+	readonly btc_fee_fiat?: number;
+	/** Live BTC/USD price used for the BTC fee scaling. */
+	readonly btc_price_fiat?: number;
+	/** True alongside the BTC live-amount fields. */
+	readonly btc_fee_live?: boolean;
+	/** cp372 Model A: live XMR fee amount as a piconero decimal string
+	 *  (matches /v1/release's representation). Same gating + semantics
+	 *  as the BTC fields. */
+	readonly xmr_fee_piconero?: string;
+	/** USD value of `xmr_fee_piconero`. */
+	readonly xmr_fee_fiat?: number;
+	/** Live XMR/USD price used for the XMR fee scaling. */
+	readonly xmr_price_fiat?: number;
+	/** True alongside the XMR live-amount fields. */
+	readonly xmr_fee_live?: boolean;
 	/** cp127 defense H — NOT-AN-ORACLE warning string.  Present
 	 *  alongside the `_fiat` fields.  Downstream protocols using
 	 *  these numbers as oracle input do so against this explicit
@@ -603,6 +632,22 @@ export interface ReleaseResponse {
 	readonly source_trx_id: string;
 	readonly source_block_num: number;
 	readonly created_at: string;
+}
+
+/** cp372 — GET /v1/fx.  The indexer's cached USD→fiat table so the
+ *  client can compute the "$1 USD-equivalent" first-order minimum
+ *  (and other fiat echoes) in the user's LOCAL currency without
+ *  itself calling an FX provider.  The whole table is served; the
+ *  client picks its own currency locally (privacy — the indexer
+ *  never learns which fiat a user chose). */
+export interface FxResponse {
+	readonly base: 'USD';
+	/** UPPERCASE fiat code → units of that fiat per 1 USD. */
+	readonly rates: Readonly<Record<string, number>>;
+	readonly source: string;
+	readonly stale: boolean;
+	readonly updated_at: string;
+	readonly currency_count: number;
 }
 
 // ─── Chat ciphertext ───────────────────────────────────────────────

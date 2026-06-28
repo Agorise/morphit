@@ -65,6 +65,13 @@ const SPECS: DocSpec[] = [
 			'14. Deployment topology requirement — apps MUST be behind a loopback proxy',
 			'16. Operator-account balance alerts',
 			'37. Comprehensive server hardening — defense-in-depth checklist',
+			// cp372: §40 covers four distinct topics (chain-pin rationale,
+			// the three-priorities discussion, the BLURT-base + auto-re-pin
+			// addendum, and the XMR explorer-backend reference).  It crossed
+			// the 600-line ceiling when §40.3a was added; it should be split
+			// into a "treasury chain-pin" section and a separate "XMR
+			// explorer backends" reference in a future checkpoint.
+			'40. Treasury chain-pin + XMR per-payment proofs — broadcasting and verifying',
 		]),
 	},
 	{

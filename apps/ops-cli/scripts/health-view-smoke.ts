@@ -28,6 +28,7 @@ import {
 	resolveRelayHealthUrl,
 	summarizeHealth,
 	parsePriceFeed,
+	parsePriceFeedsHealth,
 	classifyHealthResult,
 	bridgeGatewayHosts,
 	candidateHealthUrls,
@@ -427,6 +428,62 @@ expect('HV-1e an unparseable string passes through', ensureHealthPath('not a url
 	} finally {
 		rmSync(dir, { recursive: true, force: true });
 	}
+}
+
+// ─── HV-9: parsePriceFeedsHealth (cp372 multi-source feed health) ───
+{
+	const diag = {
+		price_feeds: {
+			fx: {
+				enabled: true,
+				source: 'frankfurter+er_api',
+				stale: false,
+				live_currency_count: 44,
+				outlier_rejected: true,
+				contributing: 2,
+				sources: [
+					{ name: 'frankfurter', ok: true, last_ok_age_s: 12 },
+					{ name: 'er_api', ok: true, last_ok_age_s: 12 },
+					{ name: 'currency_api', ok: false, last_ok_age_s: 600 }
+				]
+			},
+			crypto: {
+				BLURT: { source: 'external_avg', stale: false, outlier_rejected: false, sources: [
+					{ name: 'coingecko', ok: true, last_ok_age_s: 30 },
+					{ name: 'coinpaprika', ok: true, last_ok_age_s: 30 }
+				] },
+				BTC: { source: 'external_avg', stale: false, outlier_rejected: true, sources: [
+					{ name: 'coingecko', ok: true, last_ok_age_s: 30 },
+					{ name: 'kraken', ok: false, last_ok_age_s: null }
+				] },
+				XMR: { source: 'morphit_native', stale: true, outlier_rejected: false, sources: [
+					{ name: 'coingecko', ok: false, last_ok_age_s: 9000 }
+				] }
+			}
+		}
+	};
+	const p = parsePriceFeedsHealth(diag);
+	expect('HV-9a price_feeds parsed', p !== null && p.fxEnabled === true);
+	if (p) {
+		expect('HV-9b 4 feeds in FX,BLURT,BTC,XMR order', p.feeds.length === 4 && p.feeds[0]!.label.startsWith('FX') && p.feeds[1]!.label === 'BLURT' && p.feeds[2]!.label === 'BTC' && p.feeds[3]!.label === 'XMR');
+		const fx = p.feeds[0]!;
+		expect('HV-9c FX up/total counted (2/3)', fx.up === 2 && fx.total === 3);
+		expect('HV-9d FX outlier flag carried', fx.outlierRejected === true);
+		const btc = p.feeds.find((f) => f.label === 'BTC')!;
+		expect('HV-9e BTC down source counted (1/2)', btc.up === 1 && btc.total === 2);
+		const xmr = p.feeds.find((f) => f.label === 'XMR')!;
+		expect('HV-9f XMR stale + native source', xmr.stale === true && xmr.source === 'morphit_native');
+	}
+	expect('HV-9g absent diagnostics → null', parsePriceFeedsHealth(undefined) === null && parsePriceFeedsHealth(null) === null);
+	expect('HV-9h diagnostics without price_feeds → null', parsePriceFeedsHealth({ explorers: [] }) === null);
+	// FX disabled + no crypto → null (nothing to show).
+	expect('HV-9i fx disabled + empty crypto → null', parsePriceFeedsHealth({ price_feeds: { fx: { enabled: false }, crypto: {} } }) === null);
+	// FX disabled but crypto present → parses crypto, fxEnabled false.
+	const cryptoOnly = parsePriceFeedsHealth({ price_feeds: { fx: { enabled: false }, crypto: { BTC: { source: 'external_avg', stale: false, outlier_rejected: false, sources: [{ name: 'coingecko', ok: true, last_ok_age_s: 5 }] } } } });
+	expect('HV-9j fx off + crypto present → crypto rendered, fxEnabled false', cryptoOnly !== null && cryptoOnly.fxEnabled === false && cryptoOnly.feeds.length === 1);
+	// Malformed source rows are skipped, not crashed.
+	const messy = parsePriceFeedsHealth({ price_feeds: { fx: { enabled: false }, crypto: { BTC: { source: 'external_avg', stale: false, outlier_rejected: false, sources: [null, { ok: true }, { name: 'coingecko', ok: true, last_ok_age_s: 5 }] } } } });
+	expect('HV-9k malformed source rows skipped (only valid named one kept)', messy !== null && messy.feeds[0]!.total === 1);
 }
 
 console.log('');

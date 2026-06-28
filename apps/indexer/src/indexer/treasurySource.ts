@@ -122,14 +122,32 @@ export interface XmrTreasury {
 	readonly addressSource: 'chain' | 'env';
 }
 
+/** cp372 — what the order handler needs to know about the BLURT
+ *  listing-fee base.  Unlike BTC/XMR there is no address (BLURT
+ *  fees are transfers to the fee-recipient account); only the
+ *  tier-1 base amount is resolved.  Chain-pinning it makes the
+ *  BLURT floor deterministic across the federation. */
+export interface BlurtTreasury {
+	/** Tier-1 BLURT listing-fee base (before the Sybil multiplier). */
+	readonly base: number;
+	/** 'chain' = chain-pinned by a release op (authoritative);
+	 *  'env' = the operator's MORPHIT_INDEXER_FEE_BASE_BLURT
+	 *  fallback (Plan B / fresh-node bootstrap). */
+	readonly source: 'chain' | 'env';
+}
+
 /** Snapshot of what the source resolved on its last refresh. */
 export interface TreasurySnapshot {
 	readonly btc: BtcTreasury | null;
 	readonly xmr: XmrTreasury | null;
+	/** cp372 — resolved BLURT fee base (chain-pin > env).  Never
+	 *  null in practice (the env fallback always provides a value),
+	 *  but typed nullable for symmetry + defensive callers. */
+	readonly blurt: BlurtTreasury | null;
 	/** Wall-clock time the snapshot was taken — used for
 	 *  cache-staleness checks and /v1/health diagnostics. */
 	readonly resolvedAt: Date;
-	/** True iff at least one of btc/xmr came from chain-pinned
+	/** True iff at least one of btc/xmr/blurt came from chain-pinned
 	 *  source.  Surfaced by /v1/health for operator visibility. */
 	readonly hasChainPin: boolean;
 }
@@ -140,6 +158,10 @@ export interface TreasurySourceEnvFallback {
 	readonly btcSatoshis: number;
 	readonly xmrAddress: string;
 	readonly xmrPiconero: string;
+	/** cp372 — MORPHIT_INDEXER_FEE_BASE_BLURT.  The BLURT floor base
+	 *  used when no release op has chain-pinned one (fresh node, or
+	 *  the operator's Plan-B manual override). */
+	readonly blurtBase: number;
 }
 
 /** Internal shape of the chain-pinned treasury value as it lives
@@ -152,10 +174,14 @@ export interface TreasurySourceEnvFallback {
  *  Part 109: the view key concept is gone from the indexer
  *  entirely.  If a historical row still contains a `viewkey`
  *  field (Part 106 transitional), the resolver silently
- *  strips it — no path reads or stores it. */
+ *  strips it — no path reads or stores it.
+ *
+ *  cp372: optional `blurt` block carries the chain-pinned BLURT
+ *  base.  Absent on pre-cp372 rows → env fallback. */
 interface ChainTreasuryRow {
 	btc: { address: string; satoshis: number } | null;
 	xmr: { address: string; piconero: string } | null;
+	blurt?: { base: number } | null;
 }
 
 export class TreasurySource {
@@ -220,14 +246,32 @@ export class TreasurySource {
 
 		const btc = this.resolveBtc(chain);
 		const xmr = this.resolveXmr(chain);
+		const blurt = this.resolveBlurt(chain);
 		const snapshot: TreasurySnapshot = {
 			btc,
 			xmr,
+			blurt,
 			resolvedAt: new Date(this.now()),
-			hasChainPin: btc?.source === 'chain' || xmr?.addressSource === 'chain'
+			hasChainPin:
+				btc?.source === 'chain' || xmr?.addressSource === 'chain' || blurt?.source === 'chain'
 		};
 		this.cached = snapshot;
 		return snapshot;
+	}
+
+	/** cp372 — resolve the BLURT fee base: chain-pin > env fallback.
+	 *  Unlike BTC/XMR there's no "disabled" state — BLURT is always
+	 *  an accepted fee method, so the env fallback always yields a
+	 *  value (the config default if the operator set nothing). */
+	private resolveBlurt(chain: ChainTreasuryRow | null): BlurtTreasury | null {
+		const pinned = chain?.blurt;
+		if (pinned != null && typeof pinned.base === 'number' && pinned.base > 0) {
+			return { base: pinned.base, source: 'chain' };
+		}
+		if (this.env.blurtBase > 0) {
+			return { base: this.env.blurtBase, source: 'env' };
+		}
+		return null;
 	}
 
 	private resolveBtc(chain: ChainTreasuryRow | null): BtcTreasury | null {

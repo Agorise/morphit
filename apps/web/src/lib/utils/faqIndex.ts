@@ -784,13 +784,12 @@ const SYNONYMS_EN: Record<string, readonly string[]> = {
 	// "where to buy" / "exchange" rather than the FAQ's canonical
 	// phrasing.  Map all these to terms that appear in
 	// `where_to_buy_blurt`.  Morphit's own orderbook is the
-	// recommended path; Klingex is positioned as last-resort, so
-	// the synonym set leans toward orderbook discovery.
+	// recommended path, so the synonym set leans toward orderbook
+	// discovery.
 	acquire: ['buy', 'purchase', 'get'],
 	purchase: ['buy', 'acquire'],
-	exchange: ['klingex', 'cex', 'orderbook'],
-	cex: ['exchange', 'klingex', 'orderbook'],
-	klingex: ['exchange', 'buy', 'orderbook'],
+	exchange: ['cex', 'orderbook'],
+	cex: ['exchange', 'orderbook'],
 	swap: ['exchange', 'trade'],
 	// Operators
 	operator: ['node', 'instance', 'run'],

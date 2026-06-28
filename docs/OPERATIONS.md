@@ -1405,8 +1405,7 @@ mode needed.
 ## 13. Responding to a stale BLURT/USD price feed
 
 Under Phase 5, the indexer runs a composite BLURT/USD price
-source with a Klingex → Coingecko → static floor fallback
-chain. Values refresh every 5 minutes in the background. When
+source with a Coingecko → static floor fallback chain. Values refresh every 5 minutes in the background. When
 every upstream fails, the indexer keeps serving the last good
 value with `stale=true`. If no upstream has ever succeeded
 since boot, it falls back to the static floor
@@ -1443,10 +1442,11 @@ below.  See ADR-0041.
 **cp130 update — multi-asset morphit_native (BTC + XMR added
 alongside BLURT)**: when the price feed is enabled, the indexer
 now creates three independent composite price sources at boot —
-one per asset.  BLURT keeps its 4-tier chain (Klingex →
-Coingecko → morphit_native → static floor); BTC and XMR get a
-3-tier chain (Coingecko → morphit_native → static floor)
-because Klingex doesn't trade BTC/USDT or XMR/USDT at scale.
+one per asset.  Every asset (BLURT, BTC, XMR) uses the same
+3-tier chain (Coingecko → morphit_native → static floor).
+Klingex, the former BLURT-only upstream, went out of business
+in 2026 and was removed, so Coingecko is the sole external
+source for all assets now.
 Each source has its own cache and refresh schedule.  Two new
 env vars set per-asset static floors:
 `MORPHIT_INDEXER_PRICE_FEED_BTC_STATIC_FLOOR` (default 60000) and
@@ -1479,8 +1479,8 @@ The questions to investigate, in order:
    and hit their `/v1/price/morphit-native/receipt` directly.
    Compare their numbers and contributing-trader sets to yours.
 
-3. **Is there genuine market dislocation?** Check Klingex and
-   Coingecko for BLURT/USD.  If both external sources agree
+3. **Is there genuine market dislocation?** Check Coingecko
+   for BLURT/USD.  If both external sources agree
    with peers but your indexer's native fetcher disagrees, it's
    your instance.  If externals agree WITH your native price
    but disagree with peers, it's the peers (look for whether
@@ -1521,7 +1521,7 @@ can flip on `MORPHIT_INDEXER_PRICE_FEED_NATIVE_ENABLED=true` to
 add a new upstream slotted BETWEEN coingecko and the static
 floor. The native fetcher derives BLURT/USD from real verified-
 fee on-platform orders and survives external-feed outages
-entirely (Klingex shutdowns, Coingecko rate-limits, etc.). See
+entirely (Coingecko rate-limits or outages, etc.). See
 ADR-0039 for full design and `/v1/price/morphit-native/receipt`
 for live operator-side inspection of what it's producing.
 Defaults to OFF so a brand-new instance with zero trade history
@@ -1539,7 +1539,7 @@ doesn't try to derive from empty data.
 - `/v1/health?verbose=1` reports `diagnostics.price.stale=true`
 - `/v1/health?verbose=1` reports `diagnostics.price.source` as
   `static_floor` while `MORPHIT_INDEXER_PRICE_FEED_ENABLED=true`
-  (means no upstream — klingex or coingecko — has succeeded
+  (means the upstream — coingecko — hasn't succeeded
   since boot, so the indexer is falling back to
   `MORPHIT_INDEXER_PRICE_FEED_STATIC_FLOOR`)
 - Log aggregator shows repeated `[price] all_upstreams_failed_serving_cache`
@@ -1561,7 +1561,7 @@ Example healthy output:
 ```json
 {
   "blurt_usd": 0.00423,
-  "source": "klingex",
+  "source": "coingecko",
   "updated_at": "2026-04-20T12:35:00.000Z",
   "stale": false
 }
@@ -1572,7 +1572,7 @@ Example stale output (upstream is down, cache is aging):
 ```json
 {
   "blurt_usd": 0.00423,
-  "source": "klingex",
+  "source": "coingecko",
   "updated_at": "2026-04-20T10:00:00.000Z",
   "stale": true
 }
@@ -1596,27 +1596,24 @@ Example all-upstreams-failed-since-boot:
    reasonably close to market, stale behavior is not
    user-visible as incorrect fees.
 
-2. **Is Klingex reachable from your VPS?**
-   ```sh
-   curl -fsS --max-time 5 "$MORPHIT_INDEXER_KLINGEX_BASE_URL/ticker/BLURT_USD"
-   ```
-   If this fails from your box but works from a laptop, suspect
-   firewall, outbound VPN, or a provider-level block.
-
-3. **Is Coingecko reachable + not rate-limited?**
+2. **Is Coingecko reachable + not rate-limited?**
    ```sh
    curl -fsS --max-time 5 "$MORPHIT_INDEXER_COINGECKO_BASE_URL/simple/price?ids=blurt&vs_currencies=usd"
    ```
    A 429 response means you're rate-limited; the free tier
    allows ~10-30 req/min shared across all callers from your
    IP. With a 5-minute refresh this should be comfortable, but
-   a shared IP (NAT, proxy) can exhaust it.
+   a shared IP (NAT, proxy) can exhaust it. Coingecko is the
+   only external upstream now (Klingex, the former BLURT
+   primary, went out of business in 2026), so a Coingecko
+   outage means the indexer serves the last cached price, then
+   the static floor.
 
-4. **Has the Klingex API shape drifted?** Our Klingex fetcher
-   tries several field names defensively, but a wholesale rename
-   could surface as `unexpected_shape` log events. Open a bug
-   with the current endpoint's JSON payload and we'll extend
-   the parser.
+3. **Has the Coingecko API shape drifted?** Our Coingecko
+   fetcher tries several field names defensively, but a
+   wholesale rename could surface as `unexpected_shape` log
+   events. Open a bug with the current endpoint's JSON payload
+   and we'll extend the parser.
 
 ### Immediate mitigation
 
@@ -4491,7 +4488,7 @@ destinations) that deployment automation manages — those
 stay in your SystemD unit, Docker compose, or
 `.env.production`. But a small set of variables are
 operationally interesting *after* the service is up: the
-BLURT/USD price fallback when klingex is down, the
+BLURT/USD price fallback when the live feed is down, the
 registration kill-switch you'd flip during a spam wave,
 alert thresholds you'd tune as the instance grows.
 
@@ -4532,10 +4529,9 @@ who pastes the wrong file (e.g., a deployment `.env` with
 DATABASE_URL in it) gets a clear "you can't set that here"
 message rather than silent corruption.
 
-**Pricing — survives klingex/coingecko outage.**
+**Pricing — survives a Coingecko outage.**
 `MORPHIT_INDEXER_BLURT_PRICE_USD` (default `0.002`) is the
-absolute price floor used when klingex.io and coingecko
-are both unreachable. Live feeds always win when reachable;
+absolute price floor used when Coingecko is unreachable. Live feeds always win when reachable;
 this only kicks in during an outage. Update it during
 prolonged outages so the indexer's emergency fallback
 matches reality. See §13 for the full price-feed runbook.
@@ -4547,8 +4543,16 @@ Use during active spam-account waves, maintenance, or
 suspected drain attacks (§7, §18).
 
 **Listing fee.** `MORPHIT_INDEXER_FEE_BASE_BLURT` (default
-`60`) is the BLURT-denominated base fee per order listing.
-At BLURT ≈ $0.002, that's about $0.12.  Rarely worth
+`60`) is the BLURT base fee per order listing.  It targets the
+canonical ~12.5¢ USD-equivalent (`LISTING_FEE_USD.blurt` in
+`@morphit/asset-registry`); at BLURT ≈ $0.002 that's about 60–62
+BLURT.  **As of cp372 this base is chain-pinned and auto-tracked**
+(see §40.3a): the canonical floor comes from the most recent
+`morphit_release_v1` `treasury.blurt.base`, resolved chain-pin →
+env exactly like the BTC/XMR amounts, so this env var is now your
+**Plan-B fallback / local override** — used only on a fresh node
+that hasn't seen a treasury-bearing release op yet, or if you
+deliberately want a different local floor.  Rarely worth
 changing on a single instance — listings posted on your
 instance with non-standard fees look unusual to other
 operators indexing the chain. Federation uniformity is
@@ -4606,9 +4610,9 @@ they're set once at deployment and don't change in
 response to live conditions. Keep them in your SystemD/
 Docker config alongside the other deployment specifics.
 
-### Example workflow — klingex.io is down, BLURT price moved
+### Example workflow — the live BLURT/USD feed is down, BLURT price moved
 
-You notice klingex has been down for hours and another
+You notice the live feed (Coingecko) has been down for hours and another
 exchange shows BLURT trading 30% higher than your last
 known price.
 
@@ -4623,11 +4627,11 @@ known price.
 5. `sudo systemctl restart morphit-indexer.service`.
 6. The indexer logs will show:
    `[operator-config] loaded /opt/morphit/morphit.config.env (1 applied, 0 skipped — env wins)`.
-7. When klingex comes back up, the live feed takes over
+7. When Coingecko comes back up, the live feed takes over
    automatically. The fallback only matters during the
    outage.
 
-You don't need to revert step 4 when klingex returns —
+You don't need to revert step 4 when Coingecko returns —
 the live feed wins whenever it's reachable. Leaving the
 fallback at the more accurate value just means future
 outages start from a better baseline.
@@ -5032,8 +5036,10 @@ chat history or older copies of this runbook.
 
 Headline numbers (for context — full breakdown in the doc):
 
-- **Listing fee:** 60 BLURT per order (~$0.12), tunable via
-  `MORPHIT_INDEXER_FEE_BASE_BLURT`.
+- **Listing fee:** targets ~12.5¢ USD-equivalent in BLURT (~25¢ in
+  BTC/XMR) — the canonical `LISTING_FEE_USD` in
+  `@morphit/asset-registry`. Env base `MORPHIT_INDEXER_FEE_BASE_BLURT`
+  (default 60 BLURT, ≈ the target at BLURT ≈ $0.002).
 - **Stranger fee:** 5 BLURT for cold messages, escalates with abuse.
 - **Featured-slot bid:** 50 BLURT/hour, ≥6 hours minimum.
 - **Account-creation cost:** ~100 BLURT per signup (operator's
@@ -8685,6 +8691,40 @@ For community operators:
 - **Operator-private**: nothing.  XMR verification works
   out of the box on every Morphit instance with no
   shared secret.
+
+### 40.3a The BLURT fee base is chain-pinned too (cp372), and auto-tracked
+
+Until cp372 the BTC/XMR fee **amounts** were chain-pinned but the
+**BLURT** fee base was a per-operator env var
+(`MORPHIT_INDEXER_FEE_BASE_BLURT`) — a per-node BLURT floor that
+could fork the orderbook.  cp372 closes that: the `treasury` block
+now also carries `blurt: { base }`, resolved chain-pin → env exactly
+like BTC/XMR, so **every federated indexer enforces the same BLURT
+floor**.  Community operators do NOTHING — you inherit the
+chain-pinned base; `MORPHIT_INDEXER_FEE_BASE_BLURT` is now just your
+Plan-B fallback / local override (used only on a fresh node, or to
+deliberately run a different local floor).
+
+**Auto-re-pin (maintainer-only).**  The enforced amount stays a
+fixed chain-pin (no price read in the verifier → no fork, no
+quote→pay race); the *displayed* fee tracks the live canonical USD
+target (~12.5¢ BLURT, ~25¢ BTC/XMR).  As the market drifts the pin
+goes stale, so `ops/systemd/morphit-treasury-repin.timer` (config:
+`ops/env/treasury-repin.env.example`) runs a daily drift check and
+re-pins only past a 10% threshold that sits **inside** the
+verifier's 15% band (quotes are never rejected mid-drift).  The
+DEFAULT is **detect-only** (no key): it emits a `treasury_repin_due`
+alert and you broadcast by hand — `release-build-payload.ts` (now
+prompts for a BLURT fee base) into the laptop-only, key-gated
+`release-broadcast.ts` (the **Plan B**, no key online).  Opt-in
+auto-broadcast (`MORPHIT_REPIN_ENABLE_AUTO_BROADCAST=1` + a `0600`
+key file) builds+signs+broadcasts unattended — **trusted signing
+box ONLY, never the production server** (the posting key can re-pin
+the treasury).  Failsafes: a down/zero/negative feed skips that
+asset (never re-pinned from a bad price), an over-ceiling computed
+amount is rejected, one bad feed never blocks a healthy asset, and a
+fetch failure aborts with no re-pin.  A re-broadcast keeps the same
+version (no spurious update banner), updating only the amounts.
 
 ### 40.4 Choosing your XMR explorer backend
 

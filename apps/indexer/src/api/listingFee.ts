@@ -56,12 +56,17 @@ import { buildListingFeeBody } from '$api/listingFeeBody';
 
 export { buildListingFeeBody };
 
-export function listingFeeRoute(config: Config, priceSource: BlurtPriceSource | null): Hono {
+export function listingFeeRoute(
+	config: Config,
+	priceSource: BlurtPriceSource | null,
+	btcSource: BlurtPriceSource | null = null,
+	xmrSource: BlurtPriceSource | null = null
+): Hono {
 	const app = new Hono();
 
 	app.get('/', (c) => {
 		c.header('cache-control', 'public, max-age=60');
-		return c.json(buildListingFeeBody(config, priceSource));
+		return c.json(buildListingFeeBody(config, priceSource, btcSource, xmrSource));
 	});
 
 	return app;

@@ -70,7 +70,10 @@ export type ReleaseValidateError =
 	| 'treasury_xmr_address_missing'
 	| 'treasury_xmr_address_not_mainnet'
 	| 'treasury_xmr_piconero_invalid'
-	| 'treasury_xmr_piconero_too_large';
+	| 'treasury_xmr_piconero_too_large'
+	| 'treasury_blurt_not_object'
+	| 'treasury_blurt_base_invalid'
+	| 'treasury_blurt_base_too_large';
 
 export type ReleaseValidateResult =
 	| { ok: true; value: ReleasePayloadV1 }
@@ -102,6 +105,13 @@ const XMR_PICONERO_RE = /^\d+$/;
 /** Sanity ceiling on piconero string length: 1000 XMR is 1e15
  *  piconero (16 digits), far above any reasonable listing fee. */
 const XMR_PICONERO_MAX_LEN = 16;
+
+/** cp372 — sanity ceiling on the chain-pinned BLURT base.  The
+ *  canonical fee is ~12.5¢ (≈62.5 BLURT at $0.002).  Even an
+ *  extreme BLURT crash to $0.000001 would only need ~125,000
+ *  BLURT to hold ~12.5¢; 10,000,000 leaves generous headroom
+ *  while rejecting absurd / hostile values. */
+const BLURT_BASE_MAX = 10_000_000;
 
 /** Cheap-and-conservative URL shape validator.  We don't run new
  *  URL() because that's expensive and accepts a much wider grammar
@@ -273,12 +283,34 @@ export function validateTreasury(t: unknown):
 		xmr = { address: addr, piconero: pn };
 	}
 
+	// cp372 — optional chain-pinned BLURT fee base.  No address
+	// (BLURT fees are transfers to the operator's fee recipient);
+	// only the tier-1 base amount is pinned.
+	let blurt: { base: number } | null = null;
+	if (t.blurt !== undefined && t.blurt !== null) {
+		if (!isPlainObject(t.blurt)) return { ok: false, reason: 'treasury_blurt_not_object' };
+		const base = t.blurt.base;
+		if (typeof base !== 'number' || !Number.isFinite(base) || base <= 0) {
+			return { ok: false, reason: 'treasury_blurt_base_invalid' };
+		}
+		if (base > BLURT_BASE_MAX) {
+			return { ok: false, reason: 'treasury_blurt_base_too_large' };
+		}
+		blurt = { base };
+	}
+
 	// Size cap on the whole serialized treasury block — mirrors
 	// the indexer's checkJsonbSize gate.  In practice this can
 	// never trip with valid btc + xmr fields above (max payload
 	// is well under 1 KB), but it's a defense-in-depth bound for
 	// hostile inputs that pad the object with unknown fields.
-	const value: import('./release.js').ReleaseTreasuryBlock = { btc, xmr };
+	//
+	// Only attach `blurt` when present so a release with no BLURT
+	// pin serializes byte-identically to the pre-cp372 shape
+	// (backward compatibility for older consumers + existing
+	// release-op fixtures).
+	const value: import('./release.js').ReleaseTreasuryBlock =
+		blurt !== null ? { btc, xmr, blurt } : { btc, xmr };
 	if (byteLengthOfJson(value) > 4096) {
 		return { ok: false, reason: 'treasury_too_large' };
 	}

@@ -3,7 +3,7 @@
  *
  * Refreshes in the background every `refreshIntervalMs`. Each
  * refresh tries a chain of upstream PriceFetch callables in
- * priority order (e.g. Klingex first, Coingecko second) and
+ * priority order (Coingecko, then morphit_native) and
  * commits the first positive number returned as the new current
  * value. If all upstreams fail, the last good value is served
  * with stale=true; if nothing has ever succeeded, the static
@@ -24,16 +24,43 @@ import { logger } from '$log';
 import type { BlurtPriceSource, PriceFetch } from '$indexer/price/source';
 import type { Database } from '$db/pool';
 import { updateAndCheckDrift, type DriftCheckResult } from '$indexer/price/driftMonitor';
+import { aggregateRobust } from '$indexer/price/aggregate';
 
 const log = logger('price');
 
 export interface CompositePriceSourceConfig {
-	/** Upstream fetchers in priority order. First to return a
-	 *  positive number wins the refresh cycle. */
+	/** EXTERNAL market upstreams, fetched ALL-AT-ONCE each refresh and
+	 *  combined via the median-anchored robust mean (aggregateRobust):
+	 *  the median anchors, sources >`outlierTolerance` off it are
+	 *  dropped, and the survivors are averaged.  This damps the swing
+	 *  a single off/stale provider would cause.  ≥1 up → averaged
+	 *  value committed (source 'external_avg'). */
 	readonly upstreams: ReadonlyArray<{
 		readonly name: string;
 		readonly fetch: PriceFetch;
 	}>;
+	/** FALLBACK upstreams (e.g. morphit_native), tried in order ONLY
+	 *  when every external upstream is unavailable this cycle.  Kept
+	 *  as a distinct tier — NOT blended into the external average —
+	 *  so the disagreement monitor's external-vs-native cross-check
+	 *  stays meaningful (native is the thing checked against, and the
+	 *  thing served only when externals are all down).  Optional;
+	 *  omit for an externals-only source. */
+	readonly fallbackUpstreams?: ReadonlyArray<{
+		readonly name: string;
+		readonly fetch: PriceFetch;
+	}>;
+	/** Relative band for outlier rejection in the external average,
+	 *  e.g. 0.05 = keep readings within ±5% of the median.  Crypto
+	 *  spreads across exchanges are wider than FX; default 0.05. */
+	readonly outlierTolerance?: number;
+	/** Per-asset plausibility window.  A committed value outside
+	 *  [plausibleMin, plausibleMax] is rejected as garbage.  These
+	 *  MUST be asset-appropriate: BLURT ~[0.0001, 0.1], BTC
+	 *  ~[1000, 1e7], XMR ~[1, 1e5].  Default to the BLURT window for
+	 *  backward compatibility with callers that don't set them. */
+	readonly plausibleMin?: number;
+	readonly plausibleMax?: number;
 	/** Absolute-floor fallback when no upstream has ever succeeded.
 	 *  Operator-tunable via MORPHIT_INDEXER_PRICE_FEED_STATIC_FLOOR
 	 *  (default $0.002).  Only used when the optional price feed
@@ -79,7 +106,7 @@ export interface CompositePriceSourceConfig {
  *  After the §F.11 BLURT-native fee refactor, the price feed is
  *  no longer in the fee-verification critical path — fees are
  *  denominated directly in BLURT.  The bound therefore protects
- *  the OPTIONAL USD display only: if Klingex or Coingecko gets
+ *  the OPTIONAL USD display only: if Coingecko gets
  *  compromised and starts returning $1.00/BLURT, the bound
  *  rejects the value rather than letting the frontend show
  *  "60 BLURT (~$60.00)" next to listing fees.
@@ -99,6 +126,11 @@ export interface CompositePriceSourceConfig {
 const PRICE_PLAUSIBLE_MIN_USD = 0.0001;
 const PRICE_PLAUSIBLE_MAX_USD = 0.1;
 
+/** Default outlier band for the external average when a source
+ *  doesn't set one.  Crypto cross-exchange spreads are wider than
+ *  FX, so 5% (vs FX's 2%). */
+const CRYPTO_OUTLIER_TOLERANCE_DEFAULT = 0.05;
+
 interface CachedEntry {
 	price: number;
 	source: string;
@@ -116,6 +148,17 @@ export class CompositeCachedPriceSource implements BlurtPriceSource {
 	private readonly setIntervalFn: typeof globalThis.setInterval;
 	private readonly clearIntervalFn: typeof globalThis.clearInterval;
 	private readonly staleThresholdMs: number;
+	private readonly plausibleMin: number;
+	private readonly plausibleMax: number;
+	private readonly outlierTolerance: number;
+	/** Per-external-source health, surfaced to the morphit-ops view. */
+	private readonly extStats: Map<
+		string,
+		{ lastOkAt: number | null; lastTriedAt: number | null; okLastCycle: boolean; lastValue: number | null }
+	>;
+	/** Whether the last committed external average dropped any source
+	 *  as an outlier (a disagreement signal worth surfacing). */
+	private lastOutlierRejected = false;
 
 	constructor(private readonly config: CompositePriceSourceConfig) {
 		if (config.staticFloor <= 0) {
@@ -130,6 +173,15 @@ export class CompositeCachedPriceSource implements BlurtPriceSource {
 		this.setIntervalFn = config.setInterval ?? globalThis.setInterval;
 		this.clearIntervalFn = config.clearInterval ?? globalThis.clearInterval;
 		this.staleThresholdMs = config.staleThresholdMs ?? config.refreshIntervalMs * 2;
+		this.plausibleMin = config.plausibleMin ?? PRICE_PLAUSIBLE_MIN_USD;
+		this.plausibleMax = config.plausibleMax ?? PRICE_PLAUSIBLE_MAX_USD;
+		this.outlierTolerance = config.outlierTolerance ?? CRYPTO_OUTLIER_TOLERANCE_DEFAULT;
+		this.extStats = new Map(
+			config.upstreams.map((u) => [
+				u.name,
+				{ lastOkAt: null, lastTriedAt: null, okLastCycle: false, lastValue: null }
+			])
+		);
 	}
 
 	current(): number {
@@ -189,90 +241,167 @@ export class CompositeCachedPriceSource implements BlurtPriceSource {
 		this.timer = null;
 	}
 
-	/** Attempt one refresh pass. Public for tests that want
-	 *  deterministic control; production code relies on start()
-	 *  to drive this via the interval. */
+	/** One refresh pass.  External upstreams are fetched ALL-AT-ONCE
+	 *  and combined via the median-anchored robust mean; if none are
+	 *  available this cycle, the fallback tier (native) is tried in
+	 *  order; if that also fails, the cached/static value persists.
+	 *  Public for tests that want deterministic control. */
 	async refreshOnce(): Promise<void> {
-		for (const up of this.config.upstreams) {
+		const now = this.now();
+
+		// ── External tier: fetch all concurrently, robust-average ──
+		const results = await Promise.allSettled(this.config.upstreams.map((u) => u.fetch()));
+		const values: number[] = [];
+		results.forEach((res, i) => {
+			const up = this.config.upstreams[i]!;
+			const stat = this.extStats.get(up.name)!;
+			stat.lastTriedAt = now;
+			let value: number | null = null;
+			if (res.status === 'fulfilled') {
+				value = res.value;
+			} else {
+				// PriceFetch contract says "never throws"; a buggy impl
+				// shouldn't crash the refresher.
+				log.warn('upstream_threw', { source: up.name }, res.reason);
+			}
+			if (
+				value !== null &&
+				Number.isFinite(value) &&
+				value > 0 &&
+				value >= this.plausibleMin &&
+				value <= this.plausibleMax
+			) {
+				stat.lastOkAt = now;
+				stat.okLastCycle = true;
+				stat.lastValue = value;
+				values.push(value);
+			} else {
+				stat.okLastCycle = false;
+				if (value !== null) {
+					log.warn('upstream_bad_or_out_of_range', {
+						source: up.name,
+						value,
+						min: this.plausibleMin,
+						max: this.plausibleMax
+					});
+				}
+			}
+		});
+
+		if (values.length > 0) {
+			const agg = aggregateRobust(values, this.outlierTolerance);
+			if (
+				agg &&
+				Number.isFinite(agg.value) &&
+				agg.value >= this.plausibleMin &&
+				agg.value <= this.plausibleMax
+			) {
+				this.lastOutlierRejected = agg.rejected > 0;
+				await this.commit(agg.value, 'external_avg', now);
+				log.info('refreshed_averaged', {
+					contributors: agg.contributors,
+					considered: agg.considered,
+					rejected: agg.rejected,
+					price: agg.value
+				});
+				return;
+			}
+		}
+
+		// ── Fallback tier (native): sequential, first plausible wins ──
+		for (const up of this.config.fallbackUpstreams ?? []) {
 			let value: number | null;
 			try {
 				value = await up.fetch();
 			} catch (err) {
-				// Defense in depth. PriceFetch contract says "never
-				// throws" but a buggy implementation shouldn't crash us.
-				log.warn('upstream_threw', { source: up.name }, err);
+				log.warn('fallback_threw', { source: up.name }, err);
 				continue;
 			}
-
-			if (value === null) {
-				// Upstream couldn't provide a value this round. Try
-				// next in chain. Not worth warn-logging — this is an
-				// expected "upstream is temporarily unavailable" path.
+			if (value === null) continue;
+			if (
+				!Number.isFinite(value) ||
+				value <= 0 ||
+				value < this.plausibleMin ||
+				value > this.plausibleMax
+			) {
+				log.warn('fallback_bad_or_out_of_range', { source: up.name, value });
 				continue;
 			}
-
-			if (!Number.isFinite(value) || value <= 0) {
-				log.warn('upstream_bad_value', { source: up.name, value });
-				continue;
-			}
-
-			// Sanity clamp.  Outside this window the value is almost
-			// certainly wrong (zero-tickers, compromised oracle, etc.)
-			// — fall through to the next upstream rather than commit
-			// it.  Defends the listing-fee economy against a single
-			// upstream pushing a wildly skewed price.
-			if (value < PRICE_PLAUSIBLE_MIN_USD || value > PRICE_PLAUSIBLE_MAX_USD) {
-				log.warn('upstream_value_out_of_range', {
-					source: up.name,
-					value,
-					min: PRICE_PLAUSIBLE_MIN_USD,
-					max: PRICE_PLAUSIBLE_MAX_USD
-				});
-				continue;
-			}
-
-			// Got a good value — commit and done.
-			const now = this.now();
-			this.cached = { price: value, source: up.name, updatedAt: now };
-			log.info('refreshed', { source: up.name, price: value });
-
-			// cp233 — Defense B (slow-drift / "frog in boiling water"):
-			// update the persisted drift baseline and check for a
-			// sustained divergence from it.  Observational ONLY — the
-			// value is already committed above, and a baseline-store
-			// failure must never break price serving (invariant: refresh
-			// failures are logged, not propagated), so it is fenced in
-			// its own try/catch.  Runs only when the operator wired
-			// db + asset + denomination (production path); test sources
-			// constructed without them skip it.  Reuses `now` so the
-			// baseline timestamps honor the same injected clock the rest
-			// of the source uses.
-			if (this.config.db && this.config.asset && this.config.denominationFiat) {
-				try {
-					this.lastDrift = await updateAndCheckDrift(
-						this.config.db,
-						this.config.asset,
-						this.config.denominationFiat,
-						value,
-						{ now: () => new Date(now) }
-					);
-				} catch (err) {
-					log.warn('drift_check_failed', { asset: this.config.asset }, err);
-				}
-			}
+			this.lastOutlierRejected = false;
+			await this.commit(value, up.name, now);
+			log.info('refreshed_fallback', { source: up.name, price: value });
 			return;
 		}
 
-		// Every upstream failed this round.
+		// ── Every upstream failed this round ──
 		if (this.cached) {
 			log.warn('all_upstreams_failed_serving_cache', {
 				cached_source: this.cached.source,
-				cached_age_ms: this.now() - this.cached.updatedAt
+				cached_age_ms: now - this.cached.updatedAt
 			});
 		} else {
 			log.warn('all_upstreams_failed_no_cache_serving_floor', {
 				floor: this.config.staticFloor
 			});
 		}
+	}
+
+	/** Commit a value as the new cached price + run the drift check.
+	 *  Extracted so the external-average and native-fallback paths
+	 *  share identical commit + Defense-B semantics. */
+	private async commit(value: number, source: string, now: number): Promise<void> {
+		this.cached = { price: value, source, updatedAt: now };
+
+		// cp233 — Defense B (slow-drift / "frog in boiling water"):
+		// update the persisted drift baseline and check for a
+		// sustained divergence from it.  Observational ONLY — the
+		// value is already committed above, and a baseline-store
+		// failure must never break price serving (invariant: refresh
+		// failures are logged, not propagated), so it is fenced in
+		// its own try/catch.  Runs only when the operator wired
+		// db + asset + denomination (production path); test sources
+		// constructed without them skip it.  Reuses `now` so the
+		// baseline timestamps honor the same injected clock.
+		if (this.config.db && this.config.asset && this.config.denominationFiat) {
+			try {
+				this.lastDrift = await updateAndCheckDrift(
+					this.config.db,
+					this.config.asset,
+					this.config.denominationFiat,
+					value,
+					{ now: () => new Date(now) }
+				);
+			} catch (err) {
+				log.warn('drift_check_failed', { asset: this.config.asset }, err);
+			}
+		}
+	}
+
+	/** Per-external-source health for the morphit-ops node-health
+	 *  view: which providers answered, when each last succeeded, and
+	 *  their last reading. */
+	sourceStatus(): Array<{
+		name: string;
+		ok: boolean;
+		lastOkAt: Date | null;
+		lastTriedAt: Date | null;
+		lastValue: number | null;
+	}> {
+		return this.config.upstreams.map((u) => {
+			const s = this.extStats.get(u.name)!;
+			return {
+				name: u.name,
+				ok: s.okLastCycle,
+				lastOkAt: s.lastOkAt === null ? null : new Date(s.lastOkAt),
+				lastTriedAt: s.lastTriedAt === null ? null : new Date(s.lastTriedAt),
+				lastValue: s.lastValue
+			};
+		});
+	}
+
+	/** Whether the last committed external average dropped at least
+	 *  one source as an outlier (a disagreement signal). */
+	outlierRejected(): boolean {
+		return this.lastOutlierRejected;
 	}
 }

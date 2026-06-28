@@ -50,7 +50,7 @@ describe('frontend Sybil tier schedule parity', () => {
 		expect(BASE_FEE_BLURT).toBe(60);
 	});
 
-	it('FEE_TOLERANCE is 0.1% (FP-rounding only after the BLURT-native refactor)', () => {
+	it('FEE_TOLERANCE constant unchanged (display-side reference; indexer enforces FEE_PRICE_TOLERANCE under Model A)', () => {
 		expect(FEE_TOLERANCE).toBe(0.001);
 	});
 });

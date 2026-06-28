@@ -6,7 +6,9 @@
  *   - current() always returns a positive number
  *   - current() serves the static floor before any refresh
  *   - current() serves the most recently cached upstream value
- *   - fallback chain: tries upstreams in order, first positive wins
+ *   - external averaging: all external upstreams fetched at once,
+ *     median-anchored mean committed, outliers rejected
+ *   - native fallback tier: consulted only when all externals are down
  *   - preserves cache when all upstreams fail in a later refresh
  *   - marks stale when cached value exceeds threshold age
  *   - idempotent start/stop
@@ -28,12 +30,20 @@ function mkFetch(impl: () => Promise<number | null>): PriceFetch {
  *  for determinism. */
 function mkSource(opts: {
 	upstreams: Array<{ name: string; fetch: PriceFetch }>;
+	fallbackUpstreams?: Array<{ name: string; fetch: PriceFetch }>;
 	floor?: number;
 	now?: () => number;
 	staleThresholdMs?: number;
+	outlierTolerance?: number;
+	plausibleMin?: number;
+	plausibleMax?: number;
 }) {
 	return new CompositeCachedPriceSource({
 		upstreams: opts.upstreams,
+		fallbackUpstreams: opts.fallbackUpstreams,
+		outlierTolerance: opts.outlierTolerance,
+		plausibleMin: opts.plausibleMin,
+		plausibleMax: opts.plausibleMax,
 		staticFloor: opts.floor ?? 0.002,
 		refreshIntervalMs: 60_000,
 		staleThresholdMs: opts.staleThresholdMs,
@@ -81,16 +91,32 @@ describe('CompositeCachedPriceSource — baseline contracts', () => {
 	});
 });
 
-describe('CompositeCachedPriceSource — fallback chain', () => {
-	it('uses the first upstream when it returns a positive number', async () => {
+describe('CompositeCachedPriceSource — external averaging + failover', () => {
+	it('averages all available external upstreams (median-anchored mean)', async () => {
 		const s = mkSource({
 			upstreams: [
-				{ name: 'first', fetch: mkFetch(async () => 0.005) },
-				{ name: 'second', fetch: mkFetch(async () => 0.007) }
+				{ name: 'a', fetch: mkFetch(async () => 0.005) },
+				{ name: 'b', fetch: mkFetch(async () => 0.0052) }
 			]
 		});
 		await s.refreshOnce();
-		expect(s.current()).toBe(0.005);
+		// Two close readings within tolerance → their mean.
+		expect(s.current()).toBeCloseTo(0.0051, 6);
+		expect(s.currentDetailed().source).toBe('external_avg');
+	});
+
+	it('rejects an outlier reading before averaging', async () => {
+		const s = mkSource({
+			upstreams: [
+				{ name: 'a', fetch: mkFetch(async () => 0.005) },
+				{ name: 'b', fetch: mkFetch(async () => 0.0051) },
+				{ name: 'c', fetch: mkFetch(async () => 0.05) } // 10× outlier
+			]
+		});
+		await s.refreshOnce();
+		// Outlier dropped; mean of the two inliers.
+		expect(s.current()).toBeCloseTo(0.00505, 6);
+		expect(s.outlierRejected()).toBe(true);
 	});
 
 	it('falls through to the second upstream when the first returns null', async () => {
@@ -137,6 +163,53 @@ describe('CompositeCachedPriceSource — fallback chain', () => {
 				{ name: 'first', fetch: mkFetch(async () => null) },
 				{ name: 'second', fetch: mkFetch(async () => null) }
 			],
+			floor: 0.002
+		});
+		await s.refreshOnce();
+		expect(s.current()).toBe(0.002);
+	});
+
+	it('falls back to the native tier only when all externals are down', async () => {
+		const s = mkSource({
+			upstreams: [
+				{ name: 'ext-a', fetch: mkFetch(async () => null) },
+				{ name: 'ext-b', fetch: mkFetch(async () => null) }
+			],
+			fallbackUpstreams: [{ name: 'morphit_native', fetch: mkFetch(async () => 0.003) }]
+		});
+		await s.refreshOnce();
+		expect(s.current()).toBe(0.003);
+		expect(s.currentDetailed().source).toBe('morphit_native');
+	});
+
+	it('prefers the external average over the native fallback when any external is up', async () => {
+		const s = mkSource({
+			upstreams: [
+				{ name: 'ext-a', fetch: mkFetch(async () => 0.005) },
+				{ name: 'ext-b', fetch: mkFetch(async () => null) }
+			],
+			fallbackUpstreams: [{ name: 'morphit_native', fetch: mkFetch(async () => 0.003) }]
+		});
+		await s.refreshOnce();
+		// External average (just ext-a here) wins; native is NOT consulted.
+		expect(s.current()).toBe(0.005);
+		expect(s.currentDetailed().source).toBe('external_avg');
+	});
+
+	it('respects per-asset plausibility bounds (BTC-range value passes with BTC bounds)', async () => {
+		const s = mkSource({
+			upstreams: [{ name: 'cg', fetch: mkFetch(async () => 65000) }],
+			floor: 60000,
+			plausibleMin: 1000,
+			plausibleMax: 10_000_000
+		});
+		await s.refreshOnce();
+		expect(s.current()).toBe(65000);
+	});
+
+	it('rejects a value outside the configured bounds (default BLURT window → floor)', async () => {
+		const s = mkSource({
+			upstreams: [{ name: 'cg', fetch: mkFetch(async () => 65000) }], // ≫ 0.1 BLURT max
 			floor: 0.002
 		});
 		await s.refreshOnce();
@@ -197,7 +270,8 @@ describe('CompositeCachedPriceSource — staleness reporting', () => {
 		await s.refreshOnce();
 		// Same clock tick — age is 0, well within threshold.
 		expect(s.currentDetailed().stale).toBe(false);
-		expect(s.currentDetailed().source).toBe('up');
+		// A single external source now reports under the averaged label.
+		expect(s.currentDetailed().source).toBe('external_avg');
 	});
 
 	it('marks stale when cached value exceeds stale threshold', async () => {
@@ -211,10 +285,10 @@ describe('CompositeCachedPriceSource — staleness reporting', () => {
 		// Advance clock beyond threshold.
 		t += 15_000;
 		expect(s.currentDetailed().stale).toBe(true);
-		// Value and source name are still preserved — staleness is
+		// Value and source are still preserved — staleness is
 		// metadata, not a fallback trigger.
 		expect(s.currentDetailed().price).toBe(0.005);
-		expect(s.currentDetailed().source).toBe('up');
+		expect(s.currentDetailed().source).toBe('external_avg');
 	});
 
 	it('defaults staleThresholdMs to 2× refreshIntervalMs', () => {

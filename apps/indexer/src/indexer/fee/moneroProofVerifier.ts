@@ -98,6 +98,7 @@
 
 import type { FeeClaim, FeeVerifier, FeeVerifyResult } from '$indexer/fee/verifier';
 import { EndpointPool, type EndpointState } from '@morphit/rpc-pool';
+import { minAcceptablePiconero, FEE_PRICE_TOLERANCE } from '@morphit/asset-registry';
 import { logger } from '$log';
 
 const log = logger('xmr-verify');
@@ -322,10 +323,14 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 			// proves a payment to a different recipient.
 			return { kind: 'rejected', reason: 'tx_proof_did_not_prove_any_match' };
 		}
-		if (observed < claim.expectedAmount) {
+		// Model-A tolerance (cp372): accept within FEE_PRICE_TOLERANCE
+		// below the chain-pinned expected piconero (see the BTC
+		// verifier for the rationale).  bigint-safe lower bound.
+		const minPico = minAcceptablePiconero(claim.expectedAmount);
+		if (observed < minPico) {
 			return {
 				kind: 'rejected',
-				reason: `underpaid: observed ${observed} piconero, expected ${claim.expectedAmount}`
+				reason: `underpaid: observed ${observed} piconero, expected ${claim.expectedAmount} (min ${minPico} at ${FEE_PRICE_TOLERANCE * 100}% tolerance)`
 			};
 		}
 

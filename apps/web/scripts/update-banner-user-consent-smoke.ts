@@ -2,14 +2,18 @@
  * update-banner-user-consent-smoke — the update snackbar reloads ONLY on an
  * explicit "Load it now" click, never on its own, and can't get stuck hidden.
  *
- * WHY (cp339): the banner broke on PC because (a) a 'controllerchange' listener
- * auto-reloaded the page whenever the service worker activated — refreshing
- * behind the user's back — and (b) an "applying" flag persisted in
- * sessionStorage could get stuck `true` after a reload that didn't fully land
- * the update, suppressing the snackbar for minutes. The fix: NO controllerchange
- * auto-reload (the page reloads only inside applyUpdate, the "Load it now"
- * click), and "applying" is in-memory only (a reload resets it, so it can't
- * wedge). "Later" only closes the snackbar — it never reloads.
+ * WHY (cp339): the banner broke on PC because (a) an AUTONOMOUS 'controllerchange'
+ * listener (module/effect scope) auto-reloaded the page whenever the service
+ * worker activated — refreshing behind the user's back — and (b) an "applying"
+ * flag persisted in sessionStorage could get stuck `true` after a reload that
+ * didn't fully land the update, suppressing the snackbar for minutes. The fix:
+ * no AUTONOMOUS controllerchange auto-reload, and "applying" is in-memory only
+ * (a reload resets it, so it can't wedge). "Later" only closes the snackbar.
+ *
+ * cp368 refinement: "Load it now" now registers a controllerchange listener
+ * INSIDE applyUpdate (so it fires only after the user clicks) and reloads the
+ * instant the new worker takes control — one tap lands the new bundle on mobile.
+ * Still consent-gated: the listener never exists outside applyUpdate.
  *
  * Usage (from apps/web): tsx scripts/update-banner-user-consent-smoke.ts
  */
@@ -35,10 +39,29 @@ function check(name: string, cond: boolean, detail = ''): void {
 
 console.log('\n── update banner: user-consent only, never stuck ──────');
 
-// No controllerchange auto-reload WIRING (a comment may mention the absence).
+// cp368: "Load it now" now waits for the new worker to take CONTROL
+// (controllerchange) before reloading, so a single tap lands the new bundle
+// even on mobile (where the old fixed 250ms reload could beat SW activation
+// and leave the tab on the stale bundle, making the version poll re-offer).
+// A controllerchange listener is now ALLOWED — but only inside applyUpdate
+// (registered on the user's "Load it now" click), never at module/effect
+// scope where it would reload the page autonomously behind the user's back.
+const applyStart = src.indexOf('function applyUpdate');
+const applyStop = (() => {
+	if (applyStart === -1) return -1;
+	const nextFn = src.indexOf('\n\tfunction ', applyStart + 1);
+	const nextEffect = src.indexOf('\n\t$effect', applyStart + 1);
+	const ends = [nextFn, nextEffect].filter((i) => i !== -1);
+	return ends.length ? Math.min(...ends) : src.length;
+})();
+const applyUpdateBody = applyStart !== -1 ? src.slice(applyStart, applyStop) : '';
+const ccRe = /addEventListener\(\s*['"]controllerchange['"]/g;
+const ccTotal = [...src.matchAll(ccRe)].length;
+const ccInApplyUpdate = [...applyUpdateBody.matchAll(ccRe)].length;
 check(
-	"no addEventListener('controllerchange') auto-reload",
-	!/addEventListener\(\s*['"]controllerchange['"]/.test(src)
+	'controllerchange listener (if any) lives only inside applyUpdate (consent-gated, never autonomous)',
+	ccTotal === ccInApplyUpdate && ccInApplyUpdate >= 1,
+	`${ccTotal} total, ${ccInApplyUpdate} inside applyUpdate`
 );
 
 // location.reload() appears exactly once, and inside applyUpdate().

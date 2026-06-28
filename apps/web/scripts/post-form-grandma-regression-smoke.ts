@@ -55,6 +55,21 @@ const STARTER_PACK = join(
 );
 const starterSrc = readFileSync(STARTER_PACK, 'utf8');
 
+// cp368: also read the en locale so we can assert the waiver-benefit
+// `_with_fiat` keys actually exist — when they were missing, svelte-i18n
+// rendered the raw key path ("post_order.waiver_benefits.tier_1")
+// straight into the "What your buy unlocks" box.
+const EN_JSON = join(__dirname, '..', 'src', 'lib', 'i18n', 'locales', 'en.json');
+const enLocale = JSON.parse(readFileSync(EN_JSON, 'utf8')) as Record<string, unknown>;
+function enKey(path: string): unknown {
+	return path
+		.split('.')
+		.reduce<unknown>(
+			(o, k) => (o && typeof o === 'object' ? (o as Record<string, unknown>)[k] : undefined),
+			enLocale
+		);
+}
+
 interface Scenario {
 	readonly name: string;
 	/** Returns null when the invariant holds, else a failure reason. */
@@ -270,6 +285,196 @@ const SCENARIOS: Scenario[] = [
 			if (!/dark:hover:text-morphit-emerald/.test(cls))
 				return 'walkthrough link missing dark:hover:text-morphit-emerald — text stays white on hover in dark mode';
 			if (m === null) return 'first_post_starter.faq_link not found';
+			return null;
+		}
+	},
+	// ─── cp368/cp369/cp372: first-trade /post screen ───
+	{
+		name: 'waiver floor is the $1 USD-equivalent (FX-aware, fiat→USD), not a 500-BLURT constant (cp369 reverses §F.11; cp372 makes it multi-currency)',
+		check: () => {
+			if (!/const WAIVER_MIN_FIAT_USD = FIRST_ORDER_MIN_USD\b/.test(src))
+				return 'floor is not wired to canonical FIRST_ORDER_MIN_USD';
+			if (!/FIRST_ORDER_MIN_USD[^\n]*from '@morphit\/asset-registry'/.test(src))
+				return 'FIRST_ORDER_MIN_USD not imported from @morphit/asset-registry';
+			if (/WAIVER_MIN_BLURT/.test(src)) return 'stale WAIVER_MIN_BLURT constant remains';
+			if (!/waiverMinUsd[^\n]*<\s*WAIVER_MIN_FIAT_USD/.test(src))
+				return 'floor check does not compare the (FX-converted) minimum to WAIVER_MIN_FIAT_USD';
+			// cp372: the floor MUST be FX-aware — convert the entered
+			// minimum (in the selected fiat) to USD via fiatToUsd, with a
+			// `?? amountMinNum` fallback that mirrors the indexer's order.ts
+			// (`ctx.fiatToUsd(amount_min, fiat) ?? amount_min`) so the
+			// client pre-submit check and the on-chain check agree for ANY
+			// currency, not just USD.
+			if (!/fiatToUsd\(fxTable, amountMinNum, fiat\)\s*\?\?\s*amountMinNum/.test(src))
+				return 'floor is not FX-aware (waiverMinUsd must be `fiatToUsd(fxTable, amountMinNum, fiat) ?? amountMinNum`, matching the indexer)';
+			return null;
+		}
+	},
+	{
+		name: 'cp372 Min-value default-seed is safe-by-construction (no cp364-class loop/overwrite; re-syncs on fiat change while untouched)',
+		check: () => {
+			// The seed effect must exist and bail out the instant the
+			// user has typed (amountTouched) — otherwise it would fight a
+			// user-entered value (a cp364-class bug).
+			if (!/if \(!isFirstTrade \|\| fxTable === null \|\| fiat === '' \|\| amountTouched\) return;/.test(src))
+				return 'seed effect missing its bail-out guard (not-first-trade / no-fx / empty-fiat / amountTouched)';
+			// It must track the last-seeded fiat so re-running with the
+			// same fiat is a no-op (no infinite loop) but a currency switch
+			// re-seeds.  It must NOT read `amountMin` (reading the signal it
+			// writes is the classic self-trigger loop) — the lastSeededFiat
+			// guard is what makes that unnecessary.
+			if (!/if \(fiat === lastSeededFiat\) return;/.test(src))
+				return 'seed effect missing the `fiat === lastSeededFiat` no-loop / re-sync guard';
+			if (!/lastSeededFiat = fiat;/.test(src))
+				return 'seed effect does not record lastSeededFiat (would re-seed every run)';
+			// The grandma-facing $1-equivalent hint must be rendered.
+			if (!/firstOrderMinHint/.test(src))
+				return 'first-order-min hint ($1-equivalent in the user fiat) not present';
+			return null;
+		}
+	},
+	{
+		name: 'cp372 Terms typewriter placeholder: 8 untranslated phrases, reduced-motion fallback, cleaned up, wired to the textarea',
+		check: () => {
+			if (!/TERMS_PLACEHOLDER_PHRASES/.test(src))
+				return 'TERMS_PLACEHOLDER_PHRASES not present';
+			// The multilingual example set: verify distinctive phrases
+			// across scripts survive (the design — several languages
+			// cycling — is the point, not the exact count).
+			for (const p of [
+				'Weekends only',
+				'Debajo del puente',
+				'请在工作开始前取走您的个人物品',
+				'На трибунах баскетбольной площадки'
+			]) {
+				if (!src.includes(p)) return `typewriter example phrase missing: ${p}`;
+			}
+			// Accessibility: motion-sensitive users must not get the
+			// per-character animation.
+			if (!/prefers-reduced-motion/.test(src))
+				return 'typewriter does not honor prefers-reduced-motion';
+			// No leaked timer on unmount.
+			if (!/clearTimeout|clearInterval/.test(src))
+				return 'typewriter timer is not cleaned up on unmount';
+			// The textarea must render the animated placeholder, not the
+			// old static key.
+			if (!/placeholder=\{termsPlaceholder\}/.test(src))
+				return 'Terms textarea not wired to the typewriter placeholder';
+			return null;
+		}
+	},
+	{
+		name: 'waiver-benefit ladder is fiat-first ($1/$4/$20/$100 breakpoints; fiat-named tier keys interpolate {amount}, never "{amount} BLURT")',
+		check: () => {
+			// amount_min and the tiers are fiat values; the floor is $1.
+			// cp370: the tier keys are now named for their fiat breakpoint
+			// (tier_1/4/20/100), not the old BLURT quantities (500/2000/…).
+			for (const t of ['tier_1', 'tier_4', 'tier_20', 'tier_100']) {
+				const k = `post_order.waiver_benefits.${t}`;
+				const v = enKey(k);
+				if (typeof v !== 'string') return `missing key: ${k}`;
+				if (!v.includes('{amount}')) return `${k} does not interpolate {amount}`;
+				if (/\{amount\}\s*BLURT/.test(v))
+					return `${k} still renders "{amount} BLURT" (BLURT-quantity, not fiat)`;
+			}
+			// The old BLURT-named tier keys (and the superseded with-fiat
+			// variants) must be gone from en.json.
+			for (const stale of ['tier_500', 'tier_2000', 'tier_10000', 'tier_50000']) {
+				if (enKey(`post_order.waiver_benefits.${stale}`) !== undefined)
+					return `stale BLURT-named key still present: ${stale}`;
+				if (enKey(`post_order.waiver_benefits.${stale}_with_fiat`) !== undefined)
+					return `stale ${stale}_with_fiat key still present`;
+			}
+			// The code's tier mapping must reference the fiat-named keys and
+			// the fiat breakpoints — and must NOT reference the old names.
+			if (!/\{ at: 1, key: 'post_order\.waiver_benefits\.tier_1' \}/.test(src))
+				return 'tier_1 breakpoint is not the $1 fiat floor';
+			if (/waiver_benefits\.tier_(500|2000|10000|50000)\b/.test(src))
+				return 'code still references an old BLURT-named tier key';
+			if (/at: 500,|at: 2000,|at: 10_000,|at: 50_000,/.test(src))
+				return 'a BLURT-quantity tier breakpoint (500/2000/10000/50000) remains';
+			// The ladder builds the fiat label via formatFiat, not a _with_fiat suffix.
+			if (/_with_fiat/.test(src)) return 'code still references the _with_fiat suffix';
+			if (!/formatFiat\(tier\.at, denominationFiat\)/.test(src))
+				return 'ladder no longer formats the tier threshold as a fiat amount';
+			return null;
+		}
+	},
+	{
+		name: 'amount field red border + bottom error are gated on amountTouched (no premature red on a pristine form)',
+		check: () => {
+			if (!/let amountTouched\b/.test(src)) return 'amountTouched state not found';
+			// Per-field touched-gated borders.
+			if (!/amountTouched && amountMinHasError/.test(src))
+				return 'min border not gated on `amountTouched && amountMinHasError`';
+			if (!/amountTouched && amountMaxHasError/.test(src))
+				return 'max border not gated on `amountTouched && amountMaxHasError`';
+			// Bottom amount-error StatusLine gated too.
+			if (!/\{#if amountTouched && amountError\}/.test(src))
+				return 'bottom amount-error StatusLine not gated on amountTouched';
+			// Anti-pattern: an ungated `{amountError ?` border must not return.
+			if (/border-2 \{amountError\b/.test(src))
+				return 'an amount input border still keys off raw amountError (ungated → premature red)';
+			return null;
+		}
+	},
+	{
+		name: 'per-field error attribution exists (a min-only fault must not redden the max field)',
+		check: () => {
+			if (!/const amountMinHasError = \$derived/.test(src))
+				return 'amountMinHasError $derived not found';
+			if (!/const amountMaxHasError = \$derived/.test(src))
+				return 'amountMaxHasError $derived not found';
+			return null;
+		}
+	},
+	{
+		name: 'flat-price red border + StatusLine are gated on fixedPriceTouched (no red on reveal before typing)',
+		check: () => {
+			if (!/let fixedPriceTouched\b/.test(src)) return 'fixedPriceTouched state not found';
+			if (!/fixedPriceTouched && priceModelError/.test(src))
+				return 'flat-price border not gated on `fixedPriceTouched && priceModelError`';
+			if (!/\{#if fixedPriceTouched && priceModelError\}/.test(src))
+				return 'flat-price StatusLine not gated on fixedPriceTouched';
+			return null;
+		}
+	},
+	{
+		name: 'number inputs force the cleaned value back onto the DOM (typed letters cannot linger)',
+		check: () => {
+			// The resync helper + its use is what stops a one-way
+			// `value={…}` field from keeping visually-typed letters when
+			// the sanitised result equals the current (empty) state.
+			if (!/function syncCleaned\(/.test(src)) return 'syncCleaned helper not found';
+			if (!/el\.value !== clean/.test(src))
+				return 'syncCleaned does not rewrite the DOM value when it differs';
+			for (const h of [
+				'handleAmountMinInput',
+				'handleAmountMaxInput',
+				'handleSpreadInput',
+				'handleFixedPriceInput'
+			]) {
+				if (!new RegExp(`function ${h}\\(`).test(src)) return `missing input handler: ${h}`;
+				if (!new RegExp(`oninput=\\{${h}\\}`).test(src))
+					return `${h} is not wired to an input's oninput`;
+			}
+			// Anti-pattern: the old inline strip-without-resync handlers.
+			if (/oninput=\{\(e\) => \(amountMin = keepDecimal/.test(src))
+				return 'min input still uses the inline strip-without-resync handler';
+			if (/oninput=\{\(e\) => \(spreadPercent = keepSignedDecimal/.test(src))
+				return 'spread input still uses the inline strip-without-resync handler';
+			return null;
+		}
+	},
+	{
+		name: 'progressive-disclosure dead-end has a nudge (continue_locked_hint when step1Done && !step2Done)',
+		check: () => {
+			if (typeof enKey('post_order.form.continue_locked_hint') !== 'string')
+				return 'continue_locked_hint key missing from en locale';
+			if (!/\{#if step1Done && !step2Done\}/.test(src))
+				return 'no `step1Done && !step2Done` block to surface the locked hint';
+			if (!/post_order\.form\.continue_locked_hint/.test(src))
+				return 'continue_locked_hint is not referenced in the template';
 			return null;
 		}
 	}
