@@ -114,6 +114,22 @@ const FALSE_POSITIVE_SUBSTRINGS: readonly string[] = [
 	'sanitizeSvg' // Returns { ok, value } — checked
 ];
 
+// Binding names that are, by universal convention in this codebase,
+// DOM elements (HTMLInputElement / HTMLTextAreaElement / Node) —
+// never an indexer-client Result.  `el.value` is the DOM `.value`
+// property (e.g. the /post `syncCleaned(el: HTMLInputElement)`
+// helper added in cp368), not a Result read.  Checked against the
+// VALUE_RE capture as a WHOLE TOKEN, so this does NOT suppress
+// `model.value`, `cancel.value`, `panel.value`, etc. — only an exact
+// `el`/`input`/… binding.
+const DOM_VALUE_BINDINGS: ReadonlySet<string> = new Set([
+	'el',
+	'input',
+	'node',
+	'elem',
+	'textarea'
+]);
+
 // Pattern that says "this file imports from indexer/client".  We
 // match the alias forms ($indexer/client and $lib/indexer/client)
 // and the relative form.  $ is a regex metachar so we escape it.
@@ -191,6 +207,7 @@ async function main(): Promise<void> {
 				while ((m = VALUE_RE.exec(line))) {
 					const binding = m[1] ?? '';
 					if (allowedValueBindings.has(binding)) continue;
+					if (DOM_VALUE_BINDINGS.has(binding)) continue;
 					findings.push({
 						file: file.replace(REPO, ''),
 						line: i + 1,

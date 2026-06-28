@@ -1133,3 +1133,241 @@ export function feePayable(): readonly AssetEntry[] {
 export function externalAssets(): readonly AssetEntry[] {
 	return ASSETS.filter((a) => !a.isCoordinationChain);
 }
+
+// ════════════════════════════════════════════════════════════════
+//  CANONICAL ECONOMICS — the single source of truth for what things
+//  cost on Morphit (the fee + first-order economics).
+// ════════════════════════════════════════════════════════════════
+//
+//  This lives INLINE in index.ts (not a separate economics.ts file)
+//  ON PURPOSE. @morphit/asset-registry is consumed as RAW source —
+//  its package.json `main`/`types` point straight at this file and
+//  there is no build step. The mcp-server ships a compiled
+//  `node dist/main.js` bin that value-imports ASSET_TICKERS from
+//  here at RUNTIME, and plain Node ESM resolves a relative
+//  `./economics.js` specifier LITERALLY (it does NOT remap .js→.ts
+//  the way tsx and Vite do), so factoring this out into its own file
+//  made `node dist/main.js` crash on startup with ERR_MODULE_NOT_FOUND.
+//  A single self-contained index.ts is the invariant that lets every
+//  consumer — Vite bundler, tsx, AND plain node — import the package.
+//  DO NOT re-extract this into a separate file.
+//
+//  The frontend (which QUOTES the fee to the user) and the indexer
+//  (which VALIDATES the on-chain payment) BOTH import these, so the
+//  numbers physically cannot drift apart. People's money rides on
+//  these values. Change a number here and NOWHERE ELSE — every other
+//  reference is derived from these constants.
+//
+//  FIAT-FIRST — the governing principle: users think in their LOCAL
+//  currency (USD, EUR, MXN, …), NEVER in BLURT. Telling someone "buy
+//  500 BLURT" sounds like a fortune and scares newcomers away. So
+//  every figure below is a USD target and the live crypto amount is
+//  DERIVED from target ÷ live price — a fixed BLURT/satoshi/piconero
+//  amount would silently drift (60 BLURT is ~12.5¢ today but half
+//  that if BLURT halves).
+//
+//  In one breath:
+//    • A new user's first BLURT buy must be worth at least $1 USD.
+//    • Placing a listing costs ~25¢ USD in BTC/XMR, or HALF (~12.5¢)
+//      in BLURT — the discount nudges users into the native economy.
+//    • Listing fees can ONLY be paid in BLURT, XMR, or BTC; every
+//      other tradable asset is trade-only (see `canPayListingFee`).
+
+/**
+ * First buy-order minimum, in USD.
+ *
+ * A new user's first BLURT buy is the fee-WAIVED welcome order. We
+ * require it to be worth at least this much so the user leaves the
+ * flow with a usable starter balance (~$1 of BLURT funds ~8 future
+ * listings at the BLURT listing-fee rate). Checked against the
+ * order's fiat VALUE (`amount_min`), which is itself a fiat amount —
+ * so this is a fiat-to-fiat comparison and needs no price feed.
+ *
+ * Exact when the order's fiat is USD (the default denomination). A
+ * non-USD instance wants this converted into its local currency via
+ * a USD↔local rate; that is the open multi-currency-pricing item.
+ */
+export const FIRST_ORDER_MIN_USD = 1.0;
+
+/**
+ * Listing-fee USD targets, per payment method.
+ *
+ * These are the ONLY fee numbers in the system. The BLURT / satoshi
+ * / piconero amounts a user actually pays are ALWAYS derived from
+ * these ÷ the live price (see the helpers below) — never hardcoded.
+ *
+ *   btc / xmr : ~25¢ USD worth of the coin.
+ *   blurt     : ~12.5¢ USD worth — half price, to reward paying in
+ *               the native token.
+ *
+ * Only BLURT, BTC, and XMR can pay listing fees (the indexer's
+ * `fee_method` enum is frozen to 'blurt' | 'btc' | 'xmr' |
+ * 'waived_first_buy'); every other asset is trade-only.
+ */
+export const LISTING_FEE_USD: Readonly<Record<'blurt' | 'btc' | 'xmr', number>> = Object.freeze({
+	blurt: 0.125,
+	btc: 0.25,
+	xmr: 0.25
+});
+
+/**
+ * Reference prices (USD) used ONLY to seed the static fallback fee
+ * amounts when no live price is available (cold start / price feed
+ * down). They are NOT the live economics — the live amounts come
+ * from the real price via the helpers below. Kept here so the
+ * fallback amounts trace to the same USD targets rather than being
+ * unexplained magic numbers scattered through the config.
+ */
+export const FEE_REFERENCE_PRICE_USD: Readonly<Record<'blurt' | 'btc' | 'xmr', number>> =
+	Object.freeze({
+		blurt: 0.002,
+		btc: 60_000,
+		xmr: 320
+	});
+
+/**
+ * Tolerance the indexer grants when verifying a fee payment.
+ *
+ * Because the fee is USD-targeted (derived from a LIVE price), the
+ * required crypto amount can move between the moment the user
+ * fetched their quote and the moment the indexer validates the
+ * on-chain payment. This band absorbs that drift so a good-faith
+ * payment is NEVER rejected because the market ticked. The fee is a
+ * few cents, so even a 15% band is a sub-cent-to-~4¢ difference —
+ * economically negligible, and far cheaper than rejecting a real
+ * user's order.
+ *
+ * (This is distinct from, and replaces for fee-amount purposes, the
+ * tiny 0.1% floating-point-rounding tolerance the old BLURT-native
+ * model used. A price-drift band has to be much wider than a
+ * rounding band.)
+ */
+export const FEE_PRICE_TOLERANCE = 0.15;
+
+/** Smallest-unit decimals per fee-capable asset (mirrors ASSETS:
+ *  BTC 8 satoshi, XMR 12 piconero, BLURT 3 milliBLURT). */
+const FEE_ASSET_DECIMALS: Readonly<Record<'blurt' | 'btc' | 'xmr', number>> = Object.freeze({
+	blurt: 3,
+	btc: 8,
+	xmr: 12
+});
+
+function usablePrice(p: number): boolean {
+	return Number.isFinite(p) && p > 0;
+}
+
+/**
+ * Defense-in-depth behind the price feed's own plausibility envelope.
+ * A garbage price can drive `target ÷ price` to a value that is:
+ *   • effectively ∞ (price → 0⁺) → BigInt(∞) THROWS, and a number
+ *     amount of ∞ makes the verifier reject every payment (DoS);
+ *   • rounded to 0 (price → ∞) → a "free" listing, defeating the
+ *     anti-Sybil purpose.
+ * In either case we return null so the caller falls back to the sane
+ * fixed FEE_FALLBACK amount rather than quoting/validating nonsense.
+ * A real listing fee is always a small POSITIVE amount.
+ */
+function safeAmount(n: number): number | null {
+	return Number.isFinite(n) && n > 0 ? n : null;
+}
+function safeUnitCount(n: number): number | null {
+	// Smallest-unit counts (satoshi/piconero) must be exact positive
+	// integers; an unsafe-integer result means the float already lost
+	// precision (absurd price), so fall back.
+	return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
+
+/**
+ * Derive the BLURT listing-fee BASE (in BLURT) from the live
+ * BLURT/USD price. The Sybil-tier multiplier is applied ON TOP of
+ * this by the caller (see the indexer's `expectedFeeBlurt` and the
+ * frontend's `computeFee`). Returns null when no usable price is
+ * available, so the caller can fall back to the reference amount.
+ */
+export function listingFeeBlurtBase(blurtUsdPrice: number): number | null {
+	if (!usablePrice(blurtUsdPrice)) return null;
+	return safeAmount(LISTING_FEE_USD.blurt / blurtUsdPrice);
+}
+
+/**
+ * Derive the BTC listing fee in whole satoshis from the live
+ * BTC/USD price. null when no usable price.
+ */
+export function listingFeeSatoshis(btcUsdPrice: number): number | null {
+	if (!usablePrice(btcUsdPrice)) return null;
+	return safeUnitCount(Math.round((LISTING_FEE_USD.btc / btcUsdPrice) * 10 ** FEE_ASSET_DECIMALS.btc));
+}
+
+/**
+ * Derive the XMR listing fee in whole piconero (12-decimal unit)
+ * from the live XMR/USD price, returned as a bigint. null when no
+ * usable price.
+ */
+export function listingFeePiconero(xmrUsdPrice: number): bigint | null {
+	if (!usablePrice(xmrUsdPrice)) return null;
+	const pico = safeUnitCount(
+		Math.round((LISTING_FEE_USD.xmr / xmrUsdPrice) * 10 ** FEE_ASSET_DECIMALS.xmr)
+	);
+	return pico === null ? null : BigInt(pico);
+}
+
+/**
+ * Static FALLBACK fee amounts — what the reference prices imply.
+ * Used to seed config defaults and to validate during a price-feed
+ * outage. These trace to the same USD targets, so they're "right at
+ * the reference price" rather than arbitrary constants.
+ */
+export const FEE_FALLBACK = Object.freeze({
+	/** ~12.5¢ at $0.002/BLURT. */
+	blurtBase: LISTING_FEE_USD.blurt / FEE_REFERENCE_PRICE_USD.blurt, // 62.5
+	/** ~25¢ at $60k BTC. */
+	satoshis: Math.round((LISTING_FEE_USD.btc / FEE_REFERENCE_PRICE_USD.btc) * 1e8), // 417
+	/** ~25¢ at $320 XMR, as a piconero bigint. */
+	piconero: BigInt(Math.round((LISTING_FEE_USD.xmr / FEE_REFERENCE_PRICE_USD.xmr) * 1e12)) // 781250000n
+} as const);
+
+/**
+ * Model-A verification tolerance (cp372).
+ *
+ * The ENFORCED fee amount stays chain-pinned (a fork can't set its
+ * own — see the poller's TreasurySource), but the live USD-targeted
+ * amount the UI shows can drift from the pinned amount as crypto
+ * prices move between operator re-pins.  To avoid rejecting a user
+ * who paid exactly the live-displayed amount, the verifier accepts a
+ * payment within FEE_PRICE_TOLERANCE *below* the pinned amount.
+ *
+ * Only the LOWER bound relaxes: the verifier is a floor (overpayment
+ * is always fine), and when crypto depreciates the live amount rises
+ * *above* the pin (already accepted).  The relaxation is a fixed
+ * 15% — bounded and NOT fork-controllable — so the anti-fork
+ * guarantee the pin provides is preserved (the most a payer saves is
+ * 15% of the operator's chosen amount, ≈4¢ on a 25¢ fee).
+ *
+ * Returns the smallest integer satoshi count that must be observed
+ * for the payment to count as fully paid.
+ */
+export function minAcceptableSatoshis(expectedSatoshis: number): number {
+	if (!Number.isFinite(expectedSatoshis) || expectedSatoshis <= 0) return 0;
+	return Math.floor(expectedSatoshis * (1 - FEE_PRICE_TOLERANCE));
+}
+
+/**
+ * Piconero counterpart of {@link minAcceptableSatoshis}.  bigint-safe:
+ * `1 - FEE_PRICE_TOLERANCE` is taken to 3 decimal places (×1000) so
+ * the whole computation stays in integer bigint arithmetic — no
+ * float round-trip on a 12-decimal value.
+ */
+export function minAcceptablePiconero(expectedPiconero: bigint): bigint {
+	if (expectedPiconero <= 0n) return 0n;
+	const keepPerMille = BigInt(Math.round((1 - FEE_PRICE_TOLERANCE) * 1000)); // 850 at 0.15
+	return (expectedPiconero * keepPerMille) / 1000n;
+}
+
+/** True iff this asset can be used to pay a listing fee. Hardcoded to
+ *  stay tied to the FROZEN fee_method enum (charter-level invariant),
+ *  NOT the mutable registry. `economics-canonical-smoke` enforces that
+ *  this set, the registry's `canPayListingFee` flags, and the
+ *  LISTING_FEE_USD keys all agree — a divergence fails CI. */
+export function isFeeCapableAsset(ticker: AssetTicker): ticker is 'BLURT' | 'BTC' | 'XMR' {
+	return ticker === 'BLURT' || ticker === 'BTC' || ticker === 'XMR';
+}

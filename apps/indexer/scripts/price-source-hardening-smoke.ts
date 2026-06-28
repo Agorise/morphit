@@ -147,7 +147,7 @@ console.log('\n── price-source-hardening invariants smoke (cp127) ───\
 	const m = new DisagreementMonitor('BLURT', 'USD');
 	const r = m.check({
 		externalPrice: 0.002,
-		externalSourceName: 'klingex',
+		externalSourceName: 'coingecko',
 		nativePrice: 0.00205, // 2.5% — under threshold
 		now: new Date()
 	});
@@ -163,7 +163,7 @@ console.log('\n── price-source-hardening invariants smoke (cp127) ───\
 	const m = new DisagreementMonitor('BLURT', 'USD');
 	const r = m.check({
 		externalPrice: 0.002,
-		externalSourceName: 'klingex',
+		externalSourceName: 'coingecko',
 		nativePrice: 0.003, // 50% — over threshold
 		now: new Date()
 	});
@@ -183,19 +183,19 @@ console.log('\n── price-source-hardening invariants smoke (cp127) ───\
 
 	const r1 = m.check({
 		externalPrice: 0.002,
-		externalSourceName: 'klingex',
+		externalSourceName: 'coingecko',
 		nativePrice: 0.003,
 		now: t0
 	});
 	const r2 = m.check({
 		externalPrice: 0.002,
-		externalSourceName: 'klingex',
+		externalSourceName: 'coingecko',
 		nativePrice: 0.003,
 		now: t1
 	});
 	const r3 = m.check({
 		externalPrice: 0.002,
-		externalSourceName: 'klingex',
+		externalSourceName: 'coingecko',
 		nativePrice: 0.003,
 		now: t5
 	});
@@ -220,25 +220,25 @@ console.log('\n── price-source-hardening invariants smoke (cp127) ───\
 
 	m.check({
 		externalPrice: 0.002,
-		externalSourceName: 'klingex',
+		externalSourceName: 'coingecko',
 		nativePrice: 0.003,
 		now: t0
 	});
 	const r1 = m.check({
 		externalPrice: 0.002,
-		externalSourceName: 'klingex',
+		externalSourceName: 'coingecko',
 		nativePrice: 0.003,
 		now: t5
 	});
 	const r2 = m.check({
 		externalPrice: 0.002,
-		externalSourceName: 'klingex',
+		externalSourceName: 'coingecko',
 		nativePrice: 0.003,
 		now: t10
 	});
 	const r3 = m.check({
 		externalPrice: 0.002,
-		externalSourceName: 'klingex',
+		externalSourceName: 'coingecko',
 		nativePrice: 0.003,
 		now: t30
 	});
@@ -274,23 +274,29 @@ console.log('\n── price-source-hardening invariants smoke (cp127) ───\
 
 // ── Factory + composite wiring ───────────────────────────────────
 
-// FW-1 factory wires morphit_native between coingecko and static floor
+// FW-1 factory wires morphit_native as the FALLBACK tier.  cp372:
+// native is no longer blended into the external priority chain — it's
+// the fallback tier consulted only when all external sources are
+// down, which keeps defense C's external-vs-native cross-check
+// meaningful (native is what's checked against, not averaged in).
 {
 	const src = readFileSync(
 		resolve(__dirname, '..', 'src', 'indexer', 'price', 'factory.ts'),
 		'utf-8'
 	);
 	const hasNativeWire = src.includes('morphit_native') && src.includes('createMorphitNativeFetcher');
-	// Accept any documenting phrase that confirms ordering: "between
-	// coingecko and the static floor" OR "AFTER coingecko" + "BEFORE static floor".
+	const isFallbackTier = src.includes('fallbackUpstreams');
 	const lowered = src.toLowerCase();
-	const orderingComment =
-		(lowered.includes('between coingecko') && lowered.includes('static floor')) ||
-		(lowered.includes('after coingecko') && lowered.includes('before static floor'));
-	if (hasNativeWire && orderingComment) {
-		pass('FW-1 factory wires morphit_native between coingecko and static floor (with documenting comment)');
+	const fallbackComment =
+		lowered.includes('not blended') ||
+		(lowered.includes('fallback tier') && lowered.includes('native'));
+	if (hasNativeWire && isFallbackTier && fallbackComment) {
+		pass('FW-1 factory wires morphit_native as the fallback tier (not blended into the external average)');
 	} else {
-		fail('FW-1', `native wired: ${hasNativeWire}; ordering comment: ${orderingComment}`);
+		fail(
+			'FW-1',
+			`native wired: ${hasNativeWire}; fallback tier: ${isFallbackTier}; comment: ${fallbackComment}`
+		);
 	}
 }
 
@@ -392,7 +398,7 @@ console.log('\n── price-source-hardening invariants smoke (cp127) ───\
 		}
 	} as unknown as Database;
 	const wired = new CompositeCachedPriceSource({
-		upstreams: [{ name: 'klingex', fetch: async () => 0.005 }],
+		upstreams: [{ name: 'coingecko', fetch: async () => 0.005 }],
 		staticFloor: 0.002,
 		refreshIntervalMs: 60_000,
 		setInterval: (() => 0) as unknown as typeof setInterval,
@@ -413,7 +419,7 @@ console.log('\n── price-source-hardening invariants smoke (cp127) ───\
 	} as unknown as Database;
 	void fakeDb2; // referenced for symmetry; unwired source gets no db
 	const unwired = new CompositeCachedPriceSource({
-		upstreams: [{ name: 'klingex', fetch: async () => 0.005 }],
+		upstreams: [{ name: 'coingecko', fetch: async () => 0.005 }],
 		staticFloor: 0.002,
 		refreshIntervalMs: 60_000,
 		setInterval: (() => 0) as unknown as typeof setInterval,

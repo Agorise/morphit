@@ -130,7 +130,7 @@ Liveness check — also exposes block lag and indexer version.
 ```json
 {
   "status": "ok",
-  "version": "1.0.0-beta.35",
+  "version": "1.0.0-beta.36",
   "uptime_sec": 3742,
   "chain_head_block": 17234569,
   "indexed_block": 17234567,
@@ -183,8 +183,8 @@ UI's fiat echoes (the same number served as `blurt_price_fiat` on
 BLURT only).  When enabled, `blurt_fiat` is the current 1-BLURT
 price, `denomination_fiat` is the fiat ticker it's quoted in
 (`MORPHIT_INDEXER_PRICE_FEED_DENOMINATION_FIAT`, default `USD`),
-`source` is the upstream currently serving (`klingex`,
-`coingecko`, or `static_floor`), and `stale` is `true` when no
+`source` is the upstream currently serving
+(`coingecko` or `static_floor`), and `stale` is `true` when no
 live upstream has succeeded and the indexer is falling back to the
 static floor.  The per-upstream forensic detail (drift,
 disagreement, peer comparison) stays in the verbose block.
@@ -636,7 +636,29 @@ RPCs are unreachable and we returned the configured default.
 Tier: `resource`
 
 Latest `morphit_release_v1` op the indexer has seen.  Use for
-detecting stale instance bundles.
+detecting stale instance bundles.  When the release carries a
+chain-pinned `treasury` block it is surfaced here (BTC/XMR
+addresses + amounts and, as of cp372, the BLURT fee base under
+`treasury.blurt.base`) — all public information.  Any Monero
+view key on a legacy row is stripped before the response (it is
+never stored or served).
+
+#### `GET /v1/fx`
+
+Tier: `resource`
+
+The indexer's cached USD→fiat rate table (cp372), so a client can
+compute the "$1 USD-equivalent" first-order minimum and other fiat
+echoes in the user's LOCAL currency without itself calling an FX
+provider. Response: `{ base: "USD", rates: { EUR: 0.92, … },
+source, stale, updated_at, currency_count }`. The WHOLE table is
+served and the client picks its own currency locally — there is
+deliberately no per-currency lookup, so the indexer never learns
+which fiat any individual user chose (the same privacy posture as
+the server-side FX fetch). `404` when the FX feed is disabled on
+the instance (`MORPHIT_INDEXER_FX_FEED_ENABLED=false`); clients
+then treat amounts as already-USD and the indexer's own floor
+still applies.
 
 #### `GET /v1/profiles/:account`
 

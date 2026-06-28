@@ -263,6 +263,7 @@
 
 	<ProtectedTextarea
 		bind:value={text}
+		name="chat-message"
 		onDetect={handleKeyDetect}
 		onkeydown={onKeydown}
 		rows={2}

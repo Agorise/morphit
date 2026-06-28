@@ -80,6 +80,12 @@ order_cancel, order_replace, order, payment_method_addition, profile, release, s
 ## PROGRESS LOG
 (newest first)
 
+### Session (cp371, 2026-06-27) — form id/name a11y completion + /post/edit grandma-friendly consistency pass (post-cp370-tarball; NOT in any tarball)
+Ken: "finish up everything you can, including deferred tasks that you can do." Two bounded backlog items, both verified end-to-end. **(a) Form id/name (the cp369 remainder):** PaymentMethodsPicker search `<input>` → `name="payment-methods-search"`; the 3 decorative selected-state checkboxes (inside toggle buttons, pointer-events-none/tabindex=-1/readonly) → `name={`pm-${entry.key}`}`; ProtectedTextarea gained an optional `name?: string` prop forwarded to its `<textarea>`, with all 5 call sites passing a name (chat-message / feedback-comment / feedback-response / order-terms ×2). Clears the "a form field should have an id or name" DevTools warnings Ken flagged in cp369. a11y-patterns 36→41 (5 new guard scenarios + PROTECTED_TEXTAREA/CHAT_COMPOSER reads); TAMPER-TESTED (stripping `{name}` fails it 1/41). **(b) /post/edit consistency pass (type=number → cleaned inputmode="decimal" + dynamic-fiat labels):** /post got the grandma-friendly cleaned inputs in cp360; /post/edit had lagged on `type="number"` + the generic `amount_{min,max}_label`. Converted all 4 /post/edit number inputs (amountMin / amountMax / spreadPercent / fixedPrice — all already string `$state`, so state-compatible) to /post's `type="text" inputmode="decimal" maxlength value oninput` pattern with `id`/`name`, and swapped the two amount labels to the dynamic `amount_{min,max}_label_in_fiat` form. **No validation gap** from dropping the browser min/max/step: the existing `$derived` validators enforce all ranges (amounts ≥0/≤MAX_AMOUNT=1e12, spread finite ∈[-50,50], fixed >0/≤MAX_AMOUNT) — the same JS validation /post relies on. The cleaner helpers were DUPLICATED from /post (to avoid touching the critical /post form mid-pass); they're stable input-hygiene utilities, NOT money-value logic (centralized in the canonical economics) — a shared-util extraction is filed in REVISIT (low priority). **Verified GREEN:** svelte-check 0/0; a11y-patterns 41; post-edit-multi-network-wired 29; price-model-picker-parity 13; price-model-display 21; paired-readonly 13; require-live-session 14; post-form 20 (/post untouched bar one `name="order-terms"`); persona-walkthrough 182; wiring-completeness 56; active-owner-key-invariants 13; first-trade-buy-blurt-lock 11; i18n key-coverage 2265 + completeness 4. **Human-gated:** real-browser eyeball of /post/edit's converted inputs (mobile decimal keypad + fa RTL) — folds into the standing /post + /post/edit check.
+
+### Session (cp370, 2026-06-27) — canonical hardcoded ECONOMICS source of truth + every FAQ/doc/locale cost corrected + black-hat helper hardening (post-beta.35 working tree, NO bump; NO TARBALL — Ken: "no tarball until i say so")
+Ken: the fee + first-order economics "need to be hardcoded somewhere so you never screw this up again — it's people's money — get this perfectly"; then "do not rush the live price tracking, DO IT RIGHT THE FIRST TIME, think like a black hat, think like grandma." **Created `packages/asset-registry/src/economics.ts`** — the single source of truth the frontend (quote) + indexer (validation) both import so they cannot drift: `FIRST_ORDER_MIN_USD=1.0`; `LISTING_FEE_USD={blurt:0.125,btc:0.25,xmr:0.25}` (frozen — the only fee numbers); `FEE_REFERENCE_PRICE_USD` (frozen, seeds fallback); `FEE_PRICE_TOLERANCE=0.15` (price-drift band for the future quote→pay window); derivation helpers `listingFeeBlurtBase/Satoshis/Piconero`; `FEE_FALLBACK={62.5,417,781250000n}`; `isFeeCapableAsset`. **Black-hat (FAQ/category-J + money-math):** the helpers divide a fixed USD target by a feed price — hardened so a garbage price → null (tiny→would-be ∞ → `BigInt(∞)` THROW averted + ∞-amount DoS averted; huge→would-be 0-satoshi free-listing averted) via `safeAmount`/`safeUnitCount` (finite + positive; smallest-unit counts must be positive safe integers); caller falls back to FEE_FALLBACK. Floor wired to `FIRST_ORDER_MIN_USD` (client + 2 indexer). **FAQ accuracy (category, all 10 locales, fiat-first):** most FAQ already correct ($0.25/$0.125); fixed `cheat_sheet…listing_fee_body`, `first_order_free.a` (full re-translation, "500 Blurt"→"$1 worth"/"60 Blurt each"→"~12.5¢"), `where_does_blurt_price_come_from.a` ($0.12→$0.125), `welcome_first_buy.bullet_starter`. Only the loyalty-milestone "500 Blurt" (cumulative spend) kept — legitimately Blurt-denominated. Living docs (FEES-AND-REWARDS, OPERATIONS) point at the canonical module; history docs immutable. CLI + wizard default target → `LISTING_FEE_USD.btc`. **New smoke `economics-canonical` 63/63** (USD targets + frozen + 50%-discount invariant + derivation + FEE_FALLBACK + black-hat garbage-price cases + a registry cross-check that isFeeCapableAsset/the fee-capable set/LISTING_FEE_USD keys/decimals all agree with ASSETS), registered. **Verified GREEN:** asset-registry+indexer+ops-cli tsc 0; svelte-check 0/0; economics-canonical 63/63; post-form-grandma-regression 20/20; i18n parity 10/10 + key-coverage 2/2 + completeness 4/4; registration-integrity 4/4 (382 files); forgejo 3/3. **DEEP-DEEP thorough sweep:** (test/category-J) fixed a test-mock/tolerance bug — `testutils/context.ts` mocked feeBaseBlurt=60 while order.test + the integration test send 62.5 transfers with "1% tolerance" comments (tests passed by luck; the "0.5%-below" case was wrong at the real 0.1% tolerance) → anchored the mock to FEE_FALLBACK.blurtBase=62.5 + fixed the within-tolerance amount to 62.45 + corrected the tolerance comments (full indexer unit vitest 495+1skip); renamed stale BLURT-era waiver_benefits tier keys (tier_500/…→tier_1/4/20/100) across 10 locales+code+smoke + rebuilt the native-translations snapshot (floor 11/11); caught + fixed a LATENT cp368 a11y-patterns regression (3/36 stale aria-invalid matchers not re-synced after the per-field/touch-gated split — a11y intact, now 36/36) + swept all 13 /post-source smokes green; ADR-0011 forward-note added; confirmed listingFee.test.ts is a documented skip for a removed module (not a live second fee path) and the MCP server exposes no fee-cost figure. **OPEN (Ken agreed NOT to rush):** the fee AMOUNTS still don't track the live price — full live-tracking needs a BTC/XMR USD price subsystem built in the indexer FIRST (verified: poller has only the BLURT priceSource; no BTC/XMR feed). Design ready (centralize derivation in poller `feeAmounts`, both quote+validation read it, `FEE_PRICE_TOLERANCE` absorbs the quote→pay drift, `FEE_FALLBACK` on outage); the canonical module is its foundation. See TARBALL/REVISIT cp370. **NOT in-sandbox:** vitest-must-pass (better-sqlite3) + vite build → CI; native QA on fa/ru/zh `first_order_free`. **FULL-BATTERY ROUND (Ken: "make it ALL perfect") — RAN the entire smoke battery in 6 chunks, 387/387 runnable smokes GREEN** (only `vitest-must-pass` + `workspace-typecheck` excluded as CI/sandbox gates), fixing 4 failures it surfaced. **(1) A REGRESSION I introduced this session (category-J / build-resolution):** the new standalone `economics.ts` broke the BUILT mcp-server — `@morphit/asset-registry` is consumed as RAW `src/index.ts` (no build) and `index.ts` was self-contained; plain Node ESM (the mcp-server's `node dist/main.js` bin, which value-imports `ASSET_TICKERS` at runtime) resolves the new relative `./economics.js` LITERALLY (no .js→.ts remap like tsx/Vite) → `ERR_MODULE_NOT_FOUND` → startup crash → would have broken production. **FIX: inlined the canonical economics INTO `index.ts`** (deleted economics.ts; removed the re-export) with a DO-NOT-RE-EXTRACT comment, restoring the self-contained invariant (works under Vite + tsx + plain node). Re-verified: mcp-server-smoke 8/8, `node dist/main.js` JSON-RPC OK, package tsc 0, svelte-check 0/0, economics-canonical 63/63, order.test 38/38, the 22 package smokes; the 7 source comments naming "economics.ts" repointed to "@morphit/asset-registry". **(2) `order-handler-smoke` 4/42→42/42** — stale 60/75-BLURT fee amounts (after the 62.5 testutils anchor) + the removed 500-BLURT floor (cp369→$1) → re-anchored to 62.5-derived amounts + the $1 fiat floor. **(3) `indexer-result-shape-smoke` →27/27** — cp368's `el.value` (HTMLInputElement) flagged as a Result misuse → added a token-level DOM-binding allowlist (no masking of real `model.value` misuses). **(4) `llms-full-freshness-smoke` →6/6** — 90+ drifted FAQ sections (mostly pre-existing) → regenerated `apps/web/static/llms-full.txt` via the sanctioned `node scripts/build-llms-full.mjs`. Tally: chunks 65/65/70/65/65/57. 3 of the 4 were pre-existing latent failures (cp368/cp369), 1 was mine this session — all the kind only a full battery surfaces.
+
 ### Session (cp356, 2026-06-26) — three UI fixes (post-beta.32 working tree, NO bump; NO TARBALL — Ken deferred)
 Ken-reported. **(1)** Tooltip "Learn more ⇨" underline-on-hover: removed `hover:underline` from `Tooltip.svelte`'s learn-more `<button>` (the nav-arrow slide IS the hover affordance) and extended the app.css no-underline rule from `:where(a):has(.nav-arrow)` to also cover `button`/`[role]` so arrow-buttons can't reintroduce it. **(2)** Security-page bounty link spacing ("…rules⇨"): the `inline-flex items-center` link collapsed the whitespace text node before the arrow span — added `gap-1` to the flex container. **(3)** Locked → welcome-back → intended destination: `RequireLiveSession.svelte` now captures the current path and routes locked visitors to `/login?next=…` (was `gotoLocale('/')`); the login page's new `postUnlockDestination()` reads `next` and forwards there after BOTH unlock paths (password + YubiKey). Open-redirect guard: `new URL(raw, $page.url.origin)` + same-origin check (defeats `//evil`/`/\evil`/`scheme:`); off-origin/malformed → home. Helps all RequireLiveSession-guarded pages (post, post/edit, chat, chat/[peer], settings, 2fa, backup-keys), not just post/chat. **Smokes:** updated `locked-session-ux-smoke` + `require-live-session-smoke` (retargeted off the stale "homepage" assertion); new `unlock-redirect-next-smoke.ts` (8 checks, registered → 387, tamper-tested both ways). No i18n changes. **Verified GREEN:** svelte-check 0/0; locked-session-ux 13/13; require-live-session 14/14; registration-integrity 4/4 (387/380); web chunk 321-387 = 823/0. Battery 8590 across 387. **NO tarball cut** — Ken said "no tarball until I say so"; cp356 is working-tree-only, latest cut tarball remains cp355. **NOT in-sandbox:** real-browser pass on the three fixes after the next deploy.
 
@@ -840,3 +846,333 @@ indexer health.test 30/30 (incl. 3 new price_feed cases); ops-cli health-view-sm
 parity 114/114; smoke-registration-integrity 4/4 (381 files — no new file); smoke-pass-line-
 canonical 10/10 (388 registered). NOT run in-sandbox: full 388-smoke battery + vitest suite
 + vite build → CI; real-browser eyeball of the hover + first-trade flow → post-deploy.
+
+### cp367 — Klingex removal (out of business) + price-feed questions answered
+
+CONTEXT: Ken reported Klingex (the Blurt-community CEX that was BLURT's primary
+external price upstream) went out of business and directed that all mentions + use of
+their data be eliminated. CoinGecko is now the sole external BLURT/USD source.
+
+CODE (Klingex no longer fetched or used anywhere — indexer tsc 0, matrix-bot tsc 0):
+- `apps/indexer/src/indexer/price/factory.ts`: removed the `enableKlingex` option field,
+  the `createKlingexFetcher` import, the klingex upstream push block, and the 3 asset-
+  default `enableKlingex` entries. BLURT now builds the SAME chain as BTC/XMR:
+  Coingecko → morphit_native → static floor. Header chain diagram updated; one historical
+  "went out of business" note kept.
+- DELETED `apps/indexer/src/indexer/price/klingexFetcher.ts`.
+- `config/index.ts`: removed `klingexBaseUrl` field, `MORPHIT_INDEXER_KLINGEX_BASE_URL`
+  env (+ default), and the env→config mapping. Fixed 3 comments (incl. reverting the
+  cp365 "Klingex, then CoinGecko" wording to "CoinGecko").
+- `disagreementMonitor.ts`: `EXTERNAL_MARKET_SOURCES` `{'klingex','coingecko'}` →
+  `{'coingecko'}`; black-hat comment rewritten for the Coingecko-only chain.
+- Comment-only: `coingeckoFetcher.ts` (now documented as the sole external upstream),
+  `compositeSource.ts`, `priceFetchUtil.ts`, `source.ts`, `morphitNativeFetcher.ts`,
+  `main.ts`, `api/health.ts`.
+- `apps/web/src/lib/prices/providers/coingecko.ts` + `fallback.ts`: comment updates.
+- `apps/web/src/lib/utils/faqIndex.ts`: dropped the `klingex` search synonyms.
+- `apps/matrix-bot/src/classifier.ts`: removed the dead `price-klingex` feed_stale rule
+  (module deleted; `price-coingecko` rule still covers external-feed staleness).
+
+TESTS / SMOKES (all GREEN, tamper-safe):
+- `test/api/health.test.ts` (klingex→coingecko source labels) 30/30;
+  `test/testutils/context.ts` (dropped the klingexBaseUrl mock).
+- `multi-asset-factory-smoke` 19/19 (removed the enableKlingex shape-check + the 3
+  "BLURT enables Klingex" scenarios; added "no enableKlingex field" + "factory imports no
+  Klingex fetcher" assertions; doc-marker updated).
+- `price-fetch-util-smoke` 11/11 (dropped the deleted klingexFetcher from the call-site
+  sentinel set).
+- `price-source-hardening-smoke` 28/28 (fixture source labels klingex→coingecko).
+- `classifier-smoke` 100/100 (dropped the price-klingex scenario).
+- `persona-walkthrough-smoke` 182/182 (removed the obsolete D-6 "Klingex curl URL"
+  scenario that pinned a now-defunct klingex.io URL).
+
+LOCALES (all 10, value-only — parity unchanged; faq render smokes green):
+- `where_to_buy_blurt.a`: dropped the "Last-resort: Klingex.io" paragraph (it carried a
+  now-dead klingex.io trade link) in all 10 (4→3 paras each).
+- `where_does_blurt_price_come_from.a`: removed Klingex as price-source #1, renumbered the
+  chain to 1. Coingecko / 2. morphit_native / 3. Static fallback, and scrubbed the in-prose
+  Klingex mentions, in all 10 locales. NOTE: fa used a Persian digit (۱.) for the Klingex
+  bullet, which escaped the first ASCII-digit pass and briefly left a mangled bullet +
+  unbalanced **bold** — caught by faq-jsonld-no-markdown + faq-inline-render and fixed.
+  i18n parity 10/10; faq-jsonld-no-markdown 7/7; faq-inline-render 13/13;
+  faq-search-grandma-coverage 14/14. The 9 mechanically-edited non-English answers (esp.
+  fa/ru/zh, already on the native-QA list) want a native-speaker polish pass on the
+  slightly-redundant "Coingecko could be the same" sentence.
+
+DOCS (live operator/marketing surface fixed; historical records left as immutable history):
+- env.example: removed the dead `MORPHIT_INDEXER_KLINGEX_BASE_URL`, reverted the cp365
+  "Klingex, then CoinGecko" wording, fixed the per-asset-chain + morphit_native comments.
+- OPERATIONS.md §13: rewrote the chain description (all assets 3-tier), removed the dead
+  "Is Klingex reachable… curl $MORPHIT_INDEXER_KLINGEX_BASE_URL" troubleshooting step
+  (renumbered), reframed the "klingex is down" example workflow around Coingecko, fixed
+  the example JSON `source` values. RUN-A-MORPHIT-NODE.md: all-assets-3-tier. API.md: the
+  `price_feed.source` value list (dropped klingex). SECURITY.md: price-feed posture
+  rewritten to Coingecko-only. ADR-0004: added a 2026 forward-note (Klingex removed,
+  CoinGecko sole external source).
+- Brag list items 96 + 100: "instead of asking Klingex or Coingecko" → "Coingecko"; the
+  multi-asset chain claim → all-assets-3-tier. MEDIAKIT regenerated (brag changed);
+  mediakit-freshness 7/7, brag-claim-parity 82/82, trailer 5/5, kiss 2/2.
+- LEFT AS HISTORY (flagged in REVISIT): ADR-0011/0039/0042, PRICE-SOURCES-RESEARCH.md,
+  POST-LAUNCH-WEEK-ONE.md, and the dated AUDIT/PLAN/PHASE-*/LAUNCH-DAY docs still mention
+  Klingex as part of their point-in-time decision/research record. These are immutable
+  history; ADR-0004's forward-note is the canonical "Klingex is gone" pointer.
+
+VERIFICATION SUMMARY (all GREEN): indexer tsc 0; matrix-bot tsc 0; indexer health.test
+30/30; multi-asset-factory 19/19; price-fetch-util 11/11; price-source-hardening 28/28;
+classifier 100/100; persona-walkthrough 182/182; i18n parity 10/10; faq-jsonld-no-markdown
+7/7; faq-inline-render 13/13; faq-search-grandma-coverage 14/14; brag-claim-parity 82/82;
+mediakit-freshness 7/7; operator-doc-env-var-parity 113/113 (was 114 — the dead
+KLINGEX_BASE_URL var removed from both env.example and config); the Forgejo-vs-others guard 3/3.
+NOT run in-sandbox: full 388-battery + vitest + vite build → CI. NO TARBALL CUT (Ken:
+"no tarball until i say so").
+
+ANSWERS recorded for Ken (no code change — these were questions):
+- Listing fee is a FIXED 60 BLURT (`MORPHIT_INDEXER_FEE_BASE_BLURT`); the USD figure is
+  DERIVED (`base_fee_fiat = feeBaseBlurt × price`). The fee is NOT USD-targeted (ADR-0009's
+  $0.25 USD-target was replaced by the BLURT-native refactor, ADR-0011). So changing the
+  static floor $0.002→$0.001 changes ONLY the displayed USD echo (when the floor is the
+  active source), NOT any BLURT amount anyone pays.
+- The static floor is a config constant; it does NOT auto-update from the live price. But
+  the composite source CACHES the last successful CoinGecko price and serves it on
+  temporary upstream failure (the `all_upstreams_failed_serving_cache` path) — the floor is
+  only used if NOTHING ever succeeded since boot.
+- If CoinGecko rate-limits/blocks: serve last cached price; after staleThresholdMs (2×
+  refresh) `currentDetailed().stale` flips true → `/v1/listing-fee` omits `blurt_price_fiat`
+  → UI shows BLURT only. The fixed BLURT fee is unaffected.
+- CoinMarketCap: feasible as a 2nd external upstream (now that Klingex is gone, redundancy
+  has value); needs a CMC API key + BLURT being listed on CMC. Offered, not built.
+
+### cp368 — UpdateBanner one-tap mobile fix + first-trade /post bug batch (from 2 screenshots)
+
+CONTEXT: Ken approved the controllerchange one-tap fix, then reported a batch of bugs on
+the first-trade /post screen (signed in via keyfile, landed on the post page): (1) red-
+bordered Min/Max on a pristine form + a yellow warning; (2) double border on focus (red
+error + green focus ring) on Min/Max and flat-price; (3) the market-spread % field accepts
+letters with no red; (4) the flat-price field is red before any input; (5) flat-price also
+accepts letters; (6) the "What your buy unlocks" box shows raw i18n key paths; (7) "where
+is the nav button?".
+
+UpdateBanner (apps/web/src/lib/components/UpdateBanner.svelte):
+- `applyUpdate()` now registers a `controllerchange` listener (once) when a waiting worker
+  exists and reloads via a single `reloadOnce` guard the instant the new worker takes
+  control, with a 3s `setTimeout(reloadOnce)` fallback if the handoff stalls; the no-
+  waiting-worker (version-poll-only) path still reloads after 250ms. One tap now lands the
+  new bundle on mobile (the old fixed 250ms reload could beat SW activation, leaving the
+  tab on the stale bundle so the verify.json poll re-offered → the double-tap Ken saw).
+  The listener lives ONLY inside applyUpdate, so it's still consent-gated (no autonomous
+  controllerchange auto-reload). Comments updated. svelte-check 0/0.
+
+/post page (apps/web/src/routes/[lang]/post/+page.svelte) — all root causes verified in code:
+- BUG 6 (raw keys): the waiver-benefits rows append `_with_fiat` whenever a fiat is
+  selected (the normal path — the form requires one), but `tier_*_with_fiat` keys didn't
+  exist, and svelte-i18n renders the literal key path rather than degrading (the stale
+  comment claimed it degrades). FIX: added `tier_500/2000/10000/50000_with_fiat` to all 10
+  locales (derived from the existing `tier_*` by inserting "(~{fiat} {denomination_fiat})"
+  after "{amount} BLURT"; the form requires a fiat so this is the primary path and also
+  turns on the intended fiat-equivalent display). Stale comment corrected.
+- BUGS 1/2/4 (premature red + double border): the borders + the bottom amount-error
+  StatusLine keyed purely off the `amountError`/`priceModelError` validators with no
+  "touched" gate, so a pristine form (waiver active + empty amountMin → `waiver_min_required`)
+  and a just-revealed flat-price field (`fixed_price_required` when empty) showed red before
+  any input; the green focus ring stacked outside the red = the "double border". FIX: added
+  `amountTouched`/`fixedPriceTouched` $state set on first input; the red border + inline
+  StatusLine now gate on touched. Removing the premature red removes the double-border on an
+  untouched field (the focus ring alone shows). Also added per-field attribution
+  (`amountMinHasError`/`amountMaxHasError`) so a min-only fault (incl. the waiver floor)
+  reddens only the min field — previously the shared `amountError` reddened BOTH inputs.
+  Reset flags wired: clearDraft + postAnother set both false (pristine); applyDraft sets
+  them true when a loaded draft carries non-empty values (so an invalid saved value surfaces).
+- BUGS 3/5 (number fields accept letters): all four number inputs use one-way `value={…}`
+  + an `oninput` that strips via `keepDecimal`/`keepSignedDecimal`. When the stripped result
+  equals the current state (typing letters into an empty field → both ''), Svelte sees no
+  state change and skips re-rendering the input, so the typed letters linger on screen while
+  the bound value stays empty → the validator sees empty → no red. FIX: a `syncCleaned`
+  helper force-writes `el.value = clean` when they differ, wired through four named handlers
+  (`handleAmountMinInput`/`handleAmountMaxInput`/`handleSpreadInput`/`handleFixedPriceInput`).
+  The box now stays numeric and the validator sees the truth.
+- BUG 7 (missing nav button): Step 3 (payment/region/terms/expiry) AND the Continue button
+  are gated behind `{#if step1Done && step2Done}`, and `step2Done` requires `amountError === ''`.
+  With Ken's amountMin=1 below the waiver floor (and on a fiat-less first load), step2Done is
+  false → the whole block, button included, never renders → a silent dead-end. NOT a bug in
+  the button; it's progressive disclosure with no cue. FIX (cue, not ungating): a neutral
+  `continue_locked_hint` ("Finish the fields above to continue.") renders when
+  `step1Done && !step2Done` — added to all 10 locales (register-aware), never red.
+
+REGRESSION SMOKE (apps/web/scripts/post-form-grandma-regression-smoke.ts — now 19 scenarios,
+was 13): added 6 tamper-tested cp368 scenarios — (a) the four `tier_*_with_fiat` keys exist
+and interpolate {amount}/{fiat}/{denomination_fiat} + the code builds the suffix; (b) the
+amount borders + bottom error gate on `amountTouched` and no ungated `{amountError ?` border
+remains; (c) `amountMinHasError`/`amountMaxHasError` per-field deriveds exist; (d) the flat-
+price border + StatusLine gate on `fixedPriceTouched`; (e) `syncCleaned` rewrites the DOM
+value + all four handlers are wired and the old inline strip-without-resync handlers are
+gone; (f) the `continue_locked_hint` exists and renders under `step1Done && !step2Done`.
+Reads en.json for the key-existence checks.
+
+UPDATED SMOKES for the controllerchange design change (the old rule forbade ANY
+controllerchange listener; the new one is consent-gated inside applyUpdate):
+- update-banner-user-consent-smoke: replaced "no controllerchange listener" with
+  "controllerchange listener lives only inside applyUpdate (>=1, none outside)"; header
+  updated. 8/8.
+- service-worker-single-registration-smoke §10: same consent-gated check (controllerchange
+  only inside applyUpdate); §12 comment refreshed (reload is still a single reloadOnce site).
+  13/13.
+
+VERIFICATION (all GREEN): svelte-check 0 errors / 0 warnings; post-form-grandma-regression
+19/19; update-banner-user-consent 8/8; update-banner-deployed-version-poll 8/8; service-
+worker-single-registration 13/13; update-surface-nocache-config 6/6; i18n-locale-parity
+10/10; i18n-key-coverage 2/2; i18n-translation-completeness 4/4; split-on-placeholder 19/19;
+i18n-hardcoded-english 1/1; i18n-html-injection 1/1. NOT run in-sandbox: full 388-battery +
+vitest + vite build → CI; real-browser eyeball of the /post screen (pristine load, focus
+states, typing letters, flat-price reveal, the unlocked-tier fiat figures, the locked hint)
+in all 10 locales after deploy. NO TARBALL CUT (Ken: "no tarball until i say so").
+
+FLAGGED TO KEN (NOT fixed — needs design intent): UNIT MISMATCH on the Min/Max field. When a
+fiat is selected the label is "Minimum value in {fiat}" (e.g. "in USD"), but `amountMin` is
+compared directly to `WAIVER_MIN_BLURT` = 500 *BLURT* (and the order carries amountMin as the
+asset amount). So "$1" (≈500 BLURT at $0.002 — exactly the floor) is read as "1 BLURT" < 500
+and rejected. Either amountMin IS the BLURT/asset amount and the "in {fiat}" label is wrong,
+or it's a fiat value and the waiver check needs conversion to a fiat floor. The cp368 display
+fixes are correct regardless; this is a separate semantic decision.
+
+### cp369 — FIAT-FIRST reversal of the §F.11 regression (first-order $1 floor) + form id/name a11y
+
+CONTEXT: Ken (frustrated — he's said this many times) restated the core design: users think in
+their LOCAL FIAT, never in BLURT. (a) The first-order minimum is **$1 USD-equivalent** of BLURT
+(the user picks their currency; the system figures out how much of it equals $1 worth) — never
+"buy 500 BLURT" (sounds like a fortune, scares newcomers). (b) Listing fees are **25¢ USD** worth
+of XMR/BTC, or **~12.5¢ USD-equiv** if paid in BLURT — USD-targeted, tracking the live price.
+Recorded as a memory edit so it stops getting lost. He also attached a DevTools screenshot of 11
+"form field should have an id or name" warnings.
+
+ROOT-CAUSE (verified in code — and I own it): a past **§F.11 "BLURT-denomination refactor"**
+(which I drove, and wrongly defended last turn) abandoned Ken's USD-targeted/fiat-first design and
+replaced it with hardcoded BLURT constants:
+- The waiver floor became a flat `WAIVER_MIN_BLURT = 500` in BOTH the client (`+page.svelte`) and
+  the indexer (`order.ts`, `orderReplace.ts`), justified by "no price feed in the critical path."
+- The fees became fixed amounts targeting USD *at a reference price*: `feeBaseBlurt = 60` (≈$0.12),
+  a fixed satoshi amount "targets ~$0.25 at [ref]" (config:954), a fixed piconero amount "targets
+  ~$0.25 USD at $320 XMR" (config:990). `loyalty.ts:53` confirms the intended "$0.125 listing fee".
+- It also created a UNIT BUG: `amount_min`/`amount_max` are FIAT values (the orderbook RSS renders
+  `${amount_min} – ${amount_max} ${fiat_currency}`, e.g. "1 – 50 USD"), but the floor compared the
+  fiat value to a 500-*BLURT* constant. So "$1" (≈500 BLURT, exactly the floor) read as "1 BLURT
+  < 500" and was rejected — the bug Ken hit, and the reason my last-turn answer was wrong.
+
+FIX — FLOOR reversal (this is clean: amount_min is already a fiat value everywhere except the
+buggy checks, so the floor is a fiat-to-fiat comparison — NO price feed needed, which moots
+§F.11's only stated reason):
+- Client `+page.svelte`: `WAIVER_MIN_BLURT = 500` → `WAIVER_MIN_FIAT_USD = 1` (the $1 floor, a
+  fiat value); both floor checks (`amountError`, `amountMinHasError`) updated; comments rewritten.
+  `WAIVER_SUGGESTED_DEFAULT` 2000 (BLURT) → 4 (≈$4 fiat). The benefits ladder breakpoints
+  500/2000/10000/50000 BLURT → 1/4/20/100 (fiat USD-equiv); `waiverBenefitRows` rewritten to be
+  fiat-first (shows the threshold via `formatFiat(tier.at, denominationFiat)`, `unlocked` compares
+  the fiat amountMin to the fiat tier) — dropped the BLURT-quantity formatting and the `_with_fiat`
+  suffix logic entirely. Three stale "500 floor" comments (prefill rationale, the amountError
+  block, the waiver-box markup) corrected to "$1 USD-equivalent".
+- Indexer `order.ts` + `orderReplace.ts`: `WAIVER_MIN_BLURT = 500` → `WAIVER_MIN_FIAT_USD = 1`;
+  the §F.11 comment blocks rewritten to explain the fiat floor + the reversal.
+- Locales (all 10): the 4 `tier_*` keys rewritten fiat-primary ("{amount} — <desc>", dropping
+  "{amount} BLURT"); the 4 `tier_*_with_fiat` keys (added cp368) DELETED. The descriptions still
+  hold ($1 ÷ ~$0.125 per listing ≈ 8 listings).
+- NON-USD NUANCE (documented, not yet solved): "$1 USD-equivalent" is exact when the order's fiat
+  is USD (the default denomination). A non-USD instance needs a per-currency $1 conversion, which
+  the single-denomination price feed (BLURT priced in one currency) doesn't carry — a multi-
+  currency-pricing enhancement, flagged in code + REVISIT.
+
+FIX — a11y id/name (Ken's DevTools screenshot): added unique `id` + `name` to the 7 inline
+composing-phase inputs (amount min/max, spread %, flat price, region, expires select, syndicate
+checkbox) and to the FiatCurrencySelect search/combobox input. The radios already carry `name=`
+(price-model-kind, fee-method). REMAINING (minor, deferred): the PaymentMethodsPicker checkbox
+inputs and the ProtectedTextarea (the latter needs a `name` *prop* since it's a reusable component
+— a hardcoded name would be wrong for other consumers).
+
+REGRESSION SMOKE: `post-form-grandma-regression-smoke` 19 → **20** — the cp368 `_with_fiat`
+scenario was replaced by two cp369 scenarios: (a) the floor is `WAIVER_MIN_FIAT_USD = 1` with no
+stale `WAIVER_MIN_BLURT`; (b) the ladder is fiat-first ($1/$4/$20/$100 breakpoints, tier keys
+interpolate {amount} with no "BLURT" prefix, no `_with_fiat` keys, label via `formatFiat`).
+Indexer `order.test.ts` + `orderReplace.test.ts`: the below-floor rejection case now uses
+amount_min=$0.50 (below $1), the at-floor case uses $1, the non-waived case uses $0.50 (proving
+the floor doesn't apply), and the `waivedPayload()` helper uses realistic fiat amounts; stale
+"500 BLURT / WAIVER_MIN_BLURT" comments fixed.
+
+NOT FIXED THIS TURN — the FEE MODEL (flagged, with the real reason): the fees are the same §F.11
+regression (fixed BLURT/sat/piconero amounts that only hit their USD targets at a reference price,
+not tracking the live price). Reversing them to true USD-targeting (12.5¢ BLURT, 25¢ BTC/XMR) is
+NOT a one-line change like the floor, because the listing fee is a **paid on-chain amount**: the
+client quotes it, the user pays it on-chain, and the indexer validates the paid amount. A price-
+tracking fee reintroduces a client↔indexer price-agreement problem (a price move between quote and
+payment could reject a good-faith payment) — almost certainly *why* §F.11 went fixed-BLURT. The
+correct shape is a quote-and-validate window (the response already carries `quote_ttl_seconds: 300`
+as the basis): the indexer quotes fee + validity window, the client pays that, the indexer
+validates against the quote it issued (with tolerance). Flagged for Ken — do NOT slam this in blind
+(real-money on-chain risk).
+
+VERIFICATION (all GREEN): svelte-check 0 errors / 0 warnings; indexer tsc 0; post-form-grandma-
+regression 20/20; i18n-locale-parity 10/10; i18n-key-coverage 2/2; i18n-translation-completeness
+4/4; split-on-placeholder 19/19; i18n-hardcoded-english 1/1; indexer order.test 38/38 +
+orderReplace.test 29/29 (vitest). NOT in-sandbox: full 388-battery + full vitest + vite build → CI;
+real-browser eyeball of the /post screen in all 10 locales (pristine load, focus states, typing
+letters, flat-price reveal, the fiat-tier figures "$1 — ~8 future listings…", the locked hint, and
+that a $1 first order is now ACCEPTED). NO TARBALL CUT (Ken: "no tarball until i say so").
+
+## cp372 — treasury auto-re-pin + FX subsystem + /post grandma batch: deep-deep + five-persona walkthrough 🟢
+
+Scope this pass: everything built in the cp372 session — the chain-pinned BLURT base + automated
+auto-re-pin (decision core, read-only check + opt-in key-gated broadcast actuators, systemd timer +
+units + env, manual Plan B), the FX subsystem (/v1/fx endpoint, fx source, client fetcher + pure
+helpers, the FX-aware /post first-order floor + live $1-equivalent default + hint), and the rest of
+the /post grandma batch (dark per-method box removal, redundant terms-line removal, FAQ
+scroll-margin + border tone-down, "Step n of 3" badges, multilingual typewriter placeholder,
+fiat-required hint, the one shared `.hover-subtle` standard).
+
+### Five-persona walkthroughs (verified in code, not assumed) — all ✅
+- ✅ **Bob** (Blurt multi-login, paid order) — the FX work is gated to the waiver path AND
+  `isFirstTrade`, so his non-first paid flow is untouched (no seed, no FX floor); the listing fee he
+  pays uses the chain-pinned BLURT base (order-handler-smoke 51 + order.test 38). Sees the cosmetic
+  wins (step badges, typewriter, cleaner picker, hover standard).
+- ✅ **Sally-user** (no crypto, first trade) — the target persona. Picks her local fiat → the guarded
+  seed effect fills Min-value with the $1-equivalent in HER currency → the FX-aware floor accepts it
+  (client mirrors the indexer's `fiatToUsd(...) ?? amount_min` exactly). 🟢 **Finding (fixed):**
+  `lastSeededFiat` was not reset in the two fresh-listing reset blocks (`postAnother` + the
+  start-over reset), so a reset-then-same-fiat could skip a re-seed. Moot for Sally (one first-trade
+  per account) but a latent robustness gap — added `lastSeededFiat = ''` to both resets.
+- ✅ **Sally-operator** (node setup from the .md) — env-example-schema-parity 6/6 (the 9 new
+  FX/crypto vars present + all defaulted, so a fresh node boots without setting them);
+  `MORPHIT_INDEXER_FEE_BASE_BLURT` documented as the Plan-B fallback; she inherits the chain-pinned
+  BTC/XMR/BLURT treasury and does nothing; `/v1/fx` on by default. operator-doc-env-var-parity 113,
+  fenced-path-existence + section-ref green.
+- ✅ **Josie** (sysadmin, morphit-ops) — `/v1/health` wires `fxSource` → the `fx` feed-health block
+  (price-feeds-health 16 + health-view 61); the maintainer-only treasury-repin timer/units are
+  documented + User=-consistent (ansible-systemd-user-consistency 19).
+- ✅ **Charlie** (MCP read-only) — mcp-server-read-only-invariant 3/3 (the inlined economics in
+  `index.ts` loads); `/v1/fx` serves only the public USD→fiat table (no per-user data), so no
+  fee-mechanics privacy regression.
+
+### Deep-deep findings (comprehensive, one pass) — all 🟢 fixed
+- 🟢 **`lastSeededFiat` reset gap** (Sally-user, above) — fixed in both fresh-listing resets.
+- 🟢 **Stale `economics.ts` comments in `economics-canonical-smoke.ts`** (header + inline) — the
+  canonical economics was inlined into `index.ts` at cp370; corrected both comments. (Earlier this
+  session the same stale path was fixed in FEES-AND-REWARDS.md + ADR-0011's forward-note.)
+- 🟢 **Concatenated import in `apps/indexer/src/main.ts`** — the `fxRoute` import insert landed on
+  the same line as the `chatRoute` import (`…'$api/fx';import { chatRoute }…`). Valid JS (tsc was
+  clean) but malformed; split onto its own line. No other concatenated imports in the session's
+  touched files.
+- 🟢 **`/v1/fx` undocumented in API.md** — added the endpoint (whole-table privacy posture, the
+  404-when-disabled behavior, the response shape).
+
+### Notes (no action — harmless)
+- `post_order.summary.see_notes` and `post_order.form.terms_placeholder` are now orphaned locale
+  keys (their renders were removed/replaced this session). Harmless: still present in all 10 locales
+  so i18n-locale-parity holds, and the native-translations-floor smoke treats the snapshot as a
+  FLOOR (unused keys don't break it; no locale keys were removed). Left in place rather than churn
+  10 locales + the native-QA snapshot for two cosmetic strings.
+
+VERIFICATION (all GREEN): full smoke battery **395/395** (354 regex-matched in chunks +41 non-regex);
+full indexer unit vitest 504 passed / 1 skipped; svelte-check 0/0; i18n-locale-parity 10/10 (3237
+keys); post-form-grandma-regression 22/22 (added FX-floor, seed-safety, typewriter scenarios);
+economics-canonical 63; a11y-patterns 41; persona-walkthrough 182; faq 4; forgejo guard 3;
+operator-doc-env-var-parity 113; ansible-systemd-user-consistency 19; full web production build
+compiles (Tailwind `@apply hover-subtle` resolves). indexer + indexer-client + release-schema tsc 0.
+NOT in-sandbox (→ deploy/CI + human): real-browser eyeball of the /post screen in all 10 locales
+(typewriter animation, step badges, $1-equivalent seed per fiat, hover standard), and the live
+auto-re-pin broadcast (sandbox can't reach coingecko/RPC; the pure decision/build/parse core is
+22/22). NO TARBALL CUT (Ken: "no tarball until i say so").

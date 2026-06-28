@@ -2,7 +2,7 @@
  * priceFetchUtil smoke (cp159 F-indexer-1/2/3).
  *
  * Pins the hardened-fetch helper that backs coingeckoFetcher.ts
- * and klingexFetcher.ts after the cp159 audit closed three
+ * after the cp159 audit closed three
  * findings against the price-feed pipeline:
  *
  *   F-indexer-1 (MED) — no body cap on `await res.json()` from
@@ -24,7 +24,7 @@
  *   - priceUpstreamFetchInit(signal) — { method, redirect, signal }
  *
  * This smoke verifies every load-bearing piece behaves the same
- * way coingeckoFetcher + klingexFetcher rely on.
+ * way coingeckoFetcher relies on.
  */
 
 import {
@@ -263,25 +263,11 @@ const cgSrc = readFileSync(
 	resolve(new URL('../src/indexer/price/coingeckoFetcher.ts', import.meta.url).pathname),
 	'utf8'
 );
-const klSrc = readFileSync(
-	resolve(new URL('../src/indexer/price/klingexFetcher.ts', import.meta.url).pathname),
-	'utf8'
-);
 
 const callsiteSentinels: Array<{ file: string; src: string; markers: string[] }> = [
 	{
 		file: 'coingeckoFetcher.ts',
 		src: cgSrc,
-		markers: [
-			"from './priceFetchUtil.ts'",
-			'priceUpstreamFetchInit(ac.signal)',
-			'priceUpstreamHeaders()',
-			'readPriceBodyCapped(res, ac, url)'
-		]
-	},
-	{
-		file: 'klingexFetcher.ts',
-		src: klSrc,
 		markers: [
 			"from './priceFetchUtil.ts'",
 			'priceUpstreamFetchInit(ac.signal)',
@@ -302,7 +288,7 @@ for (const cs of callsiteSentinels) {
 	}
 }
 if (callsiteFailed === 0) {
-	pass(`both price fetchers (coingecko + klingex) actually use the hardened helper`);
+	pass(`the coingecko fetcher actually uses the hardened helper`);
 } else {
 	fail(
 		`both price fetchers use the hardened helper`,

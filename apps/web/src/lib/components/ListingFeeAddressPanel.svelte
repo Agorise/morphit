@@ -43,15 +43,36 @@
 	import { _ } from 'svelte-i18n';
 	import { chainPinnedTreasury } from '$stores/release';
 	import { MORPHIT_ACCOUNT } from '$net/config';
+	import { formatFiat } from '$lib/i18n/formatters';
 	import QrPanel from '$lib/components/QrPanel.svelte';
 	import type { AddressPayload } from '$lib/chat/payload';
 
 	interface Props {
 		/** Which fee asset is the user paying with. */
 		method: 'btc' | 'xmr';
+		/** cp372 Model A: live BTC fee amount (satoshis) from
+		 *  /v1/listing-fee — the operator's USD-equivalent fee re-priced
+		 *  at the current BTC/USD rate.  When present (>0) and method is
+		 *  'btc', it's the amount the UI quotes; the address always comes
+		 *  from the chain-pinned treasury.  Absent → quote the pinned
+		 *  /v1/release amount. */
+		liveSatoshis?: number;
+		/** cp372 Model A: live XMR fee amount as a piconero string. */
+		livePiconero?: string;
+		/** cp372 Model A: USD (or denomination-fiat) value of the live
+		 *  fee amount, for the ambient "≈ $0.25" echo. */
+		feeFiat?: number;
+		/** Fiat ticker the `feeFiat` value is expressed in (default USD). */
+		denominationFiat?: string;
 	}
 
-	let { method }: Props = $props();
+	let {
+		method,
+		liveSatoshis = undefined,
+		livePiconero = undefined,
+		feeFiat = undefined,
+		denominationFiat = 'USD'
+	}: Props = $props();
 
 	let qrShown = $state(false);
 	let copyAddrFlash = $state(false);
@@ -70,22 +91,33 @@
 		if (t === null) return null;
 		if (method === 'btc') {
 			if (t.btc === null) return null;
+			// Model A (cp372): prefer the live USD-tracked amount from
+			// /v1/listing-fee when the indexer provided one; otherwise
+			// quote the chain-pinned amount.  The ADDRESS is ALWAYS the
+			// chain-pinned one (security-critical, never overridden).
+			const sats =
+				typeof liveSatoshis === 'number' && liveSatoshis > 0 ? liveSatoshis : t.btc.satoshis;
 			// Convert satoshis to BTC for display.  Use a fixed
 			// 8-decimal repr to avoid any "0.00001" float drift.
-			const btc = (t.btc.satoshis / 100_000_000).toFixed(8);
+			const btc = (sats / 100_000_000).toFixed(8);
 			return {
 				method,
 				address: t.btc.address,
 				amount: btc,
-				satoshis: t.btc.satoshis
+				satoshis: sats
 			};
 		}
 		// xmr
 		if (t.xmr === null) return null;
+		// Prefer the live piconero string; fall back to chain-pinned.
+		const piconeroStr =
+			typeof livePiconero === 'string' && livePiconero.length > 0
+				? livePiconero
+				: t.xmr.piconero;
 		// Convert piconero string (which can exceed Number range
 		// safely as a string) to XMR fixed-12.  Use BigInt to
 		// keep precision through the divide.
-		const piconeroBig = BigInt(t.xmr.piconero);
+		const piconeroBig = BigInt(piconeroStr);
 		const xmrIntegerPart = piconeroBig / 1_000_000_000_000n;
 		const xmrFractionalPart = piconeroBig % 1_000_000_000_000n;
 		const fracStr = xmrFractionalPart.toString().padStart(12, '0').replace(/0+$/, '');
@@ -97,6 +129,13 @@
 			satoshis: undefined as number | undefined
 		};
 	});
+
+	/** Ambient USD (denomination-fiat) echo for the fee amount, e.g.
+	 *  "≈ $0.25".  Present only when the indexer supplied a live fiat
+	 *  value (price feed on + USD-denominated). */
+	const feeFiatEcho = $derived(
+		typeof feeFiat === 'number' && feeFiat > 0 ? formatFiat(feeFiat, denominationFiat) : null
+	);
 
 	/** Payload for QrPanel.  AddressPayload's `method` accepts the
 	 *  full ChatAssetTicker union ('btc' | 'xmr' | 'blurt' | 'usdt'
@@ -184,6 +223,9 @@
 				{$_('post_order.fee_method.fee_address_amount_xmr', {
 					values: { amount: resolved.amount }
 				})}
+			{/if}
+			{#if feeFiatEcho !== null}
+				<span class="text-ink-500 dark:text-ink-400">(≈&nbsp;{feeFiatEcho})</span>
 			{/if}
 		</p>
 

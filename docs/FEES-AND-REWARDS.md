@@ -25,9 +25,26 @@ fee-recipient account.
 
 ### 1. Listing fee — paid per posted order
 
-- **Default: 60 BLURT (~$0.12 at BLURT ≈ $0.002)**
-- Source: `apps/indexer/src/config/index.ts` line 723
-  (`MORPHIT_INDEXER_FEE_BASE_BLURT.default(60)`)
+- **Target: ~12.5¢ USD-equivalent when paid in BLURT** — half the
+  ~25¢ BTC/XMR rate (a deliberate 50% discount for paying in the
+  native token).  The USD targets are the **canonical source of
+  truth** in `LISTING_FEE_USD` (`packages/asset-registry/src/index.ts`,
+  inlined): `{ blurt: 0.125, btc: 0.25, xmr: 0.25 }`.  Both the
+  frontend quote and the indexer validation import from there, so
+  they cannot drift.  At BLURT ≈ $0.002 that's roughly 60–62 BLURT;
+  the env default base is `60` BLURT.
+- **Chain-pinned + auto-tracked (cp372).**  The enforced BLURT base
+  — like the BTC/XMR amounts — comes from the most recent signed
+  `morphit_release_v1` `treasury.blurt.base`, resolved chain-pin →
+  env, so every federated indexer enforces the *same* floor (the
+  last fee input that used to be per-node).  The *displayed* fee
+  tracks the live canonical USD target; a maintainer timer
+  (`morphit-treasury-repin.timer`) auto-re-pins the on-chain base as
+  the market moves, with failsafes + a manual Plan B.  See
+  `docs/OPERATIONS.md §40.3a`.
+- Source: `apps/indexer/src/config/index.ts`
+  (`MORPHIT_INDEXER_FEE_BASE_BLURT.default(60)` — now the Plan-B
+  fallback/override), with the USD target in `@morphit/asset-registry`
 - Sybil tier multiplier scales for prolific posters within 24h:
   4th order = 1×, 5th = 2×, 6th = 4×, 7th+ = 8×.  See
   `apps/indexer/src/indexer/fee.ts` for `expectedFeeBlurt(nth, base)`.

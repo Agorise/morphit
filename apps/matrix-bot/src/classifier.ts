@@ -140,7 +140,6 @@ const WARN_MATCHERS: ReadonlyArray<(a: StructuredAlert) => boolean> = [
 	// Price feed stale.
 	(a) => a.module === 'price' && a.event === 'feed_stale',
 	(a) => a.module === 'price-coingecko' && a.event === 'feed_stale',
-	(a) => a.module === 'price-klingex' && a.event === 'feed_stale',
 	// signup-anomaly probe.
 	(a) => a.module === 'signup-anomaly' && a.event === 'single_ip_spike',
 	// federation peer down a while.

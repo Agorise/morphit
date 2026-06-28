@@ -262,22 +262,36 @@ body {
 		@apply btn text-ink-700 hover:bg-ink-100 dark:text-ink-200 dark:hover:bg-ink-800;
 	}
 
+	/* ── Site-wide subtle hover standard (cp372) ──────────────────
+	 * THE one canonical "this surface is hoverable" affordance: a
+	 * 1px border-tint + a faint background wash on hover.  Use this
+	 * on any card / row / tile that responds to the pointer instead
+	 * of hand-rolling per-element hover classes, so the whole site
+	 * feels consistent.  A baseline 1px transparent border keeps the
+	 * tint from shifting layout on hover; the transition is
+	 * color-only (no transform/opacity motion) so it stays
+	 * prefers-reduced-motion-friendly.  focus-within mirrors the
+	 * hover so keyboard users get the same cue when a child control
+	 * is focused. */
+	.hover-subtle {
+		@apply border border-transparent transition-colors duration-150 ease-out;
+		@apply hover:border-ink-200 hover:bg-ink-50;
+		@apply focus-within:border-ink-300;
+		@apply dark:hover:border-white/15 dark:hover:bg-white/5;
+		@apply dark:focus-within:border-white/20;
+	}
+
 	.card {
 		@apply rounded-2xl bg-white p-6 shadow-morphit-card dark:bg-ink-900;
 	}
 
 	/* For cards that are also interactive rows (orderbook entries,
-	 * feedback entries, chat rows). Gives a subtle hover affordance
-	 * — ring + shadow bump — without motion-based cues that could
-	 * bother users with prefers-reduced-motion. The transition is
-	 * short enough (150ms) to feel responsive and slow enough to
-	 * register as intentional. */
+	 * feedback entries, chat rows).  Now composes the site-wide
+	 * .hover-subtle standard (cp372) so every interactive surface —
+	 * cards, FAQ entries, list rows — shares one identical hover
+	 * affordance instead of a per-component mix of rings/shadows. */
 	.card-interactive {
-		@apply card transition-[box-shadow,border-color] duration-150 ease-out;
-		@apply hover:shadow-morphit-card-hover;
-		@apply ring-1 ring-transparent hover:ring-morphit-emerald/40;
-		@apply focus-within:shadow-morphit-card-hover focus-within:ring-morphit-emerald/60;
-		@apply cursor-default;
+		@apply card hover-subtle cursor-default;
 	}
 
 	/* Site-wide choice-row hover affordance. Any <label> that wraps a

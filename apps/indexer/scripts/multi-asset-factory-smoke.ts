@@ -2,16 +2,16 @@
 /**
  * Structural smoke for cp130 multi-asset price-source factory.
  *
- * What this verifies (without spinning up Postgres, Klingex, or
- * Coingecko — those are integration concerns):
+ * What this verifies (without spinning up Postgres or Coingecko —
+ * those are integration concerns):
  *
  *   1. Module exports the public surface we expect:
  *      createAssetPriceSource, createPriceSource (backwards-compat
  *      wrapper), createMultiAssetPriceSources, CP130_ASSET_DEFAULTS.
  *   2. CP130_ASSET_DEFAULTS covers BLURT + BTC + XMR with the
- *      correct shape (asset/coingeckoCoinId/enableKlingex/staticFloor).
- *   3. Klingex is BLURT-only (enableKlingex: true for BLURT, false
- *      for BTC and XMR).
+ *      correct shape (asset/coingeckoCoinId/staticFloor).
+ *   3. The external chain is Coingecko-only (Klingex, the prior
+ *      BLURT primary, went out of business in 2026 and was removed).
  *   4. Coingecko coin IDs match the well-known Coingecko ids.
  *   5. createMultiAssetPriceSources returns a Map keyed by asset
  *      ticker with exactly the cp130 launch set (BLURT, BTC, XMR).
@@ -90,8 +90,6 @@ scenario('CP130-2: each default entry has the expected shape', () => {
 		if (typeof opts.asset !== 'string') throw new Error(`${key}.asset not string`);
 		if (typeof opts.coingeckoCoinId !== 'string')
 			throw new Error(`${key}.coingeckoCoinId not string`);
-		if (typeof opts.enableKlingex !== 'boolean')
-			throw new Error(`${key}.enableKlingex not boolean`);
 		if (typeof opts.staticFloor !== 'number')
 			throw new Error(`${key}.staticFloor not number`);
 		if (opts.staticFloor <= 0) throw new Error(`${key}.staticFloor not positive`);
@@ -99,17 +97,18 @@ scenario('CP130-2: each default entry has the expected shape', () => {
 	}
 });
 
-// ─── CP130-3: Klingex is BLURT-only ──
-scenario('CP130-3: BLURT enables Klingex (its native exchange)', () => {
-	assertEq(CP130_ASSET_DEFAULTS.BLURT!.enableKlingex, true, 'BLURT Klingex');
+// ─── CP130-3: external chain is Coingecko-only (Klingex removed 2026) ──
+scenario('CP130-3: no asset default carries the removed enableKlingex field', () => {
+	for (const [key, opts] of Object.entries(CP130_ASSET_DEFAULTS)) {
+		if ('enableKlingex' in opts)
+			throw new Error(`${key} still carries enableKlingex (Klingex was removed)`);
+	}
 });
 
-scenario('CP130-3: BTC does NOT enable Klingex (Klingex is BLURT-only)', () => {
-	assertEq(CP130_ASSET_DEFAULTS.BTC!.enableKlingex, false, 'BTC Klingex');
-});
-
-scenario('CP130-3: XMR does NOT enable Klingex (Klingex is BLURT-only)', () => {
-	assertEq(CP130_ASSET_DEFAULTS.XMR!.enableKlingex, false, 'XMR Klingex');
+scenario('CP130-3: factory source no longer imports a Klingex fetcher', () => {
+	const src = readFileSync(FACTORY_PATH, 'utf-8');
+	if (/createKlingexFetcher|klingexFetcher/.test(src))
+		throw new Error('factory.ts still references the deleted Klingex fetcher');
 });
 
 // ─── CP130-4: Coingecko coin IDs ──
@@ -199,7 +198,7 @@ scenario('CP130-10: factory.ts source still documents the cp130 architecture dec
 	const src = readFileSync(FACTORY_PATH, 'utf-8');
 	const markers = [
 		'cp130',
-		'Klingex is BLURT-only', // per-asset upstream selection
+		'went out of business', // the Klingex-removal historical note
 		'preemptive complexity', // why per-asset denomination wasn't added
 		'multi-asset',
 		'BLURT/USD',

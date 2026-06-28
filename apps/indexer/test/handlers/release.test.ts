@@ -368,6 +368,87 @@ describe('release handler — Part 106 + 107 treasury validation', () => {
 		expect(mock.queries).toHaveLength(0);
 	});
 
+	it('cp372: accepts a treasury with a chain-pinned blurt base (persisted)', async () => {
+		const mock = makeMockClient();
+		const r = await handler(
+			makeCtx({
+				signer: 'morphit',
+				payload: payloadWithTreasury({
+					btc: { address: VALID_BTC_ADDR, satoshis: 416 },
+					xmr: { address: VALID_XMR_ADDR, piconero: '781250000' },
+					blurt: { base: 62.5 }
+				}),
+				blurt: mockBlurt({ getAccount: async () => accountWithOfficialKey }),
+				config: fakeConfig({
+					officialPostingPubkey: OFFICIAL_PUBKEY,
+					officialAccountName: 'morphit'
+				})
+			}),
+			mock.client
+		);
+		expect(r).toEqual({ ok: true });
+		const persisted = JSON.parse(mock.queries.at(-1)!.params[10] as string);
+		expect(persisted.blurt.base).toBe(62.5);
+	});
+
+	it('cp372: treasury without blurt persists byte-identically (no blurt key)', async () => {
+		const mock = makeMockClient();
+		const r = await handler(
+			makeCtx({
+				signer: 'morphit',
+				payload: payloadWithTreasury({
+					btc: { address: VALID_BTC_ADDR, satoshis: 416 },
+					xmr: null
+				}),
+				blurt: mockBlurt({ getAccount: async () => accountWithOfficialKey }),
+				config: fakeConfig({
+					officialPostingPubkey: OFFICIAL_PUBKEY,
+					officialAccountName: 'morphit'
+				})
+			}),
+			mock.client
+		);
+		expect(r).toEqual({ ok: true });
+		const persisted = JSON.parse(mock.queries.at(-1)!.params[10] as string);
+		expect('blurt' in persisted).toBe(false);
+	});
+
+	it('cp372: rejects 0 blurt base (treasury_blurt_base_invalid)', async () => {
+		const mock = makeMockClient();
+		const r = await handler(
+			makeCtx({
+				signer: 'morphit',
+				payload: payloadWithTreasury({ btc: null, xmr: null, blurt: { base: 0 } }),
+				blurt: mockBlurt({ getAccount: async () => accountWithOfficialKey }),
+				config: fakeConfig({
+					officialPostingPubkey: OFFICIAL_PUBKEY,
+					officialAccountName: 'morphit'
+				})
+			}),
+			mock.client
+		);
+		expect(r).toEqual({ ok: false, reason: 'treasury_blurt_base_invalid' });
+		expect(mock.queries).toHaveLength(0);
+	});
+
+	it('cp372: rejects blurt base over the sanity ceiling (treasury_blurt_base_too_large)', async () => {
+		const mock = makeMockClient();
+		const r = await handler(
+			makeCtx({
+				signer: 'morphit',
+				payload: payloadWithTreasury({ btc: null, xmr: null, blurt: { base: 10_000_001 } }),
+				blurt: mockBlurt({ getAccount: async () => accountWithOfficialKey }),
+				config: fakeConfig({
+					officialPostingPubkey: OFFICIAL_PUBKEY,
+					officialAccountName: 'morphit'
+				})
+			}),
+			mock.client
+		);
+		expect(r).toEqual({ ok: false, reason: 'treasury_blurt_base_too_large' });
+		expect(mock.queries).toHaveLength(0);
+	});
+
 	it('rejects testnet XMR address (treasury_xmr_address_not_mainnet)', async () => {
 		const mock = makeMockClient();
 		const r = await handler(

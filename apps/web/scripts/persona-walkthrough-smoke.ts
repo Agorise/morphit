@@ -38,7 +38,6 @@
  *   D-3   monorepo install paths consistent in OPERATIONS.md
  *   D-4   schema version in PRE-LAUNCH reflects v31
  *   D-5   --dry-run flag claim removed from PRE-LAUNCH
- *   D-6   Klingex curl URL canonical path
  *   D-7   POST-LAUNCH backup recipe uses real systemd timer
  *   D-8   /v1/health diagnostics field paths match real shape
  *   D-9   PRE-LAUNCH wizard step-count realistic ("~17"/disclaimer)
@@ -861,14 +860,6 @@ const SCENARIOS: readonly Scenario[] = [
 		// The indexer has no --dry-run flag; verify the bad
 		// recommendation is gone.
 		mustNotHave: ['npm run start -- --dry-run']
-	},
-	{
-		name: 'D-6 — POST-LAUNCH-WEEK-ONE Klingex curl URL matches code',
-		file: 'docs/POST-LAUNCH-WEEK-ONE.md',
-		rootRelative: true,
-		mustHave: ['klingex.io/api/v1/ticker/BLURT_USDT'],
-		// Pre-fix URL was a fictitious public-api.klingex.com path.
-		mustNotHave: ['public-api.klingex.com']
 	},
 	{
 		name: 'D-7 — POST-LAUNCH backup recipe uses real systemd timer',

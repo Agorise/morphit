@@ -124,7 +124,10 @@ await scenario('listing-fee body: includes fiat echo when price is non-stale and
 	assertContains(body, 'base_fee_fiat');
 	assertContains(body, 'blurt_price_fiat');
 	assertContains(body, 'denomination_fiat');
-	assertEqual(body.base_fee_fiat, 0.12, 'base_fee_fiat'); // 60 * 0.002
+	// Canonical Model A: base tracks LISTING_FEE_USD.blurt ÷ price =
+	// 62.5 BLURT at the $0.002 reference, so the echo is the canonical
+	// ~$0.125 — NOT feeBaseBlurt × price.
+	assertEqual(body.base_fee_fiat, 0.125, 'base_fee_fiat');
 	assertEqual(body.blurt_price_fiat, 0.002, 'blurt_price_fiat');
 	// cp128: default config denomination is 'USD'; operators in
 	// non-USD markets configure differently.  The fakeConfig helper
@@ -168,12 +171,87 @@ await scenario('listing-fee body: tracks operator-tunable feeBaseBlurt', () => {
 	assertEqual(body.base_fee_blurt, 80, 'base_fee_blurt');
 });
 
-await scenario('listing-fee body: fiat echo math respects operator-tunable feeBaseBlurt', () => {
-	// 80 BLURT × $0.002 = $0.16.
+await scenario('listing-fee body: canonical display ignores feeBaseBlurt for the live amount', () => {
+	// Pre-cp372 the displayed fee was feeBaseBlurt-driven (80 × $0.002
+	// = $0.16).  Under canonical Model A the DISPLAY tracks the
+	// canonical target (~$0.125) regardless of the operator's
+	// feeBaseBlurt — that value is now the enforcement floor, not the
+	// quote.  (No-price fallback still reports feeBaseBlurt; see below.)
 	const cfg = fakeConfig({ feeBaseBlurt: 80, priceFeedEnabled: true });
 	const ps = makePriceSource({ price: 0.002, stale: false });
 	const body = buildListingFeeBody(cfg, ps);
-	assertEqual(body.base_fee_fiat, 0.16, 'base_fee_fiat');
+	assertEqual(body.base_fee_fiat, 0.125, 'base_fee_fiat is canonical, not 80×price');
+	assertEqual(body.base_fee_blurt, 62.5, 'base_fee_blurt is canonical 62.5, not 80');
+});
+
+// ── Model A (cp372): displayed base tracks the operator's USD fee ──
+const approxEq = (actual: unknown, expected: number, label: string, eps = 1e-9): void => {
+	if (typeof actual !== 'number' || Math.abs(actual - expected) > eps) {
+		throw new Error(`${label}: expected ≈${expected}, got ${JSON.stringify(actual)}`);
+	}
+};
+
+await scenario('listing-fee body (Model A): USD base is canonical 62.5 at the reference price', () => {
+	const cfg = fakeConfig({ feeBaseBlurt: 60, priceFeedEnabled: true });
+	const ps = makePriceSource({ price: 0.002, stale: false }); // == reference
+	const body = buildListingFeeBody(cfg, ps);
+	approxEq(body.base_fee_blurt, 62.5, 'base_fee_blurt canonical at reference (not feeBaseBlurt)');
+	assertEqual(body.base_fee_blurt_live, true, 'base_fee_blurt_live');
+});
+
+await scenario('listing-fee body (Model A): BLURT appreciated → fewer BLURT, USD value held', () => {
+	// Price doubled to $0.004: canonical amount halves to 31.25 BLURT,
+	// USD value stays the canonical target ($0.125).
+	const cfg = fakeConfig({ feeBaseBlurt: 60, priceFeedEnabled: true });
+	const ps = makePriceSource({ price: 0.004, stale: false });
+	const body = buildListingFeeBody(cfg, ps);
+	approxEq(body.base_fee_blurt, 31.25, 'base_fee_blurt halves on 2× price');
+	approxEq(body.base_fee_fiat, 0.125, 'base_fee_fiat held at canonical target');
+	assertEqual(body.base_fee_blurt_live, true, 'base_fee_blurt_live');
+});
+
+await scenario('listing-fee body (Model A): BLURT depreciated → more BLURT, USD value held', () => {
+	// Price halved to $0.001: canonical amount doubles to 125 BLURT.
+	const cfg = fakeConfig({ feeBaseBlurt: 60, priceFeedEnabled: true });
+	const ps = makePriceSource({ price: 0.001, stale: false });
+	const body = buildListingFeeBody(cfg, ps);
+	approxEq(body.base_fee_blurt, 125, 'base_fee_blurt doubles on ½ price');
+	approxEq(body.base_fee_fiat, 0.125, 'base_fee_fiat held at canonical target');
+});
+
+await scenario('listing-fee body (Model A): canonical display is independent of feeBaseBlurt', () => {
+	// Two operators with different floors (60 vs 80) quote the SAME
+	// canonical amount — the floor never leaks into the quote.
+	const ps = makePriceSource({ price: 0.004, stale: false });
+	const a = buildListingFeeBody(fakeConfig({ feeBaseBlurt: 60, priceFeedEnabled: true }), ps);
+	const b = buildListingFeeBody(fakeConfig({ feeBaseBlurt: 80, priceFeedEnabled: true }), ps);
+	approxEq(a.base_fee_blurt, 31.25, 'operator A canonical');
+	approxEq(b.base_fee_blurt, 31.25, 'operator B canonical (same, ignores 80)');
+});
+
+await scenario('listing-fee body (Model A): base_fee_blurt_live false when no price', () => {
+	const cfg = fakeConfig({ feeBaseBlurt: 60 });
+	const body = buildListingFeeBody(cfg, null);
+	assertEqual(body.base_fee_blurt, 60, 'base_fee_blurt is pinned fallback');
+	assertEqual(body.base_fee_blurt_live, false, 'base_fee_blurt_live false');
+});
+
+await scenario('listing-fee body (Model A): base_fee_blurt_live false when price stale', () => {
+	const cfg = fakeConfig({ feeBaseBlurt: 60, priceFeedEnabled: true });
+	const ps = makePriceSource({ price: 0.002, stale: true });
+	const body = buildListingFeeBody(cfg, ps);
+	assertEqual(body.base_fee_blurt, 60, 'base_fee_blurt is pinned fallback when stale');
+	assertEqual(body.base_fee_blurt_live, false, 'base_fee_blurt_live false');
+});
+
+await scenario('listing-fee body (Model A): non-USD denomination keeps pinned base (no USD scaling)', () => {
+	// EUR operator: live USD figure isn't available in this route, so
+	// the base stays the operator's pinned feeBaseBlurt (graceful).
+	const cfg = fakeConfig({ feeBaseBlurt: 60, priceFeedEnabled: true, priceFeedDenominationFiat: 'EUR' });
+	const ps = makePriceSource({ price: 0.0018, stale: false });
+	const body = buildListingFeeBody(cfg, ps);
+	assertEqual(body.base_fee_blurt, 60, 'base_fee_blurt unscaled for non-USD');
+	assertEqual(body.base_fee_blurt_live, false, 'base_fee_blurt_live false for non-USD');
 });
 
 await scenario('listing-fee body (cp128): EUR-denominated operator returns EUR in denomination_fiat', () => {
@@ -200,6 +278,79 @@ await scenario('listing-fee body (cp128): XAU-denominated operator returns XAU i
 	const body = buildListingFeeBody(cfg, ps);
 	assertEqual(body.denomination_fiat, 'XAU', 'denomination_fiat');
 	assertEqual(body.blurt_price_fiat, 0.00000037, 'blurt_price_fiat');
+});
+
+// ── Model A (cp372): live BTC/XMR fee amounts (USD-denominated) ──
+
+await scenario('listing-fee body (Model A): BTC live amount equals pinned at the reference price', () => {
+	const cfg = fakeConfig({ priceFeedEnabled: true }); // btcFeeSatoshis defaults to 417
+	const btc = makePriceSource({ price: 60_000, stale: false });
+	const body = buildListingFeeBody(cfg, null, btc, null);
+	assertEqual(body.btc_fee_satoshis, 417, 'btc_fee_satoshis at reference');
+	approxEq(body.btc_fee_fiat, 0.2502, 'btc_fee_fiat ≈ $0.25', 1e-6);
+	assertEqual(body.btc_fee_live, true, 'btc_fee_live');
+	assertEqual(body.btc_price_fiat, 60_000, 'btc_price_fiat');
+});
+
+await scenario('listing-fee body (Model A): BTC depreciated → more satoshis, USD value held', () => {
+	// BTC halved to $30k: canonical $0.25 ÷ $30k = 833 sats (rounded).
+	const cfg = fakeConfig({ priceFeedEnabled: true });
+	const btc = makePriceSource({ price: 30_000, stale: false });
+	const body = buildListingFeeBody(cfg, null, btc, null);
+	assertEqual(body.btc_fee_satoshis, 833, 'btc_fee_satoshis ≈ canonical $0.25 worth at $30k');
+	approxEq(body.btc_fee_fiat, 0.25, 'btc_fee_fiat held at canonical target', 1e-3);
+});
+
+await scenario('listing-fee body (Model A): XMR live amount equals pinned at the reference price', () => {
+	const cfg = fakeConfig({ priceFeedEnabled: true }); // xmrFeePiconero defaults to 781250000
+	const xmr = makePriceSource({ price: 320, stale: false });
+	const body = buildListingFeeBody(cfg, null, null, xmr);
+	assertEqual(body.xmr_fee_piconero, '781250000', 'xmr_fee_piconero at reference');
+	approxEq(body.xmr_fee_fiat, 0.25, 'xmr_fee_fiat ≈ $0.25', 1e-6);
+	assertEqual(body.xmr_fee_live, true, 'xmr_fee_live');
+	assertEqual(body.xmr_price_fiat, 320, 'xmr_price_fiat');
+});
+
+await scenario('listing-fee body (Model A): XMR depreciated → more piconero, USD value held', () => {
+	// XMR halved to $160: the quoted piconero doubles.
+	const cfg = fakeConfig({ priceFeedEnabled: true });
+	const xmr = makePriceSource({ price: 160, stale: false });
+	const body = buildListingFeeBody(cfg, null, null, xmr);
+	assertEqual(body.xmr_fee_piconero, '1562500000', 'xmr_fee_piconero doubles on ½ price');
+	approxEq(body.xmr_fee_fiat, 0.25, 'xmr_fee_fiat held at target', 1e-6);
+});
+
+await scenario('listing-fee body (Model A): no BTC/XMR fields when sources absent', () => {
+	const cfg = fakeConfig({ priceFeedEnabled: true });
+	const body = buildListingFeeBody(cfg, null, null, null);
+	assertAbsent(body, 'btc_fee_satoshis');
+	assertAbsent(body, 'xmr_fee_piconero');
+});
+
+await scenario('listing-fee body (Model A): no BTC fields when BTC price stale', () => {
+	const cfg = fakeConfig({ priceFeedEnabled: true });
+	const btc = makePriceSource({ price: 60_000, stale: true });
+	const body = buildListingFeeBody(cfg, null, btc, null);
+	assertAbsent(body, 'btc_fee_satoshis');
+});
+
+await scenario('listing-fee body (Model A): no BTC fields when btcFeeSatoshis is 0 (asset not accepted)', () => {
+	const cfg = fakeConfig({ priceFeedEnabled: true, btcFeeSatoshis: 0 });
+	const btc = makePriceSource({ price: 60_000, stale: false });
+	const body = buildListingFeeBody(cfg, null, btc, null);
+	assertAbsent(body, 'btc_fee_satoshis');
+});
+
+await scenario('listing-fee body (Model A): non-USD denomination omits BTC/XMR live amounts', () => {
+	// No FX in this route → a non-USD operator can't express the USD
+	// target here; the UI falls back to the chain-pinned /v1/release
+	// amount instead.
+	const cfg = fakeConfig({ priceFeedEnabled: true, priceFeedDenominationFiat: 'EUR' });
+	const btc = makePriceSource({ price: 55_000, stale: false });
+	const xmr = makePriceSource({ price: 290, stale: false });
+	const body = buildListingFeeBody(cfg, null, btc, xmr);
+	assertAbsent(body, 'btc_fee_satoshis');
+	assertAbsent(body, 'xmr_fee_piconero');
 });
 
 // ─── /v1/stranger-fee-quote body ────────────────────────────────

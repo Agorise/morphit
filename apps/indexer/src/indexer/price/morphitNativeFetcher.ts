@@ -2,7 +2,7 @@
  * Morphit indexer — morphit_native price fetcher (cp127).
  *
  * Self-sovereign price derivation from on-platform trade data.  This
- * is the module that lets us reduce reliance on Klingex / Coingecko
+ * is the module that lets us reduce reliance on Coingecko
  * once Morphit has enough internal trading volume.
  *
  * Architectural overview
@@ -419,7 +419,7 @@ export async function deriveMorphitNativePrice(
 	}
 
 	// No tier qualified.  Caller falls through to the next composite
-	// upstream (typically Klingex/Coingecko) → static floor.
+	// upstream (Coingecko) → static floor.
 	return {
 		price: null,
 		tier_used: null,

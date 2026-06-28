@@ -37,6 +37,7 @@ import { MoneroProofFeeVerifier } from '$indexer/fee/moneroProofVerifier';
 import type { EndpointState } from '@morphit/rpc-pool';
 import { TreasurySource } from '$indexer/treasurySource';
 import type { BlurtPriceSource } from '$indexer/price/source';
+import type { FxRateSource } from '$indexer/fx/source';
 import { logger } from '$log';
 
 const log = logger('poller');
@@ -164,6 +165,11 @@ export class Poller {
 	private feeAmounts: {
 		btcSatoshis?: number;
 		xmrPiconero?: bigint;
+		/** cp372 — chain-pinned BLURT fee base (tier-1, pre-multiplier),
+		 *  resolved chain-pin > env by the same TreasurySource.  Threaded
+		 *  to the order handler so the BLURT floor is deterministic across
+		 *  the federation rather than each node's own env value. */
+		blurtBase?: number;
 	} = {};
 	/** Source of truth for "what address should the verifiers
 	 *  be checking right now?" — chain-pinned takes precedence
@@ -209,7 +215,12 @@ export class Poller {
 		private readonly config: Config,
 		private readonly db: Database,
 		private readonly blurt: BlurtClient,
-		private readonly priceSource: BlurtPriceSource | null
+		private readonly priceSource: BlurtPriceSource | null,
+		/** USD→fiat FX source for the FX-aware first-order floor.
+		 *  null when the operator has disabled the FX feed — the
+		 *  floor then falls back to USD-only treatment (see
+		 *  fiatToUsd below). */
+		private readonly fxSource: FxRateSource | null = null
 	) {
 		this.witnessFeePoller = new WitnessFeePoller(db, blurt);
 		this.lowBalanceScanner = new LowBalanceScanner(
@@ -331,7 +342,8 @@ export class Poller {
 			btcAddress: config.btcFeeAddress,
 			btcSatoshis: config.btcFeeSatoshis,
 			xmrAddress: config.xmrFeeAddress,
-			xmrPiconero: config.xmrFeePiconero.toString()
+			xmrPiconero: config.xmrFeePiconero.toString(),
+			blurtBase: config.feeBaseBlurt
 		});
 
 		// Initial verifiers — built from env-only at construction
@@ -400,6 +412,10 @@ export class Poller {
 			this.feeVerifierAddresses.xmr = this.config.xmrFeeAddress;
 			this.feeAmounts.xmrPiconero = this.config.xmrFeePiconero;
 		}
+		// cp372 — BLURT is always an accepted fee method; seed the
+		// base from env at bootstrap.  The first treasury refresh
+		// replaces it with the chain-pinned value when one exists.
+		this.feeAmounts.blurtBase = this.config.feeBaseBlurt;
 	}
 
 	/** Per-cycle verifier refresh — Part 106.
@@ -524,6 +540,18 @@ export class Poller {
 		} else {
 			this.feeAmounts.xmrPiconero = undefined;
 		}
+
+		// cp372 — sync the BLURT base (chain-pin > env).  BLURT is
+		// always an accepted method, so resolveBlurt yields a value
+		// whenever the env fallback is positive; only an operator who
+		// zeroed MORPHIT_INDEXER_FEE_BASE_BLURT (with no chain-pin)
+		// produces null, in which case the order handler falls back to
+		// its own config read.  Always synced so a chain re-pin (the
+		// auto-re-pin daemon's whole purpose) propagates within one
+		// poll cycle.
+		if (snapshot.blurt !== null) {
+			this.feeAmounts.blurtBase = snapshot.blurt.base;
+		}
 	}
 
 	/** Start the loop. Resolves only when `stop()` is called (or on
@@ -635,7 +663,22 @@ export class Poller {
 					this.blurt,
 					this.config,
 					this.feeVerifiers,
-					this.feeAmounts
+					this.feeAmounts,
+					// FX-aware first-order floor converter.  When the FX
+					// feed is live (default) this routes through the
+					// composite FX source (which itself falls back to a
+					// static rate table during an outage).  When the
+					// operator has disabled the feed, it degrades to a
+					// USD-only identity: USD converts 1:1, any other
+					// currency returns null and the order handler falls
+					// back to the documented direct comparison.
+					(amount: number, fiat: string): number | null => {
+						if (this.fxSource) return this.fxSource.fiatToUsd(amount, fiat);
+						if (fiat.trim().toUpperCase() === 'USD') {
+							return Number.isFinite(amount) ? amount : null;
+						}
+						return null;
+					}
 				);
 				await markApplied(client, n);
 				return result;

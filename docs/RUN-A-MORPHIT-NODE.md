@@ -945,7 +945,7 @@ For the full list of every env var the indexer reads (price feed, operator-balan
 
 > **About the slow-drift (B) and native-vs-external (C) price defenses (cp127, runtime-wired cp233):** Unlike Defense F above, these two need **no peers** — they protect a lone instance — and they are **on by default whenever `MORPHIT_INDEXER_PRICE_FEED_NATIVE_ENABLED=true`** (no separate switch).  B watches the published price for a slow walk away from its own time-decayed moving baseline ("frog in boiling water"); C cross-checks the published external market price against your `morphit_native` price.  Both log-alert on a sustained breach, and — as of cp233 — all three defenses (B, C, and F) surface in the verbose price block of `/v1/health` under `price.drift`, `price.disagreement`, and `price.peer`.  Neither B nor C ever auto-corrects the price; they make manipulation loud so you can investigate.  See `docs/OPERATIONS.md` → "Monitoring the price-manipulation defenses" for what to do on an alert, and ADR-0039 for the design.
 
-> **About `MORPHIT_INDEXER_PRICE_FEED_BTC_STATIC_FLOOR` + `..._XMR_STATIC_FLOOR` (cp130 multi-asset pricing):** Defaults are USD-shaped: 60000 for BTC, 200 for XMR.  These are the per-asset fallback prices that the composite source serves when all live upstreams have failed AND no value has cached since boot — they never surface in normal operation.  Operators in non-USD denominations (per cp128 `MORPHIT_INDEXER_PRICE_FEED_DENOMINATION_FIAT`) should override these to match their unit — e.g. on a EUR-denominated instance, set `BTC_STATIC_FLOOR=55000` (~BTC/EUR) instead of the USD-shaped 60000.  The cp127 morphit_native price source now derives prices for BTC and XMR too (in addition to BLURT), so `/v1/price/morphit-native/receipt?asset=BTC` returns a real derivation; Klingex remains BLURT-only since it doesn't trade BTC/USDT or XMR/USDT at scale, so BTC and XMR get a 3-tier chain (Coingecko → morphit_native → static floor) rather than BLURT's 4-tier chain.  See ADR-0042.
+> **About `MORPHIT_INDEXER_PRICE_FEED_BTC_STATIC_FLOOR` + `..._XMR_STATIC_FLOOR` (cp130 multi-asset pricing):** Defaults are USD-shaped: 60000 for BTC, 200 for XMR.  These are the per-asset fallback prices that the composite source serves when all live upstreams have failed AND no value has cached since boot — they never surface in normal operation.  Operators in non-USD denominations (per cp128 `MORPHIT_INDEXER_PRICE_FEED_DENOMINATION_FIAT`) should override these to match their unit — e.g. on a EUR-denominated instance, set `BTC_STATIC_FLOOR=55000` (~BTC/EUR) instead of the USD-shaped 60000.  The cp127 morphit_native price source now derives prices for BTC and XMR too (in addition to BLURT), so `/v1/price/morphit-native/receipt?asset=BTC` returns a real derivation; every asset (BLURT, BTC, XMR) now uses the same 3-tier chain (Coingecko → morphit_native → static floor) since Klingex, the former BLURT-only upstream, went out of business in 2026.  See ADR-0042.
 
 > **About `MORPHIT_INDEXER_BTC_FEE_ADDRESS` (community
 > operators):** Leave it empty.  As of Part 106, your
@@ -955,6 +955,21 @@ For the full list of every env var the indexer reads (price feed, operator-balan
 > 90% operator share on BLURT-paid fees (separate pipeline,
 > see §9.3 below); only BTC fees go 100% to canonical's
 > treasury.
+
+> **About `MORPHIT_INDEXER_FEE_BASE_BLURT` (community
+> operators, cp372):** Leave it at the default.  The BLURT
+> listing-fee base is now chain-pinned and auto-tracked the
+> same way the BTC/XMR amounts are — your indexer inherits
+> the canonical base from the most recent signed
+> `morphit_release_v1` op's `treasury.blurt.base`, so every
+> federated instance enforces the *same* BLURT floor (this
+> closes the one fee input that used to be per-node).  This
+> env var is now just your **Plan-B fallback / local
+> override** — used only on a fresh node before it has seen
+> a treasury-bearing release op, or if you deliberately want
+> a different local floor.  The canonical maintainer keeps
+> the on-chain base on its ~12.5¢ USD target automatically
+> (see `OPERATIONS.md §40.3a`); you do nothing.
 
 > **About `MORPHIT_INDEXER_XMR_FEE_ADDRESS` (community
 > operators):** Leave it empty.  As of Part 108++, your

@@ -119,6 +119,8 @@ interface Inputs {
 	btcSatoshis: string;
 	xmrAddress: string;
 	xmrPiconero: string;
+	/** cp372 — chain-pinned BLURT fee base (tier-1).  Empty = omit. */
+	blurtBase: string;
 }
 
 async function gatherInputs(): Promise<Inputs> {
@@ -173,6 +175,15 @@ async function gatherInputs(): Promise<Inputs> {
 		process.env.MORPHIT_BUILD_XMR_PICONERO ?? '781250000'
 	);
 
+	// cp372 — chain-pinned BLURT fee base.  Empty omits it (older
+	// shape); when set, makes the BLURT floor deterministic across
+	// the federation like BTC/XMR.  Defaults to the canonical
+	// fallback (~12.5¢ at the reference price).
+	const blurtBase = await ask(
+		'BLURT fee base (whole BLURT, e.g. 62.5; empty to omit)',
+		process.env.MORPHIT_BUILD_BLURT_BASE ?? ''
+	);
+
 	return {
 		version,
 		hashManifest,
@@ -180,7 +191,8 @@ async function gatherInputs(): Promise<Inputs> {
 		btcAddress,
 		btcSatoshis,
 		xmrAddress,
-		xmrPiconero
+		xmrPiconero,
+		blurtBase
 	};
 }
 
@@ -195,7 +207,8 @@ function buildTreasury(i: Inputs): ReleaseTreasuryBlock | null {
 	// View key stays in the operator's env on the indexer
 	// machine and is never part of a chain-broadcast payload.
 	const hasXmr = i.xmrAddress !== '';
-	if (!hasBtc && !hasXmr) return null;
+	const hasBlurt = i.blurtBase.trim() !== '';
+	if (!hasBtc && !hasXmr && !hasBlurt) return null;
 
 	const btc = hasBtc
 		? {
@@ -213,6 +226,14 @@ function buildTreasury(i: Inputs): ReleaseTreasuryBlock | null {
 		};
 	}
 
+	// cp372 — optional BLURT base.  Parsed as a float (BLURT has
+	// 3-decimal precision).  Only attached when present so a release
+	// without it serializes byte-identically to the legacy shape.
+	if (hasBlurt) {
+		const base = Number.parseFloat(i.blurtBase);
+		if (!Number.isFinite(base) || base <= 0) fail('BLURT base must be a positive number');
+		return { btc, xmr, blurt: { base } };
+	}
 	return { btc, xmr };
 }
 

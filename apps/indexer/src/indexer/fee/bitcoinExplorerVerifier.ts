@@ -36,6 +36,7 @@
 
 import type { FeeClaim, FeeVerifier, FeeVerifyResult } from '$indexer/fee/verifier';
 import { EndpointPool, type EndpointState } from '@morphit/rpc-pool';
+import { minAcceptableSatoshis, FEE_PRICE_TOLERANCE } from '@morphit/asset-registry';
 import { logger } from '$log';
 
 const log = logger('btc-verify');
@@ -223,10 +224,17 @@ export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 		const successful = agreeingResponses.map((p) => p.body);
 
 		const observedSats = agreedSats;
-		if (observedSats < claim.expectedAmount) {
+		// Model-A tolerance (cp372): accept a payment within
+		// FEE_PRICE_TOLERANCE below the chain-pinned expected amount,
+		// so a user paying the live-displayed amount isn't rejected
+		// when crypto has appreciated since the operator last re-pinned.
+		// Overpayment is always fine (floor); only the lower bound
+		// relaxes, by a fixed bounded 15% (not fork-controllable).
+		const minSats = minAcceptableSatoshis(claim.expectedAmount);
+		if (observedSats < minSats) {
 			return {
 				kind: 'rejected',
-				reason: `underpaid: observed ${observedSats} sats, expected ${claim.expectedAmount}`
+				reason: `underpaid: observed ${observedSats} sats, expected ${claim.expectedAmount} (min ${minSats} at ${FEE_PRICE_TOLERANCE * 100}% tolerance)`
 			};
 		}
 

@@ -396,6 +396,55 @@
 		return '';
 	});
 
+	// ── Number-input hygiene: grandma-friendly cleaned inputmode
+	//    "decimal" fields, mirroring /post (cp360 + the cp368 DOM-sync
+	//    fix). Strips anything that is not a number-shaped string so the
+	//    box only ever shows digits + a single dot; keepSignedDecimal
+	//    additionally allows a leading minus for the spread field. These
+	//    mirror the identical helpers in /post — a candidate for a shared
+	//    util (see REVISIT-LIST). syncCleaned forces currentTarget.value
+	//    so a rejected keystroke can't linger on screen under one-way
+	//    value={…} binding. ─────────────────────────────────────
+	function keepDecimal(raw: string): string {
+		let seenDot = false;
+		let out = '';
+		for (const ch of raw) {
+			if (ch >= '0' && ch <= '9') out += ch;
+			else if (ch === '.' && !seenDot) {
+				out += ch;
+				seenDot = true;
+			}
+		}
+		return out;
+	}
+	function keepSignedDecimal(raw: string): string {
+		const neg = raw.trimStart().startsWith('-');
+		return (neg ? '-' : '') + keepDecimal(raw);
+	}
+	function syncCleaned(el: HTMLInputElement, clean: string): void {
+		if (el.value !== clean) el.value = clean;
+	}
+	function handleAmountMinInput(e: Event & { currentTarget: HTMLInputElement }): void {
+		const clean = keepDecimal(e.currentTarget.value);
+		syncCleaned(e.currentTarget, clean);
+		amountMin = clean;
+	}
+	function handleAmountMaxInput(e: Event & { currentTarget: HTMLInputElement }): void {
+		const clean = keepDecimal(e.currentTarget.value);
+		syncCleaned(e.currentTarget, clean);
+		amountMax = clean;
+	}
+	function handleSpreadInput(e: Event & { currentTarget: HTMLInputElement }): void {
+		const clean = keepSignedDecimal(e.currentTarget.value);
+		syncCleaned(e.currentTarget, clean);
+		spreadPercent = clean;
+	}
+	function handleFixedPriceInput(e: Event & { currentTarget: HTMLInputElement }): void {
+		const clean = keepDecimal(e.currentTarget.value);
+		syncCleaned(e.currentTarget, clean);
+		fixedPrice = clean;
+	}
+
 	const canSave = $derived(
 		phase === 'ready' &&
 			!amountError &&
@@ -749,13 +798,16 @@
 			<div class="grid gap-4 sm:grid-cols-2">
 				<label class="block">
 					<span class="mb-1 block text-sm font-semibold"
-						>{$_('post_order.form.amount_min_label')}</span
+						>{fiat ? $_('post_order.form.amount_min_label_in_fiat', { values: { fiat } }) : $_('post_order.form.amount_min_label')}</span
 					>
 					<input
-						type="number"
-						min="0"
-						step="0.01"
-						bind:value={amountMin}
+						type="text"
+						inputmode="decimal"
+						maxlength="16"
+						id="edit-amount-min"
+						name="amount_min"
+						value={amountMin}
+						oninput={handleAmountMinInput}
 						aria-invalid={!!amountError}
 						aria-describedby={amountError ? 'edit-amount-error' : undefined}
 						class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
@@ -763,13 +815,16 @@
 				</label>
 				<label class="block">
 					<span class="mb-1 block text-sm font-semibold"
-						>{$_('post_order.form.amount_max_label')}</span
+						>{fiat ? $_('post_order.form.amount_max_label_in_fiat', { values: { fiat } }) : $_('post_order.form.amount_max_label')}</span
 					>
 					<input
-						type="number"
-						min="0"
-						step="0.01"
-						bind:value={amountMax}
+						type="text"
+						inputmode="decimal"
+						maxlength="16"
+						id="edit-amount-max"
+						name="amount_max"
+						value={amountMax}
+						oninput={handleAmountMaxInput}
 						aria-invalid={!!amountError}
 						aria-describedby={amountError ? 'edit-amount-error' : undefined}
 						class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
@@ -822,11 +877,13 @@
 							{#if priceModelKind === 'spread'}
 								<div class="mt-2 flex items-center gap-2">
 									<input
-										type="number"
-										step="0.1"
-										min="-50"
-										max="50"
-										bind:value={spreadPercent}
+										type="text"
+										inputmode="decimal"
+										maxlength="6"
+										id="edit-spread-percent"
+										name="spread_percent"
+										value={spreadPercent}
+										oninput={handleSpreadInput}
 										aria-invalid={!!priceModelError}
 										aria-describedby={priceModelError ? 'edit-price-model-error' : undefined}
 										class="w-24 rounded-lg border-2 border-ink-200 bg-white px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
@@ -864,10 +921,13 @@
 							{#if priceModelKind === 'fixed'}
 								<div class="mt-2 flex items-center gap-2">
 									<input
-										type="number"
-										step="0.01"
-										min="0"
-										bind:value={fixedPrice}
+										type="text"
+										inputmode="decimal"
+										maxlength="16"
+										id="edit-fixed-price"
+										name="fixed_price"
+										value={fixedPrice}
+										oninput={handleFixedPriceInput}
 										aria-invalid={!!priceModelError}
 										aria-describedby={priceModelError ? 'edit-fixed-price-error' : undefined}
 										class="w-32 rounded-lg border-2 border-ink-200 bg-white px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
@@ -917,6 +977,7 @@
 				<span class="mb-1 block text-sm font-semibold">{$_('post_order.form.terms_label')}</span>
 				<ProtectedTextarea
 					bind:value={terms}
+					name="order-terms"
 					onDetect={handleTermsKeyDetect}
 					rows={3}
 					maxlength={2048}

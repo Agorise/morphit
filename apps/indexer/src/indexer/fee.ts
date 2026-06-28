@@ -4,8 +4,19 @@
  * BLURT-native: fees are denominated directly in BLURT, not derived
  * from a USD anchor at verification time.  Both indexer and frontend
  * use the same `feeBaseBlurt × sybilMultiplier(nth)` formula; the
- * tolerance band absorbs floating-point rounding in BLURT amount
+ * tolerance band absorbs floating-point rounding in the BLURT amount
  * formatting.
+ *
+ * NB (cp370): the canonical USD TARGET for the BLURT fee lives in
+ * the canonical economics in `@morphit/asset-registry` (`LISTING_FEE_USD.blurt`,
+ * ~12.5¢).  `feeBaseBlurt` is currently a fixed BLURT amount that
+ * approximates that target at the reference price — verification is
+ * still BLURT-native (no price feed, no TOCTOU window).  Making the
+ * amount track the live price so it stays exactly on-target is the
+ * deliberately-deferred live-tracking work: it would derive the base
+ * from `listingFeeBlurtBase(blurtUsdPrice)` and widen the tolerance
+ * to `FEE_PRICE_TOLERANCE` to absorb the quote→pay drift.  Until then
+ * this comment, not the USD target, describes runtime behaviour.
  *
  * Tier schedule (per-account, rolling 24-hour window):
  *   tiers 1-3 (orders 1, 2, 3): 1.00×

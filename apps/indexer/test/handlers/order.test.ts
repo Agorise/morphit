@@ -263,18 +263,25 @@ describe('order handler — fee verification', () => {
 		expect(mock.queries[1]!.params[14]).toBe('verified');
 	});
 
-	it('accepts a transfer 0.5% below expected (within tolerance)', async () => {
+	it('accepts a transfer within the Model-A price-drift band (cp372)', async () => {
 		const mock = makeMockClient([
 			{ match: 'SELECT COUNT', rows: [{ n: '0' }] },
 			{ match: 'INSERT INTO orders' }
 		]);
 		const payload = validPayload();
-		// 62.5 × 0.995 = 62.188 — within the 1% tolerance band.
+		// Model A (cp372): the BLURT acceptance floor is the chain-pinned
+		// base widened by FEE_PRICE_TOLERANCE (15%), so a user paying the
+		// live-DISPLAYED canonical amount isn't rejected when BLURT has
+		// appreciated up to 15% since the last chain-pin re-pin.  Expected
+		// 62.5 → floor 62.5 × (1 − 0.15) = 53.125.  54 is ~13.6% below the
+		// pinned base — inside the band → verified.  (The old 0.1% rounding
+		// tolerance is subsumed: Math.max(config.feeTolerance=0.001,
+		// FEE_PRICE_TOLERANCE=0.15) = 0.15, so 15% is always the floor.)
 		const r = await handler(
 			makeCtx({
 				signer: 'alice',
 				payload,
-				siblingOps: [feeTransferOp('alice', 62.188, payload.permlink)]
+				siblingOps: [feeTransferOp('alice', 54, payload.permlink)]
 			}),
 			mock.client
 		);
@@ -282,18 +289,22 @@ describe('order handler — fee verification', () => {
 		expect(mock.queries[1]!.params[14]).toBe('verified');
 	});
 
-	it('sets fee_status=underpaid when transfer is >1% below expected', async () => {
+	it('sets fee_status=underpaid below the Model-A price-drift floor (cp372)', async () => {
 		const mock = makeMockClient([
 			{ match: 'SELECT COUNT', rows: [{ n: '0' }] },
 			{ match: 'INSERT INTO orders' }
 		]);
 		const payload = validPayload();
-		// 62.5 × 0.95 = 59.375 — well below the tolerance band.
+		// 52 is ~16.8% below the 62.5 expected — past the 15%
+		// FEE_PRICE_TOLERANCE floor (53.125) → underpaid.  A payment can
+		// drift up to 15% below the pinned base (the displayed fee tracks
+		// the live USD target between re-pins); beyond that it's a genuine
+		// underpayment, not price drift.
 		const r = await handler(
 			makeCtx({
 				signer: 'alice',
 				payload,
-				siblingOps: [feeTransferOp('alice', 59.375, payload.permlink)]
+				siblingOps: [feeTransferOp('alice', 52, payload.permlink)]
 			}),
 			mock.client
 		);
@@ -395,16 +406,16 @@ describe('order handler — fee verification', () => {
 
 describe('order handler — waived_first_buy (ADR-0011)', () => {
 	function waivedPayload() {
-		// Phase-3 / §F.11 update: the waiver is BLURT-only now.
-		// Override the BTC default from validPayload() and set a
-		// BLURT-denominated amount_min above the WAIVER_MIN_BLURT
-		// floor (500 BLURT).
+		// Phase-3 / cp369 update: the waiver is BLURT-only, and the
+		// first-buy floor is a $1 USD-equivalent VALUE (amount_min is
+		// a fiat value, not a BLURT quantity). Override the BTC default
+		// from validPayload() and set an amount above the $1 floor.
 		return {
 			...validPayload(),
 			side: 'buy',
 			asset: 'BLURT',
-			amount_min: 500,
-			amount_max: 5000,
+			amount_min: 4,
+			amount_max: 50,
 			fee_method: 'waived_first_buy'
 		};
 	}

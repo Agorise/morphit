@@ -551,7 +551,7 @@ describe('healthRoute — price source diagnostics', () => {
 			'verbose=1',
 			fakePriceSource({
 				price: 0.00423,
-				source: 'klingex',
+				source: 'coingecko',
 				updatedAt,
 				stale: false
 			})
@@ -562,7 +562,7 @@ describe('healthRoute — price source diagnostics', () => {
 		// the price feed gained an opt-in flag).
 		expect(d.price).toMatchObject({
 			blurt_usd: 0.00423,
-			source: 'klingex',
+			source: 'coingecko',
 			updated_at: updatedAt.toISOString(),
 			stale: false
 		});

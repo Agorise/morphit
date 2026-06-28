@@ -238,6 +238,7 @@
 		</span>
 		<ProtectedTextarea
 			bind:value={comment}
+			name="feedback-response"
 			onDetect={handleKeyDetect}
 			rows={3}
 			maxlength={1024}

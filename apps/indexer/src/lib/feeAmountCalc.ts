@@ -37,6 +37,16 @@ export interface FeeAmountsResult {
  * Compute fee amounts in BTC sats and XMR piconero
  * targeting a given USD value.
  *
+ * The default USD target this is called with traces to the
+ * canonical `LISTING_FEE_USD` in `@morphit/asset-registry`
+ * the canonical economics in @morphit/asset-registry (the single source of
+ * truth); this helper takes
+ * `targetUsd` as a parameter so the CLI/wizard can offer an
+ * operator override. The formula matches the canonical
+ * `listingFeeSatoshis` / `listingFeePiconero` helpers, so a
+ * CLI-recomputed amount equals what the live derivation would
+ * produce at the same price.
+ *
  * Pure function — does not throw on any finite positive
  * input.  The caller is responsible for validating
  * `targetUsd > 0` and `prices.{btcUsd,xmrUsd} > 0`

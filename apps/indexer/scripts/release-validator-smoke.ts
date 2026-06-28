@@ -631,6 +631,74 @@ scenario('Part 106: BTC legacy testnet (m...) → reject', () => {
 	}
 });
 
+// ─── cp372 — chain-pinned BLURT fee base ─────────────────────────────
+
+scenario('cp372: treasury.blurt absent → ok (back-compat, no BLURT pin)', () => {
+	const r = validateReleasePayload(withTreasury({ btc: null, xmr: null }));
+	if (!r.ok) throw new Error('expected ok without blurt');
+	if (r.value.treasury?.blurt !== undefined) {
+		throw new Error('blurt should be absent when not provided (byte-identical to pre-cp372)');
+	}
+});
+
+scenario('cp372: treasury.blurt={base:62.5} → ok, preserved', () => {
+	const r = validateReleasePayload(withTreasury({ btc: null, xmr: null, blurt: { base: 62.5 } }));
+	if (!r.ok) throw new Error('expected ok');
+	if (r.value.treasury?.blurt?.base !== 62.5) throw new Error('blurt base not preserved');
+});
+
+scenario('cp372: treasury.blurt=null → ok (explicit no-pin)', () => {
+	const r = validateReleasePayload(withTreasury({ btc: null, xmr: null, blurt: null }));
+	if (!r.ok) throw new Error('expected ok');
+	if (r.value.treasury?.blurt !== undefined) throw new Error('null blurt normalizes to absent');
+});
+
+scenario('cp372: blurt not object → reject', () => {
+	const r = validateReleasePayload(withTreasury({ btc: null, xmr: null, blurt: 62.5 as unknown as { base: number } }));
+	if (r.ok || r.reason !== 'treasury_blurt_not_object') {
+		throw new Error(`expected treasury_blurt_not_object, got ${r.ok ? 'ok' : r.reason}`);
+	}
+});
+
+scenario('cp372: blurt base zero → reject', () => {
+	const r = validateReleasePayload(withTreasury({ btc: null, xmr: null, blurt: { base: 0 } }));
+	if (r.ok || r.reason !== 'treasury_blurt_base_invalid') {
+		throw new Error(`expected treasury_blurt_base_invalid, got ${r.ok ? 'ok' : r.reason}`);
+	}
+});
+
+scenario('cp372: blurt base negative → reject', () => {
+	const r = validateReleasePayload(withTreasury({ btc: null, xmr: null, blurt: { base: -5 } }));
+	if (r.ok || r.reason !== 'treasury_blurt_base_invalid') {
+		throw new Error(`expected treasury_blurt_base_invalid, got ${r.ok ? 'ok' : r.reason}`);
+	}
+});
+
+scenario('cp372: blurt base non-finite → reject', () => {
+	const r = validateReleasePayload(withTreasury({ btc: null, xmr: null, blurt: { base: Infinity } }));
+	if (r.ok || r.reason !== 'treasury_blurt_base_invalid') {
+		throw new Error(`expected treasury_blurt_base_invalid, got ${r.ok ? 'ok' : r.reason}`);
+	}
+});
+
+scenario('cp372: blurt base over sanity ceiling → reject', () => {
+	const r = validateReleasePayload(withTreasury({ btc: null, xmr: null, blurt: { base: 10_000_001 } }));
+	if (r.ok || r.reason !== 'treasury_blurt_base_too_large') {
+		throw new Error(`expected treasury_blurt_base_too_large, got ${r.ok ? 'ok' : r.reason}`);
+	}
+});
+
+scenario('cp372: all three assets pinned together → ok', () => {
+	const r = validateReleasePayload(withTreasury({
+		btc: { address: VALID_BTC_ADDR, satoshis: 416 },
+		xmr: { address: VALID_XMR_ADDR, piconero: '781250000' },
+		blurt: { base: 62.5 }
+	}));
+	if (!r.ok) throw new Error('expected ok with all three');
+	if (r.value.treasury?.blurt?.base !== 62.5) throw new Error('blurt base lost');
+	if (r.value.treasury?.btc?.satoshis !== 416) throw new Error('btc lost');
+});
+
 console.log(`\n${'─'.repeat(54)}`);
 if (failures === 0) {
 	console.log(`✓ all ${scenarios} scenarios passed`);

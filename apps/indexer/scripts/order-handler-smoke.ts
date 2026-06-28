@@ -22,6 +22,7 @@
 import handler from '../src/indexer/handlers/order.ts';
 import { makeCtx } from '../test/testutils/context.ts';
 import { makeMockClient, type QueryExpectation } from '../test/testutils/mockClient.ts';
+import { readFileSync } from 'node:fs';
 
 let failures = 0;
 let scenarios = 0;
@@ -129,13 +130,13 @@ function expectationsForBlurtFeePath(
 
 // ─── §F.11 critical-path scenarios ──────────────────────────────
 
-await scenario('BLURT fee path: verifies a 60-BLURT transfer at tier 1', async () => {
+await scenario('BLURT fee path: verifies a 62.5-BLURT transfer at tier 1', async () => {
 	const signer = 'alice';
 	const permlink = 'order-2026-04-25-aaa';
 	const ctx = makeCtx({
 		signer,
 		payload: makePayload({ permlink, fee_method: 'blurt' }),
-		siblingOps: feeTransfer(signer, permlink, 60)
+		siblingOps: feeTransfer(signer, permlink, 62.5)
 	});
 	const mock = makeMockClient(expectationsForBlurtFeePath(0, 1, true));
 	const r = await handler(ctx, mock.client);
@@ -150,14 +151,78 @@ await scenario('BLURT fee path: verifies a 60-BLURT transfer at tier 1', async (
 	}
 });
 
-await scenario('BLURT fee path: tier multiplier kicks in at the 4th order', async () => {
-	const signer = 'busy_trader';
-	const permlink = 'order-2026-04-25-bbb';
-	// Tier 4: 60 × 1.25 = 75 BLURT.  Pay exactly 75.000 — should verify.
+await scenario('BLURT fee path: chain-pinned blurtBase overrides config (cp372 determinism)', async () => {
+	// The chain-pinned base (via feeAmounts.blurtBase) is authoritative
+	// over config.feeBaseBlurt — this is what makes the BLURT floor
+	// deterministic across the federation.  Pin base=100; a 62.5 pay
+	// (fine against the config default 62.5) is now well below 100×0.85
+	// = 85 → underpaid.
+	const signer = 'alice';
+	const permlink = 'order-cp372-pin-a';
 	const ctx = makeCtx({
 		signer,
 		payload: makePayload({ permlink, fee_method: 'blurt' }),
-		siblingOps: feeTransfer(signer, permlink, 75)
+		siblingOps: feeTransfer(signer, permlink, 62.5),
+		feeAmounts: { blurtBase: 100 }
+	});
+	const mock = makeMockClient(expectationsForBlurtFeePath(0, 1, false));
+	const r = await handler(ctx, mock.client);
+	assertEqual(r, { ok: true }, 'result');
+	const insertCall = mock.queries.find((q) => q.text.includes('INSERT INTO orders'));
+	const feeStatus = insertCall!.params[insertCall!.params.length - 2];
+	if (feeStatus !== 'underpaid') {
+		throw new Error(`chain-pinned base=100 should reject a 62.5 pay, got ${feeStatus}`);
+	}
+});
+
+await scenario('BLURT fee path: chain-pinned blurtBase=100 verifies a 100-BLURT pay', async () => {
+	const signer = 'alice';
+	const permlink = 'order-cp372-pin-b';
+	const ctx = makeCtx({
+		signer,
+		payload: makePayload({ permlink, fee_method: 'blurt' }),
+		siblingOps: feeTransfer(signer, permlink, 100),
+		feeAmounts: { blurtBase: 100 }
+	});
+	const mock = makeMockClient(expectationsForBlurtFeePath(0, 1, true));
+	const r = await handler(ctx, mock.client);
+	assertEqual(r, { ok: true }, 'result');
+	const insertCall = mock.queries.find((q) => q.text.includes('INSERT INTO orders'));
+	const feeStatus = insertCall!.params[insertCall!.params.length - 2];
+	if (feeStatus !== 'verified') {
+		throw new Error(`chain-pinned base=100, 100-BLURT pay should verify, got ${feeStatus}`);
+	}
+});
+
+await scenario('BLURT fee path: Plan-B fallback to config.feeBaseBlurt when no chain pin', async () => {
+	// feeAmounts.blurtBase undefined (fresh node / unit ctx) → handler
+	// falls back to config.feeBaseBlurt (62.5).  62.5 pay verifies.
+	const signer = 'alice';
+	const permlink = 'order-cp372-fallback';
+	const ctx = makeCtx({
+		signer,
+		payload: makePayload({ permlink, fee_method: 'blurt' }),
+		siblingOps: feeTransfer(signer, permlink, 62.5)
+		// feeAmounts defaults to {} → blurtBase undefined → config fallback
+	});
+	const mock = makeMockClient(expectationsForBlurtFeePath(0, 1, true));
+	const r = await handler(ctx, mock.client);
+	assertEqual(r, { ok: true }, 'result');
+	const insertCall = mock.queries.find((q) => q.text.includes('INSERT INTO orders'));
+	const feeStatus = insertCall!.params[insertCall!.params.length - 2];
+	if (feeStatus !== 'verified') {
+		throw new Error(`Plan-B config fallback should verify a 62.5 pay, got ${feeStatus}`);
+	}
+});
+
+await scenario('BLURT fee path: tier multiplier kicks in at the 4th order', async () => {
+	const signer = 'busy_trader';
+	const permlink = 'order-2026-04-25-bbb';
+	// Tier 4: 62.5 × 1.25 = 78.125 BLURT.  Pay exactly 78.125 — should verify.
+	const ctx = makeCtx({
+		signer,
+		payload: makePayload({ permlink, fee_method: 'blurt' }),
+		siblingOps: feeTransfer(signer, permlink, 78.125)
 	});
 	const mock = makeMockClient(expectationsForBlurtFeePath(3, 1, true));
 	const r = await handler(ctx, mock.client);
@@ -166,19 +231,19 @@ await scenario('BLURT fee path: tier multiplier kicks in at the 4th order', asyn
 	const insertCall = mock.queries.find((q) => q.text.includes('INSERT INTO orders'));
 	const feeStatus = insertCall!.params[insertCall!.params.length - 2];
 	if (feeStatus !== 'verified') {
-		throw new Error(`tier 4 75-BLURT pay should verify, got ${feeStatus}`);
+		throw new Error(`tier 4 78.125-BLURT pay should verify, got ${feeStatus}`);
 	}
 });
 
-await scenario('BLURT fee path: tier-4 underpayment (60 BLURT against 75) rejects', async () => {
+await scenario('BLURT fee path: tier-4 underpayment (62.5 BLURT against 78.125) rejects', async () => {
 	const signer = 'busy_trader';
 	const permlink = 'order-2026-04-25-ccc';
-	// User pays 60 BLURT but expected is 75 (tier 4).  Should mark
-	// fee_status='underpaid', not verified.
+	// User pays 62.5 BLURT (the tier-1 amount) but expected is
+	// 78.125 (tier 4).  Should mark fee_status='underpaid', not verified.
 	const ctx = makeCtx({
 		signer,
 		payload: makePayload({ permlink, fee_method: 'blurt' }),
-		siblingOps: feeTransfer(signer, permlink, 60)
+		siblingOps: feeTransfer(signer, permlink, 62.5)
 	});
 	// No loyalty queries because fee_status != 'verified'.
 	const mock = makeMockClient(expectationsForBlurtFeePath(3, 1, false));
@@ -193,18 +258,19 @@ await scenario('BLURT fee path: tier-4 underpayment (60 BLURT against 75) reject
 });
 
 await scenario(
-	'BLURT fee path: tolerance band absorbs FP rounding (59.94 BLURT verifies)',
+	'BLURT fee path: a near-exact payment (62.45 BLURT against 62.5) verifies',
 	async () => {
-		// FP-rounding tolerance: 60 × (1 - 0.001) = 59.94. 59.94 is the
-		// minimum acceptable. Frontend's ceil-rounding to 3 decimals
-		// should always produce an amount >= floor; this test confirms
-		// the indexer's threshold matches the frontend's contract.
+		// 62.45 is ~0.08% below the pinned 62.5 — trivially inside the
+		// Model-A FEE_PRICE_TOLERANCE band (floor 62.5 × 0.85 = 53.125),
+		// so it verifies.  (Pre-cp372 this exercised the tight 0.1%
+		// FP-rounding band; that band is now subsumed by the 15% price-
+		// drift band — see the order handler + FEE_PRICE_TOLERANCE.)
 		const signer = 'alice';
 		const permlink = 'order-2026-04-25-ddd';
 		const ctx = makeCtx({
 			signer,
 			payload: makePayload({ permlink, fee_method: 'blurt' }),
-			siblingOps: feeTransfer(signer, permlink, 59.94)
+			siblingOps: feeTransfer(signer, permlink, 62.45)
 		});
 		const mock = makeMockClient(expectationsForBlurtFeePath(0, 1, true));
 		const r = await handler(ctx, mock.client);
@@ -213,20 +279,24 @@ await scenario(
 		const insertCall = mock.queries.find((q) => q.text.includes('INSERT INTO orders'));
 		const feeStatus = insertCall!.params[insertCall!.params.length - 2];
 		if (feeStatus !== 'verified') {
-			throw new Error(`59.94 BLURT (within tolerance) should verify, got ${feeStatus}`);
+			throw new Error(`62.45 BLURT (within tolerance) should verify, got ${feeStatus}`);
 		}
 	}
 );
 
 await scenario(
-	'BLURT fee path: just-below-tolerance (59.93 BLURT) rejects as underpaid',
+	'BLURT fee path: below the FEE_PRICE_TOLERANCE band (53.0 BLURT against 62.5) rejects',
 	async () => {
+		// Model A (cp372): the acceptance floor is FEE_PRICE_TOLERANCE
+		// (15%) below the pinned base — 62.5 × 0.85 = 53.125.  53.0 is
+		// just under it, so it's a genuine underpayment even allowing
+		// for live-price drift → underpaid.
 		const signer = 'alice';
 		const permlink = 'order-2026-04-25-eee';
 		const ctx = makeCtx({
 			signer,
 			payload: makePayload({ permlink, fee_method: 'blurt' }),
-			siblingOps: feeTransfer(signer, permlink, 59.93)
+			siblingOps: feeTransfer(signer, permlink, 53.0)
 		});
 		const mock = makeMockClient(expectationsForBlurtFeePath(0, 1, false));
 		const r = await handler(ctx, mock.client);
@@ -236,6 +306,33 @@ await scenario(
 		const feeStatus = insertCall!.params[insertCall!.params.length - 2];
 		if (feeStatus !== 'underpaid') {
 			throw new Error(`expected fee_status=underpaid, got ${feeStatus}`);
+		}
+	}
+);
+
+await scenario(
+	'BLURT fee path: Model-A band absorbs live-price drift (55 BLURT against pinned 62.5 verifies)',
+	async () => {
+		// BLURT appreciated since the operator last re-tuned, so the
+		// live-displayed amount (≈55) sits ~12% below the pinned base
+		// (62.5).  A user paying the live-displayed figure must NOT be
+		// rejected — 55 ≥ 62.5 × 0.85 = 53.125 → verified.  This is the
+		// quote→pay drift the FEE_PRICE_TOLERANCE band exists to absorb.
+		const signer = 'alice';
+		const permlink = 'order-2026-04-25-eee2';
+		const ctx = makeCtx({
+			signer,
+			payload: makePayload({ permlink, fee_method: 'blurt' }),
+			siblingOps: feeTransfer(signer, permlink, 55.0)
+		});
+		const mock = makeMockClient(expectationsForBlurtFeePath(0, 1, true));
+		const r = await handler(ctx, mock.client);
+		assertEqual(r, { ok: true }, 'result');
+
+		const insertCall = mock.queries.find((q) => q.text.includes('INSERT INTO orders'));
+		const feeStatus = insertCall!.params[insertCall!.params.length - 2];
+		if (feeStatus !== 'verified') {
+			throw new Error(`55 BLURT (within FEE_PRICE_TOLERANCE of 62.5) should verify, got ${feeStatus}`);
 		}
 	}
 );
@@ -273,7 +370,7 @@ await scenario(
 		const ctx = makeCtx({
 			signer,
 			payload: makePayload({ permlink, fee_method: 'blurt' }),
-			siblingOps: feeTransfer(signer, 'different-permlink', 60)
+			siblingOps: feeTransfer(signer, 'different-permlink', 62.5)
 		});
 		const mock = makeMockClient([{ match: 'INSERT INTO orders', rows: [], rowCount: 1 }]);
 		const r = await handler(ctx, mock.client);
@@ -294,7 +391,7 @@ await scenario('BLURT fee path: wrong recipient treated as missing', async () =>
 	const ctx = makeCtx({
 		signer,
 		payload: makePayload({ permlink, fee_method: 'blurt' }),
-		siblingOps: feeTransfer(signer, permlink, 60, { to: 'attacker' })
+		siblingOps: feeTransfer(signer, permlink, 62.5, { to: 'attacker' })
 	});
 	const mock = makeMockClient([{ match: 'INSERT INTO orders', rows: [], rowCount: 1 }]);
 	const r = await handler(ctx, mock.client);
@@ -415,19 +512,20 @@ await scenario('Waiver: rejects null amount_min', async () => {
 	assertEqual(r, { ok: false, reason: 'waiver_requires_min_usd' }, 'result');
 });
 
-await scenario('Waiver: rejects amount_min below 500 BLURT floor', async () => {
-	// THIS scenario is the one that would have caught the
-	// priceSource bug.  Pre-fix, the handler called
-	// ctx.priceSource.current() — undefined under the §F.11
-	// OpContext, throwing TypeError.  Post-fix, the handler uses
-	// the BLURT-native 500-BLURT constant directly.
+await scenario('Waiver: rejects amount_min below the $1 USD floor', async () => {
+	// cp369/cp370: the first-order floor is $1 USD-EQUIVALENT — the
+	// canonical FIRST_ORDER_MIN_USD, a fiat value compared to
+	// amount_min (itself fiat), NO price feed.  amount_min below $1
+	// → waiver_requires_min_usd.  (Historically this scenario also
+	// caught the §F.11 priceSource bug where the handler called
+	// ctx.priceSource.current() under an OpContext lacking one.)
 	const ctx = makeCtx({
 		signer: 'newbie',
 		payload: makePayload({
 			fee_method: 'waived_first_buy',
 			side: 'buy',
 			asset: 'BLURT',
-			amount_min: 100, // below 500 floor
+			amount_min: 0.5, // below the $1 USD floor
 			amount_max: null
 		}),
 		siblingOps: []
@@ -437,14 +535,14 @@ await scenario('Waiver: rejects amount_min below 500 BLURT floor', async () => {
 	assertEqual(r, { ok: false, reason: 'waiver_requires_min_usd' }, 'result');
 });
 
-await scenario('Waiver: 500 BLURT exactly is at the floor and accepted', async () => {
+await scenario('Waiver: $1 exactly is at the floor and accepted', async () => {
 	const ctx = makeCtx({
 		signer: 'newbie',
 		payload: makePayload({
 			fee_method: 'waived_first_buy',
 			side: 'buy',
 			asset: 'BLURT',
-			amount_min: 500,
+			amount_min: 1,
 			amount_max: null
 		}),
 		siblingOps: []
@@ -460,6 +558,112 @@ await scenario('Waiver: 500 BLURT exactly is at the floor and accepted', async (
 	]);
 	const r = await handler(ctx, mock.client);
 	assertEqual(r, { ok: true }, 'result');
+});
+
+// ─── cp372 — FX-aware first-order floor regressions ─────────────
+// The floor is "$1 USD-EQUIVALENT".  amount_min is denominated in
+// the order's fiat_currency, so a non-USD order must be converted
+// to USD before the $1 check.  These scenarios tamper-test that:
+// reverting to the pre-cp372 USD-only comparison (v.amount_min <
+// FIRST_ORDER_MIN_USD, ignoring fiatToUsd) breaks them.
+
+// AUD 1.52 per USD, so 1.20 AUD ≈ $0.79 — below the $1 floor.  The
+// override mimics the FX source.  The full proceed-mock is supplied
+// so that IF the floor wrongly passed (regression), the handler
+// would claim the waiver and return ok:true, making the expected-
+// reject assertion fail loudly.
+await scenario('Waiver FX: non-USD min below $1-equivalent rejected (1.20 AUD ≈ $0.79)', async () => {
+	const ctx = makeCtx({
+		signer: 'newbie_au',
+		payload: makePayload({
+			fee_method: 'waived_first_buy',
+			side: 'buy',
+			asset: 'BLURT',
+			fiat_currency: 'AUD',
+			amount_min: 1.2,
+			amount_max: null
+		}),
+		siblingOps: [],
+		fiatToUsd: (a: number, f: string) => (f === 'AUD' ? a / 1.52 : a)
+	});
+	const mock = makeMockClient([
+		{ match: 'COUNT(*)::text AS n FROM orders WHERE account', rows: [{ n: '0' }] },
+		{ match: 'INSERT INTO accounts', rows: [{ first_buy_waived_at: new Date() }], rowCount: 1 },
+		{ match: 'INSERT INTO orders', rows: [], rowCount: 1 }
+	]);
+	const r = await handler(ctx, mock.client);
+	assertEqual(r, { ok: false, reason: 'waiver_requires_min_usd' }, 'result');
+});
+
+// 2.00 AUD ≈ $1.32 — above the floor; the waiver is claimed.
+await scenario('Waiver FX: non-USD min above $1-equivalent accepted (2.00 AUD ≈ $1.32)', async () => {
+	const ctx = makeCtx({
+		signer: 'newbie_au2',
+		payload: makePayload({
+			fee_method: 'waived_first_buy',
+			side: 'buy',
+			asset: 'BLURT',
+			fiat_currency: 'AUD',
+			amount_min: 2.0,
+			amount_max: null
+		}),
+		siblingOps: [],
+		fiatToUsd: (a: number, f: string) => (f === 'AUD' ? a / 1.52 : a)
+	});
+	const mock = makeMockClient([
+		{ match: 'COUNT(*)::text AS n FROM orders WHERE account', rows: [{ n: '0' }] },
+		{ match: 'INSERT INTO accounts', rows: [{ first_buy_waived_at: new Date() }], rowCount: 1 },
+		{ match: 'INSERT INTO orders', rows: [], rowCount: 1 }
+	]);
+	const r = await handler(ctx, mock.client);
+	assertEqual(r, { ok: true }, 'result');
+});
+
+// Unconvertible currency (FX off + outside the static table):
+// fiatToUsd returns null → the handler falls back to the documented
+// direct comparison (treat amount_min as USD-equivalent).  0.5 < 1 → reject.
+await scenario('Waiver FX: unconvertible currency falls back to direct compare (0.5 rejected)', async () => {
+	const ctx = makeCtx({
+		signer: 'newbie_zz',
+		payload: makePayload({
+			fee_method: 'waived_first_buy',
+			side: 'buy',
+			asset: 'BLURT',
+			fiat_currency: 'ZZZ',
+			amount_min: 0.5,
+			amount_max: null
+		}),
+		siblingOps: [],
+		fiatToUsd: () => null
+	});
+	const mock = makeMockClient([
+		{ match: 'COUNT(*)::text AS n FROM orders WHERE account', rows: [{ n: '0' }] },
+		{ match: 'INSERT INTO accounts', rows: [{ first_buy_waived_at: new Date() }], rowCount: 1 },
+		{ match: 'INSERT INTO orders', rows: [], rowCount: 1 }
+	]);
+	const r = await handler(ctx, mock.client);
+	assertEqual(r, { ok: false, reason: 'waiver_requires_min_usd' }, 'result');
+});
+
+// Structural belt-and-suspenders: the source must route the floor
+// through ctx.fiatToUsd, not compare the raw fiat amount_min to the
+// USD constant.  Catches a revert even if a future refactor changes
+// the behavioural mocks.
+await scenario('Waiver FX: order.ts routes the floor through ctx.fiatToUsd (structural)', () => {
+	const src = readFileSync(new URL('../src/indexer/handlers/order.ts', import.meta.url), 'utf-8');
+	if (!/ctx\.fiatToUsd\(v\.amount_min,\s*v\.fiat_currency\)/.test(src)) {
+		throw new Error('order.ts no longer converts amount_min via ctx.fiatToUsd');
+	}
+	if (/if\s*\(\s*v\.amount_min\s*<\s*WAIVER_MIN_FIAT_USD\s*\)/.test(src)) {
+		throw new Error('order.ts reverted to raw USD-only floor comparison');
+	}
+});
+
+await scenario('Waiver FX: orderReplace.ts routes the floor through ctx.fiatToUsd (structural)', () => {
+	const src = readFileSync(new URL('../src/indexer/handlers/orderReplace.ts', import.meta.url), 'utf-8');
+	if (!/ctx\.fiatToUsd\(v\.amount_min,\s*v\.fiat_currency\)/.test(src)) {
+		throw new Error('orderReplace.ts no longer converts amount_min via ctx.fiatToUsd');
+	}
 });
 
 await scenario('Waiver: prior orders disqualify (waiver_not_first_order)', async () => {

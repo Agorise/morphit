@@ -1030,15 +1030,18 @@ handling secrets. High-threat-model operators should use
 host physical security to the fee volume they process. See
 ADR-0010 §4 for the relay's in-memory key posture.
 
-### Klingex / Coingecko price-feed posture
+### Coingecko price-feed posture
 
-The indexer's price feed reads BLURT/USDT from Klingex first,
-falls back to Coingecko aggregate. The USD echo on Morphit's
-benefits ladder and other UI surfaces is **display-only** —
-not a settlement reference. Operators who anticipate USDT
-de-pegging or Klingex compromise can disable the price feed
-entirely; the BLURT-denominated fees and amounts continue to
-work without the USD overlay.
+The indexer's price feed reads BLURT/USD from Coingecko, the
+sole external upstream. (Klingex, the former BLURT-only primary,
+went out of business in 2026 and was removed.) The USD echo on
+Morphit's benefits ladder and other UI surfaces is
+**display-only** — not a settlement reference. Operators who
+anticipate a Coingecko outage or compromise can disable the
+price feed entirely; the BLURT-denominated fees and amounts
+continue to work without the USD overlay. Behind Coingecko sit
+the opt-in self-sovereign morphit_native source and the static
+floor, so the chain degrades rather than breaks.
 
 Operator-trust assumption (BATCH14-4): a malicious operator
 can lie about the fiat price displayed alongside BLURT amounts

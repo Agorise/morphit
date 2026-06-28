@@ -467,6 +467,7 @@
 		<span class="mb-1 block text-sm font-semibold">{$_('feedback.form.comment_label')}</span>
 		<ProtectedTextarea
 			bind:value={comment}
+			name="feedback-comment"
 			onDetect={handleKeyDetect}
 			rows={3}
 			maxlength={1024}

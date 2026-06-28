@@ -9,11 +9,24 @@
  *   - the BLURT amount as a Graphene-conforming string
  *     ("N.NNN BLURT")
  *
- * Fees are denominated directly in BLURT — no live-USD
- * conversion at sign or verify time.  The frontend's quote and
- * the indexer's verification both use the same constants and
- * the same multiplier, so there's no drift window between
- * quote and broadcast.
+ * Fees are denominated in BLURT, and VERIFICATION is BLURT-native
+ * — the indexer checks the paid BLURT against `feeBaseBlurt × mult`
+ * with no price read, so there's no TOCTOU window between quote and
+ * broadcast.  What the UI QUOTES, though, tracks the live USD value
+ * (Model A, cp372): `/v1/listing-fee.base_fee_blurt` is the operator's
+ * USD-equivalent fee re-priced at the live BLURT/USD rate, so the
+ * fee's dollar value stays put instead of drifting as a fixed BLURT
+ * constant.  The verifier grants a FEE_PRICE_TOLERANCE band so a user
+ * paying the live-quoted amount isn't rejected as that quote drifts
+ * from the operator's pinned base between re-tunes.
+ *
+ * NB (cp370 → cp372): the canonical USD target (~12.5¢) lives in
+ * `@morphit/asset-registry` (`LISTING_FEE_USD.blurt`).  `BASE_FEE_BLURT`
+ * below is a fixed fallback approximating it at the reference price,
+ * used only when the `/v1/listing-fee` fetch fails; the live amount
+ * (operator's USD fee at the current rate) is fetched from
+ * `/v1/listing-fee.base_fee_blurt`, with `base_fee_blurt_live` telling
+ * the client whether that amount is the live figure or the fallback.
  *
  * The optional USD echo for display ("60 BLURT (~$0.12)") is
  * fetched separately from /v1/listing-fee when the operator has
@@ -34,12 +47,14 @@
  *  indexer's clear `fee_underpaid` status surfaces the issue. */
 export const BASE_FEE_BLURT = 60;
 
-/** Tolerance the indexer grants when verifying the fee amount.
- *  After the BLURT-native fee refactor this band only absorbs
- *  floating-point rounding (Graphene serializes BLURT amounts
- *  to 3 decimals; multiplications can introduce sub-millibBLURT
- *  drift).  Must match MORPHIT_INDEXER_FEE_TOLERANCE on the
- *  indexer. */
+/** Display-side reference for the indexer's fee-acceptance band.
+ *  Pre-cp372 this was the tight FP-rounding tolerance (0.1%).  Under
+ *  Model A the indexer accepts a payment within FEE_PRICE_TOLERANCE
+ *  (15%, in @morphit/asset-registry) below the pinned base, to absorb
+ *  the drift between the live-quoted amount and the operator's pinned
+ *  base.  This constant is informational only — the frontend does NOT
+ *  enforce a tolerance (the indexer is the authority); it's kept for
+ *  reference + the doc test.  See the indexer order handler. */
 export const FEE_TOLERANCE = 0.001;
 
 /** Fee-collection account.  This is where the transfer op

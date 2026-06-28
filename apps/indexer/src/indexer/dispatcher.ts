@@ -428,7 +428,12 @@ export async function applyBlock(
 	 *  chain-pinned amount (with env fallback) instead of
 	 *  reading directly from config.  See handler-contract.ts
 	 *  for the rationale. */
-	feeAmounts: OpContext['feeAmounts']
+	feeAmounts: OpContext['feeAmounts'],
+	/** FX-aware first-order floor converter — threaded through to
+	 *  OpContext so the order handler can convert amount_min (in the
+	 *  order's fiat) to USD before the $1 first-buy check.  See
+	 *  handler-contract.ts. */
+	fiatToUsd: OpContext['fiatToUsd']
 ): Promise<{
 	applied: number;
 	rejected: number;
@@ -604,6 +609,7 @@ export async function applyBlock(
 			config,
 			feeVerifiers,
 			feeAmounts,
+			fiatToUsd,
 			recordOrderbookChange: (orderId: string): void => {
 				opPendingChanges.push(orderId);
 			},

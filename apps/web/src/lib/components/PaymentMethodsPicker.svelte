@@ -93,11 +93,6 @@
 		instance: false
 	});
 
-	/** Order in which selections were made, so we can show the
-	 *  description of the MOST RECENT one.  Reset on full
-	 *  deselection. */
-	let lastSelectedKey = $state<string | null>(null);
-
 	/** i18n description lookup.  Returns the translated string
 	 *  for `payment_method.<key>.description` or null if no
 	 *  description i18n key exists.  svelte-i18n returns the
@@ -163,14 +158,12 @@
 		if (isSelected(key)) {
 			const next = selected.filter((k) => k !== key);
 			selected = next;
-			lastSelectedKey = next[next.length - 1] ?? null;
 			onchange?.(next);
 			return;
 		}
 		if (selected.length >= max) return;
 		const next = [...selected, key];
 		selected = next;
-		lastSelectedKey = key;
 		onchange?.(next);
 	}
 
@@ -226,20 +219,11 @@
 		</div>
 	{/if}
 
-	<!-- Description of last-selected method ────────────────── -->
-	{#if lastSelectedKey && descFor(lastSelectedKey)}
-		<p
-			class="rounded-lg border border-ink-200 bg-ink-50 px-3 py-2 text-xs text-ink-700 dark:border-ink-800 dark:bg-ink-950 dark:text-ink-300"
-		>
-			<strong class="font-semibold">{nameFor(lastSelectedKey)}:</strong>
-			{descFor(lastSelectedKey)}
-		</p>
-	{/if}
-
 	<!-- Search box ─────────────────────────────────────────── -->
 	<div>
 		<input
 			type="text"
+			name="payment-methods-search"
 			bind:value={query}
 			maxlength="64"
 			placeholder={$_('payment_method.search_placeholder')}
@@ -296,6 +280,7 @@
 						<input
 							type="checkbox"
 							class="pointer-events-none h-4 w-4 accent-morphit-emerald"
+							name={`pm-${entry.key}`}
 							checked={isSelected(entry.key)}
 							tabindex="-1"
 							readonly
@@ -348,6 +333,7 @@
 										<input
 											type="checkbox"
 											class="pointer-events-none h-4 w-4 accent-morphit-emerald"
+											name={`pm-${entry.key}`}
 											checked={isSelected(entry.key)}
 											tabindex="-1"
 											readonly
@@ -405,6 +391,7 @@
 									<input
 										type="checkbox"
 										class="pointer-events-none h-4 w-4 accent-morphit-emerald"
+										name={`pm-${entry.key}`}
 										checked={isSelected(entry.key)}
 										tabindex="-1"
 										readonly

@@ -107,7 +107,31 @@ export interface OpContext {
 	readonly feeAmounts: {
 		readonly btcSatoshis?: number;
 		readonly xmrPiconero?: bigint;
+		/** cp372 — chain-pinned BLURT fee base (tier-1, pre-multiplier),
+		 *  resolved chain-pin > env.  The order handler multiplies by the
+		 *  Sybil tier and accepts ± FEE_PRICE_TOLERANCE.  Routing it here
+		 *  (rather than reading config.feeBaseBlurt directly) gives the
+		 *  BLURT floor the same chain-pinned determinism as BTC/XMR, so a
+		 *  hostile fork can't quietly run a different floor.  Undefined →
+		 *  the handler falls back to its own config read (Plan B). */
+		readonly blurtBase?: number;
 	};
+
+	/** FX-aware first-order floor.  The "$1 USD-equivalent" first-buy
+	 *  minimum compares amount_min — which is denominated in the
+	 *  order's `fiat_currency` (AUD, EUR, …) — against
+	 *  FIRST_ORDER_MIN_USD.  This converts that fiat amount to USD so
+	 *  the floor is correct for ANY currency, not just USD.
+	 *
+	 *  Returns null when the currency can't be converted (FX feed
+	 *  disabled AND the currency isn't USD, or a genuinely-unknown
+	 *  currency the static table doesn't cover).  The order handler
+	 *  treats null conservatively — see order.ts.  Backed by the
+	 *  indexer's FX source (which itself falls back to a static rate
+	 *  table during an outage), or a USD-only identity when the
+	 *  operator has disabled the FX feed.  Server-side only; no
+	 *  per-user query ever leaves the box. */
+	readonly fiatToUsd: (amount: number, fiat: string) => number | null;
 
 	/** Phase E — post-commit notification hook.  Handlers call
 	 *  this to flag an orderId whose orderbook-relevant state

@@ -193,7 +193,7 @@ export interface Config {
 	 *  Default: false. When false, the indexer makes ZERO outbound
 	 *  HTTP calls for pricing; fee verification doesn't need it.
 	 *
-	 *  When true, the price source (Klingex → Coingecko →
+	 *  When true, the price source (Coingecko →
 	 *  morphit_native → static floor) is initialized at boot and the
 	 *  /v1/listing-fee endpoint surfaces an optional `base_fee_fiat`
 	 *  + `blurt_price_fiat` + `denomination_fiat` echo. This is
@@ -214,15 +214,41 @@ export interface Config {
 	 *  upstreams, in ms. Only relevant when `priceFeedEnabled` is
 	 *  true. Default 5 minutes. */
 	readonly priceRefreshIntervalMs: number;
-	/** Klingex public API base URL (without trailing slash). Only
-	 *  used when `priceFeedEnabled` is true. */
-	readonly klingexBaseUrl: string;
 	/** Coingecko API base URL. Default is the free-tier host; set
 	 *  to https://pro-api.coingecko.com/api/v3 with an API key to
 	 *  use the paid tier. Only used when `priceFeedEnabled` is true. */
 	readonly coingeckoBaseUrl: string;
 	/** Optional Coingecko API key. Free tier works without one. */
 	readonly coingeckoApiKey?: string;
+	/** Additional no-key crypto→USD sources averaged alongside
+	 *  Coingecko (USD denomination only — these return USD quotes).
+	 *  More sources → a single bad/stale provider can't swing the
+	 *  committed price. */
+	readonly coinpaprikaBaseUrl: string;
+	readonly krakenBaseUrl: string;
+	/** Relative outlier band for the crypto external average, e.g.
+	 *  0.05 = drop sources >5% off the median before averaging. */
+	readonly priceOutlierTolerance: number;
+
+	/** ── USD→fiat FX feed (multi-currency $1-equivalent floor) ───
+	 *  Powers the "$1 USD-equivalent of BLURT" first-trade minimum
+	 *  for users posting in a non-USD fiat, and the Min-value field
+	 *  default in the user's currency.  Server-side only; the whole
+	 *  USD→fiat table is fetched generically (base=USD) so no
+	 *  provider learns any individual user's currency.  ON by
+	 *  default (matches the price feed); operators can disable. */
+	readonly fxFeedEnabled: boolean;
+	/** Background refresh cadence for the FX table, ms.  FX moves
+	 *  slowly; default 1 hour. */
+	readonly fxRefreshIntervalMs: number;
+	/** Per-request timeout for FX upstreams, ms. */
+	readonly fxFetchTimeoutMs: number;
+	/** FX provider base URLs (all free, no-key, privacy-respecting).
+	 *  Tried in order Frankfurter → open.er-api → currency-api, then
+	 *  the hardcoded static table.  Operator-overridable. */
+	readonly fxFrankfurterBaseUrl: string;
+	readonly fxErApiBaseUrl: string;
+	readonly fxCurrencyApiBaseUrl: string;
 
 	/** ── cp127: morphit_native price-source feed config ──────────
 	 *  Opt-in self-sovereign price derivation from on-platform
@@ -864,9 +890,8 @@ const envSchema = z.object({
 
 	// Optional BLURT/USD price feed.  ON by default: it powers the USD
 	// equivalents the Morphit frontend shows next to BLURT amounts (the
-	// profile balance card + the listing-fee fiat echo).  Source is the
-	// layered external chain — Klingex, then CoinGecko — with a static-
-	// floor fallback; a server-side call from the operator's box, never
+	// profile balance card + the listing-fee fiat echo).  Source is
+	// CoinGecko with a static-floor fallback; a server-side call from the operator's box, never
 	// user-facing.  Operators who want a fully self-contained instance
 	// that makes zero external price calls can set this to false (the UI
 	// then shows BLURT only).
@@ -880,9 +905,35 @@ const envSchema = z.object({
 		.int()
 		.positive()
 		.default(5 * 60 * 1000),
-	MORPHIT_INDEXER_KLINGEX_BASE_URL: z.string().default('https://klingex.io/api/v1'),
 	MORPHIT_INDEXER_COINGECKO_BASE_URL: z.string().default('https://api.coingecko.com/api/v3'),
 	MORPHIT_INDEXER_COINGECKO_API_KEY: z.string().optional(),
+	// Additional no-key crypto→USD sources (averaged with Coingecko).
+	MORPHIT_INDEXER_COINPAPRIKA_BASE_URL: z.string().default('https://api.coinpaprika.com/v1'),
+	MORPHIT_INDEXER_KRAKEN_BASE_URL: z.string().default('https://api.kraken.com/0/public'),
+	MORPHIT_INDEXER_PRICE_OUTLIER_TOLERANCE: z.coerce.number().positive().max(1).default(0.05),
+
+	// ─── USD→fiat FX feed (multi-currency $1-equivalent floor) ──
+	// ON by default (matches the price feed).  Generic server-side
+	// table fetch (base=USD) — privacy-preserving, no per-user query.
+	MORPHIT_INDEXER_FX_FEED_ENABLED: z
+		.enum(['true', 'false'])
+		.default('true')
+		.transform((s) => s === 'true'),
+	// FX moves slowly; refresh hourly by default.
+	MORPHIT_INDEXER_FX_REFRESH_INTERVAL_MS: z.coerce
+		.number()
+		.int()
+		.positive()
+		.default(60 * 60 * 1000),
+	MORPHIT_INDEXER_FX_FETCH_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
+	// Free, no-key, privacy-respecting providers (deep failover chain).
+	MORPHIT_INDEXER_FX_FRANKFURTER_BASE_URL: z
+		.string()
+		.default('https://api.frankfurter.dev/v1'),
+	MORPHIT_INDEXER_FX_ER_API_BASE_URL: z.string().default('https://open.er-api.com/v6'),
+	MORPHIT_INDEXER_FX_CURRENCY_API_BASE_URL: z
+		.string()
+		.default('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1'),
 
 	// ─── cp127: morphit_native (self-sovereign) price feed ──────
 	// Default OFF (operators opt in when they trust their data).
@@ -890,7 +941,7 @@ const envSchema = z.object({
 		.enum(['true', 'false'])
 		.default('false')
 		.transform((s) => s === 'true'),
-	// Default OFF (priority remains Klingex > Coingecko > native).
+	// Default OFF (priority remains Coingecko > native).
 	// Operators with mature data can flip to true to prefer native
 	// when external sources materially disagree.
 	MORPHIT_INDEXER_PRICE_PREFER_NATIVE_WHEN_DISAGREEING: z
@@ -1480,9 +1531,18 @@ export function loadConfig(): Config {
 		priceFeedEnabled: e.MORPHIT_INDEXER_PRICE_FEED_ENABLED,
 		priceFeedStaticFloor: e.MORPHIT_INDEXER_PRICE_FEED_STATIC_FLOOR,
 		priceRefreshIntervalMs: e.MORPHIT_INDEXER_PRICE_REFRESH_INTERVAL_MS,
-		klingexBaseUrl: e.MORPHIT_INDEXER_KLINGEX_BASE_URL,
 		coingeckoBaseUrl: e.MORPHIT_INDEXER_COINGECKO_BASE_URL,
 		coingeckoApiKey: e.MORPHIT_INDEXER_COINGECKO_API_KEY,
+		coinpaprikaBaseUrl: e.MORPHIT_INDEXER_COINPAPRIKA_BASE_URL,
+		krakenBaseUrl: e.MORPHIT_INDEXER_KRAKEN_BASE_URL,
+		priceOutlierTolerance: e.MORPHIT_INDEXER_PRICE_OUTLIER_TOLERANCE,
+		// USD→fiat FX feed
+		fxFeedEnabled: e.MORPHIT_INDEXER_FX_FEED_ENABLED,
+		fxRefreshIntervalMs: e.MORPHIT_INDEXER_FX_REFRESH_INTERVAL_MS,
+		fxFetchTimeoutMs: e.MORPHIT_INDEXER_FX_FETCH_TIMEOUT_MS,
+		fxFrankfurterBaseUrl: e.MORPHIT_INDEXER_FX_FRANKFURTER_BASE_URL,
+		fxErApiBaseUrl: e.MORPHIT_INDEXER_FX_ER_API_BASE_URL,
+		fxCurrencyApiBaseUrl: e.MORPHIT_INDEXER_FX_CURRENCY_API_BASE_URL,
 		// cp127 — morphit_native price feed
 		priceFeedNativeEnabled: e.MORPHIT_INDEXER_PRICE_FEED_NATIVE_ENABLED,
 		priceFeedPreferNativeWhenDisagreeing:

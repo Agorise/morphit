@@ -164,11 +164,12 @@
 		};
 		window.addEventListener('online', onOnline);
 
-		// NOTE: there is deliberately NO 'controllerchange' auto-reload listener.
-		// The page must NEVER refresh on its own — a new frontend loads ONLY when
-		// the user clicks "Load it now" (applyUpdate). The service worker already
-		// waits for the APPLY_UPDATE user-consent message before skipWaiting, so
-		// nothing activates behind the user's back either.
+		// NOTE: there is deliberately NO AUTONOMOUS 'controllerchange' auto-reload.
+		// The page refreshes ONLY after the user clicks "Load it now" (applyUpdate),
+		// which is where the single controllerchange listener is registered — so a
+		// new frontend still loads only on explicit user consent, never behind the
+		// user's back. The service worker also waits for the APPLY_UPDATE message
+		// before skipWaiting, so nothing activates unprompted either.
 
 		return () => {
 			cancelled = true;
@@ -186,15 +187,38 @@
 	});
 
 	// The ONLY place the page reloads — never on its own. Clicking "Load it now"
-	// hides the snackbar instantly, asks the waiting worker (if any) to take
-	// over (skipWaiting via APPLY_UPDATE), then reloads. Navigations are
-	// network-first, so the reload pulls the fresh shell + chunks from the
-	// origin regardless of service-worker state — the new frontend loads even
-	// if the SW is still mid-handoff.
+	// hides the snackbar instantly and asks the waiting worker to take over
+	// (skipWaiting via APPLY_UPDATE). When there's a waiting worker we wait for
+	// it to actually take CONTROL (controllerchange) before reloading, so the
+	// reload is served by the NEW worker and a single tap lands the new bundle.
+	// Previously a fixed 250ms reload could fire before the worker had activated
+	// (common on mobile, which throttles timers and activates more slowly),
+	// leaving the tab on the old bundle — so the verify.json version poll
+	// re-detected the mismatch and re-offered, and the user had to tap twice.
+	// A timeout fallback still reloads if the handoff stalls, and the
+	// version-poll-only path (no waiting worker, because a proxy hid the SW
+	// byte-diff) reloads directly since there's no handoff to await — navigations
+	// are network-first, so that reload still pulls the fresh shell.
 	function applyUpdate(): void {
 		applying = true;
-		waitingWorker?.postMessage({ type: 'APPLY_UPDATE' });
-		setTimeout(() => window.location.reload(), 250);
+		let reloaded = false;
+		const reloadOnce = (): void => {
+			if (reloaded) return;
+			reloaded = true;
+			window.location.reload();
+		};
+		if (waitingWorker && 'serviceWorker' in navigator) {
+			// Reload the instant the new worker takes control.
+			navigator.serviceWorker.addEventListener('controllerchange', reloadOnce, {
+				once: true
+			});
+			waitingWorker.postMessage({ type: 'APPLY_UPDATE' });
+			// Fallback: if controllerchange never fires (handoff stalls), reload anyway.
+			setTimeout(reloadOnce, 3_000);
+		} else {
+			// No waiting worker to hand off — just reload to pull the new bundle.
+			setTimeout(reloadOnce, 250);
+		}
 	}
 
 	// "Later" just closes the snackbar — no reload, nothing loaded. It stays

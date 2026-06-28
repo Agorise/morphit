@@ -56,6 +56,14 @@ const FIAT_SELECT = readFileSync(
 	join(REPO_ROOT, 'apps/web/src/lib/components/FiatCurrencySelect.svelte'),
 	'utf8'
 );
+const PROTECTED_TEXTAREA = readFileSync(
+	join(REPO_ROOT, 'apps/web/src/lib/components/ProtectedTextarea.svelte'),
+	'utf8'
+);
+const CHAT_COMPOSER = readFileSync(
+	join(REPO_ROOT, 'apps/web/src/lib/components/ChatComposer.svelte'),
+	'utf8'
+);
 
 interface Scenario {
 	readonly name: string;
@@ -131,13 +139,18 @@ const scenarios: readonly Scenario[] = [
 	// `oninput` (cp360: the decimal sanitiser keepDecimal/keepSignedDecimal
 	// can't run cleanly through a two-way bind), so these match `value={…}`
 	// not `bind:value={…}`.  /post/edit (below) still uses bind:value.
+	// cp368 split the shared `amountError` into per-field `amountMinHasError`
+	// / `amountMaxHasError` and gated the red on `amountTouched` /
+	// `fixedPriceTouched` (premature-red fix).  The a11y requirement is that
+	// each input still carries an aria-invalid wired to the field's OWN error
+	// state — these matchers assert that, tolerant of the touched-gate prefix.
 	{
-		name: '/post amountMin input has aria-invalid',
-		ok: /value=\{amountMin\}[\s\S]{0,300}aria-invalid=\{!!amountError\}/.test(POST)
+		name: '/post amountMin input has aria-invalid (per-field, touch-gated)',
+		ok: /value=\{amountMin\}[\s\S]{0,300}aria-invalid=\{[^}]*amountMinHasError[^}]*\}/.test(POST)
 	},
 	{
-		name: '/post amountMax input has aria-invalid',
-		ok: /value=\{amountMax\}[\s\S]{0,300}aria-invalid=\{!!amountError\}/.test(POST)
+		name: '/post amountMax input has aria-invalid (per-field, touch-gated)',
+		ok: /value=\{amountMax\}[\s\S]{0,300}aria-invalid=\{[^}]*amountMaxHasError[^}]*\}/.test(POST)
 	},
 	{
 		name: '/post amount StatusLine has id="amount-error"',
@@ -145,11 +158,11 @@ const scenarios: readonly Scenario[] = [
 	},
 	{
 		name: '/post spread price input has aria-invalid',
-		ok: /value=\{spreadPercent\}[\s\S]{0,300}aria-invalid=\{!!priceModelError\}/.test(POST)
+		ok: /value=\{spreadPercent\}[\s\S]{0,300}aria-invalid=\{[^}]*priceModelError[^}]*\}/.test(POST)
 	},
 	{
-		name: '/post fixed price input has aria-invalid',
-		ok: /value=\{fixedPrice\}[\s\S]{0,300}aria-invalid=\{!!priceModelError\}/.test(POST)
+		name: '/post fixed price input has aria-invalid (touch-gated)',
+		ok: /value=\{fixedPrice\}[\s\S]{0,300}aria-invalid=\{[^}]*priceModelError[^}]*\}/.test(POST)
 	},
 	{
 		name: '/post payment-methods StatusLine has id',
@@ -167,8 +180,8 @@ const scenarios: readonly Scenario[] = [
 	},
 	{
 		name: '/post/edit amount inputs have aria-invalid',
-		ok: /bind:value=\{amountMin\}[\s\S]{0,300}aria-invalid=\{!!amountError\}/.test(POST_EDIT) &&
-			/bind:value=\{amountMax\}[\s\S]{0,300}aria-invalid=\{!!amountError\}/.test(POST_EDIT)
+		ok: /value=\{amountMin\}[\s\S]{0,300}aria-invalid=\{!!amountError\}/.test(POST_EDIT) &&
+			/value=\{amountMax\}[\s\S]{0,300}aria-invalid=\{!!amountError\}/.test(POST_EDIT)
 	},
 	{
 		name: '/post/edit amount StatusLine has id="edit-amount-error"',
@@ -241,6 +254,29 @@ const scenarios: readonly Scenario[] = [
 	{
 		name: '/post/edit passes invalid + describedById to PaymentMethodsPicker',
 		ok: /<PaymentMethodsPicker\b[\s\S]{0,400}invalid=\{!!pmError\}[\s\S]{0,200}describedById="edit-pm-error"/.test(POST_EDIT)
+	},
+	// ─── Form-field id/name (cp371 — clears the "a form field should
+	//     have an id or name attribute" autofill warning Ken flagged;
+	//     completes the cp369 form-id/name pass) ──────────────────
+	{
+		name: 'PaymentMethodsPicker search input carries a name',
+		ok: PICKER.includes('name="payment-methods-search"')
+	},
+	{
+		name: 'PaymentMethodsPicker decorative checkboxes carry a per-entry name',
+		ok: PICKER.includes('name={`pm-${entry.key}`}')
+	},
+	{
+		name: 'ProtectedTextarea exposes a name prop and forwards it to <textarea>',
+		ok: PROTECTED_TEXTAREA.includes('name?: string;') && PROTECTED_TEXTAREA.includes('{name}')
+	},
+	{
+		name: '/post + /post/edit give the terms ProtectedTextarea a name',
+		ok: POST.includes('name="order-terms"') && POST_EDIT.includes('name="order-terms"')
+	},
+	{
+		name: 'ChatComposer gives its ProtectedTextarea a name',
+		ok: CHAT_COMPOSER.includes('name="chat-message"')
 	}
 ];
 
