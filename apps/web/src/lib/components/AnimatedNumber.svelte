@@ -51,11 +51,21 @@
 		decimals?: number;
 		durationMs?: number;
 		epsilon?: number;
+		/** Whether to group thousands (1,234 vs 1234). Default true.
+		 *  The compact mobile balance variant turns this off. */
+		grouping?: boolean;
 		/** Optional aria-label override.  By default the rendered
 		 *  number is the accessible content. */
 		ariaLabel?: string;
 	}
-	let { value, decimals = 3, durationMs = 1100, epsilon = 1e-9, ariaLabel }: Props = $props();
+	let {
+		value,
+		decimals = 3,
+		durationMs = 1100,
+		epsilon = 1e-9,
+		grouping = true,
+		ariaLabel
+	}: Props = $props();
 
 	/** The number currently shown.  Tweens between values.
 	 *  Initializer reads `value` once on first render — the
@@ -200,7 +210,8 @@
 		try {
 			return displayed.toLocaleString(undefined, {
 				minimumFractionDigits: decimals,
-				maximumFractionDigits: decimals
+				maximumFractionDigits: decimals,
+				useGrouping: grouping
 			});
 		} catch {
 			return displayed.toFixed(decimals);

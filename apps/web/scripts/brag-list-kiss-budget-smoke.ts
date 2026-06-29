@@ -57,9 +57,14 @@ const REPO_ROOT = join(__dirname, '..', '..', '..');
 
 let failed = 0;
 let passed = 0;
-function pass(name: string): void { console.log(`  ✓ ${name}`); passed++; }
+function pass(name: string): void {
+	console.log(`  ✓ ${name}`);
+	passed++;
+}
 function fail(name: string, detail: string): void {
-	console.error(`  ✗ ${name}`); console.error(`      ${detail}`); failed++;
+	console.error(`  ✗ ${name}`);
+	console.error(`      ${detail}`);
+	failed++;
 }
 
 console.log('\n── brag-list-kiss-budget smoke (cp60 LL #62 / O-12) ──\n');
@@ -117,7 +122,11 @@ const content = readFileSync(BRAG_PATH, 'utf-8');
 // by +1.  The staccato exemptions above #15 move with them:
 // 197→198, 206→207, 210→211, 213→214, 215→216.  '3', '12', '14'
 // are below the insertion point and don't shift.
-const STACCATO_ALLOWLIST = new Set(['3', '12', '14', '198', '207', '211', '214', '216']);
+// cp388: a new market-maker brag entry was inserted at #11, shifting
+// every entry ≥11 down by +1.  The staccato exemptions move with them:
+// 12→13, 14→15, 198→199, 207→208, 211→212, 214→215, 216→217.  '3' is
+// before the insertion point and is unchanged.
+const STACCATO_ALLOWLIST = new Set(['3', '13', '15', '199', '208', '212', '215', '217']);
 
 const SENTENCE_LIMIT = 4;
 const WORD_LIMIT = 100;
@@ -179,7 +188,9 @@ function countWords(text: string): number {
 
 const entries = parseEntries(content);
 console.log(`Total brag entries: ${entries.length}`);
-console.log(`Budget: ≤${SENTENCE_LIMIT} sentences, ≤${WORD_LIMIT} words (staccato allowlist exempt from sentence limit)\n`);
+console.log(
+	`Budget: ≤${SENTENCE_LIMIT} sentences, ≤${WORD_LIMIT} words (staccato allowlist exempt from sentence limit)\n`
+);
 
 const overSentence: string[] = [];
 const overWord: string[] = [];
@@ -198,7 +209,9 @@ for (const e of entries) {
 }
 
 if (overSentence.length === 0) {
-	pass(`every entry within ≤${SENTENCE_LIMIT}-sentence budget (excluding ${STACCATO_ALLOWLIST.size} staccato-exempt: ${[...STACCATO_ALLOWLIST].join(', ')})`);
+	pass(
+		`every entry within ≤${SENTENCE_LIMIT}-sentence budget (excluding ${STACCATO_ALLOWLIST.size} staccato-exempt: ${[...STACCATO_ALLOWLIST].join(', ')})`
+	);
 } else {
 	fail(
 		`every entry within sentence budget`,
@@ -219,8 +232,12 @@ const total = passed + failed;
 console.log(`\n${passed} passed, ${failed} failed (${total} total)`);
 if (failed > 0) {
 	console.error('\nbrag-list-kiss-budget smoke FAILED');
-	console.error('Memory rule: BRAG LIST entries concise (~2-4 sentences), public-facing wins only, K.I.S.S. for grandma.');
-	console.error('Rewrite the over-budget entries to fit the budget.  See cp59 audit log for the template.');
+	console.error(
+		'Memory rule: BRAG LIST entries concise (~2-4 sentences), public-facing wins only, K.I.S.S. for grandma.'
+	);
+	console.error(
+		'Rewrite the over-budget entries to fit the budget.  See cp59 audit log for the template.'
+	);
 	process.exit(1);
 }
 console.log(`✓ all ${total} K.I.S.S. budget checks pass`);

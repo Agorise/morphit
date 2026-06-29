@@ -281,6 +281,7 @@
       "cancel": "Stay signed in",
       "confirm_pending": "Locking…"
     },
+    "sign_in_another_device": "Sign in to another device",
     "lock_session": "Lock session",
     "view_my_profile": "@{account} profile"
   },
@@ -1569,7 +1570,11 @@
       },
       "arbitrage_morphit_vs_exchanges": {
         "q": "How does arbitrage between Morphit and centralized/decentralized exchanges work?",
-        "a": "Morphit is built so arbitrage is easy. Listing fees are a fraction of a dollar, there's no taker fee, no withdrawal fee on the trade itself, no withdrawal limit, and no waiting period. A trader who sees a price gap between Morphit's P2P market and a CEX (Coinbase, Kraken, Binance) or a \"DEX\" (Uniswap, THORChain) can post a Morphit order at a thin spread on either side and let the orderbook fill. The price-model picker lets you pin a `spread: 0.5%` against the live CoinGecko mid-price so your order tracks the market automatically — no manual re-pricing as the worldwide price moves. As more traders use Morphit, arbitrageurs naturally pull the P2P prices into line with the broader market, which is good for everyone trading on the marketplace: tighter spreads, better fills, more predictable execution. A few practical notes: Morphit's per-trade settlement is what you make it — direct wallet-to-wallet for crypto-vs-crypto pairs (XMR for USDT, BTC for USDT), or via your bank/fiat rail of choice for crypto-vs-fiat. For high-frequency arbitrage, the Sybil-tier fee structure escalates listing costs if you post many orders quickly from the same account; this is anti-spam infrastructure, not anti-arbitrage — most arbitrageurs run a single account per direction and never hit the tier-2 threshold."
+        "a": "Morphit is built so arbitrage is easy. Listing fees are a fraction of a dollar, there's no taker fee, no withdrawal fee on the trade itself, no withdrawal limit, and no waiting period. A trader who sees a price gap between Morphit's P2P market and a CEX (Coinbase, Kraken, Binance, Hive-Engine (HE)) or a \"DEX\" (Uniswap, THORChain) can post a Morphit order at a thin spread on either side and let the orderbook fill. The price-model picker lets you pin a `spread: 0.5%` against the live CoinGecko mid-price so your order tracks the market automatically — no manual re-pricing as the worldwide price moves. As more traders use Morphit, arbitrageurs naturally pull the P2P prices into line with the broader market, which is good for everyone trading on the marketplace: tighter spreads, better fills, more predictable execution. A few practical notes: Morphit's per-trade settlement is what you make it — direct wallet-to-wallet for crypto-vs-crypto pairs (XMR for USDT, BTC for USDT), or via your bank/fiat rail of choice for crypto-vs-fiat. For high-frequency arbitrage, the Sybil-tier fee structure escalates listing costs if you post many orders quickly from the same account; this is anti-spam infrastructure, not anti-arbitrage — most arbitrageurs run a single account per direction and never hit the tier-2 threshold."
+      },
+      "market_making": {
+        "q": "Can I market-make or run a trading bot on Morphit?",
+        "a": "Yes — Morphit is built to welcome market makers and trading bots. There's no maker or taker fee: you pay only the flat listing fee of about $0.12 per order, with no withdrawal fee, no withdrawal limit, and no waiting period. The order form's `spread` price model pins an order a set percentage off the live CoinGecko mid-price (for example, `market ± 0.5%`), so it re-prices itself as the worldwide price moves instead of needing manual updates. The whole orderbook is readable programmatically over the read-only MCP tools and the RSS feeds — no API key, no account approval, no KYC — and because every order is a plain on-chain operation, a bot can post one by signing directly while the instance never holds your funds. The anti-spam Sybil-tier fee only escalates if you fire many orders from one account at once; running one account per side stays well under the threshold."
       },
       "what_is_doge": {
         "q": "What is DOGE on Morphit?",
@@ -2087,10 +2092,10 @@
     "qr_loading": "Loading QR code…",
     "qr_render_error": "Couldn't render the code. Refresh the page.",
     "qr_aria": "QR code containing a one-time login request",
-    "scan_instruction": "Open Morphit on your phone and tap \"Sign in to another device\".",
+    "scan_instruction": "On your phone, tap your avatar (top-right) and choose \"Sign in to another device\", then point its camera at this code.",
     "expires_in": "Expires in {seconds} seconds",
     "no_phone_scanner_heading": "Don't have a QR scanner?",
-    "no_phone_scanner_body": "Open Morphit on your phone, go to Sign in → \"From another device\", and follow the instructions.",
+    "no_phone_scanner_body": "You don't need a separate QR app — Morphit has its own scanner. On your phone, tap your avatar (top-right) and choose \"Sign in to another device\".",
     "received_heading": "Signed in!",
     "received_body": "Welcome, @{account}. Taking you to the orderbook…",
     "expired_heading": "This code expired",
@@ -4054,6 +4059,7 @@
       "backup_warning_body": "Adding a YubiKey re-encrypts your keystore. If you lose access to your YubiKey AND forget your password, only your 12-word seed phrase can recover this account. Please make sure it's written down somewhere safe before continuing.",
       "backup_confirm_label": "Yes, my seed phrase is backed up safely.",
       "current_password_label": "Your current password",
+      "current_password_label_named": "Your @{account} password",
       "label_label": "Label (optional)",
       "label_placeholder": "Work YubiKey",
       "slot_picker_label": "YubiKey slot",

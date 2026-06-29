@@ -209,10 +209,11 @@
 				{#if faqKey}
 					<button
 						type="button"
-						class="mt-2 text-sm font-semibold text-morphit-emerald"
+						class="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-ink-900 transition-colors hover:text-morphit-emerald dark:text-white"
 						onclick={openFaq}
 					>
-						{$_('common.learn_more')} <span class="nav-arrow nav-arrow-right" aria-hidden="true">⇨</span>
+						{$_('common.learn_more')}
+						<span class="nav-arrow nav-arrow-right" aria-hidden="true">⇨</span>
 					</button>
 				{/if}
 			</div>

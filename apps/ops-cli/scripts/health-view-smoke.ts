@@ -34,6 +34,12 @@ import {
 	candidateHealthUrls,
 	hasExplicitTarget,
 	checkCanary,
+	bytesToGB,
+	clampPct,
+	cpuTimesTotals,
+	cpuBusyPct,
+	parseMeminfo,
+	readSystemResources,
 	DEFAULT_INDEXER_HOST,
 	DEFAULT_INDEXER_PORT,
 	DEFAULT_RELAY_PORT
@@ -490,6 +496,83 @@ expect('HV-1e an unparseable string passes through', ensureHealthPath('not a url
 	// Malformed source rows are skipped, not crashed.
 	const messy = parsePriceFeedsHealth({ fx: { enabled: false }, crypto: { BTC: { source: 'external_avg', stale: false, outlier_rejected: false, sources: [null, { ok: true }, { name: 'coingecko', ok: true, last_ok_age_s: 5, price: 67000 }] } } });
 	expect('HV-9k malformed source rows skipped (only valid named one kept)', messy !== null && messy.feeds[0]!.total === 1);
+}
+
+// ── HV-10: system-resource pure helpers (CPU / memory / disk math) ──
+{
+	// bytesToGB — 1 GiB → 1.0, rounds to one decimal, 0 → 0.
+	expect('HV-10a bytesToGB(1 GiB) === 1', bytesToGB(1024 * 1024 * 1024) === 1);
+	expect('HV-10b bytesToGB rounds to 1 decimal', bytesToGB(1.55 * 1024 ** 3) === 1.6);
+	expect('HV-10c bytesToGB(0) === 0', bytesToGB(0) === 0);
+
+	// clampPct — integer 0..100, NaN-safe.
+	expect('HV-10d clampPct(-5) === 0', clampPct(-5) === 0);
+	expect('HV-10e clampPct(150) === 100', clampPct(150) === 100);
+	expect('HV-10f clampPct(49.6) rounds to 50', clampPct(49.6) === 50);
+	expect('HV-10g clampPct(NaN) === 0', clampPct(NaN) === 0);
+
+	// cpuTimesTotals — aggregate idle + total jiffies across cores.
+	const totals = cpuTimesTotals([
+		{ times: { user: 10, nice: 0, sys: 5, idle: 80, irq: 5 } },
+		{ times: { user: 20, nice: 0, sys: 10, idle: 60, irq: 10 } }
+	]);
+	expect('HV-10h cpuTimesTotals sums idle', totals.idle === 140);
+	expect('HV-10i cpuTimesTotals sums total', totals.total === 200);
+
+	// cpuBusyPct — busy fraction between two snapshots.
+	expect(
+		'HV-10j cpuBusyPct 50% busy',
+		cpuBusyPct({ idle: 100, total: 200 }, { idle: 150, total: 300 }) === 50
+	);
+	expect(
+		'HV-10k cpuBusyPct zero delta → null',
+		cpuBusyPct({ idle: 100, total: 200 }, { idle: 100, total: 200 }) === null
+	);
+	expect(
+		'HV-10l cpuBusyPct fully busy (no idle gain)',
+		cpuBusyPct({ idle: 100, total: 200 }, { idle: 100, total: 400 }) === 100
+	);
+
+	// parseMeminfo — MemTotal/MemAvailable kB → bytes; null on missing.
+	const mi = parseMeminfo('MemTotal:        4096 kB\nMemFree: 512 kB\nMemAvailable:    1024 kB\n');
+	expect(
+		'HV-10m parseMeminfo total/avail → bytes',
+		mi !== null && mi.totalBytes === 4096 * 1024 && mi.availBytes === 1024 * 1024
+	);
+	expect('HV-10n parseMeminfo garbage → null', parseMeminfo('not meminfo') === null);
+	expect(
+		'HV-10o parseMeminfo missing MemAvailable → null',
+		parseMeminfo('MemTotal: 4096 kB\nMemFree: 512 kB\n') === null
+	);
+}
+
+// ── HV-11: readSystemResources shape (impure; samples THIS host) ──
+{
+	const sys = await readSystemResources();
+	const keys = [
+		'cpuPct',
+		'memUsedGB',
+		'memTotalGB',
+		'memPct',
+		'diskUsedGB',
+		'diskAvailGB',
+		'diskTotalGB',
+		'diskPct'
+	];
+	const pctOk = (v: number | null) => v === null || (v >= 0 && v <= 100);
+	const gbOk = (v: number | null) => v === null || v >= 0;
+	expect('HV-11a readSystemResources returns all 8 keys', keys.every((k) => k in sys));
+	expect('HV-11b cpuPct in 0..100 or null', pctOk(sys.cpuPct));
+	expect('HV-11c memPct in 0..100 or null', pctOk(sys.memPct));
+	expect('HV-11d diskPct in 0..100 or null', pctOk(sys.diskPct));
+	expect('HV-11e memTotalGB ≥ 0 or null', gbOk(sys.memTotalGB));
+	expect('HV-11f diskTotalGB ≥ 0 or null', gbOk(sys.diskTotalGB));
+	// Memory has an os.totalmem() fallback that never throws, so on any
+	// real host memTotalGB must resolve to a positive number.
+	expect(
+		'HV-11g memTotalGB is a positive number on this host',
+		typeof sys.memTotalGB === 'number' && (sys.memTotalGB as number) > 0
+	);
 }
 
 console.log('');

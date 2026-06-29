@@ -31,6 +31,7 @@
 	import { page } from '$app/stores';
 
 	import Head from '$components/Head.svelte';
+	import TermsText from '$components/TermsText.svelte';
 	import RssFeedPicker from '$components/RssFeedPicker.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
 	import BusyButton from '$components/BusyButton.svelte';
@@ -111,8 +112,7 @@
 	let feedbackError = $state('');
 
 	// cp165 lazy-loaders for /[account] conditional components
-	const loadMyBalanceCard = () =>
-		import('$components/MyBalanceCard.svelte').then((m) => m.default);
+	const loadMyBalanceCard = () => import('$components/MyBalanceCard.svelte').then((m) => m.default);
 	const loadRespondToFeedbackForm = () =>
 		import('$components/RespondToFeedbackForm.svelte').then((m) => m.default);
 	let loadingMore = $state(false);
@@ -473,7 +473,15 @@
 					decoding="async"
 				/>
 			{:else}
-				<img src={heroAvatar} alt="" width="96" height="96" class="rounded-2xl" loading="lazy" decoding="async" />
+				<img
+					src={heroAvatar}
+					alt=""
+					width="96"
+					height="96"
+					class="rounded-2xl"
+					loading="lazy"
+					decoding="async"
+				/>
 			{/if}
 			{#if validatedNostrUrl || validatedBlurtMediaUrl}
 				<div class="flex flex-col gap-2 pb-1">
@@ -722,7 +730,9 @@
 									{/if}
 								</div>
 								{#if o.terms}
-									<p class="mt-2 text-sm text-ink-700 dark:text-ink-200">{o.terms}</p>
+									<p class="mt-2 text-sm text-ink-700 dark:text-ink-200">
+										<TermsText text={o.terms} />
+									</p>
 								{/if}
 							</div>
 						</a>
@@ -917,7 +927,7 @@
 												void loadFeedbackPage();
 											}}
 											onCancel={() => (replyingTo = null)}
-									/>
+										/>
 									{/await}
 								{:else}
 									<div class="mt-3">

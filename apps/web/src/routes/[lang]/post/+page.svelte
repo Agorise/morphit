@@ -82,7 +82,12 @@
 	import { broadcastNewOrder, BroadcastError } from '$blurt/ops/order';
 	import { computeFee, BASE_FEE_BLURT, type FeeQuote } from '$lib/orders/fee';
 	import { getOrdersByAccount } from '$lib/indexer/client';
-	import { ASSET_TICKERS, FIRST_ORDER_MIN_USD, isAssetTicker, type AssetTicker } from '@morphit/asset-registry';
+	import {
+		ASSET_TICKERS,
+		FIRST_ORDER_MIN_USD,
+		isAssetTicker,
+		type AssetTicker
+	} from '@morphit/asset-registry';
 	import {
 		checkWaiverEligibility,
 		fetchListingFee,
@@ -738,10 +743,7 @@
 		if (trimmed.length === 0) {
 			return $_('post_order.fee_method.tx_proof_required');
 		}
-		if (
-			!trimmed.startsWith('OutProofV1') &&
-			!trimmed.startsWith('OutProofV2')
-		) {
+		if (!trimmed.startsWith('OutProofV1') && !trimmed.startsWith('OutProofV2')) {
 			return $_('post_order.fee_method.tx_proof_malformed_prefix');
 		}
 		if (trimmed.length < 64 || trimmed.length > 4096) {
@@ -773,40 +775,26 @@
 		return 'ok';
 	});
 
-	/** Tracks the last asset value we applied a fee-method
-	 *  pre-selection for.  Used to fire the asset→fee-method
-	 *  coercion exactly once per asset change, so explicit
-	 *  later fee-method edits by the user stick. */
-	let lastAutoSelectedForAsset = $state<Asset | null>(null);
-	// cp384 (#8): latch so the first-buy waiver auto-selects ONCE when it
-	// first becomes available — NOT on every effect run. Without it, an
-	// existing Blurt user who clicks "Pay in BLURT" got snapped straight back
-	// to the waiver (the old `waiverOffered && choice==='blurt' → waiver` ran
-	// on every change and reverted the choice). Plain (non-reactive) let — a
-	// latch, deliberately not $state. Re-armed when the waiver goes away.
+	// Latch so the first-buy waiver auto-selects ONCE when it first becomes
+	// available — NOT on every effect run. (cp384 #8 added it so an explicit
+	// BLURT choice wouldn't get reverted; cp386 #3 then hid the BLURT fee on
+	// the waiver card entirely, so the waiver is simply the first-buy default
+	// now.) Plain (non-reactive) let — a latch, deliberately not $state.
+	// Re-armed when the waiver goes away.
 	let waiverAutoSelectDone = false;
 
 	$effect(() => {
-		// When the user picks XMR or BTC as the trade asset, default
-		// the fee method to match.  Monero traders shouldn't have to
-		// click around to find the XMR fee option — it should be the
-		// natural default when they're trading XMR.  Same for BTC.
-		// Fires once per asset change so explicit later edits stick.
-		if (asset !== null && asset !== lastAutoSelectedForAsset) {
-			lastAutoSelectedForAsset = asset;
-			if (asset === 'XMR' && feeMethodChoice === 'blurt') {
-				feeMethodChoice = 'xmr';
-			} else if (asset === 'BTC' && feeMethodChoice === 'blurt') {
-				feeMethodChoice = 'btc';
-			}
-		}
+		// cp386 (#3): on the FIRST-trade waiver card we don't offer paying the
+		// fee in the asset being acquired ("buy BLURT with BLURT") — those
+		// radios are hidden there and the reconciliation at the end of this
+		// effect keeps feeMethodChoice off them. Scope is the waiver card only,
+		// so the old XMR→xmr / BTC→btc auto-default is gone; later trades keep
+		// every fee option (pay the ~$1 fee in what you already hold).
 
-		// Auto-select the waiver ONCE when it first becomes available — but do
-		// NOT keep reverting an explicit BLURT choice. Existing Blurt users
-		// already hold BLURT and may want to pay the listing fee in it instead
-		// of spending their one free-first-buy waiver; the latch lets that
-		// choice stick (cp384 #8). Only blurt → waiver (never override an
-		// explicit BTC/XMR choice).
+		// Auto-select the waiver ONCE when it first becomes available. On the
+		// waiver card the BLURT fee is hidden (cp386 #3), so the free waiver is
+		// the natural first-buy default; an explicit BTC/XMR choice still
+		// sticks. Only blurt → waiver (never override an explicit BTC/XMR).
 		if (waiverOffered && !waiverAutoSelectDone) {
 			waiverAutoSelectDone = true;
 			if (feeMethodChoice === 'blurt') {
@@ -835,6 +823,26 @@
 			} else {
 				feeMethodChoice = 'blurt';
 			}
+		}
+
+		// cp386 (#3): on the FIRST-trade waiver card we hide the fee option
+		// whose asset matches the trade (you're acquiring that asset and hold
+		// none yet — e.g. "buy BLURT with BLURT" — and the free waiver is right
+		// there). Scope is the waiver card ONLY: on later trades the user holds
+		// the asset, so paying a ~$1 fee in it (esp. BLURT) is the easy path and
+		// stays offered — we never force grandma onto a BTC/XMR txid for $1.
+		// This guard just keeps feeMethodChoice off a now-hidden option on the
+		// waiver card (restored draft, or asset switched to match a picked fee).
+		const selectedFeeAsset =
+			feeMethodChoice === 'blurt'
+				? 'BLURT'
+				: feeMethodChoice === 'btc'
+					? 'BTC'
+					: feeMethodChoice === 'xmr'
+						? 'XMR'
+						: null;
+		if (waiverOffered && selectedFeeAsset !== null && selectedFeeAsset === asset) {
+			feeMethodChoice = asset === 'BLURT' ? 'waived_first_buy' : 'blurt';
 		}
 	});
 
@@ -1084,11 +1092,23 @@
 				// user to re-pick rather than silently broadcasting
 				// a stale value (same posture as the /post/edit
 				// load hydration added in cp36).
-				if (asset === 'USDT' && typeof p.assetNetwork === 'string' && isUsdtNetwork(p.assetNetwork)) {
+				if (
+					asset === 'USDT' &&
+					typeof p.assetNetwork === 'string' &&
+					isUsdtNetwork(p.assetNetwork)
+				) {
 					usdtNetwork = p.assetNetwork;
-				} else if (asset === 'USDC' && typeof p.assetNetwork === 'string' && isUsdcNetwork(p.assetNetwork)) {
+				} else if (
+					asset === 'USDC' &&
+					typeof p.assetNetwork === 'string' &&
+					isUsdcNetwork(p.assetNetwork)
+				) {
 					usdcNetwork = p.assetNetwork;
-				} else if (asset === 'DAI' && typeof p.assetNetwork === 'string' && isDaiNetwork(p.assetNetwork)) {
+				} else if (
+					asset === 'DAI' &&
+					typeof p.assetNetwork === 'string' &&
+					isDaiNetwork(p.assetNetwork)
+				) {
 					daiNetwork = p.assetNetwork;
 				}
 				if (typeof p.amountMin === 'string') amountMin = p.amountMin;
@@ -2175,9 +2195,7 @@
 				     is replaced by a fixed, explained "Buy BLURT" card and the
 				     side is held to buy / asset to BLURT in the script. -->
 				<div class="rounded-xl border-2 border-morphit-emerald/40 bg-morphit-emerald/5 p-4">
-					<p
-						class="flex items-center gap-2 font-display text-base font-bold text-morphit-emerald"
-					>
+					<p class="flex items-center gap-2 font-display text-base font-bold text-morphit-emerald">
 						<span aria-hidden="true">🌱</span>
 						{$_('post_order.form.first_trade_title')}
 					</p>
@@ -2187,27 +2205,27 @@
 				</div>
 			{:else}
 				<div class="grid gap-3 sm:grid-cols-2">
-				<button
-					type="button"
-					onclick={() => (side = 'buy')}
-					class="rounded-xl border-2 px-4 py-3 text-left transition active:scale-[0.98] {side ===
-					'buy'
-						? 'border-morphit-emerald bg-emerald-50 dark:bg-ink-800'
-						: 'border-ink-200 dark:border-ink-700'}"
-				>
-					<span class="font-semibold">{$_('post_order.form.side_buy')}</span>
-				</button>
-				<button
-					type="button"
-					onclick={() => (side = 'sell')}
-					class="rounded-xl border-2 px-4 py-3 text-left transition active:scale-[0.98] {side ===
-					'sell'
-						? 'border-morphit-emerald bg-emerald-50 dark:bg-ink-800'
-						: 'border-ink-200 dark:border-ink-700'}"
-				>
-					<span class="font-semibold">{$_('post_order.form.side_sell')}</span>
-				</button>
-			</div>
+					<button
+						type="button"
+						onclick={() => (side = 'buy')}
+						class="rounded-xl border-2 px-4 py-3 text-left transition active:scale-[0.98] {side ===
+						'buy'
+							? 'border-morphit-emerald bg-emerald-50 dark:bg-ink-800'
+							: 'border-ink-200 dark:border-ink-700'}"
+					>
+						<span class="font-semibold">{$_('post_order.form.side_buy')}</span>
+					</button>
+					<button
+						type="button"
+						onclick={() => (side = 'sell')}
+						class="rounded-xl border-2 px-4 py-3 text-left transition active:scale-[0.98] {side ===
+						'sell'
+							? 'border-morphit-emerald bg-emerald-50 dark:bg-ink-800'
+							: 'border-ink-200 dark:border-ink-700'}"
+					>
+						<span class="font-semibold">{$_('post_order.form.side_sell')}</span>
+					</button>
+				</div>
 			{/if}
 			<p class="mb-2 mt-6 flex items-center gap-2 text-sm font-semibold">
 				{$_('post_order.form.asset_label')}
@@ -2257,10 +2275,7 @@
 							{a}
 						</button>
 						{#if a === 'BLURT'}
-							<Tooltip
-								textKey="post_order.form.asset_explainer.blurt"
-								faqKey="what_is_blurt"
-							/>
+							<Tooltip textKey="post_order.form.asset_explainer.blurt" faqKey="what_is_blurt" />
 						{:else if a === 'BTC'}
 							<Tooltip textKey="post_order.form.asset_explainer.btc" />
 						{:else if a === 'XMR'}
@@ -2751,6 +2766,19 @@
 	{:else if phase === 'reviewing'}
 		<!-- Review: fee + summary + post button. -->
 
+		{#if summarySentence}
+			<div
+				class="mb-4 rounded-xl border-2 border-morphit-emerald/40 bg-morphit-emerald/5 p-3"
+				role="status"
+				aria-live="polite"
+			>
+				<p class="text-sm text-ink-800 dark:text-ink-100">
+					<span aria-hidden="true">📝</span>
+					{summarySentence}
+				</p>
+			</div>
+		{/if}
+
 		<!-- ADR-0011: waiver affordance. When eligible+buy, the UI
 		     defaults to waiver. Users can still choose BLURT fee via
 		     the radio below if they want (e.g. to keep the waiver for
@@ -2792,51 +2820,57 @@
 									</span>
 								</span>
 							</label>
-							<label class="flex items-start gap-2 py-1">
-								<input
-									type="radio"
-									name="fee-method"
-									value="blurt"
-									bind:group={feeMethodChoice}
-									class="mt-0.5 accent-morphit-emerald"
-								/>
-								<span class="text-sm">
-									<span class="font-semibold">{$_('post_order.fee_method.blurt_label')}</span>
-									<span class="block text-xs text-ink-500">
-										{$_('post_order.fee_method.blurt_hint')}
+							{#if asset !== 'BLURT'}
+								<label class="flex items-start gap-2 py-1">
+									<input
+										type="radio"
+										name="fee-method"
+										value="blurt"
+										bind:group={feeMethodChoice}
+										class="mt-0.5 accent-morphit-emerald"
+									/>
+									<span class="text-sm">
+										<span class="font-semibold">{$_('post_order.fee_method.blurt_label')}</span>
+										<span class="block text-xs text-ink-500">
+											{$_('post_order.fee_method.blurt_hint')}
+										</span>
 									</span>
-								</span>
-							</label>
-							<label class="flex items-start gap-2 py-1">
-								<input
-									type="radio"
-									name="fee-method"
-									value="btc"
-									bind:group={feeMethodChoice}
-									class="mt-0.5 accent-morphit-emerald"
-								/>
-								<span class="text-sm">
-									<span class="font-semibold">{$_('post_order.fee_method.btc_label')}</span>
-									<span class="block text-xs text-ink-500">
-										{$_('post_order.fee_method.btc_hint')}
+								</label>
+							{/if}
+							{#if asset !== 'BTC'}
+								<label class="flex items-start gap-2 py-1">
+									<input
+										type="radio"
+										name="fee-method"
+										value="btc"
+										bind:group={feeMethodChoice}
+										class="mt-0.5 accent-morphit-emerald"
+									/>
+									<span class="text-sm">
+										<span class="font-semibold">{$_('post_order.fee_method.btc_label')}</span>
+										<span class="block text-xs text-ink-500">
+											{$_('post_order.fee_method.btc_hint')}
+										</span>
 									</span>
-								</span>
-							</label>
-							<label class="flex items-start gap-2 py-1">
-								<input
-									type="radio"
-									name="fee-method"
-									value="xmr"
-									bind:group={feeMethodChoice}
-									class="mt-0.5 accent-morphit-emerald"
-								/>
-								<span class="text-sm">
-									<span class="font-semibold">{$_('post_order.fee_method.xmr_label')}</span>
-									<span class="block text-xs text-ink-500">
-										{$_('post_order.fee_method.xmr_hint')}
+								</label>
+							{/if}
+							{#if asset !== 'XMR'}
+								<label class="flex items-start gap-2 py-1">
+									<input
+										type="radio"
+										name="fee-method"
+										value="xmr"
+										bind:group={feeMethodChoice}
+										class="mt-0.5 accent-morphit-emerald"
+									/>
+									<span class="text-sm">
+										<span class="font-semibold">{$_('post_order.fee_method.xmr_label')}</span>
+										<span class="block text-xs text-ink-500">
+											{$_('post_order.fee_method.xmr_hint')}
+										</span>
 									</span>
-								</span>
-							</label>
+								</label>
+							{/if}
 						</fieldset>
 					</div>
 				</div>
@@ -2988,7 +3022,9 @@
 				     one payment, nothing else about the user's
 				     wallet.  Render BEFORE the textarea so the user
 				     understands what they're sharing. -->
-				<p class="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
+				<p
+					class="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+				>
 					{$_('post_order.fee_method.tx_proof_privacy_note')}
 				</p>
 
@@ -2998,29 +3034,43 @@
 				     no required external doc lookup).  Default
 				     collapsed to keep the page short for users who
 				     already know the flow. -->
-				<details class="mb-3 rounded-lg border border-ink-200 bg-ink-50 dark:border-ink-700 dark:bg-ink-900">
+				<details
+					class="mb-3 rounded-lg border border-ink-200 bg-ink-50 dark:border-ink-700 dark:bg-ink-900"
+				>
 					<summary class="cursor-pointer select-none px-3 py-2 text-sm font-semibold">
 						{$_('post_order.fee_method.tx_proof_how_to_label')}
 					</summary>
-					<div class="space-y-3 border-t border-ink-200 px-3 py-3 text-xs text-ink-700 dark:border-ink-700 dark:text-ink-300">
+					<div
+						class="space-y-3 border-t border-ink-200 px-3 py-3 text-xs text-ink-700 dark:border-ink-700 dark:text-ink-300"
+					>
 						<div>
-							<div class="font-semibold">{$_('post_order.fee_method.tx_proof_how_to_cli_heading')}</div>
+							<div class="font-semibold">
+								{$_('post_order.fee_method.tx_proof_how_to_cli_heading')}
+							</div>
 							<div class="mt-1">{$_('post_order.fee_method.tx_proof_how_to_cli_body')}</div>
 						</div>
 						<div>
-							<div class="font-semibold">{$_('post_order.fee_method.tx_proof_how_to_gui_heading')}</div>
+							<div class="font-semibold">
+								{$_('post_order.fee_method.tx_proof_how_to_gui_heading')}
+							</div>
 							<div class="mt-1">{$_('post_order.fee_method.tx_proof_how_to_gui_body')}</div>
 						</div>
 						<div>
-							<div class="font-semibold">{$_('post_order.fee_method.tx_proof_how_to_cake_heading')}</div>
+							<div class="font-semibold">
+								{$_('post_order.fee_method.tx_proof_how_to_cake_heading')}
+							</div>
 							<div class="mt-1">{$_('post_order.fee_method.tx_proof_how_to_cake_body')}</div>
 						</div>
 						<div>
-							<div class="font-semibold">{$_('post_order.fee_method.tx_proof_how_to_feather_heading')}</div>
+							<div class="font-semibold">
+								{$_('post_order.fee_method.tx_proof_how_to_feather_heading')}
+							</div>
 							<div class="mt-1">{$_('post_order.fee_method.tx_proof_how_to_feather_body')}</div>
 						</div>
 						<div>
-							<div class="font-semibold">{$_('post_order.fee_method.tx_proof_how_to_other_heading')}</div>
+							<div class="font-semibold">
+								{$_('post_order.fee_method.tx_proof_how_to_other_heading')}
+							</div>
 							<div class="mt-1">{$_('post_order.fee_method.tx_proof_how_to_other_body')}</div>
 						</div>
 					</div>
@@ -3116,14 +3166,14 @@
 
 		<div class="flex flex-col gap-3 sm:flex-row sm:justify-between">
 			<BusyButton variant="link" onclick={backToEditing}>
-				<span class="nav-arrow nav-arrow-left" aria-hidden="true">⇦</span> {$_('common.back')}
+				<span class="nav-arrow nav-arrow-left" aria-hidden="true">⇦</span>
+				{$_('common.back')}
 			</BusyButton>
 			<BusyButton
 				variant="primary"
 				disabled={(feeMethodChoice === 'blurt' && !feeQuote) ||
 					(feeMethodChoice === 'btc' && externalTxIdError !== 'ok') ||
-					(feeMethodChoice === 'xmr' &&
-						(externalTxIdError !== 'ok' || txProofError !== 'ok'))}
+					(feeMethodChoice === 'xmr' && (externalTxIdError !== 'ok' || txProofError !== 'ok'))}
 				onclick={goToPasswordPrompt}
 			>
 				{#if feeMethodChoice === 'waived_first_buy'}
@@ -3173,7 +3223,8 @@
 						password = '';
 					}}
 				>
-					<span class="nav-arrow nav-arrow-left" aria-hidden="true">⇦</span> {$_('common.cancel')}
+					<span class="nav-arrow nav-arrow-left" aria-hidden="true">⇦</span>
+					{$_('common.cancel')}
 				</BusyButton>
 				<BusyButton variant="primary" disabled={password.length < 8} onclick={submitBroadcast}>
 					{$_('common.unlock')}
@@ -3318,10 +3369,8 @@
 						class="text-morphit-orchid group mt-3 inline-block font-semibold underline decoration-dotted underline-offset-2 transition hover:decoration-solid"
 						href={lp('/my/orders')}
 					>
-						{$_('post_order.success.feature_upsell_cta')} <span
-							class="nav-arrow nav-arrow-right"
-							aria-hidden="true">⇨</span
-						>
+						{$_('post_order.success.feature_upsell_cta')}
+						<span class="nav-arrow nav-arrow-right" aria-hidden="true">⇨</span>
 					</a>
 				</div>
 			{/if}

@@ -2052,7 +2052,15 @@ DAI runs on four networks Morphit supports: Ethereum (ERC-20, native), Polygon (
 
 **FAQ key:** `arbitrage_morphit_vs_exchanges`
 
-Morphit is built so arbitrage is easy. Listing fees are a fraction of a dollar, there's no taker fee, no withdrawal fee on the trade itself, no withdrawal limit, and no waiting period. A trader who sees a price gap between Morphit's P2P market and a CEX (Coinbase, Kraken, Binance) or a "DEX" (Uniswap, THORChain) can post a Morphit order at a thin spread on either side and let the orderbook fill. The price-model picker lets you pin a `spread: 0.5%` against the live CoinGecko mid-price so your order tracks the market automatically — no manual re-pricing as the worldwide price moves. As more traders use Morphit, arbitrageurs naturally pull the P2P prices into line with the broader market, which is good for everyone trading on the marketplace: tighter spreads, better fills, more predictable execution. A few practical notes: Morphit's per-trade settlement is what you make it — direct wallet-to-wallet for crypto-vs-crypto pairs (XMR for USDT, BTC for USDT), or via your bank/fiat rail of choice for crypto-vs-fiat. For high-frequency arbitrage, the Sybil-tier fee structure escalates listing costs if you post many orders quickly from the same account; this is anti-spam infrastructure, not anti-arbitrage — most arbitrageurs run a single account per direction and never hit the tier-2 threshold.
+Morphit is built so arbitrage is easy. Listing fees are a fraction of a dollar, there's no taker fee, no withdrawal fee on the trade itself, no withdrawal limit, and no waiting period. A trader who sees a price gap between Morphit's P2P market and a CEX (Coinbase, Kraken, Binance, Hive-Engine (HE)) or a "DEX" (Uniswap, THORChain) can post a Morphit order at a thin spread on either side and let the orderbook fill. The price-model picker lets you pin a `spread: 0.5%` against the live CoinGecko mid-price so your order tracks the market automatically — no manual re-pricing as the worldwide price moves. As more traders use Morphit, arbitrageurs naturally pull the P2P prices into line with the broader market, which is good for everyone trading on the marketplace: tighter spreads, better fills, more predictable execution. A few practical notes: Morphit's per-trade settlement is what you make it — direct wallet-to-wallet for crypto-vs-crypto pairs (XMR for USDT, BTC for USDT), or via your bank/fiat rail of choice for crypto-vs-fiat. For high-frequency arbitrage, the Sybil-tier fee structure escalates listing costs if you post many orders quickly from the same account; this is anti-spam infrastructure, not anti-arbitrage — most arbitrageurs run a single account per direction and never hit the tier-2 threshold.
+
+---
+
+## Can I market-make or run a trading bot on Morphit?
+
+**FAQ key:** `market_making`
+
+Yes — Morphit is built to welcome market makers and trading bots. There's no maker or taker fee: you pay only the flat listing fee of about $0.12 per order, with no withdrawal fee, no withdrawal limit, and no waiting period. The order form's `spread` price model pins an order a set percentage off the live CoinGecko mid-price (for example, `market ± 0.5%`), so it re-prices itself as the worldwide price moves instead of needing manual updates. The whole orderbook is readable programmatically over the read-only MCP tools and the RSS feeds — no API key, no account approval, no KYC — and because every order is a plain on-chain operation, a bot can post one by signing directly while the instance never holds your funds. The anti-spam Sybil-tier fee only escalates if you fire many orders from one account at once; running one account per side stays well under the threshold.
 
 ---
 
@@ -2317,7 +2325,7 @@ For the full per-coin guidance see /privacy/{asset} (e.g. /privacy/xmr, /privacy
 
 ## Metadata
 
-Total FAQ entries: 139
+Total FAQ entries: 140
 Canonical URL: https://morphit.io/faq
 License: AGPL-3.0 (content may be quoted/redistributed)
 Source of truth: https://git.agorise.net/agorise/morphit

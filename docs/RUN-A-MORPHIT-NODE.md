@@ -195,6 +195,8 @@ Once registered, orders posted on your instance carry your tag, and your share o
 
 **Is the USD price healthy?** Run `morphit-ops health` and look at the price-feed lines. Morphit reads the BLURT price from several public providers at once and uses the middle value, so one provider being off doesn't move your price. The health view lists each provider, whether it answered, and the price it gave — so if one (say, a particular API) is down, you'll see a `down` next to its name and can ignore it unless several go dark at once. This detail shows only in your own `morphit-ops health` on the server, never on the public `https://yourdomain.com/v1/health` page.
 
+**Is the server itself OK?** The same `morphit-ops health` view has a **System** section showing your box's CPU, memory, and disk usage (the disk numbers match `df -h /`). It's a quick gut-check: if the disk is nearly full or the CPU is pegged at 100%, that's usually why things feel slow or the indexer falls behind. These numbers are read right off your own machine and are never exposed on the public health page.
+
 ---
 
 ## 11. Reference and hardening

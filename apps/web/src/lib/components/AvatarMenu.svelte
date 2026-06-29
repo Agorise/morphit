@@ -75,6 +75,15 @@
 	 *  correctly returns false for since no envelope is persisted. */
 	const canLock = $derived(hasPersistedKeystore() && !$isPairedReadOnly);
 
+	/** Whether to show "Sign in to another device" (QR-pair, ADR-0022).
+	 *  Only an UNLOCKED, named session can sign the pairing challenge that
+	 *  authorizes a desktop — so this is hidden for paired-readonly
+	 *  sessions (they hold no signing keys) and before account-name
+	 *  registration. Works for every keystore mode (password/keyfile/
+	 *  seed), unlike canLock which is password-mode only. Routes to the
+	 *  phone-side camera scanner at /scan-login. */
+	const canPairDevice = $derived(!$isPairedReadOnly && $blurtAccountName !== null);
+
 	/** Signed-out header CTA label. When this device has a remembered
 	 *  keystore, clicking it lands on the welcome-back UNLOCK screen
 	 *  (not a fresh import), so the button reads "Unlock" instead of
@@ -303,7 +312,7 @@
 				     profileProps → sanitizeSvg). Same {@html} treatment as
 				     the profile-page hero and IdentityLabel. -->
 				<span
-					class="block h-10 w-10 overflow-hidden rounded-full bg-ink-200/50 [&>svg]:h-full [&>svg]:w-full dark:bg-ink-800/50"
+					class="block h-10 w-10 overflow-hidden rounded-full bg-ink-200/50 dark:bg-ink-800/50 [&>svg]:h-full [&>svg]:w-full"
 					aria-hidden="true"
 				>
 					{@html selfAvatar.svg}
@@ -483,10 +492,7 @@
 							class="group inline-flex items-center text-xs font-semibold text-morphit-emerald transition hover:brightness-110"
 						>
 							{$_('avatar_menu.notification_settings')}
-							<span
-								class="nav-arrow nav-arrow-right"
-								aria-hidden="true">⇨</span
-							>
+							<span class="nav-arrow nav-arrow-right" aria-hidden="true">⇨</span>
 						</a>
 					</div>
 				{:else}
@@ -647,7 +653,9 @@
 										<circle cx="12" cy="8" r="4" />
 										<path d="M4 21a8 8 0 0 1 16 0" />
 									</svg>
-									<span class="text-sm font-semibold">{$_('avatar_menu.view_my_profile', { values: { account: myAccount } })}</span>
+									<span class="text-sm font-semibold"
+										>{$_('avatar_menu.view_my_profile', { values: { account: myAccount } })}</span
+									>
 								</button>
 							</li>
 						{/if}
@@ -754,6 +762,52 @@
 						</li>
 
 						<li class="my-1 border-t border-ink-100 dark:border-ink-800"></li>
+
+						{#if canPairDevice}
+							<!-- Sign in to another device (QR-pair, ADR-0022).
+							     Opens the phone-side camera scanner; the user
+							     points it at the QR shown on the desktop's
+							     /login/qr-pair screen to authorize a read-only
+							     desktop session. Hidden for paired-readonly
+							     sessions (no signing keys to authorize with). -->
+							<li>
+								<a
+									href={lp('/scan-login')}
+									onclick={close}
+									role="menuitem"
+									class="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left hover:bg-ink-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:hover:bg-ink-800"
+								>
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										width="18"
+										height="18"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										aria-hidden="true"
+									>
+										<rect x="3" y="3" width="5" height="5" rx="1" />
+										<rect x="16" y="3" width="5" height="5" rx="1" />
+										<rect x="3" y="16" width="5" height="5" rx="1" />
+										<path d="M21 16h-3a2 2 0 0 0-2 2v3" />
+										<path d="M21 21v.01" />
+										<path d="M12 7v3a2 2 0 0 1-2 2H7" />
+										<path d="M3 12h.01" />
+										<path d="M12 3h.01" />
+										<path d="M12 16v.01" />
+										<path d="M16 12h1" />
+										<path d="M21 12v.01" />
+										<path d="M12 21v-1" />
+									</svg>
+									<span class="text-sm font-semibold"
+										>{$_('avatar_menu.sign_in_another_device')}</span
+									>
+								</a>
+							</li>
+						{/if}
 
 						{#if canLock}
 							<!-- Lock Session — only visible for users

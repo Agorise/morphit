@@ -503,7 +503,19 @@
 					{$_('profile.my_balance.blurt_label')}
 				</dt>
 				<dd class="font-mono text-lg font-semibold">
-					<AnimatedNumber value={blurtBalance} decimals={3} durationMs={3000} />{#if usdLabel}<span
+					<!-- Desktop: full BLURT precision with grouping (e.g. 5,055.031). -->
+					<span class="hidden sm:inline"
+						><AnimatedNumber value={blurtBalance} decimals={3} durationMs={3000} /></span
+					><!-- Mobile: floored integer, no thousands separator (e.g. 5055).
+					     The 3-column card squishes the full number on narrow phones. -->
+					<span class="sm:hidden"
+						><AnimatedNumber
+							value={Math.floor(blurtBalance)}
+							decimals={0}
+							grouping={false}
+							durationMs={3000}
+						/></span
+					>{#if usdLabel}<span
 							class="ml-1 font-sans text-xs font-normal text-ink-500 dark:text-ink-400"
 							>({usdLabel})</span
 						>{/if}
@@ -514,7 +526,18 @@
 					{$_('profile.my_balance.bp_staked_label')}
 				</dt>
 				<dd class="font-mono text-lg font-semibold">
-					<AnimatedNumber value={bpBalance} decimals={3} durationMs={3000} />
+					<!-- Desktop: full BP precision with grouping. -->
+					<span class="hidden sm:inline"
+						><AnimatedNumber value={bpBalance} decimals={3} durationMs={3000} /></span
+					><!-- Mobile: floored integer, no thousands separator. -->
+					<span class="sm:hidden"
+						><AnimatedNumber
+							value={Math.floor(bpBalance)}
+							decimals={0}
+							grouping={false}
+							durationMs={3000}
+						/></span
+					>
 				</dd>
 				{#if Number.isFinite(vestingApr)}
 					<!-- Batch K: APR display.  Phrased as "Currently
@@ -540,7 +563,9 @@
 		</dl>
 
 		{#if showLowBalanceHint || showLowManaHint}
-			<p class="mt-3 flex items-start gap-1.5 text-xs font-medium text-amber-600 dark:text-amber-400">
+			<p
+				class="mt-3 flex items-start gap-1.5 text-xs font-medium text-amber-600 dark:text-amber-400"
+			>
 				<span aria-hidden="true" class="flex-none">⚠</span>
 				<span>
 					{#if showLowBalanceHint}

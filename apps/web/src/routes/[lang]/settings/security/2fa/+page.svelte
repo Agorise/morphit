@@ -45,6 +45,7 @@
 		isLayeredEnvelope
 	} from '$crypto/keystoreTotpEnroll';
 	import { wipeFullIdentity } from '$crypto/keygen';
+	import { getUserBlurtAccount } from '$lib/blurt/ops/profile';
 	import {
 		generateSecret,
 		otpauthUri,
@@ -102,6 +103,7 @@
 	let totpCode = $state('');
 	let errorMsg = $state('');
 	let busy = $state(false);
+	let copied = $state(false);
 	let layeredKeystoreWarning = $state(false);
 
 	// "I have saved" acknowledgment must be ticked before continuing.
@@ -180,7 +182,7 @@
 				const secret = await generateSecret();
 				pendingSecret = secret;
 				pendingSecretB32 = base32Encode(secret);
-				const accountLabel = `${$page.params.lang || 'user'}@morphit`;
+				const accountLabel = `${getUserBlurtAccount() || 'account'}@morphit`;
 				const uri = otpauthUri(accountLabel, pendingSecretB32);
 				// Render QR.
 				try {
@@ -262,12 +264,7 @@
 		try {
 			const full = await decryptIdentity(env, password);
 			try {
-				const result = await enrollTotp(
-					full,
-					password,
-					pendingSecret,
-					pendingBackupCodes
-				);
+				const result = await enrollTotp(full, password, pendingSecret, pendingBackupCodes);
 				writeEnvelope(result.envelope);
 				updateEnvelope(result.envelope);
 				hasTotp = true;
@@ -411,10 +408,28 @@
 		phase = hasTotp ? 'enrolled_idle' : 'not_enrolled_init';
 	}
 
+	let copyResetTimer: ReturnType<typeof setTimeout> | undefined;
 	function copySecret(): void {
 		if (browser && pendingSecretB32) {
-			void navigator.clipboard.writeText(pendingSecretB32).catch(() => {});
+			void navigator.clipboard
+				.writeText(pendingSecretB32)
+				.then(() => {
+					copied = true;
+					clearTimeout(copyResetTimer);
+					copyResetTimer = setTimeout(() => (copied = false), 1500);
+				})
+				.catch(() => {});
 		}
+	}
+
+	// The displayed code rotates as "123 456" in some authenticators, and
+	// users paste/type it with the space. Strip everything but digits as
+	// they type (capped at 6) so the value is always a clean 6-digit code —
+	// otherwise the input's native validation silently blocks submit on the
+	// space and confirmEnrollmentCode never runs.
+	function sanitizeTotpCode(e: Event): void {
+		const t = e.currentTarget as HTMLInputElement;
+		totpCode = t.value.replace(/\D/g, '').slice(0, 6);
 	}
 </script>
 
@@ -426,7 +441,10 @@
 <main class="totp-page">
 	<RequireLiveSession />
 	<header>
-		<button class="back" onclick={backToSettings} type="button"><span class="nav-arrow nav-arrow-left" aria-hidden="true">⇦</span> {$_('settings.title')}</button>
+		<button class="back" onclick={backToSettings} type="button"
+			><span class="nav-arrow nav-arrow-left" aria-hidden="true">⇦</span>
+			{$_('settings.title')}</button
+		>
 		<h1 class="font-display text-3xl font-extrabold md:text-4xl">
 			<span class="brand-gradient-text">{$_('settings.totp.heading')}</span>
 		</h1>
@@ -535,7 +553,9 @@
 			<div class="manual">
 				<p>{$_('settings.totp.enroll.manual_label')}</p>
 				<code>{pendingSecretB32}</code>
-				<button type="button" onclick={copySecret}>{$_('common.copy')}</button>
+				<button type="button" class="copy-btn" class:copied onclick={copySecret}
+					>{copied ? $_('common.copied') : $_('common.copy')}</button
+				>
 			</div>
 
 			<h2>{$_('settings.totp.enroll.step3_title')}</h2>
@@ -551,10 +571,10 @@
 					<input
 						type="text"
 						inputmode="numeric"
-						pattern="\d{6}"
 						maxlength="7"
 						placeholder={$_('settings.totp.enroll.code_placeholder')}
-						bind:value={totpCode}
+						value={totpCode}
+						oninput={sanitizeTotpCode}
 						autocomplete="one-time-code"
 						disabled={busy}
 					/>
@@ -666,9 +686,9 @@
 					<input
 						type="text"
 						inputmode="numeric"
-						pattern="\d{6}"
 						maxlength="7"
-						bind:value={totpCode}
+						value={totpCode}
+						oninput={sanitizeTotpCode}
 						autocomplete="one-time-code"
 						disabled={busy}
 					/>
@@ -707,9 +727,9 @@
 					<input
 						type="text"
 						inputmode="numeric"
-						pattern="\d{6}"
 						maxlength="7"
-						bind:value={totpCode}
+						value={totpCode}
+						oninput={sanitizeTotpCode}
 						autocomplete="one-time-code"
 						disabled={busy}
 					/>
@@ -765,7 +785,7 @@
 		color: var(--success, #2bb24c);
 	}
 	.honest-framing {
-		background: var(--surface-2, #1a1a1a);
+		background: var(--surface-2, #1a202b);
 		padding: 0.75rem 1rem;
 		border-radius: 0.5rem;
 		margin: 1rem 0;
@@ -805,7 +825,7 @@
 		line-height: 1.4;
 	}
 	.apps.not-recommended {
-		background: var(--surface-2, #1a1a1a);
+		background: var(--surface-2, #1a202b);
 		padding: 0.75rem 1rem;
 		border-radius: 0.5rem;
 	}
@@ -829,10 +849,19 @@
 		background: var(--surface-1, #0e0e10);
 		color: inherit;
 		border-radius: 0.3rem;
+		transition:
+			border-color 0.15s ease,
+			box-shadow 0.15s ease;
+	}
+	input[type='text']:focus,
+	input[type='password']:focus {
+		outline: none;
+		border-color: var(--morphit-emerald);
+		box-shadow: 0 0 0 3px rgba(0, 218, 105, 0.25);
 	}
 	.qr {
 		max-width: 280px;
-		margin: 1rem 0;
+		margin: 1rem auto;
 		background: white;
 		padding: 0.5rem;
 		border-radius: 0.5rem;
@@ -851,7 +880,7 @@
 	}
 	.manual code {
 		font-family: ui-monospace, 'SF Mono', Consolas, monospace;
-		background: var(--surface-2, #1a1a1a);
+		background: var(--surface-2, #1a202b);
 		padding: 0.4rem 0.6rem;
 		border-radius: 0.3rem;
 		font-size: 0.95rem;
@@ -863,7 +892,7 @@
 		gap: 0.5rem;
 		list-style: none;
 		padding: 1rem;
-		background: var(--surface-2, #1a1a1a);
+		background: var(--surface-2, #1a202b);
 		border-radius: 0.5rem;
 		margin: 1rem 0;
 	}
@@ -900,7 +929,7 @@
 	.lost-device {
 		margin: 1.5rem 0;
 		padding: 0.75rem 1rem;
-		background: var(--surface-2, #1a1a1a);
+		background: var(--surface-2, #1a202b);
 		border-radius: 0.5rem;
 	}
 	.lost-device summary {
@@ -921,10 +950,36 @@
 		color: inherit;
 		border-radius: 0.3rem;
 		cursor: pointer;
+		transition:
+			border-color 0.15s ease,
+			background 0.15s ease,
+			transform 0.06s ease;
 	}
 	button:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
+	}
+	button:hover:not(:disabled) {
+		border-color: var(--morphit-emerald);
+	}
+	button:active:not(:disabled) {
+		transform: scale(0.97);
+	}
+	/* Copy button (manual-entry secret): brand-accented, with a filled
+	   "Copied" confirmation state set by copySecret() for ~1.5s. */
+	.copy-btn {
+		border-color: var(--morphit-emerald);
+		color: var(--morphit-emerald);
+		font-weight: 600;
+		white-space: nowrap;
+	}
+	.copy-btn:hover:not(:disabled) {
+		background: rgba(0, 218, 105, 0.12);
+	}
+	.copy-btn.copied {
+		background: var(--morphit-emerald);
+		color: #ffffff;
+		border-color: var(--morphit-emerald);
 	}
 
 	/* Expand/collapse headers: the native <summary> is already a
@@ -938,6 +993,6 @@
 		transition: color 0.15s ease;
 	}
 	details > summary:hover {
-		color: var(--accent, #4a9eff);
+		color: var(--morphit-emerald);
 	}
 </style>

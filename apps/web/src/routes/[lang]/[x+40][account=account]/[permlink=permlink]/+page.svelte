@@ -38,6 +38,7 @@
 	import { get } from 'svelte/store';
 
 	import Head from '$components/Head.svelte';
+	import TermsText from '$components/TermsText.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
 	import BusyButton from '$components/BusyButton.svelte';
 	import IdentityLabel from '$components/IdentityLabel.svelte';
@@ -465,7 +466,7 @@
 					<div>
 						<dt class="text-xs text-ink-500">{$_('order_detail.terms')}</dt>
 						<dd class="mt-1 whitespace-pre-wrap text-sm text-ink-700 dark:text-ink-200">
-							{order.terms}
+							<TermsText text={order.terms} />
 						</dd>
 					</div>
 				{/if}
@@ -559,11 +560,7 @@
 					     phone (with permlink preserved), instead of a
 					     misleading "session locked" hint. -->
 					<div class="flex flex-col gap-2">
-						<WriteBlockedReadOnly
-							variant="post_order"
-							orderPermlink={permlink}
-							density="inline"
-						/>
+						<WriteBlockedReadOnly variant="post_order" orderPermlink={permlink} density="inline" />
 						<WriteBlockedReadOnly
 							variant="cancel_order"
 							orderPermlink={permlink}
@@ -602,7 +599,10 @@
 				{:else}
 					<div class="flex flex-col gap-2 sm:flex-row">
 						{#if withinEditWindow(order)}
-							<BusyButton variant="secondary" onclick={() => gotoLocale(`/post/edit/${order!.permlink}`)}>
+							<BusyButton
+								variant="secondary"
+								onclick={() => gotoLocale(`/post/edit/${order!.permlink}`)}
+							>
 								{$_('my_orders.order.action_edit')}
 							</BusyButton>
 						{:else}

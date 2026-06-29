@@ -281,6 +281,7 @@
       "cancel": "保持登录",
       "confirm_pending": "锁定中…"
     },
+    "sign_in_another_device": "在其他设备上登录",
     "lock_session": "锁定会话",
     "view_my_profile": "@{account} 的资料"
   },
@@ -1569,7 +1570,11 @@
       },
       "arbitrage_morphit_vs_exchanges": {
         "q": "Morphit 与中心化/去中心化交易所之间的套利如何运作？",
-        "a": "Morphit 的设计使套利变得简单。挂单费用是几美分，没有吃单方手续费，交易本身没有提现费，没有提现限额，没有等待期。当交易者看到 Morphit 的 P2P 市场与 CEX（Coinbase、Kraken、Binance）或 \"DEX\"（Uniswap、THORChain）之间存在价差时，可以在 Morphit 上以薄差价在任一方挂单，让订单簿成交。价格模型选择器让你能够将 `spread: 0.5%` 固定在 CoinGecko 实时中间价上，让你的订单自动跟随市场 — 全球价格波动时不需要手动重新定价。随着越来越多的交易者使用 Morphit，套利者自然会将 P2P 价格与更广泛的市场对齐，这对所有人都有好处：更紧的价差、更好的成交、更可预测的执行。一些实用说明：Morphit 上每笔交易的结算由你来决定 — 加密 vs 加密对（USDT 换 XMR、USDT 换 BTC）直接钱包对钱包，加密 vs 法币用你选择的银行/法币通道。对于高频套利，Sybil-tier 费用结构会在你从同一账户快速发布多个订单时提高挂单成本；这是反垃圾基础设施，不是反套利 — 大多数套利者每个方向使用一个账户，从未达到 tier-2 阈值。"
+        "a": "Morphit 的设计使套利变得简单。挂单费用是几美分，没有吃单方手续费，交易本身没有提现费，没有提现限额，没有等待期。当交易者看到 Morphit 的 P2P 市场与 CEX（Coinbase、Kraken、Binance、Hive-Engine (HE)）或 \"DEX\"（Uniswap、THORChain）之间存在价差时，可以在 Morphit 上以薄差价在任一方挂单，让订单簿成交。价格模型选择器让你能够将 `spread: 0.5%` 固定在 CoinGecko 实时中间价上，让你的订单自动跟随市场 — 全球价格波动时不需要手动重新定价。随着越来越多的交易者使用 Morphit，套利者自然会将 P2P 价格与更广泛的市场对齐，这对所有人都有好处：更紧的价差、更好的成交、更可预测的执行。一些实用说明：Morphit 上每笔交易的结算由你来决定 — 加密 vs 加密对（USDT 换 XMR、USDT 换 BTC）直接钱包对钱包，加密 vs 法币用你选择的银行/法币通道。对于高频套利，Sybil-tier 费用结构会在你从同一账户快速发布多个订单时提高挂单成本；这是反垃圾基础设施，不是反套利 — 大多数套利者每个方向使用一个账户，从未达到 tier-2 阈值。"
+      },
+      "market_making": {
+        "q": "我可以在 Morphit 上做市或运行交易机器人吗？",
+        "a": "可以 — Morphit 的设计就是欢迎做市商和交易机器人。没有挂单方或吃单方手续费：你只需支付每笔订单约 $0.12 的固定挂单费用，没有提现费、没有提现限额、没有等待期。订单表单的 `spread` 价格模型会将订单固定在 CoinGecko 实时中间价的某个百分比上（例如 `market ± 0.5%`），因此全球价格波动时它会自动重新定价，无需手动更新。整个订单簿都可以通过只读的 MCP 工具和 RSS 源以编程方式读取 — 无需 API key、无需账户审批、无需 KYC — 而且由于每个订单都是普通的 on-chain 操作，机器人可以通过直接签名来发布订单，而实例从不持有你的资金。反垃圾的 Sybil-tier 费用只有在你从同一账户一次性发布大量订单时才会上涨；每个方向使用一个账户会远低于该阈值。"
       },
       "what_is_doge": {
         "q": "Morphit 上的 DOGE 是什么？",
@@ -2087,10 +2092,10 @@
     "qr_loading": "加载二维码…",
     "qr_render_error": "无法显示二维码。请刷新页面。",
     "qr_aria": "包含一次性登录请求的二维码",
-    "scan_instruction": "在手机上打开 Morphit,点击「在其他设备上登录」。",
+    "scan_instruction": "在手机上点击你的头像（右上角），选择「在其他设备上登录」，然后用摄像头对准此二维码。",
     "expires_in": "{seconds} 秒后过期",
     "no_phone_scanner_heading": "没有二维码扫描器?",
-    "no_phone_scanner_body": "在手机上打开 Morphit,前往登录 → 「从其他设备」,按提示操作。",
+    "no_phone_scanner_body": "不需要单独的二维码应用——Morphit 自带扫描器。在手机上点击你的头像（右上角），选择「在其他设备上登录」。",
     "received_heading": "已登录!",
     "received_body": "欢迎,@{account}。正在进入交易簿…",
     "expired_heading": "此码已过期",
@@ -4054,6 +4059,7 @@
       "backup_warning_body": "添加 YubiKey 会重新加密你的密钥库。如果失去对 YubiKey 的访问权限并忘记密码,只有 12 词助记词能恢复此账户。继续之前请确保它已写在安全的地方。",
       "backup_confirm_label": "是的,我的助记词已安全备份。",
       "current_password_label": "你当前的密码",
+      "current_password_label_named": "你的 @{account} 密码",
       "label_label": "标签(可选)",
       "label_placeholder": "工作 YubiKey",
       "slot_picker_label": "YubiKey 插槽",

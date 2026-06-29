@@ -123,11 +123,6 @@
 					>
 						{$_('welcome_first_buy.heading')}
 					</h2>
-					{#if !collapsed}
-						<p class="mt-2 text-sm text-ink-700 dark:text-ink-200">
-							{$_('welcome_first_buy.lead')}
-						</p>
-					{/if}
 				</div>
 			</div>
 			<button
@@ -167,6 +162,12 @@
 
 		{#if !collapsed}
 			<div id="welcome-first-buy-body">
+				<!-- Lead intro spans the full card width (was previously nested in
+				     the icon-adjacent column, which squished it into the narrow
+				     right gutter on phones). -->
+				<p class="mt-4 text-sm text-ink-700 dark:text-ink-200">
+					{$_('welcome_first_buy.lead')}
+				</p>
 				<ul class="mt-5 grid gap-3 text-sm sm:grid-cols-2">
 					<li class="flex items-start gap-2">
 						<span class="mt-0.5 flex-none text-morphit-emerald" aria-hidden="true">✓</span>
@@ -207,7 +208,8 @@
 						href={lp('/faq#first_order_free')}
 						class="inline-flex items-center gap-1 text-sm font-semibold text-ink-900 transition-colors hover:text-morphit-emerald dark:text-white"
 					>
-						{$_('common.learn_more')} <span class="nav-arrow nav-arrow-right" aria-hidden="true">⇨</span>
+						{$_('common.learn_more')}
+						<span class="nav-arrow nav-arrow-right" aria-hidden="true">⇨</span>
 					</a>
 				</div>
 			</div>

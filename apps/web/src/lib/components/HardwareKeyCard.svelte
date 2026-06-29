@@ -37,11 +37,13 @@
 		classifyYubikeyError
 	} from '$crypto/keystoreYubikey';
 	import { isWebHidSupported, requestYubikey, type YubikeyDevice } from '$crypto/yubikey/transport';
-	import {
-		DEFAULT_YUBIKEY_SLOT,
-		type YubikeySlot
-	} from '$crypto/yubikey/protocol';
+	import { DEFAULT_YUBIKEY_SLOT, type YubikeySlot } from '$crypto/yubikey/protocol';
 	import { showToast } from '$lib/stores/toast';
+	import { getUserBlurtAccount } from '$lib/blurt/ops/profile';
+
+	// Logged-in account, for the "Your @<account> password" field label.
+	// Stable for this card's lifetime (only rendered while unlocked).
+	const blurtAccount = getUserBlurtAccount();
 
 	// ─── reactive view of the persisted envelope ──────────────
 	const envelope = $derived($currentEnvelope);
@@ -410,30 +412,41 @@
 
 				<!-- ─── Enrollment form ─── -->
 				{#if enrollOpen}
-					<div class="mt-5 rounded-xl border-2 border-morphit-emerald bg-white p-4 dark:bg-ink-950">
-						<h3 class="text-base font-semibold">
+					<div
+						class="mx-auto mt-5 max-w-lg rounded-xl border border-ink-200 bg-white p-4 dark:border-ink-700 dark:bg-ink-950"
+					>
+						<h3 class="text-center text-base font-semibold">
 							{$_('settings.hardware_key.enroll_form_title')}
 						</h3>
 
 						<!-- Backup precondition.  Hard gate. -->
 						<div
-							class="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"
+							class="mt-3 rounded-lg border border-red-300 bg-red-50 p-3 text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-100"
 						>
-							<p class="text-sm font-semibold">
-								{$_('settings.hardware_key.backup_warning_title')}
+							<p class="flex items-start gap-2 text-sm font-semibold">
+								<span aria-hidden="true" class="text-base leading-tight">⚠</span>
+								<span>{$_('settings.hardware_key.backup_warning_title')}</span>
 							</p>
 							<p class="mt-1 text-sm">
 								{$_('settings.hardware_key.backup_warning_body')}
 							</p>
-							<label class="mt-3 flex items-start gap-2 text-sm">
-								<input type="checkbox" bind:checked={backupConfirmed} class="mt-0.5" />
+							<label class="mt-3 flex items-start gap-2 bg-transparent text-sm">
+								<input
+									type="checkbox"
+									bind:checked={backupConfirmed}
+									class="mt-0.5 accent-morphit-emerald"
+								/>
 								<span>{$_('settings.hardware_key.backup_confirm_label')}</span>
 							</label>
 						</div>
 
 						<label class="mt-4 block">
 							<span class="block text-sm font-semibold">
-								{$_('settings.hardware_key.current_password_label')}
+								{blurtAccount
+									? $_('settings.hardware_key.current_password_label_named', {
+											values: { account: blurtAccount }
+										})
+									: $_('settings.hardware_key.current_password_label')}
 							</span>
 							<input
 								type="password"
@@ -521,21 +534,28 @@
 
 				<!-- ─── Harden form ─── -->
 				{#if hardenOpen}
-					<div class="mt-5 rounded-xl border-2 border-amber-400 bg-white p-4 dark:bg-ink-950">
-						<h3 class="text-base font-semibold">
+					<div
+						class="mx-auto mt-5 max-w-lg rounded-xl border border-ink-200 bg-white p-4 dark:border-ink-700 dark:bg-ink-950"
+					>
+						<h3 class="text-center text-base font-semibold">
 							{$_('settings.hardware_key.harden_form_title')}
 						</h3>
 						<div
-							class="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"
+							class="mt-3 rounded-lg border border-red-300 bg-red-50 p-3 text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-100"
 						>
-							<p class="text-sm font-semibold">
-								{$_('settings.hardware_key.harden_warning_title')}
+							<p class="flex items-start gap-2 text-sm font-semibold">
+								<span aria-hidden="true" class="text-base leading-tight">⚠</span>
+								<span>{$_('settings.hardware_key.harden_warning_title')}</span>
 							</p>
 							<p class="mt-1 text-sm">
 								{$_('settings.hardware_key.harden_warning_body')}
 							</p>
-							<label class="mt-3 flex items-start gap-2 text-sm">
-								<input type="checkbox" bind:checked={hardenAck} class="mt-0.5" />
+							<label class="mt-3 flex items-start gap-2 bg-transparent text-sm">
+								<input
+									type="checkbox"
+									bind:checked={hardenAck}
+									class="mt-0.5 accent-morphit-emerald"
+								/>
 								<span>{$_('settings.hardware_key.harden_confirm_label')}</span>
 							</label>
 						</div>
@@ -576,8 +596,10 @@
 
 				<!-- ─── Soften form ─── -->
 				{#if softenOpen}
-					<div class="mt-5 rounded-xl border-2 border-morphit-emerald bg-white p-4 dark:bg-ink-950">
-						<h3 class="text-base font-semibold">
+					<div
+						class="mx-auto mt-5 max-w-lg rounded-xl border border-ink-200 bg-white p-4 dark:border-ink-700 dark:bg-ink-950"
+					>
+						<h3 class="text-center text-base font-semibold">
 							{$_('settings.hardware_key.soften_form_title')}
 						</h3>
 						<p class="mt-2 text-sm text-ink-600 dark:text-ink-300">

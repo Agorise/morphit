@@ -281,6 +281,7 @@
       "cancel": "保持登入",
       "confirm_pending": "鎖定中…"
     },
+    "sign_in_another_device": "喺其他裝置登入",
     "lock_session": "鎖定會話",
     "view_my_profile": "@{account} 的個人檔案"
   },
@@ -1569,7 +1570,11 @@
       },
       "arbitrage_morphit_vs_exchanges": {
         "q": "Morphit 同中心化/去中心化交易所之間嘅套利點樣運作？",
-        "a": "Morphit 設計到令套利變得簡單。掛單費用係幾美仙，冇食單方手續費，交易本身冇提現費，冇提現限額，冇等待期。當交易者見到 Morphit 嘅 P2P 市場同 CEX（Coinbase、Kraken、Binance）或 \"DEX\"（Uniswap、THORChain）之間有價差，可以喺 Morphit 上面用薄差價喺任一方掛單，讓訂單簿成交。價格模型選擇器讓你可以將 `spread: 0.5%` 釘喺 CoinGecko 即時中間價度，等你嘅訂單自動跟住市場 — 全球價格郁嘅時候唔使手動重新定價。越多交易者用 Morphit，套利者自然會將 P2P 價格同更廣闊嘅市場睇齊，對大家都好：更窄嘅價差、更好嘅成交、更易預測嘅執行。一啲實用說明：Morphit 上每筆交易嘅結算由你決定 — 加密 vs 加密對（USDT 換 XMR、USDT 換 BTC）直接錢包對錢包，加密 vs 法幣用你揀嘅銀行/法幣通道。對於高頻套利，Sybil-tier 費用結構會喺你從同一個帳戶快速發佈好多訂單嘅時候提高掛單成本；呢個係反垃圾基礎設施，唔係反套利 — 大多數套利者每個方向用一個帳戶，永遠唔會達到 tier-2 門檻。"
+        "a": "Morphit 設計到令套利變得簡單。掛單費用係幾美仙，冇食單方手續費，交易本身冇提現費，冇提現限額，冇等待期。當交易者見到 Morphit 嘅 P2P 市場同 CEX（Coinbase、Kraken、Binance、Hive-Engine (HE)）或 \"DEX\"（Uniswap、THORChain）之間有價差，可以喺 Morphit 上面用薄差價喺任一方掛單，讓訂單簿成交。價格模型選擇器讓你可以將 `spread: 0.5%` 釘喺 CoinGecko 即時中間價度，等你嘅訂單自動跟住市場 — 全球價格郁嘅時候唔使手動重新定價。越多交易者用 Morphit，套利者自然會將 P2P 價格同更廣闊嘅市場睇齊，對大家都好：更窄嘅價差、更好嘅成交、更易預測嘅執行。一啲實用說明：Morphit 上每筆交易嘅結算由你決定 — 加密 vs 加密對（USDT 換 XMR、USDT 換 BTC）直接錢包對錢包，加密 vs 法幣用你揀嘅銀行/法幣通道。對於高頻套利，Sybil-tier 費用結構會喺你從同一個帳戶快速發佈好多訂單嘅時候提高掛單成本；呢個係反垃圾基礎設施，唔係反套利 — 大多數套利者每個方向用一個帳戶，永遠唔會達到 tier-2 門檻。"
+      },
+      "market_making": {
+        "q": "我可唔可以喺 Morphit 上面造市或者運行交易機械人？",
+        "a": "可以 — Morphit 嘅設計就係歡迎造市商同交易機械人。冇掛單方或食單方手續費：你只需要支付每筆訂單大約 $0.12 嘅固定掛單費用，冇提現費、冇提現限額、冇等待期。訂單表單嘅 `spread` 價格模型會將訂單釘喺 CoinGecko 即時中間價嘅某個百分比上（例如 `market ± 0.5%`），所以全球價格郁嘅時候佢會自動重新定價，唔使手動更新。整個訂單簿都可以透過只讀嘅 MCP 工具同 RSS 源以程式方式讀取 — 唔使 API key、唔使帳戶審批、唔使 KYC — 而且因為每個訂單都係普通嘅 on-chain 操作，機械人可以透過直接簽名嘅方式發佈訂單，而實例從來唔會持有你嘅資金。反垃圾嘅 Sybil-tier 費用只有喺你從同一個帳戶一次過發佈好多訂單嘅時候先會上漲；每個方向用一個帳戶會遠低於這個門檻。"
       },
       "what_is_doge": {
         "q": "Morphit 上的 DOGE 是什麼？",
@@ -2087,10 +2092,10 @@
     "qr_loading": "載入 QR 碼…",
     "qr_render_error": "無法顯示 QR 碼。請重新載入頁面。",
     "qr_aria": "包含一次性登入請求嘅 QR 碼",
-    "scan_instruction": "喺手機上打開 Morphit,撳「喺其他裝置登入」。",
+    "scan_instruction": "喺手機撳你嘅頭像（右上角），揀「喺其他裝置登入」，然後用鏡頭對準呢個二維碼。",
     "expires_in": "{seconds} 秒後過期",
     "no_phone_scanner_heading": "冇 QR 碼掃描器?",
-    "no_phone_scanner_body": "喺手機上打開 Morphit,去登入 → 「由其他裝置」,跟住指示做。",
+    "no_phone_scanner_body": "唔使另外裝二維碼 App——Morphit 有自己嘅掃描器。喺手機撳你嘅頭像（右上角），揀「喺其他裝置登入」。",
     "received_heading": "登入成功!",
     "received_body": "歡迎,‌@{account}。送你去 orderbook 喇…",
     "expired_heading": "呢個碼已過期",
@@ -4054,6 +4059,7 @@
       "backup_warning_body": "新增 YubiKey 會重新加密你嘅密鑰庫。如果失去 YubiKey 嘅存取權限同時忘記密碼,只有 12 字助記詞先可以恢復呢個帳戶。繼續之前請確保佢寫喺安全嘅地方。",
       "backup_confirm_label": "係,我嘅助記詞已經安全備份。",
       "current_password_label": "你目前嘅密碼",
+      "current_password_label_named": "你嘅 @{account} 密碼",
       "label_label": "標籤(可選)",
       "label_placeholder": "工作 YubiKey",
       "slot_picker_label": "YubiKey 插槽",

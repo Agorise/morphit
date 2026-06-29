@@ -36,11 +36,7 @@
 	import { scorePassword, isPasswordAcceptable } from '$lib/auth/passwordStrength';
 	import { hiddenAccounts, unhideAccount, clearAllHidden } from '$lib/utils/hiddenAccounts';
 	import { firstTradeAnnounce, setFirstTradeAnnounce } from '$lib/utils/syndicationPrefs';
-	import {
-		liveIdentity,
-		isUnlocked,
-		isPairedReadOnly
-	} from '$stores/identity';
+	import { liveIdentity, isUnlocked, isPairedReadOnly } from '$stores/identity';
 	import { getProfile } from '$lib/indexer/client';
 	import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
 	import {
@@ -570,7 +566,6 @@
 		setTimeout(() => (blurtMediaSavedToast = false), 1800);
 	}
 
-
 	async function saveAndBroadcastBlurtMedia(): Promise<void> {
 		await saveBlurtMediaLocal();
 		const live = $liveIdentity;
@@ -631,7 +626,6 @@
 		nostrSavedToast = true;
 		setTimeout(() => (nostrSavedToast = false), 1800);
 	}
-
 
 	async function saveAndBroadcastNostr(): Promise<void> {
 		await saveNostrLocal();
@@ -752,7 +746,11 @@
 			// Confirmed on-chain — publish to the shared self-profile
 			// store so the avatar menu + every IdentityLabel of self
 			// update instantly (don't wait for the indexer to catch up).
-			setSelfAvatar(getUserBlurtAccount() ?? '', avatarStagedSvg || null, avatarStagedDataUri || null);
+			setSelfAvatar(
+				getUserBlurtAccount() ?? '',
+				avatarStagedSvg || null,
+				avatarStagedDataUri || null
+			);
 			avatarBroadcastOk = true;
 			setTimeout(() => (avatarBroadcastOk = false), 3000);
 		} catch (err) {
@@ -831,7 +829,6 @@
 		input = '';
 		confirmingClear = false;
 	}
-
 
 	// Auto-lock timeout handler. Parses the <select> value — the
 	// 'never' option maps to the NEVER_LOCK sentinel, all others are
@@ -1126,12 +1123,7 @@
 				<p class="mb-1 text-xs font-semibold uppercase tracking-widest text-ink-500">
 					{$_('settings.account_name.current_label')}
 				</p>
-				<IdentityLabel
-					account={accountSaved}
-					weight="bold"
-					avatarSize={40}
-					showCopy={false}
-				/>
+				<IdentityLabel account={accountSaved} weight="bold" avatarSize={40} showCopy={false} />
 				<p class="mt-2 text-sm text-ink-600 dark:text-ink-300">
 					{$_('settings.account_name.locked_explain')}
 				</p>
@@ -1340,7 +1332,7 @@
 				<div class="flex items-center gap-3">
 					{#if currentAvatarSvg}
 						<span
-							class="h-12 w-12 flex-none overflow-hidden rounded-full bg-ink-100 ring-1 ring-ink-200 [&>svg]:h-full [&>svg]:w-full dark:bg-ink-800 dark:ring-ink-700"
+							class="h-12 w-12 flex-none overflow-hidden rounded-full bg-ink-100 ring-1 ring-ink-200 dark:bg-ink-800 dark:ring-ink-700 [&>svg]:h-full [&>svg]:w-full"
 							aria-hidden="true"
 						>
 							{@html currentAvatarSvg}
@@ -1807,7 +1799,12 @@
 				<p class="mb-2 text-xs uppercase tracking-wider text-ink-500">
 					{$_('settings.nostr_url.preview_label')}
 				</p>
-				<IdentityLabel account={accountSaved ?? undefined} displayName={saved} publicKey={previewPubkey} nostrUrl={nostrCleaned} />
+				<IdentityLabel
+					account={accountSaved ?? undefined}
+					displayName={saved}
+					publicKey={previewPubkey}
+					nostrUrl={nostrCleaned}
+				/>
 			</div>
 		{/if}
 
@@ -1914,10 +1911,8 @@
 							href={lp('/faq#iphone_install')}
 							class="group underline transition hover:text-morphit-emerald"
 						>
-							{$_('settings.install.iphone_link')} <span
-								class="nav-arrow nav-arrow-right"
-								aria-hidden="true">⇨</span
-							>
+							{$_('settings.install.iphone_link')}
+							<span class="nav-arrow nav-arrow-right" aria-hidden="true">⇨</span>
 						</a>
 					</p>
 				</div>
@@ -2059,17 +2054,9 @@
 	<!-- ─── Blocked accounts (Finding H layer 1) ─── -->
 	<section class="card mt-6" aria-labelledby="blocked-accounts-heading">
 		<div class="flex items-start justify-between gap-4">
-			<div class="min-w-0">
-				<h2 id="blocked-accounts-heading" class="font-display text-xl font-bold">
-					{$_('settings.blocked_accounts.heading')}
-				</h2>
-				<p class="mt-2 text-ink-600 dark:text-ink-300">
-					{$_('settings.blocked_accounts.explain')}
-				</p>
-				<p class="mt-2 text-sm text-ink-500">
-					{$_('settings.blocked_accounts.scope_note')}
-				</p>
-			</div>
+			<h2 id="blocked-accounts-heading" class="min-w-0 font-display text-xl font-bold">
+				{$_('settings.blocked_accounts.heading')}
+			</h2>
 			<div class="flex flex-none items-center gap-2">
 				{#if blockedRefreshed}
 					<span
@@ -2090,6 +2077,17 @@
 				</button>
 			</div>
 		</div>
+		<!-- Explain + scope note span the full card width (matching the
+		     Preferences card below). Previously they were nested in the
+		     flex row's left column, so the width allocated to them — and
+		     therefore their wrapping — shifted whenever the "✓ Refreshed!"
+		     flash appeared/disappeared in the button column on refresh. -->
+		<p class="mt-2 text-ink-600 dark:text-ink-300">
+			{$_('settings.blocked_accounts.explain')}
+		</p>
+		<p class="mt-2 text-sm text-ink-500">
+			{$_('settings.blocked_accounts.scope_note')}
+		</p>
 
 		{#if blockedList.length === 0}
 			<div
@@ -2137,11 +2135,15 @@
 		</p>
 
 		{#if !$userPreferences.fiat && !$userPreferences.region}
-			<p class="mt-4 rounded-xl bg-ink-50 p-4 text-sm text-ink-600 dark:bg-ink-950 dark:text-ink-300">
+			<p
+				class="mt-4 rounded-xl bg-ink-50 p-4 text-sm text-ink-600 dark:bg-ink-950 dark:text-ink-300"
+			>
 				{$_('settings.preferences.empty')}
 			</p>
 		{:else}
-			<dl class="mt-4 divide-y divide-ink-200 overflow-hidden rounded-xl border border-ink-200 dark:divide-ink-800 dark:border-ink-700">
+			<dl
+				class="mt-4 divide-y divide-ink-200 overflow-hidden rounded-xl border border-ink-200 dark:divide-ink-800 dark:border-ink-700"
+			>
 				{#if $userPreferences.fiat}
 					<div class="flex items-center justify-between gap-3 bg-ink-50 px-4 py-3 dark:bg-ink-900">
 						<dt class="text-sm font-semibold text-ink-700 dark:text-ink-200">
@@ -2222,10 +2224,14 @@
 						{$_('settings.totp.subtitle')}
 					</p>
 					<a
-						href={localePath('/settings/security/2fa', ($page.params.lang as LocaleCode) ?? DEFAULT_LOCALE)}
+						href={localePath(
+							'/settings/security/2fa',
+							($page.params.lang as LocaleCode) ?? DEFAULT_LOCALE
+						)}
 						class="mt-3 inline-block rounded-xl border border-ink-300 px-4 py-2 text-sm font-semibold transition hover:border-morphit-emerald hover:bg-morphit-emerald/5 hover:text-morphit-emerald dark:border-ink-700 dark:hover:border-morphit-emerald dark:hover:bg-morphit-emerald/10"
 					>
-						{$_('settings.totp.enroll.cta')} <span class="nav-arrow nav-arrow-right" aria-hidden="true">⇨</span>
+						{$_('settings.totp.enroll.cta')}
+						<span class="nav-arrow nav-arrow-right" aria-hidden="true">⇨</span>
 					</a>
 				</div>
 
@@ -2386,7 +2392,6 @@
 						</p>
 					{/if}
 				</div>
-
 			{/if}
 		</section>
 	{/if}
