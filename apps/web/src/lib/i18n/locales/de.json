@@ -281,6 +281,7 @@
       "cancel": "Angemeldet bleiben",
       "confirm_pending": "Sperre…"
     },
+    "sign_in_another_device": "Auf anderem Gerät anmelden",
     "lock_session": "Session sperren",
     "view_my_profile": "Profil von @{account}"
   },
@@ -1569,7 +1570,11 @@
       },
       "arbitrage_morphit_vs_exchanges": {
         "q": "Wie funktioniert Arbitrage zwischen Morphit und zentralisierten/dezentralisierten Börsen?",
-        "a": "Morphit ist so gebaut, dass Arbitrage einfach ist. Listungsgebühren sind ein Bruchteil eines Dollars, es gibt keine Taker-Gebühr, keine Abhebungsgebühr auf den Trade selbst, kein Abhebungslimit und keine Wartezeit. Ein Trader, der eine Preislücke zwischen Morphits P2P-Markt und einer CEX (Coinbase, Kraken, Binance) oder \"DEX\" (Uniswap, THORChain) sieht, kann auf Morphit eine Order mit dünnem Spread auf beiden Seiten platzieren und das Orderbuch füllen lassen. Der Preismodell-Picker erlaubt das Festlegen von `spread: 0.5%` gegen den Live-CoinGecko-Mittelpreis, sodass deine Order dem Markt automatisch folgt — keine manuelle Neubepreisung bei weltweiten Preisbewegungen. Je mehr Trader Morphit nutzen, desto natürlicher ziehen Arbitrageure die P2P-Preise in Einklang mit dem breiteren Markt, was für alle gut ist: engere Spreads, bessere Fills, vorhersehbarere Ausführung. Ein paar praktische Hinweise: Die Pro-Trade-Abwicklung auf Morphit ist, was du daraus machst — direkt Wallet-zu-Wallet für Krypto-vs-Krypto-Paare (XMR gegen USDT, BTC gegen USDT) oder über deine bevorzugte Bank/Fiat-Schiene für Krypto-vs-Fiat. Für Hochfrequenz-Arbitrage skaliert die Sybil-Tier-Gebührenstruktur die Listungskosten, wenn du viele Orders schnell vom selben Account postest; das ist Anti-Spam-Infrastruktur, nicht Anti-Arbitrage — die meisten Arbitrageure führen einen Account pro Richtung und erreichen die Tier-2-Schwelle nie."
+        "a": "Morphit ist so gebaut, dass Arbitrage einfach ist. Listungsgebühren sind ein Bruchteil eines Dollars, es gibt keine Taker-Gebühr, keine Abhebungsgebühr auf den Trade selbst, kein Abhebungslimit und keine Wartezeit. Ein Trader, der eine Preislücke zwischen Morphits P2P-Markt und einer CEX (Coinbase, Kraken, Binance, Hive-Engine (HE)) oder \"DEX\" (Uniswap, THORChain) sieht, kann auf Morphit eine Order mit dünnem Spread auf beiden Seiten platzieren und das Orderbuch füllen lassen. Der Preismodell-Picker erlaubt das Festlegen von `spread: 0.5%` gegen den Live-CoinGecko-Mittelpreis, sodass deine Order dem Markt automatisch folgt — keine manuelle Neubepreisung bei weltweiten Preisbewegungen. Je mehr Trader Morphit nutzen, desto natürlicher ziehen Arbitrageure die P2P-Preise in Einklang mit dem breiteren Markt, was für alle gut ist: engere Spreads, bessere Fills, vorhersehbarere Ausführung. Ein paar praktische Hinweise: Die Pro-Trade-Abwicklung auf Morphit ist, was du daraus machst — direkt Wallet-zu-Wallet für Krypto-vs-Krypto-Paare (XMR gegen USDT, BTC gegen USDT) oder über deine bevorzugte Bank/Fiat-Schiene für Krypto-vs-Fiat. Für Hochfrequenz-Arbitrage skaliert die Sybil-Tier-Gebührenstruktur die Listungskosten, wenn du viele Orders schnell vom selben Account postest; das ist Anti-Spam-Infrastruktur, nicht Anti-Arbitrage — die meisten Arbitrageure führen einen Account pro Richtung und erreichen die Tier-2-Schwelle nie."
+      },
+      "market_making": {
+        "q": "Kann ich auf Morphit Market-Making betreiben oder einen Trading-Bot laufen lassen?",
+        "a": "Ja — Morphit ist darauf ausgelegt, Market Maker und Trading-Bots willkommen zu heißen. Es gibt keine Maker- oder Taker-Gebühr: Du zahlst nur die pauschale Listungsgebühr von etwa $0.12 pro Order, ohne Abhebungsgebühr, ohne Abhebungslimit und ohne Wartezeit. Das `spread`-Preismodell im Order-Formular fixiert eine Order auf einen Prozentsatz des Live-CoinGecko-Mittelpreises (zum Beispiel `market ± 0.5%`), sodass sie sich automatisch neu bepreist, wenn sich der weltweite Preis bewegt — ohne manuelle Updates. Das gesamte Orderbuch ist programmatisch über die schreibgeschützten MCP-Tools und die RSS-Feeds lesbar — kein API-Key, keine Account-Freigabe, kein KYC — und da jede Order eine einfache On-Chain-Operation ist, kann ein Bot eine posten, indem er direkt signiert, während die Instanz niemals deine Gelder hält. Die Anti-Spam-Sybil-Tier-Gebühr steigt nur, wenn du viele Orders auf einmal von einem Account postest; ein Account pro Richtung bleibt deutlich unter der Schwelle."
       },
       "what_is_doge": {
         "q": "Was ist DOGE auf Morphit?",
@@ -2087,10 +2092,10 @@
     "qr_loading": "QR-Code wird geladen…",
     "qr_render_error": "Code konnte nicht angezeigt werden. Lade die Seite neu.",
     "qr_aria": "QR-Code mit einer einmaligen Anmelde-Anfrage",
-    "scan_instruction": "Öffne Morphit auf deinem Handy und tippe auf „Auf anderem Gerät anmelden\".",
+    "scan_instruction": "Tippe auf deinem Handy oben rechts auf dein Profilbild und wähle „Auf anderem Gerät anmelden\", dann richte die Kamera auf diesen Code.",
     "expires_in": "Läuft ab in {seconds} Sekunden",
     "no_phone_scanner_heading": "Keinen QR-Scanner?",
-    "no_phone_scanner_body": "Öffne Morphit auf deinem Handy, gehe zu Anmelden → „Von anderem Gerät\" und folge den Anweisungen.",
+    "no_phone_scanner_body": "Du brauchst keine separate QR-App — Morphit hat einen eigenen Scanner. Tippe auf deinem Handy oben rechts auf dein Profilbild und wähle „Auf anderem Gerät anmelden\".",
     "received_heading": "Angemeldet!",
     "received_body": "Willkommen, @{account}. Du landest gleich im Orderbuch…",
     "expired_heading": "Dieser Code ist abgelaufen",
@@ -4054,6 +4059,7 @@
       "backup_warning_body": "Einen YubiKey hinzuzufügen verschlüsselt deinen Keystore neu. Wenn du den Zugriff auf deinen YubiKey verlierst UND dein Passwort vergisst, kann nur deine 12-Wort-Seed-Phrase dieses Konto wiederherstellen. Bitte stelle sicher, dass sie an einem sicheren Ort notiert ist, bevor du fortfährst.",
       "backup_confirm_label": "Ja, meine Seed-Phrase ist sicher gesichert.",
       "current_password_label": "Dein aktuelles Passwort",
+      "current_password_label_named": "Dein Passwort für @{account}",
       "label_label": "Bezeichnung (optional)",
       "label_placeholder": "Arbeits-YubiKey",
       "slot_picker_label": "YubiKey-Slot",

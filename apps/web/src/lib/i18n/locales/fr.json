@@ -281,6 +281,7 @@
       "cancel": "Rester connecté",
       "confirm_pending": "Verrouillage…"
     },
+    "sign_in_another_device": "Se connecter depuis un autre appareil",
     "lock_session": "Verrouiller la session",
     "view_my_profile": "Profil de @{account}"
   },
@@ -1569,7 +1570,11 @@
       },
       "arbitrage_morphit_vs_exchanges": {
         "q": "Comment fonctionne l'arbitrage entre Morphit et les exchanges centralisés/décentralisés ?",
-        "a": "Morphit est conçu pour que l'arbitrage soit facile. Les frais d'inscription sont une fraction de dollar, pas de frais taker, pas de frais de retrait sur le trade lui-même, pas de limite de retrait, pas de période d'attente. Un trader qui voit un écart de prix entre le marché P2P de Morphit et un CEX (Coinbase, Kraken, Binance) ou \"DEX\" (Uniswap, THORChain) peut poster un ordre Morphit avec un spread fin de chaque côté et laisser l'orderbook se remplir. Le sélecteur de modèle de prix permet d'épingler un `spread: 0.5%` contre le prix médian en direct de CoinGecko pour que votre ordre suive le marché automatiquement — pas de re-pricing manuel quand le prix mondial bouge. À mesure que plus de traders utilisent Morphit, les arbitragistes alignent naturellement les prix P2P avec le marché mondial, ce qui est bon pour tout le monde : spreads plus serrés, meilleures exécutions, exécution plus prévisible. Quelques notes pratiques : le règlement par trade sur Morphit est ce que vous en faites — direct wallet-à-wallet pour les paires crypto-vs-crypto (XMR contre USDT, BTC contre USDT), ou via votre banque/rail fiat de choix pour crypto-vs-fiat. Pour l'arbitrage haute fréquence, la structure de frais Sybil-tier fait monter le coût d'inscription si vous postez beaucoup d'ordres rapidement depuis le même compte ; c'est de l'infrastructure anti-spam, pas anti-arbitrage — la plupart des arbitragistes utilisent un compte par direction et n'atteignent jamais le seuil tier-2."
+        "a": "Morphit est conçu pour que l'arbitrage soit facile. Les frais d'inscription sont une fraction de dollar, pas de frais taker, pas de frais de retrait sur le trade lui-même, pas de limite de retrait, pas de période d'attente. Un trader qui voit un écart de prix entre le marché P2P de Morphit et un CEX (Coinbase, Kraken, Binance, Hive-Engine (HE)) ou \"DEX\" (Uniswap, THORChain) peut poster un ordre Morphit avec un spread fin de chaque côté et laisser l'orderbook se remplir. Le sélecteur de modèle de prix permet d'épingler un `spread: 0.5%` contre le prix médian en direct de CoinGecko pour que votre ordre suive le marché automatiquement — pas de re-pricing manuel quand le prix mondial bouge. À mesure que plus de traders utilisent Morphit, les arbitragistes alignent naturellement les prix P2P avec le marché mondial, ce qui est bon pour tout le monde : spreads plus serrés, meilleures exécutions, exécution plus prévisible. Quelques notes pratiques : le règlement par trade sur Morphit est ce que vous en faites — direct wallet-à-wallet pour les paires crypto-vs-crypto (XMR contre USDT, BTC contre USDT), ou via votre banque/rail fiat de choix pour crypto-vs-fiat. Pour l'arbitrage haute fréquence, la structure de frais Sybil-tier fait monter le coût d'inscription si vous postez beaucoup d'ordres rapidement depuis le même compte ; c'est de l'infrastructure anti-spam, pas anti-arbitrage — la plupart des arbitragistes utilisent un compte par direction et n'atteignent jamais le seuil tier-2."
+      },
+      "market_making": {
+        "q": "Puis-je faire du market-making ou lancer un bot de trading sur Morphit ?",
+        "a": "Oui — Morphit est conçu pour accueillir les market makers et les bots de trading. Pas de frais maker ni taker : vous ne payez que les frais d'inscription forfaitaires d'environ $0.12 par ordre, sans frais de retrait, sans limite de retrait et sans période d'attente. Le modèle de prix `spread` du formulaire d'ordre épingle un ordre à un pourcentage du prix médian en direct de CoinGecko (par exemple, `market ± 0.5%`), de sorte qu'il se re-price automatiquement quand le prix mondial bouge, sans mise à jour manuelle. Tout l'orderbook est lisible par programmation via les outils MCP en lecture seule et les flux RSS — pas d'API key, pas d'approbation de compte, pas de KYC — et comme chaque ordre est une simple opération on-chain, un bot peut en poster un en signant directement tandis que l'instance ne détient jamais vos fonds. Les frais Sybil-tier anti-spam n'augmentent que si vous postez beaucoup d'ordres depuis un seul compte d'un coup ; utiliser un compte par direction reste bien en dessous du seuil."
       },
       "what_is_doge": {
         "q": "Qu'est-ce que DOGE sur Morphit ?",
@@ -2087,10 +2092,10 @@
     "qr_loading": "Chargement du code QR…",
     "qr_render_error": "Impossible d'afficher le code. Rafraîchis la page.",
     "qr_aria": "Code QR contenant une demande de connexion à usage unique",
-    "scan_instruction": "Ouvre Morphit sur ton téléphone et touche « Se connecter depuis un autre appareil ».",
+    "scan_instruction": "Sur ton téléphone, touche ton avatar (en haut à droite) et choisis « Se connecter depuis un autre appareil », puis vise ce code avec sa caméra.",
     "expires_in": "Expire dans {seconds} secondes",
     "no_phone_scanner_heading": "Pas de scanner QR ?",
-    "no_phone_scanner_body": "Ouvre Morphit sur ton téléphone, va sur Se connecter → « Depuis un autre appareil » et suis les instructions.",
+    "no_phone_scanner_body": "Pas besoin d'une appli QR séparée — Morphit a son propre scanner. Sur ton téléphone, touche ton avatar (en haut à droite) et choisis « Se connecter depuis un autre appareil ».",
     "received_heading": "Connecté !",
     "received_body": "Bienvenue, @{account}. Direction l'orderbook…",
     "expired_heading": "Ce code a expiré",
@@ -4054,6 +4059,7 @@
       "backup_warning_body": "Ajouter une YubiKey re-chiffre ton keystore. Si tu perds l'accès à ta YubiKey ET oublies ton mot de passe, seule ta phrase de récupération de 12 mots peut restaurer ce compte. Assure-toi qu'elle est notée en lieu sûr avant de continuer.",
       "backup_confirm_label": "Oui, ma phrase de récupération est sauvegardée en sécurité.",
       "current_password_label": "Ton mot de passe actuel",
+      "current_password_label_named": "Ton mot de passe @{account}",
       "label_label": "Étiquette (facultatif)",
       "label_placeholder": "YubiKey du travail",
       "slot_picker_label": "Emplacement de la YubiKey",

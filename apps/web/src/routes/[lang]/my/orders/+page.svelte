@@ -22,6 +22,7 @@
 	import { get } from 'svelte/store';
 
 	import Head from '$components/Head.svelte';
+	import TermsText from '$components/TermsText.svelte';
 	import BusyButton from '$components/BusyButton.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
 	// cp165 byte-budget: 3 disclosure/modal components below are
@@ -693,7 +694,9 @@
 							</div>
 
 							{#if o.terms}
-								<p class="mt-2 text-sm text-ink-700 dark:text-ink-200">{o.terms}</p>
+								<p class="mt-2 text-sm text-ink-700 dark:text-ink-200">
+									<TermsText text={o.terms} />
+								</p>
 							{/if}
 						</div>
 
@@ -702,7 +705,10 @@
 							{#if o.status === 'live'}
 								{#if withinEditWindow(o)}
 									{@const remaining = editWindowRemainingSeconds(o)}
-									<BusyButton variant="secondary" onclick={() => gotoLocale(`/post/edit/${o.permlink}`)}>
+									<BusyButton
+										variant="secondary"
+										onclick={() => gotoLocale(`/post/edit/${o.permlink}`)}
+									>
 										{$_('my_orders.order.action_edit')}
 									</BusyButton>
 									<!-- Sally finding M1/M8 (Part 68): live

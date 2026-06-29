@@ -161,6 +161,7 @@ export const FAQ_KEYS = [
 
 	// ─── 10. Advanced topics ───────────────────────────────────
 	'arbitrage_morphit_vs_exchanges',
+	'market_making',
 	'taxes',
 	'public_api',
 	'wallet_developer_api',
@@ -212,7 +213,13 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 	// Intro + framing cluster — helps new readers orient between
 	// "what is this" and the handful of pages they should read next.
 	what_is_morphit: ['vs_others', 'is_it_safe', 'how_to_trade_walkthrough'],
-	vs_others: ['vs_atomic_swap_dexes', 'vs_bisq_haveno', 'vs_openmonero', 'what_is_morphit', 'who_runs_it'],
+	vs_others: [
+		'vs_atomic_swap_dexes',
+		'vs_bisq_haveno',
+		'vs_openmonero',
+		'what_is_morphit',
+		'who_runs_it'
+	],
 	vs_atomic_swap_dexes: ['vs_others', 'vs_bisq_haveno', 'vs_openmonero', 'no_escrow_arbitration'],
 	vs_bisq_haveno: ['vs_others', 'vs_atomic_swap_dexes', 'vs_openmonero', 'no_escrow_arbitration'],
 	vs_openmonero: ['vs_others', 'vs_bisq_haveno', 'vs_atomic_swap_dexes'],
@@ -254,8 +261,19 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 		'what_is_mana',
 		'where_does_blurt_price_come_from'
 	],
-	where_to_buy_blurt: ['blurt_benefits', 'first_order_free', 'fees', 'where_does_blurt_price_come_from'],
-	what_is_blurt: ['blurt_benefits', 'where_to_buy_blurt', 'why_chat_on_chain', 'what_is_mana', 'what_is_reputation'],
+	where_to_buy_blurt: [
+		'blurt_benefits',
+		'first_order_free',
+		'fees',
+		'where_does_blurt_price_come_from'
+	],
+	what_is_blurt: [
+		'blurt_benefits',
+		'where_to_buy_blurt',
+		'why_chat_on_chain',
+		'what_is_mana',
+		'what_is_reputation'
+	],
 	what_is_mana: ['what_is_blurt', 'blurt_benefits', 'welcome_bonus'],
 	where_does_blurt_price_come_from: [
 		'blurt_benefits',
@@ -348,8 +366,18 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 		'forward_secrecy',
 		'monero_amount_jitter'
 	],
-	monero_amount_jitter: ['chat_privacy', 'data_collection', 'why_fresh_addresses', 'privacy_practices'],
-	privacy_coins_onchain: ['monero_amount_jitter', 'why_fresh_addresses', 'xmr_txid', 'what_is_blurt'],
+	monero_amount_jitter: [
+		'chat_privacy',
+		'data_collection',
+		'why_fresh_addresses',
+		'privacy_practices'
+	],
+	privacy_coins_onchain: [
+		'monero_amount_jitter',
+		'why_fresh_addresses',
+		'xmr_txid',
+		'what_is_blurt'
+	],
 	chat_key_loss: ['chat_identity_key', 'backup_practices', 'lost_keys'],
 
 	// Chain-anchored TOFU pin (Option 5 / S2 mitigation, ADR-0015):
@@ -425,7 +453,12 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 	// switching_instances get links so readers who land on those
 	// concrete questions can navigate to the bigger "who runs this
 	// / can it be taken down" framing.
-	run_your_own: ['how_to_run_node', 'help_make_unstoppable', 'node_minimum_requirements', 'why_agpl'],
+	run_your_own: [
+		'how_to_run_node',
+		'help_make_unstoppable',
+		'node_minimum_requirements',
+		'why_agpl'
+	],
 	why_agpl: ['run_your_own', 'help_make_unstoppable', 'how_to_spread_morphit', 'data_collection'],
 	how_to_run_node: [
 		'run_your_own',
@@ -440,7 +473,12 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 	how_to_find_good_operator: ['rogue_operator', 'who_runs_it'],
 	rogue_operator: ['how_to_find_good_operator', 'who_runs_it'],
 	who_runs_it: ['run_your_own', 'rogue_operator'],
-	help_make_unstoppable: ['run_your_own', 'how_to_run_node', 'how_to_spread_morphit', 'wallet_developer_api'],
+	help_make_unstoppable: [
+		'run_your_own',
+		'how_to_run_node',
+		'how_to_spread_morphit',
+		'wallet_developer_api'
+	],
 	switching_instances: ['who_runs_it', 'run_your_own', 'how_to_find_good_operator'],
 	operator_moderation: ['rogue_operator', 'how_to_find_good_operator'],
 
@@ -488,7 +526,12 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 	use_vpn: ['privacy_practices'],
 	why_fresh_addresses: ['privacy_practices', 'xmr_txid'],
 	xmr_tx_proof: ['xmr_txid', 'privacy_practices', 'why_fresh_addresses'],
-	push_notifications_privacy: ['notifications_overview', 'chat_inbox_features', 'privacy_practices', 'lock_vs_signout'],
+	push_notifications_privacy: [
+		'notifications_overview',
+		'chat_inbox_features',
+		'privacy_practices',
+		'lock_vs_signout'
+	],
 
 	// RSS — referenced by the global footer pill, per-asset
 	// orderbook link, and per-trader profile link. Privacy
@@ -522,11 +565,7 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 	// design.  Related cluster surfaces both deep-dive companions
 	// plus chat_anti_spam (the Requests-tab triage is part of the
 	// inbox experience the overview opens with).
-	notifications_overview: [
-		'chat_inbox_features',
-		'push_notifications_privacy',
-		'chat_anti_spam'
-	],
+	notifications_overview: ['chat_inbox_features', 'push_notifications_privacy', 'chat_anti_spam'],
 	chat_anti_spam: [
 		'chat_inbox_features',
 		'sybil_protection',
@@ -567,31 +606,183 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 		'forward_secrecy',
 		'how_morphit_protects_me'
 	],
-	public_api: ['wallet_developer_api', 'run_your_own', 'how_to_run_node', 'rss_feeds', 'block_explorer'],
-	wallet_developer_api: ['public_api', 'help_make_unstoppable', 'how_to_spread_morphit', 'run_your_own'],
-	how_to_spread_morphit: ['help_make_unstoppable', 'how_operators_earn', 'wallet_developer_api', 'run_your_own'],
+	public_api: [
+		'wallet_developer_api',
+		'run_your_own',
+		'how_to_run_node',
+		'rss_feeds',
+		'block_explorer'
+	],
+	wallet_developer_api: [
+		'public_api',
+		'help_make_unstoppable',
+		'how_to_spread_morphit',
+		'run_your_own'
+	],
+	how_to_spread_morphit: [
+		'help_make_unstoppable',
+		'how_operators_earn',
+		'wallet_developer_api',
+		'run_your_own'
+	],
 	qr_login: ['lost_keys', 'backup_practices', 'lock_vs_signout', 'how_morphit_protects_me'],
-	what_is_usdt: ['why_usdt_warning', 'which_usdt_network', 'what_is_usdc', 'what_is_dai', 'fees', 'how_to_buy'],
-	why_usdt_warning: ['what_is_usdt', 'which_usdt_network', 'why_usdc_warning', 'why_dai_warning', 'how_morphit_protects_me', 'privacy_practices'],
-	which_usdt_network: ['what_is_usdt', 'why_usdt_warning', 'which_usdc_network', 'which_dai_network', 'fees', 'how_to_buy'],
-	what_is_usdc: ['why_usdc_warning', 'which_usdc_network', 'what_is_usdt', 'what_is_dai', 'fees', 'how_to_buy'],
-	why_usdc_warning: ['what_is_usdc', 'which_usdc_network', 'why_usdt_warning', 'why_dai_warning', 'how_morphit_protects_me', 'privacy_practices'],
-	which_usdc_network: ['what_is_usdc', 'why_usdc_warning', 'which_usdt_network', 'which_dai_network', 'fees', 'how_to_buy'],
-	what_is_dai: ['why_dai_warning', 'which_dai_network', 'what_is_usdt', 'what_is_usdc', 'fees', 'how_to_buy'],
-	why_dai_warning: ['what_is_dai', 'which_dai_network', 'why_usdt_warning', 'why_usdc_warning', 'how_morphit_protects_me', 'privacy_practices'],
-	which_dai_network: ['what_is_dai', 'why_dai_warning', 'which_usdc_network', 'which_usdt_network', 'fees', 'how_to_buy'],
-	what_is_doge: ['privacy_practices', 'how_to_buy', 'fees', 'how_morphit_protects_me', 'what_is_blurt'],
-	what_is_zec: ['privacy_practices', 'how_to_buy', 'fees', 'how_morphit_protects_me', 'what_is_blurt'],
-	what_is_arrr: ['privacy_practices', 'how_to_buy', 'fees', 'how_morphit_protects_me', 'what_is_blurt'],
-	what_is_dcr: ['privacy_practices', 'how_to_buy', 'fees', 'how_morphit_protects_me', 'what_is_blurt'],
-	what_is_sol: ['privacy_practices', 'how_to_buy', 'fees', 'how_morphit_protects_me', 'what_is_blurt'],
-	what_is_eth: ['privacy_practices', 'how_to_buy', 'fees', 'how_morphit_protects_me', 'what_is_blurt'],
-	what_is_xrp: ['privacy_practices', 'how_to_buy', 'fees', 'how_morphit_protects_me', 'what_is_blurt'],
+	what_is_usdt: [
+		'why_usdt_warning',
+		'which_usdt_network',
+		'what_is_usdc',
+		'what_is_dai',
+		'fees',
+		'how_to_buy'
+	],
+	why_usdt_warning: [
+		'what_is_usdt',
+		'which_usdt_network',
+		'why_usdc_warning',
+		'why_dai_warning',
+		'how_morphit_protects_me',
+		'privacy_practices'
+	],
+	which_usdt_network: [
+		'what_is_usdt',
+		'why_usdt_warning',
+		'which_usdc_network',
+		'which_dai_network',
+		'fees',
+		'how_to_buy'
+	],
+	what_is_usdc: [
+		'why_usdc_warning',
+		'which_usdc_network',
+		'what_is_usdt',
+		'what_is_dai',
+		'fees',
+		'how_to_buy'
+	],
+	why_usdc_warning: [
+		'what_is_usdc',
+		'which_usdc_network',
+		'why_usdt_warning',
+		'why_dai_warning',
+		'how_morphit_protects_me',
+		'privacy_practices'
+	],
+	which_usdc_network: [
+		'what_is_usdc',
+		'why_usdc_warning',
+		'which_usdt_network',
+		'which_dai_network',
+		'fees',
+		'how_to_buy'
+	],
+	what_is_dai: [
+		'why_dai_warning',
+		'which_dai_network',
+		'what_is_usdt',
+		'what_is_usdc',
+		'fees',
+		'how_to_buy'
+	],
+	why_dai_warning: [
+		'what_is_dai',
+		'which_dai_network',
+		'why_usdt_warning',
+		'why_usdc_warning',
+		'how_morphit_protects_me',
+		'privacy_practices'
+	],
+	which_dai_network: [
+		'what_is_dai',
+		'why_dai_warning',
+		'which_usdc_network',
+		'which_usdt_network',
+		'fees',
+		'how_to_buy'
+	],
+	what_is_doge: [
+		'privacy_practices',
+		'how_to_buy',
+		'fees',
+		'how_morphit_protects_me',
+		'what_is_blurt'
+	],
+	what_is_zec: [
+		'privacy_practices',
+		'how_to_buy',
+		'fees',
+		'how_morphit_protects_me',
+		'what_is_blurt'
+	],
+	what_is_arrr: [
+		'privacy_practices',
+		'how_to_buy',
+		'fees',
+		'how_morphit_protects_me',
+		'what_is_blurt'
+	],
+	what_is_dcr: [
+		'privacy_practices',
+		'how_to_buy',
+		'fees',
+		'how_morphit_protects_me',
+		'what_is_blurt'
+	],
+	what_is_sol: [
+		'privacy_practices',
+		'how_to_buy',
+		'fees',
+		'how_morphit_protects_me',
+		'what_is_blurt'
+	],
+	what_is_eth: [
+		'privacy_practices',
+		'how_to_buy',
+		'fees',
+		'how_morphit_protects_me',
+		'what_is_blurt'
+	],
+	what_is_xrp: [
+		'privacy_practices',
+		'how_to_buy',
+		'fees',
+		'how_morphit_protects_me',
+		'what_is_blurt'
+	],
 	// Part 122 cp51 deep-deep N-1: BCH/LTC/DASH FAQ_RELATED parity
-	what_is_bch: ['privacy_practices', 'how_to_buy', 'fees', 'how_morphit_protects_me', 'what_is_blurt'],
-	what_is_ltc: ['privacy_practices', 'how_to_buy', 'fees', 'how_morphit_protects_me', 'what_is_blurt'],
-	what_is_dash: ['privacy_practices', 'how_to_buy', 'fees', 'how_morphit_protects_me', 'what_is_blurt'],
-	arbitrage_morphit_vs_exchanges: ['fees', 'trade_size_limits', 'how_to_buy', 'how_to_sell'],
+	what_is_bch: [
+		'privacy_practices',
+		'how_to_buy',
+		'fees',
+		'how_morphit_protects_me',
+		'what_is_blurt'
+	],
+	what_is_ltc: [
+		'privacy_practices',
+		'how_to_buy',
+		'fees',
+		'how_morphit_protects_me',
+		'what_is_blurt'
+	],
+	what_is_dash: [
+		'privacy_practices',
+		'how_to_buy',
+		'fees',
+		'how_morphit_protects_me',
+		'what_is_blurt'
+	],
+	arbitrage_morphit_vs_exchanges: [
+		'market_making',
+		'fees',
+		'trade_size_limits',
+		'how_to_buy',
+		'how_to_sell'
+	],
+	market_making: [
+		'arbitrage_morphit_vs_exchanges',
+		'fees',
+		'public_api',
+		'rss_feeds',
+		'wallet_developer_api'
+	],
 
 	// cp218 — backfill: every FAQ key now has a related cluster, so no
 	// expanded article is a dead end ("keep people reading"). These are the
@@ -1134,8 +1325,7 @@ export function searchEntries(entries: FaqEntry[], query: string, limit = 10): F
 		return entries
 			.filter(
 				(entry) =>
-					normalize(entry.question).includes(needle) ||
-					normalize(entry.answer).includes(needle)
+					normalize(entry.question).includes(needle) || normalize(entry.answer).includes(needle)
 			)
 			.slice(0, limit)
 			.map((entry) => ({ entry, score: 1 }));

@@ -381,6 +381,7 @@ SMOKES=(
 	"apps/web:account-history-via-indexer-smoke"
 	"apps/web:chain-explorer-via-indexer-smoke"
 	"apps/web:external-link-hygiene-smoke"
+	"apps/web:blurt-image-link-safety-smoke"
 	"apps/web:removed-static-asset-guard-smoke"
 	"apps/web:login-key-verify-via-indexer-smoke"
 	"apps/web:explorer-manual-refresh-smoke"

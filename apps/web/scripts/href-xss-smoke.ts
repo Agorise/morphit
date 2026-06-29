@@ -58,6 +58,7 @@ const SAFE_BUILDER_NAMES = [
 	'blurtWalletExplorerFallbackUrl',
 	'safeContactUrl',
 	'safeInstanceOrigin',
+	'safeBlurtImageUrl', // cp388 — TermsText builder; https + exact host img.blurt.blog + image-ext + no userinfo/odd-port, returns string|null
 	'validateContactUrl', // local /operators function returning string|null
 	'canonicalFor', // Head.svelte canonical builder
 	'shareUrl', // FaqSearch builder

@@ -31,6 +31,7 @@
 	import { _ } from 'svelte-i18n';
 
 	import Head from '$components/Head.svelte';
+	import TermsText from '$components/TermsText.svelte';
 	import RssFeedPicker from '$components/RssFeedPicker.svelte';
 	import BusyButton from '$components/BusyButton.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
@@ -343,10 +344,7 @@
 		eligibilityCheckedFor = acct;
 		void (async () => {
 			try {
-				const result = await checkWaiverEligibility(
-					resolveOrigin(MORPHIT_INDEXER_ORIGIN),
-					acct
-				);
+				const result = await checkWaiverEligibility(resolveOrigin(MORPHIT_INDEXER_ORIGIN), acct);
 				viewerHasOrdered = result.kind === 'ineligible_has_orders';
 			} catch {
 				viewerHasOrdered = false;
@@ -801,8 +799,6 @@
 		return $_('orderbook.order.range_open', { values: { fiat: fiatCode } });
 	}
 
-
-
 	// Part 121 cp7 — per-locale internal-link wrapper.  See
 	// $i18n/path.localePath() + the analogous helper in
 	// [lang]/+layout.svelte for design rationale.
@@ -814,7 +810,11 @@
 	routeKey="orderbook"
 	feeds={[
 		{ title: $_('seo.site_name') + ' — orderbook (RSS)', href: '/rss/orderbook.xml' },
-		{ title: $_('seo.site_name') + ' — orderbook (Atom)', href: '/rss/orderbook.atom', type: 'atom' },
+		{
+			title: $_('seo.site_name') + ' — orderbook (Atom)',
+			href: '/rss/orderbook.atom',
+			type: 'atom'
+		},
 		{
 			title: $_('seo.site_name') + ' — orderbook (JSON Feed)',
 			href: '/rss/orderbook.json',
@@ -868,10 +868,8 @@
 				href={lp('/my/orders#fee-status')}
 				class="inline-flex items-center gap-1 text-ink-900 transition-colors hover:text-morphit-emerald dark:text-white"
 			>
-				{$_('orderbook.fee_rejected_check')} <span
-					class="nav-arrow nav-arrow-right"
-					aria-hidden="true">⇨</span
-				>
+				{$_('orderbook.fee_rejected_check')}
+				<span class="nav-arrow nav-arrow-right" aria-hidden="true">⇨</span>
 			</a>
 		</p>
 	{/if}
@@ -946,149 +944,149 @@
 			</button>
 		</h2>
 		{#if filtersExpanded}
-		<div id="orderbook-filters-body" transition:slide={{ duration: 250 }}>
-		<div class="grid gap-4 sm:grid-cols-2">
-			<label class="block">
-				<span class="mb-1 block text-sm font-semibold">
-					{$_('orderbook.filters.side_label')}
-				</span>
-				<select
-					bind:value={side}
-					class="w-full cursor-pointer rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
-				>
-					<option value="">{$_('orderbook.filters.side_any')}</option>
-					<option value="buy">{$_('orderbook.filters.side_buy')}</option>
-					<option value="sell">{$_('orderbook.filters.side_sell')}</option>
-					<option value="buy_goods">{$_('orderbook.filters.side_buy_goods')}</option>
-					<option value="sell_goods">{$_('orderbook.filters.side_sell_goods')}</option>
-				</select>
-				<p class="mt-1 text-xs text-ink-500 dark:text-ink-400">
-					{$_('orderbook.filters.side_help')}
-				</p>
-			</label>
+			<div id="orderbook-filters-body" transition:slide={{ duration: 250 }}>
+				<div class="grid gap-4 sm:grid-cols-2">
+					<label class="block">
+						<span class="mb-1 block text-sm font-semibold">
+							{$_('orderbook.filters.side_label')}
+						</span>
+						<select
+							bind:value={side}
+							class="w-full cursor-pointer rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+						>
+							<option value="">{$_('orderbook.filters.side_any')}</option>
+							<option value="buy">{$_('orderbook.filters.side_buy')}</option>
+							<option value="sell">{$_('orderbook.filters.side_sell')}</option>
+							<option value="buy_goods">{$_('orderbook.filters.side_buy_goods')}</option>
+							<option value="sell_goods">{$_('orderbook.filters.side_sell_goods')}</option>
+						</select>
+						<p class="mt-1 text-xs text-ink-500 dark:text-ink-400">
+							{$_('orderbook.filters.side_help')}
+						</p>
+					</label>
 
-			<div class="block">
-				<span class="mb-1 block text-sm font-semibold">
-					{$_('orderbook.filters.asset_label')}
-				</span>
-				<AssetFilterSelect bind:value={asset} />
-			</div>
+					<div class="block">
+						<span class="mb-1 block text-sm font-semibold">
+							{$_('orderbook.filters.asset_label')}
+						</span>
+						<AssetFilterSelect bind:value={asset} />
+					</div>
 
-			<div class="block">
-				<span class="mb-1 block text-sm font-semibold">
-					{$_('orderbook.filters.fiat_label')}
-				</span>
-				<FiatCurrencySelect bind:value={fiatList} />
-			</div>
+					<div class="block">
+						<span class="mb-1 block text-sm font-semibold">
+							{$_('orderbook.filters.fiat_label')}
+						</span>
+						<FiatCurrencySelect bind:value={fiatList} />
+					</div>
 
-			<label class="block">
-				<span class="mb-1 block text-sm font-semibold">
-					{$_('orderbook.filters.region_label')}
-				</span>
-				<input
-					type="text"
-					bind:value={region}
-					maxlength="128"
-					autocomplete="off"
-					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
-					placeholder={regionPlaceholder}
-				/>
-			</label>
-		</div>
+					<label class="block">
+						<span class="mb-1 block text-sm font-semibold">
+							{$_('orderbook.filters.region_label')}
+						</span>
+						<input
+							type="text"
+							bind:value={region}
+							maxlength="128"
+							autocomplete="off"
+							class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+							placeholder={regionPlaceholder}
+						/>
+					</label>
+				</div>
 
-		<div class="mt-4 block">
-			<span class="mb-1 block text-sm font-semibold">
-				{$_('orderbook.filters.payment_methods_label')}
-			</span>
-			<PaymentFilterSelect
-				bind:value={paymentMethods}
-				additions={$instanceAdditions}
-				disabled={$instance.disabled_payment_methods}
-				placeholder={paymentPlaceholder}
-			/>
-			<p class="mt-1 text-xs text-ink-500">
-				{$_('orderbook.filters.payment_methods_hint')}
-			</p>
-		</div>
+				<div class="mt-4 block">
+					<span class="mb-1 block text-sm font-semibold">
+						{$_('orderbook.filters.payment_methods_label')}
+					</span>
+					<PaymentFilterSelect
+						bind:value={paymentMethods}
+						additions={$instanceAdditions}
+						disabled={$instance.disabled_payment_methods}
+						placeholder={paymentPlaceholder}
+					/>
+					<p class="mt-1 text-xs text-ink-500">
+						{$_('orderbook.filters.payment_methods_hint')}
+					</p>
+				</div>
 
-		<!-- Trader experience + sort. These two controls surface
+				<!-- Trader experience + sort. These two controls surface
 		     reputation data without hiding newcomers — new traders
 		     remain visible under every sort mode; the min-trades
 		     filter defaults to "Any" so the default view never
 		     excludes them. -->
-		<div class="mt-4 grid gap-4 sm:grid-cols-2">
-			<label class="block">
-				<span class="mb-1 block text-sm font-semibold">
-					{$_('orderbook.filters.min_trades_label')}
-				</span>
-				<select
-					bind:value={minTrades}
-					class="w-full cursor-pointer rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
-				>
-					<option value={0}>{$_('orderbook.filters.min_trades_any')}</option>
-					<option value={5}>{$_('orderbook.filters.min_trades_5')}</option>
-					<option value={20}>{$_('orderbook.filters.min_trades_20')}</option>
-				</select>
-				<p class="mt-1 text-xs text-ink-500">
-					{$_('orderbook.filters.min_trades_hint')}
-				</p>
-			</label>
+				<div class="mt-4 grid gap-4 sm:grid-cols-2">
+					<label class="block">
+						<span class="mb-1 block text-sm font-semibold">
+							{$_('orderbook.filters.min_trades_label')}
+						</span>
+						<select
+							bind:value={minTrades}
+							class="w-full cursor-pointer rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+						>
+							<option value={0}>{$_('orderbook.filters.min_trades_any')}</option>
+							<option value={5}>{$_('orderbook.filters.min_trades_5')}</option>
+							<option value={20}>{$_('orderbook.filters.min_trades_20')}</option>
+						</select>
+						<p class="mt-1 text-xs text-ink-500">
+							{$_('orderbook.filters.min_trades_hint')}
+						</p>
+					</label>
 
-			<label class="block">
-				<span class="mb-1 block text-sm font-semibold">
-					{$_('orderbook.filters.sort_label')}
-				</span>
-				<select
-					bind:value={sortMode}
-					class="w-full cursor-pointer rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
-				>
-					<option value="recent">{$_('orderbook.filters.sort_recent')}</option>
-					<option value="rating">{$_('orderbook.filters.sort_rating')}</option>
-					<option value="trades">{$_('orderbook.filters.sort_trades')}</option>
-				</select>
-			</label>
-		</div>
+					<label class="block">
+						<span class="mb-1 block text-sm font-semibold">
+							{$_('orderbook.filters.sort_label')}
+						</span>
+						<select
+							bind:value={sortMode}
+							class="w-full cursor-pointer rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+						>
+							<option value="recent">{$_('orderbook.filters.sort_recent')}</option>
+							<option value="rating">{$_('orderbook.filters.sort_rating')}</option>
+							<option value="trades">{$_('orderbook.filters.sort_trades')}</option>
+						</select>
+					</label>
+				</div>
 
-		{#if asset || side || fiatList.length || region || paymentMethods.length || minTrades > 0 || sortMode !== 'recent'}
-			<div class="mt-4 flex flex-wrap items-center gap-3">
-				<BusyButton variant="ghost" onclick={clearFilters}>
-					{$_('orderbook.filters.clear')}
-				</BusyButton>
+				{#if asset || side || fiatList.length || region || paymentMethods.length || minTrades > 0 || sortMode !== 'recent'}
+					<div class="mt-4 flex flex-wrap items-center gap-3">
+						<BusyButton variant="ghost" onclick={clearFilters}>
+							{$_('orderbook.filters.clear')}
+						</BusyButton>
 
-				<!-- Per-asset RSS subscribe link.
+						<!-- Per-asset RSS subscribe link.
 					Only meaningful when an asset is selected — without one,
 					the global /rss/orderbook.xml from the footer already
 					covers the use case. Keeps the URL space small (3 valid
 					asset feeds) so a passive observer learns at most "this
 					subscriber cares about <asset>."
 					Privacy and use case documented in rss_feeds FAQ. -->
-				{#if asset && asset !== 'barter'}
-					<RssFeedPicker
-						base={`/rss/orderbook/by-asset/${asset.toLowerCase()}`}
-						query={rssQuery}
-						label={$_('orderbook.filters.rss_asset_title', { values: { asset } }) as string}
-						text={$_('orderbook.filters.rss_generated_label') as string}
-						triggerClass="chip text-xs"
-						iconClass="h-3.5 w-3.5"
-					/>
-				{:else if globalRssActive}
-					<!-- Cross-asset filtered feed: no single asset selected, but
+						{#if asset && asset !== 'barter'}
+							<RssFeedPicker
+								base={`/rss/orderbook/by-asset/${asset.toLowerCase()}`}
+								query={rssQuery}
+								label={$_('orderbook.filters.rss_asset_title', { values: { asset } }) as string}
+								text={$_('orderbook.filters.rss_generated_label') as string}
+								triggerClass="chip text-xs"
+								iconClass="h-3.5 w-3.5"
+							/>
+						{:else if globalRssActive}
+							<!-- Cross-asset filtered feed: no single asset selected, but
 					     the search has filters the feed honors. Same global
 					     /rss/orderbook the footer links, with the active filters
 					     in the query. aria-label is the dynamic, already-localized
 					     criteria summary (rssTitle). -->
-					<RssFeedPicker
-						base="/rss/orderbook"
-						query={rssQuery}
-						label={rssTitle}
-						text={$_('orderbook.filters.rss_generated_label') as string}
-						triggerClass="chip text-xs"
-						iconClass="h-3.5 w-3.5"
-					/>
+							<RssFeedPicker
+								base="/rss/orderbook"
+								query={rssQuery}
+								label={rssTitle}
+								text={$_('orderbook.filters.rss_generated_label') as string}
+								triggerClass="chip text-xs"
+								iconClass="h-3.5 w-3.5"
+							/>
+						{/if}
+					</div>
 				{/if}
 			</div>
-		{/if}
-		</div>
 		{/if}
 	</section>
 
@@ -1363,7 +1361,7 @@
 								{/if}
 								{#if o.terms}
 									<p class="mt-2 text-sm text-ink-700 dark:text-ink-200">
-										{o.terms}
+										<TermsText text={o.terms} />
 									</p>
 								{/if}
 							</div>

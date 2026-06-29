@@ -32,9 +32,10 @@
  *   both Just Work.
  */
 
-import { networkInterfaces } from 'node:os';
+import { networkInterfaces, cpus, totalmem, freemem } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
+import { statfs } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { defaultRepoRoot } from '../lib/repoRoot.ts';
@@ -676,6 +677,159 @@ function serviceLine(
 	return `      ${name} ${dot}`;
 }
 
+// ─── System resources (local host, read-only, non-privileged) ──────
+//
+// CPU / memory / disk for the box the node runs on, so the operator
+// can spot a saturated CPU, a memory squeeze, or a filling disk at a
+// glance — often the real reason an indexer starts lagging.  All reads
+// are unprivileged: os.cpus()/totalmem(), /proc/meminfo, and statfs('/')
+// never EACCES for a normal user, so this preserves the view's
+// "works regardless of file permissions" property.
+
+export interface SystemResources {
+	readonly cpuPct: number | null; // 0..100 busy across all cores
+	readonly memUsedGB: number | null;
+	readonly memTotalGB: number | null;
+	readonly memPct: number | null; // 0..100
+	readonly diskUsedGB: number | null;
+	readonly diskAvailGB: number | null;
+	readonly diskTotalGB: number | null;
+	readonly diskPct: number | null; // 0..100
+}
+
+/** Bytes → GiB, one decimal.  PURE. */
+export function bytesToGB(bytes: number): number {
+	return Math.round((bytes / 1024 / 1024 / 1024) * 10) / 10;
+}
+
+/** Clamp to an integer 0..100.  PURE. */
+export function clampPct(n: number): number {
+	if (!Number.isFinite(n)) return 0;
+	return Math.max(0, Math.min(100, Math.round(n)));
+}
+
+/** Aggregate idle + total jiffies across all cores.  PURE given input. */
+export function cpuTimesTotals(
+	list: ReadonlyArray<{ times: { user: number; nice: number; sys: number; idle: number; irq: number } }>
+): { idle: number; total: number } {
+	let idle = 0;
+	let total = 0;
+	for (const cpu of list) {
+		const t = cpu.times;
+		idle += t.idle;
+		total += t.user + t.nice + t.sys + t.idle + t.irq;
+	}
+	return { idle, total };
+}
+
+/** Busy% from two cpu-times snapshots (b after a).  null if no delta. PURE. */
+export function cpuBusyPct(
+	a: { idle: number; total: number },
+	b: { idle: number; total: number }
+): number | null {
+	const dTotal = b.total - a.total;
+	const dIdle = b.idle - a.idle;
+	if (dTotal <= 0) return null;
+	return clampPct((1 - dIdle / dTotal) * 100);
+}
+
+/** Parse MemTotal/MemAvailable (bytes) from /proc/meminfo text.  null
+ *  if either line is absent (non-Linux, or no MemAvailable).  PURE. */
+export function parseMeminfo(text: string): { totalBytes: number; availBytes: number } | null {
+	const mt = text.match(/^MemTotal:\s+(\d+)\s+kB/m);
+	const ma = text.match(/^MemAvailable:\s+(\d+)\s+kB/m);
+	if (!mt || !ma) return null;
+	return { totalBytes: Number(mt[1]) * 1024, availBytes: Number(ma[1]) * 1024 };
+}
+
+/** Sample the host once.  Never throws — any failed metric is left
+ *  null and the view degrades to "unavailable" for that line. */
+export async function readSystemResources(): Promise<SystemResources> {
+	let cpuPct: number | null = null;
+	let memUsedGB: number | null = null;
+	let memTotalGB: number | null = null;
+	let memPct: number | null = null;
+	let diskUsedGB: number | null = null;
+	let diskAvailGB: number | null = null;
+	let diskTotalGB: number | null = null;
+	let diskPct: number | null = null;
+
+	// CPU: two snapshots ~150ms apart → busy fraction.
+	try {
+		const a = cpuTimesTotals(cpus());
+		await new Promise((r) => setTimeout(r, 150));
+		const b = cpuTimesTotals(cpus());
+		cpuPct = cpuBusyPct(a, b);
+	} catch {
+		/* leave null */
+	}
+
+	// Memory: prefer /proc/meminfo MemAvailable (counts reclaimable cache
+	// as free, the honest "used"); fall back to os.totalmem/freemem.
+	try {
+		let totalBytes: number;
+		let availBytes: number;
+		let parsed: { totalBytes: number; availBytes: number } | null = null;
+		try {
+			parsed = parseMeminfo(readFileSync('/proc/meminfo', 'utf8'));
+		} catch {
+			parsed = null;
+		}
+		if (parsed) {
+			totalBytes = parsed.totalBytes;
+			availBytes = parsed.availBytes;
+		} else {
+			totalBytes = totalmem();
+			availBytes = freemem();
+		}
+		const usedBytes = Math.max(0, totalBytes - availBytes);
+		memTotalGB = bytesToGB(totalBytes);
+		memUsedGB = bytesToGB(usedBytes);
+		if (totalBytes > 0) memPct = clampPct((usedBytes / totalBytes) * 100);
+	} catch {
+		/* leave null */
+	}
+
+	// Disk: the root filesystem (the VPS's drive on a single-disk box;
+	// Docker volumes / the DB live under it).  statfs is Node 18.15+.
+	try {
+		const st = await statfs('/');
+		const bsize = Number(st.bsize);
+		const totalBytes = Number(st.blocks) * bsize;
+		const availBytes = Number(st.bavail) * bsize; // usable by non-root
+		const freeBytes = Number(st.bfree) * bsize; // incl. root-reserved
+		const usedBytes = Math.max(0, totalBytes - freeBytes);
+		diskTotalGB = bytesToGB(totalBytes);
+		diskAvailGB = bytesToGB(availBytes);
+		diskUsedGB = bytesToGB(usedBytes);
+		// `df`-style use%: used relative to (used + available-to-non-root),
+		// not raw total — matches `df -h /` (reserved blocks are excluded
+		// from the denominator), the figure an operator cross-checks.
+		const usableBytes = usedBytes + availBytes;
+		if (usableBytes > 0) diskPct = clampPct((usedBytes / usableBytes) * 100);
+	} catch {
+		/* leave null */
+	}
+
+	return {
+		cpuPct,
+		memUsedGB,
+		memTotalGB,
+		memPct,
+		diskUsedGB,
+		diskAvailGB,
+		diskTotalGB,
+		diskPct
+	};
+}
+
+/** Colour a string by usage %: red ≥90, yellow ≥80, plain below.  PURE
+ *  given the colour helper. */
+export function pctColored(c: ReturnType<typeof color>, pct: number | null, s: string): string {
+	if (pct === null) return s;
+	return pct >= 90 ? c.red(s) : pct >= 80 ? c.yellow(s) : s;
+}
+
 export async function runHealth(ctx: HealthCtx): Promise<number> {
 	const c = color(ctx.colorEnabled);
 	const json = ctx.flags.json === 'true';
@@ -711,6 +865,9 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 	];
 	const canary = checkCanary(canaryFilePath(), now);
 
+	// Local host CPU / memory / disk (read-only, non-privileged).
+	const sys = await readSystemResources();
+
 	if (json) {
 		console.log(
 			JSON.stringify(
@@ -724,6 +881,16 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 						uptime_sec: relay.summary?.uptimeSec ?? null,
 						web_push: relay.summary?.webPush ?? null,
 						blurt_balance: relay.summary?.relayBalance ?? null
+					},
+					system: {
+						cpu_pct: sys.cpuPct,
+						mem_pct: sys.memPct,
+						mem_used_gb: sys.memUsedGB,
+						mem_total_gb: sys.memTotalGB,
+						disk_pct: sys.diskPct,
+						disk_used_gb: sys.diskUsedGB,
+						disk_avail_gb: sys.diskAvailGB,
+						disk_total_gb: sys.diskTotalGB
 					},
 					services: Object.fromEntries(services.map((s) => [s.unit, s.state])),
 					canary
@@ -868,6 +1035,39 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 	} else {
 		console.log(`  ${c.yellow('⚠')} answered, but not as the relay (${relay.kind})`);
 	}
+
+	// ── System resources block (local host, read-only) ──
+	console.log('');
+	console.log(`  ${c.bold('System')}    ${c.dim('(this host)')}`);
+	console.log(
+		`      CPU:           ${
+			sys.cpuPct === null ? c.dim('unavailable') : pctColored(c, sys.cpuPct, `${sys.cpuPct}%`)
+		}`
+	);
+	console.log(
+		`      Memory:        ${
+			sys.memUsedGB === null || sys.memTotalGB === null
+				? c.dim('unavailable')
+				: pctColored(
+						c,
+						sys.memPct,
+						`${sys.memUsedGB} / ${sys.memTotalGB} GB (${sys.memPct ?? '?'}%)`
+					)
+		}`
+	);
+	console.log(
+		`      Disk (/):      ${
+			sys.diskUsedGB === null || sys.diskTotalGB === null
+				? c.dim('unavailable')
+				: pctColored(
+						c,
+						sys.diskPct,
+						`${sys.diskUsedGB} / ${sys.diskTotalGB} GB used (${sys.diskPct ?? '?'}%), ${
+							sys.diskAvailGB ?? '?'
+						} GB free`
+					)
+		}`
+	);
 
 	// ── Services block ──
 	console.log('');

@@ -294,7 +294,11 @@ const SCENARIOS: Scenario[] = [
 		check: () => {
 			if (!/const WAIVER_MIN_FIAT_USD = FIRST_ORDER_MIN_USD\b/.test(src))
 				return 'floor is not wired to canonical FIRST_ORDER_MIN_USD';
-			if (!/FIRST_ORDER_MIN_USD[^\n]*from '@morphit\/asset-registry'/.test(src))
+			if (
+				!/import\s*\{[^}]*\bFIRST_ORDER_MIN_USD\b[^}]*\}\s*from\s*'@morphit\/asset-registry'/.test(
+					src
+				)
+			)
 				return 'FIRST_ORDER_MIN_USD not imported from @morphit/asset-registry';
 			if (/WAIVER_MIN_BLURT/.test(src)) return 'stale WAIVER_MIN_BLURT constant remains';
 			if (!/waiverMinUsd[^\n]*<\s*WAIVER_MIN_FIAT_USD/.test(src))

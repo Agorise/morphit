@@ -26,11 +26,26 @@
 	 *    transition to near-instant for users who've asked for
 	 *    reduced animation.
 	 *
+	 * 5. LOADING IS DEFERRED UNTIL THE ICON IS ACTUALLY VISIBLE
+	 *    (cp388). These icons live in the footer / below-the-fold
+	 *    panels; the native `loading="lazy"` hint has a generous
+	 *    fetch distance on fast connections, so on a short page the
+	 *    browser pulls them down on first paint anyway — wasting
+	 *    bytes on artwork the user hasn't scrolled to (priority #4:
+	 *    tiny footprint; "don't load what wasn't requested"). An
+	 *    IntersectionObserver assigns `src` only once the wrapper
+	 *    scrolls within 200px of the viewport, then disconnects.
+	 *    A `<noscript>` fallback keeps the icon working for no-JS
+	 *    visitors via the native lazy attribute. The text label
+	 *    that always sits beside the chip means the icon is purely
+	 *    decorative, so the JS-gated path never costs information.
+	 *
 	 * The files themselves live in `apps/web/static/icons/` and
 	 * are referenced by absolute path so any call site inherits
 	 * the same visual regardless of route depth.
 	 */
 	import { _ } from 'svelte-i18n';
+	import { onMount, onDestroy } from 'svelte';
 
 	interface Props {
 		network: 'tor' | 'lokinet' | 'i2p' | 'nostr' | 'blurt' | 'ens';
@@ -50,18 +65,74 @@
 	// navigating by image.
 	const ariaKey = $derived(`footer.${network}`);
 	const iconSrc = $derived(`/icons/icon-${network}.svg`);
+
+	// Deferred-load gate. Stays false through SSR and on first
+	// client paint, so no `src` ships in the initial HTML and the
+	// browser has nothing to fetch eagerly. Flipped true only when
+	// the wrapper scrolls into view (or right away if the browser
+	// lacks IntersectionObserver — graceful degradation).
+	let wrapperEl = $state<HTMLSpanElement | undefined>(undefined);
+	let shown = $state(false);
+	let io: IntersectionObserver | null = null;
+
+	onMount(() => {
+		if (typeof IntersectionObserver === 'undefined') {
+			// No IO support → just load it; correctness over thrift.
+			shown = true;
+			return;
+		}
+		io = new IntersectionObserver(
+			(entries) => {
+				for (const entry of entries) {
+					if (entry.isIntersecting) {
+						shown = true;
+						io?.disconnect();
+						io = null;
+						break;
+					}
+				}
+			},
+			{ rootMargin: '200px 0px', threshold: 0.01 }
+		);
+		if (wrapperEl) io.observe(wrapperEl);
+	});
+
+	onDestroy(() => {
+		io?.disconnect();
+		io = null;
+	});
 </script>
 
-<span class="alt-network-icon {cls}" style="width: {size}px; height: {size}px;">
-	<img
-		src={iconSrc}
-		alt={$_(ariaKey)}
-		width={size}
-		height={size}
-		draggable="false"
-		loading="lazy"
-		decoding="async"
-	/>
+<span
+	class="alt-network-icon {cls}"
+	style="width: {size}px; height: {size}px;"
+	bind:this={wrapperEl}
+>
+	{#if shown}
+		<img
+			src={iconSrc}
+			alt={$_(ariaKey)}
+			width={size}
+			height={size}
+			draggable="false"
+			decoding="async"
+		/>
+	{/if}
+	<!-- No-JS fallback: the IntersectionObserver gate above never
+	     runs without scripting, so render the icon directly (native
+	     lazy) for those visitors. Browsers with JS enabled ignore
+	     noscript content, so there is no double fetch. -->
+	<noscript>
+		<img
+			src={iconSrc}
+			alt={$_(ariaKey)}
+			width={size}
+			height={size}
+			draggable="false"
+			loading="lazy"
+			decoding="async"
+		/>
+	</noscript>
 </span>
 
 <style>

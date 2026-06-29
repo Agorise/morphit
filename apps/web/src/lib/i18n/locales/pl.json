@@ -281,6 +281,7 @@
       "cancel": "Zostań zalogowany",
       "confirm_pending": "Blokuję…"
     },
+    "sign_in_another_device": "Zaloguj się na innym urządzeniu",
     "lock_session": "Zablokuj sesję",
     "view_my_profile": "Profil @{account}"
   },
@@ -1569,7 +1570,11 @@
       },
       "arbitrage_morphit_vs_exchanges": {
         "q": "Jak działa arbitraż między Morphit a scentralizowanymi/zdecentralizowanymi giełdami?",
-        "a": "Morphit jest zbudowany tak, aby arbitraż był łatwy. Opłaty za wystawianie to ułamek dolara, nie ma opłaty taker, nie ma opłaty za wypłatę na samej transakcji, nie ma limitu wypłat, nie ma okresu oczekiwania. Trader, który widzi różnicę cen między rynkiem P2P Morphit a CEX (Coinbase, Kraken, Binance) lub \"DEX\" (Uniswap, THORChain), może wystawić zlecenie Morphit z cienkim spreadem po obu stronach i pozwolić, żeby orderbook się wypełnił. Selektor modelu cenowego pozwala przypiąć `spread: 0.5%` względem aktualnej średniej ceny CoinGecko, więc twoje zlecenie podąża za rynkiem automatycznie — bez ręcznej zmiany cen przy ruchach cen ogólnoświatowych. W miarę jak coraz więcej traderów używa Morphit, arbitrażyści naturalnie wyrównują ceny P2P z szerszym rynkiem, co jest dobre dla wszystkich: węższe spready, lepsze realizacje, bardziej przewidywalne wykonanie. Kilka uwag praktycznych: rozliczenie per-transakcja w Morphit jest tym, co z niego zrobisz — bezpośrednio wallet-do-wallet dla par krypto-vs-krypto (XMR za USDT, BTC za USDT) lub przez wybrany bank/rail fiat dla krypto-vs-fiat. Dla arbitrażu wysokiej częstotliwości struktura opłat Sybil-tier skaluje koszt wystawiania, jeśli wystawiasz wiele zleceń szybko z tego samego konta; to infrastruktura anty-spam, nie anty-arbitraż — większość arbitrażystów używa jednego konta na kierunek i nigdy nie osiąga progu tier-2."
+        "a": "Morphit jest zbudowany tak, aby arbitraż był łatwy. Opłaty za wystawianie to ułamek dolara, nie ma opłaty taker, nie ma opłaty za wypłatę na samej transakcji, nie ma limitu wypłat, nie ma okresu oczekiwania. Trader, który widzi różnicę cen między rynkiem P2P Morphit a CEX (Coinbase, Kraken, Binance, Hive-Engine (HE)) lub \"DEX\" (Uniswap, THORChain), może wystawić zlecenie Morphit z cienkim spreadem po obu stronach i pozwolić, żeby orderbook się wypełnił. Selektor modelu cenowego pozwala przypiąć `spread: 0.5%` względem aktualnej średniej ceny CoinGecko, więc twoje zlecenie podąża za rynkiem automatycznie — bez ręcznej zmiany cen przy ruchach cen ogólnoświatowych. W miarę jak coraz więcej traderów używa Morphit, arbitrażyści naturalnie wyrównują ceny P2P z szerszym rynkiem, co jest dobre dla wszystkich: węższe spready, lepsze realizacje, bardziej przewidywalne wykonanie. Kilka uwag praktycznych: rozliczenie per-transakcja w Morphit jest tym, co z niego zrobisz — bezpośrednio wallet-do-wallet dla par krypto-vs-krypto (XMR za USDT, BTC za USDT) lub przez wybrany bank/rail fiat dla krypto-vs-fiat. Dla arbitrażu wysokiej częstotliwości struktura opłat Sybil-tier skaluje koszt wystawiania, jeśli wystawiasz wiele zleceń szybko z tego samego konta; to infrastruktura anty-spam, nie anty-arbitraż — większość arbitrażystów używa jednego konta na kierunek i nigdy nie osiąga progu tier-2."
+      },
+      "market_making": {
+        "q": "Czy mogę robić market-making lub uruchomić bota tradingowego na Morphit?",
+        "a": "Tak — Morphit jest zbudowany tak, aby witać market makerów i boty tradingowe. Nie ma opłaty maker ani taker: płacisz tylko stałą opłatę za wystawianie wynoszącą około $0.12 za zlecenie, bez opłaty za wypłatę, bez limitu wypłat i bez okresu oczekiwania. Model cenowy `spread` w formularzu zlecenia przypina zlecenie do procentu aktualnej średniej ceny CoinGecko (na przykład `market ± 0.5%`), więc samo zmienia cenę, gdy cena ogólnoświatowa się porusza, bez ręcznych aktualizacji. Cały orderbook można odczytać programowo przez narzędzia MCP tylko do odczytu i kanały RSS — bez API key, bez zatwierdzania konta, bez KYC — a ponieważ każde zlecenie to zwykła operacja on-chain, bot może je opublikować, podpisując bezpośrednio, podczas gdy instancja nigdy nie przechowuje twoich środków. Opłata Sybil-tier anty-spam rośnie tylko wtedy, gdy wystawiasz wiele zleceń z jednego konta naraz; jedno konto na kierunek pozostaje znacznie poniżej progu."
       },
       "what_is_doge": {
         "q": "Czym jest DOGE na Morphit?",
@@ -2087,10 +2092,10 @@
     "qr_loading": "Ładowanie kodu QR…",
     "qr_render_error": "Nie udało się wyświetlić kodu. Odśwież stronę.",
     "qr_aria": "Kod QR z jednorazowym żądaniem logowania",
-    "scan_instruction": "Otwórz Morphit w telefonie i dotknij „Zaloguj się na innym urządzeniu\".",
+    "scan_instruction": "W telefonie dotknij swojego awatara (prawy górny róg) i wybierz „Zaloguj się na innym urządzeniu\", a następnie skieruj aparat na ten kod.",
     "expires_in": "Wygasa za {seconds} s",
     "no_phone_scanner_heading": "Nie masz skanera QR?",
-    "no_phone_scanner_body": "Otwórz Morphit w telefonie, przejdź do Zaloguj się → „Z innego urządzenia\" i postępuj zgodnie z instrukcjami.",
+    "no_phone_scanner_body": "Nie potrzebujesz osobnej aplikacji QR — Morphit ma własny skaner. W telefonie dotknij swojego awatara (prawy górny róg) i wybierz „Zaloguj się na innym urządzeniu\".",
     "received_heading": "Zalogowano!",
     "received_body": "Witaj, @{account}. Zabieramy cię do orderbooka…",
     "expired_heading": "Ten kod wygasł",
@@ -4054,6 +4059,7 @@
       "backup_warning_body": "Dodanie YubiKeya ponownie szyfruje keystore. Jeśli stracisz dostęp do YubiKeya I zapomnisz hasła, tylko 12-wyrazowa fraza seed może odzyskać to konto. Upewnij się, że jest zapisana w bezpiecznym miejscu, zanim przejdziesz dalej.",
       "backup_confirm_label": "Tak, moja fraza seed jest bezpiecznie zapisana.",
       "current_password_label": "Twoje obecne hasło",
+      "current_password_label_named": "Twoje hasło do @{account}",
       "label_label": "Etykieta (opcjonalnie)",
       "label_placeholder": "YubiKey do pracy",
       "slot_picker_label": "Slot YubiKeya",

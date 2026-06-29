@@ -581,13 +581,22 @@ back-fill.
 
 > **Friendlier: `morphit-ops health`.** Rather than curling and
 > reading JSON, `morphit-ops health` (menu: "Check & operate" →
-> "Node health — indexer, relay, services, canary") gives one
+> "Node health — indexer, relay, system, services, canary") gives one
 > consolidated view of the whole node:
 > - **Indexer** and **Relay** — each hits its own `/v1/health` and
 >   prints synced/behind (with the lag in blocks) or unreachable,
 >   plus version, uptime, and the healthy/total RPC count. Both
 >   auto-probe the bridge gateway if loopback doesn't answer (see the
 >   note above). The relay is reported as optional.
+> - **System** — CPU, memory, and root-disk usage of the box itself,
+>   read locally (unprivileged: `os` counters, `/proc/meminfo`, and a
+>   `statfs` on `/` — no config or DB access, so it works regardless of
+>   file permissions, same as the rest of this view). Memory and disk
+>   show used/total in GB with a percentage (disk uses the `df`-style
+>   used-of-usable figure so it matches `df -h /`); a line reads
+>   `unavailable` rather than failing if a metric can't be read. Useful
+>   for spotting a saturated CPU or a filling disk — often the real
+>   reason an indexer starts lagging.
 > - **Services** — the read-only `systemctl` active-state of
 >   `morphit-matrix-bot` and `morphit-mcp`. (The MCP runs the hardened
 >   Streamable-HTTP transport bound to `127.0.0.1:8124`, so besides the

@@ -149,7 +149,7 @@ export const MENU_GROUPS: readonly MenuGroup[] = [
 				tip: 'Changes nothing. This is the \u201cwhy won\u2019t it boot?\u201d check — it inspects config, not a running process.'
 			},
 			{
-				label: 'Node health — indexer, relay, services, canary',
+				label: 'Node health — indexer, relay, system, services, canary',
 				blurb: 'Live check of the RUNNING indexer over HTTP (/v1/health): sync state, last indexed block vs chain head, and lag.',
 				subcommand: 'health',
 				tip: 'The quickest \u201cis it synced right now?\u201d check. Needs the indexer running; doctor checks config instead.'

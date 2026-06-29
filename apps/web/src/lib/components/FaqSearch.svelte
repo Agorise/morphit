@@ -440,7 +440,7 @@
 			{@const justCopied = copiedKey === entry.key}
 			<li
 				id="faq-{entry.key}"
-				class="card p-0 scroll-mt-24 hover-subtle hover:border-morphit-emerald/30 hover:bg-emerald-50/60 dark:hover:border-morphit-emerald/25 dark:hover:bg-morphit-emerald/10"
+				class="card hover-subtle scroll-mt-24 p-0 hover:border-morphit-emerald/20 hover:bg-emerald-50/30 dark:hover:border-morphit-emerald/15 dark:hover:bg-morphit-emerald/[0.05]"
 			>
 				<!--
 					Inline-anchor target without the `faq-` prefix.  Many
