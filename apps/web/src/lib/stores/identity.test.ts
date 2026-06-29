@@ -8,7 +8,7 @@
  * resulting identity store state.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import { get } from 'svelte/store';
 
 import {
@@ -18,7 +18,9 @@ import {
 	broadcastSignOut,
 	handleSessionHandoffMessage,
 	pairedReadOnly,
-	reset
+	reset,
+	stashSessionForReload,
+	restoreSessionFromReloadStash
 } from './identity';
 import { encryptIdentity, type KeystoreEnvelope } from '$crypto/keystore';
 import { generateFullIdentity } from '$crypto/keygen';
@@ -28,6 +30,7 @@ import {
 	clearPairedSession,
 	readPairedSession
 } from '$crypto/pairedSession';
+import { ensureSodium } from '$crypto/sodium';
 
 const TEST_PASSWORD = 'correct-horse-battery-staple';
 
@@ -306,5 +309,95 @@ describe('identity — cross-tab session handoff dispatch + sign-out propagation
 		expect(get(identity).state).toBe('locked');
 		await flushMicrotasks();
 		expect(readPairedSession()).toBeNull();
+	});
+});
+
+describe('identity — reload self-handoff (Remember-me-gated, hard-reload carve-out)', () => {
+	// Mirrors the impl constant RELOAD_STASH_KEY in identity.ts.
+	const STASH_KEY = 'morphit.session.reload-stash-v1';
+	// btoa('AB') = base64 of bytes [65,66]; btoa('CD') = [67,68]. Used to prove
+	// the binary serializer round-trips key bytes back to Uint8Array.
+	const liveStash = {
+		live: {
+			createdAt: 1,
+			origin: 'posting-only',
+			posting: { role: 'posting', publicKey: { __u8__: btoa('AB') }, privateKey: { __u8__: btoa('CD') } },
+			memo: null,
+			ownerPublicKey: null,
+			activePublicKey: null
+		},
+		envelope: { scheme: 'simple' }
+	};
+
+	function stubController(): void {
+		Object.defineProperty(navigator, 'serviceWorker', {
+			configurable: true,
+			value: { controller: {} }
+		});
+	}
+	function clearController(): void {
+		delete (navigator as unknown as { serviceWorker?: unknown }).serviceWorker;
+	}
+
+	// reset() wipes live key bytes via sodium.memzero; ready the shared
+	// libsodium instance so the unlocked-state teardown doesn't throw.
+	beforeAll(async () => {
+		await ensureSodium();
+	});
+
+	beforeEach(() => {
+		reset();
+		window.sessionStorage.removeItem(STASH_KEY);
+		// jsdom has no navigator.serviceWorker by default — that is the
+		// "hard reload / no controller" baseline.
+		clearController();
+	});
+	afterEach(() => {
+		reset();
+		window.sessionStorage.removeItem(STASH_KEY);
+		clearController();
+	});
+
+	it('stashSessionForReload writes nothing while locked', () => {
+		stashSessionForReload(); // precondition: reset() → locked
+		expect(window.sessionStorage.getItem(STASH_KEY)).toBeNull();
+	});
+
+	it('restoreSessionFromReloadStash is a no-op when there is no stash', () => {
+		restoreSessionFromReloadStash();
+		expect(get(identity).state).toBe('locked');
+	});
+
+	it('discards the stash and stays LOCKED when there is no SW controller (hard reload)', () => {
+		window.sessionStorage.setItem(STASH_KEY, JSON.stringify(liveStash));
+		restoreSessionFromReloadStash();
+		expect(window.sessionStorage.getItem(STASH_KEY)).toBeNull(); // consumed once
+		expect(get(identity).state).toBe('locked'); // fail closed — not restored
+	});
+
+	it('adopts the stash and round-trips key bytes when a SW controller is present (normal reload)', () => {
+		stubController();
+		window.sessionStorage.setItem(STASH_KEY, JSON.stringify(liveStash));
+		restoreSessionFromReloadStash();
+		expect(window.sessionStorage.getItem(STASH_KEY)).toBeNull(); // consumed once
+		const st = get(identity);
+		expect(st.state).toBe('unlocked');
+		if (st.state === 'unlocked') {
+			expect(st.live.posting.publicKey).toBeInstanceOf(Uint8Array);
+			expect(Array.from(st.live.posting.publicKey)).toEqual([65, 66]);
+			expect(Array.from(st.live.posting.privateKey)).toEqual([67, 68]);
+		}
+	});
+
+	it('consumes but does NOT clobber an already-live session', () => {
+		stubController();
+		window.sessionStorage.setItem(STASH_KEY, JSON.stringify(liveStash));
+		restoreSessionFromReloadStash();
+		expect(get(identity).state).toBe('unlocked');
+		// A second stash arrives while we're already unlocked.
+		window.sessionStorage.setItem(STASH_KEY, JSON.stringify(liveStash));
+		restoreSessionFromReloadStash();
+		expect(window.sessionStorage.getItem(STASH_KEY)).toBeNull(); // still consumed
+		expect(get(identity).state).toBe('unlocked'); // live session preserved
 	});
 });

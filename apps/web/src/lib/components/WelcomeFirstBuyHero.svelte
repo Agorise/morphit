@@ -205,9 +205,9 @@
 					</a>
 					<a
 						href={lp('/faq#first_order_free')}
-						class="text-sm font-semibold text-morphit-emerald hover:underline"
+						class="inline-flex items-center gap-1 text-sm font-semibold text-ink-900 transition-colors hover:text-morphit-emerald dark:text-white"
 					>
-						{$_('common.learn_more')}
+						{$_('common.learn_more')} <span class="nav-arrow nav-arrow-right" aria-hidden="true">⇨</span>
 					</a>
 				</div>
 			</div>

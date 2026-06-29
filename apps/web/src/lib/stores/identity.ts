@@ -39,7 +39,8 @@ import { writable, derived, get, type Readable } from 'svelte/store';
 import { browser } from '$app/environment';
 import { decryptIdentity, type KeystoreEnvelope } from '$crypto/keystore';
 import { toLiveIdentity, wipeLiveIdentity, type LiveIdentity } from '$crypto/identity-core';
-import { KEYSTORE_ENVELOPE_STORAGE_KEY, clearKeystore } from '$crypto/persistentKeystore';
+import { KEYSTORE_ENVELOPE_STORAGE_KEY, clearKeystore, hasPersistedKeystore } from '$crypto/persistentKeystore';
+import { safeSession } from '../utils/safeStorage';
 import {
 	PAIRED_SESSION_STORAGE_KEY,
 	writePairedSession,
@@ -725,6 +726,120 @@ export function requestSessionFromOpenTabs(): void {
 	}
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+// Reload self-handoff — Remember-me-gated, hard-reload carve-out
+// ────────────────────────────────────────────────────────────────────────────
+//
+// Ken's decision (post-beta.38): if the user CHECKED "Remember me", a plain
+// page refresh (F5 / the reload button) must keep them logged in WITHOUT a
+// password — the convenience they opted into. A HARD refresh (Ctrl+Shift+R)
+// is an explicit "clean slate" → LOCK. If Remember-me is OFF, EVERY refresh
+// locks (the in-memory-only default is untouched).
+//
+// The cross-tab handoff above already covers a refresh while a SIBLING tab is
+// open. This covers the LONE-tab refresh: on `pagehide` we stash the live
+// session to PER-TAB sessionStorage; the next load consumes it exactly once.
+// Gated on hasPersistedKeystore() — i.e. Remember-me ON (the import/login
+// "remember me" opt-in is precisely what persists the encrypted envelope) —
+// so a privacy-max user (Remember-me OFF) never has a decrypted session
+// written anywhere.
+//
+// TRADE-OFF, made deliberately on Ken's call: while the stash exists, the
+// decrypted session sits in per-tab sessionStorage (cleared when the tab
+// closes, never shared cross-tab, and — honoring the Keypair "never serialize
+// to network" contract — NEVER sent anywhere off the device). A same-origin
+// XSS that could read it could already read the live in-memory session, and
+// the app's CSP + no-eval + SRI + on-chain release manifest make that
+// marginal. Remember-me OFF stays pure in-memory.
+//
+// Hard-reload detection: a hard reload BYPASSES the service worker, so
+// `navigator.serviceWorker.controller` is null on that load; a normal reload
+// keeps it set. We FAIL CLOSED — null controller (hard reload, or the rare
+// pre-SW-activation first load) → discard the stash and lock.
+
+const RELOAD_STASH_KEY = 'morphit.session.reload-stash-v1';
+
+// structured clone (the cross-tab handoff) preserves typed arrays; JSON does
+// not, and LiveIdentity carries Uint8Array key bytes — so base64 them.
+function reloadStashReplacer(_k: string, v: unknown): unknown {
+	if (v instanceof Uint8Array) {
+		let s = '';
+		for (const b of v) s += String.fromCharCode(b);
+		return { __u8__: btoa(s) };
+	}
+	return v;
+}
+function reloadStashReviver(_k: string, v: unknown): unknown {
+	if (v && typeof v === 'object' && typeof (v as { __u8__?: unknown }).__u8__ === 'string') {
+		const bin = atob((v as { __u8__: string }).__u8__);
+		const u = new Uint8Array(bin.length);
+		for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+		return u;
+	}
+	return v;
+}
+
+/** Stash the live session for a same-tab reload. Called from `pagehide`
+ *  BEFORE reset() wipes the in-memory keys. No-op unless the session is
+ *  UNLOCKED and Remember-me is on (hasPersistedKeystore()); a paired-readonly
+ *  session has its own disk marker (autoRestorePairedSession) and is never
+ *  stashed here. */
+export function stashSessionForReload(): void {
+	// No `browser` guard: safeSession/safeLocal are SSR-safe (return null/false
+	// off-window) and the sole caller is the browser-gated pagehide listener.
+	// Omitting it also lets vitest exercise this (SvelteKit's `browser` is
+	// false under test, which would otherwise no-op the whole function).
+	const s = get(internal);
+	if (s.state !== 'unlocked' || !s.live || !s.envelope) return;
+	if (!hasPersistedKeystore()) {
+		// Remember-me OFF → never persist the decrypted session; clear stale.
+		safeSession.remove(RELOAD_STASH_KEY);
+		return;
+	}
+	try {
+		safeSession.set(
+			RELOAD_STASH_KEY,
+			JSON.stringify({ live: s.live, envelope: s.envelope }, reloadStashReplacer)
+		);
+	} catch {
+		safeSession.remove(RELOAD_STASH_KEY);
+	}
+}
+
+/** Consume a reload stash on the next load. CONSUME-ONCE: the key is removed
+ *  before anything else, so a parse error or a hard reload can never leave the
+ *  decrypted session lingering. Restores only when (a) we're still locked
+ *  (never clobber a live session, e.g. a sibling handoff already won) and
+ *  (b) a service-worker controller is present (a hard reload has none → lock,
+ *  failing closed). */
+export function restoreSessionFromReloadStash(): void {
+	// No `browser` guard — see stashSessionForReload. safeSession is SSR-safe
+	// and the navigator.serviceWorker access below is typeof-guarded.
+	const raw = safeSession.get(RELOAD_STASH_KEY);
+	if (raw === null) return;
+	safeSession.remove(RELOAD_STASH_KEY);
+	if (get(internal).state !== 'locked') return;
+	if (
+		typeof navigator === 'undefined' ||
+		!('serviceWorker' in navigator) ||
+		navigator.serviceWorker.controller === null
+	) {
+		return; // hard reload (Ctrl+Shift+R) or pre-activation → lock
+	}
+	try {
+		const parsed = JSON.parse(raw, reloadStashReviver) as {
+			live?: LiveIdentity;
+			envelope?: KeystoreEnvelope;
+		};
+		if (parsed.live && parsed.envelope) {
+			internal.set({ state: 'unlocked', live: parsed.live, envelope: parsed.envelope });
+		}
+	} catch {
+		// Malformed stash — stay locked; the envelope is still persisted, so
+		// the user can unlock with their password.
+	}
+}
+
 /** Explicit, user-initiated Sign Out that propagates to every open tab.
  *  Posts a one-shot 'signout' over the handoff channel (so sibling tabs
  *  holding the SAME in-memory session wipe their keys too) and then resets
@@ -786,18 +901,37 @@ export function broadcastSignOut(): void {
 if (browser) {
 	autoRestorePairedSession();
 
+	// Lone-tab refresh restore (Remember-me-gated). Consume any reload stash
+	// this tab's own pagehide left BEFORE asking siblings — our own stash is
+	// the authoritative session for this tab, and a hard reload will already
+	// have caused it to be discarded (controller null → lock). Runs after the
+	// paired restore so a disk-restored paired session short-circuits it.
+	restoreSessionFromReloadStash();
+
 	// Set up the cross-tab handoff listener (so this tab can ANSWER sibling
 	// requests) and immediately ask any open tab to hand us a session.
-	// Runs after autoRestorePairedSession so a disk-restored paired session
+	// Runs after the restores above so an already-restored session
 	// short-circuits the request (we're no longer locked).
 	initSessionHandoff();
 	requestSessionFromOpenTabs();
 
-	// Best-effort: wipe keys when the tab closes. JS engines don't
-	// guarantee this runs, but when it does, it reduces the window in
-	// which keys sit in freed-but-not-scrubbed heap.
+	// Best-effort: wipe keys when the tab closes/reloads. JS engines don't
+	// guarantee this runs, but when it does, it reduces the window in which
+	// keys sit in freed-but-not-scrubbed heap. We STASH first (Remember-me-
+	// gated, a no-op otherwise) so a plain refresh can re-establish the
+	// session on the next load, THEN reset() wipes the in-memory copy.
 	window.addEventListener('pagehide', () => {
+		stashSessionForReload();
 		reset();
+	});
+
+	// bfcache restore (back/forward, or a mobile tab resumed from the page
+	// cache) re-runs neither module init nor onMount, so consume the stash
+	// here too. The session usually survived bfcache intact (still unlocked),
+	// in which case restoreSessionFromReloadStash() just clears the stash and
+	// returns without clobbering the live session.
+	window.addEventListener('pageshow', (e) => {
+		if ((e as PageTransitionEvent).persisted) restoreSessionFromReloadStash();
 	});
 
 	// Cross-tab unlock state propagation (§F.17 + Part 114 for paired).

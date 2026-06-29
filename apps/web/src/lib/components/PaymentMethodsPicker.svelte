@@ -145,6 +145,13 @@
 	 *  collapse category headers and render a flat ranked list. */
 	const inSearchMode = $derived(query.trim().length > 0);
 
+	/** The user typed a query that matches nothing. Drives the red field
+	 *  border + red "No payment methods match." text — a live, in-field
+	 *  signal that what they typed isn't a known method (distinct from the
+	 *  parent's `invalid`, which is the on-submit "you selected none" gate).
+	 *  Single red border (color swap), never a second ring on top. */
+	const noMatch = $derived(inSearchMode && searchHits.length === 0);
+
 	/** Reactive scheme-allowlisted version of the operator's
 	 *  contact URL.  Computed up here (rather than via {@const}
 	 *  inline in the template) because Svelte 5 requires
@@ -246,9 +253,12 @@
 			bind:value={query}
 			maxlength="64"
 			placeholder={$_('payment_method.search_placeholder')}
-			aria-invalid={invalid || undefined}
+			aria-invalid={invalid || noMatch || undefined}
 			aria-describedby={invalid && describedById ? describedById : undefined}
-			class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+			class="w-full rounded-xl border-2 bg-white px-3 py-2 focus:outline-none focus:ring-2 dark:bg-ink-900 {noMatch ||
+			invalid
+				? 'border-red-500 focus:ring-red-500 dark:border-red-500'
+				: 'border-ink-200 focus:ring-morphit-emerald dark:border-ink-700'}"
 			autocomplete="off"
 			autocapitalize="off"
 			autocorrect="off"
@@ -307,7 +317,7 @@
 					</button>
 				</li>
 			{:else}
-				<li class="text-sm text-ink-500 dark:text-ink-400">{$_('payment_method.no_results')}</li>
+				<li class="text-sm text-red-600 dark:text-red-400">{$_('payment_method.no_results')}</li>
 			{/each}
 		</ul>
 	{:else}
