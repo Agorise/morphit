@@ -1129,7 +1129,7 @@
       },
       "trade_goods_services": {
         "q": "我可以喺 Morphit 上交易商品或服務嗎，例如果樹或黑膠唱片？",
-        "a": "得——但有一種要花啲時間先領會到嘅特定形態。Morphit 嘅訂單模型永遠都係**一邊係可交易資產（BTC、XMR、Blurt 或者 Morphit 上架嘅任何其他幣種），另一邊係第啲嘢**。嗰個「第啲嘢」可以係：\n\n• 一種**法幣**（USD、EUR、MXN、COP、NGN——任何國家嘅錢）\n• 一種**唔同嘅加密貨幣**（例如用 BTC 支付一筆資產係 XMR 嘅訂單）\n• **商品或者服務**，透過 `Barter (goods/services)` 支付方式\n\n**要用橙樹換 XMR**，你會噉樣發布：side=`buy`、asset=`XMR`、payment_methods=`[Barter (goods/services)]`、fiat_currency=`USD`（或者你同對手方協定嘅任何計價參考），並且將具體內容寫入 `terms` 欄位——例如：`\"50 healthy orange tree saplings, 30cm+ tall, picked up at my farm in Querétaro, MX. Will release XMR after delivery.\"` 啱啱有 XMR 嘅橙樹買家會回應。\n\n**要用 BTC 換一棵車厘子樹**，發布：side=`sell`、asset=`BTC`、payment_methods=`[Barter (goods/services)]`、fiat_currency=`USD`（參考價）、terms=`\"Will accept one mature cherry tree (3+ years, healthy) as payment for 0.001 BTC. Delivery to Mexico City.\"`\n\n**你冇辦法直接建模嘅**：物物交換（橙樹換辣木樹，唔涉及加密貨幣）。每筆 Morphit 訂單嘅一邊必須係可交易資產（BTC、XMR、Blurt 或者 Morphit 上架嘅任何其他幣種）——鏈就係噉樣錨定交易、反饋就係噉樣附到真實嘅鏈上動作。對於唔涉及加密貨幣嘅純物物交換，請用第個平台。\n\n**點解有呢個約束？**三個原因：\n\n1. **聲譽需要錨定。**反饋係針對 Blurt 上面一筆訂單操作簽名嘅。訂單操作引用一個特定嘅可分割資產（帶住數量、價格、費用）。純商品唔符合呢個形態——唔存在「一棵橙樹嘅幾多」呢個問題。\n\n2. **市場之所以運作，係因為大多數訂單以一個共同單位計價。**一個喺訂單簿裡面搵 `XMR/USD < $300` 嘅買家會得到一份清爽嘅列表。如果一半訂單以果樹計價、另一半以剪髮計價，搜索同撮合就會崩潰。\n\n3. **當一邊喺鏈上可證明嗰陣，糾紛更容易處理。**如果你發送咗 BTC 但係冇收到車厘子樹，嗰筆 BTC 轉賬永遠喺鏈上。賣家冇辦法否認收到咗付款。至少一邊有加密貨幣，每筆 Morphit 交易就有一半帶住硬性憑據。\n\n**關於好似 Bitso、Zelle、PayPal 噉嘅支付方式**：呢啲係**法幣側嘅軌道**——佢哋描述法幣（或者一個以法幣計價嘅參考價）係點樣轉移嘅。「用 Bitso 轉賬換辣木樹」唔符合模型：Bitso 轉移嘅係 MXN，唔係辣木樹。最接近嘅模型：發布一筆透過 Bitso 支付嘅買入 XMR 訂單，然後另外用嗰啲 XMR 喺平台外面買辣木樹。兩筆交易，而唔係一筆。\n\n**反過嚟嘅組合**：只要資產係 Morphit 支持嘅加密貨幣之一，`(side, asset, payment_methods, fiat_currency)` 嘅任何組合都可行。自由格式嘅 `terms` 欄位描述交易喺人類可讀側實際涉及咩。常見組合：\n\n• 透過 PayPal 用 USD 買入/賣出 BTC\n• 當面用現金買入/賣出 XMR\n• 用 BTC 買入/賣出 Blurt（加密貨幣換加密貨幣）\n• 透過 Wise 或者當面現金用法幣買入/賣出 USDT（喺 Tron、Ethereum、Solana 或者 BSC 上面）\n• 用橙樹買入 XMR（物物交換，以 USD 為參考價）\n• 用一棵車厘子樹賣出 BTC（物物交換，以 USD 為參考價）\n• 用生蒜頭賣出 USDT（物物交換，以 USD 為參考價）\n• 賣出 XMR 以換取當面現金交換（`payment_methods=[cash]`）"
+        "a": "**可以 —— 而且對一些人來說，這正是 Morphit 存在的全部意義。** 如果你沒有銀行帳戶、生活在資本管制之下，或眼看著本國貨幣一週週貶值，那麼能把你的貨物和勞動直接換成硬通貨 —— 無需向銀行請求許可 —— 就不是一種便利，而是一條生路。這就是反經濟學的實踐：普通人在自由市場上點對點交易，繞開守門人。Morphit 正是為此而生。\n\n運作方式：**每一筆 Morphit 訂單的一側是可交易的幣（BTC、XMR、Blurt 或 Morphit 上架的任何資產），另一側則是你們約定的東西** —— 一種法定貨幣、另一種加密貨幣，或 **貨物與服務。** 要交易貨物或服務，請選擇 `Barter (goods/services)` 支付方式，並在 `terms` 欄位中描述交易。\n\n*示例 —— 用橙子樹換取門羅幣（Monero）：* 發佈一個 `buy XMR` 訂單，支付方式 `Barter (goods/services)`，terms：`\"50 healthy orange-tree saplings, 30cm+, pickup at my farm. XMR must be released upon pick-up.\"` 任何持有 XMR 又想要你的樹的人都可以接單。\n\n**唯一的規則：** 一側必須是 Morphit 上架的幣。正是這一點讓每筆交易在鏈上都有一張真實的收據，並讓誠實的交易者累積起跟隨他們的信譽 —— 自由市場賴以運轉的信任。"
       },
       "cash_by_mail_walkthrough": {
         "q": "我如何透過 Morphit 用郵件交易現金或運送實物商品?",
@@ -3036,7 +3036,7 @@
       "body_missing_external_tx_id": "BTC 同 XMR 費用支付需要外部交易 ID。"
     },
     "waiver": {
-      "heading": "你的首單免費!🌱",
+      "heading": "你的首單免費!",
       "body": "歡迎嚟到 Morphit！你嘅第一個訂單係免費嘅 BLURT 購買。我哋負擔上架費，你收到嘅 BLURT 以 BLURT 折扣價資助你未來嘅訂單、讓你為 Blurt 社交內容投票獲得策展獎勵，並解鎖你嘅 1 BP 歡迎權益。"
     },
     "fee_method": {
@@ -3094,10 +3094,10 @@
       "discard": "捨棄草稿"
     },
     "waiver_benefits": {
-      "tier_1": "{amount} — 約 8 個未來訂單已覆蓋 + 免費首次購買費",
-      "tier_4": "{amount} — 豐厚嘅起始餘額 + 積極交易嘅空間",
-      "tier_20": "{amount} — 接近第一個 10 BP 忠誠度里程碑",
-      "tier_100": "{amount} — 強勢起步；從第一日起喺 Blurt 擁有可觀嘅投票權重"
+      "tier_1": "{amount} — 可覆蓋幾條掛單 + 首次掛單費豁免",
+      "tier_4": "{amount} — 基礎起步餘額 + 足夠活躍交易的空間",
+      "tier_20": "{amount} — 接近你的首個 10 BP 忠誠里程碑，可獲被動收入",
+      "tier_100": "{amount} — 適合活躍交易者、DarkFi 高級用戶，並帶來更多被動收入"
     },
     "summary": {
       "sentence_buy": "我將{price}購買{amount}，並使用 {methods} 付款。",

@@ -241,7 +241,7 @@ const scenarios: readonly Scenario[] = [
 	},
 	{
 		name: 'PaymentMethodsPicker search input wires aria-invalid conditionally',
-		ok: /aria-invalid=\{invalid \|\| undefined\}/.test(PICKER)
+		ok: /aria-invalid=\{invalid \|\| noMatch \|\| undefined\}/.test(PICKER)
 	},
 	{
 		name: 'PaymentMethodsPicker search input wires aria-describedby conditionally',

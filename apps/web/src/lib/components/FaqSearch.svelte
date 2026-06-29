@@ -438,7 +438,10 @@
 		{#each $faqEntries as entry (entry.key)}
 			{@const isOpen = expanded.has(entry.key)}
 			{@const justCopied = copiedKey === entry.key}
-			<li id="faq-{entry.key}" class="card p-0 scroll-mt-24 hover-subtle">
+			<li
+				id="faq-{entry.key}"
+				class="card p-0 scroll-mt-24 hover-subtle hover:border-morphit-emerald/30 hover:bg-emerald-50/60 dark:hover:border-morphit-emerald/25 dark:hover:bg-morphit-emerald/10"
+			>
 				<!--
 					Inline-anchor target without the `faq-` prefix.  Many
 					internal "Learn more →" links spell their target as

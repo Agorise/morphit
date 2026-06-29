@@ -474,6 +474,20 @@ body {
 	transform: scaleX(-1) translateX(-3px);
 }
 
+/* cp384 (#4): emerald border flash. Used by ProtectedTextarea (Terms field)
+ * to draw the eye when barter is added → Terms becomes required. Only the
+ * 50% keyframe is set, so 0%/100% interpolate from the element's resting
+ * border-color — works in both light and dark without hardcoding either.
+ * The animation overrides the static Tailwind border-color while playing. */
+@keyframes pk-flash-green {
+	50% {
+		border-color: var(--morphit-emerald);
+	}
+}
+.pk-flash-green {
+	animation: pk-flash-green 1s ease-in-out 5;
+}
+
 @media (prefers-reduced-motion: reduce) {
 	.nav-arrow {
 		transition: color 180ms ease-out;

@@ -213,8 +213,20 @@
 				once: true
 			});
 			waitingWorker.postMessage({ type: 'APPLY_UPDATE' });
-			// Fallback: if controllerchange never fires (handoff stalls), reload anyway.
-			setTimeout(reloadOnce, 3_000);
+			// Fallback ONLY for a genuinely stalled handoff — generous on
+			// purpose. Mobile throttles skipWaiting + activate, so the
+			// controllerchange handoff can take several seconds. The old 3s
+			// fallback fired BEFORE the new worker took control on mobile: the
+			// reload then landed on the OLD worker, the verify.json poll
+			// re-detected the version mismatch, and the snackbar re-offered —
+			// the "Load it now twice on mobile" bug (PC activates fast enough
+			// that controllerchange always won the 3s race, so PC saw it once).
+			// 12s lets the real controllerchange win in virtually every case;
+			// this fallback only ever fires if the handoff never completes at
+			// all. NOT a persisted flag — persisting an "applied"/"applying"
+			// marker is what previously stranded the snackbar hidden for
+			// minutes when an update didn't land, so we deliberately don't.
+			setTimeout(reloadOnce, 12_000);
 		} else {
 			// No waiting worker to hand off — just reload to pull the new bundle.
 			setTimeout(reloadOnce, 250);

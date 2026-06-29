@@ -71,6 +71,8 @@
 	import { blockedAccounts, loadBlocks } from '$lib/chat/blocks';
 	import { recordOrderView } from '$lib/orders/views';
 	import { formatOrderPriceModel } from '$lib/orders/priceModelDisplay';
+	import { checkWaiverEligibility } from '$lib/orders/listingFee';
+	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
 	import { isUnlocked, hasAnySession } from '$stores/identity';
 
@@ -326,6 +328,30 @@
 		// the session locks/unlocks the account-name lookup re-runs.
 		void $isUnlocked;
 		return getUserBlurtAccount();
+	});
+
+	// cp384 (#2): the "Posted an order but don't see it? Check fee status"
+	// hint only makes sense once the viewer has actually posted an order, so
+	// gate it on waiver eligibility — checkWaiverEligibility returns
+	// `ineligible_has_orders` exactly when the account has ≥1 order. Fetched
+	// once per account (re-runs on login); a failure just hides the hint.
+	let viewerHasOrdered = $state(false);
+	let eligibilityCheckedFor: string | null = null;
+	$effect(() => {
+		const acct = viewerAccount;
+		if (!acct || acct === eligibilityCheckedFor) return;
+		eligibilityCheckedFor = acct;
+		void (async () => {
+			try {
+				const result = await checkWaiverEligibility(
+					resolveOrigin(MORPHIT_INDEXER_ORIGIN),
+					acct
+				);
+				viewerHasOrdered = result.kind === 'ineligible_has_orders';
+			} catch {
+				viewerHasOrdered = false;
+			}
+		})();
 	});
 
 	/** Profile data keyed by account. Populated asynchronously AFTER
@@ -832,15 +858,15 @@
 	     link gives them a recovery path back to that view.
 	     Only shown for signed-in users with a registered account
 	     name, since anonymous browsers have no orders to recover. -->
-	{#if $hasAnySession && viewerAccount !== null}
+	{#if $hasAnySession && viewerAccount !== null && viewerHasOrdered}
 		<!-- Part 116: widened from $isUnlocked to $hasAnySession so
 		     paired-readonly users (whose orders + fee-rejected chips
 		     still render on /my/orders post-Part-116 shell refactor)
 		     also see the recovery link. -->
-		<p class="mb-4 text-xs text-ink-500 dark:text-ink-400">
+		<p class="mb-4 text-xs">
 			<a
 				href={lp('/my/orders#fee-status')}
-				class="group underline transition hover:no-underline"
+				class="inline-flex items-center gap-1 text-ink-900 transition-colors hover:text-morphit-emerald dark:text-white"
 			>
 				{$_('orderbook.fee_rejected_check')} <span
 					class="nav-arrow nav-arrow-right"

@@ -626,37 +626,15 @@
 					<StatusLine kind="error">{errorMsg}</StatusLine>
 				{/if}
 
-				<BusyButton
-					variant="primary"
-					{busy}
-					busyLabel={$_('login.welcome_back.unlocking')}
-					onclick={handleUnlock}
-				>
-					{$_('common.unlock')}
-				</BusyButton>
-
-				{#if envelopeHasYubikey && webhidSupported}
-					<button
-						type="button"
-						onclick={handleUnlockYubikey}
-						disabled={busy}
-						class="block w-full rounded-xl border border-ink-300 px-4 py-2.5 text-sm font-semibold transition hover:bg-ink-50 active:scale-[0.99] disabled:opacity-50 dark:border-ink-700 dark:hover:bg-ink-900"
+				<div class="flex items-center justify-between gap-3">
+					<BusyButton
+						variant="primary"
+						{busy}
+						busyLabel={$_('login.welcome_back.unlocking')}
+						onclick={handleUnlock}
 					>
-						<span class="inline-flex items-center justify-center gap-2">
-							<img
-								src="/icons/icon-yubikey.svg"
-								alt=""
-								aria-hidden="true"
-								loading="lazy"
-								decoding="async"
-								class="h-5 w-auto opacity-90"
-							/>
-							{$_('login.welcome_back.unlock_with_yubikey')}
-						</span>
-					</button>
-				{/if}
-
-				<div class="flex justify-end pt-1">
+						{$_('common.unlock')}
+					</BusyButton>
 					<button
 						type="button"
 						onclick={promptSignOut}
@@ -681,6 +659,27 @@
 						<span class="text-sm font-semibold">{$_('avatar_menu.sign_out')}</span>
 					</button>
 				</div>
+
+				{#if envelopeHasYubikey && webhidSupported}
+					<button
+						type="button"
+						onclick={handleUnlockYubikey}
+						disabled={busy}
+						class="block w-full rounded-xl border border-ink-300 px-4 py-2.5 text-sm font-semibold transition hover:bg-ink-50 active:scale-[0.99] disabled:opacity-50 dark:border-ink-700 dark:hover:bg-ink-900"
+					>
+						<span class="inline-flex items-center justify-center gap-2">
+							<img
+								src="/icons/icon-yubikey.svg"
+								alt=""
+								aria-hidden="true"
+								loading="lazy"
+								decoding="async"
+								class="h-5 w-auto opacity-90"
+							/>
+							{$_('login.welcome_back.unlock_with_yubikey')}
+						</span>
+					</button>
+				{/if}
 			</form>
 		{/if}
 

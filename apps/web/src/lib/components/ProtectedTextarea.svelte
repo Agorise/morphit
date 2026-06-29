@@ -84,6 +84,10 @@
 		 *  from `maxlength` when using codepoint counting with a
 		 *  larger UTF-16 defense ceiling. */
 		counterLimit?: number;
+		/** cp384 (#4): when this number CHANGES (the parent increments it),
+		 *  the textarea border flashes emerald 5× over ~5s — used to draw the
+		 *  eye to a field that just became required (barter → Terms). */
+		flashToken?: number;
 	}
 
 	let {
@@ -100,10 +104,32 @@
 		showCounter = false,
 		counterAlwaysVisible = false,
 		counterMode = 'utf16',
-		counterLimit
+		counterLimit,
+		flashToken
 	}: Props = $props();
 
 	let textareaEl: HTMLTextAreaElement;
+
+	// cp384 (#4): flash the border emerald 5× over ~5s whenever flashToken
+	// changes. Toggling the class off → on (next frame) restarts the CSS
+	// animation, so repeated triggers (remove + re-add barter) re-flash each
+	// time. Plain `lastFlashToken` (non-reactive) avoids an extra effect run.
+	let flashOn = $state(false);
+	let lastFlashToken = 0;
+	$effect(() => {
+		const t = flashToken ?? 0;
+		if (t === lastFlashToken) return;
+		lastFlashToken = t;
+		if (t === 0) return;
+		flashOn = false;
+		requestAnimationFrame(() => {
+			flashOn = true;
+		});
+		const id = setTimeout(() => {
+			flashOn = false;
+		}, 5000);
+		return () => clearTimeout(id);
+	});
 	let overlayEl: HTMLDivElement;
 	let matches = $state<PrivateKeyMatch[]>([]);
 
@@ -265,6 +291,7 @@
 		class="pk-textarea w-full rounded-xl border-2 {isOver
 			? 'border-red-500 focus:ring-red-500 dark:border-red-500'
 			: 'border-ink-200 focus:ring-morphit-emerald dark:border-ink-700'} bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 dark:bg-ink-900"
+		class:pk-flash-green={flashOn}
 	></textarea>
 
 	<!-- Inline character counter. Absolute-positioned bottom-right

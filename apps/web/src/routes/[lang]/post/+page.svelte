@@ -778,6 +778,13 @@
 	 *  coercion exactly once per asset change, so explicit
 	 *  later fee-method edits by the user stick. */
 	let lastAutoSelectedForAsset = $state<Asset | null>(null);
+	// cp384 (#8): latch so the first-buy waiver auto-selects ONCE when it
+	// first becomes available — NOT on every effect run. Without it, an
+	// existing Blurt user who clicks "Pay in BLURT" got snapped straight back
+	// to the waiver (the old `waiverOffered && choice==='blurt' → waiver` ran
+	// on every change and reverted the choice). Plain (non-reactive) let — a
+	// latch, deliberately not $state. Re-armed when the waiver goes away.
+	let waiverAutoSelectDone = false;
 
 	$effect(() => {
 		// When the user picks XMR or BTC as the trade asset, default
@@ -794,16 +801,26 @@
 			}
 		}
 
-		// Auto-select waiver when it becomes available AND the user
-		// hasn't already picked a specific method. Don't override an
-		// explicit BTC/XMR choice.
-		if (waiverOffered && feeMethodChoice === 'blurt') {
-			feeMethodChoice = 'waived_first_buy';
+		// Auto-select the waiver ONCE when it first becomes available — but do
+		// NOT keep reverting an explicit BLURT choice. Existing Blurt users
+		// already hold BLURT and may want to pay the listing fee in it instead
+		// of spending their one free-first-buy waiver; the latch lets that
+		// choice stick (cp384 #8). Only blurt → waiver (never override an
+		// explicit BTC/XMR choice).
+		if (waiverOffered && !waiverAutoSelectDone) {
+			waiverAutoSelectDone = true;
+			if (feeMethodChoice === 'blurt') {
+				feeMethodChoice = 'waived_first_buy';
+			}
 		}
-		// If the user changes side from buy → sell mid-compose, we
-		// have to revert a waiver choice back to BLURT.
-		if (!waiverOffered && feeMethodChoice === 'waived_first_buy') {
-			feeMethodChoice = 'blurt';
+		// If the waiver goes away (e.g. side flips buy → sell mid-compose),
+		// revert a waiver choice back to BLURT and re-arm the latch so the
+		// waiver re-auto-selects if it becomes available again.
+		if (!waiverOffered) {
+			waiverAutoSelectDone = false;
+			if (feeMethodChoice === 'waived_first_buy') {
+				feeMethodChoice = 'blurt';
+			}
 		}
 		// Waiver is BLURT-only. Two-way sync:
 		//  - If the user picks the waiver, auto-set asset to BLURT
@@ -1563,6 +1580,29 @@
 
 	const step3Done = $derived(paymentMethods.length > 0 && paymentMethodsError === '');
 
+	// cp384 (#4): barter requires Terms. When "Barter (goods/services)" (key
+	// `barter_goods`) is among the payment methods, the Terms field becomes
+	// required and Continue stays disabled until the user has typed at least
+	// 3 chars describing the deal — a bare barter order with no terms is
+	// useless to a counterparty.
+	const barterSelected = $derived(paymentMethods.includes('barter_goods'));
+	const termsOkForBarter = $derived(!barterSelected || terms.trim().length >= 3);
+
+	// Flash the Terms textarea border emerald 5× over 5s every time barter is
+	// newly ADDED (false → true), so users see Terms is now required. Re-arms
+	// on remove + re-add. The bumped token makes ProtectedTextarea restart its
+	// border-flash animation. `barterWasSelected` is a plain (non-reactive)
+	// latch so this effect only fires on the transition.
+	let termsFlash = $state(0);
+	let barterWasSelected = false;
+	$effect(() => {
+		const now = barterSelected;
+		if (now && !barterWasSelected) {
+			termsFlash += 1;
+		}
+		barterWasSelected = now;
+	});
+
 	// cp377 (F17): order terms soft cap.  TERMS_MAX mirrors the indexer's
 	// authoritative `terms_too_long` rejection (>2048 in order.ts /
 	// orderReplace.ts).  The textarea's hard `maxlength` is set higher
@@ -1574,7 +1614,9 @@
 	const TERMS_HARD_MAX = TERMS_MAX * 2;
 	const termsOverLimit = $derived(terms.length > TERMS_MAX);
 
-	const canReview = $derived(step1Done && step2Done && step3Done && !termsOverLimit);
+	const canReview = $derived(
+		step1Done && step2Done && step3Done && !termsOverLimit && termsOkForBarter
+	);
 
 	// ─── Transition handlers ───────────────────────────────────────
 	function goToReview(): void {
@@ -2031,16 +2073,18 @@
 	     tips, and pre-flips the expiry default from 90 days to
 	     7 days via the onFirstTimeStatus callback.  Per-session
 	     dismissable.  Self-hides for experienced posters. -->
-	<FirstPostStarterPack
-		onFirstTimeStatus={(isFirstTime) => {
-			if (isFirstTime && expiresDays === 90) {
-				// Safer default for first-time posters.  Only
-				// flip if still at the form's default — don't
-				// override a value loaded from a saved draft.
-				expiresDays = 7;
-			}
-		}}
-	/>
+	{#if phase === 'editing'}
+		<FirstPostStarterPack
+			onFirstTimeStatus={(isFirstTime) => {
+				if (isFirstTime && expiresDays === 90) {
+					// Safer default for first-time posters.  Only
+					// flip if still at the form's default — don't
+					// override a value loaded from a saved draft.
+					expiresDays = 7;
+				}
+			}}
+		/>
+	{/if}
 
 	<!-- Gate 1: user must have a Blurt account. -->
 	{#if !blurtAccount}
@@ -2121,7 +2165,7 @@
 						)}{/if}
 				</h2>
 				<span class="shrink-0 text-xs font-medium text-ink-400 dark:text-ink-500">
-					{$_('post_order.form.step_counter', { values: { n: 1, total: 3 } })}
+					{$_('post_order.form.step_counter', { values: { n: 1, total: 4 } })}
 				</span>
 			</div>
 			{#if isFirstTrade}
@@ -2313,7 +2357,7 @@
 						{$_('post_order.form.step_2_heading')}
 					</h2>
 					<span class="shrink-0 text-xs font-medium text-ink-400 dark:text-ink-500">
-						{$_('post_order.form.step_counter', { values: { n: 2, total: 3 } })}
+						{$_('post_order.form.step_counter', { values: { n: 2, total: 4 } })}
 					</span>
 				</div>
 
@@ -2559,7 +2603,7 @@
 						{$_('post_order.form.step_3_heading')}
 					</h2>
 					<span class="shrink-0 text-xs font-medium text-ink-400 dark:text-ink-500">
-						{$_('post_order.form.step_counter', { values: { n: 3, total: 3 } })}
+						{$_('post_order.form.step_counter', { values: { n: 3, total: 4 } })}
 					</span>
 				</div>
 
@@ -2617,6 +2661,7 @@
 						rows={3}
 						maxlength={TERMS_HARD_MAX}
 						counterLimit={TERMS_MAX}
+						flashToken={termsFlash}
 						showCounter
 						counterAlwaysVisible
 						placeholder={termsPlaceholder}
@@ -2718,9 +2763,14 @@
 				<div class="flex items-start gap-3">
 					<span class="text-2xl" aria-hidden="true">🌱</span>
 					<div class="flex-1">
-						<h2 id="waiver-heading" class="font-display text-lg font-bold">
-							{$_('post_order.waiver.heading')}
-						</h2>
+						<div class="flex items-baseline justify-between gap-3">
+							<h2 id="waiver-heading" class="font-display text-lg font-bold">
+								{$_('post_order.waiver.heading')}
+							</h2>
+							<span class="shrink-0 text-xs font-medium text-ink-400 dark:text-ink-500">
+								{$_('post_order.form.step_counter', { values: { n: 4, total: 4 } })}
+							</span>
+						</div>
 						<p class="mt-1 text-sm text-ink-600 dark:text-ink-300">
 							{$_('post_order.waiver.body')}
 						</p>
@@ -2795,9 +2845,14 @@
 
 		{#if !waiverOffered}
 			<section class="card mb-4" aria-labelledby="fee-method-heading">
-				<h2 id="fee-method-heading" class="mb-4 font-display text-lg font-bold">
-					{$_('post_order.fee_method.legend')}
-				</h2>
+				<div class="mb-4 flex items-baseline justify-between gap-3">
+					<h2 id="fee-method-heading" class="font-display text-lg font-bold">
+						{$_('post_order.fee_method.legend')}
+					</h2>
+					<span class="shrink-0 text-xs font-medium text-ink-400 dark:text-ink-500">
+						{$_('post_order.form.step_counter', { values: { n: 4, total: 4 } })}
+					</span>
+				</div>
 				<fieldset>
 					<legend class="sr-only">{$_('post_order.fee_method.legend')}</legend>
 					<label class="flex items-start gap-2 py-1">
