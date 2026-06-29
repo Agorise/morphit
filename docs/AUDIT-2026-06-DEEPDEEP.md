@@ -1176,3 +1176,41 @@ NOT in-sandbox (→ deploy/CI + human): real-browser eyeball of the /post screen
 (typewriter animation, step badges, $1-equivalent seed per fiat, hover standard), and the live
 auto-re-pin broadcast (sandbox can't reach coingecko/RPC; the pure decision/build/parse core is
 22/22). NO TARBALL CUT (Ken: "no tarball until i say so").
+
+---
+
+## cp382 (beta.38 batch) — focused deep-deep on the changed surface
+
+Scope: this session changed only UI (`FiatCurrencySelect.svelte`, a global `app.css` hover
+rule), content (FAQ text in 10 locale JSONs, brag list, comparison generator), and docs
+(OPERATIONS/RUN-A AMD-SEV note). No crypto, key-handling, indexer, relay, or auth code-path
+was touched, so the 94-task static-audit baseline is unchanged for the untouched surface;
+this is a black-hat sweep of the delta only.
+
+**FINDING (fixed) — hover rule vs. red invalid borders.** The new global hover-brighten rule
+excluded `[aria-invalid='true']`, but several fields signal invalid by RED CLASS without
+setting aria-invalid: `ProtectedTextarea.svelte` (textarea, `border-red-500`), `FocusedField.svelte`
+(field wrapper, `border-red-500`), and the onboarding/import + settings forms (`border-red-400/500`).
+On those, hovering an invalid field would have washed the red border to neutral `ink-300`.
+FIX: added `:not([class*='border-red'])` to all three selector branches — the substring guard
+keeps every red-bordered field intact on hover in one place, no per-field aria-invalid retrofit.
+svelte-check 0/0 after.
+
+**CLEAR:**
+- **FAQ XSS / injection** — `i18n-html-injection-smoke` 1/1 + `i18n-hardcoded-english-smoke` 1/1;
+  the new OM/Haveno text carries no HTML and no English leaked into non-EN locales.
+- **FiatCurrencySelect label `for=` duplicate-id** — the static id `fiat-currency-search` is
+  safe because only ONE single-mode instance renders per page (post / post-edit on separate
+  pages; the orderbook fiat filter is multi-mode and renders no label). Noted as a minor: a
+  future page stacking two single-mode instances would need a derived id.
+- **Competitor-claim accuracy** — the Haveno June-16 dispute-resolution exploit and OpenMonero's
+  return were web-verified before publishing; the ~1,500 XMR figure is attributed to orangefren
+  as an early-tracking estimate (mainstream put June losses "still being assessed"), and the
+  unverifiable ~40 XMR May-21 OM figure was softened to the confirmed halt-payments alert.
+- **AMD SEV doc** — makes no TEE-attestation claim; frames SEV/TDX as opt-in and notes it roots
+  trust in the CPU vendor (priority-#2 tension), consistent with the prior TEE-NO decision.
+- **Comparison OM `-` on obfuscation** — defensible: OM brags V8 bytecode, which is a
+  source-protection/obfuscation technique; Bisq/Haveno/BasicSwap stay Y (open, unobfuscated).
+
+**Walkthroughs:** persona 182/182, sally 22/22 green. Charlie (MCP) and Josie (ops-cli)
+unaffected — no MCP or ops-cli runtime touched (docs only).

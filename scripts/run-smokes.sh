@@ -219,6 +219,7 @@ SMOKES=(
 	".:mcp-webpush-install-defaults-smoke"
 	".:mcp-tool-name-parity-smoke"
 	".:csp-header-consistency-smoke"
+	".:price-feed-health-header-strip-smoke"
 	".:workspace-membership-smoke"
 	".:operator-doc-fenced-path-existence-smoke"
 	".:operator-doc-section-ref-smoke"

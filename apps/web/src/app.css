@@ -309,6 +309,29 @@ body {
 		@apply bg-ink-50 dark:bg-ink-800/50;
 	}
 
+	/* Site-wide text-field hover affordance. Text inputs, textareas and
+	 * selects rest at border-ink-200 / ink-700; on hover their border steps
+	 * one shade stronger (ink-300 / ink-600) so the pointer target is
+	 * obvious — the field equivalent of the .hover-subtle standard the cards
+	 * use. Color-only transition (prefers-reduced-motion-friendly). We skip
+	 * checkbox/radio/range/file/color (not bordered text fields) and
+	 * [aria-invalid='true'] (the red invalid border must NOT wash neutral on
+	 * hover — every validated field in the app sets aria-invalid, e.g. the
+	 * post-form amount inputs and FiatCurrencySelect). We ALSO skip any field
+	 * whose class currently carries a red border ([class*='border-red'] —
+	 * catches border-red-400/500 + dark:border-red-500), because several
+	 * fields signal invalid by class WITHOUT aria-invalid (ProtectedTextarea,
+	 * FocusedField, the import/settings forms); the substring guard keeps the
+	 * red border intact on hover for all of them in one place. The emerald
+	 * focus ring still owns the focus state; a slightly stronger border
+	 * underneath it is harmless. Borderless fields (border-0, e.g. the fiat
+	 * search box) only gain a border-COLOR with zero width, so nothing shows. */
+	input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not([type='color']):not([aria-invalid='true']):not([class*='border-red']),
+	textarea:not([aria-invalid='true']):not([class*='border-red']),
+	select:not([aria-invalid='true']):not([class*='border-red']) {
+		@apply transition-colors duration-150 ease-out hover:border-ink-300 dark:hover:border-ink-600;
+	}
+
 	.brand-gradient-text {
 		background: var(--morphit-gradient);
 		-webkit-background-clip: text;

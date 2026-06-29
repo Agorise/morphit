@@ -1,7 +1,7 @@
 {
 	"_meta": {
 		"description": "Snapshot of (key, locale) pairs where the locale value differs from the canonical English value. Captured as the floor that native-translations-floor-smoke.ts checks against to prevent the LL #46 regression class (overwriting a native translation with EN-fallback).",
-		"baseline_taken_at": "2026-06-28",
+		"baseline_taken_at": "2026-06-29",
 		"en_total_leaves": 3190,
 		"native_pair_counts_per_locale": {
 			"es": 3085,

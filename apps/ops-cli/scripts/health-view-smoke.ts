@@ -430,59 +430,65 @@ expect('HV-1e an unparseable string passes through', ensureHealthPath('not a url
 	}
 }
 
-// ─── HV-9: parsePriceFeedsHealth (cp372 multi-source feed health) ───
+// ─── HV-9: parsePriceFeedsHealth (cp372 multi-source feed health;
+//          cp381 top-level operator-only block + per-source price) ───
 {
-	const diag = {
-		price_feeds: {
-			fx: {
-				enabled: true,
-				source: 'frankfurter+er_api',
-				stale: false,
-				live_currency_count: 44,
-				outlier_rejected: true,
-				contributing: 2,
-				sources: [
-					{ name: 'frankfurter', ok: true, last_ok_age_s: 12 },
-					{ name: 'er_api', ok: true, last_ok_age_s: 12 },
-					{ name: 'currency_api', ok: false, last_ok_age_s: 600 }
-				]
-			},
-			crypto: {
-				BLURT: { source: 'external_avg', stale: false, outlier_rejected: false, sources: [
-					{ name: 'coingecko', ok: true, last_ok_age_s: 30 },
-					{ name: 'coinpaprika', ok: true, last_ok_age_s: 30 }
-				] },
-				BTC: { source: 'external_avg', stale: false, outlier_rejected: true, sources: [
-					{ name: 'coingecko', ok: true, last_ok_age_s: 30 },
-					{ name: 'kraken', ok: false, last_ok_age_s: null }
-				] },
-				XMR: { source: 'morphit_native', stale: true, outlier_rejected: false, sources: [
-					{ name: 'coingecko', ok: false, last_ok_age_s: 9000 }
-				] }
-			}
+	// cp381: the parser now takes the top-level `price_feeds` block
+	// directly (it moved out of the gated `diagnostics`), and each
+	// crypto source row carries the price it reported.
+	const block = {
+		fx: {
+			enabled: true,
+			source: 'frankfurter+er_api',
+			stale: false,
+			live_currency_count: 44,
+			outlier_rejected: true,
+			contributing: 2,
+			sources: [
+				{ name: 'frankfurter', ok: true, last_ok_age_s: 12, price: null },
+				{ name: 'er_api', ok: true, last_ok_age_s: 12, price: null },
+				{ name: 'currency_api', ok: false, last_ok_age_s: 600, price: null }
+			]
+		},
+		crypto: {
+			BLURT: { source: 'external_avg', stale: false, outlier_rejected: false, sources: [
+				{ name: 'coingecko', ok: true, last_ok_age_s: 30, price: 0.0013047 },
+				{ name: 'coinpaprika', ok: true, last_ok_age_s: 30, price: 0.00130526 }
+			] },
+			BTC: { source: 'external_avg', stale: false, outlier_rejected: true, sources: [
+				{ name: 'coingecko', ok: true, last_ok_age_s: 30, price: 67000 },
+				{ name: 'kraken', ok: false, last_ok_age_s: null, price: null }
+			] },
+			XMR: { source: 'morphit_native', stale: true, outlier_rejected: false, sources: [
+				{ name: 'coingecko', ok: false, last_ok_age_s: 9000, price: null }
+			] }
 		}
 	};
-	const p = parsePriceFeedsHealth(diag);
+	const p = parsePriceFeedsHealth(block);
 	expect('HV-9a price_feeds parsed', p !== null && p.fxEnabled === true);
 	if (p) {
 		expect('HV-9b 4 feeds in FX,BLURT,BTC,XMR order', p.feeds.length === 4 && p.feeds[0]!.label.startsWith('FX') && p.feeds[1]!.label === 'BLURT' && p.feeds[2]!.label === 'BTC' && p.feeds[3]!.label === 'XMR');
 		const fx = p.feeds[0]!;
 		expect('HV-9c FX up/total counted (2/3)', fx.up === 2 && fx.total === 3);
 		expect('HV-9d FX outlier flag carried', fx.outlierRejected === true);
+		expect('HV-9d2 FX tagged not-crypto', fx.isCrypto === false);
+		const blurt = p.feeds.find((f) => f.label === 'BLURT')!;
+		expect('HV-9d3 BLURT tagged crypto + per-source price carried', blurt.isCrypto === true && blurt.sources.find((s) => s.name === 'coinpaprika')!.price === 0.00130526);
 		const btc = p.feeds.find((f) => f.label === 'BTC')!;
 		expect('HV-9e BTC down source counted (1/2)', btc.up === 1 && btc.total === 2);
+		expect('HV-9e2 BTC down source price null', btc.sources.find((s) => s.name === 'kraken')!.price === null);
 		const xmr = p.feeds.find((f) => f.label === 'XMR')!;
 		expect('HV-9f XMR stale + native source', xmr.stale === true && xmr.source === 'morphit_native');
 	}
-	expect('HV-9g absent diagnostics → null', parsePriceFeedsHealth(undefined) === null && parsePriceFeedsHealth(null) === null);
-	expect('HV-9h diagnostics without price_feeds → null', parsePriceFeedsHealth({ explorers: [] }) === null);
+	expect('HV-9g absent block → null', parsePriceFeedsHealth(undefined) === null && parsePriceFeedsHealth(null) === null);
+	expect('HV-9h block without fx/crypto → null', parsePriceFeedsHealth({ explorers: [] }) === null);
 	// FX disabled + no crypto → null (nothing to show).
-	expect('HV-9i fx disabled + empty crypto → null', parsePriceFeedsHealth({ price_feeds: { fx: { enabled: false }, crypto: {} } }) === null);
+	expect('HV-9i fx disabled + empty crypto → null', parsePriceFeedsHealth({ fx: { enabled: false }, crypto: {} }) === null);
 	// FX disabled but crypto present → parses crypto, fxEnabled false.
-	const cryptoOnly = parsePriceFeedsHealth({ price_feeds: { fx: { enabled: false }, crypto: { BTC: { source: 'external_avg', stale: false, outlier_rejected: false, sources: [{ name: 'coingecko', ok: true, last_ok_age_s: 5 }] } } } });
+	const cryptoOnly = parsePriceFeedsHealth({ fx: { enabled: false }, crypto: { BTC: { source: 'external_avg', stale: false, outlier_rejected: false, sources: [{ name: 'coingecko', ok: true, last_ok_age_s: 5, price: 67000 }] } } });
 	expect('HV-9j fx off + crypto present → crypto rendered, fxEnabled false', cryptoOnly !== null && cryptoOnly.fxEnabled === false && cryptoOnly.feeds.length === 1);
 	// Malformed source rows are skipped, not crashed.
-	const messy = parsePriceFeedsHealth({ price_feeds: { fx: { enabled: false }, crypto: { BTC: { source: 'external_avg', stale: false, outlier_rejected: false, sources: [null, { ok: true }, { name: 'coingecko', ok: true, last_ok_age_s: 5 }] } } } });
+	const messy = parsePriceFeedsHealth({ fx: { enabled: false }, crypto: { BTC: { source: 'external_avg', stale: false, outlier_rejected: false, sources: [null, { ok: true }, { name: 'coingecko', ok: true, last_ok_age_s: 5, price: 67000 }] } } });
 	expect('HV-9k malformed source rows skipped (only valid named one kept)', messy !== null && messy.feeds[0]!.total === 1);
 }
 

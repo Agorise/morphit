@@ -382,7 +382,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 166. **CHANGELOG kept in releases on Forgejo.** Every release notes what changed, what bugs were fixed, what's deprecated.
 
-167. **No proprietary modules.** No "this part is closed-source for security reasons." Every byte of the running system is in the repo.
+167. **No proprietary modules — and zero code obfuscation.** Nothing is closed "for security reasons," and nothing is obfuscated: the frontend is minified only for size, never to hide logic. Every byte of the running system is published AGPL source you can read and audit — no V8 bytecode, no opaque packed archives.
 
 168. **No telemetry.** Not even crash reporting. The codebase doesn't phone home.
 
@@ -392,7 +392,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 171. **Signed-tag release pipeline with one-command operator upgrade.** Every release tag is GPG-signed by an authorized release-signer (public keys live in `.forgejo/release-signers/` so anyone can verify); CI runs `git verify-tag` before building the tarball, and `morphit-ops upgrade` re-verifies on the operator's side before extracting, with automatic rollback on failure. A `morphit-release-monitor` systemd sidecar polls Forgejo every 6 hours and DMs the operator via matrix-bot when a new release is available — no mailing list to subscribe to, no manual repo-checking needed. Full operator guide at `docs/UPGRADING.md`.
 
-172. **Live-updated comparison image hosted at a stable URL.** Blog posts, fediverse threads, and external sites can hot-link `https://morphit.io/morphit-comparison.png` — a 2400-pixel-wide feature-by-feature table comparing Morphit to Bisq, Haveno/RetoSwap, OpenMonero, and BasicSwap across 129 verified data points. The image regenerates from `scripts/comparison-image/build_comparison.py` every time the brag list or competitor facts change; a CI smoke (`comparison-image-freshness-smoke`) fails if the PNG goes stale. Every claim is traceable to either Morphit's source code or the competitor's public docs; corrections welcome via Matrix #agorise:matrix.org.
+172. **Live-updated comparison image hosted at a stable URL.** Blog posts, fediverse threads, and external sites can hot-link `https://morphit.io/morphit-comparison.png` — a 2400-pixel-wide feature-by-feature table comparing Morphit to Bisq, Haveno/RetoSwap, OpenMonero, and BasicSwap across 134 verified data points. The image regenerates from `scripts/comparison-image/build_comparison.py` every time the brag list or competitor facts change; a CI smoke (`comparison-image-freshness-smoke`) fails if the PNG goes stale. Every claim is traceable to either Morphit's source code or the competitor's public docs; corrections welcome via Matrix #agorise:matrix.org.
 
 ## 11. Internationalization done right
 
@@ -754,4 +754,4 @@ Don't trust this list. Verify it. That's the whole point.
 
 ---
 
-*333 specific selling points. None of them invented. All of them shipped, documented, or honestly disclosed as backlog. If you find one that isn't accurate, open an issue at git.agorise.net/agorise/morphit and we'll either fix the claim or fix the code. Last updated: 10 June, 2026.*
+*333 specific selling points. None of them invented. All of them shipped, documented, or honestly disclosed as backlog. If you find one that isn't accurate, open an issue at git.agorise.net/agorise/morphit and we'll either fix the claim or fix the code. Last updated: 28 June, 2026.*
