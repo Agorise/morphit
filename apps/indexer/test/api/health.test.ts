@@ -604,3 +604,102 @@ describe('healthRoute — price source diagnostics', () => {
 		expect(body.diagnostics).toBeUndefined();
 	});
 });
+
+// ─── cp381: operator-only per-source price-feed health ──────────
+describe('healthRoute — operator-only price_feeds (cp381)', () => {
+	// A crypto source that reports per-provider health, including each
+	// provider's last reading (the price the morphit-ops view shows).
+	function blurtSourceWithStatus(): BlurtPriceSource {
+		return {
+			current: () => 0.0013,
+			currentDetailed: () => ({
+				price: 0.0013,
+				source: 'external_avg',
+				updated_at: new Date('2026-04-20T11:59:00Z'),
+				stale: false
+			}),
+			start: () => undefined,
+			stop: () => undefined,
+			sourceStatus: () => [
+				{
+					name: 'kraken',
+					ok: true,
+					lastOkAt: new Date('2026-04-20T11:59:00Z'),
+					lastTriedAt: new Date('2026-04-20T11:59:00Z'),
+					lastValue: 0.00130526
+				},
+				{
+					name: 'coinpaprika',
+					ok: false,
+					lastOkAt: new Date('2026-04-20T11:50:00Z'),
+					lastTriedAt: new Date('2026-04-20T11:59:00Z'),
+					lastValue: null
+				}
+			],
+			outlierRejected: () => false
+		};
+	}
+
+	async function requestHealth(
+		headers?: Record<string, string>,
+		query = '',
+		cfg: Config = fakeConfig()
+	): Promise<Record<string, unknown>> {
+		const app = healthRoute(
+			cfg,
+			fakePoller(),
+			fakePriceSource(),
+			new Map(),
+			new Map(),
+			null,
+			new Map([['BLURT', blurtSourceWithStatus()]])
+		);
+		const url = `http://localhost/${query ? '?' + query : ''}`;
+		const res = await app.request(url, headers ? { headers } : undefined);
+		return (await res.json()) as Record<string, unknown>;
+	}
+
+	it('emits top-level price_feeds (with per-source price) when the operator-local header is set', async () => {
+		const body = await requestHealth({ 'x-morphit-local-health': '1' });
+		expect(body.price_feeds).toBeDefined();
+		const pf = body.price_feeds as {
+			crypto: Record<string, { sources: Array<Record<string, unknown>> }>;
+		};
+		const blurt = pf.crypto.BLURT!;
+		expect(blurt).toBeDefined();
+		const kraken = blurt.sources.find((s) => s.name === 'kraken')!;
+		expect(kraken.ok).toBe(true);
+		expect(kraken.price).toBe(0.00130526);
+		const paprika = blurt.sources.find((s) => s.name === 'coinpaprika')!;
+		expect(paprika.ok).toBe(false);
+		expect(paprika.price).toBeNull();
+	});
+
+	it('omits price_feeds when the operator-local header is absent (public path)', async () => {
+		const body = await requestHealth();
+		expect(body.price_feeds).toBeUndefined();
+	});
+
+	it('omits price_feeds when the header is any value other than "1"', async () => {
+		const body = await requestHealth({ 'x-morphit-local-health': 'true' });
+		expect(body.price_feeds).toBeUndefined();
+	});
+
+	it('the operator-local header alone does NOT expose the gated diagnostics (NEW-9-8 intact)', async () => {
+		// price_feeds appears, but operator_balances / drain diagnostics
+		// still require MORPHIT_INDEXER_VERBOSE_HEALTH + ?verbose=1.
+		const body = await requestHealth({ 'x-morphit-local-health': '1' });
+		expect(body.price_feeds).toBeDefined();
+		expect(body.diagnostics).toBeUndefined();
+	});
+
+	it('full verbose diagnostics still require both flags even with the local header', async () => {
+		const body = await requestHealth(
+			{ 'x-morphit-local-health': '1' },
+			'verbose=1',
+			fakeConfig({ verboseHealth: true })
+		);
+		expect(body.price_feeds).toBeDefined();
+		expect(body.diagnostics).toBeDefined();
+	});
+});

@@ -186,9 +186,19 @@
 			     the field is focused the label yields to the search box so
 			     the user can type a replacement (picking one REPLACES). -->
 			{#if value.length === 1 && !focused}
-				<span class="px-1 py-0.5 text-sm font-medium text-ink-900 dark:text-ink-50">
+				<!-- A <label for> (not a bare <span>): clicking the visible
+				     currency text focuses the search input, which reopens the
+				     menu so the choice can be changed. As a plain span the
+				     text was a dead zone and the field read as "stuck" once a
+				     value was set (you could only reopen by hitting the thin
+				     grow-input strip to its right). cursor-text signals it's
+				     editable. -->
+				<label
+					for="fiat-currency-search"
+					class="cursor-text px-1 py-0.5 text-sm font-medium text-ink-900 dark:text-ink-50"
+				>
 					{value[0]}{#if mod && nameFor(value[0]) !== value[0]} — {nameFor(value[0])}{/if}
-				</span>
+				</label>
 			{/if}
 		{:else}
 			{#each value as code (code)}

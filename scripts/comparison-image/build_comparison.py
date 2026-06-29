@@ -145,6 +145,7 @@ SECTIONS = [
         ('Thousands of self-checking smoke tests in the source tree',        ['Y','-','-','-','-'], None),
         ('AGPL-3.0 — modified instances must publish source',                ['Y','-','-','-','-'], None),
         ('Open source under any OSI-approved license',                       ['Y','Y','Y','Y','Y'], None),
+        ('Zero code obfuscation — every shipped byte is auditable',          ['Y','Y','Y','-','Y'], None),
         ('42+ public Architecture Decision Records (ADRs)',                  ['Y','-','-','-','-'], None),
         ('No PHP / WordPress / XML-RPC / OAuth attack surface',              ['Y','Y','Y','-','Y'], None),
         ('Zero known unpatched CVEs in shipped dependencies',                ['Y','-','-','-','-'], None),

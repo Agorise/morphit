@@ -308,6 +308,9 @@ export interface FeedSourceRow {
 	readonly name: string;
 	readonly ok: boolean;
 	readonly lastOkAgeS: number | null;
+	/** This provider's last reported reading (crypto: asset→fiat price;
+	 *  null = never succeeded or FX row). */
+	readonly price: number | null;
 }
 /** One feed's rolled-up health (FX, or BLURT/BTC/XMR). */
 export interface FeedHealthRow {
@@ -317,6 +320,9 @@ export interface FeedHealthRow {
 	readonly outlierRejected: boolean;
 	readonly up: number;
 	readonly total: number;
+	/** FX feeds report a whole currency table, not a single price, so
+	 *  they render as a rolled-up summary rather than per-source prices. */
+	readonly isCrypto: boolean;
 	readonly sources: FeedSourceRow[];
 }
 export interface PriceFeedsHealthSummary {
@@ -365,19 +371,18 @@ export function summarizeHealth(body: unknown): HealthSummary {
 		webPush: typeof b.web_push === 'boolean' ? b.web_push : null,
 		relayBalance: typeof b.blurt_balance === 'string' ? b.blurt_balance : null,
 		priceFeed: parsePriceFeed(b.price_feed),
-		priceFeeds: parsePriceFeedsHealth(b.diagnostics)
+		priceFeeds: parsePriceFeedsHealth(b.price_feeds)
 	};
 }
 
-/** Interpret the verbose `diagnostics.price_feeds` block.  PURE.
- *  Returns null when diagnostics or price_feeds is absent (verbose
- *  off / relay / pre-field build).  Tolerant of partial shapes so a
- *  future field change never crashes the view. */
-export function parsePriceFeedsHealth(diagnostics: unknown): PriceFeedsHealthSummary | null {
-	if (diagnostics === null || typeof diagnostics !== 'object') return null;
-	const pf = (diagnostics as Record<string, unknown>).price_feeds;
-	if (pf === null || typeof pf !== 'object') return null;
-	const block = pf as Record<string, unknown>;
+/** Interpret the top-level `price_feeds` block from a `/v1/health`
+ *  body.  PURE.  Returns null when the block is absent (operator-local
+ *  header not sent / stripped at the public edge / relay health /
+ *  pre-field build).  Tolerant of partial shapes so a future field
+ *  change never crashes the view. */
+export function parsePriceFeedsHealth(priceFeeds: unknown): PriceFeedsHealthSummary | null {
+	if (priceFeeds === null || typeof priceFeeds !== 'object') return null;
+	const block = priceFeeds as Record<string, unknown>;
 
 	const rows = (raw: unknown): FeedSourceRow[] => {
 		if (!Array.isArray(raw)) return [];
@@ -386,10 +391,17 @@ export function parsePriceFeedsHealth(diagnostics: unknown): PriceFeedsHealthSum
 			const o = r as Record<string, unknown>;
 			const name = typeof o.name === 'string' ? safe(o.name) : null;
 			if (name === null) return [];
-			return [{ name, ok: o.ok === true, lastOkAgeS: numOrNull(o.last_ok_age_s) }];
+			return [
+				{
+					name,
+					ok: o.ok === true,
+					lastOkAgeS: numOrNull(o.last_ok_age_s),
+					price: numOrNull(o.price)
+				}
+			];
 		});
 	};
-	const toFeed = (label: string, v: unknown): FeedHealthRow | null => {
+	const toFeed = (label: string, isCrypto: boolean, v: unknown): FeedHealthRow | null => {
 		if (v === null || typeof v !== 'object') return null;
 		const o = v as Record<string, unknown>;
 		const sources = rows(o.sources);
@@ -400,6 +412,7 @@ export function parsePriceFeedsHealth(diagnostics: unknown): PriceFeedsHealthSum
 			outlierRejected: o.outlier_rejected === true,
 			up: sources.filter((s) => s.ok).length,
 			total: sources.length,
+			isCrypto,
 			sources
 		};
 	};
@@ -408,20 +421,20 @@ export function parsePriceFeedsHealth(diagnostics: unknown): PriceFeedsHealthSum
 	const fx = block.fx as Record<string, unknown> | undefined;
 	const fxEnabled = !!fx && fx.enabled === true;
 	if (fxEnabled) {
-		const row = toFeed('FX (USD→fiat)', fx);
+		const row = toFeed('FX (USD→fiat)', false, fx);
 		if (row) feeds.push(row);
 	}
 	const crypto = block.crypto;
 	if (crypto !== null && typeof crypto === 'object') {
 		// Stable display order; only assets actually present are shown.
 		for (const asset of ['BLURT', 'BTC', 'XMR']) {
-			const row = toFeed(asset, (crypto as Record<string, unknown>)[asset]);
+			const row = toFeed(asset, true, (crypto as Record<string, unknown>)[asset]);
 			if (row) feeds.push(row);
 		}
 		// Any other assets the operator configured, appended after.
 		for (const asset of Object.keys(crypto as Record<string, unknown>)) {
 			if (['BLURT', 'BTC', 'XMR'].includes(asset)) continue;
-			const row = toFeed(asset, (crypto as Record<string, unknown>)[asset]);
+			const row = toFeed(asset, true, (crypto as Record<string, unknown>)[asset]);
 			if (row) feeds.push(row);
 		}
 	}
@@ -536,17 +549,19 @@ interface FetchedHealth {
 async function fetchHealth(url: string, timeoutMs = 5000): Promise<FetchedHealth> {
 	const controller = new AbortController();
 	const t = setTimeout(() => controller.abort(), timeoutMs);
-	// cp372: request the verbose body so the per-source FX + crypto
-	// feed health (gated `diagnostics.price_feeds`) is available to the
-	// node-health view.  Harmless if the operator hasn't enabled
-	// verboseHealth — `?verbose=1` is a no-op then (the indexer returns
-	// the compact body), and the renderer falls back to a hint.
-	const verboseUrl = url.includes('?') ? `${url}&verbose=1` : `${url}?verbose=1`;
+	// cp381: request the operator-only per-source price-feed health.
+	// The ops-cli hits the indexer directly on the internal bridge, so
+	// this header reaches it; the public edge strips X-Morphit-Local-Health
+	// (proxy_set_header … ""), so a public caller can never forge it. The
+	// indexer returns the top-level `price_feeds` block only when the
+	// header is present — the gated `diagnostics` (operator balances /
+	// drain signal, NEW-9-8) still needs MORPHIT_INDEXER_VERBOSE_HEALTH
+	// and isn't requested here.
 	try {
-		const res = await fetch(verboseUrl, {
+		const res = await fetch(url, {
 			method: 'GET',
 			signal: controller.signal,
-			headers: { accept: 'application/json' },
+			headers: { accept: 'application/json', 'x-morphit-local-health': '1' },
 			redirect: 'manual'
 		});
 		const text = await res.text();
@@ -763,31 +778,61 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 			}
 			console.log(`      Price feed:    ${pfLine}`);
 		}
-		// cp372 — per-source FX + crypto feed health (from the verbose
-		// diagnostics block).  Shows, at a glance, how many providers
-		// answered each feed, freshness, the serving source, and a
-		// disagreement flag (an outlier was dropped from the average).
+		// cp381 — per-source price-feed health (operator-only; from the
+		// top-level `price_feeds` block, gated by the X-Morphit-Local-Health
+		// header the public edge strips).  For crypto feeds, one line per
+		// provider — status, the price that provider reported, and its
+		// name — so it's obvious which upstream is serving and which is
+		// down.  FX has no single per-source price (a whole currency
+		// table), so it stays a rolled-up summary.
 		if (s.priceFeeds !== null) {
-			console.log(`      ${c.bold('Price feeds')}`);
+			const denom = s.priceFeed?.denomination ?? 'USD';
 			for (const f of s.priceFeeds.feeds) {
-				const allUp = f.total > 0 && f.up === f.total;
-				const tag = f.stale ? c.red('✗') : !allUp || f.outlierRejected ? c.yellow('⚠') : c.green('✓');
-				const cnt = `${f.up}/${f.total} src`;
-				const cntStr = f.stale || !allUp ? c.yellow(cnt) : cnt;
-				const fresh = f.stale ? c.yellow('STALE') : 'fresh';
-				const dis = f.outlierRejected ? ` · ${c.yellow('⚠ disagreement')}` : '';
-				const label = f.label.padEnd(14);
-				console.log(`        ${tag} ${label} ${cntStr} · ${fresh} · ${c.dim(safe(f.source))}${dis}`);
-				// List any source that didn't answer this cycle (the
-				// actionable ones) with how long since it last did.
-				for (const src of f.sources.filter((x) => !x.ok)) {
-					const age = src.lastOkAgeS === null ? 'never' : `${fmtUptime(src.lastOkAgeS)} ago`;
-					console.log(`            ${c.dim(`↳ ${safe(src.name)} down (last ok: ${age})`)}`);
+				if (f.isCrypto) {
+					for (const src of f.sources) {
+						const status = src.ok ? c.green('on  ') : c.red('down');
+						const px =
+							src.ok && src.price !== null
+								? `1 ${f.label} \u2248 ${src.price} ${denom}`
+								: `1 ${f.label} \u2248 ${c.dim('??')} ${denom}`;
+						const age =
+							src.lastOkAgeS === null
+								? src.ok
+									? ''
+									: c.dim(' (never answered)')
+								: c.dim(` (${fmtUptime(src.lastOkAgeS)} ago)`);
+						console.log(
+							`      Price feed:    ${status} \u2014 ${px} (${safe(src.name)})${age}`
+						);
+					}
+					if (f.outlierRejected) {
+						console.log(
+							`                     ${c.yellow('⚠ provider disagreement')} ${c.dim('— an outlier was dropped from the median')}`
+						);
+					}
+				} else {
+					// FX feed: rolled-up summary (no single per-source price).
+					const allUp = f.total > 0 && f.up === f.total;
+					const tag = f.stale
+						? c.red('✗')
+						: !allUp || f.outlierRejected
+							? c.yellow('⚠')
+							: c.green('✓');
+					const cnt = `${f.up}/${f.total} src`;
+					const fresh = f.stale ? c.yellow('STALE') : 'fresh';
+					const dis = f.outlierRejected ? ` · ${c.yellow('⚠ disagreement')}` : '';
+					console.log(
+						`      FX feed:       ${tag} ${cnt} · ${fresh} · ${c.dim(safe(f.source))}${dis}`
+					);
+					for (const src of f.sources.filter((x) => !x.ok)) {
+						const age = src.lastOkAgeS === null ? 'never' : `${fmtUptime(src.lastOkAgeS)} ago`;
+						console.log(`            ${c.dim(`↳ ${safe(src.name)} down (last ok: ${age})`)}`);
+					}
 				}
 			}
 		} else if (s.priceFeed !== null && s.priceFeed.enabled) {
 			console.log(
-				`      ${c.dim('Price feeds:   enable verboseHealth (MORPHIT_INDEXER_VERBOSE_HEALTH=true) for per-source status')}`
+				`      ${c.dim('Price feeds:   per-source status unavailable (older indexer build)')}`
 			);
 		}
 	} else if (indexer.kind === 'unreachable') {

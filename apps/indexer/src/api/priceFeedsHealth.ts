@@ -24,6 +24,11 @@ export interface SourceHealthRow {
 	readonly ok: boolean;
 	/** Whole seconds since this source last succeeded; null = never. */
 	readonly last_ok_age_s: number | null;
+	/** This source's last reading (crypto feeds: the asset→USD price it
+	 *  reported; null = never succeeded). FX rows are always null — an FX
+	 *  source reports a whole currency table, not a single price. Lets the
+	 *  morphit-ops view show each provider's own number next to its name. */
+	readonly price: number | null;
 }
 
 export interface FxFeedHealth {
@@ -71,7 +76,8 @@ export function buildPriceFeedsHealth(
 		const rows: SourceHealthRow[] = (fxSource.sourceStatus?.() ?? []).map((s) => ({
 			name: s.name,
 			ok: s.ok,
-			last_ok_age_s: ageSeconds(s.lastOkAt, nowMs)
+			last_ok_age_s: ageSeconds(s.lastOkAt, nowMs),
+			price: null
 		}));
 		fx = {
 			enabled: true,
@@ -91,7 +97,8 @@ export function buildPriceFeedsHealth(
 		const rows: SourceHealthRow[] = (source.sourceStatus?.() ?? []).map((s) => ({
 			name: s.name,
 			ok: s.ok,
-			last_ok_age_s: ageSeconds(s.lastOkAt, nowMs)
+			last_ok_age_s: ageSeconds(s.lastOkAt, nowMs),
+			price: s.lastValue ?? null
 		}));
 		crypto[asset] = {
 			source: d.source,

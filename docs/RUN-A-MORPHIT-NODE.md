@@ -193,6 +193,8 @@ Once registered, orders posted on your instance carry your tag, and your share o
 
 **Upkeep — how often will I touch this?** Rarely. To update Morphit, `git pull`, then `sudo morphit-ops upgrade` — it rebuilds and redeploys the website (and the read-only helper) and restarts the services for you. Check on things any time with `morphit-ops status`, or the live health endpoint at `https://yourdomain.com/v1/health`.
 
+**Is the USD price healthy?** Run `morphit-ops health` and look at the price-feed lines. Morphit reads the BLURT price from several public providers at once and uses the middle value, so one provider being off doesn't move your price. The health view lists each provider, whether it answered, and the price it gave — so if one (say, a particular API) is down, you'll see a `down` next to its name and can ignore it unless several go dark at once. This detail shows only in your own `morphit-ops health` on the server, never on the public `https://yourdomain.com/v1/health` page.
+
 ---
 
 ## 11. Reference and hardening
@@ -237,7 +239,11 @@ npx morphit-ops bunkerweb
 
 It runs as a small Docker stack on its own private network (`172.20.0.0/16`); use that range if you ever reference the WAF network in your own config.
 
-### 11.5 Everything else
+### 11.5 Optional: an encrypted-memory host (advanced)
+
+Totally optional, and most people don't need it. If your VPS offers a "confidential computing" mode (AMD SEV-SNP or Intel TDX), turning it on encrypts your server's memory in hardware. The only secret Morphit keeps in memory is your relay's Blurt posting key — never anyone's funds, because Morphit holds no funds. So it's a small extra shield for that one key, not a fix for any gap. Morphit makes no "secure-enclave" claims and doesn't rely on it; your Tor address, the locked-down security headers, and the on-chain hash of every release already cover the essentials. `OPERATIONS.md` has the honest details and the trade-offs.
+
+### 11.6 Everything else
 
 The full operator reference — every configuration setting, the complete nginx server block, the background-service details, the Ansible internals, federation-cost mechanics, and deeper hardening (SSH lockdown, fail2ban tuning, firewall rules) — lives in **`OPERATIONS.md`**. This guide covers the happy path; `OPERATIONS.md` is the encyclopedia.
 

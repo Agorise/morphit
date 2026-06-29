@@ -479,6 +479,20 @@ scripts.
 > mode is operator-opt-in to keep attackers from timing
 > drain attempts against unhardened instances).  Surfaced
 > Part 119 (Sally-operator finding So-3).
+>
+> **Exception — per-source price-feed status is automatic.**
+> `morphit-ops health` shows each price provider, whether
+> it answered this cycle, and the price it reported, with
+> no env opt-in.  It travels in a top-level `price_feeds`
+> block the indexer returns only when the request carries
+> `X-Morphit-Local-Health: 1` — which the local ops-cli
+> sends over the bridge and the public edge strips
+> (`proxy_set_header X-Morphit-Local-Health "";`), so it's
+> operator-only without exposing which of your feeds are
+> down to a public caller.  `MORPHIT_INDEXER_VERBOSE_HEALTH`
+> still gates the fuller diagnostics (operator balances,
+> explorer pools, drift/disagreement) — the parts NEW-9-8
+> protects.
 
 ### Monitoring the price-manipulation defenses (drift / disagreement / peer)
 
@@ -1792,6 +1806,11 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        # Operator-only per-source price-feed health (morphit-ops health)
+        # is gated on X-Morphit-Local-Health, sent by the local ops-cli
+        # over the bridge. Clear any client-supplied value here so a
+        # public caller can never forge it.
+        proxy_set_header X-Morphit-Local-Health "";
     }
 
     # Indexer RSS feeds. Same backend as `/v1/`, but mounted at
@@ -2282,6 +2301,41 @@ form gets client-side JS-redirected to the locale-prefixed
 form on first hit (see `apps/web/src/routes/+page.svelte`), so
 your auth rule should match `^/[a-z]{2}(?:-[A-Z]{2})?/admin/`
 to cover all 10 locale variants.
+
+#### Optional: confidential-computing host (AMD SEV-SNP / Intel TDX)
+
+This is **optional defense-in-depth, not a requirement** — most
+operators can and should skip it. If your VPS or bare-metal host
+offers a confidential-computing mode (AMD SEV-SNP or Intel TDX),
+enabling it encrypts the guest's RAM at the hardware level. The
+only long-lived secret Morphit keeps in process memory is the
+operator's Blurt **posting** key (used by the relay to broadcast
+signup dust and listing-fee splits — never a user's funds, which
+Morphit does not hold at all). Hardware memory encryption protects
+that one key against a malicious host operator or co-tenant who can
+read raw VM memory.
+
+Two honest caveats, because we will not oversell this:
+
+- Morphit makes **no TEE/enclave attestation claim** and does not
+  depend on SEV/TDX. The relay does not run inside an attested
+  enclave, and we will not market "TEE-attested" security we have
+  not earned. A SEV/TDX host adds a memory-secrecy layer; it does
+  not change Morphit's trust model.
+- A TEE roots part of your trust in the CPU vendor (AMD/Intel) and
+  your cloud provider — which is in tension with priority #2
+  (decentralization). That is why this is opt-in for operators who
+  specifically want it, not a default we push.
+
+For the threats that actually matter on a no-funds relay, Morphit's
+defaults already do the heavy lifting: Tor-onion reachability on by
+default, a strict CSP, Subresource Integrity on every script, the
+on-chain `morphit_release_v1` hash manifest (so users verify the
+served bundle independently of the host — see §15 and the release
+sections), `ufw`/`fail2ban`, and the client-side Argon2id + AES-GCM
+key envelope (user keys are encrypted in the browser and never reach
+the server in the clear). SEV/TDX is a nice extra for the paranoid,
+not a gap in the baseline.
 
 ---
 
@@ -4600,10 +4654,14 @@ featured slots more exclusive; lower to encourage more
 bidding.
 
 **Verbose health.** `MORPHIT_INDEXER_VERBOSE_HEALTH`
-(default `false`). Toggle on while debugging an
-operational issue; revert when done. Verbose output
-exposes indexer internals that aren't useful to public
-consumers.
+(default `false`). Gates the fuller `/v1/health?verbose=1`
+diagnostics — operator balances, explorer-pool circuit
+state, drift/disagreement — that aren't useful to public
+consumers and that NEW-9-8 keeps off by default. Toggle on
+while debugging an operational issue; revert when done.
+Note: per-source price-feed status in `morphit-ops health`
+does NOT need this — it's operator-only and automatic (see
+the verbose-mode note earlier in this section).
 
 **Operator-balance alert thresholds.**
 `MORPHIT_INDEXER_OPERATOR_BALANCE_RELAY_THRESHOLD_BLURT`

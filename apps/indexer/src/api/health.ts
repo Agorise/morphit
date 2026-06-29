@@ -34,7 +34,7 @@ import { chatEventBus } from '$indexer/chatEventBus';
 // update all 10 package.json files + this constant +
 // apps/relay/src/api/health.ts VERSION + the example response
 // in docs/API.md in the same commit.
-const INDEXER_VERSION = '1.0.0-beta.37';
+const INDEXER_VERSION = '1.0.0-beta.38';
 
 // Blurt produces one block every 3 seconds. Used to translate the
 // block-lag count into a human "seconds behind" figure in the
@@ -57,9 +57,11 @@ export function healthRoute(
 	// read for the verbose price block's `peer` surface.  Defaulted so
 	// a caller that doesn't wire it sees an empty map (→ peer null).
 	peerMonitorResults: ReadonlyMap<string, PeerSampleCycleResult> = new Map(),
-	// cp372 — multi-source FX + crypto feed status for the verbose
-	// `price_feeds` block (morphit-ops node-health view).  Defaulted so
-	// callers that don't wire them see fx disabled / no crypto feeds.
+	// cp372/cp381 — multi-source FX + crypto feed status for the
+	// operator-only top-level `price_feeds` block (morphit-ops node-health
+	// view), gated on the X-Morphit-Local-Health header the public edge
+	// strips.  Defaulted so callers that don't wire them see fx disabled /
+	// no crypto feeds.
 	fxSource: FxRateSource | null = null,
 	multiAssetSources: ReadonlyMap<string, BlurtPriceSource> = new Map()
 ): Hono {
@@ -127,6 +129,30 @@ export function healthRoute(
 						};
 					})()
 				: { enabled: false as const };
+
+		// cp381 — per-source price-feed health (which providers are up,
+		// each provider's last reading, seconds since each answered,
+		// provider-disagreement).  This is what `morphit-ops health`
+		// renders by default so an operator can see at a glance which
+		// upstream is serving and which is down.
+		//
+		// OPERATOR-ONLY: gated on a request header the ops-cli sends
+		// (it hits the indexer directly on the internal bridge) and the
+		// public edge strips (`proxy_set_header X-Morphit-Local-Health "";`
+		// in ops/nginx/*.conf + BunkerWeb), so a public caller can never
+		// forge it.  Deliberately NOT in the gated `diagnostics` block:
+		// that block also carries `operator_balances` (the NEW-9-8
+		// drain signal), which must stay behind the full verbose gate.
+		// Per-source feed health is low-sensitivity (the committed price
+		// is already public on `price_feed` above, and the provider list
+		// is documented in ADR-0004), but exposing which of *this*
+		// operator's feeds are momentarily down would shave the
+		// price-manipulation opacity the median-of-many design relies on —
+		// hence operator-only rather than public.
+		const localDiag = c.req.header('x-morphit-local-health') === '1';
+		if (localDiag) {
+			body.price_feeds = buildPriceFeedsHealth(fxSource, multiAssetSources);
+		}
 
 		// Audit 2026-05 finding NEW-9-8: verbose mode now requires
 		// the server-side MORPHIT_INDEXER_VERBOSE_HEALTH flag to be
@@ -318,15 +344,6 @@ export function healthRoute(
 				rpc_endpoints,
 				explorers,
 				price,
-				// cp372 — multi-source FX + crypto feed health: which
-				// providers are up, seconds since each last answered,
-				// staleness, and provider-disagreement (outlier dropped).
-				// This is what the morphit-ops node-health view renders.
-				price_feeds: buildPriceFeedsHealth(
-					fxSource,
-					multiAssetSources,
-					() => now
-				),
 				operator_balances,
 				// SSE subscriber counts.  Useful for operators
 				// triaging "is anyone watching the live orderbook
