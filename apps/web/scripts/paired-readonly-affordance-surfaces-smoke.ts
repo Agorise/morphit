@@ -131,11 +131,16 @@ const SCENARIOS: readonly Scenario[] = [
 		]
 	},
 	{
-		name: '8 — /orderbook fee-rejected recovery link widened to $hasAnySession',
+		name: '8 — /orderbook fee-rejected recovery link widened to $hasAnySession (+ cp384 viewerHasOrdered gate)',
 		file: 'src/routes/[lang]/orderbook/+page.svelte',
 		mustHave: [
 			"import { isUnlocked, hasAnySession } from '$stores/identity'",
-			'{#if $hasAnySession && viewerAccount !== null}'
+			// cp384 #2: the link stays WIDENED to $hasAnySession (paired-readonly
+			// users still see it) but is now additionally gated on viewerHasOrdered
+			// — the "Posted an order but don't see it?" hint only makes sense once
+			// the viewer has actually posted an order (Ken's request). The gate is
+			// still BASED on $hasAnySession (NOT re-narrowed to $isUnlocked).
+			'{#if $hasAnySession && viewerAccount !== null && viewerHasOrdered}'
 		],
 		mustNotHave: [
 			// Pre-fix sentinel: the old gate was $isUnlocked &&
