@@ -32,7 +32,7 @@
 
 	const ageSeconds = $derived(fetchedAt == null ? null : Math.floor((now - fetchedAt) / 1000));
 
-	/** Color tier: green fresh (<60s), amber stale (60s-10m), red very stale (>10m),
+	/** Color tier: green fresh (<60s), neutral stale (60s-10m), red very stale (>10m),
 	 *  gray unknown (no quote yet). */
 	const tier = $derived.by<'fresh' | 'stale' | 'very_stale' | 'unknown'>(() => {
 		if (ageSeconds == null) return 'unknown';
@@ -45,7 +45,7 @@
 		tier === 'fresh'
 			? 'text-morphit-emerald'
 			: tier === 'stale'
-				? 'text-amber-600 dark:text-amber-400'
+				? 'text-ink-600 dark:text-ink-400'
 				: tier === 'very_stale'
 					? 'text-red-600 dark:text-red-400'
 					: 'text-ink-500 dark:text-ink-400'

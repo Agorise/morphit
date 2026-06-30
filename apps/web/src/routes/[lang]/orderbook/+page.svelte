@@ -31,6 +31,7 @@
 	import { _ } from 'svelte-i18n';
 
 	import Head from '$components/Head.svelte';
+	import MessageIcon from '$components/MessageIcon.svelte';
 	import TermsText from '$components/TermsText.svelte';
 	import RssFeedPicker from '$components/RssFeedPicker.svelte';
 	import BusyButton from '$components/BusyButton.svelte';
@@ -68,7 +69,8 @@
 	import type { AssetTicker } from '@morphit/asset-registry';
 	import type { OrderbookQuery, OrderRecord, ProfileResponse } from '@morphit/indexer-client';
 
-	import { hiddenAccounts, hideAccount } from '$lib/utils/hiddenAccounts';
+	import { hiddenAccounts, hideAccount, unhideAccount } from '$lib/utils/hiddenAccounts';
+	import { orderTitleParts } from '$lib/utils/orderTitle';
 	import { blockedAccounts, loadBlocks } from '$lib/chat/blocks';
 	import { recordOrderView } from '$lib/orders/views';
 	import { formatOrderPriceModel } from '$lib/orders/priceModelDisplay';
@@ -775,28 +777,9 @@
 		return n % 1 === 0 ? String(n) : n.toFixed(2);
 	}
 
-	function formatRange(o: OrderRecord): string {
-		const fiatCode = o.fiat_currency;
-		if (o.amount_min !== null && o.amount_max !== null) {
-			return $_('orderbook.order.range_both', {
-				values: {
-					min: formatAmount(o.amount_min),
-					max: formatAmount(o.amount_max),
-					fiat: fiatCode
-				}
-			});
-		}
-		if (o.amount_min !== null) {
-			return $_('orderbook.order.range_min_only', {
-				values: { min: formatAmount(o.amount_min), fiat: fiatCode }
-			});
-		}
-		if (o.amount_max !== null) {
-			return $_('orderbook.order.range_max_only', {
-				values: { max: formatAmount(o.amount_max), fiat: fiatCode }
-			});
-		}
-		return $_('orderbook.order.range_open', { values: { fiat: fiatCode } });
+	function cardTitle(o: OrderRecord): string {
+		const tp = orderTitleParts(o, formatAmount);
+		return $_(tp.key, { values: tp.values }) as string;
 	}
 
 	// Part 121 cp7 — per-locale internal-link wrapper.  See
@@ -887,7 +870,7 @@
 	     get the home-page CTAs to onboard from). -->
 	{#if $isUnlocked && viewerAccount === null}
 		<section
-			class="card mb-6 border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950"
+			class="card mb-6 border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-950"
 			role="status"
 			aria-live="polite"
 		>
@@ -895,10 +878,10 @@
 				<div class="flex items-start gap-3">
 					<span class="text-2xl" aria-hidden="true">👋</span>
 					<div>
-						<p class="font-semibold text-amber-900 dark:text-amber-100">
+						<p class="font-semibold text-red-900 dark:text-red-100">
 							{$_('orderbook.needs_account.title')}
 						</p>
-						<p class="mt-1 text-sm text-amber-800 dark:text-amber-200">
+						<p class="mt-1 text-sm text-red-800 dark:text-red-200">
 							{$_('orderbook.needs_account.body')}
 						</p>
 					</div>
@@ -1117,17 +1100,17 @@
 	<!-- Error -->
 	{#if phase === 'error'}
 		<section
-			class="card mt-4 border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950"
+			class="card mt-4 border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-950"
 			role="alert"
 			aria-live="assertive"
 		>
-			<h2 class="font-display text-lg font-bold text-amber-900 dark:text-amber-100">
+			<h2 class="font-display text-lg font-bold text-red-900 dark:text-red-100">
 				{$_('orderbook.error_title')}
 			</h2>
-			<p class="mt-2 text-sm text-amber-800 dark:text-amber-200">
+			<p class="mt-2 text-sm text-red-800 dark:text-red-200">
 				{$_('orderbook.error_body')}
 			</p>
-			<p class="mt-1 text-xs text-amber-700 dark:text-amber-300">
+			<p class="mt-1 text-xs text-red-700 dark:text-red-300">
 				{errorMessage}
 			</p>
 			<div class="mt-4">
@@ -1217,7 +1200,8 @@
 							? o.asset_network
 							: null}
 					<li
-						class="card-interactive animate-fade-up {accountIsHidden || accountIsBlocked
+						class="card-interactive animate-fade-up hover:border-morphit-emerald/20 hover:bg-emerald-50/30 dark:hover:border-morphit-emerald/15 dark:hover:bg-morphit-emerald/[0.05] {accountIsHidden ||
+						accountIsBlocked
 							? 'opacity-50'
 							: ''}"
 					>
@@ -1225,9 +1209,7 @@
 							<div class="flex-1">
 								<div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
 									<span class="font-display text-lg font-bold">
-										{o.side === 'buy'
-											? $_('orderbook.order.buying', { values: { asset: o.asset } })
-											: $_('orderbook.order.selling', { values: { asset: o.asset } })}
+										{cardTitle(o)}
 									</span>
 									{#if usdtRowNetwork !== null}
 										<!-- Part 121 — USDT network chip with the
@@ -1236,7 +1218,7 @@
 										     for USDT rows; single-network assets
 										     skip. -->
 										<span
-											class="rounded-md border border-amber-400/30 bg-amber-400/5 px-2 py-0.5 text-xs font-semibold text-amber-300"
+											class="rounded-md border border-ink-400/30 bg-ink-400/5 px-2 py-0.5 text-xs font-semibold text-ink-300"
 											title={$_('assets.usdt.order_row.network_hint', {
 												values: {
 													network: $_(`assets.usdt.network.${usdtRowNetwork}.displayName`)
@@ -1282,9 +1264,6 @@
 											{$_(`assets.dai.network.${daiRowNetwork}.displayName`)}
 										</span>
 									{/if}
-									<span class="text-sm text-ink-600 dark:text-ink-300">
-										{formatRange(o)}
-									</span>
 									{#if priceModelLabel !== null}
 										<span
 											class="text-sm text-ink-500 dark:text-ink-400"
@@ -1398,26 +1377,36 @@
 											void recordOrderView(o.account, o.permlink);
 										}}
 									>
-										<span aria-hidden="true">💬</span>
+										<MessageIcon />
 										{$_('chat.message_button_label')}
 									</a>
 								{/if}
-								{#if !accountIsHidden && !accountIsBlocked}
-									<!-- Per-row hide affordance. Reversible
-									     via Settings; tooltip explains this
-									     is local-only (no ban, no signal
-									     to the hidden user).  Suppressed
-									     when the user has already chain-
-									     blocked this account — they've
-									     done a stronger version already. -->
+								{#if !accountIsBlocked}
+									<!-- Per-row visibility toggle: a plain eye
+									     when the account is visible (tap to hide)
+									     and an eye-with-slash when hidden (tap to
+									     show again).  Hiding is local-only — no
+									     ban, no signal to the other user, and
+									     reversible.  Hidden rows only appear here
+									     when the transparency toggle reveals them.
+									     Suppressed when the user has already
+									     chain-blocked this account — they've done
+									     a stronger version already. -->
 									<button
 										type="button"
-										onclick={() => hideAccount(o.account)}
-										title={$_('orderbook.hide_button_tooltip')}
+										onclick={() =>
+											accountIsHidden ? unhideAccount(o.account) : hideAccount(o.account)}
+										title={accountIsHidden
+											? ($_('orderbook.unhide_button_tooltip') as string)
+											: ($_('orderbook.hide_button_tooltip') as string)}
 										class="rounded px-2 py-1 text-ink-400 hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
-										aria-label={$_('orderbook.hide_button_aria', {
-											values: { account: o.account }
-										})}
+										aria-label={accountIsHidden
+											? ($_('orderbook.unhide_button_aria', {
+													values: { account: o.account }
+												}) as string)
+											: ($_('orderbook.hide_button_aria', {
+													values: { account: o.account }
+												}) as string)}
 									>
 										<svg
 											xmlns="http://www.w3.org/2000/svg"
@@ -1431,11 +1420,23 @@
 											stroke-linejoin="round"
 											aria-hidden="true"
 										>
-											<path d="m15 18-.722-3.25" />
-											<path d="M2 8a10.645 10.645 0 0 0 20 0" />
-											<path d="m20 15-1.726-2.05" />
-											<path d="m4 15 1.726-2.05" />
-											<path d="m9 18 .722-3.25" />
+											{#if accountIsHidden}
+												<!-- eye-off (slash) — account is hidden -->
+												<path
+													d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"
+												/>
+												<path d="M14.084 14.158a3 3 0 0 1-4.242-4.242" />
+												<path
+													d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"
+												/>
+												<path d="m2 2 20 20" />
+											{:else}
+												<!-- eye — account is visible -->
+												<path
+													d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"
+												/>
+												<circle cx="12" cy="12" r="3" />
+											{/if}
 										</svg>
 									</button>
 								{/if}

@@ -270,7 +270,7 @@
 	</div>
 
 	{#if maxReached}
-		<p class="text-xs text-amber-700 dark:text-amber-300">
+		<p class="text-xs text-ink-700 dark:text-ink-300">
 			{$_('payment_method.max_reached', { values: { max } })}
 		</p>
 	{/if}
@@ -285,7 +285,7 @@
 						type="button"
 						onclick={() => toggle(entry.key)}
 						disabled={!isSelected(entry.key) && maxReached}
-						class="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm hover-subtle cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 {isSelected(
+						class="hover-subtle flex w-full cursor-pointer items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm disabled:cursor-not-allowed disabled:opacity-50 {isSelected(
 							entry.key
 						)
 							? 'bg-emerald-50 dark:bg-ink-800'
@@ -345,7 +345,7 @@
 										type="button"
 										onclick={() => toggle(entry.key)}
 										disabled={!isSelected(entry.key) && maxReached}
-										class="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover-subtle rounded-lg cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 {isSelected(
+										class="hover-subtle flex w-full cursor-pointer items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm disabled:cursor-not-allowed disabled:opacity-50 {isSelected(
 											entry.key
 										)
 											? 'bg-emerald-50 dark:bg-ink-800'
@@ -403,7 +403,7 @@
 									type="button"
 									onclick={() => toggle(entry.key)}
 									disabled={!isSelected(entry.key) && maxReached}
-									class="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover-subtle rounded-lg cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 {isSelected(
+									class="hover-subtle flex w-full cursor-pointer items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm disabled:cursor-not-allowed disabled:opacity-50 {isSelected(
 										entry.key
 									)
 										? 'bg-emerald-50 dark:bg-ink-800'

@@ -34,7 +34,13 @@ import { writable, type Readable } from 'svelte/store';
 /** Toast variants. Match the StatusLine kind vocabulary for
  *  UX consistency — an operation that showed a `warn`
  *  StatusLine inline should use the same kind for a toast
- *  about the same event. */
+ *  about the same event.
+ *
+ *  NOTE: since the de-brown, `warn` and `error` render with the
+ *  SAME red styling in ToastRegion (red is the only attention
+ *  colour left in the palette). `warn` is kept as a distinct
+ *  level for its auto-dismiss timing (below), assertive aria-live
+ *  grouping, and StatusLine parity — not for a separate colour. */
 export type ToastKind = 'info' | 'success' | 'warn' | 'error';
 
 export interface Toast {

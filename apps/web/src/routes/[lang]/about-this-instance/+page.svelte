@@ -211,9 +211,7 @@
 						<dd>
 							<a
 								class="font-mono text-morphit-emerald hover:underline"
-								href="https://matrix.to/#/{encodeURIComponent(
-									$instance.operator_matrix_room
-								)}"
+								href="https://matrix.to/#/{encodeURIComponent($instance.operator_matrix_room)}"
 								rel="noopener noreferrer"
 								target="_blank"
 							>
@@ -365,7 +363,7 @@
 			     attack), but the warning makes the trust boundary
 			     visible. -->
 			<div
-				class="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
+				class="mt-4 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-700 dark:bg-red-950 dark:text-red-200"
 			>
 				<p class="font-semibold">⚠ {$_('about_this_instance.worried.type_warning_heading')}</p>
 				<p class="mt-1">{$_('about_this_instance.worried.type_warning_body')}</p>

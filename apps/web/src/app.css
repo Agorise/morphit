@@ -326,7 +326,9 @@ body {
 	 * focus ring still owns the focus state; a slightly stronger border
 	 * underneath it is harmless. Borderless fields (border-0, e.g. the fiat
 	 * search box) only gain a border-COLOR with zero width, so nothing shows. */
-	input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not([type='color']):not([aria-invalid='true']):not([class*='border-red']),
+	input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not(
+			[type='color']
+		):not([aria-invalid='true']):not([class*='border-red']),
 	textarea:not([aria-invalid='true']):not([class*='border-red']),
 	select:not([aria-invalid='true']):not([class*='border-red']) {
 		@apply transition-colors duration-150 ease-out hover:border-ink-300 dark:hover:border-ink-600;
@@ -449,6 +451,21 @@ body {
  * keyboard-focused. */
 :where(a, button, [role='link'], [role='button']):hover .nav-arrow,
 :where(a, button, [role='link'], [role='button']):focus-visible .nav-arrow {
+	color: var(--morphit-emerald);
+}
+
+/* …and the affordance's TEXT greens with it, not just the glyph. Element
+ * selectors (deliberately NOT :where) keep specificity at ≥(0,2,1) so this
+ * wins over a Tailwind `dark:text-*` utility (0,2,0) that would otherwise
+ * keep the label its base colour on hover in dark mode. */
+a:has(.nav-arrow):hover,
+a:has(.nav-arrow):focus-visible,
+button:has(.nav-arrow):hover,
+button:has(.nav-arrow):focus-visible,
+[role='link']:has(.nav-arrow):hover,
+[role='link']:has(.nav-arrow):focus-visible,
+[role='button']:has(.nav-arrow):hover,
+[role='button']:has(.nav-arrow):focus-visible {
 	color: var(--morphit-emerald);
 }
 :where(a, button, [role='link'], [role='button']):hover .nav-arrow-right,

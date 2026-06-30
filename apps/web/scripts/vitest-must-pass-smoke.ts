@@ -103,6 +103,21 @@ const WORKSPACES: WorkspaceBaseline[] = [
 		// was failing because the keys didn't exist).
 		minPassing: 619,
 		notes: 'web store + i18n + indexer-client tests; baseline locked at cp73 ship after cp73-D11 fix'
+	},
+	{
+		path: 'apps/ops-cli',
+		// beta.41 prep: lifted from "no vitest gate" to a real
+		// baseline.  ops-cli's only suite is test/time.test.ts — 24
+		// pure unit tests of the duration / relative-time helpers
+		// (parseDurationSpec, formatDuration, relativeTime,
+		// ageSeconds, utcMidnightToday).  No fs/network/env or
+		// cross-app imports, so there is zero risk of the indexer-
+		// style CI-vs-local collection gap (cp170, release.test.ts):
+		// the count is identical in every environment.  This closes
+		// the last vitest-bearing workspace that run-smokes did not
+		// gate (relay + web + indexer were already covered).
+		minPassing: 24,
+		notes: 'ops-cli time-helper unit tests; baseline locked at beta.41 prep (pure functions, no cross-app reach)'
 	}
 ];
 

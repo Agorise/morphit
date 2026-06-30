@@ -48,26 +48,14 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const REPO_ROOT = join(__dirname, '..', '..', '..');
 
-const ORDER_HANDLER = join(
-	REPO_ROOT,
-	'apps/indexer/src/indexer/handlers/order.ts'
-);
-const FEE_ATTEST_HANDLER = join(
-	REPO_ROOT,
-	'apps/indexer/src/indexer/handlers/feeAttest.ts'
-);
-const MY_ORDERS_PAGE = join(
-	REPO_ROOT,
-	'apps/web/src/routes/[lang]/my/orders/+page.svelte'
-);
+const ORDER_HANDLER = join(REPO_ROOT, 'apps/indexer/src/indexer/handlers/order.ts');
+const FEE_ATTEST_HANDLER = join(REPO_ROOT, 'apps/indexer/src/indexer/handlers/feeAttest.ts');
+const MY_ORDERS_PAGE = join(REPO_ROOT, 'apps/web/src/routes/[lang]/my/orders/+page.svelte');
 const ORDER_DETAIL_PAGE = join(
 	REPO_ROOT,
 	'apps/web/src/routes/[lang]/[x+40][account=account]/[permlink=permlink]/+page.svelte'
 );
-const EN_LOCALE = join(
-	REPO_ROOT,
-	'apps/web/src/lib/i18n/locales/en.json'
-);
+const EN_LOCALE = join(REPO_ROOT, 'apps/web/src/lib/i18n/locales/en.json');
 
 console.log('');
 console.log('── fee_status label coverage smoke ─────────────────────');
@@ -108,7 +96,8 @@ for (const m of feeAttestSrc.matchAll(assignRe)) {
 //     INSERT column list contains fee_status.  We grep for
 //     SQL fragments that mention fee_status and extract the
 //     literal-string values that appear in them.
-const sqlLiteralRe = /'(verified|verified_by_attestation|pending_external|reused|missing|underpaid|unverified)'/g;
+const sqlLiteralRe =
+	/'(verified|verified_by_attestation|pending_external|reused|missing|underpaid|unverified)'/g;
 const writtenViaSql = new Set<string>();
 for (const file of [orderHandlerSrc, feeAttestSrc]) {
 	// crude but effective: find INSERT INTO orders blocks
@@ -128,10 +117,7 @@ for (const file of [orderHandlerSrc, feeAttestSrc]) {
 }
 
 // Union of both (since runtime can take either path).
-const indexerWritten = new Set<string>([
-	...writtenViaAssign,
-	...writtenViaSql
-]);
+const indexerWritten = new Set<string>([...writtenViaAssign, ...writtenViaSql]);
 
 // ─── Step 2: parse feeStatusLabel cases ────────────────────────
 
@@ -157,8 +143,8 @@ if (fnMatch) {
 		// Empty-string fallback is the bug we're guarding against.
 		// `return '';` (or the empty-string literal alone) means
 		// any unmatched fee_status renders an empty pill.
-		defaultIsEmpty = /return\s+''\s*;?/.test(defaultBody) &&
-			!/return\s+o\.fee_status/.test(defaultBody);
+		defaultIsEmpty =
+			/return\s+''\s*;?/.test(defaultBody) && !/return\s+o\.fee_status/.test(defaultBody);
 	}
 }
 
@@ -176,21 +162,19 @@ if (fnMatch) {
 
 const orderDetailSrc = readFileSync(ORDER_DETAIL_PAGE, 'utf-8');
 const detailCases = new Set<string>();
-for (const m of orderDetailSrc.matchAll(
-	/order\.fee_status\s*===\s*'([a-z_]+)'/g
-)) {
+for (const m of orderDetailSrc.matchAll(/order\.fee_status\s*===\s*'([a-z_]+)'/g)) {
 	detailCases.add(m[1]);
 }
 // order_detail must have an {:else} fallback after its branches.
 const detailHasElse = /order_detail/.test(orderDetailSrc) // guard
-	? /\{:else\}\s*<!--[\s\S]*?Future-proof[\s\S]*?-->\s*<span/.test(
-		orderDetailSrc
-	  )
+	? /\{:else\}\s*<!--[\s\S]*?Future-proof[\s\S]*?-->\s*<span/.test(orderDetailSrc)
 	: false;
 
 // ─── Step 5: load en.json to verify referenced keys exist ──────
 
-interface JsonObj { [k: string]: unknown }
+interface JsonObj {
+	[k: string]: unknown;
+}
 const enJson = JSON.parse(readFileSync(EN_LOCALE, 'utf-8')) as JsonObj;
 function getDeep(obj: unknown, path: string): unknown {
 	let cur: unknown = obj;
@@ -205,6 +189,27 @@ for (const k of labelI18nKeys) {
 	const v = getDeep(enJson, k);
 	if (typeof v !== 'string' || v.trim() === '') missingI18n.push(k);
 }
+
+// ─── Step 5b: Finding #1 (cp391) — `unverified` is the DB column
+// DEFAULT (order.ts always writes a definite status, so a row only
+// reaches 'unverified' via the column default — a migration artifact
+// or a future handler that forgets to set it). It is a NEUTRAL
+// "not yet verified" state, NOT a rejection. order_detail already
+// renders it neutral; my/orders must too — grouped with
+// pending_external in the ink branch, never the red "fee rejected"
+// catch-all (which links to faq#order_fee_rejected). ─────────────
+
+const SCHEMA_SQL = join(REPO_ROOT, 'apps/indexer/src/db/schema.sql');
+const schemaSrc = readFileSync(SCHEMA_SQL, 'utf-8');
+const schemaDefaultsUnverified = /fee_status\s+TEXT\s+NOT\s+NULL\s+DEFAULT\s+'unverified'/.test(
+	schemaSrc
+);
+
+// my/orders neutral (ink) branch must match BOTH pending_external
+// and unverified, so unverified can never fall through to the red
+// catch-all below it.
+const unverifiedInNeutralBranch =
+	/'pending_external'\s*\|\|\s*o\.fee_status\s*===\s*'unverified'/.test(myOrdersSrc);
 
 // ─── Step 6: scenarios ─────────────────────────────────────────
 
@@ -223,7 +228,8 @@ const scenarios = [
 	},
 	{
 		name: 'indexer extraction includes the four core states',
-		ok: indexerWritten.has('verified') &&
+		ok:
+			indexerWritten.has('verified') &&
 			indexerWritten.has('pending_external') &&
 			indexerWritten.has('verified_by_attestation') &&
 			indexerWritten.has('reused')
@@ -259,6 +265,18 @@ const scenarios = [
 	{
 		name: 'order_detail has a future-proof {:else} fallback after its branches',
 		ok: detailHasElse
+	},
+	{
+		name: "Finding #1 — schema confirms 'unverified' is the fee_status column DEFAULT (so it is reachable + must be handled)",
+		ok: schemaDefaultsUnverified
+	},
+	{
+		name: "Finding #1 — feeStatusLabel has an explicit 'unverified' case (localized label, not the raw-string fallback)",
+		ok: labelCases.has('unverified')
+	},
+	{
+		name: "Finding #1 — my/orders renders 'unverified' in the NEUTRAL ink branch (grouped with pending_external), never the red 'fee rejected' catch-all",
+		ok: unverifiedInNeutralBranch
 	}
 ];
 
@@ -276,14 +294,12 @@ for (const s of scenarios) {
 
 if (labelGap.length > 0) {
 	console.log(
-		`  feeStatusLabel missing cases for indexer-written values: ` +
-		`${JSON.stringify(labelGap)}`
+		`  feeStatusLabel missing cases for indexer-written values: ` + `${JSON.stringify(labelGap)}`
 	);
 }
 if (detailGap.length > 0) {
 	console.log(
-		`  order_detail missing branches for indexer-written values: ` +
-		`${JSON.stringify(detailGap)}`
+		`  order_detail missing branches for indexer-written values: ` + `${JSON.stringify(detailGap)}`
 	);
 }
 if (missingI18n.length > 0) {
@@ -292,7 +308,7 @@ if (missingI18n.length > 0) {
 if (defaultIsEmpty) {
 	console.log(
 		`  feeStatusLabel default returns ''; should return o.fee_status ?? '' ` +
-		`so unknown states render as raw text rather than an empty pill.`
+			`so unknown states render as raw text rather than an empty pill.`
 	);
 }
 

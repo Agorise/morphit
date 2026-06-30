@@ -1,5 +1,48 @@
 # Morphit pre-launch revisit list
 
+## RELEASE — v1.0.0-beta.41 (bundles cp389 + cp390 + cp391 + ops-cli CI gate; see TARBALL.md head)
+
+**Version bumped beta.40 → beta.41** at all 19 touchpoints + the lockfile (15 version fields; `npm install --package-lock-only` confirms zero drift). `RELEASE-NOTES-v1.0.0-beta.41.md` written. Captured in `morphit-beta.41-RELEASE-FULL-STATE.tar.gz`. **STILL BETA → Forgejo only.** Ken pushes + signs the `v1.0.0-beta.41` tag (clean git chunk delivered in-chat); CI runs the full battery + all four vitest suites on the runner.
+
+- **CI coverage strengthened:** `vitest-must-pass-smoke` now gates **apps/ops-cli** (24 pure time-helper tests) in addition to indexer/relay/web — the last vitest-bearing workspace that wasn't gated. All four suites green in-sandbox (1,544 tests, 0 failures).
+- In-sandbox verification green across version-consistency (19/19 @ beta.41), lockfile-sync (3/3), svelte-check (0/0), the full vitest suites, the full i18n suite, color-contrast, a11y, persona, wiring-completeness, the freshness gates, and the release-notes parity smokes. The full 401-smoke battery + `vite build` run in Forgejo CI on push.
+- **STILL PENDING — the STABLE-release ceremony** (separate from beta): mirror signed bytes to Codeberg + IPFS, anchor on Blurt, remove the beta Basic-Auth gate. Plus the standing hardware/infra items below (MCP-HTTP-on-VPS, YubiKey WebHID framing, Docker-aware backup).
+
+---
+
+## WORKING TREE — cp391 (post-beta.40; applies the three delegated cp389-review items — see TARBALL.md cp391)
+
+**cp391 — Ken delegated all three ("I'll go with your recommendations"). All RESOLVED + verified.** Working tree at `/home/claude/morphit/morphit/`, captured in `morphit-cp391-three-decisions-FULL-STATE.tar.gz`. Version UNCHANGED (`1.0.0-beta.40`). svelte-check 0/0; fee-status-label-coverage 13/13; full i18n battery green; order-expiry-day-floor 5/5; persona 182/182; a11y 41/41; version 19/19; pass-line 10/10; registration 4/4.
+
+- **Finding #1 — RESOLVED.** `unverified` fee_status now renders NEUTRAL ink in my/orders (was red catch-all + raw string + misleading "fee rejected" link). It's the DB column default (`schema.sql` `DEFAULT 'unverified'`), unreachable via live handlers → a consistency fix matching order-detail, not a live bug. `feeStatusLabel` `case 'unverified'` + neutral-branch grouping with `pending_external`; new `my_orders.order.fee_unverified` in all 10 locales (reusing each locale's `order_detail.fee_unverified`); smoke 10→13 (reachability + label + neutral-branch guards); native snapshot rebuilt.
+- **D1 (ToastRegion warn≡error) — RESOLVED: accepted as-is.** Both render red (post-de-brown red is the only attention colour; amber=retired brown, lime=confuses with success). `warn` kept as a distinct level for timing (6s vs error 8s), assertive aria-live, StatusLine parity — guard comments added so nobody reintroduces amber/lime. No behaviour change.
+- **D2 (two expiry treatments) — RESOLVED: flattened OrderExpiryChip to emerald.** The graded ink→red→pulse chip is now flat emerald, matching the profile/order-view pills (one visual language; honors the de-brown "expiry/countdown = emerald" rule; red reserved for errors/destructive). Kept ⏳/format/a11y + per-tier tick cadence (tiers now drive only tick rate); `.expired` stays neutral gray; pulse + reduced-motion rule removed. 1 file.
+
+**Nothing from the cp389 review remains open.** Remaining pending items are the hardware/Ken-gated ones below (stable-release ceremony, MCP-HTTP-on-VPS, YubiKey WebHID framing, Docker-aware backup, beta Basic-Auth gate).
+
+---
+
+## WORKING TREE — cp390 (post-beta.40 mirror-logo finalization on top of cp389; NOT a release — see TARBALL.md cp390)
+
+**cp390 — resolves the one pending cp389 item: the download-page mirror-logo decision.** Ken supplied the official GitFlic + Radicle brand SVGs. Working tree at `/home/claude/morphit/morphit/`, captured in `morphit-cp390-mirror-logos-FULL-STATE.tar.gz`. Version UNCHANGED (still `1.0.0-beta.40` — NO bump/tag). svelte-check **0/0**; href-xss / sally / external-link-hygiene / forgejo-not-gitea all green.
+
+- **GitFlic + Radicle now carry their REAL marks** (was: both shared the generic Git-diamond fallback). GitFlic = the official **bear-head** glyph (wordmark dropped — the mirror name sits beside the icon), native 36×43. Radicle = the official **pixel-mosaic** flattened to a **single monochrome silhouette** (coloured cells → one `currentColor` compound path; the white/magenta eye cells left as negative-space holes), native 44×44. **Both monochrome `currentColor`** so they adapt to light + dark — verified by rendering both themes at the true 20px size (a flat brand colour would vanish on one theme). New `MIRROR_LOGO_VIEWBOX` map (gitflic `0 0 36 43`, radicle `0 0 44 44`) + dynamic `viewBox` on the download glyph (`?? '0 0 24 24'`), so no path is hand-rescaled. Cleanup: codeberg trailing `zz`→`z` (proven byte-identical render). [DECISION — the mirror-logo item is CLOSED.]
+- **STILL OPEN (carried from cp389, unchanged):** Finding #1 (`unverified` fee_status red-vs-ink consistency — see TARBALL.md cp390 "STILL QUEUED"; unreachable via live handlers → robustness fix, not a live bug) + the two design decisions D1/D2 below.
+
+---
+
+## WORKING TREE — cp389 (post-beta.40 de-brown + UI/UX + deep-deep; NOT a release — see TARBALL.md cp389)
+
+**cp389 — a large UI/UX + site-wide de-brown + deep-deep session on top of cp388/beta.40.** Working tree at `/home/claude/morphit/morphit/`, captured in `morphit-cp389-debrown-FULL-STATE.tar.gz`. Version UNCHANGED (still `1.0.0-beta.40` — NO bump/tag; this is a working-tree handoff, not a release). Full battery **401/401 runners / ~9,082 scenarios / 0 failed**; svelte-check **0/0**; web vitest **761/5-skip**. (The full work log lives in TARBALL.md cp389; this section tracks the OPEN decisions + the standing de-brown record so they aren't re-litigated.)
+
+**TWO OPEN DESIGN DECISIONS — Ken's call (NOT blockers; the tree is green either way):**
+- **(cp389-D1) ToastRegion 'warn' now renders identical to 'error' (both red).** The de-brown moved ToastRegion's `'warn'` variant from amber → red, so `'warn'` and `'error'` toasts are now visually identical and the deliberate 4-level vocabulary (success / info / warn / error) has collapsed on the negative side. The only gradient-native colour left for a DISTINCT warn is lime (#8eef26), but it reads as confusable with emerald = success → advised against. Options for Ken: **(a)** accept warn≡error (simplest, defensible — a "warning" toast and an "error" toast are both "something's wrong, red"); **(b)** reintroduce a distinct warn hue outside the gradient (e.g. a muted orange/amber-for-toasts-only) accepting it's slightly off-palette; **(c)** drop the `'warn'` level from the toast API entirely and fold its call sites into `'error'`/`'info'`. No code change made pending the decision.
+- **(cp389-D2) Two expiry treatments coexist.** `OrderExpiryChip.svelte` is GRADED (far = ink → near = soft red → urgent = bold red + pulse) while the profile + order-view "expires in X" pills are now a FLAT emerald success-countdown style. Both are internally consistent, but they're two different visual languages for "time left." Offer to unify on one once Ken picks the preferred language (either make the profile/order-view pills graded like the chip, or simplify the chip to the flat emerald style).
+
+**STANDING DE-BROWN RECORD (for all future colour work):** amber = "the ugly brown," now eliminated everywhere EXCEPT (a) `routes/[lang]/dev/*` internal tooling (8 amber intentionally kept) and (b) ASSET-BRAND accents in `lib/assets/registry.ts` + the 2 ChatMessage USDT identity pills (USDT = amber, deliberately paired vs USDC = blue — Ken ruled "do not change any coin logos, those are brands"). The palette: success/positive = emerald, info = teal, error/warning/caution/privacy/safety/destructive/cross-network/price-loss = red, neutral status/limits/pending = ink, expiry/countdown = emerald. **Any NEW amber that appears in a non-dev, non-asset-brand surface is drift → de-brown it** (red or ink per the semantics above; the `/plan` `in_progress` badge was the last such miss, caught + fixed to teal at cp389 because it lived in a `.ts` file outside the `.svelte` sweep — when colour-sweeping, remember to grep `.ts`/`.css` too, not just `.svelte`).
+
+---
+
 ## RELEASE — cp388 (beta.40; beta.39 → beta.40, Ken said go)
 
 **cp388 = the beta.40 RELEASE cut, bundling the post-beta.39 working tree cp386 (Ken's 7-item UI/UX batch — below) + cp387 (HardwareKeyCard/ops-cli-health/mobile-balance/welcome-hero/avatar-menu/blocked-accounts batch) + this session's cp388 four-task batch.** FULL tarball `morphit-cp388-beta40-FULL-STATE.tar.gz`. Beta → Forgejo only; the beta.40 tag goes on the cp388 commit. Version was already at beta.40 in staging (19 touchpoints + lockfile) — cp388 folded in with NO re-bump.

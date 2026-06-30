@@ -94,7 +94,7 @@
 	<span
 		class={compact
 			? 'text-xs italic text-ink-500'
-			: 'inline-flex items-center rounded-md border border-amber-400/30 bg-amber-400/5 px-2 py-0.5 text-xs italic text-amber-300'}
+			: 'inline-flex items-center rounded-md border border-ink-400/30 bg-ink-400/5 px-2 py-0.5 text-xs italic text-ink-300'}
 		title={$_('assets.usdt.price_subline.unavailable', {
 			values: { staleness: stalenessString }
 		}) as string}

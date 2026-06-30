@@ -243,10 +243,10 @@
 			</div>
 		{:else if phase.kind === 'error'}
 			<div
-				class="mt-6 rounded-xl border-2 border-amber-300 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-950"
+				class="mt-6 rounded-xl border-2 border-red-300 bg-red-50 p-4 dark:border-red-700 dark:bg-red-950"
 				role="alert"
 			>
-				<p class="text-sm text-amber-900 dark:text-amber-100">
+				<p class="text-sm text-red-900 dark:text-red-100">
 					{$_(phase.messageKey)}
 				</p>
 				<div class="mt-3 flex gap-2">
@@ -277,10 +277,10 @@
 			     why the price went up and what to do about it. -->
 			{#if phase.priceQuote.multiplier > 1}
 				<div
-					class="mt-4 rounded-xl border-2 border-amber-400 bg-amber-50 p-3 dark:border-amber-600 dark:bg-amber-950"
+					class="mt-4 rounded-xl border-2 border-red-400 bg-red-50 p-3 dark:border-red-600 dark:bg-red-950"
 					role="alert"
 				>
-					<p class="text-sm font-semibold text-amber-900 dark:text-amber-100">
+					<p class="text-sm font-semibold text-red-900 dark:text-red-100">
 						{$_('chat.stranger_fee.escalation.heading', {
 							values: {
 								multiplier: phase.priceQuote.multiplier,
@@ -289,7 +289,7 @@
 							}
 						})}
 					</p>
-					<p class="mt-1 text-xs text-amber-800 dark:text-amber-200">
+					<p class="mt-1 text-xs text-red-800 dark:text-red-200">
 						{$_('chat.stranger_fee.escalation.body')}
 					</p>
 				</div>
@@ -308,7 +308,8 @@
 				</div>
 				{#if fiatPerBlurt !== null}
 					<div class="mt-1 flex items-baseline justify-end text-xs text-ink-500 dark:text-ink-500">
-						<span>~{formatFiat(phase.priceQuote.price_blurt * fiatPerBlurt, denominationFiat)}</span>
+						<span>~{formatFiat(phase.priceQuote.price_blurt * fiatPerBlurt, denominationFiat)}</span
+						>
 					</div>
 				{/if}
 			</div>

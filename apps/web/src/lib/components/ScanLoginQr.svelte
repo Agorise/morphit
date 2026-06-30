@@ -37,7 +37,7 @@
 	 *     fresh consent moment
 	 */
 
-	import { onMount, onDestroy } from 'svelte';
+	import { onDestroy, tick } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import { get } from 'svelte/store';
 	import {
@@ -67,6 +67,10 @@
 	let validatedQr = $state<PairingQrPayload | null>(null);
 	let qrSignedSeconds = $state<number>(0);
 	let failureReason = $state<string>('');
+	/** True while the camera-permission request is in flight (after the
+	 *  user taps "Turn on camera"), to disable the button and avoid a
+	 *  double getUserMedia call. */
+	let cameraStarting = $state(false);
 
 	async function startScanner(): Promise<void> {
 		if (!videoEl) return;
@@ -118,10 +122,30 @@
 		phase = 'review';
 	}
 
+	/** Begin (or retry) the camera flow.  Driven by an explicit user
+	 *  tap, never auto-started on mount: mobile browsers only surface
+	 *  the getUserMedia permission prompt in response to a user gesture,
+	 *  and starting the camera only on a deliberate tap is the
+	 *  privacy-first default.  We flip to 'scanning' first (which renders
+	 *  the <video>) and await a tick so `videoEl` is bound before
+	 *  startScanner reads it — otherwise startScanner early-returns and
+	 *  the prompt never appears. */
+	async function requestCamera(): Promise<void> {
+		if (cameraStarting) return;
+		cameraStarting = true;
+		phase = 'scanning';
+		await tick();
+		try {
+			await startScanner();
+		} finally {
+			cameraStarting = false;
+		}
+	}
+
 	function rescan(): void {
 		validatedQr = null;
 		failureReason = '';
-		void startScanner();
+		void requestCamera();
 	}
 
 	async function confirm(): Promise<void> {
@@ -254,10 +278,6 @@
 		return Math.max(0, Math.floor(ago / 60));
 	}
 
-	onMount(() => {
-		void startScanner();
-	});
-
 	onDestroy(() => {
 		const inst = scannerInstance as { stop?: () => void; destroy?: () => void } | null;
 		try {
@@ -278,6 +298,14 @@
 			<p class="mt-2 text-sm text-ink-600 dark:text-ink-300">
 				{$_('scan_login.starting_body')}
 			</p>
+			<button
+				type="button"
+				class="btn-primary mt-4"
+				onclick={requestCamera}
+				disabled={cameraStarting}
+			>
+				{$_('scan_login.starting_button')}
+			</button>
 		</header>
 	{:else if phase === 'camera_denied'}
 		<header class="text-center">

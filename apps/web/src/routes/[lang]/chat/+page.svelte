@@ -336,7 +336,7 @@
 		</div>
 	{:else}
 		{#if loadError}
-			<p class="mb-4 text-sm text-amber-700 dark:text-amber-300">
+			<p class="mb-4 text-sm text-red-700 dark:text-red-300">
 				{$_('chat.inbox.load_error_fallback')}
 			</p>
 		{/if}
@@ -519,8 +519,9 @@
 								weight="semibold"
 								showCopy={false}
 							/>
-							<span class="ml-auto text-xs text-ink-500 dark:text-ink-400 nav-arrow nav-arrow-right" aria-hidden="true"
-								>⇨</span
+							<span
+								class="nav-arrow nav-arrow-right ml-auto text-xs text-ink-500 dark:text-ink-400"
+								aria-hidden="true">⇨</span
 							>
 						</a>
 					</li>

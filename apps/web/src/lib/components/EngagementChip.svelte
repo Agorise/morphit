@@ -18,7 +18,7 @@
 	 * Q11 plumbed.
 	 *
 	 * Design:
-	 *   - Small, inline, amber accent (different from emerald
+	 *   - Small, inline, ink accent (different from emerald
 	 *     "new trader" so the two chips don't look identical).
 	 *   - Subtle pulse animation when count >= 2 (the "competition
 	 *     is real" tier).  prefers-reduced-motion suppresses.
@@ -40,6 +40,7 @@
 	 */
 
 	import { _ } from 'svelte-i18n';
+	import MessageIcon from './MessageIcon.svelte';
 
 	interface Props {
 		/** Distinct accounts who've messaged the seller about
@@ -52,14 +53,14 @@
 
 <span
 	class="engagement-chip inline-flex items-center gap-1 rounded-full
-	       bg-amber-500/10 px-2 py-0.5 text-xs font-medium
-	       text-amber-700 ring-1 ring-amber-500/30
-	       dark:text-amber-300 dark:ring-amber-400/30"
+	       bg-ink-500/10 px-2 py-0.5 text-xs font-medium
+	       text-ink-700 ring-1 ring-ink-500/30
+	       dark:text-ink-300 dark:ring-ink-400/30"
 	class:pulse={count >= 2}
 	aria-label={$_('orderbook.order.engagement_aria', { values: { count } }) as string}
 	title={$_('orderbook.order.engagement_tooltip', { values: { count } }) as string}
 >
-	<span aria-hidden="true">💬</span>
+	<MessageIcon class="h-3.5 w-3.5 shrink-0" />
 	<span>{count}</span>
 </span>
 

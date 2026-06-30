@@ -1294,7 +1294,7 @@
       },
       "supported_countries": {
         "q": "Morphit 在我所在的国家能用吗?",
-        "a": "能。Morphit 在每个国家都能用,因为 Morphit 不在任何特定国家运营 — 它是一个发布在公共区块链上的去中心化公告板。你可以从任何有网络的地方浏览、发布和交易。软件中没有 IP 封锁、居住国检查或地理限制。如果你所在国家屏蔽加密货币服务,Tor / Lokinet / I2P 镜像能让你照样访问 Morphit(见页脚图标)。话虽如此:请了解你自己国家的加密交易法律。Morphit doesn't enforce any country/corporation's rules — that's between you and the government that you consent to (govern = control, ment = mind. Mind Control). Their flag is their corporate logo. You are a living male or female, not a corpse (hence the term corporation). Starve the beast. #agorism #freemarkets #countereconomics"
+        "a": "能。Morphit 在每个国家都能用,因为 Morphit 不在任何特定国家运营 — 它是一个发布在公共区块链上的去中心化公告板。你可以从任何有网络的地方浏览、发布和交易。软件中没有 IP 封锁、居住国检查或地理限制。如果你所在国家屏蔽加密货币服务,Tor / Lokinet / I2P / `.eth` 镜像能让你照样访问 Morphit(见页脚图标)。话虽如此:请了解你自己国家的加密交易法律。Morphit doesn't enforce any country/corporation's rules — that's between you and the government that you consent to (govern = control, ment = mind. Mind Control). Their flag is their corporate logo. You are a living male or female, not a corpse (hence the term corporation). Starve the beast. #agorism #freemarkets #countereconomics"
       },
       "supported_fiat_currencies": {
         "q": "Morphit 支持哪些法币(USD、EUR、本地货币)?",
@@ -1382,7 +1382,7 @@
       },
       "syndicate_trade_announcement": {
         "q": "\"同步我的订单\" 复选框是什么？",
-        "a": "在发布订单的表单上，你可以勾选 \"同时把我的订单同步到我的 Blog（免费）\"。勾选后，Morphit 会在你的订单成功广播的那一刻，把一条简短的订单公告发布到你自己的 Blurt 博客（blurt.blog、beblurt.com、etc）上。这条帖子包含一个指向你在 Morphit 上订单页面的链接，并使用 #morphit 标签，这样它会出现在 Morphit 社区的信息流里。\n\n帖子用你的 posting 密钥签名——不是 Morphit 的，不是运营者的，是你的。这意味着：\n- 帖子真正来自你，而不是营销垃圾信息。\n- Morphit 项目不持有可以代你签署社交内容的密钥。\n- 你之后可以像处理你 Blurt 账户上的其他任何帖子一样，编辑或删除这条帖子。\n- 你在博客帖子上收到的「点赞」会为你赚取更多用于交易和质押的 Blurt。\n\n还有一个独立的、自动发出的帖子，一生只会触发一次：当你完成你在 Morphit 上的第一笔交易时，Morphit 会在 @morphit 社区（不是你的个人博客）发布一条 \"我加入了 Morphit\" 的简短公告。这条帖子属于欢迎流程的一部分；它没有复选框，因为它只触发一次，用来标记这个里程碑。第一条之后，只有你在 /post 上看到的那个按订单勾选的复选框会控制未来的帖子。"
+        "a": "在发布订单的表单上，你可以勾选 \"同时把我的订单同步到我的 Blog（免费）\"。勾选后，Morphit 会在你的订单成功广播的那一刻，把一条简短的订单公告发布到你自己的 Blurt 博客（blurt.blog、beblurt.com、etc）上。这条帖子包含一个指向你在 Morphit 上订单页面的链接，并使用 #morphit 标签，这样它会出现在 Morphit 社区的信息流里。\n\n帖子用你的 posting 密钥签名——不是 Morphit 的，不是运营者的，是你的。这意味着：\n- 帖子真正来自你，而不是营销垃圾信息。\n- Morphit 项目不持有可以代你签署社交内容的密钥。\n- 你之后可以像处理你 Blurt 账户上的其他任何帖子一样，编辑或删除这条帖子。\n- 你在博客帖子上收到的「点赞」会为你赚取更多用于交易和质押的 Blurt。\n\n还有一则你可以选择开启的一次性公告:在你的首笔交易时,向 @morphit 社区(而非你的博客)发布一篇简短的\"我加入了 Morphit\"帖子。默认关闭——在下单表单、设置或评价表单上用复选框开启,它只在你为该首笔交易留下评价时发布一次。之后,设置卡片改为让你预先勾选单笔订单的博客帖子。"
       },
       "offline_caching": {
         "q": "Morphit 可以 offline 工作吗?",
@@ -2170,6 +2170,7 @@
       "action_feature": "推广",
       "action_feedback": "标记完成 / 评价",
       "fee_pending_external": "等待见证",
+      "fee_unverified": "尚未验证",
       "fee_verified_by_attestation": "已验证(见证)",
       "fee_reused": "不在订单簿中 — 付款已使用",
       "fee_missing": "不在订单簿中 — 未收到费用支付",
@@ -2184,7 +2185,7 @@
     },
     "cancel": {
       "confirm_title": "取消此订单?",
-      "confirm_body": "订单将从订单簿中移除。挂单费不可退还。",
+      "confirm_body": "这会将你的订单从订单簿中移除，新用户将无法再回应它，并且无法撤销。你已经开始的对话会保留，任何人都不会被收费。如果你支付了挂单费，将不予退还。",
       "confirm_button": "是,取消",
       "cancel_button": "保留订单",
       "cancelling": "正在取消…"
@@ -2553,7 +2554,8 @@
     "fee_verified_by_attestation": "已由社区验证",
     "fee_pending_external_hint": "此订单使用 BTC 或 XMR 作为挂单费。Morphit 正在等待社区验证者见证付款。在此之前,订单可见但尚未被认可。",
     "price_label": "价格",
-    "error_load_failed": "无法加载此订单。请尝试刷新。"
+    "error_load_failed": "无法加载此订单。请尝试刷新。",
+    "cancel_button": "取消此订单"
   },
   "orderbook": {
     "heading": "订单簿",
@@ -2634,6 +2636,8 @@
     "blocked_marker": "已屏蔽",
     "hide_button_tooltip": "在此设备上隐藏此账户的所有订单(可从设置中撤销 — 他们不会被通知)",
     "hide_button_aria": "隐藏 {account} 的订单",
+    "unhide_button_tooltip": "在此设备上重新显示该账户的订单",
+    "unhide_button_aria": "重新显示来自 {account} 的订单",
     "all_hidden_title": "此页面上的每个订单都来自已隐藏的账户",
     "all_hidden_body": "此页面上所有 {count} 笔订单都来自你已隐藏的账户。仍然显示它们,或在设置中管理你的隐藏列表。",
     "live": "实时",
@@ -3019,7 +3023,7 @@
       "post_another": "再发一个",
       "edit_cta": "编辑此订单",
       "waiver_title": "你的免费首次订单已上线！",
-      "waiver_body": "它已经广播到 Blurt 链上，订单簿对所有人可见——Morphit 为你承担了上架费。🌱",
+      "waiver_body": "它已经广播到 Blurt 链上，订单簿对所有人可见——Morphit 为你承担了上架费。❤️",
       "waiver_next_heading": "接下来会发生什么：",
       "waiver_step_1": "有兴趣用 BLURT 交换你所提供之物的人会给你发消息。你会在标题栏的聊天图标上看到通知——留意一下。",
       "waiver_step_2": "聊天确认条款（价格、付款时间、地点）。准备好后，分享你的 BLURT 收款地址（使用聊天中的分享地址按钮）；他们给你发 BLURT，你给他们发你们同意的东西。",
@@ -3518,7 +3522,8 @@
   },
   "scan_login": {
     "starting_heading": "相机权限",
-    "starting_body": "我们需要你的相机来扫描电脑上的登录码。",
+    "starting_body": "需要使用你的摄像头来扫描电脑上的二维码。",
+    "starting_button": "打开摄像头",
     "camera_denied_heading": "相机被阻止",
     "camera_denied_body": "我们需要相机权限来扫描二维码。打开浏览器设置,允许 Morphit 使用相机,然后再试。",
     "no_camera_heading": "未找到相机",
@@ -4015,10 +4020,13 @@
     "syndication": {
       "heading": "联合发布",
       "explain": "Morphit 可在您执行某些操作时向您的 Blurt 博客发布公告。这些帖子由您的发布密钥签名 — Morphit 不代您持有任何内容。",
-      "first_trade_label": "自动向 @morphit 社区公告我的第一笔交易",
+      "first_trade_label": "向 @morphit 社区公布我的首笔交易",
       "first_trade_help": "当您为首次 Morphit 交易留下反馈时，也在 Blurt 上的 @morphit 社区发布一条简短的「我加入了 Morphit」帖子。每个账户只发布一次。逐订单联合发布是订单表单上的一个单独复选框。",
       "pitch_heading": "为何开启?",
-      "pitch_body": "辛迪加发布至关重要。更多眼睛 = 更多伙伴 + 点赞奖励直接进入 Blurt 钱包。关闭 = 不公开。"
+      "pitch_body": "辛迪加发布至关重要。更多眼睛 = 更多伙伴 + 点赞奖励直接进入 Blurt 钱包。关闭 = 不公开。",
+      "blog_default_explain": "你已完成首笔交易,很好。现在 Morphit 可以在每个新订单上为你预先勾选\"将此订单发布到我的 Blurt 博客\",让你的报价自动分享。每篇帖子仍由你签名,你也可以在任意单个订单上取消勾选。",
+      "blog_default_label": "默认将我的订单发布到我的 Blurt 博客",
+      "blog_default_help": "在下单表单上为每个订单预先勾选\"同步到我的博客\"。你随时可以为某个订单取消勾选。关闭 = 每次都从未勾选开始。"
     },
     "privacy": {
       "heading": "隐私",
@@ -4322,13 +4330,13 @@
   "syndicate": {
     "first_trade": {
       "title": "我刚刚在 Morphit 完成了与 @{seller} 的第一笔交易！",
-      "body": "![](https://img.blurt.blog/blurtimage/morphit/e3d56ddc849685c391dcdb03526463b8264f3e09.png)\n\n我加入 Morphit，是为了终于可以在不依赖中心化交易所（CEX）的情况下交易加密货币和法币。无 KYC、无日志、无 cookie，且无对手方风险。\n\n没有比 Morphit 更安全、更快、更可靠的地方来交易加密货币和法币。\n\n看看我在 Morphit 的个人主页！\nhttps://morphit.io/@{username}"
+      "body": "![](https://img.blurt.blog/blurtimage/morphit/e3d56ddc849685c391dcdb03526463b8264f3e09.png)\n\n我加入 Morphit，是为了终于可以在不依赖中心化交易所（CEX）的情况下交易加密货币和法币。无 KYC、无日志、无 cookie，且无对手方风险。\n\n没有比 Morphit 更安全、更快、更可靠的地方来交易加密货币和法币。\n\n看看我在 Morphit 的个人主页！\nhttps://morphit.io/{lang}/@{username}"
     },
     "order_post": {
       "title_buy": "我正在用 {asset2} 正在买入 {asset1}。想交易吗？",
       "title_sell": "我正在用 {asset2} 正在卖出 {asset1}。想交易吗？",
-      "body_buy": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\n我正在用 {asset2} 正在买入 {asset1}。想交易吗？\n\n没有比 Morphit 更安全、更快、更可靠的地方来交易加密货币和法币。\n\n看看我在 Morphit 上的报价！\nhttps://morphit.io/@{username}/{permlink}",
-      "body_sell": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\n我正在用 {asset2} 正在卖出 {asset1}。想交易吗？\n\n没有比 Morphit 更安全、更快、更可靠的地方来交易加密货币和法币。\n\n看看我在 Morphit 上的报价！\nhttps://morphit.io/@{username}/{permlink}"
+      "body_buy": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\n我正在用 {asset2} 正在买入 {asset1}。想交易吗？\n\n没有比 Morphit 更安全、更快、更可靠的地方来交易加密货币和法币。\n\n看看我在 Morphit 上的报价！\nhttps://morphit.io/{lang}/@{username}/{permlink}",
+      "body_sell": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\n我正在用 {asset2} 正在卖出 {asset1}。想交易吗？\n\n没有比 Morphit 更安全、更快、更可靠的地方来交易加密货币和法币。\n\n看看我在 Morphit 上的报价！\nhttps://morphit.io/{lang}/@{username}/{permlink}"
     },
     "opt_in_label": "将此订单也同步发布到我的博客（免费）",
     "opt_in_help": "将此订单的简短公告发布到你的 Blurt 博客。每个订单一篇帖子，由你签署，提交后立即触发。免费——帖子使用你现有的 Mana 上链。",
@@ -4337,7 +4345,10 @@
     "success_pending": "正在将公告发布到你的 Blurt 博客…",
     "success_ok": "已发布到你的 Blurt 博客。",
     "success_failed": "目前无法将公告发布到你的博客——你的订单仍然有效。如果愿意,你可以稍后手动发布。",
-    "opt_in_pitch": "辛迪加发布交易至关重要。更多眼睛看到您的报价 = 更多交易伙伴,加上点赞奖励直接进入您的 Blurt 钱包。"
+    "opt_in_pitch": "辛迪加发布交易至关重要。更多眼睛看到您的报价 = 更多交易伙伴,加上点赞奖励直接进入您的 Blurt 钱包。",
+    "first_trade_opt_in_label": "向 @morphit 社区公布我的首笔交易(免费)",
+    "first_trade_opt_in_pitch": "你在 Morphit 的第一笔交易可以向 @morphit 社区发布一次性的\"我加入了 Morphit\"公告——让更多人看到你,并有机会获得点赞奖励,直接进入你的 Blurt 钱包。",
+    "first_trade_opt_in_help": "仅触发一次——在你为首笔交易留下评价时,而非现在。默认关闭。与上方的单笔订单博客帖子相互独立。"
   },
   "toast": {
     "view_action": "查看"
@@ -4410,5 +4421,15 @@
     "heading": "就快完成了",
     "body": "你已登录，但还没有 Blurt 账户名。添加一个就能开始交易和发布；在那之前你可以先浏览。",
     "cta": "完成设置"
+  },
+  "order_title": {
+    "buy_min": "我想买价值 {amount} {fiat} 或以上的 {asset}",
+    "sell_min": "我想卖价值 {amount} {fiat} 或以上的 {asset}",
+    "buy_max": "我想买价值最多 {amount} {fiat} 的 {asset}",
+    "sell_max": "我想卖价值最多 {amount} {fiat} 的 {asset}",
+    "buy_range": "我想买价值 {min}–{max} {fiat} 的 {asset}",
+    "sell_range": "我想卖价值 {min}–{max} {fiat} 的 {asset}",
+    "buy_any": "我想买 {asset}",
+    "sell_any": "我想卖 {asset}"
   }
 }

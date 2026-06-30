@@ -222,7 +222,7 @@
 			</div>
 		{:else if panelState.kind === 'locked'}
 			<div
-				class="mt-5 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"
+				class="mt-5 rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-700 dark:bg-red-950 dark:text-red-100"
 			>
 				{$_('chat.verify_peer.locked')}
 			</div>

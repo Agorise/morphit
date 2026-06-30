@@ -890,7 +890,7 @@ Here's the full flow from start to finish. **Step 1:** Create a free Blurt accou
 
 **FAQ key:** `supported_countries`
 
-Yes. Morphit works in every country because Morphit doesn't operate from any specific country — it's a decentralized bulletin board published to a public blockchain. You can browse, post, and trade from anywhere with an internet connection. There are no IP blocks, no country-of-residence checks, no geographic restrictions built into the software. If your country blocks access to crypto services, the Tor / Lokinet / I2P mirrors let you reach Morphit anyway (see the footer icons). That said: please understand your own country's laws about crypto trading. Morphit doesn't enforce any country/corporation's rules — that's between you and the government that you consent to (govern = control, ment = mind. Mind Control). Their flag is their corporate logo. You are a living male or female, not a corpse (hence the term corporation). Starve the beast. #agorism #freemarkets #countereconomics
+Yes. Morphit works in every country because Morphit doesn't operate from any specific country — it's a decentralized bulletin board published to a public blockchain. You can browse, post, and trade from anywhere with an internet connection. There are no IP blocks, no country-of-residence checks, no geographic restrictions built into the software. If your country blocks access to crypto services, the Tor / Lokinet / I2P / `.eth` mirrors let you reach Morphit anyway (see the footer icons). That said: please understand your own country's laws about crypto trading. Morphit doesn't enforce any country/corporation's rules — that's between you and the government that you consent to (govern = control, ment = mind. Mind Control). Their flag is their corporate logo. You are a living male or female, not a corpse (hence the term corporation). Starve the beast. #agorism #freemarkets #countereconomics
 
 ---
 
@@ -1169,7 +1169,7 @@ The post is signed with YOUR posting key — not Morphit's, not the operator's, 
 - You can edit or delete the post later just like any other post on your Blurt account.
 - "Likes" that you receive on blog posts earn you more Blurt for trading and staking.
 
-There's a separate, automatic post that fires once in your lifetime: when you complete your FIRST Morphit trade, Morphit publishes a short "I joined Morphit" announcement to the @morphit community (not your personal blog). That post is part of the onboarding flow; there's no checkbox for it because it only fires once and marks the milestone. After the first one, only the per-order opt-in you see on /post controls future posts.
+There's also a one-time announcement you can opt into: a short "I joined Morphit" post to the @morphit community (not your blog) on your FIRST trade. It's off by default — arm it with a checkbox on the order form, in Settings, or on the feedback form, and it fires once, when you leave feedback for that first trade. Afterwards the Settings card instead lets you pre-tick the per-order blog post.
 
 ---
 

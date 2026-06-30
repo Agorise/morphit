@@ -325,7 +325,12 @@
 		refreshing = true;
 		stopPolling();
 		try {
-			const r = await fetchAccountBalance(resolveOrigin(MORPHIT_INDEXER_ORIGIN), account, fetch, true);
+			const r = await fetchAccountBalance(
+				resolveOrigin(MORPHIT_INDEXER_ORIGIN),
+				account,
+				fetch,
+				true
+			);
 			if (r.kind === 'ok' && r.data.account.name === account) applyBalanceData(r.data);
 			await fetchHistory(-1, true);
 		} catch (err) {
@@ -358,7 +363,8 @@
 <section class="mx-auto max-w-4xl px-4 py-8">
 	<nav class="mb-4 text-sm">
 		<a href={lp('/explorer')} class="text-white hover:text-morphit-emerald">
-			<span class="nav-arrow nav-arrow-left" aria-hidden="true">⇦</span> {$_('explorer.nav.back_to_search')}
+			<span class="nav-arrow nav-arrow-left" aria-hidden="true">⇦</span>
+			{$_('explorer.nav.back_to_search')}
 		</a>
 	</nav>
 
@@ -386,7 +392,7 @@
 			<h1 class="font-display text-xl font-bold">
 				{$_('explorer.account.error_title')}
 			</h1>
-			<p class="mt-2 text-sm text-amber-700 dark:text-amber-300">
+			<p class="mt-2 text-sm text-red-700 dark:text-red-300">
 				{errorMsg}
 			</p>
 		</div>

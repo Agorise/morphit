@@ -111,9 +111,7 @@
 		if (t.xmr === null) return null;
 		// Prefer the live piconero string; fall back to chain-pinned.
 		const piconeroStr =
-			typeof livePiconero === 'string' && livePiconero.length > 0
-				? livePiconero
-				: t.xmr.piconero;
+			typeof livePiconero === 'string' && livePiconero.length > 0 ? livePiconero : t.xmr.piconero;
 		// Convert piconero string (which can exceed Number range
 		// safely as a string) to XMR fixed-12.  Use BigInt to
 		// keep precision through the divide.
@@ -184,8 +182,8 @@
 </script>
 
 {#if resolved === null}
-	<section class="card mb-4 border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/30">
-		<p class="text-sm text-amber-800 dark:text-amber-200">
+	<section class="card mb-4 border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-950/30">
+		<p class="text-sm text-red-800 dark:text-red-200">
 			{$_('post_order.fee_method.fee_address_unavailable', {
 				values: { asset: method.toUpperCase() }
 			})}
@@ -236,9 +234,7 @@
 				onclick={copyAddress}
 				class="rounded-md border border-ink-300 bg-white px-3 py-1.5 text-sm font-medium text-ink-700 hover:bg-ink-50 dark:border-ink-600 dark:bg-ink-800 dark:text-ink-100 dark:hover:bg-ink-700"
 			>
-				{copyAddrFlash
-					? $_('common.copied')
-					: $_('post_order.fee_method.fee_address_copy')}
+				{copyAddrFlash ? $_('common.copied') : $_('post_order.fee_method.fee_address_copy')}
 			</button>
 			<button
 				type="button"

@@ -22,7 +22,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO = join(__dirname, '..', '..', '..');
 
 const P = {
-	accountPage: join(REPO, 'apps/web/src/routes/[lang]/explorer/account/[name=account]/+page.svelte'),
+	accountPage: join(
+		REPO,
+		'apps/web/src/routes/[lang]/explorer/account/[name=account]/+page.svelte'
+	),
 	searchPage: join(REPO, 'apps/web/src/routes/[lang]/explorer/+page.svelte'),
 	historyHelper: join(REPO, 'apps/web/src/lib/blurt/accountHistory.ts'),
 	balanceHelper: join(REPO, 'apps/web/src/lib/blurt/accountBalance.ts'),
@@ -62,7 +65,7 @@ const bad = (m: string): void => {
 {
 	const s = read(P.accountPage);
 	const historyBust = /fetchHistory\(-1,\s*true\)/.test(s);
-	const balanceBust = /fetchAccountBalance\([^;]*fetch,\s*true\)/.test(s);
+	const balanceBust = /fetchAccountBalance\([^;]*fetch,\s*true\s*\)/.test(s);
 	if (historyBust && balanceBust) ok('manual refresh bypasses cache for both history and balance');
 	else bad(`manual refresh not cache-bypassed (history=${historyBust} balance=${balanceBust})`);
 }
@@ -76,10 +79,14 @@ const bad = (m: string): void => {
 }
 
 // 5. Both fetch helpers support the noCache cache-bust.
-for (const [label, path] of [['fetchAccountHistory', P.historyHelper], ['fetchAccountBalance', P.balanceHelper]] as const) {
+for (const [label, path] of [
+	['fetchAccountHistory', P.historyHelper],
+	['fetchAccountBalance', P.balanceHelper]
+] as const) {
 	const s = read(path);
 	const hasParam = /noCache = false/.test(s);
-	const busts = /_cb=\$\{Date\.now\(\)\}/.test(s) && /cache: noCache \? 'no-store' : 'default'/.test(s);
+	const busts =
+		/_cb=\$\{Date\.now\(\)\}/.test(s) && /cache: noCache \? 'no-store' : 'default'/.test(s);
 	if (hasParam && busts) ok(`${label} supports noCache (cache-buster + no-store)`);
 	else bad(`${label} missing noCache support (param=${hasParam} busts=${busts})`);
 }
@@ -92,7 +99,11 @@ for (const [label, path] of [['fetchAccountHistory', P.historyHelper], ['fetchAc
 	};
 	const acc = en.explorer?.account ?? {};
 	const sea = en.explorer?.search ?? {};
-	if (typeof acc.refresh_label === 'string' && typeof acc.delay_notice === 'string' && typeof sea.delay_notice === 'string')
+	if (
+		typeof acc.refresh_label === 'string' &&
+		typeof acc.delay_notice === 'string' &&
+		typeof sea.delay_notice === 'string'
+	)
 		ok('en locale has refresh_label + account/search delay_notice');
 	else bad('en locale missing one of the new explorer keys');
 }
@@ -100,9 +111,12 @@ for (const [label, path] of [['fetchAccountHistory', P.historyHelper], ['fetchAc
 // ── Tamper tests ──
 {
 	const mutated = read(P.accountPage).replace('onclick={manualRefresh}', 'onclick={() => {}}');
-	const stillWired = /async function manualRefresh\(/.test(mutated) && /onclick=\{manualRefresh\}/.test(mutated);
-	if (mutated === read(P.accountPage)) bad('tamper wiring error: could not unwire the refresh button');
-	else if (stillWired) bad('tamper NOT caught: unwiring the refresh button still passes (toothless)');
+	const stillWired =
+		/async function manualRefresh\(/.test(mutated) && /onclick=\{manualRefresh\}/.test(mutated);
+	if (mutated === read(P.accountPage))
+		bad('tamper wiring error: could not unwire the refresh button');
+	else if (stillWired)
+		bad('tamper NOT caught: unwiring the refresh button still passes (toothless)');
 	else ok('tamper caught: unwiring the refresh button turns the wiring check red');
 }
 {

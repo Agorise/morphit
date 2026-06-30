@@ -1294,7 +1294,7 @@
       },
       "supported_countries": {
         "q": "Czy Morphit działa w moim kraju?",
-        "a": "Tak. Morphit działa w każdym kraju, ponieważ Morphit nie operuje z żadnego konkretnego kraju — to zdecentralizowana tablica ogłoszeń publikowana w publicznym blockchainie. Możesz przeglądać, publikować i handlować z dowolnego miejsca z internetem. Nie ma blokad IP, sprawdzania kraju zamieszkania, ani ograniczeń geograficznych wbudowanych w oprogramowanie. Jeśli Twój kraj blokuje dostęp do usług krypto, mirrory Tor / Lokinet / I2P pozwolą Ci dotrzeć do Morphit mimo wszystko (zobacz ikony w stopce). Powiedziawszy to: zrozum prawa swojego kraju dotyczące handlu kryptowalutami. Morphit doesn't enforce any country/corporation's rules — that's between you and the government that you consent to (govern = control, ment = mind. Mind Control). Their flag is their corporate logo. You are a living male or female, not a corpse (hence the term corporation). Starve the beast. #agorism #freemarkets #countereconomics"
+        "a": "Tak. Morphit działa w każdym kraju, ponieważ Morphit nie operuje z żadnego konkretnego kraju — to zdecentralizowana tablica ogłoszeń publikowana w publicznym blockchainie. Możesz przeglądać, publikować i handlować z dowolnego miejsca z internetem. Nie ma blokad IP, sprawdzania kraju zamieszkania, ani ograniczeń geograficznych wbudowanych w oprogramowanie. Jeśli Twój kraj blokuje dostęp do usług krypto, mirrory Tor / Lokinet / I2P / `.eth` pozwolą Ci dotrzeć do Morphit mimo wszystko (zobacz ikony w stopce). Powiedziawszy to: zrozum prawa swojego kraju dotyczące handlu kryptowalutami. Morphit doesn't enforce any country/corporation's rules — that's between you and the government that you consent to (govern = control, ment = mind. Mind Control). Their flag is their corporate logo. You are a living male or female, not a corpse (hence the term corporation). Starve the beast. #agorism #freemarkets #countereconomics"
       },
       "supported_fiat_currencies": {
         "q": "Jakie waluty fiat (PLN, EUR, USD) obsługuje Morphit?",
@@ -1382,7 +1382,7 @@
       },
       "syndicate_trade_announcement": {
         "q": "Co to jest pole \"Zsyndykuj moje zlecenie\"?",
-        "a": "W formularzu publikacji zlecenia możesz zaznaczyć \"Zsyndykuj moje zlecenie też na moim Blogu (Gratis)\". Jeśli to zaznaczysz, Morphit publikuje krótkie ogłoszenie twojego zlecenia na twoim własnym blogu Blurt (blurt.blog, beblurt.com, etc) w chwili, gdy twoje zlecenie zostanie pomyślnie nadane. Post zawiera link z powrotem do strony twojego zlecenia na Morphit i używa tagu #morphit, więc pojawia się w feedzie społeczności Morphit.\n\nPost jest podpisany TWOIM kluczem posting — nie Morphit, nie operatora, twoim. To znaczy:\n- Post autentycznie pochodzi od ciebie, nie jest marketingowym spamem.\n- Projekt Morphit nie posiada kluczy, które mogłyby podpisywać treści społecznościowe w twoim imieniu.\n- Możesz edytować lub usunąć post później, tak jak każdy inny post na twoim koncie Blurt.\n- „Polubienia”, które otrzymujesz pod postami na blogu, dają Ci więcej Blurt do handlu i stakingu.\n\nJest też osobny, automatyczny post, który uruchamia się raz w życiu: gdy ukończysz swoją PIERWSZĄ transakcję na Morphit, Morphit publikuje krótkie ogłoszenie \"Dołączyłem do Morphit\" w społeczności @morphit (nie na twoim osobistym blogu). Ten post jest częścią przepływu powitalnego; nie ma dla niego pola wyboru, bo uruchamia się tylko raz i oznacza kamień milowy. Po pierwszym razie tylko pole przy każdym zleceniu, które widzisz w /post, kontroluje przyszłe posty."
+        "a": "W formularzu publikacji zlecenia możesz zaznaczyć \"Zsyndykuj moje zlecenie też na moim Blogu (Gratis)\". Jeśli to zaznaczysz, Morphit publikuje krótkie ogłoszenie twojego zlecenia na twoim własnym blogu Blurt (blurt.blog, beblurt.com, etc) w chwili, gdy twoje zlecenie zostanie pomyślnie nadane. Post zawiera link z powrotem do strony twojego zlecenia na Morphit i używa tagu #morphit, więc pojawia się w feedzie społeczności Morphit.\n\nPost jest podpisany TWOIM kluczem posting — nie Morphit, nie operatora, twoim. To znaczy:\n- Post autentycznie pochodzi od ciebie, nie jest marketingowym spamem.\n- Projekt Morphit nie posiada kluczy, które mogłyby podpisywać treści społecznościowe w twoim imieniu.\n- Możesz edytować lub usunąć post później, tak jak każdy inny post na twoim koncie Blurt.\n- „Polubienia”, które otrzymujesz pod postami na blogu, dają Ci więcej Blurt do handlu i stakingu.\n\nJest też jednorazowe ogłoszenie, na które możesz się zgodzić: krótki wpis \"Dołączyłem do Morphit\" w społeczności @morphit (nie na Twoim blogu) przy Twojej PIERWSZEJ transakcji. Domyślnie wyłączone — włącz je polem na formularzu zlecenia, w Ustawieniach lub na formularzu opinii; publikuje się raz, gdy wystawisz opinię za tę pierwszą transakcję. Później karta Ustawień pozwala zamiast tego z góry zaznaczać wpis na blogu dla danego zlecenia."
       },
       "offline_caching": {
         "q": "Czy Morphit działa offline?",
@@ -2170,6 +2170,7 @@
       "action_feature": "Wyróżnij",
       "action_feedback": "Zakończ / oceń",
       "fee_pending_external": "Oczekuje poświadczenia",
+      "fee_unverified": "Jeszcze niezweryfikowana",
       "fee_verified_by_attestation": "Zweryfikowana (poświadczona)",
       "fee_reused": "Brak w księdze zleceń — płatność już użyta",
       "fee_missing": "Brak w księdze ofert — nie otrzymano opłaty",
@@ -2184,7 +2185,7 @@
     },
     "cancel": {
       "confirm_title": "Anulować to zlecenie?",
-      "confirm_body": "Zlecenie zostanie usunięte z orderbooka. Opłata za listing nie podlega zwrotowi.",
+      "confirm_body": "To usuwa Twoje zlecenie z arkusza zleceń, więc nikt nowy nie będzie mógł na nie odpowiedzieć — i nie można tego cofnąć. Rozpoczęte już rozmowy pozostają otwarte i nikt nie jest obciążany. Jeśli zapłaciłeś opłatę za wystawienie, nie podlega ona zwrotowi.",
       "confirm_button": "Tak, anuluj",
       "cancel_button": "Zachowaj",
       "cancelling": "Anulowanie…"
@@ -2553,7 +2554,8 @@
     "fee_verified_by_attestation": "Zweryfikowana przez społeczność",
     "fee_pending_external_hint": "To zlecenie używa BTC lub XMR jako opłaty za wystawienie. Morphit czeka, aż walidatorzy społeczności poświadczą płatność. Do tego czasu zlecenie jest widoczne, ale niepotwierdzone.",
     "price_label": "Cena",
-    "error_load_failed": "Nie udało się załadować tego zlecenia. Spróbuj odświeżyć."
+    "error_load_failed": "Nie udało się załadować tego zlecenia. Spróbuj odświeżyć.",
+    "cancel_button": "Anuluj to zlecenie"
   },
   "orderbook": {
     "heading": "Księga zleceń",
@@ -2634,6 +2636,8 @@
     "blocked_marker": "Zablok.",
     "hide_button_tooltip": "Ukryj wszystkie zlecenia z tego konta na tym urządzeniu (odwracalne z Ustawień — nie są powiadamiani)",
     "hide_button_aria": "Ukryj zlecenia od {account}",
+    "unhide_button_tooltip": "Pokaż ponownie zlecenia tego konta na tym urządzeniu",
+    "unhide_button_aria": "Pokaż ponownie zlecenia od {account}",
     "all_hidden_title": "Każde zlecenie na tej stronie jest z ukrytego konta",
     "all_hidden_body": "Wszystkie {count} zleceń na tej stronie są z kont, które ukryłeś. Pokaż je mimo to, lub zarządzaj listą ukrytych w Ustawieniach.",
     "live": "Na żywo",
@@ -3019,7 +3023,7 @@
       "post_another": "Opublikuj kolejne",
       "edit_cta": "Edytuj",
       "waiver_title": "Twoje bezpłatne pierwsze zlecenie jest aktywne!",
-      "waiver_body": "Zostało już rozesłane na łańcuch Blurt i jest widoczne w księdze zleceń dla wszystkich — Morphit pokrył opłatę za wystawienie za ciebie. 🌱",
+      "waiver_body": "Zostało już rozesłane na łańcuch Blurt i jest widoczne w księdze zleceń dla wszystkich — Morphit pokrył opłatę za wystawienie za ciebie. ❤️",
       "waiver_next_heading": "Co dzieje się dalej:",
       "waiver_step_1": "Ktoś zainteresowany wymianą BLURT za to co oferujesz wyśle ci wiadomość. Zobaczysz powiadomienie na ikonie czatu w nagłówku — bądź czujny.",
       "waiver_step_2": "Rozmawiaj, aby potwierdzić warunki (cena, czas płatności, lokalizacja). Gdy będziesz gotowy, udostępnij swój adres odbioru BLURT (użyj przycisku udostępniania adresu w czacie); oni wysyłają ci BLURT, ty wysyłasz im to, na co się umówiliście.",
@@ -3518,7 +3522,8 @@
   },
   "scan_login": {
     "starting_heading": "Uprawnienie do kamery",
-    "starting_body": "Potrzebujemy kamery, żeby zeskanować kod logowania na komputerze.",
+    "starting_body": "Twój aparat jest potrzebny do zeskanowania kodu QR na komputerze.",
+    "starting_button": "Włącz aparat",
     "camera_denied_heading": "Kamera zablokowana",
     "camera_denied_body": "Potrzebujemy dostępu do kamery, żeby zeskanować kod QR. Otwórz ustawienia przeglądarki, zezwól na kamerę dla Morphit i spróbuj ponownie.",
     "no_camera_heading": "Nie znaleziono kamery",
@@ -4015,10 +4020,13 @@
     "syndication": {
       "heading": "Syndykacja",
       "explain": "Morphit może publikować ogłoszenia na twoim blogu Blurt, gdy wykonujesz określone czynności. Są podpisywane twoim kluczem postingu — Morphit niczego nie przechowuje w twoim imieniu.",
-      "first_trade_label": "Automatycznie ogłaszaj mój pierwszy handel w społeczności @morphit",
+      "first_trade_label": "Ogłoś moją pierwszą transakcję w społeczności @morphit",
       "first_trade_help": "Gdy zostawisz opinię o pierwszym handlu w Morphit, opublikuj również krótki post \"Dołączyłem do Morphit\" w społeczności @morphit na Blurt. Publikuje tylko raz na konto. Syndykacja per-zamówienie to osobne pole wyboru na formularzu zamówienia.",
       "pitch_heading": "Po co to włączać?",
-      "pitch_body": "Syndykacja to wszystko. Więcej oczu = więcej partnerów i nagrody za upvoty na portfel Blurt. Off = nic publicznego."
+      "pitch_body": "Syndykacja to wszystko. Więcej oczu = więcej partnerów i nagrody za upvoty na portfel Blurt. Off = nic publicznego.",
+      "blog_default_explain": "Masz za sobą pierwszą transakcję — świetnie. Morphit może teraz automatycznie zaznaczać pole \"opublikuj to zlecenie na moim blogu Blurt\" przy każdym nowym zleceniu, aby Twoje oferty były udostępniane automatycznie. Każdy wpis nadal jest podpisany przez Ciebie i możesz odznaczyć go przy konkretnym zleceniu.",
+      "blog_default_label": "Domyślnie publikuj moje zlecenia na moim blogu Blurt",
+      "blog_default_help": "Zaznacza z góry pole \"udostępnij na moim blogu\" dla każdego zlecenia w formularzu. Zawsze możesz je odznaczyć dla konkretnego zlecenia. Wyłączone = pole za każdym razem zaczyna niezaznaczone."
     },
     "privacy": {
       "heading": "Prywatność",
@@ -4322,13 +4330,13 @@
   "syndicate": {
     "first_trade": {
       "title": "Właśnie zakończyłem moją pierwszą transakcję z @{seller} na Morphit!",
-      "body": "![](https://img.blurt.blog/blurtimage/morphit/e3d56ddc849685c391dcdb03526463b8264f3e09.png)\n\nDołączyłem do Morphit, żeby wreszcie móc wymieniać kryptowaluty i fiaty bez polegania na scentralizowanej giełdzie (CEX). Bez KYC, bez logowania, bez ciasteczek i bez kontrahenta.\n\nNie ma bezpieczniejszego, szybszego ani pewniejszego miejsca do handlu kryptami i fiatami niż Morphit.\n\nZobacz mój profil na Morphit!\nhttps://morphit.io/@{username}"
+      "body": "![](https://img.blurt.blog/blurtimage/morphit/e3d56ddc849685c391dcdb03526463b8264f3e09.png)\n\nDołączyłem do Morphit, żeby wreszcie móc wymieniać kryptowaluty i fiaty bez polegania na scentralizowanej giełdzie (CEX). Bez KYC, bez logowania, bez ciasteczek i bez kontrahenta.\n\nNie ma bezpieczniejszego, szybszego ani pewniejszego miejsca do handlu kryptami i fiatami niż Morphit.\n\nZobacz mój profil na Morphit!\nhttps://morphit.io/{lang}/@{username}"
     },
     "order_post": {
       "title_buy": "kupuję {asset1} za {asset2}. Chcesz handlować?",
       "title_sell": "sprzedaję {asset1} za {asset2}. Chcesz handlować?",
-      "body_buy": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\nkupuję {asset1} za {asset2}. Chcesz handlować?\n\nNie ma bezpieczniejszego, szybszego ani pewniejszego miejsca do handlu kryptami i fiatami niż Morphit.\n\nZobacz moją ofertę na Morphit!\nhttps://morphit.io/@{username}/{permlink}",
-      "body_sell": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\nsprzedaję {asset1} za {asset2}. Chcesz handlować?\n\nNie ma bezpieczniejszego, szybszego ani pewniejszego miejsca do handlu kryptami i fiatami niż Morphit.\n\nZobacz moją ofertę na Morphit!\nhttps://morphit.io/@{username}/{permlink}"
+      "body_buy": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\nkupuję {asset1} za {asset2}. Chcesz handlować?\n\nNie ma bezpieczniejszego, szybszego ani pewniejszego miejsca do handlu kryptami i fiatami niż Morphit.\n\nZobacz moją ofertę na Morphit!\nhttps://morphit.io/{lang}/@{username}/{permlink}",
+      "body_sell": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\nsprzedaję {asset1} za {asset2}. Chcesz handlować?\n\nNie ma bezpieczniejszego, szybszego ani pewniejszego miejsca do handlu kryptami i fiatami niż Morphit.\n\nZobacz moją ofertę na Morphit!\nhttps://morphit.io/{lang}/@{username}/{permlink}"
     },
     "opt_in_label": "Opublikuj to zlecenie również na moim blogu (za darmo)",
     "opt_in_help": "Publikuje krótkie ogłoszenie o tym zleceniu na Twoim blogu Blurt. Jeden post na zlecenie, podpisany przez Ciebie, wysyłany zaraz po zatwierdzeniu. Za darmo — post idzie on-chain używając Twojej istniejącej Mana.",
@@ -4337,7 +4345,10 @@
     "success_pending": "Publikowanie ogłoszenia na Twoim blogu Blurt…",
     "success_ok": "Opublikowano na Twoim blogu Blurt.",
     "success_failed": "Nie udało się teraz opublikować ogłoszenia na Twoim blogu — Twoje zlecenie i tak jest aktywne. Możesz opublikować je ręcznie później, jeśli chcesz.",
-    "opt_in_pitch": "Syndykacja transakcji to wszystko. Więcej oczu na ofertach = więcej partnerów, plus nagrody za upvoty bezpośrednio do twojego portfela Blurt."
+    "opt_in_pitch": "Syndykacja transakcji to wszystko. Więcej oczu na ofertach = więcej partnerów, plus nagrody za upvoty bezpośrednio do twojego portfela Blurt.",
+    "first_trade_opt_in_label": "Ogłoś moją pierwszą transakcję w społeczności @morphit (za darmo)",
+    "first_trade_opt_in_pitch": "Twoja pierwsza transakcja na Morphit może opublikować jednorazowe ogłoszenie \"Dołączyłem do Morphit\" w społeczności @morphit — większa widoczność i możliwość nagród za głosy, które trafiają do Twojego portfela Blurt.",
+    "first_trade_opt_in_help": "Uruchamia się tylko raz — gdy wystawisz opinię za swoją pierwszą transakcję, nie teraz. Domyślnie wyłączone. Niezależne od wpisu na blogu dla zlecenia powyżej."
   },
   "toast": {
     "view_action": "Zobacz"
@@ -4410,5 +4421,15 @@
     "heading": "Prawie gotowe",
     "body": "Jesteś zalogowany, ale nie masz jeszcze nazwy konta Blurt. Dodaj ją, aby zacząć handlować i publikować — do tego czasu możesz przeglądać.",
     "cta": "Dokończ konfigurację"
+  },
+  "order_title": {
+    "buy_min": "Kupuję {asset} za {amount} {fiat} lub więcej",
+    "sell_min": "Sprzedaję {asset} za {amount} {fiat} lub więcej",
+    "buy_max": "Kupuję {asset} za maksymalnie {amount} {fiat}",
+    "sell_max": "Sprzedaję {asset} za maksymalnie {amount} {fiat}",
+    "buy_range": "Kupuję {asset} za {min}–{max} {fiat}",
+    "sell_range": "Sprzedaję {asset} za {min}–{max} {fiat}",
+    "buy_any": "Kupuję {asset}",
+    "sell_any": "Sprzedaję {asset}"
   }
 }

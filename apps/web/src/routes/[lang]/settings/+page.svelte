@@ -35,7 +35,13 @@
 	import { changePassword } from '$crypto/changePassword';
 	import { scorePassword, isPasswordAcceptable } from '$lib/auth/passwordStrength';
 	import { hiddenAccounts, unhideAccount, clearAllHidden } from '$lib/utils/hiddenAccounts';
-	import { firstTradeAnnounce, setFirstTradeAnnounce } from '$lib/utils/syndicationPrefs';
+	import {
+		firstTradeAnnounce,
+		setFirstTradeAnnounce,
+		hasFiredFirstTrade,
+		orderBlogDefault,
+		setOrderBlogDefault
+	} from '$lib/utils/syndicationPrefs';
 	import { liveIdentity, isUnlocked, isPairedReadOnly } from '$stores/identity';
 	import { getProfile } from '$lib/indexer/client';
 	import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
@@ -66,6 +72,10 @@
 	// bare base, which is harmless — there's no account whose draft could leak,
 	// and the legacy global keys are purged on mount (see the rehydrate effect).
 	const PROFILE_KEY_SCOPE = browser ? (getUserBlurtAccount() ?? '') : '';
+	// Syndication card phase: before the first completed trade we offer the
+	// one-time first-trade announcement opt-in; after, that affordance is
+	// spent and the card toggles the per-order blog-post default instead.
+	const firstTradeMilestonePast = hasFiredFirstTrade(getUserBlurtAccount());
 	const PROFILE_KEY_SUFFIX = PROFILE_KEY_SCOPE ? `.${PROFILE_KEY_SCOPE}` : '';
 	const STORAGE_KEY = `morphit.displayName${PROFILE_KEY_SUFFIX}`;
 	const NOSTR_URL_STORAGE_KEY = `morphit.nostrUrl${PROFILE_KEY_SUFFIX}`;
@@ -1174,7 +1184,7 @@
 				</a>
 			</p>
 			{#if !$isUnlocked}
-				<p class="mt-3 text-sm text-amber-700 dark:text-amber-300">
+				<p class="mt-3 text-sm text-red-700 dark:text-red-300">
 					{$_('settings.account_name.error_locked')}
 				</p>
 			{/if}
@@ -1234,13 +1244,13 @@
 		     get skimmed past. On-chain means public forever, no
 		     delete, no takedown. -->
 		<div
-			class="mt-4 rounded-xl border-2 border-amber-500/60 bg-amber-50 p-4 text-sm dark:border-amber-500/50 dark:bg-amber-900/20"
+			class="mt-4 rounded-xl border-2 border-red-500/60 bg-red-50 p-4 text-sm dark:border-red-500/50 dark:bg-red-900/20"
 			role="note"
 		>
-			<p class="font-semibold text-amber-900 dark:text-amber-200">
+			<p class="font-semibold text-red-900 dark:text-red-200">
 				⚠ {$_('settings.avatar.permanence_heading')}
 			</p>
-			<p class="mt-1 text-amber-900 dark:text-amber-100">
+			<p class="mt-1 text-red-900 dark:text-red-100">
 				{$_('settings.avatar.permanence_body')}
 			</p>
 		</div>
@@ -1299,7 +1309,7 @@
 							})}
 						</p>
 						{#if avatarStagedBytes > 2048}
-							<p class="mt-1 text-amber-600 dark:text-amber-400">
+							<p class="mt-1 text-red-600 dark:text-red-400">
 								{$_('settings.avatar.preview_getting_large')}
 							</p>
 						{/if}
@@ -1472,11 +1482,11 @@
 			     UX-STANDARD rule #5: one confirmation, not two; the
 			     confirming action is the heavier of the pair. -->
 			<div
-				class="mt-4 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-950"
+				class="mt-4 rounded-2xl border-2 border-red-300 bg-red-50 p-4 dark:border-red-700 dark:bg-red-950"
 				role="alertdialog"
 				aria-live="polite"
 			>
-				<p class="text-sm text-amber-900 dark:text-amber-100">
+				<p class="text-sm text-red-900 dark:text-red-100">
 					{$_('settings.display_name.clear_confirm_prompt')}
 				</p>
 				<div class="mt-3 flex flex-wrap gap-2">
@@ -1939,40 +1949,62 @@
 		<h2 id="syndication-heading" class="font-display text-xl font-bold">
 			{$_('settings.syndication.heading')}
 		</h2>
-		<p class="mt-2 text-ink-600 dark:text-ink-300">
-			{$_('settings.syndication.explain')}
-		</p>
-		<!-- Sally finding H9 (Part 68): selling-point pitch on the
-		     settings card so a user who navigates here directly to
-		     toggle the preference understands what they're trading
-		     off (privacy vs. additional earnings + reach). -->
-		<p
-			class="mt-3 rounded-xl border border-morphit-emerald/30 bg-morphit-emerald/5 p-3 text-sm text-ink-700 dark:border-morphit-emerald/40 dark:text-ink-200"
-		>
-			<span class="font-semibold text-morphit-emerald"
-				>📣 {$_('settings.syndication.pitch_heading')}</span
+		{#if !firstTradeMilestonePast}
+			<!-- Phase 1: one-time first-trade announcement opt-in (default off). -->
+			<p class="mt-2 text-ink-600 dark:text-ink-300">
+				{$_('settings.syndication.explain')}
+			</p>
+			<!-- Sally finding H9 (Part 68): selling-point pitch so a user landing here understands the privacy-vs-reach tradeoff. -->
+			<p
+				class="mt-3 rounded-xl border border-morphit-emerald/30 bg-morphit-emerald/5 p-3 text-sm text-ink-700 dark:border-morphit-emerald/40 dark:text-ink-200"
 			>
-			<span class="mt-1 block">{$_('settings.syndication.pitch_body')}</span>
-		</p>
-
-		<label
-			class="mt-4 flex items-start gap-3 rounded-xl border border-ink-200 p-4 dark:border-ink-700"
-		>
-			<input
-				type="checkbox"
-				checked={$firstTradeAnnounce}
-				onchange={(e) => setFirstTradeAnnounce(e.currentTarget.checked)}
-				class="mt-1 h-5 w-5 flex-none accent-morphit-emerald"
-			/>
-			<div class="min-w-0">
-				<p class="font-semibold">
-					{$_('settings.syndication.first_trade_label')}
-				</p>
-				<p class="mt-1 text-sm text-ink-600 dark:text-ink-300">
-					{$_('settings.syndication.first_trade_help')}
-				</p>
-			</div>
-		</label>
+				<span class="font-semibold text-morphit-emerald"
+					>📣 {$_('settings.syndication.pitch_heading')}</span
+				>
+				<span class="mt-1 block">{$_('settings.syndication.pitch_body')}</span>
+			</p>
+			<label
+				class="mt-4 flex items-start gap-3 rounded-xl border border-ink-200 p-4 dark:border-ink-700"
+			>
+				<input
+					type="checkbox"
+					checked={$firstTradeAnnounce}
+					onchange={(e) => setFirstTradeAnnounce(e.currentTarget.checked)}
+					class="mt-1 h-5 w-5 flex-none accent-morphit-emerald"
+				/>
+				<div class="min-w-0">
+					<p class="font-semibold">
+						{$_('settings.syndication.first_trade_label')}
+					</p>
+					<p class="mt-1 text-sm text-ink-600 dark:text-ink-300">
+						{$_('settings.syndication.first_trade_help')}
+					</p>
+				</div>
+			</label>
+		{:else}
+			<!-- Phase 2: first trade done — the announcement opt-in is spent; this card now sets the per-order blog-post default. -->
+			<p class="mt-2 text-ink-600 dark:text-ink-300">
+				{$_('settings.syndication.blog_default_explain')}
+			</p>
+			<label
+				class="mt-4 flex items-start gap-3 rounded-xl border border-ink-200 p-4 dark:border-ink-700"
+			>
+				<input
+					type="checkbox"
+					checked={$orderBlogDefault}
+					onchange={(e) => setOrderBlogDefault(e.currentTarget.checked)}
+					class="mt-1 h-5 w-5 flex-none accent-morphit-emerald"
+				/>
+				<div class="min-w-0">
+					<p class="font-semibold">
+						{$_('settings.syndication.blog_default_label')}
+					</p>
+					<p class="mt-1 text-sm text-ink-600 dark:text-ink-300">
+						{$_('settings.syndication.blog_default_help')}
+					</p>
+				</div>
+			</label>
+		{/if}
 	</section>
 
 	<!-- ─── Hidden accounts (client-side moderation, Q1.4) ─── -->
@@ -2022,11 +2054,11 @@
 					</button>
 				{:else}
 					<div
-						class="rounded-xl border-2 border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-950"
+						class="rounded-xl border-2 border-red-300 bg-red-50 p-3 dark:border-red-700 dark:bg-red-950"
 						role="alertdialog"
 						aria-live="polite"
 					>
-						<p class="text-sm text-amber-900 dark:text-amber-100">
+						<p class="text-sm text-red-900 dark:text-red-100">
 							{$_('settings.hidden_accounts.unhide_all_confirm', {
 								values: { count: hiddenList.length }
 							})}
@@ -2173,11 +2205,11 @@
 					</button>
 				{:else}
 					<div
-						class="rounded-xl border-2 border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-950"
+						class="rounded-xl border-2 border-red-300 bg-red-50 p-3 dark:border-red-700 dark:bg-red-950"
 						role="alertdialog"
 						aria-live="polite"
 					>
-						<p class="text-sm text-amber-900 dark:text-amber-100">
+						<p class="text-sm text-red-900 dark:text-red-100">
 							{$_('settings.preferences.clear_confirm_body')}
 						</p>
 						<div class="mt-3 flex flex-wrap gap-2">
@@ -2283,7 +2315,7 @@
 									⚠ {$_('settings.change_password.strength_trivial')}
 								</p>
 							{:else if pwNewStrength === 'short'}
-								<p class="mt-1 text-xs text-amber-700 dark:text-amber-400">
+								<p class="mt-1 text-xs text-red-700 dark:text-red-400">
 									{$_('settings.change_password.strength_short')}
 								</p>
 							{:else if pwNewStrength === 'ok'}

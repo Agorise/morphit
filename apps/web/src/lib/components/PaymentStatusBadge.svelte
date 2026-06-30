@@ -57,7 +57,7 @@
 		</span>
 	{:else if state.phase === 'paid_mismatch'}
 		<span
-			class="inline-flex items-center gap-1 rounded-full border border-amber-400 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-900 dark:border-amber-600 dark:bg-amber-950 dark:text-amber-100"
+			class="inline-flex items-center gap-1 rounded-full border border-red-400 bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-900 dark:border-red-600 dark:bg-red-950 dark:text-red-100"
 		>
 			<span aria-hidden="true">⚠</span>
 			{$_('trade_status.payment_mismatch')}

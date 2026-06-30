@@ -160,7 +160,7 @@
 				</button>
 			</div>
 			{#if failed}
-				<p class="mt-2 text-xs text-amber-700 dark:text-amber-400">
+				<p class="mt-2 text-xs text-red-700 dark:text-red-400">
 					{$_('chat_notif_nudge.error')}
 				</p>
 			{:else}

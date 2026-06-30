@@ -364,13 +364,13 @@
 					{badgeText}
 				</span>
 			{:else if !$backupVisited}
-				<!-- Backup-unvisited nudge: amber dot, no count. The
+				<!-- Backup-unvisited nudge: red dot, no count. The
 				     distinct color communicates "this is a one-time
 				     reminder, not an activity counter." Hidden once
 				     notifications are active (unread count takes
 				     priority visually). -->
 				<span
-					class="absolute -end-0.5 -top-0.5 h-3 w-3 rounded-full bg-amber-400 shadow-morphit-card ring-2 ring-white dark:ring-ink-950"
+					class="absolute -end-0.5 -top-0.5 h-3 w-3 rounded-full bg-red-400 shadow-morphit-card ring-2 ring-white dark:ring-ink-950"
 					aria-label={$_('avatar_menu.backup_nudge_aria')}
 				></span>
 			{/if}
@@ -661,7 +661,7 @@
 						{/if}
 
 						<!-- Backup my keys — critical one-time nudge.
-						     Amber pill on the right disappears on
+						     Red nudge pill on the right disappears on
 						     first visit. Copy is intentionally direct
 						     so new users understand this isn't
 						     optional. -->
@@ -692,7 +692,7 @@
 								</span>
 								{#if !$backupVisited}
 									<span
-										class="rounded-full bg-amber-400 px-2 py-0.5 text-[11px] font-black text-ink-950"
+										class="rounded-full bg-red-400 px-2 py-0.5 text-[11px] font-black text-ink-950"
 									>
 										{$_('avatar_menu.backup_nudge_pill')}
 									</span>

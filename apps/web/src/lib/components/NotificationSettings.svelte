@@ -249,7 +249,7 @@
 						{$_('settings.notifications.channel_ambient_help')}
 					</p>
 					{#if !supportsBadging}
-						<p class="mt-2 text-xs text-amber-600 dark:text-amber-400">
+						<p class="mt-2 text-xs text-ink-600 dark:text-ink-400">
 							{$_('settings.notifications.hint_badging_unsupported')}
 						</p>
 					{/if}
@@ -275,7 +275,7 @@
 							{$_('settings.notifications.channel_native_help')}
 						</p>
 						{#if !supportsNotifications}
-							<p class="mt-2 text-xs text-amber-600 dark:text-amber-400">
+							<p class="mt-2 text-xs text-ink-600 dark:text-ink-400">
 								{$_('settings.notifications.hint_notifications_unsupported')}
 							</p>
 						{/if}
@@ -306,10 +306,7 @@
 							{$_('settings.notifications.channel_push_help')}
 						</p>
 						{#if pushError}
-							<p
-								class="mt-2 text-sm text-rose-700 dark:text-rose-300"
-								role="alert"
-							>
+							<p class="mt-2 text-sm text-rose-700 dark:text-rose-300" role="alert">
 								{$_(`settings.notifications.push_error_${pushError}`)}
 							</p>
 						{/if}
@@ -416,7 +413,7 @@
 							{$_('settings.notifications.channel_vibrate_help')}
 						</p>
 						{#if !supportsVibrate}
-							<p class="mt-2 text-xs text-amber-600 dark:text-amber-400">
+							<p class="mt-2 text-xs text-ink-600 dark:text-ink-400">
 								{$_('settings.notifications.hint_vibrate_unsupported')}
 							</p>
 						{/if}
@@ -588,11 +585,11 @@
 					</button>
 				{:else}
 					<div
-						class="rounded-xl border-2 border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-950"
+						class="rounded-xl border-2 border-red-300 bg-red-50 p-3 dark:border-red-700 dark:bg-red-950"
 						role="alertdialog"
 						aria-live="polite"
 					>
-						<p class="text-sm text-amber-900 dark:text-amber-100">
+						<p class="text-sm text-red-900 dark:text-red-100">
 							{$_('settings.privacy.address_history_forget_confirm', {
 								values: { count: addressHistoryCount }
 							})}
@@ -618,5 +615,4 @@
 			</div>
 		{/if}
 	</div>
-
 </section>

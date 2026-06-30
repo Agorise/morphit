@@ -83,11 +83,7 @@
 	const noteValid = $derived(note.length <= SHIPMENT_LIMITS.noteMax);
 
 	const canShare = $derived(
-		carrierValid &&
-			trackingValid &&
-			customCarrierNameValid &&
-			customTrackingUrlValid &&
-			noteValid
+		carrierValid && trackingValid && customCarrierNameValid && customTrackingUrlValid && noteValid
 	);
 
 	let sending = $state(false);
@@ -106,11 +102,9 @@
 			};
 			if (carrier === 'other') {
 				if (customCarrierName.trim())
-					(payload as { customCarrierName?: string }).customCarrierName =
-						customCarrierName.trim();
+					(payload as { customCarrierName?: string }).customCarrierName = customCarrierName.trim();
 				if (customTrackingUrl.trim())
-					(payload as { customTrackingUrl?: string }).customTrackingUrl =
-						customTrackingUrl.trim();
+					(payload as { customTrackingUrl?: string }).customTrackingUrl = customTrackingUrl.trim();
 			}
 			if (note.trim()) (payload as { note?: string }).note = note.trim();
 			if (orderPermlink) (payload as { orderPermlink?: string }).orderPermlink = orderPermlink;
@@ -151,13 +145,13 @@
 
 		<!-- Always-shown safety tips -->
 		<div
-			class="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950/30"
+			class="mt-4 rounded-lg border border-red-300 bg-red-50 p-3 text-sm dark:border-red-700 dark:bg-red-950/30"
 			role="note"
 		>
-			<p class="font-semibold text-amber-900 dark:text-amber-200">
+			<p class="font-semibold text-red-900 dark:text-red-200">
 				{$_('shipment_modal.safety_heading')}
 			</p>
-			<ul class="mt-1 list-disc space-y-1 pl-5 text-amber-800 dark:text-amber-300">
+			<ul class="mt-1 list-disc space-y-1 pl-5 text-red-800 dark:text-red-300">
 				<li>{$_('shipment_modal.safety_insurance')}</li>
 				<li>{$_('shipment_modal.safety_plain_envelope')}</li>
 				<li>{$_('shipment_modal.safety_return_address')}</li>
@@ -167,7 +161,7 @@
 			<!-- Cash-specific expander -->
 			<button
 				type="button"
-				class="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-amber-900 underline hover:no-underline dark:text-amber-200"
+				class="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-red-900 underline hover:no-underline dark:text-red-200"
 				onclick={() => (cashTipsOpen = !cashTipsOpen)}
 				aria-expanded={cashTipsOpen}
 				aria-controls="shipment-cash-tips"
@@ -179,7 +173,7 @@
 			{#if cashTipsOpen}
 				<div
 					id="shipment-cash-tips"
-					class="mt-2 rounded-md border border-amber-400 bg-amber-100 p-3 text-amber-900 dark:border-amber-600 dark:bg-amber-950 dark:text-amber-100"
+					class="mt-2 rounded-md border border-red-400 bg-red-100 p-3 text-red-900 dark:border-red-600 dark:bg-red-950 dark:text-red-100"
 				>
 					<p class="font-semibold">{$_('shipment_modal.cash_heading')}</p>
 					<ul class="mt-1 list-disc space-y-1 pl-5">
@@ -194,10 +188,7 @@
 		<div class="mt-5 grid gap-4">
 			<!-- Carrier dropdown -->
 			<div>
-				<label
-					for="sh-carrier"
-					class="block text-sm font-semibold text-ink-700 dark:text-ink-200"
-				>
+				<label for="sh-carrier" class="block text-sm font-semibold text-ink-700 dark:text-ink-200">
 					{$_('shipment_modal.carrier_label')}
 				</label>
 				<select
@@ -214,7 +205,9 @@
 
 			<!-- Custom carrier fields when 'other' selected -->
 			{#if carrier === 'other'}
-				<div class="rounded-lg border border-ink-200 bg-ink-50 p-3 dark:border-ink-700 dark:bg-ink-950">
+				<div
+					class="rounded-lg border border-ink-200 bg-ink-50 p-3 dark:border-ink-700 dark:bg-ink-950"
+				>
 					<p class="text-xs font-semibold text-ink-700 dark:text-ink-200">
 						{$_('shipment_modal.other_heading')}
 					</p>
@@ -262,10 +255,7 @@
 
 			<!-- Tracking number -->
 			<div>
-				<label
-					for="sh-tracking"
-					class="block text-sm font-semibold text-ink-700 dark:text-ink-200"
-				>
+				<label for="sh-tracking" class="block text-sm font-semibold text-ink-700 dark:text-ink-200">
 					{$_('shipment_modal.tracking_label')}
 				</label>
 				<input
@@ -286,9 +276,7 @@
 			<div>
 				<label for="sh-note" class="block text-sm font-semibold text-ink-700 dark:text-ink-200">
 					{$_('shipment_modal.note_label')}
-					<span class="ml-1 font-normal text-ink-400"
-						>{$_('shipment_modal.optional_marker')}</span
-					>
+					<span class="ml-1 font-normal text-ink-400">{$_('shipment_modal.optional_marker')}</span>
 				</label>
 				<textarea
 					id="sh-note"

@@ -116,8 +116,12 @@
 {#if asset}
 	<article class="mx-auto max-w-3xl px-4 py-8">
 		<nav class="mb-4 text-sm">
-			<a href={`/${$page.params.lang ?? 'en'}/privacy`} class="text-white hover:text-morphit-emerald">
-				<span class="nav-arrow nav-arrow-left" aria-hidden="true">⇦</span> {$_('privacy.back_to_index')}
+			<a
+				href={`/${$page.params.lang ?? 'en'}/privacy`}
+				class="text-white hover:text-morphit-emerald"
+			>
+				<span class="nav-arrow nav-arrow-left" aria-hidden="true">⇦</span>
+				{$_('privacy.back_to_index')}
 			</a>
 		</nav>
 
@@ -211,12 +215,12 @@
 		     fully-public coordination chain). -->
 		{#if $_(`privacy.guides.${guideKey}.caveats`) !== `privacy.guides.${guideKey}.caveats`}
 			<section
-				class="mb-6 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-950"
+				class="mb-6 rounded-lg border border-red-300 bg-red-50 p-3 dark:border-red-700 dark:bg-red-950"
 			>
-				<h2 class="mb-2 text-sm font-semibold text-amber-900 dark:text-amber-100">
+				<h2 class="mb-2 text-sm font-semibold text-red-900 dark:text-red-100">
 					⚠ {$_('privacy.section_caveats')}
 				</h2>
-				<p class="text-sm text-amber-800 dark:text-amber-200">
+				<p class="text-sm text-red-800 dark:text-red-200">
 					{$_(`privacy.guides.${guideKey}.caveats`)}
 				</p>
 			</section>

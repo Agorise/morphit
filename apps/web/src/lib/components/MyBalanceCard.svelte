@@ -493,7 +493,7 @@
 			{$_('profile.my_balance.loading')}
 		</p>
 	{:else if loadState === 'error'}
-		<p class="text-sm text-amber-700 dark:text-amber-300">
+		<p class="text-sm text-red-700 dark:text-red-300">
 			{$_('profile.my_balance.error')}: {errorMsg}
 		</p>
 	{:else}
@@ -563,9 +563,7 @@
 		</dl>
 
 		{#if showLowBalanceHint || showLowManaHint}
-			<p
-				class="mt-3 flex items-start gap-1.5 text-xs font-medium text-amber-600 dark:text-amber-400"
-			>
+			<p class="mt-3 flex items-start gap-1.5 text-xs font-medium text-red-600 dark:text-red-400">
 				<span aria-hidden="true" class="flex-none">⚠</span>
 				<span>
 					{#if showLowBalanceHint}
@@ -607,7 +605,7 @@
 			</span>
 		</div>
 		{#if exportError}
-			<p class="mt-2 text-xs text-amber-700 dark:text-amber-300">
+			<p class="mt-2 text-xs text-red-700 dark:text-red-300">
 				{$_('profile.pnl.export_error')}: {exportError}
 			</p>
 		{/if}

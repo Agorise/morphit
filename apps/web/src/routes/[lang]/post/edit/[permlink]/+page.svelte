@@ -597,7 +597,8 @@
 			<p class="mt-2 text-ink-600 dark:text-ink-300">{$_('edit_order.not_found_body')}</p>
 			<div class="mt-4">
 				<BusyButton variant="secondary" onclick={() => gotoLocale('/orderbook')}>
-					<span class="nav-arrow nav-arrow-left" aria-hidden="true">⇦</span> {$_('post_order.back_to_orderbook')}
+					<span class="nav-arrow nav-arrow-left" aria-hidden="true">⇦</span>
+					{$_('post_order.back_to_orderbook')}
 				</BusyButton>
 			</div>
 		</section>
@@ -607,7 +608,8 @@
 			<p class="mt-2 text-ink-600 dark:text-ink-300">{$_('edit_order.not_yours_body')}</p>
 			<div class="mt-4">
 				<BusyButton variant="secondary" onclick={() => gotoLocale('/orderbook')}>
-					<span class="nav-arrow nav-arrow-left" aria-hidden="true">⇦</span> {$_('post_order.back_to_orderbook')}
+					<span class="nav-arrow nav-arrow-left" aria-hidden="true">⇦</span>
+					{$_('post_order.back_to_orderbook')}
 				</BusyButton>
 			</div>
 		</section>
@@ -622,11 +624,11 @@
 			</div>
 		</section>
 	{:else if phase === 'window_expired'}
-		<section class="card border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950">
-			<h2 class="font-display text-lg font-bold text-amber-900 dark:text-amber-100">
+		<section class="card border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-950">
+			<h2 class="font-display text-lg font-bold text-red-900 dark:text-red-100">
 				{$_('edit_order.expired_title')}
 			</h2>
-			<p class="mt-2 text-sm text-amber-800 dark:text-amber-200">
+			<p class="mt-2 text-sm text-red-800 dark:text-red-200">
 				{$_('edit_order.expired_body')}
 			</p>
 			<div class="mt-4 flex flex-col gap-3 sm:flex-row">
@@ -668,18 +670,15 @@
 			</div>
 		</section>
 	{:else if phase === 'save_error'}
-		<section
-			class="card border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950"
-			role="alert"
-		>
-			<h2 class="font-display text-lg font-bold text-amber-900 dark:text-amber-100">
+		<section class="card border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-950" role="alert">
+			<h2 class="font-display text-lg font-bold text-red-900 dark:text-red-100">
 				{$_('edit_order.save_error_title')}
 			</h2>
-			<p class="mt-2 text-sm text-amber-800 dark:text-amber-200">
+			<p class="mt-2 text-sm text-red-800 dark:text-red-200">
 				{$_('edit_order.save_error_body')}
 			</p>
 			{#if errorMessage}
-				<p class="mt-1 text-xs text-amber-700 dark:text-amber-300">{errorMessage}</p>
+				<p class="mt-1 text-xs text-red-700 dark:text-red-300">{errorMessage}</p>
 			{/if}
 			<div class="mt-4">
 				<BusyButton
@@ -798,7 +797,9 @@
 			<div class="grid gap-4 sm:grid-cols-2">
 				<label class="block">
 					<span class="mb-1 block text-sm font-semibold"
-						>{fiat ? $_('post_order.form.amount_min_label_in_fiat', { values: { fiat } }) : $_('post_order.form.amount_min_label')}</span
+						>{fiat
+							? $_('post_order.form.amount_min_label_in_fiat', { values: { fiat } })
+							: $_('post_order.form.amount_min_label')}</span
 					>
 					<input
 						type="text"
@@ -815,7 +816,9 @@
 				</label>
 				<label class="block">
 					<span class="mb-1 block text-sm font-semibold"
-						>{fiat ? $_('post_order.form.amount_max_label_in_fiat', { values: { fiat } }) : $_('post_order.form.amount_max_label')}</span
+						>{fiat
+							? $_('post_order.form.amount_max_label_in_fiat', { values: { fiat } })
+							: $_('post_order.form.amount_max_label')}</span
 					>
 					<input
 						type="text"
@@ -1006,7 +1009,8 @@
 
 		<div class="flex flex-col gap-3 sm:flex-row sm:justify-between">
 			<BusyButton variant="link" onclick={() => gotoLocale('/orderbook')}>
-				<span class="nav-arrow nav-arrow-left" aria-hidden="true">⇦</span> {$_('post_order.back_to_orderbook')}
+				<span class="nav-arrow nav-arrow-left" aria-hidden="true">⇦</span>
+				{$_('post_order.back_to_orderbook')}
 			</BusyButton>
 			<BusyButton
 				variant="primary"

@@ -2,18 +2,23 @@
 	/**
 	 * OrderExpiryChip — relative countdown for an order's expiry.
 	 *
-	 * Three visual tiers based on time remaining:
+	 * One flat emerald countdown style for every LIVE tier, matching
+	 * the profile + order-view "expires in X" pills (de-brown D2 — a
+	 * single visual language for "time left"; red is reserved for
+	 * genuine errors/destructive actions, not a normal expiry). The
+	 * tiers below now differ ONLY in tick cadence, not colour:
 	 *
-	 *   far    (> 1 hour):  muted gray, no animation, ticks
-	 *                       every 60s.  Format: "Expires in 5d 3h"
-	 *                       or "Expires in 4h 12m".
-	 *   near   (1 min..1 hour): amber, no animation, ticks
-	 *                       every 60s.  Format: "Expires in 42m".
-	 *   urgent (< 15 min):  bold red, gentle pulse, ticks every
-	 *                       SECOND so the countdown feels alive.
-	 *                       Format: "Expires in 8m 14s".
-	 *   expired (≤ 0):      muted gray, "Expired".  No animation,
-	 *                       no ticking — frozen.
+	 *   far    (> 1 hour):  emerald, ticks every 60s.  Format:
+	 *                       "Expires in 5d 3h" or "Expires in 4h 12m".
+	 *   near   (1 min..1 hour): emerald, ticks every 60s.  Format:
+	 *                       "Expires in 42m".
+	 *   urgent (< 15 min):  emerald, ticks every SECOND so the
+	 *                       countdown feels alive.  Format:
+	 *                       "Expires in 8m 14s".
+	 *   expired (≤ 0):      muted gray, "Expired", strikethrough.
+	 *                       No ticking — frozen. (In practice the
+	 *                       callers only render this chip for LIVE
+	 *                       orders, so the expired tier is rarely hit.)
 	 *
 	 * Why a per-instance timer rather than a global tick channel:
 	 * the orderbook's typical row count is ~50 visible at once,
@@ -35,9 +40,10 @@
 	 *   - aria-label includes the full deadline + time remaining
 	 *     so screen readers don't need the user to translate emoji
 	 *     or the countdown format.
-	 *   - prefers-reduced-motion: pulse animation is suppressed.
-	 *     The color flip from amber → red still tells the user
-	 *     "urgent" without movement.
+	 *   - prefers-reduced-motion: n/a — the chip no longer animates
+	 *     (the urgent-tier pulse was retired in the D2 flat-emerald
+	 *     unification); the live per-second countdown text conveys
+	 *     urgency without movement.
 	 *   - aria-live="polite" on the wrapper so screen readers
 	 *     announce the countdown only when it changes meaningfully
 	 *     (we throttle the tick to once-per-minute except in
@@ -195,53 +201,26 @@
 	.order-expiry-chip {
 		font-variant-numeric: tabular-nums;
 	}
-	.far {
-		color: rgb(107, 114, 128); /* tailwind ink-500 */
-		background: rgb(243, 244, 246); /* tailwind ink-100 */
-	}
-	:global(.dark) .far {
-		color: rgb(156, 163, 175); /* tailwind ink-400 */
-		background: rgba(31, 41, 55, 0.4); /* tailwind ink-800/40 */
-	}
-	.near {
-		color: rgb(180, 83, 9); /* tailwind amber-700 */
-		background: rgba(251, 191, 36, 0.1); /* amber-400/10 */
-		/* Tailwind's `ring-1 ring-amber-400/30` desugars to a
-		   box-shadow inset/outset of the given color and width.
-		   Inlined here as raw CSS because the Tailwind utility
-		   class wasn't being applied (this was authored as raw
-		   CSS where `ring: ...` is not a valid property). */
-		box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.3);
-	}
-	:global(.dark) .near {
-		color: rgb(252, 211, 77); /* amber-300 */
-	}
+	/* De-brown D2: one flat emerald countdown style for every LIVE
+	   tier (far/near/urgent), matching the profile + order-view
+	   "expires in X" pills (border-morphit-emerald/30, bg /5, emerald
+	   text). The tier still drives the JS tick rate (1s in urgent, 60s
+	   otherwise) — only the colour is unified. Red stays reserved for
+	   genuine errors/destructive actions, not a normal expiry. */
+	.far,
+	.near,
 	.urgent {
-		color: rgb(220, 38, 38); /* red-600 */
-		background: rgba(248, 113, 113, 0.12); /* red-400/12 */
-		font-weight: 700;
-		animation: expiry-urgent-pulse 1.4s ease-in-out infinite;
-	}
-	:global(.dark) .urgent {
-		color: rgb(248, 113, 113); /* red-400 */
+		color: var(--morphit-emerald);
+		background: rgba(0, 218, 105, 0.05);
+		box-shadow: 0 0 0 1px rgba(0, 218, 105, 0.3);
 	}
 	.expired {
-		color: rgb(107, 114, 128);
-		background: rgb(243, 244, 246);
+		color: rgb(107, 114, 128); /* tailwind ink-500 */
+		background: rgb(243, 244, 246); /* tailwind ink-100 */
 		text-decoration: line-through;
 	}
-	@keyframes expiry-urgent-pulse {
-		0%,
-		100% {
-			transform: scale(1);
-		}
-		50% {
-			transform: scale(1.04);
-		}
-	}
-	@media (prefers-reduced-motion: reduce) {
-		.urgent {
-			animation: none;
-		}
+	:global(.dark) .expired {
+		color: rgb(156, 163, 175); /* tailwind ink-400 */
+		background: rgba(31, 41, 55, 0.4); /* tailwind ink-800/40 */
 	}
 </style>
