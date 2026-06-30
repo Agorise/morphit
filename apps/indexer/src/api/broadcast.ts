@@ -51,7 +51,11 @@ const ALLOWED_OP_TYPES = new Set([
 	'transfer',
 	'comment',
 	'comment_options',
-	'vote'
+	'vote',
+	// cp396 — claim unclaimed author/curation rewards into usable balances.
+	// Posting-authority op; the signer can only claim their OWN rewards, so
+	// whitelisting it can't be abused to move anyone else's funds.
+	'claim_reward_balance'
 ]);
 
 /** A signed transaction, validated STRUCTURALLY only — the chain is the

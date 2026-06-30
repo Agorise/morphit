@@ -342,7 +342,7 @@ body {
 	}
 
 	.chip {
-		@apply inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-white px-3 py-1 text-sm font-medium text-ink-700 dark:border-ink-700 dark:bg-ink-900 dark:text-ink-200;
+		@apply inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-white px-3 py-1 text-sm font-medium text-ink-700 transition-colors hover:border-morphit-emerald hover:text-morphit-emerald dark:border-ink-700 dark:bg-ink-900 dark:text-ink-200 dark:hover:border-morphit-emerald dark:hover:text-morphit-emerald;
 	}
 
 	/* Text inputs.  Mirrors the inline-Tailwind inputs on login /

@@ -405,3 +405,60 @@ export async function broadcastCustomJson(
 }
 
 export const MORPHIT_OP_IDS = OP_IDS;
+
+/**
+ * Broadcast a `claim_reward_balance` op signed by the user's posting key,
+ * sweeping the account's unclaimed author/curation rewards into its usable
+ * (liquid BLURT + powered-up BP) balances. cp396.
+ *
+ * Same-origin via the indexer broadcast proxy (claim_reward_balance is on
+ * its op whitelist), with the direct-RPC fallback inherited from
+ * submitSignedTransaction. Posting authority only — the signer can claim
+ * ONLY their own rewards, so this op can never move another account's funds.
+ *
+ * @param live          Session LiveIdentity — posting private key read from here.
+ * @param blurtAccount  The account claiming (chain-enforced as the only payee).
+ * @param rewardBlurt   Liquid reward as a Graphene asset string, e.g.
+ *                      "1.234 BLURT" — exactly reward_blurt_balance (claim all).
+ * @param rewardVests   Vesting reward as a VESTS asset string, e.g.
+ *                      "1000.000000 VESTS" — exactly reward_vesting_balance.
+ */
+export async function broadcastClaimReward(
+	live: LiveIdentity,
+	blurtAccount: string,
+	rewardBlurt: string,
+	rewardVests: string
+): Promise<{ block_num: number; trx_id: string }> {
+	if (!blurtAccount) {
+		throw new Error('Cannot claim rewards: no Blurt account registered.');
+	}
+	if (!BROADCAST_ACCOUNT_RE.test(blurtAccount)) {
+		throw new Error('broadcastClaimReward: blurtAccount is not a valid account name');
+	}
+
+	const { ref_block_num, ref_block_prefix, expiration } = await getRefBlockInfo();
+
+	const op: Operation = [
+		'claim_reward_balance',
+		{
+			account: blurtAccount,
+			reward_blurt: rewardBlurt,
+			reward_vests: rewardVests
+		}
+	];
+
+	const tx: Transaction = {
+		ref_block_num,
+		ref_block_prefix,
+		expiration,
+		operations: [op],
+		extensions: []
+	};
+
+	// Pure-JS sign with the posting key; no network, no key-exfiltration path.
+	const postingKey = rawToPrivateKey(live.posting.privateKey);
+	const signed: SignedTransaction = signTransactionWithKey(tx, postingKey, live.posting.privateKey);
+
+	const result = await submitSignedTransaction(signed);
+	return result;
+}

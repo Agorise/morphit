@@ -51,7 +51,9 @@
 	import { fetchListingFee } from '$lib/orders/listingFee';
 	import { formatFiat } from '$i18n/formatters';
 	import { safeSession } from '$lib/utils/safeStorage';
-	import { subscribeBalanceRefresh } from '$lib/balance/bus';
+	import { subscribeBalanceRefresh, triggerBalanceRefresh } from '$lib/balance/bus';
+	import { broadcastClaimReward } from '$blurt/sign';
+	import { liveIdentity } from '$stores/identity';
 	import AnimatedNumber from '$components/AnimatedNumber.svelte';
 
 	/** The canonical operator account name (Featured-listing
@@ -74,6 +76,18 @@
 	let bpBalance = $state(NaN);
 	let manaPct = $state(NaN);
 	let vestingApr = $state(NaN);
+	// cp396 — unclaimed author/curation rewards. `*Display` are the parsed
+	// numbers shown to the user (BLURT liquid + BP via the chain's
+	// reward_vesting_blurt). `*Raw` are the exact Graphene asset strings the
+	// claim_reward_balance op consumes (claim ALL). `claiming` guards the
+	// in-flight broadcast; `claimError` surfaces a failure inline.
+	let rewardBlurt = $state(0);
+	let rewardBp = $state(0);
+	let rewardBlurtRaw = $state('0.000 BLURT');
+	let rewardVestsRaw = $state('0.000000 VESTS');
+	let claiming = $state(false);
+	let claimError = $state('');
+	const hasUnclaimed = $derived(rewardBlurt > 0 || rewardBp > 0);
 	/** Live BLURT price in the operator's fiat, fetched from
 	 *  /v1/listing-fee (present only when the operator runs the price
 	 *  feed; morphit.io does). null until loaded or when unavailable —
@@ -169,6 +183,15 @@
 				current_supply: dgp.current_supply,
 				total_vesting_fund_blurt: dgp.total_vesting_fund_blurt
 			});
+			// cp396 — unclaimed rewards. While a claim is in flight we DON'T
+			// overwrite from a soft poll (the optimistic clear must win until
+			// the post-claim hard refresh lands); otherwise sync from chain.
+			if (!claiming) {
+				rewardBlurtRaw = acct.reward_blurt_balance;
+				rewardVestsRaw = acct.reward_vesting_balance;
+				rewardBlurt = parseAssetAmount(acct.reward_blurt_balance);
+				rewardBp = parseAssetAmount(acct.reward_vesting_blurt);
+			}
 			loadState = 'ready';
 		} catch (err) {
 			console.warn('[MyBalanceCard] balance load failed:', err);
@@ -244,12 +267,48 @@
 			JSON.stringify({
 				side: 'buy',
 				asset: 'BLURT',
-				amountMin: '10',
-				amountMax: '10',
+				// Min = $5-equivalent in the user's fiat; max blank. The
+				// post page converts $5 → fiat once fx + the chosen fiat
+				// are ready (it owns the fx table), so we pass the USD
+				// intent rather than a literal fiat amount here.
+				amountMax: '',
+				topupUsdMin: 5,
 				reason: 'topup'
 			})
 		);
 		void goto(lp('/post'));
+	}
+
+	// cp396 — claim unclaimed rewards into usable balances. Broadcasts
+	// claim_reward_balance with the posting key, optimistically clears the
+	// unclaimed line (so it disappears at once), then hard-refreshes so the
+	// BLURT/BP odometers above animate up to the post-claim totals.
+	async function claimRewards(): Promise<void> {
+		const live = $liveIdentity;
+		if (claiming || !hasUnclaimed || !live) return;
+		claiming = true;
+		claimError = '';
+		const blurtArg = rewardBlurtRaw;
+		const vestsArg = rewardVestsRaw;
+		try {
+			await broadcastClaimReward(live, account, blurtArg, vestsArg);
+			// Optimistic clear — the line vanishes immediately on success.
+			rewardBlurt = 0;
+			rewardBp = 0;
+			rewardBlurtRaw = '0.000 BLURT';
+			rewardVestsRaw = '0.000000 VESTS';
+			claiming = false;
+			// Hard refresh: pulls the post-claim balances so the existing
+			// AnimatedNumber odometers animate to the new totals. Then nudge
+			// any other balance-aware components on this device.
+			await refresh({ hard: true });
+			triggerBalanceRefresh();
+		} catch {
+			// Broadcast failed — keep the (un-cleared) amounts so the user can
+			// retry, and surface a themed error line beneath the claim row.
+			claiming = false;
+			claimError = $_('profile.my_balance.claim_error');
+		}
 	}
 
 	// ─── P&L export ───────────────────────────────────────────────
@@ -446,6 +505,45 @@
 	);
 	const showLowManaHint = $derived(Number.isFinite(manaPct) && manaPct < LOW_MANA_THRESHOLD);
 
+	// cp396 — mobile exact-amount popovers. On mobile the three values render
+	// abbreviated (floored BLURT/BP, 0-decimal voting %) to fit the 3-column
+	// card on narrow phones. Tapping a value reveals its EXACT amount in a
+	// small popover. Desktop already shows full precision, so the popovers are
+	// wired only on the mobile (sm:hidden / mobile-decimals) tap targets.
+	let openExact = $state<'blurt' | 'bp' | 'mana' | null>(null);
+	function toggleExact(v: 'blurt' | 'bp' | 'mana'): void {
+		openExact = openExact === v ? null : v;
+	}
+	function fmtExact(n: number, decimals: number): string {
+		return Number.isFinite(n)
+			? n.toLocaleString(undefined, {
+					minimumFractionDigits: decimals,
+					maximumFractionDigits: decimals
+				})
+			: '—';
+	}
+	const exactBlurt = $derived(`${fmtExact(blurtBalance, 3)} BLURT`);
+	const exactBp = $derived(`${fmtExact(bpBalance, 3)} BP`);
+	const exactMana = $derived(`${fmtExact(manaPct, 2)}%`);
+	// Outside-tap / Escape dismiss for the open popover. Scoped to the open
+	// window and self-cleaning, so no listener lingers once it closes.
+	$effect(() => {
+		if (openExact === null) return;
+		const onPointer = (e: Event): void => {
+			const t = e.target as HTMLElement | null;
+			if (t && !t.closest('[data-exact-tip]')) openExact = null;
+		};
+		const onKey = (e: KeyboardEvent): void => {
+			if (e.key === 'Escape') openExact = null;
+		};
+		document.addEventListener('pointerdown', onPointer, true);
+		document.addEventListener('keydown', onKey, true);
+		return () => {
+			document.removeEventListener('pointerdown', onPointer, true);
+			document.removeEventListener('keydown', onKey, true);
+		};
+	});
+
 	// Part 121 cp7 — per-locale internal-link wrapper.
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
 	const lp = $derived((path: string) => localePath(path, currentLang));
@@ -498,6 +596,13 @@
 		</p>
 	{:else}
 		<dl class="grid grid-cols-3 gap-3">
+			{#snippet exactTip(text: string)}
+				<span
+					role="tooltip"
+					class="absolute left-1/2 top-full z-40 mt-1.5 -translate-x-1/2 whitespace-nowrap rounded-lg border border-ink-200 bg-white px-2.5 py-1.5 font-mono text-xs font-semibold text-ink-800 shadow-morphit-card dark:border-ink-700 dark:bg-ink-900 dark:text-ink-100"
+					>{text}</span
+				>
+			{/snippet}
 			<div>
 				<dt class="text-xs text-ink-500 dark:text-ink-400">
 					{$_('profile.my_balance.blurt_label')}
@@ -506,15 +611,20 @@
 					<!-- Desktop: full BLURT precision with grouping (e.g. 5,055.031). -->
 					<span class="hidden sm:inline"
 						><AnimatedNumber value={blurtBalance} decimals={3} durationMs={3000} /></span
-					><!-- Mobile: floored integer, no thousands separator (e.g. 5055).
-					     The 3-column card squishes the full number on narrow phones. -->
-					<span class="sm:hidden"
-						><AnimatedNumber
-							value={Math.floor(blurtBalance)}
-							decimals={0}
-							grouping={false}
-							durationMs={3000}
-						/></span
+					><!-- Mobile: floored integer; tap to reveal the exact amount (cp396). -->
+					<span class="relative sm:hidden" data-exact-tip
+						><button
+							type="button"
+							onclick={() => toggleExact('blurt')}
+							aria-label={`${$_('profile.my_balance.blurt_label')} ${exactBlurt}`}
+							class="cursor-pointer underline decoration-dotted underline-offset-2"
+							><AnimatedNumber
+								value={Math.floor(blurtBalance)}
+								decimals={0}
+								grouping={false}
+								durationMs={3000}
+							/></button
+						>{#if openExact === 'blurt'}{@render exactTip(exactBlurt)}{/if}</span
 					>{#if usdLabel}<span
 							class="ml-1 font-sans text-xs font-normal text-ink-500 dark:text-ink-400"
 							>({usdLabel})</span
@@ -529,14 +639,20 @@
 					<!-- Desktop: full BP precision with grouping. -->
 					<span class="hidden sm:inline"
 						><AnimatedNumber value={bpBalance} decimals={3} durationMs={3000} /></span
-					><!-- Mobile: floored integer, no thousands separator. -->
-					<span class="sm:hidden"
-						><AnimatedNumber
-							value={Math.floor(bpBalance)}
-							decimals={0}
-							grouping={false}
-							durationMs={3000}
-						/></span
+					><!-- Mobile: floored integer; tap to reveal the exact amount (cp396). -->
+					<span class="relative sm:hidden" data-exact-tip
+						><button
+							type="button"
+							onclick={() => toggleExact('bp')}
+							aria-label={`${$_('profile.my_balance.bp_staked_label')} ${exactBp}`}
+							class="cursor-pointer underline decoration-dotted underline-offset-2"
+							><AnimatedNumber
+								value={Math.floor(bpBalance)}
+								decimals={0}
+								grouping={false}
+								durationMs={3000}
+							/></button
+						>{#if openExact === 'bp'}{@render exactTip(exactBp)}{/if}</span
 					>
 				</dd>
 				{#if Number.isFinite(vestingApr)}
@@ -557,7 +673,19 @@
 					{$_('profile.my_balance.voting_label')}
 				</dt>
 				<dd class="font-mono text-lg font-semibold">
-					<AnimatedNumber value={manaPct} decimals={2} durationMs={3000} />%
+					<!-- Desktop: 2-decimal precision. -->
+					<span class="hidden sm:inline"
+						><AnimatedNumber value={manaPct} decimals={2} durationMs={3000} />%</span
+					><!-- Mobile: 0-decimal; tap to reveal the exact percentage (cp396). -->
+					<span class="relative sm:hidden" data-exact-tip
+						><button
+							type="button"
+							onclick={() => toggleExact('mana')}
+							aria-label={`${$_('profile.my_balance.voting_label')} ${exactMana}`}
+							class="cursor-pointer underline decoration-dotted underline-offset-2"
+							><AnimatedNumber value={manaPct} decimals={0} durationMs={3000} />%</button
+						>{#if openExact === 'mana'}{@render exactTip(exactMana)}{/if}</span
+					>
 				</dd>
 			</div>
 		</dl>
@@ -575,7 +703,49 @@
 			</p>
 		{/if}
 
-		<div class="mt-4 flex flex-wrap items-center gap-2">
+		{#if hasUnclaimed}
+			<!-- cp396 — unclaimed author/curation rewards. Highlighted line ABOVE
+			     the Top up button; claiming sweeps them into usable balances (the
+			     odometers above animate up), then this line disappears. The Claim
+			     button only renders when keys are present (a paired-readonly device
+			     can't sign — it sees the line as info only). -->
+			<div
+				data-unclaimed-rewards
+				class="mt-4 flex items-center justify-between gap-3 rounded-xl border-2 border-morphit-emerald/40 bg-morphit-emerald/10 p-3 dark:border-morphit-emerald/50 dark:bg-morphit-emerald/15"
+			>
+				<div class="min-w-0">
+					<p class="flex items-center gap-1.5 text-sm font-semibold text-morphit-emerald">
+						<span aria-hidden="true">🎁</span>
+						{$_('profile.my_balance.unclaimed_label')}
+					</p>
+					<p class="mt-0.5 font-mono text-sm font-semibold text-ink-800 dark:text-ink-100">
+						{#if rewardBlurt > 0}{fmtExact(rewardBlurt, 3)} BLURT{/if}{#if rewardBlurt > 0 && rewardBp > 0}<span
+								class="px-1 font-sans font-normal text-ink-400">+</span
+							>{/if}{#if rewardBp > 0}{fmtExact(rewardBp, 3)} BP{/if}
+					</p>
+				</div>
+				{#if $liveIdentity}
+					<button
+						type="button"
+						onclick={claimRewards}
+						disabled={claiming}
+						class="flex-none rounded-xl bg-morphit-btn px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+					>
+						{claiming
+							? $_('profile.my_balance.claiming')
+							: $_('profile.my_balance.claim_now')}
+					</button>
+				{/if}
+			</div>
+			{#if claimError}
+				<p class="mt-2 flex items-start gap-1.5 text-xs font-medium text-red-600 dark:text-red-400">
+					<span aria-hidden="true" class="flex-none">⚠</span>
+					<span>{claimError}</span>
+				</p>
+			{/if}
+		{/if}
+
+		<div class="mt-4 flex flex-wrap items-center justify-between gap-2">
 			<button
 				type="button"
 				onclick={topUpBlurt}
@@ -583,26 +753,31 @@
 			>
 				{$_('profile.my_balance.top_up_blurt')}
 			</button>
-			<span class="text-xs text-ink-500 dark:text-ink-400">
-				{$_('profile.my_balance.top_up_hint')}
-			</span>
-		</div>
-
-		<!-- P&L export — same row but visually subordinate to top-up. -->
-		<div
-			class="mt-3 flex flex-wrap items-center gap-2 border-t border-ink-200 pt-3 dark:border-ink-700"
-		>
 			<button
 				type="button"
 				onclick={exportPnl}
 				disabled={exporting}
-				class="rounded-xl border border-ink-300 px-4 py-2 text-sm font-semibold transition hover:bg-ink-50 active:scale-[0.98] disabled:opacity-50 dark:border-ink-700 dark:hover:bg-ink-900"
+				class="inline-flex items-center gap-2 rounded-xl border border-ink-300 px-4 py-2 text-sm font-semibold transition hover:bg-ink-50 active:scale-[0.98] disabled:opacity-50 dark:border-ink-700 dark:hover:bg-ink-900"
 			>
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					width="16"
+					height="16"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+					class="h-4 w-4 flex-none"
+				>
+					<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+					<polyline points="7 10 12 15 17 10" />
+					<line x1="12" y1="15" x2="12" y2="3" />
+				</svg>
 				{exporting ? $_('profile.pnl.exporting') : $_('profile.pnl.export_button')}
 			</button>
-			<span class="text-xs text-ink-500 dark:text-ink-400">
-				{$_('profile.pnl.export_hint')}
-			</span>
 		</div>
 		{#if exportError}
 			<p class="mt-2 text-xs text-red-700 dark:text-red-300">

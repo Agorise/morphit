@@ -52,7 +52,7 @@
 	// only once the free-first-buy waiver is consumed (checkWaiverEligibility
 	// flips to ineligible once the user has any order — i.e. well before/at
 	// their first completed trade).
-	let collapsed = $state(false);
+	let collapsed = $state(true);
 
 	const live = $derived($liveIdentity);
 
@@ -66,7 +66,11 @@
 		// it only rolls it up (＋ re-expands). The card stops showing for good
 		// when the free-first-buy waiver is consumed (eligibility flips).
 		try {
-			collapsed = sessionStorage.getItem(COLLAPSE_KEY) === '1';
+			// Default collapsed for first-time traders (no stored pref). An
+			// explicit expand ('0') sticks for the session so opening the card
+			// isn't undone on the next render.
+			const stored = sessionStorage.getItem(COLLAPSE_KEY);
+			collapsed = stored !== '0';
 		} catch {
 			// Private/Incognito mode may throw; fall through.
 		}
@@ -91,8 +95,9 @@
 	function toggleCollapse(): void {
 		collapsed = !collapsed;
 		try {
-			if (collapsed) sessionStorage.setItem(COLLAPSE_KEY, '1');
-			else sessionStorage.removeItem(COLLAPSE_KEY);
+			// Persist BOTH states ('1' collapsed / '0' expanded) so an explicit
+			// expand isn't re-collapsed by the default-collapsed restore.
+			sessionStorage.setItem(COLLAPSE_KEY, collapsed ? '1' : '0');
 		} catch {
 			// no-op
 		}
@@ -108,56 +113,59 @@
 		class="card mb-6 animate-fade-up overflow-hidden border-morphit-emerald/40 bg-gradient-to-br from-morphit-emerald/10 via-transparent to-morphit-emerald/5 p-6"
 		aria-labelledby="welcome-first-buy-heading"
 	>
-		<div class="flex items-start justify-between gap-3">
-			<div class="flex items-start gap-4">
-				<div
-					class="flex h-12 w-12 flex-none items-center justify-center rounded-full bg-morphit-emerald/15 text-3xl"
-					aria-hidden="true"
-				>
-					🎁
-				</div>
-				<div class="flex-1">
-					<h2
-						id="welcome-first-buy-heading"
-						class="font-display text-xl font-bold text-morphit-emerald"
-					>
-						{$_('welcome_first_buy.heading')}
-					</h2>
-				</div>
-			</div>
-			<button
-				type="button"
-				class="flex-none rounded-md p-1 text-ink-500 hover:text-ink-700 dark:text-ink-400 dark:hover:text-ink-200"
-				onclick={toggleCollapse}
-				aria-expanded={!collapsed}
-				aria-controls="welcome-first-buy-body"
-				aria-label={(collapsed
-					? $_('welcome_first_buy.expand_aria')
-					: $_('welcome_first_buy.collapse_aria')) as string}
+		<div class="flex items-start gap-4">
+			<div
+				class="flex h-12 w-12 flex-none items-center justify-center rounded-full bg-morphit-emerald/15 text-3xl"
+				aria-hidden="true"
 			>
-				<svg
-					xmlns="http://www.w3.org/2000/svg"
-					width="18"
-					height="18"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
+				🎁
+			</div>
+			<div class="flex-1">
+				<h2
+					id="welcome-first-buy-heading"
+					class="font-display text-xl font-bold text-morphit-emerald"
 				>
-					{#if collapsed}
-						<!-- ＋ : rolled up, click to re-expand -->
-						<path d="M12 5v14" />
-						<path d="M5 12h14" />
-					{:else}
-						<!-- ✕ : expanded, click to roll up -->
-						<path d="M18 6 6 18" />
-						<path d="m6 6 12 12" />
-					{/if}
-				</svg>
-			</button>
+					<!-- The whole title row toggles the card (collapse/expand),
+					     not just the ✕/＋ glyph. Kept inside the <h2> so the
+					     heading semantic + aria-labelledby still hold. -->
+					<button
+						type="button"
+						onclick={toggleCollapse}
+						aria-expanded={!collapsed}
+						aria-controls="welcome-first-buy-body"
+						aria-label={(collapsed
+							? $_('welcome_first_buy.expand_aria')
+							: $_('welcome_first_buy.collapse_aria')) as string}
+						class="-mx-2 flex w-full items-center justify-between gap-3 rounded-xl px-2 py-1 text-left transition hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
+					>
+						<span>{$_('welcome_first_buy.heading')}</span>
+						<span class="flex-none text-ink-500 dark:text-ink-400">
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								width="18"
+								height="18"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								aria-hidden="true"
+							>
+								{#if collapsed}
+									<!-- ＋ : rolled up, click to re-expand -->
+									<path d="M12 5v14" />
+									<path d="M5 12h14" />
+								{:else}
+									<!-- ✕ : expanded, click to roll up -->
+									<path d="M18 6 6 18" />
+									<path d="m6 6 12 12" />
+								{/if}
+							</svg>
+						</span>
+					</button>
+				</h2>
+			</div>
 		</div>
 
 		{#if !collapsed}

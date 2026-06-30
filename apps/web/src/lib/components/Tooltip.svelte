@@ -6,6 +6,7 @@
 	import { localePath } from '$i18n/path';
 	import type { LocaleCode } from '$i18n/locales';
 	import type { FaqKey } from '$utils/faqIndex';
+	import type { Snippet } from 'svelte';
 
 	interface Props {
 		/** i18n key for the tooltip's explanation text. */
@@ -14,9 +15,16 @@
 		faqKey?: FaqKey;
 		/** Label for screen readers describing what the tooltip is about. */
 		ariaLabel?: string;
+		/** Optional custom trigger. When provided, this content is rendered as
+		 *  the hover/focus target INSTEAD of the default ⓘ icon button — the
+		 *  wrapper still owns open/close, so the explainer surfaces on hover
+		 *  (desktop) or focus-on-tap (mobile). The caller's element keeps its
+		 *  own click handler (e.g. an asset block that selects on tap). When
+		 *  omitted, the default ⓘ icon button renders (existing behavior). */
+		trigger?: Snippet;
 	}
 
-	let { textKey, faqKey, ariaLabel }: Props = $props();
+	let { textKey, faqKey, ariaLabel, trigger }: Props = $props();
 
 	// Sally finding S-12 (Part 119): pre-fix this defaulted to the
 	// English string 'More info', which leaked into ARIA labels for
@@ -162,31 +170,35 @@
 	onfocusout={onFocusOut}
 	onkeydown={onKeydown}
 >
-	<button
-		type="button"
-		class="inline-flex h-6 w-6 items-center justify-center rounded-full border border-ink-300 text-ink-500 hover:border-morphit-emerald hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:border-ink-600 dark:text-ink-400"
-		aria-label={effectiveAriaLabel}
-		aria-expanded={open}
-		aria-describedby={open ? `tip-${textKey}` : undefined}
-		onclick={toggle}
-	>
-		<svg
-			xmlns="http://www.w3.org/2000/svg"
-			width="14"
-			height="14"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			stroke-width="2.5"
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			aria-hidden="true"
+	{#if trigger}
+		{@render trigger()}
+	{:else}
+		<button
+			type="button"
+			class="inline-flex h-6 w-6 items-center justify-center rounded-full border border-ink-300 text-ink-500 hover:border-morphit-emerald hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:border-ink-600 dark:text-ink-400"
+			aria-label={effectiveAriaLabel}
+			aria-expanded={open}
+			aria-describedby={open ? `tip-${textKey}` : undefined}
+			onclick={toggle}
 		>
-			<circle cx="12" cy="12" r="10" />
-			<path d="M12 16v-4" />
-			<path d="M12 8h.01" />
-		</svg>
-	</button>
+			<svg
+				xmlns="http://www.w3.org/2000/svg"
+				width="14"
+				height="14"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2.5"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				aria-hidden="true"
+			>
+				<circle cx="12" cy="12" r="10" />
+				<path d="M12 16v-4" />
+				<path d="M12 8h.01" />
+			</svg>
+		</button>
+	{/if}
 
 	{#if open}
 		<!-- Outer wrapper is positioned flush to the trigger with

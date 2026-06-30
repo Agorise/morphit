@@ -300,14 +300,20 @@
 
 {#snippet label()}
 	{#if name && fingerprint}
-		<span class={weightCls}>{name}</span>
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<bdi
-			class="ltr-in-rtl ms-1.5 font-mono text-[0.85em] text-ink-500 dark:text-ink-400"
-			title={full}
-			onpointerenter={ensureFullKey}
-			onfocus={ensureFullKey}>({shown})</bdi
-		>
+		<!-- cp397: the truncated posting key sits on its own line directly
+		     under the (bold) display name, in tiny muted text — so the
+		     human label and the cryptographic identity read as a stacked
+		     pair rather than a long inline run. -->
+		<span class="inline-flex min-w-0 flex-col leading-tight">
+			<span class={weightCls}>{name}</span>
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<bdi
+				class="ltr-in-rtl font-mono text-[0.7em] text-ink-500 dark:text-ink-400"
+				title={full}
+				onpointerenter={ensureFullKey}
+				onfocus={ensureFullKey}>({shown})</bdi
+			>
+		</span>
 	{:else if name}
 		<span class={weightCls}>{name}</span>
 	{:else}

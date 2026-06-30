@@ -30,7 +30,14 @@ export function createCurrencyApiFetcher(config: CurrencyApiConfig): FxFetch {
 	const fetchImpl = config.fetchImpl ?? globalThis.fetch;
 	const url = `${config.baseUrl.replace(/\/+$/, '')}/currencies/usd.json`;
 	return async function fetchCurrencyApi(): Promise<FxRateTable | null> {
-		const body = await fxGetJson(url, config.timeoutMs, fetchImpl);
+		// jsDelivr's `@latest` path 302-redirects to the concrete dated
+		// version, so this upstream MUST follow the hop (the shared FX
+		// stack otherwise defaults to redirect:'manual' and this source
+		// would never succeed). fxGetJson still rejects any redirect that
+		// leaves the requested host, so the SSRF posture is preserved.
+		const body = await fxGetJson(url, config.timeoutMs, fetchImpl, {
+			followSameHostRedirect: true
+		});
 		if (typeof body !== 'object' || body === null) return null;
 		// Shape: { date, usd: { eur: n, … } }.  tableFromFlat
 		// uppercases the lowercase codes.

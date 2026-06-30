@@ -770,7 +770,12 @@
 							     /login/qr-pair screen to authorize a read-only
 							     desktop session. Hidden for paired-readonly
 							     sessions (no signing keys to authorize with). -->
-							<li>
+							<!-- Touch-only: this opens the phone camera to scan a
+							     QR shown on a desktop's /login/qr-pair screen.
+							     A PC SHOWS the QR rather than scans one, so the
+							     scan entry is hidden on fine-pointer (mouse)
+							     devices and shown only on phones/tablets. -->
+							<li class="pointer-fine:hidden">
 								<a
 									href={lp('/scan-login')}
 									onclick={close}

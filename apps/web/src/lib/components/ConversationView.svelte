@@ -973,7 +973,7 @@
 			     "please unlock" no-op modal). -->
 			{#if !locked}
 				<div
-					class="dark:bg-ink-925 flex-none border-t border-ink-200 bg-ink-50 px-4 py-2 dark:border-ink-800"
+					class="flex-none border-t border-ink-200 bg-ink-50 px-4 py-2 dark:border-ink-800 dark:bg-ink-900"
 				>
 					<div
 						class="mx-auto grid max-w-2xl grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:justify-end"

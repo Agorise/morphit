@@ -681,7 +681,7 @@
 					<li>
 						<a
 							href={lp(`/@${account}/${o.permlink}`)}
-							class="card block transition hover:border-morphit-emerald/60"
+							class="card block transition hover:border-morphit-emerald/60 hover:bg-emerald-50/30 dark:hover:bg-morphit-emerald/[0.05]"
 						>
 							<div class="flex flex-col gap-1">
 								<div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">

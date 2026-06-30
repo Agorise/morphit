@@ -24,6 +24,7 @@ export type OpDecorationKind =
 	| 'transfer'
 	| 'comment'
 	| 'vote'
+	| 'account_create'
 	/** Morphit custom_json by op-id. */
 	| 'morphit_profile'
 	| 'morphit_order'
@@ -54,6 +55,11 @@ export interface OpDecoration {
 	/** True if the op is a Morphit-specific custom_json.  UI uses
 	 *  this to decide whether to show a tinted background. */
 	readonly isMorphitOp: boolean;
+	/** cp397 — interpolation values for the templated labels
+	 *  (transfer / vote / comment / account_create spell out the
+	 *  accounts + amount involved, e.g. "@a sent 55 BLURT to @b").
+	 *  Undefined for the static pill labels (Morphit ops, unknowns). */
+	readonly values?: Readonly<Record<string, string>>;
 }
 
 /** Reverse-lookup: which OP_IDS value corresponds to which
@@ -77,6 +83,29 @@ const OP_ID_TO_KIND: ReadonlyMap<string, OpDecorationKind> = new Map<string, OpD
 	[OP_IDS.strangerFee, 'morphit_stranger_fee']
 ]);
 
+/** Account-creation native ops — all surface as "account created". */
+const ACCOUNT_CREATE_OPS: ReadonlySet<string> = new Set([
+	'account_create',
+	'account_create_with_delegation',
+	'create_claimed_account'
+]);
+
+/** Coerce an unknown op field to a string (empty when absent). */
+function str(x: unknown): string {
+	return typeof x === 'string' ? x : '';
+}
+
+/** Split a chain asset string ("55.000 BLURT") into a trimmed amount
+ *  and its symbol, dropping trailing zeros for readability
+ *  ("55.000 BLURT" → { amount: "55", asset: "BLURT" }). */
+function splitAmount(raw: string): { amount: string; asset: string } {
+	const parts = raw.trim().split(/\s+/);
+	let amount = parts[0] ?? '';
+	const asset = parts[1] ?? '';
+	if (amount.includes('.')) amount = amount.replace(/0+$/, '').replace(/\.$/, '');
+	return { amount, asset };
+}
+
 /** Decorate a chain op for the explorer view.  Caller passes the
  *  op tuple `[opName, opBody]` as it appears in
  *  `condenser_api.get_account_history` results.  Returns a
@@ -86,19 +115,62 @@ export function decorateOp(opName: string, opBody: unknown): OpDecoration {
 		return { kind: 'native_unknown', labelKey: 'native_unknown', isMorphitOp: false };
 	}
 
+	const body = (opBody && typeof opBody === 'object' ? opBody : {}) as Record<string, unknown>;
+
 	if (opName === 'transfer') {
-		return { kind: 'transfer', labelKey: 'transfer', isMorphitOp: false };
+		const from = str(body.from);
+		const to = str(body.to);
+		const { amount, asset } = splitAmount(str(body.amount));
+		const hasMemo = str(body.memo).trim() !== '';
+		if (from && to && amount && asset) {
+			return {
+				kind: 'transfer',
+				labelKey: hasMemo ? 'transfer_memo' : 'transfer',
+				isMorphitOp: false,
+				values: { from, to, amount, asset }
+			};
+		}
+		return { kind: 'native_unknown', labelKey: 'native_unknown', isMorphitOp: false };
 	}
 	if (opName === 'comment') {
-		return { kind: 'comment', labelKey: 'comment', isMorphitOp: false };
+		const author = str(body.author);
+		const parent = str(body.parent_author);
+		if (author) {
+			return parent
+				? { kind: 'comment', labelKey: 'comment_reply', isMorphitOp: false, values: { author, parent } }
+				: { kind: 'comment', labelKey: 'comment', isMorphitOp: false, values: { author } };
+		}
+		return { kind: 'native_unknown', labelKey: 'native_unknown', isMorphitOp: false };
 	}
 	if (opName === 'vote') {
-		return { kind: 'vote', labelKey: 'vote', isMorphitOp: false };
+		const voter = str(body.voter);
+		const author = str(body.author);
+		if (voter && author) {
+			const down = Number(body.weight) < 0;
+			return {
+				kind: 'vote',
+				labelKey: down ? 'vote_down' : 'vote',
+				isMorphitOp: false,
+				values: { voter, author }
+			};
+		}
+		return { kind: 'native_unknown', labelKey: 'native_unknown', isMorphitOp: false };
+	}
+	if (ACCOUNT_CREATE_OPS.has(opName)) {
+		const account = str(body.new_account_name);
+		if (account) {
+			return {
+				kind: 'account_create',
+				labelKey: 'account_create',
+				isMorphitOp: false,
+				values: { account }
+			};
+		}
+		return { kind: 'native_unknown', labelKey: 'native_unknown', isMorphitOp: false };
 	}
 
 	if (opName === 'custom_json') {
-		const body = opBody as Record<string, unknown> | null;
-		const id = body && typeof body === 'object' ? body.id : undefined;
+		const id = typeof body.id === 'string' ? body.id : undefined;
 		if (typeof id === 'string') {
 			const kind = OP_ID_TO_KIND.get(id);
 			if (kind) {

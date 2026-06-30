@@ -75,6 +75,15 @@ interface AccountBalanceBody {
 		/** First posting-authority pubkey, or null — lets the block
 		 *  explorer's account page avoid a direct getAccount RPC read. */
 		readonly posting_pub: string | null;
+		/** cp396 — unclaimed author/curation rewards waiting to be claimed
+		 *  via claim_reward_balance. `reward_blurt_balance` is liquid BLURT;
+		 *  `reward_vesting_balance` is the VESTS amount (what the claim op
+		 *  consumes); `reward_vesting_blurt` is the chain-provided BLURT
+		 *  value of that vesting reward (what the card shows as BP). All
+		 *  default to their zero sentinel when a node omits them. */
+		readonly reward_blurt_balance: string;
+		readonly reward_vesting_balance: string;
+		readonly reward_vesting_blurt: string;
 	};
 	readonly dgp: {
 		readonly head_block_number: number;
@@ -159,7 +168,12 @@ export function accountBalanceRoute(blurt: BlurtClient): Hono {
 				voting_manabar: acct.voting_manabar ?? null,
 				voting_power: acct.voting_power ?? null,
 				last_vote_time: acct.last_vote_time ?? null,
-				posting_pub: postingPub
+				posting_pub: postingPub,
+				// cp396 — unclaimed rewards. Zero sentinels keep the frontend
+				// math safe if a node omits them (no rewards → line hidden).
+				reward_blurt_balance: acct.reward_blurt_balance ?? '0.000 BLURT',
+				reward_vesting_balance: acct.reward_vesting_balance ?? '0.000000 VESTS',
+				reward_vesting_blurt: acct.reward_vesting_blurt ?? '0.000 BLURT'
 			},
 			dgp: {
 				head_block_number: dgp.head_block_number,

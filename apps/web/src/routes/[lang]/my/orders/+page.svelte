@@ -632,7 +632,10 @@
 					o,
 					$_ as unknown as Parameters<typeof formatOrderPriceModel>[1]
 				)}
-				<li id="order-{o.permlink}" class="card-interactive scroll-mt-20">
+				<li
+					id="order-{o.permlink}"
+					class="card-interactive scroll-mt-20 hover:border-morphit-emerald/20 hover:bg-emerald-50/30 dark:hover:border-morphit-emerald/15 dark:hover:bg-morphit-emerald/[0.05]"
+				>
 					<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
 						<div class="flex-1">
 							<div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">

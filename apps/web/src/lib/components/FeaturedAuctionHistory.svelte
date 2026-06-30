@@ -141,7 +141,7 @@
 			</div>
 		</div>
 
-		{#if latest !== null}
+		{#if latest !== null && (latest.clearing_blurt_per_hour > 0 || latest.active_visible_count > 0)}
 			<p class="mb-3 text-sm text-ink-600 dark:text-ink-300">
 				{#if latest.clearing_blurt_per_hour > 0}
 					{$_('clearing_price.summary_competitive', {
@@ -151,16 +151,12 @@
 							max: latest.max_slots
 						}
 					})}
-				{:else if latest.active_visible_count > 0}
+				{:else}
 					{$_('clearing_price.summary_partial', {
 						values: {
 							slots: latest.active_visible_count,
 							max: latest.max_slots
 						}
-					})}
-				{:else}
-					{$_('clearing_price.summary_empty', {
-						values: { max: latest.max_slots }
 					})}
 				{/if}
 			</p>

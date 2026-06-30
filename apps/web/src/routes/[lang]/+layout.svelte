@@ -206,9 +206,9 @@
 		};
 	});
 
-	const navLinks = $derived([
+	const navLinks: { href: string; key: string; shortKey?: string }[] = $derived([
 		{ href: lp('/orderbook'), key: 'nav.orderbook' },
-		{ href: lp('/post'), key: 'nav.post_now' },
+		{ href: lp('/post'), key: 'nav.post_now', shortKey: 'nav.post' },
 		{ href: lp('/chat'), key: 'nav.messages' },
 		{ href: lp('/faq'), key: 'nav.faq' }
 	]);
@@ -300,7 +300,7 @@
 							: 'text-ink-600 dark:text-ink-300'}"
 						aria-current={isActive(link.href) ? 'page' : undefined}
 					>
-						{$_(link.key)}
+						{$_(link.shortKey ?? link.key)}
 					</a>
 				{/each}
 				<!-- No sign-in link here on purpose. The AvatarMenu in the
@@ -580,6 +580,14 @@
 				>
 				<a href={lp('/download')} class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300"
 					>{$_('footer.download')}</a
+				>
+				<a
+					href="/morphit-comparison.png"
+					data-sveltekit-reload
+					class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300"
+					title={$_('footer.compare_title')}
+					target="_blank"
+					rel="noopener noreferrer">{$_('footer.compare')}</a
 				>
 				<a
 					href="{lp('/faq')}?q=wallet_developer_api&lang={currentLang}"

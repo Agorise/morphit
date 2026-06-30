@@ -77,10 +77,17 @@ const checks: readonly Check[] = [
 		holds: (s) => /\{#if isFirstTrade\}/.test(s) && /first_trade_title/.test(s)
 	},
 	{
-		name: 'asset row shows BLURT only while first-trade (assetTickersForPicker)',
+		name: 'asset row shows BLURT only while first-trade (assetTickersForPicker → assetPickerItems)',
 		holds: (s) =>
+			// Source of truth: the ticker list is BLURT-only during the
+			// first-trade lock.
 			/assetTickersForPicker[\s\S]{0,160}isFirstTrade \? \(\['BLURT'\] as const\)/.test(s) &&
-			/#each assetTickersForPicker as a/.test(s)
+			// cp396 alphabetized the Step-1 blocks into `assetPickerItems`,
+			// which DERIVES from `assetTickersForPicker` (so the BLURT-only
+			// gating flows through unchanged), and the #each iterates that
+			// derived list.
+			/assetPickerItems\s*=\s*\$derived\(\s*\[\.\.\.assetTickersForPicker\]/.test(s) &&
+			/#each assetPickerItems as item/.test(s)
 	},
 	{
 		name: 'expiry <select> is disabled while first-trade',
