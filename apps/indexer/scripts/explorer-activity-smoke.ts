@@ -104,13 +104,41 @@ scenario('decorates transfer', () => {
 });
 
 scenario('decorates comment', () => {
-	const d = decorateOp('comment', {});
+	// cp397: comment decoration interpolates the author, so the op must
+	// carry one (real `comment` ops always do — it's a required field).
+	const d = decorateOp('comment', { author: 'alice', permlink: 'hello-world' });
 	if (d.kind !== 'comment') throw new Error(d.kind);
+	if (d.labelKey !== 'comment') throw new Error(d.labelKey);
+});
+
+scenario('decorates comment reply (parent_author present)', () => {
+	const d = decorateOp('comment', { author: 'alice', parent_author: 'bob' });
+	if (d.kind !== 'comment') throw new Error(d.kind);
+	if (d.labelKey !== 'comment_reply') throw new Error(d.labelKey);
+});
+
+scenario('comment without author → native_unknown (cannot label it)', () => {
+	const d = decorateOp('comment', {});
+	if (d.kind !== 'native_unknown') throw new Error(d.kind);
 });
 
 scenario('decorates vote', () => {
-	const d = decorateOp('vote', {});
+	// cp397: vote decoration interpolates voter + author (both required
+	// fields on a real `vote` op); weight sign picks up/down.
+	const d = decorateOp('vote', { voter: 'alice', author: 'bob', weight: 10000 });
 	if (d.kind !== 'vote') throw new Error(d.kind);
+	if (d.labelKey !== 'vote') throw new Error(d.labelKey);
+});
+
+scenario('decorates downvote (negative weight → vote_down)', () => {
+	const d = decorateOp('vote', { voter: 'alice', author: 'bob', weight: -10000 });
+	if (d.kind !== 'vote') throw new Error(d.kind);
+	if (d.labelKey !== 'vote_down') throw new Error(d.labelKey);
+});
+
+scenario('vote without voter/author → native_unknown (cannot label it)', () => {
+	const d = decorateOp('vote', {});
+	if (d.kind !== 'native_unknown') throw new Error(d.kind);
 });
 
 scenario('decorates morphit_order_v1 custom_json', () => {
