@@ -228,10 +228,7 @@
 			class="card mb-6 border-morphit-emerald/40 bg-morphit-emerald/5"
 			aria-labelledby="backup-paired-heading"
 		>
-			<h2
-				id="backup-paired-heading"
-				class="font-display text-2xl font-bold text-morphit-emerald"
-			>
+			<h2 id="backup-paired-heading" class="font-display text-2xl font-bold text-morphit-emerald">
 				{$_('backup_keys.paired.heading')}
 			</h2>
 			<p class="mt-3 text-ink-800 dark:text-ink-200">
@@ -241,10 +238,7 @@
 				{$_('backup_keys.paired.deeplink_hint')}
 			</p>
 			<div class="mt-5">
-				<a
-					href="web+morphit://backup-keys"
-					class="btn-primary inline-flex items-center gap-2"
-				>
+				<a href="web+morphit://backup-keys" class="btn-primary inline-flex items-center gap-2">
 					<span aria-hidden="true">📱</span>
 					{$_('backup_keys.paired.deeplink_cta')}
 				</a>
@@ -269,17 +263,17 @@
 						{$_('backup_keys.show_seed.error.no_seed_posting_only')}
 					</p>
 				{:else}
-				<p class="mt-2 whitespace-pre-line text-ink-700 dark:text-ink-200">
-					{$_('backup_keys.seed_body')}
-				</p>
-				<ul class="mt-3 list-inside list-disc space-y-1 text-sm text-ink-700 dark:text-ink-200">
-					<li>{$_('backup_keys.seed_tip_paper')}</li>
-					<li>{$_('backup_keys.seed_tip_steel')}</li>
-					<li>{$_('backup_keys.seed_tip_split')}</li>
-					<li>{$_('backup_keys.seed_tip_digital_warning')}</li>
-				</ul>
+					<p class="mt-2 whitespace-pre-line text-ink-700 dark:text-ink-200">
+						{$_('backup_keys.seed_body')}
+					</p>
+					<ul class="mt-3 list-inside list-disc space-y-1 text-sm text-ink-700 dark:text-ink-200">
+						<li>{$_('backup_keys.seed_tip_paper')}</li>
+						<li>{$_('backup_keys.seed_tip_steel')}</li>
+						<li>{$_('backup_keys.seed_tip_split')}</li>
+						<li>{$_('backup_keys.seed_tip_digital_warning')}</li>
+					</ul>
 
-				<!-- Sally finding H6 (Part 68): show-my-seed flow.
+					<!-- Sally finding H6 (Part 68): show-my-seed flow.
 				     The seed lives in the encrypted envelope and
 				     can be recovered with the user's password.
 				     Gated behind a password re-prompt because
@@ -288,114 +282,114 @@
 				     should NOT be able to read the recovery
 				     phrase by tapping a button.  Mirrors the
 				     useActiveKey JIT pattern conceptually. -->
-				{#if $isUnlocked && $currentEnvelope}
-					<div class="mt-5 rounded-xl border border-morphit-emerald/30 bg-morphit-emerald/5 p-4">
-						<h4 class="font-display text-base font-bold">
-							{$_('backup_keys.show_seed.heading')}
-						</h4>
-						<p class="mt-1 text-sm text-ink-700 dark:text-ink-200">
-							{$_('backup_keys.show_seed.body')}
-						</p>
-
-						{#if seedPhase.kind === 'idle'}
-							<div class="mt-3">
-								<BusyButton variant="secondary" onclick={startShowSeed}>
-									{$_('backup_keys.show_seed.cta')}
-								</BusyButton>
-							</div>
-						{:else if seedPhase.kind === 'prompting' || seedPhase.kind === 'verifying'}
-							<label class="mt-3 block">
-								<span class="block text-sm font-semibold">
-									{$_('backup_keys.show_seed.password_label')}
-								</span>
-								<input
-									type="password"
-									maxlength="64"
-									bind:value={seedPassword}
-									autocomplete="current-password"
-									disabled={seedPhase.kind === 'verifying'}
-									onkeydown={(e) => {
-										if (e.key === 'Enter' && seedPassword.length > 0) {
-											void verifyAndShowSeed();
-										}
-									}}
-									class="mt-1 w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
-								/>
-							</label>
-							<p class="mt-2 text-xs text-ink-500 dark:text-ink-400">
-								{$_('backup_keys.show_seed.password_hint')}
+					{#if $isUnlocked && $currentEnvelope}
+						<div class="mt-5 rounded-xl border border-morphit-emerald/30 bg-morphit-emerald/5 p-4">
+							<h4 class="font-display text-base font-bold">
+								{$_('backup_keys.show_seed.heading')}
+							</h4>
+							<p class="mt-1 text-sm text-ink-700 dark:text-ink-200">
+								{$_('backup_keys.show_seed.body')}
 							</p>
-							<div class="mt-3 flex flex-wrap gap-2">
-								<BusyButton
-									variant="primary"
-									busy={seedPhase.kind === 'verifying'}
-									busyLabel={$_('backup_keys.show_seed.verifying') as string}
-									disabled={seedPassword.length === 0}
-									onclick={verifyAndShowSeed}
-								>
-									{$_('backup_keys.show_seed.reveal')}
-								</BusyButton>
-								<BusyButton
-									variant="ghost"
-									disabled={seedPhase.kind === 'verifying'}
-									onclick={hideSeed}
-								>
-									{$_('common.cancel')}
-								</BusyButton>
-							</div>
-						{:else if seedPhase.kind === 'shown'}
-							<div
-								class="mt-4 rounded-xl border-2 border-dashed border-amber-400 bg-white p-4 dark:bg-ink-950"
-							>
-								<p
-									class="mb-3 text-xs font-semibold uppercase tracking-widest text-amber-700 dark:text-amber-400"
-								>
-									⚠ {$_('backup_keys.show_seed.shoulder_warning')}
-								</p>
-								<ol class="grid grid-cols-2 gap-x-6 gap-y-2 font-mono text-base sm:grid-cols-3">
-									{#each seedPhase.words as word, i}
-										<li class="flex items-baseline gap-2">
-											<span class="w-6 text-right text-xs text-ink-400">{i + 1}.</span>
-											<span class="select-all font-semibold">{word}</span>
-										</li>
-									{/each}
-								</ol>
-							</div>
 
-							{#if seedPhase.keys.length > 0}
-								<div class="mt-6">
-									<KeyBackupPanel keys={seedPhase.keys} accountName={seedPhase.account} />
+							{#if seedPhase.kind === 'idle'}
+								<div class="mt-3">
+									<BusyButton variant="secondary" onclick={startShowSeed}>
+										{$_('backup_keys.show_seed.cta')}
+									</BusyButton>
+								</div>
+							{:else if seedPhase.kind === 'prompting' || seedPhase.kind === 'verifying'}
+								<label class="mt-3 block">
+									<span class="block text-sm font-semibold">
+										{$_('backup_keys.show_seed.password_label')}
+									</span>
+									<input
+										type="password"
+										maxlength="64"
+										bind:value={seedPassword}
+										autocomplete="current-password"
+										disabled={seedPhase.kind === 'verifying'}
+										onkeydown={(e) => {
+											if (e.key === 'Enter' && seedPassword.length > 0) {
+												void verifyAndShowSeed();
+											}
+										}}
+										class="mt-1 w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+									/>
+								</label>
+								<p class="mt-2 text-xs text-ink-500 dark:text-ink-400">
+									{$_('backup_keys.show_seed.password_hint')}
+								</p>
+								<div class="mt-3 flex flex-wrap gap-2">
+									<BusyButton
+										variant="primary"
+										busy={seedPhase.kind === 'verifying'}
+										busyLabel={$_('backup_keys.show_seed.verifying') as string}
+										disabled={seedPassword.length === 0}
+										onclick={verifyAndShowSeed}
+									>
+										{$_('backup_keys.show_seed.reveal')}
+									</BusyButton>
+									<BusyButton
+										variant="ghost"
+										disabled={seedPhase.kind === 'verifying'}
+										onclick={hideSeed}
+									>
+										{$_('common.cancel')}
+									</BusyButton>
+								</div>
+							{:else if seedPhase.kind === 'shown'}
+								<div
+									class="mt-4 rounded-xl border-2 border-dashed border-red-400 bg-white p-4 dark:bg-ink-950"
+								>
+									<p
+										class="mb-3 text-xs font-semibold uppercase tracking-widest text-red-700 dark:text-red-400"
+									>
+										⚠ {$_('backup_keys.show_seed.shoulder_warning')}
+									</p>
+									<ol class="grid grid-cols-2 gap-x-6 gap-y-2 font-mono text-base sm:grid-cols-3">
+										{#each seedPhase.words as word, i}
+											<li class="flex items-baseline gap-2">
+												<span class="w-6 text-right text-xs text-ink-400">{i + 1}.</span>
+												<span class="select-all font-semibold">{word}</span>
+											</li>
+										{/each}
+									</ol>
+								</div>
+
+								{#if seedPhase.keys.length > 0}
+									<div class="mt-6">
+										<KeyBackupPanel keys={seedPhase.keys} accountName={seedPhase.account} />
+									</div>
+								{/if}
+
+								<div class="mt-3">
+									<BusyButton variant="secondary" onclick={hideSeed}>
+										{$_('backup_keys.show_seed.hide')}
+									</BusyButton>
+								</div>
+							{:else if seedPhase.kind === 'error'}
+								<div class="mt-3">
+									<StatusLine kind="error">
+										{$_(seedPhase.messageKey)}
+									</StatusLine>
+								</div>
+								<div class="mt-3 flex flex-wrap gap-2">
+									<BusyButton variant="primary" onclick={retryFromError}>
+										{$_('common.retry')}
+									</BusyButton>
+									<BusyButton variant="ghost" onclick={hideSeed}>
+										{$_('common.cancel')}
+									</BusyButton>
 								</div>
 							{/if}
-
-							<div class="mt-3">
-								<BusyButton variant="secondary" onclick={hideSeed}>
-									{$_('backup_keys.show_seed.hide')}
-								</BusyButton>
-							</div>
-						{:else if seedPhase.kind === 'error'}
-							<div class="mt-3">
-								<StatusLine kind="error">
-									{$_(seedPhase.messageKey)}
-								</StatusLine>
-							</div>
-							<div class="mt-3 flex flex-wrap gap-2">
-								<BusyButton variant="primary" onclick={retryFromError}>
-									{$_('common.retry')}
-								</BusyButton>
-								<BusyButton variant="ghost" onclick={hideSeed}>
-									{$_('common.cancel')}
-								</BusyButton>
-							</div>
-						{/if}
-					</div>
-				{:else}
-					<div class="mt-4">
-						<StatusLine kind="idle">
-							{$_('backup_keys.show_seed.locked_hint')}
-						</StatusLine>
-					</div>
-				{/if}
+						</div>
+					{:else}
+						<div class="mt-4">
+							<StatusLine kind="idle">
+								{$_('backup_keys.show_seed.locked_hint')}
+							</StatusLine>
+						</div>
+					{/if}
 				{/if}
 			</article>
 
@@ -405,11 +399,7 @@
 			<article>
 				<h3 class="font-display text-lg font-bold">{$_('backup_keys.keyfile_heading')}</h3>
 				<p class="mt-2 whitespace-pre-line text-ink-700 dark:text-ink-200">
-					{$_(
-						isPostingOnly
-							? 'backup_keys.keyfile_body_posting_only'
-							: 'backup_keys.keyfile_body'
-					)}
+					{$_(isPostingOnly ? 'backup_keys.keyfile_body_posting_only' : 'backup_keys.keyfile_body')}
 				</p>
 
 				{#if $isUnlocked}
@@ -470,29 +460,29 @@
 	{#if !isPostingOnly}
 		<section class="card mb-6">
 			<h2 class="font-display text-2xl font-bold">{$_('backup_keys.antipatterns_heading')}</h2>
-		<ul class="mt-4 space-y-3">
-			<li class="flex gap-3">
-				<span class="flex-none text-red-500" aria-hidden="true">✕</span>
-				<span class="text-ink-700 dark:text-ink-200">{$_('backup_keys.anti_email')}</span>
-			</li>
-			<li class="flex gap-3">
-				<span class="flex-none text-red-500" aria-hidden="true">✕</span>
-				<span class="text-ink-700 dark:text-ink-200">{$_('backup_keys.anti_cloud')}</span>
-			</li>
-			<li class="flex gap-3">
-				<span class="flex-none text-red-500" aria-hidden="true">✕</span>
-				<span class="text-ink-700 dark:text-ink-200">{$_('backup_keys.anti_photo')}</span>
-			</li>
-			<li class="flex gap-3">
-				<span class="flex-none text-red-500" aria-hidden="true">✕</span>
-				<span class="text-ink-700 dark:text-ink-200">{$_('backup_keys.anti_share')}</span>
-			</li>
-			<li class="flex gap-3">
-				<span class="flex-none text-red-500" aria-hidden="true">✕</span>
-				<span class="text-ink-700 dark:text-ink-200">{$_('backup_keys.anti_support')}</span>
-			</li>
-		</ul>
-	</section>
+			<ul class="mt-4 space-y-3">
+				<li class="flex gap-3">
+					<span class="flex-none text-red-500" aria-hidden="true">✕</span>
+					<span class="text-ink-700 dark:text-ink-200">{$_('backup_keys.anti_email')}</span>
+				</li>
+				<li class="flex gap-3">
+					<span class="flex-none text-red-500" aria-hidden="true">✕</span>
+					<span class="text-ink-700 dark:text-ink-200">{$_('backup_keys.anti_cloud')}</span>
+				</li>
+				<li class="flex gap-3">
+					<span class="flex-none text-red-500" aria-hidden="true">✕</span>
+					<span class="text-ink-700 dark:text-ink-200">{$_('backup_keys.anti_photo')}</span>
+				</li>
+				<li class="flex gap-3">
+					<span class="flex-none text-red-500" aria-hidden="true">✕</span>
+					<span class="text-ink-700 dark:text-ink-200">{$_('backup_keys.anti_share')}</span>
+				</li>
+				<li class="flex gap-3">
+					<span class="flex-none text-red-500" aria-hidden="true">✕</span>
+					<span class="text-ink-700 dark:text-ink-200">{$_('backup_keys.anti_support')}</span>
+				</li>
+			</ul>
+		</section>
 	{/if}
 
 	<!-- FAQ pointers for users who want to dig deeper. -->

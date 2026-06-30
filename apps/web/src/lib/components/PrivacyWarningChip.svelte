@@ -46,9 +46,7 @@
 	let dismissed = $state(false);
 
 	const fullText = $derived(
-		privacyWarningKey
-			? ($_(`assets.privacy_warnings.${privacyWarningKey}`) as string)
-			: ''
+		privacyWarningKey ? ($_(`assets.privacy_warnings.${privacyWarningKey}`) as string) : ''
 	);
 </script>
 
@@ -56,7 +54,7 @@
 	{#if compact}
 		<button
 			type="button"
-			class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-amber-400/20 text-amber-400 hover:bg-amber-400/30"
+			class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-red-400/20 text-red-400 hover:bg-red-400/30"
 			title={fullText}
 			aria-label={fullText}
 			onclick={(e) => {
@@ -75,12 +73,18 @@
 				class="h-3 w-3"
 				aria-hidden="true"
 			>
-				<path d="M8 1.5L15 14H1L8 1.5zm0 4.5v4m0 2.5v.01" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+				<path
+					d="M8 1.5L15 14H1L8 1.5zm0 4.5v4m0 2.5v.01"
+					stroke="currentColor"
+					stroke-width="1.5"
+					fill="none"
+					stroke-linecap="round"
+				/>
 			</svg>
 		</button>
 	{:else}
 		<aside
-			class="my-3 flex gap-3 rounded-lg border border-amber-400/30 bg-amber-400/5 p-4 text-sm"
+			class="my-3 flex gap-3 rounded-lg border border-red-400/30 bg-red-400/5 p-4 text-sm"
 			role="note"
 			aria-live="polite"
 		>
@@ -93,12 +97,14 @@
 				stroke-width="2"
 				stroke-linecap="round"
 				stroke-linejoin="round"
-				class="mt-0.5 h-5 w-5 flex-none text-amber-400"
+				class="mt-0.5 h-5 w-5 flex-none text-red-400"
 				aria-hidden="true"
 			>
-				<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-				<line x1="12" y1="9" x2="12" y2="13"/>
-				<line x1="12" y1="17" x2="12.01" y2="17"/>
+				<path
+					d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+				/>
+				<line x1="12" y1="9" x2="12" y2="13" />
+				<line x1="12" y1="17" x2="12.01" y2="17" />
 			</svg>
 			<div class="flex-1 text-ink-200">
 				{fullText}
@@ -120,8 +126,8 @@
 					class="h-4 w-4"
 					aria-hidden="true"
 				>
-					<line x1="18" y1="6" x2="6" y2="18"/>
-					<line x1="6" y1="6" x2="18" y2="18"/>
+					<line x1="18" y1="6" x2="6" y2="18" />
+					<line x1="6" y1="6" x2="18" y2="18" />
 				</svg>
 			</button>
 		</aside>

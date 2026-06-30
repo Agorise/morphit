@@ -89,7 +89,7 @@
 	// to send a message that contains an IBAN, BIC, or 9+-digit
 	// run.  Account numbers are LEGITIMATE in chat (it's how
 	// trade partners share where to send fiat), so we never
-	// block, redact, or confirm-modal — just an inline amber
+	// block, redact, or confirm-modal — just an inline red
 	// banner that says "this is permanent, double-check the
 	// number before sending."  Once dismissed for the session,
 	// stays dismissed; the next session re-evaluates.
@@ -114,9 +114,7 @@
 
 	let acctReminderDismissed = $state(false);
 	const showAcctReminder = $derived(
-		!acctReminderDismissed &&
-			!readAcctReminderSeen() &&
-			hasAccountNumberShape(text)
+		!acctReminderDismissed && !readAcctReminderSeen() && hasAccountNumberShape(text)
 	);
 
 	function dismissAcctReminder(): void {
@@ -233,7 +231,7 @@
 >
 	{#if isLocked}
 		<p
-			class="mb-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200"
+			class="mb-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-800 dark:bg-red-950 dark:text-red-200"
 			role="status"
 		>
 			{$_('chat.composer.locked_hint')}
@@ -242,7 +240,7 @@
 
 	{#if showAcctReminder}
 		<div
-			class="mb-2 flex items-start justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"
+			class="mb-2 flex items-start justify-between gap-2 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-200"
 			role="status"
 			aria-live="polite"
 		>
@@ -253,7 +251,7 @@
 			<button
 				type="button"
 				onclick={dismissAcctReminder}
-				class="-mr-1 -mt-0.5 rounded-md px-2 py-0.5 text-amber-700 hover:bg-amber-100 hover:text-amber-900 dark:text-amber-300 dark:hover:bg-amber-900 dark:hover:text-amber-100"
+				class="-mr-1 -mt-0.5 rounded-md px-2 py-0.5 text-red-700 hover:bg-red-100 hover:text-red-900 dark:text-red-300 dark:hover:bg-red-900 dark:hover:text-red-100"
 				aria-label={$_('chat.composer.acct_reminder.dismiss_aria') as string}
 			>
 				✕

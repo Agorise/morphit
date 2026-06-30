@@ -105,7 +105,7 @@ export function statusBadgeClass(s: PhaseStatus): string {
 		case 'shipped':
 			return 'bg-emerald-100 text-emerald-900 dark:bg-emerald-900 dark:text-emerald-100';
 		case 'in_progress':
-			return 'bg-amber-100 text-amber-900 dark:bg-amber-900 dark:text-amber-100';
+			return 'bg-teal-100 text-teal-900 dark:bg-teal-900 dark:text-teal-100';
 		case 'planned':
 			return 'bg-ink-100 text-ink-700 dark:bg-ink-800 dark:text-ink-300';
 	}

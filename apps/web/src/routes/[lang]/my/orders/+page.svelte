@@ -24,6 +24,7 @@
 	import Head from '$components/Head.svelte';
 	import TermsText from '$components/TermsText.svelte';
 	import BusyButton from '$components/BusyButton.svelte';
+	import ConfirmModal from '$components/ConfirmModal.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
 	// cp165 byte-budget: 3 disclosure/modal components below are
 	// lazy-imported.  None render on first paint; all are gated by
@@ -48,9 +49,20 @@
 	import { formatOrderPriceModel } from '$lib/orders/priceModelDisplay';
 	import { MORPHIT_INDEXER_ORIGIN, resolveOrigin } from '$net/config';
 	import { safeSession } from '$lib/utils/safeStorage';
+	import { orderTitleParts } from '$lib/utils/orderTitle';
+	import { displayNamesForMethods } from '$lib/payments/display';
+	import { instanceAdditions, instanceNameLookup } from '$lib/stores/instanceAdditions';
 	import type { OrderRecord } from '@morphit/indexer-client';
 
 	const blurtAccount = getUserBlurtAccount();
+
+	/** Reactive payment-instrument name lookup (re-derives when the
+	 *  user's saved instances change), so payment methods on each card
+	 *  render with friendly names, not raw keys. */
+	const instLookup = $derived.by(() => {
+		void $instanceAdditions;
+		return instanceNameLookup;
+	});
 
 	// ─── Phase + data ──────────────────────────────────────────────
 	type Phase = 'loading' | 'ready' | 'error';
@@ -92,8 +104,6 @@
 	 *  time — confirming a second one is rare enough that we don't
 	 *  need a Set. */
 	let pendingCancelPermlink: string | null = $state(null);
-	/** Permlink currently mid-broadcast. */
-	let cancellingPermlink: string | null = $state(null);
 	let cancelErrorPermlink: string | null = $state(null);
 	let cancelErrorMessage = $state('');
 
@@ -278,22 +288,9 @@
 		return n % 1 === 0 ? String(n) : n.toFixed(2);
 	}
 
-	function formatRange(o: OrderRecord): string {
-		const fiat = o.fiat_currency;
-		if (o.amount_min !== null && o.amount_max !== null) {
-			return $_('my_orders.order.range_both', {
-				values: { min: formatAmount(o.amount_min), max: formatAmount(o.amount_max), fiat }
-			});
-		}
-		if (o.amount_min !== null)
-			return $_('my_orders.order.range_min_only', {
-				values: { min: formatAmount(o.amount_min), fiat }
-			});
-		if (o.amount_max !== null)
-			return $_('my_orders.order.range_max_only', {
-				values: { max: formatAmount(o.amount_max), fiat }
-			});
-		return $_('my_orders.order.range_open', { values: { fiat } });
+	function cardTitle(o: OrderRecord): string {
+		const tp = orderTitleParts(o, formatAmount);
+		return $_(tp.key, { values: tp.values }) as string;
 	}
 
 	function stateLabel(o: OrderRecord): string {
@@ -323,6 +320,15 @@
 				return $_('my_orders.order.fee_missing');
 			case 'underpaid':
 				return $_('my_orders.order.fee_underpaid');
+			case 'unverified':
+				// The DB-default initial state (order.ts always writes a
+				// definite status, so this is only reached by a row left
+				// at the column default — a migration artifact or a future
+				// handler that forgets to set it). Neutral, NOT a rejection
+				// — mirrors order-detail's `fee_unverified` ("Not yet
+				// verified"), and the ink branch below keeps it out of the
+				// red "fee rejected" treatment.
+				return $_('my_orders.order.fee_unverified');
 			default:
 				// Future-proof: if the indexer adds a new fee_status
 				// we don't recognize, fall back to the raw string
@@ -412,11 +418,12 @@
 		if (state.state !== 'unlocked') {
 			cancelErrorPermlink = permlink;
 			cancelErrorMessage = $_('post_order.broadcast_error.body_locked');
+			pendingCancelPermlink = null;
 			return;
 		}
 
-		cancellingPermlink = permlink;
-		pendingCancelPermlink = null;
+		cancelErrorPermlink = null;
+		cancelErrorMessage = '';
 
 		try {
 			await broadcastOrderCancel(state.live, permlink);
@@ -439,7 +446,7 @@
 				cancelErrorMessage = $_('post_order.broadcast_error.body_generic');
 			}
 		} finally {
-			cancellingPermlink = null;
+			pendingCancelPermlink = null;
 		}
 	}
 
@@ -524,15 +531,12 @@
 	{:else if phase === 'loading'}
 		<StatusLine kind="loading">{$_('my_orders.loading')}</StatusLine>
 	{:else if phase === 'error'}
-		<section
-			class="card border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950"
-			role="alert"
-		>
-			<h2 class="font-display text-lg font-bold text-amber-900 dark:text-amber-100">
+		<section class="card border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-950" role="alert">
+			<h2 class="font-display text-lg font-bold text-red-900 dark:text-red-100">
 				{$_('my_orders.error_title')}
 			</h2>
-			<p class="mt-2 text-sm text-amber-800 dark:text-amber-200">{$_('my_orders.error_body')}</p>
-			<p class="mt-1 text-xs text-amber-700 dark:text-amber-300">{errorMessage}</p>
+			<p class="mt-2 text-sm text-red-800 dark:text-red-200">{$_('my_orders.error_body')}</p>
+			<p class="mt-1 text-xs text-red-700 dark:text-red-300">{errorMessage}</p>
 			<div class="mt-4">
 				<BusyButton variant="primary" onclick={load}>
 					{$_('common.retry')}
@@ -633,12 +637,7 @@
 						<div class="flex-1">
 							<div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
 								<span class="font-display text-lg font-bold">
-									{o.side === 'buy'
-										? $_('my_orders.order.buying', { values: { asset: o.asset } })
-										: $_('my_orders.order.selling', { values: { asset: o.asset } })}
-								</span>
-								<span class="text-sm text-ink-600 dark:text-ink-300">
-									{formatRange(o)}
+									{cardTitle(o)}
 								</span>
 								{#if priceModelLabel !== null}
 									<span
@@ -660,9 +659,15 @@
 									>
 										{feeStatusLabel(o)}
 									</span>
+								{:else if o.fee_status === 'pending_external' || o.fee_status === 'unverified'}
+									<span
+										class="rounded-full border border-ink-300 bg-ink-50 px-2 py-0.5 text-ink-700 dark:bg-ink-800 dark:text-ink-200"
+									>
+										{feeStatusLabel(o)}
+									</span>
 								{:else if o.fee_status}
 									<span
-										class="rounded-full border border-amber-400 bg-amber-50 px-2 py-0.5 text-amber-900 dark:bg-amber-950 dark:text-amber-100"
+										class="rounded-full border border-red-400 bg-red-50 px-2 py-0.5 text-red-900 dark:bg-red-950 dark:text-red-100"
 									>
 										{feeStatusLabel(o)}
 									</span>
@@ -692,6 +697,38 @@
 									</span>
 								{/if}
 							</div>
+
+							<!-- Order details: where, how, and when it expires —
+							     the same facts the public order page shows, at a
+							     glance for the owner. -->
+							<dl class="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-xs">
+								{#if o.payment_methods.length > 0}
+									<div>
+										<dt class="inline text-ink-500">{$_('order_detail.payment_methods')}:</dt>
+										<dd class="inline text-ink-700 dark:text-ink-200">
+											{displayNamesForMethods(o.payment_methods, instLookup).join(', ')}
+										</dd>
+									</div>
+								{/if}
+								{#if o.location_region}
+									<div>
+										<dt class="inline text-ink-500">{$_('order_detail.location')}:</dt>
+										<dd class="inline text-ink-700 dark:text-ink-200">{o.location_region}</dd>
+									</div>
+								{/if}
+								{#if o.expires_at}
+									<div>
+										<dt class="inline text-ink-500">{$_('order_detail.expires_on')}:</dt>
+										<dd class="inline text-ink-700 dark:text-ink-200">
+											{new Date(o.expires_at).toLocaleDateString(undefined, {
+												year: 'numeric',
+												month: 'short',
+												day: 'numeric'
+											})}
+										</dd>
+									</div>
+								{/if}
+							</dl>
 
 							{#if o.terms}
 								<p class="mt-2 text-sm text-ink-700 dark:text-ink-200">
@@ -724,7 +761,7 @@
 											class="self-end rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums {remaining <=
 											30
 												? 'animate-pulse bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200'
-												: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'}"
+												: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200'}"
 											title={$_('my_orders.order.edit_window_tooltip') as string}
 											aria-label={$_('my_orders.order.edit_window_aria', {
 												values: { remaining: formatRemainingMmSs(remaining) }
@@ -746,18 +783,8 @@
 								     pulls identity state itself; no prop plumbing
 								     needed. -->
 								{#if pendingFeaturePermlink === o.permlink && $isUnlocked}
-									{#await loadFeatureBidForm() then FeatureBidForm}
-										<FeatureBidForm
-											orderPermlink={o.permlink}
-											feeBlurtPerHour={featureBlurtPerHour}
-											onSuccess={(r) => {
-												pendingFeaturePermlink = null;
-												featureSuccessPermlink = o.permlink;
-												featureSuccessBlurt = r.blurtPaid;
-											}}
-											onCancel={() => (pendingFeaturePermlink = null)}
-										/>
-									{/await}
+									<!-- Feature form renders full-width below the card
+									     body so it doesn't squeeze the action column. -->
 								{:else if featureSuccessPermlink === o.permlink}
 									<StatusLine kind="ok">
 										{$_('feature_bid.success', {
@@ -789,7 +816,7 @@
 												void ensureFeatureRateFetched();
 											}}
 										>
-											⭐ {$_('my_orders.order.action_feature')}
+											🚀 {$_('my_orders.order.action_feature')}
 										</BusyButton>
 									{/if}
 								{/if}
@@ -799,16 +826,8 @@
 								     ADR-0011 §8, feedback IS the trade-complete
 								     signal. -->
 								{#if pendingFeedbackPermlink === o.permlink && $isUnlocked}
-									{#await loadLeaveFeedbackForm() then LeaveFeedbackForm}
-										<LeaveFeedbackForm
-											orderPermlink={o.permlink}
-											onSuccess={() => {
-												pendingFeedbackPermlink = null;
-												feedbackSuccessPermlink = o.permlink;
-											}}
-											onCancel={() => (pendingFeedbackPermlink = null)}
-										/>
-									{/await}
+									<!-- Feedback form renders full-width below the card
+									     body so it doesn't squeeze the action column. -->
 								{:else if feedbackSuccessPermlink === o.permlink}
 									<StatusLine kind="ok">
 										{$_('feedback.success_line')}
@@ -836,32 +855,7 @@
 									</BusyButton>
 								{/if}
 
-								{#if pendingCancelPermlink === o.permlink}
-									<!-- Inline confirm card -->
-									<div
-										class="rounded-xl border-2 border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-950"
-									>
-										<p class="mb-1 text-sm font-semibold text-amber-900 dark:text-amber-100">
-											{$_('my_orders.cancel.confirm_title')}
-										</p>
-										<p class="mb-3 text-xs text-amber-800 dark:text-amber-200">
-											{$_('my_orders.cancel.confirm_body')}
-										</p>
-										<div class="flex flex-col gap-2">
-											<BusyButton
-												variant="primary"
-												busy={cancellingPermlink === o.permlink}
-												busyLabel={$_('my_orders.cancel.cancelling')}
-												onclick={() => confirmCancel(o.permlink)}
-											>
-												{$_('my_orders.cancel.confirm_button')}
-											</BusyButton>
-											<BusyButton variant="ghost" onclick={abortCancel}>
-												{$_('my_orders.cancel.cancel_button')}
-											</BusyButton>
-										</div>
-									</div>
-								{:else if $isPairedReadOnly}
+								{#if $isPairedReadOnly}
 									<!-- Part 116: paired-readonly users see an inline
 									     affordance.  Permlink preserved in the
 									     #cancel=<permlink> deep link. -->
@@ -871,8 +865,8 @@
 										density="inline"
 									/>
 								{:else}
-									<BusyButton variant="ghost" onclick={() => requestCancel(o.permlink)}>
-										{$_('my_orders.order.action_cancel')}
+									<BusyButton variant="danger" onclick={() => requestCancel(o.permlink)}>
+										{$_('order_detail.cancel_button')}
 									</BusyButton>
 								{/if}
 							{:else if o.status === 'cancelled'}
@@ -896,8 +890,51 @@
 							{/if}
 						</div>
 					</div>
+					{#if pendingFeaturePermlink === o.permlink && $isUnlocked}
+						{#await loadFeatureBidForm() then FeatureBidForm}
+							<div class="mt-3">
+								<FeatureBidForm
+									orderPermlink={o.permlink}
+									feeBlurtPerHour={featureBlurtPerHour}
+									onSuccess={(r) => {
+										pendingFeaturePermlink = null;
+										featureSuccessPermlink = o.permlink;
+										featureSuccessBlurt = r.blurtPaid;
+									}}
+									onCancel={() => (pendingFeaturePermlink = null)}
+								/>
+							</div>
+						{/await}
+					{/if}
+					{#if pendingFeedbackPermlink === o.permlink && $isUnlocked}
+						{#await loadLeaveFeedbackForm() then LeaveFeedbackForm}
+							<div class="mt-3">
+								<LeaveFeedbackForm
+									orderPermlink={o.permlink}
+									onSuccess={() => {
+										pendingFeedbackPermlink = null;
+										feedbackSuccessPermlink = o.permlink;
+									}}
+									onCancel={() => (pendingFeedbackPermlink = null)}
+								/>
+							</div>
+						{/await}
+					{/if}
 				</li>
 			{/each}
 		</ul>
 	{/if}
+
+	<ConfirmModal
+		open={pendingCancelPermlink !== null}
+		title={$_('my_orders.cancel.confirm_title') as string}
+		body={$_('my_orders.cancel.confirm_body') as string}
+		confirmLabel={$_('my_orders.cancel.confirm_button') as string}
+		cancelLabel={$_('my_orders.cancel.cancel_button') as string}
+		busyLabel={$_('my_orders.cancel.cancelling') as string}
+		onConfirm={() => {
+			if (pendingCancelPermlink) void confirmCancel(pendingCancelPermlink);
+		}}
+		onCancel={abortCancel}
+	/>
 </div>

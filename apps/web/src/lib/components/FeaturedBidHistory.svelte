@@ -157,7 +157,7 @@
 							class="rounded-full px-2 py-0.5 text-[11px] font-bold {state === 'visible'
 								? 'bg-morphit-emerald/10 text-morphit-emerald'
 								: state === 'outranked'
-									? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
+									? 'bg-ink-100 text-ink-800 dark:bg-ink-900/30 dark:text-ink-300'
 									: 'bg-ink-100 text-ink-600 dark:bg-ink-800 dark:text-ink-300'}"
 						>
 							{state === 'visible'

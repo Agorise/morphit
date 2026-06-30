@@ -4,6 +4,7 @@
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	import { _ } from 'svelte-i18n';
 	import Head from '$components/Head.svelte';
+	import { MIRROR_LOGO_PATHS, MIRROR_LOGO_VIEWBOX } from '$lib/mirrorLogos';
 
 	// Source mirrors.  Morphit's canonical repository is our own Forgejo
 	// server; it's mirrored across the web so the code stays reachable
@@ -110,19 +111,30 @@
 						href={m.url}
 						target="_blank"
 						rel="noopener noreferrer external"
-						class="card-interactive flex items-center justify-between gap-3 {m.status ===
-						'primary'
+						class="card-interactive flex items-center justify-between gap-3 {m.status === 'primary'
 							? 'border-morphit-emerald/40 bg-morphit-emerald/5'
 							: ''}"
 					>
-						<span class="min-w-0">
-							<span class="block font-display font-bold">{m.name}</span>
-							<span
-								class="block text-xs {m.status === 'pending'
-									? 'text-ink-500 dark:text-ink-400'
-									: 'text-morphit-emerald'}"
+						<span class="flex min-w-0 items-center gap-3">
+							<svg
+								viewBox={MIRROR_LOGO_VIEWBOX[m.id] ?? '0 0 24 24'}
+								width="20"
+								height="20"
+								fill="currentColor"
+								aria-hidden="true"
+								class="flex-none text-ink-500 dark:text-ink-400"
 							>
-								{mirrorLabel(m.status)}
+								<path d={MIRROR_LOGO_PATHS[m.id]} />
+							</svg>
+							<span class="min-w-0">
+								<span class="block font-display font-bold">{m.name}</span>
+								<span
+									class="block text-xs {m.status === 'pending'
+										? 'text-ink-500 dark:text-ink-400'
+										: 'text-morphit-emerald'}"
+								>
+									{mirrorLabel(m.status)}
+								</span>
 							</span>
 						</span>
 						<svg

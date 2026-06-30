@@ -154,7 +154,8 @@
 <section class="mx-auto max-w-4xl px-4 py-8">
 	<nav class="mb-4 text-sm">
 		<a href={lp('/explorer')} class="text-white hover:text-morphit-emerald">
-			<span class="nav-arrow nav-arrow-left" aria-hidden="true">⇦</span> {$_('explorer.nav.back_to_search')}
+			<span class="nav-arrow nav-arrow-left" aria-hidden="true">⇦</span>
+			{$_('explorer.nav.back_to_search')}
 		</a>
 	</nav>
 
@@ -195,7 +196,7 @@
 		{#if volumeStatus === 'loading'}
 			<p class="text-sm text-ink-500">{$_('common.loading')}</p>
 		{:else if volumeStatus === 'error'}
-			<p class="text-sm text-amber-700 dark:text-amber-300">
+			<p class="text-sm text-red-700 dark:text-red-300">
 				{$_('explorer.activity.error_label')}: {volumeError}
 			</p>
 		{:else if activeVolume.length === 0}
@@ -234,7 +235,7 @@
 			</table>
 			{#if volumeGeneratedAt}
 				<p class="mt-2 text-xs text-ink-500 dark:text-ink-400">
-					{$_("explorer.activity.last_updated")}: {formatDayMonthTime(volumeGeneratedAt)}
+					{$_('explorer.activity.last_updated')}: {formatDayMonthTime(volumeGeneratedAt)}
 				</p>
 			{/if}
 		{/if}
@@ -254,7 +255,7 @@
 		{#if listingsStatus === 'loading'}
 			<p class="text-sm text-ink-500">{$_('common.loading')}</p>
 		{:else if listingsStatus === 'error'}
-			<p class="text-sm text-amber-700 dark:text-amber-300">
+			<p class="text-sm text-red-700 dark:text-red-300">
 				{$_('explorer.activity.error_label')}: {listingsError}
 			</p>
 		{:else if listings.length === 0}

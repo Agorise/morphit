@@ -113,10 +113,10 @@
 <section aria-labelledby="backup-keys-panel-heading">
 	<!-- Don't-share warning, prominent and plain-language (grandma). -->
 	<div
-		class="flex items-start gap-3 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-950"
+		class="flex items-start gap-3 rounded-2xl border-2 border-red-300 bg-red-50 p-4 dark:border-red-700 dark:bg-red-950"
 	>
 		<svg
-			class="mt-0.5 h-6 w-6 flex-none text-amber-600 dark:text-amber-400"
+			class="mt-0.5 h-6 w-6 flex-none text-red-600 dark:text-red-400"
 			xmlns="http://www.w3.org/2000/svg"
 			viewBox="0 0 24 24"
 			fill="none"
@@ -126,15 +126,17 @@
 			stroke-linejoin="round"
 			aria-hidden="true"
 		>
-			<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+			<path
+				d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+			/>
 			<line x1="12" y1="9" x2="12" y2="13" />
 			<line x1="12" y1="17" x2="12.01" y2="17" />
 		</svg>
 		<div>
-			<p id="backup-keys-panel-heading" class="font-semibold text-amber-900 dark:text-amber-100">
+			<p id="backup-keys-panel-heading" class="font-semibold text-red-900 dark:text-red-100">
 				{$_('backup_keys_panel.warning_title')}
 			</p>
-			<p class="mt-1 text-sm text-amber-900/90 dark:text-amber-100/90">
+			<p class="mt-1 text-sm text-red-900/90 dark:text-red-100/90">
 				{$_('backup_keys_panel.warning_body')}
 			</p>
 		</div>
@@ -144,7 +146,9 @@
 
 	<div class="mt-3 space-y-3">
 		{#each keys as k (k.role)}
-			<div class="rounded-xl border border-ink-200 bg-white p-3 dark:border-ink-700 dark:bg-ink-900">
+			<div
+				class="rounded-xl border border-ink-200 bg-white p-3 dark:border-ink-700 dark:bg-ink-900"
+			>
 				<div class="flex items-baseline justify-between gap-2">
 					<span class="font-semibold">{$_(`backup_keys_panel.role.${k.role}`)}</span>
 					<span class="text-xs text-ink-500 dark:text-ink-400"
@@ -152,7 +156,12 @@
 					>
 				</div>
 				{@render keyLine(`${k.role}:pub`, $_('backup_keys_panel.public_label'), k.pub, false)}
-				{@render keyLine(`${k.role}:wif`, `🔒 ${$_('backup_keys_panel.private_label')}`, k.wif, true)}
+				{@render keyLine(
+					`${k.role}:wif`,
+					`🔒 ${$_('backup_keys_panel.private_label')}`,
+					k.wif,
+					true
+				)}
 			</div>
 		{/each}
 	</div>
@@ -183,5 +192,7 @@
 		</button>
 	</div>
 
-	<p class="mt-3 text-xs text-ink-500 dark:text-ink-400">{$_('backup_keys_panel.no_master_password')}</p>
+	<p class="mt-3 text-xs text-ink-500 dark:text-ink-400">
+		{$_('backup_keys_panel.no_master_password')}
+	</p>
 </section>

@@ -9,7 +9,7 @@
 	 *              so nothing shifts when a message appears
 	 *   loading  → spinner + muted text, aria-live polite
 	 *   ok       → checkmark + emerald text, aria-live polite
-	 *   warn     → warning triangle + amber text, aria-live polite
+	 *   warn     → warning triangle + ink text, aria-live polite
 	 *   error    → same as warn but aria-live assertive so screen
 	 *              readers interrupt
 	 *
@@ -44,7 +44,7 @@
 			case 'ok':
 				return 'text-morphit-emerald font-semibold';
 			case 'warn':
-				return 'text-amber-700 dark:text-amber-300';
+				return 'text-ink-700 dark:text-ink-300';
 			case 'error':
 				return 'text-red-700 dark:text-red-300 font-semibold';
 		}

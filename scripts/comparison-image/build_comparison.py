@@ -98,6 +98,7 @@ SECTIONS = [
         ('Tor (.onion) accessible',                                          ['Y','Y','Y','Y','Y'], None),
         ('I2P accessible',                                                   ['Y','-','-','Y','-'], None),
         ('Lokinet accessible',                                               ['Y','-','-','-','-'], None),
+        ('Reachable at a .eth name (ENS, no DNS)',                            ['Y','-','-','-','-'], None),
         ('End-to-end encrypted in-app chat',                                 ['Y','Y','Y','-','-'], None),
         ('Real-time streaming chat (no polling)',                            ['Y','-','-','-','-'], None),
         ('Immutable on-chain chat history (operator cannot delete)',         ['Y','-','-','-','-'], None),

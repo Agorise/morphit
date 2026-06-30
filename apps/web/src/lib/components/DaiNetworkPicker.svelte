@@ -48,7 +48,7 @@
 	let { network = $bindable(), disabled = false }: Props = $props();
 </script>
 
-<fieldset class="space-y-3" disabled={disabled}>
+<fieldset class="space-y-3" {disabled}>
 	<legend class="text-sm font-semibold text-ink-100">
 		{$_('assets.dai.network.picker.label')}
 	</legend>
@@ -61,7 +61,7 @@
 		{$_('assets.dai.network.picker.requiredHint')}
 	</p>
 	<p
-		class="rounded-md border border-amber-400/30 bg-amber-400/5 px-3 py-2 text-xs text-amber-200"
+		class="rounded-md border border-ink-400/30 bg-ink-400/5 px-3 py-2 text-xs text-ink-200"
 		role="note"
 	>
 		{$_('assets.dai.network.picker.crossNetworkWarning')}

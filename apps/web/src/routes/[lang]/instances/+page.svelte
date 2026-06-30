@@ -210,7 +210,7 @@
 			case 'good':
 				return 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-500/30';
 			case 'quiet':
-				return 'bg-amber-500/15 text-amber-800 dark:text-amber-200 ring-1 ring-amber-500/30';
+				return 'bg-ink-500/15 text-ink-800 dark:text-ink-200 ring-1 ring-ink-500/30';
 			case 'syncing':
 				return 'bg-blue-500/15 text-blue-700 dark:text-blue-300 ring-1 ring-blue-500/30';
 			case 'stale':
@@ -281,7 +281,7 @@
 
 	{#if error && !snapshotReceived}
 		<p
-			class="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
+			class="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-700 dark:bg-red-950 dark:text-red-200"
 			title={error}
 		>
 			{$_('instances.fetch_error')}
@@ -492,10 +492,7 @@
 									rel="noopener"
 								>
 									{$_('instances.contact')}
-									<span
-										class="nav-arrow nav-arrow-right"
-										aria-hidden="true">⇨</span
-									>
+									<span class="nav-arrow nav-arrow-right" aria-hidden="true">⇨</span>
 								</a>
 							{/if}
 						</div>

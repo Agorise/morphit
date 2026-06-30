@@ -16,7 +16,12 @@
 		type FullIdentity,
 		type LiveIdentity
 	} from '$crypto/keygen';
-	import { blobToEnvelope, decryptIdentity, encryptIdentity, type KeystoreEnvelope } from '$crypto/keystore';
+	import {
+		blobToEnvelope,
+		decryptIdentity,
+		encryptIdentity,
+		type KeystoreEnvelope
+	} from '$crypto/keystore';
 	import { writeKeystoreMode, writeEnvelope } from '$crypto/persistentKeystore';
 	import { scorePassword, isPasswordAcceptable } from '$lib/auth/passwordStrength';
 	import { wifToRawPrivateKey, WifDecodeError, type WifError } from '$crypto/wif';
@@ -875,7 +880,11 @@
 		</h1>
 		{#if importStage !== 'remember_me_choice'}
 			<p class="mx-auto mt-3 max-w-prose text-ink-600 dark:text-ink-300">
-				{#if importBodyParts}{importBodyParts.before}<a href={lp('/login')} class="font-semibold text-morphit-emerald underline underline-offset-2 hover:text-morphit-emerald/80">{importBodyParts.link}</a>{importBodyParts.after}{:else}{$_('onboarding.import.body')}{/if}
+				{#if importBodyParts}{importBodyParts.before}<a
+						href={lp('/login')}
+						class="font-semibold text-morphit-emerald underline underline-offset-2 hover:text-morphit-emerald/80"
+						>{importBodyParts.link}</a
+					>{importBodyParts.after}{:else}{$_('onboarding.import.body')}{/if}
 			</p>
 		{/if}
 	</header>
@@ -906,313 +915,317 @@
 	{/if}
 
 	{#if importStage === 'form'}
-	<div class="mb-6 flex flex-wrap gap-2" role="tablist">
-		<button
-			type="button"
-			role="tab"
-			aria-selected={mode === 'seed'}
-			class="flex-1 rounded-xl px-4 py-3 font-semibold transition active:scale-[0.98] {mode ===
-			'seed'
-				? 'bg-morphit-gradient text-white'
-				: 'bg-ink-100 dark:bg-ink-800'}"
-			onclick={() => (mode = 'seed')}
-		>
-			{$_('onboarding.import.seed_tab_label')}
-		</button>
-		<button
-			type="button"
-			role="tab"
-			aria-selected={mode === 'keyfile'}
-			class="flex-1 rounded-xl px-4 py-3 font-semibold transition active:scale-[0.98] {mode ===
-			'keyfile'
-				? 'bg-morphit-gradient text-white'
-				: 'bg-ink-100 dark:bg-ink-800'}"
-			onclick={() => (mode = 'keyfile')}
-		>
-			{$_('onboarding.import.keyfile_tab_label')}
-		</button>
-		<button
-			type="button"
-			role="tab"
-			aria-selected={mode === 'posting-only'}
-			class="flex-1 rounded-xl px-4 py-3 font-semibold transition active:scale-[0.98] {mode ===
-			'posting-only'
-				? 'bg-morphit-gradient text-white'
-				: 'bg-ink-100 dark:bg-ink-800'}"
-			onclick={() => (mode = 'posting-only')}
-		>
-			{$_('onboarding.import.posting_only.tab_label')}
-		</button>
-	</div>
-
-	<div class="card">
-		{#if mode === 'seed'}
-			<label class="block">
-				<span class="mb-2 block font-semibold">{$_('onboarding.import.seed_label')}</span>
-				<textarea
-					bind:value={seed}
-					rows="3"
-					autocomplete="off"
-					spellcheck="false"
-					maxlength="120"
-					onblur={normalizeSeedInput}
-					oninput={() => (seedInvalid = false)}
-					class="w-full rounded-xl border-2 bg-white p-3 font-mono text-base focus:outline-none focus:ring-2 dark:bg-ink-950 {seedInvalid
-						? 'border-red-400 focus:ring-red-400 dark:border-red-500'
-						: 'border-ink-200 focus:ring-morphit-emerald dark:border-ink-700'}"
-				></textarea>
-				<span class="mt-2 block text-sm text-ink-500 dark:text-ink-400">
-					{$_('onboarding.import.seed_hint')}
-				</span>
-			</label>
-		{:else if mode === 'keyfile'}
-			<label class="block">
-				<span class="mb-2 block font-semibold">{$_('onboarding.import.keyfile_label')}</span>
-				<input
-					type="file"
-					accept="application/json,.json"
-					onchange={onFileSelected}
-					class="block w-full text-sm file:me-4 file:cursor-pointer file:rounded-lg file:border-0 file:bg-morphit-btn file:px-4 file:py-2 file:font-semibold file:text-white hover:file:brightness-110"
-				/>
-				<span class="mt-2 block text-sm text-ink-500 dark:text-ink-400">
-					{$_('onboarding.import.keyfile_hint')}
-				</span>
-			</label>
-			<label class="mt-4 block">
-				<span class="mb-2 block font-semibold">{$_('onboarding.import.password_label')}</span>
-				<input
-					type="password"
-					maxlength="64"
-					bind:value={password}
-					autocomplete="current-password"
-					oninput={() => (keyfilePwInvalid = false)}
-					class="w-full rounded-xl border-2 bg-white px-3 py-2 focus:outline-none focus:ring-2 dark:bg-ink-900 {keyfilePwInvalid
-						? 'border-red-400 focus:ring-red-400 dark:border-red-500'
-						: 'border-ink-200 focus:ring-morphit-emerald dark:border-ink-700'}"
-				/>
-			</label>
-		{:else}
-			<!-- Posting-only mode: existing Blurt user importing with one role-key WIF. -->
-
-			<div
-				class="mb-5 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"
-				role="note"
+		<div class="mb-6 flex flex-wrap gap-2" role="tablist">
+			<button
+				type="button"
+				role="tab"
+				aria-selected={mode === 'seed'}
+				class="flex-1 rounded-xl px-4 py-3 font-semibold transition active:scale-[0.98] {mode ===
+				'seed'
+					? 'bg-morphit-gradient text-white'
+					: 'bg-ink-100 dark:bg-ink-800'}"
+				onclick={() => (mode = 'seed')}
 			>
-				<p class="font-semibold">{$_('onboarding.import.posting_only.warning_title')}</p>
-				<p class="mt-1 text-sm">
-					{$_('onboarding.import.posting_only.warning_body')}
-				</p>
-			</div>
+				{$_('onboarding.import.seed_tab_label')}
+			</button>
+			<button
+				type="button"
+				role="tab"
+				aria-selected={mode === 'keyfile'}
+				class="flex-1 rounded-xl px-4 py-3 font-semibold transition active:scale-[0.98] {mode ===
+				'keyfile'
+					? 'bg-morphit-gradient text-white'
+					: 'bg-ink-100 dark:bg-ink-800'}"
+				onclick={() => (mode = 'keyfile')}
+			>
+				{$_('onboarding.import.keyfile_tab_label')}
+			</button>
+			<button
+				type="button"
+				role="tab"
+				aria-selected={mode === 'posting-only'}
+				class="flex-1 rounded-xl px-4 py-3 font-semibold transition active:scale-[0.98] {mode ===
+				'posting-only'
+					? 'bg-morphit-gradient text-white'
+					: 'bg-ink-100 dark:bg-ink-800'}"
+				onclick={() => (mode = 'posting-only')}
+			>
+				{$_('onboarding.import.posting_only.tab_label')}
+			</button>
+		</div>
 
-			<label class="block">
-				<span class="mb-2 block font-semibold"
-					>{$_('onboarding.import.posting_only.account_label')}</span
-				>
-				<div class="relative">
-					<input
-						type="text"
-						maxlength="16"
-						bind:value={postingAccount}
-						oninput={(e) => {
-							const el = e.currentTarget;
-							const stripped = el.value.replace(/@/g, '');
-							if (stripped !== el.value) {
-								const removed = el.value.length - stripped.length;
-								const caret = (el.selectionStart ?? stripped.length) - removed;
-								el.value = stripped;
-								postingAccount = stripped;
-								const p = Math.max(0, caret);
-								el.setSelectionRange(p, p);
-							}
-							accountStatus = 'idle';
-						}}
-						onfocus={() => (accountStatus = 'idle')}
-						onblur={checkAccountExists}
+		<div class="card">
+			{#if mode === 'seed'}
+				<label class="block">
+					<span class="mb-2 block font-semibold">{$_('onboarding.import.seed_label')}</span>
+					<textarea
+						bind:value={seed}
+						rows="3"
 						autocomplete="off"
-						autocapitalize="none"
 						spellcheck="false"
-						placeholder={accountPlaceholder}
-						class="w-full rounded-xl border-2 bg-white px-3 py-2 pe-28 font-mono focus:outline-none focus:ring-2 dark:bg-ink-900 {accountHasInvalidChar ||
-						accountStatus === 'invalid'
+						maxlength="120"
+						onblur={normalizeSeedInput}
+						oninput={() => (seedInvalid = false)}
+						class="w-full rounded-xl border-2 bg-white p-3 font-mono text-base focus:outline-none focus:ring-2 dark:bg-ink-950 {seedInvalid
 							? 'border-red-400 focus:ring-red-400 dark:border-red-500'
 							: 'border-ink-200 focus:ring-morphit-emerald dark:border-ink-700'}"
+					></textarea>
+					<span class="mt-2 block text-sm text-ink-500 dark:text-ink-400">
+						{$_('onboarding.import.seed_hint')}
+					</span>
+				</label>
+			{:else if mode === 'keyfile'}
+				<label class="block">
+					<span class="mb-2 block font-semibold">{$_('onboarding.import.keyfile_label')}</span>
+					<input
+						type="file"
+						accept="application/json,.json"
+						onchange={onFileSelected}
+						class="block w-full text-sm file:me-4 file:cursor-pointer file:rounded-lg file:border-0 file:bg-morphit-btn file:px-4 file:py-2 file:font-semibold file:text-white hover:file:brightness-110"
 					/>
-					{#if accountStatus === 'valid'}
-						<span
-							class="pointer-events-none absolute end-3 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 text-sm font-medium text-morphit-emerald"
-						>
-							<svg
-								xmlns="http://www.w3.org/2000/svg"
-								width="16"
-								height="16"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="3"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								aria-hidden="true"
-							>
-								<path d="M20 6 9 17l-5-5" />
-							</svg>
-							{$_('onboarding.import.posting_only.account_ok')}
-						</span>
-					{:else if accountStatus === 'invalid'}
-						<span
-							class="pointer-events-none absolute end-3 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 text-sm font-medium text-red-500 dark:text-red-400"
-						>
-							<svg
-								xmlns="http://www.w3.org/2000/svg"
-								width="16"
-								height="16"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2.5"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								aria-hidden="true"
-							>
-								<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
-								<path d="M12 9v4" />
-								<path d="M12 17h.01" />
-							</svg>
-							{$_('onboarding.import.posting_only.account_bad')}
-						</span>
-					{/if}
-				</div>
-				<span class="mt-1 block text-xs text-ink-500 dark:text-ink-400">
-					{$_('onboarding.import.posting_only.account_hint')}
-				</span>
-			</label>
-
-			<label class="mt-4 block">
-				<span class="mb-2 block font-semibold"
-					>{$_('onboarding.import.posting_only.wif_label')}</span
-				>
-				<div class="relative">
+					<span class="mt-2 block text-sm text-ink-500 dark:text-ink-400">
+						{$_('onboarding.import.keyfile_hint')}
+					</span>
+				</label>
+				<label class="mt-4 block">
+					<span class="mb-2 block font-semibold">{$_('onboarding.import.password_label')}</span>
 					<input
 						type="password"
 						maxlength="64"
-						bind:value={postingWif}
-						autocomplete="off"
-						spellcheck="false"
-						oninput={() => {
-							wifKeyInvalid = false;
-							wifStatus = 'idle';
-						}}
-						onfocus={() => {
-							wifKeyInvalid = false;
-							wifStatus = 'idle';
-						}}
-						onblur={checkWifLooksOk}
-						placeholder={$_('onboarding.import.posting_only.wif_placeholder')}
-						class="w-full rounded-xl border-2 bg-white px-3 py-2 pe-10 font-mono focus:outline-none focus:ring-2 dark:bg-ink-900 {wifKeyInvalid ||
-						wifLooksInvalid
+						bind:value={password}
+						autocomplete="current-password"
+						oninput={() => (keyfilePwInvalid = false)}
+						class="w-full rounded-xl border-2 bg-white px-3 py-2 focus:outline-none focus:ring-2 dark:bg-ink-900 {keyfilePwInvalid
 							? 'border-red-400 focus:ring-red-400 dark:border-red-500'
 							: 'border-ink-200 focus:ring-morphit-emerald dark:border-ink-700'}"
 					/>
-					{#if wifStatus === 'valid'}
-						<span
-							class="pointer-events-none absolute end-3 top-1/2 inline-flex -translate-y-1/2 items-center text-morphit-emerald"
-						>
-							<svg
-								xmlns="http://www.w3.org/2000/svg"
-								width="16"
-								height="16"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="3"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								aria-hidden="true"
+				</label>
+			{:else}
+				<!-- Posting-only mode: existing Blurt user importing with one role-key WIF. -->
+
+				<div
+					class="mb-5 rounded-xl border border-red-300 bg-red-50 p-4 text-red-900 dark:border-red-700 dark:bg-red-950 dark:text-red-100"
+					role="note"
+				>
+					<p class="font-semibold">{$_('onboarding.import.posting_only.warning_title')}</p>
+					<p class="mt-1 text-sm">
+						{$_('onboarding.import.posting_only.warning_body')}
+					</p>
+				</div>
+
+				<label class="block">
+					<span class="mb-2 block font-semibold"
+						>{$_('onboarding.import.posting_only.account_label')}</span
+					>
+					<div class="relative">
+						<input
+							type="text"
+							maxlength="16"
+							bind:value={postingAccount}
+							oninput={(e) => {
+								const el = e.currentTarget;
+								const stripped = el.value.replace(/@/g, '');
+								if (stripped !== el.value) {
+									const removed = el.value.length - stripped.length;
+									const caret = (el.selectionStart ?? stripped.length) - removed;
+									el.value = stripped;
+									postingAccount = stripped;
+									const p = Math.max(0, caret);
+									el.setSelectionRange(p, p);
+								}
+								accountStatus = 'idle';
+							}}
+							onfocus={() => (accountStatus = 'idle')}
+							onblur={checkAccountExists}
+							autocomplete="off"
+							autocapitalize="none"
+							spellcheck="false"
+							placeholder={accountPlaceholder}
+							class="w-full rounded-xl border-2 bg-white px-3 py-2 pe-28 font-mono focus:outline-none focus:ring-2 dark:bg-ink-900 {accountHasInvalidChar ||
+							accountStatus === 'invalid'
+								? 'border-red-400 focus:ring-red-400 dark:border-red-500'
+								: 'border-ink-200 focus:ring-morphit-emerald dark:border-ink-700'}"
+						/>
+						{#if accountStatus === 'valid'}
+							<span
+								class="pointer-events-none absolute end-3 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 text-sm font-medium text-morphit-emerald"
 							>
-								<path d="M20 6 9 17l-5-5" />
-							</svg>
-						</span>
-					{:else if wifStatus === 'invalid'}
-						<span
-							class="pointer-events-none absolute end-3 top-1/2 inline-flex -translate-y-1/2 items-center text-red-500 dark:text-red-400"
-						>
-							<svg
-								xmlns="http://www.w3.org/2000/svg"
-								width="16"
-								height="16"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2.5"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								aria-hidden="true"
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									width="16"
+									height="16"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="3"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+								>
+									<path d="M20 6 9 17l-5-5" />
+								</svg>
+								{$_('onboarding.import.posting_only.account_ok')}
+							</span>
+						{:else if accountStatus === 'invalid'}
+							<span
+								class="pointer-events-none absolute end-3 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 text-sm font-medium text-red-500 dark:text-red-400"
 							>
-								<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
-								<path d="M12 9v4" />
-								<path d="M12 17h.01" />
-							</svg>
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									width="16"
+									height="16"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2.5"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+								>
+									<path
+										d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"
+									/>
+									<path d="M12 9v4" />
+									<path d="M12 17h.01" />
+								</svg>
+								{$_('onboarding.import.posting_only.account_bad')}
+							</span>
+						{/if}
+					</div>
+					<span class="mt-1 block text-xs text-ink-500 dark:text-ink-400">
+						{$_('onboarding.import.posting_only.account_hint')}
+					</span>
+				</label>
+
+				<label class="mt-4 block">
+					<span class="mb-2 block font-semibold"
+						>{$_('onboarding.import.posting_only.wif_label')}</span
+					>
+					<div class="relative">
+						<input
+							type="password"
+							maxlength="64"
+							bind:value={postingWif}
+							autocomplete="off"
+							spellcheck="false"
+							oninput={() => {
+								wifKeyInvalid = false;
+								wifStatus = 'idle';
+							}}
+							onfocus={() => {
+								wifKeyInvalid = false;
+								wifStatus = 'idle';
+							}}
+							onblur={checkWifLooksOk}
+							placeholder={$_('onboarding.import.posting_only.wif_placeholder')}
+							class="w-full rounded-xl border-2 bg-white px-3 py-2 pe-10 font-mono focus:outline-none focus:ring-2 dark:bg-ink-900 {wifKeyInvalid ||
+							wifLooksInvalid
+								? 'border-red-400 focus:ring-red-400 dark:border-red-500'
+								: 'border-ink-200 focus:ring-morphit-emerald dark:border-ink-700'}"
+						/>
+						{#if wifStatus === 'valid'}
+							<span
+								class="pointer-events-none absolute end-3 top-1/2 inline-flex -translate-y-1/2 items-center text-morphit-emerald"
+							>
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									width="16"
+									height="16"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="3"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+								>
+									<path d="M20 6 9 17l-5-5" />
+								</svg>
+							</span>
+						{:else if wifStatus === 'invalid'}
+							<span
+								class="pointer-events-none absolute end-3 top-1/2 inline-flex -translate-y-1/2 items-center text-red-500 dark:text-red-400"
+							>
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									width="16"
+									height="16"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2.5"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+								>
+									<path
+										d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"
+									/>
+									<path d="M12 9v4" />
+									<path d="M12 17h.01" />
+								</svg>
+							</span>
+						{/if}
+					</div>
+					<span class="mt-1 block text-xs text-ink-500 dark:text-ink-400">
+						{$_('onboarding.import.posting_only.wif_hint')}
+					</span>
+				</label>
+
+				<div class="my-4 border-t border-ink-200 dark:border-ink-800"></div>
+
+				<label class="block">
+					<span class="mb-2 block font-semibold"
+						>{$_('onboarding.import.posting_only.new_password_label')}</span
+					>
+					<input
+						type="password"
+						maxlength="64"
+						bind:value={postingNewPassword}
+						autocomplete="new-password"
+						class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+					/>
+					<span class="mt-1 block text-xs text-ink-500 dark:text-ink-400">
+						{$_('onboarding.import.posting_only.new_password_hint')}
+					</span>
+				</label>
+
+				<label class="mt-3 block">
+					<span class="mb-2 block font-semibold"
+						>{$_('onboarding.import.posting_only.new_password_confirm_label')}</span
+					>
+					<input
+						type="password"
+						maxlength="64"
+						bind:value={postingNewPasswordConfirm}
+						onblur={() => (postingConfirmBlurred = true)}
+						autocomplete="new-password"
+						aria-invalid={postingConfirmMismatch}
+						class="w-full rounded-xl border-2 bg-white px-3 py-2 focus:outline-none focus:ring-2 dark:bg-ink-900 {postingConfirmMismatch
+							? 'border-red-400 focus:ring-red-400 dark:border-red-500'
+							: 'border-ink-200 focus:ring-morphit-emerald dark:border-ink-700'}"
+					/>
+					{#if postingConfirmMismatch}
+						<span class="mt-1 block text-xs text-red-600 dark:text-red-400">
+							{$_('onboarding.import.posting_only.password_mismatch')}
 						</span>
 					{/if}
-				</div>
-				<span class="mt-1 block text-xs text-ink-500 dark:text-ink-400">
-					{$_('onboarding.import.posting_only.wif_hint')}
-				</span>
-			</label>
+				</label>
+			{/if}
 
-			<div class="my-4 border-t border-ink-200 dark:border-ink-800"></div>
-
-			<label class="block">
-				<span class="mb-2 block font-semibold"
-					>{$_('onboarding.import.posting_only.new_password_label')}</span
+			<div class="mt-6">
+				<BusyButton
+					variant="primary"
+					busy={working}
+					disabled={submitDisabled}
+					onclick={unlock}
+					busyLabel={$_('onboarding.import.submit_pending')}
+					fullWidth
 				>
-				<input
-					type="password"
-					maxlength="64"
-					bind:value={postingNewPassword}
-					autocomplete="new-password"
-					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
-				/>
-				<span class="mt-1 block text-xs text-ink-500 dark:text-ink-400">
-					{$_('onboarding.import.posting_only.new_password_hint')}
-				</span>
-			</label>
-
-			<label class="mt-3 block">
-				<span class="mb-2 block font-semibold"
-					>{$_('onboarding.import.posting_only.new_password_confirm_label')}</span
-				>
-				<input
-					type="password"
-					maxlength="64"
-					bind:value={postingNewPasswordConfirm}
-					onblur={() => (postingConfirmBlurred = true)}
-					autocomplete="new-password"
-					aria-invalid={postingConfirmMismatch}
-					class="w-full rounded-xl border-2 bg-white px-3 py-2 focus:outline-none focus:ring-2 dark:bg-ink-900 {postingConfirmMismatch
-						? 'border-red-400 focus:ring-red-400 dark:border-red-500'
-						: 'border-ink-200 focus:ring-morphit-emerald dark:border-ink-700'}"
-				/>
-				{#if postingConfirmMismatch}
-					<span class="mt-1 block text-xs text-red-600 dark:text-red-400">
-						{$_('onboarding.import.posting_only.password_mismatch')}
-					</span>
-				{/if}
-			</label>
-		{/if}
-
-		<div class="mt-6">
-			<BusyButton
-				variant="primary"
-				busy={working}
-				disabled={submitDisabled}
-				onclick={unlock}
-				busyLabel={$_('onboarding.import.submit_pending')}
-				fullWidth
-			>
-				{$_('onboarding.import.submit')}
-			</BusyButton>
+					{$_('onboarding.import.submit')}
+				</BusyButton>
+			</div>
 		</div>
-	</div>
 	{:else if importStage === 'remember_me_choice'}
 		<!-- cp137 H-1 — post-seed-import "remember me on this device"
 		     choice.  Default is UNCHECKED (privacy-positive).  The
@@ -1243,7 +1256,9 @@
 			</label>
 
 			{#if rememberMe && !passwordAlreadyChosen}
-				<div class="mt-5 space-y-4 rounded-xl border-2 border-morphit-emerald bg-morphit-emerald/5 p-4">
+				<div
+					class="mt-5 space-y-4 rounded-xl border-2 border-morphit-emerald bg-morphit-emerald/5 p-4"
+				>
 					<p class="text-sm text-ink-700 dark:text-ink-200">
 						{$_('onboarding.import.remember_me.password_intro')}
 					</p>

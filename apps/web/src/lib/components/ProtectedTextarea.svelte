@@ -60,7 +60,7 @@
 		class?: string;
 		/** Show the inline character counter in the bottom-right of
 		 *  the textarea. The counter is invisible below 75% of the
-		 *  limit, fades in gently between 75-89%, turns amber at
+		 *  limit, fades in gently between 75-89%, turns warn at
 		 *  90-99%, and red at/above 100%. Defaults to false so
 		 *  existing call sites are unaffected. */
 		showCounter?: boolean;
@@ -221,7 +221,7 @@
 	// ─── Counter state ─────────────────────────────────────────────
 	// The counter shows N/L in the bottom-right of the textarea when
 	// showCounter is true and the user is approaching the limit.
-	// Invisible below 75%, faint 75-89%, amber 90-99%, red at/above
+	// Invisible below 75%, faint 75-89%, warn 90-99%, red at/above
 	// 100%. The threshold model means users well below the limit
 	// never have to look at a number they don't care about.
 
@@ -246,10 +246,10 @@
 	/** Tier drives both visibility and color. Tiers are thresholds
 	 *  not percentages so the rendering is stable during IME
 	 *  composition or paste bursts. */
-	const counterTier = $derived.by<'hidden' | 'faint' | 'amber' | 'red'>(() => {
+	const counterTier = $derived.by<'hidden' | 'faint' | 'warn' | 'red'>(() => {
 		if (!showCounter || effectiveLimit <= 0) return 'hidden';
 		if (ratio >= 1) return 'red';
-		if (ratio >= 0.9) return 'amber';
+		if (ratio >= 0.9) return 'warn';
 		if (ratio >= 0.75) return 'faint';
 		return counterAlwaysVisible ? 'faint' : 'hidden';
 	});
@@ -266,7 +266,7 @@
 	 *  A polite live-region on every keystroke is noise for screen
 	 *  reader users — we keep quiet until the user is close to or
 	 *  past the limit. */
-	const counterLive = $derived(counterTier === 'amber' || counterTier === 'red' ? 'polite' : 'off');
+	const counterLive = $derived(counterTier === 'warn' || counterTier === 'red' ? 'polite' : 'off');
 </script>
 
 <div class="protected-textarea relative {cls}">
@@ -303,7 +303,7 @@
 		<span
 			class="pk-counter"
 			class:pk-counter-faint={counterTier === 'faint'}
-			class:pk-counter-amber={counterTier === 'amber'}
+			class:pk-counter-warn={counterTier === 'warn'}
 			class:pk-counter-red={counterTier === 'red'}
 			class:pk-counter-hidden={counterTier === 'hidden'}
 			aria-live={counterLive}
@@ -433,13 +433,13 @@
 	.pk-counter-faint {
 		opacity: 0.55;
 	}
-	.pk-counter-amber {
+	.pk-counter-warn {
 		opacity: 1;
-		color: #b45309; /* amber-700 */
+		color: #dc2626; /* red-600 */
 		font-weight: 600;
 	}
-	:global(.dark) .pk-counter-amber {
-		color: #fbbf24; /* amber-400 */
+	:global(.dark) .pk-counter-warn {
+		color: #f87171; /* red-400 */
 	}
 	.pk-counter-red {
 		opacity: 1;

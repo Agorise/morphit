@@ -69,8 +69,7 @@
 	// cp376: lazy-loader for the leave-guard ConfirmModal (see import
 	// block note).  Gated in the template behind {#if leaveGuard.open}
 	// so the dynamic import fires only when the guard actually triggers.
-	const loadConfirmModal = () =>
-		import('$components/ConfirmModal.svelte').then((m) => m.default);
+	const loadConfirmModal = () => import('$components/ConfirmModal.svelte').then((m) => m.default);
 
 	// ─── Session identity ────────────────────────────────────────────
 	// liveIdentity is a Readable<LiveIdentity | null>. The onboarding-
@@ -148,9 +147,7 @@
 	 *  round-trip resolves to 'available'. The button stays disabled until
 	 *  canSubmit, so previewing the name on a not-yet-confirmed name is
 	 *  safe — it reflects intent, never enables a premature claim. */
-	const showNamedClaim = $derived(
-		normalizedName.length >= 3 && availability.kind !== 'rejected'
-	);
+	const showNamedClaim = $derived(normalizedName.length >= 3 && availability.kind !== 'rejected');
 
 	// ─── Availability polling ────────────────────────────────────────
 
@@ -176,11 +173,14 @@
 		}
 		availability = { kind: 'checking' };
 		try {
-			const res = await fetchWithTimeout(`${resolveOrigin(MORPHIT_RELAY_ORIGIN)}/v1/account/availability`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ name: candidate })
-			});
+			const res = await fetchWithTimeout(
+				`${resolveOrigin(MORPHIT_RELAY_ORIGIN)}/v1/account/availability`,
+				{
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ name: candidate })
+				}
+			);
 			if (res.status === 429) {
 				availability = { kind: 'rejected', reason: 'rate_limited' };
 				return;
@@ -531,7 +531,13 @@
 	{:else if submit.kind === 'done'}
 		<!-- Success state — briefly shown before we redirect. -->
 		<section class="card animate-fade-up text-center" aria-live="polite">
-			<img src={avatarUri} alt="" class="mx-auto mb-4 h-24 w-24 rounded-2xl" loading="lazy" decoding="async" />
+			<img
+				src={avatarUri}
+				alt=""
+				class="mx-auto mb-4 h-24 w-24 rounded-2xl"
+				loading="lazy"
+				decoding="async"
+			/>
 			<h2 class="font-display text-2xl font-bold">
 				{$_('onboarding.register_name.success.title')}
 			</h2>
@@ -547,7 +553,13 @@
 		<section class="animate-fade-up" aria-labelledby="register-heading">
 			<div class="card">
 				<div class="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
-					<img src={avatarUri} alt="" class="h-24 w-24 flex-none rounded-2xl" loading="lazy" decoding="async" />
+					<img
+						src={avatarUri}
+						alt=""
+						class="h-24 w-24 flex-none rounded-2xl"
+						loading="lazy"
+						decoding="async"
+					/>
 					<div class="flex-1 text-center sm:text-left">
 						<h1 id="register-heading" class="font-display text-2xl font-bold">
 							{$_('onboarding.register_name.title')}
@@ -655,14 +667,14 @@
 			<!-- Submit / skip -->
 			{#if submit.kind === 'error'}
 				<div
-					class="card mt-6 border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950"
+					class="card mt-6 border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-950"
 					role="alert"
 					aria-live="assertive"
 				>
-					<p class="font-semibold text-amber-900 dark:text-amber-100">
+					<p class="font-semibold text-red-900 dark:text-red-100">
 						{$_(submit.messageKey, { values: submit.messageArgs ?? {} })}
 					</p>
-					<p class="mt-2 text-sm text-amber-800 dark:text-amber-200">
+					<p class="mt-2 text-sm text-red-800 dark:text-red-200">
 						<a href={lp('/faq#signup_stuck')} class="underline hover:no-underline">
 							{$_('common.learn_more')}
 						</a>
@@ -672,7 +684,7 @@
 				<!-- Voucher fast-path.  Only when the relay's daily
 				     ceiling is the reason — for other errors this
 				     route is irrelevant.  We deliberately render
-				     this as a separate card (not inside the amber
+				     this as a separate card (not inside the red
 				     warning) so it reads as constructive next-step
 				     advice rather than as part of the error.
 				     The matrix-open/matrix-close and plugin-open/
@@ -735,7 +747,7 @@
 						     recovery if the link target is dead or
 						     they need to type it on another device. -->
 						<p
-							class="mt-4 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
+							class="mt-4 rounded border border-red-300 bg-red-50 p-2 text-xs text-red-900 dark:border-red-700 dark:bg-red-950 dark:text-red-200"
 						>
 							⚠ {$_('onboarding.register_name.errors.daily_ceiling_voucher_external_warning')}
 							<span class="mt-1 block select-all font-mono">https://blurtplugin.online/account</span

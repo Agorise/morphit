@@ -94,9 +94,7 @@
 	const streetValid = $derived(
 		street.length > 0 && street.length <= MAILING_ADDRESS_LIMITS.streetMax
 	);
-	const cityValid = $derived(
-		city.length > 0 && city.length <= MAILING_ADDRESS_LIMITS.cityMax
-	);
+	const cityValid = $derived(city.length > 0 && city.length <= MAILING_ADDRESS_LIMITS.cityMax);
 	const postalCodeValid = $derived(
 		postalCode.length >= MAILING_ADDRESS_LIMITS.postalCodeMin &&
 			postalCode.length <= MAILING_ADDRESS_LIMITS.postalCodeMax
@@ -180,13 +178,13 @@
 		<!-- Privacy aside — highly sensitive PII; user should
 		     understand what they're sharing before they share. -->
 		<div
-			class="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950/30"
+			class="mt-4 rounded-lg border border-red-300 bg-red-50 p-3 text-sm dark:border-red-700 dark:bg-red-950/30"
 			role="note"
 		>
-			<p class="font-semibold text-amber-900 dark:text-amber-200">
+			<p class="font-semibold text-red-900 dark:text-red-200">
 				{$_('mailing_address_modal.privacy_heading')}
 			</p>
-			<ul class="mt-1 list-disc space-y-1 pl-5 text-amber-800 dark:text-amber-300">
+			<ul class="mt-1 list-disc space-y-1 pl-5 text-red-800 dark:text-red-300">
 				<li>{$_('mailing_address_modal.privacy_e2ee')}</li>
 				<li>{$_('mailing_address_modal.privacy_irreversible')}</li>
 				<li>{$_('mailing_address_modal.privacy_pobox_tip')}</li>
@@ -265,10 +263,7 @@
 
 			<!-- Street 2 (optional) -->
 			<div>
-				<label
-					for="ma-street2"
-					class="block text-sm font-semibold text-ink-700 dark:text-ink-200"
-				>
+				<label for="ma-street2" class="block text-sm font-semibold text-ink-700 dark:text-ink-200">
 					{$_('mailing_address_modal.street2_label')}
 					<span class="ml-1 font-normal text-ink-400"
 						>{$_('mailing_address_modal.optional_marker')}</span
@@ -299,10 +294,7 @@
 					/>
 				</div>
 				<div>
-					<label
-						for="ma-state"
-						class="block text-sm font-semibold text-ink-700 dark:text-ink-200"
-					>
+					<label for="ma-state" class="block text-sm font-semibold text-ink-700 dark:text-ink-200">
 						{$_('mailing_address_modal.state_label')}
 						<span class="ml-1 font-normal text-ink-400"
 							>{$_('mailing_address_modal.optional_marker')}</span
@@ -317,10 +309,7 @@
 					/>
 				</div>
 				<div>
-					<label
-						for="ma-postal"
-						class="block text-sm font-semibold text-ink-700 dark:text-ink-200"
-					>
+					<label for="ma-postal" class="block text-sm font-semibold text-ink-700 dark:text-ink-200">
 						{$_('mailing_address_modal.postal_label')}
 					</label>
 					<input
@@ -378,9 +367,7 @@
 					disabled={!canShare || sending}
 					class="rounded-lg bg-morphit-btn px-4 py-2 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-50"
 				>
-					{sending
-						? $_('common.sending')
-						: $_('mailing_address_modal.share_button')}
+					{sending ? $_('common.sending') : $_('mailing_address_modal.share_button')}
 				</button>
 			</div>
 		</div>

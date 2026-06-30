@@ -8,14 +8,16 @@
  *
  * ─── Post A: first-trade announcement ──────────────────────────────
  *
- * Fires once, automatically, when the user broadcasts feedback for
- * their first trade (which is forced to be a BLURT BUY per the
- * waiver branch). Posted to the @morphit community
- * (parent_permlink = "blurt-176570").
+ * Fires once, when the user broadcasts feedback for their first
+ * trade (which is forced to be a BLURT BUY per the waiver branch),
+ * IF the user opted in to the first-trade announcement. Posted to
+ * the @morphit community (parent_permlink = "blurt-176570").
  *
- * No opt-in. It's part of the onboarding promise — every new user's
- * first trade produces this post. Idempotent via deterministic
- * permlink: a retry won't double-post.
+ * Opt-in, default OFF (see utils/syndicationPrefs.ts). The user can
+ * arm it on the order form, in Settings, or at feedback time — the
+ * caller checks isFirstTradeAnnounceEnabled() before firing. We
+ * never post to a community on someone's behalf unless they ask.
+ * Idempotent via deterministic permlink: a retry won't double-post.
  *
  * Failure mode: silent. The user just gave feedback; the welcome
  * bonus is on its way; nothing critical depends on this post landing.
@@ -39,12 +41,13 @@
  */
 
 import { get } from 'svelte/store';
-import { _ } from 'svelte-i18n';
+import { _, locale } from 'svelte-i18n';
 
 import type { LiveIdentity } from '$crypto/keygen';
 import type { AssetTicker } from '@morphit/asset-registry';
 import { broadcastComment, type CommentPayload } from '$blurt/ops/comment';
 import { getUserBlurtAccount } from '$blurt/ops/profile';
+import { DEFAULT_LOCALE } from '$i18n/locales';
 
 /** The @morphit community account on Blurt. Posts here get
  *  surfaced to @morphit subscribers and indexed under the
@@ -119,8 +122,9 @@ export async function publishFirstTradePost(
 	const title = t('syndicate.first_trade.title', {
 		values: { seller: ctx.seller }
 	}) as string;
+	const lang = (get(locale) ?? DEFAULT_LOCALE) as string;
 	const body = t('syndicate.first_trade.body', {
-		values: { username: account }
+		values: { username: account, lang }
 	}) as string;
 
 	const permlink = firstTradePermlink(account);
@@ -186,12 +190,14 @@ export async function publishOrderPost(
 			asset2: ctx.counterAsset
 		}
 	}) as string;
+	const lang = (get(locale) ?? DEFAULT_LOCALE) as string;
 	const body = t(bodyKey, {
 		values: {
 			asset1: ctx.asset,
 			asset2: ctx.counterAsset,
 			username: account,
-			permlink: ctx.orderPermlink
+			permlink: ctx.orderPermlink,
+			lang
 		}
 	}) as string;
 

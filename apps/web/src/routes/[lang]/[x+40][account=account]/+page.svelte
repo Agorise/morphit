@@ -31,6 +31,7 @@
 	import { page } from '$app/stores';
 
 	import Head from '$components/Head.svelte';
+	import MessageIcon from '$components/MessageIcon.svelte';
 	import TermsText from '$components/TermsText.svelte';
 	import RssFeedPicker from '$components/RssFeedPicker.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
@@ -59,6 +60,7 @@
 	import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
 	import { displayNamesForMethods } from '$lib/payments/display';
 	import { formatOrderPriceModel } from '$lib/orders/priceModelDisplay';
+	import { orderTitleParts } from '$lib/utils/orderTitle';
 	import { instanceAdditions, instanceNameLookup } from '$lib/stores/instanceAdditions';
 	import { isUnlocked, isPairedReadOnly } from '$stores/identity';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
@@ -403,18 +405,19 @@
 		return `${days}d`;
 	}
 
-	/** Format amount range for an order. Same pattern used on
-	 *  my/orders and the orderbook: show both bounds when present,
-	 *  single bound when only one side is set, "any" when neither. */
-	function formatRange(o: OrderRecord): string {
-		const min = o.amount_min;
-		const max = o.amount_max;
-		if (min !== null && max !== null) {
-			return `${min}–${max} ${o.asset}`;
-		}
-		if (min !== null) return `≥${min} ${o.asset}`;
-		if (max !== null) return `≤${max} ${o.asset}`;
-		return `— ${o.asset}`;
+	/** Number formatter for order trade-size bounds (fiat values). */
+	function formatAmount(n: number | null): string {
+		if (n === null) return '';
+		return n % 1 === 0 ? String(n) : n.toFixed(2);
+	}
+
+	/** Canonical order title — the same unified sentence used on the
+	 *  orderbook, /my/orders, and the order-detail page. Replaces the
+	 *  old per-card formatting that mislabelled the fiat trade-size
+	 *  band with the asset ticker. */
+	function cardTitle(o: OrderRecord): string {
+		const tp = orderTitleParts(o, formatAmount);
+		return $_(tp.key, { values: tp.values }) as string;
 	}
 
 	/** Sally finding L10 (Part 68): absolute expiry date formatter
@@ -534,7 +537,7 @@
 					class="inline-flex items-center gap-1.5 rounded-xl border-2 border-morphit-emerald bg-morphit-emerald/10 px-4 py-2 text-sm font-semibold text-morphit-emerald transition hover:bg-morphit-emerald hover:text-ink-950 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
 					aria-label={$_('chat.message_button_aria', { values: { peer: account } }) as string}
 				>
-					<span aria-hidden="true">💬</span>
+					<MessageIcon />
 					{$_('chat.message_button_label_named', { values: { account } })}
 				</a>
 			</div>
@@ -683,15 +686,7 @@
 							<div class="flex flex-col gap-1">
 								<div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
 									<span class="font-display text-base font-bold">
-										{o.side === 'buy'
-											? ($_('profile.order_buying', { values: { asset: o.asset } }) as string)
-											: ($_('profile.order_selling', { values: { asset: o.asset } }) as string)}
-									</span>
-									<span class="text-sm text-ink-600 dark:text-ink-300">
-										{formatRange(o)}
-									</span>
-									<span class="text-sm text-ink-600 dark:text-ink-300">
-										· {o.fiat_currency}
+										{cardTitle(o)}
 									</span>
 									{#if priceModelLabel !== null}
 										<span
@@ -712,7 +707,7 @@
 										     arithmetic.  Visible chip text stays
 										     relative for compactness. -->
 										<span
-											class="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"
+											class="rounded-full border border-morphit-emerald/30 bg-morphit-emerald/5 px-2 py-0.5 text-morphit-emerald"
 											title={formatAbsoluteDate(o.expires_at)}
 										>
 											{$_('profile.expires_in', {
@@ -782,7 +777,7 @@
 							     rating + count. -->
 							<a
 								href={lp('/faq#feedback_suppressed')}
-								class="mb-2 inline-block rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs text-amber-900 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100 dark:hover:bg-amber-900"
+								class="mb-2 inline-block rounded-full border border-red-300 bg-red-50 px-2 py-0.5 text-xs text-red-900 hover:bg-red-100 dark:border-red-700 dark:bg-red-950 dark:text-red-100 dark:hover:bg-red-900"
 							>
 								{$_('profile.feedback_suppressed_chip')}
 							</a>
@@ -975,7 +970,7 @@
 						{#if fb.suppressed}
 							<a
 								href={lp('/faq#feedback_suppressed')}
-								class="mb-2 inline-block rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs text-amber-900 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100 dark:hover:bg-amber-900"
+								class="mb-2 inline-block rounded-full border border-red-300 bg-red-50 px-2 py-0.5 text-xs text-red-900 hover:bg-red-100 dark:border-red-700 dark:bg-red-950 dark:text-red-100 dark:hover:bg-red-900"
 							>
 								{$_('profile.feedback_suppressed_chip')}
 							</a>

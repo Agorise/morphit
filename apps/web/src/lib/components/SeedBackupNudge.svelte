@@ -17,7 +17,7 @@
 	 *   - Provides a "Show me how" link to the seed-recovery FAQ
 	 *     entry so the user can act on the prompt.
 	 *   - Visually friendly, not alarming — this is a routine
-	 *     reminder, not a warning.  Amber background to catch
+	 *     reminder, not a warning.  Soft red-tinted background to catch
 	 *     the eye without screaming.
 	 *
 	 * Why only after 7 days: a fresh user is overwhelmed; we
@@ -55,9 +55,9 @@
 
 {#if visible}
 	<div
-		class="border-b border-amber-300/40 bg-amber-50 px-4 py-2 text-sm
-		       text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/40
-		       dark:text-amber-200"
+		class="border-b border-red-300/40 bg-red-50 px-4 py-2 text-sm
+		       text-red-900 dark:border-red-500/30 dark:bg-red-950/40
+		       dark:text-red-200"
 		role="status"
 		aria-live="polite"
 	>
@@ -70,15 +70,13 @@
 				href={lp('/faq#lost_keys')}
 				class="group font-semibold underline decoration-dotted underline-offset-2 transition hover:decoration-solid"
 			>
-				{$_('seed_backup_nudge.show_me_how')} <span
-					class="nav-arrow nav-arrow-right"
-					aria-hidden="true">⇨</span
-				>
+				{$_('seed_backup_nudge.show_me_how')}
+				<span class="nav-arrow nav-arrow-right" aria-hidden="true">⇨</span>
 			</a>
 			<button
 				type="button"
 				onclick={dismiss}
-				class="rounded px-2 py-1 font-semibold hover:bg-amber-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 dark:hover:bg-amber-900/40"
+				class="rounded px-2 py-1 font-semibold hover:bg-red-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:hover:bg-red-900/40"
 			>
 				{$_('seed_backup_nudge.got_it')}
 			</button>

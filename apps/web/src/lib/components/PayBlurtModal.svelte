@@ -256,7 +256,7 @@
 							<dt class="font-semibold text-ink-600 dark:text-ink-300">
 								{$_('chat.pay_blurt.memo_label')}
 							</dt>
-							<dd class="break-all font-mono font-bold text-amber-700 dark:text-amber-300">
+							<dd class="break-all font-mono font-bold text-red-700 dark:text-red-300">
 								{memo}
 							</dd>
 						</div>

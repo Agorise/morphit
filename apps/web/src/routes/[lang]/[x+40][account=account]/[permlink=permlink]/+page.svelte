@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
+	import { orderTitleParts } from '$lib/utils/orderTitle';
 
 	// cp242 — per-locale internal-link wrapper (cp7 design: every
 	// internal link is locale-prefixed; bare 2-segment paths 404).
@@ -41,6 +42,8 @@
 	import TermsText from '$components/TermsText.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
 	import BusyButton from '$components/BusyButton.svelte';
+	import ConfirmModal from '$components/ConfirmModal.svelte';
+	import MessageIcon from '$components/MessageIcon.svelte';
 	import IdentityLabel from '$components/IdentityLabel.svelte';
 	import WriteBlockedReadOnly from '$components/WriteBlockedReadOnly.svelte';
 	import { identity, isUnlocked, isPairedReadOnly } from '$stores/identity';
@@ -107,12 +110,9 @@
 	const posterLabelProps = $derived(extractLabelPropsFromProfile(posterProfile));
 
 	// ─── Owner-only action state ──────────────────────────────────
-	/** True once the user has clicked Cancel — shows the inline
-	 *  "are you sure?" confirm card. A second tap on Cancel is a
-	 *  no-op while this is already true. */
+	/** True once the user has clicked Cancel — opens the confirm
+	 *  modal. A second tap is a no-op while already true. */
 	let pendingCancel = $state(false);
-	/** True while the cancel broadcast is in flight. */
-	let cancelling = $state(false);
 	/** Non-empty when the last cancel attempt failed. */
 	let cancelError = $state('');
 
@@ -191,10 +191,10 @@
 		const state = get(identity);
 		if (state.state !== 'unlocked') {
 			cancelError = $_('post_order.broadcast_error.body_locked') as string;
+			pendingCancel = false;
 			return;
 		}
-		cancelling = true;
-		pendingCancel = false;
+		cancelError = '';
 		try {
 			await broadcastOrderCancel(state.live, order.permlink);
 			// Wait for the indexer to catch the block, then refetch
@@ -214,20 +214,11 @@
 				cancelError = $_('post_order.broadcast_error.body_generic') as string;
 			}
 		} finally {
-			cancelling = false;
+			pendingCancel = false;
 		}
 	}
 
 	// ─── Derived view state ────────────────────────────────────────
-
-	function formatRange(o: OrderRecord): string {
-		const min = o.amount_min;
-		const max = o.amount_max;
-		if (min !== null && max !== null) return `${min}–${max} ${o.asset}`;
-		if (min !== null) return `≥${min} ${o.asset}`;
-		if (max !== null) return `≤${max} ${o.asset}`;
-		return `— ${o.asset}`;
-	}
 
 	function formatTimeUntil(iso: string): string {
 		const diff = new Date(iso).getTime() - Date.now();
@@ -315,34 +306,24 @@
 			</div>
 		</section>
 	{:else if phase === 'error'}
-		<section
-			class="card border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950"
-			role="alert"
-		>
-			<h1 class="font-display text-lg font-bold text-amber-900 dark:text-amber-100">
+		<section class="card border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-950" role="alert">
+			<h1 class="font-display text-lg font-bold text-red-900 dark:text-red-100">
 				{$_('order_detail.error_title')}
 			</h1>
-			<p class="mt-2 text-sm text-amber-800 dark:text-amber-200">
+			<p class="mt-2 text-sm text-red-800 dark:text-red-200">
 				{$_('order_detail.error_body')}
 			</p>
-			<p class="mt-1 text-xs text-amber-700 dark:text-amber-300">{errorMessage}</p>
+			<p class="mt-1 text-xs text-red-700 dark:text-red-300">{errorMessage}</p>
 		</section>
 	{:else if order}
+		{@const orderTitle = orderTitleParts(order)}
 		<!-- ─── Order headline ──────────────────────────────────── -->
 		<section class="mb-6">
 			<h1 class="mb-2 font-display text-3xl font-extrabold">
-				{order.side === 'buy'
-					? ($_('profile.order_buying', { values: { asset: order.asset } }) as string)
-					: ($_('profile.order_selling', { values: { asset: order.asset } }) as string)}
+				<span class="brand-gradient-text"
+					>{$_(orderTitle.key, { values: orderTitle.values }) as string}</span
+				>
 			</h1>
-			<div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-				<span class="text-lg text-ink-700 dark:text-ink-200">
-					{formatRange(order)}
-				</span>
-				<span class="text-lg text-ink-600 dark:text-ink-300">
-					· {order.fiat_currency}
-				</span>
-			</div>
 			{#if priceModelLabel !== null}
 				<div
 					class="mt-1 text-base text-ink-600 dark:text-ink-300"
@@ -362,7 +343,7 @@
 				</span>
 				{#if order.status === 'live' && order.expires_at}
 					<span
-						class="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"
+						class="rounded-full border border-morphit-emerald/30 bg-morphit-emerald/5 px-2 py-0.5 text-xs text-morphit-emerald"
 					>
 						{$_('profile.expires_in', { values: { t: formatTimeUntil(order.expires_at) } })}
 					</span>
@@ -424,7 +405,7 @@
 							values: { peer: order.account }
 						}) as string}
 					>
-						<span aria-hidden="true">💬</span>
+						<MessageIcon />
 						{$_('chat.message_button_label')}
 					</a>
 				{/if}
@@ -439,103 +420,110 @@
 			>
 				{$_('order_detail.details_heading')}
 			</h2>
-			<dl class="space-y-3">
-				{#if order.payment_methods.length > 0}
+			<dl class="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2">
+				<!-- LEFT column: how and where this person wants to trade -->
+				<div class="space-y-3">
+					{#if order.payment_methods.length > 0}
+						<div>
+							<dt class="text-xs text-ink-500">{$_('order_detail.payment_methods')}</dt>
+							<dd class="mt-1 flex flex-wrap gap-1.5">
+								{#each displayNamesForMethods(order.payment_methods, instLookup) as pm}
+									<span
+										class="rounded-full border border-ink-200 bg-white px-2 py-0.5 text-xs dark:border-ink-700 dark:bg-ink-900"
+									>
+										{pm}
+									</span>
+								{/each}
+							</dd>
+						</div>
+					{/if}
+
+					{#if order.location_region}
+						<div>
+							<dt class="text-xs text-ink-500">{$_('order_detail.location')}</dt>
+							<dd class="mt-1 text-sm">{order.location_region}</dd>
+						</div>
+					{/if}
+				</div>
+
+				<!-- RIGHT column: timing and listing fee -->
+				<div class="space-y-3">
 					<div>
-						<dt class="text-xs text-ink-500">{$_('order_detail.payment_methods')}</dt>
-						<dd class="mt-1 flex flex-wrap gap-1.5">
-							{#each displayNamesForMethods(order.payment_methods, instLookup) as pm}
-								<span
-									class="rounded-full border border-ink-200 bg-white px-2 py-0.5 text-xs dark:border-ink-700 dark:bg-ink-900"
-								>
-									{pm}
-								</span>
-							{/each}
+						<dt class="text-xs text-ink-500">{$_('order_detail.posted_on')}</dt>
+						<dd class="mt-1 text-sm tabular-nums">
+							{formatAbsoluteDate(order.created_at)}
 						</dd>
 					</div>
-				{/if}
 
-				{#if order.location_region}
-					<div>
-						<dt class="text-xs text-ink-500">{$_('order_detail.location')}</dt>
-						<dd class="mt-1 text-sm">{order.location_region}</dd>
-					</div>
-				{/if}
+					{#if order.expires_at}
+						<div>
+							<dt class="text-xs text-ink-500">{$_('order_detail.expires_on')}</dt>
+							<dd class="mt-1 text-sm tabular-nums">
+								{formatAbsoluteDate(order.expires_at)}
+							</dd>
+						</div>
+					{/if}
 
+					{#if order.fee_status}
+						<div>
+							<dt class="text-xs text-ink-500">{$_('order_detail.listing_fee')}</dt>
+							<dd class="mt-1 text-sm">
+								{#if order.fee_status === 'verified'}
+									<span class="text-emerald-700 dark:text-emerald-300">
+										✓ {$_('order_detail.fee_verified')}
+									</span>
+								{:else if order.fee_status === 'verified_by_attestation'}
+									<span class="text-emerald-700 dark:text-emerald-300">
+										✓ {$_('order_detail.fee_verified_by_attestation')}
+									</span>
+								{:else if order.fee_status === 'pending_external'}
+									<span class="text-ink-600 dark:text-ink-300">
+										⏳ {$_('order_detail.fee_pending_external')}
+									</span>
+								{:else if order.fee_status === 'underpaid'}
+									<span class="text-red-700 dark:text-red-300">
+										⚠ {$_('order_detail.fee_underpaid')}
+									</span>
+								{:else if order.fee_status === 'missing'}
+									<span class="text-red-700 dark:text-red-300">
+										⚠ {$_('order_detail.fee_missing')}
+									</span>
+								{:else if order.fee_status === 'reused'}
+									<span class="text-red-700 dark:text-red-300">
+										⚠ {$_('order_detail.fee_reused')}
+									</span>
+								{:else if order.fee_status === 'unverified'}
+									<span class="text-ink-500">
+										{$_('order_detail.fee_unverified')}
+									</span>
+								{:else}
+									<!-- Future-proof: if the indexer adds a new
+									     fee_status we don't know about, fall
+									     back to the raw string rather than
+									     showing nothing. -->
+									<span class="text-ink-500">{order.fee_status}</span>
+								{/if}
+							</dd>
+							{#if order.fee_status === 'pending_external'}
+								<!-- Dedicated explainer for pending_external
+								     because it's the status most likely to
+								     confuse first-time viewers. Small,
+								     non-alarming, explains the mechanism. -->
+								<p class="mt-2 text-xs text-ink-600 dark:text-ink-400">
+									{$_('order_detail.fee_pending_external_hint')}
+								</p>
+							{/if}
+						</div>
+					{/if}
+				</div>
+
+				<!-- Terms span both columns at the bottom -->
 				{#if order.terms}
-					<div>
+					<div class="sm:col-span-2">
 						<dt class="text-xs text-ink-500">{$_('order_detail.terms')}</dt>
 						<dd class="mt-1 whitespace-pre-wrap text-sm text-ink-700 dark:text-ink-200">
 							<TermsText text={order.terms} />
 						</dd>
-					</div>
-				{/if}
-
-				<div>
-					<dt class="text-xs text-ink-500">{$_('order_detail.posted_on')}</dt>
-					<dd class="mt-1 text-sm tabular-nums">
-						{formatAbsoluteDate(order.created_at)}
-					</dd>
-				</div>
-
-				{#if order.expires_at}
-					<div>
-						<dt class="text-xs text-ink-500">{$_('order_detail.expires_on')}</dt>
-						<dd class="mt-1 text-sm tabular-nums">
-							{formatAbsoluteDate(order.expires_at)}
-						</dd>
-					</div>
-				{/if}
-
-				{#if order.fee_status}
-					<div>
-						<dt class="text-xs text-ink-500">{$_('order_detail.listing_fee')}</dt>
-						<dd class="mt-1 text-sm">
-							{#if order.fee_status === 'verified'}
-								<span class="text-emerald-700 dark:text-emerald-300">
-									✓ {$_('order_detail.fee_verified')}
-								</span>
-							{:else if order.fee_status === 'verified_by_attestation'}
-								<span class="text-emerald-700 dark:text-emerald-300">
-									✓ {$_('order_detail.fee_verified_by_attestation')}
-								</span>
-							{:else if order.fee_status === 'pending_external'}
-								<span class="text-amber-700 dark:text-amber-300">
-									⏳ {$_('order_detail.fee_pending_external')}
-								</span>
-							{:else if order.fee_status === 'underpaid'}
-								<span class="text-amber-700 dark:text-amber-300">
-									⚠ {$_('order_detail.fee_underpaid')}
-								</span>
-							{:else if order.fee_status === 'missing'}
-								<span class="text-amber-700 dark:text-amber-300">
-									⚠ {$_('order_detail.fee_missing')}
-								</span>
-							{:else if order.fee_status === 'reused'}
-								<span class="text-amber-700 dark:text-amber-300">
-									⚠ {$_('order_detail.fee_reused')}
-								</span>
-							{:else if order.fee_status === 'unverified'}
-								<span class="text-ink-500">
-									{$_('order_detail.fee_unverified')}
-								</span>
-							{:else}
-								<!-- Future-proof: if the indexer adds a new
-								     fee_status we don't know about, fall
-								     back to the raw string rather than
-								     showing nothing. -->
-								<span class="text-ink-500">{order.fee_status}</span>
-							{/if}
-						</dd>
-						{#if order.fee_status === 'pending_external'}
-							<!-- Dedicated explainer for pending_external
-							     because it's the status most likely to
-							     confuse first-time viewers. Small,
-							     non-alarming, explains the mechanism. -->
-							<p class="mt-2 text-xs text-ink-600 dark:text-ink-400">
-								{$_('order_detail.fee_pending_external_hint')}
-							</p>
-						{/if}
 					</div>
 				{/if}
 			</dl>
@@ -571,31 +559,6 @@
 					<StatusLine kind="warn">
 						{$_('order_detail.owner_locked_hint')}
 					</StatusLine>
-				{:else if pendingCancel}
-					<!-- Inline confirm for cancel — same pattern as /my/orders -->
-					<div
-						class="rounded-xl border-2 border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-950"
-					>
-						<p class="mb-1 text-sm font-semibold text-amber-900 dark:text-amber-100">
-							{$_('my_orders.cancel.confirm_title')}
-						</p>
-						<p class="mb-3 text-xs text-amber-800 dark:text-amber-200">
-							{$_('my_orders.cancel.confirm_body')}
-						</p>
-						<div class="flex flex-col gap-2 sm:flex-row">
-							<BusyButton
-								variant="primary"
-								busy={cancelling}
-								busyLabel={$_('my_orders.cancel.cancelling') as string}
-								onclick={confirmCancel}
-							>
-								{$_('my_orders.cancel.confirm_button')}
-							</BusyButton>
-							<BusyButton variant="ghost" onclick={abortCancel}>
-								{$_('my_orders.cancel.cancel_button')}
-							</BusyButton>
-						</div>
-					</div>
 				{:else}
 					<div class="flex flex-col gap-2 sm:flex-row">
 						{#if withinEditWindow(order)}
@@ -610,8 +573,8 @@
 								{$_('my_orders.order.action_edit_expired')}
 							</span>
 						{/if}
-						<BusyButton variant="ghost" onclick={requestCancel}>
-							{$_('my_orders.order.action_cancel')}
+						<BusyButton variant="danger" onclick={requestCancel}>
+							{$_('order_detail.cancel_button')}
 						</BusyButton>
 					</div>
 				{/if}
@@ -619,6 +582,17 @@
 				{#if cancelError}
 					<StatusLine kind="warn">{cancelError}</StatusLine>
 				{/if}
+
+				<ConfirmModal
+					bind:open={pendingCancel}
+					title={$_('my_orders.cancel.confirm_title') as string}
+					body={$_('my_orders.cancel.confirm_body') as string}
+					confirmLabel={$_('my_orders.cancel.confirm_button') as string}
+					cancelLabel={$_('my_orders.cancel.cancel_button') as string}
+					busyLabel={$_('my_orders.cancel.cancelling') as string}
+					onConfirm={confirmCancel}
+					onCancel={abortCancel}
+				/>
 			</section>
 		{/if}
 

@@ -1294,7 +1294,7 @@
       },
       "supported_countries": {
         "q": "Morphit funziona nel mio paese?",
-        "a": "Sì. Morphit funziona in ogni paese perché Morphit non opera da alcun paese specifico — è una bacheca decentralizzata pubblicata su una blockchain pubblica. Puoi sfogliare, pubblicare e tradare da qualsiasi luogo con internet. Nessun blocco IP, nessun controllo del paese di residenza, nessuna restrizione geografica nel software. Se il tuo paese blocca l'accesso ai servizi crypto, i mirror Tor / Lokinet / I2P ti permettono di raggiungere Morphit comunque (vedi icone del footer). Detto questo: comprendi le leggi del tuo paese sul trading crypto. Morphit doesn't enforce any country/corporation's rules — that's between you and the government that you consent to (govern = control, ment = mind. Mind Control). Their flag is their corporate logo. You are a living male or female, not a corpse (hence the term corporation). Starve the beast. #agorism #freemarkets #countereconomics"
+        "a": "Sì. Morphit funziona in ogni paese perché Morphit non opera da alcun paese specifico — è una bacheca decentralizzata pubblicata su una blockchain pubblica. Puoi sfogliare, pubblicare e tradare da qualsiasi luogo con internet. Nessun blocco IP, nessun controllo del paese di residenza, nessuna restrizione geografica nel software. Se il tuo paese blocca l'accesso ai servizi crypto, i mirror Tor / Lokinet / I2P / `.eth` ti permettono di raggiungere Morphit comunque (vedi icone del footer). Detto questo: comprendi le leggi del tuo paese sul trading crypto. Morphit doesn't enforce any country/corporation's rules — that's between you and the government that you consent to (govern = control, ment = mind. Mind Control). Their flag is their corporate logo. You are a living male or female, not a corpse (hence the term corporation). Starve the beast. #agorism #freemarkets #countereconomics"
       },
       "supported_fiat_currencies": {
         "q": "Quali valute fiat (EUR, USD, valuta locale) supporta Morphit?",
@@ -1382,7 +1382,7 @@
       },
       "syndicate_trade_announcement": {
         "q": "Cos'è la casella \"Sindacalizza il mio ordine\"?",
-        "a": "Nel modulo di pubblicazione ordine, puoi spuntare \"Sindacalizza il mio ordine anche sul mio Blog (Gratis)\". Se è spuntata, Morphit pubblica un breve annuncio del tuo ordine sul tuo blog Blurt (blurt.blog, beblurt.com, etc) nel momento in cui il tuo ordine viene trasmesso con successo. Il post include un link indietro alla pagina del tuo ordine su Morphit e usa il tag #morphit, così appare nel feed della community Morphit.\n\nIl post è firmato con la TUA chiave posting — non quella di Morphit, non quella dell'operatore, la tua. Questo significa:\n- Il post è autenticamente tuo, non spam di marketing.\n- Il progetto Morphit non detiene chiavi che possano firmare contenuti social a tuo nome.\n- Puoi modificare o cancellare il post più tardi come qualsiasi altro post del tuo account Blurt.\n- I «Mi piace» che ricevi sui post del blog ti fanno guadagnare più Blurt per fare trading e staking.\n\nC'è un post separato, automatico, che scatta una sola volta nella tua vita: quando completi la TUA prima operazione su Morphit, Morphit pubblica un breve annuncio \"Sono su Morphit\" nella community @morphit (non sul tuo blog personale). Quel post fa parte del flusso di benvenuto; non c'è una casella perché scatta solo una volta e marca il traguardo. Dopo il primo, solo la casella per-ordine che vedi su /post controlla i post futuri."
+        "a": "Nel modulo di pubblicazione ordine, puoi spuntare \"Sindacalizza il mio ordine anche sul mio Blog (Gratis)\". Se è spuntata, Morphit pubblica un breve annuncio del tuo ordine sul tuo blog Blurt (blurt.blog, beblurt.com, etc) nel momento in cui il tuo ordine viene trasmesso con successo. Il post include un link indietro alla pagina del tuo ordine su Morphit e usa il tag #morphit, così appare nel feed della community Morphit.\n\nIl post è firmato con la TUA chiave posting — non quella di Morphit, non quella dell'operatore, la tua. Questo significa:\n- Il post è autenticamente tuo, non spam di marketing.\n- Il progetto Morphit non detiene chiavi che possano firmare contenuti social a tuo nome.\n- Puoi modificare o cancellare il post più tardi come qualsiasi altro post del tuo account Blurt.\n- I «Mi piace» che ricevi sui post del blog ti fanno guadagnare più Blurt per fare trading e staking.\n\nC'è anche un annuncio una tantum a cui puoi aderire: un breve post \"Sono su Morphit\" nella comunità @morphit (non sul tuo blog) alla tua PRIMA operazione. È disattivato per impostazione predefinita: attivalo con una casella nel modulo d'ordine, nelle Impostazioni o nel modulo di feedback, e viene pubblicato una sola volta, quando lasci il feedback per quella prima operazione. In seguito la scheda Impostazioni ti consente invece di spuntare in anticipo il post per ordine."
       },
       "offline_caching": {
         "q": "Morphit funziona offline?",
@@ -2170,6 +2170,7 @@
       "action_feature": "In evidenza",
       "action_feedback": "Completa / recensisci",
       "fee_pending_external": "In attesa di attestazione",
+      "fee_unverified": "Non ancora verificata",
       "fee_verified_by_attestation": "Verificata (attestata)",
       "fee_reused": "Non nel libro ordini — pagamento già usato",
       "fee_missing": "Fuori dal libro degli ordini — pagamento della commissione non ricevuto",
@@ -2184,7 +2185,7 @@
     },
     "cancel": {
       "confirm_title": "Cancellare questo ordine?",
-      "confirm_body": "L'ordine sarà rimosso dall'orderbook. La tariffa di listing non è rimborsabile.",
+      "confirm_body": "Questo rimuove il tuo ordine dal book ordini, quindi nessun nuovo utente potrà rispondere, e non è reversibile. Le conversazioni già avviate restano aperte e a nessuno viene addebitato nulla. Se hai pagato una commissione di pubblicazione, non viene rimborsata.",
       "confirm_button": "Sì, cancellalo",
       "cancel_button": "Mantieni l'ordine",
       "cancelling": "Annullamento…"
@@ -2553,7 +2554,8 @@
     "fee_verified_by_attestation": "Verificata dalla community",
     "fee_pending_external_hint": "Questo ordine usa BTC o XMR come tassa di inserzione. Morphit attende che i validatori della community attestino il pagamento. Fino ad allora l'ordine è visibile ma non ancora confermato.",
     "price_label": "Prezzo",
-    "error_load_failed": "Non siamo riusciti a caricare questo ordine. Prova ad aggiornare."
+    "error_load_failed": "Non siamo riusciti a caricare questo ordine. Prova ad aggiornare.",
+    "cancel_button": "Annulla questo ordine"
   },
   "orderbook": {
     "heading": "Libro ordini",
@@ -2634,6 +2636,8 @@
     "blocked_marker": "Bloccato",
     "hide_button_tooltip": "Nascondi tutti gli ordini da questo account su questo dispositivo (reversibile da Impostazioni — non vengono notificati)",
     "hide_button_aria": "Nascondi ordini da {account}",
+    "unhide_button_tooltip": "Mostra di nuovo gli ordini di questo account su questo dispositivo",
+    "unhide_button_aria": "Mostra di nuovo gli ordini di {account}",
     "all_hidden_title": "Ogni ordine su questa pagina è da un account nascosto",
     "all_hidden_body": "Tutti {count} gli ordini su questa pagina sono da account che hai nascosto. Mostrali comunque, o gestisci la tua lista nascosti in Impostazioni.",
     "live": "Live",
@@ -3019,7 +3023,7 @@
       "post_another": "Pubblicane un altro",
       "edit_cta": "Modifica questo ordine",
       "waiver_title": "Il tuo primo ordine gratuito è online!",
-      "waiver_body": "È già stato trasmesso alla catena Blurt ed è visibile nel libro ordini a tutti — Morphit ha coperto la commissione di listing per te. 🌱",
+      "waiver_body": "È già stato trasmesso alla catena Blurt ed è visibile nel libro ordini a tutti — Morphit ha coperto la commissione di listing per te. ❤️",
       "waiver_next_heading": "Cosa succede dopo:",
       "waiver_step_1": "Qualcuno interessato a scambiare BLURT per quello che offri ti contatterà. Vedrai una notifica sull'icona della chat nell'intestazione — tieni gli occhi aperti.",
       "waiver_step_2": "Chatta per confermare i termini (prezzo, tempistica del pagamento, luogo). Quando sei pronto, condividi il tuo indirizzo di ricezione BLURT (usa il pulsante condividi indirizzo nella chat); loro ti inviano BLURT, tu mandi loro quello che avete concordato.",
@@ -3518,7 +3522,8 @@
   },
   "scan_login": {
     "starting_heading": "Permesso fotocamera",
-    "starting_body": "Ci serve la tua fotocamera per scansionare il codice di accesso sul tuo computer.",
+    "starting_body": "Serve la tua fotocamera per scansionare il codice QR sul tuo computer.",
+    "starting_button": "Attiva fotocamera",
     "camera_denied_heading": "Fotocamera bloccata",
     "camera_denied_body": "Ci serve il permesso della fotocamera per scansionare il QR. Apri le impostazioni del browser, consenti la fotocamera per Morphit e riprova.",
     "no_camera_heading": "Nessuna fotocamera trovata",
@@ -4015,10 +4020,13 @@
     "syndication": {
       "heading": "Sindacazione",
       "explain": "Morphit può pubblicare annunci sul tuo blog Blurt quando esegui determinate azioni. Sono firmati con la tua chiave di pubblicazione — Morphit non detiene nulla a tuo nome.",
-      "first_trade_label": "Annuncia automaticamente il mio primo scambio alla community @morphit",
+      "first_trade_label": "Annuncia la mia prima operazione alla comunità @morphit",
       "first_trade_help": "Quando lasci un feedback per il tuo primo scambio Morphit, pubblica anche un breve post \"Mi sono unito a Morphit\" sulla community @morphit su Blurt. Pubblicato solo una volta per account. La sindacazione per-ordine è una casella separata sul modulo ordine.",
       "pitch_heading": "Perché attivarlo?",
-      "pitch_body": "La sindicazione è tutto. Più occhi = più partner e ricompense upvote direttamente sul Wallet Blurt. Off = nulla di pubblico."
+      "pitch_body": "La sindicazione è tutto. Più occhi = più partner e ricompense upvote direttamente sul Wallet Blurt. Off = nulla di pubblico.",
+      "blog_default_explain": "Hai fatto la tua prima operazione, bene. Ora Morphit può spuntare per te la casella \"pubblica questo ordine sul mio blog Blurt\" a ogni nuovo ordine, così le tue offerte vengono condivise automaticamente. Ogni post resta firmato da te e puoi togliere la spunta su un singolo ordine.",
+      "blog_default_label": "Pubblica i miei ordini sul mio blog Blurt per impostazione predefinita",
+      "blog_default_help": "Spunta in anticipo la casella \"diffondi sul mio blog\" di ogni ordine nel modulo. Puoi sempre togliere la spunta per un ordine specifico. Disattivato = la casella parte senza spunta ogni volta."
     },
     "privacy": {
       "heading": "Privacy",
@@ -4322,13 +4330,13 @@
   "syndicate": {
     "first_trade": {
       "title": "Ho appena completato il mio primo scambio con @{seller} su Morphit!",
-      "body": "![](https://img.blurt.blog/blurtimage/morphit/e3d56ddc849685c391dcdb03526463b8264f3e09.png)\n\nMi sono iscritto a Morphit per poter finalmente scambiare cripto e valute fiat senza dover dipendere da un exchange centralizzato (CEX). Niente KYC, niente log, niente cookie, e senza controparte.\n\nNon esiste posto più sicuro, veloce e affidabile dove scambiare cripto e fiat di Morphit.\n\nDai un'occhiata al mio profilo su Morphit!\nhttps://morphit.io/@{username}"
+      "body": "![](https://img.blurt.blog/blurtimage/morphit/e3d56ddc849685c391dcdb03526463b8264f3e09.png)\n\nMi sono iscritto a Morphit per poter finalmente scambiare cripto e valute fiat senza dover dipendere da un exchange centralizzato (CEX). Niente KYC, niente log, niente cookie, e senza controparte.\n\nNon esiste posto più sicuro, veloce e affidabile dove scambiare cripto e fiat di Morphit.\n\nDai un'occhiata al mio profilo su Morphit!\nhttps://morphit.io/{lang}/@{username}"
     },
     "order_post": {
       "title_buy": "Sto comprando {asset1} con {asset2}. Vuoi scambiare?",
       "title_sell": "Sto vendendo {asset1} per {asset2}. Vuoi scambiare?",
-      "body_buy": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\nSto comprando {asset1} con {asset2}. Vuoi scambiare?\n\nNon esiste posto più sicuro, veloce e affidabile dove scambiare cripto e fiat di Morphit.\n\nDai un'occhiata alla mia offerta su Morphit!\nhttps://morphit.io/@{username}/{permlink}",
-      "body_sell": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\nSto vendendo {asset1} per {asset2}. Vuoi scambiare?\n\nNon esiste posto più sicuro, veloce e affidabile dove scambiare cripto e fiat di Morphit.\n\nDai un'occhiata alla mia offerta su Morphit!\nhttps://morphit.io/@{username}/{permlink}"
+      "body_buy": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\nSto comprando {asset1} con {asset2}. Vuoi scambiare?\n\nNon esiste posto più sicuro, veloce e affidabile dove scambiare cripto e fiat di Morphit.\n\nDai un'occhiata alla mia offerta su Morphit!\nhttps://morphit.io/{lang}/@{username}/{permlink}",
+      "body_sell": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\nSto vendendo {asset1} per {asset2}. Vuoi scambiare?\n\nNon esiste posto più sicuro, veloce e affidabile dove scambiare cripto e fiat di Morphit.\n\nDai un'occhiata alla mia offerta su Morphit!\nhttps://morphit.io/{lang}/@{username}/{permlink}"
     },
     "opt_in_label": "Sindaca questo ordine anche sul mio Blog (Gratis)",
     "opt_in_help": "Pubblica un breve annuncio di questo ordine sul tuo blog Blurt. Un post per ordine, firmato da te, parte subito dopo l'invio. Gratis — il post va on-chain usando il tuo Mana esistente.",
@@ -4337,7 +4345,10 @@
     "success_pending": "Pubblicazione dell'annuncio sul tuo blog Blurt…",
     "success_ok": "Pubblicato sul tuo blog Blurt.",
     "success_failed": "Non è stato possibile pubblicare l'annuncio sul tuo blog al momento — il tuo ordine è comunque attivo. Puoi pubblicarlo manualmente più tardi se vuoi.",
-    "opt_in_pitch": "La sindicazione dei tuoi scambi è tutto. Più occhi sulle tue offerte = più partner di trading, più ricompense da upvote direttamente sul tuo Wallet Blurt."
+    "opt_in_pitch": "La sindicazione dei tuoi scambi è tutto. Più occhi sulle tue offerte = più partner di trading, più ricompense da upvote direttamente sul tuo Wallet Blurt.",
+    "first_trade_opt_in_label": "Annuncia la mia prima operazione alla comunità @morphit (gratis)",
+    "first_trade_opt_in_pitch": "La tua primissima operazione su Morphit può pubblicare un annuncio una tantum \"Sono su Morphit\" nella comunità @morphit: più visibilità per te, e può ricevere ricompense dai voti che arrivano nel tuo portafoglio Blurt.",
+    "first_trade_opt_in_help": "Si attiva una sola volta: quando lasci un feedback per la tua prima operazione, non ora. Disattivato per impostazione predefinita. Distinto dal post per ordine qui sopra."
   },
   "toast": {
     "view_action": "Visualizza"
@@ -4410,5 +4421,15 @@
     "heading": "Quasi pronto",
     "body": "Hai effettuato l'accesso, ma non hai ancora un nome account Blurt. Aggiungine uno per iniziare a fare trading e pubblicare; fino ad allora puoi dare un'occhiata.",
     "cta": "Completa la configurazione"
+  },
+  "order_title": {
+    "buy_min": "Compro {amount} {fiat} o più in {asset}",
+    "sell_min": "Vendo {amount} {fiat} o più in {asset}",
+    "buy_max": "Compro fino a {amount} {fiat} in {asset}",
+    "sell_max": "Vendo fino a {amount} {fiat} in {asset}",
+    "buy_range": "Compro da {min} a {max} {fiat} in {asset}",
+    "sell_range": "Vendo da {min} a {max} {fiat} in {asset}",
+    "buy_any": "Compro {asset}",
+    "sell_any": "Vendo {asset}"
   }
 }

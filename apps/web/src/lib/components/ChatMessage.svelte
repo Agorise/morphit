@@ -35,7 +35,17 @@
 	// cp121: O(1) carrier lookup for shipment-pill rendering.
 	// Built once at module init (CARRIERS is a frozen const array).
 	const CARRIERS_LOOKUP = new Map(CARRIERS.map((c) => [c.key, c]));
-	import { externalExplorerUrl, externalExplorerUrls, morphitExplorerTxUrl, usdtExplorerUrl, usdcExplorerUrl, daiExplorerUrl, usdtExplorerUrls, usdcExplorerUrls, daiExplorerUrls } from '$lib/explorer/urls';
+	import {
+		externalExplorerUrl,
+		externalExplorerUrls,
+		morphitExplorerTxUrl,
+		usdtExplorerUrl,
+		usdcExplorerUrl,
+		daiExplorerUrl,
+		usdtExplorerUrls,
+		usdcExplorerUrls,
+		daiExplorerUrls
+	} from '$lib/explorer/urls';
 	import ExplorerLink from '$lib/components/ExplorerLink.svelte';
 	import { isUsdtNetwork, isUsdcNetwork, isDaiNetwork } from '$lib/assets/networks';
 	import { verifyBlurtTransfer, type VerifyResult } from '$lib/chat/blurtVerify';
@@ -88,7 +98,27 @@
 		 *  one of the seven listed above (BLURT excluded —
 		 *  BLURT transfers are single-tx and don't go through
 		 *  the mark-sent reconciliation flow). */
-		onMarkSent?: (args: { method: 'btc' | 'xmr' | 'usdt' | 'usdc' | 'dai' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec' | 'arrr' | 'dcr' | 'sol' | 'eth' | 'xrp'; amount?: string; orderPermlink?: string; network?: string }) => void;
+		onMarkSent?: (args: {
+			method:
+				| 'btc'
+				| 'xmr'
+				| 'usdt'
+				| 'usdc'
+				| 'dai'
+				| 'bch'
+				| 'ltc'
+				| 'dash'
+				| 'doge'
+				| 'zec'
+				| 'arrr'
+				| 'dcr'
+				| 'sol'
+				| 'eth'
+				| 'xrp';
+			amount?: string;
+			orderPermlink?: string;
+			network?: string;
+		}) => void;
 	}
 
 	let { message, me, peer, onRetry, onPayNow, onMarkSent }: Props = $props();
@@ -130,11 +160,7 @@
 	// from, and we want the louder warning to surface even on a
 	// paired-readonly device.
 	const placeholderKind: 'failed' | 'paired' | 'default' = $derived(
-		message.decryptFailed
-			? 'failed'
-			: $isPairedReadOnly
-				? 'paired'
-				: 'default'
+		message.decryptFailed ? 'failed' : $isPairedReadOnly ? 'paired' : 'default'
 	);
 	const placeholderI18nKey = $derived(
 		placeholderKind === 'failed'
@@ -338,7 +364,7 @@
 	 *  you X BLURT, txid Y, memo Z," the seller's UI fetches the
 	 *  transaction from chain and verifies recipient + sender +
 	 *  amount + memo all match.  Result renders as a colored
-	 *  badge: green (verified), amber (mismatch detail), gray
+	 *  badge: green (verified), red (mismatch detail), gray
 	 *  (loading or chain RPC down).
 	 *
 	 *  Phase F.5 routes the result through the tradeStatus store
@@ -508,13 +534,13 @@
 				     three placeholder cases (decrypt-failed / paired-
 				     readonly / default) get distinct copy via the
 				     derived placeholderI18nKey above.  Failed
-				     decryption gets louder visual treatment (amber
+				     decryption gets louder visual treatment (red
 				     border + not italic) since it's a real signal
 				     the message may be tampered; paired-readonly +
 				     default share the muted-italic style. -->
 				{#if placeholderKind === 'failed'}
 					<span
-						class="block rounded border border-amber-500/50 bg-amber-500/10 px-2 py-1 text-sm text-amber-700 dark:border-amber-400/40 dark:bg-amber-400/10 dark:text-amber-200"
+						class="block rounded border border-red-500/50 bg-red-500/10 px-2 py-1 text-sm text-red-700 dark:border-red-400/40 dark:bg-red-400/10 dark:text-red-200"
 					>
 						{$_(placeholderI18nKey)}
 					</span>
@@ -534,11 +560,30 @@
 					!Number.isNaN(parsedAmount) &&
 					parsedAmount > 0}
 				{@const canMarkSent =
-					onMarkSent !== undefined && (p.method === 'btc' || p.method === 'xmr' || p.method === 'usdt' || p.method === 'usdc' || p.method === 'dai' || p.method === 'bch' || p.method === 'ltc' || p.method === 'dash' || p.method === 'doge' || p.method === 'zec' || p.method === 'arrr' || p.method === 'dcr' || p.method === 'sol' || p.method === 'eth' || p.method === 'xrp') && isIncoming}
+					onMarkSent !== undefined &&
+					(p.method === 'btc' ||
+						p.method === 'xmr' ||
+						p.method === 'usdt' ||
+						p.method === 'usdc' ||
+						p.method === 'dai' ||
+						p.method === 'bch' ||
+						p.method === 'ltc' ||
+						p.method === 'dash' ||
+						p.method === 'doge' ||
+						p.method === 'zec' ||
+						p.method === 'arrr' ||
+						p.method === 'dcr' ||
+						p.method === 'sol' ||
+						p.method === 'eth' ||
+						p.method === 'xrp') &&
+					isIncoming}
 				{@const xmrLooksStandard = p.method === 'xmr' && p.address.startsWith('4')}
-				{@const usdtNetworkValid = p.method === 'usdt' && p.network !== undefined && isUsdtNetwork(p.network)}
-				{@const usdcNetworkValid = p.method === 'usdc' && p.network !== undefined && isUsdcNetwork(p.network)}
-				{@const daiNetworkValid = p.method === 'dai' && p.network !== undefined && isDaiNetwork(p.network)}
+				{@const usdtNetworkValid =
+					p.method === 'usdt' && p.network !== undefined && isUsdtNetwork(p.network)}
+				{@const usdcNetworkValid =
+					p.method === 'usdc' && p.network !== undefined && isUsdcNetwork(p.network)}
+				{@const daiNetworkValid =
+					p.method === 'dai' && p.network !== undefined && isDaiNetwork(p.network)}
 				<div class="flex flex-col gap-2">
 					<div
 						class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider opacity-70"
@@ -640,9 +685,7 @@
 							onclick={() => copyText(p.address, 'address')}
 							aria-label={$_('common.copy') as string}
 						>
-							{copiedKind === 'address'
-								? $_('chat.address.pill_copied')
-								: $_('common.copy')}
+							{copiedKind === 'address' ? $_('chat.address.pill_copied') : $_('common.copy')}
 						</button>
 					</div>
 					{#if p.method === 'usdt' && usdtNetworkValid}
@@ -650,9 +693,9 @@
 						     warning.  Stays on the chat record
 						     permanently so a buyer who re-checks an old
 						     message before paying still sees the
-						     warning.  Amber border + body text. -->
+						     warning.  Red border + body text. -->
 						<aside
-							class="rounded-md border border-amber-400/30 bg-amber-400/5 px-2.5 py-2 text-xs text-amber-200"
+							class="rounded-md border border-red-400/30 bg-red-400/5 px-2.5 py-2 text-xs text-red-200"
 							role="note"
 						>
 							{$_('assets.usdt.address_share.warning', {
@@ -709,34 +752,32 @@
 						     seller pinned a memo to this address pill, the
 						     buyer MUST include it as their on-chain transfer
 						     memo so the seller can match the payment to
-						     this trade.  Amber-tinted to be unmissable;
+						     this trade.  Red-tinted to be unmissable;
 						     prominent mono-font for at-a-glance readability;
 						     copy button for paste-into-wallet flows. -->
 						<div
-							class="rounded-lg border-2 border-amber-400 bg-amber-50 p-3 dark:border-amber-600 dark:bg-amber-950"
+							class="rounded-lg border-2 border-red-400 bg-red-50 p-3 dark:border-red-600 dark:bg-red-950"
 						>
 							<p
-								class="text-xs font-semibold uppercase tracking-wider text-amber-900 dark:text-amber-100"
+								class="text-xs font-semibold uppercase tracking-wider text-red-900 dark:text-red-100"
 							>
 								{$_('chat.address.memo_required')}
 							</p>
 							<div class="mt-1 flex items-start gap-2">
 								<code
-									class="flex-1 break-all rounded-md bg-amber-100 px-2 py-1.5 font-mono text-base font-bold tracking-widest text-amber-900 dark:bg-amber-900 dark:text-amber-100"
+									class="flex-1 break-all rounded-md bg-red-100 px-2 py-1.5 font-mono text-base font-bold tracking-widest text-red-900 dark:bg-red-900 dark:text-red-100"
 								>
 									{p.memo}
 								</code>
 								<button
 									type="button"
-									class="flex-none rounded-md border border-amber-700 px-2 py-1 text-xs font-semibold text-amber-900 hover:bg-amber-200 dark:border-amber-500 dark:text-amber-100 dark:hover:bg-amber-900"
+									class="flex-none rounded-md border border-red-700 px-2 py-1 text-xs font-semibold text-red-900 hover:bg-red-200 dark:border-red-500 dark:text-red-100 dark:hover:bg-red-900"
 									onclick={() => copyText(p.memo as string, 'memo')}
 								>
-									{copiedKind === 'memo'
-										? $_('chat.address.pill_copied')
-										: $_('common.copy')}
+									{copiedKind === 'memo' ? $_('chat.address.pill_copied') : $_('common.copy')}
 								</button>
 							</div>
-							<p class="mt-2 text-xs text-amber-900 dark:text-amber-100">
+							<p class="mt-2 text-xs text-red-900 dark:text-red-100">
 								{$_('chat.address.memo_required_explain')}
 							</p>
 						</div>
@@ -772,7 +813,22 @@
 								class="rounded-md border-2 border-morphit-btn bg-morphit-btn px-3 py-1 text-xs font-semibold text-white hover:brightness-110"
 								onclick={() =>
 									onMarkSent?.({
-										method: p.method as 'btc' | 'xmr' | 'usdt' | 'usdc' | 'dai' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec' | 'arrr' | 'dcr' | 'sol' | 'eth' | 'xrp',
+										method: p.method as
+											| 'btc'
+											| 'xmr'
+											| 'usdt'
+											| 'usdc'
+											| 'dai'
+											| 'bch'
+											| 'ltc'
+											| 'dash'
+											| 'doge'
+											| 'zec'
+											| 'arrr'
+											| 'dcr'
+											| 'sol'
+											| 'eth'
+											| 'xrp',
 										amount: p.amount,
 										orderPermlink: p.orderPermlink,
 										// cp26 DD-7 fix + cp30 — propagate the network
@@ -805,9 +861,12 @@
 				</div>
 			{:else if decoded?.kind === 'funds_sent'}
 				{@const p = decoded.payload}
-				{@const usdtFundsNetworkValid = p.method === 'usdt' && p.network !== undefined && isUsdtNetwork(p.network)}
-				{@const usdcFundsNetworkValid = p.method === 'usdc' && p.network !== undefined && isUsdcNetwork(p.network)}
-				{@const daiFundsNetworkValid = p.method === 'dai' && p.network !== undefined && isDaiNetwork(p.network)}
+				{@const usdtFundsNetworkValid =
+					p.method === 'usdt' && p.network !== undefined && isUsdtNetwork(p.network)}
+				{@const usdcFundsNetworkValid =
+					p.method === 'usdc' && p.network !== undefined && isUsdcNetwork(p.network)}
+				{@const daiFundsNetworkValid =
+					p.method === 'dai' && p.network !== undefined && isDaiNetwork(p.network)}
 				<div class="flex flex-col gap-2">
 					<div
 						class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider opacity-70"
@@ -907,7 +966,7 @@
 							</div>
 						{:else if verifyResult.kind === 'mismatch'}
 							<div
-								class="rounded-md border border-amber-400 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-600 dark:bg-amber-950 dark:text-amber-100"
+								class="rounded-md border border-red-400 bg-red-50 p-2 text-xs text-red-900 dark:border-red-600 dark:bg-red-950 dark:text-red-100"
 								role="alert"
 							>
 								<p class="font-semibold">
@@ -945,7 +1004,7 @@
 							</div>
 						{:else if verifyResult.kind === 'wrong_op'}
 							<div
-								class="rounded-md border border-amber-400 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-600 dark:bg-amber-950 dark:text-amber-100"
+								class="rounded-md border border-red-400 bg-red-50 p-2 text-xs text-red-900 dark:border-red-600 dark:bg-red-950 dark:text-red-100"
 							>
 								⚠ {isOutgoing
 									? $_('chat.funds_sent.self_verify_wrong_op')
@@ -970,9 +1029,7 @@
 								{p.txid}
 							</code>
 							{#if explorerLinksForTxid(p.method, p.txid, p.network).length > 0}
-								<ExplorerLink
-									urls={explorerLinksForTxid(p.method, p.txid, p.network)}
-								/>
+								<ExplorerLink urls={explorerLinksForTxid(p.method, p.txid, p.network)} />
 							{/if}
 						</div>
 						<button
@@ -981,9 +1038,7 @@
 							onclick={() => copyText(p.txid, 'txid')}
 							aria-label={$_('common.copy') as string}
 						>
-							{copiedKind === 'txid'
-								? $_('chat.address.pill_copied')
-								: $_('common.copy')}
+							{copiedKind === 'txid' ? $_('chat.address.pill_copied') : $_('common.copy')}
 						</button>
 					</div>
 					{#if p.note}
@@ -1035,9 +1090,7 @@
 							if (p.recipientName) lines.push(p.recipientName);
 							lines.push(p.street);
 							if (p.street2) lines.push(p.street2);
-							lines.push(
-								`${p.city}${p.state ? `, ${p.state}` : ''} ${p.postalCode}`
-							);
+							lines.push(`${p.city}${p.state ? `, ${p.state}` : ''} ${p.postalCode}`);
 							lines.push(p.country);
 							void navigator.clipboard?.writeText(lines.join('\n'));
 						}}
@@ -1059,11 +1112,10 @@
 				     (rel=noopener so referrer is suppressed). -->
 				{@const sh = decoded.payload}
 				{@const carrierEntry = sh.carrier === 'other' ? null : CARRIERS_LOOKUP.get(sh.carrier)}
-				{@const carrierDisplay =
-					carrierEntry?.name ?? sh.customCarrierName ?? sh.carrier}
+				{@const carrierDisplay = carrierEntry?.name ?? sh.customCarrierName ?? sh.carrier}
 				{@const trackingUrl =
 					sh.carrier === 'other'
-						? sh.customTrackingUrl ?? null
+						? (sh.customTrackingUrl ?? null)
 						: carrierEntry?.trackingUrlTemplate
 							? buildTrackingUrl(carrierEntry.trackingUrlTemplate, sh.tracking)
 							: null}
@@ -1120,7 +1172,14 @@
 					{$_('chat.unknown_version')}
 				</span>
 			{:else}
-				<span class="whitespace-pre-wrap">{#each textSegments as seg}{#if seg.link}<a href={safeContactUrl(seg.value)} target="_blank" rel="noopener noreferrer nofollow" class="underline break-all">{seg.value}</a>{:else}{seg.value}{/if}{/each}</span>
+				<span class="whitespace-pre-wrap"
+					>{#each textSegments as seg}{#if seg.link}<a
+								href={safeContactUrl(seg.value)}
+								target="_blank"
+								rel="noopener noreferrer nofollow"
+								class="break-all underline">{seg.value}</a
+							>{:else}{seg.value}{/if}{/each}</span
+				>
 			{/if}
 		</div>
 

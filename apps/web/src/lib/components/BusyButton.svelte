@@ -21,7 +21,7 @@
 	interface Props {
 		/** Primary CTA, secondary, ghost, or text-link (de-emphasized
 		 *  back/cancel nav). Only one primary per screen. */
-		variant?: 'primary' | 'secondary' | 'ghost' | 'link';
+		variant?: 'primary' | 'secondary' | 'ghost' | 'link' | 'danger';
 		/** True while the action is in flight. Shows spinner, disables button. */
 		busy?: boolean;
 		/** True briefly after a just-completed success. Shows a
@@ -67,6 +67,11 @@
 				return 'bg-morphit-btn text-white font-bold shadow hover:brightness-110 disabled:bg-ink-300 disabled:text-ink-500 disabled:shadow-none';
 			case 'secondary':
 				return 'bg-white dark:bg-ink-900 text-morphit-emerald font-semibold border-2 border-morphit-emerald hover:bg-emerald-50 dark:hover:bg-ink-800 disabled:border-ink-300 disabled:text-ink-400';
+			case 'danger':
+				// Outlined destructive action (cancel an order, etc.): dark-red
+				// text + border with a faint red wash on hover. Outlined rather
+				// than solid-red so it reads as deliberate, not alarming.
+				return 'bg-white dark:bg-ink-900 text-red-700 dark:text-red-400 font-semibold border-2 border-red-300 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-950/40 hover:border-red-500 disabled:border-ink-300 disabled:text-ink-400';
 			case 'ghost':
 				return 'bg-transparent text-ink-700 dark:text-ink-200 font-medium hover:bg-ink-100 dark:hover:bg-ink-800 disabled:text-ink-400';
 			case 'link':
@@ -92,9 +97,7 @@
 	aria-busy={busy}
 	aria-label={ariaLabel}
 	{onclick}
-	class="{layoutClass} {variantClass} {fullWidth
-		? 'w-full'
-		: ''}"
+	class="{layoutClass} {variantClass} {fullWidth ? 'w-full' : ''}"
 >
 	{#if busy}
 		<!-- Inline spinner. Uses currentColor so it matches the button

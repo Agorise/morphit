@@ -152,7 +152,7 @@
 		if (s.cooldownUntil > Date.now()) {
 			return {
 				text: $_('settings.endpoints.cooling_down'),
-				cls: 'text-amber-700 dark:text-amber-400'
+				cls: 'text-ink-700 dark:text-ink-400'
 			};
 		}
 		// Failing → RED, with the REASON so the user can see why a node is
@@ -177,10 +177,7 @@
 		if (s.lastLatencyMs != null) {
 			return {
 				text: formatLatency(s.lastLatencyMs),
-				cls:
-					s.lastLatencyMs > 1000
-						? 'text-amber-700 dark:text-amber-400'
-						: 'text-morphit-emerald'
+				cls: s.lastLatencyMs > 1000 ? 'text-ink-700 dark:text-ink-400' : 'text-morphit-emerald'
 			};
 		}
 		return { text: $_('settings.endpoints.probing'), cls: 'text-ink-500 dark:text-ink-400' };
@@ -297,16 +294,16 @@
 			</button>
 		{:else}
 			<div
-				class="flex flex-wrap items-center gap-2 rounded-xl border-2 border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-950"
+				class="flex flex-wrap items-center gap-2 rounded-xl border-2 border-red-300 bg-red-50 p-3 dark:border-red-700 dark:bg-red-950"
 				role="alertdialog"
 				aria-live="polite"
 			>
-				<p class="text-sm text-amber-900 dark:text-amber-100">
+				<p class="text-sm text-red-900 dark:text-red-100">
 					{$_('settings.endpoints.reset_confirm_prompt')}
 				</p>
 				<button
 					type="button"
-					class="rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-700"
+					class="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-700"
 					onclick={doReset}
 				>
 					{$_('settings.endpoints.reset_confirm_yes')}

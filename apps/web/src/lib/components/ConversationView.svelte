@@ -287,7 +287,22 @@
 	 *  button (with prefill) share the modal but supply
 	 *  different starting state. */
 	let markSentArgs = $state<{
-		method: 'btc' | 'xmr' | 'usdt' | 'usdc' | 'dai' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec' | 'arrr' | 'dcr' | 'sol' | 'eth' | 'xrp';
+		method:
+			| 'btc'
+			| 'xmr'
+			| 'usdt'
+			| 'usdc'
+			| 'dai'
+			| 'bch'
+			| 'ltc'
+			| 'dash'
+			| 'doge'
+			| 'zec'
+			| 'arrr'
+			| 'dcr'
+			| 'sol'
+			| 'eth'
+			| 'xrp';
 		amount?: string;
 		orderPermlink?: string;
 		// cp26 DD-7 fix + cp30 — pill's "Mark as sent" button now
@@ -425,7 +440,22 @@
 	 *  their own wallet (scanning the QR / pasting the address),
 	 *  then comes back to this modal with the txid in hand. */
 	function handleMarkSentClick(args: {
-		method: 'btc' | 'xmr' | 'usdt' | 'usdc' | 'dai' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec' | 'arrr' | 'dcr' | 'sol' | 'eth' | 'xrp';
+		method:
+			| 'btc'
+			| 'xmr'
+			| 'usdt'
+			| 'usdc'
+			| 'dai'
+			| 'bch'
+			| 'ltc'
+			| 'dash'
+			| 'doge'
+			| 'zec'
+			| 'arrr'
+			| 'dcr'
+			| 'sol'
+			| 'eth'
+			| 'xrp';
 		amount?: string;
 		orderPermlink?: string;
 		network?: string;
@@ -945,7 +975,9 @@
 				<div
 					class="dark:bg-ink-925 flex-none border-t border-ink-200 bg-ink-50 px-4 py-2 dark:border-ink-800"
 				>
-					<div class="mx-auto flex max-w-2xl flex-wrap items-center justify-end gap-2">
+					<div
+						class="mx-auto grid max-w-2xl grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:justify-end"
+					>
 						<button
 							type="button"
 							class="rounded-lg border border-ink-300 px-3 py-1.5 text-xs font-semibold text-ink-700 hover:border-morphit-emerald hover:text-morphit-emerald dark:border-ink-700 dark:text-ink-200"
@@ -1046,47 +1078,41 @@
 		{orderPermlink}
 		initialMethod={markSentArgs?.method ?? 'btc'}
 		initialAmount={markSentArgs?.amount ?? ''}
-		initialUsdtNetwork={
-			/* cp26 DD-7 fix — propagate the USDT network from the
+		initialUsdtNetwork={/* cp26 DD-7 fix — propagate the USDT network from the
 			   pill the user tapped, so they don't have to re-pick
 			   the network they already saw in the chat header.
 			   Validate via isUsdtNetwork to defend against a
 			   garbage `network` value somehow arriving here (e.g.
 			   from a malformed pre-cp26 payload); fall through to
 			   null on mismatch so the picker re-prompts. */
-			markSentArgs?.method === 'usdt' &&
-			markSentArgs?.network !== undefined &&
-			isUsdtNetwork(markSentArgs.network)
-				? (markSentArgs.network as UsdtNetwork)
-				: null
-		}
-		initialUsdcNetwork={
-			/* Part 122 cp30 — same propagation path for USDC.
+		markSentArgs?.method === 'usdt' &&
+		markSentArgs?.network !== undefined &&
+		isUsdtNetwork(markSentArgs.network)
+			? (markSentArgs.network as UsdtNetwork)
+			: null}
+		initialUsdcNetwork={/* Part 122 cp30 — same propagation path for USDC.
 			   Guarded by method === 'usdc' so a wire-format
 			   `network` value carried on a non-multi-network
 			   asset (which the encoder forbids, but defense in
 			   depth) can't accidentally route into the USDC
 			   picker. */
-			markSentArgs?.method === 'usdc' &&
-			markSentArgs?.network !== undefined &&
-			isUsdcNetwork(markSentArgs.network)
-				? (markSentArgs.network as UsdcNetwork)
-				: null
-		}
-		initialDaiNetwork={
-			/* Part 122 cp31 — same propagation path for DAI.
+		markSentArgs?.method === 'usdc' &&
+		markSentArgs?.network !== undefined &&
+		isUsdcNetwork(markSentArgs.network)
+			? (markSentArgs.network as UsdcNetwork)
+			: null}
+		initialDaiNetwork={/* Part 122 cp31 — same propagation path for DAI.
 			   Guarded by method === 'dai' for the same
 			   defense-in-depth reasons.  DAI is the most
 			   important case here because all 4 networks share
 			   the EVM 0x address format — the network from the
 			   pill is the ONLY way the buyer's modal can know
 			   which chain to expect a txid on. */
-			markSentArgs?.method === 'dai' &&
-			markSentArgs?.network !== undefined &&
-			isDaiNetwork(markSentArgs.network)
-				? (markSentArgs.network as DaiNetwork)
-				: null
-		}
+		markSentArgs?.method === 'dai' &&
+		markSentArgs?.network !== undefined &&
+		isDaiNetwork(markSentArgs.network)
+			? (markSentArgs.network as DaiNetwork)
+			: null}
 		onShare={handleFundsSent}
 		onCancel={() => {
 			showFundsSentModal = false;

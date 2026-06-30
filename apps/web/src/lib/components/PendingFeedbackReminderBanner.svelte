@@ -171,12 +171,12 @@
 
 {#if loaded && reminders.length > 0}
 	<aside
-		class="my-6 rounded-xl border-2 border-amber-300 bg-amber-50/70 p-4 dark:border-amber-700/60 dark:bg-amber-950/20"
+		class="my-6 rounded-xl border-2 border-red-300 bg-red-50/70 p-4 dark:border-red-700/60 dark:bg-red-950/20"
 		aria-label={$_('feedback_reminder.aria_label')}
 	>
 		<header class="mb-3 flex items-start gap-3">
 			<svg
-				class="mt-0.5 h-5 w-5 flex-none text-amber-600 dark:text-amber-400"
+				class="mt-0.5 h-5 w-5 flex-none text-red-600 dark:text-red-400"
 				viewBox="0 0 20 20"
 				fill="currentColor"
 				aria-hidden="true"
@@ -188,12 +188,12 @@
 				/>
 			</svg>
 			<div class="min-w-0 flex-1">
-				<h2 class="font-semibold text-amber-900 dark:text-amber-100">
+				<h2 class="font-semibold text-red-900 dark:text-red-100">
 					{$_('feedback_reminder.heading', {
 						values: { count: reminders.length }
 					})}
 				</h2>
-				<p class="mt-1 text-sm text-amber-800 dark:text-amber-200">
+				<p class="mt-1 text-sm text-red-800 dark:text-red-200">
 					{$_('feedback_reminder.subheading')}
 				</p>
 			</div>
@@ -202,7 +202,7 @@
 		<ul class="space-y-3">
 			{#each reminders as reminder (reminder.counterpartyFeedbackTrxId)}
 				<li
-					class="rounded-lg border border-amber-200 bg-white p-3 dark:border-amber-800/60 dark:bg-ink-900"
+					class="rounded-lg border border-red-200 bg-white p-3 dark:border-red-800/60 dark:bg-ink-900"
 				>
 					<div class="flex flex-wrap items-center justify-between gap-3">
 						<div class="min-w-0 flex-1">

@@ -27,7 +27,7 @@
 	 *
 	 * Color semantics:
 	 *   - Higher value than before → emerald (gain)
-	 *   - Lower value than before  → amber (loss / spend)
+	 *   - Lower value than before  → red (loss / spend)
 	 *   - Initial render or NaN     → no color
 	 *
 	 * The wrapper uses tabular-nums so digits don't shift width
@@ -241,6 +241,6 @@
 		color: rgb(16, 185, 129); /* matches morphit-emerald */
 	}
 	.flash-loss {
-		color: rgb(245, 158, 11); /* tailwind amber-500 */
+		color: rgb(220, 38, 38); /* tailwind red-600 */
 	}
 </style>

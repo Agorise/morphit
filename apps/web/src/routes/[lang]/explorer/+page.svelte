@@ -110,7 +110,7 @@
 		</p>
 
 		{#if lastError}
-			<p class="mt-3 text-sm text-amber-700 dark:text-amber-300">
+			<p class="mt-3 text-sm text-red-700 dark:text-red-300">
 				{lastError}
 			</p>
 		{/if}

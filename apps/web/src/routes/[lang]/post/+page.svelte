@@ -19,7 +19,7 @@
 	 * Error handling:
 	 * - Any input that fails client validation shows a StatusLine
 	 *   kind=warn under the field.
-	 * - Broadcast failures show an amber error card with a Retry
+	 * - Broadcast failures show a red error card with a Retry
 	 *   BusyButton; nothing was paid, the user can try again safely.
 	 * - Locked-session errors prompt the password flow without
 	 *   losing the form state.
@@ -99,6 +99,12 @@
 	import type { OrderFormInput } from '$lib/orders/payload';
 	import { makeExpiryFlooredUtcDay } from '$lib/orders/payload';
 	import { publishOrderPost } from '$lib/syndication/publish';
+	import {
+		isOrderBlogDefaultEnabled,
+		hasFiredFirstTrade,
+		firstTradeAnnounce,
+		setFirstTradeAnnounce
+	} from '$lib/utils/syndicationPrefs';
 	import { redactPrivateKeys, type PrivateKeyMatch } from '$lib/security/privateKeyDetector';
 	import { saveDraft, loadDraftWithMeta, clearDraft } from '$lib/drafts';
 	import { safeSession } from '$lib/utils/safeStorage';
@@ -267,7 +273,7 @@
 	 *  user's own Blurt blog. Defaults false so users actively opt
 	 *  in. When true, Post B fires immediately after the order
 	 *  broadcast succeeds — see syndicate/publish.ts. */
-	let syndicateToBlog = $state(false);
+	let syndicateToBlog = $state(isOrderBlogDefaultEnabled());
 
 	// O (cp295): animated example regions cycle through the placeholder,
 	// mirroring the onboarding import account field. Runs only while the
@@ -537,7 +543,7 @@
 		region = '';
 		terms = '';
 		expiresDays = 90;
-		syndicateToBlog = false;
+		syndicateToBlog = isOrderBlogDefaultEnabled();
 		feeMethodChoice = 'blurt';
 		externalTxId = '';
 		txProof = '';
@@ -1988,7 +1994,7 @@
 		region = '';
 		terms = '';
 		expiresDays = 90;
-		syndicateToBlog = false;
+		syndicateToBlog = isOrderBlogDefaultEnabled();
 		syndicationStatus = null;
 		successPermlink = null;
 		successUsedWaiver = false;
@@ -2743,6 +2749,33 @@
 						</p>
 					</div>
 				</label>
+				{#if !hasFiredFirstTrade(blurtAccount)}
+					<!-- First-trade announcement opt-in (phase 1 only). Arms the one-time @morphit-community post that fires when the user later leaves feedback on this trade; default off, spent after the first trade. Distinct from the per-order blog post above. -->
+					<label
+						class="mt-4 flex items-start gap-3 rounded-xl border-2 border-morphit-emerald/30 bg-morphit-emerald/5 p-4 dark:border-morphit-emerald/40"
+					>
+						<input
+							type="checkbox"
+							id="post-first-trade-announce"
+							name="first-trade-announce"
+							checked={$firstTradeAnnounce}
+							onchange={(e) => setFirstTradeAnnounce(e.currentTarget.checked)}
+							class="mt-0.5 h-4 w-4 flex-none accent-morphit-emerald"
+						/>
+						<div class="min-w-0">
+							<p class="flex items-center gap-2 font-semibold text-morphit-emerald">
+								<span aria-hidden="true">🎉</span>
+								{$_('syndicate.first_trade_opt_in_label')}
+							</p>
+							<p class="mt-2 text-sm text-ink-700 dark:text-ink-200">
+								{$_('syndicate.first_trade_opt_in_pitch')}
+							</p>
+							<p class="mt-2 text-xs text-ink-600 dark:text-ink-300">
+								{$_('syndicate.first_trade_opt_in_help')}
+							</p>
+						</div>
+					</label>
+				{/if}
 			</section>
 
 			<!-- Continue to review -->
@@ -3289,7 +3322,7 @@
 				</p>
 			{:else if syndicationStatus === 'failed'}
 				<p
-					class="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200"
+					class="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-800 dark:bg-red-950 dark:text-red-200"
 				>
 					{$_('syndicate.success_failed')}
 				</p>
@@ -3328,10 +3361,10 @@
 						     could miss the deadline without warning. -->
 						{#if remaining !== null}
 							<span
-								class="rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums {remaining <=
+								class="rounded-full border px-2 py-0.5 text-[11px] font-semibold tabular-nums {remaining <=
 								30
-									? 'animate-pulse bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200'
-									: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'}"
+									? 'animate-pulse border-red-300 bg-red-100 text-red-800 dark:border-red-700 dark:bg-red-900/40 dark:text-red-200'
+									: 'border-morphit-emerald/30 bg-morphit-emerald/5 text-morphit-emerald'}"
 								title={$_('post_order.success.edit_window_tooltip') as string}
 							>
 								{$_('post_order.success.edit_window_countdown', {
@@ -3377,14 +3410,14 @@
 		</section>
 	{:else if phase === 'error'}
 		<section
-			class="card border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950"
+			class="card border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-950"
 			role="alert"
 			aria-live="assertive"
 		>
-			<h2 class="font-display text-lg font-bold text-amber-900 dark:text-amber-100">
+			<h2 class="font-display text-lg font-bold text-red-900 dark:text-red-100">
 				{$_('post_order.broadcast_error.title')}
 			</h2>
-			<p class="mt-2 text-sm text-amber-800 dark:text-amber-200">
+			<p class="mt-2 text-sm text-red-800 dark:text-red-200">
 				{broadcastError}
 			</p>
 			<div class="mt-4">

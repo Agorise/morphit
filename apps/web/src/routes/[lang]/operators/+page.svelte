@@ -202,7 +202,7 @@
 
 						{#if !op.is_active}
 							<span
-								class="flex-none rounded-full border border-amber-500/50 bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-300"
+								class="flex-none rounded-full border border-ink-500/50 bg-ink-500/10 px-2 py-0.5 text-xs font-semibold text-ink-300"
 								>{$_('operators.inactive_badge')}</span
 							>
 						{/if}

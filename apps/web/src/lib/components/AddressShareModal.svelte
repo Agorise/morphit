@@ -38,7 +38,14 @@
 		type AddressPayload,
 		type ChatAssetTicker
 	} from '$lib/chat/payload';
-	import { validateUsdtAddress, type UsdtNetwork, validateUsdcAddress, type UsdcNetwork, validateDaiAddress, type DaiNetwork } from '$lib/assets/networks';
+	import {
+		validateUsdtAddress,
+		type UsdtNetwork,
+		validateUsdcAddress,
+		type UsdcNetwork,
+		validateDaiAddress,
+		type DaiNetwork
+	} from '$lib/assets/networks';
 	import PrivacyWarningChip from './PrivacyWarningChip.svelte';
 	import UsdtNetworkPicker from './UsdtNetworkPicker.svelte';
 	import UsdcNetworkPicker from './UsdcNetworkPicker.svelte';
@@ -222,9 +229,7 @@
 	 *  observers + builds a counterparty graph against the same
 	 *  address over time. */
 	const priorShare = $derived(
-		addressLooksValid
-			? findPriorShare(method.toUpperCase(), trimmedAddress)
-			: null
+		addressLooksValid ? findPriorShare(method.toUpperCase(), trimmedAddress) : null
 	);
 	/** Amount is OPTIONAL.  Empty is fine.  Non-empty must be a
 	 *  valid positive decimal. */
@@ -733,7 +738,7 @@
 			{/if}
 			{#if showSubaddressTip}
 				<div
-					class="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"
+					class="mt-2 rounded-lg border border-red-300 bg-red-50 p-2 text-xs text-red-900 dark:border-red-700 dark:bg-red-950 dark:text-red-100"
 				>
 					{$_('chat.address.subaddress_tip_modal')}
 				</div>
@@ -746,13 +751,13 @@
 			     never transmitted to any server. -->
 			{#if priorShare !== null && !addressErrorKey}
 				<div
-					class="mt-2 rounded-lg border border-amber-400 bg-amber-50 p-2 text-xs dark:border-amber-600 dark:bg-amber-950"
+					class="mt-2 rounded-lg border border-red-400 bg-red-50 p-2 text-xs dark:border-red-600 dark:bg-red-950"
 					role="alert"
 				>
-					<div class="font-semibold text-amber-900 dark:text-amber-100">
+					<div class="font-semibold text-red-900 dark:text-red-100">
 						⚠ {$_('chat.address.reuse_warning_heading')}
 					</div>
-					<p class="mt-1 text-amber-800 dark:text-amber-200">
+					<p class="mt-1 text-red-800 dark:text-red-200">
 						{$_('chat.address.reuse_warning_body', {
 							values: {
 								date: new Date(priorShare.sharedAt).toLocaleDateString()
@@ -760,7 +765,7 @@
 						})}
 					</p>
 					{#if priorShare.orderPermlink !== undefined}
-						<p class="mt-1 text-[11px] text-amber-700 dark:text-amber-300">
+						<p class="mt-1 text-[11px] text-red-700 dark:text-red-300">
 							{$_('chat.address.reuse_warning_prior_order', {
 								values: { permlink: priorShare.orderPermlink }
 							})}
@@ -780,7 +785,9 @@
 		     wallets without PayJoin support — they fall back to a
 		     normal payment. -->
 		{#if method === 'btc'}
-			<details class="mt-3 rounded-lg border border-ink-200 bg-ink-50 p-2 text-sm dark:border-ink-700 dark:bg-ink-900">
+			<details
+				class="mt-3 rounded-lg border border-ink-200 bg-ink-50 p-2 text-sm dark:border-ink-700 dark:bg-ink-900"
+			>
 				<summary class="cursor-pointer font-semibold text-ink-700 dark:text-ink-200">
 					🔐 {$_('chat.address.payjoin_summary')}
 				</summary>
@@ -883,24 +890,26 @@
 		     threat. -->
 		{#if jitterEligible && trimmedAmount.length > 0 && amountLooksValid}
 			{@const unit = method.toUpperCase()}
-			{@const labelKey = method === 'xmr'
-				? 'chat.address.xmr_jitter_label'
-				: 'chat.address.amount_jitter_label'}
-			{@const explainKey = method === 'xmr'
-				? 'chat.address.xmr_jitter_explain'
-				: 'chat.address.amount_jitter_explain'}
-			{@const willSendKey = method === 'xmr'
-				? 'chat.address.xmr_jitter_will_send'
-				: 'chat.address.amount_jitter_will_send'}
-			{@const sendExactKey = method === 'xmr'
-				? 'chat.address.xmr_jitter_send_exact_hint'
-				: 'chat.address.amount_jitter_send_exact_hint'}
-			{@const offHeadingKey = method === 'xmr'
-				? 'chat.address.xmr_jitter_off_warning_heading'
-				: 'chat.address.amount_jitter_off_warning_heading'}
-			{@const offBodyKey = method === 'xmr'
-				? 'chat.address.xmr_jitter_off_warning_body'
-				: 'chat.address.amount_jitter_off_warning_body'}
+			{@const labelKey =
+				method === 'xmr' ? 'chat.address.xmr_jitter_label' : 'chat.address.amount_jitter_label'}
+			{@const explainKey =
+				method === 'xmr' ? 'chat.address.xmr_jitter_explain' : 'chat.address.amount_jitter_explain'}
+			{@const willSendKey =
+				method === 'xmr'
+					? 'chat.address.xmr_jitter_will_send'
+					: 'chat.address.amount_jitter_will_send'}
+			{@const sendExactKey =
+				method === 'xmr'
+					? 'chat.address.xmr_jitter_send_exact_hint'
+					: 'chat.address.amount_jitter_send_exact_hint'}
+			{@const offHeadingKey =
+				method === 'xmr'
+					? 'chat.address.xmr_jitter_off_warning_heading'
+					: 'chat.address.amount_jitter_off_warning_heading'}
+			{@const offBodyKey =
+				method === 'xmr'
+					? 'chat.address.xmr_jitter_off_warning_body'
+					: 'chat.address.amount_jitter_off_warning_body'}
 			<div class="mt-2 rounded-lg border border-morphit-emerald/40 bg-morphit-emerald/5 p-3">
 				<label class="flex items-start gap-2 text-sm">
 					<input type="checkbox" bind:checked={jitterAmount} class="mt-0.5 h-4 w-4" />
@@ -921,7 +930,8 @@
 							✓ {$_(willSendKey)}
 						</div>
 						<code class="mt-1 block break-all font-mono text-sm font-bold">
-							{jitteredAmount} {unit}
+							{jitteredAmount}
+							{unit}
 						</code>
 						<p class="mt-1 text-[11px] text-ink-500 dark:text-ink-500">
 							{$_(sendExactKey)}
@@ -929,12 +939,12 @@
 					</div>
 				{:else if !jitterAmount}
 					<div
-						class="mt-2 rounded-md border border-amber-300 bg-amber-50 p-2 dark:border-amber-700 dark:bg-amber-950"
+						class="mt-2 rounded-md border border-red-300 bg-red-50 p-2 dark:border-red-700 dark:bg-red-950"
 					>
-						<div class="text-xs font-semibold text-amber-900 dark:text-amber-200">
+						<div class="text-xs font-semibold text-red-900 dark:text-red-200">
 							⚠ {$_(offHeadingKey)}
 						</div>
-						<p class="mt-1 text-[11px] text-amber-800 dark:text-amber-300">
+						<p class="mt-1 text-[11px] text-red-800 dark:text-red-300">
 							{$_(offBodyKey)}
 						</p>
 					</div>
@@ -961,7 +971,7 @@
 
 		<!-- Verify warning -->
 		<div
-			class="mt-5 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"
+			class="mt-5 rounded-lg border border-red-300 bg-red-50 p-3 text-xs text-red-900 dark:border-red-700 dark:bg-red-950 dark:text-red-100"
 		>
 			{$_('chat.address.verify_warning')}
 		</div>

@@ -35,8 +35,16 @@
 				return 'border-morphit-emerald';
 			case 'info':
 				return 'border-morphit-teal';
+			// `warn` and `error` deliberately render IDENTICALLY (red).
+			// Post de-brown, red is the only "something needs attention"
+			// colour in the palette (amber = the retired brown; lime reads
+			// as success/emerald). `warn` survives as a distinct level for
+			// its longer-than-info / shorter-than-error timing, its
+			// assertive aria-live grouping, and parity with the StatusLine
+			// `warn` vocabulary — NOT for a separate colour. Do NOT
+			// reintroduce amber/lime here to "differentiate" them.
 			case 'warn':
-				return 'border-amber-500';
+				return 'border-red-500';
 			case 'error':
 				return 'border-red-500';
 		}
@@ -49,7 +57,7 @@
 			case 'info':
 				return 'text-morphit-teal';
 			case 'warn':
-				return 'text-amber-700 dark:text-amber-300';
+				return 'text-red-700 dark:text-red-300';
 			case 'error':
 				return 'text-red-700 dark:text-red-300';
 		}
