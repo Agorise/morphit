@@ -1025,6 +1025,13 @@ const ALLOW_LIST: AllowEntry[] = [
 	{ key: 'settings.totp.not_recommended_apps.authy.name', locale: 'de', reason: '(c) "Authy" is a registered product name; does not translate' },
 	{ key: 'settings.totp.not_recommended_apps.authy.name', locale: 'es', reason: '(c) "Authy" is a registered product name; does not translate' },
 	{ key: 'settings.totp.not_recommended_apps.authy.name', locale: 'fr', reason: '(c) "Authy" is a registered product name; does not translate' },
+	// cp396 — "Blockchain" is a universally-adopted loanword; the body text in
+	// each of these locales uses it verbatim, so the glossary TITLE matches it
+	// by design. (it/pl already use "blockchain" elsewhere and pass the
+	// heuristic; ru/fa/zh translate it: Блокчейн / بلاکچین / 区块链 / 區塊鏈.)
+	{ key: 'glossary.blockchain.title', locale: 'de', reason: '(b) "Blockchain" is a universal tech loanword (Duden-listed); body uses it verbatim' },
+	{ key: 'glossary.blockchain.title', locale: 'es', reason: '(b) "Blockchain" is a universal tech loanword; body uses it verbatim' },
+	{ key: 'glossary.blockchain.title', locale: 'fr', reason: '(b) "Blockchain" is a universal tech loanword; body uses it verbatim' }
 ];
 
 const allowSet = new Set(ALLOW_LIST.map((e) => `${e.key}::${e.locale}`));

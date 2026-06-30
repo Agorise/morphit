@@ -33,14 +33,25 @@ const log = logger('fx-fetch');
 export async function fxGetJson(
 	url: string,
 	timeoutMs: number,
-	fetchImpl: typeof globalThis.fetch
+	fetchImpl: typeof globalThis.fetch,
+	opts?: { readonly followSameHostRedirect?: boolean }
 ): Promise<unknown | null> {
 	const ac = new AbortController();
 	const timer = setTimeout(() => ac.abort(), timeoutMs);
 	try {
 		const res = await fetchImpl(url, {
 			...priceUpstreamFetchInit(ac.signal),
-			headers: priceUpstreamHeaders()
+			headers: priceUpstreamHeaders(),
+			// The price stack defaults to redirect:'manual' (no 30x to
+			// unexpected hosts). One FX upstream — currency-api on the
+			// jsDelivr CDN — addresses its data via the `@latest` path,
+			// which 302-redirects to the concrete dated version. Under
+			// redirect:'manual' that hop becomes an opaque non-OK response
+			// and the source can NEVER succeed (its health shows "last ok:
+			// never"). Such upstreams opt into following the redirect; we
+			// still honour the price stack's intent by REJECTING any
+			// redirect that crosses to a different host (guard below).
+			...(opts?.followSameHostRedirect ? { redirect: 'follow' as const } : {})
 		});
 		if (res.status === 429) {
 			log.warn('rate_limited', { url });
@@ -49,6 +60,25 @@ export async function fxGetJson(
 		if (!res.ok) {
 			log.warn('http_not_ok', { url, status: res.status });
 			return null;
+		}
+		if (opts?.followSameHostRedirect && typeof res.url === 'string' && res.url.length > 0) {
+			// Reject ONLY a redirect we can PROVE crossed to a different
+			// host. An empty/unparseable final URL (no redirect happened,
+			// or a test mock that doesn't populate res.url) is not a
+			// detectable cross-host hop — don't reject; the rate filter is
+			// the backstop. A real undici response always carries the final
+			// URL, so genuine cross-host hops (jsDelivr → elsewhere) are
+			// still caught.
+			let crossHost = false;
+			try {
+				crossHost = new URL(res.url).host !== new URL(url).host;
+			} catch {
+				crossHost = false;
+			}
+			if (crossHost) {
+				log.warn('cross_host_redirect_rejected', { url, finalUrl: res.url });
+				return null;
+			}
 		}
 		const text = await readPriceBodyCapped(res, ac, url);
 		return JSON.parse(text) as unknown;

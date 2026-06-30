@@ -123,6 +123,14 @@ export interface ChainAccount {
 	 *  same "Voting" % as classic Blurt explorers (blocks.blurtwallet.com). */
 	readonly voting_power?: number;
 	readonly last_vote_time?: string;
+	/** cp396 — unclaimed author/curation rewards (claim_reward_balance).
+	 *  `reward_blurt_balance` is liquid BLURT ("0.000 BLURT");
+	 *  `reward_vesting_balance` is the VESTS the claim op consumes
+	 *  ("0.000000 VESTS"); `reward_vesting_blurt` is the chain-provided
+	 *  BLURT value of that vesting reward (shown to the user as BP). */
+	readonly reward_blurt_balance?: string;
+	readonly reward_vesting_balance?: string;
+	readonly reward_vesting_blurt?: string;
 }
 
 /** Bridge a dblurt call (no native cancellation) to an AbortSignal.

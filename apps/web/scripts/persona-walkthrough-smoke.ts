@@ -373,25 +373,26 @@ const SCENARIOS: readonly Scenario[] = [
 	{
 		name: 'S-12 — /post asset-explainer Tooltips no longer pass hardcoded ariaLabel',
 		file: 'src/routes/[lang]/post/+page.svelte',
+		// cp396: the per-asset Tooltip chain was replaced by a single
+		// alphabetized loop. Each block is a Tooltip whose textKey is the
+		// derived explainer key (post_order.form.asset_explainer.<ticker>),
+		// built once in `assetPickerItems`. So the evidence is the dynamic
+		// key construction + the Tooltip wiring it, not three literal keys.
 		mustHave: [
-			'post_order.form.asset_explainer.blurt',
-			'post_order.form.asset_explainer.btc',
-			'post_order.form.asset_explainer.xmr'
+			'post_order.form.asset_explainer.${a.toLowerCase()}',
+			'textKey={item.explainerKey}'
 		],
 		mustNotHave: [
 			'ariaLabel="What is BLURT?"',
 			'ariaLabel="What is BTC?"',
 			'ariaLabel="What is XMR?"'
 		],
-		// Part 122 cp6 F7: broaden coverage beyond the three literals
-		// above.  Any future asset (USDT, LTC, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, ...) added with a
-		// hardcoded `ariaLabel="What is X?"` Tooltip prop pattern would
-		// regress S-12 without firing the literal list.  The regex
-		// catches every `ariaLabel="..."` Svelte prop with a literal
-		// string value on this page, regardless of asset name.
-		// Acceptable forms must derive from i18n via `effectiveAriaLabel`
-		// (no ariaLabel prop set) or a `{$_("...")}` expression value
-		// (which the regex doesn't match because `{` ≠ `"`).
+		// Part 122 cp6 F7: broaden coverage beyond any literal list. Any
+		// asset Tooltip added with a hardcoded `ariaLabel="What is X?"` prop
+		// would regress S-12. The regex catches every `ariaLabel="..."` Svelte
+		// prop with a literal string value on this page, regardless of asset.
+		// Acceptable forms derive from i18n via `effectiveAriaLabel` (no
+		// ariaLabel prop — the cp396 asset blocks) or a `{$_("...")}` value.
 		assertNoRegexMatch: [
 			{
 				pattern: /\bariaLabel="[^"]*"/,

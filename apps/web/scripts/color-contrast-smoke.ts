@@ -422,6 +422,27 @@ interface Finding {
 	ratio: number;
 	classList: string;
 }
+// ─── Undefined-ink-shade guard ─────────────────────────────────
+//
+// The contrast scan above SKIPS any pair whose shade can't be
+// resolved (resolveColor → null), so a typo'd / undefined ink
+// shade like `dark:bg-ink-925` slips through silently — and at
+// runtime Tailwind emits NO rule for it, so the element keeps its
+// un-prefixed base class (e.g. a light `bg-ink-50` shows in dark
+// mode → an unreadable near-white band, the exact bug this guard
+// was added for). This fails on ANY `*-ink-<shade>` whose shade
+// isn't in the declared `ink` palette, so that class of silent
+// dark-mode regression can't ship again.
+const DEFINED_INK_SHADES = new Set(Object.keys(PALETTE.ink));
+const INK_SHADE_RE = /[a-z-]+-ink-(\d+)/g;
+interface BadInkShade {
+	file: string;
+	token: string;
+	shade: string;
+	classList: string;
+}
+const badInkShades: BadInkShade[] = [];
+
 const findings: Finding[] = [];
 
 let filesScanned = 0;
@@ -432,6 +453,16 @@ for (const f of svelteFiles) {
 	const src = readFileSync(f, 'utf-8');
 	const classLists = extractClassLists(src);
 	for (const cl of classLists) {
+		for (const m of cl.matchAll(INK_SHADE_RE)) {
+			if (!DEFINED_INK_SHADES.has(m[1])) {
+				badInkShades.push({
+					file: relative(REPO_ROOT, f),
+					token: m[0],
+					shade: m[1],
+					classList: cl
+				});
+			}
+		}
 		const pairs = pairUp(cl);
 		for (const p of pairs) {
 			pairsChecked++;
@@ -497,6 +528,10 @@ const scenarios = [
 	{
 		name: 'every checked text/bg pair meets WCAG AA (4.5:1)',
 		ok: findings.length === 0
+	},
+	{
+		name: 'every ink-<shade> utility references a defined palette shade',
+		ok: badInkShades.length === 0
 	}
 ];
 
@@ -519,6 +554,25 @@ if (findings.length > 0) {
 			console.log(
 				`      [${f.mode}] ${f.text} on ${f.bg}  ratio=${f.ratio.toFixed(2)}:1  (need ≥4.5)`
 			);
+		}
+	}
+	console.log('');
+}
+
+if (badInkShades.length > 0) {
+	const byFile = new Map<string, BadInkShade[]>();
+	for (const b of badInkShades) {
+		if (!byFile.has(b.file)) byFile.set(b.file, []);
+		byFile.get(b.file)!.push(b);
+	}
+	console.log(
+		`  ${badInkShades.length} undefined ink-shade reference${badInkShades.length === 1 ? '' : 's'} ` +
+		`(no Tailwind rule emitted → silent fallback to the base class):`
+	);
+	for (const [file, bs] of byFile) {
+		console.log(`    ${file}`);
+		for (const b of bs) {
+			console.log(`      ${b.token}  (ink-${b.shade} is not in the declared palette)`);
 		}
 	}
 	console.log('');

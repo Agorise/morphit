@@ -488,7 +488,6 @@
 	<!-- FAQ pointers for users who want to dig deeper. -->
 	<section class="card">
 		<h2 class="font-display text-2xl font-bold">{$_('backup_keys.learn_more_heading')}</h2>
-		<p class="mt-2 text-ink-700 dark:text-ink-200">{$_('backup_keys.learn_more_body')}</p>
 		<div class="mt-4 flex flex-wrap gap-3">
 			<a href={lp('/faq#lost_keys')} class="btn-secondary">{$_('backup_keys.faq_lost_keys')}</a>
 			<a href={lp('/faq#privacy_practices')} class="btn-ghost">{$_('backup_keys.faq_privacy')}</a>

@@ -45,6 +45,7 @@
 	 *  locale JSONs, done. */
 	const TERMS = [
 		'active_key',
+		'blockchain',
 		'blurt',
 		'blurt_power',
 		'broadcast',

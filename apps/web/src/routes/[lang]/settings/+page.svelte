@@ -56,9 +56,10 @@
 	import { fetchAccountKeys } from '$blurt/accountKeys';
 	import { ChainRejectedError } from '$blurt/broadcastTransport';
 	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
+	import { checkWaiverEligibility } from '$lib/orders/listingFee';
 	import { setSelfAvatar } from '$lib/stores/selfProfile';
 	import { broadcastUnblock } from '$blurt/ops/block';
-	import { blockedAccounts, loadBlocks, refreshBlocks, markUnblocked } from '$lib/chat/blocks';
+	import { blockedAccounts, refreshBlocks, markUnblocked } from '$lib/chat/blocks';
 	import { showToast } from '$lib/stores/toast';
 	import RequireLiveSession from '$components/RequireLiveSession.svelte';
 
@@ -72,10 +73,49 @@
 	// bare base, which is harmless — there's no account whose draft could leak,
 	// and the legacy global keys are purged on mount (see the rehydrate effect).
 	const PROFILE_KEY_SCOPE = browser ? (getUserBlurtAccount() ?? '') : '';
-	// Syndication card phase: before the first completed trade we offer the
-	// one-time first-trade announcement opt-in; after, that affordance is
-	// spent and the card toggles the per-order blog-post default instead.
-	const firstTradeMilestonePast = hasFiredFirstTrade(getUserBlurtAccount());
+	// Syndication card phase. Two signals flip it to the post-first-trade
+	// (Phase 2) state, OR'd because they cover different cases:
+	//   • hasFiredFirstTrade — the local "first feedback fired" marker, set
+	//     by LeaveFeedbackForm once a COMPLETED trade is reviewed. Covers
+	//     trading via someone else's order (you have no order of your own).
+	//   • hasPlacedOrderOnChain — the account has at least one order in the
+	//     index (its free first-buy waiver is consumed). Chain-derived, so
+	//     it's robust across devices and covers the common "placed my first
+	//     order, haven't completed a trade yet" case. Determined once on
+	//     mount via the same /v1/orders check the order form uses for waiver
+	//     eligibility; null = not yet known.
+	const syndicationAccount = getUserBlurtAccount();
+	let hasPlacedOrderOnChain = $state<boolean | null>(null);
+	const firstTradeMilestonePast = $derived(
+		hasFiredFirstTrade(syndicationAccount) || hasPlacedOrderOnChain === true
+	);
+	// True once the right phase can render without a wrong-phase flash: no
+	// account (nothing to query), the local marker already says "past", or
+	// the chain check has resolved.
+	const syndicationPhaseKnown = $derived(
+		!syndicationAccount || hasFiredFirstTrade(syndicationAccount) || hasPlacedOrderOnChain !== null
+	);
+	// Resolve the chain-side "has this account placed an order" signal once
+	// on mount (browser only; no reactive deps → runs a single time). Drives
+	// the syndication phase switch above.
+	$effect(() => {
+		if (!browser || !syndicationAccount) return;
+		let cancelled = false;
+		void (async () => {
+			try {
+				const origin = resolveOrigin(MORPHIT_INDEXER_ORIGIN);
+				const result = await checkWaiverEligibility(origin, syndicationAccount);
+				if (!cancelled) hasPlacedOrderOnChain = result.kind === 'ineligible_has_orders';
+			} catch {
+				// Conservative on error: leave Phase 1 so the first-trade
+				// announcement opt-in stays offered rather than vanishing.
+				if (!cancelled) hasPlacedOrderOnChain = false;
+			}
+		})();
+		return () => {
+			cancelled = true;
+		};
+	});
 	const PROFILE_KEY_SUFFIX = PROFILE_KEY_SCOPE ? `.${PROFILE_KEY_SCOPE}` : '';
 	const STORAGE_KEY = `morphit.displayName${PROFILE_KEY_SUFFIX}`;
 	const NOSTR_URL_STORAGE_KEY = `morphit.nostrUrl${PROFILE_KEY_SUFFIX}`;
@@ -980,9 +1020,9 @@
 
 	// ─── Blocked accounts (Finding H layer 1) ───────────────────
 	/** Sorted alphabetically so the list is stable across unblocks.
-	 *  Store is lazy-loaded on first access; we kick off loadBlocks
-	 *  in an effect below so the list is populated by the time the
-	 *  user scrolls to it. */
+	 *  An effect below calls refreshBlocks on every mount so the list
+	 *  reflects the indexer's current truth by the time the user scrolls
+	 *  to it (not a stale session cache). */
 	const blockedList = $derived([...$blockedAccounts].sort());
 	/** Account-name keyed busy flags — one unblock op might be in
 	 *  flight while the user clicks another. A simple Set tracks
@@ -999,9 +1039,18 @@
 		if (!browser) return;
 		const me = getUserBlurtAccount();
 		if (!me) return;
-		// Best-effort: if this fails, the list is empty but visible,
-		// and a refresh retries.
-		void loadBlocks(me);
+		// Force a fresh fetch on every mount — NOT loadBlocks(), which
+		// early-returns once the store has loaded once in the session, so
+		// after navigating away and back the card would show the stale
+		// cached set (e.g. empty, or a block the indexer has since
+		// confirmed/dropped) until the user hit Refresh manually. The
+		// store's own contract documents refreshBlocks() as the
+		// Settings-mount entry point; the previous loadBlocks() defeated
+		// it. refreshBlocks keeps the current value visible during the
+		// in-flight fetch (it only .set()s on success), so there's no
+		// empty flash. Best-effort: on failure the list stays as-is and
+		// the manual Refresh retries.
+		void refreshBlocks(me);
 	});
 
 	async function onUnblock(account: string): Promise<void> {
@@ -1949,7 +1998,12 @@
 		<h2 id="syndication-heading" class="font-display text-xl font-bold">
 			{$_('settings.syndication.heading')}
 		</h2>
-		{#if !firstTradeMilestonePast}
+		{#if !syndicationPhaseKnown}
+			<!-- Determining whether the first-trade milestone is past (one
+			     indexer round-trip on mount). Show only the heading meanwhile
+			     so an order-placer never sees a flash of the Phase-1 "announce
+			     my first trade" copy before it resolves to Phase 2. -->
+		{:else if !firstTradeMilestonePast}
 			<!-- Phase 1: one-time first-trade announcement opt-in (default off). -->
 			<p class="mt-2 text-ink-600 dark:text-ink-300">
 				{$_('settings.syndication.explain')}

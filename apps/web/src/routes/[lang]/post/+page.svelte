@@ -38,6 +38,7 @@
 	import RequireLiveSession from '$components/RequireLiveSession.svelte';
 	import FocusedField from '$components/FocusedField.svelte';
 	import Tooltip from '$components/Tooltip.svelte';
+	import type { FaqKey } from '$utils/faqIndex';
 	import Term from '$components/Term.svelte';
 	// cp165 byte-budget: ListingFeeAddressPanel renders only when
 	// the user picks btc/xmr fee method (alt path; default is
@@ -93,7 +94,7 @@
 		fetchListingFee,
 		type WaiverEligibility
 	} from '$lib/orders/listingFee';
-	import { fetchFxRates, fiatToUsd, firstOrderMinInFiat } from '$lib/orders/fx';
+	import { fetchFxRates, fiatToUsd, firstOrderMinInFiat, usdMinInFiat } from '$lib/orders/fx';
 	import type { FxResponse } from '@morphit/indexer-client';
 	import { MORPHIT_INDEXER_ORIGIN, resolveOrigin } from '$net/config';
 	import type { OrderFormInput } from '$lib/orders/payload';
@@ -654,6 +655,12 @@
 	// the seed re-syncs when the user switches currency (while the
 	// field is still untouched) but never fights a user-typed value.
 	let lastSeededFiat = $state('');
+	// cp397: when arriving via the profile "Top up BLURT" CTA, the Min
+	// field is seeded with this USD amount expressed in the user's fiat
+	// (the conversion needs fx + a chosen fiat, which aren't ready at
+	// prefill-read time, so a dedicated seed effect fills it once both
+	// are). null = not a top-up arrival.
+	let topupUsdMin = $state<number | null>(null);
 	// cp372 Model A: live BTC/XMR fee amounts + USD echoes from
 	// /v1/listing-fee, fed to ListingFeeAddressPanel so the BTC/XMR
 	// quote tracks the operator's USD-equivalent fee instead of a fixed
@@ -710,6 +717,39 @@
 	 *  lock, the full set otherwise. */
 	const assetTickersForPicker: readonly AssetTicker[] = $derived(
 		isFirstTrade ? (['BLURT'] as const) : ASSET_TICKERS
+	);
+	/** Asset → FAQ deep-link. Every tradable asset has a `what_is_<ticker>`
+	 *  FAQ entry EXCEPT BTC and XMR (no deep-link — matches the prior
+	 *  per-asset Tooltip markup). The "Learn more" link is omitted for
+	 *  those two; their explainer text still shows. */
+	const ASSET_FAQ: Partial<Record<AssetTicker, FaqKey>> = {
+		BLURT: 'what_is_blurt',
+		USDT: 'what_is_usdt',
+		USDC: 'what_is_usdc',
+		DAI: 'what_is_dai',
+		BCH: 'what_is_bch',
+		LTC: 'what_is_ltc',
+		DASH: 'what_is_dash',
+		DOGE: 'what_is_doge',
+		ZEC: 'what_is_zec',
+		ARRR: 'what_is_arrr',
+		DCR: 'what_is_dcr',
+		SOL: 'what_is_sol',
+		ETH: 'what_is_eth',
+		XRP: 'what_is_xrp'
+	};
+	/** cp396 — the Step-1 asset blocks, ALPHABETIZED by ticker. Each block
+	 *  carries its own coin icon (left of the ticker) and triggers a themed
+	 *  explainer tooltip on hover (desktop) / focus-on-tap (mobile); the
+	 *  separate ⓘ bubbles are gone. Tickers are uppercase ASCII so the
+	 *  default lexicographic sort IS alphabetical. */
+	const assetPickerItems = $derived(
+		[...assetTickersForPicker].sort().map((a) => ({
+			ticker: a,
+			iconPath: `/icons/icon-${a.toLowerCase()}.svg`,
+			explainerKey: `post_order.form.asset_explainer.${a.toLowerCase()}`,
+			faqKey: ASSET_FAQ[a]
+		}))
 	);
 	/** The user's choice for this order. Four options post-4b:
 	 *    'blurt'              → pay standard BLURT fee (default)
@@ -1086,6 +1126,7 @@
 					terms: string;
 					expiresDays: number;
 					reason: string;
+					topupUsdMin: number;
 				}>;
 				if (p.side === 'buy' || p.side === 'sell') side = p.side;
 				if (isAssetTicker(p.asset)) {
@@ -1119,6 +1160,9 @@
 				}
 				if (typeof p.amountMin === 'string') amountMin = p.amountMin;
 				if (typeof p.amountMax === 'string') amountMax = p.amountMax;
+				if (typeof p.topupUsdMin === 'number' && Number.isFinite(p.topupUsdMin)) {
+					topupUsdMin = p.topupUsdMin;
+				}
 				if (typeof p.fiat === 'string') fiatArr = p.fiat ? [p.fiat] : [];
 				if (p.priceModelKind === 'spread' || p.priceModelKind === 'fixed') {
 					priceModelKind = p.priceModelKind;
@@ -1427,6 +1471,22 @@
 		lastSeededFiat = fiat;
 	});
 
+	/** cp397 — "Top up BLURT" (profile balance card) seeds the Min field
+	 *  with a $5-equivalent in the user's fiat.  Same safe-by-construction
+	 *  posture as the first-trade seed above: never reads amountMin, stops
+	 *  once the user types (amountTouched), re-seeds only on a currency
+	 *  switch while still untouched.  Owns returning-user top-up arrivals;
+	 *  the first-trade seed (gated on isFirstTrade) owns first buys, so the
+	 *  two never both seed. */
+	$effect(() => {
+		if (topupUsdMin === null || fxTable === null || fiat === '' || amountTouched) return;
+		if (fiat === lastSeededFiat) return;
+		const seed = usdMinInFiat(fxTable, topupUsdMin, fiat);
+		if (seed === null) return;
+		amountMin = String(seed);
+		lastSeededFiat = fiat;
+	});
+
 	/** cp372 — grandma-facing explanation of the first-order minimum,
 	 *  in HER currency.  Shown only on a first (waiver) trade once a
 	 *  fiat is chosen.  With FX we show the converted "$1-equivalent"
@@ -1461,6 +1521,27 @@
 		}
 		return $_('post_order.form.first_order_min_hint', {
 			values: { amount: String(eq), fiat }
+		});
+	});
+
+	/** cp397 — for a RETURNING buyer (already completed a first buy, so
+	 *  the waiver/first-order path no longer applies), the Min-field
+	 *  helper restates their entered minimum in their own fiat plus its
+	 *  USD-equivalent ("At least 100 MXN worth (≈ $5.00)"), replacing the
+	 *  plain "Leave blank for no limit." once a value is present.  Empty
+	 *  (no minimum set) → '' so the optional-limit line shows instead.
+	 *  `waiverMinUsd` is the entered min converted to USD (falls back to
+	 *  treating it as USD when the fiat is unknown / feed is off). */
+	const returningMinHint = $derived.by(() => {
+		if (isFirstTrade || fiat === '') return '';
+		if (amountMinNum === null || !Number.isFinite(amountMinNum) || amountMinNum <= 0) return '';
+		if (waiverMinUsd === null) return '';
+		return $_('post_order.form.returning_min_hint', {
+			values: {
+				amount: String(amountMinNum),
+				fiat,
+				usd: formatFiat(waiverMinUsd, 'USD')
+			}
 		});
 	});
 
@@ -2217,7 +2298,7 @@
 						class="rounded-xl border-2 px-4 py-3 text-left transition active:scale-[0.98] {side ===
 						'buy'
 							? 'border-morphit-emerald bg-emerald-50 dark:bg-ink-800'
-							: 'border-ink-200 dark:border-ink-700'}"
+							: 'border-ink-200 hover:border-morphit-emerald/50 hover:bg-emerald-50/40 dark:border-ink-700 dark:hover:border-morphit-emerald/40 dark:hover:bg-morphit-emerald/[0.06]'}"
 					>
 						<span class="font-semibold">{$_('post_order.form.side_buy')}</span>
 					</button>
@@ -2227,7 +2308,7 @@
 						class="rounded-xl border-2 px-4 py-3 text-left transition active:scale-[0.98] {side ===
 						'sell'
 							? 'border-morphit-emerald bg-emerald-50 dark:bg-ink-800'
-							: 'border-ink-200 dark:border-ink-700'}"
+							: 'border-ink-200 hover:border-morphit-emerald/50 hover:bg-emerald-50/40 dark:border-ink-700 dark:hover:border-morphit-emerald/40 dark:hover:bg-morphit-emerald/[0.06]'}"
 					>
 						<span class="font-semibold">{$_('post_order.form.side_sell')}</span>
 					</button>
@@ -2254,66 +2335,48 @@
 			     each asset chip carries a tooltip explaining what the
 			     asset is, so first-time users don't have to guess.  -->
 			<div class="flex flex-wrap gap-2">
-				{#each assetTickersForPicker as a}
+				{#each assetPickerItems as item (item.ticker)}
+					{@const a = item.ticker}
 					{@const disabled = feeMethodChoice === 'waived_first_buy' && a !== 'BLURT'}
-					<div class="flex items-center gap-1">
-						<button
-							type="button"
-							{disabled}
-							title={disabled ? ($_('post_order.form.waiver_asset_locked_title') as string) : ''}
-							onclick={() => {
-								asset = a as Asset;
-								// Part 121 / cp30 / cp31: reset network when
-								// leaving a multi-network asset, so a re-pick
-								// later forces a fresh explicit choice (no
-								// stale network value).
-								if (a !== 'USDT') usdtNetwork = null;
-								if (a !== 'USDC') usdcNetwork = null;
-								if (a !== 'DAI') daiNetwork = null;
-							}}
-							class="rounded-xl border-2 px-4 py-2 font-mono font-semibold transition active:scale-[0.98] {asset ===
-							a
-								? 'border-morphit-emerald bg-emerald-50 dark:bg-ink-800'
-								: 'border-ink-200 dark:border-ink-700'} {disabled
-								? 'cursor-not-allowed opacity-40'
-								: ''}"
-						>
-							{a}
-						</button>
-						{#if a === 'BLURT'}
-							<Tooltip textKey="post_order.form.asset_explainer.blurt" faqKey="what_is_blurt" />
-						{:else if a === 'BTC'}
-							<Tooltip textKey="post_order.form.asset_explainer.btc" />
-						{:else if a === 'XMR'}
-							<Tooltip textKey="post_order.form.asset_explainer.xmr" />
-						{:else if a === 'USDT'}
-							<Tooltip textKey="post_order.form.asset_explainer.usdt" faqKey="what_is_usdt" />
-						{:else if a === 'USDC'}
-							<Tooltip textKey="post_order.form.asset_explainer.usdc" faqKey="what_is_usdc" />
-						{:else if a === 'DAI'}
-							<Tooltip textKey="post_order.form.asset_explainer.dai" faqKey="what_is_dai" />
-						{:else if a === 'BCH'}
-							<Tooltip textKey="post_order.form.asset_explainer.bch" faqKey="what_is_bch" />
-						{:else if a === 'LTC'}
-							<Tooltip textKey="post_order.form.asset_explainer.ltc" faqKey="what_is_ltc" />
-						{:else if a === 'DASH'}
-							<Tooltip textKey="post_order.form.asset_explainer.dash" faqKey="what_is_dash" />
-						{:else if a === 'DOGE'}
-							<Tooltip textKey="post_order.form.asset_explainer.doge" faqKey="what_is_doge" />
-						{:else if a === 'ZEC'}
-							<Tooltip textKey="post_order.form.asset_explainer.zec" faqKey="what_is_zec" />
-						{:else if a === 'ARRR'}
-							<Tooltip textKey="post_order.form.asset_explainer.arrr" faqKey="what_is_arrr" />
-						{:else if a === 'DCR'}
-							<Tooltip textKey="post_order.form.asset_explainer.dcr" faqKey="what_is_dcr" />
-						{:else if a === 'SOL'}
-							<Tooltip textKey="post_order.form.asset_explainer.sol" faqKey="what_is_sol" />
-						{:else if a === 'ETH'}
-							<Tooltip textKey="post_order.form.asset_explainer.eth" faqKey="what_is_eth" />
-						{:else if a === 'XRP'}
-							<Tooltip textKey="post_order.form.asset_explainer.xrp" faqKey="what_is_xrp" />
-						{/if}
-					</div>
+					<Tooltip textKey={item.explainerKey} faqKey={item.faqKey}>
+						{#snippet trigger()}
+							<button
+								type="button"
+								{disabled}
+								title={disabled
+									? ($_('post_order.form.waiver_asset_locked_title') as string)
+									: ''}
+								onclick={() => {
+									asset = a as Asset;
+									// Part 121 / cp30 / cp31: reset network when
+									// leaving a multi-network asset, so a re-pick
+									// later forces a fresh explicit choice (no
+									// stale network value).
+									if (a !== 'USDT') usdtNetwork = null;
+									if (a !== 'USDC') usdcNetwork = null;
+									if (a !== 'DAI') daiNetwork = null;
+								}}
+								class="flex items-center gap-2 rounded-xl border-2 px-4 py-2 transition active:scale-[0.98] {asset ===
+								a
+									? 'border-morphit-emerald bg-emerald-50 dark:bg-ink-800'
+									: 'border-ink-200 dark:border-ink-700'} {disabled
+									? 'cursor-not-allowed opacity-40'
+									: asset === a
+										? ''
+										: 'hover:border-morphit-emerald/50 hover:bg-emerald-50/40 dark:hover:border-morphit-emerald/40 dark:hover:bg-morphit-emerald/[0.06]'}"
+							>
+								<img
+									src={item.iconPath}
+									alt=""
+									aria-hidden="true"
+									width="20"
+									height="20"
+									class="h-5 w-5 flex-none"
+								/>
+								<span class="font-mono font-semibold">{a}</span>
+							</button>
+						{/snippet}
+					</Tooltip>
 				{/each}
 			</div>
 
@@ -2433,6 +2496,14 @@
 							<span class="mt-1 block text-xs text-ink-500 dark:text-ink-400">
 								{firstOrderMinHint}
 							</span>
+						{:else if returningMinHint}
+							<span class="mt-1 block text-xs text-ink-500 dark:text-ink-400">
+								{returningMinHint}
+							</span>
+						{:else}
+							<span class="mt-1 block text-xs text-ink-500 dark:text-ink-400">
+								{$_('post_order.form.amount_optional_hint')}
+							</span>
 						{/if}
 					</label>
 					<label class="block">
@@ -2460,6 +2531,14 @@
 						</span>
 					</label>
 				</div>
+
+				<!-- cp396: amount min/max validation surfaces HERE, directly
+				     under the amount fields and ABOVE the Price section, in
+				     themed red (kind="error"). The min>max swap prompt belongs
+				     next to the fields it's about, not buried below Price. -->
+				{#if amountTouched && amountError}
+					<StatusLine kind="error" id="amount-error">{amountError}</StatusLine>
+				{/if}
 
 				<!-- Price model picker.  Two shapes shipped: 'spread'
 				     (relative to current market rate, with an optional
@@ -2610,9 +2689,6 @@
 						</ul>
 					</div>
 				{/if}
-				{#if amountTouched && amountError}
-					<StatusLine kind="warn" id="amount-error">{amountError}</StatusLine>
-				{/if}
 			</section>
 		{/if}
 
@@ -2749,8 +2825,14 @@
 						</p>
 					</div>
 				</label>
-				{#if !hasFiredFirstTrade(blurtAccount)}
-					<!-- First-trade announcement opt-in (phase 1 only). Arms the one-time @morphit-community post that fires when the user later leaves feedback on this trade; default off, spent after the first trade. Distinct from the per-order blog post above. -->
+				{#if isFirstTrade && !hasFiredFirstTrade(blurtAccount)}
+					<!-- First-trade announcement opt-in (phase 1 only). Shown ONLY during the
+					     genuine first-buy (isFirstTrade = waiver-eligible welcome-bonus path),
+					     so it never reappears on a 2nd+ trade. Arms the one-time @morphit-community
+					     post (blurt-176570) that fires when the user later leaves feedback on this
+					     trade; default off, spent after the first trade. Distinct from the per-order
+					     blog post above. The community post celebrates a NEW trader's first BUY so
+					     curators can find + upvote it. -->
 					<label
 						class="mt-4 flex items-start gap-3 rounded-xl border-2 border-morphit-emerald/30 bg-morphit-emerald/5 p-4 dark:border-morphit-emerald/40"
 					>

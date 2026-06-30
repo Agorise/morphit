@@ -29,10 +29,12 @@
 		isPushSupported,
 		currentSubscription,
 		subscribe as subscribeToPush,
-		type PushPrivacyMode
+		type PushPrivacyMode,
+		type SubscribeError
 	} from '$lib/notifications/push';
 	import { notificationPrefs, setCategory, setChannel } from '$lib/notifications/preferences';
 	import { shouldShowChatNudge, CHAT_NUDGE_DISMISSED_KEY } from '$lib/notifications/chatNudge';
+	import StatusLine from '$components/StatusLine.svelte';
 
 	interface Props {
 		/** Counterparty handle, for the prompt copy. */
@@ -44,7 +46,12 @@
 	let visible = $state(false);
 	let busy = $state(false);
 	let enabled = $state(false);
-	let failed = $state(false);
+	// The SPECIFIC failure reason (null = no error). Surfacing the exact
+	// SubscribeError — rather than one catch-all line — lets the user see
+	// WHY it failed (permission declined vs operator hasn't enabled push
+	// vs relay unreachable) and reuses the per-code messages Settings →
+	// Notifications already ships, so there are no nudge-only strings.
+	let errorCode = $state<SubscribeError | null>(null);
 
 	function readDismissed(): boolean {
 		if (!browser) return true;
@@ -73,11 +80,11 @@
 		if (busy) return;
 		const account = getUserBlurtAccount();
 		if (!account) {
-			failed = true;
+			errorCode = 'locked_session';
 			return;
 		}
 		busy = true;
-		failed = false;
+		errorCode = null;
 		try {
 			const mode: PushPrivacyMode =
 				get(notificationPrefs).pushPrivacy === 'self_hosted' ? 'self_hosted' : 'standard';
@@ -89,11 +96,13 @@
 			setTimeout(() => {
 				visible = false;
 			}, 2200);
-		} catch {
-			// Push can fail (operator relay has no VAPID, permission denied,
-			// browser quirk). Don't crash the chat — show a quiet fallback
-			// pointing at Settings.
-			failed = true;
+		} catch (err: unknown) {
+			// Push can fail for several distinct reasons (permission
+			// declined, operator hasn't enabled push, relay unreachable,
+			// locked session…). subscribe() throws the specific
+			// SubscribeError code — surface it so the message is
+			// actionable instead of a vague "try Settings".
+			errorCode = (err as SubscribeError) ?? 'subscribe_failed';
 		} finally {
 			busy = false;
 		}
@@ -159,10 +168,10 @@
 					{$_('chat_notif_nudge.not_now')}
 				</button>
 			</div>
-			{#if failed}
-				<p class="mt-2 text-xs text-red-700 dark:text-red-400">
-					{$_('chat_notif_nudge.error')}
-				</p>
+			{#if errorCode}
+				<StatusLine kind="error">
+					{$_(`settings.notifications.push_error_${errorCode}`)}
+				</StatusLine>
 			{:else}
 				<p class="mt-2 text-xs text-ink-500 dark:text-ink-500">
 					{$_('chat_notif_nudge.privacy_note')}

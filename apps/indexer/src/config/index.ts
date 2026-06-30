@@ -966,6 +966,9 @@ const envSchema = z.object({
 	MORPHIT_INDEXER_FX_ER_API_BASE_URL: z.string().default('https://open.er-api.com/v6'),
 	MORPHIT_INDEXER_FX_CURRENCY_API_BASE_URL: z
 		.string()
+		// jsDelivr `@latest` 302-redirects to the concrete dated version;
+		// the currency-api fetcher follows that hop (same-host only). See
+		// currencyApiFetcher.ts / fetchUtil.ts followSameHostRedirect.
 		.default('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1'),
 
 	// ─── cp127: morphit_native (self-sovereign) price feed ──────

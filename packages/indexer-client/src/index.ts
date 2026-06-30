@@ -398,6 +398,15 @@ export interface AccountBalanceResponse {
 		 *  the account has none. Lets the block explorer's account page
 		 *  render the posting key WITHOUT a direct getAccount RPC read. */
 		readonly posting_pub: string | null;
+		/** cp396 — unclaimed author/curation rewards awaiting claim_reward_balance.
+		 *  `reward_blurt_balance` is liquid BLURT ("0.000 BLURT");
+		 *  `reward_vesting_balance` is the VESTS the claim op consumes
+		 *  ("0.000000 VESTS"); `reward_vesting_blurt` is the chain's BLURT
+		 *  value of that vesting reward (shown as BP). Zero sentinels when
+		 *  the account has nothing to claim. */
+		readonly reward_blurt_balance: string;
+		readonly reward_vesting_balance: string;
+		readonly reward_vesting_blurt: string;
 	};
 	readonly dgp: {
 		readonly head_block_number: number;

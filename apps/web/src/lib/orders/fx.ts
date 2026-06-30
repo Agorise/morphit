@@ -90,22 +90,28 @@ export function fiatToUsd(table: FxResponse | null, amount: number, fiat: string
 	return amount / r;
 }
 
-/** The first-order minimum ($1 USD-equivalent) expressed in `fiat`,
- *  rounded to a clean, grandma-friendly value for seeding the
- *  Min-value field.  null when the fiat is unknown (caller seeds the
- *  raw USD figure / leaves the field blank).  Pure + total.
+/** A USD amount expressed in `fiat`, rounded UP to a clean,
+ *  grandma-friendly step (never below the true equivalent) for seeding
+ *  a fiat amount field.  null when the fiat is unknown.  Pure + total.
  *
- *  Rounding: keep it readable but never below the true $1-equivalent
- *  (rounding DOWN could seed a value the floor then rejects).  We
- *  round UP to a sensible step so the seeded default always clears
- *  the floor: ≥100 → up to nearest 10; ≥10 → nearest whole; ≥1 →
+ *  Rounding: keep it readable but never below the true equivalent
+ *  (rounding DOWN could seed a value the floor then rejects).  Round UP
+ *  to a sensible step: ≥100 → nearest 10; ≥10 → nearest whole; ≥1 →
  *  nearest 0.5; otherwise two decimals (rounded up). */
-export function firstOrderMinInFiat(table: FxResponse | null, fiat: string): number | null {
-	const raw = usdToFiat(table, FIRST_ORDER_MIN_USD, fiat);
+export function usdMinInFiat(table: FxResponse | null, usd: number, fiat: string): number | null {
+	const raw = usdToFiat(table, usd, fiat);
 	if (raw === null) return null;
 	const ceilTo = (x: number, step: number): number => Math.ceil(x / step) * step;
 	if (raw >= 100) return ceilTo(raw, 10);
 	if (raw >= 10) return ceilTo(raw, 1);
 	if (raw >= 1) return ceilTo(raw, 0.5);
 	return Math.ceil(raw * 100) / 100;
+}
+
+/** The first-order minimum ($1 USD-equivalent) expressed in `fiat`,
+ *  rounded to a clean, grandma-friendly value for seeding the
+ *  Min-value field.  null when the fiat is unknown (caller seeds the
+ *  raw USD figure / leaves the field blank).  Pure + total. */
+export function firstOrderMinInFiat(table: FxResponse | null, fiat: string): number | null {
+	return usdMinInFiat(table, FIRST_ORDER_MIN_USD, fiat);
 }

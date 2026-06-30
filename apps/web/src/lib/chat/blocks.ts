@@ -33,6 +33,12 @@ const blockedSet = writable<Set<string>>(new Set());
 
 let loaded = false;
 let inflight: Promise<void> | null = null;
+/** Bumped on every optimistic mutation (markBlocked / markUnblocked).
+ *  loadBlocks snapshots it before its fetch and refuses to overwrite the
+ *  store if the user mutated the set while the fetch was in flight — so a
+ *  Block/Unblock clicked mid-load can't be silently clobbered by a now-
+ *  stale indexer snapshot. The next refreshBlocks reconciles. */
+let mutationGen = 0;
 
 /** Readable store surface for components. Always safe to
  *  subscribe — initial value is an empty set. Components can
@@ -52,14 +58,24 @@ export async function loadBlocks(myAccount: string): Promise<void> {
 	if (inflight) {
 		return inflight;
 	}
+	const startGen = mutationGen;
 	inflight = (async () => {
 		const res = await getBlocks(myAccount);
 		if (res.ok) {
-			const s = new Set<string>();
-			for (const e of res.data.items) {
-				s.add(e.blocked.toLowerCase());
+			// If the user optimistically mutated the set (markBlocked /
+			// markUnblocked) while this fetch was in flight, the indexer
+			// snapshot we just received predates their action — adopting it
+			// would clobber a Block/Unblock they just clicked (it would
+			// "un-stick"). Keep their newer state; a later refreshBlocks
+			// reconciles once the op is indexed. With no intervening
+			// mutation, adopt the indexer truth as the authoritative set.
+			if (mutationGen === startGen) {
+				const s = new Set<string>();
+				for (const e of res.data.items) {
+					s.add(e.blocked.toLowerCase());
+				}
+				blockedSet.set(s);
 			}
-			blockedSet.set(s);
 			loaded = true;
 		}
 		// On failure, leave loaded=false so a later access
@@ -89,6 +105,7 @@ export async function refreshBlocks(myAccount: string): Promise<void> {
  *  validates or doesn't), refreshBlocks() corrects us. */
 export function markBlocked(account: string): void {
 	const normalized = account.toLowerCase();
+	mutationGen++;
 	blockedSet.update((s) => {
 		if (s.has(normalized)) return s;
 		const next = new Set(s);
@@ -101,6 +118,7 @@ export function markBlocked(account: string): void {
  *  unblock. Parallel to markBlocked. */
 export function markUnblocked(account: string): void {
 	const normalized = account.toLowerCase();
+	mutationGen++;
 	blockedSet.update((s) => {
 		if (!s.has(normalized)) return s;
 		const next = new Set(s);

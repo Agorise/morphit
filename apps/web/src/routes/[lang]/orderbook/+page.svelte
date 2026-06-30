@@ -646,7 +646,7 @@
 	 *  is deliberately NO auto-collapse on filter changes — folding the
 	 *  card away mid-adjustment was disorienting, so it stays open until
 	 *  the user chooses to collapse it. */
-	let filtersExpanded = $state(true);
+	let filtersExpanded = $state(false);
 
 	// Re-fetch when any filter changes.
 	$effect(() => {
@@ -894,8 +894,11 @@
 	{/if}
 
 	<!-- Filters -->
-	<section class="card mb-6" aria-labelledby="filters-heading">
-		<h2 id="filters-heading" class="mb-4">
+	<section
+		class="card mb-6 {filtersExpanded ? '' : 'px-4 py-2'}"
+		aria-labelledby="filters-heading"
+	>
+		<h2 id="filters-heading" class={filtersExpanded ? 'mb-4' : 'mb-0'}>
 			<button
 				type="button"
 				onclick={() => (filtersExpanded = !filtersExpanded)}
@@ -908,7 +911,9 @@
 					{$_('orderbook.filters.heading')}
 				</span>
 				<span
-					class="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-ink-100 text-ink-600 transition group-hover:bg-emerald-50 group-hover:text-morphit-emerald dark:bg-ink-800 dark:text-ink-300 dark:group-hover:bg-ink-700"
+					class="flex flex-none items-center justify-center rounded-full bg-ink-100 text-ink-600 transition group-hover:bg-emerald-50 group-hover:text-morphit-emerald dark:bg-ink-800 dark:text-ink-300 dark:group-hover:bg-ink-700 {filtersExpanded
+						? 'h-8 w-8'
+						: 'h-7 w-7'}"
 					aria-hidden="true"
 				>
 					<svg
@@ -1200,12 +1205,27 @@
 							? o.asset_network
 							: null}
 					<li
-						class="card-interactive animate-fade-up hover:border-morphit-emerald/20 hover:bg-emerald-50/30 dark:hover:border-morphit-emerald/15 dark:hover:bg-morphit-emerald/[0.05] {accountIsHidden ||
+						class="card-interactive animate-fade-up relative p-4 sm:p-6 hover:border-morphit-emerald/20 hover:bg-emerald-50/30 dark:hover:border-morphit-emerald/15 dark:hover:bg-morphit-emerald/[0.05] {accountIsHidden ||
 						accountIsBlocked
 							? 'opacity-50'
 							: ''}"
 					>
-						<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+						<!-- Stretched link: the whole card opens the order's
+						     detail page. It sits BEHIND the card content
+						     (z-0); the genuinely-interactive children below
+						     (the profile link, the Message CTA, and the
+						     eyeball hide/show toggle) are raised to z-10 so
+						     they keep their own click targets. Clicking
+						     anywhere else on the card — title, chips,
+						     region/payment, terms — opens the order. -->
+						<a
+							href={lp(`/@${o.account}/${o.permlink}`)}
+							class="absolute inset-0 z-0 rounded-[inherit] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-morphit-emerald"
+							aria-label={$_('orderbook.order.open_aria', {
+								values: { title: cardTitle(o) }
+							}) as string}
+						></a>
+						<div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
 							<div class="flex-1">
 								<div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
 									<span class="font-display text-lg font-bold">
@@ -1298,9 +1318,8 @@
 										displayName={labelProps.displayName}
 										avatarSvg={labelProps.avatarSvg}
 										avatarDataUri={labelProps.avatarDataUri}
-										nostrUrl={labelProps.nostrUrl}
-										blurtMediaUrl={labelProps.blurtMediaUrl}
 										href={lp(`/@${o.account}`)}
+										class="relative z-10"
 									/>
 									{#if o.is_new_trader}
 										<NewTraderChip />
@@ -1326,26 +1345,30 @@
 										<OrderExpiryChip expiresAt={o.expires_at} />
 									{/if}
 								</div>
-								{#if o.location_region}
-									<p class="mt-1 text-xs text-ink-500">
-										<span class="font-semibold">{$_('orderbook.order.region_label')}:</span>
-										{o.location_region}
-									</p>
-								{/if}
-								{#if o.payment_methods.length > 0}
-									<p class="mt-1 text-xs text-ink-500">
-										<span class="font-semibold">{$_('orderbook.order.payment_label')}:</span>
-										{displayNamesForMethods(o.payment_methods, instLookup).join(', ')}
+								{#if o.location_region || o.payment_methods.length > 0}
+									<p class="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-ink-500">
+										{#if o.location_region}
+											<span>
+												<span class="font-semibold">{$_('orderbook.order.region_label')}:</span>
+												{o.location_region}
+											</span>
+										{/if}
+										{#if o.payment_methods.length > 0}
+											<span>
+												<span class="font-semibold">{$_('orderbook.order.payment_label')}:</span>
+												{displayNamesForMethods(o.payment_methods, instLookup).join(', ')}
+											</span>
+										{/if}
 									</p>
 								{/if}
 								{#if o.terms}
-									<p class="mt-2 text-sm text-ink-700 dark:text-ink-200">
+									<p class="mt-1.5 text-sm text-ink-700 dark:text-ink-200">
 										<TermsText text={o.terms} />
 									</p>
 								{/if}
 							</div>
 							<div
-								class="flex flex-none flex-col items-end gap-2 text-xs text-ink-500 sm:text-right"
+								class="flex flex-none flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-500 sm:flex-col sm:items-end sm:gap-2 sm:text-right"
 							>
 								<span>
 									{$_('orderbook.order.updated_prefix')}
@@ -1369,7 +1392,7 @@
 									     proceeds normally. -->
 									<a
 										href={lp(`/chat/${o.account}?order=${encodeURIComponent(o.permlink)}`)}
-										class="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold text-morphit-emerald hover:bg-morphit-emerald/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
+										class="relative z-10 inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold text-morphit-emerald hover:bg-morphit-emerald/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
 										aria-label={$_('chat.message_button_aria', {
 											values: { peer: o.account }
 										})}
@@ -1399,7 +1422,7 @@
 										title={accountIsHidden
 											? ($_('orderbook.unhide_button_tooltip') as string)
 											: ($_('orderbook.hide_button_tooltip') as string)}
-										class="rounded px-2 py-1 text-ink-400 hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
+										class="relative z-10 rounded px-2 py-1 text-ink-400 hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
 										aria-label={accountIsHidden
 											? ($_('orderbook.unhide_button_aria', {
 													values: { account: o.account }
