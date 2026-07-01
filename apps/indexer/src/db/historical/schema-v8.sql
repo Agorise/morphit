@@ -1,0 +1,15 @@
+-- Migration v8 — recorded no-op (kept for migration-numbering continuity).
+--
+-- Originally introduced in Phase 5c to scaffold the chat_messages
+-- table with an order_permlink-scoped design.  By the time chat
+-- shipped (post-ADR-0014 sub-Q resolutions), the design had pivoted
+-- to general-purpose DM and chat_messages was defined in schema.sql
+-- (the v1 base) with a different column set and a UNIQUE
+-- source_trx_id dedupe constraint.  schema-v25.sql later added back
+-- order_permlink as nullable.
+--
+-- Rather than retroactively delete this file (which would shift
+-- every subsequent migration number), v8 stays as a recorded no-op.
+-- Pre-launch we have no deployed instances — see REVISIT-LIST item
+-- "collapse migration history" for the v1.0.0 cleanup.
+SELECT 1;

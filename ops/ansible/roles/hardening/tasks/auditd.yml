@@ -1,0 +1,67 @@
+# §37.6 — auditd.
+---
+- name: Deploy audit.rules
+  ansible.builtin.copy:
+    dest: /etc/audit/rules.d/morphit.rules
+    owner: root
+    group: root
+    mode: '0640'
+    content: |
+      # Managed by Ansible — see OPERATIONS.md §37.6 for rationale.
+      # CIS-flavored auditing of identity, sudo, time, and morphit
+      # service files.
+      -D
+      -b 8192
+      -f 1
+
+      # Identity files
+      -w /etc/passwd -p wa -k identity
+      -w /etc/shadow -p wa -k identity
+      -w /etc/group -p wa -k identity
+      -w /etc/gshadow -p wa -k identity
+      -w /etc/sudoers -p wa -k identity
+      -w /etc/sudoers.d/ -p wa -k identity
+
+      # SSH
+      -w /etc/ssh/sshd_config -p wa -k sshd_config
+      -w /etc/ssh/sshd_config.d/ -p wa -k sshd_config
+
+      # Morphit service files
+      -w /etc/morphit/ -p wa -k morphit_config
+      -w {{ morphit_repo_path }}/apps/relay/ -p wa -k morphit_relay_code
+      -w {{ morphit_repo_path }}/apps/indexer/ -p wa -k morphit_indexer_code
+
+      # Privilege escalation
+      -a always,exit -F arch=b64 -S execve -F euid=0 -k root_exec
+      -a always,exit -F arch=b64 -S setuid -k setuid
+      -a always,exit -F arch=b64 -S setgid -k setgid
+
+      # Time changes
+      -a always,exit -F arch=b64 -S clock_settime -k time_change
+      -a always,exit -F arch=b64 -S settimeofday -k time_change
+
+      # Make rules immutable after load (-e 2 enables this).  Comment
+      # out the next line if you need to reload rules without reboot
+      # during initial deployment.
+      -e 2
+  notify: Reload audit rules
+
+- name: Configure auditd log rotation
+  ansible.builtin.lineinfile:
+    path: /etc/audit/auditd.conf
+    regexp: '^max_log_file\s*='
+    line: "max_log_file = {{ audit_log_max_size_mb }}"
+  notify: Restart auditd
+
+- name: Configure auditd max log files
+  ansible.builtin.lineinfile:
+    path: /etc/audit/auditd.conf
+    regexp: '^num_logs\s*='
+    line: "num_logs = {{ audit_log_max_files }}"
+  notify: Restart auditd
+
+- name: Enable + start auditd
+  ansible.builtin.systemd:
+    name: auditd
+    enabled: true
+    state: started
