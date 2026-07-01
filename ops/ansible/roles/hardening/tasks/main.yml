@@ -1,0 +1,71 @@
+# Role: hardening
+#
+# Implements OPERATIONS.md §37 (all 18 subsections) + §34
+# (UFW + fail2ban).  Idempotent — safe to re-run.
+#
+# WARNING: applying §37.1 changes SSH config.  Verify your key-
+# based login works in a SECOND ssh session BEFORE the playbook
+# reaches the "Restart sshd" handler.  If you can't, you're about
+# to lock yourself out and will need console / KVM access to
+# recover.
+
+---
+- name: §37.1 SSH hardening
+  ansible.builtin.import_tasks: ssh.yml
+  tags: [hardening_ssh, '37.1']
+
+- name: §37.2 Unattended security upgrades
+  ansible.builtin.import_tasks: unattended.yml
+  tags: [hardening_unattended, '37.2']
+
+- name: §37.3 Kernel sysctl hardening
+  ansible.builtin.import_tasks: sysctl.yml
+  tags: [hardening_sysctl, '37.3']
+
+- name: §37.4 Filesystem mount hardening (notes-only — manual reboot may be needed)
+  ansible.builtin.import_tasks: mounts.yml
+  tags: [hardening_mounts, '37.4']
+
+- name: §37.6 auditd
+  ansible.builtin.import_tasks: auditd.yml
+  tags: [hardening_auditd, '37.6']
+
+- name: §37.7 AppArmor profiles
+  ansible.builtin.import_tasks: apparmor.yml
+  tags: [hardening_apparmor, '37.7']
+
+- name: §37.9 AIDE — filesystem integrity baseline
+  ansible.builtin.import_tasks: aide.yml
+  tags: [hardening_aide, '37.9']
+
+- name: §37.10 Secrets file hygiene
+  ansible.builtin.import_tasks: secrets_perms.yml
+  tags: [hardening_secrets, '37.10']
+
+- name: §37.13 Outbound network policy
+  ansible.builtin.import_tasks: outbound.yml
+  tags: [hardening_outbound, '37.13']
+
+- name: §37.14 Operator alerting (Postfix smarthost config)
+  ansible.builtin.import_tasks: alerting.yml
+  tags: [hardening_alerting, '37.14']
+
+- name: §37.15 Rootkit scanner (rkhunter)
+  ansible.builtin.import_tasks: rkhunter.yml
+  tags: [hardening_rkhunter, '37.15']
+
+- name: §37.16 GRUB / boot hardening (manual review steps)
+  ansible.builtin.import_tasks: grub.yml
+  tags: [hardening_grub, '37.16']
+
+- name: §37.17 Operator account password discipline (pam_pwquality)
+  ansible.builtin.import_tasks: password_policy.yml
+  tags: [hardening_password_policy, '37.17']
+
+- name: §34 UFW firewall
+  ansible.builtin.import_tasks: ufw.yml
+  tags: [hardening_ufw, firewall, '34']
+
+- name: §34 fail2ban
+  ansible.builtin.import_tasks: fail2ban.yml
+  tags: [hardening_fail2ban, fail2ban, '34']

@@ -1,0 +1,51 @@
+# ─────────────────────────────────────────────────────────────────────
+# Morphit — daily DB backup timer.
+#
+# Triggers morphit-backup.service every day at 04:00 local time
+# (the operator's choice; common low-traffic window).  Persistent
+# means a missed run (server was off at 04:00) fires as soon as
+# the timer is next active, so a daily-ish schedule actually
+# becomes daily.
+#
+# Why 04:00 and not midnight:
+#   - Midnight is high traffic for some operators (US west coast
+#     evening, Europe/Asia early morning).
+#   - 04:00 local time is the global low-watermark for most
+#     consumer-facing services.
+#
+# The operator can change this with `systemctl edit
+# morphit-backup.timer` and overriding the OnCalendar= line
+# without touching the package-shipped unit file.
+# ─────────────────────────────────────────────────────────────────────
+
+[Unit]
+Description=Daily timer for morphit-backup.service
+Documentation=file:///home/morphit/morphit/docs/RUN-A-MORPHIT-NODE.md
+
+[Timer]
+# Run every day at 04:00:00 local time.  The trailing `*` matches
+# any second; we want the unit to fire as close to 04:00:00 as
+# possible.
+OnCalendar=*-*-* 04:00:00
+
+# AccuracySec=1m means systemd may delay the trigger up to a
+# minute to coalesce timer wakeups.  For a daily backup this is
+# fine; if the operator wants exact 04:00 they can set
+# AccuracySec=1s.
+AccuracySec=1m
+
+# If the system was powered off / suspended at 04:00, fire as
+# soon as the timer is next active.  Without this the daily
+# backup would just silently skip on suspended laptops or
+# rebooting servers.
+Persistent=true
+
+# Random delay 0-30 minutes so a fleet of operators doesn't all
+# hit Blurt RPC nodes at exactly the same instant.  (pg_dump
+# itself doesn't touch the chain, but the indexer might be
+# mid-poll when the dump starts; smearing the run time avoids
+# correlated load.)
+RandomizedDelaySec=30m
+
+[Install]
+WantedBy=timers.target

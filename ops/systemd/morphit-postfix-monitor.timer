@@ -1,0 +1,17 @@
+[Unit]
+Description=Morphit postfix monitor timer — fires the .service every 15 minutes
+Documentation=https://git.agorise.net/agorise/morphit
+Requires=morphit-postfix-monitor.service
+
+[Timer]
+# 2 min after boot (let postfix initialize), then every 15 min.
+# Queues built up due to credential rotation don't drain on their
+# own; this is responsive enough to catch a smarthost outage
+# within a quarter-hour.
+OnBootSec=2min
+OnUnitActiveSec=15min
+AccuracySec=30s
+Unit=morphit-postfix-monitor.service
+
+[Install]
+WantedBy=timers.target

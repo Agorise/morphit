@@ -1,0 +1,54 @@
+# roles/journald_monitor/tasks/main.yml
+#
+# Deploy the morphit-journald-monitor sidecar (journal disk
+# usage + rotation health).
+#
+# Optional variables:
+#   journald_size_critical_mb       : default 4096 (4 GB)
+#   journald_size_warn_mb           : default 1024 (1 GB)
+#   journald_rotation_stale_days    : default 90
+#   journald_rotation_stale_min_mb  : default 500
+#
+# References: docs/OPERATIONS.md §16 "Extended monitoring sidecars".
+
+---
+- name: Write journald-monitor env file (optional)
+  ansible.builtin.template:
+    src: journald-monitor.env.j2
+    dest: /etc/morphit/journald-monitor.env
+    owner: root
+    group: root
+    mode: '0644'
+  when:
+    - journald_size_critical_mb is defined or
+      journald_size_warn_mb is defined or
+      journald_rotation_stale_days is defined or
+      journald_rotation_stale_min_mb is defined
+  notify: Restart morphit-journald-monitor-timer
+
+- name: Install journald-monitor systemd service unit
+  ansible.builtin.copy:
+    src: /opt/morphit/ops/systemd/morphit-journald-monitor.service
+    dest: /etc/systemd/system/morphit-journald-monitor.service
+    owner: root
+    group: root
+    mode: '0644'
+    remote_src: true
+  notify: Reload systemd
+
+- name: Install journald-monitor systemd timer
+  ansible.builtin.copy:
+    src: /opt/morphit/ops/systemd/morphit-journald-monitor.timer
+    dest: /etc/systemd/system/morphit-journald-monitor.timer
+    owner: root
+    group: root
+    mode: '0644'
+    remote_src: true
+  notify: Reload systemd
+
+- name: Enable + start morphit-journald-monitor.timer
+  ansible.builtin.systemd:
+    name: morphit-journald-monitor.timer
+    enabled: true
+    state: started
+    daemon_reload: true

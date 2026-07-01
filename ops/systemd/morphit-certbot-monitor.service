@@ -1,0 +1,40 @@
+[Unit]
+Description=Morphit certbot monitor — TLS cert expiry + renewal-stall detection
+Documentation=https://git.agorise.net/agorise/morphit
+After=network-online.target
+
+[Service]
+Type=oneshot
+# Needs read access to /etc/letsencrypt/live/ which is root-only.
+User=root
+Group=root
+
+EnvironmentFile=-/etc/morphit/certbot-monitor.env
+ExecStart=/opt/morphit/ops/scripts/morphit-certbot-monitor.sh
+
+# ─── Hardening ─────────────────────────────────────────────────
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+LimitCORE=0
+PrivateNetwork=true
+RestrictAddressFamilies=AF_UNIX
+
+CapabilityBoundingSet=CAP_DAC_READ_SEARCH
+AmbientCapabilities=CAP_DAC_READ_SEARCH
+
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+
+[Install]
+WantedBy=multi-user.target

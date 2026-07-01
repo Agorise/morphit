@@ -1,0 +1,40 @@
+# roles/mdadm_monitor/tasks/main.yml
+#
+# Deploy the morphit-mdadm-monitor sidecar (Linux software RAID).
+# /proc/mdstat is in the kernel — no package install required.
+# Service uses DynamicUser=true; no setup needed beyond installing
+# the unit files.
+#
+# Useful only if the host actually runs md RAID.  If /proc/mdstat
+# has no md* entries the script exits silently — safe to enable
+# defensively.
+#
+# References: docs/OPERATIONS.md §16 "Extended monitoring sidecars".
+
+---
+- name: Install mdadm-monitor systemd service unit
+  ansible.builtin.copy:
+    src: /opt/morphit/ops/systemd/morphit-mdadm-monitor.service
+    dest: /etc/systemd/system/morphit-mdadm-monitor.service
+    owner: root
+    group: root
+    mode: '0644'
+    remote_src: true
+  notify: Reload systemd
+
+- name: Install mdadm-monitor systemd timer
+  ansible.builtin.copy:
+    src: /opt/morphit/ops/systemd/morphit-mdadm-monitor.timer
+    dest: /etc/systemd/system/morphit-mdadm-monitor.timer
+    owner: root
+    group: root
+    mode: '0644'
+    remote_src: true
+  notify: Reload systemd
+
+- name: Enable + start morphit-mdadm-monitor.timer
+  ansible.builtin.systemd:
+    name: morphit-mdadm-monitor.timer
+    enabled: true
+    state: started
+    daemon_reload: true
