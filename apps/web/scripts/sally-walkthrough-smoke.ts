@@ -26,7 +26,10 @@
  *   H6  backup-keys show-seed flow exists
  *   H7  /support is no longer a one-card bounce
  *   H8  AvatarMenu has View my profile
- *   H9  feedback first-trade disclosure with selling-point pitch
+ *   H9  per-order syndicate checkbox with selling-point pitch
+ *       (the separate LeaveFeedbackForm first-trade box was
+ *        removed in cp399 — announcing is still on by default,
+ *        controlled on the post form + in Settings)
  *   L8  /post broadcasts run redactPrivateKeys() over region +
  *       payment-method entries (in addition to terms)
  *   M3  waiver asset-locked hint renders ABOVE the chip row
@@ -125,16 +128,6 @@ const SCENARIOS: readonly Scenario[] = [
 		name: 'H8 — AvatarMenu has View my profile entry',
 		file: 'src/lib/components/AvatarMenu.svelte',
 		mustHave: ['Sally finding H8', 'avatar_menu.view_my_profile', 'goToMyProfile', 'canViewProfile']
-	},
-	{
-		name: 'H9 — feedback first-trade disclosure has selling-point pitch + checkbox',
-		file: 'src/lib/components/LeaveFeedbackForm.svelte',
-		mustHave: [
-			'Sally finding H9',
-			'feedback.first_trade_disclosure.heading',
-			'feedback.first_trade_disclosure.pitch',
-			'setFirstTradeAnnounce(e.currentTarget.checked)'
-		]
 	},
 	{
 		name: 'H9 — per-order syndicate checkbox has selling-point pitch',

@@ -87,6 +87,7 @@ const RESERVED_CANONICAL_KEYS: ReadonlySet<string> = new Set([
 	// cp128 — BRICS Pay (cross-border payment rail, BRICS+ bloc)
 	'brics_pay',
 	'cash_app',
+	'cash_machine_code',
 	'gcash',
 	'google_pay',
 	'ideal',
