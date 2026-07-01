@@ -1,5 +1,0 @@
-# roles/mdadm_monitor/handlers/main.yml
----
-- name: Reload systemd
-  ansible.builtin.systemd:
-    daemon_reload: true
