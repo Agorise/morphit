@@ -20,6 +20,7 @@
 -->
 
 <script lang="ts">
+	import { formatDayMonth } from '$lib/i18n/formatters';
 	import { _ } from 'svelte-i18n';
 	import BusyButton from '$components/BusyButton.svelte';
 	import { currentEnvelope, bootFromEnvelope } from '$stores/identity';
@@ -270,15 +271,8 @@
 	}
 
 	function formatEnrolledAt(ts: number): string {
-		try {
-			return new Intl.DateTimeFormat(undefined, {
-				year: 'numeric',
-				month: 'short',
-				day: 'numeric'
-			}).format(new Date(ts));
-		} catch {
-			return '';
-		}
+		// Sitewide canonical date format ("30 June, 2026").
+		return formatDayMonth(new Date(ts));
 	}
 
 	// Phase-banner text for the enrollment / soften flows.

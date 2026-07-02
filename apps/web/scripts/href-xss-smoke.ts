@@ -86,6 +86,19 @@ const SAFE_BUILDER_NAMES = [
  *  given <expr> to a value an attacker controls. */
 const ALLOWLIST_HREF_EXPR: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 	[
+		'apps/web/src/lib/components/OrderCard.svelte',
+		// cp404 — detailHref/profileHref/messageHref are STRING PROPS whose
+		// values the parent pages (orderbook + account) build with localePath():
+		//   lp(`/@${account}/${permlink}`), lp(`/@${account}`).
+		// localePath is a SAFE_BUILDER that only prefixes single-slash internal
+		// paths (external / `//` / any scheme pass through untouched — and these
+		// inputs always start with `/@`), and account/permlink are validated
+		// on-chain identifiers. The static tracer can't follow a prop value back
+		// to the parent's lp() call, but these are confirmed site-controlled
+		// internal routes — no operator/peer-controlled scheme is reachable.
+		new Set(['detailHref', 'messageHref', 'profileHref'])
+	],
+	[
 		'apps/web/src/routes/[lang]/explorer/account/[name=account]/+page.svelte',
 		// `txUrl ? lp(txUrl) : '#'` and `blockUrl ? lp(blockUrl) : '#'` —
 		// txUrl/blockUrl are `{@const}`s from morphitExplorerTxUrl(op.trxId) /

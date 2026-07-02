@@ -47,7 +47,7 @@ import { Hono } from 'hono';
 import type { Database } from '$db/pool';
 import type { Poller } from '$indexer/poller';
 import { logger } from '$log';
-import { chatEventBus, type ChatEvent } from '$indexer/chatEventBus';
+import { chatEventBus, type ChatEvent, type ChatFastEvent } from '$indexer/chatEventBus';
 import { errorBody } from '$api/shared';
 import {
 	eventMatchesFilter,
@@ -81,7 +81,7 @@ const SNAPSHOT_LIMIT = 50;
 const PENDING_DURING_SNAPSHOT_CAP = 1000;
 
 const ROW_SELECT = `
-	SELECT id::text, sender, recipient, ciphertext, header, created_at
+	SELECT id::text, sender, recipient, ciphertext, header, created_at, source_trx_id
 `;
 
 async function fetchSnapshot(db: Database, f: ChatStreamFilter): Promise<ChatStreamRow[]> {
@@ -98,6 +98,7 @@ async function fetchSnapshot(db: Database, f: ChatStreamFilter): Promise<ChatStr
 		ciphertext: string;
 		header: unknown;
 		created_at: Date;
+		source_trx_id: string;
 	}>(sql, [f.lo, f.hi]);
 	// pg returns BIGINT-as-string for id::text; coerce to JS number.
 	// cp138 A-3 correction: schema declares chat_messages.id as
@@ -118,7 +119,8 @@ async function fetchSnapshot(db: Database, f: ChatStreamFilter): Promise<ChatStr
 		recipient: r.recipient,
 		ciphertext: r.ciphertext,
 		header: r.header,
-		created_at: r.created_at
+		created_at: r.created_at,
+		source_trx_id: r.source_trx_id
 	}));
 }
 
@@ -144,6 +146,7 @@ async function fetchMessageById(
 		ciphertext: string;
 		header: unknown;
 		created_at: Date;
+		source_trx_id: string;
 	}>(sql, [messageId, f.lo, f.hi]);
 	const row = result.rows[0];
 	if (row === undefined) return null;
@@ -153,7 +156,8 @@ async function fetchMessageById(
 		recipient: row.recipient,
 		ciphertext: row.ciphertext,
 		header: row.header,
-		created_at: row.created_at
+		created_at: row.created_at,
+		source_trx_id: row.source_trx_id
 	};
 }
 
@@ -176,6 +180,7 @@ async function fetchSinceId(
 		ciphertext: string;
 		header: unknown;
 		created_at: Date;
+		source_trx_id: string;
 	}>(sql, [f.lo, f.hi, sinceId]);
 	return result.rows.map((r) => ({
 		id: parseInt(r.id, 10),
@@ -183,7 +188,8 @@ async function fetchSinceId(
 		recipient: r.recipient,
 		ciphertext: r.ciphertext,
 		header: r.header,
-		created_at: r.created_at
+		created_at: r.created_at,
+		source_trx_id: r.source_trx_id
 	}));
 }
 
@@ -210,6 +216,11 @@ export function chatStreamRoute(db: Database, poller: Poller): Hono {
 		// silently dropping events).
 		let snapshotSent = false;
 		const pendingDuringSnapshot: ChatEvent[] = [];
+		// cp403 [1] — parallel queue for head-block fast-path events that
+		// arrive before the snapshot is sent. Drained right after the
+		// snapshot, same as pendingDuringSnapshot. Carries the full
+		// payload (fast events have no DB row to re-fetch).
+		const pendingFastDuringSnapshot: ChatFastEvent[] = [];
 
 		// latestEmittedId — highest message id we've sent to this
 		// subscriber (snapshot OR diff).  The fallback poll uses
@@ -218,6 +229,7 @@ export function chatStreamRoute(db: Database, poller: Poller): Hono {
 		let latestEmittedId = 0;
 
 		let unsubscribeBus: (() => void) | null = null;
+		let unsubscribeFastBus: (() => void) | null = null;
 		let pollTimer: ReturnType<typeof setInterval> | null = null;
 		let keepaliveTimer: ReturnType<typeof setInterval> | null = null;
 		let cancelled = false;
@@ -238,6 +250,10 @@ export function chatStreamRoute(db: Database, poller: Poller): Hono {
 					if (unsubscribeBus !== null) {
 						unsubscribeBus();
 						unsubscribeBus = null;
+					}
+					if (unsubscribeFastBus !== null) {
+						unsubscribeFastBus();
+						unsubscribeFastBus = null;
 					}
 					if (pollTimer !== null) {
 						clearInterval(pollTimer);
@@ -274,6 +290,39 @@ export function chatStreamRoute(db: Database, poller: Poller): Hono {
 					}
 				};
 
+				/** cp403 [1] — push a head-block fast-path message as a
+				 *  PROVISIONAL message_appended. The message isn't in the
+				 *  DB yet (it's not irreversible), so it carries id:0 and
+				 *  the full payload from the event. The client dedupes it
+				 *  against its later durable twin by header.client_tag.
+				 *  Deliberately does NOT touch latestEmittedId — id:0 is a
+				 *  sentinel, not a watermark; the durable row (real id)
+				 *  advances the watermark when it arrives, and the fallback
+				 *  poll must not skip it. */
+				const pushFast = (ev: ChatFastEvent): void => {
+					if (cancelled) return;
+					safePush(
+						sseEvent(
+							'message_appended',
+							rowToWire({
+								id: 0,
+								sender: ev.sender,
+								recipient: ev.recipient,
+								ciphertext: ev.ciphertext,
+								header: ev.header,
+								created_at: ev.createdAt,
+								// Provisional head-block preview: the message isn't
+								// irreversible yet, so it has no settled on-chain
+								// anchor to cite. Empty here; the durable twin (real
+								// id) arrives with its source_trx_id and replaces this
+								// via header.client_tag dedupe. The PDF export treats
+								// an empty anchor as "pending confirmation".
+								source_trx_id: ''
+							})
+						)
+					);
+				};
+
 				// ─── Bus subscription FIRST (F-5 audit pattern) ────
 				// Subscribe before fetching snapshot so events
 				// arriving during the snapshot get queued, not
@@ -292,6 +341,24 @@ export function chatStreamRoute(db: Database, poller: Poller): Hono {
 						return;
 					}
 					void processMessage(ev.messageId);
+				});
+
+				// cp403 [1] — subscribe to the head-block fast path too.
+				// Same queue-during-snapshot discipline; carries the full
+				// payload so there's no DB fetch. No-op unless an operator
+				// enabled the tailer (ADR-0048) — otherwise emitFast never
+				// fires.
+				unsubscribeFastBus = chatEventBus.onFast((ev) => {
+					if (cancelled) return;
+					if (!eventMatchesFilter(ev, filter)) return;
+					if (!snapshotSent) {
+						if (pendingFastDuringSnapshot.length >= PENDING_DURING_SNAPSHOT_CAP) {
+							return;
+						}
+						pendingFastDuringSnapshot.push(ev);
+						return;
+					}
+					pushFast(ev);
 				});
 
 				// ─── Initial snapshot ────
@@ -331,6 +398,16 @@ export function chatStreamRoute(db: Database, poller: Poller): Hono {
 					void processMessage(ev.messageId);
 				}
 
+				// cp403 [1] — drain fast-path events that arrived during
+				// the snapshot. Order relative to the durable drain doesn't
+				// matter: the client sorts by created_at and dedupes by
+				// client_tag, so a provisional and its durable twin collapse
+				// regardless of arrival order.
+				const drainedFast = pendingFastDuringSnapshot.splice(0, pendingFastDuringSnapshot.length);
+				for (const ev of drainedFast) {
+					pushFast(ev);
+				}
+
 				// ─── Defense-in-depth fallback poll ────
 				pollTimer = setInterval(async () => {
 					if (cancelled) return;
@@ -359,6 +436,10 @@ export function chatStreamRoute(db: Database, poller: Poller): Hono {
 				if (unsubscribeBus !== null) {
 					unsubscribeBus();
 					unsubscribeBus = null;
+				}
+				if (unsubscribeFastBus !== null) {
+					unsubscribeFastBus();
+					unsubscribeFastBus = null;
 				}
 				if (pollTimer !== null) {
 					clearInterval(pollTimer);

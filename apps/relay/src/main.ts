@@ -274,6 +274,21 @@ async function main(): Promise<void> {
 	// references the store).  Sender is only constructed when
 	// pushEnabled (it calls webpush.setVapidDetails which throws
 	// on undefined keys).
+	// cp404 — a set-but-malformed VAPID public key (wrong length, a stray
+	// trailing newline, or the private key pasted in) can't yield working
+	// subscriptions, so config treats push as disabled. Tell the operator
+	// clearly rather than letting every user hit a cryptic "subscribe
+	// failed" in their browser.
+	if (
+		cfg.vapidPublicKey &&
+		cfg.vapidPrivateKey &&
+		cfg.vapidSubject &&
+		!cfg.pushEnabled
+	) {
+		cfgLog.warn('vapid_public_key_invalid', {
+			hint: 'MORPHIT_RELAY_VAPID_PUBLIC_KEY is set but is not a valid VAPID public key (must be a base64url-encoded 65-byte uncompressed P-256 point). Push is DISABLED until corrected. Check for a trailing newline/whitespace, or regenerate the pair with: npx web-push generate-vapid-keys'
+		});
+	}
 	const pushSubscriptionStore = new PushSubscriptionStore(db);
 	const pushSubscribeLimiter = new Limiter(20, 60 * 60_000); // 20/hour/IP
 	// cp131 MED-009 — per-IP rate limit on unsubscribe.  Same

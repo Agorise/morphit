@@ -22,6 +22,8 @@
 	// gone; the footer renders its own chips).
 	import { organizationSchema, websiteSchema, softwareApplicationSchema } from '$seo/jsonld';
 	import { instance } from '$stores/instance';
+	import { hasAnySession } from '$stores/identity';
+	import { hasPersistedKeystore } from '$crypto/persistentKeystore';
 
 	// cp115-cp6: the old 4-card `points` grid (non_custodial / no_kyc /
 	// uncensorable / grandma) was deleted — replaced by the 7-card
@@ -33,6 +35,30 @@
 	// [lang]/+layout.svelte for design rationale.
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
 	const lp = $derived((path: string) => localePath(path, currentLang));
+
+	// Hide the "Start trading" onboarding CTA for anyone who already has
+	// an account on this device — whether signed in (unlocked OR
+	// paired-readonly) or merely locked (keystore persisted, awaiting
+	// unlock). Existing users reach their session via the header
+	// AvatarMenu / the Unlock screen; routing them through fresh
+	// onboarding makes no sense.
+	//
+	// hasPersistedKeystore() is NOT reactive and reads false on SSR (no
+	// localStorage). $hasAnySession is *also* false for a LOCKED session,
+	// so a pure `$hasAnySession || hasPersistedKeystore()` derived can keep
+	// the SSR "false" and never re-read on the client — leaving the CTA
+	// visible for a locked returning user (the REVISIT-LIST deferred
+	// hardening). So mirror the keystore flag into reactive $state via an
+	// $effect that re-reads on mount AND whenever the session state flips:
+	// mount catches the locked-on-load case; the $hasAnySession dependency
+	// catches unlock and sign-out (so the CTA correctly REappears after a
+	// sign-out that happens while sitting on the homepage).
+	let keystorePersisted = $state(false);
+	$effect(() => {
+		void $hasAnySession;
+		keystorePersisted = hasPersistedKeystore();
+	});
+	const hideStartTradingCta = $derived($hasAnySession || keystorePersisted);
 
 	// cp169 lazy-loaders for every below-the-fold component on the
 	// landing page.  All three sit below the fold on the typical
@@ -112,7 +138,9 @@
 				style="animation-delay: 220ms"
 			>
 				<a href={lp('/orderbook')} class="btn-primary">{$_('home.cta_browse')}</a>
-				<a href={lp('/onboarding')} class="btn-secondary">{$_('home.cta_start')}</a>
+				{#if !hideStartTradingCta}
+					<a href={lp('/onboarding')} class="btn-secondary">{$_('home.cta_start')}</a>
+				{/if}
 			</div>
 			<!-- cp168 removed the returning-user "Already have a Blurt
 			     account…" tertiary CTA.  Reason: it mentioned the chain

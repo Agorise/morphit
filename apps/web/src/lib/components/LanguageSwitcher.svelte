@@ -5,12 +5,31 @@
 	import { page } from '$app/stores';
 	import { goto, replaceState } from '$app/navigation';
 
+	/** When true the dropdown opens UPWARD. Used by the footer instance,
+	 *  where the trigger sits at the very bottom of the page and a
+	 *  downward menu would render below the fold. Desktop anchors to the
+	 *  button's top edge (`bottom-full`); the mobile fixed sheet anchors
+	 *  near the bottom of the viewport instead of the top. Default opens
+	 *  downward (header / showcase usage). */
+	let { dropUp = false }: { dropUp?: boolean } = $props();
+
 	let open = $state(false);
 	let buttonEl: HTMLButtonElement;
 	let menuEl: HTMLDivElement | undefined = $state();
 
 	const currentMeta = $derived(
 		SUPPORTED_LOCALES.find((l) => l.code === $currentLocale) ?? SUPPORTED_LOCALES[0]
+	);
+
+	// Dropdown anchoring. Down (default): mobile sheet fixed near the top
+	// (top-16), desktop menu below the button (top-auto/mt-2, top-right
+	// origin). Up (dropUp, footer): mobile sheet fixed near the bottom
+	// (bottom-16), desktop menu above the button (bottom-full/mb-2,
+	// bottom-right origin) so it never opens below the page fold.
+	const menuPositionClass = $derived(
+		dropUp
+			? 'bottom-16 sm:bottom-full sm:mb-2 ltr:sm:origin-bottom-right rtl:sm:origin-bottom-left'
+			: 'top-16 sm:top-auto sm:mt-2 ltr:sm:origin-top-right rtl:sm:origin-top-left'
 	);
 
 	// A compact 2-letter badge per locale. For unambiguous languages this is
@@ -119,7 +138,7 @@
 			bind:this={menuEl}
 			role="listbox"
 			aria-label={$_('nav.language')}
-			class="fixed inset-x-3 top-16 z-50 grid max-h-[min(70vh,30rem)] grid-cols-2 gap-1 overflow-y-auto rounded-xl border border-ink-200 bg-white p-1.5 shadow-morphit-card sm:absolute sm:inset-x-auto sm:end-0 sm:top-auto sm:mt-2 sm:w-[min(92vw,30rem)] sm:origin-top-right sm:grid-cols-3 dark:border-ink-700 dark:bg-ink-900 ltr:sm:origin-top-right rtl:sm:origin-top-left"
+			class="fixed inset-x-3 z-50 grid max-h-[min(70vh,30rem)] grid-cols-2 gap-1 overflow-y-auto rounded-xl border border-ink-200 bg-white p-1.5 shadow-morphit-card sm:absolute sm:inset-x-auto sm:end-0 sm:w-[min(92vw,30rem)] sm:grid-cols-3 dark:border-ink-700 dark:bg-ink-900 {menuPositionClass}"
 		>
 			{#each SUPPORTED_LOCALES as loc (loc.code)}
 				{@const active = loc.code === $currentLocale}

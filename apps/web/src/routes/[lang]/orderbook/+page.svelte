@@ -31,17 +31,9 @@
 	import { _ } from 'svelte-i18n';
 
 	import Head from '$components/Head.svelte';
-	import MessageIcon from '$components/MessageIcon.svelte';
-	import TermsText from '$components/TermsText.svelte';
 	import RssFeedPicker from '$components/RssFeedPicker.svelte';
 	import BusyButton from '$components/BusyButton.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
-	import IdentityLabel from '$components/IdentityLabel.svelte';
-	import NewTraderChip from '$components/NewTraderChip.svelte';
-	import EngagementChip from '$components/EngagementChip.svelte';
-	import OrderExpiryChip from '$components/OrderExpiryChip.svelte';
-	import RatingChip from '$components/RatingChip.svelte';
-	import UsdtPriceSubline from '$components/UsdtPriceSubline.svelte';
 	import { isUsdtNetwork, isUsdcNetwork, isDaiNetwork } from '$lib/assets/networks';
 	// cp165 byte-budget: FeaturedOrders + FeaturedAuctionHistory are
 	// lazy-imported below.  Both render below the orderbook fold
@@ -64,6 +56,8 @@
 	import { instance } from '$lib/stores/instance';
 	import { getProfilesBatch } from '$lib/indexer/profileCache';
 	import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
+	import OrderCard from '$lib/components/OrderCard.svelte';
+	import { formatOrderPriceModel } from '$lib/orders/priceModelDisplay';
 	import { createOrderbookStream } from '$lib/orderbook/stream';
 	import type { AssetTicker } from '@morphit/asset-registry';
 	import type { OrderbookQuery, OrderRecord, ProfileResponse } from '@morphit/indexer-client';
@@ -72,7 +66,6 @@
 	import { orderTitleParts } from '$lib/utils/orderTitle';
 	import { blockedAccounts, loadBlocks } from '$lib/chat/blocks';
 	import { recordOrderView } from '$lib/orders/views';
-	import { formatOrderPriceModel } from '$lib/orders/priceModelDisplay';
 	import { checkWaiverEligibility } from '$lib/orders/listingFee';
 	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
@@ -1186,10 +1179,6 @@
 				{#each visibleItems as o (o.account + '/' + o.permlink)}
 					{@const accountIsHidden = $hiddenAccounts.has(o.account.toLowerCase())}
 					{@const accountIsBlocked = $blockedAccounts.has(o.account.toLowerCase())}
-					{@const priceModelLabel = formatOrderPriceModel(
-						o,
-						$_ as unknown as Parameters<typeof formatOrderPriceModel>[1]
-					)}
 					{@const labelProps = extractLabelPropsFromProfile(profileMap[o.account])}
 					{@const usdtRowNetwork =
 						o.asset === 'USDT' && o.asset_network && isUsdtNetwork(o.asset_network)
@@ -1203,270 +1192,36 @@
 						o.asset === 'DAI' && o.asset_network && isDaiNetwork(o.asset_network)
 							? o.asset_network
 							: null}
-					<li
-						class="card-interactive animate-fade-up relative p-4 sm:p-6 hover:border-morphit-emerald/20 hover:bg-emerald-50/30 dark:hover:border-morphit-emerald/15 dark:hover:bg-morphit-emerald/[0.05] {accountIsHidden ||
-						accountIsBlocked
-							? 'opacity-50'
-							: ''}"
-					>
-						<!-- Stretched link: the whole card opens the order's
-						     detail page. It sits BEHIND the card content
-						     (z-0); the genuinely-interactive children below
-						     (the profile link, the Message CTA, and the
-						     eyeball hide/show toggle) are raised to z-10 so
-						     they keep their own click targets. Clicking
-						     anywhere else on the card — title, chips,
-						     region/payment, terms — opens the order. -->
-						<a
-							href={lp(`/@${o.account}/${o.permlink}`)}
-							class="absolute inset-0 z-0 rounded-[inherit] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-morphit-emerald"
-							aria-label={$_('orderbook.order.open_aria', {
-								values: { title: cardTitle(o) }
-							}) as string}
-						></a>
-						<div class="flex flex-col gap-2">
-							<div class="flex-1">
-								<div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-									<span class="font-display text-lg font-bold">
-										{cardTitle(o)}
-									</span>
-									{#if usdtRowNetwork !== null}
-										<!-- Part 121 — USDT network chip with the
-										     "you need USDT on Tron for this trade"
-										     hint via title-tooltip.  Renders only
-										     for USDT rows; single-network assets
-										     skip. -->
-										<span
-											class="rounded-md border border-ink-400/30 bg-ink-400/5 px-2 py-0.5 text-xs font-semibold text-ink-300"
-											title={$_('assets.usdt.order_row.network_hint', {
-												values: {
-													network: $_(`assets.usdt.network.${usdtRowNetwork}.displayName`)
-												}
-											}) as string}
-										>
-											{$_(`assets.usdt.network.${usdtRowNetwork}.displayName`)}
-										</span>
-									{/if}
-									{#if usdcRowNetwork !== null}
-										<!-- Part 122 cp30 / cp34 closure — USDC
-										     network chip.  Same shape as USDT;
-										     three of USDC's four networks share
-										     EVM 0x format so chip disambiguates
-										     ERC-20/Base/Polygon on orderbook row.
-										     Sky-blue (Circle brand) so USDT/USDC
-										     are visually distinguishable. -->
-										<span
-											class="rounded-md border border-sky-400/30 bg-sky-400/5 px-2 py-0.5 text-xs font-semibold text-sky-300"
-											title={$_('assets.usdc.order_row.network_hint', {
-												values: {
-													network: $_(`assets.usdc.network.${usdcRowNetwork}.displayName`)
-												}
-											}) as string}
-										>
-											{$_(`assets.usdc.network.${usdcRowNetwork}.displayName`)}
-										</span>
-									{/if}
-									{#if daiRowNetwork !== null}
-										<!-- Part 122 cp31 / cp34 closure — DAI
-										     network chip.  ALL FOUR DAI networks
-										     share EVM 0x format, so chip is the
-										     ONLY thing telling a reader which
-										     chain.  Yellow (MakerDAO brand). -->
-										<span
-											class="rounded-md border border-yellow-400/30 bg-yellow-400/5 px-2 py-0.5 text-xs font-semibold text-yellow-300"
-											title={$_('assets.dai.order_row.network_hint', {
-												values: {
-													network: $_(`assets.dai.network.${daiRowNetwork}.displayName`)
-												}
-											}) as string}
-										>
-											{$_(`assets.dai.network.${daiRowNetwork}.displayName`)}
-										</span>
-									{/if}
-									{#if priceModelLabel !== null}
-										<span
-											class="text-sm text-ink-500 dark:text-ink-400"
-											title={$_('orderbook.price_model.tooltip') as string}
-										>
-											· {priceModelLabel}
-										</span>
-									{/if}
-									{#if o.asset === 'USDT'}
-										<!-- Part 121 — live USDT/USD price subline.
-										     Compact mode (no border) for in-row
-										     placement.  Pegging health is news. -->
-										<UsdtPriceSubline compact />
-									{/if}
-									{#if accountIsBlocked}
-										<span
-											class="rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-rose-700 dark:bg-rose-900/40 dark:text-rose-300"
-										>
-											{$_('orderbook.blocked_marker')}
-										</span>
-									{:else if accountIsHidden}
-										<span
-											class="rounded-full bg-ink-200 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-ink-700 dark:bg-ink-800 dark:text-ink-300"
-										>
-											{$_('orderbook.hidden_marker')}
-										</span>
-									{/if}
-								</div>
-								<div class="mt-2 flex flex-wrap items-center gap-2 text-sm">
-									<IdentityLabel
-										account={o.account}
-										displayName={labelProps.displayName}
-										avatarSvg={labelProps.avatarSvg}
-										avatarDataUri={labelProps.avatarDataUri}
-										href={lp(`/@${o.account}`)}
-										class="relative z-10"
-									/>
-									{#if o.is_new_trader}
-										<NewTraderChip />
-									{/if}
-									<RatingChip count={o.feedback_count ?? 0} rating={o.weighted_rating ?? null} />
-									{#if (o.engagement_24h ?? 0) > 0}
-										<!-- #5 — real-time engagement signal.  When
-										     other users are actively messaging the
-										     seller about THIS order, surface that
-										     so the current viewer knows they're
-										     not alone.  The chip pulses gently at
-										     count >= 2 (the "competition is real"
-										     tier) so a passing glance catches it.
-										     Hidden entirely at 0; caller checks
-										     before rendering. -->
-										<EngagementChip count={o.engagement_24h ?? 0} />
-									{/if}
-									{#if o.expires_at}
-										<!-- #6 — countdown chip with three tiers
-										     (far / near / urgent).  Goes bold-red +
-										     pulse at < 15 min so users feel the
-										     deadline. The last-updated time rides
-										     along in this chip's hover tooltip. -->
-										<OrderExpiryChip expiresAt={o.expires_at} updatedAtIso={o.updated_at} />
-									{/if}
-								</div>
-								{#if o.location_region || o.payment_methods.length > 0}
-									<p class="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-ink-500">
-										{#if o.location_region}
-											<span>
-												<span class="font-semibold">{$_('orderbook.order.region_label')}:</span>
-												{o.location_region}
-											</span>
-										{/if}
-										{#if o.payment_methods.length > 0}
-											<span>
-												<span class="font-semibold">{$_('orderbook.order.payment_label')}:</span>
-												{displayNamesForMethods(o.payment_methods, instLookup).join(', ')}
-											</span>
-										{/if}
-									</p>
-								{/if}
-								{#if o.terms}
-									<p class="mt-1.5 text-sm text-ink-700 dark:text-ink-200">
-										<TermsText text={o.terms} />
-									</p>
-								{/if}
-							</div>
-							<!-- Footer: Message CTA centered; the hide-eye is
-							     pinned to the card's bottom-right corner (both
-							     mobile + pc). The last-updated time is no longer
-							     shown here — it rides in the expires pill's
-							     hover tooltip. -->
-							<div
-								class="relative mt-2 flex min-h-[2rem] items-center justify-center gap-x-3 text-xs text-ink-500"
-							>
-								{#if !accountIsHidden && !accountIsBlocked && viewerAccount !== null && viewerAccount !== o.account}
-									<!-- Message CTA: deep-links to /chat/[peer].
-									     Only shown when the viewer is signed in
-									     AND the order isn't theirs.  Anonymous
-									     viewers don't see this — the profile
-									     page is where they're nudged to onboard
-									     (since chat fundamentally requires an
-									     account).
-
-									     Task #14 — fire-and-forget viewcount POST
-									     on click.  Clicking Message indicates
-									     real interest, so this is the right
-									     trigger (vs. firing on every scroll-into-
-									     view event).  The POST is non-blocking
-									     and never surfaces errors; navigation
-									     proceeds normally. -->
-									<a
-										href={lp(`/chat/${o.account}?order=${encodeURIComponent(o.permlink)}`)}
-										class="relative z-10 inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold text-morphit-emerald hover:bg-morphit-emerald/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
-										aria-label={$_('chat.message_button_aria', {
-											values: { peer: o.account }
-										})}
-										onclick={() => {
-											void recordOrderView(o.account, o.permlink);
-										}}
-									>
-										<MessageIcon />
-										{$_('chat.message_button_label')}
-									</a>
-								{/if}
-								{#if !accountIsBlocked}
-									<!-- Per-row visibility toggle: a plain eye
-									     when the account is visible (tap to hide)
-									     and an eye-with-slash when hidden (tap to
-									     show again).  Hiding is local-only — no
-									     ban, no signal to the other user, and
-									     reversible.  Hidden rows only appear here
-									     when the transparency toggle reveals them.
-									     Suppressed when the user has already
-									     chain-blocked this account — they've done
-									     a stronger version already. -->
-									<button
-										type="button"
-										onclick={() =>
-											accountIsHidden ? unhideAccount(o.account) : hideAccount(o.account)}
-										title={accountIsHidden
-											? ($_('orderbook.unhide_button_tooltip') as string)
-											: ($_('orderbook.hide_button_tooltip') as string)}
-										class="absolute right-0 top-1/2 z-10 -translate-y-1/2 rounded px-2 py-1 text-ink-400 hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
-										aria-label={accountIsHidden
-											? ($_('orderbook.unhide_button_aria', {
-													values: { account: o.account }
-												}) as string)
-											: ($_('orderbook.hide_button_aria', {
-													values: { account: o.account }
-												}) as string)}
-									>
-										<svg
-											xmlns="http://www.w3.org/2000/svg"
-											width="14"
-											height="14"
-											viewBox="0 0 24 24"
-											fill="none"
-											stroke="currentColor"
-											stroke-width="2"
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											aria-hidden="true"
-										>
-											{#if accountIsHidden}
-												<!-- eye-off (slash) — account is hidden -->
-												<path
-													d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"
-												/>
-												<path d="M14.084 14.158a3 3 0 0 1-4.242-4.242" />
-												<path
-													d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"
-												/>
-												<path d="m2 2 20 20" />
-											{:else}
-												<!-- eye — account is visible -->
-												<path
-													d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"
-												/>
-												<circle cx="12" cy="12" r="3" />
-											{/if}
-										</svg>
-									</button>
-								{/if}
-							</div>
-						</div>
-					</li>
+					{@const networkChip = usdtRowNetwork
+						? { label: $_(`assets.usdt.network.${usdtRowNetwork}.displayName`) as string, tone: 'usdt' as const }
+						: usdcRowNetwork
+							? { label: $_(`assets.usdc.network.${usdcRowNetwork}.displayName`) as string, tone: 'usdc' as const }
+							: daiRowNetwork
+								? { label: $_(`assets.dai.network.${daiRowNetwork}.displayName`) as string, tone: 'dai' as const }
+								: null}
+					<OrderCard
+						order={o}
+						title={cardTitle(o)}
+						displayName={labelProps.displayName}
+						avatarSvg={labelProps.avatarSvg}
+						avatarDataUri={labelProps.avatarDataUri}
+						detailHref={lp(`/@${o.account}/${o.permlink}`)}
+						profileHref={lp(`/@${o.account}`)}
+						messageHref={viewerAccount !== null && viewerAccount !== o.account
+							? lp(`/chat/${o.account}?order=${encodeURIComponent(o.permlink)}`)
+							: null}
+						paymentLabels={displayNamesForMethods(o.payment_methods, instLookup)}
+						{networkChip}
+						priceModelLabel={formatOrderPriceModel(
+							o,
+							$_ as unknown as Parameters<typeof formatOrderPriceModel>[1]
+						)}
+						hidden={accountIsHidden}
+						blocked={accountIsBlocked}
+						onToggleHide={() => (accountIsHidden ? unhideAccount(o.account) : hideAccount(o.account))}
+						onMessageClick={() => void recordOrderView(o.account, o.permlink)}
+						class="animate-fade-up"
+					/>
 				{/each}
 			</ul>
 

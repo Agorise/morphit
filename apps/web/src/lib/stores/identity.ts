@@ -299,6 +299,13 @@ export function lockSession(): void {
 	// here: it holds public account names (not secrets), and its only
 	// effect is to skip an indexer round-trip. A stale entry just means
 	// the next unlocked session pays one extra GET to re-confirm — fine.
+	//
+	// cp402 [3] — the own-sent plaintext cache IS cleared here: unlike the
+	// chat-identity name cache above, it holds message CONTENT, so it must
+	// not linger in memory past a lock. Dynamic import keeps chatService's
+	// deps out of this store's static graph (the same dynamic-import
+	// approach the sign-out path uses for the self-profile cache).
+	void import('$lib/chat/chatService').then((m) => m.clearOwnSentPlaintextCache());
 }
 
 /**
@@ -335,6 +342,12 @@ export function reset(opts?: { clearDisk?: boolean }): void {
 		wipeLiveIdentity(current.live);
 	}
 	internal.set({ state: 'locked' });
+	// cp402 [3] — clear the own-sent plaintext cache (message content must
+	// not survive a lock/sign-out in memory). In-memory only; dynamic
+	// import avoids pulling chatService's deps into this store's static
+	// graph (the same dynamic-import approach the sign-out path uses for
+	// the self-profile cache).
+	void import('$lib/chat/chatService').then((m) => m.clearOwnSentPlaintextCache());
 	// Disk-clear is now EXPLICIT and deterministic (opts.clearDisk),
 	// NOT a fire-and-forget that we hope loses a race against page
 	// teardown. The old approach — always firing the dynamic-import

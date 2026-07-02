@@ -126,6 +126,13 @@ export interface LocalMessage {
 	 *  pending/broadcast/failed. Rendering uses it to decide
 	 *  whether to show the time line. */
 	createdAt: Date | null;
+	/** cp404 — Blurt transaction id anchoring this message on-chain,
+	 *  once known. Null while pending/broadcast/failed, and for
+	 *  not-yet-irreversible provisional copies. Populated on durable
+	 *  confirmation (own messages) or straight from the record
+	 *  (incoming). The chat PDF export cites this so each line is
+	 *  independently verifiable on any Blurt block explorer. */
+	trxId: string | null;
 	/** Non-null only in the 'failed' state. Populated by the
 	 *  broadcast catch block. Used by the "Tap to retry" UI. */
 	error: string | null;
@@ -296,6 +303,63 @@ const POLL_JITTER_MS = 5_000;
  *  UI can render appropriately. */
 const ENCRYPTED_PLACEHOLDER = '(encrypted)';
 
+// ─── cp402 [3] — own-sent plaintext cache (in-memory only) ─────────
+//
+// The chat crypto (see crypto.ts) is ephemeral sender-PFS: the sender
+// generates a fresh ephemeral X25519 keypair per message and WIPES the
+// ephemeral private key immediately after encrypting. That is what gives
+// us forward secrecy — a later key/disk/chain compromise cannot recover
+// the plaintext of messages already sent. The unavoidable consequence is
+// that WE can never re-derive the shared secret for our OWN sent messages
+// from chain history either. During a live session that's invisible: the
+// composer keeps the plaintext we typed as a local optimistic echo. But
+// when the user navigates away and back, the controller is destroyed and
+// that echo is gone; a fresh controller reloading history sees our own
+// sent messages as ciphertext it cannot decrypt and renders "(encrypted)".
+//
+// This cache closes that gap by remembering the plaintext of OUR sent
+// messages, keyed by account + client_tag, so a fresh controller can
+// restore them. Crucially it lives ONLY in memory — nothing is written
+// to disk — so the on-disk / on-chain forward-secrecy guarantee is
+// unchanged (the plaintext is already resident in memory while the
+// conversation is open; this merely lets it survive in-app navigation
+// within the same tab session). It is:
+//   • gated on read by getLiveIdentity() — a LOCKED session shows the
+//     placeholder, consistent with incoming messages;
+//   • cleared on lock AND sign-out (identity.ts reset()/lockSession())
+//     so plaintext never lingers in memory past a lock, and one
+//     account's messages never leak into another's session;
+//   • bounded to OWN_SENT_CACHE_MAX entries (oldest evicted) so a very
+//     long, reload-free session can't grow it without bound.
+const OWN_SENT_CACHE_MAX = 1000;
+const ownSentPlaintext = new Map<string, string>();
+
+/** Key: account + client_tag. Client tags are 16 random bytes so they
+ *  never collide across conversations; scoping by account too is
+ *  defense-in-depth against the astronomically-unlikely collision and
+ *  keeps entries unambiguously owned. */
+function ownSentKey(me: string, clientTag: string): string {
+	return `${me}\t${clientTag}`;
+}
+
+function rememberOwnSent(me: string, clientTag: string, plaintext: string): void {
+	ownSentPlaintext.set(ownSentKey(me, clientTag), plaintext);
+	// Evict oldest (Map preserves insertion order) if over the cap.
+	if (ownSentPlaintext.size > OWN_SENT_CACHE_MAX) {
+		const oldest = ownSentPlaintext.keys().next().value;
+		if (oldest !== undefined) ownSentPlaintext.delete(oldest);
+	}
+}
+
+/** Clear the own-sent plaintext cache. Called by identity.ts on lock and
+ *  on explicit sign-out so plaintext never survives a locked/signed-out
+ *  session in memory. Exported (not a controller method) because the
+ *  cache is module-scoped and must be clearable without a live
+ *  controller instance. */
+export function clearOwnSentPlaintextCache(): void {
+	ownSentPlaintext.clear();
+}
+
 /** Map an unknown caught error to a stable sentinel string for
  *  LocalMessage.error.  `PubPinError` carries a stable code that
  *  the UI maps to a localized copy via the chat.security.*
@@ -394,13 +458,30 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 	function reconcileByClientTag(rec: ChatMessageRecord): boolean {
 		const tag = clientTagFromHeader(rec.header);
 		if (tag === null) return false;
+		// cp403 [1] — id 0 marks a PROVISIONAL head-block (fast-path)
+		// copy that isn't irreversible yet (ADR-0048). It must never
+		// overwrite a real, durable id.
+		const isDurable = rec.id !== 0;
 		for (const m of messages) {
-			if ((m.state === 'pending' || m.state === 'broadcast') && m.clientTag === tag) {
+			if (m.clientTag !== tag) continue;
+			// This is one of our own messages, matched by client_tag. It
+			// could be the local optimistic echo (pending/broadcast), a
+			// provisional fast-path copy already reconciled (confirmed,
+			// id still null), or the durable copy (confirmed, real id).
+			// Every case is a dedup hit — we return true so the caller
+			// never appends a second entry.
+			if (m.state === 'pending' || m.state === 'broadcast') {
+				m.state = 'confirmed';
+				m.createdAt = new Date(rec.created_at);
+			}
+			// Adopt the durable id the first time it lands; a provisional
+			// (id 0) never overwrites a real id we already hold.
+			if (isDurable && (m.id === null || m.id === 0)) {
 				m.id = rec.id;
 				m.createdAt = new Date(rec.created_at);
-				m.state = 'confirmed';
-				return true;
+				m.trxId = rec.source_trx_id || null;
 			}
+			return true;
 		}
 		return false;
 	}
@@ -509,37 +590,74 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 				// (e.g. second poll after we already merged it once):
 				// skip.
 				if (seenIds.has(rec.id)) continue;
-				// No local tag matched — this is a message we sent
-				// from a different client / session. We could decrypt
-				// it (we have our own identity key) but the
-				// plaintext of messages WE SENT is of limited value
-				// to us since we don't remember what we typed from
-				// that other session. Show placeholder without
-				// flagging as a "real" failure.
+				// No local tag matched — a message we sent, but not from
+				// this controller's live echo (we navigated away and back,
+				// or it was sent from another client/session). We can never
+				// re-decrypt our own messages from chain history (ephemeral
+				// sender-PFS wipes the key), so try the in-memory own-sent
+				// plaintext cache: if WE typed this in this tab session it's
+				// there and we restore it; otherwise fall back to the
+				// placeholder. Gated on getLiveIdentity() so a LOCKED session
+				// shows the placeholder, exactly like incoming messages.
+				const ownTag = clientTagFromHeader(rec.header);
+				const ownCached =
+					deps.getLiveIdentity() !== null && ownTag !== null
+						? ownSentPlaintext.get(ownSentKey(deps.me, ownTag))
+						: undefined;
 				messages.push({
 					id: rec.id,
-					clientTag: clientTagFromHeader(rec.header),
-					text: ENCRYPTED_PLACEHOLDER,
+					clientTag: ownTag,
+					text: ownCached ?? ENCRYPTED_PLACEHOLDER,
 					sender: rec.sender,
 					state: 'confirmed',
 					createdAt: new Date(rec.created_at),
+					trxId: rec.source_trx_id || null,
 					error: null,
 					decryptFailed: false,
 					localSeq: ++localSeqCounter
 				});
 				added = true;
 			} else {
-				// Incoming from the peer. Skip if we've already
-				// seen this id.
-				if (seenIds.has(rec.id)) continue;
+				// Incoming from the peer.
+				// cp403 [1] — id 0 marks a PROVISIONAL head-block copy
+				// (ADR-0048 fast path), not yet irreversible.
+				const incomingTag = clientTagFromHeader(rec.header);
+				const isDurable = rec.id !== 0;
+
+				// Collapse a fast-path provisional against its durable
+				// twin — either may arrive first, and both carry the same
+				// on-chain client_tag. On a hit, adopt the durable id the
+				// first time it lands, but NEVER re-decode or re-record:
+				// the trade-status side effects below ran when the message
+				// first arrived, and re-running them would double-record
+				// an address/funds-sent payload.
+				if (incomingTag !== null) {
+					const twin = messages.find(
+						(m) => m.sender === rec.sender && m.clientTag === incomingTag
+					);
+					if (twin) {
+						if (isDurable && (twin.id === null || twin.id === 0)) {
+							twin.id = rec.id;
+							twin.createdAt = new Date(rec.created_at);
+							twin.trxId = rec.source_trx_id || null;
+						}
+						added = true;
+						continue;
+					}
+				}
+
+				// No twin yet. Durable copies dedup by id; a provisional
+				// (id 0) is stored with a null id and never enters seenIds.
+				if (isDurable && seenIds.has(rec.id)) continue;
 				const d = await decryptOrPlaceholder(rec);
 				messages.push({
-					id: rec.id,
-					clientTag: null,
+					id: isDurable ? rec.id : null,
+					clientTag: incomingTag,
 					text: d.text,
 					sender: rec.sender,
 					state: 'confirmed',
 					createdAt: new Date(rec.created_at),
+					trxId: isDurable ? rec.source_trx_id || null : null,
 					error: null,
 					decryptFailed: d.decryptFailed,
 					localSeq: ++localSeqCounter
@@ -712,6 +830,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 				sender: deps.me,
 				state: 'failed',
 				createdAt: null,
+				trxId: null,
 				error: 'Session is locked — unlock and try again.',
 				decryptFailed: false,
 				localSeq: ++localSeqCounter
@@ -721,6 +840,11 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		}
 
 		const clientTag = deps.generateClientTag();
+		// cp402 [3] — remember our own plaintext so it survives navigating
+		// away and back (we can never re-decrypt it from chain history —
+		// ephemeral sender-PFS wipes the key). In-memory only; cleared on
+		// lock/sign-out.
+		rememberOwnSent(deps.me, clientTag, trimmed);
 		const local: LocalMessage = {
 			id: null,
 			clientTag,
@@ -728,6 +852,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 			sender: deps.me,
 			state: 'pending',
 			createdAt: null,
+			trxId: null,
 			error: null,
 			decryptFailed: false,
 			localSeq: ++localSeqCounter

@@ -164,9 +164,6 @@
       "address_share": {
         "warning": "Send USDT on {network} only. Sending USDT on any other network to this address loses your funds permanently."
       },
-      "order_row": {
-        "network_hint": "You need USDT on {network} for this trade."
-      },
       "price_subline": {
         "live": "1 USDT = ${price} live",
         "unavailable": "USDT/USD price feed unavailable — last seen {staleness} ago."
@@ -350,7 +347,6 @@
     }
   },
   "chat": {
-    "message_button_label": "Message",
     "message_button_aria": "Message {peer}",
     "message": {
       "aria": {
@@ -406,11 +402,7 @@
       "dismiss_toast": "Hid @{peer}. Undo in Settings → Hidden Accounts."
     },
     "block": {
-      "block": "Block",
-      "unblock": "Unblock",
       "busy": "Working…",
-      "block_aria": "Block {peer}",
-      "unblock_aria": "Unblock {peer}",
       "failed": "Could not update block state. Please check your connection and try again.",
       "confirm": {
         "block": {
@@ -581,15 +573,18 @@
       "pill_method_xrp": "Ripple (XRP)"
     },
     "funds_sent": {
-      "button": "Mark funds sent",
-      "button_aria": "Mark that you sent funds for this trade",
+      "button": "Pay now",
+      "button_aria": "Pay for this trade",
       "modal_title": "Mark funds as sent",
       "modal_subtitle": "Notify your trade partner that you sent the crypto.",
+      "locked_method_label": "Paying with {asset}",
       "txid_label": "Transaction ID",
       "txid_placeholder": "Paste the txid (64 hex characters)",
       "txid_help": "The unique fingerprint your wallet showed after sending. Most wallets call it a TxID, Transaction Hash, or Tx Hash. It looks like a long jumble of letters and numbers (64 characters). Tap any sent transaction in your wallet to find it.",
       "txid_invalid": "That doesn't look like a valid transaction ID.",
       "amount_label": "Amount sent (optional)",
+      "amount_label_required": "Amount sent",
+      "amount_required_hint": "Enter the amount you're paying.",
       "send": "Mark sent",
       "pill_title_btc": "Bitcoin sent",
       "pill_title_xmr": "Monero sent",
@@ -639,6 +634,8 @@
       "title": "Pay BLURT to recipient",
       "subtitle": "Send BLURT directly from your Morphit account.",
       "amount_label": "Amount",
+      "amount_placeholder": "0.000",
+      "amount_help": "Enter the BLURT amount you agreed to send.",
       "recipient_label": "To",
       "from_label": "From",
       "no_memo_notice": "No on-chain memo will be included — your trade context stays in this encrypted chat.",
@@ -693,7 +690,6 @@
       "why_hide": "Hide explanation",
       "why_body": "By default Morphit chat trusts the indexer to deliver the right chat key for your counterparty. A hostile indexer could substitute attacker-controlled keys and read your messages. The 8-word fingerprint is computed locally from both sides' real chat keys — if both of you see the same words, no MITM occurred. This protects against MITM only; it does NOT prove the person on the other end of your phone call is who they say they are."
     },
-    "order_context_label": "About this order",
     "boot_failed": "Couldn't load chat. Try refreshing the page.",
     "mailing_address": {
       "button": "Share mailing address",
@@ -710,7 +706,28 @@
       "track_button": "Track package",
       "for_order": "For order"
     },
-    "message_button_label_named": "Message @{account}"
+    "message_button_label_named": "Message @{account}",
+    "header": {
+      "chatting_with": "Chatting with",
+      "re": "RE"
+    },
+    "export": {
+      "menu_label": "Export chat",
+      "title": "Morphit chat with @{peer}",
+      "regarding": "Regarding: {summary}",
+      "exported_at": "Exported {datetime}",
+      "you": "You",
+      "encrypted": "(encrypted message)",
+      "no_messages": "No messages yet.",
+      "subtitle": "End-to-end encrypted conversation, anchored on the Blurt blockchain.",
+      "parties_heading": "Parties",
+      "posting_key_label": "Posting key",
+      "verify_heading": "How to verify this record",
+      "verify_body": "Every message below is a permanent entry on the public Blurt blockchain, cryptographically signed by the sender's account. The “Blockchain proof” code on each message is its transaction ID: anyone can paste it into a Blurt block explorer (for example, blurtwallet.com) to confirm that this exact account sent a message to the other at the stated time. The wording shown is the private message after decryption by the account named above. Because each proof lives on a public, permanent ledger, this record cannot be secretly altered — changing any line here would no longer match the blockchain.",
+      "proof_label": "Blockchain proof",
+      "pending_label": "pending confirmation",
+      "footer": "Morphit chat record — locked, read-only. Verify each message on a Blurt block explorer."
+    }
   },
   "cheat_sheet": {
     "heading": "Morphit cheat-sheet",
@@ -927,7 +944,8 @@
     "save_error_title": "Changes didn't save",
     "save_error_body": "The chain didn't accept the update. Try again.",
     "fee_note": "Editing is free — no listing fee for replacements within the window.",
-    "error_load_failed": "Couldn't load your orders. Try again."
+    "error_load_failed": "Couldn't load your orders. Try again.",
+    "substance_locked_hint": "Side, asset and currency are locked while editing — a buyer who saw your original listing should find the same trade. To change what you're trading, post a new order instead."
   },
   "explorer": {
     "search": {
@@ -961,7 +979,6 @@
       "view_profile_link": "View Morphit profile",
       "posting_pubkey_label": "Posting public key",
       "recent_ops_heading": "Recent operations",
-      "realtime_label": "polling every 5 seconds",
       "no_ops": "No operations recorded yet.",
       "load_more": "Load older operations",
       "error": {
@@ -1410,11 +1427,11 @@
       },
       "what_is_reputation": {
         "q": "How does Morphit's reputation system work?",
-        "a": "Every completed trade lets both sides leave one feedback: a 1-5 star rating and an optional comment. The feedback is posted on-chain, so it's permanent and public — anyone can read it on a trader's profile page. The profile shows a weighted average rating, a count of reviews, and a breakdown by star rating so you can see at a glance whether a trader has a consistent track record or a few outliers. There's no central arbiter; the community's own reviews are the reputation signal.\n\n**If people are going to trust you, your reputation is everything.**\n\nMorphit doesn't have arbitrators, escrow agents, or chargebacks. The only thing that lets a stranger trust you with their money is the visible track record you've built. Treat every trade like it matters — because every trade is a public, permanent entry on the only reputation that counts: yours."
+        "a": "Every completed trade lets both sides leave one feedback: a 1-5 star rating and an optional comment. The feedback is posted on-chain, so it's permanent and public — anyone can read it on a trader's profile page. The profile shows a weighted average rating, a count of reviews, and a breakdown by star rating so you can see at a glance whether a trader has a consistent track record or a few outliers. There's no central arbiter; the community's own reviews are the reputation signal.\n\n**If people are going to trust you, your reputation is everything.**\n\nMorphit doesn't have arbitrators, escrow agents, or chargebacks. The only thing that lets a stranger trust you with their money is the visible track record you've built. Treat every trade like it matters — because every trade is a public, permanent entry on the only reputation that counts: yours.\n\n**Your reputation score.** On order cards, Morphit distils all of this into a single reputation score from 0 to 5 (for example, 4.06), shown next to — but separate from — your trade count. The score blends your time-decayed average rating with how many trades you've completed and how recently you've been active, shrinking a thin track record toward a neutral 3.0 so a single review can't spike it. Good behaviour compounds over time; a poor rating can't be bought back with sheer volume.\n"
       },
       "how_to_build_high_reputation": {
         "q": "How do I build a high reputation score on Morphit?",
-        "a": "Reputation on Morphit is built **organically** — by trading consistently, getting real feedback from real counterparties, and avoiding patterns that the code flags as suspicious. There is no shortcut. Here's exactly what factors into your score and what you should do.\n\n**What counts toward your score** (in order of impact):\n\n1. **Verified, completed trades.** Every order you post that pays the listing fee (`fee_status = 'verified'`) and gets a feedback row from a counterparty contributes to your weighted rating. **Unverified-fee orders cannot be cited as feedback targets** — so a counterparty can only leave you reputation-bearing feedback after you've put real economic skin in the game (the listing fee, ~$0.25 in Blurt/BTC/XMR equivalent).\n\n2. **Recent activity counts more than ancient activity.** Morphit uses a **365-day half-life** exponential decay: a review posted today carries full weight (1.0×), a review one year old counts half (0.5×), two years old counts a quarter (0.25×), and so on. A trader with 10 fresh 5-star reviews can rank higher than a trader with 100 ancient 5-star reviews. **Trade regularly to keep your score current.**\n\n3. **Both buy AND sell sides.** Your profile shows separate weighted ratings for buyer-side trades and seller-side trades. A trader great as a buyer but careless as a seller (or vice versa) is visible to readers. **Build reputation on both sides** by being trustworthy whether you're the one sending crypto or the one receiving it.\n\n4. **Verified-chat badges on individual reviews.** A review carries a verified-chat badge (a small ✓ icon next to the rating) when you and your counterparty exchanged at least 2 messages each direction over a span of at least 15 minutes before either party left feedback. Real trades involve real conversation; this badge is a quality signal that distinguishes a real-trade review from a drive-by one. **Have real conversations with your counterparties.**\n\n5. **Recency of last activity (dormancy signal).** Your profile shows \"Last traded: N ago.\" A trader with great old reviews who hasn't traded in 18 months is visibly dormant. **Trade at least every few months** to keep that timestamp fresh — both for the recency-decay benefit AND for the dormancy display.\n\n**What does NOT inflate your score** (the system actively filters these out):\n\n- **Self-reviews.** Trying to leave feedback for yourself (subject = reviewer) is rejected at the protocol level.\n- **Sock-puppet accounts created by the same person you control.** Signal A flags accounts created by the same creator with first-Morphit-activity within 5 minutes of each other. Their mutual feedback is excluded from both sides' aggregates.\n- **Mutual high-star reciprocity rings.** Signal B flags pairs exchanging ≥3 high-star reviews in 7 days with no third-party reviews. Their feedback to each other is excluded from both aggregates.\n- **Concentration attacks.** Signal D (added cp123) flags reviewers who concentrate ≥80% of their reviews on a single high-star target across a 30-day window. An attacker who reviews 2-3 throwaway third parties to evade Signal B still gets caught if the concentration ratio is high.\n- **Untethered feedback.** Feedback without an `order_permlink` (no cited trade) does NOT count toward the aggregate weighted rating. The feedback row still exists in your profile's per-row list, but it doesn't move the headline number.\n- **Coordinated 1-star pile-ons.** Signal C catches the deflation case: ≥3 reviewers leaving 1-star with clustered account creation and narrow review diversity → flagged.\n\n**What you should DO** (concrete checklist):\n\n1. **Complete real trades, all the way through.** Post orders, pay the listing fee, settle off-platform with your counterparty, leave honest feedback.\n2. **Pay the listing fee** (Blurt is cheapest at 50% discount; BTC or XMR work too). Without a verified fee, your counterparty can't cite your order in their feedback.\n3. **Reciprocate feedback.** When your counterparty leaves you a review, leave them one back. Mutual feedback is the strongest reputation signal both ways.\n4. **Have real chat conversations** with your counterparties before settlement. Aim for 2+ messages each direction, over at least 15 minutes. That earns the verified-chat badge on the resulting feedback.\n5. **Write detailed comments** in your feedback. \"Smooth trade, fast settlement, would trade again\" is more credible to readers than empty 5-star reviews.\n6. **Trade on both sides.** Don't only buy or only sell — alternate to build a balanced reputation.\n7. **Trade with diverse counterparties.** Reviewers who concentrate on one subject get filtered (Signal D). The same applies in reverse: build relationships with many traders.\n8. **Stay active.** A trader who posts orders monthly preserves their decay-weighted score and dormancy signal far better than one who disappears for 2 years.\n\n**What you should AVOID:**\n\n1. **Don't create alt accounts to review yourself.** Signal A + Signal B + Signal D will catch this. Your fake reviews will be filtered out of your aggregate and your real reputation will look worse for the attempt.\n2. **Don't pile-on a counterparty you had a bad trade with.** One honest 1-star is fine. Three sock-puppet 1-stars triggers Signal C and gets all of them filtered.\n3. **Don't pay for fake reviews.** Reviewers who concentrate ≥80% of their activity on one subject get flagged by Signal D regardless of how the relationship started.\n4. **Don't leave drive-by feedback.** A review without an `order_permlink` won't move your aggregate, and even if you cite an order, a review with no chat history won't earn the verified-chat badge.\n\n**Verification — anyone can audit your score.** Morphit ships a **public reputation receipt** endpoint: `GET /v1/accounts/<your-account>/reputation-receipt`. Any reader can fetch the full set of feedback rows about you (included AND excluded, with the reason for each exclusion), the decay-weight at the moment of computation, and the formula used. They can independently re-derive your weighted rating from chain data. Your reputation is not \"trust the indexer\" — it's \"verify against the chain.\"\n\n**Honest caveats:**\n\n- **First few trades are the hardest.** A brand-new account is shown with a `is_new_trader` badge in the orderbook until they have 4+ verified-fee trades. This is intentional cold-start protection for everyone trading with newcomers; it's not a permanent penalty.\n- **Bad reviews recover over time but are not erased.** A 1-star from 2 years ago counts roughly 1/4 of a fresh 5-star, so honest mistakes from your past don't anchor your score forever — but they don't disappear either.\n- **The system does NOT detect \"trade actually happened.\"** Settlement is off-chain, so neither Morphit nor anyone else can verify that you and your counterparty actually exchanged value. Reputation is built on the **pattern** of consistent verified-fee orders + mutual feedback over time, not on any individual claim. This is documented honestly and is fundamental to all peer-to-peer reputation systems.\n\n**The shortest path to a high reputation: trade consistently, settle reliably, chat with your counterparties, leave honest feedback both ways, and let time + signal-table filtering do the rest.**"
+        "a": "Reputation on Morphit is built **organically** — by trading consistently, getting real feedback from real counterparties, and avoiding patterns that the code flags as suspicious. There is no shortcut. Here's exactly what factors into your score and what you should do.\n\n**What counts toward your score** (in order of impact):\n\n1. **Verified, completed trades.** Every order you post that pays the listing fee (`fee_status = 'verified'`) and gets a feedback row from a counterparty contributes to your weighted rating. **Unverified-fee orders cannot be cited as feedback targets** — so a counterparty can only leave you reputation-bearing feedback after you've put real economic skin in the game (the listing fee, ~$0.25 in Blurt/BTC/XMR equivalent).\n\n2. **Recent activity counts more than ancient activity.** Morphit uses a **365-day half-life** exponential decay: a review posted today carries full weight (1.0×), a review one year old counts half (0.5×), two years old counts a quarter (0.25×), and so on. A trader with 10 fresh 5-star reviews can rank higher than a trader with 100 ancient 5-star reviews. **Trade regularly to keep your score current.**\n\n3. **Both buy AND sell sides.** Your profile shows separate weighted ratings for buyer-side trades and seller-side trades. A trader great as a buyer but careless as a seller (or vice versa) is visible to readers. **Build reputation on both sides** by being trustworthy whether you're the one sending crypto or the one receiving it.\n\n4. **Verified-chat badges on individual reviews.** A review carries a verified-chat badge (a small ✓ icon next to the rating) when you and your counterparty exchanged at least 2 messages each direction over a span of at least 15 minutes before either party left feedback. Real trades involve real conversation; this badge is a quality signal that distinguishes a real-trade review from a drive-by one. **Have real conversations with your counterparties.**\n\n5. **Recency of last activity (dormancy signal).** Your profile shows \"Last traded: N ago.\" A trader with great old reviews who hasn't traded in 18 months is visibly dormant. **Trade at least every few months** to keep that timestamp fresh — both for the recency-decay benefit AND for the dormancy display.\n\n**What does NOT inflate your score** (the system actively filters these out):\n\n- **Self-reviews.** Trying to leave feedback for yourself (subject = reviewer) is rejected at the protocol level.\n- **Sock-puppet accounts created by the same person you control.** Signal A flags accounts created by the same creator with first-Morphit-activity within 5 minutes of each other. Their mutual feedback is excluded from both sides' aggregates.\n- **Mutual high-star reciprocity rings.** Signal B flags pairs exchanging ≥3 high-star reviews in 7 days with no third-party reviews. Their feedback to each other is excluded from both aggregates.\n- **Concentration attacks.** Signal D (added cp123) flags reviewers who concentrate ≥80% of their reviews on a single high-star target across a 30-day window. An attacker who reviews 2-3 throwaway third parties to evade Signal B still gets caught if the concentration ratio is high.\n- **Untethered feedback.** Feedback without an `order_permlink` (no cited trade) does NOT count toward the aggregate weighted rating. The feedback row still exists in your profile's per-row list, but it doesn't move the headline number.\n- **Coordinated 1-star pile-ons.** Signal C catches the deflation case: ≥3 reviewers leaving 1-star with clustered account creation and narrow review diversity → flagged.\n\n**What you should DO** (concrete checklist):\n\n1. **Complete real trades, all the way through.** Post orders, pay the listing fee, settle off-platform with your counterparty, leave honest feedback.\n2. **Pay the listing fee** (Blurt is cheapest at 50% discount; BTC or XMR work too). Without a verified fee, your counterparty can't cite your order in their feedback.\n3. **Reciprocate feedback.** When your counterparty leaves you a review, leave them one back. Mutual feedback is the strongest reputation signal both ways.\n4. **Have real chat conversations** with your counterparties before settlement. Aim for 2+ messages each direction, over at least 15 minutes. That earns the verified-chat badge on the resulting feedback.\n5. **Write detailed comments** in your feedback. \"Smooth trade, fast settlement, would trade again\" is more credible to readers than empty 5-star reviews.\n6. **Trade on both sides.** Don't only buy or only sell — alternate to build a balanced reputation.\n7. **Trade with diverse counterparties.** Reviewers who concentrate on one subject get filtered (Signal D). The same applies in reverse: build relationships with many traders.\n8. **Stay active.** A trader who posts orders monthly preserves their decay-weighted score and dormancy signal far better than one who disappears for 2 years.\n\n**What you should AVOID:**\n\n1. **Don't create alt accounts to review yourself.** Signal A + Signal B + Signal D will catch this. Your fake reviews will be filtered out of your aggregate and your real reputation will look worse for the attempt.\n2. **Don't pile-on a counterparty you had a bad trade with.** One honest 1-star is fine. Three sock-puppet 1-stars triggers Signal C and gets all of them filtered.\n3. **Don't pay for fake reviews.** Reviewers who concentrate ≥80% of their activity on one subject get flagged by Signal D regardless of how the relationship started.\n4. **Don't leave drive-by feedback.** A review without an `order_permlink` won't move your aggregate, and even if you cite an order, a review with no chat history won't earn the verified-chat badge.\n\n**Verification — anyone can audit your score.** Morphit ships a **public reputation receipt** endpoint: `GET /v1/accounts/<your-account>/reputation-receipt`. Any reader can fetch the full set of feedback rows about you (included AND excluded, with the reason for each exclusion), the decay-weight at the moment of computation, and the formula used. They can independently re-derive your weighted rating from chain data. Your reputation is not \"trust the indexer\" — it's \"verify against the chain.\"\n\n**Honest caveats:**\n\n- **First few trades are the hardest.** A brand-new account is shown with a `is_new_trader` badge in the orderbook until they have 4+ verified-fee trades. This is intentional cold-start protection for everyone trading with newcomers; it's not a permanent penalty.\n- **Bad reviews recover over time but are not erased.** A 1-star from 2 years ago counts roughly 1/4 of a fresh 5-star, so honest mistakes from your past don't anchor your score forever — but they don't disappear either.\n- **The system does NOT detect \"trade actually happened.\"** Settlement is off-chain, so neither Morphit nor anyone else can verify that you and your counterparty actually exchanged value. Reputation is built on the **pattern** of consistent verified-fee orders + mutual feedback over time, not on any individual claim. This is documented honestly and is fundamental to all peer-to-peer reputation systems.\n\n**How the 0–5 score itself is built.** The reputation score on your order cards is a composite. It starts from your time-decayed average rating, shrinks a thin history toward a neutral 3.0 (so newcomers earn trust rather than inheriting it), then adds a small bonus for a long, recent, above-average track record. Experience and recency can lift a good trader toward a full 5.0 but can never rescue a poor rating — it's good behaviour that's rewarded, not sheer activity. The trade count shown beside it (e.g. 852) is a separate number: how MUCH you've traded, not how well. The public reputation receipt returns this score and its factor breakdown too, so the 0–5 figure is as auditable against the chain as the raw rating.\n\n**The shortest path to a high reputation: trade consistently, settle reliably, chat with your counterparties, leave honest feedback both ways, and let time + signal-table filtering do the rest.**"
       },
       "how_to_leave_feedback": {
         "q": "How do I leave feedback after a trade?",
@@ -1454,7 +1471,7 @@
       },
       "chat_dispute_recourse": {
         "q": "If I disagree with my counterparty later, can I prove what we agreed to in chat?",
-        "a": "Yes — because Morphit chat lives on the blockchain, both of you hold a permanent cryptographic record of every message sent. The ciphertext is immutable once confirmed; nobody can edit or quietly delete what was said.\n\n**What this gives you:**\n\n• **A verifiable trail.** Every message has a block number, a timestamp, and a signature from the sender's posting key. There's no \"he said / she said\" about whether a specific message was sent at a specific time.\n\n• **Decryption on demand.** Both you and your counterparty can decrypt the full conversation at any time — the keys don't expire. If you later need to show a mediator, trusted friend, accountant, or even a small-claims court what was agreed, you can export plaintext from your side.\n\n• **No operator gatekeeping.** Because the chat is on-chain rather than on a Morphit server, no operator or admin can selectively reveal or hide parts of the record. What's there is there for everyone with a decryption key.\n\n**What this does NOT give you:**\n\n• **No automatic arbitration.** Morphit has no customer service, no dispute-resolution team, and no escrow. Having the evidence doesn't force the other side to honor it. See 'Why no Escrow or Arbitration service?' for why that's deliberate.\n\n• **No forced disclosure.** Your counterparty cannot be compelled to decrypt their side of the conversation. The record is symmetric — if they refuse to cooperate, you still have your copy, but you can't unlock theirs.\n\n• **No binding precedent.** A chat log is evidence, not a contract. Whether a court or mediator weighs it depends on their jurisdiction and the nature of the dispute.\n\n**Practical advice.** For any trade large enough that a dispute would matter, use chat for the whole negotiation: confirm the asset, amount, payment method, and any special terms in writing before anyone transfers anything. Short messages that pin down the exact terms are more useful later than long casual back-and-forth.\n\nIf you want your record to be legible to people outside Morphit, you can paste decrypted message excerpts (with timestamps and block numbers) into an email or document — the block number is the anchor anyone else can independently verify against Blurt."
+        "a": "Yes — because Morphit chat lives on the blockchain, both of you hold a permanent cryptographic record of every message sent. The ciphertext is immutable once confirmed; nobody can edit or quietly delete what was said.\n\n**What this gives you:**\n\n• **A verifiable trail.** Every message has a block number, a timestamp, and a signature from the sender's posting key. There's no \"he said / she said\" about whether a specific message was sent at a specific time.\n\n• **Decryption on demand.** Both you and your counterparty can decrypt the full conversation at any time — the keys don't expire. If you later need to show a mediator, trusted friend, accountant, or even a small-claims court what was agreed, you can export plaintext from your side.\n\n• **No operator gatekeeping.** Because the chat is on-chain rather than on a Morphit server, no operator or admin can selectively reveal or hide parts of the record. What's there is there for everyone with a decryption key.\n\n**What this does NOT give you:**\n\n• **No automatic arbitration.** Morphit has no customer service, no dispute-resolution team, and no escrow. Having the evidence doesn't force the other side to honor it. See 'Why no Escrow or Arbitration service?' for why that's deliberate.\n\n• **No forced disclosure.** Your counterparty cannot be compelled to decrypt their side of the conversation. The record is symmetric — if they refuse to cooperate, you still have your copy, but you can't unlock theirs.\n\n• **No binding precedent.** A chat log is evidence, not a contract. Whether a court or mediator weighs it depends on their jurisdiction and the nature of the dispute.\n\n**Practical advice.** For any trade large enough that a dispute would matter, use chat for the whole negotiation: confirm the asset, amount, payment method, and any special terms in writing before anyone transfers anything. Short messages that pin down the exact terms are more useful later than long casual back-and-forth.\n\nIf you want your record to be legible to people outside Morphit, you can paste decrypted message excerpts (with timestamps and block numbers) into an email or document — the block number is the anchor anyone else can independently verify against Blurt.\n\n**One-tap court-ready export.** You don't have to copy-paste any of this by hand. Open the conversation's ⋯ menu and choose \"Export chat\": Morphit builds a locked PDF (view / print / copy only, no editing) with every message, its UTC timestamp, and its Blurt transaction ID as a re-verifiable \"Blockchain proof\" — plus a plain-language page that walks a mediator or a small-claims court through checking each line against the public chain. It can't force a dishonest counterparty to do the right thing, but it replaces \"he said / she said\" with a record built to hold up outside Morphit."
       },
       "chat_vs_feedback_visibility": {
         "q": "What's public and what's private about my trades on Morphit?",
@@ -2616,8 +2633,6 @@
       "range_max_only": "up to {max} {fiat}",
       "range_open": "any amount ({fiat})",
       "updated_prefix": "Updated",
-      "region_label": "Region",
-      "payment_label": "Buyer can pay with",
       "new_trader_aria": "New trader — first trade not yet completed",
       "new_trader_tooltip": "This trader is new to Morphit. Help them get started!",
       "rating_aria": "{rating} stars from {count, plural, one {# completed trade} other {# completed trades}}",
@@ -2662,7 +2677,17 @@
       "body": "You can browse here, but you need an account name to message sellers or post your own orders.",
       "cta": "Pick a name"
     },
-    "fee_rejected_check": "Posted an order but don't see it? Check fee status"
+    "fee_rejected_check": "Posted an order but don't see it? Check fee status",
+    "card": {
+      "pay_with_label": "I can pay with",
+      "accept_label": "I accept",
+      "location_label": "Location",
+      "terms_label": "Terms",
+      "trades_since": "{count} trades since {month}",
+      "trades_only": "{count} trades",
+      "reputation_aria": "Reputation score {score} out of 5",
+      "message_word": "Message"
+    }
   },
   "paired_readonly": {
     "banner_heading": "Signed in as @{account} — phone holds the keys.",
@@ -3324,7 +3349,7 @@
     "display_name": {
       "errors": {
         "too_short": "Please enter a name.",
-        "too_long": "Too long — please keep it to 40 characters or fewer.",
+        "too_long": "Too long — please keep it to 24 characters or fewer.",
         "control_char": "That name contains a control character that isn't allowed.",
         "invisible_char": "That name contains an invisible or direction-override character that isn't allowed.",
         "invalid": "That's not a valid name.",

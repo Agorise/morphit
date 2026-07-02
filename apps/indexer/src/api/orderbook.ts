@@ -29,6 +29,7 @@
  */
 
 import { Hono } from 'hono';
+import { computeReputationScore } from '$indexer/reputation/score';
 import { z } from 'zod';
 
 import type { Database } from '$db/pool';
@@ -143,6 +144,10 @@ interface OrderRow {
 	/** Average rating across all received feedback (1-5 scale).
 	 *  Null when feedback_count is zero. */
 	weighted_rating: string | null; // NUMERIC returns as string from pg
+	/** MAX(created_at) of this account's included feedback — drives the
+	 *  recency factor of the composite reputation score. NULL when the
+	 *  account has no included feedback. */
+	last_feedback_at: Date | null;
 	/** Derived from feedback_count < 4 — shows the 🌱 sprout chip
 	 *  during the account's first four counterparty reviews. The
 	 *  underlying welcome-bonus trigger (accounts.first_trade_
@@ -157,6 +162,14 @@ interface OrderRow {
 	 *  about, expect competition"; zero means "be the first to
 	 *  reach out."  See Part-13 audit + #5 for design rationale. */
 	engagement_24h: number;
+	/** Timestamp of this account's first COMPLETED trade (earliest
+	 *  counterparty feedback), from accounts.first_trade_complete_at.
+	 *  NULL when the account has never completed a trade — the order
+	 *  card then shows just the trade count with no "since {month}". */
+	first_trade_complete_at: Date | null;
+	/** Primary posting public key (base58 "BLT…") for the display-only
+	 *  identity anchor on order cards. NULL when not captured yet. */
+	posting_pubkey: string | null;
 	created_at: Date;
 	updated_at: Date;
 	expires_at: Date | null;
@@ -181,8 +194,16 @@ function rowToWire(r: OrderRow) {
 		fee_method: r.fee_method,
 		feedback_count: r.feedback_count,
 		weighted_rating: r.weighted_rating === null ? null : Number(r.weighted_rating),
+		reputation_score: computeReputationScore({
+			count: r.feedback_count,
+			weightedAvg: r.weighted_rating === null ? null : Number(r.weighted_rating),
+			lastFeedbackAtMs: r.last_feedback_at === null ? null : r.last_feedback_at.getTime()
+		}),
 		is_new_trader: r.is_new_trader,
 		engagement_24h: r.engagement_24h,
+		first_trade_at:
+			r.first_trade_complete_at === null ? null : r.first_trade_complete_at.toISOString(),
+		posting_pubkey: r.posting_pubkey ?? null,
 		created_at: r.created_at.toISOString(),
 		updated_at: r.updated_at.toISOString(),
 		expires_at: r.expires_at === null ? null : r.expires_at.toISOString()
@@ -398,8 +419,11 @@ export function orderbookRoute(db: Database, poller: Poller, operatorAccount: st
 			        o.fee_method,
 			        COALESCE(f.c, 0)::int AS feedback_count,
 			        CASE WHEN f.r IS NOT NULL THEN f.r::text ELSE NULL END AS weighted_rating,
+			        f.last_feedback_at,
 			        (COALESCE(f.c, 0) < 4) AS is_new_trader,
 			        COALESCE(e.distinct_senders_24h, 0)::int AS engagement_24h,
+			        a.first_trade_complete_at,
+			        a.posting_pubkey,
 			        o.created_at, o.updated_at, o.expires_at
 			 FROM orders o
 			 LEFT JOIN (
@@ -418,6 +442,7 @@ export function orderbookRoute(db: Database, poller: Poller, operatorAccount: st
 			   -- "real human Alice writes vague positive feedback for
 			   -- stranger Bob she never traded with" attack path.
 			   SELECT subject, COUNT(*)::int AS c,
+			          MAX(created_at) AS last_feedback_at,
 			          -- cp123 H1: time-decay weighted rating with 365-day
 			          -- half-life.  See indexer/reputation/decay.ts.
 			          ROUND(
@@ -502,6 +527,7 @@ export function orderbookRoute(db: Database, poller: Poller, operatorAccount: st
 			      )
 			    GROUP BY recipient, order_permlink
 			 ) e ON e.recipient = o.account AND e.order_permlink = o.permlink
+			 LEFT JOIN accounts a ON a.account = o.account
 			 WHERE ${where.join(' AND ')}
 			 ORDER BY ${orderBy}
 			 LIMIT ${p(limit + 1)}`;

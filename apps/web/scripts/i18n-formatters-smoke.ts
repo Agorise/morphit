@@ -41,7 +41,11 @@ import {
 	formatCount,
 	formatDateLong,
 	formatDateMedium,
-	formatDateTime
+	formatDateTime,
+	formatDayMonth,
+	formatDayMonthTime,
+	formatMonthYear,
+	formatCountCompact
 } from '../src/lib/i18n/formatters';
 
 interface Scenario {
@@ -218,6 +222,80 @@ const scenarios: readonly Scenario[] = [
 	{
 		name: 'formatDateLong(invalid) — returns "—"',
 		fn: () => formatDateLong('not-a-date') === '—'
+	},
+
+	// ─── Canonical UI date/time (Ken's sitewide standard) ──
+	// TIME is 24-hour UTC with an explicit "UTC" suffix and seconds,
+	// built from getUTC* so it is timezone-independent (deterministic
+	// regardless of the sandbox's TZ): "…@ 16:45:18 UTC".
+	{
+		name: 'formatDayMonthTime — 24h UTC time with explicit UTC suffix',
+		fn: () => {
+			const out = formatDayMonthTime('2026-06-30T16:45:18Z');
+			return out.includes('16:45:18 UTC') && out.includes('2026');
+		}
+	},
+	{
+		name: 'formatDayMonthTime — never 12-hour (no AM/PM)',
+		fn: () => {
+			const out = formatDayMonthTime('2026-06-30T16:45:18Z');
+			return !/\b[AP]M\b/i.test(out) && / @ \d{2}:\d{2}:\d{2} UTC$/.test(out);
+		}
+	},
+	{
+		name: 'formatDayMonthTime — date part is UTC-coherent (no midnight rollover mismatch)',
+		fn: () => {
+			// 23:30 UTC on the 30th must render the 30th (UTC), not the
+			// 31st/1st that a local frame could show. In 'en': "30 June".
+			const out = formatDayMonthTime('2026-06-30T23:30:00Z');
+			return out.includes('23:30:00 UTC') && /\b30\b/.test(out) && out.includes('June');
+		}
+	},
+	{
+		name: 'formatDayMonthTime(invalid) — returns "—"',
+		fn: () => formatDayMonthTime('not-a-date') === '—' && formatDayMonthTime(null) === '—'
+	},
+	{
+		name: 'formatDayMonth — date only, no time, no UTC suffix, UTC-coherent day',
+		fn: () => {
+			// UTC calendar date (no time-of-day, no "UTC" literal). 23:30 UTC
+			// on the 30th must render the 30th (UTC), not a local rollover.
+			const out = formatDayMonth('2026-06-30T23:30:00Z');
+			return (
+				out.includes('2026') &&
+				!out.includes('UTC') &&
+				!out.includes('@') &&
+				/\b30\b/.test(out) &&
+				out.includes('June')
+			);
+		}
+	},
+	{
+		name: 'formatMonthYear — month name + year, no day',
+		fn: () => {
+			const out = formatMonthYear('2026-07-15T00:00:00Z');
+			return out.includes('July') && out.includes('2026') && !/\b15\b/.test(out);
+		}
+	},
+	{
+		name: 'formatMonthYear(invalid) — returns "—"',
+		fn: () => formatMonthYear('') === '—'
+	},
+	{
+		name: 'formatCountCompact — compacts thousands (en "1.2K")',
+		fn: () => {
+			const out = formatCountCompact(1234);
+			// en compact → "1.2K"; other locales differ, so assert it's
+			// SHORTER than the grouped form and contains the leading digit.
+			return out.length <= 5 && /^[0-9۰-۹]/.test(out) && out !== '1,234';
+		}
+	},
+	{
+		name: 'formatCountCompact — small values as-is, non-finite → "0"',
+		fn: () => {
+			const small = formatCountCompact(42);
+			return /4.?2/.test(small) && formatCountCompact(Number.NaN) === '0';
+		}
 	},
 
 	// ─── Locale-switching ──────────────────────────────

@@ -1,7 +1,7 @@
 <script lang="ts">
+	import { capDisplayName } from '$lib/crypto/profile';
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
-	import { formatDayMonthTime } from '$i18n/formatters';
 	/**
 	 * Profile page — /@{account}
 	 *
@@ -32,7 +32,6 @@
 
 	import Head from '$components/Head.svelte';
 	import MessageIcon from '$components/MessageIcon.svelte';
-	import TermsText from '$components/TermsText.svelte';
 	import RssFeedPicker from '$components/RssFeedPicker.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
 	import BusyButton from '$components/BusyButton.svelte';
@@ -59,7 +58,10 @@
 	import { getProfilesBatch } from '$lib/indexer/profileCache';
 	import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
 	import { displayNamesForMethods } from '$lib/payments/display';
+	import OrderCard from '$lib/components/OrderCard.svelte';
 	import { formatOrderPriceModel } from '$lib/orders/priceModelDisplay';
+	import { isUsdtNetwork, isUsdcNetwork, isDaiNetwork } from '$lib/assets/networks';
+	import { recordOrderView } from '$lib/orders/views';
 	import { orderTitleParts } from '$lib/utils/orderTitle';
 	import { instanceAdditions, instanceNameLookup } from '$lib/stores/instanceAdditions';
 	import { isUnlocked, isPairedReadOnly } from '$stores/identity';
@@ -294,7 +296,9 @@
 	/** Effective display name with sensible fallback to @account
 	 *  when no profile has been set. */
 	const effectiveDisplayName = $derived(
-		profile?.display_name && profile.display_name.length > 0 ? profile.display_name : `@${account}`
+		profile?.display_name && profile.display_name.length > 0
+			? capDisplayName(profile.display_name)
+			: `@${account}`
 	);
 
 	/** Centralized profile-derived identity props.  This is the
@@ -388,23 +392,6 @@
 		});
 	});
 
-	/** Compact "time until expiry" for live orders.
-	 *  Format mirrors the terse RelativeTime component: 1m / 1h / 1d.
-	 *  A negative duration (already past expiry but still marked
-	 *  live — e.g. the orderbook hasn't flipped the status yet)
-	 *  renders as "now" rather than a negative number. */
-	function formatTimeUntil(iso: string): string {
-		const diff = new Date(iso).getTime() - Date.now();
-		if (diff <= 0) return $_('profile.expires_now') as string;
-		const minutes = Math.floor(diff / 60_000);
-		if (minutes < 1) return '<1m';
-		if (minutes < 60) return `${minutes}m`;
-		const hours = Math.floor(minutes / 60);
-		if (hours < 24) return `${hours}h`;
-		const days = Math.floor(hours / 24);
-		return `${days}d`;
-	}
-
 	/** Number formatter for order trade-size bounds (fiat values). */
 	function formatAmount(n: number | null): string {
 		if (n === null) return '';
@@ -418,13 +405,6 @@
 	function cardTitle(o: OrderRecord): string {
 		const tp = orderTitleParts(o, formatAmount);
 		return $_(tp.key, { values: tp.values }) as string;
-	}
-
-	/** Sally finding L10 (Part 68): absolute expiry date formatter
-	 *  for the order chip's `title` tooltip.  Uses the project's
-	 *  canonical translated day-month-year-time format. */
-	function formatAbsoluteDate(iso: string): string {
-		return formatDayMonthTime(iso);
 	}
 
 	function starString(n: 1 | 2 | 3 | 4 | 5): string {
@@ -674,64 +654,44 @@
 			</p>
 			<ul class="space-y-3">
 				{#each liveOrders as o (o.permlink)}
-					{@const priceModelLabel = formatOrderPriceModel(
-						o,
-						$_ as unknown as Parameters<typeof formatOrderPriceModel>[1]
-					)}
-					<li>
-						<a
-							href={lp(`/@${account}/${o.permlink}`)}
-							class="card block transition hover:border-morphit-emerald/60 hover:bg-emerald-50/30 dark:hover:bg-morphit-emerald/[0.05]"
-						>
-							<div class="flex flex-col gap-1">
-								<div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-									<span class="font-display text-base font-bold">
-										{cardTitle(o)}
-									</span>
-									{#if priceModelLabel !== null}
-										<span
-											class="text-sm text-ink-500 dark:text-ink-400"
-											title={$_('orderbook.price_model.tooltip') as string}
-										>
-											· {priceModelLabel}
-										</span>
-									{/if}
-								</div>
-								<div class="mt-1 flex flex-wrap items-center gap-2 text-xs">
-									{#if o.expires_at}
-										<!-- Sally finding L10 (Part 68): show the
-										     absolute date in a `title` tooltip so a
-										     viewer trying to plan a trade ("can I
-										     reach this seller on Tuesday?") can
-										     answer without doing relative-time
-										     arithmetic.  Visible chip text stays
-										     relative for compactness. -->
-										<span
-											class="rounded-full border border-morphit-emerald/30 bg-morphit-emerald/5 px-2 py-0.5 text-morphit-emerald"
-											title={formatAbsoluteDate(o.expires_at)}
-										>
-											{$_('profile.expires_in', {
-												values: { t: formatTimeUntil(o.expires_at) }
-											})}
-										</span>
-									{/if}
-									{#if o.location_region}
-										<span class="text-ink-500">{o.location_region}</span>
-									{/if}
-									{#if o.payment_methods.length > 0}
-										<span class="text-ink-500">
-											{displayNamesForMethods(o.payment_methods, instLookup).join(', ')}
-										</span>
-									{/if}
-								</div>
-								{#if o.terms}
-									<p class="mt-2 text-sm text-ink-700 dark:text-ink-200">
-										<TermsText text={o.terms} />
-									</p>
-								{/if}
-							</div>
-						</a>
-					</li>
+					{@const usdtRowNetwork =
+						o.asset === 'USDT' && o.asset_network && isUsdtNetwork(o.asset_network)
+							? o.asset_network
+							: null}
+					{@const usdcRowNetwork =
+						o.asset === 'USDC' && o.asset_network && isUsdcNetwork(o.asset_network)
+							? o.asset_network
+							: null}
+					{@const daiRowNetwork =
+						o.asset === 'DAI' && o.asset_network && isDaiNetwork(o.asset_network)
+							? o.asset_network
+							: null}
+					{@const networkChip = usdtRowNetwork
+						? { label: $_(`assets.usdt.network.${usdtRowNetwork}.displayName`) as string, tone: 'usdt' as const }
+						: usdcRowNetwork
+							? { label: $_(`assets.usdc.network.${usdcRowNetwork}.displayName`) as string, tone: 'usdc' as const }
+							: daiRowNetwork
+								? { label: $_(`assets.dai.network.${daiRowNetwork}.displayName`) as string, tone: 'dai' as const }
+								: null}
+					<OrderCard
+						order={o}
+						title={cardTitle(o)}
+						displayName={labelProps.displayName}
+						{avatarSvg}
+						{avatarDataUri}
+						detailHref={lp(`/@${account}/${o.permlink}`)}
+						profileHref={lp(`/@${account}`)}
+						messageHref={viewerAccount !== null && viewerAccount !== account
+							? lp(`/chat/${account}?order=${encodeURIComponent(o.permlink)}`)
+							: null}
+						paymentLabels={displayNamesForMethods(o.payment_methods, instLookup)}
+						{networkChip}
+						priceModelLabel={formatOrderPriceModel(
+							o,
+							$_ as unknown as Parameters<typeof formatOrderPriceModel>[1]
+						)}
+						onMessageClick={() => void recordOrderView(account, o.permlink)}
+					/>
 				{/each}
 			</ul>
 		{/if}

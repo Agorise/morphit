@@ -164,9 +164,6 @@
       "address_share": {
         "warning": "Envoyez de l'USDT uniquement sur {network}. Envoyer de l'USDT sur tout autre réseau à cette adresse perd vos fonds définitivement."
       },
-      "order_row": {
-        "network_hint": "Vous avez besoin d'USDT sur {network} pour ce trade."
-      },
       "price_subline": {
         "live": "1 USDT = {price} $ en direct",
         "unavailable": "Flux de prix USDT/USD indisponible — dernier vu il y a {staleness}."
@@ -350,7 +347,6 @@
     }
   },
   "chat": {
-    "message_button_label": "Message",
     "message_button_aria": "Envoyer un message à {peer}",
     "message": {
       "aria": {
@@ -406,11 +402,7 @@
       "dismiss_toast": "@{peer} masqué. Annuler dans Paramètres → Comptes masqués."
     },
     "block": {
-      "block": "Bloquer",
-      "unblock": "Débloquer",
       "busy": "Traitement…",
-      "block_aria": "Bloquer {peer}",
-      "unblock_aria": "Débloquer {peer}",
       "failed": "Impossible de mettre à jour l'état du blocage. Vérifiez votre connexion et réessayez.",
       "confirm": {
         "block": {
@@ -581,15 +573,18 @@
       "pill_method_xrp": "Ripple (XRP)"
     },
     "funds_sent": {
-      "button": "Marquer fonds envoyés",
-      "button_aria": "Marquer que vous avez envoyé les fonds pour cet échange",
+      "button": "Payer maintenant",
+      "button_aria": "Payer pour cet échange",
       "modal_title": "Marquer les fonds comme envoyés",
       "modal_subtitle": "Notifier à votre partenaire que vous avez envoyé la crypto.",
+      "locked_method_label": "Paiement en {asset}",
       "txid_label": "Identifiant de transaction",
       "txid_placeholder": "Coller le txid (64 caractères hex)",
       "txid_help": "L'empreinte unique que votre portefeuille a affichée après l'envoi. La plupart l'appellent TxID, Transaction Hash ou Tx Hash. C'est une longue suite de lettres et de chiffres (64 caractères). Touchez n'importe quelle transaction envoyée dans votre portefeuille pour la trouver.",
       "txid_invalid": "Cela ne ressemble pas à un identifiant de transaction valide.",
       "amount_label": "Montant envoyé (facultatif)",
+      "amount_label_required": "Montant envoyé",
+      "amount_required_hint": "Saisissez le montant que vous payez.",
       "send": "Marquer envoyé",
       "pill_title_btc": "Bitcoin envoyé",
       "pill_title_xmr": "Monero envoyé",
@@ -639,6 +634,8 @@
       "title": "Payer en BLURT au destinataire",
       "subtitle": "Envoyez du BLURT directement depuis votre compte Morphit.",
       "amount_label": "Montant",
+      "amount_placeholder": "0.000",
+      "amount_help": "Saisissez le montant de BLURT que vous avez convenu d'envoyer.",
       "recipient_label": "À",
       "from_label": "De",
       "no_memo_notice": "Aucun mémo on-chain ne sera inclus — le contexte de votre échange reste dans cette discussion chiffrée.",
@@ -693,7 +690,6 @@
       "why_hide": "Masquer l'explication",
       "why_body": "Par défaut, le chat Morphit fait confiance à l'indexer pour délivrer la bonne clé de chat de votre contact. Un indexer hostile pourrait substituer des clés contrôlées par un attaquant et lire vos messages. L'empreinte de 8 mots est calculée localement à partir des vraies clés des deux côtés — si vous voyez tous les deux les mêmes mots, pas de MITM. Cela protège uniquement contre le MITM ; cela NE PROUVE PAS que la personne à l'autre bout du téléphone est bien celle qu'elle prétend être."
     },
-    "order_context_label": "À propos de cette commande",
     "boot_failed": "Impossible de charger le chat. Essaie de rafraîchir la page.",
     "mailing_address": {
       "button": "Partager adresse postale",
@@ -710,7 +706,28 @@
       "track_button": "Suivre le colis",
       "for_order": "Pour la commande"
     },
-    "message_button_label_named": "Message à @{account}"
+    "message_button_label_named": "Message à @{account}",
+    "header": {
+      "chatting_with": "Discussion avec",
+      "re": "Réf."
+    },
+    "export": {
+      "menu_label": "Exporter la conversation",
+      "title": "Conversation Morphit avec @{peer}",
+      "regarding": "Concernant : {summary}",
+      "exported_at": "Exporté {datetime}",
+      "you": "Vous",
+      "encrypted": "(message chiffré)",
+      "no_messages": "Aucun message pour le moment.",
+      "subtitle": "Conversation chiffrée de bout en bout, ancrée sur la blockchain Blurt.",
+      "parties_heading": "Parties",
+      "posting_key_label": "Clé de publication",
+      "verify_heading": "Comment vérifier ce document",
+      "verify_body": "Chaque message ci-dessous est une entrée permanente sur la blockchain publique Blurt, signée cryptographiquement par le compte de l'expéditeur. Le code « Preuve blockchain » de chaque message est son identifiant de transaction : n'importe qui peut le coller dans un explorateur de blocs Blurt (par exemple blurtwallet.com) pour confirmer que ce compte précis a envoyé un message à l'autre à l'heure indiquée. Le texte affiché est le message privé après déchiffrement par le compte nommé ci-dessus. Comme chaque preuve réside sur un registre public et permanent, ce document ne peut pas être modifié en secret : changer une ligne ici ne correspondrait plus à la blockchain.",
+      "proof_label": "Preuve blockchain",
+      "pending_label": "confirmation en attente",
+      "footer": "Document de conversation Morphit — verrouillé, lecture seule. Vérifiez chaque message sur un explorateur de blocs Blurt."
+    }
   },
   "cheat_sheet": {
     "heading": "Aide-mémoire Morphit",
@@ -927,7 +944,8 @@
     "save_error_title": "Les modifications n'ont pas été enregistrées",
     "save_error_body": "La chaîne n'a pas accepté la mise à jour. Réessayez.",
     "fee_note": "La modification est gratuite — pas de frais pour les remplacements dans la fenêtre.",
-    "error_load_failed": "Impossible de charger tes commandes. Réessaie."
+    "error_load_failed": "Impossible de charger tes commandes. Réessaie.",
+    "substance_locked_hint": "Le sens, l'actif et la devise sont verrouillés pendant la modification : une personne ayant vu votre annonce d'origine doit retrouver la même offre. Pour changer ce que vous échangez, publiez plutôt une nouvelle annonce."
   },
   "explorer": {
     "search": {
@@ -961,7 +979,6 @@
       "view_profile_link": "Voir le profil Morphit",
       "posting_pubkey_label": "Clé publique de publication",
       "recent_ops_heading": "Opérations récentes",
-      "realtime_label": "interrogation toutes les 5 secondes",
       "no_ops": "Aucune opération enregistrée pour le moment.",
       "load_more": "Charger les opérations plus anciennes",
       "error": {
@@ -1410,11 +1427,11 @@
       },
       "what_is_reputation": {
         "q": "Comment fonctionne le système de réputation de Morphit ?",
-        "a": "Chaque échange terminé permet aux deux parties de laisser un seul avis : une note de 1 à 5 étoiles et un commentaire facultatif. L'avis est publié sur la chaîne, il est donc permanent et public — n'importe qui peut le lire sur la page de profil d'un trader. Le profil affiche une note moyenne pondérée, un nombre d'avis et une répartition par étoiles pour voir d'un coup d'œil si un trader a un historique cohérent ou quelques exceptions. Pas d'arbitre central ; les avis de la communauté sont le signal de réputation.\n\n**Si les gens doivent te faire confiance, ta réputation est tout.**\n\nMorphit n'a ni arbitres, ni séquestres, ni rétrofacturations. La seule chose qui fait qu'un inconnu te confie son argent est l'historique visible que tu as construit. Traite chaque échange comme s'il comptait — parce que chaque échange est une entrée publique et permanente dans la seule réputation qui compte : la tienne."
+        "a": "Chaque échange terminé permet aux deux parties de laisser un seul avis : une note de 1 à 5 étoiles et un commentaire facultatif. L'avis est publié sur la chaîne, il est donc permanent et public — n'importe qui peut le lire sur la page de profil d'un trader. Le profil affiche une note moyenne pondérée, un nombre d'avis et une répartition par étoiles pour voir d'un coup d'œil si un trader a un historique cohérent ou quelques exceptions. Pas d'arbitre central ; les avis de la communauté sont le signal de réputation.\n\n**Si les gens doivent te faire confiance, ta réputation est tout.**\n\nMorphit n'a ni arbitres, ni séquestres, ni rétrofacturations. La seule chose qui fait qu'un inconnu te confie son argent est l'historique visible que tu as construit. Traite chaque échange comme s'il comptait — parce que chaque échange est une entrée publique et permanente dans la seule réputation qui compte : la tienne.\n\n**Votre score de réputation.** Sur les cartes d'ordres, Morphit condense tout cela en un seul score de réputation de 0 à 5 (par exemple 4,06), affiché à côté de — mais distinct de — votre nombre de transactions. Le score combine votre note moyenne pondérée par le temps avec le nombre de transactions réalisées et la fraîcheur de votre activité, en rapprochant un historique mince d'un 3,0 neutre afin qu'un seul avis ne puisse le faire bondir. Le bon comportement se cumule avec le temps ; une mauvaise note ne se rachète pas par le seul volume.\n"
       },
       "how_to_build_high_reputation": {
         "q": "Comment construire une haute réputation sur Morphit ?",
-        "a": "La réputation sur Morphit se construit **organiquement** — en échangeant régulièrement, en recevant de vrais commentaires de vrais partenaires, et en évitant les modèles que le code signale comme suspects. Il n'y a pas de raccourci.\n\n**Ce qui compte pour votre score** (par ordre d'impact) :\n\n1. **Échanges vérifiés et terminés.** Chaque ordre que vous publiez avec `fee_status = 'verified'` et un commentaire d'un partenaire compte.\n\n2. **L'activité récente compte plus que l'ancienne.** Morphit utilise une **demi-vie de 365 jours** avec décroissance exponentielle : aujourd'hui = 1.0×, un an = 0.5×, deux ans = 0.25×. **Échangez régulièrement.**\n\n3. **Côté acheteur ET côté vendeur.** Votre profil affiche des notes séparées par côté.\n\n4. **Badges de chat vérifié.** Un avis porte un badge quand vous et votre partenaire avez échangé ≥2 messages dans chaque direction sur ≥15 minutes.\n\n5. **Récence de la dernière activité.** Le profil affiche \"Dernier échange : il y a N.\"\n\n**Ce qui n'augmente PAS votre score** (le système filtre cela) :\n\n- Auto-évaluations (rejetées au niveau du protocole)\n- Comptes sock-puppet (Signal A)\n- Anneaux de réciprocité mutuelle haute-étoile (Signal B)\n- Attaques de concentration (Signal D — ≥80% sur une cible)\n- Commentaires sans ordre cité\n- Avalanches coordonnées d'1 étoile (Signal C)\n\n**Ce que vous DEVRIEZ faire :**\n\n1. Compléter de vrais échanges\n2. Payer les frais de listing (Blurt 50% moins cher)\n3. Réciproquer les commentaires\n4. Avoir de vraies conversations\n5. Écrire des commentaires détaillés\n6. Échanger des deux côtés\n7. Échanger avec des partenaires divers\n8. Rester actif\n\n**Ce que vous DEVRIEZ éviter :**\n\n1. Ne créez pas de comptes alternatifs pour vous évaluer\n2. Ne coordonnez pas d'attaques\n3. Ne payez pas pour de faux avis\n4. Ne laissez pas d'avis de passage\n\n**Vérification — n'importe qui peut auditer votre score.** Morphit fournit un **reçu public de réputation** : `GET /v1/accounts/<votre-compte>/reputation-receipt`. N'importe quel lecteur peut récupérer l'ensemble complet des lignes de commentaire (incluses ET exclues, avec la raison de chaque exclusion), le poids de décroissance, et la formule utilisée.\n\n**Avertissements honnêtes :**\n\n- **Les premiers échanges sont les plus durs.** Un nouveau compte montre un badge `is_new_trader` jusqu'à 4+ échanges vérifiés.\n- **Les mauvais avis se rétablissent avec le temps mais ne s'effacent pas.**\n- **Le système NE détecte PAS si l'échange a réellement eu lieu.** Le règlement est hors chaîne.\n\n**Le chemin le plus court vers une haute réputation : échangez régulièrement, réglez de manière fiable, conversez avec vos partenaires, laissez des commentaires honnêtes dans les deux sens, et laissez le temps + le filtrage des tables de signaux faire le reste.**"
+        "a": "La réputation sur Morphit se construit **organiquement** — en échangeant régulièrement, en recevant de vrais commentaires de vrais partenaires, et en évitant les modèles que le code signale comme suspects. Il n'y a pas de raccourci.\n\n**Ce qui compte pour votre score** (par ordre d'impact) :\n\n1. **Échanges vérifiés et terminés.** Chaque ordre que vous publiez avec `fee_status = 'verified'` et un commentaire d'un partenaire compte.\n\n2. **L'activité récente compte plus que l'ancienne.** Morphit utilise une **demi-vie de 365 jours** avec décroissance exponentielle : aujourd'hui = 1.0×, un an = 0.5×, deux ans = 0.25×. **Échangez régulièrement.**\n\n3. **Côté acheteur ET côté vendeur.** Votre profil affiche des notes séparées par côté.\n\n4. **Badges de chat vérifié.** Un avis porte un badge quand vous et votre partenaire avez échangé ≥2 messages dans chaque direction sur ≥15 minutes.\n\n5. **Récence de la dernière activité.** Le profil affiche \"Dernier échange : il y a N.\"\n\n**Ce qui n'augmente PAS votre score** (le système filtre cela) :\n\n- Auto-évaluations (rejetées au niveau du protocole)\n- Comptes sock-puppet (Signal A)\n- Anneaux de réciprocité mutuelle haute-étoile (Signal B)\n- Attaques de concentration (Signal D — ≥80% sur une cible)\n- Commentaires sans ordre cité\n- Avalanches coordonnées d'1 étoile (Signal C)\n\n**Ce que vous DEVRIEZ faire :**\n\n1. Compléter de vrais échanges\n2. Payer les frais de listing (Blurt 50% moins cher)\n3. Réciproquer les commentaires\n4. Avoir de vraies conversations\n5. Écrire des commentaires détaillés\n6. Échanger des deux côtés\n7. Échanger avec des partenaires divers\n8. Rester actif\n\n**Ce que vous DEVRIEZ éviter :**\n\n1. Ne créez pas de comptes alternatifs pour vous évaluer\n2. Ne coordonnez pas d'attaques\n3. Ne payez pas pour de faux avis\n4. Ne laissez pas d'avis de passage\n\n**Vérification — n'importe qui peut auditer votre score.** Morphit fournit un **reçu public de réputation** : `GET /v1/accounts/<votre-compte>/reputation-receipt`. N'importe quel lecteur peut récupérer l'ensemble complet des lignes de commentaire (incluses ET exclues, avec la raison de chaque exclusion), le poids de décroissance, et la formule utilisée.\n\n**Avertissements honnêtes :**\n\n- **Les premiers échanges sont les plus durs.** Un nouveau compte montre un badge `is_new_trader` jusqu'à 4+ échanges vérifiés.\n- **Les mauvais avis se rétablissent avec le temps mais ne s'effacent pas.**\n- **Le système NE détecte PAS si l'échange a réellement eu lieu.** Le règlement est hors chaîne.\n\n**Comment le score de 0 à 5 est construit.** Le score de réputation de vos cartes d'ordres est un composite. Il part de votre note moyenne pondérée par le temps, rapproche un historique mince d'un 3,0 neutre (pour que les nouveaux venus gagnent la confiance plutôt que d'en hériter), puis ajoute un petit bonus pour un historique long, récent et supérieur à la moyenne. L'expérience et la récence peuvent hisser un bon trader vers un 5,0 complet mais ne peuvent jamais racheter une mauvaise note — c'est le bon comportement qui est récompensé, pas la simple activité. Le nombre de transactions affiché à côté (p. ex. 852) est un chiffre distinct : combien vous avez échangé, pas à quel point c'était bien. Le reçu de réputation public renvoie aussi ce score et le détail de ses facteurs, si bien que le chiffre de 0 à 5 est aussi vérifiable face à la chaîne que la note brute.\n\n**Le chemin le plus court vers une haute réputation : échangez régulièrement, réglez de manière fiable, conversez avec vos partenaires, laissez des commentaires honnêtes dans les deux sens, et laissez le temps + le filtrage des tables de signaux faire le reste.**"
       },
       "how_to_leave_feedback": {
         "q": "Comment laisser un avis après une transaction ?",
@@ -1454,7 +1471,7 @@
       },
       "chat_dispute_recourse": {
         "q": "Si je suis en désaccord avec ma contrepartie plus tard, puis-je prouver ce que nous avons convenu dans le chat ?",
-        "a": "Oui — parce que le chat Morphit vit sur la blockchain, vous détenez tous les deux un enregistrement cryptographique permanent de chaque message envoyé. Le texte chiffré est immuable une fois confirmé ; personne ne peut modifier ou supprimer discrètement ce qui a été dit.\n\n**Ce que cela vous donne :**\n\n• **Une trace vérifiable.** Chaque message a un numéro de bloc, un horodatage et une signature avec la clé de publication de l'expéditeur. Il n'y a pas de débat « il a dit / elle a dit » sur la question de savoir si un message spécifique a été envoyé à un moment précis.\n\n• **Déchiffrement à la demande.** Vous et votre contrepartie pouvez déchiffrer toute la conversation à tout moment — les clés n'expirent pas. Si vous devez plus tard montrer à un médiateur, un ami de confiance, un comptable, ou même un tribunal de petites créances ce qui a été convenu, vous pouvez exporter le texte en clair de votre côté.\n\n• **Aucun filtrage par l'opérateur.** Parce que le chat est sur la chaîne plutôt que sur un serveur Morphit, aucun opérateur ou administrateur ne peut révéler ou dissimuler sélectivement des parties de l'enregistrement. Ce qui y est, y est pour toute personne disposant d'une clé de déchiffrement.\n\n**Ce que cela ne vous donne PAS :**\n\n• **Aucun arbitrage automatique.** Morphit n'a pas de service client, pas d'équipe de résolution des litiges, et pas d'entiercement. Avoir la preuve n'oblige pas l'autre partie à l'honorer. Voir « Pourquoi pas de service d'entiercement ou d'arbitrage ? » pour comprendre pourquoi c'est délibéré.\n\n• **Pas de divulgation forcée.** Votre contrepartie ne peut pas être contrainte de déchiffrer son côté de la conversation. L'enregistrement est symétrique — s'ils refusent de coopérer, vous avez toujours votre copie, mais vous ne pouvez pas déverrouiller la leur.\n\n• **Aucun précédent contraignant.** Un journal de chat est une preuve, pas un contrat. Qu'un tribunal ou un médiateur le prenne en compte dépend de sa juridiction et de la nature du différend.\n\n**Conseil pratique.** Pour toute transaction suffisamment importante pour qu'un différend compte, utilisez le chat pour toute la négociation : confirmez l'actif, le montant, le mode de paiement et toutes les conditions particulières par écrit avant que quelqu'un ne transfère quoi que ce soit. Les messages courts qui fixent les termes exacts sont plus utiles plus tard que de longs échanges informels.\n\nSi vous voulez que votre enregistrement soit lisible pour des personnes extérieures à Morphit, vous pouvez coller des extraits de messages déchiffrés (avec horodatages et numéros de bloc) dans un e-mail ou un document — le numéro de bloc est l'ancre que toute autre personne peut vérifier indépendamment contre Blurt."
+        "a": "Oui — parce que le chat Morphit vit sur la blockchain, vous détenez tous les deux un enregistrement cryptographique permanent de chaque message envoyé. Le texte chiffré est immuable une fois confirmé ; personne ne peut modifier ou supprimer discrètement ce qui a été dit.\n\n**Ce que cela vous donne :**\n\n• **Une trace vérifiable.** Chaque message a un numéro de bloc, un horodatage et une signature avec la clé de publication de l'expéditeur. Il n'y a pas de débat « il a dit / elle a dit » sur la question de savoir si un message spécifique a été envoyé à un moment précis.\n\n• **Déchiffrement à la demande.** Vous et votre contrepartie pouvez déchiffrer toute la conversation à tout moment — les clés n'expirent pas. Si vous devez plus tard montrer à un médiateur, un ami de confiance, un comptable, ou même un tribunal de petites créances ce qui a été convenu, vous pouvez exporter le texte en clair de votre côté.\n\n• **Aucun filtrage par l'opérateur.** Parce que le chat est sur la chaîne plutôt que sur un serveur Morphit, aucun opérateur ou administrateur ne peut révéler ou dissimuler sélectivement des parties de l'enregistrement. Ce qui y est, y est pour toute personne disposant d'une clé de déchiffrement.\n\n**Ce que cela ne vous donne PAS :**\n\n• **Aucun arbitrage automatique.** Morphit n'a pas de service client, pas d'équipe de résolution des litiges, et pas d'entiercement. Avoir la preuve n'oblige pas l'autre partie à l'honorer. Voir « Pourquoi pas de service d'entiercement ou d'arbitrage ? » pour comprendre pourquoi c'est délibéré.\n\n• **Pas de divulgation forcée.** Votre contrepartie ne peut pas être contrainte de déchiffrer son côté de la conversation. L'enregistrement est symétrique — s'ils refusent de coopérer, vous avez toujours votre copie, mais vous ne pouvez pas déverrouiller la leur.\n\n• **Aucun précédent contraignant.** Un journal de chat est une preuve, pas un contrat. Qu'un tribunal ou un médiateur le prenne en compte dépend de sa juridiction et de la nature du différend.\n\n**Conseil pratique.** Pour toute transaction suffisamment importante pour qu'un différend compte, utilisez le chat pour toute la négociation : confirmez l'actif, le montant, le mode de paiement et toutes les conditions particulières par écrit avant que quelqu'un ne transfère quoi que ce soit. Les messages courts qui fixent les termes exacts sont plus utiles plus tard que de longs échanges informels.\n\nSi vous voulez que votre enregistrement soit lisible pour des personnes extérieures à Morphit, vous pouvez coller des extraits de messages déchiffrés (avec horodatages et numéros de bloc) dans un e-mail ou un document — le numéro de bloc est l'ancre que toute autre personne peut vérifier indépendamment contre Blurt.\n\n**Export prêt pour un tribunal, en un geste.** Vous n'avez rien à copier-coller à la main. Ouvrez le menu ⋯ de la conversation et choisissez « Exporter la discussion » : Morphit génère un PDF verrouillé (lecture / impression / copie uniquement, sans modification) contenant chaque message, son horodatage UTC et son identifiant de transaction Blurt comme « Preuve blockchain » revérifiable — plus une page en langage clair qui explique à un médiateur ou à un tribunal des petites créances comment vérifier chaque ligne face à la chaîne publique. Cela ne forcera pas une contrepartie malhonnête à bien agir, mais cela remplace le « c'est lui / c'est elle » par un document conçu pour tenir hors de Morphit."
       },
       "chat_vs_feedback_visibility": {
         "q": "Qu'est-ce qui est public et qu'est-ce qui est privé concernant mes transactions sur Morphit ?",
@@ -2616,8 +2633,6 @@
       "range_max_only": "jusqu'à {max} {fiat}",
       "range_open": "tout montant ({fiat})",
       "updated_prefix": "Mis à jour",
-      "region_label": "Région",
-      "payment_label": "Paiement possible par",
       "new_trader_aria": "Nouveau trader — première transaction non encore terminée",
       "new_trader_tooltip": "Ce trader est nouveau sur Morphit. Aidez-le à démarrer !",
       "rating_aria": "{rating} étoiles sur {count, plural, one {# trade complété} other {# trades complétés}}",
@@ -2662,7 +2677,17 @@
       "body": "Tu peux parcourir ici, mais il te faut un nom de compte pour contacter les vendeurs ou publier tes propres offres.",
       "cta": "Choisir un nom"
     },
-    "fee_rejected_check": "Vous avez publié un ordre mais ne le voyez pas ? Vérifiez le statut des frais"
+    "fee_rejected_check": "Vous avez publié un ordre mais ne le voyez pas ? Vérifiez le statut des frais",
+    "card": {
+      "pay_with_label": "Je peux payer avec",
+      "accept_label": "J'accepte",
+      "location_label": "Emplacement",
+      "terms_label": "Conditions",
+      "trades_since": "{count} transactions depuis {month}",
+      "trades_only": "{count} transactions",
+      "reputation_aria": "Score de réputation {score} sur 5",
+      "message_word": "Message"
+    }
   },
   "paired_readonly": {
     "banner_heading": "Connecté en tant que @{account} — votre téléphone détient les clés.",
@@ -3324,7 +3349,7 @@
     "display_name": {
       "errors": {
         "too_short": "Veuillez saisir un nom.",
-        "too_long": "Trop long — 40 caractères maximum.",
+        "too_long": "Trop long — 24 caractères maximum.",
         "control_char": "Ce nom contient un caractère de contrôle non autorisé.",
         "invisible_char": "Ce nom contient un caractère invisible ou d'inversion de direction non autorisé.",
         "invalid": "Ce nom n'est pas valide.",

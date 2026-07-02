@@ -245,7 +245,23 @@ It runs as a small Docker stack on its own private network (`172.20.0.0/16`); us
 
 Totally optional, and most people don't need it. If your VPS offers a "confidential computing" mode (AMD SEV-SNP or Intel TDX), turning it on encrypts your server's memory in hardware. The only secret Morphit keeps in memory is your relay's Blurt posting key — never anyone's funds, because Morphit holds no funds. So it's a small extra shield for that one key, not a fix for any gap. Morphit makes no "secure-enclave" claims and doesn't rely on it; your Tor address, the locked-down security headers, and the on-chain hash of every release already cover the essentials. `OPERATIONS.md` has the honest details and the trade-offs.
 
-### 11.6 Everything else
+### 11.6 Chat speed (on by default)
+
+Messages in a chat show up within a few seconds. Your node does this by watching the very newest blocks on the chain, instead of waiting the ~45–60 seconds it takes for a block to become permanent. It's on automatically — you don't have to do anything.
+
+It's safe: this fast lane only ever *reads* the chain, never writes to your database, and it only handles chat (never money or orders — those always wait for permanence). It still respects your users' block lists. If a block gets reorganized away by the network (rare), a message that flashed up live just won't be saved to history — fine for chat.
+
+You can see whether it's on at any time from the node-health screen — `morphit-ops` → **Node health** (main menu item 13) shows a **Fast chat** line next to your price feeds. An upgrade also prints a one-line confirmation that it's on.
+
+If you'd rather messages only appear once they're permanent, or you want to trim the small amount of extra chain traffic this adds, open `ops/env/indexer.env` and set:
+
+```
+MORPHIT_INDEXER_CHAT_FASTPATH_ENABLED=false
+```
+
+then restart the indexer. (`OPERATIONS.md` §19 has the full details, including the tuning knob and the `/v1/health` status field.)
+
+### 11.7 Everything else
 
 The full operator reference — every configuration setting, the complete nginx server block, the background-service details, the Ansible internals, federation-cost mechanics, and deeper hardening (SSH lockdown, fail2ban tuning, firewall rules) — lives in **`OPERATIONS.md`**. This guide covers the happy path; `OPERATIONS.md` is the encyclopedia.
 

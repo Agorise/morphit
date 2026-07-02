@@ -42,6 +42,8 @@
 		blurtWalletExplorerFallbackUrl
 	} from '$lib/explorer/urls';
 	import { identiconDataUri } from '$crypto/identicon';
+	import { getProfilesBatch } from '$lib/indexer/profileCache';
+	import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
 	import Head from '$components/Head.svelte';
 
 	// name is a route parameter; always defined when this page
@@ -65,6 +67,49 @@
 	 *  no separate resource-credit ("RC mana") system the way Hive does, so
 	 *  this value IS the account's voting power. */
 	let voting = $state(NaN);
+
+	// cp401 — custom avatar (parity with the profile hero): if the account
+	// has uploaded a custom avatar (sanitized SVG or WebP data-URI in its
+	// profile json_metadata) show that; otherwise fall back to the
+	// name-seeded identicon. Best-effort — a fetch failure keeps the identicon.
+	let avatarSvg = $state<string | null>(null);
+	let avatarDataUri = $state<string | null>(null);
+
+	// cp401 — mobile exact-amount popovers (parity with MyBalanceCard). On
+	// phones the balances render as floored integers to fit the 3-column card;
+	// tapping one reveals its exact value in a small popover. Desktop already
+	// shows full precision, so this is wired only on the sm:hidden tap targets.
+	let openExact = $state<'blurt' | 'bp' | 'voting' | null>(null);
+	function toggleExact(v: 'blurt' | 'bp' | 'voting'): void {
+		openExact = openExact === v ? null : v;
+	}
+	function fmtInt(n: number): string {
+		return Number.isFinite(n)
+			? Math.floor(n).toLocaleString(undefined, { maximumFractionDigits: 0 })
+			: '—';
+	}
+	const exactBlurt = $derived(`${formatBalance(blurt)} BLURT`);
+	const exactBp = $derived(`${formatBalance(bp)} BP`);
+	const exactVoting = $derived(formatPercentage(voting));
+	// Outside-tap / Escape dismiss for the open popover. Scoped to the open
+	// window and self-cleaning, so no listener lingers once it closes.
+	$effect(() => {
+		if (openExact === null) return;
+		const onPointer = (e: Event): void => {
+			const t = e.target as HTMLElement | null;
+			if (t && !t.closest('[data-exact-tip]')) openExact = null;
+		};
+		const onKey = (e: KeyboardEvent): void => {
+			if (e.key === 'Escape') openExact = null;
+		};
+		document.addEventListener('pointerdown', onPointer, true);
+		document.addEventListener('keydown', onKey, true);
+		return () => {
+			document.removeEventListener('pointerdown', onPointer, true);
+			document.removeEventListener('keydown', onKey, true);
+		};
+	});
+
 	/** All four public keys (owner / active / posting / memo), fetched once
 	 *  from the indexer's same-origin /keys proxy.  null until loaded or on
 	 *  fetch failure (the card then simply doesn't render). */
@@ -177,6 +222,18 @@
 				}
 			} catch (err) {
 				console.warn('[explorer/account] keys load failed:', err);
+			}
+
+			// Custom avatar (SVG or WebP data-URI) from the account's profile
+			// json_metadata via the shared, cached profile batch. Non-fatal: a
+			// failure just leaves the name-seeded identicon fallback in place.
+			try {
+				const map = await getProfilesBatch([account]);
+				const props = extractLabelPropsFromProfile(map.get(account) ?? null);
+				avatarSvg = props.avatarSvg;
+				avatarDataUri = props.avatarDataUri;
+			} catch (err) {
+				console.warn('[explorer/account] avatar load failed:', err);
 			}
 
 			// First page of history.
@@ -398,24 +455,46 @@
 		</div>
 	{:else}
 		<header class="mb-6 flex items-center gap-4">
-			<!-- Sally finding L9 was investigated and reverted: the
-			     profile page (`/@account`) also seeds the hero
-			     identicon from account-name bytes, not the posting
-			     pubkey.  Switching the explorer to pubkey-seeding
-			     would make the explorer's identicon differ from the
-			     profile's instead of matching it.  The deeper
-			     inconsistency is between IdentityLabel (pubkey-
-			     seeded for bytes-when-known) and the public surfaces
-			     (always name-seeded) — that's a systemic ratification
-			     for a future pass, not a Part 68 fix.  Documented in
-			     REVISIT-LIST.md. -->
-			<img
-				src={identiconDataUri(new TextEncoder().encode(account))}
-				alt=""
-				class="h-16 w-16 rounded-xl"
-				loading="lazy"
-				decoding="async"
-			/>
+			{#if avatarSvg}
+				<!-- Custom avatar SVG. The avatar_svg value was produced by
+				     sanitizeSvg on the uploader's device, broadcast to chain,
+				     then indexed — it reaches this render path having already
+				     passed allowlist sanitization; we trust that chokepoint
+				     and inline it. -->
+				<span
+					class="flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl"
+					aria-hidden="true"
+				>
+					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+					{@html avatarSvg}
+				</span>
+			{:else if avatarDataUri}
+				<img
+					src={avatarDataUri}
+					alt=""
+					class="h-16 w-16 rounded-xl object-cover"
+					loading="lazy"
+					decoding="async"
+				/>
+			{:else}
+				<!-- Fallback identicon. Sally finding L9 was investigated and
+				     reverted: the profile page (`/@account`) also seeds the
+				     hero identicon from account-name bytes, not the posting
+				     pubkey.  Switching the explorer to pubkey-seeding would
+				     make the explorer's identicon differ from the profile's
+				     instead of matching it.  The deeper inconsistency is
+				     between IdentityLabel (pubkey-seeded for bytes-when-known)
+				     and the public surfaces (always name-seeded) — that's a
+				     systemic ratification for a future pass, not a Part 68 fix.
+				     Documented in REVISIT-LIST.md. -->
+				<img
+					src={identiconDataUri(new TextEncoder().encode(account))}
+					alt=""
+					class="h-16 w-16 rounded-xl"
+					loading="lazy"
+					decoding="async"
+				/>
+			{/if}
 			<div>
 				<h1 class="font-display text-2xl font-bold">@{account}</h1>
 				<a
@@ -428,17 +507,50 @@
 		</header>
 
 		<dl class="card mb-6 grid grid-cols-3 gap-3">
+			{#snippet exactTip(text: string)}
+				<span
+					role="tooltip"
+					class="absolute left-1/2 top-full z-40 mt-1.5 -translate-x-1/2 whitespace-nowrap rounded-lg border border-ink-200 bg-white px-2.5 py-1.5 font-mono text-xs font-semibold text-ink-800 shadow-morphit-card dark:border-ink-700 dark:bg-ink-900 dark:text-ink-100"
+					>{text}</span
+				>
+			{/snippet}
 			<div>
 				<dt class="text-xs text-ink-500 dark:text-ink-400">
 					{$_('profile.my_balance.blurt_label')}
 				</dt>
-				<dd class="font-mono text-lg font-semibold">{formatBalance(blurt)}</dd>
+				<dd class="font-mono text-lg font-semibold">
+					<!-- Desktop: full precision with grouping. -->
+					<span class="hidden sm:inline">{formatBalance(blurt)}</span
+					><!-- Mobile: floored integer; tap to reveal the exact amount. -->
+					<span class="relative sm:hidden" data-exact-tip
+						><button
+							type="button"
+							onclick={() => toggleExact('blurt')}
+							aria-label={`${$_('profile.my_balance.blurt_label')} ${exactBlurt}`}
+							class="cursor-pointer underline decoration-dotted underline-offset-2"
+							>{fmtInt(blurt)}</button
+						>{#if openExact === 'blurt'}{@render exactTip(exactBlurt)}{/if}</span
+					>
+				</dd>
 			</div>
 			<div>
 				<dt class="text-xs text-ink-500 dark:text-ink-400">
 					{$_('profile.my_balance.bp_staked_label')}
 				</dt>
-				<dd class="font-mono text-lg font-semibold">{formatBalance(bp)}</dd>
+				<dd class="font-mono text-lg font-semibold">
+					<!-- Desktop: full precision with grouping. -->
+					<span class="hidden sm:inline">{formatBalance(bp)}</span
+					><!-- Mobile: floored integer; tap to reveal the exact amount. -->
+					<span class="relative sm:hidden" data-exact-tip
+						><button
+							type="button"
+							onclick={() => toggleExact('bp')}
+							aria-label={`${$_('profile.my_balance.bp_staked_label')} ${exactBp}`}
+							class="cursor-pointer underline decoration-dotted underline-offset-2"
+							>{fmtInt(bp)}</button
+						>{#if openExact === 'bp'}{@render exactTip(exactBp)}{/if}</span
+					>
+				</dd>
 				{#if Number.isFinite(vestingApr)}
 					<!-- Live BP APR from chain inflation. Phrased "Currently
 					     earning N% APR" (same key as the private balance card)
@@ -454,7 +566,20 @@
 				<dt class="text-xs text-ink-500 dark:text-ink-400">
 					{$_('explorer.account.voting_label')}
 				</dt>
-				<dd class="font-mono text-lg font-semibold">{formatPercentage(voting)}</dd>
+				<dd class="font-mono text-lg font-semibold">
+					<!-- Desktop: full precision. -->
+					<span class="hidden sm:inline">{formatPercentage(voting)}</span
+					><!-- Mobile: floored integer %; tap to reveal the exact value. -->
+					<span class="relative sm:hidden" data-exact-tip
+						><button
+							type="button"
+							onclick={() => toggleExact('voting')}
+							aria-label={`${$_('explorer.account.voting_label')} ${exactVoting}`}
+							class="cursor-pointer underline decoration-dotted underline-offset-2"
+							>{fmtInt(voting)}%</button
+						>{#if openExact === 'voting'}{@render exactTip(exactVoting)}{/if}</span
+					>
+				</dd>
 			</div>
 		</dl>
 
@@ -504,9 +629,6 @@
 			<div class="mb-1 flex items-center justify-between gap-2">
 				<h2 class="font-display text-base font-bold">
 					{$_('explorer.account.recent_ops_heading')}
-					<span class="ml-2 text-xs font-normal text-ink-500">
-						({$_('explorer.account.realtime_label')})
-					</span>
 				</h2>
 				<button
 					type="button"
@@ -555,18 +677,22 @@
 								</time>
 							</div>
 							<div class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs">
-								<a
-									href={txUrl ? lp(txUrl) : '#'}
-									class="font-mono text-morphit-emerald underline-offset-2 hover:underline"
-								>
-									tx: {op.trxId.slice(0, 10)}…
-								</a>
-								<a
-									href={blockUrl ? lp(blockUrl) : '#'}
-									class="font-mono text-morphit-emerald underline-offset-2 hover:underline"
-								>
-									block: {op.block}
-								</a>
+								<span class="font-mono">
+									tx:
+									<a
+										href={txUrl ? lp(txUrl) : '#'}
+										class="text-morphit-emerald underline-offset-2 hover:underline"
+										>{op.trxId.slice(0, 10)}…</a
+									>
+								</span>
+								<span class="font-mono">
+									block:
+									<a
+										href={blockUrl ? lp(blockUrl) : '#'}
+										class="text-morphit-emerald underline-offset-2 hover:underline"
+										>{op.block}</a
+									>
+								</span>
 							</div>
 						</li>
 					{/each}

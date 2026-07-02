@@ -51,9 +51,14 @@
 	import { showToast } from '$lib/stores/toast';
 	import { getProfileCached } from '$lib/indexer/profileCache';
 	import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
+	import { selfProfile } from '$lib/stores/selfProfile';
 	import { blockedAccounts, loadBlocks, markBlocked, markUnblocked } from '$lib/chat/blocks';
 	import { broadcastBlock, broadcastUnblock } from '$blurt/ops/block';
-	import { getChatAdmission } from '$lib/indexer/client';
+	import { getChatAdmission, getOrdersByAccount } from '$lib/indexer/client';
+	import { fetchAccountKeys } from '$blurt/accountKeys';
+	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
+	import { orderTitleParts } from '$lib/utils/orderTitle';
+	import { formatDayMonthTime } from '$i18n/formatters';
 	import StrangerFeeModal from '$components/StrangerFeeModal.svelte';
 	import AddressShareModal from '$components/AddressShareModal.svelte';
 	import FundsSentModal from '$components/FundsSentModal.svelte';
@@ -61,6 +66,8 @@
 	import ShipmentModal from '$components/ShipmentModal.svelte';
 	import PayBlurtModal from '$components/PayBlurtModal.svelte';
 	import { encodeFundsSentPayload, type FundsSentPayload } from '$lib/chat/payload';
+	import type { ChatAssetTicker } from '$lib/chat/payload';
+	import { ASSETS } from '$lib/assets/registry';
 	import {
 		isUsdtNetwork,
 		type UsdtNetwork,
@@ -73,7 +80,7 @@
 	import ConfirmModal from '$components/ConfirmModal.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
 	import VerifyPeerPanel from '$components/VerifyPeerPanel.svelte';
-	import type { ProfileResponse } from '@morphit/indexer-client';
+	import type { ProfileResponse, OrderRecord } from '@morphit/indexer-client';
 
 	interface Props {
 		/** Local user's Blurt account name. */
@@ -104,6 +111,44 @@
 	 *  mount via the shared profile cache so we hit cache if the
 	 *  user just came from a page that listed this peer. */
 	let peerProfile = $state<ProfileResponse | null>(null);
+
+	/** cp402 [2] — the peer's canonical BLT posting-key string, fetched
+	 *  best-effort from the indexer's /keys proxy (same-origin, no
+	 *  dblurt). Feeds the header IdentityLabel's `publicKeyString` so the
+	 *  header shows "@peer BLT7gHu…A9bb" — the durable cryptographic
+	 *  identity anchor that survives display-name changes and helps
+	 *  expose impersonation. NOTE: this is the POSTING pubkey (what signs
+	 *  messages / appears on block explorers), NOT the peer's X25519 chat
+	 *  encryption key — different key, different purpose. Null until
+	 *  resolved or if the fetch fails (IdentityLabel then just omits it). */
+	let peerPostingKey = $state<string | null>(null);
+
+	/** cp402 [4] — the local user's OWN canonical posting key, for the
+	 *  whoami line above the user's own message runs. Same POSTING pubkey
+	 *  as above (not the X25519 chat key); resolved once on mount. Shows
+	 *  the counterparty the exact key that signs the user's messages, so
+	 *  they can confirm it against what they see on-chain. Null until
+	 *  resolved / on failure (IdentityLabel then omits the key). */
+	let myPostingKey = $state<string | null>(null);
+
+	/** cp402 [4] — the local user's own avatar, guarded to `me` so a stale
+	 *  selfProfile from a just-switched account can't render on this
+	 *  user's whoami. When null, IdentityLabel falls back to the heart
+	 *  identicon (and, for isSelf, its own selfProfile lookup). */
+	const myAvatarSvg = $derived($selfProfile.account === me ? $selfProfile.avatarSvg : null);
+	const myAvatarDataUri = $derived(
+		$selfProfile.account === me ? $selfProfile.avatarDataUri : null
+	);
+
+	/** cp402 [2] — when this conversation was opened about a specific
+	 *  order (orderPermlink set), the resolved order record, fetched via
+	 *  the peer's live orders and matched on permlink (same approach as
+	 *  the order-detail page — there's no single-order endpoint). Drives
+	 *  the header "RE: <order summary>" line. Null when there's no order
+	 *  context, or the order is no longer live (cancelled / filled /
+	 *  expired) and thus not in the peer's current book — in which case
+	 *  the RE: line is simply omitted. */
+	let orderRecord = $state<OrderRecord | null>(null);
 
 	/** Derived block status for this peer. True iff the blocks
 	 *  store contains the peer's account. Drives the Block/Unblock
@@ -222,6 +267,160 @@
 		verifyPeerOpen = true;
 	}
 
+	/** cp404 — export this conversation as a printable transcript. Chat is
+	 *  E2EE, so the document is built entirely client-side from the
+	 *  already-decrypted in-memory messages: a self-contained HTML page is
+	 *  opened in a new window and handed to the browser's print dialog,
+	 *  where the user chooses "Save as PDF". Zero added dependencies (the
+	 *  tiny-footprint priority) and no plaintext ever leaves the browser.
+	 *  Timestamps use the canonical UTC formatter; labels are localized. */
+	/** cp404 — export this conversation as a LOCKED, courtroom-grade
+	 *  legal record. Chat is E2EE, so the document is built entirely
+	 *  client-side from the already-decrypted in-memory messages; no
+	 *  plaintext leaves the browser.
+	 *
+	 *  Tamper-resistance has two layers:
+	 *    1. The PDF is locked (a random owner password + a permission set
+	 *       that allows view / print / copy but NOT modification or
+	 *       annotation), so it can't be casually edited.
+	 *    2. The REAL evidence: every message cites its Blurt transaction
+	 *       id, so the record's integrity is anchored to the public,
+	 *       immutable blockchain — anyone can re-verify each line against
+	 *       any Blurt explorer, and altering the text here would no longer
+	 *       match the chain.
+	 *
+	 *  jsPDF is dynamically imported so it is code-split and only fetched
+	 *  when a user actually exports (footprint + lazy-load). */
+	async function exportChatToPdf(): Promise<void> {
+		closeOverflowMenu();
+		const { jsPDF } = await import('jspdf');
+
+		const t = (k: string, v?: Record<string, string | number>): string =>
+			(v ? $_(k, { values: v }) : $_(k)) as string;
+
+		// Lock against edits: random owner password, view/print/copy only.
+		const ownerPassword = Array.from(crypto.getRandomValues(new Uint8Array(24)))
+			.map((b) => b.toString(16).padStart(2, '0'))
+			.join('');
+
+		const doc = new jsPDF({
+			unit: 'pt',
+			format: 'a4',
+			encryption: { ownerPassword, userPermissions: ['print', 'copy'] }
+		});
+
+		const PAGE_W = doc.internal.pageSize.getWidth();
+		const PAGE_H = doc.internal.pageSize.getHeight();
+		const M = 48;
+		const CW = PAGE_W - M * 2;
+		let y = M;
+		let pageNo = 1;
+
+		const footer = (): void => {
+			doc.setFont('helvetica', 'normal');
+			doc.setFontSize(7);
+			doc.setTextColor(140);
+			doc.text(t('chat.export.footer'), M, PAGE_H - 24);
+			doc.text(String(pageNo), PAGE_W - M, PAGE_H - 24, { align: 'right' });
+			doc.setTextColor(20);
+			pageNo += 1;
+		};
+
+		const ensure = (need: number): void => {
+			if (y + need > PAGE_H - M - 28) {
+				footer();
+				doc.addPage();
+				y = M;
+			}
+		};
+
+		const para = (
+			text: string,
+			size: number,
+			opts: { font?: string; style?: string; gap?: number; color?: number } = {}
+		): void => {
+			doc.setFont(opts.font ?? 'helvetica', opts.style ?? 'normal');
+			doc.setFontSize(size);
+			doc.setTextColor(opts.color ?? 20);
+			const lh = size * 1.42;
+			for (const ln of doc.splitTextToSize(text, CW) as string[]) {
+				ensure(lh);
+				doc.text(ln, M, y);
+				y += lh;
+			}
+			y += opts.gap ?? 0;
+		};
+
+		// ─── Header ───
+		para(t('chat.export.title', { peer }), 16, { style: 'bold', gap: 2 });
+		para(t('chat.export.subtitle'), 9, { color: 90, gap: 12 });
+
+		// ─── Parties (accounts + the posting keys that sign their messages) ───
+		para(t('chat.export.parties_heading'), 10, { style: 'bold', gap: 3 });
+		para(`${t('chat.export.you')} \u2014 @${me}`, 9.5, { style: 'bold' });
+		if (myPostingKey)
+			para(`${t('chat.export.posting_key_label')}: ${myPostingKey}`, 8, {
+				font: 'courier',
+				color: 90,
+				gap: 3
+			});
+		para(`@${peer}`, 9.5, { style: 'bold' });
+		if (peerPostingKey)
+			para(`${t('chat.export.posting_key_label')}: ${peerPostingKey}`, 8, {
+				font: 'courier',
+				color: 90,
+				gap: 3
+			});
+
+		if (orderSummary) para(t('chat.export.regarding', { summary: orderSummary }), 9, { gap: 2 });
+		para(t('chat.export.exported_at', { datetime: formatDayMonthTime(new Date().toISOString()) }), 8, {
+			color: 90,
+			gap: 12
+		});
+
+		// ─── Plain-language verification explainer ───
+		para(t('chat.export.verify_heading'), 10, { style: 'bold', gap: 3 });
+		para(t('chat.export.verify_body'), 8.5, { color: 60, gap: 12 });
+
+		ensure(16);
+		doc.setDrawColor(205);
+		doc.line(M, y, PAGE_W - M, y);
+		y += 14;
+
+		// ─── The conversation ───
+		if (messages.length === 0) {
+			para(t('chat.export.no_messages'), 9.5, { color: 120 });
+		} else {
+			for (const m of messages) {
+				const when = m.createdAt ? formatDayMonthTime(m.createdAt.toISOString()) : '';
+				const who = m.sender === 'me' ? `${t('chat.export.you')} (@${me})` : `@${peer}`;
+				// Sender + timestamp line.
+				ensure(13 * 1.42);
+				doc.setFont('helvetica', 'bold');
+				doc.setFontSize(9);
+				doc.setTextColor(20);
+				doc.text(who, M, y);
+				doc.setFont('helvetica', 'normal');
+				doc.setFontSize(8);
+				doc.setTextColor(120);
+				doc.text(when, PAGE_W - M, y, { align: 'right' });
+				y += 13 * 1.42;
+				// Message body (decrypted plaintext, or an encrypted-marker).
+				para(m.decryptFailed ? t('chat.export.encrypted') : m.text, 9.5, { color: 25, gap: 1 });
+				// On-chain proof — the verifiable anchor for this line.
+				const proof = m.trxId
+					? `${t('chat.export.proof_label')}: ${m.trxId}`
+					: `${t('chat.export.proof_label')}: ${t('chat.export.pending_label')}`;
+				para(proof, 7.5, { font: 'courier', color: 110, gap: 10 });
+			}
+		}
+
+		footer();
+
+		const dateStr = new Date().toISOString().slice(0, 10);
+		doc.save(`Morphit-chat-${peer}-${dateStr}.pdf`);
+	}
+
 	function closeVerifyPeer(): void {
 		verifyPeerOpen = false;
 		// Return focus to the overflow trigger for keyboard users.
@@ -322,6 +521,9 @@
 		amount: number;
 		memo: string;
 		orderPermlink?: string;
+		/** cp402 [7b] — true when opened from the composer "Pay now"
+		 *  (no pill), so PayBlurtModal shows a validated amount input. */
+		amountEditable?: boolean;
 	} | null>(null);
 
 	async function fetchAdmission(): Promise<void> {
@@ -486,7 +688,11 @@
 	 *       so the user can copy it for manual receipt-posting
 	 *       later (no need to dig through wallet history).
 	 */
-	async function handlePaidBlurt(args: { trxId: string; blockNum: number }): Promise<void> {
+	async function handlePaidBlurt(args: {
+		trxId: string;
+		blockNum: number;
+		amount: number;
+	}): Promise<void> {
 		const stagedArgs = payBlurtArgs;
 		payBlurtArgs = null;
 		if (stagedArgs === null) return;
@@ -496,6 +702,11 @@
 		// the orderPermlink from staged args; if absent (rare —
 		// pay-now without an order context), the store can't anchor
 		// the entry by permlink and we skip this step.
+		//
+		// cp402 [7b] — the AMOUNT comes from `args` (what PayBlurtModal
+		// actually broadcast), NOT stagedArgs: in the composer flow the
+		// staged amount is a 0 placeholder and the real value was entered
+		// in-modal. For the pill flow the two are identical.
 		if (stagedArgs.orderPermlink !== undefined) {
 			recordFundsSent({
 				orderPermlink: stagedArgs.orderPermlink,
@@ -503,7 +714,7 @@
 				method: 'blurt',
 				txid: args.trxId,
 				claimedMemo: stagedArgs.memo !== '' ? stagedArgs.memo : undefined,
-				amount: stagedArgs.amount,
+				amount: args.amount,
 				direction: 'outgoing'
 			});
 		}
@@ -524,7 +735,7 @@
 			kind: 'morphit_funds_sent',
 			method: 'blurt',
 			txid: args.trxId,
-			amount: String(stagedArgs.amount),
+			amount: String(args.amount),
 			...(stagedArgs.orderPermlink !== undefined
 				? { orderPermlink: stagedArgs.orderPermlink }
 				: {}),
@@ -602,6 +813,49 @@
 		peerProfile = await getProfileCached(peer);
 	}
 
+	/** cp402 [2] — fetch the peer's canonical posting key for the header
+	 *  identity anchor. Best-effort, same-origin (indexer /keys proxy —
+	 *  no browser→RPC, no dblurt). Silent on failure. */
+	async function loadPeerPostingKey(): Promise<void> {
+		try {
+			const keys = await fetchAccountKeys(resolveOrigin(MORPHIT_INDEXER_ORIGIN), peer, fetch);
+			const k = keys?.posting?.key_auths?.[0]?.[0];
+			peerPostingKey = typeof k === 'string' ? k : null;
+		} catch {
+			peerPostingKey = null;
+		}
+	}
+
+	/** cp402 [4] — same as loadPeerPostingKey but for the local user, so
+	 *  the whoami above the user's own message runs shows their real
+	 *  posting-key anchor. Same-origin, best-effort, silent on failure. */
+	async function loadMyPostingKey(): Promise<void> {
+		if (!me) return;
+		try {
+			const keys = await fetchAccountKeys(resolveOrigin(MORPHIT_INDEXER_ORIGIN), me, fetch);
+			const k = keys?.posting?.key_auths?.[0]?.[0];
+			myPostingKey = typeof k === 'string' ? k : null;
+		} catch {
+			myPostingKey = null;
+		}
+	}
+
+	/** cp402 [2] — when opened about an order, resolve it for the header
+	 *  "RE:" line. No single-order endpoint exists, so (like the
+	 *  order-detail page) we fetch the peer's live orders and match on
+	 *  permlink. Best-effort: on failure or a no-longer-live order the
+	 *  RE: line is just omitted. */
+	async function loadOrderContext(): Promise<void> {
+		if (!orderPermlink) return;
+		try {
+			const r = await getOrdersByAccount(peer, { limit: 100 });
+			if (!r.ok) return;
+			orderRecord = r.data.items.find((o) => o.permlink === orderPermlink) ?? null;
+		} catch {
+			orderRecord = null;
+		}
+	}
+
 	// ─── Controller lifecycle ────────────────────────────────────
 
 	onMount(() => {
@@ -641,6 +895,10 @@
 		controller.start();
 		// Kick off peer profile load in parallel.
 		void loadPeerProfile();
+		// cp402 [2] — header identity anchor + order-context "RE:" line.
+		void loadPeerPostingKey();
+		void loadMyPostingKey();
+		void loadOrderContext();
 		// Load the block list too — best-effort. Failure here
 		// leaves the header showing "Block" (the optimistic
 		// default); a refresh retries.
@@ -673,6 +931,65 @@
 	// ─── Derived header ──────────────────────────────────────────
 
 	const peerLabelProps = $derived(extractLabelPropsFromProfile(peerProfile));
+
+	/** cp402 [2] — the header "RE:" order summary, e.g. "I'm buying 500
+	 *  MXN or more worth of BLURT". Built from the resolved order via the
+	 *  shared orderTitleParts helper (identical phrasing to the orderbook
+	 *  + order-detail pages). Empty when there's no order context (no
+	 *  orderPermlink, or the order is no longer live). */
+	const orderSummary = $derived.by(() => {
+		if (!orderRecord) return '';
+		const parts = orderTitleParts({
+			side: orderRecord.side,
+			asset: orderRecord.asset,
+			fiat_currency: orderRecord.fiat_currency,
+			amount_min: orderRecord.amount_min,
+			amount_max: orderRecord.amount_max
+		});
+		return $_(parts.key, { values: parts.values }) as string;
+	});
+
+	// ─── cp402 [6] — crypto-payment direction ────────────────────
+	//
+	// `orderRecord.side` is the PEER's perspective (the chat is about
+	// the peer's order): side='buy' ⇒ the peer is BUYING the asset ⇒
+	// the peer receives the crypto and I send it (I'm the crypto-SENDER,
+	// I use "Pay now"); side='sell' ⇒ the peer sells ⇒ the peer sends the
+	// crypto and I receive it (I'm the crypto-RECEIVER, I share a receiving
+	// address). Normalize exactly like orderTitle.ts (anything ≠ 'sell' is
+	// 'buy'). With no order context we can't tell the direction, so both
+	// buttons show (the pre-cp402 behavior) rather than risk hiding one a
+	// trader needs. Mailing-address + shipment are NOT gated here — they
+	// legitimately apply to barter, courier shipments, and cash-by-mail,
+	// none of which the order reveals.
+	const peerOrderSide = $derived(
+		orderRecord ? (orderRecord.side === 'sell' ? 'sell' : 'buy') : null
+	);
+	/** I send the crypto ⇒ show "Pay now". True when the peer is buying
+	 *  the asset; also true when there's no order (fallback: show it). */
+	const showPayNowButton = $derived(peerOrderSide === null || peerOrderSide === 'buy');
+	/** I receive the crypto ⇒ show "Share address". True when the peer is
+	 *  selling the asset; also true when there's no order (fallback). */
+	const showShareAddressButton = $derived(peerOrderSide === null || peerOrderSide === 'sell');
+
+	/** cp402 [7a] — narrow a raw order asset string to a ChatAssetTicker
+	 *  against the live asset registry (OrderRecord.asset is typed
+	 *  `string`). Defense-in-depth: if an order somehow carries an asset
+	 *  we don't ship, we simply don't lock (free picker) rather than lock
+	 *  the modal to an invalid coin. */
+	function isKnownChatAsset(s: string): s is ChatAssetTicker {
+		return ASSETS.some((a) => a.ticker === s);
+	}
+	/** cp402 [7a] — when the composer "Pay now" (no pill context, so
+	 *  `markSentArgs === null`) is opened about an order, the funds-sent
+	 *  modal locks its asset to the order's asset so grandma cannot send
+	 *  the wrong coin. `undefined` (free picker) when there's no order or
+	 *  the asset is unknown, or when a pill drove the modal. */
+	const composerPayNowAsset = $derived(
+		markSentArgs === null && orderRecord && isKnownChatAsset(orderRecord.asset)
+			? orderRecord.asset
+			: undefined
+	);
 
 	// ─── Send handler ────────────────────────────────────────────
 
@@ -740,52 +1057,59 @@
 	scrolls; the composer is pinned at the bottom. 100svh handles
 	iOS keyboard reshaping; the flex layout avoids position: fixed.
 -->
-<div class="chat-conversation flex h-[100svh] flex-col">
+<div class="chat-conversation flex min-h-0 flex-1 flex-col">
 	<!-- Header block: peer identity + block button, plus a
 	     transient StatusLine for failure messages that sits
 	     below the header row. -->
 	<div class="flex-none border-b border-ink-200 bg-white dark:border-ink-800 dark:bg-ink-950">
 		<header class="chat-header flex items-start justify-between gap-3 px-4 py-3">
-			<div class="flex min-w-0 items-center gap-2">
+			<!-- cp402 [2] — peer identity + context. "Chatting with:" lead-in,
+			     then the IdentityLabel (avatar + display name + @username +
+			     truncated BLT posting key — the durable identity anchor,
+			     same as the order-detail poster card), then a "RE:" line
+			     summarizing the order this conversation is about (omitted
+			     when there's no order context). Replaces the old 📌 banner
+			     that used to sit below the header. -->
+			<div class="flex min-w-0 flex-col gap-0.5">
+				<span class="text-xs text-ink-500 dark:text-ink-400">{$_('chat.header.chatting_with')}:</span>
 				<IdentityLabel
 					account={peer}
 					displayName={peerLabelProps.displayName}
 					avatarSvg={peerLabelProps.avatarSvg}
 					avatarDataUri={peerLabelProps.avatarDataUri}
+					publicKeyString={peerPostingKey ?? undefined}
 					href={lp(`/@${peer}`)}
 					weight="bold"
 					avatarSize={32}
 				/>
+				{#if orderSummary}
+					<!-- The RE: line links through to the order-detail page —
+					     the click-through the removed 📌 banner used to provide,
+					     now folded into the header. Whole line is the tap target
+					     (mobile + grandma friendly); the label stays put while the
+					     summary truncates, with the full text in the hover title. -->
+					<a
+						href={lp(`/@${peer}/${orderPermlink}`)}
+						class="flex min-w-0 items-baseline gap-1 text-xs text-ink-500 hover:text-morphit-emerald hover:underline dark:text-ink-400"
+						title={orderSummary}
+					>
+						<span class="flex-none font-medium">{$_('chat.header.re')}:</span>
+						<span class="truncate">{orderSummary}</span>
+					</a>
+				{/if}
 			</div>
-			<!-- Right column: Block + overflow menu on top, the LIVE pip
-			     stacked beneath it (mobile: it no longer sits to the left of
-			     Block, which was squishing the peer name). -->
+			<!-- Right column: the overflow (kebab) menu on top, the LIVE
+			     pip stacked beneath it. cp402: the standalone Block button
+			     was removed — Block/Unblock now lives INSIDE the kebab menu
+			     as "Block @username" (Ken's chat batch), decluttering the
+			     header row and matching a single-menu-for-peer-actions model. -->
 			<div class="flex flex-none flex-col items-end gap-1.5">
 				{#if $isUnlocked}
 				<div class="flex flex-none items-center gap-2">
-					<button
-						type="button"
-						class="rounded-xl border-2 px-3 py-1.5 text-sm font-semibold transition-colors disabled:cursor-wait disabled:opacity-60 {isPeerBlocked
-							? 'border-red-400 bg-red-50 text-red-800 hover:bg-red-100 dark:border-red-700 dark:bg-red-950 dark:text-red-200'
-							: 'border-ink-300 bg-white text-ink-700 hover:bg-ink-100 dark:border-ink-600 dark:bg-ink-900 dark:text-ink-200 dark:hover:bg-ink-800'}"
-						disabled={blockActionBusy}
-						onclick={onToggleBlock}
-						aria-label={isPeerBlocked
-							? ($_('chat.block.unblock_aria', { values: { peer } }) as string)
-							: ($_('chat.block.block_aria', { values: { peer } }) as string)}
-					>
-						{#if blockActionBusy}
-							{$_('chat.block.busy')}
-						{:else if isPeerBlocked}
-							{$_('chat.block.unblock')}
-						{:else}
-							{$_('chat.block.block')}
-						{/if}
-					</button>
-					<!-- REVISIT-LIST item 11 — overflow menu.  Hosts
-					     the opt-in "Verify peer" item.  Hidden-by-
-					     default UX: the menu is collapsed, no
-					     badges, no nag. -->
+					<!-- Overflow (kebab) menu.  Hosts the "Block @username" /
+					     "Unblock @username" action and the opt-in "Verify peer"
+					     item.  Hidden-by-default UX: collapsed, no badges, no
+					     nag. -->
 					<div class="relative">
 						<button
 							type="button"
@@ -817,6 +1141,39 @@
 								class="absolute right-0 top-full z-40 mt-1 min-w-[12rem] rounded-lg border border-ink-200 bg-white shadow-lg dark:border-ink-700 dark:bg-ink-900"
 								role="menu"
 							>
+								<!-- cp404 — export the conversation to a printable PDF (browser
+								     Save-as-PDF; built client-side from decrypted messages, no deps). -->
+								<button
+									type="button"
+									role="menuitem"
+									class="block w-full px-4 py-2 text-left text-sm hover:bg-ink-100 dark:hover:bg-ink-800"
+									onclick={exportChatToPdf}
+								>
+									{$_('chat.export.menu_label')}
+								</button>
+								<!-- cp402: Block/Unblock moved here from a standalone
+								     header button. Reuses the confirm modal's named
+								     block/unblock label (it interpolates the peer, so it
+								     reads "Block @username"); the click closes the menu
+								     and opens the existing confirm modal (onToggleBlock →
+								     pendingBlockAction). Destructive (block) is tinted
+								     red; unblock is neutral. Disabled while in flight. -->
+								<button
+									type="button"
+									role="menuitem"
+									class="block w-full px-4 py-2 text-left text-sm hover:bg-ink-100 disabled:cursor-wait disabled:opacity-60 dark:hover:bg-ink-800 {isPeerBlocked
+										? 'text-ink-700 dark:text-ink-200'
+										: 'text-red-700 dark:text-red-400'}"
+									disabled={blockActionBusy}
+									onclick={() => {
+										closeOverflowMenu();
+										onToggleBlock();
+									}}
+								>
+									{isPeerBlocked
+										? $_('chat.block.confirm.unblock.yes', { values: { peer } })
+										: $_('chat.block.confirm.block.yes', { values: { peer } })}
+								</button>
 								<button
 									type="button"
 									role="menuitem"
@@ -844,22 +1201,6 @@
 		{#if blockActionError}
 			<div class="px-4 pb-2">
 				<StatusLine kind="error">{blockActionError}</StatusLine>
-			</div>
-		{/if}
-		{#if orderPermlink}
-			<!-- Q10 — order-context banner. When the user reached this
-			     chat from an orderbook row's Message button (or via a
-			     ?order= deep link), surface the link to the order so
-			     they can re-read terms without losing chat scroll. -->
-			<div class="border-b border-morphit-emerald/20 bg-morphit-emerald/5 px-4 py-2 text-xs">
-				<a
-					href={lp(`/@${peer}/${orderPermlink}`)}
-					class="flex items-center gap-2 text-morphit-emerald hover:underline"
-				>
-					<span aria-hidden="true">📌</span>
-					<span class="font-semibold">{$_('chat.order_context_label')}:</span>
-					<code class="font-mono">{orderPermlink}</code>
-				</a>
 			</div>
 		{/if}
 	</div>
@@ -895,7 +1236,7 @@
 				aria-live="polite"
 				aria-label={$_('chat.messages_aria') as string}
 			>
-				{#each messages as m (m.localSeq)}
+				{#each messages as m, i (m.localSeq)}
 					<ChatMessage
 						message={m}
 						{me}
@@ -903,6 +1244,12 @@
 						onRetry={handleRetry}
 						onPayNow={handlePayNowClick}
 						onMarkSent={handleMarkSentClick}
+						showWhoami={messages[i - 1]?.sender !== m.sender}
+						senderAvatarSvg={m.sender === me ? myAvatarSvg : peerLabelProps.avatarSvg}
+						senderAvatarDataUri={m.sender === me
+							? myAvatarDataUri
+							: peerLabelProps.avatarDataUri}
+						senderPostingKey={m.sender === me ? myPostingKey : peerPostingKey}
 					/>
 				{/each}
 			</ul>
@@ -974,6 +1321,12 @@
 					<div
 						class="mx-auto grid max-w-2xl grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:justify-end"
 					>
+					<!-- cp402 [6] — "Share address" shares MY crypto receiving
+					     address, so it's only relevant when I'm the one RECEIVING
+					     the crypto (the peer is selling the asset). Hidden when
+					     I'm the sender; shown in both roles when there's no order
+					     context to judge from. -->
+					{#if showShareAddressButton}
 						<button
 							type="button"
 							class="rounded-lg border border-ink-300 px-3 py-1.5 text-xs font-semibold text-ink-700 hover:border-morphit-emerald hover:text-morphit-emerald dark:border-ink-700 dark:text-ink-200"
@@ -982,20 +1335,48 @@
 						>
 							{$_('chat.address.share_button')}
 						</button>
+					{/if}
+					<!-- cp402 [6] — the funds-sent / "Pay now" button initiates
+					     (or records) MY crypto payment, so it's only relevant when
+					     I'm the one SENDING the crypto (the peer is buying the
+					     asset). Hidden when I'm the receiver; shown in both roles
+					     with no order context. ([7] reflows the click below.) -->
+					{#if showPayNowButton}
 						<button
 							type="button"
 							class="rounded-lg border border-ink-300 px-3 py-1.5 text-xs font-semibold text-ink-700 hover:border-morphit-emerald hover:text-morphit-emerald dark:border-ink-700 dark:text-ink-200"
-							onclick={() => (showFundsSentModal = true)}
+							onclick={() => {
+								// cp402 [7] — composer "Pay now". Clear any stale
+								// pill context first. BLURT is sent by the app
+								// itself (broadcast, no manual txid), so route it to
+								// PayBlurtModal with a validated in-modal amount;
+								// every other asset records an external payment
+								// (amount + txid) via FundsSentModal, with the asset
+								// locked to the order's asset.
+								markSentArgs = null;
+								if (composerPayNowAsset === 'blurt') {
+									payBlurtArgs = {
+										recipient: peer,
+										amount: 0,
+										memo: '',
+										orderPermlink: orderPermlink ?? undefined,
+										amountEditable: true
+									};
+								} else {
+									showFundsSentModal = true;
+								}
+							}}
 							aria-label={$_('chat.funds_sent.button_aria') as string}
 						>
 							{$_('chat.funds_sent.button')}
 						</button>
-						<!-- cp121: physical-shipment + mailing-address pills.
-						     Available in every conversation regardless of
-						     order/payment-method context — users know when
-						     they need to share an address or report a
-						     shipment (same pattern as the crypto-address +
-						     funds-sent buttons above). -->
+					{/if}
+						<!-- cp121 / cp402 [6]: physical-shipment + mailing-address
+						     pills. Deliberately NOT gated by order context — they
+						     apply to barter trades, courier shipments (FedEx etc.),
+						     and cash-by-mail (which can carry a tracking number),
+						     none of which the order record reveals. Gating them from
+						     the order would risk hiding a control a trader needs. -->
 						<button
 							type="button"
 							class="rounded-lg border border-ink-300 px-3 py-1.5 text-xs font-semibold text-ink-700 hover:border-morphit-emerald hover:text-morphit-emerald dark:border-ink-700 dark:text-ink-200"
@@ -1074,6 +1455,8 @@
 		{orderPermlink}
 		initialMethod={markSentArgs?.method ?? 'btc'}
 		initialAmount={markSentArgs?.amount ?? ''}
+		lockedMethod={composerPayNowAsset}
+		amountRequired={markSentArgs === null}
 		initialUsdtNetwork={/* cp26 DD-7 fix — propagate the USDT network from the
 			   pill the user tapped, so they don't have to re-pick
 			   the network they already saw in the chat header.
@@ -1140,6 +1523,7 @@
 	<PayBlurtModal
 		recipient={payBlurtArgs.recipient}
 		amount={payBlurtArgs.amount}
+		amountEditable={payBlurtArgs.amountEditable ?? false}
 		memo={payBlurtArgs.memo}
 		onPaid={handlePaidBlurt}
 		onCancel={handleCancelPayBlurt}
@@ -1183,10 +1567,12 @@
 
 <style>
 	.chat-conversation {
-		/* Keep the flex column constrained. 100svh handles mobile
-		   keyboard reshape better than 100vh. */
-		min-height: 0; /* critical — prevents the flex child (.chat-scroll)
-		                  from overflowing its parent on short screens */
+		/* cp402 [9] — this fills the immersive layout's flex-column
+		   <main> (flex-1 min-h-0) instead of a fixed 100svh, so the sticky
+		   header above it no longer pushes the composer below the fold.
+		   min-height: 0 is critical — it lets the flex child (.chat-scroll)
+		   scroll instead of forcing this column taller than its parent. */
+		min-height: 0;
 	}
 
 	.chat-scroll {

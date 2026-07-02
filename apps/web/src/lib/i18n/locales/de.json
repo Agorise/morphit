@@ -164,9 +164,6 @@
       "address_share": {
         "warning": "Sende USDT nur auf {network}. USDT auf einem anderen Netzwerk an diese Adresse zu senden, verliert deine Mittel dauerhaft."
       },
-      "order_row": {
-        "network_hint": "Für diesen Trade brauchst du USDT auf {network}."
-      },
       "price_subline": {
         "live": "1 USDT = ${price} (Echtzeit)",
         "unavailable": "USDT/USD-Preisfeed nicht verfügbar — zuletzt vor {staleness} gesehen."
@@ -350,7 +347,6 @@
     }
   },
   "chat": {
-    "message_button_label": "Nachricht",
     "message_button_aria": "Nachricht an {peer}",
     "message": {
       "aria": {
@@ -406,11 +402,7 @@
       "dismiss_toast": "@{peer} ausgeblendet. Rückgängig in Einstellungen → Ausgeblendete Konten."
     },
     "block": {
-      "block": "Blockieren",
-      "unblock": "Entsperren",
       "busy": "Verarbeitung…",
-      "block_aria": "{peer} blockieren",
-      "unblock_aria": "{peer} entsperren",
       "failed": "Der Blockierstatus konnte nicht aktualisiert werden. Prüfe deine Verbindung und versuche es erneut.",
       "confirm": {
         "block": {
@@ -581,15 +573,18 @@
       "pill_method_xrp": "Ripple (XRP)"
     },
     "funds_sent": {
-      "button": "Gelder gesendet markieren",
-      "button_aria": "Markieren, dass du Gelder für diesen Handel gesendet hast",
+      "button": "Jetzt bezahlen",
+      "button_aria": "Für diesen Handel bezahlen",
       "modal_title": "Gelder als gesendet markieren",
       "modal_subtitle": "Benachrichtige deinen Handelspartner, dass du die Krypto gesendet hast.",
+      "locked_method_label": "Zahlung mit {asset}",
       "txid_label": "Transaktions-ID",
       "txid_placeholder": "Füge die txid ein (64 Hex-Zeichen)",
       "txid_help": "Der eindeutige Fingerabdruck, den Ihre Wallet nach dem Senden angezeigt hat. Die meisten nennen ihn TxID, Transaction Hash oder Tx Hash. Er sieht aus wie eine lange Mischung aus Buchstaben und Zahlen (64 Zeichen). Tippen Sie in Ihrer Wallet auf eine gesendete Transaktion, um ihn zu finden.",
       "txid_invalid": "Das sieht nicht nach einer gültigen Transaktions-ID aus.",
       "amount_label": "Gesendeter Betrag (optional)",
+      "amount_label_required": "Gesendeter Betrag",
+      "amount_required_hint": "Gib den zu zahlenden Betrag ein.",
       "send": "Gesendet markieren",
       "pill_title_btc": "Bitcoin gesendet",
       "pill_title_xmr": "Monero gesendet",
@@ -639,6 +634,8 @@
       "title": "BLURT an Empfänger zahlen",
       "subtitle": "Sende BLURT direkt von deinem Morphit-Konto.",
       "amount_label": "Betrag",
+      "amount_placeholder": "0.000",
+      "amount_help": "Gib den BLURT-Betrag ein, den du senden willst.",
       "recipient_label": "An",
       "from_label": "Von",
       "no_memo_notice": "Kein On-Chain-Memo wird beigefügt — der Handelskontext bleibt in diesem verschlüsselten Chat.",
@@ -693,7 +690,6 @@
       "why_hide": "Erklärung ausblenden",
       "why_body": "Standardmäßig vertraut Morphit-Chat dem Indexer, den richtigen Chat-Schlüssel für deinen Kontakt zu liefern. Ein feindseliger Indexer könnte vom Angreifer kontrollierte Schlüssel einschleusen und deine Nachrichten lesen. Der 8-Wort-Fingerprint wird lokal aus den echten Chat-Schlüsseln beider Seiten berechnet — wenn ihr beide dieselben Wörter seht, gab es kein MITM. Das schützt nur vor MITM; es BEWEIST NICHT, dass die Person am anderen Ende der Leitung wirklich diejenige ist, die sie zu sein vorgibt."
     },
-    "order_context_label": "Über diese Order",
     "boot_failed": "Chat konnte nicht geladen werden. Lade die Seite neu.",
     "mailing_address": {
       "button": "Postanschrift teilen",
@@ -710,7 +706,28 @@
       "track_button": "Sendung verfolgen",
       "for_order": "Zur Bestellung"
     },
-    "message_button_label_named": "Nachricht an @{account}"
+    "message_button_label_named": "Nachricht an @{account}",
+    "header": {
+      "chatting_with": "Chat mit",
+      "re": "Betr."
+    },
+    "export": {
+      "menu_label": "Chat exportieren",
+      "title": "Morphit-Chat mit @{peer}",
+      "regarding": "Betrifft: {summary}",
+      "exported_at": "Exportiert {datetime}",
+      "you": "Du",
+      "encrypted": "(verschlüsselte Nachricht)",
+      "no_messages": "Noch keine Nachrichten.",
+      "subtitle": "Ende-zu-Ende-verschlüsselte Unterhaltung, verankert auf der Blurt-Blockchain.",
+      "parties_heading": "Parteien",
+      "posting_key_label": "Posting-Schlüssel",
+      "verify_heading": "So überprüfen Sie dieses Dokument",
+      "verify_body": "Jede Nachricht unten ist ein dauerhafter Eintrag auf der öffentlichen Blurt-Blockchain, kryptografisch signiert vom Konto des Absenders. Der Code „Blockchain-Nachweis“ jeder Nachricht ist ihre Transaktions-ID: Jeder kann sie in einen Blurt-Block-Explorer (zum Beispiel blurtwallet.com) einfügen, um zu bestätigen, dass genau dieses Konto der anderen zur angegebenen Zeit eine Nachricht gesendet hat. Der angezeigte Text ist die private Nachricht nach der Entschlüsselung durch das oben genannte Konto. Da jeder Nachweis in einem öffentlichen, dauerhaften Register liegt, kann dieses Dokument nicht heimlich verändert werden — das Ändern einer Zeile würde nicht mehr zur Blockchain passen.",
+      "proof_label": "Blockchain-Nachweis",
+      "pending_label": "Bestätigung ausstehend",
+      "footer": "Morphit-Chat-Dokument — gesperrt, schreibgeschützt. Überprüfen Sie jede Nachricht in einem Blurt-Block-Explorer."
+    }
   },
   "cheat_sheet": {
     "heading": "Morphit-Spickzettel",
@@ -927,7 +944,8 @@
     "save_error_title": "Änderungen wurden nicht gespeichert",
     "save_error_body": "Die Chain hat das Update abgelehnt. Versuche es erneut.",
     "fee_note": "Bearbeiten ist kostenlos — keine Gebühr für Änderungen im Fenster.",
-    "error_load_failed": "Konnte deine Bestellungen nicht laden. Versuche es erneut."
+    "error_load_failed": "Konnte deine Bestellungen nicht laden. Versuche es erneut.",
+    "substance_locked_hint": "Seite, Asset und Währung sind während der Bearbeitung gesperrt – wer dein ursprüngliches Angebot gesehen hat, soll denselben Handel vorfinden. Um zu ändern, was du handelst, erstelle stattdessen eine neue Order."
   },
   "explorer": {
     "search": {
@@ -961,7 +979,6 @@
       "view_profile_link": "Morphit-Profil ansehen",
       "posting_pubkey_label": "Posting-Public-Key",
       "recent_ops_heading": "Aktuelle Operationen",
-      "realtime_label": "Abfrage alle 5 Sekunden",
       "no_ops": "Noch keine Operationen aufgezeichnet.",
       "load_more": "Ältere Operationen laden",
       "error": {
@@ -1410,11 +1427,11 @@
       },
       "what_is_reputation": {
         "q": "Wie funktioniert das Reputationssystem von Morphit?",
-        "a": "Jeder abgeschlossene Handel erlaubt beiden Seiten, eine Bewertung abzugeben: 1 bis 5 Sterne plus ein optionaler Kommentar. Die Bewertung wird on-chain veröffentlicht, ist also permanent und öffentlich — jeder kann sie auf der Profilseite eines Traders lesen. Das Profil zeigt eine gewichtete Durchschnittsbewertung, eine Anzahl der Reviews und eine Aufschlüsselung nach Sternen, sodass du auf einen Blick siehst, ob ein Trader eine konsistente Historie oder ein paar Ausreißer hat. Es gibt keinen zentralen Schiedsrichter; die Community-Reviews sind das Reputationssignal.\n\n**Wenn dir Menschen vertrauen sollen, ist dein Ruf alles.**\n\nMorphit hat keine Schlichter, Treuhänder oder Rückbuchungen. Das Einzige, was einen Fremden dazu bringt, dir sein Geld anzuvertrauen, ist der sichtbare Verlauf, den du aufgebaut hast. Behandle jeden Handel so, als ob er zählt — denn jeder Handel ist ein öffentlicher, permanenter Eintrag in der einzigen Reputation, die zählt: deiner."
+        "a": "Jeder abgeschlossene Handel erlaubt beiden Seiten, eine Bewertung abzugeben: 1 bis 5 Sterne plus ein optionaler Kommentar. Die Bewertung wird on-chain veröffentlicht, ist also permanent und öffentlich — jeder kann sie auf der Profilseite eines Traders lesen. Das Profil zeigt eine gewichtete Durchschnittsbewertung, eine Anzahl der Reviews und eine Aufschlüsselung nach Sternen, sodass du auf einen Blick siehst, ob ein Trader eine konsistente Historie oder ein paar Ausreißer hat. Es gibt keinen zentralen Schiedsrichter; die Community-Reviews sind das Reputationssignal.\n\n**Wenn dir Menschen vertrauen sollen, ist dein Ruf alles.**\n\nMorphit hat keine Schlichter, Treuhänder oder Rückbuchungen. Das Einzige, was einen Fremden dazu bringt, dir sein Geld anzuvertrauen, ist der sichtbare Verlauf, den du aufgebaut hast. Behandle jeden Handel so, als ob er zählt — denn jeder Handel ist ein öffentlicher, permanenter Eintrag in der einzigen Reputation, die zählt: deiner.\n\n**Dein Reputationswert.** Auf Order-Karten verdichtet Morphit all dies zu einem einzigen Reputationswert von 0 bis 5 (zum Beispiel 4,06), der neben — aber getrennt von — deiner Handelsanzahl angezeigt wird. Der Wert verbindet deine zeitgewichtete Durchschnittsbewertung damit, wie viele Trades du abgeschlossen hast und wie kürzlich du aktiv warst, und zieht eine dünne Historie in Richtung einer neutralen 3,0, damit eine einzelne Bewertung ihn nicht hochschnellen lässt. Gutes Verhalten summiert sich mit der Zeit; eine schlechte Bewertung lässt sich nicht durch bloßes Volumen zurückkaufen.\n"
       },
       "how_to_build_high_reputation": {
         "q": "Wie baue ich eine hohe Reputation auf Morphit auf?",
-        "a": "Reputation auf Morphit baut sich **organisch** auf — durch konsistenten Handel, echtes Feedback von echten Gegenparteien, und das Vermeiden von Mustern, die der Code als verdächtig markiert. Es gibt keine Abkürzung.\n\n**Was zu deiner Punktzahl zählt** (nach Auswirkung geordnet):\n\n1. **Verifizierte, abgeschlossene Handelsgeschäfte.** Jede Order mit `fee_status = 'verified'` und einem Feedback einer Gegenpartei zählt.\n\n2. **Aktuelle Aktivität zählt mehr als alte.** Morphit verwendet eine **365-Tage-Halbwertszeit** mit exponentieller Abklingrate: heute = 1.0×, ein Jahr alt = 0.5×, zwei Jahre = 0.25×. **Handle regelmäßig.**\n\n3. **Sowohl Kauf- ALS AUCH Verkaufsseite.** Dein Profil zeigt separate Bewertungen pro Seite.\n\n4. **Verified-Chat-Abzeichen.** Eine Bewertung trägt das Abzeichen, wenn du und deine Gegenpartei ≥2 Nachrichten in jede Richtung über ≥15 Minuten ausgetauscht habt.\n\n5. **Aktualität der letzten Aktivität.** Profil zeigt \"Letzter Handel: vor N.\"\n\n**Was deine Punktzahl NICHT erhöht** (das System filtert dies):\n\n- Selbst-Bewertungen (auf Protokoll-Ebene abgelehnt)\n- Sock-Puppet-Konten (Signal A)\n- Gegenseitige Hoch-Stern-Reziprozitäts-Ringe (Signal B)\n- Konzentrationsangriffe (Signal D — ≥80% Fokus auf ein Ziel)\n- Feedback ohne zitierte Order\n- Koordinierte 1-Stern-Angriffe (Signal C)\n\n**Was du TUN solltest:**\n\n1. Vollständige Handelsgeschäfte durchführen\n2. Die Listing-Gebühr bezahlen (Blurt ist 50% günstiger)\n3. Feedback erwidern\n4. Echte Chat-Gespräche führen\n5. Detaillierte Kommentare schreiben\n6. Auf beiden Seiten handeln\n7. Mit diversen Gegenparteien handeln\n8. Aktiv bleiben\n\n**Was du VERMEIDEN solltest:**\n\n1. Keine Alt-Konten für Selbstbewertung\n2. Keine koordinierten Angriffe auf Gegenparteien\n3. Keine bezahlten Fake-Bewertungen\n4. Keine Drive-By-Feedbacks\n\n**Verifizierung — jeder kann deine Punktzahl prüfen.** Morphit bietet eine **öffentliche Reputationsquittung**: `GET /v1/accounts/<dein-konto>/reputation-receipt`. Jeder Leser kann alle Feedback-Zeilen abrufen (eingeschlossen UND ausgeschlossen, mit dem Grund jeder Ausschließung), das Abklinggewicht, und die verwendete Formel.\n\n**Ehrliche Einschränkungen:**\n\n- **Die ersten Handelsgeschäfte sind die schwersten.** Ein neues Konto zeigt ein `is_new_trader`-Abzeichen bis 4+ verifizierte Trades.\n- **Schlechte Bewertungen erholen sich mit der Zeit, werden aber nicht gelöscht.**\n- **Das System erkennt NICHT, ob ein Handel tatsächlich stattfand.** Settlement ist off-chain.\n\n**Kürzester Weg zu hoher Reputation: handle konsistent, settle zuverlässig, chatte mit deinen Gegenparteien, hinterlasse ehrliches Feedback in beide Richtungen, und lass Zeit + Signal-Tabellen-Filterung den Rest tun.**"
+        "a": "Reputation auf Morphit baut sich **organisch** auf — durch konsistenten Handel, echtes Feedback von echten Gegenparteien, und das Vermeiden von Mustern, die der Code als verdächtig markiert. Es gibt keine Abkürzung.\n\n**Was zu deiner Punktzahl zählt** (nach Auswirkung geordnet):\n\n1. **Verifizierte, abgeschlossene Handelsgeschäfte.** Jede Order mit `fee_status = 'verified'` und einem Feedback einer Gegenpartei zählt.\n\n2. **Aktuelle Aktivität zählt mehr als alte.** Morphit verwendet eine **365-Tage-Halbwertszeit** mit exponentieller Abklingrate: heute = 1.0×, ein Jahr alt = 0.5×, zwei Jahre = 0.25×. **Handle regelmäßig.**\n\n3. **Sowohl Kauf- ALS AUCH Verkaufsseite.** Dein Profil zeigt separate Bewertungen pro Seite.\n\n4. **Verified-Chat-Abzeichen.** Eine Bewertung trägt das Abzeichen, wenn du und deine Gegenpartei ≥2 Nachrichten in jede Richtung über ≥15 Minuten ausgetauscht habt.\n\n5. **Aktualität der letzten Aktivität.** Profil zeigt \"Letzter Handel: vor N.\"\n\n**Was deine Punktzahl NICHT erhöht** (das System filtert dies):\n\n- Selbst-Bewertungen (auf Protokoll-Ebene abgelehnt)\n- Sock-Puppet-Konten (Signal A)\n- Gegenseitige Hoch-Stern-Reziprozitäts-Ringe (Signal B)\n- Konzentrationsangriffe (Signal D — ≥80% Fokus auf ein Ziel)\n- Feedback ohne zitierte Order\n- Koordinierte 1-Stern-Angriffe (Signal C)\n\n**Was du TUN solltest:**\n\n1. Vollständige Handelsgeschäfte durchführen\n2. Die Listing-Gebühr bezahlen (Blurt ist 50% günstiger)\n3. Feedback erwidern\n4. Echte Chat-Gespräche führen\n5. Detaillierte Kommentare schreiben\n6. Auf beiden Seiten handeln\n7. Mit diversen Gegenparteien handeln\n8. Aktiv bleiben\n\n**Was du VERMEIDEN solltest:**\n\n1. Keine Alt-Konten für Selbstbewertung\n2. Keine koordinierten Angriffe auf Gegenparteien\n3. Keine bezahlten Fake-Bewertungen\n4. Keine Drive-By-Feedbacks\n\n**Verifizierung — jeder kann deine Punktzahl prüfen.** Morphit bietet eine **öffentliche Reputationsquittung**: `GET /v1/accounts/<dein-konto>/reputation-receipt`. Jeder Leser kann alle Feedback-Zeilen abrufen (eingeschlossen UND ausgeschlossen, mit dem Grund jeder Ausschließung), das Abklinggewicht, und die verwendete Formel.\n\n**Ehrliche Einschränkungen:**\n\n- **Die ersten Handelsgeschäfte sind die schwersten.** Ein neues Konto zeigt ein `is_new_trader`-Abzeichen bis 4+ verifizierte Trades.\n- **Schlechte Bewertungen erholen sich mit der Zeit, werden aber nicht gelöscht.**\n- **Das System erkennt NICHT, ob ein Handel tatsächlich stattfand.** Settlement ist off-chain.\n\n**Wie der 0–5-Wert selbst entsteht.** Der Reputationswert auf deinen Order-Karten ist zusammengesetzt. Er beginnt bei deiner zeitgewichteten Durchschnittsbewertung, zieht eine dünne Historie in Richtung einer neutralen 3,0 (damit Neulinge Vertrauen verdienen statt es zu erben) und fügt dann einen kleinen Bonus für eine lange, aktuelle, überdurchschnittliche Bilanz hinzu. Erfahrung und Aktualität können einen guten Händler in Richtung voller 5,0 heben, aber niemals eine schlechte Bewertung retten — belohnt wird gutes Verhalten, nicht bloße Aktivität. Die daneben angezeigte Handelsanzahl (z. B. 852) ist eine eigene Zahl: WIE VIEL du gehandelt hast, nicht wie gut. Die öffentliche Reputationsquittung liefert auch diesen Wert und seine Faktoraufschlüsselung, sodass die 0–5-Zahl ebenso gegen die Chain prüfbar ist wie die rohe Bewertung.\n\n**Kürzester Weg zu hoher Reputation: handle konsistent, settle zuverlässig, chatte mit deinen Gegenparteien, hinterlasse ehrliches Feedback in beide Richtungen, und lass Zeit + Signal-Tabellen-Filterung den Rest tun.**"
       },
       "how_to_leave_feedback": {
         "q": "Wie hinterlasse ich eine Bewertung nach einem Handel?",
@@ -1454,7 +1471,7 @@
       },
       "chat_dispute_recourse": {
         "q": "Wenn ich später mit meinem Handelspartner uneinig bin, kann ich beweisen, was wir im Chat vereinbart haben?",
-        "a": "Ja — weil der Morphit-Chat auf der Blockchain lebt, habt ihr beide eine dauerhafte kryptografische Aufzeichnung jeder gesendeten Nachricht. Der verschlüsselte Text ist unveränderlich, sobald er bestätigt ist; niemand kann das Gesagte bearbeiten oder heimlich löschen.\n\n**Was das dir gibt:**\n\n• **Eine überprüfbare Spur.** Jede Nachricht hat eine Blocknummer, einen Zeitstempel und eine Signatur vom Posting-Key des Absenders. Es gibt kein \"er sagte / sie sagte\" darüber, ob eine bestimmte Nachricht zu einer bestimmten Zeit gesendet wurde.\n\n• **Entschlüsselung auf Anfrage.** Du und dein Handelspartner könnt die gesamte Unterhaltung jederzeit entschlüsseln — die Schlüssel laufen nicht ab. Wenn du später einem Mediator, einem vertrauten Freund, einem Buchhalter oder sogar einem Gericht zeigen musst, was vereinbart wurde, kannst du Klartext von deiner Seite exportieren.\n\n• **Keine Operator-Torwächter.** Da der Chat on-chain läuft statt auf einem Morphit-Server, kann kein Operator oder Admin Teile der Aufzeichnung selektiv offenlegen oder verbergen. Was dort ist, ist für jeden mit einem Entschlüsselungsschlüssel da.\n\n**Was das dir NICHT gibt:**\n\n• **Keine automatische Schlichtung.** Morphit hat keinen Kundenservice, kein Streitbeilegungs-Team und keinen Treuhand-Dienst. Beweise zu haben zwingt die andere Seite nicht, sie zu respektieren. Siehe 'Warum kein Treuhand- oder Schlichtungsdienst?' für den Grund dieser bewussten Entscheidung.\n\n• **Keine erzwungene Offenlegung.** Dein Handelspartner kann nicht gezwungen werden, seine Seite der Unterhaltung zu entschlüsseln. Die Aufzeichnung ist symmetrisch — wenn sie nicht kooperieren, hast du immer noch deine Kopie, aber du kannst ihre nicht entsperren.\n\n• **Kein bindender Präzedenzfall.** Ein Chat-Protokoll ist Beweis, kein Vertrag. Ob ein Gericht oder Mediator es würdigt, hängt von dessen Zuständigkeit und der Art des Streits ab.\n\n**Praktischer Rat.** Für jede Transaktion, die groß genug ist, dass ein Streit zählen würde, nutze den Chat für die gesamte Verhandlung: bestätige das Asset, den Betrag, die Zahlungsmethode und alle besonderen Bedingungen schriftlich, bevor irgendjemand etwas überträgt. Kurze Nachrichten, die genaue Bedingungen festhalten, sind später nützlicher als lange beiläufige Gespräche.\n\nWenn du möchtest, dass deine Aufzeichnung für Personen außerhalb von Morphit lesbar ist, kannst du entschlüsselte Nachrichtenauszüge (mit Zeitstempeln und Blocknummern) in eine E-Mail oder ein Dokument einfügen — die Blocknummer ist der Anker, den jede andere Person unabhängig gegen Blurt verifizieren kann."
+        "a": "Ja — weil der Morphit-Chat auf der Blockchain lebt, habt ihr beide eine dauerhafte kryptografische Aufzeichnung jeder gesendeten Nachricht. Der verschlüsselte Text ist unveränderlich, sobald er bestätigt ist; niemand kann das Gesagte bearbeiten oder heimlich löschen.\n\n**Was das dir gibt:**\n\n• **Eine überprüfbare Spur.** Jede Nachricht hat eine Blocknummer, einen Zeitstempel und eine Signatur vom Posting-Key des Absenders. Es gibt kein \"er sagte / sie sagte\" darüber, ob eine bestimmte Nachricht zu einer bestimmten Zeit gesendet wurde.\n\n• **Entschlüsselung auf Anfrage.** Du und dein Handelspartner könnt die gesamte Unterhaltung jederzeit entschlüsseln — die Schlüssel laufen nicht ab. Wenn du später einem Mediator, einem vertrauten Freund, einem Buchhalter oder sogar einem Gericht zeigen musst, was vereinbart wurde, kannst du Klartext von deiner Seite exportieren.\n\n• **Keine Operator-Torwächter.** Da der Chat on-chain läuft statt auf einem Morphit-Server, kann kein Operator oder Admin Teile der Aufzeichnung selektiv offenlegen oder verbergen. Was dort ist, ist für jeden mit einem Entschlüsselungsschlüssel da.\n\n**Was das dir NICHT gibt:**\n\n• **Keine automatische Schlichtung.** Morphit hat keinen Kundenservice, kein Streitbeilegungs-Team und keinen Treuhand-Dienst. Beweise zu haben zwingt die andere Seite nicht, sie zu respektieren. Siehe 'Warum kein Treuhand- oder Schlichtungsdienst?' für den Grund dieser bewussten Entscheidung.\n\n• **Keine erzwungene Offenlegung.** Dein Handelspartner kann nicht gezwungen werden, seine Seite der Unterhaltung zu entschlüsseln. Die Aufzeichnung ist symmetrisch — wenn sie nicht kooperieren, hast du immer noch deine Kopie, aber du kannst ihre nicht entsperren.\n\n• **Kein bindender Präzedenzfall.** Ein Chat-Protokoll ist Beweis, kein Vertrag. Ob ein Gericht oder Mediator es würdigt, hängt von dessen Zuständigkeit und der Art des Streits ab.\n\n**Praktischer Rat.** Für jede Transaktion, die groß genug ist, dass ein Streit zählen würde, nutze den Chat für die gesamte Verhandlung: bestätige das Asset, den Betrag, die Zahlungsmethode und alle besonderen Bedingungen schriftlich, bevor irgendjemand etwas überträgt. Kurze Nachrichten, die genaue Bedingungen festhalten, sind später nützlicher als lange beiläufige Gespräche.\n\nWenn du möchtest, dass deine Aufzeichnung für Personen außerhalb von Morphit lesbar ist, kannst du entschlüsselte Nachrichtenauszüge (mit Zeitstempeln und Blocknummern) in eine E-Mail oder ein Dokument einfügen — die Blocknummer ist der Anker, den jede andere Person unabhängig gegen Blurt verifizieren kann.\n\n**Gerichtsfertiger Export mit einem Tippen.** Sie müssen nichts davon von Hand kopieren. Öffnen Sie das ⋯-Menü der Unterhaltung und wählen Sie „Chat exportieren“: Morphit erzeugt ein gesperrtes PDF (nur Ansehen / Drucken / Kopieren, kein Bearbeiten) mit jeder Nachricht, ihrem UTC-Zeitstempel und ihrer Blurt-Transaktions-ID als überprüfbarem „Blockchain-Nachweis“ — plus einer Seite in einfacher Sprache, die einem Mediator oder einem Gericht für geringe Forderungen zeigt, wie sich jede Zeile gegen die öffentliche Blockchain prüfen lässt. Es kann eine unehrliche Gegenpartei nicht zwingen, sich richtig zu verhalten, aber es ersetzt „hat er / hat sie gesagt“ durch einen Nachweis, der außerhalb von Morphit standhält."
       },
       "chat_vs_feedback_visibility": {
         "q": "Was ist öffentlich und was ist privat bei meinen Trades auf Morphit?",
@@ -2616,8 +2633,6 @@
       "range_max_only": "bis {max} {fiat}",
       "range_open": "beliebiger Betrag ({fiat})",
       "updated_prefix": "Aktualisiert",
-      "region_label": "Region",
-      "payment_label": "Käufer zahlt mit",
       "new_trader_aria": "Neuer Händler — erster Handel noch nicht abgeschlossen",
       "new_trader_tooltip": "Dieser Händler ist neu bei Morphit. Hilf ihm zu starten!",
       "rating_aria": "{rating} Sterne aus {count, plural, one {# abgeschlossenem Trade} other {# abgeschlossenen Trades}}",
@@ -2662,7 +2677,17 @@
       "body": "Du kannst hier stöbern, aber du brauchst einen Kontonamen, um Verkäufer anzuschreiben oder eigene Angebote zu erstellen.",
       "cta": "Namen wählen"
     },
-    "fee_rejected_check": "Order veröffentlicht, aber nicht sichtbar? Gebührenstatus prüfen"
+    "fee_rejected_check": "Order veröffentlicht, aber nicht sichtbar? Gebührenstatus prüfen",
+    "card": {
+      "pay_with_label": "Ich kann zahlen mit",
+      "accept_label": "Ich akzeptiere",
+      "location_label": "Standort",
+      "terms_label": "Bedingungen",
+      "trades_since": "{count} Trades seit {month}",
+      "trades_only": "{count} Trades",
+      "reputation_aria": "Reputationswert {score} von 5",
+      "message_word": "Nachricht"
+    }
   },
   "paired_readonly": {
     "banner_heading": "Angemeldet als @{account} — das Telefon hat die Schlüssel.",
@@ -3324,7 +3349,7 @@
     "display_name": {
       "errors": {
         "too_short": "Bitte gib einen Namen ein.",
-        "too_long": "Zu lang — bitte höchstens 40 Zeichen.",
+        "too_long": "Zu lang — bitte höchstens 24 Zeichen.",
         "control_char": "Der Name enthält ein Steuerzeichen, das nicht erlaubt ist.",
         "invisible_char": "Der Name enthält ein unsichtbares oder richtungsüberschreibendes Zeichen, das nicht erlaubt ist.",
         "invalid": "Das ist kein gültiger Name.",

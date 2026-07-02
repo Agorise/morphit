@@ -365,7 +365,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 158. **Source code at git.agorise.net/agorise/morphit.** Self-hosted Forgejo (Git forge), not GitHub. The project's own infrastructure is decentralized too.
 
-159. **46 ADRs** (Architectural Decision Records) in `docs/adr/`, files numbered 0001 through 0047 (0016 retracted). Each records a major design choice, the alternatives considered, and the tradeoff rationale. Topics span key custody (0010), chat reputation + crypto (0014, 0015), YubiKey unlock (0017), release trust anchor (0019), QR pairing (0022), one ADR per tradable-asset addition (0023–0036), cash-by-mail (0037), reputation hardening (0038), self-sovereign pricing (0039–0042), opt-in TOTP 2FA (0043), AI-agent integration via Model Context Protocol (0044), shared network-defense primitives (0045), migrating Blurt signing off `elliptic` (0046), and Tor-onion + host-hardening on by default (0047).
+159. **47 ADRs** (Architectural Decision Records) in `docs/adr/`, files numbered 0001 through 0048 (0016 retracted). Each records a major design choice, the alternatives considered, and the tradeoff rationale. Topics span key custody (0010), chat reputation + crypto (0014, 0015), YubiKey unlock (0017), release trust anchor (0019), QR pairing (0022), one ADR per tradable-asset addition (0023–0036), cash-by-mail (0037), reputation hardening (0038), self-sovereign pricing (0039–0042), opt-in TOTP 2FA (0043), AI-agent integration via Model Context Protocol (0044), shared network-defense primitives (0045), migrating Blurt signing off `elliptic` (0046), Tor-onion + host-hardening on by default (0047), and the chat head-block fast path for sub-6s message delivery (0048).
 
 160. **49 design and operations documents** in `docs/`. Architecture, operations runbook, security model, fees-and-rewards reference, threat model, metadata-leak catalog, integration test design, automation audit — all public.
 
@@ -741,13 +741,19 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 336. **Runs across the whole Debian/Ubuntu family — including hardened, lightweight servers.** The setup pre-flight (`apps/ops-cli/src/init/systemCheck.ts`) green-lights Ubuntu 24.04/26.04 LTS and Debian 12+ as first-class bases and recognizes popular derivatives automatically from their base codename — Linux Mint, Pop!_OS, Zorin OS, KDE neon, and elementary OS. Debian-minimal and hardened-Debian distros like Kicksecure make excellent lean, security-focused nodes: the one-command Ansible installer targets the Ubuntu 24.04 'noble' family, while Debian and Kicksecure install via the documented manual steps, and the recognition is locked by `apps/ops-cli/scripts/system-check-os-smoke.ts`.
 
+337. **Save any chat as a locked, court-ready PDF anchored to the blockchain.** Export a conversation to a tamper-resistant PDF: it's locked against editing, and every message cites its Blurt transaction ID as a "Blockchain proof" anyone can re-verify on a public block explorer. A plain-language explainer walks a judge or jury through confirming each line against the immutable chain — the document's integrity comes from the blockchain, not from trusting the file. It's generated entirely in your browser from the already-decrypted messages, and the PDF engine is only fetched the moment you export, so it costs nothing until you need it.
+
+338. **A reputation score that shows its work — and can't be bought with volume.** Alongside the raw trade count, each trader gets a 0–5 composite reputation score: their time-decayed rating, shrunk toward neutral so a single glowing (possibly fake) review can't spike a newcomer, plus a bounded track-record bonus that applies only when the rating is already above neutral. A high-volume scammer stays low; sustained good behaviour is rewarded. The reputation-receipt endpoint returns the full factor breakdown so anyone can re-derive the number from the raw feedback rows.
+
+339. **Every timestamp is 24-hour UTC, to the second.** Dates and times sitewide — pages, PDFs, and exports — render as "30 June, 2026 @ 16:45:18 UTC": day-first, the month translated into your language, 24-hour clock, a literal UTC suffix, and seconds. Unambiguous across time zones and locales, and precise enough to line up with an on-chain transaction if a record ever has to hold up in a dispute.
+
 ## How to verify any of the above
 
 Every claim in this document is verifiable. The repository is at **git.agorise.net/agorise/morphit**. Specific anchors:
 
 - **Smoke suite**: `bash scripts/run-smokes.sh` — runs several thousand self-checks across ~280 runners, triple-pulse stable
 - **Audit log**: `docs/AUDIT-2026-05.md`
-- **Architecture decisions**: `docs/adr/0001-*.md` through `docs/adr/0047-*.md` (46 ADRs; 0016 was retracted and the number isn't reused)
+- **Architecture decisions**: `docs/adr/0001-*.md` through `docs/adr/0048-*.md` (47 ADRs; 0016 was retracted and the number isn't reused)
 - **Fees and rewards**: `docs/FEES-AND-REWARDS.md` (line-cited to source)
 - **Public API**: `docs/API.md`
 - **Operator runbook**: `docs/OPERATIONS.md`
@@ -759,4 +765,4 @@ Don't trust this list. Verify it. That's the whole point.
 
 ---
 
-*336 specific selling points. None of them invented. All of them shipped, documented, or honestly disclosed as backlog. If you find one that isn't accurate, open an issue at git.agorise.net/agorise/morphit and we'll either fix the claim or fix the code. Last updated: 30 June, 2026.*
+*339 specific selling points. None of them invented. All of them shipped, documented, or honestly disclosed as backlog. If you find one that isn't accurate, open an issue at git.agorise.net/agorise/morphit and we'll either fix the claim or fix the code. Last updated: 2 July, 2026.*

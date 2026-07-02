@@ -301,12 +301,29 @@ export function formatCount(n: number): string {
 	}).format(n);
 }
 
+/**
+ * Format an integer count COMPACTLY, locale-aware: "1.2K" / "1M" in en,
+ * "1,2 Mio." in de, "۱۲۳" in fa. Used for the order-card trade count
+ * ("1.2K trades since {month}") where a full grouped number would crowd
+ * the row. Small values (< 1000) render as-is. Returns "0" for a
+ * zero/absent count so the card can always show "N trades".
+ */
+export function formatCountCompact(n: number): string {
+	if (!Number.isFinite(n)) return '0';
+	return getNumberFormat(activeLocale(), {
+		notation: 'compact',
+		maximumFractionDigits: 1
+	}).format(n);
+}
+
 // ─── Date formatters ───────────────────────────────────────────
 
 /**
- * Format an ISO timestamp or Date as a localized
- * full-date string.  "Saturday, May 9, 2026" in en,
- * "samedi 9 mai 2026" in fr, "9 мая 2026 г." in ru.
+ * Format an ISO timestamp or Date as a localized full-date string, in
+ * UTC. "Saturday, May 9, 2026" in en, "samedi 9 mai 2026" in fr. UTC so
+ * every displayed date is unambiguous and identical for all parties (see
+ * {@link formatDayMonthTime} for the rationale) — the weekday matches the
+ * UTC calendar day too.
  */
 export function formatDateLong(input: string | Date): string {
 	const d = typeof input === 'string' ? new Date(input) : input;
@@ -315,14 +332,14 @@ export function formatDateLong(input: string | Date): string {
 		year: 'numeric',
 		month: 'long',
 		day: 'numeric',
-		weekday: 'long'
+		weekday: 'long',
+		timeZone: 'UTC'
 	}).format(d);
 }
 
 /**
- * Format an ISO timestamp or Date as a localized
- * medium-date string.  "May 9, 2026" in en,
- * "9 mai 2026" in fr, "9 мая 2026" in ru.
+ * Format an ISO timestamp or Date as a localized medium-date string, in
+ * UTC. "May 9, 2026" in en, "9 mai 2026" in fr.
  */
 export function formatDateMedium(input: string | Date): string {
 	const d = typeof input === 'string' ? new Date(input) : input;
@@ -330,14 +347,16 @@ export function formatDateMedium(input: string | Date): string {
 	return getDateFormat(activeLocale(), {
 		year: 'numeric',
 		month: 'short',
-		day: 'numeric'
+		day: 'numeric',
+		timeZone: 'UTC'
 	}).format(d);
 }
 
 /**
- * Format an ISO timestamp or Date as a localized
- * date-and-time string at the time component's precision.
- * "May 9, 2026, 5:47 PM" in en, "9 mai 2026 à 17:47" in fr.
+ * Localized date-and-time string in 24-hour UTC. "May 9, 2026, 17:47" in
+ * en. Superseded for most UI by {@link formatDayMonthTime} (the canonical
+ * "30 June, 2026 @ HH:MM:SS UTC"); kept UTC + 24-hour here so any future
+ * caller stays consistent with the sitewide standard.
  */
 export function formatDateTime(input: string | Date): string {
 	const d = typeof input === 'string' ? new Date(input) : input;
@@ -346,8 +365,10 @@ export function formatDateTime(input: string | Date): string {
 		year: 'numeric',
 		month: 'short',
 		day: 'numeric',
-		hour: 'numeric',
-		minute: '2-digit'
+		hour: '2-digit',
+		minute: '2-digit',
+		hour12: false,
+		timeZone: 'UTC'
 	}).format(d);
 }
 
@@ -373,27 +394,62 @@ export function formatDayMonth(input: string | Date | null | undefined): string 
 	if (input === null || input === undefined || input === '') return '—';
 	const d = typeof input === 'string' ? new Date(input) : input;
 	if (isNaN(d.getTime()) || d.getFullYear() < 2000) return '—';
+	return dayMonthYearParts(d);
+}
+
+/**
+ * Assemble "day full-month, year" (Ken's canonical order) with the month
+ * name + digits localized, in UTC. UTC so a displayed date is unambiguous
+ * and identical for every viewer regardless of their timezone — the same
+ * reason the time is UTC (see {@link formatDayMonthTime}); without it a
+ * 23:30-UTC instant near month-end would render a different calendar day
+ * for a viewer east/west of UTC, and the two chat parties would disagree
+ * about "what day did this happen".
+ */
+function dayMonthYearParts(d: Date): string {
 	const loc = activeLocale();
-	const day = getDateFormat(loc, { day: 'numeric' }).format(d);
-	const month = getDateFormat(loc, { month: 'long' }).format(d);
-	const year = getDateFormat(loc, { year: 'numeric' }).format(d);
+	const day = getDateFormat(loc, { day: 'numeric', timeZone: 'UTC' }).format(d);
+	const month = getDateFormat(loc, { month: 'long', timeZone: 'UTC' }).format(d);
+	const year = getDateFormat(loc, { year: 'numeric', timeZone: 'UTC' }).format(d);
 	return `${day} ${month}, ${year}`;
 }
 
 /**
- * The canonical format plus a localized time, joined by " @ " —
- * "11 June, 2026 @ 3:27:54 PM" in en, "11 Juni, 2026 @ 15:27:54"
- * in de.  For timestamps where the time-of-day matters (e.g.
- * "Directory last updated").  Same guards as {@link formatDayMonth}.
+ * The canonical format plus the time in 24-hour UTC, joined by " @ " —
+ * "30 June, 2026 @ 16:45:18 UTC" in en, "30 Junio, 2026 @ 16:45:18 UTC"
+ * in es. Ken's court-friendly standard: 24-hour time in UTC with an
+ * explicit "UTC" suffix, so a displayed timestamp is unambiguous about
+ * the timezone it refers to (needed if a chat/order log is ever produced
+ * as evidence). The DATE part is rendered in UTC too so it always agrees
+ * with the UTC time-of-day (no midnight-boundary mismatch); the month
+ * name stays translated. The time itself is fixed Western-digit HH:MM:SS
+ * (never locale-shifted digits/separators) so "UTC" always means the same
+ * unambiguous string everywhere. Same guards as {@link formatDayMonth}.
  */
 export function formatDayMonthTime(input: string | Date | null | undefined): string {
 	if (input === null || input === undefined || input === '') return '—';
 	const d = typeof input === 'string' ? new Date(input) : input;
 	if (isNaN(d.getTime()) || d.getFullYear() < 2000) return '—';
-	const time = getDateFormat(activeLocale(), {
-		hour: 'numeric',
-		minute: '2-digit',
-		second: '2-digit'
-	}).format(d);
-	return `${formatDayMonth(d)} @ ${time}`;
+	const date = dayMonthYearParts(d);
+	const hh = String(d.getUTCHours()).padStart(2, '0');
+	const mm = String(d.getUTCMinutes()).padStart(2, '0');
+	const ss = String(d.getUTCSeconds()).padStart(2, '0');
+	return `${date} @ ${hh}:${mm}:${ss} UTC`;
+}
+
+/**
+ * "July, 2026" in en, "julio, 2026" in es — a coarse month+year label
+ * (the month name translated, digits localized), in UTC. Used for "N
+ * trades since {month year}" on order cards. UTC keeps it consistent
+ * with every other displayed date (same rationale as {@link formatDayMonth}).
+ * Same missing/bogus guards as {@link formatDayMonth}.
+ */
+export function formatMonthYear(input: string | Date | null | undefined): string {
+	if (input === null || input === undefined || input === '') return '—';
+	const d = typeof input === 'string' ? new Date(input) : input;
+	if (isNaN(d.getTime()) || d.getFullYear() < 2000) return '—';
+	const loc = activeLocale();
+	const month = getDateFormat(loc, { month: 'long', timeZone: 'UTC' }).format(d);
+	const year = getDateFormat(loc, { year: 'numeric', timeZone: 'UTC' }).format(d);
+	return `${month}, ${year}`;
 }

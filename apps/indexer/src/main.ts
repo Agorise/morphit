@@ -24,9 +24,11 @@ import { loadConfig } from '$config';
 import { createDatabase } from '$db/pool';
 import { checkSchemaDrift, formatDriftReport } from '$db/schemaDrift';
 import { runMigrations } from '$db/migrations';
+import { backfillPostingKeys } from '$indexer/postingKeyBackfill';
 import { seedFederationDirectory } from '$indexer/federationSeed';
 import { BlurtClient } from '$blurt/client';
 import { Poller } from '$indexer/poller';
+import { ChatHeadTailer } from '$indexer/chatHeadTailer';
 import { createMultiAssetPriceSources, createDisagreementMonitor } from '$indexer/price/factory';
 import { createFxRateSource } from '$indexer/fx/factory';
 import type { FxRateSource } from '$indexer/fx/source';
@@ -183,6 +185,21 @@ async function main(): Promise<void> {
 	// ─── 4. Blurt client ───────────────────────────────────────
 	const blurt = new BlurtClient(config);
 
+	// ─── 4a. Posting-key backfill (cp404, option A) ────────────
+	// Populate accounts.posting_pubkey for accounts created before the
+	// column existed (and refresh rotated keys) from the chain, in the
+	// background so the poller isn't blocked. New accounts already get
+	// their key at ingest from the account_create op. Fire-and-forget:
+	// a failure here never blocks indexing.
+	void backfillPostingKeys(db, blurt).then(
+		(r) => {
+			if (r.updated > 0 || r.remaining > 0) {
+				bootLog.info('posting_key_backfill_done', { ...r });
+			}
+		},
+		(e) => bootLog.warn('posting_key_backfill_failed', { error: String(e) })
+	);
+
 	// ─── 5. Optional price sources (cp130 multi-asset; cp131 consolidated) ──
 	//
 	// History:
@@ -303,6 +320,19 @@ async function main(): Promise<void> {
 		process.exit(1);
 	});
 
+	// ─── 6b. Chat head-block fast-path tailer (cp403 [1], ADR-0048) ──
+	// Tails the chain HEAD (not the irreversible point) to emit chat SSE
+	// within a few seconds instead of ~45-60s. NEVER writes the DB — the
+	// poller above stays the sole source of truth. ON by default; runs
+	// unless the operator set MORPHIT_INDEXER_CHAT_FASTPATH_ENABLED=false.
+	// Fire-and-forget; a crash here must NOT take down the process (unlike
+	// the poller), so its errors are contained inside run() — the catch is
+	// a belt-and-suspenders that just logs, never exits.
+	const chatTailer = new ChatHeadTailer(config, db, blurt);
+	const chatTailerPromise = chatTailer.run().catch((err) => {
+		pollerLog.error('chat_fastpath_fatal', {}, err);
+	});
+
 	// ─── 7. HTTP app ───────────────────────────────────────────
 	const app = new Hono();
 
@@ -316,7 +346,7 @@ async function main(): Promise<void> {
 	// list, feedback list, chat history) at the lower `list` limit;
 	// single-resource endpoints (profile, release) at the higher
 	// `resource` limit.
-	app.route('/v1/health', healthRoute(config, poller, priceSource, disagreementMonitors, peerMonitorResults, fxSource, multiAssetSources));
+	app.route('/v1/health', healthRoute(config, poller, priceSource, disagreementMonitors, peerMonitorResults, fxSource, multiAssetSources, chatTailer));
 	app.route('/v1/instance', instanceRoute(config, () => poller.currentTreasuryAddresses()));
 	app.route('/v1/instances/stream', instancesStreamRoute(db));
 	app.route('/v1/instances', instancesRoute(db));
@@ -645,11 +675,19 @@ async function main(): Promise<void> {
 		// Stop poller first so it finishes its current block tx
 		// without being killed mid-INSERT.
 		poller.stop();
+		// cp403 [1] — stop the chat fast-path tailer too. It holds no DB
+		// transaction (read-only + in-process emits), so it stops cleanly
+		// at its next loop boundary; no timeout race needed.
+		chatTailer.stop();
 		// Give the poller up to 10 seconds to wrap up. If it's stuck
 		// on a slow RPC call, we've told it to abort via AbortSignal
 		// but the underlying fetch might not honor that in time.
 		const pollerTimeout = new Promise<void>((resolve) => setTimeout(resolve, 10_000));
 		await Promise.race([pollerPromise, pollerTimeout]);
+		// The tailer resolves promptly on abort (its only in-flight work
+		// is a block fetch); await it briefly so the promise isn't left
+		// dangling, but never block shutdown on it.
+		await Promise.race([chatTailerPromise, new Promise<void>((r) => setTimeout(r, 2_000))]);
 
 		// Stop all price sources.  cp131 LOW-005 — pre-cp131 had
 		// a separate priceSource.stop() for the standalone BLURT

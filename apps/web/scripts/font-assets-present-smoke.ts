@@ -1,7 +1,7 @@
 /**
  * font-assets-present-smoke (cp212).
  *
- * The repo now SHIPS the Nunito woff2 subsets (previously the folder was
+ * The repo now SHIPS the Comfortaa woff2 subsets (previously the folder was
  * empty and operators converted the fonts at build time). This guards that
  * promise: every `/fonts/*.woff2` the CSS + preload reference actually exists
  * in `apps/web/static/fonts/` and is a real woff2 — otherwise a deleted or
@@ -9,7 +9,7 @@
  * test failure. Also asserts the SIL OFL license ships alongside the binaries
  * (the OFL requires the license to travel with redistributed fonts).
  *
- * It does NOT pin sizes or weights (regenerating from a new Nunito release is
+ * It does NOT pin sizes or weights (regenerating from a new Comfortaa release is
  * expected) — only existence + woff2 validity + the @font-face/reference
  * count staying in sync.
  */
@@ -92,5 +92,5 @@ if (fail > 0) {
 	console.log('\u2717 font-assets-present smoke FAILED');
 	process.exit(1);
 }
-console.log('\u2713 Nunito woff2 subsets + OFL ship in apps/web/static/fonts and match app.css/app.html');
+console.log('\u2713 Comfortaa woff2 subsets + OFL ship in apps/web/static/fonts and match app.css/app.html');
 console.log(`\u2713 all ${pass} font-assets-present scenarios passed`);

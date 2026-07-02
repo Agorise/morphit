@@ -172,12 +172,14 @@ expect(
 	'TermsText link sets referrerpolicy="no-referrer"'
 );
 
-// ── 6. All four terms-display views render through TermsText ──
+// ── 6. Full-terms views render clickable terms through TermsText ──
+// cp404 — the orderbook + account LIST cards were consolidated into the
+// shared OrderCard, which shows terms as a TRUNCATED, plain-escaped preview
+// (no clickable links, no {@html} — see section 6b). The views below render
+// the FULL terms with clickable links, so they MUST route through TermsText.
 const SITES = [
 	'src/routes/[lang]/[x+40][account=account]/[permlink=permlink]/+page.svelte',
-	'src/routes/[lang]/orderbook/+page.svelte',
-	'src/routes/[lang]/my/orders/+page.svelte',
-	'src/routes/[lang]/[x+40][account=account]/+page.svelte'
+	'src/routes/[lang]/my/orders/+page.svelte'
 ];
 for (const rel of SITES) {
 	const src = readFileSync(join(WEB, rel), 'utf8');
@@ -189,6 +191,28 @@ for (const rel of SITES) {
 	expect(
 		!/[>\s]\{(?:order|o)\.terms\}/.test(src),
 		`no raw terms interpolation left in ${rel.split('/').slice(-2).join('/')}`
+	);
+}
+
+// ── 6b. OrderCard list-preview terms are SAFE plain escaped text ──
+// The browse cards intentionally show a one-line truncated preview (full
+// terms + clickable safe links live on the order detail page). It renders
+// {order.terms} via Svelte's auto-escaping interpolation inside a
+// `.truncate` span — NEVER {@html}, and no clickable-link rendering — so
+// hostile markup/URLs in terms are neutralised (shown as inert escaped
+// text), not executed or turned into links. This preserves the link-safety
+// model without the invalid nested-<a> a TermsText link would create inside
+// the card's stretched detail-page link.
+{
+	const orderCard = readFileSync(join(WEB, 'src/lib/components/OrderCard.svelte'), 'utf8');
+	expect(!/\{@html\s/.test(orderCard), 'OrderCard never uses the {@html} directive');
+	expect(
+		/\{order\.terms\}/.test(orderCard),
+		'OrderCard renders terms via auto-escaped {order.terms} interpolation'
+	);
+	expect(
+		/class="truncate"[^>]*>\{order\.terms\}|\{order\.terms\}/.test(orderCard),
+		'OrderCard terms preview is a single truncated line'
 	);
 }
 

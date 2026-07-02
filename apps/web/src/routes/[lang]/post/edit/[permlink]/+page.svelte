@@ -41,9 +41,6 @@
 	// import PrivateKeyWarningModal from '$components/PrivateKeyWarningModal.svelte';
 	import WriteBlockedReadOnly from '$components/WriteBlockedReadOnly.svelte';
 	import RequireLiveSession from '$components/RequireLiveSession.svelte';
-	import UsdtNetworkPicker from '$components/UsdtNetworkPicker.svelte';
-	import UsdcNetworkPicker from '$components/UsdcNetworkPicker.svelte';
-	import DaiNetworkPicker from '$components/DaiNetworkPicker.svelte';
 
 	import { identity, isUnlocked, isPairedReadOnly } from '$stores/identity';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
@@ -54,7 +51,7 @@
 	import { makeExpiryFlooredUtcDay } from '$lib/orders/payload';
 	import type { OrderRecord } from '@morphit/indexer-client';
 	import type { PrivateKeyMatch } from '$lib/security/privateKeyDetector';
-	import { ASSET_TICKERS, type AssetTicker } from '@morphit/asset-registry';
+	import { type AssetTicker } from '@morphit/asset-registry';
 	import {
 		type UsdtNetwork,
 		type UsdcNetwork,
@@ -325,6 +322,18 @@
 	// ─── Validation (lightweight — handler re-validates) ───────────
 	const amountMinNum = $derived(amountMin === '' ? null : Number(amountMin));
 	const amountMaxNum = $derived(amountMax === '' ? null : Number(amountMax));
+
+	// The order's sub-network (USDT/USDC/DAI only), shown read-only in the
+	// locked-substance chip. Immutable in a replace, like side/asset/fiat.
+	const assetNetworkDisplay = $derived(
+		asset === 'USDT'
+			? usdtNetwork
+			: asset === 'USDC'
+				? usdcNetwork
+				: asset === 'DAI'
+					? daiNetwork
+					: null
+	);
 
 	/** Sanity cap.  Mirror of /post and the indexer's MAX_AMOUNT. */
 	const MAX_AMOUNT = 1e12;
@@ -703,97 +712,57 @@
 		</section>
 
 		<section class="card mb-4">
-			<div class="grid gap-3 sm:grid-cols-2">
-				<button
-					type="button"
-					onclick={() => (side = 'buy')}
-					class="rounded-xl border-2 px-4 py-3 text-left transition active:scale-[0.98] {side ===
-					'buy'
-						? 'border-morphit-emerald bg-emerald-50 dark:bg-ink-800'
-						: 'border-ink-200 dark:border-ink-700'}"
+			<!-- Substance fields (side / asset / sub-network / currency) are
+			     IMMUTABLE in a 15-minute edit — the indexer rejects any change
+			     to them (replace_side/asset/fiat/asset_network_change_forbidden)
+			     so a counterparty who clicked through on the original listing
+			     finds the same trade. They render read-only here. Previously
+			     these were editable controls (side buttons, asset chips, a fiat
+			     input, network pickers); changing one made the broadcast
+			     "succeed" — the page showed "saved" — while the indexer silently
+			     rejected the replace, so the edit never applied. Locking them
+			     removes that dead-end. To change what's being traded, post a new
+			     order instead. -->
+			<div
+				class="mb-4 flex items-start gap-2 rounded-xl border border-ink-200 bg-ink-50 px-3 py-2 text-xs text-ink-600 dark:border-ink-700 dark:bg-ink-900 dark:text-ink-300"
+			>
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					width="16"
+					height="16"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					class="mt-0.5 flex-none"
+					aria-hidden="true"
 				>
-					<span class="font-semibold">{$_('post_order.form.side_buy')}</span>
-				</button>
-				<button
-					type="button"
-					onclick={() => (side = 'sell')}
-					class="rounded-xl border-2 px-4 py-3 text-left transition active:scale-[0.98] {side ===
-					'sell'
-						? 'border-morphit-emerald bg-emerald-50 dark:bg-ink-800'
-						: 'border-ink-200 dark:border-ink-700'}"
+					<rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+					<path d="M7 11V7a5 5 0 0 1 10 0v4" />
+				</svg>
+				<p>{$_('edit_order.substance_locked_hint')}</p>
+			</div>
+			<div class="flex flex-wrap items-center gap-2">
+				<span
+					class="rounded-xl border-2 border-morphit-emerald bg-emerald-50 px-4 py-2 font-semibold dark:bg-ink-800"
+					>{side === 'buy'
+						? $_('post_order.form.side_buy')
+						: $_('post_order.form.side_sell')}</span
 				>
-					<span class="font-semibold">{$_('post_order.form.side_sell')}</span>
-				</button>
+				<span
+					class="rounded-xl border-2 border-morphit-emerald bg-emerald-50 px-4 py-2 font-mono font-semibold dark:bg-ink-800"
+					>{asset}{#if assetNetworkDisplay} · {assetNetworkDisplay.toUpperCase()}{/if}</span
+				>
+				<span
+					class="rounded-xl border-2 border-morphit-emerald bg-emerald-50 px-4 py-2 font-mono font-semibold uppercase dark:bg-ink-800"
+					>{fiat}</span
+				>
 			</div>
-			<p class="mb-2 mt-6 text-sm font-semibold">{$_('post_order.form.asset_label')}</p>
-			<div class="flex flex-wrap gap-2">
-				{#each ASSET_TICKERS as a}
-					<button
-						type="button"
-						onclick={() => {
-							asset = a as Asset;
-							// cp36 Bob-3 fix — clear stale picker
-							// selections when the user switches off a
-							// multi-network asset, so a USDT→BTC→USDT
-							// round-trip doesn't smuggle a phantom
-							// USDT network into the payload.
-							if (a !== 'USDT') usdtNetwork = null;
-							if (a !== 'USDC') usdcNetwork = null;
-							if (a !== 'DAI') daiNetwork = null;
-						}}
-						class="rounded-xl border-2 px-4 py-2 font-mono font-semibold transition active:scale-[0.98] {asset ===
-						a
-							? 'border-morphit-emerald bg-emerald-50 dark:bg-ink-800'
-							: 'border-ink-200 dark:border-ink-700'}"
-					>
-						{a}
-					</button>
-				{/each}
-			</div>
-
-			<!-- cp36 Bob-3 fix — multi-network picker mounts.
-			     Mirror /post's UI exactly: a picker appears only
-			     when its asset is selected. canSave gates above
-			     enforce that the picker has a value before save
-			     is allowed.  When editing a USDT/USDC/DAI order
-			     the picker is pre-hydrated from the order's
-			     existing asset_network via the load() block;
-			     changing it will be rejected at broadcast time
-			     by the indexer's
-			     `replace_asset_network_change_forbidden` rule. -->
-			{#if asset === 'USDT'}
-				<div class="mt-4">
-					<UsdtNetworkPicker bind:network={usdtNetwork} />
-				</div>
-			{/if}
-			{#if asset === 'USDC'}
-				<div class="mt-4">
-					<UsdcNetworkPicker bind:network={usdcNetwork} />
-				</div>
-			{/if}
-			{#if asset === 'DAI'}
-				<div class="mt-4">
-					<DaiNetworkPicker bind:network={daiNetwork} />
-				</div>
-			{/if}
 		</section>
 
 		<section class="card mb-4">
-			<label class="mb-4 block">
-				<span class="mb-1 block text-sm font-semibold">{$_('post_order.form.fiat_label')}</span>
-				<input
-					type="text"
-					bind:value={fiat}
-					maxlength="8"
-					aria-invalid={!!fiatError}
-					aria-describedby={fiatError ? 'edit-fiat-error' : undefined}
-					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 uppercase focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
-				/>
-				{#if fiatError}
-					<StatusLine kind="warn" id="edit-fiat-error">{fiatError}</StatusLine>
-				{/if}
-			</label>
-
 			<div class="grid gap-4 sm:grid-cols-2">
 				<label class="block">
 					<span class="mb-1 block text-sm font-semibold"
@@ -832,6 +801,7 @@
 						aria-describedby={amountError ? 'edit-amount-error' : undefined}
 						class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 					/>
+					<p class="mt-1 text-xs text-ink-500">{$_('post_order.form.amount_optional_hint')}</p>
 				</label>
 			</div>
 			{#if amountError}
@@ -953,7 +923,12 @@
 
 		<section class="card mb-4">
 			<div class="mb-4">
-				<p class="mb-1 text-sm font-semibold">{$_('post_order.form.payment_methods_label')}</p>
+				<p class="mb-1 text-sm font-semibold">
+					{side === 'sell'
+						? $_('post_order.form.payment_methods_label_sell')
+						: $_('post_order.form.payment_methods_label')}
+				</p>
+				<p class="mb-2 text-xs text-ink-500">{$_('post_order.form.payment_methods_hint')}</p>
 				<PaymentMethodsPicker
 					bind:selected={paymentMethods}
 					excludeForAsset={asset}
@@ -974,6 +949,7 @@
 					maxlength="128"
 					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 				/>
+				<p class="mt-1 text-xs text-ink-500">{$_('post_order.form.region_hint')}</p>
 			</label>
 
 			<label class="mb-4 block">

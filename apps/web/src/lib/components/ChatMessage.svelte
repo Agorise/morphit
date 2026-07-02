@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { localePath } from '$i18n/path';
+	import { formatDayMonthTime } from '$i18n/formatters';
+	import IdentityLabel from '$components/IdentityLabel.svelte';
 	import { safeContactUrl } from '$lib/utils/safeContactUrl';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	/**
@@ -119,11 +121,48 @@
 			orderPermlink?: string;
 			network?: string;
 		}) => void;
+		/** cp402 [4] — whoami line. When true, a tiny "@sender (BLT…)"
+		 *  identity line renders above this bubble. The parent sets this
+		 *  only for the FIRST message of a same-sender run, so a burst of
+		 *  messages from one party shows the line once. The sender is
+		 *  derived from direction (isOutgoing ⇒ `me`, else `peer`), so the
+		 *  parent supplies only that sender's avatar + posting key. */
+		showWhoami?: boolean;
+		/** cp402 [4] — the sender's sanitized avatar SVG (if they set one).
+		 *  Rendered via {@html} exactly like IdentityLabel; sanitized
+		 *  upstream in profileProps/selfProfile. */
+		senderAvatarSvg?: string | null;
+		/** cp402 [4] — the sender's raster avatar data URI (mutually
+		 *  exclusive with senderAvatarSvg). */
+		senderAvatarDataUri?: string | null;
+		/** cp402 [4] — the sender's canonical BLT posting key (full base58
+		 *  string). Truncated head(9)…tail(4) for the whoami — the SAME
+		 *  shape IdentityLabel shows in the header, so the same peer's key
+		 *  reads identically in both places. Null ⇒ the "(BLT…)" part is
+		 *  omitted (identity still shows @username + avatar). */
+		senderPostingKey?: string | null;
 	}
 
-	let { message, me, peer, onRetry, onPayNow, onMarkSent }: Props = $props();
+	let {
+		message,
+		me,
+		peer,
+		onRetry,
+		onPayNow,
+		onMarkSent,
+		showWhoami = false,
+		senderAvatarSvg = null,
+		senderAvatarDataUri = null,
+		senderPostingKey = null
+	}: Props = $props();
 
 	const isOutgoing = $derived(message.sender === me);
+
+	/** cp402 [4] — the sender account for the whoami line. message.sender
+	 *  is authoritative; the me/peer fallback guarantees it's never empty
+	 *  (which would make IdentityLabel seed a blank identicon). */
+	const whoamiAccount = $derived(message.sender || (isOutgoing ? me : (peer ?? '')));
+
 	const isInFlight = $derived(message.state === 'pending' || message.state === 'broadcast');
 	const isFailed = $derived(message.state === 'failed');
 	// Placeholder = either the explicit decrypt-failed signal, or
@@ -468,34 +507,57 @@
 		});
 	});
 
-	/** Render the timestamp for confirmed messages only. Format is
-	 *  locale-sensitive via Intl (short time for same-day, short
-	 *  date + time otherwise). Pending / broadcast / failed
-	 *  messages don't get a timestamp. */
-	const timestampDisplay = $derived.by(() => {
+	/** cp402 [5] — full date + time revealed on tap/click of a
+	 *  confirmed bubble (the persistent below-bubble timestamp was
+	 *  removed per Ken's chat batch). Uses the canonical Morphit
+	 *  formatter → "30 June, 2026 @ 8:52:42 PM": day-number,
+	 *  translated full month, comma, 4-digit year, @ localized time
+	 *  with seconds. Empty for pending / broadcast / failed messages
+	 *  (no on-chain createdAt yet). */
+	const fullTimestamp = $derived.by(() => {
 		if (message.state !== 'confirmed' || !message.createdAt) return '';
-		const now = new Date();
-		const msgDate = message.createdAt;
-		const sameDay =
-			now.getFullYear() === msgDate.getFullYear() &&
-			now.getMonth() === msgDate.getMonth() &&
-			now.getDate() === msgDate.getDate();
-		try {
-			if (sameDay) {
-				return new Intl.DateTimeFormat(undefined, {
-					hour: 'numeric',
-					minute: '2-digit'
-				}).format(msgDate);
-			}
-			return new Intl.DateTimeFormat(undefined, {
-				month: 'short',
-				day: 'numeric',
-				hour: 'numeric',
-				minute: '2-digit'
-			}).format(msgDate);
-		} catch {
-			return msgDate.toISOString();
+		return formatDayMonthTime(message.createdAt);
+	});
+
+	/** cp402 [5] — whether the tap-to-reveal timestamp popover is
+	 *  showing for this bubble. Toggled by tapping the bubble;
+	 *  dismissed by tapping again or pressing Escape. */
+	let showTimestamp = $state(false);
+
+	/** Toggle the timestamp popover. Guarded so taps on inner
+	 *  interactive elements (address-pill Pay-now / Mark-sent
+	 *  buttons, the retry button, links) don't also toggle it. */
+	function onBubbleActivate(e: MouseEvent | KeyboardEvent): void {
+		if (fullTimestamp === '') return;
+		const target = e.target as HTMLElement | null;
+		if (target?.closest('button, a, input, textarea, [role="button"]')) return;
+		showTimestamp = !showTimestamp;
+	}
+
+	/** cp402 [5] — ref to this message row; the popover's dismissal
+	 *  effect uses it to tell an outside tap from a re-tap on the bubble. */
+	let bubbleRowEl = $state<HTMLElement | null>(null);
+
+	/** cp402 [5] — while the timestamp popover is open, dismiss it on an
+	 *  outside tap or Escape. Listeners attach only while open, so they
+	 *  don't accumulate across the (potentially many) messages in a
+	 *  conversation. The opening tap can't self-close because this effect
+	 *  only (re)subscribes after showTimestamp flips true. */
+	$effect(() => {
+		if (!showTimestamp) return;
+		function onDocPointerDown(ev: Event): void {
+			const t = ev.target as Node | null;
+			if (bubbleRowEl && t && !bubbleRowEl.contains(t)) showTimestamp = false;
 		}
+		function onKey(ev: KeyboardEvent): void {
+			if (ev.key === 'Escape') showTimestamp = false;
+		}
+		document.addEventListener('pointerdown', onDocPointerDown, true);
+		document.addEventListener('keydown', onKey);
+		return () => {
+			document.removeEventListener('pointerdown', onDocPointerDown, true);
+			document.removeEventListener('keydown', onKey);
+		};
 	});
 
 	// Part 121 cp7 — per-locale internal-link wrapper.
@@ -504,14 +566,49 @@
 </script>
 
 <li class="chat-message flex" class:justify-end={isOutgoing} class:justify-start={!isOutgoing}>
-	<div class="flex max-w-[85%] flex-col gap-1 sm:max-w-[70%]">
+	<div class="relative flex max-w-[85%] flex-col gap-1 sm:max-w-[70%]" bind:this={bubbleRowEl}>
+		{#if showWhoami}
+			<!-- cp402 [4] — whoami identity line. Rendered once above the
+			     FIRST bubble of a same-sender run (the parent gates this),
+			     so a burst of messages from one party is labelled once. This
+			     is a SAFETY affordance: it shows the sender's avatar, @handle,
+			     and truncated BLT posting key so each trader can confirm the
+			     counterparty's durable cryptographic identity — the thing an
+			     impersonator can't forge — before agreeing to terms or sending
+			     funds. Goes through IdentityLabel (not a hand-rolled @handle)
+			     to satisfy the identity-label policy AND so the same peer's
+			     key reads identically to the header (same head-9…tail-4
+			     truncation). No `href`: the header already links to the
+			     profile, and omitting it keeps one fewer tab stop per group.
+			     For the local user's own runs, IdentityLabel falls back to
+			     the selfProfile avatar automatically (isSelf). -->
+			<div class="max-w-full" class:self-end={isOutgoing} class:self-start={!isOutgoing}>
+				<IdentityLabel
+					account={whoamiAccount}
+					publicKeyString={senderPostingKey ?? undefined}
+					avatarSvg={senderAvatarSvg}
+					avatarDataUri={senderAvatarDataUri}
+					avatarSize={18}
+					weight="normal"
+				/>
+			</div>
+		{/if}
 		<!--
 			The bubble itself. Tailwind classes handle the color split
 			between outgoing (emerald tint) and incoming (ink-surface).
 			The failed state adds a red ring that overrides the border.
 		-->
+		<!-- cp402 [5] — tap/click the bubble to reveal its full send
+		     time (fullTimestamp popover below). Pointer/touch reveal;
+		     the message text stays fully accessible, and the timestamp
+		     is also exposed to assistive tech via the sr-only <time>
+		     that follows, so this is a supplementary enhancement (hence
+		     the a11y suppressions — the div is intentionally not a
+		     button so it never hijacks the message text as its name). -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="break-words rounded-2xl px-3 py-2 text-sm"
+			class:cursor-pointer={fullTimestamp !== ''}
 			class:bg-morphit-emerald={isOutgoing && !isFailed}
 			class:text-ink-950={isOutgoing && !isFailed}
 			class:bg-ink-200={!isOutgoing && !isFailed}
@@ -525,6 +622,14 @@
 			class:text-red-900={isFailed}
 			class:dark:text-red-200={isFailed}
 			class:opacity-80={isInFlight}
+			title={fullTimestamp || undefined}
+			onclick={onBubbleActivate}
+			onkeydown={(e) => {
+				if (e.key === 'Enter' || e.key === ' ') {
+					e.preventDefault();
+					onBubbleActivate(e);
+				}
+			}}
 			aria-label={isOutgoing
 				? ($_('chat.message.aria.outgoing') as string)
 				: ($_('chat.message.aria.incoming') as string)}
@@ -1183,33 +1288,58 @@
 			{/if}
 		</div>
 
-		<!-- Meta line: timestamp for confirmed, sending indicator for in-flight,
-		     error + retry for failed. -->
-		<div
-			class="flex items-center gap-2 text-xs text-ink-500 dark:text-ink-400"
-			class:justify-end={isOutgoing}
-			class:justify-start={!isOutgoing}
-		>
-			{#if isInFlight}
-				<span aria-live="polite">{$_('chat.message.sending')}</span>
-			{:else if isFailed}
-				<span class="text-red-700 dark:text-red-300">
-					{$_('chat.message.failed_label')}
-				</span>
-				<button
-					type="button"
-					class="rounded font-semibold text-morphit-emerald hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
-					onclick={() => onRetry?.(message.localSeq)}
-					aria-label={$_('chat.message.retry_aria') as string}
-				>
-					{$_('chat.message.retry')}
-				</button>
-			{:else if timestampDisplay}
-				<time datetime={message.createdAt?.toISOString()}>
-					{timestampDisplay}
-				</time>
-			{/if}
-		</div>
+		<!-- cp402 [5] — screen-reader-only send time, always present for
+		     confirmed messages so assistive tech has the timestamp without
+		     needing the pointer/touch reveal below. -->
+		{#if fullTimestamp}
+			<time class="sr-only" datetime={message.createdAt?.toISOString()}>{fullTimestamp}</time>
+		{/if}
+
+		<!-- cp402 [5] — tap-to-reveal timestamp popover. Appears when the
+		     user taps/clicks the bubble; dismissed by tapping again, tapping
+		     outside, or Escape. Anchored just below the bubble, on the
+		     sender's side. pointer-events-none so it never eats the
+		     dismiss tap. -->
+		{#if showTimestamp && fullTimestamp}
+			<div
+				data-ts-tip
+				role="tooltip"
+				class="pointer-events-none absolute top-full z-30 mt-1 whitespace-nowrap rounded-lg bg-ink-900 px-2 py-1 text-xs font-medium text-ink-50 shadow-lg dark:bg-ink-100 dark:text-ink-900"
+				class:right-0={isOutgoing}
+				class:left-0={!isOutgoing}
+			>
+				{fullTimestamp}
+			</div>
+		{/if}
+
+		<!-- Meta line: sending indicator for in-flight, error + retry for
+		     failed. cp402 [5] removed the persistent confirmed-message
+		     timestamp (now tap-to-reveal above), so this line renders only
+		     when there's in-flight or failed status to show — a confirmed
+		     bubble carries no meta line at all. -->
+		{#if isInFlight || isFailed}
+			<div
+				class="flex items-center gap-2 text-xs text-ink-500 dark:text-ink-400"
+				class:justify-end={isOutgoing}
+				class:justify-start={!isOutgoing}
+			>
+				{#if isInFlight}
+					<span aria-live="polite">{$_('chat.message.sending')}</span>
+				{:else if isFailed}
+					<span class="text-red-700 dark:text-red-300">
+						{$_('chat.message.failed_label')}
+					</span>
+					<button
+						type="button"
+						class="rounded font-semibold text-morphit-emerald hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
+						onclick={() => onRetry?.(message.localSeq)}
+						aria-label={$_('chat.message.retry_aria') as string}
+					>
+						{$_('chat.message.retry')}
+					</button>
+				{/if}
+			</div>
+		{/if}
 
 		<!-- Detailed error message on failed, below the meta line. Present
 		     only if the controller captured one; some failure paths leave

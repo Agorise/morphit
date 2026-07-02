@@ -48,12 +48,12 @@ interface Migration {
 const MIGRATIONS: readonly Migration[] = [
 	{
 		version: 1,
-		description: 'collapsed canonical schema (v1-v35 merged in-place; pre-launch baseline)',
+		description: 'collapsed canonical schema (v1-v36 merged in-place; pre-launch baseline)',
 		sqlPath: resolve(HERE, 'schema.sql'),
 		// On a fresh DB, mark all the historical versions as applied
 		// so any downstream check "is v15 applied?" sees true.  The
 		// collapsed schema produces byte-for-byte the same end state
-		// as applying v1-v35 incrementally; this list preserves the
+		// as applying v1-v36 incrementally; this list preserves the
 		// version-tracking semantics.  The original per-version files
 		// are archived under apps/indexer/src/db/historical/ for
 		// archaeology.
@@ -63,13 +63,18 @@ const MIGRATIONS: readonly Migration[] = [
 		// v34, v35 sections were added in-place during cp82+ work
 		// rather than as separate migration entries, contrary to the
 		// original cp82 "future migrations land here at v28" framing).
+		// cp404 — extended 2..35 → 2..36 for the v36 accounts.posting_pubkey
+		// section, likewise added in-place. A fresh DB gets the column from
+		// this baseline schema.sql; an existing beta DB (already recorded at
+		// v1, so the baseline won't re-run) gets it from the idempotent
+		// ADD COLUMN in postingKeyBackfill.ts at boot.
 		// The v1 collapsed schema is the pre-launch baseline; the
 		// first separate additive migration will be assigned an
 		// integer version at launch.
 		subsumesVersions: [
 			2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
 			18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
-			32, 33, 34, 35
+			32, 33, 34, 35, 36
 		]
 	}
 	// Future migrations land here.  The v1 collapsed schema is the

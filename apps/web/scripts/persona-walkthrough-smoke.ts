@@ -1077,13 +1077,28 @@ const SCENARIOS: readonly Scenario[] = [
 		]
 	},
 	{
-		name: 'P121-USDT-5 — orderbook row renders USDT network chip + price subline',
+		name: 'P121-USDT-5a — orderbook page derives the USDT network chip',
 		file: 'apps/web/src/routes/[lang]/orderbook/+page.svelte',
 		rootRelative: true,
+		// cp404 — the verbose order_row.network_hint sentence was replaced by
+		// the compact network-name chip; the page derives which network and
+		// looks up its display name, then passes the chip to OrderCard.
 		mustHave: [
 			'usdtRowNetwork',
-			'assets.usdt.order_row.network_hint',
-			'<UsdtPriceSubline'
+			'assets.usdt.network.',
+			'networkChip'
+		]
+	},
+	{
+		name: 'P121-USDT-5b — OrderCard renders the USDT network chip + price subline',
+		file: 'apps/web/src/lib/components/OrderCard.svelte',
+		rootRelative: true,
+		// cp404 — the USDT row rendering moved into the shared OrderCard: it
+		// renders the passed networkChip and, for USDT orders, the peg subline.
+		mustHave: [
+			'networkChip',
+			'<UsdtPriceSubline',
+			"order.asset === 'USDT'"
 		]
 	},
 	{

@@ -302,6 +302,23 @@ export interface HealthSummary {
 	 *  is absent (verboseHealth off, relay health, or a pre-field
 	 *  indexer build) — the renderer then shows a one-line hint. */
 	readonly priceFeeds: PriceFeedsHealthSummary | null;
+	/** cp403 [1] — chat head-block fast-path status from the operator-only
+	 *  top-level `chat_fastpath` block (same X-Morphit-Local-Health gate as
+	 *  price_feeds). null when absent (relay health, or a pre-fast-path
+	 *  indexer build) — the renderer then shows a one-line hint. */
+	readonly chatFastPath: ChatFastPathSummary | null;
+}
+
+/** cp403 [1] — chat head-block fast-path status (mirrors the indexer's
+ *  ChatHeadTailerStatus). `enabled:false` → an operator turned fast chat
+ *  off (messages appear only once irreversible). `running` + a rising
+ *  `scannedHead` → it's actively tailing the chain head. */
+export interface ChatFastPathSummary {
+	readonly enabled: boolean;
+	readonly running: boolean;
+	readonly scannedHead: number | null;
+	readonly emitted: number | null;
+	readonly lastError: string | null;
 }
 
 /** One source's health within a feed (FX or a crypto asset). */
@@ -372,7 +389,24 @@ export function summarizeHealth(body: unknown): HealthSummary {
 		webPush: typeof b.web_push === 'boolean' ? b.web_push : null,
 		relayBalance: typeof b.blurt_balance === 'string' ? b.blurt_balance : null,
 		priceFeed: parsePriceFeed(b.price_feed),
-		priceFeeds: parsePriceFeedsHealth(b.price_feeds)
+		priceFeeds: parsePriceFeedsHealth(b.price_feeds),
+		chatFastPath: parseChatFastPath(b.chat_fastpath)
+	};
+}
+
+/** Interpret the operator-only top-level `chat_fastpath` block from a
+ *  `/v1/health` body (present only when the X-Morphit-Local-Health
+ *  header is sent, which the ops-cli does). Keys are camelCase — the
+ *  indexer forwards its ChatHeadTailerStatus object verbatim. PURE. */
+export function parseChatFastPath(v: unknown): ChatFastPathSummary | null {
+	if (v === null || typeof v !== 'object') return null;
+	const o = v as Record<string, unknown>;
+	return {
+		enabled: o.enabled === true,
+		running: o.running === true,
+		scannedHead: numOrNull(o.scannedHead),
+		emitted: numOrNull(o.emitted),
+		lastError: typeof o.lastError === 'string' ? safe(o.lastError) : null
 	};
 }
 
@@ -1000,6 +1034,36 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 		} else if (s.priceFeed !== null && s.priceFeed.enabled) {
 			console.log(
 				`      ${c.dim('Price feeds:   per-source status unavailable (older indexer build)')}`
+			);
+		}
+		// cp403 [1] — chat head-block fast path (operator-only; same
+		// top-level block + X-Morphit-Local-Health gate as the price feeds
+		// above).  Shows admins whether sub-6s chat delivery is on and
+		// actively tailing the chain head, plus any last error.
+		if (s.chatFastPath !== null) {
+			const cf = s.chatFastPath;
+			let line: string;
+			if (!cf.enabled) {
+				line = `${c.dim('off')} ${c.dim('\u2014 messages appear once irreversible (~45-60s)')}`;
+			} else if (cf.running) {
+				const head =
+					cf.scannedHead !== null && cf.scannedHead > 0
+						? ` @ head block ${cf.scannedHead}`
+						: '';
+				const delivered =
+					cf.emitted !== null ? ` ${c.dim(`(${cf.emitted} delivered)`)}` : '';
+				line = `${c.green('on')} \u2014 tailing${head}${delivered}`;
+			} else {
+				line = c.yellow('on but not tailing yet');
+			}
+			console.log(`      Fast chat:     ${line}`);
+			if (cf.lastError !== null) {
+				console.log(`            ${c.dim(`↳ last error: ${cf.lastError}`)}`);
+			}
+		} else {
+			// Indexer up but no chat_fastpath block → a pre-fast-path build.
+			console.log(
+				`      ${c.dim('Fast chat:     status unavailable (older indexer build)')}`
 			);
 		}
 	} else if (indexer.kind === 'unreachable') {

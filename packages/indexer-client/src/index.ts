@@ -195,6 +195,16 @@ export interface OrderRecord {
 	/** Weighted average rating (1-5) across received feedback.
 	 *  Null when feedback_count is zero. */
 	readonly weighted_rating?: number | null;
+	/** Composite REPUTATION SCORE (0-5), distinct from the raw
+	 *  weighted_rating and from the trade count. A compilation of
+	 *  factors — sock-puppet-filtered time-decayed rating (Bayesian-
+	 *  shrunk by volume), a track-record bonus for sustained
+	 *  above-neutral behaviour, and recency — computed by the indexer
+	 *  (see indexer/reputation/score.ts). Null when feedback_count is
+	 *  zero (card shows nothing; the 🌱 chip signals newness). The card
+	 *  shows this as "⭐ 4.06" and the trade COUNT separately. Optional
+	 *  for backward compatibility with pre-cp404 indexer instances. */
+	readonly reputation_score?: number | null;
 	/** True when the poster has fewer than 4 received feedback
 	 *  rows. Drives the "🌱 New trader" chip in the frontend
 	 *  orderbook. The underlying welcome-bonus trigger fires on
@@ -209,6 +219,20 @@ export interface OrderRecord {
 	 *  omit the field, which the frontend treats as "not enough
 	 *  data, suppress the chip" rather than "zero engagement." */
 	readonly engagement_24h?: number;
+	/** ISO-8601 timestamp of this account's first COMPLETED trade
+	 *  (earliest counterparty feedback). Drives the "N trades since
+	 *  {month year}" line on order cards. Null/omitted when the account
+	 *  has never completed a trade (card shows the count with no
+	 *  "since"). Optional for backward compatibility with pre-cp404
+	 *  indexer instances. */
+	readonly first_trade_at?: string | null;
+	/** Primary posting public key (base58 "BLT…") of this order's owner,
+	 *  for the display-only truncated identity anchor "(BLT5vw…7Bjw)" on
+	 *  order cards. Served inline by the indexer (accounts.posting_pubkey)
+	 *  so the frontend needn't resolve keys per-card. Null/omitted when
+	 *  not captured yet, or on pre-cp404 indexer instances. Never used for
+	 *  verification — signatures resolve keys live from the chain. */
+	readonly posting_pubkey?: string | null;
 	readonly created_at: string;
 	readonly updated_at: string;
 	readonly expires_at: string | null;
@@ -614,6 +638,13 @@ export interface ReputationReceiptResponse {
 		readonly count_excluded: number;
 		readonly weight_sum: number;
 		readonly weighted_rating: number | null;
+		// Composite reputation score + factor breakdown (cp404) — the
+		// "⭐ 4.06" shown on order cards, re-derivable from `rows`.
+		readonly reputation_score?: number | null;
+		readonly reputation_base?: number | null;
+		readonly reputation_bonus?: number;
+		readonly reputation_experience_frac?: number;
+		readonly reputation_recency_frac?: number;
 	};
 	readonly rows: readonly ReputationReceiptRow[];
 }
@@ -668,6 +699,12 @@ export interface ChatMessageRecord {
 	readonly ciphertext: string; // base64 opaque
 	readonly header: unknown; // ECIES envelope header (ephemeral_pub, nonce, client_tag — opaque to indexer; see ADR-0015)
 	readonly created_at: string;
+	/** Blurt transaction id of the custom_json op that anchored this
+	 *  message on-chain — the immutable, signed, publicly-verifiable
+	 *  proof of authorship + time. Present on all messages served by a
+	 *  cp404+ indexer; optional so older clients/instances still type-
+	 *  check. Consumed by the chat PDF export for on-chain evidence. */
+	readonly source_trx_id?: string;
 }
 
 export interface ChatHistoryResponse {

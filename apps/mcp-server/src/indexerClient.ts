@@ -357,6 +357,15 @@ const ORDERBOOK_PUBLIC_FIELDS: ReadonlySet<string> = new Set([
 	'terms',
 	'feedback_count',
 	'weighted_rating',
+	// cp404 — the composite reputation score (0–5) and the earliest
+	// completed-trade timestamp. Both are first-class trust signals now
+	// shown on the order cards; surfacing them lets a read-only agent
+	// relay "this trader scores 4.06, trading since July 2026" and pairs
+	// with the existing min_trades filter. (The raw posting_pubkey is
+	// deliberately NOT surfaced — it's a human-facing identity anchor an
+	// agent has no use for, same trimming philosophy as fee mechanics.)
+	'reputation_score',
+	'first_trade_at',
 	'is_new_trader',
 	'updated_at',
 	'created_at'

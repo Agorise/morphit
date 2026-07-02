@@ -46,6 +46,7 @@
 	import { validateNostrUrlForRender } from '$utils/nostrUrl';
 	import { validateBlurtMediaUrlForRender } from '$utils/blurtMediaUrl';
 	import { selfProfile } from '$lib/stores/selfProfile';
+	import { truncatePublicKey } from '$lib/crypto/publicKeyDisplay';
 
 	interface Props {
 		/**
@@ -264,7 +265,7 @@
 	const shown = $derived.by(() => {
 		const f = full;
 		if (f.length <= 14) return f;
-		return `${f.slice(0, 9)}…${f.slice(-4)}`;
+		return truncatePublicKey(f);
 	});
 
 	// cp305: eagerly resolve the canonical base58 key as soon as the

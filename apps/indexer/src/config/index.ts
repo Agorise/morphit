@@ -82,6 +82,37 @@ export interface Config {
 	 *  `stale: true`. Informational; no hard behavior change. */
 	readonly staleLagThreshold: number;
 
+	/** cp403 [1] — chat head-block fast path. A separate scanner tails
+	 *  the chain HEAD (not just irreversible blocks) and emits new chat
+	 *  messages over SSE within a few seconds, instead of waiting ~45-60s
+	 *  for Blurt's last-irreversible block to catch up. It NEVER writes to
+	 *  the database — the durable, irreversible poller remains the sole
+	 *  source of truth for chat history (and for everything else). Clients
+	 *  dedupe a fast-path message against its later durable twin by the
+	 *  on-chain `client_tag` in the message header. A reorg orphaning a
+	 *  message shown live is an accepted trade-off (chat is low-stakes; it
+	 *  simply won't reach durable history).
+	 *
+	 *  DEFAULT ON (ADR-0048). The matching frontend dedup ships in the
+	 *  same release, so a normal `morphit-ops upgrade` deploys both the
+	 *  fast-path indexer and the client that understands it together —
+	 *  there is no partial-deploy window on a standard upgrade. (The one
+	 *  edge case — a browser tab still running a pre-release frontend
+	 *  against a freshly-upgraded indexer — would briefly double a message
+	 *  until the tab reloads and picks up the new build; self-healing.)
+	 *  Operators who want a message not shown until it's irreversible can
+	 *  set MORPHIT_INDEXER_CHAT_FASTPATH_ENABLED=false. See chatHeadTailer.ts. */
+	readonly chatFastPathEnabled: boolean;
+	/** cp403 [1] — how often (ms) the chat head-block scanner polls the
+	 *  chain head. Defaults to 2000. Latency budget for the "≤6s" target:
+	 *  a broadcast lands in the next block within ~0-3s (inherent Blurt
+	 *  block time), the tailer then catches that head block within ≤one
+	 *  interval, and SSE + client render is ~0.5s — so ~3 + 2 + 0.5 ≈ 5.5s
+	 *  worst case. Lower it for tighter latency at the cost of more head
+	 *  polls; raise it to reduce RPC load. Only consulted when
+	 *  chatFastPathEnabled. */
+	readonly chatFastPathIntervalMs: number;
+
 	/** HTTP listen host/port. Typically 127.0.0.1:8081 with nginx
 	 *  fronting it. */
 	readonly listenHost: string;
@@ -737,6 +768,22 @@ const envSchema = z.object({
 	MORPHIT_INDEXER_START_BLOCK: z.coerce.number().int().nonnegative().default(MORPHIT_GENESIS_BLOCK),
 	MORPHIT_INDEXER_BLOCK_INTERVAL_MS: z.coerce.number().int().positive().default(3000),
 	MORPHIT_INDEXER_ERROR_BACKOFF_MS: z.coerce.number().int().positive().default(5000),
+	// cp403 [1] — chat head-block fast path (ADR-0048). ON by default so
+	// every instance (including existing operators, on their next upgrade)
+	// gets sub-6s chat delivery. The matching client dedup ships in the
+	// same release, so a standard upgrade deploys both together. When on,
+	// a head-block scanner emits chat SSE within a few seconds; it NEVER
+	// writes to the DB (the irreversible poller stays the source of
+	// truth). Set to 'false' to only show messages once irreversible.
+	// See chatHeadTailer.ts.
+	MORPHIT_INDEXER_CHAT_FASTPATH_ENABLED: z
+		.enum(['true', 'false'])
+		.default('true')
+		.transform((s) => s === 'true'),
+	// Poll interval for the head scanner. 2000ms keeps the worst-case
+	// end-to-end delivery under ~6s (see the Config field doc for the
+	// latency budget). Lower = tighter latency + more head polls.
+	MORPHIT_INDEXER_CHAT_FASTPATH_INTERVAL_MS: z.coerce.number().int().positive().default(2000),
 	MORPHIT_INDEXER_STALE_LAG_THRESHOLD: z.coerce.number().int().positive().default(30),
 
 	MORPHIT_INDEXER_LISTEN_HOST: z.string().default('127.0.0.1'),
@@ -1535,6 +1582,8 @@ export function loadConfig(): Config {
 		startBlock: e.MORPHIT_INDEXER_START_BLOCK,
 		blockIntervalMs: e.MORPHIT_INDEXER_BLOCK_INTERVAL_MS,
 		errorBackoffMs: e.MORPHIT_INDEXER_ERROR_BACKOFF_MS,
+		chatFastPathEnabled: e.MORPHIT_INDEXER_CHAT_FASTPATH_ENABLED,
+		chatFastPathIntervalMs: e.MORPHIT_INDEXER_CHAT_FASTPATH_INTERVAL_MS,
 		staleLagThreshold: e.MORPHIT_INDEXER_STALE_LAG_THRESHOLD,
 
 		listenHost: e.MORPHIT_INDEXER_LISTEN_HOST,

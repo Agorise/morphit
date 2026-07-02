@@ -15,6 +15,7 @@
 	 */
 	import { _ } from 'svelte-i18n';
 	import { browser } from '$app/environment';
+	import { formatDayMonthTime } from '$lib/i18n/formatters';
 	import {
 		notificationPrefs,
 		setCategory,
@@ -144,15 +145,8 @@
 	const muteActiveUntil = $derived.by(() => {
 		const until = $notificationPrefs.mutedUntil;
 		if (until <= Date.now()) return null;
-		// Format as locale-aware short time.
-		try {
-			return new Intl.DateTimeFormat(undefined, {
-				hour: 'numeric',
-				minute: '2-digit'
-			}).format(new Date(until));
-		} catch {
-			return new Date(until).toISOString();
-		}
+		// Sitewide standard: 24-hour UTC timestamp (unambiguous timezone).
+		return formatDayMonthTime(new Date(until));
 	});
 
 	const HOUR_MS = 60 * 60 * 1000;

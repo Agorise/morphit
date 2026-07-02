@@ -187,6 +187,57 @@ posted a verified order AND never received feedback).
 in 18 months may no longer hold their key. Visible freshness
 informs trust without changing the numeric score.
 
+### H7 — Composite reputation score (cp404)
+
+Order cards show TWO distinct trust signals side by side: the raw
+trade **count** (`feedback_count`, e.g. "852" / "1.4K") and a 0–5
+**reputation score** (e.g. "4.06"). Prior to cp404 the only numeric
+was `weighted_rating` (the H1 time-decayed mean), which answers
+"what's the average rating" but not "how much should I trust this,
+accounting for how much history exists and whether the trader
+earned it." The reputation score is that composite, computed by
+`apps/indexer/src/indexer/reputation/score.ts` from the SAME
+sock-puppet-filtered feedback (H2/Signal-B/C/D exclusions already
+applied):
+
+```
+base  = (n·avg + K·μ) / (n + K)                      # Bayesian shrink
+bonus = BONUS_MAX · exp_frac · rec_frac · aboveNeutral
+score = clamp(base + bonus, 0..5)
+```
+
+- `avg` = the H1 time-decayed mean rating; `n` = included count.
+- **Bayesian shrinkage** toward a neutral prior (`μ`=3.0, `K`=4)
+  so a newcomer with one glowing (possibly fake) review can't spike
+  to 5.0 — trust is earned as good trades accumulate and the shrunk
+  mean rises toward the true high average.
+- `exp_frac = ln(1+n)/ln(1+40)` (experience, saturates at 40 trades);
+  `rec_frac = 0.5^(days_since_last_feedback/180)` (recency).
+- **The bonus gate** `aboveNeutral = max(0, (base−μ)/(5−μ))` is the
+  key fairness property: it is **zero at or below the neutral prior**,
+  so experience and recency can only reward a trader whose rating is
+  already above neutral, and never rescue a poor or mediocre one. A
+  500-trade scammer rated 2.0 stays ~2.0; a 5-star veteran climbs
+  toward 5.0.
+
+Behaviours (locked by `reputation-score-smoke`, 10 scenarios): zero
+feedback → `null` (card shows nothing; the 🌱 new-trader chip signals
+newness instead); one 5-star → ~3.4, not 5; 200 recent 5-stars → ≥4.8;
+more good trades strictly raise the score; a dormant good trader
+scores below an active one; always bounded to [0, 5].
+
+**Constants are tunable** (`REPUTATION_PRIOR_MEAN`,
+`REPUTATION_PRIOR_WEIGHT`, `REPUTATION_EXPERIENCE_FULL`,
+`REPUTATION_RECENCY_HALF_LIFE_DAYS`, `REPUTATION_BONUS_MAX`) — a
+future instance could expose them via env like the H1 half-life.
+
+**Transparent + verifiable:** the H4 receipt endpoint now also
+returns the score plus its factor breakdown (`reputation_score`,
+`reputation_base`, `reputation_bonus`, `reputation_experience_frac`,
+`reputation_recency_frac`) and an extended `formula` string, so any
+reader can re-derive the "⭐ 4.06" from the raw feedback rows — the
+same "show your work" posture as the underlying `weighted_rating`.
+
 ## Privacy posture
 
 Per Morphit's standing priority #1 (privacy):
@@ -296,10 +347,16 @@ Per Morphit's priority #2:
 - ADR-0014 Component C (verified-chat badge framing)
 - `apps/indexer/src/indexer/reputation/decay.ts` (the new
   shared formula module)
-- `apps/indexer/src/api/reputationReceipt.ts` (H4 endpoint)
+- `apps/indexer/src/indexer/reputation/score.ts` (H7 composite
+  reputation score — cp404)
+- `apps/indexer/src/api/reputationReceipt.ts` (H4 endpoint; cp404
+  extends its summary with the score breakdown)
 - `apps/indexer/scripts/reputation-decay-smoke.ts` (13 scenarios)
+- `apps/indexer/scripts/reputation-score-smoke.ts` (10 scenarios —
+  cp404)
 - `apps/indexer/scripts/reputation-receipt-shape-smoke.ts`
   (7 scenarios)
 - `docs/faq/how_to_build_high_reputation.md` (cp125 companion FAQ
   — Ken's explicit ask: "make sure an faq article explains the
-  best ways to get yourself a high reputation score")
+  best ways to get yourself a high reputation score"; updated for
+  the cp404 composite score)

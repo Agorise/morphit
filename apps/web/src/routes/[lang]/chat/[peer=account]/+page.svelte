@@ -2,11 +2,20 @@
 	/**
 	 * /chat/[peer] — a single conversation view.
 	 *
-	 * Layout is full-height (100svh) — the ConversationView component
-	 * owns the flex-column / scroll-container / composer layout.
+	 * Layout (cp402 [9]): this is an IMMERSIVE full-viewport route — the
+	 * [lang] layout detects it (isImmersiveChat), gives <main> a definite
+	 * height as a min-h-0 flex column, and suppresses the marketing footer,
+	 * so ConversationView (and this loading shell) fill the space below the
+	 * header with the composer pinned + always visible. ConversationView
+	 * owns the inner flex-column / scroll-container / composer layout.
 	 *
 	 * Redirects:
-	 *   - Not signed in (no Blurt account yet) → /onboarding
+	 *   - No signing identity in this browser (signed out, or never
+	 *     onboarded) → /login?next=… (the unlock screen if a keystore is
+	 *     remembered, else sign-in/import — which leads to onboarding only
+	 *     if they truly need a new account). NOT straight to /onboarding.
+	 *   - Fully locked (keystore present, not unlocked) → /login?next=…
+	 *     via <RequireLiveSession /> below.
 	 *   - Chatting with yourself (peer === me) → /chat (inbox)
 	 *
 	 * The peer segment is validated by the `account` route matcher,
@@ -116,10 +125,16 @@
 			return;
 		}
 		if (!myAccount) {
-			// User hasn't registered a Blurt account. Chat is
-			// meaningless without a sender identity. Send them to
-			// onboarding.
-			gotoLocale('/onboarding');
+			// No signing identity in this browser (signed out, or never
+			// onboarded). Chat needs a sender identity, so send them to the
+			// login/unlock hub — NOT onboarding: /login shows the welcome-
+			// back unlock screen if a keystore is remembered, or sign-in/
+			// import options otherwise (which lead to onboarding only if they
+			// genuinely need a new account). Carry ?next= so a successful
+			// login forwards them back to this conversation (cp356), mirroring
+			// the <RequireLiveSession /> locked-visitor redirect below.
+			const here = window.location.pathname + window.location.search + window.location.hash;
+			gotoLocale('/login?next=' + encodeURIComponent(here));
 			return;
 		}
 		if (myAccount === peer) {
@@ -229,7 +244,7 @@
 	     pick quiet — fast connections see <1 frame of this; slow
 	     ones see something purposeful instead of a flash. -->
 	<section
-		class="flex h-[100svh] flex-col items-center justify-center px-4 text-ink-600 dark:text-ink-400"
+		class="flex min-h-0 flex-1 flex-col items-center justify-center px-4 text-ink-600 dark:text-ink-400"
 	>
 		<p class="text-sm">{$_('chat.loading')}</p>
 	</section>

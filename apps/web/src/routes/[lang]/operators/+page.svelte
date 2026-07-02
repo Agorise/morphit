@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { formatDayMonth } from '$lib/i18n/formatters';
 	import { page } from '$app/stores';
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
@@ -57,15 +58,8 @@
 	}
 
 	function formatDate(iso: string): string {
-		try {
-			return new Intl.DateTimeFormat(undefined, {
-				year: 'numeric',
-				month: 'short',
-				day: 'numeric'
-			}).format(new Date(iso));
-		} catch {
-			return iso;
-		}
+		// Sitewide canonical date format ("30 June, 2026").
+		return formatDayMonth(iso);
 	}
 
 	/** Re-validate the operator's contact URL at render time.

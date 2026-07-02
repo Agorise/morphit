@@ -2529,3 +2529,28 @@ ON price_peer_observations (asset, denomination_fiat, observed_at DESC);
 
 -- Cleanup: a periodic job DELETEs WHERE observed_at < now() - 7 days.
 -- Index supports the bounded scan.
+
+-- ─── v36: accounts.posting_pubkey (cp404) ─────────────────────
+-- Morphit indexer — migration v36.
+--
+-- Stores each account's PRIMARY posting public key (base58 "BLT…"
+-- string) so order cards can show the truncated "(BLT5vw…7Bjw)"
+-- identity anchor WITHOUT the frontend resolving it per-card from
+-- the chain (which for a whole orderbook list would be N lookups —
+-- against the tiny-footprint priority). This is DISPLAY-ONLY data;
+-- signature verification still resolves keys live from the chain
+-- authority (apps/indexer/src/blurt/verify.ts) and never trusts
+-- this column.
+--
+-- Population is two-pronged (see dispatcher.ts + the startup
+-- backfill in main.ts / postingKeyBackfill.ts):
+--   1. On account_create ingest, the primary posting key is read
+--      straight from the op's posting authority.
+--   2. A bounded startup backfill fetches the key from the chain
+--      (condenser_api.get_accounts) for any account still NULL —
+--      covering accounts created before this migration. Keys that
+--      rotate later are refreshed by the same backfill on the next
+--      restart. NULL simply means "not captured yet"; the card
+--      omits the posting-key line for that trader until it fills.
+ALTER TABLE accounts
+    ADD COLUMN IF NOT EXISTS posting_pubkey TEXT;

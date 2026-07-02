@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { formatDayMonth } from '$lib/i18n/formatters';
 	import { page } from '$app/stores';
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
@@ -755,11 +756,7 @@
 									<div>
 										<dt class="inline text-ink-500">{$_('order_detail.expires_on')}:</dt>
 										<dd class="inline text-ink-700 dark:text-ink-200">
-											{new Date(o.expires_at).toLocaleDateString(undefined, {
-												year: 'numeric',
-												month: 'short',
-												day: 'numeric'
-											})}
+											{formatDayMonth(o.expires_at)}
 										</dd>
 									</div>
 								{/if}
