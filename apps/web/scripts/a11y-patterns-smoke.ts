@@ -170,14 +170,9 @@ const scenarios: readonly Scenario[] = [
 	},
 
 	// ─── /post/edit field validation aria ──────────────────
-	{
-		name: '/post/edit fiat input has aria-invalid',
-		ok: /bind:value=\{fiat\}[\s\S]{0,300}aria-invalid=\{!!fiatError\}/.test(POST_EDIT)
-	},
-	{
-		name: '/post/edit fiat StatusLine has id="edit-fiat-error"',
-		ok: /<StatusLine[^>]*id="edit-fiat-error"[^>]*>\{fiatError\}/.test(POST_EDIT)
-	},
+	// (cp401: fiat is now a read-only locked-substance chip — no fiat
+	//  input, so the former fiat aria-invalid / edit-fiat-error checks
+	//  were removed. side/asset/fiat/network are immutable in a replace.)
 	{
 		name: '/post/edit amount inputs have aria-invalid',
 		ok: /value=\{amountMin\}[\s\S]{0,300}aria-invalid=\{!!amountError\}/.test(POST_EDIT) &&

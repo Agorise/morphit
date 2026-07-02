@@ -264,7 +264,11 @@ export async function subscribe(
 	let reg: ServiceWorkerRegistration;
 	try {
 		reg = await navigator.serviceWorker.ready;
-	} catch {
+	} catch (err) {
+		console.warn(
+			'[push] service worker not ready:',
+			err instanceof Error ? `${err.name}: ${err.message}` : err
+		);
 		throw 'subscribe_failed' satisfies SubscribeError;
 	}
 
@@ -291,7 +295,18 @@ export async function subscribe(
 				applicationServerKey: appServerKey as BufferSource
 			});
 		}
-	} catch {
+	} catch (err) {
+		// Surface the underlying reason — pushManager.subscribe() throws a
+		// DOMException whose name/message is the only clue to WHY it failed
+		// (e.g. "AbortError: Registration failed - push service error" when
+		// the push service is unreachable/blocked or the applicationServerKey
+		// is malformed; "InvalidStateError" for a stale subscription;
+		// "NotAllowedError" for a permission problem). Without logging it the
+		// failure collapses to an undiagnosable "subscribe_failed".
+		console.warn(
+			'[push] pushManager.subscribe failed:',
+			err instanceof Error ? `${err.name}: ${err.message}` : err
+		);
 		throw 'subscribe_failed' satisfies SubscribeError;
 	}
 

@@ -697,7 +697,14 @@
 					<span class="flex-none text-lg leading-none" aria-hidden="true">🔐</span>
 					{$_('login.welcome_back.use_seed_instead')}
 				</button>
-				<a href={lp('/login/qr-pair')} class="btn-secondary">
+				<!-- "Use phone instead" points this device's camera-less
+				     unlock at a QR that the user's PHONE scans (ADR-0022) —
+				     so it only makes sense on a desktop-class device. Hidden
+				     below the md width: a phone IS the device with the keys.
+				     Width (not pointer:coarse) is the reliable guard — some
+				     phones don't report coarse, and a touch-laptop is
+				     desktop-class and should keep this. -->
+				<a href={lp('/login/qr-pair')} class="btn-secondary max-md:hidden">
 					<svg
 						viewBox="-1 -1 2002 2002"
 						fill="currentColor"

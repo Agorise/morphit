@@ -16,6 +16,31 @@ import { looksLikeEnvelope } from '../crypto/keyEnvelope.ts';
 import { DEFAULT_BLURT_RPC_ENDPOINTS } from '@morphit/operator-config';
 
 /**
+ * A VAPID application-server (public) key is the uncompressed P-256 public
+ * point: 65 bytes, first byte 0x04, base64url-encoded (~87 chars). The
+ * browser's `pushManager.subscribe()` rejects anything else — a malformed
+ * value here (wrong length, a stray trailing newline that survived into
+ * the served JSON, a base64-PEM blob, or the 32-byte PRIVATE key pasted by
+ * mistake) surfaces to end users as a cryptic "Subscription failed" with
+ * no clue why. Validating the shape lets us refuse to advertise push as
+ * enabled (clients then show a clean "push disabled") and log one clear
+ * operator warning instead. Accepts base64 or base64url, with/without
+ * padding; rejects whitespace/PEM/hex.
+ */
+export function isValidVapidPublicKey(key: string | undefined | null): boolean {
+	if (!key) return false;
+	if (!/^[A-Za-z0-9_+/-]+={0,2}$/.test(key)) return false;
+	let buf: Buffer;
+	try {
+		buf = Buffer.from(key, 'base64url');
+	} catch {
+		return false;
+	}
+	// 65-byte uncompressed P-256 point, leading 0x04.
+	return buf.length === 65 && buf[0] === 0x04;
+}
+
+/**
  * Sentinels that have appeared in this repo's example .env files.
  * Boot is refused if MORPHIT_RELAY_DATABASE_URL still contains
  * any of them as the password component, which catches the
@@ -303,13 +328,14 @@ const envSchema = z.object({
 	// and the client falls back to in-tab channels.  Changing the
 	// public key invalidates ALL existing subscriptions on this
 	// instance (users must re-subscribe).
-	MORPHIT_RELAY_VAPID_PUBLIC_KEY: z.string().optional(),
-	MORPHIT_RELAY_VAPID_PRIVATE_KEY: z.string().optional(),
+	MORPHIT_RELAY_VAPID_PUBLIC_KEY: z.string().trim().optional(),
+	MORPHIT_RELAY_VAPID_PRIVATE_KEY: z.string().trim().optional(),
 	// Identifies the operator to the push service.  MUST be a
 	// mailto: or https:// URL.  Push services use this to contact
 	// the operator if their pushes misbehave (per RFC 8292).
 	MORPHIT_RELAY_VAPID_SUBJECT: z
 		.string()
+		.trim()
 		.refine(
 			(s) => s.startsWith('mailto:') || s.startsWith('https://'),
 			'VAPID subject must be a mailto: or https:// URL'
@@ -617,12 +643,17 @@ export function loadConfig(): Config {
 		verboseHealth: env.MORPHIT_RELAY_VERBOSE_HEALTH,
 		accountCreationFeeBlurt: env.MORPHIT_INDEXER_ACCOUNT_CREATION_FEE_BLURT,
 
-		// Web Push: enabled only when ALL three VAPID fields are set.
+		// Web Push: enabled only when ALL three VAPID fields are set AND
+		// the public key is a well-formed P-256 point. A malformed public
+		// key can't produce a working subscription, so we treat push as
+		// disabled (clean client message) rather than serving a bad key
+		// that fails cryptically in every user's browser. main.ts logs a
+		// clear operator warning for the set-but-invalid case.
 		vapidPublicKey: env.MORPHIT_RELAY_VAPID_PUBLIC_KEY,
 		vapidPrivateKey: env.MORPHIT_RELAY_VAPID_PRIVATE_KEY,
 		vapidSubject: env.MORPHIT_RELAY_VAPID_SUBJECT,
 		pushEnabled: Boolean(
-			env.MORPHIT_RELAY_VAPID_PUBLIC_KEY &&
+			isValidVapidPublicKey(env.MORPHIT_RELAY_VAPID_PUBLIC_KEY) &&
 				env.MORPHIT_RELAY_VAPID_PRIVATE_KEY &&
 				env.MORPHIT_RELAY_VAPID_SUBJECT
 		),

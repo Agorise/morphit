@@ -29,6 +29,7 @@ import {
 	summarizeHealth,
 	parsePriceFeed,
 	parsePriceFeedsHealth,
+	parseChatFastPath,
 	classifyHealthResult,
 	bridgeGatewayHosts,
 	candidateHealthUrls,
@@ -575,8 +576,82 @@ expect('HV-1e an unparseable string passes through', ensureHealthPath('not a url
 	);
 }
 
+// ── HV-12: chat head-block fast-path status (cp403 [1], ADR-0048) ──
+{
+	// parseChatFastPath — tolerant parse of the operator-only top-level
+	// `chat_fastpath` block (camelCase keys, forwarded verbatim from the
+	// indexer's ChatHeadTailerStatus).
+	const on = parseChatFastPath({
+		enabled: true,
+		running: true,
+		scannedHead: 59500000,
+		emitted: 42,
+		lastError: null,
+		lastErrorAt: null
+	});
+	expect(
+		'HV-12a chat_fastpath running parsed',
+		on !== null && on.enabled && on.running && on.scannedHead === 59500000 && on.emitted === 42
+	);
+	const off = parseChatFastPath({ enabled: false, running: false, scannedHead: 0, emitted: 0, lastError: null });
+	expect('HV-12b disabled parsed (enabled:false)', off !== null && !off.enabled);
+	expect(
+		'HV-12c absent/null block → null',
+		parseChatFastPath(undefined) === null && parseChatFastPath(null) === null
+	);
+	const err = parseChatFastPath({ enabled: true, running: false, lastError: 'rpc getBlock 502' });
+	expect(
+		'HV-12d lastError surfaced, missing numeric fields → null (tolerant)',
+		err !== null && err.lastError === 'rpc getBlock 502' && err.scannedHead === null && err.emitted === null
+	);
+	expect(
+		'HV-12e non-object → null',
+		parseChatFastPath(42) === null && parseChatFastPath('on') === null
+	);
+
+	// Render source-assertion: the node-health view prints a "Fast chat:"
+	// line with the on / off / not-tailing-yet branches + an older-build
+	// fallback, so admins always see the status (like the price feeds).
+	const healthSrc = readFileSync(
+		join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'commands', 'health.ts'),
+		'utf-8'
+	);
+	expect('HV-12f render has a "Fast chat:" label', healthSrc.includes('Fast chat:'));
+	expect(
+		'HV-12g render shows the disabled state (irreversible note)',
+		healthSrc.includes('messages appear once irreversible')
+	);
+	expect(
+		'HV-12h render shows the tailing state + delivered count',
+		healthSrc.includes('tailing') && healthSrc.includes('delivered')
+	);
+	expect(
+		'HV-12i render has the older-build fallback',
+		healthSrc.includes('Fast chat:     status unavailable (older indexer build)')
+	);
+
+	// Indexer-side: chat_fastpath must be in the OPERATOR-ONLY top-level
+	// block (the `localDiag` / X-Morphit-Local-Health gate the ops-cli
+	// uses) — NOT only in the ?verbose=1 diagnostics block, or the
+	// node-health view (which doesn't send verbose=1) would never see it.
+	const idxHealthSrc = readFileSync(
+		join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'indexer', 'src', 'api', 'health.ts'),
+		'utf-8'
+	);
+	const localDiagIdx = idxHealthSrc.indexOf('if (localDiag) {');
+	const fastPathIdx = idxHealthSrc.indexOf('body.chat_fastpath');
+	const verboseIdx = idxHealthSrc.indexOf('if (verbose) {');
+	expect(
+		'HV-12j indexer emits body.chat_fastpath',
+		fastPathIdx >= 0
+	);
+	expect(
+		'HV-12k chat_fastpath is inside the localDiag (operator-only) block, before the verbose block',
+		localDiagIdx >= 0 && fastPathIdx > localDiagIdx && (verboseIdx < 0 || fastPathIdx < verboseIdx)
+	);
+}
+
 console.log('');
-console.log(`${pass} passed, ${fail} failed`);
 if (fail > 0) {
 	console.log('\u2717 health-view smoke FAILED');
 	process.exit(1);

@@ -29,8 +29,14 @@
 import { formatPublicKey } from './keygen';
 import { impersonatesReservedName } from './confusables';
 
-export const DISPLAY_NAME_MAX_LENGTH = 40;
-export const DISPLAY_NAME_MIN_LENGTH = 1;
+// cp404 — capDisplayName + the length constants live in the keygen-free
+// $lib/crypto/displayName module so light, baseline-closure consumers
+// (profileProps.ts) can import the cap without pulling keygen → bip39 into
+// every page's modulepreload. Imported here for this module's own use
+// (validateDisplayName) AND re-exported so existing
+// `from '$lib/crypto/profile'` call sites are unchanged.
+import { DISPLAY_NAME_MAX_LENGTH, DISPLAY_NAME_MIN_LENGTH, capDisplayName } from './displayName';
+export { DISPLAY_NAME_MAX_LENGTH, DISPLAY_NAME_MIN_LENGTH, capDisplayName };
 
 /** Codepoints that are always forbidden in display names. */
 const FORBIDDEN_CODEPOINTS = new Set<number>([

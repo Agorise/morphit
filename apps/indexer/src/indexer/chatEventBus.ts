@@ -46,8 +46,55 @@ export interface ChatEvent {
 
 export type ChatListener = (ev: ChatEvent) => void;
 
+/**
+ * cp403 [1] — head-block fast-path event.
+ *
+ * Emitted by the chatHeadTailer (ADR-0048) for a chat message seen in
+ * a chain HEAD block, BEFORE it is irreversible and therefore before
+ * the durable poller has inserted it into `chat_messages`. Because
+ * there is no DB row yet, this event carries the FULL message payload
+ * (unlike the durable `ChatEvent`, which carries only a row id the SSE
+ * handler re-fetches). The SSE handler pushes it straight to matching
+ * subscribers as a provisional `message_appended` with `id: 0`.
+ *
+ * The client dedupes this provisional message against its later durable
+ * twin by the on-chain `clientTag` (present in the header of every
+ * Morphit-composed message), so the two never render twice.
+ *
+ * INVARIANT: nothing on this path touches the database. A reorg that
+ * orphans a message shown via the fast path is an accepted trade-off —
+ * chat is low-stakes and the message simply never reaches durable
+ * history. Orders, fees, and transfers are NEVER carried on this path.
+ */
+export interface ChatFastEvent {
+	/** LEAST(sender, recipient) — canonical pair-low. */
+	readonly lo: string;
+	/** GREATEST(sender, recipient) — canonical pair-high. */
+	readonly hi: string;
+	readonly sender: string;
+	readonly recipient: string;
+	/** base64 opaque ciphertext, exactly as seen on chain. */
+	readonly ciphertext: string;
+	/** The message header object (ephemeral_pub, nonce, client_tag),
+	 *  opaque to the indexer — forwarded verbatim to the client. */
+	readonly header: unknown;
+	/** Block timestamp of the head block the op appeared in. */
+	readonly createdAt: Date;
+	/** The on-chain `client_tag` from the header, or null if absent —
+	 *  the key the client uses to dedupe this provisional message
+	 *  against its durable twin. Extracted once here so SSE subscribers
+	 *  don't each re-parse the header. */
+	readonly clientTag: string | null;
+}
+
+export type ChatFastListener = (ev: ChatFastEvent) => void;
+
 class ChatEventBus {
 	private readonly listeners: Set<ChatListener> = new Set();
+	/** cp403 [1] — separate listener set for head-block fast-path
+	 *  events. Kept distinct from the durable listeners so the two
+	 *  channels can't be accidentally cross-wired. */
+	private readonly fastListeners: Set<ChatFastListener> = new Set();
 
 	/** Subscribe a listener.  Returns an unsubscribe function;
 	 *  the SSE handler calls it on connection close. */
@@ -55,6 +102,15 @@ class ChatEventBus {
 		this.listeners.add(listener);
 		return () => {
 			this.listeners.delete(listener);
+		};
+	}
+
+	/** cp403 [1] — subscribe to head-block fast-path events. Returns an
+	 *  unsubscribe function; the SSE handler calls it on close. */
+	onFast(listener: ChatFastListener): () => void {
+		this.fastListeners.add(listener);
+		return () => {
+			this.fastListeners.delete(listener);
 		};
 	}
 
@@ -75,11 +131,33 @@ class ChatEventBus {
 		}
 	}
 
+	/** cp403 [1] — emit a head-block fast-path event. Same
+	 *  fire-and-forget, error-isolating discipline as `emit`. */
+	emitFast(ev: ChatFastEvent): void {
+		const snapshot = Array.from(this.fastListeners);
+		for (const listener of snapshot) {
+			try {
+				listener(ev);
+			} catch (err) {
+				const msg = err instanceof Error ? err.message : String(err);
+				process.stderr.write(`chat-event-bus: fast listener threw: ${msg}\n`);
+			}
+		}
+	}
+
 	/** Number of active subscribers.  Surfaced via /v1/health
 	 *  verbose so operators can confirm the bus is wired and
 	 *  see how many tabs are watching live chats. */
 	get subscriberCount(): number {
 		return this.listeners.size;
+	}
+
+	/** cp403 [1] — count of active fast-path subscribers (same as
+	 *  subscriberCount; the SSE handler subscribes to both channels,
+	 *  so this normally equals subscriberCount when the fast path is
+	 *  enabled). Surfaced on /v1/health verbose. */
+	get fastSubscriberCount(): number {
+		return this.fastListeners.size;
 	}
 }
 

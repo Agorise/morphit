@@ -273,6 +273,10 @@ interface AccountCreateRow {
 	readonly blockNum: number;
 	readonly blockTime: Date;
 	readonly trxId: string;
+	/** Primary posting public key from the account_create op's posting
+	 *  authority, or null if unparseable. Stored for display (the
+	 *  truncated "(BLT…)" on order cards) — NOT used for verification. */
+	readonly postingPubkey: string | null;
 }
 
 /** The three account-creation op names on Blurt. All three carry
@@ -305,6 +309,7 @@ function collectAccountCreates(
 				new_account_name?: unknown;
 				name?: unknown;
 				creator?: unknown;
+				posting?: { key_auths?: unknown };
 			};
 			// Different op variants use different field names; pick
 			// whichever is present.
@@ -317,23 +322,35 @@ function collectAccountCreates(
 			if (!newName) continue;
 			if (typeof b.creator !== 'string') continue;
 
+			// Primary posting pubkey from the op's posting authority:
+			// key_auths is [[pubkey, weight], ...]. Store the first key
+			// for display only. Defensive parse — never throws on a
+			// malformed/absent authority (just yields null).
+			let postingPubkey: string | null = null;
+			const ka = b.posting?.key_auths;
+			if (Array.isArray(ka) && Array.isArray(ka[0]) && typeof ka[0][0] === 'string') {
+				postingPubkey = ka[0][0];
+			}
+
 			out.push({
 				newAccountName: newName,
 				creator: b.creator,
 				blockNum,
 				blockTime,
-				trxId: trxIds[ti] ?? ''
+				trxId: trxIds[ti] ?? '',
+				postingPubkey
 			});
 		}
 	}
 	return out;
 }
 
-/** Bulk-insert account rows. ON CONFLICT DO NOTHING because:
- *  (a) the poller may retry a block, and (b) in the extremely
- *  unlikely case of two account_create ops for the same name
- *  in the same run (which the chain would reject anyway), we
- *  keep the first one we observed. */
+/** Bulk-insert account rows. ON CONFLICT only fills a NULL
+ *  posting_pubkey (COALESCE keeps any value we already have),
+ *  otherwise does nothing — so (a) the poller may retry a block,
+ *  and (b) re-observing an account can backfill a posting key we
+ *  hadn't captured, without disturbing the first-observed create
+ *  metadata. */
 async function writeAccountCreates(
 	client: pg.PoolClient,
 	rows: readonly AccountCreateRow[]
@@ -343,10 +360,11 @@ async function writeAccountCreates(
 		await client.query(
 			`INSERT INTO accounts (
 				name, creator, created_block_num, created_block_time,
-				created_trx_id
-			) VALUES ($1, $2, $3, $4, $5)
-			ON CONFLICT (name) DO NOTHING`,
-			[r.newAccountName, r.creator, r.blockNum, r.blockTime, r.trxId]
+				created_trx_id, posting_pubkey
+			) VALUES ($1, $2, $3, $4, $5, $6)
+			ON CONFLICT (name) DO UPDATE SET
+				posting_pubkey = COALESCE(accounts.posting_pubkey, EXCLUDED.posting_pubkey)`,
+			[r.newAccountName, r.creator, r.blockNum, r.blockTime, r.trxId, r.postingPubkey]
 		);
 	}
 }

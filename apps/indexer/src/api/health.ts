@@ -26,6 +26,7 @@ import type { DisagreementMonitor } from '$indexer/price/disagreementMonitor';
 import type { PeerSampleCycleResult } from '$indexer/price/peerPriceMonitor';
 import { orderbookEventBus } from '$indexer/orderbookEventBus';
 import { chatEventBus } from '$indexer/chatEventBus';
+import type { ChatHeadTailer } from '$indexer/chatHeadTailer';
 
 // Keep in sync with the root package.json `version`.  The
 // version-consistency-smoke (Part 122 cp20) fails the build if
@@ -34,7 +35,7 @@ import { chatEventBus } from '$indexer/chatEventBus';
 // update all 10 package.json files + this constant +
 // apps/relay/src/api/health.ts VERSION + the example response
 // in docs/API.md in the same commit.
-const INDEXER_VERSION = '1.0.0-beta.43';
+const INDEXER_VERSION = '1.0.0-beta.44';
 
 // Blurt produces one block every 3 seconds. Used to translate the
 // block-lag count into a human "seconds behind" figure in the
@@ -63,7 +64,14 @@ export function healthRoute(
 	// strips.  Defaulted so callers that don't wire them see fx disabled /
 	// no crypto feeds.
 	fxSource: FxRateSource | null = null,
-	multiAssetSources: ReadonlyMap<string, BlurtPriceSource> = new Map()
+	multiAssetSources: ReadonlyMap<string, BlurtPriceSource> = new Map(),
+	// cp403 [1] — chat head-block fast-path tailer. Its status
+	// (enabled/running/watermark/emitted/last error) is surfaced in the
+	// operator-only top-level `chat_fastpath` block (beside `price_feeds`,
+	// same X-Morphit-Local-Health gate) so the morphit-ops node-health
+	// view can show admins whether fast chat is on. Defaulted so a caller
+	// that doesn't wire it reports the fast path as absent, never a crash.
+	chatTailer: ChatHeadTailer | null = null
 ): Hono {
 	const app = new Hono();
 	const bootTime = Date.now();
@@ -152,6 +160,13 @@ export function healthRoute(
 		const localDiag = c.req.header('x-morphit-local-health') === '1';
 		if (localDiag) {
 			body.price_feeds = buildPriceFeedsHealth(fxSource, multiAssetSources);
+			// cp403 [1] — chat head-block fast-path status, surfaced in the
+			// same operator-only top-level block as price_feeds so the
+			// morphit-ops node-health view can show admins whether fast
+			// chat is on and tailing (alongside FX + price feeds). Low
+			// sensitivity: it's the operator's own config + a head
+			// watermark, no user data. null when the tailer wasn't wired.
+			body.chat_fastpath = chatTailer ? chatTailer.getStatus() : null;
 		}
 
 		// Audit 2026-05 finding NEW-9-8: verbose mode now requires

@@ -83,6 +83,10 @@ function makeRow(overrides: Partial<OrderbookStreamRow> = {}): OrderbookStreamRo
 		fee_method: 'blurt',
 		feedback_count: 5,
 		weighted_rating: '4.5',
+		// cp404 — reputation-score inputs + posting key now read by rowToWire.
+		last_feedback_at: new Date('2026-04-20T00:00:00Z'),
+		first_trade_complete_at: new Date('2026-02-01T00:00:00Z'),
+		posting_pubkey: 'BLT6vSMDaw3sLdJP7SjSxHCbtwLQoyTA2oc9dWDdmKZ2Jjw6Bh7d',
 		is_new_trader: false,
 		created_at: new Date('2026-04-01T10:00:00Z'),
 		updated_at: new Date('2026-04-26T12:00:00Z'),
@@ -233,6 +237,22 @@ scenario('rowToWire: full row → full wire shape', () => {
 	assertEqual(w.created_at, '2026-04-01T10:00:00.000Z', 'created_at iso');
 	assertEqual(w.updated_at, '2026-04-26T12:00:00.000Z', 'updated_at iso');
 	assertEqual(w.expires_at, '2026-05-01T00:00:00.000Z', 'expires_at iso');
+	// cp404 — composite reputation score, earliest-trade ISO, posting key.
+	assertEqual(typeof w.reputation_score, 'number', 'reputation_score is a number');
+	assertEqual(w.first_trade_at, '2026-02-01T00:00:00.000Z', 'first_trade_at iso');
+	assertEqual(
+		w.posting_pubkey,
+		'BLT6vSMDaw3sLdJP7SjSxHCbtwLQoyTA2oc9dWDdmKZ2Jjw6Bh7d',
+		'posting_pubkey passthrough'
+	);
+});
+
+scenario('rowToWire: null reputation inputs → null score, null first_trade_at', () => {
+	const w = rowToWire(
+		makeRow({ weighted_rating: null, last_feedback_at: null, first_trade_complete_at: null })
+	);
+	assertEqual(w.reputation_score, null, 'null score when no rating');
+	assertEqual(w.first_trade_at, null, 'null first_trade_at when none');
 });
 
 scenario('rowToWire: null amounts and rating preserved', () => {

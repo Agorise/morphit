@@ -335,6 +335,52 @@ export function resolveWebRoot(env: { MORPHIT_WEB_ROOT?: string }): string {
 	return v === '' ? DEFAULT_WEB_ROOT : v;
 }
 
+/** The env files the indexer systemd unit sources, in the SAME order it
+ *  sources them (later file wins), matching
+ *  `ops/systemd/morphit-indexer.service`'s ExecStart:
+ *    <installDir>/morphit.env, <installDir>/morphit.config.env,
+ *    <etc>/indexer.env.
+ *  On a real deploy `installDir` is /opt/morphit and `<etc>` is
+ *  /etc/morphit; both are overridable for tests. PURE. */
+export function indexerEnvFiles(installDir: string): string[] {
+	const etc = process.env.MORPHIT_ETC_DIR ?? '/etc/morphit';
+	return [
+		join(installDir, 'morphit.env'),
+		join(installDir, 'morphit.config.env'),
+		join(etc, 'indexer.env')
+	];
+}
+
+/** Effective MORPHIT_INDEXER_CHAT_FASTPATH_ENABLED across the indexer's
+ *  env files, applying `set -a; . file` semantics (a later file's value
+ *  overrides an earlier one). Returns:
+ *    'default' — the var is set in none of the files (config default = ON)
+ *    'on'      — the last-set value is not 'false' (the only other valid
+ *                enum value is 'true')
+ *    'off'     — the last-set value is 'false'
+ *  Absent/unreadable files are skipped (best-effort, e.g. a root-only
+ *  file opened without sudo). Reads the files; otherwise PURE. */
+export function effectiveFastPathState(files: string[]): 'default' | 'on' | 'off' {
+	let state: 'default' | 'on' | 'off' = 'default';
+	for (const f of files) {
+		if (!existsSync(f)) continue;
+		let text: string;
+		try {
+			text = readFileSync(f, 'utf-8');
+		} catch {
+			continue;
+		}
+		for (const line of text.split('\n')) {
+			const m = line.match(/^\s*MORPHIT_INDEXER_CHAT_FASTPATH_ENABLED\s*=\s*(\S+)/);
+			if (m) {
+				const v = m[1]!.replace(/^["']|["']$/g, '').trim().toLowerCase();
+				state = v === 'false' ? 'off' : 'on';
+			}
+		}
+	}
+	return state;
+}
+
 /** True if this version's indexer `schema.sql` differs from the one in the
  *  previous install (now the backup) — i.e. the upgrade crossed a schema
  *  change. Reads two files; returns false if either is missing/unreadable
@@ -1280,6 +1326,30 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	} else {
 		info(
 			'Skipping matrix-bot lifecycle (morphit-matrix-bot.service is not installed on this host).'
+		);
+	}
+
+	// ─── 10d. Confirm the chat fast-path (sub-6s delivery) state ──
+	// Fast chat is ON by default (ADR-0048). The indexer runs from TS
+	// source and was just restarted above, so it picked up this version's
+	// default — meaning an operator who never set the knob (the common
+	// case) now has sub-6s chat with no action. We report the EFFECTIVE
+	// state (read from the same env files the unit sources) at every
+	// upgrade so it's never silently off, and — respecting an operator's
+	// explicit choice — we do NOT force it back on if they disabled it.
+	const fastPathState = effectiveFastPathState(indexerEnvFiles(installDir));
+	if (fastPathState === 'off') {
+		info(
+			'ℹ Fast chat (sub-6s message delivery) is DISABLED — ' +
+				'MORPHIT_INDEXER_CHAT_FASTPATH_ENABLED=false is set in your indexer env. ' +
+				'It is on by default; remove that line (or set it to true) and restart ' +
+				'the indexer to turn it on. See status anytime with `morphit-ops health`.'
+		);
+	} else {
+		info(
+			'\u2713 Fast chat is on (sub-6s message delivery)' +
+				(fastPathState === 'default' ? ' \u2014 on by default' : '') +
+				'. Verify with `morphit-ops health`.'
 		);
 	}
 

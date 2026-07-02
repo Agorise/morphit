@@ -4284,6 +4284,73 @@ them to (a) unblock if blocked, (b) pay the stranger fee
 if first contact, (c) wait for the recipient to reply to
 lift the rate caps.
 
+### Chat head-block fast path (sub-6s delivery) — ADR-0048
+
+New chat messages appear in an open conversation within a
+few seconds instead of waiting ~45–60s for Blurt's
+last-irreversible block. A separate scanner tails the chain
+HEAD and streams new chat messages over SSE; the normal
+poller (which only applies irreversible blocks) is
+unchanged and stays the sole source of truth for chat
+history and everything else.
+
+**On by default.** Two knobs, both in `ops/env/indexer.env`:
+
+```
+MORPHIT_INDEXER_CHAT_FASTPATH_ENABLED=true    # default true
+MORPHIT_INDEXER_CHAT_FASTPATH_INTERVAL_MS=2000 # default 2000
+```
+
+- It **never writes the database** — read-only (block feed +
+  a block-list lookup) plus in-process SSE. A crash in it
+  cannot affect the durable poller or your data.
+- It is **chat-only** and enforces the **block list** (a
+  blocked sender's message is never streamed, failing closed
+  on any DB error). It does not re-run the stranger-fee /
+  rate-limit gates — the durable pass still enforces those
+  for stored history, so a stranger's message can flash up
+  live for a few seconds before it fails to persist. That is
+  bounded and intentional; the block list, the one gate whose
+  bypass would matter, is always enforced.
+- If a head block is later orphaned by a fork, a message
+  shown live simply never lands in durable history. Fine for
+  chat; this is exactly why orders and fees are **not** on
+  this path.
+- Extra RPC: roughly one head-poll per interval (~30/min at
+  2s) plus a block fetch per new block (~20/min) — about a 2×
+  increase in block-feed calls. Raise the interval to reduce
+  load, lower it for tighter latency.
+
+**When to turn it off.** Set `..._ENABLED=false` if you want
+messages shown only once irreversible, or to shed the extra
+RPC load. Restart the indexer to apply.
+
+**Checking status.** The simplest check is the node-health
+view — `morphit-ops health` (main menu item #13) — which
+shows a **Fast chat:** line right below the price feeds:
+`on — tailing @ head block N (M delivered)` when it's live,
+`off — messages appear once irreversible (~45-60s)` when an
+operator disabled it, or `on but not tailing yet` just after
+a restart. Under the hood that comes from an operator-only
+top-level `chat_fastpath` block on `/v1/health`
+(`{enabled, running, scannedHead, emitted, lastError,
+lastErrorAt}`), gated on the same `X-Morphit-Local-Health`
+header the public edge strips — the same gate as the
+per-source `price_feeds` block, so a public caller can't see
+it. (It is deliberately NOT in the `?verbose=1` diagnostics
+block, so the node-health view — which doesn't pass
+`verbose=1` — always sees it.)
+
+**Upgrade note.** Fast chat is on by default and the indexer
+runs from source, so a normal `morphit-ops upgrade` turns it
+on for any instance that hasn't explicitly disabled it — the
+upgrade prints a `✓ Fast chat is on` (or a note if you've
+disabled it) at the end so you always know. The matching
+client-side dedupe ships in the same release, so both halves
+deploy together — no partial-deploy window. A browser tab
+still on a pre-upgrade frontend could briefly show a message
+twice until it reloads; harmless and self-healing.
+
 ## 20. Attestation phase transition (Finding I)
 
 Finding I mitigates a sybil-attack path on BTC/XMR fee
@@ -7215,6 +7282,27 @@ the chain block-by-block with one transaction per block.  No
 single statement is ever a deep replay; each block's write
 stays well under the timeout even when catching up from
 genesis on a brand-new instance.  No special handling needed.
+
+**Posting-key backfill (cp404).**  On every indexer boot, a
+one-shot idempotent backfill populates the `accounts.posting_pubkey`
+column (added in schema v36) — the durable BLT posting key shown on
+the order cards' identity line and used by the chat PDF export. It
+runs `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS posting_pubkey`
+(so the column lands on an already-running instance at the next
+`morphit-ops upgrade` without a tracked migration), then fills any
+`NULL` rows in creation-block order (batched, capped per boot) by
+reading each account's current `posting.key_auths[0][0]` from the
+chain. It is fire-and-forget and NEVER blocks startup or ingestion;
+a failure only logs a warning. Nothing to configure. Expect one of:
+
+- `posting_key_backfill_done` (INFO) — payload `{ensuredColumn,
+  scanned, updated, remaining}`. `remaining > 0` just means the cap
+  was hit this boot; the rest fill on subsequent boots. Once
+  `updated` and `remaining` are both 0, every known account has its
+  key and the line stops appearing.
+- `posting_key_backfill_failed` (WARN) — a chain-read or DB hiccup;
+  harmless, retried next boot. The order cards simply omit the key
+  line for un-backfilled accounts until then.
 
 **Ad-hoc long queries.**  If you ever need to run a one-off
 long query (analytics from psql, a custom report), override
@@ -10162,6 +10250,22 @@ the client UI shows "Not supported on this device", and users
 fall back to the in-tab channels).  This is the correct
 behavior for operators who don't want to participate in Web
 Push.
+
+**Malformed key detection (cp404).**  A subtler failure mode is a
+VAPID public key that is *set but invalid* — truncated on a
+copy-paste, wrapped in quotes, or a stray newline.  Previously the
+relay would serve whatever string it was given and the browser's
+`pushManager.subscribe()` would reject it with an opaque
+`applicationServerKey` error on the client, with nothing in the
+relay log to point at the cause.  The relay now validates the key
+at startup: it must be valid base64url decoding to exactly 65
+bytes whose first byte is `0x04` (an uncompressed P-256 point).
+If it fails that check the relay logs `vapid_public_key_invalid`
+and starts with push **disabled** (same 503 behavior as unset),
+rather than serving a key that can't work.  The env vars are also
+trimmed of surrounding whitespace before use.  If push is
+unexpectedly off after you set the keys, grep the relay log for
+`vapid_public_key_invalid` and re-run `generate-vapid-keys.sh`.
 
 ### 42.3 Optional tuning knobs
 

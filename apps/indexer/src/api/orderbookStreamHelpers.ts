@@ -16,6 +16,7 @@
  */
 
 import { escapeLike } from '$api/shared';
+import { computeReputationScore } from '$indexer/reputation/score';
 import type { AssetTicker } from '@morphit/asset-registry';
 
 /** Filter shape accepted by the orderbook-stream WHERE-clause
@@ -46,8 +47,17 @@ export interface OrderbookStreamRow {
 	fee_method: 'blurt' | 'waived_first_buy' | 'btc' | 'xmr' | null;
 	feedback_count: number;
 	weighted_rating: string | null;
+	/** MAX(created_at) of included feedback — recency factor for the
+	 *  composite reputation score. NULL when no included feedback. */
+	last_feedback_at: Date | null;
 	is_new_trader: boolean;
 	engagement_24h: number;
+	/** accounts.first_trade_complete_at — earliest completed trade;
+	 *  NULL when none. Drives "N trades since {month}" on order cards. */
+	first_trade_complete_at: Date | null;
+	/** Primary posting public key for the display-only card identity
+	 *  anchor. NULL when not captured yet. */
+	posting_pubkey: string | null;
 	created_at: Date;
 	updated_at: Date;
 	expires_at: Date | null;
@@ -75,8 +85,16 @@ export function rowToWire(r: OrderbookStreamRow): Record<string, unknown> {
 		fee_method: r.fee_method,
 		feedback_count: r.feedback_count,
 		weighted_rating: r.weighted_rating === null ? null : Number(r.weighted_rating),
+		reputation_score: computeReputationScore({
+			count: r.feedback_count,
+			weightedAvg: r.weighted_rating === null ? null : Number(r.weighted_rating),
+			lastFeedbackAtMs: r.last_feedback_at === null ? null : r.last_feedback_at.getTime()
+		}),
 		is_new_trader: r.is_new_trader,
 		engagement_24h: r.engagement_24h,
+		first_trade_at:
+			r.first_trade_complete_at === null ? null : r.first_trade_complete_at.toISOString(),
+		posting_pubkey: r.posting_pubkey ?? null,
 		created_at: r.created_at.toISOString(),
 		updated_at: r.updated_at.toISOString(),
 		expires_at: r.expires_at === null ? null : r.expires_at.toISOString()

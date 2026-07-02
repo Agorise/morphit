@@ -1,3 +1,5 @@
+import tailwindPlugin from 'tailwindcss/plugin';
+
 /** @type {import('tailwindcss').Config} */
 export default {
 	content: ['./src/**/*.{html,js,svelte,ts}'],
@@ -5,8 +7,8 @@ export default {
 	theme: {
 		extend: {
 			fontFamily: {
-				sans: ['Nunito', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
-				display: ['Nunito', 'system-ui', 'sans-serif']
+				sans: ['Comfortaa', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
+				display: ['Comfortaa', 'system-ui', 'sans-serif']
 			},
 			colors: {
 				// Morphit brand palette (from the logo gradient)
@@ -80,5 +82,19 @@ export default {
 			}
 		}
 	},
-	plugins: []
+	plugins: [
+		// Pointer-type variants — Tailwind v3 ships no built-in pointer-*
+		// variants, so `pointer-fine:` / `pointer-coarse:` classes were
+		// previously silently dropped (emitting no CSS). `pointer-fine:`
+		// matches a mouse/trackpad (desktop); `pointer-coarse:` matches
+		// touch (phones/tablets). Used for the handful of touch-only /
+		// desktop-only affordances that can't be a viewport-width swap —
+		// e.g. the avatar menu's "sign in to another device" scan entry
+		// (opens a phone camera; pointless on a PC) and the unlock
+		// screen's "use phone instead" (pointless on a phone).
+		tailwindPlugin(function ({ addVariant }) {
+			addVariant('pointer-fine', '@media (pointer: fine)');
+			addVariant('pointer-coarse', '@media (pointer: coarse)');
+		})
+	]
 };

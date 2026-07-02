@@ -30,6 +30,7 @@
 
 import type { ProfileResponse } from '@morphit/indexer-client';
 import { sanitizeSvg } from '$lib/avatar';
+import { capDisplayName } from '$lib/crypto/displayName';
 
 export interface IdentityLabelProfileProps {
 	readonly displayName: string | null;
@@ -108,7 +109,7 @@ export function extractLabelPropsFromProfile(
 	}
 	const displayName =
 		typeof profile.display_name === 'string' && profile.display_name.length > 0
-			? profile.display_name
+			? capDisplayName(profile.display_name)
 			: null;
 
 	const meta = profile.json_metadata;

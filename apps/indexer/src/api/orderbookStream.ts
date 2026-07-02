@@ -117,6 +117,7 @@ const orderbookStreamQuerySchema = z.object({
 const FEEDBACK_AGGREGATE_JOIN = `
 	LEFT JOIN (
 	  SELECT subject, COUNT(*)::int AS c,
+	         MAX(created_at) AS last_feedback_at,
 	         -- cp123 H1: time-decay weighted rating with 365-day
 	         -- half-life.  Mirrors apps/indexer/src/api/orderbook.ts
 	         -- + apps/indexer/src/api/feedback.ts so the SSE stream
@@ -175,6 +176,7 @@ const FEEDBACK_AGGREGATE_JOIN = `
 	     )
 	   GROUP BY recipient, order_permlink
 	) e ON e.recipient = o.account AND e.order_permlink = o.permlink
+	LEFT JOIN accounts a ON a.account = o.account
 `;
 
 const ROW_SELECT = `
@@ -184,8 +186,11 @@ const ROW_SELECT = `
 	       o.fee_method,
 	       COALESCE(f.c, 0)::int AS feedback_count,
 	       CASE WHEN f.r IS NOT NULL THEN f.r::text ELSE NULL END AS weighted_rating,
+	       f.last_feedback_at,
 	       (COALESCE(f.c, 0) < 4) AS is_new_trader,
 	       COALESCE(e.distinct_senders_24h, 0)::int AS engagement_24h,
+	       a.first_trade_complete_at,
+	       a.posting_pubkey,
 	       o.created_at, o.updated_at, o.expires_at
 `;
 

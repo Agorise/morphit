@@ -1,39 +1,44 @@
 /**
  * post-edit-multi-network-wired-smoke.ts
  *
- * Pre-launch invariant: every route that lets a user create OR
- * edit an order for a multi-network asset (USDT, USDC, DAI) must
- * mount the corresponding network picker AND emit asset_network
- * in its broadcast payload.
+ * Pre-launch invariant: multi-network assets (USDT, USDC, DAI) must
+ * carry their sub-network (asset_network) correctly through BOTH order
+ * creation and order editing — but the two flows differ:
  *
- * WHY THIS SMOKE EXISTS (Part 122 cp36 Bob-3 finding):
+ *   • CREATE (/post): the user CHOOSES the network, so the route must
+ *     import + mount the network picker, gate submit on a chosen
+ *     network, and emit asset_network in the broadcast payload.
  *
- * /post/+page.svelte was wired with all 3 multi-network pickers
- * in cp34 (closing the cp31 DAI miss originally caught at cp34
- * H-1). But the sibling route /post/edit/[permlink]/+page.svelte
- * was never walked at the same time, and shipped through cp35
- * with ZERO multi-network wiring — no imports, no picker mounts,
- * no asset_network field in OrderFormInput. Editing a USDT,
- * USDC, or DAI order would broadcast an orderReplace without
- * asset_network and the indexer would reject it with
- * `asset_network_required_for_<asset>`. cp35 also missed this
- * because the asset-coverage map saw /post/edit as "covered"
- * (it imports AssetTicker) but did not check for picker mounts.
+ *   • EDIT (/post/edit): the network is IMMUTABLE in a 15-minute
+ *     replace — the indexer rejects a change with
+ *     `replace_asset_network_change_forbidden`. So the edit route must
+ *     NOT mount an interactive picker. cp401: mounting one let the user
+ *     change the network, the broadcast "succeeded" (the page showed
+ *     "saved"), and the indexer silently rejected the replace — the
+ *     edit never applied. Instead the edit route HYDRATES the network
+ *     read-only from the loaded order and still EMITS asset_network in
+ *     the payload, so the immutability check matches
+ *     (v.asset_network === target.asset_network).
  *
- * Strategy: for each registered route, grep the source for the
- * required picker import + mount + payload-field shape. The
- * smoke is text-based; no transpile, no runtime.
+ * WHY THIS SMOKE EXISTS (Part 122 cp36 Bob-3 finding, revised cp401):
  *
- * Adding a new multi-network asset is then a 3-step gate:
+ * /post/edit originally shipped with ZERO multi-network wiring (cp35),
+ * so editing a USDT/USDC/DAI order broadcast an orderReplace without
+ * asset_network → `asset_network_required_for_<asset>`. cp36 added the
+ * pickers to BOTH routes. cp401 then found that an editable network (or
+ * side/asset/fiat) on the edit page is itself the bug: those fields are
+ * immutable in a replace, so the picker was removed and the network is
+ * now shown read-only. This smoke was rewritten to encode the
+ * emit-not-mount invariant for the edit route.
  *
+ * Adding a new multi-network asset is a 3-step gate:
  *   1. Add the asset to ASSET_TICKERS in asset-registry.
- *   2. Add MULTI_NETWORK_ASSETS entry below.
- *   3. Run smokes — this smoke fails until every order-creation
- *      AND order-edit route has a picker mounted and a payload
- *      branch emitting the network.
+ *   2. Add a MULTI_NETWORK_ASSETS entry below.
+ *   3. Run smokes — fails until the CREATE route mounts a picker and
+ *      every route (create AND edit) emits asset_network.
  *
- * Self-test on tamper: comment out a picker mount → smoke MUST
- * fail before tarball.
+ * Self-test on tamper: comment out the /post picker mount → fail; OR
+ * mount a picker on /post/edit → fail (read-only invariant).
  */
 
 import { readFileSync, existsSync } from 'node:fs';
@@ -43,33 +48,29 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..', '..', '..');
 
-// The multi-network assets and their picker component names.
-// Keep this list in sync with $lib/assets/networks.ts exports.
+// The multi-network assets, their picker component, $state var, and the
+// hydration typeguard. Keep in sync with $lib/assets/networks.ts.
 const MULTI_NETWORK_ASSETS: ReadonlyArray<{
 	readonly asset: string;
 	readonly picker: string;
 	readonly stateVar: string;
+	readonly guard: string;
 }> = [
-	{ asset: 'USDT', picker: 'UsdtNetworkPicker', stateVar: 'usdtNetwork' },
-	{ asset: 'USDC', picker: 'UsdcNetworkPicker', stateVar: 'usdcNetwork' },
-	{ asset: 'DAI', picker: 'DaiNetworkPicker', stateVar: 'daiNetwork' }
+	{ asset: 'USDT', picker: 'UsdtNetworkPicker', stateVar: 'usdtNetwork', guard: 'isUsdtNetwork' },
+	{ asset: 'USDC', picker: 'UsdcNetworkPicker', stateVar: 'usdcNetwork', guard: 'isUsdcNetwork' },
+	{ asset: 'DAI', picker: 'DaiNetworkPicker', stateVar: 'daiNetwork', guard: 'isDaiNetwork' }
 ];
 
-// Routes that build an OrderFormInput and broadcast it. Both
-// /post (create) and /post/edit (replace) must mount pickers
-// and emit asset_network.
-const ORDER_ROUTES: ReadonlyArray<{
-	readonly path: string;
-	readonly label: string;
-}> = [
-	{
-		path: 'apps/web/src/routes/[lang]/post/+page.svelte',
-		label: '/post (order create)'
-	},
-	{
-		path: 'apps/web/src/routes/[lang]/post/edit/[permlink]/+page.svelte',
-		label: '/post/edit (order replace)'
-	}
+// CREATE routes let the user pick the network → picker required.
+const CREATE_ROUTES: ReadonlyArray<{ readonly path: string; readonly label: string }> = [
+	{ path: 'apps/web/src/routes/[lang]/post/+page.svelte', label: '/post (order create)' }
+];
+
+// EDIT routes replace an existing order → network is immutable, shown
+// read-only. Picker must NOT be mounted; asset_network must still be
+// hydrated + emitted.
+const EDIT_ROUTES: ReadonlyArray<{ readonly path: string; readonly label: string }> = [
+	{ path: 'apps/web/src/routes/[lang]/post/edit/[permlink]/+page.svelte', label: '/post/edit (order replace)' }
 ];
 
 interface Scenario {
@@ -79,7 +80,8 @@ interface Scenario {
 
 const scenarios: Scenario[] = [];
 
-for (const route of ORDER_ROUTES) {
+// ─── CREATE routes: full picker wiring ─────────────────────────────
+for (const route of CREATE_ROUTES) {
 	const absPath = resolve(REPO_ROOT, route.path);
 
 	scenarios.push({
@@ -93,9 +95,10 @@ for (const route of ORDER_ROUTES) {
 			run: () => {
 				if (!existsSync(absPath)) return null;
 				const src = readFileSync(absPath, 'utf8');
-				// Match either explicit default import or named
-				// import path.
-				if (!src.includes(`import ${picker} from`) && !src.includes(`from '$components/${picker}.svelte'`)) {
+				if (
+					!src.includes(`import ${picker} from`) &&
+					!src.includes(`from '$components/${picker}.svelte'`)
+				) {
 					return `missing import for ${picker}`;
 				}
 				return null;
@@ -103,23 +106,12 @@ for (const route of ORDER_ROUTES) {
 		});
 
 		scenarios.push({
-			name: `${route.label}: mounts ${picker} when asset === '${asset}'`,
+			name: `${route.label}: mounts ${picker} + declares ${stateVar}`,
 			run: () => {
 				if (!existsSync(absPath)) return null;
 				const src = readFileSync(absPath, 'utf8');
-				// The picker must be mounted inside a guard that
-				// keys on the asset value. We accept either the
-				// {#if asset === 'X'} pattern or any structural
-				// equivalent that pairs the guard with the mount
-				// in the same component. Be tolerant of whitespace.
-				const mountPattern = `<${picker}`;
-				if (!src.includes(mountPattern)) {
-					return `${picker} is imported but never mounted`;
-				}
-				// And the asset's $state var must be declared.
-				if (!src.includes(`let ${stateVar} = $state`)) {
-					return `state var '${stateVar}' not declared`;
-				}
+				if (!src.includes(`<${picker}`)) return `${picker} is imported but never mounted`;
+				if (!src.includes(`let ${stateVar} = $state`)) return `state var '${stateVar}' not declared`;
 				return null;
 			}
 		});
@@ -129,10 +121,6 @@ for (const route of ORDER_ROUTES) {
 			run: () => {
 				if (!existsSync(absPath)) return null;
 				const src = readFileSync(absPath, 'utf8');
-				// Look for the canSubmit/canSave gate pattern.
-				// Accept either explicit (asset !== 'X' || stateVar !== null)
-				// or any branch that requires the picker to be
-				// non-null before allowing broadcast.
 				const gatePattern = `(asset !== '${asset}' || ${stateVar} !== null)`;
 				if (!src.includes(gatePattern)) {
 					return `submit gate does not require ${stateVar} for ${asset} orders (expected literal: ${gatePattern})`;
@@ -146,8 +134,6 @@ for (const route of ORDER_ROUTES) {
 			run: () => {
 				if (!existsSync(absPath)) return null;
 				const src = readFileSync(absPath, 'utf8');
-				// The OrderFormInput must carry an `assetNetwork`
-				// branch keyed on this asset+state pair.
 				const emitPattern = `asset === '${asset}' && ${stateVar} !== null`;
 				if (!src.includes(emitPattern)) {
 					return `OrderFormInput does not emit ${stateVar} for ${asset} (expected substring: ${emitPattern})`;
@@ -158,17 +144,88 @@ for (const route of ORDER_ROUTES) {
 	}
 }
 
-// Cross-route consistency: any picker that's imported in one
-// order-creation route should be imported in ALL order-creation
-// routes (catches an asymmetric future addition like cp34's
-// /post fix without a parallel /post/edit fix).
-for (const { picker } of MULTI_NETWORK_ASSETS) {
+// ─── EDIT routes: read-only network (emit, don't mount) ────────────
+for (const route of EDIT_ROUTES) {
+	const absPath = resolve(REPO_ROOT, route.path);
+
 	scenarios.push({
-		name: `cross-route consistency: every order route mounts ${picker} OR none do`,
+		name: `${route.label}: file exists at expected path`,
+		run: () => (existsSync(absPath) ? null : `not found: ${route.path}`)
+	});
+
+	for (const { asset, picker, stateVar, guard } of MULTI_NETWORK_ASSETS) {
+		scenarios.push({
+			name: `${route.label}: declares ${stateVar} (needed to hydrate + emit)`,
+			run: () => {
+				if (!existsSync(absPath)) return null;
+				const src = readFileSync(absPath, 'utf8');
+				if (!src.includes(`let ${stateVar} = $state`)) return `state var '${stateVar}' not declared`;
+				return null;
+			}
+		});
+
+		scenarios.push({
+			name: `${route.label}: hydrates ${stateVar} read-only from the loaded order (${guard})`,
+			run: () => {
+				if (!existsSync(absPath)) return null;
+				const src = readFileSync(absPath, 'utf8');
+				if (!src.includes(`${guard}(netRaw)`)) {
+					return `does not hydrate ${stateVar} from order.asset_network via ${guard}(netRaw)`;
+				}
+				return null;
+			}
+		});
+
+		scenarios.push({
+			name: `${route.label}: still gates save on ${stateVar} for ${asset} orders`,
+			run: () => {
+				if (!existsSync(absPath)) return null;
+				const src = readFileSync(absPath, 'utf8');
+				const gatePattern = `(asset !== '${asset}' || ${stateVar} !== null)`;
+				if (!src.includes(gatePattern)) {
+					return `save gate does not require ${stateVar} for ${asset} orders (expected literal: ${gatePattern})`;
+				}
+				return null;
+			}
+		});
+
+		scenarios.push({
+			name: `${route.label}: emits ${stateVar} via assetNetwork field on broadcast (immutability match)`,
+			run: () => {
+				if (!existsSync(absPath)) return null;
+				const src = readFileSync(absPath, 'utf8');
+				const emitPattern = `asset === '${asset}' && ${stateVar} !== null`;
+				if (!src.includes(emitPattern)) {
+					return `OrderFormInput does not emit ${stateVar} for ${asset} (expected substring: ${emitPattern})`;
+				}
+				return null;
+			}
+		});
+
+		scenarios.push({
+			name: `${route.label}: does NOT mount ${picker} (network is immutable/read-only in a replace)`,
+			run: () => {
+				if (!existsSync(absPath)) return null;
+				const src = readFileSync(absPath, 'utf8');
+				if (src.includes(`<${picker}`)) {
+					return `${picker} is mounted on the edit route — the network is immutable in a replace, so it must be read-only (mounting a picker re-introduces the silent-rejection bug)`;
+				}
+				return null;
+			}
+		});
+	}
+}
+
+// ─── Cross-route consistency ───────────────────────────────────────
+for (const { picker } of MULTI_NETWORK_ASSETS) {
+	// Every CREATE route mounts the picker, or none do (catches an
+	// asymmetric future addition of a second create route).
+	scenarios.push({
+		name: `cross-route consistency: every CREATE route mounts ${picker} OR none do`,
 		run: () => {
 			const mounted: string[] = [];
 			const notMounted: string[] = [];
-			for (const route of ORDER_ROUTES) {
+			for (const route of CREATE_ROUTES) {
 				const absPath = resolve(REPO_ROOT, route.path);
 				if (!existsSync(absPath)) continue;
 				const src = readFileSync(absPath, 'utf8');
@@ -177,6 +234,24 @@ for (const { picker } of MULTI_NETWORK_ASSETS) {
 			}
 			if (mounted.length > 0 && notMounted.length > 0) {
 				return `asymmetric mount: ${picker} present in [${mounted.join(', ')}] but missing in [${notMounted.join(', ')}]`;
+			}
+			return null;
+		}
+	});
+
+	// No EDIT route mounts the picker (read-only network invariant).
+	scenarios.push({
+		name: `cross-route consistency: no EDIT route mounts ${picker}`,
+		run: () => {
+			const mounted: string[] = [];
+			for (const route of EDIT_ROUTES) {
+				const absPath = resolve(REPO_ROOT, route.path);
+				if (!existsSync(absPath)) continue;
+				const src = readFileSync(absPath, 'utf8');
+				if (src.includes(`<${picker}`)) mounted.push(route.label);
+			}
+			if (mounted.length > 0) {
+				return `${picker} mounted on edit route(s) [${mounted.join(', ')}] — must be read-only`;
 			}
 			return null;
 		}

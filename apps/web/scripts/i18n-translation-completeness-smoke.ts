@@ -1031,7 +1031,9 @@ const ALLOW_LIST: AllowEntry[] = [
 	// heuristic; ru/fa/zh translate it: Блокчейн / بلاکچین / 区块链 / 區塊鏈.)
 	{ key: 'glossary.blockchain.title', locale: 'de', reason: '(b) "Blockchain" is a universal tech loanword (Duden-listed); body uses it verbatim' },
 	{ key: 'glossary.blockchain.title', locale: 'es', reason: '(b) "Blockchain" is a universal tech loanword; body uses it verbatim' },
-	{ key: 'glossary.blockchain.title', locale: 'fr', reason: '(b) "Blockchain" is a universal tech loanword; body uses it verbatim' }
+	{ key: 'glossary.blockchain.title', locale: 'fr', reason: '(b) "Blockchain" is a universal tech loanword; body uses it verbatim' },
+	{ key: 'orderbook.card.message_word', locale: 'fr', reason: '(a) "Message" is the same word in French; translating it would be wrong (cp404)' },
+	{ key: 'chat.export.parties_heading', locale: 'fr', reason: '(a) "Parties" is the same word in French — the parties to an agreement (cp404)' }
 ];
 
 const allowSet = new Set(ALLOW_LIST.map((e) => `${e.key}::${e.locale}`));

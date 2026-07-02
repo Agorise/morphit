@@ -27,6 +27,7 @@
 	lifted (the next page load will then return blocked: false).
 -->
 <script lang="ts">
+	import { formatDayMonth } from '$lib/i18n/formatters';
 	import { onMount } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import { browser } from '$app/environment';
@@ -102,16 +103,8 @@
 	 *  more readable in the banner.  We use the user's locale via
 	 *  Intl.DateTimeFormat — no extra dependency. */
 	function formatSince(iso: string): string {
-		try {
-			const d = new Date(iso);
-			return new Intl.DateTimeFormat(undefined, {
-				year: 'numeric',
-				month: 'short',
-				day: 'numeric'
-			}).format(d);
-		} catch {
-			return iso;
-		}
+		// Sitewide canonical date format ("30 June, 2026").
+		return formatDayMonth(iso);
 	}
 
 	const isBlocked = $derived(status !== null && status.blocked === true);

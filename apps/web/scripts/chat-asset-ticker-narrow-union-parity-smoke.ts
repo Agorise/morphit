@@ -41,6 +41,11 @@ const CANONICAL = new Set([
 // present in the line, the union is allow-listed.
 const NARROW_BY_DESIGN: Array<{ pattern: string; reason: string }> = [
 	{
+		pattern: "'usdt' | 'usdc' | 'dai'",
+		reason:
+			'OrderCard networkChip tone (cp404) — only the 3 multi-network stablecoins get a network-chip tone; this is a chip-tone enum, NOT a ChatAssetTicker'
+	},
+	{
 		pattern: "'blurt' | 'waived_first_buy' | 'btc' | 'xmr'",
 		reason: 'fee_method — Memory #23 invariant (listing fees BLURT/BTC/XMR only)'
 	},

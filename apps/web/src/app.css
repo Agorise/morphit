@@ -3,49 +3,49 @@
 @tailwind utilities;
 
 /* -----------------------------------------------------------------------------
- * Typography — Nunito (SIL OFL). Subsetted locally; no external font services.
+ * Typography — Comfortaa (SIL OFL). Subsetted locally; no external font services.
  * We ship Latin + Latin-Extended by default; CJK loaded on demand when the
  * user switches to Mandarin or Cantonese.
  * -------------------------------------------------------------------------- */
 @font-face {
-	font-family: 'Nunito';
+	font-family: 'Comfortaa';
 	font-style: normal;
 	font-weight: 400;
 	font-display: swap;
-	src: url('/fonts/nunito-latin-400.woff2') format('woff2');
+	src: url('/fonts/comfortaa-latin-400.woff2') format('woff2');
 	unicode-range:
 		U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
 		U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
 @font-face {
-	font-family: 'Nunito';
+	font-family: 'Comfortaa';
 	font-style: normal;
 	font-weight: 600;
 	font-display: swap;
-	src: url('/fonts/nunito-latin-600.woff2') format('woff2');
+	src: url('/fonts/comfortaa-latin-600.woff2') format('woff2');
 	unicode-range:
 		U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
 		U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
 @font-face {
-	font-family: 'Nunito';
+	font-family: 'Comfortaa';
 	font-style: normal;
 	font-weight: 700;
 	font-display: swap;
-	src: url('/fonts/nunito-latin-700.woff2') format('woff2');
+	src: url('/fonts/comfortaa-latin-700.woff2') format('woff2');
 	unicode-range:
 		U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
 		U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
 @font-face {
-	font-family: 'Nunito';
+	font-family: 'Comfortaa';
 	font-style: normal;
 	font-weight: 800;
 	font-display: swap;
-	src: url('/fonts/nunito-latin-800.woff2') format('woff2');
+	src: url('/fonts/comfortaa-latin-800.woff2') format('woff2');
 	unicode-range:
 		U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
 		U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
@@ -163,12 +163,12 @@ body {
  * -------------------------------------------------------------------------- */
 html {
 	font-family:
-		'Nunito',
+		'Comfortaa',
 		system-ui,
 		-apple-system,
 		'Segoe UI',
 		sans-serif;
-	font-feature-settings: 'kern', 'liga', 'ss01';
+	font-feature-settings: 'kern', 'liga';
 	text-size-adjust: 100%;
 }
 

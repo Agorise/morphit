@@ -70,6 +70,7 @@
 	 *     the words is the recommended path).
 	 */
 
+	import { formatDayMonth } from '$lib/i18n/formatters';
 	import { _ } from 'svelte-i18n';
 	import { browser } from '$app/environment';
 
@@ -85,13 +86,7 @@
 
 	let { words, accountName = '' }: Props = $props();
 
-	const generatedAt = $derived(
-		new Date().toLocaleDateString(undefined, {
-			year: 'numeric',
-			month: 'long',
-			day: 'numeric'
-		})
-	);
+	const generatedAt = $derived(formatDayMonth(new Date()));
 
 	function triggerPrint(): void {
 		if (!browser) return;

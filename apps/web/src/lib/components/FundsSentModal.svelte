@@ -51,6 +51,16 @@
 		 *  method); free-choice when launched from the composer
 		 *  without context. */
 		initialMethod?: ChatAssetTicker;
+		/** cp402 [7a] — when set, the asset is LOCKED to this ticker
+		 *  (the modal was opened from the composer "Pay now" about an
+		 *  order, so the coin is fixed to the order's asset). The method
+		 *  picker is replaced by a read-only "Paying with X" line so the
+		 *  user (grandma) can't accidentally send the wrong coin. */
+		lockedMethod?: ChatAssetTicker;
+		/** cp402 [7a] — when true, the amount is REQUIRED (not optional):
+		 *  the send stays disabled until a valid positive number is
+		 *  entered. Set for the composer "Pay now" flow. */
+		amountRequired?: boolean;
 		/** Part 121 — initial USDT network.  When the modal is
 		 *  triggered from a received USDT address pill, the
 		 *  network is already pinned and the picker is read-only
@@ -90,6 +100,8 @@
 
 	let {
 		initialMethod = 'btc',
+		lockedMethod = undefined,
+		amountRequired = false,
 		initialUsdtNetwork = null,
 		initialUsdcNetwork = null,
 		initialDaiNetwork = null,
@@ -99,12 +111,18 @@
 		onCancel
 	}: Props = $props();
 
+	/** cp402 [7a] — is the asset locked to the order's asset? Computed
+	 *  once from the prop (the parent never changes it mid-session). */
+	// svelte-ignore state_referenced_locally
+	const methodLocked = lockedMethod !== undefined && lockedMethod !== null;
+
 	// Modal state initialized from props on first paint.  The
 	// modal mounts when triggered, captures current prop values,
 	// and dismisses after submit/cancel — there is no flow where
 	// the parent updates these props while the modal is open.
 	// svelte-ignore state_referenced_locally
-	let method = $state<ChatAssetTicker>(initialMethod);
+	// svelte-ignore state_referenced_locally
+	let method = $state<ChatAssetTicker>(lockedMethod ?? initialMethod);
 	// svelte-ignore state_referenced_locally
 	let usdtNetwork = $state<UsdtNetwork | null>(initialUsdtNetwork);
 	// svelte-ignore state_referenced_locally
@@ -149,9 +167,17 @@
 						? daiNetwork !== null && validateDaiTxid(daiNetwork, trimmedTxid)
 						: isValidTxid(method, trimmedTxid))
 	);
-	const amountLooksValid = $derived(
-		trimmedAmount.length === 0 || /^\d{1,12}(?:\.\d{1,12})?$/.test(trimmedAmount)
-	);
+	const amountLooksValid = $derived.by(() => {
+		const wellFormed = /^\d{1,12}(?:\.\d{1,12})?$/.test(trimmedAmount);
+		if (amountRequired) {
+			// cp402 [7a] — required: a valid, strictly-positive number.
+			// (The regex alone would accept "0" / "0.00"; a payment of
+			// zero is never valid, so guard > 0 explicitly.)
+			return wellFormed && Number(trimmedAmount) > 0;
+		}
+		// Optional: blank is fine, otherwise must be well-formed.
+		return trimmedAmount.length === 0 || wellFormed;
+	});
 	const noteLooksValid = $derived(trimmedNote.length <= PAYLOAD_CONSTANTS.MAX_NOTE_LEN);
 
 	/** USDT-specific gate: network must be picked. */
@@ -193,6 +219,10 @@
 	});
 
 	function selectMethod(m: ChatAssetTicker): void {
+		// cp402 [7a] — never change the asset when it's locked to the
+		// order's asset (the picker is hidden in that mode, but guard the
+		// handler too so no path can flip the coin out from under a send).
+		if (methodLocked) return;
 		method = m;
 		// Part 121 / cp30 / cp31: clear the picked network when
 		// leaving a multi-network method.  On re-pick, the user
@@ -279,7 +309,19 @@
 			{$_('chat.funds_sent.modal_subtitle')}
 		</p>
 
-		<div class="mt-5 flex gap-2" role="tablist">
+		{#if methodLocked}
+			<!-- cp402 [7a] — asset locked to the order's asset. The picker
+			     is replaced by this read-only line so the wrong coin can
+			     never be selected for a payment. -->
+			<div
+				class="mt-5 rounded-lg border-2 border-morphit-emerald bg-morphit-emerald/10 px-3 py-2 text-center text-sm font-semibold text-morphit-emerald"
+			>
+				{$_('chat.funds_sent.locked_method_label', {
+					values: { asset: method.toUpperCase() }
+				})}
+			</div>
+		{:else}
+			<div class="mt-5 flex gap-2" role="tablist">
 			<button
 				type="button"
 				role="tab"
@@ -472,7 +514,8 @@
 			>
 				{$_('chat.address.method_xrp')}
 			</button>
-		</div>
+			</div>
+		{/if}
 
 		<!-- Part 121 — USDT network picker.  When the parent
 		     pinned a network (came from an address pill we
@@ -595,7 +638,11 @@
 		</label>
 
 		<label class="mt-4 block">
-			<span class="text-sm font-semibold">{$_('chat.funds_sent.amount_label')}</span>
+			<span class="text-sm font-semibold"
+				>{amountRequired
+					? $_('chat.funds_sent.amount_label_required')
+					: $_('chat.funds_sent.amount_label')}</span
+			>
 			<input
 				type="text"
 				bind:value={amount}
@@ -607,6 +654,12 @@
 			{#if !amountLooksValid && trimmedAmount.length > 0}
 				<p class="mt-1 text-xs text-red-600 dark:text-red-400">
 					{$_('chat.address.amount_invalid')}
+				</p>
+			{:else if amountRequired && trimmedAmount.length === 0}
+				<!-- cp402 [7a] — neutral (non-error) nudge so grandma knows
+				     the field is required before she's typed anything. -->
+				<p class="mt-1 text-xs text-ink-500 dark:text-ink-400">
+					{$_('chat.funds_sent.amount_required_hint')}
 				</p>
 			{/if}
 		</label>

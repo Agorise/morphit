@@ -77,6 +77,7 @@ import {
 	reputationDecayWeight,
 	REPUTATION_DECAY_HALF_LIFE_DAYS
 } from '$indexer/reputation/decay';
+import { computeReputationScoreDetailed } from '$indexer/reputation/score';
 
 const querySchema = z.object({
 	as_of: z.string().datetime().optional()
@@ -114,6 +115,12 @@ interface ReceiptResponse {
 		count_excluded: number;
 		weight_sum: number; // sum of decay weights of included rows
 		weighted_rating: number | null; // null when count_included = 0
+		// Composite reputation score + factor breakdown (cp404).
+		reputation_score: number | null;
+		reputation_base: number | null;
+		reputation_bonus: number;
+		reputation_experience_frac: number;
+		reputation_recency_frac: number;
 	};
 	rows: ReceiptRow[];
 }
@@ -217,6 +224,7 @@ export function reputationReceiptRoute(db: Database): Hono {
 		let countIncluded = 0;
 		let weightSum = 0;
 		let weightedSum = 0;
+		let lastIncludedMs: number | null = null;
 		const receiptRows: ReceiptRow[] = [];
 
 		for (const row of rowsRes.rows) {
@@ -242,6 +250,8 @@ export function reputationReceiptRoute(db: Database): Hono {
 				countIncluded++;
 				weightSum += weight;
 				weightedSum += row.rating * weight;
+				const ms = row.created_at.getTime();
+				if (lastIncludedMs === null || ms > lastIncludedMs) lastIncludedMs = ms;
 			}
 
 			receiptRows.push({
@@ -260,6 +270,15 @@ export function reputationReceiptRoute(db: Database): Hono {
 		const weightedRating =
 			weightSum > 0 ? Math.round((weightedSum / weightSum) * 100) / 100 : null;
 
+		// Composite reputation score + its factor breakdown, so a reader can
+		// re-derive the "⭐ 4.06" shown on order cards from these same rows.
+		const scoreBreakdown = computeReputationScoreDetailed({
+			count: countIncluded,
+			weightedAvg: weightedRating,
+			lastFeedbackAtMs: lastIncludedMs,
+			asOfMs
+		});
+
 		const response: ReceiptResponse = {
 			account,
 			as_of: asOf.toISOString(),
@@ -267,16 +286,27 @@ export function reputationReceiptRoute(db: Database): Hono {
 			formula:
 				'weighted_rating = SUM(rating × decay_weight) / SUM(decay_weight) ' +
 				'where decay_weight = 0.5 ^ (age_days / decay_half_life_days). ' +
+				'reputation_score = base + bonus, where base = (n·weighted_rating + K·μ)/(n + K) ' +
+				'(Bayesian shrinkage toward neutral prior μ=3.0, K=4), and ' +
+				'bonus = 0.5 · experience_frac · recency_frac · max(0,(base−μ)/(5−μ)) ' +
+				'(a track-record bonus that only rewards above-neutral ratings; ' +
+				'experience_frac = ln(1+n)/ln(1+40) capped at 1; ' +
+				'recency_frac = 0.5 ^ (days_since_last_feedback / 180)). ' +
 				'Rows excluded when order_permlink is null OR the (reviewer, subject) pair ' +
 				'is in suspicious_reciprocity OR related_accounts OR one_way_pile_on.attacking_reviewers ' +
 				'OR review_concentration with dominant_subject = subject. ' +
-				'See apps/indexer/src/indexer/reputation/decay.ts and ADR-0038.',
+				'See apps/indexer/src/indexer/reputation/{decay,score}.ts and ADR-0038.',
 			summary: {
 				count_total: rowsRes.rows.length,
 				count_included: countIncluded,
 				count_excluded: rowsRes.rows.length - countIncluded,
 				weight_sum: Math.round(weightSum * 100000) / 100000,
-				weighted_rating: weightedRating
+				weighted_rating: weightedRating,
+				reputation_score: scoreBreakdown.score,
+				reputation_base: scoreBreakdown.base,
+				reputation_bonus: scoreBreakdown.bonus,
+				reputation_experience_frac: scoreBreakdown.experienceFrac,
+				reputation_recency_frac: scoreBreakdown.recencyFrac
 			},
 			rows: receiptRows
 		};

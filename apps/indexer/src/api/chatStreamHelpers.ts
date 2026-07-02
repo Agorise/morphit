@@ -20,6 +20,11 @@ export interface ChatStreamRow {
 	ciphertext: string;
 	header: unknown;
 	created_at: Date;
+	/** Blurt transaction id of the custom_json op that anchored this
+	 *  message on-chain. The immutable, signed, publicly-verifiable
+	 *  proof that `sender` authored this message at `created_at` — used
+	 *  by the chat PDF export as courtroom-grade evidence. */
+	source_trx_id: string;
 }
 
 /** Subscriber's filter — the canonical pair this connection is
@@ -37,6 +42,7 @@ export function rowToWire(r: ChatStreamRow): {
 	ciphertext: string;
 	header: unknown;
 	created_at: string;
+	source_trx_id: string;
 } {
 	return {
 		id: r.id,
@@ -44,7 +50,8 @@ export function rowToWire(r: ChatStreamRow): {
 		recipient: r.recipient,
 		ciphertext: r.ciphertext,
 		header: r.header,
-		created_at: r.created_at.toISOString()
+		created_at: r.created_at.toISOString(),
+		source_trx_id: r.source_trx_id
 	};
 }
 

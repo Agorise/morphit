@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { formatDayMonth } from '$lib/i18n/formatters';
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	import { orderTitleParts } from '$lib/utils/orderTitle';
@@ -268,14 +269,8 @@
 	}
 
 	function formatAbsoluteDate(iso: string): string {
-		// Long-form date for "created on" + "expires on" below the
-		// relative-time chip. Locale-aware via Intl; the browser
-		// picks its own formatting.
-		return new Date(iso).toLocaleDateString(undefined, {
-			year: 'numeric',
-			month: 'short',
-			day: 'numeric'
-		});
+		// Sitewide canonical date format ("30 June, 2026").
+		return formatDayMonth(iso);
 	}
 
 	function starString(n: 1 | 2 | 3 | 4 | 5): string {
@@ -440,7 +435,7 @@
 						}) as string}
 					>
 						<MessageIcon />
-						{$_('chat.message_button_label')}
+						{$_('chat.message_button_label_named', { values: { account: order.account } })}
 					</a>
 				{/if}
 			</div>

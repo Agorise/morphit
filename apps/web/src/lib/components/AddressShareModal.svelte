@@ -28,6 +28,7 @@
 	 * header for why we don't do checksum verification here.
 	 */
 
+	import { formatDayMonth } from '$lib/i18n/formatters';
 	import { _ } from 'svelte-i18n';
 	import {
 		encodeAddressPayload,
@@ -760,7 +761,7 @@
 					<p class="mt-1 text-red-800 dark:text-red-200">
 						{$_('chat.address.reuse_warning_body', {
 							values: {
-								date: new Date(priorShare.sharedAt).toLocaleDateString()
+								date: formatDayMonth(priorShare.sharedAt)
 							}
 						})}
 					</p>

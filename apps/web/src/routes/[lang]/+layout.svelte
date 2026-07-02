@@ -63,6 +63,21 @@
 	const currentLang = $derived($currentLocale);
 	const lp = $derived((path: string) => localePath(path, currentLang));
 
+	/** cp402 [9] — the chat CONVERSATION route (/[lang]/chat/[peer]) is an
+	 *  immersive, full-viewport view: ConversationView fills the space
+	 *  below the header, its composer stays pinned and visible, and the
+	 *  marketing footer is suppressed. Without this the chat's own
+	 *  viewport-height container plus the sticky header above it plus the
+	 *  footer below it overflow the screen, pushing the Send button below
+	 *  the fold. Matched by pathname SHAPE — exactly three segments with
+	 *  `chat` in the middle (`/en/chat/alice` YES; the `/en/chat` inbox or
+	 *  any other route NO), so EVERY non-chat route keeps the normal
+	 *  min-h-[100dvh] + footer layout byte-for-byte unchanged. */
+	const isImmersiveChat = $derived.by(() => {
+		const parts = $page.url.pathname.split('/').filter(Boolean);
+		return parts.length === 3 && parts[1] === 'chat';
+	});
+
 	// Tier-N a11y deferred from Part 100 — route-transition focus
 	// management.  SvelteKit's default doesn't move focus on
 	// client-side navigation, which is a documented SPA a11y
@@ -225,7 +240,7 @@
 	}
 </script>
 
-<div class="flex min-h-[100dvh] flex-col">
+<div class="flex flex-col {isImmersiveChat ? 'h-[100svh]' : 'min-h-[100dvh]'}">
 	<!-- Skip link for keyboard users -->
 	<a
 		href="#main"
@@ -277,13 +292,14 @@
 			</nav>
 
 			<div class="flex items-center gap-2">
-				<LanguageSwitcher />
 				<!--
 					AvatarMenu renders either:
 					- Signed in: avatar identicon with unread-count badge
 					  overlay + dropdown containing the notifications
 					  fly-out, My orders, Settings, and Sign out.
 					- Signed out: the "Sign in / Register" CTA button.
+					(The language switcher moved to the footer's bottom
+					 line, sharing the copyright row.)
 				-->
 				<AvatarMenu />
 			</div>
@@ -339,11 +355,20 @@
 	     localStorage anchors. -->
 	<SeedBackupNudge />
 
-	<main bind:this={mainEl} id="main" tabindex="-1" class="flex-1 focus:outline-none">
+	<main
+		bind:this={mainEl}
+		id="main"
+		tabindex="-1"
+		class="flex-1 focus:outline-none {isImmersiveChat ? 'flex min-h-0 flex-col' : ''}"
+	>
 		{@render children()}
 	</main>
 
-	<footer class="mt-16 border-t border-ink-100 bg-ink-50 py-10 dark:border-ink-800 dark:bg-ink-950">
+	<!-- cp402 [9] — the footer is suppressed on the immersive chat route:
+	     rendered below a viewport-tall conversation it would force the
+	     page to scroll past the composer, hiding the Send button. -->
+	{#if !isImmersiveChat}
+		<footer class="mt-16 border-t border-ink-100 bg-ink-50 py-10 dark:border-ink-800 dark:bg-ink-950">
 		<div class="mx-auto flex max-w-7xl flex-col items-center gap-6 px-4 text-center md:px-6">
 			<!-- Footer brand: full wide wordmark only. Small mark + "Morphit" text removed.
 			     cp304 — IDENTICAL to the top-left header wordmark: same imported wordmark
@@ -640,15 +665,22 @@
 				>
 			</nav>
 
-			<p class="text-xs text-ink-500">
-				<a
-					href="{lp('/faq')}?q=why_agpl&lang={currentLang}"
-					class="underline decoration-dotted underline-offset-2 transition-colors hover:text-morphit-emerald"
-					title={$_('footer.agpl_title')}>AGPL-3.0</a
-				> · No cookies · No analytics · No logs
-			</p>
+			<div class="flex w-full flex-wrap items-center justify-between gap-3">
+				<p class="text-xs text-ink-500">
+					<a
+						href="{lp('/faq')}?q=why_agpl&lang={currentLang}"
+						class="underline decoration-dotted underline-offset-2 transition-colors hover:text-morphit-emerald"
+						title={$_('footer.agpl_title')}>AGPL-3.0</a
+					> · No cookies · No analytics · No logs
+				</p>
+				<!-- Language switcher lives here (cp401): far bottom-right,
+				     sharing the copyright line. dropUp so its menu opens
+				     upward instead of below the page fold. -->
+				<LanguageSwitcher dropUp />
+			</div>
 		</div>
 	</footer>
+	{/if}
 
 	<UpdateBanner />
 	<StaleBuildBanner />

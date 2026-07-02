@@ -259,22 +259,28 @@
 		</div>
 	{/if}
 
-	<ProtectedTextarea
-		bind:value={text}
-		name="chat-message"
-		onDetect={handleKeyDetect}
-		onkeydown={onKeydown}
-		rows={2}
-		maxlength={1024}
-		showCounter
-		counterMode="codepoint"
-		counterLimit={MAX_CODEPOINTS}
-		placeholder={$_('chat.composer.placeholder', { values: { peer } }) as string}
-		disabled={sending || isLocked}
-		ariaLabel={$_('chat.composer.input_aria') as string}
-	/>
+	<!-- cp402 [9] — textarea + Send on ONE row (Send to the right,
+	     bottom-aligned). Compact composer keeps the Send button visible
+	     on mobile without the textarea+button stack pushing it below the
+	     fold. The account-number reminder + locked hint stay full-width
+	     above this row. -->
+	<div class="flex items-end gap-2">
+		<ProtectedTextarea
+			class="flex-1"
+			bind:value={text}
+			name="chat-message"
+			onDetect={handleKeyDetect}
+			onkeydown={onKeydown}
+			rows={2}
+			maxlength={1024}
+			showCounter
+			counterMode="codepoint"
+			counterLimit={MAX_CODEPOINTS}
+			placeholder={$_('chat.composer.placeholder', { values: { peer } }) as string}
+			disabled={sending || isLocked}
+			ariaLabel={$_('chat.composer.input_aria') as string}
+		/>
 
-	<div class="mt-2 flex items-center justify-end gap-2">
 		<BusyButton
 			variant="primary"
 			busy={sending}
