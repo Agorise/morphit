@@ -161,3 +161,4 @@ if (failures > 0) {
 	console.log(`terms-markdown-smoke: ${failures} FAILED`);
 	process.exit(1);
 }
+console.log(`✓ all ${scenarios} terms-markdown scenarios passed`);

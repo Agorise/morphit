@@ -162,6 +162,7 @@ async function main(): Promise<void> {
 		console.log(`chat-self-copy-smoke: ${failures} FAILED`);
 		process.exit(1);
 	}
+	console.log(`✓ all ${scenarios} chat-self-copy scenarios passed`);
 }
 
 void main();
