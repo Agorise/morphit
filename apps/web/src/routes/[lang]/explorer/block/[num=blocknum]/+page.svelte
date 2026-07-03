@@ -206,7 +206,7 @@
 												? 'bg-morphit-emerald/15 text-morphit-emerald'
 												: 'bg-ink-200 text-ink-700 dark:bg-ink-800 dark:text-ink-200'}"
 										>
-											{$_(`explorer.op.label.${dec.labelKey}`)}
+											{$_(`explorer.op.label.${dec.labelKey}`, dec.values ? { values: dec.values } : undefined)}
 										</span>
 									</li>
 								{/each}

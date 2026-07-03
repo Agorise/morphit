@@ -99,6 +99,29 @@ const ALLOWLIST_HREF_EXPR: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 		new Set(['detailHref', 'messageHref', 'profileHref'])
 	],
 	[
+		'apps/web/src/lib/components/OrderPosterIdentity.svelte',
+		// cp406 — the identity row was extracted out of OrderCard into this
+		// shared component (used by OrderCard + the order-detail poster card).
+		// `profileHref` is the same STRING PROP as OrderCard's above: callers
+		// build it with localePath() — lp(`/@${account}`) — a SAFE_BUILDER that
+		// only prefixes single-slash internal paths, and account is a validated
+		// on-chain identifier. Same reviewer confirmation as OrderCard.
+		new Set(['profileHref'])
+	],
+	[
+		'apps/web/src/lib/components/TermsText.svelte',
+		// cp406 — TermsText renders a structured tree from parseTermsMarkdown().
+		// The only anchors it emits are `link` runs, and a `link` run's `href`
+		// (r.href) is set exclusively to `safeBlurtImageUrl(seg.value)` inside
+		// termsMarkdown.ts (a SAFE_BUILDER already in SAFE_BUILDER_NAMES: https +
+		// exact host img.blurt.blog + image extension + no userinfo/odd port, or
+		// the run isn't emitted as a link at all). The static tracer can't follow
+		// the safe URL through the parse-tree run type, but it's confirmed safe —
+		// there is NO {@html} and no other href source. (Locked by
+		// blurt-image-link-safety-smoke.)
+		new Set(['r.href'])
+	],
+	[
 		'apps/web/src/routes/[lang]/explorer/account/[name=account]/+page.svelte',
 		// `txUrl ? lp(txUrl) : '#'` and `blockUrl ? lp(blockUrl) : '#'` —
 		// txUrl/blockUrl are `{@const}`s from morphitExplorerTxUrl(op.trxId) /

@@ -156,11 +156,21 @@ expect(
 }
 
 // ── 5. Render wiring: TermsText is the single render path, no {@html}, privacy attrs present ──
+// cp406 — TermsText now renders a structured tree from parseTermsMarkdown()
+// (restricted markdown: headings/bold/italics/lists/hr). The safe href still
+// originates from safeBlurtImageUrl — now baked into the parse tree in
+// termsMarkdown.ts — and TermsText binds it via href={r.href}. Still NO
+// {@html}: every leaf goes through Svelte escaping.
 const termsText = readFileSync(join(WEB, 'src/lib/components/TermsText.svelte'), 'utf8');
+const termsMarkdown = readFileSync(join(WEB, 'src/lib/utils/termsMarkdown.ts'), 'utf8');
 expect(!/\{@html\s/.test(termsText), 'TermsText never uses the {@html} directive');
 expect(
-	termsText.includes('safeBlurtImageUrl(seg.value)'),
-	'TermsText binds href via the safe builder'
+	termsMarkdown.includes('safeBlurtImageUrl(seg.value)'),
+	'termsMarkdown builds link href via the safe builder'
+);
+expect(
+	termsText.includes('href={r.href}'),
+	'TermsText binds href from the safe parse tree'
 );
 expect(termsText.includes('target="_blank"'), 'TermsText opens links in a new tab');
 expect(
@@ -196,23 +206,24 @@ for (const rel of SITES) {
 
 // ── 6b. OrderCard list-preview terms are SAFE plain escaped text ──
 // The browse cards intentionally show a one-line truncated preview (full
-// terms + clickable safe links live on the order detail page). It renders
-// {order.terms} via Svelte's auto-escaping interpolation inside a
-// `.truncate` span — NEVER {@html}, and no clickable-link rendering — so
-// hostile markup/URLs in terms are neutralised (shown as inert escaped
-// text), not executed or turned into links. This preserves the link-safety
-// model without the invalid nested-<a> a TermsText link would create inside
-// the card's stretched detail-page link.
+// terms + clickable safe links live on the order detail page). cp406 — it now
+// renders {termsPreview}, i.e. stripMarkdown(order.terms), via Svelte's
+// auto-escaping interpolation inside a `.truncate` span — NEVER {@html}, and
+// no clickable-link rendering — so hostile markup/URLs in terms are
+// neutralised (shown as inert, markdown-stripped escaped text), not executed
+// or turned into links. This preserves the link-safety model without the
+// invalid nested-<a> a TermsText link would create inside the card's
+// stretched detail-page link.
 {
 	const orderCard = readFileSync(join(WEB, 'src/lib/components/OrderCard.svelte'), 'utf8');
 	expect(!/\{@html\s/.test(orderCard), 'OrderCard never uses the {@html} directive');
 	expect(
-		/\{order\.terms\}/.test(orderCard),
-		'OrderCard renders terms via auto-escaped {order.terms} interpolation'
+		/stripMarkdown\(order\.terms\)/.test(orderCard),
+		'OrderCard strips markdown from the terms preview'
 	);
 	expect(
-		/class="truncate"[^>]*>\{order\.terms\}|\{order\.terms\}/.test(orderCard),
-		'OrderCard terms preview is a single truncated line'
+		/class="truncate"[^>]*>\{termsPreview\}/.test(orderCard),
+		'OrderCard terms preview is a single truncated, escaped line'
 	);
 }
 

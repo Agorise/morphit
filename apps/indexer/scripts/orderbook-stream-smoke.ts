@@ -16,6 +16,13 @@ import {
 	rowToWire,
 	type OrderbookStreamRow
 } from '../src/api/orderbookStreamHelpers.ts';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { parseExpectedSchema } from '../src/db/schemaDrift.ts';
+
+const SMOKE_SRC = resolve(dirname(fileURLToPath(import.meta.url)), '../src');
+const readSmokeSrc = (p: string): string => readFileSync(resolve(SMOKE_SRC, p), 'utf8');
 
 let failures = 0;
 let scenarios = 0;
@@ -424,6 +431,41 @@ await asyncScenario('serializer: schedule after completion starts a fresh fetch'
 	resolveOne!();
 	await tickN(2);
 	assertEqual(state.has('alice/perma'), false, 'cleared');
+});
+
+// cp405 regression guard — the beta.44 outage: the orderbook query joined
+// `accounts a` on `a.account`, but the accounts table keys on `name` (every
+// OTHER table uses `account`, so the typo looked right). No smoke executes the
+// SQL, so it shipped and 500'd every orderbook load. This asserts every `a.<col>`
+// reference in BOTH orderbook query files is a real accounts column (inline
+// columns from the drift parser + ALTER-added ones, which that parser omits).
+scenario('orderbook query only references real accounts columns via alias a.', () => {
+	const schema = readSmokeSrc('db/schema.sql');
+	const accountsCols = new Set<string>(parseExpectedSchema(schema).get('accounts') ?? []);
+	const alterRe =
+		/ALTER\s+TABLE\s+accounts\s+ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?"?([a-z_][a-z0-9_]*)"?/gi;
+	let am: RegExpExecArray | null;
+	while ((am = alterRe.exec(schema)) !== null) accountsCols.add(am[1]!.toLowerCase());
+
+	if (accountsCols.size === 0) throw new Error('parsed 0 accounts columns — parser/schema drift');
+	if (!accountsCols.has('name')) throw new Error('expected accounts.name (PK) in parsed columns');
+
+	const bad: string[] = [];
+	for (const f of ['api/orderbook.ts', 'api/orderbookStream.ts']) {
+		const src = readSmokeSrc(f);
+		const refRe = /\ba\.([a-z_][a-z0-9_]*)/gi;
+		let rm: RegExpExecArray | null;
+		while ((rm = refRe.exec(src)) !== null) {
+			const col = rm[1]!.toLowerCase();
+			if (!accountsCols.has(col)) bad.push(`${f}: a.${col}`);
+		}
+	}
+	if (bad.length > 0) {
+		throw new Error(
+			`orderbook query references non-existent accounts column(s): ${bad.join('; ')}. ` +
+				`accounts keys on "name", not "account". Real columns: ${[...accountsCols].sort().join(', ')}`
+		);
+	}
 });
 
 console.log(`\n${'─'.repeat(54)}`);

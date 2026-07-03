@@ -527,7 +527,7 @@ export function orderbookRoute(db: Database, poller: Poller, operatorAccount: st
 			      )
 			    GROUP BY recipient, order_permlink
 			 ) e ON e.recipient = o.account AND e.order_permlink = o.permlink
-			 LEFT JOIN accounts a ON a.account = o.account
+			 LEFT JOIN accounts a ON a.name = o.account
 			 WHERE ${where.join(' AND ')}
 			 ORDER BY ${orderBy}
 			 LIMIT ${p(limit + 1)}`;

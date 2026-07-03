@@ -72,6 +72,9 @@ export const ROUTES: readonly RouteDescriptor[] = [
 	},
 	{ path: '/instances', key: 'instances', indexable: true, priority: 0.5, changefreq: 'weekly' },
 	{ path: '/compare', key: 'compare', indexable: true, priority: 0.5, changefreq: 'weekly' },
+	// /stats — cp406 human-readable companion to the /v1/stats aggregate
+	// endpoint (privacy-safe network activity). Daily-changing figures.
+	{ path: '/stats', key: 'stats', indexable: true, priority: 0.4, changefreq: 'daily' },
 	{
 		path: '/backup-keys',
 		key: 'backup_keys',

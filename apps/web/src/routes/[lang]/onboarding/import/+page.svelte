@@ -4,7 +4,6 @@
 	import { page } from '$app/stores';
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
-	import { ACCOUNT_NAME_RE } from '$lib/explorer/urlsCore';
 	import Head from '$components/Head.svelte';
 	import BusyButton from '$components/BusyButton.svelte';
 	import {
@@ -26,7 +25,6 @@
 	import { scorePassword, isPasswordAcceptable } from '$lib/auth/passwordStrength';
 	import { wifToRawPrivateKey, WifDecodeError, type WifError } from '$crypto/wif';
 	import { verifyPostingKey } from '$crypto/postingVerify';
-	import { masterPasswordPubKey } from '$crypto/masterPassword';
 	import { normalizeSeedPhrase, seedWordCount } from '$crypto/seedNormalize';
 	import { fetchAccountKeys } from '$blurt/accountKeys';
 	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
@@ -41,7 +39,6 @@
 	let file = $state<File | null>(null);
 	let password = $state('');
 	// Posting-only fields:
-	let postingAccount = $state('');
 	let postingWif = $state('');
 	let postingNewPassword = $state('');
 	let postingNewPasswordConfirm = $state('');
@@ -116,46 +113,6 @@
 		return m ? { before: m[1], link: m[2], after: m[3] } : null;
 	});
 
-	// Reject any character outside the Blurt account-name charset [a-z0-9.-].
-	// An @ (users often type @alice) is stripped on input (below); every other stray character
-	// just paints the field red until corrected. This is a CHARACTER check,
-	// not the full name-format regex — a half-typed valid name stays green.
-	const INVALID_ACCOUNT_CHAR = /[^a-z0-9.-]/;
-	const accountHasInvalidChar = $derived(INVALID_ACCOUNT_CHAR.test(postingAccount));
-	const accountHasText = $derived(postingAccount.trim().length > 0);
-
-	// On-blur account check, tri-state so the field can affirm OR warn:
-	//   'idle'     — empty, or being edited (no verdict shown)
-	//   'checking' — async on-chain lookup in flight
-	//   'valid'    — exists on Blurt → green ✓ + account_ok
-	//   'invalid'  — malformed name, OR a well-formed name that does NOT
-	//                exist on Blurt → red ⚠ + account_bad
-	// Re-runs on every blur, so editing a previously-green name and tabbing
-	// out re-verifies the new value (and flips to red if it's now bogus).
-	// A network error reverts to 'idle' (never a false red on a flaky link).
-	let accountStatus = $state<'idle' | 'checking' | 'valid' | 'invalid'>('idle');
-	async function checkAccountExists(): Promise<void> {
-		const v = postingAccount.trim();
-		if (!v) {
-			accountStatus = 'idle';
-			return;
-		}
-		// Malformed (bad chars or not a legal Blurt name) → invalid, no chain hit.
-		if (accountHasInvalidChar || !ACCOUNT_NAME_RE.test(v)) {
-			accountStatus = 'invalid';
-			return;
-		}
-		const token = v; // guard against stale async results (value changed / refocus)
-		accountStatus = 'checking';
-		try {
-			const fetched = await fetchAccountKeys(resolveOrigin(MORPHIT_INDEXER_ORIGIN), v);
-			if (postingAccount.trim() === token) accountStatus = fetched ? 'valid' : 'invalid';
-		} catch {
-			// Couldn't reach the chain — don't assert invalid; clear the verdict.
-			if (postingAccount.trim() === token) accountStatus = 'idle';
-		}
-	}
-
 	// Live structural check for the posting-key (WIF) field: a Blurt private
 	// key is an uncompressed Bitcoin-style WIF — 51 base58 chars beginning
 	// with '5'. This flags obviously-wrong input (too short/long, wrong
@@ -185,72 +142,6 @@
 		}
 		wifStatus = looksLikeBlurtWif(v) ? 'valid' : 'invalid';
 	}
-
-	// Animated "someone is typing" placeholder — same treatment as the
-	// orderbook Region/Payment fields. These handles are deliberately NOT
-	// translated (proper-noun usernames, like the orderbook place names).
-	// Runs only while the field is empty AND we're on the posting-only tab;
-	// pauses the instant there's text and resumes when it goes empty again.
-	// prefers-reduced-motion shows a single static name with no animation.
-	const ACCOUNT_PLACEHOLDERS = [
-		'alice',
-		'jose-cripto',
-		'scooby88',
-		'die-piraten',
-		'mariadbee',
-		'what.the.frank',
-		'sweeptheleg',
-		'bonkstr-23'
-	] as const;
-	let accountPlaceholder = $state<string>(ACCOUNT_PLACEHOLDERS[0]);
-	$effect(() => {
-		if (accountHasText || mode !== 'posting-only') return;
-		if (
-			typeof window !== 'undefined' &&
-			window.matchMedia('(prefers-reduced-motion: reduce)').matches
-		) {
-			accountPlaceholder = ACCOUNT_PLACEHOLDERS[0];
-			return;
-		}
-		const TYPE_MS = 70; // per-character typing speed
-		const DELETE_MS = 35; // per-character backspacing speed
-		const HOLD_MS = 1600; // pause on the fully-typed name
-		const GAP_MS = 450; // blank beat before the next name
-		let nameIdx = 0;
-		let charIdx = 0;
-		let phase: 'typing' | 'holding' | 'deleting' = 'typing';
-		let timer: ReturnType<typeof setTimeout>;
-		const tick = (): void => {
-			const name = ACCOUNT_PLACEHOLDERS[nameIdx] ?? ACCOUNT_PLACEHOLDERS[0];
-			if (phase === 'typing') {
-				charIdx += 1;
-				accountPlaceholder = name.slice(0, charIdx);
-				if (charIdx >= name.length) {
-					phase = 'holding';
-					timer = setTimeout(tick, HOLD_MS);
-				} else {
-					timer = setTimeout(tick, TYPE_MS);
-				}
-			} else if (phase === 'holding') {
-				phase = 'deleting';
-				timer = setTimeout(tick, DELETE_MS);
-			} else {
-				charIdx -= 1;
-				accountPlaceholder = name.slice(0, Math.max(charIdx, 0));
-				if (charIdx <= 0) {
-					phase = 'typing';
-					charIdx = 0;
-					nameIdx = (nameIdx + 1) % ACCOUNT_PLACEHOLDERS.length;
-					timer = setTimeout(tick, GAP_MS);
-				} else {
-					timer = setTimeout(tick, DELETE_MS);
-				}
-			}
-		};
-		accountPlaceholder = '';
-		timer = setTimeout(tick, GAP_MS);
-		return () => clearTimeout(timer);
-	});
 
 	/** cp137 H-1 — post-seed-import "remember me on this device" step.
 	 *  After a successful seed-mode import, instead of redirecting to
@@ -323,8 +214,6 @@
 	function wifErrorMessage(code: WifError): string {
 		return $_(`onboarding.import.posting_only.error.wif.${code}`);
 	}
-
-	const BLURT_ACCOUNT_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
 
 	/** Tidy the seed phrase the user typed/pasted, on blur. BIP-39
 	 *  mnemonics are always lowercase, space-separated words — so commas
@@ -611,19 +500,11 @@
 	}
 
 	async function unlockPostingOnly(): Promise<void> {
-		// Up-front validation before we do any crypto. The account name is
-		// OPTIONAL: leave it blank and we reverse-resolve it from the posting
-		// key's PUBLIC key on-chain (the same same-origin get_key_references
-		// lookup the seed/keyfile imports use) after deriving it — a posting key
-		// uniquely identifies its account in the normal case, so typing the name
-		// is redundant friction. We only format-check it here when the user DID
-		// type one; the auto-detect path "validates" by finding the key in
-		// exactly one account's posting authority.
-		const typedAccount = postingAccount.trim().toLowerCase();
-		if (typedAccount && !BLURT_ACCOUNT_RE.test(typedAccount)) {
-			errorMsg = $_('onboarding.import.posting_only.error.bad_account');
-			return;
-		}
+		// Up-front validation before we do any crypto. cp406 — there's no account
+		// field: we reverse-resolve the account from the posting key's PUBLIC key
+		// on-chain (the same same-origin get_key_references lookup the seed/keyfile
+		// imports use) after deriving it. A posting key uniquely identifies its
+		// account in the normal case, so asking for the name is redundant friction.
 		if (postingNewPassword.length < 8) {
 			errorMsg = $_('common.password_too_short');
 			return;
@@ -643,35 +524,6 @@
 				scalar = await wifToRawPrivateKey(postingWif);
 			} catch (err) {
 				if (err instanceof WifDecodeError) {
-					// Before the generic "bad key" error, check whether the
-					// user pasted their Blurt MASTER PASSWORD into the
-					// posting-key field — a common mistake for people coming
-					// from other Blurt frontends. Detect by deriving the
-					// master-password posting pubkey and matching it against
-					// this account's on-chain posting authority. Needs the
-					// account, so fetch best-effort; on any network/lookup
-					// failure fall back to the plain WIF-format error. Morphit
-					// NEVER logs in via master password — this is detection
-					// only, to give a precise, actionable message.
-					try {
-						if (typedAccount) {
-							const fetched = await fetchAccountKeys(
-								resolveOrigin(MORPHIT_INDEXER_ORIGIN),
-								typedAccount
-							);
-							if (fetched) {
-								const mpPub = await masterPasswordPubKey(typedAccount, 'posting', postingWif);
-								if (mpPub && verifyPostingKey(fetched, mpPub).kind === 'ok') {
-									errorMsg = $_('onboarding.import.posting_only.error.master_password');
-									wifKeyInvalid = true;
-									postingWif = '';
-									return;
-								}
-							}
-						}
-					} catch {
-						// fall through to the plain WIF-format error below
-					}
 					errorMsg = wifErrorMessage(err.code);
 					wifKeyInvalid = true;
 					return;
@@ -691,26 +543,17 @@
 			// 3. Format the derived posting public key for chain comparison.
 			const derivedPub = await formatPublicKeyBLT(full.keys.posting.publicKey);
 
-			// 3b. Resolve the account name. If the user TYPED one, use it (and
-			//     verify the key against it below). If they left it BLANK,
-			//     reverse-resolve it from the derived public key via the same
-			//     same-origin get_key_references lookup the seed/keyfile imports
-			//     use — a UNIQUE match IS the account (the key is in exactly that
-			//     account's posting authority, so it's inherently verified).
-			//     Ambiguous (a key shared across accounts), no match, or any
-			//     lookup failure (a rotated key / an RPC without the method) →
-			//     ask the user to type the name and resubmit (the typed path
-			//     below then runs the full verify).
-			let account = typedAccount;
+			// 3b. Reverse-resolve the account name from the derived public key via
+			//     the same same-origin get_key_references lookup the seed/keyfile
+			//     imports use — a UNIQUE match IS the account (the key is in exactly
+			//     that account's posting authority, so it's inherently verified).
+			//     Ambiguous (a key shared across accounts), no match, or any lookup
+			//     failure (rotated key / an RPC without the method) → could_not_resolve.
+			const matches = await resolveAccountsByPublicKeys([derivedPub]);
+			const account = matches.length === 1 ? matches[0] : undefined;
 			if (!account) {
-				const matches = await resolveAccountsByPublicKeys([derivedPub]);
-				const only = matches.length === 1 ? matches[0] : undefined;
-				if (only) {
-					account = only;
-				} else {
-					errorMsg = $_('onboarding.import.posting_only.error.could_not_resolve');
-					return;
-				}
+				errorMsg = $_('onboarding.import.posting_only.error.could_not_resolve');
+				return;
 			}
 
 			// 4. Fetch the account from chain and classify the key.
@@ -800,11 +643,10 @@
 			errorMsg = looksLikeNetworkError(raw)
 				? $_('onboarding.import.error.network')
 				: $_('onboarding.import.error.generic');
-			// Clear passwords on error.  Keep `postingWif` and
-			// `postingAccount` so the user can fix typos without
-			// re-pasting their key from scratch — the WIF will be
-			// cleared on a successful submit by the path above, or
-			// when the user navigates away (component unmount).
+			// Clear passwords on error.  Keep `postingWif` so the user
+			// can fix typos without re-pasting their key from scratch —
+			// the WIF is cleared on a successful submit by the path above,
+			// or when the user navigates away (component unmount).
 			postingNewPassword = '';
 			postingNewPasswordConfirm = '';
 		} finally {
@@ -856,10 +698,8 @@
 					// proper-looking values — a WIF that passes the Blurt-WIF shape
 					// check (not a 1-char stub), a device password of at least the
 					// 8-char floor the handler enforces, and a confirmation that
-					// actually MATCHES. The account name is now OPTIONAL (blank ⇒
-					// auto-detect from the key), so it no longer gates the button;
-					// a non-empty name with bad characters still does.
-					accountHasInvalidChar ||
+					// actually MATCHES. cp406 — the account name is auto-detected
+					// from the key, so there's no account field to gate the button.
 					!postingWif.trim() ||
 					wifLooksInvalid ||
 					postingNewPassword.length < 8 ||
@@ -1012,90 +852,6 @@
 						{$_('onboarding.import.posting_only.warning_body')}
 					</p>
 				</div>
-
-				<label class="block">
-					<span class="mb-2 block font-semibold"
-						>{$_('onboarding.import.posting_only.account_label')}</span
-					>
-					<div class="relative">
-						<input
-							type="text"
-							maxlength="16"
-							bind:value={postingAccount}
-							oninput={(e) => {
-								const el = e.currentTarget;
-								const stripped = el.value.replace(/@/g, '');
-								if (stripped !== el.value) {
-									const removed = el.value.length - stripped.length;
-									const caret = (el.selectionStart ?? stripped.length) - removed;
-									el.value = stripped;
-									postingAccount = stripped;
-									const p = Math.max(0, caret);
-									el.setSelectionRange(p, p);
-								}
-								accountStatus = 'idle';
-							}}
-							onfocus={() => (accountStatus = 'idle')}
-							onblur={checkAccountExists}
-							autocomplete="off"
-							autocapitalize="none"
-							spellcheck="false"
-							placeholder={accountPlaceholder}
-							class="w-full rounded-xl border-2 bg-white px-3 py-2 pe-28 font-mono focus:outline-none focus:ring-2 dark:bg-ink-900 {accountHasInvalidChar ||
-							accountStatus === 'invalid'
-								? 'border-red-400 focus:ring-red-400 dark:border-red-500'
-								: 'border-ink-200 focus:ring-morphit-emerald dark:border-ink-700'}"
-						/>
-						{#if accountStatus === 'valid'}
-							<span
-								class="pointer-events-none absolute end-3 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 text-sm font-medium text-morphit-emerald"
-							>
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									width="16"
-									height="16"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="3"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									aria-hidden="true"
-								>
-									<path d="M20 6 9 17l-5-5" />
-								</svg>
-								{$_('onboarding.import.posting_only.account_ok')}
-							</span>
-						{:else if accountStatus === 'invalid'}
-							<span
-								class="pointer-events-none absolute end-3 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 text-sm font-medium text-red-500 dark:text-red-400"
-							>
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									width="16"
-									height="16"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2.5"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									aria-hidden="true"
-								>
-									<path
-										d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"
-									/>
-									<path d="M12 9v4" />
-									<path d="M12 17h.01" />
-								</svg>
-								{$_('onboarding.import.posting_only.account_bad')}
-							</span>
-						{/if}
-					</div>
-					<span class="mt-1 block text-xs text-ink-500 dark:text-ink-400">
-						{$_('onboarding.import.posting_only.account_hint')}
-					</span>
-				</label>
 
 				<label class="mt-4 block">
 					<span class="mb-2 block font-semibold"

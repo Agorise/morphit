@@ -85,9 +85,21 @@
 		onPaid: (result: { trxId: string; blockNum: number; amount: number }) => void;
 		/** Called on cancel / dismiss. */
 		onCancel: () => void;
+		/** cp406 — optional one-line caption under the amount field explaining a
+		 *  pre-filled amount (e.g. "The order's minimum is 500 MXN (≈ 588 BLURT)").
+		 *  Empty string renders nothing. */
+		payHint?: string;
 	}
 
-	let { recipient, amount = 0, amountEditable = false, memo, onPaid, onCancel }: Props = $props();
+	let {
+		recipient,
+		amount = 0,
+		amountEditable = false,
+		memo,
+		onPaid,
+		onCancel,
+		payHint = ''
+	}: Props = $props();
 
 	type Phase = { kind: 'ready' } | { kind: 'paying' } | { kind: 'error'; messageKey: string };
 
@@ -224,7 +236,7 @@
 >
 	<div class="card w-full max-w-md">
 		<h2 id="pay-blurt-heading" class="font-display text-xl font-bold">
-			{$_('chat.pay_blurt.title')}
+			{$_('chat.pay_blurt.title', { values: { recipient } })}
 		</h2>
 		<p class="mt-2 text-sm text-ink-600 dark:text-ink-300">
 			{$_('chat.pay_blurt.subtitle')}
@@ -248,6 +260,9 @@
 					placeholder={$_('chat.pay_blurt.amount_placeholder') as string}
 					class="mt-1 w-full rounded-lg border border-ink-300 bg-white px-3 py-2 font-mono text-sm dark:border-ink-700 dark:bg-ink-900"
 				/>
+				{#if payHint}
+					<p class="mt-1 text-xs text-morphit-teal dark:text-morphit-emerald">{payHint}</p>
+				{/if}
 				{#if enteredAmount.trim().length > 0 && !canPay && myAccount !== null && myAccount !== recipient}
 					<p class="mt-1 text-xs text-red-600 dark:text-red-400">
 						{$_('chat.pay_blurt.error.invalid_amount')}

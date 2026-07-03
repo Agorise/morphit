@@ -208,6 +208,27 @@ function firstQuoted(src: string, anchor: string): string | null {
 	}
 }
 
+// ── 10. cp406 self-copy bound parity ──
+{
+	// The optional sender self-copy (self_ciphertext/self_nonce) must be
+	// bounded identically in BOTH files, else the fast path could emit a
+	// message the durable handler rejects. Pin that both reference the fields
+	// AND cap self_ciphertext with MAX_CIPHERTEXT_CHARS.
+	const handlerHasSelf =
+		handler.includes('self_ciphertext') &&
+		/self_ciphertext[\s\S]{0,400}MAX_CIPHERTEXT_CHARS/.test(handler);
+	const tailerHasSelf =
+		tailer.includes('self_ciphertext') &&
+		/self_ciphertext[\s\S]{0,400}MAX_CIPHERTEXT_CHARS/.test(tailer);
+	if (!handlerHasSelf) {
+		bad('10 — self-copy bound parity', 'handler is missing the self_ciphertext MAX_CIPHERTEXT_CHARS bound');
+	} else if (!tailerHasSelf) {
+		bad('10 — self-copy bound parity', 'tailer is missing the self_ciphertext MAX_CIPHERTEXT_CHARS bound — fast path could emit what the handler rejects');
+	} else {
+		ok('10 — self_ciphertext bound mirrored in tailer + handler');
+	}
+}
+
 console.log(`\n${count} scenarios, ${failures} failed`);
 if (failures > 0) {
 	console.error('chat-head-tailer-validation-parity-smoke FAILED');

@@ -7,8 +7,8 @@
  * Every route under `apps/web/src/routes/[lang]/` inherits this:
  *
  *   - `prerender = true` — emit one HTML file per (route × locale).
- *     With 17 indexable routes × 10 supported locales, the build
- *     produces 170 prerendered pages.
+ *     With 20 indexable routes × 10 supported locales, the build
+ *     produces 200 prerendered pages.
  *
  *   - `ssr = true` — server-side render at build time so the HTML
  *     ships in the right language, no client-side string swap, no

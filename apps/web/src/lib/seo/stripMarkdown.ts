@@ -40,6 +40,14 @@ export function stripMarkdown(input: string): string {
 		return `\u0000C${code.length - 1}\u0000`;
 	});
 
+	// cp406 — order `terms` may use headings and horizontal rules (the FAQ does
+	// not, so these are no-ops there). Drop whole horizontal-rule lines, and
+	// strip leading heading markers (`#`…`######`) keeping the heading text.
+	// Done before emphasis stripping so an hr like `***` isn't mistaken for
+	// bold/italic.
+	s = s.replace(/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/gm, '');
+	s = s.replace(/^\s{0,3}#{1,6}\s+/gm, '');
+
 	// Strip `[link text](url)` → "link text (url)".  Keeping the
 	// URL in parens preserves accessibility info for users who
 	// can't click (which describes every SERP rich-snippet —

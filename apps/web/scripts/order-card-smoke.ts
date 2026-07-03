@@ -45,20 +45,24 @@ const check = (name: string, cond: boolean, detail = '') => {
 };
 
 const card = read('src/lib/components/OrderCard.svelte');
+// cp406 — the identity row (avatar + name·new-trader·⭐score, key·trades) was
+// extracted into the shared OrderPosterIdentity component. Assertions about
+// that row now read from it; card-level assertions stay on OrderCard.
+const identity = read('src/lib/components/OrderPosterIdentity.svelte');
 
 // ─── Reputation score vs trade count: separate signals ────────────
 check(
 	'1 reputation score rendered from reputation_score (not the raw rating)',
-	/order\.reputation_score/.test(card) && /score\.toFixed\(2\)/.test(card)
+	/order\.reputation_score/.test(identity) && /score\.toFixed\(2\)/.test(identity)
 );
 check(
 	'2 trade count rendered via formatCountCompact(feedback_count)',
-	/formatCountCompact/.test(card) && /order\.feedback_count/.test(card)
+	/formatCountCompact/.test(identity) && /order\.feedback_count/.test(identity)
 );
 check(
 	'3 score and count are distinct (score has ⭐, count has its own line)',
-	card.indexOf('reputation_score') !== card.indexOf('feedback_count') &&
-		/⭐/.test(card)
+	identity.indexOf('reputation_score') !== identity.indexOf('feedback_count') &&
+		/⭐/.test(identity)
 );
 
 // ─── Buyer / seller framing ───────────────────────────────────────
@@ -73,8 +77,8 @@ check(
 check(
 	'5 first_trade_at present → trades_since, absent → trades_only',
 	/order\.first_trade_at[\s\S]*orderbook\.card\.trades_since[\s\S]*orderbook\.card\.trades_only/.test(
-		card
-	) && /formatMonthYear/.test(card)
+		identity
+	) && /formatMonthYear/.test(identity)
 );
 
 // ─── Stretched link + z-index pattern ─────────────────────────────
@@ -84,13 +88,13 @@ check(
 );
 check(
 	'7 interactive children raised above the stretched link (z-10)',
-	(card.match(/z-10/g) ?? []).length >= 3 // profile link, message button, eyeball
+	(card.match(/z-10/g) ?? []).length >= 2 // message button, eyeball (profile link moved to OrderPosterIdentity)
 );
 
 // ─── Posting key via the centralized truncation cache ─────────────
 check(
 	'8 posting key shown via truncatePublicKey(order.posting_pubkey)',
-	/truncatePublicKey\(order\.posting_pubkey/.test(card)
+	/truncatePublicKey\(/.test(identity) && /order\.posting_pubkey/.test(identity)
 );
 
 // ─── Message button + eyeball gating ──────────────────────────────
@@ -105,8 +109,8 @@ check(
 
 // ─── Preserved / new signals (cp404 revision) ─────────────────────
 check(
-	'11 keeps expiry + new-trader chips',
-	/OrderExpiryChip/.test(card) && /NewTraderChip/.test(card)
+	'11 keeps expiry (card) + new-trader (identity) chips',
+	/OrderExpiryChip/.test(card) && /NewTraderChip/.test(identity)
 );
 check(
 	'11b engagement chip commented out, data preserved',
@@ -133,7 +137,7 @@ check(
 );
 check(
 	'13 reuses IdentityLabel for the avatar (hideHandle)',
-	/IdentityLabel/.test(card) && /hideHandle/.test(card)
+	/IdentityLabel/.test(identity) && /hideHandle/.test(identity)
 );
 
 // ─── Both call sites render OrderCard ─────────────────────────────

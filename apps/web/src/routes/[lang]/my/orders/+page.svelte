@@ -763,9 +763,9 @@
 							</dl>
 
 							{#if o.terms}
-								<p class="mt-2 text-sm text-ink-700 dark:text-ink-200">
+								<div class="mt-2 text-sm text-ink-700 dark:text-ink-200">
 									<TermsText text={o.terms} />
-								</p>
+								</div>
 							{/if}
 						</div>
 

@@ -184,8 +184,10 @@ const SCENARIOS: Scenario[] = [
 	{
 		name: 'subtitle is hidden and the heading changes for first-time traders',
 		check: () => {
-			if (!/\{#if !isFirstTrade\}/.test(src))
-				return 'subtitle is not wrapped in {#if !isFirstTrade}';
+			// cp406 — the subtitle is now also phase-gated (editing/reviewing
+			// only), but the grandma-friendly `!isFirstTrade` guard remains.
+			if (!/\{#if !isFirstTrade\b/.test(src))
+				return 'subtitle is not gated on !isFirstTrade';
 			if (!/post_order\.form\.step_1_heading_first/.test(src))
 				return 'first-trade step-1 heading key not referenced';
 			return null;

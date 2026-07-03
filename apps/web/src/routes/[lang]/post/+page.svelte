@@ -759,6 +759,20 @@
 	 *  Non-BLURT methods require an external txid, captured in
 	 *  externalTxId. */
 	let feeMethodChoice = $state<'blurt' | 'waived_first_buy' | 'btc' | 'xmr'>('blurt');
+	/** Whether the unlocked session actually holds the ACTIVE key.  Only a
+	 *  'morphit-seed' session does; a 'posting-only' login (imported a single
+	 *  posting WIF, or a posting-only keyfile) CANNOT sign a BLURT transfer,
+	 *  so the BLURT listing-fee path is unavailable to it — LiveIdentity's
+	 *  contract is that active-key features must guard with
+	 *  `origin === 'morphit-seed'`.  Such a user can still use the free
+	 *  first-listing waiver or pay the fee in BTC/XMR (all posting-key only).
+	 *  Without this guard, a posting-only user picking BLURT was prompted for
+	 *  their password and then hit a generic "the chain didn't accept your
+	 *  broadcast" — a *local* pre-broadcast failure mislabeled as a chain
+	 *  rejection (the active key simply isn't on this device). */
+	const hasActiveKey = $derived(
+		$identity.state === 'unlocked' ? $identity.live.origin === 'morphit-seed' : false
+	);
 	/** External transaction ID for btc/xmr methods. Must be 64-char
 	 *  hex (indexer validates; we also do a client-side check to
 	 *  give immediate feedback). Empty when the method is blurt or
@@ -1747,6 +1761,15 @@
 			void submitBroadcast();
 			return;
 		}
+		// BLURT fee = a chain TRANSFER, which needs the active key.  A
+		// posting-only session doesn't have it, so don't prompt for a password
+		// that can't succeed — surface a clear, actionable error instead of the
+		// old generic "chain didn't accept" (a local failure, not a chain one).
+		if (!hasActiveKey) {
+			broadcastError = $_('post_order.broadcast_error.body_posting_only');
+			phase = 'error';
+			return;
+		}
 		phase = 'awaiting_password';
 		passwordError = '';
 	}
@@ -2001,7 +2024,18 @@
 			} else {
 				const msg = err instanceof Error ? err.message : String(err); // smoke-ok-raw-local: used only for regex classification + console.warn
 				console.warn('[post] BLURT-path broadcast failed:', err);
-				if (/insufficient/i.test(msg) || /balance/i.test(msg)) {
+				if (/posting-only/i.test(msg)) {
+					// Defense in depth: goToPasswordPrompt already gates this,
+					// but if a posting-only session reaches useActiveKey it
+					// throws a plain Error — classify it as such, not "chain
+					// rejected" (nothing was broadcast).
+					broadcastError = $_('post_order.broadcast_error.body_posting_only');
+				} else if (
+					/insufficient/i.test(msg) ||
+					/balance/i.test(msg) ||
+					/enough/i.test(msg) ||
+					/does not have/i.test(msg)
+				) {
 					broadcastError = $_('post_order.broadcast_error.body_insufficient_funds');
 				} else {
 					broadcastError = $_('post_order.broadcast_error.body_generic');
@@ -2167,12 +2201,34 @@
 		<h1 class="font-display text-3xl font-extrabold">
 			<span class="brand-gradient-text">{$_('post_order.heading')}</span>
 		</h1>
-		{#if !isFirstTrade}
+		{#if !isFirstTrade && (phase === 'editing' || phase === 'reviewing')}
+			<!-- The "tell traders what you want…" lead only makes sense while
+			     the user is still composing/reviewing.  On the sign / posting /
+			     error phases the order is already written, so we drop the lead
+			     and instead surface the order summary (below) so the user can
+			     see exactly what they're signing. -->
 			<p class="mt-2 text-ink-700 dark:text-ink-200">
 				{$_('post_order.subtitle')}
 			</p>
 		{/if}
 	</header>
+
+	<!-- Order summary on the sign / posting / error phases.  Editing and
+	     reviewing render their own inline summaries; here we keep the same
+	     📝 card pinned directly under the header so the user always sees what
+	     they're about to sign (or what failed) — never a bare password box. -->
+	{#if summarySentence && (phase === 'awaiting_password' || phase === 'broadcasting' || phase === 'error')}
+		<div
+			class="mb-6 rounded-xl border-2 border-morphit-emerald/40 bg-morphit-emerald/5 p-3"
+			role="status"
+			aria-live="polite"
+		>
+			<p class="text-sm text-ink-800 dark:text-ink-100">
+				<span aria-hidden="true">📝</span>
+				{summarySentence}
+			</p>
+		</div>
+	{/if}
 
 	<!-- Tier 2.5 (Part 93): green-tinted starter-pack helper for
 	     first-time posters.  Detects (no orders on record →
@@ -2338,7 +2394,7 @@
 				{#each assetPickerItems as item (item.ticker)}
 					{@const a = item.ticker}
 					{@const disabled = feeMethodChoice === 'waived_first_buy' && a !== 'BLURT'}
-					<Tooltip textKey={item.explainerKey} faqKey={item.faqKey}>
+					<Tooltip textKey={item.explainerKey} faqKey={item.faqKey} hoverOpenDelayMs={1500}>
 						{#snippet trigger()}
 							<button
 								type="button"
@@ -2936,12 +2992,13 @@
 								</span>
 							</label>
 							{#if asset !== 'BLURT'}
-								<label class="flex items-start gap-2 py-1">
+								<label class="flex items-start gap-2 py-1" class:opacity-60={!hasActiveKey}>
 									<input
 										type="radio"
 										name="fee-method"
 										value="blurt"
 										bind:group={feeMethodChoice}
+										disabled={!hasActiveKey}
 										class="mt-0.5 accent-morphit-emerald"
 									/>
 									<span class="text-sm">
@@ -2949,6 +3006,11 @@
 										<span class="block text-xs text-ink-500">
 											{$_('post_order.fee_method.blurt_hint')}
 										</span>
+										{#if !hasActiveKey}
+											<span class="mt-1 block text-xs text-red-600 dark:text-red-400">
+												{$_('post_order.fee_method.blurt_needs_active_key')}
+											</span>
+										{/if}
 									</span>
 								</label>
 							{/if}
@@ -3004,12 +3066,13 @@
 				</div>
 				<fieldset>
 					<legend class="sr-only">{$_('post_order.fee_method.legend')}</legend>
-					<label class="flex items-start gap-2 py-1">
+					<label class="flex items-start gap-2 py-1" class:opacity-60={!hasActiveKey}>
 						<input
 							type="radio"
 							name="fee-method"
 							value="blurt"
 							bind:group={feeMethodChoice}
+							disabled={!hasActiveKey}
 							class="mt-0.5 accent-morphit-emerald"
 						/>
 						<span class="text-sm">
@@ -3017,6 +3080,11 @@
 							<span class="block text-xs text-ink-500">
 								{$_('post_order.fee_method.blurt_hint')}
 							</span>
+							{#if !hasActiveKey}
+								<span class="mt-1 block text-xs text-red-600 dark:text-red-400">
+									{$_('post_order.fee_method.blurt_needs_active_key')}
+								</span>
+							{/if}
 						</span>
 					</label>
 					<label class="flex items-start gap-2 py-1">
@@ -3305,10 +3373,10 @@
 	{:else if phase === 'awaiting_password'}
 		<section class="card" aria-labelledby="password-heading">
 			<h2 id="password-heading" class="mb-2 font-display text-lg font-bold">
-				{$_('post_order.locked.title')}
+				{$_('post_order.locked.fee_title')}
 			</h2>
 			<p class="mb-4 text-ink-600 dark:text-ink-300">
-				{$_('post_order.locked.body')}
+				{$_('post_order.locked.fee_body')}
 			</p>
 			<label class="block">
 				<span class="mb-1 block text-sm font-semibold">

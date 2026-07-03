@@ -24,10 +24,18 @@
  * On the collapsed-baseline migration phase: the migration runner tracks
  * versions by number and won't re-run v1 when schema.sql changes, and the
  * contract validator can't yet accept a separate additive version (that's a
- * launch-time un-collapse). So this routine also ensures the column exists via
- * an idempotent ADD COLUMN IF NOT EXISTS — that's what actually delivers the
- * column onto an already-migrated beta DB on upgrade. At launch this becomes a
- * normal tracked migration and the ensure-column line can go away.
+ * launch-time un-collapse). So the column is delivered onto an already-migrated
+ * beta DB by an idempotent ADD COLUMN IF NOT EXISTS, exported as
+ * ensurePostingPubkeyColumn(). cp405: main.ts AWAITS that on the boot path,
+ * right after runMigrations() and BEFORE the HTTP server binds — so the column
+ * is guaranteed present before the orderbook query (which selects it) can ever
+ * be served. Previously the ensure ran ONLY inside this fire-and-forget
+ * backfill, so it raced the first request and, if the ADD COLUMN threw, left the
+ * orderbook hard-down (500 on every load) while the indexer stayed up — the
+ * "Can't reach the indexer" beta.44 regression. The awaited boot step removes
+ * both hazards. This function still calls the ensure first, so it stays correct
+ * when invoked standalone (tests). At launch this becomes a normal tracked
+ * migration and the ensure-column step goes away.
  */
 
 import type { BlurtClient } from '$blurt/client';
@@ -64,13 +72,26 @@ export function primaryPostingKey(acc: {
 	return null;
 }
 
+/**
+ * Idempotently add accounts.posting_pubkey. AWAITED on the boot path (main.ts)
+ * right after migrations and before the HTTP server binds, so the column always
+ * exists before the orderbook query that selects it can be served — a missing
+ * additive column can never bring the orderbook down. Idempotent (IF NOT
+ * EXISTS): safe to run on every boot and from the backfill below.
+ */
+export async function ensurePostingPubkeyColumn(db: Database): Promise<void> {
+	await db.query(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS posting_pubkey TEXT`);
+}
+
 export async function backfillPostingKeys(
 	db: Database,
 	blurt: BlurtClient,
 	opts: { maxAccounts?: number } = {}
 ): Promise<BackfillResult> {
-	// Ensure the column exists on any DB (see docblock). Idempotent.
-	await db.query(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS posting_pubkey TEXT`);
+	// Idempotent ensure so this stays correct when invoked standalone (tests);
+	// on the real boot path main.ts has already awaited ensurePostingPubkeyColumn()
+	// before the server bound, so here it's a no-op.
+	await ensurePostingPubkeyColumn(db);
 
 	const max = opts.maxAccounts ?? DEFAULT_MAX;
 	const pending = await db.query<{ name: string }>(

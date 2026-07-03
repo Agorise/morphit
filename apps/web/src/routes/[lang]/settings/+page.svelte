@@ -190,6 +190,8 @@
 	 *  to confirm. Per UX-STANDARD rule #5 — destructive actions get
 	 *  one (and only one) confirmation. */
 	let confirmingClear = $state(false);
+	/** Bio counterpart of confirmingClear (short-bio Clear button). */
+	let confirmingBioClear = $state(false);
 
 	/** Tier 3.2 (Part 99) — same pattern as confirmingClear, but
 	 *  scoped to clearing the user's stored fiat / region
@@ -880,6 +882,25 @@
 		confirmingClear = false;
 	}
 
+	function beginBioClear(): void {
+		confirmingBioClear = true;
+	}
+
+	function cancelBioClear(): void {
+		confirmingBioClear = false;
+	}
+
+	function confirmBioClear(): void {
+		try {
+			window.localStorage.removeItem(SHORT_BIO_STORAGE_KEY);
+		} catch {
+			// ignore
+		}
+		bioSaved = '';
+		bioInput = '';
+		confirmingBioClear = false;
+	}
+
 	// Auto-lock timeout handler. Parses the <select> value — the
 	// 'never' option maps to the NEVER_LOCK sentinel, all others are
 	// numeric minutes. Setting immediately persists via
@@ -1490,7 +1511,7 @@
 
 		<div class="mt-6 flex flex-wrap items-center gap-3">
 			<BusyButton
-				variant="primary"
+				variant="secondary"
 				busy={saving}
 				done={savedToast}
 				disabled={!validation.ok || validation.cleaned === saved}
@@ -1505,7 +1526,7 @@
 			</BusyButton>
 			{#if $isUnlocked}
 				<BusyButton
-					variant="secondary"
+					variant="primary"
 					busy={broadcasting}
 					done={broadcastOk}
 					disabled={!validation.ok}
@@ -1616,7 +1637,7 @@
 
 		<div class="mt-6 flex flex-wrap items-center gap-3">
 			<BusyButton
-				variant="primary"
+				variant="secondary"
 				busy={bioSaving}
 				done={bioSavedToast}
 				disabled={!bioValidation.ok || bioValidation.cleaned === bioSaved}
@@ -1631,7 +1652,7 @@
 			</BusyButton>
 			{#if $isUnlocked}
 				<BusyButton
-					variant="secondary"
+					variant="primary"
 					busy={bioBroadcasting}
 					done={bioBroadcastOk}
 					disabled={!bioValidation.ok}
@@ -1645,7 +1666,34 @@
 					{/if}
 				</BusyButton>
 			{/if}
+			{#if bioSaved && !confirmingBioClear}
+				<BusyButton variant="ghost" onclick={beginBioClear}>
+					{$_('settings.short_bio.clear')}
+				</BusyButton>
+			{/if}
 		</div>
+
+		{#if confirmingBioClear}
+			<!-- Same inline destructive-action confirmation as the display-name
+			     card (UX-STANDARD rule #5: one confirmation, heavier action). -->
+			<div
+				class="mt-4 rounded-2xl border-2 border-red-300 bg-red-50 p-4 dark:border-red-700 dark:bg-red-950"
+				role="alertdialog"
+				aria-live="polite"
+			>
+				<p class="text-sm text-red-900 dark:text-red-100">
+					{$_('settings.short_bio.clear_confirm_prompt')}
+				</p>
+				<div class="mt-3 flex flex-wrap gap-2">
+					<BusyButton variant="primary" onclick={confirmBioClear}>
+						{$_('settings.display_name.clear_confirm_yes')}
+					</BusyButton>
+					<BusyButton variant="ghost" onclick={cancelBioClear}>
+						{$_('settings.display_name.clear_confirm_cancel')}
+					</BusyButton>
+				</div>
+			</div>
+		{/if}
 
 		{#if bioBroadcastError}
 			<div class="mt-3">
@@ -1740,7 +1788,7 @@
 
 		<div class="mt-6 flex flex-wrap items-center gap-3">
 			<BusyButton
-				variant="primary"
+				variant="secondary"
 				busy={blurtMediaSaving}
 				done={blurtMediaSavedToast}
 				disabled={!blurtMediaIsValid ||
@@ -1756,7 +1804,7 @@
 			</BusyButton>
 			{#if $isUnlocked}
 				<BusyButton
-					variant="secondary"
+					variant="primary"
 					busy={blurtMediaBroadcasting}
 					done={blurtMediaBroadcastOk}
 					disabled={!blurtMediaIsValid}
@@ -1869,7 +1917,7 @@
 
 		<div class="mt-6 flex flex-wrap items-center gap-3">
 			<BusyButton
-				variant="primary"
+				variant="secondary"
 				busy={nostrSaving}
 				done={nostrSavedToast}
 				disabled={!nostrIsValid || (nostrIsEmpty ? '' : nostrCleaned) === nostrSaved}
@@ -1884,7 +1932,7 @@
 			</BusyButton>
 			{#if $isUnlocked}
 				<BusyButton
-					variant="secondary"
+					variant="primary"
 					busy={nostrBroadcasting}
 					done={nostrBroadcastOk}
 					disabled={!nostrIsValid}

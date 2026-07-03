@@ -107,6 +107,35 @@ check(
 	!/posting_pubkey/.test(verify),
 	'verify.ts must resolve keys from the chain authority, not the stored column'
 );
+// cp405 — the beta.44 "Can't reach the indexer" regression fix. The additive
+// column must be delivered on the AWAITED boot path (before the server binds),
+// not only by the fire-and-forget backfill (which raced the first request and,
+// on an ADD COLUMN failure, hard-downed the orderbook while the indexer stayed
+// up). These pin the ordering so it can't silently regress.
+check(
+	'13 backfill exports ensurePostingPubkeyColumn (the idempotent ADD COLUMN)',
+	/export\s+async\s+function\s+ensurePostingPubkeyColumn\s*\(/.test(backfill) &&
+		/ADD COLUMN IF NOT EXISTS posting_pubkey TEXT/.test(backfill)
+);
+check(
+	'14 startup AWAITS ensurePostingPubkeyColumn on the boot path',
+	/await\s+ensurePostingPubkeyColumn\(db\)/.test(main)
+);
+{
+	const idxEnsure = main.indexOf('await ensurePostingPubkeyColumn(db)');
+	const idxServe = main.search(/serve\(\{/);
+	const idxMig = main.indexOf('runMigrations');
+	check(
+		'15 the ensure is awaited AFTER migrations and BEFORE the server binds',
+		idxEnsure !== -1 &&
+			idxServe !== -1 &&
+			idxMig !== -1 &&
+			idxMig < idxEnsure &&
+			idxEnsure < idxServe,
+		`ensure=${idxEnsure} serve=${idxServe} migrations=${idxMig} — the orderbook ` +
+			`selects posting_pubkey, so the column MUST exist before serve() binds`
+	);
+}
 
 console.log('');
 if (failed > 0) {

@@ -451,14 +451,27 @@
       "pub_pin_older_indexer_ref": "Nie udało się bezpiecznie wysłać: Twój indeksator zgłasza zapis klucza czatu starszy niż znany Ci do tej pory. Na łańcuchu, który posuwa się tylko do przodu, nie powinno to się zdarzyć. Spróbuj odświeżyć lub przełączyć się na inną instancję Morphit.",
       "pub_pin_chain_reports_none": "Nie udało się bezpiecznie wysłać: Twój indeksator twierdzi, że ten odbiorca ma klucz czatu, ale blockchain nie zna żadnego. Indeksator może być niezsynchronizowany lub zmyślać dane. Spróbuj innej instancji Morphit, albo poczekaj i spróbuj ponownie.",
       "pub_pin_chain_older_than_pin": "Nie udało się bezpiecznie wysłać: blockchain zgłasza dla tego odbiorcy starszy klucz czatu niż już znany Ci. To jest wewnętrznie niespójne. Spróbuj innej instancji Morphit albo innego endpointu RPC.",
-      "pub_pin_malformed_indexer_response": "Nie udało się bezpiecznie wysłać: Twój indeksator zwrócił niepoprawnie sformatowane dane dla zapisu klucza czatu tego odbiorcy. Może działa na starszej wersji lub jest źle skonfigurowany. Spróbuj innej instancji Morphit."
+      "pub_pin_malformed_indexer_response": "Nie udało się bezpiecznie wysłać: Twój indeksator zwrócił niepoprawnie sformatowane dane dla zapisu klucza czatu tego odbiorcy. Może działa na starszej wersji lub jest źle skonfigurowany. Spróbuj innej instancji Morphit.",
+      "menu_label": "Bezpieczeństwo czatu",
+      "confirm": {
+        "title": "Bezpieczeństwo czatu",
+        "body": "Czy chcesz, aby Twoje wiadomości zostały zniszczone po opuszczeniu tego czatu? Wybierz Nie, aby móc czytać własną historię, jak w zwykłym komunikatorze.",
+        "yes": "Tak, zniszcz je",
+        "no": "Nie, zachowaj je"
+      },
+      "pdf_reminder": {
+        "title": "Nie zapomnij wyeksportować tego czatu do PDF",
+        "body": "W tym trybie Twoich wiadomości nie można odzyskać po wyjściu. Zapisz teraz PDF, jeśli chcesz zachować kopię.",
+        "get_now": "Pobierz mój PDF teraz",
+        "later": "Później"
+      }
     },
     "live": "Na żywo",
     "loading": "Wczytywanie rozmowy…",
     "lazy_load_failed": "Nie udało się załadować widoku czatu. Odśwież stronę i spróbuj ponownie.",
     "address": {
-      "share_button": "Udostępnij adres",
-      "share_button_aria": "Udostępnij adres odbioru",
+      "share_button": "Udostępnij adres krypto",
+      "share_button_aria": "Udostępnij swój adres odbioru krypto",
       "modal_title": "Udostępnij adres odbioru",
       "modal_subtitle": "Wyślij swój adres odbioru BTC lub XMR partnerowi handlowemu.",
       "method_btc": "Bitcoin",
@@ -575,8 +588,8 @@
     "funds_sent": {
       "button": "Zapłać teraz",
       "button_aria": "Zapłać za tę transakcję",
-      "modal_title": "Oznacz środki jako wysłane",
-      "modal_subtitle": "Powiadom partnera handlowego, że wysłałeś kryptowaluty.",
+      "modal_title": "Potwierdź swoją płatność dla @{peer}",
+      "modal_subtitle": "@{peer} zobaczy kwotę i identyfikator transakcji, które wpiszesz poniżej.",
       "locked_method_label": "Płatność w {asset}",
       "txid_label": "ID transakcji",
       "txid_placeholder": "Wklej txid (64 znaki hex)",
@@ -631,7 +644,7 @@
     },
     "unknown_version": "Ta wiadomość używa nowszego protokołu. Zaktualizuj Morphit, aby ją odczytać.",
     "pay_blurt": {
-      "title": "Zapłać BLURT odbiorcy",
+      "title": "Wyślij BLURT do @{recipient}",
       "subtitle": "Wyślij BLURT bezpośrednio ze swojego konta Morphit.",
       "amount_label": "Kwota",
       "amount_placeholder": "0.000",
@@ -723,10 +736,14 @@
       "parties_heading": "Strony",
       "posting_key_label": "Klucz publikacji",
       "verify_heading": "Jak zweryfikować ten dokument",
-      "verify_body": "Każda wiadomość poniżej to trwały wpis w publicznym blockchainie Blurt, kryptograficznie podpisany przez konto nadawcy. Kod „Dowód blockchain” przy każdej wiadomości to jej identyfikator transakcji: każdy może wkleić go w eksploratorze bloków Blurt (na przykład blurtwallet.com), aby potwierdzić, że dokładnie to konto wysłało wiadomość do drugiego o podanym czasie. Wyświetlany tekst to prywatna wiadomość po odszyfrowaniu przez konto wskazane powyżej. Ponieważ każdy dowód znajduje się w publicznym, trwałym rejestrze, tego dokumentu nie można potajemnie zmienić — zmiana dowolnej linii nie zgadzałaby się już z blockchainem.",
+      "verify_body": "Każda wiadomość poniżej to trwały wpis w publicznym blockchainie Blurt, kryptograficznie podpisany przez konto nadawcy. Kod „Dowód blockchain” przy każdej wiadomości to jej identyfikator transakcji: każdy może wkleić go w eksploratorze bloków Blurt (na przykład blocks.blurtwallet.com), aby potwierdzić, że dokładnie to konto wysłało wiadomość do drugiego o podanym czasie. Wyświetlany tekst to prywatna wiadomość odszyfrowana kluczami konta wskazanego powyżej. Ponieważ każdy dowód znajduje się w publicznym, trwałym rejestrze, tego dokumentu nie można potajemnie zmienić — zmiana dowolnej linii nie zgadzałaby się już z blockchainem.",
       "proof_label": "Dowód blockchain",
       "pending_label": "oczekuje na potwierdzenie",
       "footer": "Dokument czatu Morphit — zablokowany, tylko do odczytu. Zweryfikuj każdą wiadomość w eksploratorze bloków Blurt."
+    },
+    "pay_prefill": {
+      "hint": "Minimum zlecenia wynosi {min} {fiat} (≈ {amount} {asset}).",
+      "hint_market": "Minimum zlecenia wynosi {min} {fiat} (≈ {amount} {asset} po bieżącej cenie rynkowej)."
     }
   },
   "cheat_sheet": {
@@ -1139,7 +1156,7 @@
       },
       "how_to_buy": {
         "q": "Jak kupić krypto?",
-        "a": "Otwórz księgę zleceń, filtruj po monecie i kraju. Wybierz sprzedawcę z dobrą reputacją, otwórz czat, ustalcie szczegóły. Płacisz mu wybraną metodą (gotówka, przelew itp.), a on wysyła Ci krypto. Albo po prostu barteruj, Twój wybór. Wszystko jest wymienne. Zegar transakcji daje kilka dni na dokończenie płatności."
+        "a": "Otwórz księgę zleceń i przefiltruj ją według kryptowaluty, której chcesz. Wybierz sprzedawcę z dobrą reputacją, kliknij przycisk Wiadomość, aby odpowiedzieć na jego ogłoszenie, a na czacie wspólnie ustalacie szczegóły. Następnie płacisz sprzedawcy co najmniej minimalną kwotę (gotówka, krypto, przelew, barter itp.) zgodnie z ustaleniami. Wysyłasz środki w sposób możliwy do udowodnienia (lub realizujesz umowę barterową), a wtedy sprzedawca kryptowaluty wysyła kryptowalutę bezpośrednio do twojego portfela. Zostawcie sobie nawzajem opinię i gotowe!"
       },
       "how_to_sell": {
         "q": "Jak sprzedać kryptowalutę?",
@@ -1151,7 +1168,7 @@
       },
       "trade_goods_services": {
         "q": "Czy mogę handlować towarami lub usługami na Morphit, takimi jak drzewa owocowe lub płyty winylowe?",
-        "a": "**Tak — a dla niektórych to właśnie cały sens Morphit.** Jeśli nie masz konta w banku, żyjesz pod kontrolą przepływu kapitału albo patrzysz, jak twoja waluta krajowa traci na wartości tydzień po tygodniu, możliwość zamiany swoich towarów i swojej pracy bezpośrednio na twardy pieniądz — bez proszenia banku o pozwolenie — to nie wygoda, lecz koło ratunkowe. To kontrekonomia w praktyce: zwykli ludzie handlujący bezpośrednio na wolnym rynku, poza strażnikami. Morphit jest stworzony właśnie do tego.\n\nJak to działa: **każde zlecenie Morphit ma po jednej stronie zbywalną monetę (BTC, XMR, Blurt lub dowolny aktyw notowany przez Morphit), a po drugiej to, co uzgodnisz** — walutę krajową, inne krypto albo **towary i usługi.** Aby wymieniać towary lub usługi, wybierz metodę płatności `Barter (goods/services)` i opisz transakcję w polu `terms`.\n\n*Przykład — sprzedaż drzewek pomarańczowych za Monero:* opublikuj zlecenie `buy XMR`, metoda płatności `Barter (goods/services)`, terms: `\"50 healthy orange-tree saplings, 30cm+, pickup at my farm. XMR must be released upon pick-up.\"` Każdy, kto ma XMR i chce twoich drzewek, może je przyjąć.\n\n**Jedyna zasada:** jedna strona musi być monetą notowaną przez Morphit. To właśnie daje każdej transakcji prawdziwe potwierdzenie w łańcuchu i pozwala uczciwym handlowcom budować reputację, która za nimi podąża — zaufanie, na którym opiera się wolny rynek."
+        "a": "**Tak — a dla niektórych osób to jest cały sens Morphit.** Jeśli jesteś wykluczony z bankowości, żyjesz pod kontrolą kapitału albo patrzysz, jak twoja waluta narodowa co tydzień traci na wartości, możliwość zamiany swoich dóbr i swojej pracy bezpośrednio na twardy pieniądz — bez proszenia banku o pozwolenie — nie jest wygodą, lecz kołem ratunkowym. To kontrekonomia w praktyce: zwykli ludzie handlujący anonimowo, między sobą, na wolnym rynku, poza strażnikami. Morphit powstał właśnie do tego.\n\nJak to działa: **każde zlecenie Morphit ma po jednej stronie zbywalną kryptowalutę (BTC, XMR, Blurt lub dowolny aktyw obsługiwany przez Morphit), a po drugiej to, na co się umówicie** — walutę narodową, inną kryptowalutę albo **dobra i usługi.** Aby wymienić dobra lub usługi, wybierz metodę płatności `Barter (dobra/usługi)` i opisz układ w polu `warunki`.\n\n*Przykład 1 — sprzedaż drzewek pomarańczowych za Monero:* Przejdź na stronę Opublikuj i kliknij `Chcę KUPIĆ`. Wybierz Monero (XMR). Wybierz walutę fiat, w której zwykle sprzedawałbyś te drzewka, np. peso, euro, dolary itd. Wybierz metodę płatności `Barter (dobra/usługi)`. Ustaw swoje warunki, na przykład: `\"20 $ za drzewko pomarańczowe o wysokości co najmniej 1-2 m. Odbiór na mojej farmie (lub podaj mi swój adres do wysyłki (5 $ więcej za drzewko)).\"` Każdy, kto ma XMR i chce twoich drzewek, może przyjąć twoją ofertę.\n\n*Przykład 2 — sprzedaż mobilnej usługi mycia samochodów za Monero:* Ten sam proces, ale w polu warunków możesz napisać coś takiego: `\"Przyjadę do twojej firmy i umyję twój samochód. Biorę 30 $ za auto. Osuszanie i woskowanie za dodatkowe 20 $. Zobacz moje ogłoszenie w lokalnej gazecie! Wash Boy, Inc.\"`\n\n**Jedyna zasada:** jedna strona musi być kryptowalutą obsługiwaną przez Morphit. To właśnie daje każdej transakcji prawdziwe potwierdzenie w łańcuchu i pozwala uczciwym handlowcom budować reputację, która idzie za nimi — zaufanie, na którym opiera się wolny rynek."
       },
       "cash_by_mail_walkthrough": {
         "q": "Jak handluję gotówką pocztą lub wysyłam fizyczne towary przez Morphit?",
@@ -1823,7 +1840,9 @@
     "bounty": "Nagroda za błędy",
     "ens": "ENS",
     "compare": "Porównaj",
-    "compare_title": "Zobacz, jak Morphit wypada na tle innych opcji"
+    "compare_title": "Zobacz, jak Morphit wypada na tle innych opcji",
+    "stats": "Statystyki",
+    "stats_title": "Zbiorcze statystyki sieci na żywo"
   },
   "glossary": {
     "active_key": {
@@ -2318,10 +2337,7 @@
       "posting_only": {
         "tab_label": "Klucz posting Blurta",
         "warning_title": "Import tylko klucza posting",
-        "warning_body": "Jeśli nie masz 12-wyrazowego seeda ani pliku .json do importu konta, po prostu wklej tutaj swój klucz posting Blurt. Zaszyfrujemy go na tym urządzeniu hasłem, które wybierzesz. Będziesz mógł czytać, publikować i handlować — ale nie zmieniać kluczy konta (do tego potrzebny jest portfel jak blurtwallet.com).",
-        "account_label": "Twoja nazwa konta Blurt (opcjonalnie)",
-        "account_ok": "wygląda dobrze!",
-        "account_hint": "Zostaw to pole puste, a wykryjemy ją na podstawie Twojego klucza. Bez @; jeśli ją wpiszesz, sprawdzimy, czy pasuje do Twojego klucza.",
+        "warning_body": "Jeśli nie masz 12-wyrazowej frazy seed ani pliku Keyfile, po prostu wklej tutaj swój Posting Key. Zaszyfrujemy go dla ciebie na tym urządzeniu. Będziesz mógł czytać, publikować i handlować z innymi, ale NIE otrzymasz zniżkowych opłat za ogłoszenia.",
         "wif_label": "Prywatny klucz posting (WIF)",
         "wif_placeholder": "5J… lub P5J…",
         "password_mismatch": "Hasła nie są zgodne.",
@@ -2330,9 +2346,8 @@
         "new_password_hint": "Co najmniej 8 znaków. Odblokowuje Morphit na tym urządzeniu. To nie jest hasło Blurt.",
         "new_password_confirm_label": "Potwierdź hasło",
         "error": {
-          "bad_account": "Nazwy kont używają małych liter, cyfr, myślników i kropek.",
           "passwords_mismatch": "Hasła się nie zgadzają. Wpisz oba ponownie.",
-          "account_not_found": "Nie znaleźliśmy @{account} w łańcuchu Blurt. Sprawdź pisownię i spróbuj ponownie.",
+          "account_not_found": "Wykryliśmy twoje konto (@{account}), ale nie udało się go teraz wczytać z Blurt. Sprawdź połączenie i spróbuj ponownie.",
           "key_not_on_account": "Wprowadzony klucz posting nie pasuje do klucza posting on-chain @{account}. Sprawdź, czy skopiowano właściwą WIF.",
           "wif": {
             "too-short": "Ten WIF jest za krótki, by był poprawnym kluczem Blurt.",
@@ -2348,8 +2363,7 @@
             "owner": "To twój klucz OWNER. Morphit potrzebuje tylko POSTING — wklej ten. (Klucze owner dają pełną kontrolę nad kontem; nigdzie ich nie wklejaj.)",
             "memo": "To twój klucz MEMO. Morphit potrzebuje POSTING — wklej ten."
           },
-          "master_password": "To wygląda na Twoje hasło główne Blurt, a nie klucz POSTING. Morphit nigdy nie używa hasła głównego do logowania. Otwórz blurtwallet.com → Permissions i skopiuj swój Posting Private Key (zaczyna się od 5).",
-          "could_not_resolve": "Nie udało się automatycznie wykryć Twojego konta na podstawie tego klucza. Wpisz powyżej swoją nazwę konta Blurt (bez @) i spróbuj ponownie."
+          "could_not_resolve": "Nie udało się wykryć twojego konta na podstawie tego klucza. Sprawdź, czy poprawnie skopiowałeś swój Posting Private Key, albo zaimportuj za pomocą 12-wyrazowej frazy seed lub pliku Keyfile."
         },
         "account_bad": "nieprawidłowy"
       },
@@ -2552,7 +2566,6 @@
     "error_title": "Nie udało się wczytać tego zlecenia",
     "error_body": "Coś poszło nie tak podczas kontaktu z indekserem. Spróbuj ponownie za chwilę.",
     "posted_by": "Opublikowane przez",
-    "new_trader": "Nowy trader",
     "details_heading": "Szczegóły",
     "payment_methods": "Metody płatności",
     "location": "Lokalizacja",
@@ -2939,7 +2952,9 @@
     "locked": {
       "title": "Odblokuj sesję, aby kontynuować",
       "body": "Morphit nigdy nie przechowuje Twojego hasła. Wpisz je, aby podpisać zlecenie.",
-      "password_label": "Hasło sesji"
+      "password_label": "Hasło sesji",
+      "fee_title": "Wpisz hasło, aby zapłacić opłatę",
+      "fee_body": "Opłata za ogłoszenie jest płacona w BLURT — to podpisany przelew, który wymaga klucza aktywnego. Wpisz hasło, aby odblokować go na chwilę. Morphit nigdy nie przechowuje twojego hasła."
     },
     "form": {
       "step_1_heading": "Co chcesz wymienić?",
@@ -3079,7 +3094,8 @@
       "body_insufficient_funds": "Twoje konto nie ma wystarczająco BLURT na opłatę za listing.",
       "body_locked": "Sesja jest zablokowana. Odblokuj hasłem, aby spróbować ponownie.",
       "body_bad_password": "To hasło nie odblokowało twojego keystore. Spróbuj ponownie.",
-      "body_missing_external_tx_id": "Identyfikator zewnętrznej transakcji jest wymagany dla płatności opłat w BTC i XMR."
+      "body_missing_external_tx_id": "Identyfikator zewnętrznej transakcji jest wymagany dla płatności opłat w BTC i XMR.",
+      "body_posting_only": "Opłata za ogłoszenie w BLURT wymaga klucza aktywnego, którego nie ma na tym urządzeniu — jesteś zalogowany tylko kluczem publikacji. Zaloguj się hasłem głównym lub pełnym keyfile, aby zapłacić w BLURT, albo wróć i zapłać w BTC/XMR (lub skorzystaj z darmowego pierwszego ogłoszenia)."
     },
     "waiver": {
       "heading": "Pierwsze zlecenie na nasz koszt!",
@@ -3133,7 +3149,8 @@
       "fee_address_chain_pinned": "Zakotwiczone w łańcuchu przez {account} — każda instancja Morphit weryfikuje opłaty wobec tego adresu.",
       "fee_address_chain_pinned_aria": "Autentyczność adresu zakotwiczonego w łańcuchu",
       "fee_address_local_fallback": "Lokalny adres zapasowy — ten operator nie przyjął jeszcze kanonicznego zakotwiczenia w łańcuchu. Zweryfikuj go z inną instancją Morphit przed wysłaniem, jeśli chcesz dodatkowej pewności.",
-      "fee_address_unavailable": "Ten operator nie skonfigurował adresu opłaty {asset}. Wybierz zamiast tego BLURT lub opublikuj swoje zlecenie na innej instancji Morphit."
+      "fee_address_unavailable": "Ten operator nie skonfigurował adresu opłaty {asset}. Wybierz zamiast tego BLURT lub opublikuj swoje zlecenie na innej instancji Morphit.",
+      "blurt_needs_active_key": "Wymaga klucza aktywnego. Jesteś zalogowany tylko kluczem publikacji — zaloguj się hasłem głównym lub pełnym keyfile, aby zapłacić w BLURT, albo zapłać w BTC/XMR."
     },
     "draft": {
       "restored_banner": "Przywrócono szkic sprzed {age}. Kontynuuj tam, gdzie skończyłeś — albo zacznij od nowa.",
@@ -3791,6 +3808,10 @@
     "dev_index": {
       "title": "Narzędzia dla deweloperów i operatorów",
       "description": "Narzędzia diagnostyczne dla operatorów dostosowujących swoją instancję Morphit i kontrybutorów weryfikujących build."
+    },
+    "stats": {
+      "title": "Statystyki sieci",
+      "description": "Aktualne, wyłącznie zbiorcze statystyki aktywności tego rynku peer-to-peer Morphit."
     }
   },
   "settings": {
@@ -3800,7 +3821,9 @@
       "input_label": "Twoje krótkie bio",
       "placeholder": "np. Kawa, BTC i długie spacery po blockchainie.",
       "hint": "Wygląda dobrze.",
-      "broadcast_ok_detail": "Twoje krótkie bio jest teraz opublikowane i widoczne dla wszystkich."
+      "broadcast_ok_detail": "Twoje krótkie bio jest teraz opublikowane i widoczne dla wszystkich.",
+      "clear": "Wyczyść",
+      "clear_confirm_prompt": "Usunąć krótki opis z tego urządzenia? Możesz go ustawić ponownie w każdej chwili."
     },
     "title": "Ustawienia",
     "subtitle": "Twoja tożsamość, Twoje zasady. Zapisane u Ciebie, nigdy na naszych serwerach.",
@@ -4220,7 +4243,7 @@
         "backup_codes_exhausted": "Nie masz już kodów zapasowych. Jeśli stracisz uwierzytelniający, będziesz potrzebować frazy seed do odzyskania."
       },
       "enroll": {
-        "cta": "Skonfiguruj uwierzytelnianie dwuskładnikowe",
+        "cta": "Skonfiguruj 2FA",
         "step1_title": "1. Zainstaluj otwartoźródłową aplikację uwierzytelniającą",
         "step1_body": "Zdecydowanie polecamy opcje open source poniżej. Morphit NIE poleca Google Authenticator, Microsoft Authenticator ani Authy — zamknięty kod, ze ścieżkami backup/synchronizacji, które mogą wyciec Twoje sekrety.",
         "step2_title": "2. Zeskanuj kod QR",
@@ -4472,5 +4495,20 @@
     "sell_range": "Sprzedaję {asset} za {min}–{max} {fiat}",
     "buy_any": "Kupuję {asset}",
     "sell_any": "Sprzedaję {asset}"
+  },
+  "stats": {
+    "page_title": "Statystyki sieci",
+    "page_intro": "Aktualny, wyłącznie zbiorczy przegląd aktywności w tej sieci Morphit. Nic tu nikogo nie identyfikuje — to sumy dla całej sieci.",
+    "orders_active": "Aktywne zlecenia",
+    "orders_total": "Zlecenia łącznie",
+    "trades_total": "Transakcje (od początku)",
+    "trades_30d": "Transakcje (30 dni)",
+    "assets_active": "Aktywa ze zleceniami",
+    "fiats_active": "Waluty ze zleceniami",
+    "assets_supported": "Obsługiwane aktywa",
+    "updated": "Zaktualizowano {time}",
+    "json_note": "Tworzysz agregator lub pulpit? Te same dane są dostępne w formacie JSON:",
+    "json_link": "surowy kanał",
+    "error": "Nie udało się teraz załadować statystyk. Spróbuj ponownie za chwilę."
   }
 }

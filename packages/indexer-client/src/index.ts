@@ -690,6 +690,23 @@ export interface FxResponse {
 	readonly currency_count: number;
 }
 
+/**
+ * GET /v1/stats — aggregate-only network summary for third-party P2P
+ * aggregators. Every field is a coarse aggregate; nothing per-account. Kept in
+ * sync with the indexer's buildStatsResponse (apps/indexer/src/api/stats.ts).
+ */
+export interface StatsResponse {
+	readonly network: 'morphit';
+	readonly generated_at: string;
+	readonly orders: { readonly active: number; readonly total: number };
+	readonly trades: { readonly completed_total: number; readonly completed_30d: number };
+	readonly assets: {
+		readonly supported: readonly string[];
+		readonly with_active_orders: number;
+	};
+	readonly fiat_currencies: { readonly with_active_orders: number };
+}
+
 // ─── Chat ciphertext ───────────────────────────────────────────────
 
 export interface ChatMessageRecord {
