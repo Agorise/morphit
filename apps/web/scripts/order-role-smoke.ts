@@ -130,3 +130,4 @@ if (failures > 0) {
 	console.log(`order-role-smoke: ${failures} FAILED`);
 	process.exit(1);
 }
+console.log(`✓ all ${scenarios} order-role scenarios passed`);

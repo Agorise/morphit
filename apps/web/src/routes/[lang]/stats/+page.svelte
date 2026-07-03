@@ -34,12 +34,12 @@
 	const tiles = $derived(
 		stats
 			? [
-					{ value: stats.orders.active, key: 'stats.orders_active' },
-					{ value: stats.orders.total, key: 'stats.orders_total' },
-					{ value: stats.trades.completed_total, key: 'stats.trades_total' },
-					{ value: stats.trades.completed_30d, key: 'stats.trades_30d' },
-					{ value: stats.assets.with_active_orders, key: 'stats.assets_active' },
-					{ value: stats.fiat_currencies.with_active_orders, key: 'stats.fiats_active' }
+					{ count: stats.orders.active, key: 'stats.orders_active' },
+					{ count: stats.orders.total, key: 'stats.orders_total' },
+					{ count: stats.trades.completed_total, key: 'stats.trades_total' },
+					{ count: stats.trades.completed_30d, key: 'stats.trades_30d' },
+					{ count: stats.assets.with_active_orders, key: 'stats.assets_active' },
+					{ count: stats.fiat_currencies.with_active_orders, key: 'stats.fiats_active' }
 				]
 			: []
 	);
@@ -66,7 +66,7 @@
 					<div
 						class="font-display text-3xl font-extrabold text-morphit-teal dark:text-morphit-emerald"
 					>
-						{tile.value.toLocaleString(currentLang)}
+						{tile.count.toLocaleString(currentLang)}
 					</div>
 					<div class="mt-1 text-sm text-ink-600 dark:text-ink-300">{$_(tile.key)}</div>
 				</div>
