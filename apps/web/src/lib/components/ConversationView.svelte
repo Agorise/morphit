@@ -52,9 +52,15 @@
 	import { getProfileCached } from '$lib/indexer/profileCache';
 	import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
 	import { selfProfile } from '$lib/stores/selfProfile';
+	import {
+		writeChatSecurityMode,
+		readChatSecurityNudgeSeen,
+		markChatSecurityNudgeSeen
+	} from '$stores/chatSecurity';
 	import { blockedAccounts, loadBlocks, markBlocked, markUnblocked } from '$lib/chat/blocks';
 	import { broadcastBlock, broadcastUnblock } from '$blurt/ops/block';
 	import { getChatAdmission, getOrdersByAccount } from '$lib/indexer/client';
+	import { chatMoneyFlow } from '$lib/chat/orderRole';
 	import { fetchAccountKeys } from '$blurt/accountKeys';
 	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 	import { orderTitleParts } from '$lib/utils/orderTitle';
@@ -67,7 +73,12 @@
 	import PayBlurtModal from '$components/PayBlurtModal.svelte';
 	import { encodeFundsSentPayload, type FundsSentPayload } from '$lib/chat/payload';
 	import type { ChatAssetTicker } from '$lib/chat/payload';
-	import { ASSETS } from '$lib/assets/registry';
+	import { chatAssetFromTicker, getAsset } from '$lib/assets/registry';
+	import { computeOrderPayAmount } from '$lib/orders/payAmount';
+	import { fetchFxRates } from '$lib/orders/fx';
+	import { getPrice, priceStore, type PricedSymbol } from '$lib/prices';
+	import type { FxResponse } from '@morphit/indexer-client';
+	import { orderUsesShippableMethod } from '$lib/payments/registry';
 	import {
 		isUsdtNetwork,
 		type UsdtNetwork,
@@ -149,6 +160,16 @@
 	 *  expired) and thus not in the peer's current book — in which case
 	 *  the RE: line is simply omitted. */
 	let orderRecord = $state<OrderRecord | null>(null);
+
+	/** cp406 — which account POSTED the resolved order (peer or me). The chat
+	 *  may be about the peer's order (the common case) OR our own order (the
+	 *  peer opened the chat about it). Drives the RE: link author, the PDF
+	 *  subject URL, and — via orderIsMine — the peer-side money-flow gating.
+	 *  Null when there's no resolved order. */
+	let orderOwner = $state<string | null>(null);
+	/** True when the resolved order is OURS (we posted it). Flips the peer's
+	 *  trade side, so Pay-now / Share-address gate correctly either way. */
+	const orderIsMine = $derived(orderOwner !== null && orderOwner === me);
 
 	/** Derived block status for this peer. True iff the blocks
 	 *  store contains the peer's account. Drives the Block/Unblock
@@ -262,6 +283,48 @@
 		overflowMenuOpen = false;
 	}
 
+	// cp406 — Chat Security (self-copy / "destroy on leave" opt-in).
+	/** One-time nudge: a red dot on the kebab until the user opens Chat
+	 *  Security once. Initialised safe (no dot) and corrected from storage in
+	 *  the $effect below, so a seen user never sees a false dot flash. */
+	let chatSecurityNudgeSeen = $state(true);
+	/** Confirm modal ("destroy after you leave this chat?"). */
+	let chatSecurityConfirmOpen = $state(false);
+	/** Follow-up "grab your PDF" reminder, shown only after choosing destroy. */
+	let pdfReminderOpen = $state(false);
+	$effect(() => {
+		chatSecurityNudgeSeen = readChatSecurityNudgeSeen(me);
+	});
+
+	/** Kebab → "Chat Security": close the menu, clear the one-time dot, and
+	 *  open the confirm modal. */
+	function openChatSecurity(): void {
+		overflowMenuOpen = false;
+		markChatSecurityNudgeSeen(me);
+		chatSecurityNudgeSeen = true;
+		chatSecurityConfirmOpen = true;
+	}
+	/** "Yes, destroy them" → PFS mode + the PDF reminder. */
+	function onChatSecurityConfirm(): void {
+		chatSecurityConfirmOpen = false;
+		writeChatSecurityMode(me, 'destroy');
+		pdfReminderOpen = true;
+	}
+	/** "No, keep them" → the default keep-history mode. */
+	function onChatSecurityCancel(): void {
+		chatSecurityConfirmOpen = false;
+		writeChatSecurityMode(me, 'keep');
+	}
+	/** "Get my PDF now" → export, then close. */
+	async function onPdfReminderConfirm(): Promise<void> {
+		pdfReminderOpen = false;
+		await exportChatToPdf();
+	}
+	/** "Later" → just close; destroy mode is already saved. */
+	function onPdfReminderCancel(): void {
+		pdfReminderOpen = false;
+	}
+
 	function openVerifyPeer(): void {
 		closeOverflowMenu();
 		verifyPeerOpen = true;
@@ -307,6 +370,20 @@
 			unit: 'pt',
 			format: 'a4',
 			encryption: { ownerPassword, userPermissions: ['print', 'copy'] }
+		});
+
+		// cp406 [D1] — Document Properties surfaced by PDF readers. Title
+		// mirrors the visible heading (localized, = "Morphit chat with @peer");
+		// Author is the exporting account; Subject is the canonical order URL
+		// when this chat is about an order. The order owner may be either party,
+		// and we use this instance's own origin so a federated node's export
+		// links back to itself.
+		doc.setDocumentProperties({
+			title: t('chat.export.title', { peer }),
+			author: `@${me}`,
+			...(orderOwner && orderPermlink
+				? { subject: `${window.location.origin}${lp(`/@${orderOwner}/${orderPermlink}`)}` }
+				: {})
 		});
 
 		const PAGE_W = doc.internal.pageSize.getWidth();
@@ -393,7 +470,7 @@
 		} else {
 			for (const m of messages) {
 				const when = m.createdAt ? formatDayMonthTime(m.createdAt.toISOString()) : '';
-				const who = m.sender === 'me' ? `${t('chat.export.you')} (@${me})` : `@${peer}`;
+				const who = m.sender === me ? `${t('chat.export.you')} (@${me})` : `@${peer}`;
 				// Sender + timestamp line.
 				ensure(13 * 1.42);
 				doc.setFont('helvetica', 'bold');
@@ -847,13 +924,28 @@
 	 *  RE: line is just omitted. */
 	async function loadOrderContext(): Promise<void> {
 		if (!orderPermlink) return;
-		try {
-			const r = await getOrdersByAccount(peer, { limit: 100 });
-			if (!r.ok) return;
-			orderRecord = r.data.items.find((o) => o.permlink === orderPermlink) ?? null;
-		} catch {
-			orderRecord = null;
+		// The order may belong to EITHER party: usually the peer (we opened the
+		// chat from their order), but also us (they opened the chat about OUR
+		// order). Try the peer's book first, then our own, and remember whose it
+		// is so the RE: link, the PDF subject, and the trade-role gating point at
+		// the right author. Best-effort: on failure / no-longer-live order the
+		// RE: line is just omitted.
+		for (const owner of [peer, me]) {
+			try {
+				const r = await getOrdersByAccount(owner, { limit: 100 });
+				if (!r.ok) continue;
+				const found = r.data.items.find((o) => o.permlink === orderPermlink);
+				if (found) {
+					orderRecord = found;
+					orderOwner = owner;
+					return;
+				}
+			} catch {
+				/* try the next book */
+			}
 		}
+		orderRecord = null;
+		orderOwner = null;
 	}
 
 	// ─── Controller lifecycle ────────────────────────────────────
@@ -949,47 +1041,146 @@
 		return $_(parts.key, { values: parts.values }) as string;
 	});
 
-	// ─── cp402 [6] — crypto-payment direction ────────────────────
+	// ─── cp402 [6] / cp406 — crypto-payment direction ────────────
 	//
-	// `orderRecord.side` is the PEER's perspective (the chat is about
-	// the peer's order): side='buy' ⇒ the peer is BUYING the asset ⇒
-	// the peer receives the crypto and I send it (I'm the crypto-SENDER,
-	// I use "Pay now"); side='sell' ⇒ the peer sells ⇒ the peer sends the
-	// crypto and I receive it (I'm the crypto-RECEIVER, I share a receiving
-	// address). Normalize exactly like orderTitle.ts (anything ≠ 'sell' is
-	// 'buy'). With no order context we can't tell the direction, so both
-	// buttons show (the pre-cp402 behavior) rather than risk hiding one a
-	// trader needs. Mailing-address + shipment are NOT gated here — they
-	// legitimately apply to barter, courier shipments, and cash-by-mail,
-	// none of which the order reveals.
-	const peerOrderSide = $derived(
-		orderRecord ? (orderRecord.side === 'sell' ? 'sell' : 'buy') : null
-	);
-	/** I send the crypto ⇒ show "Pay now". True when the peer is buying
-	 *  the asset; also true when there's no order (fallback: show it). */
-	const showPayNowButton = $derived(peerOrderSide === null || peerOrderSide === 'buy');
-	/** I receive the crypto ⇒ show "Share address". True when the peer is
-	 *  selling the asset; also true when there's no order (fallback). */
-	const showShareAddressButton = $derived(peerOrderSide === null || peerOrderSide === 'sell');
+	// The chat's button gating is expressed from the PEER's side: peer BUYS the
+	// asset ⇒ the peer receives the crypto and I send it (I'm the crypto-SENDER,
+	// I use "Pay now"); peer SELLS ⇒ the peer sends the crypto and I receive it
+	// (I'm the crypto-RECEIVER, I share a receiving address). An order's raw
+	// `side` is the POSTER's perspective, so we translate it to the peer's side
+	// via peerCryptoSide (inside chatMoneyFlow): as-is when the order is the
+	// peer's, flipped when the order is ours (orderIsMine). cp406 (Ken): with
+	// NO live-order context — an unsolicited chat opened from a profile's
+	// Message button, or a chat whose order is no longer live (cancelled /
+	// filled) — none of these money-flow controls belong on screen at all, so
+	// chatMoneyFlow returns both false and every button below is hidden. The
+	// physical mailing/shipment controls are gated the same way (they depend on
+	// these + orderCanShip, which also needs a live order — see below).
+	// Both crypto buttons come from the one tested pure helper (chatMoneyFlow):
+	// no live order ⇒ both false; a live order ⇒ exactly one true.
+	const cryptoButtons = $derived(chatMoneyFlow(orderRecord, orderIsMine));
+	/** I send the crypto ⇒ show "Pay now". Only when a live order is connected
+	 *  AND the peer is buying the asset. Hidden with no live order. */
+	const showPayNowButton = $derived(cryptoButtons.payNow);
+	/** I receive the crypto ⇒ show "Share crypto address". Only when a live
+	 *  order is connected AND the peer is selling. Hidden with no live order. */
+	const showShareAddressButton = $derived(cryptoButtons.shareAddress);
 
-	/** cp402 [7a] — narrow a raw order asset string to a ChatAssetTicker
-	 *  against the live asset registry (OrderRecord.asset is typed
-	 *  `string`). Defense-in-depth: if an order somehow carries an asset
-	 *  we don't ship, we simply don't lock (free picker) rather than lock
-	 *  the modal to an invalid coin. */
-	function isKnownChatAsset(s: string): s is ChatAssetTicker {
-		return ASSETS.some((a) => a.ticker === s);
-	}
-	/** cp402 [7a] — when the composer "Pay now" (no pill context, so
-	 *  `markSentArgs === null`) is opened about an order, the funds-sent
-	 *  modal locks its asset to the order's asset so grandma cannot send
-	 *  the wrong coin. `undefined` (free picker) when there's no order or
-	 *  the asset is unknown, or when a pill drove the modal. */
+	// cp406 (Ken) — the "Share mailing address" + "Record shipment" controls
+	// only matter when the trade moves a PHYSICAL thing that can be posted:
+	// barter goods, precious metals, or cash-by-mail. A plain crypto↔fiat trade
+	// paid in person / online / on-chain never ships anything, so those two
+	// buttons stay hidden to keep the composer grandma-simple. Cash-in-person is
+	// physical but face-to-face only → not shippable.
+	//
+	// WHICH of the two each party sees follows a hard invariant: the physical
+	// thing IS the payment for the crypto. So whoever RECEIVES the crypto is the
+	// one paying physically — they SHIP it ("Record shipment"); whoever SENDS
+	// the crypto is receiving that physical payment — they say where to send it
+	// ("Share mailing address"). This holds identically for barter, precious
+	// metals, and cash-by-mail. It maps straight onto the crypto-direction
+	// gating above: crypto receiver (showShareAddressButton) ships; crypto
+	// sender (showPayNowButton) shares a mailing address.
+	const orderCanShip = $derived(
+		orderRecord !== null && orderUsesShippableMethod(orderRecord.payment_methods)
+	);
+	/** I RECEIVE crypto ⇒ I'm paying with the physical item ⇒ I ship it. */
+	const showRecordShipmentButton = $derived(orderCanShip && showShareAddressButton);
+	/** I SEND crypto ⇒ I'm receiving the physical payment ⇒ I share where. */
+	const showShareMailingButton = $derived(orderCanShip && showPayNowButton);
+
+	/** cp406 (Ken) — the whole money-flow toolbar shows only when at least one
+	 *  of its buttons would. Since every button above requires a live order,
+	 *  this collapses to "a live order is connected" — an unsolicited chat
+	 *  (profile Message button) or a chat whose order went non-live renders no
+	 *  toolbar strip at all, rather than an empty bordered bar. */
+	const showChatActionToolbar = $derived(
+		showPayNowButton || showShareAddressButton || showShareMailingButton || showRecordShipmentButton
+	);
+
+	/** cp402 [7a] / cp406 — when the composer "Pay now" (no pill context, so
+	 *  `markSentArgs === null`) is opened about an order, the funds-sent / pay
+	 *  modal locks its asset to the order's asset so a user cannot send the
+	 *  wrong coin, and BLURT is routed to PayBlurtModal. `undefined` (free
+	 *  picker) when there's no order, the asset isn't a tradable chat asset, or
+	 *  a pill drove the modal.
+	 *
+	 *  cp406 FIX: `OrderRecord.asset` is the canonical UPPERCASE AssetTicker
+	 *  ('BLURT') while ChatAssetTicker is lower-case ('blurt'); the old inline
+	 *  check compared them directly and ALWAYS failed, so the lock never engaged
+	 *  and every order fell back to the free 16-coin picker. `chatAssetFromTicker`
+	 *  folds the case. */
 	const composerPayNowAsset = $derived(
-		markSentArgs === null && orderRecord && isKnownChatAsset(orderRecord.asset)
-			? orderRecord.asset
+		markSentArgs === null && orderRecord
+			? (chatAssetFromTicker(orderRecord.asset) ?? undefined)
 			: undefined
 	);
+
+	// ─── cp406: Pay-now amount pre-fill ──────────────────────────
+	// Seed the "Pay now" modal with the crypto amount equal to the order's fiat
+	// minimum, at the order's price, so a non-technical user doesn't have to do
+	// the conversion by hand. A FIXED-price order resolves with no live data;
+	// a market/spread order needs the FX table + the asset's live USD price,
+	// fetched below ONLY for that case. computeOrderPayAmount returns null (→
+	// leave the field blank) whenever it can't be derived safely — for a money
+	// field, blank always beats a confidently-wrong seed.
+	let fxTable = $state<FxResponse | null>(null);
+
+	$effect(() => {
+		const o = orderRecord;
+		if (!o) return;
+		const pm = o.price_model as Record<string, unknown> | null;
+		// Only market/spread orders need live data; fixed prices are exact.
+		if (!pm || pm.kind !== 'spread') return;
+		void getPrice(o.asset as PricedSymbol).catch(() => {});
+		if (fxTable === null) {
+			void fetchFxRates(resolveOrigin(MORPHIT_INDEXER_ORIGIN), fetch).then((res) => {
+				if (res.kind === 'ok') fxTable = res.table;
+			});
+		}
+	});
+
+	const payPrefill = $derived.by(() => {
+		const o = orderRecord;
+		if (!o) return null;
+		const marketUsd = $priceStore[o.asset as PricedSymbol]?.usd ?? null;
+		return computeOrderPayAmount(o, fxTable, marketUsd);
+	});
+
+	/** payPrefill rounded to the order asset's native decimals (capped at 8 for
+	 *  a sane input) as a positive number; null when there is nothing to seed
+	 *  (uncomputable price, or the composer isn't locked to a chat asset). */
+	const payPrefillAmount = $derived.by((): number | null => {
+		const pre = payPrefill;
+		const asset = composerPayNowAsset;
+		if (pre === null || !asset) return null;
+		const decimals = Math.min(getAsset(asset).decimals, 8);
+		const rounded = Number(pre.amount.toFixed(decimals));
+		return Number.isFinite(rounded) && rounded > 0 ? rounded : null;
+	});
+	/** String form for FundsSentModal.initialAmount (empty = no seed). */
+	const payPrefillStr = $derived(payPrefillAmount !== null ? String(payPrefillAmount) : '');
+
+	/** cp406 — one-line caption for the modal explaining the seeded amount: the
+	 *  order's fiat minimum + its crypto equivalent, with a market-price caveat
+	 *  when the estimate rides on a live price. Empty unless there's a pre-fill
+	 *  (composer flow only), so the pill flow shows no caption. */
+	const payPrefillHint = $derived.by((): string => {
+		const pre = payPrefill;
+		const amt = payPrefillAmount;
+		const o = orderRecord;
+		if (pre === null || amt === null || !o || o.amount_min === null || markSentArgs !== null) {
+			return '';
+		}
+		return $_(pre.approximate ? 'chat.pay_prefill.hint_market' : 'chat.pay_prefill.hint', {
+			values: {
+				min: String(o.amount_min),
+				fiat: o.fiat_currency,
+				amount: String(amt),
+				asset: o.asset
+			}
+		}) as string;
+	});
 
 	// ─── Send handler ────────────────────────────────────────────
 
@@ -1089,7 +1280,7 @@
 					     (mobile + grandma friendly); the label stays put while the
 					     summary truncates, with the full text in the hover title. -->
 					<a
-						href={lp(`/@${peer}/${orderPermlink}`)}
+						href={lp(`/@${orderOwner ?? peer}/${orderPermlink}`)}
 						class="flex min-w-0 items-baseline gap-1 text-xs text-ink-500 hover:text-morphit-emerald hover:underline dark:text-ink-400"
 						title={orderSummary}
 					>
@@ -1114,7 +1305,7 @@
 						<button
 							type="button"
 							bind:this={overflowTriggerEl}
-							class="rounded-xl border-2 border-ink-300 bg-white px-2 py-1.5 text-ink-700 hover:bg-ink-100 dark:border-ink-600 dark:bg-ink-900 dark:text-ink-200 dark:hover:bg-ink-800"
+							class="relative rounded-xl border-2 border-ink-300 bg-white px-2 py-1.5 text-ink-700 hover:bg-ink-100 dark:border-ink-600 dark:bg-ink-900 dark:text-ink-200 dark:hover:bg-ink-800"
 							aria-haspopup="menu"
 							aria-expanded={overflowMenuOpen}
 							aria-label={$_('chat.menu.aria_open') as string}
@@ -1134,6 +1325,14 @@
 								<circle cx="8" cy="8" r="1.5" />
 								<circle cx="8" cy="13" r="1.5" />
 							</svg>
+							{#if !chatSecurityNudgeSeen}
+								<!-- cp406 — one-time nudge dot inviting discovery of Chat
+								     Security. Cleared for good the first time the item is opened. -->
+								<span
+									class="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-ink-900"
+									aria-hidden="true"
+								></span>
+							{/if}
 						</button>
 						{#if overflowMenuOpen}
 							<div
@@ -1150,6 +1349,16 @@
 									onclick={exportChatToPdf}
 								>
 									{$_('chat.export.menu_label')}
+								</button>
+								<!-- cp406 — Chat Security: opt into "destroy on leave" (PFS) or
+								     keep the default readable history. Opening clears the dot. -->
+								<button
+									type="button"
+									role="menuitem"
+									class="block w-full px-4 py-2 text-left text-sm hover:bg-ink-100 dark:hover:bg-ink-800"
+									onclick={openChatSecurity}
+								>
+									{$_('chat.security.menu_label')}
 								</button>
 								<!-- cp402: Block/Unblock moved here from a standalone
 								     header button. Reuses the confirm modal's named
@@ -1313,8 +1522,9 @@
 			     above the composer.  Only rendered when admitted (or
 			     when the order-response bypass applies).  Locked
 			     sessions hide the toolbar (it would just dispatch a
-			     "please unlock" no-op modal). -->
-			{#if !locked}
+			     "please unlock" no-op modal). cp406: also hidden when
+			     there's no live order to act on (showChatActionToolbar). -->
+			{#if !locked && showChatActionToolbar}
 				<div
 					class="flex-none border-t border-ink-200 bg-ink-50 px-4 py-2 dark:border-ink-800 dark:bg-ink-900"
 				>
@@ -1324,12 +1534,12 @@
 					<!-- cp402 [6] — "Share address" shares MY crypto receiving
 					     address, so it's only relevant when I'm the one RECEIVING
 					     the crypto (the peer is selling the asset). Hidden when
-					     I'm the sender; shown in both roles when there's no order
-					     context to judge from. -->
+					     I'm the sender, and hidden entirely when there's no live
+					     order (cp406 — unsolicited / non-live chats). -->
 					{#if showShareAddressButton}
 						<button
 							type="button"
-							class="rounded-lg border border-ink-300 px-3 py-1.5 text-xs font-semibold text-ink-700 hover:border-morphit-emerald hover:text-morphit-emerald dark:border-ink-700 dark:text-ink-200"
+							class="rounded-lg border border-morphit-teal/40 px-3 py-1.5 text-xs font-semibold text-morphit-teal transition-colors hover:border-morphit-teal hover:bg-morphit-teal/5 dark:border-morphit-emerald/40 dark:text-morphit-emerald dark:hover:bg-morphit-emerald/10"
 							onclick={() => (showAddressShareModal = true)}
 							aria-label={$_('chat.address.share_button_aria') as string}
 						>
@@ -1339,12 +1549,13 @@
 					<!-- cp402 [6] — the funds-sent / "Pay now" button initiates
 					     (or records) MY crypto payment, so it's only relevant when
 					     I'm the one SENDING the crypto (the peer is buying the
-					     asset). Hidden when I'm the receiver; shown in both roles
-					     with no order context. ([7] reflows the click below.) -->
+					     asset). Hidden when I'm the receiver, and hidden entirely
+					     when there's no live order (cp406). ([7] reflows the click
+					     below.) -->
 					{#if showPayNowButton}
 						<button
 							type="button"
-							class="rounded-lg border border-ink-300 px-3 py-1.5 text-xs font-semibold text-ink-700 hover:border-morphit-emerald hover:text-morphit-emerald dark:border-ink-700 dark:text-ink-200"
+							class="rounded-lg bg-[var(--morphit-btn-face)] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
 							onclick={() => {
 								// cp402 [7] — composer "Pay now". Clear any stale
 								// pill context first. BLURT is sent by the app
@@ -1357,7 +1568,10 @@
 								if (composerPayNowAsset === 'blurt') {
 									payBlurtArgs = {
 										recipient: peer,
-										amount: 0,
+										// cp406 — pre-fill the order's fiat-minimum
+										// equivalent in BLURT (0 when uncomputable);
+										// the field stays editable.
+										amount: payPrefillAmount ?? 0,
 										memo: '',
 										orderPermlink: orderPermlink ?? undefined,
 										amountEditable: true
@@ -1371,28 +1585,33 @@
 							{$_('chat.funds_sent.button')}
 						</button>
 					{/if}
-						<!-- cp121 / cp402 [6]: physical-shipment + mailing-address
-						     pills. Deliberately NOT gated by order context — they
-						     apply to barter trades, courier shipments (FedEx etc.),
-						     and cash-by-mail (which can carry a tracking number),
-						     none of which the order record reveals. Gating them from
-						     the order would risk hiding a control a trader needs. -->
-						<button
-							type="button"
-							class="rounded-lg border border-ink-300 px-3 py-1.5 text-xs font-semibold text-ink-700 hover:border-morphit-emerald hover:text-morphit-emerald dark:border-ink-700 dark:text-ink-200"
-							onclick={() => (showMailingAddressModal = true)}
-							aria-label={$_('chat.mailing_address.button_aria') as string}
-						>
-							{$_('chat.mailing_address.button')}
-						</button>
-						<button
-							type="button"
-							class="rounded-lg border border-ink-300 px-3 py-1.5 text-xs font-semibold text-ink-700 hover:border-morphit-emerald hover:text-morphit-emerald dark:border-ink-700 dark:text-ink-200"
-							onclick={() => (showShipmentModal = true)}
-							aria-label={$_('chat.shipment.button_aria') as string}
-						>
-							{$_('chat.shipment.button')}
-						</button>
+						<!-- cp121 / cp402 [6] / cp406: physical-shipment +
+						     mailing-address controls, shown only for a shippable trade
+						     (barter / precious metals / cash-by-mail) and split by
+						     direction: the crypto SENDER receives the physical payment
+						     so they "Share mailing address"; the crypto RECEIVER is
+						     paying with the physical item so they "Record shipment". A
+						     plain crypto↔fiat in-person/online trade shows neither. -->
+						{#if showShareMailingButton}
+							<button
+								type="button"
+								class="rounded-lg border border-morphit-teal/40 px-3 py-1.5 text-xs font-semibold text-morphit-teal transition-colors hover:border-morphit-teal hover:bg-morphit-teal/5 dark:border-morphit-emerald/40 dark:text-morphit-emerald dark:hover:bg-morphit-emerald/10"
+								onclick={() => (showMailingAddressModal = true)}
+								aria-label={$_('chat.mailing_address.button_aria') as string}
+							>
+								{$_('chat.mailing_address.button')}
+							</button>
+						{/if}
+						{#if showRecordShipmentButton}
+							<button
+								type="button"
+								class="rounded-lg border border-morphit-teal/40 px-3 py-1.5 text-xs font-semibold text-morphit-teal transition-colors hover:border-morphit-teal hover:bg-morphit-teal/5 dark:border-morphit-emerald/40 dark:text-morphit-emerald dark:hover:bg-morphit-emerald/10"
+								onclick={() => (showShipmentModal = true)}
+								aria-label={$_('chat.shipment.button_aria') as string}
+							>
+								{$_('chat.shipment.button')}
+							</button>
+						{/if}
 					</div>
 				</div>
 			{/if}
@@ -1454,9 +1673,11 @@
 	<FundsSentModal
 		{orderPermlink}
 		initialMethod={markSentArgs?.method ?? 'btc'}
-		initialAmount={markSentArgs?.amount ?? ''}
+		initialAmount={markSentArgs !== null ? (markSentArgs.amount ?? '') : payPrefillStr}
 		lockedMethod={composerPayNowAsset}
 		amountRequired={markSentArgs === null}
+		payHint={payPrefillHint}
+		{peer}
 		initialUsdtNetwork={/* cp26 DD-7 fix — propagate the USDT network from the
 			   pill the user tapped, so they don't have to re-pick
 			   the network they already saw in the chat header.
@@ -1525,6 +1746,7 @@
 		amount={payBlurtArgs.amount}
 		amountEditable={payBlurtArgs.amountEditable ?? false}
 		memo={payBlurtArgs.memo}
+		payHint={payPrefillHint}
 		onPaid={handlePaidBlurt}
 		onCancel={handleCancelPayBlurt}
 	/>
@@ -1556,6 +1778,34 @@
 		onCancel={onCancelBlock}
 	/>
 {/if}
+
+<!-- cp406 — Chat Security confirm: "destroy after you leave this chat?".
+     Yes → PFS "destroy" mode + the PDF reminder below; No → the default
+     keep-history mode (self-copy, readable own history). -->
+<ConfirmModal
+	bind:open={chatSecurityConfirmOpen}
+	title={$_('chat.security.confirm.title') as string}
+	body={$_('chat.security.confirm.body') as string}
+	confirmLabel={$_('chat.security.confirm.yes') as string}
+	cancelLabel={$_('chat.security.confirm.no') as string}
+	variant="neutral"
+	onConfirm={onChatSecurityConfirm}
+	onCancel={onChatSecurityCancel}
+/>
+
+<!-- cp406 — follow-up reminder, shown only after choosing destroy: grab a PDF
+     before your own history becomes unrecoverable. "Get my PDF now" exports;
+     "Later" just closes (destroy mode is already saved either way). -->
+<ConfirmModal
+	bind:open={pdfReminderOpen}
+	title={$_('chat.security.pdf_reminder.title') as string}
+	body={$_('chat.security.pdf_reminder.body') as string}
+	confirmLabel={$_('chat.security.pdf_reminder.get_now') as string}
+	cancelLabel={$_('chat.security.pdf_reminder.later') as string}
+	variant="neutral"
+	onConfirm={onPdfReminderConfirm}
+	onCancel={onPdfReminderCancel}
+/>
 
 <!-- REVISIT-LIST item 11 — opt-in OOB fingerprint panel.
      Hidden by default; opened by the user from the conversation

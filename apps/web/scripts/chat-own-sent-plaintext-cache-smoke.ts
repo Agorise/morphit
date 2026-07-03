@@ -86,7 +86,7 @@ const SCENARIOS: readonly Scenario[] = [
 			'const ownTag = clientTagFromHeader(rec.header);',
 			'deps.getLiveIdentity() !== null && ownTag !== null',
 			'ownSentPlaintext.get(ownSentKey(deps.me, ownTag))',
-			'text: ownCached ?? ENCRYPTED_PLACEHOLDER'
+			'text: ownFromChain ?? ownCached ?? ENCRYPTED_PLACEHOLDER'
 		],
 		mustNotHave: [
 			// Pre-fix: our own historical messages were ALWAYS placeholder.

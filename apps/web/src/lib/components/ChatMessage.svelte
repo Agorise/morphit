@@ -771,7 +771,9 @@
 						     BIP-78 PSBT exchange." -->
 						{#if p.method === 'btc' && p.payjoinEndpoint !== undefined}
 							<span
-								class="rounded-md bg-morphit-emerald/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-morphit-emerald"
+								class="rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide {isOutgoing
+									? 'bg-ink-950/15 text-ink-950'
+									: 'bg-morphit-emerald/20 text-emerald-800 dark:text-morphit-emerald'}"
 								title={$_('chat.address.payjoin_badge_tooltip') as string}
 							>
 								🔐 {$_('chat.address.payjoin_badge')}
@@ -1166,7 +1168,7 @@
 				>
 					<div class="mb-1 flex items-center gap-2">
 						<span aria-hidden="true">✉️</span>
-						<span class="text-sm font-semibold text-morphit-emerald">
+						<span class="text-sm font-semibold text-emerald-800 dark:text-morphit-emerald">
 							{$_('chat.mailing_address.pill_heading')}
 						</span>
 					</div>
@@ -1187,7 +1189,7 @@
 					{/if}
 					<button
 						type="button"
-						class="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-morphit-emerald hover:underline"
+						class="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-emerald-800 hover:underline dark:text-morphit-emerald"
 						onclick={() => {
 							const p = decoded.kind === 'mailing_address' ? decoded.payload : null;
 							if (!p) return;

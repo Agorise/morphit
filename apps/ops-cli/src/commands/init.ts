@@ -26,6 +26,11 @@ import { defaultRepoRoot } from '../lib/repoRoot.ts';
 import { existsSync, readFileSync } from 'node:fs';
 import { runSystemCheck, renderSystemCheck } from '../init/systemCheck.ts';
 import { generateOnionV3, type OnionV3 } from '../init/torOnion.ts';
+import {
+	generateI2pDestination,
+	i2pdAvailable,
+	type I2pDestinationResult
+} from '../init/i2pGenerate.ts';
 import { validateAltAddress } from '../lib/altAddressValidate.ts';
 import { sanitizeForTerm } from '../render/term.ts';
 import {
@@ -91,6 +96,33 @@ function resolveExistingTorAddress(existingConfigPath: string): string | null {
 			const cap = m?.[1];
 			if (cap) {
 				const v = validateAltAddress('tor', cap.trim());
+				if (v.ok) return v.value;
+			}
+		}
+	} catch {
+		/* unreadable → treat as none */
+	}
+	return null;
+}
+
+/** Resolve an EXISTING I2P b32 address the operator already set, so we never
+ *  overwrite / regenerate over an operable one (Ken's rule: a saved, operable
+ *  b32 is preserved).  First the env var, then a manual line in an existing
+ *  config.  Returns the validated address, or null → the wizard generates a
+ *  fresh basic destination (default-on). */
+function resolveExistingI2pAddress(existingConfigPath: string): string | null {
+	const envVal = (process.env.MORPHIT_INSTANCE_I2P_B32_ADDRESS ?? '').trim();
+	if (envVal) {
+		const v = validateAltAddress('i2p', envVal);
+		if (v.ok) return v.value;
+	}
+	try {
+		if (existsSync(existingConfigPath)) {
+			const txt = readFileSync(existingConfigPath, 'utf8');
+			const m = txt.match(/^\s*MORPHIT_INSTANCE_I2P_B32_ADDRESS\s*=\s*"?([^"\n#]+?)"?\s*$/m);
+			const cap = m?.[1];
+			if (cap) {
+				const v = validateAltAddress('i2p', cap.trim());
 				if (v.ok) return v.value;
 			}
 		}
@@ -354,6 +386,36 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 	}
 	const altNetworksWithTor = { ...altNetworks, tor: torAddress };
 
+	// Resolve the I2P b32 (default-on, like the onion): a value the operator
+	// typed in the alt-network step wins; else an existing operable address is
+	// PRESERVED (never regenerated over); else — for a fresh instance — we
+	// generate a basic destination via i2pd if it's installed.  The address
+	// rides in altNetworks.i2pB32 (→ env var + footer pill); the keyfile +
+	// tunnel stanza ride in i2pDestination and are written on the success path
+	// only.  Generation failure is never fatal.
+	let i2pDestination: I2pDestinationResult | null = null;
+	let i2pB32 = altNetworksWithTor.i2pB32;
+	if (i2pB32 === null) {
+		const existingI2p = resolveExistingI2pAddress(existingConfig);
+		if (existingI2p) {
+			i2pB32 = existingI2p;
+		} else if (i2pdAvailable()) {
+			try {
+				console.log('\n  Generating a default I2P address with i2pd\u2026');
+				i2pDestination = await generateI2pDestination();
+				i2pB32 = i2pDestination.b32;
+			} catch (e) {
+				console.log(
+					`  \u2139 Could not auto-generate an I2P address (${
+						e instanceof Error ? e.message : 'unknown error'
+					}); skipping \u2014 you can add one later from the main menu.`
+				);
+			}
+		}
+		// else: i2pd not installed → leave I2P unset for now.
+	}
+	const altNetworksFinal = { ...altNetworksWithTor, i2pB32 };
+
 	const answers: WizardAnswers = {
 		instanceName,
 		tagline,
@@ -365,7 +427,7 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 		dailyCeiling,
 		contactUrl,
 		origin,
-		altNetworks: altNetworksWithTor,
+		altNetworks: altNetworksFinal,
 		listingFee,
 		feeExplorers,
 		chatLinkExplorers,
@@ -378,7 +440,8 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 		mcpServer,
 		bunkerWeb,
 		hardening,
-		torOnion
+		torOnion,
+		i2pDestination
 	};
 
 	// ─── Review ────
@@ -574,6 +637,8 @@ function printNextSteps(
 		hardeningChecklistPath: string | null;
 		torHsDir: string | null;
 		torHsAddress: string | null;
+		i2pTunnelDir: string | null;
+		i2pB32Address: string | null;
 	}
 ): void {
 	const rule = '━'.repeat(58);
@@ -768,6 +833,30 @@ function printNextSteps(
 		console.log('');
 		console.log('Want a custom VANITY onion instead? Generate one with');
 		console.log('scripts/generate-onion.sh on your own machine and set it via');
+		console.log('`morphit-ops alt-address` — that replaces this basic one.');
+		console.log('');
+	}
+
+	// ─── I2P destination ────────────────────────────────────────
+	if (result.i2pTunnelDir && result.i2pB32Address) {
+		console.log('━'.repeat(58));
+		console.log('Your I2P address (generated for you)');
+		console.log('━'.repeat(58));
+		console.log('');
+		console.log(`  ${sanitizeForTerm(result.i2pB32Address)}`);
+		console.log('');
+		console.log('Your site already advertises this (footer pill).  To actually SERVE');
+		console.log('it, install the generated keyfile into i2pd and add the tunnel:');
+		console.log(`  ${sanitizeForTerm(result.i2pTunnelDir)}/`);
+		console.log('  → copy morphit-web.dat to i2pd\u2019s datadir, e.g.');
+		console.log('    /var/lib/i2pd/morphit-web.dat (owned by the i2pd user, mode 0600),');
+		console.log('    then append tunnel.conf\u2019s stanza to i2pd\u2019s tunnels.conf and');
+		console.log('    restart i2pd.  The Ansible "i2pd" role (enable_i2pd in');
+		console.log('    group_vars/all.yml) does this for you.  Keep the keyfile safe;');
+		console.log('    losing it means a new address.');
+		console.log('');
+		console.log('Want a custom VANITY .b32.i2p instead? Generate one with');
+		console.log('scripts/generate-i2p.sh on your own machine and set it via');
 		console.log('`morphit-ops alt-address` — that replaces this basic one.');
 		console.log('');
 	}

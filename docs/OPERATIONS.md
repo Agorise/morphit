@@ -689,6 +689,25 @@ the relay's structured logs).  This is recoverable
 — top up the account and signups resume — but
 visible to users in the interim.
 
+### Public network-stats endpoint (`/v1/stats`)
+
+Every node automatically serves a small, **aggregate-only** JSON summary at
+`https://<your-instance>/v1/stats` — active/total orders, completed-trade
+counts (lifetime + last 30 days), the tradable assets you support, and how
+many assets/fiat currencies currently have live orders. It is **public, needs
+no configuration**, and is rate-limited like the other read endpoints. It is
+also linked from the site footer ("Stats").
+
+The endpoint is intended for third-party P2P aggregators (RoboSats, Bisq,
+Hodl Hodl, AgoraDesk peers, …) evaluating your instance for a marketplace
+listing — point them there. By design it exposes **nothing per-account**: only
+coarse counts and static config, so it can't be used to profile or correlate
+individual traders. (Instance *configuration* — disabled assets/payment
+methods, treasury addresses, fees — lives on `/v1/instance`.) There is
+deliberately no trade-*volume* figure yet: order amounts span many fiat
+currencies and aren't meaningfully summable without USD normalization, so the
+endpoint reports counts rather than a misleading notional total.
+
 ---
 
 ## 1. Recurrent BLURT top-up setup (one-time)
@@ -4921,6 +4940,8 @@ cd /opt/morphit/apps/indexer && npx tsx scripts/fee-status-filter-lint.ts
 ### Alt-network addresses (Tor / Lokinet / I2P / Nostr / ENS) — the `alt-address` wizard
 
 > **Tor onion is automatic (cp378).** Every instance gets a **basic v3 `.onion` by default** — privacy is the first priority. The setup wizard **generates one in the background** while you answer the other steps (a plain non-vanity address, instant — you never wait), writes `MORPHIT_INSTANCE_TOR_ADDRESS` so the **footer pill + the `Onion-Location` auto-redirect** light up automatically, and saves the Tor hidden-service key files to a `tor-hidden-service/` directory (`hs_ed25519_secret_key` 0600, `hs_ed25519_public_key`, `hostname`). The wizard **never asks** about Tor and **never overwrites** an address you set yourself — if `MORPHIT_INSTANCE_TOR_ADDRESS` is already in your environment or an existing config, that value is kept. To actually *serve* the onion, the `tor` Ansible role (`enable_tor`, default-on in `ops/ansible/group_vars/all.yml`) installs Tor and points its `HiddenServiceDir` at those generated keys; set `morphit_tor_key_src` to the `tor-hidden-service/` directory so Tor serves the **same** address the site advertises. A custom **vanity** `.onion` is still a manual step (generate with `scripts/generate-onion.sh` on your own hardware and paste it below) — neither the wizard nor this menu grinds vanity keys for you; pasting a vanity address simply replaces the basic one (and, being a manual value, is never overwritten).
+
+> **I2P `.b32.i2p` is automatic too (cp406).** Every instance also gets a **basic `.b32.i2p` by default** — same privacy-first posture as the onion. The one difference: an I2P destination can't be minted in Node the way a Tor onion can (it bundles an encryption key — ElGamal/X25519 — plus an Ed25519 signing key), so the wizard uses your host's **i2pd** to mint the keyfile. That means **i2pd must be installed** for auto-generation (the `i2pd` Ansible role installs it; on a box that's already reached the I2P network this takes a few seconds). When i2pd is present the wizard mints a destination, derives its address as `base32(SHA-256(keyfile[0:391]))` — the standard I2P hash-of-destination, verified against i2pd itself — writes `MORPHIT_INSTANCE_I2P_B32_ADDRESS` so the **footer pill** lights up, and saves the i2pd keyfile plus a ready-to-append tunnel stanza to an `i2p-tunnel/` directory (`morphit-web.dat` 0600, `tunnel.conf`). The wizard **never overwrites** an address you already set (env var or existing config) or one you typed in the alt-network step — an **operable existing b32 is preserved**. If i2pd isn't installed, the wizard simply skips I2P (add it later from the menu). To actually *serve* it, the `i2pd` Ansible role (`enable_i2pd`, default-on in `ops/ansible/group_vars/all.yml`) installs i2pd, writes the `[morphit-web]` server tunnel (`signaturetype = 7`) to `tunnels.conf`, and installs your wizard keyfile — **only when the server has none**, so an operable keyfile on the box is never clobbered. Set `morphit_i2pd_key_src` to the `i2p-tunnel/` directory so i2pd serves the **same** address the site advertises; otherwise i2pd self-generates a *different* one (the role prints the `head -c 391 … | sha256sum | base32` command to read it, so you can update the env to match). A custom **vanity** `.b32.i2p` remains a manual step (`scripts/generate-i2p.sh`), replacing the basic one.
 
 `morphit-ops alt-address` (also the **"Set up a Tor / Lokinet / I2P address"** main-menu item) is a guided **CRUD** tool for your privacy-network addresses. Pick an address type and it **shows the current value**, then offers **Replace · Delete · Back** (Delete removes the line from `morphit.config.env` and the pill from the footer). I2P now appears as **two separate menu choices** — the always-resolvable **b32** (`DOMAIN.b32.i2p`, generated) and an optional **vanity name** (`DOMAIN.i2p`, which you *register* with an i2p naming service and paste — not generated). For Tor / Lokinet / I2P-b32, "Replace" walks you through *generating* the address; the **I2P vanity name**, **Nostr** (cp311), and **ENS** (`DOMAIN.eth`, cp334) are values you already own/register elsewhere, so they just prompt for the value. An instance may set neither, one, or both i2p addresses. The relevant knobs:
 

@@ -70,6 +70,14 @@ export interface PaymentMethodEntry {
 	 *  (`/icons/icon-<ticker>.svg`) and ignore this; a non-crypto
 	 *  entry that wants a glyph (e.g. Barter) sets it explicitly. */
 	readonly icon?: string;
+	/** cp406 — this method can involve mailing/shipping a PHYSICAL thing,
+	 *  so a trade using it unlocks the in-chat "Share mailing address" +
+	 *  "Record shipment" controls. True for barter goods, precious metals
+	 *  (both handed over in person OR shipped) and cash-by-mail (the cash
+	 *  envelope itself is posted). Cash-in-person is physical but NOT
+	 *  shippable (face-to-face only); everything electronic/on-chain is not
+	 *  physical at all. */
+	readonly shippable?: boolean;
 }
 
 /** All canonical entries.  Adding an entry: insert in
@@ -352,13 +360,18 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 	// face-to-face exchange.  "Barter (goods/services)" is intentionally
 	// open-ended — the order's free-form `terms` field carries
 	// what's actually being bartered ("orange trees," "used
-	// bicycle," "raw garlic").
+	// bicycle," "raw garlic," "handwoven baskets").
+	// cp406: barter goods + precious metals are `shippable` — the physical
+	// item can be handed over in person OR posted, so they unlock the in-chat
+	// mailing/shipment controls. Cash-in-person is NOT shippable (face-to-face
+	// cash only).
 	{
 		key: 'barter_goods',
 		name: 'Barter (goods/services)',
 		url: null,
 		category: 'in_person',
-		icon: '/icons/icon-barter.svg'
+		icon: '/icons/icon-barter.svg',
+		shippable: true
 	},
 	{
 		key: 'cash_in_person',
@@ -370,19 +383,21 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		key: 'precious_metals',
 		name: 'Precious metals (gold/silver)',
 		url: null,
-		category: 'in_person'
+		category: 'in_person',
+		shippable: true
 	},
 
 	// ─── By mail (cp120) ────────────────────────────────────────
-	// Asynchronous mail-based payments.  Trades using these
-	// methods unlock the in-chat mailing-address-share + shipment-
-	// tracking pills.  Currently one entry; future additions like
-	// money orders or postal money orders fit here.
+	// Asynchronous mail-based payments.  These are `shippable` (cp406) — the
+	// cash envelope itself is posted, unlocking the in-chat mailing-address-
+	// share + shipment-tracking controls.  Currently one entry; future
+	// additions like money orders or postal money orders fit here.
 	{
 		key: 'cash_by_mail',
 		name: 'Cash by mail',
 		url: null,
-		category: 'by_mail'
+		category: 'by_mail',
+		shippable: true
 	},
 
 	// ─── Online ─────────────────────────────────────────────────
@@ -643,6 +658,16 @@ const PAYMENT_METHOD_BY_KEY: ReadonlyMap<string, PaymentMethodEntry> = new Map(
 
 export function findPaymentMethod(key: string): PaymentMethodEntry | null {
 	return PAYMENT_METHOD_BY_KEY.get(key) ?? null;
+}
+
+/**
+ * cp406 — does any of these payment methods involve mailing/shipping a
+ * physical thing (barter goods, precious metals, cash-by-mail)? Drives whether
+ * the in-chat "Share mailing address" + "Record shipment" controls appear.
+ * Unknown keys are ignored. Pure.
+ */
+export function orderUsesShippableMethod(paymentMethods: readonly string[]): boolean {
+	return paymentMethods.some((k) => findPaymentMethod(k)?.shippable === true);
 }
 
 /** Categories in display order (alphabetized per user

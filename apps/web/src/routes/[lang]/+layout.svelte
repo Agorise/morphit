@@ -615,6 +615,11 @@
 					rel="noopener noreferrer">{$_('footer.compare')}</a
 				>
 				<a
+					href={lp('/stats')}
+					class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300 dark:hover:text-morphit-emerald"
+					title={$_('footer.stats_title')}>{$_('footer.stats')}</a
+				>
+				<a
 					href="{lp('/faq')}?q=wallet_developer_api&lang={currentLang}"
 					class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300 dark:hover:text-morphit-emerald"
 					title={$_('footer.api_title')}>{$_('footer.api')}</a

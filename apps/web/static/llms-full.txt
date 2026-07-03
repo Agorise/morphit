@@ -138,7 +138,7 @@ Nothing. No email, no phone number, no name. Your browser generates a cryptograp
 
 **FAQ key:** `how_to_buy`
 
-Open the orderbook, filter by the coin you want and your country. Pick a seller with good reputation, open a chat, agree on the details. You pay the seller in your chosen fiat method (cash, bank transfer, etc.), and they send you the crypto. Or just Barter, it's your call. They're all interchangeable. The trade timer gives you several days to complete payment.
+Open the orderbook and Filter it by the cryptocurrency that you want. Pick a seller with a good reputation, click the Message button to respond to their post and in the chat you two agree on the details. You then pay the seller at least the minimum value amount (cash, crypto, bank transfer, barter, etc) as per your agreement. You provably send the funds (or complete the barter agreement) and then the crypto seller sends the crypto directly to your crypto wallet. Leave each other a Feedback review and you're done!
 
 ---
 
@@ -175,13 +175,15 @@ A note on the spam-deterrent escalation: post a lot of orders quickly (4+ in a 2
 
 **FAQ key:** `trade_goods_services`
 
-**Yes — and for some people, this is the whole point of Morphit.** If you're unbanked, living under capital controls, or watching your national currency lose value by the week, being able to turn your goods and your labor directly into hard money — without asking a bank's permission — isn't a convenience, it's a lifeline. That's counter-economics in practice: ordinary people trading peer-to-peer in a free market, outside the gatekeepers. Morphit is built for exactly this.
+**Yes — and for some people, this is the whole point of Morphit.** If you're unbanked, living under capital controls, or watching your national currency lose value by the week, being able to turn your goods and your labor directly into hard money — without asking a bank's permission — isn't a convenience, it's a lifeline. That's counter-economics in practice: ordinary people anonymously trading peer-to-peer in a free market, outside the gatekeepers. Morphit is built for exactly this.
 
 How it works: **every Morphit order has a tradable coin on one side (BTC, XMR, Blurt, or any asset Morphit lists), and whatever you agree on for the other side** — a national currency, a different coin, or **goods and services.** To trade goods or services, choose the `Barter (goods/services)` payment method and describe the deal in the `terms` field.
 
-*Example — selling orange trees for Monero:* post a `buy XMR` order, payment method `Barter (goods/services)`, terms: `"50 healthy orange-tree saplings, 30cm+, pickup at my farm. XMR must be released upon pick-up."` Anyone holding XMR who wants your trees can take it.
+*Example 1 — selling orange trees for Monero:* Go to the Post page, then click on `I want to BUY`. Select Monero (XMR). Select which fiat currency you would normally sell those trees for such as Pesos, Euros, Dollars, etc. Select the `Barter (goods/services)` payment method. Set your Terms, for example: `"$20 per orange tree at least 1-2m tall. Pick them up at my farm (or advise me on your location address for shipment ($5 more per tree))."` Anyone holding XMR who wants your trees can accept your offer.
 
-**The one rule:** one side must be a coin Morphit lists. That's what gives every trade a real, on-chain receipt and lets honest traders build a reputation that travels with them — the trust a free market runs on.
+*Example 2 — selling your mobile car wash service for Monero:* Same process, but in the Terms field you might say something like this: `"I'll come to your business and wash your car. I charge $30 per car. Dry and wax for an additional $20. See my ad in the local newspaper! Wash Boy, Inc."`
+
+**The one rule:** one side must be a coin that Morphit supports. That's what gives every trade a real, on-chain receipt and lets honest traders build a reputation that travels with them — the trust a free market runs on.
 
 ---
 

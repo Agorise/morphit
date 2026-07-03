@@ -451,14 +451,27 @@
       "pub_pin_older_indexer_ref": "We couldn't safely send: your indexer is reporting a chat-key record that's older than what you've already seen. That shouldn't happen on a forward-only chain. Try refreshing or switching to another Morphit instance.",
       "pub_pin_chain_reports_none": "We couldn't safely send: your indexer says this peer has a chat key, but the blockchain reports none. The indexer may be out of sync, or fabricating data. Try another Morphit instance, or wait and retry.",
       "pub_pin_chain_older_than_pin": "We couldn't safely send: the blockchain reports an older chat key for this peer than the one you've already seen. That's internally inconsistent. Try another Morphit instance or another blockchain endpoint.",
-      "pub_pin_malformed_indexer_response": "We couldn't safely send: your indexer returned malformed data for this peer's chat-key record. The indexer may be running an older version or be misconfigured. Try another Morphit instance."
+      "pub_pin_malformed_indexer_response": "We couldn't safely send: your indexer returned malformed data for this peer's chat-key record. The indexer may be running an older version or be misconfigured. Try another Morphit instance.",
+      "menu_label": "Chat Security",
+      "confirm": {
+        "title": "Chat Security",
+        "body": "Do you want your chat messages destroyed after you leave this chat? Choose No to keep reading your own history, like a normal messenger.",
+        "yes": "Yes, destroy them",
+        "no": "No, keep them"
+      },
+      "pdf_reminder": {
+        "title": "Don't forget to export this chat to PDF",
+        "body": "In this mode your messages can't be recovered after you leave. Save a PDF now if you want to keep a copy.",
+        "get_now": "Get my PDF now",
+        "later": "Later"
+      }
     },
     "live": "Live",
     "loading": "Loading conversation…",
     "lazy_load_failed": "Couldn't load the chat view. Refresh the page and try again.",
     "address": {
-      "share_button": "Share address",
-      "share_button_aria": "Share a receiving address",
+      "share_button": "Share crypto address",
+      "share_button_aria": "Share your crypto receiving address",
       "modal_title": "Share a receiving address",
       "modal_subtitle": "Send your BTC or XMR receiving address to your trade partner.",
       "method_btc": "Bitcoin",
@@ -575,8 +588,8 @@
     "funds_sent": {
       "button": "Pay now",
       "button_aria": "Pay for this trade",
-      "modal_title": "Mark funds as sent",
-      "modal_subtitle": "Notify your trade partner that you sent the crypto.",
+      "modal_title": "Confirm your payment to @{peer}",
+      "modal_subtitle": "@{peer} will see the amount and transaction ID you enter below.",
       "locked_method_label": "Paying with {asset}",
       "txid_label": "Transaction ID",
       "txid_placeholder": "Paste the txid (64 hex characters)",
@@ -631,7 +644,7 @@
     },
     "unknown_version": "This message uses a newer protocol. Please update Morphit to read it.",
     "pay_blurt": {
-      "title": "Pay BLURT to recipient",
+      "title": "Send BLURT to @{recipient}",
       "subtitle": "Send BLURT directly from your Morphit account.",
       "amount_label": "Amount",
       "amount_placeholder": "0.000",
@@ -723,10 +736,14 @@
       "parties_heading": "Parties",
       "posting_key_label": "Posting key",
       "verify_heading": "How to verify this record",
-      "verify_body": "Every message below is a permanent entry on the public Blurt blockchain, cryptographically signed by the sender's account. The “Blockchain proof” code on each message is its transaction ID: anyone can paste it into a Blurt block explorer (for example, blurtwallet.com) to confirm that this exact account sent a message to the other at the stated time. The wording shown is the private message after decryption by the account named above. Because each proof lives on a public, permanent ledger, this record cannot be secretly altered — changing any line here would no longer match the blockchain.",
+      "verify_body": "Every message below is a permanent entry on the public Blurt blockchain, cryptographically signed by the sender's account. The “Blockchain proof” code on each message is its transaction ID: anyone can paste it into a Blurt block explorer (for example, blocks.blurtwallet.com) to confirm that this exact account sent a message to the other at the stated time. The text shown is the private message, decrypted with the keys of the account named above. Because each proof lives on a public, permanent ledger, this record cannot be secretly altered — changing any line here would no longer match the blockchain.",
       "proof_label": "Blockchain proof",
       "pending_label": "pending confirmation",
       "footer": "Morphit chat record — locked, read-only. Verify each message on a Blurt block explorer."
+    },
+    "pay_prefill": {
+      "hint": "The order's minimum is {min} {fiat} (≈ {amount} {asset}).",
+      "hint_market": "The order's minimum is {min} {fiat} (≈ {amount} {asset} at current market price)."
     }
   },
   "cheat_sheet": {
@@ -1139,7 +1156,7 @@
       },
       "how_to_buy": {
         "q": "How do I buy crypto?",
-        "a": "Open the orderbook, filter by the coin you want and your country. Pick a seller with good reputation, open a chat, agree on the details. You pay the seller in your chosen fiat method (cash, bank transfer, etc.), and they send you the crypto. Or just Barter, it's your call. They're all interchangeable. The trade timer gives you several days to complete payment."
+        "a": "Open the orderbook and Filter it by the cryptocurrency that you want. Pick a seller with a good reputation, click the Message button to respond to their post and in the chat you two agree on the details. You then pay the seller at least the minimum value amount (cash, crypto, bank transfer, barter, etc) as per your agreement. You provably send the funds (or complete the barter agreement) and then the crypto seller sends the crypto directly to your crypto wallet. Leave each other a Feedback review and you're done!"
       },
       "how_to_sell": {
         "q": "How do I sell crypto?",
@@ -1151,7 +1168,7 @@
       },
       "trade_goods_services": {
         "q": "Can I trade goods or services on Morphit, like fruit trees or vintage records?",
-        "a": "**Yes — and for some people, this is the whole point of Morphit.** If you're unbanked, living under capital controls, or watching your national currency lose value by the week, being able to turn your goods and your labor directly into hard money — without asking a bank's permission — isn't a convenience, it's a lifeline. That's counter-economics in practice: ordinary people trading peer-to-peer in a free market, outside the gatekeepers. Morphit is built for exactly this.\n\nHow it works: **every Morphit order has a tradable coin on one side (BTC, XMR, Blurt, or any asset Morphit lists), and whatever you agree on for the other side** — a national currency, a different coin, or **goods and services.** To trade goods or services, choose the `Barter (goods/services)` payment method and describe the deal in the `terms` field.\n\n*Example — selling orange trees for Monero:* post a `buy XMR` order, payment method `Barter (goods/services)`, terms: `\"50 healthy orange-tree saplings, 30cm+, pickup at my farm. XMR must be released upon pick-up.\"` Anyone holding XMR who wants your trees can take it.\n\n**The one rule:** one side must be a coin Morphit lists. That's what gives every trade a real, on-chain receipt and lets honest traders build a reputation that travels with them — the trust a free market runs on."
+        "a": "**Yes — and for some people, this is the whole point of Morphit.** If you're unbanked, living under capital controls, or watching your national currency lose value by the week, being able to turn your goods and your labor directly into hard money — without asking a bank's permission — isn't a convenience, it's a lifeline. That's counter-economics in practice: ordinary people anonymously trading peer-to-peer in a free market, outside the gatekeepers. Morphit is built for exactly this.\n\nHow it works: **every Morphit order has a tradable coin on one side (BTC, XMR, Blurt, or any asset Morphit lists), and whatever you agree on for the other side** — a national currency, a different coin, or **goods and services.** To trade goods or services, choose the `Barter (goods/services)` payment method and describe the deal in the `terms` field.\n\n*Example 1 — selling orange trees for Monero:* Go to the Post page, then click on `I want to BUY`. Select Monero (XMR). Select which fiat currency you would normally sell those trees for such as Pesos, Euros, Dollars, etc. Select the `Barter (goods/services)` payment method. Set your Terms, for example: `\"$20 per orange tree at least 1-2m tall. Pick them up at my farm (or advise me on your location address for shipment ($5 more per tree)).\"` Anyone holding XMR who wants your trees can accept your offer.\n\n*Example 2 — selling your mobile car wash service for Monero:* Same process, but in the Terms field you might say something like this: `\"I'll come to your business and wash your car. I charge $30 per car. Dry and wax for an additional $20. See my ad in the local newspaper! Wash Boy, Inc.\"`\n\n**The one rule:** one side must be a coin that Morphit supports. That's what gives every trade a real, on-chain receipt and lets honest traders build a reputation that travels with them — the trust a free market runs on."
       },
       "cash_by_mail_walkthrough": {
         "q": "How do I trade cash by mail or ship physical goods through Morphit?",
@@ -1823,7 +1840,9 @@
     "bounty": "Bug bounty",
     "ens": "ENS",
     "compare": "Compare",
-    "compare_title": "See how Morphit compares to other options"
+    "compare_title": "See how Morphit compares to other options",
+    "stats": "Stats",
+    "stats_title": "Live aggregate network statistics"
   },
   "glossary": {
     "active_key": {
@@ -2318,10 +2337,7 @@
       "posting_only": {
         "tab_label": "Blurt posting key",
         "warning_title": "Posting-only import",
-        "warning_body": "If you don't have a 12-word seed or a .json file for account import, just paste your Blurt Posting Key here instead. We'll encrypt it on this device with a password you choose. You'll be able to read, post, and trade — but not change account keys (that needs a wallet like blurtwallet.com).",
-        "account_label": "Your Blurt account name (optional)",
-        "account_ok": "looks good!",
-        "account_hint": "Leave this blank and we'll detect it from your key. Without the @ — if you type it, we'll check it matches your key.",
+        "warning_body": "If you don't have a 12-word seed or a Keyfile, just paste your Posting Key here instead. We'll encrypt it on this device for you. You'll be able to read, post, and trade with others, but NOT get discounted listing fees.",
         "wif_label": "Posting private key (WIF)",
         "wif_placeholder": "5J… or P5J…",
         "password_mismatch": "Passwords don't match.",
@@ -2330,9 +2346,8 @@
         "new_password_hint": "At least 8 characters. Used to unlock Morphit on this device. Not your Blurt password.",
         "new_password_confirm_label": "Confirm password",
         "error": {
-          "bad_account": "Account names use lowercase letters, digits, dashes, and dots.",
           "passwords_mismatch": "Passwords don't match. Please retype both.",
-          "account_not_found": "We couldn't find an account called '@{account}' on Blurt. Usernames are all lowercase with no '@' — check the spelling and try again.",
+          "account_not_found": "We detected your account (@{account}) but couldn't load it from Blurt just now. Check your connection and try again.",
           "key_not_on_account": "This is a valid Blurt key, but it doesn't belong to '@{account}'. Double-check the username above, or paste the Posting key that matches this account.",
           "wif": {
             "too-short": "That WIF is too short to be a valid Blurt key.",
@@ -2348,8 +2363,7 @@
             "owner": "That's your Owner key — the most powerful key on your account, and the one to guard most carefully. Morphit only ever signs you in with your Posting key. Please paste your Posting key instead.",
             "memo": "That's your Memo key — it's only used to encrypt and decrypt private messages and can't sign you in. Please paste your Posting key instead."
           },
-          "master_password": "That looks like your Blurt master password, not your Posting key. Morphit never uses your master password to sign in. Open blurtwallet.com → Permissions and copy your Posting Private Key (it starts with 5).",
-          "could_not_resolve": "We couldn't detect your account from this key automatically. Type your Blurt account name above (without the @) and try again."
+          "could_not_resolve": "We couldn't detect your account from this key. Double-check that you copied your Posting Private Key correctly, or import with your 12-word seed or Keyfile instead."
         },
         "account_bad": "invalid"
       },
@@ -2552,7 +2566,6 @@
     "error_title": "Couldn't load this order",
     "error_body": "Something went wrong reaching the indexer. Please try again in a moment.",
     "posted_by": "Posted by",
-    "new_trader": "New trader",
     "details_heading": "Details",
     "payment_methods": "Payment methods",
     "location": "Location",
@@ -2939,7 +2952,9 @@
     "locked": {
       "title": "Unlock your session to continue",
       "body": "Morphit never keeps your password. Enter it to sign the order.",
-      "password_label": "Session password"
+      "password_label": "Session password",
+      "fee_title": "Enter your password to pay the fee",
+      "fee_body": "The listing fee is paid in BLURT — a signed transfer that needs your active key. Enter your password to unlock it for a moment. Morphit never stores your password."
     },
     "form": {
       "step_1_heading": "What do you want to trade?",
@@ -3079,7 +3094,8 @@
       "body_insufficient_funds": "Your account doesn't have enough BLURT to pay the listing fee.",
       "body_locked": "The session is locked. Unlock your password to try again.",
       "body_bad_password": "That password didn't unlock your keystore. Try again.",
-      "body_missing_external_tx_id": "An external transaction ID is required for BTC and XMR fee payments."
+      "body_missing_external_tx_id": "An external transaction ID is required for BTC and XMR fee payments.",
+      "body_posting_only": "Paying the listing fee in BLURT needs your active key, and it isn't on this device — you're signed in with your posting key only. Sign in with your master password or full keyfile to pay in BLURT, or go back and pay in BTC/XMR (or use your free first listing)."
     },
     "waiver": {
       "heading": "Your first order is on us!",
@@ -3133,7 +3149,8 @@
       "fee_address_chain_pinned": "Chain-pinned by {account} — every Morphit instance verifies fees against this address.",
       "fee_address_chain_pinned_aria": "Chain-pinned address authenticity",
       "fee_address_local_fallback": "Local fallback address — this operator hasn't yet adopted the chain-pinned canonical. Verify with another Morphit instance before sending if you want extra assurance.",
-      "fee_address_unavailable": "This operator hasn't configured a {asset} fee address. Pick BLURT instead, or post your order on a different Morphit instance."
+      "fee_address_unavailable": "This operator hasn't configured a {asset} fee address. Pick BLURT instead, or post your order on a different Morphit instance.",
+      "blurt_needs_active_key": "Needs your active key. You're signed in with your posting key only — sign in with your master password or full keyfile to pay in BLURT, or pay in BTC/XMR instead."
     },
     "draft": {
       "restored_banner": "Draft restored from {age} ago. Pick up where you left off — or start fresh.",
@@ -3791,6 +3808,10 @@
     "dev_index": {
       "title": "Developer & operator tools",
       "description": "Diagnostic utilities for operators customizing their Morphit instance and contributors verifying build output."
+    },
+    "stats": {
+      "title": "Network statistics",
+      "description": "Live, aggregate-only activity statistics for this Morphit peer-to-peer marketplace."
     }
   },
   "settings": {
@@ -3800,7 +3821,9 @@
       "input_label": "Your short bio",
       "placeholder": "e.g. Coffee, BTC, and long walks on the blockchain.",
       "hint": "Looks good.",
-      "broadcast_ok_detail": "Your short bio is now published for everyone to see."
+      "broadcast_ok_detail": "Your short bio is now published for everyone to see.",
+      "clear": "Clear",
+      "clear_confirm_prompt": "Remove your short bio from this device? You can set it again anytime."
     },
     "title": "Settings",
     "subtitle": "Your identity, your rules. Stored on your device, never on our servers.",
@@ -4220,7 +4243,7 @@
         "backup_codes_exhausted": "You have no backup codes left. If you lose your authenticator, you’ll need your seed phrase to recover."
       },
       "enroll": {
-        "cta": "Set up two-factor authentication",
+        "cta": "Set up 2FA",
         "step1_title": "1. Install an open-source authenticator app",
         "step1_body": "We strongly recommend the open-source options below. Morphit does NOT recommend Google Authenticator, Microsoft Authenticator, or Authy — closed source, with backup/sync paths that can leak your secrets.",
         "step2_title": "2. Scan the QR code",
@@ -4472,5 +4495,20 @@
     "sell_range": "I'm selling {min}–{max} {fiat} worth of {asset}",
     "buy_any": "I'm buying {asset}",
     "sell_any": "I'm selling {asset}"
+  },
+  "stats": {
+    "page_title": "Network statistics",
+    "page_intro": "A live, aggregate-only snapshot of activity on this Morphit network. Nothing here identifies anyone — these are network-wide totals.",
+    "orders_active": "Active orders",
+    "orders_total": "Total orders",
+    "trades_total": "Trades (all time)",
+    "trades_30d": "Trades (30 days)",
+    "assets_active": "Assets with orders",
+    "fiats_active": "Currencies with orders",
+    "assets_supported": "Supported assets",
+    "updated": "Updated {time}",
+    "json_note": "Building an aggregator or dashboard? The same data is available as JSON:",
+    "json_link": "raw feed",
+    "error": "Couldn't load the statistics right now. Please try again in a moment."
   }
 }

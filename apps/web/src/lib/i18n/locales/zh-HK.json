@@ -451,14 +451,27 @@
       "pub_pin_older_indexer_ref": "無法安全發送:你個索引器報嘅聊天密鑰記錄,比你之前見過嘅仲要舊。喺一條淨係向前行嘅鏈上面,呢樣嘢唔應該發生。試吓重新整理,或者轉去另一個 Morphit 實例。",
       "pub_pin_chain_reports_none": "無法安全發送:你個索引器話呢個收件人有聊天密鑰,但區塊鏈上面冇報過。個索引器可能未同步,或者係作緊嘅。試吓另一個 Morphit 實例,或者等等再試。",
       "pub_pin_chain_older_than_pin": "無法安全發送:區塊鏈報嘅呢個收件人嘅聊天密鑰,比你之前見過嘅仲要舊,呢個本身就矛盾。試吓另一個 Morphit 實例,或者另一個 RPC 端點。",
-      "pub_pin_malformed_indexer_response": "無法安全發送:你個索引器為呢個收件人嘅聊天密鑰記錄回傳咗格式錯誤嘅數據。可能佢係舊版本,或者設定錯咗。試吓另一個 Morphit 實例。"
+      "pub_pin_malformed_indexer_response": "無法安全發送:你個索引器為呢個收件人嘅聊天密鑰記錄回傳咗格式錯誤嘅數據。可能佢係舊版本,或者設定錯咗。試吓另一個 Morphit 實例。",
+      "menu_label": "聊天安全",
+      "confirm": {
+        "title": "聊天安全",
+        "body": "離開此聊天後要銷毀你的訊息嗎？選擇「否」即可像普通即時通訊軟件一樣繼續查看自己的歷史記錄。",
+        "yes": "是，銷毀它們",
+        "no": "否，保留它們"
+      },
+      "pdf_reminder": {
+        "title": "別忘記將此聊天匯出為 PDF",
+        "body": "在此模式下，離開後你的訊息將無法復原。如果想保留副本，請立即儲存 PDF。",
+        "get_now": "立即取得我的 PDF",
+        "later": "稍後"
+      }
     },
     "live": "即時",
     "loading": "正在載入對話…",
     "lazy_load_failed": "無法載入聊天視圖。刷新頁面後重試。",
     "address": {
-      "share_button": "共享地址",
-      "share_button_aria": "共享一個收款地址",
+      "share_button": "分享加密地址",
+      "share_button_aria": "分享你的加密收款地址",
       "modal_title": "共享一個收款地址",
       "modal_subtitle": "將您的 BTC 或 XMR 收款地址發送給您的交易夥伴。",
       "method_btc": "比特幣",
@@ -575,8 +588,8 @@
     "funds_sent": {
       "button": "立即付款",
       "button_aria": "為此交易付款",
-      "modal_title": "將資金標記為已發送",
-      "modal_subtitle": "通知您的交易夥伴您已發送加密貨幣。",
+      "modal_title": "確認你向 @{peer} 嘅付款",
+      "modal_subtitle": "@{peer} 會看到你喺下面輸入嘅金額同交易 ID。",
       "locked_method_label": "使用 {asset} 付款",
       "txid_label": "交易 ID",
       "txid_placeholder": "貼上 txid(64 個十六進制字符)",
@@ -631,7 +644,7 @@
     },
     "unknown_version": "此訊息使用較新的協議。請更新 Morphit 以讀取。",
     "pay_blurt": {
-      "title": "向收款人支付 BLURT",
+      "title": "向 @{recipient} 發送 BLURT",
       "subtitle": "直接從您的 Morphit 帳戶發送 BLURT。",
       "amount_label": "金額",
       "amount_placeholder": "0.000",
@@ -723,10 +736,14 @@
       "parties_heading": "各方",
       "posting_key_label": "發佈密鑰",
       "verify_heading": "如何驗證本記錄",
-      "verify_body": "下面每條訊息都是公開的 Blurt 區塊鏈上的永久記錄，由發送方帳戶以密碼學方式簽署。每條訊息的「區塊鏈證明」代碼就是它的交易 ID：任何人都可以把它貼到 Blurt 區塊瀏覽器（例如 blurtwallet.com）中，確認正是該帳戶在所示時間向對方發送了訊息。所顯示的文字是由上述帳戶解密後的私密訊息。由於每個證明都存在於公開、永久的帳本上，本記錄無法被秘密篡改——在此更改任何一行都將不再與區塊鏈相符。",
+      "verify_body": "下面每條訊息都是公開的 Blurt 區塊鏈上的永久記錄，由發送方帳戶以密碼學方式簽署。每條訊息的「區塊鏈證明」代碼就是它的交易 ID：任何人都可以把它貼到 Blurt 區塊瀏覽器（例如 blocks.blurtwallet.com）中，確認正是該帳戶在所示時間向對方發送了訊息。所顯示的文字是使用上述帳戶的密鑰解密後的私密訊息。由於每個證明都存在於公開、永久的帳本上，本記錄無法被秘密篡改——在此更改任何一行都將不再與區塊鏈相符。",
       "proof_label": "區塊鏈證明",
       "pending_label": "等待確認",
       "footer": "Morphit 聊天記錄——已鎖定，唯讀。請在 Blurt 區塊瀏覽器中驗證每條訊息。"
+    },
+    "pay_prefill": {
+      "hint": "訂單最低額為 {min} {fiat}（≈ {amount} {asset}）。",
+      "hint_market": "訂單最低額為 {min} {fiat}（≈ {amount} {asset}，按當前市場價）。"
     }
   },
   "cheat_sheet": {
@@ -1139,7 +1156,7 @@
       },
       "how_to_buy": {
         "q": "點樣買加密貨幣?",
-        "a": "開訂單簿,按幣種同國家篩選。揀個信譽好嘅賣家,開 chat 傾,傾妥細節。用你揀嘅付款方式(現金、銀行轉帳之類)畀佢,佢就會將幣轉畀你。又或者乾脆以物易物,隨你。樣樣都可以互換。交易計時器會畀你幾日時間搞妥付款。"
+        "a": "打開訂單簿，按你想要的加密貨幣篩選。挑選一位信譽良好的賣家，點擊「訊息」按鈕回覆其貼文，在聊天中你們雙方商定細節。然後你按約定至少支付最低金額給賣家（現金、加密貨幣、銀行轉帳、以物易物等）。你以可驗證的方式付款（或完成以物易物約定），隨後加密貨幣賣家會把加密貨幣直接發送到你的錢包。互相留下回饋評價，就完成了！"
       },
       "how_to_sell": {
         "q": "怎樣賣加密貨幣？",
@@ -1151,7 +1168,7 @@
       },
       "trade_goods_services": {
         "q": "我可以喺 Morphit 上交易商品或服務嗎，例如果樹或黑膠唱片？",
-        "a": "**可以 —— 而且對一些人來說，這正是 Morphit 存在的全部意義。** 如果你沒有銀行帳戶、生活在資本管制之下，或眼看著本國貨幣一週週貶值，那麼能把你的貨物和勞動直接換成硬通貨 —— 無需向銀行請求許可 —— 就不是一種便利，而是一條生路。這就是反經濟學的實踐：普通人在自由市場上點對點交易，繞開守門人。Morphit 正是為此而生。\n\n運作方式：**每一筆 Morphit 訂單的一側是可交易的幣（BTC、XMR、Blurt 或 Morphit 上架的任何資產），另一側則是你們約定的東西** —— 一種法定貨幣、另一種加密貨幣，或 **貨物與服務。** 要交易貨物或服務，請選擇 `Barter (goods/services)` 支付方式，並在 `terms` 欄位中描述交易。\n\n*示例 —— 用橙子樹換取門羅幣（Monero）：* 發佈一個 `buy XMR` 訂單，支付方式 `Barter (goods/services)`，terms：`\"50 healthy orange-tree saplings, 30cm+, pickup at my farm. XMR must be released upon pick-up.\"` 任何持有 XMR 又想要你的樹的人都可以接單。\n\n**唯一的規則：** 一側必須是 Morphit 上架的幣。正是這一點讓每筆交易在鏈上都有一張真實的收據，並讓誠實的交易者累積起跟隨他們的信譽 —— 自由市場賴以運轉的信任。"
+        "a": "**是的——對某些人來說，這正是 Morphit 的全部意義。** 如果你被排除在銀行體系之外、生活在資本管制之下，或眼看着本國貨幣每週貶值，那麼能把你的貨物和勞動直接換成硬通貨——無需向任何銀行請求許可——就不是一種便利，而是一根救命稻草。這就是實踐中的反經濟學：普通人在自由市場上匿名地進行點對點交易，繞開守門人。Morphit 正是為此而生。\n\n運作方式：**每筆 Morphit 訂單的一方是可交易的加密貨幣（BTC、XMR、Blurt 或任何 Morphit 支援的資產），另一方則是你們雙方約定的任何東西**——一種本國貨幣、另一種加密貨幣，或**貨物與服務。** 要交易貨物或服務，請選擇 `以物易物（貨物/服務）` 付款方式，並在 `條款` 欄位中描述這筆交易。\n\n*範例 1 — 用橙樹換取 Monero：* 前往發佈頁面，點擊 `我想購買`。選擇 Monero（XMR）。選擇你平時會用來出售這些樹的法幣，如比索、歐元、美元等。選擇 `以物易物（貨物/服務）` 付款方式。設定你的條款，例如：`\"每棵至少 1-2 米高的橙樹 20 美元。到我的農場自取（或告訴我你的收貨地址，運費每棵加 5 美元）。\"` 任何持有 XMR 並想要你的樹的人都可以接受你的報價。\n\n*範例 2 — 用你的上門洗車服務換取 Monero：* 流程相同，但在條款欄位裡你可以寫類似這樣的話：`\"我上門為你洗車。每輛 30 美元。烘乾打蠟另加 20 美元。請看我在本地報紙上的廣告！Wash Boy, Inc.\"`\n\n**唯一的規則：** 有一方必須是 Morphit 支援的加密貨幣。正是這一點讓每一筆交易都擁有真實的鏈上憑證，並讓誠實的交易者建立起隨身攜帶的聲譽——自由市場賴以運行的信任。"
       },
       "cash_by_mail_walkthrough": {
         "q": "我如何透過 Morphit 用郵件交易現金或運送實物商品?",
@@ -1823,7 +1840,9 @@
     "bounty": "漏洞賞金",
     "ens": "ENS",
     "compare": "比較",
-    "compare_title": "睇吓 Morphit 同其他選擇嘅比較"
+    "compare_title": "睇吓 Morphit 同其他選擇嘅比較",
+    "stats": "統計",
+    "stats_title": "即時聚合網絡統計"
   },
   "glossary": {
     "active_key": {
@@ -2318,10 +2337,7 @@
       "posting_only": {
         "tab_label": "Blurt Posting key",
         "warning_title": "只用 Posting 密鑰匯入",
-        "warning_body": "如果你冇 12 個字嘅助記詞或者用喻匯入戶口嘅 .json 檔案，直接將你嘅 Blurt posting 密鑰黏喺呢度。我哋會用你揀嘅密碼喺呢部裝置上加密佢。你可以讀、發文同交易 — 但唔可以改帳戶密鑰（嘸個需要好似 blurtwallet.com 黈嘅錢包）。",
-        "account_label": "你嘅 Blurt 帳戶名（可選）",
-        "account_ok": "冇問題！",
-        "account_hint": "留空就得，我哋會根據你嘅密鑰自動識別。唔帶 @；如果你填咗，我哋會核對佢同你嘅密鑰夾唔夾。",
+        "warning_body": "如果你沒有 12 個單詞的種子短語或 Keyfile，只需在此貼上你的 Posting Key。我們會在此裝置上為你加密它。你將能夠閱讀、發佈並與他人交易，但不會獲得折扣的掛單費。",
         "wif_label": "Posting 私鑰 (WIF)",
         "wif_placeholder": "5J… 或 P5J…",
         "password_mismatch": "密碼不一致。",
@@ -2330,9 +2346,8 @@
         "new_password_hint": "至少 8 個字符。用嚟喺呢部裝置上解鎖 Morphit。唔係你嘅 Blurt 密碼。",
         "new_password_confirm_label": "確認密碼",
         "error": {
-          "bad_account": "帳戶名用細階字母、數字、連字符同點。",
           "passwords_mismatch": "密碼唔相符。請兩個都重新輸入。",
-          "account_not_found": "喺 Blurt 鏈上搵唔到 @{account}。檢查拼寫後再試。",
+          "account_not_found": "我們偵測到你的帳戶（@{account}），但此刻無法從 Blurt 載入它。請檢查你的網絡連接後重試。",
           "key_not_on_account": "你輸入嘅 posting 密鑰同 @{account} 鏈上嘅 posting 密鑰唔夾。檢查你係咪複製咗啱嘅 WIF。",
           "wif": {
             "too-short": "呢個 WIF 太短,唔係有效嘅 Blurt 密鑰。",
@@ -2348,8 +2363,7 @@
             "owner": "嗰個係你嘅 OWNER 密鑰。Morphit 只需要 POSTING — 黐嗰個。(Owner 密鑰俾你完全控制帳戶;唔好黐到任何網站。)",
             "memo": "嗰個係你嘅 MEMO 密鑰。Morphit 需要 POSTING — 黐嗰個。"
           },
-          "master_password": "這看來是你的 Blurt 主密碼，而非 POSTING 密鑰。Morphit 從不使用主密碼登入。請開啟 blurtwallet.com → Permissions，複製你的 Posting Private Key（以 5 開頭）。",
-          "could_not_resolve": "我哋無法根據呢個密鑰自動識別你嘅帳戶。請喺上方輸入你嘅 Blurt 帳戶名（唔帶 @）後再試。"
+          "could_not_resolve": "我們無法從此密鑰偵測到你的帳戶。請核對你是否正確複製了 Posting Private Key，或改用你的 12 個單詞種子短語或 Keyfile 匯入。"
         },
         "account_bad": "無效"
       },
@@ -2552,7 +2566,6 @@
     "error_title": "無法載入此訂單",
     "error_body": "訪問索引器時出錯。請稍後再試。",
     "posted_by": "發佈者",
-    "new_trader": "新交易者",
     "details_heading": "詳情",
     "payment_methods": "支付方式",
     "location": "位置",
@@ -2939,7 +2952,9 @@
     "locked": {
       "title": "解鎖您的工作階段以繼續",
       "body": "Morphit 從不保存您的密碼。請輸入密碼以簽署訂單。",
-      "password_label": "工作階段密碼"
+      "password_label": "工作階段密碼",
+      "fee_title": "輸入你的密碼以支付費用",
+      "fee_body": "掛單費以 BLURT 支付——這是一筆需要你活躍密鑰的簽名轉帳。輸入你的密碼以短暫解鎖它。Morphit 從不儲存你的密碼。"
     },
     "form": {
       "step_1_heading": "您想交易什麼?",
@@ -3079,7 +3094,8 @@
       "body_insufficient_funds": "您的帳戶沒有足夠的 BLURT 來支付掛單費。",
       "body_locked": "工作階段已鎖定。請解鎖密碼後重試。",
       "body_bad_password": "該密碼未解鎖你嘅 keystore。請重試。",
-      "body_missing_external_tx_id": "BTC 同 XMR 費用支付需要外部交易 ID。"
+      "body_missing_external_tx_id": "BTC 同 XMR 費用支付需要外部交易 ID。",
+      "body_posting_only": "用 BLURT 支付掛單費需要你的活躍密鑰，而此裝置上並沒有它——你目前只用發文密鑰登入。請用主密碼或完整的 keyfile 登入以用 BLURT 支付，或返回改用 BTC/XMR 支付（亦可使用你的首次免費掛單）。"
     },
     "waiver": {
       "heading": "你的首單免費!",
@@ -3133,7 +3149,8 @@
       "fee_address_chain_pinned": "由 {account} 在鏈上錨定 — 每個 Morphit 實例都依據此地址驗證費用。",
       "fee_address_chain_pinned_aria": "鏈上錨定地址的真實性",
       "fee_address_local_fallback": "本地備用地址 — 此營運者尚未採用鏈上錨定的標準地址。如需額外保證，請在發送前用另一個 Morphit 實例核對。",
-      "fee_address_unavailable": "此營運者未設定 {asset} 費用地址。請改選 BLURT，或在另一個 Morphit 實例上發布您的訂單。"
+      "fee_address_unavailable": "此營運者未設定 {asset} 費用地址。請改選 BLURT，或在另一個 Morphit 實例上發布您的訂單。",
+      "blurt_needs_active_key": "需要你的活躍密鑰。你目前只用發文密鑰登入——請用主密碼或完整的 keyfile 登入以用 BLURT 支付，或改用 BTC/XMR 付款。"
     },
     "draft": {
       "restored_banner": "已還原 {age} 前的草稿。從上次停下的地方繼續——或者重新開始。",
@@ -3791,6 +3808,10 @@
     "dev_index": {
       "title": "開發者與營運者工具",
       "description": "為自訂 Morphit 實例的營運者和驗證建構輸出的貢獻者提供的診斷工具。"
+    },
+    "stats": {
+      "title": "網絡統計",
+      "description": "此 Morphit 點對點市場嘅即時聚合活動統計。"
     }
   },
   "settings": {
@@ -3800,7 +3821,9 @@
       "input_label": "你嘅簡短簡介",
       "placeholder": "例如：咖啡、BTC，仲有喺區塊鏈上面散步。",
       "hint": "睇落唔錯。",
-      "broadcast_ok_detail": "你嘅簡短簡介而家已經發佈，所有人都睇到。"
+      "broadcast_ok_detail": "你嘅簡短簡介而家已經發佈，所有人都睇到。",
+      "clear": "清除",
+      "clear_confirm_prompt": "從此裝置移除你的簡短簡介？你可以隨時重新設定。"
     },
     "title": "設定",
     "subtitle": "你嘅身份,你話事。儲喺你部機,唔會上我哋伺服器。",
@@ -4220,7 +4243,7 @@
         "backup_codes_exhausted": "你冇剩餘嘅備用代碼。如果你唔見咗身份驗證器,你需要你嘅種子短語嚟恢復。"
       },
       "enroll": {
-        "cta": "設置雙因素身份驗證",
+        "cta": "設定 2FA",
         "step1_title": "1. 安裝開源身份驗證器應用程式",
         "step1_body": "我哋強烈推薦下面嘅開源選項。Morphit 唔推薦 Google Authenticator、Microsoft Authenticator 或者 Authy — 閉源,有可能洩漏你密鑰嘅備份/同步路徑。",
         "step2_title": "2. 掃描二維碼",
@@ -4472,5 +4495,20 @@
     "sell_range": "我想賣價值 {min}–{max} {fiat} 嘅 {asset}",
     "buy_any": "我想買 {asset}",
     "sell_any": "我想賣 {asset}"
+  },
+  "stats": {
+    "page_title": "網絡統計",
+    "page_intro": "此 Morphit 網絡活動嘅即時聚合快照。呢度嘅任何內容都唔會識別任何人——呢啲係全網總量。",
+    "orders_active": "活躍訂單",
+    "orders_total": "訂單總數",
+    "trades_total": "成交（全部）",
+    "trades_30d": "成交（30 日）",
+    "assets_active": "有訂單嘅資產",
+    "fiats_active": "有訂單嘅貨幣",
+    "assets_supported": "支援嘅資產",
+    "updated": "更新於 {time}",
+    "json_note": "喺度建立聚合器或儀表板？相同嘅數據以 JSON 形式提供：",
+    "json_link": "原始數據源",
+    "error": "暫時無法載入統計數據。請稍後再試。"
   }
 }

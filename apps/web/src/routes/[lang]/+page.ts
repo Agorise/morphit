@@ -15,8 +15,8 @@
  *      crawler naturally discovers every (route × locale) pair
  *      it needs to prerender.
  *
- * Total prerendered output: 17 indexable routes × 10 supported
- * locales = 170 HTML files, plus the redirect shell at `/`.
+ * Total prerendered output: 20 indexable routes × 10 supported
+ * locales = 200 HTML files, plus the redirect shell at `/`.
  *
  * If a new locale graduates from PLANNED → SUPPORTED in
  * `$i18n/locales.ts`, the next build automatically produces the

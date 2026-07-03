@@ -91,10 +91,12 @@ import { recordAddressShared, recordFundsSent } from '$lib/trades/tradeStatus';
 import { triggerBlurtVerification } from '$lib/trades/tradeVerify';
 import { resolveChatPubFromIndexer, PubPinError, type ChatPubPin } from '$lib/chat/pubPin';
 import { fetchLatestChatIdentityFromChainQuorum } from '$lib/chat/chainVerify';
+import { readChatSecurityMode, shouldAttachSelfCopy, type ChatSecurityMode } from '$stores/chatSecurity';
 import {
 	deriveChatIdentity,
 	encryptToRecipient,
 	decryptFromSender,
+	decryptSelfCopy,
 	decodeChatPub,
 	DecryptError
 } from '$lib/chat/crypto';
@@ -221,8 +223,16 @@ export interface ChatControllerDeps {
 		plaintext: string,
 		recipientPub: Uint8Array,
 		senderAccount: string,
-		recipientAccount: string
-	): Promise<{ ciphertext: string; ephemeralPub: string; nonce: string }>;
+		recipientAccount: string,
+		senderChatPub: Uint8Array,
+		includeSelfCopy: boolean
+	): Promise<{
+		ciphertext: string;
+		ephemeralPub: string;
+		nonce: string;
+		selfCiphertext?: string;
+		selfNonce?: string;
+	}>;
 	/** Decrypt an envelope. Returns the plaintext, or null if
 	 *  decryption fails (the UI shows the placeholder in that
 	 *  case rather than crashing the conversation). */
@@ -233,6 +243,28 @@ export interface ChatControllerDeps {
 		senderAccount: string,
 		recipientAccount: string
 	): Promise<string | null>;
+	/** cp406 — decrypt the SENDER's own self-copy of a message they sent
+	 *  (keep-history mode). Returns the plaintext, or null if there's no
+	 *  self-copy present or it fails. Optional so existing test fakes without
+	 *  it still type-check; the own-sent render path falls back to the
+	 *  in-memory cache / placeholder when it's absent. */
+	decryptSelfCopy?(
+		envelope: {
+			ciphertext: string;
+			ephemeralPub: string;
+			nonce: string;
+			selfCiphertext?: string;
+			selfNonce?: string;
+		},
+		myPriv: Uint8Array,
+		myPub: Uint8Array,
+		senderAccount: string,
+		recipientAccount: string
+	): Promise<string | null>;
+	/** cp406 — the account's chat-security mode ('keep' | 'destroy'), read
+	 *  fresh at send time. Optional: absent → treated as 'keep' (the default,
+	 *  self-copy on), so existing tests keep their prior behavior. */
+	chatSecurityMode?(): ChatSecurityMode;
 	/** Called on EVERY state change. The component subscribes via
 	 *  its own $effect so Svelte re-renders automatically. */
 	onChange(messages: readonly LocalMessage[]): void;
@@ -547,6 +579,45 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		}
 	}
 
+	/** cp406 — decrypt OUR OWN sent message from chain via its self-copy
+	 *  (keep-history mode, the default). Returns the plaintext, or null when
+	 *  there's no self-copy (PFS "destroy" mode / a pre-feature message), the
+	 *  session is locked, deps.decryptSelfCopy isn't wired (older tests), or
+	 *  decrypt fails. This is what lets own sent history survive a reload
+	 *  without depending on the in-memory cache. Only called for records where
+	 *  rec.sender === deps.me. */
+	async function decryptOwnFromChain(rec: ChatMessageRecord): Promise<string | null> {
+		const live = deps.getLiveIdentity();
+		if (!live || deps.decryptSelfCopy === undefined) return null;
+		const header = rec.header;
+		if (typeof header !== 'object' || header === null) return null;
+		const h = header as Record<string, unknown>;
+		const ephemeralPub = h.ephemeral_pub;
+		const nonce = h.nonce;
+		const selfCiphertext = h.self_ciphertext;
+		const selfNonce = h.self_nonce;
+		if (
+			typeof ephemeralPub !== 'string' ||
+			typeof nonce !== 'string' ||
+			typeof selfCiphertext !== 'string' ||
+			typeof selfNonce !== 'string'
+		) {
+			return null;
+		}
+		try {
+			const id = await ensureMyChatIdentity(live);
+			return await deps.decryptSelfCopy(
+				{ ciphertext: rec.ciphertext, ephemeralPub, nonce, selfCiphertext, selfNonce },
+				id.priv,
+				id.pub,
+				rec.sender,
+				rec.recipient
+			);
+		} catch {
+			return null;
+		}
+	}
+
 	/** Process one poll response: merge new messages into the
 	 *  local list, advance the cursor. The template then renders
 	 *  sorted oldest-first.
@@ -592,22 +663,23 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 				if (seenIds.has(rec.id)) continue;
 				// No local tag matched — a message we sent, but not from
 				// this controller's live echo (we navigated away and back,
-				// or it was sent from another client/session). We can never
-				// re-decrypt our own messages from chain history (ephemeral
-				// sender-PFS wipes the key), so try the in-memory own-sent
-				// plaintext cache: if WE typed this in this tab session it's
-				// there and we restore it; otherwise fall back to the
-				// placeholder. Gated on getLiveIdentity() so a LOCKED session
+				// or it was sent from another client/session). cp406: in
+				// keep-history mode we can now re-decrypt our own messages from
+				// chain via their self-copy — so try that FIRST (survives a full
+				// reload). Fall back to the in-memory own-sent cache (covers
+				// PFS-mode messages we typed this session), then the placeholder.
+				// Everything is gated on getLiveIdentity() so a LOCKED session
 				// shows the placeholder, exactly like incoming messages.
 				const ownTag = clientTagFromHeader(rec.header);
+				const ownFromChain = await decryptOwnFromChain(rec);
 				const ownCached =
-					deps.getLiveIdentity() !== null && ownTag !== null
+					ownFromChain === null && deps.getLiveIdentity() !== null && ownTag !== null
 						? ownSentPlaintext.get(ownSentKey(deps.me, ownTag))
 						: undefined;
 				messages.push({
 					id: rec.id,
 					clientTag: ownTag,
-					text: ownCached ?? ENCRYPTED_PLACEHOLDER,
+					text: ownFromChain ?? ownCached ?? ENCRYPTED_PLACEHOLDER,
 					sender: rec.sender,
 					state: 'confirmed',
 					createdAt: new Date(rec.created_at),
@@ -840,11 +912,17 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		}
 
 		const clientTag = deps.generateClientTag();
-		// cp402 [3] — remember our own plaintext so it survives navigating
-		// away and back (we can never re-decrypt it from chain history —
-		// ephemeral sender-PFS wipes the key). In-memory only; cleared on
-		// lock/sign-out.
-		rememberOwnSent(deps.me, clientTag, trimmed);
+		// cp406 — keep-history mode (the DEFAULT) caches our own plaintext so it
+		// survives navigating away and back, as a fast path (the durable source
+		// is the on-chain self-copy attached below). In DESTROY mode we
+		// deliberately do NOT cache: with no self-copy on chain and nothing left
+		// in memory after we leave, own messages become unreadable once the
+		// session ends — the "destroyed after you leave this chat" guarantee.
+		// The cache is in-memory only and also cleared on lock/sign-out.
+		const keepHistory = shouldAttachSelfCopy(deps.chatSecurityMode?.());
+		if (keepHistory) {
+			rememberOwnSent(deps.me, clientTag, trimmed);
+		}
 		const local: LocalMessage = {
 			id: null,
 			clientTag,
@@ -885,12 +963,11 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 			return;
 		}
 
-		// Step 2: derive my identity (cached) for the encryption
-		// context. We don't actually USE my priv for sending (ECIES
-		// uses a fresh ephemeral on every encrypt) but we cache it
-		// here so receive-path decryption is fast.
+		// Step 2: derive my identity (cached). Used for the sender self-copy
+		// (keep-history mode, below) and to keep receive-path decryption fast.
+		let myId: { priv: Uint8Array; pub: Uint8Array };
 		try {
-			await ensureMyChatIdentity(live);
+			myId = await ensureMyChatIdentity(live);
 		} catch (err) {
 			local.state = 'failed';
 			local.error = err instanceof Error ? err.message : String(err);
@@ -898,10 +975,28 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 			return;
 		}
 
-		// Step 3: encrypt. deps.encrypt wraps crypto.encryptToRecipient.
-		let envelope: { ciphertext: string; ephemeralPub: string; nonce: string };
+		// Step 3: encrypt. deps.encrypt wraps crypto.encryptToRecipient. In
+		// keep-history mode (the default) we pass our own chat pubkey so the
+		// envelope also carries a sender self-copy — a second ciphertext only WE
+		// can open — letting us reread our own sent messages from chain. The
+		// opt-in PFS "destroy on leave" mode (keepHistory === false) omits it.
+		const includeSelfCopy = keepHistory;
+		let envelope: {
+			ciphertext: string;
+			ephemeralPub: string;
+			nonce: string;
+			selfCiphertext?: string;
+			selfNonce?: string;
+		};
 		try {
-			envelope = await deps.encrypt(trimmed, peerPub, deps.me, deps.peer);
+			envelope = await deps.encrypt(
+				trimmed,
+				peerPub,
+				deps.me,
+				deps.peer,
+				myId.pub,
+				includeSelfCopy
+			);
 		} catch (err) {
 			local.state = 'failed';
 			local.error = err instanceof Error ? err.message : String(err);
@@ -927,7 +1022,12 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 			header: {
 				client_tag: clientTag,
 				ephemeral_pub: envelope.ephemeralPub,
-				nonce: envelope.nonce
+				nonce: envelope.nonce,
+				// cp406 — sender self-copy (keep-history mode). Bounded + validated
+				// by the indexer exactly like the main ciphertext.
+				...(envelope.selfCiphertext !== undefined && envelope.selfNonce !== undefined
+					? { self_ciphertext: envelope.selfCiphertext, self_nonce: envelope.selfNonce }
+					: {})
 			}
 		};
 		if (deps.orderPermlink !== null) {
@@ -998,8 +1098,9 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 			return;
 		}
 
+		let myId: { priv: Uint8Array; pub: Uint8Array };
 		try {
-			await ensureMyChatIdentity(live);
+			myId = await ensureMyChatIdentity(live);
 		} catch (err) {
 			target.state = 'failed';
 			target.error = err instanceof Error ? err.message : String(err);
@@ -1007,9 +1108,26 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 			return;
 		}
 
-		let envelope: { ciphertext: string; ephemeralPub: string; nonce: string };
+		// cp406 — attach a sender self-copy in keep-history mode (the default),
+		// so a retried message is also readable by us from chain; DESTROY mode
+		// omits it, exactly like the send path (shared helper, no drift).
+		const includeSelfCopy = shouldAttachSelfCopy(deps.chatSecurityMode?.());
+		let envelope: {
+			ciphertext: string;
+			ephemeralPub: string;
+			nonce: string;
+			selfCiphertext?: string;
+			selfNonce?: string;
+		};
 		try {
-			envelope = await deps.encrypt(text, peerPub, deps.me, deps.peer);
+			envelope = await deps.encrypt(
+				text,
+				peerPub,
+				deps.me,
+				deps.peer,
+				myId.pub,
+				includeSelfCopy
+			);
 		} catch (err) {
 			target.state = 'failed';
 			target.error = err instanceof Error ? err.message : String(err);
@@ -1023,7 +1141,10 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 			header: {
 				client_tag: newTag,
 				ephemeral_pub: envelope.ephemeralPub,
-				nonce: envelope.nonce
+				nonce: envelope.nonce,
+				...(envelope.selfCiphertext !== undefined && envelope.selfNonce !== undefined
+					? { self_ciphertext: envelope.selfCiphertext, self_nonce: envelope.selfNonce }
+					: {})
 			}
 		};
 		try {
@@ -1263,18 +1384,25 @@ export function runtimeDeps(
 			plaintext: string,
 			recipientPub: Uint8Array,
 			senderAccount: string,
-			recipientAccount: string
+			recipientAccount: string,
+			senderChatPub: Uint8Array,
+			includeSelfCopy: boolean
 		) => {
 			const env = await encryptToRecipient(
 				plaintext,
 				recipientPub,
 				senderAccount,
-				recipientAccount
+				recipientAccount,
+				senderChatPub,
+				includeSelfCopy
 			);
 			return {
 				ciphertext: env.ciphertext,
 				ephemeralPub: env.ephemeralPub,
-				nonce: env.nonce
+				nonce: env.nonce,
+				...(env.selfCiphertext !== undefined && env.selfNonce !== undefined
+					? { selfCiphertext: env.selfCiphertext, selfNonce: env.selfNonce }
+					: {})
 			};
 		},
 		decrypt: async (
@@ -1297,6 +1425,32 @@ export function runtimeDeps(
 				throw err;
 			}
 		},
+		decryptSelfCopy: async (
+			envelope: {
+				ciphertext: string;
+				ephemeralPub: string;
+				nonce: string;
+				selfCiphertext?: string;
+				selfNonce?: string;
+			},
+			myPriv: Uint8Array,
+			myPub: Uint8Array,
+			senderAccount: string,
+			recipientAccount: string
+		) => {
+			try {
+				return await decryptSelfCopy(
+					envelope,
+					{ priv: myPriv, pub: myPub },
+					senderAccount,
+					recipientAccount
+				);
+			} catch (err) {
+				if (err instanceof DecryptError) return null;
+				throw err;
+			}
+		},
+		chatSecurityMode: () => readChatSecurityMode(me),
 		onChange: () => {
 			// Runtime caller replaces this with their Svelte-reactive
 			// state-setter. This default is a no-op so a controller

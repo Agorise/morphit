@@ -33,6 +33,8 @@
 
 import { writeFileSync, chmodSync, mkdirSync } from 'node:fs';
 import type { OnionV3 } from './torOnion.ts';
+import type { I2pDestinationResult } from './i2pGenerate.ts';
+import { i2pTunnelStanza, I2P_KEYFILE_NAME } from './i2pGenerate.ts';
 import { join, isAbsolute, resolve } from 'node:path';
 import { MORPHIT_GENESIS_BLOCK } from '@morphit/operator-config';
 import { safeCwd } from '../lib/repoRoot.ts';
@@ -116,6 +118,14 @@ export interface WizardAnswers {
 	 *  Tor HS files; the .onion address itself rides in `altNetworks.tor`.
 	 *  Carries the HS SECRET KEY, so it is never put in the resume file. */
 	readonly torOnion?: OnionV3 | null;
+	/** The basic I2P destination generated for this instance by default, or
+	 *  null when the operator already had MORPHIT_INSTANCE_I2P_B32_ADDRESS set
+	 *  (never overwrite / regenerate over an existing operable address).  When
+	 *  present, writeWizardOutput writes the i2pd keyfile + a tunnels.conf
+	 *  stanza; the .b32.i2p address itself rides in `altNetworks.i2pB32`.
+	 *  Carries the destination's PRIVATE keys, so it is never put in the resume
+	 *  file. */
+	readonly i2pDestination?: I2pDestinationResult | null;
 }
 
 /** Matrix-surfaces wizard result.  Both fields are optional
@@ -201,6 +211,14 @@ export interface WriteResult {
 	readonly torHsDir: string | null;
 	/** The generated .onion address (for the post-install summary), or null. */
 	readonly torHsAddress: string | null;
+	/** Directory holding the generated i2pd keyfile + tunnel stanza
+	 *  (morphit-web.dat, tunnel.conf), or null when no I2P destination was
+	 *  generated (operator already had one).  The operator installs the
+	 *  keyfile into i2pd's datadir and appends the stanza to i2pd's
+	 *  tunnels.conf. */
+	readonly i2pTunnelDir: string | null;
+	/** The generated .b32.i2p address (for the post-install summary), or null. */
+	readonly i2pB32Address: string | null;
 }
 
 /** Render the wizard answers into the two env files + keystore,
@@ -248,6 +266,32 @@ export function writeWizardOutput(answers: WizardAnswers, repoRoot: string): Wri
 		chmodSync(pubPath, 0o600);
 		writeFileSync(hostPath, answers.torOnion.hostnameFile, { mode: 0o644 });
 		chmodSync(hostPath, 0o644);
+	}
+
+	// ─── I2P destination (basic non-vanity, generated for this instance) ──
+	// The i2pd keyfile (679-byte private-keys blob, SENSITIVE → 0600) plus a
+	// ready-to-append tunnels.conf stanza.  The operator installs the keyfile
+	// into i2pd's datadir and appends the stanza to their i2pd tunnels.conf,
+	// then restarts i2pd — which serves the .b32.i2p we already advertise.
+	// Only written when a destination was generated (never when the operator
+	// already had MORPHIT_INSTANCE_I2P_B32_ADDRESS — we don't clobber an
+	// existing / vanity address).
+	let i2pTunnelDir: string | null = null;
+	let i2pB32Address: string | null = null;
+	if (answers.i2pDestination) {
+		i2pTunnelDir = join(repoRoot, 'i2p-tunnel');
+		i2pB32Address = answers.i2pDestination.b32;
+		mkdirSync(i2pTunnelDir, { recursive: true, mode: 0o700 });
+		chmodSync(i2pTunnelDir, 0o700);
+		const keyPath = join(i2pTunnelDir, I2P_KEYFILE_NAME);
+		const stanzaPath = join(i2pTunnelDir, 'tunnel.conf');
+		writeFileSync(keyPath, answers.i2pDestination.keyfile, { mode: 0o600 });
+		chmodSync(keyPath, 0o600);
+		// The stanza points at the keyfile by its bare name — valid once the
+		// operator copies morphit-web.dat into i2pd's datadir.  webPort is the
+		// origin's port (i2pd proxies I2P → the local site).
+		writeFileSync(stanzaPath, i2pTunnelStanza(I2P_KEYFILE_NAME, 8080), { mode: 0o644 });
+		chmodSync(stanzaPath, 0o644);
 	}
 
 	// ─── morphit.config.env (operator-tunable) ──
@@ -313,6 +357,8 @@ export function writeWizardOutput(answers: WizardAnswers, repoRoot: string): Wri
 		hardeningChecklistBytes,
 		torHsDir,
 		torHsAddress,
+		i2pTunnelDir,
+		i2pB32Address,
 		configBytes: Buffer.byteLength(configContent, 'utf8'),
 		envBytes: Buffer.byteLength(envContent, 'utf8'),
 		keystoreBytes: Buffer.byteLength(keystoreContent, 'utf8'),

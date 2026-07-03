@@ -8,14 +8,14 @@
  * same-origin `get_key_references` proxy (accountByKey → /v1/chain/key-references,
  * pinned same-origin by rpc-privacy-routing-smoke). A unique match is
  * authoritative (the key is in exactly that account's posting authority);
- * ambiguity / no-match / RPC-miss falls back to manual entry.
+ * ambiguity / no-match / RPC-miss surfaces the could_not_resolve message
+ * (cp406: there is no manual account field to fall back to).
  *
  * Regressions this guards against:
  *   - the seed/keyfile path reading the pubkey from `full` (seed-only) again,
  *     so keyfile silently falls through to manual /settings entry;
- *   - the posting-only handler going back to a REQUIRED account field (the
- *     pre-cp354 `!postingAccount.trim()` submit gate + up-front mandatory
- *     validation) instead of auto-detecting from the key;
+ *   - the posting-only handler reintroducing an account field (cp406 removed it
+ *     entirely) instead of auto-detecting from the key;
  *   - the could_not_resolve fallback message disappearing.
  *
  * Static source scan (the page pulls $-aliases the bare runner can't resolve,
@@ -67,23 +67,22 @@ check(
 	/resolveAccountsByPublicKeys\(pendingPubKeysBLT\)/.test(importPage)
 );
 
-// ─── posting-only: account is OPTIONAL, auto-detected from the key ───────────
+// ─── posting-only: NO account field — always auto-detected from the key ─────
 check(
-	'posting-only treats the account as optional (typedAccount, not a mandatory `account`)',
-	/const typedAccount = postingAccount\.trim\(\)\.toLowerCase\(\)/.test(importPage) &&
-		/if \(typedAccount && !BLURT_ACCOUNT_RE\.test\(typedAccount\)\)/.test(importPage)
+	'posting-only has NO account field (postingAccount removed entirely)',
+	!/postingAccount/.test(importPage)
 );
 check(
-	'posting-only reverse-resolves the account from the derived key when blank',
-	/if \(!account\)/.test(importPage) &&
-		/resolveAccountsByPublicKeys\(\[derivedPub\]\)/.test(importPage)
+	'posting-only always reverse-resolves the account from the derived key',
+	/resolveAccountsByPublicKeys\(\[derivedPub\]\)/.test(importPage) &&
+		/const account = matches\.length === 1 \? matches\[0\] : undefined/.test(importPage)
 );
 check(
-	'posting-only submit button NO LONGER requires a typed account name',
-	!/!postingAccount\.trim\(\) \|\|/.test(importPage)
+	'posting-only submit button does not gate on any account name',
+	!/!postingAccount\.trim\(\) \|\|/.test(importPage) && !/accountHasInvalidChar/.test(importPage)
 );
 check(
-	'blank-account auto-detect failure falls back to a manual-entry message',
+	'auto-detect failure surfaces the could_not_resolve message',
 	/posting_only\.error\.could_not_resolve/.test(importPage)
 );
 

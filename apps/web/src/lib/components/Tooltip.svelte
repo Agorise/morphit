@@ -22,9 +22,17 @@
 		 *  own click handler (e.g. an asset block that selects on tap). When
 		 *  omitted, the default ⓘ icon button renders (existing behavior). */
 		trigger?: Snippet;
+		/** cp406 (Ken) — delay, in ms, before a POINTER hover opens the tooltip.
+		 *  0 (default) = open immediately (existing behavior). When > 0, the
+		 *  tooltip only opens if the pointer stays over the trigger for this
+		 *  long; a hover that leaves sooner never opens it (used on the /post
+		 *  asset blocks, where a quick pass over the grid shouldn't flash a
+		 *  tooltip). Only the mouse-hover path is delayed — keyboard focus and
+		 *  tap-to-pin still open instantly, so touch + a11y are unaffected. */
+		hoverOpenDelayMs?: number;
 	}
 
-	let { textKey, faqKey, ariaLabel, trigger }: Props = $props();
+	let { textKey, faqKey, ariaLabel, trigger, hoverOpenDelayMs = 0 }: Props = $props();
 
 	// Sally finding S-12 (Part 119): pre-fix this defaulted to the
 	// English string 'More info', which leaked into ARIA labels for
@@ -57,12 +65,21 @@
 	let hovering = false;
 	let focusWithin = false;
 	let closeTimer: ReturnType<typeof setTimeout> | null = null;
+	// cp406 — pending hover-open timer (only used when hoverOpenDelayMs > 0).
+	let openTimer: ReturnType<typeof setTimeout> | null = null;
 	let wrapperEl = $state<HTMLSpanElement>();
 
 	function clearCloseTimer(): void {
 		if (closeTimer) {
 			clearTimeout(closeTimer);
 			closeTimer = null;
+		}
+	}
+
+	function clearOpenTimer(): void {
+		if (openTimer) {
+			clearTimeout(openTimer);
+			openTimer = null;
 		}
 	}
 
@@ -92,10 +109,23 @@
 	}
 
 	function onMouseEnter(): void {
+		if (hoverOpenDelayMs > 0) {
+			// Arm the open: only mark as hovering (which opens via recompute)
+			// once the pointer has dwelled for the full delay. A leave before
+			// then clears this timer, so a quick pass never opens the tooltip.
+			clearOpenTimer();
+			openTimer = setTimeout(() => {
+				openTimer = null;
+				hovering = true;
+				recompute();
+			}, hoverOpenDelayMs);
+			return;
+		}
 		hovering = true;
 		recompute();
 	}
 	function onMouseLeave(): void {
+		clearOpenTimer();
 		hovering = false;
 		recompute();
 	}
@@ -118,6 +148,7 @@
 			hovering = false;
 			focusWithin = false;
 			pinned = false;
+			clearOpenTimer();
 			clearCloseTimer();
 			open = false;
 		}
@@ -146,7 +177,10 @@
 		return () => document.removeEventListener('pointerdown', onDocPointer, true);
 	});
 
-	onDestroy(clearCloseTimer);
+	onDestroy(() => {
+		clearCloseTimer();
+		clearOpenTimer();
+	});
 
 	// "Learn more" opens the FAQ entry in a NEW TAB. This (1) keeps the user
 	// on their current page — critical during onboarding, where a same-tab

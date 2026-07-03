@@ -35,6 +35,7 @@ import type {
 	ProfileResponse,
 	ReleaseResponse,
 	ReputationReceiptResponse,
+	StatsResponse,
 	StrangerFeeQuoteResponse,
 	ErrorResponse,
 	ErrorCode
@@ -174,6 +175,12 @@ export function getInstance(signal?: AbortSignal): Promise<Result<InstanceRespon
 	// normal refresh instead of waiting out the HTTP cache (the footer
 	// used to keep the stale name until a ctrl+shift+r cold reload).
 	return request<InstanceResponse>('/v1/instance', { signal, cache: 'no-cache' });
+}
+
+/** GET /v1/stats — aggregate-only network summary (for the /stats page and
+ *  third-party aggregators). */
+export function getStats(signal?: AbortSignal): Promise<Result<StatsResponse>> {
+	return request<StatsResponse>('/v1/stats', { signal });
 }
 
 /** GET /v1/instances — federation directory (all known peer

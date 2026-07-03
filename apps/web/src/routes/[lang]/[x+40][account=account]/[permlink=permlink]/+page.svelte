@@ -45,13 +45,13 @@
 	import BusyButton from '$components/BusyButton.svelte';
 	import ConfirmModal from '$components/ConfirmModal.svelte';
 	import MessageIcon from '$components/MessageIcon.svelte';
-	import IdentityLabel from '$components/IdentityLabel.svelte';
+	import OrderPosterIdentity from '$components/OrderPosterIdentity.svelte';
 	import WriteBlockedReadOnly from '$components/WriteBlockedReadOnly.svelte';
 	import { identity, isUnlocked, isPairedReadOnly } from '$stores/identity';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
 	import { broadcastOrderCancel, BroadcastError } from '$blurt/ops/order';
 	import { KeystoreError } from '$crypto/keystore';
-	import { getOrdersByAccount, getFeedback } from '$lib/indexer/client';
+	import { getOrdersByAccount } from '$lib/indexer/client';
 	import { getProfileCached } from '$lib/indexer/profileCache';
 	import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
 	import { fetchAccountKeys } from '$blurt/accountKeys';
@@ -59,7 +59,7 @@
 	import { displayNamesForMethods } from '$lib/payments/display';
 	import { formatOrderPriceModel } from '$lib/orders/priceModelDisplay';
 	import { instanceAdditions, instanceNameLookup } from '$lib/stores/instanceAdditions';
-	import type { OrderRecord, FeedbackSummary, ProfileResponse } from '@morphit/indexer-client';
+	import type { OrderRecord, ProfileResponse } from '@morphit/indexer-client';
 
 	// account + permlink are route parameters; always defined.
 	// The non-null assertions are safe because SvelteKit would
@@ -94,15 +94,9 @@
 			: null
 	);
 
-	// Reputation summary — fetched alongside the order so the poster
-	// card can show ★X.X (N) without the user having to click through
-	// to the profile. Best-effort; if it fails the badge just doesn't
-	// render.
-	let ratingSummary = $state<FeedbackSummary | null>(null);
-
 	/** Poster profile — for custom avatar + display name on the
 	 *  poster card. Best-effort; null if the server has no profile
-	 *  or the fetch fails, in which case IdentityLabel falls back
+	 *  or the fetch fails, in which case OrderPosterIdentity falls back
 	 *  to the identicon + account name. Hits the shared profile
 	 *  cache, so a user who came from the orderbook page gets it
 	 *  instantly without a second round-trip. */
@@ -145,18 +139,8 @@
 		phase = 'ready';
 	}
 
-	async function loadRatingSummary(): Promise<void> {
-		// Fetch the first page with minimal limit just for the
-		// summary. The items themselves aren't rendered here.
-		const r = await getFeedback(account, { limit: 1 });
-		if (r.ok) {
-			ratingSummary = r.data.summary;
-		}
-		// Silent failure — reputation badge is decorative here.
-	}
-
 	async function loadPosterProfile(): Promise<void> {
-		// Silent: if the profile fetch fails, IdentityLabel renders
+		// Silent: if the profile fetch fails, OrderPosterIdentity renders
 		// its identicon fallback cleanly.
 		posterProfile = await getProfileCached(account);
 	}
@@ -176,7 +160,6 @@
 
 	onMount(() => {
 		void loadOrder();
-		void loadRatingSummary();
 		void loadPosterProfile();
 		void loadPosterPostingKey();
 	});
@@ -271,10 +254,6 @@
 	function formatAbsoluteDate(iso: string): string {
 		// Sitewide canonical date format ("30 June, 2026").
 		return formatDayMonth(iso);
-	}
-
-	function starString(n: 1 | 2 | 3 | 4 | 5): string {
-		return '★'.repeat(n) + '☆'.repeat(5 - n);
 	}
 
 	/** Pretty label for the order status. */
@@ -389,47 +368,23 @@
 			>
 				{$_('order_detail.posted_by')}
 			</h2>
-			<div class="flex flex-wrap items-center gap-3">
-				<IdentityLabel
-					account={order.account}
-					displayName={posterLabelProps.displayName}
-					avatarSvg={posterLabelProps.avatarSvg}
-					avatarDataUri={posterLabelProps.avatarDataUri}
-					publicKeyString={posterPostingKey ?? undefined}
-					href={lp(`/@${order.account}`)}
-					weight="bold"
-					avatarSize={40}
-				/>
-				{#if ratingSummary && ratingSummary.count > 0}
-					<a
-						href={lp(`/@${order.account}`)}
-						class="flex items-center gap-1 text-sm text-ink-600 hover:text-morphit-emerald dark:text-ink-300"
-					>
-						<span class="text-morphit-emerald" aria-hidden="true">
-							{starString(Math.round(ratingSummary.weighted_rating) as 1 | 2 | 3 | 4 | 5)}
-						</span>
-						<span class="tabular-nums">
-							{ratingSummary.weighted_rating.toFixed(1)}
-						</span>
-						<span class="text-xs text-ink-500">
-							({ratingSummary.count})
-						</span>
-					</a>
-				{:else if order.is_new_trader}
-					<span
-						class="rounded-full border border-morphit-teal/40 bg-morphit-teal/10 px-2 py-0.5 text-xs text-morphit-teal"
-					>
-						{$_('order_detail.new_trader')}
-					</span>
-				{/if}
-				<!-- Message button: non-owners on a live order get a
-				     direct link into the chat with the poster. Owners
-				     don't see it — they can't message themselves; the
-				     inbox is how they'd reach inbound messages. -->
-				{#if order.status === 'live' && !isOwner}
+			<OrderPosterIdentity
+				{order}
+				displayName={posterLabelProps.displayName}
+				avatarSvg={posterLabelProps.avatarSvg}
+				avatarDataUri={posterLabelProps.avatarDataUri}
+				profileHref={lp(`/@${order.account}`)}
+				postingKeyOverride={posterPostingKey}
+			/>
+			<!-- Message button: non-owners on a live order get a
+			     direct link into the chat with the poster. Owners
+			     don't see it — they can't message themselves; the
+			     inbox is how they'd reach inbound messages. -->
+			{#if order.status === 'live' && !isOwner}
+				<div class="mt-4">
 					<a
 						href={lp(`/chat/${order.account}?order=${encodeURIComponent(order.permlink)}`)}
-						class="ml-auto inline-flex items-center gap-1 rounded-xl border-2 border-morphit-emerald bg-morphit-emerald/10 px-3 py-1.5 text-sm font-semibold text-morphit-emerald transition hover:bg-morphit-emerald hover:text-ink-950 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
+						class="inline-flex items-center gap-1 rounded-xl border-2 border-morphit-emerald bg-morphit-emerald/10 px-3 py-1.5 text-sm font-semibold text-morphit-emerald transition hover:bg-morphit-emerald hover:text-ink-950 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
 						aria-label={$_('chat.message_button_aria', {
 							values: { peer: order.account }
 						}) as string}
@@ -437,8 +392,8 @@
 						<MessageIcon />
 						{$_('chat.message_button_label_named', { values: { account: order.account } })}
 					</a>
-				{/if}
-			</div>
+				</div>
+			{/if}
 		</section>
 
 		<!-- ─── Details ──────────────────────────────────────────── -->
@@ -480,7 +435,7 @@
 					{#if order.terms}
 						<div>
 							<dt class="text-xs text-ink-500">{$_('order_detail.terms')}</dt>
-							<dd class="mt-1 whitespace-pre-wrap text-sm text-ink-700 dark:text-ink-200">
+							<dd class="mt-1 text-sm text-ink-700 dark:text-ink-200">
 								<TermsText text={order.terms} />
 							</dd>
 						</div>

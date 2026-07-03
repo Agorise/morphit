@@ -92,10 +92,17 @@
 		/** Pre-filled order permlink, same role as in
 		 *  AddressShareModal. */
 		orderPermlink?: string;
+		/** cp406 — the counterparty's account name, for grandma-clear,
+		 *  peer-aware modal titles ("Confirm your payment to @peer"). */
+		peer: string;
 		/** Called with the encoded JSON payload. */
 		onShare: (payload: string) => Promise<void> | void;
 		/** Called when the user cancels. */
 		onCancel: () => void;
+		/** cp406 — optional one-line caption under the amount field explaining a
+		 *  pre-filled amount (the order's fiat minimum + its crypto equivalent).
+		 *  Empty string renders nothing. */
+		payHint?: string;
 	}
 
 	let {
@@ -107,8 +114,10 @@
 		initialDaiNetwork = null,
 		initialAmount = '',
 		orderPermlink,
+		peer,
 		onShare,
-		onCancel
+		onCancel,
+		payHint = ''
 	}: Props = $props();
 
 	/** cp402 [7a] — is the asset locked to the order's asset? Computed
@@ -303,10 +312,10 @@
 >
 	<div class="card w-full max-w-md">
 		<h2 id="funds-sent-heading" class="font-display text-xl font-bold">
-			{$_('chat.funds_sent.modal_title')}
+			{$_('chat.funds_sent.modal_title', { values: { peer } })}
 		</h2>
 		<p class="mt-2 text-sm text-ink-600 dark:text-ink-300">
-			{$_('chat.funds_sent.modal_subtitle')}
+			{$_('chat.funds_sent.modal_subtitle', { values: { peer } })}
 		</p>
 
 		{#if methodLocked}
@@ -651,6 +660,9 @@
 				autocomplete="off"
 				class="mt-1 w-full rounded-lg border border-ink-300 bg-white px-3 py-2 font-mono text-sm dark:border-ink-700 dark:bg-ink-900"
 			/>
+			{#if payHint}
+				<p class="mt-1 text-xs text-morphit-teal dark:text-morphit-emerald">{payHint}</p>
+			{/if}
 			{#if !amountLooksValid && trimmedAmount.length > 0}
 				<p class="mt-1 text-xs text-red-600 dark:text-red-400">
 					{$_('chat.address.amount_invalid')}

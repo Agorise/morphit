@@ -801,6 +801,20 @@ export function getAsset(ticker: ChatAssetTicker): AssetMetadata {
 	return a;
 }
 
+/** cp406 — resolve a ticker that may be UPPERCASE to the lower-case
+ *  ChatAssetTicker used across the chat UI + payment modals, or null when it
+ *  isn't a tradable chat asset. `OrderRecord.asset` is the canonical UPPERCASE
+ *  AssetTicker ('BLURT'), but this registry + ChatAssetTicker are lower-case
+ *  ('blurt'); without folding the case an uppercase order asset never matched,
+ *  so the composer "Pay now" asset-lock silently failed and the modal fell back
+ *  to the free 16-coin picker. Case-insensitive + total. */
+export function chatAssetFromTicker(ticker: string): ChatAssetTicker | null {
+	const lower = ticker.toLowerCase();
+	return Object.prototype.hasOwnProperty.call(BY_TICKER, lower)
+		? (lower as ChatAssetTicker)
+		: null;
+}
+
 /** Filter helpers for common UI-side queries. */
 export function tradeableAssets(): readonly AssetMetadata[] {
 	return ASSETS.filter((a) => a.canBeTraded);

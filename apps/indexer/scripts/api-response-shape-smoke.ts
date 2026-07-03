@@ -24,6 +24,7 @@
 
 import { buildListingFeeBody } from '../src/api/listingFeeBody.ts';
 import { buildStrangerFeeQuoteBody } from '../src/api/strangerFeeQuoteBody.ts';
+import { buildStatsResponse } from '../src/api/stats.ts';
 import { isAccountName } from '../src/api/shared.ts';
 import { fakeConfig } from '../test/testutils/context.ts';
 import type { BlurtPriceSource } from '../src/indexer/price/source.ts';
@@ -458,6 +459,81 @@ await scenario('isAccountName: rejects non-string input', () => {
 	if (isAccountName(null)) throw new Error('null should be rejected');
 	if (isAccountName(undefined)) throw new Error('undefined should be rejected');
 	if (isAccountName(123)) throw new Error('number should be rejected');
+});
+
+// ─── /v1/stats (buildStatsResponse) ──────────────────────────────
+
+await scenario('stats: shapes counts from aggregate rows', () => {
+	const r = buildStatsResponse(
+		{ active: '12', total: '340', assets_active: '4', fiats_active: '7' },
+		{ completed_total: '88', completed_30d: '19' },
+		[],
+		new Date('2026-07-02T00:00:00.000Z')
+	);
+	assertEqual(r.orders, { active: 12, total: 340 }, 'stats.orders');
+	assertEqual(r.trades, { completed_total: 88, completed_30d: 19 }, 'stats.trades');
+	assertEqual(r.assets.with_active_orders, 4, 'stats.assets.with_active_orders');
+	assertEqual(r.fiat_currencies.with_active_orders, 7, 'stats.fiats');
+	assertEqual(r.network, 'morphit', 'stats.network');
+	assertEqual(r.generated_at, '2026-07-02T00:00:00.000Z', 'stats.generated_at');
+});
+
+await scenario('stats: supported assets = canonical minus disabled (case-insensitive)', () => {
+	const r = buildStatsResponse(undefined, undefined, ['xmr', 'DOGE']);
+	if (r.assets.supported.includes('XMR')) throw new Error('XMR should be filtered (disabled)');
+	if (r.assets.supported.includes('DOGE')) throw new Error('DOGE should be filtered (disabled)');
+	if (!r.assets.supported.includes('BTC')) throw new Error('BTC should remain supported');
+	// 16 canonical tickers minus 2 disabled = 14.
+	assertEqual(r.assets.supported.length, 14, 'supported count');
+});
+
+await scenario('stats: PRIVACY — response has ONLY aggregate keys, nothing per-account', () => {
+	const r = buildStatsResponse(
+		{ active: '1', total: '1', assets_active: '1', fiats_active: '1' },
+		{ completed_total: '1', completed_30d: '1' },
+		[]
+	) as unknown as Record<string, unknown>;
+	// Exact top-level key set — any new field must be a deliberate, reviewed
+	// change, not an accidental leak of per-account data.
+	const keys = Object.keys(r).sort();
+	assertEqual(
+		keys,
+		['assets', 'fiat_currencies', 'generated_at', 'network', 'orders', 'trades'],
+		'stats top-level keys'
+	);
+	// Belt-and-suspenders: explicitly forbid any per-account / de-anonymizing shape.
+	for (const forbidden of [
+		'accounts',
+		'users',
+		'by_account',
+		'per_user',
+		'traders',
+		'account',
+		'top_accounts',
+		'volume',
+		'balances'
+	]) {
+		assertAbsent(r, forbidden);
+	}
+});
+
+await scenario('stats: missing rows → zeros (empty DB / query miss)', () => {
+	const r = buildStatsResponse(undefined, undefined, []);
+	assertEqual(r.orders, { active: 0, total: 0 }, 'orders zeros');
+	assertEqual(r.trades, { completed_total: 0, completed_30d: 0 }, 'trades zeros');
+	assertEqual(r.assets.with_active_orders, 0, 'assets zero');
+	assertEqual(r.fiat_currencies.with_active_orders, 0, 'fiats zero');
+});
+
+await scenario('stats: garbage / negative counts coerce to 0', () => {
+	const r = buildStatsResponse(
+		{ active: 'abc', total: '-5', assets_active: '', fiats_active: 'NaN' },
+		{ completed_total: '-1', completed_30d: 'x' },
+		[]
+	);
+	assertEqual(r.orders, { active: 0, total: 0 }, 'garbage orders → 0');
+	assertEqual(r.trades, { completed_total: 0, completed_30d: 0 }, 'garbage trades → 0');
+	assertEqual(r.assets.with_active_orders, 0, 'garbage assets → 0');
 });
 
 // ─── Final report ───────────────────────────────────────────────

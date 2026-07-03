@@ -119,6 +119,15 @@
       tags: [tor]
       when: enable_tor | default(true)
 
+    # Every instance gets a basic .b32.i2p by default (the wizard generates
+    # one and the site advertises it via MORPHIT_INSTANCE_I2P_B32_ADDRESS →
+    # footer pill).  This role makes i2pd actually SERVE it; set
+    # morphit_i2pd_key_src to the wizard's i2p-tunnel/ dir.  An operable
+    # keyfile already on the server is preserved.
+    - role: i2pd
+      tags: [i2pd]
+      when: enable_i2pd | default(true)
+
     # ─── Optional sidecar monitors ────────────────────────────
     # All disabled by default — set enable_<name>: true in
     # group_vars/all.yml (or per-host in inventory) to opt in.

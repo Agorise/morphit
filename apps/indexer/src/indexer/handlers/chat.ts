@@ -102,6 +102,10 @@ const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
  *  the chat audit. */
 const MAX_CIPHERTEXT_CHARS = 1536;
 
+/** Base64 well-formedness: multiple-of-4 length, at most 2 trailing '='.
+ *  Shared by the main ciphertext and the cp406 self-copy checks. */
+const CHAT_BASE64_RE = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+
 /** Finding H layer 3 — per-recipient rate limits to deter
  *  coordinated spam. Two rules, both evaluated BEFORE INSERT so
  *  blocked messages never touch chat_messages.
@@ -167,7 +171,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	// Rejecting at intake keeps demonstrably-malformed ciphertext
 	// out of the DB; legitimate clients always produce conformant
 	// output.
-	if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(ciphertext)) {
+	if (!CHAT_BASE64_RE.test(ciphertext)) {
 		return { ok: false, reason: 'ciphertext_not_base64' };
 	}
 
@@ -177,6 +181,31 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	const headerSize = checkJsonbSize(ctx.payload.header);
 	if (!headerSize.ok) {
 		return { ok: false, reason: 'header_too_large' };
+	}
+
+	// cp406 — OPTIONAL sender self-copy (ChatEnvelopeWire.selfCiphertext): a
+	// second ciphertext of the SAME plaintext, decryptable only by the sender,
+	// so they can reread their own history from chain (keep-history mode). It
+	// lives in the otherwise-opaque header, but we bound it EXACTLY like the
+	// main ciphertext so it can't smuggle past the 256-codepoint message budget
+	// or bloat the chain. self_ciphertext and self_nonce are a pair — both
+	// present or both absent. (PFS "destroy" mode simply omits both.)
+	const hdr = ctx.payload.header as Record<string, unknown>;
+	const selfCiphertext = hdr.self_ciphertext;
+	const selfNonce = hdr.self_nonce;
+	if ((selfCiphertext !== undefined) !== (selfNonce !== undefined)) {
+		return { ok: false, reason: 'self_copy_incomplete' };
+	}
+	if (selfCiphertext !== undefined) {
+		if (typeof selfCiphertext !== 'string' || typeof selfNonce !== 'string') {
+			return { ok: false, reason: 'self_copy_not_string' };
+		}
+		if (selfCiphertext.length < 1 || selfCiphertext.length > MAX_CIPHERTEXT_CHARS) {
+			return { ok: false, reason: 'self_ciphertext_too_long' };
+		}
+		if (!CHAT_BASE64_RE.test(selfCiphertext) || !CHAT_BASE64_RE.test(selfNonce)) {
+			return { ok: false, reason: 'self_copy_not_base64' };
+		}
 	}
 
 	// Finding H layer 1: block list. If the recipient has blocked

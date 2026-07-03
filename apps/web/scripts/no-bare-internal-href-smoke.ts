@@ -51,7 +51,17 @@ const BT = String.fromCharCode(96); // backtick, written this way to stay unambi
 
 /** Intentional exceptions: { file: substring-of-src-relative-path, frag: substring-of-line }.
  *  Empty by design — see file header. */
-const ALLOWLIST: ReadonlyArray<{ file: string; frag: string }> = [];
+const ALLOWLIST: ReadonlyArray<{ file: string; frag: string }> = [
+	{
+		// cp406 — the stats page's "view raw JSON" link points at the indexer
+		// API endpoint /v1/stats (same-origin, served by the backend, NOT a
+		// localized SvelteKit page). It carries data-sveltekit-reload for a full
+		// navigation. Locale-prefixing it (→ /en/v1/stats) would 404; the API
+		// lives at /v1/stats for every locale. Intentional, reviewer-confirmed.
+		file: 'routes/[lang]/stats/+page.svelte',
+		frag: 'href="/v1/stats"'
+	}
+];
 
 /** Asset file extensions whose static hrefs are served raw (not via a
  *  [lang] route) and so legitimately carry no locale prefix. */

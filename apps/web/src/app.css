@@ -212,24 +212,12 @@ body {
 
 	.btn-primary {
 		@apply btn text-white shadow-morphit-glow;
-		/* Brand-teal face; the brand gradient animates ONLY on the 1px border.
-		 * padding-box layer = the (teal) face, border-box layer = the moving
-		 * gradient. */
+		/* Solid brand-teal face. cp406 (Ken) — the 1px animated green gradient
+		 * border was removed site-wide; the 1px border is kept but transparent
+		 * (over a solid teal fill, background-clip default border-box) so button
+		 * sizing is unchanged. No border-sweep animation. */
 		border: 1px solid transparent;
-		background:
-			linear-gradient(var(--morphit-btn-face), var(--morphit-btn-face)) padding-box,
-			var(--morphit-gradient) border-box;
-		background-size:
-			100% 100%,
-			200% 100%;
-		background-repeat: no-repeat;
-		background-position:
-			0 0,
-			0 50%;
-		/* Occasional, subtle border-gradient sweep: one quick there-and-back
-		 * pass 2s after the page loads, then every 10s — replaces the old
-		 * continuous 6s shimmer.  The face stays a solid teal throughout. */
-		animation: morphit-border-occasional 10s ease-in-out 2s infinite;
+		background: var(--morphit-btn-face);
 	}
 
 	/* Compact primary button — same animated 1px gradient border as
@@ -240,18 +228,10 @@ body {
 	.btn-primary-sm {
 		@apply inline-flex items-center justify-center gap-1 rounded-xl px-2.5 py-2 text-sm font-semibold text-white transition-all duration-150;
 		@apply focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald;
+		/* cp406 (Ken) — green gradient border removed; transparent 1px border
+		 * kept so the pill-height match with the LanguageSwitcher is preserved. */
 		border: 1px solid transparent;
-		background:
-			linear-gradient(var(--morphit-btn-face), var(--morphit-btn-face)) padding-box,
-			var(--morphit-gradient) border-box;
-		background-size:
-			100% 100%,
-			200% 100%;
-		background-repeat: no-repeat;
-		background-position:
-			0 0,
-			0 50%;
-		animation: morphit-border-occasional 10s ease-in-out 2s infinite;
+		background: var(--morphit-btn-face);
 	}
 
 	.btn-secondary {
@@ -356,48 +336,23 @@ body {
 
 	/*
 	 * Subtle motion — gives the page life without demanding attention.
-	 *   - morphit-border-occasional (10s, 2s delay): one quick there-and-back
-	 *     sweep of the brand gradient along the 1px border of .btn-primary /
-	 *     .btn-primary-sm, 2s after load then every 10s (face stays solid teal).
 	 *   - morphit-pulse    (4s): slow opacity pulse for atmospheric glows.
 	 *
 	 * All respect prefers-reduced-motion: they pause for users who ask.
+	 * (cp406 — the morphit-border-occasional button-border sweep was removed
+	 *  along with the green gradient border on .btn-primary / .btn-primary-sm.)
 	 */
 	/* .btn-shine previously layered a full-face white "shine" sweep on
-	 * top of .btn-primary. That full-face motion was removed in favour
-	 * of the subtle 1px animated-gradient border on .btn-primary itself.
-	 * The class is kept as a harmless no-op so existing markup using
-	 * `btn-primary btn-shine` doesn't need touching. */
+	 * top of .btn-primary; that motion was later replaced by a 1px animated
+	 * gradient border, which cp406 also removed (the button is now a solid
+	 * teal face, no border sweep). The class is kept as a harmless no-op so
+	 * existing markup using `btn-primary btn-shine` doesn't need touching. */
 	.btn-shine {
 		position: relative;
 	}
 
 	.animate-morphit-pulse {
 		animation: morphit-pulse 4s ease-in-out infinite;
-	}
-}
-
-@keyframes morphit-border-occasional {
-	/* Two background layers: layer 1 (the solid face) stays put at 0 0;
-	 * layer 2 (the gradient border) rests at 0% 50%, does ONE quick
-	 * there-and-back sweep over the first ~0.8s of the 10s cycle, then
-	 * sits idle for the remaining ~9s. With the 2s animation-delay the
-	 * first sweep lands 2s after load, then repeats every 10s. */
-	0%,
-	100% {
-		background-position:
-			0 0,
-			0% 50%;
-	}
-	4% {
-		background-position:
-			0 0,
-			100% 50%;
-	}
-	8% {
-		background-position:
-			0 0,
-			0% 50%;
 	}
 }
 
@@ -535,4 +490,40 @@ button:has(.nav-arrow):focus-visible,
 	.no-print {
 		display: none !important;
 	}
+}
+
+/* Explorer raw-JSON syntax highlighting (rendered via {@html} from the
+ * XSS-safe highlightJsonToHtml — see lib/explorer/jsonHighlight.ts). Plain
+ * classes, deliberately outside @layer so they're never purged despite being
+ * injected dynamically. Colors are tuned for both the light (ink-100) and
+ * dark (ink-900) <pre> backgrounds. */
+.json-key {
+	color: #0369a1;
+}
+.json-string {
+	color: #15803d;
+}
+.json-num {
+	color: #b45309;
+}
+.json-bool {
+	color: #7c3aed;
+}
+.json-null {
+	color: #6b7280;
+}
+.dark .json-key {
+	color: #7dd3fc;
+}
+.dark .json-string {
+	color: #86efac;
+}
+.dark .json-num {
+	color: #fcd34d;
+}
+.dark .json-bool {
+	color: #c4b5fd;
+}
+.dark .json-null {
+	color: #9ca3af;
 }

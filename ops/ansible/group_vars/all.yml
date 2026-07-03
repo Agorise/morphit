@@ -284,6 +284,20 @@ morphit_tor_local_host: 127.0.0.1
 morphit_tor_local_port: 8080
 morphit_tor_key_src: ""
 
+# Every instance also gets a basic .b32.i2p (the wizard generates one and
+# the site advertises it via MORPHIT_INSTANCE_I2P_B32_ADDRESS → footer pill).
+# This role makes i2pd SERVE it.  Set morphit_i2pd_key_src to the wizard's
+# i2p-tunnel/ directory (copied to the control node) so i2pd serves the SAME
+# address the site advertises; otherwise i2pd self-generates a different one.
+# An operable keyfile already on the server is PRESERVED (never overwritten).
+enable_i2pd: true
+morphit_i2pd_datadir: /var/lib/i2pd
+morphit_i2pd_tunnels_conf: /etc/i2pd/tunnels.conf
+morphit_i2pd_keyfile: morphit-web.dat
+morphit_i2pd_local_host: 127.0.0.1
+morphit_i2pd_local_port: 8080
+morphit_i2pd_key_src: ""
+
 
 # ─── BunkerWeb (§32) ─────────────────────────────────────────────
 

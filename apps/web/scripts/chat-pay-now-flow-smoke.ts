@@ -71,11 +71,15 @@ const SCENARIOS: readonly Scenario[] = [
 	{
 		name: '1 — composer Pay-now asset lock derives ONLY from a registry-known order asset',
 		file: CONV,
+		// cp406 — the case-folding registry lookup moved into chatAssetFromTicker
+		// (in $lib/assets/registry): OrderRecord.asset is UPPERCASE ('BLURT'),
+		// ChatAssetTicker is lower-case ('blurt'); the helper folds the case and
+		// returns undefined for anything not in the registry.
 		mustHave: [
-			'function isKnownChatAsset(s: string): s is ChatAssetTicker',
-			'ASSETS.some((a) => a.ticker === s)',
+			"import { chatAssetFromTicker, getAsset } from '$lib/assets/registry'",
 			'const composerPayNowAsset = $derived(',
-			'markSentArgs === null && orderRecord && isKnownChatAsset(orderRecord.asset)'
+			'markSentArgs === null && orderRecord',
+			'chatAssetFromTicker(orderRecord.asset) ?? undefined'
 		]
 	},
 	{

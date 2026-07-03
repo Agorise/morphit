@@ -24,7 +24,7 @@ import { loadConfig } from '$config';
 import { createDatabase } from '$db/pool';
 import { checkSchemaDrift, formatDriftReport } from '$db/schemaDrift';
 import { runMigrations } from '$db/migrations';
-import { backfillPostingKeys } from '$indexer/postingKeyBackfill';
+import { backfillPostingKeys, ensurePostingPubkeyColumn } from '$indexer/postingKeyBackfill';
 import { seedFederationDirectory } from '$indexer/federationSeed';
 import { BlurtClient } from '$blurt/client';
 import { Poller } from '$indexer/poller';
@@ -81,6 +81,7 @@ import { conversationsRoute } from '$api/conversations';
 import { rssOrderbookRoute } from '$api/rssOrderbook';
 import { operatorsRoute } from '$api/operators';
 import { activityRoute } from '$api/activity';
+import { statsRoute } from '$api/stats';
 import { instancePaymentMethodsRoute } from '$api/instancePaymentMethods';
 import { operatorBlocksRoute } from '$api/operatorBlocks';
 import { logger } from '$log';
@@ -175,6 +176,17 @@ async function main(): Promise<void> {
 		bootLog.info('migrations_applied', { versions: mig.applied });
 	}
 
+	// ─── 3-bis. Additive columns not carried by the collapsed v1 baseline ──
+	// The orderbook query selects accounts.posting_pubkey. On an already-migrated
+	// beta DB, schema.sql does NOT re-run, so this additive column is delivered by
+	// an idempotent ADD COLUMN — and it MUST exist before the server binds, or the
+	// orderbook 500s on every request. It is therefore AWAITED here on the boot
+	// path (right after migrations, which already proved DB write access), NOT left
+	// to the fire-and-forget backfill below. This closes the beta.44 "Can't reach
+	// the indexer" regression, where the ensure raced the first request / could
+	// fail silently. Cheap and idempotent (metadata-only ADD COLUMN IF NOT EXISTS).
+	await ensurePostingPubkeyColumn(db);
+
 	// ─── 3a. Federation seed (Phase D.5) ────────────────────────
 	// Hardcoded reference instances inserted into known_instances
 	// with status='never'.  Idempotent.  Probe scheduler picks them
@@ -186,11 +198,13 @@ async function main(): Promise<void> {
 	const blurt = new BlurtClient(config);
 
 	// ─── 4a. Posting-key backfill (cp404, option A) ────────────
-	// Populate accounts.posting_pubkey for accounts created before the
-	// column existed (and refresh rotated keys) from the chain, in the
-	// background so the poller isn't blocked. New accounts already get
-	// their key at ingest from the account_create op. Fire-and-forget:
-	// a failure here never blocks indexing.
+	// The column itself is already guaranteed (awaited ensurePostingPubkeyColumn
+	// in step 3-bis). This step only POPULATES it: fills posting_pubkey for
+	// accounts created before the column existed, from the chain, in the
+	// background so the poller isn't blocked. New accounts already get their key
+	// at ingest from the account_create op. Fire-and-forget: a failure here only
+	// leaves some rows' key NULL (harmless — display-only, serves as NULL), and
+	// never blocks indexing or the orderbook.
 	void backfillPostingKeys(db, blurt).then(
 		(r) => {
 			if (r.updated > 0 || r.remaining > 0) {
@@ -591,6 +605,14 @@ async function main(): Promise<void> {
 	activityApp.use('*', rateLimit('list', config.listRatePerMin));
 	activityApp.route('/', activityRoute(db));
 	app.route('/v1/activity', activityApp);
+
+	// cp406 — aggregate-only network summary for third-party P2P aggregators
+	// (RoboSats, Bisq, Hodl Hodl, AgoraDesk, …). Privacy-first: coarse counts +
+	// config lists only, nothing per-account. Public, list-tier rate-limited.
+	const statsApp = new Hono();
+	statsApp.use('*', rateLimit('list', config.listRatePerMin));
+	statsApp.route('/', statsRoute(db, config));
+	app.route('/v1/stats', statsApp);
 
 	// Operator-instance payment-method additions (ADR-0021).
 	// Frontend reads on app-boot to populate the picker's

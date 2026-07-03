@@ -29,18 +29,16 @@
 	 */
 	import type { OrderRecord } from '@morphit/indexer-client';
 	import { _ } from 'svelte-i18n';
-	import IdentityLabel from '$lib/components/IdentityLabel.svelte';
-	import NewTraderChip from '$lib/components/NewTraderChip.svelte';
+	import OrderPosterIdentity from '$lib/components/OrderPosterIdentity.svelte';
 	import OrderExpiryChip from '$lib/components/OrderExpiryChip.svelte';
 	// cp404: the "N talking now" engagement chip is hidden per Ken's
 	// request. The engagement_24h data still flows on OrderRecord — to
 	// display it again, restore this import and the commented block in
-	// the identity row below.
+	// OrderPosterIdentity.
 	// import EngagementChip from '$lib/components/EngagementChip.svelte';
 	import UsdtPriceSubline from '$lib/components/UsdtPriceSubline.svelte';
 	import MessageIcon from '$lib/components/MessageIcon.svelte';
-	import { truncatePublicKey } from '$lib/crypto/publicKeyDisplay';
-	import { formatCountCompact, formatMonthYear } from '$lib/i18n/formatters';
+	import { stripMarkdown } from '$lib/seo/stripMarkdown';
 
 	interface Props {
 		/** The order to render. */
@@ -97,20 +95,8 @@
 		class: cls = ''
 	}: Props = $props();
 
-	const count = $derived(order.feedback_count ?? 0);
-	const score = $derived(order.reputation_score ?? null);
-	const postingKey = $derived(truncatePublicKey(order.posting_pubkey ?? ''));
-
-	// "852 trades since July, 2026" — count always shown (0 when none);
-	// the "since {month}" tail only when a first trade exists.
-	const tradesLine = $derived.by(() => {
-		const c = formatCountCompact(count);
-		return order.first_trade_at
-			? ($_('orderbook.card.trades_since', {
-					values: { count: c, month: formatMonthYear(order.first_trade_at) }
-				}) as string)
-			: ($_('orderbook.card.trades_only', { values: { count: c } }) as string);
-	});
+	// count / score / postingKey / tradesLine now live inside
+	// OrderPosterIdentity (the shared identity row).
 
 	const paymentLabelKey = $derived(
 		order.side === 'buy' ? 'orderbook.card.pay_with_label' : 'orderbook.card.accept_label'
@@ -127,6 +113,11 @@
 	);
 
 	const handle = $derived('@' + order.account);
+
+	// cp406 — the card shows a single truncated line, so strip the terms'
+	// markdown (headings / bold / italics / lists / hr) and collapse line feeds
+	// to plain text. Full markdown renders on the order detail page (TermsText).
+	const termsPreview = $derived(order.terms ? stripMarkdown(order.terms) : '');
 </script>
 
 <li
@@ -179,61 +170,10 @@
 	<!-- Title. Right padding clears the top-right cluster. -->
 	<h3 class="font-display pr-24 text-lg font-bold sm:pr-28">{title}</h3>
 
-	<!-- Identity row: avatar tucks up under the title; name + key beside. -->
-	<div class="-mt-2 flex items-start gap-3">
-		<div class="relative z-0 flex-none">
-			<IdentityLabel
-				account={order.account}
-				{avatarSvg}
-				{avatarDataUri}
-				avatarSize={52}
-				hideHandle
-			/>
-		</div>
-		<div class="min-w-0 flex-1 pt-1">
-			<!-- Line 1: display name · new-trader · reputation score -->
-			<div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-				<a
-					href={profileHref}
-					class="relative z-10 truncate font-bold text-ink-900 hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:text-white"
-				>
-					{displayName || handle}
-				</a>
-				{#if order.is_new_trader}
-					<NewTraderChip />
-				{/if}
-				{#if score !== null}
-					<span
-						class="inline-flex items-center gap-1 text-sm font-semibold text-morphit-emerald"
-						aria-label={$_('orderbook.card.reputation_aria', {
-							values: { score: score.toFixed(2) }
-						}) as string}
-						title={$_('orderbook.card.reputation_aria', {
-							values: { score: score.toFixed(2) }
-						}) as string}
-					>
-						<span aria-hidden="true">⭐</span>
-						<span aria-hidden="true">{score.toFixed(2)}</span>
-					</span>
-				{/if}
-				<!-- cp404: "N talking now" engagement chip hidden per Ken.
-				     engagement_24h still flows on OrderRecord; restore the
-				     EngagementChip import above and uncomment to display:
-				{#if (order.engagement_24h ?? 0) > 0}
-					<EngagementChip count={order.engagement_24h ?? 0} />
-				{/if}
-				-->
-			</div>
-			<!-- Line 2: truncated posting key · trade count since {month} -->
-			<div
-				class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-500 dark:text-ink-400"
-			>
-				{#if postingKey}
-					<span class="font-mono">({postingKey})</span>
-				{/if}
-				<span>{tradesLine}</span>
-			</div>
-		</div>
+	<!-- Identity row (shared with the order detail "POSTED BY" card via
+	     OrderPosterIdentity). -mt-2 tucks the avatar up under the title. -->
+	<div class="-mt-2">
+		<OrderPosterIdentity {order} {displayName} {avatarSvg} {avatarDataUri} {profileHref} />
 	</div>
 
 	<!-- Network chip (multi-network assets only). -->
@@ -266,11 +206,12 @@
 		</p>
 	{/if}
 
-	<!-- Terms — a single truncated line. Full text lives on the order page. -->
-	{#if order.terms}
+	<!-- Terms — a single truncated, markdown-stripped line. Full text (with
+	     markdown) lives on the order page. -->
+	{#if termsPreview}
 		<p class="mt-1.5 flex min-w-0 items-baseline gap-1 text-sm text-ink-700 dark:text-ink-200">
 			<span class="shrink-0 font-semibold">{$_('orderbook.card.terms_label')}:</span>
-			<span class="truncate">{order.terms}</span>
+			<span class="truncate">{termsPreview}</span>
 		</p>
 	{/if}
 

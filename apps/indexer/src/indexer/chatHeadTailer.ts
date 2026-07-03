@@ -165,6 +165,19 @@ function locateChatOp(op: ChainOperation): LocatedChatOp | null {
 	// Same serialized-size gate the handler applies to the header jsonb.
 	if (!checkJsonbSize(payload.header).ok) return null;
 
+	// cp406 — mirror the handler's OPTIONAL sender self-copy bound
+	// (handlers/chat.ts): self_ciphertext/self_nonce are a pair, and the
+	// self-copy is capped exactly like the main ciphertext, so the fast path
+	// never provisionally emits a message the durable handler would reject.
+	const selfCiphertext = payload.header.self_ciphertext;
+	const selfNonce = payload.header.self_nonce;
+	if ((selfCiphertext !== undefined) !== (selfNonce !== undefined)) return null;
+	if (selfCiphertext !== undefined) {
+		if (typeof selfCiphertext !== 'string' || typeof selfNonce !== 'string') return null;
+		if (selfCiphertext.length < 1 || selfCiphertext.length > MAX_CIPHERTEXT_CHARS) return null;
+		if (!BASE64_RE.test(selfCiphertext) || !BASE64_RE.test(selfNonce)) return null;
+	}
+
 	// Client-tag gate (invariant 5): only emit dedupable messages.
 	const clientTag = clientTagFromHeader(payload.header);
 	if (clientTag === null) return null;

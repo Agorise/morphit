@@ -176,7 +176,7 @@ const FEEDBACK_AGGREGATE_JOIN = `
 	     )
 	   GROUP BY recipient, order_permlink
 	) e ON e.recipient = o.account AND e.order_permlink = o.permlink
-	LEFT JOIN accounts a ON a.account = o.account
+	LEFT JOIN accounts a ON a.name = o.account
 `;
 
 const ROW_SELECT = `

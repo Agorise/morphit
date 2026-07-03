@@ -4,10 +4,13 @@
  * `PrivateKey.fromLogin(account, password, role).createPublic().toString()`
  * for every role.
  *
- * Why this matters: the import flow uses this to detect when a user pasted
- * their Blurt MASTER PASSWORD into the posting-key field (error message 6).
- * If the derivation drifts from dblurt's, detection silently breaks and the
- * user gets a generic "bad key" error instead of the precise one.
+ * Why this matters: `masterPasswordPubKey` reproduces dblurt's login-key
+ * derivation so we can tell when a user pasted their Blurt MASTER PASSWORD
+ * where a private key was expected. cp406 removed the posting-key import's
+ * account field, which unwired the one place this was used (that detector
+ * needed the account name). The primitive is kept — correct + regression-
+ * locked here — so the detection can be re-wired (e.g. on the settings
+ * account-name card) without re-deriving it from scratch.
  *
  * Derivation under test: scalar = sha256(account + role + password), then
  * secp256k1 pubkey → BLT string. Must equal dblurt for all four roles.

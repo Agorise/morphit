@@ -61,8 +61,16 @@
 
 	/** Maximum plaintext codepoints per message. Matches the
 	 *  design-doc budget; the indexer enforces a ciphertext-level
-	 *  cap at 1024 chars which accommodates this plaintext + DR
-	 *  overhead + base64. */
+	 *  cap of 1536 chars PER ciphertext — applied to both the
+	 *  recipient copy and the self-copy — which comfortably absorbs
+	 *  this 256-codepoint plaintext + DR overhead + base64. (An
+	 *  earlier comment here said 1024; that was the indexer's old,
+	 *  bad-math cap, since corrected to 1536.) The precise per-
+	 *  message limit is the codepoint counter (`overCap`) below;
+	 *  the textarea's `maxlength` is only a hard paste backstop and
+	 *  is sized to 2× MAX_CODEPOINTS UTF-16 units (the worst case
+	 *  for 256 codepoints is 512 units — all surrogate-pair emoji),
+	 *  so it never truncates a valid 256-codepoint message. */
 	const MAX_CODEPOINTS = 256;
 
 	/** Draft key in the shared drafts module. The full localStorage
@@ -272,7 +280,7 @@
 			onDetect={handleKeyDetect}
 			onkeydown={onKeydown}
 			rows={2}
-			maxlength={1024}
+			maxlength={MAX_CODEPOINTS * 2}
 			showCounter
 			counterMode="codepoint"
 			counterLimit={MAX_CODEPOINTS}

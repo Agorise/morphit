@@ -24,6 +24,7 @@
 	import { fetchChainTx } from '$blurt/chainExplorer';
 	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 	import { decorateOp } from '$lib/explorer/decorate';
+	import { highlightJsonToHtml } from '$lib/explorer/jsonHighlight';
 	import { morphitExplorerBlockUrl, blurtWalletExplorerFallbackUrl } from '$lib/explorer/urls';
 	import Head from '$components/Head.svelte';
 
@@ -182,10 +183,8 @@
 						</div>
 						{#if expandedOps[i]}
 							<pre
-								class="mt-2 overflow-x-auto whitespace-pre-wrap break-all rounded-md bg-ink-100 p-3 font-mono text-xs dark:bg-ink-900">{JSON.stringify(
-									op[1],
-									null,
-									2
+								class="mt-2 overflow-x-auto whitespace-pre-wrap break-all rounded-md bg-ink-100 p-3 font-mono text-xs dark:bg-ink-900">{@html highlightJsonToHtml(
+									JSON.stringify(op[1], null, 2)
 								)}</pre>
 						{/if}
 					</li>
