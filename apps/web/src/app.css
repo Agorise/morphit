@@ -314,6 +314,28 @@ body {
 		@apply transition-colors duration-150 ease-out hover:border-ink-300 dark:hover:border-ink-600;
 	}
 
+	/* cp407 — kill the browser autofill background highlight. Chrome/Brave
+	 * paint a pale blue-grey over any field they decide was autofilled — most
+	 * visibly the Region field, whose name matches their address heuristic, so
+	 * it flips to the highlight on blur and only clears on re-edit. The
+	 * box-shadow trick repaints the field's OWN dark surface over the highlight
+	 * (there's no CSS to override the highlight colour directly), and the
+	 * 5000s transition defeats the animated re-tint that fires on blur.
+	 * Dark-only theme, so one ink-900 surface + ink-100 text covers every case. */
+	input:-webkit-autofill,
+	input:-webkit-autofill:hover,
+	input:-webkit-autofill:focus,
+	input:-webkit-autofill:active,
+	textarea:-webkit-autofill,
+	textarea:-webkit-autofill:focus,
+	select:-webkit-autofill,
+	select:-webkit-autofill:focus {
+		-webkit-box-shadow: 0 0 0 1000px #0f141c inset;
+		-webkit-text-fill-color: #eef1f5;
+		caret-color: #eef1f5;
+		transition: background-color 5000s ease-in-out 0s;
+	}
+
 	.brand-gradient-text {
 		background: var(--morphit-gradient);
 		-webkit-background-clip: text;

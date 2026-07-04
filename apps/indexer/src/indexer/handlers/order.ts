@@ -23,9 +23,10 @@
 
 import type pg from 'pg';
 import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contract';
-import { expectedFeeBlurt } from '$indexer/fee';
+import { expectedFeeBlurt, canonicalShareOk, sumFeeTransfers } from '$indexer/fee';
 import { trackVerifiedBlurtFee } from '$indexer/loyalty';
 import { attributeBlurtFeeToOperator } from '$indexer/operatorEarnings';
+import { CANONICAL_TREASURY } from '../../config/canonicalTreasury';
 import { checkJsonbSize } from '$indexer/payloadSize';
 import { validateOrderPermlink } from '$indexer/permlink';
 import { logger } from '$log';
@@ -465,51 +466,10 @@ function validate(payload: unknown): ValidatedOrder | { reason: string } {
 	};
 }
 
-/** Find the sibling transfer op that paid the fee for this order.
- *  Returns the parsed amount + observation, or null if no matching
- *  transfer exists in the same transaction. "Matching" means:
- *    - from the signer
- *    - to config.feeRecipient
- *    - memo equals `morphit-fee:<permlink>`
- *  Malformed sibling ops are skipped (not errors).
- */
-function findFeeTransfer(
-	siblingOps: readonly (readonly [string, Record<string, unknown>])[],
-	signer: string,
-	feeRecipient: string,
-	permlink: string
-): { amountBlurt: number } | null {
-	const expectedMemo = `morphit-fee:${permlink}`;
-	for (const op of siblingOps) {
-		if (!op) continue;
-		const [name, body] = op;
-		if (name !== 'transfer') continue;
-		const b = body as {
-			from?: unknown;
-			to?: unknown;
-			amount?: unknown;
-			memo?: unknown;
-		};
-		if (b.from !== signer) continue;
-		if (b.to !== feeRecipient) continue;
-		if (b.memo !== expectedMemo) continue;
-
-		// Parse amount "N.NNN BLURT"
-		if (typeof b.amount !== 'string') continue;
-		const match = /^(\d+(?:\.\d+)?)\s+BLURT$/.exec(b.amount);
-		if (!match) continue;
-		const amount = Number(match[1]);
-		// Reject NaN/Infinity and non-positive amounts.  A 0-amount fee is
-		// already treated as underpaid downstream (0 < minAcceptable), but
-		// rejecting it here keeps this parser symmetric with strangerFee.ts's
-		// and means amountBlurt is always a positive finite number by
-		// construction (cp175 F-002, defense-in-depth).
-		if (!Number.isFinite(amount) || amount <= 0) continue;
-
-		return { amountBlurt: amount };
-	}
-	return null;
-}
+/** Find and sum the sibling transfer(s) that paid the fee for this order.
+ *  cp408 — moved to `$indexer/fee` as the shared `sumFeeTransfers` (used by the
+ *  listing, feature-bid, and stranger-fee handlers), which honors the
+ *  payment-time federation split. See there. */
 
 /** Count how many orders by this signer are in the "count toward
  *  Sybil tier" bucket per ADR-0009 §4: currently live OR created
@@ -897,10 +857,23 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	// the correct value. An order with fee_status != 'verified' is
 	// invisible in /v1/orderbook but visible via /v1/orders/:account
 	// so the user can see their own fee-rejected posts.
-	const transfer = findFeeTransfer(ctx.siblingOps, ctx.signer, ctx.config.feeRecipient, v.permlink);
+	//
+	// cp408 — the fee is paid as a payment-time split: 90% to this instance's
+	// fee recipient + 10% to the canonical treasury (or a single 100% transfer
+	// when the recipient IS the canonical treasury). We sum both legs for the
+	// underpaid check and separately confirm the canonical treasury received its
+	// ~10% cut — that second check is what stops a federation instance from
+	// keeping the canonical's share.
+	const fee = sumFeeTransfers(
+		ctx.siblingOps,
+		ctx.signer,
+		ctx.config.feeRecipient,
+		CANONICAL_TREASURY.blurt,
+		`morphit-fee:${v.permlink}`
+	);
 
 	let feeStatus: 'verified' | 'missing' | 'underpaid' = 'missing';
-	if (transfer !== null) {
+	if (fee !== null) {
 		// Count existing orders for Sybil tier. This order is the
 		// (count + 1)-th.
 		const existingCount = await countForSybilTier(client, ctx.signer, ctx.blockTime);
@@ -926,7 +899,12 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		const expected = expectedFeeBlurt(nth, feeBaseBlurt);
 		const tolerance = Math.max(ctx.config.feeTolerance, FEE_PRICE_TOLERANCE);
 		const minAcceptable = expected * (1 - tolerance);
-		if (transfer.amountBlurt < minAcceptable) {
+		if (fee.totalBlurt < minAcceptable) {
+			feeStatus = 'underpaid';
+		} else if (!canonicalShareOk(fee.totalBlurt, fee.toCanonicalBlurt)) {
+			// Total was paid, but the canonical treasury's 10% leg was missing or
+			// short. Treated as underpaid (order stays hidden) — the canonical
+			// cut is not optional.
 			feeStatus = 'underpaid';
 		} else {
 			feeStatus = 'verified';
@@ -970,23 +948,25 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	// replays land as rowCount == 0 and would otherwise double-count.
 	// The loyalty module itself also guards via UNIQUE, but catching
 	// it here first avoids churn on the account_loyalty table.
-	if (feeStatus === 'verified' && transfer !== null && (res.rowCount ?? 0) > 0) {
+	if (feeStatus === 'verified' && fee !== null && (res.rowCount ?? 0) > 0) {
 		await trackVerifiedBlurtFee(
 			client,
 			ctx.signer,
-			transfer.amountBlurt,
+			fee.totalBlurt,
 			ctx.blockNum,
 			ctx.blockTime,
 			operatorTagForRow,
 			ctx.config.instanceOperatorTag
 		);
 
-		// REVISIT-LIST item 5 — operator-earnings attribution.
-		// If this order op carries an `operator_tag` resolving to
-		// a registered active operator, credit them 90% of the
-		// BLURT fee.  No-op if tag is missing/malformed/unknown.
-		// Idempotent on trx_id; replay-safe.  See operatorEarnings.ts
-		// for the deep black-hat audit and policy rationale.
+		// cp408 — operator-earnings attribution (audit only).
+		// The operator's 90% is now paid DIRECTLY at payment time (the fee
+		// split's owner leg), so this no longer queues a relay transfer — it
+		// just records the attribution + cumulative earnings for the operator
+		// dashboard. If this order op carries an `operator_tag` resolving to a
+		// registered active operator, record their 90% of the BLURT fee.
+		// No-op if the tag is missing/malformed/unknown. Idempotent on trx_id.
+		// See operatorEarnings.ts for the deep black-hat audit and rationale.
 		//
 		// We pull the tag from the raw payload rather than from
 		// `v` because operator_tag is an attribution side-channel,
@@ -1000,7 +980,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			operatorTagRaw,
 			orderAccount: ctx.signer,
 			orderPermlink: v.permlink,
-			feeBlurt: transfer.amountBlurt,
+			feeBlurt: fee.totalBlurt,
 			trxId: ctx.trxId,
 			blockNum: ctx.blockNum,
 			blockTime: ctx.blockTime,

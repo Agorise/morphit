@@ -38,6 +38,7 @@
 	import RequireLiveSession from '$components/RequireLiveSession.svelte';
 	import FocusedField from '$components/FocusedField.svelte';
 	import Tooltip from '$components/Tooltip.svelte';
+	import TermsText from '$components/TermsText.svelte';
 	import type { FaqKey } from '$utils/faqIndex';
 	import Term from '$components/Term.svelte';
 	// cp165 byte-budget: ListingFeeAddressPanel renders only when
@@ -81,7 +82,7 @@
 	import { useActiveKey, KeystoreError } from '$crypto/keystore';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
 	import { broadcastNewOrder, BroadcastError } from '$blurt/ops/order';
-	import { computeFee, BASE_FEE_BLURT, type FeeQuote } from '$lib/orders/fee';
+	import { computeFee, BASE_FEE_BLURT, resolveFeeRecipient, type FeeQuote } from '$lib/orders/fee';
 	import { getOrdersByAccount } from '$lib/indexer/client';
 	import {
 		ASSET_TICKERS,
@@ -1962,7 +1963,7 @@
 					password,
 					async (activePriv) => {
 						const { signOrderWithFeeWithKey } = await import('$blurt/sign');
-						return signOrderWithFeeWithKey(unsigned, state.live.posting.privateKey, activePriv);
+						return signOrderWithFeeWithKey(unsigned, activePriv);
 					},
 					// M6: pin to the live session's posting pubkey so
 					// envelope decrypt verifies identity continuity.
@@ -1974,7 +1975,8 @@
 				signCallback,
 				input,
 				freshFee.nth,
-				operatorBaseBlurt
+				operatorBaseBlurt,
+				resolveFeeRecipient(getInstanceSnapshot().fee_recipient)
 			);
 			// useActiveKey has wiped the scalar by now.
 			successPermlink = result.permlink;
@@ -2031,12 +2033,46 @@
 					// rejected" (nothing was broadcast).
 					broadcastError = $_('post_order.broadcast_error.body_posting_only');
 				} else if (
+					// cp407 — the fee transfer's RECIPIENT (the treasury account)
+					// isn't on-chain. This is the single most likely cause of a
+					// well-funded BLURT-fee order failing (BTC/XMR fees pay the
+					// treasury externally, so ONLY the BLURT path transfers to it,
+					// so ONLY this path exposes a missing recipient). "does not
+					// exist" ≠ the insufficient branch's "does not have", so no
+					// overlap.
+					/does not exist/i.test(msg) ||
+					/unable to find account/i.test(msg) ||
+					/unknown account/i.test(msg) ||
+					/account.*not found/i.test(msg) ||
+					/missing account/i.test(msg)
+				) {
+					broadcastError = $_('post_order.broadcast_error.body_recipient_missing');
+				} else if (
 					/insufficient/i.test(msg) ||
 					/balance/i.test(msg) ||
 					/enough/i.test(msg) ||
 					/does not have/i.test(msg)
 				) {
 					broadcastError = $_('post_order.broadcast_error.body_insufficient_funds');
+				} else if (
+					// cp407 — low Resource Credits (RC) / bandwidth: a funded
+					// account can still be rate-limited by the chain's RC system.
+					/resource credit/i.test(msg) ||
+					/\bRC\b/.test(msg) ||
+					/bandwidth/i.test(msg) ||
+					/manabar/i.test(msg) ||
+					/power\s*up/i.test(msg)
+				) {
+					broadcastError = $_('post_order.broadcast_error.body_insufficient_rc');
+				} else if (
+					// cp407 — signature/authority mismatch: the Active key used
+					// doesn't satisfy the account's on-chain active authority.
+					/missing.*authority/i.test(msg) ||
+					/required.*authority/i.test(msg) ||
+					/signature/i.test(msg) ||
+					/verify/i.test(msg)
+				) {
+					broadcastError = $_('post_order.broadcast_error.body_authority');
 				} else {
 					broadcastError = $_('post_order.broadcast_error.body_generic');
 				}
@@ -2197,11 +2233,29 @@
 
 <div class="mx-auto max-w-3xl px-4 py-10 md:py-14">
 	<RequireLiveSession />
+
+	<!-- cp407 — shared extras rendered inside every order-SUMMARY card (step 4
+	     review + the awaiting-password / broadcasting / error cards): a live
+	     preview of the markdown-rendered terms exactly as they'll appear on the
+	     posted order, plus the chosen listing-expiry. Terms block only when the
+	     user actually wrote terms; the expiry line always shows. -->
+	{#snippet orderSummaryExtras()}
+		{#if terms.trim().length > 0}
+			<div
+				class="mt-3 border-t border-morphit-emerald/20 pt-3 text-sm text-ink-800 dark:text-ink-100"
+			>
+				<TermsText text={terms} />
+			</div>
+		{/if}
+		<p class="mt-3 text-xs text-ink-500 dark:text-ink-400">
+			{$_('post_order.form.expires_label')}: {$_(`post_order.form.expires_${expiresDays}d`)}
+		</p>
+	{/snippet}
 	<header class="mb-8">
 		<h1 class="font-display text-3xl font-extrabold">
 			<span class="brand-gradient-text">{$_('post_order.heading')}</span>
 		</h1>
-		{#if !isFirstTrade && (phase === 'editing' || phase === 'reviewing')}
+		{#if !isFirstTrade && phase === 'editing'}
 			<!-- The "tell traders what you want…" lead only makes sense while
 			     the user is still composing/reviewing.  On the sign / posting /
 			     error phases the order is already written, so we drop the lead
@@ -2227,6 +2281,7 @@
 				<span aria-hidden="true">📝</span>
 				{summarySentence}
 			</p>
+			{@render orderSummaryExtras()}
 		</div>
 	{/if}
 
@@ -2394,7 +2449,7 @@
 				{#each assetPickerItems as item (item.ticker)}
 					{@const a = item.ticker}
 					{@const disabled = feeMethodChoice === 'waived_first_buy' && a !== 'BLURT'}
-					<Tooltip textKey={item.explainerKey} faqKey={item.faqKey} hoverOpenDelayMs={1500}>
+					<Tooltip textKey={item.explainerKey} faqKey={item.faqKey} hoverOpenDelayMs={1000}>
 						{#snippet trigger()}
 							<button
 								type="button"
@@ -2786,6 +2841,7 @@
 						name="region"
 						bind:value={region}
 						maxlength="128"
+						autocomplete="off"
 						class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 						placeholder={regionPlaceholder}
 					/>
@@ -2947,6 +3003,7 @@
 					<span aria-hidden="true">📝</span>
 					{summarySentence}
 				</p>
+				{@render orderSummaryExtras()}
 			</div>
 		{/if}
 
@@ -3380,7 +3437,7 @@
 			</p>
 			<label class="block">
 				<span class="mb-1 block text-sm font-semibold">
-					{$_('post_order.locked.password_label')}
+					{$_('post_order.locked.password_label', { values: { account: blurtAccount ?? '' } })}
 				</span>
 				<FocusedField focused={password.length === 0} valid={password.length >= 8}>
 					<input

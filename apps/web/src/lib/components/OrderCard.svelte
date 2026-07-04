@@ -39,6 +39,7 @@
 	import UsdtPriceSubline from '$lib/components/UsdtPriceSubline.svelte';
 	import MessageIcon from '$lib/components/MessageIcon.svelte';
 	import { stripMarkdown } from '$lib/seo/stripMarkdown';
+	import { highlightMatches } from '$lib/utils/highlightMatches';
 
 	interface Props {
 		/** The order to render. */
@@ -72,6 +73,11 @@
 		onToggleHide?: (() => void) | null;
 		/** Fired when the Message button is clicked (e.g. view-count ping). */
 		onMessageClick?: (() => void) | null;
+		/** cp411 — lowercased search tokens from the orderbook's free-text
+		 *  "Order details" filter. When non-empty, occurrences in the terms
+		 *  preview are wrapped in a <mark> so the searcher sees why the card
+		 *  matched. Omitted/empty everywhere except the filtered orderbook. */
+		highlightTokens?: readonly string[];
 		/** Extra classes for the root <li> (e.g. list animation). */
 		class?: string;
 	}
@@ -92,6 +98,7 @@
 		blocked = false,
 		onToggleHide = null,
 		onMessageClick = null,
+		highlightTokens = [],
 		class: cls = ''
 	}: Props = $props();
 
@@ -118,6 +125,14 @@
 	// markdown (headings / bold / italics / lists / hr) and collapse line feeds
 	// to plain text. Full markdown renders on the order detail page (TermsText).
 	const termsPreview = $derived(order.terms ? stripMarkdown(order.terms) : '');
+	// cp411 — when the orderbook's "Order details" search is active, mark the
+	// matched word(s) in the preview. highlightMatches escapes the text and only
+	// emits <mark class="…"> (static), so this {@html} is safe for user terms.
+	const termsPreviewHtml = $derived(
+		highlightTokens.length > 0
+			? highlightMatches(termsPreview, highlightTokens)
+			: null
+	);
 </script>
 
 <li
@@ -211,7 +226,13 @@
 	{#if termsPreview}
 		<p class="mt-1.5 flex min-w-0 items-baseline gap-1 text-sm text-ink-700 dark:text-ink-200">
 			<span class="shrink-0 font-semibold">{$_('orderbook.card.terms_label')}:</span>
-			<span class="truncate">{termsPreview}</span>
+			{#if termsPreviewHtml !== null}
+				<!-- eslint-disable-next-line svelte/no-at-html-tags -- highlightMatches
+				     escapes the text and only injects <mark class> (see its doc). -->
+				<span class="truncate">{@html termsPreviewHtml}</span>
+			{:else}
+				<span class="truncate">{termsPreview}</span>
+			{/if}
 		</p>
 	{/if}
 

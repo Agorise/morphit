@@ -54,9 +54,11 @@
 export const CANONICAL_TREASURY = {
 	/** BLURT account that collects listing fees.  Mirrors the
 	 *  frontend `FEE_RECIPIENT` (apps/web/src/lib/orders/fee.ts) and
-	 *  the indexer `MORPHIT_INDEXER_FEE_RECIPIENT` default.  The
-	 *  90/10 operator/treasury split is applied downstream by
-	 *  operatorEarnings.ts. */
+	 *  the indexer `MORPHIT_INDEXER_FEE_RECIPIENT` default.  cp408 —
+	 *  the 90/10 owner/treasury split is applied AT PAYMENT TIME (the
+	 *  fee tx carries a 90% leg to the instance's recipient + a 10%
+	 *  leg to this account); on the canonical instance both legs land
+	 *  here, so it collects 100%. */
 	blurt: 'morphit-fees',
 	/** Mainnet BTC P2WPKH (bech32, `bc1q…`) fee address. 100% to
 	 *  treasury.  Passes @morphit/release-schema validateTreasury

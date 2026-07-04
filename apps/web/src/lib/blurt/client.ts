@@ -1,25 +1,38 @@
 /**
  * Morphit — Blurt chain client.
  *
- * Wraps the `dblurt` library (community fork of dhive/dsteem) so that
- * every JSON-RPC call it makes routes through Morphit's endpoint
- * rotator. dblurt is used for ITS operation builders and signing
- * primitives, but its transport is replaced — dblurt thinks it's
- * talking to a single "morphit-internal" URL, which our client
- * intercepts via the fetch shim on `Client`'s `address` parameter.
+ * Read-only helpers over the Blurt chain. cp410: by default every call routes
+ * through the operator's OWN indexer via `chainRelay` (POST /v1/chain/condenser),
+ * so the browser NEVER contacts a Blurt RPC node directly (privacy #1).
  *
- * Phase 2a exposes read-only helpers:
+ * THE ONE EXCEPTION is release verification (net/releaseFetch.ts): its trust
+ * anchor exists specifically to detect a malicious operator serving a tampered
+ * build, so it MUST read the real chain rather than the operator's indexer. It
+ * gets a DIRECT-to-chain client via `getDirectChainClient()` — the sole
+ * sanctioned browser→node reader, kept narrow and auditable. Everything else
+ * uses `getBlurtClient()` (indexer-routed).
+ *
+ * Helpers:
  *   - getAccount(name) — fetch a Blurt account's public keys + metadata
  *   - getDynamicGlobalProperties() — chain head info (for ref_block_num)
  *   - getLatestCustomJson(account, id) — most recent op of a given type
- *
- * Phase 2b adds:
- *   - broadcastCustomJson(op, postingKey) — sign + broadcast a morphit op
- *
- * Everything here is client-side; there is no server component.
+ *   - getBlock / getTransaction — block-explorer reads
  */
 
-import { getRotator, type EndpointRotator } from '$net/endpoints';
+import { chainRelay } from '$net/chainRelay';
+import { getRotator } from '$net/endpoints';
+
+/** How a BlurtClient reads the chain. Default = the same-origin indexer relay
+ *  (privacy #1). Release verification injects a direct-to-chain reader. */
+export type ChainReadFn = <T>(method: string, params?: unknown[]) => Promise<T>;
+
+/** Direct-to-chain reader via the node-hopping rotator. Used ONLY by release
+ *  verification (getDirectChainClient) — its trust anchor requires reading the
+ *  REAL chain, not the operator's indexer (which it exists to distrust). The
+ *  rotator speaks `condenser_api.<method>`; the typed helpers pass bare method
+ *  names, so prefix them here. */
+const directRotatorRead: ChainReadFn = <T>(method: string, params?: unknown[]): Promise<T> =>
+	getRotator().call<T>(method.includes('.') ? method : `condenser_api.${method}`, params);
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types (mirror Blurt's blockchain JSON shapes)
@@ -95,16 +108,9 @@ export interface ChainOperation {
 // ────────────────────────────────────────────────────────────────────────────
 
 export class BlurtClient {
-	/**
-	 * Rotator is resolved fresh on each call rather than cached, so that
-	 * a user editing endpoints in Settings (which calls `refreshRotator()`)
-	 * takes effect immediately without needing to re-create this client.
-	 */
-	constructor(private readonly rotatorOverride?: EndpointRotator) {}
-
-	private get rotator(): EndpointRotator {
-		return this.rotatorOverride ?? getRotator();
-	}
+	/** @param read chain-read transport; defaults to the indexer relay. Release
+	 *  verification injects the direct-to-chain reader. */
+	constructor(private readonly read: ChainReadFn = chainRelay) {}
 
 	/**
 	 * Look up a single account by name. Returns null if the account
@@ -112,15 +118,13 @@ export class BlurtClient {
 	 * public key that hasn't been registered yet).
 	 */
 	async getAccount(name: string): Promise<BlurtAccount | null> {
-		const result = await this.rotator.call<BlurtAccount[]>('condenser_api.get_accounts', [[name]]);
-		return result.length > 0 ? result[0]! : null;
+		const result = await this.read<BlurtAccount[]>('get_accounts', [[name]]);
+		return Array.isArray(result) && result.length > 0 ? result[0]! : null;
 	}
 
 	/** Fetch chain head info — needed for transaction ref_block_num. */
 	async getDynamicGlobalProperties(): Promise<DynamicGlobalProperties> {
-		return this.rotator.call<DynamicGlobalProperties>(
-			'condenser_api.get_dynamic_global_properties'
-		);
+		return this.read<DynamicGlobalProperties>('get_dynamic_global_properties');
 	}
 
 	/**
@@ -152,11 +156,8 @@ export class BlurtClient {
 		// condenser_api.get_account_history returns operations in
 		// reverse-chronological order when `from = -1`.
 		type HistoryEntry = [number, ChainOperation];
-		const history = await this.rotator.call<HistoryEntry[]>('condenser_api.get_account_history', [
-			account,
-			-1,
-			limit
-		]);
+		const history = await this.read<HistoryEntry[]>('get_account_history', [account, -1, limit]);
+		if (!Array.isArray(history)) return null;
 		// History is ordered oldest-first even with from=-1; walk backwards.
 		for (let i = history.length - 1; i >= 0; i--) {
 			const entry = history[i]!;
@@ -182,9 +183,10 @@ export class BlurtClient {
 		return null;
 	}
 
-	/** Raw JSON-RPC call, escape hatch for Phase 2b/3 code. */
+	/** Raw read-only chain call via this client's transport. Escape hatch for
+	 *  callers needing a whitelisted read the typed helpers don't cover. */
 	async call<T = unknown>(method: string, params?: unknown): Promise<T> {
-		return this.rotator.call<T>(method, params);
+		return this.read<T>(method, Array.isArray(params) ? params : params == null ? [] : [params]);
 	}
 
 	/** Fetch a Blurt block by number.  Returns the block's
@@ -202,9 +204,7 @@ export class BlurtClient {
 	 *    }
 	 */
 	async getBlock(blockNumber: number): Promise<BlurtBlock | null> {
-		const result = await this.rotator.call<BlurtBlock | null>('condenser_api.get_block', [
-			blockNumber
-		]);
+		const result = await this.read<BlurtBlock | null>('get_block', [blockNumber]);
 		return result ?? null;
 	}
 
@@ -218,14 +218,10 @@ export class BlurtClient {
 	 *  back to "view on blocks.blurtwallet.com" if needed. */
 	async getTransaction(trxId: string): Promise<BlurtTransaction | null> {
 		try {
-			const result = await this.rotator.call<BlurtTransaction | null>(
-				'condenser_api.get_transaction',
-				[trxId]
-			);
+			const result = await this.read<BlurtTransaction | null>('get_transaction', [trxId]);
 			return result ?? null;
 		} catch {
-			// RPC nodes without the tx-index plugin throw on this
-			// call.  Return null so the UI can show the fallback.
+			// Relay unreachable / chain error → null so the UI shows the fallback.
 			return null;
 		}
 	}
@@ -265,7 +261,22 @@ export interface BlurtTransaction {
 
 let singleton: BlurtClient | null = null;
 
+/** The default chain client — every read routes through the operator's indexer
+ *  (privacy #1). Use this everywhere EXCEPT release verification. */
 export function getBlurtClient(): BlurtClient {
 	if (!singleton) singleton = new BlurtClient();
 	return singleton;
+}
+
+let directSingleton: BlurtClient | null = null;
+
+/** Direct-to-chain client — reads the REAL chain via the node-hopping rotator,
+ *  bypassing the indexer. This is the SOLE sanctioned browser→Blurt-node reader
+ *  and exists ONLY for release verification (net/releaseFetch.ts), whose
+ *  anti-tamper trust anchor is meaningless if it trusts the operator's indexer.
+ *  Do NOT use this for anything else — every other read must go through
+ *  getBlurtClient() so the browser leaks nothing to third-party nodes. */
+export function getDirectChainClient(): BlurtClient {
+	if (!directSingleton) directSingleton = new BlurtClient(directRotatorRead);
+	return directSingleton;
 }

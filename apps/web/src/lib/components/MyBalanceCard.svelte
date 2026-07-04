@@ -47,7 +47,8 @@
 		type PnlRow
 	} from '$lib/pnl/categorize';
 	import { buildPnlCsv, downloadCsv } from '$lib/pnl/exportCsv';
-	import { FEE_RECIPIENT } from '$lib/orders/fee';
+	import { FEE_RECIPIENT, resolveFeeRecipient } from '$lib/orders/fee';
+	import { getInstanceSnapshot } from '$stores/instance';
 	import { fetchListingFee } from '$lib/orders/listingFee';
 	import { formatFiat } from '$i18n/formatters';
 	import { safeSession } from '$lib/utils/safeStorage';
@@ -382,8 +383,12 @@
 		exportError = '';
 		try {
 			const ops = await fetchYearOfHistory(account);
+			const opFeeAccount = resolveFeeRecipient(getInstanceSnapshot().fee_recipient);
 			const preds: CategorizerPredicates = {
-				isFeesAccount: (n) => n === FEE_RECIPIENT,
+				// cp407 — recognise BOTH this instance's operator fee account and
+				// the canonical treasury, so fee transfers light up whether the
+				// user paid a federated operator or the canonical morphit-fees.
+				isFeesAccount: (n) => n === opFeeAccount || n === FEE_RECIPIENT,
 				isOperatorAccount: (n) => n === OPERATOR_ACCOUNT,
 				// Featured-bid memos use a documented prefix.  Keep
 				// the predicate lenient so a future memo-format

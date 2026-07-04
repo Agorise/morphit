@@ -44,22 +44,43 @@ on the compose flow:
 
 ## Decision
 
-### 1. Fee payment — single Blurt transaction, two operations
+### 1. Fee payment — single Blurt transaction, two active-level operations
 
-Posting an order is a single Blurt transaction containing two
-operations in order:
+Posting an order paid in BLURT is a single Blurt transaction
+containing two operations in order:
 
-1. `custom_json` — the `morphit_order_v1` op, signed by the
-   signer's posting key
+1. `custom_json` — the `morphit_order_v1` op, declared at **active**
+   authority (`required_auths: [signer]`, empty `required_posting_auths`)
 2. `transfer` — a BLURT transfer from the signer to the Morphit
-   fee-collection account `@morphit-fees`, signed by the active
-   key, with a specific memo format
+   fee-collection account `@morphit-fees`, with a specific memo
+   format (active authority, as all transfers are)
 
 Both ops go in **one** signed transaction. This gives atomicity:
 either both land on chain or neither does. A user cannot post an
-order without paying, nor pay without posting. The frontend asks
-the user to unlock their active key once, signs the whole
-transaction, and broadcasts.
+order without paying, nor pay without posting.
+
+**Why the order op is active-level here, not posting (cp407).** A
+transfer requires active authority, and Blurt (Graphene) rejects any
+transaction that mixes posting-level and active-level operations — it
+asserts `required_active.size() == 0` when a posting op is present.
+So an order op that shares a transaction with the fee transfer MUST
+itself be active-level; the whole transaction is then active-level and
+takes a **single active signature**. (The original design signed a
+posting-level order op alongside the active transfer, which the chain
+rejected on every BLURT-paid order — this was fixed by making the
+order op active-level rather than splitting the fee into a second
+transaction, which would have broken atomicity and the sibling-op fee
+verification below.)
+
+The frontend asks the user to unlock their active key once, signs the
+whole transaction with the active key alone, and broadcasts.
+
+Orders whose fee is **waived** or paid **externally** (BTC/XMR) carry
+no `transfer`, so they remain a lone posting-level `custom_json`. The
+indexer therefore accepts an active-level order op for exactly the
+fee-bearing op ids (`morphit_order_v1`, `morphit_feature_bid_v1`,
+`morphit_stranger_fee_v1`) and stays posting-only for every other op
+(see the indexer's `extractSigner`).
 
 The transfer memo format is:
 

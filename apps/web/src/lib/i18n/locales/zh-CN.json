@@ -613,6 +613,7 @@
       "verify_not_found": "尚未找到交易 — 请等待一两个区块。",
       "verify_wrong_op": "找到交易但不包含匹配的转账。",
       "verify_rpc_error": "无法在链上验证(RPC 不可达)。",
+      "verify_independently": "在区块浏览器中验证",
       "self_verify_pending": "正在链上验证你的转账…",
       "self_verify_verified": "按预期发送",
       "self_verify_mismatch_title": "钱包发送了不同的内容",
@@ -1408,7 +1409,7 @@
       },
       "operator_payouts_timing": {
         "q": "操作员何时收到他们的费用份额?",
-        "a": "按归属即时发生。当订单的Blurt挂单费被验证时,记录归属的同一indexer交易会将您的90%份额排入待处理转账队列。relay的drainer在下一个周期(~几秒)取出并向您的运营商账户广播一个`transfer`操作。从用户点击「发布」到Blurt到达您的钱包,典型耗时约10-15秒。\n\n没有批处理,没有每周支付周期,没有「最低提现门槛」。每个已验证的Blurt支付订单都会产生自己的支付转账。\n\n**重要:运营商仅从Blurt支付的费用中赚取收入。** BTC和XMR支付的挂单费100%进入Morphit金库(`@morphit-fees`)——请参阅「运营商如何赚钱?」条目了解为何Blurt分成是90/10(严重偏向运营商)而BTC/XMR路径是100/0(仅金库)的完整理由。简而言之:Blurt在链上原子分割,BTC/XMR需要链下托管簿记,这会破坏Morphit的非托管设计。\n\n这是相对于传统交易所合作关系最明显的非托管优势之一。您永远不需要等待「支付时间表」,Morphit项目在任何时刻都不持有您的收益——这是indexer和relay到您的直接传递,确定性的,无人工干预,从链历史完全可审计。"
+        "a": "立即——就在用户付款的那一笔交易中。每一笔 Blurt 挂单费都在付款时拆分:用户的费用交易在同一笔交易中把 90% 直接发送到你的费用账户,10% 发送到 Morphit 金库。你的份额在一个 Blurt 区块内(约 3 秒)到账,没有转发步骤,也没有任何人需要把它转交给你。\n\n没有批量处理,没有每周结算周期,没有\"最低提现门槛\",中间也没有任何 relay(中继)。每一笔用 Blurt 支付的订单都直接在链上支付你的份额。\n\n**重要:运营者只从以 Blurt 支付的费用中获得收益。** 以 BTC 和 XMR 支付的挂单费 100% 进入 Morphit 金库(`@morphit-fees`)——关于为什么 Blurt 的分成是 90/10(大幅偏向运营者)而 BTC/XMR 路径是 100/0(仅金库)的完整理由,请参见\"运营者如何获得收益?\"条目。简而言之:一笔 Blurt 付款可以在一笔交易中于链上携带分成,而 BTC/XMR 则需要链下托管记账,这会破坏 Morphit 的非托管设计。\n\n这是相较于传统交易所合作关系最明显的非托管优势之一。你永远不必等待\"付款周期\",Morphit 项目在任何时刻都不持有你的收益——用户直接在链上向你付款,具有确定性,无需人工参与,可从链上历史完全审计。"
       },
       "operator_moderation": {
         "q": "操作员可以从他们的 instance 阻止或封禁特定用户吗?",
@@ -2629,7 +2630,8 @@
       "rss_generated_label": "RSS — 动态生成",
       "rss_title_prefix": "{site} 订单簿 - 筛选条件：",
       "rss_asset_title": "当有新的 {asset} 订单发布时通过 RSS 收到通知。",
-      "side_help": "提示：如果你想买加密货币，找想卖的订单。如果你想卖，找想买的订单。"
+      "side_help": "提示：如果你想买加密货币，找想卖的订单。如果你想卖，找想买的订单。",
+      "order_details_label": "订单详情"
     },
     "loading": "正在加载订单…",
     "empty_title": "没有订单符合您的筛选",
@@ -2700,7 +2702,10 @@
       "trades_only": "{count} 笔交易",
       "reputation_aria": "信誉评分 {score}（满分 5）",
       "message_word": "消息"
-    }
+    },
+    "search_no_results_title": "没有匹配的订单",
+    "search_no_results_body": "已加载的订单中没有提到“{query}”。请尝试其他词语，或清除搜索以查看全部。",
+    "search_clear": "清除搜索"
   },
   "paired_readonly": {
     "banner_heading": "以 @{account} 登录 — 密钥在手机上。",
@@ -2942,7 +2947,7 @@
   },
   "post_order": {
     "heading": "发布订单",
-    "subtitle": "告诉交易者您想买或卖什么以及如何联系您。挂单费涵盖 90 天。",
+    "subtitle": "告诉交易者您想买或卖什么以及如何联系您。挂单费最多涵盖 90 天。",
     "back_to_orderbook": "返回订单簿",
     "no_account": {
       "title": "你需要先创建账户",
@@ -2952,7 +2957,7 @@
     "locked": {
       "title": "解锁您的会话以继续",
       "body": "Morphit 从不保存您的密码。请输入密码以签署订单。",
-      "password_label": "会话密码",
+      "password_label": "@{account} 的密码",
       "fee_title": "输入你的密码以支付费用",
       "fee_body": "挂单费以 BLURT 支付——这是一笔需要你活跃密钥的签名转账。输入你的密码以短暂解锁它。Morphit 从不保存你的密码。"
     },
@@ -3095,7 +3100,10 @@
       "body_locked": "会话已锁定。请解锁密码后重试。",
       "body_bad_password": "该密码未解锁你的 keystore。请重试。",
       "body_missing_external_tx_id": "BTC 和 XMR 费用支付需要外部交易 ID。",
-      "body_posting_only": "用 BLURT 支付挂单费需要你的活跃密钥，而此设备上没有它——你目前仅用发帖密钥登录。请用主密码或完整的 keyfile 登录以使用 BLURT 支付，或返回改用 BTC/XMR 支付（也可使用你的首次免费挂单）。"
+      "body_posting_only": "用 BLURT 支付挂单费需要你的活跃密钥，而此设备上没有它——你目前仅用发帖密钥登录。请用主密码或完整的 keyfile 登录以使用 BLURT 支付，或返回改用 BTC/XMR 支付（也可使用你的首次免费挂单）。",
+      "body_recipient_missing": "无法发送挂单费——它要支付到的资金账户（@morphit-fees）似乎在 Blurt 上尚不存在。未支付任何费用。如果你运营此实例，需要创建该账户；否则请报告此问题。",
+      "body_insufficient_rc": "你的账户资源积分（RC）不足，因此 Blurt 拒绝了该交易。请将少量 BLURT 进行 power up，或等待 RC 充满后再试。未支付任何费用。",
+      "body_authority": "Blurt 拒绝了手续费支付的签名——你账户的活跃（Active）密钥可能与链上的不匹配。未支付任何费用。请用你的 12 个单词种子短语或 Keyfile 重新登录。"
     },
     "waiver": {
       "heading": "你的首单免费!",
@@ -3110,7 +3118,7 @@
       "btc_label": "用 BTC 支付",
       "btc_hint": "将费用发送到我们的 Bitcoin 地址,然后在下方粘贴交易 ID。",
       "xmr_label": "用 XMR 支付",
-      "xmr_hint": "将费用发送到我们的 Monero 地址,然后在下方粘贴交易 ID。",
+      "xmr_hint": "将手续费发送到我们的 Monero 地址，然后在下方粘贴交易 ID 和证明。",
       "txid_label": "交易 ID",
       "txid_placeholder": "粘贴 64 位十六进制交易 ID",
       "txid_required": "交易 ID 是必填项。",
@@ -3150,7 +3158,7 @@
       "fee_address_chain_pinned_aria": "链上锚定地址的真实性",
       "fee_address_local_fallback": "本地备用地址 — 此运营商尚未采用链上锚定的标准地址。如需额外保证,请在发送前用另一个 Morphit 实例核对。",
       "fee_address_unavailable": "此运营商未配置 {asset} 费用地址。请改选 BLURT,或在另一个 Morphit 实例上发布您的订单。",
-      "blurt_needs_active_key": "需要你的活跃密钥。你目前仅用发帖密钥登录——请用主密码或完整的 keyfile 登录以使用 BLURT 支付，或改用 BTC/XMR 支付。"
+      "blurt_needs_active_key": "需要你的活跃（Active）密钥。你目前用发帖（Posting）密钥登录——请用你的 12 个单词种子短语或 Keyfile 登录以使用 BLURT 支付，或改用 BTC/XMR 支付："
     },
     "draft": {
       "restored_banner": "已恢复 {age} 前的草稿。从上次停下的地方继续——或者重新开始。",
@@ -3653,13 +3661,14 @@
     "site_name": "Morphit",
     "og_image_alt": "Morphit — 注重隐私的 Monero、Bitcoin 等点对点市场",
     "home": {
-      "title": "Morphit — 私密交易 Monero、Bitcoin 等与法定货币",
-      "description": "注重隐私的点对点市场。直接与真实的人交易 Monero、Bitcoin 和其他加密货币换取法定货币。非托管。无 KYC。无邮箱。无追踪。开源。可自行托管。",
-      "keywords": "门罗币, 比特币, p2p, 市场, 无kyc, 非托管, 隐私, 去中心化交易所, 法定货币, 加密货币, blurt, 反国家主义, 自托管"
+      "title": "Morphit — 无需 KYC 的 P2P 市场，买卖 Monero、Bitcoin 等",
+      "description": "以私密、无需 KYC 的方式，点对点（P2P）与真实的人买卖 Monero (XMR)、Bitcoin (BTC) 等——非托管，无需账户、无需邮箱、不追踪。Morphit 是一个开源的场外交易（OTC）加密货币市场和去中心化公告板服务（DBBS）——可自托管的 LocalMonero 和 LocalBitcoins 替代品。",
+      "keywords": "购买 monero, 购买 bitcoin, 无需 kyc 交易所, 点对点, p2p, 非托管, 场外交易, over the counter, OTC, 公告板, BBS, DBBS, 去中心化公告板服务, localmonero 替代品, localbitcoins 替代品, bisq 替代品, 无需 kyc 购买 monero, 匿名购买 bitcoin, XMR, BTC, 隐私币, 去中心化交易所, 法币兑加密货币, agorism, 自托管, monero, bitcoin, blurt"
     },
     "orderbook": {
-      "title": "订单簿 — 买卖 Bitcoin 和 Monero · Morphit",
-      "description": "浏览 Bitcoin、Monero、BLURT 以及更多加密货币的实时 P2P 报价。按国家/地区、支付方式、声誉过滤。不用注册账号就能看。"
+      "title": "浏览报价 — 点对点买卖 Bitcoin 与 Monero，无需 KYC · Morphit",
+      "description": "浏览实时的点对点（P2P）报价，买卖 Bitcoin、Monero (XMR)、BLURT 等——一个无需 KYC、非托管的场外交易（OTC）市场和去中心化公告板（DBBS）。按国家、支付方式、价格和信誉筛选。无需账户即可浏览。",
+      "keywords": "bitcoin p2p, monero p2p, 无需 kyc 购买 monero, 无需 kyc 购买 bitcoin, 场外交易, over the counter, OTC, 公告板, DBBS, 去中心化公告板服务, 浏览加密报价, localmonero 替代品, 非托管, 法币兑加密货币, XMR, BTC, 市场, agorism"
     },
     "faq": {
       "title": "FAQ — Morphit 怎么用 · 非托管 P2P 加密货币",
@@ -3858,22 +3867,12 @@
     "endpoints": {
       "heading": "RPC 节点",
       "explain": "Morphit 用于读写数据的网络节点。应用会按响应速度依次尝试。添加你自己的或社区节点。",
-      "add": "添加",
-      "add_placeholder": "https://rpc.example.com",
-      "reset": "恢复默认",
-      "invalid_url": "请输入一个 https:// 开头的 URL。",
-      "duplicate": "这个节点已经在列表里了。",
-      "at_least_one": "至少保留一个节点。",
+      "pool_note": "你的 Morphit 实例为你处理所有 Blurt 网络流量——你的浏览器从不直接与这些节点通信。这里只是显示它们的实时状态。",
       "cooling_down": "冷却中",
       "recheck": "重新检测节点速度",
       "http_error": "错误：{code}",
-      "server_only_heading": "网络中的其他节点",
-      "server_only_note": "它们是 Blurt 网络的一部分，但浏览器无法直接连接。Morphit 的服务器在后台使用它们。",
       "failing": "{n} 次失败",
       "probing": "探测中…",
-      "remove_aria": "移除 {url}",
-      "reset_confirm_prompt": "将所有自定义 RPC 端点重置为默认值？",
-      "reset_confirm_yes": "是，重置",
       "timed_out": "超时",
       "unreachable": "无法连接"
     },
@@ -3995,7 +3994,8 @@
       "push_error_internal": "运营者中继出现问题。请稍后重试。",
       "push_error_signature_required": "此实例要求签名的订阅请求。请确保账号已解锁后重试。",
       "push_error_signature_invalid": "中继拒绝了你的签名。请重新解锁账号后再试。",
-      "push_error_locked_session": "会话已锁定。请先解锁账号以启用推送通知。"
+      "push_error_locked_session": "会话已锁定。请先解锁账号以启用推送通知。",
+      "push_error_push_service_unavailable": "你的浏览器屏蔽了网页推送——通常是隐私功能，例如 Brave 的 Shields、uBlock Origin 或其他广告/追踪器拦截器（网页推送经由 Google 的服务器，会被它们拦截）。你可以为本站降低浏览器的防护以允许它，或者让推送保持关闭——上面的通知方式仍然有效。推送只在 Morphit 完全关闭时才有意义。"
     },
     "hidden_accounts": {
       "heading": "已隐藏的账户",

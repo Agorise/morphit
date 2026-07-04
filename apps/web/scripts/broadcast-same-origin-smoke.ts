@@ -7,9 +7,12 @@
  * WRITE twin of the cp298 read leak) and broke whenever a node changed its
  * CORS header / went down. The fix routes the broadcast AND the ref-block read
  * that precedes it through the indexer (POST /v1/broadcast, GET
- * /v1/chain/properties), with a direct-RPC fallback so it can't regress below
- * the old behavior. This smoke pins that wiring so it can't silently revert to
- * direct RPC (which would quietly re-open the privacy hole + the fragility).
+ * /v1/chain/properties). cp344 shipped this WITH a direct-RPC fallback;
+ * cp410 REMOVED that fallback entirely — the browser must never contact a Blurt
+ * node directly, so an unreachable proxy now throws BroadcastUnavailableError
+ * rather than leaking the write to a third-party node. This smoke pins that
+ * wiring so it can't silently revert to direct RPC (which would quietly
+ * re-open the privacy hole + the fragility).
  *
  * Static analysis only — the sandbox has no Blurt RPC, so the live broadcast
  * itself is a post-deploy real-browser check, not something this can run.
@@ -55,8 +58,9 @@ check(
 	'getRefBlockInfo reads head via fetchDynamicGlobalProperties (not direct RPC)',
 	/fetchDynamicGlobalProperties\(\)/.test(sign)
 );
-// The ONLY condenser broadcast call left in the web client must be the
-// fallback inside broadcastTransport.ts — sign.ts must not call it directly.
+// cp410 — there is NO condenser broadcast call left anywhere in the web client
+// (the last one, broadcastTransport's fallback, was removed). sign.ts in
+// particular must not broadcast directly.
 check(
 	'sign.ts no longer calls condenser broadcast directly',
 	!/condenser_api\.broadcast_transaction_synchronous/.test(sign)
@@ -77,17 +81,28 @@ check(
 		!/getBlurtClient\(\)\.getDynamicGlobalProperties/.test(comment)
 );
 
-// ── Transport: same-origin first, direct-RPC fallback, surfaces rejection ────
+// ── Transport: same-origin ONLY (cp410 removed the direct-RPC fallback) ──────
 check("transport POSTs to /v1/broadcast", /'\/v1\/broadcast'/.test(transport));
 check("transport reads /v1/chain/properties for the ref-block", /'\/v1\/chain\/properties'/.test(transport));
 check('transport exports ChainRejectedError', /export class ChainRejectedError/.test(transport));
+// cp410 — the browser must NEVER contact a Blurt RPC node directly, so the old
+// direct-RPC fallback (directRpcBroadcast) was REMOVED. This is the stronger
+// invariant: the transport has NO direct broadcast path at all, and when the
+// indexer proxy is unreachable it throws BroadcastUnavailableError (never
+// leaking the write to a third-party node). A regression that re-introduces a
+// direct fallback would re-open the exact privacy hole this closed.
 check(
-	'transport falls back to direct RPC (directRpcBroadcast)',
-	/function directRpcBroadcast/.test(transport) &&
-		/condenser_api\.broadcast_transaction_synchronous/.test(transport)
+	'transport has NO direct-RPC broadcast fallback (cp410 removed directRpcBroadcast)',
+	!/directRpcBroadcast/.test(transport) &&
+		!/condenser_api\.broadcast_transaction_synchronous/.test(transport)
 );
 check(
-	'transport surfaces chain rejection on 400 (no fallback)',
+	'transport throws BroadcastUnavailableError when the indexer proxy is unreachable (no fallback)',
+	/export class BroadcastUnavailableError/.test(transport) &&
+		/throw new BroadcastUnavailableError/.test(transport)
+);
+check(
+	'transport surfaces chain rejection on 400 (distinct from unavailable)',
 	/res\.status === 400/.test(transport) && /throw new ChainRejectedError/.test(transport)
 );
 

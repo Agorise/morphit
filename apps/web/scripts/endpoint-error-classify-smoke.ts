@@ -1,17 +1,18 @@
 /**
- * endpoint-error-classify-smoke (cp346)
+ * endpoint-error-classify-smoke (cp346; repurposed cp408)
  *
- * Pins the "show WHY an RPC node is failing" wiring on the settings endpoint
- * panel. Before cp346 a non-HTTP failure (timeout / network / CORS) showed only
- * a failure count; now the rotator classifies the error and the panel renders a
- * reason. This guards both halves:
- *   - endpoints.ts: an EndpointStat.lastErrorKind field, a classifyEndpointError
- *     that maps HTTP→'http'(+code), AbortError/timeout→'timeout', else→'network',
- *     and — critically — the warmup() catch (the panel's probe path) capturing
- *     it instead of swallowing the error.
- *   - EndpointList.svelte: statusLabel branching on lastErrorKind to the right
- *     i18n key (timed_out / unreachable / http_error).
- *   - the two new i18n keys exist in en.
+ * Two guards:
+ *
+ * 1. PRIVACY (#1) — the settings RPC-endpoints card NEVER contacts a Blurt RPC
+ *    node directly. Node latency/health shown on the card comes ONLY from the
+ *    indexer (GET /v1/rpc-endpoints), which measures the pool server-side. The
+ *    browser-side probe (`warmup()`) has been removed entirely. This locks that
+ *    in so a future edit can't silently re-introduce a browser→node ping that
+ *    would leak the user's IP to third-party node operators.
+ *
+ * 2. The rotator still classifies WHY a REAL RPC call failed (HTTP / timeout /
+ *    network) for its own diagnostics — that machinery (used by call()/
+ *    callMany()) is unchanged.
  *
  * Static source scan (endpoints.ts pulls $app/environment, unresolvable in the
  * smoke runner, so we assert on source rather than importing).
@@ -39,51 +40,76 @@ function check(label: string, cond: boolean): void {
 console.log('\nendpoint-error-classify smoke:\n');
 
 const endpoints = read('src/lib/net/endpoints.ts');
+const list = read('src/lib/components/EndpointList.svelte');
 
-check('EndpointStat carries lastErrorKind', /lastErrorKind:\s*'http'\s*\|\s*'timeout'\s*\|\s*'network'\s*\|\s*null/.test(endpoints));
-check('classifyEndpointError is exported', /export function classifyEndpointError\(/.test(endpoints));
+// ─── 1. PRIVACY: the browser never probes RPC nodes ─────────────────────────
 check(
-	"classify maps an HTTP status to kind 'http' with its code",
-	/\/\^HTTP \(\\d\{3\}\)\\b\//.test(endpoints) && /kind:\s*'http',\s*code:\s*Number\(httpMatch\[1\]\)/.test(endpoints)
+	'the browser-side probe warmup() has been REMOVED from the rotator',
+	!/\basync\s+warmup\s*\(/.test(endpoints) && !/\.warmup\s*\(/.test(endpoints)
 );
 check(
+	'EndpointList does NOT call the rotator to probe nodes (no getRotator / warmup)',
+	!/getRotator/.test(list) && !/warmup/.test(list)
+);
+check(
+	'EndpointList makes NO direct fetch to a node (no fetch( / EndpointRotator use)',
+	!/\bfetch\s*\(/.test(list) && !/EndpointRotator/.test(list)
+);
+check(
+	'EndpointList shows node health from the INDEXER (getRpcEndpoints → loadHealth)',
+	/import \{ getRpcEndpoints \}/.test(list) &&
+		/function loadHealth/.test(list) &&
+		/getRpcEndpoints\(\)/.test(list)
+);
+check(
+	'healthStatus derives cooling-down / unreachable / latency from indexer health',
+	/function healthStatus/.test(list) &&
+		/cooldown_ms > 0/.test(list) &&
+		/settings\.endpoints\.cooling_down/.test(list) &&
+		/consecutive_failures > 0/.test(list) &&
+		/settings\.endpoints\.unreachable/.test(list) &&
+		/latency_ms/.test(list)
+);
+check(
+	'the pool list renders indexer-derived status per node, informational-only (cp410 — no custom-endpoint management)',
+	/healthStatus\(h\)/.test(list) &&
+		/sortedEndpoints/.test(list) &&
+		!/saveEndpoints|resetEndpoints|refreshRotator|addEndpoint|removeEndpoint/.test(list)
+);
+check(
+	'the refresh button re-fetches the indexer (not a browser probe)',
+	/onclick=\{\(\) => void loadHealth\(\)\}/.test(list)
+);
+
+// ─── 2. The rotator still classifies REAL-call failures ─────────────────────
+check(
+	'EndpointStat carries lastErrorKind',
+	/lastErrorKind:\s*'http'\s*\|\s*'timeout'\s*\|\s*'network'\s*\|\s*null/.test(endpoints)
+);
+check('classifyEndpointError is exported', /export function classifyEndpointError\(/.test(endpoints));
+check(
 	"classify maps AbortError / timeout to kind 'timeout'",
-	/AbortError'|timed out|timeout|aborted/.test(endpoints) && /kind:\s*'timeout',\s*code:\s*null/.test(endpoints)
+	/AbortError'|timed out|timeout|aborted/.test(endpoints) &&
+		/kind:\s*'timeout',\s*code:\s*null/.test(endpoints)
 );
 check(
 	"classify falls back to kind 'network' (DNS/offline/TLS/CORS — indistinguishable)",
 	/return\s*\{\s*kind:\s*'network',\s*code:\s*null\s*\}/.test(endpoints)
 );
 check(
-	'warmup() (the settings-panel probe path) captures+classifies instead of swallowing the error',
-	/async warmup\(\)/.test(endpoints) &&
-		/classifyEndpointError\(err instanceof Error/.test(endpoints) &&
-		!/}\s*catch\s*\{\s*\n\s*target\.consecutiveFailures\+\+;\s*\n\s*\}/.test(endpoints)
+	'the REAL-call path (call/callMany) classifies failures via classifyEndpointError',
+	/const cls = classifyEndpointError\(/.test(endpoints)
 );
 
-// EndpointList renders the reason.
-const list = read('src/lib/components/EndpointList.svelte');
-check(
-	"EndpointList shows 'timed out' for a timeout",
-	/lastErrorKind === 'timeout'/.test(list) && /settings\.endpoints\.timed_out/.test(list)
-);
-check(
-	"EndpointList shows 'unreachable' for a network failure",
-	/lastErrorKind === 'network'/.test(list) && /settings\.endpoints\.unreachable/.test(list)
-);
-check(
-	"EndpointList still shows the HTTP code for an HTTP failure",
-	/lastErrorKind === 'http'/.test(list) && /settings\.endpoints\.http_error/.test(list)
-);
-
-// The two new keys exist (parity across locales is enforced by i18n-locale-parity).
+// ─── i18n keys the card still uses exist in en ──────────────────────────────
 const en = JSON.parse(read('src/lib/i18n/locales/en.json')) as {
 	settings: { endpoints: Record<string, string> };
 };
 check(
-	'en has settings.endpoints.timed_out + unreachable',
-	typeof en.settings.endpoints.timed_out === 'string' &&
-		typeof en.settings.endpoints.unreachable === 'string'
+	'en has settings.endpoints.unreachable + cooling_down + probing',
+	typeof en.settings.endpoints.unreachable === 'string' &&
+		typeof en.settings.endpoints.cooling_down === 'string' &&
+		typeof en.settings.endpoints.probing === 'string'
 );
 
 console.log('');

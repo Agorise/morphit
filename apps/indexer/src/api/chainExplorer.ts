@@ -53,6 +53,25 @@ const BLT_PUBKEY_RE = /^BLT[1-9A-HJ-NP-Za-km-z]{40,60}$/;
  *  build a giant get_key_references query against the operator's RPC pool. */
 const MAX_KEY_REFERENCES_KEYS = 8;
 
+/** The read-only condenser_api methods the browser is allowed to relay through
+ *  POST /condenser. Everything the frontend chain client needs, nothing more —
+ *  strictly read methods (no broadcast / no write), so this proxy can never be
+ *  used to push to the chain or call an arbitrary expensive method. */
+const RELAYABLE_READ_METHODS: ReadonlySet<string> = new Set([
+	'get_accounts',
+	'get_account_history',
+	'get_dynamic_global_properties',
+	'get_block',
+	'get_transaction',
+	'get_key_references'
+]);
+
+/** Widest relayed call is get_account_history [account, from, limit] = 3; cap at
+ *  4 for a little headroom. Plus a serialized-size cap so the param array can't
+ *  smuggle a huge upstream query. */
+const MAX_CONDENSER_PARAMS = 4;
+const MAX_CONDENSER_PARAMS_BYTES = 2048;
+
 interface ChainBlockBody {
 	readonly block: unknown;
 }
@@ -214,6 +233,63 @@ export function chainExplorerRoute(blurt: BlurtClient): Hono {
 		// own retries.
 		c.header('Cache-Control', 'no-store');
 		return c.json(out);
+	});
+
+	// POST /v1/chain/condenser → { result: <verbatim condenser_api result> }
+	//   body: { method: string, params: unknown[] }
+	//
+	// PRIVACY (priority #1) — the general chain-read relay. cp409/cp410: the
+	// browser must NEVER contact a Blurt RPC node directly (it would leak the
+	// user's IP + exactly what they're reading to third-party node operators).
+	// Every remaining browser chain read — account lookups, account history,
+	// the chain head, block/tx verification for chat payment + identity checks —
+	// funnels through here, so third parties only ever see the indexer's
+	// request and the browser opens no cross-origin RPC connection. This is the
+	// generic sibling of the tightly-typed /block, /tx, /properties,
+	// /key-references relays above; those keep their per-method validation +
+	// caching, this one carries everything else.
+	//
+	// STRICTLY READ-ONLY + WHITELISTED so it can't be turned into a broadcast
+	// path or an arbitrary/expensive-method amplifier against the operator's
+	// pool: only the six read methods the frontend actually needs are relayed,
+	// the param array is bounded, and the chainApp rate-limit (resource tier)
+	// caps the request rate. The result is relayed verbatim (it may legitimately
+	// be null, e.g. a not-yet-final get_transaction — the caller handles that),
+	// and never cached (account state is volatile and a stale "payment
+	// confirmed" must never be served).
+	app.post('/condenser', async (c) => {
+		let body: unknown;
+		try {
+			body = await c.req.json();
+		} catch {
+			return c.json(errorBody('bad_request', 'invalid JSON body'), 400);
+		}
+		if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+			return c.json(errorBody('bad_request', 'expected an object body'), 400);
+		}
+		const method = (body as Record<string, unknown>).method;
+		const params = (body as Record<string, unknown>).params ?? [];
+		if (typeof method !== 'string' || !RELAYABLE_READ_METHODS.has(method)) {
+			return c.json(errorBody('bad_request', 'method not allowed'), 400);
+		}
+		if (!Array.isArray(params) || params.length > MAX_CONDENSER_PARAMS) {
+			return c.json(errorBody('bad_request', 'invalid params'), 400);
+		}
+		// Bound the serialized payload so a bogus caller can't build a giant
+		// upstream query (deep per-arg validation is the chain's job; the
+		// whitelist + this cap + the rate-limit are the guardrails).
+		if (JSON.stringify(params).length > MAX_CONDENSER_PARAMS_BYTES) {
+			return c.json(errorBody('bad_request', 'params too large'), 400);
+		}
+
+		let result: unknown;
+		try {
+			result = await blurt.callCondenser(method, params, { userFacing: true });
+		} catch {
+			return c.json(errorBody('internal', 'could not reach the Blurt network'), 502);
+		}
+		c.header('Cache-Control', 'no-store');
+		return c.json({ result: result ?? null });
 	});
 
 	return app;

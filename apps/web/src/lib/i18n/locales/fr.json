@@ -613,6 +613,7 @@
       "verify_not_found": "Transaction introuvable pour l'instant — attendez un ou deux blocs.",
       "verify_wrong_op": "Transaction trouvée mais sans transfert correspondant.",
       "verify_rpc_error": "Impossible de vérifier sur la chaîne (RPC indisponible).",
+      "verify_independently": "Vérifier sur l’explorateur de blocs",
       "self_verify_pending": "Vérification de votre transfert sur la chaîne…",
       "self_verify_verified": "Envoyé comme prévu",
       "self_verify_mismatch_title": "Le portefeuille a envoyé autre chose",
@@ -1408,7 +1409,7 @@
       },
       "operator_payouts_timing": {
         "q": "Quand les opérateurs reçoivent-ils leur part de commission ?",
-        "a": "Effectivement immédiat, par attribution. Lorsque les frais de listing Blurt d'une commande sont vérifiés, la même transaction de l'indexer qui enregistre l'attribution met votre part de 90% en file d'attente sous forme de transfert en attente. Le drainer du relais la récupère lors de son prochain cycle (~quelques secondes) et diffuse une op `transfer` vers votre compte opérateur. Le temps total horloge depuis le clic « Publier » de l'utilisateur jusqu'à ce que les Blurt atterrissent dans votre portefeuille est généralement de 10-15 secondes.\n\nAucun batching, aucun cycle de paiement hebdomadaire, aucun « seuil minimum pour retirer ». Chaque commande payée en Blurt vérifiée produit son propre transfert de paiement.\n\n**Important : les opérateurs ne gagnent que sur les frais payés en Blurt.** Les frais de listing payés en BTC et XMR vont à 100% au trésor Morphit (`@morphit-fees`) — voir l'entrée « Comment les opérateurs gagnent-ils ? » pour le raisonnement complet expliquant pourquoi le partage Blurt est 90/10 (fortement favorable à l'opérateur) tandis que la voie BTC/XMR est 100/0 (trésor uniquement). En bref : Blurt se divise atomiquement on-chain, BTC/XMR exigerait une comptabilité custodiale off-chain qui briserait la conception non-custodial de Morphit.\n\nC'est l'un des avantages non-custodial les plus clairs par rapport aux partenariats d'échange traditionnels. Vous n'attendez jamais un « calendrier de paiement », et le projet Morphit ne retient jamais vos gains à aucun moment — c'est indexer-et-relais-vers-vous, déterministe, sans intervention humaine, entièrement auditable depuis l'historique de la chaîne."
+        "a": "Immédiatement — dans la transaction même où l'utilisateur paie. Chaque frais de publication en Blurt est divisé au moment du paiement : la transaction de frais de l'utilisateur envoie 90 % directement sur votre compte de frais et 10 % à la trésorerie de Morphit, dans la même transaction. Votre part arrive en un bloc Blurt (~3 secondes), sans étape de transfert et sans que personne ait à vous la transmettre.\n\nPas de regroupement, pas de cycle de paiement hebdomadaire, pas de « seuil minimum de retrait », et aucun relais intermédiaire. Chaque ordre payé en Blurt paie votre part directement, sur la chaîne.\n\n**Important : les opérateurs ne gagnent que sur les frais payés en Blurt.** Les frais de publication payés en BTC et XMR vont à 100 % à la trésorerie de Morphit (`@morphit-fees`) — voir l'entrée « Comment les opérateurs gagnent-ils ? » pour toute la justification de la répartition 90/10 en Blurt (très favorable à l'opérateur) alors que la voie BTC/XMR est 100/0 (trésorerie uniquement). En bref : un paiement en Blurt peut porter la division sur la chaîne en une seule transaction, tandis que BTC/XMR nécessiterait une comptabilité de conservation hors chaîne qui briserait la conception non dépositaire de Morphit.\n\nC'est l'un des avantages non dépositaires les plus clairs par rapport aux partenariats d'échange traditionnels. Vous n'attendez jamais un « calendrier de paiement », et le projet Morphit ne détient jamais vos gains à aucun moment — l'utilisateur vous paie directement sur la chaîne, de manière déterministe, sans intervention humaine, entièrement vérifiable à partir de l'historique de la chaîne."
       },
       "operator_moderation": {
         "q": "Les opérateurs peuvent-ils bloquer certains utilisateurs de leur instance ?",
@@ -2629,7 +2630,8 @@
       "rss_generated_label": "RSS — Généré dynamiquement",
       "rss_title_prefix": "{site} Carnet d'ordres - Filtré par :",
       "rss_asset_title": "Reçois des notifications par RSS quand un nouvel ordre {asset} est publié.",
-      "side_help": "Astuce : si vous voulez acheter de la crypto, cherchez des annonces voulant vendre. Si vous voulez vendre, cherchez des annonces voulant acheter."
+      "side_help": "Astuce : si vous voulez acheter de la crypto, cherchez des annonces voulant vendre. Si vous voulez vendre, cherchez des annonces voulant acheter.",
+      "order_details_label": "Détails de l'ordre"
     },
     "loading": "Chargement des ordres…",
     "empty_title": "Aucun ordre ne correspond à vos filtres",
@@ -2700,7 +2702,10 @@
       "trades_only": "{count} transactions",
       "reputation_aria": "Score de réputation {score} sur 5",
       "message_word": "Message"
-    }
+    },
+    "search_no_results_title": "Aucun ordre correspondant",
+    "search_no_results_body": "Aucun ordre chargé ne mentionne « {query} ». Essayez un autre mot ou effacez la recherche pour tout voir.",
+    "search_clear": "Effacer la recherche"
   },
   "paired_readonly": {
     "banner_heading": "Connecté en tant que @{account} — votre téléphone détient les clés.",
@@ -2942,7 +2947,7 @@
   },
   "post_order": {
     "heading": "Publier un ordre",
-    "subtitle": "Indiquez aux traders ce que vous voulez acheter ou vendre et comment vous joindre. Les frais couvrent 90 jours dans le carnet d'ordres.",
+    "subtitle": "Indiquez aux traders ce que vous voulez acheter ou vendre et comment vous joindre. Les frais couvrent jusqu'à 90 jours dans le carnet d'ordres.",
     "back_to_orderbook": "Retour au carnet",
     "no_account": {
       "title": "Vous avez besoin d'un compte d'abord",
@@ -2952,7 +2957,7 @@
     "locked": {
       "title": "Déverrouillez votre session pour continuer",
       "body": "Morphit ne conserve jamais votre mot de passe. Saisissez-le pour signer l'ordre.",
-      "password_label": "Mot de passe de session",
+      "password_label": "Mot de passe de @{account}",
       "fee_title": "Saisissez votre mot de passe pour payer les frais",
       "fee_body": "Les frais de publication sont payés en BLURT — un transfert signé qui nécessite votre clé active. Saisissez votre mot de passe pour la déverrouiller un instant. Morphit ne conserve jamais votre mot de passe."
     },
@@ -3095,7 +3100,10 @@
       "body_locked": "La session est verrouillée. Déverrouillez votre mot de passe pour réessayer.",
       "body_bad_password": "Ce mot de passe n'a pas déverrouillé ton keystore. Réessaie.",
       "body_missing_external_tx_id": "Un ID de transaction externe est requis pour les paiements de frais en BTC et XMR.",
-      "body_posting_only": "Payer les frais de publication en BLURT nécessite votre clé active, et elle n'est pas sur cet appareil — vous êtes connecté uniquement avec votre clé de publication. Connectez-vous avec votre mot de passe maître ou votre keyfile complet pour payer en BLURT, ou revenez en arrière et payez en BTC/XMR (ou utilisez votre première publication gratuite)."
+      "body_posting_only": "Payer les frais de publication en BLURT nécessite votre clé active, et elle n'est pas sur cet appareil — vous êtes connecté uniquement avec votre clé de publication. Connectez-vous avec votre mot de passe maître ou votre keyfile complet pour payer en BLURT, ou revenez en arrière et payez en BTC/XMR (ou utilisez votre première publication gratuite).",
+      "body_recipient_missing": "Les frais de publication n'ont pas pu être envoyés : le compte de trésorerie auquel ils sont versés (@morphit-fees) semble ne pas encore exister sur Blurt. Rien n'a été payé. Si vous gérez cette instance, ce compte doit être créé ; sinon, veuillez le signaler.",
+      "body_insufficient_rc": "Votre compte manque de Crédits de Ressources (RC), donc Blurt a rejeté la transaction. Faites un power up avec un peu de BLURT, ou attendez que vos RC se rechargent, puis réessayez. Rien n'a été payé.",
+      "body_authority": "Blurt a rejeté la signature du paiement des frais : la clé Active de votre compte ne correspond peut-être pas à celle sur la chaîne. Rien n'a été payé. Essayez de vous reconnecter avec votre phrase seed de 12 mots ou votre Keyfile."
     },
     "waiver": {
       "heading": "Votre premier ordre est offert !",
@@ -3110,7 +3118,7 @@
       "btc_label": "Payer en BTC",
       "btc_hint": "Envoyez les frais à notre adresse Bitcoin, puis collez l'ID de transaction ci-dessous.",
       "xmr_label": "Payer en XMR",
-      "xmr_hint": "Envoyez les frais à notre adresse Monero, puis collez l'ID de transaction ci-dessous.",
+      "xmr_hint": "Envoyez les frais à notre adresse Monero, puis collez l'ID de transaction et la preuve ci-dessous.",
       "txid_label": "ID de transaction",
       "txid_placeholder": "Collez l'ID de transaction (64 caractères hex)",
       "txid_required": "L'ID de transaction est requis.",
@@ -3150,7 +3158,7 @@
       "fee_address_chain_pinned_aria": "Authenticité de l'adresse ancrée sur la chaîne",
       "fee_address_local_fallback": "Adresse de repli locale — cet opérateur n'a pas encore adopté la canonique ancrée sur la chaîne. Vérifiez-la avec une autre instance Morphit avant d'envoyer si vous souhaitez une garantie supplémentaire.",
       "fee_address_unavailable": "Cet opérateur n'a pas configuré d'adresse de frais {asset}. Choisissez BLURT à la place, ou publiez votre ordre sur une autre instance Morphit.",
-      "blurt_needs_active_key": "Nécessite votre clé active. Vous êtes connecté uniquement avec votre clé de publication — connectez-vous avec votre mot de passe maître ou votre keyfile complet pour payer en BLURT, ou payez en BTC/XMR."
+      "blurt_needs_active_key": "Nécessite votre clé Active. Vous êtes connecté avec votre clé de Publication pour le moment — connectez-vous avec votre phrase seed de 12 mots ou votre Keyfile pour payer en BLURT, ou payez en BTC/XMR :"
     },
     "draft": {
       "restored_banner": "Brouillon restauré d'il y a {age}. Reprends où tu t'étais arrêté — ou recommence.",
@@ -3653,13 +3661,14 @@
     "site_name": "Morphit",
     "og_image_alt": "Morphit — marché P2P axé sur la confidentialité pour Monero, Bitcoin et plus",
     "home": {
-      "title": "Morphit — Échangez Monero, Bitcoin et plus avec des monnaies fiat+ en toute confidentialité",
-      "description": "Marché P2P axé sur la confidentialité. Échangez Monero, Bitcoin et autres cryptomonnaies contre des fiats directement avec de vraies personnes. Non-custodial. Sans KYC. Sans email. Sans suivi. Open-source. Auto-hébergeable.",
-      "keywords": "monero, bitcoin, p2p, marché, sans-kyc, non-custodial, confidentialité, échange décentralisé, fiat, cryptomonnaie, blurt, agorisme, auto-hébergé"
+      "title": "Morphit — Place de marché P2P sans KYC pour acheter et vendre Monero, Bitcoin",
+      "description": "La façon privée et sans KYC d'acheter et vendre Monero (XMR), Bitcoin (BTC) et plus, de pair à pair (P2P) avec de vraies personnes : sans conservation, sans compte, sans e-mail, sans pistage. Morphit est une place de marché crypto de gré à gré (OTC) open source et un service de babillard décentralisé (DBBS) — une alternative auto-hébergeable à LocalMonero et LocalBitcoins.",
+      "keywords": "acheter monero, acheter bitcoin, échange sans kyc, pair à pair, p2p, sans conservation, gré à gré, over the counter, OTC, babillard, BBS, DBBS, service de babillard décentralisé, alternative à localmonero, alternative à localbitcoins, alternative à bisq, acheter monero sans kyc, acheter bitcoin anonyme, XMR, BTC, cryptomonnaie de confidentialité, échange décentralisé, fiat vers crypto, agorism, auto-hébergé, monero, bitcoin, blurt"
     },
     "orderbook": {
-      "title": "Carnet d'ordres — Acheter/vendre Bitcoin et Monero · Morphit",
-      "description": "Parcourez les offres P2P en direct pour Bitcoin, Monero, BLURT et d'autres cryptomonnaies. Filtrez par pays, mode de paiement, réputation. Pas de compte pour regarder."
+      "title": "Voir les offres — Acheter/vendre Bitcoin & Monero P2P, sans KYC · Morphit",
+      "description": "Parcourez les offres en direct de pair à pair (P2P) pour acheter et vendre Bitcoin, Monero (XMR), BLURT et plus — une place de marché de gré à gré (OTC) sans KYC et sans conservation, un babillard décentralisé (DBBS). Filtrez par pays, moyen de paiement, prix et réputation. Aucun compte requis pour regarder.",
+      "keywords": "bitcoin p2p, monero p2p, acheter monero sans kyc, acheter bitcoin sans kyc, gré à gré, over the counter, OTC, babillard, DBBS, service de babillard décentralisé, voir offres crypto, alternative à localmonero, sans conservation, fiat vers crypto, XMR, BTC, place de marché, agorism"
     },
     "faq": {
       "title": "FAQ — Comment Morphit fonctionne · Crypto P2P non-custodial",
@@ -3858,22 +3867,12 @@
     "endpoints": {
       "heading": "Points de terminaison RPC",
       "explain": "Les nœuds réseau avec lesquels Morphit communique pour lire et écrire des données. L'app les essaie par ordre de vitesse de réponse. Ajoutez les vôtres ou un nœud communautaire.",
-      "add": "Ajouter",
-      "add_placeholder": "https://rpc.exemple.fr",
-      "reset": "Réinitialiser aux valeurs par défaut",
-      "invalid_url": "Entrez une URL https://.",
-      "duplicate": "Ce point de terminaison est déjà dans la liste.",
-      "at_least_one": "Gardez au moins un point de terminaison.",
+      "pool_note": "Votre instance Morphit gère tout le trafic du réseau Blurt pour vous — votre navigateur ne communique jamais directement avec ces nœuds. Ceci n’est que leur état en direct.",
       "cooling_down": "en pause",
       "recheck": "Revérifier la vitesse des nœuds",
       "http_error": "Erreur : {code}",
-      "server_only_heading": "Aussi sur le réseau",
-      "server_only_note": "Ils font partie du réseau Blurt, mais un navigateur ne peut pas s'y connecter directement. Les serveurs de Morphit les utilisent en arrière-plan.",
       "failing": "{n} échec(s)",
       "probing": "test…",
-      "remove_aria": "Retirer {url}",
-      "reset_confirm_prompt": "Réinitialiser tous les endpoints RPC personnalisés aux valeurs par défaut ?",
-      "reset_confirm_yes": "Oui, réinitialiser",
       "timed_out": "délai dépassé",
       "unreachable": "injoignable"
     },
@@ -3995,7 +3994,8 @@
       "push_error_internal": "Une erreur s'est produite sur le relai de l'opérateur. Réessayez dans un instant.",
       "push_error_signature_required": "Cette instance exige une demande d'abonnement signée. Assurez-vous que votre compte est déverrouillé et réessayez.",
       "push_error_signature_invalid": "Le relai a rejeté votre signature. Re-déverrouillez votre compte puis réessayez.",
-      "push_error_locked_session": "Votre session est verrouillée. Déverrouillez d'abord votre compte pour activer les notifications push."
+      "push_error_locked_session": "Votre session est verrouillée. Déverrouillez d'abord votre compte pour activer les notifications push.",
+      "push_error_push_service_unavailable": "Votre navigateur a bloqué les notifications push web, généralement à cause d'une fonction de confidentialité comme les Shields de Brave, uBlock Origin ou un autre bloqueur de pubs/traceurs (le push web dépend des serveurs de Google, qu'ils bloquent). Abaissez les protections de votre navigateur pour ce site pour l'autoriser, ou laissez le push désactivé : les options de notification ci-dessus fonctionnent toujours. Le push ne compte que lorsque Morphit est entièrement fermé."
     },
     "hidden_accounts": {
       "heading": "Comptes masqués",

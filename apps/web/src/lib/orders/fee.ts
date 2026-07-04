@@ -34,6 +34,8 @@
  * that path.
  */
 
+import { splitListingFeeBlurt } from '@morphit/asset-registry';
+
 /** Fallback BLURT base fee used when the indexer's reported
  *  rate is unavailable.  The compose page and the broadcast
  *  path read the operator's actual rate from
@@ -57,10 +59,84 @@ export const BASE_FEE_BLURT = 60;
  *  reference + the doc test.  See the indexer order handler. */
 export const FEE_TOLERANCE = 0.001;
 
-/** Fee-collection account.  This is where the transfer op
- *  sends the BLURT.  Public knowledge; owner/active keys are
+/** Fee-collection account of the CANONICAL instance, and the safe
+ *  fallback when a federated operator hasn't configured their own (or
+ *  configured a malformed one).  Public knowledge; owner/active keys are
  *  cold-stored by the Morphit maintainer. */
 export const FEE_RECIPIENT = 'morphit-fees';
+
+/** Blurt account-name shape — the project-canonical regex (cp175 F-007):
+ *  3–16 chars, lowercase, leading letter, `[a-z0-9.-]` interior, ending
+ *  alphanumeric. Byte-identical to every other account-name regex in the
+ *  tree (blurt-account-regex-parity sentinel). */
+const FEE_RECIPIENT_ACCOUNT_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
+
+/** cp407 — resolve which Blurt account a listing/feature/stranger fee is paid
+ *  to. Federated operators earn 90% of BLURT fees and set their own account,
+ *  advertised by their indexer at `/v1/instance.fee_recipient` (which the
+ *  indexer has ALREADY validated + fallback-resolved). This just guards the
+ *  edge case of an old/misconfigured indexer advertising an empty or malformed
+ *  value: fall back to the canonical treasury so we never sign a transfer to a
+ *  non-account (which the chain would reject). The frontend pays exactly what
+ *  the operator's indexer verifies against, so fees and verification agree. */
+export function resolveFeeRecipient(fromInstance: string | null | undefined): string {
+	const trimmed = (fromInstance ?? '').trim();
+	return FEE_RECIPIENT_ACCOUNT_RE.test(trimmed) ? trimmed : FEE_RECIPIENT;
+}
+
+/** A single BLURT transfer that makes up a listing/feature/stranger fee
+ *  payment. All transfers for one fee share the same memo (applied by the
+ *  caller), so the indexer can find every leg of the split. */
+export interface FeeTransfer {
+	readonly to: string;
+	/** Graphene asset string, exactly 3 decimals: "N.NNN BLURT". */
+	readonly amount: string;
+}
+
+/** Format an already-3-decimal BLURT amount as a Graphene asset string.
+ *  Unlike `formatBlurtAmount` this does NOT round up — the split shares come
+ *  out of `splitListingFeeBlurt` already at milliBLURT precision and must be
+ *  emitted verbatim so the two legs sum back to the exact total. */
+function exactBlurtString(amount: number): string {
+	return `${amount.toFixed(3)} BLURT`;
+}
+
+/** cp408 — build the BLURT transfer(s) for a listing/feature/stranger fee,
+ *  applying the federation revenue split AT PAYMENT TIME.
+ *
+ *  On a FEDERATION instance (the owner's recipient differs from the canonical
+ *  treasury) the fee is paid as TWO transfers in the same transaction — 90% to
+ *  the owner's account, 10% to the canonical treasury — so the canonical 10% is
+ *  delivered directly by the user's wallet and nobody has to forward it later.
+ *
+ *  When the recipient IS the canonical treasury (the canonical instance, or a
+ *  federation owner whose configured account was blank/invalid and fell back to
+ *  canonical) both halves would land in the same account, so this collapses to
+ *  a single 100% transfer. A share that would round below BLURT's milli
+ *  precision also collapses to a single canonical transfer — we never sign a
+ *  zero/dust transfer, and the canonical treasury never loses its cut.
+ *
+ *  `totalBlurt` is the raw fee amount; it is rounded UP to 3 decimals here
+ *  (matching `formatBlurtAmount`, the amount the user actually pays) before the
+ *  split, so the two legs sum to exactly what a single-transfer fee would be. */
+export function feeTransfersFor(
+	totalBlurt: number,
+	ownerRecipient: string,
+	canonicalTreasury: string = FEE_RECIPIENT
+): FeeTransfer[] {
+	const total = Math.ceil(totalBlurt * 1000) / 1000;
+	if (ownerRecipient === canonicalTreasury) {
+		return [{ to: canonicalTreasury, amount: exactBlurtString(total) }];
+	}
+	const { ownerShareBlurt, treasuryShareBlurt } = splitListingFeeBlurt(total);
+	if (ownerShareBlurt <= 0 || treasuryShareBlurt <= 0) {
+		return [{ to: canonicalTreasury, amount: exactBlurtString(total) }];
+	}
+	return [
+		{ to: ownerRecipient, amount: exactBlurtString(ownerShareBlurt) },
+		{ to: canonicalTreasury, amount: exactBlurtString(treasuryShareBlurt) }
+	];
+}
 
 /**
  * Multiplier table.

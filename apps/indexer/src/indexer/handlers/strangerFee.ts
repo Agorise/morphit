@@ -48,6 +48,8 @@
 import type pg from 'pg';
 import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contract';
 import { getStrangerFeeQuote } from '$indexer/strangerFeePricing';
+import { canonicalShareOk, sumFeeTransfers } from '$indexer/fee';
+import { CANONICAL_TREASURY } from '../../config/canonicalTreasury';
 
 const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
 
@@ -64,40 +66,10 @@ function isUniqueViolation(err: unknown): boolean {
 	);
 }
 
-/** Locate the sibling transfer carrying the stranger-fee
- *  BLURT payment. Returns { amountBlurt } on match, null if
- *  none qualifies. */
-function findStrangerFeeTransfer(
-	siblingOps: readonly (readonly [string, Record<string, unknown>])[],
-	signer: string,
-	feeRecipient: string,
-	messageRecipient: string
-): { amountBlurt: number } | null {
-	const expectedMemo = `morphit-stranger:${messageRecipient}`;
-	for (const op of siblingOps) {
-		if (!op) continue;
-		const [name, body] = op;
-		if (name !== 'transfer') continue;
-		const b = body as {
-			from?: unknown;
-			to?: unknown;
-			amount?: unknown;
-			memo?: unknown;
-		};
-		if (b.from !== signer) continue;
-		if (b.to !== feeRecipient) continue;
-		if (b.memo !== expectedMemo) continue;
-
-		if (typeof b.amount !== 'string') continue;
-		const match = /^(\d+(?:\.\d+)?)\s+BLURT$/.exec(b.amount);
-		if (!match) continue;
-		const amount = Number(match[1]);
-		if (!Number.isFinite(amount) || amount <= 0) continue;
-
-		return { amountBlurt: amount };
-	}
-	return null;
-}
+/** cp408 — the stranger-fee sibling transfer(s) are located + summed by the
+ *  shared `sumFeeTransfers` in `$indexer/fee`, which honors the payment-time
+ *  federation split (90% owner / 10% canonical, memo
+ *  `morphit-stranger:<recipient>`). */
 
 const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<HandlerResult> => {
 	if (!isPlainObject(ctx.payload)) {
@@ -168,14 +140,19 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	}
 
 	// ─── Fee transfer verification ──────────────────────────────
+	// cp408 — the stranger fee is paid as a payment-time split (90% to this
+	// instance's recipient + 10% to the canonical treasury, or a single 100%
+	// transfer when the recipient is canonical). Sum both legs, then confirm
+	// the canonical treasury received its cut.
 
-	const transfer = findStrangerFeeTransfer(
+	const fee = sumFeeTransfers(
 		ctx.siblingOps,
 		ctx.signer,
 		ctx.config.feeRecipient,
-		recipient
+		CANONICAL_TREASURY.blurt,
+		`morphit-stranger:${recipient}`
 	);
-	if (transfer === null) {
+	if (fee === null) {
 		return { ok: false, reason: 'fee_missing' };
 	}
 
@@ -183,7 +160,11 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	// no USD conversion needed.  Tolerance band absorbs floating-
 	// point rounding in the client's BLURT amount formatting.
 	const minAcceptable = quote.priceBlurt * (1 - ctx.config.feeTolerance);
-	if (transfer.amountBlurt < minAcceptable) {
+	if (fee.totalBlurt < minAcceptable) {
+		return { ok: false, reason: 'fee_underpaid' };
+	}
+	if (!canonicalShareOk(fee.totalBlurt, fee.toCanonicalBlurt)) {
+		// Total paid, but the canonical treasury's 10% leg was missing/short.
 		return { ok: false, reason: 'fee_underpaid' };
 	}
 
@@ -195,7 +176,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			   (sender, recipient, paid_block_num, paid_trx_id,
 			    paid_at, amount_blurt)
 			 VALUES ($1, $2, $3, $4, $5, $6)`,
-			[ctx.signer, recipient, ctx.blockNum, ctx.trxId, ctx.blockTime, transfer.amountBlurt]
+			[ctx.signer, recipient, ctx.blockNum, ctx.trxId, ctx.blockTime, fee.totalBlurt]
 		);
 	} catch (err) {
 		// Race: another op in the same block paid for the same

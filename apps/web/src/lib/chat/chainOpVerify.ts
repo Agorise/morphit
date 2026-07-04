@@ -72,7 +72,7 @@
  */
 
 import type { AuthorityType, SignedTransaction } from '@beblurt/dblurt';
-import { getRotator } from '$net/endpoints';
+import { chainRelay } from '$net/chainRelay';
 
 import { verifyTransactionSignatures, type ChainOpVerifyResult } from './chainOpVerifyCore';
 
@@ -107,13 +107,11 @@ export async function verifyChainOpSignature(
 		return { ok: false, code: 'no_account', message: 'empty account' };
 	}
 
-	const rotator = getRotator();
-
-	// Step 1 — fetch the full signed transaction.  If all endpoints
-	// fail, the rotator throws and the caller treats as
+	// Step 1 — fetch the full signed transaction via the indexer relay. On a
+	// relay/chain failure chainRelay throws and the caller treats as
 	// verification-failed.
 	let tx: SignedTransaction;
-	const result = await rotator.call<SignedTransaction>('condenser_api.get_transaction', [trxId]);
+	const result = await chainRelay<SignedTransaction>('get_transaction', [trxId]);
 	if (!result || typeof result !== 'object') {
 		return { ok: false, code: 'tx_not_found', message: 'rpc returned non-object' };
 	}
@@ -121,10 +119,9 @@ export async function verifyChainOpSignature(
 
 	// Step 2 — fetch the expected account's posting authority.
 	let posting: AuthorityType;
-	const accounts = await rotator.call<Array<{ posting?: AuthorityType }>>(
-		'condenser_api.get_accounts',
-		[[expectedAccount]]
-	);
+	const accounts = await chainRelay<Array<{ posting?: AuthorityType }>>('get_accounts', [
+		[expectedAccount]
+	]);
 	if (!Array.isArray(accounts) || accounts.length === 0 || !accounts[0]?.posting) {
 		return {
 			ok: false,

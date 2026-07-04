@@ -1440,9 +1440,19 @@ dated Part 110: pre-Part-111, every operator's relay
 queued payouts on every chain-op it saw, multiplying
 treasury spend by the federation count.  Account
 creation was already correctly scoped (HTTP endpoint)
-but the four chain-op-triggered payouts (welcome
-bonus, low-balance refill, operator-payout, loyalty
-BP) were not.
+but the chain-op-triggered payouts (welcome bonus,
+low-balance refill, operator earnings, loyalty BP)
+were not.
+
+> **cp408 amendment (2026-07-04):** operator earnings
+> no longer flow through a relay payout — the owner's
+> 90% is paid directly by the payment-time fee split
+> (see ADR-0013 amendment + FEES-AND-REWARDS.md). The
+> Part-111 gate below still applies to the operator
+> **earnings attribution** (which instance books the
+> dashboard credit); the three remaining relay-queued
+> payouts (welcome bonus, low-balance refill, loyalty
+> BP) are gated exactly as described.
 
 ### Design
 

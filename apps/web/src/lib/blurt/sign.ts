@@ -241,41 +241,68 @@ export async function prepareUnsignedOrderWithFee(
 	opId: MorphitOpId,
 	orderPayload: unknown,
 	blurtAccount: string,
-	feeRecipient: string,
-	feeBlurtAmount: string,
+	feeTransfers: ReadonlyArray<{ to: string; amount: string }>,
 	feeMemo: string
 ): Promise<Transaction> {
 	if (!blurtAccount) {
 		throw new Error('prepareUnsignedOrderWithFee: no Blurt account registered.');
 	}
+	if (feeTransfers.length === 0) {
+		throw new Error('prepareUnsignedOrderWithFee: at least one fee transfer is required.');
+	}
 
 	const { ref_block_num, ref_block_prefix, expiration } = await getRefBlockInfo();
 
+	// cp407 — this order op is ACTIVE-level, not posting. The sibling `transfer`
+	// (the listing fee) below needs active authority, and Blurt (Graphene)
+	// rejects any tx that mixes posting-level and active-level ops
+	// (`required_active.size() == 0` assertion). So the whole tx is active-level:
+	// one op set, one active signature, chain-valid. The indexer accepts an
+	// active-level ORDER op specifically (see verify.ts extractSigner) and still
+	// finds the fee as a sibling transfer, so fee verification + atomicity are
+	// unchanged. (Waived/BTC/XMR orders carry no transfer, so they stay
+	// posting-level via the single-op broadcastCustomJson path.)
+	//
+	// cp408 — the fee is now paid as ONE OR TWO sibling transfers (the
+	// federation revenue split, computed by `feeTransfersFor`): 90% to the
+	// instance owner + 10% to the canonical treasury, or a single 100% transfer
+	// when the recipient IS the canonical treasury. Every leg shares the same
+	// `feeMemo` so the indexer can sum them; all are active-level in this one tx.
 	const customOp: Operation = [
 		'custom_json',
 		{
-			required_auths: [],
-			required_posting_auths: [blurtAccount],
+			required_auths: [blurtAccount],
+			required_posting_auths: [],
 			id: opId,
 			json: JSON.stringify(orderPayload)
 		}
 	];
 
-	const transferOp: Operation = [
-		'transfer',
-		{
-			from: blurtAccount,
-			to: feeRecipient,
-			amount: feeBlurtAmount,
-			memo: feeMemo
+	const transferOps: Operation[] = feeTransfers.map((t) => {
+		if (!BROADCAST_AMOUNT_RE.test(t.amount)) {
+			throw new Error(
+				'prepareUnsignedOrderWithFee: fee amount must be "N.NNN BLURT" (3 decimal places)'
+			);
 		}
-	];
+		if (t.to === blurtAccount) {
+			throw new Error('prepareUnsignedOrderWithFee: fee transfer to self.');
+		}
+		return [
+			'transfer',
+			{
+				from: blurtAccount,
+				to: t.to,
+				amount: t.amount,
+				memo: feeMemo
+			}
+		];
+	});
 
 	return {
 		ref_block_num,
 		ref_block_prefix,
 		expiration,
-		operations: [customOp, transferOp],
+		operations: [customOp, ...transferOps],
 		extensions: []
 	};
 }
@@ -283,18 +310,20 @@ export async function prepareUnsignedOrderWithFee(
 /** Phase F.5 audit fix (F-18) — sign an order-with-fee
  *  transaction with both posting and active keys.  Pure, sync.
  *  Active key lifetime is the duration of this call. */
+/** cp407 — sign the order-with-fee transaction. Both the order custom_json
+ *  and the fee transfer are now ACTIVE-level (Blurt forbids mixing posting +
+ *  active in one tx), so the tx takes exactly ONE active signature — adding a
+ *  posting signature would be an irrelevant/extra sig the chain can reject.
+ *  Pure, sync. Active-key lifetime is the duration of this call. */
 export function signOrderWithFeeWithKey(
 	tx: Transaction,
-	postingPriv: Uint8Array,
 	activePriv: Uint8Array
 ): SignedTransaction {
 	if (!(activePriv instanceof Uint8Array) || activePriv.length !== 32) {
 		throw new Error('signOrderWithFeeWithKey: active key missing or malformed.');
 	}
-	const postingKey = rawToPrivateKey(postingPriv);
 	const activeKey = rawToPrivateKey(activePriv);
-	const signedWithPosting = signTransactionWithKey(tx, postingKey, postingPriv);
-	return signTransactionWithKey(signedWithPosting, activeKey, activePriv);
+	return signTransactionWithKey(tx, activeKey, activePriv);
 }
 
 /** Phase F.5 audit fix (F-18) — broadcast a pre-signed

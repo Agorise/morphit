@@ -501,7 +501,8 @@
 					href={lp(`/@${account}`)}
 					class="text-sm text-ink-500 hover:text-morphit-emerald dark:text-ink-400"
 				>
-					{$_('explorer.account.view_profile_link')} →
+					{$_('explorer.account.view_profile_link')}
+					<span class="nav-arrow nav-arrow-right" aria-hidden="true">⇨</span>
 				</a>
 			</div>
 		</header>

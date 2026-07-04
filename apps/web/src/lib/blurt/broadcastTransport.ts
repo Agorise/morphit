@@ -20,17 +20,15 @@
  * NON-CUSTODIAL IS UNTOUCHED. Signing is pure client-side crypto; only the
  * already-signed transaction bytes (never a private key) leave the browser.
  *
- * SAFETY NET. If the proxy is unreachable — network error, 5xx, or a stale
- * indexer that predates these endpoints (404) — we fall back to the legacy
- * direct-RPC path, so this can never be WORSE than the pre-cp344 behavior. A
- * 400 from the broadcast proxy is a CHAIN REJECTION (the chain refused the
- * tx): that is surfaced, not fallen back, because direct RPC would only
- * refuse it again — and the message is the chain's real reason (e.g. "missing
- * required posting authority", "insufficient mana"), which is far more useful
- * than the old generic "couldn't broadcast".
+ * NO DIRECT-RPC FALLBACK (cp410). Privacy is priority #1: the browser must
+ * NEVER contact a Blurt RPC node directly, so there is no fallback path. If the
+ * indexer is unreachable, the broadcast (or ref-block read) FAILS with a clear
+ * error and the user retries — it does not silently leak to a third-party node.
+ * A 400 from the broadcast proxy is a CHAIN REJECTION (the chain refused the
+ * tx): that is surfaced with the chain's real reason (e.g. "missing required
+ * posting authority", "insufficient mana"), not retried.
  */
 
-import { getBlurtClient } from './client';
 import type { DynamicGlobalProperties } from './client';
 import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 import { fetchWithTimeout } from '$net/fetchWithTimeout';
@@ -42,8 +40,7 @@ export interface BroadcastResult {
 }
 
 /** Thrown when the CHAIN rejected the transaction (broadcast proxy → 400).
- *  The message carries the chain's reason; callers surface it rather than
- *  silently retrying against a third-party node. */
+ *  The message carries the chain's reason; callers surface it. */
 export class ChainRejectedError extends Error {
 	constructor(message: string) {
 		super(message);
@@ -51,53 +48,54 @@ export class ChainRejectedError extends Error {
 	}
 }
 
+/** Thrown when the indexer relay itself is unreachable (transport error, 5xx,
+ *  or a too-old indexer returning 404). There is NO direct-RPC fallback — the
+ *  broadcast simply failed and the user should retry. */
+export class BroadcastUnavailableError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = 'BroadcastUnavailableError';
+	}
+}
+
 function indexerUrl(path: string): URL {
 	return new URL(path, resolveOrigin(MORPHIT_INDEXER_ORIGIN));
 }
 
-/** Fetch the chain head (for ref_block / expiration). Tries the same-origin
- *  indexer proxy first, falls back to direct RPC if the proxy is unreachable
- *  or returns an unexpected shape. */
+/** Fetch the chain head (for ref_block / expiration) through the same-origin
+ *  indexer proxy. Throws if the proxy is unreachable — no direct-RPC fallback. */
 export async function fetchDynamicGlobalProperties(): Promise<DynamicGlobalProperties> {
+	let res: Response;
 	try {
-		const res = await fetchWithTimeout(
+		res = await fetchWithTimeout(
 			indexerUrl('/v1/chain/properties'),
 			{ method: 'GET', headers: { accept: 'application/json' } },
 			15_000
 		);
-		if (res.ok) {
-			const body = (await res.json()) as { properties?: Partial<DynamicGlobalProperties> };
-			const p = body.properties;
-			if (
-				p &&
-				typeof p.head_block_number === 'number' &&
-				typeof p.head_block_id === 'string' &&
-				typeof p.time === 'string'
-			) {
-				return p as DynamicGlobalProperties;
-			}
-		}
-		// non-ok or unexpected shape → fall through to direct RPC
-	} catch {
-		// network error reaching the proxy → fall through to direct RPC
+	} catch (e) {
+		throw new BroadcastUnavailableError(
+			`could not reach your Morphit instance: ${e instanceof Error ? e.message : String(e)}`
+		);
 	}
-	return getBlurtClient().getDynamicGlobalProperties();
+	if (res.ok) {
+		const body = (await res.json()) as { properties?: Partial<DynamicGlobalProperties> };
+		const p = body.properties;
+		if (
+			p &&
+			typeof p.head_block_number === 'number' &&
+			typeof p.head_block_id === 'string' &&
+			typeof p.time === 'string'
+		) {
+			return p as DynamicGlobalProperties;
+		}
+	}
+	throw new BroadcastUnavailableError('your Morphit instance returned no chain head');
 }
 
-/** Legacy fallback: broadcast straight to a Blurt RPC node from the browser.
- *  Used ONLY when the same-origin proxy is unreachable. */
-async function directRpcBroadcast(signed: SignedTransaction): Promise<BroadcastResult> {
-	const client = getBlurtClient();
-	const r = await client.call<{ block_num: number; id?: string; trx_id?: string }>(
-		'condenser_api.broadcast_transaction_synchronous',
-		[signed]
-	);
-	// condenser names the tx hash `id`; normalize (the old code left trx_id undefined).
-	return { block_num: r.block_num, trx_id: (r.trx_id ?? r.id) as string };
-}
-
-/** Submit a SIGNED transaction. Same-origin proxy first; direct-RPC fallback
- *  on proxy-unreachable; surfaces a `ChainRejectedError` on chain rejection. */
+/** Submit a SIGNED transaction through the same-origin indexer broadcast proxy.
+ *  Surfaces a `ChainRejectedError` on chain rejection (400) and a
+ *  `BroadcastUnavailableError` if the indexer is unreachable — NEVER falls back
+ *  to a direct browser→node broadcast (privacy #1). */
 export async function submitSignedTransaction(signed: SignedTransaction): Promise<BroadcastResult> {
 	let res: Response;
 	try {
@@ -110,9 +108,10 @@ export async function submitSignedTransaction(signed: SignedTransaction): Promis
 			},
 			30_000
 		);
-	} catch {
-		// Network error reaching the proxy → fall back to direct RPC.
-		return directRpcBroadcast(signed);
+	} catch (e) {
+		throw new BroadcastUnavailableError(
+			`could not reach your Morphit instance to broadcast: ${e instanceof Error ? e.message : String(e)}`
+		);
 	}
 
 	if (res.ok) {
@@ -120,12 +119,11 @@ export async function submitSignedTransaction(signed: SignedTransaction): Promis
 		if (typeof body.block_num === 'number' && typeof body.trx_id === 'string') {
 			return { block_num: body.block_num, trx_id: body.trx_id };
 		}
-		// Unexpected success shape → fall back rather than return a half result.
-		return directRpcBroadcast(signed);
+		throw new BroadcastUnavailableError('your Morphit instance returned an unexpected result');
 	}
 
 	if (res.status === 400) {
-		// The chain rejected the tx — surface the real reason, do NOT fall back.
+		// The chain rejected the tx — surface the real reason.
 		let message = 'the chain rejected the transaction';
 		try {
 			const body = (await res.json()) as { message?: string };
@@ -136,7 +134,9 @@ export async function submitSignedTransaction(signed: SignedTransaction): Promis
 		throw new ChainRejectedError(message);
 	}
 
-	// 5xx (incl. 502 "couldn't reach the network") or a stale indexer (404) →
-	// fall back to direct RPC. Worst case == the pre-cp344 behavior.
-	return directRpcBroadcast(signed);
+	// 5xx (incl. 502 "couldn't reach the network") or a too-old indexer (404).
+	// No direct-RPC fallback — fail and let the user retry.
+	throw new BroadcastUnavailableError(
+		`your Morphit instance could not broadcast right now (status ${res.status})`
+	);
 }

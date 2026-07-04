@@ -26,7 +26,7 @@ import { OP_IDS } from '$net/config';
 import type { LiveIdentity } from '$crypto/keygen';
 import type { Transaction, SignedTransaction } from '@beblurt/dblurt';
 
-import { FEE_RECIPIENT, computeFee, feeMemoFor, type FeeQuote } from '$lib/orders/fee';
+import { FEE_RECIPIENT, computeFee, feeMemoFor, feeTransfersFor, type FeeQuote } from '$lib/orders/fee';
 import { buildOrderPayload, makeOrderPermlink, type OrderFormInput } from '$lib/orders/payload';
 
 export interface BroadcastOrderResult {
@@ -82,7 +82,11 @@ export async function broadcastNewOrder(
 	signCallback: ((tx: Transaction) => SignedTransaction | Promise<SignedTransaction>) | null,
 	input: OrderFormInput,
 	nth: number,
-	baseBlurt: number
+	baseBlurt: number,
+	/** cp407 — the Blurt account this instance's operator collects BLURT fees
+	 *  in (from `$instance.fee_recipient`). Defaults to the canonical treasury
+	 *  so callers that don't pass it stay correct on the canonical deployment. */
+	feeRecipient: string = FEE_RECIPIENT
 ): Promise<BroadcastOrderResult> {
 	const account = getUserBlurtAccount();
 	if (!account) {
@@ -140,6 +144,12 @@ export async function broadcastNewOrder(
 	const feeQuote = computeFee(nth, baseBlurt);
 	const memo = feeMemoFor(permlink);
 
+	// cp408 — split the fee at payment time: 90% to the instance's fee
+	// recipient + 10% to the canonical treasury (or a single 100% transfer when
+	// the recipient IS canonical / fell back to it). `feeRecipient` is already
+	// resolved by the caller from /v1/instance.
+	const feeTransfers = feeTransfersFor(feeQuote.blurtAmount, feeRecipient);
+
 	const { prepareUnsignedOrderWithFee, broadcastSignedTransaction } = await import('$blurt/sign');
 
 	// 1. Prepare unsigned tx (network call, no key in scope).
@@ -147,8 +157,7 @@ export async function broadcastNewOrder(
 		OP_IDS.order,
 		payload,
 		account,
-		FEE_RECIPIENT,
-		feeQuote.blurtFormatted,
+		feeTransfers,
 		memo
 	);
 

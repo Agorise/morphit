@@ -25,6 +25,8 @@
 import { buildListingFeeBody } from '../src/api/listingFeeBody.ts';
 import { buildStrangerFeeQuoteBody } from '../src/api/strangerFeeQuoteBody.ts';
 import { buildStatsResponse } from '../src/api/stats.ts';
+import { buildRpcEndpointsResponse } from '../src/api/rpcHealth.ts';
+import type { EndpointState } from '@morphit/rpc-pool';
 import { isAccountName } from '../src/api/shared.ts';
 import { fakeConfig } from '../test/testutils/context.ts';
 import type { BlurtPriceSource } from '../src/indexer/price/source.ts';
@@ -534,6 +536,77 @@ await scenario('stats: garbage / negative counts coerce to 0', () => {
 	assertEqual(r.orders, { active: 0, total: 0 }, 'garbage orders → 0');
 	assertEqual(r.trades, { completed_total: 0, completed_30d: 0 }, 'garbage trades → 0');
 	assertEqual(r.assets.with_active_orders, 0, 'garbage assets → 0');
+});
+
+// ─── /v1/rpc-endpoints (buildRpcEndpointsResponse) ───────────────
+const NOW = 1_700_000_000_000;
+const mkState = (o: Partial<EndpointState> & { url: string }): EndpointState => ({
+	url: o.url,
+	ewmaLatencyMs: o.ewmaLatencyMs ?? null,
+	consecutiveFailures: o.consecutiveFailures ?? 0,
+	cooldownUntil: o.cooldownUntil ?? 0,
+	lastSuccessAt: o.lastSuccessAt ?? 0
+});
+const CANON = ['https://a.example', 'https://b.example', 'https://c.example'];
+
+await scenario('rpc-endpoints: PRIVACY — operator-custom URLs are filtered out', () => {
+	const snap = [
+		mkState({ url: 'https://a.example', ewmaLatencyMs: 120 }),
+		mkState({ url: 'https://secret-internal.op', ewmaLatencyMs: 5 })
+	];
+	const r = buildRpcEndpointsResponse(snap, CANON, NOW);
+	assertEqual(
+		r.endpoints.map((e) => e.url),
+		['https://a.example'],
+		'only the canonical URL is present; the custom one is dropped'
+	);
+});
+
+await scenario('rpc-endpoints: order follows the canonical list; missing nodes omitted', () => {
+	const snap = [
+		mkState({ url: 'https://c.example', ewmaLatencyMs: 30 }),
+		mkState({ url: 'https://a.example', ewmaLatencyMs: 10 })
+	];
+	const r = buildRpcEndpointsResponse(snap, CANON, NOW);
+	// b.example is canonical but not in this pool → omitted; a before c (canon order).
+	assertEqual(r.endpoints.map((e) => e.url), ['https://a.example', 'https://c.example'], 'canon order, b omitted');
+});
+
+await scenario('rpc-endpoints: healthy = no failures AND not in cooldown; latency passes through', () => {
+	const r = buildRpcEndpointsResponse([mkState({ url: 'https://a.example', ewmaLatencyMs: 140 })], CANON, NOW);
+	assertEqual(r.endpoints[0]?.healthy, true, 'healthy');
+	assertEqual(r.endpoints[0]?.latency_ms, 140, 'latency passthrough');
+	assertEqual(r.endpoints[0]?.cooldown_ms, 0, 'no cooldown');
+});
+
+await scenario('rpc-endpoints: consecutive failures → not healthy', () => {
+	const r = buildRpcEndpointsResponse(
+		[mkState({ url: 'https://a.example', consecutiveFailures: 3 })],
+		CANON,
+		NOW
+	);
+	assertEqual(r.endpoints[0]?.healthy, false, 'failing → unhealthy');
+	assertEqual(r.endpoints[0]?.consecutive_failures, 3, 'failure count surfaced');
+});
+
+await scenario('rpc-endpoints: in cooldown → not healthy, cooldown_ms is remaining time', () => {
+	const r = buildRpcEndpointsResponse(
+		[mkState({ url: 'https://a.example', cooldownUntil: NOW + 45_000 })],
+		CANON,
+		NOW
+	);
+	assertEqual(r.endpoints[0]?.healthy, false, 'cooling down → unhealthy');
+	assertEqual(r.endpoints[0]?.cooldown_ms, 45_000, 'remaining cooldown');
+});
+
+await scenario('rpc-endpoints: past cooldown clamps to 0 (not negative)', () => {
+	const r = buildRpcEndpointsResponse(
+		[mkState({ url: 'https://a.example', cooldownUntil: NOW - 10_000 })],
+		CANON,
+		NOW
+	);
+	assertEqual(r.endpoints[0]?.cooldown_ms, 0, 'expired cooldown clamps to 0');
+	assertEqual(r.endpoints[0]?.healthy, true, 'expired cooldown + no failures → healthy');
 });
 
 // ─── Final report ───────────────────────────────────────────────

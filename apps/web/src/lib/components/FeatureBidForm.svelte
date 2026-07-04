@@ -28,6 +28,8 @@
 	import { identity } from '$stores/identity';
 	import { runWithActiveKey } from '$crypto/runWithActiveKey';
 	import { broadcastFeatureBid } from '$blurt/ops/featureBid';
+	import { getInstanceSnapshot } from '$stores/instance';
+	import { resolveFeeRecipient } from '$lib/orders/fee';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
 	import FeaturedBidHistory from '$components/FeaturedBidHistory.svelte';
 	import { onMount } from 'svelte';
@@ -124,7 +126,7 @@
 			): Promise<import('@beblurt/dblurt').SignedTransaction> => {
 				const r = await runWithActiveKey(password, async (activePriv) => {
 					const { signOrderWithFeeWithKey } = await import('$blurt/sign');
-					return signOrderWithFeeWithKey(unsigned, state.live.posting.privateKey, activePriv);
+					return signOrderWithFeeWithKey(unsigned, activePriv);
 				});
 				if (!r.ok) {
 					const err = new Error(`runWithActiveKey:${r.kind}`);
@@ -133,11 +135,16 @@
 				}
 				return r.value;
 			};
-			const result = await broadcastFeatureBid(state.live, signCallback, {
-				orderPermlink,
-				hoursRequested: selectedHours,
-				feeBlurtPerHour
-			});
+			const result = await broadcastFeatureBid(
+				state.live,
+				signCallback,
+				{
+					orderPermlink,
+					hoursRequested: selectedHours,
+					feeBlurtPerHour
+				},
+				resolveFeeRecipient(getInstanceSnapshot().fee_recipient)
+			);
 			password = '';
 			onSuccess?.({
 				trx_id: result.trx_id,

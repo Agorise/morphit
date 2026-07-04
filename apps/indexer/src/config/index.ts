@@ -12,6 +12,27 @@ import { z } from 'zod';
 import { parseRoomAlias, MORPHIT_GENESIS_BLOCK, DEFAULT_BLURT_RPC_ENDPOINTS } from '@morphit/operator-config';
 import { CANONICAL_TREASURY } from '$config/canonicalTreasury';
 
+/** Blurt account-name shape — the project-canonical regex (cp175 F-007):
+ *  3–16 chars, lowercase, leading letter, `[a-z0-9.-]` interior, ending
+ *  alphanumeric. Byte-identical to every other account-name regex in the
+ *  tree (blurt-account-regex-parity sentinel). */
+const FEE_RECIPIENT_ACCOUNT_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
+
+/** cp407 — resolve the operator's configured BLURT fee recipient. A federated
+ *  operator earns 90% of BLURT listing fees and sets the account they land in;
+ *  if they leave it empty or enter a malformed account name we fall back to the
+ *  canonical treasury (@morphit-fees) rather than route fees to a non-account
+ *  (which the chain would reject) or crash the indexer. Pure + exported so the
+ *  fallback is unit-testable. Returns the resolved account + whether it fell
+ *  back (so boot can warn the operator). */
+export function resolveFeeRecipient(raw: string): { recipient: string; fellBack: boolean } {
+	const trimmed = raw.trim();
+	if (FEE_RECIPIENT_ACCOUNT_RE.test(trimmed)) {
+		return { recipient: trimmed, fellBack: false };
+	}
+	return { recipient: CANONICAL_TREASURY.blurt, fellBack: true };
+}
+
 /**
  * Sentinels that have appeared in this repo's example .env files.
  * Boot is refused if MORPHIT_INDEXER_DATABASE_URL still contains
@@ -816,7 +837,15 @@ const envSchema = z.object({
 	 *  config change while community operators get a dedicated knob. */
 	MORPHIT_INDEXER_OPERATOR_ACCOUNT_NAME: z.string().max(16).default(''),
 
-	MORPHIT_INDEXER_FEE_RECIPIENT: z.string().min(3).max(16).default(CANONICAL_TREASURY.blurt),
+	// cp407 — federated operators earn 90% of BLURT listing fees, so they set
+	// the Blurt account those fees land in (the wizard writes this from their
+	// "fees account" answer). Accept ANY string here (even empty/garbage)
+	// rather than min/max — an operator who nulls or fat-fingers it must NOT
+	// crash the indexer at boot; the mapping below validates against the
+	// canonical account-name shape and FALLS BACK to the treasury (@morphit-fees)
+	// when it's empty or malformed. /v1/instance then advertises the RESOLVED
+	// account, so the frontend always pays the same place the indexer verifies.
+	MORPHIT_INDEXER_FEE_RECIPIENT: z.string().default(CANONICAL_TREASURY.blurt),
 	MORPHIT_INDEXER_FEE_BASE_BLURT: z.coerce.number().positive().default(60),
 	MORPHIT_INDEXER_FEE_TOLERANCE: z.coerce.number().positive().max(0.5).default(0.001),
 
@@ -1604,7 +1633,7 @@ export function loadConfig(): Config {
 				? e.MORPHIT_INDEXER_OPERATOR_ACCOUNT_NAME
 				: e.MORPHIT_INDEXER_OFFICIAL_ACCOUNT_NAME,
 
-		feeRecipient: e.MORPHIT_INDEXER_FEE_RECIPIENT,
+		feeRecipient: resolveFeeRecipient(e.MORPHIT_INDEXER_FEE_RECIPIENT).recipient,
 		feeBaseBlurt: e.MORPHIT_INDEXER_FEE_BASE_BLURT,
 		disabledAssets: e.MORPHIT_INDEXER_DISABLED_ASSETS,
 		disabledPaymentMethods: e.MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS,
