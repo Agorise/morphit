@@ -15,14 +15,17 @@
  *   this class can't slip past an enumerated allowlist (the gap that let the
  *   original accountByKey ship direct).
  *
- *   TRUST (must NOT be "optimized" into the indexer): release / payment /
- *   chat-identity VERIFICATION reads deliberately go direct to chain via the
- *   node-hopping rotator — and the security-critical ones across a MULTI-NODE
- *   quorum — precisely because the operator's own indexer is a single party
- *   that could forge a release, a "payment received" confirmation, or a chat
- *   identity. Routing these through the indexer would reintroduce exactly the
- *   forgery the quorum/trust-anchor defends against. This smoke fails if anyone
- *   reroutes them to a single same-origin call.
+ *   TRUST — cp410 policy. PAYMENT, chat-IDENTITY and op-signature verification
+ *   now route through the same-origin indexer (privacy #1); the browser's old
+ *   multi-node quorum is gone. To keep the money-critical payment check
+ *   trustless for the cautious, the chat UI offers an independent block-explorer
+ *   "Verify" link instead. RELEASE verification is the SOLE exception: it still
+ *   reads the real chain DIRECTLY (getDirectChainClient), because its anti-tamper
+ *   trust anchor is meaningless if it trusts the operator's own indexer — a
+ *   malicious operator could otherwise forge a "verified" release. This smoke
+ *   fails if payment/identity/op verification regress to a direct-node read, if
+ *   release verification is rerouted through the indexer, or if any flow OTHER
+ *   than release verification uses the direct-to-chain reader.
  *
  * Static source scan (the rotator module pulls $app/environment, which the
  * smoke runner can't resolve, so we assert on source rather than importing).
@@ -115,48 +118,81 @@ check(
 		/get_key_references/.test(indexerChainExplorer)
 );
 
-// ─── TRUST: verification stays direct-to-chain (rotator / multi-node quorum) ──
+// ─── TRUST: payment / identity / op verification now route through the indexer ─
+// cp410 — these used to read direct-to-chain across a multi-node quorum; they
+// now go through the same-origin indexer relay (chainRelay), and must NOT use
+// the node-hopping rotator or its callMany quorum any more.
 const blurtVerify = read('src/lib/chat/blurtVerify.ts');
 check(
-	'payment verification (blurtVerify) uses a multi-node quorum (callMany), not a single call',
-	/getRotator\(\)/.test(blurtVerify) &&
-		/\.callMany<[^>]*>\(\s*'condenser_api\.get_transaction'/.test(blurtVerify) &&
-		// must NOT route the transfer check through the same-origin indexer
-		!/\/v1\/(chain|account|broadcast)/.test(blurtVerify)
+	'payment verification (blurtVerify) routes through the indexer relay (chainRelay), not the rotator',
+	/chainRelay/.test(blurtVerify) && !/getRotator\(\)/.test(blurtVerify) && !/\.callMany\b/.test(blurtVerify)
 );
 
 const chainOpVerify = read('src/lib/chat/chainOpVerify.ts');
 check(
-	'op verification (chainOpVerify) fetches the tx via the rotator, not the indexer',
-	/getRotator\(\)/.test(chainOpVerify) &&
-		/condenser_api\.get_transaction/.test(chainOpVerify) &&
-		!/\/v1\/(chain|account)/.test(chainOpVerify)
+	'op verification (chainOpVerify) routes through the indexer relay (chainRelay), not the rotator',
+	/chainRelay/.test(chainOpVerify) && !/getRotator\(\)/.test(chainOpVerify)
 );
 
 const chainVerify = read('src/lib/chat/chainVerify.ts');
 check(
-	'chat-identity verification (chainVerify) reads chain history directly, not the indexer',
-	(/getBlurtClient\(\)/.test(chainVerify) || /getRotator\(\)/.test(chainVerify)) &&
-		!/\/v1\/(account|chain)\b/.test(chainVerify)
+	'chat-identity verification (chainVerify) routes through the indexer relay (chainRelay), not the rotator',
+	/chainRelay/.test(chainVerify) && !/getRotator\(\)/.test(chainVerify) && !/\.callMany\b/.test(chainVerify)
 );
 
+// ─── TRUST EXCEPTION: release verification stays DIRECT-to-chain ──────────────
+// The sole sanctioned browser→node reader. Its anti-tamper anchor is worthless
+// if it trusts the operator's own indexer (which could forge a "verified"
+// release), so it MUST read the real chain via getDirectChainClient.
 const releaseFetch = read('src/lib/net/releaseFetch.ts');
 check(
-	'release verification (releaseFetch) reads the signed op direct-to-chain via getBlurtClient',
-	/getBlurtClient\(\)/.test(releaseFetch) && /getLatestCustomJson/.test(releaseFetch)
+	'release verification (releaseFetch) reads direct-to-chain via getDirectChainClient',
+	/getDirectChainClient\(\)/.test(releaseFetch) && /getLatestCustomJson/.test(releaseFetch)
+);
+check(
+	'releaseFetch does NOT route through the indexer (no getBlurtClient, no /v1 relay)',
+	!/getBlurtClient\b/.test(releaseFetch) && !/\/v1\/(chain|account)/.test(releaseFetch)
 );
 check(
 	'releaseFetch documents WHY it avoids the indexer (trust anchor / forgery)',
 	/trust anchor/i.test(releaseFetch) && /forge/i.test(releaseFetch)
 );
 
-// ─── The cp344 broadcast fallback is the only sanctioned direct WRITE path ───
+// getDirectChainClient is the ONE sanctioned browser→node reader. Sweep every
+// web source: only releaseFetch may call it, and only blurt/client.ts (where it
+// is defined and wired to the rotator) may reference it. A NEW file calling it
+// would be a fresh direct-to-chain leak — fail loudly.
+const directClientOffenders = srcFiles.filter((f) => {
+	if (f.endsWith('lib/blurt/client.ts') || f.endsWith('lib/net/releaseFetch.ts')) return false;
+	// Match a CALL `getDirectChainClient(` — a bare mention in a comment (e.g.
+	// endpoints.ts documenting why the rotator exists) is not a direct-chain read.
+	return /getDirectChainClient\(/.test(readFileSync(f, 'utf8'));
+});
+check('only releaseFetch uses the direct-to-chain client (sweep)', directClientOffenders.length === 0);
+if (directClientOffenders.length > 0) {
+	for (const f of directClientOffenders) console.log(`      ↳ direct-chain client used in ${f}`);
+}
+
+// ─── BROADCAST: same-origin indexer ONLY — no direct-to-node fallback ────────
+// cp410 removed the cp344 direct-RPC fallback. Broadcasts go through
+// /v1/broadcast and fail (BroadcastUnavailableError) if the indexer is
+// unreachable — they never leak to a third-party node.
 const broadcastTransport = read('src/lib/blurt/broadcastTransport.ts');
 check(
-	'broadcastTransport prefers the same-origin indexer and only falls back to direct RPC',
-	/\/v1\/broadcast/.test(broadcastTransport) &&
-		/fall back|fallback/i.test(broadcastTransport) &&
-		/getBlurtClient\(\)/.test(broadcastTransport)
+	'broadcastTransport broadcasts ONLY through the same-origin indexer (/v1/broadcast)',
+	/\/v1\/broadcast/.test(broadcastTransport)
+);
+check(
+	'broadcastTransport has NO direct-RPC fallback (no getBlurtClient, no directRpcBroadcast)',
+	!/getBlurtClient\b/.test(broadcastTransport) &&
+		!/directRpcBroadcast/.test(broadcastTransport) &&
+		/no direct-rpc fallback/i.test(broadcastTransport)
+);
+
+// ─── The indexer exposes the generic read-only condenser relay (cp410) ───────
+check(
+	'indexer exposes the read-only condenser relay (POST /condenser, whitelisted)',
+	/['"]\/condenser['"]/.test(indexerChainExplorer) && /RELAYABLE_READ_METHODS/.test(indexerChainExplorer)
 );
 
 console.log('');

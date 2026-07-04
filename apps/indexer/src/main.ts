@@ -19,8 +19,8 @@
 import { Hono } from 'hono';
 import { serve, type ServerType } from '@hono/node-server';
 
-import { loadOperatorConfig } from '@morphit/operator-config';
-import { loadConfig } from '$config';
+import { loadOperatorConfig, DEFAULT_BLURT_RPC_ENDPOINTS } from '@morphit/operator-config';
+import { loadConfig, resolveFeeRecipient } from '$config';
 import { createDatabase } from '$db/pool';
 import { checkSchemaDrift, formatDriftReport } from '$db/schemaDrift';
 import { runMigrations } from '$db/migrations';
@@ -82,6 +82,7 @@ import { rssOrderbookRoute } from '$api/rssOrderbook';
 import { operatorsRoute } from '$api/operators';
 import { activityRoute } from '$api/activity';
 import { statsRoute } from '$api/stats';
+import { rpcEndpointsRoute } from '$api/rpcHealth';
 import { instancePaymentMethodsRoute } from '$api/instancePaymentMethods';
 import { operatorBlocksRoute } from '$api/operatorBlocks';
 import { logger } from '$log';
@@ -112,6 +113,22 @@ async function main(): Promise<void> {
 
 	// ─── 1. Config ──────────────────────────────────────────────
 	const config = loadConfig();
+
+	// cp407 — a federated operator earns 90% of BLURT listing fees and sets the
+	// account they land in (MORPHIT_INDEXER_FEE_RECIPIENT). If they left it empty
+	// or entered a malformed account name, the config resolver silently fell back
+	// to the treasury (@morphit-fees). Warn at boot so they don't unknowingly
+	// route their earnings there.
+	{
+		const raw = (process.env.MORPHIT_INDEXER_FEE_RECIPIENT ?? '').trim();
+		if (raw.length > 0 && resolveFeeRecipient(raw).fellBack) {
+			bootLog.warn('fee_recipient_invalid', {
+				configured: raw,
+				using: config.feeRecipient,
+				hint: 'MORPHIT_INDEXER_FEE_RECIPIENT is not a valid Blurt account name (3–16 chars, lowercase, leading letter, [a-z0-9.-] interior, ending alphanumeric). BLURT listing fees are going to the fallback treasury account until this is corrected.'
+			});
+		}
+	}
 
 	// cp194 — `--check-config`: validate operator-config + the full
 	// indexer config schema, then exit WITHOUT touching the database,
@@ -613,6 +630,18 @@ async function main(): Promise<void> {
 	statsApp.use('*', rateLimit('list', config.listRatePerMin));
 	statsApp.route('/', statsRoute(db, config));
 	app.route('/v1/stats', statsApp);
+
+	// cp407 — per-node health for the canonical Blurt RPC pool, so the browser
+	// Settings card can show why a server-only (CORS-blocked) node is/isn't
+	// used. Canonical-only (operator-custom upstreams filtered out); reads the
+	// poller's live in-memory pool snapshot. Public, resource-tier rate-limited.
+	const rpcEndpointsApp = new Hono();
+	rpcEndpointsApp.use('*', rateLimit('resource', config.resourceRatePerMin));
+	rpcEndpointsApp.route(
+		'/',
+		rpcEndpointsRoute(() => poller.rpcEndpointSnapshot, DEFAULT_BLURT_RPC_ENDPOINTS)
+	);
+	app.route('/v1/rpc-endpoints', rpcEndpointsApp);
 
 	// Operator-instance payment-method additions (ADR-0021).
 	// Frontend reads on app-boot to populate the picker's

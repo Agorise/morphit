@@ -18,10 +18,8 @@
  * localStorage and survive reloads.
  */
 
-import { browser } from '$app/environment';
 import {
 	DEFAULT_RPC_ENDPOINTS,
-	ENDPOINTS_STORAGE_KEY,
 	RPC_TIMEOUT_MS,
 	RPC_MAX_CONSECUTIVE_FAILURES,
 	RPC_MAX_RETRIES_PER_CALL
@@ -95,46 +93,16 @@ export interface JsonRpcError {
 export type JsonRpcResponse<T = unknown> = JsonRpcSuccess<T> | JsonRpcError;
 
 // ────────────────────────────────────────────────────────────────────────────
-// Endpoint list persistence
+// Endpoint list
 // ────────────────────────────────────────────────────────────────────────────
-
-/** Load the user's endpoint list from localStorage, or seed defaults. */
-export function loadEndpoints(): string[] {
-	if (!browser) return [...DEFAULT_RPC_ENDPOINTS];
-	try {
-		const raw = window.localStorage.getItem(ENDPOINTS_STORAGE_KEY);
-		if (!raw) return [...DEFAULT_RPC_ENDPOINTS];
-		const parsed = JSON.parse(raw) as unknown;
-		if (!Array.isArray(parsed)) return [...DEFAULT_RPC_ENDPOINTS];
-		const valid = parsed.filter(
-			(u): u is string => typeof u === 'string' && /^https?:\/\/.+/i.test(u)
-		);
-		return valid.length > 0 ? valid : [...DEFAULT_RPC_ENDPOINTS];
-	} catch {
-		return [...DEFAULT_RPC_ENDPOINTS];
-	}
-}
-
-/** Persist the user's endpoint list. */
-export function saveEndpoints(urls: string[]): void {
-	if (!browser) return;
-	try {
-		window.localStorage.setItem(ENDPOINTS_STORAGE_KEY, JSON.stringify(urls));
-	} catch {
-		// Quota exhausted or Privacy Mode; silently ignore. User's
-		// custom list is a nice-to-have, not a correctness feature.
-	}
-}
-
-/** Reset to the default pool. */
-export function resetEndpoints(): void {
-	if (!browser) return;
-	try {
-		window.localStorage.removeItem(ENDPOINTS_STORAGE_KEY);
-	} catch {
-		// ignore
-	}
-}
+//
+// cp410 — the user-editable custom endpoint list (loadEndpoints / saveEndpoints
+// / resetEndpoints, persisted in localStorage) was removed with the settings
+// card's simplification. The browser talks only to the operator's indexer; the
+// rotator's sole remaining caller (release verification) is pinned to the
+// canonical DEFAULT_RPC_ENDPOINTS, so there is nothing left that would honor a
+// user-supplied node. Any list previously stored under ENDPOINTS_STORAGE_KEY is
+// simply ignored (harmless dead data).
 
 // ────────────────────────────────────────────────────────────────────────────
 // Rotator
@@ -253,9 +221,10 @@ export class EndpointRotator {
 				// answered, it just said no).
 				if (!(err instanceof RpcError)) {
 					target.consecutiveFailures++;
-					// Capture WHY it failed so the endpoint-settings panel can
-					// show it (HTTP status / timeout / unreachable), not just a
-					// failure count.
+					// Capture WHY it failed (HTTP status / timeout / unreachable)
+					// for the rotator's own diagnostics. cp408: this is NO LONGER
+					// surfaced on the settings panel — that card now shows node
+					// health measured server-side by the indexer.
 					const cls = classifyEndpointError(lastErr);
 					target.lastErrorCode = cls.code;
 					target.lastErrorKind = cls.kind;
@@ -378,45 +347,12 @@ export class EndpointRotator {
 		return Promise.all(promises);
 	}
 
-	/**
-	 * Warm up by pinging each endpoint once. Populates lastLatencyMs so
-	 * the initial call uses meaningful priority. Non-blocking on the
-	 * caller — returns a promise that resolves when all probes complete
-	 * (or timeout).
-	 */
-	async warmup(): Promise<void> {
-		await Promise.allSettled(
-			this.order.map(async (url) => {
-				const target = this.stats.get(url)!;
-				try {
-					const started = performance.now();
-					const body: JsonRpcRequest = {
-						jsonrpc: '2.0',
-						id: this.nextRpcId++,
-						method: 'database_api.get_dynamic_global_properties',
-						params: {}
-					};
-					const res = await fetchWithTimeout(url, body, RPC_TIMEOUT_MS);
-					if (res.ok) {
-						const elapsed = performance.now() - started;
-						target.lastLatencyMs = Math.round(elapsed);
-						target.lastOkAt = Date.now();
-						target.consecutiveFailures = 0;
-						target.lastErrorCode = null;
-						target.lastErrorKind = null;
-					}
-				} catch (err) {
-					// The endpoint-settings panel probes via warmup(), so this is
-					// where its "why did this node fail" detail comes from — capture
-					// and classify the error instead of discarding it.
-					target.consecutiveFailures++;
-					const cls = classifyEndpointError(err instanceof Error ? err : new Error(String(err)));
-					target.lastErrorCode = cls.code;
-					target.lastErrorKind = cls.kind;
-				}
-			})
-		);
-	}
+	/* cp408 — warmup() (a browser-side probe that POSTed to every Blurt RPC
+	 * node from the user's device) was REMOVED. Privacy is priority #1: the
+	 * browser must never contact a Blurt RPC node just to measure it. The
+	 * endpoint-settings card now shows node health measured by the INDEXER
+	 * (GET /v1/rpc-endpoints), and the rotator still self-tunes from real
+	 * `call()` latency/health, so no dedicated probe is needed or wanted. */
 
 	/** Replace the endpoint list. Preserves stats for endpoints that
 	 *  survive the change; new URLs start with a clean slate. */
@@ -515,25 +451,26 @@ let singleton: EndpointRotator | null = null;
  *  still work, just without latency-informed priority. */
 export function getRotator(): EndpointRotator {
 	if (singleton) return singleton;
-	const urls = loadEndpoints();
+	// cp410 — PINNED to the canonical browser-reachable pool. The rotator now has
+	// a single caller: the boot-time release-integrity check (getDirectChainClient
+	// in $blurt/client), the SOLE sanctioned browser→Blurt-node reader. It must
+	// read the REAL chain (not the operator's indexer, which it exists to
+	// distrust), and from the browser it can only reach the CORS-clean canonical
+	// nodes — so it uses DEFAULT_RPC_ENDPOINTS, not any user-supplied list (the
+	// custom-endpoint feature was removed with the settings card's simplification;
+	// there's nothing left in the app that would honor a custom node).
+	const urls = [...DEFAULT_RPC_ENDPOINTS];
 	singleton = new EndpointRotator(urls);
-	// cp268 privacy (#1): do NOT warmup-probe every endpoint here.
+	// cp268/cp408 privacy (#1): the browser NEVER probe-pings Blurt RPC nodes.
 	// getRotator() runs on ordinary pages (the layout's per-session
-	// release-integrity check reaches it), and an eager warmup POSTed
-	// `get_dynamic_global_properties` to ALL configured Blurt RPC nodes
-	// from the user's browser on every page load — leaking the user's IP
-	// to several third-party operators at once (and throwing CORS errors
-	// on any node whose server-side CORS headers are misconfigured, e.g.
-	// a missing or doubled Access-Control-Allow-Origin). It was also
-	// redundant: `call()` records each endpoint's latency / health on
-	// every real request, so the rotator self-tunes organically. warmup()
-	// is now OPT-IN — invoked explicitly only from the endpoint-settings
-	// UI, where probing every node is a deliberate user action.
+	// release-integrity check reaches it); an eager probe would POST
+	// `get_dynamic_global_properties` to ALL configured Blurt RPC nodes from
+	// the user's browser, leaking the user's IP to several third-party
+	// operators at once (and throwing CORS errors on any node whose CORS
+	// headers are misconfigured). It's also unnecessary: `call()` records each
+	// endpoint's latency / health on every real request, so the rotator
+	// self-tunes organically. The dedicated probe (warmup()) has been removed
+	// entirely (cp408); the endpoint-settings card shows node health measured
+	// server-side by the indexer instead.
 	return singleton;
-}
-
-/** Reset singleton. Mainly useful after the user edits the endpoint list. */
-export function refreshRotator(): EndpointRotator {
-	singleton = null;
-	return getRotator();
 }

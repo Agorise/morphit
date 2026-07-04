@@ -364,7 +364,7 @@ await scenario(
 	async () => {
 		const signer = 'alice';
 		const permlink = 'order-2026-04-25-ggg';
-		// Transfer has a memo for a DIFFERENT permlink. findFeeTransfer
+		// Transfer has a memo for a DIFFERENT permlink. sumFeeTransfers
 		// requires the memo to match exactly; mismatched memo means the
 		// transfer doesn't apply and fee_status falls to 'missing'.
 		const ctx = makeCtx({
@@ -387,7 +387,7 @@ await scenario(
 await scenario('BLURT fee path: wrong recipient treated as missing', async () => {
 	const signer = 'alice';
 	const permlink = 'order-2026-04-25-hhh';
-	// Transfer goes to wrong account — findFeeTransfer rejects.
+	// Transfer goes to wrong account — sumFeeTransfers rejects.
 	const ctx = makeCtx({
 		signer,
 		payload: makePayload({ permlink, fee_method: 'blurt' }),

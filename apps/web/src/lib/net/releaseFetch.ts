@@ -42,7 +42,7 @@
  * refresh in long-lived sessions is in the store.
  */
 
-import { getBlurtClient } from '$blurt/client';
+import { getDirectChainClient } from '$blurt/client';
 import { MORPHIT_OFFICIAL_POSTING_PUBKEY } from '$net/config';
 import { validateReleasePayload, type ReleaseValidateError } from '@morphit/release-schema';
 import { checkPinnedKeyInAuthority } from '@morphit/release-schema';
@@ -110,7 +110,12 @@ export type ReleaseFetchResult =
  *  ReleaseFetchError.  Throws only on programmer error.
  */
 export async function fetchVerifiedRelease(): Promise<ReleaseFetchResult> {
-	const client = getBlurtClient();
+	// DIRECT-to-chain (NOT the indexer). cp410: this is the sole sanctioned
+	// browser→Blurt-node reader. Release verification's trust anchor exists to
+	// detect a malicious operator serving a tampered build, so it must read the
+	// real chain — routing it through the operator's own indexer would let that
+	// operator forge a "verified" release and defeat the whole check.
+	const client = getDirectChainClient();
 
 	// ─── 1. Find the latest release op in @morphit's history.  ──
 	let opResult;

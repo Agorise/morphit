@@ -1355,10 +1355,19 @@
 								<button
 									type="button"
 									role="menuitem"
-									class="block w-full px-4 py-2 text-left text-sm hover:bg-ink-100 dark:hover:bg-ink-800"
+									class="flex w-full items-center gap-1.5 px-4 py-2 text-left text-sm hover:bg-ink-100 dark:hover:bg-ink-800"
 									onclick={openChatSecurity}
 								>
-									{$_('chat.security.menu_label')}
+									<span>{$_('chat.security.menu_label')}</span>
+									{#if !chatSecurityNudgeSeen}
+										<!-- cp407 — matching one-time nudge dot at the end of the
+										     item; clears together with the kebab dot the first time
+										     Chat Security is opened (openChatSecurity → seen). -->
+										<span
+											class="h-2 w-2 flex-none rounded-full bg-red-500"
+											aria-hidden="true"
+										></span>
+									{/if}
 								</button>
 								<!-- cp402: Block/Unblock moved here from a standalone
 								     header button. Reuses the confirm modal's named

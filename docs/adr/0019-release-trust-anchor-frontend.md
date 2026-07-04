@@ -281,3 +281,34 @@ When deploying a new release, the deploy pipeline:
   version mismatch as "stale." A future enhancement could
   distinguish "patch update available" vs "MAJOR update — you
   must reload." Deferred.
+
+## Amendment (cp410, 2026-07-04) — the sole browser→node reader
+
+cp410 made a project-wide change: the browser must NEVER contact a Blurt RPC
+node directly. Every other browser chain read — account lookups, history, the
+chain head, block/tx fetches for chat payment + identity verification, and the
+broadcast path — now routes through the operator's OWN indexer (same-origin
+`POST /v1/chain/condenser` and `/v1/broadcast`), so third-party node operators
+never see the user's IP or reads.
+
+**Release verification is the ONE exception, and this ADR is why.** Its whole
+purpose is to detect a malicious or compromised operator serving a tampered
+build, so it MUST read the real chain rather than the operator's own indexer —
+routing it through the indexer would let that operator forge a "verified"
+release and defeat the check entirely (it does not re-verify the op signature;
+it trusts that an op in @morphit's history was signed by @morphit, which only
+holds against the real chain). Ken confirmed this trade-off explicitly (privacy
+vs. anti-tamper): release verification stays direct-to-chain.
+
+Implementation: `fetchVerifiedRelease` now uses `getDirectChainClient()`
+(`$blurt/client`) — a `BlurtClient` wired to the node-hopping rotator instead of
+the indexer relay. It is the SOLE sanctioned browser→Blurt-node reader; a smoke
+(`rpc-privacy-routing-smoke`) sweeps every web source and fails if any file
+OTHER than `releaseFetch` uses it, and fails if `releaseFetch` regresses to the
+indexer. The rotator (`net/endpoints.ts`) and the edge CSP's RPC `connect-src`
+origins are retained specifically for this boot-time read.
+
+Residual limits (unchanged, accepted): the check is fail-open (a node that
+can't be reached → no banner), and a hostile operator who also controls the
+served frontend can still strip the check from the JS. It remains defense in
+depth / detection, not a hard guarantee.

@@ -277,7 +277,22 @@ const ALLOWLIST_HREF_EXPR: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 		// Both the canonical and custom paths are scheme-locked to https://.
 		// Anchor element also carries rel="noopener noreferrer" to suppress
 		// referrer leak + Spectre-style window.opener attacks.
-		new Set(['trackingUrl'])
+		//
+		// cp410: `verifyUrl` is a `{@const}` from
+		// blurtWalletExplorerFallbackUrl('tx', p.txid) — the opt-in
+		// "Verify on block explorer" link on a BLURT funds-sent pill (lets a
+		// seller self-verify a payment without trusting the operator's
+		// indexer). blurtWalletExplorerFallbackUrl (a SAFE_BUILDER already in
+		// SAFE_BUILDER_NAMES) hardcodes the https://blocks.blurtwallet.com base
+		// and, for kind==='tx', VALIDATES the txid against BLURT_TRXID_RE
+		// (/^[0-9a-fA-F]{40}$/) before interpolating a lowercased copy —
+		// anything else returns null, and the surrounding `{#if verifyUrl}`
+		// gate means the anchor only renders for a valid trxid. Site-controlled,
+		// scheme-locked https, no operator/peer scheme reachable. The static
+		// tracer can't follow the builder through the {@const}; reviewer
+		// confirmed. Anchor also carries target="_blank" +
+		// rel="noopener noreferrer" (suppresses window.opener + referrer leak).
+		new Set(['trackingUrl', 'verifyUrl'])
 	],
 	[
 		'apps/web/src/routes/[lang]/settings/security/2fa/+page.svelte',

@@ -1,64 +1,61 @@
 /**
- * Morphit indexer — operator-earnings attribution + immediate
- * payout.
+ * Morphit indexer — operator-earnings attribution (audit).
  *
  * Called by the order handler after a BLURT fee is verified.
- * If the order op carries an `operator_tag` that resolves to
- * a registered, active operator, this module credits that
- * operator with their share of the fee, queues an immediate
- * relay transfer for the credited amount, and records audit
- * events.
+ * If the order op carries an `operator_tag` that resolves to a
+ * registered, active operator, this module records that the
+ * operator earned their 90% share of the fee — for the operator
+ * dashboard and a per-order audit trail.
  *
- * REVISIT-LIST item 5 — pipeline shipped 2026-05-02.
+ * cp408 — this module NO LONGER queues a relay payout. The
+ * operator's 90% is paid DIRECTLY at payment time: the user's fee
+ * transaction splits into a 90% transfer to the instance's fee
+ * recipient (the operator's account) plus a 10% transfer to the
+ * canonical treasury (see `feeTransfersFor` on the frontend and
+ * `sumFeeTransfers` in the indexer). Nothing is forwarded
+ * afterward, so this module's job is purely attribution + earnings
+ * accounting. The older "fee lands in a treasury, relay forwards
+ * the operator's 90%" model is retired — it only netted correctly
+ * when one entity owned both the treasury and the relay (the
+ * canonical case), which is exactly why it broke for independent
+ * federation owners.
+ *
+ * REVISIT-LIST item 5 — attribution pipeline shipped 2026-05-02;
+ * relay payout removed 2026-07-04 (cp408) in favor of the
+ * payment-time split.
  *
  * ─── Policy of record ──────────────────────────────────────
  *
- * **BLURT-paid listing fees: 90% to the attributed operator,
- * 10% to the Morphit treasury.**  This is what the user-facing
- * FAQ promises in all 10 locales (faq.entries.how_operators_earn).
+ * **BLURT-paid listing fees: 90% to the attributed operator, 10%
+ * to the canonical Morphit treasury**, both delivered at payment
+ * time. This is what the user-facing FAQ promises in all 10
+ * locales (faq.entries.how_operators_earn).
  *
- * BTC- and XMR-paid listing fees flow 100% to the treasury.
- * That path doesn't go through this module — it's enforced
- * by `attributeBlurtFee` only being called from the BLURT-fee
- * branch of the order handler.  See `apps/indexer/src/indexer/handlers/order.ts`.
+ * BTC- and XMR-paid listing fees flow 100% to the canonical
+ * treasury. That path doesn't go through this module — it's
+ * enforced by `attributeBlurtFeeToOperator` only being called from
+ * the BLURT-fee branch of the order handler. See
+ * `apps/indexer/src/indexer/handlers/order.ts`.
  *
  * The split percentage is recorded on each event row as
  * `split_percent_at_event` so a future policy change doesn't
- * retroactively rewrite history.  If 90/10 ever shifts, NEW
- * events use the new ratio while the audit log of OLD events
- * stays intact.
+ * retroactively rewrite history. If 90/10 ever shifts, NEW events
+ * use the new ratio while the audit log of OLD events stays intact.
  *
- * ─── Immediate-payout model ────────────────────────────────
+ * ─── What this module writes ───────────────────────────────
  *
- * Per Ken's directive (2026-05-02), payout is immediate per
- * attribution rather than batched.  Blurt's 3-second blocks
- * + mana-based (effectively zero per-tx fee) economics make
- * batching pointless: the relay account already does dozens
- * of welcome-bonus transfers daily without strain.
- *
- * Pipeline within a single transaction (the order-handler's
- * per-op savepoint):
+ * Within the order-handler's per-op savepoint:
  *   1. Look up operator by tag (active only).
- *   2. Insert audit row in operator_attribution_events.
+ *   2. INSERT audit row in operator_attribution_events (fee,
+ *      operator's 90% share, treasury's 10% share, split %).
  *      UNIQUE on trx_id rejects replays.
- *   3. If operator_share_blurt > 0:
- *        a. Insert row in relay_pending_transfers (kind='liquid',
- *           amount = operator's share, recipient = operator's
- *           account, reason = 'operator_payout:<trx_id>').
- *        b. Insert audit row in operator_payouts referencing
- *           both the attribution event and the relay row.
- *        c. UPSERT operator_earnings (cumulative_blurt_earned
- *           and lifetime_paid_blurt += share, last_payout_at
- *           = block_time, last_payout_blurt = share).
- *      If operator_share_blurt == 0 (sub-precision rounding
- *      to zero — e.g. 0.001-BLURT fees), no transfer queued
- *      and operator_earnings is updated with 0 share but the
- *      attribution event row still records the fact for audit
- *      completeness.
+ *   3. UPSERT operator_earnings (cumulative_blurt_earned += share,
+ *      total_orders_attributed += 1). The operator dashboard
+ *      (/v1/operators) reads those two figures.
  *
- * The relay drainer picks up the queued row on its next cycle
- * (~seconds) and broadcasts it.  Operator sees BLURT in their
- * wallet within typically 10-15s of the user's order op.
+ * No relay transfer is queued and no operator_payouts row is
+ * written — the operator was already paid by the split at the
+ * moment the user's fee cleared.
  *
  * ─── Black-hat audit (deep) ────────────────────────────────
  *
@@ -114,35 +111,37 @@
  *    misses the very first attribution if it lands in the same
  *    block as their own register.
  *
- * 9. *Relay broadcast failure.*  Once we queue the
- *    relay_pending_transfers row, it's the relay drainer's
- *    responsibility.  If broadcast fails (operator account
- *    doesn't exist on-chain, bad witness, network), the row
- *    stays unbroadcast with last_error set.  The earnings
- *    accounting on our side is correct: we credited
- *    lifetime_paid_blurt at queue time, and the relay's
- *    failure to broadcast doesn't unwind that.  Recovery is
- *    a federation-level human concern (operator support).
+ * 9. *Operator's fee account doesn't exist on-chain.*  Under the
+ *    payment-time split the user's wallet is what sends the 90% to
+ *    the operator's account. If the operator configured a
+ *    non-existent account, the CHAIN rejects that transfer (and
+ *    thus the whole fee tx), so the order never lands — the
+ *    operator simply can't collect until they set a real account.
+ *    This module isn't involved in delivery, so there is no
+ *    unbroadcast-payout / last_error state to reconcile anymore.
  *
- * 10. *Relay account out of mana.*  Relay drainer broadcasts
- *     when mana is available; otherwise rows pile up in the
- *     queue.  Same as welcome-bonus path.  No corruption.
+ * 10. *Relay account out of mana.*  No longer relevant to operator
+ *     earnings: the operator's 90% is paid by the user's wallet,
+ *     not the relay. The relay still funds welcome bonuses +
+ *     loyalty; those paths are unchanged.
  *
- * 11. *Treasury front-running attack.*  Attacker watches the
- *     mempool for a high-fee order op carrying an operator_tag,
- *     copies the attribution payload onto their own order,
- *     pre-pays a 0.001 BLURT fee.  Result: 0.001 fee × 90% =
- *     0 milli-BLURT (floors to nothing).  No payout queued.
- *     Mitigation effective.
+ * 11. *Fee-splitting front-running / dust attack.*  Attacker copies
+ *     an operator_tag onto their own order and pre-pays a dust fee.
+ *     A dust fee is far below the acceptance floor, so the order
+ *     handler rejects it as fee_underpaid before this module is
+ *     ever called — no attribution, and the attacker paid the
+ *     operator (via the split) for nothing. Mitigation effective.
  *
  * 12. *Recursive operator_tag attack.*  Operator alice
  *     attributes orders to herself, getting 90% back.  Net
- *     cost is 10% per order.  This is "paying for orderbook
- *     spam" — see the order handler's anti-spam rate limits.
- *     Not a money-extraction vector.
+ *     cost is 10% per order (paid to the canonical treasury by
+ *     the split).  This is "paying for orderbook spam" — see the
+ *     order handler's anti-spam rate limits.  Not a
+ *     money-extraction vector.
  */
 
 import type pg from 'pg';
+import { splitListingFeeBlurt } from '@morphit/asset-registry';
 import { logger } from '$log';
 
 const log = logger('operator-earnings');
@@ -168,7 +167,6 @@ export type AttributionResult =
 			kind: 'attributed';
 			operatorAccount: string;
 			operatorShareBlurt: number;
-			payoutQueued: boolean;
 	  }
 	| { kind: 'no_tag' }
 	| { kind: 'tag_malformed' }
@@ -177,15 +175,20 @@ export type AttributionResult =
 	/** Part 111 — the order op's operator_tag does not match
 	 *  THIS instance's MORPHIT_INSTANCE_OPERATOR_TAG.  The op is
 	 *  for another operator's instance; this indexer records the
-	 *  order for orderbook/audit purposes but does NOT queue a
-	 *  payout (the named operator's relay is the one obligated).
-	 *  Pre-Part-111, every operator queued every op's payout —
-	 *  multiplying federation cost.  This gate fixes it. */
+	 *  order for orderbook/audit purposes but does NOT record
+	 *  earnings for it (those belong on the named operator's own
+	 *  indexer). Pre-Part-111 every operator recorded every op —
+	 *  now each instance only books its own. */
 	| { kind: 'attributed_other_instance'; opTag: string; instanceTag: string };
 
 /** Compute the operator's share of a BLURT fee.  Pure function
  *  for unit testing.  Returned as 3-decimal strings ready for
- *  Postgres NUMERIC parameters. */
+ *  Postgres NUMERIC parameters.
+ *
+ *  cp408 — delegates to `splitListingFeeBlurt` (the same helper the
+ *  frontend uses to build the fee transaction), so the recorded
+ *  earnings match to the milliBLURT what the operator was actually
+ *  paid by the split. */
 export function computeOperatorShareBlurt(feeBlurt: number): {
 	operatorShareBlurt: string;
 	treasuryShareBlurt: string;
@@ -193,12 +196,10 @@ export function computeOperatorShareBlurt(feeBlurt: number): {
 	if (!Number.isFinite(feeBlurt) || feeBlurt <= 0) {
 		throw new Error(`computeOperatorShareBlurt: invalid feeBlurt ${feeBlurt}`);
 	}
-	const feeMilliBlurt = Math.round(feeBlurt * 1000);
-	const operatorMilliBlurt = Math.floor((feeMilliBlurt * OPERATOR_BLURT_SPLIT_PERCENT) / 100);
-	const treasuryMilliBlurt = feeMilliBlurt - operatorMilliBlurt;
+	const { ownerShareBlurt, treasuryShareBlurt } = splitListingFeeBlurt(feeBlurt);
 	return {
-		operatorShareBlurt: (operatorMilliBlurt / 1000).toFixed(3),
-		treasuryShareBlurt: (treasuryMilliBlurt / 1000).toFixed(3)
+		operatorShareBlurt: ownerShareBlurt.toFixed(3),
+		treasuryShareBlurt: treasuryShareBlurt.toFixed(3)
 	};
 }
 
@@ -235,27 +236,26 @@ interface AttributeArgs {
 	readonly instanceOperatorTag: string | undefined;
 }
 
-/** Attribute a verified BLURT listing fee to a registered
- *  operator AND immediately queue the relay transfer.
+/** Record that a verified BLURT listing fee attributed to a
+ *  registered operator earned that operator their 90% share.
  *
- *  All writes happen inside the caller's transaction (the
- *  order handler's per-op savepoint); a failure anywhere
- *  rolls back the whole attribution.  Idempotent on trx_id
- *  via UNIQUE constraint.
+ *  cp408 — audit only. The operator's 90% was already paid at
+ *  payment time by the fee split; this queues NO transfer. All
+ *  writes happen inside the caller's transaction (the order
+ *  handler's per-op savepoint); a failure anywhere rolls back the
+ *  whole attribution. Idempotent on trx_id via UNIQUE constraint.
  *
  *  Side effects on success (kind === 'attributed'):
- *    - INSERT into operator_attribution_events
- *    - If operator_share_blurt > 0:
- *        - INSERT into relay_pending_transfers (kind='liquid')
- *        - INSERT into operator_payouts
- *    - UPSERT operator_earnings (lifetime_paid_blurt += share)
+ *    - INSERT into operator_attribution_events (fee + 90/10 shares)
+ *    - UPSERT operator_earnings (cumulative_blurt_earned += share,
+ *      total_orders_attributed += 1)
  *
  *  Part 111 — when `operator_tag !== instanceOperatorTag`:
  *    - NO DB writes at all.  Returns `attributed_other_instance`.
  *    - The op is for a different operator's instance; their
- *      indexer will handle it.  This indexer recorded the order
- *      itself (in the orders table) for orderbook/audit
- *      purposes; only the payout side is gated.
+ *      indexer books its earnings.  This indexer recorded the order
+ *      itself (in the orders table) for orderbook/audit purposes;
+ *      only the earnings side is gated.
  *
  *  No-op (no DB writes) for any non-'attributed' outcome.
  */
@@ -317,19 +317,17 @@ export async function attributeBlurtFeeToOperator(args: AttributeArgs): Promise<
 	const { operatorShareBlurt, treasuryShareBlurt } = computeOperatorShareBlurt(args.feeBlurt);
 	const operatorShareNum = Number(operatorShareBlurt);
 
-	// Insert the attribution event.  RETURNING the new id so
-	// downstream rows can reference it.
-	let attributionEventId: string;
+	// Insert the attribution event (audit of what this operator earned on
+	// this order — the 90% was already paid to them by the split).
 	try {
-		const ins = await args.client.query<{ id: string }>(
+		await args.client.query(
 			`INSERT INTO operator_attribution_events (
 				operator_account, operator_tag,
 				order_account, order_permlink,
 				fee_blurt, operator_share_blurt, treasury_share_blurt,
 				split_percent_at_event,
 				trx_id, block_num, block_time_at
-			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-			RETURNING id::text`,
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
 			[
 				operatorAccount,
 				tag,
@@ -344,7 +342,6 @@ export async function attributeBlurtFeeToOperator(args: AttributeArgs): Promise<
 				args.blockTime
 			]
 		);
-		attributionEventId = ins.rows[0]!.id;
 	} catch (err) {
 		if (isUniqueViolation(err)) {
 			return { kind: 'duplicate_attribution' };
@@ -352,37 +349,14 @@ export async function attributeBlurtFeeToOperator(args: AttributeArgs): Promise<
 		throw err;
 	}
 
-	let payoutQueued = false;
-
-	if (operatorShareNum > 0) {
-		// Queue the relay transfer.  RETURNING the new id so we
-		// can link the operator_payouts row to it.
-		const queueRes = await args.client.query<{ id: string }>(
-			`INSERT INTO relay_pending_transfers (
-				recipient, kind, amount_blurt, reason, created_at
-			) VALUES ($1, 'liquid', $2, $3, $4)
-			RETURNING id::text`,
-			[operatorAccount, operatorShareBlurt, `operator_payout:${args.trxId}`, args.blockTime]
-		);
-		const relayRowId = queueRes.rows[0]!.id;
-
-		// Audit row linking the attribution to the relay row.
-		await args.client.query(
-			`INSERT INTO operator_payouts (
-				operator_account, attribution_event_id,
-				amount_blurt, relay_pending_transfer_id, queued_at
-			) VALUES ($1, $2, $3, $4, $5)`,
-			[operatorAccount, attributionEventId, operatorShareBlurt, relayRowId, args.blockTime]
-		);
-
-		payoutQueued = true;
-	}
-
-	// UPSERT operator_earnings.  cumulative_blurt_earned tracks
-	// lifetime credit; lifetime_paid_blurt mirrors it (separate
-	// for future model divergence).  last_payout_at and
-	// last_payout_blurt now mean "most recent attribution"
-	// (per-event semantic) rather than "most recent batch."
+	// cp408 — no relay payout is queued: the operator's 90% was paid directly
+	// by the fee split at the moment the user's order cleared. This module only
+	// keeps the running earnings tally the dashboard reads.
+	//
+	// UPSERT operator_earnings. cumulative_blurt_earned is the operator's
+	// lifetime earnings; lifetime_paid_blurt mirrors it (they're paid as they
+	// earn now, at source), and last_payout_at / last_payout_blurt record the
+	// most recent order that paid this operator.
 	await args.client.query(
 		`INSERT INTO operator_earnings (
 			account, cumulative_blurt_earned, total_orders_attributed,
@@ -404,8 +378,7 @@ export async function attributeBlurtFeeToOperator(args: AttributeArgs): Promise<
 	return {
 		kind: 'attributed',
 		operatorAccount,
-		operatorShareBlurt: operatorShareNum,
-		payoutQueued
+		operatorShareBlurt: operatorShareNum
 	};
 }
 

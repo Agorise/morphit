@@ -55,6 +55,7 @@ export type SubscribeError =
 	| 'unreachable'
 	| 'no_vapid_key'
 	| 'subscribe_failed'
+	| 'push_service_unavailable'
 	| 'signature_required'
 	| 'signature_invalid'
 	| 'locked_session'
@@ -307,6 +308,19 @@ export async function subscribe(
 			'[push] pushManager.subscribe failed:',
 			err instanceof Error ? `${err.name}: ${err.message}` : err
 		);
+		// cp407 — the browser could not register with its push service. This
+		// is a BROWSER/PLATFORM limitation, not a Morphit fault: common in
+		// privacy-hardened / de-googled browsers where Google's FCM push
+		// service is disabled or unreachable, or on networks that block it.
+		// Give it a distinct code so the UI can reassure the user that the
+		// in-tab notification channels still work (push is only for when the
+		// tab is fully closed) instead of a generic "try again".
+		if (
+			err instanceof DOMException &&
+			(err.name === 'AbortError' || /push service/i.test(err.message))
+		) {
+			throw 'push_service_unavailable' satisfies SubscribeError;
+		}
 		throw 'subscribe_failed' satisfies SubscribeError;
 	}
 

@@ -204,26 +204,41 @@ for (const rel of SITES) {
 	);
 }
 
-// ── 6b. OrderCard list-preview terms are SAFE plain escaped text ──
+// ── 6b. OrderCard list-preview terms are SAFE escaped text ──
 // The browse cards intentionally show a one-line truncated preview (full
-// terms + clickable safe links live on the order detail page). cp406 — it now
-// renders {termsPreview}, i.e. stripMarkdown(order.terms), via Svelte's
-// auto-escaping interpolation inside a `.truncate` span — NEVER {@html}, and
-// no clickable-link rendering — so hostile markup/URLs in terms are
-// neutralised (shown as inert, markdown-stripped escaped text), not executed
-// or turned into links. This preserves the link-safety model without the
-// invalid nested-<a> a TermsText link would create inside the card's
-// stretched detail-page link.
+// terms + clickable safe links live on the order detail page). cp406 — the
+// preview is stripMarkdown(order.terms) rendered inside a `.truncate` span, so
+// hostile markup/URLs in terms are neutralised (inert, markdown-stripped
+// escaped text), not executed or turned into links. This preserves the
+// link-safety model without the invalid nested-<a> a TermsText link would
+// create inside the card's stretched detail-page link.
+//
+// cp411 — when the orderbook "Order details" search is active, the matched
+// word(s) are highlighted via a SINGLE `{@html termsPreviewHtml}`. That is
+// SAFE: termsPreviewHtml is produced by highlightMatches(), which HTML-escapes
+// every character of the (attacker-controllable) terms and only ever injects a
+// static-class <mark> — its dedicated orderbook-terms-highlight-safety-smoke
+// pins that guarantee. What we lock here is that this highlight builder is the
+// ONLY {@html} in OrderCard and that its source is that safe function, so raw
+// terms can never reach {@html} directly.
 {
 	const orderCard = readFileSync(join(WEB, 'src/lib/components/OrderCard.svelte'), 'utf8');
-	expect(!/\{@html\s/.test(orderCard), 'OrderCard never uses the {@html} directive');
+	const orderCardHtmlBindings = orderCard.match(/\{@html\s+[^}]*\}/g) ?? [];
+	expect(
+		orderCardHtmlBindings.length === 1 && /\{@html\s+termsPreviewHtml\s*\}/.test(orderCard),
+		'OrderCard uses exactly one {@html}, bound to termsPreviewHtml (the highlight preview)'
+	);
+	expect(
+		/const\s+termsPreviewHtml\s*=[\s\S]*?highlightMatches\(/.test(orderCard),
+		"OrderCard's {@html} source (termsPreviewHtml) is produced by the safe highlightMatches() builder"
+	);
 	expect(
 		/stripMarkdown\(order\.terms\)/.test(orderCard),
 		'OrderCard strips markdown from the terms preview'
 	);
 	expect(
 		/class="truncate"[^>]*>\{termsPreview\}/.test(orderCard),
-		'OrderCard terms preview is a single truncated, escaped line'
+		'OrderCard non-highlighted terms preview is a single truncated, escaped line'
 	);
 }
 

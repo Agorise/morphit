@@ -267,12 +267,13 @@
 		</div>
 	{/if}
 
-	<!-- cp402 [9] — textarea + Send on ONE row (Send to the right,
-	     bottom-aligned). Compact composer keeps the Send button visible
-	     on mobile without the textarea+button stack pushing it below the
-	     fold. The account-number reminder + locked hint stay full-width
+	<!-- cp407 — textarea + Send on ONE row, Send vertically CENTRED against the
+	     2-row textarea (was items-end, which sank the 1-row button to the bottom
+	     and read as misaligned/too low). Still one row, so the compact composer
+	     stays visible on mobile without a textarea+button stack pushing it below
+	     the fold. The account-number reminder + locked hint stay full-width
 	     above this row. -->
-	<div class="flex items-end gap-2">
+	<div class="flex items-center gap-2">
 		<ProtectedTextarea
 			class="flex-1"
 			bind:value={text}

@@ -44,6 +44,8 @@
 import type pg from 'pg';
 import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contract';
 import { validateOrderPermlink } from '$indexer/permlink';
+import { canonicalShareOk, sumFeeTransfers } from '$indexer/fee';
+import { CANONICAL_TREASURY } from '../../config/canonicalTreasury';
 import { logger } from '$log';
 import { localize, normalizeLocale } from '$indexer/pushLocalize';
 
@@ -84,40 +86,9 @@ function isUniqueViolation(err: unknown): boolean {
 	);
 }
 
-/** Locate the sibling transfer paying the feature fee. Same shape
- *  as order.ts's findFeeTransfer, but with a different memo
- *  namespace so listing fees and feature bids don't collide. */
-function findFeatureFeeTransfer(
-	siblingOps: readonly (readonly [string, Record<string, unknown>])[],
-	signer: string,
-	feeRecipient: string,
-	permlink: string
-): { amountBlurt: number } | null {
-	const expectedMemo = `morphit-feature:${permlink}`;
-	for (const op of siblingOps) {
-		if (!op) continue;
-		const [name, body] = op;
-		if (name !== 'transfer') continue;
-		const b = body as {
-			from?: unknown;
-			to?: unknown;
-			amount?: unknown;
-			memo?: unknown;
-		};
-		if (b.from !== signer) continue;
-		if (b.to !== feeRecipient) continue;
-		if (b.memo !== expectedMemo) continue;
-
-		if (typeof b.amount !== 'string') continue;
-		const match = /^(\d+(?:\.\d+)?)\s+BLURT$/.exec(b.amount);
-		if (!match) continue;
-		const amount = Number(match[1]);
-		if (!Number.isFinite(amount) || amount <= 0) continue;
-
-		return { amountBlurt: amount };
-	}
-	return null;
-}
+/** cp408 — the feature-fee sibling transfer(s) are located + summed by the
+ *  shared `sumFeeTransfers` in `$indexer/fee`, which honors the payment-time
+ *  federation split (90% owner / 10% canonical, memo `morphit-feature:<permlink>`). */
 
 const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<HandlerResult> => {
 	if (!isPlainObject(ctx.payload)) return { ok: false, reason: 'payload_not_object' };
@@ -191,14 +162,19 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	}
 
 	// ─── Fee verification ─────────────────────────────────────────
+	// cp408 — the feature fee is paid as a payment-time split (90% to this
+	// instance's recipient + 10% to the canonical treasury, or a single 100%
+	// transfer when the recipient is canonical). Sum both legs, then confirm
+	// the canonical treasury received its cut.
 
-	const transfer = findFeatureFeeTransfer(
+	const fee = sumFeeTransfers(
 		ctx.siblingOps,
 		ctx.signer,
 		ctx.config.feeRecipient,
-		permlink
+		CANONICAL_TREASURY.blurt,
+		`morphit-feature:${permlink}`
 	);
-	if (transfer === null) {
+	if (fee === null) {
 		return { ok: false, reason: 'fee_missing' };
 	}
 
@@ -207,7 +183,11 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	// BLURT arithmetic on the client side can produce ±0.001
 	// rounding, so we accept within config.feeTolerance.
 	const minAcceptable = expectedBlurt * (1 - ctx.config.feeTolerance);
-	if (transfer.amountBlurt < minAcceptable) {
+	if (fee.totalBlurt < minAcceptable) {
+		return { ok: false, reason: 'fee_underpaid' };
+	}
+	if (!canonicalShareOk(fee.totalBlurt, fee.toCanonicalBlurt)) {
+		// Total paid, but the canonical treasury's 10% leg was missing/short.
 		return { ok: false, reason: 'fee_underpaid' };
 	}
 
@@ -239,7 +219,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	// imports are a hassle to chase.  If MAX_SLOTS changes there,
 	// update here too (handler-coverage smoke does NOT catch this
 	// drift; an integration test would).
-	const newBidBlurtPerHour = transfer.amountBlurt / hours;
+	const newBidBlurtPerHour = fee.totalBlurt / hours;
 	const visibleTop = await client.query<{ blurt_per_hour: string }>(
 		`SELECT blurt_per_hour::text AS blurt_per_hour
 		 FROM featured_slot_bids
@@ -289,7 +269,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 				ctx.signer,
 				permlink,
 				hours,
-				transfer.amountBlurt,
+				fee.totalBlurt,
 				blurtPerHour,
 				ctx.blockTime,
 				expiresAt,

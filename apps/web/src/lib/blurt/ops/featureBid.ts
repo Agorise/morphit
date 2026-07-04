@@ -27,7 +27,7 @@ import { getUserBlurtAccount, BroadcastError } from '$blurt/ops/profile';
 import { OP_IDS } from '$net/config';
 import type { LiveIdentity } from '$crypto/keygen';
 
-import { FEE_RECIPIENT, formatBlurtAmount } from '$lib/orders/fee';
+import { FEE_RECIPIENT, formatBlurtAmount, feeTransfersFor } from '$lib/orders/fee';
 
 export interface FeatureBidInput {
 	/** Permlink of a live order owned by the signer. */
@@ -67,7 +67,10 @@ export function featureBidMemoFor(permlink: string): string {
 export async function broadcastFeatureBid(
 	_live: LiveIdentity,
 	signCallback: (tx: Transaction) => SignedTransaction | Promise<SignedTransaction>,
-	input: FeatureBidInput
+	input: FeatureBidInput,
+	/** cp407 — operator's BLURT fee-collection account (from
+	 *  `$instance.fee_recipient`); defaults to the canonical treasury. */
+	feeRecipient: string = FEE_RECIPIENT
 ): Promise<BroadcastFeatureBidResult> {
 	const account = getUserBlurtAccount();
 	if (!account) {
@@ -107,12 +110,14 @@ export async function broadcastFeatureBid(
 	};
 
 	// Phase F.5 audit fix (F-18) — three-phase split.
+	// cp408 — fee split at payment time (90% owner / 10% canonical, or a single
+	// 100% transfer when the recipient is canonical).
+	const feeTransfers = feeTransfersFor(blurtAmount, feeRecipient);
 	const unsigned = await prepareUnsignedOrderWithFee(
 		OP_IDS.featureBid,
 		payload,
 		account,
-		FEE_RECIPIENT,
-		blurtFormatted,
+		feeTransfers,
 		memo
 	);
 	const signed = await signCallback(unsigned);

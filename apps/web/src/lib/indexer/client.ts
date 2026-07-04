@@ -36,6 +36,7 @@ import type {
 	ReleaseResponse,
 	ReputationReceiptResponse,
 	StatsResponse,
+	RpcEndpointsResponse,
 	StrangerFeeQuoteResponse,
 	ErrorResponse,
 	ErrorCode
@@ -181,6 +182,12 @@ export function getInstance(signal?: AbortSignal): Promise<Result<InstanceRespon
  *  third-party aggregators). */
 export function getStats(signal?: AbortSignal): Promise<Result<StatsResponse>> {
 	return request<StatsResponse>('/v1/stats', { signal });
+}
+
+/** GET /v1/rpc-endpoints — per-node health of the canonical Blurt RPC pool the
+ *  indexer uses (for the Settings RPC card's server-only rows). */
+export function getRpcEndpoints(signal?: AbortSignal): Promise<Result<RpcEndpointsResponse>> {
+	return request<RpcEndpointsResponse>('/v1/rpc-endpoints', { signal });
 }
 
 /** GET /v1/instances — federation directory (all known peer

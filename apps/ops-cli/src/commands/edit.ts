@@ -47,6 +47,7 @@ import {
 	stepOrigin,
 	stepListingFee,
 	stepOperatorTag,
+	stepFeesAccount,
 	stepRpcEndpoints,
 	parseRpcEndpoints,
 	DEFAULT_BLURT_RPC_ENDPOINTS,
@@ -313,6 +314,20 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 			'MORPHIT_INDEXER_PRICE_FEED_STATIC_FLOOR',
 			String(fee.fallbackBlurtPriceUsd)
 		);
+	}
+	if (choice === 'fees-account' || choice === 'all') {
+		// cp407 — redirect where BLURT listing fees land (the operator earns
+		// 90% of them). Default to the account currently configured, falling
+		// back to the relay account (init's default) if unset. stepFeesAccount
+		// validates the Blurt account name; the indexer independently falls
+		// back to @morphit-fees if this is ever left empty or malformed.
+		const cfgKv = parseKvLines(existing.text);
+		const currentFees =
+			cfgKv.get('MORPHIT_INDEXER_FEE_RECIPIENT') ??
+			cfgKv.get('MORPHIT_INDEXER_RELAY_ACCOUNT') ??
+			'';
+		const feesAccount = await stepFeesAccount(currentFees);
+		configUpdates.set('MORPHIT_INDEXER_FEE_RECIPIENT', feesAccount);
 	}
 	if (choice === 'operator-tag' || choice === 'all') {
 		const op = await stepOperatorTag(existing.origin ?? null);
@@ -740,7 +755,7 @@ export { atomicEnvWrite as _testAtomicEnvWrite };
 
 async function pickSection(
 	rpcAvailable: boolean
-): Promise<'origin' | 'alt-networks' | 'seo' | 'listing-fee' | 'operator-tag' | 'rpc' | 'all' | 'cancel'> {
+): Promise<'origin' | 'alt-networks' | 'seo' | 'listing-fee' | 'fees-account' | 'operator-tag' | 'rpc' | 'all' | 'cancel'> {
 	step(1, 1, 'What do you want to edit?');
 
 	// Build the menu dynamically so adding/removing sections in
@@ -753,6 +768,7 @@ async function pickSection(
 		| 'alt-networks'
 		| 'seo'
 		| 'listing-fee'
+		| 'fees-account'
 		| 'operator-tag'
 		| 'rpc'
 		| 'all'
@@ -794,6 +810,16 @@ async function pickSection(
 				'     amounts no longer match your USD target, or when\n' +
 				'     BLURT has drifted enough that the static-floor\n' +
 				'     fallback (used during upstream outages) is stale.'
+		},
+		{
+			key: 'fees-account',
+			label: 'Fees account (where BLURT listing fees land)',
+			description:
+				'Fees account — the Blurt account your BLURT listing\n' +
+				'     fees are paid into (you earn 90% of them).  Pick\n' +
+				'     this to redirect fees to a different account.  If\n' +
+				'     left blank or set to an invalid name, fees fall\n' +
+				'     back to the canonical @morphit-fees treasury.'
 		},
 		{
 			key: 'operator-tag',

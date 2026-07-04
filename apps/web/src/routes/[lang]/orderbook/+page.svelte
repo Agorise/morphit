@@ -288,6 +288,103 @@
 	 *  filter bar. Per-session only — doesn't touch the hidden set. */
 	let showHiddenTemporarily = $state(false);
 
+	// ─── Free-text "Order details" filter (cp411) ────────────────────
+	/** Raw query for the free-text search over each order's terms/details.
+	 *  This is a CLIENT-SIDE filter over the already-loaded page(s) — it
+	 *  never hits the indexer (it is deliberately NOT part of currentQuery,
+	 *  so typing here doesn't refetch). As the orderbook grows to thousands
+	 *  of posts this becomes the fastest way to find "orange trees" or a
+	 *  neighbourhood name buried in someone's terms, in any language. */
+	let orderDetailsQuery = $state('');
+	/** Lowercased, de-duped query tokens (≥2 chars) used for BOTH the filter
+	 *  (every token must appear in an order's terms) and the in-card
+	 *  highlight. A 1-char query yields no tokens → no filtering, no noise. */
+	const orderDetailsTokens = $derived(
+		Array.from(
+			new Set(
+				orderDetailsQuery
+					.toLowerCase()
+					.split(/\s+/)
+					.map((t) => t.trim())
+					.filter((t) => t.length >= 2)
+			)
+		)
+	);
+	// Order-details filter: an animated typewriter placeholder, same "someone
+	// is typing" treatment as Region/Payment above, cycling through a
+	// deliberately MULTILINGUAL set of example searches (Polish / Spanish /
+	// Russian / Italian / English) to signal the field searches free text in
+	// any language. Shown verbatim in every locale (NOT translated). HOLD_MS
+	// (2100) sits between Region's 1600 and Payment's 2600 so all three
+	// placeholders cycle out of lockstep. Runs only while the field is empty;
+	// reduced-motion shows a single static example.
+	const ORDER_DETAILS_PLACEHOLDERS = [
+		'Myjnia samochodowa',
+		'Orange trees',
+		'Te hago recados',
+		'Car wash',
+		'Housecleaning',
+		'Dog walking',
+		'Выгул собак',
+		'Dog walker',
+		'Servizio di pulizia',
+		'Errand runner',
+		'Caretaker'
+	] as const;
+	let orderDetailsPlaceholder = $state<string>(ORDER_DETAILS_PLACEHOLDERS[0]);
+	const orderDetailsHasText = $derived(orderDetailsQuery.trim().length > 0);
+	$effect(() => {
+		// Pause while the user has typed something; resume when empty.
+		if (orderDetailsHasText) return;
+		// Respect reduced-motion: a single static example, no typing.
+		if (
+			typeof window !== 'undefined' &&
+			window.matchMedia('(prefers-reduced-motion: reduce)').matches
+		) {
+			orderDetailsPlaceholder = ORDER_DETAILS_PLACEHOLDERS[0];
+			return;
+		}
+		const TYPE_MS = 70; // per-character typing speed (matches Region/Payment)
+		const DELETE_MS = 35; // per-character backspacing speed (matches)
+		const HOLD_MS = 2100; // between Region (1600) and Payment (2600) — desync
+		const GAP_MS = 450; // blank beat before the next example (matches)
+		let idx = 0;
+		let charIdx = 0;
+		let phaseT: 'typing' | 'holding' | 'deleting' = 'typing';
+		let timer: ReturnType<typeof setTimeout>;
+		const tick = (): void => {
+			const name = ORDER_DETAILS_PLACEHOLDERS[idx] ?? ORDER_DETAILS_PLACEHOLDERS[0];
+			if (phaseT === 'typing') {
+				charIdx += 1;
+				orderDetailsPlaceholder = name.slice(0, charIdx);
+				if (charIdx >= name.length) {
+					phaseT = 'holding';
+					timer = setTimeout(tick, HOLD_MS);
+				} else {
+					timer = setTimeout(tick, TYPE_MS);
+				}
+			} else if (phaseT === 'holding') {
+				phaseT = 'deleting';
+				timer = setTimeout(tick, DELETE_MS);
+			} else {
+				charIdx -= 1;
+				orderDetailsPlaceholder = name.slice(0, Math.max(charIdx, 0));
+				if (charIdx <= 0) {
+					phaseT = 'typing';
+					charIdx = 0;
+					idx = (idx + 1) % ORDER_DETAILS_PLACEHOLDERS.length;
+					timer = setTimeout(tick, GAP_MS);
+				} else {
+					timer = setTimeout(tick, DELETE_MS);
+				}
+			}
+		};
+		// Start by typing the first example in from an empty field.
+		orderDetailsPlaceholder = '';
+		timer = setTimeout(tick, GAP_MS);
+		return () => clearTimeout(timer);
+	});
+
 	// ─── Paging state ────────────────────────────────────────────────
 	type Phase = 'loading' | 'ready' | 'error';
 	let phase = $state<Phase>('loading');
@@ -296,6 +393,27 @@
 	let indexedBlock = $state(0);
 	let errorMessage = $state('');
 	let loadingMore = $state(false);
+
+	/** cp411 — don't flash the load-error card during a transient first-load
+	 *  hiccup. On a fresh page the indexer/SSE stream can briefly be
+	 *  unreachable before the first snapshot lands; a bright red "couldn't
+	 *  load" card that appears for a beat and then vanishes reads like the
+	 *  site is broken. So the error card is gated behind this flag, which only
+	 *  flips true after the page has stayed in 'error' for 2s. A quick retry
+	 *  or the stream recovering flips `phase` back to 'ready'/'loading' first,
+	 *  cancelling the reveal — so in the common case the card is never seen. */
+	let showLoadError = $state(false);
+	$effect(() => {
+		if (phase !== 'error') {
+			showLoadError = false;
+			return;
+		}
+		// Entered (and still in) 'error' — reveal only if it persists 2s.
+		const t = setTimeout(() => {
+			showLoadError = true;
+		}, 2000);
+		return () => clearTimeout(t);
+	});
 
 	// ─── SSE streaming state (Phase E) ───────────────────────────────
 	/** True while the orderbook stream is connected and fed.  Drives
@@ -374,12 +492,24 @@
 	 *  accounts since it's a "show me what I'd otherwise be
 	 *  filtering" transparency control. */
 	const visibleItems = $derived.by(() => {
-		if (showHiddenTemporarily) return items;
+		const tokens = orderDetailsTokens;
 		const hidden = $hiddenAccounts;
 		const blocked = $blockedAccounts;
 		return items.filter((o) => {
-			const acct = o.account.toLowerCase();
-			return !hidden.has(acct) && !blocked.has(acct);
+			// Moderation filter — skipped when the transparency toggle is on.
+			if (!showHiddenTemporarily) {
+				const acct = o.account.toLowerCase();
+				if (hidden.has(acct) || blocked.has(acct)) return false;
+			}
+			// cp411 — free-text "Order details" filter: every query token must
+			// appear (case-insensitively) somewhere in the order's terms text.
+			if (tokens.length > 0) {
+				const terms = (o.terms ?? '').toLowerCase();
+				for (const t of tokens) {
+					if (!terms.includes(t)) return false;
+				}
+			}
+			return true;
 		});
 	});
 
@@ -760,6 +890,7 @@
 		paymentMethods = [];
 		minTrades = 0;
 		sortMode = 'recent';
+		orderDetailsQuery = '';
 	}
 
 	// ─── Formatting helpers ──────────────────────────────────────────
@@ -989,6 +1120,23 @@
 					</p>
 				</div>
 
+				<!-- cp411 — free-text search over each order's terms/details.
+				     Client-side over the loaded page(s); no help text under it
+				     (Ken's ask). Animated multilingual typewriter placeholder. -->
+				<label class="mt-4 block">
+					<span class="mb-1 block text-sm font-semibold">
+						{$_('orderbook.filters.order_details_label')}
+					</span>
+					<input
+						type="text"
+						bind:value={orderDetailsQuery}
+						maxlength="128"
+						autocomplete="off"
+						class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+						placeholder={orderDetailsPlaceholder}
+					/>
+				</label>
+
 				<!-- Trader experience + sort. These two controls surface
 		     reputation data without hiding newcomers — new traders
 		     remain visible under every sort mode; the min-trades
@@ -1027,7 +1175,7 @@
 					</label>
 				</div>
 
-				{#if asset || side || fiatList.length || region || paymentMethods.length || minTrades > 0 || sortMode !== 'recent'}
+				{#if asset || side || fiatList.length || region || paymentMethods.length || minTrades > 0 || sortMode !== 'recent' || orderDetailsQuery.trim()}
 					<div class="mt-4 flex flex-wrap items-center gap-3">
 						<BusyButton variant="ghost" onclick={clearFilters}>
 							{$_('orderbook.filters.clear')}
@@ -1094,20 +1242,21 @@
 		<StatusLine kind="loading">{$_('orderbook.loading')}</StatusLine>
 	{/if}
 
-	<!-- Error -->
-	{#if phase === 'error'}
+	<!-- Error (cp411: 2s-delayed reveal + dimmed so a transient load blip
+	     doesn't read as a big red "site is broken" flag) -->
+	{#if showLoadError}
 		<section
-			class="card mt-4 border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-950"
-			role="alert"
-			aria-live="assertive"
+			class="card mt-4 border-amber-300/50 bg-amber-50/40 dark:border-amber-800/40 dark:bg-amber-950/20"
+			role="status"
+			aria-live="polite"
 		>
-			<h2 class="font-display text-lg font-bold text-red-900 dark:text-red-100">
+			<h2 class="font-display text-lg font-bold text-amber-900 dark:text-amber-200">
 				{$_('orderbook.error_title')}
 			</h2>
-			<p class="mt-2 text-sm text-red-800 dark:text-red-200">
+			<p class="mt-2 text-sm text-ink-700 dark:text-ink-300">
 				{$_('orderbook.error_body')}
 			</p>
-			<p class="mt-1 text-xs text-red-700 dark:text-red-300">
+			<p class="mt-1 text-xs text-ink-500 dark:text-ink-400">
 				{errorMessage}
 			</p>
 			<div class="mt-4">
@@ -1128,6 +1277,28 @@
 				<p class="mt-2 text-ink-600 dark:text-ink-300">
 					{$_('orderbook.empty_body')}
 				</p>
+			</section>
+		{:else if visibleItems.length === 0 && orderDetailsTokens.length > 0}
+			<!-- cp411 — the free-text "Order details" search filtered every
+			     loaded order out. Offer a clear-search escape hatch rather than
+			     an empty list, and echo the query so it's obvious what matched
+			     nothing. -->
+			<section class="card text-center">
+				<h2 class="font-display text-lg font-bold">
+					{$_('orderbook.search_no_results_title')}
+				</h2>
+				<p class="mt-2 text-ink-600 dark:text-ink-300">
+					{$_('orderbook.search_no_results_body', {
+						values: { query: orderDetailsQuery.trim() }
+					})}
+				</p>
+				<button
+					type="button"
+					onclick={() => (orderDetailsQuery = '')}
+					class="mt-4 rounded-xl border border-ink-300 px-4 py-2 text-sm font-semibold hover:border-morphit-emerald hover:text-morphit-emerald dark:border-ink-700"
+				>
+					{$_('orderbook.search_clear')}
+				</button>
 			</section>
 		{:else if visibleItems.length === 0 && hiddenInView > 0}
 			<!-- Every item in the fetched page is from an account the
@@ -1220,6 +1391,7 @@
 						blocked={accountIsBlocked}
 						onToggleHide={() => (accountIsHidden ? unhideAccount(o.account) : hideAccount(o.account))}
 						onMessageClick={() => void recordOrderView(o.account, o.permlink)}
+						highlightTokens={orderDetailsTokens}
 						class="animate-fade-up"
 					/>
 				{/each}

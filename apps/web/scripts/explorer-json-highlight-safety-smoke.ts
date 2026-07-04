@@ -17,7 +17,7 @@
  *   4. benign tokens get the right classes (key / string / number / bool / null).
  */
 
-import { highlightJsonToHtml } from '../src/lib/explorer/jsonHighlight.ts';
+import { highlightJsonToHtml, expandNestedJsonStrings } from '../src/lib/explorer/jsonHighlight.ts';
 
 let failures = 0;
 let scenarios = 0;
@@ -107,6 +107,55 @@ scenario('benign tokens get the right classes', () => {
 	assert(html.includes('<span class="json-num">7</span>'), 'number class');
 	assert(html.includes('<span class="json-bool">true</span>'), 'bool class');
 	assert(html.includes('<span class="json-null">null</span>'), 'null class');
+});
+
+// ── expandNestedJsonStrings (cp411): the tx op view parses JSON-in-strings
+//    (e.g. a custom_json `json` field) before pretty-printing so nested keys
+//    indent instead of showing one escaped line. Pin: it expands objects/arrays,
+//    leaves ordinary/numeric strings alone, is bounded, and stays SAFE when its
+//    output is fed back through the highlighter. ────────────────────────────
+scenario("custom_json 'json' field expands into an indented object", () => {
+	const op = {
+		id: 'morphit_read_v1',
+		json: '{"v":1,"peer":"kentest2","last_read_at":"2026-07-03T23:28:55.291Z","ts":1783121335}'
+	};
+	const out = JSON.stringify(expandNestedJsonStrings(op), null, 2);
+	assert(/"json": \{/.test(out), 'json field should become a nested object');
+	assert(/"peer": "kentest2"/.test(out), 'nested keys should be on their own lines');
+	// The escaped one-liner must be gone.
+	assert(!out.includes('\\"peer\\"'), 'nested JSON should no longer be an escaped string');
+});
+
+scenario('plain + numeric strings are NOT retyped; valid array string expands', () => {
+	const v = expandNestedJsonStrings({
+		memo: 'orange trees for sale',
+		num: '42',
+		arr: '[1,2,3]',
+		notjson: '{oops'
+	}) as Record<string, unknown>;
+	assert(v.memo === 'orange trees for sale', 'memo stays a string');
+	assert(v.num === '42', 'numeric string stays a string');
+	assert(Array.isArray(v.arr), 'valid array-string expands to an array');
+	assert(v.notjson === '{oops', 'invalid JSON stays the original string');
+});
+
+scenario('expander output stays safe through the highlighter (no raw <script>)', () => {
+	const evil = { json: '{"x":"<script>alert(1)</script>"}' };
+	const html = highlightJsonToHtml(JSON.stringify(expandNestedJsonStrings(evil), null, 2));
+	assertNoRawHtml(stripAllowedSpans(html), 'expanded-then-highlighted evil op');
+});
+
+scenario('deeply nested input is depth-bounded (no throw/hang)', () => {
+	// Nest well beyond the depth cap (8). Each level re-stringifies the prior,
+	// so size grows ~2x/level — keep it modest (12) to stay under V8's max
+	// string length while still exercising the cap.
+	let s: unknown = { leaf: 1 };
+	for (let i = 0; i < 12; i++) s = { inner: JSON.stringify(s) };
+	// Must return without throwing; layers past the cap remain strings.
+	const out = JSON.stringify(expandNestedJsonStrings(s), null, 2);
+	assert(typeof out === 'string' && out.length > 0, 'expander should return a string');
+	// Past the depth cap, at least one inner layer is still an escaped string.
+	assert(out.includes('\\"inner\\"'), 'a layer past the cap should stay an escaped string');
 });
 
 console.log(`\n${'─'.repeat(56)}`);

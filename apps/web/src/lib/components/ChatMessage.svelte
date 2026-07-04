@@ -46,7 +46,8 @@
 		daiExplorerUrl,
 		usdtExplorerUrls,
 		usdcExplorerUrls,
-		daiExplorerUrls
+		daiExplorerUrls,
+		blurtWalletExplorerFallbackUrl
 	} from '$lib/explorer/urls';
 	import ExplorerLink from '$lib/components/ExplorerLink.svelte';
 	import { isUsdtNetwork, isUsdcNetwork, isDaiNetwork } from '$lib/assets/networks';
@@ -1137,6 +1138,28 @@
 							</code>
 							{#if explorerLinksForTxid(p.method, p.txid, p.network).length > 0}
 								<ExplorerLink urls={explorerLinksForTxid(p.method, p.txid, p.network)} />
+							{/if}
+							{#if p.method === 'blurt'}
+								{@const verifyUrl = blurtWalletExplorerFallbackUrl('tx', p.txid)}
+								{#if verifyUrl}
+									<!-- cp410 — independent "Verify" link. The verification
+									     badge above is computed via the operator's indexer;
+									     this opens an INDEPENDENT third-party Blurt explorer
+									     so a cautious seller can confirm the payment landed
+									     WITHOUT trusting their instance operator. Opening it
+									     is a deliberate one-off action (it reveals the user's
+									     IP to that explorer), which is why it's an opt-in
+									     link rather than an automatic check. -->
+									<a
+										href={verifyUrl}
+										target="_blank"
+										rel="noopener noreferrer"
+										class="inline-flex w-fit items-center gap-1 text-xs font-semibold text-morphit-emerald hover:underline"
+									>
+										<span aria-hidden="true">🔎</span>
+										{$_('chat.funds_sent.verify_independently')}
+									</a>
+								{/if}
 							{/if}
 						</div>
 						<button

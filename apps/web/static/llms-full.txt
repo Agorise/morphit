@@ -1114,13 +1114,13 @@ The registration op is signed by your posting key, so only you control your tag.
 
 **FAQ key:** `operator_payouts_timing`
 
-Effectively immediately, per attribution. When an order's Blurt listing fee is verified, the same indexer transaction that records the attribution enqueues your 90% share as a pending transfer. The relay's drainer picks it up on its next cycle (~a few seconds) and broadcasts a `transfer` op to your operator account. Total wall-clock from the user's "Post" click to Blurt landing in your wallet is typically 10-15 seconds.
+Immediately — in the very transaction the user pays. Each Blurt listing fee is split at payment time: the user's fee transaction sends 90% straight to your fees account and 10% to the Morphit treasury, in the same transaction. Your share lands in one Blurt block (~3 seconds), with no forwarding step and nobody who has to pass it along to you.
 
-There is no batching, no weekly payout cycle, no "minimum threshold to withdraw." Each verified Blurt-paid order produces its own payout transfer.
+There is no batching, no weekly payout cycle, no "minimum threshold to withdraw," and no relay in the middle. Each Blurt-paid order pays your share directly, on chain.
 
-**Important: operators earn from Blurt-paid fees only.** BTC- and XMR-paid listing fees go 100% to the Morphit treasury (`@morphit-fees`) — see the "How do operators earn?" entry for the full rationale of why the Blurt split is 90/10 (heavily operator-favored) while the BTC/XMR path is 100/0 (treasury-only). In short: Blurt splits atomically on-chain, BTC/XMR would require off-chain custodial bookkeeping that breaks Morphit's non-custodial design.
+**Important: operators earn from Blurt-paid fees only.** BTC- and XMR-paid listing fees go 100% to the Morphit treasury (`@morphit-fees`) — see the "How do operators earn?" entry for the full rationale of why the Blurt split is 90/10 (heavily operator-favored) while the BTC/XMR path is 100/0 (treasury-only). In short: a Blurt payment can carry the split on-chain in a single transaction, while BTC/XMR would require off-chain custodial bookkeeping that breaks Morphit's non-custodial design.
 
-This is one of the clearest non-custodial advantages over traditional exchange partnerships. You never wait for a "payout schedule," and Morphit the project never holds your earnings at any point — it's indexer-and-relay-to-you, deterministic, no human involvement, fully auditable from chain history.
+This is one of the clearest non-custodial advantages over traditional exchange partnerships. You never wait for a "payout schedule," and Morphit the project never holds your earnings at any point — the user pays you directly on chain, deterministically, with no human involvement, fully auditable from chain history.
 
 ---
 

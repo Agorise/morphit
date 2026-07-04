@@ -18,6 +18,50 @@ commit.
 
 ---
 
+## Canonical money-flow policy (the forever rule)
+
+This is the authoritative statement of **where listing-fee money
+goes**.  Everything else in this document is mechanism; this
+section is policy.  If mechanism and policy ever disagree, policy
+wins and the mechanism is the bug.
+
+**BLURT-paid listing fees:**
+
+- On the **canonical instance** (morphit.io, using the
+  `@morphit-relay` and `@morphit-fees` accounts): the canonical
+  project receives **100%** of the BLURT fees paid on that
+  instance.
+- On a **federation instance**: the **federation owner receives
+  90%** of the BLURT fees paid on their instance — into the Blurt
+  account they configure (`MORPHIT_INDEXER_FEE_RECIPIENT`) — and
+  the **canonical `@morphit-fees` receives the remaining 10%**.
+- Federation owners can **set and edit** their fees account easily:
+  via `morphit-ops edit` → **Fees account**, or by editing
+  `MORPHIT_INDEXER_FEE_RECIPIENT` in the env file directly.
+- If a federation owner sets an **invalid** Blurt account name, or
+  **removes** it entirely, then **100% of that instance's BLURT
+  fees fall back to the canonical fees account** (currently
+  `@morphit-fees`).
+
+The canonical project must **never lose its 10%** of federation
+BLURT fees, and a federation instance must **not** be able to keep
+that 10%.  (In an open-source federated system the default honest
+code enforces this; a hostile fork that rewrites the split is
+outside what any code can prevent — but such a fork is no longer
+running Morphit.)
+
+**BTC- and XMR-paid listing fees:**
+
+- **100%** of *all* Bitcoin and Monero listing fees, from **every
+  instance worldwide**, flow to the **canonical BTC/XMR accounts**.
+  No federation split, no operator share.
+
+**Future:** the canonical BTC/XMR/BLURT fee-receiving addresses
+will be pinned on-chain (extending the release-anchor pattern) so
+anyone can verify them independently.
+
+---
+
 ## Money INTO the operator (income)
 
 These are the things users pay that flow into the operator's
@@ -83,70 +127,73 @@ fee-recipient account.
 
 ---
 
-## How listing fees split: operator vs treasury
+## How listing fees split: owner vs canonical treasury
 
-When a user posts an order through an operator-branded
-frontend (the post-form sends the operator's tag in the order
-op's `operator_tag` field), the indexer attributes the listing
-fee and splits it asymmetrically.
+The BLURT fee is split **at payment time**, inside the very
+transaction that carries the order op. There is no separate
+"collect then forward" step.
 
-### BLURT-paid listing fees: 90% to operator, 10% to treasury
+### BLURT-paid listing fees: 90% to the instance owner, 10% to the canonical treasury
 
-- **Operator: 90%** of the BLURT fee (immediate per-order
-  payout — see "Payout mechanics" below).
-- **Treasury: 10%** retained to fund the ongoing development and
-  maintenance of the Morphit software itself.  (Welcome bonuses,
+- The user's fee transaction carries **two transfers**: 90% to the
+  instance's configured fee recipient (the owner's account,
+  `MORPHIT_INDEXER_FEE_RECIPIENT`) and 10% to the canonical
+  treasury (`@morphit-fees`). Both are signed by the same active
+  authority in the one transaction.
+- On the **canonical instance** (or when a federation owner's
+  account is blank/invalid and falls back to canonical), both
+  halves are the same account, so it collapses to a **single 100%
+  transfer** to `@morphit-fees`.
+- The canonical **10%** funds the ongoing development and
+  maintenance of the Morphit software itself. (Welcome bonuses,
   loyalty delegations, and account-creation costs are NOT paid by
   the treasury — each operator funds those from their own relay
   account; see "Money OUT from the operator" below.)
-- Source: `apps/indexer/src/indexer/operatorEarnings.ts`
-  `OPERATOR_BLURT_SPLIT_PERCENT = 90`
-- Computed in milli-BLURT integer arithmetic with floor
-  rounding so the operator never receives more than their
-  exact share — sub-precision residuals (≤0.001 BLURT) flow
-  to the treasury.
+- The split math is the shared `splitListingFeeBlurt`
+  (`@morphit/asset-registry`), imported by BOTH the frontend that
+  builds the fee transaction (`feeTransfersFor` in
+  `apps/web/src/lib/orders/fee.ts`) and the indexer that verifies
+  it (`sumFeeTransfers` / `canonicalShareOk` in
+  `apps/indexer/src/indexer/fee.ts`), so the two can never drift.
+  Shares are computed in integer milliBLURT and always sum back to
+  the exact total.
 
-### BTC- and XMR-paid listing fees: 100% to treasury, 0% to operator
+### BTC- and XMR-paid listing fees: 100% to the canonical treasury, from every instance
 
-- The Blurt chain's payout mechanism splits BLURT atomically
-  per-receipt. BTC/XMR fees land in cold-stored Morphit-
-  controlled wallets, off the BLURT chain. Splitting BTC/XMR
-  per-receipt would require a custodial off-chain bookkeeper
-  (defeats the non-custodial design) or batch-and-convert
-  (introduces exchange-rate risk and operational complexity).
-- The aggressively generous 90/10 BLURT split is the
-  compensating mechanism — operators whose users mostly pay
-  in BLURT (the loyalty-milestone-rewarded path) earn close
-  to the full fee value.
-- Source: `apps/indexer/src/indexer/handlers/order.ts` calls
-  the attribution module ONLY from the BLURT-verified fee
-  branch.
+- BTC/XMR fees land in cold-stored, canonical Morphit-controlled
+  wallets, off the BLURT chain, and do NOT split — 100% goes to the
+  canonical BTC/XMR accounts from every instance worldwide.
+  Splitting them per-receipt would require a custodial off-chain
+  bookkeeper (defeats the non-custodial design) or batch-and-convert
+  (introduces exchange-rate risk and complexity).
+- The generous 90/10 BLURT split is the compensating mechanism —
+  operators whose users mostly pay in BLURT earn close to the full
+  fee value.
+- Source: `apps/indexer/src/indexer/handlers/order.ts` verifies the
+  BLURT split; the BTC/XMR fee paths verify a single 100%-to-canonical
+  transfer.
 
-### Payout mechanics — immediate, not periodic
+### Delivery mechanics — direct, at payment
 
-Per-order, in the same transaction that the indexer applies
-the order op:
+Because the split happens in the user's own fee transaction, the
+owner's 90% and the canonical 10% both land **immediately**, with
+no relay forwarding and nobody trusted to remit a share afterward.
+Total latency from the user clicking "Post" to BLURT landing in the
+owner's account is one Blurt block (~3 seconds).
 
-1. Insert audit row in `operator_attribution_events` (UNIQUE
-   on `trx_id` rejects replays).
-2. Queue a `relay_pending_transfers` row with the operator's
-   90% share. Reason field embeds the originating `trx_id`
-   for traceability.
-3. Insert audit row in `operator_payouts` linking attribution
-   event ↔ relay row.
-4. UPSERT `operator_earnings` with running totals.
+Per-order, in the same transaction that applies the order op, the
+indexer also records **earnings attribution** for the operator
+dashboard (audit only — the money already moved):
 
-The relay drainer (already running for welcome bonuses) picks
-up the queued row on its next cycle (~5-10 seconds) and
-broadcasts a `transfer` op from `morphit-relay` to the
-operator's account. Total latency from user clicking "Post"
-to BLURT landing in the operator's wallet: typically 10-15
-seconds.
+1. Insert an audit row in `operator_attribution_events` (UNIQUE on
+   `trx_id` rejects replays), recording the fee, the owner's 90%
+   share, and the canonical 10% share.
+2. UPSERT `operator_earnings` running totals
+   (`cumulative_blurt_earned`, `total_orders_attributed`).
 
-This works because Blurt has 3-second blocks and effectively
-no per-transfer fee (mana-based). Periodic batching would
-delay operator gratification by up to a week without any
-real cost saving.
+No `relay_pending_transfers` row and no `operator_payouts` row are
+written for the fee — the operator was already paid by the split.
+(The relay still handles welcome bonuses + loyalty, unchanged.)
 
 ### Auditing per-operator earnings
 
@@ -154,20 +201,20 @@ real cost saving.
 GET /v1/operators/:tag
 ```
 
-Returns `cumulative_blurt_earned`, `lifetime_paid_blurt`,
-`total_orders_attributed`, `last_payout_at`, and
-`last_payout_blurt`. Per-attribution detail is in
-`operator_attribution_events`; per-payout detail in
-`operator_payouts`.
+Returns `cumulative_blurt_earned` and `total_orders_attributed`.
+Per-order earnings detail is in `operator_attribution_events`.
 
 ### What if the configured operator_tag doesn't match a
 registered operator?
 
-Silent no-op. Order goes through, fee transfers to treasury
-in full, no attribution credited. This is the right failure
-mode: a typo or unregistered tag never blocks order posting,
-just forfeits the operator share. Operators should verify
-their `MORPHIT_INSTANCE_OPERATOR_TAG` matches their on-chain
+The fee **still splits** to the instance's fee recipient (90%) and
+the canonical treasury (10%) — the split is driven by the
+instance's configured `MORPHIT_INDEXER_FEE_RECIPIENT`, not by the
+tag. The `operator_tag` only drives the earnings-dashboard
+attribution, which is silently skipped for an unknown tag. A typo
+or unregistered tag never blocks order posting and never misroutes
+the money; it just omits the dashboard credit. Operators should
+verify their `MORPHIT_INSTANCE_OPERATOR_TAG` matches their on-chain
 registration after first config.
 
 ---

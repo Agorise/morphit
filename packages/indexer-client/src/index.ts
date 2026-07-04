@@ -707,6 +707,25 @@ export interface StatsResponse {
 	readonly fiat_currencies: { readonly with_active_orders: number };
 }
 
+/**
+ * GET /v1/rpc-endpoints — per-node health of the canonical Blurt RPC pool the
+ * indexer reads/writes through. Canonical-only (operator-custom upstreams are
+ * filtered out server-side). Kept in sync with the indexer's
+ * buildRpcEndpointsResponse (apps/indexer/src/api/rpcHealth.ts).
+ */
+export interface RpcEndpointHealth {
+	readonly url: string;
+	readonly healthy: boolean;
+	readonly latency_ms: number | null;
+	readonly consecutive_failures: number;
+	readonly cooldown_ms: number;
+}
+export interface RpcEndpointsResponse {
+	readonly network: 'morphit';
+	readonly generated_at: string;
+	readonly endpoints: readonly RpcEndpointHealth[];
+}
+
 // ─── Chat ciphertext ───────────────────────────────────────────────
 
 export interface ChatMessageRecord {

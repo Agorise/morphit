@@ -203,6 +203,75 @@ try {
 	}
 }
 
+// ─── Guard 4 (cp407): fee recipient validates + falls back to the
+//     treasury. Federated operators earn 90% of BLURT fees and set the
+//     account they land in; an empty or malformed value must fall back to
+//     @morphit-fees (NOT crash boot, NOT route fees to a non-account) and
+//     /v1/instance then advertises the RESOLVED account so the frontend pays
+//     the same place the indexer verifies. ────────────────────────────────
+{
+	const mod = await import('../src/config/index.ts');
+	const resolve = mod.resolveFeeRecipient as (
+		raw: string
+	) => { recipient: string; fellBack: boolean };
+	const TREASURY = 'morphit-fees';
+
+	// Pure resolver: valid stays, empty/garbage falls back.
+	const validOk = resolve('some-operator').recipient === 'some-operator' && !resolve('some-operator').fellBack;
+	validOk
+		? ok('resolveFeeRecipient keeps a valid operator account')
+		: bad('resolveFeeRecipient mangled a valid account', JSON.stringify(resolve('some-operator')));
+
+	const cases: Array<[string, string]> = [
+		['', 'empty'],
+		['   ', 'whitespace'],
+		['UPPER', 'uppercase'],
+		['ab', 'too short'],
+		['a'.repeat(17), 'too long'],
+		['1lead', 'leading digit'],
+		['trailing-', 'trailing punct'],
+		['under_score', 'underscore']
+	];
+	let allFellBack = true;
+	for (const [raw, why] of cases) {
+		const r = resolve(raw);
+		if (!(r.recipient === TREASURY && r.fellBack)) {
+			allFellBack = false;
+			bad(`resolveFeeRecipient did NOT fall back for ${why}`, JSON.stringify(r));
+		}
+	}
+	if (allFellBack) ok('resolveFeeRecipient falls back to @morphit-fees for empty / malformed accounts');
+
+	// loadConfig integration: a garbage env resolves to the treasury (no boot crash).
+	const prior4: Record<string, string | undefined> = {};
+	const set4 = (k: string, v: string) => {
+		prior4[k] = process.env[k];
+		process.env[k] = v;
+	};
+	set4('MORPHIT_INDEXER_DATABASE_URL', 'postgres://u:arealpassword@localhost:5432/morphit_indexer');
+	set4('MORPHIT_INDEXER_RELAY_ACCOUNT', 'tester');
+	set4('MORPHIT_INDEXER_CHAIN_ID', 'cd8d90f29ae273abec3eaa7731e25934c63eb654d55080caff2ebb7f5df6381f');
+	set4('MORPHIT_INDEXER_PUBLIC_ORIGIN', 'https://idx.example.com');
+	set4('MORPHIT_INDEXER_OFFICIAL_POSTING_PUBKEY', 'BLT6CVC6C3PgmMe5xDtxFXJvGHaLnUTtcsK1ghHomDqLPWW7yeMp9');
+	set4('MORPHIT_INDEXER_FEE_RECIPIENT', 'BAD_ACCOUNT!'); // malformed on purpose
+	try {
+		const cfg = mod.loadConfig() as { feeRecipient: string };
+		cfg.feeRecipient === TREASURY
+			? ok('loadConfig resolves a malformed MORPHIT_INDEXER_FEE_RECIPIENT to the treasury (no boot crash)')
+			: bad('loadConfig did not fall back a malformed fee recipient', cfg.feeRecipient);
+	} catch (e) {
+		bad(
+			'loadConfig CRASHED on a malformed fee recipient (must fall back, not throw)',
+			(e instanceof Error ? e.message : String(e)).split('\n')[0]!
+		);
+	} finally {
+		for (const [k, v] of Object.entries(prior4)) {
+			if (v === undefined) delete process.env[k];
+			else process.env[k] = v;
+		}
+	}
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) {
 	console.error('\nindexer-config-boot smoke FAILED');

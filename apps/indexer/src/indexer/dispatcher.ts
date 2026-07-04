@@ -537,8 +537,14 @@ export async function applyBlock(
 	for (const entry of orderedLocated) {
 		const { trxInBlock, opInTrx, trxId, op, siblingOps } = entry;
 
-		// Step 1: extract signer per Morphit's auth policy.
-		const signerResult = extractSigner(op);
+		// Step 1: extract signer per Morphit's auth policy. The three
+		// fee-bearing op types (order-create, feature-bid, stranger-fee) carry
+		// an active-authority fee `transfer` in the SAME tx, and Blurt forbids
+		// mixing posting + active in one tx — so those ops are active-level.
+		// Allow active auth for exactly those; every other op stays posting-only.
+		const feeBearing =
+			op.id === OP_IDS.order || op.id === OP_IDS.featureBid || op.id === OP_IDS.strangerFee;
+		const signerResult = extractSigner(op, feeBearing);
 		if (!signerResult.ok) {
 			await writeEventLog(client, {
 				blockNum,

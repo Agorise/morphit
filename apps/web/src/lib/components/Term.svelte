@@ -267,11 +267,12 @@
 				</span>
 				<a
 					href={lp(`/glossary#${key}`)}
-					class="mt-2 inline-block text-sm font-semibold text-morphit-emerald hover:underline"
+					class="mt-2 inline-block text-sm font-semibold text-morphit-emerald"
 					onfocus={cancelClose}
 					onblur={scheduleClose}
 				>
-					{$_('glossary.tooltip.open_full')} →
+					{$_('glossary.tooltip.open_full')}
+					<span class="nav-arrow nav-arrow-right" aria-hidden="true">⇨</span>
 				</a>
 			</span>
 		{/if}

@@ -66,6 +66,28 @@ check(
 	!priorities.includes('priorities-card-cta-arrow')
 );
 
+// cp411 — no link/button uses a BARE → (U+2192) as its affordance. Such an
+// arrow neither slides nor greens and is the smaller, inconsistent glyph. The
+// affordance idioms: a translated label `{$_(…)}` immediately followed by a
+// trailing →, a label `{…}` ending a line with a bare →, or a → right before a
+// closing </a>/</button>. Plain arrows in prose/diagrams/comments don't match.
+const BARE_ARROW_AFFORDANCE = [/\)\}\s*→/, /\}\s*→\s*$/, /→\s*<\/(?:a|button)>/];
+const bareArrowOffenders: string[] = [];
+for (const f of walkSvelte(SRC)) {
+	readFileSync(f, 'utf-8')
+		.split('\n')
+		.forEach((line, i) => {
+			if (BARE_ARROW_AFFORDANCE.some((re) => re.test(line))) {
+				bareArrowOffenders.push(`${f.replace(SRC, 'src')}:${i + 1}`);
+			}
+		});
+}
+check(
+	'no link/button uses a bare → affordance (use nav-arrow ⇨)',
+	bareArrowOffenders.length === 0,
+	bareArrowOffenders.join(', ')
+);
+
 console.log('');
 if (failures === 0) {
 	console.log(`✓ all ${checks} nav-arrow-consistency scenarios passed`);

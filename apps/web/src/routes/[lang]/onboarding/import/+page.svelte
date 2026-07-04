@@ -762,8 +762,8 @@
 				aria-selected={mode === 'seed'}
 				class="flex-1 rounded-xl px-4 py-3 font-semibold transition active:scale-[0.98] {mode ===
 				'seed'
-					? 'bg-morphit-gradient text-white'
-					: 'bg-ink-100 dark:bg-ink-800'}"
+					? 'bg-morphit-emerald text-ink-950 shadow-sm'
+					: 'bg-ink-100 text-ink-700 hover:bg-morphit-emerald/10 hover:text-morphit-emerald dark:bg-ink-800 dark:text-ink-300 dark:hover:bg-morphit-emerald/10'}"
 				onclick={() => (mode = 'seed')}
 			>
 				{$_('onboarding.import.seed_tab_label')}
@@ -774,8 +774,8 @@
 				aria-selected={mode === 'keyfile'}
 				class="flex-1 rounded-xl px-4 py-3 font-semibold transition active:scale-[0.98] {mode ===
 				'keyfile'
-					? 'bg-morphit-gradient text-white'
-					: 'bg-ink-100 dark:bg-ink-800'}"
+					? 'bg-morphit-emerald text-ink-950 shadow-sm'
+					: 'bg-ink-100 text-ink-700 hover:bg-morphit-emerald/10 hover:text-morphit-emerald dark:bg-ink-800 dark:text-ink-300 dark:hover:bg-morphit-emerald/10'}"
 				onclick={() => (mode = 'keyfile')}
 			>
 				{$_('onboarding.import.keyfile_tab_label')}
@@ -786,8 +786,8 @@
 				aria-selected={mode === 'posting-only'}
 				class="flex-1 rounded-xl px-4 py-3 font-semibold transition active:scale-[0.98] {mode ===
 				'posting-only'
-					? 'bg-morphit-gradient text-white'
-					: 'bg-ink-100 dark:bg-ink-800'}"
+					? 'bg-morphit-emerald text-ink-950 shadow-sm'
+					: 'bg-ink-100 text-ink-700 hover:bg-morphit-emerald/10 hover:text-morphit-emerald dark:bg-ink-800 dark:text-ink-300 dark:hover:bg-morphit-emerald/10'}"
 				onclick={() => (mode = 'posting-only')}
 			>
 				{$_('onboarding.import.posting_only.tab_label')}

@@ -78,6 +78,35 @@ describe('extractSigner', () => {
 		expect(r.ok).toBe(false);
 		if (!r.ok) expect(r.reason).toBe('missing_required_auths_field');
 	});
+
+	// cp407 — fee-bearing ops (order-create, feature-bid, stranger-fee) are
+	// active-level because they carry the fee transfer in the same tx. The
+	// dispatcher opts those in via allowActiveAuth=true.
+	it('accepts an active-level op when allowActiveAuth is true', () => {
+		const op = makeOp({ required_auths: ['alice'], required_posting_auths: [] });
+		const r = extractSigner(op, true);
+		expect(r.ok).toBe(true);
+		if (r.ok) expect(r.signer).toBe('alice');
+	});
+
+	it('still rejects mixed active+posting even when allowActiveAuth is true', () => {
+		const op = makeOp({ required_auths: ['alice'], required_posting_auths: ['alice'] });
+		const r = extractSigner(op, true);
+		expect(r).toEqual({ ok: false, reason: 'active_auth_not_allowed' });
+	});
+
+	it('still rejects multiple active auths even when allowActiveAuth is true', () => {
+		const op = makeOp({ required_auths: ['alice', 'bob'], required_posting_auths: [] });
+		const r = extractSigner(op, true);
+		expect(r).toEqual({ ok: false, reason: 'active_auth_not_allowed' });
+	});
+
+	it('allowActiveAuth does not change the posting-auth path', () => {
+		const op = makeOp({ required_posting_auths: ['alice'] });
+		const r = extractSigner(op, true);
+		expect(r.ok).toBe(true);
+		if (r.ok) expect(r.signer).toBe('alice');
+	});
 });
 
 describe('resolveSignerPostingPubkey', () => {

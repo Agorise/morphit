@@ -1,36 +1,28 @@
 /**
- * Operator-earnings attribution + immediate payout — tsx
- * smoke runner.
+ * Operator-earnings attribution (audit) — tsx smoke runner.
  *
- * Coverage focus is the REVISIT-LIST item 5 attribution +
- * immediate-payout pipeline.  Exercises:
+ * cp408 — the operator's 90% is now paid DIRECTLY at payment time by the fee
+ * split (see feeTransfersFor / sumFeeTransfers). This module no longer queues a
+ * relay payout; it only records attribution + earnings for the dashboard. This
+ * smoke covers:
  *
- *   - Pure share-computation (computeOperatorShareBlurt)
- *     including 3-decimal floor-rounding.
+ *   - Pure share-computation (computeOperatorShareBlurt), which now delegates to
+ *     the same splitListingFeeBlurt the payment uses, so recorded earnings match
+ *     what the operator was actually paid.
  *   - Pure tag-field validation (validateOperatorTagField).
- *   - End-to-end attributeBlurtFeeToOperator against a mock
- *     PoolClient covering every AttributionResult branch
- *     AND verifying immediate-payout side effects:
- *       • Successful attribution queues 1 relay transfer +
- *         1 operator_payouts audit row + 1 operator_earnings
- *         UPSERT.
- *       • Sub-precision share (rounds to 0) → attribution
- *         event recorded but NO relay queue (avoid
- *         dust-transfer mana waste).
- *       • Replay → ONE attribution event row total, NO
- *         downstream writes on the second attempt.
+ *   - End-to-end attributeBlurtFeeToOperator against a mock PoolClient covering
+ *     every AttributionResult branch AND verifying the audit-only side effects:
+ *       • Successful attribution → 1 operator_attribution_events INSERT +
+ *         1 operator_earnings UPSERT. NO relay queue, NO operator_payouts.
+ *       • Replay (trx_id UNIQUE 23505) → duplicate_attribution, NO earnings
+ *         upsert on the second attempt.
  *
  * Black-hat scenarios under test:
- *
  *   - Tag forging → tag_unknown, no DB writes
  *   - Inactive operator → tag_unknown via WHERE is_active=TRUE
- *   - Replay (UNIQUE 23505) → duplicate_attribution, NO
- *     downstream writes
- *   - Malformed tags (length, charset) → tag_malformed before
- *     any SQL fires
- *   - Missing tag → no_tag (no DB writes)
- *   - Sub-BLURT-precision rounding → 3-decimal output, no
- *     float drift, no over-credit
+ *   - Replay (UNIQUE 23505) → duplicate_attribution, NO downstream writes
+ *   - Malformed / missing tags → tag_malformed / no_tag before any SQL
+ *   - Sub-BLURT-precision rounding → 3-decimal output, no float drift
  *
  * Usage:
  *   tsx apps/indexer/scripts/operator-earnings-smoke.ts
@@ -76,39 +68,42 @@ const BLOCK_NUM = 12_345;
 const BLOCK_TIME = new Date('2026-05-02T12:00:00Z');
 
 async function run(): Promise<void> {
-	console.log('operator-earnings + immediate-payout smoke');
+	console.log('operator-earnings attribution (audit-only) smoke');
 	console.log(
 		`  (split policy: ${OPERATOR_BLURT_SPLIT_PERCENT}% to operator, ${
 			100 - OPERATOR_BLURT_SPLIT_PERCENT
-		}% to treasury)`
+		}% to treasury — both delivered at payment time by the fee split)`
 	);
 
 	// ─── computeOperatorShareBlurt ────────────────────────────────
+	// Delegates to splitListingFeeBlurt: treasury = round(10% of total) in
+	// integer milliBLURT, operator = remainder — so shares always sum to total.
 
-	await scenario('share: 100 BLURT @ 90% → 90 / 10', () => {
+	await scenario('share: 100 BLURT → 90 / 10', () => {
 		const r = computeOperatorShareBlurt(100);
 		assertEqual(r, { operatorShareBlurt: '90.000', treasuryShareBlurt: '10.000' }, 'shares');
 	});
 
-	await scenario('share: 60 BLURT @ 90% → 54 / 6', () => {
+	await scenario('share: 60 BLURT → 54 / 6', () => {
 		const r = computeOperatorShareBlurt(60);
 		assertEqual(r, { operatorShareBlurt: '54.000', treasuryShareBlurt: '6.000' }, 'shares');
 	});
 
-	await scenario('share: 0.125 BLURT @ 90% → 0.112 / 0.013 (half-down to 3 decimals)', () => {
+	await scenario('share: 0.125 BLURT → 0.112 / 0.013 (round to milliBLURT)', () => {
 		const r = computeOperatorShareBlurt(0.125);
 		assertEqual(r, { operatorShareBlurt: '0.112', treasuryShareBlurt: '0.013' }, 'shares');
 	});
 
-	await scenario(
-		'share: tiny fractional fee — floor avoids over-credit (sub-precision dust)',
-		() => {
-			// 0.001 BLURT × 90 / 100 = 0.0009 → floor(0.9) = 0 milli-BLURT.
-			// Treasury keeps it.  No relay queue at this level.
-			const r = computeOperatorShareBlurt(0.001);
-			assertEqual(r, { operatorShareBlurt: '0.000', treasuryShareBlurt: '0.001' }, 'shares');
+	await scenario('share: shares always sum exactly to the fee total', () => {
+		for (const fee of [60, 75, 100, 0.125, 123.456, 42.001]) {
+			const r = computeOperatorShareBlurt(fee);
+			const sum = Number(r.operatorShareBlurt) + Number(r.treasuryShareBlurt);
+			// The fee itself is milliBLURT-rounded in the split; compare at 3dp.
+			if (Math.round(sum * 1000) !== Math.round(fee * 1000)) {
+				throw new Error(`fee ${fee}: shares ${r.operatorShareBlurt}+${r.treasuryShareBlurt} != total`);
+			}
 		}
-	);
+	});
 
 	await scenario('share: rejects negative fee', () => {
 		try {
@@ -175,7 +170,7 @@ async function run(): Promise<void> {
 		assertEqual(validateOperatorTagField('a.b_c-d.0'), { tag: 'a.b_c-d.0' }, 'r');
 	});
 
-	// ─── attributeBlurtFeeToOperator: end-to-end side effects ────
+	// ─── attributeBlurtFeeToOperator: audit-only side effects ─────
 
 	const baseArgs = {
 		orderAccount: 'bob',
@@ -194,25 +189,9 @@ async function run(): Promise<void> {
 		};
 	}
 
-	function expectInsertAttributionReturning(id: string): QueryExpectation {
+	function expectInsertAttribution(): QueryExpectation {
 		return {
 			match: 'INSERT INTO operator_attribution_events',
-			rows: [{ id }],
-			rowCount: 1
-		};
-	}
-
-	function expectInsertRelayReturning(id: string): QueryExpectation {
-		return {
-			match: 'INSERT INTO relay_pending_transfers',
-			rows: [{ id }],
-			rowCount: 1
-		};
-	}
-
-	function expectInsertPayout(): QueryExpectation {
-		return {
-			match: 'INSERT INTO operator_payouts',
 			rows: [],
 			rowCount: 1
 		};
@@ -275,85 +254,48 @@ async function run(): Promise<void> {
 	});
 
 	await scenario(
-		'attribute: known active operator, fee 60 → attributed + payout queued',
+		'attribute: known active operator, fee 60 → attributed (audit + earnings, NO relay queue)',
 		async () => {
 			const mock = makeMockClient([
 				expectLookup([{ account: 'alice' }]),
-				expectInsertAttributionReturning('100'),
-				expectInsertRelayReturning('500'),
-				expectInsertPayout(),
+				expectInsertAttribution(),
 				expectUpsertEarnings()
 			]);
 			const r = await attributeBlurtFeeToOperator({
 				client: mock.client,
 				operatorTagRaw: 'alice',
 				...baseArgs,
-			instanceOperatorTag: 'alice'
+				instanceOperatorTag: 'alice'
 			});
 			assertEqual(
 				r,
 				{
 					kind: 'attributed',
 					operatorAccount: 'alice',
-					operatorShareBlurt: 54,
-					payoutQueued: true
-				},
-				'result'
-			);
-			assertEqual(
-				mock.queries.length,
-				5,
-				'lookup + attribution + relay queue + payout audit + earnings upsert'
-			);
-		}
-	);
-
-	await scenario(
-		'attribute: sub-precision share (0.001 BLURT fee) → attributed but NO relay queue',
-		async () => {
-			// 0.001 BLURT × 90% = 0.0009 → floors to 0 milli-BLURT.
-			// We still record the attribution event for audit
-			// completeness, AND update operator_earnings with 0
-			// share + 1 to total_orders_attributed.  But we DON'T
-			// queue a relay transfer for a 0-amount payment.
-			const mock = makeMockClient([
-				expectLookup([{ account: 'alice' }]),
-				expectInsertAttributionReturning('101'),
-				// NO relay queue, NO payout audit row
-				expectUpsertEarnings()
-			]);
-			const r = await attributeBlurtFeeToOperator({
-				client: mock.client,
-				operatorTagRaw: 'alice',
-				...baseArgs,
-			instanceOperatorTag: 'alice',
-				feeBlurt: 0.001
-			});
-			assertEqual(
-				r,
-				{
-					kind: 'attributed',
-					operatorAccount: 'alice',
-					operatorShareBlurt: 0,
-					payoutQueued: false
+					operatorShareBlurt: 54
 				},
 				'result'
 			);
 			assertEqual(
 				mock.queries.length,
 				3,
-				'lookup + attribution + earnings upsert (NO relay queue)'
+				'lookup + attribution insert + earnings upsert (NO relay queue, NO payout audit)'
 			);
+			// Positively assert the retired writes are absent.
+			for (const q of mock.queries) {
+				if (q.text.includes('relay_pending_transfers') || q.text.includes('operator_payouts')) {
+					throw new Error(`retired payout write present: ${q.text.slice(0, 60)}`);
+				}
+			}
 		}
 	);
 
 	await scenario(
-		'attribute: replay (trx_id UNIQUE violation) → duplicate_attribution, NO downstream writes',
+		'attribute: replay (trx_id UNIQUE violation) → duplicate_attribution, NO earnings upsert',
 		async () => {
-			// CRITICAL: if attribution insert fails with unique
-			// violation, we must NOT proceed to the relay queue
-			// or operator_earnings UPSERT.  Otherwise replays
-			// would queue duplicate transfers.
+			// CRITICAL: if the attribution insert fails with a unique violation, we
+			// must NOT proceed to the operator_earnings UPSERT — otherwise replays
+			// would double-count earnings.
 			const mock = makeMockClient([
 				expectLookup([{ account: 'alice' }]),
 				{
@@ -368,14 +310,10 @@ async function run(): Promise<void> {
 				client: mock.client,
 				operatorTagRaw: 'alice',
 				...baseArgs,
-			instanceOperatorTag: 'alice'
+				instanceOperatorTag: 'alice'
 			});
 			assertEqual(r, { kind: 'duplicate_attribution' }, 'result');
-			assertEqual(
-				mock.queries.length,
-				2,
-				'lookup + failed attribution (NO relay queue, NO upsert)'
-			);
+			assertEqual(mock.queries.length, 2, 'lookup + failed attribution (NO earnings upsert)');
 		}
 	);
 
@@ -392,7 +330,7 @@ async function run(): Promise<void> {
 				client: mock.client,
 				operatorTagRaw: 'alice',
 				...baseArgs,
-			instanceOperatorTag: 'alice'
+				instanceOperatorTag: 'alice'
 			});
 			throw new Error('expected handler to rethrow');
 		} catch (err) {
@@ -407,16 +345,14 @@ async function run(): Promise<void> {
 		async () => {
 			const mock = makeMockClient([
 				expectLookup([{ account: 'alice' }]),
-				expectInsertAttributionReturning('102'),
-				expectInsertRelayReturning('501'),
-				expectInsertPayout(),
+				expectInsertAttribution(),
 				expectUpsertEarnings()
 			]);
 			await attributeBlurtFeeToOperator({
 				client: mock.client,
 				operatorTagRaw: 'alice',
 				...baseArgs,
-			instanceOperatorTag: 'alice'
+				instanceOperatorTag: 'alice'
 			});
 			const lookup = mock.queries[0]!;
 			assertEqual(lookup.params, ['alice'], 'tag is a $1 parameter');
@@ -424,13 +360,10 @@ async function run(): Promise<void> {
 	);
 
 	await scenario('attribute: inactive operator (filter excluded) → tag_unknown', async () => {
-		// Lookup includes WHERE is_active = TRUE.  An inactive
-		// operator's row is filtered out, so the lookup returns
-		// 0 rows — same outward behavior as a non-existent tag.
-		// In the immediate-payout model this means deactivated
-		// operators stop earning new attribution; their PRIOR
-		// earnings are already paid (no pending balance to
-		// strand).
+		// Lookup includes WHERE is_active = TRUE. An inactive operator's row is
+		// filtered out, so the lookup returns 0 rows — same outward behavior as a
+		// non-existent tag. Deactivated operators simply stop earning new
+		// attribution; nothing is stranded (they were paid at source).
 		const mock = makeMockClient([expectLookup([])]);
 		const r = await attributeBlurtFeeToOperator({
 			client: mock.client,
@@ -445,58 +378,22 @@ async function run(): Promise<void> {
 		}
 	});
 
-	await scenario('attribute: relay row reason format includes trx_id (linkability)', async () => {
-		const mock = makeMockClient([
-			expectLookup([{ account: 'alice' }]),
-			expectInsertAttributionReturning('103'),
-			expectInsertRelayReturning('502'),
-			expectInsertPayout(),
-			expectUpsertEarnings()
-		]);
-		await attributeBlurtFeeToOperator({
-			client: mock.client,
-			operatorTagRaw: 'alice',
-			...baseArgs,
-			instanceOperatorTag: 'alice'
-		});
-		// The relay queue insert is at index 2.  Its params
-		// should include the operator-payout reason with the
-		// trx_id embedded — gives operators a way to trace
-		// each transfer back to the originating order op.
-		const relayIns = mock.queries[2]!;
-		const reason = relayIns.params[2];
-		if (typeof reason !== 'string' || !reason.includes(TRX_ID)) {
-			throw new Error(`reason must include trx_id, got: ${reason}`);
-		}
-		if (!reason.startsWith('operator_payout:')) {
-			throw new Error(`reason must start with operator_payout:, got: ${reason}`);
-		}
-	});
-
 	await scenario(
-		'attribute: relay queue uses kind=liquid (BLURT transfer, not vesting)',
+		'attribute: Part-111 gate — op for another instance → attributed_other_instance, NO writes',
 		async () => {
-			const mock = makeMockClient([
-				expectLookup([{ account: 'alice' }]),
-				expectInsertAttributionReturning('104'),
-				expectInsertRelayReturning('503'),
-				expectInsertPayout(),
-				expectUpsertEarnings()
-			]);
-			await attributeBlurtFeeToOperator({
+			const mock = makeMockClient([]);
+			const r = await attributeBlurtFeeToOperator({
 				client: mock.client,
-				operatorTagRaw: 'alice',
+				operatorTagRaw: 'other-community',
 				...baseArgs,
-			instanceOperatorTag: 'alice'
+				instanceOperatorTag: 'alice'
 			});
-			const relayIns = mock.queries[2]!;
-			// kind is hardcoded 'liquid' in the SQL, so verify the
-			// SQL text contains 'liquid'.
-			if (!relayIns.text.includes("'liquid'")) {
-				throw new Error(
-					`relay queue must use kind='liquid' (literal in SQL); got: ${relayIns.text}`
-				);
-			}
+			assertEqual(
+				r,
+				{ kind: 'attributed_other_instance', opTag: 'other-community', instanceTag: 'alice' },
+				'result'
+			);
+			assertEqual(mock.queries.length, 0, 'no DB writes for another instance');
 		}
 	);
 

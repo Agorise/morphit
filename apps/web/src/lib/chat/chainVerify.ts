@@ -68,7 +68,7 @@
  */
 
 import { getBlurtClient } from '$blurt/client';
-import { getRotator } from '$net/endpoints';
+import { chainRelay } from '$net/chainRelay';
 import { OP_IDS } from '$net/config';
 import { verifyChainOpSignature } from './chainOpVerify';
 
@@ -187,7 +187,6 @@ export async function fetchLatestChatIdentityFromChainQuorum(
 	agreeAtLeast = 2,
 	verifySignature = false
 ): Promise<ChainChatIdentity | null> {
-	const rotator = getRotator();
 	const limit = 10000;
 	type HistoryEntry = [
 		number,
@@ -201,88 +200,50 @@ export async function fetchLatestChatIdentityFromChainQuorum(
 			];
 		}
 	];
-	const outcomes = await rotator.callMany<HistoryEntry[]>(
-		'condenser_api.get_account_history',
-		[account, -1, limit],
-		quorumN
-	);
-	const successful = outcomes.filter(
-		(o): o is { url: string; ok: true; result: HistoryEntry[] } => o.ok
-	);
-	if (successful.length < agreeAtLeast) {
-		// Not enough working endpoints for quorum; the user can't
-		// safely accept ANY identity right now.
-		return null;
-	}
-	// Per-endpoint: walk history backwards, find the latest
-	// chat_identity op authored by `account`.  Defensively shape-
-	// check the payload.
-	const perEndpoint: Array<{ url: string; triple: ChainChatIdentity | null }> = successful.map(
-		(o) => {
-			const history = o.result;
-			for (let i = history.length - 1; i >= 0; i--) {
-				const entry = history[i];
-				if (!entry) continue;
-				const op = entry[1];
-				const [opName, opBody] = op.op;
-				if (opName !== 'custom_json') continue;
-				if (opBody.id !== OP_IDS.chatIdentity) continue;
-				const authedBy = [...opBody.required_auths, ...opBody.required_posting_auths];
-				if (!authedBy.includes(account)) continue;
-				try {
-					const payload = JSON.parse(opBody.json);
-					if (!isChatIdentityPayload(payload)) continue;
-					return {
-						url: o.url,
-						triple: {
-							chatPubB64: payload.chat_pub,
-							blockNum: op.block,
-							trxId: op.trx_id
-						}
-					};
-				} catch {
-					continue;
-				}
-			}
-			return { url: o.url, triple: null };
-		}
-	);
-	// Tally agreement by exact (chatPubB64, blockNum, trxId)
-	// equality.  null counts as its own bucket so an endpoint
-	// reporting "no chat_identity op" disagrees with one
-	// reporting a specific op.
-	const tally = new Map<string, { count: number; triple: ChainChatIdentity | null }>();
-	for (const e of perEndpoint) {
-		const key =
-			e.triple === null
-				? '__none__'
-				: `${e.triple.blockNum}:${e.triple.trxId}:${e.triple.chatPubB64}`;
-		const slot = tally.get(key) ?? { count: 0, triple: e.triple };
-		slot.count += 1;
-		tally.set(key, slot);
-	}
-	let bestKey: string | null = null;
-	let bestCount = 0;
-	for (const [k, v] of tally) {
-		if (v.count > bestCount) {
-			bestKey = k;
-			bestCount = v.count;
-		}
-	}
-	if (bestKey === null || bestCount < agreeAtLeast) {
-		// No quorum.  Surface the disagreement to devtools.
+	// cp410 — the browser no longer queries Blurt nodes directly (privacy #1).
+	// History is fetched ONCE through the operator's indexer relay (which reads
+	// its own canonical pool). The old browser-side multi-node quorum collapses
+	// onto the indexer; `quorumN` / `agreeAtLeast` are retained for API
+	// compatibility. `verifySignature` still checks the winning op's signature
+	// locally (below), and the cautious can use the chat UI's block-explorer
+	// "verify" link.
+	let history: HistoryEntry[] | null;
+	try {
+		history = await chainRelay<HistoryEntry[] | null>('get_account_history', [account, -1, limit]);
+	} catch (err) {
 		// eslint-disable-next-line no-console
 		console.warn(
-			`[chainVerify] no quorum for ${account}: ${perEndpoint.length} endpoints reported`,
-			perEndpoint.map((e) => ({
-				url: e.url,
-				key: e.triple === null ? '__none__' : `${e.triple.blockNum}:${e.triple.trxId}`
-			}))
+			`[chainVerify] relay unreachable for ${account} (quorumN=${quorumN}, agreeAtLeast=${agreeAtLeast}): ${err instanceof Error ? err.message : String(err)}`
 		);
 		return null;
 	}
-	const winner = tally.get(bestKey);
-	const triple = winner?.triple ?? null;
+	if (!Array.isArray(history)) return null;
+	// Walk history backwards, find the latest chat_identity op authored by
+	// `account`. Defensively shape-check the payload.
+	let triple: ChainChatIdentity | null = null;
+	for (let i = history.length - 1; i >= 0; i--) {
+		const entry = history[i];
+		if (!entry) continue;
+		const op = entry[1];
+		const [opName, opBody] = op.op;
+		if (opName !== 'custom_json') continue;
+		if (opBody.id !== OP_IDS.chatIdentity) continue;
+		const authedBy = [...opBody.required_auths, ...opBody.required_posting_auths];
+		if (!authedBy.includes(account)) continue;
+		try {
+			const payload = JSON.parse(opBody.json);
+			if (!isChatIdentityPayload(payload)) continue;
+			triple = {
+				chatPubB64: payload.chat_pub,
+				blockNum: op.block,
+				trxId: op.trx_id
+			};
+			break;
+		} catch {
+			continue;
+		}
+	}
+	if (triple === null) return null;
 
 	// S14 — local secp256k1 verification (Audit Part 26).
 	// When verifySignature is true, after the quorum agrees on

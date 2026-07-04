@@ -33,7 +33,7 @@ import { prepareUnsignedOrderWithFee, broadcastSignedTransaction } from '$blurt/
 import type { Transaction, SignedTransaction } from '@beblurt/dblurt';
 import { getUserBlurtAccount, BroadcastError } from '$blurt/ops/profile';
 import { OP_IDS } from '$net/config';
-import { FEE_RECIPIENT, formatBlurtAmount } from '$lib/orders/fee';
+import { FEE_RECIPIENT, feeTransfersFor } from '$lib/orders/fee';
 import type { LiveIdentity } from '$crypto/keygen';
 
 const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
@@ -76,7 +76,11 @@ export async function broadcastStrangerFee(
 	_live: LiveIdentity,
 	signCallback: (tx: Transaction) => SignedTransaction | Promise<SignedTransaction>,
 	recipient: string,
-	amountBlurt: number
+	amountBlurt: number,
+	/** cp407 — operator's BLURT fee-collection account (from
+	 *  `$instance.fee_recipient`); distinct from `recipient` (the chat peer
+	 *  being paid to message). Defaults to the canonical treasury. */
+	feeRecipient: string = FEE_RECIPIENT
 ): Promise<{ block_num: number; trx_id: string }> {
 	const account = getUserBlurtAccount();
 	if (!account) {
@@ -99,12 +103,14 @@ export async function broadcastStrangerFee(
 	};
 
 	// Phase F.5 audit fix (F-18) — three-phase split:
+	// cp408 — fee split at payment time (90% owner / 10% canonical, or a single
+	// 100% transfer when the recipient is canonical).
+	const feeTransfers = feeTransfersFor(amountBlurt, feeRecipient);
 	const unsigned = await prepareUnsignedOrderWithFee(
 		OP_IDS.strangerFee,
 		payload,
 		account,
-		FEE_RECIPIENT,
-		formatBlurtAmount(amountBlurt),
+		feeTransfers,
 		`morphit-stranger:${recipient}`
 	);
 	const signed = await signCallback(unsigned);

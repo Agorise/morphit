@@ -31,6 +31,57 @@ function escapeHtml(s: string): string {
 const TOKEN =
 	/("(?:\\.|[^"\\])*")(\s*:)?|\b(true|false|null)\b|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|([{}[\],])|(\s+)/g;
 
+/**
+ * Recursively expand JSON-in-strings for the explorer's raw-op view. Chain ops
+ * commonly carry a field (e.g. a `custom_json` op's `json`, or a memo) whose
+ * value is itself a JSON document encoded as a STRING —
+ * `"{\"v\":1,\"peer\":\"kentest2\",\"ts\":1783121335}"`. Left as-is,
+ * `JSON.stringify(value, null, 2)` renders that as one long escaped line;
+ * parsing it first lets the pretty-printer indent it like any other nested
+ * object, so the keys line up and read cleanly.
+ *
+ * DISPLAY-ONLY: the raw wire value is the string; this is just a nicer view of
+ * the same data. Only strings that parse to an OBJECT or ARRAY are expanded —
+ * a plain memo, a numeric string like "42", or a bare word is never silently
+ * retyped. Parsing is wrapped in try/catch (non-JSON stays as-is) and recursion
+ * is depth-bounded against pathological / deeply-nested input.
+ *
+ * SAFETY: the result is still fed through `JSON.stringify` + `highlightJsonToHtml`,
+ * which escapes every HTML-special character, so expanding attacker-controlled
+ * JSON introduces no injection surface — it only changes the shape, not the
+ * escaping.
+ */
+export function expandNestedJsonStrings(value: unknown, depth = 0): unknown {
+	if (depth > 8) return value;
+	if (typeof value === 'string') {
+		const t = value.trim();
+		// Cheap pre-check: only attempt a parse if it even looks like an
+		// object/array, so ordinary strings aren't run through JSON.parse.
+		if (t.length >= 2 && (t[0] === '{' || t[0] === '[')) {
+			try {
+				const parsed: unknown = JSON.parse(t);
+				if (parsed !== null && typeof parsed === 'object') {
+					return expandNestedJsonStrings(parsed, depth + 1);
+				}
+			} catch {
+				// Not JSON after all — leave the original string untouched.
+			}
+		}
+		return value;
+	}
+	if (Array.isArray(value)) {
+		return value.map((v) => expandNestedJsonStrings(v, depth + 1));
+	}
+	if (value !== null && typeof value === 'object') {
+		const out: Record<string, unknown> = {};
+		for (const [k, v] of Object.entries(value)) {
+			out[k] = expandNestedJsonStrings(v, depth + 1);
+		}
+		return out;
+	}
+	return value;
+}
+
 export function highlightJsonToHtml(json: string): string {
 	// Fresh lastIndex per call (module-level regex with the `g` flag is
 	// stateful).

@@ -1,9 +1,35 @@
 # ADR-0013 — Third-party node operator incentives
 
-**Status:** Accepted (implemented; pipeline shipped 2026-05-02)
+**Status:** Accepted (implemented; pipeline shipped 2026-05-02).
+**Amended 2026-07-04 (cp408):** payout mechanism changed from
+relay-forwarded to a **payment-time split** — see the amendment
+note directly below.
 **Date:** 2026-04-19 (proposed); 2026-05-06 (status updated, Q1-Q6 resolved)
 **Deciders:** project maintainer, Agorise leadership
 **Related:** ADR-0011 (dynamic fee model), ADR-0010 (key custody)
+
+> **Amendment (2026-07-04, cp408) — payment-time split supersedes
+> the relay-forwarded payout.** The *decision* recorded here stands
+> unchanged: BLURT listing fees are 90% to the instance owner / 10%
+> to the canonical treasury; BTC/XMR fees 100% to the canonical
+> treasury. Only the *delivery mechanism* changed. Originally the
+> fee landed 100% in a treasury and the relay forwarded the
+> operator's 90% (an `operator_payout` `relay_pending_transfers`
+> row + `operator_payouts` audit row). That model only nets
+> correctly when one entity owns both the treasury and the relay
+> (the canonical case), so it misrouted money for independent
+> federation owners. It is replaced by splitting the fee **at
+> payment time**: the user's fee transaction carries a 90% transfer
+> to the instance's fee recipient + a 10% transfer to the canonical
+> treasury (collapsing to a single 100% transfer on the canonical
+> instance / fallback). The owner is paid directly, with no
+> forwarding. `operator_attribution_events` + `operator_earnings`
+> remain as the audit/dashboard; the `operator_payouts` table and
+> the relay payout are retired. See FEES-AND-REWARDS.md "How
+> listing fees split" and `apps/indexer/src/indexer/fee.ts`
+> (`sumFeeTransfers` / `canonicalShareOk`). Sections below that
+> describe "immediate per-attribution payout via the relay" are
+> historical; read them through this amendment.
 
 > Originally a stub with six interdependent UNDECIDED design
 > questions.  All six resolved during Phase 5b implementation;

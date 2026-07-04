@@ -1244,6 +1244,55 @@ export const FEE_REFERENCE_PRICE_USD: Readonly<Record<'blurt' | 'btc' | 'xmr', n
  */
 export const FEE_PRICE_TOLERANCE = 0.15;
 
+/**
+ * Federation revenue split for BLURT-paid listing fees.
+ *
+ * On a FEDERATION instance, the instance owner keeps 90% of each
+ * BLURT listing fee (paid directly into the account they configure)
+ * and the canonical Morphit treasury receives 10%. The split is
+ * performed AT PAYMENT TIME: the user's fee transaction carries two
+ * transfers — 90% to the owner's account, 10% to the canonical
+ * treasury — so no party has to trust another to forward a share
+ * afterward.
+ *
+ * On the CANONICAL instance (or whenever a federation owner hasn't
+ * configured a valid account, so the fee falls back to the canonical
+ * treasury), both halves land in the same account and the split
+ * collapses to a single 100% transfer.
+ *
+ * BTC- and XMR-paid fees do NOT split — 100% always goes to the
+ * canonical treasury, from every instance worldwide.
+ *
+ * Both the frontend (which builds the fee transaction) and the
+ * indexer (which verifies it) import these from here, so the split
+ * math can never drift between the two.
+ */
+export const FEE_TREASURY_SHARE_BLURT = 0.1;
+
+/**
+ * Split a BLURT listing-fee total into the owner's share (90%) and
+ * the canonical treasury's share (10%), each rounded to BLURT's
+ * 3-decimal (milliBLURT) precision. Arithmetic runs in integer
+ * milliBLURT so the two shares ALWAYS sum back to the exact total —
+ * no floating-point drift, no lost or duplicated milliBLURT.
+ *
+ * Pure. Collapse cases (owner === treasury, or a share that rounds
+ * to zero) are the caller's job — see `feeTransfersFor` on the
+ * frontend and the split verification in the indexer's order handler.
+ */
+export function splitListingFeeBlurt(totalBlurt: number): {
+	ownerShareBlurt: number;
+	treasuryShareBlurt: number;
+} {
+	const totalMilli = Math.round(totalBlurt * 1000);
+	const treasuryMilli = Math.round(totalMilli * FEE_TREASURY_SHARE_BLURT);
+	const ownerMilli = totalMilli - treasuryMilli;
+	return {
+		ownerShareBlurt: ownerMilli / 1000,
+		treasuryShareBlurt: treasuryMilli / 1000
+	};
+}
+
 /** Smallest-unit decimals per fee-capable asset (mirrors ASSETS:
  *  BTC 8 satoshi, XMR 12 piconero, BLURT 3 milliBLURT). */
 const FEE_ASSET_DECIMALS: Readonly<Record<'blurt' | 'btc' | 'xmr', number>> = Object.freeze({

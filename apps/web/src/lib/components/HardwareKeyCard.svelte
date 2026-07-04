@@ -310,7 +310,13 @@
 			<p class="mt-2 text-ink-600 dark:text-ink-300">
 				{$_('settings.hardware_key.explain')}
 			</p>
+		</div>
+	</div>
 
+	<!-- cp407 — the enroll / harden / soften forms below sit OUTSIDE the
+	     icon+heading flex row, so their `mx-auto max-w-lg` centres them on
+	     the full card instead of the (icon-offset) heading column. -->
+	<div class="mt-4">
 			<!-- WebHID feature-detect.  Firefox/Safari fall through here. -->
 			{#if !supported}
 				<div
@@ -670,6 +676,5 @@
 					</div>
 				{/if}
 			{/if}
-		</div>
 	</div>
 </section>

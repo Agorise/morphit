@@ -61,24 +61,34 @@ export type SignerRejectReason =
  * Extract the single signer of a custom_json op per Morphit's op
  * policy.
  *
- * Morphit ops (ADR-0001) are always signed with the posting key
- * of exactly one account. This function enforces that invariant.
- * Ops that:
- *   - use required_auths (active-key) instead of posting
- *   - declare multiple required_posting_auths
- *   - declare zero required_posting_auths
- * are rejected. The dispatcher lands them in the event log with
- * status='rejected' + the returned reason.
+ * Morphit ops (ADR-0001) are signed with the POSTING key of exactly
+ * one account — EXCEPT order-create ops paid in BLURT. Those carry an
+ * active-authority `transfer` (the listing fee) in the SAME transaction,
+ * and Blurt (Graphene) forbids mixing posting-level and active-level
+ * operations in one tx (it asserts `required_active.size() == 0` when any
+ * posting op is present). So a BLURT-paid order op must itself be
+ * active-level. `allowActiveAuth` opts INTO accepting that — the
+ * dispatcher passes it only for `OP_IDS.order`; every other op stays
+ * strictly posting-only, so a stray active-level chat/feedback/cancel op
+ * is still rejected as before.
+ *
+ * Ops that: use required_auths (active) when not allowed; declare multiple
+ * signers; mix posting + active; or declare zero signers — are rejected.
+ * The dispatcher lands them in the event log with status='rejected'.
  */
-export function extractSigner(op: CustomJsonOp): SignerResult {
-	if (!Array.isArray(op.required_posting_auths)) {
+export function extractSigner(op: CustomJsonOp, allowActiveAuth = false): SignerResult {
+	if (!Array.isArray(op.required_posting_auths) || !Array.isArray(op.required_auths)) {
 		return { ok: false, reason: 'missing_required_auths_field' };
 	}
 	if (op.required_auths.length > 0) {
-		// Morphit ops are posting-level only. Active-level custom_json
-		// is suspicious — could be an attempt to leverage a hotter key
-		// for something the posting key was sufficient for.
-		return { ok: false, reason: 'active_auth_not_allowed' };
+		// Active-level custom_json. Rejected by default (ADR-0001). Accepted
+		// ONLY for order ops (allowActiveAuth), and only when it's a clean
+		// single-active-signer op with no posting auth mixed in — a mixed op
+		// would itself be chain-invalid, so it never legitimately reaches here.
+		if (!allowActiveAuth || op.required_posting_auths.length > 0 || op.required_auths.length > 1) {
+			return { ok: false, reason: 'active_auth_not_allowed' };
+		}
+		return { ok: true, signer: op.required_auths[0]! };
 	}
 	if (op.required_posting_auths.length === 0) {
 		return { ok: false, reason: 'no_posting_auth' };

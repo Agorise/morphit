@@ -31,6 +31,8 @@
 	import { _ } from 'svelte-i18n';
 	import { runWithActiveKey } from '$crypto/runWithActiveKey';
 	import { broadcastStrangerFee } from '$blurt/ops/strangerFee';
+	import { getInstanceSnapshot } from '$stores/instance';
+	import { resolveFeeRecipient } from '$lib/orders/fee';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
 	import { getStrangerFeeQuote } from '$lib/indexer/client';
 	import { fetchListingFee } from '$lib/orders/listingFee';
@@ -147,7 +149,7 @@
 			): Promise<import('@beblurt/dblurt').SignedTransaction> => {
 				const r = await runWithActiveKey(passwordInput, async (activePriv) => {
 					const { signOrderWithFeeWithKey } = await import('$blurt/sign');
-					return signOrderWithFeeWithKey(unsigned, live.posting.privateKey, activePriv);
+					return signOrderWithFeeWithKey(unsigned, activePriv);
 				});
 				if (!r.ok) {
 					// Surface as throw so the outer catch classifies.
@@ -157,7 +159,13 @@
 				}
 				return r.value;
 			};
-			await broadcastStrangerFee(live, signCallback, peer, priceQuote.price_blurt);
+			await broadcastStrangerFee(
+				live,
+				signCallback,
+				peer,
+				priceQuote.price_blurt,
+				resolveFeeRecipient(getInstanceSnapshot().fee_recipient)
+			);
 			passwordInput = '';
 			onPaid();
 			return;

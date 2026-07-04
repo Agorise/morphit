@@ -80,7 +80,7 @@ const SCENARIOS: readonly Scenario[] = [
 	{
 		name: '6 — composer lays the textarea + Send on ONE row',
 		file: COMPOSER,
-		mustHave: ['<div class="flex items-end gap-2">', 'class="flex-1"']
+		mustHave: ['<div class="flex items-center gap-2">', 'class="flex-1"']
 	},
 	{
 		name: '7 — chat-route loading shell FILLS instead of a fixed viewport height',

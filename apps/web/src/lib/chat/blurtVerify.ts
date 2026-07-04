@@ -107,75 +107,34 @@ async function verifyBlurtTransferUncached(
 		return { kind: 'mismatch', field: 'memo' };
 	}
 
-	// Audit 2026-05 finding 2-8: query multiple RPC endpoints in
-	// parallel and demand quorum agreement before trusting the
-	// transfer details.  A single hostile RPC could otherwise
-	// fabricate a transaction body that satisfies the verifier and
-	// trick the seller into marking a trade paid.
-	const mod = (await import('$blurt/client')) as typeof import('$blurt/client');
-	const { getRotator } = (await import('$net/endpoints')) as typeof import('$net/endpoints');
-	const rotator = getRotator();
+	// cp410 — the browser no longer queries Blurt nodes directly (privacy #1).
+	// The transaction is fetched ONCE through the operator's indexer relay
+	// (POST /v1/chain/condenser), which reads from its own canonical node pool.
+	// This collapses the old browser-side multi-node quorum onto the indexer: a
+	// single hostile PUBLIC node can no longer fabricate a transaction body to
+	// fool the seller, but the seller now trusts their instance operator for
+	// this read. To keep the payment check trustless for the cautious, the chat
+	// UI offers an independent "verify on a block explorer" link alongside the
+	// confirmation (ChatMessage.svelte). See net/chainRelay.ts.
+	const { chainRelay, ChainRelayError } = (await import(
+		'$net/chainRelay'
+	)) as typeof import('$net/chainRelay');
 
-	const QUORUM_N = 3;
-	const AGREE_AT_LEAST = 2;
-	const outcomes = await rotator.callMany<ChainTxResponse>(
-		'condenser_api.get_transaction',
-		[txid],
-		QUORUM_N
-	);
-	const successful = outcomes.filter(
-		(o): o is { url: string; ok: true; result: ChainTxResponse } => o.ok
-	);
-	const failed = outcomes.filter((o): o is { url: string; ok: false; error: Error } => !o.ok);
-	if (successful.length < AGREE_AT_LEAST) {
-		// Not enough endpoints answered.  Distinguish "transaction
-		// definitely not on chain" (every endpoint that DID answer
-		// classified the failure as not_found) from "we couldn't
-		// reach quorum."
-		if (
-			failed.length > 0 &&
-			failed.every((f) => classifyRpcError(f.error.message) === 'not_found')
-		) {
-			return { kind: 'not_found' };
-		}
+	let tx: ChainTxResponse | null;
+	try {
+		tx = await chainRelay<ChainTxResponse | null>('get_transaction', [txid]);
+	} catch (e) {
+		// Couldn't reach the indexer relay (transport / 5xx) — NOT the same as
+		// "transaction definitely not on chain"; the next attempt may succeed.
 		return {
 			kind: 'rpc_error',
-			message: `quorum not reached (${successful.length}/${QUORUM_N} endpoints answered)`
+			message: e instanceof ChainRelayError ? e.message : 'could not reach the chain'
 		};
 	}
-	// Tally agreement on the EXACT transaction body (transfer
-	// list).  We compare the canonical JSON of the transfer ops
-	// only; ref_block_num and other fields can legitimately
-	// differ across RPC views (different forks during reorg).
-	function transfersFingerprint(tx: ChainTxResponse): string {
-		try {
-			const ops = (tx.operations ?? []).filter((op) => op[0] === 'transfer');
-			return JSON.stringify(ops);
-		} catch {
-			return '';
-		}
+	if (!tx || typeof tx !== 'object') {
+		// The relay returns a null result when the chain has no such transaction.
+		return { kind: 'not_found' };
 	}
-	const tally = new Map<string, { count: number; tx: ChainTxResponse }>();
-	for (const o of successful) {
-		const key = transfersFingerprint(o.result);
-		if (key === '') continue;
-		const slot = tally.get(key) ?? { count: 0, tx: o.result };
-		slot.count += 1;
-		tally.set(key, slot);
-	}
-	let bestKey: string | null = null;
-	let bestCount = 0;
-	for (const [k, v] of tally) {
-		if (v.count > bestCount) {
-			bestKey = k;
-			bestCount = v.count;
-		}
-	}
-	if (bestKey === null || bestCount < AGREE_AT_LEAST) {
-		return { kind: 'rpc_error', message: 'endpoints disagreed on transaction body' };
-	}
-	const tx = tally.get(bestKey)!.tx;
-	void mod; // mod kept imported for future fallback to single-call path
 
 	return verifyBlurtTransferAgainstTx(tx, expect);
 }

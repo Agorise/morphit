@@ -1781,10 +1781,11 @@ COMMENT ON COLUMN feedback.has_verified_chat IS
 -- actually queued for transfer (separate from
 -- cumulative_blurt_earned to allow future model divergence).
 --
--- Two append-only audit tables ensure the pipeline is
--- end-to-end auditable: every attribution lands a row in
--- operator_attribution_events; every payout enqueue lands a
--- row in operator_payouts referencing the relay row.
+-- cp408 — the operator's 90% is now paid DIRECTLY at payment
+-- time (the fee split's owner leg), so there is no separate
+-- relay-payout enqueue. One append-only audit table remains:
+-- every attribution lands a row in operator_attribution_events.
+-- (The former operator_payouts table is retired — see below.)
 
 -- ─── 1. operator_attribution_events ────────────────────────────
 -- Append-only: one row per attributed listing fee.
@@ -1824,42 +1825,22 @@ CREATE TABLE IF NOT EXISTS operator_attribution_events (
 CREATE INDEX IF NOT EXISTS operator_attribution_events_operator_idx
     ON operator_attribution_events (operator_account, observed_at DESC);
 
--- ─── 2. operator_payouts ───────────────────────────────────────
--- Append-only: one row per relay-transfer enqueue.  In the
--- immediate-payout model, this is 1:1 with attribution events
--- where operator_share_blurt > 0 (sub-precision events that
--- floor to zero don't queue a transfer — see operatorEarnings.ts).
---
--- Each row references the relay_pending_transfers row that
--- carries the actual broadcast.  The relay drainer fills in
--- broadcast_at / broadcast_trx_id on the relay row; this table
--- is purely the audit trail of payout intent.
---
--- The reference to operator_attribution_events lets us join
--- "which attribution caused this payout" cheaply.
-CREATE TABLE IF NOT EXISTS operator_payouts (
-    id                       BIGSERIAL PRIMARY KEY,
-    operator_account         TEXT NOT NULL
-        REFERENCES operators(account) ON DELETE CASCADE,
-    attribution_event_id     BIGINT NOT NULL
-        REFERENCES operator_attribution_events(id) ON DELETE CASCADE,
-    amount_blurt             NUMERIC NOT NULL CHECK (amount_blurt > 0),
-    relay_pending_transfer_id BIGINT NOT NULL
-        REFERENCES relay_pending_transfers(id) ON DELETE RESTRICT,
-    queued_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (attribution_event_id)
-);
-
-CREATE INDEX IF NOT EXISTS operator_payouts_operator_idx
-    ON operator_payouts (operator_account, queued_at DESC);
+-- ─── 2. operator_payouts: RETIRED (cp408) ─────────────────────
+-- This table recorded one row per relay-transfer enqueue in the
+-- old "fee lands in a treasury, relay forwards the operator's
+-- 90%" model. That model is retired: the operator's 90% is now
+-- paid directly at payment time by the fee split, so no relay
+-- payout is enqueued and nothing writes this table. It is removed
+-- (pre-launch, no migration surface). Per-order earnings history
+-- lives in operator_attribution_events; the running tally lives
+-- in operator_earnings.
 
 -- ─── 3. operator_earnings: add lifetime_paid_blurt ──────────────
--- In the immediate-payout model, cumulative_blurt_earned (from
--- v7) tracks lifetime credit. lifetime_paid_blurt is the
--- mirror: lifetime BLURT actually queued for transfer.
--- They're equal in the current model but separated to allow
--- future model divergence (e.g., if a partial-payout scheme
--- is introduced where credits accumulate before queuing).
+-- cp408 — the operator is paid directly at payment time (the fee
+-- split), so cumulative_blurt_earned (from v7) and
+-- lifetime_paid_blurt are equal: what the operator earned is what
+-- they were paid. The column is kept (separate from
+-- cumulative_blurt_earned) to allow future model divergence.
 ALTER TABLE operator_earnings
     ADD COLUMN IF NOT EXISTS lifetime_paid_blurt NUMERIC NOT NULL DEFAULT 0
         CHECK (lifetime_paid_blurt >= 0);

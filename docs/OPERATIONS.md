@@ -68,7 +68,7 @@ before relying on any of it.**
 25. [Going live — staging procedure + chain-switch](#25-going-live--staging-procedure--chain-switch)
 26. [Release signing (SHA-256 + GPG)](#26-release-signing-sha-256--gpg)
 27. [Fees and rewards reference](#27-fees-and-rewards-reference)
-28. [Operator-payout monitoring](#28-operator-payout-monitoring)
+28. [Operator-earnings monitoring](#28-operator-earnings-monitoring)
 29. [Running a second instance — DO NOT share relay accounts](#29-running-a-second-instance--do-not-share-relay-accounts)
 30. [Postgres provisioning — the password sentinel and the init script](#30-postgres-provisioning--the-password-sentinel-and-the-init-script)
 31. [Daily DB backup automation](#31-daily-db-backup-automation)
@@ -427,6 +427,33 @@ The `@morphit-fees` account (or whatever you set as
 listing fees and **has no signing key on any
 production box** — it's genuinely receive-only.  No
 upfront BLURT funding required.
+
+As a federated operator you **earn 90% of the BLURT
+listing fees** paid on your instance (the remaining 10%
+goes to the canonical project treasury), so this is where
+your revenue lands — set it to an account you control.
+The split happens **at payment time**: each user's fee
+transaction pays 90% straight into this account and 10%
+to the canonical `@morphit-fees`, in the same transaction,
+so your share arrives directly within one Blurt block — no
+forwarding step, nobody to trust to remit it later.  You
+enter the account during `morphit-ops init` (step "Fees
+account") and can change it any time with `morphit-ops
+edit` → **Fees account** (or by editing
+`MORPHIT_INDEXER_FEE_RECIPIENT` directly and restarting
+the indexer).
+
+**Fallback / safety.** If you leave
+`MORPHIT_INDEXER_FEE_RECIPIENT` empty or set it to a
+malformed Blurt account name, the indexer does **not**
+crash — it logs a `fee_recipient_invalid` warning at boot
+and falls back to the canonical `@morphit-fees` treasury.
+The frontend reads the resolved account from
+`/v1/instance`, so it always pays fees to exactly the
+account your indexer verifies against (they can never
+drift apart).  If you see fees you expected arriving at
+`@morphit-fees` instead of your own account, check that
+boot warning — your configured name was rejected.
 
 **However:** the account must exist on chain before any
 listing fees can land in it.  Default
@@ -5234,9 +5261,11 @@ Headline numbers (for context — full breakdown in the doc):
 - **Loyalty:** up to 1,260 BP delegated as cumulative fees
   cross 100/500/2,000/10,000 BLURT thresholds.
 - **Operator earnings:** 90% of BLURT-paid listing fees,
-  immediate per-order payout (FEES-AND-REWARDS.md "How
-  listing fees split" section). Treasury keeps 100% of
-  BTC/XMR-paid fees; the BLURT/treasury asymmetry is
+  delivered **directly at payment time** via the fee split —
+  90% to your fees account, 10% to the canonical treasury, in
+  the user's own fee transaction (FEES-AND-REWARDS.md "How
+  listing fees split" section). The canonical treasury keeps
+  100% of BTC/XMR-paid fees; the BLURT/treasury asymmetry is
   structural, not greed.
 
 The `fee-reward-copy-consistency-smoke` runs in the smoke
@@ -5247,14 +5276,21 @@ the relevant FAQ entries to match.
 
 ---
 
-## 28. Operator-payout monitoring
+## 28. Operator-earnings monitoring
 
-If you've registered as an operator and wired
-`MORPHIT_INSTANCE_OPERATOR_TAG` (see RUN-A-MORPHIT-NODE.md
-Section 9.2), the indexer will start crediting your account
-90% of every BLURT-paid listing fee that comes through orders
-posted on your frontend. Payout is immediate per-order — see
-RUN-A-MORPHIT-NODE.md Section 9.3 for the full mechanics.
+Your 90% is paid **directly, at payment time** — the user's fee
+transaction sends 90% straight to your fees account
+(`MORPHIT_INDEXER_FEE_RECIPIENT`) and 10% to the canonical
+treasury, in the same transaction. There is no relay payout to
+watch and nothing to reconcile: if an order verified, your 90%
+already landed. So "monitoring earnings" is two independent things:
+
+1. **The money** — the BLURT itself, which arrives in your fees
+   account on-chain. Check its balance on a chain explorer
+   (https://blocks.blurtwallet.com or similar) or in your wallet.
+2. **The dashboard attribution** — a running tally the indexer
+   keeps for display, driven by your `operator_tag`. This is
+   audit/analytics only; it does NOT move money.
 
 ### Verifying earnings are flowing
 
@@ -5263,95 +5299,88 @@ curl -s http://localhost:8080/v1/operators/yourtag | jq
 ```
 
 Look for:
-- `cumulative_blurt_earned` — should be > 0 if any BLURT-paid
-  orders have been attributed to you.
-- `total_orders_attributed` — count of orders that paid
-  through your tag.
-- `last_payout_at` — should be recent if traffic is flowing.
+- `cumulative_blurt_earned` — total BLURT the dashboard has
+  credited you (your 90% shares summed), > 0 once BLURT-paid
+  orders have been attributed to your tag.
+- `total_orders_attributed` — count of orders attributed to you.
 
-### When earnings should appear but don't
+And separately, confirm the actual BLURT balance of your fees
+account on-chain — that is the ground truth for the money.
 
-Walk this checklist in order:
+### If the money didn't arrive
 
-1. **Did the order op even include your tag?** Inspect a
-   recent order op on a chain explorer
-   (https://blocks.blurtwallet.com or similar). The payload's
-   `operator_tag` field must match your registered tag
-   exactly. If missing, your frontend isn't sending it —
-   check `MORPHIT_INSTANCE_OPERATOR_TAG` in
-   `ops/env/indexer.env` and confirm the indexer was
-   restarted after the env change.
+The 90% is a transfer inside the user's fee transaction, so if it
+didn't arrive, the fee transaction itself must have failed — which
+means the order never reached `fee_status='verified'`:
 
+1. **Does your fees account exist on chain?** The 90% transfer is
+   addressed to `MORPHIT_INDEXER_FEE_RECIPIENT`. If that account
+   doesn't exist on Blurt, the chain rejects the whole fee
+   transaction, so the order can't verify. Create the account
+   before your first fee, or fix a typo'd name (`morphit-ops
+   edit` → **Fees account**), then restart the indexer.
+2. **Check the boot warning.** If the indexer logged
+   `fee_recipient_invalid` at boot, your configured name was
+   rejected and fees fell back to the canonical `@morphit-fees`.
+   The frontend pays exactly what your indexer verifies against,
+   so they never silently disagree — but a rejected name means
+   you're donating your fees to canonical until you fix it.
+3. **Inspect a recent order's fee transaction** on a chain
+   explorer: it should contain a `transfer` of ~90% of the fee to
+   your account and ~10% to `@morphit-fees` (or a single 100%
+   transfer to `@morphit-fees` if you run the canonical account).
+
+### If the dashboard attribution is missing (but the money arrived)
+
+The money and the dashboard are independent: the split pays your
+fees account regardless of the tag; the `operator_tag` only drives
+the dashboard credit. If your balance grows but
+`/v1/operators/yourtag` shows nothing:
+
+1. **Did the order op include your tag?** Inspect a recent order
+   op's payload on a chain explorer — its `operator_tag` must
+   match your registered tag exactly. If missing, your frontend
+   isn't sending it — check `MORPHIT_INSTANCE_OPERATOR_TAG` in
+   `ops/env/indexer.env` and confirm the indexer was restarted.
 2. **Is your tag in the operators table?**
    ```
    docker-compose exec postgres psql -U morphit_indexer -c \
      "SELECT account, tag, is_active FROM operators WHERE tag = 'yourtag';"
    ```
-   If 0 rows, the on-chain registration didn't land or
-   didn't index. Re-check the registration op's status.
-
-3. **Was the order's BLURT fee actually verified?**
-   Attribution only fires for `fee_status='verified'` orders.
-   Orders paid in BTC or XMR don't trigger attribution at
-   all (treasury keeps 100% of those — see FEES-AND-REWARDS).
+   0 rows → the on-chain registration didn't land or didn't index.
+3. **Was the order's BLURT fee verified?** Attribution only fires
+   for `fee_status='verified'` BLURT orders (BTC/XMR-paid orders
+   don't attribute — 100% goes to the canonical treasury).
    ```
    docker-compose exec postgres psql -U morphit_indexer -c \
      "SELECT permlink, fee_method, fee_status FROM orders \
       WHERE account = 'orderposter' ORDER BY created_at DESC LIMIT 5;"
    ```
-
-4. **Did the attribution event get recorded?**
+4. **Is the attribution event recorded?**
    ```
    docker-compose exec postgres psql -U morphit_indexer -c \
-     "SELECT * FROM operator_attribution_events \
+     "SELECT operator_tag, fee_blurt, operator_share_blurt \
+      FROM operator_attribution_events \
       WHERE operator_tag = 'yourtag' \
       ORDER BY observed_at DESC LIMIT 5;"
    ```
-   If rows exist but no payout, jump to step 6.
-
-5. **Is the payout audit row there?**
-   ```
-   docker-compose exec postgres psql -U morphit_indexer -c \
-     "SELECT * FROM operator_payouts \
-      WHERE operator_account = 'youraccount' \
-      ORDER BY queued_at DESC LIMIT 5;"
-   ```
-
-6. **Did the relay actually broadcast?**
-   ```
-   docker-compose exec postgres psql -U morphit_indexer -c \
-     "SELECT id, recipient, amount_blurt, broadcast_at, last_error \
-      FROM relay_pending_transfers \
-      WHERE reason LIKE 'operator_payout:%' \
-      ORDER BY id DESC LIMIT 10;"
-   ```
-   `broadcast_at` should be non-null within seconds of
-   `created_at`. If `last_error` is set, the relay couldn't
-   reach the chain or the operator's account doesn't exist.
-   Cross-reference with the relay logs.
 
 ### Edge cases to know about
 
-**Sub-precision shares don't get queued.** If a single order's
-fee is so small that 90% rounds to 0 BLURT (e.g. a 0.001-BLURT
-fee, which 90% × floor → 0 milliBLURT), no transfer is queued
-but the attribution event row is still recorded for audit
-completeness. In practice this only happens at fee values
-much smaller than realistic listing fees.
+**Operator deactivation.** If `operators.is_active = FALSE` for
+your row (a future moderation feature), new attributions skip you
+silently — the dashboard stops crediting you, though any fees your
+account already received (they were paid directly) stay yours.
+There is no pending balance to strand.
 
-**Operator deactivation.** If `operators.is_active = FALSE`
-for your row (a future moderation feature; not currently
-controllable via CLI), new attributions skip you silently.
-Earnings already paid stay paid; the immediate-payout model
-means there's no pending balance to lose.
-
-**Treasury self-dealing.** If a hostile user lists orders
-through your instance with a different operator's tag in the
-op, that other operator gets the 90%. The 10% to treasury is
-unaffected. There's no way for your indexer alone to detect
-this — it's a frontend-trust issue, mitigated by the public
-audit trail (`operator_attribution_events.operator_tag` shows
-which tag was actually credited per order).
+**Self-dealing / mis-tagging.** If a hostile user lists orders
+through your instance carrying a *different* operator's tag, that
+other operator gets the dashboard credit — but the **money** still
+splits to *your* instance's fees account (the split follows your
+configured recipient, not the tag) plus the canonical 10%. So
+mis-tagging can only misattribute the dashboard analytics, never
+misroute the fees. The public `operator_attribution_events.operator_tag`
+audit trail shows which tag was credited per order.
 
 ## 29. Running a second instance — DO NOT share relay accounts
 
