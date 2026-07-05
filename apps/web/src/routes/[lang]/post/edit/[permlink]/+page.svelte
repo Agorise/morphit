@@ -26,6 +26,7 @@
 	 */
 
 	import { onDestroy, onMount } from 'svelte';
+	import LazyLoadError from '$components/LazyLoadError.svelte';
 	import { _ } from 'svelte-i18n';
 	import { gotoLocale } from '$i18n/navigate';
 	import { get } from 'svelte/store';
@@ -1014,5 +1015,7 @@
 				void save();
 			}}
 		/>
+	{:catch}
+		<LazyLoadError />
 	{/await}
 {/if}

@@ -112,13 +112,16 @@ const ALLOWLIST_HREF_EXPR: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 		'apps/web/src/lib/components/TermsText.svelte',
 		// cp406 — TermsText renders a structured tree from parseTermsMarkdown().
 		// The only anchors it emits are `link` runs, and a `link` run's `href`
-		// (r.href) is set exclusively to `safeBlurtImageUrl(seg.value)` inside
-		// termsMarkdown.ts (a SAFE_BUILDER already in SAFE_BUILDER_NAMES: https +
-		// exact host img.blurt.blog + image extension + no userinfo/odd port, or
-		// the run isn't emitted as a link at all). The static tracer can't follow
-		// the safe URL through the parse-tree run type, but it's confirmed safe —
-		// there is NO {@html} and no other href source. (Locked by
-		// blurt-image-link-safety-smoke.)
+		// (r.href) comes from one of two SAFE_BUILDERS baked into the parse tree
+		// in termsMarkdown.ts (both already in SAFE_BUILDER_NAMES): (1)
+		// safeBlurtImageUrl(seg.value) — https + exact host img.blurt.blog +
+		// image extension + no userinfo/odd port — for auto-linked Blurt images,
+		// and (2) safeContactUrl(m[2]) — scheme allowlist (https/http/mailto/
+		// matrix/xmpp/nostr), REFUSES javascript:/data:/vbscript:/file: — for
+		// explicit `[text](url)` links (cp414); an unsafe scheme is left as inert
+		// literal text, never a link. The static tracer can't follow the safe URL
+		// through the parse-tree run type, but it's confirmed safe — there is NO
+		// {@html} and no other href source. (Locked by blurt-image-link-safety-smoke.)
 		new Set(['r.href'])
 	],
 	[

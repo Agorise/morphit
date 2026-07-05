@@ -830,6 +830,26 @@ export interface ConversationsResponse {
 	readonly items: readonly ConversationSummary[];
 }
 
+// ─── Order counterparties (feedback gate, cp421) ────────────────
+
+/** One candidate trade partner for an order: someone who messaged the
+ *  order owner naming this order. `reviewable` is an OPAQUE boolean —
+ *  true iff the owner may leave feedback on this peer for this order
+ *  (owner has replied ≥once AND the pair is not flagged). It never
+ *  reveals WHICH condition failed, so it can't leak the sockpuppet
+ *  detector's state. See GET /v1/orders/:owner/:permlink/counterparties. */
+export interface OrderCounterparty {
+	readonly peer: string;
+	readonly reviewable: boolean;
+}
+
+/** Response from GET /v1/orders/:owner/:permlink/counterparties. */
+export interface OrderCounterpartiesResponse {
+	readonly owner: string;
+	readonly permlink: string;
+	readonly items: readonly OrderCounterparty[];
+}
+
 // ─── Chat read state (on-chain read receipts, Phase B inbox) ─────
 
 /** One (peer, last_read_at) pair for a given reader, derived from

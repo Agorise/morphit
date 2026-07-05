@@ -13,6 +13,18 @@
  * level: one feedback per (reviewer, subject, order_permlink).
  * Self-reviews (subject == reviewer) are rejected.
  *
+ * PROVABLE-COUNTERPARTY GATE (cp420/cp421): a review is rejected with
+ * `no_verified_counterparty` unless the reviewer and subject have a
+ * substantiated two-way on-chain conversation — ≥2 morphit_chat_v1
+ * each way, ≥15-min span, and not a flagged suspicious-reciprocity
+ * pair (i.e. the SAME bar as the has_verified_chat badge). Settlement
+ * is off-chain and undecidable, but the conversation is on-chain — this
+ * makes ghost reviews and hand-typed random subjects impossible. Ken
+ * chose this strict bar over a looser bidirectional-only gate: it costs
+ * some legitimate ultra-fast trades but forces a sockpuppeteer to
+ * fabricate a sustained conversation rather than two throwaway
+ * messages. See the gate block below for the full rationale.
+ *
  * Comment length limit is 256 code points. Control characters
  * (C0/C1), bidi override marks (U+202A–202E, U+2066–2069), and
  * zero-width joiners (U+200B–200D, U+FEFF) are rejected — same
@@ -112,18 +124,26 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		if (!PERMLINK_RE.test(ctx.payload.order_permlink)) {
 			return { ok: false, reason: 'order_permlink_bad_chars' };
 		}
-		// Verify the cited order exists, was posted by the subject,
-		// AND the listing fee was actually paid (fee_status =
-		// 'verified').  Three-prong check:
+		// Verify the cited order exists, was posted by EITHER party to
+		// the trade (subject OR reviewer), AND the listing fee was
+		// actually paid (fee_status = 'verified').  Three-prong check:
 		//
 		// 1. EXISTS — Finding R17.  Without this, an attacker could
 		//    spam many feedback rows by citing fake permlinks; each
 		//    is unique by (reviewer, subject, order_permlink) so
 		//    each becomes a row.
 		//
-		// 2. account = subject — same Finding R17.  Ties feedback
-		//    to an order the subject actually offered, not a
-		//    random other user's order.
+		// 2. account IN (subject, reviewer) — cp420.  Was `= subject`
+		//    only, which fit ONE direction (a taker reviewing the
+		//    order's maker).  But /my/orders reviews run the OTHER way:
+		//    the MAKER (reviewer=signer, who posted the order) reviews
+		//    the taker (subject), citing the maker's OWN order — that
+		//    was silently rejected on-chain (account=reviewer≠subject).
+		//    A trade about an order involves both parties, so the
+		//    citation is valid whichever of the two posted it.  The
+		//    provable-counterparty GATE below is what actually ties the
+		//    feedback to a real trade partner; this prong just keeps the
+		//    cited order real + fee-paid.
 		//
 		// 3. fee_status = 'verified' — Part 113 (reputation audit,
 		//    Vector A5/B2).  Pre-Part-113 reality: an attacker
@@ -139,21 +159,13 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		//    every fake-feedback row carries a non-trivial real-
 		//    money cost.  ALSO closes the symmetric B2 vector
 		//    (retaliatory 1-star citing an unpaid order).
-		//
-		// Note: we don't verify the reviewer was a counterparty on
-		// the trade (impossible — Morphit's trade settlement is
-		// off-chain).  This is the "the cited order is real,
-		// belongs to the subject, AND the subject paid the
-		// listing fee for it" defense, not the "this trade
-		// actually happened" defense (which is structurally
-		// undecidable on-chain).
 		const orderCheck = await client.query(
 			`SELECT 1 FROM orders
-			  WHERE account = $1
+			  WHERE account IN ($1, $3)
 			    AND permlink = $2
 			    AND fee_status = 'verified'
 			  LIMIT 1`,
-			[subject, ctx.payload.order_permlink]
+			[subject, ctx.payload.order_permlink, ctx.signer]
 		);
 		if (orderCheck.rowCount === 0) {
 			return { ok: false, reason: 'order_permlink_not_found_or_unverified' };
@@ -219,6 +231,41 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		Number.isFinite(spanSec) &&
 		spanSec >= 15 * 60 &&
 		!hasRecipFlag;
+
+	// ─── cp420/cp421 PROVABLE-COUNTERPARTY GATE (Ken) ────────────
+	// A review must attach to someone the reviewer PROVABLY interacted
+	// with — not a ghost and not a self-boost. Morphit's trade
+	// SETTLEMENT is off-chain (cash/bank/crypto handoff the chain never
+	// sees), so "did this trade happen" is undecidable. But the
+	// CONVERSATION is on-chain: every morphit_chat_v1 op carries sender
+	// + recipient in the clear. We gate on the SAME bar as the
+	// has_verified_chat badge — a substantiated two-way exchange:
+	//   ≥2 messages each way, ≥15-min span, and the sockpuppet
+	//   detector has NOT flagged the pair (suspicious_reciprocity).
+	//
+	// This makes the two abuses Ken called out impossible:
+	//   • Ghost reviews — you cannot review an account you never had a
+	//     real back-and-forth with.
+	//   • Hand-typed random subjects — same; no conversation, no review.
+	// Self-reviews are already rejected upstream (subject === signer).
+	//
+	// Ken chose the STRICT bar (cp421) over the looser bidirectional-
+	// only gate: it costs some legitimate ultra-fast trades (a real
+	// deal closed in <2 messages each way or under 15 min), but a
+	// determined sockpuppeteer now has to fabricate a sustained
+	// two-way conversation instead of two throwaway messages — a much
+	// higher bar. The heavier defense is still the reciprocity /
+	// concentration / pile-on detectors (flagging PATTERNS over time)
+	// plus the fee_status='verified' order-citation cost above.
+	//
+	// Because the gate == the badge, every ACCEPTED review now has
+	// has_verified_chat = true (a platform guarantee: all Morphit
+	// reputation is conversation-backed). Historical pre-gate rows may
+	// still be false; the column + the profile's verified-chat share
+	// stay meaningful across that boundary.
+	if (!hasVerifiedChat) {
+		return { ok: false, reason: 'no_verified_counterparty' };
+	}
 
 	try {
 		await client.query(

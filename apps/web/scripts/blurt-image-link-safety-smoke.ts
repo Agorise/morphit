@@ -156,17 +156,24 @@ expect(
 }
 
 // ── 5. Render wiring: TermsText is the single render path, no {@html}, privacy attrs present ──
-// cp406 — TermsText now renders a structured tree from parseTermsMarkdown()
-// (restricted markdown: headings/bold/italics/lists/hr). The safe href still
-// originates from safeBlurtImageUrl — now baked into the parse tree in
-// termsMarkdown.ts — and TermsText binds it via href={r.href}. Still NO
-// {@html}: every leaf goes through Svelte escaping.
+// cp406 — TermsText renders a structured tree from parseTermsMarkdown()
+// (restricted markdown: headings/bold/italics/lists/hr; cp413 blockquotes;
+// cp414 `[text](url)` hyperlinks). Safe hrefs originate from TWO validated
+// builders baked into the parse tree in termsMarkdown.ts — safeBlurtImageUrl
+// (auto-linked Blurt images) and safeContactUrl (explicit `[text](url)` links,
+// which REFUSES javascript:/data:/etc, leaving an unsafe scheme as inert text) —
+// and TermsText binds either via href={r.href}. Still NO {@html}: every leaf
+// goes through Svelte escaping.
 const termsText = readFileSync(join(WEB, 'src/lib/components/TermsText.svelte'), 'utf8');
 const termsMarkdown = readFileSync(join(WEB, 'src/lib/utils/termsMarkdown.ts'), 'utf8');
 expect(!/\{@html\s/.test(termsText), 'TermsText never uses the {@html} directive');
 expect(
 	termsMarkdown.includes('safeBlurtImageUrl(seg.value)'),
-	'termsMarkdown builds link href via the safe builder'
+	'termsMarkdown builds Blurt-image link href via the safe builder'
+);
+expect(
+	termsMarkdown.includes('safeContactUrl(m[2]'),
+	'termsMarkdown validates `[text](url)` hyperlink URLs via safeContactUrl (scheme allowlist)'
 );
 expect(
 	termsText.includes('href={r.href}'),
@@ -180,6 +187,30 @@ expect(
 expect(
 	termsText.includes('referrerpolicy="no-referrer"'),
 	'TermsText link sets referrerpolicy="no-referrer"'
+);
+// cp415 — terms links render in the brand emerald (visible on the dark terms
+// panel) and, on click/tap, open a "Leaving Morphit" interstitial before
+// navigating; the actual navigation is an anchor-click with noopener/noreferrer.
+expect(
+	termsText.includes('text-morphit-emerald'),
+	'TermsText renders links in the brand emerald'
+);
+expect(
+	/onclick=\{\(e\) => onLinkClick\(e, r\.href\)\}/.test(termsText),
+	'TermsText intercepts link clicks (interstitial trigger)'
+);
+expect(
+	termsText.includes('<ConfirmModal') && termsText.includes("terms.leave_site.title"),
+	'TermsText shows the Leaving-Morphit ConfirmModal on a link click'
+);
+expect(
+	/destinationHost\(/.test(termsText) &&
+		/terms\.leave_site\.body[\s\S]*?values:\s*\{\s*site:/.test(termsText),
+	'TermsText names the destination host in the interstitial body (anti-phishing)'
+);
+expect(
+	/a\.rel = 'noopener noreferrer'/.test(termsText) && /a\.click\(\)/.test(termsText),
+	'TermsText navigates via a noopener/noreferrer anchor-click after confirm'
 );
 
 // ── 6. Full-terms views render clickable terms through TermsText ──

@@ -1090,15 +1090,17 @@ const SCENARIOS: readonly Scenario[] = [
 		]
 	},
 	{
-		name: 'P121-USDT-5b — OrderCard renders the USDT network chip + price subline',
+		name: 'P121-STABLECOIN-5b — OrderCard renders the network chip + stablecoin price subline',
 		file: 'apps/web/src/lib/components/OrderCard.svelte',
 		rootRelative: true,
-		// cp404 — the USDT row rendering moved into the shared OrderCard: it
-		// renders the passed networkChip and, for USDT orders, the peg subline.
+		// cp404 — the row rendering moved into the shared OrderCard: it renders
+		// the passed networkChip and, for stablecoin orders, the peg subline.
+		// cp417 — generalised from USDT-only to all three stablecoins
+		// (USDT/USDC/DAI) via isStablecoinSublineTicker + StablecoinPriceSubline.
 		mustHave: [
 			'networkChip',
-			'<UsdtPriceSubline',
-			"order.asset === 'USDT'"
+			'<StablecoinPriceSubline',
+			'isStablecoinSublineTicker(order.asset)'
 		]
 	},
 	{

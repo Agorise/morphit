@@ -226,10 +226,15 @@ describe('Part 111 — welcome bonus federation gate (feedback handler)', () => 
 			// cited-order operator-tag lookup; both query FROM
 			// orders).
 			{ match: 'FROM orders', rowCount: 1 },
-			// Trade-completion gate via chat-messages.
+			// Trade-completion gate via chat-messages. cp421: the
+			// feedback handler now requires a verified counterparty
+			// conversation (≥2 msgs each way, ≥15min span, unflagged)
+			// before it will record feedback — so this fixture must
+			// clear that bar for the welcome-bonus path underneath to
+			// run at all.
 			{
 				match: 'FROM chat_messages',
-				rows: [{ from_reviewer: '0', from_subject: '0', span_seconds: null, has_recip_flag: false }]
+				rows: [{ from_reviewer: '2', from_subject: '2', span_seconds: '900', has_recip_flag: false }]
 			},
 			// Feedback row insert.
 			{ match: 'INSERT INTO feedback' },

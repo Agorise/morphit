@@ -365,7 +365,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 158. **Source code at git.agorise.net/agorise/morphit.** Self-hosted Forgejo (Git forge), not GitHub. The project's own infrastructure is decentralized too.
 
-159. **47 ADRs** (Architectural Decision Records) in `docs/adr/`, files numbered 0001 through 0048 (0016 retracted). Each records a major design choice, the alternatives considered, and the tradeoff rationale. Topics span key custody (0010), chat reputation + crypto (0014, 0015), YubiKey unlock (0017), release trust anchor (0019), QR pairing (0022), one ADR per tradable-asset addition (0023–0036), cash-by-mail (0037), reputation hardening (0038), self-sovereign pricing (0039–0042), opt-in TOTP 2FA (0043), AI-agent integration via Model Context Protocol (0044), shared network-defense primitives (0045), migrating Blurt signing off `elliptic` (0046), Tor-onion + host-hardening on by default (0047), and the chat head-block fast path for sub-6s message delivery (0048).
+159. **48 ADRs** (Architectural Decision Records) in `docs/adr/`, numbered 0001–0049 (0016 retracted), each recording a design choice with its alternatives and tradeoff. Topics span key custody (0010), chat reputation + crypto (0014, 0015), YubiKey unlock (0017), release trust anchor (0019), QR pairing (0022), one ADR per tradable-asset addition (0023–0036), cash-by-mail (0037), reputation hardening (0038), self-sovereign pricing (0039–0042), opt-in TOTP 2FA (0043), AI-agent integration via MCP (0044), shared network-defense primitives (0045), Blurt signing off `elliptic` (0046), Tor-onion + host-hardening by default (0047), sub-6s chat delivery (0048), and payment-proof reputation deferred to protect transaction privacy (0049).
 
 160. **49 design and operations documents** in `docs/`. Architecture, operations runbook, security model, fees-and-rewards reference, threat model, metadata-leak catalog, integration test design, automation audit — all public.
 
@@ -753,7 +753,7 @@ Every claim in this document is verifiable. The repository is at **git.agorise.n
 
 - **Smoke suite**: `bash scripts/run-smokes.sh` — runs several thousand self-checks across ~280 runners, triple-pulse stable
 - **Audit log**: `docs/AUDIT-2026-05.md`
-- **Architecture decisions**: `docs/adr/0001-*.md` through `docs/adr/0048-*.md` (47 ADRs; 0016 was retracted and the number isn't reused)
+- **Architecture decisions**: `docs/adr/0001-*.md` through `docs/adr/0049-*.md` (48 ADRs; 0016 was retracted and the number isn't reused)
 - **Fees and rewards**: `docs/FEES-AND-REWARDS.md` (line-cited to source)
 - **Public API**: `docs/API.md`
 - **Operator runbook**: `docs/OPERATIONS.md`

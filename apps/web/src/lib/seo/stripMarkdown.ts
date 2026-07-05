@@ -44,9 +44,11 @@ export function stripMarkdown(input: string): string {
 	// not, so these are no-ops there). Drop whole horizontal-rule lines, and
 	// strip leading heading markers (`#`…`######`) keeping the heading text.
 	// Done before emphasis stripping so an hr like `***` isn't mistaken for
-	// bold/italic.
+	// bold/italic. cp413 — also strip leading blockquote markers (`>`) so a
+	// quoted line reads as plain text in the compact card preview.
 	s = s.replace(/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/gm, '');
 	s = s.replace(/^\s{0,3}#{1,6}\s+/gm, '');
+	s = s.replace(/^\s{0,3}>\s?/gm, '');
 
 	// Strip `[link text](url)` → "link text (url)".  Keeping the
 	// URL in parens preserves accessibility info for users who
@@ -68,11 +70,13 @@ export function stripMarkdown(input: string): string {
 	// Restore the stashed inline-code text (plain, backticks already dropped).
 	s = s.replace(/\u0000C(\d+)\u0000/g, (_m, i: string) => code[Number(i)] ?? '');
 
-	// Bullet-list normalization: "\n • item" → ". item" so the
-	// list reads as a flowing sentence stream.  Plaintext FAQ
-	// answers don't have visual bullet structure to preserve.
-	s = s.replace(/\n\s*•\s+/g, '. ');
-	s = s.replace(/\n\s*-\s+/g, '. ');
+	// List-marker normalization → flowing ". " sentence stream (plaintext
+	// previews don't preserve visual list structure). cp415 — covers EVERY
+	// list marker the Terms renderer understands: "-"/"*"/"•" bullets AND
+	// ordered "N." markers, both mid-text (after a newline) and on the very
+	// first line, so no leftover marker survives on an OrderCard slice.
+	s = s.replace(/\n[ \t]*(?:[-*•]|\d+\.)[ \t]+/g, '. ');
+	s = s.replace(/^[ \t]*(?:[-*•]|\d+\.)[ \t]+/, '');
 
 	// Paragraph collapse: "\n\n" → " " (single space).  JSON-LD
 	// is a single field; multi-paragraph structure isn't

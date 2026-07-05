@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
+	import LazyLoadError from '$components/LazyLoadError.svelte';
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	import { _ } from 'svelte-i18n';
@@ -2539,6 +2540,8 @@
 	{#if $isUnlocked && hasPersistedKeystore()}
 		{#await loadHardwareKeyCard() then HardwareKeyCard}
 			<HardwareKeyCard />
+		{:catch}
+			<LazyLoadError />
 		{/await}
 	{/if}
 </div>

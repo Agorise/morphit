@@ -79,7 +79,6 @@ const REQUIRED_KEYS = [
 	'dismiss_aria',
 	'enabling',
 	'enabled',
-	'error',
 	'privacy_note'
 ];
 for (const f of locales) {

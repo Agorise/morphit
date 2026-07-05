@@ -196,9 +196,6 @@
       "address_share": {
         "warning": "僅在 {network} 上發送 USDC。在任何其他網絡上向此地址發送 USDC 將永久丟失你的資金。"
       },
-      "order_row": {
-        "network_hint": "此交易需要 {network} 上的 USDC。"
-      },
       "price_subline": {
         "live": "1 USDC = ${price} 即時",
         "unavailable": "USDC/USD 價格源不可用——上次出現於 {staleness} 前。"
@@ -230,9 +227,6 @@
       },
       "address_share": {
         "warning": "穩定幣交易——DAI 在合約層面比 USDT/USDC 更去中心化（無管理員凍結）但通過 PSM 部分由 USDC 支持。選擇雙方都使用的網絡。"
-      },
-      "order_row": {
-        "network_hint": "{network} 上的 DAI"
       },
       "price_subline": {
         "live": "1 DAI = ${price}",
@@ -315,7 +309,6 @@
     "anti_share": "把種子分享給「支援」— 我們的或任何人的。真正的支援絕對、絕對不會要你的種子。要的人就是騙子。",
     "anti_support": "以為有人能幫你恢復。他們不能。我們不能。沒人能。這就是非託管的全部意義。",
     "learn_more_heading": "了解更多",
-    "learn_more_body": "相關資源:",
     "faq_lost_keys": "如果我遺失金鑰會怎樣?",
     "faq_privacy": "隱私實踐",
     "security_page": "完整安全模型",
@@ -808,7 +801,6 @@
     "window_label": "{days}日",
     "summary_competitive": "今日結算價:{rate} BLURT/小時 — {slots}/{max} 個位置已佔。出價高於呢個費率先可見。",
     "summary_partial": "今日 {slots}/{max} 個位置已佔 — 而家任何出價都贏到一個可見位置。",
-    "summary_empty": "今日 {max} 個位置全部空閒 — 仲未有人出價。",
     "chart_aria": "最近 {days} 日嘅每日結算價圖表",
     "legend": "柱高 = 結算價(BLURT/小時)。深綠 = 所有位置都滿(競爭激烈)。淺綠 = 部分位置佔咗。灰色 = 嗰日冇出價。",
     "no_history_yet": "最近 {days} 日冇精選位置出價。做第一個。"
@@ -832,7 +824,8 @@
     "close": "關閉",
     "learn_more": "了解更多",
     "unlock": "解鎖",
-    "password_too_short": "密碼至少要 8 個字符。"
+    "password_too_short": "密碼至少要 8 個字符。",
+    "lazy_load_failed": "無法載入此部分。"
   },
   "compare": {
     "heading": "比較 orderbook",
@@ -967,8 +960,6 @@
   },
   "explorer": {
     "search": {
-      "page_title": "區塊瀏覽器",
-      "page_description": "通過用戶名、交易 ID 或區塊號搜尋區塊鏈。",
       "heading": "區塊瀏覽器",
       "subheading": "通過 @用戶名、交易 ID 或區塊號搜尋區塊鏈。",
       "label": "搜尋",
@@ -987,15 +978,12 @@
       "fallback_description": "獨立的 Blurt 瀏覽器。"
     },
     "account": {
-      "page_title": "@{account} - 區塊瀏覽器",
-      "page_description": "@{account} 最近的鏈上操作。",
       "loading": "正在載入帳號…",
       "not_found_title": "未找到帳號",
       "not_found_body": "我們無法在鏈上找到 @{account}。帳號可能不存在,或被詢問的 RPC 節點缺少資料。",
       "try_fallback": "嘗試備用瀏覽器",
       "error_title": "無法載入帳號",
       "view_profile_link": "查看 Morphit 資料",
-      "posting_pubkey_label": "Posting 公鑰",
       "recent_ops_heading": "最近操作",
       "no_ops": "尚無操作記錄。",
       "load_more": "載入更早的操作",
@@ -1013,8 +1001,6 @@
       "key_memo": "Memo"
     },
     "block": {
-      "page_title": "區塊 {block}",
-      "page_description": "區塊鏈的區塊 {block}。",
       "loading": "正在載入區塊…",
       "not_found_title": "未找到區塊",
       "not_found_body": "區塊 {block} 在鏈上尚不存在,或被詢問的 RPC 節點缺少資料。",
@@ -1035,8 +1021,6 @@
       }
     },
     "tx": {
-      "page_title": "交易 {trx}…",
-      "page_description": "鏈上交易詳情。",
       "loading": "正在載入交易…",
       "not_found_title": "未找到交易",
       "not_found_body": "我們無法取得此交易。某些 RPC 節點不支援按 ID 查找;請嘗試備用瀏覽器。",
@@ -1054,8 +1038,6 @@
       }
     },
     "activity": {
-      "page_title": "交易活動",
-      "page_description": "此 Morphit 實例的交易量和活躍掛單。",
       "heading": "交易活動",
       "subheading": "已完成交易數和當前掛單,按資產分類。",
       "volume_heading": "交易量",
@@ -1701,6 +1683,7 @@
     "success": "⭐ 訂單已推廣 — 已支付 {blurt} BLURT",
     "error_locked": "需要解鎖 Active 密鑰以支付推廣費用。",
     "password_label": "你的密碼(用於使用 Active 密鑰簽名)",
+    "password_label_named": "{handle} 的密碼（用於使用 Active 密鑰簽名）",
     "error_password_required": "請輸入密碼以對出價簽名。",
     "error_bad_password": "此密碼未能解鎖你的活躍金鑰。",
     "error_generic": "無法提交你嘅出價。請重試。",
@@ -1732,7 +1715,8 @@
       "comment_label": "評論（可選）",
       "comment_placeholder": "關於這筆交易進行情況的任何內容。",
       "submit": "提交回饋",
-      "submitting": "提交中…"
+      "submitting": "提交中…",
+      "subject_locked_label": "你正在評價"
     },
     "error": {
       "subject_invalid": "這看起來不是一個有效的帳戶名。",
@@ -2188,19 +2172,12 @@
       "expired": "已過期"
     },
     "order": {
-      "buying": "購買 {asset}",
-      "selling": "出售 {asset}",
-      "range_open": "任意金額 ({fiat})",
-      "range_both": "{min} – {max} {fiat}",
-      "range_min_only": "{min} {fiat} 起",
-      "range_max_only": "至多 {max} {fiat}",
       "posted_prefix": "已發布",
       "state_live": "活躍",
       "state_cancelled": "已取消",
       "state_expired": "已過期",
       "fee_verified": "在訂單簿中可見",
       "action_edit": "編輯",
-      "action_cancel": "取消",
       "action_edit_expired": "編輯已關閉(15 分鐘視窗)",
       "action_cancelled": "已取消",
       "action_feature": "推廣",
@@ -2217,7 +2194,9 @@
       "action_relist_hint": "用原條款預填表單;將收取新的掛單費。",
       "edit_window_countdown": "編輯視窗:{remaining}",
       "edit_window_tooltip": "訂單僅可在發布後 15 分鐘內編輯。之後需要取消並重新發布。",
-      "edit_window_aria": "剩餘編輯時間:{remaining}"
+      "edit_window_aria": "剩餘編輯時間:{remaining}",
+      "feedback_no_counterparty": "暫無可評價嘅交易對手",
+      "feedback_pick_prompt": "你同邊個完成咗交易？"
     },
     "cancel": {
       "confirm_title": "取消此訂單?",
@@ -2301,7 +2280,6 @@
       "keyfile_explain": "可選:下載金鑰的加密備份。與上面相同的密碼。把檔案存在安全的地方(USB 隨身碟、你信任的雲端、另一台裝置),作為瀏覽器儲存被清空時返回帳戶的替代路徑。",
       "password_strength_common": "呢個密碼好常見 — 揀個獨特啲嘅。",
       "password_strength_trivial": "順序或者重複嘅模式好易畀人猜到。撈勻啲。",
-      "password_strength_short": "考慮用長啲嘅密碼(建議 12 個字元以上)。",
       "password_strength_ok": "睇落唔錯。",
       "persist_failed": "無法將加密密鑰庫儲存到此裝置。儲存可能無法使用。請改用「每次都使用助記詞」,或重試。",
       "password_strength_too_simple": "混合數字、符號或大寫字母 — 或設為 12 個以上字元。",
@@ -2643,10 +2621,6 @@
     "order": {
       "buying": "買入 {asset}",
       "selling": "賣出 {asset}",
-      "range_both": "{min} – {max} {fiat}",
-      "range_min_only": "從 {min} {fiat} 起",
-      "range_max_only": "最多 {max} {fiat}",
-      "range_open": "任意金額 ({fiat})",
       "updated_prefix": "更新於",
       "new_trader_aria": "新交易者 — 尚未完成首次交易",
       "new_trader_tooltip": "這位交易者是 Morphit 的新人。幫助他們起步吧!",
@@ -2701,7 +2675,9 @@
       "trades_since": "自 {month} 起 {count} 筆交易",
       "trades_only": "{count} 筆交易",
       "reputation_aria": "信譽評分 {score}（滿分 5）",
-      "message_word": "訊息"
+      "message_word": "訊息",
+      "message_before": "在 {date} 前聯絡 {handle}",
+      "message_compact": "聯絡 {handle}"
     },
     "search_no_results_title": "沒有符合嘅訂單",
     "search_no_results_body": "已載入嘅訂單冇提到「{query}」。請試下其他字詞，或清除搜尋睇返全部。",
@@ -2980,7 +2956,6 @@
       "region_label": "地區 (可選)",
       "region_hint": "您願意在哪裡交易。幫助附近的人找到您。",
       "terms_label": "條款 / 詳情 / 備註",
-      "terms_placeholder": "例如 \"僅週末\" 或 \"100 美元以下僅限現金\"",
       "expires_label": "掛單到期",
       "expires_1d": "1 天後",
       "expires_3d": "3 天後",
@@ -3099,7 +3074,6 @@
       "body_insufficient_funds": "您的帳戶沒有足夠的 BLURT 來支付掛單費。",
       "body_locked": "工作階段已鎖定。請解鎖密碼後重試。",
       "body_bad_password": "該密碼未解鎖你嘅 keystore。請重試。",
-      "body_missing_external_tx_id": "BTC 同 XMR 費用支付需要外部交易 ID。",
       "body_posting_only": "用 BLURT 支付掛單費需要你的活躍密鑰，而此裝置上並沒有它——你目前只用發文密鑰登入。請用主密碼或完整的 keyfile 登入以用 BLURT 支付，或返回改用 BTC/XMR 支付（亦可使用你的首次免費掛單）。",
       "body_recipient_missing": "無法發送掛單費——它要支付到的資金帳戶（@morphit-fees）似乎在 Blurt 上尚不存在。未支付任何費用。如果你營運此實例，需要建立該帳戶；否則請報告此問題。",
       "body_insufficient_rc": "你的帳戶資源積分（RC）不足，因此 Blurt 拒絕了該交易。請將少量 BLURT 進行 power up，或等待 RC 充滿後再試。未支付任何費用。",
@@ -3156,7 +3130,6 @@
       "fee_address_hide_qr": "隱藏 QR 碼",
       "fee_address_chain_pinned": "由 {account} 在鏈上錨定 — 每個 Morphit 實例都依據此地址驗證費用。",
       "fee_address_chain_pinned_aria": "鏈上錨定地址的真實性",
-      "fee_address_local_fallback": "本地備用地址 — 此營運者尚未採用鏈上錨定的標準地址。如需額外保證，請在發送前用另一個 Morphit 實例核對。",
       "fee_address_unavailable": "此營運者未設定 {asset} 費用地址。請改選 BLURT，或在另一個 Morphit 實例上發布您的訂單。",
       "blurt_needs_active_key": "需要你的活躍（Active）密鑰。你目前用發文（Posting）密鑰登入——請用你的 12 個單詞種子短語或 Keyfile 登入以用 BLURT 支付，或改用 BTC/XMR 付款："
     },
@@ -3178,8 +3151,7 @@
       "amount_min_plus": "價值 {min} {fiat} 或以上的 {asset}",
       "amount_any": "任意數量的 {asset}",
       "price_market": "以市場價格",
-      "price_fixed": "以 {price} {fiat}/{asset} 的固定價格",
-      "see_notes": "在下方欄位中添加任何條款、詳情或備註："
+      "price_fixed": "以 {price} {fiat}/{asset} 的固定價格"
     }
   },
   "prices": {
@@ -3395,8 +3367,6 @@
     "orders_error": "現在無法載入訂單。",
     "no_active_orders": "沒有活躍訂單。目前沒有可交易的內容。",
     "active_orders_sort_hint": "最舊的在前——即將到期的先顯示。",
-    "order_buying": "買入 {asset}",
-    "order_selling": "賣出 {asset}",
     "expires_in": "{t} 後到期",
     "expires_now": "即將到期",
     "given_heading": "此用戶留下的評價",
@@ -3419,7 +3389,6 @@
       "low_blurt_hint": "你的流動 BLURT 快用完了。充值以繼續發佈訂單。",
       "low_voting_hint": "您的投票權較低。大約 5 天可恢復。將更多 BLURT 升級為 BLURT Power 可提高上限。",
       "top_up_blurt": "充值 BLURT",
-      "top_up_hint": "開啟預填的買入訂單。",
       "apr_label": "年化收益率 {apr}",
       "unclaimed_label": "未領取的獎勵",
       "claim_now": "立即領取",
@@ -3429,7 +3398,6 @@
     "pnl": {
       "export_button": "匯出 P&L(過去 12 個月)",
       "exporting": "正在生成報告...",
-      "export_hint": "下載包含你的 BLURT 轉帳、費用和精選競標活動的 CSV。",
       "export_error": "無法生成報告",
       "csv_header": {
         "timestamp": "時間戳(UTC)",
@@ -3449,7 +3417,6 @@
       }
     },
     "error": {
-      "profile_load_failed": "無法載入檔案。",
       "feedback_load_failed": "無法載入反饋。",
       "feedback_given_load_failed": "無法載入呢個帳戶俾過嘅反饋。",
       "orders_load_failed": "無法載入訂單。"
@@ -3672,7 +3639,8 @@
     },
     "faq": {
       "title": "FAQ — Morphit 點用 · 非託管 P2P 加密貨幣",
-      "description": "解答唔使 KYC 買賣 Bitcoin、Monero、BLURT 以及更多加密貨幣、非託管交易、私密傾偈、手續費嘅問題,同 LocalBitcoins、LocalMonero、Haveno 嘅比較。"
+      "description": "解答唔使 KYC 買賣 Bitcoin、Monero、BLURT 以及更多加密貨幣、非託管交易、私密傾偈、手續費嘅問題,同 LocalBitcoins、LocalMonero、Haveno 嘅比較。",
+      "keywords": "點樣免 kyc 買 monero, 點樣免 kyc 買 bitcoin, 免 kyc 加密貨幣, morphit 非託管, 點對點, p2p, 場外交易, OTC, 私密交易, 匿名買 monero, localmonero 替代品, localbitcoins 替代品, 託管, 法幣兌加密貨幣, XMR, BTC, DBBS, agorism"
     },
     "security": {
       "title": "保安 — 密鑰、加密、威脅模型 · Morphit",
@@ -3803,12 +3771,14 @@
       "description": "列印一頁紙的 Morphit 使用參考:帳戶名 vs 助記詞,掛單費 vs 網絡費,支援的可交易資產一覽,以及出問題時該怎麼辦。"
     },
     "privacy_index": {
-      "title": "Morphit 上的私隱——每個資產的指南",
-      "description": "Morphit 支援的每個資產的私隱指南。大多數鏈都是透明的；具體步驟使你的交易更難被關聯、畫像或監控。"
+      "title": "私密購買 Monero 和 Bitcoin——各資產私隱指南 · Morphit",
+      "description": "如何在 Morphit 上保持點對點（P2P）交易的私密性——一個免 KYC、非託管的場外交易（OTC）市場。各資產指南教你在不關聯身份的情況下買賣 Monero (XMR)、Bitcoin (BTC) 等：地址輪換、金額抖動和各鏈專屬技術。大多數鏈都是透明的；這些具體步驟使你的交易更難被關聯、畫像或監控。",
+      "keywords": "私密購買 monero, 私密購買 bitcoin, monero 私隱, bitcoin 私隱, 免 kyc, 免 kyc 買 monero, 匿名購買加密貨幣, 點對點, p2p, 場外交易, over the counter, OTC, 非託管, 地址輪換, 私隱幣, XMR, BTC, DBBS, localmonero 替代品, agorism, monero, bitcoin"
     },
     "privacy_asset": {
-      "title": "{asset} 私隱指南 — Morphit",
-      "description": "在 Morphit 上點對點交易 {asset} 時如何保護你的私隱。地址輪換、金額抖動以及鏈特定的私隱技術。"
+      "title": "如何私密買賣 {asset}——私隱指南 · Morphit",
+      "description": "在 Morphit 上點對點（P2P）買賣 {asset} 時保護你的私隱——一個免 KYC、非託管的市場。地址輪換、金額抖動和各鏈專屬技術使你的 {asset} 交易更難被關聯、畫像或監控。",
+      "keywords": "私密購買加密貨幣, 加密貨幣私隱, 免 kyc, 匿名購買加密貨幣, 點對點, p2p, 非託管, 地址輪換, 私隱幣, 場外交易, OTC, XMR, BTC, DBBS, agorism, monero, bitcoin"
     },
     "admin_setup_wizard": {
       "title": "營運者設置嚮導 — Morphit",
@@ -3870,10 +3840,7 @@
       "pool_note": "你嘅 Morphit 實例為你處理所有 Blurt 網絡流量——你嘅瀏覽器從不直接同呢些節點通訊。呢度只係顯示佢哋嘅即時狀態。",
       "cooling_down": "冷卻中",
       "recheck": "重新檢測節點速度",
-      "http_error": "錯誤：{code}",
-      "failing": "{n} 次失敗",
       "probing": "測試中…",
-      "timed_out": "逾時",
       "unreachable": "無法連線"
     },
     "session": {
@@ -3903,7 +3870,6 @@
         "malformed": "這看起來不像有效的 URL。"
       },
       "preview_label": "預覽",
-      "save": "本機儲存",
       "saved_toast": "已儲存 ✓",
       "save_and_broadcast": "儲存並廣播",
       "broadcast_pending": "發佈中…",
@@ -3925,7 +3891,6 @@
         "malformed": "URL 格式錯誤。"
       },
       "preview_label": "預覽:",
-      "save": "本地儲存",
       "saved_toast": "已儲存到此裝置。",
       "save_and_broadcast": "儲存並廣播",
       "clear": "清除",
@@ -4237,7 +4202,6 @@
       "status": {
         "not_enrolled": "雙因素身份驗證已關閉。",
         "enrolled": "雙因素身份驗證已開啟。",
-        "enrolled_since": "由 {date} 起激活。",
         "backup_codes_remaining": "剩餘 {count} 個備用代碼",
         "backup_codes_low": "你嘅備用代碼快用完。重新產生一組新嘅,放喺安全嘅地方。",
         "backup_codes_exhausted": "你冇剩餘嘅備用代碼。如果你唔見咗身份驗證器,你需要你嘅種子短語嚟恢復。"
@@ -4249,13 +4213,11 @@
         "step2_title": "2. 掃描二維碼",
         "step2_body": "打開你嘅身份驗證器並掃描呢個代碼。如果你冇辦法掃描(冇相機、無障礙),手動輸入下面嘅密鑰。",
         "manual_label": "手動輸入(密鑰):",
-        "manual_help": "帳戶: {account}。類型: 基於時間(TOTP)。算法: SHA-1。位數: 6。間隔: 30 秒。",
         "step3_title": "3. 確認你應用程式中嘅代碼",
         "step3_body": "輸入你嘅身份驗證器當前顯示嘅 6 位代碼。代碼每 30 秒輪換一次;如果你嘅啱啱變,等下一個。",
         "code_label": "當前 6 位代碼",
         "code_placeholder": "000000",
         "confirm_cta": "確認並啟用 2FA",
-        "confirm_busy": "驗證中…",
         "step4_title": "4. 保存你嘅備用代碼",
         "step4_body": "如果你唔見咗身份驗證器,呢十個代碼會畀你登入。每個代碼精確地工作一次。將佢哋保存喺安全嘅地方 — 密碼管理器、打印並鎖起,或者寫喺紙上。我哋唔會再顯示。",
         "backup_acknowledge": "我已將呢啲備用代碼保存喺安全嘅地方。",
@@ -4270,9 +4232,7 @@
         "confirm_body": "你會可以淨係用密碼解鎖。你確定?",
         "code_label": "當前 6 位代碼(用嚟確認)",
         "submit": "停用 2FA",
-        "submit_busy": "停用中…",
         "cancel": "保持 2FA 啟用",
-        "success": "雙因素身份驗證已停用。",
         "err_invalid_code": "個代碼冇通過驗證。請再試。"
       },
       "regenerate": {
@@ -4281,20 +4241,14 @@
         "confirm_body": "你之前嘅備用代碼會立即停止工作。喺繼續之前,確保你可以完成新代碼嘅保存步驟。",
         "code_label": "當前 6 位代碼(用嚟確認)",
         "submit": "產生新代碼",
-        "submit_busy": "產生中…",
-        "success": "新備用代碼已產生。即刻保存。",
         "err_invalid_code": "個代碼冇通過驗證。請再試。"
       },
       "unlock_prompt": {
-        "heading": "雙因素代碼",
         "body": "你嘅密碼成功。而家輸入你身份驗證器應用程式中嘅 6 位代碼,或者備用代碼。",
         "code_label": "身份驗證器代碼或備用代碼",
         "code_placeholder": "000000 或 XXXX-XXXX",
-        "submit": "繼續",
-        "submit_busy": "驗證中…",
         "err_invalid_code": "個代碼冇通過驗證。檢查你嘅設備時間係咪同步,或者試備用代碼。",
-        "err_locked_out": "太多無效嘗試。{seconds} 秒後再試。",
-        "backup_code_redeemed_warning": "剛剛使用咗一個備用代碼。剩餘 {remaining} 個備用代碼。"
+        "err_locked_out": "太多無效嘗試。{seconds} 秒後再試。"
       },
       "recommended_apps": {
         "heading": "推薦嘅身份驗證器應用程式(開源)",
@@ -4453,7 +4407,6 @@
     "not_now": "暫時唔使",
     "enabling": "開緊…",
     "enabled": "搞掂——有新訊息嘅時候會通知你。",
-    "error": "開唔到通知。你可以喺「設定 → 通知」度開啟。",
     "privacy_note": "用瀏覽器嘅私密通知——唔使電郵或者電話號碼，隨時可以閂。",
     "dismiss_aria": "略過"
   },
@@ -4510,5 +4463,13 @@
     "json_note": "喺度建立聚合器或儀表板？相同嘅數據以 JSON 形式提供：",
     "json_link": "原始數據源",
     "error": "暫時無法載入統計數據。請稍後再試。"
+  },
+  "terms": {
+    "leave_site": {
+      "title": "正在離開 Morphit",
+      "body": "確定要前往 {site} 嗎？",
+      "cancel": "取消",
+      "confirm": "前往該網站"
+    }
   }
 }

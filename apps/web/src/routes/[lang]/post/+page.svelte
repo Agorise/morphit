@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
+	import LazyLoadError from '$components/LazyLoadError.svelte';
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	/**
@@ -2508,6 +2509,8 @@
 				<div class="mt-3">
 					{#await loadUsdtNetworkPicker() then UsdtNetworkPicker}
 						<UsdtNetworkPicker bind:network={usdtNetwork} />
+					{:catch}
+						<LazyLoadError />
 					{/await}
 				</div>
 			{/if}
@@ -2520,6 +2523,8 @@
 				<div class="mt-3">
 					{#await loadUsdcNetworkPicker() then UsdcNetworkPicker}
 						<UsdcNetworkPicker bind:network={usdcNetwork} />
+					{:catch}
+						<LazyLoadError />
 					{/await}
 				</div>
 			{/if}
@@ -2539,6 +2544,8 @@
 				<div class="mt-3">
 					{#await loadDaiNetworkPicker() then DaiNetworkPicker}
 						<DaiNetworkPicker bind:network={daiNetwork} />
+					{:catch}
+						<LazyLoadError />
 					{/await}
 				</div>
 			{/if}
@@ -2567,6 +2574,8 @@
 							invalid={!!fiatError}
 							describedById={fiatError ? 'fiat-error' : undefined}
 						/>
+					{:catch}
+						<LazyLoadError />
 					{/await}
 					{#if fiatError}
 						<StatusLine kind="warn" id="fiat-error">{fiatError}</StatusLine>
@@ -2827,6 +2836,8 @@
 							describedById="payment-methods-error"
 							firstTrade={isFirstTrade}
 						/>
+					{:catch}
+						<LazyLoadError />
 					{/await}
 					{#if paymentMethodsError}
 						<StatusLine kind="warn" id="payment-methods-error">{paymentMethodsError}</StatusLine>
@@ -3192,6 +3203,8 @@
 					feeFiat={feeMethodChoice === 'btc' ? btcFeeFiat : xmrFeeFiat}
 					{denominationFiat}
 				/>
+			{:catch}
+				<LazyLoadError />
 			{/await}
 
 			<section class="card mb-4" aria-labelledby="txid-heading">
@@ -3649,5 +3662,7 @@
 				void submitBroadcast();
 			}}
 		/>
+	{:catch}
+		<LazyLoadError />
 	{/await}
 {/if}

@@ -59,6 +59,7 @@ import { clearingPriceHistoryRoute } from '$api/clearingPriceHistory';
 import { loginPairingRoute, PairingRegistry } from '$api/loginPairing';
 import { ordersByAccountRoute } from '$api/orders';
 import { orderViewsRoute } from '$api/orderViews';
+import { orderCounterpartiesRoute } from '$api/orderCounterparties';
 import { profilesRoute } from '$api/profiles';
 import { accountBalanceRoute } from '$api/accountBalance';
 import { accountHistoryRoute } from '$api/accountHistory';
@@ -460,6 +461,10 @@ async function main(): Promise<void> {
 	// the existing 'list' rate-limit tier; nginx limit_req_zone is
 	// the right place for stricter write-side spam protection.
 	ordersApp.route('/', orderViewsRoute(db));
+	// cp421 — reviewable counterparties for an order, so /my/orders can
+	// gate the "Mark complete / review" button + prefill the trade
+	// partner. Same :account/:permlink/... shape, same 'list' tier.
+	ordersApp.route('/', orderCounterpartiesRoute(db));
 	app.route('/v1/orders', ordersApp);
 
 	const profilesApp = new Hono();

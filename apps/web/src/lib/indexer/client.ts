@@ -23,6 +23,7 @@ import type {
 	ChatIdentityResponse,
 	ChatReadStateResponse,
 	ConversationsResponse,
+	OrderCounterpartiesResponse,
 	FeaturedOrderbookResponse,
 	ClearingPriceHistoryResponse,
 	FeaturedBidHistoryResponse,
@@ -413,6 +414,25 @@ export function getConversations(
 	return request<ConversationsResponse>(`/v1/conversations/${encodeURIComponent(account)}`, {
 		signal
 	});
+}
+
+/**
+ * GET /v1/orders/:owner/:permlink/counterparties — the accounts who
+ * messaged the owner about a specific order, each with an OPAQUE
+ * `reviewable` flag (true iff a feedback op from owner→peer for this
+ * order would pass the indexer's provable-counterparty gate). Used by
+ * /my/orders to gate the "Mark complete / review" button + prefill the
+ * trade partner, so a user never submits a review the indexer drops.
+ */
+export function getOrderCounterparties(
+	owner: string,
+	permlink: string,
+	signal?: AbortSignal
+): Promise<Result<OrderCounterpartiesResponse>> {
+	return request<OrderCounterpartiesResponse>(
+		`/v1/orders/${encodeURIComponent(owner)}/${encodeURIComponent(permlink)}/counterparties`,
+		{ signal }
+	);
 }
 
 /**

@@ -2,18 +2,27 @@
  * Morphit — restricted markdown parser for user-authored order `terms`.
  *
  * cp406 (Ken): the Terms field supports a DELIBERATELY SMALL markdown subset —
- * headings, bold, italics, unordered/ordered lists, horizontal rules, and line
- * feeds. Nothing else (no raw HTML, no images beyond the existing Blurt-image
- * link carve-out, no tables, no blockquotes, no code fences).
+ * headings, bold, italics, unordered/ordered lists, blockquotes, links,
+ * horizontal rules, and line feeds. Nothing else (no raw HTML, no images
+ * beyond the existing Blurt-image link carve-out, no tables, no code fences).
+ * cp413 (Ken): added blockquotes (`> quoted`).
+ * cp414 (Ken): added inline `[text](url)` hyperlinks — the URL is scheme-
+ * validated through `safeContactUrl` (https/http/mailto/matrix/xmpp/nostr only;
+ * javascript:/data:/vbscript:/file: are REFUSED and left as inert literal
+ * text), and TermsText renders it hardened (target=_blank + noopener/noreferrer/
+ * nofollow + no-referrer). Blurt-image URLs still auto-link on their own.
  *
  * ─── Security ────────────────────────────────────────────────────────────
  * `terms` is the highest-risk free-text input in the app: attacker-authored,
  * shown to every viewer of an order page. This module NEVER produces HTML.  It
  * parses the text into a plain structured tree (headings / paragraphs / lists /
- * hr, each with inline runs of text / bold / italic / Blurt-image-link) that
- * TermsText.svelte renders through Svelte's normal escaping — so there is NO
- * `{@html}` sink anywhere and no way for markup in `terms` to become live DOM.
- * The only href produced is the already-validated `safeBlurtImageUrl`.
+ * blockquotes / hr, each with inline runs of text / bold / italic /
+ * Blurt-image-link / scheme-validated hyperlink) that TermsText.svelte renders
+ * through Svelte's normal escaping — so there is NO `{@html}` sink anywhere and
+ * no way for markup in `terms` to become live DOM. The only hrefs produced are
+ * the already-validated `safeBlurtImageUrl` (auto-linked images) and
+ * `safeContactUrl` (explicit `[text](url)` links) — both reject dangerous
+ * schemes, so no `javascript:`/`data:` href is ever emitted.
  *
  * The parser is pure + total (never throws) and is regression-locked by
  * apps/web/scripts/terms-markdown-smoke.ts.  For the compact card preview use
@@ -21,6 +30,7 @@
  */
 
 import { linkifyBlurtImageSegments, safeBlurtImageUrl } from '$lib/utils/blurtImageLink';
+import { safeContactUrl } from '$lib/utils/safeContactUrl';
 
 export type TermsInline =
 	| { t: 'text'; v: string }
@@ -33,12 +43,16 @@ export type TermsBlock =
 	| { type: 'paragraph'; runs: TermsInline[] }
 	| { type: 'ul'; items: TermsInline[][] }
 	| { type: 'ol'; items: TermsInline[][] }
+	| { type: 'blockquote'; runs: TermsInline[] }
 	| { type: 'hr' };
 
 const HEADING_RE = /^(#{1,6})\s+(.*)$/;
 const HR_RE = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/;
 const UL_RE = /^\s*[-*]\s+(.*)$/;
 const OL_RE = /^\s*\d+\.\s+(.*)$/;
+/** A blockquote line: `>` (up to 3 leading spaces), an optional single space,
+ *  then the quoted content.  cp413. */
+const BLOCKQUOTE_RE = /^\s{0,3}>\s?(.*)$/;
 
 /** Split a run of text into bold / italic / plain runs.  `**x**` → bold,
  *  `*x*` → italic.  Emphasis never spans a newline (so a lone `*` on its own
@@ -59,9 +73,15 @@ function parseEmphasis(text: string): TermsInline[] {
 	return runs.length > 0 ? runs : [{ t: 'text', v: text }];
 }
 
-/** Parse a line/run of inline content: Blurt-image links first (they must stay
- *  verbatim, never emphasis-parsed), then bold/italic on the remaining text. */
-function parseInline(text: string): TermsInline[] {
+/** Regex for an inline `[text](url)` markdown link. `text` is any run of
+ *  non-`]` chars; `url` is a run of non-`)`, non-whitespace chars (a trailing
+ *  `)` or space ends the URL — standard markdown). cp414. */
+const MD_LINK_RE = /\[([^\]]+)\]\(([^)\s]+)\)/g;
+
+/** Blurt-image auto-links + bold/italic on a plain text run.  Explicit
+ *  `[text](url)` links are handled one level up in parseInline — this only
+ *  sees the text around/between them. */
+function parseTextRuns(text: string): TermsInline[] {
 	const runs: TermsInline[] = [];
 	for (const seg of linkifyBlurtImageSegments(text)) {
 		if (seg.link) {
@@ -76,6 +96,28 @@ function parseInline(text: string): TermsInline[] {
 		runs.push(...parseEmphasis(seg.value));
 	}
 	return runs;
+}
+
+/** Parse a line/run of inline content.  Explicit `[text](url)` links come
+ *  FIRST: the URL is scheme-validated via safeContactUrl, and an unsafe scheme
+ *  (javascript:/data:/…) leaves the WHOLE `[text](url)` as inert literal text —
+ *  never a live link.  The text around/between links then gets Blurt-image
+ *  auto-linking + bold/italic.  Link text renders as plain (escaped) text — no
+ *  nested emphasis inside the label. */
+function parseInline(text: string): TermsInline[] {
+	const runs: TermsInline[] = [];
+	let last = 0;
+	let m: RegExpExecArray | null;
+	MD_LINK_RE.lastIndex = 0;
+	while ((m = MD_LINK_RE.exec(text)) !== null) {
+		const href = safeContactUrl(m[2] ?? '');
+		if (!href) continue; // unsafe scheme → the match stays literal text
+		if (m.index > last) runs.push(...parseTextRuns(text.slice(last, m.index)));
+		runs.push({ t: 'link', v: m[1] ?? '', href });
+		last = m.index + m[0].length;
+	}
+	if (last < text.length) runs.push(...parseTextRuns(text.slice(last)));
+	return runs.length > 0 ? runs : [{ t: 'text', v: text }];
 }
 
 /**
@@ -145,6 +187,26 @@ export function parseTermsMarkdown(input: string | null | undefined): TermsBlock
 			}
 			i--;
 			blocks.push({ type: 'ol', items });
+			continue;
+		}
+
+		if (BLOCKQUOTE_RE.test(line)) {
+			flushParagraph();
+			// Gather consecutive `>` lines, strip the marker, and treat the
+			// joined content as one blockquote of inline runs (internal newlines
+			// preserved, rendered whitespace-pre-line — same model as a
+			// paragraph). A blockquote never contains nested block markdown
+			// (a `> - x` line renders the literal "- x", not a nested list) —
+			// consistent with the deliberately-small subset.
+			const quoted: string[] = [];
+			while (i < lines.length) {
+				const m = BLOCKQUOTE_RE.exec(lines[i] ?? '');
+				if (!m) break;
+				quoted.push(m[1] ?? '');
+				i++;
+			}
+			i--; // step back; outer loop will advance
+			blocks.push({ type: 'blockquote', runs: parseInline(quoted.join('\n')) });
 			continue;
 		}
 

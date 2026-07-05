@@ -196,9 +196,6 @@
       "address_share": {
         "warning": "Senden Sie USDC nur auf {network}. USDC auf einem anderen Netzwerk an diese Adresse zu senden, verliert Ihre Gelder dauerhaft."
       },
-      "order_row": {
-        "network_hint": "Sie benötigen USDC auf {network} für diesen Trade."
-      },
       "price_subline": {
         "live": "1 USDC = ${price} aktuell",
         "unavailable": "USDC/USD-Preis-Feed nicht verfügbar — zuletzt vor {staleness} gesehen."
@@ -230,9 +227,6 @@
       },
       "address_share": {
         "warning": "Stablecoin-Handel — DAI ist auf Vertragsebene dezentraler als USDT/USDC (kein Admin-Freeze), aber teilweise durch USDC über das PSM gedeckt. Wähle ein Netzwerk mit beiden Gegenparteien."
-      },
-      "order_row": {
-        "network_hint": "DAI auf {network}"
       },
       "price_subline": {
         "live": "1 DAI = ${price}",
@@ -315,7 +309,6 @@
     "anti_share": "Die Seed mit dem 'Support' teilen — unserem oder irgendeinem anderen. Echter Support fragt NIEMALS nach deiner Seed. Wer es tut, ist ein Betrüger.",
     "anti_support": "Annehmen, dass irgendjemand dir bei der Wiederherstellung helfen kann. Kann niemand. Wir nicht. Niemand. Genau das ist der ganze Sinn von non-custodial.",
     "learn_more_heading": "Mehr erfahren",
-    "learn_more_body": "Verwandte Ressourcen:",
     "faq_lost_keys": "Was passiert, wenn ich meine Schlüssel verliere?",
     "faq_privacy": "Datenschutzpraktiken",
     "security_page": "Vollständiges Sicherheitsmodell",
@@ -808,7 +801,6 @@
     "window_label": "{days}T",
     "summary_competitive": "Heutiger Räumungspreis: {rate} BLURT/h — {slots} von {max} Slots belegt. Biete über diesem Tarif, um sichtbar zu sein.",
     "summary_partial": "{slots} von {max} Slots heute belegt — jedes Gebot gewinnt jetzt einen sichtbaren Slot.",
-    "summary_empty": "Alle {max} Slots sind heute frei — niemand hat geboten.",
     "chart_aria": "Tägliches Räumungspreis-Diagramm der letzten {days} Tage",
     "legend": "Balkenhöhe = Räumungspreis (BLURT/Stunde). Volles Grün = alle Slots belegt (umkämpfte Auktion). Verblasstes Grün = einige Slots belegt. Grau = keine Gebote an diesem Tag.",
     "no_history_yet": "Keine Gebote für hervorgehobene Slots in den letzten {days} Tagen. Sei der Erste."
@@ -832,7 +824,8 @@
     "close": "Schließen",
     "learn_more": "Mehr erfahren",
     "unlock": "Entsperren",
-    "password_too_short": "Das Passwort muss mindestens 8 Zeichen haben."
+    "password_too_short": "Das Passwort muss mindestens 8 Zeichen haben.",
+    "lazy_load_failed": "Dieser Abschnitt konnte nicht geladen werden."
   },
   "compare": {
     "heading": "Orderbooks vergleichen",
@@ -967,8 +960,6 @@
   },
   "explorer": {
     "search": {
-      "page_title": "Block-Explorer",
-      "page_description": "Durchsuche die Blockchain nach Benutzer, Transaktions-ID oder Blocknummer.",
       "heading": "Block-Explorer",
       "subheading": "Durchsuche die Blockchain nach @benutzer, Transaktions-ID oder Blocknummer.",
       "label": "Suchen",
@@ -987,15 +978,12 @@
       "fallback_description": "Unabhängiger Blurt-Explorer."
     },
     "account": {
-      "page_title": "@{account} im Block-Explorer",
-      "page_description": "Aktuelle On-Chain-Operationen von @{account}.",
       "loading": "Konto wird geladen…",
       "not_found_title": "Konto nicht gefunden",
       "not_found_body": "Wir konnten @{account} nicht auf der Chain finden. Das Konto existiert möglicherweise nicht, oder dem RPC-Knoten fehlen Daten.",
       "try_fallback": "Ersatz-Explorer versuchen",
       "error_title": "Konto konnte nicht geladen werden",
       "view_profile_link": "Morphit-Profil ansehen",
-      "posting_pubkey_label": "Posting-Public-Key",
       "recent_ops_heading": "Aktuelle Operationen",
       "no_ops": "Noch keine Operationen aufgezeichnet.",
       "load_more": "Ältere Operationen laden",
@@ -1013,8 +1001,6 @@
       "key_memo": "Memo"
     },
     "block": {
-      "page_title": "Block {block}",
-      "page_description": "Block {block} der Blockchain.",
       "loading": "Block wird geladen…",
       "not_found_title": "Block nicht gefunden",
       "not_found_body": "Block {block} existiert noch nicht auf der Chain, oder dem RPC-Knoten fehlen Daten.",
@@ -1035,8 +1021,6 @@
       }
     },
     "tx": {
-      "page_title": "Transaktion {trx}…",
-      "page_description": "On-Chain-Transaktionsdetails.",
       "loading": "Transaktion wird geladen…",
       "not_found_title": "Transaktion nicht gefunden",
       "not_found_body": "Wir konnten diese Transaktion nicht abrufen. Manche RPC-Knoten unterstützen keine Suche per ID; versuche den Ersatz-Explorer.",
@@ -1054,8 +1038,6 @@
       }
     },
     "activity": {
-      "page_title": "Handelsaktivität",
-      "page_description": "Volumen und aktive Angebote auf dieser Morphit-Instanz.",
       "heading": "Handelsaktivität",
       "subheading": "Anzahl abgeschlossener Trades und aktuelle Angebote, nach Asset.",
       "volume_heading": "Handelsvolumen",
@@ -1701,6 +1683,7 @@
     "success": "⭐ Auftrag hervorgehoben — {blurt} BLURT bezahlt",
     "error_locked": "Active Key muss entsperrt sein, um die Hervorhebungsgebühr zu bezahlen.",
     "password_label": "Dein Passwort (zum Signieren mit deinem Active Key)",
+    "password_label_named": "Das Passwort von {handle} (zum Signieren mit deinem Active Key)",
     "error_password_required": "Passwort eingeben, um das Gebot zu signieren.",
     "error_bad_password": "Dieses Passwort hat deinen Active-Key nicht entsperrt.",
     "error_generic": "Konnte dein Gebot nicht abgeben. Versuche es erneut.",
@@ -1732,7 +1715,8 @@
       "comment_label": "Kommentar (optional)",
       "comment_placeholder": "Was auch immer zum Ablauf des Trades.",
       "submit": "Feedback absenden",
-      "submitting": "Wird gesendet…"
+      "submitting": "Wird gesendet…",
+      "subject_locked_label": "Du bewertest"
     },
     "error": {
       "subject_invalid": "Das sieht nicht nach einem gültigen Kontonamen aus.",
@@ -2188,19 +2172,12 @@
       "expired": "Abgelaufen"
     },
     "order": {
-      "buying": "kaufe {asset}",
-      "selling": "verkaufe {asset}",
-      "range_open": "beliebiger Betrag ({fiat})",
-      "range_both": "{min} – {max} {fiat}",
-      "range_min_only": "ab {min} {fiat}",
-      "range_max_only": "bis {max} {fiat}",
       "posted_prefix": "Gepostet",
       "state_live": "Aktiv",
       "state_cancelled": "Storniert",
       "state_expired": "Abgelaufen",
       "fee_verified": "Sichtbar im Orderbook",
       "action_edit": "Bearbeiten",
-      "action_cancel": "Stornieren",
       "action_edit_expired": "Bearbeitung geschlossen (15-Min-Fenster)",
       "action_cancelled": "Storniert",
       "action_feature": "Hervorheben",
@@ -2217,7 +2194,9 @@
       "action_relist_hint": "Füllt das Formular mit den ursprünglichen Bedingungen vor; eine neue Listing-Gebühr fällt an.",
       "edit_window_countdown": "Bearbeitungsfenster: {remaining}",
       "edit_window_tooltip": "Angebote können nur innerhalb von 15 Minuten nach dem Posten bearbeitet werden. Danach müssen sie storniert und neu erstellt werden.",
-      "edit_window_aria": "Verbleibende Bearbeitungszeit: {remaining}"
+      "edit_window_aria": "Verbleibende Bearbeitungszeit: {remaining}",
+      "feedback_no_counterparty": "Noch kein Handelspartner zum Bewerten",
+      "feedback_pick_prompt": "Mit wem hast du gehandelt?"
     },
     "cancel": {
       "confirm_title": "Diese Order stornieren?",
@@ -2301,7 +2280,6 @@
       "keyfile_explain": "Optional: lade eine verschlüsselte Sicherung deiner Schlüssel herunter. Gleiches Passwort wie oben. Bewahre die Datei an einem sicheren Ort auf (USB-Stick, vertrauenswürdige Cloud, anderes Gerät) als alternativen Weg zurück zu deinem Konto, falls der Browser-Speicher gelöscht wird.",
       "password_strength_common": "Dieses Passwort gehört zu den häufigsten — wähle etwas Einzigartiges.",
       "password_strength_trivial": "Aufeinanderfolgende oder wiederholte Muster lassen sich leicht erraten. Misch sie auf.",
-      "password_strength_short": "Erwäge ein längeres Passwort (12+ Zeichen empfohlen).",
       "password_strength_ok": "Sieht gut aus.",
       "persist_failed": "Dein verschlüsselter Keystore konnte nicht auf diesem Gerät gespeichert werden. Der Speicher ist möglicherweise nicht verfügbar. Wähle stattdessen «Seed-Phrase jedes Mal» oder versuche es erneut.",
       "password_strength_too_simple": "Mische Ziffern, Symbole oder Großbuchstaben — oder mache es 12+ Zeichen lang.",
@@ -2643,10 +2621,6 @@
     "order": {
       "buying": "kauft {asset}",
       "selling": "verkauft {asset}",
-      "range_both": "{min} – {max} {fiat}",
-      "range_min_only": "ab {min} {fiat}",
-      "range_max_only": "bis {max} {fiat}",
-      "range_open": "beliebiger Betrag ({fiat})",
       "updated_prefix": "Aktualisiert",
       "new_trader_aria": "Neuer Händler — erster Handel noch nicht abgeschlossen",
       "new_trader_tooltip": "Dieser Händler ist neu bei Morphit. Hilf ihm zu starten!",
@@ -2701,7 +2675,9 @@
       "trades_since": "{count} Trades seit {month}",
       "trades_only": "{count} Trades",
       "reputation_aria": "Reputationswert {score} von 5",
-      "message_word": "Nachricht"
+      "message_word": "Nachricht",
+      "message_before": "Nachricht an {handle} vor dem {date}",
+      "message_compact": "Nachricht an {handle}"
     },
     "search_no_results_title": "Keine passenden Aufträge",
     "search_no_results_body": "Kein geladener Auftrag erwähnt „{query}\". Versuchen Sie ein anderes Wort oder löschen Sie die Suche, um alles zu sehen.",
@@ -2980,7 +2956,6 @@
       "region_label": "Region (optional)",
       "region_hint": "Wo du handeln möchtest. Hilft Leuten in deiner Nähe, dich zu finden.",
       "terms_label": "Bedingungen / Details / Notizen",
-      "terms_placeholder": "z. B. „Nur am Wochenende\" oder „Nur Bargeld für Beträge unter 100 $\"",
       "expires_label": "Listing läuft ab",
       "expires_1d": "In 1 Tag",
       "expires_3d": "In 3 Tagen",
@@ -3099,7 +3074,6 @@
       "body_insufficient_funds": "Dein Konto hat nicht genug BLURT, um die Listing-Gebühr zu bezahlen.",
       "body_locked": "Die Sitzung ist gesperrt. Entsperre dein Passwort, um es erneut zu versuchen.",
       "body_bad_password": "Dieses Passwort hat dein Keystore nicht entsperrt. Versuche es erneut.",
-      "body_missing_external_tx_id": "Eine externe Transaktions-ID ist für BTC- und XMR-Gebührenzahlungen erforderlich.",
       "body_posting_only": "Die Zahlung der Inseratsgebühr in BLURT benötigt deinen Active Key, und er ist nicht auf diesem Gerät – du bist nur mit deinem Posting Key angemeldet. Melde dich mit deinem Master-Passwort oder deinem vollständigen Keyfile an, um in BLURT zu zahlen, oder geh zurück und zahle in BTC/XMR (oder nutze dein kostenloses erstes Inserat).",
       "body_recipient_missing": "Die Inseratsgebühr konnte nicht gesendet werden – das Treasury-Konto, an das sie geht (@morphit-fees), scheint auf Blurt noch nicht zu existieren. Es wurde nichts bezahlt. Wenn du diese Instanz betreibst, muss dieses Konto erstellt werden; andernfalls melde dies bitte.",
       "body_insufficient_rc": "Dein Konto hat wenig Resource Credits (RC), daher hat Blurt die Transaktion abgelehnt. Power up ein wenig BLURT oder warte, bis sich deine RC aufladen, und versuche es erneut. Es wurde nichts bezahlt.",
@@ -3156,7 +3130,6 @@
       "fee_address_hide_qr": "QR-Code ausblenden",
       "fee_address_chain_pinned": "Auf der Blockchain durch {account} verankert — jede Morphit-Instanz prüft Gebühren gegen diese Adresse.",
       "fee_address_chain_pinned_aria": "Authentizität der blockchain-verankerten Adresse",
-      "fee_address_local_fallback": "Lokale Fallback-Adresse — dieser Betreiber hat die kanonische Chain-Verankerung noch nicht übernommen. Überprüfen Sie sie vor dem Senden mit einer anderen Morphit-Instanz, wenn Sie zusätzliche Sicherheit wünschen.",
       "fee_address_unavailable": "Dieser Betreiber hat keine {asset}-Gebührenadresse konfiguriert. Wählen Sie stattdessen BLURT oder posten Sie Ihren Auftrag auf einer anderen Morphit-Instanz.",
       "blurt_needs_active_key": "Benötigt deinen Active Key. Du bist gerade mit deinem Posting Key angemeldet — melde dich mit deiner 12-Wort-Seed-Phrase oder deinem Keyfile an, um in BLURT zu zahlen, oder zahle in BTC/XMR:"
     },
@@ -3178,8 +3151,7 @@
       "amount_min_plus": "{min} {fiat} oder mehr in {asset}",
       "amount_any": "eine beliebige Menge {asset}",
       "price_market": "zum Marktpreis",
-      "price_fixed": "zu einem Festpreis von {price} {fiat} pro {asset}",
-      "see_notes": "Füge unten Bedingungen, Details oder Notizen hinzu:"
+      "price_fixed": "zu einem Festpreis von {price} {fiat} pro {asset}"
     }
   },
   "prices": {
@@ -3395,8 +3367,6 @@
     "orders_error": "Orders konnten gerade nicht geladen werden.",
     "no_active_orders": "Keine aktiven Orders. Aktuell nichts zu handeln.",
     "active_orders_sort_hint": "Älteste zuerst — die, die am ehesten ablaufen.",
-    "order_buying": "Kauft {asset}",
-    "order_selling": "Verkauft {asset}",
     "expires_in": "Läuft ab in {t}",
     "expires_now": "Läuft gerade ab",
     "given_heading": "Bewertungen, die dieser Nutzer abgegeben hat",
@@ -3419,7 +3389,6 @@
       "low_blurt_hint": "Dein flüssiges BLURT geht zur Neige. Lade auf, um weiter Orders zu veröffentlichen.",
       "low_voting_hint": "Deine Stimmkraft ist niedrig. Sie regeneriert sich in etwa 5 Tagen. Mehr BLURT als BLURT Power anlegen erhöht deine Obergrenze.",
       "top_up_blurt": "BLURT aufladen",
-      "top_up_hint": "Öffnet eine vorausgefüllte Kauforder.",
       "apr_label": "Verdient {apr} APR",
       "unclaimed_label": "Nicht abgeholte Belohnungen",
       "claim_now": "Jetzt abholen",
@@ -3429,7 +3398,6 @@
     "pnl": {
       "export_button": "P&L exportieren (letzte 12 Monate)",
       "exporting": "Bericht wird erstellt...",
-      "export_hint": "Lädt eine CSV mit deinen BLURT-Überweisungen, Gebühren und Featured-Gebot-Aktivitäten herunter.",
       "export_error": "Bericht konnte nicht erstellt werden",
       "csv_header": {
         "timestamp": "Zeitstempel (UTC)",
@@ -3449,7 +3417,6 @@
       }
     },
     "error": {
-      "profile_load_failed": "Konnte das Profil nicht laden.",
       "feedback_load_failed": "Konnte das Feedback nicht laden.",
       "feedback_given_load_failed": "Konnte das gegebene Feedback dieses Kontos nicht laden.",
       "orders_load_failed": "Konnte die Bestellungen nicht laden."
@@ -3672,7 +3639,8 @@
     },
     "faq": {
       "title": "FAQ — Wie Morphit funktioniert · Nicht-verwahrendes P2P",
-      "description": "Antworten zum Kauf und Verkauf von Bitcoin, Monero, BLURT und weiteren Kryptowährungen ohne KYC, nicht-verwahrendem Handel, privatem Chat, Gebühren und dem Vergleich mit LocalBitcoins, LocalMonero, Haveno."
+      "description": "Antworten zum Kauf und Verkauf von Bitcoin, Monero, BLURT und weiteren Kryptowährungen ohne KYC, nicht-verwahrendem Handel, privatem Chat, Gebühren und dem Vergleich mit LocalBitcoins, LocalMonero, Haveno.",
+      "keywords": "monero ohne kyc kaufen, bitcoin ohne kyc kaufen, krypto ohne kyc, morphit nicht-verwahrend, peer to peer, p2p, außerbörslich, OTC, privater handel, monero anonym kaufen, localmonero alternative, localbitcoins alternative, treuhand, fiat zu krypto, XMR, BTC, DBBS, agorism"
     },
     "security": {
       "title": "Sicherheit — Keys, Verschlüsselung, Threat Model · Morphit",
@@ -3803,12 +3771,14 @@
       "description": "Drucken Sie eine einseitige Referenz für die Nutzung von Morphit: Kontoname vs Seed-Phrase, Inseratgebühr vs Netzwerkgebühr, die unterstützten handelbaren Assets im Überblick, und was zu tun ist, wenn etwas schiefgeht."
     },
     "privacy_index": {
-      "title": "Privatsphäre auf Morphit — Leitfäden je Asset",
-      "description": "Privatsphäre-Leitfäden für jedes von Morphit unterstützte Asset. Die meisten Chains sind transparent; konkrete Schritte machen deine Trades deutlich schwerer zu verknüpfen, zu profilieren oder zu überwachen."
+      "title": "Monero & Bitcoin privat kaufen — Datenschutz-Leitfäden je Asset · Morphit",
+      "description": "Wie du deine Peer-to-Peer-Trades (P2P) auf Morphit privat hältst, einem außerbörslichen (OTC), nicht-verwahrenden Marktplatz ohne KYC. Leitfäden je Asset zum Kaufen und Verkaufen von Monero (XMR), Bitcoin (BTC) und mehr, ohne deine Identität zu verknüpfen: Adressrotation, Betrags-Jitter und chain-spezifische Techniken. Die meisten Chains sind transparent; diese konkreten Schritte machen deine Trades deutlich schwerer zu verknüpfen, zu profilieren oder zu überwachen.",
+      "keywords": "monero privat kaufen, bitcoin privat kaufen, monero datenschutz, bitcoin datenschutz, ohne kyc, monero ohne kyc kaufen, krypto anonym kaufen, peer to peer, p2p, außerbörslich, over the counter, OTC, nicht-verwahrend, adressrotation, privacy coin, XMR, BTC, DBBS, localmonero alternative, agorism, monero, bitcoin"
     },
     "privacy_asset": {
-      "title": "{asset}-Datenschutzleitfaden — Morphit",
-      "description": "So schützt du deine Privatsphäre beim Peer-to-Peer-Handel mit {asset} auf Morphit. Adressrotation, Betrags-Jitter und chainspezifische Privacy-Techniken."
+      "title": "{asset} privat kaufen und verkaufen — Datenschutzleitfaden · Morphit",
+      "description": "Schütze deine Privatsphäre, wenn du {asset} peer-to-peer (P2P) auf Morphit kaufst und verkaufst, einem nicht-verwahrenden Marktplatz ohne KYC. Adressrotation, Betrags-Jitter und chain-spezifische Techniken machen deine {asset}-Trades deutlich schwerer zu verknüpfen, zu profilieren oder zu überwachen.",
+      "keywords": "krypto privat kaufen, krypto datenschutz, ohne kyc, krypto anonym kaufen, peer to peer, p2p, nicht-verwahrend, adressrotation, privacy coin, außerbörslich, OTC, XMR, BTC, DBBS, agorism, monero, bitcoin"
     },
     "admin_setup_wizard": {
       "title": "Betreiber-Einrichtungsassistent — Morphit",
@@ -3870,10 +3840,7 @@
       "pool_note": "Deine Morphit-Instanz wickelt den gesamten Blurt-Netzwerkverkehr für dich ab — dein Browser kommuniziert nie direkt mit diesen Nodes. Dies ist nur ihr Live-Status.",
       "cooling_down": "pausiert",
       "recheck": "Node-Geschwindigkeiten erneut prüfen",
-      "http_error": "Fehler: {code}",
-      "failing": "{n} Fehler",
       "probing": "prüfe…",
-      "timed_out": "Zeitüberschreitung",
       "unreachable": "nicht erreichbar"
     },
     "session": {
@@ -3903,7 +3870,6 @@
         "malformed": "Das sieht nicht wie eine gültige URL aus."
       },
       "preview_label": "Vorschau",
-      "save": "Lokal speichern",
       "saved_toast": "Gespeichert ✓",
       "save_and_broadcast": "Speichern & senden",
       "broadcast_pending": "Veröffentliche…",
@@ -3925,7 +3891,6 @@
         "malformed": "URL ist ungültig."
       },
       "preview_label": "Vorschau:",
-      "save": "Lokal speichern",
       "saved_toast": "Auf diesem Gerät gespeichert.",
       "save_and_broadcast": "Speichern & senden",
       "clear": "Leeren",
@@ -4237,7 +4202,6 @@
       "status": {
         "not_enrolled": "Die Zwei-Faktor-Authentifizierung ist AUS.",
         "enrolled": "Die Zwei-Faktor-Authentifizierung ist EIN.",
-        "enrolled_since": "Aktiviert seit {date}.",
         "backup_codes_remaining": "{count, plural, one {# Sicherungscode übrig} other {# Sicherungscodes übrig}}",
         "backup_codes_low": "Dir gehen die Sicherungscodes aus. Erzeuge einen neuen Satz und lege sie an einem sicheren Ort ab.",
         "backup_codes_exhausted": "Du hast keine Sicherungscodes mehr. Wenn du deinen Authenticator verlierst, brauchst du deine Seed-Phrase zur Wiederherstellung."
@@ -4249,13 +4213,11 @@
         "step2_title": "2. Scanne den QR-Code",
         "step2_body": "Öffne deinen Authenticator und scanne diesen Code. Wenn du nicht scannen kannst (keine Kamera, Barrierefreiheit), gib das Geheimnis unten manuell ein.",
         "manual_label": "Manuelle Eingabe (Geheimnis):",
-        "manual_help": "Konto: {account}. Typ: Zeitbasiert (TOTP). Algorithmus: SHA-1. Stellen: 6. Intervall: 30 Sekunden.",
         "step3_title": "3. Bestätige den Code aus deiner App",
         "step3_body": "Gib den 6-stelligen Code ein, den dein Authenticator gerade anzeigt. Der Code rotiert alle 30 Sekunden; wenn deiner gerade gewechselt hat, warte auf den nächsten.",
         "code_label": "Aktueller 6-stelliger Code",
         "code_placeholder": "000000",
         "confirm_cta": "Bestätigen und 2FA aktivieren",
-        "confirm_busy": "Überprüfung…",
         "step4_title": "4. Speichere deine Sicherungscodes",
         "step4_body": "Diese zehn Codes lassen dich anmelden, falls du deinen Authenticator verlierst. Jeder Code funktioniert genau EINMAL. Speichere sie an einem sicheren Ort — einem Passwortmanager, gedruckt und verschlossen, oder auf Papier geschrieben. Wir werden sie nicht noch einmal anzeigen.",
         "backup_acknowledge": "Ich habe diese Sicherungscodes an einem sicheren Ort gespeichert.",
@@ -4270,9 +4232,7 @@
         "confirm_body": "Du kannst dann mit nur deinem Passwort entsperren. Bist du sicher?",
         "code_label": "Aktueller 6-stelliger Code (zur Bestätigung)",
         "submit": "2FA deaktivieren",
-        "submit_busy": "Deaktivierung…",
         "cancel": "2FA aktiviert lassen",
-        "success": "Zwei-Faktor-Authentifizierung deaktiviert.",
         "err_invalid_code": "Dieser Code wurde nicht verifiziert. Versuche es erneut."
       },
       "regenerate": {
@@ -4281,20 +4241,14 @@
         "confirm_body": "Deine vorherigen Sicherungscodes hören sofort auf zu funktionieren. Stelle sicher, dass du den Speicherschritt für die neuen Codes abschließen kannst, bevor du fortfährst.",
         "code_label": "Aktueller 6-stelliger Code (zur Bestätigung)",
         "submit": "Neue Codes erzeugen",
-        "submit_busy": "Erzeugung…",
-        "success": "Neue Sicherungscodes erzeugt. Speichere sie jetzt.",
         "err_invalid_code": "Dieser Code wurde nicht verifiziert. Versuche es erneut."
       },
       "unlock_prompt": {
-        "heading": "Zwei-Faktor-Code",
         "body": "Dein Passwort hat funktioniert. Gib jetzt den 6-stelligen Code aus deiner Authenticator-App ein, oder einen Sicherungscode.",
         "code_label": "Authenticator-Code oder Sicherungscode",
         "code_placeholder": "000000 oder XXXX-XXXX",
-        "submit": "Weiter",
-        "submit_busy": "Überprüfung…",
         "err_invalid_code": "Dieser Code wurde nicht verifiziert. Prüfe, ob die Zeit deines Geräts synchron ist, oder versuche einen Sicherungscode.",
-        "err_locked_out": "Zu viele ungültige Versuche. Versuche es in {seconds} Sekunden erneut.",
-        "backup_code_redeemed_warning": "Ein Sicherungscode wurde gerade verwendet. {remaining} Sicherungscodes verbleiben."
+        "err_locked_out": "Zu viele ungültige Versuche. Versuche es in {seconds} Sekunden erneut."
       },
       "recommended_apps": {
         "heading": "Empfohlene Authenticator-Apps (Open Source)",
@@ -4453,7 +4407,6 @@
     "not_now": "Jetzt nicht",
     "enabling": "Wird aktiviert…",
     "enabled": "Fertig – du wirst benachrichtigt, sobald eine neue Nachricht eintrifft.",
-    "error": "Benachrichtigungen konnten nicht aktiviert werden. Du kannst sie unter Einstellungen → Benachrichtigungen aktivieren.",
     "privacy_note": "Nutzt private Browser-Benachrichtigungen – ohne E-Mail oder Telefonnummer, jederzeit abschaltbar.",
     "dismiss_aria": "Verwerfen"
   },
@@ -4510,5 +4463,13 @@
     "json_note": "Baust du einen Aggregator oder ein Dashboard? Dieselben Daten gibt es als JSON:",
     "json_link": "Rohdaten-Feed",
     "error": "Die Statistiken konnten gerade nicht geladen werden. Bitte versuche es gleich noch einmal."
+  },
+  "terms": {
+    "leave_site": {
+      "title": "Sie verlassen Morphit",
+      "body": "Möchten Sie {site} wirklich besuchen?",
+      "cancel": "Abbrechen",
+      "confirm": "Website besuchen"
+    }
   }
 }

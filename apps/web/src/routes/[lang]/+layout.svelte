@@ -670,18 +670,25 @@
 				>
 			</nav>
 
-			<div class="flex w-full flex-wrap items-center justify-between gap-3">
-				<p class="text-xs text-ink-500">
+			<div class="flex w-full items-center justify-between gap-3">
+				<p class="min-w-0 text-xs text-ink-500">
 					<a
 						href="{lp('/faq')}?q=why_agpl&lang={currentLang}"
 						class="underline decoration-dotted underline-offset-2 transition-colors hover:text-morphit-emerald"
 						title={$_('footer.agpl_title')}>AGPL-3.0</a
 					> · No cookies · No analytics · No logs
 				</p>
-				<!-- Language switcher lives here (cp401): far bottom-right,
-				     sharing the copyright line. dropUp so its menu opens
-				     upward instead of below the page fold. -->
-				<LanguageSwitcher dropUp />
+				<!-- Language switcher lives here (cp401): shares the copyright
+				     row at the far end (bottom-right in LTR, bottom-left in RTL —
+				     the reading-direction end). cp414 — dropped flex-wrap on the
+				     row + min-w-0 on the copyright so on a narrow phone the
+				     copyright text wraps INSIDE its own paragraph instead of
+				     bumping the switcher onto a new line below it; the switcher
+				     stays at the top-right of this row, never lower than the
+				     AGPL line. dropUp so its menu opens upward, not below the fold. -->
+				<div class="flex-none self-start">
+					<LanguageSwitcher dropUp />
+				</div>
 			</div>
 		</div>
 	</footer>

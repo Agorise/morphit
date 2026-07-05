@@ -398,6 +398,26 @@ export function formatDayMonth(input: string | Date | null | undefined): string 
 }
 
 /**
+ * "26 Jun" — day + the first 3 characters of the localized month name, UTC.
+ * The compact form for the mobile order-card message button ("Message @user
+ * before 26 Jun"), where a full month name + a 16-char username would blow
+ * past one line. Day-first (Ken's canonical order); month clipped to 3 chars
+ * after localization so it stays slim in every language (CJK months are
+ * already ≤3 chars). UTC for the same unambiguity reason as the other date
+ * formatters. Returns '' for an invalid/absent date so callers can drop the
+ * "before …" suffix entirely.
+ */
+export function formatDayMonthShort(input: string | Date | null | undefined): string {
+	if (input === null || input === undefined || input === '') return '';
+	const d = typeof input === 'string' ? new Date(input) : input;
+	if (isNaN(d.getTime()) || d.getFullYear() < 2000) return '';
+	const loc = activeLocale();
+	const day = getDateFormat(loc, { day: 'numeric', timeZone: 'UTC' }).format(d);
+	const month = getDateFormat(loc, { month: 'long', timeZone: 'UTC' }).format(d).slice(0, 3);
+	return `${day} ${month}`;
+}
+
+/**
  * Assemble "day full-month, year" (Ken's canonical order) with the month
  * name + digits localized, in UTC. UTC so a displayed date is unambiguous
  * and identical for every viewer regardless of their timezone — the same
