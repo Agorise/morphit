@@ -25,6 +25,56 @@ function escapeHtml(s: string): string {
 	return s.replace(/[&<>]/g, (c) => (c === '&' ? '&amp;' : c === '<' ? '&lt;' : '&gt;'));
 }
 
+/** Render a JSON string VALUE token (quotes included) with the whitespace
+ *  escapes \n, \r, \t shown as REAL line breaks / tabs instead of literal
+ *  backslash sequences, so multi-line markdown values — an order's `terms`,
+ *  a post `body` — read naturally in the explorer instead of as one long
+ *  `...\n\n...` line. Continuation lines hang-indent under the value.
+ *
+ *  DISPLAY-ONLY: the wire value is unchanged. This deliberately trades strict
+ *  JSON-literal validity in the *rendered* view for readability — the point
+ *  is a nicer view of the same bytes, matching the module's existing
+ *  expandNestedJsonStrings posture.
+ *
+ *  SAFETY: every literal character is still passed through escapeHtml (the
+ *  only non-escaped output is real whitespace we insert ourselves and the
+ *  surrounding quotes), so the "no injectable markup" guarantee is preserved
+ *  — a `<script>` or `</span>` inside the string stays inert. Non-whitespace
+ *  escapes (\" \\ \/ \uXXXX \b \f) are left as their literal backslash form. */
+function renderMultilineStringValue(token: string, indent: string): string {
+	const inner = token.slice(1, -1); // drop the surrounding quotes
+	const cont = '\n' + indent + '  '; // real break + hang indent under the value
+	let html = '"';
+	for (let i = 0; i < inner.length; i++) {
+		const ch = inner[i]!;
+		if (ch === '\\' && i + 1 < inner.length) {
+			const next = inner[i + 1]!;
+			if (next === 'n') {
+				html += cont;
+				i++;
+				continue;
+			}
+			if (next === 't') {
+				html += '\t';
+				i++;
+				continue;
+			}
+			if (next === 'r') {
+				// Fold a CR into the LF that follows it (CRLF → one break);
+				// a lone CR is simply dropped.
+				i++;
+				continue;
+			}
+			// Any other escape (\" \\ \/ \uXXXX \b \f) stays in literal form.
+			html += escapeHtml(ch + next);
+			i++;
+			continue;
+		}
+		html += escapeHtml(ch);
+	}
+	return html + '"';
+}
+
 // One token at a time: a quoted string (with an optional trailing `:` that
 // marks it as an object key), a literal, a number, structural punctuation, or
 // a run of whitespace.
@@ -88,6 +138,9 @@ export function highlightJsonToHtml(json: string): string {
 	TOKEN.lastIndex = 0;
 	let out = '';
 	let cursor = 0;
+	// Indentation of the current line, tracked from whitespace tokens so a
+	// multi-line string value can hang-indent its continuation lines.
+	let currentIndent = '';
 	let m: RegExpExecArray | null;
 
 	while ((m = TOKEN.exec(json)) !== null) {
@@ -99,8 +152,14 @@ export function highlightJsonToHtml(json: string): string {
 		if (m[1] !== undefined) {
 			// A quoted string. m[2] present ⇒ it's followed by a colon ⇒ key.
 			const isKey = m[2] !== undefined;
-			out += `<span class="${isKey ? 'json-key' : 'json-string'}">${escapeHtml(m[1])}</span>`;
-			if (isKey) out += escapeHtml(m[2] as string); // the ":" — plain
+			if (isKey) {
+				out += `<span class="json-key">${escapeHtml(m[1])}</span>`;
+				out += escapeHtml(m[2] as string); // the ":" — plain
+			} else {
+				// Value strings render \n/\t as real breaks/tabs so multi-line
+				// markdown (an order's terms, a post body) reads cleanly.
+				out += `<span class="json-string">${renderMultilineStringValue(m[1], currentIndent)}</span>`;
+			}
 		} else if (m[3] !== undefined) {
 			out += `<span class="${m[3] === 'null' ? 'json-null' : 'json-bool'}">${escapeHtml(m[3])}</span>`;
 		} else if (m[4] !== undefined) {
@@ -109,6 +168,10 @@ export function highlightJsonToHtml(json: string): string {
 			out += escapeHtml(m[5]); // { } [ ] , — plain punctuation
 		} else if (m[6] !== undefined) {
 			out += m[6]; // whitespace only — no HTML-special chars possible
+			// Track the current line's indent so a following multi-line
+			// string value can hang-indent under itself.
+			const lastNl = m[6].lastIndexOf('\n');
+			if (lastNl !== -1) currentIndent = m[6].slice(lastNl + 1);
 		}
 	}
 	if (cursor < json.length) out += escapeHtml(json.slice(cursor));

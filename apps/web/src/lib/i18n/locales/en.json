@@ -2617,7 +2617,6 @@
     "error_title": "Can't reach the indexer",
     "error_body": "The indexer is unreachable at the moment. Please try again in a little while.",
     "load_more": "Load more",
-    "indexed_block_label": "Indexed block",
     "order": {
       "buying": "buying {asset}",
       "selling": "selling {asset}",
@@ -2956,6 +2955,7 @@
       "region_label": "Region (optional)",
       "region_hint": "Where you're willing to trade. Helps people find you nearby.",
       "terms_label": "Terms / Details / Notes",
+      "terms_forbidden_char": "Your terms contain a character that can't be used — remove any hidden or control characters. (Line breaks and the usual markdown are fine.)",
       "expires_label": "Listing expires",
       "expires_1d": "In 1 day",
       "expires_3d": "In 3 days",

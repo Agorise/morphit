@@ -101,6 +101,7 @@
 	import { MORPHIT_INDEXER_ORIGIN, resolveOrigin } from '$net/config';
 	import type { OrderFormInput } from '$lib/orders/payload';
 	import { makeExpiryFlooredUtcDay } from '$lib/orders/payload';
+	import { termsHasForbiddenChar } from '$lib/orders/termsForbiddenChars';
 	import { publishOrderPost } from '$lib/syndication/publish';
 	import {
 		isOrderBlogDefaultEnabled,
@@ -1736,9 +1737,16 @@
 	const TERMS_MAX = 2048;
 	const TERMS_HARD_MAX = TERMS_MAX * 2;
 	const termsOverLimit = $derived(terms.length > TERMS_MAX);
+	// cp422: block submit if the terms contain a character the indexer
+	// rejects (control / bidi / zero-width). Terms is multi-line markdown,
+	// so TAB/LF/CR are permitted — see termsForbiddenChars.ts. Without this
+	// gate the order broadcasts, pays its listing fee, and is then silently
+	// dropped by the indexer (terms_forbidden_char) — a wasted, unrefundable
+	// fee for an order that never appears.
+	const termsForbidden = $derived(termsHasForbiddenChar(terms));
 
 	const canReview = $derived(
-		step1Done && step2Done && step3Done && !termsOverLimit && termsOkForBarter
+		step1Done && step2Done && step3Done && !termsOverLimit && !termsForbidden && termsOkForBarter
 	);
 
 	// ─── Transition handlers ───────────────────────────────────────
@@ -2887,6 +2895,11 @@
 						placeholder={termsPlaceholder}
 					/>
 				</label>
+				{#if termsForbidden}
+					<p class="-mt-3 mb-4 text-sm text-red-700 dark:text-red-300" role="alert">
+						{$_('post_order.form.terms_forbidden_char')}
+					</p>
+				{/if}
 
 				<label class="block">
 					<span class="mb-1 block text-sm font-semibold">{$_('post_order.form.expires_label')}</span

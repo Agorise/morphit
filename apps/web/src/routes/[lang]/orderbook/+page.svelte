@@ -390,7 +390,6 @@
 	let phase = $state<Phase>('loading');
 	let items = $state<OrderRecord[]>([]);
 	let cursor: string | null = $state(null);
-	let indexedBlock = $state(0);
 	let errorMessage = $state('');
 	let loadingMore = $state(false);
 
@@ -715,7 +714,6 @@
 		}
 		items = [...result.data.items];
 		cursor = result.data.next_cursor;
-		indexedBlock = result.data.indexed_block;
 		phase = 'ready';
 		// Kick off profile hydration — deliberately not awaited.
 		// The identicon fallback renders immediately; custom avatars
@@ -747,7 +745,6 @@
 			}
 		}
 		cursor = result.data.next_cursor;
-		indexedBlock = result.data.indexed_block;
 		void hydrateProfiles(result.data.items, signal);
 	}
 
@@ -804,7 +801,6 @@
 				const SNAPSHOT_SIZE = 50;
 				const tail = items.slice(SNAPSHOT_SIZE);
 				items = [...snap.items, ...tail];
-				indexedBlock = snap.indexed_block;
 				streamedIds.clear();
 				for (const e of snap.items) {
 					streamedIds.add(`${e.account}/${e.permlink}`);
@@ -1406,10 +1402,6 @@
 					</BusyButton>
 				</div>
 			{/if}
-
-			<p class="mt-4 text-center text-xs text-ink-400">
-				{$_('orderbook.indexed_block_label')}: #{indexedBlock}
-			</p>
 		{/if}
 	{/if}
 </div>

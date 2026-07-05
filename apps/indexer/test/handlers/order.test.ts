@@ -221,6 +221,39 @@ describe('order handler', () => {
 		);
 		expect(r).toEqual({ ok: false, reason: 'terms_too_long' });
 	});
+
+	it('cp422: accepts multi-line markdown terms (TAB/LF/CR permitted)', async () => {
+		// Regression: the terms field is a multi-line markdown textarea,
+		// but the strict forbidden-char regex covered the whole C0 range
+		// (\u0000-\u001F), rejecting every newline. Result: any order with
+		// multi-line terms was dropped on-chain AFTER its fee settled.
+		// Newlines + tabs must validate. Fee path is orthogonal here (no
+		// sibling transfer → inserts with fee_status='missing').
+		const mock = makeMockClient([{ match: 'INSERT INTO orders' }]);
+		const r = await handler(
+			makeCtx({
+				signer: 'alice',
+				payload: {
+					...validPayload(),
+					terms: '# Big header\n\n**Bold** and *italic* text.\n\n> A blockquote line.\n\n1. First\n2. Second\n\n- a bullet\ttab too'
+				},
+				siblingOps: []
+			}),
+			mock.client
+		);
+		expect(r).toEqual({ ok: true });
+	});
+
+	it('cp422: still rejects a bidi override (RLO) in terms', async () => {
+		const mock = makeMockClient();
+		const r = await handler(
+			makeCtx({
+				payload: { ...validPayload(), terms: 'cash\u202Eonly' }
+			}),
+			mock.client
+		);
+		expect(r).toEqual({ ok: false, reason: 'terms_forbidden_char' });
+	});
 });
 
 describe('order handler — fee verification', () => {

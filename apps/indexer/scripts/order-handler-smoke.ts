@@ -791,6 +791,44 @@ await scenario('O3.4: rejects terms with control character', async () => {
 	assertEqual(r, { ok: false, reason: 'terms_forbidden_char' }, 'result');
 });
 
+// cp422 regression — the strict forbidden-char regex included the whole
+// C0 range \u0000-\u001F, which swallowed TAB/LF/CR. Because the terms
+// field is a multi-line markdown textarea (TermsText renders headings,
+// blockquotes, lists, links, and line feeds), every order with a
+// newline in its terms was REJECTED on-chain AFTER its fee was paid —
+// the op broadcasts, the fee transfer settles, and the indexer silently
+// drops the row, so the order never appears anywhere. These two pin the
+// fix: newlines/tabs are accepted, the dangerous controls stay blocked.
+await scenario('cp422: ACCEPTS multi-line markdown terms (TAB/LF/CR permitted)', async () => {
+	const signer = 'alice';
+	const permlink = 'order-2026-04-25-aaa';
+	const ctx = makeCtx({
+		signer,
+		payload: makePayload({
+			permlink,
+			fee_method: 'blurt',
+			terms: '# Big header\n\n**Bold** and *italic* text.\n\n> A blockquote line.\n\n1. First\n2. Second\n\n- a bullet\ttab too'
+		}),
+		siblingOps: feeTransfer(signer, permlink, 62.5)
+	});
+	const mock = makeMockClient(expectationsForBlurtFeePath(0, 1, true));
+	const r = await handler(ctx, mock.client);
+	assertEqual(r, { ok: true }, 'result');
+});
+
+await scenario('cp422: STILL rejects a bidi override in terms (RLO)', async () => {
+	const mock = makeMockClient();
+	const r = await handler(
+		makeCtx({
+			signer: 'alice',
+			payload: makePayload({ terms: 'cash\u202Eonly' }),
+			siblingOps: feeTransfer('alice', 'order-2026-04-25-aaa', 62.5)
+		}),
+		mock.client
+	);
+	assertEqual(r, { ok: false, reason: 'terms_forbidden_char' }, 'result');
+});
+
 await scenario('O3.4: rejects payment_method item with zero-width joiner', async () => {
 	const mock = makeMockClient();
 	const r = await handler(

@@ -158,6 +158,23 @@ scenario('deeply nested input is depth-bounded (no throw/hang)', () => {
 	assert(out.includes('\\"inner\\"'), 'a layer past the cap should stay an escaped string');
 });
 
+scenario('multi-line string VALUES render with real line breaks (terms / post body)', () => {
+	// cp422 — an order's `terms` and a post `body` are multi-line markdown.
+	// The renderer shows their \n as REAL breaks (readable) while keeping
+	// every literal character HTML-escaped, so a hostile </span><script>
+	// pasted inside a multi-line value stays inert.
+	const op = {
+		body: '# H\n\n**bold** and *it*\n\n> quote\n\n1. one\n2. two\n\n</span><script>alert(1)</script>'
+	};
+	const html = highlightJsonToHtml(JSON.stringify(expandNestedJsonStrings(op), null, 2));
+	assert(html.includes('# H\n'), 'value newlines must render as real line breaks');
+	assert(!html.includes('# H\\n'), 'no literal \\n escape should remain after the header');
+	assert(html.includes('&gt; quote'), 'blockquote > must render as &gt; (normal char, never rejected)');
+	assert(!html.includes('<script>'), 'raw <script> in a multi-line value must be escaped');
+	assert(html.includes('&lt;/span&gt;&lt;script&gt;'), 'the injected tags must be escaped, not literal');
+	assertNoRawHtml(html, 'multiline-value');
+});
+
 console.log(`\n${'─'.repeat(56)}`);
 if (failures === 0) {
 	console.log(`✓ all ${scenarios} scenarios passed`);

@@ -218,6 +218,43 @@ describe('orderReplace handler', () => {
 		expect(r).toEqual({ ok: false, reason: 'terms_forbidden_char' });
 	});
 
+	it('cp422: accepts multi-line markdown terms on replace (TAB/LF/CR permitted)', async () => {
+		// Mirror of the create-handler regression: the replace handler
+		// shared the same C0-swallowing regex, so editing an order to add
+		// multi-line terms was silently rejected on-chain too.
+		const createdAt = new Date('2026-04-19T12:00:00Z');
+		const blockTime = new Date('2026-04-19T12:02:00Z');
+		const mock = makeMockClient([
+			{
+				match: 'SELECT status, created_at',
+				rows: [
+					{
+						status: 'live',
+						created_at: createdAt,
+						side: 'sell',
+						asset: 'BTC',
+						asset_network: null,
+						fiat_currency: 'EUR',
+						fee_method: 'blurt'
+					}
+				]
+			},
+			{ match: 'UPDATE orders', rowCount: 1 }
+		]);
+		const r = await handler(
+			makeCtx({
+				signer: 'alice',
+				blockTime,
+				payload: {
+					...validPayload(),
+					terms: '# Updated terms\n\nCash only.\n\n> Meet in public.\ntabs ok'
+				}
+			}),
+			mock.client
+		);
+		expect(r).toEqual({ ok: true });
+	});
+
 	// ─── B1 regression: waiver substance protection ────────────────
 
 	it('B1: rejects replace below waiver floor when target is waived_first_buy', async () => {

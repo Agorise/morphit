@@ -59,10 +59,24 @@ const MAX_EXPIRES_AT_DAYS = 365;
  *  Control chars (C0/C1), bidi-override marks, zero-width
  *  joiners — none have legitimate display use, all are used
  *  by impersonation / RTL-flip attacks against rendered text.
- *  Applied to location_region, terms, and payment_methods
- *  items, all of which are rendered in orderbook UI surfaces. */
+ *  Applied to the single-line fields location_region and
+ *  payment_methods items. The terms field is multi-line markdown and
+ *  uses FORBIDDEN_MULTILINE_TEXT_CHARS below instead. */
 const FORBIDDEN_TEXT_CHARS =
 	/[\u0000-\u001F\u007F-\u009F\u200B-\u200D\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/;
+/** Multi-line variant for the terms field ONLY. Identical to
+ *  FORBIDDEN_TEXT_CHARS except it PERMITS the three whitespace control
+ *  chars TAB (U+0009), LF (U+000A), and CR (U+000D). The terms field
+ *  is a multi-line markdown textarea — TermsText renders headings,
+ *  lists, blockquotes, links, and line feeds — so the strict regex
+ *  silently rejected on-chain EVERY order whose terms contained a
+ *  newline (the frontend textarea has no such gate, so the op
+ *  broadcasts and pays its fee, then the indexer drops the row). The
+ *  genuinely dangerous C0/C1 controls, Unicode line/paragraph
+ *  separators, bidi overrides, and zero-width characters stay
+ *  blocked. */
+const FORBIDDEN_MULTILINE_TEXT_CHARS =
+	/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u200B-\u200D\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/;
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
 	return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -282,7 +296,7 @@ function validate(payload: unknown): ValidatedOrder | { reason: string } {
 		// are surfaced in the order-detail card.
 		const normalized = payload.terms.normalize('NFC');
 		if (normalized.length > 2048) return { reason: 'terms_too_long' };
-		if (FORBIDDEN_TEXT_CHARS.test(normalized)) {
+		if (FORBIDDEN_MULTILINE_TEXT_CHARS.test(normalized)) {
 			return { reason: 'terms_forbidden_char' };
 		}
 		terms = normalized;

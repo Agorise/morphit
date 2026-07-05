@@ -2617,7 +2617,6 @@
     "error_title": "Indexer nicht erreichbar",
     "error_body": "Der Indexer ist momentan nicht erreichbar. Bitte versuche es in Kürze noch einmal.",
     "load_more": "Mehr laden",
-    "indexed_block_label": "Indexierter Block",
     "order": {
       "buying": "kauft {asset}",
       "selling": "verkauft {asset}",
@@ -2956,6 +2955,7 @@
       "region_label": "Region (optional)",
       "region_hint": "Wo du handeln möchtest. Hilft Leuten in deiner Nähe, dich zu finden.",
       "terms_label": "Bedingungen / Details / Notizen",
+      "terms_forbidden_char": "Deine Bedingungen enthalten ein unzulässiges Zeichen – entferne versteckte oder Steuerzeichen. (Zeilenumbrüche und das übliche Markdown sind erlaubt.)",
       "expires_label": "Listing läuft ab",
       "expires_1d": "In 1 Tag",
       "expires_3d": "In 3 Tagen",
