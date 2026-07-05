@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { capDisplayName } from '$lib/crypto/profile';
+	import LazyLoadError from '$components/LazyLoadError.svelte';
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	/**
@@ -883,6 +884,8 @@
 											}}
 											onCancel={() => (replyingTo = null)}
 										/>
+									{:catch}
+										<LazyLoadError />
 									{/await}
 								{:else}
 									<div class="mt-3">

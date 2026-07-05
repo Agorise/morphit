@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { formatDayMonth } from '$lib/i18n/formatters';
+	import LazyLoadError from '$components/LazyLoadError.svelte';
 	import { page } from '$app/stores';
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
@@ -25,6 +26,7 @@
 	import Head from '$components/Head.svelte';
 	import TermsText from '$components/TermsText.svelte';
 	import BusyButton from '$components/BusyButton.svelte';
+	import IdentityLabel from '$components/IdentityLabel.svelte';
 	import ConfirmModal from '$components/ConfirmModal.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
 	// cp165 byte-budget: 3 disclosure/modal components below are
@@ -44,7 +46,7 @@
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
 	import { broadcastOrderCancel, BroadcastError } from '$blurt/ops/order';
 	import { KeystoreError } from '$crypto/keystore';
-	import { getOrdersByAccount } from '$lib/indexer/client';
+	import { getOrdersByAccount, getOrderCounterparties } from '$lib/indexer/client';
 	import { fetchListingFee } from '$lib/orders/listingFee';
 	import { fetchOrderViews } from '$lib/orders/views';
 	import { formatOrderPriceModel } from '$lib/orders/priceModelDisplay';
@@ -120,6 +122,41 @@
 	// open at a time; LeaveFeedbackForm manages its own submit state.
 	let pendingFeedbackPermlink: string | null = $state(null);
 	let feedbackSuccessPermlink: string | null = $state(null);
+	// cp421 — reviewable trade partners per order (permlink → peer names
+	// the owner MAY review, i.e. the counterparties endpoint's
+	// reviewable=true set). `undefined` = not loaded yet OR the lookup
+	// failed → fall back to the legacy free-type form (the indexer gate
+	// still enforces). `[]` = loaded, nobody reviewable → hide the button.
+	let reviewableCounterparties: Record<string, string[] | undefined> = $state({});
+	// When a review form opens, the counterparty it is locked to (a
+	// single reviewable peer). Null → legacy free-type (fallback only).
+	let feedbackPrefillSubject: string | null = $state(null);
+	// When an order has >1 reviewable counterparty, the row shows a
+	// small picker first; this holds which order's picker is open.
+	let feedbackPickerPermlink: string | null = $state(null);
+
+	/** Open the review form for an order, locked to a specific peer. */
+	function openFeedback(permlink: string, peer: string): void {
+		feedbackPrefillSubject = peer;
+		feedbackPickerPermlink = null;
+		pendingFeedbackPermlink = permlink;
+	}
+
+	/** Click handler for the "Mark complete / review" button. 1
+	 *  reviewable peer → open locked to them; >1 → open the picker. */
+	function startFeedback(permlink: string): void {
+		const peers = reviewableCounterparties[permlink];
+		if (peers && peers.length === 1) {
+			openFeedback(permlink, peers[0]!);
+		} else if (peers && peers.length > 1) {
+			feedbackPickerPermlink = permlink;
+		} else {
+			// Unknown (not loaded / lookup failed) → legacy free-type form.
+			feedbackPrefillSubject = null;
+			feedbackPickerPermlink = null;
+			pendingFeedbackPermlink = permlink;
+		}
+	}
 
 	// ─── Featured-bid rate ─────────────────────────────────────────
 	// Lazy-fetched the first time the user opens a FeatureBidForm.
@@ -169,6 +206,7 @@
 		// resolves, so badges appear progressively rather than
 		// blocking on the slowest network round-trip.
 		void loadViewCounts();
+		void loadCounterparties();
 
 		// cp17 — if the URL hash names a specific order (set by
 		// the outbid-push deep link `/my/orders#order-<permlink>`),
@@ -196,6 +234,26 @@
 			const r = await fetchOrderViews(account, permlink);
 			if (r !== null) {
 				viewCounts[permlink] = r.count;
+			}
+		};
+		await Promise.all(items.map((o) => fetchOne(o.permlink)));
+	}
+
+	/** cp421 — for each order, load the set of trade partners the owner
+	 *  may review (counterparties endpoint, reviewable=true). Runs in
+	 *  parallel with the view-count batch so the button is already gated
+	 *  by the time the rows render. A failed lookup leaves the entry
+	 *  `undefined` → the row falls back to the legacy free-type form
+	 *  (the indexer's provable-counterparty gate still enforces). */
+	async function loadCounterparties(): Promise<void> {
+		if (!blurtAccount) return;
+		const account = blurtAccount;
+		const fetchOne = async (permlink: string): Promise<void> => {
+			const r = await getOrderCounterparties(account, permlink);
+			if (r.ok) {
+				reviewableCounterparties[permlink] = r.data.items
+					.filter((it) => it.reviewable)
+					.map((it) => it.peer);
 			}
 		};
 		await Promise.all(items.map((o) => fetchOne(o.permlink)));
@@ -878,11 +936,39 @@
 										orderPermlink={o.permlink}
 										density="inline"
 									/>
+								{:else if feedbackPickerPermlink === o.permlink}
+									<!-- cp421: >1 reviewable trade partner — ask which
+									     one before opening the (subject-locked) form. -->
+									<div class="flex flex-col gap-2">
+										<p class="text-xs text-ink-500 dark:text-ink-400">
+											{$_('my_orders.order.feedback_pick_prompt')}
+										</p>
+										{#each reviewableCounterparties[o.permlink] ?? [] as peer (peer)}
+											<BusyButton
+												variant="secondary"
+												onclick={() => openFeedback(o.permlink, peer)}
+											>
+												<IdentityLabel account={peer} />
+											</BusyButton>
+										{/each}
+										<button
+											type="button"
+											class="self-start text-xs text-ink-500 underline hover:text-ink-700 dark:text-ink-400 dark:hover:text-ink-200"
+											onclick={() => (feedbackPickerPermlink = null)}
+										>
+											{$_('common.cancel')}
+										</button>
+									</div>
+								{:else if reviewableCounterparties[o.permlink]?.length === 0}
+									<!-- cp421: loaded, but nobody has provably traded on
+									     this order yet (no two-way conversation about it).
+									     A review would be dropped by the indexer gate, so
+									     don't offer the button — explain instead. -->
+									<p class="text-xs text-ink-500 dark:text-ink-400">
+										{$_('my_orders.order.feedback_no_counterparty')}
+									</p>
 								{:else}
-									<BusyButton
-										variant="secondary"
-										onclick={() => (pendingFeedbackPermlink = o.permlink)}
-									>
+									<BusyButton variant="secondary" onclick={() => startFeedback(o.permlink)}>
 										{$_('my_orders.order.action_feedback')}
 									</BusyButton>
 								{/if}
@@ -936,6 +1022,8 @@
 									onCancel={() => (pendingFeaturePermlink = null)}
 								/>
 							</div>
+						{:catch}
+							<LazyLoadError />
 						{/await}
 					{/if}
 					{#if pendingFeedbackPermlink === o.permlink && $isUnlocked}
@@ -943,13 +1031,21 @@
 							<div class="mt-3">
 								<LeaveFeedbackForm
 									orderPermlink={o.permlink}
+									prefillSubject={feedbackPrefillSubject ?? undefined}
+									lockSubject={feedbackPrefillSubject !== null}
 									onSuccess={() => {
 										pendingFeedbackPermlink = null;
+										feedbackPrefillSubject = null;
 										feedbackSuccessPermlink = o.permlink;
 									}}
-									onCancel={() => (pendingFeedbackPermlink = null)}
+									onCancel={() => {
+										pendingFeedbackPermlink = null;
+										feedbackPrefillSubject = null;
+									}}
 								/>
 							</div>
+						{:catch}
+							<LazyLoadError />
 						{/await}
 					{/if}
 				</li>

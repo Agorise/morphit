@@ -44,6 +44,7 @@ import {
 	formatDateTime,
 	formatDayMonth,
 	formatDayMonthTime,
+	formatDayMonthShort,
 	formatMonthYear,
 	formatCountCompact
 } from '../src/lib/i18n/formatters';
@@ -280,6 +281,39 @@ const scenarios: readonly Scenario[] = [
 	{
 		name: 'formatMonthYear(invalid) — returns "—"',
 		fn: () => formatMonthYear('') === '—'
+	},
+	{
+		// cp420 — the compact mobile order-card date. "26 Jun": day + a
+		// 3-char month, no year, no time.
+		name: 'formatDayMonthShort — day + 3-char month, no year',
+		fn: () => {
+			const out = formatDayMonthShort('2026-06-26T12:00:00Z');
+			return out.includes('26') && out.includes('Jun') && !out.includes('2026');
+		}
+	},
+	{
+		// The month must be clipped to exactly 3 chars so a 16-char username
+		// still fits one line ("June" → "Jun", never the full month name).
+		name: 'formatDayMonthShort — month clipped to 3 chars (no full "June")',
+		fn: () => !formatDayMonthShort('2026-06-26T12:00:00Z').includes('June')
+	},
+	{
+		// UTC-coherent: a 23:30-UTC instant on the last of the month must not
+		// roll the displayed day into the next month for eastern viewers.
+		name: 'formatDayMonthShort — UTC-coherent day (no midnight rollover)',
+		fn: () => {
+			const out = formatDayMonthShort('2026-06-30T23:30:00Z');
+			return /\b30\b/.test(out) && out.includes('Jun');
+		}
+	},
+	{
+		// Returns '' (not "—") for absent/invalid input so callers can drop
+		// the "before <date>" suffix entirely.
+		name: 'formatDayMonthShort(invalid/absent) — returns empty string',
+		fn: () =>
+			formatDayMonthShort('not-a-date') === '' &&
+			formatDayMonthShort(null) === '' &&
+			formatDayMonthShort('') === ''
 	},
 	{
 		name: 'formatCountCompact — compacts thousands (en "1.2K")',

@@ -74,9 +74,9 @@ await scenario('G1.1: feedback WITHOUT order_permlink does NOT trigger bonus', a
 			match: 'COUNT(*) FILTER (WHERE sender',
 			rows: [
 				{
-					from_reviewer: '0',
-					from_subject: '0',
-					span_seconds: null,
+					from_reviewer: '2',
+					from_subject: '2',
+					span_seconds: '900',
 					has_recip_flag: false
 				}
 			],
@@ -118,9 +118,9 @@ await scenario('G1.1: feedback WITH valid order_permlink DOES trigger bonus', as
 			match: 'COUNT(*) FILTER (WHERE sender',
 			rows: [
 				{
-					from_reviewer: '0',
-					from_subject: '0',
-					span_seconds: null,
+					from_reviewer: '2',
+					from_subject: '2',
+					span_seconds: '900',
 					has_recip_flag: false
 				}
 			],
@@ -296,9 +296,9 @@ await scenario(
 				match: 'COUNT(*) FILTER (WHERE sender',
 				rows: [
 					{
-						from_reviewer: '0',
-						from_subject: '0',
-						span_seconds: null,
+						from_reviewer: '2',
+						from_subject: '2',
+						span_seconds: '900',
 						has_recip_flag: false
 					}
 				],
@@ -450,9 +450,9 @@ await scenario('O3.3: NFC-normalizes comment before length check', async () => {
 			match: 'COUNT(*) FILTER (WHERE sender',
 			rows: [
 				{
-					from_reviewer: '0',
-					from_subject: '0',
-					span_seconds: null,
+					from_reviewer: '2',
+					from_subject: '2',
+					span_seconds: '900',
 					has_recip_flag: false
 				}
 			],
@@ -530,7 +530,7 @@ await scenario('ADR-0014: badge=true when 2+ in each direction, ≥15min span, n
 	}
 });
 
-await scenario('ADR-0014: badge=false when only 1 message from reviewer', async () => {
+await scenario('cp421: gate REJECTS when only 1 message from reviewer (below verified-chat bar)', async () => {
 	const ctx = makeCtx({
 		signer: 'alice',
 		payload: feedbackPayload({ subject: 'bob' }),
@@ -552,14 +552,13 @@ await scenario('ADR-0014: badge=false when only 1 message from reviewer', async 
 		{ match: 'INSERT INTO feedback', rows: [], rowCount: 1 }
 	]);
 	const r = await handler(ctx, mock.client);
-	assertEqual(r, { ok: true }, 'result');
-	const insert = mock.queries.find((q) => q.text.includes('INSERT INTO feedback'));
-	if (insert!.params[7] !== false) {
-		throw new Error('expected has_verified_chat=false (only 1 from reviewer)');
-	}
+	// cp421: the gate now == the verified-chat bar, so a below-bar
+	// conformance (only 1 message from the reviewer) is REJECTED, not
+	// stored with badge=false.
+	assertEqual(r, { ok: false, reason: 'no_verified_counterparty' }, 'result');
 });
 
-await scenario('ADR-0014: badge=false when span < 15 minutes', async () => {
+await scenario('cp421: gate REJECTS when span < 15 minutes (below verified-chat bar)', async () => {
 	const ctx = makeCtx({
 		signer: 'alice',
 		payload: feedbackPayload({ subject: 'bob' }),
@@ -577,18 +576,13 @@ await scenario('ADR-0014: badge=false when span < 15 minutes', async () => {
 				}
 			],
 			rowCount: 1
-		},
-		{ match: 'INSERT INTO feedback', rows: [], rowCount: 1 }
+		}
 	]);
 	const r = await handler(ctx, mock.client);
-	assertEqual(r, { ok: true }, 'result');
-	const insert = mock.queries.find((q) => q.text.includes('INSERT INTO feedback'));
-	if (insert!.params[7] !== false) {
-		throw new Error('expected has_verified_chat=false (span too short)');
-	}
+	assertEqual(r, { ok: false, reason: 'no_verified_counterparty' }, 'result');
 });
 
-await scenario('ADR-0014: badge=false when suspicious_reciprocity flag is set', async () => {
+await scenario('cp421: gate REJECTS a flagged suspicious_reciprocity pair', async () => {
 	const ctx = makeCtx({
 		signer: 'alice',
 		payload: feedbackPayload({ subject: 'bob' }),
@@ -601,53 +595,40 @@ await scenario('ADR-0014: badge=false when suspicious_reciprocity flag is set', 
 				{
 					from_reviewer: '5',
 					from_subject: '5',
-					span_seconds: '7200', // 2h — fine
+					span_seconds: '7200', // 2h — plenty
 					has_recip_flag: true // but flagged
 				}
 			],
 			rowCount: 1
-		},
-		{ match: 'INSERT INTO feedback', rows: [], rowCount: 1 }
+		}
 	]);
 	const r = await handler(ctx, mock.client);
-	assertEqual(r, { ok: true }, 'result');
-	const insert = mock.queries.find((q) => q.text.includes('INSERT INTO feedback'));
-	if (insert!.params[7] !== false) {
-		throw new Error('expected has_verified_chat=false (recip flag)');
-	}
+	assertEqual(r, { ok: false, reason: 'no_verified_counterparty' }, 'result');
 });
 
-await scenario(
-	'ADR-0014: badge=false when no chat messages exist (span_seconds=null)',
-	async () => {
-		const ctx = makeCtx({
-			signer: 'alice',
-			payload: feedbackPayload({ subject: 'bob' }),
-			siblingOps: []
-		});
-		const mock = makeMockClient([
-			{
-				match: 'COUNT(*) FILTER (WHERE sender',
-				rows: [
-					{
-						from_reviewer: '0',
-						from_subject: '0',
-						span_seconds: null, // pg returns NULL on empty set
-						has_recip_flag: false
-					}
-				],
-				rowCount: 1
-			},
-			{ match: 'INSERT INTO feedback', rows: [], rowCount: 1 }
-		]);
-		const r = await handler(ctx, mock.client);
-		assertEqual(r, { ok: true }, 'result');
-		const insert = mock.queries.find((q) => q.text.includes('INSERT INTO feedback'));
-		if (insert!.params[7] !== false) {
-			throw new Error('expected has_verified_chat=false (no chat at all)');
+await scenario('cp421: gate REJECTS when no chat messages exist (span_seconds=null)', async () => {
+	const ctx = makeCtx({
+		signer: 'alice',
+		payload: feedbackPayload({ subject: 'bob' }),
+		siblingOps: []
+	});
+	const mock = makeMockClient([
+		{
+			match: 'COUNT(*) FILTER (WHERE sender',
+			rows: [
+				{
+					from_reviewer: '0',
+					from_subject: '0',
+					span_seconds: null, // pg returns NULL on empty set
+					has_recip_flag: false
+				}
+			],
+			rowCount: 1
 		}
-	}
-);
+	]);
+	const r = await handler(ctx, mock.client);
+	assertEqual(r, { ok: false, reason: 'no_verified_counterparty' }, 'result');
+});
 
 // ─── Final report ───────────────────────────────────────────────
 

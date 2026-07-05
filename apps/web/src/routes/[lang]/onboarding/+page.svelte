@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
+	import LazyLoadError from '$components/LazyLoadError.svelte';
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	import { currentLocale } from '$i18n';
@@ -601,6 +602,8 @@
 					<div class="mt-3 flex items-center gap-3">
 						{#await loadSeedBackupPrint() then SeedBackupPrint}
 							<SeedBackupPrint words={seedWords} />
+						{:catch}
+							<LazyLoadError />
 						{/await}
 						<span class="text-xs text-ink-500">
 							{$_('onboarding.backup.print_card.helper_hint')}
@@ -777,6 +780,8 @@
 						<div class="mt-4">
 							<KeyBackupPanel keys={backupKeys} />
 						</div>
+					{:catch}
+						<LazyLoadError />
 					{/await}
 				{:else}
 					<div class="mt-4">
@@ -892,6 +897,8 @@
 			onConfirm={onConfirmLeave}
 			onCancel={onCancelLeave}
 		/>
+	{:catch}
+		<LazyLoadError />
 	{/await}
 {/if}
 
@@ -907,5 +914,7 @@
 			onConfirm={confirmRestartFromReview}
 			onCancel={cancelRestartFromReview}
 		/>
+	{:catch}
+		<LazyLoadError />
 	{/await}
 {/if}

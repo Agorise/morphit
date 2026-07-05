@@ -23,6 +23,7 @@
 	import { browser } from '$app/environment';
 	import { onMount } from 'svelte';
 	import BusyButton from '$components/BusyButton.svelte';
+	import IdentityLabel from '$components/IdentityLabel.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
 	import ProtectedTextarea from '$components/ProtectedTextarea.svelte';
 	import PrivateKeyWarningModal from '$components/PrivateKeyWarningModal.svelte';
@@ -48,9 +49,17 @@
 		 *  Used by call sites that already know who the user is
 		 *  reviewing — e.g. the pending-feedback reminder banner
 		 *  knows the counterparty from the chain feedback record.
-		 *  When provided, the field is still editable so users can
-		 *  correct typos in their own minds, but starts populated. */
+		 *  When provided WITHOUT lockSubject, the field is still
+		 *  editable so users can correct typos; WITH lockSubject it
+		 *  is shown read-only. */
 		prefillSubject?: string;
+		/** cp421: when true, the subject is a provably-derived trade
+		 *  partner (from the order's on-chain counterparties) and is
+		 *  rendered LOCKED — a prominent read-only @handle instead of a
+		 *  free-text input — so there's no ambiguity about who is being
+		 *  reviewed and no way to redirect the stars to another account.
+		 *  Requires prefillSubject to be set. */
+		lockSubject?: boolean;
 		/** Called on successful broadcast with the trx_id. Parent
 		 *  typically refetches its list and closes the disclosure. */
 		onSuccess?: (result: { trx_id: string }) => void;
@@ -58,7 +67,7 @@
 		onCancel?: () => void;
 	}
 
-	let { orderPermlink, prefillSubject, onSuccess, onCancel }: Props = $props();
+	let { orderPermlink, prefillSubject, lockSubject = false, onSuccess, onCancel }: Props = $props();
 
 	// localStorage key — once set, we skip the Post A broadcast for
 	// subsequent feedback. The flag is keyed by account so switching
@@ -414,27 +423,42 @@
 	</p>
 
 	<!-- Subject: counterparty account name -->
-	<label class="mb-3 block">
-		<span class="mb-1 block text-sm font-semibold">
-			{$_('feedback.form.subject_label')}
-		</span>
-		<input
-			type="text"
-			inputmode="text"
-			autocomplete="off"
-			autocorrect="off"
-			autocapitalize="off"
-			spellcheck="false"
-			bind:value={subject}
-			maxlength="16"
-			onblur={() => (subjectTouched = true)}
-			placeholder={$_('feedback.form.subject_placeholder') as string}
-			class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
-			disabled={submitting}
-		/>
-	</label>
-	{#if subjectError}
-		<StatusLine kind="warn">{subjectError}</StatusLine>
+	{#if lockSubject}
+		<!-- cp421: provably-derived trade partner — read-only, prominent,
+		     no way to redirect the review to another account. -->
+		<div class="mb-3">
+			<span class="mb-1 block text-sm font-semibold">
+				{$_('feedback.form.subject_locked_label')}
+			</span>
+			<div
+				class="w-full rounded-xl border-2 border-morphit-emerald bg-morphit-emerald/5 px-3 py-2 font-mono text-sm font-semibold text-ink-900 dark:text-ink-50"
+			>
+				<IdentityLabel account={subject} />
+			</div>
+		</div>
+	{:else}
+		<label class="mb-3 block">
+			<span class="mb-1 block text-sm font-semibold">
+				{$_('feedback.form.subject_label')}
+			</span>
+			<input
+				type="text"
+				inputmode="text"
+				autocomplete="off"
+				autocorrect="off"
+				autocapitalize="off"
+				spellcheck="false"
+				bind:value={subject}
+				maxlength="16"
+				onblur={() => (subjectTouched = true)}
+				placeholder={$_('feedback.form.subject_placeholder') as string}
+				class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+				disabled={submitting}
+			/>
+		</label>
+		{#if subjectError}
+			<StatusLine kind="warn">{subjectError}</StatusLine>
+		{/if}
 	{/if}
 
 	<!-- Rating: 5-star buttons -->

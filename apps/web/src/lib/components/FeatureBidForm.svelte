@@ -24,7 +24,6 @@
 	import { get } from 'svelte/store';
 	import { _ } from 'svelte-i18n';
 	import BusyButton from '$components/BusyButton.svelte';
-	import StatusLine from '$components/StatusLine.svelte';
 	import { identity } from '$stores/identity';
 	import { runWithActiveKey } from '$crypto/runWithActiveKey';
 	import { broadcastFeatureBid } from '$blurt/ops/featureBid';
@@ -59,11 +58,24 @@
 	let selectedHours: (typeof HOURS_OPTIONS)[number] = $state(24);
 	let password = $state('');
 	let submitting = $state(false);
+	/** Broadcast/signing error (locked, identity mismatch, generic failure).
+	 *  cp420 — shown in red directly UNDER the password field (was a warn
+	 *  line at the card bottom, which read as disconnected from the action
+	 *  that failed). */
 	let errorMessage = $state('');
-	/** Password-specific error (bad/empty password) — shown in red
-	 *  right under the field, distinct from generic broadcast errors
-	 *  which stay at the card bottom. */
+	/** Password-specific error (bad/empty password) — shown in red right
+	 *  under the field, alongside {@link errorMessage}. */
 	let passwordError = $state('');
+	/** The signing account, so the label can read "Your @account password"
+	 *  and the user knows exactly whose password unlocks the active key. */
+	const signingAccount = getUserBlurtAccount();
+	const passwordLabel = $derived(
+		signingAccount
+			? ($_('feature_bid.password_label_named', {
+					values: { handle: '@' + signingAccount }
+				}) as string)
+			: ($_('feature_bid.password_label') as string)
+	);
 	/** Toggled to briefly replay a twice-flash red border on the
 	 *  password field when the entered password is rejected. */
 	let flashPassword = $state(false);
@@ -233,7 +245,7 @@
 	     active key only exists inside the useActiveKey callback. -->
 	<label class="mb-3 block">
 		<span class="mb-1 block text-xs font-semibold text-ink-700 dark:text-ink-200">
-			{$_('feature_bid.password_label')}
+			{passwordLabel}
 		</span>
 		<input
 			type="password"
@@ -252,6 +264,11 @@
 			{passwordError}
 		</p>
 	{/if}
+	{#if errorMessage}
+		<p class="-mt-2 mb-3 text-sm font-medium text-red-600 dark:text-red-400" role="alert">
+			{errorMessage}
+		</p>
+	{/if}
 
 	<div class="flex flex-col gap-2">
 		<BusyButton
@@ -268,12 +285,6 @@
 			</BusyButton>
 		{/if}
 	</div>
-
-	{#if errorMessage}
-		<div class="mt-2">
-			<StatusLine kind="warn">{errorMessage}</StatusLine>
-		</div>
-	{/if}
 </div>
 
 <style>

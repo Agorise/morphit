@@ -955,30 +955,12 @@
 		</a>
 	</header>
 
-	<!-- Tier 2.7 (Part 91): a user who paid a listing fee and
-	     doesn't see their order on the orderbook will assume
-	     Morphit is broken — fee verification can fail (BTC
-	     reorg, XMR tx-key mismatch, etc.) and the order silently
-	     disappears from the public orderbook even though it's
-	     visible on /my/orders with a fee-rejected chip.  Forward
-	     link gives them a recovery path back to that view.
-	     Only shown for signed-in users with a registered account
-	     name, since anonymous browsers have no orders to recover. -->
-	{#if $hasAnySession && viewerAccount !== null && viewerHasOrdered}
-		<!-- Part 116: widened from $isUnlocked to $hasAnySession so
-		     paired-readonly users (whose orders + fee-rejected chips
-		     still render on /my/orders post-Part-116 shell refactor)
-		     also see the recovery link. -->
-		<p class="mb-4 text-xs">
-			<a
-				href={lp('/my/orders#fee-status')}
-				class="inline-flex items-center gap-1 text-ink-900 transition-colors hover:text-morphit-emerald dark:text-white"
-			>
-				{$_('orderbook.fee_rejected_check')}
-				<span class="nav-arrow nav-arrow-right" aria-hidden="true">⇨</span>
-			</a>
-		</p>
-	{/if}
+	<!-- cp420: the fee-status recovery link that used to sit here (Tier 2.7 /
+	     Part 91 — a user who paid a listing fee but doesn't see their order,
+	     because fee verification silently failed, gets a path back to
+	     /my/orders) moved to the FOOT of the filter card below. It was too
+	     prominent at the top of the page. Same gating: signed-in users with a
+	     registered account name who've actually posted an order. -->
 
 	<WelcomeFirstBuyHero />
 
@@ -1213,6 +1195,21 @@
 							/>
 						{/if}
 					</div>
+				{/if}
+				<!-- cp420: the "posted an order but don't see it? check fee
+				     status" recovery link lives at the FOOT of the filter card
+				     now — it was too prominent at the top of the page. Signed-in
+				     users who've actually posted an order only. -->
+				{#if $hasAnySession && viewerAccount !== null && viewerHasOrdered}
+					<p class="mt-4 border-t border-ink-100 pt-3 text-xs dark:border-ink-800">
+						<a
+							href={lp('/my/orders#fee-status')}
+							class="inline-flex items-center gap-1 text-ink-900 transition-colors hover:text-morphit-emerald dark:text-white"
+						>
+							{$_('orderbook.fee_rejected_check')}
+							<span class="nav-arrow nav-arrow-right" aria-hidden="true">⇨</span>
+						</a>
+					</p>
 				{/if}
 			</div>
 		{/if}

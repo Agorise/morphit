@@ -196,9 +196,6 @@
       "address_share": {
         "warning": "仅在 {network} 上发送 USDC。在任何其他网络上向此地址发送 USDC 将永久丢失您的资金。"
       },
-      "order_row": {
-        "network_hint": "此交易需要 {network} 上的 USDC。"
-      },
       "price_subline": {
         "live": "1 USDC = ${price} 实时",
         "unavailable": "USDC/USD 价格源不可用——上次出现于 {staleness} 前。"
@@ -230,9 +227,6 @@
       },
       "address_share": {
         "warning": "稳定币交易——DAI 在合约层面比 USDT/USDC 更去中心化（无管理员冻结）但通过 PSM 部分由 USDC 支持。选择双方都使用的网络。"
-      },
-      "order_row": {
-        "network_hint": "{network} 上的 DAI"
       },
       "price_subline": {
         "live": "1 DAI = ${price}",
@@ -315,7 +309,6 @@
     "anti_share": "把种子分享给「支持」— 我们的或任何人的。真正的支持绝对、绝对不会要你的种子。要的人就是骗子。",
     "anti_support": "以为有人能帮你恢复。他们不能。我们不能。没人能。这就是非托管的全部意义。",
     "learn_more_heading": "了解更多",
-    "learn_more_body": "相关资源:",
     "faq_lost_keys": "如果我丢失密钥会怎样?",
     "faq_privacy": "隐私实践",
     "security_page": "完整安全模型",
@@ -808,7 +801,6 @@
     "window_label": "{days}天",
     "summary_competitive": "今日出清价:{rate} BLURT/小时 — {slots}/{max} 个位置已占用。出价高于此费率以可见。",
     "summary_partial": "今日 {slots}/{max} 个位置已占用 — 现在任何出价都能赢得一个可见位置。",
-    "summary_empty": "今日 {max} 个位置全部空闲 — 还没人出价。",
     "chart_aria": "最近 {days} 天的每日出清价图表",
     "legend": "柱高 = 出清价(BLURT/小时)。深绿 = 所有位置都满(竞争激烈)。浅绿 = 部分位置占用。灰色 = 当天无出价。",
     "no_history_yet": "最近 {days} 天没有精选位置出价。成为第一个。"
@@ -832,7 +824,8 @@
     "close": "关闭",
     "learn_more": "了解更多",
     "unlock": "解锁",
-    "password_too_short": "密码至少需要 8 个字符。"
+    "password_too_short": "密码至少需要 8 个字符。",
+    "lazy_load_failed": "无法加载此部分。"
   },
   "compare": {
     "heading": "比较 orderbook",
@@ -967,8 +960,6 @@
   },
   "explorer": {
     "search": {
-      "page_title": "区块浏览器",
-      "page_description": "通过用户名、交易 ID 或区块号搜索区块链。",
       "heading": "区块浏览器",
       "subheading": "通过 @用户名、交易 ID 或区块号搜索区块链。",
       "label": "搜索",
@@ -987,15 +978,12 @@
       "fallback_description": "独立的 Blurt 浏览器。"
     },
     "account": {
-      "page_title": "@{account} - 区块浏览器",
-      "page_description": "@{account} 最近的链上操作。",
       "loading": "正在加载账户…",
       "not_found_title": "未找到账户",
       "not_found_body": "我们无法在链上找到 @{account}。账户可能不存在,或被询问的 RPC 节点缺少数据。",
       "try_fallback": "尝试备用浏览器",
       "error_title": "无法加载账户",
       "view_profile_link": "查看 Morphit 资料",
-      "posting_pubkey_label": "Posting 公钥",
       "recent_ops_heading": "最近操作",
       "no_ops": "尚无操作记录。",
       "load_more": "加载更早的操作",
@@ -1013,8 +1001,6 @@
       "key_memo": "Memo"
     },
     "block": {
-      "page_title": "区块 {block}",
-      "page_description": "区块链的区块 {block}。",
       "loading": "正在加载区块…",
       "not_found_title": "未找到区块",
       "not_found_body": "区块 {block} 在链上尚不存在,或被询问的 RPC 节点缺少数据。",
@@ -1035,8 +1021,6 @@
       }
     },
     "tx": {
-      "page_title": "交易 {trx}…",
-      "page_description": "链上交易详情。",
       "loading": "正在加载交易…",
       "not_found_title": "未找到交易",
       "not_found_body": "我们无法获取此交易。某些 RPC 节点不支持按 ID 查找;请尝试备用浏览器。",
@@ -1054,8 +1038,6 @@
       }
     },
     "activity": {
-      "page_title": "交易活动",
-      "page_description": "此 Morphit 实例的交易量和活跃挂单。",
       "heading": "交易活动",
       "subheading": "已完成交易数和当前挂单,按资产分类。",
       "volume_heading": "交易量",
@@ -1701,6 +1683,7 @@
     "success": "⭐ 订单已推广 — 已支付 {blurt} BLURT",
     "error_locked": "需要解锁 Active 密钥以支付推广费用。",
     "password_label": "你的密码(用于使用 Active 密钥签名)",
+    "password_label_named": "{handle} 的密码（用于使用 Active 密钥签名）",
     "error_password_required": "请输入密码以对出价签名。",
     "error_bad_password": "此密码未能解锁你的活跃密钥。",
     "error_generic": "无法提交你的出价。请重试。",
@@ -1732,7 +1715,8 @@
       "comment_label": "评论（可选）",
       "comment_placeholder": "关于这笔交易进行情况的任何内容。",
       "submit": "提交反馈",
-      "submitting": "提交中…"
+      "submitting": "提交中…",
+      "subject_locked_label": "你正在评价"
     },
     "error": {
       "subject_invalid": "这看起来不是一个有效的账户名。",
@@ -2188,19 +2172,12 @@
       "expired": "已过期"
     },
     "order": {
-      "buying": "购买 {asset}",
-      "selling": "出售 {asset}",
-      "range_open": "任意金额 ({fiat})",
-      "range_both": "{min} – {max} {fiat}",
-      "range_min_only": "{min} {fiat} 起",
-      "range_max_only": "至多 {max} {fiat}",
       "posted_prefix": "已发布",
       "state_live": "活跃",
       "state_cancelled": "已取消",
       "state_expired": "已过期",
       "fee_verified": "在订单簿中可见",
       "action_edit": "编辑",
-      "action_cancel": "取消",
       "action_edit_expired": "编辑已关闭(15 分钟窗口)",
       "action_cancelled": "已取消",
       "action_feature": "推广",
@@ -2217,7 +2194,9 @@
       "action_relist_hint": "用原条款预填表单;将收取新的挂单费。",
       "edit_window_countdown": "编辑窗口:{remaining}",
       "edit_window_tooltip": "订单仅可在发布后 15 分钟内编辑。之后需要取消并重新发布。",
-      "edit_window_aria": "剩余编辑时间:{remaining}"
+      "edit_window_aria": "剩余编辑时间:{remaining}",
+      "feedback_no_counterparty": "暂无可评价的交易对手",
+      "feedback_pick_prompt": "你和谁完成了交易？"
     },
     "cancel": {
       "confirm_title": "取消此订单?",
@@ -2301,7 +2280,6 @@
       "keyfile_explain": "可选:下载密钥的加密备份。与上面相同的密码。把文件存在安全的地方(U 盘、你信任的云、另一台设备),作为浏览器存储被清空时返回账户的替代路径。",
       "password_strength_common": "这个密码是最常见的之一 — 选个独特的吧。",
       "password_strength_trivial": "顺序或重复的模式容易被猜到。混合一下。",
-      "password_strength_short": "建议使用更长的密码(推荐 12+ 字符)。",
       "password_strength_ok": "看起来不错。",
       "persist_failed": "无法将加密密钥库保存到此设备。存储可能不可用。请改用「每次都使用助记词」,或重试。",
       "password_strength_too_simple": "混合使用数字、符号或大写字母 — 或者设为 12 个以上字符。",
@@ -2643,10 +2621,6 @@
     "order": {
       "buying": "买入 {asset}",
       "selling": "卖出 {asset}",
-      "range_both": "{min} – {max} {fiat}",
-      "range_min_only": "从 {min} {fiat} 起",
-      "range_max_only": "最多 {max} {fiat}",
-      "range_open": "任意金额 ({fiat})",
       "updated_prefix": "更新于",
       "new_trader_aria": "新交易者 — 尚未完成首次交易",
       "new_trader_tooltip": "这位交易者是 Morphit 的新人。帮助他们起步吧!",
@@ -2701,7 +2675,9 @@
       "trades_since": "自 {month} 起 {count} 笔交易",
       "trades_only": "{count} 笔交易",
       "reputation_aria": "信誉评分 {score}（满分 5）",
-      "message_word": "消息"
+      "message_word": "消息",
+      "message_before": "在 {date} 前联系 {handle}",
+      "message_compact": "联系 {handle}"
     },
     "search_no_results_title": "没有匹配的订单",
     "search_no_results_body": "已加载的订单中没有提到“{query}”。请尝试其他词语，或清除搜索以查看全部。",
@@ -2980,7 +2956,6 @@
       "region_label": "地区 (可选)",
       "region_hint": "您愿意在哪里交易。帮助附近的人找到您。",
       "terms_label": "条款 / 详情 / 备注",
-      "terms_placeholder": "例如 \"仅周末\" 或 \"100 美元以下仅限现金\"",
       "expires_label": "挂单到期",
       "expires_1d": "1 天后",
       "expires_3d": "3 天后",
@@ -3099,7 +3074,6 @@
       "body_insufficient_funds": "您的账户没有足够的 BLURT 来支付挂单费。",
       "body_locked": "会话已锁定。请解锁密码后重试。",
       "body_bad_password": "该密码未解锁你的 keystore。请重试。",
-      "body_missing_external_tx_id": "BTC 和 XMR 费用支付需要外部交易 ID。",
       "body_posting_only": "用 BLURT 支付挂单费需要你的活跃密钥，而此设备上没有它——你目前仅用发帖密钥登录。请用主密码或完整的 keyfile 登录以使用 BLURT 支付，或返回改用 BTC/XMR 支付（也可使用你的首次免费挂单）。",
       "body_recipient_missing": "无法发送挂单费——它要支付到的资金账户（@morphit-fees）似乎在 Blurt 上尚不存在。未支付任何费用。如果你运营此实例，需要创建该账户；否则请报告此问题。",
       "body_insufficient_rc": "你的账户资源积分（RC）不足，因此 Blurt 拒绝了该交易。请将少量 BLURT 进行 power up，或等待 RC 充满后再试。未支付任何费用。",
@@ -3156,7 +3130,6 @@
       "fee_address_hide_qr": "隐藏二维码",
       "fee_address_chain_pinned": "由 {account} 在链上锚定 — 每个 Morphit 实例都依据此地址验证费用。",
       "fee_address_chain_pinned_aria": "链上锚定地址的真实性",
-      "fee_address_local_fallback": "本地备用地址 — 此运营商尚未采用链上锚定的标准地址。如需额外保证,请在发送前用另一个 Morphit 实例核对。",
       "fee_address_unavailable": "此运营商未配置 {asset} 费用地址。请改选 BLURT,或在另一个 Morphit 实例上发布您的订单。",
       "blurt_needs_active_key": "需要你的活跃（Active）密钥。你目前用发帖（Posting）密钥登录——请用你的 12 个单词种子短语或 Keyfile 登录以使用 BLURT 支付，或改用 BTC/XMR 支付："
     },
@@ -3178,8 +3151,7 @@
       "amount_min_plus": "价值 {min} {fiat} 或以上的 {asset}",
       "amount_any": "任意数量的 {asset}",
       "price_market": "以市场价格",
-      "price_fixed": "以 {price} {fiat}/{asset} 的固定价格",
-      "see_notes": "在下方栏位中添加任何条款、详情或备注："
+      "price_fixed": "以 {price} {fiat}/{asset} 的固定价格"
     }
   },
   "prices": {
@@ -3395,8 +3367,6 @@
     "orders_error": "现在无法加载订单。",
     "no_active_orders": "没有活跃订单。目前没有可交易的内容。",
     "active_orders_sort_hint": "最旧的在前——即将到期的先显示。",
-    "order_buying": "买入 {asset}",
-    "order_selling": "卖出 {asset}",
     "expires_in": "{t} 后到期",
     "expires_now": "即将到期",
     "given_heading": "此用户留下的评价",
@@ -3419,7 +3389,6 @@
       "low_blurt_hint": "你的流动 BLURT 即将用完。充值以继续发布订单。",
       "low_voting_hint": "您的投票权较低。大约 5 天可恢复。将更多 BLURT 升级为 BLURT Power 可提高上限。",
       "top_up_blurt": "充值 BLURT",
-      "top_up_hint": "打开预填的买入订单。",
       "apr_label": "年化收益率 {apr}",
       "unclaimed_label": "未领取的奖励",
       "claim_now": "立即领取",
@@ -3429,7 +3398,6 @@
     "pnl": {
       "export_button": "导出 P&L(过去 12 个月)",
       "exporting": "正在生成报告...",
-      "export_hint": "下载包含你的 BLURT 转账、费用和精选竞标活动的 CSV。",
       "export_error": "无法生成报告",
       "csv_header": {
         "timestamp": "时间戳(UTC)",
@@ -3449,7 +3417,6 @@
       }
     },
     "error": {
-      "profile_load_failed": "无法加载档案。",
       "feedback_load_failed": "无法加载反馈。",
       "feedback_given_load_failed": "无法加载此账户给出的反馈。",
       "orders_load_failed": "无法加载订单。"
@@ -3672,7 +3639,8 @@
     },
     "faq": {
       "title": "FAQ — Morphit 怎么用 · 非托管 P2P 加密货币",
-      "description": "关于不 KYC 买卖 Bitcoin、Monero、BLURT 以及更多加密货币、非托管交易、私密聊天、手续费的解答,以及和 LocalBitcoins、LocalMonero、Haveno 的对比。"
+      "description": "关于不 KYC 买卖 Bitcoin、Monero、BLURT 以及更多加密货币、非托管交易、私密聊天、手续费的解答,以及和 LocalBitcoins、LocalMonero、Haveno 的对比。",
+      "keywords": "如何无需 kyc 购买 monero, 如何无需 kyc 购买 bitcoin, 无需 kyc 加密货币, morphit 非托管, 点对点, p2p, 场外交易, OTC, 私密交易, 匿名购买 monero, localmonero 替代品, localbitcoins 替代品, 托管, 法币兑加密货币, XMR, BTC, DBBS, agorism"
     },
     "security": {
       "title": "安全 — 密钥、加密、威胁模型 · Morphit",
@@ -3803,12 +3771,14 @@
       "description": "打印一页纸的 Morphit 使用参考:账户名 vs 助记词,挂单费 vs 网络费,支持的可交易资产一览,以及出问题时该怎么办。"
     },
     "privacy_index": {
-      "title": "Morphit 上的隐私——每个资产的指南",
-      "description": "Morphit 支持的每个资产的隐私指南。大多数链都是透明的；具体步骤使您的交易更难被关联、画像或监控。"
+      "title": "私密购买 Monero 和 Bitcoin——各资产隐私指南 · Morphit",
+      "description": "如何在 Morphit 上保持点对点（P2P）交易的私密性——一个无需 KYC、非托管的场外交易（OTC）市场。各资产指南教你在不关联身份的情况下买卖 Monero (XMR)、Bitcoin (BTC) 等：地址轮换、金额抖动和各链专属技术。大多数链都是透明的；这些具体步骤使你的交易更难被关联、画像或监控。",
+      "keywords": "私密购买 monero, 私密购买 bitcoin, monero 隐私, bitcoin 隐私, 无需 kyc, 无需 kyc 购买 monero, 匿名购买加密货币, 点对点, p2p, 场外交易, over the counter, OTC, 非托管, 地址轮换, 隐私币, XMR, BTC, DBBS, localmonero 替代品, agorism, monero, bitcoin"
     },
     "privacy_asset": {
-      "title": "{asset} 隐私指南 — Morphit",
-      "description": "在 Morphit 上点对点交易 {asset} 时如何保护您的隐私。地址轮换、金额抖动以及链特定的隐私技术。"
+      "title": "如何私密买卖 {asset}——隐私指南 · Morphit",
+      "description": "在 Morphit 上点对点（P2P）买卖 {asset} 时保护你的隐私——一个无需 KYC、非托管的市场。地址轮换、金额抖动和各链专属技术使你的 {asset} 交易更难被关联、画像或监控。",
+      "keywords": "私密购买加密货币, 加密货币隐私, 无需 kyc, 匿名购买加密货币, 点对点, p2p, 非托管, 地址轮换, 隐私币, 场外交易, OTC, XMR, BTC, DBBS, agorism, monero, bitcoin"
     },
     "admin_setup_wizard": {
       "title": "运营者设置向导 — Morphit",
@@ -3870,10 +3840,7 @@
       "pool_note": "你的 Morphit 实例为你处理所有 Blurt 网络流量——你的浏览器从不直接与这些节点通信。这里只是显示它们的实时状态。",
       "cooling_down": "冷却中",
       "recheck": "重新检测节点速度",
-      "http_error": "错误：{code}",
-      "failing": "{n} 次失败",
       "probing": "探测中…",
-      "timed_out": "超时",
       "unreachable": "无法连接"
     },
     "session": {
@@ -3903,7 +3870,6 @@
         "malformed": "这看起来不像有效的 URL。"
       },
       "preview_label": "预览",
-      "save": "本地保存",
       "saved_toast": "已保存 ✓",
       "save_and_broadcast": "保存并广播",
       "broadcast_pending": "发布中…",
@@ -3925,7 +3891,6 @@
         "malformed": "URL 格式错误。"
       },
       "preview_label": "预览:",
-      "save": "本地保存",
       "saved_toast": "已保存到此设备。",
       "save_and_broadcast": "保存并广播",
       "clear": "清除",
@@ -4237,7 +4202,6 @@
       "status": {
         "not_enrolled": "双因素身份验证已关闭。",
         "enrolled": "双因素身份验证已开启。",
-        "enrolled_since": "自 {date} 起激活。",
         "backup_codes_remaining": "剩余 {count} 个备份代码",
         "backup_codes_low": "您的备份代码即将用尽。重新生成一组新的并将它们放在安全的地方。",
         "backup_codes_exhausted": "您没有剩余的备份代码。如果您丢失了身份验证器,您需要您的种子短语来恢复。"
@@ -4249,13 +4213,11 @@
         "step2_title": "2. 扫描二维码",
         "step2_body": "打开您的身份验证器并扫描此代码。如果您无法扫描(没有相机、可访问性),请手动输入下面的密钥。",
         "manual_label": "手动输入(密钥):",
-        "manual_help": "账户: {account}。类型: 基于时间(TOTP)。算法: SHA-1。位数: 6。间隔: 30 秒。",
         "step3_title": "3. 确认您应用中的代码",
         "step3_body": "输入您的身份验证器当前显示的 6 位代码。代码每 30 秒轮换一次;如果您的刚刚变更,请等待下一个。",
         "code_label": "当前 6 位代码",
         "code_placeholder": "000000",
         "confirm_cta": "确认并启用 2FA",
-        "confirm_busy": "验证中…",
         "step4_title": "4. 保存您的备份代码",
         "step4_body": "如果您丢失了身份验证器,这十个代码将让您登录。每个代码精确地工作一次。将它们保存在安全的地方 — 密码管理器、打印并锁起来,或写在纸上。我们不会再次显示它们。",
         "backup_acknowledge": "我已将这些备份代码保存在安全的地方。",
@@ -4270,9 +4232,7 @@
         "confirm_body": "您将能够仅使用密码解锁。您确定吗?",
         "code_label": "当前 6 位代码(用于确认)",
         "submit": "禁用 2FA",
-        "submit_busy": "禁用中…",
         "cancel": "保持 2FA 启用",
-        "success": "双因素身份验证已禁用。",
         "err_invalid_code": "该代码未能验证。请重试。"
       },
       "regenerate": {
@@ -4281,20 +4241,14 @@
         "confirm_body": "您之前的备份代码将立即停止工作。在继续之前,确保您可以完成新代码的保存步骤。",
         "code_label": "当前 6 位代码(用于确认)",
         "submit": "生成新代码",
-        "submit_busy": "生成中…",
-        "success": "新备份代码已生成。立即保存它们。",
         "err_invalid_code": "该代码未能验证。请重试。"
       },
       "unlock_prompt": {
-        "heading": "双因素代码",
         "body": "您的密码有效。现在输入您身份验证器应用中的 6 位代码,或备份代码。",
         "code_label": "身份验证器代码或备份代码",
         "code_placeholder": "000000 或 XXXX-XXXX",
-        "submit": "继续",
-        "submit_busy": "验证中…",
         "err_invalid_code": "该代码未能验证。检查您的设备时间是否同步,或尝试备份代码。",
-        "err_locked_out": "太多无效尝试。在 {seconds} 秒后重试。",
-        "backup_code_redeemed_warning": "刚刚使用了一个备份代码。剩余 {remaining} 个备份代码。"
+        "err_locked_out": "太多无效尝试。在 {seconds} 秒后重试。"
       },
       "recommended_apps": {
         "heading": "推荐的身份验证器应用(开源)",
@@ -4453,7 +4407,6 @@
     "not_now": "暂不",
     "enabling": "正在开启…",
     "enabled": "已完成——有新消息时会通知你。",
-    "error": "无法开启通知。你可以在“设置 → 通知”中启用。",
     "privacy_note": "使用浏览器的私密通知——无需邮箱或电话号码，随时可以关闭。",
     "dismiss_aria": "忽略"
   },
@@ -4510,5 +4463,13 @@
     "json_note": "在构建聚合器或仪表板？相同的数据以 JSON 形式提供：",
     "json_link": "原始数据源",
     "error": "暂时无法加载统计数据。请稍后重试。"
+  },
+  "terms": {
+    "leave_site": {
+      "title": "正在离开 Morphit",
+      "body": "确定要访问 {site} 吗？",
+      "cancel": "取消",
+      "confirm": "访问该网站"
+    }
   }
 }

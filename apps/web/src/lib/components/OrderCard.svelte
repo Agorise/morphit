@@ -6,8 +6,11 @@
 	 * profile "active orders") with one component so the layout stays in
 	 * sync. Layout, top to bottom:
 	 *
-	 *   • Title (bold) that tucks slightly over the avatar below it.
-	 *   • Top-right cluster: the ⏳ "Expires in…" pill, and — when the
+	 *   • Title (bold), sitting cleanly ABOVE the avatar (cp420 — it used
+	 *     to tuck over the avatar; that was dropped). On phones the title
+	 *     clamps to 2 lines.
+	 *   • Top-right cluster (DESKTOP ≥sm): the ⏳ "Expires in…" pill, the
+	 *     tiny price-model line, the stablecoin peg subline, and — when the
 	 *     viewer can message — a stacked green "Message / @username" button.
 	 *   • Identity row: avatar (identicon fallback) beside two lines —
 	 *       line 1: display name (linked) · 🌱 new-trader chip · ⭐ score
@@ -17,7 +20,12 @@
 	 *   • "I can pay with:" (buy) / "I accept:" (sell) + payment methods,
 	 *     with "Location:" alongside when a region is set.
 	 *   • Terms — a single truncated line (full text on the order page).
-	 *   • Eyeball hide/show toggle, bottom-right.
+	 *   • Eyeball hide/show toggle, bottom-right (DESKTOP ≥sm only).
+	 *
+	 * MOBILE (<sm) declutter (cp420): the top-right pill + message button,
+	 * the price-model line, and the eyeball are all hidden; instead a single
+	 * full-width "🗨 Message @username before <date>" button spans the foot
+	 * of the card (OrderCardMobileMessageButton).
 	 *
 	 * The whole card is a stretched link to the order's detail page (z-0);
 	 * the genuinely-interactive children (name link, Message button, hide
@@ -36,8 +44,10 @@
 	// display it again, restore this import and the commented block in
 	// OrderPosterIdentity.
 	// import EngagementChip from '$lib/components/EngagementChip.svelte';
-	import UsdtPriceSubline from '$lib/components/UsdtPriceSubline.svelte';
+	import StablecoinPriceSubline from '$lib/components/StablecoinPriceSubline.svelte';
+	import { isStablecoinSublineTicker } from '$lib/assets/stablecoinSubline';
 	import MessageIcon from '$lib/components/MessageIcon.svelte';
+	import OrderCardMobileMessageButton from '$lib/components/OrderCardMobileMessageButton.svelte';
 	import { stripMarkdown } from '$lib/seo/stripMarkdown';
 	import { highlightMatches } from '$lib/utils/highlightMatches';
 
@@ -149,28 +159,32 @@
 		aria-label={$_('orderbook.order.open_aria', { values: { title } }) as string}
 	></a>
 
-	<!-- Top-right cluster: expiry pill, then the tiny price-model line and
-	     USDT peg subline, then the (optional) Message button. -->
+	<!-- Top-right cluster (DESKTOP ≥sm): expiry pill, the tiny price-model
+	     line, the stablecoin peg subline, then the (optional) Message button.
+	     On phones the pill, price-model line, and message button are hidden —
+	     they fold into the full-width button at the foot of the card. -->
 	<div class="absolute right-3 top-3 z-10 flex flex-col items-end gap-1.5 sm:right-4 sm:top-4">
 		{#if order.expires_at}
-			<OrderExpiryChip expiresAt={order.expires_at} updatedAtIso={order.updated_at} />
+			<div class="hidden sm:block">
+				<OrderExpiryChip expiresAt={order.expires_at} updatedAtIso={order.updated_at} />
+			</div>
 		{/if}
 		{#if priceModelLabel}
 			<span
-				class="text-xs text-ink-500 dark:text-ink-400"
+				class="hidden text-xs text-ink-500 dark:text-ink-400 sm:block"
 				title={$_('orderbook.price_model.tooltip') as string}
 			>
 				{priceModelLabel}
 			</span>
 		{/if}
-		{#if order.asset === 'USDT'}
-			<UsdtPriceSubline compact />
+		{#if isStablecoinSublineTicker(order.asset)}
+			<StablecoinPriceSubline asset={order.asset} compact />
 		{/if}
 		{#if messageHref && !hidden && !blocked}
 			<a
 				href={messageHref}
 				onclick={() => onMessageClick?.()}
-				class="mt-0.5 flex flex-col items-center rounded-lg border border-morphit-emerald px-3 py-1 text-center leading-tight text-morphit-emerald transition hover:bg-morphit-emerald/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
+				class="mt-0.5 hidden flex-col items-center rounded-lg border border-morphit-emerald px-3 py-1 text-center leading-tight text-morphit-emerald transition hover:bg-morphit-emerald/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald sm:flex"
 				aria-label={$_('chat.message_button_aria', { values: { peer: order.account } }) as string}
 			>
 				<span class="inline-flex items-center gap-1 text-sm font-semibold">
@@ -182,12 +196,16 @@
 		{/if}
 	</div>
 
-	<!-- Title. Right padding clears the top-right cluster. -->
-	<h3 class="font-display pr-24 text-lg font-bold sm:pr-28">{title}</h3>
+	<!-- Title. Right padding clears the top-right cluster. On phones it
+	     clamps to 2 lines so a long "I'm buying …" can't run away. -->
+	<h3 class="font-display line-clamp-2 pr-24 text-lg font-bold sm:line-clamp-none sm:pr-28">
+		{title}
+	</h3>
 
 	<!-- Identity row (shared with the order detail "POSTED BY" card via
-	     OrderPosterIdentity). -mt-2 tucks the avatar up under the title. -->
-	<div class="-mt-2">
+	     OrderPosterIdentity). cp420 — the avatar now sits cleanly below the
+	     title (was -mt-2, which tucked it up under the title). -->
+	<div class="mt-1">
 		<OrderPosterIdentity {order} {displayName} {avatarSvg} {avatarDataUri} {profileHref} />
 	</div>
 
@@ -236,10 +254,26 @@
 		</p>
 	{/if}
 
+	<!-- MOBILE (<sm) foot button: the combined "🗨 Message @username before
+	     <date>" CTA, full width. It stands in for the top-right pill + message
+	     button, both hidden on phones. Only shown when the poster is
+	     messageable (same guard as the desktop button). -->
+	{#if messageHref && !hidden && !blocked}
+		<div class="mt-3 sm:hidden">
+			<OrderCardMobileMessageButton
+				href={messageHref}
+				account={order.account}
+				expiresAt={order.expires_at ?? null}
+				onClick={() => onMessageClick?.()}
+			/>
+		</div>
+	{/if}
+
 	<!-- Bottom-right cluster: a blocked/hidden marker (so a dimmed card
 	     explains itself) sits to the LEFT of the hide/show eyeball. The
 	     eyeball is suppressed when chain-blocked (a stronger action was
-	     taken) or when no toggle is wired; the marker still shows. -->
+	     taken) or when no toggle is wired; the marker still shows. The
+	     eyeball is also hidden on phones (cp420); the marker still shows. -->
 	{#if blocked || hidden || onToggleHide}
 		<div class="absolute bottom-3 right-3 z-10 flex items-center gap-2">
 			{#if blocked}
@@ -262,7 +296,7 @@
 					title={hidden
 						? ($_('orderbook.unhide_button_tooltip') as string)
 						: ($_('orderbook.hide_button_tooltip') as string)}
-					class="rounded px-2 py-1 text-ink-400 transition hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
+					class="hidden rounded px-2 py-1 text-ink-400 transition hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald sm:block"
 					aria-label={hidden
 						? ($_('orderbook.unhide_button_aria', { values: { account: order.account } }) as string)
 						: ($_('orderbook.hide_button_aria', { values: { account: order.account } }) as string)}

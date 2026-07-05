@@ -126,8 +126,25 @@ check(
 	/\{#if priceModelLabel\}/.test(card) && /\{priceModelLabel\}/.test(card)
 );
 check(
-	'11d USDT peg subline shown for USDT orders',
-	/order\.asset === 'USDT'/.test(card) && /UsdtPriceSubline/.test(card)
+	'11d stablecoin peg subline shown for USDT/USDC/DAI orders',
+	/isStablecoinSublineTicker\(order\.asset\)/.test(card) && /StablecoinPriceSubline/.test(card)
+);
+check(
+	'11e stablecoin subline is generalised to all three stablecoins (not USDT-only)',
+	(() => {
+		const list = readFileSync(
+			join(WEB, 'src/lib/assets/stablecoinSubline.ts'),
+			'utf8'
+		);
+		const comp = readFileSync(
+			join(WEB, 'src/lib/components/StablecoinPriceSubline.svelte'),
+			'utf8'
+		);
+		const hasAllThree = /'USDT'/.test(list) && /'USDC'/.test(list) && /'DAI'/.test(list);
+		// component keys off a dynamic ns → works for any listed stablecoin
+		const dynamicKey = /assets\.\$\{ns\}\.price_subline\.(live|unavailable)/.test(comp);
+		return hasAllThree && dynamicKey;
+	})()
 );
 check(
 	'12 blocked/hidden markers present, in the bottom-right cluster beside the eyeball',

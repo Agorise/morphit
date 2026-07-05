@@ -30,6 +30,18 @@ of fixes. **Recommended for all operators.**
   transaction view now pretty-prints structured data that used to appear as one
   long escaped line, making Morphit operations much easier to read.
 
+- **Blockquotes and links in listing terms, and clearer emphasis.** The Terms
+  field when you post an order now understands Markdown blockquotes
+  (`> quoted text`) and `[text](link)` hyperlinks, on top of the headings, bold,
+  italics, lists, and rules it already supported. Links are restricted to safe
+  web schemes (an unsafe link is shown as plain text, never made clickable),
+  appear in the brand green on the order page, and — before sending you off
+  Morphit — pop up a quick confirmation that names where you're headed ("Leaving
+  Morphit — are you sure you want to visit example.com?"), then open the site in
+  a new tab. Headings and bold text now render in a noticeably
+  heavier weight. In the compact browse cards, all of this is flattened to a
+  clean single line of plain text.
+
 ## Changed
 
 - **Your browser never contacts a Blurt node directly.** Previously a few
@@ -53,11 +65,12 @@ of fixes. **Recommended for all operators.**
   when one party ran both the treasury and the relay. Fees paid in BTC or XMR
   continue to go entirely to the canonical accounts.
 
-- **Much better discoverability.** The home and orderbook pages have rewritten
-  titles, descriptions, and keywords aimed at what people actually search for
-  now that LocalMonero, LocalBitcoins, AgoraDesk, and Paxful have all shut
-  down — a no-KYC, peer-to-peer, over-the-counter way to buy and sell Monero and
-  Bitcoin. All of it is fully translated into every supported language.
+- **Much better discoverability.** The home, orderbook, privacy, and FAQ
+  pages have rewritten titles, descriptions, and keywords aimed at what people
+  actually search for now that LocalMonero, LocalBitcoins, AgoraDesk, and Paxful
+  have all shut down — a no-KYC, peer-to-peer, over-the-counter way to buy and
+  sell Monero and Bitcoin, including how to do it privately. All of it is fully
+  translated into every supported language.
 
 - **The Blurt listing-fee step reads more clearly.** The wording on the post
   page around paying in Blurt, the Monero fee hint (which now reminds you to
@@ -93,6 +106,10 @@ of fixes. **Recommended for all operators.**
 
 - **A stray autofill highlight and a couple of small layout issues** on the post
   and settings pages are corrected.
+
+- **The language switcher no longer drops to the bottom-left on phones.** It now
+  stays on the same row as the copyright line, at the bottom-right (bottom-left
+  in right-to-left languages), instead of wrapping onto its own line below.
 
 ---
 

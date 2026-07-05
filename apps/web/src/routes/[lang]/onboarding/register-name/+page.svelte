@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
+	import LazyLoadError from '$components/LazyLoadError.svelte';
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	import { currentLocale } from '$i18n';
@@ -825,5 +826,7 @@
 			onConfirm={confirmLeave}
 			onCancel={cancelLeave}
 		/>
+	{:catch}
+		<LazyLoadError />
 	{/await}
 {/if}
