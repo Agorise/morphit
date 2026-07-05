@@ -2617,7 +2617,6 @@
     "error_title": "Impossibile raggiungere l'indexer",
     "error_body": "L'indexer al momento è irraggiungibile. Riprova tra poco.",
     "load_more": "Carica altri",
-    "indexed_block_label": "Blocco indicizzato",
     "order": {
       "buying": "compra {asset}",
       "selling": "vende {asset}",
@@ -2956,6 +2955,7 @@
       "region_label": "Regione (opzionale)",
       "region_hint": "Dove sei disposto a scambiare. Aiuta chi è vicino a trovarti.",
       "terms_label": "Condizioni / Dettagli / Note",
+      "terms_forbidden_char": "I tuoi termini contengono un carattere non consentito: rimuovi i caratteri nascosti o di controllo. (Le interruzioni di riga e il markdown abituale vanno bene.)",
       "expires_label": "Il listing scade",
       "expires_1d": "Tra 1 giorno",
       "expires_3d": "Tra 3 giorni",

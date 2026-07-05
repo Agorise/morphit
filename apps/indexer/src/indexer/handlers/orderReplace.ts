@@ -29,9 +29,15 @@ const MAX_AMOUNT = 1e12;
 const MAX_EXPIRES_AT_DAYS = 365;
 
 /** O3.4 — forbidden character class for user-text fields.
- *  Mirror of order.ts.  See that file for full rationale. */
+ *  Mirror of order.ts.  See that file for full rationale.
+ *  Applied to the single-line location_region + payment_methods. */
 const FORBIDDEN_TEXT_CHARS =
 	/[\u0000-\u001F\u007F-\u009F\u200B-\u200D\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/;
+/** Multi-line variant for the terms field ONLY — permits TAB/LF/CR so
+ *  multi-line markdown terms aren't silently rejected on-chain. Mirror
+ *  of order.ts FORBIDDEN_MULTILINE_TEXT_CHARS; keep the two in sync. */
+const FORBIDDEN_MULTILINE_TEXT_CHARS =
+	/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u200B-\u200D\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/;
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
 	return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -174,7 +180,7 @@ function validate(payload: unknown): Validated | { reason: string } {
 		// O3.4 — NFC + forbidden-char filter.
 		const normalized = payload.terms.normalize('NFC');
 		if (normalized.length > 2048) return { reason: 'terms_too_long' };
-		if (FORBIDDEN_TEXT_CHARS.test(normalized)) {
+		if (FORBIDDEN_MULTILINE_TEXT_CHARS.test(normalized)) {
 			return { reason: 'terms_forbidden_char' };
 		}
 		terms = normalized;

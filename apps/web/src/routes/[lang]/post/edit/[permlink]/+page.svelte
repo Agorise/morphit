@@ -50,6 +50,7 @@
 	import { getOrdersByAccount } from '$lib/indexer/client';
 	import type { OrderFormInput } from '$lib/orders/payload';
 	import { makeExpiryFlooredUtcDay } from '$lib/orders/payload';
+	import { termsHasForbiddenChar } from '$lib/orders/termsForbiddenChars';
 	import type { OrderRecord } from '@morphit/indexer-client';
 	import type { PrivateKeyMatch } from '$lib/security/privateKeyDetector';
 	import { type AssetTicker } from '@morphit/asset-registry';
@@ -455,12 +456,19 @@
 		fixedPrice = clean;
 	}
 
+	// cp422: fail-closed on terms the indexer would reject (control / bidi /
+	// zero-width). Terms is multi-line markdown so TAB/LF/CR are fine. Same
+	// posture as the network gate below — better a disabled Save than a
+	// silent post-broadcast `terms_forbidden_char` rejection.
+	const termsForbidden = $derived(termsHasForbiddenChar(terms));
+
 	const canSave = $derived(
 		phase === 'ready' &&
 			!amountError &&
 			!pmError &&
 			!fiatError &&
 			!priceModelError &&
+			!termsForbidden &&
 			remainingMs > 0 &&
 			// cp36 Bob-3 fix — multi-network assets require a picked
 			// network. Without this gate the user can save with an
@@ -964,6 +972,11 @@
 					showCounter
 				/>
 			</label>
+			{#if termsForbidden}
+				<p class="-mt-3 mb-4 text-sm text-red-700 dark:text-red-300" role="alert">
+					{$_('post_order.form.terms_forbidden_char')}
+				</p>
+			{/if}
 
 			<label class="block">
 				<span class="mb-1 block text-sm font-semibold">{$_('post_order.form.expires_label')}</span>

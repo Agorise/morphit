@@ -2617,7 +2617,6 @@
     "error_title": "Impossible de joindre l'indexeur",
     "error_body": "L'indexeur est injoignable pour le moment. Réessaie dans un petit moment.",
     "load_more": "Charger plus",
-    "indexed_block_label": "Bloc indexé",
     "order": {
       "buying": "achète {asset}",
       "selling": "vend {asset}",
@@ -2956,6 +2955,7 @@
       "region_label": "Région (optionnel)",
       "region_hint": "Où vous êtes prêt à échanger. Aide les gens proches à vous trouver.",
       "terms_label": "Conditions / Détails / Notes",
+      "terms_forbidden_char": "Vos conditions contiennent un caractère non autorisé : supprimez les caractères masqués ou de contrôle. (Les sauts de ligne et le markdown habituel sont acceptés.)",
       "expires_label": "L'annonce expire",
       "expires_1d": "Dans 1 jour",
       "expires_3d": "Dans 3 jours",

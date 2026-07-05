@@ -408,6 +408,7 @@ SMOKES=(
 	"apps/web:explorer-account-card-smoke"
 	"apps/web:explorer-op-label-values-parity-smoke"
 	"apps/web:explorer-json-highlight-safety-smoke"
+	"apps/web:terms-forbidden-char-parity-smoke"
 	"apps/web:orderbook-terms-highlight-safety-smoke"
 	"apps/web:instances-alt-network-links-smoke"
 	"apps/web:blurt-apr-smoke"

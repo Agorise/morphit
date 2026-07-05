@@ -2617,7 +2617,6 @@
     "error_title": "Nie można połączyć się z indekserem",
     "error_body": "Indekser jest w tej chwili nieosiągalny. Spróbuj ponownie za chwilę.",
     "load_more": "Załaduj więcej",
-    "indexed_block_label": "Zindeksowany blok",
     "order": {
       "buying": "kupuje {asset}",
       "selling": "sprzedaje {asset}",
@@ -2956,6 +2955,7 @@
       "region_label": "Region (opcjonalnie)",
       "region_hint": "Gdzie chcesz handlować. Pomaga osobom w pobliżu Cię znaleźć.",
       "terms_label": "Warunki / Szczegóły / Notatki",
+      "terms_forbidden_char": "Twoje warunki zawierają niedozwolony znak — usuń ukryte lub sterujące znaki. (Podziały wierszy i zwykły markdown są dozwolone.)",
       "expires_label": "Listing wygasa",
       "expires_1d": "Za 1 dzień",
       "expires_3d": "Za 3 dni",

@@ -2617,7 +2617,6 @@
     "error_title": "No se puede contactar el indexador",
     "error_body": "El indexador no está disponible en este momento. Vuelve a intentarlo dentro de un rato.",
     "load_more": "Cargar más",
-    "indexed_block_label": "Bloque indexado",
     "order": {
       "buying": "comprando {asset}",
       "selling": "vendiendo {asset}",
@@ -2956,6 +2955,7 @@
       "region_label": "Región (opcional)",
       "region_hint": "Dónde estás dispuesto a operar. Ayuda a que la gente cercana te encuentre.",
       "terms_label": "Términos / Detalles / Notas",
+      "terms_forbidden_char": "Tus términos contienen un carácter que no se puede usar: elimina los caracteres ocultos o de control. (Los saltos de línea y el markdown habitual están bien.)",
       "expires_label": "El listado vence",
       "expires_1d": "En 1 día",
       "expires_3d": "En 3 días",

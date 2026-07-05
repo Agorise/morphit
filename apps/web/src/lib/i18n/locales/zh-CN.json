@@ -2617,7 +2617,6 @@
     "error_title": "无法连接索引器",
     "error_body": "索引器暂时无法访问。请稍后再试。",
     "load_more": "加载更多",
-    "indexed_block_label": "已索引区块",
     "order": {
       "buying": "买入 {asset}",
       "selling": "卖出 {asset}",
@@ -2956,6 +2955,7 @@
       "region_label": "地区 (可选)",
       "region_hint": "您愿意在哪里交易。帮助附近的人找到您。",
       "terms_label": "条款 / 详情 / 备注",
+      "terms_forbidden_char": "您的条款包含无法使用的字符——请删除任何隐藏字符或控制字符。（换行和常用的 markdown 都可以。）",
       "expires_label": "挂单到期",
       "expires_1d": "1 天后",
       "expires_3d": "3 天后",

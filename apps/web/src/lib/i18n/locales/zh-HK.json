@@ -2617,7 +2617,6 @@
     "error_title": "無法連線到索引器",
     "error_body": "索引器暫時無法存取。請稍後再試。",
     "load_more": "載入更多",
-    "indexed_block_label": "已索引區塊",
     "order": {
       "buying": "買入 {asset}",
       "selling": "賣出 {asset}",
@@ -2956,6 +2955,7 @@
       "region_label": "地區 (可選)",
       "region_hint": "您願意在哪裡交易。幫助附近的人找到您。",
       "terms_label": "條款 / 詳情 / 備註",
+      "terms_forbidden_char": "您的條款包含無法使用的字元——請移除任何隱藏字元或控制字元。（換行和常用的 markdown 都可以。）",
       "expires_label": "掛單到期",
       "expires_1d": "1 天後",
       "expires_3d": "3 天後",
