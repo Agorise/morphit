@@ -1777,15 +1777,11 @@ See also "How does Morphit stop spam and unsolicited messages from strangers?" f
 
 **FAQ key:** `what_is_mana`
 
-On Blurt, Mana is the per-account capacity that lets you do things on the chain — post, comment, vote, and (in Morphit's case) submit orders, broadcast feedback, send chat messages.
+On Blurt, Mana is your voting power — it sets how much weight your upvotes carry, and that is the only thing it affects. Picture a stamina bar that starts at 100%, drops a little each time you vote, and refills by roughly 20% a day. The more Blurt Power (staked Blurt) you hold, the bigger the bar.
 
-Think of Mana like a video-game stamina bar that refills on its own. Every action you take spends a little. The bar slowly recharges over the next few hours and days. If you're a normal user, you'll basically never notice it — Blurt's design refills Mana fast enough that you can do dozens of things per day without thinking about it.
+What Mana does NOT do is pay for your actions. This is the key difference from Steem and Hive, which meter posting and transacting with "Resource Credits (RC)". Blurt dropped that model. On Blurt, on-chain actions — posting, commenting, transferring, and on Morphit submitting orders, leaving feedback, and sending chat messages — cost a small fee paid from your liquid BLURT (an operation flat fee plus a size-based bandwidth fee, set by the witnesses; you see the exact amount just before you sign). Voting is the one exception: it spends Mana, not BLURT.
 
-Mana is the answer to the spam question: "if posting on a blockchain is free, why doesn't everyone just spam?" Because spamming would burn through your Mana bar in seconds, and then you'd have to wait it out while everyone else's actions go through normally. Blurt's economy uses this to throttle abuse without anyone needing to charge fees on each post.
-
-The size of your Mana bar is roughly proportional to how much Blurt you're holding (specifically, Blurt Power — staked Blurt). New accounts get a small starter amount, which is why the welcome bonus includes some Blurt Power: it bumps up your bar so you can use Morphit smoothly from day one.
-
-**Note on terminology.** You may see this called "RC" or "Resource Credits" in older Blurt documentation, on the Steem network it forked from, or in our internal code comments. Mana is the modern Blurt name, and what we use everywhere a normal user can see.
+So the practical rule is simple: keep a little liquid BLURT on hand — even about 10 is plenty for everyday use — and your actions go through. Incoming transfers are free, so topping up is easy. You never have to wait for Mana to recharge before you can post or trade; that is a Steem/Hive habit that does not apply on Blurt.
 
 ---
 

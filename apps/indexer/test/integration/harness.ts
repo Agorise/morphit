@@ -48,8 +48,11 @@ export interface IntegrationFixture {
 	readonly pool: pg.Pool;
 	readonly db: Database;
 	readonly schema: string;
-	/** Apply every registered migration SQL, but redirected at the
-	 *  fixture's schema. Called from setup() by default. */
+	/** Apply every registered migration SQL, redirected at the
+	 *  fixture's schema. NOT called automatically by setup() — either
+	 *  call this yourself after setup(), or use the setupWithMigrations()
+	 *  convenience wrapper (which every data-test should). A bare setup()
+	 *  leaves an EMPTY schema with no tables. */
 	applyMigrations(): Promise<void>;
 	/** Destroy the schema and close the pool. Always called from
 	 *  teardown() — tests don't need to invoke this directly. */
