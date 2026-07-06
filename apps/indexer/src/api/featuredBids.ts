@@ -39,7 +39,7 @@ import { z } from 'zod';
 import type { Database } from '$db/pool';
 
 const MAX_RESULTS = 30;
-const MAX_SLOTS = 5;
+const MAX_SLOTS = 3;
 
 /** Valid Blurt account name pattern.  Same regex used elsewhere
  *  in the indexer for input validation. */

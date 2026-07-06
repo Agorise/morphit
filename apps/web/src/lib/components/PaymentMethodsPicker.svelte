@@ -209,6 +209,21 @@
 		return $_(i18nKey);
 	}
 
+	/** Icon path for a payment-method row, or null for none.  Crypto entries
+	 *  derive their coin logo from the `pay_<ticker>` key (matching the
+	 *  registry's documented convention + the step-1 asset blocks and the
+	 *  barter accepted-crypto chips, which use the same `/icons/icon-<ticker>`
+	 *  scheme); every other entry opts in via the registry `icon` field —
+	 *  today that's `barter_goods` (→ the barter glyph), so barter shows its
+	 *  icon wherever it appears in this picker. Unknown/iconless methods
+	 *  (bank, cash, …) render text-only, unchanged. */
+	function iconFor(entry: PaymentMethodEntry): string | null {
+		if (entry.category === 'crypto') {
+			return `/icons/icon-${entry.key.replace(/^pay_/, '').toLowerCase()}.svg`;
+		}
+		return entry.icon ?? null;
+	}
+
 	const maxReached = $derived(selected.length >= max);
 </script>
 
@@ -280,6 +295,7 @@
 		<!-- Flat ranked list for search results -->
 		<ul class="space-y-1">
 			{#each searchHits as { entry } (entry.key)}
+				{@const icon = iconFor(entry)}
 				<li>
 					<button
 						type="button"
@@ -291,20 +307,25 @@
 							? 'bg-emerald-50 dark:bg-ink-800'
 							: ''}"
 					>
-						<span class="flex flex-col gap-0.5">
-							<span class="font-semibold">
-								{entry.name}
-								{#if isInstanceKey(entry.key)}
-									<span class="ml-1 text-xs font-normal text-ink-500 dark:text-ink-400">
-										({$_('payment_method.instance_addition_label')})
+						<span class="flex min-w-0 items-center gap-2.5">
+							{#if icon}
+								<img src={icon} alt="" class="h-5 w-5 shrink-0" />
+							{/if}
+							<span class="flex min-w-0 flex-col gap-0.5">
+								<span class="font-semibold">
+									{entry.name}
+									{#if isInstanceKey(entry.key)}
+										<span class="ml-1 text-xs font-normal text-ink-500 dark:text-ink-400">
+											({$_('payment_method.instance_addition_label')})
+										</span>
+									{/if}
+								</span>
+								{#if descFor(entry.key)}
+									<span class="text-xs text-ink-500 dark:text-ink-400">
+										{descFor(entry.key)}
 									</span>
 								{/if}
 							</span>
-							{#if descFor(entry.key)}
-								<span class="text-xs text-ink-500 dark:text-ink-400">
-									{descFor(entry.key)}
-								</span>
-							{/if}
 						</span>
 						<input
 							type="checkbox"
@@ -340,6 +361,7 @@
 					{#if !collapsed[cat]}
 						<ul class="divide-y divide-ink-100 dark:divide-ink-900">
 							{#each entries as entry (entry.key)}
+								{@const icon = iconFor(entry)}
 								<li>
 									<button
 										type="button"
@@ -351,13 +373,18 @@
 											? 'bg-emerald-50 dark:bg-ink-800'
 											: ''}"
 									>
-										<span class="flex flex-col gap-0.5">
-											<span class="font-semibold">{entry.name}</span>
-											{#if descFor(entry.key)}
-												<span class="text-xs text-ink-500 dark:text-ink-400">
-													{descFor(entry.key)}
-												</span>
+										<span class="flex min-w-0 items-center gap-2.5">
+											{#if icon}
+												<img src={icon} alt="" class="h-5 w-5 shrink-0" />
 											{/if}
+											<span class="flex min-w-0 flex-col gap-0.5">
+												<span class="font-semibold">{entry.name}</span>
+												{#if descFor(entry.key)}
+													<span class="text-xs text-ink-500 dark:text-ink-400">
+														{descFor(entry.key)}
+													</span>
+												{/if}
+											</span>
 										</span>
 										<input
 											type="checkbox"
@@ -398,6 +425,7 @@
 				{#if !collapsed.instance}
 					<ul class="divide-y divide-ink-100 dark:divide-ink-900">
 						{#each instanceAdditions as entry (entry.key)}
+							{@const icon = iconFor(entry)}
 							<li>
 								<button
 									type="button"
@@ -409,13 +437,18 @@
 										? 'bg-emerald-50 dark:bg-ink-800'
 										: ''}"
 								>
-									<span class="flex flex-col gap-0.5">
-										<span class="font-semibold">{entry.name}</span>
-										{#if descFor(entry.key)}
-											<span class="text-xs text-ink-500 dark:text-ink-400">
-												{descFor(entry.key)}
-											</span>
+									<span class="flex min-w-0 items-center gap-2.5">
+										{#if icon}
+											<img src={icon} alt="" class="h-5 w-5 shrink-0" />
 										{/if}
+										<span class="flex min-w-0 flex-col gap-0.5">
+											<span class="font-semibold">{entry.name}</span>
+											{#if descFor(entry.key)}
+												<span class="text-xs text-ink-500 dark:text-ink-400">
+													{descFor(entry.key)}
+												</span>
+											{/if}
+										</span>
 									</span>
 									<input
 										type="checkbox"

@@ -104,7 +104,7 @@ scenario('empty rows → empty points array', () => {
 	const r = shapeClearingResponse([], 30);
 	expect(r.points, []);
 	expect(r.window_days, 30);
-	expect(r.max_slots, 5);
+	expect(r.max_slots, 3);
 });
 
 scenario('single day with full slots → clearing price exposed', () => {
@@ -113,7 +113,7 @@ scenario('single day with full slots → clearing price exposed', () => {
 			{
 				day: new Date('2026-05-01T00:00:00Z'),
 				clearing_blurt_per_hour: '12.500',
-				active_visible_count: 5
+				active_visible_count: 3
 			}
 		],
 		7
@@ -121,10 +121,10 @@ scenario('single day with full slots → clearing price exposed', () => {
 	expect(r.points.length, 1);
 	expect(r.points[0]!.day, '2026-05-01');
 	expect(r.points[0]!.clearing_blurt_per_hour, 12.5);
-	expect(r.points[0]!.active_visible_count, 5);
-	expect(r.points[0]!.max_slots, 5);
+	expect(r.points[0]!.active_visible_count, 3);
+	expect(r.points[0]!.max_slots, 3);
 	expect(r.window_days, 7);
-	expect(r.max_slots, 5);
+	expect(r.max_slots, 3);
 });
 
 // ─── shapeClearingResponse: under-filled days ─────────────
@@ -135,7 +135,7 @@ scenario('under-filled day (NULL clearing) → 0 in wire shape', () => {
 			{
 				day: new Date('2026-05-01T00:00:00Z'),
 				clearing_blurt_per_hour: null,
-				active_visible_count: 2 // only 2 of 5 slots filled
+				active_visible_count: 2 // only 2 of 3 slots filled
 			}
 		],
 		7
@@ -167,7 +167,7 @@ scenario('NUMERIC string with high precision → preserved as number', () => {
 			{
 				day: new Date('2026-05-01T00:00:00Z'),
 				clearing_blurt_per_hour: '0.123456',
-				active_visible_count: 5
+				active_visible_count: 3
 			}
 		],
 		7
@@ -181,7 +181,7 @@ scenario('whole-number NUMERIC string → integer-typed number', () => {
 			{
 				day: new Date('2026-05-01T00:00:00Z'),
 				clearing_blurt_per_hour: '100',
-				active_visible_count: 5
+				active_visible_count: 3
 			}
 		],
 		7
@@ -196,12 +196,12 @@ scenario('7-day series with mixed under/full days', () => {
 		{
 			day: new Date('2026-04-25T00:00:00Z'),
 			clearing_blurt_per_hour: '5.000',
-			active_visible_count: 5
+			active_visible_count: 3
 		},
 		{
 			day: new Date('2026-04-26T00:00:00Z'),
 			clearing_blurt_per_hour: '5.000',
-			active_visible_count: 5
+			active_visible_count: 3
 		},
 		{
 			day: new Date('2026-04-27T00:00:00Z'),
@@ -216,17 +216,17 @@ scenario('7-day series with mixed under/full days', () => {
 		{
 			day: new Date('2026-04-29T00:00:00Z'),
 			clearing_blurt_per_hour: '8.000',
-			active_visible_count: 5
+			active_visible_count: 3
 		},
 		{
 			day: new Date('2026-04-30T00:00:00Z'),
 			clearing_blurt_per_hour: '12.500',
-			active_visible_count: 5
+			active_visible_count: 3
 		},
 		{
 			day: new Date('2026-05-01T00:00:00Z'),
 			clearing_blurt_per_hour: '15.000',
-			active_visible_count: 5
+			active_visible_count: 3
 		}
 	];
 	const r = shapeClearingResponse(rows, 7);
@@ -260,7 +260,7 @@ scenario('day with timestamp not at midnight UTC still produces YYYY-MM-DD', () 
 			{
 				day: new Date('2026-05-01T15:30:45Z'),
 				clearing_blurt_per_hour: '1.000',
-				active_visible_count: 5
+				active_visible_count: 3
 			}
 		],
 		7
@@ -281,19 +281,19 @@ scenario('window_days reflects what was passed in', () => {
 
 // ─── max_slots invariant ──────────────────────────────────
 
-scenario('max_slots is constant 5 in both wire shape and per-point', () => {
+scenario('max_slots is constant 3 in both wire shape and per-point', () => {
 	const r = shapeClearingResponse(
 		[
 			{
 				day: new Date('2026-05-01T00:00:00Z'),
 				clearing_blurt_per_hour: '1.000',
-				active_visible_count: 5
+				active_visible_count: 3
 			}
 		],
 		7
 	);
-	expect(r.max_slots, 5);
-	expect(r.points[0]!.max_slots, 5);
+	expect(r.max_slots, 3);
+	expect(r.points[0]!.max_slots, 3);
 });
 
 // ─── Type-narrowing sanity ────────────────────────────────
@@ -304,7 +304,7 @@ scenario('shape is well-typed and JSON-serializable', () => {
 			{
 				day: new Date('2026-05-01T00:00:00Z'),
 				clearing_blurt_per_hour: '12.500',
-				active_visible_count: 5
+				active_visible_count: 3
 			}
 		],
 		7

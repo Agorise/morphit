@@ -70,7 +70,7 @@ const MAX_HOURS = 168; // one week
 /** Mirror of MAX_SLOTS in `apps/indexer/src/api/featuredOrderbook.ts`.
  *  See "Min-bid increment" block in handle() below for why this
  *  lives here.  If you change one, change both. */
-const MAX_SLOTS_VISIBLE = 5;
+const MAX_SLOTS_VISIBLE = 3;
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
 	return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -309,7 +309,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	//
 	// Non-fatal on failure — bid is already recorded.  An
 	// extension miss is a UX regression, not a data-loss event.
-	const MAX_SLOTS_FOR_NOTIFY = 5;
+	const MAX_SLOTS_FOR_NOTIFY = 3;
 	const SNIPE_WINDOW_MINUTES = 5;
 	const SNIPE_EXTENSION_MINUTES = 5;
 	const MAX_EXTENSIONS = 6;

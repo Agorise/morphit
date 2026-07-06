@@ -251,7 +251,8 @@ export function getOrderbookFromOrigin(
 	});
 }
 
-/** GET /v1/orderbook/featured — top 5 featured slots right now. */
+/** GET /v1/orderbook/featured — the live featured slots right now (up to
+ *  the response's `max_slots`, currently 3). */
 export function getFeaturedOrderbook(
 	signal?: AbortSignal
 ): Promise<Result<FeaturedOrderbookResponse>> {

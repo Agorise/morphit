@@ -91,6 +91,12 @@
 		highlightTokens?: readonly string[];
 		/** Extra classes for the root <li> (e.g. list animation). */
 		class?: string;
+		/** cp428 — render this card in the FEATURED style: an emerald border +
+		 *  faint gradient wash + a "🎉 Featured" corner badge. The card content
+		 *  is identical to a normal order card (same layout on PC + mobile) —
+		 *  featuring only changes the frame, so a featured order reads exactly
+		 *  like every other card plus the badge. */
+		featured?: boolean;
 	}
 
 	let {
@@ -110,7 +116,8 @@
 		onToggleHide = null,
 		onMessageClick = null,
 		highlightTokens = [],
-		class: cls = ''
+		class: cls = '',
+		featured = false
 	}: Props = $props();
 
 	// count / score / postingKey / tradesLine now live inside
@@ -150,6 +157,8 @@
 	class="card-interactive relative p-4 sm:p-6 hover:border-morphit-emerald/20 hover:bg-emerald-50/30 dark:hover:border-morphit-emerald/15 dark:hover:bg-morphit-emerald/[0.05] {hidden ||
 	blocked
 		? 'opacity-50'
+		: ''} {featured
+		? 'border-2 border-morphit-emerald/40 bg-gradient-to-br from-morphit-emerald/5 to-morphit-teal/5'
 		: ''} {cls}"
 >
 	<!-- Stretched link: whole card opens the order detail page (z-0).
@@ -196,6 +205,18 @@
 			</a>
 		{/if}
 	</div>
+
+	<!-- cp428 — featured badge sits on its own line above the title (top-left),
+	     so it never collides with the top-right expiry / message cluster. -->
+	{#if featured}
+		<p class="mb-2">
+			<span
+				class="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-morphit-emerald to-morphit-teal px-2.5 py-0.5 text-xs font-bold text-ink-950"
+			>
+				🎉 {$_('featured.badge')}
+			</span>
+		</p>
+	{/if}
 
 	<!-- Title. Right padding clears the top-right cluster. On phones it
 	     clamps to 2 lines so a long "I'm buying …" can't run away. -->

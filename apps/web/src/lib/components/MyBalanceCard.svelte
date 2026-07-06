@@ -32,7 +32,7 @@
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	import { onMount, onDestroy } from 'svelte';
-	import { _ } from 'svelte-i18n';
+	import { _, locale } from 'svelte-i18n';
 	import { goto } from '$app/navigation';
 	import { fetchAccountBalance } from '$blurt/accountBalance';
 	import { fetchAccountHistory } from '$blurt/accountHistory';
@@ -594,12 +594,19 @@
 		openExact = openExact === v ? null : v;
 	}
 	function fmtExact(n: number, decimals: number): string {
-		return Number.isFinite(n)
-			? n.toLocaleString(undefined, {
-					minimumFractionDigits: decimals,
-					maximumFractionDigits: decimals
-				})
-			: '—';
+		if (!Number.isFinite(n)) return '—';
+		// App-selected locale (matches AnimatedNumber), not the browser's.
+		try {
+			return n.toLocaleString($locale ?? undefined, {
+				minimumFractionDigits: decimals,
+				maximumFractionDigits: decimals
+			});
+		} catch {
+			return n.toLocaleString(undefined, {
+				minimumFractionDigits: decimals,
+				maximumFractionDigits: decimals
+			});
+		}
 	}
 	const exactBlurt = $derived(`${fmtExact(blurtBalance, 3)} BLURT`);
 	const exactBp = $derived(`${fmtExact(bpBalance, 3)} BP`);
@@ -713,7 +720,7 @@
 					<button
 						type="button"
 						onclick={() => openPower('up')}
-						class="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-morphit-teal underline decoration-dotted underline-offset-2 hover:text-morphit-emerald dark:text-morphit-emerald"
+						class="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-morphit-teal underline decoration-dotted underline-offset-2 hover:text-morphit-emerald hover:no-underline dark:text-morphit-emerald"
 					><span aria-hidden="true">↑</span>{$_('profile.wallet.power_up_action')}</button>
 				{/if}
 			</div>
@@ -757,7 +764,7 @@
 					<button
 						type="button"
 						onclick={() => openPower('down')}
-						class="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-morphit-teal underline decoration-dotted underline-offset-2 hover:text-morphit-emerald dark:text-morphit-emerald"
+						class="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-morphit-teal underline decoration-dotted underline-offset-2 hover:text-morphit-emerald hover:no-underline dark:text-morphit-emerald"
 					><span aria-hidden="true">↓</span>{$_('profile.wallet.power_down_action')}</button>
 				{/if}
 			</div>

@@ -147,8 +147,10 @@ export function validateFeedback(reviewer: string, payload: FeedbackPayload): vo
  */
 export function buildFeedbackBody(payload: FeedbackPayload): Record<string, unknown> {
 	// Build the wire payload. Omit optional fields when absent so the
-	// on-chain JSON stays minimal (saves Mana — formerly known
-	// as "RC"; Blurt charges by serialized op size).
+	// on-chain JSON stays minimal — Blurt's per-op network fee has a
+	// bandwidth component that scales with serialized op size, so a
+	// smaller op costs slightly less LIQUID BLURT. (This is a BLURT fee,
+	// not mana/RC — mana on Blurt is only voting power.)
 	// Silent redactPrivateKeys on the comment closes the gap if any
 	// code path calls broadcastFeedback directly without going
 	// through LeaveFeedbackForm (which also redacts upstream).

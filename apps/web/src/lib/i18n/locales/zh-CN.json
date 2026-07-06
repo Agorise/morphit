@@ -1521,7 +1521,7 @@
       },
       "what_is_mana": {
         "q": "Blurt 上的 Mana 是什么？",
-        "a": "在 Blurt 上，Mana 是每个账户的容量，让你能够在链上做各种事情——发帖、评论、投票，以及（在 Morphit 的情况下）提交订单、广播反馈、发送聊天消息。\n\n把 Mana 想象成一个会自动恢复的视频游戏耐力条。你做的每一个动作都会消耗一点。条会在接下来的几个小时和几天内慢慢回充。如果你是普通用户，你基本上永远不会注意到它——Blurt 的设计让 Mana 回充得足够快，你可以一天做几十件事而不需要思考它。\n\nMana 是垃圾信息问题的答案：「如果在区块链上发帖是免费的，为什么大家不直接发垃圾信息呢？」因为发垃圾信息会在几秒钟内烧光你的 Mana 条，然后你必须等待，而其他人的操作仍在正常进行。Blurt 的经济用这个来限制滥用，而无需任何人对每个帖子收费。\n\n你的 Mana 条的大小大致与你持有的 Blurt 数量成比例（具体来说是 Blurt Power——质押的 Blurt）。新账户会获得一小笔初始金额，这就是为什么欢迎奖励包括一些 Blurt Power：它会增加你的条，让你从第一天起就能舒适地使用 Morphit。\n\n**术语说明。** 你可能会在较旧的 Blurt 文档、它分叉自的 Steem 网络，或我们的内部代码注释中看到这个被称为「RC」或「Resource Credits」。Mana 是 Blurt 上的现代名称，也是我们在普通用户能看到的所有地方使用的名称。"
+        "a": "在 Blurt 上，Mana 是你的投票权——它决定你的点赞有多大权重，而且这是它唯一影响的东西。把它想象成一条耐力条，从 100% 开始，每次投票会下降一点，每天大约回充 20%。你持有的 Blurt Power（质押的 Blurt）越多，条就越大。\n\nMana 不做的事，就是为你的操作付费。这是与 Steem 和 Hive 的关键区别——它们用「资源积分（RC）」来计量发帖和交易。Blurt 放弃了那套模型。在 Blurt 上，链上操作——发帖、评论、转账，以及在 Morphit 上提交订单、留下反馈、发送聊天消息——都需要一笔从你的流动 BLURT 中支付的小额费用（每次操作的固定费用加上按大小计的带宽费，由见证人设定；你在签名前就能看到确切金额）。投票是唯一的例外：它消耗 Mana，而不是 BLURT。\n\n所以实用的规则很简单：手头留一点流动 BLURT——即便约 10 个也足够日常使用——你的操作就会通过。转入是免费的，所以充值很容易。你永远不需要等 Mana 回充才能发帖或交易；那是 Steem/Hive 的习惯，在 Blurt 上并不适用。"
       },
       "node_minimum_requirements": {
         "q": "运行 Morphit 节点的最低硬件要求是什么？",
@@ -2624,8 +2624,6 @@
     "error_body": "索引器暂时无法访问。请稍后再试。",
     "load_more": "加载更多",
     "order": {
-      "buying": "买入 {asset}",
-      "selling": "卖出 {asset}",
       "updated_prefix": "更新于",
       "new_trader_aria": "新交易者 — 尚未完成首次交易",
       "new_trader_tooltip": "这位交易者是 Morphit 的新人。帮助他们起步吧!",
@@ -2961,6 +2959,7 @@
       "region_label": "地区 (可选)",
       "region_hint": "您愿意在哪里交易。帮助附近的人找到您。",
       "terms_label": "条款 / 详情 / 备注",
+      "terms_markdown_hint": "支持基本的 Markdown 格式；如需图片，请提供指向你的博客等的链接。",
       "terms_forbidden_char": "您的条款包含无法使用的字符——请删除任何隐藏字符或控制字符。（换行和常用的 markdown 都可以。）",
       "expires_label": "挂单到期",
       "expires_1d": "1 天后",
@@ -3018,7 +3017,7 @@
       "amount_entered_usd_hint": "{amount} {fiat}（≈ {usd}）",
       "returning_min_hint": "至少 {amount} {fiat}（≈ {usd}）",
       "barter_accept_label": "你接受哪些加密货币?",
-      "barter_accept_hint": "勾选买家可以用来付款的加密货币——选择你真正使用的。"
+      "barter_accept_hint": "选择买家可以用来付款给你的加密货币——挑选你偏好的那些。"
     },
     "errors": {
       "fiat_empty": "请选择一种法币(如 USD 或 EUR)。",
@@ -3085,7 +3084,7 @@
       "body_bad_password": "该密码未解锁你的 keystore。请重试。",
       "body_posting_only": "用 BLURT 支付挂单费需要你的活跃密钥，而此设备上没有它——你目前仅用发帖密钥登录。请用主密码或完整的 keyfile 登录以使用 BLURT 支付，或返回改用 BTC/XMR 支付（也可使用你的首次免费挂单）。",
       "body_recipient_missing": "无法发送挂单费——它要支付到的资金账户（@morphit-fees）似乎在 Blurt 上尚不存在。未支付任何费用。如果你运营此实例，需要创建该账户；否则请报告此问题。",
-      "body_insufficient_rc": "你的账户资源积分（RC）不足，因此 Blurt 拒绝了该交易。请将少量 BLURT 进行 power up，或等待 RC 充满后再试。未支付任何费用。",
+      "body_insufficient_rc": "Blurt 会为此操作从你的流动 BLURT 中收取一笔小额网络费用，而你的账户无法支付。请补充一点流动 BLURT（转入是免费的）后再试。未支付任何费用。",
       "body_authority": "Blurt 拒绝了手续费支付的签名——你账户的活跃（Active）密钥可能与链上的不匹配。未支付任何费用。请用你的 12 个单词种子短语或 Keyfile 重新登录。"
     },
     "waiver": {
@@ -3162,7 +3161,9 @@
       "price_market": "以市场价格",
       "price_fixed": "以 {price} {fiat}/{asset} 的固定价格",
       "barter_sentence_sell": "你提供价值 {value} 的商品/服务,接受 {cryptos}。",
-      "barter_sentence_buy": "你想要价值 {value} 的商品/服务,用 {cryptos} 付款。"
+      "barter_sentence_buy": "你想要价值 {value} 的商品/服务,用 {cryptos} 付款。",
+      "barter_sentence_sell_novalue": "你提供商品/服务,接受 {cryptos}。",
+      "barter_sentence_buy_novalue": "你想要商品/服务,用 {cryptos} 付款。"
     }
   },
   "prices": {
@@ -3454,6 +3455,8 @@
       "error_bad_password": "该密码未能解锁你的活跃密钥。请检查后重试。",
       "error_no_active_key": "此设备没有可用于签名的活跃密钥。请使用助记词登录以进行 power up 或 power down。",
       "error_broadcast": "该操作未能在链上完成。请重试。",
+      "error_chain_rejected": "网络拒绝了此交易：{reason}",
+      "error_unreachable": "无法连接到你的 Morphit 实例进行广播。请检查网络连接后重试。",
       "error_amount": "请输入不超过可用余额的数量。"
     },
     "send": {
@@ -4415,7 +4418,7 @@
       "body_sell": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\n我正在用 {asset2} 正在卖出 {asset1}。想交易吗？\n\n没有比 Morphit 更安全、更快、更可靠的地方来交易加密货币和法币。\n\n看看我在 Morphit 上的报价！\nhttps://morphit.io/{lang}/@{username}/{permlink}"
     },
     "opt_in_label": "将此订单也同步发布到我的博客（免费）",
-    "opt_in_help": "将此订单的简短公告发布到你的 Blurt 博客。每个订单一篇帖子，由你签署，提交后立即触发。免费——帖子使用你现有的 Mana 上链。",
+    "opt_in_help": "将此订单的简短公告发布到你的 Blurt 博客。每个订单一篇帖子，由你签署，提交后立即发出。仅需支付 Blurt 的小额网络费用，从你的流动 BLURT 中扣除。",
     "review_on_title": "此订单也将发布到你的博客",
     "review_on_body": "提交后，简短公告将立即发布到你的 Blurt 博客,让其他人能找到你的报价。由你签署,免费。",
     "success_pending": "正在将公告发布到你的 Blurt 博客…",

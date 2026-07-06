@@ -41,7 +41,7 @@ interface BidSnapshot {
 const NOW = new Date('2026-05-16T12:00:00Z');
 const SNIPE_WINDOW_MINUTES = 5;
 const MAX_EXTENSIONS = 6;
-const MAX_SLOTS = 5;
+const MAX_SLOTS = 3;
 const NEW_BID_TRX = 'new-bid-trx-id';
 
 function minutesFromNow(m: number): Date {

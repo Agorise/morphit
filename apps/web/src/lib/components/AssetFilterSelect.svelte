@@ -132,7 +132,7 @@
 		onclick={() => (open = !open)}
 		onfocus={() => (focused = true)}
 		onblur={() => (focused = false)}
-		class="flex w-full items-center gap-2 rounded-xl border-2 border-ink-200 dark:border-ink-700 {focused || open
+		class="flex w-full items-center gap-2 rounded-xl border-2 border-ink-200 dark:border-ink-700 transition-colors duration-150 ease-out hover:border-ink-300 dark:hover:border-ink-600 {focused || open
 			? 'ring-2 ring-morphit-emerald'
 			: ''} bg-white px-3 py-2 text-left focus:outline-none dark:bg-ink-900"
 	>

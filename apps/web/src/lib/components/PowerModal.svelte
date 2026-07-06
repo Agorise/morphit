@@ -41,6 +41,7 @@
 		broadcastSignedTransaction
 	} from '$blurt/sign';
 	import { signWithdrawVestingWithKey } from '$blurt/withdrawVestingSign';
+	import { ChainRejectedError, BroadcastUnavailableError } from '$blurt/broadcastTransport';
 	import {
 		blurtPowerToVests,
 		formatBlurtAmount,
@@ -84,7 +85,10 @@
 		onCancel
 	}: Props = $props();
 
-	type Phase = { kind: 'ready' } | { kind: 'working' } | { kind: 'error'; messageKey: string };
+	type Phase =
+		| { kind: 'ready' }
+		| { kind: 'working' }
+		| { kind: 'error'; messageKey: string; reason?: string };
 
 	let phase = $state<Phase>({ kind: 'ready' });
 	let enteredAmount = $state('');
@@ -151,9 +155,13 @@
 					: formatVestsAmount(blurtPowerToVests(amountNum, vestingFund, totalVests));
 				unsignedTx = await prepareUnsignedWithdrawVesting(account, vestsStr);
 			}
-		} catch {
+		} catch (err) {
 			passwordInput = '';
-			phase = { kind: 'error', messageKey: 'profile.wallet.error_broadcast' };
+			console.warn('[power] prepare failed:', err);
+			phase =
+				err instanceof BroadcastUnavailableError
+					? { kind: 'error', messageKey: 'profile.wallet.error_unreachable' }
+					: { kind: 'error', messageKey: 'profile.wallet.error_broadcast' };
 			return;
 		}
 
@@ -171,8 +179,26 @@
 				await broadcastSignedTransaction(r.value);
 				onDone();
 				return;
-			} catch {
-				phase = { kind: 'error', messageKey: 'profile.wallet.error_broadcast' };
+			} catch (err) {
+				// Surface the chain's actual reason. NOTE: powering up does NOT
+				// require mana/RC — that's the Hive/Steem model. On Blurt an op
+				// costs a small fee paid from LIQUID BLURT (operation flat fee +
+				// bandwidth fee, set by witnesses); mana on Blurt is only voting
+				// power. With ample liquid BLURT the fee is trivially covered, so
+				// whatever the chain reports here is shown verbatim rather than
+				// guessed at.
+				console.warn('[power] broadcast rejected:', err);
+				if (err instanceof ChainRejectedError) {
+					phase = {
+						kind: 'error',
+						messageKey: 'profile.wallet.error_chain_rejected',
+						reason: err.message
+					};
+				} else if (err instanceof BroadcastUnavailableError) {
+					phase = { kind: 'error', messageKey: 'profile.wallet.error_unreachable' };
+				} else {
+					phase = { kind: 'error', messageKey: 'profile.wallet.error_broadcast' };
+				}
 				return;
 			}
 		}
@@ -221,12 +247,14 @@
 			<div
 				class="mt-5 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-700 dark:bg-red-950 dark:text-red-200"
 			>
-				{$_(phase.messageKey)}
+				{phase.reason
+					? $_(phase.messageKey, { values: { reason: phase.reason } })
+					: $_(phase.messageKey)}
 			</div>
 			<div class="mt-5 flex justify-end">
 				<button
 					type="button"
-					class="rounded-lg border border-ink-300 px-4 py-2 text-sm font-semibold hover:border-ink-400 dark:border-ink-700"
+					class="rounded-lg border border-ink-300 px-4 py-2 text-sm font-semibold transition-colors hover:border-ink-400 hover:bg-ink-50 dark:border-ink-700 dark:hover:bg-ink-800"
 					onclick={onCancel}
 				>
 					{$_('common.close')}
@@ -306,7 +334,7 @@
 			<div class="mt-5 flex justify-end gap-2">
 				<button
 					type="button"
-					class="rounded-lg border border-ink-300 px-4 py-2 text-sm font-semibold hover:border-ink-400 disabled:opacity-50 dark:border-ink-700"
+					class="rounded-lg border border-ink-300 px-4 py-2 text-sm font-semibold transition-colors hover:border-ink-400 hover:bg-ink-50 disabled:opacity-50 dark:border-ink-700 dark:hover:bg-ink-800"
 					onclick={onCancel}
 					disabled={phase.kind === 'working'}
 				>

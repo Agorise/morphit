@@ -175,7 +175,7 @@
 	<div
 		onfocusin={() => (focused = true)}
 		onfocusout={() => (focused = false)}
-		class="flex flex-wrap items-center gap-1 rounded-xl border-2 border-ink-200 dark:border-ink-700 {focused || open
+		class="flex flex-wrap items-center gap-1 rounded-xl border-2 border-ink-200 dark:border-ink-700 transition-colors duration-150 ease-out hover:border-ink-300 dark:hover:border-ink-600 {focused || open
 			? 'ring-2 ring-morphit-emerald'
 			: ''} bg-white px-2 py-1.5 dark:bg-ink-900"
 	>

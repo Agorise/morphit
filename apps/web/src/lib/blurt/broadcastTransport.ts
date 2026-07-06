@@ -26,7 +26,8 @@
  * error and the user retries — it does not silently leak to a third-party node.
  * A 400 from the broadcast proxy is a CHAIN REJECTION (the chain refused the
  * tx): that is surfaced with the chain's real reason (e.g. "missing required
- * posting authority", "insufficient mana"), not retried.
+ * active authority", or not enough liquid BLURT to cover the network fee —
+ * Blurt meters ops with a small BLURT fee, not mana/RC), not retried.
  */
 
 import type { DynamicGlobalProperties } from './client';

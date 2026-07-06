@@ -6,7 +6,7 @@
  * decision menu).
  *
  * Definition of clearing price:
- *   At any given moment, up to MAX_SLOTS_VISIBLE (=5) bids are
+ *   At any given moment, up to MAX_SLOTS (=3) bids are
  *   visible at the top of the orderbook.  The "clearing price"
  *   is the bid rate (in BLURT/hour) of the LOWEST-ranked
  *   currently-visible bid — i.e., the price you needed to beat
@@ -28,7 +28,7 @@
  *       clearing_blurt_per_hour: number,  // 0 if under-filled
  *       active_visible_count: number,     // how many slots
  *                                         //  were filled this day
- *       max_slots: number                 // for context (= 5)
+ *       max_slots: number                 // for context (= 3)
  *     }>,
  *     window_days: number,
  *     max_slots: number
@@ -61,7 +61,7 @@ import type { Database } from '$db/pool';
  *  places — handler, current-orderbook API, and history API.
  *  An integration test would catch drift; for now the comment is
  *  the only enforcement. */
-const MAX_SLOTS = 5;
+const MAX_SLOTS = 3;
 
 /** Window choices.  Validated at request time; clipped to
  *  defaults if the client sends garbage rather than rejecting

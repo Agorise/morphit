@@ -32,7 +32,7 @@
 import { readFileSync } from 'node:fs';
 import { ask, askPassword, askYesNo } from '../init/prompt.ts';
 import { sanitizeForTerm } from '../render/term.ts';
-import { printChainErrorHelp, classifyChainError, SUGGESTED_BP_FLOOR, broadcastCustomJson, errMsg } from './chainErrors.ts';
+import { printChainErrorHelp, classifyChainError, SUGGESTED_LIQUID_BLURT_BUFFER, broadcastCustomJson, errMsg } from './chainErrors.ts';
 import { isReservedTag } from '../../../indexer/src/indexer/confusables.ts';
 import { defaultRepoRoot } from '../lib/repoRoot.ts';
 import { loadInstanceEnv } from '../lib/instanceEnv.ts';
@@ -125,17 +125,18 @@ export async function runRegister(_ctx: RegisterCtx): Promise<number> {
 		return 0;
 	}
 
-	// ─── 3-5. Load key → preview → broadcast, with a mana-aware retry
+	// ─── 3-5. Load key → preview → broadcast, with a fee-aware retry
 	//         loop ────
 	//
-	// On an 'insufficient_rc' failure we DON'T make the operator re-run
-	// the whole command: we explain how much to power up and then offer
-	// an in-place retry.  Crucial security property: the decrypted
-	// active key is loaded fresh for EACH attempt and wiped immediately
-	// after the broadcast call, so it is NOT resident in memory during
-	// the (possibly minutes-long) power-up wait between attempts.  The
-	// cost is re-entering the passphrase per retry for an encrypted
-	// keystore — the right trade for a high-value active key.
+	// On an 'insufficient_fee' failure (the account is short of the LIQUID
+	// BLURT needed to pay Blurt's small per-op fee — NOT mana/RC; see
+	// docs/BLURT-CHAIN-MODEL.md) we DON'T make the operator re-run the whole
+	// command: we explain what to top up and then offer an in-place retry.
+	// Crucial security property: the decrypted active key is loaded fresh for
+	// EACH attempt and wiped immediately after the broadcast call, so it is
+	// NOT resident in memory during the wait between attempts.  The cost is
+	// re-entering the passphrase per retry for an encrypted keystore — the
+	// right trade for a high-value active key.
 	let result: { trx_id: string } | null = null;
 	let attempt = 0;
 	for (;;) {
@@ -213,10 +214,10 @@ export async function runRegister(_ctx: RegisterCtx): Promise<number> {
 
 		if (broadcastErr === null) break; // success
 
-		// Classify.  Only 'insufficient_rc' is retryable in place; for
+		// Classify.  Only 'insufficient_fee' is retryable in place; for
 		// everything else we print full guidance and exit.
 		const kind = classifyChainError(errMsg(broadcastErr));
-		if (kind !== 'insufficient_rc') {
+		if (kind !== 'insufficient_fee') {
 			printChainErrorHelp(errMsg(broadcastErr), {
 				opLabel: 'morphit_operator_register_v1',
 				account,
@@ -227,8 +228,8 @@ export async function runRegister(_ctx: RegisterCtx): Promise<number> {
 			return 1;
 		}
 
-		// Insufficient mana — print the specific power-up guidance (which
-		// account, how much BP), then offer an in-place retry.  The key
+		// Insufficient fee — print the specific guidance (which account,
+		// keep a little liquid BLURT), then offer an in-place retry.  The key
 		// is already wiped (above); the operator can take their time.
 		printChainErrorHelp(errMsg(broadcastErr), {
 			opLabel: 'morphit_operator_register_v1',
@@ -239,9 +240,10 @@ export async function runRegister(_ctx: RegisterCtx): Promise<number> {
 		});
 		console.log('');
 		const retry = await askYesNo(
-			`Once you've powered up BLURT into BP on @${account} (~${SUGGESTED_BP_FLOOR} BP ` +
-				`recommended), retry the broadcast now? (No need to re-run setup — ` +
-				`answer No to quit and run \`npx morphit-ops register\` later)`,
+			`Once @${account} holds a little liquid BLURT for the fee (~${SUGGESTED_LIQUID_BLURT_BUFFER} BLURT ` +
+				`is ample — transfer it, do NOT power up), retry the broadcast now? ` +
+				`(No need to re-run setup — answer No to quit and run ` +
+				`\`npx morphit-ops register\` later)`,
 			false
 		);
 		if (!retry) {

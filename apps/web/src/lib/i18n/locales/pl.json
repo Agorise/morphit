@@ -1521,7 +1521,7 @@
       },
       "what_is_mana": {
         "q": "Czym jest Mana na Blurcie?",
-        "a": "Na Blurcie Mana to pojemność konta, która pozwala robić różne rzeczy na łańcuchu — publikować, komentować, głosować i (w przypadku Morphita) składać zlecenia, zostawiać opinie, wysyłać wiadomości czatu.\n\nWyobraź sobie Manę jak pasek wytrzymałości w grze wideo, który sam się napełnia. Każda akcja zużywa trochę. Pasek powoli ładuje się przez następne godziny i dni. Jeśli jesteś normalnym użytkownikiem, w zasadzie nigdy tego nie zauważysz — projekt Blurta uzupełnia Manę wystarczająco szybko, żebyś mógł robić dziesiątki rzeczy dziennie bez zastanowienia.\n\nMana to odpowiedź na pytanie o spam: „skoro publikowanie na blockchainie jest darmowe, czemu wszyscy po prostu nie spamują?\" Bo spamowanie wypaliłoby twój pasek Many w kilka sekund, a potem musiałbyś czekać, podczas gdy akcje innych nadal przechodzą normalnie. Ekonomia Blurta używa tego do ograniczania nadużyć bez konieczności pobierania opłat za każdy post.\n\nWielkość twojego paska Many jest mniej więcej proporcjonalna do ilości posiadanego Blurt (konkretnie Blurt Power — Blurt zastakowanego). Nowe konta dostają małą ilość startową, dlatego bonus powitalny zawiera trochę Blurt Power: zwiększa twój pasek, żebyś mógł komfortowo korzystać z Morphita od pierwszego dnia.\n\n**Uwaga terminologiczna.** Możesz spotkać określenie „RC\" lub „Resource Credits\" w starszej dokumentacji Blurta, w sieci Steem, z której się wyodrębnił, lub w naszych wewnętrznych komentarzach w kodzie. Mana to nowoczesna nazwa na Blurcie, której używamy wszędzie, gdzie zwykły użytkownik może to zobaczyć."
+        "a": "Na Blurcie Mana to twoja siła głosu — decyduje, jaką wagę mają twoje głosy w górę, i to jedyne, na co wpływa. Wyobraź sobie pasek wytrzymałości, który zaczyna od 100%, spada trochę przy każdym głosie i ładuje się o około 20% dziennie. Im więcej masz Blurt Power (zastakowanego Blurta), tym większy pasek.\n\nCzego Mana NIE robi, to opłacanie twoich działań. To kluczowa różnica względem Steem i Hive, które rozliczają publikowanie i transakcje przez „Resource Credits (RC)”. Blurt porzucił ten model. Na Blurcie działania on-chain — publikowanie, komentowanie, przelewy oraz w Morphicie składanie zleceń, wystawianie opinii i wysyłanie wiadomości na czacie — kosztują małą opłatę pobieraną z twojego płynnego BLURT (stała opłata za operację plus opłata za pasmo zależna od rozmiaru, ustalane przez witnessów; dokładną kwotę widzisz tuż przed podpisaniem). Głosowanie to jedyny wyjątek: zużywa Manę, nie BLURT.\n\nWięc praktyczna zasada jest prosta: miej pod ręką trochę płynnego BLURT — nawet około 10 w zupełności wystarczy do codziennego użytku — a twoje działania przejdą. Przelewy przychodzące są darmowe, więc doładowanie jest łatwe. Nigdy nie musisz czekać, aż Mana się naładuje, żeby opublikować lub handlować; to nawyk ze Steem/Hive, który nie obowiązuje na Blurcie."
       },
       "node_minimum_requirements": {
         "q": "Jakie są minimalne wymagania sprzętowe do uruchomienia węzła Morphit?",
@@ -2624,8 +2624,6 @@
     "error_body": "Indekser jest w tej chwili nieosiągalny. Spróbuj ponownie za chwilę.",
     "load_more": "Załaduj więcej",
     "order": {
-      "buying": "kupuje {asset}",
-      "selling": "sprzedaje {asset}",
       "updated_prefix": "Zaktualizowano",
       "new_trader_aria": "Nowy handlowiec — pierwsza transakcja jeszcze niezakończona",
       "new_trader_tooltip": "Ten handlowiec jest nowy na Morphit. Pomóż mu zacząć!",
@@ -2961,6 +2959,7 @@
       "region_label": "Region (opcjonalnie)",
       "region_hint": "Gdzie chcesz handlować. Pomaga osobom w pobliżu Cię znaleźć.",
       "terms_label": "Warunki / Szczegóły / Notatki",
+      "terms_markdown_hint": "Obsługiwane jest podstawowe formatowanie Markdown; jeśli chcesz dodać obrazy, podaj link do swojego bloga itp.",
       "terms_forbidden_char": "Twoje warunki zawierają niedozwolony znak — usuń ukryte lub sterujące znaki. (Podziały wierszy i zwykły markdown są dozwolone.)",
       "expires_label": "Listing wygasa",
       "expires_1d": "Za 1 dzień",
@@ -3018,7 +3017,7 @@
       "amount_entered_usd_hint": "{amount} {fiat} (≈ {usd})",
       "returning_min_hint": "Co najmniej {amount} {fiat} (≈ {usd})",
       "barter_accept_label": "Które krypto zaakceptujesz?",
-      "barter_accept_hint": "Zaznacz krypto, którymi kupujący mogą Ci zapłacić — wybierz te, których naprawdę używasz."
+      "barter_accept_hint": "Wybierz kryptowaluty, którymi kupujący mogą ci zapłacić — te, które wolisz."
     },
     "errors": {
       "fiat_empty": "Wybierz walutę fiat (np. USD lub EUR).",
@@ -3085,7 +3084,7 @@
       "body_bad_password": "To hasło nie odblokowało twojego keystore. Spróbuj ponownie.",
       "body_posting_only": "Opłata za ogłoszenie w BLURT wymaga klucza aktywnego, którego nie ma na tym urządzeniu — jesteś zalogowany tylko kluczem publikacji. Zaloguj się hasłem głównym lub pełnym keyfile, aby zapłacić w BLURT, albo wróć i zapłać w BTC/XMR (lub skorzystaj z darmowego pierwszego ogłoszenia).",
       "body_recipient_missing": "Nie udało się wysłać opłaty za ogłoszenie — konto skarbca, na które trafia (@morphit-fees), wygląda na to, że jeszcze nie istnieje na Blurt. Nic nie zapłacono. Jeśli prowadzisz tę instancję, to konto trzeba utworzyć; w przeciwnym razie zgłoś to.",
-      "body_insufficient_rc": "Twoje konto ma mało Resource Credits (RC), więc Blurt odrzucił transakcję. Zrób power up odrobiną BLURT albo poczekaj, aż RC się naładują, i spróbuj ponownie. Nic nie zapłacono.",
+      "body_insufficient_rc": "Blurt pobiera za tę akcję małą opłatę sieciową z twojego płynnego BLURT, a twoje konto nie mogło jej pokryć. Doładuj trochę płynnego BLURT (przelewy przychodzące są darmowe) i spróbuj ponownie. Nic nie zapłacono.",
       "body_authority": "Blurt odrzucił podpis płatności opłaty — klucz Aktywny twojego konta może nie zgadzać się z tym w łańcuchu. Nic nie zapłacono. Spróbuj zalogować się ponownie 12-wyrazową frazą seed lub plikiem Keyfile."
     },
     "waiver": {
@@ -3162,7 +3161,9 @@
       "price_market": "po cenie rynkowej",
       "price_fixed": "po stałej cenie {price} {fiat} za {asset}",
       "barter_sentence_sell": "Oferujesz towary/usługi o wartości {value}, akceptując {cryptos}.",
-      "barter_sentence_buy": "Szukasz towarów/usług o wartości {value}, płacąc w {cryptos}."
+      "barter_sentence_buy": "Szukasz towarów/usług o wartości {value}, płacąc w {cryptos}.",
+      "barter_sentence_sell_novalue": "Oferujesz towary/usługi, akceptując {cryptos}.",
+      "barter_sentence_buy_novalue": "Szukasz towarów/usług, płacąc w {cryptos}."
     }
   },
   "prices": {
@@ -3454,6 +3455,8 @@
       "error_bad_password": "To hasło nie odblokowało Twojego klucza aktywnego. Sprawdź je i spróbuj ponownie.",
       "error_no_active_key": "To urządzenie nie ma klucza aktywnego do podpisywania. Zaloguj się za pomocą frazy seed, aby zrobić power up lub power down.",
       "error_broadcast": "Nie udało się zakończyć operacji w łańcuchu. Spróbuj ponownie.",
+      "error_chain_rejected": "Sieć odrzuciła tę transakcję: {reason}",
+      "error_unreachable": "Nie udało się połączyć z Twoją instancją Morphit, aby nadać transakcję. Sprawdź połączenie i spróbuj ponownie.",
       "error_amount": "Wpisz kwotę nieprzekraczającą dostępnego salda."
     },
     "send": {
@@ -4415,7 +4418,7 @@
       "body_sell": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\nsprzedaję {asset1} za {asset2}. Chcesz handlować?\n\nNie ma bezpieczniejszego, szybszego ani pewniejszego miejsca do handlu kryptami i fiatami niż Morphit.\n\nZobacz moją ofertę na Morphit!\nhttps://morphit.io/{lang}/@{username}/{permlink}"
     },
     "opt_in_label": "Opublikuj to zlecenie również na moim blogu (za darmo)",
-    "opt_in_help": "Publikuje krótkie ogłoszenie o tym zleceniu na Twoim blogu Blurt. Jeden post na zlecenie, podpisany przez Ciebie, wysyłany zaraz po zatwierdzeniu. Za darmo — post idzie on-chain używając Twojej istniejącej Mana.",
+    "opt_in_help": "Publikuje krótkie ogłoszenie o tym zleceniu na twoim blogu Blurt. Jeden post na zlecenie, podpisany przez ciebie, wychodzi zaraz po wysłaniu. Kosztuje tylko małą opłatę sieciową Blurta, pobieraną z twojego płynnego BLURT.",
     "review_on_title": "To zlecenie zostanie też opublikowane na Twoim blogu",
     "review_on_body": "Zaraz po zatwierdzeniu krótkie ogłoszenie zostanie opublikowane na Twoim blogu Blurt, aby inni mogli znaleźć Twoją ofertę. Podpisane przez Ciebie, za darmo.",
     "success_pending": "Publikowanie ogłoszenia na Twoim blogu Blurt…",

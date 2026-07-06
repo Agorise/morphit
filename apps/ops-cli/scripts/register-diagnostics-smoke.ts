@@ -3,12 +3,14 @@
  *
  * Covers the operator-UX fixes shipped in cp178:
  *   1. classifyChainError maps representative error strings to the
- *      right kind (including Blurt's "mana" AND Steem-derived "rc"
- *      daemon wording → insufficient_rc).
+ *      right kind (a fee / insufficient-balance shortfall — and any
+ *      leftover Steem-lineage "mana"/"rc" daemon wording — → the
+ *      insufficient_fee kind, since Blurt pays a per-op FEE from
+ *      liquid BLURT and does NOT gate on mana/RC).
  *   2. printChainErrorHelp emits the right specific guidance per
- *      kind, uses Blurt's MANA term (never "resource credits"/"RC")
- *      in the mana branch, and never tells the operator to merely
- *      reinstall for the dependency_unevaluable case.
+ *      kind: the fee branch talks about a per-op fee + keeping liquid
+ *      BLURT (never mana/RC or "power up for headroom"), and it never
+ *      tells the operator to merely reinstall for dependency_unevaluable.
  *   3. maskWif reveals only a short fingerprint and never the whole
  *      key.
  *   4. tagFromOrigin derives a clean domain tag (the wizard's new
@@ -51,10 +53,13 @@ const classifyCases: Array<[string, string]> = [
 	['private key network id mismatch', 'key_mismatch'],
 	['missing required posting authority bob', 'key_mismatch'],
 	['signature verification failed', 'key_mismatch'],
-	['transaction has insufficient mana', 'insufficient_rc'],
-	['Account bob does not have enough mana', 'insufficient_rc'],
-	['not enough rc', 'insufficient_rc'],
-	['resource credit exhausted', 'insufficient_rc'],
+	['account bob does not have sufficient funds', 'insufficient_fee'],
+	['insufficient balance to pay the operation fee', 'insufficient_fee'],
+	['not enough balance for fee', 'insufficient_fee'],
+	['transaction has insufficient mana', 'insufficient_fee'],
+	['Account bob does not have enough mana', 'insufficient_fee'],
+	['not enough rc', 'insufficient_fee'],
+	['resource credit exhausted', 'insufficient_fee'],
 	['all Blurt RPC endpoints rejected the broadcast. Last error: x', 'rpc_unreachable'],
 	['ECONNREFUSED 1.2.3.4:443', 'rpc_unreachable'],
 	['fetch failed', 'rpc_unreachable'],
@@ -89,13 +94,28 @@ function capture(raw: string, ctxOverrides: Partial<Parameters<typeof printChain
 }
 
 scenarios.push({
-	name: 'mana branch uses Blurt MANA term, not RC/resource-credits',
+	name: 'fee branch uses Blurt op-fee/liquid-BLURT model, never mana/RC or power-up advice',
+	run() {
+		const t = capture('insufficient balance to pay the operation fee');
+		if (!/fee/i.test(t)) return 'expected the fee to be named';
+		if (!/liquid BLURT/i.test(t)) return 'should tell operator to keep liquid BLURT';
+		// The corrected guidance's whole point is to DISCLAIM the Hive/Steem
+		// model ("do NOT power up"), so we don't forbid the word "power" — we
+		// forbid the WRONG framings and require the disclaimer.
+		if (/resource credit|\(RC\)| RC /i.test(t)) return 'must not say RC / resource credits';
+		if (/regenerate|recharge/i.test(t)) return 'must not tell operator to wait for mana to recharge';
+		if (!/do NOT power|does NOT help/i.test(t))
+			return 'should clarify that powering up is NOT the fix';
+		return null;
+	}
+});
+
+scenarios.push({
+	name: 'legacy "mana" daemon wording still classifies + routes to the fee guidance',
 	run() {
 		const t = capture('transaction has insufficient mana');
-		if (!/mana/i.test(t)) return 'expected "mana" in output';
-		if (/resource credit/i.test(t)) return 'must not say "resource credit"';
-		if (/\(RC\)/.test(t) || / RC /.test(t)) return 'must not say standalone "RC"';
-		if (!/BLURT Power|BP/.test(t)) return 'should mention BP / BLURT Power';
+		if (!/fee/i.test(t)) return 'should route to the fee guidance';
+		if (!/liquid BLURT/i.test(t)) return 'should mention liquid BLURT';
 		return null;
 	}
 });
@@ -166,7 +186,7 @@ scenarios.push({
 			},
 			() => {}
 		);
-		return k === 'insufficient_rc' ? null : `returned ${k}`;
+		return k === 'insufficient_fee' ? null : `returned ${k}`;
 	}
 });
 

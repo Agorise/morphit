@@ -272,7 +272,7 @@ export interface OrderbookResponse {
 //
 // Phase 5 item 5 — featured-slot auction. Up to 5 concurrently
 // active featured slots; `max_slots` surfaces the hard cap so
-// clients can render "N of 5 slots filled" UX without guessing.
+// clients can render "N of 3 slots filled" UX without guessing.
 
 export interface FeaturedBid {
 	/** Hours the bidder paid for. 1..168. */
@@ -368,7 +368,7 @@ export interface FeaturedBidHistoryEntry {
 export interface FeaturedBidHistoryResponse {
 	readonly account: string;
 	readonly bids: readonly FeaturedBidHistoryEntry[];
-	/** Mirrors MAX_SLOTS so the client renders "ranked X / 5"
+	/** Mirrors MAX_SLOTS so the client renders "ranked X / 3"
 	 *  consistently with the rest of the auction UI. */
 	readonly max_slots: number;
 }

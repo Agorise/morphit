@@ -28,6 +28,7 @@
 	import { _ } from 'svelte-i18n';
 	import { getClearingPriceHistory } from '$lib/indexer/client';
 	import type { ClearingPricePoint } from '@morphit/indexer-client';
+	import FeaturedOrders from '$components/FeaturedOrders.svelte';
 
 	type WindowDays = 7 | 30 | 90;
 
@@ -119,7 +120,7 @@
 	}
 </script>
 
-{#if loaded && points.length > 0}
+{#if loaded}
 	<section class="card mb-4" aria-labelledby="clearing-price-heading">
 		<div class="mb-3 flex items-center justify-between gap-2">
 			<h2 id="clearing-price-heading" class="font-display text-base font-bold">
@@ -140,6 +141,13 @@
 				{/each}
 			</div>
 		</div>
+
+		<!-- cp428 — the LIVE featured orders live at the top of the unified
+		     "🎉 Featured" card (was a separate "FEATURED RIGHT NOW" section that
+		     read as a jumbled second block). Renders the shared OrderCard, and
+		     self-hides when nothing is featured — leaving just the auction
+		     history + "be the first" prompt below. -->
+		<FeaturedOrders embedded variant="stack" />
 
 		{#if latest !== null && (latest.clearing_blurt_per_hour > 0 || latest.active_visible_count > 0)}
 			<p class="mb-3 text-sm text-ink-600 dark:text-ink-300">

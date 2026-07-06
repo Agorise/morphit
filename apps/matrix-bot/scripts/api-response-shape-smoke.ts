@@ -648,7 +648,7 @@ const sampleFeaturedSlot = {
 
 const sampleFeaturedOrderbook = {
 	featured: [sampleFeaturedSlot],
-	max_slots: 5
+	max_slots: 3
 } satisfies FeaturedOrderbookResponse;
 
 const sampleAccountOrders = {
@@ -744,13 +744,13 @@ const sampleClearingPricePoint = {
 	day: '2026-05-15',
 	clearing_blurt_per_hour: 0.12,
 	active_visible_count: 4,
-	max_slots: 5
+	max_slots: 3
 } satisfies ClearingPricePoint;
 
 const sampleClearingPriceHistory = {
 	points: [sampleClearingPricePoint],
 	window_days: 30,
-	max_slots: 5
+	max_slots: 3
 } satisfies ClearingPriceHistoryResponse;
 
 const sampleBatchProfiles = {
