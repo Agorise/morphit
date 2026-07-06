@@ -45,7 +45,7 @@
  * arithmetic, no I/O.
  */
 
-import { ASSETS as CANONICAL } from '@morphit/asset-registry';
+import { ASSETS as CANONICAL, isGoodsAsset } from '@morphit/asset-registry';
 import {
 	jitterAmountForAsset,
 	buildPaymentUri,
@@ -235,12 +235,19 @@ function fail(name: string, detail: string): void {
 console.log('\n── asset-payload-precision-parity smoke (cp46) ──────\n');
 
 // ── 1. canonical asset count matches expectations array ──
-if (CANONICAL.length === EXPECTATIONS.length) {
-	pass(`canonical asset count (${CANONICAL.length}) matches expectations`);
+// cp425 — EXPECTATIONS lists txid/URI/precision shapes, which only crypto
+// assets have. Goods assets (BARTER) are orderable but have no on-chain txid,
+// URI scheme, or amount precision (isGoodsAsset gates them out), so they are
+// correctly absent from EXPECTATIONS. Compare the count against the CRYPTO
+// canonical set, not the full registry, or every new goods asset would trip
+// this coverage guard.
+const CRYPTO_CANONICAL = CANONICAL.filter((a) => !isGoodsAsset(a.ticker));
+if (CRYPTO_CANONICAL.length === EXPECTATIONS.length) {
+	pass(`crypto asset count (${CRYPTO_CANONICAL.length}) matches expectations`);
 } else {
 	fail(
-		`canonical asset count matches expectations`,
-		`canonical ${CANONICAL.length} != expectations ${EXPECTATIONS.length} — add a row for the new asset`
+		`crypto asset count matches expectations`,
+		`crypto ${CRYPTO_CANONICAL.length} != expectations ${EXPECTATIONS.length} — add a row for the new crypto asset`
 	);
 }
 

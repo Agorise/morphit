@@ -53,6 +53,20 @@ function walkTs(dir: string, out: string[]): void {
 			if (entry === 'node_modules' || entry === '.svelte-kit' || entry === 'dist' || entry === 'test' || entry === '.vite' || entry === 'historical') continue;
 			walkTs(full, out);
 		} else if (entry.endsWith('.ts') || entry.endsWith('.svelte')) {
+			// Skip co-located test/spec files. The `test`-directory skip above
+			// already excludes dir-based tests; this catches co-located ones
+			// like `src/lib/avatar/fuzz.test.ts`, whose adversarial SVG
+			// payloads contain literal `fetch('//evil')` strings (fixture
+			// DATA, not a real runtime call). The smoke's concern is
+			// PRODUCTION fetch() reliability, not test fixtures.
+			if (
+				entry.endsWith('.test.ts') ||
+				entry.endsWith('.spec.ts') ||
+				entry.endsWith('.test.svelte') ||
+				entry.endsWith('.spec.svelte')
+			) {
+				continue;
+			}
 			out.push(full);
 		}
 	}

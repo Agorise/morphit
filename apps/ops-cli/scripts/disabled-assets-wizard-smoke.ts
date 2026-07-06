@@ -28,7 +28,7 @@ type Scenario = {
 
 const scenarios: Scenario[] = [
 	{
-		name: 'Category-B filter returns USDT + USDC + DAI + BCH + LTC + DASH + DOGE + ZEC from canonical registry',
+		name: 'Category-B filter returns the 13 trade-only cryptos + BARTER (14 total) from canonical registry',
 		check: () => {
 			const catB = ASSETS.filter((a) => a.canBeTraded && !a.canPayListingFee).map(
 				(a) => a.ticker
@@ -47,7 +47,8 @@ const scenarios: Scenario[] = [
 				catB.includes('SOL') &&
 				catB.includes('ETH') &&
 				catB.includes('XRP') &&
-				catB.length === 13
+				catB.includes('BARTER') &&
+				catB.length === 14
 			);
 		}
 	},

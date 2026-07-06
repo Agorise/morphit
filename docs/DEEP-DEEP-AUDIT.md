@@ -363,3 +363,39 @@ beta.49 cut: release notes updated (explorer-SEO line), FULL tarball built,
 two bare git blocks delivered. Remaining items all human-gated/deferred
 (feature-bid retry, YubiKey device, settings pathname stack, SBOM re-check of
 the 3 transitive vulns whose real fix is replacing matrix-bot-sdk).
+
+## Session 3 FOLLOW-UP — CI caught what the deep-deep sampled (both jobs red on the beta.49 push)
+
+Ken pushed beta.49 (commit 667c0092); two CI jobs went red. Owning it plainly:
+the S3 "delta deep-deep" **sampled** the smoke battery instead of running all of
+it, so it missed 11 pre-existing failures from cp424 (wallet) + cp425 (barter).
+CI's full triple-pulse run caught them. Not the WAF — all static/derived checks.
+
+### CI #1 — integration job (`28P01` auth failure)
+The runner is act_runner's HOST executor (`hostexecutor` in the logs), so a
+GitHub-style `services:` block gives the job no isolated Postgres — the
+connection hit a host/other Postgres with no `morphit_test` role. Fixed
+`.forgejo/workflows/ci.yml` to start our own `postgres:16` via explicit
+`docker run` (creds as `-e`, loopback port 55432, `pg_isready` wait, always-run
+teardown).
+
+### CI #2 — 11 smoke runners (BARTER-derived drift)
+Locked taxonomy: **BARTER is orderable + disable-able but is NOT a crypto
+asset.** Excluded from crypto counts/lists via `isGoodsAsset` (stats.supported →
+14; brag "16 tradable assets"; asset-payload-precision coverage → crypto-only;
+seo /privacy/[asset] expansion; usdt network-picker), matching the sitemap
+builder's GOODS_TICKERS and the rss "16" convention. Included in operator-disable
+(Category-B wizard → 14, with a BARTER `CATEGORY_B_DESCRIPTIONS` entry).
+Regenerated `sitemap.xml` + `llms-full.txt`; added `MORPHIT_INDEXER_BLURT_PRICE_FEED_URL`
+to `indexer.env.example`; added `order` to the matrix-bot `ConversationSummary`
+fixture; skipped test files in the fetch-timeout smoke.
+
+### Re-verification — COMPREHENSIVE, not sampled
+Full smoke battery re-run in chunks: **400/401 registered runners green** (only
+`vitest-must-pass` not run as a wrapper — its content, the 791-test web suite,
+verified directly). Web vitest **791 pass / 5 skip**. Release gates unchanged
+(version-consistency 19/19 @ beta.49, the Forgejo-naming guard green). No version bump;
+re-push main, wait for ALL jobs green, then the signed tag.
+
+**Lesson banked:** a release whose headline is a NEW ASSET must re-run the FULL
+asset-derived + generated-file smoke surface — sampling is not sufficient.

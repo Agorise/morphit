@@ -412,10 +412,17 @@ function countAssetTickers(): number {
 	);
 	const m = src.match(/ASSET_TICKERS\s*=\s*\[([^\]]+)\]/);
 	if (!m) return -1;
+	// cp425 — the brag list's "N tradable assets" claims count CRYPTO assets
+	// (the coins a wallet would integrate). Goods assets (BARTER) are orderable
+	// but are not coins, so they're excluded from this marketing count —
+	// mirroring isGoodsAsset() in the registry and the GOODS_TICKERS exclusion
+	// in scripts/build-sitemap.mjs. Keep these in sync when a goods asset lands.
+	const GOODS_TICKERS = new Set(['BARTER']);
 	const tickers = m[1]
 		.split(',')
-		.map((s) => s.trim())
-		.filter((s) => s.length > 0);
+		.map((s) => s.trim().replace(/['"]/g, ''))
+		.filter((s) => s.length > 0)
+		.filter((s) => !GOODS_TICKERS.has(s));
 	return tickers.length;
 }
 

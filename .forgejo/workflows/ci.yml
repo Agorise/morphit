@@ -127,40 +127,30 @@ jobs:
     # against a warm DB; 15 minutes is generous headroom for the
     # postgres service to become healthy + npm ci on a cold cache.
     timeout-minutes: 15
-    # A throwaway Postgres 16 for the integration harness. The harness
-    # (apps/indexer/test/integration/harness.ts) CREATEs a random schema
-    # per suite, runs the PRODUCTION migration path (runMigrations) into
-    # it, and DROP SCHEMA … CASCADE on teardown — so an EMPTY database is
-    # all that's needed here (no schema/seed step). The tests SKIP when
-    # TEST_DATABASE_URL is unset (INTEGRATION_ENABLED), so setting it below
-    # is what actually turns them on.
+    # ── Why an explicit `docker run` instead of a `services:` block (cp426) ──
+    # This project's Forgejo runner uses act_runner's HOST executor: jobs run
+    # directly on the host, not in an ephemeral container (see `hostexecutor`
+    # in the run logs). On a host executor a GitHub-style `services:` block does
+    # NOT hand the job an isolated Postgres on localhost:5432 with our creds —
+    # the first attempt (task 895) reached *a* Postgres on localhost:5432 that
+    # had no `morphit_test` role and failed with 28P01 (either the host's own
+    # Postgres, or a service container that never received our env). So we start
+    # our OWN throwaway container explicitly, pass credentials directly as -e,
+    # and bind it to a NON-standard loopback port (55432) so it can never
+    # collide with a Postgres already running on the host's 5432.
     #
-    # ⚠ RUNNER NOTE (cp426): `services:` requires the Forgejo runner to
-    # support Docker service containers (the default act_runner Docker
-    # backend does). If THIS job is the only red one on the first push
-    # after landing, the runner likely lacks service-container support —
-    # swap this `services:` block + the localhost URL for an apt-installed
-    # Postgres step (mirror the smokes job's `apt-get install` pattern:
-    # `sudo apt-get install -y postgresql`, `sudo service postgresql start`,
-    # `sudo -u postgres psql -c "CREATE USER morphit_test PASSWORD 'test' CREATEDB"`,
-    # `… CREATE DATABASE morphit_test OWNER morphit_test"`). Same tests, no
-    # Docker dependency. Everything else (env var, run step) is unchanged.
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: morphit_test
-          POSTGRES_PASSWORD: test
-          POSTGRES_DB: morphit_test
-        ports:
-          - 5432:5432
-        # Gate the steps until Postgres answers, so the first test
-        # connection doesn't race the container's startup.
-        options: >-
-          --health-cmd "pg_isready -U morphit_test"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
+    # Requires the runner's job steps to be able to invoke `docker` (this host
+    # already runs its Docker stack, so the CLI is present). If a future run
+    # fails at the "Start throwaway Postgres" step with a docker permission /
+    # not-found error, add the runner's user to the `docker` group on the host
+    # (a one-time host change, not a repo change) — the tests themselves are
+    # unaffected.
+    #
+    # The harness (apps/indexer/test/integration/harness.ts) CREATEs a random
+    # schema per suite, runs the PRODUCTION migration path (runMigrations), and
+    # DROP SCHEMA … CASCADE on teardown — so an EMPTY database is all we need.
+    # Tests SKIP when TEST_DATABASE_URL is unset (INTEGRATION_ENABLED); setting
+    # it in the run step is what turns them on.
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
@@ -170,6 +160,29 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Start throwaway Postgres 16 (own container, loopback port 55432)
+        run: |
+          # Remove any leftover from a previous run on this persistent host.
+          docker rm -f morphit-ci-pg >/dev/null 2>&1 || true
+          docker run -d --name morphit-ci-pg \
+            -e POSTGRES_USER=morphit_test \
+            -e POSTGRES_PASSWORD=test \
+            -e POSTGRES_DB=morphit_test \
+            -p 127.0.0.1:55432:5432 \
+            postgres:16
+          # Wait until it accepts connections (pg_isready INSIDE the container,
+          # so the host needs no psql client). Fail loudly if it never comes up
+          # rather than letting the tests fail later with a vague error.
+          for i in $(seq 1 30); do
+            if docker exec morphit-ci-pg pg_isready -U morphit_test -d morphit_test >/dev/null 2>&1; then
+              echo "postgres ready after ${i}s"
+              break
+            fi
+            echo "waiting for postgres (${i}/30)..."
+            sleep 1
+          done
+          docker exec morphit-ci-pg pg_isready -U morphit_test -d morphit_test
+
       - name: Install workspace dependencies
         # --ignore-scripts is SAFE here: the indexer integration tests use
         # `pg`, not better-sqlite3, so no native build is required — and
@@ -178,14 +191,16 @@ jobs:
         # workspace links still materialize under the standard workspace ci.
         run: npm ci --ignore-scripts --no-audit --no-fund
 
-      - name: Run indexer integration tests (against the Postgres service)
+      - name: Run indexer integration tests
         working-directory: apps/indexer
         env:
-          # localhost:5432 is the service container's mapped port. If you
-          # switch to an apt-installed Postgres (see the runner note above)
-          # this URL is unchanged.
-          TEST_DATABASE_URL: postgres://morphit_test:test@localhost:5432/morphit_test
+          # 127.0.0.1:55432 → our own container above (NOT the host's 5432).
+          TEST_DATABASE_URL: postgres://morphit_test:test@127.0.0.1:55432/morphit_test
         run: npm run test:integration
+
+      - name: Tear down Postgres
+        if: always()
+        run: docker rm -f morphit-ci-pg >/dev/null 2>&1 || true
 
   ansible-lint:
     name: ansible-lint (playbook quality gate)

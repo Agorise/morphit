@@ -574,9 +574,9 @@ Morphit is built on Blurt because the ledger's design (low transaction overhead,
 
 Staking Blurt means converting your liquid Blurt into **Blurt Power (BP)** — a process Blurt calls "powering up." Staked Blurt earns roughly **2% interest a year (APR)** (the live rate is computed from the chain's inflation and shown in-app), strengthens your upvotes, and earns curation rewards. It's your own coin the whole time — not a deposit, not a loan, not held by anyone else.
 
-**The easiest way is a Blurt wallet.** Open [BlurtWallet.com](https://blurtwallet.com), log in with your account, find your liquid Blurt balance, and choose **Power Up**. Enter the amount and confirm. That's it — your Blurt is now BP and starts earning.
+**The easiest way is right here in Morphit.** Open your [wallet](/my/wallet), find your liquid Blurt, and choose **Power Up**. Enter the amount and confirm. That's it — your Blurt is now BP and starts earning.
 
-Morphit itself isn't a wallet, so we don't hold or move your Blurt for you; powering up happens directly on the blockchain through a wallet you control. If you ever want liquid Blurt back, you **power down**, which releases it gradually over about four weeks (this gradual unstake is a Blurt protocol rule, not a Morphit one).
+Morphit never holds or moves your Blurt for you — powering up happens directly on the blockchain, signed by your own keys. If you ever want liquid Blurt back, you **power down**, which releases it gradually over 4 weeks (this gradual unstake is a Blurt protocol rule, not a Morphit one).
 
 ---
 
@@ -2332,9 +2332,23 @@ For the full per-coin guidance see /privacy/{asset} (e.g. /privacy/xmr, /privacy
 
 ---
 
+## What is Barter on Morphit?
+
+**FAQ key:** `what_is_barter`
+
+Barter lets you buy or sell goods and services — not cryptocurrency — and settle in crypto. A grandmother selling baskets, a neighbor who fixes bikes, someone trading a crate of oranges: they list what they're offering, price it in their local currency, and pick which crypto(s) they'll accept (say XMR, BTC, and DOGE). It's **one listing**, not one per coin.
+
+**How it works:** describe exactly what you're offering in the Terms, set a local-currency value (a single price or a range), and tick the crypto(s) your town actually uses. Buyers browse the wares like any other listing and can only pay in a crypto you accept — if you don't list Decred, nobody can pay you in Decred. You and the buyer arrange the handoff in chat and settle in whichever accepted crypto they chose.
+
+**No address on the listing:** the goods change hands off Morphit — in person or by post — so a barter listing has no crypto receive address, and Morphit never touches the goods or the payment. Common-sense safety applies: meet in a public place, share only what you need to, and treat a stranger like a stranger.
+
+On Morphit, Barter is **trade-only** — you can't pay Morphit's listing fees with it (those stay Blurt/BTC/XMR). It's for trading wares, nothing else.
+
+---
+
 ## Metadata
 
-Total FAQ entries: 140
+Total FAQ entries: 141
 Canonical URL: https://morphit.io/faq
 License: AGPL-3.0 (content may be quoted/redistributed)
 Source of truth: https://git.agorise.net/agorise/morphit
