@@ -89,7 +89,7 @@
 	// instance — and re-evaluating on key changes would be
 	// nonsensical (different glossary term entirely).
 	const isFirstAppearance = untrack(() =>
-		markSeen(get(page).url.pathname, key)
+		markSeen(get(page)?.url?.pathname ?? '', key)
 	);
 
 	let open = $state(false);

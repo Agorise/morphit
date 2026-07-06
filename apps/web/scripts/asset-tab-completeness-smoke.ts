@@ -81,7 +81,11 @@ const COMPONENTS: readonly ComponentSpec[] = [
 		// receive-address surface, which applies to all assets
 		// uniformly (the user shares a receive address for
 		// whatever they're being paid in).
-		excludeAssets: []
+		// cp425: EXCEPT goods (BARTER) — a barter listing has no receive
+		// address (wares change hands off-platform); a barter trade settles
+		// in whichever crypto the buyer picks from `accepted_assets`, and
+		// THAT crypto's tab is the one shown. So no 'barter' tab here.
+		excludeAssets: ['BARTER']
 	},
 	{
 		path: 'apps/web/src/lib/components/FundsSentModal.svelte',
@@ -90,7 +94,10 @@ const COMPONENTS: readonly ComponentSpec[] = [
 		// broadcast path with explicit memo handling), not the
 		// generic mark-sent dispatch. So BLURT is not expected
 		// as a tab in this modal. Every other asset IS.
-		excludeAssets: ['BLURT']
+		// cp425: goods (BARTER) also excluded — a barter trade's payment is
+		// the buyer's chosen crypto, marked sent under THAT crypto's tab; no
+		// 'barter' funds-sent tab.
+		excludeAssets: ['BLURT', 'BARTER']
 	}
 ];
 
@@ -112,24 +119,38 @@ for (const comp of COMPONENTS) {
 		.filter((t) => !comp.excludeAssets.includes(t))
 		.map((t) => t.toLowerCase());
 
+	// cp425 — the 16 hardcoded per-coin tab buttons in these modals were
+	// refactored to a single {#each visibleMethods as m} template backed by an
+	// ALL_METHODS array (so an `allowedMethods` prop can filter the set for a
+	// barter order). We now verify (a) the templated tab wiring is present, and
+	// (b) each expected coin is listed in ALL_METHODS (what the template
+	// iterates) — equivalent coverage to the old per-coin aria-selected check.
+	scenarios.push({
+		name: `${comp.name}: templated tablist wiring present`,
+		run: () => {
+			if (!existsSync(absPath)) return null;
+			const src = readFileSync(absPath, 'utf8');
+			const ok =
+				src.includes('{#each visibleMethods as m') &&
+				src.includes('aria-selected={method === m}') &&
+				src.includes('selectMethod(m)');
+			return ok
+				? null
+				: `templated tablist wiring missing ({#each visibleMethods as m} + aria-selected={method === m} + selectMethod(m))`;
+		}
+	});
+
 	for (const lowerTicker of expected) {
 		scenarios.push({
-			name: `${comp.name}: tablist contains tab for ${lowerTicker.toUpperCase()}`,
+			name: `${comp.name}: tablist offers method ${lowerTicker.toUpperCase()}`,
 			run: () => {
-				if (!existsSync(absPath)) return null; // covered above
+				if (!existsSync(absPath)) return null;
 				const src = readFileSync(absPath, 'utf8');
-				// We look for both the aria-selected pattern AND
-				// the selectMethod(<asset>) onclick, since either
-				// alone could be a typo. Both must appear.
-				const ariaPattern = `aria-selected={method === '${lowerTicker}'}`;
-				const onclickPattern = `selectMethod('${lowerTicker}')`;
-				if (!src.includes(ariaPattern)) {
-					return `missing aria-selected wiring for method='${lowerTicker}' (expected literal: ${ariaPattern})`;
-				}
-				if (!src.includes(onclickPattern)) {
-					return `missing onclick wiring for selectMethod('${lowerTicker}') — tab button likely missing`;
-				}
-				return null;
+				// The coin must be listed in ALL_METHODS (the array the {#each}
+				// iterates); a bare quoted lower-case ticker is its entry.
+				return src.includes(`'${lowerTicker}'`)
+					? null
+					: `method '${lowerTicker}' not listed in ALL_METHODS — its tab would never render`;
 			}
 		});
 	}

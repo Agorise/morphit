@@ -468,18 +468,21 @@ button:has(.nav-arrow):focus-visible,
 	transform: scaleX(-1) translateX(-3px);
 }
 
-/* cp384 (#4): emerald border flash. Used by ProtectedTextarea (Terms field)
+/* cp384 (#4) / cp425: border flash. Used by ProtectedTextarea (Terms field)
  * to draw the eye when barter is added → Terms becomes required. Only the
  * 50% keyframe is set, so 0%/100% interpolate from the element's resting
  * border-color — works in both light and dark without hardcoding either.
- * The animation overrides the static Tailwind border-color while playing. */
-@keyframes pk-flash-green {
+ * The animation overrides the static Tailwind border-color while playing.
+ * cp425 (Ken): flash a bright, theme-friendly YELLOW (was emerald green) so
+ * it reads as an attention cue distinct from the site's green brand color.
+ * Visible on both light (white) and dark backgrounds as a border. */
+@keyframes pk-flash-yellow {
 	50% {
-		border-color: var(--morphit-emerald);
+		border-color: #facc15;
 	}
 }
-.pk-flash-green {
-	animation: pk-flash-green 1s ease-in-out 5;
+.pk-flash-yellow {
+	animation: pk-flash-yellow 1s ease-in-out 5;
 }
 
 @media (prefers-reduced-motion: reduce) {

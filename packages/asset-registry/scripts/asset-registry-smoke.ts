@@ -22,6 +22,7 @@ import {
 	feePayable,
 	getAsset,
 	isAssetTicker,
+	isGoodsAsset,
 	tradeable,
 	type AssetEntry,
 	type AssetTicker
@@ -83,20 +84,34 @@ for (const a of ASSETS) {
 		typeof a.isCoordinationChain === 'boolean',
 		`asset '${a.ticker}' isCoordinationChain must be boolean`
 	);
-	assert(
-		Array.isArray(a.supportedNetworks) && a.supportedNetworks.length > 0,
-		`asset '${a.ticker}' supportedNetworks must be a non-empty array`
-	);
-	for (const net of a.supportedNetworks) {
+	if (isGoodsAsset(a.ticker)) {
+		// cp425 — goods assets (BARTER) are OFF-CHAIN: they settle in crypto
+		// but have no network of their own, so supportedNetworks is EMPTY and
+		// defaultNetwork is null. Assert that shape rather than non-empty.
 		assert(
-			typeof net === 'string' && net.length > 0,
-			`asset '${a.ticker}' supportedNetworks contains a non-string or empty value`
+			Array.isArray(a.supportedNetworks) && a.supportedNetworks.length === 0,
+			`goods asset '${a.ticker}' supportedNetworks must be EMPTY (off-chain)`
+		);
+		assert(
+			a.defaultNetwork === null,
+			`goods asset '${a.ticker}' defaultNetwork must be null (off-chain)`
+		);
+	} else {
+		assert(
+			Array.isArray(a.supportedNetworks) && a.supportedNetworks.length > 0,
+			`asset '${a.ticker}' supportedNetworks must be a non-empty array`
+		);
+		for (const net of a.supportedNetworks) {
+			assert(
+				typeof net === 'string' && net.length > 0,
+				`asset '${a.ticker}' supportedNetworks contains a non-string or empty value`
+			);
+		}
+		assert(
+			a.defaultNetwork === null || a.supportedNetworks.includes(a.defaultNetwork),
+			`asset '${a.ticker}' defaultNetwork '${a.defaultNetwork}' is not in supportedNetworks ${JSON.stringify(a.supportedNetworks)}`
 		);
 	}
-	assert(
-		a.defaultNetwork === null || a.supportedNetworks.includes(a.defaultNetwork),
-		`asset '${a.ticker}' defaultNetwork '${a.defaultNetwork}' is not in supportedNetworks ${JSON.stringify(a.supportedNetworks)}`
-	);
 	assert(
 		a.privacyWarningKey === null ||
 			(typeof a.privacyWarningKey === 'string' && a.privacyWarningKey.length > 0),

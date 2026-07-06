@@ -120,6 +120,12 @@ const BROADCAST_ACCOUNT_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
  *  before the chain roundtrip. */
 const BROADCAST_AMOUNT_RE = /^\d+\.\d{3}\s+BLURT$/;
 
+/** VESTS asset string — 6-decimal, used by `withdraw_vesting` (power
+ *  down). VESTS is the raw vesting-shares unit the chain stores; the
+ *  user thinks in BP (Blurt Power) but the op amount is VESTS. Same
+ *  6-decimal shape as `reward_vesting_balance` in claim_reward. */
+const BROADCAST_VESTS_RE = /^\d+\.\d{6}\s+VESTS$/;
+
 /** Fetch the chain head, return ref_block info for a transaction. */
 async function getRefBlockInfo(): Promise<{
 	ref_block_num: number;
@@ -219,6 +225,85 @@ export async function prepareUnsignedTransfer(
 		ref_block_prefix,
 		expiration,
 		operations: [['transfer', { from, to, amount, memo }]],
+		extensions: []
+	};
+}
+
+/** Assemble the unsigned `transfer_to_vesting` (POWER UP) Transaction —
+ *  async, no key needed (mirrors prepareUnsignedTransfer's F-18 split).
+ *
+ *  Power-up moves LIQUID BLURT into staked VESTS. Requires ACTIVE
+ *  authority. Unlike a plain transfer, `from === to` is the NORMAL case
+ *  (a user powers up their OWN balance), so self is ALLOWED here.
+ *  `amount` is a 3-decimal BLURT string. Sign with `signTransferWithKey`
+ *  (the active-key signer — reused, it signs any active-level tx) inside
+ *  a runWithActiveKey closure, then `broadcastSignedTransaction`. */
+export async function prepareUnsignedTransferToVesting(
+	from: string,
+	to: string,
+	amount: string
+): Promise<Transaction> {
+	if (!from) throw new Error('prepareUnsignedTransferToVesting: missing from account');
+	if (!to) throw new Error('prepareUnsignedTransferToVesting: missing to account');
+	if (!BROADCAST_ACCOUNT_RE.test(from)) {
+		throw new Error('prepareUnsignedTransferToVesting: from is not a valid account name');
+	}
+	if (!BROADCAST_ACCOUNT_RE.test(to)) {
+		throw new Error('prepareUnsignedTransferToVesting: to is not a valid account name');
+	}
+	if (!BROADCAST_AMOUNT_RE.test(amount)) {
+		throw new Error(
+			'prepareUnsignedTransferToVesting: amount must be "N.NNN BLURT" (3 decimal places)'
+		);
+	}
+	// NOTE: from === to is intentionally permitted — powering up your OWN
+	// balance is the normal case (and the only one Morphit's UI offers).
+
+	const { ref_block_num, ref_block_prefix, expiration } = await getRefBlockInfo();
+
+	return {
+		ref_block_num,
+		ref_block_prefix,
+		expiration,
+		operations: [['transfer_to_vesting', { from, to, amount }]],
+		extensions: []
+	};
+}
+
+/** Assemble the unsigned `withdraw_vesting` (POWER DOWN) Transaction —
+ *  async, no key needed. Requires ACTIVE authority.
+ *
+ *  Power-DOWN unstakes VESTS back to liquid BLURT over the chain's
+ *  4-week / 13-weekly-payment schedule (the chain enforces the schedule;
+ *  this op just STARTS it — the UI must say so honestly, never imply
+ *  the funds arrive instantly). `vestingShares` is a 6-decimal VESTS
+ *  string (NOT BLURT): the caller converts the user's BP figure via
+ *  `balanceMath.blurtPowerToVests`, or — for "power down everything" —
+ *  passes the account's EXACT on-chain `vesting_shares` so no dust is
+ *  left behind by a round-trip conversion. `"0.000000 VESTS"` is a legal
+ *  op (it CANCELS an in-progress power-down) and is permitted here; the
+ *  UI decides whether to surface that. */
+export async function prepareUnsignedWithdrawVesting(
+	account: string,
+	vestingShares: string
+): Promise<Transaction> {
+	if (!account) throw new Error('prepareUnsignedWithdrawVesting: missing account');
+	if (!BROADCAST_ACCOUNT_RE.test(account)) {
+		throw new Error('prepareUnsignedWithdrawVesting: account is not a valid account name');
+	}
+	if (!BROADCAST_VESTS_RE.test(vestingShares)) {
+		throw new Error(
+			'prepareUnsignedWithdrawVesting: vesting_shares must be "N.NNNNNN VESTS" (6 decimal places)'
+		);
+	}
+
+	const { ref_block_num, ref_block_prefix, expiration } = await getRefBlockInfo();
+
+	return {
+		ref_block_num,
+		ref_block_prefix,
+		expiration,
+		operations: [['withdraw_vesting', { account, vesting_shares: vestingShares }]],
 		extensions: []
 	};
 }

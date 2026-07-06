@@ -298,6 +298,9 @@ export interface Config {
 	 *  messariApiKey is set. */
 	readonly messariBaseUrl: string;
 	readonly messariApiKey?: string;
+	/** cp425 — Blurt-native BLURT/USD price feed (api.blurt.blog/price_info).
+	 *  Joins the external market average for BLURT only. Empty disables it. */
+	readonly blurtPriceFeedUrl: string;
 	/** Relative outlier band for the crypto external average, e.g.
 	 *  0.05 = drop sources >5% off the median before averaging. */
 	readonly priceOutlierTolerance: number;
@@ -1019,6 +1022,9 @@ const envSchema = z.object({
 	MORPHIT_INDEXER_COINCAP_API_KEY: z.string().optional(),
 	MORPHIT_INDEXER_MESSARI_BASE_URL: z.string().default('https://data.messari.io'),
 	MORPHIT_INDEXER_MESSARI_API_KEY: z.string().optional(),
+	// cp425 — Blurt-native price feed (BLURT/USD). Joins the external
+	// average for BLURT. Set empty to disable.
+	MORPHIT_INDEXER_BLURT_PRICE_FEED_URL: z.string().default('https://api.blurt.blog/price_info'),
 	MORPHIT_INDEXER_PRICE_OUTLIER_TOLERANCE: z.coerce.number().positive().max(1).default(0.05),
 
 	// ─── USD→fiat FX feed (multi-currency $1-equivalent floor) ──
@@ -1660,6 +1666,7 @@ export function loadConfig(): Config {
 		coincapApiKey: e.MORPHIT_INDEXER_COINCAP_API_KEY,
 		messariBaseUrl: e.MORPHIT_INDEXER_MESSARI_BASE_URL,
 		messariApiKey: e.MORPHIT_INDEXER_MESSARI_API_KEY,
+		blurtPriceFeedUrl: e.MORPHIT_INDEXER_BLURT_PRICE_FEED_URL,
 		priceOutlierTolerance: e.MORPHIT_INDEXER_PRICE_OUTLIER_TOLERANCE,
 		// USD→fiat FX feed
 		fxFeedEnabled: e.MORPHIT_INDEXER_FX_FEED_ENABLED,

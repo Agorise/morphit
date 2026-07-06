@@ -38,6 +38,7 @@
 	import type { OrderRecord } from '@morphit/indexer-client';
 	import { _ } from 'svelte-i18n';
 	import OrderPosterIdentity from '$lib/components/OrderPosterIdentity.svelte';
+	import Tooltip from '$lib/components/Tooltip.svelte';
 	import OrderExpiryChip from '$lib/components/OrderExpiryChip.svelte';
 	// cp404: the "N talking now" engagement chip is hidden per Ken's
 	// request. The engagement_24h data still flows on OrderRecord — to
@@ -242,7 +243,9 @@
 	<!-- Terms — a single truncated, markdown-stripped line. Full text (with
 	     markdown) lives on the order page. -->
 	{#if termsPreview}
-		<p class="mt-1.5 flex min-w-0 items-baseline gap-1 text-sm text-ink-700 dark:text-ink-200">
+		<p
+			class="mt-1.5 flex min-w-0 items-baseline gap-1 text-sm text-ink-700 sm:pr-8 dark:text-ink-200"
+		>
 			<span class="shrink-0 font-semibold">{$_('orderbook.card.terms_label')}:</span>
 			{#if termsPreviewHtml !== null}
 				<!-- eslint-disable-next-line svelte/no-at-html-tags -- highlightMatches
@@ -290,17 +293,36 @@
 				</span>
 			{/if}
 			{#if onToggleHide && !blocked}
-				<button
-					type="button"
-					onclick={() => onToggleHide?.()}
-					title={hidden
-						? ($_('orderbook.unhide_button_tooltip') as string)
-						: ($_('orderbook.hide_button_tooltip') as string)}
-					class="hidden rounded px-2 py-1 text-ink-400 transition hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald sm:block"
-					aria-label={hidden
-						? ($_('orderbook.unhide_button_aria', { values: { account: order.account } }) as string)
-						: ($_('orderbook.hide_button_aria', { values: { account: order.account } }) as string)}
-				>
+				<!-- cp425 — the hide/show explainer moved from the native `title`
+				     tooltip (small + hard to read) to the styled Tooltip. The
+				     desktop-only gate lives on the wrapper (was `sm:block` on the
+				     button); the button keeps its own toggle click handler. -->
+				<div class="hidden sm:block">
+					<Tooltip
+						textKey={hidden
+							? 'orderbook.unhide_button_tooltip'
+							: 'orderbook.hide_button_tooltip'}
+						ariaLabel={hidden
+							? ($_('orderbook.unhide_button_aria', {
+									values: { account: order.account }
+								}) as string)
+							: ($_('orderbook.hide_button_aria', {
+									values: { account: order.account }
+								}) as string)}
+					>
+						{#snippet trigger()}
+							<button
+								type="button"
+								onclick={() => onToggleHide?.()}
+								class="rounded px-2 py-1 text-ink-400 transition hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
+								aria-label={hidden
+									? ($_('orderbook.unhide_button_aria', {
+											values: { account: order.account }
+										}) as string)
+									: ($_('orderbook.hide_button_aria', {
+											values: { account: order.account }
+										}) as string)}
+							>
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
 						width="14"
@@ -329,7 +351,10 @@
 							<circle cx="12" cy="12" r="3" />
 						{/if}
 					</svg>
-				</button>
+							</button>
+						{/snippet}
+					</Tooltip>
+				</div>
 			{/if}
 		</div>
 	{/if}

@@ -386,6 +386,7 @@
       "mark_all_read": "Segna tutto come letto",
       "conversation_aria_unread": "Conversazione con {peer} — non letta",
       "conversation_aria_read": "Conversazione con {peer}",
+      "re_prefix": "RE:",
       "tab_messages": "Messaggi",
       "tab_requests": "Richieste",
       "tabs_aria": "Schede della casella",
@@ -782,7 +783,8 @@
       "dcr": "Decred. Una moneta i cui possessori votano su come è gestita. Registro pubblico come Bitcoin, con una modalità privacy opzionale nel wallet.",
       "sol": "Solana — criptovaluta PoS ad alto throughput con sequenziamento Proof-of-History. Base layer trasparente, governance fondazione + comunità validatori, ecosistema SPL-token. Solo trading: non può pagare le commissioni di pubblicazione.",
       "eth": "Ethereum — piattaforma di smart-contract Proof-of-Stake. Base layer trasparente; nessun protocollo di mixing nativo (i mixer di terze parti sono sanzionati in molte giurisdizioni). La rotazione degli indirizzi lato wallet è la leva primaria per la privacy. Trading + commissioni di pubblicazione.",
-      "xrp": "Ripple (XRP) — criptovaluta Federated Byzantine Agreement sull'XRP Ledger orientata ai pagamenti. Base layer trasparente; nessuna privacy a livello di protocollo. Destination tag è un identificatore (per il routing degli exchange), non una funzionalità di privacy. La rotazione degli indirizzi lato wallet è la leva primaria per la privacy. Trading + commissioni di pubblicazione."
+      "xrp": "Ripple (XRP) — criptovaluta Federated Byzantine Agreement sull'XRP Ledger orientata ai pagamenti. Base layer trasparente; nessuna privacy a livello di protocollo. Destination tag è un identificatore (per il routing degli exchange), non una funzionalità di privacy. La rotazione degli indirizzi lato wallet è la leva primaria per la privacy. Trading + commissioni di pubblicazione.",
+      "barter": "Baratto — beni o servizi, non una moneta. Fissa il prezzo nella tua valuta locale, scegli la/e cripto accettate (es. XMR, BTC, DOGE) e descrivi esattamente la tua offerta nelle Condizioni. L'annuncio non richiede un indirizzo cripto; regoli nella cripto accettata scelta dall'acquirente. Solo scambio su Morphit."
     },
     "section_recovery": {
       "heading": "Se qualcosa va storto",
@@ -1251,7 +1253,7 @@
       },
       "how_to_stake_blurt": {
         "q": "Come faccio staking dei miei Blurt (power up a BP) per guadagnare interessi?",
-        "a": "Fare staking di Blurt significa convertire i tuoi Blurt liquidi in **Blurt Power (BP)** — un processo che Blurt chiama \"power up\". I Blurt in staking guadagnano circa il **2% di interesse all'anno (APR)** (il tasso reale è calcolato dall'inflazione della catena e mostrato nell'app), rafforzano i tuoi voti e generano ricompense di curation. Restano la tua moneta per tutto il tempo — non è un deposito, né un prestito, e nessun altro li custodisce.\n\n**Il modo più semplice è un wallet Blurt.** Apri [BlurtWallet.com](https://blurtwallet.com), accedi con il tuo account, trova il saldo di Blurt liquidi e scegli **Power Up**. Inserisci l'importo e conferma. Tutto qui — i tuoi Blurt ora sono BP e iniziano a rendere.\n\nMorphit non è un wallet, quindi non custodiamo né spostiamo i tuoi Blurt per te; il power up avviene direttamente sulla blockchain tramite un wallet che controlli tu. Se vuoi riavere Blurt liquidi, fai un **power down**, che li rilascia gradualmente nell'arco di circa quattro settimane (questo prelievo graduale è una regola del protocollo Blurt, non di Morphit)."
+        "a": "Fare staking di Blurt significa convertire i tuoi Blurt liquidi in **Blurt Power (BP)** — un processo che Blurt chiama \"power up\". I Blurt in staking guadagnano circa il **2% di interesse all'anno (APR)** (il tasso reale è calcolato dall'inflazione della catena e mostrato nell'app), rafforzano i tuoi voti e generano ricompense di curation. Restano la tua moneta per tutto il tempo — non è un deposito, né un prestito, e nessun altro li custodisce.\n\n**Il modo più semplice è proprio qui in Morphit.** Apri il tuo [wallet](/my/wallet), trova il saldo di Blurt liquidi e scegli **Power Up**. Inserisci l'importo e conferma. Tutto qui — i tuoi Blurt ora sono BP e iniziano a rendere.\n\nMorphit non custodisce né sposta mai i tuoi Blurt per te — il power up avviene direttamente sulla blockchain, firmato con le tue chiavi. Se vuoi riavere Blurt liquidi, fai un **power down**, che li rilascia gradualmente nell'arco di 4 settimane (questo prelievo graduale è una regola del protocollo Blurt, non di Morphit)."
       },
       "where_does_blurt_price_come_from": {
         "q": "Da dove proviene il prezzo Blurt visualizzato su Morphit?",
@@ -1660,6 +1662,10 @@
       "privacy_coins_onchain": {
         "q": "Come fa Morphit a mantenere private le mie operazioni con le criptovalute della privacy?",
         "a": "Morphit scambia diverse criptovalute incentrate sulla privacy — Monero (XMR), Zcash (ZEC), Pirate Chain (ARRR), Dash (DASH) e Decred (DCR) — e applica a tutte le stesse protezioni dell'impronta on-chain.\n\n**Il tuo regolamento effettivo non tocca mai Blurt.** Quando scambi una criptovaluta della privacy, le monete si muovono peer-to-peer tra il tuo portafoglio e quello della controparte, direttamente sulla chain propria di quella moneta. Quel trasferimento non viene mai trasmesso, registrato né è visibile dalla blockchain che Morphit usa per il coordinamento. Blurt trasporta solo l'ordine pubblico (l'annuncio) e la chat cifrata end-to-end.\n\n**Cosa rivela l'ordine su Blurt — e cosa ne abbiamo tolto:**\n• L'ordine è un annuncio, quindi lato/asset/intervallo di importo/metodi di pagamento sono necessariamente pubblici (è così che un compratore trova la tua vendita). È inerente a qualsiasi order book pubblico.\n• Ma abbiamo rimosso tutto ciò che non doveva esserci: il permlink dell'ordine ora è un token casuale opaco (`order-…`), non `sell-xmr-usd-…`, così il nome dell'asset non trapela più nel permlink on-chain, negli URL dell'ordine, nei feed RSS o negli explorer. Il timestamp di scadenza è arrotondato al giorno, così non può identificare il momento esatto in cui hai pubblicato. Non vengono mai allegati IP, fuso orario, lingua o impronta del browser — ciò che digiti nel modulo «Pubblica ora» è tutto ciò che va sulla chain.\n\n**Variazione dell'importo su ogni moneta.** Quando condividi un importo da ricevere in chat, Morphit aggiunge una piccola coda casuale (fino alla più piccola unità della moneta — piconero per XMR, scala satoshi per le altre) così l'importo on-chain non può essere abbinato al tuo ordine pubblicato. Attivo per impostazione predefinita.\n\n**ZEC, ARRR, DASH e DCR sono solo per il trading — il loro TxID non appare mai su Blurt.** Non puoi pagare la commissione di pubblicazione di Morphit con esse, e il regolamento è peer-to-peer, quindi non c'è alcun punto in cui l'ID di transazione di quelle monete venga scritto sulla chain pubblica. Per queste quattro, la storia on-chain è ancora più pulita di quella di Monero.\n\n**Monero ha esattamente un contatto cross-chain opzionale, con opt-out.** XMR è uno dei tre asset (con BLURT e BTC) che *puoi* usare per pagare la piccola commissione di pubblicazione; se lo fai, il TxID di quel pagamento viene registrato nel tuo ordine su Blurt (così qualsiasi operatore può verificare la commissione con un tx_proof di Monero — nessuna chiave di visualizzazione, vedi la FAQ del TxID di Monero). È l'unico posto in cui un TxID XMR tocca Blurt, ed è una commissione di ~0,25 USD verso un indirizzo pubblico, mai la tua operazione. Vuoi zero collegamento Monero-Blurt? Paga la commissione in BLURT — è l'opzione predefinita e costa la metà.\n\nPer la guida completa per moneta vedi /privacy/{asset} (es. /privacy/xmr, /privacy/zec), e l'inventario completo delle fughe è nel catalogo delle fughe di metadati del progetto."
+      },
+      "what_is_barter": {
+        "q": "Cos'è il Baratto su Morphit?",
+        "a": "Il Baratto ti permette di comprare o vendere beni e servizi — non criptovalute — e regolare in cripto. Una nonna che vende cesti, un vicino che ripara le bici, qualcuno che scambia una cassa di arance: pubblicano ciò che offrono, gli danno un prezzo nella loro valuta locale e scelgono quale/i cripto accetteranno (ad esempio XMR, BTC e DOGE). È **un solo annuncio**, non uno per moneta.\n\n**Come funziona:** descrivi esattamente la tua offerta nelle Condizioni, imposta un valore in valuta locale (un prezzo unico o un intervallo) e spunta la/e cripto davvero usate dalle tue parti. Gli acquirenti sfogliano le merci come in qualsiasi annuncio e possono pagare solo in una cripto che accetti: se non elenchi Decred, nessuno può pagarti in Decred. Tu e l'acquirente organizzate la consegna in chat e regolate nella cripto accettata che ha scelto.\n\n**Nessun indirizzo sull'annuncio:** i beni passano di mano fuori da Morphit — di persona o per posta —, quindi un annuncio di baratto non ha un indirizzo cripto di ricezione, e Morphit non tocca mai né i beni né il pagamento. Vale il buon senso: incontratevi in un luogo pubblico, condividi solo il necessario e tratta uno sconosciuto come uno sconosciuto.\n\nSu Morphit, il Baratto è **solo per lo scambio**: non puoi pagarci le commissioni di annuncio di Morphit (quelle restano Blurt/BTC/XMR). Serve a scambiare merci, nient'altro."
       }
     },
     "share_link": "Condividi",
@@ -1696,7 +1702,9 @@
     "history_state_expired": "Scaduta",
     "history_state_order_inactive": "Ordine concluso",
     "history_extended": "Estesa ×{n}",
-    "history_extended_title": "Offerta estesa {n} volta/e dall'anti-snipe"
+    "history_extended_title": "Offerta estesa {n} volta/e dall'anti-snipe",
+    "error_chain_rejected": "La rete ha rifiutato questa transazione: {reason}",
+    "error_unreachable": "Impossibile raggiungere la tua istanza Morphit per la trasmissione. Controlla la connessione e riprova."
   },
   "featured": {
     "heading": "In evidenza",
@@ -2584,8 +2592,6 @@
       "fiat_no_matches": "Nessuna valuta corrispondente",
       "fiat_remove": "Rimuovi",
       "asset_barter": "Baratto (beni/servizi)",
-      "side_buy_goods": "Annunci che vogliono comprare beni/servizi",
-      "side_sell_goods": "Annunci che vogliono vendere beni/servizi",
       "side_label": "Voglio vedere",
       "side_any": "Tutto",
       "side_buy": "Annunci che vogliono comprare crypto",
@@ -2982,7 +2988,8 @@
         "dcr": "Decred (DCR). Una moneta la cui comunità vota su come è gestito il progetto. Il suo registro pubblico è visibile come quello di Bitcoin e il suo wallet ha una modalità privacy opzionale. Nessun emittente centrale: nessuno può congelare le tue monete.",
         "sol": "Solana — criptovaluta PoS ad alto throughput con sequenziamento Proof-of-History. Base layer trasparente, nessun protocollo di mixing nativo. La rotazione degli indirizzi lato wallet è la leva primaria per la privacy.",
         "eth": "Ethereum (ETH) — piattaforma di smart-contract Proof-of-Stake. Base layer trasparente; nessun protocollo di mixing nativo. Cuidado con destinatari di contratto (l'invio di ETH a un contratto senza `payable receive()` o `fallback()` si revertirà; le monete non sono perse, ma la transazione fallisce e paghi gas).",
-        "xrp": "Ripple (XRP) — criptovaluta Federated Byzantine Agreement sull'XRP Ledger orientata ai pagamenti. Base layer trasparente; nessuna privacy a livello di protocollo. Destination tag è un identificatore (per il routing degli exchange), non una funzionalità di privacy. La rotazione degli indirizzi lato wallet è la leva primaria per la privacy."
+        "xrp": "Ripple (XRP) — criptovaluta Federated Byzantine Agreement sull'XRP Ledger orientata ai pagamenti. Base layer trasparente; nessuna privacy a livello di protocollo. Destination tag è un identificatore (per il routing degli exchange), non una funzionalità di privacy. La rotazione degli indirizzi lato wallet è la leva primaria per la privacy.",
+        "barter": "Baratto (beni/servizi). Non è una criptovaluta: offri merci o un servizio e vieni pagato nella/e cripto che scegli di accettare. Fissa il prezzo nella tua valuta locale; tu e l'acquirente concordate i dettagli in chat e regolate in una delle tue cripto accettate. Descrivi esattamente ciò che offri nel campo Condizioni."
       },
       "waiver_fiat_hint": "💡 La maggior parte degli scambi di BLURT su Morphit avviene con utenti attivi del social network Blurt, operatori esistenti o tramite baratto. Quindi scegli la valuta fiat che usi localmente (USD, EUR, MXN, ecc.) e offri metodi di pagamento di persona o tramite baratto (beni/servizi) al Passo 3 se vuoi offrire qualcos'altro di valore.",
       "waiver_benefits_heading": "Cosa sblocca il tuo acquisto:",
@@ -3009,7 +3016,9 @@
       "step_counter": "Passo {n} di {total}",
       "fiat_required_hint": "Scegli la valuta in cui fisserai il prezzo di questo scambio.",
       "amount_entered_usd_hint": "{amount} {fiat} (≈ {usd})",
-      "returning_min_hint": "Almeno {amount} {fiat} (≈ {usd})"
+      "returning_min_hint": "Almeno {amount} {fiat} (≈ {usd})",
+      "barter_accept_label": "Quali cripto accetterai?",
+      "barter_accept_hint": "Spunta le cripto con cui gli acquirenti possono pagarti: scegli quelle che usi davvero."
     },
     "errors": {
       "fiat_empty": "Scegli una valuta fiat (come USD o EUR).",
@@ -3151,7 +3160,9 @@
       "amount_min_plus": "{min} {fiat} o più di {asset}",
       "amount_any": "qualsiasi quantità di {asset}",
       "price_market": "al prezzo di mercato",
-      "price_fixed": "a un prezzo fisso di {price} {fiat} per {asset}"
+      "price_fixed": "a un prezzo fisso di {price} {fiat} per {asset}",
+      "barter_sentence_sell": "Offri beni/servizi del valore di {value}, accettando {cryptos}.",
+      "barter_sentence_buy": "Cerchi beni/servizi del valore di {value}, pagando in {cryptos}."
     }
   },
   "prices": {
@@ -3378,8 +3389,8 @@
     "rss_subscribe_title": "Ricevi notifiche via RSS quando questo trader pubblica un nuovo ordine di acquisto o vendita. Nota: interrogare un feed per-trader è leggermente più rivelatore del feed mondiale.",
     "feedback_suppressed_chip": "Non conta per la valutazione — recensori segnalati come collegati",
     "my_balance": {
-      "section_label": "Saldo di @{account}",
-      "title": "Saldo di @{account}",
+      "section_label": "Portafoglio di @{account}",
+      "title": "Portafoglio di @{account}",
       "private_label": "Solo tu lo vedi",
       "loading": "Caricamento saldo...",
       "error": "Impossibile caricare il saldo",
@@ -3423,7 +3434,54 @@
     },
     "as_buyer": "come acquirente",
     "as_seller": "come venditore",
-    "last_traded_label": "Ultimo scambio:"
+    "last_traded_label": "Ultimo scambio:",
+    "wallet": {
+      "power_up_action": "Power up",
+      "power_down_action": "Power down",
+      "power_up_title": "Power up BLURT",
+      "power_down_title": "Power down BP",
+      "power_up_subtitle": "Il power up converte i tuoi BLURT liquidi in Blurt Power (BP). I BLURT in staking generano rendimento, rafforzano i tuoi voti e restano completamente tuoi: non è un deposito né un prestito.",
+      "power_down_subtitle": "Il power down riconverte i tuoi Blurt Power (BP) in BLURT liquidi.",
+      "amount_label": "Importo",
+      "power_up_placeholder": "BLURT per il power up",
+      "power_down_placeholder": "BP per il power down",
+      "use_full": "Usa l'intero saldo",
+      "available_blurt": "Disponibile: {amount} BLURT",
+      "available_bp": "Disponibile: {amount} BP",
+      "power_down_schedule": "Non è istantaneo: i tuoi BP tornano BLURT liquidi gradualmente, nell'arco di 4 settimane. Questo rilascio graduale è una regola del protocollo Blurt, non di Morphit.",
+      "password_label": "La tua password di @{account} (per firmare con la tua chiave attiva)",
+      "error_password_required": "Inserisci la tua password per continuare.",
+      "error_bad_password": "Quella password non ha sbloccato la tua chiave attiva. Controllala e riprova.",
+      "error_no_active_key": "Questo dispositivo non ha una chiave attiva per firmare. Accedi con la tua frase seed per fare power up o power down.",
+      "error_broadcast": "Non è stato possibile completare l'operazione sulla catena. Riprova.",
+      "error_amount": "Inserisci un importo non superiore al tuo saldo disponibile."
+    },
+    "send": {
+      "title": "Invia BLURT",
+      "subtitle": "Invia BLURT a qualsiasi account Blurt.",
+      "recipient_label": "Destinatario",
+      "recipient_placeholder": "Nome account Blurt",
+      "recipient_checking": "Verifica in corso…",
+      "recipient_valid": "Account trovato",
+      "recipient_not_found": "Non esiste alcun account con quel nome sulla catena.",
+      "recipient_invalid": "Non è un nome account Blurt valido.",
+      "recipient_self": "Non puoi inviare BLURT a te stesso.",
+      "recipient_error": "Impossibile verificare quell'account. Riprova.",
+      "amount_placeholder": "BLURT da inviare",
+      "memo_label": "Nota (facoltativa)",
+      "memo_placeholder": "es. un riferimento dell'ordine",
+      "memo_privacy_warning": "Le note sono salvate in modo pubblico e permanente sulla blockchain, in chiaro. Non inserire mai password, chiavi o dati privati.",
+      "error_no_active_key": "Questo dispositivo non ha una chiave attiva per firmare. Accedi con la tua frase seed per inviare BLURT.",
+      "send_button": "Invia",
+      "confirm": "Invia BLURT",
+      "qr_heading": "Scansiona un QR del destinatario",
+      "qr_body": "Inquadra con la fotocamera un QR di un account Blurt per compilare il destinatario.",
+      "qr_start_button": "Accendi la fotocamera",
+      "qr_scanning_hint": "Tieni il codice QR fermo dentro il riquadro.",
+      "qr_camera_denied": "L'accesso alla fotocamera è stato bloccato. Consentilo nelle impostazioni del browser e riprova.",
+      "qr_no_camera": "Questo dispositivo non ha una fotocamera per scansionare.",
+      "qr_invalid": "Quel QR non conteneva un account Blurt. Provane un altro."
+    }
   },
   "relative_time": {
     "descriptive": {
@@ -3735,23 +3793,23 @@
       "description": "Elenco curato di istanze Morphit. Ogni istanza è gestita da un operatore indipendente; gli utenti possono scegliere dove negoziare."
     },
     "explorer_search": {
-      "title": "Esploratore blocchi",
-      "description": "Cerca blocchi, transazioni e account sulla blockchain."
+      "title": "Esploratore blocchi Blurt",
+      "description": "Cerca blocchi, transazioni e account sulla blockchain Blurt — senza registrazione, senza tracciamento, senza account."
     },
     "explorer_account": {
-      "title": "Account {account} — Esploratore blocchi",
+      "title": "Account {account} — Esploratore blocchi Blurt",
       "description": "Cronologia on-chain di {account} sulla blockchain."
     },
     "explorer_activity": {
-      "title": "Attività in diretta — Esploratore blocchi",
+      "title": "Attività in diretta — Esploratore blocchi Blurt",
       "description": "Feed in diretta delle operazioni rilevanti per Morphit sulla blockchain."
     },
     "explorer_block": {
-      "title": "Blocco {block} — Esploratore blocchi",
+      "title": "Blocco {block} — Esploratore blocchi Blurt",
       "description": "Operazioni contenute nel blocco Blurt {block}."
     },
     "explorer_tx": {
-      "title": "Transazione {trx} — Esploratore blocchi",
+      "title": "Transazione {trx} — Esploratore blocchi Blurt",
       "description": "Operazioni contenute in questa transazione Blurt."
     },
     "login_qr": {
@@ -4447,7 +4505,8 @@
     "buy_range": "Compro da {min} a {max} {fiat} in {asset}",
     "sell_range": "Vendo da {min} a {max} {fiat} in {asset}",
     "buy_any": "Compro {asset}",
-    "sell_any": "Vendo {asset}"
+    "sell_any": "Vendo {asset}",
+    "goods_services": "beni/servizi"
   },
   "stats": {
     "page_title": "Statistiche della rete",

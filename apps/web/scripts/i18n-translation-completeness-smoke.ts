@@ -154,6 +154,14 @@ const ALLOW_LIST: AllowEntry[] = [
 	{ key: 'footer.api', locale: 'de', reason: '(c) "API" is a universal programming acronym; identical in every locale' },
 	{ key: 'footer.api', locale: 'es', reason: '(c) "API" is a universal programming acronym; identical in every locale' },
 	{ key: 'footer.api', locale: 'fr', reason: '(c) "API" is a universal programming acronym; identical in every locale' },
+	// cp423 — the chat-inbox "RE:" prefix on the "RE: <order title>" subline.
+	// "RE:" (from Latin "in re" = "regarding") is an internationally-recognized
+	// convention rendered identically in email clients across languages; it is
+	// Ken's literal wording and the intended text, not an untranslated miss.
+	// (The order title that follows IS fully translated via order_title.*.)
+	{ key: 'chat.inbox.re_prefix', locale: 'de', reason: '(b) "RE:" is a universal "regarding" convention (Latin in re); identical in every locale' },
+	{ key: 'chat.inbox.re_prefix', locale: 'es', reason: '(b) "RE:" is a universal "regarding" convention (Latin in re); identical in every locale' },
+	{ key: 'chat.inbox.re_prefix', locale: 'fr', reason: '(b) "RE:" is a universal "regarding" convention (Latin in re); identical in every locale' },
 	// post-beta.28 — the RPC endpoint-health error label "Error: {code}".
 	// "Error" is spelled identically in Spanish (cognate); only the
 	// interpolated HTTP status code follows, so es is legitimately
@@ -1033,7 +1041,23 @@ const ALLOW_LIST: AllowEntry[] = [
 	{ key: 'glossary.blockchain.title', locale: 'es', reason: '(b) "Blockchain" is a universal tech loanword; body uses it verbatim' },
 	{ key: 'glossary.blockchain.title', locale: 'fr', reason: '(b) "Blockchain" is a universal tech loanword; body uses it verbatim' },
 	{ key: 'orderbook.card.message_word', locale: 'fr', reason: '(a) "Message" is the same word in French; translating it would be wrong (cp404)' },
-	{ key: 'chat.export.parties_heading', locale: 'fr', reason: '(a) "Parties" is the same word in French — the parties to an agreement (cp404)' }
+	{ key: 'chat.export.parties_heading', locale: 'fr', reason: '(a) "Parties" is the same word in French — the parties to an agreement (cp404)' },
+	// cp424 — "Power up" / "Power down" are Blurt operation terms of art,
+	// kept verbatim like BLURT / BP. blurtwallet.com and Morphit's own FAQ
+	// (all 10 locales) use them untranslated; the wallet modal's subtitles
+	// + schedule notice ARE fully translated around them.
+	{ key: 'profile.wallet.power_up_action', locale: 'de', reason: '(b) "Power up" is a Blurt term of art (loanword); FAQ + blurtwallet.com keep it verbatim' },
+	{ key: 'profile.wallet.power_up_action', locale: 'es', reason: '(b) "Power up" is a Blurt term of art (loanword); FAQ + blurtwallet.com keep it verbatim' },
+	{ key: 'profile.wallet.power_up_action', locale: 'fr', reason: '(b) "Power up" is a Blurt term of art (loanword); FAQ + blurtwallet.com keep it verbatim' },
+	{ key: 'profile.wallet.power_down_action', locale: 'de', reason: '(b) "Power down" is a Blurt term of art (loanword); FAQ + blurtwallet.com keep it verbatim' },
+	{ key: 'profile.wallet.power_down_action', locale: 'es', reason: '(b) "Power down" is a Blurt term of art (loanword); FAQ + blurtwallet.com keep it verbatim' },
+	{ key: 'profile.wallet.power_down_action', locale: 'fr', reason: '(b) "Power down" is a Blurt term of art (loanword); FAQ + blurtwallet.com keep it verbatim' },
+	{ key: 'profile.wallet.power_up_title', locale: 'de', reason: '(c) "Power up BLURT" is all Blurt terms (Power up + BLURT); invariant across locales' },
+	{ key: 'profile.wallet.power_up_title', locale: 'es', reason: '(c) "Power up BLURT" is all Blurt terms (Power up + BLURT); invariant across locales' },
+	{ key: 'profile.wallet.power_up_title', locale: 'fr', reason: '(c) "Power up BLURT" is all Blurt terms (Power up + BLURT); invariant across locales' },
+	{ key: 'profile.wallet.power_down_title', locale: 'de', reason: '(c) "Power down BP" is all Blurt terms (Power down + BP); invariant across locales' },
+	{ key: 'profile.wallet.power_down_title', locale: 'es', reason: '(c) "Power down BP" is all Blurt terms (Power down + BP); invariant across locales' },
+	{ key: 'profile.wallet.power_down_title', locale: 'fr', reason: '(c) "Power down BP" is all Blurt terms (Power down + BP); invariant across locales' }
 ];
 
 const allowSet = new Set(ALLOW_LIST.map((e) => `${e.key}::${e.locale}`));

@@ -195,7 +195,7 @@ Once registered, orders posted on your instance carry your tag, and your share o
 
 **Upkeep — how often will I touch this?** Rarely. To update Morphit, `git pull`, then `sudo morphit-ops upgrade` — it rebuilds and redeploys the website (and the read-only helper) and restarts the services for you. Check on things any time with `morphit-ops status`, or the live health endpoint at `https://yourdomain.com/v1/health`.
 
-**Is the USD price healthy?** Run `morphit-ops health` and look at the price-feed lines. Morphit reads the BLURT price from several public providers at once and uses the middle value, so one provider being off doesn't move your price. The health view lists each provider, whether it answered, and the price it gave — so if one (say, a particular API) is down, you'll see a `down` next to its name and can ignore it unless several go dark at once. This detail shows only in your own `morphit-ops health` on the server, never on the public `https://yourdomain.com/v1/health` page.
+**Is the USD price healthy?** Run `morphit-ops health` and look at the price-feed lines. Morphit reads the BLURT price from several public providers at once — including Blurt's own feed (`api.blurt.blog`) — and uses the middle value, so one provider being off doesn't move your price. The health view lists each provider, whether it answered, and the price it gave — so if one (say, a particular API) is down, you'll see a `down` next to its name and can ignore it unless several go dark at once. (If you firewall your server's outbound traffic, allow `api.blurt.blog` along with the other price sites.) This detail shows only in your own `morphit-ops health` on the server, never on the public `https://yourdomain.com/v1/health` page.
 
 **Is the server itself OK?** The same `morphit-ops health` view has a **System** section showing your box's CPU, memory, and disk usage (the disk numbers match `df -h /`). It's a quick gut-check: if the disk is nearly full or the CPU is pegged at 100%, that's usually why things feel slow or the indexer falls behind. These numbers are read right off your own machine and are never exposed on the public health page.
 
@@ -207,13 +207,13 @@ The bits you copy into config, plus optional extra protection. Most people set t
 
 ### 11.1 Which assets you offer
 
-Every tradable asset is **on by default**. To switch some off, list their tickers in one line of your indexer config:
+Every tradable asset is **on by default** — including **BARTER** (goods/services, the one non-crypto "asset"). To switch some off, list their tickers in one line of your indexer config:
 
 ```
-MORPHIT_INDEXER_DISABLED_ASSETS=USDT,USDC,DAI,BCH,LTC,DASH,DOGE,ZEC,ARRR,DCR,SOL,ETH,XRP
+MORPHIT_INDEXER_DISABLED_ASSETS=USDT,USDC,DAI,BCH,LTC,DASH,DOGE,ZEC,ARRR,DCR,SOL,ETH,XRP,BARTER
 ```
 
-Leave it empty to offer everything. (BLURT, BTC and XMR are always available.)
+Leave it empty to offer everything. (BLURT, BTC and XMR are always available.) For example, a crypto-only instance that doesn't want off-platform barter listings would add `BARTER` to that line.
 
 ### 11.2 nginx: never cache the update files
 

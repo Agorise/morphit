@@ -418,7 +418,8 @@ file in the same turn.
 
 - [ ] **[blocking]** Decide your trade-only-asset operator
       stance.  The canonical morphit.io ships USDT, USDC, DAI,
-      BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, and XRP enabled by default; alternative
+      BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, and BARTER (goods/services — the
+      one non-crypto tradable "asset"; disable-able the same way) enabled by default; alternative
       instances may want to disable one or more instance-wide
       on philosophical (centralization, fork preference),
       regulatory, or audience-specialization grounds.
@@ -449,8 +450,11 @@ file in the same turn.
          `MORPHIT_INDEXER_DISABLED_ASSETS="DASH"`.
       8. Refuse DOGE — set
          `MORPHIT_INDEXER_DISABLED_ASSETS="DOGE"`.
-      9. Refuse multiple —
-         `MORPHIT_INDEXER_DISABLED_ASSETS="USDT,USDC,DAI,BCH,LTC,DASH,DOGE,ZEC,ARRR,DCR,SOL,ETH,XRP"`.
+      9. Refuse BARTER (goods/services — e.g. a crypto-only
+         instance) — set
+         `MORPHIT_INDEXER_DISABLED_ASSETS="BARTER"`.
+      10. Refuse multiple —
+         `MORPHIT_INDEXER_DISABLED_ASSETS="USDT,USDC,DAI,BCH,LTC,DASH,DOGE,ZEC,ARRR,DCR,SOL,ETH,XRP,BARTER"`.
 
       Federation note: disabling an asset means your own
       users cannot POST orders for it; you'll still see

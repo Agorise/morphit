@@ -43,6 +43,8 @@ export interface OrderbookStreamRow {
 	price_model: string | null;
 	location_region: string | null;
 	payment_methods: string[];
+	/** cp425 — accepted crypto set for a BARTER order; null for crypto assets. */
+	accepted_assets: string[] | null;
 	terms: string | null;
 	fee_method: 'blurt' | 'waived_first_buy' | 'btc' | 'xmr' | null;
 	feedback_count: number;
@@ -81,6 +83,7 @@ export function rowToWire(r: OrderbookStreamRow): Record<string, unknown> {
 		price_model: r.price_model,
 		location_region: r.location_region,
 		payment_methods: r.payment_methods,
+		accepted_assets: r.accepted_assets ?? null,
 		terms: r.terms,
 		fee_method: r.fee_method,
 		feedback_count: r.feedback_count,

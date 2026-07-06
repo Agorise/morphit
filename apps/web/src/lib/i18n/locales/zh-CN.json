@@ -386,6 +386,7 @@
       "mark_all_read": "全部标为已读",
       "conversation_aria_unread": "与 {peer} 的对话 — 未读",
       "conversation_aria_read": "与 {peer} 的对话",
+      "re_prefix": "RE:",
       "tab_messages": "消息",
       "tab_requests": "请求",
       "tabs_aria": "收件箱选项卡",
@@ -782,7 +783,8 @@
       "dcr": "Decred。一种由持有者投票决定如何运作的币。账本像 Bitcoin 一样公开，钱包内提供可选的隐私模式。",
       "sol": "Solana — 具有 Proof-of-History 排序的高吞吐量 PoS 加密货币。透明基础层，基金会 + 验证者社区治理，SPL 代币生态系统。仅交易：不能支付挂单费用。",
       "eth": "Ethereum — Proof-of-Stake 智能合约平台。透明基础层；无原生混合协议（第三方混合器在许多司法管辖区被制裁）。钱包端地址轮换是主要的隐私手段。交易 + 挂单费用。",
-      "xrp": "Ripple (XRP) — XRP Ledger 上面向支付的联邦拜占庭协议加密货币。透明基础层；协议层没有隐私。destination tag 是标识符（用于交易所路由），不是隐私功能。钱包端地址轮换是主要的隐私手段。交易 + 挂单费用。"
+      "xrp": "Ripple (XRP) — XRP Ledger 上面向支付的联邦拜占庭协议加密货币。透明基础层；协议层没有隐私。destination tag 是标识符（用于交易所路由），不是隐私功能。钱包端地址轮换是主要的隐私手段。交易 + 挂单费用。",
+      "barter": "以物易物——商品或服务,不是币。用本地货币定价,选择你接受的加密货币(如 XMR、BTC、DOGE),并在「条款」里准确描述你的提供内容。挂单不需要加密货币地址;以买家选择的、你接受的加密货币结算。在 Morphit 上仅供交换。"
     },
     "section_recovery": {
       "heading": "如果出了问题",
@@ -1251,7 +1253,7 @@
       },
       "how_to_stake_blurt": {
         "q": "如何质押我的 Blurt(power up 转成 BP)来赚取利息?",
-        "a": "质押 Blurt 是指把你的流动 Blurt 转换成 **Blurt Power(BP)**——Blurt 把这个过程称为「power up」。质押的 Blurt 每年约赚取 **2% 的利息(APR)**(实际利率根据链上通胀计算并在应用内显示),增强你的点赞权重,并赚取策展奖励。整个过程中它始终是你自己的币——不是存款,不是借贷,也不由任何其他人保管。\n\n**最简单的方式是使用 Blurt 钱包。**打开 [BlurtWallet.com](https://blurtwallet.com),用你的账户登录,找到你的流动 Blurt 余额,选择 **Power Up**。输入金额并确认。就这样——你的 Blurt 现在变成了 BP 并开始产生收益。\n\nMorphit 本身不是钱包,所以我们不会为你保管或转移 Blurt;power up 直接在区块链上、通过你控制的钱包完成。如果你想要换回流动 Blurt,就执行 **power down**,它会在大约四周内逐步释放(这种逐步解押是 Blurt 协议的规则,不是 Morphit 的)。"
+        "a": "质押 Blurt 是指把你的流动 Blurt 转换成 **Blurt Power(BP)**——Blurt 把这个过程称为「power up」。质押的 Blurt 每年约赚取 **2% 的利息(APR)**(实际利率根据链上通胀计算并在应用内显示),增强你的点赞权重,并赚取策展奖励。整个过程中它始终是你自己的币——不是存款,不是借贷,也不由任何其他人保管。\n\n**最简单的方式就是直接在 Morphit 里操作。**打开你的[钱包](/my/wallet),找到你的流动 Blurt 余额,选择 **Power Up**。输入金额并确认。就这样——你的 Blurt 现在变成了 BP 并开始产生收益。\n\nMorphit 从不为你保管或转移 Blurt——power up 直接在区块链上、用你自己的密钥签名完成。如果你想要换回流动 Blurt,就执行 **power down**,它会在 4 周内逐步释放(这种逐步解押是 Blurt 协议的规则,不是 Morphit 的)。"
       },
       "where_does_blurt_price_come_from": {
         "q": "Morphit 上显示的 Blurt 价格来自哪里?",
@@ -1660,6 +1662,10 @@
       "privacy_coins_onchain": {
         "q": "Morphit 如何保护我用隐私币交易的隐私？",
         "a": "Morphit 交易多种隐私币——门罗币（XMR）、Zcash（ZEC）、海盗链（ARRR）、达世币（DASH）和 Decred（DCR）——并对它们全部采用相同的链上足迹保护。\n\n**你的实际结算永远不会触及 Blurt。**当你交易隐私币时，币是在你和对手方的钱包之间点对点转移的，直接在该币自己的链上完成。该转账永远不会广播到、记录在 Morphit 用于协调的区块链上，也无法从中看到。Blurt 只承载公开的订单（广告）和端到端加密的聊天。\n\n**订单在 Blurt 上暴露什么——以及我们从中剥离了什么：**\n• 订单是一则广告，所以它的方向/资产/金额区间/支付方式必然是公开的（买家就是这样找到你的卖单）。这是任何公开订单簿的固有属性。\n• 但我们移除了所有不必要存在的内容：订单的 permlink 现在是一个不透明的随机令牌（`order-…`），而不是 `sell-xmr-usd-…`，因此资产名称不再泄露到链上 permlink、订单 URL、RSS 源或区块浏览器中。到期时间戳被取整到天，因此无法识别你发布的确切时刻。永远不会附加 IP、时区、语言或浏览器指纹——你在「Post Now」表单里填写的就是上链的全部内容。\n\n**每种币都有金额抖动。**当你在聊天中分享一个收款金额时，Morphit 会添加一条微小的随机尾数（精确到该币的最小单位——XMR 用皮可门罗，其他用聪级），使链上金额无法与你发布的订单匹配。默认开启。\n\n**ZEC、ARRR、DASH 和 DCR 仅供交易——它们的 TxID 根本不会出现在 Blurt 上。**你不能用它们支付 Morphit 的挂单费，而结算是点对点的，所以这些币的交易 ID 不存在任何被写入公开链的时刻。对这四种币而言，链上情况甚至比门罗币还要干净。\n\n**门罗币恰好有一处可选的跨链接触，且可以选择不用。**XMR 是三种资产之一（与 BLURT 和 BTC 一起），你*可以*用它支付那笔小额挂单费；如果你这样做，该费用支付的 TxID 会记录在你 Blurt 上的订单里（这样任何运营者都能用门罗币 tx_proof 验证费用——无需查看密钥，参见门罗币 TxID 常见问题）。那是门罗币 TxID 唯一触及 Blurt 的地方，而且只是一笔支付到公开地址的约 0.25 美元手续费，绝不是你的交易。想要门罗币与 Blurt 之间零关联？用 BLURT 支付挂单费即可——这是默认选项，价格只有一半。\n\n每种币的完整指南见 /privacy/{asset}（例如 /privacy/xmr、/privacy/zec），完整的泄露清单在项目的元数据泄露目录中。"
+      },
+      "what_is_barter": {
+        "q": "Morphit 上的以物易物是什么?",
+        "a": "以物易物让你买卖商品和服务——不是加密货币——并以加密货币结算。卖篮子的奶奶、修自行车的邻居、拿一箱橙子来换的人:他们把提供的东西挂出来,用本地货币定价,并选择接受哪些加密货币(比如 XMR、BTC 和 DOGE)。这是**一条挂单**,不是每种币一条。\n\n**如何运作:**在「条款」里准确描述你的提供内容,设定一个本地货币价值(单一价格或区间),并勾选你所在城镇真正使用的加密货币。买家像浏览其他挂单一样浏览货品,只能用你接受的加密货币付款——如果你没有列出 Decred,就没人能用 Decred 付你钱。你和买家在聊天中安排交接,并用他选择的、你接受的加密货币结算。\n\n**挂单上没有地址:**货品在 Morphit 之外易手——当面或邮寄——所以以物易物挂单没有加密货币收款地址,Morphit 也从不碰货品或款项。请讲常识安全:在公共场所见面,只分享必要的信息,把陌生人当作陌生人。\n\n在 Morphit 上,以物易物**仅供交换**——不能用它支付 Morphit 的挂单费(那些仍是 Blurt/BTC/XMR)。它只用于交换货品,别无其他。"
       }
     },
     "share_link": "分享",
@@ -1696,7 +1702,9 @@
     "history_state_expired": "已过期",
     "history_state_order_inactive": "订单已结束",
     "history_extended": "已延期 ×{n}",
-    "history_extended_title": "该竞价被反狙击机制延长了 {n} 次"
+    "history_extended_title": "该竞价被反狙击机制延长了 {n} 次",
+    "error_chain_rejected": "网络拒绝了此交易：{reason}",
+    "error_unreachable": "无法连接到你的 Morphit 实例进行广播。请检查网络连接后重试。"
   },
   "featured": {
     "heading": "当前推广",
@@ -2584,8 +2592,6 @@
       "fiat_no_matches": "没有匹配的货币",
       "fiat_remove": "移除",
       "asset_barter": "易货（商品/服务）",
-      "side_buy_goods": "想购买商品/服务的帖子",
-      "side_sell_goods": "想出售商品/服务的帖子",
       "side_label": "我想看",
       "side_any": "全部",
       "side_buy": "想买加密货币的订单",
@@ -2982,7 +2988,8 @@
         "dcr": "Decred (DCR)。一种由社区投票决定项目如何运作的币。它的账本像 Bitcoin 一样公开可见，钱包提供可选的隐私模式。没有中央发行方——没有人能冻结你的币。",
         "sol": "Solana — 具有 Proof-of-History 排序的高吞吐量 PoS 加密货币。透明基础层，无原生混合协议。钱包端地址轮换是主要的隐私手段。",
         "eth": "Ethereum (ETH) — Proof-of-Stake 智能合约平台。透明基础层；无原生混合协议。注意合约接收者（向没有 `payable receive()` 或 `fallback()` 的合约发送 ETH 将被回滚；币没丢失，但交易失败且您支付 gas）。",
-        "xrp": "Ripple (XRP) — XRP Ledger 上面向支付的联邦拜占庭协议加密货币。透明基础层；协议层没有隐私。destination tag 是标识符（用于交易所路由），不是隐私功能。钱包端地址轮换是主要的隐私手段。"
+        "xrp": "Ripple (XRP) — XRP Ledger 上面向支付的联邦拜占庭协议加密货币。透明基础层；协议层没有隐私。destination tag 是标识符（用于交易所路由），不是隐私功能。钱包端地址轮换是主要的隐私手段。",
+        "barter": "以物易物（商品/服务）。这不是加密货币——你提供货品或服务,并以你选择接受的加密货币收款。用你的本地货币定价;你和买家在聊天中商定细节,并用你接受的某种加密货币结算。在「条款」栏里准确描述你所提供的内容。"
       },
       "waiver_fiat_hint": "💡 Morphit 上大多数 BLURT 交易发生在活跃的 Blurt 社交网络用户、现有运营者之间，或通过易货进行。因此，请选择您本地使用的法定货币（USD、EUR、MXN 等），如果您想提供其他有价值的东西，可在第 3 步提供当面或易货（商品/服务）付款方式。",
       "waiver_benefits_heading": "你的购买能解锁：",
@@ -3009,7 +3016,9 @@
       "step_counter": "第 {n} 步，共 {total} 步",
       "fiat_required_hint": "选择你为这笔交易定价所用的货币。",
       "amount_entered_usd_hint": "{amount} {fiat}（≈ {usd}）",
-      "returning_min_hint": "至少 {amount} {fiat}（≈ {usd}）"
+      "returning_min_hint": "至少 {amount} {fiat}（≈ {usd}）",
+      "barter_accept_label": "你接受哪些加密货币?",
+      "barter_accept_hint": "勾选买家可以用来付款的加密货币——选择你真正使用的。"
     },
     "errors": {
       "fiat_empty": "请选择一种法币(如 USD 或 EUR)。",
@@ -3151,7 +3160,9 @@
       "amount_min_plus": "价值 {min} {fiat} 或以上的 {asset}",
       "amount_any": "任意数量的 {asset}",
       "price_market": "以市场价格",
-      "price_fixed": "以 {price} {fiat}/{asset} 的固定价格"
+      "price_fixed": "以 {price} {fiat}/{asset} 的固定价格",
+      "barter_sentence_sell": "你提供价值 {value} 的商品/服务,接受 {cryptos}。",
+      "barter_sentence_buy": "你想要价值 {value} 的商品/服务,用 {cryptos} 付款。"
     }
   },
   "prices": {
@@ -3378,8 +3389,8 @@
     "rss_subscribe_title": "当该交易者发布新的买/卖单时通过 RSS 收到通知。注意:轮询按交易者的订阅比全站订阅稍稍更具揭示性。",
     "feedback_suppressed_chip": "不计入评分 — 评论者被标记为关联账户",
     "my_balance": {
-      "section_label": "@{account} 的余额",
-      "title": "@{account} 的余额",
+      "section_label": "@{account} 的钱包",
+      "title": "@{account} 的钱包",
       "private_label": "仅你可见",
       "loading": "正在加载余额...",
       "error": "无法加载余额",
@@ -3423,7 +3434,54 @@
     },
     "as_buyer": "作为买家",
     "as_seller": "作为卖家",
-    "last_traded_label": "最近交易:"
+    "last_traded_label": "最近交易:",
+    "wallet": {
+      "power_up_action": "Power up",
+      "power_down_action": "Power down",
+      "power_up_title": "Power up BLURT",
+      "power_down_title": "Power down BP",
+      "power_up_subtitle": "power up 会把你的流动 BLURT 转换成 Blurt Power(BP)。质押的 BLURT 会赚取收益、增强你的投票权,并且始终完全属于你——不是存款,也不是借贷。",
+      "power_down_subtitle": "power down 会把你的 Blurt Power(BP)转换回流动 BLURT。",
+      "amount_label": "数量",
+      "power_up_placeholder": "要 power up 的 BLURT",
+      "power_down_placeholder": "要 power down 的 BP",
+      "use_full": "使用全部余额",
+      "available_blurt": "可用:{amount} BLURT",
+      "available_bp": "可用:{amount} BP",
+      "power_down_schedule": "这不是即时的:你的 BP 会在 4 周内逐步释放回流动 BLURT。这种逐步释放是 Blurt 协议的规则,不是 Morphit 的。",
+      "password_label": "你的 @{account} 密码(用于以你的活跃密钥签名)",
+      "error_password_required": "请输入密码以继续。",
+      "error_bad_password": "该密码未能解锁你的活跃密钥。请检查后重试。",
+      "error_no_active_key": "此设备没有可用于签名的活跃密钥。请使用助记词登录以进行 power up 或 power down。",
+      "error_broadcast": "该操作未能在链上完成。请重试。",
+      "error_amount": "请输入不超过可用余额的数量。"
+    },
+    "send": {
+      "title": "发送 BLURT",
+      "subtitle": "向任意 Blurt 账户发送 BLURT。",
+      "recipient_label": "收款人",
+      "recipient_placeholder": "Blurt 账户名",
+      "recipient_checking": "检查中…",
+      "recipient_valid": "已找到账户",
+      "recipient_not_found": "链上不存在该名称的账户。",
+      "recipient_invalid": "这不是有效的 Blurt 账户名。",
+      "recipient_self": "你不能给自己发送 BLURT。",
+      "recipient_error": "无法检查该账户。请重试。",
+      "amount_placeholder": "要发送的 BLURT",
+      "memo_label": "备注(可选)",
+      "memo_placeholder": "例如订单编号",
+      "memo_privacy_warning": "备注会以明文形式公开且永久地存储在区块链上。切勿填写密码、密钥或任何隐私信息。",
+      "error_no_active_key": "此设备没有可用于签名的活跃密钥。请使用助记词登录以发送 BLURT。",
+      "send_button": "发送",
+      "confirm": "发送 BLURT",
+      "qr_heading": "扫描收款人二维码",
+      "qr_body": "将摄像头对准 Blurt 账户二维码即可填入收款人。",
+      "qr_start_button": "开启摄像头",
+      "qr_scanning_hint": "将二维码稳定地保持在取景框内。",
+      "qr_camera_denied": "摄像头访问被阻止。请在浏览器设置中允许后重试。",
+      "qr_no_camera": "此设备没有可用于扫描的摄像头。",
+      "qr_invalid": "该二维码不包含 Blurt 账户。请换一个。"
+    }
   },
   "relative_time": {
     "descriptive": {
@@ -3735,23 +3793,23 @@
       "description": "精选的 Morphit 实例列表。每个实例由独立运营者运行;用户可自行选择交易地点。"
     },
     "explorer_search": {
-      "title": "区块浏览器",
-      "description": "搜索区块链上的区块、交易和账户。"
+      "title": "Blurt 区块浏览器",
+      "description": "在 Blurt 区块链上搜索区块、交易和账户——无需登录、无追踪、无需账户。"
     },
     "explorer_account": {
-      "title": "账户 {account} — 区块浏览器",
+      "title": "账户 {account} — Blurt 区块浏览器",
       "description": "{account} 在区块链上的链上历史。"
     },
     "explorer_activity": {
-      "title": "实时活动 — 区块浏览器",
+      "title": "实时活动 — Blurt 区块浏览器",
       "description": "区块链上 Morphit 相关操作的实时动态。"
     },
     "explorer_block": {
-      "title": "区块 {block} — 区块浏览器",
+      "title": "区块 {block} — Blurt 区块浏览器",
       "description": "Blurt 区块 {block} 中包含的操作。"
     },
     "explorer_tx": {
-      "title": "交易 {trx} — 区块浏览器",
+      "title": "交易 {trx} — Blurt 区块浏览器",
       "description": "此 Blurt 交易中包含的操作。"
     },
     "login_qr": {
@@ -4447,7 +4505,8 @@
     "buy_range": "我想买价值 {min}–{max} {fiat} 的 {asset}",
     "sell_range": "我想卖价值 {min}–{max} {fiat} 的 {asset}",
     "buy_any": "我想买 {asset}",
-    "sell_any": "我想卖 {asset}"
+    "sell_any": "我想卖 {asset}",
+    "goods_services": "商品/服务"
   },
   "stats": {
     "page_title": "网络统计",

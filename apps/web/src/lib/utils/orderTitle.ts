@@ -20,6 +20,8 @@
  * existing grouping/precision behaviour.
  */
 
+import { isGoodsAsset, type AssetTicker } from '@morphit/asset-registry';
+
 export interface OrderTitleInput {
 	/** 'buy' | 'sell' — anything other than 'sell' is treated as buy. */
 	readonly side: string;
@@ -48,10 +50,16 @@ export interface OrderTitleParts {
  */
 export function orderTitleParts(
 	o: OrderTitleInput,
-	fmt: (n: number) => string = (n) => String(n)
+	fmt: (n: number) => string = (n) => String(n),
+	goodsLabel?: string
 ): OrderTitleParts {
 	const side = o.side === 'sell' ? 'sell' : 'buy';
-	const asset = o.asset;
+	// cp425 — for a goods asset (BARTER) the sentence reads "worth of
+	// goods/services" instead of "worth of BARTER"; callers pass a localized
+	// `goodsLabel`. Falls back to the raw ticker if none is provided (e.g. a
+	// caller that hasn't been updated), so the title is always sensible.
+	const asset =
+		isGoodsAsset(o.asset as AssetTicker) && goodsLabel ? goodsLabel : o.asset;
 	const fiat = o.fiat_currency;
 	const hasMin = o.amount_min !== null && o.amount_min !== undefined;
 	const hasMax = o.amount_max !== null && o.amount_max !== undefined;

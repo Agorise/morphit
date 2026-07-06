@@ -145,7 +145,10 @@ await scenario('BLURT fee path: verifies a 62.5-BLURT transfer at tier 1', async
 	// The INSERT should have been called with fee_status='verified'.
 	const insertCall = mock.queries.find((q) => q.text.includes('INSERT INTO orders'));
 	if (!insertCall) throw new Error('no INSERT INTO orders query');
-	const feeStatus = insertCall.params[insertCall.params.length - 2];
+	// fee_status sits third-from-last in the BLURT insert's params: the two
+	// trailing columns are operator_tag then accepted_assets (cp425). If you
+	// add another trailing column to the BLURT insert, bump this offset.
+	const feeStatus = insertCall.params[insertCall.params.length - 3];
 	if (feeStatus !== 'verified') {
 		throw new Error(`expected fee_status=verified, got ${feeStatus}`);
 	}
@@ -169,7 +172,7 @@ await scenario('BLURT fee path: chain-pinned blurtBase overrides config (cp372 d
 	const r = await handler(ctx, mock.client);
 	assertEqual(r, { ok: true }, 'result');
 	const insertCall = mock.queries.find((q) => q.text.includes('INSERT INTO orders'));
-	const feeStatus = insertCall!.params[insertCall!.params.length - 2];
+	const feeStatus = insertCall!.params[insertCall!.params.length - 3];
 	if (feeStatus !== 'underpaid') {
 		throw new Error(`chain-pinned base=100 should reject a 62.5 pay, got ${feeStatus}`);
 	}
@@ -188,7 +191,7 @@ await scenario('BLURT fee path: chain-pinned blurtBase=100 verifies a 100-BLURT 
 	const r = await handler(ctx, mock.client);
 	assertEqual(r, { ok: true }, 'result');
 	const insertCall = mock.queries.find((q) => q.text.includes('INSERT INTO orders'));
-	const feeStatus = insertCall!.params[insertCall!.params.length - 2];
+	const feeStatus = insertCall!.params[insertCall!.params.length - 3];
 	if (feeStatus !== 'verified') {
 		throw new Error(`chain-pinned base=100, 100-BLURT pay should verify, got ${feeStatus}`);
 	}
@@ -209,7 +212,7 @@ await scenario('BLURT fee path: Plan-B fallback to config.feeBaseBlurt when no c
 	const r = await handler(ctx, mock.client);
 	assertEqual(r, { ok: true }, 'result');
 	const insertCall = mock.queries.find((q) => q.text.includes('INSERT INTO orders'));
-	const feeStatus = insertCall!.params[insertCall!.params.length - 2];
+	const feeStatus = insertCall!.params[insertCall!.params.length - 3];
 	if (feeStatus !== 'verified') {
 		throw new Error(`Plan-B config fallback should verify a 62.5 pay, got ${feeStatus}`);
 	}
@@ -229,7 +232,7 @@ await scenario('BLURT fee path: tier multiplier kicks in at the 4th order', asyn
 	assertEqual(r, { ok: true }, 'result');
 
 	const insertCall = mock.queries.find((q) => q.text.includes('INSERT INTO orders'));
-	const feeStatus = insertCall!.params[insertCall!.params.length - 2];
+	const feeStatus = insertCall!.params[insertCall!.params.length - 3];
 	if (feeStatus !== 'verified') {
 		throw new Error(`tier 4 78.125-BLURT pay should verify, got ${feeStatus}`);
 	}
@@ -251,7 +254,7 @@ await scenario('BLURT fee path: tier-4 underpayment (62.5 BLURT against 78.125) 
 	assertEqual(r, { ok: true }, 'result');
 
 	const insertCall = mock.queries.find((q) => q.text.includes('INSERT INTO orders'));
-	const feeStatus = insertCall!.params[insertCall!.params.length - 2];
+	const feeStatus = insertCall!.params[insertCall!.params.length - 3];
 	if (feeStatus !== 'underpaid') {
 		throw new Error(`expected fee_status=underpaid, got ${feeStatus}`);
 	}
@@ -277,7 +280,7 @@ await scenario(
 		assertEqual(r, { ok: true }, 'result');
 
 		const insertCall = mock.queries.find((q) => q.text.includes('INSERT INTO orders'));
-		const feeStatus = insertCall!.params[insertCall!.params.length - 2];
+		const feeStatus = insertCall!.params[insertCall!.params.length - 3];
 		if (feeStatus !== 'verified') {
 			throw new Error(`62.45 BLURT (within tolerance) should verify, got ${feeStatus}`);
 		}
@@ -303,7 +306,7 @@ await scenario(
 		assertEqual(r, { ok: true }, 'result');
 
 		const insertCall = mock.queries.find((q) => q.text.includes('INSERT INTO orders'));
-		const feeStatus = insertCall!.params[insertCall!.params.length - 2];
+		const feeStatus = insertCall!.params[insertCall!.params.length - 3];
 		if (feeStatus !== 'underpaid') {
 			throw new Error(`expected fee_status=underpaid, got ${feeStatus}`);
 		}
@@ -330,7 +333,7 @@ await scenario(
 		assertEqual(r, { ok: true }, 'result');
 
 		const insertCall = mock.queries.find((q) => q.text.includes('INSERT INTO orders'));
-		const feeStatus = insertCall!.params[insertCall!.params.length - 2];
+		const feeStatus = insertCall!.params[insertCall!.params.length - 3];
 		if (feeStatus !== 'verified') {
 			throw new Error(`55 BLURT (within FEE_PRICE_TOLERANCE of 62.5) should verify, got ${feeStatus}`);
 		}
@@ -353,7 +356,7 @@ await scenario('BLURT fee path: missing transfer marks fee_status=missing', asyn
 	assertEqual(r, { ok: true }, 'result');
 
 	const insertCall = mock.queries.find((q) => q.text.includes('INSERT INTO orders'));
-	const feeStatus = insertCall!.params[insertCall!.params.length - 2];
+	const feeStatus = insertCall!.params[insertCall!.params.length - 3];
 	if (feeStatus !== 'missing') {
 		throw new Error(`expected fee_status=missing, got ${feeStatus}`);
 	}
@@ -377,7 +380,7 @@ await scenario(
 		assertEqual(r, { ok: true }, 'result');
 
 		const insertCall = mock.queries.find((q) => q.text.includes('INSERT INTO orders'));
-		const feeStatus = insertCall!.params[insertCall!.params.length - 2];
+		const feeStatus = insertCall!.params[insertCall!.params.length - 3];
 		if (feeStatus !== 'missing') {
 			throw new Error(`memo-mismatch should be 'missing', got ${feeStatus}`);
 		}
@@ -398,7 +401,7 @@ await scenario('BLURT fee path: wrong recipient treated as missing', async () =>
 	assertEqual(r, { ok: true }, 'result');
 
 	const insertCall = mock.queries.find((q) => q.text.includes('INSERT INTO orders'));
-	const feeStatus = insertCall!.params[insertCall!.params.length - 2];
+	const feeStatus = insertCall!.params[insertCall!.params.length - 3];
 	if (feeStatus !== 'missing') {
 		throw new Error(`wrong-recipient should be 'missing', got ${feeStatus}`);
 	}
@@ -424,7 +427,7 @@ await scenario('BLURT fee path: operator-tunable feeBaseBlurt (80) shifts fee ma
 	assertEqual(r, { ok: true }, 'result');
 
 	const insertCall = mock.queries.find((q) => q.text.includes('INSERT INTO orders'));
-	const feeStatus = insertCall!.params[insertCall!.params.length - 2];
+	const feeStatus = insertCall!.params[insertCall!.params.length - 3];
 	if (feeStatus !== 'verified') {
 		throw new Error(`80 BLURT pay against 80-base should verify, got ${feeStatus}`);
 	}
@@ -453,7 +456,7 @@ await scenario('BLURT fee path: 60 BLURT pay against 80-base operator rejects', 
 	assertEqual(r, { ok: true }, 'result');
 
 	const insertCall = mock.queries.find((q) => q.text.includes('INSERT INTO orders'));
-	const feeStatus = insertCall!.params[insertCall!.params.length - 2];
+	const feeStatus = insertCall!.params[insertCall!.params.length - 3];
 	if (feeStatus !== 'underpaid') {
 		throw new Error(`60-pay-against-80-base should underpay, got ${feeStatus}`);
 	}
@@ -1126,4 +1129,77 @@ if (failures > 0) {
 	console.log(`✗ ${failures}/${scenarios} scenarios failed`);
 	process.exit(1);
 }
+// ─── cp425: barter (accepted_assets) validation ─────────────────
+// A BARTER order settles in one of a SET of cryptos the seller accepts.
+// accepted_assets is REQUIRED (non-empty crypto set) for BARTER and
+// FORBIDDEN for crypto assets; each entry must be a real crypto ticker.
+await scenario('barter: rejects order with no accepted_assets', async () => {
+	const mock = makeMockClient();
+	const r = await handler(
+		makeCtx({
+			signer: 'alice',
+			payload: makePayload({ asset: 'BARTER', payment_methods: ['in-person'] })
+		}),
+		mock.client
+	);
+	assertEqual(r, { ok: false, reason: 'accepted_assets_required_for_barter' }, 'result');
+});
+
+await scenario('barter: rejects order with an empty accepted_assets set', async () => {
+	const mock = makeMockClient();
+	const r = await handler(
+		makeCtx({
+			signer: 'alice',
+			payload: makePayload({
+				asset: 'BARTER',
+				payment_methods: ['in-person'],
+				accepted_assets: []
+			})
+		}),
+		mock.client
+	);
+	assertEqual(r, { ok: false, reason: 'accepted_assets_required_for_barter' }, 'result');
+});
+
+await scenario('barter: rejects accepting a goods asset (no barter-for-barter)', async () => {
+	const mock = makeMockClient();
+	const r = await handler(
+		makeCtx({
+			signer: 'alice',
+			payload: makePayload({
+				asset: 'BARTER',
+				payment_methods: ['in-person'],
+				accepted_assets: ['XMR', 'BARTER']
+			})
+		}),
+		mock.client
+	);
+	assertEqual(r, { ok: false, reason: 'accepted_assets_entry_not_crypto' }, 'result');
+});
+
+await scenario('barter: rejects accepting an unknown ticker', async () => {
+	const mock = makeMockClient();
+	const r = await handler(
+		makeCtx({
+			signer: 'alice',
+			payload: makePayload({
+				asset: 'BARTER',
+				payment_methods: ['in-person'],
+				accepted_assets: ['XMR', 'NOTACOIN']
+			})
+		}),
+		mock.client
+	);
+	assertEqual(r, { ok: false, reason: 'accepted_assets_entry_unknown' }, 'result');
+});
+
+await scenario('crypto order: rejects a stray accepted_assets field', async () => {
+	const mock = makeMockClient();
+	const r = await handler(
+		makeCtx({ signer: 'alice', payload: makePayload({ accepted_assets: ['XMR'] }) }),
+		mock.client
+	);
+	assertEqual(r, { ok: false, reason: 'accepted_assets_not_permitted_for_asset' }, 'result');
+});
+
 console.log(`✓ all ${scenarios} scenarios passed`);

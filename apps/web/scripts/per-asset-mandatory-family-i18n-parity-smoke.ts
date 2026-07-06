@@ -73,7 +73,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ASSET_TICKERS } from '../../../packages/asset-registry/src/index';
+import { ASSET_TICKERS, isGoodsAsset, type AssetTicker } from '../../../packages/asset-registry/src/index';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -98,6 +98,12 @@ interface Family {
 	readonly id: string;
 	readonly pathTemplate: string;
 	readonly renderSite: string;
+	/** cp425 — true for families that only make sense for a crypto asset
+	 *  (e.g. the per-asset PRIVACY GUIDE). Goods assets (BARTER) have no
+	 *  on-chain privacy guide, so these are skipped for them via isGoodsAsset.
+	 *  Non-crypto-specific families (asset_explainer, cheat sheet) apply to
+	 *  goods too and stay required. */
+	readonly cryptoOnly?: boolean;
 }
 
 const MANDATORY_FAMILIES: Family[] = [
@@ -114,17 +120,20 @@ const MANDATORY_FAMILIES: Family[] = [
 	{
 		id: 'privacy_guide_one_line',
 		pathTemplate: 'privacy.guides.{ticker}.one_line',
-		renderSite: 'apps/web/src/routes/[lang]/privacy/+page.svelte (privacy index card)'
+		renderSite: 'apps/web/src/routes/[lang]/privacy/+page.svelte (privacy index card)',
+		cryptoOnly: true
 	},
 	{
 		id: 'privacy_guide_intro',
 		pathTemplate: 'privacy.guides.{ticker}.intro',
-		renderSite: 'apps/web/src/routes/[lang]/privacy/[asset]/+page.svelte (guide body)'
+		renderSite: 'apps/web/src/routes/[lang]/privacy/[asset]/+page.svelte (guide body)',
+		cryptoOnly: true
 	},
 	{
 		id: 'privacy_guide_meta_description',
 		pathTemplate: 'privacy.guides.{ticker}.meta_description',
-		renderSite: 'apps/web/src/routes/[lang]/privacy/[asset]/+page.svelte (HTML meta description)'
+		renderSite: 'apps/web/src/routes/[lang]/privacy/[asset]/+page.svelte (HTML meta description)',
+		cryptoOnly: true
 	}
 ];
 
@@ -170,6 +179,9 @@ for (const loc of localeFiles) {
 
 for (const family of MANDATORY_FAMILIES) {
 	for (const tickerUpper of ASSET_TICKERS) {
+		// cp425 — skip crypto-only families (privacy guides) for goods
+		// assets (BARTER): a barter listing has no on-chain privacy guide.
+		if (family.cryptoOnly && isGoodsAsset(tickerUpper as AssetTicker)) continue;
 		const ticker = tickerUpper.toLowerCase();
 		const path = family.pathTemplate.replace('{ticker}', ticker);
 		for (const locale of localeFiles) {

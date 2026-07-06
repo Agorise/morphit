@@ -44,7 +44,7 @@ const SENTINEL = '\u0000';
  * (the caller renders with `white-space: pre-line`). Pure + idempotent-safe on
  * already-escaped text.
  */
-export function renderFaqInline(input: string): string {
+export function renderFaqInline(input: string, localizeHref?: (path: string) => string): string {
 	if (!input) return '';
 
 	// 1. Escape everything first. From here we only ADD known-safe tags.
@@ -67,8 +67,14 @@ export function renderFaqInline(input: string): string {
 		const href = safeHref(raw);
 		if (href === null) return whole; // leave unsafe/odd links as literal text
 		const internal = href.startsWith('/') || href.startsWith('#');
+		// cp425 — locale-prefix path-internal links (e.g. `/my/wallet` →
+		// `/{lang}/my/wallet`) via the caller's localizer so an in-app link
+		// in an answer lands on the right per-locale route. `#hash` links and
+		// external URLs pass through unchanged; safeHref already validated the
+		// path, so the localizer only ever sees a known-safe `/…` string.
+		const finalHref = href.startsWith('/') && localizeHref ? localizeHref(href) : href;
 		const rel = internal ? '' : ' target="_blank" rel="noopener noreferrer"';
-		return stash(`<a href="${escapeHtml(href)}" class="underline hover:no-underline"${rel}>${text}</a>`);
+		return stash(`<a href="${escapeHtml(finalHref)}" class="underline hover:no-underline"${rel}>${text}</a>`);
 	});
 
 	// 3. Emphasis on the remaining (sentinel-protected) text. Bold before

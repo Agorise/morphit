@@ -70,8 +70,12 @@ scenario('adversarial values + keys are fully escaped (no raw HTML tag leaks)', 
 	const html = highlightJsonToHtml(JSON.stringify(ADVERSARIAL, null, 2));
 	assert(!html.includes('<script>'), 'raw <script> present');
 	assert(!html.includes('</script>'), 'raw </script> present');
-	assert(!html.includes('onerror="'), 'raw onerror attribute present');
+	// cp425 — `onerror="` can now legitimately appear as TEXT (escaped quotes
+	// are unescaped for readability), but only INSIDE an escaped `&lt;img…&gt;`,
+	// where it can't execute. The real guarantee is that the tag is neutralized,
+	// which `!<img` + `assertNoRawHtml` below already enforce.
 	assert(!html.includes('<img'), 'raw <img present');
+	assert(html.includes('&lt;img'), 'the <img tag must be HTML-escaped');
 	assert(html.includes('&lt;script&gt;'), 'expected escaped &lt;script&gt;');
 	assertNoRawHtml(html, 'adversarial');
 });
@@ -88,9 +92,19 @@ scenario('only whitelisted json-* span classes appear (no other tags/attrs)', ()
 	assert(!strayTag, 'a tag other than the whitelisted json-* spans was emitted');
 });
 
-scenario('transform is lossless (strip + unescape === input)', () => {
+scenario('transform is lossless for non-display-escaped input (HTML-escaping round-trips)', () => {
+	// The highlighter intentionally TRANSFORMS display escapes for readability
+	// (\n/\t → real breaks/tabs; cp425: \" \\ \/ → their real char), so a value
+	// carrying those is deliberately not byte-recoverable — that's the module's
+	// stated posture. This check pins the property that still matters for data
+	// integrity: the HTML-escaping of `< > &` (and everything else) round-trips
+	// exactly for input WITHOUT those display escapes.
 	for (const input of [
-		JSON.stringify(ADVERSARIAL, null, 2),
+		JSON.stringify(
+			{ tag: 'a & b < c > d', nested: { '<b>k</b>': [true, false, null, 42, -3.14e2] } },
+			null,
+			2
+		),
 		JSON.stringify({ a: 1, b: 'two', c: [true, false, null], d: -3.14e2 }, null, 2),
 		JSON.stringify('a bare string', null, 2),
 		JSON.stringify(42, null, 2),
@@ -98,6 +112,23 @@ scenario('transform is lossless (strip + unescape === input)', () => {
 	]) {
 		assert(unhighlight(highlightJsonToHtml(input)) === input, `not lossless for: ${input.slice(0, 60)}`);
 	}
+});
+
+scenario('cp425 — literal \\" \\\\ \\/ escapes render as their real char (readability)', () => {
+	// Ken: short_bio `type some "weird" chars` must show real quotes.
+	const q = highlightJsonToHtml(JSON.stringify({ bio: 'type "weird" chars' }, null, 2));
+	assert(q.includes('type "weird" chars'), 'escaped quotes not unescaped for display');
+	assert(!q.includes('\\"weird\\"'), 'the literal \\" form should no longer appear');
+	// An escaped backslash `a\b` collapses to one backslash for display.
+	const b = highlightJsonToHtml(JSON.stringify({ p: 'a\\b' }, null, 2));
+	assert(b.includes('a\\b'), 'escaped backslash not collapsed for display');
+	// An escaped slash from a raw JSON payload shows as `/`.
+	const s = highlightJsonToHtml('{\n  "u": "x\\/y"\n}');
+	assert(s.includes('x/y'), 'escaped slash not unescaped for display');
+	// SECURITY unchanged: an escaped-quote-then-tag value stays inert.
+	const evil = highlightJsonToHtml(JSON.stringify({ x: '"><script>alert(1)</script>' }, null, 2));
+	assertNoRawHtml(evil, 'escaped-quote-then-tag');
+	assert(!evil.includes('<script>'), 'raw <script> present after quote unescape');
 });
 
 scenario('benign tokens get the right classes', () => {

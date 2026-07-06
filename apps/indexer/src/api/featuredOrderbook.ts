@@ -53,6 +53,8 @@ interface FeaturedRow {
 	price_model: Record<string, unknown>;
 	location_region: string | null;
 	payment_methods: string[];
+	/** cp425 — accepted crypto set for a BARTER order; null for crypto assets. */
+	accepted_assets: string[] | null;
 	terms: string | null;
 	status: string;
 	updated_at: Date;
@@ -106,7 +108,7 @@ export function featuredRoute(db: Database, operatorAccount: string): Hono {
 				o.account, o.permlink, o.side, o.asset, o.fiat_currency,
 				o.amount_min::text AS amount_min,
 				o.amount_max::text AS amount_max,
-				o.price_model, o.location_region, o.payment_methods,
+				o.price_model, o.location_region, o.payment_methods, o.accepted_assets,
 				o.terms, o.status, o.updated_at,
 				o.expires_at AS expires_at_order,
 				o.fee_status, o.fee_method,
@@ -135,6 +137,7 @@ export function featuredRoute(db: Database, operatorAccount: string): Hono {
 				price_model: r.price_model,
 				location_region: r.location_region,
 				payment_methods: r.payment_methods,
+				accepted_assets: r.accepted_assets ?? null,
 				terms: r.terms,
 				status: r.status,
 				updated_at: r.updated_at.toISOString(),

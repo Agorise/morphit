@@ -26,9 +26,12 @@
 	import { _ } from 'svelte-i18n';
 	import { ASSETS } from '$lib/assets/registry';
 	import { instance } from '$stores/instance';
-	import type { AssetTicker } from '@morphit/asset-registry';
+	import { isGoodsAsset, type AssetTicker } from '@morphit/asset-registry';
 
-	/** '' = Any · an uppercase ticker · 'barter' = goods/services. */
+	/** '' = Any · an uppercase crypto ticker · 'barter' = the goods/services
+	 *  ASSET (cp425). The 'barter' sentinel keeps the goods entry visually
+	 *  distinct (its own icon + "goods/services" label) rather than mixed into
+	 *  the coin list; the orderbook page maps it to `o.asset = 'BARTER'`. */
 	type AssetFilterValue = '' | AssetTicker | 'barter';
 
 	let { value = $bindable('' as AssetFilterValue) } = $props();
@@ -43,8 +46,16 @@
 	);
 
 	// Tradable coins, operator-disabled filtered, alphabetized by name.
+	// cp425 — goods assets (BARTER) are excluded here; barter has its own
+	// distinct "goods/services" entry below (the 'barter' sentinel), so it
+	// isn't mixed into the coin list.
 	const coins = $derived(
-		ASSETS.filter((a) => a.canBeTraded && !disabled.has(a.displayTicker.toUpperCase()))
+		ASSETS.filter(
+			(a) =>
+				a.canBeTraded &&
+				!isGoodsAsset(a.displayTicker as AssetTicker) &&
+				!disabled.has(a.displayTicker.toUpperCase())
+		)
 			.slice()
 			.sort((a, b) => a.displayName.localeCompare(b.displayName))
 	);

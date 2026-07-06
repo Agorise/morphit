@@ -30,7 +30,7 @@ import { CANONICAL_TREASURY } from '../../config/canonicalTreasury';
 import { checkJsonbSize } from '$indexer/payloadSize';
 import { validateOrderPermlink } from '$indexer/permlink';
 import { logger } from '$log';
-import { ASSET_TICKERS_SET, FIRST_ORDER_MIN_USD, FEE_PRICE_TOLERANCE, type AssetTicker } from '@morphit/asset-registry';
+import { ASSET_TICKERS_SET, FIRST_ORDER_MIN_USD, FEE_PRICE_TOLERANCE, isGoodsAsset, type AssetTicker } from '@morphit/asset-registry';
 
 const log = logger('order-handler');
 
@@ -124,6 +124,12 @@ interface ValidatedOrder {
 	 *  (BTC, XMR, BLURT, BCH, LTC, DASH, DOGE).  Pinned at post
 	 *  time so cross-network sends are impossible. */
 	readonly asset_network: string | null;
+	/** cp425 — for a BARTER (goods/services) order, the non-empty set of
+	 *  crypto tickers the seller accepts as settlement (canonical sorted,
+	 *  deduped, e.g. ['BTC','DOGE','XMR']).  Each is a real crypto ticker in
+	 *  ASSET_TICKERS, never BARTER or any goods asset.  Null for every crypto
+	 *  asset — those settle in themselves and carry no accepted-set. */
+	readonly accepted_assets: readonly string[] | null;
 }
 
 function validate(payload: unknown): ValidatedOrder | { reason: string } {
@@ -460,6 +466,51 @@ function validate(payload: unknown): ValidatedOrder | { reason: string } {
 		asset_network = null;
 	}
 
+	// cp425 — accepted_assets: the set of cryptos a BARTER (goods/services)
+	// listing accepts as settlement.  REQUIRED (non-empty) when the asset is
+	// a goods asset (BARTER); must be OMITTED for every crypto asset (they
+	// settle in themselves).  Each entry must be a real crypto ticker in the
+	// registry — never BARTER, never any goods asset (no barter-for-barter).
+	let accepted_assets: string[] | null = null;
+	const acceptedRaw = (payload as Record<string, unknown>).accepted_assets;
+	if (isGoodsAsset(asset as AssetTicker)) {
+		if (!Array.isArray(acceptedRaw) || acceptedRaw.length === 0) {
+			return { reason: 'accepted_assets_required_for_barter' };
+		}
+		// Bound the set — there are only a handful of crypto tickers, so a
+		// list longer than the registry is malformed (or a padding attempt).
+		if (acceptedRaw.length > ASSET_TICKERS_SET.size) {
+			return { reason: 'accepted_assets_too_many' };
+		}
+		const seen = new Set<string>();
+		for (const entry of acceptedRaw) {
+			if (typeof entry !== 'string') {
+				return { reason: 'accepted_assets_entry_not_string' };
+			}
+			// Must be a registered ticker...
+			if (!ASSET_TICKERS_SET.has(entry)) {
+				return { reason: 'accepted_assets_entry_unknown' };
+			}
+			// ...and a CRYPTO one — never a goods asset (barter can't accept
+			// barter, and can't accept another goods asset either).
+			if (isGoodsAsset(entry as AssetTicker)) {
+				return { reason: 'accepted_assets_entry_not_crypto' };
+			}
+			seen.add(entry);
+		}
+		// Dedupe → canonical sorted order so the same accepted-set always
+		// serializes identically on the row and renders as a stable list.
+		accepted_assets = [...seen].sort();
+	} else {
+		// Crypto asset — accepted_assets must be absent/null.  A crypto order
+		// settles in itself; a set here is malformed or an attempt to confuse
+		// downstream readers.
+		if (acceptedRaw !== undefined && acceptedRaw !== null) {
+			return { reason: 'accepted_assets_not_permitted_for_asset' };
+		}
+		accepted_assets = null;
+	}
+
 	return {
 		permlink,
 		side: side as 'buy' | 'sell',
@@ -476,7 +527,8 @@ function validate(payload: unknown): ValidatedOrder | { reason: string } {
 		fee_method,
 		external_tx_id,
 		tx_proof,
-		asset_network
+		asset_network,
+		accepted_assets
 	};
 }
 
@@ -668,9 +720,9 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 				account, permlink, side, asset, asset_network, fiat_currency,
 				amount_min, amount_max, price_model, location_region,
 				payment_methods, terms, status, created_at, updated_at,
-				expires_at, fee_status, fee_method, operator_tag
+				expires_at, fee_status, fee_method, operator_tag, accepted_assets
 			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12,
-			          'live', $13, $13, $14, 'verified', 'waived_first_buy', $15)
+			          'live', $13, $13, $14, 'verified', 'waived_first_buy', $15, $16)
 			ON CONFLICT (account, permlink) DO NOTHING`,
 			[
 				ctx.signer,
@@ -687,7 +739,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 				v.terms,
 				ctx.blockTime,
 				v.expires_at,
-				operatorTagForRow
+				operatorTagForRow,
+				v.accepted_assets
 			]
 		);
 		if ((waiverRes.rowCount ?? 0) > 0) {
@@ -758,9 +811,9 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 					amount_min, amount_max, price_model, location_region,
 					payment_methods, terms, status, created_at, updated_at,
 					expires_at, fee_status, fee_method, external_tx_id, tx_proof,
-					operator_tag
+					operator_tag, accepted_assets
 				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12,
-				          'live', $13, $13, $14, 'reused', $15, $16, $17, $18)
+				          'live', $13, $13, $14, 'reused', $15, $16, $17, $18, $19)
 				ON CONFLICT (account, permlink) DO NOTHING`,
 				[
 					ctx.signer,
@@ -780,7 +833,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 					v.fee_method,
 					v.external_tx_id,
 					v.tx_proof,
-					operatorTagForRow
+					operatorTagForRow,
+					v.accepted_assets
 				]
 			);
 			// Reused-fee orders have fee_status='reused' so they
@@ -834,9 +888,9 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 				amount_min, amount_max, price_model, location_region,
 				payment_methods, terms, status, created_at, updated_at,
 				expires_at, fee_status, fee_method, external_tx_id, tx_proof,
-				operator_tag
+				operator_tag, accepted_assets
 			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12,
-			          'live', $13, $13, $14, $15, $16, $17, $18, $19)
+			          'live', $13, $13, $14, $15, $16, $17, $18, $19, $20)
 			ON CONFLICT (account, permlink) DO NOTHING`,
 			[
 				ctx.signer,
@@ -857,7 +911,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 				v.fee_method,
 				v.external_tx_id,
 				v.tx_proof,
-				operatorTagForRow
+				operatorTagForRow,
+				v.accepted_assets
 			]
 		);
 		if ((externalRes.rowCount ?? 0) > 0) {
@@ -933,9 +988,9 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			account, permlink, side, asset, asset_network, fiat_currency,
 			amount_min, amount_max, price_model, location_region,
 			payment_methods, terms, status, created_at, updated_at,
-			expires_at, fee_status, fee_method, operator_tag
+			expires_at, fee_status, fee_method, operator_tag, accepted_assets
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12,
-		          'live', $13, $13, $14, $15, 'blurt', $16)
+		          'live', $13, $13, $14, $15, 'blurt', $16, $17)
 		ON CONFLICT (account, permlink) DO NOTHING`,
 		[
 			ctx.signer,
@@ -953,7 +1008,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			ctx.blockTime,
 			v.expires_at,
 			feeStatus,
-			operatorTagForRow
+			operatorTagForRow,
+			v.accepted_assets
 		]
 	);
 

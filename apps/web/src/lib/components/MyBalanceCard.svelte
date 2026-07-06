@@ -56,6 +56,18 @@
 	import { broadcastClaimReward } from '$blurt/sign';
 	import { liveIdentity } from '$stores/identity';
 	import AnimatedNumber from '$components/AnimatedNumber.svelte';
+	import LazyLoadError from '$components/LazyLoadError.svelte';
+
+	/** cp424 — the Power up / Power down modal is lazy-loaded: it pulls in
+	 *  the active-key signing path (incl. the withdraw_vesting serializer +
+	 *  bytebuffer), which shouldn't sit in the initial profile-card chunk
+	 *  when most viewers never open it. */
+	const loadPowerModal = () => import('$components/PowerModal.svelte').then((m) => m.default);
+
+	/** cp424 — the Send modal is lazy-loaded for the same reason as
+	 *  PowerModal: it pulls the active-key transfer-signing path, which
+	 *  shouldn't sit in the initial profile-card chunk. */
+	const loadSendModal = () => import('$components/SendBlurtModal.svelte').then((m) => m.default);
 
 	/** The canonical operator account name (Featured-listing
 	 *  revenue sink, release-op signer).  Reused as the
@@ -75,6 +87,14 @@
 	let errorMsg = $state('');
 	let blurtBalance = $state(NaN);
 	let bpBalance = $state(NaN);
+	/** cp424 — captured for the Power up / Power down modal. `vestingFund`
+	 *  + `totalVests` are the raw DGP pool strings that drive the BP→VESTS
+	 *  conversion for a partial power-down (blurtPowerToVests parses them);
+	 *  `vestingSharesRaw` is the EXACT on-chain vesting_shares string, used
+	 *  verbatim for "power down everything" so no dust is left behind. */
+	let vestingFund = $state('');
+	let totalVests = $state('');
+	let vestingSharesRaw = $state('');
 	let manaPct = $state(NaN);
 	let vestingApr = $state(NaN);
 	// cp396 — unclaimed author/curation rewards. `*Display` are the parsed
@@ -172,6 +192,21 @@
 				dgp.total_vesting_fund_blurt,
 				dgp.total_vesting_shares
 			);
+			// cp424 — retain the raw pool figures + exact vesting_shares for
+			// the Power up / Power down modal (BP↔VESTS conversion + dust-free
+			// "power down everything").
+			vestingFund =
+				typeof dgp.total_vesting_fund_blurt === 'string'
+					? dgp.total_vesting_fund_blurt
+					: String(dgp.total_vesting_fund_blurt);
+			totalVests =
+				typeof dgp.total_vesting_shares === 'string'
+					? dgp.total_vesting_shares
+					: String(dgp.total_vesting_shares);
+			vestingSharesRaw =
+				typeof acct.vesting_shares === 'string'
+					? acct.vesting_shares
+					: String(acct.vesting_shares);
 			manaPct = votingPowerPercent(
 				acct.voting_power,
 				acct.last_vote_time,
@@ -254,6 +289,45 @@
 		} finally {
 			manualRefreshing = false;
 		}
+	}
+
+	// ─── cp424 — Power up (stake) / Power down (unstake) ───────────────
+	// Both sign with the ACTIVE key, so they're only offered to a full
+	// seed session ('morphit-seed'). A posting-only login (imported a
+	// posting WIF / posting-only keyfile) has no active key locally and
+	// CANNOT sign these — the buttons stay hidden for it (matching the
+	// /post BLURT-fee active-key gate, cp406), rather than letting the
+	// user fill a form only to hit a "no active key" wall.
+	const hasActiveKey = $derived($liveIdentity?.origin === 'morphit-seed');
+	let powerMode = $state<'up' | 'down' | null>(null);
+	function openPower(mode: 'up' | 'down'): void {
+		powerMode = mode;
+	}
+	function closePower(): void {
+		powerMode = null;
+	}
+	function onPowerDone(): void {
+		powerMode = null;
+		// The op settled on-chain; pull fresh balances so the odometers
+		// animate to the new totals (and nudge other balance-aware views).
+		triggerBalanceRefresh();
+		void refresh({ hard: true });
+	}
+
+	// ─── cp424 — Send BLURT to any Blurt account ───────────────────────
+	// Also active-key-signed, so gated on the same hasActiveKey as the
+	// staking actions.
+	let sendOpen = $state(false);
+	function openSend(): void {
+		sendOpen = true;
+	}
+	function closeSend(): void {
+		sendOpen = false;
+	}
+	function onSendDone(): void {
+		sendOpen = false;
+		triggerBalanceRefresh();
+		void refresh({ hard: true });
 	}
 
 	function topUpBlurt(): void {
@@ -635,6 +709,13 @@
 							>({usdLabel})</span
 						>{/if}
 				</dd>
+				{#if hasActiveKey && blurtBalance > 0}
+					<button
+						type="button"
+						onclick={() => openPower('up')}
+						class="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-morphit-teal underline decoration-dotted underline-offset-2 hover:text-morphit-emerald dark:text-morphit-emerald"
+					><span aria-hidden="true">↑</span>{$_('profile.wallet.power_up_action')}</button>
+				{/if}
 			</div>
 			<div>
 				<dt class="text-xs text-ink-500 dark:text-ink-400">
@@ -671,6 +752,13 @@
 							values: { apr: formatApr(vestingApr) }
 						})}
 					</dd>
+				{/if}
+				{#if hasActiveKey && bpBalance > 0}
+					<button
+						type="button"
+						onclick={() => openPower('down')}
+						class="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-morphit-teal underline decoration-dotted underline-offset-2 hover:text-morphit-emerald dark:text-morphit-emerald"
+					><span aria-hidden="true">↓</span>{$_('profile.wallet.power_down_action')}</button>
 				{/if}
 			</div>
 			<div>
@@ -750,44 +838,100 @@
 			{/if}
 		{/if}
 
-		<div class="mt-4 flex flex-wrap items-center justify-between gap-2">
-			<button
-				type="button"
-				onclick={topUpBlurt}
-				class="rounded-xl bg-morphit-btn px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110 active:scale-[0.98]"
-			>
-				{$_('profile.my_balance.top_up_blurt')}
-			</button>
-			<button
-				type="button"
-				onclick={exportPnl}
-				disabled={exporting}
-				class="inline-flex items-center gap-2 rounded-xl border border-ink-300 px-4 py-2 text-sm font-semibold transition hover:bg-ink-50 active:scale-[0.98] disabled:opacity-50 dark:border-ink-700 dark:hover:bg-ink-900"
-			>
-				<svg
-					xmlns="http://www.w3.org/2000/svg"
-					width="16"
-					height="16"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-					class="h-4 w-4 flex-none"
+		<!-- cp424 — P&L grouped next to Top up (stacked under on mobile). The
+		     "Send" button (right on desktop / stacked-under on mobile) lands in
+		     the reserved right slot with the Send modal in the next increment. -->
+		<div class="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+			<div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+				<button
+					type="button"
+					onclick={topUpBlurt}
+					class="rounded-xl bg-morphit-btn px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110 active:scale-[0.98]"
 				>
-					<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-					<polyline points="7 10 12 15 17 10" />
-					<line x1="12" y1="15" x2="12" y2="3" />
-				</svg>
-				{exporting ? $_('profile.pnl.exporting') : $_('profile.pnl.export_button')}
-			</button>
+					{$_('profile.my_balance.top_up_blurt')}
+				</button>
+				<button
+					type="button"
+					onclick={exportPnl}
+					disabled={exporting}
+					class="inline-flex items-center justify-center gap-2 rounded-xl border border-ink-300 px-4 py-2 text-sm font-semibold transition hover:bg-ink-50 active:scale-[0.98] disabled:opacity-50 dark:border-ink-700 dark:hover:bg-ink-900"
+				>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						width="16"
+						height="16"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+						class="h-4 w-4 flex-none"
+					>
+						<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+						<polyline points="7 10 12 15 17 10" />
+						<line x1="12" y1="15" x2="12" y2="3" />
+					</svg>
+					{exporting ? $_('profile.pnl.exporting') : $_('profile.pnl.export_button')}
+				</button>
+			</div>
+			{#if hasActiveKey}
+				<button
+					type="button"
+					onclick={openSend}
+					class="inline-flex items-center justify-center gap-2 rounded-xl bg-morphit-btn px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110 active:scale-[0.98]"
+				>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						width="16"
+						height="16"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+						class="h-4 w-4 flex-none"
+					>
+						<path d="m22 2-7 20-4-9-9-4Z" />
+						<path d="M22 2 11 13" />
+					</svg>
+					{$_('profile.send.send_button')}
+				</button>
+			{/if}
 		</div>
 		{#if exportError}
 			<p class="mt-2 text-xs text-red-700 dark:text-red-300">
 				{$_('profile.pnl.export_error')}: {exportError}
 			</p>
 		{/if}
+	{/if}
+
+	{#if powerMode}
+		{#await loadPowerModal() then PowerModal}
+			<PowerModal
+				mode={powerMode}
+				{account}
+				{blurtBalance}
+				{bpBalance}
+				{vestingFund}
+				{totalVests}
+				{vestingSharesRaw}
+				onDone={onPowerDone}
+				onCancel={closePower}
+			/>
+		{:catch}
+			<LazyLoadError />
+		{/await}
+	{/if}
+
+	{#if sendOpen}
+		{#await loadSendModal() then SendBlurtModal}
+			<SendBlurtModal {account} {blurtBalance} onDone={onSendDone} onCancel={closeSend} />
+		{:catch}
+			<LazyLoadError />
+		{/await}
 	{/if}
 </section>

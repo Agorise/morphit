@@ -774,6 +774,33 @@ export const ASSETS: ReadonlyArray<AssetMetadata> = [
 		// Native XRP cannot be frozen by any central authority
 		// (freeze flag applies only to issued tokens/IOUs).
 		privacyWarningKey: null
+	},
+	{
+		// cp425 — BARTER: goods/services as a tradable asset (not a crypto).
+		// Display metadata only; every crypto-shaped path (address, price,
+		// network, memo, listing-fee) is gated away by isGoodsAsset().
+		ticker: 'barter',
+		displayTicker: 'BARTER',
+		displayName: 'Barter (goods/services)',
+		oneLineDescription:
+			'Goods or services — sell or buy wares directly for crypto.  Priced in your local currency; settled in the crypto(s) you accept.',
+		logoSvgPath: '/icons/icon-barter.svg',
+		accentClass: 'text-stone-500',
+		// Goods are valued in fiat, not a crypto amount.
+		decimals: 0,
+		supportsMemo: false,
+		// Goods have no receive address — the wares change hands off-platform
+		// (described in the listing's Terms). Never-valid; every address path
+		// is gated away from barter by isGoodsAsset().
+		addressValidator: () => false,
+		canBeUsedForListingFee: false,
+		canBeTraded: true,
+		// No chain → no network (goods change hands off-platform); empty so
+		// the network-icon smoke doesn't expect an icon. isGoodsAsset() guards
+		// every network path away from barter.
+		supportedNetworks: [],
+		defaultNetwork: null,
+		privacyWarningKey: null
 	}
 ] as const;
 

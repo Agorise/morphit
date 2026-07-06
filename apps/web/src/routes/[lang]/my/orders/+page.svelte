@@ -185,6 +185,26 @@
 		// the form opening on a network round-trip.
 	}
 
+	/** cp425 — smooth-scroll to the just-opened Feature form. The form is
+	 *  lazy-loaded, so its element may not exist for a frame or two after
+	 *  the click; retry across a few rAFs until it mounts. The target div
+	 *  carries `scroll-mt-24` (6rem ≈ an inch) so it lands an inch below the
+	 *  viewport top, per Ken's request — a breath of space above the
+	 *  "🚀 Feature this order!" heading rather than flush against the top. */
+	function scrollToFeatureForm(permlink: string): void {
+		if (typeof window === 'undefined') return;
+		let attempts = 0;
+		const tryScroll = (): void => {
+			const el = document.getElementById(`feature-form-${permlink}`);
+			if (el) {
+				el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+			} else if (attempts++ < 40) {
+				requestAnimationFrame(tryScroll);
+			}
+		};
+		requestAnimationFrame(tryScroll);
+	}
+
 	async function load(): Promise<void> {
 		if (!blurtAccount) {
 			phase = 'error';
@@ -358,7 +378,7 @@
 	}
 
 	function cardTitle(o: OrderRecord): string {
-		const tp = orderTitleParts(o, formatAmount);
+		const tp = orderTitleParts(o, formatAmount, $_('order_title.goods_services'));
 		return $_(tp.key, { values: tp.values }) as string;
 	}
 
@@ -904,6 +924,8 @@
 												// form opens with the bundled default and
 												// re-renders once the real value lands.
 												void ensureFeatureRateFetched();
+												// cp425 — smooth-scroll down to the form.
+												scrollToFeatureForm(o.permlink);
 											}}
 										>
 											🚀 {$_('my_orders.order.action_feature')}
@@ -1010,7 +1032,7 @@
 					</div>
 					{#if pendingFeaturePermlink === o.permlink && $isUnlocked}
 						{#await loadFeatureBidForm() then FeatureBidForm}
-							<div class="mt-3">
+							<div class="mt-3 scroll-mt-24" id="feature-form-{o.permlink}">
 								<FeatureBidForm
 									orderPermlink={o.permlink}
 									feeBlurtPerHour={featureBlurtPerHour}

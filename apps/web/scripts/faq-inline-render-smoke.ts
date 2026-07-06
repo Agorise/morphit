@@ -67,6 +67,42 @@ const bad = (m: string, d = '') => {
 		ok('internal link → <a> without target');
 	else bad('internal link render wrong', r);
 }
+// ── cp425: localizeHref (locale-prefix internal path links) ──────────
+{
+	// A path-internal link is passed through the caller's localizer.
+	const lp = (p: string) => (p.startsWith('/en/') ? p : '/en' + p);
+	const r = renderFaqInline('Open your [wallet](/my/wallet).', lp);
+	if (
+		r.includes('<a href="/en/my/wallet"') &&
+		!r.includes('target="_blank"') &&
+		r.includes('>wallet</a>')
+	)
+		ok('localizeHref: internal path → /en/my/wallet, no target');
+	else bad('localizeHref internal link wrong', r);
+}
+{
+	// The localizer must NOT touch external URLs (they keep target=_blank).
+	const lp = (p: string) => '/en' + p;
+	const r = renderFaqInline('See [docs](https://example.com/x).', lp);
+	if (r.includes('<a href="https://example.com/x"') && r.includes('target="_blank"'))
+		ok('localizeHref: external link untouched (still target=_blank)');
+	else bad('localizeHref wrongly touched external link', r);
+}
+{
+	// The localizer must NOT touch #hash links.
+	const lp = (p: string) => '/en' + p;
+	const r = renderFaqInline('Jump to [top](#section).', lp);
+	if (r.includes('<a href="#section"') && !r.includes('/en#section'))
+		ok('localizeHref: #hash link untouched');
+	else bad('localizeHref wrongly touched hash link', r);
+}
+{
+	// Back-compat: with no localizer, an internal path is unchanged.
+	const r = renderFaqInline('Open your [wallet](/my/wallet).');
+	if (r.includes('<a href="/my/wallet"') && !r.includes('/en/'))
+		ok('no localizer → internal path unchanged (back-compat)');
+	else bad('no-localizer internal link wrong', r);
+}
 
 // ── XSS / safety ─────────────────────────────────────────────────────
 {

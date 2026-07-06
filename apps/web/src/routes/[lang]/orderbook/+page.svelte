@@ -73,7 +73,7 @@
 
 	// ─── Filter state ────────────────────────────────────────────────
 	type AssetFilter = '' | AssetTicker | 'barter';
-	type SideFilter = '' | 'buy' | 'sell' | 'buy_goods' | 'sell_goods';
+	type SideFilter = '' | 'buy' | 'sell';
 
 	let asset = $state<AssetFilter>('');
 	let side = $state<SideFilter>('');
@@ -535,29 +535,20 @@
 		// the assignment back to OrderbookQuery on return is a
 		// type-level no-op (the values are identical).
 		const q: { -readonly [K in keyof OrderbookQuery]: OrderbookQuery[K] } = {};
-		// 'barter' is a payment method (barter_goods), not a tradable
-		// asset, so it never goes on q.asset.
-		if (asset && asset !== 'barter') q.asset = asset;
-		// The "products/services" side options are the normal buy/sell
-		// side PLUS a barter payment-method constraint (added below).
-		const sideForQuery = side === 'buy_goods' ? 'buy' : side === 'sell_goods' ? 'sell' : side;
-		if (sideForQuery) q.side = sideForQuery;
+		// cp425 — 'barter' selects the goods/services ASSET, mapped to the
+		// uppercase registry ticker 'BARTER'. One clear "Barter" filter that
+		// surfaces the wares (no hidden payment-method filter).
+		if (asset === 'barter') q.asset = 'BARTER';
+		else if (asset) q.asset = asset;
+		if (side) q.side = side;
 		// One or more ISO codes (already uppercase from the dataset);
 		// the indexer matches orders in ANY of them.
 		if (fiatList.length) q.fiat_currency = fiatList.join(',');
 		const regionTrim = region.trim();
 		if (regionTrim) q.location_region = regionTrim;
-		// Barter selection (asset=barter, or a products/services side)
-		// maps to payment_methods ⊇ barter_goods. The indexer matches
-		// orders accepting ANY listed method, so combining with a typed
-		// payment filter ORs them (broadens) — acceptable; an exclude
-		// filter (to make a "crypto" view hide barter-only orders) would
-		// need indexer support and is intentionally not done here.
-		const wantsBarter = asset === 'barter' || side === 'buy_goods' || side === 'sell_goods';
-		const paymentTokens: string[] = [];
-		if (wantsBarter) paymentTokens.push('barter_goods');
-		paymentTokens.push(...paymentMethods);
-		const uniquePayment = [...new Set(paymentTokens)];
+		// cp425 — barter is now an ASSET filter (above), not a payment
+		// filter, so payment_methods carries only the user's typed picks.
+		const uniquePayment = [...new Set(paymentMethods)];
 		if (uniquePayment.length) q.payment_methods = uniquePayment.join(',');
 		if (minTrades > 0) q.min_trades = minTrades;
 		if (sortMode !== 'recent') q.sort = sortMode;
@@ -696,15 +687,20 @@
 
 	async function fetchFirstPage(): Promise<void> {
 		if (currentAbort) currentAbort.abort();
-		currentAbort = new AbortController();
+		const myAbort = new AbortController();
+		currentAbort = myAbort;
 
 		phase = 'loading';
 		items = [];
 		cursor = null;
 		errorMessage = '';
 
-		const result = await getOrderbook(currentQuery(), currentAbort.signal);
-		if (currentAbort.signal.aborted) return;
+		const result = await getOrderbook(currentQuery(), myAbort.signal);
+		// Check OUR OWN signal, not the module-level `currentAbort` — a newer
+		// fetchFirstPage() may have reassigned currentAbort and aborted us.
+		// A superseded request is normal (e.g. a fast filter change), not an
+		// error, so return quietly instead of logging + flashing an error.
+		if (myAbort.signal.aborted) return;
 
 		if (!result.ok) {
 			console.warn('[orderbook] first-page fetch failed:', result.message);
@@ -897,7 +893,7 @@
 	}
 
 	function cardTitle(o: OrderRecord): string {
-		const tp = orderTitleParts(o, formatAmount);
+		const tp = orderTitleParts(o, formatAmount, $_('order_title.goods_services'));
 		return $_(tp.key, { values: tp.values }) as string;
 	}
 
@@ -925,28 +921,40 @@
 	]}
 />
 
+{#snippet liveIndicator()}
+	<span class="inline-flex items-center gap-1.5 text-xs">
+		<span class="relative inline-flex h-2 w-2">
+			<span
+				class="absolute inline-flex h-full w-full animate-ping rounded-full bg-morphit-emerald opacity-60"
+			></span>
+			<span class="relative inline-flex h-2 w-2 rounded-full bg-morphit-emerald"></span>
+		</span>
+		<span class="uppercase tracking-widest text-ink-500">{$_('orderbook.live')}</span>
+	</span>
+{/snippet}
+
 <div class="mx-auto max-w-4xl px-4 py-10 md:py-14">
 	<header class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
 		<div>
-			<h1 class="font-display text-3xl font-extrabold">
-				<span class="brand-gradient-text">{$_('orderbook.heading')}</span>
-			</h1>
+			<!-- Title row. On mobile the LIVE badge sits top-right next to the
+			     title; on desktop (sm+) it drops down beside the subtitle
+			     instead, so the two layouts read the way each screen expects. -->
+			<div class="flex items-center justify-between gap-3 sm:justify-start">
+				<h1 class="font-display text-3xl font-extrabold">
+					<span class="brand-gradient-text">{$_('orderbook.heading')}</span>
+				</h1>
+				{#if streaming}
+					<span class="sm:hidden">{@render liveIndicator()}</span>
+				{/if}
+			</div>
 			<p class="mt-2 flex items-center gap-3 text-ink-700 dark:text-ink-200">
 				<span>{$_('orderbook.subtitle')}</span>
 				{#if streaming}
-					<span class="inline-flex items-center gap-1.5 text-xs">
-						<span class="relative inline-flex h-2 w-2">
-							<span
-								class="absolute inline-flex h-full w-full animate-ping rounded-full bg-morphit-emerald opacity-60"
-							></span>
-							<span class="relative inline-flex h-2 w-2 rounded-full bg-morphit-emerald"></span>
-						</span>
-						<span class="uppercase tracking-widest text-ink-500">{$_('orderbook.live')}</span>
-					</span>
+					<span class="hidden sm:inline-flex">{@render liveIndicator()}</span>
 				{/if}
 			</p>
 		</div>
-		<a href={lp('/post')} class="btn-primary self-start whitespace-nowrap">
+		<a href={lp('/post')} class="btn-primary self-end whitespace-nowrap sm:self-start">
 			{$_('orderbook.post_cta')}
 		</a>
 	</header>
@@ -996,7 +1004,7 @@
 
 	<!-- Filters -->
 	<section
-		class="card mb-6 {filtersExpanded ? '' : 'px-4 py-2'}"
+		class="card mb-6 {filtersExpanded ? '' : 'px-6 py-1'}"
 		aria-labelledby="filters-heading"
 	>
 		<h2 id="filters-heading" class={filtersExpanded ? 'mb-4' : 'mb-0'}>
@@ -1006,15 +1014,17 @@
 				aria-expanded={filtersExpanded}
 				aria-controls="orderbook-filters-body"
 				title={filtersExpanded ? $_('orderbook.filters.collapse') : $_('orderbook.filters.expand')}
-				class="group -mx-2 flex w-full items-center justify-between gap-3 rounded-xl px-2 py-1.5 text-start transition hover:bg-ink-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:hover:bg-ink-800/60"
+				class="group -mx-2 flex w-full items-center justify-between gap-3 rounded-xl px-2 text-start transition focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald {filtersExpanded
+					? 'py-1.5'
+					: 'py-0.5'}"
 			>
-				<span class="font-display text-lg font-bold">
+				<span class="font-display font-bold {filtersExpanded ? 'text-lg' : 'text-base'}">
 					{$_('orderbook.filters.heading')}
 				</span>
 				<span
 					class="flex flex-none items-center justify-center rounded-full bg-ink-100 text-ink-600 transition group-hover:bg-emerald-50 group-hover:text-morphit-emerald dark:bg-ink-800 dark:text-ink-300 dark:group-hover:bg-ink-700 {filtersExpanded
 						? 'h-8 w-8'
-						: 'h-7 w-7'}"
+						: 'h-6 w-6'}"
 					aria-hidden="true"
 				>
 					<svg
@@ -1046,8 +1056,6 @@
 							<option value="">{$_('orderbook.filters.side_any')}</option>
 							<option value="buy">{$_('orderbook.filters.side_buy')}</option>
 							<option value="sell">{$_('orderbook.filters.side_sell')}</option>
-							<option value="buy_goods">{$_('orderbook.filters.side_buy_goods')}</option>
-							<option value="sell_goods">{$_('orderbook.filters.side_sell_goods')}</option>
 						</select>
 						<p class="mt-1 text-xs text-ink-500 dark:text-ink-400">
 							{$_('orderbook.filters.side_help')}

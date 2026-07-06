@@ -13,7 +13,7 @@
  * INVARIANT across all 12 assets in one shot.
  */
 
-import { ASSETS as CANONICAL } from '../src/index';
+import { ASSETS as CANONICAL, isGoodsAsset, type AssetTicker } from '../src/index';
 import { ASSETS as FRONTEND } from '../../../apps/web/src/lib/assets/registry';
 import { PAYMENT_METHODS } from '../../../apps/web/src/lib/payments/registry';
 
@@ -29,7 +29,12 @@ const payRailKeys = new Set(
 	PAYMENT_METHODS.filter((m) => m.key.startsWith('pay_')).map((m) => m.key.slice('pay_'.length))
 );
 
-const missing = [...tradableTickers].filter((t) => !payRailKeys.has(t));
+// cp425 — goods assets (BARTER) settle in one of the buyer's accepted
+// cryptos (the order's `accepted_assets`), not a fiat rail, so there's no
+// `pay_barter` payment method. Exempt them from the pay-rail requirement.
+const missing = [...tradableTickers].filter(
+	(t) => !payRailKeys.has(t) && !isGoodsAsset(t.toUpperCase() as AssetTicker)
+);
 const extra = [...payRailKeys].filter((k) => !tradableTickers.has(k));
 
 if (missing.length === 0 && extra.length === 0) {

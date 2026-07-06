@@ -252,8 +252,13 @@ describe.skipIf(!INTEGRATION_ENABLED)('migrations — integration', () => {
 			// v24
 			'instance_payment_methods',
 			// v27
-			'operator_attribution_events',
-			'operator_payouts'
+			'operator_attribution_events'
+			// NOTE: `operator_payouts` was introduced at v27 but RETIRED at
+			// cp408 (a v28+ change) — see schema.sql "operator_payouts:
+			// RETIRED (cp408)". The runner applies the consolidated schema.sql
+			// (current state), which correctly omits the table, so it must NOT
+			// appear in this expected-superset. (No live code references it;
+			// the collapsed baseline is authoritative.)
 		];
 		const res = await fx.db.query<{ table_name: string }>(
 			`SELECT table_name FROM information_schema.tables

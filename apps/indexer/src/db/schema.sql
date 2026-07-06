@@ -2535,3 +2535,26 @@ ON price_peer_observations (asset, denomination_fiat, observed_at DESC);
 --      omits the posting-key line for that trader until it fills.
 ALTER TABLE accounts
     ADD COLUMN IF NOT EXISTS posting_pubkey TEXT;
+-- ─── v37: orders.accepted_assets (cp425 barter accepted-crypto set) ───
+-- A BARTER (goods/services) listing settles in one of a SET of cryptos
+-- the seller accepts.  This column pins that set on the order row so
+-- the orderbook can (a) show buyers which cryptos they can pay in and
+-- (b) refuse a buyer's chosen crypto that isn't on the list.  NULL for
+-- every crypto asset (they settle in themselves); non-empty for BARTER.
+ALTER TABLE orders
+    ADD COLUMN IF NOT EXISTS accepted_assets TEXT[];
+
+-- GIN index for "barter orders that accept <crypto>" containment
+-- queries (accepted_assets @> ARRAY['XMR']).  Partial: only barter
+-- rows have a non-null set, so the index stays tiny.
+CREATE INDEX IF NOT EXISTS idx_orders_accepted_assets
+    ON orders USING GIN (accepted_assets)
+    WHERE accepted_assets IS NOT NULL;
+
+COMMENT ON COLUMN orders.accepted_assets IS
+    'cp425: for a BARTER (goods/services) order, the non-empty set of '
+    'crypto tickers the seller accepts as settlement (e.g. '
+    '{XMR,BTC,DOGE}).  Each is a real crypto ticker in ASSET_TICKERS '
+    '(never BARTER itself, never a goods asset).  A buyer may only '
+    'settle in a crypto on this list.  NULL for every crypto asset — '
+    'those settle in themselves and have no accepted-set.';

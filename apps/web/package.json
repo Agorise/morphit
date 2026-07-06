@@ -1,6 +1,6 @@
 {
 	"name": "morphit-web",
-	"version": "1.0.0-beta.48",
+	"version": "1.0.0-beta.49",
 	"private": true,
 	"type": "module",
 	"description": "Morphit web frontend — SvelteKit SSG, PWA, No-JS read-only paths",
@@ -51,6 +51,7 @@
 		"@morphit/release-schema": "*",
 		"@noble/secp256k1": "^2.1.0",
 		"@scure/bip39": "^1.4.0",
+		"bytebuffer": "^5.0.1",
 		"jspdf": "4.2.1",
 		"libsodium-wrappers-sumo": "0.7.15",
 		"qr-scanner": "^1.4.2",

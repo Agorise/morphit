@@ -33,7 +33,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ASSET_TICKERS } from '@morphit/asset-registry';
+import { ASSET_TICKERS, isGoodsAsset, type AssetTicker } from '@morphit/asset-registry';
 import { SUPPORTED_LOCALES } from '../src/lib/i18n/locales';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -85,9 +85,15 @@ while ((m = locRe.exec(xml)) !== null) {
 }
 
 // P-2: every registered ticker present × 10 locales
+// cp425 — goods assets (BARTER) have no /privacy/<ticker> page (no on-chain
+// privacy guide; wares change hands off-platform), so they're exempt from the
+// required set and the exact count.
+const privacyTickers = (ASSET_TICKERS as readonly string[]).filter(
+	(t) => !isGoodsAsset(t as AssetTicker)
+);
 const missing: string[] = [];
 const partial: string[] = [];
-for (const ticker of ASSET_TICKERS) {
+for (const ticker of privacyTickers) {
 	const tickerLc = ticker.toLowerCase();
 	const seen = found.get(tickerLc);
 	if (!seen) {
@@ -101,7 +107,7 @@ for (const ticker of ASSET_TICKERS) {
 }
 if (missing.length === 0 && partial.length === 0) {
 	pass(
-		`every tradable ASSET_TICKER (${ASSET_TICKERS.length}) has /privacy/<ticker> in all ${LOCALES.length} locales`
+		`every crypto ASSET_TICKER (${privacyTickers.length}) has /privacy/<ticker> in all ${LOCALES.length} locales`
 	);
 } else {
 	const detail: string[] = [];
@@ -133,7 +139,7 @@ if (stale.length === 0) {
 }
 
 // P-4: exact count
-const expectedCount = ASSET_TICKERS.length * LOCALES.length;
+const expectedCount = privacyTickers.length * LOCALES.length;
 let actualCount = 0;
 locRe.lastIndex = 0;
 while (locRe.exec(xml) !== null) actualCount++;
