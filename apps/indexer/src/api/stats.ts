@@ -24,8 +24,10 @@
  *                      meaningfully summable without USD normalization, so we
  *                      report counts only and leave a USD-normalized volume to
  *                      a later revision rather than publish a misleading number.
- *   - assets.supported — tradable tickers on THIS instance (the canonical set
- *                      minus any the operator disabled).
+ *   - assets.supported — the CRYPTO tickers tradable on THIS instance (the
+ *                      canonical set minus any the operator disabled, and minus
+ *                      goods assets like BARTER, which are orderable but not
+ *                      coins — see isGoodsAsset).
  *   - assets.with_active_orders / fiat_currencies.with_active_orders — breadth
  *                      of current liquidity (distinct counts among live orders).
  *
@@ -37,7 +39,7 @@ import { Hono } from 'hono';
 
 import type { Database } from '$db/pool';
 import type { Config } from '$config';
-import { ASSET_TICKERS } from '@morphit/asset-registry';
+import { ASSET_TICKERS, isGoodsAsset } from '@morphit/asset-registry';
 
 interface OrdersAggRow {
 	active: string;
@@ -79,7 +81,15 @@ export function buildStatsResponse(
 		return Number.isFinite(n) && n >= 0 ? n : 0;
 	};
 	const disabled = new Set(disabledAssets.map((a) => a.toUpperCase()));
-	const supported = ASSET_TICKERS.filter((tk) => !disabled.has(tk));
+	// cp425 — `supported` reports the CRYPTO tickers this instance trades, the
+	// list clients render as coins on the stats page. Goods assets (BARTER)
+	// are orderable but are not coins (no address / price / icon-as-coin), so
+	// isGoodsAsset() gates them out here — mirroring the sitemap builder and
+	// the brag-list count. Barter's availability is surfaced via the orderbook
+	// and the barter-specific UI, not this coin summary.
+	const supported = ASSET_TICKERS.filter(
+		(tk) => !disabled.has(tk) && !isGoodsAsset(tk)
+	);
 
 	return {
 		network: 'morphit',

@@ -92,10 +92,17 @@ function readAssetTickers(): string[] {
 
 function expandRoutes(routes: Array<{ path: string }>): Array<{ path: string }> {
 	const tickers = readAssetTickers();
+	// cp425 — goods assets (BARTER) have no crypto address and no on-chain
+	// privacy guide (the wares change hands off-platform), so they get NO
+	// /privacy/<ticker> page. This mirrors the sitemap builder's GOODS_TICKERS
+	// exclusion in scripts/build-sitemap.mjs and the registry's isGoodsAsset()
+	// predicate — keep the three in sync when a new goods asset is added.
+	const GOODS_TICKERS = new Set(['BARTER']);
 	const out: Array<{ path: string }> = [];
 	for (const r of routes) {
 		if (r.path.includes('[asset]')) {
 			for (const t of tickers) {
+				if (GOODS_TICKERS.has(t)) continue;
 				out.push({ path: r.path.replace('[asset]', t.toLowerCase()) });
 			}
 		} else if (r.path.includes('[')) {

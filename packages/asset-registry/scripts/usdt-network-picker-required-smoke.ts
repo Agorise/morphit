@@ -124,13 +124,18 @@ if (ADDR_PICKED_RE.test(addrBody)) {
 	);
 }
 
-// USDT tab present in tablist.
-if (/method\s*===\s*['"]usdt['"]/.test(addrBody) && /method_usdt/.test(addrBody)) {
+// USDT tab present in tablist. cp425 — the method tabs are now rendered
+// dynamically from the ALL_METHODS array via `{#each visibleMethods as m}`
+// with a templated i18n label `chat.address.method_${m}`, so there is no
+// literal `method_usdt` string anymore. Verify 'usdt' is one of the tab
+// methods AND the templated label render is present (both are needed for a
+// selectable USDT tab — which is what makes the network-required gate reachable).
+if (/ALL_METHODS[\s\S]*?'usdt'[\s\S]*?\]/.test(addrBody) && /method_\$\{m\}/.test(addrBody)) {
 	pass('AddressShareModal has USDT tab');
 } else {
 	fail(
 		'AddressShareModal has USDT tab',
-		'no USDT-method tab found in tablist'
+		'no USDT method in ALL_METHODS or dynamic `method_${m}` tablist label missing'
 	);
 }
 
