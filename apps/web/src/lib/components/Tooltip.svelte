@@ -64,10 +64,40 @@
 	let placement = $state<'above' | 'below'>('below');
 	let hovering = false;
 	let focusWithin = false;
+	// cp427 — the panel is PORTALED to <body> (below), so it no longer lives
+	// inside the wrapper's hover/focus region. These mirror the wrapper flags
+	// for the panel itself, so the "trigger → panel" pointer/keyboard journey
+	// keeps the tooltip open (the exact hover-bridge cp249 protected, now
+	// spanning the portal boundary).
+	let panelHovering = false;
+	let panelFocusWithin = false;
 	let closeTimer: ReturnType<typeof setTimeout> | null = null;
 	// cp406 — pending hover-open timer (only used when hoverOpenDelayMs > 0).
 	let openTimer: ReturnType<typeof setTimeout> | null = null;
 	let wrapperEl = $state<HTMLSpanElement>();
+	let panelEl = $state<HTMLDivElement>();
+	// cp427 — computed FIXED coordinates for the portaled panel (viewport
+	// space). `left` is clamped so the w-64 card never spills off either edge;
+	// `top` anchors flush to the trigger (the transparent padding bridges the
+	// 8px visual gap). Recomputed on open and on scroll/resize while open.
+	let panelLeft = $state(0);
+	let panelTop = $state(0);
+	const PANEL_WIDTH = 256; // w-64
+	const EDGE_MARGIN = 8; // keep this far from the viewport's left/right edge
+
+	/** Svelte action: relocate the panel to <body> so it escapes every
+	 *  ancestor's `overflow`/stacking context (an order card is a `relative`
+	 *  `<li>` whose later siblings painted OVER an in-card absolute tooltip —
+	 *  the "appears behind other elements" bug). Combined with `position:fixed`
+	 *  + a high z-index below, the panel now floats above everything. */
+	function portal(node: HTMLElement): { destroy(): void } {
+		document.body.appendChild(node);
+		return {
+			destroy(): void {
+				if (node.parentNode) node.parentNode.removeChild(node);
+			}
+		};
+	}
 
 	function clearCloseTimer(): void {
 		if (closeTimer) {
@@ -83,21 +113,35 @@
 		}
 	}
 
-	// Open below the trigger by default; flip above when there isn't enough
-	// room underneath. The panel can be ~190px tall (w-64 card: hint text +
-	// "Learn more"), so if less than that remains below the icon, opening
-	// downward would run off the bottom of the viewport.
-	function computePlacement(): void {
+	// Position the portaled panel in viewport (fixed) space: flip ABOVE the
+	// trigger when there isn't ~190px of room below (the w-64 card can be that
+	// tall), and clamp the horizontal origin so the card stays fully on-screen
+	// even when the trigger (e.g. an order card's right-edge hide eyeball) sits
+	// near the viewport edge. `panelTop` anchors flush to the trigger edge; the
+	// transparent padding in the markup bridges the 8px gap to the visible card.
+	function computePosition(): void {
 		if (!wrapperEl || typeof window === 'undefined') return;
 		const rect = wrapperEl.getBoundingClientRect();
 		const spaceBelow = window.innerHeight - rect.bottom;
 		placement = spaceBelow < 200 ? 'above' : 'below';
+
+		const triggerCenterX = rect.left + rect.width / 2;
+		const maxLeft = window.innerWidth - PANEL_WIDTH - EDGE_MARGIN;
+		// Center on the trigger, then clamp into [EDGE_MARGIN, maxLeft]. When the
+		// viewport is narrower than the card + margins, maxLeft < EDGE_MARGIN, so
+		// Math.max wins and the card pins to the left margin (still fully visible,
+		// just not centered) rather than overflowing.
+		panelLeft = Math.max(EDGE_MARGIN, Math.min(triggerCenterX - PANEL_WIDTH / 2, maxLeft));
+		// 'below' → top edge just under the trigger; 'above' → flush to the
+		// trigger's TOP (the panel is shifted up by its own height via a
+		// translateY(-100%) in the markup, so variable panel height is handled).
+		panelTop = placement === 'below' ? rect.bottom : rect.top;
 	}
 
 	function recompute(): void {
-		if (hovering || focusWithin || pinned) {
+		if (hovering || focusWithin || panelHovering || panelFocusWithin || pinned) {
 			clearCloseTimer();
-			computePlacement();
+			computePosition();
 			open = true;
 		} else {
 			clearCloseTimer();
@@ -147,11 +191,38 @@
 		if (e.key === 'Escape' && open) {
 			hovering = false;
 			focusWithin = false;
+			panelHovering = false;
+			panelFocusWithin = false;
 			pinned = false;
 			clearOpenTimer();
 			clearCloseTimer();
 			open = false;
 		}
+	}
+
+	// cp427 — the portaled panel's own hover/focus, so pointer or keyboard can
+	// move from the trigger onto the panel (e.g. to click "Learn more") without
+	// the tooltip closing. The 140ms close-timer bridges the 8px gap during the
+	// hand-off; the transparent padding in the markup keeps the hover region
+	// continuous so the pointer never crosses dead space.
+	function onPanelEnter(): void {
+		panelHovering = true;
+		recompute();
+	}
+	function onPanelLeave(): void {
+		panelHovering = false;
+		recompute();
+	}
+	function onPanelFocusIn(): void {
+		panelFocusWithin = true;
+		recompute();
+	}
+	function onPanelFocusOut(e: FocusEvent): void {
+		const next = e.relatedTarget as Node | null;
+		const wrap = e.currentTarget as HTMLElement | null;
+		if (next && wrap && wrap.contains(next)) return;
+		panelFocusWithin = false;
+		recompute();
 	}
 
 	// Tap/click the icon toggles the hint — the reliable open path on touch.
@@ -165,16 +236,38 @@
 
 	// While pinned open (tapped), an outside tap dismisses it. Scoped to the
 	// pinned window and self-cleaning, so no listener lingers after close.
+	// cp427 — the panel is now portaled OUTSIDE the wrapper, so a tap on the
+	// panel itself must count as "inside" too, else tapping "Learn more" would
+	// dismiss before the click lands.
 	$effect(() => {
 		if (!pinned) return;
 		const onDocPointer = (e: Event): void => {
-			if (wrapperEl && !wrapperEl.contains(e.target as Node)) {
+			const t = e.target as Node;
+			const insideWrapper = wrapperEl?.contains(t);
+			const insidePanel = panelEl?.contains(t);
+			if (!insideWrapper && !insidePanel) {
 				pinned = false;
 				recompute();
 			}
 		};
 		document.addEventListener('pointerdown', onDocPointer, true);
 		return () => document.removeEventListener('pointerdown', onDocPointer, true);
+	});
+
+	// cp427 — while open, keep the fixed-positioned panel glued to the trigger
+	// as the page scrolls or the window resizes (a fixed element does NOT move
+	// with scroll on its own). Capture-phase scroll catches nested scroll
+	// containers too; both listeners are passive (read-only) and torn down when
+	// the tooltip closes.
+	$effect(() => {
+		if (!open || typeof window === 'undefined') return;
+		const onReflow = (): void => computePosition();
+		window.addEventListener('scroll', onReflow, { capture: true, passive: true });
+		window.addEventListener('resize', onReflow, { passive: true });
+		return () => {
+			window.removeEventListener('scroll', onReflow, true);
+			window.removeEventListener('resize', onReflow);
+		};
 	});
 
 	onDestroy(() => {
@@ -235,16 +328,28 @@
 	{/if}
 
 	{#if open}
-		<!-- Outer wrapper is positioned flush to the trigger with
-		     transparent padding (pt-2 below / pb-2 above) that BRIDGES the
-		     visual gap: the pointer can travel from the trigger into the
-		     panel without leaving the wrapper's hover region, while the
-		     visible card floats ~8px away. `placement` flips it above the
-		     trigger when there isn't room below (viewport-bottom guard). -->
+		<!-- cp427 — the panel is PORTALED to <body> and FIXED-positioned, so it
+		     floats above every card / stacking context ("on top of everything")
+		     and its horizontal origin is clamped to the viewport ("visible near
+		     the edge / page fold"). The outer div anchors flush to the trigger
+		     edge (panelTop) with transparent padding (pt-2 below / pb-2 above)
+		     that BRIDGES the 8px visual gap so the pointer never crosses dead
+		     space; its own hover/focus keep the tooltip open across the portal
+		     seam. `placement` flips it above the trigger when there isn't room
+		     below; for 'above' the panel is shifted up by its own height via
+		     translateY(-100%) so variable panel heights are handled. -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
-			class="absolute left-1/2 z-40 -translate-x-1/2 {placement === 'above'
-				? 'bottom-full pb-2'
-				: 'top-full pt-2'}"
+			bind:this={panelEl}
+			use:portal
+			class="fixed z-50 {placement === 'above' ? 'pb-2' : 'pt-2'}"
+			style="left: {panelLeft}px; top: {panelTop}px;{placement === 'above'
+				? ' transform: translateY(-100%);'
+				: ''}"
+			onmouseenter={onPanelEnter}
+			onmouseleave={onPanelLeave}
+			onfocusin={onPanelFocusIn}
+			onfocusout={onPanelFocusOut}
 		>
 			<div
 				id="tip-{textKey}"

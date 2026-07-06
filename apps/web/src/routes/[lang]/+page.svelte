@@ -150,11 +150,11 @@
 			     prompts; this paragraph wasn't load-bearing. -->
 		</div>
 
-		<!-- Phase 5 item 5: featured slots showcase. Up to 5 orders
-		     users have paid to promote. Self-hides when empty so
-		     a fresh-install site doesn't show an awkward empty
-		     panel.  cp169 lazy-loaded — see rationale on the
-		     loadFeaturedOrders import. -->
+		<!-- Phase 5 item 5: featured slots showcase — the orders users have
+		     paid to promote (up to max_slots, currently 3), each rendered with
+		     the shared OrderCard in its featured frame. Self-hides when empty so
+		     a fresh-install site doesn't show an awkward empty panel. cp169
+		     lazy-loaded — see rationale on the loadFeaturedOrders import. -->
 		<div class="mt-16">
 			{#await loadFeaturedOrders() then FeaturedOrders}
 				<FeaturedOrders variant="grid" />

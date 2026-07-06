@@ -50,6 +50,7 @@
 	import { fetchListingFee } from '$lib/orders/listingFee';
 	import { fetchOrderViews } from '$lib/orders/views';
 	import { formatOrderPriceModel } from '$lib/orders/priceModelDisplay';
+	import { isOrderExpired, isOrderLive } from '$lib/orders/orderExpiry';
 	import { MORPHIT_INDEXER_ORIGIN, resolveOrigin } from '$net/config';
 	import { safeSession } from '$lib/utils/safeStorage';
 	import { orderTitleParts } from '$lib/utils/orderTitle';
@@ -95,9 +96,9 @@
 	const counts = $derived.by(() => {
 		const c = { all: items.length, live: 0, cancelled: 0, expired: 0 };
 		for (const o of items) {
-			if (o.status === 'live') c.live++;
+			if (isLive(o)) c.live++;
 			else if (o.status === 'cancelled') c.cancelled++;
-			else if (o.status === 'expired') c.expired++;
+			else if (isExpired(o)) c.expired++;
 		}
 		return c;
 	});
@@ -317,14 +318,26 @@
 	 *  the indexer in sync if changed again. */
 	const EDIT_WINDOW_MS = 15 * 60 * 1000;
 
+	// Effective (query-time) order status — see $lib/orders/orderExpiry for the
+	// full rationale and the timezone note.  Thin wrappers so every call site in
+	// this file stays `isExpired(o)` / `isLive(o)` while the rule lives in a pure,
+	// unit-tested module (orderExpiry.test.ts).  Both read the `nowMs` ticker so
+	// the pill / label / actions flip the second an order crosses its deadline.
+	function isExpired(o: OrderRecord): boolean {
+		return isOrderExpired(o, nowMs);
+	}
+	function isLive(o: OrderRecord): boolean {
+		return isOrderLive(o, nowMs);
+	}
+
 	const visibleItems = $derived.by(() => {
 		switch (filter) {
 			case 'live':
-				return items.filter((o) => o.status === 'live');
+				return items.filter((o) => isLive(o));
 			case 'cancelled':
 				return items.filter((o) => o.status === 'cancelled');
 			case 'expired':
-				return items.filter((o) => o.status === 'expired');
+				return items.filter((o) => isExpired(o));
 			default:
 				return items;
 		}
@@ -332,7 +345,7 @@
 
 	// ─── Derived helpers ───────────────────────────────────────────
 	function withinEditWindow(o: OrderRecord): boolean {
-		if (o.status !== 'live') return false;
+		if (!isLive(o)) return false;
 		const createdMs = new Date(o.created_at).getTime();
 		// Read nowMs (the live ticker) so callers re-evaluate when
 		// the second hand moves.  Pre-Part-68 this read Date.now()
@@ -345,7 +358,7 @@
 	 *  window has expired, so the template can fall back to the
 	 *  "edit window expired" copy. */
 	function editWindowRemainingSeconds(o: OrderRecord): number | null {
-		if (o.status !== 'live') return null;
+		if (!isLive(o)) return null;
 		const createdMs = new Date(o.created_at).getTime();
 		const remaining = createdMs + EDIT_WINDOW_MS - nowMs;
 		if (remaining <= 0) return null;
@@ -357,7 +370,7 @@
 	 *  has been live ≥20 minutes the note stops showing (reactive via
 	 *  nowMs) — by then the note is just noise in the action column. */
 	function withinEditClosedNotice(o: OrderRecord): boolean {
-		if (o.status !== 'live') return false;
+		if (!isLive(o)) return false;
 		const age = nowMs - new Date(o.created_at).getTime();
 		return age >= EDIT_WINDOW_MS && age < 20 * 60 * 1000;
 	}
@@ -383,6 +396,9 @@
 	}
 
 	function stateLabel(o: OrderRecord): string {
+		// A 'live' order past its expires_at reads "Expired", matching the
+		// orderbook (which has already dropped it) — see isExpired().
+		if (isExpired(o)) return $_('my_orders.order.state_expired');
 		switch (o.status) {
 			case 'live':
 				return $_('my_orders.order.state_live');
@@ -760,14 +776,14 @@
 							</div>
 							<div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
 								<span
-									class="rounded-full border px-2 py-0.5 font-semibold {o.status === 'live'
+									class="rounded-full border px-2 py-0.5 font-semibold {isLive(o)
 										? 'border-morphit-emerald bg-emerald-50 text-emerald-900 dark:bg-ink-800 dark:text-emerald-100'
 										: 'border-ink-300 text-ink-600 dark:border-ink-600 dark:text-ink-300'}"
 								>
 									{stateLabel(o)}
 								</span>
 								<PaymentStatusBadge orderPermlink={o.permlink} />
-								{#if o.fee_status === 'verified' || o.fee_status === 'verified_by_attestation'}
+								{#if (o.fee_status === 'verified' || o.fee_status === 'verified_by_attestation') && !isExpired(o)}
 									<span
 										class="rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-emerald-900 dark:bg-ink-800 dark:text-emerald-100"
 									>
@@ -834,7 +850,9 @@
 									<div>
 										<dt class="inline text-ink-500">{$_('order_detail.expires_on')}:</dt>
 										<dd class="inline text-ink-700 dark:text-ink-200">
-											{formatDayMonth(o.expires_at)}
+											{isExpired(o)
+												? $_('my_orders.order.state_expired')
+												: formatDayMonth(o.expires_at)}
 										</dd>
 									</div>
 								{/if}
@@ -849,7 +867,7 @@
 
 						<!-- Action column -->
 						<div class="flex flex-none flex-col gap-2 sm:min-w-[10rem]">
-							{#if o.status === 'live'}
+							{#if isLive(o)}
 								{#if withinEditWindow(o)}
 									{@const remaining = editWindowRemainingSeconds(o)}
 									<BusyButton
@@ -1013,7 +1031,7 @@
 								<span class="text-xs text-ink-500">
 									{$_('my_orders.order.action_cancelled')}
 								</span>
-							{:else if o.status === 'expired'}
+							{:else if isExpired(o)}
 								<!-- Item 4: Re-list expired orders.  Pre-fills the
 								     post form with the original terms; user can edit,
 								     promote to Featured, pays a fresh listing fee.

@@ -877,38 +877,46 @@ export function broadcastSignOut(): void {
 			// Channel error — local reset still runs below.
 		}
 	}
-	// EXPLICIT sign-out wipes disk for real. Done SYNCHRONOUSLY here (not via
-	// reset()'s clearDisk dynamic-import path) so hasPersistedKeystore() is
-	// already false when the signed-out header CTA's $derived re-runs on the
-	// $hasAnySession flip inside reset() below. The async clearDisk path lands
-	// a microtask later — AFTER that single re-run — which left the header
-	// button stuck on "Unlock" after sign-out (AvatarMenu lives in the layout,
-	// so the post-sign-out navigation doesn't remount it to re-read, and
-	// hasPersistedKeystore() is a plain localStorage read, not a reactive dep).
-	// No import cycle: persistentKeystore/pairedSession don't import this store.
-	clearKeystore();
-	clearPairedSession();
-	reset();
-	// Forget the persisted account name on an EXPLICIT sign-out so the
-	// login page's signed-in gate (getUserBlurtAccount(), which reads the
-	// shared-across-tabs `morphit.blurtAccount` localStorage key) no longer
-	// reports an account anywhere. localStorage is per-origin, so this one
-	// removal signs the name out of every open tab — the sibling tabs only
-	// need the broadcast above to wipe their per-tab in-memory keys.
-	// Deliberately here and NOT in reset(): like the signout broadcast,
+	// A sign-out MUST fully complete. Leaving any one of these clears un-run is
+	// a security/UX bug: identity wiped but account-name still remembered (so
+	// the login page keeps offering to "sign out of @you"), or the reverse.
+	// Some browsers throw on localStorage / crypto access in private or
+	// storage-restricted contexts, so each step is ISOLATED — a throw in one
+	// can never abort the rest. Best-effort, matching the channel-post catch
+	// above. Order preserved: clearKeystore/clearPairedSession run BEFORE
+	// reset() so hasPersistedKeystore() is already false when the signed-out
+	// header CTA's $derived re-runs on the $hasAnySession flip inside reset()
+	// (otherwise the header button sticks on "Unlock"). No import cycle:
+	// persistentKeystore/pairedSession don't import this store.
+	const bestEffort = (fn: () => void): void => {
+		try {
+			fn();
+		} catch {
+			// Isolated: a failure here must not prevent the other clears.
+		}
+	};
+	// EXPLICIT sign-out wipes disk for real, SYNCHRONOUSLY (not via reset()'s
+	// clearDisk dynamic-import path, which lands a microtask later).
+	bestEffort(clearKeystore);
+	bestEffort(clearPairedSession);
+	bestEffort(() => reset());
+	// Forget the persisted account name on an EXPLICIT sign-out so the login
+	// page's signed-in gate (getUserBlurtAccount(), reading the shared-across-
+	// tabs `morphit.blurtAccount` localStorage key) no longer reports an
+	// account anywhere. localStorage is per-origin, so this one removal signs
+	// the name out of every open tab. Deliberately here and NOT in reset():
 	// reset() also runs on pagehide/lockSession(), where wiping this
 	// convenience cache would force the user to re-enter their account name
-	// every session. The name-clear is the mark of an EXPLICIT sign-out.
-	clearUserBlurtAccount();
-	// Also drop the cached self-avatar (the logged-in user's own avatar,
-	// shown in the menu + their IdentityLabels). Dynamically imported to
-	// keep selfProfile's profileCache/profileProps deps out of this
-	// store's static graph. Like the name-clear above, this belongs to an
-	// EXPLICIT sign-out only — reset()/lockSession keep it (public data,
-	// re-shown on unlock; the AvatarMenu effect refreshes per account).
-	void import('$lib/stores/selfProfile').then((mod) => {
-		mod.clearSelfProfile();
-	});
+	// every session — the name-clear is the mark of an EXPLICIT sign-out.
+	bestEffort(clearUserBlurtAccount);
+	// Also drop the cached self-avatar (shown in the menu + IdentityLabels).
+	// Dynamically imported to keep selfProfile's deps out of this store's
+	// static graph; EXPLICIT sign-out only (reset()/lockSession keep it —
+	// public data, re-shown on unlock). Chunk-load failure is harmless: the
+	// avatar cache is refreshed per account on the next unlock anyway.
+	void import('$lib/stores/selfProfile')
+		.then((mod) => mod.clearSelfProfile())
+		.catch(() => {});
 }
 
 if (browser) {

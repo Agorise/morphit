@@ -1765,12 +1765,16 @@
 	const termsRequired = $derived(barterSelected || isBarter);
 	const termsOkForBarter = $derived(!termsRequired || terms.trim().length >= 3);
 
-	// Flash the Terms textarea border emerald 5× over 5s every time a barter
-	// deal becomes active (false → true) — either the barter_goods payment
-	// method is added OR a BARTER asset is selected — so users see Terms is now
-	// required. Re-arms on transition. The bumped token makes ProtectedTextarea
-	// restart its border-flash animation. `barterWasSelected` is a plain
-	// (non-reactive) latch so this effect only fires on the transition.
+	// Flash the Terms textarea border bright yellow 5× over ~5s every time a
+	// barter deal becomes active (false → true) — either the barter_goods
+	// PAYMENT METHOD is added (live on step 3, where the field is mounted) OR
+	// the step-1 BARTER ASSET block is selected (the token bumps while step 3
+	// is still gated closed; the flash then plays when the terms field mounts
+	// on arrival, because ProtectedTextarea's flash effect fires on mount with
+	// an already-nonzero token). Re-arms on each transition; the bumped token
+	// makes ProtectedTextarea restart its border-flash animation.
+	// `barterWasSelected` is a plain (non-reactive) latch so this effect only
+	// fires on the transition, not on every unrelated re-render.
 	let termsFlash = $state(0);
 	let barterWasSelected = false;
 	$effect(() => {
@@ -2132,13 +2136,18 @@
 				) {
 					broadcastError = $_('post_order.broadcast_error.body_insufficient_funds');
 				} else if (
-					// cp407 — low Resource Credits (RC) / bandwidth: a funded
-					// account can still be rate-limited by the chain's RC system.
+					// Blurt meters ops with a small fee taken from LIQUID BLURT
+					// (an operation flat fee + a size-based bandwidth fee), NOT
+					// with Steem/Hive-style Resource Credits. If the chain names
+					// the fee/bandwidth component when an account can't cover it,
+					// point the user at topping up liquid BLURT (we keep the RC
+					// spellings too so a node that still uses the old wording is
+					// caught, but the guidance is Blurt-correct).
 					/resource credit/i.test(msg) ||
 					/\bRC\b/.test(msg) ||
 					/bandwidth/i.test(msg) ||
-					/manabar/i.test(msg) ||
-					/power\s*up/i.test(msg)
+					/\bfee\b/i.test(msg) ||
+					/manabar/i.test(msg)
 				) {
 					broadcastError = $_('post_order.broadcast_error.body_insufficient_rc');
 				} else if (
@@ -2261,16 +2270,6 @@
 		// currency, settled in the accepted cryptos. No price-model or
 		// payment-method language (both are crypto-trade concepts).
 		if (isBarter) {
-			let valueClause: string;
-			if (hasMin && hasMax) {
-				valueClause = `${amountMin.trim()}–${amountMax.trim()} ${fiatCode}`;
-			} else if (hasMax) {
-				valueClause = `${amountMax.trim()} ${fiatCode}`;
-			} else if (hasMin) {
-				valueClause = `${amountMin.trim()} ${fiatCode}`;
-			} else {
-				valueClause = fiatCode;
-			}
 			let cryptosClause: string;
 			if (acceptedAssets.length > 0) {
 				try {
@@ -2282,6 +2281,24 @@
 				}
 			} else {
 				cryptosClause = '…';
+			}
+			// cp428 — no min AND no max → a "worth {value}" clause would read as
+			// "…worth MXN," (bare currency, no number). Use a value-free sentence
+			// instead: "You're offering goods/services and accepting BLURT and XMR."
+			if (!hasMin && !hasMax) {
+				const barterKeyNoValue =
+					side === 'sell'
+						? 'post_order.summary.barter_sentence_sell_novalue'
+						: 'post_order.summary.barter_sentence_buy_novalue';
+				return $_(barterKeyNoValue, { values: { cryptos: cryptosClause } }) as string;
+			}
+			let valueClause: string;
+			if (hasMin && hasMax) {
+				valueClause = `${amountMin.trim()}–${amountMax.trim()} ${fiatCode}`;
+			} else if (hasMax) {
+				valueClause = `${amountMax.trim()} ${fiatCode}`;
+			} else {
+				valueClause = `${amountMin.trim()} ${fiatCode}`;
 			}
 			const barterKey =
 				side === 'sell'
@@ -2952,8 +2969,8 @@
 									onclick={() => toggleAcceptedAsset(t)}
 									aria-pressed={sel}
 									class="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors {sel
-										? 'border-morphit-emerald bg-morphit-emerald/10 text-morphit-emerald'
-										: 'border-ink-200 text-ink-600 hover:border-ink-300 dark:border-ink-700 dark:text-ink-300'}"
+										? 'border-morphit-emerald bg-morphit-emerald/10 text-morphit-emerald hover:bg-morphit-emerald/20'
+										: 'border-ink-200 text-ink-600 hover:border-ink-300 hover:bg-ink-50 dark:border-ink-700 dark:text-ink-300 dark:hover:border-ink-600 dark:hover:bg-ink-800/60'}"
 								>
 									<img src={`/icons/icon-${t.toLowerCase()}.svg`} alt="" class="h-4 w-4" />
 									{t}
@@ -3023,6 +3040,9 @@
 						counterAlwaysVisible
 						placeholder={termsPlaceholder}
 					/>
+					<span class="mt-1.5 block text-xs text-ink-500 dark:text-ink-400">
+						{$_('post_order.form.terms_markdown_hint')}
+					</span>
 				</label>
 				{#if termsForbidden}
 					<p class="-mt-3 mb-4 text-sm text-red-700 dark:text-red-300" role="alert">

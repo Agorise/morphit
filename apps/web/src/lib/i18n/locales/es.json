@@ -1521,7 +1521,7 @@
       },
       "what_is_mana": {
         "q": "¿Qué es Mana en Blurt?",
-        "a": "En Blurt, Mana es la capacidad por cuenta que te permite hacer cosas en la cadena — publicar, comentar, votar y (en el caso de Morphit) enviar órdenes, dejar reseñas y enviar mensajes de chat.\n\nPiensa en Mana como una barra de resistencia de videojuego que se rellena sola. Cada acción que haces gasta un poco. La barra se recarga lentamente durante las próximas horas y días. Si eres un usuario normal, básicamente nunca lo notarás — el diseño de Blurt rellena Mana lo bastante rápido como para que puedas hacer docenas de cosas al día sin pensarlo.\n\nMana es la respuesta a la pregunta del spam: \"si publicar en una cadena de bloques es gratis, ¿por qué no todos simplemente hacen spam?\" Porque hacer spam quemaría tu barra de Mana en segundos, y luego tendrías que esperar mientras las acciones de los demás siguen funcionando normalmente. La economía de Blurt usa esto para frenar el abuso sin que nadie tenga que cobrar comisiones por cada publicación.\n\nEl tamaño de tu barra de Mana es aproximadamente proporcional a cuánto Blurt tienes (específicamente Blurt Power — Blurt en staking). Las cuentas nuevas reciben una pequeña cantidad inicial, por eso el bono de bienvenida incluye algo de Blurt Power: aumenta tu barra para que puedas usar Morphit cómodamente desde el primer día.\n\n**Nota sobre terminología.** Puedes verlo llamado \"RC\" o \"Resource Credits\" en documentación antigua de Blurt, en la red Steem de la que se bifurcó, o en nuestros comentarios de código internos. Mana es el nombre moderno de Blurt, y el que usamos en todo lo que un usuario normal puede ver."
+        "a": "En Blurt, el Mana es tu poder de voto: determina cuánto peso tienen tus votos positivos, y es lo único a lo que afecta. Imagina una barra de resistencia que empieza al 100%, baja un poco cada vez que votas y se recarga alrededor del 20% al día. Cuanto más Blurt Power (Blurt en stake) tengas, más grande es la barra.\n\nLo que el Mana NO hace es pagar tus acciones. Esta es la diferencia clave con Steem y Hive, que miden publicar y transaccionar con \"Resource Credits (RC)\". Blurt abandonó ese modelo. En Blurt, las acciones on-chain —publicar, comentar, transferir y, en Morphit, enviar órdenes, dejar reseñas y enviar mensajes de chat— cuestan una pequeña comisión pagada con tu BLURT líquido (una comisión fija por operación más una comisión de ancho de banda según el tamaño, fijadas por los witnesses; ves el importe exacto justo antes de firmar). Votar es la única excepción: gasta Mana, no BLURT.\n\nAsí que la regla práctica es simple: ten un poco de BLURT líquido a mano —incluso unos 10 sobran para el uso diario— y tus acciones pasarán. Las transferencias entrantes son gratuitas, así que recargar es fácil. Nunca tienes que esperar a que el Mana se recargue para publicar o comerciar; eso es una costumbre de Steem/Hive que no aplica en Blurt."
       },
       "node_minimum_requirements": {
         "q": "¿Cuáles son los requisitos mínimos de hardware para ejecutar un nodo Morphit?",
@@ -2624,8 +2624,6 @@
     "error_body": "El indexador no está disponible en este momento. Vuelve a intentarlo dentro de un rato.",
     "load_more": "Cargar más",
     "order": {
-      "buying": "comprando {asset}",
-      "selling": "vendiendo {asset}",
       "updated_prefix": "Actualizado",
       "new_trader_aria": "Nuevo operador — aún no completa su primera operación",
       "new_trader_tooltip": "Este operador es nuevo en Morphit. ¡Ayúdale a empezar!",
@@ -2961,6 +2959,7 @@
       "region_label": "Región (opcional)",
       "region_hint": "Dónde estás dispuesto a operar. Ayuda a que la gente cercana te encuentre.",
       "terms_label": "Términos / Detalles / Notas",
+      "terms_markdown_hint": "Se admite formato básico de Markdown; si deseas imágenes, proporciona un enlace a tu blog, etc.",
       "terms_forbidden_char": "Tus términos contienen un carácter que no se puede usar: elimina los caracteres ocultos o de control. (Los saltos de línea y el markdown habitual están bien.)",
       "expires_label": "El listado vence",
       "expires_1d": "En 1 día",
@@ -3018,7 +3017,7 @@
       "amount_entered_usd_hint": "{amount} {fiat} (≈ {usd})",
       "returning_min_hint": "Al menos {amount} {fiat} (≈ {usd})",
       "barter_accept_label": "¿Qué criptos aceptarás?",
-      "barter_accept_hint": "Marca las criptos con las que los compradores pueden pagarte; elige las que de verdad usas."
+      "barter_accept_hint": "Selecciona las criptos con las que los compradores pueden pagarte — elige las que prefieras."
     },
     "errors": {
       "fiat_empty": "Elige una moneda fiat (como USD o EUR).",
@@ -3085,7 +3084,7 @@
       "body_bad_password": "Esa contraseña no desbloqueó tu keystore. Inténtalo de nuevo.",
       "body_posting_only": "Pagar la tarifa de publicación en BLURT requiere tu clave activa, y no está en este dispositivo: has iniciado sesión solo con tu clave de publicación. Inicia sesión con tu contraseña maestra o tu keyfile completo para pagar en BLURT, o vuelve y paga en BTC/XMR (o usa tu primera publicación gratuita).",
       "body_recipient_missing": "No se pudo enviar la tarifa de publicación: la cuenta del tesoro a la que se paga (@morphit-fees) parece no existir todavía en Blurt. No se pagó nada. Si administras esta instancia, esa cuenta debe crearse; de lo contrario, informa de esto.",
-      "body_insufficient_rc": "Tu cuenta tiene pocos Créditos de Recursos (RC), así que Blurt rechazó la transacción. Haz power up con un poco de BLURT, o espera a que tus RC se recarguen, y vuelve a intentarlo. No se pagó nada.",
+      "body_insufficient_rc": "Blurt cobra una pequeña comisión de red por esta acción desde tu BLURT líquido, y tu cuenta no pudo cubrirla. Añade un poco de BLURT líquido (las transferencias entrantes son gratuitas) e inténtalo de nuevo. No se pagó nada.",
       "body_authority": "Blurt rechazó la firma del pago de la tarifa: puede que la clave Activa de tu cuenta no coincida con la que está en la cadena. No se pagó nada. Intenta iniciar sesión de nuevo con tu frase semilla de 12 palabras o tu Keyfile."
     },
     "waiver": {
@@ -3162,7 +3161,9 @@
       "price_market": "a precio de mercado",
       "price_fixed": "a un precio fijo de {price} {fiat} por {asset}",
       "barter_sentence_sell": "Ofreces bienes/servicios por valor de {value}, aceptando {cryptos}.",
-      "barter_sentence_buy": "Buscas bienes/servicios por valor de {value}, pagando en {cryptos}."
+      "barter_sentence_buy": "Buscas bienes/servicios por valor de {value}, pagando en {cryptos}.",
+      "barter_sentence_sell_novalue": "Ofreces bienes/servicios y aceptas {cryptos}.",
+      "barter_sentence_buy_novalue": "Buscas bienes/servicios y pagas en {cryptos}."
     }
   },
   "prices": {
@@ -3454,6 +3455,8 @@
       "error_bad_password": "Esa contraseña no desbloqueó tu clave activa. Revísala e inténtalo de nuevo.",
       "error_no_active_key": "Este dispositivo no tiene clave activa para firmar. Inicia sesión con tu frase semilla para hacer power up o power down.",
       "error_broadcast": "No se pudo completar en la cadena. Inténtalo de nuevo.",
+      "error_chain_rejected": "La red rechazó esta transacción: {reason}",
+      "error_unreachable": "No se pudo conectar con tu instancia de Morphit para transmitir. Revisa tu conexión e inténtalo de nuevo.",
       "error_amount": "Introduce una cantidad que no supere tu saldo disponible."
     },
     "send": {
@@ -4415,7 +4418,7 @@
       "body_sell": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\nEstoy vendiendo {asset1} por {asset2}. ¿Quieres operar?\n\nNo hay lugar más seguro, rápido y fiable para operar con criptos y divisas que Morphit.\n\n¡Mira mi oferta en Morphit!\nhttps://morphit.io/{lang}/@{username}/{permlink}"
     },
     "opt_in_label": "Sindicar esta orden también a mi Blog (Gratis)",
-    "opt_in_help": "Publica un breve anuncio de esta orden en tu blog de Blurt. Una publicación por orden, firmada por ti, se dispara justo después de enviar. Gratis — la publicación va on-chain usando tu Mana existente.",
+    "opt_in_help": "Publica un breve anuncio de esta orden en tu blog de Blurt. Una publicación por orden, firmada por ti, se envía justo después de enviar. Solo cuesta la pequeña comisión de red de Blurt, pagada con tu BLURT líquido.",
     "review_on_title": "Esta orden también se publicará en tu blog",
     "review_on_body": "Justo después de enviar, un breve anuncio se publicará en tu blog de Blurt para que otros encuentren tu oferta. Firmado por ti, gratis.",
     "success_pending": "Publicando el anuncio en tu blog de Blurt…",

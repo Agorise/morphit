@@ -20,10 +20,11 @@ export const NETWORK = 'blurt-mainnet';
  *  Registered 2026-04-18. */
 export const MORPHIT_ACCOUNT = 'morphit';
 
-/** The posting relay's own account. It spends Mana (Blurt's
- *  transaction fuel) on behalf of new users during account creation,
- *  and broadcasts signed ops they hand it. It never holds user
- *  private keys.
+/** The posting relay's own account. It pays the small Blurt network
+ *  fee (an operation flat fee + a bandwidth fee, deducted from LIQUID
+ *  BLURT — NOT mana; mana on Blurt is only voting power) on behalf of
+ *  new users during account creation, and broadcasts signed ops they
+ *  hand it. It never holds user private keys.
  *
  *  Registered 2026-04-18. */
 export const MORPHIT_RELAY_ACCOUNT = 'morphit-relay';
@@ -52,8 +53,8 @@ export const MORPHIT_OFFICIAL_POSTING_PUBKEY =
  * Base location of Morphit's posting relay service.
  *
  * The relay is a small service on the operator's VPS that pays
- * Blurt RC for new-user account creation on behalf of the user,
- * without ever holding user private keys (see PHASE-3a-DESIGN.md).
+ * the Blurt account-creation fee (in BLURT) for new users on their
+ * behalf, without ever holding user private keys (see PHASE-3a-DESIGN.md).
  *
  * Default is a same-origin relative path ('/relay') assuming
  * the colocated topology documented in OPERATIONS.md §14: nginx

@@ -9579,10 +9579,13 @@ For a community operator standing up
    First-come-first-served; once claimed, no other
    operator can use it.  Before broadcasting it shows
    the public key your active key derives to; if the
-   account is low on **mana** (Blurt's transaction
-   fuel) it tells you how much BLURT Power to add
-   (≈50 BP floor) and lets you retry in place after
-   powering up — no full re-run.  See the
+   account can't cover the operation's small BLURT fee
+   (Blurt charges a per-op fee from your LIQUID balance —
+   it does NOT gate transactions on mana/RC like
+   Hive/Steem; see docs/BLURT-CHAIN-MODEL.md) it tells you
+   to top up a little liquid BLURT (≈5 BLURT is ample —
+   transfer it, do NOT power it up) and lets you retry in
+   place — no full re-run.  See the
    morphit_operator_register_v1 handler in
    apps/indexer/src/indexer/handlers for the op shape.
    - To verify the saved key at any time:

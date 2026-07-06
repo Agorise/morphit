@@ -189,6 +189,52 @@ describe('profileCache', () => {
 		expect(fetchMock).toHaveBeenCalledTimes(2);
 	});
 
+	// ─── cp428: fetch-failure nulls self-heal fast (soft TTL) ────
+	// A transient blip during a profile batch must NOT hide a real display
+	// name for the full 90s — it used to, so a card fell back to "@account"
+	// for a minute and a half even though the profile was well indexed.
+
+	it('re-fetches a FAILED-fetch null after the short soft TTL (not 90s)', async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-04-23T12:00:00Z'));
+
+		// First fetch fails (network down) → null, but SOFT-cached.
+		fetchMock.mockRejectedValueOnce(new TypeError('network down'));
+		const r1 = await getProfilesBatch(['alice']);
+		expect(r1.get('alice')).toBeNull();
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+
+		// 3s later — still inside the 5s soft TTL, no refetch yet.
+		vi.setSystemTime(new Date('2026-04-23T12:00:03Z'));
+		await getProfilesBatch(['alice']);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+
+		// 6s after the failure — past the soft TTL but WELL before 90s.
+		// The blip must have cleared: a re-fetch fires and now succeeds.
+		vi.setSystemTime(new Date('2026-04-23T12:00:06Z'));
+		fetchMock.mockResolvedValueOnce(mockBatchResponse({ alice: mockProfile('alice') }));
+		const r2 = await getProfilesBatch(['alice']);
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+		expect(r2.get('alice')!.display_name).toBe('alice display');
+	});
+
+	it('keeps a GENUINE "no profile" null cached the full TTL (no soft expiry)', async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-04-23T12:00:00Z'));
+
+		// HTTP 200, but alice is absent → authoritative "no profile".
+		fetchMock.mockResolvedValueOnce(mockBatchResponse({}));
+		const r1 = await getProfilesBatch(['alice']);
+		expect(r1.get('alice')).toBeNull();
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+
+		// 6s later — past the SOFT ttl, but this null is authoritative, so it
+		// must stay cached (must NOT be treated as a transient failure).
+		vi.setSystemTime(new Date('2026-04-23T12:00:06Z'));
+		await getProfilesBatch(['alice']);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+	});
+
 	// ─── In-flight deduplication ────────────────────────────────
 
 	it('shares in-flight promise across concurrent calls', async () => {

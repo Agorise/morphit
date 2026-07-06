@@ -670,7 +670,7 @@
 				>
 			</nav>
 
-			<div class="flex w-full items-center justify-between gap-3">
+			<div class="flex w-full items-end justify-between gap-3">
 				<p class="min-w-0 text-xs text-ink-500">
 					<a
 						href="{lp('/faq')}?q=why_agpl&lang={currentLang}"
@@ -683,10 +683,12 @@
 				     the reading-direction end). cp414 — dropped flex-wrap on the
 				     row + min-w-0 on the copyright so on a narrow phone the
 				     copyright text wraps INSIDE its own paragraph instead of
-				     bumping the switcher onto a new line below it; the switcher
-				     stays at the top-right of this row, never lower than the
-				     AGPL line. dropUp so its menu opens upward, not below the fold. -->
-				<div class="flex-none self-start">
+				     bumping the switcher onto a new line below it. cp428 — the row
+				     is items-end and the switcher gets pb-0.5, so the BOTTOM of the
+				     switcher sits on (a hair above) the AGPL line rather than
+				     hanging below it. dropUp so its menu opens upward, not below
+				     the fold. -->
+				<div class="flex-none pb-0.5">
 					<LanguageSwitcher dropUp />
 				</div>
 			</div>

@@ -27,6 +27,7 @@ SMOKES=(
 	"apps/indexer:chat-identity-handler-smoke"
 	"apps/indexer:order-handler-smoke"
 	"apps/indexer:broadcast-chain-proxy-rate-limit-smoke"
+	"apps/indexer:broadcast-op-allowlist-smoke"
 	"apps/indexer:asset-network-set-registry-parity-smoke"
 	"apps/indexer:feedback-handler-smoke"
 	"apps/indexer:stranger-fee-handler-smoke"

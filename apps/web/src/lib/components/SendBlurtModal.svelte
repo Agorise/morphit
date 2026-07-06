@@ -33,6 +33,7 @@
 		signTransferWithKey,
 		broadcastSignedTransaction
 	} from '$blurt/sign';
+	import { ChainRejectedError, BroadcastUnavailableError } from '$blurt/broadcastTransport';
 	import { formatBlurtAmount } from '$blurt/balanceMath';
 	import { fetchAccountBalance } from '$blurt/accountBalance';
 	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
@@ -52,7 +53,10 @@
 
 	let { account, blurtBalance, onDone, onCancel }: Props = $props();
 
-	type Phase = { kind: 'ready' } | { kind: 'sending' } | { kind: 'error'; messageKey: string };
+	type Phase =
+		| { kind: 'ready' }
+		| { kind: 'sending' }
+		| { kind: 'error'; messageKey: string; reason?: string };
 	/** Recipient validation state. 'invalid' = bad name grammar; 'self' =
 	 *  the sender; 'checking' = on-chain lookup in flight; 'not_found' =
 	 *  no such account on chain; 'error' = the lookup itself failed. */
@@ -179,9 +183,16 @@
 				formatBlurtAmount(amountNum),
 				memo.trim()
 			);
-		} catch {
+		} catch (err) {
 			passwordInput = '';
-			phase = { kind: 'error', messageKey: 'profile.wallet.error_broadcast' };
+			// Building the tx fetches the chain head; if the instance is
+			// unreachable that surfaces as BroadcastUnavailableError. Log the
+			// raw error so an unexpected build failure is diagnosable.
+			console.warn('[send] prepare failed:', err);
+			phase =
+				err instanceof BroadcastUnavailableError
+					? { kind: 'error', messageKey: 'profile.wallet.error_unreachable' }
+					: { kind: 'error', messageKey: 'profile.wallet.error_broadcast' };
 			return;
 		}
 
@@ -195,8 +206,26 @@
 				await broadcastSignedTransaction(r.value);
 				onDone();
 				return;
-			} catch {
-				phase = { kind: 'error', messageKey: 'profile.wallet.error_broadcast' };
+			} catch (err) {
+				// Surface the chain's actual reason rather than a blank "try
+				// again" that just loops. NOTE: on Blurt an op costs a small
+				// fee paid from LIQUID BLURT (an operation flat fee + a
+				// bandwidth fee, set by witnesses) — it is NOT gated by
+				// mana/RC (that's the Hive/Steem model; Blurt's mana is only
+				// voting power). So the reason here is whatever the chain
+				// reports (e.g. balance/fee, authority) — we show it verbatim.
+				console.warn('[send] broadcast rejected:', err);
+				if (err instanceof ChainRejectedError) {
+					phase = {
+						kind: 'error',
+						messageKey: 'profile.wallet.error_chain_rejected',
+						reason: err.message
+					};
+				} else if (err instanceof BroadcastUnavailableError) {
+					phase = { kind: 'error', messageKey: 'profile.wallet.error_unreachable' };
+				} else {
+					phase = { kind: 'error', messageKey: 'profile.wallet.error_broadcast' };
+				}
 				return;
 			}
 		}
@@ -247,12 +276,14 @@
 			<div
 				class="mt-5 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-700 dark:bg-red-950 dark:text-red-200"
 			>
-				{$_(phase.messageKey)}
+				{phase.reason
+					? $_(phase.messageKey, { values: { reason: phase.reason } })
+					: $_(phase.messageKey)}
 			</div>
 			<div class="mt-5 flex justify-end">
 				<button
 					type="button"
-					class="rounded-lg border border-ink-300 px-4 py-2 text-sm font-semibold hover:border-ink-400 dark:border-ink-700"
+					class="rounded-lg border border-ink-300 px-4 py-2 text-sm font-semibold transition-colors hover:border-ink-400 hover:bg-ink-50 dark:border-ink-700 dark:hover:bg-ink-800"
 					onclick={onCancel}
 				>
 					{$_('common.close')}
@@ -403,7 +434,7 @@
 			<div class="mt-5 flex justify-end gap-2">
 				<button
 					type="button"
-					class="rounded-lg border border-ink-300 px-4 py-2 text-sm font-semibold hover:border-ink-400 disabled:opacity-50 dark:border-ink-700"
+					class="rounded-lg border border-ink-300 px-4 py-2 text-sm font-semibold transition-colors hover:border-ink-400 hover:bg-ink-50 disabled:opacity-50 dark:border-ink-700 dark:hover:bg-ink-800"
 					onclick={onCancel}
 					disabled={phase.kind === 'sending'}
 				>

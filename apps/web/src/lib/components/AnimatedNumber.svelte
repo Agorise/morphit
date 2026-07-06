@@ -45,6 +45,7 @@
 	 */
 	import { onMount, onDestroy } from 'svelte';
 	import { browser } from '$app/environment';
+	import { locale } from 'svelte-i18n';
 
 	interface Props {
 		value: number;
@@ -204,17 +205,27 @@
 
 	const formatted = $derived.by(() => {
 		if (!Number.isFinite(displayed)) return '--';
-		// Use Intl for locale-aware grouping; it picks the user's
-		// browser locale automatically (Sally in es-MX would see
-		// "1,234.567" or "1.234,567" per her locale).
+		// Format per the APP's selected locale (the language the user picked in
+		// the switcher), NOT the browser's — a German (de) user sees
+		// "1.234,567" (dot thousands, comma decimal) even if their browser is
+		// English. Falls back to the browser locale, then a plain toFixed.
+		const appLocale = $locale ?? undefined;
 		try {
-			return displayed.toLocaleString(undefined, {
+			return displayed.toLocaleString(appLocale, {
 				minimumFractionDigits: decimals,
 				maximumFractionDigits: decimals,
 				useGrouping: grouping
 			});
 		} catch {
-			return displayed.toFixed(decimals);
+			try {
+				return displayed.toLocaleString(undefined, {
+					minimumFractionDigits: decimals,
+					maximumFractionDigits: decimals,
+					useGrouping: grouping
+				});
+			} catch {
+				return displayed.toFixed(decimals);
+			}
 		}
 	});
 </script>

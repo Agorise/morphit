@@ -8,20 +8,27 @@
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
 	const lp = $derived((path: string) => localePath(path, currentLang));
 	/**
-	 * FeaturedOrders — renders up to 5 featured slots.
+	 * FeaturedOrders — renders the live featured slots (up to max_slots, cap 3).
 	 *
-	 * Self-fetches /v1/orderbook/featured on mount and on a 60s
-	 * interval. 60s matches the backend's cache-control: asking
-	 * more often is wasted, asking less often lets expired slots
-	 * linger visibly past deadline. If the fetch fails the
-	 * component renders nothing — featured slots are advertising,
-	 * not a primary navigation surface, and a broken request
-	 * shouldn't leave an error empty-state on the homepage.
+	 * cp428 — each slot now renders through the SHARED OrderCard (with its
+	 * `featured` frame), so a featured order reads exactly like every other
+	 * orderbook card (same layout on PC + mobile) — title, poster identity,
+	 * pay/accept line, terms preview, expiry pill, price model — plus the
+	 * emerald border + "🎉 Featured" badge. Previously it was a bespoke 4-line
+	 * card that looked nothing like the orderbook.
 	 *
-	 * Variant prop controls layout density:
-	 *   - 'grid'  — 5-across on desktop, stacked on mobile. Home.
-	 *   - 'stack' — always stacked 1-per-row. Above the
-	 *     orderbook list so it matches the regular-order cards.
+	 * Self-fetches /v1/orderbook/featured on mount and on a 30s interval (matches
+	 * the backend cache TTL — asking more often is wasted, less often lets
+	 * expired slots linger). If the fetch fails the component renders nothing —
+	 * featured slots are advertising, not primary navigation, and a broken
+	 * request shouldn't leave an error state on the page.
+	 *
+	 * Layout:
+	 *   - variant='grid'   — responsive grid (home showcase).
+	 *   - variant='stack'  — one card per row (orderbook, matches the list).
+	 *   - embedded=true    — render ONLY the <ul> of cards (no heading / section
+	 *     wrapper), so it can live INSIDE the unified "🎉 Featured" card next to
+	 *     the clearing-price history. Self-hides (renders nothing) when empty.
 	 */
 
 	import { onMount, onDestroy } from 'svelte';
@@ -29,29 +36,45 @@
 	import { getFeaturedOrderbook } from '$lib/indexer/client';
 	import { getProfilesBatch } from '$lib/indexer/profileCache';
 	import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
+	import { isOrderLive } from '$lib/orders/orderExpiry';
+	import { orderTitleParts } from '$lib/utils/orderTitle';
+	import { displayNamesForMethods } from '$lib/payments/display';
+	import { formatOrderPriceModel } from '$lib/orders/priceModelDisplay';
 	import type { FeaturedSlot, ProfileResponse } from '@morphit/indexer-client';
-	import IdentityLabel from '$components/IdentityLabel.svelte';
-	import NewTraderChip from '$components/NewTraderChip.svelte';
+	import OrderCard from '$components/OrderCard.svelte';
 
 	interface Props {
 		variant?: 'grid' | 'stack';
-		/** If false, the component renders nothing when empty. If
-		 *  true, renders a muted "no featured orders yet" stub —
-		 *  useful on the orderbook page where an empty featured
-		 *  section still wants to educate about the feature. */
+		/** If false, the component renders nothing when empty. If true, renders a
+		 *  muted "no featured orders yet" stub (standalone use only). */
 		showEmptyState?: boolean;
+		/** Embedded inside the unified "🎉 Featured" card: render only the card
+		 *  list, no heading/section chrome, and nothing at all when empty. */
+		embedded?: boolean;
 	}
 
-	let { variant = 'grid', showEmptyState = false }: Props = $props();
+	let {
+		variant = 'grid',
+		showEmptyState = false,
+		embedded = false
+	}: Props = $props();
 
 	let slots = $state<readonly FeaturedSlot[]>([]);
+	let maxSlots = $state(3);
 	let loaded = $state(false);
 	let abortController: AbortController | null = null;
 	let pollTimer: ReturnType<typeof setInterval> | null = null;
 
-	/** Profile data for featured slots' posters. Populated after
-	 *  each refresh; up to 5 entries. Missing keys fall through to
-	 *  identicons in IdentityLabel. */
+	// A coarse now-ticker (5s) so a featured offer whose own expires_at passes
+	// BETWEEN backend polls disappears immediately rather than lingering. The
+	// indexer already excludes cancelled/expired/unverified orders; this client
+	// filter is the immediacy win + a defensive net. `isOrderLive` treats a
+	// malformed/absent expires_at as still-live (fail-safe).
+	let nowMs = $state(Date.now());
+	let tickTimer: ReturnType<typeof setInterval> | null = null;
+	const visibleSlots = $derived(slots.filter((s) => isOrderLive(s.order, nowMs)));
+
+	/** Profile data for featured slots' posters. */
 	let profileMap = $state<Record<string, ProfileResponse | null>>({});
 
 	async function hydrateProfiles(
@@ -75,9 +98,9 @@
 		const result = await getFeaturedOrderbook(abortController.signal);
 		if (result.ok) {
 			slots = result.data.featured;
-			// Kick off profile hydration — non-blocking. 90s cache TTL
-			// means the 60s refresh cycle usually hits cache for the
-			// same accounts.
+			// cp428 — surface the real cap from the API (fixes a hardcoded "/5"
+			// that drifted from the backend's MAX_SLOTS=3).
+			maxSlots = result.data.max_slots;
 			void hydrateProfiles(result.data.featured, abortController.signal);
 		}
 		loaded = true;
@@ -85,26 +108,69 @@
 
 	onMount(() => {
 		void refresh();
-		pollTimer = setInterval(() => void refresh(), 60_000);
+		// 30s — matches the backend cache TTL, so new featured slots appear about
+		// as fast as the shared cache allows. (The bulk of any "why so slow"
+		// delay is the indexer indexing the on-chain bid, which is inherent to
+		// the federated model and can't be shortened client-side.)
+		pollTimer = setInterval(() => void refresh(), 30_000);
+		tickTimer = setInterval(() => (nowMs = Date.now()), 5_000);
 	});
 
 	onDestroy(() => {
 		abortController?.abort();
 		if (pollTimer !== null) clearInterval(pollTimer);
+		if (tickTimer !== null) clearInterval(tickTimer);
 	});
 
-	function formatAmountRange(o: FeaturedSlot['order']): string {
-		const min = o.amount_min;
-		const max = o.amount_max;
-		const cur = o.fiat_currency;
-		if (min !== null && max !== null && min !== max) return `${min}–${max} ${cur}`;
-		if (min !== null) return `≥ ${min} ${cur}`;
-		if (max !== null) return `≤ ${max} ${cur}`;
-		return cur;
+	/** Simple amount formatter for titles — mirrors the orderbook's so the
+	 *  featured card title reads identically to the list card. */
+	function formatAmount(n: number | null): string {
+		if (n === null) return '';
+		return n % 1 === 0 ? String(n) : n.toFixed(2);
+	}
+	function cardTitle(o: FeaturedSlot['order']): string {
+		const tp = orderTitleParts(o, formatAmount, $_('order_title.goods_services') as string);
+		return $_(tp.key, { values: tp.values }) as string;
 	}
 </script>
 
-{#if loaded && slots.length > 0}
+{#snippet cards()}
+	<ul
+		class={variant === 'grid'
+			? 'grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5'
+			: 'space-y-3'}
+	>
+		{#each visibleSlots as slot (slot.order.account + '/' + slot.order.permlink)}
+			{@const o = slot.order}
+			{@const labelProps = extractLabelPropsFromProfile(profileMap[o.account])}
+			<OrderCard
+				order={o}
+				title={cardTitle(o)}
+				displayName={labelProps.displayName}
+				avatarSvg={labelProps.avatarSvg}
+				avatarDataUri={labelProps.avatarDataUri}
+				detailHref={lp(`/@${o.account}/${o.permlink}`)}
+				profileHref={lp(`/@${o.account}`)}
+				paymentLabels={displayNamesForMethods(o.payment_methods)}
+				priceModelLabel={formatOrderPriceModel(
+					o,
+					$_ as unknown as Parameters<typeof formatOrderPriceModel>[1]
+				)}
+				featured
+			/>
+		{/each}
+	</ul>
+{/snippet}
+
+{#if embedded}
+	<!-- Nested inside the unified "🎉 Featured" card: cards only, nothing when
+	     empty. locale referenced so titles re-render on language switch. -->
+	{#if loaded && visibleSlots.length > 0}
+		<div class="mb-4">
+			{@render cards()}
+		</div>
+	{/if}
+{:else if loaded && visibleSlots.length > 0}
 	<section aria-labelledby="featured-heading" class="space-y-3">
 		<div class="flex items-center gap-2">
 			<h2
@@ -116,66 +182,10 @@
 			<span
 				class="rounded-full bg-morphit-emerald/20 px-2 py-0.5 text-xs font-bold text-morphit-emerald"
 			>
-				{slots.length}/5
+				{visibleSlots.length}/{maxSlots}
 			</span>
 		</div>
-
-		<ul
-			class={variant === 'grid'
-				? 'grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5'
-				: 'space-y-3'}
-		>
-			{#each slots as slot (slot.order.account + '/' + slot.order.permlink)}
-				{@const o = slot.order}
-				{@const labelProps = extractLabelPropsFromProfile(profileMap[o.account])}
-				<li
-					class="relative overflow-hidden rounded-2xl border-2 border-morphit-emerald/30 bg-gradient-to-br from-morphit-emerald/5 to-morphit-teal/5 p-4 transition hover:border-morphit-emerald/60 dark:border-morphit-emerald/40"
-				>
-					<!-- Featured badge: top-right corner, always visible -->
-					<div
-						class="absolute right-0 top-0 rounded-bl-xl bg-gradient-to-r from-morphit-emerald to-morphit-teal px-3 py-1 text-xs font-bold text-ink-950"
-					>
-						⭐ {$_('featured.badge')}
-					</div>
-
-					<div class="mt-4">
-						<div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-							<span class="font-display text-base font-bold">
-								{o.side === 'buy'
-									? $_('orderbook.order.buying', { values: { asset: o.asset } })
-									: $_('orderbook.order.selling', { values: { asset: o.asset } })}
-							</span>
-							<span class="text-xs text-ink-600 dark:text-ink-300">
-								{formatAmountRange(o)}
-							</span>
-						</div>
-						<div class="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs">
-							<IdentityLabel
-								account={o.account}
-								displayName={labelProps.displayName}
-								avatarSvg={labelProps.avatarSvg}
-								avatarDataUri={labelProps.avatarDataUri}
-								href={lp(`/@${o.account}`)}
-							/>
-							{#if o.is_new_trader}
-								<NewTraderChip />
-							{/if}
-						</div>
-						{#if o.location_region}
-							<p class="mt-1 truncate text-xs text-ink-500 dark:text-ink-400">
-								{o.location_region}
-							</p>
-						{/if}
-						{#if o.payment_methods.length > 0}
-							<p class="mt-1 truncate text-xs text-ink-500 dark:text-ink-400">
-								{o.payment_methods.slice(0, 2).join(', ')}
-								{#if o.payment_methods.length > 2}…{/if}
-							</p>
-						{/if}
-					</div>
-				</li>
-			{/each}
-		</ul>
+		{@render cards()}
 	</section>
 {:else if loaded && showEmptyState}
 	<section

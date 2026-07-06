@@ -55,7 +55,17 @@ const ALLOWED_OP_TYPES = new Set([
 	// cp396 — claim unclaimed author/curation rewards into usable balances.
 	// Posting-authority op; the signer can only claim their OWN rewards, so
 	// whitelisting it can't be abused to move anyone else's funds.
-	'claim_reward_balance'
+	'claim_reward_balance',
+	// cp428 — wallet Power Up / Power Down. `transfer_to_vesting` stakes the
+	// signer's own liquid BLURT into BP; `withdraw_vesting` unstakes it back.
+	// Both are self-only (the op moves the SIGNER's own balance between liquid
+	// and staked — it cannot move anyone else's funds, same safety class as
+	// claim_reward_balance), so whitelisting them can't turn this into an open
+	// relay. Without these the indexer rejected every Power Up/Down with
+	// "operation type not permitted", surfacing to the user as a generic
+	// on-chain error even though the signed op was perfectly valid.
+	'transfer_to_vesting',
+	'withdraw_vesting'
 ]);
 
 /** A signed transaction, validated STRUCTURALLY only — the chain is the

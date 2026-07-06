@@ -166,9 +166,9 @@
 	// cp165 byte-budget: lazy-load below-the-fold featured components.
 	// Each kicks off a network fetch in its onMount, so deferring the
 	// import also defers the fetch for visitors who don't scroll past
-	// the orderbook list.
-	const loadFeaturedOrders = () =>
-		import('$components/FeaturedOrders.svelte').then((m) => m.default);
+	// the orderbook list. cp428 — FeaturedAuctionHistory now pulls in
+	// FeaturedOrders itself (the live cards render inside its card), so the
+	// orderbook only lazy-loads the one component.
 	const loadFeaturedAuctionHistory = () =>
 		import('$components/FeaturedAuctionHistory.svelte').then((m) => m.default);
 	/** Batch L: payment-method display lookup.  Reading
@@ -1219,23 +1219,14 @@
 		{/if}
 	</section>
 
-	<!-- Phase 5 item 5: Featured slots pinned above the main list.
-	     'stack' variant to match the single-column orderbook row
-	     layout below. Self-hides when empty so no promotional noise
-	     on a fresh marketplace. -->
-	<div class="mt-6">
-		{#await loadFeaturedOrders() then FeaturedOrders}
-			<FeaturedOrders variant="stack" />
-		{/await}
-	</div>
-
-	<!-- Item 5 (Group 1 #2): clearing-price history for the
-	     featured-slot auction.  Self-hides until there's at
-	     least one bid in the window.  Below the live featured
-	     panel because "is the auction competitive?" is more
-	     interesting AFTER you've seen who's currently winning. -->
+	<!-- cp428 — the LIVE featured orders now render INSIDE the unified
+	     "🎉 Featured" card (FeaturedAuctionHistory), above the clearing-price
+	     history + window selector, instead of a separate section here (which
+	     read as a jumbled second featured block). Self-hides when empty. -->
 	{#await loadFeaturedAuctionHistory() then FeaturedAuctionHistory}
-		<FeaturedAuctionHistory />
+		<div class="mt-6">
+			<FeaturedAuctionHistory />
+		</div>
 	{/await}
 
 	<!-- Loading status -->

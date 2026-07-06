@@ -177,30 +177,30 @@ export type ChainErrorKind =
 	| 'invalid_origin' // origin URL rejected (loopback/private/path/scheme/etc.)
 	| 'already_registered'
 	| 'key_mismatch'
-	| 'insufficient_rc'
+	| 'insufficient_fee' // not enough LIQUID BLURT to pay the small per-op fee (NOT mana/RC)
 	| 'rpc_unreachable'
 	| 'unknown';
 
 /**
- * Approximate BLURT Power needed to transact comfortably.
+ * Suggested LIQUID BLURT buffer to keep on an operator account so it can
+ * always pay Blurt's small per-operation fee.
  *
- * On Blurt the chain's rate-limit fuel is called MANA (the
- * Steem/Hive "resource credits / RC" term is not what Blurt users
- * see).  Mana accrues from BLURT Power (BP) and regenerates fully
- * over ~5 days.  A `custom_json` like the operator ops here is one
- * of the CHEAP operations — far below a >2 KB post.  The exact mana
- * charge floats with chain state and the op's byte size, so we
- * don't print a single fixed mana integer (it would go stale and
- * mislead).  Instead we give an actionable floor: an account with
- * this much BP comfortably covers occasional operator ops with
- * headroom, and regenerates well within a day.
+ * IMPORTANT — Blurt is NOT Hive/Steem here (see docs/BLURT-CHAIN-MODEL.md).
+ * Blurt does NOT gate transactions on RC / mana / bandwidth. Every on-chain
+ * op instead costs a small BLURT FEE, deducted from the account's LIQUID
+ * balance (the chain computes it from the witness-set `operation_flat_fee`
+ * plus a `bandwidth_kbytes_fee` scaled by tx size). Mana on Blurt is
+ * VOTING-only and never blocks a broadcast. So the thing an operator account
+ * can run short of is LIQUID BLURT to pay the fee — not BP, not mana. Powering
+ * up does NOT help transacting (it only raises voting power + APR); if
+ * anything it moves BLURT out of the liquid balance the fee is paid from.
  *
- * This is intentionally conservative (a few BLURT, not fractions),
- * because the failure mode we're guarding against — a near-empty
- * relay account that can't even post its own registration — is
- * cheap to over-provision against and expensive to retry blind.
+ * A `custom_json` like the operator ops here is tiny, so the fee is a small
+ * fraction of a BLURT. We suggest keeping a few BLURT liquid as comfortable
+ * headroom for occasional operator ops — cheap to over-provision, expensive to
+ * retry blind on a near-empty account.
  */
-export const SUGGESTED_BP_FLOOR = 50;
+export const SUGGESTED_LIQUID_BLURT_BUFFER = 5;
 
 /** Classify a broadcast error message into a coarse kind. */
 export function classifyChainError(message: string): ChainErrorKind {
@@ -269,19 +269,35 @@ export function classifyChainError(message: string): ChainErrorKind {
 		return 'key_mismatch';
 	}
 
-	// Mana exhaustion.  Blurt's USER-FACING term is "mana"; but the
-	// blurtd daemon is forked from Steem, whose low-level assert
-	// messages still say "rc" / "resource credit" / "manabar".  Match
-	// BOTH so we classify correctly regardless of which the node
-	// surfaces — the DISPLAYED guidance always uses Blurt's "mana".
-	if (m.includes('mana')) return 'insufficient_rc';
+	// Fee / balance shortfall.  Blurt charges a small BLURT fee per op,
+	// deducted from the LIQUID balance (it does NOT gate on RC / mana /
+	// bandwidth like Hive/Steem — see docs/BLURT-CHAIN-MODEL.md), so the
+	// resource an operator account runs short of is liquid BLURT to cover
+	// that fee, surfaced as an insufficient-balance / insufficient-funds
+	// assert.  We also still catch any leftover Steem-lineage "rc" / "mana"
+	// wording defensively (blurtd is forked from Steem) and route it to the
+	// SAME fee guidance, because on Blurt the actionable fix is always "keep
+	// liquid BLURT for the fee", never "power up for mana".
 	if (
-		m.includes('rc') &&
-		(m.includes('insufficient') || m.includes('exceeded') || m.includes('negative'))
+		m.includes('insufficient balance') ||
+		m.includes('insufficient funds') ||
+		m.includes('does not have sufficient') ||
+		m.includes('has not enough balance') ||
+		m.includes('overdrawn') ||
+		((m.includes('fee') || m.includes('balance')) &&
+			(m.includes('insufficient') || m.includes('not enough')))
 	) {
-		return 'insufficient_rc';
+		return 'insufficient_fee';
 	}
-	if (m.includes('resource credit') || m.includes('not enough rc')) return 'insufficient_rc';
+	if (
+		m.includes('mana') ||
+		m.includes('resource credit') ||
+		m.includes('not enough rc') ||
+		(m.includes('rc') &&
+			(m.includes('insufficient') || m.includes('exceeded') || m.includes('negative')))
+	) {
+		return 'insufficient_fee';
+	}
 
 	// Transport.
 	if (
@@ -425,19 +441,20 @@ export function printChainErrorHelp(
 			log('    edit` and supply the correct ACTIVE key.');
 			break;
 
-		case 'insufficient_rc':
-			log(`@${sanitizeForTerm(ctx.account)} does not have enough mana to broadcast right`);
-			log('now.  Mana is Blurt\'s rate-limit fuel for transactions; it');
-			log('comes from BLURT Power (BP) and refills fully over about 5 days.');
+		case 'insufficient_fee':
+			log(`@${sanitizeForTerm(ctx.account)} could not cover this operation's fee.  On`);
+			log('Blurt every on-chain op costs a small BLURT fee, paid from the');
+			log("account's LIQUID balance (a flat fee plus a tiny size-based fee).");
+			log('This is NOT mana — Blurt does not gate transactions on mana the');
+			log('way Hive/Steem chains do, so powering up does NOT help and can');
+			log('make it worse by moving BLURT out of the liquid balance.');
 			log('');
-			log('To fix it — either:');
-			log('  - Wait a few hours for mana to regenerate (this op is cheap;');
-			log('    a partially-recharged account is usually enough); OR');
-			log(`  - Power up BLURT into BP on @${sanitizeForTerm(ctx.account)}.  As a`);
-			log(`    comfortable floor, ~${SUGGESTED_BP_FLOOR} BP gives this account ample mana`);
-			log('    headroom for occasional operator ops with margin to spare.');
-			log('    In any Blurt wallet: Wallet → Power Up (or a transfer_to_vesting');
-			log('    op).  Note: BP is staked BLURT; powering down later takes ~weeks.');
+			log('To fix it:');
+			log(`  - Keep a little LIQUID BLURT on @${sanitizeForTerm(ctx.account)} — a few`);
+			log(`    BLURT (≈${SUGGESTED_LIQUID_BLURT_BUFFER}) is ample headroom for occasional operator ops.`);
+			log('    Transfer some liquid BLURT to the account (do NOT power it up),');
+			log('    then re-run.  If the balance already looks fine, the shortfall');
+			log('    may be transient chain state — re-run in a moment.');
 			break;
 
 		case 'rpc_unreachable':
@@ -460,7 +477,8 @@ export function printChainErrorHelp(
 			log('    free and not project-reserved? (try a different name)');
 			log(`  - Key: does \`npx morphit-ops show-key\` show the active key for`);
 			log(`    @${sanitizeForTerm(ctx.account)}?`);
-			log(`  - Mana: does @${sanitizeForTerm(ctx.account)} have mana / some BP to transact?`);
+			log(`  - Fee: does @${sanitizeForTerm(ctx.account)} hold a little liquid BLURT for the`);
+			log('    small per-op fee? (Blurt charges a fee, not mana — do not power up.)');
 			log('  - Connectivity: can this server reach a Blurt RPC node?');
 			log('  - If none of these fit, report the full message above.');
 			break;

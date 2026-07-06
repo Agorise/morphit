@@ -55,7 +55,10 @@
 
 	let { orderPermlink, feeBlurtPerHour = 50, onSuccess, onCancel }: Props = $props();
 
-	const HOURS_OPTIONS = [1, 6, 24, 72] as const;
+	// The indexer enforces MIN_HOURS=6 (featureBid handler): a bid below 6h is
+	// rejected on-chain, so offering 1h here just produced a confusing
+	// "couldn't place your bid". Options start at the real minimum.
+	const HOURS_OPTIONS = [6, 24, 72] as const;
 	let selectedHours: (typeof HOURS_OPTIONS)[number] = $state(24);
 	let password = $state('');
 	let submitting = $state(false);
@@ -178,8 +181,9 @@
 				flashPasswordBorder();
 			} else if (err instanceof ChainRejectedError) {
 				// cp425 — the network rejected the tx. Surface the REAL reason
-				// (insufficient RC/mana, missing authority, etc.) instead of a
-				// generic message that hides what actually went wrong.
+				// (not enough liquid BLURT for the network fee, missing
+				// authority, etc. — NOT mana/RC, which is the Steem/Hive model)
+				// instead of a generic message that hides what went wrong.
 				errorMessage = $_('feature_bid.error_chain_rejected', {
 					values: { reason: err.message }
 				});

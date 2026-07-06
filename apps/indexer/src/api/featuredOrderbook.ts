@@ -1,13 +1,17 @@
 /**
  * Morphit indexer — /v1/orderbook/featured endpoint.
  *
- * Returns the top 5 featured orders at the current moment. "Top"
+ * Returns the top 3 featured orders at the current moment. "Top"
  * means: among all featured_slot_bids rows whose effective_at has
  * already passed and expires_at is still in the future, pick the
- * 5 highest blurt_per_hour, ties broken by earliest block_time_at
+ * 3 highest blurt_per_hour, ties broken by earliest block_time_at
  * (first bidder wins ties). Cross-join against orders to filter
- * out bids whose target order has since been cancelled or
- * completed.
+ * out bids whose target order is no longer effectively live —
+ * cancelled, or past its own expires_at (the indexer keeps a
+ * stored status of 'live' until a cancel/sweep and enforces expiry
+ * at query time, exactly as /v1/orderbook does, so a featured slot
+ * whose underlying offer has expired stops showing the instant its
+ * deadline passes rather than lingering until the bid window ends).
  *
  * Response shape:
  *   {
@@ -21,7 +25,7 @@
  *         expires_at: ISO
  *       }
  *     }>,
- *     max_slots: 5
+ *     max_slots: 3
  *   }
  *
  * The endpoint is deliberately non-paginated — 5 rows at most,
@@ -39,7 +43,7 @@ import type { AssetTicker } from '@morphit/asset-registry';
 
 /** Hard cap per project directive: at most 5 concurrent featured
  *  slots. Keeps the feature scarce and visually manageable. */
-const MAX_SLOTS = 5;
+const MAX_SLOTS = 3;
 
 interface FeaturedRow {
 	// Order columns (subset matching /v1/orderbook list shape)
@@ -119,6 +123,7 @@ export function featuredRoute(db: Database, operatorAccount: string): Hono {
 			  ON o.account = w.bidder
 			 AND o.permlink = w.order_permlink
 			WHERE o.status = 'live'
+			  AND o.expires_at > NOW()
 			  AND o.fee_status IN ('verified', 'verified_by_attestation')
 			  AND NOT EXISTS (SELECT 1 FROM operator_blocks ob WHERE ob.operator = $2 AND ob.blocked = o.account AND ob.state = 'blocked')
 			ORDER BY w.blurt_per_hour DESC, w.effective_at ASC`,

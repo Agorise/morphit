@@ -1521,7 +1521,7 @@
       },
       "what_is_mana": {
         "q": "What is Mana on Blurt?",
-        "a": "On Blurt, Mana is the per-account capacity that lets you do things on the chain — post, comment, vote, and (in Morphit's case) submit orders, broadcast feedback, send chat messages.\n\nThink of Mana like a video-game stamina bar that refills on its own. Every action you take spends a little. The bar slowly recharges over the next few hours and days. If you're a normal user, you'll basically never notice it — Blurt's design refills Mana fast enough that you can do dozens of things per day without thinking about it.\n\nMana is the answer to the spam question: \"if posting on a blockchain is free, why doesn't everyone just spam?\" Because spamming would burn through your Mana bar in seconds, and then you'd have to wait it out while everyone else's actions go through normally. Blurt's economy uses this to throttle abuse without anyone needing to charge fees on each post.\n\nThe size of your Mana bar is roughly proportional to how much Blurt you're holding (specifically, Blurt Power — staked Blurt). New accounts get a small starter amount, which is why the welcome bonus includes some Blurt Power: it bumps up your bar so you can use Morphit smoothly from day one.\n\n**Note on terminology.** You may see this called \"RC\" or \"Resource Credits\" in older Blurt documentation, on the Steem network it forked from, or in our internal code comments. Mana is the modern Blurt name, and what we use everywhere a normal user can see."
+        "a": "On Blurt, Mana is your voting power — it sets how much weight your upvotes carry, and that is the only thing it affects. Picture a stamina bar that starts at 100%, drops a little each time you vote, and refills by roughly 20% a day. The more Blurt Power (staked Blurt) you hold, the bigger the bar.\n\nWhat Mana does NOT do is pay for your actions. This is the key difference from Steem and Hive, which meter posting and transacting with \"Resource Credits (RC)\". Blurt dropped that model. On Blurt, on-chain actions — posting, commenting, transferring, and on Morphit submitting orders, leaving feedback, and sending chat messages — cost a small fee paid from your liquid BLURT (an operation flat fee plus a size-based bandwidth fee, set by the witnesses; you see the exact amount just before you sign). Voting is the one exception: it spends Mana, not BLURT.\n\nSo the practical rule is simple: keep a little liquid BLURT on hand — even about 10 is plenty for everyday use — and your actions go through. Incoming transfers are free, so topping up is easy. You never have to wait for Mana to recharge before you can post or trade; that is a Steem/Hive habit that does not apply on Blurt."
       },
       "node_minimum_requirements": {
         "q": "What are the minimum hardware requirements to run a Morphit node?",
@@ -2624,8 +2624,6 @@
     "error_body": "The indexer is unreachable at the moment. Please try again in a little while.",
     "load_more": "Load more",
     "order": {
-      "buying": "buying {asset}",
-      "selling": "selling {asset}",
       "updated_prefix": "Updated",
       "new_trader_aria": "New trader — first trade not yet completed",
       "new_trader_tooltip": "This trader is new to Morphit. Help them get started!",
@@ -2961,6 +2959,7 @@
       "region_label": "Region (optional)",
       "region_hint": "Where you're willing to trade. Helps people find you nearby.",
       "terms_label": "Terms / Details / Notes",
+      "terms_markdown_hint": "Basic markdown formatting is supported; If images are desired, provide a link to your blog, etc.",
       "terms_forbidden_char": "Your terms contain a character that can't be used — remove any hidden or control characters. (Line breaks and the usual markdown are fine.)",
       "expires_label": "Listing expires",
       "expires_1d": "In 1 day",
@@ -3018,7 +3017,7 @@
       "amount_entered_usd_hint": "{amount} {fiat} (≈ {usd})",
       "returning_min_hint": "At least {amount} {fiat} worth (≈ {usd})",
       "barter_accept_label": "Which cryptos will you accept?",
-      "barter_accept_hint": "Tick the cryptos buyers can pay you in — pick the ones you actually use."
+      "barter_accept_hint": "Select the cryptos that buyers can pay you with — pick the ones you prefer."
     },
     "errors": {
       "fiat_empty": "Pick a fiat currency (like USD or EUR).",
@@ -3085,7 +3084,7 @@
       "body_bad_password": "That password didn't unlock your keystore. Try again.",
       "body_posting_only": "Paying the listing fee in BLURT needs your active key, and it isn't on this device — you're signed in with your posting key only. Sign in with your master password or full keyfile to pay in BLURT, or go back and pay in BTC/XMR (or use your free first listing).",
       "body_recipient_missing": "The listing fee couldn't be sent — the treasury account it pays to (@morphit-fees) doesn't seem to exist on Blurt yet. Nothing was paid. If you run this instance, that account needs to be created; otherwise, please report this.",
-      "body_insufficient_rc": "Your account is low on Resource Credits (RC), so Blurt rejected the transaction. Power up a little BLURT, or wait a while for your RC to recharge, then try again. Nothing was paid.",
+      "body_insufficient_rc": "Blurt takes a small network fee for this action from your liquid BLURT, and your account could not cover it. Top up a little liquid BLURT (incoming transfers are free) and try again. Nothing was paid.",
       "body_authority": "Blurt rejected the signature on the fee payment — your account's Active key may not match what's on-chain. Nothing was paid. Try signing in again with your 12-word seed or Keyfile."
     },
     "waiver": {
@@ -3162,7 +3161,9 @@
       "price_market": "at market price",
       "price_fixed": "at a fixed price of {price} {fiat} per {asset}",
       "barter_sentence_sell": "You're offering goods/services worth {value}, accepting {cryptos}.",
-      "barter_sentence_buy": "You're looking for goods/services worth {value}, paying in {cryptos}."
+      "barter_sentence_buy": "You're looking for goods/services worth {value}, paying in {cryptos}.",
+      "barter_sentence_sell_novalue": "You're offering goods/services and accepting {cryptos}.",
+      "barter_sentence_buy_novalue": "You're looking for goods/services and paying in {cryptos}."
     }
   },
   "prices": {
@@ -3454,6 +3455,8 @@
       "error_bad_password": "That password didn't unlock your active key. Check it and try again.",
       "error_no_active_key": "This device has no active key to sign with. Sign in with your seed phrase to power up or down.",
       "error_broadcast": "That couldn't be completed on-chain. Please try again.",
+      "error_chain_rejected": "The network rejected this transaction: {reason}",
+      "error_unreachable": "Couldn't reach your Morphit instance to broadcast. Check your connection and try again.",
       "error_amount": "Enter an amount up to your available balance."
     },
     "send": {
@@ -4415,7 +4418,7 @@
       "body_sell": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\nI'm selling {asset1} for {asset2}. Want to trade?\n\nThere is no safer, faster, more secure place to trade cryptos and fiats than on Morphit.\n\nCheck out my offer on Morphit!\nhttps://morphit.io/{lang}/@{username}/{permlink}"
     },
     "opt_in_label": "Syndicate this order to my Blog too (Free)",
-    "opt_in_help": "Posts a short announcement of this order to your Blurt blog. One post per order, signed by you, fires right after you submit. Free — the post itself is on-chain using your existing Mana.",
+    "opt_in_help": "Posts a short announcement of this order to your Blurt blog. One post per order, signed by you, fires right after you submit. Costs only Blurt's tiny network fee, paid from your liquid BLURT.",
     "review_on_title": "This order will also be posted to your blog",
     "review_on_body": "Right after you submit, a short announcement will be posted to your Blurt blog so others can find your offer. Signed by you, free.",
     "success_pending": "Posting the announcement to your Blurt blog…",

@@ -41,6 +41,17 @@ import type { BatchProfilesResponse, ProfileResponse } from '@morphit/indexer-cl
 /** Cache TTL, matching server Cache-Control max-age. */
 const CACHE_TTL_MS = 90_000;
 
+/** cp428 — negative-cache TTL for a null that came from a FETCH FAILURE
+ *  (network error / non-200 / timeout / abort), NOT from a genuine
+ *  "account has no profile". A transient indexer blip during a profile batch
+ *  used to poison EVERY account in that batch with a 90s null — so a card
+ *  (e.g. the viewer's own order) fell back to "@account" instead of the
+ *  display name for a full minute and a half, even though the profile was
+ *  perfectly well indexed. Failures now expire in a few seconds so the next
+ *  render/poll re-fetches and the display name reappears, while still being
+ *  long enough to prevent a retry storm during a sustained outage. */
+const FAILED_FETCH_TTL_MS = 5_000;
+
 /** Server-side batch limit. Larger requests are split into multiple
  *  HTTP calls; the resulting promises are awaited in parallel. */
 const MAX_BATCH_SIZE = 100;
@@ -57,6 +68,11 @@ interface CacheEntry {
 	/** `Date.now()` at the moment this entry was populated. Used for
 	 *  TTL expiry checks. */
 	readonly fetchedAt: number;
+	/** cp428 — true when `value` is a null that came from a FETCH FAILURE
+	 *  rather than an authoritative "no such profile". Soft entries expire on
+	 *  the short {@link FAILED_FETCH_TTL_MS} so a transient blip doesn't hide
+	 *  a real display name for the full {@link CACHE_TTL_MS}. */
+	readonly soft?: boolean;
 }
 
 /** The cache. Module-scoped so every page, component, and route
@@ -76,7 +92,8 @@ const cache: Map<string, CacheEntry> = new Map();
 const inFlight: Map<string, Promise<ProfileResponse | null>> = new Map();
 
 function isFresh(entry: CacheEntry): boolean {
-	return Date.now() - entry.fetchedAt < CACHE_TTL_MS;
+	const ttl = entry.soft ? FAILED_FETCH_TTL_MS : CACHE_TTL_MS;
+	return Date.now() - entry.fetchedAt < ttl;
 }
 
 /**
@@ -239,15 +256,19 @@ export async function getProfilesBatch(
 		fetchPromises.push(
 			batchPromise.then(
 				(batch) => {
-					// Populate cache + result for every account in this
-					// chunk. Batch may be null if the HTTP call failed;
-					// treat that as all-null results, but DO cache the
-					// nulls — a transient failure shouldn't trigger N
-					// retries across the page. The 90s TTL is short
-					// enough that a brief outage self-heals.
+					// Populate cache + result for every account in this chunk.
+					// cp428 — distinguish the two null causes:
+					//   • batch is a RECORD (HTTP 200): an account absent from it
+					//     is an authoritative "no profile" → cache null for the
+					//     full TTL.
+					//   • batch is NULL (fetch failed — network/non-200/timeout):
+					//     a transient blip, NOT an answer → cache null SOFT so it
+					//     expires in seconds and the next render re-fetches,
+					//     instead of hiding a real display name for 90s.
+					const failed = batch === null;
 					for (const account of chunkOfAccounts) {
 						const value = batch ? (batch[account] ?? null) : null;
-						cache.set(account, { value, fetchedAt: Date.now() });
+						cache.set(account, { value, fetchedAt: Date.now(), soft: failed });
 						result.set(account, value);
 						inFlight.delete(account);
 					}
@@ -256,9 +277,10 @@ export async function getProfilesBatch(
 					// fetchBatch returns null on error rather than
 					// throwing, so this branch is defensive — but if
 					// something upstream throws we still want to clean
-					// up in-flight entries and fall back to null.
+					// up in-flight entries and fall back to null. cp428 —
+					// this is a failure, so the null is SOFT (short TTL).
 					for (const account of chunkOfAccounts) {
-						cache.set(account, { value: null, fetchedAt: Date.now() });
+						cache.set(account, { value: null, fetchedAt: Date.now(), soft: true });
 						result.set(account, null);
 						inFlight.delete(account);
 					}
