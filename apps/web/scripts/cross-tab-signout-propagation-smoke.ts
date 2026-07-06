@@ -277,13 +277,25 @@ if (resetBody && /clearSelfProfile/.test(resetBody)) {
 // layout, so the navigation home doesn't remount it to re-read, and
 // hasPersistedKeystore() is a plain localStorage read, not a reactive dep).
 // broadcastSignOut must therefore call clearKeystore() synchronously in its
-// own body, before reset() runs.
-if (broadcastBody && /\bclearKeystore\s*\(\s*\)/.test(broadcastBody)) {
-	pass(`broadcastSignOut clears the keystore synchronously (header CTA reverts to Sign in, not Unlock)`);
+// own body, before reset() runs. cp428 — accept BOTH the direct call
+// `clearKeystore()` and the isolated form `bestEffort(clearKeystore)`: the
+// sign-out hardening wraps each clear in a synchronous try/catch isolator
+// (`bestEffort` invokes its argument immediately), so the keystore is still
+// wiped synchronously and BEFORE reset() — the cp363 invariant is preserved,
+// just wrapped. Strip line comments first so comment-mentions of `reset()` /
+// `clearKeystore` (this body has several) don't skew the presence/order check,
+// then assert the ordering (keystore clear precedes reset) on real code only.
+const broadcastCode = broadcastBody ? broadcastBody.replace(/\/\/[^\n]*/g, '') : '';
+const keystoreSyncIdx = broadcastBody
+	? broadcastCode.search(/\bclearKeystore\s*\(\s*\)|\bbestEffort\s*\(\s*clearKeystore\s*[),]/)
+	: -1;
+const resetCallIdx = broadcastBody ? broadcastCode.search(/\breset\s*\(\s*\)/) : -1;
+if (broadcastBody && keystoreSyncIdx !== -1 && (resetCallIdx === -1 || keystoreSyncIdx < resetCallIdx)) {
+	pass(`broadcastSignOut clears the keystore synchronously before reset() (header CTA reverts to Sign in, not Unlock)`);
 } else if (broadcastBody) {
 	fail(
-		`broadcastSignOut does not clear the keystore synchronously`,
-		`call clearKeystore() directly in broadcastSignOut — relying only on reset()'s async clearDisk path leaves the signed-out header button stuck on "Unlock"`
+		`broadcastSignOut does not clear the keystore synchronously before reset()`,
+		`clear the keystore in broadcastSignOut BEFORE reset() — directly as clearKeystore() or via the synchronous isolator bestEffort(clearKeystore); relying only on reset()'s async clearDisk path leaves the signed-out header button stuck on "Unlock"`
 	);
 }
 

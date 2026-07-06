@@ -14,7 +14,7 @@
  * integration job).
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { INTEGRATION_ENABLED, setup, type IntegrationFixture } from './harness';
+import { INTEGRATION_ENABLED, setupWithMigrations, type IntegrationFixture } from './harness';
 import { featuredRoute } from '../../src/api/featuredOrderbook';
 
 const OPERATOR = 'op-featured-test';
@@ -65,7 +65,7 @@ describe.skipIf(!INTEGRATION_ENABLED)('featured orderbook â€” expiry exclusion â
 	let fx: IntegrationFixture;
 
 	beforeAll(async () => {
-		fx = await setup();
+		fx = await setupWithMigrations();
 	});
 	afterAll(async () => {
 		await fx.teardown();
