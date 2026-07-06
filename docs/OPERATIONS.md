@@ -1538,6 +1538,25 @@ Receipt endpoint `/v1/price/morphit-native/receipt?asset=BTC`
 returns a real BTC/USD derivation operators can inspect.
 See ADR-0042.
 
+**cp425 update — Blurt-native price feed added to the BLURT
+average**: BLURT now also reads `api.blurt.blog/price_info`
+(configurable via `MORPHIT_INDEXER_BLURT_PRICE_FEED_URL`, default
+`https://api.blurt.blog/price_info`; set it empty to opt out) as
+one more independent reading in the same outlier-rejected median.
+It's a self-sovereign, non-CEX source that fits Morphit's
+decentralization priority, and — like every other feed — a
+provider that's down or returns a bad number is simply dropped
+from the median, so it can never move the published price on its
+own. It applies to BLURT only (BTC/XMR are unaffected) and only
+when the instance prices in USD (the feed quotes USD). If you
+firewall the indexer's outbound traffic, allow `api.blurt.blog`
+alongside the other price hosts. The provider appears as
+`blurt_price_feed` in the `morphit-ops health` per-source list.
+Note the effective fallback: when live feeds are temporarily
+down the indexer keeps serving the last committed **average**
+(`stale=true`), not the static floor — the static floor only
+applies at cold-start before any feed has ever answered.
+
 ### Responding to a peer-price-disagreement alert
 
 If you see a `peer_price_disagreement_alert` event in the
@@ -9809,6 +9828,9 @@ MORPHIT_INDEXER_DISABLED_ASSETS="SOL"
 MORPHIT_INDEXER_DISABLED_ASSETS="ETH"
 # Refuse only XRP trades (cp49):
 MORPHIT_INDEXER_DISABLED_ASSETS="XRP"
+# Refuse BARTER (cp425 — the goods/services "asset"; e.g. a
+# crypto-only instance that doesn't want off-platform barter listings):
+MORPHIT_INDEXER_DISABLED_ASSETS="BARTER"
 
 # Refuse two assets (any future stablecoin additions)
 MORPHIT_INDEXER_DISABLED_ASSETS="USDT,DAI"
@@ -10122,6 +10144,17 @@ required beyond the standard `npm run migrate` flow.
 **Audience:** operators deciding which canonical payment methods
 their instance offers — most commonly whether to allow **Barter**
 (products/services, e.g. trading crypto for goods).
+
+> **⚠ Two different "Barter" features — disable BOTH to fully opt out.**
+> This section covers the barter **payment method** (`barter_goods`): a way
+> for someone *selling a cryptocurrency* to also accept goods/services as
+> payment. Since cp425 there is ALSO a first-class barter **asset**
+> (`BARTER`), where the goods/services *themselves* are the listing, priced
+> in local currency and settled in a crypto the seller accepts. The asset is
+> controlled separately under **"Trade-only asset configuration"** above with
+> `MORPHIT_INDEXER_DISABLED_ASSETS="BARTER"`. If you want NO barter of any
+> kind on your instance, disable BOTH: the `barter_goods` payment method
+> here **and** the `BARTER` asset there.
 
 This is the payment-method analogue of "Trade-only asset
 configuration" above.  Every canonical payment method ships

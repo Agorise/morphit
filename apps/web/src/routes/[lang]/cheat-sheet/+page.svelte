@@ -172,6 +172,10 @@
 				<dt>XRP</dt>
 				<dd>{$_('cheat_sheet.section_assets.xrp')}</dd>
 			</div>
+			<div class="cheat-row">
+				<dt>Barter</dt>
+				<dd>{$_('cheat_sheet.section_assets.barter')}</dd>
+			</div>
 		</dl>
 	</section>
 

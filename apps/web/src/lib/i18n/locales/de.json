@@ -386,6 +386,7 @@
       "mark_all_read": "Alle als gelesen markieren",
       "conversation_aria_unread": "Unterhaltung mit {peer} — ungelesen",
       "conversation_aria_read": "Unterhaltung mit {peer}",
+      "re_prefix": "RE:",
       "tab_messages": "Nachrichten",
       "tab_requests": "Anfragen",
       "tabs_aria": "Posteingang-Tabs",
@@ -782,7 +783,8 @@
       "dcr": "Decred. Eine Münze, deren Inhaber über ihre Verwaltung abstimmen. Öffentliches Kassenbuch wie Bitcoin, mit optionalem Privatsphäre-Modus in der Wallet.",
       "sol": "SOL — Solana.  Hochdurchsatz-Proof-of-Stake-Kryptowährung.  Nur zum Handeln auf Morphit.  Verwende eine Solana-Wallet (Phantom, Solflare, Cake Wallet für SOL, Trust Wallet); 32-44 Zeichen lange Base58-Adressen.  Sende natives SOL, nicht wrapped SOL oder SPL-Token.",
       "eth": "ETH — Ethereum.  Proof-of-Stake-Kryptowährung.  Nur zum Handeln auf Morphit.  Verwende eine Ethereum-Wallet (MetaMask, Rabby, Rainbow, Trust Wallet); 42 Zeichen lange 0x-Adressen.  Sende natives ETH, nicht wrapped ETH (WETH) oder ERC-20-Token.  Kein natives Protokoll-Mixing; Adressrotation auf Wallet-Seite ist der primäre Datenschutz-Hebel.  ENS-Namen werden nicht aufgelöst — füge rohe 0x-Adressen ein.",
-      "xrp": "XRP — Ripple.  Federated-Byzantine-Agreement-Konsens auf dem XRP Ledger.  Nur zum Handeln auf Morphit.  Verwende eine XRPL-Wallet (Xaman/Xumm, Crossmark, Bifrost, GemWallet, Trust Wallet); 24-34 Zeichen lange base58-Adressen, die mit `r` beginnen.  Destination-Tags erforderlich beim Senden an Exchange-Adressen (32-Bit-Integer für Routing).  Konten benötigen ≥1 XRP Basis-Reserve, um zu existieren.  Kein natives Protokoll-Mixing; Adressrotation auf Wallet-Seite ist der primäre Datenschutz-Hebel."
+      "xrp": "XRP — Ripple.  Federated-Byzantine-Agreement-Konsens auf dem XRP Ledger.  Nur zum Handeln auf Morphit.  Verwende eine XRPL-Wallet (Xaman/Xumm, Crossmark, Bifrost, GemWallet, Trust Wallet); 24-34 Zeichen lange base58-Adressen, die mit `r` beginnen.  Destination-Tags erforderlich beim Senden an Exchange-Adressen (32-Bit-Integer für Routing).  Konten benötigen ≥1 XRP Basis-Reserve, um zu existieren.  Kein natives Protokoll-Mixing; Adressrotation auf Wallet-Seite ist der primäre Datenschutz-Hebel.",
+      "barter": "Tausch — Waren oder Dienstleistungen, keine Münze. Preise in Landeswährung aus, wähle die akzeptierte(n) Krypto(s) (z. B. XMR, BTC, DOGE) und beschreibe dein Angebot genau in den Bedingungen. Das Inserat braucht keine Krypto-Adresse; abgewickelt wird in der vom Käufer gewählten akzeptierten Krypto. Nur zum Tauschen auf Morphit."
     },
     "section_recovery": {
       "heading": "Wenn etwas schiefgeht",
@@ -1251,7 +1253,7 @@
       },
       "how_to_stake_blurt": {
         "q": "Wie stake ich meine Blurt (Power-up zu BP), um Zinsen zu verdienen?",
-        "a": "Blurt zu staken bedeutet, deine liquiden Blurt in **Blurt Power (BP)** umzuwandeln — ein Vorgang, den Blurt „Power-up\" nennt. Gestakte Blurt verdienen etwa **2 % Zinsen pro Jahr (APR)** (der tatsächliche Satz wird aus der Inflation der Chain berechnet und in der App angezeigt), verstärken deine Upvotes und bringen Kuratierungsbelohnungen. Es bleibt die ganze Zeit deine eigene Münze — keine Einlage, kein Kredit, von niemandem sonst verwahrt.\n\n**Am einfachsten geht es mit einer Blurt-Wallet.** Öffne [BlurtWallet.com](https://blurtwallet.com), melde dich mit deinem Konto an, suche dein liquides Blurt-Guthaben und wähle **Power Up**. Gib den Betrag ein und bestätige. Das war's — deine Blurt sind jetzt BP und beginnen zu verdienen.\n\nMorphit selbst ist keine Wallet, daher halten oder bewegen wir deine Blurt nicht für dich; das Power-up passiert direkt auf der Blockchain über eine Wallet, die du kontrollierst. Wenn du wieder liquide Blurt möchtest, machst du ein **Power-down**, das sie über etwa vier Wochen schrittweise freigibt (dieses schrittweise Entstaken ist eine Regel des Blurt-Protokolls, nicht von Morphit)."
+        "a": "Blurt zu staken bedeutet, deine liquiden Blurt in **Blurt Power (BP)** umzuwandeln — ein Vorgang, den Blurt „Power-up\" nennt. Gestakte Blurt verdienen etwa **2 % Zinsen pro Jahr (APR)** (der tatsächliche Satz wird aus der Inflation der Chain berechnet und in der App angezeigt), verstärken deine Upvotes und bringen Kuratierungsbelohnungen. Es bleibt die ganze Zeit deine eigene Münze — keine Einlage, kein Kredit, von niemandem sonst verwahrt.\n\n**Am einfachsten geht es direkt in Morphit.** Öffne deine [Wallet](/my/wallet), suche dein liquides Blurt-Guthaben und wähle **Power Up**. Gib den Betrag ein und bestätige. Das war's — deine Blurt sind jetzt BP und beginnen zu verdienen.\n\nMorphit hält oder bewegt deine Blurt niemals für dich — das Power-up passiert direkt auf der Blockchain, signiert mit deinen eigenen Schlüsseln. Wenn du wieder liquide Blurt möchtest, machst du ein **Power-down**, das sie über 4 Wochen schrittweise freigibt (dieses schrittweise Entstaken ist eine Regel des Blurt-Protokolls, nicht von Morphit)."
       },
       "where_does_blurt_price_come_from": {
         "q": "Woher kommt der Blurt-Preis, der auf Morphit angezeigt wird?",
@@ -1660,6 +1662,10 @@
       "privacy_coins_onchain": {
         "q": "Wie hält Morphit meine Privacy-Coin-Trades privat?",
         "a": "Morphit handelt mehrere Privacy-Coins — Monero (XMR), Zcash (ZEC), Pirate Chain (ARRR), Dash (DASH) und Decred (DCR) — und wendet auf alle dieselben On-Chain-Fußabdruck-Schutzmaßnahmen an.\n\n**Deine eigentliche Abwicklung berührt Blurt nie.** Wenn du einen Privacy-Coin handelst, bewegen sich die Coins peer-to-peer zwischen deiner Wallet und der deiner Gegenpartei, direkt auf der eigenen Chain dieses Coins. Diese Überweisung wird nie an die Blockchain, über die Morphit koordiniert, gesendet, dort aufgezeichnet oder von ihr aus sichtbar. Blurt trägt nur die öffentliche Order (die Anzeige) und den Ende-zu-Ende-verschlüsselten Chat.\n\n**Was die Order auf Blurt preisgibt — und was wir entfernt haben:**\n• Die Order ist eine Anzeige, daher sind Seite/Asset/Betragsspanne/Zahlungsmethoden zwangsläufig öffentlich (so findet ein Käufer deinen Verkauf). Das ist jedem öffentlichen Orderbuch inhärent.\n• Aber wir haben alles entfernt, was nicht dort sein musste: der Permlink der Order ist jetzt ein undurchsichtiges Zufalls-Token (`order-…`), nicht `sell-xmr-usd-…`, sodass der Asset-Name nicht mehr in den On-Chain-Permlink, Order-URLs, RSS-Feeds oder Block-Explorer durchsickert. Der Ablauf-Zeitstempel wird auf den Tag abgerundet, sodass er den genauen Moment deiner Veröffentlichung nicht verraten kann. Es werden nie IP, Zeitzone, Sprache oder Browser-Fingerabdruck angehängt — was du in das „Jetzt posten“-Formular eingibst, ist alles, was auf die Chain geht.\n\n**Betrags-Jitter bei jedem Coin.** Wenn du im Chat einen Empfangsbetrag teilst, fügt Morphit einen winzigen zufälligen Rest hinzu (bis zur kleinsten Einheit des Coins — Piconero bei XMR, Satoshi-Skala bei den anderen), sodass der On-Chain-Betrag nicht mit deiner veröffentlichten Order abgeglichen werden kann. Standardmäßig aktiviert.\n\n**ZEC, ARRR, DASH und DCR sind reine Handels-Assets — ihre TxID erscheint überhaupt nie auf Blurt.** Du kannst Morphits Einstellgebühr nicht mit ihnen bezahlen, und die Abwicklung ist peer-to-peer, sodass es keinen Punkt gibt, an dem die Transaktions-ID dieser Coins auf die öffentliche Chain geschrieben wird. Für diese vier ist die On-Chain-Geschichte sogar sauberer als die von Monero.\n\n**Monero hat genau eine optionale chain-übergreifende Berührung, mit Opt-out.** XMR ist eines von drei Assets (mit BLURT und BTC), das du zur Zahlung der kleinen Einstellgebühr verwenden *kannst*; wenn du das tust, wird die TxID dieser Gebührenzahlung in deiner Order auf Blurt aufgezeichnet (damit jeder Operator die Gebühr mit einem Monero-tx_proof prüfen kann — kein View Key, siehe die Monero-TxID-FAQ). Das ist der einzige Ort, an dem eine XMR-TxID Blurt berührt, und es ist eine Gebühr von ~0,25 USD an eine öffentliche Adresse, niemals dein Handel. Willst du null Monero-zu-Blurt-Verknüpfung? Zahle die Gebühr in BLURT — das ist die Standardoption und der halbe Preis.\n\nDie vollständige Anleitung pro Coin findest du unter /privacy/{asset} (z. B. /privacy/xmr, /privacy/zec), und das komplette Leak-Inventar steht im Metadaten-Leak-Katalog des Projekts."
+      },
+      "what_is_barter": {
+        "q": "Was ist Tausch auf Morphit?",
+        "a": "Mit Tausch kannst du Waren und Dienstleistungen kaufen oder verkaufen — keine Kryptowährung — und in Krypto abwickeln. Eine Großmutter, die Körbe verkauft, ein Nachbar, der Fahrräder repariert, jemand, der eine Kiste Orangen tauscht: Sie inserieren, was sie anbieten, preisen es in ihrer Landeswährung aus und wählen die Krypto(s), die sie akzeptieren (etwa XMR, BTC und DOGE). Es ist **ein Inserat**, nicht eines pro Münze.\n\n**So funktioniert's:** beschreibe dein Angebot genau in den Bedingungen, lege einen Wert in Landeswährung fest (ein einzelner Preis oder eine Spanne) und hake die Krypto(s) an, die in deinem Ort wirklich genutzt werden. Käufer stöbern in den Waren wie bei jedem Inserat und können nur in einer von dir akzeptierten Krypto zahlen — wenn du Decred nicht aufführst, kann dich niemand in Decred bezahlen. Du und der Käufer klärt die Übergabe im Chat und wickelt in der von ihm gewählten akzeptierten Krypto ab.\n\n**Keine Adresse im Inserat:** die Waren wechseln außerhalb von Morphit den Besitzer — persönlich oder per Post —, daher hat ein Tausch-Inserat keine Krypto-Empfangsadresse, und Morphit fasst weder die Waren noch die Zahlung an. Gesunder Menschenverstand gilt: trefft euch an einem öffentlichen Ort, teile nur das Nötige und behandle einen Fremden wie einen Fremden.\n\nAuf Morphit ist Tausch **nur zum Handeln** — du kannst damit keine Inseratsgebühren von Morphit bezahlen (die bleiben Blurt/BTC/XMR). Er dient dem Tausch von Waren, sonst nichts."
       }
     },
     "share_link": "Teilen",
@@ -1696,7 +1702,9 @@
     "history_state_expired": "Abgelaufen",
     "history_state_order_inactive": "Order beendet",
     "history_extended": "Verlängert ×{n}",
-    "history_extended_title": "Gebot {n}× durch Anti-Snipe verlängert"
+    "history_extended_title": "Gebot {n}× durch Anti-Snipe verlängert",
+    "error_chain_rejected": "Das Netzwerk hat diese Transaktion abgelehnt: {reason}",
+    "error_unreachable": "Deine Morphit-Instanz konnte zum Senden nicht erreicht werden. Prüfe deine Verbindung und versuche es erneut."
   },
   "featured": {
     "heading": "Gerade hervorgehoben",
@@ -2584,8 +2592,6 @@
       "fiat_no_matches": "Keine passende Währung",
       "fiat_remove": "Entfernen",
       "asset_barter": "Tauschhandel (Waren/Dienstleistungen)",
-      "side_buy_goods": "Angebote, die Waren/Dienstleistungen kaufen wollen",
-      "side_sell_goods": "Angebote, die Waren/Dienstleistungen verkaufen wollen",
       "side_label": "Ich möchte sehen",
       "side_any": "Alles",
       "side_buy": "Beiträge, die Krypto kaufen möchten",
@@ -2982,7 +2988,8 @@
         "dcr": "Decred (DCR). Eine Münze, deren Gemeinschaft über die Verwaltung des Projekts abstimmt. Ihr öffentliches Kassenbuch ist wie bei Bitcoin sichtbar, und ihre Wallet bietet einen optionalen Privatsphäre-Modus. Kein zentraler Herausgeber – niemand kann Ihre Münzen einfrieren.",
         "sol": "Solana (SOL) — Proof-of-Stake-Kryptowährung mit hohem Durchsatz. Native SOL-Übertragung (kein wrapped SOL oder SPL-Tokens). 32-44 Zeichen lange base58-Adressen (gleiche Form wie USDT-Solana- und USDC-Solana-Adressen; das `asset`-Feld disambiguiert).",
         "eth": "Ethereum (ETH) — Proof-of-Stake-Kryptowährung. Native ETH-Übertragung (kein wrapped ETH oder ERC-20-Tokens). 42 Zeichen lange 0x-präfigierte Hex-Adressen (gleiche Form wie USDT-ERC20, USDC-ERC20, DAI-ERC20 und jede EVM-Token-Konto-Adresse; die Felder `asset` und `network` disambiguieren).",
-        "xrp": "Ripple (XRP) — Kryptowährung mit Federated-Byzantine-Agreement-Konsens auf dem XRP Ledger. 24-34 Zeichen lange base58-Adressen, die mit `r` beginnen. Destination Tags (32-Bit-Integer) sind beim Senden an exchange-gehostete Adressen erforderlich — deine Peer-to-Peer-Gegenpartei benötigt typischerweise keinen. XRPL-Konten benötigen ≥1 XRP Basisreserve, um zu existieren."
+        "xrp": "Ripple (XRP) — Kryptowährung mit Federated-Byzantine-Agreement-Konsens auf dem XRP Ledger. 24-34 Zeichen lange base58-Adressen, die mit `r` beginnen. Destination Tags (32-Bit-Integer) sind beim Senden an exchange-gehostete Adressen erforderlich — deine Peer-to-Peer-Gegenpartei benötigt typischerweise keinen. XRPL-Konten benötigen ≥1 XRP Basisreserve, um zu existieren.",
+        "barter": "Tausch (Waren/Dienstleistungen). Keine Kryptowährung — du bietest Waren oder eine Dienstleistung an und wirst in der/den Krypto(s) bezahlt, die du akzeptieren möchtest. Preise es in deiner Landeswährung aus; du und der Käufer klärt die Details im Chat und wickelt in einer deiner akzeptierten Kryptos ab. Beschreibe im Feld Bedingungen genau, was du anbietest."
       },
       "waiver_fiat_hint": "💡 Die meisten BLURT-Trades auf Morphit laufen mit aktiven Nutzern des sozialen Blurt-Netzwerks, bestehenden Betreibern oder über Tauschhandel. Wähle also die Fiat-Währung, die du lokal verwendest (USD, EUR, MXN usw.), und biete in Schritt 3 Zahlungsmethoden vor Ort oder per Tauschhandel (Waren/Dienstleistungen) an, wenn du etwas anderes von Wert anbieten willst.",
       "waiver_benefits_heading": "Was dein Kauf freischaltet:",
@@ -3009,7 +3016,9 @@
       "step_counter": "Schritt {n} von {total}",
       "fiat_required_hint": "Wähle die Währung, in der du diesen Handel bepreist.",
       "amount_entered_usd_hint": "{amount} {fiat} (≈ {usd})",
-      "returning_min_hint": "Mindestens {amount} {fiat} (≈ {usd})"
+      "returning_min_hint": "Mindestens {amount} {fiat} (≈ {usd})",
+      "barter_accept_label": "Welche Kryptos akzeptierst du?",
+      "barter_accept_hint": "Hake die Kryptos an, mit denen Käufer dich bezahlen können — wähle die, die du wirklich nutzt."
     },
     "errors": {
       "fiat_empty": "Wähle eine Fiat-Währung (wie USD oder EUR).",
@@ -3151,7 +3160,9 @@
       "amount_min_plus": "{min} {fiat} oder mehr in {asset}",
       "amount_any": "eine beliebige Menge {asset}",
       "price_market": "zum Marktpreis",
-      "price_fixed": "zu einem Festpreis von {price} {fiat} pro {asset}"
+      "price_fixed": "zu einem Festpreis von {price} {fiat} pro {asset}",
+      "barter_sentence_sell": "Du bietest Waren/Dienstleistungen im Wert von {value} an und akzeptierst {cryptos}.",
+      "barter_sentence_buy": "Du suchst Waren/Dienstleistungen im Wert von {value} und zahlst in {cryptos}."
     }
   },
   "prices": {
@@ -3378,8 +3389,8 @@
     "rss_subscribe_title": "Benachrichtigungen via RSS, wenn dieser Trader eine neue Kauf- oder Verkaufsorder postet. Hinweis: Ein Per-Trader-Feed abzufragen ist etwas verräterischer als der weltweite Feed.",
     "feedback_suppressed_chip": "Zählt nicht zur Bewertung — Rezensenten als verwandt markiert",
     "my_balance": {
-      "section_label": "Guthaben von @{account}",
-      "title": "Guthaben von @{account}",
+      "section_label": "Wallet von @{account}",
+      "title": "Wallet von @{account}",
       "private_label": "Nur du siehst das",
       "loading": "Guthaben wird geladen...",
       "error": "Guthaben konnte nicht geladen werden",
@@ -3423,7 +3434,54 @@
     },
     "as_buyer": "als Käufer",
     "as_seller": "als Verkäufer",
-    "last_traded_label": "Letzter Handel:"
+    "last_traded_label": "Letzter Handel:",
+    "wallet": {
+      "power_up_action": "Power up",
+      "power_down_action": "Power down",
+      "power_up_title": "Power up BLURT",
+      "power_down_title": "Power down BP",
+      "power_up_subtitle": "Power up wandelt dein liquides BLURT in Blurt Power (BP) um. Gestaktes BLURT erwirtschaftet Rendite, stärkt deine Stimmen und bleibt vollständig deins – kein Einlage- und kein Kreditgeschäft.",
+      "power_down_subtitle": "Power down wandelt deine Blurt Power (BP) wieder in liquides BLURT um.",
+      "amount_label": "Betrag",
+      "power_up_placeholder": "BLURT für Power up",
+      "power_down_placeholder": "BP für Power down",
+      "use_full": "Gesamtes Guthaben verwenden",
+      "available_blurt": "Verfügbar: {amount} BLURT",
+      "available_bp": "Verfügbar: {amount} BP",
+      "power_down_schedule": "Das geschieht nicht sofort: Dein BP wird nach und nach über 4 Wochen wieder zu liquidem BLURT freigegeben. Diese schrittweise Freigabe ist eine Regel des Blurt-Protokolls, nicht von Morphit.",
+      "password_label": "Dein @{account}-Passwort (zum Signieren mit deinem Active Key)",
+      "error_password_required": "Gib dein Passwort ein, um fortzufahren.",
+      "error_bad_password": "Mit diesem Passwort ließ sich dein Active Key nicht entsperren. Prüfe es und versuche es erneut.",
+      "error_no_active_key": "Dieses Gerät hat keinen Active Key zum Signieren. Melde dich mit deiner Seed-Phrase an, um Power up oder Power down zu nutzen.",
+      "error_broadcast": "Das konnte nicht auf der Blockchain abgeschlossen werden. Bitte versuche es erneut.",
+      "error_amount": "Gib einen Betrag ein, der dein verfügbares Guthaben nicht übersteigt."
+    },
+    "send": {
+      "title": "BLURT senden",
+      "subtitle": "Sende BLURT an ein beliebiges Blurt-Konto.",
+      "recipient_label": "Empfänger",
+      "recipient_placeholder": "Blurt-Kontoname",
+      "recipient_checking": "Wird geprüft…",
+      "recipient_valid": "Konto gefunden",
+      "recipient_not_found": "Es existiert kein Konto mit diesem Namen auf der Blockchain.",
+      "recipient_invalid": "Das ist kein gültiger Blurt-Kontoname.",
+      "recipient_self": "Du kannst BLURT nicht an dich selbst senden.",
+      "recipient_error": "Dieses Konto konnte nicht geprüft werden. Bitte versuche es erneut.",
+      "amount_placeholder": "BLURT zum Senden",
+      "memo_label": "Notiz (optional)",
+      "memo_placeholder": "z. B. eine Bestellreferenz",
+      "memo_privacy_warning": "Notizen werden öffentlich und dauerhaft im Klartext auf der Blockchain gespeichert. Gib niemals Passwörter, Schlüssel oder etwas Privates ein.",
+      "error_no_active_key": "Dieses Gerät hat keinen Active Key zum Signieren. Melde dich mit deiner Seed-Phrase an, um BLURT zu senden.",
+      "send_button": "Senden",
+      "confirm": "BLURT senden",
+      "qr_heading": "Empfänger-QR scannen",
+      "qr_body": "Richte deine Kamera auf einen Blurt-Konto-QR, um den Empfänger auszufüllen.",
+      "qr_start_button": "Kamera einschalten",
+      "qr_scanning_hint": "Halte den QR-Code ruhig im Rahmen.",
+      "qr_camera_denied": "Der Kamerazugriff wurde blockiert. Erlaube ihn in den Browsereinstellungen und versuche es erneut.",
+      "qr_no_camera": "Dieses Gerät hat keine Kamera zum Scannen.",
+      "qr_invalid": "Dieser QR enthielt kein Blurt-Konto. Versuche einen anderen."
+    }
   },
   "relative_time": {
     "descriptive": {
@@ -3735,23 +3793,23 @@
       "description": "Kuratierte Liste von Morphit-Instanzen. Jede Instanz wird von einem unabhängigen Betreiber betrieben; Nutzer können wählen, wo sie handeln."
     },
     "explorer_search": {
-      "title": "Block-Explorer",
-      "description": "Suche Blöcke, Transaktionen und Konten in der Blockchain."
+      "title": "Blurt-Block-Explorer",
+      "description": "Durchsuche Blöcke, Transaktionen und Konten in der Blurt-Blockchain — ohne Konto, ohne Anmeldung, ohne Tracking."
     },
     "explorer_account": {
-      "title": "Konto {account} — Block-Explorer",
+      "title": "Konto {account} — Blurt-Block-Explorer",
       "description": "On-Chain-Historie von {account} in der Blockchain."
     },
     "explorer_activity": {
-      "title": "Live-Aktivität — Block-Explorer",
+      "title": "Live-Aktivität — Blurt-Block-Explorer",
       "description": "Live-Feed der für Morphit relevanten Operationen in der Blockchain."
     },
     "explorer_block": {
-      "title": "Block {block} — Block-Explorer",
+      "title": "Block {block} — Blurt-Block-Explorer",
       "description": "Operationen im Blurt-Block {block}."
     },
     "explorer_tx": {
-      "title": "Transaktion {trx} — Block-Explorer",
+      "title": "Transaktion {trx} — Blurt-Block-Explorer",
       "description": "Operationen in dieser Blurt-Transaktion."
     },
     "login_qr": {
@@ -4447,7 +4505,8 @@
     "buy_range": "Ich kaufe {asset} im Wert von {min}–{max} {fiat}",
     "sell_range": "Ich verkaufe {asset} im Wert von {min}–{max} {fiat}",
     "buy_any": "Ich kaufe {asset}",
-    "sell_any": "Ich verkaufe {asset}"
+    "sell_any": "Ich verkaufe {asset}",
+    "goods_services": "Waren/Dienstleistungen"
   },
   "stats": {
     "page_title": "Netzwerkstatistiken",

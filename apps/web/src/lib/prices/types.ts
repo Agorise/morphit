@@ -15,7 +15,15 @@ import type { AssetTicker } from '@morphit/asset-registry';
  * rationale.
  */
 
-export type PricedSymbol = AssetTicker;
+/**
+ * The set of assets that HAVE a USD price. cp425: goods assets (BARTER)
+ * are excluded — a barter listing is valued directly in the seller's fiat
+ * (no crypto-per-fiat rate), so it has no Coingecko slug, no fallback USD,
+ * and no price-store slot. This is the type-level counterpart of the
+ * registry's `isGoodsAsset()` predicate; every price map keyed by
+ * `PricedSymbol` therefore correctly omits BARTER.
+ */
+export type PricedSymbol = Exclude<AssetTicker, 'BARTER'>;
 
 export interface PriceQuote {
 	readonly symbol: PricedSymbol;

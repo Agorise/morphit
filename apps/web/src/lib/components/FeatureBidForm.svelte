@@ -27,6 +27,7 @@
 	import { identity } from '$stores/identity';
 	import { runWithActiveKey } from '$crypto/runWithActiveKey';
 	import { broadcastFeatureBid } from '$blurt/ops/featureBid';
+	import { ChainRejectedError, BroadcastUnavailableError } from '$blurt/broadcastTransport';
 	import { getInstanceSnapshot } from '$stores/instance';
 	import { resolveFeeRecipient } from '$lib/orders/fee';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
@@ -175,6 +176,15 @@
 			} else if (kind === 'password_empty') {
 				passwordError = $_('feature_bid.error_password_required');
 				flashPasswordBorder();
+			} else if (err instanceof ChainRejectedError) {
+				// cp425 — the network rejected the tx. Surface the REAL reason
+				// (insufficient RC/mana, missing authority, etc.) instead of a
+				// generic message that hides what actually went wrong.
+				errorMessage = $_('feature_bid.error_chain_rejected', {
+					values: { reason: err.message }
+				});
+			} else if (err instanceof BroadcastUnavailableError) {
+				errorMessage = $_('feature_bid.error_unreachable');
 			} else {
 				console.warn('[feature_bid] unrecognized error:', err);
 				errorMessage = $_('feature_bid.error_generic');

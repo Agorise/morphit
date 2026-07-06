@@ -143,6 +143,10 @@ export interface OrderRecord {
 	readonly price_model: unknown; // opaque to the indexer; frontend interprets
 	readonly location_region: string | null;
 	readonly payment_methods: readonly string[];
+	/** cp425 — for a BARTER (goods/services) order, the crypto tickers the
+	 *  seller accepts as settlement (e.g. ['BTC','XMR']). Null/absent for
+	 *  every crypto asset (they settle in themselves) and on pre-cp425 rows. */
+	readonly accepted_assets?: readonly string[] | null;
 	readonly terms: string | null;
 	readonly status?: 'live' | 'cancelled' | 'expired';
 	readonly fee_status?:
@@ -804,6 +808,34 @@ export interface ChatIdentityResponse {
 
 // ─── Conversations list ────────────────────────────────────────────
 
+/** The order a conversation is most recently about, if any.
+ *
+ *  Derived (server-side) from the latest `morphit_chat_v1` message in
+ *  the conversation that carried a plaintext `order_permlink` — so it
+ *  tracks whatever order the two parties last referenced.  `account`
+ *  is the order's OWNER (the recipient of that message; the op
+ *  validator guarantees the permlink names an order that account
+ *  owns).  The fiat band fields feed the shared `orderTitleParts`
+ *  helper so the client renders the same "I'm buying 500 MXN or more
+ *  worth of BLURT" sentence used everywhere else.  `null` on the
+ *  parent when the conversation references no order. */
+export interface ConversationOrderRef {
+	/** Order permlink (link target: /@{account}/{permlink}). */
+	readonly permlink: string;
+	/** Order owner account (the message recipient). */
+	readonly account: string;
+	/** 'buy' | 'sell'. */
+	readonly side: string;
+	/** Asset ticker (BLURT, BTC, …). Never translated. */
+	readonly asset: string;
+	/** Fiat/quote currency the amount band is denominated in. */
+	readonly fiat_currency: string;
+	/** Minimum trade size, in fiat. null = no lower bound. */
+	readonly amount_min: number | null;
+	/** Maximum trade size, in fiat. null = no upper bound. */
+	readonly amount_max: number | null;
+}
+
 /** One peer the account has a chat history with. */
 export interface ConversationSummary {
 	readonly peer: string;
@@ -816,6 +848,10 @@ export interface ConversationSummary {
 	 *  "Requests" tabs (the latter holds first-contact threads
 	 *  admitted via Finding H layer 2's stranger-fee path). */
 	readonly has_user_sent: boolean;
+	/** The order this conversation is most recently about, or null.
+	 *  Frontend renders it as a "RE: <linked title>" subline under
+	 *  the peer's handle. */
+	readonly order: ConversationOrderRef | null;
 }
 
 /** Response from GET /v1/conversations/:account. Items sorted by

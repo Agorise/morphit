@@ -143,6 +143,13 @@ export interface OrderPayload {
 	 *  configured — keeps the on-chain payload as small as
 	 *  possible for unbranded instances. */
 	readonly operator_tag?: string;
+	/** cp425 — for a BARTER (goods/services) listing, the non-empty set of
+	 *  crypto tickers the seller accepts as settlement (e.g. ['BTC','DOGE',
+	 *  'XMR']). REQUIRED when asset === 'BARTER'; omitted for every crypto
+	 *  asset (they settle in themselves). Each must be a real crypto ticker,
+	 *  never 'BARTER' or any goods asset. The indexer dedupes + sorts to a
+	 *  canonical set; the builder ships whatever the form provides. */
+	readonly accepted_assets?: readonly AssetTicker[];
 }
 
 /** Input to buildOrderPayload — the fields a user fills in, in
@@ -188,6 +195,11 @@ export interface OrderFormInput {
 	 *  from the instance store ($instance.operator_tag).  Empty
 	 *  string treated same as undefined: omitted from payload. */
 	readonly operatorTag?: string;
+	/** cp425 — for a BARTER listing, the crypto tickers the seller accepts
+	 *  as settlement. REQUIRED (non-empty) when asset === 'BARTER'; omitted
+	 *  for crypto assets. The form layer validates each is a real crypto
+	 *  ticker (never BARTER/goods) before calling buildOrderPayload. */
+	readonly acceptedAssets?: readonly AssetTicker[];
 }
 
 /**
@@ -260,6 +272,14 @@ export function buildOrderPayload(permlink: string, input: OrderFormInput): Orde
 		// malformed at the indexer side).
 		...(input.operatorTag !== undefined && input.operatorTag.length > 0
 			? { operator_tag: input.operatorTag }
+			: {}),
+		// cp425 — accepted-crypto set for a BARTER listing.  Deduped + sorted
+		// to the same canonical form the indexer stores, so the broadcast
+		// payload is deterministic (the same accepted-set always serializes
+		// identically).  Included only when the form provides a non-empty set
+		// (BARTER); omitted for crypto assets, which settle in themselves.
+		...(input.acceptedAssets !== undefined && input.acceptedAssets.length > 0
+			? { accepted_assets: [...new Set(input.acceptedAssets)].sort() as AssetTicker[] }
 			: {})
 	};
 }

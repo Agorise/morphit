@@ -195,6 +195,31 @@ No `relay_pending_transfers` row and no `operator_payouts` row are
 written for the fee — the operator was already paid by the split.
 (The relay still handles welcome bonuses + loyalty, unchanged.)
 
+### Edge case: an operator paying a BLURT fee on their OWN instance
+
+When the account signing a BLURT fee **is** the instance's own fee
+recipient — most commonly an operator who **features their own
+order**, but also a solo operator posting a listing with a BLURT
+fee on their own instance — the 90% owner leg would be a transfer
+from that account back to itself. Blurt (Graphene) **rejects a
+self-transfer at consensus** (`from != to`), which would make the
+whole transaction un-broadcastable.
+
+**Settled policy (decided — this is the intended behavior, not a
+bug):** in that case the fee collapses to a **single 100%-to-
+canonical-treasury transfer**. The operator does **not** receive
+the 90% owner share on a fee they pay to themselves — you cannot
+pay yourself the operator cut. The indexer accepts this unchanged
+(100% ≥ the required canonical 10%, and the total still meets the
+fee floor). This is also a fair, mild disincentive against an
+operator cheaply self-promoting their own listings for free.
+
+This is implemented in `feeTransfersFor` (frontend `fee.ts`) via
+the `signer` collapse and is pinned by a regression test
+(`fee.test.ts` — "sends 100% to canonical when the owner recipient
+IS the signer"). It applies to all three BLURT fee types (listing,
+featured-slot, cold-message) whenever the signer is the recipient.
+
 ### Auditing per-operator earnings
 
 ```

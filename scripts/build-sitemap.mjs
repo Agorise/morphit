@@ -118,10 +118,17 @@ function readAssetTickers() {
  */
 function expandRoutes(routes) {
 	const tickers = readAssetTickers();
+	// cp425 — goods assets (BARTER) have no crypto address and no on-chain
+	// privacy guide (the wares change hands off-platform), so they get no
+	// /privacy/<ticker> page. Mirror of the registry's isGoodsAsset()
+	// predicate (this .mjs can't import the .ts helper) — keep in sync if a
+	// goods asset is ever added.
+	const GOODS_TICKERS = new Set(['BARTER']);
 	const out = [];
 	for (const r of routes) {
 		if (r.path.includes('[asset]')) {
 			for (const t of tickers) {
+				if (GOODS_TICKERS.has(t)) continue;
 				out.push({
 					path: r.path.replace('[asset]', t.toLowerCase()),
 					priority: r.priority,

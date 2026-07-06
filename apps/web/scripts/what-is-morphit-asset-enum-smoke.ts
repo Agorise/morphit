@@ -65,7 +65,12 @@ const ENGLISH_NAMES: Record<string, readonly string[]> = {
 	DCR: ['Decred', 'DCR'],
 	SOL: ['Solana', 'SOL'],
 	ETH: ['Ethereum', 'ETH'],
-	XRP: ['XRP', 'Ripple']
+	XRP: ['XRP', 'Ripple'],
+	// cp425 — goods/services. The what_is_morphit answer names it with a
+	// locale-appropriate word (barter/goods), not the ticker, so the accepted
+	// spellings are the words that actually appear; per-locale renderings are
+	// in LOCALE_ALIASES below.
+	BARTER: ['Barter', 'barter', 'goods']
 };
 
 /** Per-locale alternate renderings.  When a locale uses a
@@ -80,7 +85,8 @@ const LOCALE_ALIASES: Record<string, Record<string, readonly string[]>> = {
 		LTC: ['莱特币', 'Litecoin', 'LTC'],
 		DASH: ['达世币', 'Dash', 'DASH'],
 		DOGE: ['狗狗币', 'Dogecoin', 'DOGE'],
-		ETH: ['以太坊', 'Ethereum', 'ETH']
+		ETH: ['以太坊', 'Ethereum', 'ETH'],
+		BARTER: ['以物易物', '商品']
 	},
 	'zh-HK': {
 		BTC: ['比特幣', 'Bitcoin', 'BTC'],
@@ -90,8 +96,19 @@ const LOCALE_ALIASES: Record<string, Record<string, readonly string[]>> = {
 		LTC: ['萊特幣', 'Litecoin', 'LTC'],
 		DASH: ['達世幣', 'Dash', 'DASH'],
 		DOGE: ['狗狗幣', 'Dogecoin', 'DOGE'],
-		ETH: ['以太坊', 'Ethereum', 'ETH']
-	}
+		ETH: ['以太坊', 'Ethereum', 'ETH'],
+		BARTER: ['以物易物', '商品']
+	},
+	// cp425 — these locales otherwise fall through to ENGLISH_NAMES, but the
+	// what_is_morphit answer names barter with a translated word (not the
+	// ticker or the English "Barter"), so each needs its own barter alias.
+	es: { BARTER: ['bienes', 'intercambiar'] },
+	fr: { BARTER: ['troquer', 'biens'] },
+	de: { BARTER: ['Waren', 'tauschen'] },
+	it: { BARTER: ['barattare', 'beni'] },
+	pl: { BARTER: ['barterować', 'towary'] },
+	ru: { BARTER: ['бартер', 'товары'] },
+	fa: { BARTER: ['تهاتر', 'کالا'] }
 };
 
 function acceptedNames(locale: string, ticker: string): readonly string[] {

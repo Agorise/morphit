@@ -44,7 +44,7 @@
  *  Tickers are uppercase string literals.  The chain payload
  *  schema (orders, fees, attestations) uses these exact strings
  *  on the wire, so renaming one is a hard breaking change. */
-export const ASSET_TICKERS = ['BTC', 'XMR', 'BLURT', 'USDT', 'USDC', 'DAI', 'BCH', 'LTC', 'DASH', 'DOGE', 'ZEC', 'ARRR', 'DCR', 'SOL', 'ETH', 'XRP'] as const;
+export const ASSET_TICKERS = ['BTC', 'XMR', 'BLURT', 'USDT', 'USDC', 'DAI', 'BCH', 'LTC', 'DASH', 'DOGE', 'ZEC', 'ARRR', 'DCR', 'SOL', 'ETH', 'XRP', 'BARTER'] as const;
 
 /** TypeScript type union derived from the ASSET_TICKERS list.
  *  Use this as the type of any field that holds an asset
@@ -1043,6 +1043,51 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		// DESTINATION TAG and RESERVE REQUIREMENT are documented
 		// in privacy.guides.xrp.caveats × 10 locales.
 		addressShape: /^r[1-9A-HJ-NP-Za-km-z]{24,34}$/
+	}),
+	Object.freeze({
+		// cp425 — BARTER: goods/services as a first-class tradable "asset".
+		// UNLIKE every other entry it is NOT a crypto: a barter listing is
+		// the wares themselves (described in the listing's Terms), valued
+		// directly in the seller's local fiat (min/max), and settled in one
+		// of a SET of accepted cryptos the seller picks (the order's
+		// `accepted_assets` list). All the crypto-shaped fields below are
+		// therefore inert sentinels; every code path that assumes a chain
+		// amount / receive address / price feed is gated away from BARTER by
+		// the `isGoodsAsset()` predicate (mirrors the `isFeeCapableAsset`
+		// pattern). See ADDING-A-COIN.md / the barter design notes.
+		ticker: 'BARTER',
+		// No on-chain smallest unit — goods are valued in fiat, not a crypto
+		// amount. 0 means "not a chain amount"; isGoodsAsset() guards the
+		// amount-formatting / jitter paths away from it.
+		decimals: 0,
+		isCoordinationChain: false,
+		// Goods/services ARE tradable — buying or selling wares for crypto is
+		// the entire feature.
+		canBeTraded: true,
+		// Goods can't pay listing fees; the fee_method enum is frozen at
+		// BLURT/BTC/XMR (charter invariant).
+		canPayListingFee: false,
+		// No chain, so no network — goods change hands off-platform. Empty
+		// (not a sentinel slug) so the network-icon / multi-network smokes
+		// don't expect an icon for it; isGoodsAsset() guards every network
+		// path away from BARTER anyway.
+		supportedNetworks: [],
+		defaultNetwork: null,
+		// No privacy-warning chip: the barter listing itself has no on-chain
+		// footprint (wares change hands off-platform). The crypto the buyer
+		// settles in carries its OWN asset's privacy properties + guide.
+		privacyWarningKey: null,
+		privacyFeatures: {
+			// Inert — goods have no receive address. isGoodsAsset() keeps the
+			// fresh-address / privacy-tech surfaces away from BARTER.
+			freshAddressAdvice: 'account-reuse',
+			optInPrivacyTech: null,
+			privacyGuideKey: 'barter'
+		},
+		// Goods have no crypto address (the wares are exchanged off-platform,
+		// described in the listing's Terms). Never-match so any stray,
+		// un-guarded call fails CLOSED rather than accepting junk.
+		addressShape: /(?!)/
 	})
 ] as const) as ReadonlyArray<AssetEntry>;
 
@@ -1419,4 +1464,17 @@ export function minAcceptablePiconero(expectedPiconero: bigint): bigint {
  *  LISTING_FEE_USD keys all agree — a divergence fails CI. */
 export function isFeeCapableAsset(ticker: AssetTicker): ticker is 'BLURT' | 'BTC' | 'XMR' {
 	return ticker === 'BLURT' || ticker === 'BTC' || ticker === 'XMR';
+}
+
+/** cp425 — True iff this "asset" is goods/services (barter), NOT a crypto.
+ *  A barter listing is wares valued directly in the seller's fiat and settled
+ *  in one of a SET of accepted cryptos (the order's `accepted_assets`); it has
+ *  no chain amount, no receive address, and no price feed. Every code path
+ *  that assumes a crypto — amount decimals, address shape, price source,
+ *  network picker, first-order-min-via-price — MUST gate BARTER out with this
+ *  predicate. Centralized here (the single source of truth), mirroring
+ *  `isFeeCapableAsset`, so the rule can't drift between the frontend and the
+ *  indexer, which both import it. */
+export function isGoodsAsset(ticker: AssetTicker): ticker is 'BARTER' {
+	return ticker === 'BARTER';
 }

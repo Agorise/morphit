@@ -63,7 +63,17 @@ if (!tickersMatch) {
 	process.exit(1);
 }
 const tickerStrings = tickersMatch[1]!.match(/'[A-Z0-9]+'/g) ?? [];
-const tradableCount = tickerStrings.length;
+// cp425 — these release-notes counts describe the tradable *cryptocurrencies*
+// ("N tradable assets", "N trade-only", "N can pay listing fees"). Goods assets
+// (barter) are a distinct category with their own release-notes section, not one
+// of the coins, so they must NOT count here. Derive the goods tickers straight
+// from the isGoodsAsset predicate body and exclude them.
+const goodsMatch = registryText.match(
+	/export\s+function\s+isGoodsAsset[^{]*\{([^}]+)\}/
+);
+const goodsTickers = new Set(goodsMatch ? (goodsMatch[1]!.match(/'[A-Z0-9]+'/g) ?? []) : []);
+const cryptoTickers = tickerStrings.filter((t) => !goodsTickers.has(t));
+const tradableCount = cryptoTickers.length;
 
 // canPayListingFee: true count.
 const feeEligibleMatches = registryText.match(/canPayListingFee:\s*true/g) ?? [];

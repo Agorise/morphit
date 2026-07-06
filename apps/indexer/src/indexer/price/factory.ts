@@ -78,6 +78,7 @@ import type { Database } from '$db/pool';
 import type { BlurtPriceSource, PriceFetch } from '$indexer/price/source';
 import { CompositeCachedPriceSource } from '$indexer/price/compositeSource';
 import { createCoingeckoFetcher } from '$indexer/price/coingeckoFetcher';
+import { createBlurtBlogFetcher } from '$indexer/price/blurtBlogFetcher';
 import { createCoinpaprikaFetcher } from '$indexer/price/coinpaprikaFetcher';
 import { createKrakenFetcher } from '$indexer/price/krakenFetcher';
 import { createCryptocompareFetcher } from '$indexer/price/cryptocompareFetcher';
@@ -149,6 +150,9 @@ export interface AssetPriceSourceOptions {
 	 *  An operator on a non-USD denomination should override
 	 *  these via env vars. */
 	readonly staticFloor: number;
+	/** cp425 — true only for BLURT: pull the Blurt-native price feed
+	 *  (api.blurt.blog/price_info) as one more external-average source. */
+	readonly blurtPriceFeed?: boolean;
 }
 
 /** Per-asset known defaults for the cp130 launch set.  Operators
@@ -178,6 +182,7 @@ export const CP130_ASSET_DEFAULTS: Record<string, AssetPriceSourceOptions> = {
 		cryptocompareSymbol: 'BLURT',
 		coincapId: 'blurt',
 		messariSlug: 'blurt',
+		blurtPriceFeed: true,
 		staticFloor: 0.002,
 		plausibleMin: 0.0001,
 		plausibleMax: 0.1
@@ -356,6 +361,22 @@ export function createAssetPriceSource(
 				baseUrl: config.messariBaseUrl,
 				slug: options.messariSlug,
 				apiKey: config.messariApiKey,
+				timeoutMs: 5_000
+			})
+		});
+	}
+	// cp425 — Blurt-native price feed (api.blurt.blog/price_info). BLURT
+	// only, USD only (the feed quotes USD), and only when a URL is set
+	// (an operator can blank MORPHIT_INDEXER_BLURT_PRICE_FEED_URL to opt
+	// out). One more independent reading in the robust average — and a
+	// self-sovereign, non-CEX source, which suits Morphit's priorities.
+	if (isUsd && options.blurtPriceFeed && config.blurtPriceFeedUrl) {
+		upstreams.push({
+			name: 'blurt_price_feed',
+			fetch: createBlurtBlogFetcher({
+				url: config.blurtPriceFeedUrl,
+				plausibleMin: options.plausibleMin,
+				plausibleMax: options.plausibleMax,
 				timeoutMs: 5_000
 			})
 		});

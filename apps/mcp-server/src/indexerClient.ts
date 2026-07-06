@@ -354,6 +354,10 @@ const ORDERBOOK_PUBLIC_FIELDS: ReadonlySet<string> = new Set([
 	'amount_max',
 	'location_region',
 	'payment_methods',
+	// cp425 — the crypto set a BARTER (goods/services) listing accepts as
+	// settlement. A first-class, public trade signal like payment_methods, so
+	// a read-only agent can relay "these baskets take XMR or BTC".
+	'accepted_assets',
 	'terms',
 	'feedback_count',
 	'weighted_rating',

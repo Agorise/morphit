@@ -103,6 +103,10 @@
 		 *  pre-filled amount (the order's fiat minimum + its crypto equivalent).
 		 *  Empty string renders nothing. */
 		payHint?: string;
+		/** cp425 — restrict the method tabs to this set (a BARTER order's
+		 *  accepted_assets). Undefined → all methods. Ignored when
+		 *  `lockedMethod` is set (the tabs aren't shown then). */
+		allowedMethods?: readonly ChatAssetTicker[];
 	}
 
 	let {
@@ -117,8 +121,35 @@
 		peer,
 		onShare,
 		onCancel,
-		payHint = ''
+		payHint = '',
+		allowedMethods
 	}: Props = $props();
+
+	/** cp425 — every method tab in on-screen order; `visibleMethods` filters
+	 *  it to `allowedMethods` when the modal is restricted (barter). */
+	const ALL_METHODS: readonly ChatAssetTicker[] = [
+		'btc',
+		'xmr',
+		'blurt',
+		'usdt',
+		'usdc',
+		'dai',
+		'bch',
+		'ltc',
+		'dash',
+		'doge',
+		'zec',
+		'arrr',
+		'dcr',
+		'sol',
+		'eth',
+		'xrp'
+	];
+	const visibleMethods = $derived(
+		allowedMethods && allowedMethods.length > 0
+			? ALL_METHODS.filter((m) => allowedMethods.includes(m))
+			: ALL_METHODS
+	);
 
 	/** cp402 [7a] — is the asset locked to the order's asset? Computed
 	 *  once from the prop (the parent never changes it mid-session). */
@@ -132,6 +163,16 @@
 	// svelte-ignore state_referenced_locally
 	// svelte-ignore state_referenced_locally
 	let method = $state<ChatAssetTicker>(lockedMethod ?? initialMethod);
+	// cp425 — when the tabs are restricted (barter accepted_assets) and not
+	// locked, keep the selection inside the allowed set (default may not be in
+	// it). No-op when locked (tabs hidden) or unrestricted.
+	$effect(() => {
+		if (methodLocked) return;
+		const first = visibleMethods[0];
+		if (first !== undefined && !visibleMethods.includes(method)) {
+			method = first;
+		}
+	});
 	// svelte-ignore state_referenced_locally
 	let usdtNetwork = $state<UsdtNetwork | null>(initialUsdtNetwork);
 	// svelte-ignore state_referenced_locally
@@ -330,199 +371,20 @@
 				})}
 			</div>
 		{:else}
-			<div class="mt-5 flex gap-2" role="tablist">
-			<button
-				type="button"
-				role="tab"
-				aria-selected={method === 'btc'}
-				class="flex-1 rounded-lg border-2 px-3 py-2 text-sm font-semibold transition {method ===
-				'btc'
-					? 'border-morphit-emerald bg-morphit-emerald/10 text-morphit-emerald'
-					: 'border-ink-200 hover:border-ink-300 dark:border-ink-700 dark:hover:border-ink-600'}"
-				onclick={() => selectMethod('btc')}
-			>
-				{$_('chat.address.method_btc')}
-			</button>
-			<button
-				type="button"
-				role="tab"
-				aria-selected={method === 'xmr'}
-				class="flex-1 rounded-lg border-2 px-3 py-2 text-sm font-semibold transition {method ===
-				'xmr'
-					? 'border-morphit-emerald bg-morphit-emerald/10 text-morphit-emerald'
-					: 'border-ink-200 hover:border-ink-300 dark:border-ink-700 dark:hover:border-ink-600'}"
-				onclick={() => selectMethod('xmr')}
-			>
-				{$_('chat.address.method_xmr')}
-			</button>
-			<button
-				type="button"
-				role="tab"
-				aria-selected={method === 'blurt'}
-				class="flex-1 rounded-lg border-2 px-3 py-2 text-sm font-semibold transition {method ===
-				'blurt'
-					? 'border-morphit-emerald bg-morphit-emerald/10 text-morphit-emerald'
-					: 'border-ink-200 hover:border-ink-300 dark:border-ink-700 dark:hover:border-ink-600'}"
-				onclick={() => selectMethod('blurt')}
-			>
-				{$_('chat.address.method_blurt')}
-			</button>
-			<button
-				type="button"
-				role="tab"
-				aria-selected={method === 'usdt'}
-				class="flex-1 rounded-lg border-2 px-3 py-2 text-sm font-semibold transition {method ===
-				'usdt'
-					? 'border-morphit-emerald bg-morphit-emerald/10 text-morphit-emerald'
-					: 'border-ink-200 hover:border-ink-300 dark:border-ink-700 dark:hover:border-ink-600'}"
-				onclick={() => selectMethod('usdt')}
-			>
-				{$_('chat.address.method_usdt')}
-			</button>
-			<button
-				type="button"
-				role="tab"
-				aria-selected={method === 'usdc'}
-				class="flex-1 rounded-lg border-2 px-3 py-2 text-sm font-semibold transition {method ===
-				'usdc'
-					? 'border-morphit-emerald bg-morphit-emerald/10 text-morphit-emerald'
-					: 'border-ink-200 hover:border-ink-300 dark:border-ink-700 dark:hover:border-ink-600'}"
-				onclick={() => selectMethod('usdc')}
-			>
-				{$_('chat.address.method_usdc')}
-			</button>
-			<button
-				type="button"
-				role="tab"
-				aria-selected={method === 'dai'}
-				class="flex-1 rounded-lg border-2 px-3 py-2 text-sm font-semibold transition {method ===
-				'dai'
-					? 'border-morphit-emerald bg-morphit-emerald/10 text-morphit-emerald'
-					: 'border-ink-200 hover:border-ink-300 dark:border-ink-700 dark:hover:border-ink-600'}"
-				onclick={() => selectMethod('dai')}
-			>
-				{$_('chat.address.method_dai')}
-			</button>
-			<button
-				type="button"
-				role="tab"
-				aria-selected={method === 'bch'}
-				class="flex-1 rounded-lg border-2 px-3 py-2 text-sm font-semibold transition {method ===
-				'bch'
-					? 'border-morphit-emerald bg-morphit-emerald/10 text-morphit-emerald'
-					: 'border-ink-200 hover:border-ink-300 dark:border-ink-700 dark:hover:border-ink-600'}"
-				onclick={() => selectMethod('bch')}
-			>
-				{$_('chat.address.method_bch')}
-			</button>
-			<button
-				type="button"
-				role="tab"
-				aria-selected={method === 'ltc'}
-				class="flex-1 rounded-lg border-2 px-3 py-2 text-sm font-semibold transition {method ===
-				'ltc'
-					? 'border-morphit-emerald bg-morphit-emerald/10 text-morphit-emerald'
-					: 'border-ink-200 hover:border-ink-300 dark:border-ink-700 dark:hover:border-ink-600'}"
-				onclick={() => selectMethod('ltc')}
-			>
-				{$_('chat.address.method_ltc')}
-			</button>
-			<button
-				type="button"
-				role="tab"
-				aria-selected={method === 'dash'}
-				class="flex-1 rounded-lg border-2 px-3 py-2 text-sm font-semibold transition {method ===
-				'dash'
-					? 'border-morphit-emerald bg-morphit-emerald/10 text-morphit-emerald'
-					: 'border-ink-200 hover:border-ink-300 dark:border-ink-700 dark:hover:border-ink-600'}"
-				onclick={() => selectMethod('dash')}
-			>
-				{$_('chat.address.method_dash')}
-			</button>
-			<button
-				type="button"
-				role="tab"
-				aria-selected={method === 'doge'}
-				class="flex-1 rounded-lg border-2 px-3 py-2 text-sm font-semibold transition {method ===
-				'doge'
-					? 'border-morphit-emerald bg-morphit-emerald/10 text-morphit-emerald'
-					: 'border-ink-200 hover:border-ink-300 dark:border-ink-700 dark:hover:border-ink-600'}"
-				onclick={() => selectMethod('doge')}
-			>
-				{$_('chat.address.method_doge')}
-			</button>
-			<button
-				type="button"
-				role="tab"
-				aria-selected={method === 'zec'}
-				class="flex-1 rounded-lg border-2 px-3 py-2 text-sm font-semibold transition {method ===
-				'zec'
-					? 'border-morphit-emerald bg-morphit-emerald/10 text-morphit-emerald'
-					: 'border-ink-200 hover:border-ink-300 dark:border-ink-700 dark:hover:border-ink-600'}"
-				onclick={() => selectMethod('zec')}
-			>
-				{$_('chat.address.method_zec')}
-			</button>
-			<button
-				type="button"
-				role="tab"
-				aria-selected={method === 'arrr'}
-				class="flex-1 rounded-lg border-2 px-3 py-2 text-sm font-semibold transition {method ===
-				'arrr'
-					? 'border-morphit-emerald bg-morphit-emerald/10 text-morphit-emerald'
-					: 'border-ink-200 hover:border-ink-300 dark:border-ink-700 dark:hover:border-ink-600'}"
-				onclick={() => selectMethod('arrr')}
-			>
-				{$_('chat.address.method_arrr')}
-			</button>
-			<button
-				type="button"
-				role="tab"
-				aria-selected={method === 'dcr'}
-				class="flex-1 rounded-lg border-2 px-3 py-2 text-sm font-semibold transition {method ===
-				'dcr'
-					? 'border-morphit-emerald bg-morphit-emerald/10 text-morphit-emerald'
-					: 'border-ink-200 hover:border-ink-300 dark:border-ink-700 dark:hover:border-ink-600'}"
-				onclick={() => selectMethod('dcr')}
-			>
-				{$_('chat.address.method_dcr')}
-			</button>
-			<button
-				type="button"
-				role="tab"
-				aria-selected={method === 'sol'}
-				class="flex-1 rounded-lg border-2 px-3 py-2 text-sm font-semibold transition {method ===
-				'sol'
-					? 'border-morphit-emerald bg-morphit-emerald/10 text-morphit-emerald'
-					: 'border-ink-200 hover:border-ink-300 dark:border-ink-700 dark:hover:border-ink-600'}"
-				onclick={() => selectMethod('sol')}
-			>
-				{$_('chat.address.method_sol')}
-			</button>
-			<button
-				type="button"
-				role="tab"
-				aria-selected={method === 'eth'}
-				class="flex-1 rounded-lg border-2 px-3 py-2 text-sm font-semibold transition {method ===
-				'eth'
-					? 'border-morphit-emerald bg-morphit-emerald/10 text-morphit-emerald'
-					: 'border-ink-200 hover:border-ink-300 dark:border-ink-700 dark:hover:border-ink-600'}"
-				onclick={() => selectMethod('eth')}
-			>
-				{$_('chat.address.method_eth')}
-			</button>
-			<button
-				type="button"
-				role="tab"
-				aria-selected={method === 'xrp'}
-				class="flex-1 rounded-lg border-2 px-3 py-2 text-sm font-semibold transition {method ===
-				'xrp'
-					? 'border-morphit-emerald bg-morphit-emerald/10 text-morphit-emerald'
-					: 'border-ink-200 hover:border-ink-300 dark:border-ink-700 dark:hover:border-ink-600'}"
-				onclick={() => selectMethod('xrp')}
-			>
-				{$_('chat.address.method_xrp')}
-			</button>
+			<div class="mt-5 flex flex-wrap gap-2" role="tablist">
+				{#each visibleMethods as m (m)}
+					<button
+						type="button"
+						role="tab"
+						aria-selected={method === m}
+						class="flex-1 rounded-lg border-2 px-3 py-2 text-sm font-semibold transition {method === m
+							? 'border-morphit-emerald bg-morphit-emerald/10 text-morphit-emerald'
+							: 'border-ink-200 hover:border-ink-300 dark:border-ink-700 dark:hover:border-ink-600'}"
+						onclick={() => selectMethod(m)}
+					>
+						{$_(`chat.address.method_${m}`)}
+					</button>
+				{/each}
 			</div>
 		{/if}
 

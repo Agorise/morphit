@@ -154,6 +154,7 @@ export const FAQ_KEYS = [
 	'what_is_sol',
 	'what_is_eth',
 	'what_is_xrp',
+	'what_is_barter',
 	// Asset-specific transactional advice
 	'xmr_txid',
 	'xmr_tx_proof',
@@ -746,6 +747,12 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 		'fees',
 		'how_morphit_protects_me',
 		'what_is_blurt'
+	],
+	what_is_barter: [
+		'how_to_buy',
+		'fees',
+		'how_morphit_protects_me',
+		'what_is_morphit'
 	],
 	// Part 122 cp51 deep-deep N-1: BCH/LTC/DASH FAQ_RELATED parity
 	what_is_bch: [

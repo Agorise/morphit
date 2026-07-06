@@ -37,7 +37,7 @@
 	import { page } from '$app/stores';
 	import { _ } from 'svelte-i18n';
 	import { gotoLocale } from '$i18n/navigate';
-	import { ASSETS, type AssetTicker } from '@morphit/asset-registry';
+	import { ASSETS, isGoodsAsset, type AssetTicker } from '@morphit/asset-registry';
 	import Head from '$components/Head.svelte';
 	import { breadcrumbListSchema, type BreadcrumbItem } from '$seo/jsonld';
 	import { localizedUrl, CANONICAL_ORIGIN } from '$seo/urls';
@@ -50,8 +50,10 @@
 	$effect(() => {
 		// Unknown ticker → redirect to /[lang]/privacy index.  The
 		// alternative (404) loses the user's locale prefix; redirect
-		// preserves it.
-		if (asset === undefined) {
+		// preserves it. cp425: goods assets (BARTER) have no on-chain
+		// privacy guide (the wares change hands off-platform), so treat
+		// them like an unknown ticker and redirect.
+		if (asset === undefined || isGoodsAsset(assetParam)) {
 			gotoLocale('/privacy');
 		}
 	});

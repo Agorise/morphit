@@ -53,6 +53,72 @@ describe('orderReplace handler', () => {
 		expect(mock.queries).toHaveLength(2);
 	});
 
+	// ─── cp425: barter accepted_assets on replace ───────────────────
+	// accepted_assets is editable on replace (a seller may change which
+	// cryptos they accept), unlike side/asset/fiat/network which are locked.
+	// The validation mirrors the order handler.
+	function validBarterReplacePayload() {
+		return {
+			permlink: 'sell-barter-mxn-2026-07',
+			side: 'sell',
+			asset: 'BARTER',
+			asset_network: null,
+			fiat_currency: 'MXN',
+			amount_min: 100,
+			amount_max: 500,
+			price_model: { kind: 'fixed', price: 250 },
+			payment_methods: ['in-person'],
+			accepted_assets: ['XMR', 'BTC']
+		};
+	}
+
+	it('updates a barter order (accepted_assets editable on replace)', async () => {
+		const createdAt = new Date('2026-07-05T12:00:00Z');
+		const blockTime = new Date('2026-07-05T12:02:00Z');
+		const mock = makeMockClient([
+			{
+				match: 'SELECT status, created_at',
+				rows: [
+					{
+						status: 'live',
+						created_at: createdAt,
+						side: 'sell',
+						asset: 'BARTER',
+						asset_network: null,
+						fiat_currency: 'MXN',
+						fee_method: 'blurt'
+					}
+				]
+			},
+			{ match: 'UPDATE orders', rowCount: 1 }
+		]);
+		const r = await handler(
+			makeCtx({ signer: 'alice', blockTime, payload: validBarterReplacePayload() }),
+			mock.client
+		);
+		expect(r).toEqual({ ok: true });
+		expect(mock.queries).toHaveLength(2);
+	});
+
+	it('rejects a barter replace with no accepted_assets (before any query)', async () => {
+		const mock = makeMockClient();
+		const p: Record<string, unknown> = { ...validBarterReplacePayload() };
+		delete p.accepted_assets;
+		const r = await handler(makeCtx({ payload: p }), mock.client);
+		expect(r).toEqual({ ok: false, reason: 'accepted_assets_required_for_barter' });
+		expect(mock.queries).toHaveLength(0);
+	});
+
+	it('rejects a crypto replace that carries accepted_assets', async () => {
+		const mock = makeMockClient();
+		const r = await handler(
+			makeCtx({ payload: { ...validPayload(), accepted_assets: ['XMR'] } }),
+			mock.client
+		);
+		expect(r).toEqual({ ok: false, reason: 'accepted_assets_not_permitted_for_asset' });
+		expect(mock.queries).toHaveLength(0);
+	});
+
 	it('rejects with replace_window_expired at exactly 15:00:01', async () => {
 		// Just past the 15-minute window.  Window extended from 3
 		// to 15 minutes 2026-05-07 per ADR-0001 Amendment.

@@ -428,18 +428,6 @@
 							<dd class="mt-1 text-sm">{order.location_region}</dd>
 						</div>
 					{/if}
-
-					<!-- Terms moved up here (under Location) instead of a
-					     full-width row at the bottom — keeps this card
-					     compact and balances the two columns. -->
-					{#if order.terms}
-						<div>
-							<dt class="text-xs text-ink-500">{$_('order_detail.terms')}</dt>
-							<dd class="mt-1 text-sm text-ink-700 dark:text-ink-200">
-								<TermsText text={order.terms} />
-							</dd>
-						</div>
-					{/if}
 				</div>
 
 				<!-- RIGHT column: timing and listing fee -->
@@ -517,6 +505,19 @@
 						</div>
 					{/if}
 				</div>
+
+				<!-- Terms span the FULL width of the card (a row below both
+				     columns) — multi-line markdown terms (headings, lists,
+				     blockquotes, paragraphs) need the room to read, not a
+				     squished half-width column. -->
+				{#if order.terms}
+					<div class="sm:col-span-2">
+						<dt class="text-xs text-ink-500">{$_('order_detail.terms')}</dt>
+						<dd class="mt-1 text-sm text-ink-700 dark:text-ink-200">
+							<TermsText text={order.terms} />
+						</dd>
+					</div>
+				{/if}
 			</dl>
 		</section>
 

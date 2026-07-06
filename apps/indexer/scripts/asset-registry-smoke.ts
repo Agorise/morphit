@@ -13,6 +13,7 @@ import {
 	memoCapableAssets,
 	type AssetMetadata
 } from '../../web/src/lib/assets/registry.ts';
+import { isGoodsAsset, type AssetTicker } from '@morphit/asset-registry';
 import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -38,9 +39,9 @@ function scenario(name: string, fn: () => void): void {
 
 console.log('\n── asset registry smoke ─────────────────────────────────\n');
 
-scenario('all current assets registered (16 assets: BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP)', () => {
+scenario('all current assets registered (17 assets: BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, BARTER)', () => {
 	const tickers = ASSETS.map((a) => a.ticker).sort();
-	const expected = ['arrr', 'bch', 'blurt', 'btc', 'dai', 'dash', 'dcr', 'doge', 'eth', 'ltc', 'sol', 'usdc', 'usdt', 'xmr', 'xrp', 'zec'];
+	const expected = ['arrr', 'barter', 'bch', 'blurt', 'btc', 'dai', 'dash', 'dcr', 'doge', 'eth', 'ltc', 'sol', 'usdc', 'usdt', 'xmr', 'xrp', 'zec'];
 	if (JSON.stringify(tickers) !== JSON.stringify(expected)) {
 		throw new Error(`expected ${expected}, got ${tickers}`);
 	}
@@ -187,7 +188,8 @@ scenario('lower-case tickers match payload union', () => {
 		'dcr',
 		'sol',
 		'eth',
-		'xrp'
+		'xrp',
+		'barter'
 	]);
 	for (const a of ASSETS) {
 		if (!valid.has(a.ticker)) {
@@ -196,8 +198,11 @@ scenario('lower-case tickers match payload union', () => {
 	}
 });
 
-scenario('decimals are positive integers', () => {
+scenario('decimals are positive integers (crypto assets; goods have 0)', () => {
 	for (const a of ASSETS) {
+		// cp425 — goods assets (BARTER) are valued directly in fiat, not a
+		// crypto amount, so decimals=0 is correct for them; skip the >0 check.
+		if (isGoodsAsset(a.ticker.toUpperCase() as AssetTicker)) continue;
 		if (!Number.isInteger(a.decimals) || a.decimals <= 0) {
 			throw new Error(`${a.ticker}: bad decimals ${a.decimals}`);
 		}

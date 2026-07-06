@@ -386,6 +386,7 @@
       "mark_all_read": "全部標為已讀",
       "conversation_aria_unread": "同 {peer} 嘅對話 — 未讀",
       "conversation_aria_read": "同 {peer} 嘅對話",
+      "re_prefix": "RE:",
       "tab_messages": "訊息",
       "tab_requests": "請求",
       "tabs_aria": "收件匣分頁",
@@ -782,7 +783,8 @@
       "dcr": "Decred。一種由持有者投票決定如何運作嘅幣。帳本好似 Bitcoin 咁公開，錢包內提供可選嘅私隱模式。",
       "sol": "Solana — 具有 Proof-of-History 排序的高吞吐量 PoS 加密貨幣。透明基礎層，基金會 + 驗證者社區治理，SPL 代幣生態系統。僅交易：不能支付掛單費用。",
       "eth": "Ethereum — Proof-of-Stake 智能合約平台。透明基礎層；無原生混合協議（第三方混合器在許多司法管轄區被制裁）。錢包端地址輪換是主要的私隱手段。交易 + 掛單費用。",
-      "xrp": "Ripple (XRP) — XRP Ledger 上面向支付的聯邦拜占庭協議加密貨幣。透明基礎層；協議層沒有私隱。destination tag 是標識符（用於交易所路由），不是私隱功能。錢包端地址輪換是主要的私隱手段。交易 + 掛單費用。"
+      "xrp": "Ripple (XRP) — XRP Ledger 上面向支付的聯邦拜占庭協議加密貨幣。透明基礎層；協議層沒有私隱。destination tag 是標識符（用於交易所路由），不是私隱功能。錢包端地址輪換是主要的私隱手段。交易 + 掛單費用。",
+      "barter": "以物易物——商品或服務,唔係幣。用本地貨幣定價,揀你接受嘅加密貨幣(如 XMR、BTC、DOGE),並喺「條款」入面準確描述你嘅提供內容。掛單唔需要加密貨幣地址;以買家揀選、你接受嘅加密貨幣結算。喺 Morphit 上淨係用嚟交換。"
     },
     "section_recovery": {
       "heading": "如果出了問題",
@@ -1251,7 +1253,7 @@
       },
       "how_to_stake_blurt": {
         "q": "點樣質押我嘅 Blurt(power up 轉成 BP)嚟賺取利息?",
-        "a": "質押 Blurt 即係將你嘅流動 Blurt 轉換成 **Blurt Power(BP)**——Blurt 將呢個過程叫做「power up」。質押咗嘅 Blurt 每年大約賺取 **2% 利息(APR)**(實際利率根據鏈上通脹計算並喺應用程式內顯示),加強你嘅點讚權重,仲會賺取策展獎勵。成個過程入面佢一直都係你自己嘅幣——唔係存款,唔係借貸,亦都唔由任何其他人保管。\n\n**最簡單嘅方法係用 Blurt 錢包。**打開 [BlurtWallet.com](https://blurtwallet.com),用你嘅帳戶登入,搵到你嘅流動 Blurt 餘額,揀 **Power Up**。輸入金額並確認。就係咁——你嘅 Blurt 而家變咗 BP 並開始產生收益。\n\nMorphit 本身唔係錢包,所以我哋唔會幫你保管或者轉移 Blurt;power up 直接喺區塊鏈上、透過你控制嘅錢包完成。如果你想換返流動 Blurt,就執行 **power down**,佢會喺大約四個星期內逐步釋放(呢種逐步解押係 Blurt 協議嘅規則,唔係 Morphit 嘅)。"
+        "a": "質押 Blurt 即係將你嘅流動 Blurt 轉換成 **Blurt Power(BP)**——Blurt 將呢個過程叫做「power up」。質押咗嘅 Blurt 每年大約賺取 **2% 利息(APR)**(實際利率根據鏈上通脹計算並喺應用程式內顯示),加強你嘅點讚權重,仲會賺取策展獎勵。成個過程入面佢一直都係你自己嘅幣——唔係存款,唔係借貸,亦都唔由任何其他人保管。\n\n**最簡單嘅方法就係直接喺 Morphit 度操作。**打開你嘅[錢包](/my/wallet),搵到你嘅流動 Blurt 餘額,揀 **Power Up**。輸入金額並確認。就係咁——你嘅 Blurt 而家變咗 BP 並開始產生收益。\n\nMorphit 從來唔會幫你保管或者轉移 Blurt——power up 直接喺區塊鏈上、用你自己嘅密鑰簽名完成。如果你想換返流動 Blurt,就執行 **power down**,佢會喺 4 個星期內逐步釋放(呢種逐步解押係 Blurt 協議嘅規則,唔係 Morphit 嘅)。"
       },
       "where_does_blurt_price_come_from": {
         "q": "Morphit 上顯示嘅 Blurt 價格從哪裡來?",
@@ -1660,6 +1662,10 @@
       "privacy_coins_onchain": {
         "q": "Morphit 點樣保護我用隱私幣交易嘅私隱？",
         "a": "Morphit 交易多種隱私幣——門羅幣（XMR）、Zcash（ZEC）、海盜鏈（ARRR）、達世幣（DASH）同 Decred（DCR）——並且對佢哋全部採用相同嘅鏈上足跡保護。\n\n**你嘅實際結算永遠唔會接觸 Blurt。**當你交易隱私幣嘅時候，啲幣係喺你同對手方嘅錢包之間點對點轉移，直接喺該幣自己嘅鏈上完成。嗰筆轉賬永遠唔會廣播到、記錄喺 Morphit 用嚟協調嘅區塊鏈上，亦都無法從中睇到。Blurt 只係承載公開嘅訂單（廣告）同埋端到端加密嘅聊天。\n\n**訂單喺 Blurt 上披露啲乜——以及我哋從中剝走咗啲乜：**\n• 訂單係一則廣告，所以佢嘅方向/資產/金額範圍/付款方式必然係公開嘅（買家就係咁搵到你嘅賣單）。呢個係任何公開訂單簿嘅固有屬性。\n• 但係我哋移除咗所有唔需要存在嘅內容：訂單嘅 permlink 而家係一個唔透明嘅隨機令牌（`order-…`），而唔係 `sell-xmr-usd-…`，所以資產名稱唔再洩漏到鏈上 permlink、訂單 URL、RSS 源或者區塊瀏覽器入面。到期時間戳被取整到日，所以無法識別你發佈嘅確切時刻。永遠唔會附加 IP、時區、語言或者瀏覽器指紋——你喺「Post Now」表單入面填寫嘅就係上鏈嘅全部內容。\n\n**每種幣都有金額抖動。**當你喺聊天入面分享一個收款金額嘅時候，Morphit 會加一條微小嘅隨機尾數（精確到該幣嘅最小單位——XMR 用皮可門羅，其他用聰級），令鏈上金額無法同你發佈嘅訂單匹配。預設開啟。\n\n**ZEC、ARRR、DASH 同 DCR 只供交易——佢哋嘅 TxID 根本唔會出現喺 Blurt 上。**你唔可以用佢哋畀 Morphit 嘅掛單費，而結算係點對點嘅，所以呢啲幣嘅交易 ID 唔存在任何被寫入公開鏈嘅時刻。對呢四種幣嚟講，鏈上情況甚至比門羅幣仲要乾淨。\n\n**門羅幣啱啱有一處可選嘅跨鏈接觸，而且可以揀唔用。**XMR 係三種資產之一（同 BLURT 同 BTC 一齊），你*可以*用佢畀嗰筆小額掛單費；如果你咁做，該費用支付嘅 TxID 會記錄喺你 Blurt 上嘅訂單裡面（咁任何營運者都可以用門羅幣 tx_proof 驗證費用——唔需要檢視密鑰，參見門羅幣 TxID 常見問題）。嗰度係門羅幣 TxID 唯一接觸 Blurt 嘅地方，而且只係一筆畀公開地址嘅約 0.25 美元手續費，絕對唔係你嘅交易。想要門羅幣同 Blurt 之間零關聯？用 BLURT 畀掛單費就得——呢個係預設選項，價錢只係一半。\n\n每種幣嘅完整指南見 /privacy/{asset}（例如 /privacy/xmr、/privacy/zec），完整嘅洩漏清單喺項目嘅元數據洩漏目錄入面。"
+      },
+      "what_is_barter": {
+        "q": "Morphit 上嘅以物易物係乜嘢?",
+        "a": "以物易物畀你買賣商品同服務——唔係加密貨幣——並以加密貨幣結算。賣籃嘅婆婆、整單車嘅鄰居、攞一箱橙嚟換嘅人:佢哋將提供嘅嘢掛出嚟,用本地貨幣定價,並揀接受邊啲加密貨幣(例如 XMR、BTC 同 DOGE)。呢個係**一條掛單**,唔係每種幣一條。\n\n**點運作:**喺「條款」入面準確描述你嘅提供內容,設定一個本地貨幣價值(單一價格或區間),並剔選你所在城鎮真正使用嘅加密貨幣。買家好似睇其他掛單噉睇貨品,淨係可以用你接受嘅加密貨幣畀錢——如果你冇列出 Decred,就冇人可以用 Decred 畀錢你。你同買家喺聊天入面安排交收,並用佢揀選、你接受嘅加密貨幣結算。\n\n**掛單上冇地址:**貨品喺 Morphit 以外易手——當面或郵寄——所以以物易物掛單冇加密貨幣收款地址,Morphit 亦從來唔會掂貨品或款項。請講常識安全:喺公眾地方見面,淨係分享必要嘅資訊,對陌生人保持警惕。\n\n喺 Morphit 上,以物易物**淨係用嚟交換**——唔可以用佢畀 Morphit 嘅掛單費(嗰啲仍然係 Blurt/BTC/XMR)。佢淨係用嚟交換貨品,冇其他。"
       }
     },
     "share_link": "分享",
@@ -1696,7 +1702,9 @@
     "history_state_expired": "已過期",
     "history_state_order_inactive": "訂單已結束",
     "history_extended": "已延期 ×{n}",
-    "history_extended_title": "該競價被反狙擊機制延長咗 {n} 次"
+    "history_extended_title": "該競價被反狙擊機制延長咗 {n} 次",
+    "error_chain_rejected": "網絡拒絕了此交易：{reason}",
+    "error_unreachable": "無法連接到你的 Morphit 實例進行廣播。請檢查網絡連接後重試。"
   },
   "featured": {
     "heading": "目前精選",
@@ -2584,8 +2592,6 @@
       "fiat_no_matches": "沒有匹配嘅貨幣",
       "fiat_remove": "移除",
       "asset_barter": "易貨（商品/服務）",
-      "side_buy_goods": "想購買商品/服務嘅帖子",
-      "side_sell_goods": "想出售商品/服務嘅帖子",
       "side_label": "我想睇",
       "side_any": "全部",
       "side_buy": "想買加密貨幣嘅訂單",
@@ -2982,7 +2988,8 @@
         "dcr": "Decred (DCR)。一種由社區投票決定項目點運作嘅幣。佢嘅帳本好似 Bitcoin 咁公開可見，錢包提供可選嘅私隱模式。冇中央發行方——冇人可以凍結你嘅幣。",
         "sol": "Solana — 具有 Proof-of-History 排序的高吞吐量 PoS 加密貨幣。透明基礎層，無原生混合協議。錢包端地址輪換是主要的私隱手段。",
         "eth": "Ethereum (ETH) — Proof-of-Stake 智能合約平台。透明基礎層；無原生混合協議。注意合約接收者（向沒有 `payable receive()` 或 `fallback()` 的合約發送 ETH 將被回滾；幣沒丟失，但交易失敗且你支付 gas）。",
-        "xrp": "Ripple (XRP) — XRP Ledger 上面向支付的聯邦拜占庭協議加密貨幣。透明基礎層；協議層沒有私隱。destination tag 是標識符（用於交易所路由），不是私隱功能。錢包端地址輪換是主要的私隱手段。"
+        "xrp": "Ripple (XRP) — XRP Ledger 上面向支付的聯邦拜占庭協議加密貨幣。透明基礎層；協議層沒有私隱。destination tag 是標識符（用於交易所路由），不是私隱功能。錢包端地址輪換是主要的私隱手段。",
+        "barter": "以物易物（商品/服務）。呢個唔係加密貨幣——你提供貨品或服務,並以你揀選接受嘅加密貨幣收款。用你嘅本地貨幣定價;你同買家喺聊天入面商定細節,並用你接受嘅某種加密貨幣結算。喺「條款」欄入面準確描述你所提供嘅內容。"
       },
       "waiver_fiat_hint": "💡 Morphit 上大多數 BLURT 交易發生在活躍的 Blurt 社交網絡用戶、現有運營者之間，或透過易貨進行。因此，請選擇您本地使用的法定貨幣（USD、EUR、MXN 等），如果您想提供其他有價值的東西，可在第 3 步提供當面或易貨（商品/服務）付款方式。",
       "waiver_benefits_heading": "你嘅購買能解鎖：",
@@ -3009,7 +3016,9 @@
       "step_counter": "第 {n} 步，共 {total} 步",
       "fiat_required_hint": "選擇你為這筆交易定價所用的貨幣。",
       "amount_entered_usd_hint": "{amount} {fiat}（≈ {usd}）",
-      "returning_min_hint": "至少 {amount} {fiat}（≈ {usd}）"
+      "returning_min_hint": "至少 {amount} {fiat}（≈ {usd}）",
+      "barter_accept_label": "你接受邊啲加密貨幣?",
+      "barter_accept_hint": "剔選買家可以用嚟畀錢嘅加密貨幣——揀你真正使用嘅。"
     },
     "errors": {
       "fiat_empty": "請選擇一種法幣(如 USD 或 EUR)。",
@@ -3151,7 +3160,9 @@
       "amount_min_plus": "價值 {min} {fiat} 或以上的 {asset}",
       "amount_any": "任意數量的 {asset}",
       "price_market": "以市場價格",
-      "price_fixed": "以 {price} {fiat}/{asset} 的固定價格"
+      "price_fixed": "以 {price} {fiat}/{asset} 的固定價格",
+      "barter_sentence_sell": "你提供價值 {value} 嘅商品/服務,接受 {cryptos}。",
+      "barter_sentence_buy": "你想要價值 {value} 嘅商品/服務,用 {cryptos} 畀錢。"
     }
   },
   "prices": {
@@ -3378,8 +3389,8 @@
     "rss_subscribe_title": "當呢個交易者發布新嘅買/賣單時透過 RSS 收到通知。注意:輪詢按交易者嘅訂閱比全站訂閱稍微更具揭示性。",
     "feedback_suppressed_chip": "唔計入評分 — 評論者被標記為關聯戶口",
     "my_balance": {
-      "section_label": "@{account} 的餘額",
-      "title": "@{account} 的餘額",
+      "section_label": "@{account} 的錢包",
+      "title": "@{account} 的錢包",
       "private_label": "只有你看到",
       "loading": "正在載入餘額...",
       "error": "無法載入餘額",
@@ -3423,7 +3434,54 @@
     },
     "as_buyer": "作為買家",
     "as_seller": "作為賣家",
-    "last_traded_label": "最近交易:"
+    "last_traded_label": "最近交易:",
+    "wallet": {
+      "power_up_action": "Power up",
+      "power_down_action": "Power down",
+      "power_up_title": "Power up BLURT",
+      "power_down_title": "Power down BP",
+      "power_up_subtitle": "power up 會把你的流動 BLURT 轉換成 Blurt Power(BP)。質押的 BLURT 會賺取收益、增強你的投票權,並且始終完全屬於你——不是存款,也不是借貸。",
+      "power_down_subtitle": "power down 會把你的 Blurt Power(BP)轉換回流動 BLURT。",
+      "amount_label": "數量",
+      "power_up_placeholder": "要 power up 的 BLURT",
+      "power_down_placeholder": "要 power down 的 BP",
+      "use_full": "使用全部餘額",
+      "available_blurt": "可用:{amount} BLURT",
+      "available_bp": "可用:{amount} BP",
+      "power_down_schedule": "這不是即時的:你的 BP 會在 4 週內逐步釋放回流動 BLURT。這種逐步釋放是 Blurt 協議的規則,不是 Morphit 的。",
+      "password_label": "你的 @{account} 密碼(用於以你的活躍密鑰簽名)",
+      "error_password_required": "請輸入密碼以繼續。",
+      "error_bad_password": "該密碼未能解鎖你的活躍密鑰。請檢查後重試。",
+      "error_no_active_key": "此裝置沒有可用於簽名的活躍密鑰。請使用助記詞登入以進行 power up 或 power down。",
+      "error_broadcast": "該操作未能在鏈上完成。請重試。",
+      "error_amount": "請輸入不超過可用餘額的數量。"
+    },
+    "send": {
+      "title": "發送 BLURT",
+      "subtitle": "向任何 Blurt 帳戶發送 BLURT。",
+      "recipient_label": "收款人",
+      "recipient_placeholder": "Blurt 帳戶名",
+      "recipient_checking": "檢查中…",
+      "recipient_valid": "已找到帳戶",
+      "recipient_not_found": "鏈上不存在該名稱的帳戶。",
+      "recipient_invalid": "這不是有效的 Blurt 帳戶名。",
+      "recipient_self": "你不能向自己發送 BLURT。",
+      "recipient_error": "無法檢查該帳戶。請重試。",
+      "amount_placeholder": "要發送的 BLURT",
+      "memo_label": "備註(可選)",
+      "memo_placeholder": "例如訂單編號",
+      "memo_privacy_warning": "備註會以明文形式公開且永久地儲存在區塊鏈上。切勿填寫密碼、密鑰或任何私密資訊。",
+      "error_no_active_key": "此裝置沒有可用於簽名的活躍密鑰。請使用助記詞登入以發送 BLURT。",
+      "send_button": "發送",
+      "confirm": "發送 BLURT",
+      "qr_heading": "掃描收款人二維碼",
+      "qr_body": "將鏡頭對準 Blurt 帳戶二維碼即可填入收款人。",
+      "qr_start_button": "開啟鏡頭",
+      "qr_scanning_hint": "將二維碼穩定地保持在取景框內。",
+      "qr_camera_denied": "鏡頭存取被封鎖。請在瀏覽器設定中允許後重試。",
+      "qr_no_camera": "此裝置沒有可用於掃描的鏡頭。",
+      "qr_invalid": "該二維碼不包含 Blurt 帳戶。請換一個。"
+    }
   },
   "relative_time": {
     "descriptive": {
@@ -3735,23 +3793,23 @@
       "description": "精選的 Morphit 實例列表。每個實例由獨立營運者運行;用戶可自行選擇交易地點。"
     },
     "explorer_search": {
-      "title": "區塊瀏覽器",
-      "description": "搜尋區塊鏈上的區塊、交易和帳戶。"
+      "title": "Blurt 區塊瀏覽器",
+      "description": "在 Blurt 區塊鏈上搜尋區塊、交易和帳戶——無需登入、無追蹤、無需帳戶。"
     },
     "explorer_account": {
-      "title": "帳戶 {account} — 區塊瀏覽器",
+      "title": "帳戶 {account} — Blurt 區塊瀏覽器",
       "description": "{account} 在區塊鏈上的鏈上歷史。"
     },
     "explorer_activity": {
-      "title": "即時活動 — 區塊瀏覽器",
+      "title": "即時活動 — Blurt 區塊瀏覽器",
       "description": "區塊鏈上 Morphit 相關操作的即時動態。"
     },
     "explorer_block": {
-      "title": "區塊 {block} — 區塊瀏覽器",
+      "title": "區塊 {block} — Blurt 區塊瀏覽器",
       "description": "Blurt 區塊 {block} 中包含的操作。"
     },
     "explorer_tx": {
-      "title": "交易 {trx} — 區塊瀏覽器",
+      "title": "交易 {trx} — Blurt 區塊瀏覽器",
       "description": "此 Blurt 交易中包含的操作。"
     },
     "login_qr": {
@@ -4447,7 +4505,8 @@
     "buy_range": "我想買價值 {min}–{max} {fiat} 嘅 {asset}",
     "sell_range": "我想賣價值 {min}–{max} {fiat} 嘅 {asset}",
     "buy_any": "我想買 {asset}",
-    "sell_any": "我想賣 {asset}"
+    "sell_any": "我想賣 {asset}",
+    "goods_services": "商品/服務"
   },
   "stats": {
     "page_title": "網絡統計",

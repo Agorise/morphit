@@ -30,6 +30,7 @@
  */
 
 import type { OrderRecord } from '@morphit/indexer-client';
+import { isGoodsAsset } from '@morphit/asset-registry';
 
 type Translator = (key: string, opts?: { values?: Record<string, unknown> }) => string;
 
@@ -81,9 +82,14 @@ export function formatPriceModel(
 /** Convenience that takes an `OrderRecord` instead of a raw
  *  price_model — most call sites have the whole order in scope. */
 export function formatOrderPriceModel(
-	o: Pick<OrderRecord, 'price_model' | 'fiat_currency'>,
+	o: Pick<OrderRecord, 'price_model' | 'fiat_currency' | 'asset'>,
 	t: Translator
 ): string | null {
+	// cp425 — a BARTER (goods/services) order has no crypto-vs-fiat rate; it
+	// ships an inert price_model that would otherwise render as "Market rate".
+	// Suppress the price line entirely for goods — the card shows the value
+	// range + accepted cryptos instead.
+	if (isGoodsAsset(o.asset)) return null;
 	return formatPriceModel(o.price_model, t, o.fiat_currency);
 }
 

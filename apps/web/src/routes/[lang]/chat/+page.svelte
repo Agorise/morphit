@@ -37,6 +37,7 @@
 	import Head from '$components/Head.svelte';
 	import IdentityLabel from '$components/IdentityLabel.svelte';
 	import RelativeTime from '$components/RelativeTime.svelte';
+	import { orderTitleParts } from '$lib/utils/orderTitle';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
 	import { loadRecentPeers } from '$lib/chat/recentPeers';
 	import {
@@ -435,46 +436,72 @@
 							? 'border-morphit-emerald/60 dark:border-morphit-emerald/50'
 							: 'border-ink-200 dark:border-ink-800'}"
 					>
-						<a
-							href={lp(`/chat/${convo.peer}`)}
-							onclick={() => handleOpen(convo.peer)}
-							class="flex flex-1 items-center gap-3 p-3"
-							aria-label={convo.unread
-								? ($_('chat.inbox.conversation_aria_unread', {
-										values: { peer: convo.peer }
-									}) as string)
-								: ($_('chat.inbox.conversation_aria_read', {
-										values: { peer: convo.peer }
-									}) as string)}
-						>
-							<!-- Unread indicator dot. aria-hidden because the
-							     unread status is already conveyed via the
-							     aria-label on the anchor. The hidden sibling
-							     span when read preserves alignment between
-							     read/unread rows so identity labels align in
-							     a column. -->
-							{#if convo.unread}
-								<span class="h-2 w-2 flex-none rounded-full bg-morphit-emerald" aria-hidden="true"
-								></span>
-							{:else}
-								<span class="h-2 w-2 flex-none" aria-hidden="true"></span>
-							{/if}
-							<IdentityLabel
-								account={convo.peer}
-								displayName={labelProps.displayName}
-								avatarSvg={labelProps.avatarSvg}
-								avatarDataUri={labelProps.avatarDataUri}
-								weight={convo.unread ? 'bold' : 'semibold'}
-								showCopy={false}
-							/>
-							<span
-								class="ml-auto text-xs {convo.unread
-									? 'font-semibold text-morphit-emerald'
-									: 'text-ink-500 dark:text-ink-400'}"
+						<!-- Chat link + optional "RE: <order>" subline share a
+						     column so the order line can be its OWN anchor (to the
+						     order detail page) as a SIBLING of the chat anchor — a
+						     nested <a> would be invalid HTML. The p-3 moves to the
+						     column so both rows sit inside the same padding. -->
+						<div class="flex min-w-0 flex-1 flex-col gap-0.5 p-3">
+							<a
+								href={lp(`/chat/${convo.peer}`)}
+								onclick={() => handleOpen(convo.peer)}
+								class="flex items-center gap-3"
+								aria-label={convo.unread
+									? ($_('chat.inbox.conversation_aria_unread', {
+											values: { peer: convo.peer }
+										}) as string)
+									: ($_('chat.inbox.conversation_aria_read', {
+											values: { peer: convo.peer }
+										}) as string)}
 							>
-								<RelativeTime iso={convo.last_message_at} format="descriptive" />
-							</span>
-						</a>
+								<!-- Unread indicator dot. aria-hidden because the
+								     unread status is already conveyed via the
+								     aria-label on the anchor. The hidden sibling
+								     span when read preserves alignment between
+								     read/unread rows so identity labels align in
+								     a column. -->
+								{#if convo.unread}
+									<span class="h-2 w-2 flex-none rounded-full bg-morphit-emerald" aria-hidden="true"
+									></span>
+								{:else}
+									<span class="h-2 w-2 flex-none" aria-hidden="true"></span>
+								{/if}
+								<IdentityLabel
+									account={convo.peer}
+									displayName={labelProps.displayName}
+									avatarSvg={labelProps.avatarSvg}
+									avatarDataUri={labelProps.avatarDataUri}
+									weight={convo.unread ? 'bold' : 'semibold'}
+									showCopy={false}
+								/>
+								<span
+									class="ml-auto text-xs {convo.unread
+										? 'font-semibold text-morphit-emerald'
+										: 'text-ink-500 dark:text-ink-400'}"
+								>
+									<RelativeTime iso={convo.last_message_at} format="descriptive" />
+								</span>
+							</a>
+							<!-- "RE: <order title>" — shown when this conversation is
+							     about a specific order. Its own link to the order
+							     detail page, indented to align under the username
+							     (dot 8 + gap-3 12 + avatar 28 + IdentityLabel
+							     gap-1.5 6 = 54px). The title uses the same shared
+							     orderTitleParts helper (and 10-locale wording) as
+							     the orderbook / order-detail / chat-thread. -->
+							{#if convo.order}
+								{@const parts = orderTitleParts(convo.order, undefined, $_('order_title.goods_services'))}
+								{@const orderTitle = $_(parts.key, { values: parts.values }) as string}
+								<a
+									href={lp(`/@${convo.order.account}/${convo.order.permlink}`)}
+									class="flex items-baseline gap-1 pl-[54px] text-xs text-ink-500 transition-colors hover:text-morphit-emerald dark:text-ink-400 dark:hover:text-morphit-emerald"
+									title={`${$_('chat.inbox.re_prefix')} ${orderTitle}`}
+								>
+									<span class="flex-none font-medium">{$_('chat.inbox.re_prefix')}</span>
+									<span class="min-w-0 truncate">{orderTitle}</span>
+								</a>
+							{/if}
+						</div>
 						{#if activeTab === 'requests'}
 							<!-- Dismiss button. Client-side hide via the
 							     shared hiddenAccounts primitive — the peer

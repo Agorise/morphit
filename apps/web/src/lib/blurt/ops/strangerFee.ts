@@ -105,7 +105,7 @@ export async function broadcastStrangerFee(
 	// Phase F.5 audit fix (F-18) — three-phase split:
 	// cp408 — fee split at payment time (90% owner / 10% canonical, or a single
 	// 100% transfer when the recipient is canonical).
-	const feeTransfers = feeTransfersFor(amountBlurt, feeRecipient);
+	const feeTransfers = feeTransfersFor(amountBlurt, feeRecipient, FEE_RECIPIENT, account);
 	const unsigned = await prepareUnsignedOrderWithFee(
 		OP_IDS.strangerFee,
 		payload,

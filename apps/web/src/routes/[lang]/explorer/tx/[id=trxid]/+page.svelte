@@ -36,6 +36,19 @@
 	let tx = $state<BlurtTransaction | null>(null);
 	let expandedOps = $state<Record<number, boolean>>({});
 
+	// cp425 — animate the loading ellipsis as up to 3 cycling dots (advancing
+	// every 500ms, echoing the typewriter effect used elsewhere). The dots grow
+	// rightward at the end of the line, so nothing before them ever shifts. The
+	// interval runs only while the page is loading and is cleaned up otherwise.
+	let loadingDots = $state(0);
+	$effect(() => {
+		if (status !== 'loading') return;
+		const id = setInterval(() => {
+			loadingDots = (loadingDots + 1) % 4;
+		}, 500);
+		return () => clearInterval(id);
+	});
+
 	async function load(): Promise<void> {
 		status = 'loading';
 		try {
@@ -83,7 +96,11 @@
 	</nav>
 
 	{#if status === 'loading'}
-		<p class="text-ink-500">{$_('explorer.tx.loading')}</p>
+		<p class="text-ink-500">
+			{$_('explorer.tx.loading').replace(/…\s*$/, '')}<span aria-hidden="true"
+				>{'.'.repeat(loadingDots)}</span
+			>
+		</p>
 	{:else if status === 'not_found'}
 		<div class="card">
 			<h1 class="font-display text-xl font-bold">

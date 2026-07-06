@@ -133,6 +133,10 @@ interface OrderRow {
 	price_model: unknown;
 	location_region: string | null;
 	payment_methods: string[];
+	/** cp425 — for a BARTER (goods/services) order, the crypto tickers the
+	 *  seller accepts as settlement (e.g. ['BTC','XMR']). Null for every
+	 *  crypto asset (they settle in themselves). */
+	accepted_assets: string[] | null;
 	terms: string | null;
 	/** ADR-0011 §10 — how this order's fee was paid. */
 	fee_method: 'blurt' | 'waived_first_buy' | 'btc' | 'xmr';
@@ -190,6 +194,7 @@ function rowToWire(r: OrderRow) {
 		price_model: r.price_model,
 		location_region: r.location_region,
 		payment_methods: r.payment_methods,
+		accepted_assets: r.accepted_assets ?? null,
 		terms: r.terms,
 		fee_method: r.fee_method,
 		feedback_count: r.feedback_count,
@@ -415,7 +420,7 @@ export function orderbookRoute(db: Database, poller: Poller, operatorAccount: st
 
 		const sql = `SELECT o.account, o.permlink, o.side, o.asset, o.asset_network, o.fiat_currency,
 			        o.amount_min::text, o.amount_max::text, o.price_model,
-			        o.location_region, o.payment_methods, o.terms,
+			        o.location_region, o.payment_methods, o.accepted_assets, o.terms,
 			        o.fee_method,
 			        COALESCE(f.c, 0)::int AS feedback_count,
 			        CASE WHEN f.r IS NOT NULL THEN f.r::text ELSE NULL END AS weighted_rating,

@@ -329,3 +329,36 @@ describe('makeOrderPermlink', () => {
 		expect(a).not.toBe(b);
 	});
 });
+
+// ─── cp425: barter accepted_assets passthrough ──────────────────────
+describe('buildOrderPayload — accepted_assets (barter)', () => {
+	it('passes through a barter accepted-crypto set', () => {
+		const out = buildOrderPayload(
+			'sell-barter-mxn-ab12cd',
+			mkInput({ asset: 'BARTER', acceptedAssets: ['XMR', 'BTC'] })
+		);
+		// Deduped + sorted to canonical form (matches what the indexer stores).
+		expect(out.accepted_assets).toEqual(['BTC', 'XMR']);
+	});
+
+	it('dedupes and sorts the accepted set to a canonical form', () => {
+		const out = buildOrderPayload(
+			'sell-barter-mxn-ab12cd',
+			mkInput({ asset: 'BARTER', acceptedAssets: ['XMR', 'BTC', 'XMR', 'DOGE'] })
+		);
+		expect(out.accepted_assets).toEqual(['BTC', 'DOGE', 'XMR']);
+	});
+
+	it('omits accepted_assets for a crypto order (none provided)', () => {
+		const out = buildOrderPayload('sell-btc-usd-ab12cd', mkInput({ asset: 'BTC' }));
+		expect(out.accepted_assets).toBeUndefined();
+	});
+
+	it('omits accepted_assets when the set is empty', () => {
+		const out = buildOrderPayload(
+			'sell-barter-mxn-ab12cd',
+			mkInput({ asset: 'BARTER', acceptedAssets: [] })
+		);
+		expect(out.accepted_assets).toBeUndefined();
+	});
+});

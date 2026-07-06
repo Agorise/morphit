@@ -65,7 +65,27 @@ function renderMultilineStringValue(token: string, indent: string): string {
 				i++;
 				continue;
 			}
-			// Any other escape (\" \\ \/ \uXXXX \b \f) stays in literal form.
+			// cp425 — show the common literal escapes as their real character so
+			// values read naturally (`"weird"` not `\"weird\"`, `C:\x` not
+			// `C:\\x`). DISPLAY-ONLY, same posture as the \n/\t handling above;
+			// none of `"`, `\`, `/` is HTML-special in a text node, so the
+			// "no injectable markup" guarantee is preserved.
+			if (next === '"') {
+				html += '"';
+				i++;
+				continue;
+			}
+			if (next === '\\') {
+				html += '\\';
+				i++;
+				continue;
+			}
+			if (next === '/') {
+				html += '/';
+				i++;
+				continue;
+			}
+			// Any other escape (\uXXXX \b \f) stays in literal form.
 			html += escapeHtml(ch + next);
 			i++;
 			continue;

@@ -912,7 +912,7 @@ function noteHasForbiddenChars(s: string): boolean {
  *  sender which chain to broadcast on.  No TRC-20 (Circle
  *  doesn't issue on Tron) and no BEP-20 in this initial set
  *  (see ADR-0028). */
-export type ChatAssetTicker = 'btc' | 'xmr' | 'blurt' | 'usdt' | 'usdc' | 'dai' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec' | 'arrr' | 'dcr' | 'sol' | 'eth' | 'xrp';
+export type ChatAssetTicker = 'btc' | 'xmr' | 'blurt' | 'usdt' | 'usdc' | 'dai' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec' | 'arrr' | 'dcr' | 'sol' | 'eth' | 'xrp' | 'barter';
 
 export interface AddressPayload {
 	readonly v: 1;

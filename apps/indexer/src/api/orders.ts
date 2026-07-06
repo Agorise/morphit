@@ -48,6 +48,8 @@ interface OrderRow {
 	price_model: unknown;
 	location_region: string | null;
 	payment_methods: string[];
+	/** cp425 — accepted crypto set for a BARTER order; null for crypto assets. */
+	accepted_assets: string[] | null;
 	terms: string | null;
 	status: 'live' | 'cancelled' | 'expired';
 	fee_status:
@@ -86,6 +88,7 @@ function rowToWire(r: OrderRow) {
 		price_model: r.price_model,
 		location_region: r.location_region,
 		payment_methods: r.payment_methods,
+		accepted_assets: r.accepted_assets ?? null,
 		terms: r.terms,
 		status: r.status,
 		fee_status: r.fee_status,
@@ -138,7 +141,7 @@ export function ordersByAccountRoute(db: Database, operatorAccount: string): Hon
 
 		const sql = `SELECT o.account, o.permlink, o.side, o.asset, o.fiat_currency,
 			        o.amount_min::text, o.amount_max::text, o.price_model,
-			        o.location_region, o.payment_methods, o.terms,
+			        o.location_region, o.payment_methods, o.accepted_assets, o.terms,
 			        o.status, o.fee_status, o.fee_method,
 			        (COALESCE(f.c, 0) < 4) AS is_new_trader,
 			        o.created_at, o.updated_at, o.expires_at

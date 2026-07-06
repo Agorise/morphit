@@ -57,13 +57,18 @@ const ALLOWLIST: readonly AllowlistEntry[] = [
 		package: 'request',
 		maxSeverity: 'critical',
 		acceptedTitles: ['Server-Side Request Forgery in Request'],
-		lastReviewed: '2026-05-16',
+		lastReviewed: '2026-07-06',
 		rationale:
-			'Deprecated HTTP library brought in transitively by matrix-bot-sdk@0.7.1. ' +
+			'Deprecated HTTP library brought in transitively by matrix-bot-sdk. ' +
 			'Carries CRITICAL SSRF (CVE in request) but matrix-bot only makes outbound ' +
 			'calls to operator-configured Matrix homeserver URLs — no user-controlled ' +
 			'URLs flow through this library, so the SSRF surface is bounded to operator ' +
-			'misconfiguration. Acceptable until matrix-bot-sdk upgrades or is replaced.'
+			'misconfiguration. Re-reviewed cp426 (2026-07-06): matrix-bot-sdk\'s LATEST ' +
+			'(0.8.0) STILL depends on request@^2.88.2 + request-promise, so an SDK version ' +
+			'bump does NOT resolve this — only replacing matrix-bot-sdk with a request-free ' +
+			'client would (the bot\'s usage is a thin MatrixClient facade, so that is ' +
+			'feasible future work). Overriding form-data/request to a fixed major would ' +
+			'break request\'s 2.x multipart API, so no safe transitive override exists.'
 	},
 	{
 		package: 'form-data',
@@ -72,7 +77,7 @@ const ALLOWLIST: readonly AllowlistEntry[] = [
 			'form-data uses unsafe random function in form-data for choosing boundary',
 			'form-data: CRLF injection in form-data via unescaped multipart field names and filenames'
 		],
-		lastReviewed: '2026-06-15',
+		lastReviewed: '2026-07-06',
 		rationale:
 			'Transitive of `request` (see above), reached only by matrix-bot-sdk. Two ' +
 			'advisories: (1) unsafe Math.random() boundary generation matters for cross-origin ' +
@@ -87,7 +92,7 @@ const ALLOWLIST: readonly AllowlistEntry[] = [
 		package: 'tough-cookie',
 		maxSeverity: 'high',
 		acceptedTitles: ['tough-cookie Prototype Pollution vulnerability'],
-		lastReviewed: '2026-05-16',
+		lastReviewed: '2026-07-06',
 		rationale:
 			'Transitive of `request` (see above). Prototype-pollution via crafted ' +
 			'cookie names; matrix-bot only receives cookies from operator-configured ' +
@@ -139,7 +144,7 @@ const ALLOWLIST: readonly AllowlistEntry[] = [
 			'launch-editor: NTLMv2 hash disclosure via UNC path handling on Windows',
 			'vite: `server.fs.deny` bypass on Windows alternate paths'
 		],
-		lastReviewed: '2026-06-15',
+		lastReviewed: '2026-07-06',
 		rationale:
 			'Dev/build-only dependency (never shipped to operators — production serves ' +
 			'prebuilt static assets via the operator web server, with no Vite dev server ' +

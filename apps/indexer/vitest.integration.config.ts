@@ -20,13 +20,22 @@ export default defineConfig({
 		isolate: true
 	},
 	resolve: {
-		alias: {
-			$config: src('config/index.ts'),
-			$db: src('db'),
-			$blurt: src('blurt'),
-			$indexer: src('indexer'),
-			$api: src('api'),
-			$log: src('log/index.ts')
-		}
+		// Mirror apps/indexer/tsconfig.json "paths" EXACTLY, including the
+		// subpath (`/*`) forms.  The object-shorthand alias mapped bare
+		// `$config` to the config/index.ts FILE, so a subpath import like
+		// `$config/canonicalTreasury` (which src/config/index.ts itself
+		// uses) resolved to `config/index.ts/canonicalTreasury` and the
+		// whole integration suite failed to load.  Regex aliases resolve
+		// both the bare and subpath forms.  Order matters: exact `$config`
+		// before the `$config/` prefix.
+		alias: [
+			{ find: /^\$config$/, replacement: src('config/index.ts') },
+			{ find: /^\$config\/(.*)$/, replacement: `${src('config')}/$1` },
+			{ find: /^\$db\/(.*)$/, replacement: `${src('db')}/$1` },
+			{ find: /^\$blurt\/(.*)$/, replacement: `${src('blurt')}/$1` },
+			{ find: /^\$indexer\/(.*)$/, replacement: `${src('indexer')}/$1` },
+			{ find: /^\$api\/(.*)$/, replacement: `${src('api')}/$1` },
+			{ find: /^\$log$/, replacement: src('log/index.ts') }
+		]
 	}
 });

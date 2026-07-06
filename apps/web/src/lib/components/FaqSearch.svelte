@@ -541,7 +541,7 @@
 						id="faq-body-{entry.key}"
 						class="animate-fade-up px-5 pb-5 text-ink-700 dark:text-ink-200"
 					>
-						<p class="whitespace-pre-line leading-relaxed">{@html renderFaqInline(entry.answer)}</p>
+						<p class="whitespace-pre-line leading-relaxed">{@html renderFaqInline(entry.answer, lp)}</p>
 
 						{#if entry.related.length > 0}
 							<!-- ─── Related row ───

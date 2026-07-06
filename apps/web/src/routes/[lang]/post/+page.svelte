@@ -89,6 +89,7 @@
 		ASSET_TICKERS,
 		FIRST_ORDER_MIN_USD,
 		isAssetTicker,
+		isGoodsAsset,
 		type AssetTicker
 	} from '@morphit/asset-registry';
 	import {
@@ -199,6 +200,11 @@
 	// ─── Form state (step 3) ───────────────────────────────────────
 	let paymentMethods: string[] = $state([]);
 	let pmDraft = $state('');
+	// cp425 — for a BARTER (goods/services) listing, step 3 is a different
+	// surface: the seller ticks which cryptos they'll accept as settlement
+	// (the on-chain `accepted_assets` set) instead of picking fiat/in-person
+	// payment methods. Crypto assets leave this empty.
+	let acceptedAssets: AssetTicker[] = $state([]);
 	let region = $state('');
 	let terms = $state('');
 
@@ -392,6 +398,8 @@
 		spreadPercent: string;
 		fixedPrice: string;
 		paymentMethods: string[];
+		/** cp425 — accepted-crypto set for a barter draft. */
+		acceptedAssets?: AssetTicker[];
 		pmDraft: string;
 		region: string;
 		terms: string;
@@ -433,6 +441,7 @@
 			spreadPercent,
 			fixedPrice,
 			paymentMethods: [...paymentMethods],
+			acceptedAssets: [...acceptedAssets],
 			pmDraft,
 			region: region.length > 0 ? redactPrivateKeys(region) : region,
 			terms: terms.length > 0 ? redactPrivateKeys(terms) : terms,
@@ -477,6 +486,10 @@
 		paymentMethods = Array.isArray(d.paymentMethods)
 			? d.paymentMethods.filter((m): m is string => typeof m === 'string')
 			: [];
+		// cp425 — restore the barter accepted-crypto set (only valid tickers).
+		acceptedAssets = Array.isArray(d.acceptedAssets)
+			? d.acceptedAssets.filter((t): t is AssetTicker => isAssetTicker(t))
+			: [];
 		pmDraft = str(d.pmDraft);
 		region = str(d.region);
 		terms = str(d.terms);
@@ -517,6 +530,7 @@
 			d.amountMax.length > 0 ||
 			d.fixedPrice.length > 0 ||
 			d.paymentMethods.length > 0 ||
+			(d.acceptedAssets?.length ?? 0) > 0 ||
 			d.pmDraft.length > 0 ||
 			d.region.length > 0 ||
 			d.terms.length > 0 ||
@@ -739,20 +753,30 @@
 		DCR: 'what_is_dcr',
 		SOL: 'what_is_sol',
 		ETH: 'what_is_eth',
-		XRP: 'what_is_xrp'
+		XRP: 'what_is_xrp',
+		BARTER: 'what_is_barter'
 	};
 	/** cp396 — the Step-1 asset blocks, ALPHABETIZED by ticker. Each block
 	 *  carries its own coin icon (left of the ticker) and triggers a themed
 	 *  explainer tooltip on hover (desktop) / focus-on-tap (mobile); the
 	 *  separate ⓘ bubbles are gone. Tickers are uppercase ASCII so the
-	 *  default lexicographic sort IS alphabetical. */
+	 *  default lexicographic sort IS alphabetical.
+	 *  cp425 — EXCEPT goods assets (BARTER): they aren't coins, so they sort
+	 *  to the END of the picker, after the alphabetized cryptos. */
 	const assetPickerItems = $derived(
-		[...assetTickersForPicker].sort().map((a) => ({
-			ticker: a,
-			iconPath: `/icons/icon-${a.toLowerCase()}.svg`,
-			explainerKey: `post_order.form.asset_explainer.${a.toLowerCase()}`,
-			faqKey: ASSET_FAQ[a]
-		}))
+		[...assetTickersForPicker]
+			.sort((a, b) => {
+				const ga = isGoodsAsset(a);
+				const gb = isGoodsAsset(b);
+				if (ga !== gb) return ga ? 1 : -1;
+				return a < b ? -1 : a > b ? 1 : 0;
+			})
+			.map((a) => ({
+				ticker: a,
+				iconPath: `/icons/icon-${a.toLowerCase()}.svg`,
+				explainerKey: `post_order.form.asset_explainer.${a.toLowerCase()}`,
+				faqKey: ASSET_FAQ[a]
+			}))
 	);
 	/** The user's choice for this order. Four options post-4b:
 	 *    'blurt'              → pay standard BLURT fee (default)
@@ -1618,7 +1642,16 @@
 	 *  spread mode — empty spread defaults to 0, which IS
 	 *  valid).
 	 */
+	// cp425 — is the selected asset a goods asset (BARTER)? Barter is valued
+	// directly in local currency and settled in crypto; several deriveds below
+	// branch on it (price model, step 3, terms), so it's declared up here.
+	const isBarter = $derived(asset !== null && isGoodsAsset(asset));
+
 	const priceModelError = $derived.by(() => {
+		// cp425 — a BARTER listing is valued directly in fiat (the amount range
+		// above), not priced against a crypto, so there's no price model to
+		// validate; the price-model UI is hidden and an inert model is shipped.
+		if (isBarter) return '';
 		if (priceModelKind === 'spread') {
 			// Empty spread is OK — it means "market price" (0%).
 			if (spreadPercent.trim() === '') return '';
@@ -1702,25 +1735,46 @@
 		return '';
 	});
 
-	const step3Done = $derived(paymentMethods.length > 0 && paymentMethodsError === '');
+	// cp425 — is the selected asset a goods asset (BARTER)? Barter's step 3
+	// is the accepted-crypto picker (tick which cryptos to accept), not the
+	// fiat/in-person payment methods, and it requires Terms.
+	// cp425 — the cryptos a barter listing can accept as settlement: every
+	// tradable asset EXCEPT goods themselves (no barter-for-barter). Stable
+	// alphabetized list; the on-chain set is re-deduped/sorted by the indexer.
+	const cryptoTickers: readonly AssetTicker[] = [...ASSET_TICKERS]
+		.filter((t) => !isGoodsAsset(t))
+		.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 
-	// cp384 (#4): barter requires Terms. When "Barter (goods/services)" (key
-	// `barter_goods`) is among the payment methods, the Terms field becomes
-	// required and Continue stays disabled until the user has typed at least
-	// 3 chars describing the deal — a bare barter order with no terms is
-	// useless to a counterparty.
+	function toggleAcceptedAsset(t: AssetTicker): void {
+		acceptedAssets = acceptedAssets.includes(t)
+			? acceptedAssets.filter((x) => x !== t)
+			: [...acceptedAssets, t];
+	}
+
+	const step3Done = $derived(
+		isBarter
+			? acceptedAssets.length > 0
+			: paymentMethods.length > 0 && paymentMethodsError === ''
+	);
+
+	// cp384 (#4) + cp425: Terms are REQUIRED when the deal is a barter — either
+	// the legacy `barter_goods` PAYMENT METHOD on a crypto listing, OR a
+	// first-class BARTER ASSET listing. A bare barter order with no terms is
+	// useless to a counterparty: nobody knows what wares are on offer or wanted.
 	const barterSelected = $derived(paymentMethods.includes('barter_goods'));
-	const termsOkForBarter = $derived(!barterSelected || terms.trim().length >= 3);
+	const termsRequired = $derived(barterSelected || isBarter);
+	const termsOkForBarter = $derived(!termsRequired || terms.trim().length >= 3);
 
-	// Flash the Terms textarea border emerald 5× over 5s every time barter is
-	// newly ADDED (false → true), so users see Terms is now required. Re-arms
-	// on remove + re-add. The bumped token makes ProtectedTextarea restart its
-	// border-flash animation. `barterWasSelected` is a plain (non-reactive)
-	// latch so this effect only fires on the transition.
+	// Flash the Terms textarea border emerald 5× over 5s every time a barter
+	// deal becomes active (false → true) — either the barter_goods payment
+	// method is added OR a BARTER asset is selected — so users see Terms is now
+	// required. Re-arms on transition. The bumped token makes ProtectedTextarea
+	// restart its border-flash animation. `barterWasSelected` is a plain
+	// (non-reactive) latch so this effect only fires on the transition.
 	let termsFlash = $state(0);
 	let barterWasSelected = false;
 	$effect(() => {
-		const now = barterSelected;
+		const now = termsRequired;
 		if (now && !barterWasSelected) {
 			termsFlash += 1;
 		}
@@ -1822,8 +1876,14 @@
 
 		// Build the form input. We've already validated; this just
 		// funnels values into the typed shape.
-		const priceModel: Record<string, unknown> =
-			priceModelKind === 'spread'
+		const priceModel: Record<string, unknown> = isBarter
+			? // cp425 — barter has no crypto-vs-fiat rate; the value is the
+				// fiat amount range. Ship an inert, VALID model — spread 0%
+				// (a 'fixed' price of 0 would fail the indexer's positive-price
+				// check). The orderbook renders barter by its {min,max} value +
+				// accepted cryptos, never by this model.
+				{ kind: 'spread', percent: 0 }
+			: priceModelKind === 'spread'
 				? { kind: 'spread', percent: Number(spreadPercent) || 0 }
 				: { kind: 'fixed', price: Number(fixedPrice) };
 
@@ -1843,7 +1903,15 @@
 			// it on-chain.  No UX cost on the clean path: redact is
 			// a no-op when there's no key to find.
 			locationRegion: region.trim() ? redactPrivateKeys(region.trim()) : null,
-			paymentMethods: paymentMethods.map((pm) => redactPrivateKeys(pm)),
+			// cp425 — a BARTER (goods/services) listing settles in crypto: its
+			// payment_methods are the `pay_<crypto>` rails for the accepted
+			// cryptos (so the orderbook's payment filter naturally shows which
+			// coins it accepts), and the on-chain `acceptedAssets` set carries
+			// the tickers. Crypto listings use the user-picked payment methods.
+			paymentMethods: isBarter
+				? acceptedAssets.map((a) => `pay_${a.toLowerCase()}`)
+				: paymentMethods.map((pm) => redactPrivateKeys(pm)),
+			acceptedAssets: isBarter && acceptedAssets.length > 0 ? acceptedAssets : undefined,
 			terms: terms.trim() || null,
 			expiresAt: makeExpiryFlooredUtcDay(expiresDays),
 			feeMethod: feeMethodChoice,
@@ -2188,6 +2256,41 @@
 		const fiatCode = fiat.trim().toUpperCase();
 		const hasMin = amountMin.trim() !== '';
 		const hasMax = amountMax.trim() !== '';
+
+		// cp425 — barter gets its own summary: goods/services valued in local
+		// currency, settled in the accepted cryptos. No price-model or
+		// payment-method language (both are crypto-trade concepts).
+		if (isBarter) {
+			let valueClause: string;
+			if (hasMin && hasMax) {
+				valueClause = `${amountMin.trim()}–${amountMax.trim()} ${fiatCode}`;
+			} else if (hasMax) {
+				valueClause = `${amountMax.trim()} ${fiatCode}`;
+			} else if (hasMin) {
+				valueClause = `${amountMin.trim()} ${fiatCode}`;
+			} else {
+				valueClause = fiatCode;
+			}
+			let cryptosClause: string;
+			if (acceptedAssets.length > 0) {
+				try {
+					cryptosClause = new Intl.ListFormat(currentLang, { type: 'conjunction' }).format(
+						[...acceptedAssets]
+					);
+				} catch {
+					cryptosClause = acceptedAssets.join(', ');
+				}
+			} else {
+				cryptosClause = '…';
+			}
+			const barterKey =
+				side === 'sell'
+					? 'post_order.summary.barter_sentence_sell'
+					: 'post_order.summary.barter_sentence_buy';
+			return $_(barterKey, {
+				values: { value: valueClause, cryptos: cryptosClause }
+			}) as string;
+		}
 
 		let amountClause: string;
 		if (hasMin && hasMax) {
@@ -2682,6 +2785,10 @@
 				     Submission shape (assembled in submitPost):
 				       spread → { kind: 'spread', percent: <number> }
 				       fixed  → { kind: 'fixed',  price:   <number> } -->
+				{#if !isBarter}
+				<!-- cp425 — the spread/fixed price-model controls price a CRYPTO
+				     against fiat; a BARTER (goods/services) listing is valued
+				     directly in local currency (the amount above), so hide them. -->
 				<fieldset class="mt-4 rounded-xl border border-ink-200 p-3 dark:border-ink-700">
 					<legend class="px-2 text-sm font-semibold">
 						{$_('post_order.form.price_model_legend')}
@@ -2786,6 +2893,7 @@
 						</label>
 					</div>
 				</fieldset>
+				{/if}
 
 				{#if feeMethodChoice === 'waived_first_buy'}
 					<!-- First-buy benefits ladder (Q10 follow-up).  Rather
@@ -2833,22 +2941,43 @@
 				</div>
 
 				<div class="mb-4">
-					<p class="mb-1 text-sm font-semibold">{$_(side === 'sell' ? 'post_order.form.payment_methods_label_sell' : 'post_order.form.payment_methods_label')}</p>
-					<p class="mb-2 text-xs text-ink-500">{$_('post_order.form.payment_methods_hint')}</p>
-					{#await loadPaymentMethodsPicker() then PaymentMethodsPicker}
-						<PaymentMethodsPicker
-							bind:selected={paymentMethods}
-							excludeForAsset={asset ?? undefined}
-							instanceAdditions={$instanceAdditions}
-							invalid={!!paymentMethodsError}
-							describedById="payment-methods-error"
-							firstTrade={isFirstTrade}
-						/>
-					{:catch}
-						<LazyLoadError />
-					{/await}
-					{#if paymentMethodsError}
-						<StatusLine kind="warn" id="payment-methods-error">{paymentMethodsError}</StatusLine>
+					{#if isBarter}
+						<p class="mb-1 text-sm font-semibold">{$_('post_order.form.barter_accept_label')}</p>
+						<p class="mb-2 text-xs text-ink-500">{$_('post_order.form.barter_accept_hint')}</p>
+						<div class="flex flex-wrap gap-2" role="group" aria-label={$_('post_order.form.barter_accept_label')}>
+							{#each cryptoTickers as t (t)}
+								{@const sel = acceptedAssets.includes(t)}
+								<button
+									type="button"
+									onclick={() => toggleAcceptedAsset(t)}
+									aria-pressed={sel}
+									class="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors {sel
+										? 'border-morphit-emerald bg-morphit-emerald/10 text-morphit-emerald'
+										: 'border-ink-200 text-ink-600 hover:border-ink-300 dark:border-ink-700 dark:text-ink-300'}"
+								>
+									<img src={`/icons/icon-${t.toLowerCase()}.svg`} alt="" class="h-4 w-4" />
+									{t}
+								</button>
+							{/each}
+						</div>
+					{:else}
+						<p class="mb-1 text-sm font-semibold">{$_(side === 'sell' ? 'post_order.form.payment_methods_label_sell' : 'post_order.form.payment_methods_label')}</p>
+						<p class="mb-2 text-xs text-ink-500">{$_('post_order.form.payment_methods_hint')}</p>
+						{#await loadPaymentMethodsPicker() then PaymentMethodsPicker}
+							<PaymentMethodsPicker
+								bind:selected={paymentMethods}
+								excludeForAsset={asset ?? undefined}
+								instanceAdditions={$instanceAdditions}
+								invalid={!!paymentMethodsError}
+								describedById="payment-methods-error"
+								firstTrade={isFirstTrade}
+							/>
+						{:catch}
+							<LazyLoadError />
+						{/await}
+						{#if paymentMethodsError}
+							<StatusLine kind="warn" id="payment-methods-error">{paymentMethodsError}</StatusLine>
+						{/if}
 					{/if}
 				</div>
 

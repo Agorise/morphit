@@ -21,6 +21,7 @@ import { createBybitFetcher } from '../src/indexer/price/bybitFetcher';
 import { createCoincapFetcher } from '../src/indexer/price/coincapFetcher';
 import { createCoinloreFetcher } from '../src/indexer/price/coinloreFetcher';
 import { createMessariFetcher } from '../src/indexer/price/messariFetcher';
+import { createBlurtBlogFetcher } from '../src/indexer/price/blurtBlogFetcher';
 
 let passed = 0;
 let failed = 0;
@@ -276,6 +277,94 @@ async function main(): Promise<void> {
 	{
 		const f = createMessariFetcher({ ...msBase, fetchImpl: fetchThrowing() });
 		check('messari: throws → null', (await f()) === null);
+	}
+
+	// ── cp425: Blurt-native price feed (api.blurt.blog/price_info) ──
+	// The parser is DEFENSIVE (the exact shape is verified on deploy):
+	// it accepts several plausible shapes, but ONLY a value inside the
+	// plausibility band, so a volume / percent / market-cap field can
+	// never be mistaken for a sub-cent price.
+	const bfBase = {
+		url: 'https://api.blurt.blog/price_info',
+		plausibleMin: 0.0001,
+		plausibleMax: 0.1,
+		timeoutMs: 5_000
+	};
+	{
+		const f = createBlurtBlogFetcher({ ...bfBase, fetchImpl: fetchReturning(mockRes(200, { price: 0.0019 })) });
+		check('blurt_feed: { price } → value', (await f()) === 0.0019);
+	}
+	{
+		const f = createBlurtBlogFetcher({ ...bfBase, fetchImpl: fetchReturning(mockRes(200, { price: '0.0019' })) });
+		check('blurt_feed: numeric-string price → value', (await f()) === 0.0019);
+	}
+	{
+		const f = createBlurtBlogFetcher({ ...bfBase, fetchImpl: fetchReturning(mockRes(200, 0.0019)) });
+		check('blurt_feed: bare number body → value', (await f()) === 0.0019);
+	}
+	{
+		const f = createBlurtBlogFetcher({ ...bfBase, fetchImpl: fetchReturning(mockRes(200, { usd: 0.0019 })) });
+		check('blurt_feed: { usd } → value', (await f()) === 0.0019);
+	}
+	{
+		const f = createBlurtBlogFetcher({ ...bfBase, fetchImpl: fetchReturning(mockRes(200, { data: { price: 0.0019 } })) });
+		check('blurt_feed: { data: { price } } → value', (await f()) === 0.0019);
+	}
+	{
+		const f = createBlurtBlogFetcher({ ...bfBase, fetchImpl: fetchReturning(mockRes(200, { blurt: { usd: 0.0019 } })) });
+		check('blurt_feed: { blurt: { usd } } → value', (await f()) === 0.0019);
+	}
+	{
+		const f = createBlurtBlogFetcher({ ...bfBase, fetchImpl: fetchReturning(mockRes(200, { last_price: 0.0019 })) });
+		check('blurt_feed: { last_price } → value', (await f()) === 0.0019);
+	}
+	{
+		// A `price` field that's out-of-band (e.g. a percent) is skipped;
+		// a real in-band price under `usd` is found instead.
+		const f = createBlurtBlogFetcher({ ...bfBase, fetchImpl: fetchReturning(mockRes(200, { price: 5.2, usd: 0.0019 })) });
+		check('blurt_feed: out-of-band price skipped, in-band usd wins', (await f()) === 0.0019);
+	}
+	{
+		// The real price wins over a co-present in-band change field.
+		const f = createBlurtBlogFetcher({ ...bfBase, fetchImpl: fetchReturning(mockRes(200, { price: 0.0019, change_24h: 0.05 })) });
+		check('blurt_feed: real price wins over co-present change', (await f()) === 0.0019);
+	}
+	{
+		// In-band values under NON-price keys are never picked up.
+		const f = createBlurtBlogFetcher({ ...bfBase, fetchImpl: fetchReturning(mockRes(200, { change_24h: 0.05, foo: 0.02 })) });
+		check('blurt_feed: in-band non-price keys ignored → null', (await f()) === null);
+	}
+	{
+		const f = createBlurtBlogFetcher({ ...bfBase, fetchImpl: fetchReturning(mockRes(200, { price: 250 })) });
+		check('blurt_feed: above plausibleMax (volume-like) → null', (await f()) === null);
+	}
+	{
+		const f = createBlurtBlogFetcher({ ...bfBase, fetchImpl: fetchReturning(mockRes(200, { price: 0.00001 })) });
+		check('blurt_feed: below plausibleMin → null', (await f()) === null);
+	}
+	{
+		const f = createBlurtBlogFetcher({ ...bfBase, fetchImpl: fetchReturning(mockRes(200, { price: 0 })) });
+		check('blurt_feed: non-positive → null', (await f()) === null);
+	}
+	{
+		const f = createBlurtBlogFetcher({ ...bfBase, fetchImpl: fetchReturning(mockRes(200, { price: 'abc' })) });
+		check('blurt_feed: non-numeric → null', (await f()) === null);
+	}
+	{
+		const f = createBlurtBlogFetcher({ ...bfBase, fetchImpl: fetchReturning(mockRes(200, {})) });
+		check('blurt_feed: empty object → null', (await f()) === null);
+	}
+	{
+		const f = createBlurtBlogFetcher({ ...bfBase, fetchImpl: fetchReturning(mockRes(429, {})) });
+		check('blurt_feed: 429 → null', (await f()) === null);
+	}
+	{
+		const f = createBlurtBlogFetcher({ ...bfBase, fetchImpl: fetchReturning(mockRes(500, {})) });
+		check('blurt_feed: 500 → null', (await f()) === null);
+	}
+	{
+		const f = createBlurtBlogFetcher({ ...bfBase, fetchImpl: fetchThrowing() });
+		check('blurt_feed: throws → null', (await f()) === null);
 	}
 
 	console.log('\u2500'.repeat(56));

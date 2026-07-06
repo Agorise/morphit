@@ -166,6 +166,27 @@ describe('feeTransfersFor', () => {
 		expect(legs[0]!.amount).toBe('60.000 BLURT');
 	});
 
+	it('cp425 — sends 100% to canonical when the owner recipient IS the signer', () => {
+		// An operator paying a BLURT fee on their OWN instance: the 90%
+		// owner leg would be a self-transfer, which Blurt rejects at
+		// consensus. The whole fee goes to the canonical treasury instead —
+		// no self-transfer leg, and the indexer accepts a 100%-canonical fee.
+		const legs = feeTransfersFor(60, 'op-node', CANON, 'op-node');
+		expect(legs).toHaveLength(1);
+		expect(legs[0]!.to).toBe(CANON);
+		expect(legs[0]!.amount).toBe('60.000 BLURT');
+		// No leg is ever a transfer to the signer (would be invalid on-chain).
+		expect(legs.some((l) => l.to === 'op-node')).toBe(false);
+	});
+
+	it('cp425 — still splits 90/10 when the signer is NOT the owner recipient', () => {
+		// A normal user on an operator's instance: unchanged split.
+		const legs = feeTransfersFor(60, 'op-node', CANON, 'some-user');
+		expect(legs).toHaveLength(2);
+		expect(legs.find((l) => l.to === 'op-node')!.amount).toBe('54.000 BLURT');
+		expect(legs.find((l) => l.to === CANON)!.amount).toBe('6.000 BLURT');
+	});
+
 	it('every leg is a Graphene-valid "N.NNN BLURT" string', () => {
 		for (const l of feeTransfersFor(75.4271, 'op-node', CANON)) {
 			expect(l.amount).toMatch(/^\d+\.\d{3} BLURT$/);

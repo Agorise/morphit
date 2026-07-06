@@ -122,10 +122,24 @@ function exactBlurtString(amount: number): string {
 export function feeTransfersFor(
 	totalBlurt: number,
 	ownerRecipient: string,
-	canonicalTreasury: string = FEE_RECIPIENT
+	canonicalTreasury: string = FEE_RECIPIENT,
+	/** cp425 — the tx signer. When the owner recipient IS the signer (an
+	 *  operator paying a BLURT fee on their OWN instance — e.g. featuring
+	 *  their own order), the 90% owner leg would be a transfer to
+	 *  themselves, which Blurt (Graphene) REJECTS at consensus
+	 *  (`FC_ASSERT(from != to)`). That previously made the whole tx
+	 *  un-buildable (prepareUnsignedOrderWithFee threw "fee transfer to
+	 *  self"). In that case the entire fee goes to the canonical treasury:
+	 *  you can't pay the operator share to yourself, and the indexer
+	 *  accepts a 100%-canonical fee (totalBlurt ≥ expected, canonicalShareOk
+	 *  holds since canonical got 100% ≥ 10%). */
+	signer?: string
 ): FeeTransfer[] {
 	const total = Math.ceil(totalBlurt * 1000) / 1000;
-	if (ownerRecipient === canonicalTreasury) {
+	if (
+		ownerRecipient === canonicalTreasury ||
+		(signer !== undefined && ownerRecipient === signer)
+	) {
 		return [{ to: canonicalTreasury, amount: exactBlurtString(total) }];
 	}
 	const { ownerShareBlurt, treasuryShareBlurt } = splitListingFeeBlurt(total);

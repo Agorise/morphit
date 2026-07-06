@@ -89,6 +89,85 @@ describe('order handler', () => {
 		expect(r).toEqual({ ok: false, reason: 'asset_invalid' });
 	});
 
+	// ─── cp425: barter (accepted_assets) validation ─────────────────
+	// A BARTER (goods/services) order settles in one of a SET of cryptos
+	// the seller accepts. accepted_assets is REQUIRED (non-empty crypto set)
+	// for BARTER and FORBIDDEN for every crypto asset (they settle in
+	// themselves). Each entry must be a real crypto ticker, never a goods
+	// asset (no barter-for-barter).
+	function validBarterPayload() {
+		return {
+			permlink: 'sell-barter-mxn-2026-07',
+			side: 'sell',
+			asset: 'BARTER',
+			fiat_currency: 'MXN',
+			amount_min: 100,
+			amount_max: 500,
+			price_model: { kind: 'fixed', price: 250 },
+			// payment_methods semantics for barter are an increment-3 (post-
+			// flow) decision; the handler only requires a valid 1-12 array.
+			payment_methods: ['in-person'],
+			accepted_assets: ['XMR', 'BTC']
+		};
+	}
+
+	it('accepts a valid barter order (asset=BARTER + crypto accepted_assets)', async () => {
+		// BLURT default fee, no siblingOps → fee_status missing → just INSERT.
+		const mock = makeMockClient([{ match: 'INSERT INTO orders' }]);
+		const r = await handler(makeCtx({ signer: 'alice', payload: validBarterPayload() }), mock.client);
+		expect(r).toEqual({ ok: true });
+		expect(mock.queries).toHaveLength(1);
+	});
+
+	it('rejects a barter order with no accepted_assets', async () => {
+		const mock = makeMockClient();
+		const p: Record<string, unknown> = { ...validBarterPayload() };
+		delete p.accepted_assets;
+		const r = await handler(makeCtx({ payload: p }), mock.client);
+		expect(r).toEqual({ ok: false, reason: 'accepted_assets_required_for_barter' });
+		expect(mock.queries).toHaveLength(0);
+	});
+
+	it('rejects a barter order with an empty accepted_assets set', async () => {
+		const mock = makeMockClient();
+		const r = await handler(
+			makeCtx({ payload: { ...validBarterPayload(), accepted_assets: [] } }),
+			mock.client
+		);
+		expect(r).toEqual({ ok: false, reason: 'accepted_assets_required_for_barter' });
+		expect(mock.queries).toHaveLength(0);
+	});
+
+	it('rejects a barter order that accepts a goods asset (no barter-for-barter)', async () => {
+		const mock = makeMockClient();
+		const r = await handler(
+			makeCtx({ payload: { ...validBarterPayload(), accepted_assets: ['XMR', 'BARTER'] } }),
+			mock.client
+		);
+		expect(r).toEqual({ ok: false, reason: 'accepted_assets_entry_not_crypto' });
+		expect(mock.queries).toHaveLength(0);
+	});
+
+	it('rejects a barter order that accepts an unknown ticker', async () => {
+		const mock = makeMockClient();
+		const r = await handler(
+			makeCtx({ payload: { ...validBarterPayload(), accepted_assets: ['XMR', 'NOTACOIN'] } }),
+			mock.client
+		);
+		expect(r).toEqual({ ok: false, reason: 'accepted_assets_entry_unknown' });
+		expect(mock.queries).toHaveLength(0);
+	});
+
+	it('rejects a CRYPTO order that carries accepted_assets (forbidden)', async () => {
+		const mock = makeMockClient();
+		const r = await handler(
+			makeCtx({ payload: { ...validPayload(), accepted_assets: ['XMR'] } }),
+			mock.client
+		);
+		expect(r).toEqual({ ok: false, reason: 'accepted_assets_not_permitted_for_asset' });
+		expect(mock.queries).toHaveLength(0);
+	});
+
 	it('rejects unknown side', async () => {
 		const mock = makeMockClient();
 		const r = await handler(

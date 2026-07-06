@@ -19,7 +19,7 @@ import type pg from 'pg';
 import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contract';
 import { checkJsonbSize } from '$indexer/payloadSize';
 import { validateOrderPermlink } from '$indexer/permlink';
-import { ASSET_TICKERS_SET, FIRST_ORDER_MIN_USD, type AssetTicker } from '@morphit/asset-registry';
+import { ASSET_TICKERS_SET, FIRST_ORDER_MIN_USD, isGoodsAsset, type AssetTicker } from '@morphit/asset-registry';
 
 const SIDES = new Set(['buy', 'sell']);
 
@@ -69,6 +69,11 @@ interface Validated {
 	 *  USDT + cp30 USDC + cp31 DAI).  Required for USDT/USDC/DAI, null for every
 	 *  other asset.  Same shape contract as order.ts. */
 	readonly asset_network: string | null;
+	/** cp425 — for a BARTER order, the non-empty canonical-sorted set of
+	 *  crypto tickers the seller accepts (editable on replace, like the
+	 *  amount/terms; the asset itself stays locked to BARTER). Null for
+	 *  crypto assets. */
+	readonly accepted_assets: readonly string[] | null;
 }
 
 function validate(payload: unknown): Validated | { reason: string } {
@@ -254,6 +259,41 @@ function validate(payload: unknown): Validated | { reason: string } {
 		asset_network_validated = null;
 	}
 
+	// cp425 — accepted_assets gate.  Mirror of order.ts.  REQUIRED
+	// (non-empty crypto set) when the asset is BARTER; forbidden for every
+	// crypto asset.  Each entry a real crypto ticker, never a goods asset.
+	// Editable on replace (a seller may change which cryptos they accept),
+	// unlike the asset itself which the handler locks.
+	let accepted_assets_validated: string[] | null = null;
+	const acceptedRaw = (payload as Record<string, unknown>).accepted_assets;
+	if (isGoodsAsset(asset as AssetTicker)) {
+		if (!Array.isArray(acceptedRaw) || acceptedRaw.length === 0) {
+			return { reason: 'accepted_assets_required_for_barter' };
+		}
+		if (acceptedRaw.length > ASSET_TICKERS_SET.size) {
+			return { reason: 'accepted_assets_too_many' };
+		}
+		const seen = new Set<string>();
+		for (const entry of acceptedRaw) {
+			if (typeof entry !== 'string') {
+				return { reason: 'accepted_assets_entry_not_string' };
+			}
+			if (!ASSET_TICKERS_SET.has(entry)) {
+				return { reason: 'accepted_assets_entry_unknown' };
+			}
+			if (isGoodsAsset(entry as AssetTicker)) {
+				return { reason: 'accepted_assets_entry_not_crypto' };
+			}
+			seen.add(entry);
+		}
+		accepted_assets_validated = [...seen].sort();
+	} else {
+		if (acceptedRaw !== undefined && acceptedRaw !== null) {
+			return { reason: 'accepted_assets_not_permitted_for_asset' };
+		}
+		accepted_assets_validated = null;
+	}
+
 	return {
 		permlink,
 		side: side as 'buy' | 'sell',
@@ -274,7 +314,8 @@ function validate(payload: unknown): Validated | { reason: string } {
 		// orderReplace handler also locks this against changes
 		// (see handle() body for the target.asset_network check) —
 		// network is substance per ADR-0023/0028, not detail.
-		asset_network: asset_network_validated
+		asset_network: asset_network_validated,
+		accepted_assets: accepted_assets_validated
 	};
 }
 
@@ -417,7 +458,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			payment_methods = $10,
 			terms = $11,
 			updated_at = $12,
-			expires_at = $13
+			expires_at = $13,
+			accepted_assets = $14
 		 WHERE account = $1 AND permlink = $2 AND status = 'live'`,
 		[
 			ctx.signer,
@@ -432,7 +474,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			v.payment_methods,
 			v.terms,
 			ctx.blockTime,
-			v.expires_at
+			v.expires_at,
+			v.accepted_assets
 		]
 	);
 

@@ -11,7 +11,7 @@
  * The caller is expected to have:
  *   - confirmed the target order is live and owned by the signer
  *   - JIT-unlocked the active key via `useActiveKey()`
- *   - picked an hours-requested value in [1, 168]
+ *   - picked an hours-requested value in [6, 168]
  *   - fetched the current `featureFeeBlurtPerHour` from the
  *     indexer's /v1/config (or used the cached default)
  *
@@ -32,7 +32,7 @@ import { FEE_RECIPIENT, formatBlurtAmount, feeTransfersFor } from '$lib/orders/f
 export interface FeatureBidInput {
 	/** Permlink of a live order owned by the signer. */
 	readonly orderPermlink: string;
-	/** How many hours the bidder is paying for. 1..168. */
+	/** How many hours the bidder is paying for. 6..168 (indexer MIN_HOURS=6). */
 	readonly hoursRequested: number;
 	/** Current per-hour rate from indexer config (default 50). */
 	readonly feeBlurtPerHour: number;
@@ -112,7 +112,7 @@ export async function broadcastFeatureBid(
 	// Phase F.5 audit fix (F-18) — three-phase split.
 	// cp408 — fee split at payment time (90% owner / 10% canonical, or a single
 	// 100% transfer when the recipient is canonical).
-	const feeTransfers = feeTransfersFor(blurtAmount, feeRecipient);
+	const feeTransfers = feeTransfersFor(blurtAmount, feeRecipient, FEE_RECIPIENT, account);
 	const unsigned = await prepareUnsignedOrderWithFee(
 		OP_IDS.featureBid,
 		payload,

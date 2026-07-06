@@ -148,7 +148,7 @@ export async function broadcastNewOrder(
 	// recipient + 10% to the canonical treasury (or a single 100% transfer when
 	// the recipient IS canonical / fell back to it). `feeRecipient` is already
 	// resolved by the caller from /v1/instance.
-	const feeTransfers = feeTransfersFor(feeQuote.blurtAmount, feeRecipient);
+	const feeTransfers = feeTransfersFor(feeQuote.blurtAmount, feeRecipient, FEE_RECIPIENT, account);
 
 	const { prepareUnsignedOrderWithFee, broadcastSignedTransaction } = await import('$blurt/sign');
 

@@ -76,12 +76,36 @@ const MIGRATIONS: readonly Migration[] = [
 			18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
 			32, 33, 34, 35, 36
 		]
+	},
+	// cp425 — the first separate additive migration after the v1 collapse
+	// baseline (which subsumes 2..36), so this is version 37. Adds the barter
+	// accepted-crypto set to `orders`. Idempotent (IF NOT EXISTS): on a fresh
+	// DB the v1 schema.sql already created the column + index, so this is a
+	// no-op there; on an existing beta deploy it adds them. Kept byte-aligned
+	// with the same block in schema.sql.
+	{
+		version: 37,
+		description: 'cp425: add orders.accepted_assets (barter accepted-crypto set) + partial GIN index',
+		sql: `
+ALTER TABLE orders
+    ADD COLUMN IF NOT EXISTS accepted_assets TEXT[];
+
+CREATE INDEX IF NOT EXISTS idx_orders_accepted_assets
+    ON orders USING GIN (accepted_assets)
+    WHERE accepted_assets IS NOT NULL;
+
+COMMENT ON COLUMN orders.accepted_assets IS
+    'cp425: for a BARTER (goods/services) order, the non-empty set of '
+    'crypto tickers the seller accepts as settlement (e.g. '
+    '{XMR,BTC,DOGE}).  Each is a real crypto ticker in ASSET_TICKERS '
+    '(never BARTER itself, never a goods asset).  A buyer may only '
+    'settle in a crypto on this list.  NULL for every crypto asset — '
+    'those settle in themselves and have no accepted-set.';
+`
 	}
 	// Future migrations land here.  The v1 collapsed schema is the
-	// pre-launch baseline; the first separate additive migration to
-	// be assigned an integer version will land here at launch.  From
-	// that point forward, every new schema change is its own
-	// additive migration with its own version number.  No further
+	// pre-launch baseline; from v37 forward, every new schema change is its
+	// own additive migration with its own version number.  No further
 	// collapse should happen until well after 1.0.0 ships.
 ];
 
@@ -99,17 +123,34 @@ const MIGRATIONS: readonly Migration[] = [
  *
  *  Throws on any violation.  Called once at module scope below. */
 function validateMigrationsContract(): void {
+	// Each migration's declared version must be exactly 1 + the highest
+	// version COVERED by all prior migrations (their own version PLUS any
+	// versions they subsume).  For the collapsed v1 baseline (version 1,
+	// subsumes 2..36) the highest covered version is 36, so the next
+	// migration must be version 37 — NOT index+1.  An index-based check
+	// (`expected = i + 1`) would wrongly demand version 2 here, which is
+	// already recorded as applied on every existing deploy (v1 subsumed it),
+	// so that migration would be silently skipped and its schema change never
+	// run.  The gap-free coverage of the subsumed ranges themselves is
+	// enforced by the second loop below; here we only pin each declared
+	// version to the coverage boundary so there's no gap or overlap.
+	let coveredMax = 0;
 	for (let i = 0; i < MIGRATIONS.length; i++) {
-		const expected = i + 1;
-		const actual = MIGRATIONS[i]!.version;
-		if (actual !== expected) {
+		const m = MIGRATIONS[i]!;
+		const expected = coveredMax + 1;
+		if (m.version !== expected) {
 			throw new Error(
-				`migrations contract violated: MIGRATIONS[${i}] has version=${actual}, ` +
-					`expected ${expected}.  Versions must be strictly increasing and gap-free ` +
-					`starting at 1.  If schema-v${expected}.sql exists but isn't in the list, ` +
-					`the runner will silently never apply it.`
+				`migrations contract violated: MIGRATIONS[${i}] has version=${m.version}, ` +
+					`expected ${expected} (1 + the highest version covered by prior migrations). ` +
+					`Versions must be strictly increasing and gap-free; a new migration after a ` +
+					`collapse baseline takes the next version PAST the subsumed range.`
 			);
 		}
+		const subMax =
+			m.subsumesVersions && m.subsumesVersions.length > 0
+				? Math.max(...m.subsumesVersions)
+				: m.version;
+		coveredMax = Math.max(m.version, subMax);
 	}
 	// Validate subsumesVersions across the array: each subsumed
 	// version must be unique globally (no two migrations claim the

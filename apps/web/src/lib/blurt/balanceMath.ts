@@ -82,6 +82,54 @@ export function vestsToBlurtPower(
 	return (vests * fund) / totalVests;
 }
 
+/** Reverse of `vestsToBlurtPower`: convert a BLURT POWER (BP) figure
+ *  back to VESTS given the current global pool ratio. Power-DOWN uses
+ *  it — `withdraw_vesting` takes VESTS, but the user enters BP.
+ *
+ *    vests = (bp * total_vesting_shares) / total_vesting_fund_blurt
+ *
+ *  Returns NaN on malformed input or a degenerate pool (zero fund).
+ *  ALWAYS convert against FRESHLY-fetched DGP for a fund-moving op — the
+ *  rate drifts each block. For "power down everything", prefer the
+ *  account's EXACT on-chain `vesting_shares` string over a BP→VESTS
+ *  round-trip (avoids leaving sub-VESTS dust). */
+export function blurtPowerToVests(
+	bp: number,
+	totalVestingFundBlurtStr: string,
+	totalVestingSharesStr: string
+): number {
+	const fund = parseAssetAmount(totalVestingFundBlurtStr);
+	const totalVests = parseAssetAmount(totalVestingSharesStr);
+	if (!Number.isFinite(bp) || !Number.isFinite(fund) || !Number.isFinite(totalVests)) {
+		return NaN;
+	}
+	if (fund <= 0) return NaN;
+	return (bp * totalVests) / fund;
+}
+
+/** Format a BLURT quantity as the EXACT 3-decimal chain-asset string
+ *  `"N.NNN BLURT"` that `transfer` / `transfer_to_vesting` require.
+ *  Distinct from `formatBalance` (which strips trailing zeros for
+ *  DISPLAY): the chain needs exactly 3 decimals. Throws on a non-finite
+ *  or negative amount — a money op must never be built from a bad number
+ *  (fail fast rather than emit "NaN BLURT"). */
+export function formatBlurtAmount(n: number): string {
+	if (!Number.isFinite(n) || n < 0) {
+		throw new Error(`formatBlurtAmount: invalid amount ${n}`);
+	}
+	return `${n.toFixed(3)} BLURT`;
+}
+
+/** Format a VESTS quantity as the EXACT 6-decimal chain-asset string
+ *  `"N.NNNNNN VESTS"` that `withdraw_vesting` requires. Throws on a
+ *  non-finite or negative amount. */
+export function formatVestsAmount(n: number): string {
+	if (!Number.isFinite(n) || n < 0) {
+		throw new Error(`formatVestsAmount: invalid amount ${n}`);
+	}
+	return `${n.toFixed(6)} VESTS`;
+}
+
 /** Compute an account's current voting-power percentage [0..100] from
  *  the legacy `voting_power` (0–10000) + `last_vote_time` fields,
  *  regenerated to `nowSeconds`.  This is the value classic Blurt

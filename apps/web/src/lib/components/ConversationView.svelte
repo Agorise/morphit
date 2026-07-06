@@ -74,6 +74,7 @@
 	import { encodeFundsSentPayload, type FundsSentPayload } from '$lib/chat/payload';
 	import type { ChatAssetTicker } from '$lib/chat/payload';
 	import { chatAssetFromTicker, getAsset } from '$lib/assets/registry';
+	import { isGoodsAsset } from '@morphit/asset-registry';
 	import { computeOrderPayAmount } from '$lib/orders/payAmount';
 	import { fetchFxRates } from '$lib/orders/fx';
 	import { getPrice, priceStore, type PricedSymbol } from '$lib/prices';
@@ -1031,13 +1032,17 @@
 	 *  orderPermlink, or the order is no longer live). */
 	const orderSummary = $derived.by(() => {
 		if (!orderRecord) return '';
-		const parts = orderTitleParts({
-			side: orderRecord.side,
-			asset: orderRecord.asset,
-			fiat_currency: orderRecord.fiat_currency,
-			amount_min: orderRecord.amount_min,
-			amount_max: orderRecord.amount_max
-		});
+		const parts = orderTitleParts(
+			{
+				side: orderRecord.side,
+				asset: orderRecord.asset,
+				fiat_currency: orderRecord.fiat_currency,
+				amount_min: orderRecord.amount_min,
+				amount_max: orderRecord.amount_max
+			},
+			undefined,
+			$_('order_title.goods_services')
+		);
 		return $_(parts.key, { values: parts.values }) as string;
 	});
 
@@ -1111,10 +1116,26 @@
 	 *  and every order fell back to the free 16-coin picker. `chatAssetFromTicker`
 	 *  folds the case. */
 	const composerPayNowAsset = $derived(
-		markSentArgs === null && orderRecord
+		markSentArgs === null && orderRecord && !isGoodsAsset(orderRecord.asset)
 			? (chatAssetFromTicker(orderRecord.asset) ?? undefined)
 			: undefined
 	);
+
+	// cp425 — for a BARTER order, the settlement modals restrict their coin
+	// picker to the cryptos the seller ACCEPTS (the order's accepted_assets),
+	// mapped to lower-case ChatAssetTickers. Undefined for a crypto order (no
+	// restriction). This is what keeps a barter trade settling in an accepted
+	// coin instead of any of the 16.
+	const barterAcceptedMethods = $derived.by((): readonly ChatAssetTicker[] | undefined => {
+		const o = orderRecord;
+		if (!o || !isGoodsAsset(o.asset)) return undefined;
+		const out: ChatAssetTicker[] = [];
+		for (const t of o.accepted_assets ?? []) {
+			const m = chatAssetFromTicker(t);
+			if (m !== null && !out.includes(m)) out.push(m);
+		}
+		return out;
+	});
 
 	// ─── cp406: Pay-now amount pre-fill ──────────────────────────
 	// Seed the "Pay now" modal with the crypto amount equal to the order's fiat
@@ -1129,6 +1150,9 @@
 	$effect(() => {
 		const o = orderRecord;
 		if (!o) return;
+		// cp425 — barter has no crypto price (valued in fiat directly); never
+		// fetch a price for a goods asset (o.asset='BARTER' isn't a PricedSymbol).
+		if (isGoodsAsset(o.asset)) return;
 		const pm = o.price_model as Record<string, unknown> | null;
 		// Only market/spread orders need live data; fixed prices are exact.
 		if (!pm || pm.kind !== 'spread') return;
@@ -1143,6 +1167,8 @@
 	const payPrefill = $derived.by(() => {
 		const o = orderRecord;
 		if (!o) return null;
+		// cp425 — no crypto pay-amount to seed for a barter order.
+		if (isGoodsAsset(o.asset)) return null;
 		const marketUsd = $priceStore[o.asset as PricedSymbol]?.usd ?? null;
 		return computeOrderPayAmount(o, fxTable, marketUsd);
 	});
@@ -1673,6 +1699,7 @@
 {#if showAddressShareModal}
 	<AddressShareModal
 		{orderPermlink}
+		allowedMethods={barterAcceptedMethods}
 		onShare={handleAddressShare}
 		onCancel={() => (showAddressShareModal = false)}
 	/>
@@ -1684,6 +1711,7 @@
 		initialMethod={markSentArgs?.method ?? 'btc'}
 		initialAmount={markSentArgs !== null ? (markSentArgs.amount ?? '') : payPrefillStr}
 		lockedMethod={composerPayNowAsset}
+		allowedMethods={barterAcceptedMethods}
 		amountRequired={markSentArgs === null}
 		payHint={payPrefillHint}
 		{peer}

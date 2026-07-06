@@ -15,7 +15,7 @@
  * map after asset removal.
  */
 
-import { ASSET_TICKERS } from '../src/index';
+import { ASSET_TICKERS, isGoodsAsset, type AssetTicker } from '../src/index';
 
 let failed = 0;
 let passed = 0;
@@ -50,7 +50,12 @@ const initialEntries = extractTickers(idxSrc, /null/);
 const cgEntries = extractTickers(cgSrc, /'[^']+'/);
 const fbEntries = extractTickers(fbSrc, /[0-9.]+/);
 
-const expected = new Set(ASSET_TICKERS as readonly string[]);
+// cp425 — goods assets (BARTER) have NO crypto price: a barter listing is
+// valued directly in the seller's fiat, so it has no Coingecko slug / fallback
+// USD / initial price-state entry. Exempt them from the coverage requirement.
+const expected = new Set(
+	(ASSET_TICKERS as readonly string[]).filter((t) => !isGoodsAsset(t as AssetTicker))
+);
 
 function check(name: string, observed: Set<string>): void {
 	const missing = [...expected].filter((t) => !observed.has(t));

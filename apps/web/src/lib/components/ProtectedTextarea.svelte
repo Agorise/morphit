@@ -85,7 +85,7 @@
 		 *  larger UTF-16 defense ceiling. */
 		counterLimit?: number;
 		/** cp384 (#4): when this number CHANGES (the parent increments it),
-		 *  the textarea border flashes emerald 5× over ~5s — used to draw the
+		 *  the textarea border flashes bright yellow 5× over ~5s — used to draw
 		 *  eye to a field that just became required (barter → Terms). */
 		flashToken?: number;
 	}
@@ -110,7 +110,7 @@
 
 	let textareaEl: HTMLTextAreaElement;
 
-	// cp384 (#4): flash the border emerald 5× over ~5s whenever flashToken
+	// cp384 (#4) / cp425: flash the border yellow 5× over ~5s whenever flashToken
 	// changes. Toggling the class off → on (next frame) restarts the CSS
 	// animation, so repeated triggers (remove + re-add barter) re-flash each
 	// time. Plain `lastFlashToken` (non-reactive) avoids an extra effect run.
@@ -291,7 +291,7 @@
 		class="pk-textarea w-full rounded-xl border-2 {isOver
 			? 'border-red-500 focus:ring-red-500 dark:border-red-500'
 			: 'border-ink-200 focus:ring-morphit-emerald dark:border-ink-700'} bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 dark:bg-ink-900"
-		class:pk-flash-green={flashOn}
+		class:pk-flash-yellow={flashOn}
 	></textarea>
 
 	<!-- Inline character counter. Absolute-positioned bottom-right

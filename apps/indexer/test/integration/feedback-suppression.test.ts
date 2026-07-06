@@ -63,11 +63,26 @@ async function insertFeedback(
 	rating: number,
 	trxId: string
 ): Promise<void> {
+	const permlink = `order-${trxId}`;
+	// The /feedback summary INNER JOINs orders on (subject, order_permlink)
+	// — cp124 H5, relying on the intake-time guarantee that the cited order
+	// exists, belongs to the subject, and is fee-verified. Seed that order so
+	// the feedback row survives the join and is counted (or, when a signal
+	// flags it, correctly EXCLUDED by suppression rather than silently dropped
+	// by a missing join). Without this the summary always reads 0.
+	await fx.db.query(
+		`INSERT INTO orders (
+			account, permlink, side, asset, fiat_currency, price_model,
+			payment_methods, status, fee_status, created_at, updated_at
+		) VALUES ($1, $2, 'buy', 'BLURT', 'MXN', '{}'::jsonb, $3, 'live', 'verified', NOW(), NOW())
+		ON CONFLICT (account, permlink) DO NOTHING`,
+		[subject, permlink, []]
+	);
 	await fx.db.query(
 		`INSERT INTO feedback (
 			reviewer, subject, rating, order_permlink, created_at, source_trx_id
 		) VALUES ($1, $2, $3, $4, NOW(), $5)`,
-		[reviewer, subject, rating, `order-${trxId}`, trxId]
+		[reviewer, subject, rating, permlink, trxId]
 	);
 }
 
