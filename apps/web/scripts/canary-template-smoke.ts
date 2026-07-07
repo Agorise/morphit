@@ -105,7 +105,7 @@ if (failures.length === 0) {
 
 	// Required sections must be present in the template.
 	const required = [
-		'-----BEGIN MORPHIT CANARY-----',
+		'=== MORPHIT CANARY ===',
 		'DECLARATION',
 		'FRESHNESS PROOFS',
 		'HOW TO VERIFY',

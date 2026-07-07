@@ -195,6 +195,43 @@ export function formatFiat(amount: number, ticker: string = 'USD'): string {
 }
 
 /**
+ * cp433 — like formatFiat, but with the currency symbol GLUED to the
+ * number (no separating space): "3,98€" instead of "3,98 €". Some
+ * locales (e.g. de-DE) place a space between the amount and a
+ * trailing symbol; this drops only the whitespace literal(s) Intl
+ * inserts, leaving grouping/decimal separators intact. Used for the
+ * wallet's compact "~3,98€ eur" fiat-equivalent line. Non-ISO
+ * tickers (no symbol) fall back to the spaced "{number} {CODE}" form.
+ */
+export function formatFiatGlued(amount: number, ticker: string = 'USD'): string {
+	if (!Number.isFinite(amount)) return '—';
+	const upperTicker = ticker.toUpperCase();
+	const fractionDigits = fractionDigitsForTicker(upperTicker);
+	if (KNOWN_ISO_4217.has(upperTicker)) {
+		try {
+			const parts = getNumberFormat(activeLocale(), {
+				style: 'currency',
+				currency: upperTicker,
+				minimumFractionDigits: fractionDigits,
+				maximumFractionDigits: fractionDigits
+			}).formatToParts(amount);
+			return parts
+				.filter((p) => !(p.type === 'literal' && p.value.trim() === ''))
+				.map((p) => p.value)
+				.join('');
+		} catch {
+			// fall through to the spaced fallback
+		}
+	}
+	const numFormatted = getNumberFormat(activeLocale(), {
+		style: 'decimal',
+		minimumFractionDigits: fractionDigits,
+		maximumFractionDigits: fractionDigits
+	}).format(amount);
+	return `${numFormatted} ${upperTicker}`;
+}
+
+/**
  * Per-ticker decimal precision.  Centralized so callers don't have
  * to think about it.  Returns the recommended `minimumFractionDigits`
  * and `maximumFractionDigits` for formatFiat.

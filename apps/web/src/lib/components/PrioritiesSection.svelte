@@ -100,7 +100,6 @@
 
 <section class="priorities-section" aria-labelledby="priorities-heading">
 	<header class="priorities-header">
-		<p class="priorities-eyebrow">{$_('home.priorities.eyebrow')}</p>
 		<h2 id="priorities-heading" class="priorities-heading">
 			{$_('home.priorities.heading')}
 		</h2>

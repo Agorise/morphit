@@ -222,11 +222,21 @@ function validate(payload: unknown): ValidatedRelease | { reason: string } {
 	const hashManifestSize = checkJsonbSize(payload.hash_manifest);
 	if (!hashManifestSize.ok) return { reason: 'hash_manifest_too_large' };
 
-	if (!isPlainObject(payload.endpoints)) {
-		return { reason: 'endpoints_not_object' };
+	// cp436 — endpoints is OPTIONAL (Ken's rule: no longer pinned on-chain —
+	// redundant with the frontend's baked-in defaults + avoids chain-bloat).
+	// Validate only when present; default to an empty object so the DB column
+	// stays non-null and /v1/release returns {} for the (now normal) case.
+	let endpoints: Record<string, unknown> = {};
+	let endpoints_serialized = '{}';
+	if (payload.endpoints !== undefined && payload.endpoints !== null) {
+		if (!isPlainObject(payload.endpoints)) {
+			return { reason: 'endpoints_not_object' };
+		}
+		const endpointsSize = checkJsonbSize(payload.endpoints);
+		if (!endpointsSize.ok) return { reason: 'endpoints_too_large' };
+		endpoints = payload.endpoints;
+		endpoints_serialized = endpointsSize.serialized;
 	}
-	const endpointsSize = checkJsonbSize(payload.endpoints);
-	if (!endpointsSize.ok) return { reason: 'endpoints_too_large' };
 
 	let signature = '';
 	if (payload.signature !== undefined && payload.signature !== null) {
@@ -249,10 +259,10 @@ function validate(payload: unknown): ValidatedRelease | { reason: string } {
 	return {
 		version,
 		hash_manifest: payload.hash_manifest,
-		endpoints: payload.endpoints,
+		endpoints,
 		signature,
 		hash_manifest_serialized: hashManifestSize.serialized,
-		endpoints_serialized: endpointsSize.serialized,
+		endpoints_serialized,
 		treasury_serialized
 	};
 }

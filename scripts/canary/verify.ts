@@ -62,8 +62,16 @@ function verify(text: string): Verification {
 	const warnings: string[] = [];
 
 	// ── Structural: must start with the canary header.
-	if (!text.startsWith('-----BEGIN MORPHIT CANARY-----')) {
-		errors.push('missing header line "-----BEGIN MORPHIT CANARY-----"');
+	//    cp432 renamed the inner marker `-----BEGIN MORPHIT CANARY-----`
+	//    (which forced PGP dash-escaping) to `=== MORPHIT CANARY ===`.
+	//    Accept BOTH during the transition so an operator's still-valid
+	//    OLD-format canary (signed before they pulled the new template)
+	//    doesn't trip a false "malformed" alarm until it's re-signed.
+	if (
+		!text.startsWith('=== MORPHIT CANARY ===') &&
+		!text.startsWith('-----BEGIN MORPHIT CANARY-----')
+	) {
+		errors.push('missing header line "=== MORPHIT CANARY ==="');
 	}
 
 	// ── Structural: every required field has been substituted.

@@ -1963,7 +1963,6 @@
       }
     },
     "priorities": {
-      "eyebrow": "Our priorities",
       "heading": "What Morphit is built around",
       "privacy": {
         "title": "Privacy first",
@@ -2330,7 +2329,7 @@
         "wif_label": "Posting private key (WIF)",
         "wif_placeholder": "5J… or P5J…",
         "password_mismatch": "Passwords don't match.",
-        "wif_hint": "Starts with 5 (legacy) or P5 (newer). Never shared with the operator — encrypted on this device only.",
+        "wif_hint": "Starts with a 5. Never shared with the operator — encrypted on this device only.",
         "new_password_label": "New password for this device",
         "new_password_hint": "At least 8 characters. Used to unlock Morphit on this device. Not your Blurt password.",
         "new_password_confirm_label": "Confirm password",
@@ -2354,7 +2353,11 @@
           },
           "could_not_resolve": "We couldn't detect your account from this key. Double-check that you copied your Posting Private Key correctly, or import with your 12-word seed or Keyfile instead."
         },
-        "account_bad": "invalid"
+        "account_bad": "invalid",
+        "manual_account_label": "Your Blurt username",
+        "manual_account_placeholder": "e.g. alice",
+        "manual_account_hint": "We couldn't detect your account from this key — it may be from before Blurt existed. Type your Blurt username so we can confirm the key belongs to it.",
+        "manual_account_invalid": "That username doesn't match this key. Check the spelling, or that you pasted the right Posting Private Key."
       },
       "error": {
         "seed_word_count": "A Blurt seed phrase is exactly 12 words — you've entered {count}. Make sure all 12 are present, each separated by a single space.",
@@ -3451,7 +3454,7 @@
       "use_full": "Use full balance",
       "available_blurt": "Available: {amount} BLURT",
       "available_bp": "Available: {amount} BP",
-      "power_down_schedule": "This isn't instant: your BP is released back to liquid BLURT gradually, over 4 weeks. The gradual release is a Blurt protocol rule, not Morphit's.",
+      "power_down_schedule": "This isn't instant: your BP will be unstaked back to liquid BLURT gradually, over 4 weeks. None of it today, so please be patient. The gradual release is a Blurt protocol rule, not Morphit's.",
       "password_label": "Your @{account} password (to sign with your active key)",
       "error_password_required": "Enter your password to continue.",
       "error_bad_password": "That password didn't unlock your active key. Check it and try again.",

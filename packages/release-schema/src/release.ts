@@ -149,9 +149,11 @@ export interface ReleasePayloadV1 {
 	readonly version: string;
 	/** SHA-256 hash manifest of the build's assets. */
 	readonly hash_manifest: ReleaseHashManifest;
-	/** Announced endpoint pools.  May be empty `{}` if the
-	 *  operator wants to retain whatever clients already have. */
-	readonly endpoints: ReleaseEndpoints;
+	/** cp436 — OPTIONAL announced endpoint pools. Ken's rule: normal
+	 *  releases OMIT this entirely (it bloats the chain and is redundant
+	 *  with the frontend's baked-in DEFAULT_BLURT_RPC_ENDPOINTS). When
+	 *  absent, clients keep whatever endpoints they already have. */
+	readonly endpoints?: ReleaseEndpoints;
 	/** Optional secondary signature (PGP, etc.) — opaque to the
 	 *  indexer, available to clients that want to do extra
 	 *  verification.  Bounded at 512 chars. */

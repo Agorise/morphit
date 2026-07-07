@@ -50,7 +50,7 @@
 	import { FEE_RECIPIENT, resolveFeeRecipient } from '$lib/orders/fee';
 	import { getInstanceSnapshot } from '$stores/instance';
 	import { fetchListingFee } from '$lib/orders/listingFee';
-	import { formatFiat } from '$i18n/formatters';
+	import { formatFiatGlued } from '$i18n/formatters';
 	import { fetchFxRates, fiatToUsd, usdToFiat } from '$lib/orders/fx';
 	import type { FxResponse } from '@morphit/indexer-client';
 	import { userPreferences } from '$stores/userPreferences';
@@ -128,6 +128,29 @@
 	 *  locale-formatted by formatFiat (activeLocale()); the lowercase code is
 	 *  appended deliberately because in many locales "$"/"€" alone is
 	 *  ambiguous. null → render nothing. */
+	/** cp433 — when the user hasn't explicitly chosen a display fiat, fall
+	 *  back to a sensible default for their INTERFACE LANGUAGE rather than
+	 *  always showing the operator's USD denomination. Language ≠ country, so
+	 *  this is best-effort (a Spanish speaker in Mexico can still pick MXN in
+	 *  their preferences, which always wins); it just means a German-language
+	 *  user sees "€ eur" instead of "$ usd" out of the box. Any currency not
+	 *  in the FX table simply falls through to the operator denomination. */
+	const LOCALE_DEFAULT_FIAT: Record<string, string> = {
+		en: 'USD',
+		de: 'EUR',
+		fr: 'EUR',
+		it: 'EUR',
+		es: 'EUR',
+		pl: 'PLN',
+		ru: 'RUB',
+		'zh-CN': 'CNY',
+		'zh-HK': 'HKD',
+		fa: 'USD'
+	};
+	function localeDefaultFiat(lang: string | undefined): string | undefined {
+		return lang ? LOCALE_DEFAULT_FIAT[lang] : undefined;
+	}
+
 	const usdLabel = $derived.by(() => {
 		if (blurtPriceFiat === null || !Number.isFinite(blurtBalance)) return null;
 		// Value in the operator's fiat (what blurtPriceFiat is denominated in).
@@ -138,7 +161,7 @@
 		// the operator's denomination AND we can actually convert to it (via
 		// the USD-anchored FX table). Any missing piece falls back to denomFiat
 		// so the line stays correct rather than lying with an unconverted number.
-		const wantFiat = $userPreferences.fiat;
+		const wantFiat = $userPreferences.fiat ?? localeDefaultFiat($page.data?.lang);
 		if (wantFiat && wantFiat !== denomFiat && fxTable !== null) {
 			const usd = fiatToUsd(fxTable, valueInDenom, denomFiat);
 			const converted = usd !== null ? usdToFiat(fxTable, usd, wantFiat) : null;
@@ -147,7 +170,7 @@
 				fiat = wantFiat;
 			}
 		}
-		return `~${formatFiat(value, fiat)} ${fiat.toLowerCase()}`;
+		return `~${formatFiatGlued(value, fiat)} ${fiat.toLowerCase()}`;
 	});
 
 	/** Refresh interval.  Aggressive at 5 seconds: Blurt blocks
@@ -334,6 +357,13 @@
 	// user fill a form only to hit a "no active key" wall.
 	const hasActiveKey = $derived($liveIdentity?.origin === 'morphit-seed');
 	let powerMode = $state<'up' | 'down' | null>(null);
+	/** cp433 — when true, the liquid-BLURT odometer applies its next change
+	 *  with no red flash. Set for a few seconds after a power-DOWN so the
+	 *  tiny per-op fee debit doesn't paint the balance red and scare the
+	 *  user (the money that actually moves is BP, released weekly). All
+	 *  other balance changes flash red/green as normal. */
+	let suppressBlurtFlashOnce = $state(false);
+	let suppressTimer: ReturnType<typeof setTimeout> | null = null;
 	function openPower(mode: 'up' | 'down'): void {
 		powerMode = mode;
 	}
@@ -341,7 +371,19 @@
 		powerMode = null;
 	}
 	function onPowerDone(): void {
+		const wasPowerDown = powerMode === 'down';
 		powerMode = null;
+		if (wasPowerDown) {
+			// The fee debit may not land until the next block or two, so keep
+			// the BLURT odometer quiet for a few seconds — long enough for the
+			// fee to appear on a poll without a scary red flash.
+			suppressBlurtFlashOnce = true;
+			if (suppressTimer !== null) clearTimeout(suppressTimer);
+			suppressTimer = setTimeout(() => {
+				suppressBlurtFlashOnce = false;
+				suppressTimer = null;
+			}, 12_000);
+		}
 		// The op settled on-chain; pull fresh balances so the odometers
 		// animate to the new totals (and nudge other balance-aware views).
 		triggerBalanceRefresh();
@@ -730,7 +772,12 @@
 				<dd class="font-mono text-lg font-semibold">
 					<!-- Desktop: full BLURT precision with grouping (e.g. 5,055.031). -->
 					<span class="hidden sm:inline"
-						><AnimatedNumber value={blurtBalance} decimals={3} durationMs={3000} /></span
+						><AnimatedNumber
+							value={blurtBalance}
+							decimals={3}
+							durationMs={3000}
+							silent={suppressBlurtFlashOnce}
+						/></span
 					><!-- Mobile: floored integer; tap to reveal the exact amount (cp396). -->
 					<span class="relative sm:hidden" data-exact-tip
 						><button
@@ -743,6 +790,7 @@
 								decimals={0}
 								grouping={false}
 								durationMs={3000}
+								silent={suppressBlurtFlashOnce}
 							/></button
 						>{#if openExact === 'blurt'}{@render exactTip(exactBlurt)}{/if}</span
 					>{#if usdLabel}<span

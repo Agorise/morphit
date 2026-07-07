@@ -114,7 +114,7 @@ function readJsonFile(path: string, label: string): Record<string, unknown> {
 interface Inputs {
 	version: string;
 	hashManifest: Record<string, unknown>;
-	endpoints: Record<string, unknown>;
+	endpoints?: Record<string, unknown>;
 	btcAddress: string;
 	btcSatoshis: string;
 	xmrAddress: string;
@@ -126,8 +126,8 @@ interface Inputs {
 async function gatherInputs(): Promise<Inputs> {
 	process.stderr.write('\n── Morphit release-op payload builder ────────────────────\n');
 	process.stderr.write('Enter values for the morphit_release_v1 op.  Leave a\n');
-	process.stderr.write('field empty to omit (treasury fields only — version,\n');
-	process.stderr.write('hash_manifest, endpoints are required).\n\n');
+	process.stderr.write('field empty to omit — endpoints and treasury are all\n');
+	process.stderr.write('optional; only version + hash_manifest are required.\n\n');
 
 	const version = await ask(
 		'Release version (semver, e.g. 1.0.0)',
@@ -142,12 +142,15 @@ async function gatherInputs(): Promise<Inputs> {
 	if (!manifestPath) fail('hash_manifest file path is required');
 	const hashManifest = readJsonFile(manifestPath, 'hash_manifest');
 
+	// cp436 — endpoints is OPTIONAL and normally OMITTED. Ken's rule: don't
+	// pin the blurt_rpc list on-chain (redundant with the frontend's baked-in
+	// DEFAULT_BLURT_RPC_ENDPOINTS; avoid chain-bloat). Set
+	// MORPHIT_BUILD_ENDPOINTS_FILE only to deliberately announce a pool.
 	const endpointsPath = await ask(
-		'Path to endpoints JSON file',
+		'Path to endpoints JSON file (optional — leave empty to omit)',
 		process.env.MORPHIT_BUILD_ENDPOINTS_FILE
 	);
-	if (!endpointsPath) fail('endpoints file path is required');
-	const endpoints = readJsonFile(endpointsPath, 'endpoints');
+	const endpoints = endpointsPath ? readJsonFile(endpointsPath, 'endpoints') : undefined;
 
 	process.stderr.write('\n── Treasury (Part 106; Part 107) ─────────────────────────\n');
 	process.stderr.write('Leave any treasury field empty to omit that chain.\n');
@@ -253,7 +256,10 @@ async function main(): Promise<void> {
 	const payload: ReleasePayloadV1 = {
 		version: inputs.version,
 		hash_manifest: inputs.hashManifest as ReleasePayloadV1['hash_manifest'],
-		endpoints: inputs.endpoints as ReleasePayloadV1['endpoints'],
+		// cp436 — omit endpoints entirely unless one was explicitly provided.
+		...(inputs.endpoints !== undefined
+			? { endpoints: inputs.endpoints as ReleasePayloadV1['endpoints'] }
+			: {}),
 		...(treasury !== null ? { treasury } : {})
 	};
 

@@ -58,6 +58,13 @@
 		/** Optional aria-label override.  By default the rendered
 		 *  number is the accessible content. */
 		ariaLabel?: string;
+		/** cp433 — when true, a value change snaps in with NO color flash
+		 *  and no tween (like the first render). Used to quietly apply the
+		 *  tiny per-op fee debited on a power-down, which otherwise flashes
+		 *  the BLURT balance red and alarms the user (the money that's
+		 *  actually moving is BP, released weekly over 4 weeks). Normal
+		 *  balance changes leave this false and animate as usual. */
+		silent?: boolean;
 	}
 	let {
 		value,
@@ -65,7 +72,8 @@
 		durationMs = 1100,
 		epsilon = 1e-9,
 		grouping = true,
-		ariaLabel
+		ariaLabel,
+		silent = false
 	}: Props = $props();
 
 	/** The number currently shown.  Tweens between values.
@@ -186,6 +194,17 @@
 		// the number green every few seconds, forever, even after a refresh.
 		// If the digits the user actually SEES don't change, update silently.
 		if (next.toFixed(decimals) === lastSettled.toFixed(decimals)) {
+			lastSettled = next;
+			displayed = next;
+			return;
+		}
+		if (silent) {
+			// cp433 — caller asked for a quiet update (the per-op fee on a
+			// power-down). Snap to the new value with no color, no tween.
+			if (rafId !== null) {
+				cancelAnimationFrame(rafId);
+				rafId = null;
+			}
 			lastSettled = next;
 			displayed = next;
 			return;

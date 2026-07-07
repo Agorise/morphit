@@ -1963,7 +1963,6 @@
       }
     },
     "priorities": {
-      "eyebrow": "Nasze priorytety",
       "heading": "Na czym opiera się Morphit",
       "privacy": {
         "title": "Prywatność na pierwszym miejscu",
@@ -2330,7 +2329,7 @@
         "wif_label": "Prywatny klucz posting (WIF)",
         "wif_placeholder": "5J… lub P5J…",
         "password_mismatch": "Hasła nie są zgodne.",
-        "wif_hint": "Zaczyna się od 5 (stary format) lub P5 (nowszy). Nigdy nie udostępniany operatorowi — szyfrowany tylko na tym urządzeniu.",
+        "wif_hint": "Zaczyna się od 5. Nigdy nie udostępniany operatorowi — szyfrowany tylko na tym urządzeniu.",
         "new_password_label": "Nowe hasło na to urządzenie",
         "new_password_hint": "Co najmniej 8 znaków. Odblokowuje Morphit na tym urządzeniu. To nie jest hasło Blurt.",
         "new_password_confirm_label": "Potwierdź hasło",
@@ -2354,7 +2353,11 @@
           },
           "could_not_resolve": "Nie udało się wykryć twojego konta na podstawie tego klucza. Sprawdź, czy poprawnie skopiowałeś swój Posting Private Key, albo zaimportuj za pomocą 12-wyrazowej frazy seed lub pliku Keyfile."
         },
-        "account_bad": "nieprawidłowy"
+        "account_bad": "nieprawidłowy",
+        "manual_account_label": "Twoja nazwa użytkownika Blurt",
+        "manual_account_placeholder": "np. alice",
+        "manual_account_hint": "Nie udało się wykryć Twojego konta na podstawie tego klucza — może pochodzić sprzed Blurt. Wpisz swoją nazwę użytkownika Blurt, abyśmy mogli potwierdzić, że klucz do niego należy.",
+        "manual_account_invalid": "Ta nazwa użytkownika nie pasuje do tego klucza. Sprawdź pisownię lub czy wkleiłeś właściwy prywatny klucz publikowania."
       },
       "error": {
         "seed_word_count": "Fraza seed Blurt ma dokładnie 12 słów — wpisano {count}. Upewnij się, że jest wszystkie 12, każde oddzielone pojedynczą spacją.",
@@ -3451,7 +3454,7 @@
       "use_full": "Użyj całego salda",
       "available_blurt": "Dostępne: {amount} BLURT",
       "available_bp": "Dostępne: {amount} BP",
-      "power_down_schedule": "To nie jest natychmiastowe: Twój BP wraca do płynnych BLURT stopniowo, w ciągu 4 tygodni. To stopniowe uwalnianie to reguła protokołu Blurt, a nie Morphit.",
+      "power_down_schedule": "To nie jest natychmiastowe: Twoje BP będzie stopniowo odstakowywane z powrotem do płynnego BLURT, przez 4 tygodnie. Dziś nic z tego, więc prosimy o cierpliwość. Stopniowe uwalnianie to reguła protokołu Blurt, nie Morphit.",
       "password_label": "Twoje hasło @{account} (do podpisania kluczem aktywnym)",
       "error_password_required": "Wpisz hasło, aby kontynuować.",
       "error_bad_password": "To hasło nie odblokowało Twojego klucza aktywnego. Sprawdź je i spróbuj ponownie.",

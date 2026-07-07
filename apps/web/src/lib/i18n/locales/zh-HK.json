@@ -1963,7 +1963,6 @@
       }
     },
     "priorities": {
-      "eyebrow": "我哋嘅優先事項",
       "heading": "Morphit 圍繞乜嘢構建",
       "privacy": {
         "title": "私隱優先",
@@ -2330,7 +2329,7 @@
         "wif_label": "Posting 私鑰 (WIF)",
         "wif_placeholder": "5J… 或 P5J…",
         "password_mismatch": "密碼不一致。",
-        "wif_hint": "以 5 (舊版)或 P5 (新版)開頭。永遠唔會同營運者分享 — 只喺呢部裝置上加密。",
+        "wif_hint": "以 5 開頭。永遠唔會同營運者分享 — 只喺呢部裝置上加密。",
         "new_password_label": "呢部裝置嘅新密碼",
         "new_password_hint": "至少 8 個字符。用嚟喺呢部裝置上解鎖 Morphit。唔係你嘅 Blurt 密碼。",
         "new_password_confirm_label": "確認密碼",
@@ -2354,7 +2353,11 @@
           },
           "could_not_resolve": "我們無法從此密鑰偵測到你的帳戶。請核對你是否正確複製了 Posting Private Key，或改用你的 12 個單詞種子短語或 Keyfile 匯入。"
         },
-        "account_bad": "無效"
+        "account_bad": "無效",
+        "manual_account_label": "你的 Blurt 用戶名",
+        "manual_account_placeholder": "例如 alice",
+        "manual_account_hint": "我們無法透過此密鑰偵測到你的帳戶——它可能是喺 Blurt 出現之前建立嘅。請輸入你嘅 Blurt 用戶名，以便確認此密鑰屬於該帳戶。",
+        "manual_account_invalid": "該用戶名與此密鑰不符。請檢查拼寫，或確認你貼上嘅係正確嘅發文私鑰。"
       },
       "error": {
         "seed_word_count": "Blurt 助記詞剛好是 12 個單詞——你輸入了 {count} 個。請確保 12 個單詞齊全，每個之間用一個空格分隔。",
@@ -3451,7 +3454,7 @@
       "use_full": "使用全部餘額",
       "available_blurt": "可用:{amount} BLURT",
       "available_bp": "可用:{amount} BP",
-      "power_down_schedule": "這不是即時的:你的 BP 會在 4 週內逐步釋放回流動 BLURT。這種逐步釋放是 Blurt 協議的規則,不是 Morphit 的。",
+      "power_down_schedule": "這並非即時：你的 BP 會在 4 週內逐步解押回流動的 BLURT。今日不會到帳，請耐心等候。逐步釋放是 Blurt 協議的規則，而非 Morphit 的規則。",
       "password_label": "你的 @{account} 密碼(用於以你的活躍密鑰簽名)",
       "error_password_required": "請輸入密碼以繼續。",
       "error_bad_password": "該密碼未能解鎖你的活躍密鑰。請檢查後重試。",

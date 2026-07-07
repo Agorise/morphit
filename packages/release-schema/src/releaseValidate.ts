@@ -168,28 +168,36 @@ export function validateReleasePayload(payload: unknown): ReleaseValidateResult 
 		}
 	}
 
-	const endpoints = payload.endpoints;
-	if (!isPlainObject(endpoints)) {
-		return { ok: false, reason: 'endpoints_not_object' };
-	}
-	const endpointsSerLen = byteLengthOfJson(endpoints);
-	if (endpointsSerLen > ENDPOINTS_MAX_SERIALIZED_BYTES) {
-		return { ok: false, reason: 'endpoints_too_large' };
-	}
-	for (const [, list] of Object.entries(endpoints)) {
-		if (!Array.isArray(list)) {
-			return { ok: false, reason: 'endpoints_entry_invalid' };
+	// cp436 — endpoints is now OPTIONAL. Ken's rule: stop pinning the
+	// blurt_rpc list on-chain — it's redundant with the frontend's baked-in
+	// DEFAULT_BLURT_RPC_ENDPOINTS and only bloats the chain. Validate it only
+	// when present; a payload with NO endpoints is valid (and preferred).
+	let validEndpoints: Record<string, readonly string[]> | undefined;
+	if (payload.endpoints !== undefined && payload.endpoints !== null) {
+		const endpoints = payload.endpoints;
+		if (!isPlainObject(endpoints)) {
+			return { ok: false, reason: 'endpoints_not_object' };
 		}
-		for (const u of list) {
-			if (
-				typeof u !== 'string' ||
-				u.length === 0 ||
-				u.length > MAX_ORIGIN_LEN ||
-				!ORIGIN_RE.test(u)
-			) {
+		const endpointsSerLen = byteLengthOfJson(endpoints);
+		if (endpointsSerLen > ENDPOINTS_MAX_SERIALIZED_BYTES) {
+			return { ok: false, reason: 'endpoints_too_large' };
+		}
+		for (const [, list] of Object.entries(endpoints)) {
+			if (!Array.isArray(list)) {
 				return { ok: false, reason: 'endpoints_entry_invalid' };
 			}
+			for (const u of list) {
+				if (
+					typeof u !== 'string' ||
+					u.length === 0 ||
+					u.length > MAX_ORIGIN_LEN ||
+					!ORIGIN_RE.test(u)
+				) {
+					return { ok: false, reason: 'endpoints_entry_invalid' };
+				}
+			}
 		}
+		validEndpoints = endpoints as Record<string, readonly string[]>;
 	}
 
 	let signature: string | undefined;
@@ -218,7 +226,7 @@ export function validateReleasePayload(payload: unknown): ReleaseValidateResult 
 		value: {
 			version,
 			hash_manifest: hashManifest as Record<string, string>,
-			endpoints: endpoints as Record<string, readonly string[]>,
+			...(validEndpoints !== undefined ? { endpoints: validEndpoints } : {}),
 			...(signature !== undefined ? { signature } : {}),
 			...(treasuryResult.value !== null ? { treasury: treasuryResult.value } : {})
 		}

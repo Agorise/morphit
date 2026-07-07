@@ -9318,12 +9318,12 @@ cd ../..
 
 # 1) build the payload — BTC/XMR treasury pre-filled from
 #    apps/indexer/src/config/canonicalTreasury.ts; you supply the
-#    version, the manifest from step 0, and your endpoints file.
+#    version and the manifest from step 0. (cp436 — endpoints are no
+#    longer pinned on-chain; omit MORPHIT_BUILD_ENDPOINTS_FILE.)
 #    < /dev/null forces non-interactive mode so the redirected
 #    stdout is clean JSON (not echoed prompts):
 MORPHIT_BUILD_VERSION=<semver> \
   MORPHIT_BUILD_HASH_MANIFEST_FILE=apps/web/build-manifest.release.json \
-  MORPHIT_BUILD_ENDPOINTS_FILE=<endpoints.json> \
   npx tsx apps/indexer/scripts/release-build-payload.ts < /dev/null > release.json
 
 # 2) PREVIEW — prints the exact op, asks for NO key, sends nothing:

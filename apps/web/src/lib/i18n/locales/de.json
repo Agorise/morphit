@@ -1963,7 +1963,6 @@
       }
     },
     "priorities": {
-      "eyebrow": "Unsere Prioritäten",
       "heading": "Worauf Morphit aufgebaut ist",
       "privacy": {
         "title": "Privatsphäre zuerst",
@@ -2330,7 +2329,7 @@
         "wif_label": "Privater Posting-Schlüssel (WIF)",
         "wif_placeholder": "5J… oder P5J…",
         "password_mismatch": "Die Passwörter stimmen nicht überein.",
-        "wif_hint": "Beginnt mit 5 (alt) oder P5 (neuer). Wird niemals mit dem Operator geteilt — nur auf diesem Gerät verschlüsselt.",
+        "wif_hint": "Beginnt mit einer 5. Wird niemals mit dem Operator geteilt — nur auf diesem Gerät verschlüsselt.",
         "new_password_label": "Neues Passwort für dieses Gerät",
         "new_password_hint": "Mindestens 8 Zeichen. Entsperrt Morphit auf diesem Gerät. Nicht dein Blurt-Passwort.",
         "new_password_confirm_label": "Passwort bestätigen",
@@ -2354,7 +2353,11 @@
           },
           "could_not_resolve": "Wir konnten dein Konto anhand dieses Schlüssels nicht ermitteln. Prüfe, ob du deinen Posting Private Key korrekt kopiert hast, oder importiere mit deiner 12-Wort-Seed-Phrase oder deinem Keyfile."
         },
-        "account_bad": "ungültig"
+        "account_bad": "ungültig",
+        "manual_account_label": "Dein Blurt-Benutzername",
+        "manual_account_placeholder": "z. B. alice",
+        "manual_account_hint": "Wir konnten dein Konto anhand dieses Schlüssels nicht erkennen — es stammt vielleicht aus der Zeit vor Blurt. Gib deinen Blurt-Benutzernamen ein, damit wir bestätigen können, dass der Schlüssel dazugehört.",
+        "manual_account_invalid": "Dieser Benutzername passt nicht zu diesem Schlüssel. Prüfe die Schreibweise oder ob du den richtigen privaten Posting-Schlüssel eingefügt hast."
       },
       "error": {
         "seed_word_count": "Eine Blurt-Seed-Phrase besteht aus genau 12 Wörtern — du hast {count} eingegeben. Stelle sicher, dass alle 12 vorhanden sind, jeweils durch ein einzelnes Leerzeichen getrennt.",
@@ -3451,7 +3454,7 @@
       "use_full": "Gesamtes Guthaben verwenden",
       "available_blurt": "Verfügbar: {amount} BLURT",
       "available_bp": "Verfügbar: {amount} BP",
-      "power_down_schedule": "Das geschieht nicht sofort: Dein BP wird nach und nach über 4 Wochen wieder zu liquidem BLURT freigegeben. Diese schrittweise Freigabe ist eine Regel des Blurt-Protokolls, nicht von Morphit.",
+      "power_down_schedule": "Das geht nicht sofort: Dein BP wird schrittweise über 4 Wochen wieder in flüssiges BLURT umgewandelt. Heute noch nichts davon, also hab bitte Geduld. Die schrittweise Freigabe ist eine Regel des Blurt-Protokolls, nicht von Morphit.",
       "password_label": "Dein @{account}-Passwort (zum Signieren mit deinem Active Key)",
       "error_password_required": "Gib dein Passwort ein, um fortzufahren.",
       "error_bad_password": "Mit diesem Passwort ließ sich dein Active Key nicht entsperren. Prüfe es und versuche es erneut.",
