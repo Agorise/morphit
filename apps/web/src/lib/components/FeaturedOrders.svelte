@@ -42,6 +42,11 @@
 	import { formatOrderPriceModel } from '$lib/orders/priceModelDisplay';
 	import type { FeaturedSlot, ProfileResponse } from '@morphit/indexer-client';
 	import OrderCard from '$components/OrderCard.svelte';
+	import {
+		pendingFeatured,
+		mergeablePending,
+		pendingFeaturedKey
+	} from '$stores/pendingFeatured';
 
 	interface Props {
 		variant?: 'grid' | 'stack';
@@ -79,7 +84,20 @@
 	// malformed/absent expires_at as still-live (fail-safe).
 	let nowMs = $state(Date.now());
 	let tickTimer: ReturnType<typeof setInterval> | null = null;
-	const visibleSlots = $derived(slots.filter((s) => isOrderLive(s.order, nowMs)));
+
+	// cp431 — the featured view is the indexer's confirmed slots PLUS any
+	// order the current user just paid to feature (optimistic, display-only).
+	// `confirmedKeys` lets us drop an optimistic entry the instant the indexer
+	// serves the real slot, so there's no flicker or duplicate — the durable
+	// indexer stays the source of truth; the optimistic card just fills the
+	// ~50-90s gap before it confirms (and fades on its own if the bid lost).
+	const confirmedKeys = $derived(new Set(slots.map((s) => pendingFeaturedKey(s.order))));
+	const visibleSlots = $derived([
+		...slots.filter((s) => isOrderLive(s.order, nowMs)),
+		...mergeablePending($pendingFeatured, confirmedKeys, nowMs).filter((s) =>
+			isOrderLive(s.order, nowMs)
+		)
+	]);
 
 	// cp429 — surface the live count to a parent (FeaturedAuctionHistory) so it
 	// can tell "no featured order at all" apart from "a featured order is live
@@ -106,6 +124,15 @@
 		profileMap = next;
 	}
 
+	// cp431 — refresh() only hydrates the indexer's slots; an optimistic
+	// pending order (the user's own, not yet in the indexer) needs its poster
+	// profile fetched too, else the card falls back to a bare @handle. Guarded
+	// by the missing-set + profileCache, so it fires once per new account.
+	$effect(() => {
+		const missing = visibleSlots.filter((s) => !(s.order.account in profileMap));
+		if (missing.length > 0) void hydrateProfiles(missing);
+	});
+
 	async function refresh(): Promise<void> {
 		abortController?.abort();
 		abortController = new AbortController();
@@ -122,11 +149,13 @@
 
 	onMount(() => {
 		void refresh();
-		// 30s — matches the backend cache TTL, so new featured slots appear about
-		// as fast as the shared cache allows. (The bulk of any "why so slow"
-		// delay is the indexer indexing the on-chain bid, which is inherent to
-		// the federated model and can't be shortened client-side.)
-		pollTimer = setInterval(() => void refresh(), 30_000);
+		// 10s — the person who featured sees their order instantly via the
+		// optimistic pending path; this poll (matched to the backend's 10s
+		// cache TTL) is how OTHER users pick up a newly-confirmed featured
+		// slot. The remaining delay for them is the indexer indexing the
+		// on-chain bid (~50-90s, last-irreversible), inherent to the
+		// federated model and not shortenable client-side.
+		pollTimer = setInterval(() => void refresh(), 10_000);
 		tickTimer = setInterval(() => (nowMs = Date.now()), 5_000);
 	});
 
@@ -151,7 +180,7 @@
 {#snippet cards()}
 	<ul
 		class={variant === 'grid'
-			? 'grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5'
+			? 'grid gap-3 sm:grid-cols-2 lg:grid-cols-3'
 			: 'space-y-3'}
 	>
 		{#each visibleSlots as slot (slot.order.account + '/' + slot.order.permlink)}

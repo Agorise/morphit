@@ -154,10 +154,13 @@
 		     paid to promote (up to max_slots, currently 3), each rendered with
 		     the shared OrderCard in its featured frame. Self-hides when empty so
 		     a fresh-install site doesn't show an awkward empty panel. cp169
-		     lazy-loaded — see rationale on the loadFeaturedOrders import. -->
+		     lazy-loaded — see rationale on the loadFeaturedOrders import.
+		     cp431 — `stack` (full-width horizontal cards), identical to the
+		     orderbook's featured list, on desktop AND mobile.  The old `grid`
+		     variant squished a lone order into a fraction-width portrait cell. -->
 		<div class="mt-16">
 			{#await loadFeaturedOrders() then FeaturedOrders}
-				<FeaturedOrders variant="grid" />
+				<FeaturedOrders variant="stack" />
 			{/await}
 		</div>
 

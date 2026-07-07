@@ -208,8 +208,8 @@ export interface CanaryStatus {
 	readonly detail: string;
 }
 
-/** Freshness of the operator warrant-canary (`apps/web/static/
- *  canary.txt`, regenerated weekly by cron).  Parses the
+/** Freshness of the operator warrant-canary served at `/canary.txt`
+ *  (the file in `apps/web/build/`, the nginx web root).  Parses the
  *  `Valid through:` line and compares it to `now`.  PURE given the
  *  path and clock (the only I/O is reading the file). */
 export function checkCanary(filePath: string, now: Date): CanaryStatus {
@@ -218,7 +218,9 @@ export function checkCanary(filePath: string, now: Date): CanaryStatus {
 			state: 'missing',
 			generatedAt: null,
 			validThrough: null,
-			detail: 'not generated yet — run scripts/canary/generate.sh (weekly via cron)'
+			detail:
+				'no served canary — sign it on your operator machine ' +
+				'(scripts/canary/generate.sh) and place it at apps/web/build/canary.txt'
 		};
 	}
 	let txt: string;
@@ -262,9 +264,14 @@ export function checkCanary(filePath: string, now: Date): CanaryStatus {
 	return { state: 'fresh', generatedAt, validThrough, detail: 'current' };
 }
 
-/** Resolve the canary file inside the install tree (best-effort). */
+/** Resolve the canary file inside the install tree.  It reads the
+ *  SERVED copy — nginx's web root is the `build/` dir, so `/canary.txt`
+ *  is served from `apps/web/build/canary.txt`, NOT `static/`.  (cp431:
+ *  was `static/`, which is only the build-time source and is never the
+ *  file the public actually fetches — so health reported "missing" even
+ *  with a live, verified canary at the URL.) */
 export function canaryFilePath(): string {
-	return join(defaultRepoRoot(), 'apps', 'web', 'static', 'canary.txt');
+	return join(defaultRepoRoot(), 'apps', 'web', 'build', 'canary.txt');
 }
 
 /** The fields we read out of a `/v1/health` body.  Only the always-

@@ -70,8 +70,11 @@ const DEFAULT_RELEASE_OUT = join(WEB_ROOT, 'build-manifest.release.json');
 
 /** Mirror of @morphit/release-schema MANIFEST_MAX_SERIALIZED_BYTES.
  *  Kept in sync by build-manifest-release-json-smoke (which also runs
- *  the real validateReleasePayload, so a drift here is caught). */
-const MANIFEST_MAX_SERIALIZED_BYTES = 64 * 1024;
+ *  the real validateReleasePayload, so a drift here is caught).
+ *  cp430: aligned to the indexer's real per-field JSONB cap (4096) —
+ *  the on-chain manifest is a tamper-critical SUBSET (shell + entry +
+ *  service worker); full per-file coverage is the served /verify.json. */
+const MANIFEST_MAX_SERIALIZED_BYTES = 4096;
 
 async function* walk(dir) {
 	for (const entry of await readdir(dir, { withFileTypes: true })) {
@@ -191,20 +194,30 @@ async function main() {
 		if (bytes > MANIFEST_MAX_SERIALIZED_BYTES) {
 			console.error(
 				`build-manifest: release manifest is ${bytes} bytes serialized, over the ` +
-					`${MANIFEST_MAX_SERIALIZED_BYTES}-byte schema cap (${count} entries).\n` +
-					`Scope it to the tamper-critical executable surface with --prefix, e.g.:\n` +
-					`  node scripts/build-manifest.mjs --release-json --prefix _app/ --prefix index.html --prefix service-worker.js\n` +
-					`(see docs/PRE-LAUNCH-CHECKLIST.md \u00A7B).`
+					`${MANIFEST_MAX_SERIALIZED_BYTES}-byte cap (${count} entries) — the indexer's ` +
+					`per-field JSONB limit; anything larger is filed 'hash_manifest_too_large'.\n` +
+					`Scope it to the tamper-critical BOOTSTRAP (shell + entry + service worker):\n` +
+					`  node scripts/build-manifest.mjs --release-json OUT --prefix index.html --prefix service-worker --prefix _app/immutable/entry/\n` +
+					`then drop the redundant .br/.gz duplicates (the browser fetches the plain\n` +
+					`files and decompresses them). Full per-file coverage lives in /verify.json.`
 			);
 			process.exit(1);
 		}
 		const out = outOverride ?? DEFAULT_RELEASE_OUT;
 		await writeFile(out, JSON.stringify(obj, null, 2) + '\n', 'utf8');
+		const hasCompressed = Object.keys(obj).some((k) => k.endsWith('.br') || k.endsWith('.gz'));
 		console.log(
 			`build-manifest: wrote ${count} entries (${bytes} bytes) to ${out}\n` +
 				`  feed it to the release op:\n` +
 				`  MORPHIT_BUILD_HASH_MANIFEST_FILE=${out} \\\n` +
-				`    tsx apps/indexer/scripts/release-build-payload.ts > release.json`
+				`    tsx apps/indexer/scripts/release-build-payload.ts > release.json\n` +
+				`  NOTE: the whole on-chain payload (manifest + endpoints + treasury)\n` +
+				`  must be UNDER 8192 bytes — Blurt's custom_json limit.` +
+				(hasCompressed
+					? `\n  This manifest still lists .br/.gz duplicates; the browser fetches\n` +
+						`  the plain files and decompresses them, so those are redundant — strip\n` +
+						`  them to reclaim ~2/3 of the byte budget if you're near the limit.`
+					: '')
 		);
 		return;
 	}

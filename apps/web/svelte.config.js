@@ -15,6 +15,16 @@ const config = {
 			strict: true
 		}),
 
+		// Every Morphit instance is served from its DOMAIN ROOT (nginx web
+		// root = the build dir), never a sub-path.  SvelteKit's default
+		// `paths.relative: true` rewrites root-absolute links (e.g. the
+		// footer's `/canary.txt` / `/pgp_keys.asc`) into paths relative to
+		// the current prerendered page — so from `/en/` they resolved to
+		// `/en/canary.txt` and 404'd.  `relative: false` keeps them absolute
+		// (`/canary.txt`) on every locale page, which is what a root-hosted
+		// static site wants.  (cp431 — footer canary link 404.)
+		paths: { relative: false },
+
 		// Content Security Policy is NOT emitted here.
 		//
 		// This is a fully static (adapter-static) build served by nginx, so

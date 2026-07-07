@@ -14,7 +14,8 @@ import {
 	buildReleaseCustomJsonOp,
 	assertNoSecretHex,
 	RELEASE_OP_ID,
-	RELEASE_SIGNER_DEFAULT
+	RELEASE_SIGNER_DEFAULT,
+	BLURT_CUSTOM_JSON_MAX_BYTES
 } from '../src/blurt/releaseBroadcastOp.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -84,6 +85,29 @@ throws(
 	() => assertNoSecretHex('prefix ' + 'a'.repeat(64) + ' suffix'),
 	'secret key'
 );
+
+// ── 5b. cp430 — a hash_manifest over the indexer's 4096-byte per-field
+//        JSONB cap is now rejected up front by validateReleasePayload
+//        (schema cap lowered from 64 KB to match the handler). This is
+//        the EXACT failure that reached the chain on 1.0.0 and got
+//        filed valid=false → /v1/release not_found. ──
+const bigManifest: Record<string, string> = {};
+for (let i = 0; i < 120; i++) {
+	bigManifest[`/_app/immutable/nodes/${i}.CFakeHash00000${i}.js`] = 'sha256-' + 'A'.repeat(43) + '=';
+}
+const manifestBytes = new TextEncoder().encode(JSON.stringify(bigManifest)).length;
+if (manifestBytes > 4096) ok(`oversized manifest fixture is ${manifestBytes} bytes — over the 4096 per-field cap`);
+else bad('oversized manifest fixture is not over 4096', String(manifestBytes));
+throws(
+	'manifest over the 4096 per-field cap → rejected before broadcast',
+	() => buildReleaseCustomJsonOp(JSON.stringify({ ...JSON.parse(VALID), hash_manifest: bigManifest })),
+	'hash_manifest_too_large'
+);
+// a normal (small) payload stays under the whole-op chain limit and builds
+const okSized = buildReleaseCustomJsonOp(VALID);
+if (new TextEncoder().encode(okSized.json).length < BLURT_CUSTOM_JSON_MAX_BYTES)
+	ok('a normal (small) payload stays under the 8192-byte chain limit and builds');
+else bad('normal payload unexpectedly over the limit', '');
 
 // ── 6. real payload (SRI base64) passes the hex guard ─────────────
 try {

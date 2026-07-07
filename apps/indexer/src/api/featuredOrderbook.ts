@@ -32,7 +32,7 @@
  * so cursor pagination would be theater. Clients that want a
  * bidder's full history hit the per-account endpoint instead.
  *
- * Cache-Control: max-age=30 because expires_at moves through time
+ * Cache-Control: max-age=10 (cp431) because expires_at moves through time
  * but the winning set is stable for tens of seconds in practice.
  */
 
@@ -163,7 +163,7 @@ export function featuredRoute(db: Database, operatorAccount: string): Hono {
 		// to the homepage, short enough that a new winning bid
 		// surfaces quickly. Aggressive caches (5m+) would let an
 		// expired slot linger visibly past its deadline.
-		c.header('cache-control', 'max-age=30, public');
+		c.header('cache-control', 'max-age=10, public');
 		return c.json({ featured, max_slots: MAX_SLOTS });
 	});
 
