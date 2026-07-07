@@ -51,6 +51,9 @@
 	import { getInstanceSnapshot } from '$stores/instance';
 	import { fetchListingFee } from '$lib/orders/listingFee';
 	import { formatFiat } from '$i18n/formatters';
+	import { fetchFxRates, fiatToUsd, usdToFiat } from '$lib/orders/fx';
+	import type { FxResponse } from '@morphit/indexer-client';
+	import { userPreferences } from '$stores/userPreferences';
 	import { safeSession } from '$lib/utils/safeStorage';
 	import { subscribeBalanceRefresh, triggerBalanceRefresh } from '$lib/balance/bus';
 	import { broadcastClaimReward } from '$blurt/sign';
@@ -115,15 +118,37 @@
 	 *  in which case the USD-equivalent line is simply omitted. */
 	let blurtPriceFiat = $state<number | null>(null);
 	let denomFiat = $state('USD');
-	/** "~$10.00 usd"-style approximate fiat value of the liquid BLURT
-	 *  balance. The denomination word is appended deliberately: in many
-	 *  locales (e.g. MXN) "$" alone is ambiguous, so spelling out the
-	 *  fiat code disambiguates. null → render nothing. */
-	const usdLabel = $derived(
-		blurtPriceFiat !== null && Number.isFinite(blurtBalance)
-			? `~${formatFiat(blurtBalance * blurtPriceFiat, denomFiat)} ${denomFiat.toLowerCase()}`
-			: null
-	);
+	/** cp429 — FX table (USD-anchored) so the balance's fiat value can be
+	 *  shown in the USER's saved preferred fiat, not the operator's
+	 *  denomination. Best-effort: null → we fall back to denomFiat. */
+	let fxTable = $state<FxResponse | null>(null);
+	/** "~5,67 € eur"-style approximate fiat value of the liquid BLURT balance.
+	 *  Shown in the user's saved preferred fiat when set (and convertible),
+	 *  otherwise the operator's denomination. The number + symbol are
+	 *  locale-formatted by formatFiat (activeLocale()); the lowercase code is
+	 *  appended deliberately because in many locales "$"/"€" alone is
+	 *  ambiguous. null → render nothing. */
+	const usdLabel = $derived.by(() => {
+		if (blurtPriceFiat === null || !Number.isFinite(blurtBalance)) return null;
+		// Value in the operator's fiat (what blurtPriceFiat is denominated in).
+		const valueInDenom = blurtBalance * blurtPriceFiat;
+		let value = valueInDenom;
+		let fiat = denomFiat;
+		// The user's saved preferred fiat wins — but only when it differs from
+		// the operator's denomination AND we can actually convert to it (via
+		// the USD-anchored FX table). Any missing piece falls back to denomFiat
+		// so the line stays correct rather than lying with an unconverted number.
+		const wantFiat = $userPreferences.fiat;
+		if (wantFiat && wantFiat !== denomFiat && fxTable !== null) {
+			const usd = fiatToUsd(fxTable, valueInDenom, denomFiat);
+			const converted = usd !== null ? usdToFiat(fxTable, usd, wantFiat) : null;
+			if (converted !== null) {
+				value = converted;
+				fiat = wantFiat;
+			}
+		}
+		return `~${formatFiat(value, fiat)} ${fiat.toLowerCase()}`;
+	});
 
 	/** Refresh interval.  Aggressive at 5 seconds: Blurt blocks
 	 *  every ~3 seconds, so a 5s poll gives near-real-time updates
@@ -264,6 +289,15 @@
 			}
 		} catch {
 			// Price feed unavailable → USD-equivalent simply not shown.
+		}
+		// cp429 — fetch the USD-anchored FX table so the value can be shown in
+		// the user's preferred fiat. Separate best-effort call: if it fails the
+		// balance still shows the operator's-denomination value.
+		try {
+			const fx = await fetchFxRates(resolveOrigin(MORPHIT_INDEXER_ORIGIN));
+			if (fx.kind === 'ok') fxTable = fx.table;
+		} catch {
+			// FX feed unavailable → fall back to the operator's denomination.
 		}
 	}
 

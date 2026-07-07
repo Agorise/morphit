@@ -61,6 +61,7 @@
 	import { displayNamesForMethods } from '$lib/payments/display';
 	import OrderCard from '$lib/components/OrderCard.svelte';
 	import { formatOrderPriceModel } from '$lib/orders/priceModelDisplay';
+	import { isOrderLive } from '$lib/orders/orderExpiry';
 	import { isUsdtNetwork, isUsdcNetwork, isDaiNetwork } from '$lib/assets/networks';
 	import { recordOrderView } from '$lib/orders/views';
 	import { orderTitleParts } from '$lib/utils/orderTitle';
@@ -365,7 +366,14 @@
 	/** Live orders sorted with the soonest-to-expire first.
 	 *
 	 *  Sort rules:
-	 *    - status !== 'live' is excluded
+	 *    - not-live orders are excluded — this uses isOrderLive() (status
+	 *      'live' AND expires_at in the future), NOT a bare status === 'live'
+	 *      check. The indexer keeps a stored status of 'live' until a cancel
+	 *      op or a periodic sweep and enforces expiry at QUERY TIME, so an
+	 *      order whose expires_at has passed still reads status 'live'. Using
+	 *      the shared expiry helper (same as the orderbook, /my/orders, and
+	 *      the order-detail page) keeps an EXPIRED order out of "Active
+	 *      orders" instead of showing it with an "Expired" badge (cp429).
 	 *    - expires_at ASC (earliest first)
 	 *    - expires_at === null ranks after all dated expiries
 	 *      (a non-expiring order is less time-pressured than
@@ -377,7 +385,8 @@
 	 *  she most needs help moving first.
 	 */
 	const liveOrders = $derived.by(() => {
-		const live = allOrders.filter((o) => o.status === 'live');
+		const nowMs = Date.now();
+		const live = allOrders.filter((o) => isOrderLive(o, nowMs));
 		return [...live].sort((a, b) => {
 			const aExp = a.expires_at;
 			const bExp = b.expires_at;

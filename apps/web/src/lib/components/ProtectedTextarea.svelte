@@ -85,7 +85,7 @@
 		 *  larger UTF-16 defense ceiling. */
 		counterLimit?: number;
 		/** cp384 (#4): when this number CHANGES (the parent increments it),
-		 *  the textarea border flashes bright yellow 5× over ~5s — used to draw
+		 *  the textarea border flashes bright yellow 8× over ~8s — used to draw
 		 *  eye to a field that just became required (barter → Terms). */
 		flashToken?: number;
 	}
@@ -110,7 +110,7 @@
 
 	let textareaEl: HTMLTextAreaElement;
 
-	// cp384 (#4) / cp425: flash the border yellow 5× over ~5s whenever flashToken
+	// cp384 (#4) / cp425: flash the border yellow 8× over ~8s whenever flashToken
 	// changes. Toggling the class off → on (next frame) restarts the CSS
 	// animation, so repeated triggers (remove + re-add barter) re-flash each
 	// time. Plain `lastFlashToken` (non-reactive) avoids an extra effect run.
@@ -127,7 +127,7 @@
 		});
 		const id = setTimeout(() => {
 			flashOn = false;
-		}, 5000);
+		}, 8000);
 		return () => clearTimeout(id);
 	});
 	let overlayEl: HTMLDivElement;

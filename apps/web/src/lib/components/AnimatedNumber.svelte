@@ -140,13 +140,12 @@
 	function startFlash(direction: 'gain' | 'loss'): void {
 		flash = direction;
 		if (flashTimer !== null) clearTimeout(flashTimer);
-		// Flash duration matches tween duration + a little tail so
-		// the color outlasts the count by ~400ms.  Total visible
-		// "something changed" cue: ~1.5s.
+		// cp429 — the color lasts EXACTLY as long as the odometer tween, no
+		// longer (was durationMs + 400, a tail that outlived the count).
 		flashTimer = setTimeout(() => {
 			flash = null;
 			flashTimer = null;
-		}, durationMs + 400);
+		}, durationMs);
 	}
 
 	// React to value changes after first mount.
@@ -175,6 +174,18 @@
 		const diff = Math.abs(next - lastSettled);
 		if (diff < epsilon) {
 			// RPC float jitter or an unchanged value — no animation.
+			lastSettled = next;
+			displayed = next;
+			return;
+		}
+		// cp429 — suppress the flash/tween when the change is imperceptible at
+		// the DISPLAYED precision. BP is derived from VESTS via the global
+		// vesting ratio, which drifts by sub-milli-BP every block, so each
+		// wallet poll recomputed a bpBalance that differed BELOW the 3rd
+		// decimal — above `epsilon` but invisible on screen. That re-flashed
+		// the number green every few seconds, forever, even after a refresh.
+		// If the digits the user actually SEES don't change, update silently.
+		if (next.toFixed(decimals) === lastSettled.toFixed(decimals)) {
 			lastSettled = next;
 			displayed = next;
 			return;

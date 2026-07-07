@@ -482,7 +482,7 @@ button:has(.nav-arrow):focus-visible,
 	}
 }
 .pk-flash-yellow {
-	animation: pk-flash-yellow 1s ease-in-out 5;
+	animation: pk-flash-yellow 1s ease-in-out 8;
 }
 
 @media (prefers-reduced-motion: reduce) {

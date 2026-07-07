@@ -805,7 +805,8 @@
     "summary_partial": "{slots} of {max} slots filled today — any bid wins a visible slot right now.",
     "chart_aria": "Daily clearing-price chart over the last {days} days",
     "legend": "Bar height = clearing price (BLURT/hour). Solid green = all slots filled (auction was competitive). Faded green = some slots filled. Grey = no bids that day.",
-    "no_history_yet": "No featured-slot bids in the last {days} days yet. Be the first."
+    "no_history_yet": "No featured-slot bids in the last {days} days yet. Be the first.",
+    "no_history_yet_active": "No featured-slot price history for the last {days} days yet."
   },
   "common": {
     "back": "Back",
@@ -1541,11 +1542,11 @@
       },
       "what_is_featured_slot": {
         "q": "What is the featured slot and how does the auction work?",
-        "a": "Featured slots are the top **5 highest-paying** orders that appear at the top of the orderbook page in a special highlighted section. They get more visibility than the regular orderbook list — useful when you want a fast trade and are willing to pay a small fee to be seen first.\n\n**How bidding works.** You bid by paying Blurt into the Morphit fee account along with a `morphit_feature_bid_v1` op naming your order and the number of hours you want featured time. The rate you pay (Blurt per hour) determines your rank: the 5 highest-rate active bids are visible at any moment.\n\n**Bid rules:**\n• **Minimum bid duration:** 6 hours. Prevents one-hour cheap-shots from displacing serious multi-day bidders.\n• **Maximum bid duration:** 1 week (168 hours) per bid.\n• **Min-bid increment:** if your bid would displace someone currently visible, you must beat them by at least `max(1 Blurt/hour, 5%)`. Prevents penny-war bidding spam.\n\n**What you pay:** rate × hours, in Blurt, transferred to the Morphit fee account when you submit the bid. The fee is non-refundable — see the **What happens if I get outbid?** entry for what \"non-refundable\" means in practice.\n\n**Who sees featured slots:** every visitor to the orderbook page on every Morphit instance. Featured-slot rendering is part of the standard orderbook view, not opt-in."
+        "a": "Featured slots are the top **3 highest-paying** orders that appear at the top of the orderbook page in a special highlighted section. They get more visibility than the regular orderbook list — useful when you want a fast trade and are willing to pay a small fee to be seen first.\n\n**How bidding works.** You bid by paying Blurt into the Morphit fee account along with a `morphit_feature_bid_v1` op naming your order and the number of hours you want featured time. The rate you pay (Blurt per hour) determines your rank: the 3 highest-rate active bids are visible at any moment.\n\n**Bid rules:**\n• **Minimum bid duration:** 6 hours. Prevents one-hour cheap-shots from displacing serious multi-day bidders.\n• **Maximum bid duration:** 1 week (168 hours) per bid.\n• **Min-bid increment:** if your bid would displace someone currently visible, you must beat them by at least `max(1 Blurt/hour, 5%)`. Prevents penny-war bidding spam.\n\n**What you pay:** rate × hours, in Blurt, transferred to the Morphit fee account when you submit the bid. The fee is non-refundable — see the **What happens if I get outbid?** entry for what \"non-refundable\" means in practice.\n\n**Who sees featured slots:** every visitor to the orderbook page on every Morphit instance. Featured-slot rendering is part of the standard orderbook view, not opt-in."
       },
       "featured_slot_displaced": {
         "q": "What happens to my featured slot if someone outbids me?",
-        "a": "Your bid stays alive — you don't lose your money — but you lose visibility until the higher bidder's slot ends or you're un-displaced.\n\n**Concretely:** Morphit shows the top 5 highest-paying active bids. If a 6th bidder posts a meaningfully higher rate (max of 1 Blurt/hour or 5% above the current 5th-place bid — small increments are rejected to prevent grief-displacement), you drop to position 6 and become invisible in the featured section. Your bid record stays in the indexer. When any of the bids above you expires (their hours run out), you bubble up. If you eventually rise back into the top 5 before your own hours expire, you become visible again.\n\n**No refund for displaced minutes.** This is deliberate. Refunds would require re-broadcasting transfer ops on every displacement — operationally messy and would create a perverse incentive (bid high, get displaced, get refunded, repeat). The simple rule is: you paid for N hours of *eligibility for the featured slot*, not N hours of *guaranteed visibility*.\n\n**How to avoid being displaced:**\n• Watch the current top-5 rates before bidding. If the lowest visible rate is 10 Blurt/hour, bidding 8 Blurt/hour means you're queued, not visible.\n• Bid for shorter durations. 6 hours of guaranteed-visible time is often more useful than 24 hours of \"might get displaced midway.\"\n• Bid during low-traffic times. Featured-slot competition is higher when more traders are posting.\n\n**Two protections built into the platform:**\n\n• **Outbid push notifications.** If you've subscribed to Web Push (Settings → Notifications), Morphit sends a notification the moment you drop out of the top 5, with a deep-link to the affected order in `/my/orders`. You'll know within seconds — you don't have to refresh the orderbook manually.\n\n• **Anti-snipe soft-close.** A late bidder can't insta-displace you at T-2 seconds: when a new bid arrives within 5 minutes of an expiring top-5 bid's deadline, that deadline auto-extends by 5 minutes. The extension can fire up to 6 times per bid (30 minutes total drag), giving you real time to counter. Your bid history shows an \"Extended ×N\" chip when anti-snipe has fired on one of your bids.\n\n**Recap:** outbid = you stay queued, no refund, you get a push notification if subscribed, anti-snipe gives you time to counter, and you reappear when slots above you expire."
+        "a": "Your bid stays alive — you don't lose your money — but you lose visibility until the higher bidder's slot ends or you're un-displaced.\n\n**Concretely:** Morphit shows the top 3 highest-paying active bids. If a 4th bidder posts a meaningfully higher rate (max of 1 Blurt/hour or 5% above the current 3rd-place bid — small increments are rejected to prevent grief-displacement), you drop to position 4 and become invisible in the featured section. Your bid record stays in the indexer. When any of the bids above you expires (their hours run out), you bubble up. If you eventually rise back into the top 3 before your own hours expire, you become visible again.\n\n**No refund for displaced minutes.** This is deliberate. Refunds would require re-broadcasting transfer ops on every displacement — operationally messy and would create a perverse incentive (bid high, get displaced, get refunded, repeat). The simple rule is: you paid for N hours of *eligibility for the featured slot*, not N hours of *guaranteed visibility*.\n\n**How to avoid being displaced:**\n• Watch the current top-3 rates before bidding. If the lowest visible rate is 10 Blurt/hour, bidding 8 Blurt/hour means you're queued, not visible.\n• Bid for shorter durations. 6 hours of guaranteed-visible time is often more useful than 24 hours of \"might get displaced midway.\"\n• Bid during low-traffic times. Featured-slot competition is higher when more traders are posting.\n\n**Two protections built into the platform:**\n\n• **Outbid push notifications.** If you've subscribed to Web Push (Settings → Notifications), Morphit sends a notification the moment you drop out of the top 3, with a deep-link to the affected order in `/my/orders`. You'll know within seconds — you don't have to refresh the orderbook manually.\n\n• **Anti-snipe soft-close.** A late bidder can't insta-displace you at T-2 seconds: when a new bid arrives within 5 minutes of an expiring top-3 bid's deadline, that deadline auto-extends by 5 minutes. The extension can fire up to 6 times per bid (30 minutes total drag), giving you real time to counter. Your bid history shows an \"Extended ×N\" chip when anti-snipe has fired on one of your bids.\n\n**Recap:** outbid = you stay queued, no refund, you get a push notification if subscribed, anti-snipe gives you time to counter, and you reappear when slots above you expire."
       },
       "verify_peer_fingerprint": {
         "q": "How can I be sure no one is reading my chats? (Verify peer fingerprint)",
@@ -2199,12 +2200,13 @@
       "viewed_count": "{count} views",
       "viewed_tooltip": "Approximate count of times this offer has been viewed. Visible only to you.",
       "action_relist": "Re-list this order",
-      "action_relist_hint": "Pre-fills the form with the original terms; you'll pay a fresh listing fee.",
+      "action_relist_hint": "Pre-fills the form for you with the original values and terms.",
       "edit_window_countdown": "Edit window: {remaining}",
       "edit_window_tooltip": "Orders can only be edited within 15 minutes of posting. After that they have to be cancelled and re-posted.",
       "edit_window_aria": "Edit window remaining: {remaining}",
       "feedback_no_counterparty": "No trade partner to review yet",
-      "feedback_pick_prompt": "Who did you trade with?"
+      "feedback_pick_prompt": "Who did you trade with?",
+      "not_visible_orderbook": "Not visible in orderbook"
     },
     "cancel": {
       "confirm_title": "Cancel this order?",
@@ -3503,7 +3505,8 @@
       "days": "{n}d",
       "months": "{n}mo",
       "years": "{n}y",
-      "unknown": "earlier"
+      "unknown": "earlier",
+      "ago": "{t} ago"
     }
   },
   "release": {

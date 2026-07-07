@@ -51,12 +51,19 @@
 		/** Embedded inside the unified "🎉 Featured" card: render only the card
 		 *  list, no heading/section chrome, and nothing at all when empty. */
 		embedded?: boolean;
+		/** cp429 — reports the number of LIVE featured orders whenever it
+		 *  changes. FeaturedAuctionHistory uses it to suppress a misleading
+		 *  "no bids yet — be the first" prompt while a featured order is live
+		 *  (the clearing-price *history* endpoint can be empty even when a
+		 *  current bid exists). */
+		oncount?: (n: number) => void;
 	}
 
 	let {
 		variant = 'grid',
 		showEmptyState = false,
-		embedded = false
+		embedded = false,
+		oncount
 	}: Props = $props();
 
 	let slots = $state<readonly FeaturedSlot[]>([]);
@@ -73,6 +80,13 @@
 	let nowMs = $state(Date.now());
 	let tickTimer: ReturnType<typeof setInterval> | null = null;
 	const visibleSlots = $derived(slots.filter((s) => isOrderLive(s.order, nowMs)));
+
+	// cp429 — surface the live count to a parent (FeaturedAuctionHistory) so it
+	// can tell "no featured order at all" apart from "a featured order is live
+	// but there's no settled clearing-price history yet".
+	$effect(() => {
+		oncount?.(visibleSlots.length);
+	});
 
 	/** Profile data for featured slots' posters. */
 	let profileMap = $state<Record<string, ProfileResponse | null>>({});
