@@ -1,0 +1,296 @@
+═══════════════════════════════════════════════════════════════════
+   Morphit sysadmin handoff — verification checklist
+═══════════════════════════════════════════════════════════════════
+
+This document is for the SYSADMIN who just ran the Ansible playbook
+in `ops/ansible/`.  Ansible reporting "0 failed" means the plays
+ran; it does NOT mean the deployment is secure or that Morphit
+is actually working.  Run the steps below to verify both.
+
+The checklist is in three sections:
+
+  1. Security verifications (host posture per OPERATIONS.md §37)
+  2. Morphit service verifications (relay + indexer working)
+  3. Operator handoff (what the OPERATOR (not the sysadmin) does next)
+
+Each step shows the expected outcome.  If any step fails, see the
+"Troubleshooting" section at the end.
+
+
+═══════════════════════════════════════════════════════════════════
+   SECTION 1 — Security verifications
+═══════════════════════════════════════════════════════════════════
+
+For each:  run on a workstation that is NOT the target host (you
+need an outside-perspective view).
+
+──────────────────────────────────────────────────────────────────
+1.1  SSH root login refused
+
+    ssh root@<host>
+    → expect:  "Permission denied (publickey)."
+
+──────────────────────────────────────────────────────────────────
+1.2  SSH password authentication refused
+
+    ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no \
+        <user>@<host>
+    → expect:  "Permission denied (publickey)."
+
+──────────────────────────────────────────────────────────────────
+1.3  Only 22/80/443 externally reachable (UFW + BunkerWeb)
+
+    nmap -p 1-1024 <host>
+    → expect:  ONLY 22/tcp ssh, 80/tcp http, 443/tcp https
+    →          (5432 postgres MUST NOT be reachable externally)
+
+──────────────────────────────────────────────────────────────────
+1.4  PostgreSQL bound to loopback only
+
+    psql -h <host> -U morphit_indexer -d morphit_indexer
+    → expect:  connection times out or "Connection refused"
+
+──────────────────────────────────────────────────────────────────
+1.5  X-Forwarded-For spoof from untrusted source rejected
+
+    From a host NOT in MORPHIT_RELAY_TRUSTED_PROXY_IPS:
+    curl -H 'X-Forwarded-For: 8.8.8.8' https://<host>/v1/health
+    → expect:  the relay logs the connection's REAL IP, not 8.8.8.8.
+               Verify with `sudo journalctl -u morphit-relay | grep -E
+               '"ip":"[0-9.]+"' | tail -3`.
+
+──────────────────────────────────────────────────────────────────
+1.6  AIDE filesystem integrity baseline initialized
+
+    sudo aide --check
+    → expect:  "All files match AIDE database."  or
+               "Database not found" → run `sudo aideinit` to initialize.
+
+──────────────────────────────────────────────────────────────────
+1.7  auditd active and logging
+
+    sudo systemctl is-active auditd
+    → expect:  active
+    sudo ausearch -k morphit -ts today | head
+    → expect:  records of auditd-watched events
+
+──────────────────────────────────────────────────────────────────
+1.8  fail2ban active
+
+    sudo systemctl is-active fail2ban
+    → expect:  active
+    sudo fail2ban-client status sshd
+    → expect:  status of sshd jail
+
+
+═══════════════════════════════════════════════════════════════════
+   SECTION 2 — Morphit service verifications
+═══════════════════════════════════════════════════════════════════
+
+──────────────────────────────────────────────────────────────────
+2.1  Indexer and relay services up
+
+    sudo systemctl status morphit-indexer morphit-relay
+    → expect:  both "active (running)" with recent start time
+
+──────────────────────────────────────────────────────────────────
+2.2  Public instance endpoint returns JSON
+
+    curl -fsSL https://<host>/v1/instance | jq .operator_account
+    → expect:  the operator account name configured in
+               group_vars/all.yml under morphit_operator_account
+
+──────────────────────────────────────────────────────────────────
+2.3  Diamond-hardened squatter defense preset applied
+
+    sudo grep -E '^MORPHIT_RELAY_(SIGNUP_DAILY_CEILING|HIGHVALUE_NAME_POLICY|SEQUENTIAL_DETECTOR_ENABLED|ALTCHA_TRIGGER_COUNT)=' /etc/morphit/relay.env
+    → expect:  all four set per §38.7 (look up canonical values in
+               docs/OPERATIONS.md §38.7 — the diamond preset)
+
+──────────────────────────────────────────────────────────────────
+2.4  Daily backup timer scheduled
+
+    sudo systemctl list-timers | grep morphit-backup
+    → expect:  morphit-backup.timer fires daily at the configured time
+
+──────────────────────────────────────────────────────────────────
+2.5  BunkerWeb container running (if enable_bunkerweb)
+
+    sudo docker compose -f /opt/bunkerweb/docker-compose.yml ps
+    → expect:  bunkerweb container "Up" and healthy
+
+──────────────────────────────────────────────────────────────────
+2.7  TLS cert valid + auto-renewal scheduled
+
+    sudo certbot certificates
+    → expect:  one certificate for <morphit_domain>; expiry > 30 days
+    sudo systemctl list-timers | grep certbot
+    → expect:  certbot.timer fires twice daily (random-delay)
+
+──────────────────────────────────────────────────────────────────
+2.8  Backup actually produces an encrypted artifact
+
+    sudo systemctl start morphit-backup.service
+    sudo systemctl status morphit-backup.service
+    → expect:  exit code 0; backup file written to configured destination
+
+──────────────────────────────────────────────────────────────────
+2.9  Optional monitor sidecars (if any enable_* in group_vars)
+
+    For each sidecar enabled, verify:
+    - sudo systemctl status morphit-<sidecar>.service (or .timer)
+    - sudo journalctl -t morphit-<sidecar> --since '10 minutes ago'
+      should show structured JSON events
+    - If matrix_bot is enabled:
+      sudo journalctl -u morphit-matrix-bot | grep -E 'ready|started'
+
+
+═══════════════════════════════════════════════════════════════════
+   SECTION 3 — Operator handoff
+═══════════════════════════════════════════════════════════════════
+
+The sysadmin's work is done after Section 2 passes.  Hand the
+host off to the OPERATOR (the person whose BLURT account is the
+relay's identity).  The operator's day-1 tasks are NOT scripted
+by this playbook:
+
+  - Run §0 of OPERATIONS.md to perform the on-chain
+    operator-registration op (morphit_operator_v1).
+  - Verify the indexer is observing the chain and ingesting
+    operator-registration events (it should self-attest).
+  - Test a real signup flow end-to-end on the public site.
+  - Run §8 of OPERATIONS.md to configure the operator's BLURT
+    posting key for release ops.
+  - Establish on-host backup egress destination (the playbook
+    creates the timer, but the operator owns the offsite path).
+  - Configure operator-alert email/Matrix endpoint and verify
+    test alerts arrive.
+
+
+═══════════════════════════════════════════════════════════════════
+   Troubleshooting
+═══════════════════════════════════════════════════════════════════
+
+──────────────────────────────────────────────────────────────────
+"npx morphit-ops <cmd> returns command not found"
+
+    Worked once, then stopped after a `git pull` — or never worked
+    on a fresh clone / manual checkout on the host.
+
+    CAUSE:  morphit-ops is a workspace-local tool (it lives in the
+    repo under apps/ops-cli/, NOT published to the npm registry).
+    `npx morphit-ops` resolves it ONLY when run from inside the
+    repo, after `npm install` has populated node_modules.  Run it
+    from the wrong directory, or before install, and npx falls
+    through to the public registry and returns:
+
+        npm error 404 Not Found - GET .../morphit-ops - Not found
+
+    which surfaces as "command not found".  (A `git pull` that
+    changed the dependency files can also stale the
+    node_modules/.bin/morphit-ops symlink until `npm install` is
+    re-run — same fix.)
+
+    THE RIGHT FIX FOR ANSIBLE DEPLOYMENTS:  do NOT `git pull` on the
+    target host by hand.  Re-run the playbook instead — it runs
+    `npm install` and (since cp161) verifies the morphit-ops bin is
+    runnable as a post-install step, so a broken install fails the
+    play with a clear error rather than surfacing here.
+
+    IF YOU MUST FIX IN PLACE (host already diverged from a manual
+    pull):  run as the morphit service user, from the repo root:
+
+        sudo -u <morphit_service_user> bash -lc \
+          'cd <morphit_repo_path> && npm install && \
+           npm exec --offline --workspace apps/ops-cli morphit-ops -- --help'
+
+    The `npm exec --offline --workspace` form resolves the tool
+    purely from the LOCAL workspace and forbids any registry
+    access — if it prints the help text, the operator's
+    `morphit-ops init` / `register` will work.  (Do NOT rely on
+    `npx --no-install` for this check: it still performs a
+    registry lookup before erroring, so it is not a reliable
+    offline guarantee on a hardened or air-gapped host.)
+
+    NOTE: the CLI runs from TypeScript source via tsx, which is a
+    PRODUCTION dependency of apps/ops-cli (since cp161).  Installing
+    with --omit=dev or NODE_ENV=production no longer breaks it.
+
+    Full explanation: OPERATIONS.md §33 "Troubleshooting:
+    morphit-ops says command not found".
+
+──────────────────────────────────────────────────────────────────
+"morphit-indexer service fails to start with Zod validation error"
+
+    sudo journalctl -u morphit-indexer --since '5 minutes ago'
+
+    Common causes:
+    - DATABASE_URL still contains a CHANGE-ME placeholder password
+    - PUBLIC_ORIGIN not set (template now includes it, but if the
+      operator overrode group_vars/all.yml without re-running the
+      playbook, the on-disk env file may be stale)
+    - OFFICIAL_POSTING_PUBKEY mismatched between indexer and frontend
+
+    Fix:  edit /etc/morphit/indexer.env, restart:
+    sudo systemctl restart morphit-indexer
+
+──────────────────────────────────────────────────────────────────
+"morphit-relay service fails to start with 'keystore not found'"
+
+    The relay's keystore must be at the path set in
+    MORPHIT_RELAY_ACTIVE_KEY_FILE.  Default path:
+    /etc/morphit/relay.keystore — see RUN-A-MORPHIT-NODE.md
+    for the keystore-generation procedure.
+
+    First-boot behavior:  the relay prompts on TTY for the
+    keystore passphrase.  If running under systemd-managed boot
+    without a TTY, run `sudo systemctl start morphit-relay`
+    interactively from a console session (NOT ssh-with-no-TTY).
+
+──────────────────────────────────────────────────────────────────
+"BunkerWeb returns 502 Bad Gateway for /v1/* endpoints"
+
+    Check that the indexer and relay are bound to the IPs
+    BunkerWeb expects.  Default config: BunkerWeb container talks
+    to the host indexer at the Docker bridge gateway address
+    (typically 172.17.0.1:8081).
+
+    Verify:
+    sudo netstat -lntp | grep -E '8080|8081'
+    →  morphit-indexer should be listening on 127.0.0.1:8081
+    →  morphit-relay should be listening on 127.0.0.1:8080
+    →  BunkerWeb uses MORPHIT_BUNKERWEB_UPSTREAM_INDEXER etc. to
+       reach them across the bridge.
+
+──────────────────────────────────────────────────────────────────
+"X-Forwarded-For shows BunkerWeb's IP, not the real client IP"
+
+    The relay's trusted-proxy IPs setting needs BunkerWeb's
+    Docker bridge IP added.  See group_vars/all.yml for
+    `morphit_relay_trusted_proxy_ips` and verify it includes
+    the Docker bridge subnet (e.g. "172.16.0.0/12").
+
+──────────────────────────────────────────────────────────────────
+"Daily AIDE check emails are not arriving"
+
+    The aide-check cron script in /etc/cron.daily/aide-check uses
+    `mail` to send to the alert email.  Verify:
+    - postfix or another MTA is installed and configured
+    - DNS for the alert recipient domain is reachable
+    - test-send:  echo test | mail -s test <alert_recipient>
+
+
+═══════════════════════════════════════════════════════════════════
+   Final word
+═══════════════════════════════════════════════════════════════════
+
+The playbook has NOT been tested end-to-end on a fresh Ubuntu
+24.04 VM by the maintainer (see README.md "Honesty caveats from
+the author").  Expect to debug rather than copy-paste.  Specific
+places already known to need debugging are listed in the README.
+
+If you find a defect, file an issue at git.agorise.net/agorise/morphit
+with the playbook tag and the exact ansible-playbook command +
+output that demonstrates the issue.
+
+═══════════════════════════════════════════════════════════════════

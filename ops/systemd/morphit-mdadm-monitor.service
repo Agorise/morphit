@@ -1,0 +1,38 @@
+[Unit]
+Description=Morphit mdadm monitor — Linux software RAID array health
+Documentation=https://git.agorise.net/agorise/morphit
+After=network-online.target
+
+[Service]
+Type=oneshot
+# /proc/mdstat is world-readable; no privileged access needed.
+DynamicUser=true
+
+ExecStart=/opt/morphit/ops/scripts/morphit-mdadm-monitor.sh
+
+# ─── Hardening ─────────────────────────────────────────────────
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+LimitCORE=0
+PrivateNetwork=true
+RestrictAddressFamilies=AF_UNIX
+
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+
+[Install]
+WantedBy=multi-user.target

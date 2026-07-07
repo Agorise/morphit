@@ -1,0 +1,28 @@
+# §37.13 — Outbound network policy.
+#
+# UFW outbound default allow is the standard, but for max hardening
+# we set default deny and explicitly allow the destinations Morphit
+# needs.  See group_vars/all.yml > outbound_allowed_destinations.
+#
+# NOTE: federation probes target arbitrary peer instances, so
+# completely sealing outbound is incompatible with operating a
+# federated relay.  The probe-layer SSRF defenses
+# (federationProbe.ts) handle the risk via HTTPS-only + private-
+# network deny list + 256KB cap + manual-redirect.
+---
+- name: Show outbound policy guidance
+  ansible.builtin.debug:
+    msg: |
+      §37.13 outbound network policy: kept permissive by default
+      because federation probes need to reach arbitrary peer
+      instances on tcp/443.  The probe-layer SSRF defenses
+      handle the risk.
+
+      If you want stricter outbound (and you accept that this
+      breaks federation discovery for any newly-registered
+      peer outside your allowlist), set default-deny in UFW
+      and explicitly allow the {{ outbound_allowed_destinations | length }}
+      destinations in outbound_allowed_destinations.
+
+      This playbook does NOT auto-apply default-deny outbound
+      because it's destructive to federation.

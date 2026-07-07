@@ -1,0 +1,70 @@
+---
+- name: Install Tor
+  ansible.builtin.apt:
+    name: tor
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  notify: Restart tor
+
+- name: Ensure the hidden-service directory exists (Tor-owned, 0700)
+  ansible.builtin.file:
+    path: "{{ morphit_tor_hs_dir }}"
+    state: directory
+    owner: "{{ morphit_tor_user }}"
+    group: "{{ morphit_tor_user }}"
+    mode: "0700"
+
+- name: Check for wizard-generated onion keys on the control node
+  ansible.builtin.stat:
+    path: "{{ morphit_tor_key_src }}/hs_ed25519_secret_key"
+  delegate_to: localhost
+  become: false
+  register: morphit_tor_key_stat
+  when: morphit_tor_key_src | length > 0
+
+- name: Install the wizard-generated onion keys (serve the advertised address)
+  ansible.builtin.copy:
+    src: "{{ morphit_tor_key_src }}/{{ item.name }}"
+    dest: "{{ morphit_tor_hs_dir }}/{{ item.name }}"
+    owner: "{{ morphit_tor_user }}"
+    group: "{{ morphit_tor_user }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - { name: hs_ed25519_secret_key, mode: "0600" }
+    - { name: hs_ed25519_public_key, mode: "0600" }
+    - { name: hostname, mode: "0644" }
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - morphit_tor_key_src | length > 0
+    - morphit_tor_key_stat.stat.exists | default(false)
+  notify: Restart tor
+
+- name: Warn when no wizard keys were provided
+  ansible.builtin.debug:
+    msg: >-
+      morphit_tor_key_src is unset or its key files are missing, so Tor will
+      generate its OWN onion address on first start.  That address will NOT
+      match MORPHIT_INSTANCE_TOR_ADDRESS unless you update it.  Place the
+      wizard's tor-hidden-service/ directory and set morphit_tor_key_src to
+      serve the address the site advertises.
+  when: >-
+    morphit_tor_key_src | length == 0
+    or not (morphit_tor_key_stat.stat.exists | default(false))
+
+- name: Configure the hidden service in torrc
+  ansible.builtin.blockinfile:
+    path: /etc/tor/torrc
+    marker: "# {mark} MORPHIT HIDDEN SERVICE (managed by Ansible)"
+    block: |
+      HiddenServiceDir {{ morphit_tor_hs_dir }}
+      HiddenServicePort 80 {{ morphit_tor_local_host }}:{{ morphit_tor_local_port }}
+    create: false
+  notify: Restart tor
+
+- name: Ensure Tor is enabled and running
+  ansible.builtin.systemd:
+    name: tor
+    state: started
+    enabled: true

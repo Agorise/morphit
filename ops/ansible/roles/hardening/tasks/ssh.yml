@@ -1,0 +1,31 @@
+# §37.1 — SSH hardening.
+#
+# WARNING: before this role's handler restarts sshd, ensure your
+# SSH key-based login works in a separate, currently-open session.
+# Reload-on-handler can lock you out if anything goes wrong.
+
+---
+- name: Deploy hardened sshd_config drop-in
+  ansible.builtin.template:
+    src: 99-morphit-hardening.conf.j2
+    dest: /etc/ssh/sshd_config.d/99-morphit-hardening.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart sshd
+
+- name: Ensure root login is disabled in main sshd_config
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?PermitRootLogin'
+    line: 'PermitRootLogin no'
+    validate: '/usr/sbin/sshd -t -f %s'
+  notify: Restart sshd
+
+- name: Ensure password auth is disabled in main sshd_config
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?PasswordAuthentication'
+    line: 'PasswordAuthentication no'
+    validate: '/usr/sbin/sshd -t -f %s'
+  notify: Restart sshd
