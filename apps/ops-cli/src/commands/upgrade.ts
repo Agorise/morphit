@@ -1384,6 +1384,23 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		info('  a reset, and OPERATIONS.md §46 has the reset + re-sync steps.');
 	}
 
+	// cp431 — a warrant canary lives in the served build/ dir (operators sign
+	// it OFF-server and upload it). build/ is rebuilt on every upgrade, so the
+	// canary is now gone. If the previous install had one, remind the operator
+	// to re-upload it — otherwise it silently goes stale and users get a FALSE
+	// tamper warning after 14 days, through no fault of the operator.
+	try {
+		if (existsSync(join(backupDir, 'apps', 'web', 'build', 'canary.txt'))) {
+			info('');
+			info('⚠ Your warrant canary was in the rebuilt build/ dir and is now gone.');
+			info('  Re-upload your freshly-signed canary.txt (+ pgp_keys.asc) into');
+			info('  apps/web/build/, or it goes stale and users see a false tamper');
+			info('  warning after 14 days — see OPERATIONS.md (warrant canary).');
+		}
+	} catch {
+		/* best-effort reminder; never fail an upgrade over a missing dir */
+	}
+
 	return 0;
 }
 

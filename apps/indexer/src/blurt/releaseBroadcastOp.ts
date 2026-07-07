@@ -6,7 +6,7 @@
  * produced by `release-build-payload.ts`, this validates it (the
  * SAME rules the indexer enforces), re-checks that it carries no
  * secret key material, and shapes it into the exact `custom_json`
- * operation params that get signed with the @morphit posting key
+ * operation params that get signed with the @morphit private posting key (WIF)
  * and broadcast to the Blurt chain.
  *
  * Keeping this separate from the CLI means the validation + op
@@ -20,6 +20,16 @@ import { validateReleasePayload } from '@morphit/release-schema';
 /** custom_json op id the indexer's release handler + frontend
  *  release store both key on.  Frozen. */
 export const RELEASE_OP_ID = 'morphit_release_v1';
+
+/** Hard Blurt chain limit: a `custom_json` operation's `json` field
+ *  must be UNDER this many bytes or every node rejects the broadcast
+ *  with `o.json.length() <= BLURT_CUSTOM_OP_DATA_MAX_LENGTH`.  The
+ *  whole release payload (version + hash_manifest + endpoints +
+ *  treasury) is that `json` field, so it — not just the manifest —
+ *  must fit here.  (cp430: a 16 KB manifest sailed past the 64 KB
+ *  schema cap and only failed at broadcast, AFTER the operator had
+ *  already pasted their key.  This guard now catches it up front.) */
+export const BLURT_CUSTOM_JSON_MAX_BYTES = 8192;
 
 /** Default signer — the canonical @morphit account whose posting
  *  pubkey is pinned on the frontend build.  Overridable for tests
@@ -88,6 +98,21 @@ export function buildReleaseCustomJsonOp(
 	assertNoSecretHex(trimmed);
 	if (!ACCOUNT_RE.test(signer)) {
 		throw new Error(`invalid signer account name: "${signer}"`);
+	}
+	// The on-chain `json` is this trimmed string (see docblock). Blurt
+	// rejects any custom_json whose json field is >= 8192 bytes, so check
+	// the WHOLE payload here — fail loudly + locally with guidance rather
+	// than after the operator has entered their posting key.
+	const jsonBytes = new TextEncoder().encode(trimmed).length;
+	if (jsonBytes >= BLURT_CUSTOM_JSON_MAX_BYTES) {
+		throw new Error(
+			`release payload is ${jsonBytes} bytes — Blurt custom_json must be under ` +
+				`${BLURT_CUSTOM_JSON_MAX_BYTES} bytes.  Scope the hash_manifest tighter: ` +
+				`regenerate build-manifest.mjs with fewer --prefix paths (e.g. drop ` +
+				`_app/immutable/nodes/) and strip the redundant .br/.gz entries (the ` +
+				`browser fetches the plain files and decompresses them, so pinning the ` +
+				`compressed copies wastes ~2/3 of the budget).`
+		);
 	}
 	return {
 		required_auths: [],

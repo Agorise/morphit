@@ -2,9 +2,9 @@
  * release-broadcast (cp317) — sign + broadcast a morphit_release_v1 op.
  *
  * ┌─────────────────────────────────────────────────────────────┐
- * │  LAPTOP ONLY.  This uses the @morphit POSTING key, which by   │
- * │  design lives OFF the production server.  Never run this on   │
- * │  the VPS.                                                     │
+ * │  LAPTOP ONLY.  This uses the @morphit PRIVATE posting key   │
+ * │  (the WIF), which by design lives OFF the production        │
+ * │  server.  Never run this on the VPS.                        │
  * └─────────────────────────────────────────────────────────────┘
  *
  * Pipeline:
@@ -21,7 +21,8 @@
  *   --node <url>     Override the RPC node(s) (default: the project's
  *                    DEFAULT_BLURT_RPC_ENDPOINTS, tried in order).
  *
- * The posting key is read from a MASKED prompt at runtime — never a
+ * The @morphit PRIVATE posting key (the WIF) is read from a MASKED
+ * prompt at runtime — never a
  * file, never an env var (which would leak to shell history / `ps`),
  * never logged.
  */
@@ -81,8 +82,8 @@ const nodes = nodeOverride ? [nodeOverride] : [...DEFAULT_BLURT_RPC_ENDPOINTS];
 
 process.stderr.write(
 	'\n┌─────────────────────────────────────────────────────────────┐\n' +
-		'│  release-broadcast — LAPTOP ONLY (uses the @morphit posting   │\n' +
-		'│  key).  Never run this on the production server.              │\n' +
+		'│  release-broadcast — LAPTOP ONLY (uses the @morphit         │\n' +
+		'│  PRIVATE posting key / WIF).  Never run on the server.      │\n' +
 		'└─────────────────────────────────────────────────────────────┘\n\n'
 );
 process.stderr.write(`Operation id : ${op.id}\n`);
@@ -100,14 +101,18 @@ if (dryRun) {
 
 // ── masked prompt helpers ──────────────────────────────────────────
 function askHidden(query: string): Promise<string> {
-	process.stdout.write(query);
+	// stderr, not stdout: it's unbuffered and it's where the rest of the
+	// ceremony prints, so the prompt always shows immediately (a plain
+	// stdout write with no newline could sit invisibly in a buffer and
+	// look like the script had stalled).
+	process.stderr.write(query);
 	return new Promise((resolve) => {
 		const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: true });
 		// Suppress all keystroke echo so the WIF never appears on screen.
 		(rl as unknown as { _writeToOutput: (s: string) => void })._writeToOutput = () => {};
 		rl.question('', (ans) => {
 			rl.close();
-			process.stdout.write('\n');
+			process.stderr.write('\n');
 			resolve(ans.trim());
 		});
 	});
@@ -131,7 +136,10 @@ async function main(): Promise<void> {
 	}
 
 	const wif = await askHidden(
-		`Paste the @${op.required_posting_auths[0]} POSTING key (WIF, starts "5..."): `
+		`\n→ NOW PASTE the @${op.required_posting_auths[0]} PRIVATE posting key` +
+			` (the WIF — it starts with "5") and press Enter.\n` +
+			`  Nothing will show as you paste it — that is intentional; the key stays hidden.\n` +
+			`  key> `
 	);
 	if (!wif.startsWith('5') || wif.length < 50) {
 		die('that does not look like a Blurt WIF private key (expected a "5..." string).');

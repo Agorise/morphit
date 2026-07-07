@@ -290,7 +290,8 @@ async function main(): Promise<void> {
 	process.stderr.write('signing tool to broadcast as a custom_json op:\n\n');
 	process.stderr.write('    required_posting_auths: ["morphit"]\n');
 	process.stderr.write('    id: "morphit_release_v1"\n\n');
-	process.stderr.write('Sign with the @morphit posting key.  See\n');
+	process.stderr.write('Sign with the @morphit PRIVATE posting key (the WIF —\n');
+	process.stderr.write('starts "5...", NOT the public posting key).  See\n');
 	process.stderr.write('docs/OPERATIONS.md §40.5 for the full ceremony.\n\n');
 	// Part 110 note: previous versions of this script printed a
 	// reminder to run `verify-xmr-viewkey.ts` before broadcasting,

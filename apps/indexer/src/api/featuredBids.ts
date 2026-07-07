@@ -26,7 +26,7 @@
  *     requires computing the rank against all CURRENT active
  *     bids — the same predicate as /v1/orderbook/featured.
  *
- * Cache-Control: max-age=30 to match the featured-orderbook
+ * Cache-Control: max-age=10 to match the featured-orderbook
  * endpoint; visibility flips when other bidders move and that
  * stabilizes over tens of seconds.
  *
@@ -140,7 +140,7 @@ export function featuredBidsRoute(db: Database): Hono {
 			last_extended_at: r.last_extended_at ? r.last_extended_at.toISOString() : null
 		}));
 
-		c.header('cache-control', 'max-age=30, public');
+		c.header('cache-control', 'max-age=10, public');
 		return c.json({ account, bids, max_slots: MAX_SLOTS });
 	});
 

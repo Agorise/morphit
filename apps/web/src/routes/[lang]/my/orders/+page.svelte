@@ -57,6 +57,7 @@
 	import { displayNamesForMethods } from '$lib/payments/display';
 	import { instanceAdditions, instanceNameLookup } from '$lib/stores/instanceAdditions';
 	import type { OrderRecord } from '@morphit/indexer-client';
+	import { addPendingFeatured } from '$stores/pendingFeatured';
 
 	const blurtAccount = getUserBlurtAccount();
 
@@ -1071,6 +1072,12 @@
 										pendingFeaturePermlink = null;
 										featureSuccessPermlink = o.permlink;
 										featureSuccessBlurt = r.blurtPaid;
+										// cp431 — optimistically mark it featured and jump to the
+										// orderbook so the user watches their order appear within the
+										// 6s window. The durable indexer confirms it ~a minute later
+										// and transparently takes over (or it fades if the bid lost).
+										addPendingFeatured(o, r.blurtPaid);
+										void gotoLocale('/orderbook');
 									}}
 									onCancel={() => (pendingFeaturePermlink = null)}
 								/>

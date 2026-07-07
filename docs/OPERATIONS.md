@@ -402,11 +402,18 @@ morphit.io production box — only the signed serialized
 op is copied to a place where the broadcast can happen.
 
 The **warrant canary** is a separate primitive — a
-PGP-signed static file at `/canary.txt` regenerated
-weekly by `scripts/canary/generate.sh` and signed by
-the operator's release PGP key (see §36).  The canary
-does NOT consume `@morphit` BLURT; it lives off-chain
-and uses a PGP keypair, not the Blurt posting key.
+PGP-signed file served at `/canary.txt` (from the
+frontend's `build/` dir), signed with the operator's
+PGP key.  **Sign it on your OWN machine (your laptop),
+not the server, and upload the signed file to the
+server's `apps/web/build/`.  A server-side cron is a
+FLAW:** a seized box would keep auto-signing "all-clear"
+canaries forever, silently turning the canary into a
+lie.  Off-server signing makes it go stale exactly when
+it should — if you're compelled and gagged, if something
+happens to you, or if the box is seized without your key.
+The canary does NOT consume `@morphit` BLURT; it lives
+off-chain and uses a PGP keypair, not the Blurt posting key.
 
 Pre-fund `@morphit` with **~10 BLURT** before launch.
 This is a small fixed cost, not signup-rate-dependent:
@@ -629,7 +636,7 @@ back-fill.
 >   Streamable-HTTP transport bound to `127.0.0.1:8124`, so besides the
 >   systemd service state you can curl its liveness directly:
 >   `curl http://127.0.0.1:8124/health` → `{"status":"ok","transport":"http"}`.)
-> - **Canary** — whether `apps/web/static/canary.txt` is current
+> - **Canary** — whether `apps/web/build/canary.txt` is current
 >   (parsed from its `Valid through:` line) or overdue for its weekly
 >   regeneration.
 >
@@ -646,7 +653,7 @@ back-fill.
 >
 > ```
 > systemctl is-active morphit-matrix-bot      # or morphit-mcp, morphit-relay
-> grep '^Valid through:' apps/web/static/canary.txt   # compare to today's date
+> grep '^Valid through:' apps/web/build/canary.txt   # compare to today's date
 > ```
 
 For deep triage, verbose mode adds per-endpoint detail:
@@ -5242,7 +5249,7 @@ The frontend bundle (apps/web/build/) has its own per-file
 SHA-256 manifest at `verify.json`, generated post-build by
 `scripts/build-verify-json.mjs`.  The whole manifest is then
 referenced by a `morphit_release_v1` chain op signed by the
-project's posting key.  See
+project's **private** posting key (WIF).  See
 `apps/indexer/src/indexer/handlers/release.ts` for the
 chain-side handler.
 
@@ -6563,17 +6570,28 @@ order, you simply **stop updating the canary**. After 14 days of
 staleness, Morphit's frontend shows your users a warning banner
 and they move to another instance. You never have to say a word.
 
-So your only ongoing job is boring: keep the weekly file fresh. A
-cron job does that for you. The file is **PGP-signed by your
-release key** and carries freshness proofs (the current Blurt
-chain head, the current Bitcoin chain head, and a current news
-headline) so readers can confirm it was generated recently and
-not replayed from an old copy.
+So your only ongoing job is boring: keep the file fresh — you
+re-sign it about weekly **on your own machine and upload it to
+the server.** DO NOT run this from a cron job on the server: a
+seized box would keep auto-signing "all-clear" canaries forever,
+silently turning your canary into a lie. Signing off-server is
+what makes it a real dead-man's switch — it goes stale exactly
+when it should (you're compelled and gagged, something happens to
+you, or the box is seized without your key). The file is
+**PGP-signed by your canary key** (which lives on your machine,
+never on the server) and carries freshness proofs (the current
+Blurt chain head, the current Bitcoin chain head, and a current
+news headline) so readers can confirm it was generated recently
+and not replayed from an old copy.
 
-### Setup (done once)
+### Setup (done once — ON YOUR OWN MACHINE)
 
-1. **Make (or pick) a PGP signing key.** If you already have a
-   release/canary key, skip to step 2.
+Do all of this on the machine you'll sign from (e.g. your laptop) —
+the one place your canary PGP key lives. You only touch the server
+in step 5, to upload the finished files.
+
+1. **Make (or pick) a PGP signing key** on your machine. If you
+   already have a release/canary key here, skip to step 2.
 
    ```sh
    gpg --quick-gen-key 'Morphit Operator <op@morphit.example>' \
@@ -6582,17 +6600,16 @@ not replayed from an old copy.
 
    Note the **fingerprint** from the output — you will need it.
 
-2. **Publish your PGP public key** so users can verify signatures
-   without contacting a key server:
+2. **Export your PGP public key** so users can verify signatures
+   without contacting a key server (you upload it in step 5):
 
    ```sh
    FINGERPRINT="<from step 1>"
-   gpg --armor --export "$FINGERPRINT" \
-     > /opt/morphit/apps/web/static/pgp_keys.asc
+   gpg --armor --export "$FINGERPRINT" > /tmp/pgp_keys.asc
    ```
 
-3. **Put the canary settings in `/etc/morphit/canary.env`.** All
-   four are required:
+3. **Set the canary settings** in your shell (or a local file you
+   `source`). All four are required:
 
    ```sh
    export MORPHIT_CANARY_PGP_KEY_ID="<your PGP fingerprint>"
@@ -6608,53 +6625,61 @@ not replayed from an old copy.
    # export MORPHIT_CANARY_NEWS_RSS="https://cointelegraph.com/rss"
    ```
 
-   **No Blurt private key sits on the box for the canary** — the
-   only signing key it uses is your PGP key, which gpg manages.
-   Keep `canary.env` root-owned and `chmod 600` anyway, out of the
-   web root, and never commit it.
+   **No Blurt private key is involved** — the canary is signed only
+   with your PGP key, which gpg manages. If you keep these in a
+   file, `chmod 600` it and never commit it.
 
-4. **Run it once by hand** to confirm everything is wired:
+4. **Sign the canary** from your local repo checkout:
 
    ```sh
-   cd /opt/morphit
-   . /etc/morphit/canary.env
+   cd ~/path/to/morphit          # your local checkout
    bash scripts/canary/generate.sh
    ```
 
-   Success ends with `canary: wrote
-   /opt/morphit/apps/web/static/canary.txt`. Then check the
-   signature is good:
+   Success ends with `canary: wrote .../apps/web/static/canary.txt`
+   — the freshly-signed file on YOUR machine. It is NOT live yet:
+   nginx on the server serves from `build/`, not `static/`. Step 5
+   puts it where it's served.
+
+5. **Upload the signed files to the server's served dir**, then
+   confirm the signature over the live URL:
 
    ```sh
+   # copy up to a temp spot first (the served dir is root-owned),
+   # then move both into place on the server:
+   scp apps/web/static/canary.txt /tmp/pgp_keys.asc you@your-server:/tmp/
+   ssh you@your-server \
+     'sudo cp /tmp/canary.txt /tmp/pgp_keys.asc /opt/morphit/apps/web/build/'
+
+   # verify it's live + valid (your public key must be in your keyring):
    curl https://morphit.example.com/canary.txt | gpg --verify
    # Should report: Good signature from "Morphit Operator <op@...>"
    ```
 
-5. **Schedule weekly regeneration** via cron:
+   nginx serves the new files immediately — no restart needed.
 
-   ```cron
-   # Weekly canary regeneration — Sundays at 03:14 UTC.
-   # Logs to /var/log/morphit/canary.log (rotate as you like).
-   14 3 * * 0  cd /opt/morphit && \
-               . /etc/morphit/canary.env && \
-               bash scripts/canary/generate.sh \
-               >> /var/log/morphit/canary.log 2>&1
-   ```
+6. **Keep it fresh — and mind two gotchas:**
 
-   It sources `canary.env` every run, so your PGP key id and the
-   other settings are always in scope.
+   - **Re-sign + re-upload about weekly** (repeat steps 4–5); set a
+     recurring reminder somewhere you'll see it. If you're ever
+     compelled to spy on users, you simply stop — the 14-day
+     staleness banner is automatic in the frontend.
+   - **Re-upload after every `morphit-ops upgrade`.** An upgrade
+     rebuilds `build/`, which wipes the canary; the upgrade prints a
+     reminder, and `morphit-ops health` will show it "missing" until
+     you re-run step 5.
 
-6. **Add a freshness alarm for yourself** so you find out before
-   your users do (catches: cron broke, PGP key expired, RPC
-   changed):
+   A freshness alarm for yourself (so you find out before your users
+   do — catches an expired PGP key, a bad upload, a forgotten
+   re-upload after a deploy). Run it from your OWN machine; it checks
+   the live URL exactly as a user's browser would:
 
    ```sh
-   # /etc/cron.daily/morphit-canary-freshness
-   #!/usr/bin/env bash
-   cd /opt/morphit
-   if ! npx tsx scripts/canary/verify.ts apps/web/static/canary.txt; then
-       echo "Morphit canary stale or malformed" \
-         | mail -s "morphit canary FAILED on $(hostname)" your-pager@example.com
+   # daily cron on YOUR machine (not the server):
+   cd ~/path/to/morphit
+   if ! npx tsx scripts/canary/verify.ts https://morphit.example.com/canary.txt; then
+       echo "Morphit canary stale or invalid" \
+         | mail -s "morphit canary FAILED" you@example.com
    fi
    ```
 
@@ -6667,8 +6692,9 @@ This is the canary's whole point. **Do not lie.** Stop updating
 the canary. Your users switch to other operators (the
 federation), and Morphit's marketplace continues without you.
 That is by design. If you cannot even tell anyone you have
-stopped, just let the cron lapse — the `Generated:` date stops
-advancing, and after 14 days users see the banner and switch.
+stopped, just stop re-signing and re-uploading it — the
+`Generated:` date stops advancing, and after 14 days users see
+the banner and switch.
 
 ### Privacy considerations
 
@@ -9270,7 +9296,7 @@ Sign + broadcast as a `custom_json` op:
 }
 ```
 
-Sign with the `@morphit` posting key.  This key lives
+Sign with the `@morphit` **private** posting key (the WIF, starts "5…" — NOT the public posting key).  This key lives
 **off** the morphit.io production server, on a personal
 machine you trust — typically your laptop.
 
@@ -9282,10 +9308,12 @@ Blurt library the relay uses (`@beblurt/dblurt`):
 ```
 # 0) build the frontend, then generate the SRI hash manifest
 #    (JSON object of /<served-path>: sha256-<base64>, scoped to the
-#    tamper-critical executable surface to stay under the 64 KB cap):
+#    tamper-critical BOOTSTRAP — shell + service worker + entry loader —
+#    to stay under the indexer's 4 KB per-field JSONB cap; the full
+#    per-file coverage is the served /verify.json):
 cd apps/web && npm run build && \
   node scripts/build-manifest.mjs --release-json \
-    --prefix _app/ --prefix index.html --prefix service-worker.js
+    --prefix index.html --prefix service-worker --prefix _app/immutable/entry/
 cd ../..
 
 # 1) build the payload — BTC/XMR treasury pre-filled from
@@ -9301,7 +9329,7 @@ MORPHIT_BUILD_VERSION=<semver> \
 # 2) PREVIEW — prints the exact op, asks for NO key, sends nothing:
 npx tsx apps/indexer/scripts/release-broadcast.ts release.json --dry-run
 
-# 3) sign + broadcast for real (prompts for the posting key, masked):
+# 3) sign + broadcast for real (prompts for the PRIVATE posting key / WIF, masked):
 npx tsx apps/indexer/scripts/release-broadcast.ts release.json
 ```
 

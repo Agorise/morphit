@@ -24,13 +24,23 @@ const SEMVER_RE = /^\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?$/;
  *  indexer's checkJsonbSize ceiling.  64 KB serialized is a generous
  *  ceiling: a typical web app has dozens of bundles, hundreds of
  *  asset paths at the upper end.  Each entry is roughly
- *  `"path/...": "sha256-..."` ~ 80–120 bytes.  64 KB fits ~500
- *  entries comfortably. */
-const MANIFEST_MAX_SERIALIZED_BYTES = 64 * 1024;
+ *  `"path/...": "sha256-..."` ~ 80–120 bytes.
+ *
+ *  cp430: this was 64 KB, but the indexer stores each field in a
+ *  JSONB column capped at MAX_JSONB_BYTES = 4096 (apps/indexer/src/
+ *  indexer/payloadSize.ts), so the HANDLER rejects any manifest over
+ *  4096 as `hash_manifest_too_large` — regardless of what the builder
+ *  accepted.  A 64 KB manifest here therefore built + broadcast fine
+ *  but was silently filed `valid=false` by the indexer.  These caps
+ *  now MIRROR the handler's 4096 so the builder fails loudly, up front.
+ *  ~4 KB ≈ 40 entries — the on-chain manifest is a tamper-critical
+ *  SUBSET (shell + entry + service worker); full per-file coverage is
+ *  the served /verify.json. */
+const MANIFEST_MAX_SERIALIZED_BYTES = 4096;
 
-/** Same cap on endpoints.  Endpoints are tiny (a handful of URLs);
- *  64 KB is an unreachable ceiling but bounds adversarial input. */
-const ENDPOINTS_MAX_SERIALIZED_BYTES = 64 * 1024;
+/** Same cap on endpoints, mirroring the indexer's per-field JSONB
+ *  limit (a handful of URLs is well under it). */
+const ENDPOINTS_MAX_SERIALIZED_BYTES = 4096;
 
 const SIGNATURE_MAX_LEN = 512;
 

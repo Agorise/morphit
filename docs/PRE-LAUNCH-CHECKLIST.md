@@ -240,7 +240,7 @@ file in the same turn.
       # 1. Build the frontend + the SRI release manifest (§E):
       cd apps/web && npm run build && \
         node scripts/build-manifest.mjs --release-json \
-          --prefix _app/ --prefix index.html --prefix service-worker.js
+          --prefix index.html --prefix service-worker --prefix _app/immutable/entry/
       cd ../..
 
       # 2. Build the release payload (treasury pre-filled),
@@ -671,11 +671,12 @@ file in the same turn.
       cd apps/web && node scripts/build-manifest.mjs
 
       # (b) The ON-CHAIN release hash_manifest (SRI base64
-      #     JSON, scoped to the tamper-critical executable
-      #     surface to stay under the 64 KB schema cap):
+      #     JSON, scoped to the tamper-critical BOOTSTRAP — shell +
+      #     service worker + entry loader — to stay under the indexer's
+      #     4 KB per-field JSONB cap):
       cd apps/web && node scripts/build-manifest.mjs \
-        --release-json --prefix _app/ --prefix index.html \
-        --prefix service-worker.js
+        --release-json --prefix index.html --prefix service-worker \
+        --prefix _app/immutable/entry/
       ```
       Artifact (b) writes `apps/web/build-manifest.release.json`
       — a JSON object of `/<served-path>: sha256-<base64>`,
