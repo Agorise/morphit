@@ -69,6 +69,17 @@ if (buildReleaseCustomJsonOp(VALID, 'example-op').required_posting_auths[0] === 
 	ok('custom --signer is honored');
 else bad('custom signer not honored', '');
 
+// ── cp436 — payload with NO endpoints → still a valid op ──────────
+const NO_ENDPOINTS = JSON.stringify({
+	version: '1.1.0',
+	hash_manifest: { 'app.js': 'sha256-' + 'A'.repeat(43) + '=' },
+	treasury: { btc: { address: BTC, satoshis: 416 }, xmr: { address: XMR, piconero: '781250000' } }
+});
+const opNoEp = buildReleaseCustomJsonOp(NO_ENDPOINTS);
+if (opNoEp.id === RELEASE_OP_ID && opNoEp.json === NO_ENDPOINTS.trim() && !opNoEp.json.includes('endpoints'))
+	ok('cp436 — no-endpoints payload → valid op, no endpoints pinned');
+else bad('cp436 — no-endpoints payload failed', JSON.stringify(opNoEp));
+
 // ── 3. invalid payload (bad version) → validation error ───────────
 throws(
 	'invalid payload (version not semver)',

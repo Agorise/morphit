@@ -222,11 +222,6 @@
 			>
 				{$_('featured.heading')}
 			</h2>
-			<span
-				class="rounded-full bg-morphit-emerald/20 px-2 py-0.5 text-xs font-bold text-morphit-emerald"
-			>
-				{visibleSlots.length}/{maxSlots}
-			</span>
 		</div>
 		{@render cards()}
 	</section>

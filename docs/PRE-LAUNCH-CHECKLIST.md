@@ -244,12 +244,12 @@ file in the same turn.
       cd ../..
 
       # 2. Build the release payload (treasury pre-filled),
-      #    pre-loading the manifest/endpoints/version
+      #    pre-loading the manifest/version (cp436 — endpoints
+      #    are no longer pinned on-chain; omit the endpoints file).
       #    (< /dev/null keeps it non-interactive so the
       #    redirected stdout is clean JSON, not prompts):
       MORPHIT_BUILD_VERSION=<semver> \
         MORPHIT_BUILD_HASH_MANIFEST_FILE=apps/web/build-manifest.release.json \
-        MORPHIT_BUILD_ENDPOINTS_FILE=<endpoints.json> \
         npx tsx apps/indexer/scripts/release-build-payload.ts < /dev/null > release.json
 
       # 3. Preview, then sign + broadcast (masked key):

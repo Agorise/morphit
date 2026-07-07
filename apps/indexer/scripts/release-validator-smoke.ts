@@ -58,6 +58,20 @@ scenario('accepts empty endpoints object', () => {
 	if (!r.ok) throw new Error(`got ${r.reason}`);
 });
 
+scenario('cp436 — accepts a payload with NO endpoints field (no longer pinned)', () => {
+	const p = makePayload() as Record<string, unknown>;
+	delete p.endpoints;
+	const r = validateReleasePayload(p);
+	if (!r.ok) throw new Error(`got ${r.reason}`);
+	if ('endpoints' in r.value) throw new Error('endpoints must be omitted from output when absent');
+});
+
+scenario('cp436 — still accepts a payload WITH endpoints (backward-compat)', () => {
+	const r = validateReleasePayload(makePayload({ endpoints: { indexer: ['https://idx.example.com'] } }));
+	if (!r.ok) throw new Error(`got ${r.reason}`);
+	if (!r.value.endpoints) throw new Error('endpoints should be preserved when present');
+});
+
 scenario('accepts optional signature', () => {
 	const r = validateReleasePayload(makePayload({ signature: 'pgp-sig-blob' }));
 	if (!r.ok) throw new Error(`got ${r.reason}`);

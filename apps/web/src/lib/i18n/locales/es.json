@@ -1963,7 +1963,6 @@
       }
     },
     "priorities": {
-      "eyebrow": "Nuestras prioridades",
       "heading": "En qué se basa Morphit",
       "privacy": {
         "title": "La privacidad primero",
@@ -2330,7 +2329,7 @@
         "wif_label": "Clave privada de posting (WIF)",
         "wif_placeholder": "5J… o P5J…",
         "password_mismatch": "Las contraseñas no coinciden.",
-        "wif_hint": "Empieza por 5 (formato antiguo) o P5 (más reciente). Nunca se comparte con el operador — solo se cifra en este dispositivo.",
+        "wif_hint": "Empieza por 5. Nunca se comparte con el operador — solo se cifra en este dispositivo.",
         "new_password_label": "Nueva contraseña para este dispositivo",
         "new_password_hint": "Mínimo 8 caracteres. Sirve para desbloquear Morphit en este dispositivo. No es tu contraseña de Blurt.",
         "new_password_confirm_label": "Confirma la contraseña",
@@ -2354,7 +2353,11 @@
           },
           "could_not_resolve": "No pudimos detectar tu cuenta a partir de esta clave. Verifica que copiaste correctamente tu Posting Private Key, o importa con tu frase semilla de 12 palabras o tu Keyfile."
         },
-        "account_bad": "no válido"
+        "account_bad": "no válido",
+        "manual_account_label": "Tu nombre de usuario de Blurt",
+        "manual_account_placeholder": "p. ej. alice",
+        "manual_account_hint": "No pudimos detectar tu cuenta a partir de esta clave — puede ser de antes de que Blurt existiera. Escribe tu nombre de usuario de Blurt para confirmar que la clave le pertenece.",
+        "manual_account_invalid": "Ese nombre de usuario no coincide con esta clave. Revisa la ortografía o que hayas pegado la Clave Privada de Publicación correcta."
       },
       "error": {
         "seed_word_count": "Una frase semilla de Blurt tiene exactamente 12 palabras — has introducido {count}. Asegúrate de que estén las 12, separadas por un solo espacio.",
@@ -3451,7 +3454,7 @@
       "use_full": "Usar saldo completo",
       "available_blurt": "Disponible: {amount} BLURT",
       "available_bp": "Disponible: {amount} BP",
-      "power_down_schedule": "No es instantáneo: tu BP se libera de nuevo como BLURT líquidos de forma gradual, a lo largo de 4 semanas. Esta liberación gradual es una regla del protocolo Blurt, no de Morphit.",
+      "power_down_schedule": "Esto no es instantáneo: tu BP se desconvertirá gradualmente a BLURT líquido a lo largo de 4 semanas. Nada de ello hoy, así que ten paciencia. La liberación gradual es una regla del protocolo Blurt, no de Morphit.",
       "password_label": "Tu contraseña de @{account} (para firmar con tu clave activa)",
       "error_password_required": "Introduce tu contraseña para continuar.",
       "error_bad_password": "Esa contraseña no desbloqueó tu clave activa. Revísala e inténtalo de nuevo.",

@@ -31,6 +31,7 @@
 	import { bootFromEnvelope, liveIdentity } from '$stores/identity';
 	import { setUserBlurtAccount } from '$blurt/ops/profile';
 	import { resolveAccountsByPublicKeys } from '$blurt/accountByKey';
+	import * as secp256k1 from '@noble/secp256k1';
 	import { get } from 'svelte/store';
 	import sodium from 'libsodium-wrappers-sumo';
 
@@ -141,6 +142,126 @@
 			return;
 		}
 		wifStatus = looksLikeBlurtWif(v) ? 'valid' : 'invalid';
+	}
+
+	// ── cp434 — prefork-key manual account name ─────────────────────
+	// Some accounts predate Blurt (created on Steem before the fork). Their
+	// posting key still logs in fine, but the reverse key→account lookup
+	// (get_key_references) can't find them, so the username can't be
+	// auto-detected. Rather than dead-end with an error, reveal a Username
+	// field ONLY in that case, validate the typed name against the pasted
+	// key in real time, and block submit until the two match.
+	const BLURT_ACCOUNT_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/; // blurt-account-regex-parity sentinel
+	let detectedAccount = $state<string | null>(null);
+	let accountFieldNeeded = $state(false);
+	let manualAccount = $state('');
+	let manualAccountStatus = $state<'idle' | 'checking' | 'valid' | 'invalid'>('idle');
+	let derivedPubCache = $state<string | null>(null);
+	// Monotonic guards so a slow reply for an OLD wif/name can't clobber the
+	// current one.
+	let detectSeq = 0;
+	let validateSeq = 0;
+	let manualDebounce: ReturnType<typeof setTimeout> | null = null;
+
+	/** Derive the BLT posting public key from a WIF WITHOUT building a full
+	 *  identity — scalar → point → BLT. Scalar is wiped. null on failure. */
+	async function derivePostingPubBLT(wif: string): Promise<string | null> {
+		let scalar: Uint8Array | null = null;
+		try {
+			scalar = await wifToRawPrivateKey(wif);
+			const pub = secp256k1.getPublicKey(scalar, true);
+			return await formatPublicKeyBLT(pub);
+		} catch {
+			return null;
+		} finally {
+			if (scalar) sodium.memzero(scalar);
+		}
+	}
+
+	/** Reset all manual-account state — called when the WIF changes so a
+	 *  stale username can't linger against a different key. */
+	function resetAccountDetection(): void {
+		detectSeq++;
+		validateSeq++;
+		if (manualDebounce) clearTimeout(manualDebounce);
+		detectedAccount = null;
+		accountFieldNeeded = false;
+		manualAccount = '';
+		manualAccountStatus = 'idle';
+		derivedPubCache = null;
+	}
+
+	/** On WIF blur: if the key looks valid, derive its pubkey and try to
+	 *  auto-resolve the account. A unique match hides the manual field;
+	 *  anything else (prefork / ambiguous / lookup down) reveals it. */
+	async function detectAccountFromWif(): Promise<void> {
+		const wif = postingWif.trim();
+		if (!looksLikeBlurtWif(wif)) {
+			resetAccountDetection();
+			return;
+		}
+		const seq = ++detectSeq;
+		const pub = await derivePostingPubBLT(wif);
+		if (seq !== detectSeq) return; // superseded by a newer key
+		derivedPubCache = pub;
+		if (!pub) {
+			detectedAccount = null;
+			accountFieldNeeded = false;
+			return;
+		}
+		let matches: string[] = [];
+		try {
+			matches = await resolveAccountsByPublicKeys([pub]);
+		} catch {
+			matches = [];
+		}
+		if (seq !== detectSeq) return;
+		if (matches.length === 1) {
+			detectedAccount = matches[0] ?? null;
+			accountFieldNeeded = false;
+			manualAccount = '';
+			manualAccountStatus = 'idle';
+		} else {
+			detectedAccount = null;
+			accountFieldNeeded = true;
+		}
+	}
+
+	/** Validate the typed username against the pasted key: it must EXIST and
+	 *  carry this key in its POSTING authority. Debounced by the caller. */
+	async function validateManualAccount(): Promise<void> {
+		const name = manualAccount.trim().toLowerCase();
+		if (!accountFieldNeeded || name.length === 0) {
+			manualAccountStatus = 'idle';
+			return;
+		}
+		if (!BLURT_ACCOUNT_RE.test(name) || !derivedPubCache) {
+			manualAccountStatus = 'invalid';
+			return;
+		}
+		const seq = ++validateSeq;
+		manualAccountStatus = 'checking';
+		let fetched;
+		try {
+			fetched = await fetchAccountKeys(resolveOrigin(MORPHIT_INDEXER_ORIGIN), name);
+		} catch {
+			fetched = null;
+		}
+		if (seq !== validateSeq) return;
+		if (!fetched) {
+			manualAccountStatus = 'invalid'; // no such account
+			return;
+		}
+		const verdict = verifyPostingKey(fetched, derivedPubCache);
+		if (seq !== validateSeq) return;
+		manualAccountStatus = verdict.kind === 'ok' ? 'valid' : 'invalid';
+	}
+
+	/** Debounced entry point for the Username input. */
+	function onManualAccountInput(): void {
+		manualAccountStatus = manualAccount.trim().length === 0 ? 'idle' : 'checking';
+		if (manualDebounce) clearTimeout(manualDebounce);
+		manualDebounce = setTimeout(() => void validateManualAccount(), 450);
 	}
 
 	/** cp137 H-1 — post-seed-import "remember me on this device" step.
@@ -543,15 +664,26 @@
 			// 3. Format the derived posting public key for chain comparison.
 			const derivedPub = await formatPublicKeyBLT(full.keys.posting.publicKey);
 
-			// 3b. Reverse-resolve the account name from the derived public key via
+			// 3b. Resolve the account name. Prefer the manually-entered +
+			//     validated username (prefork accounts the reverse lookup can't
+			//     find); otherwise reverse-resolve from the derived public key via
 			//     the same same-origin get_key_references lookup the seed/keyfile
 			//     imports use — a UNIQUE match IS the account (the key is in exactly
 			//     that account's posting authority, so it's inherently verified).
-			//     Ambiguous (a key shared across accounts), no match, or any lookup
-			//     failure (rotated key / an RPC without the method) → could_not_resolve.
-			const matches = await resolveAccountsByPublicKeys([derivedPub]);
-			const account = matches.length === 1 ? matches[0] : undefined;
+			//     Either way, step 4 re-fetches + re-verifies the key on-chain.
+			let account: string | undefined;
+			if (accountFieldNeeded && manualAccountStatus === 'valid') {
+				account = manualAccount.trim().toLowerCase();
+			} else {
+				const matches = await resolveAccountsByPublicKeys([derivedPub]);
+				account = matches.length === 1 ? matches[0] : undefined;
+			}
 			if (!account) {
+				// cp434 — couldn't auto-detect and no valid manual name (e.g. the
+				// user hit submit before blurring the key). Reveal the Username
+				// field so they can supply it, rather than dead-ending.
+				accountFieldNeeded = true;
+				derivedPubCache = derivedPub;
 				errorMsg = $_('onboarding.import.posting_only.error.could_not_resolve');
 				return;
 			}
@@ -702,6 +834,7 @@
 					// from the key, so there's no account field to gate the button.
 					!postingWif.trim() ||
 					wifLooksInvalid ||
+					(accountFieldNeeded && manualAccountStatus !== 'valid') ||
 					postingNewPassword.length < 8 ||
 					postingNewPassword !== postingNewPasswordConfirm
 	);
@@ -867,12 +1000,16 @@
 							oninput={() => {
 								wifKeyInvalid = false;
 								wifStatus = 'idle';
+								resetAccountDetection();
 							}}
 							onfocus={() => {
 								wifKeyInvalid = false;
 								wifStatus = 'idle';
 							}}
-							onblur={checkWifLooksOk}
+							onblur={() => {
+								checkWifLooksOk();
+								void detectAccountFromWif();
+							}}
 							placeholder={$_('onboarding.import.posting_only.wif_placeholder')}
 							class="w-full rounded-xl border-2 bg-white px-3 py-2 pe-10 font-mono focus:outline-none focus:ring-2 dark:bg-ink-900 {wifKeyInvalid ||
 							wifLooksInvalid
@@ -927,6 +1064,98 @@
 						{$_('onboarding.import.posting_only.wif_hint')}
 					</span>
 				</label>
+
+				{#if accountFieldNeeded}
+					<!-- cp434 — shown ONLY when the account can't be auto-detected from
+					     the key (typically a pre-Blurt/prefork account). Required, and
+					     validated in real time against the pasted key. -->
+					<label class="mt-4 block">
+						<span class="mb-2 block font-semibold"
+							>{$_('onboarding.import.posting_only.manual_account_label')}</span
+						>
+						<div class="relative">
+							<input
+								type="text"
+								bind:value={manualAccount}
+								autocomplete="off"
+								autocapitalize="none"
+								spellcheck="false"
+								maxlength="16"
+								oninput={onManualAccountInput}
+								onblur={() => void validateManualAccount()}
+								placeholder={$_('onboarding.import.posting_only.manual_account_placeholder')}
+								class="w-full rounded-xl border-2 bg-white px-3 py-2 pe-10 lowercase focus:outline-none focus:ring-2 dark:bg-ink-900 {manualAccountStatus ===
+								'invalid'
+									? 'border-red-400 focus:ring-red-400 dark:border-red-500'
+									: 'border-ink-200 focus:ring-morphit-emerald dark:border-ink-700'}"
+							/>
+							{#if manualAccountStatus === 'valid'}
+								<span
+									class="pointer-events-none absolute end-3 top-1/2 inline-flex -translate-y-1/2 items-center text-morphit-emerald"
+								>
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										width="16"
+										height="16"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="3"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg
+									>
+								</span>
+							{:else if manualAccountStatus === 'checking'}
+								<span
+									class="pointer-events-none absolute end-3 top-1/2 inline-flex -translate-y-1/2 items-center text-ink-400"
+								>
+									<svg
+										class="animate-spin"
+										xmlns="http://www.w3.org/2000/svg"
+										width="16"
+										height="16"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2.5"
+										stroke-linecap="round"
+										aria-hidden="true"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg
+									>
+								</span>
+							{:else if manualAccountStatus === 'invalid'}
+								<span
+									class="pointer-events-none absolute end-3 top-1/2 inline-flex -translate-y-1/2 items-center text-red-500 dark:text-red-400"
+								>
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										width="16"
+										height="16"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2.5"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										aria-hidden="true"
+										><path
+											d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"
+										/><path d="M12 9v4" /><path d="M12 17h.01" /></svg
+									>
+								</span>
+							{/if}
+						</div>
+						<span
+							class="mt-1 block text-xs {manualAccountStatus === 'invalid'
+								? 'text-red-500 dark:text-red-400'
+								: 'text-ink-500 dark:text-ink-400'}"
+						>
+							{manualAccountStatus === 'invalid'
+								? $_('onboarding.import.posting_only.manual_account_invalid')
+								: $_('onboarding.import.posting_only.manual_account_hint')}
+						</span>
+					</label>
+				{/if}
 
 				<div class="my-4 border-t border-ink-200 dark:border-ink-800"></div>
 

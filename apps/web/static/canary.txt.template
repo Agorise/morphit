@@ -1,4 +1,4 @@
------BEGIN MORPHIT CANARY-----
+=== MORPHIT CANARY ===
 
 Morphit operator canary — {{OPERATOR_NAME}}
 Instance: {{INSTANCE_ORIGIN}}
@@ -10,7 +10,7 @@ This canary is regenerated weekly.  If the date above is more than
 operator may have been served with a legal demand that prohibits
 explicit acknowledgment.
 
-──── DECLARATION ────
+==== DECLARATION ====
 
 As of the generated-at date above, the operator of this Morphit
 instance ({{OPERATOR_ACCOUNT}} on the Blurt chain) has NOT been
@@ -40,7 +40,7 @@ The operator further declares:
     the last canary, OR if it has, the previous canary lists the
     rotation reason.
 
-──── FRESHNESS PROOFS ────
+==== FRESHNESS PROOFS ====
 
 These prove the canary was generated AFTER the dates/heights
 shown — they cannot be pre-generated.
@@ -62,7 +62,7 @@ just rebroadcast from an old signed copy):
   Source: {{NEWS_SOURCE}}
   Fetched: {{NEWS_FETCHED_AT}}
 
-──── HOW TO VERIFY ────
+==== HOW TO VERIFY ====
 
 1. Verify the PGP signature below using the operator's release
    public key, published at /pgp_keys.asc on the same instance.
@@ -82,7 +82,7 @@ just rebroadcast from an old signed copy):
 3. Compare the generated-at date.  Older than 14 days =
    treat as silent.
 
-──── IF THIS CANARY DOESN'T UPDATE ────
+==== IF THIS CANARY DOESN'T UPDATE ====
 
 This is the warrant canary's whole point.  An operator who has
 been served with a gag order CAN be compelled to lie about
@@ -102,9 +102,7 @@ If you see this canary frozen for more than 14 days:
     chat ciphertext are all on chain and any other operator's
     indexer reconstructs the same view from chain history.
 
-────
-
-────
+====
 
 -----BEGIN PGP SIGNATURE-----
 
