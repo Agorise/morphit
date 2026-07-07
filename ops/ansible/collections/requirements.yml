@@ -1,0 +1,14 @@
+---
+# Ansible collections required by Morphit's playbook.  Install
+# on the control node (where you run ansible-playbook) with:
+#
+#   ansible-galaxy collection install -r collections/requirements.yml
+#
+# CI / linter use the same.
+collections:
+  - name: community.general
+    # community.general.timezone (roles/base) and other helpers.
+  - name: community.postgresql
+    # community.postgresql.postgresql_{db,user} (roles/postgres).
+  - name: community.docker
+    # community.docker.docker_compose_v2 (roles/bunkerweb).

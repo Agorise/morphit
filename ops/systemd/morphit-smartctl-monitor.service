@@ -1,0 +1,46 @@
+[Unit]
+Description=Morphit smartctl monitor — disk SMART health checks
+Documentation=https://git.agorise.net/agorise/morphit
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+
+# smartctl needs raw block-device access via /dev/sda etc.; it
+# can't run unprivileged.  Mitigations: very narrow capability
+# set + read-only filesystem + no network.
+CapabilityBoundingSet=CAP_SYS_RAWIO CAP_DAC_OVERRIDE
+AmbientCapabilities=
+
+EnvironmentFile=-/etc/morphit/smartctl-monitor.env
+ExecStart=/opt/morphit/ops/scripts/morphit-smartctl-monitor.sh
+
+# ─── Hardening ─────────────────────────────────────────────────
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+LimitCORE=0
+PrivateNetwork=true
+RestrictAddressFamilies=AF_UNIX
+
+# Allow reads on /dev/sd*, /dev/nvme*, etc.
+DeviceAllow=block-* r
+DevicePolicy=closed
+
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+
+[Install]
+WantedBy=multi-user.target

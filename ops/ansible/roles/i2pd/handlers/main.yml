@@ -1,0 +1,6 @@
+---
+- name: Restart i2pd
+  ansible.builtin.systemd:
+    name: i2pd
+    state: restarted
+    enabled: true

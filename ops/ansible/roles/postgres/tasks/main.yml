@@ -1,0 +1,105 @@
+# Role: postgres
+#
+# Install Postgres, bind to loopback only (§37.8), provision the
+# morphit_indexer + morphit_relay databases and users.
+#
+# Uses the Ubuntu-shipped postgresql package (Ubuntu 24.04 ships
+# PG 16 by default).  If you need PG 17 to match the repo's
+# ops/postgres/init.sql, add the PGDG apt repository first.
+
+---
+- name: Install PostgreSQL + Python adapter
+  ansible.builtin.apt:
+    name:
+      - postgresql
+      - postgresql-contrib
+      - python3-psycopg2
+    state: present
+    update_cache: true
+
+- name: Ensure postgresql listens on loopback only
+  ansible.builtin.lineinfile:
+    path: /etc/postgresql/{{ postgres_version_dir }}/main/postgresql.conf
+    regexp: "^#?listen_addresses\\s*="
+    line: "listen_addresses = '{{ postgres_listen_addresses }}'"
+  vars:
+    # Detect the Ubuntu-shipped version dir
+    postgres_version_dir: "{{ ansible_facts.packages['postgresql'][0].version.split('+')[0].split('.')[0] if 'postgresql' in ansible_facts.packages else '16' }}"
+  notify: Restart postgresql
+
+- name: Ensure postgresql port is the configured one
+  ansible.builtin.lineinfile:
+    path: /etc/postgresql/{{ postgres_version_dir }}/main/postgresql.conf
+    regexp: "^#?port\\s*="
+    line: "port = {{ postgres_port }}"
+  vars:
+    postgres_version_dir: "{{ ansible_facts.packages['postgresql'][0].version.split('+')[0].split('.')[0] if 'postgresql' in ansible_facts.packages else '16' }}"
+  notify: Restart postgresql
+
+- name: Ensure pg_hba.conf restricts host connections to local only
+  ansible.builtin.lineinfile:
+    path: /etc/postgresql/{{ postgres_version_dir }}/main/pg_hba.conf
+    regexp: '^host\s+all\s+all\s+'
+    state: absent
+  vars:
+    postgres_version_dir: "{{ ansible_facts.packages['postgresql'][0].version.split('+')[0].split('.')[0] if 'postgresql' in ansible_facts.packages else '16' }}"
+  notify: Restart postgresql
+
+- name: Enable + start PostgreSQL
+  ansible.builtin.systemd:
+    name: postgresql
+    enabled: true
+    state: started
+
+- name: Create morphit_indexer user
+  community.postgresql.postgresql_user:
+    name: "{{ postgres_indexer_user }}"
+    password: "{{ postgres_indexer_password }}"
+    role_attr_flags: NOSUPERUSER,NOCREATEROLE,NOCREATEDB
+    state: present
+  become: true
+  become_user: postgres
+
+- name: Create morphit_relay user
+  community.postgresql.postgresql_user:
+    name: "{{ postgres_relay_user }}"
+    password: "{{ postgres_relay_password }}"
+    role_attr_flags: NOSUPERUSER,NOCREATEROLE,NOCREATEDB
+    state: present
+  become: true
+  become_user: postgres
+
+- name: Create morphit_indexer database
+  community.postgresql.postgresql_db:
+    name: "{{ postgres_indexer_db }}"
+    owner: "{{ postgres_indexer_user }}"
+    encoding: UTF8
+    lc_collate: en_US.UTF-8
+    lc_ctype: en_US.UTF-8
+    template: template0
+    state: present
+  become: true
+  become_user: postgres
+
+- name: Create morphit_relay database
+  community.postgresql.postgresql_db:
+    name: "{{ postgres_relay_db }}"
+    owner: "{{ postgres_relay_user }}"
+    encoding: UTF8
+    lc_collate: en_US.UTF-8
+    lc_ctype: en_US.UTF-8
+    template: template0
+    state: present
+  become: true
+  become_user: postgres
+
+- name: Apply repo's init.sql to indexer DB if present
+  ansible.builtin.shell:
+    cmd: psql -d {{ postgres_indexer_db }} -f {{ morphit_repo_path }}/ops/postgres/init.sql
+    creates: "{{ morphit_repo_path }}/ops/postgres/.init.applied"
+  become: true
+  become_user: postgres
+  failed_when: false
+  # init.sql may already have been applied; the schema migrator
+  # handles further evolution.  The `morphit` role runs migrations
+  # after services start.

@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en" dir="ltr" class="dark">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<meta name="color-scheme" content="dark" />
+		<meta name="theme-color" content="#00DA69" />
+
+		<meta name="referrer" content="no-referrer" />
+
+		<link rel="icon" type="image/svg+xml" href="%sveltekit.assets%/favicon.svg" />
+		<link rel="apple-touch-icon" href="%sveltekit.assets%/apple-touch-icon.png" />
+		<!-- crossorigin="use-credentials": the browser fetches the manifest
+		     WITHOUT credentials by default, so during beta the HTTP Basic Auth
+		     gate 401s it (visible as a console error). Sending credentials makes
+		     the manifest fetch carry the auth → 200; harmless at the stable
+		     release (Morphit sets no cookies). cp305. -->
+		<link
+			rel="manifest"
+			href="%sveltekit.assets%/manifest.webmanifest"
+			crossorigin="use-credentials"
+		/>
+
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+		<meta name="apple-mobile-web-app-title" content="Morphit" />
+		<meta name="mobile-web-app-capable" content="yes" />
+
+		<link
+			rel="preload"
+			href="%sveltekit.assets%/fonts/comfortaa-latin-400.woff2"
+			as="font"
+			type="font/woff2"
+			crossorigin="anonymous"
+		/>
+		<link
+			rel="preload"
+			href="%sveltekit.assets%/fonts/comfortaa-latin-700.woff2"
+			as="font"
+			type="font/woff2"
+			crossorigin="anonymous"
+		/>
+
+		<script>
+			(function () {
+				try {
+					var q = new URLSearchParams(window.location.search);
+					var code = q.get('lang');
+					if (!code) return;
+					var allowed = ['en', 'es', 'de', 'pl', 'fr', 'it', 'ru', 'fa', 'zh-CN', 'zh-HK'];
+					if (allowed.indexOf(code) === -1) return;
+					document.documentElement.lang = code;
+					document.documentElement.dir = code === 'fa' ? 'rtl' : 'ltr';
+				} catch (_e) {}
+			})();
+		</script>
+
+		%sveltekit.head%
+	</head>
+	<body data-sveltekit-preload-data="hover" class="bg-ink-950 text-ink-100 antialiased">
+		<noscript>
+			<div
+				style="
+					max-width: 640px;
+					margin: 48px auto;
+					padding: 24px;
+					border-radius: 16px;
+					background: linear-gradient(135deg, rgba(142, 239, 38, 0.12), rgba(2, 166, 178, 0.12));
+					font-family: system-ui, sans-serif;
+					line-height: 1.6;
+				"
+			>
+				<h1 style="margin-top: 0; font-size: 22px">Morphit works without JavaScript — partly.</h1>
+				<p>You can browse orders, profiles, and feedback with JavaScript off. That is by design.</p>
+				<p>
+					<strong>Trading</strong> (creating orders, chatting, signing feedback) needs JavaScript,
+					because all cryptography happens inside your browser. Morphit never sees your keys. If JS
+					ran on our servers instead, we'd have to hold them — and we refuse to.
+				</p>
+				<p>Turn on JS only when you're ready to trade. Browsing is safe without it.</p>
+			</div>
+		</noscript>
+
+		<div id="svelte" style="display: contents">%sveltekit.body%</div>
+	</body>
+</html>
