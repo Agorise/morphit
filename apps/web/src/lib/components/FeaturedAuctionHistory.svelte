@@ -35,6 +35,11 @@
 	let windowDays = $state<WindowDays>(30);
 	let points = $state<readonly ClearingPricePoint[]>([]);
 	let loaded = $state(false);
+	// cp429 — live featured-order count, reported up by the embedded
+	// <FeaturedOrders>. Distinguishes "nobody has ever bid" (show the
+	// "be the first" prompt) from "a bid is live right now, just no settled
+	// clearing-price history yet" (show a neutral history-empty note).
+	let liveFeaturedCount = $state(0);
 	let abortController: AbortController | null = null;
 	let pollTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -147,7 +152,7 @@
 		     read as a jumbled second block). Renders the shared OrderCard, and
 		     self-hides when nothing is featured — leaving just the auction
 		     history + "be the first" prompt below. -->
-		<FeaturedOrders embedded variant="stack" />
+		<FeaturedOrders embedded variant="stack" oncount={(n) => (liveFeaturedCount = n)} />
 
 		{#if latest !== null && (latest.clearing_blurt_per_hour > 0 || latest.active_visible_count > 0)}
 			<p class="mb-3 text-sm text-ink-600 dark:text-ink-300">
@@ -221,9 +226,18 @@
 			</p>
 		{:else}
 			<div class="rounded-lg bg-ink-50 p-3 text-sm text-ink-600 dark:bg-ink-800 dark:text-ink-300">
-				{$_('clearing_price.no_history_yet', {
-					values: { days: windowDays }
-				})}
+				{#if liveFeaturedCount > 0}
+					<!-- cp429 — a featured order IS live (shown above); the history
+					     endpoint just has no settled clearing prices for this window
+					     yet. Don't claim "no bids — be the first". -->
+					{$_('clearing_price.no_history_yet_active', {
+						values: { days: windowDays }
+					})}
+				{:else}
+					{$_('clearing_price.no_history_yet', {
+						values: { days: windowDays }
+					})}
+				{/if}
 			</div>
 		{/if}
 	</section>

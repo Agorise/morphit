@@ -783,7 +783,20 @@
 									{stateLabel(o)}
 								</span>
 								<PaymentStatusBadge orderPermlink={o.permlink} />
-								{#if (o.fee_status === 'verified' || o.fee_status === 'verified_by_attestation') && !isExpired(o)}
+								{#if isExpired(o)}
+									<!-- cp429 — an EXPIRED order is simply not on the
+									     orderbook anymore. This is NOT a fee problem, so
+									     it gets a neutral pill and NO "Learn more →
+									     order_fee_rejected" link. Previously a verified-
+									     but-expired order fell through to the red rejected
+									     branch below, showing "Visible in orderbook" in
+									     red with a misleading fee-rejection link. -->
+									<span
+										class="rounded-full border border-ink-300 bg-ink-50 px-2 py-0.5 text-ink-600 dark:border-ink-600 dark:bg-ink-800 dark:text-ink-300"
+									>
+										{$_('my_orders.order.not_visible_orderbook')}
+									</span>
+								{:else if o.fee_status === 'verified' || o.fee_status === 'verified_by_attestation'}
 									<span
 										class="rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-emerald-900 dark:bg-ink-800 dark:text-emerald-100"
 									>
@@ -810,7 +823,7 @@
 								{/if}
 								<span class="text-ink-500">
 									{$_('my_orders.order.posted_prefix')}
-									<RelativeTime iso={o.created_at} format="terse" />
+									<RelativeTime iso={o.created_at} format="terse" ago />
 								</span>
 								{#if viewCounts[o.permlink] !== undefined && viewCounts[o.permlink]! > 0}
 									<!-- Task #14 — viewcount badge.  Visible only
@@ -1039,7 +1052,7 @@
 								<BusyButton variant="secondary" onclick={() => relistOrder(o)}>
 									{$_('my_orders.order.action_relist')}
 								</BusyButton>
-								<span class="text-xs text-ink-500 dark:text-ink-400">
+								<span class="max-w-[13rem] text-xs text-ink-500 dark:text-ink-400">
 									{$_('my_orders.order.action_relist_hint')}
 								</span>
 							{/if}

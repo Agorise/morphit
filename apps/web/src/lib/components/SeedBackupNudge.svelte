@@ -61,25 +61,36 @@
 		role="status"
 		aria-live="polite"
 	>
-		<div class="mx-auto flex max-w-5xl flex-wrap items-center gap-3">
-			<span aria-hidden="true">🔐</span>
-			<span class="min-w-0 flex-1">
-				{$_('seed_backup_nudge.body')}
-			</span>
-			<a
-				href={lp('/faq#lost_keys')}
-				class="group font-semibold underline decoration-dotted underline-offset-2 transition hover:decoration-solid"
-			>
-				{$_('seed_backup_nudge.show_me_how')}
-				<span class="nav-arrow nav-arrow-right" aria-hidden="true">⇨</span>
-			</a>
-			<button
-				type="button"
-				onclick={dismiss}
-				class="rounded px-2 py-1 font-semibold hover:bg-red-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:hover:bg-red-900/40"
-			>
-				{$_('seed_backup_nudge.got_it')}
-			</button>
+		<div
+			class="mx-auto flex max-w-5xl flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3"
+		>
+			<!-- cp429 — on mobile the message used to be squished into a narrow
+			     flex-1 column while the two actions kept their width on the
+			     right. Now the icon+message take the full width on their own
+			     row (flex-col) and the actions sit below; on ≥sm everything is
+			     inline again (flex-row). -->
+			<div class="flex min-w-0 flex-1 items-start gap-2 sm:items-center">
+				<span aria-hidden="true">🔐</span>
+				<span class="min-w-0">
+					{$_('seed_backup_nudge.body')}
+				</span>
+			</div>
+			<div class="flex flex-shrink-0 items-center gap-3 pl-7 sm:pl-0">
+				<a
+					href={lp('/faq#lost_keys')}
+					class="group font-semibold underline decoration-dotted underline-offset-2 transition hover:decoration-solid"
+				>
+					{$_('seed_backup_nudge.show_me_how')}
+					<span class="nav-arrow nav-arrow-right" aria-hidden="true">⇨</span>
+				</a>
+				<button
+					type="button"
+					onclick={dismiss}
+					class="rounded px-2 py-1 font-semibold hover:bg-red-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:hover:bg-red-900/40"
+				>
+					{$_('seed_backup_nudge.got_it')}
+				</button>
+			</div>
 		</div>
 	</div>
 {/if}

@@ -363,6 +363,7 @@ SMOKES=(
 	".:seo-url-consistency-smoke"
 	"apps/web:og-image-freshness-smoke"
 	"apps/web:llms-full-freshness-smoke"
+	"apps/web:llms-txt-freshness-smoke"
 	"apps/web:build-manifest-release-json-smoke"
 	"apps/web:logo-bling-invariants-smoke"
 	"apps/web:coin-carousel-invariants-smoke"

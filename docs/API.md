@@ -130,7 +130,7 @@ Liveness check — also exposes block lag and indexer version.
 ```json
 {
   "status": "ok",
-  "version": "1.0.0-beta.50",
+  "version": "1.0.0",
   "uptime_sec": 3742,
   "chain_head_block": 17234569,
   "indexed_block": 17234567,
@@ -360,7 +360,7 @@ polling.
 
 Tier: `list`
 
-Featured-slot bidders, top 5 by paid bid amount.  Same response
+Featured-slot bidders, top 3 by paid bid amount.  Same response
 shape as `/v1/orderbook` items, plus a `featured_until` field.
 
 #### `GET /v1/orders/:account`

@@ -60,9 +60,14 @@
 		format?: 'terse' | 'descriptive';
 		/** Optional extra CSS classes for the rendered <time>. */
 		class?: string;
+		/** cp429 — when true (terse only), wrap the terse value in a per-locale
+		 *  "ago" phrase (en "5d ago", de "vor 5T", es "hace 5d"). Used by
+		 *  /my/orders' "Posted {age} ago". Composes correctly after a prefix
+		 *  because the "ago" word attaches to the time, not the sentence. */
+		ago?: boolean;
 	}
 
-	let { iso, format = 'terse', class: cls = '' }: Props = $props();
+	let { iso, format = 'terse', class: cls = '', ago = false }: Props = $props();
 
 	// Tick once per minute so a long-mounted view stays current.
 	// Below the minute mark the change rate doesn't matter (terse
@@ -91,21 +96,33 @@
 		}
 		const seconds = Math.max(0, Math.floor((now - then) / 1000));
 		if (format === 'terse') {
-			if (seconds < 60) return $_('relative_time.terse.lt1m') as string;
-			const minutes = Math.floor(seconds / 60);
-			if (minutes < 60)
-				return $_('relative_time.terse.minutes', { values: { n: minutes } }) as string;
-			const hours = Math.floor(minutes / 60);
-			if (hours < 24)
-				return $_('relative_time.terse.hours', { values: { n: hours } }) as string;
-			const days = Math.floor(hours / 24);
-			if (days < 30)
-				return $_('relative_time.terse.days', { values: { n: days } }) as string;
-			const months = Math.floor(days / 30);
-			if (months < 12)
-				return $_('relative_time.terse.months', { values: { n: months } }) as string;
-			const years = Math.floor(months / 12);
-			return $_('relative_time.terse.years', { values: { n: years } }) as string;
+			let value: string;
+			if (seconds < 60) value = $_('relative_time.terse.lt1m') as string;
+			else {
+				const minutes = Math.floor(seconds / 60);
+				if (minutes < 60)
+					value = $_('relative_time.terse.minutes', { values: { n: minutes } }) as string;
+				else {
+					const hours = Math.floor(minutes / 60);
+					if (hours < 24)
+						value = $_('relative_time.terse.hours', { values: { n: hours } }) as string;
+					else {
+						const days = Math.floor(hours / 24);
+						if (days < 30)
+							value = $_('relative_time.terse.days', { values: { n: days } }) as string;
+						else {
+							const months = Math.floor(days / 30);
+							if (months < 12)
+								value = $_('relative_time.terse.months', { values: { n: months } }) as string;
+							else {
+								const years = Math.floor(months / 12);
+								value = $_('relative_time.terse.years', { values: { n: years } }) as string;
+							}
+						}
+					}
+				}
+			}
+			return ago ? ($_('relative_time.terse.ago', { values: { t: value } }) as string) : value;
 		}
 		// descriptive
 		if (seconds < 60) return $_('relative_time.descriptive.just_now') as string;
