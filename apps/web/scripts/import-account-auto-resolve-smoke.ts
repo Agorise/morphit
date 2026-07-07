@@ -8,15 +8,19 @@
  * same-origin `get_key_references` proxy (accountByKey → /v1/chain/key-references,
  * pinned same-origin by rpc-privacy-routing-smoke). A unique match is
  * authoritative (the key is in exactly that account's posting authority);
- * ambiguity / no-match / RPC-miss surfaces the could_not_resolve message
- * (cp406: there is no manual account field to fall back to).
+ * cp434: when the derived key can't map to a unique account (prefork /
+ * ambiguous / no-match), the posting-only path reveals a VALIDATED manual
+ * Username field (checked against the derived key in real time) instead of
+ * dead-ending — the could_not_resolve message stays as a final fallback.
  *
  * Regressions this guards against:
  *   - the seed/keyfile path reading the pubkey from `full` (seed-only) again,
  *     so keyfile silently falls through to manual /settings entry;
- *   - the posting-only handler reintroducing an account field (cp406 removed it
- *     entirely) instead of auto-detecting from the key;
- *   - the could_not_resolve fallback message disappearing.
+ *   - the posting-only path losing its auto-resolve (unique key → account, no
+ *     typing) — the common case must never force manual entry;
+ *   - cp434's prefork fallback regressing: the validated manual field, its
+ *     real-time key-check, or the manual_account_* / could_not_resolve strings
+ *     disappearing.
  *
  * Static source scan (the page pulls $-aliases the bare runner can't resolve,
  * so we assert on source text rather than importing the component).
@@ -67,30 +71,50 @@ check(
 	/resolveAccountsByPublicKeys\(pendingPubKeysBLT\)/.test(importPage)
 );
 
-// ─── posting-only: NO account field — always auto-detected from the key ─────
+// ─── posting-only: auto-resolve when unique; cp434 reveals a validated ───────
+//     manual Username field when the key can't map to a unique account.
 check(
-	'posting-only has NO account field (postingAccount removed entirely)',
+	'posting-only does NOT reintroduce the old cp406 postingAccount field',
 	!/postingAccount/.test(importPage)
 );
 check(
-	'posting-only always reverse-resolves the account from the derived key',
-	/resolveAccountsByPublicKeys\(\[derivedPub\]\)/.test(importPage) &&
-		/const account = matches\.length === 1 \? matches\[0\] : undefined/.test(importPage)
+	'posting-only auto-resolves the account from the derived posting key (unique match, no typing)',
+	/resolveAccountsByPublicKeys\(\[pub\]\)/.test(importPage) &&
+		/matches\.length === 1/.test(importPage) &&
+		/detectedAccount = matches\[0\]/.test(importPage)
 );
 check(
-	'posting-only submit button does not gate on any account name',
-	!/!postingAccount\.trim\(\) \|\|/.test(importPage) && !/accountHasInvalidChar/.test(importPage)
+	'cp434: an unresolvable key (prefork/ambiguous/no-match) reveals the manual field',
+	/accountFieldNeeded = true/.test(importPage)
 );
 check(
-	'auto-detect failure surfaces the could_not_resolve message',
+	'cp434: the manual account is validated against the derived key in real time',
+	/async function validateManualAccount/.test(importPage) &&
+		/verifyPostingKey\(fetched, derivedPubCache\)/.test(importPage) &&
+		/\? 'valid' : 'invalid'/.test(importPage)
+);
+check(
+	'cp434: submit gates on the manual account ONLY when the field is shown',
+	/accountFieldNeeded && manualAccountStatus !== 'valid'/.test(importPage)
+);
+check(
+	'could_not_resolve message survives as the final fallback',
 	/posting_only\.error\.could_not_resolve/.test(importPage)
 );
 
-// ─── the fallback i18n key exists ────────────────────────────────────────────
+// ─── the i18n keys exist ─────────────────────────────────────────────────────
 check(
 	'en locale carries posting_only.error.could_not_resolve',
 	typeof enLocale?.onboarding?.import?.posting_only?.error?.could_not_resolve === 'string' &&
 		enLocale.onboarding.import.posting_only.error.could_not_resolve.length > 0
+);
+check(
+	'cp434: en locale carries the manual_account_* keys',
+	['manual_account_label', 'manual_account_placeholder', 'manual_account_hint', 'manual_account_invalid'].every(
+		(k) =>
+			typeof enLocale?.onboarding?.import?.posting_only?.[k] === 'string' &&
+			enLocale.onboarding.import.posting_only[k].length > 0
+	)
 );
 
 console.log('');
