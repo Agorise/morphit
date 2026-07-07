@@ -40,7 +40,7 @@ describe('pendingFeatured', () => {
 		const now = 1_000_000;
 		const out = mergeablePending([mkPending('alice', 'p1', now)], new Set(), now + 1000);
 		expect(out).toHaveLength(1);
-		expect(out[0].order.account).toBe('alice');
+		expect(out[0]?.order.account).toBe('alice');
 	});
 
 	it('mergeablePending drops an entry the indexer has confirmed (no flicker/dup)', () => {
