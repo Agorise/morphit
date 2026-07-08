@@ -87,38 +87,38 @@ check('dismiss() does not call location.reload()', !/location\.reload\(\)/.test(
 check('snackbar condition includes !applying', /&&\s*!applying/.test(src));
 check('snackbar dismiss is version-aware (dismissedForCurrent)', /!dismissedForCurrent/.test(src));
 
-// ── cp438: consent survives the reload (the "twice on mobile" fix) ──────────
-// After the user consents, a handoff that lands on the old worker RESUMES
-// silently on the next load instead of re-offering — bounded so a genuinely
-// stuck handoff still resurfaces the snackbar (never stranded, the failure the
-// old persisted "applying" flag caused).
+// ── v1.1.5: the real "twice on mobile" fix — fresh shell on navigation ──────
+// cp364→438 chased the SW handoff timing (and cp438 added a cross-reload
+// "resume + attempt cap" marker) — none held on-device. Root cause: a reload
+// could be answered from a stale HTTP-cached index.html, so the poll re-detected
+// the mismatch and cp438's resume machinery re-surfaced the snackbar at its cap
+// (the visible SECOND fire). Fix: the service worker fetches navigations with
+// `cache:'reload'` (fresh shell from origin every time), and the resume
+// machinery is REMOVED. These checks lock in that shape.
+const sw = readFileSync(join(import.meta.dirname, '..', 'src', 'service-worker.ts'), 'utf8');
 check(
-	'a resume marker is written on consent (applyUpdate persists the target version)',
-	/writeResume\(deployedVersion/.test(src) && /RESUME_KEY/.test(src)
+	"SW fetches navigations with cache:'reload' (forces a fresh shell)",
+	/req\.mode === 'navigate'[\s\S]*?fetch\(req,\s*\{\s*cache:\s*'reload'\s*\}\)/.test(sw)
 );
 check(
-	'the resume is attempt-bounded (MAX_RESUME_ATTEMPTS caps auto-retries)',
-	/MAX_RESUME_ATTEMPTS/.test(src) && /resume\.n\s*<\s*MAX_RESUME_ATTEMPTS/.test(src)
+	'the cp438 resume marker machinery is GONE (no RESUME_KEY / updateResume)',
+	!/RESUME_KEY/.test(src) && !/updateResume/.test(src) && !/MAX_RESUME_ATTEMPTS/.test(src)
 );
 check(
-	'the resume self-clears on success (runningVersion === target) and on cap',
-	/runningVersion === resume\.target[\s\S]*?clearResume\(\)/.test(src) &&
-		(src.match(/clearResume\(\)/g)?.length ?? 0) >= 2
+	'no resume read/write/clear helpers remain',
+	!/writeResume\(/.test(src) && !/readResume\(/.test(src) && !/clearResume\(/.test(src)
 );
 check(
-	'the snackbar stays hidden while resuming (condition includes !resuming)',
-	/&&\s*!resuming/.test(src)
+	'no `resuming` state gates the snackbar anymore',
+	!/&&\s*!resuming/.test(src) && !/let resuming/.test(src)
 );
 check(
-	'resume re-drives the SAME consent path (no new reload / no autonomous controllerchange)',
-	// applyUpdate is reused for the resume — so the single reload + the
-	// consent-gated controllerchange listener are NOT duplicated.
-	(src.match(/location\.reload\(\)/g)?.length ?? 0) === 1 &&
-		/await check\(\);[\s\S]*?applyUpdate\(\)/.test(src)
+	'still exactly one location.reload() (a single consented reload, no retry loop)',
+	(src.match(/location\.reload\(\)/g)?.length ?? 0) === 1
 );
 check(
-	'the resume marker is version-keyed, not a bare "applying" flag',
-	/updateResume/.test(src) && !/setItem\([^)]*[Aa]pplying/.test(src)
+	'the navigation fetch keeps its offline cache fallback (catch → cache.match)',
+	/catch\s*\{[\s\S]*?cache\.match/.test(sw)
 );
 
 console.log('');

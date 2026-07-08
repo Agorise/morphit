@@ -2644,7 +2644,7 @@
       "expires_in_minutes": "Expire dans {minutes}m",
       "expires_in_minutes_seconds": "Expire dans {minutes}m {seconds}s",
       "expires_in_seconds": "Expire dans {seconds}s",
-      "expires_aria": "L'ordre expire à {iso} ({formatted})",
+      "expires_aria": "L'ordre expire le {date}",
       "open_aria": "Voir les détails de l'ordre : {title}"
     },
     "post_cta": "Publier un ordre",

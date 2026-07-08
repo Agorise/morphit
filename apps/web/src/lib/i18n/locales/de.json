@@ -2644,7 +2644,7 @@
       "expires_in_minutes": "Läuft ab in {minutes}min",
       "expires_in_minutes_seconds": "Läuft ab in {minutes}min {seconds}s",
       "expires_in_seconds": "Läuft ab in {seconds}s",
-      "expires_aria": "Order läuft ab um {iso} ({formatted})",
+      "expires_aria": "Die Order läuft am {date} ab",
       "open_aria": "Orderdetails ansehen: {title}"
     },
     "post_cta": "Order posten",

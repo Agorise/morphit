@@ -498,7 +498,7 @@ async function main(): Promise<void> {
 	// op surfaces "try again" rather than silently leaking to direct RPC).
 	const chainApp = new Hono();
 	chainApp.use('*', rateLimit('resource', config.resourceRatePerMin));
-	chainApp.route('/', chainExplorerRoute(blurt));
+	chainApp.route('/', chainExplorerRoute(blurt, db));
 	app.route('/v1/chain', chainApp);
 
 	const broadcastApp = new Hono();

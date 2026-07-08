@@ -97,9 +97,9 @@ interface AllowEntry {
 const ALLOW_LIST: readonly AllowEntry[] = [
 	{
 		file: 'apps/web/src/service-worker.ts',
-		snippet: 'cleanRedirect(await fetch(req))',
+		snippet: "cleanRedirect(await fetch(req, { cache: 'reload' }))",
 		reason:
-			'navigation fetch (network-first) in the SW fetch handler — a blanket AbortController would prematurely fall back to the (possibly stale) cached shell on a slow-but-working network, reintroducing the dead-chunk staleness the network-first nav exists to prevent; the browser bounds the request, and a true network failure rejects → cached-shell offline fallback'
+			'navigation fetch (network-first, cache:reload for a fresh shell) in the SW fetch handler — a blanket AbortController would prematurely fall back to the (possibly stale) cached shell on a slow-but-working network, reintroducing the dead-chunk staleness the network-first nav exists to prevent; the browser bounds the request, and a true network failure rejects → cached-shell offline fallback'
 	},
 	{
 		file: 'apps/web/src/service-worker.ts',

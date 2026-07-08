@@ -2644,7 +2644,7 @@
       "expires_in_minutes": "Истекает через {minutes}м",
       "expires_in_minutes_seconds": "Истекает через {minutes}м {seconds}с",
       "expires_in_seconds": "Истекает через {seconds}с",
-      "expires_aria": "Ордер истекает в {iso} ({formatted})",
+      "expires_aria": "Ордер истекает {date}",
       "open_aria": "Открыть детали заявки: {title}"
     },
     "post_cta": "Разместить",

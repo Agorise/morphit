@@ -4,9 +4,17 @@
  * A Blurt seed phrase deterministically derives a user's owner / active /
  * posting / memo keypairs, but it does NOT encode the account NAME (the
  * name is chosen at account creation and lives only on-chain). To spare a
- * seed-importing user from typing their account name, we ask the chain
- * which account(s) reference their derived PUBLIC keys in any authority,
- * via `condenser_api.get_key_references`.
+ * seed-importing user from typing their account name, we ask the operator's
+ * indexer which account(s) reference their derived PUBLIC keys. Server-side
+ * that endpoint unions TWO sources (cp440): the chain's
+ * `condenser_api.get_key_references` AND the indexer's own
+ * `accounts.posting_pubkey` index. The second catches PRE-FORK / genesis
+ * accounts — Blurt's `account_by_key` plugin only indexes keys set by a
+ * post-fork op, so a Steem-era account that never re-set its posting key
+ * returns [] from the chain even though the key is a valid current authority.
+ * Any such account that has touched Morphit still resolves from the DB, so
+ * the user skips the manual-name fallback. Either way, login then forward-
+ * verifies the key against the resolved account's on-chain authority.
  *
  * Privacy (priority #1): the lookup is relayed through the operator's OWN
  * indexer (same-origin `POST /v1/chain/key-references`), NOT a direct
@@ -42,14 +50,6 @@ function indexerUrl(path: string): URL {
 export async function resolveAccountsByPublicKeys(pubKeysBLT: string[]): Promise<string[]> {
 	const keys = pubKeysBLT.filter((k): k is string => typeof k === 'string' && k.length > 0);
 	if (keys.length === 0) return [];
-	// [morphit-diag cp440] TEMP — the BLT-formatted PUBLIC keys we're about to
-	// look up. These come out of formatPublicKey(); if the login username field
-	// is blank/wrong, compare THESE strings to the posting key's true on-chain
-	// public key. A corrupted key here = the same formatPublicKey browser bug
-	// implicated in the settings "Missing Posting Authority" failure. Public
-	// keys only — nothing secret.
-	// eslint-disable-next-line no-console
-	console.info('[morphit-diag] resolveAccountsByPublicKeys → lookup keys', { keys });
 	try {
 		const res = await fetchWithTimeout(
 			indexerUrl('/v1/chain/key-references'),
@@ -61,11 +61,6 @@ export async function resolveAccountsByPublicKeys(pubKeysBLT: string[]): Promise
 			15_000
 		);
 		if (!res.ok) {
-			// [morphit-diag cp440] TEMP
-			// eslint-disable-next-line no-console
-			console.warn('[morphit-diag] resolveAccountsByPublicKeys → key-references NOT ok', {
-				status: res.status
-			});
 			return []; // proxy unreachable / error ⇒ manual entry
 		}
 		const body = (await res.json()) as { accounts?: unknown };
@@ -74,17 +69,8 @@ export async function resolveAccountsByPublicKeys(pubKeysBLT: string[]): Promise
 		for (const name of body.accounts) {
 			if (typeof name === 'string' && name.length > 0) accounts.add(name);
 		}
-		// [morphit-diag cp440] TEMP — the resolved account name(s). Empty here =
-		// the username field can't auto-fill; a wrong name = a lookup/formatter bug.
-		// eslint-disable-next-line no-console
-		console.info('[morphit-diag] resolveAccountsByPublicKeys → resolved accounts', {
-			accounts: [...accounts]
-		});
 		return [...accounts];
-	} catch (e) {
-		// [morphit-diag cp440] TEMP
-		// eslint-disable-next-line no-console
-		console.warn('[morphit-diag] resolveAccountsByPublicKeys → threw', e);
+	} catch {
 		return [];
 	}
 }

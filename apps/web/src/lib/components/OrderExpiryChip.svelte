@@ -57,6 +57,7 @@
 
 	import { onMount, onDestroy } from 'svelte';
 	import { _ } from 'svelte-i18n';
+	import { formatDayMonthTime } from '$lib/i18n/formatters';
 
 	interface Props {
 		/** ISO-8601 timestamp string from the indexer.  Caller is
@@ -178,12 +179,16 @@
 		});
 	});
 
-	/** Full ISO-style aria label for screen readers. */
+	/** Full, friendly deadline for the hover tooltip + screen readers.
+	 *  cp440/v1.1.5 — was `new Date(...).toISOString()` (raw Zulu, e.g.
+	 *  "2026-08-04T17:59:30.000Z"), which looked broken on hover. Now the
+	 *  sitewide day-first + 24h-UTC format ("4 August, 2026 @ 17:59:30 UTC"),
+	 *  locale-translated month name. The pill itself already shows the relative
+	 *  "Expires in 5d 20h", so the tooltip only carries the absolute deadline. */
 	const ariaLabel = $derived.by(() => {
 		if (expiresAtMs === null) return '';
-		const expiresDate = new Date(expiresAtMs).toISOString();
 		return $_('orderbook.order.expires_aria', {
-			values: { iso: expiresDate, formatted }
+			values: { date: formatDayMonthTime(expiresAt) }
 		}) as string;
 	});
 

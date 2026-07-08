@@ -2644,7 +2644,7 @@
       "expires_in_minutes": "Wygasa za {minutes}m",
       "expires_in_minutes_seconds": "Wygasa za {minutes}m {seconds}s",
       "expires_in_seconds": "Wygasa za {seconds}s",
-      "expires_aria": "Zlecenie wygasa o {iso} ({formatted})",
+      "expires_aria": "Zlecenie wygasa {date}",
       "open_aria": "Zobacz szczegóły zlecenia: {title}"
     },
     "post_cta": "Opublikuj",

@@ -21,6 +21,7 @@ import { Hono } from 'hono';
 
 import { chainExplorerRoute } from '$api/chainExplorer';
 import type { BlurtClient } from '$blurt/client';
+import type { Database } from '$db/pool';
 
 /**
  * A concrete (non-generic) stub shape for the relay's upstream reader. The real
@@ -36,8 +37,31 @@ type CondenserStub = (
 	options?: { userFacing?: boolean }
 ) => Promise<unknown>;
 
+/**
+ * Minimal Database stub for the key-references DB-union path. `resolve` maps the
+ * queried keys → account names found in accounts.posting_pubkey (or throws to
+ * simulate a DB outage). Defaults to "no rows" so the condenser tests, which
+ * never touch the DB, are unaffected.
+ */
+function mockDb(resolve: (keys: string[]) => string[] = () => []): Database {
+	return {
+		query: (async (_text: string, params?: readonly unknown[]) => {
+			const keys = (params?.[0] as string[]) ?? [];
+			const names = resolve(keys);
+			return { rows: names.map((name) => ({ name })), rowCount: names.length };
+		}) as Database['query'],
+		withTx: (async () => {
+			throw new Error('withTx not used in these tests');
+		}) as Database['withTx'],
+		close: async () => {}
+	};
+}
+
 /** Mount /v1/chain with a stub whose callCondenser records the last call. */
-function mount(callCondenser: CondenserStub): {
+function mount(
+	callCondenser: CondenserStub,
+	db: Database = mockDb()
+): {
 	app: Hono;
 	calls: Array<{ method: string; params: unknown[] }>;
 } {
@@ -47,7 +71,7 @@ function mount(callCondenser: CondenserStub): {
 		return callCondenser(method, params, opts as { userFacing?: boolean });
 	}) as BlurtClient['callCondenser'];
 	const app = new Hono();
-	app.route('/v1/chain', chainExplorerRoute({ callCondenser: wrapped } as unknown as BlurtClient));
+	app.route('/v1/chain', chainExplorerRoute({ callCondenser: wrapped } as unknown as BlurtClient, db));
 	return { app, calls };
 }
 
@@ -170,5 +194,80 @@ describe('POST /v1/chain/condenser', () => {
 		const res = await post(app, { method: 'get_accounts', params: [['alice']] });
 		expect(res.status).toBe(502);
 		expect(((await res.json()) as { code: string }).code).toBe('internal');
+	});
+});
+
+describe('POST /v1/chain/key-references (chain + indexer-DB union)', () => {
+	const KEY = 'BLT8eGZMnyrBvNgcz3KKbFga5xwfEXpDEDHXrEuTLG7JMEi5BoAVo';
+
+	function keyRefPost(app: Hono, body: unknown): Promise<Response> {
+		return Promise.resolve(
+			app.request('/v1/chain/key-references', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify(body)
+			})
+		);
+	}
+
+	it('returns the chain result when the plugin indexes the key', async () => {
+		const { app } = mount(async () => [['alice']]);
+		const res = await keyRefPost(app, { keys: [KEY] });
+		expect(res.status).toBe(200);
+		expect(((await res.json()) as { accounts: string[] }).accounts).toEqual(['alice']);
+	});
+
+	it('falls back to the indexer DB when the chain plugin misses a pre-fork key', async () => {
+		// Chain returns [] (account_by_key never indexed the genesis key), but
+		// the account has touched Morphit so accounts.posting_pubkey has it.
+		const { app } = mount(
+			async () => [[]],
+			mockDb((keys) => (keys.includes(KEY) ? ['kencode'] : []))
+		);
+		const res = await keyRefPost(app, { keys: [KEY] });
+		expect(res.status).toBe(200);
+		expect(((await res.json()) as { accounts: string[] }).accounts).toEqual(['kencode']);
+	});
+
+	it('unions + dedupes both sources', async () => {
+		const { app } = mount(
+			async () => [['alice']],
+			mockDb(() => ['alice', 'kencode'])
+		);
+		const res = await keyRefPost(app, { keys: [KEY] });
+		const { accounts } = (await res.json()) as { accounts: string[] };
+		expect([...accounts].sort()).toEqual(['alice', 'kencode']);
+	});
+
+	it('still answers from the DB when the chain RPC is down (no 502)', async () => {
+		const { app } = mount(
+			async () => {
+				throw new Error('all endpoints failed');
+			},
+			mockDb(() => ['kencode'])
+		);
+		const res = await keyRefPost(app, { keys: [KEY] });
+		expect(res.status).toBe(200);
+		expect(((await res.json()) as { accounts: string[] }).accounts).toEqual(['kencode']);
+	});
+
+	it('502s only when BOTH the chain AND the DB fail', async () => {
+		const { app } = mount(
+			async () => {
+				throw new Error('all endpoints failed');
+			},
+			mockDb(() => {
+				throw new Error('db down');
+			})
+		);
+		const res = await keyRefPost(app, { keys: [KEY] });
+		expect(res.status).toBe(502);
+	});
+
+	it('returns empty (200) when neither source knows the key', async () => {
+		const { app } = mount(async () => [[]]);
+		const res = await keyRefPost(app, { keys: [KEY] });
+		expect(res.status).toBe(200);
+		expect(((await res.json()) as { accounts: string[] }).accounts).toEqual([]);
 	});
 });
