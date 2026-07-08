@@ -131,6 +131,17 @@ export interface ChainAccount {
 	readonly reward_blurt_balance?: string;
 	readonly reward_vesting_balance?: string;
 	readonly reward_vesting_blurt?: string;
+	/** cp439 — power-down (withdraw_vesting) progress. `vesting_withdraw_rate`
+	 *  is the per-week VESTS payout ("0.000000 VESTS" when idle);
+	 *  `next_vesting_withdrawal` is the ISO timestamp of the next weekly payout
+	 *  (a 1969/1970 epoch sentinel when idle); `to_withdraw` / `withdrawn` are
+	 *  raw VESTS×1e6 integers (total scheduled / already paid — string OR number
+	 *  depending on the node). The balance proxy forwards them so the wallet can
+	 *  show an in-progress power-down (amount left + finish date). */
+	readonly vesting_withdraw_rate?: string;
+	readonly next_vesting_withdrawal?: string;
+	readonly to_withdraw?: string | number;
+	readonly withdrawn?: string | number;
 }
 
 /** Bridge a dblurt call (no native cancellation) to an AbortSignal.

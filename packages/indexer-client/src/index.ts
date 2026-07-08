@@ -435,6 +435,16 @@ export interface AccountBalanceResponse {
 		readonly reward_blurt_balance: string;
 		readonly reward_vesting_balance: string;
 		readonly reward_vesting_blurt: string;
+		/** cp439 — power-down (withdraw_vesting) progress. `vesting_withdraw_rate`
+		 *  is the per-week VESTS payout ("0.000000 VESTS" when idle);
+		 *  `next_vesting_withdrawal` is the next-payout ISO timestamp (a 1970
+		 *  epoch sentinel when idle); `to_withdraw` / `withdrawn` are raw
+		 *  VESTS×1e6 integer strings (total scheduled / already paid). The wallet
+		 *  uses these to show an in-progress power-down (amount left + finish). */
+		readonly vesting_withdraw_rate: string;
+		readonly next_vesting_withdrawal: string;
+		readonly to_withdraw: string;
+		readonly withdrawn: string;
 	};
 	readonly dgp: {
 		readonly head_block_number: number;

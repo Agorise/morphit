@@ -957,9 +957,10 @@
     "save_success_body": "訂單簿將在幾秒內更新。",
     "save_error_title": "更改未儲存",
     "save_error_body": "區塊鏈未接受更新。請重試。",
-    "fee_note": "編輯免費 — 窗口期內替換不收費。",
+    "fee_note": "編輯免費——在 15 分鐘內完成則不收取掛單費。",
     "error_load_failed": "無法載入你嘅訂單。請重試。",
-    "substance_locked_hint": "編輯時，買賣方向、資產同法定貨幣已鎖定——睇過你原本掛單嘅人應該見到同一筆交易。若要更改交易內容，請改為發佈新掛單。"
+    "substance_locked_hint": "編輯時，買賣方向、資產同法定貨幣已鎖定——睇過你原本掛單嘅人應該見到同一筆交易。若要更改交易內容，請改為發佈新掛單。",
+    "barter_accept_locked_hint": "編輯時,你接受的加密貨幣已鎖定。"
   },
   "explorer": {
     "search": {
@@ -1082,6 +1083,7 @@
         "morphit_chat_identity": "聊天身份更新",
         "morphit_chat_read": "已讀回執",
         "morphit_release": "版本公告",
+        "morphit_release_versioned": "版本公告：Morphit v{version}",
         "morphit_fee_attest": "費用見證",
         "morphit_feature_bid": "精選競標",
         "morphit_operator_register": "營運者註冊",
@@ -1406,7 +1408,7 @@
       },
       "syndicate_trade_announcement": {
         "q": "\"同步我的訂單\" 核取方塊是甚麼？",
-        "a": "在發佈訂單的表單上，你可以勾選 \"同時把我的訂單同步到我的 Blog（免費）\"。勾選後，Morphit 會在你的訂單成功廣播的那一刻，把一條簡短的訂單公告發佈到你自己的 Blurt 博客（blurt.blog、beblurt.com、etc）上。這條帖子包含一個指向你在 Morphit 上訂單頁面的連結，並使用 #morphit 標籤，這樣它會出現在 Morphit 社群的訊息流裡。\n\n帖子用你的 posting 金鑰簽名——不是 Morphit 的，不是運營者的，是你的。這意味著：\n- 帖子真正來自你，而不是營銷垃圾訊息。\n- Morphit 項目不持有可以代你簽署社交內容的金鑰。\n- 你之後可以像處理你帳戶上的其他任何帖子一樣，編輯或刪除這條帖子。\n- 你喺博客帖子上收到嘅「讚好」會為你賺取更多用嚟交易同質押嘅 Blurt。\n\n還有一則你可以選擇開啟的一次性公告:在你的首筆交易時,向 @morphit 社群(而非你的網誌)發佈一篇簡短的「我加入了 Morphit」帖子。預設關閉——在下單表單、設定或評價表單上用核取方塊開啟,它只在你為該首筆交易留下評價時發佈一次。之後,設定卡片改為讓你預先勾選單筆訂單的網誌帖子。"
+        "a": "在發佈訂單的表單上，你可以勾選 \"將我的訂單同步發佈到 Blurt 網誌\"。勾選後，Morphit 會在你的訂單成功廣播的那一刻，把一條簡短的訂單公告發佈到你自己的 Blurt 博客（blurt.blog、beblurt.com、etc）上。這條帖子包含一個指向你在 Morphit 上訂單頁面的連結，並使用 #morphit 標籤，這樣它會出現在 Morphit 社群的訊息流裡。\n\n帖子用你的 posting 金鑰簽名——不是 Morphit 的，不是運營者的，是你的。這意味著：\n- 帖子真正來自你，而不是營銷垃圾訊息。\n- Morphit 項目不持有可以代你簽署社交內容的金鑰。\n- 你之後可以像處理你帳戶上的其他任何帖子一樣，編輯或刪除這條帖子。\n- 你喺博客帖子上收到嘅「讚好」會為你賺取更多用嚟交易同質押嘅 Blurt。\n\n還有一則你可以選擇開啟的一次性公告:在你的首筆交易時,向 @morphit 社群(而非你的網誌)發佈一篇簡短的「我加入了 Morphit」帖子。預設關閉——在下單表單、設定或評價表單上用核取方塊開啟,它只在你為該首筆交易留下評價時發佈一次。之後,設定卡片改為讓你預先勾選單筆訂單的網誌帖子。"
       },
       "offline_caching": {
         "q": "Morphit 可以 offline 工作嗎?",
@@ -3455,6 +3457,7 @@
       "available_blurt": "可用:{amount} BLURT",
       "available_bp": "可用:{amount} BP",
       "power_down_schedule": "這並非即時：你的 BP 會在 4 週內逐步解押回流動的 BLURT。今日不會到帳，請耐心等候。逐步釋放是 Blurt 協議的規則，而非 Morphit 的規則。",
+      "power_down_in_progress": "你已有一筆 power down 正在進行：剩餘 {amount} BP，將於 {date} 完成。",
       "password_label": "你的 @{account} 密碼(用於以你的活躍密鑰簽名)",
       "error_password_required": "請輸入密碼以繼續。",
       "error_bad_password": "該密碼未能解鎖你的活躍密鑰。請檢查後重試。",
@@ -4423,17 +4426,16 @@
       "body_buy": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\n我正在用 {asset2} 正在買入 {asset1}。想交易嗎?\n\n沒有比 Morphit 更安全、更快、更可靠的地方來交易加密貨幣和法幣。\n\n看看我在 Morphit 上的報價!\nhttps://morphit.io/{lang}/@{username}/{permlink}",
       "body_sell": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\n我正在用 {asset2} 正在賣出 {asset1}。想交易嗎?\n\n沒有比 Morphit 更安全、更快、更可靠的地方來交易加密貨幣和法幣。\n\n看看我在 Morphit 上的報價!\nhttps://morphit.io/{lang}/@{username}/{permlink}"
     },
-    "opt_in_label": "將此訂單也同步發佈到我的網誌(免費)",
-    "opt_in_help": "將呢個訂單嘅簡短公告發佈到你嘅 Blurt 博客。每個訂單一篇帖子，由你簽署，提交後即刻發出。只需支付 Blurt 嘅小額網絡費用，由你嘅流動 BLURT 扣除。",
+    "opt_in_label": "將我的訂單同步發佈到 Blurt 網誌",
     "review_on_title": "此訂單也將發佈到你的網誌",
     "review_on_body": "提交後,簡短公告將立即發佈到你的 Blurt 網誌,讓其他人能找到你的報價。由你簽署,免費。",
     "success_pending": "正在將公告發佈到你的 Blurt 網誌…",
     "success_ok": "已發佈到你的 Blurt 網誌。",
     "success_failed": "目前無法將公告發佈到你的網誌——你的訂單仍然有效。如果願意,你可以稍後手動發佈。",
     "opt_in_pitch": "辛迪加發布交易至關重要。更多眼睛看到您的報價 = 更多交易夥伴,加上點讚獎勵直接進入您的 Blurt 錢包。",
-    "first_trade_opt_in_label": "向 @morphit 社群公佈我的首筆交易(免費)",
+    "first_trade_opt_in_label": "向 @morphit 社群公佈我的首筆交易",
     "first_trade_opt_in_pitch": "你在 Morphit 的第一筆交易可以向 @morphit 社群發佈一次性的「我加入了 Morphit」公告——讓更多人看到你,並有機會獲得讚好獎勵,直接進入你的 Blurt 錢包。",
-    "first_trade_opt_in_help": "僅觸發一次——在你為首筆交易留下評價時,而非現在。預設關閉。與上方的單筆訂單網誌帖子互相獨立。"
+    "first_trade_opt_in_help": "這是你向整個社群介紹自己的一次性機會,將在你首筆訂單成功完成後發佈。"
   },
   "toast": {
     "view_action": "查看"

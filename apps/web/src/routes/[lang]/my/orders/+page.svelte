@@ -51,6 +51,7 @@
 	import { fetchOrderViews } from '$lib/orders/views';
 	import { formatOrderPriceModel } from '$lib/orders/priceModelDisplay';
 	import { isOrderExpired, isOrderLive } from '$lib/orders/orderExpiry';
+	import { buildRelistPrefill, RELIST_PREFILL_KEY } from '$lib/orders/relist';
 	import { MORPHIT_INDEXER_ORIGIN, resolveOrigin } from '$net/config';
 	import { safeSession } from '$lib/utils/safeStorage';
 	import { orderTitleParts } from '$lib/utils/orderTitle';
@@ -460,51 +461,7 @@
 	 *  spread=0 so the user can fix manually.
 	 */
 	function relistOrder(o: OrderRecord): void {
-		// Translate the wire price_model back to the form's split
-		// state.  Defensive coding — the field is `unknown`-typed
-		// because the indexer doesn't validate it; we accept the
-		// known shapes and fall back gracefully on anything else.
-		let priceModelKind: 'spread' | 'fixed' = 'spread';
-		let spreadPercent = '0';
-		let fixedPrice = '';
-		const pm = o.price_model;
-		if (pm && typeof pm === 'object') {
-			const obj = pm as Record<string, unknown>;
-			if (obj.kind === 'spread' && typeof obj.percent === 'number') {
-				priceModelKind = 'spread';
-				spreadPercent = String(obj.percent);
-			} else if (obj.kind === 'fixed' && typeof obj.price === 'number') {
-				priceModelKind = 'fixed';
-				fixedPrice = String(obj.price);
-			}
-		}
-
-		const payload = {
-			side: o.side,
-			asset: o.asset,
-			// cp36 Bob-4 fix — carry forward the multi-network
-			// asset's asset_network so /post can pre-hydrate its
-			// network picker. Without this, relisting a USDT/USDC/DAI
-			// order lands on /post with an empty picker and the user
-			// has to remember which network they had.
-			assetNetwork: o.asset_network ?? null,
-			fiat: o.fiat_currency,
-			amountMin: o.amount_min !== null ? String(o.amount_min) : '',
-			amountMax: o.amount_max !== null ? String(o.amount_max) : '',
-			priceModelKind,
-			spreadPercent,
-			fixedPrice,
-			paymentMethods: [...o.payment_methods],
-			region: o.location_region ?? '',
-			terms: o.terms ?? '',
-			// Default new expiry to 30 days; the user can adjust on
-			// the post page.  We deliberately don't carry forward
-			// the OLD expiresDays (which already passed) because
-			// the user is re-upping fresh — make them pick again.
-			expiresDays: 30,
-			reason: 'relist'
-		};
-		safeSession.set('morphit.post.prefill', JSON.stringify(payload));
+		safeSession.set(RELIST_PREFILL_KEY, JSON.stringify(buildRelistPrefill(o)));
 		void gotoLocale('/post');
 	}
 
@@ -784,14 +741,14 @@
 									{stateLabel(o)}
 								</span>
 								<PaymentStatusBadge orderPermlink={o.permlink} />
-								{#if isExpired(o)}
-									<!-- cp429 — an EXPIRED order is simply not on the
-									     orderbook anymore. This is NOT a fee problem, so
-									     it gets a neutral pill and NO "Learn more →
-									     order_fee_rejected" link. Previously a verified-
-									     but-expired order fell through to the red rejected
-									     branch below, showing "Visible in orderbook" in
-									     red with a misleading fee-rejection link. -->
+								{#if !isLive(o)}
+									<!-- cp429/cp440 — an order that is no longer live (EXPIRED or
+									     CANCELLED) is not on the orderbook anymore. This is NOT a
+									     fee problem, so it gets a neutral "Not visible" pill and NO
+									     "Learn more → order_fee_rejected" link. Previously a
+									     verified-but-expired order fell through to the red rejected
+									     branch, and a verified-but-cancelled order wrongly showed a
+									     green "Visible in orderbook" pill. -->
 									<span
 										class="rounded-full border border-ink-300 bg-ink-50 px-2 py-0.5 text-ink-600 dark:border-ink-600 dark:bg-ink-800 dark:text-ink-300"
 									>
@@ -864,9 +821,11 @@
 									<div>
 										<dt class="inline text-ink-500">{$_('order_detail.expires_on')}:</dt>
 										<dd class="inline text-ink-700 dark:text-ink-200">
-											{isExpired(o)
-												? $_('my_orders.order.state_expired')
-												: formatDayMonth(o.expires_at)}
+											{o.status === 'cancelled'
+												? $_('my_orders.order.state_cancelled')
+												: isExpired(o)
+													? $_('my_orders.order.state_expired')
+													: formatDayMonth(o.expires_at)}
 										</dd>
 									</div>
 								{/if}
@@ -1042,7 +1001,9 @@
 									</BusyButton>
 								{/if}
 							{:else if o.status === 'cancelled'}
-								<span class="text-xs text-ink-500">
+								<span
+									class="self-end rounded-full border border-ink-300 px-2.5 py-0.5 text-xs font-semibold text-ink-500 dark:border-ink-600 dark:text-ink-400"
+								>
 									{$_('my_orders.order.action_cancelled')}
 								</span>
 							{:else if isExpired(o)}

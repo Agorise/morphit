@@ -84,6 +84,16 @@ interface AccountBalanceBody {
 		readonly reward_blurt_balance: string;
 		readonly reward_vesting_balance: string;
 		readonly reward_vesting_blurt: string;
+		/** cp439 — power-down (withdraw_vesting) progress, forwarded so the
+		 *  wallet can show an in-progress power-down (amount left + finish
+		 *  date). `vesting_withdraw_rate` per-week VESTS payout; `next_
+		 *  vesting_withdrawal` next-payout ISO timestamp (epoch sentinel when
+		 *  idle); `to_withdraw` / `withdrawn` raw VESTS×1e6 totals. Zero /
+		 *  sentinel defaults keep the "no active power-down" case clean. */
+		readonly vesting_withdraw_rate: string;
+		readonly next_vesting_withdrawal: string;
+		readonly to_withdraw: string;
+		readonly withdrawn: string;
 	};
 	readonly dgp: {
 		readonly head_block_number: number;
@@ -173,7 +183,15 @@ export function accountBalanceRoute(blurt: BlurtClient): Hono {
 				// math safe if a node omits them (no rewards → line hidden).
 				reward_blurt_balance: acct.reward_blurt_balance ?? '0.000 BLURT',
 				reward_vesting_balance: acct.reward_vesting_balance ?? '0.000000 VESTS',
-				reward_vesting_blurt: acct.reward_vesting_blurt ?? '0.000 BLURT'
+				reward_vesting_blurt: acct.reward_vesting_blurt ?? '0.000 BLURT',
+				// cp439 — power-down progress. Sentinels for an idle account:
+				// rate "0.000000 VESTS", next-withdrawal the 1970 epoch, totals
+				// "0". `to_withdraw`/`withdrawn` are int-ish (string OR number
+				// off the node) → normalise to string for a stable wire shape.
+				vesting_withdraw_rate: acct.vesting_withdraw_rate ?? '0.000000 VESTS',
+				next_vesting_withdrawal: acct.next_vesting_withdrawal ?? '1970-01-01T00:00:00',
+				to_withdraw: String(acct.to_withdraw ?? '0'),
+				withdrawn: String(acct.withdrawn ?? '0')
 			},
 			dgp: {
 				head_block_number: dgp.head_block_number,

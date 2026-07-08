@@ -269,6 +269,7 @@ SMOKES=(
 	"apps/web:i18n-formatters-smoke"
 	"apps/web:public-key-display-smoke"
 	"apps/web:order-card-smoke"
+	"apps/web:order-detail-expired-ui-smoke"
 	"apps/web:lazy-import-catch-fallback-smoke"
 	"apps/web:chat-pdf-export-smoke"
 	"apps/web:display-name-cap-smoke"

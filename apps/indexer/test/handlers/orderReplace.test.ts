@@ -53,10 +53,10 @@ describe('orderReplace handler', () => {
 		expect(mock.queries).toHaveLength(2);
 	});
 
-	// ─── cp425: barter accepted_assets on replace ───────────────────
-	// accepted_assets is editable on replace (a seller may change which
-	// cryptos they accept), unlike side/asset/fiat/network which are locked.
-	// The validation mirrors the order handler.
+	// ─── cp425/cp440: barter accepted_assets on replace ─────────────
+	// cp440 — accepted_assets is now LOCKED on replace (bait-and-switch
+	// guard), like side/asset/fiat/network. An unchanged set passes; a
+	// changed set is rejected. The validation still mirrors the order handler.
 	function validBarterReplacePayload() {
 		return {
 			permlink: 'sell-barter-mxn-2026-07',
@@ -72,7 +72,7 @@ describe('orderReplace handler', () => {
 		};
 	}
 
-	it('updates a barter order (accepted_assets editable on replace)', async () => {
+	it('updates a barter order when the accepted set is unchanged (order-independent)', async () => {
 		const createdAt = new Date('2026-07-05T12:00:00Z');
 		const blockTime = new Date('2026-07-05T12:02:00Z');
 		const mock = makeMockClient([
@@ -86,7 +86,10 @@ describe('orderReplace handler', () => {
 						asset: 'BARTER',
 						asset_network: null,
 						fiat_currency: 'MXN',
-						fee_method: 'blurt'
+						fee_method: 'blurt',
+						// stored sorted; payload sends ['XMR','BTC'] — same set,
+						// different order — must still be treated as unchanged.
+						accepted_assets: ['BTC', 'XMR']
 					}
 				]
 			},
@@ -98,6 +101,35 @@ describe('orderReplace handler', () => {
 		);
 		expect(r).toEqual({ ok: true });
 		expect(mock.queries).toHaveLength(2);
+	});
+
+	it('rejects a barter replace that changes the accepted set (cp440 bait-and-switch lock)', async () => {
+		const createdAt = new Date('2026-07-05T12:00:00Z');
+		const blockTime = new Date('2026-07-05T12:02:00Z');
+		const mock = makeMockClient([
+			{
+				match: 'SELECT status, created_at',
+				rows: [
+					{
+						status: 'live',
+						created_at: createdAt,
+						side: 'sell',
+						asset: 'BARTER',
+						asset_network: null,
+						fiat_currency: 'MXN',
+						fee_method: 'blurt',
+						accepted_assets: ['BTC', 'XMR']
+					}
+				]
+			},
+			{ match: 'UPDATE orders', rowCount: 1 }
+		]);
+		// payload drops BTC, keeping only XMR — a substance change.
+		const payload = { ...validBarterReplacePayload(), accepted_assets: ['XMR'] };
+		const r = await handler(makeCtx({ signer: 'alice', blockTime, payload }), mock.client);
+		expect(r).toEqual({ ok: false, reason: 'replace_accepted_assets_change_forbidden' });
+		// rejected after the probe, before the UPDATE.
+		expect(mock.queries).toHaveLength(1);
 	});
 
 	it('rejects a barter replace with no accepted_assets (before any query)', async () => {

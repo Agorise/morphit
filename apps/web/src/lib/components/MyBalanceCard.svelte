@@ -35,6 +35,7 @@
 	import { _, locale } from 'svelte-i18n';
 	import { goto } from '$app/navigation';
 	import { fetchAccountBalance } from '$blurt/accountBalance';
+	import { computePowerDownProgress, type PowerDownProgress } from '$blurt/powerDownProgress';
 	import { fetchAccountHistory } from '$blurt/accountHistory';
 	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 	import { vestsToBlurtPower, votingPowerPercent, parseAssetAmount } from '$blurt/balanceMath';
@@ -98,6 +99,9 @@
 	let vestingFund = $state('');
 	let totalVests = $state('');
 	let vestingSharesRaw = $state('');
+	/** cp439 — in-progress power-down summary (amount left + finish date) for
+	 *  the Power down modal's 💡 section. null when nothing is powering down. */
+	let powerDownProgress = $state<PowerDownProgress | null>(null);
 	let manaPct = $state(NaN);
 	let vestingApr = $state(NaN);
 	// cp396 — unclaimed author/curation rewards. `*Display` are the parsed
@@ -255,6 +259,19 @@
 				typeof acct.vesting_shares === 'string'
 					? acct.vesting_shares
 					: String(acct.vesting_shares);
+			// cp439 — an in-progress power-down (amount still to release + the
+			// date the last weekly payout lands) for the Power down modal's 💡
+			// section. null when the account isn't powering down.
+			powerDownProgress = computePowerDownProgress(
+				{
+					vesting_withdraw_rate: acct.vesting_withdraw_rate,
+					next_vesting_withdrawal: acct.next_vesting_withdrawal,
+					to_withdraw: acct.to_withdraw,
+					withdrawn: acct.withdrawn
+				},
+				vestingFund,
+				totalVests
+			);
 			manaPct = votingPowerPercent(
 				acct.voting_power,
 				acct.last_vote_time,
@@ -1008,6 +1025,7 @@
 				{vestingFund}
 				{totalVests}
 				{vestingSharesRaw}
+				powerDown={powerDownProgress}
 				onDone={onPowerDone}
 				onCancel={closePower}
 			/>

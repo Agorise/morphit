@@ -511,10 +511,60 @@ export async function broadcastCustomJson(
 	const postingKey = rawToPrivateKey(live.posting.privateKey);
 	const signed: SignedTransaction = signTransactionWithKey(tx, postingKey, live.posting.privateKey);
 
+	// ─── [morphit-diag cp440] TEMPORARY — remove after the broadcast bug hunt ───
+	// Public-only logging (nothing secret): the op id, the account that goes
+	// into required_posting_auths, and the posting PUBLIC key derived from the
+	// key actually in hand. `nobleHex` is ground truth (bypasses the app
+	// formatter); `formatted` is what formatPublicKeyBLT() — the canonical
+	// formatter with the suspected browser-Buffer bug — yields in THIS build.
+	// leading "Missing Posting Authority" theory. Because chat (works) and
+	// profile (fails) both flow through here, comparing the two console lines
+	// pinpoints any account/key divergence between them.
+	try {
+		const scalar = live.posting.privateKey;
+		const secp = await import('@noble/secp256k1');
+		const pub = secp.getPublicKey(scalar, true);
+		const nobleHex = Array.from(pub as Uint8Array)
+			.map((b) => b.toString(16).padStart(2, '0'))
+			.join('');
+		let formatted = '(formatPublicKeyBLT threw)';
+		try {
+			const { formatPublicKeyBLT } = await import('$lib/crypto/keygen');
+			formatted = await formatPublicKeyBLT(pub as Uint8Array);
+		} catch (e) {
+			formatted =
+				'(formatPublicKeyBLT threw: ' + (e instanceof Error ? e.message : String(e)) + ')';
+		}
+		// eslint-disable-next-line no-console
+		console.info('[morphit-diag] broadcastCustomJson →', {
+			op: id,
+			account: blurtAccount,
+			postingPubNobleHex: nobleHex,
+			postingPubFormatted: formatted,
+			scalarLen: scalar.length,
+			payloadBytes: JSON.stringify(payload).length
+		});
+	} catch (e) {
+		// eslint-disable-next-line no-console
+		console.warn('[morphit-diag] broadcastCustomJson diag skipped', e);
+	}
+	// ─── end diag ───
+
 	// cp344: broadcast SAME-ORIGIN through the indexer proxy (direct-RPC
 	// fallback) — no cross-origin RPC connection, no IP leak to third-party
 	// nodes. See broadcastTransport.ts.
-	const result = await submitSignedTransaction(signed);
+	let result: { block_num: number; trx_id: string };
+	try {
+		result = await submitSignedTransaction(signed);
+	} catch (err) {
+		// eslint-disable-next-line no-console
+		console.error('[morphit-diag] broadcastCustomJson FAILED', {
+			op: id,
+			account: blurtAccount,
+			error: err instanceof Error ? err.message : String(err)
+		});
+		throw err;
+	}
 	return result;
 }
 

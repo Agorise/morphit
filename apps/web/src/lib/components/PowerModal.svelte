@@ -32,7 +32,7 @@
 	 *     leaves no dust.
 	 */
 
-	import { _ } from 'svelte-i18n';
+	import { _, locale } from 'svelte-i18n';
 	import { runWithActiveKey } from '$crypto/runWithActiveKey';
 	import {
 		prepareUnsignedTransferToVesting,
@@ -47,6 +47,8 @@
 		formatBlurtAmount,
 		formatVestsAmount
 	} from '$blurt/balanceMath';
+	import type { PowerDownProgress } from '$blurt/powerDownProgress';
+	import { formatDayMonth } from '$lib/i18n/formatters';
 
 	interface Props {
 		/** 'up' = stake liquid BLURT as BP; 'down' = unstake BP → BLURT. */
@@ -67,6 +69,10 @@
 		 *  "12345.678901 VESTS"), used verbatim for "power down everything"
 		 *  so no dust is left behind. */
 		vestingSharesRaw: string;
+		/** cp439 — an already-running power-down (amount left + finish date),
+		 *  or null. Shown as a 💡 note in the mode='down' modal so the user
+		 *  sees an unstake is already underway before starting another. */
+		powerDown?: PowerDownProgress | null;
 		/** Broadcast succeeded → parent refreshes the balance + closes. */
 		onDone: () => void;
 		/** Cancel / dismiss. */
@@ -81,6 +87,7 @@
 		vestingFund,
 		totalVests,
 		vestingSharesRaw,
+		powerDown = null,
 		onDone,
 		onCancel
 	}: Props = $props();
@@ -100,6 +107,18 @@
 	let usingFullBalance = $state(false);
 
 	const available = $derived(mode === 'up' ? blurtBalance : bpBalance);
+
+	/** cp439 — remaining-BP figure for the 💡 in-progress note, formatted the
+	 *  same way the balance card shows BP (locale grouping, 3 decimals). The
+	 *  i18n string supplies the "BP" unit, so this is number-only. */
+	const powerDownAmountText = $derived(
+		powerDown
+			? powerDown.remainingBp.toLocaleString($locale ?? undefined, {
+					minimumFractionDigits: 3,
+					maximumFractionDigits: 3
+				})
+			: ''
+	);
 
 	/** The entered amount as a number, for validation + conversion. */
 	const amountNum = $derived(Number(enteredAmount.trim()));
@@ -242,6 +261,25 @@
 				? $_('profile.wallet.power_up_subtitle')
 				: $_('profile.wallet.power_down_subtitle')}
 		</p>
+
+		{#if mode === 'down' && powerDown}
+			<!-- cp439 — a power-down is already running. Show how much is left
+			     and when the final weekly payout lands, so the user knows an
+			     unstake is underway before they start another. -->
+			<p
+				class="mt-3 flex items-start gap-1.5 rounded-lg border border-morphit-teal/40 bg-morphit-teal/5 p-2.5 text-xs text-ink-600 dark:border-morphit-emerald/40 dark:text-ink-300"
+			>
+				<span aria-hidden="true" class="flex-none">💡</span>
+				<span>
+					{$_('profile.wallet.power_down_in_progress', {
+						values: {
+							amount: powerDownAmountText,
+							date: formatDayMonth(powerDown.finishIso)
+						}
+					})}
+				</span>
+			</p>
+		{/if}
 
 		{#if phase.kind === 'error'}
 			<div

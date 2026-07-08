@@ -664,6 +664,34 @@
 			// 3. Format the derived posting public key for chain comparison.
 			const derivedPub = await formatPublicKeyBLT(full.keys.posting.publicKey);
 
+			// ─── [morphit-diag cp440] TEMP — remove after the bug hunt ───
+			// Compare the RAW derived posting pubkey (ground truth, straight from
+			// secp256k1) against the formatPublicKeyBLT() output used for the
+			// account lookup below. If they don't correspond, the canonical
+			// formatter is corrupting the key in THIS browser build — the same bug
+			// behind a blank/wrong username field here AND the settings
+			// "Missing Posting Authority". Public keys only; nothing secret.
+			try {
+				const rawPub = full.keys.posting.publicKey;
+				let rawB64 = '';
+				for (const b of rawPub) rawB64 += String.fromCharCode(b);
+				rawB64 = btoa(rawB64).replace(/=+$/, '');
+				const rawHex = Array.from(rawPub)
+					.map((b) => b.toString(16).padStart(2, '0'))
+					.join('');
+				// eslint-disable-next-line no-console
+				console.info('[morphit-diag] posting-only login → derived posting pubkey', {
+					rawPubB64: rawB64,
+					rawPubHex: rawHex,
+					rawLen: rawPub.length,
+					formattedBLT: derivedPub
+				});
+			} catch (e) {
+				// eslint-disable-next-line no-console
+				console.warn('[morphit-diag] posting-only login diag failed', e);
+			}
+			// ─── end diag ───
+
 			// 3b. Resolve the account name. Prefer the manually-entered +
 			//     validated username (prefork accounts the reverse lookup can't
 			//     find); otherwise reverse-resolve from the derived public key via

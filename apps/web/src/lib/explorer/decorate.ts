@@ -174,6 +174,20 @@ export function decorateOp(opName: string, opBody: unknown): OpDecoration {
 		if (typeof id === 'string') {
 			const kind = OP_ID_TO_KIND.get(id);
 			if (kind) {
+				// cp439: a release announcement surfaces its version in the pill
+				// ("Release announcement: Morphit vX.Y.Z"). Falls back to the
+				// plain label if the version can't be read.
+				if (kind === 'morphit_release') {
+					const version = releaseVersion(body.json);
+					if (version !== null) {
+						return {
+							kind,
+							labelKey: 'morphit_release_versioned',
+							isMorphitOp: true,
+							values: { version }
+						};
+					}
+				}
 				return { kind, labelKey: kind, isMorphitOp: true };
 			}
 		}
@@ -185,4 +199,32 @@ export function decorateOp(opName: string, opBody: unknown): OpDecoration {
 	}
 
 	return { kind: 'native_unknown', labelKey: 'native_unknown', isMorphitOp: false };
+}
+
+/**
+ * Pull the version string out of a `morphit_release` custom_json payload.
+ *
+ * The op's `json` field is the payload encoded as a STRING (raw wire form),
+ * though some call paths hand back an already-parsed object — handle both.
+ * Returns null on anything unexpected (missing / non-string / unparseable) so
+ * the pill falls back to the plain "Release announcement" label rather than
+ * showing a broken interpolation. Pure — JSON.parse only, no I/O.
+ */
+function releaseVersion(json: unknown): string | null {
+	let payload: Record<string, unknown> | null = null;
+	if (typeof json === 'string') {
+		try {
+			const parsed: unknown = JSON.parse(json);
+			if (parsed !== null && typeof parsed === 'object') {
+				payload = parsed as Record<string, unknown>;
+			}
+		} catch {
+			return null;
+		}
+	} else if (json !== null && typeof json === 'object') {
+		payload = json as Record<string, unknown>;
+	}
+	if (payload === null) return null;
+	const v = payload.version;
+	return typeof v === 'string' && v.trim().length > 0 ? v.trim() : null;
 }

@@ -21,7 +21,7 @@
  *   - Make MyBalanceCard stop importing fetchAccountBalance → fails.
  */
 
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -81,6 +81,55 @@ if (importsHelper && callsHelper) {
 	ok('MyBalanceCard reads balance via fetchAccountBalance (indexer), not direct RPC');
 } else {
 	bad('MyBalanceCard does not use fetchAccountBalance for the balance read');
+}
+
+// 5. cp439 — power-down-in-progress chain: the withdraw_vesting progress the
+//    Power down modal's 💡 note shows must flow indexer → client type → web
+//    helper module → card → modal → all 10 locales.
+const PD_FIELDS = ['vesting_withdraw_rate', 'next_vesting_withdrawal', 'to_withdraw', 'withdrawn'];
+if (PD_FIELDS.every((f) => endpoint.includes(f))) {
+	ok('indexer balance endpoint forwards the 4 power-down fields');
+} else {
+	bad('indexer balance endpoint drops one or more power-down fields');
+}
+if (PD_FIELDS.every((f) => client.includes(f))) {
+	ok('indexer-client AccountBalanceResponse declares the 4 power-down fields');
+} else {
+	bad('indexer-client AccountBalanceResponse missing a power-down field');
+}
+const pdHelper = read('apps/web/src/lib/blurt/powerDownProgress.ts');
+if (/export function computePowerDownProgress/.test(pdHelper)) {
+	ok('powerDownProgress.ts exports computePowerDownProgress');
+} else {
+	bad('powerDownProgress.ts missing computePowerDownProgress');
+}
+const cardWires =
+	/computePowerDownProgress/.test(card) && /powerDown=\{powerDownProgress\}/.test(card);
+if (cardWires) {
+	ok('MyBalanceCard computes power-down progress + passes it to PowerModal');
+} else {
+	bad('MyBalanceCard does not compute/pass power-down progress');
+}
+const modal = read('apps/web/src/lib/components/PowerModal.svelte');
+const modalRenders =
+	modal.includes('profile.wallet.power_down_in_progress') && /mode === 'down' && powerDown/.test(modal);
+if (modalRenders) {
+	ok('PowerModal renders the 💡 power_down_in_progress note (gated on mode=down + powerDown)');
+} else {
+	bad('PowerModal does not render the power_down_in_progress note');
+}
+const locDir = join(REPO, 'apps/web/src/lib/i18n/locales');
+const locales = existsSync(locDir)
+	? readdirSync(locDir).filter((f) => f.endsWith('.json'))
+	: [];
+const missing = locales.filter((f) => {
+	const j = JSON.parse(read(`apps/web/src/lib/i18n/locales/${f}`) || '{}');
+	return typeof j?.profile?.wallet?.power_down_in_progress !== 'string';
+});
+if (locales.length === 10 && missing.length === 0) {
+	ok(`power_down_in_progress present in all ${locales.length} locales`);
+} else {
+	bad(`power_down_in_progress missing in: ${missing.join(', ') || '(locale count != 10)'}`);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
