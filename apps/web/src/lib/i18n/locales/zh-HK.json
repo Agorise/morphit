@@ -2644,7 +2644,7 @@
       "expires_in_minutes": "{minutes}分鐘後過期",
       "expires_in_minutes_seconds": "{minutes}分 {seconds}秒後過期",
       "expires_in_seconds": "{seconds}秒後過期",
-      "expires_aria": "訂單喺 {iso} 過期（{formatted}）",
+      "expires_aria": "訂單將於 {date} 到期",
       "open_aria": "查看訂單詳情：{title}"
     },
     "post_cta": "發布訂單",

@@ -786,7 +786,7 @@
 				<dt class="text-xs text-ink-500 dark:text-ink-400">
 					{$_('profile.my_balance.blurt_label')}
 				</dt>
-				<dd class="font-mono text-lg font-semibold">
+				<dd class="font-mono text-lg font-semibold leading-tight">
 					<!-- Desktop: full BLURT precision with grouping (e.g. 5,055.031). -->
 					<span class="hidden sm:inline"
 						><AnimatedNumber
@@ -810,8 +810,11 @@
 								silent={suppressBlurtFlashOnce}
 							/></button
 						>{#if openExact === 'blurt'}{@render exactTip(exactBlurt)}{/if}</span
-					>{#if usdLabel}<span
-							class="ml-1 font-sans text-xs font-normal text-ink-500 dark:text-ink-400"
+					><!-- Fiat approximation. `inline-block` gives the wrapped line its
+					     own text-xs line-box (v1.1.5) — inline it inherited the dd's
+					     text-lg line-height, leaving a phantom gap that read as a
+					     stray line-feed above the fiat. -->{#if usdLabel}<span
+							class="ml-1 inline-block align-baseline font-sans text-xs font-normal leading-tight text-ink-500 dark:text-ink-400"
 							>({usdLabel})</span
 						>{/if}
 				</dd>

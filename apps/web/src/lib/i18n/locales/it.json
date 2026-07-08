@@ -2644,7 +2644,7 @@
       "expires_in_minutes": "Scade tra {minutes}m",
       "expires_in_minutes_seconds": "Scade tra {minutes}m {seconds}s",
       "expires_in_seconds": "Scade tra {seconds}s",
-      "expires_aria": "L'ordine scade alle {iso} ({formatted})",
+      "expires_aria": "L'ordine scade il {date}",
       "open_aria": "Vedi i dettagli dell'ordine: {title}"
     },
     "post_cta": "Pubblica ordine",

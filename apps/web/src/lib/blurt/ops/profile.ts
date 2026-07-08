@@ -264,16 +264,6 @@ export async function broadcastProfile(
 	// broadcast. If a real identity↔account mismatch ever occurs, the chain's
 	// own rejection is surfaced via broadcastErrCopy, same as every other op.
 	const body = buildProfileBody(payload, Math.floor(Date.now() / 1000));
-	// [morphit-diag cp440] TEMP — confirms the settings "Save & broadcast" path
-	// reaches here with the expected account. The account MUST match the one in
-	// the broadcastCustomJson diag line (op:'profile') below; a mismatch there
-	// is the smoking gun. Field names only, no free-text values (avoids logging
-	// a display name/bio the user may consider private).
-	// eslint-disable-next-line no-console
-	console.info('[morphit-diag] broadcastProfile → about to broadcast', {
-		account,
-		bodyFields: Object.keys(body as Record<string, unknown>)
-	});
 	// cp165: dynamic import of '../sign' keeps dblurt out of the
 	// eager-load graph for read-only routes that pull profile.ts.
 	const { broadcastCustomJson } = await import('../sign');

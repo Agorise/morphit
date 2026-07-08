@@ -2644,7 +2644,7 @@
       "expires_in_minutes": "تا {minutes} دقیقه دیگر منقضی می‌شود",
       "expires_in_minutes_seconds": "تا {minutes} دقیقه و {seconds} ثانیه دیگر منقضی می‌شود",
       "expires_in_seconds": "تا {seconds} ثانیه دیگر منقضی می‌شود",
-      "expires_aria": "سفارش در {iso} منقضی می‌شود ({formatted})",
+      "expires_aria": "این سفارش در {date} منقضی می‌شود",
       "open_aria": "مشاهده جزئیات سفارش: {title}"
     },
     "post_cta": "انتشار سفارش",

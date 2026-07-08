@@ -102,6 +102,24 @@ COMMENT ON COLUMN orders.accepted_assets IS
     'settle in a crypto on this list.  NULL for every crypto asset — '
     'those settle in themselves and have no accepted-set.';
 `
+	},
+	{
+		version: 38,
+		description:
+			'cp440: index accounts.posting_pubkey for the key-references reverse lookup (login auto-resolve)',
+		// The posting_pubkey column (v36) had no index because it was only ever
+		// SERVED (SELECT by account name, which is the PK / already indexed).
+		// cp440 added a reverse lookup — SELECT name WHERE posting_pubkey = ANY(...)
+		// in the /v1/chain/key-references union — which runs on every posting-key
+		// login attempt; without this index it seq-scans the accounts table.
+		// Partial (WHERE NOT NULL) since NULL rows (not yet backfilled) are never
+		// a lookup target and the backfill's own `WHERE posting_pubkey IS NULL`
+		// scan wants those rows excluded from this index anyway.
+		sql: `
+CREATE INDEX IF NOT EXISTS idx_accounts_posting_pubkey
+    ON accounts (posting_pubkey)
+    WHERE posting_pubkey IS NOT NULL;
+`
 	}
 	// Future migrations land here.  The v1 collapsed schema is the
 	// pre-launch baseline; from v37 forward, every new schema change is its

@@ -31,6 +31,7 @@
 import { Hono } from 'hono';
 
 import type { BlurtClient } from '$blurt/client';
+import type { Database } from '$db/pool';
 import { errorBody } from '$api/shared';
 
 /** Blocks and confirmed transactions are immutable once produced, so a
@@ -82,7 +83,7 @@ interface ChainKeyReferencesBody {
 	readonly accounts: string[];
 }
 
-export function chainExplorerRoute(blurt: BlurtClient): Hono {
+export function chainExplorerRoute(blurt: BlurtClient, db: Database): Hono {
 	const app = new Hono();
 
 	app.get('/block/:num', async (c) => {
@@ -203,29 +204,67 @@ export function chainExplorerRoute(blurt: BlurtClient): Hono {
 			keys.push(k);
 		}
 
-		let result: unknown;
+		// Two independent reverse-lookup sources, unioned:
+		//
+		//   (1) The chain's condenser_api.get_key_references — authoritative for
+		//       any key the node's account_by_key plugin has indexed.
+		//   (2) The indexer's own accounts.posting_pubkey (cp404) — catches
+		//       accounts whose key the chain plugin DOESN'T index. In practice
+		//       that's PRE-FORK / genesis accounts: account_by_key only indexes
+		//       keys set by a post-fork operation, so a Steem-era account that
+		//       never re-set its posting key on Blurt returns [] from the chain
+		//       even though the key is a perfectly valid current authority. Any
+		//       such account that has touched Morphit is in our accounts table,
+		//       so we can still resolve it and spare the user the manual-name
+		//       fallback. Stored posting_pubkey is the same BLT-formatted string
+		//       the browser sends, so it's a direct equality match.
+		//
+		// Best-effort on BOTH: a hit from either is a valid answer, and we only
+		// fail the request if BOTH sources error (previously an unreachable RPC
+		// pool 502'd even when the indexer could have answered from its own DB).
+		const accounts = new Set<string>();
+		let chainErrored = false;
+		let dbErrored = false;
+
 		try {
 			// get_key_references param shape: [[key0, key1, …]] → returns
 			// [[accountsForKey0], [accountsForKey1], …] in input order.
-			result = await blurt.callCondenser('get_key_references', [keys], {
+			const result = await blurt.callCondenser('get_key_references', [keys], {
 				userFacing: true
 			});
+			// Defense-in-depth: validate every level of the chain's response so a
+			// malformed RPC reply can't smuggle a non-string through.
+			if (Array.isArray(result)) {
+				for (const list of result) {
+					if (!Array.isArray(list)) continue;
+					for (const name of list) {
+						if (typeof name === 'string' && name.length > 0) accounts.add(name);
+					}
+				}
+			}
 		} catch {
+			chainErrored = true;
+		}
+
+		try {
+			const rows = await db.query<{ name: string }>(
+				`SELECT name FROM accounts WHERE posting_pubkey = ANY($1::text[])`,
+				[keys]
+			);
+			for (const r of rows.rows) {
+				if (typeof r.name === 'string' && r.name.length > 0) accounts.add(r.name);
+			}
+		} catch {
+			dbErrored = true;
+		}
+
+		// Only surface an error if NEITHER source could answer. If the DB
+		// answered (or legitimately returned no rows), a chain outage is not
+		// fatal — and vice versa.
+		if (chainErrored && dbErrored) {
 			return c.json(errorBody('internal', 'could not reach the Blurt network'), 502);
 		}
 
-		// Flatten to the deduped union of account names. Defense-in-depth:
-		// validate every level of the chain's response so a malformed RPC
-		// reply can't smuggle a non-string through.
-		const accounts = new Set<string>();
-		if (Array.isArray(result)) {
-			for (const list of result) {
-				if (!Array.isArray(list)) continue;
-				for (const name of list) {
-					if (typeof name === 'string' && name.length > 0) accounts.add(name);
-				}
-			}
-		}
 		const out: ChainKeyReferencesBody = { accounts: [...accounts] };
 		// A reverse key→name lookup is account state that can change (a key
 		// added/removed from an authority), so unlike block/tx this is NOT

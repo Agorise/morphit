@@ -139,6 +139,16 @@
 
 	const handle = $derived('@' + order.account);
 
+	// cp440/v1.1.5 — the top-right cluster (expiry pill, price-model line,
+	// message button) is DESKTOP-only (all `hidden sm:block` / `sm:flex`). On
+	// phones the ONLY thing that can sit top-right is the stablecoin price
+	// subline, and only for USDT/USDC/DAI. So on mobile the title's `pr-24`
+	// was reserving 6rem of EMPTY space for the other 95% of orders, forcing
+	// "…worth of BLURT" to wrap a line early. Reserve mobile right-pad only
+	// when the subline is actually there; otherwise a hair of pad so a long
+	// title can use nearly the full card width and fit in fewer lines.
+	const hasMobileTopRight = $derived(isStablecoinSublineTicker(order.asset));
+
 	// cp406 — the card shows a single truncated line, so strip the terms'
 	// markdown (headings / bold / italics / lists / hr) and collapse line feeds
 	// to plain text. Full markdown renders on the order detail page (TermsText).
@@ -218,12 +228,16 @@
 		</p>
 	{/if}
 
-	<!-- Title. Right padding clears the top-right cluster. On phones it
-	     clamps to 3 lines (cp440) — 2 was dropping the asset at the end of a
-	     long "I'm selling 40–650 MXN worth of goods/services", since the asset
-	     is the last token of the title; 3 lines fits it at phone width while
-	     still keeping a runaway title bounded. -->
-	<h3 class="font-display line-clamp-3 pr-24 text-lg font-bold sm:line-clamp-none sm:pr-28">
+	<!-- Title. On desktop the right pad clears the top-right cluster
+	     (sm:pr-28). On phones that cluster is hidden, so we pad only when the
+	     stablecoin subline is present (pr-20) — otherwise a hair (pr-2), so the
+	     title uses nearly the full width and stops wrapping early (v1.1.5).
+	     Still clamped to 3 lines as a runaway guard (cp440). -->
+	<h3
+		class="font-display line-clamp-3 text-lg font-bold sm:line-clamp-none sm:pr-28 {hasMobileTopRight
+			? 'pr-20'
+			: 'pr-2'}"
+	>
 		{title}
 	</h3>
 

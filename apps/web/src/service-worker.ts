@@ -194,7 +194,17 @@ self.addEventListener('fetch', (event: FetchEvent) => {
 			// root — so the user still sees the app, never a browser error.
 			if (req.mode === 'navigate') {
 				try {
-					return cleanRedirect(await fetch(req));
+					// cache:'reload' forces the shell to come from the ORIGIN,
+					// bypassing the browser HTTP cache, on every full navigation.
+					// Network-first alone wasn't enough: a reload right after a
+					// deploy could be answered from a stale HTTP-cached index.html,
+					// which both reports the OLD version AND references chunk hashes
+					// the origin has rotated away — so the update UI re-detected the
+					// mismatch and re-offered ("Load it now twice" on mobile). This
+					// is catch-protected: if the forced fetch throws (offline), we
+					// still fall back to the cached shell below, never a browser
+					// error. Hashed chunks stay cache-first (immutable).
+					return cleanRedirect(await fetch(req, { cache: 'reload' }));
 				} catch {
 					const cached =
 						(await cache.match(req, { ignoreSearch: true })) ??

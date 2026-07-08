@@ -2644,7 +2644,7 @@
       "expires_in_minutes": "{minutes}分钟后过期",
       "expires_in_minutes_seconds": "{minutes}分 {seconds}秒后过期",
       "expires_in_seconds": "{seconds}秒后过期",
-      "expires_aria": "订单于 {iso} 过期（{formatted}）",
+      "expires_aria": "订单将于 {date} 到期",
       "open_aria": "查看订单详情：{title}"
     },
     "post_cta": "发布订单",

@@ -2558,3 +2558,14 @@ COMMENT ON COLUMN orders.accepted_assets IS
     '(never BARTER itself, never a goods asset).  A buyer may only '
     'settle in a crypto on this list.  NULL for every crypto asset — '
     'those settle in themselves and have no accepted-set.';
+-- ─── v38: index accounts.posting_pubkey (cp440 key-references reverse lookup) ───
+-- v36 added the column but no index — it was only ever SELECTed by account
+-- name (the PK).  cp440's /v1/chain/key-references union does a REVERSE lookup
+-- (SELECT name WHERE posting_pubkey = ANY(...)) on every posting-key login to
+-- auto-resolve pre-fork accounts the chain's account_by_key plugin misses.
+-- Without this index that seq-scans the accounts table.  Partial (NOT NULL):
+-- un-backfilled rows are never a lookup target, and the backfill's own
+-- `WHERE posting_pubkey IS NULL` scan wants them excluded here anyway.
+CREATE INDEX IF NOT EXISTS idx_accounts_posting_pubkey
+    ON accounts (posting_pubkey)
+    WHERE posting_pubkey IS NOT NULL;
