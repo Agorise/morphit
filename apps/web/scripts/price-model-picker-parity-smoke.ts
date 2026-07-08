@@ -68,7 +68,7 @@
  *  12. All five validation keys exist in en.json
  *      (i18n-locale-parity-smoke enforces them across all 10
  *      locales; we just need to confirm they're in en here).
- *  13. /my/orders `relistOrder` derivation handles both canonical
+ *  13. shared relist builder (`orders/relist.ts`) derivation handles both canonical
  *      shapes (the third write-adjacent surface — relisting an
  *      expired order MUST carry the price model forward, not silently
  *      reset it to 'spread 0').
@@ -233,10 +233,10 @@ const SCENARIOS: readonly Scenario[] = [
 		]
 	},
 	{
-		name: '13 — /my/orders relistOrder derivation handles both canonical shapes',
-		file: 'src/routes/[lang]/my/orders/+page.svelte',
+		name: '13 — shared relist builder derivation handles both canonical shapes (cp438: extracted from /my/orders, reused by the order-detail page)',
+		file: 'src/lib/orders/relist.ts',
 		mustHave: [
-			'function relistOrder',
+			'export function buildRelistPrefill',
 			"priceModelKind: 'spread' | 'fixed'",
 			"obj.kind === 'spread'",
 			"obj.kind === 'fixed'"

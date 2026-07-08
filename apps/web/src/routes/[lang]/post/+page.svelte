@@ -3105,9 +3105,6 @@
 						<p class="mt-2 text-sm text-ink-700 dark:text-ink-200">
 							{$_('syndicate.opt_in_pitch')}
 						</p>
-						<p class="mt-2 text-xs text-ink-600 dark:text-ink-300">
-							{$_('syndicate.opt_in_help')}
-						</p>
 					</div>
 				</label>
 				{#if isFirstTrade && !hasFiredFirstTrade(blurtAccount)}

@@ -31,10 +31,6 @@ import { writable } from 'svelte/store';
 // 2 MB dblurt chunk out of those routes' first paint — the chunk
 // loads only when the user actually triggers a profile broadcast.
 import { OP_IDS } from '$net/config';
-import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
-import { fetchAccountKeys } from '$blurt/accountKeys';
-import { verifyPostingKey } from '$crypto/postingVerify';
-import { formatPublicKeyBLT } from '$crypto/keygen';
 import type { LiveIdentity } from '$crypto/keygen';
 import { redactPrivateKeys } from '$lib/security/privateKeyDetector';
 import { clearProfileCache } from '$lib/indexer/profileCache';
@@ -258,30 +254,26 @@ export async function broadcastProfile(
 	if (!account) {
 		throw new BroadcastError('no_account', 'No Blurt account registered yet.');
 	}
-	// Pre-flight authority check: the most common profile-broadcast
-	// failure is an identity↔account mismatch — the unlocked identity's
-	// posting key isn't authorized for the account name on file. Left
-	// to the chain, that surfaces as a cryptic "Missing Posting
-	// Authority" rejection with a raw key dump. We catch it here with a
-	// clear, actionable message. Best-effort ONLY: a fetch/network
-	// failure must never block a broadcast that would otherwise
-	// succeed, so we proceed on anything that isn't a definitive
-	// mismatch.
-	try {
-		const derivedPosting = await formatPublicKeyBLT(live.posting.publicKey);
-		const onChain = await fetchAccountKeys(resolveOrigin(MORPHIT_INDEXER_ORIGIN), account);
-		if (onChain && verifyPostingKey(onChain, derivedPosting).kind !== 'ok') {
-			throw new BroadcastError(
-				'key_mismatch',
-				`The unlocked identity's posting key isn't authorized to post for @${account}. ` +
-					`Make sure the correct account is unlocked and that the account name on file matches it, then try again.`
-			);
-		}
-	} catch (e) {
-		if (e instanceof BroadcastError) throw e;
-		// Network/fetch failure → skip the pre-check; let the broadcast proceed.
-	}
+	// cp440 — pre-flight REMOVED. Chat messages (morphit_chat_v1) broadcast
+	// fine with the same posting key through the same broadcastCustomJson, but
+	// they go STRAIGHT to it. The profile broadcast used to run a pre-flight
+	// first (a dblurt import via formatPublicKeyBLT + an account-keys fetch);
+	// that was the ONLY code-path difference between a WORKING chat broadcast
+	// and a FAILING profile broadcast ("Missing Posting Authority" despite a
+	// valid key). We now take the identical path chat does — build the op and
+	// broadcast. If a real identity↔account mismatch ever occurs, the chain's
+	// own rejection is surfaced via broadcastErrCopy, same as every other op.
 	const body = buildProfileBody(payload, Math.floor(Date.now() / 1000));
+	// [morphit-diag cp440] TEMP — confirms the settings "Save & broadcast" path
+	// reaches here with the expected account. The account MUST match the one in
+	// the broadcastCustomJson diag line (op:'profile') below; a mismatch there
+	// is the smoking gun. Field names only, no free-text values (avoids logging
+	// a display name/bio the user may consider private).
+	// eslint-disable-next-line no-console
+	console.info('[morphit-diag] broadcastProfile → about to broadcast', {
+		account,
+		bodyFields: Object.keys(body as Record<string, unknown>)
+	});
 	// cp165: dynamic import of '../sign' keeps dblurt out of the
 	// eager-load graph for read-only routes that pull profile.ts.
 	const { broadcastCustomJson } = await import('../sign');

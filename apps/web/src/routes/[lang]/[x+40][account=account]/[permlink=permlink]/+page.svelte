@@ -17,10 +17,10 @@
 	 * location, expiry) plus the poster's identity and a link back
 	 * to their profile for reputation.
 	 *
-	 * No edit/cancel actions here — those live on /my/orders where
-	 * the signer already has their list in context. Keeping this
-	 * page focused makes the shareable URL meaningful: "go look at
-	 * this offer" vs. "here's a complicated admin screen."
+	 * Owner actions live here too (cp363+): when the signed-in user
+	 * is the poster, an owner-only card offers edit/cancel while the
+	 * order is live, and Re-list once it has expired — mirroring the
+	 * affordances on /my/orders so either entry point works.
 	 *
 	 * Anonymous browsing is intentional. Someone evaluating a
 	 * potential trade shouldn't have to sign in to read the terms;
@@ -58,6 +58,9 @@
 	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 	import { displayNamesForMethods } from '$lib/payments/display';
 	import { formatOrderPriceModel } from '$lib/orders/priceModelDisplay';
+	import { isOrderExpired, isOrderLive } from '$lib/orders/orderExpiry';
+	import { buildRelistPrefill, RELIST_PREFILL_KEY } from '$lib/orders/relist';
+	import { safeSession } from '$lib/utils/safeStorage';
 	import { instanceAdditions, instanceNameLookup } from '$lib/stores/instanceAdditions';
 	import type { OrderRecord, ProfileResponse } from '@morphit/indexer-client';
 
@@ -174,6 +177,39 @@
 	const isOwner = $derived(
 		viewerAccount !== null && order !== null && viewerAccount === order.account
 	);
+
+	// ─── Live "now" ticker ─────────────────────────────────────────
+	// So the status pill flips Live→Expired and the "expires in"
+	// countdown updates the instant an order crosses its expiry —
+	// without a reload. 1s granularity; cleared on unmount. Mirrors
+	// the /my/orders ticker.
+	let nowMs = $state(Date.now());
+	$effect(() => {
+		const t = setInterval(() => {
+			nowMs = Date.now();
+		}, 1000);
+		return () => clearInterval(t);
+	});
+
+	/** Effective (query-time) status. The indexer keeps an order's
+	 *  stored status at 'live' until a sweep and enforces expiry at
+	 *  query time (expires_at ≤ now), so an order the public orderbook
+	 *  has already dropped still arrives here as 'live'. This reads it
+	 *  as 'expired' — matching the orderbook and /my/orders — via the
+	 *  shared orderExpiry helper. Reads nowMs to re-evaluate over time. */
+	function effectiveStatus(o: OrderRecord): OrderRecord['status'] {
+		return isOrderExpired(o, nowMs) ? 'expired' : o.status;
+	}
+
+	/** Re-list an expired order: hand /post a prefill of this order and
+	 *  navigate. Uses the SAME shared builder as /my/orders so both
+	 *  entry points re-list identically (a fresh order, fresh permlink
+	 *  + expiry — never a silent re-sign of the old one). */
+	function relistOrder(): void {
+		if (!order) return;
+		safeSession.set(RELIST_PREFILL_KEY, JSON.stringify(buildRelistPrefill(order)));
+		void gotoLocale('/post');
+	}
 
 	/** Edit window: 15 minutes from creation, same rule as /my/orders.
 	 *  The edit path at /post/edit/[permlink] also enforces this on
@@ -347,10 +383,10 @@
 				</div>
 			{/if}
 			<div class="mt-3 flex flex-wrap items-center gap-2">
-				<span class={statusChipClasses(order.status)}>
-					{statusLabel(order.status)}
+				<span class={statusChipClasses(effectiveStatus(order))}>
+					{statusLabel(effectiveStatus(order))}
 				</span>
-				{#if order.status === 'live' && order.expires_at}
+				{#if isOrderLive(order, nowMs) && order.expires_at}
 					<span
 						class="rounded-full border border-morphit-emerald/30 bg-morphit-emerald/5 px-2 py-0.5 text-xs text-morphit-emerald"
 					>
@@ -380,7 +416,7 @@
 			     direct link into the chat with the poster. Owners
 			     don't see it — they can't message themselves; the
 			     inbox is how they'd reach inbound messages. -->
-			{#if order.status === 'live' && !isOwner}
+			{#if isOrderLive(order, nowMs) && !isOwner}
 				<div class="mt-4">
 					<a
 						href={lp(`/chat/${order.account}?order=${encodeURIComponent(order.permlink)}`)}
@@ -522,7 +558,7 @@
 		</section>
 
 		<!-- ─── Owner-only actions ────────────────────────────── -->
-		{#if isOwner && order.status === 'live'}
+		{#if isOwner && (isOrderLive(order, nowMs) || isOrderExpired(order, nowMs))}
 			<section
 				class="card mb-6 border-morphit-emerald/30 bg-morphit-emerald/5"
 				aria-labelledby="owner-actions-heading"
@@ -558,7 +594,14 @@
 					     its brief grace period) sits on its own line above
 					     a full-width Cancel button, instead of being
 					     cramped beside it. -->
-					{#if withinEditWindow(order)}
+					{#if isOrderExpired(order, nowMs)}
+						<!-- Expired: nothing live to cancel — offer a fresh
+						     Re-list (a new order with a new permlink + expiry)
+						     via the same prefill path as /my/orders. -->
+						<BusyButton variant="secondary" onclick={relistOrder}>
+							{$_('my_orders.order.action_relist')}
+						</BusyButton>
+					{:else if withinEditWindow(order)}
 						<div class="flex flex-col gap-2 sm:flex-row">
 							<BusyButton
 								variant="secondary"
@@ -602,7 +645,7 @@
 		{/if}
 
 		<!-- ─── CTA hint (non-owners only) ───────────────────── -->
-		{#if order.status === 'live' && !isOwner}
+		{#if isOrderLive(order, nowMs) && !isOwner}
 			<section class="card border-morphit-teal/30 bg-morphit-teal/5">
 				<p class="text-sm text-ink-700 dark:text-ink-200">
 					{$_('order_detail.cta_hint')}

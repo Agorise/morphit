@@ -957,9 +957,10 @@
     "save_success_body": "订单簿将在几秒内更新。",
     "save_error_title": "更改未保存",
     "save_error_body": "区块链未接受更新。请重试。",
-    "fee_note": "编辑免费 — 窗口期内替换不收费。",
+    "fee_note": "编辑免费——在 15 分钟内完成则不收取挂单费。",
     "error_load_failed": "无法加载你的订单。请重试。",
-    "substance_locked_hint": "编辑时，买卖方向、资产和法币已锁定——看过你原始挂单的人应能看到相同的交易。若要更改交易内容，请改为发布新挂单。"
+    "substance_locked_hint": "编辑时，买卖方向、资产和法币已锁定——看过你原始挂单的人应能看到相同的交易。若要更改交易内容，请改为发布新挂单。",
+    "barter_accept_locked_hint": "编辑时,你接受的加密货币已锁定。"
   },
   "explorer": {
     "search": {
@@ -1082,6 +1083,7 @@
         "morphit_chat_identity": "聊天身份更新",
         "morphit_chat_read": "已读回执",
         "morphit_release": "版本公告",
+        "morphit_release_versioned": "版本公告：Morphit v{version}",
         "morphit_fee_attest": "费用见证",
         "morphit_feature_bid": "精选竞标",
         "morphit_operator_register": "运营者注册",
@@ -1406,7 +1408,7 @@
       },
       "syndicate_trade_announcement": {
         "q": "\"同步我的订单\" 复选框是什么？",
-        "a": "在发布订单的表单上，你可以勾选 \"同时把我的订单同步到我的 Blog（免费）\"。勾选后，Morphit 会在你的订单成功广播的那一刻，把一条简短的订单公告发布到你自己的 Blurt 博客（blurt.blog、beblurt.com、etc）上。这条帖子包含一个指向你在 Morphit 上订单页面的链接，并使用 #morphit 标签，这样它会出现在 Morphit 社区的信息流里。\n\n帖子用你的 posting 密钥签名——不是 Morphit 的，不是运营者的，是你的。这意味着：\n- 帖子真正来自你，而不是营销垃圾信息。\n- Morphit 项目不持有可以代你签署社交内容的密钥。\n- 你之后可以像处理你账户上的其他任何帖子一样，编辑或删除这条帖子。\n- 你在博客帖子上收到的「点赞」会为你赚取更多用于交易和质押的 Blurt。\n\n还有一则你可以选择开启的一次性公告:在你的首笔交易时,向 @morphit 社区(而非你的博客)发布一篇简短的\"我加入了 Morphit\"帖子。默认关闭——在下单表单、设置或评价表单上用复选框开启,它只在你为该首笔交易留下评价时发布一次。之后,设置卡片改为让你预先勾选单笔订单的博客帖子。"
+        "a": "在发布订单的表单上，你可以勾选 \"将我的订单同步发布到 Blurt 博客\"。勾选后，Morphit 会在你的订单成功广播的那一刻，把一条简短的订单公告发布到你自己的 Blurt 博客（blurt.blog、beblurt.com、etc）上。这条帖子包含一个指向你在 Morphit 上订单页面的链接，并使用 #morphit 标签，这样它会出现在 Morphit 社区的信息流里。\n\n帖子用你的 posting 密钥签名——不是 Morphit 的，不是运营者的，是你的。这意味着：\n- 帖子真正来自你，而不是营销垃圾信息。\n- Morphit 项目不持有可以代你签署社交内容的密钥。\n- 你之后可以像处理你账户上的其他任何帖子一样，编辑或删除这条帖子。\n- 你在博客帖子上收到的「点赞」会为你赚取更多用于交易和质押的 Blurt。\n\n还有一则你可以选择开启的一次性公告:在你的首笔交易时,向 @morphit 社区(而非你的博客)发布一篇简短的\"我加入了 Morphit\"帖子。默认关闭——在下单表单、设置或评价表单上用复选框开启,它只在你为该首笔交易留下评价时发布一次。之后,设置卡片改为让你预先勾选单笔订单的博客帖子。"
       },
       "offline_caching": {
         "q": "Morphit 可以 offline 工作吗?",
@@ -3455,6 +3457,7 @@
       "available_blurt": "可用:{amount} BLURT",
       "available_bp": "可用:{amount} BP",
       "power_down_schedule": "这不是即时的：你的 BP 会在 4 周内逐步解押回流动的 BLURT。今天不会到账，请耐心等待。逐步释放是 Blurt 协议的规则，而不是 Morphit 的规则。",
+      "power_down_in_progress": "你已有一笔 power down 正在进行：剩余 {amount} BP，将于 {date} 完成。",
       "password_label": "你的 @{account} 密码(用于以你的活跃密钥签名)",
       "error_password_required": "请输入密码以继续。",
       "error_bad_password": "该密码未能解锁你的活跃密钥。请检查后重试。",
@@ -4423,17 +4426,16 @@
       "body_buy": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\n我正在用 {asset2} 正在买入 {asset1}。想交易吗？\n\n没有比 Morphit 更安全、更快、更可靠的地方来交易加密货币和法币。\n\n看看我在 Morphit 上的报价！\nhttps://morphit.io/{lang}/@{username}/{permlink}",
       "body_sell": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\n我正在用 {asset2} 正在卖出 {asset1}。想交易吗？\n\n没有比 Morphit 更安全、更快、更可靠的地方来交易加密货币和法币。\n\n看看我在 Morphit 上的报价！\nhttps://morphit.io/{lang}/@{username}/{permlink}"
     },
-    "opt_in_label": "将此订单也同步发布到我的博客（免费）",
-    "opt_in_help": "将此订单的简短公告发布到你的 Blurt 博客。每个订单一篇帖子，由你签署，提交后立即发出。仅需支付 Blurt 的小额网络费用，从你的流动 BLURT 中扣除。",
+    "opt_in_label": "将我的订单同步发布到 Blurt 博客",
     "review_on_title": "此订单也将发布到你的博客",
     "review_on_body": "提交后，简短公告将立即发布到你的 Blurt 博客,让其他人能找到你的报价。由你签署,免费。",
     "success_pending": "正在将公告发布到你的 Blurt 博客…",
     "success_ok": "已发布到你的 Blurt 博客。",
     "success_failed": "目前无法将公告发布到你的博客——你的订单仍然有效。如果愿意,你可以稍后手动发布。",
     "opt_in_pitch": "辛迪加发布交易至关重要。更多眼睛看到您的报价 = 更多交易伙伴,加上点赞奖励直接进入您的 Blurt 钱包。",
-    "first_trade_opt_in_label": "向 @morphit 社区公布我的首笔交易(免费)",
+    "first_trade_opt_in_label": "向 @morphit 社区公布我的首笔交易",
     "first_trade_opt_in_pitch": "你在 Morphit 的第一笔交易可以向 @morphit 社区发布一次性的\"我加入了 Morphit\"公告——让更多人看到你,并有机会获得点赞奖励,直接进入你的 Blurt 钱包。",
-    "first_trade_opt_in_help": "仅触发一次——在你为首笔交易留下评价时,而非现在。默认关闭。与上方的单笔订单博客帖子相互独立。"
+    "first_trade_opt_in_help": "这是你向整个社区介绍自己的一次性机会,将在你首笔订单成功完成后发布。"
   },
   "toast": {
     "view_action": "查看"

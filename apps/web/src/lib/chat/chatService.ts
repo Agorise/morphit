@@ -317,6 +317,19 @@ export interface ChatController {
  *  without going through recordChatChange. 60s mirrors the
  *  orderbook-stream fallback poll. */
 const FALLBACK_POLL_INTERVAL_MS = 60_000;
+
+// [morphit-diag cp440] TEMP — standard base64 (padding stripped) so a logged
+// public chat key is directly comparable to the on-chain morphit_chat_identity_v1
+// chat_pub shown on the block explorer. Public keys only; nothing secret.
+function __diagB64(u8: Uint8Array): string {
+	let bin = '';
+	for (const b of u8) bin += String.fromCharCode(b);
+	try {
+		return btoa(bin).replace(/=+$/, '');
+	} catch {
+		return '(b64-failed)';
+	}
+}
 /** Initial history page size — the newest 50 messages on first
  *  load. Matches the design-doc recommendation. */
 const HISTORY_PAGE_SIZE = 50;
@@ -448,18 +461,45 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 	): Promise<{ priv: Uint8Array; pub: Uint8Array }> {
 		if (myChatIdentity) return myChatIdentity;
 		myChatIdentity = await deps.deriveMyChatIdentity(live, deps.me);
+		// [morphit-diag cp440] TEMP — public chat key only, nothing secret.
+		// eslint-disable-next-line no-console
+		console.info('[morphit-diag] myChatIdentity derived', {
+			me: deps.me,
+			myChatPub: __diagB64(myChatIdentity.pub)
+		});
 		return myChatIdentity;
 	}
 
 	async function ensurePeerChatPub(): Promise<Uint8Array | null> {
-		if (peerChatPub) return peerChatPub;
+		if (peerChatPub) {
+			// [morphit-diag cp440] TEMP — log the cached peer key we'll encrypt to.
+			// eslint-disable-next-line no-console
+			console.info('[morphit-diag] ensurePeerChatPub → CACHE', {
+				peer: deps.peer,
+				peerChatPub: __diagB64(peerChatPub)
+			});
+			return peerChatPub;
+		}
 		if (peerPubUnknown) return null;
 		const fetched = await deps.fetchPeerChatPub(deps.peer);
 		if (fetched === null) {
+			// [morphit-diag cp440] TEMP
+			// eslint-disable-next-line no-console
+			console.info('[morphit-diag] ensurePeerChatPub → NO published chat_pub', {
+				peer: deps.peer
+			});
 			peerPubUnknown = true;
 			return null;
 		}
 		peerChatPub = fetched;
+		// [morphit-diag cp440] TEMP — compare this to the peer's on-chain
+		// morphit_chat_identity_v1 chat_pub. A mismatch = we're encrypting to a
+		// stale/wrong key, which is exactly why the recipient can't decrypt.
+		// eslint-disable-next-line no-console
+		console.info('[morphit-diag] ensurePeerChatPub → FETCHED', {
+			peer: deps.peer,
+			peerChatPub: __diagB64(fetched)
+		});
 		return fetched;
 	}
 

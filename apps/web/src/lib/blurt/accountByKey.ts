@@ -42,6 +42,14 @@ function indexerUrl(path: string): URL {
 export async function resolveAccountsByPublicKeys(pubKeysBLT: string[]): Promise<string[]> {
 	const keys = pubKeysBLT.filter((k): k is string => typeof k === 'string' && k.length > 0);
 	if (keys.length === 0) return [];
+	// [morphit-diag cp440] TEMP — the BLT-formatted PUBLIC keys we're about to
+	// look up. These come out of formatPublicKey(); if the login username field
+	// is blank/wrong, compare THESE strings to the posting key's true on-chain
+	// public key. A corrupted key here = the same formatPublicKey browser bug
+	// implicated in the settings "Missing Posting Authority" failure. Public
+	// keys only — nothing secret.
+	// eslint-disable-next-line no-console
+	console.info('[morphit-diag] resolveAccountsByPublicKeys → lookup keys', { keys });
 	try {
 		const res = await fetchWithTimeout(
 			indexerUrl('/v1/chain/key-references'),
@@ -52,15 +60,31 @@ export async function resolveAccountsByPublicKeys(pubKeysBLT: string[]): Promise
 			},
 			15_000
 		);
-		if (!res.ok) return []; // proxy unreachable / error ⇒ manual entry
+		if (!res.ok) {
+			// [morphit-diag cp440] TEMP
+			// eslint-disable-next-line no-console
+			console.warn('[morphit-diag] resolveAccountsByPublicKeys → key-references NOT ok', {
+				status: res.status
+			});
+			return []; // proxy unreachable / error ⇒ manual entry
+		}
 		const body = (await res.json()) as { accounts?: unknown };
 		if (!Array.isArray(body.accounts)) return [];
 		const accounts = new Set<string>();
 		for (const name of body.accounts) {
 			if (typeof name === 'string' && name.length > 0) accounts.add(name);
 		}
+		// [morphit-diag cp440] TEMP — the resolved account name(s). Empty here =
+		// the username field can't auto-fill; a wrong name = a lookup/formatter bug.
+		// eslint-disable-next-line no-console
+		console.info('[morphit-diag] resolveAccountsByPublicKeys → resolved accounts', {
+			accounts: [...accounts]
+		});
 		return [...accounts];
-	} catch {
+	} catch (e) {
+		// [morphit-diag cp440] TEMP
+		// eslint-disable-next-line no-console
+		console.warn('[morphit-diag] resolveAccountsByPublicKeys → threw', e);
 		return [];
 	}
 }

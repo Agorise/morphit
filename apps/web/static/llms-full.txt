@@ -1163,7 +1163,7 @@ The tradeoff: because your chat key is derived from your posting key, someone wh
 
 **FAQ key:** `syndicate_trade_announcement`
 
-On the order-posting form, you can tick "Syndicate my order to my Blog too (Free)". If checked, Morphit publishes a short announcement of your order to your own Blurt blog (blurt.blog, beblurt.com, etc) the moment your order is successfully broadcast. The post includes a link back to your order's page on Morphit and uses the #morphit tag so it shows up in the Morphit community feed.
+On the order-posting form, you can tick "Syndicate my order to the Blurt blog". If checked, Morphit publishes a short announcement of your order to your own Blurt blog (blurt.blog, beblurt.com, etc) the moment your order is successfully broadcast. The post includes a link back to your order's page on Morphit and uses the #morphit tag so it shows up in the Morphit community feed.
 
 The post is signed with YOUR posting key — not Morphit's, not the operator's, yours. This means:
 - The post is authentically from you, not marketing spam.

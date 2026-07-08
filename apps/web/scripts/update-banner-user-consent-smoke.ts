@@ -87,6 +87,40 @@ check('dismiss() does not call location.reload()', !/location\.reload\(\)/.test(
 check('snackbar condition includes !applying', /&&\s*!applying/.test(src));
 check('snackbar dismiss is version-aware (dismissedForCurrent)', /!dismissedForCurrent/.test(src));
 
+// ── cp438: consent survives the reload (the "twice on mobile" fix) ──────────
+// After the user consents, a handoff that lands on the old worker RESUMES
+// silently on the next load instead of re-offering — bounded so a genuinely
+// stuck handoff still resurfaces the snackbar (never stranded, the failure the
+// old persisted "applying" flag caused).
+check(
+	'a resume marker is written on consent (applyUpdate persists the target version)',
+	/writeResume\(deployedVersion/.test(src) && /RESUME_KEY/.test(src)
+);
+check(
+	'the resume is attempt-bounded (MAX_RESUME_ATTEMPTS caps auto-retries)',
+	/MAX_RESUME_ATTEMPTS/.test(src) && /resume\.n\s*<\s*MAX_RESUME_ATTEMPTS/.test(src)
+);
+check(
+	'the resume self-clears on success (runningVersion === target) and on cap',
+	/runningVersion === resume\.target[\s\S]*?clearResume\(\)/.test(src) &&
+		(src.match(/clearResume\(\)/g)?.length ?? 0) >= 2
+);
+check(
+	'the snackbar stays hidden while resuming (condition includes !resuming)',
+	/&&\s*!resuming/.test(src)
+);
+check(
+	'resume re-drives the SAME consent path (no new reload / no autonomous controllerchange)',
+	// applyUpdate is reused for the resume — so the single reload + the
+	// consent-gated controllerchange listener are NOT duplicated.
+	(src.match(/location\.reload\(\)/g)?.length ?? 0) === 1 &&
+		/await check\(\);[\s\S]*?applyUpdate\(\)/.test(src)
+);
+check(
+	'the resume marker is version-keyed, not a bare "applying" flag',
+	/updateResume/.test(src) && !/setItem\([^)]*[Aa]pplying/.test(src)
+);
+
 console.log('');
 if (failures === 0) {
 	console.log(`✓ all ${checks} update-banner-user-consent scenarios passed`);

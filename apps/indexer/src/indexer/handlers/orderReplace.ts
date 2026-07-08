@@ -43,6 +43,26 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 	return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
+/**
+ * cp440 — order-independent equality for two barter accepted-crypto sets.
+ * Both `null`/absent (crypto orders) counts as equal; a set vs null (or two
+ * different sets) does not. Sorted-copy comparison so element ordering can't
+ * produce a false mismatch on replace. A nullish (null/undefined) operand is
+ * normalised to null so an absent column reads as "no set".
+ */
+function acceptedAssetsEqual(
+	a: readonly string[] | null | undefined,
+	b: readonly string[] | null | undefined
+): boolean {
+	const an = a ?? null;
+	const bn = b ?? null;
+	if (an === null || bn === null) return an === bn;
+	if (an.length !== bn.length) return false;
+	const as = [...an].sort();
+	const bs = [...bn].sort();
+	return as.every((x, i) => x === bs[i]);
+}
+
 function isFiniteNumOrNull(v: unknown): v is number | null | undefined {
 	return v === null || v === undefined || (typeof v === 'number' && Number.isFinite(v));
 }
@@ -262,8 +282,9 @@ function validate(payload: unknown): Validated | { reason: string } {
 	// cp425 — accepted_assets gate.  Mirror of order.ts.  REQUIRED
 	// (non-empty crypto set) when the asset is BARTER; forbidden for every
 	// crypto asset.  Each entry a real crypto ticker, never a goods asset.
-	// Editable on replace (a seller may change which cryptos they accept),
-	// unlike the asset itself which the handler locks.
+	// cp440 — LOCKED on replace: the handle() body rejects a replace whose
+	// accepted-crypto set differs from the target's (bait-and-switch guard,
+	// parallel to the side/asset/fiat/network lock-down).
 	let accepted_assets_validated: string[] | null = null;
 	const acceptedRaw = (payload as Record<string, unknown>).accepted_assets;
 	if (isGoodsAsset(asset as AssetTicker)) {
@@ -356,8 +377,12 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		// cp30-DD-DD CODE-3 — read original asset_network so we
 		// can enforce it as a frozen substance field on replace.
 		asset_network: string | null;
+		// cp440 — read the original barter accepted-crypto set so we can
+		// freeze it on replace (bait-and-switch protection), like the
+		// substance fields above. null for crypto orders.
+		accepted_assets: string[] | null;
 	}>(
-		`SELECT status, created_at, side, asset, fiat_currency, fee_method, asset_network
+		`SELECT status, created_at, side, asset, fiat_currency, fee_method, asset_network, accepted_assets
 		 FROM orders WHERE account = $1 AND permlink = $2`,
 		[ctx.signer, v.permlink]
 	);
@@ -408,6 +433,16 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	// a counterparty who clicked through on the original listing.
 	if (v.asset_network !== target.asset_network) {
 		return { ok: false, reason: 'replace_asset_network_change_forbidden' };
+	}
+	// cp440 — the accepted-crypto set of a BARTER order is substance too: a
+	// counterparty who clicked through on the original listing chose it partly
+	// on WHICH coins they'd be paid in. Dropping one — or unchecking them all —
+	// in a replace is a bait-and-switch, so the set is frozen like
+	// side/asset/fiat/network. Both sides are stored/validated sorted, but we
+	// sort defensively so a legacy row's ordering can't cause a false reject.
+	// null == null for (non-barter) crypto orders is a no-op.
+	if (!acceptedAssetsEqual(v.accepted_assets, target.accepted_assets)) {
+		return { ok: false, reason: 'replace_accepted_assets_change_forbidden' };
 	}
 
 	// B1 audit fix — waiver substance protection.

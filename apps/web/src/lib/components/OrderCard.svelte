@@ -219,8 +219,11 @@
 	{/if}
 
 	<!-- Title. Right padding clears the top-right cluster. On phones it
-	     clamps to 2 lines so a long "I'm buying …" can't run away. -->
-	<h3 class="font-display line-clamp-2 pr-24 text-lg font-bold sm:line-clamp-none sm:pr-28">
+	     clamps to 3 lines (cp440) — 2 was dropping the asset at the end of a
+	     long "I'm selling 40–650 MXN worth of goods/services", since the asset
+	     is the last token of the title; 3 lines fits it at phone width while
+	     still keeping a runaway title bounded. -->
+	<h3 class="font-display line-clamp-3 pr-24 text-lg font-bold sm:line-clamp-none sm:pr-28">
 		{title}
 	</h3>
 

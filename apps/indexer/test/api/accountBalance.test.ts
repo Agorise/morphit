@@ -54,6 +54,10 @@ type BalanceBody = {
 		received_vesting_shares: string;
 		delegated_vesting_shares: string;
 		voting_manabar: { current_mana: string; last_update_time: number } | null;
+		vesting_withdraw_rate: string;
+		next_vesting_withdrawal: string;
+		to_withdraw: string;
+		withdrawn: string;
 	};
 	dgp: {
 		head_block_number: number;
@@ -178,5 +182,37 @@ describe('GET /v1/account/:account/balance', () => {
 		});
 		const res = await app.request('/v1/account/alice/balance');
 		expect(res.status).toBe(502);
+	});
+
+	it('cp439: defaults power-down fields to idle sentinels when the account has none', async () => {
+		const app = mount({
+			getAccount: async () => FULL_ACCOUNT, // no vesting_withdraw_rate etc.
+			getDynamicGlobalProperties: async () => FULL_DGP
+		});
+		const res = await app.request('/v1/account/alice/balance');
+		const body = (await res.json()) as BalanceBody;
+		expect(body.account.vesting_withdraw_rate).toBe('0.000000 VESTS');
+		expect(body.account.next_vesting_withdrawal).toBe('1970-01-01T00:00:00');
+		expect(body.account.to_withdraw).toBe('0');
+		expect(body.account.withdrawn).toBe('0');
+	});
+
+	it('cp439: forwards an active power-down (normalising numeric totals to strings)', async () => {
+		const app = mount({
+			getAccount: async () => ({
+				...FULL_ACCOUNT,
+				vesting_withdraw_rate: '1000000.000000 VESTS',
+				next_vesting_withdrawal: '2026-07-15T12:00:00',
+				to_withdraw: 4_000_000_000_000, // number off the node
+				withdrawn: 1_000_000_000_000
+			}),
+			getDynamicGlobalProperties: async () => FULL_DGP
+		});
+		const res = await app.request('/v1/account/alice/balance');
+		const body = (await res.json()) as BalanceBody;
+		expect(body.account.vesting_withdraw_rate).toBe('1000000.000000 VESTS');
+		expect(body.account.next_vesting_withdrawal).toBe('2026-07-15T12:00:00');
+		expect(body.account.to_withdraw).toBe('4000000000000');
+		expect(body.account.withdrawn).toBe('1000000000000');
 	});
 });

@@ -957,9 +957,10 @@
     "save_success_body": "Das Orderbook aktualisiert sich in wenigen Sekunden.",
     "save_error_title": "Änderungen wurden nicht gespeichert",
     "save_error_body": "Die Chain hat das Update abgelehnt. Versuche es erneut.",
-    "fee_note": "Bearbeiten ist kostenlos — keine Gebühr für Änderungen im Fenster.",
+    "fee_note": "Bearbeiten ist kostenlos — keine Inseratsgebühr, wenn innerhalb von 15 Minuten erledigt.",
     "error_load_failed": "Konnte deine Bestellungen nicht laden. Versuche es erneut.",
-    "substance_locked_hint": "Seite, Asset und Währung sind während der Bearbeitung gesperrt – wer dein ursprüngliches Angebot gesehen hat, soll denselben Handel vorfinden. Um zu ändern, was du handelst, erstelle stattdessen eine neue Order."
+    "substance_locked_hint": "Seite, Asset und Währung sind während der Bearbeitung gesperrt – wer dein ursprüngliches Angebot gesehen hat, soll denselben Handel vorfinden. Um zu ändern, was du handelst, erstelle stattdessen eine neue Order.",
+    "barter_accept_locked_hint": "Die Kryptos, die du akzeptierst, sind während der Bearbeitung gesperrt."
   },
   "explorer": {
     "search": {
@@ -1082,6 +1083,7 @@
         "morphit_chat_identity": "Chat-Identität aktualisiert",
         "morphit_chat_read": "Lesebestätigung",
         "morphit_release": "Versionsankündigung",
+        "morphit_release_versioned": "Versionsankündigung: Morphit v{version}",
         "morphit_fee_attest": "Gebühren-Attestierung",
         "morphit_feature_bid": "Featured-Gebot",
         "morphit_operator_register": "Operator-Registrierung",
@@ -1406,7 +1408,7 @@
       },
       "syndicate_trade_announcement": {
         "q": "Was ist die \"Order syndizieren\"-Checkbox?",
-        "a": "Im Order-Formular kannst du \"Meine Order auch auf meinem Blog syndizieren (gratis)\" ankreuzen. Wenn du das machst, veröffentlicht Morphit eine kurze Ankündigung deiner Order auf deinem eigenen Blurt-Blog (blurt.blog, beblurt.com, etc) in dem Moment, in dem deine Order erfolgreich gesendet wird. Der Post enthält einen Link zurück zur Seite deiner Order auf Morphit und nutzt das #morphit-Tag, damit er im Morphit-Community-Feed erscheint.\n\nDer Post wird mit DEINEM Posting-Key signiert — nicht mit Morphits, nicht mit dem des Operators, sondern mit deinem. Das bedeutet:\n- Der Post ist authentisch von dir, kein Marketing-Spam.\n- Das Morphit-Projekt hält keine Schlüssel, die in deinem Namen Social-Content signieren könnten.\n- Du kannst den Post später bearbeiten oder löschen wie jeden anderen Post auf deinem Konto.\n- „Likes“, die du auf Blog-Posts erhältst, bringen dir mehr Blurt zum Handeln und Staken.\n\nEs gibt außerdem eine einmalige Ankündigung, für die du dich entscheiden kannst: einen kurzen \"Ich bin bei Morphit\"-Beitrag in der @morphit-Community (nicht in deinem Blog) bei deinem ERSTEN Trade. Standardmäßig aus — aktiviere sie über ein Kästchen im Order-Formular, in den Einstellungen oder im Bewertungsformular; sie wird einmal ausgelöst, wenn du eine Bewertung für diesen ersten Trade abgibst. Danach lässt dich die Einstellungskarte stattdessen den Pro-Order-Blogbeitrag vorab ankreuzen."
+        "a": "Im Order-Formular kannst du \"Meine Order im Blurt-Blog veröffentlichen\" ankreuzen. Wenn du das machst, veröffentlicht Morphit eine kurze Ankündigung deiner Order auf deinem eigenen Blurt-Blog (blurt.blog, beblurt.com, etc) in dem Moment, in dem deine Order erfolgreich gesendet wird. Der Post enthält einen Link zurück zur Seite deiner Order auf Morphit und nutzt das #morphit-Tag, damit er im Morphit-Community-Feed erscheint.\n\nDer Post wird mit DEINEM Posting-Key signiert — nicht mit Morphits, nicht mit dem des Operators, sondern mit deinem. Das bedeutet:\n- Der Post ist authentisch von dir, kein Marketing-Spam.\n- Das Morphit-Projekt hält keine Schlüssel, die in deinem Namen Social-Content signieren könnten.\n- Du kannst den Post später bearbeiten oder löschen wie jeden anderen Post auf deinem Konto.\n- „Likes“, die du auf Blog-Posts erhältst, bringen dir mehr Blurt zum Handeln und Staken.\n\nEs gibt außerdem eine einmalige Ankündigung, für die du dich entscheiden kannst: einen kurzen \"Ich bin bei Morphit\"-Beitrag in der @morphit-Community (nicht in deinem Blog) bei deinem ERSTEN Trade. Standardmäßig aus — aktiviere sie über ein Kästchen im Order-Formular, in den Einstellungen oder im Bewertungsformular; sie wird einmal ausgelöst, wenn du eine Bewertung für diesen ersten Trade abgibst. Danach lässt dich die Einstellungskarte stattdessen den Pro-Order-Blogbeitrag vorab ankreuzen."
       },
       "offline_caching": {
         "q": "Funktioniert Morphit offline?",
@@ -3455,6 +3457,7 @@
       "available_blurt": "Verfügbar: {amount} BLURT",
       "available_bp": "Verfügbar: {amount} BP",
       "power_down_schedule": "Das geht nicht sofort: Dein BP wird schrittweise über 4 Wochen wieder in flüssiges BLURT umgewandelt. Heute noch nichts davon, also hab bitte Geduld. Die schrittweise Freigabe ist eine Regel des Blurt-Protokolls, nicht von Morphit.",
+      "power_down_in_progress": "Ein Power down läuft bereits: noch {amount} BP, endet am {date}.",
       "password_label": "Dein @{account}-Passwort (zum Signieren mit deinem Active Key)",
       "error_password_required": "Gib dein Passwort ein, um fortzufahren.",
       "error_bad_password": "Mit diesem Passwort ließ sich dein Active Key nicht entsperren. Prüfe es und versuche es erneut.",
@@ -4423,17 +4426,16 @@
       "body_buy": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\nIch kaufe {asset1} gegen {asset2}. Lust zu handeln?\n\nEs gibt keinen sichereren, schnelleren oder verlässlicheren Ort, um Kryptos und Fiats zu handeln als Morphit.\n\nSchau dir mein Angebot auf Morphit an!\nhttps://morphit.io/{lang}/@{username}/{permlink}",
       "body_sell": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\nIch verkaufe {asset1} gegen {asset2}. Lust zu handeln?\n\nEs gibt keinen sichereren, schnelleren oder verlässlicheren Ort, um Kryptos und Fiats zu handeln als Morphit.\n\nSchau dir mein Angebot auf Morphit an!\nhttps://morphit.io/{lang}/@{username}/{permlink}"
     },
-    "opt_in_label": "Diese Order auch auf meinem Blog syndizieren (kostenlos)",
-    "opt_in_help": "Veröffentlicht eine kurze Ankündigung dieses Auftrags in deinem Blurt-Blog. Ein Post pro Auftrag, von dir signiert, geht direkt nach dem Absenden raus. Kostet nur Blurts kleine Netzwerkgebühr, bezahlt aus deinem liquiden BLURT.",
+    "opt_in_label": "Meine Order im Blurt-Blog veröffentlichen",
     "review_on_title": "Diese Order wird auch auf deinem Blog veröffentlicht",
     "review_on_body": "Direkt nach dem Abschicken wird eine kurze Ankündigung auf deinem Blurt-Blog veröffentlicht, damit andere dein Angebot finden. Von dir signiert, kostenlos.",
     "success_pending": "Ankündigung wird auf deinem Blurt-Blog veröffentlicht…",
     "success_ok": "Auf deinem Blurt-Blog veröffentlicht.",
     "success_failed": "Die Ankündigung konnte gerade nicht auf deinem Blog veröffentlicht werden — deine Order ist trotzdem aktiv. Du kannst sie später manuell posten, wenn du willst.",
     "opt_in_pitch": "Syndikation deiner Trades ist alles. Mehr Augen auf deinen Angeboten = mehr Handelspartner, plus Upvote-Belohnungen direkt auf deinem Blurt-Wallet.",
-    "first_trade_opt_in_label": "Meinen ersten Trade in der @morphit-Community ankündigen (kostenlos)",
+    "first_trade_opt_in_label": "Meinen ersten Trade in der @morphit-Community ankündigen",
     "first_trade_opt_in_pitch": "Dein allererster Morphit-Trade kann eine einmalige \"Ich bin bei Morphit\"-Ankündigung in der @morphit-Community posten — mehr Aufmerksamkeit für dich, und sie kann Upvote-Belohnungen erhalten, die in deiner Blurt-Wallet landen.",
-    "first_trade_opt_in_help": "Wird nur ein einziges Mal ausgelöst — wenn du eine Bewertung für deinen ersten Trade abgibst, nicht jetzt. Standardmäßig aus. Getrennt vom Pro-Order-Blogbeitrag oben."
+    "first_trade_opt_in_help": "Dies ist deine einmalige Gelegenheit, dich der gesamten Community vorzustellen — der Beitrag wird nach deinem ersten erfolgreich abgeschlossenen Handel veröffentlicht."
   },
   "toast": {
     "view_action": "Anzeigen"

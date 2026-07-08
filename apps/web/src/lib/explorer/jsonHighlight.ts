@@ -152,6 +152,16 @@ export function expandNestedJsonStrings(value: unknown, depth = 0): unknown {
 	return value;
 }
 
+/** True when a quoted string VALUE holds a pure JSON number — all digits with
+ *  an optional leading sign, single decimal, and exponent (e.g. "781250000").
+ *  Such values are quantities stored as strings (big-int-safe, like XMR
+ *  piconero), so the explorer colours them like numbers. A version ("1.1.0",
+ *  two dots), an address, or a hash never matches, so they stay strings. */
+function isNumericStringValue(token: string): boolean {
+	const inner = token.slice(1, -1); // drop the surrounding quotes
+	return /^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(inner);
+}
+
 export function highlightJsonToHtml(json: string): string {
 	// Fresh lastIndex per call (module-level regex with the `g` flag is
 	// stateful).
@@ -176,9 +186,15 @@ export function highlightJsonToHtml(json: string): string {
 				out += `<span class="json-key">${escapeHtml(m[1])}</span>`;
 				out += escapeHtml(m[2] as string); // the ":" — plain
 			} else {
-				// Value strings render \n/\t as real breaks/tabs so multi-line
-				// markdown (an order's terms, a post body) reads cleanly.
-				out += `<span class="json-string">${renderMultilineStringValue(m[1], currentIndent)}</span>`;
+				// Value string. A purely-numeric string (e.g. XMR `piconero`,
+				// which is string-encoded because it can exceed 2^53) reads as a
+				// quantity, so colour it like a number — consistent with the
+				// numeric `satoshis` field sitting right beside it (cp439).
+				if (isNumericStringValue(m[1])) {
+					out += `<span class="json-num">${escapeHtml(m[1])}</span>`;
+				} else {
+					out += `<span class="json-string">${renderMultilineStringValue(m[1], currentIndent)}</span>`;
+				}
 			}
 		} else if (m[3] !== undefined) {
 			out += `<span class="${m[3] === 'null' ? 'json-null' : 'json-bool'}">${escapeHtml(m[3])}</span>`;

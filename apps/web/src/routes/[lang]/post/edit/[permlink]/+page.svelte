@@ -53,7 +53,7 @@
 	import { termsHasForbiddenChar } from '$lib/orders/termsForbiddenChars';
 	import type { OrderRecord } from '@morphit/indexer-client';
 	import type { PrivateKeyMatch } from '$lib/security/privateKeyDetector';
-	import { ASSET_TICKERS, isAssetTicker, isGoodsAsset, type AssetTicker } from '@morphit/asset-registry';
+	import { isAssetTicker, isGoodsAsset, type AssetTicker } from '@morphit/asset-registry';
 	import {
 		type UsdtNetwork,
 		type UsdcNetwork,
@@ -104,9 +104,10 @@
 	let amountMin = $state(''); // kept as string so empty distinguishes
 	let amountMax = $state('');
 	let paymentMethods: string[] = $state([]);
-	// cp425 — for a BARTER order, step 3 is the accepted-crypto picker (like
-	// /post): the seller ticks which cryptos they accept, prefilled from the
-	// order's on-chain accepted_assets. Editable on replace.
+	// cp425/cp440 — for a BARTER order the accepted-crypto set is prefilled
+	// from the order's on-chain accepted_assets and rendered READ-ONLY here:
+	// it is locked on replace (the indexer rejects a change), like
+	// side/asset/currency. To change what you accept, post a new order.
 	let acceptedAssets: AssetTicker[] = $state([]);
 	let region = $state('');
 	let terms = $state('');
@@ -372,17 +373,10 @@
 		return '';
 	});
 
-	// cp425 — barter (goods/services) asset: step 3 is the accepted-crypto
-	// picker, not payment methods; it requires ≥1 crypto + Terms.
+	// cp425 — barter (goods/services) asset: the accepted-crypto set. On the
+	// EDIT page it is LOCKED (rendered read-only), like side/asset/currency, so
+	// there's no toggle handler here — cp440.
 	const isBarter = $derived(isGoodsAsset(asset));
-	const cryptoTickers: readonly AssetTicker[] = [...ASSET_TICKERS]
-		.filter((t) => !isGoodsAsset(t))
-		.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
-	function toggleAcceptedAsset(t: AssetTicker): void {
-		acceptedAssets = acceptedAssets.includes(t)
-			? acceptedAssets.filter((x) => x !== t)
-			: [...acceptedAssets, t];
-	}
 
 	const pmError = $derived.by(() => {
 		// Barter validates the accepted-crypto set instead of payment methods.
@@ -978,30 +972,27 @@
 			<div class="mb-4">
 				{#if isBarter}
 					<p class="mb-1 text-sm font-semibold">{$_('post_order.form.barter_accept_label')}</p>
-					<p class="mb-2 text-xs text-ink-500">{$_('post_order.form.barter_accept_hint')}</p>
+					<p class="mb-2 text-xs text-ink-500">{$_('edit_order.barter_accept_locked_hint')}</p>
+					<!-- cp440 — the accepted-crypto set is LOCKED while editing, like
+					     side / asset / currency above. A counterparty who clicked
+					     through on the original listing chose it partly on WHICH coins
+					     they'd be paid in; letting the poster silently drop one (or
+					     uncheck them all) on a replace is a bait-and-switch. Rendered
+					     read-only here; to change what you accept, post a new order. -->
 					<div
 						class="flex flex-wrap gap-2"
 						role="group"
 						aria-label={$_('post_order.form.barter_accept_label')}
 					>
-						{#each cryptoTickers as t (t)}
-							{@const sel = acceptedAssets.includes(t)}
-							<button
-								type="button"
-								onclick={() => toggleAcceptedAsset(t)}
-								aria-pressed={sel}
-								class="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors {sel
-									? 'border-morphit-emerald bg-morphit-emerald/10 text-morphit-emerald'
-									: 'border-ink-200 text-ink-600 hover:border-ink-300 dark:border-ink-700 dark:text-ink-300'}"
+						{#each acceptedAssets as t (t)}
+							<span
+								class="inline-flex items-center gap-1.5 rounded-full border border-morphit-emerald bg-morphit-emerald/10 px-3 py-1.5 text-sm font-medium text-morphit-emerald"
 							>
 								<img src={`/icons/icon-${t.toLowerCase()}.svg`} alt="" class="h-4 w-4" />
 								{t}
-							</button>
+							</span>
 						{/each}
 					</div>
-					{#if pmError}
-						<StatusLine kind="warn" id="edit-pm-error">{pmError}</StatusLine>
-					{/if}
 				{:else}
 					<p class="mb-1 text-sm font-semibold">
 						{side === 'sell'
