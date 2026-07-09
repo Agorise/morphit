@@ -197,3 +197,25 @@ export function clearReadState(): void {
 export function __reloadFromStorage(): void {
 	readStateStore.set(readRaw());
 }
+
+/**
+ * The timestamp to record when acknowledging a conversation as read.
+ *
+ * `isUnread()` compares the indexer's `last_message_at` — a CHAIN timestamp —
+ * against whatever we stored here. Storing the client's `Date.now()` therefore
+ * makes the comparison clock-dependent: if the browser's clock runs even
+ * slightly behind the chain, the last message you just watched arrive is
+ * "newer" than your acknowledgement, and the conversation stays lit green in
+ * the inbox forever.
+ *
+ * So: acknowledge with the newest message we have actually SEEN, and fall back
+ * to the local clock only when there is nothing to point at (an empty
+ * conversation, or a list of still-pending sends that the chain has not stamped
+ * yet). When the chain is running ahead of us, take the chain's word for it.
+ *
+ * @param latestSeenAt the newest CONFIRMED message time in view, or null.
+ */
+export function readAckTimestamp(latestSeenAt: Date | null, now: Date = new Date()): Date {
+	if (latestSeenAt === null || Number.isNaN(latestSeenAt.getTime())) return now;
+	return latestSeenAt.getTime() > now.getTime() ? latestSeenAt : now;
+}

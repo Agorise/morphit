@@ -40,14 +40,27 @@ import { ensureSodium, formatPublicKeyBLT, type KeyRole } from './keygen';
  * @param role      which authority to derive ('posting' for login checks)
  * @param password  the candidate string the user pasted
  */
+export async function masterPasswordScalar(
+	account: string,
+	role: KeyRole,
+	password: string
+): Promise<Uint8Array | null> {
+	await ensureSodium();
+	// sha256 over UTF-8 bytes of (account + role + password), matching
+	// dblurt's PrivateKey.fromSeed(account + role + password).
+	const scalar = sodium.crypto_hash_sha256(sodium.from_string(account + role + password));
+	if (!secp256k1.utils.isValidPrivateKey(scalar)) return null;
+	return scalar;
+}
+
 export async function masterPasswordPubKey(
 	account: string,
 	role: KeyRole,
 	password: string
 ): Promise<string | null> {
 	await ensureSodium();
-	// sha256 over UTF-8 bytes of (account + role + password), matching
-	// dblurt's PrivateKey.fromSeed(account + role + password).
+	// Derived in exactly ONE place (`masterPasswordScalar`) so the public and
+	// private paths can never disagree about what a master password means.
 	const scalar = sodium.crypto_hash_sha256(sodium.from_string(account + role + password));
 	try {
 		if (!secp256k1.utils.isValidPrivateKey(scalar)) return null;

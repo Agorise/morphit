@@ -78,8 +78,20 @@ export interface FullIdentity {
 	 *  for any identity created via generateFullIdentity or
 	 *  importFullIdentityFromSeed; 'posting-only' only via
 	 *  importPostingOnlyFullIdentity (Batch H — existing-Blurt-account
-	 *  import path). */
-	readonly origin: 'morphit-seed' | 'posting-only';
+	 *  import path).
+	 *
+	 *  'posting-active' (tt.txt #11) — a posting-only import that later chose
+	 *  "keep my Active key on this device". It holds posting + active; owner and
+	 *  memo remain null and `seedBytes` is still null, because an Active key
+	 *  cannot derive them (that chain is one-way).
+	 *
+	 *  `origin` is PROVENANCE, not capability. Never ask "is origin
+	 *  'morphit-seed'?" to decide whether a transfer can be signed — ask whether
+	 *  the active key is actually there (`keys.active !== null`, or
+	 *  `activePublicKey !== null` on a LiveIdentity). Conflating the two is what
+	 *  made the wallet hide its own Send button from users who could have used
+	 *  it. */
+	readonly origin: 'morphit-seed' | 'posting-only' | 'posting-active';
 	/** Raw BIP-39 entropy bytes — 16 bytes for 12-word mnemonics
 	 *  (the only form Morphit supports).  The mnemonic itself
 	 *  (a string) is
@@ -92,9 +104,9 @@ export interface FullIdentity {
 	 *  posting WIF, no mnemonic was ever derived. */
 	readonly seedBytes: Uint8Array | null;
 	/** All four key roles when origin === 'morphit-seed'; only the
-	 *  `posting` role when origin === 'posting-only'.  The other three
-	 *  slots are null in the posting-only case — owner/active/memo
-	 *  can't be derived from a single role-key WIF. */
+	 *  `posting` role when origin === 'posting-only'; `posting` + `active`
+	 *  when origin === 'posting-active'.  Owner/memo can never be derived
+	 *  from a role key — that direction is one-way. */
 	readonly keys: {
 		readonly owner: Keypair | null;
 		readonly active: Keypair | null;
@@ -135,20 +147,23 @@ export interface FullIdentity {
  */
 export interface LiveIdentity {
 	readonly createdAt: number;
-	/** Mirrors FullIdentity.origin.  Posting-only sessions cannot use
-	 *  the JIT-unlock owner/active flow (those keys do not exist), so
-	 *  any future feature that needs an active-key signature must
-	 *  guard with `live.origin === 'morphit-seed'`. */
-	readonly origin: 'morphit-seed' | 'posting-only';
+	/** Mirrors FullIdentity.origin — PROVENANCE, not capability.
+	 *
+	 *  A feature that needs an active-key signature must guard on
+	 *  `activePublicKey !== null`, NOT on `origin === 'morphit-seed'`: a
+	 *  'posting-active' session has an active key and must be allowed to
+	 *  spend, while a morphit-seed session that somehow lacked one must not. */
+	readonly origin: 'morphit-seed' | 'posting-only' | 'posting-active';
 	readonly posting: Keypair;
 	/** Null for posting-only imports.  Chat encryption today uses
 	 *  posting (deriveChatIdentity), not memo, so chat works with
 	 *  posting-only sessions; this field exists for forward-compat
 	 *  if a future chain op requires the memo private. */
 	readonly memo: Keypair | null;
-	/** Null for posting-only imports. */
+	/** Null for posting-only AND posting-active imports (owner is never held). */
 	readonly ownerPublicKey: Uint8Array | null;
-	/** Null for posting-only imports. */
+	/** Null ONLY when no active key is held. This is the capability flag the
+	 *  money paths gate on. */
 	readonly activePublicKey: Uint8Array | null;
 }
 
@@ -170,6 +185,23 @@ export function toLiveIdentity(full: FullIdentity): LiveIdentity {
 			memo: null,
 			ownerPublicKey: null,
 			activePublicKey: null
+		});
+	}
+	if (full.origin === 'posting-active') {
+		// posting + active. The active PRIVATE key stays at rest in the envelope
+		// and is JIT-unlocked per signature (useActiveKey); only its PUBLIC key
+		// is promoted to the live session, exactly as for morphit-seed.
+		const activeKp = full.keys.active;
+		if (!activeKp) throw new Error('posting-active identity is missing its active key');
+		const activePub = activeKp.publicKey.slice();
+		sodium.memzero(activeKp.privateKey);
+		return Object.freeze({
+			createdAt: full.createdAt,
+			origin: 'posting-active',
+			posting: full.keys.posting,
+			memo: null,
+			ownerPublicKey: null,
+			activePublicKey: activePub
 		});
 	}
 	// origin === 'morphit-seed': all four slots populated.

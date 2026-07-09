@@ -638,7 +638,7 @@ back-fill.
 >   `curl http://127.0.0.1:8124/health` → `{"status":"ok","transport":"http"}`.)
 > - **Canary** — whether `apps/web/build/canary.txt` is current
 >   (parsed from its `Valid through:` line) or overdue for its weekly
->   regeneration. Since v1.2.0 the generator writes the sitewide human
+>   regeneration. Since v1.3.0 the generator writes the sitewide human
 >   format — `22 July, 2026 @ 23:45:18 UTC` — and health reads BOTH that
 >   and the older Zulu ISO form (`2026-07-22T23:45:18Z`), so a canary you
 >   signed before upgrading keeps verifying. Both are parsed strictly: a

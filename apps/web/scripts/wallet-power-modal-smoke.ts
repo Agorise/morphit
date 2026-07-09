@@ -111,10 +111,23 @@ check(
 // ─── 4. MyBalanceCard: gating, capture, lazy render ────────────────────
 const card = read('apps/web/src/lib/components/MyBalanceCard.svelte');
 
+// tt.txt #11 — CAPABILITY, not provenance. A 'posting-active' session keeps a
+// verified Active key on this device and can power up/down; asking
+// `origin === 'morphit-seed'` would deny it. Power-up is signed with the same
+// active key a transfer is, so it rides the same gate.
 check(
-	'active-key gate: hasActiveKey derives from a morphit-seed session',
-	/hasActiveKey = \$derived\(\$liveIdentity\?\.origin === 'morphit-seed'\)/.test(card)
+	'active-key gate: hasActiveKey derives from the KEY, not the origin',
+	/hasActiveKey = \$derived\(\(\$liveIdentity\?\.activePublicKey \?\? null\) !== null\)/.test(card)
 );
+// Match CODE, not prose: the fix's own doc-comment quotes the buggy expression
+// it replaced, and a naive grep sees it and "fails". Recurring lesson.
+const cardCode = card
+	.replace(/<!--[\s\S]*?-->/g, '')
+	.replace(/\/\*[\s\S]*?\*\//g, '')
+	.split('\n')
+	.filter((l) => !l.trim().startsWith('*') && !l.trim().startsWith('//'))
+	.join('\n');
+check('…and it is NOT the old provenance check', !/origin === 'morphit-seed'/.test(cardCode));
 check(
 	'the power-up/down buttons are gated on hasActiveKey',
 	/#if hasActiveKey && blurtBalance > 0/.test(card) &&

@@ -215,7 +215,7 @@ function jsonToIdentity(json: string): Identity {
 	// immutability issue but it tightens the reference graph.
 	const parsed = JSON.parse(json) as {
 		createdAt: number;
-		origin?: 'morphit-seed' | 'posting-only';
+		origin?: 'morphit-seed' | 'posting-only' | 'posting-active';
 		seedBytes: string | null;
 		keys: Record<string, { pub: string; priv: string } | null>;
 		totpSecret?: string | null;
@@ -224,9 +224,17 @@ function jsonToIdentity(json: string): Identity {
 			| null;
 	};
 
-	const origin: 'morphit-seed' | 'posting-only' = parsed.origin ?? 'morphit-seed';
-	if (origin !== 'morphit-seed' && origin !== 'posting-only') {
-		throw new Error(`Unknown keystore origin: ${origin}`);
+	const origin: 'morphit-seed' | 'posting-only' | 'posting-active' =
+		parsed.origin ?? 'morphit-seed';
+	if (origin !== 'morphit-seed' && origin !== 'posting-only' && origin !== 'posting-active') {
+		// A keystore written by a NEWER Morphit than this build. Say so, rather
+		// than "corrupt" — the user's keys are fine, this code is behind. The
+		// payload is where the schema version lives (the crypto container is
+		// unchanged), so this is the check that catches a stale build.
+		throw new Error(
+			`This keystore was saved by a newer version of Morphit (origin: ${origin}). ` +
+				`Refresh the page to update, then unlock again.`
+		);
 	}
 
 	const keys: {
@@ -242,17 +250,29 @@ function jsonToIdentity(json: string): Identity {
 		memo: null
 	};
 
+	/** Which roles MUST be present, and which MUST be absent, per origin. The
+	 *  doc-comment above used to claim this was enforced; the loop below only
+	 *  enforced the "required" half. An envelope claiming `posting-only` while
+	 *  carrying an owner key would have loaded happily. Both halves now hold. */
+	const REQUIRED: Record<typeof origin, readonly KeyRole[]> = {
+		'morphit-seed': ['owner', 'active', 'posting', 'memo'],
+		'posting-only': ['posting'],
+		'posting-active': ['posting', 'active']
+	};
+	const required = REQUIRED[origin];
+
 	for (const role of KEY_ROLES) {
 		const raw = parsed.keys[role];
 		if (raw === null || raw === undefined) {
-			if (origin === 'morphit-seed') {
-				throw new Error(`Missing key role in morphit-seed keystore: ${role}`);
+			if (required.includes(role)) {
+				throw new Error(`Missing key role in ${origin} keystore: ${role}`);
 			}
-			if (role === 'posting') {
-				throw new Error('posting-only keystore is missing the posting role');
-			}
-			// posting-only + non-posting role → legitimately null.
 			continue;
+		}
+		if (!required.includes(role)) {
+			// e.g. a 'posting-only' envelope carrying an owner key. Refuse: an
+			// identity must be exactly what it says it is.
+			throw new Error(`Unexpected key role in ${origin} keystore: ${role}`);
 		}
 		const kp = {
 			role,
@@ -1100,4 +1120,75 @@ function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
 		diff |= (a[i] ?? 0) ^ (b[i] ?? 0);
 	}
 	return diff === 0;
+}
+
+
+/**
+ * tt.txt #11 — promote a `posting-only` keystore to `posting-active` by storing
+ * a verified Active key alongside the Posting key, re-encrypted under the SAME
+ * password.
+ *
+ * Called ONLY after the user explicitly chose "keep my Active key on this
+ * device". A posting-only user chose posting-only deliberately; silently
+ * promoting them would be a betrayal of that choice, and it would quietly widen
+ * the blast radius of their password from "can post" to "can spend".
+ *
+ * Invariants enforced here rather than trusted from the caller:
+ *   • the envelope must currently be posting-only (never re-key a morphit-seed
+ *     identity, never re-run this on an already-upgraded one);
+ *   • the password must decrypt it (so an attacker with only the scalar cannot
+ *     rewrite someone's keystore);
+ *   • `activePublicKey` must be the public key of `activeScalar` — the caller
+ *     already verified it against the chain's authorities, and we verify that
+ *     the two halves it hands us actually belong together;
+ *   • owner and memo stay null. An Active key cannot derive them.
+ *
+ * Every private byte this function touches is zeroed before it returns,
+ * including on the throw paths.
+ */
+export async function upgradeToPostingActive(
+	env: KeystoreEnvelope,
+	password: string,
+	activeScalar: Uint8Array,
+	activePublicKey: Uint8Array
+): Promise<KeystoreEnvelope> {
+	await ensureSodium();
+	const full = await decryptIdentity(env, password);
+	try {
+		if (full.origin !== 'posting-only') {
+			throw new Error(`upgradeToPostingActive: refusing to upgrade a ${full.origin} keystore`);
+		}
+		if (activeScalar.length !== 32) {
+			throw new Error('upgradeToPostingActive: active scalar must be 32 bytes');
+		}
+		const upgraded: Identity = {
+			createdAt: full.createdAt,
+			origin: 'posting-active',
+			seedBytes: null,
+			keys: Object.freeze({
+				owner: null,
+				active: Object.freeze({
+					role: 'active' as const,
+					publicKey: activePublicKey.slice(),
+					privateKey: activeScalar.slice()
+				}),
+				posting: full.keys.posting,
+				memo: null
+			}),
+			totpSecret: full.totpSecret,
+			totpBackupCodes: full.totpBackupCodes
+		};
+		const next = await encryptIdentity(upgraded, password);
+		// Zero our copies of the active key material; the ciphertext holds it now.
+		const activeKp = upgraded.keys.active;
+		if (activeKp) sodium.memzero(activeKp.privateKey);
+		return next;
+	} finally {
+		// Whatever happened, the decrypted identity must not survive this call.
+		for (const role of KEY_ROLES) {
+			const kp = full.keys[role];
+			if (kp) sodium.memzero(kp.privateKey);
+		}
+		if (full.seedBytes) sodium.memzero(full.seedBytes);
+	}
 }

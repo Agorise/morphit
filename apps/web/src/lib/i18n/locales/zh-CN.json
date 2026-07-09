@@ -274,7 +274,8 @@
     },
     "sign_in_another_device": "在其他设备上登录",
     "lock_session": "锁定会话",
-    "view_my_profile": "@{account} 的资料"
+    "view_my_profile": "@{account} 的资料",
+    "backup_pending_aria": "你有尚未备份的密钥"
   },
   "backup_keys": {
     "title": "备份你的密钥",
@@ -329,7 +330,8 @@
         "password_required": "请输入密码以继续。",
         "wrong_password": "密码错误。请重试。",
         "no_seed_posting_only": "此账户仅通过发帖密钥导入 — 没有可显示的助记词。请使用下方的密钥文件下载。",
-        "generic": "出现问题。请重试。"
+        "generic": "出现问题。请重试。",
+        "no_seed_posting_active": "这个账户没有 12 词助记词，也不可能有。助记词是用来「派生」密钥的——无法从你已有的密钥反推出来。下面的 Keyfile 就是你的备份，现在它同时包含你的发帖密钥和活跃密钥。"
       }
     },
     "paired": {
@@ -337,7 +339,8 @@
       "body": "此桌面已与您的手机配对，手机保存着您真正的密钥。下面的部分是关于备份不在此设备上的密钥的——它们适用于您配对的手机。在手机上打开 Morphit，前往「备份我的密钥」。",
       "deeplink_hint": "如果您的手机在附近，下面的按钮会直接在手机上打开正确的页面。",
       "deeplink_cta": "在手机上打开备份"
-    }
+    },
+    "keyfile_body_posting_active": "你的 Keyfile 现在同时保存了发帖密钥和活跃密钥，并用你的 Morphit 密码加密。请把副本妥善保存：这是你刚刚存到本设备的活跃密钥的唯一备份。它不包含所有者密钥或备注密钥——那些仍在你原本保管的地方。"
   },
   "chat": {
     "message_button_aria": "向 {peer} 发消息",
@@ -647,11 +650,10 @@
       "recipient_label": "收款人",
       "from_label": "付款人",
       "no_memo_notice": "不会包含链上备注 — 您的交易上下文留在此加密聊天中。",
-      "password_label": "您的密码",
+      "password_label": "你的 @{account} 密码（用于以活跃密钥签名）",
       "confirm": "发送 BLURT",
       "paying": "正在发送…",
       "success_toast": "BLURT 已发送。收据已发布到聊天。",
-      "success_toast_no_chat": "BLURT 已发送。无法将收据发布到聊天 — 您可以手动标记资金已发送。",
       "error": {
         "password_required": "请输入您的密码。",
         "bad_password": "密码错误。",
@@ -667,7 +669,8 @@
       "memo_label": "备注",
       "with_memo_notice": "上面的备注将包含在链上转账中,以便卖家将此付款与您的交易匹配。",
       "success_toast_no_chat_with_txid": "BLURT 已发送。无法在聊天中发布收据 — 复制此 txid 以手动标记资金已发送：{txid}",
-      "password_hint": "您用于解锁 Morphit 的密码。它会在本设备上解密您的活动密钥以进行签名——您无需在此粘贴任何密钥，也不会向任何地方发送任何内容。"
+      "password_hint": "您用于解锁 Morphit 的密码。它会在本设备上解密您的活动密钥以进行签名——您无需在此粘贴任何密钥，也不会向任何地方发送任何内容。",
+      "error_amount_precision": "最多使用 3 位小数——可发送的最小金额为 0.001 BLURT。"
     },
     "trade_event": {
       "address_shared_title": "已共享新地址",
@@ -679,7 +682,6 @@
     "order_response_no_fee": "免费——你在回应 @{peer} 的订单，所以首次联系是免费的。",
     "menu": {
       "aria_open": "会话选项",
-      "aria_dismiss": "关闭菜单",
       "verify_peer": "验证联系人"
     },
     "verify_peer": {
@@ -1825,7 +1827,6 @@
     "operators": "运营者",
     "operated_by": "运营者",
     "contact_operator": "联系本站运营者",
-    "alt_network_disabled": "本运营者未为该网络配置地址。",
     "alt_network_address": "地址:{address}",
     "instances": "实例",
     "explorer": "区块浏览器",
@@ -2249,7 +2250,7 @@
     },
     "fee_status_banner": {
       "heading": "费用状态",
-      "body": "💡 下方每个订单都会显示其挂单费状态。订单只有在费用通过验证后才会出现在公共订单簿中——标记为“未收到”“支付不足”或“尚未验证”就是某个订单在那里看起来缺失的原因。",
+      "body": "💡 下方每个订单都会显示其挂单费状态。订单只有在费用通过验证后才会出现在公共订单簿中——标记为“未收到”“支付不足”或“尚未验证”就是某个订单看起来缺失的原因。",
       "dismiss": "忽略此提示"
     }
   },
@@ -2562,8 +2563,8 @@
   },
   "order_detail": {
     "loading": "正在加载订单…",
-    "not_found_title": "未能找到此订单",
-    "not_found_body": "如果你刚刚发布，请再等一分钟——区块链可能仍在确认它，点击“再次检查”。否则此订单可能不存在，或并非由此账户发布。",
+    "not_found_title": "订单正在加载",
+    "not_found_body": "该订单正在由区块链发布，可能需要一分钟才会出现。",
     "back_to_profile": "返回个人主页",
     "error_title": "无法加载此订单",
     "error_body": "访问索引器时出错。请稍后再试。",
@@ -2594,7 +2595,8 @@
     "cancel_button": "取消此订单",
     "posting_title": "你的订单正在发布…",
     "posting_body": "此订单正在由区块链确认，可能需要一分钟才会出现。我们会自动持续检查——无需刷新。",
-    "check_again": "再次检查"
+    "check_again": "再次检查",
+    "action_edit_countdown": "编辑（剩余：{remaining}）"
   },
   "orderbook": {
     "heading": "订单簿",
@@ -3092,7 +3094,8 @@
       "feature_upsell_cta": "设置特色出价",
       "edit_window_countdown": "{remaining} 内可编辑",
       "edit_window_tooltip": "编辑仅可在发布后 15 分钟内进行。之后请取消并重新发布。",
-      "edit_window_expired": "编辑窗口已过"
+      "edit_window_expired": "编辑窗口已过",
+      "view_my_order_pending": "你的订单正在写入区块链…"
     },
     "broadcast_error": {
       "title": "订单未能成交",
@@ -3157,7 +3160,7 @@
       "fee_address_chain_pinned": "由 {account} 在链上锚定 — 每个 Morphit 实例都依据此地址验证费用。",
       "fee_address_chain_pinned_aria": "链上锚定地址的真实性",
       "fee_address_unavailable": "此运营商未配置 {asset} 费用地址。请改选 BLURT,或在另一个 Morphit 实例上发布您的订单。",
-      "blurt_needs_active_key": "需要你的活跃（Active）密钥。你目前用发帖（Posting）密钥登录——请用你的 12 个单词种子短语或 Keyfile 登录以使用 BLURT 支付，或改用 BTC/XMR 支付："
+      "blurt_needs_active_key": "需要你的活跃密钥。你现在用发帖密钥登录——发布时 Morphit 会请求你的活跃密钥（或 Blurt 主密码），你已填写的内容不会丢失。"
     },
     "draft": {
       "restored_banner": "已恢复 {age} 前的草稿。从上次停下的地方继续——或者重新开始。",
@@ -3472,7 +3475,7 @@
       "password_label": "你的 @{account} 密码(用于以你的活跃密钥签名)",
       "error_password_required": "请输入密码以继续。",
       "error_bad_password": "该密码未能解锁你的活跃密钥。请检查后重试。",
-      "error_no_active_key": "此设备没有可用于签名的活跃密钥。请使用助记词登录以进行 power up 或 power down。",
+      "error_no_active_key": "本设备没有可用于签名的活跃密钥。进行 power up 或 power down 时 Morphit 会请求你的活跃密钥（或 Blurt 主密码）。",
       "error_broadcast": "该操作未能在链上完成。请重试。",
       "error_chain_rejected": "网络拒绝了此交易：{reason}",
       "error_unreachable": "无法连接到你的 Morphit 实例进行广播。请检查网络连接后重试。",
@@ -3494,7 +3497,7 @@
       "memo_label": "备注(可选)",
       "memo_placeholder": "例如订单编号",
       "memo_privacy_warning": "备注会以明文形式公开且永久地存储在区块链上。切勿填写密码、密钥或任何隐私信息。",
-      "error_no_active_key": "此设备没有可用于签名的活跃密钥。请使用助记词登录以发送 BLURT。",
+      "error_no_active_key": "本设备没有可用于签名的活跃密钥。发送时 Morphit 会请求你的活跃密钥（或 Blurt 主密码）。",
       "send_button": "发送",
       "confirm": "发送 BLURT",
       "qr_heading": "扫描收款人二维码",
@@ -3918,7 +3921,7 @@
     },
     "endpoints": {
       "heading": "RPC 节点",
-      "explain": "Morphit 用于读写数据的网络节点。应用会按响应速度依次尝试。添加你自己的或社区节点。",
+      "explain": "Morphit 索引器用于读写数据所连接的网络节点。应用会按响应最快的顺序依次尝试。",
       "pool_note": "你的 Morphit 实例为你处理所有 Blurt 网络流量——你的浏览器从不直接与这些节点通信。这里只是显示它们的实时状态。",
       "cooling_down": "冷却中",
       "recheck": "重新检测节点速度",
@@ -4236,7 +4239,7 @@
       "iphone_link": "iPhone 安装演示"
     },
     "account_name": {
-      "heading": "账户名",
+      "heading": "账户名称",
       "explain": "Morphit 需要知道你的账户名,以识别你的交易、消息和链上活动。如果你导入了带账户名的 posting 密钥,这已经设置好了。如果你导入了助记词或 keyfile,在这里设置它。",
       "current_label": "当前账户",
       "locked_explain": "要更改,请退出登录,然后用其他账户重新导入。",
@@ -4553,5 +4556,31 @@
       "cancel": "取消",
       "confirm": "访问该网站"
     }
+  },
+  "unlock_active": {
+    "title": "这笔付款需要你的活跃密钥",
+    "body": "你目前用发帖密钥登录 @{account}，它无法转移资金。请输入你的活跃密钥或 Blurt 主密码以继续——你已填写的内容不会丢失。",
+    "field_label": "活跃密钥或 Blurt 主密码",
+    "field_placeholder": "以 5… 开头，或你的主密码",
+    "field_help": "在签名之前，Morphit 会与区块链上的账户核对。它绝不会离开本设备。",
+    "cta": "解锁并继续",
+    "checking": "正在核对…",
+    "error": {
+      "invalid_wif": "这看起来不是有效的密钥。请检查是否漏字或多字。",
+      "is_posting_key": "这是你的发帖密钥——你已经用它登录了。它无法转移资金。请改为粘贴活跃密钥。",
+      "is_owner_key": "这是你的所有者密钥。它可以接管你的整个账户，因此 Morphit 绝不会使用它。请使用活跃密钥。",
+      "not_this_account": "这不是本账户的活跃密钥。请确认你使用的是 @{account} 的密钥。",
+      "empty": "请输入你的活跃密钥或主密码。",
+      "lookup_failed": "无法连接区块链以核对你的密钥。请稍后重试。",
+      "bad_device_password": "该 Morphit 密码不正确。你的活跃密钥未被保存。",
+      "keep_failed": "无法在本设备上保存你的活跃密钥。没有任何更改——请重试，或选择“随后忘记”。"
+    },
+    "retention_heading": "本次付款之后",
+    "retention_once": "随后忘记（推荐）",
+    "retention_once_help": "仅用于签名一次，随后从内存中擦除。下次需要重新输入。",
+    "retention_keep": "加密保存在本设备上",
+    "retention_keep_help": "此后用你的 Morphit 密码解锁。知道该密码的人就能花掉你的 BLURT，所以只在你自己掌控的设备上这样做。",
+    "device_password_label": "你的 @{account} Morphit 密码",
+    "device_password_help": "你解锁 Morphit 时使用的密码。它会在本设备上加密你的活跃密钥。"
   }
 }

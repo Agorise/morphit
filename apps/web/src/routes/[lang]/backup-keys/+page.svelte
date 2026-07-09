@@ -12,6 +12,7 @@
 	import { markBackupVisited } from '$utils/backupVisited';
 	import { envelopeToBlob, decryptIdentity, KeystoreError } from '$crypto/keystore';
 	import { mnemonicForBackup, wipeFullIdentity } from '$crypto/keygen';
+	import { clearBackupMaterialPending } from '$stores/backupPending';
 	import { deriveBackupKeys, type BackupKey } from '$crypto/keyExport';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
 	import KeyBackupPanel from '$components/KeyBackupPanel.svelte';
@@ -44,6 +45,13 @@
 	// posting key), so we point there instead of showing a seed flow that
 	// would only error.
 	const isPostingOnly = $derived($liveIdentity?.origin === 'posting-only');
+	/** tt.txt #11 — an ex-posting-only account that kept its verified Active key.
+	 *  It has a REAL keyfile worth downloading (posting + active), but still no
+	 *  BIP-39 seed: a seed derives keys, and that chain is one-way — you cannot
+	 *  build one that reproduces two keys the user already had. */
+	const isPostingActive = $derived($liveIdentity?.origin === 'posting-active');
+	/** Only a morphit-seed identity has a 12-word phrase to show. */
+	const hasSeed = $derived($liveIdentity?.origin === 'morphit-seed');
 
 	// Mark the page as visited on mount. This is idempotent and
 	// clears the avatar-menu badge on first visit. If the user bails
@@ -51,6 +59,8 @@
 	// our nudge duty; nagging them further would be obnoxious.
 	onMount(() => {
 		markBackupVisited();
+		// The red dot has done its job the moment the user arrives here.
+		clearBackupMaterialPending();
 	});
 
 	async function downloadKeyfile(): Promise<void> {
@@ -258,9 +268,17 @@
 			     recover from. -->
 			<article>
 				<h3 class="font-display text-lg font-bold">{$_('backup_keys.seed_heading')}</h3>
-				{#if isPostingOnly}
+				{#if !hasSeed}
+					<!-- tt.txt #11 — a 12-word seed DERIVES keys through a one-way chain,
+					     so one cannot be constructed for keys the user already had. Say
+					     that honestly rather than implying they're missing out on
+					     something we could have given them. -->
 					<p class="mt-2 text-ink-700 dark:text-ink-200">
-						{$_('backup_keys.show_seed.error.no_seed_posting_only')}
+						{$_(
+							isPostingActive
+								? 'backup_keys.show_seed.error.no_seed_posting_active'
+								: 'backup_keys.show_seed.error.no_seed_posting_only'
+						)}
 					</p>
 				{:else}
 					<p class="mt-2 whitespace-pre-line text-ink-700 dark:text-ink-200">
@@ -399,7 +417,13 @@
 			<article>
 				<h3 class="font-display text-lg font-bold">{$_('backup_keys.keyfile_heading')}</h3>
 				<p class="mt-2 whitespace-pre-line text-ink-700 dark:text-ink-200">
-					{$_(isPostingOnly ? 'backup_keys.keyfile_body_posting_only' : 'backup_keys.keyfile_body')}
+					{$_(
+						isPostingActive
+							? 'backup_keys.keyfile_body_posting_active'
+							: isPostingOnly
+								? 'backup_keys.keyfile_body_posting_only'
+								: 'backup_keys.keyfile_body'
+					)}
 				</p>
 
 				{#if $isUnlocked}

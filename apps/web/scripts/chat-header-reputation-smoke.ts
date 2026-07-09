@@ -37,7 +37,11 @@ check('loadPeerReputation is best-effort/silent (try/catch, ok-guard)', /if \(!r
 check('loadPeerReputation kicked off on mount', /void loadPeerReputation\(\);/.test(cv));
 
 // header render
-check('header renders NewTraderChip when the peer is new', /\{#if peerReputation\}[\s\S]{0,400}peerReputation\.isNewTrader[\s\S]{0,80}<NewTraderChip \/>/.test(cv));
+// tt.txt #7 — the sprout moved OUT of the `{#if peerReputation}` reputation
+// block and onto line 1, at the end of the display name (order-card shape). The
+// intent is unchanged: it renders iff the peer is a new trader.
+check('header renders NewTraderChip when the peer is new', /\{#if peerReputation\?\.isNewTrader\}[\s\S]{0,60}<NewTraderChip \/>/.test(cv));
+check('the sprout is NOT gated on having a reputation score', !/peerReputation\.score[\s\S]{0,120}<NewTraderChip \/>/.test(cv));
 check('header renders the ⭐ score using the shared reputation aria string', /peerReputation\.score !== null[\s\S]{0,400}orderbook\.card\.reputation_aria[\s\S]{0,200}\u2b50/.test(cv));
 check('header renders the trade count via the shared trades string', /orderbook\.card\.trades_only[\s\S]{0,120}formatCountCompact\(peerReputation\.count\)/.test(cv));
 check('cluster sits in the header, before the RE: order line', cv.indexOf('{#if peerReputation}') < cv.indexOf('{#if orderSummary}'));

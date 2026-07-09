@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { validateBlurtAmount, MIN_BLURT, floorToBlurtPrecision } from './sendValidation';
+import {
+	validateBlurtAmount,
+	MIN_BLURT,
+	floorToBlurtPrecision,
+	hasBlurtPrecision
+} from './sendValidation';
 
 const BAL = 3052.962;
 
@@ -89,5 +94,29 @@ describe('floorToBlurtPrecision', () => {
 		expect(floorToBlurtPrecision(0)).toBe('0.000');
 		expect(floorToBlurtPrecision(NaN)).toBe('0.000');
 		expect(floorToBlurtPrecision(-5)).toBe('0.000');
+	});
+});
+
+describe('hasBlurtPrecision', () => {
+	it('accepts amounts already on the 3-decimal grid', () => {
+		for (const n of [1, 0.001, 30, 3052.962, 1.5]) expect(hasBlurtPrecision(n)).toBe(true);
+	});
+
+	it('rejects amounts formatBlurtAmount would silently round', () => {
+		expect(hasBlurtPrecision(1.0006)).toBe(false);
+		expect(hasBlurtPrecision(0.0004)).toBe(false);
+	});
+
+	it('tolerates float representation error rather than rejecting valid money', () => {
+		expect(hasBlurtPrecision(28.515)).toBe(true);
+		// 0.1 + 0.2 === 0.30000000000000004, but that IS 0.300 BLURT. Rejecting it
+		// would block a perfectly legal amount because of IEEE-754, so the epsilon
+		// is what makes this predicate usable on computed amounts.
+		expect(hasBlurtPrecision(0.1 + 0.2)).toBe(true);
+	});
+
+	it('rejects non-finite', () => {
+		expect(hasBlurtPrecision(NaN)).toBe(false);
+		expect(hasBlurtPrecision(Infinity)).toBe(false);
 	});
 });

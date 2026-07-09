@@ -28,6 +28,9 @@
 	import { onDestroy } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import { runWithActiveKey } from '$crypto/runWithActiveKey';
+	import { liveIdentity } from '$stores/identity';
+	import UnlockActiveKeyModal from '$components/UnlockActiveKeyModal.svelte';
+	import sodium from 'libsodium-wrappers-sumo';
 	import {
 		prepareUnsignedTransfer,
 		signTransferWithKey,
@@ -128,6 +131,22 @@
 	 *  A wrong password still fails at submit with `error_bad_password`. */
 	const passwordFilled = $derived(passwordInput.length > 0);
 
+	/** tt.txt #11 — a posting-only session has no active key on this device, so a
+	 *  transfer can never be signed with what we hold. Rather than hiding Send (as
+	 *  the wallet card used to) we offer it and unlock in place, resuming the send
+	 *  with everything the user already typed. */
+	/** CAPABILITY, not provenance (tt.txt #11). A 'posting-active' session — a
+	 *  posting-only import that chose to keep its verified Active key on this
+	 *  device — CAN sign a transfer. Asking `origin === 'morphit-seed'` would
+	 *  wrongly deny it. Ask whether the key is actually there. */
+	const hasActiveKey = $derived(($liveIdentity?.activePublicKey ?? null) !== null);
+
+	/** Everything except the password: what must be true before we let a
+	 *  posting-only user even reach for their Active key. */
+	const formReady = $derived(
+		account.length > 0 && recipientState === 'valid' && amountValid && phase.kind !== 'sending'
+	);
+
 	const canSend = $derived(
 		account.length > 0 &&
 			recipientState === 'valid' &&
@@ -185,6 +204,36 @@
 		// the asset would fill the field with more than the user actually has,
 		// and the form would then refuse to send it.
 		amountInput = floorToBlurtPrecision(blurtBalance);
+	}
+
+	/** Sign with a just-unlocked Active key, then wipe it. The key exists for the
+	 *  signing window only and is NEVER written to the keystore. */
+	async function sendWithEphemeralActiveKey(activeScalar: Uint8Array): Promise<void> {
+		if (!formReady) return;
+		phase = { kind: 'sending' };
+		try {
+			const unsignedTx = await prepareUnsignedTransfer(
+				account,
+				recipient.trim(),
+				formatBlurtAmount(amountNum),
+				memo.trim()
+			);
+			let signed;
+			try {
+				signed = signTransferWithKey(unsignedTx, activeScalar);
+			} finally {
+				sodium.memzero(activeScalar);
+			}
+			await broadcastSignedTransaction(signed);
+			onDone();
+		} catch {
+			try {
+				sodium.memzero(activeScalar);
+			} catch {
+				/* already zeroed */
+			}
+			phase = { kind: 'error', messageKey: 'profile.wallet.error_broadcast' };
+		}
 	}
 
 	async function confirm(): Promise<void> {
@@ -442,43 +491,57 @@
 				<span>{$_('profile.send.memo_privacy_warning')}</span>
 			</p>
 
-			<!-- Password (active key) -->
-			<label class="mt-4 block">
-				<span class="text-sm font-semibold">
-					{$_('profile.wallet.password_label', { values: { account } })}
-				</span>
-				<input
-					type="password"
-					maxlength="64"
-					bind:value={passwordInput}
-					autocomplete="current-password"
-					disabled={phase.kind === 'sending'}
-					aria-invalid={passwordError.length > 0}
-					class="mt-1 w-full rounded-lg border border-ink-300 bg-white px-3 py-2 text-sm dark:border-ink-700 dark:bg-ink-900"
+			<!-- tt.txt #11 — a posting-only session cannot sign a transfer with what we
+			     hold. Offer the Active-key unlock IN PLACE rather than a password field
+			     that cannot work; recipient / amount / memo above stay exactly as typed
+			     and the send resumes on success. The unlock CTA stays disabled until the
+			     rest of the form is valid — never enable a button first and explain after. -->
+			{#if !hasActiveKey}
+				<UnlockActiveKeyModal
+					{account}
+					canProceed={formReady}
+					onUnlocked={sendWithEphemeralActiveKey}
+					onCancel={onCancel}
 				/>
-				{#if passwordError}
-					<p class="mt-1 text-xs text-red-600 dark:text-red-400">{passwordError}</p>
-				{/if}
-			</label>
+			{:else}
+				<!-- Password (active key) -->
+				<label class="mt-4 block">
+					<span class="text-sm font-semibold">
+						{$_('profile.wallet.password_label', { values: { account } })}
+					</span>
+					<input
+						type="password"
+						maxlength="64"
+						bind:value={passwordInput}
+						autocomplete="current-password"
+						disabled={phase.kind === 'sending'}
+						aria-invalid={passwordError.length > 0}
+						class="mt-1 w-full rounded-lg border border-ink-300 bg-white px-3 py-2 text-sm dark:border-ink-700 dark:bg-ink-900"
+					/>
+					{#if passwordError}
+						<p class="mt-1 text-xs text-red-600 dark:text-red-400">{passwordError}</p>
+					{/if}
+				</label>
+				<div class="mt-5 flex justify-end gap-2">
+					<button
+						type="button"
+						class="rounded-lg border border-ink-300 px-4 py-2 text-sm font-semibold transition-colors hover:border-ink-400 hover:bg-ink-50 disabled:opacity-50 dark:border-ink-700 dark:hover:bg-ink-800"
+						onclick={onCancel}
+						disabled={phase.kind === 'sending'}
+					>
+						{$_('common.cancel')}
+					</button>
+					<button
+						type="button"
+						class="rounded-lg bg-morphit-btn px-4 py-2 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-50"
+						onclick={confirm}
+						disabled={!canSend}
+					>
+						{phase.kind === 'sending' ? $_('common.broadcasting') : $_('profile.send.confirm')}
+					</button>
+				</div>
+			{/if}
 
-			<div class="mt-5 flex justify-end gap-2">
-				<button
-					type="button"
-					class="rounded-lg border border-ink-300 px-4 py-2 text-sm font-semibold transition-colors hover:border-ink-400 hover:bg-ink-50 disabled:opacity-50 dark:border-ink-700 dark:hover:bg-ink-800"
-					onclick={onCancel}
-					disabled={phase.kind === 'sending'}
-				>
-					{$_('common.cancel')}
-				</button>
-				<button
-					type="button"
-					class="rounded-lg bg-morphit-btn px-4 py-2 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-50"
-					onclick={confirm}
-					disabled={!canSend}
-				>
-					{phase.kind === 'sending' ? $_('common.broadcasting') : $_('profile.send.confirm')}
-				</button>
-			</div>
 		{/if}
 	</div>
 </div>

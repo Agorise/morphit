@@ -17,6 +17,11 @@
 
 import { unreadCount, totalUnread, type UnreadCounts } from './index';
 import { startChatUnreadChannel } from './chatUnread';
+import {
+	containFit,
+	FAVICON_INTRINSIC_WIDTH,
+	FAVICON_INTRINSIC_HEIGHT
+} from './containFit';
 
 /** Holds the original (badge-less) title so we can restore it when
  *  the count goes to zero. Captured on first run. */
@@ -98,8 +103,20 @@ async function setFaviconBadge(count: number): Promise<void> {
 		const ctx = canvas.getContext('2d');
 		if (!ctx) return;
 
-		// Draw the original favicon.
-		ctx.drawImage(cachedFaviconImage, 0, 0, FAVICON_SIZE, FAVICON_SIZE);
+		// Draw the original favicon — CONTAIN-fitted, never stretched.
+		//
+		// tt.txt #2 — this used to be `drawImage(img, 0, 0, SIZE, SIZE)`. The
+		// Morphit mark is wide (viewBox 10.889 × 7.049), so forcing it into a
+		// square stretched it vertically. The browser renders the plain SVG
+		// correctly, which is why the logo only ever looked squashed at the exact
+		// moment a notification arrived — the one moment a user is looking at it.
+		//
+		// Some engines report no intrinsic size for an SVG without width/height,
+		// so fall back to the asset's own viewBox aspect.
+		const srcW = cachedFaviconImage.naturalWidth || FAVICON_INTRINSIC_WIDTH;
+		const srcH = cachedFaviconImage.naturalHeight || FAVICON_INTRINSIC_HEIGHT;
+		const fit = containFit(srcW, srcH, FAVICON_SIZE);
+		ctx.drawImage(cachedFaviconImage, fit.dx, fit.dy, fit.dw, fit.dh);
 
 		// Badge circle — upper-right, ~40% of favicon size.
 		const badgeR = FAVICON_SIZE * 0.38;
