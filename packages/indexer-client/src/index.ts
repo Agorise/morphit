@@ -292,7 +292,7 @@ export interface FeaturedSlot {
 
 export interface FeaturedOrderbookResponse {
 	readonly featured: readonly FeaturedSlot[];
-	/** Currently 5; the indexer's hard cap. Exposed in the
+	/** Currently 3; the indexer's hard cap (MAX_SLOTS). Exposed in the
 	 *  response so the client doesn't have to hard-code it. */
 	readonly max_slots: number;
 }
@@ -316,7 +316,7 @@ export interface ClearingPricePoint {
 	/** How many of the max_slots positions were filled this
 	 *  day. 0..max_slots. */
 	readonly active_visible_count: number;
-	/** Currently 5; mirrors max_slots from the parent response
+	/** Currently 3; mirrors max_slots from the parent response
 	 *  so per-point rendering doesn't need to look up. */
 	readonly max_slots: number;
 }
@@ -325,7 +325,7 @@ export interface ClearingPriceHistoryResponse {
 	readonly points: readonly ClearingPricePoint[];
 	/** Echo of the requested window: 7, 30, or 90. */
 	readonly window_days: number;
-	/** Currently 5; same as in FeaturedOrderbookResponse. */
+	/** Currently 3; same as in FeaturedOrderbookResponse. */
 	readonly max_slots: number;
 }
 

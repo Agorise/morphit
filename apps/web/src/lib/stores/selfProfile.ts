@@ -7,12 +7,13 @@
  * uploaded avatar showed on their public profile page but nowhere else.
  *
  * Populated on account change (AvatarMenu effect) and refreshed after the
- * user broadcasts a profile update (settings page, bustCache=true). Cleared
- * on sign-out. A network failure leaves the previous value in place; the
- * identicon fallback covers the empty case.
+ * user broadcasts a profile update (settings page, bustCache=true, which also
+ * bypasses the browser's HTTP cache). Cleared on sign-out. A network failure
+ * leaves the previous value in place and retries, rather than blanking a good
+ * avatar to the identicon (#2); the identicon fallback covers the empty case.
  */
 import { writable } from 'svelte/store';
-import { getProfileCached, clearProfileCache } from '$lib/indexer/profileCache';
+import { getProfileCachedDetailed, clearProfileCache } from '$lib/indexer/profileCache';
 import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
 
 export interface SelfProfileAvatar {
@@ -37,6 +38,16 @@ let latest = 0;
  * @param account the current account name (null ⇒ signed out ⇒ clear)
  * @param opts.bustCache force a fresh indexer fetch (after a broadcast)
  */
+/** #2 — how many times a FAILED self-profile fetch is retried, and how long
+ *  we wait between attempts. The profile cache negative-caches a failed fetch
+ *  for 5s (cp428's soft TTL), so waiting slightly longer than that guarantees
+ *  the retry actually re-hits the network rather than replaying the failure.
+ *  Without this, a single blip on first load left the user staring at their
+ *  identicon for the whole session — the store is only refreshed again on an
+ *  account change or a profile broadcast. */
+const SELF_PROFILE_RETRIES = 2;
+const SELF_PROFILE_RETRY_DELAY_MS = 6_000;
+
 export async function refreshSelfProfile(
 	account: string | null,
 	opts?: { bustCache?: boolean }
@@ -47,18 +58,46 @@ export async function refreshSelfProfile(
 	}
 	const token = ++latest;
 	if (opts?.bustCache) clearProfileCache(account);
-	try {
-		const profile = await getProfileCached(account);
-		// A newer refresh (account switch) superseded this one — discard.
-		if (token !== latest) return;
-		const props = extractLabelPropsFromProfile(profile);
-		selfProfile.set({
-			account,
-			avatarSvg: props.avatarSvg,
-			avatarDataUri: props.avatarDataUri
-		});
-	} catch {
-		// Network/fetch failure — keep whatever we had; identicon covers it.
+	for (let attempt = 0; ; attempt++) {
+		try {
+			// #2 — `reload` when busting: clearProfileCache only drops OUR
+			// in-memory entry, but the batch endpoint sets `max-age=90`, so the
+			// browser's own HTTP cache would keep replaying the PRE-broadcast
+			// response and the user wouldn't see the avatar they just set.
+			const { profile, failed } = await getProfileCachedDetailed(account, undefined, {
+				reload: opts?.bustCache === true
+			});
+			// A newer refresh (account switch) superseded this one — discard.
+			if (token !== latest) return;
+			// #2 — the profile cache collapses "fetch failed" and "no profile"
+			// into the same bare null, so blindly applying it used to CLEAR a
+			// good avatar to the identicon on any transient blip. On failure,
+			// keep whatever we're already showing for THIS account and retry;
+			// only blank on an account SWITCH, where showing the previous
+			// account's avatar would be wrong.
+			if (failed) {
+				selfProfile.update((cur) =>
+					cur.account === account ? cur : { account, avatarSvg: null, avatarDataUri: null }
+				);
+				if (attempt < SELF_PROFILE_RETRIES) {
+					await new Promise((r) => setTimeout(r, SELF_PROFILE_RETRY_DELAY_MS));
+					if (token !== latest) return;
+					continue;
+				}
+				return;
+			}
+			const props = extractLabelPropsFromProfile(profile);
+			selfProfile.set({
+				account,
+				avatarSvg: props.avatarSvg,
+				avatarDataUri: props.avatarDataUri
+			});
+			return;
+		} catch {
+			// Defensive: getProfileCachedDetailed resolves rather than throwing.
+			// Keep whatever we had rather than blanking a good avatar.
+			return;
+		}
 	}
 }
 

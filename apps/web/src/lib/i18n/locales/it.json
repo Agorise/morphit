@@ -647,23 +647,27 @@
       "recipient_label": "A",
       "from_label": "Da",
       "no_memo_notice": "Nessun memo on-chain sarà incluso — il contesto della tua operazione resta in questa chat cifrata.",
-      "password_label": "Password della chiave attiva",
+      "password_label": "La tua password",
       "confirm": "Invia BLURT",
       "paying": "Invio in corso…",
       "success_toast": "BLURT inviato. Ricevuta pubblicata nella chat.",
       "success_toast_no_chat": "BLURT inviato. Non è stato possibile pubblicare la ricevuta nella chat — puoi segnare i fondi inviati manualmente.",
       "error": {
-        "password_required": "Inserisci la password della tua chiave attiva.",
+        "password_required": "Inserisci la tua password.",
         "bad_password": "Password errata.",
-        "no_active_envelope": "Nessuna chiave attiva configurata. Paga da un wallet esterno.",
-        "broadcast_failed": "Impossibile inviare il trasferimento. Controlla il tuo saldo o usa un wallet esterno.",
+        "no_active_envelope": "Hai effettuato l'accesso senza la tua chiave attiva (sessione con chiave di pubblicazione o di sola lettura). Per inviare BLURT, accedi con la tua password o chiave master, oppure paga da un portafoglio esterno.",
+        "broadcast_failed": "Impossibile inviare il trasferimento.",
         "no_account": "Nessun account registrato.",
         "self_pay": "Non puoi pagarti.",
-        "invalid_amount": "Importo non valido."
+        "invalid_amount": "Importo non valido.",
+        "chain_rejected": "La blockchain ha rifiutato il trasferimento:",
+        "instance_unreachable": "Impossibile raggiungere la tua istanza Morphit per inviare il trasferimento. Controlla la connessione e riprova.",
+        "sign_failed": "Impossibile firmare il trasferimento: la tua chiave potrebbe non essere valida. Prova a disconnetterti e ad accedere di nuovo."
       },
       "memo_label": "Memo",
       "with_memo_notice": "Il memo sopra sarà incluso nel trasferimento on-chain così il venditore potrà abbinare questo pagamento alla tua operazione.",
-      "success_toast_no_chat_with_txid": "BLURT inviato. Impossibile pubblicare la ricevuta in chat — copia questa txid per contrassegnare manualmente i fondi inviati: {txid}"
+      "success_toast_no_chat_with_txid": "BLURT inviato. Impossibile pubblicare la ricevuta in chat — copia questa txid per contrassegnare manualmente i fondi inviati: {txid}",
+      "password_hint": "La password con cui sblocchi Morphit. Decifra la tua chiave attiva su questo dispositivo per firmare: non incolli mai una chiave qui e non viene inviato nulla."
     },
     "trade_event": {
       "address_shared_title": "Nuovo indirizzo condiviso",
@@ -1669,6 +1673,10 @@
       "what_is_barter": {
         "q": "Cos'è il Baratto su Morphit?",
         "a": "Il Baratto ti permette di comprare o vendere beni e servizi — non criptovalute — e regolare in cripto. Una nonna che vende cesti, un vicino che ripara le bici, qualcuno che scambia una cassa di arance: pubblicano ciò che offrono, gli danno un prezzo nella loro valuta locale e scelgono quale/i cripto accetteranno (ad esempio XMR, BTC e DOGE). È **un solo annuncio**, non uno per moneta.\n\n**Come funziona:** descrivi esattamente la tua offerta nelle Condizioni, imposta un valore in valuta locale (un prezzo unico o un intervallo) e spunta la/e cripto davvero usate dalle tue parti. Gli acquirenti sfogliano le merci come in qualsiasi annuncio e possono pagare solo in una cripto che accetti: se non elenchi Decred, nessuno può pagarti in Decred. Tu e l'acquirente organizzate la consegna in chat e regolate nella cripto accettata che ha scelto.\n\n**Nessun indirizzo sull'annuncio:** i beni passano di mano fuori da Morphit — di persona o per posta —, quindi un annuncio di baratto non ha un indirizzo cripto di ricezione, e Morphit non tocca mai né i beni né il pagamento. Vale il buon senso: incontratevi in un luogo pubblico, condividi solo il necessario e tratta uno sconosciuto come uno sconosciuto.\n\nSu Morphit, il Baratto è **solo per lo scambio**: non puoi pagarci le commissioni di annuncio di Morphit (quelle restano Blurt/BTC/XMR). Serve a scambiare merci, nient'altro."
+      },
+      "what_is_a_txid": {
+        "q": "Cos'è un ID transazione (o Hash)?",
+        "a": "Quando invii cripto, la blockchain registra il pagamento in modo permanente e gli assegna un'impronta unica chiamata ID transazione. I wallet la etichettano in modi diversi: potresti vedere «TxID», «Transaction Hash», «Tx Hash» o semplicemente «Hash» (Mycelium, ad esempio, la chiama «Hash»). È una lunga sequenza di lettere e numeri, di solito 64 caratteri (quelle di Blurt sono 40). Per trovarla: apri il wallet, tocca il pagamento appena inviato e copia l'ID o l'Hash mostrato. Incollarlo in Morphit permette alla tua controparte — e, per una commissione di pubblicazione, alla rete — di confermare che il pagamento è davvero avvenuto. L'ID dimostra soltanto che quel pagamento è stato fatto; non rivela nulla sul resto del tuo wallet."
       }
     },
     "share_link": "Condividi",
@@ -1682,7 +1690,7 @@
   },
   "feature_bid": {
     "title": "Metti in evidenza quest'ordine!",
-    "explainer": "Paga in BLURT per promuovere quest'ordine sopra l'orderbook principale e nella pagina iniziale per la durata selezionata. Max 5 slot simultanei; le offerte orarie più alte vincono.",
+    "explainer": "Paga BLURT per promuovere questo ordine sopra il book principale, e sulla homepage per {hours, plural, one {# ora} other {# ore}}. Sono disponibili solo {slots} posti; vince l'offerta oraria più alta:",
     "hours_label": "Per quanto tempo?",
     "hours_option": "{n}h",
     "cost_label": "Costo totale",
@@ -1796,7 +1804,7 @@
     "heading": "Prima operazione? Ecco come funziona",
     "step_1": "Mettiti d'accordo sul prezzo e il metodo di pagamento con l'altra persona.",
     "step_2_warn": "Aspetta!",
-    "step_2": "Se stai inviando cripto, aspetta finché non hai effettivamente ricevuto il fiat (non solo \"in attesa\") prima di inviare la cripto. Una volta partito, è partito.",
+    "step_2": "Se stai inviando cripto, aspetta di aver effettivamente ricevuto il bene concordato (contanti, baratto, ecc.) prima di inviare la cripto. Una volta inviata, è persa.",
     "step_3": "Dopo che l'operazione è terminata, lascia una recensione su /my/orders così i futuri trader si fidano di entrambi.",
     "faq_link": "Leggi la guida completa",
     "dismiss_aria": "Chiudi questa guida"
@@ -2205,7 +2213,6 @@
       "edit_window_countdown": "Finestra modifica: {remaining}",
       "edit_window_tooltip": "Gli ordini si possono modificare solo entro 15 minuti dalla pubblicazione. Dopo serve cancellarli e ripubblicarli.",
       "edit_window_aria": "Tempo rimanente per modifica: {remaining}",
-      "feedback_no_counterparty": "Nessuna controparte da recensire per ora",
       "feedback_pick_prompt": "Con chi hai scambiato?",
       "not_visible_orderbook": "Non visibile nel book ordini"
     },
@@ -2242,7 +2249,8 @@
     },
     "fee_status_banner": {
       "heading": "Stato della commissione",
-      "body": "Ogni ordine qui sotto mostra lo stato della sua commissione di pubblicazione. Un ordine compare nel book pubblico solo quando la commissione è verificata — un'etichetta «non ricevuta», «insufficiente» o «non verificata» spiega perché un ordine può non comparire lì."
+      "body": "💡 Ogni ordine qui sotto mostra lo stato della sua commissione di pubblicazione. Un ordine compare nel libro ordini pubblico solo una volta verificata la commissione — un’etichetta «non ricevuta», «pagamento insufficiente» o «non ancora verificata» è il motivo per cui un ordine può sembrare mancante lì.",
+      "dismiss": "Ignora questa nota"
     }
   },
   "nav": {
@@ -2554,8 +2562,8 @@
   },
   "order_detail": {
     "loading": "Caricamento dell'ordine…",
-    "not_found_title": "Ordine non trovato",
-    "not_found_body": "Questo ordine non esiste, o non è mai stato pubblicato da questo account.",
+    "not_found_title": "Non abbiamo trovato questo ordine",
+    "not_found_body": "Se l'hai appena pubblicato, aspetta un altro minuto: la blockchain potrebbe ancora confermarlo, quindi tocca Controlla di nuovo. Altrimenti questo ordine potrebbe non esistere o non essere stato pubblicato da questo account.",
     "back_to_profile": "Torna al profilo",
     "error_title": "Non è stato possibile caricare questo ordine",
     "error_body": "Errore durante il contatto con l'indexer. Riprova tra un momento.",
@@ -2583,7 +2591,10 @@
     "fee_pending_external_hint": "Questo ordine usa BTC o XMR come tassa di inserzione. Morphit attende che i validatori della community attestino il pagamento. Fino ad allora l'ordine è visibile ma non ancora confermato.",
     "price_label": "Prezzo",
     "error_load_failed": "Non siamo riusciti a caricare questo ordine. Prova ad aggiornare.",
-    "cancel_button": "Annulla questo ordine"
+    "cancel_button": "Annulla questo ordine",
+    "posting_title": "Il tuo ordine è in fase di pubblicazione…",
+    "posting_body": "Questo ordine è in fase di conferma da parte della blockchain e può richiedere un minuto per comparire. Continueremo a controllare automaticamente: non serve ricaricare.",
+    "check_again": "Controlla di nuovo"
   },
   "orderbook": {
     "heading": "Libro ordini",
@@ -3110,7 +3121,7 @@
       "xmr_hint": "Invia la commissione al nostro indirizzo Monero, poi incolla l'ID della transazione e la prova qui sotto.",
       "txid_label": "ID della transazione",
       "txid_placeholder": "Incolla l'ID di transazione (64 caratteri hex)",
-      "txid_required": "L'ID di transazione è obbligatorio.",
+      "txid_required": "È richiesto l'ID transazione o Hash.",
       "txid_malformed": "L'ID di transazione deve essere una stringa hex di 64 caratteri.",
       "txid_hint": "Il tuo ordine non apparirà nell'orderbook finché il pagamento non sarà confermato sulla sua catena.",
       "txid_tooltip": "L'ID di transazione dal tuo wallet — una lunga stringa di caratteri hex che prova il tuo pagamento. Clicca per dettagli su dove trovarlo.",
@@ -3465,7 +3476,8 @@
       "error_broadcast": "Non è stato possibile completare l'operazione sulla catena. Riprova.",
       "error_chain_rejected": "La rete ha rifiutato questa transazione: {reason}",
       "error_unreachable": "Impossibile raggiungere la tua istanza Morphit per la trasmissione. Controlla la connessione e riprova.",
-      "error_amount": "Inserisci un importo non superiore al tuo saldo disponibile."
+      "error_amount": "Inserisci un importo non superiore al tuo saldo disponibile.",
+      "error_amount_precision": "Usa al massimo 3 decimali: l'importo più piccolo che puoi inviare è 0,001 BLURT."
     },
     "send": {
       "title": "Invia BLURT",

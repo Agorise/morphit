@@ -442,10 +442,12 @@
 				<button
 					type="button"
 					onclick={copyEnv}
-					class="btn-secondary whitespace-nowrap"
+					class="btn-secondary whitespace-nowrap {envCopied
+						? '!border-green-600 !bg-green-600 !text-white'
+						: ''}"
 					aria-label={$_('admin.setup_wizard.copy_button_aria')}
 				>
-					{envCopied ? $_('common.copied') : $_('common.copy')}
+					{envCopied ? `✓ ${$_('common.copied')}` : $_('common.copy')}
 				</button>
 			</div>
 		</div>
@@ -668,10 +670,12 @@
 					<button
 						type="button"
 						onclick={copyCli}
-						class="btn-secondary whitespace-nowrap"
+						class="btn-secondary whitespace-nowrap {cliCopied
+							? '!border-green-600 !bg-green-600 !text-white'
+							: ''}"
 						aria-label={$_('admin.setup_wizard.copy_button_aria')}
 					>
-						{cliCopied ? $_('common.copied') : $_('common.copy')}
+						{cliCopied ? `✓ ${$_('common.copied')}` : $_('common.copy')}
 					</button>
 				</div>
 			{:else}
@@ -725,10 +729,12 @@
 					<button
 						type="button"
 						onclick={copyRemove}
-						class="btn-secondary whitespace-nowrap"
+						class="btn-secondary whitespace-nowrap {removeCopied
+							? '!border-green-600 !bg-green-600 !text-white'
+							: ''}"
 						aria-label={$_('admin.setup_wizard.copy_button_aria')}
 					>
-						{removeCopied ? $_('common.copied') : $_('common.copy')}
+						{removeCopied ? `✓ ${$_('common.copied')}` : $_('common.copy')}
 					</button>
 				</div>
 			{:else}

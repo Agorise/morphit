@@ -39,6 +39,7 @@ import { statfs } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { defaultRepoRoot } from '../lib/repoRoot.ts';
+import { parseCanaryTimestamp } from '../canaryTime.ts';
 
 export interface HealthCtx {
 	readonly flags: Readonly<Record<string, string>>;
@@ -244,7 +245,11 @@ export function checkCanary(filePath: string, now: Date): CanaryStatus {
 			detail: 'no "Valid through" date — is this still the template?'
 		};
 	}
-	const deadline = new Date(validThrough);
+	// Parse explicitly: `new Date(str)` on a non-ISO string is
+	// implementation-defined (a different runtime may return NaN, or read the
+	// stamp as LOCAL time and skew the staleness window by hours). The canary's
+	// freshness IS the security signal — it doesn't get to depend on V8 quirks.
+	const deadline = new Date(parseCanaryTimestamp(validThrough));
 	if (Number.isNaN(deadline.getTime())) {
 		return {
 			state: 'unparsable',

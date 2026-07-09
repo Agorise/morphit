@@ -40,12 +40,20 @@ import { Hono } from 'hono';
 
 import type { Database } from '$db/pool';
 import type { AssetTicker } from '@morphit/asset-registry';
+import {
+	feedbackAggregateJoin,
+	accountsJoin,
+	engagementJoin,
+	reputationSelectColumns,
+	reputationFieldsFromRow,
+	type ReputationRow
+} from '$api/reputationJoin';
 
 /** Hard cap per project directive: at most 5 concurrent featured
  *  slots. Keeps the feature scarce and visually manageable. */
 const MAX_SLOTS = 3;
 
-interface FeaturedRow {
+interface FeaturedRow extends ReputationRow {
 	// Order columns (subset matching /v1/orderbook list shape)
 	account: string;
 	permlink: string;
@@ -71,6 +79,9 @@ interface FeaturedRow {
 	blurt_per_hour: string;
 	effective_at: Date;
 	expires_at_bid: Date;
+	asset_network: string | null;
+	created_at: Date;
+	engagement_24h: number;
 }
 
 export function featuredRoute(db: Database, operatorAccount: string): Hono {
@@ -109,19 +120,24 @@ export function featuredRoute(db: Database, operatorAccount: string): Hono {
 				LIMIT $1
 			)
 			SELECT
-				o.account, o.permlink, o.side, o.asset, o.fiat_currency,
+				o.account, o.permlink, o.side, o.asset, o.asset_network, o.fiat_currency,
 				o.amount_min::text AS amount_min,
 				o.amount_max::text AS amount_max,
 				o.price_model, o.location_region, o.payment_methods, o.accepted_assets,
-				o.terms, o.status, o.updated_at,
+				o.terms, o.status, o.created_at, o.updated_at,
 				o.expires_at AS expires_at_order,
 				o.fee_status, o.fee_method,
+				${reputationSelectColumns('o', 'a')},
+				COALESCE(e.distinct_senders_24h, 0)::int AS engagement_24h,
 				w.hours_requested, w.blurt_paid, w.blurt_per_hour,
 				w.effective_at, w.expires_at_bid
 			FROM winning_bids w
 			JOIN orders o
 			  ON o.account = w.bidder
 			 AND o.permlink = w.order_permlink
+			${feedbackAggregateJoin('o', 'SELECT bidder FROM winning_bids')}
+			${engagementJoin('o', 'SELECT bidder FROM winning_bids')}
+			${accountsJoin('o', 'a')}
 			WHERE o.status = 'live'
 			  AND o.expires_at > NOW()
 			  AND o.fee_status IN ('verified', 'verified_by_attestation')
@@ -136,6 +152,7 @@ export function featuredRoute(db: Database, operatorAccount: string): Hono {
 				permlink: r.permlink,
 				side: r.side,
 				asset: r.asset,
+				asset_network: r.asset_network ?? null,
 				fiat_currency: r.fiat_currency,
 				amount_min: r.amount_min,
 				amount_max: r.amount_max,
@@ -145,10 +162,18 @@ export function featuredRoute(db: Database, operatorAccount: string): Hono {
 				accepted_assets: r.accepted_assets ?? null,
 				terms: r.terms,
 				status: r.status,
+				engagement_24h: r.engagement_24h,
+				created_at: r.created_at.toISOString(),
 				updated_at: r.updated_at.toISOString(),
 				expires_at: r.expires_at_order.toISOString(),
 				fee_status: r.fee_status,
-				fee_method: r.fee_method
+				fee_method: r.fee_method,
+				// Ken — featured cards render through the SHARED OrderCard, but the
+				// row it was handed carried no reputation/identity columns, so the
+				// 🌱 sprout, the ⭐ score, the trade count and the truncated posting
+				// key silently vanished on exactly the cards a stranger is most
+				// likely to click. Same join, same score function as /v1/orderbook.
+				...reputationFieldsFromRow(r)
 			},
 			bid: {
 				hours_requested: r.hours_requested,

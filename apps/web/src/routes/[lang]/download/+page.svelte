@@ -69,6 +69,8 @@
 
 	<!-- Install Morphit (PWA).  Morphit installs from the browser on every
 	     platform — no app store, no native package. -->
+	<!-- Already emerald-tinted at rest; adding the hover would DIM its
+	     border (/40 -> /20) on hover, which reads as the card receding. -->
 	<section class="card border-morphit-emerald/40 bg-morphit-emerald/5">
 		<h2 class="font-display text-xl font-bold">
 			{$_('download.pwa_heading')}
@@ -111,7 +113,7 @@
 						href={m.url}
 						target="_blank"
 						rel="noopener noreferrer external"
-						class="card-interactive flex items-center justify-between gap-3 {m.status === 'primary'
+						class="card-interactive card-hover-emerald flex items-center justify-between gap-3 {m.status === 'primary'
 							? 'border-morphit-emerald/40 bg-morphit-emerald/5'
 							: ''}"
 					>
@@ -174,7 +176,9 @@
 		</header>
 
 		<!-- Source code primary CTA. -->
-		<section class="card border-morphit-emerald/40 bg-morphit-emerald/5">
+		<!-- Already emerald-tinted at rest; adding the hover would DIM its
+	     border (/40 -> /20) on hover, which reads as the card receding. -->
+	<section class="card border-morphit-emerald/40 bg-morphit-emerald/5">
 			<h3 class="font-display text-xl font-bold">
 				{$_('download.operator_source_heading')}
 			</h3>
@@ -208,7 +212,7 @@
 		</section>
 
 		<!-- Setup walkthrough. -->
-		<section class="card mt-6">
+		<section class="card card-hover-emerald mt-6">
 			<h3 class="font-display text-xl font-bold">
 				{$_('download.operator_setup_heading')}
 			</h3>
@@ -235,7 +239,7 @@
 
 		<!-- Distros / package formats — honest section about what's
 		     possible and what isn't. -->
-		<section class="card mt-6">
+		<section class="card card-hover-emerald mt-6">
 			<h3 class="font-display text-xl font-bold">
 				{$_('download.operator_distros_heading')}
 			</h3>
@@ -250,7 +254,7 @@
 		</section>
 
 		<!-- Operators directory. -->
-		<section class="card mt-6">
+		<section class="card card-hover-emerald mt-6">
 			<h3 class="font-display text-xl font-bold">
 				{$_('download.operator_join_heading')}
 			</h3>

@@ -53,7 +53,7 @@
 	import { isOrderExpired, isOrderLive } from '$lib/orders/orderExpiry';
 	import { buildRelistPrefill, RELIST_PREFILL_KEY } from '$lib/orders/relist';
 	import { MORPHIT_INDEXER_ORIGIN, resolveOrigin } from '$net/config';
-	import { safeSession } from '$lib/utils/safeStorage';
+	import { safeSession, safeLocal } from '$lib/utils/safeStorage';
 	import { orderTitleParts } from '$lib/utils/orderTitle';
 	import { displayNamesForMethods } from '$lib/payments/display';
 	import { instanceAdditions, instanceNameLookup } from '$lib/stores/instanceAdditions';
@@ -75,6 +75,18 @@
 	let phase = $state<Phase>('loading');
 	let items = $state<OrderRecord[]>([]);
 	let errorMessage = $state('');
+
+	// #9 — the top fee-status explainer can be dismissed forever (localStorage
+	// so it stays hidden across sessions/devices-per-browser). Initialized from
+	// storage at setup; browser-only guard for SSR.
+	const FEE_BANNER_DISMISS_KEY = 'morphit.my_orders.fee_status_banner.dismissed.v1';
+	let feeStatusBannerDismissed = $state(
+		typeof window !== 'undefined' && safeLocal.get(FEE_BANNER_DISMISS_KEY) === '1'
+	);
+	function dismissFeeStatusBanner(): void {
+		feeStatusBannerDismissed = true;
+		safeLocal.set(FEE_BANNER_DISMISS_KEY, '1');
+	}
 
 	// cp165 lazy-loaders for below-the-fold / behind-disclosure components
 	const loadFeatureBidForm = () =>
@@ -143,6 +155,7 @@
 		feedbackPrefillSubject = peer;
 		feedbackPickerPermlink = null;
 		pendingFeedbackPermlink = permlink;
+		scrollToFeedbackForm(permlink); // #10 — smooth-scroll to the form
 	}
 
 	/** Click handler for the "Mark complete / review" button. 1
@@ -158,6 +171,7 @@
 			feedbackPrefillSubject = null;
 			feedbackPickerPermlink = null;
 			pendingFeedbackPermlink = permlink;
+			scrollToFeedbackForm(permlink); // #10 — smooth-scroll to the form
 		}
 	}
 
@@ -199,6 +213,25 @@
 		let attempts = 0;
 		const tryScroll = (): void => {
 			const el = document.getElementById(`feature-form-${permlink}`);
+			if (el) {
+				el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+			} else if (attempts++ < 40) {
+				requestAnimationFrame(tryScroll);
+			}
+		};
+		requestAnimationFrame(tryScroll);
+	}
+
+	/** #10 — smooth-scroll to the just-opened "Mark this trade complete"
+	 *  (LeaveFeedbackForm) section, same treatment as the Feature form: the
+	 *  form is lazy-loaded so retry across a few rAFs until it mounts, and its
+	 *  container carries `scroll-mt-24` (≈1in) so it lands a breath below the
+	 *  viewport top rather than flush against it. */
+	function scrollToFeedbackForm(permlink: string): void {
+		if (typeof window === 'undefined') return;
+		let attempts = 0;
+		const tryScroll = (): void => {
+			const el = document.getElementById(`feedback-form-${permlink}`);
 			if (el) {
 				el.scrollIntoView({ behavior: 'smooth', block: 'start' });
 			} else if (attempts++ < 40) {
@@ -446,13 +479,19 @@
 	}
 
 	// ─── Re-list flow (item 4) ─────────────────────────────────────
-	/** Re-list an expired order.  Maps the OrderRecord back to the
+	/** Re-list an EXPIRED or CANCELLED order.  Maps the OrderRecord back to the
 	 *  ComposeDraft shape via the post-page's session-storage prefill
 	 *  hook, then navigates.  The user reviews on /post (everything
 	 *  pre-filled), edits if desired, optionally promotes to Featured,
 	 *  pays a fresh listing fee.  This is NOT an "edit" — it produces
 	 *  a brand new order with a fresh permlink and expiration; the
-	 *  expired one stays expired.  No silent re-sign of an old listing.
+	 *  original stays expired/cancelled.  No silent re-sign of an old listing.
+	 *
+	 *  Cancelled orders qualify for the same reason expired ones do (Ken):
+	 *  you cancelled because the terms went stale or the trade fell through,
+	 *  and retyping the whole listing to try again is busywork. The cancelled
+	 *  order is immutable on-chain and stays cancelled — re-listing only
+	 *  pre-fills a new one.
 	 *
 	 *  Defensive about price_model shape: the on-chain field is
 	 *  opaque (Record<string, unknown>) by typing.  We pattern-match
@@ -693,18 +732,29 @@
 		     so arriving here lands on a clear explanation of why an order
 		     might be missing from the public orderbook. scroll-mt keeps it
 		     clear of the sticky header. -->
-		<section
-			id="fee-status"
-			class="mb-3 scroll-mt-20 rounded-xl border border-ink-200 bg-ink-50 p-3 text-sm dark:border-ink-700 dark:bg-ink-900"
-			aria-labelledby="fee-status-heading"
-		>
-			<p id="fee-status-heading" class="mb-1 font-semibold">
-				{$_('my_orders.fee_status_banner.heading')}
-			</p>
-			<p class="text-ink-600 dark:text-ink-300">
-				{$_('my_orders.fee_status_banner.body')}
-			</p>
-		</section>
+		{#if !feeStatusBannerDismissed}
+			<section
+				id="fee-status"
+				class="relative mb-3 scroll-mt-20 rounded-xl border border-ink-200 bg-ink-50 p-3 pe-9 text-sm dark:border-ink-700 dark:bg-ink-900"
+				aria-labelledby="fee-status-heading"
+			>
+				<button
+					type="button"
+					aria-label={$_('my_orders.fee_status_banner.dismiss')}
+					title={$_('my_orders.fee_status_banner.dismiss') as string}
+					onclick={dismissFeeStatusBanner}
+					class="absolute end-2 top-2 flex h-6 w-6 items-center justify-center rounded-full text-ink-400 transition-colors hover:bg-ink-200 hover:text-ink-700 dark:hover:bg-ink-800 dark:hover:text-ink-200"
+				>
+					✕
+				</button>
+				<p id="fee-status-heading" class="mb-1 font-semibold">
+					{$_('my_orders.fee_status_banner.heading')}
+				</p>
+				<p class="text-ink-600 dark:text-ink-300">
+					{$_('my_orders.fee_status_banner.body')}
+				</p>
+			</section>
+		{/if}
 
 		<!-- Orders list -->
 		<ul class="space-y-3">
@@ -715,7 +765,7 @@
 				)}
 				<li
 					id="order-{o.permlink}"
-					class="card-interactive scroll-mt-20 hover:border-morphit-emerald/20 hover:bg-emerald-50/30 dark:hover:border-morphit-emerald/15 dark:hover:bg-morphit-emerald/[0.05]"
+					class="card-interactive scroll-mt-20 card-hover-emerald"
 				>
 					<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
 						<div class="flex-1">
@@ -843,26 +893,17 @@
 							{#if isLive(o)}
 								{#if withinEditWindow(o)}
 									{@const remaining = editWindowRemainingSeconds(o)}
-									<BusyButton
-										variant="secondary"
-										onclick={() => gotoLocale(`/post/edit/${o.permlink}`)}
-									>
-										{$_('my_orders.order.action_edit')}
-									</BusyButton>
-									<!-- Sally finding M1/M8 (Part 68): live
-									     countdown.  Pre-Part-68 the user
-									     saw a button that suddenly turned
-									     into "edit window expired" with no
-									     warning.  Now there's a visible
-									     ticking timer that goes red+pulse
-									     under 30s so the user feels the
-									     deadline. -->
+									<!-- #8 — edit-window countdown pill: warm yellow to match
+									     the theme's "warn" tone, CENTERED ABOVE the Edit
+									     button, and it keeps pulsing under 30s so the user
+									     feels the deadline approaching (Sally M1/M8, Part 68).
+									     Was red + right-justified + below the button. -->
 									{#if remaining !== null}
 										<span
-											class="self-end rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums {remaining <=
+											class="self-center rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-amber-900 dark:bg-amber-900/40 dark:text-amber-200 {remaining <=
 											30
-												? 'animate-pulse bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200'
-												: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200'}"
+												? 'animate-pulse'
+												: ''}"
 											title={$_('my_orders.order.edit_window_tooltip') as string}
 											aria-label={$_('my_orders.order.edit_window_aria', {
 												values: { remaining: formatRemainingMmSs(remaining) }
@@ -873,6 +914,12 @@
 											})}
 										</span>
 									{/if}
+									<BusyButton
+										variant="secondary"
+										onclick={() => gotoLocale(`/post/edit/${o.permlink}`)}
+									>
+										{$_('my_orders.order.action_edit')}
+									</BusyButton>
 								{:else if withinEditClosedNotice(o)}
 									<span class="text-xs text-ink-500">
 										{$_('my_orders.order.action_edit_expired')}
@@ -973,13 +1020,13 @@
 										</button>
 									</div>
 								{:else if reviewableCounterparties[o.permlink]?.length === 0}
-									<!-- cp421: loaded, but nobody has provably traded on
-									     this order yet (no two-way conversation about it).
-									     A review would be dropped by the indexer gate, so
-									     don't offer the button — explain instead. -->
-									<p class="text-xs text-ink-500 dark:text-ink-400">
-										{$_('my_orders.order.feedback_no_counterparty')}
-									</p>
+									<!-- cp421 / #8: loaded, but nobody has provably traded on
+									     this order yet (no two-way conversation), so a review
+									     would be dropped by the indexer gate — we must NOT
+									     offer the review button here. Ken #8: the old "No
+									     trade partner to review yet" line read as confusing
+									     on a fresh / just-re-listed card, so render nothing. -->
+									{void 0}
 								{:else}
 									<BusyButton variant="secondary" onclick={() => startFeedback(o.permlink)}>
 										{$_('my_orders.order.action_feedback')}
@@ -1005,6 +1052,15 @@
 									class="self-end rounded-full border border-ink-300 px-2.5 py-0.5 text-xs font-semibold text-ink-500 dark:border-ink-600 dark:text-ink-400"
 								>
 									{$_('my_orders.order.action_cancelled')}
+								</span>
+								<!-- Ken — a cancelled order can be re-listed, exactly like an expired
+								     one: same pre-filled form, fresh permlink, fresh listing fee. The
+								     cancelled order itself is immutable on-chain and stays cancelled. -->
+								<BusyButton variant="secondary" onclick={() => relistOrder(o)}>
+									{$_('my_orders.order.action_relist')}
+								</BusyButton>
+								<span class="max-w-[13rem] text-xs text-ink-500 dark:text-ink-400">
+									{$_('my_orders.order.action_relist_hint')}
 								</span>
 							{:else if isExpired(o)}
 								<!-- Item 4: Re-list expired orders.  Pre-fills the
@@ -1049,7 +1105,7 @@
 					{/if}
 					{#if pendingFeedbackPermlink === o.permlink && $isUnlocked}
 						{#await loadLeaveFeedbackForm() then LeaveFeedbackForm}
-							<div class="mt-3">
+							<div class="mt-3 scroll-mt-24" id="feedback-form-{o.permlink}">
 								<LeaveFeedbackForm
 									orderPermlink={o.permlink}
 									prefillSubject={feedbackPrefillSubject ?? undefined}

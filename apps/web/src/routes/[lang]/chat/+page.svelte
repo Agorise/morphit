@@ -31,7 +31,7 @@
 	 * specific conversation at /chat/[peer].
 	 */
 
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { _ } from 'svelte-i18n';
 
 	import Head from '$components/Head.svelte';
@@ -51,6 +51,7 @@
 	import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
 	import { hiddenAccounts, hideAccount } from '$lib/utils/hiddenAccounts';
 	import { blockedAccounts, loadBlocks } from '$lib/chat/blocks';
+	import { subscribeChatActivity } from '$lib/chat/globalChatActivityStream';
 	import { showToast } from '$lib/stores/toast';
 	import RequireLiveSession from '$components/RequireLiveSession.svelte';
 	import type { ConversationSummary, ProfileResponse } from '@morphit/indexer-client';
@@ -138,12 +139,68 @@
 		}
 	});
 
-	onMount(async () => {
-		// Wrap bootstrap in try/catch so a corrupt-localStorage
-		// throw doesn't leave the inbox in an unrecoverable state.
-		// (Part 73: previously this assumed getUserBlurtAccount()
-		// only returns null/string; in practice a JSON parse on
-		// corrupt data could throw.)
+	/** Fetch profiles only for peers we don't already have — so the 5 s
+	 *  poll doesn't re-request the whole batch every tick. */
+	async function fetchProfilesForNewPeers(peers: readonly string[]): Promise<void> {
+		const missing = peers.filter((p) => !(p in profileMap));
+		if (missing.length === 0) return;
+		const fetched = await getProfilesBatch(missing).catch(() => new Map());
+		const next: Record<string, ProfileResponse | null> = { ...profileMap };
+		for (const [a, p] of fetched) next[a] = p;
+		profileMap = next;
+	}
+
+	/** Local recent-peers fallback so the inbox shows SOMETHING when the
+	 *  indexer is unreachable. Only used on the initial load — a transient
+	 *  poll failure must not blank an already-populated list. */
+	async function fallbackToRecentPeers(): Promise<void> {
+		if (me === null) return;
+		loadError = true;
+		const local = loadRecentPeers().filter((p) => p !== me);
+		fallbackPeers = local;
+		if (local.length > 0) await fetchProfilesForNewPeers(local);
+	}
+
+	/** Fetch the conversation list + server read-state and refresh the
+	 *  inbox. Called once on mount and then every POLL_MS so new messages,
+	 *  new requests (including from spammers/strangers), and read-state
+	 *  changes surface within the fastchat window WITHOUT a manual refresh
+	 *  (#18). Unread flags derive reactively from the read-state store, so
+	 *  a conversation read elsewhere clears its dot immediately; re-fetching
+	 *  here also freshens each `last_message_at` so a just-active
+	 *  conversation stops showing a stale "N min ago" (#15).
+	 *
+	 *  `initial` controls the error path: first load falls back to the local
+	 *  recent-peers list; a background poll keeps the last-known data on a
+	 *  transient failure. */
+	async function refresh(initial: boolean): Promise<void> {
+		if (me === null) return;
+		let convoR: Awaited<ReturnType<typeof getConversations>>;
+		let readR: Awaited<ReturnType<typeof getChatReadState>>;
+		try {
+			[convoR, readR] = await Promise.all([getConversations(me), getChatReadState(me)]);
+		} catch (err) {
+			console.warn('[chat-inbox] indexer fetch threw:', err);
+			if (initial) await fallbackToRecentPeers();
+			return;
+		}
+
+		if (readR.ok) mergeRemoteReadState(readR.data.items);
+
+		if (convoR.ok) {
+			conversations = convoR.data.items;
+			loadError = false;
+			await fetchProfilesForNewPeers(conversations.map((c) => c.peer));
+		} else if (initial) {
+			await fallbackToRecentPeers();
+		}
+	}
+
+	let pollTimer: ReturnType<typeof setInterval> | null = null;
+	let onVisible: (() => void) | null = null;
+	let unsubActivity: (() => void) | null = null;
+
+	onMount(() => {
 		try {
 			me = getUserBlurtAccount();
 		} catch (err) {
@@ -153,85 +210,40 @@
 		}
 		if (!me) return;
 
-		// Intentionally NOT calling ensureChatIdentityPublished() here.
-		// The inbox is a read-only surface — if the user opens it just
-		// to glance at what conversations exist, they haven't
-		// declared intent to engage. Publishing a chat identity on
-		// inbox-open would mean any user who ever visits /chat
-		// becomes chat-reachable, even if they never actually use
-		// the feature. That's backwards from the "don't force crypto
-		// on non-users" principle.
-		//
-		// The publish trigger instead lives in /chat/[peer] — opening
-		// a specific conversation IS the signal of intent to engage
-		// (either to initiate, or to read history and potentially
-		// reply).
-
-		// Fetch conversations + server read-state in parallel. The
-		// two are independent — the read-state response just refines
-		// the unread flags derived from conversations. If the
-		// read-state endpoint fails (older indexer, network hiccup),
-		// we silently fall through to Phase A local-only behavior;
-		// the inbox is still usable.
-		//
-		// loadBlocks runs in parallel too — fire-and-forget. The
-		// $blockedAccounts derivation picks it up reactively once
-		// the store settles, and the inbox's filter re-runs. Until
-		// it resolves, blocked peers show briefly in the list;
-		// acceptable tradeoff vs blocking first paint on the blocks
-		// round-trip.
-		//
-		// Outer try/catch (Part 73): a thrown error from
-		// getConversations / getChatReadState (e.g. CORS preflight
-		// fail, DNS error) would otherwise propagate as an
-		// unhandled rejection in onMount.  Catching here lets us
-		// fall through to the same recent-peers fallback path the
-		// "ok: false" branch uses below.
-		let convoR: Awaited<ReturnType<typeof getConversations>>;
-		let readR: Awaited<ReturnType<typeof getChatReadState>>;
-		try {
-			[convoR, readR] = await Promise.all([getConversations(me), getChatReadState(me)]);
-		} catch (err) {
-			console.warn('[chat-inbox] indexer fetch threw:', err);
-			loadError = true;
-			const local = loadRecentPeers().filter((p) => p !== me);
-			fallbackPeers = local;
-			if (local.length > 0) {
-				const fetched = await getProfilesBatch(local).catch(() => new Map());
-				const next: Record<string, ProfileResponse | null> = {};
-				for (const [a, p] of fetched) next[a] = p;
-				profileMap = next;
-			}
-			return;
-		}
+		// Intentionally NOT calling ensureChatIdentityPublished() here — the
+		// inbox is a read-only glance surface; publishing intent lives in
+		// /chat/[peer] (opening a specific conversation). Unchanged by the
+		// real-time refactor.
 		void loadBlocks(me);
+		void refresh(true);
 
-		if (readR.ok) {
-			mergeRemoteReadState(readR.data.items);
-		}
+		// Real-time inbox: re-poll on the fastchat cadence (≤6 s target).
+		// Paused while the tab is hidden; an immediate poll on refocus so a
+		// returning user sees a current list.
+		const POLL_MS = 5_000;
+		pollTimer = setInterval(() => {
+			if (!document.hidden) void refresh(false);
+		}, POLL_MS);
+		onVisible = () => {
+			if (!document.hidden) void refresh(false);
+		};
+		document.addEventListener('visibilitychange', onVisible);
 
-		if (convoR.ok) {
-			conversations = convoR.data.items;
-			const peers = conversations.map((c) => c.peer);
-			if (peers.length > 0) {
-				const fetched = await getProfilesBatch(peers).catch(() => new Map());
-				const next: Record<string, ProfileResponse | null> = {};
-				for (const [a, p] of fetched) next[a] = p;
-				profileMap = next;
-			}
-		} else {
-			// Indexer unreachable or errored. Fall back to the local
-			// recent-peers list so the user still sees something.
-			loadError = true;
-			const local = loadRecentPeers().filter((p) => p !== me);
-			fallbackPeers = local;
-			if (local.length > 0) {
-				const fetched = await getProfilesBatch(local).catch(() => new Map());
-				const next: Record<string, ProfileResponse | null> = {};
-				for (const [a, p] of fetched) next[a] = p;
-				profileMap = next;
-			}
-		}
+		// SUB-SECOND path: the ambient global chat-activity SSE pings the
+		// instant a new message lands for this account (from ANY peer —
+		// existing conversation, stranger, or spammer); refresh immediately
+		// so the list, dots, and ordering update in real time rather than on
+		// the ≤5s backstop. Reuses the already-running ambient stream (no
+		// extra connection); the debounce there coalesces bursts.
+		unsubActivity = subscribeChatActivity(() => {
+			if (!document.hidden) void refresh(false);
+		});
+	});
+
+	onDestroy(() => {
+		if (pollTimer !== null) clearInterval(pollTimer);
+		if (onVisible !== null) document.removeEventListener('visibilitychange', onVisible);
+		if (unsubActivity !== null) unsubActivity();
 	});
 
 	/** Navigation-time mark-read: we mark the conversation as

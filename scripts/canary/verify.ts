@@ -33,6 +33,8 @@
  */
 
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 
 const REQUIRED_PLACEHOLDERS_OR_FILLED = [
 	'OPERATOR_NAME',
@@ -48,6 +50,42 @@ const REQUIRED_PLACEHOLDERS_OR_FILLED = [
 ];
 
 const STALE_DAYS = 14;
+
+/**
+ * Parse a canary `Generated:` timestamp.
+ *
+ * Two accepted forms:
+ *   • the sitewide human format — "8 July, 2026 @ 23:45:18 UTC"
+ *   • the legacy Zulu ISO form  — "2026-07-08T23:45:18Z"
+ *
+ * The human form is what `scripts/canary/generate.sh` now emits (a
+ * warrant canary's whole job is telling a HUMAN whether it's fresh).
+ * The ISO form is still accepted so canaries signed before that change
+ * — including the one currently deployed — keep verifying.
+ *
+ * Returns epoch milliseconds, or NaN when neither form matches.
+ */
+export function parseCanaryTimestamp(raw: string): number {
+	const s = raw.trim();
+	const human = /^(\d{1,2})\s+([A-Za-z]+),\s*(\d{4})\s*@\s*(\d{2}):(\d{2}):(\d{2})\s*UTC$/.exec(s);
+	if (human) {
+		const [, d, monthName, y, hh, mm, ss] = human;
+		const months = [
+			'january', 'february', 'march', 'april', 'may', 'june',
+			'july', 'august', 'september', 'october', 'november', 'december'
+		];
+		const mi = months.indexOf(monthName!.toLowerCase());
+		if (mi === -1) return NaN;
+		return Date.UTC(Number(y), mi, Number(d), Number(hh), Number(mm), Number(ss));
+	}
+	// Legacy Zulu ISO. Require the explicit Z: a bare "2026-07-22 23:45:18"
+	// would otherwise be read as LOCAL time by `Date.parse`, skewing the
+	// staleness window by the reader's UTC offset. Anything else is NaN —
+	// `Date.parse` on a non-ISO string is implementation-defined, and it will
+	// cheerfully turn a typo'd month into a real date rather than reject it.
+	if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/.test(s)) return Date.parse(s);
+	return NaN;
+}
 
 interface Verification {
 	readonly ok: boolean;
@@ -86,10 +124,13 @@ function verify(text: string): Verification {
 	// ── Extract Generated date and check the freshness window.
 	let generatedAt: string | null = null;
 	let ageDays: number | null = null;
-	const m = text.match(/^Generated:\s*(\S+)/m);
+	// Capture the REST OF THE LINE, not the first whitespace-delimited
+	// token: the human stamp ("8 July, 2026 @ 23:45:18 UTC") contains
+	// spaces, and a `(\S+)` capture would silently grab just "8".
+	const m = text.match(/^Generated:[ \t]*(.+)$/m);
 	if (m) {
-		generatedAt = m[1]!;
-		const t = Date.parse(generatedAt);
+		generatedAt = m[1]!.trim();
+		const t = parseCanaryTimestamp(generatedAt);
 		if (Number.isNaN(t)) {
 			errors.push(`Generated: timestamp is not parseable: ${generatedAt}`);
 		} else {
@@ -178,7 +219,16 @@ async function main(): Promise<void> {
 	console.log('canary-verify: OK');
 }
 
-main().catch((err) => {
-	console.error('canary-verify: unhandled:', err);
-	process.exit(1);
-});
+// Run-as-main guard: importing this module (e.g. from a smoke that wants
+// `parseCanaryTimestamp`) must not execute the CLI. Mirrors the guard the
+// llms-full-freshness smoke enforces on scripts/build-llms-full.mjs.
+const invokedDirectly =
+	process.argv[1] !== undefined &&
+	fileURLToPath(import.meta.url) === resolve(process.argv[1]);
+
+if (invokedDirectly) {
+	main().catch((err) => {
+		console.error('canary-verify: unhandled:', err);
+		process.exit(1);
+	});
+}

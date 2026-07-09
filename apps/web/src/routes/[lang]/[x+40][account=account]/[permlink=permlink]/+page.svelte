@@ -33,7 +33,7 @@
 	 * would need pagination; not a Phase 5 problem.
 	 */
 
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import { page } from '$app/stores';
 	import { gotoLocale } from '$i18n/navigate';
@@ -72,10 +72,18 @@
 	const viewerAccount = getUserBlurtAccount();
 
 	// ─── State ─────────────────────────────────────────────────────
-	type Phase = 'loading' | 'ready' | 'not_found' | 'error';
+	type Phase = 'loading' | 'ready' | 'not_found' | 'error' | 'pending';
 	let phase = $state<Phase>('loading');
 	let order = $state<OrderRecord | null>(null);
 	let errorMessage = $state('');
+
+	// #16 — retry window for a freshly-posted order that hasn't indexed yet.
+	// ~8 tries × 3s ≈ 24s, comfortably longer than Blurt block time + indexer
+	// poll lag, so a just-posted order resolves to 'ready' without the user
+	// ever seeing not-found.
+	const ORDER_RETRY_ATTEMPTS = 8;
+	const ORDER_RETRY_INTERVAL_MS = 3000;
+	let orderRetryTimer: ReturnType<typeof setTimeout> | null = null;
 	/** Batch L: payment-method display lookup with instance
 	 *  additions (subscription side-effect populates the cache). */
 	const instLookup = $derived.by(() => {
@@ -124,8 +132,8 @@
 	/** Non-empty when the last cancel attempt failed. */
 	let cancelError = $state('');
 
-	async function loadOrder(): Promise<void> {
-		phase = 'loading';
+	async function loadOrder(attempt = 0): Promise<void> {
+		if (attempt === 0) phase = 'loading';
 		const r = await getOrdersByAccount(account, { limit: 100 });
 		if (!r.ok) {
 			console.warn('[listing-detail] loadOrder failed:', r.message);
@@ -134,12 +142,35 @@
 			return;
 		}
 		const found = r.data.items.find((o) => o.permlink === permlink);
-		if (!found) {
-			phase = 'not_found';
+		if (found) {
+			order = found;
+			phase = 'ready';
 			return;
 		}
-		order = found;
-		phase = 'ready';
+		// Not found (yet). #16 — a user who just posted lands here via the
+		// success screen's "View my order" button before the indexer has seen
+		// the new block, so an instant "Order not found" reads as "my money
+		// vanished". A freshly-posted order is almost always just mid-indexing
+		// (block time + indexer poll lag), so show a reassuring "still posting"
+		// state and retry a few times before ever saying not-found.
+		if (attempt < ORDER_RETRY_ATTEMPTS) {
+			phase = 'pending';
+			orderRetryTimer = setTimeout(() => {
+				void loadOrder(attempt + 1);
+			}, ORDER_RETRY_INTERVAL_MS);
+			return;
+		}
+		phase = 'not_found';
+	}
+
+	/** Manual "check again" from the pending / not-found state — restarts the
+	 *  retry loop from scratch so an impatient user can re-poll on demand. */
+	function retryLoadOrder(): void {
+		if (orderRetryTimer !== null) {
+			clearTimeout(orderRetryTimer);
+			orderRetryTimer = null;
+		}
+		void loadOrder(0);
 	}
 
 	async function loadPosterProfile(): Promise<void> {
@@ -165,6 +196,13 @@
 		void loadOrder();
 		void loadPosterProfile();
 		void loadPosterPostingKey();
+	});
+
+	onDestroy(() => {
+		if (orderRetryTimer !== null) {
+			clearTimeout(orderRetryTimer);
+			orderRetryTimer = null;
+		}
 	});
 
 	// ─── Ownership + owner-only actions ────────────────────────────
@@ -250,13 +288,14 @@
 			return;
 		}
 		cancelError = '';
+		let cancelled = false;
 		try {
 			await broadcastOrderCancel(state.live, order.permlink);
-			// Wait for the indexer to catch the block, then refetch
-			// so the UI reflects the cancelled status. Same 1.5s as
-			// the /my/orders pattern.
+			cancelled = true;
+			// The 1.5s pause lets the indexer see the block first (same wait the
+			// /my/orders page itself uses after a cancel), so the list we land on
+			// already reflects the new status rather than flashing the old one.
 			await new Promise((r) => setTimeout(r, 1_500));
-			await loadOrder();
 		} catch (err) {
 			console.warn('[listing-detail] cancel broadcast failed:', err);
 			if (err instanceof BroadcastError && err.code === 'locked') {
@@ -270,6 +309,23 @@
 			}
 		} finally {
 			pendingCancel = false;
+		}
+
+		// Ken: confirming the cancel used to leave you sitting on the same page,
+		// still staring at the red "Cancel this order" button, with no evidence
+		// anything happened. Take the user to /my/orders, where the order now
+		// shows as Cancelled.
+		//
+		// This lives OUTSIDE the try on purpose. A SvelteKit navigation can
+		// reject (an aborted/superseded navigation, a hook throwing). Inside the
+		// try, that rejection would be caught by the `catch` above and rendered
+		// as "the broadcast failed" — a flat lie about an order that IS cancelled
+		// on chain, and an invitation to cancel it again. The modal is already
+		// closed by `finally`, so a back-button return doesn't land on an open
+		// dialog. We deliberately DON'T re-fetch the order we're leaving:
+		// loadOrder() would start a retry timer we'd only have to tear down.
+		if (cancelled) {
+			await gotoLocale('/my/orders');
 		}
 	}
 
@@ -336,6 +392,31 @@
 <div class="mx-auto max-w-3xl px-4 py-10 md:py-14">
 	{#if phase === 'loading'}
 		<StatusLine kind="loading">{$_('order_detail.loading')}</StatusLine>
+	{:else if phase === 'pending'}
+		<!-- #16 — freshly posted, not yet indexed. Reassure instead of alarming
+		     the user (their order isn't lost, the chain is still confirming it)
+		     and keep auto-retrying; a manual "check again" is offered too. -->
+		<section class="card text-center">
+			<div
+				class="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-ink-300 border-t-morphit-emerald dark:border-ink-700"
+				aria-hidden="true"
+			></div>
+			<h1 class="font-display text-xl font-bold">
+				{$_('order_detail.posting_title')}
+			</h1>
+			<p class="mt-2 text-ink-600 dark:text-ink-300">
+				{$_('order_detail.posting_body')}
+			</p>
+			<div class="mt-4">
+				<button
+					type="button"
+					onclick={retryLoadOrder}
+					class="font-semibold text-morphit-emerald hover:underline"
+				>
+					{$_('order_detail.check_again')}
+				</button>
+			</div>
+		</section>
 	{:else if phase === 'not_found'}
 		<section class="card text-center">
 			<h1 class="font-display text-2xl font-extrabold">
@@ -344,7 +425,14 @@
 			<p class="mt-2 text-ink-600 dark:text-ink-300">
 				{$_('order_detail.not_found_body')}
 			</p>
-			<div class="mt-4">
+			<div class="mt-4 flex flex-col items-center gap-2 sm:flex-row sm:justify-center sm:gap-4">
+				<button
+					type="button"
+					onclick={retryLoadOrder}
+					class="font-semibold text-morphit-emerald hover:underline"
+				>
+					{$_('order_detail.check_again')}
+				</button>
 				<a href={lp(`/@${account}`)} class="font-semibold text-morphit-emerald hover:underline">
 					{$_('order_detail.back_to_profile')}
 				</a>

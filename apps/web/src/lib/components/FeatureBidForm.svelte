@@ -34,6 +34,7 @@
 	import FeaturedBidHistory from '$components/FeaturedBidHistory.svelte';
 	import { onMount } from 'svelte';
 	import { symbolAmountToUsd } from '$lib/prices';
+	import { MAX_FEATURED_SLOTS } from '$lib/orders/featuredSlots';
 
 	interface Props {
 		/** Permlink of the order to promote. Must be a live order
@@ -208,8 +209,15 @@
 	<p class="mb-1 font-display text-lg font-bold">
 		🚀 {$_('feature_bid.title')}
 	</p>
+	<!-- Ken — the explainer names the duration the user actually picked (it
+	     updates as they tap 6h / 24h / 72h) and takes the slot count from the
+	     shared constant rather than hardcoding it in prose: this string used to
+	     claim "Max 5 concurrent slots" while the indexer and the FAQ both said
+	     3. -->
 	<p class="mb-3 text-xs text-ink-600 dark:text-ink-300">
-		{$_('feature_bid.explainer')}
+		{$_('feature_bid.explainer', {
+			values: { hours: selectedHours, slots: MAX_FEATURED_SLOTS }
+		})}
 	</p>
 
 	<!-- Hours picker -->

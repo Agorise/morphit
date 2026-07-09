@@ -57,7 +57,7 @@
 
 	import { onMount, onDestroy } from 'svelte';
 	import { _ } from 'svelte-i18n';
-	import { formatDayMonthTime } from '$lib/i18n/formatters';
+	import { formatDayMonth } from '$lib/i18n/formatters';
 
 	interface Props {
 		/** ISO-8601 timestamp string from the indexer.  Caller is
@@ -180,15 +180,15 @@
 	});
 
 	/** Full, friendly deadline for the hover tooltip + screen readers.
-	 *  cp440/v1.1.5 — was `new Date(...).toISOString()` (raw Zulu, e.g.
-	 *  "2026-08-04T17:59:30.000Z"), which looked broken on hover. Now the
-	 *  sitewide day-first + 24h-UTC format ("4 August, 2026 @ 17:59:30 UTC"),
-	 *  locale-translated month name. The pill itself already shows the relative
-	 *  "Expires in 5d 20h", so the tooltip only carries the absolute deadline. */
+	 *  DATE ONLY — on-chain `expires_at` is deliberately floored to UTC
+	 *  midnight (cp175 privacy: a precise expiry would leak the exact submit
+	 *  moment), so it carries no meaningful time-of-day. Showing "@ 00:00:00
+	 *  UTC" was misleading; the expiry is genuinely day-granular ("expires in
+	 *  N days"), so the tooltip shows just the localized day-first date. */
 	const ariaLabel = $derived.by(() => {
 		if (expiresAtMs === null) return '';
 		return $_('orderbook.order.expires_aria', {
-			values: { date: formatDayMonthTime(expiresAt) }
+			values: { date: formatDayMonth(expiresAt) }
 		}) as string;
 	});
 

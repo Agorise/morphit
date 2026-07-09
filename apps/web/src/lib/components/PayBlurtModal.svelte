@@ -51,6 +51,7 @@
 		signTransferWithKey,
 		broadcastSignedTransaction
 	} from '$blurt/sign';
+	import { ChainRejectedError, BroadcastUnavailableError } from '$blurt/broadcastTransport';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
 	import { formatBlurtAmount } from '$lib/orders/fee';
 
@@ -101,7 +102,29 @@
 		payHint = ''
 	}: Props = $props();
 
-	type Phase = { kind: 'ready' } | { kind: 'paying' } | { kind: 'error'; messageKey: string };
+	type Phase =
+		| { kind: 'ready' }
+		| { kind: 'paying' }
+		| { kind: 'error'; messageKey: string; detail?: string };
+
+	/** Classify a broadcast/prepare failure into a specific, honest message +
+	 *  the chain/transport's own words. The generic "check your balance" was
+	 *  actively misleading (a transfer can fail with a full balance — e.g. the
+	 *  signature doesn't match the account's on-chain active authority, or the
+	 *  instance is unreachable). Blurt meters ops with a tiny BLURT fee (not
+	 *  RC/mana), so balance is rarely the real cause. */
+	function classifyBroadcastError(e: unknown): { messageKey: string; detail?: string } {
+		if (e instanceof ChainRejectedError) {
+			return { messageKey: 'chat.pay_blurt.error.chain_rejected', detail: e.message };
+		}
+		if (e instanceof BroadcastUnavailableError) {
+			return { messageKey: 'chat.pay_blurt.error.instance_unreachable', detail: e.message };
+		}
+		return {
+			messageKey: 'chat.pay_blurt.error.broadcast_failed',
+			detail: e instanceof Error ? e.message : undefined
+		};
+	}
 
 	let phase = $state<Phase>({ kind: 'ready' });
 	let passwordInput = $state('');
@@ -158,17 +181,11 @@
 				formattedAmount,
 				memo // Phase F.4 — empty when seller didn't request one
 			);
-		} catch {
+		} catch (e) {
 			// Hygiene: clear password if we're bailing before the
-			// active-key path even runs. User would have to re-type
-			// to retry, but the security benefit of not leaving the
-			// password sitting in component state on an error path
-			// is worth it.
+			// active-key path even runs.
 			passwordInput = '';
-			phase = {
-				kind: 'error',
-				messageKey: 'chat.pay_blurt.error.broadcast_failed'
-			};
+			phase = { kind: 'error', ...classifyBroadcastError(e) };
 			return;
 		}
 
@@ -183,11 +200,11 @@
 				const result = await broadcastSignedTransaction(r.value);
 				onPaid({ trxId: result.trx_id, blockNum: result.block_num, amount: effectiveAmount });
 				return;
-			} catch {
-				phase = {
-					kind: 'error',
-					messageKey: 'chat.pay_blurt.error.broadcast_failed'
-				};
+			} catch (e) {
+				// Surface the CHAIN's real reason (e.g. "missing required active
+				// authority") or "instance unreachable" — not a misleading
+				// balance hint.
+				phase = { kind: 'error', ...classifyBroadcastError(e) };
 				return;
 			}
 		}
@@ -207,11 +224,13 @@
 		} else if (r.kind === 'password_empty') {
 			phase = { kind: 'ready' };
 		} else {
-			// Sign-time failure — could be a malformed key or
-			// crypto error.  Same generic message.
+			// Sign-time failure — the signing callback threw (malformed key or
+			// crypto error). Surface it distinctly from a chain rejection, with
+			// the underlying reason when the keystore exposed one.
 			phase = {
 				kind: 'error',
-				messageKey: 'chat.pay_blurt.error.broadcast_failed'
+				messageKey: 'chat.pay_blurt.error.sign_failed',
+				detail: r.cause instanceof Error ? r.cause.message : undefined
 			};
 		}
 	}
@@ -288,7 +307,7 @@
 						{$_('chat.pay_blurt.error.invalid_amount')}
 					{/if}
 				</div>
-				<div class="mt-5 flex justify-end">
+				<div class="mt-5 flex justify-center">
 					<button
 						type="button"
 						class="rounded-lg border border-ink-300 px-4 py-2 text-sm font-semibold hover:border-ink-400 dark:border-ink-700"
@@ -300,7 +319,7 @@
 			{:else}
 				<!-- cp402 [7b] — editable + amount not entered yet: no scary
 				     error (the input above guides the user); offer Cancel. -->
-				<div class="mt-5 flex justify-end">
+				<div class="mt-5 flex justify-center">
 					<button
 						type="button"
 						class="rounded-lg border border-ink-300 px-4 py-2 text-sm font-semibold hover:border-ink-400 dark:border-ink-700"
@@ -355,9 +374,12 @@
 				<div
 					class="mt-5 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-700 dark:bg-red-950 dark:text-red-200"
 				>
-					{$_(phase.messageKey)}
+					<p>{$_(phase.messageKey)}</p>
+					{#if phase.detail}
+						<p class="mt-1 break-words font-mono text-xs opacity-80">{phase.detail}</p>
+					{/if}
 				</div>
-				<div class="mt-5 flex justify-end gap-2">
+				<div class="mt-5 flex justify-center gap-2">
 					<button
 						type="button"
 						class="rounded-lg border border-ink-300 px-4 py-2 text-sm font-semibold hover:border-ink-400 dark:border-ink-700"
@@ -380,6 +402,9 @@
 						disabled={phase.kind === 'paying'}
 						class="mt-1 w-full rounded-lg border border-ink-300 bg-white px-3 py-2 text-sm dark:border-ink-700 dark:bg-ink-900"
 					/>
+					<p class="mt-1 text-xs text-ink-500 dark:text-ink-400">
+						{$_('chat.pay_blurt.password_hint')}
+					</p>
 					{#if passwordError}
 						<p class="mt-1 text-xs text-red-600 dark:text-red-400">
 							{passwordError}
@@ -387,7 +412,7 @@
 					{/if}
 				</label>
 
-				<div class="mt-5 flex justify-end gap-2">
+				<div class="mt-5 flex justify-center gap-2">
 					<button
 						type="button"
 						class="rounded-lg border border-ink-300 px-4 py-2 text-sm font-semibold hover:border-ink-400 dark:border-ink-700"

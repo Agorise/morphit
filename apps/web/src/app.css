@@ -274,6 +274,23 @@ body {
 		@apply card hover-subtle cursor-default;
 	}
 
+	/* The dim-emerald card hover (Ken).
+	 *
+	 * Order cards, FAQ entries and the /my/orders rows each carried this exact
+	 * four-class incantation inline — `hover:border-morphit-emerald/20
+	 * hover:bg-emerald-50/30 dark:hover:border-morphit-emerald/15
+	 * dark:hover:bg-morphit-emerald/[0.05]` — copy-pasted verbatim, which is how
+	 * the /download cards ended up with no hover at all: there was nothing to
+	 * apply, only something to remember to retype. Now there's a name.
+	 *
+	 * Compose it with `.card` or `.card-interactive`. It only paints on hover,
+	 * so it costs a non-interactive card nothing at rest. */
+	.card-hover-emerald {
+		@apply transition-colors duration-150 ease-out;
+		@apply hover:border-morphit-emerald/20 hover:bg-emerald-50/30;
+		@apply dark:hover:border-morphit-emerald/15 dark:hover:bg-morphit-emerald/[0.05];
+	}
+
 	/* Site-wide choice-row hover affordance. Any <label> that wraps a
 	 * radio/checkbox gets a subtle background tint on hover so the eye can
 	 * see which option-row the pointer is over. Labels that already manage
@@ -312,6 +329,36 @@ body {
 	textarea:not([aria-invalid='true']):not([class*='border-red']),
 	select:not([aria-invalid='true']):not([class*='border-red']) {
 		@apply transition-colors duration-150 ease-out hover:border-ink-300 dark:hover:border-ink-600;
+	}
+
+	/* Site-wide text-field FOCUS border (Ken).
+	 *
+	 * The generic `:focus-visible` rule above paints `--focus-ring`, a 3px
+	 * translucent emerald glow (alpha 0.35). On a button that reads as a ring;
+	 * on a bordered text field it reads as "a very dim green border" — which is
+	 * exactly what it looked like in the Send-BLURT modal, and it disagreed with
+	 * the crisp 1px emerald border FeatureBidForm painted on its own password
+	 * field. Two different focus treatments for the same kind of control.
+	 *
+	 * Text fields now get the crisp treatment everywhere: the border itself
+	 * turns emerald, plus a 1px emerald ring so the edge reads at full strength
+	 * on both the light and dark surfaces without thickening the box.
+	 *
+	 * Deliberately NOT applied to buttons/links/[tabindex] — the soft 3px glow
+	 * is the right affordance there, and it's what the rest of the app expects.
+	 * `aria-invalid` / `border-red-*` fields keep their red border on focus: a
+	 * field that is wrong must not look valid just because the cursor is in it.
+	 * Checkbox/radio/range/file/color are not bordered text fields and keep the
+	 * glow. Specificity: the generic rule uses `:where(...)` (zero specificity),
+	 * so these element selectors win without `!important`. */
+	input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not(
+			[type='color']
+		):not([aria-invalid='true']):not([class*='border-red']):focus-visible,
+	textarea:not([aria-invalid='true']):not([class*='border-red']):focus-visible,
+	select:not([aria-invalid='true']):not([class*='border-red']):focus-visible {
+		border-color: theme('colors.morphit.emerald');
+		box-shadow: 0 0 0 1px theme('colors.morphit.emerald');
+		outline: 2px solid transparent;
 	}
 
 	/* cp407 — kill the browser autofill background highlight. Chrome/Brave

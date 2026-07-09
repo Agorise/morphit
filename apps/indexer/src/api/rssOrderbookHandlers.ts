@@ -19,6 +19,7 @@ import type { Config } from '$config/index';
 import { isAccountName, escapeLike } from '$api/shared';
 
 import { ASSET_TICKERS, type AssetTicker } from '@morphit/asset-registry';
+import { FEEDBACK_EXCLUSIONS_SQL } from '$api/reputationJoin';
 
 const FEED_LIMIT = 50;
 const CACHE_TTL_SECONDS = 60;
@@ -513,35 +514,18 @@ function filterQueryString(f: FeedFilters): string {
  *  CANONICAL exclusion set lives in orderbook.ts; this is a deliberate
  *  count-only mirror (the codebase already keeps per-consumer copies of
  *  this aggregate — orders.ts, orderbookStream.ts, reputationReceipt.ts,
- *  the feedback API — rather than one shared CTE).  rss-orderbook-
- *  filters-smoke extracts the exclusion TABLES from both this constant
- *  and orderbook.ts's `f` subquery and fails if they ever differ, so
- *  the mirror can't silently drift. */
+ *  the feedback API — rather than one shared CTE).
+ *
+ *  cp442 — the EXCLUSION CLAUSES themselves are no longer mirrored: they come
+ *  from `FEEDBACK_EXCLUSIONS_SQL` in `$api/reputationJoin`, the single place
+ *  they are written. Only the count-only SELECT/GROUP BY shape is local, which
+ *  is the part that legitimately differs (no time-decayed rating here).
+ *  rss-orderbook-filters-smoke still extracts the exclusion TABLES from both
+ *  this constant and the shared aggregate and fails if they ever differ. */
 const FEEDBACK_COUNT_SUBQUERY = `
 		SELECT subject, COUNT(*)::int AS c
 		  FROM feedback fb
-		 WHERE fb.order_permlink IS NOT NULL
-		   AND NOT EXISTS (
-		     SELECT 1 FROM suspicious_reciprocity sr
-		      WHERE sr.account_a = LEAST(fb.reviewer, fb.subject)
-		        AND sr.account_b = GREATEST(fb.reviewer, fb.subject)
-		   )
-		   AND NOT EXISTS (
-		     SELECT 1 FROM related_accounts ra
-		      WHERE ra.account_a = LEAST(fb.reviewer, fb.subject)
-		        AND ra.account_b = GREATEST(fb.reviewer, fb.subject)
-		   )
-		   AND NOT EXISTS (
-		     SELECT 1 FROM one_way_pile_on owpo,
-		                  jsonb_array_elements(owpo.attacking_reviewers) attacker
-		      WHERE owpo.subject = fb.subject
-		        AND attacker->>'reviewer' = fb.reviewer
-		   )
-		   AND NOT EXISTS (
-		     SELECT 1 FROM review_concentration rc
-		      WHERE rc.reviewer = fb.reviewer
-		        AND rc.dominant_subject = fb.subject
-		   )
+${FEEDBACK_EXCLUSIONS_SQL}
 		 GROUP BY subject`;
 
 /** /rss/orderbook/by-asset/<asset>.xml — `rawSegment` is the

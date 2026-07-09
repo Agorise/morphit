@@ -164,7 +164,7 @@
 </script>
 
 <li
-	class="card-interactive relative p-4 sm:p-6 hover:border-morphit-emerald/20 hover:bg-emerald-50/30 dark:hover:border-morphit-emerald/15 dark:hover:bg-morphit-emerald/[0.05] {hidden ||
+	class="card-interactive relative p-4 sm:p-6 card-hover-emerald {hidden ||
 	blocked
 		? 'opacity-50'
 		: ''} {featured

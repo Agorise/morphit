@@ -432,6 +432,47 @@ expect('HV-1e an unparseable string passes through', ensureHealthPath('not a url
 		const tmpl = join(dir, 'tmpl.txt');
 		writeFileSync(tmpl, 'Generated: {{GENERATED_AT_ISO}}\nValid through: {{VALID_THROUGH_ISO}}\n');
 		expect('HV-8d checkCanary: un-substituted template → unparsable', checkCanary(tmpl, now).state === 'unparsable');
+
+		// cp442 — the generator now writes Ken's sitewide stamp
+		// ("15 June, 2026 @ 03:14:00 UTC"). `new Date(str)` on a non-ISO string is
+		// implementation-defined, so health parses it explicitly. If that ever
+		// regresses, a perfectly good canary reports as `unparsable` and the
+		// operator goes hunting for a problem that doesn't exist.
+		const humanFresh = join(dir, 'human-fresh.txt');
+		writeFileSync(
+			humanFresh,
+			'Generated: 8 June, 2026 @ 03:14:00 UTC\nValid through: 15 June, 2026 @ 03:14:00 UTC\n'
+		);
+		expect(
+			'HV-8e checkCanary: human stamp, future deadline → fresh',
+			checkCanary(humanFresh, now).state === 'fresh'
+		);
+
+		const humanStale = join(dir, 'human-stale.txt');
+		writeFileSync(
+			humanStale,
+			'Generated: 25 May, 2026 @ 03:14:00 UTC\nValid through: 1 June, 2026 @ 03:14:00 UTC\n'
+		);
+		expect(
+			'HV-8f checkCanary: human stamp, past deadline → overdue',
+			checkCanary(humanStale, now).state === 'overdue'
+		);
+
+		// A local-time-looking stamp must NOT be silently accepted (it would skew
+		// the staleness window by the operator's UTC offset).
+		const ambiguous = join(dir, 'ambiguous.txt');
+		writeFileSync(ambiguous, 'Generated: 2026-06-08 03:14:00\nValid through: 2026-06-15 03:14:00\n');
+		expect(
+			'HV-8g checkCanary: ambiguous local-time stamp → unparsable, not guessed',
+			checkCanary(ambiguous, now).state === 'unparsable'
+		);
+
+		const badMonth = join(dir, 'bad-month.txt');
+		writeFileSync(badMonth, 'Generated: 8 June, 2026 @ 03:14:00 UTC\nValid through: 15 Junius, 2026 @ 03:14:00 UTC\n');
+		expect(
+			'HV-8h checkCanary: bogus month → unparsable, not treated as fresh',
+			checkCanary(badMonth, now).state === 'unparsable'
+		);
 	} finally {
 		rmSync(dir, { recursive: true, force: true });
 	}

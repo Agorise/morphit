@@ -15,9 +15,9 @@
  * service still picks up trade events when the user is on
  * /chat/<peer> directly.
  *
- * Distinct from `tradeNotificationsEnabled` (which only gates
- * OS-level browser notifications).  This setting gates whether
- * the listener runs at all.
+ * Distinct from the notification prefs' `categories.order` /
+ * `channels.native` (which gate the order badge + OS-level alert).
+ * This setting gates whether the listener runs at all.
  *
  * Storage: localStorage key `morphit.crossPageTradeEvents.enabled`,
  * boolean.  Survives session lock; cleared on full logout.

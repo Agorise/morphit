@@ -45,6 +45,7 @@
 	import { MORPHIT_ACCOUNT } from '$net/config';
 	import { formatFiat } from '$lib/i18n/formatters';
 	import QrPanel from '$lib/components/QrPanel.svelte';
+	import CopyButton from '$lib/components/CopyButton.svelte';
 	import type { AddressPayload } from '$lib/chat/payload';
 
 	interface Props {
@@ -75,7 +76,6 @@
 	}: Props = $props();
 
 	let qrShown = $state(false);
-	let copyAddrFlash = $state(false);
 
 	/** The canonical address + amount for the chosen method,
 	 *  resolved from the chain-pinned treasury block.  Null when
@@ -161,21 +161,6 @@
 		} as AddressPayload;
 	});
 
-	async function copyAddress(): Promise<void> {
-		if (resolved === null) return;
-		try {
-			await navigator.clipboard.writeText(resolved.address);
-			copyAddrFlash = true;
-			setTimeout(() => {
-				copyAddrFlash = false;
-			}, 1200);
-		} catch {
-			// Clipboard API not available (insecure context, very
-			// old browser).  Silent — the user can long-press to
-			// copy from the rendered address text.
-		}
-	}
-
 	function toggleQr(): void {
 		qrShown = !qrShown;
 	}
@@ -229,13 +214,12 @@
 
 		<!-- Action buttons: copy + show QR -->
 		<div class="mb-3 flex flex-wrap gap-2">
-			<button
-				type="button"
-				onclick={copyAddress}
-				class="rounded-md border border-ink-300 bg-white px-3 py-1.5 text-sm font-medium text-ink-700 hover:bg-ink-50 dark:border-ink-600 dark:bg-ink-800 dark:text-ink-100 dark:hover:bg-ink-700"
-			>
-				{copyAddrFlash ? $_('common.copied') : $_('post_order.fee_method.fee_address_copy')}
-			</button>
+			<CopyButton
+				value={resolved.address}
+				label={$_('post_order.fee_method.fee_address_copy')}
+				class="rounded-md border border-ink-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-ink-50 dark:border-ink-600 dark:bg-ink-800 dark:hover:bg-ink-700"
+				idleColorClass="text-ink-700 dark:text-ink-100"
+			/>
 			<button
 				type="button"
 				onclick={toggleQr}

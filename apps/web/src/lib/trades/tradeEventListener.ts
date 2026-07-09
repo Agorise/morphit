@@ -53,7 +53,7 @@ import { showToast } from '$lib/stores/toast';
 import { get } from 'svelte/store';
 import { _ } from 'svelte-i18n';
 import { liveIdentity } from '$stores/identity';
-import { tradeNotificationsEnabled } from '$lib/notifications/tradeNotifications';
+import { notify } from '$lib/notifications';
 import type { ChatMessageRecord } from '@morphit/indexer-client';
 
 interface PerPeerStream {
@@ -154,27 +154,6 @@ async function tryDecrypt(rec: ChatMessageRecord): Promise<string | null> {
 	}
 }
 
-/** Try the browser Notification API.  Silent no-op on permission
- *  denial or missing API.
- *
- *  Phase F.5 audit fix (F-31) — tag includes the order permlink
- *  so different trades produce SEPARATE notifications.  Updates
- *  to the SAME trade (e.g. address-shared → funds-sent) still
- *  coalesce, which is desirable. */
-function maybeBrowserNotify(title: string, body: string, tag: string): void {
-	if (!browser) return;
-	if (typeof Notification === 'undefined') return;
-	if (Notification.permission !== 'granted') return;
-	if (!get(tradeNotificationsEnabled)) return;
-	// Only surface when the document is hidden — visible pages
-	// show toast instead.
-	if (typeof document !== 'undefined' && !document.hidden) return;
-	try {
-		new Notification(title, { body, tag });
-	} catch {
-		// Silent.  Quotas / focus rules vary per browser.
-	}
-}
 
 async function handleAppend(peer: string, rec: ChatMessageRecord): Promise<void> {
 	const stream = streams.get(peer);
@@ -236,7 +215,18 @@ async function handleAppend(peer: string, rec: ChatMessageRecord): Promise<void>
 			values: plan.notify.i18n.values
 		}) as string;
 		showToast(body, plan.notify.toastKind, { href: plan.notify.href });
-		maybeBrowserNotify(title, body, plan.notify.notificationTag);
+		// One place for BOTH the ambient count AND the native alert. notify()
+		// always ticks the badge (peripheral, opt-in-independent) and fires the
+		// native only when the user has opted into order alerts + granted
+		// permission — replacing the dead legacy trade-notifications gate (no UI
+		// ever set it) under which order native alerts never fired.
+		notify({
+			category: 'order',
+			title,
+			body,
+			href: plan.notify.href,
+			id: plan.notify.notificationTag
+		});
 	}
 }
 

@@ -42,6 +42,7 @@
 	import { formatOrderPriceModel } from '$lib/orders/priceModelDisplay';
 	import type { FeaturedSlot, ProfileResponse } from '@morphit/indexer-client';
 	import OrderCard from '$components/OrderCard.svelte';
+	import { networkChipFor } from '$lib/orders/networkChip';
 	import {
 		pendingFeatured,
 		mergeablePending,
@@ -186,8 +187,13 @@
 		{#each visibleSlots as slot (slot.order.account + '/' + slot.order.permlink)}
 			{@const o = slot.order}
 			{@const labelProps = extractLabelPropsFromProfile(profileMap[o.account])}
+			<!-- Ken — featured cards must name the network for multi-network assets
+			     (USDT/USDC/DAI). Sending TRC20 to an ERC20 address loses the money;
+			     the chip is not decoration. Same helper the orderbook rows use. -->
+			{@const networkChip = networkChipFor(o, $_)}
 			<OrderCard
 				order={o}
+				{networkChip}
 				title={cardTitle(o)}
 				displayName={labelProps.displayName}
 				avatarSvg={labelProps.avatarSvg}
@@ -214,15 +220,12 @@
 		</div>
 	{/if}
 {:else if loaded && visibleSlots.length > 0}
-	<section aria-labelledby="featured-heading" class="space-y-3">
-		<div class="flex items-center gap-2">
-			<h2
-				id="featured-heading"
-				class="font-display text-sm font-bold uppercase tracking-widest text-ink-500 dark:text-ink-400"
-			>
-				{$_('featured.heading')}
-			</h2>
-		</div>
+	<!-- Ken — the "FEATURED RIGHT NOW" eyebrow is gone from the homepage: the
+	     🚀 cards announce themselves, and the label was just noise above them.
+	     The heading string is retained as the section's accessible NAME, so
+	     screen-reader users still get told what this group of cards is —
+	     removing the visible text shouldn't cost them the context. -->
+	<section aria-label={$_('featured.heading')} class="space-y-3">
 		{@render cards()}
 	</section>
 {:else if loaded && showEmptyState}

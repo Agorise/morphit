@@ -132,12 +132,41 @@ fi
 
 # ─── Compose ─────────────────────────────────────────────────────
 
-GENERATED_AT_ISO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+# Ken's sitewide date/time standard: day-first full month name, then a
+# 24-hour UTC clock with seconds — e.g. "8 July, 2026 @ 23:45:18 UTC".
+# A Zulu ISO stamp ("2026-07-08T23:45:18Z") is precise but reads as
+# machine output to a human trying to judge whether a warrant canary is
+# fresh, which is the ONE thing this file exists to communicate.
+#
+# LC_ALL=C pins English month names (the canary is an English-language
+# legal declaration) AND keeps `date` from emitting locale-specific
+# multibyte characters into a file we deliberately hold to pure ASCII —
+# a warrant canary must survive being read in any viewer, with any
+# charset guess, without a single mojibake byte.
+#
+# `scripts/canary/verify.ts` parses BOTH this format and the legacy ISO
+# form, so canaries signed before this change still verify.
+canary_stamp() {
+	# $1 = a `date`-parseable instant, or empty for "now".
+	if [ -n "${1:-}" ]; then
+		LC_ALL=C date -u -d "$1" +'%-d %B, %Y @ %H:%M:%S UTC'
+	else
+		LC_ALL=C date -u +'%-d %B, %Y @ %H:%M:%S UTC'
+	fi
+}
+
+GENERATED_AT_ISO="$(canary_stamp)"
 # Valid through: 14 days from now.  This is the silent-canary
 # threshold — readers should treat the canary as untrusted past
 # this point.
-VALID_THROUGH_ISO="$(date -u -d '+14 days' +%Y-%m-%dT%H:%M:%SZ)"
+VALID_THROUGH_ISO="$(canary_stamp '+14 days')"
 NEWS_FETCHED_AT="$GENERATED_AT_ISO"
+# The Blurt head timestamp arrives from the chain as ISO/Zulu; render it
+# in the same human format.  Fall back to the raw value if it doesn't
+# parse (a malformed RPC response must not abort canary generation).
+if [ -n "${BLURT_HEAD_TIMESTAMP:-}" ]; then
+	BLURT_HEAD_TIMESTAMP="$(canary_stamp "$BLURT_HEAD_TIMESTAMP" 2>/dev/null || printf '%s' "$BLURT_HEAD_TIMESTAMP")"
+fi
 
 # Build the unsigned text with all fields filled.  Use a temp file
 # so the gpg input is byte-stable.

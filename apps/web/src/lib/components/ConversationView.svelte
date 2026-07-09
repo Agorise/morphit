@@ -40,6 +40,9 @@
 	import FirstTradeHelper from '$components/FirstTradeHelper.svelte';
 	import ChatNotificationNudge from '$components/ChatNotificationNudge.svelte';
 	import IdentityLabel from '$components/IdentityLabel.svelte';
+	import NewTraderChip from '$components/NewTraderChip.svelte';
+	import { formatCountCompact, formatDayMonth } from '$lib/i18n/formatters';
+	import { daySeparatorAt } from '$lib/chat/daySeparator';
 	import WriteBlockedReadOnly from '$components/WriteBlockedReadOnly.svelte';
 	import {
 		createConversationController,
@@ -59,7 +62,7 @@
 	} from '$stores/chatSecurity';
 	import { blockedAccounts, loadBlocks, markBlocked, markUnblocked } from '$lib/chat/blocks';
 	import { broadcastBlock, broadcastUnblock } from '$blurt/ops/block';
-	import { getChatAdmission, getOrdersByAccount } from '$lib/indexer/client';
+	import { getChatAdmission, getOrdersByAccount, getReputationReceipt } from '$lib/indexer/client';
 	import { chatMoneyFlow } from '$lib/chat/orderRole';
 	import { fetchAccountKeys } from '$blurt/accountKeys';
 	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
@@ -134,6 +137,19 @@
 	 *  encryption key — different key, different purpose. Null until
 	 *  resolved or if the fetch fails (IdentityLabel then just omits it). */
 	let peerPostingKey = $state<string | null>(null);
+
+	/** #4 — the peer's public reputation cluster for the header (new-trader
+	 *  sprout + ⭐ composite score + trade count), mirroring the order card so
+	 *  you can size up who you're chatting with at a glance. Derived from the
+	 *  same reputation the order cards show (reputation-receipt summary, which
+	 *  runs the identical score computation). Best-effort, same-origin; the
+	 *  reputation is public on-chain data, so no privacy exposure. Null until
+	 *  resolved / on failure (the cluster then just doesn't render). */
+	let peerReputation = $state<{
+		score: number | null;
+		count: number;
+		isNewTrader: boolean;
+	} | null>(null);
 
 	/** cp402 [4] — the local user's OWN canonical posting key, for the
 	 *  whoami line above the user's own message runs. Same POSTING pubkey
@@ -887,8 +903,37 @@
 		}
 	}
 
+	/** Ken — day separators in the message log. Grouping + the pending-message
+	 *  rule live in `$lib/chat/daySeparator` so they can be unit-tested; this
+	 *  wrapper just turns the returned Date into the sitewide label. */
+	function daySeparatorLabelAt(i: number): string | null {
+		const at = daySeparatorAt(messages, i);
+		return at ? formatDayMonth(at) : null;
+	}
+
 	async function loadPeerProfile(): Promise<void> {
 		peerProfile = await getProfileCached(peer);
+	}
+
+	/** #4 — fetch the peer's public reputation for the header cluster. The
+	 *  reputation-receipt summary carries the SAME composite `reputation_score`
+	 *  the order cards show, plus the received-feedback count; a new-trader has
+	 *  fewer than 4 received rows (same rule as the orderbook's 🌱 chip).
+	 *  Best-effort + silent on failure — the cluster is a nice-to-have, never a
+	 *  blocker for the conversation. */
+	async function loadPeerReputation(): Promise<void> {
+		try {
+			const r = await getReputationReceipt(peer);
+			if (!r.ok) return;
+			const count = r.data.summary.count_total;
+			peerReputation = {
+				score: r.data.summary.reputation_score ?? null,
+				count,
+				isNewTrader: count < 4
+			};
+		} catch {
+			peerReputation = null;
+		}
 	}
 
 	/** cp402 [2] — fetch the peer's canonical posting key for the header
@@ -988,6 +1033,8 @@
 		controller.start();
 		// Kick off peer profile load in parallel.
 		void loadPeerProfile();
+		// #4 — peer reputation cluster for the header.
+		void loadPeerReputation();
 		// cp402 [2] — header identity anchor + order-context "RE:" line.
 		void loadPeerPostingKey();
 		void loadMyPostingKey();
@@ -1299,6 +1346,36 @@
 					weight="bold"
 					avatarSize={32}
 				/>
+				{#if peerReputation}
+					<!-- #4 — peer reputation cluster, mirroring the order card:
+					     🌱 new-trader sprout · ⭐ composite score · trade count.
+					     Same signals a buyer/seller sees before opening a trade,
+					     now visible while chatting. -->
+					<div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+						{#if peerReputation.isNewTrader}
+							<NewTraderChip />
+						{/if}
+						{#if peerReputation.score !== null}
+							<span
+								class="inline-flex items-center gap-1 font-semibold text-morphit-emerald"
+								aria-label={$_('orderbook.card.reputation_aria', {
+									values: { score: peerReputation.score.toFixed(2) }
+								}) as string}
+								title={$_('orderbook.card.reputation_aria', {
+									values: { score: peerReputation.score.toFixed(2) }
+								}) as string}
+							>
+								<span aria-hidden="true">⭐</span>
+								<span aria-hidden="true">{peerReputation.score.toFixed(2)}</span>
+							</span>
+						{/if}
+						<span class="text-ink-500 dark:text-ink-400">
+							{$_('orderbook.card.trades_only', {
+								values: { count: formatCountCompact(peerReputation.count) }
+							})}
+						</span>
+					</div>
+				{/if}
 				{#if orderSummary}
 					<!-- The RE: line links through to the order-detail page —
 					     the click-through the removed 📌 banner used to provide,
@@ -1481,6 +1558,23 @@
 				aria-label={$_('chat.messages_aria') as string}
 			>
 				{#each messages as m, i (m.localSeq)}
+					{@const daySep = daySeparatorLabelAt(i)}
+					{#if daySep}
+						<!-- Ken — day divider: a hairline all the way across the log with
+						     the date centred just above it. Deliberately quiet (11px,
+						     muted, non-interactive): it's a scroll landmark for finding
+						     "that day" in a long lazy-loaded history, not a UI element. -->
+						<li class="chat-day-separator mt-2 select-none first:mt-0">
+							<div class="text-center text-[11px] leading-none text-ink-400 dark:text-ink-500">
+								{daySep}
+							</div>
+							<div
+								class="mt-1 h-px w-full bg-ink-200 dark:bg-ink-800"
+								role="separator"
+								aria-label={daySep}
+							></div>
+						</li>
+					{/if}
 					<ChatMessage
 						message={m}
 						{me}
@@ -1564,7 +1658,7 @@
 					class="flex-none border-t border-ink-200 bg-ink-50 px-4 py-2 dark:border-ink-800 dark:bg-ink-900"
 				>
 					<div
-						class="mx-auto grid max-w-2xl grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:justify-end"
+						class="mx-auto flex max-w-2xl flex-wrap items-center justify-center gap-2"
 					>
 					<!-- cp402 [6] — "Share address" shares MY crypto receiving
 					     address, so it's only relevant when I'm the one RECEIVING

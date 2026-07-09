@@ -156,6 +156,7 @@ export const FAQ_KEYS = [
 	'what_is_xrp',
 	'what_is_barter',
 	// Asset-specific transactional advice
+	'what_is_a_txid',
 	'xmr_txid',
 	'xmr_tx_proof',
 	'block_explorer',
@@ -813,8 +814,9 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 		'lost_keys'
 	],
 	totp_2fa_why_not_google_authenticator: ['totp_2fa_what_is_it', 'totp_2fa_lost_authenticator'],
-	xmr_txid: ['xmr_tx_proof', 'block_explorer', 'privacy_coins_onchain'],
-	block_explorer: ['xmr_txid', 'xmr_tx_proof', 'public_api'],
+	what_is_a_txid: ['xmr_txid', 'block_explorer', 'why_fresh_addresses'],
+	xmr_txid: ['what_is_a_txid', 'xmr_tx_proof', 'block_explorer', 'privacy_coins_onchain'],
+	block_explorer: ['what_is_a_txid', 'xmr_txid', 'xmr_tx_proof', 'public_api'],
 	taxes: ['data_collection', 'arbitrage_morphit_vs_exchanges', 'public_api'],
 	no_js: ['no_js_limits', 'offline_caching', 'rss_feeds'],
 	no_js_limits: ['no_js', 'offline_caching', 'rss_feeds'],

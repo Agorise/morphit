@@ -1083,11 +1083,31 @@ const SCENARIOS: readonly Scenario[] = [
 		// cp404 — the verbose order_row.network_hint sentence was replaced by
 		// the compact network-name chip; the page derives which network and
 		// looks up its display name, then passes the chip to OrderCard.
+		// cp442 — that derivation moved OUT of this page's row loop into the
+		// shared `$lib/orders/networkChip` helper, because the featured strip
+		// renders the same OrderCard and had no chip at all (a featured USDT
+		// order that doesn't name its chain is a lose-your-funds ambiguity).
 		mustHave: [
-			'usdtRowNetwork',
-			'assets.usdt.network.',
+			'networkChipFor',
 			'networkChip'
 		]
+	},
+	{
+		name: 'P121-USDT-5a2 — the shared helper names the USDT/USDC/DAI network',
+		file: 'apps/web/src/lib/orders/networkChip.ts',
+		rootRelative: true,
+		mustHave: [
+			'assets.usdt.network.',
+			'assets.usdc.network.',
+			'assets.dai.network.',
+			'isUsdtNetwork'
+		]
+	},
+	{
+		name: 'P121-USDT-5a3 — featured cards pass the network chip too',
+		file: 'apps/web/src/lib/components/FeaturedOrders.svelte',
+		rootRelative: true,
+		mustHave: ['networkChipFor', '{networkChip}']
 	},
 	{
 		name: 'P121-STABLECOIN-5b — OrderCard renders the network chip + stablecoin price subline',

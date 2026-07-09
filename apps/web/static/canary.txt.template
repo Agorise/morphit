@@ -1,6 +1,6 @@
 === MORPHIT CANARY ===
 
-Morphit operator canary — {{OPERATOR_NAME}}
+Morphit operator canary - {{OPERATOR_NAME}}
 Instance: {{INSTANCE_ORIGIN}}
 Generated: {{GENERATED_AT_ISO}}
 Valid through: {{VALID_THROUGH_ISO}}
@@ -30,20 +30,20 @@ served with any of the following:
 
 The operator further declares:
 
-  • Morphit's source remains unmodified relative to the public
+  * Morphit's source remains unmodified relative to the public
     AGPL-3.0 release at git.agorise.net/agorise/morphit, except
     for branding and operator-config files documented in the
     repository.
-  • No third-party trust anchor has been added (no Cloudflare, no
+  * No third-party trust anchor has been added (no Cloudflare, no
     analytics, no CDN that wasn't in the published config).
-  • The operator's release-discovery key has not changed since
+  * The operator's release-discovery key has not changed since
     the last canary, OR if it has, the previous canary lists the
     rotation reason.
 
 ==== FRESHNESS PROOFS ====
 
 These prove the canary was generated AFTER the dates/heights
-shown — they cannot be pre-generated.
+shown - they cannot be pre-generated.
 
 Blurt chain head at signing time:
   Block height: {{BLURT_HEAD_HEIGHT}}
@@ -55,7 +55,7 @@ Bitcoin chain head at signing time:
   Block hash:   {{BTC_HEAD_HASH}}
 
 Recent news entropy (a current headline that didn't exist when
-this canary was written previously — proof the canary wasn't
+this canary was written previously - proof the canary wasn't
 just rebroadcast from an old signed copy):
 
   {{NEWS_HEADLINE}}
@@ -66,7 +66,7 @@ just rebroadcast from an old signed copy):
 
 1. Verify the PGP signature below using the operator's release
    public key, published at /pgp_keys.asc on the same instance.
-   The fingerprint shown there is the operator's identity — note
+   The fingerprint shown there is the operator's identity - note
    it on your first visit and check it hasn't silently changed on
    later visits (a legitimate key rotation is explained in the
    canary's declaration above).
@@ -93,12 +93,12 @@ recognized).  So: instead of declaring all is well, the
 operator is permitted to STOP UPDATING the canary.
 
 If you see this canary frozen for more than 14 days:
-  • Assume the operator is under coercive pressure.
-  • Switch to a different Morphit operator.  The federation
+  * Assume the operator is under coercive pressure.
+  * Switch to a different Morphit operator.  The federation
     exists for exactly this case.  See morphit.io/instances or
     the canonical directory at any working operator's
     /v1/instances endpoint.
-  • The Blurt chain itself is untouched — your orders, feedback,
+  * The Blurt chain itself is untouched - your orders, feedback,
     chat ciphertext are all on chain and any other operator's
     indexer reconstructs the same view from chain history.
 

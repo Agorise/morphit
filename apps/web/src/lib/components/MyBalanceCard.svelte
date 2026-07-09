@@ -774,7 +774,14 @@
 			{$_('profile.my_balance.error')}: {errorMsg}
 		</p>
 	{:else}
-		<dl class="grid grid-cols-3 gap-3">
+		<!-- Ken — three evenly spaced columns. `grid-cols-3` already gives the
+		     columns equal WIDTH, but with `gap-3` the BLURT column's fiat
+		     approximation ran right up against "BP (staked BLURT)" while a wide
+		     gap yawned before "Voting" — equal columns, visibly unequal rhythm.
+		     A roomier `gap-x-6` restores the breathing space on both sides; the
+		     fiat wraps under the balance rather than crowding its neighbour when
+		     the column is narrow. -->
+		<dl class="grid grid-cols-3 gap-x-6 gap-y-3">
 			{#snippet exactTip(text: string)}
 				<span
 					role="tooltip"
@@ -787,36 +794,51 @@
 					{$_('profile.my_balance.blurt_label')}
 				</dt>
 				<dd class="font-mono text-lg font-semibold leading-tight">
-					<!-- Desktop: full BLURT precision with grouping (e.g. 5,055.031). -->
-					<span class="hidden sm:inline"
-						><AnimatedNumber
-							value={blurtBalance}
-							decimals={3}
-							durationMs={3000}
-							silent={suppressBlurtFlashOnce}
-						/></span
-					><!-- Mobile: floored integer; tap to reveal the exact amount (cp396). -->
-					<span class="relative sm:hidden" data-exact-tip
-						><button
-							type="button"
-							onclick={() => toggleExact('blurt')}
-							aria-label={`${$_('profile.my_balance.blurt_label')} ${exactBlurt}`}
-							class="cursor-pointer underline decoration-dotted underline-offset-2"
-							><AnimatedNumber
-								value={Math.floor(blurtBalance)}
-								decimals={0}
-								grouping={false}
-								durationMs={3000}
-								silent={suppressBlurtFlashOnce}
-							/></button
-						>{#if openExact === 'blurt'}{@render exactTip(exactBlurt)}{/if}</span
-					><!-- Fiat approximation. `inline-block` gives the wrapped line its
-					     own text-xs line-box (v1.1.5) — inline it inherited the dd's
-					     text-lg line-height, leaving a phantom gap that read as a
-					     stray line-feed above the fiat. -->{#if usdLabel}<span
-							class="ml-1 inline-block align-baseline font-sans text-xs font-normal leading-tight text-ink-500 dark:text-ink-400"
-							>({usdLabel})</span
-						>{/if}
+					<!-- Ken — the balance and its fiat approximation sit on one baseline,
+					     separated by exactly one space.
+					     Previously the fiat was an `inline-block` with `ml-1`: an
+					     inline-block aligns by its own last line-box baseline, not the
+					     mono digits' baseline, so it rode slightly low, and `ml-1` on top
+					     of the inline gap read as two spaces. A baseline flex row aligns
+					     the two texts exactly, `gap-x-1` is the single space, and
+					     `flex-wrap` still gives the fiat its own text-xs line-box when it
+					     wraps — which is what `inline-block` was there to buy (v1.1.5:
+					     inline, it inherited the dd's text-lg line-height and left a
+					     phantom gap that read as a stray line-feed). -->
+					<span class="flex flex-wrap items-baseline gap-x-1">
+						<span>
+							<!-- Desktop: full BLURT precision with grouping (e.g. 5,055.031). -->
+							<span class="hidden sm:inline"
+								><AnimatedNumber
+									value={blurtBalance}
+									decimals={3}
+									durationMs={3000}
+									silent={suppressBlurtFlashOnce}
+								/></span
+							><!-- Mobile: floored integer; tap to reveal the exact amount (cp396). -->
+							<span class="relative sm:hidden" data-exact-tip
+								><button
+									type="button"
+									onclick={() => toggleExact('blurt')}
+									aria-label={`${$_('profile.my_balance.blurt_label')} ${exactBlurt}`}
+									class="cursor-pointer underline decoration-dotted underline-offset-2"
+									><AnimatedNumber
+										value={Math.floor(blurtBalance)}
+										decimals={0}
+										grouping={false}
+										durationMs={3000}
+										silent={suppressBlurtFlashOnce}
+									/></button
+								>{#if openExact === 'blurt'}{@render exactTip(exactBlurt)}{/if}</span
+							>
+						</span>
+						{#if usdLabel}
+							<span
+								class="font-sans text-xs font-normal leading-tight text-ink-500 dark:text-ink-400"
+								>({usdLabel})</span
+							>
+						{/if}
+					</span>
 				</dd>
 				{#if hasActiveKey && blurtBalance > 0}
 					<button

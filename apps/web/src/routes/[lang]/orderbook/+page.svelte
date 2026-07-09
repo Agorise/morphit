@@ -34,7 +34,6 @@
 	import RssFeedPicker from '$components/RssFeedPicker.svelte';
 	import BusyButton from '$components/BusyButton.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
-	import { isUsdtNetwork, isUsdcNetwork, isDaiNetwork } from '$lib/assets/networks';
 	// cp165 byte-budget: FeaturedOrders + FeaturedAuctionHistory are
 	// lazy-imported below.  Both render below the orderbook fold
 	// AND each fires an HTTP fetch on onMount — for visitors who
@@ -70,6 +69,7 @@
 	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
 	import { isUnlocked, hasAnySession } from '$stores/identity';
+	import { networkChipFor } from '$lib/orders/networkChip';
 
 	// ─── Filter state ────────────────────────────────────────────────
 	type AssetFilter = '' | AssetTicker | 'barter';
@@ -1343,25 +1343,7 @@
 					{@const accountIsHidden = $hiddenAccounts.has(o.account.toLowerCase())}
 					{@const accountIsBlocked = $blockedAccounts.has(o.account.toLowerCase())}
 					{@const labelProps = extractLabelPropsFromProfile(profileMap[o.account])}
-					{@const usdtRowNetwork =
-						o.asset === 'USDT' && o.asset_network && isUsdtNetwork(o.asset_network)
-							? o.asset_network
-							: null}
-					{@const usdcRowNetwork =
-						o.asset === 'USDC' && o.asset_network && isUsdcNetwork(o.asset_network)
-							? o.asset_network
-							: null}
-					{@const daiRowNetwork =
-						o.asset === 'DAI' && o.asset_network && isDaiNetwork(o.asset_network)
-							? o.asset_network
-							: null}
-					{@const networkChip = usdtRowNetwork
-						? { label: $_(`assets.usdt.network.${usdtRowNetwork}.displayName`) as string, tone: 'usdt' as const }
-						: usdcRowNetwork
-							? { label: $_(`assets.usdc.network.${usdcRowNetwork}.displayName`) as string, tone: 'usdc' as const }
-							: daiRowNetwork
-								? { label: $_(`assets.dai.network.${daiRowNetwork}.displayName`) as string, tone: 'dai' as const }
-								: null}
+					{@const networkChip = networkChipFor(o, $_)}
 					<OrderCard
 						order={o}
 						title={cardTitle(o)}

@@ -30,7 +30,12 @@ const repo = join(here, '..', '..', '..');
 const read = (rel: string): string => readFileSync(join(repo, rel), 'utf8');
 
 let failures = 0;
+// cp442 — `total` was hardcoded as 29 in the summary line while the file ran
+// more checks than that, so the battery under-counted this smoke's assertions.
+// Count for real.
+let total = 0;
 function check(name: string, cond: boolean, detail = ''): void {
+	total++;
 	if (cond) {
 		console.log(`  ✓ ${name}`);
 	} else {
@@ -99,9 +104,26 @@ check(
 	"canSend requires recipientState === 'valid'",
 	/canSend = \$derived\([\s\S]*?recipientState === 'valid'/.test(modal)
 );
+// cp442 — the bound moved into the pure `$lib/blurt/sendValidation` module (so
+// it can be unit-tested), but it must still be ENFORCED and the amount must
+// still reach the signer through the throwing formatter.
+const sendValidationSrc = readFileSync(
+	join(import.meta.dirname, '..', 'src', 'lib', 'blurt', 'sendValidation.ts'),
+	'utf-8'
+);
 check(
 	'the amount is bounded to the balance + reaches the signer via the throwing formatter',
-	/amountNum <= blurtBalance/.test(modal) && /formatBlurtAmount\(amountNum\)/.test(modal)
+	/validateBlurtAmount\(amountInput, blurtBalance\)/.test(modal) &&
+		/n <= balance \+ 1e-6/.test(sendValidationSrc) &&
+		/formatBlurtAmount\(amountNum\)/.test(modal)
+);
+check(
+	'the amount cannot be silently ROUNDED by toFixed(3) (1.0006 -> 1.001)',
+	/\^\\d\*\(\\\.\\d\{0,3\}\)\?\$/.test(sendValidationSrc)
+);
+check(
+	'canSend also requires the active-key password',
+	/canSend = \$derived\([\s\S]*?passwordFilled/.test(modal)
 );
 
 // ─── 4. Memo privacy ───────────────────────────────────────────────────
@@ -211,8 +233,8 @@ check(
 );
 
 if (failures === 0) {
-	console.log('✓ all 29 send-blurt-modal scenarios passed');
+	console.log(`✓ all ${total} send-blurt-modal scenarios passed`);
 } else {
-	console.log(`\n✗ ${failures}/29 send-blurt-modal scenarios failed`);
+	console.log(`\n✗ ${failures}/${total} send-blurt-modal scenarios failed`);
 	process.exit(1);
 }

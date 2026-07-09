@@ -554,7 +554,7 @@
 				<p>{$_('settings.totp.enroll.manual_label')}</p>
 				<code>{pendingSecretB32}</code>
 				<button type="button" class="copy-btn" class:copied onclick={copySecret}
-					>{copied ? $_('common.copied') : $_('common.copy')}</button
+					>{copied ? `✓ ${$_('common.copied')}` : $_('common.copy')}</button
 				>
 			</div>
 
