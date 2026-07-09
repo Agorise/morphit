@@ -440,7 +440,7 @@
 			{@const justCopied = copiedKey === entry.key}
 			<li
 				id="faq-{entry.key}"
-				class="card hover-subtle scroll-mt-24 p-0 hover:border-morphit-emerald/20 hover:bg-emerald-50/30 dark:hover:border-morphit-emerald/15 dark:hover:bg-morphit-emerald/[0.05]"
+				class="card hover-subtle scroll-mt-24 p-0 card-hover-emerald"
 			>
 				<!--
 					Inline-anchor target without the `faq-` prefix.  Many
@@ -494,7 +494,9 @@
 					     target 44px square per mobile a11y guidelines. -->
 					<button
 						type="button"
-						class="me-3 mt-3 flex h-11 w-11 flex-none items-center justify-center rounded-full text-ink-500 transition hover:bg-emerald-50 hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:text-ink-400 dark:hover:bg-ink-800"
+						class="me-3 mt-3 flex h-11 w-11 flex-none items-center justify-center rounded-full transition hover:bg-emerald-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:hover:bg-ink-800 {justCopied
+						? 'text-green-600 dark:text-green-400'
+						: 'text-ink-500 hover:text-morphit-emerald dark:text-ink-400'}"
 						aria-label={$_('faq.share_aria', { values: { question: entry.question } })}
 						onclick={(e) => copyShareLink(entry, e)}
 					>
@@ -591,7 +593,9 @@
 						>
 							<button
 								type="button"
-								class="inline-flex items-center gap-2 rounded-lg border border-ink-200 bg-white px-3 py-1.5 text-sm font-semibold text-ink-700 transition hover:border-morphit-emerald hover:bg-emerald-50 hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900 dark:text-ink-200 dark:hover:bg-ink-800"
+								class="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-1.5 text-sm font-semibold transition hover:border-morphit-emerald hover:bg-emerald-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:bg-ink-900 dark:hover:bg-ink-800 {justCopied
+								? 'border-green-300 text-green-600 dark:border-green-700 dark:text-green-400'
+								: 'border-ink-200 text-ink-700 hover:text-morphit-emerald dark:border-ink-700 dark:text-ink-200'}"
 								aria-label={$_('faq.share_aria', { values: { question: entry.question } })}
 								onclick={(e) => copyShareLink(entry, e)}
 							>

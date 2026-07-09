@@ -2342,9 +2342,17 @@ On Morphit, Barter is **trade-only** — you can't pay Morphit's listing fees wi
 
 ---
 
+## What is a Transaction ID (or Hash)?
+
+**FAQ key:** `what_is_a_txid`
+
+When you send crypto, the blockchain records your payment permanently and gives it a unique fingerprint called the Transaction ID. Wallets label it in different ways — you might see “TxID”, “Transaction Hash”, “Tx Hash”, or simply “Hash” (Mycelium, for example, calls it “Hash”). It's a long string of letters and numbers, usually 64 characters long (Blurt's are 40). To find it: open your wallet, tap the payment you just sent, and copy the ID or Hash it shows you. Pasting it into Morphit lets your trade partner — and, for a listing fee, the network — confirm the payment really happened. The ID only proves that this one payment was made; it reveals nothing about the rest of your wallet.
+
+---
+
 ## Metadata
 
-Total FAQ entries: 141
+Total FAQ entries: 142
 Canonical URL: https://morphit.io/faq
 License: AGPL-3.0 (content may be quoted/redistributed)
 Source of truth: https://git.agorise.net/agorise/morphit

@@ -377,6 +377,21 @@
 		</button>
 
 		{#if open}
+			<!-- Full-page scrim: blurs + dims the rest of the page so the eye
+			     is drawn to the open menu (same treatment as the FAQ search).
+			     Sits below the menu (z-40 < the menu's z-50) and above the page;
+			     clicking it closes the menu. `fixed inset-0` escapes this
+			     `relative` wrapper to cover the whole viewport. -->
+			<button
+				type="button"
+				aria-label={$_('common.close')}
+				tabindex="-1"
+				onclick={() => {
+					open = false;
+					showNotifications = false;
+				}}
+				class="fixed inset-0 z-40 cursor-default bg-ink-900/5 backdrop-blur-sm"
+			></button>
 			<!-- Dropdown menu. Absolutely-positioned, inline on the
 			     page so the user never navigates away. Width is fixed
 			     at sm:w-80 so content doesn't reflow; on very narrow

@@ -647,23 +647,27 @@
       "recipient_label": "To",
       "from_label": "From",
       "no_memo_notice": "No on-chain memo will be included — your trade context stays in this encrypted chat.",
-      "password_label": "Active key password",
+      "password_label": "Your password",
       "confirm": "Send BLURT",
       "paying": "Sending…",
       "success_toast": "BLURT sent. Receipt posted to chat.",
       "success_toast_no_chat": "BLURT sent. Could not post receipt to chat — you can mark funds sent manually.",
       "error": {
-        "password_required": "Enter your active-key password.",
+        "password_required": "Enter your password.",
         "bad_password": "Wrong password.",
-        "no_active_envelope": "No active key set up. Pay from an external wallet instead.",
-        "broadcast_failed": "Could not send the transfer. Check your balance or try an external wallet.",
+        "no_active_envelope": "You're signed in without your active key (a posting-key or read-only session). To send BLURT, sign in with your password or master key — or pay from an external wallet.",
+        "broadcast_failed": "Could not send the transfer.",
         "no_account": "No account on file.",
         "self_pay": "You cannot pay yourself.",
-        "invalid_amount": "Invalid amount."
+        "invalid_amount": "Invalid amount.",
+        "chain_rejected": "The blockchain rejected the transfer:",
+        "instance_unreachable": "Couldn't reach your Morphit instance to send the transfer. Check your connection and try again.",
+        "sign_failed": "Couldn't sign the transfer — your key may be invalid. Try signing out and back in."
       },
       "memo_label": "Memo",
       "with_memo_notice": "The memo above will be included in the on-chain transfer so the seller can match this payment to your trade.",
-      "success_toast_no_chat_with_txid": "BLURT sent. Could not post receipt to chat — copy this txid to mark funds sent manually: {txid}"
+      "success_toast_no_chat_with_txid": "BLURT sent. Could not post receipt to chat — copy this txid to mark funds sent manually: {txid}",
+      "password_hint": "The password you unlock Morphit with. It decrypts your active key on this device to sign — you never paste a raw key here, and nothing is sent anywhere."
     },
     "trade_event": {
       "address_shared_title": "New address shared",
@@ -1669,6 +1673,10 @@
       "what_is_barter": {
         "q": "What is Barter on Morphit?",
         "a": "Barter lets you buy or sell goods and services — not cryptocurrency — and settle in crypto. A grandmother selling baskets, a neighbor who fixes bikes, someone trading a crate of oranges: they list what they're offering, price it in their local currency, and pick which crypto(s) they'll accept (say XMR, BTC, and DOGE). It's **one listing**, not one per coin.\n\n**How it works:** describe exactly what you're offering in the Terms, set a local-currency value (a single price or a range), and tick the crypto(s) your town actually uses. Buyers browse the wares like any other listing and can only pay in a crypto you accept — if you don't list Decred, nobody can pay you in Decred. You and the buyer arrange the handoff in chat and settle in whichever accepted crypto they chose.\n\n**No address on the listing:** the goods change hands off Morphit — in person or by post — so a barter listing has no crypto receive address, and Morphit never touches the goods or the payment. Common-sense safety applies: meet in a public place, share only what you need to, and treat a stranger like a stranger.\n\nOn Morphit, Barter is **trade-only** — you can't pay Morphit's listing fees with it (those stay Blurt/BTC/XMR). It's for trading wares, nothing else."
+      },
+      "what_is_a_txid": {
+        "q": "What is a Transaction ID (or Hash)?",
+        "a": "When you send crypto, the blockchain records your payment permanently and gives it a unique fingerprint called the Transaction ID. Wallets label it in different ways — you might see “TxID”, “Transaction Hash”, “Tx Hash”, or simply “Hash” (Mycelium, for example, calls it “Hash”). It's a long string of letters and numbers, usually 64 characters long (Blurt's are 40). To find it: open your wallet, tap the payment you just sent, and copy the ID or Hash it shows you. Pasting it into Morphit lets your trade partner — and, for a listing fee, the network — confirm the payment really happened. The ID only proves that this one payment was made; it reveals nothing about the rest of your wallet."
       }
     },
     "share_link": "Share",
@@ -1682,7 +1690,7 @@
   },
   "feature_bid": {
     "title": "Feature this order!",
-    "explainer": "Pay BLURT to promote this order above the main orderbook and on the homepage for the selected duration. Max 5 concurrent slots; highest per-hour bids win.",
+    "explainer": "Pay BLURT to promote this order above the main orderbook, and on the homepage for {hours, plural, one {# hour} other {# hours}}. Only {slots} slots are available; highest per-hour bid wins:",
     "hours_label": "How long?",
     "hours_option": "{n}h",
     "cost_label": "Total cost",
@@ -1796,7 +1804,7 @@
     "heading": "First trade? Here's how it works",
     "step_1": "Agree on the price and payment method with the other person.",
     "step_2_warn": "Wait!",
-    "step_2": "If you're sending crypto, wait until you've actually received the fiat (not just \"pending\") before you send the crypto. Once it's gone, it's gone.",
+    "step_2": "If you're sending crypto, wait until you've actually received the agreed upon asset (cash, barter, etc) before you send the crypto. Once it's gone, it's gone.",
     "step_3": "After the trade is done, leave a review on /my/orders so future traders trust you both.",
     "faq_link": "Read the full walkthrough",
     "dismiss_aria": "Dismiss this helper"
@@ -2205,7 +2213,6 @@
       "edit_window_countdown": "Edit window: {remaining}",
       "edit_window_tooltip": "Orders can only be edited within 15 minutes of posting. After that they have to be cancelled and re-posted.",
       "edit_window_aria": "Edit window remaining: {remaining}",
-      "feedback_no_counterparty": "No trade partner to review yet",
       "feedback_pick_prompt": "Who did you trade with?",
       "not_visible_orderbook": "Not visible in orderbook"
     },
@@ -2242,7 +2249,8 @@
     },
     "fee_status_banner": {
       "heading": "Fee status",
-      "body": "Each order below shows its listing-fee status. An order appears in the public orderbook only once its fee is verified — a badge reading “not received”, “underpaid” or “not yet verified” is why an order may be missing there."
+      "body": "💡 Each order below shows its listing-fee status. An order appears in the public orderbook only once its fee is verified — a badge reading “not received”, “underpaid” or “not yet verified” is why an order may appear to be missing there.",
+      "dismiss": "Dismiss this note"
     }
   },
   "nav": {
@@ -2554,8 +2562,8 @@
   },
   "order_detail": {
     "loading": "Loading order…",
-    "not_found_title": "Order not found",
-    "not_found_body": "This order doesn't exist, or it was never posted by this account.",
+    "not_found_title": "We couldn't find this order",
+    "not_found_body": "If you just posted it, give it another minute — the blockchain may still be confirming it, so tap Check again. Otherwise this order may not exist, or it wasn't posted by this account.",
     "back_to_profile": "Back to profile",
     "error_title": "Couldn't load this order",
     "error_body": "Something went wrong reaching the indexer. Please try again in a moment.",
@@ -2583,7 +2591,10 @@
     "fee_pending_external_hint": "This order uses BTC or XMR as its listing fee. Morphit is waiting for community validators to attest the payment. Until then the order is visible but not yet endorsed.",
     "price_label": "Price",
     "error_load_failed": "Couldn't load this order. Try refreshing.",
-    "cancel_button": "Cancel this order"
+    "cancel_button": "Cancel this order",
+    "posting_title": "Your order is being posted…",
+    "posting_body": "This order is being confirmed by the blockchain and can take a minute to appear. We'll keep checking automatically — no need to refresh.",
+    "check_again": "Check again"
   },
   "orderbook": {
     "heading": "Orderbook",
@@ -3110,7 +3121,7 @@
       "xmr_hint": "Send the fee to our Monero address, then paste the transaction ID and proof below.",
       "txid_label": "Transaction ID",
       "txid_placeholder": "Paste the 64-character hex transaction ID",
-      "txid_required": "Transaction ID is required.",
+      "txid_required": "Transaction ID or Hash is required.",
       "txid_malformed": "Transaction ID must be a 64-character hex string.",
       "txid_hint": "Your order won't appear in the orderbook until the payment is confirmed on its chain.",
       "txid_tooltip": "The transaction ID from your wallet — a long string of hex characters that proves your payment. Click for details on where to find it.",
@@ -3465,7 +3476,8 @@
       "error_broadcast": "That couldn't be completed on-chain. Please try again.",
       "error_chain_rejected": "The network rejected this transaction: {reason}",
       "error_unreachable": "Couldn't reach your Morphit instance to broadcast. Check your connection and try again.",
-      "error_amount": "Enter an amount up to your available balance."
+      "error_amount": "Enter an amount up to your available balance.",
+      "error_amount_precision": "Use at most 3 decimal places — the smallest amount you can send is 0.001 BLURT."
     },
     "send": {
       "title": "Send BLURT",

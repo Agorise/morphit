@@ -130,7 +130,7 @@ Liveness check — also exposes block lag and indexer version.
 ```json
 {
   "status": "ok",
-  "version": "1.1.5",
+  "version": "1.2.0",
   "uptime_sec": 3742,
   "chain_head_block": 17234569,
   "indexed_block": 17234567,
@@ -360,8 +360,21 @@ polling.
 
 Tier: `list`
 
-Featured-slot bidders, top 3 by paid bid amount.  Same response
-shape as `/v1/orderbook` items, plus a `featured_until` field.
+Featured-slot bidders, top 3 by paid bid amount (`max_slots`, the
+indexer's hard cap, is echoed in the response).
+
+Each item is `{ order, bid }`.  The `order` is a COMPLETE
+`OrderRecord` — identical in shape to a `/v1/orderbook` item,
+including the trust signals (`feedback_count`, `weighted_rating`,
+the composite `reputation_score`, `is_new_trader` for the 🌱 chip,
+`first_trade_at`, `posting_pubkey`), `engagement_24h`,
+`asset_network` (a featured USDT order must name its chain) and
+`created_at`.  Reputation and engagement come from the SAME
+sock-puppet-filtered, time-decayed aggregates the orderbook uses
+(`apps/indexer/src/api/reputationJoin.ts`), so the numbers rendered
+on a featured card can never disagree with the ones on the same
+trader's orderbook card.  `bid` carries `hours_requested`,
+`blurt_paid`, `blurt_per_hour`, `effective_at` and `expires_at`.
 
 #### `GET /v1/orders/:account`
 
@@ -680,6 +693,14 @@ from the response (no 404 since some-found-some-not is the common
 case).  Use this for orderbook rows and feedback lists — N+1
 single-account lookups are how clients used to flood the API.
 
+Caching: a COMPLETE batch (every requested account resolved) is sent
+with `Cache-Control: public, max-age=90, stale-while-revalidate=60`.
+A PARTIAL batch — one where any requested account is absent — is sent
+with `Cache-Control: no-store`, because an absent account is usually
+just indexer lag right after that account's profile broadcast, and
+caching the negative result would pin it in the client's HTTP cache
+across page refreshes.
+
 #### `GET /v1/operators`
 
 Tier: `list`
@@ -815,6 +836,13 @@ SSE (Server-Sent Events) streams for real-time data:
 - `GET /v1/chat/:a/:b/stream` — chat messages between two accounts
   (only the two accounts can usefully consume this; ciphertext
   delivered as-is)
+- `GET /v1/chat-activity/:account/stream` — GLOBAL (all-conversations)
+  activity pings for one account, so the inbox list + notification
+  badges update sub-second without per-conversation streams. Emits
+  `chat_activity` with `{"peer":"<account>"}` ONLY — no ciphertext,
+  header, or message id (privacy: metadata is on-chain-public; content
+  stays end-to-end encrypted and is re-fetched same-origin on the ping).
+  A `ready` event on connect signals the stream is live.
 
 SSE clients must respect `Last-Event-ID` for resume-after-
 disconnect.  Server emits keep-alive comments every 30s.

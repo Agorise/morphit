@@ -91,7 +91,27 @@ function hydrate(): NotificationPrefs {
 	}
 }
 
-const internal = writable<NotificationPrefs>(hydrate());
+/** Legacy key retired 2026-07-08: the old trade-notification toggle lived
+ *  in its own localStorage flag and gated order native alerts separately
+ *  from the unified prefs. Order notifications now flow through notify()
+ *  (gated on `channels.native`), so a user who had the legacy toggle ON
+ *  wanted native order alerts — carry that intent forward by enabling
+ *  channels.native. Runs exactly once: the legacy key is removed after, so
+ *  it can never re-enable native against a later explicit opt-out. */
+const LEGACY_TRADE_KEY = 'morphit.tradeNotifications.enabled';
+function migrateLegacyTradeNotifications(prefs: NotificationPrefs): NotificationPrefs {
+	const legacy = safeLocal.get(LEGACY_TRADE_KEY);
+	if (legacy === null) return prefs; // nothing to migrate (new user / already done)
+	safeLocal.remove(LEGACY_TRADE_KEY); // retire the key — one-time
+	if (legacy === 'true' && !prefs.channels.native) {
+		const migrated = { ...prefs, channels: { ...prefs.channels, native: true } };
+		persist(migrated);
+		return migrated;
+	}
+	return prefs;
+}
+
+const internal = writable<NotificationPrefs>(migrateLegacyTradeNotifications(hydrate()));
 
 /** Subscribe-only view for consumers (Settings binds via set(), via
  *  the mutator functions below). */

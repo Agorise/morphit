@@ -40,6 +40,27 @@ const MAX_BATCH_SIZE = 100;
  *  while refreshing in the background. */
 const BATCH_CACHE_CONTROL = 'public, max-age=90, stale-while-revalidate=60';
 
+/** #2 — cache header for a batch response that OMITS at least one requested
+ *  account (i.e. carries a negative "no profile for this account" result).
+ *
+ *  An absent account is only *provisionally* authoritative: the commonest
+ *  cause is indexer lag — the account just broadcast its profile op (or just
+ *  signed up) and the block hasn't been indexed yet, a 1–2 block window. If
+ *  such a response is cached for 90s (+60s stale-while-revalidate), the
+ *  browser's HTTP cache replays it on every subsequent load of the same URL,
+ *  so the fresh profile stays invisible for up to two and a half minutes —
+ *  and, crucially, SURVIVES A PAGE REFRESH (the client's in-memory cache is
+ *  cleared by the reload, the browser's disk cache is not). The user sees
+ *  their display name fall back to "@account" and their avatar to the
+ *  identicon, refreshes, and nothing changes.
+ *
+ *  Positive results stay cacheable for the full 90s: a profile that exists
+ *  can only be superseded by a later profile op, and 90s of staleness there
+ *  is the documented, acceptable trade. Negative results must not be pinned.
+ *  Mirrors the client-side soft-null policy (cp428) and the same reasoning as
+ *  the dynamic-data service-worker exclusion (cp324). */
+const BATCH_CACHE_CONTROL_PARTIAL = 'no-store';
+
 function rowToProfile(r: ProfileRow) {
 	return {
 		account: r.account,
@@ -118,7 +139,12 @@ export function profilesRoute(db: Database): Hono {
 			profiles[row.account] = rowToProfile(row);
 		}
 
-		c.header('Cache-Control', BATCH_CACHE_CONTROL);
+		// #2 — only a COMPLETE batch (every requested account resolved to a
+		// row) is safe to cache. A partial result carries negative entries
+		// that are usually just indexer lag, and pinning them in the browser's
+		// HTTP cache makes a fresh profile invisible across refreshes.
+		const complete = result.rows.length === accounts.length;
+		c.header('Cache-Control', complete ? BATCH_CACHE_CONTROL : BATCH_CACHE_CONTROL_PARTIAL);
 		return c.json({ profiles });
 	});
 
@@ -135,6 +161,13 @@ export function profilesRoute(db: Database): Hono {
 			[account]
 		);
 		if (result.rowCount === 0) {
+			// #2 — a bare 404 carries no cache header, and a 404 is
+			// HEURISTICALLY cacheable: a shared cache is free to invent a
+			// freshness lifetime for it. Same failure mode as the batch
+			// endpoint's negative results — this account most likely just
+			// broadcast its profile a block or two ago. Never let "no profile
+			// yet" get pinned.
+			c.header('Cache-Control', BATCH_CACHE_CONTROL_PARTIAL);
 			return c.json(errorBody('not_found', 'no profile for that account'), 404);
 		}
 

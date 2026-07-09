@@ -89,20 +89,16 @@ function pageIsFocused(): boolean {
 export function notify(event: NotificationEvent): void {
 	if (typeof window === 'undefined') return;
 
-	// Gate on per-category opt-in. Subscribe-peek via get() because
-	// notify() is a fire-and-forget call that doesn't maintain a
-	// subscription lifetime.
-	const prefs = get(notificationPrefs);
-	if (!prefs.categories[event.category]) return;
-
 	pruneCoalesce(event.category);
 	const recent = recentIds[event.category];
 	const isNew = !recent.has(event.id);
 	recent.set(event.id, Date.now());
 
-	// Ambient channels: always update regardless of focus state.
-	// These are the badges and title prefix a user sees in their
-	// peripheral vision — not alerts.
+	// AMBIENT count — always update, regardless of opt-in, focus, or
+	// permission. This is the peripheral badge / title prefix a user sees;
+	// it just says "N things are waiting" and must show even for a category
+	// whose ALERTS are off (the opt-in gates alerts, not the badge). Cheap
+	// dedup keeps a redelivered event from double-counting.
 	if (isNew) {
 		counts.update((c: UnreadCounts) => ({
 			...c,
@@ -110,20 +106,39 @@ export function notify(event: NotificationEvent): void {
 		}));
 	}
 
-	// Phase 2: Native Notification API. All gates (focus, category
-	// opt-in already handled above, channel opt-in, silencing,
+	// ALERTS — native notification, chime, vibrate — ARE gated on the
+	// per-category opt-in. Subscribe-peek via get() (fire-and-forget call).
+	const prefs = get(notificationPrefs);
+	if (!prefs.categories[event.category]) return;
+
+	// All remaining alert gates (focus, channel opt-in, silencing, OS
 	// permission) live inside maybeFireNativeNotification.
 	maybeFireNativeNotification(event);
 
-	// Phase 4: audio + vibrate. Both suppress when the page is
-	// focused — user is looking, don't jab them. Both feature-detect
-	// internally and no-op on unsupported platforms. Each checks
-	// its own channel opt-in and the shared silencing state
-	// (mute-until + quiet-hours).
+	// Audio + vibrate suppress when focused (user is looking). Each
+	// feature-detects + checks its own channel opt-in + shared silencing.
 	if (!pageIsFocused()) {
 		maybePlayChime();
 		maybeVibrate();
 	}
+}
+
+/** Set a STATE-based category's unread count to an absolute value.
+ *  Unlike notify() (a stream of discrete events), some categories —
+ *  chat — have a count that IS the number of unread conversations,
+ *  recomputed from read-state by the chat-unread channel.
+ *
+ *  NOT gated on the per-category opt-in: the ambient count/badge is
+ *  "always-on" (it just shows how many things are waiting) — the opt-in
+ *  gates the ALERTS (native notification / chime), not the peripheral
+ *  badge. (categories.chat even DEFAULTS to false, so gating here would
+ *  keep the chat badge at 0 for everyone who hasn't turned on chat
+ *  alerts — the exact bug we're fixing.) No-ops when unchanged so
+ *  subscribers don't churn. */
+export function setCategoryCount(category: NotificationCategory, n: number): void {
+	if (typeof window === 'undefined') return;
+	const value = Math.max(0, Math.floor(n));
+	counts.update((c: UnreadCounts) => (c[category] === value ? c : { ...c, [category]: value }));
 }
 
 /** Mark a category (or all) as read — clears the unread count and
@@ -131,7 +146,14 @@ export function notify(event: NotificationEvent): void {
  *  was the last unread category. */
 export function markRead(category?: NotificationCategory): void {
 	counts.update((c: UnreadCounts) => {
-		if (category === undefined) return emptyCounts();
+		if (category === undefined) {
+			// Chat is STATE-based: its count is the live unread-conversation
+			// total (chat-unread channel + read-state), cleared only when the
+			// user actually READS a conversation. Opening the avatar menu must
+			// not zero it while messages are still unread — so clear only the
+			// event-based categories here.
+			return { ...c, order: 0, feedback: 0 };
+		}
 		return { ...c, [category]: 0 };
 	});
 }

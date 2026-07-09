@@ -16,6 +16,7 @@
  */
 
 import { unreadCount, totalUnread, type UnreadCounts } from './index';
+import { startChatUnreadChannel } from './chatUnread';
 
 /** Holds the original (badge-less) title so we can restore it when
  *  the count goes to zero. Captured on first run. */
@@ -175,8 +176,13 @@ export function startAmbientChannels(): () => void {
 		setAppBadge(total);
 	});
 
+	// Feed the chat count into the store the ambient channels above consume.
+	// Without this the chat badge never ticks up (only `feedback` was wired).
+	const stopChatUnread = startChatUnreadChannel();
+
 	return () => {
 		unsubscribe();
+		stopChatUnread();
 		// Best-effort restore on teardown.
 		if (originalTitle !== null) document.title = originalTitle;
 	};

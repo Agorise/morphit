@@ -77,12 +77,31 @@ Rationale:
 
 ### Caching
 
-- **`Cache-Control: public, max-age=90, stale-while-revalidate=60`**
+- **`Cache-Control: public, max-age=90, stale-while-revalidate=60`** —
+  but ONLY when the batch is COMPLETE (every requested account
+  resolved to a profile row).
+- **`Cache-Control: no-store` when the batch is PARTIAL** (at least one
+  requested account is absent from the response). #2 — an absent
+  account is only *provisionally* authoritative: the usual cause is
+  indexer lag, in the 1–2 block window after the account broadcast
+  its profile op or signed up. Caching that negative result pinned it
+  in the **browser's HTTP cache**, which replays it on every load of
+  the same URL — so the fresh profile stayed invisible for up to 150s
+  and, crucially, **survived a page refresh** (a reload clears the
+  client's in-memory cache but not the browser's disk cache). The
+  symptom was a display name falling back to `@account` and an avatar
+  falling back to the identicon, with refreshing changing nothing.
+  Positive results are still cached for the full 90s; only negatives
+  are excluded. Mirrors the client's soft-null policy (cp428) and the
+  dynamic-data service-worker exclusion (cp324).
 - 90 seconds = 90 blocks on Blurt (3s block time). A user who
   updates their avatar waits ~90 seconds for it to propagate via
   the cache to other visitors' orderbook views. That's acceptable
   because the orderbook-row avatar is a nice-to-have, not a
-  correctness surface.
+  correctness surface. (The updating user themselves sees it
+  immediately: the client re-fetches their own profile with
+  `cache: 'reload'` after a confirmed broadcast, bypassing both the
+  in-memory and browser HTTP caches.)
 - `stale-while-revalidate=60` lets the CDN serve slightly stale
   responses while refetching, keeping p99 latency low.
 - Browser cache also honors this; repeated orderbook navigations

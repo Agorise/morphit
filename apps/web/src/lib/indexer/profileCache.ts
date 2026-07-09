@@ -108,7 +108,8 @@ function isFresh(entry: CacheEntry): boolean {
  */
 async function fetchBatch(
 	accounts: readonly string[],
-	signal?: AbortSignal
+	signal?: AbortSignal,
+	reload = false
 ): Promise<Record<string, ProfileResponse> | null> {
 	if (accounts.length === 0) return {};
 	if (accounts.length > MAX_BATCH_SIZE) {
@@ -126,6 +127,13 @@ async function fetchBatch(
 		const response = await fetch(url.toString(), {
 			method: 'GET',
 			headers: { accept: 'application/json' },
+			// #2 — `reload` skips the browser's HTTP cache entirely (and
+			// refreshes it). Used right after the user broadcasts their own
+			// profile: the batch endpoint's `max-age=90` means the browser
+			// would otherwise keep replaying the PRE-broadcast response, so
+			// busting only our in-memory cache wasn't enough to show the user
+			// their own new display name / avatar.
+			...(reload ? { cache: 'reload' as RequestCache } : {}),
 			signal: combined
 		});
 		if (!response.ok) {
@@ -202,7 +210,8 @@ function chunk<T>(items: readonly T[], size: number): T[][] {
  */
 export async function getProfilesBatch(
 	accounts: readonly string[],
-	signal?: AbortSignal
+	signal?: AbortSignal,
+	opts?: { reload?: boolean }
 ): Promise<Map<string, ProfileResponse | null>> {
 	// Deduplicate + strip empties. A caller passing ['alice', '',
 	// 'alice', 'bob'] gets one lookup per distinct non-empty name.
@@ -216,6 +225,12 @@ export async function getProfilesBatch(
 	const awaitingInFlight: Array<{ account: string; promise: Promise<ProfileResponse | null> }> = [];
 
 	for (const account of deduped) {
+		// #2 — a reload request must not be answered from any cached or
+		// in-flight value; the whole point is to go past every cache layer.
+		if (opts?.reload) {
+			needsFetch.push(account);
+			continue;
+		}
 		// 1. Fresh cache hit — return immediately.
 		const cached = cache.get(account);
 		if (cached && isFresh(cached)) {
@@ -240,7 +255,7 @@ export async function getProfilesBatch(
 	const fetchPromises: Promise<void>[] = [];
 	for (const chunkOfAccounts of chunk(needsFetch, MAX_BATCH_SIZE)) {
 		// One batch HTTP promise. Resolves to the full record at once.
-		const batchPromise = fetchBatch(chunkOfAccounts, signal);
+		const batchPromise = fetchBatch(chunkOfAccounts, signal, opts?.reload === true);
 
 		// Per-account promises derived from the batch promise.
 		// Each one extracts its own entry from the batch response.
@@ -317,6 +332,39 @@ export async function getProfileCached(
 ): Promise<ProfileResponse | null> {
 	const batch = await getProfilesBatch([account], signal);
 	return batch.get(account) ?? null;
+}
+
+/** Result of {@link getProfileCachedDetailed}. */
+export interface ProfileFetchResult {
+	/** The profile, or null (no profile OR fetch failed — see `failed`). */
+	readonly profile: ProfileResponse | null;
+	/** #2 — true when `profile` is null because the fetch FAILED (network /
+	 *  non-200 / timeout / abort), NOT because the account authoritatively has
+	 *  no profile. `getProfileCached` collapses both into a bare null, so a
+	 *  transient indexer blip is indistinguishable from "no profile" — which
+	 *  caused the self-avatar store to CLEAR a perfectly good avatar to the
+	 *  identicon on any hiccup. Callers that render a cached/prior value use
+	 *  this flag to hold that value through a blip instead of blanking it. */
+	readonly failed: boolean;
+}
+
+/**
+ * Like {@link getProfileCached}, but distinguishes a failed fetch from an
+ * authoritative "no profile" via the {@link ProfileFetchResult.failed} flag.
+ * The distinction comes from the cache entry's soft-null marker (cp428): a
+ * soft null was a fetch failure, a hard null is authoritative.
+ */
+export async function getProfileCachedDetailed(
+	account: string,
+	signal?: AbortSignal,
+	opts?: { reload?: boolean }
+): Promise<ProfileFetchResult> {
+	const batch = await getProfilesBatch([account], signal, opts);
+	const profile = batch.get(account) ?? null;
+	// After the batch resolves there's always a cache entry for `account`;
+	// a null whose entry is `soft` came from a failure, not an answer.
+	const failed = profile === null && cache.get(account)?.soft === true;
+	return { profile, failed };
 }
 
 /**

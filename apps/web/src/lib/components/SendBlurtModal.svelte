@@ -39,6 +39,7 @@
 	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 	import { isValidBlurtAccount } from '$lib/chat/payload';
 	import LazyLoadError from '$components/LazyLoadError.svelte';
+	import { validateBlurtAmount, floorToBlurtPrecision } from '$lib/blurt/sendValidation';
 
 	interface Props {
 		/** The sending account (the wallet owner — always self). */
@@ -107,13 +108,31 @@
 
 	const normalizedRecipient = $derived(normalizeAccount(recipient));
 	const amountNum = $derived(Number(amountInput.trim()));
-	const amountValid = $derived(
-		Number.isFinite(amountNum) && amountNum > 0 && amountNum <= blurtBalance + 1e-6
-	);
+
+	/** Shape + range validation lives in `$lib/blurt/sendValidation` so it can be
+	 *  unit-tested: BLURT has 3 decimals and `formatBlurtAmount` ROUNDS, so
+	 *  `1.0006` would silently broadcast `1.001` and `0.0004` would build
+	 *  `0.000 BLURT`. Money is never rounded up behind the user's back. */
+	const amountCheck = $derived(validateBlurtAmount(amountInput, blurtBalance));
+	const amountPrecisionOk = $derived(amountCheck.precisionOk);
+	const amountValid = $derived(amountCheck.valid);
+
+	/** The active-key password is REQUIRED — nothing can be signed without it.
+	 *  It was missing from `canSend`, so "Send BLURT" sat enabled over an empty
+	 *  password field and the user only learned it was needed after clicking.
+	 *
+	 *  Gating on "non-empty" rather than "this password actually unlocks the
+	 *  key" is deliberate: verifying it means running the Argon2id KDF, which is
+	 *  intentionally slow, and doing that on every keystroke would burn the
+	 *  user's CPU to tell them something the submit path already tells them.
+	 *  A wrong password still fails at submit with `error_bad_password`. */
+	const passwordFilled = $derived(passwordInput.length > 0);
+
 	const canSend = $derived(
 		account.length > 0 &&
 			recipientState === 'valid' &&
 			amountValid &&
+			passwordFilled &&
 			phase.kind !== 'sending'
 	);
 
@@ -162,7 +181,10 @@
 
 	function useFullBalance(): void {
 		if (!Number.isFinite(blurtBalance) || blurtBalance <= 0) return;
-		amountInput = blurtBalance.toFixed(3);
+		// FLOOR, never round: `toFixed(3)` on a balance with more precision than
+		// the asset would fill the field with more than the user actually has,
+		// and the form would then refuse to send it.
+		amountInput = floorToBlurtPrecision(blurtBalance);
 	}
 
 	async function confirm(): Promise<void> {
@@ -373,6 +395,7 @@
 					autocomplete="off"
 					disabled={phase.kind === 'sending'}
 					placeholder={$_('profile.send.amount_placeholder') as string}
+					aria-invalid={amountInput.trim().length > 0 && !amountValid}
 					class="mt-1 w-full rounded-lg border border-ink-300 bg-white px-3 py-2 font-mono text-sm dark:border-ink-700 dark:bg-ink-900"
 				/>
 			</label>
@@ -389,7 +412,13 @@
 					{$_('profile.wallet.use_full')}
 				</button>
 			</div>
-			{#if amountInput.trim().length > 0 && !amountValid}
+			{#if amountInput.trim().length > 0 && !amountPrecisionOk}
+				<!-- Precision gets its OWN message: "up to your available balance" would
+				     be baffling advice for someone who typed 0.0004. -->
+				<p class="mt-1 text-xs text-red-600 dark:text-red-400">
+					{$_('profile.wallet.error_amount_precision')}
+				</p>
+			{:else if amountInput.trim().length > 0 && !amountValid}
 				<p class="mt-1 text-xs text-red-600 dark:text-red-400">{$_('profile.wallet.error_amount')}</p>
 			{/if}
 
@@ -424,6 +453,7 @@
 					bind:value={passwordInput}
 					autocomplete="current-password"
 					disabled={phase.kind === 'sending'}
+					aria-invalid={passwordError.length > 0}
 					class="mt-1 w-full rounded-lg border border-ink-300 bg-white px-3 py-2 text-sm dark:border-ink-700 dark:bg-ink-900"
 				/>
 				{#if passwordError}

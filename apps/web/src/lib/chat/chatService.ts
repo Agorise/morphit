@@ -310,23 +310,23 @@ export interface ChatController {
 	snapshot(): readonly LocalMessage[];
 }
 
-/** Defense-in-depth fallback poll cadence. SSE is the primary
- *  delivery path; this catches messages that may have been
- *  missed due to a bus emit drop, network glitch during SSE
- *  re-connect, or future code path that mutates chat state
- *  without going through recordChatChange. 60s mirrors the
- *  orderbook-stream fallback poll. */
-const FALLBACK_POLL_INTERVAL_MS = 60_000;
+/** Fallback poll cadence. SSE is the primary delivery path (appends
+ *  typically arrive <5s after broadcast); this poll runs ALONGSIDE it as
+ *  a safety net for messages missed on a bus-emit drop, a network glitch
+ *  during SSE re-connect, or when EventSource is unavailable/blocked
+ *  entirely. Was 60s — far too slow when the SSE is flaky (the felt
+ *  "chat is way too slow"). Now ~4-6s (base + jitter) so the WORST-CASE
+ *  latency, even with SSE fully down, stays inside the ≤6s fastchat
+ *  target instead of a full minute. */
+const FALLBACK_POLL_INTERVAL_MS = 4_000;
 
 /** Initial history page size — the newest 50 messages on first
  *  load. Matches the design-doc recommendation. */
 const HISTORY_PAGE_SIZE = 50;
-/** Maximum random jitter we add to the fallback poll, to spread
- *  client load across block boundaries instead of every tab
- *  pinging at the same millisecond. Higher than the old
- *  per-poll jitter because polls are now infrequent enough that
- *  alignment doesn't auto-spread. */
-const POLL_JITTER_MS = 5_000;
+/** Random jitter added to the fallback poll so clients don't all ping on
+ *  the same block boundary. Kept small (≤2s) so base + jitter stays within
+ *  the ≤6s fastchat target. */
+const POLL_JITTER_MS = 2_000;
 /** Placeholder text for messages we can't decrypt — shown when
  *  the AEAD verification fails (malformed ciphertext, recipient
  *  not us, key rotation since the message was sent, AAD tamper

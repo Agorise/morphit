@@ -72,6 +72,7 @@ import { releaseRoute } from '$api/release';
 import { fxRoute } from '$api/fx';
 import { chatRoute } from '$api/chat';
 import { chatStreamRoute } from '$api/chatStream';
+import { chatActivityStreamRoute } from '$api/chatActivityStream';
 import { chatIdentityRoute } from '$api/chatIdentity';
 import { chatReadStateRoute } from '$api/chatReadState';
 import { chatAdmissionRoute } from '$api/chatAdmission';
@@ -535,6 +536,14 @@ async function main(): Promise<void> {
 	// per-minute budget with REST GETs.  Per-IP open-connection
 	// caps belong at the reverse-proxy layer.
 	app.route('/v1/chat', chatStreamRoute(db, poller));
+
+	// Global (all-conversations) chat-activity SSE for one account. Its own
+	// /v1/chat-activity prefix so it can't collide with /v1/chat/:a/:b (an
+	// account could be named "stream"/"events"). Not rate-limited — long-lived
+	// SSE; per-IP connection caps belong at the reverse proxy. Pushes only a
+	// peer-account ping (on-chain-public), never ciphertext — see the file
+	// header for the full privacy rationale.
+	app.route('/v1/chat-activity', chatActivityStreamRoute());
 
 	const chatApp = new Hono();
 	chatApp.use('*', rateLimit('list', config.listRatePerMin));

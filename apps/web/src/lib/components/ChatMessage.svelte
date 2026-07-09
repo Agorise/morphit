@@ -789,11 +789,15 @@
 						</code>
 						<button
 							type="button"
-							class="flex-none rounded-md border border-current px-2 py-1 text-xs font-semibold opacity-70 hover:opacity-100"
+							class="flex-none rounded-md border px-2 py-1 text-xs font-semibold {copiedKind ===
+							'address'
+								? 'border-green-600 bg-green-600 text-white opacity-100'
+								: 'border-current opacity-70 hover:opacity-100'}"
 							onclick={() => copyText(p.address, 'address')}
 							aria-label={$_('common.copy') as string}
 						>
-							{copiedKind === 'address' ? $_('chat.address.pill_copied') : $_('common.copy')}
+							{#if copiedKind === 'address'}<span aria-hidden="true">✓</span>
+								{$_('chat.address.pill_copied')}{:else}{$_('common.copy')}{/if}
 						</button>
 					</div>
 					{#if p.method === 'usdt' && usdtNetworkValid}
@@ -879,10 +883,14 @@
 								</code>
 								<button
 									type="button"
-									class="flex-none rounded-md border border-red-700 px-2 py-1 text-xs font-semibold text-red-900 hover:bg-red-200 dark:border-red-500 dark:text-red-100 dark:hover:bg-red-900"
+									class="flex-none rounded-md border px-2 py-1 text-xs font-semibold {copiedKind ===
+									'memo'
+										? 'border-green-600 bg-green-600 text-white'
+										: 'border-red-700 text-red-900 hover:bg-red-200 dark:border-red-500 dark:text-red-100 dark:hover:bg-red-900'}"
 									onclick={() => copyText(p.memo as string, 'memo')}
 								>
-									{copiedKind === 'memo' ? $_('chat.address.pill_copied') : $_('common.copy')}
+									{#if copiedKind === 'memo'}<span aria-hidden="true">✓</span>
+										{$_('chat.address.pill_copied')}{:else}{$_('common.copy')}{/if}
 								</button>
 							</div>
 							<p class="mt-2 text-xs text-red-900 dark:text-red-100">
@@ -1164,11 +1172,15 @@
 						</div>
 						<button
 							type="button"
-							class="flex-none rounded-md border border-current px-2 py-1 text-xs font-semibold opacity-70 hover:opacity-100"
+							class="flex-none rounded-md border px-2 py-1 text-xs font-semibold {copiedKind ===
+							'txid'
+								? 'border-green-600 bg-green-600 text-white opacity-100'
+								: 'border-current opacity-70 hover:opacity-100'}"
 							onclick={() => copyText(p.txid, 'txid')}
 							aria-label={$_('common.copy') as string}
 						>
-							{copiedKind === 'txid' ? $_('chat.address.pill_copied') : $_('common.copy')}
+							{#if copiedKind === 'txid'}<span aria-hidden="true">✓</span>
+								{$_('chat.address.pill_copied')}{:else}{$_('common.copy')}{/if}
 						</button>
 					</div>
 					{#if p.note}

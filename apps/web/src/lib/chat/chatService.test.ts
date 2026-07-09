@@ -557,14 +557,15 @@ describe('chatService — controller', () => {
 		for (let i = 0; i < 4; i++) await Promise.resolve();
 		expect(deps.fetchMock).toHaveBeenCalledTimes(1);
 
-		// 3.5s — no poll yet (the old visible cadence is gone;
-		// fallback runs at 60s + up-to-5s jitter).
+		// 3.5s — no poll yet (fallback base is 4s).
 		await vi.advanceTimersByTimeAsync(3500);
 		expect(deps.fetchMock).toHaveBeenCalledTimes(1);
 
-		// 70s total (well past the 65s upper bound) — fallback fires.
-		await vi.advanceTimersByTimeAsync(70_000);
-		expect(deps.fetchMock).toHaveBeenCalledTimes(2);
+		// Past the fallback cadence (base 4s + up-to-2s jitter = ≤6s) — the
+		// fallback poll has fired at least once, so worst-case chat latency
+		// stays inside the ≤6s fastchat target (was 60s).
+		await vi.advanceTimersByTimeAsync(3000);
+		expect(deps.fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2);
 
 		ctrl.destroy();
 	});

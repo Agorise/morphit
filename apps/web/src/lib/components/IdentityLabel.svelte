@@ -457,7 +457,9 @@
 			onfocus={ensureFullKey}
 			aria-label={$_('identity.copy_full_key_aria')}
 			title={full}
-			class="ms-0.5 inline-flex h-5 w-5 flex-none items-center justify-center rounded text-ink-500 opacity-0 transition hover:bg-ink-100 hover:text-morphit-emerald focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald group-hover:opacity-100 dark:text-ink-400 dark:hover:bg-ink-800"
+			class="ms-0.5 inline-flex h-5 w-5 flex-none items-center justify-center rounded transition hover:bg-ink-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:hover:bg-ink-800 {copied
+				? 'text-green-600 opacity-100 dark:text-green-400'
+				: 'text-ink-500 opacity-0 hover:text-morphit-emerald group-hover:opacity-100 dark:text-ink-400'}"
 		>
 			{#if copied}
 				<svg

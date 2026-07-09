@@ -224,6 +224,8 @@ location = /service-worker.js { expires -1; try_files $uri =404; }
 location = /verify.json       { expires -1; try_files $uri =404; }
 ```
 
+**Don't add your own caching on top of `/v1/...`.** The indexer already sets the right `Cache-Control` per response, and it varies deliberately: `GET /v1/profiles` returns `max-age=90` only when every requested account was found, and `no-store` when any account is missing. A missing account usually just means the indexer hasn't caught up with that person's brand-new profile yet — if an edge cache pins that answer, visitors see their display name as `@account` and their avatar as the default identicon, and refreshing the page won't fix it. Proxy `/v1/` straight through and let the upstream headers win. (If you enable BunkerWeb's `USE_CACHE`, check it isn't configured to override upstream cache directives.)
+
 ### 11.3 Security headers (copy verbatim)
 
 Add these two headers to your HTTPS server block. **Keep them byte-for-byte identical** to the shipped `ops/nginx/web.conf` — they lock the site to itself and to the known Blurt RPC servers:

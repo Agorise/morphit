@@ -647,23 +647,27 @@
       "recipient_label": "收款人",
       "from_label": "付款人",
       "no_memo_notice": "不會包含鏈上備註 — 您的交易上下文留在此加密聊天中。",
-      "password_label": "活動密鑰密碼",
+      "password_label": "您的密碼",
       "confirm": "發送 BLURT",
       "paying": "正在發送…",
       "success_toast": "BLURT 已發送。收據已發佈到聊天。",
       "success_toast_no_chat": "BLURT 已發送。無法將收據發佈到聊天 — 您可以手動標記資金已發送。",
       "error": {
-        "password_required": "請輸入您的活動密鑰密碼。",
+        "password_required": "請輸入您的密碼。",
         "bad_password": "密碼錯誤。",
-        "no_active_envelope": "未設置活動密鑰。請從外部錢包支付。",
-        "broadcast_failed": "無法發送轉賬。請檢查餘額或使用外部錢包。",
+        "no_active_envelope": "您登入時未使用活動密鑰（僅發佈密鑰或唯讀工作階段）。若要傳送 BLURT，請使用您的密碼或主密鑰登入，或從外部錢包付款。",
+        "broadcast_failed": "無法傳送轉賬。",
         "no_account": "未註冊帳戶。",
         "self_pay": "您不能向自己付款。",
-        "invalid_amount": "金額無效。"
+        "invalid_amount": "金額無效。",
+        "chain_rejected": "區塊鏈拒絕了此轉賬：",
+        "instance_unreachable": "無法連接到您的 Morphit 實例來傳送轉賬。請檢查您的網絡連線後重試。",
+        "sign_failed": "無法簽署此轉賬——您的密鑰可能無效。請嘗試登出後重新登入。"
       },
       "memo_label": "備註",
       "with_memo_notice": "上面的備註將包含在鏈上轉賬中,以便賣家將此付款與您的交易匹配。",
-      "success_toast_no_chat_with_txid": "BLURT 已發送。無法在聊天中發布收據 — 複製此 txid 以手動標記資金已發送：{txid}"
+      "success_toast_no_chat_with_txid": "BLURT 已發送。無法在聊天中發布收據 — 複製此 txid 以手動標記資金已發送：{txid}",
+      "password_hint": "您用來解鎖 Morphit 的密碼。它會在本裝置上解密您的活動密鑰以進行簽署——您無需在此貼上任何密鑰，亦不會向任何地方傳送任何內容。"
     },
     "trade_event": {
       "address_shared_title": "已共享新地址",
@@ -1669,6 +1673,10 @@
       "what_is_barter": {
         "q": "Morphit 上嘅以物易物係乜嘢?",
         "a": "以物易物畀你買賣商品同服務——唔係加密貨幣——並以加密貨幣結算。賣籃嘅婆婆、整單車嘅鄰居、攞一箱橙嚟換嘅人:佢哋將提供嘅嘢掛出嚟,用本地貨幣定價,並揀接受邊啲加密貨幣(例如 XMR、BTC 同 DOGE)。呢個係**一條掛單**,唔係每種幣一條。\n\n**點運作:**喺「條款」入面準確描述你嘅提供內容,設定一個本地貨幣價值(單一價格或區間),並剔選你所在城鎮真正使用嘅加密貨幣。買家好似睇其他掛單噉睇貨品,淨係可以用你接受嘅加密貨幣畀錢——如果你冇列出 Decred,就冇人可以用 Decred 畀錢你。你同買家喺聊天入面安排交收,並用佢揀選、你接受嘅加密貨幣結算。\n\n**掛單上冇地址:**貨品喺 Morphit 以外易手——當面或郵寄——所以以物易物掛單冇加密貨幣收款地址,Morphit 亦從來唔會掂貨品或款項。請講常識安全:喺公眾地方見面,淨係分享必要嘅資訊,對陌生人保持警惕。\n\n喺 Morphit 上,以物易物**淨係用嚟交換**——唔可以用佢畀 Morphit 嘅掛單費(嗰啲仍然係 Blurt/BTC/XMR)。佢淨係用嚟交換貨品,冇其他。"
+      },
+      "what_is_a_txid": {
+        "q": "甚麼是交易 ID（或 Hash）？",
+        "a": "當你發送加密貨幣時，區塊鏈會永久記錄這筆付款，並給它一個稱為交易 ID 的唯一指紋。不同錢包的叫法不一樣——你可能看到「TxID」、「Transaction Hash」、「Tx Hash」，或乾脆叫「Hash」（例如 Mycelium 就稱它為「Hash」）。它是一長串字母和數字，通常有 64 個字元（Blurt 的是 40 個）。尋找方法：開啟錢包，點開你剛發送的那筆付款，複製它顯示的 ID 或 Hash。把它貼上到 Morphit，就能讓你的交易對手——以及在支付挂単費時讓網絡——確認這筆付款確實發生了。該 ID 只證明這一筆付款已完成，不會洩露你錢包裡的其他任何資訊。"
       }
     },
     "share_link": "分享",
@@ -1682,7 +1690,7 @@
   },
   "feature_bid": {
     "title": "推廣此訂單！",
-    "explainer": "支付 BLURT 在選定時間內將此訂單推廣至主訂單簿上方及主頁。最多 5 個並發位置;每小時出價最高者勝出。",
+    "explainer": "支付 BLURT，將此訂單展示喺主訂單簿上方以及首頁 {hours, plural, other {# 小時}}。僅有 {slots} 個位置；每小時出價最高者勝出：",
     "hours_label": "推廣多久?",
     "hours_option": "{n}小時",
     "cost_label": "總費用",
@@ -1796,7 +1804,7 @@
     "heading": "第一次交易?這就是流程",
     "step_1": "與另一方就價格和付款方式達成一致。",
     "step_2_warn": "等等!",
-    "step_2": "如果你要發送加密貨幣,請等到你真正收到法幣(不只是「待處理」),再發送加密貨幣。一旦發送,就無法收回。",
+    "step_2": "如果您要傳送加密貨幣，請務必先真正收到約定的資產（現金、易貨等）後再傳送。一旦發出，將無法追回。",
     "step_3": "交易完成後,在 /my/orders 留下評價,讓未來的交易者信任你們雙方。",
     "faq_link": "閱讀完整教程",
     "dismiss_aria": "關閉此指南"
@@ -2205,7 +2213,6 @@
       "edit_window_countdown": "編輯視窗:{remaining}",
       "edit_window_tooltip": "訂單僅可在發布後 15 分鐘內編輯。之後需要取消並重新發布。",
       "edit_window_aria": "剩餘編輯時間:{remaining}",
-      "feedback_no_counterparty": "暫無可評價嘅交易對手",
       "feedback_pick_prompt": "你同邊個完成咗交易？",
       "not_visible_orderbook": "未在訂單簿中顯示"
     },
@@ -2242,7 +2249,8 @@
     },
     "fee_status_banner": {
       "heading": "費用狀態",
-      "body": "下面每個訂單都會顯示其掛單費用狀態。訂單只有在費用通過驗證後才會出現在公開掛單簿中——標記為「未收到」「不足」或「尚未驗證」即說明訂單為何可能不在其中。"
+      "body": "💡 下方每個訂單都會顯示其掛單費狀態。訂單只有在費用通過驗證後才會出現在公開訂單簿中——標記為「未收到」「支付不足」或「尚未驗證」就是某個訂單在那裡看起來缺失的原因。",
+      "dismiss": "忽略此提示"
     }
   },
   "nav": {
@@ -2554,8 +2562,8 @@
   },
   "order_detail": {
     "loading": "正在載入訂單…",
-    "not_found_title": "找不到訂單",
-    "not_found_body": "此訂單不存在，或從未由該帳戶發佈。",
+    "not_found_title": "找不到此訂單",
+    "not_found_body": "如果你剛剛發佈，請再等一分鐘——區塊鏈可能仍在確認它，點擊「再次檢查」。否則此訂單可能不存在，或並非由此帳戶發佈。",
     "back_to_profile": "返回個人主頁",
     "error_title": "無法載入此訂單",
     "error_body": "訪問索引器時出錯。請稍後再試。",
@@ -2583,7 +2591,10 @@
     "fee_pending_external_hint": "此訂單使用 BTC 或 XMR 作為掛單費。Morphit 正在等待社群驗證者見證付款。在此之前,訂單可見但尚未被認可。",
     "price_label": "價格",
     "error_load_failed": "無法載入呢個訂單。請嘗試刷新。",
-    "cancel_button": "取消呢張訂單"
+    "cancel_button": "取消呢張訂單",
+    "posting_title": "你的訂單正在發佈…",
+    "posting_body": "此訂單正在由區塊鏈確認，可能需要一分鐘才會出現。我們會自動持續檢查——無需重新整理。",
+    "check_again": "再次檢查"
   },
   "orderbook": {
     "heading": "訂單簿",
@@ -3110,7 +3121,7 @@
       "xmr_hint": "將手續費發送到我們的 Monero 地址，然後在下方貼上交易 ID 和證明。",
       "txid_label": "交易 ID",
       "txid_placeholder": "貼上 64 位十六進制交易 ID",
-      "txid_required": "交易 ID 是必填項。",
+      "txid_required": "需要交易 ID 或 Hash。",
       "txid_malformed": "交易 ID 必須是 64 位十六進制字串。",
       "txid_hint": "你的訂單在付款在其鏈上確認之前不會出現在訂單簿中。",
       "txid_tooltip": "你錢包中的交易 ID — 一長串十六進制字元,證明你的付款。點擊查看在哪裡找到它的詳細資訊。",
@@ -3465,7 +3476,8 @@
       "error_broadcast": "該操作未能在鏈上完成。請重試。",
       "error_chain_rejected": "網絡拒絕了此交易：{reason}",
       "error_unreachable": "無法連接到你的 Morphit 實例進行廣播。請檢查網絡連接後重試。",
-      "error_amount": "請輸入不超過可用餘額的數量。"
+      "error_amount": "請輸入不超過可用餘額的數量。",
+      "error_amount_precision": "最多使用 3 位小數——可發送嘅最小金額為 0.001 BLURT。"
     },
     "send": {
       "title": "發送 BLURT",

@@ -40,7 +40,7 @@
  * redirect logic).
  */
 
-import { redirect } from '@sveltejs/kit';
+import { redirect, error } from '@sveltejs/kit';
 import { browser } from '$app/environment';
 import { waitLocale } from 'svelte-i18n';
 import { SUPPORTED_LOCALES, DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
@@ -76,6 +76,23 @@ export async function load({
 }): Promise<{ lang: LocaleCode }> {
 	const code = SUPPORTED_LOCALES.find((l) => l.code === params.lang)?.code;
 	if (!code) {
+		// Root static files — /canary.txt, /verify.json, /pgp_keys.asc,
+		// /rss/*.xml, /robots.txt, /sitemap.xml — live at the origin ROOT and
+		// must NEVER be locale-prefixed. A present static file is served by
+		// nginx directly and never reaches this app, so if one lands here it's
+		// because the file is (transiently) absent — e.g. `morphit-ops upgrade`
+		// rebuilds `build/`, which wipes the freshly-signed canary until it's
+		// re-uploaded. Locale-redirecting `/canary.txt` → `/en/canary.txt` in
+		// that window only produces a SECOND, more-confusing 404 under a
+		// nonsensical locale path (the "Canary link → /en/canary.txt → 404"
+		// bug). Fail cleanly at the real path instead, so the moment the file
+		// is restored the same link just works. Detection: a file extension on
+		// the last path segment — every localizable page is extensionless
+		// (/faq, /orderbook, /post), every root static asset has one.
+		const lastSegment = url.pathname.split('/').pop() ?? '';
+		if (/\.[a-z0-9]+$/i.test(lastSegment)) {
+			throw error(404, `${url.pathname} not found`);
+		}
 		// The `[lang]` segment isn't a supported locale.  This is almost
 		// always a shared link with the `/<lang>/` prefix stripped (e.g.
 		// `/faq?q=how_morphit_protects_me` instead of `/en/faq?q=…`).

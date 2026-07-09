@@ -30,6 +30,7 @@ import { join } from 'node:path';
 import { perAssetFeedHandler, globalFeedHandler } from '../src/api/rssOrderbookHandlers.ts';
 import type { Database } from '../src/db/pool.ts';
 import type { Config } from '../src/config/index.ts';
+import { feedbackAggregateJoin } from '$api/reputationJoin';
 
 /** Sock-puppet NOT-EXISTS table set referenced in a feedback aggregate.
  *  Used to assert the feed's min_trades count and the orderbook's use
@@ -259,16 +260,39 @@ await scenario('min_trades fail-open (0 / negative / >100 / non-numeric → no c
 });
 
 await scenario('PARITY: feed min_trades uses the SAME exclusion tables as orderbook.ts', async () => {
-	// Extract the sock-puppet NOT-EXISTS table set from orderbook.ts's
-	// `f` aggregate and from the feed's generated min_trades SQL; they
-	// MUST match, or the feed's reputation count would disagree with the
-	// orderbook's (a trader hidden by one could leak into the other).
+	// Extract the sock-puppet NOT-EXISTS table set the ORDERBOOK applies, and
+	// the set the feed's generated min_trades SQL applies; they MUST match, or
+	// the feed's reputation count would disagree with the orderbook's (a trader
+	// hidden by one could leak into the other).
+	//
+	// cp442 — compare the GENERATED SQL on both sides, not the source text. The
+	// clauses now come from `FEEDBACK_EXCLUSIONS_SQL` in `$api/reputationJoin`
+	// (one definition, spliced into the orderbook/featured aggregate AND the
+	// feed's count-only subquery), so scraping either file's literal text would
+	// find a `${...}` placeholder rather than tables. What actually reaches
+	// Postgres is what matters.
+	//
+	// Also assert orderbook.ts genuinely CONSUMES the shared join — otherwise
+	// this parity check could pass against a module nobody uses.
 	const obSrc = readFileSync(
 		join(import.meta.dirname, '..', 'src', 'api', 'orderbook.ts'),
 		'utf-8'
 	);
-	const obTables = exclusionTables(feedbackBlock(obSrc));
-	if (obTables.length === 0) throw new Error('extracted no exclusion tables from orderbook.ts');
+	if (!/feedbackAggregateJoin\('o'\)/.test(obSrc)) {
+		throw new Error('orderbook.ts no longer consumes the shared feedbackAggregateJoin');
+	}
+	const obTables = exclusionTables(feedbackBlock(feedbackAggregateJoin('o')));
+	if (obTables.length === 0) throw new Error('extracted no exclusion tables from the shared aggregate');
+
+	// ABSOLUTE guard, not just relative. Since cp442 both sides splice the SAME
+	// constant, so "they agree" is now true by construction — parity alone can no
+	// longer notice someone deleting an exclusion from that one definition. Pin
+	// the actual table set.
+	assertEqual(
+		obTables,
+		['one_way_pile_on', 'related_accounts', 'review_concentration', 'suspicious_reciprocity'],
+		'the shared aggregate still applies ALL FOUR sock-puppet exclusions'
+	);
 
 	const mock = makeMockDb([]);
 	await perAssetFeedHandler('btc.xml', mock.db, FAKE_CONFIG, { min_trades: '5' });

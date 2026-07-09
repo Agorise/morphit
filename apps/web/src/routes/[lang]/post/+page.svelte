@@ -3373,7 +3373,7 @@
 					</h2>
 					<Tooltip
 						textKey="post_order.fee_method.txid_tooltip"
-						faqKey="xmr_txid"
+						faqKey="what_is_a_txid"
 						ariaLabel={$_('post_order.fee_method.txid_tooltip_aria')}
 					/>
 				</div>

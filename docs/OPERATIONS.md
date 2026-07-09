@@ -638,7 +638,14 @@ back-fill.
 >   `curl http://127.0.0.1:8124/health` → `{"status":"ok","transport":"http"}`.)
 > - **Canary** — whether `apps/web/build/canary.txt` is current
 >   (parsed from its `Valid through:` line) or overdue for its weekly
->   regeneration.
+>   regeneration. Since v1.2.0 the generator writes the sitewide human
+>   format — `22 July, 2026 @ 23:45:18 UTC` — and health reads BOTH that
+>   and the older Zulu ISO form (`2026-07-22T23:45:18Z`), so a canary you
+>   signed before upgrading keeps verifying. Both are parsed strictly: a
+>   misspelled month or a timestamp with no timezone reports `unparsable`
+>   rather than being guessed at, because a canary's freshness is the
+>   whole security signal and a silently-skewed one is worse than an
+>   obviously broken one.
 >
 > It resolves the indexer URL from `--url`, then `MORPHIT_OPS_HEALTH_URL`,
 > then `--host`/`--port` (or the indexer's own
@@ -5746,6 +5753,8 @@ The in-app **"Load it now" update snackbar** that prompts users to reload after 
 - `ops/nginx/web.conf` (bare-metal) has the equivalent blocks (with a full security-header re-emission, since `add_header` in a `location` drops inherited headers — see the comment there; the hand-paste example in `RUN-A-MORPHIT-NODE.md` uses the shorter `expires -1` form, which sets `no-cache` without that footgun).
 
 BunkerWeb passes an upstream `Cache-Control: no-cache` through and honors it for its own caching, so the frontend-container block is sufficient — you do **not** need a separate BunkerWeb cache rule. (If you have explicitly enabled BunkerWeb's `USE_CACHE`, confirm it isn't configured to override upstream cache directives for these two paths.)
+
+**Never let an edge cache override the indexer's `/v1/` cache headers.** The read API sets `Cache-Control` per response and the value is load-bearing. In particular, `GET /v1/profiles` (the batch profile lookup behind every avatar + display name) returns `public, max-age=90, stale-while-revalidate=60` only when EVERY requested account resolved to a profile row, and `no-store` when any requested account is absent — because an absent account is normally just indexer lag in the 1–2 block window after that account broadcast its profile op or signed up. If a proxy or CDN caches that negative response anyway, the affected users' display names fall back to `@account` and their avatars to the identicon, and (since the client's in-memory cache is cleared by a reload but the browser's disk cache is not) **a page refresh does not fix it** — only a hard reload does. Proxy `/v1/` through untouched.
 
 > The app no longer relies *solely* on the service-worker byte-diff: the update-version poll compares `verify.json`'s deployed version to the running bundle's version on every tab-foreground and surfaces the snackbar on a mismatch even if a proxy served the worker stale. The `no-cache` config above is still the right fix — it keeps the worker itself updating promptly and the poll cheap — but the two together mean the prompt appears regardless of proxy quirks.
 

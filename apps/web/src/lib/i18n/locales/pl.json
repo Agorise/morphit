@@ -5,7 +5,7 @@
   },
   "about_this_instance": {
     "heading": "O tej instancji",
-    "lede": "Co ta instancja Morphit mówi o sobie, żebyś mógł zweryfikować.",
+    "lede": "Co ta instancja Morphit sobą reprezentuje, żebyś mógł zweryfikować.",
     "error": {
       "fetch_failed": "Nie udało się pobrać informacji weryfikacyjnych tej instancji.",
       "malformed": "verify.json jest obecny, ale nieprawidłowo sformułowany. Traktuj tę instancję z ostrożnością.",
@@ -655,15 +655,19 @@
       "error": {
         "password_required": "Wprowadź hasło klucza aktywnego.",
         "bad_password": "Nieprawidłowe hasło.",
-        "no_active_envelope": "Brak skonfigurowanego klucza aktywnego. Zapłać z zewnętrznego portfela.",
-        "broadcast_failed": "Nie udało się wysłać przelewu. Sprawdź saldo lub użyj zewnętrznego portfela.",
+        "no_active_envelope": "Jesteś zalogowany bez klucza aktywnego (sesja z kluczem publikacji lub tylko do odczytu). Aby wysłać BLURT, zaloguj się hasłem lub kluczem głównym — albo zapłać z zewnętrznego portfela.",
+        "broadcast_failed": "Nie udało się wysłać transferu.",
         "no_account": "Brak konta.",
         "self_pay": "Nie możesz zapłacić sobie samemu.",
-        "invalid_amount": "Nieprawidłowa kwota."
+        "invalid_amount": "Nieprawidłowa kwota.",
+        "chain_rejected": "Blockchain odrzucił transfer:",
+        "instance_unreachable": "Nie można było połączyć się z Twoją instancją Morphit, aby wysłać transfer. Sprawdź połączenie i spróbuj ponownie.",
+        "sign_failed": "Nie udało się podpisać transferu — Twój klucz może być nieprawidłowy. Spróbuj się wylogować i zalogować ponownie."
       },
       "memo_label": "Notatka",
       "with_memo_notice": "Powyższa notatka zostanie dołączona do przelewu w łańcuchu, aby sprzedawca mógł powiązać tę płatność z twoją transakcją.",
-      "success_toast_no_chat_with_txid": "BLURT wysłane. Nie można było opublikować potwierdzenia w czacie — skopiuj ten txid, aby ręcznie oznaczyć środki jako wysłane: {txid}"
+      "success_toast_no_chat_with_txid": "BLURT wysłane. Nie można było opublikować potwierdzenia w czacie — skopiuj ten txid, aby ręcznie oznaczyć środki jako wysłane: {txid}",
+      "password_hint": "Hasło, którym odblokowujesz Morphit. Odszyfrowuje Twój klucz aktywny na tym urządzeniu, aby podpisać — nigdy nie wklejasz tu klucza, a nic nie jest nigdzie wysyłane."
     },
     "trade_event": {
       "address_shared_title": "Udostępniono nowy adres",
@@ -805,7 +809,7 @@
     "summary_partial": "{slots} z {max} slotów zajętych dziś — każda licytacja wygrywa widoczny slot.",
     "chart_aria": "Dzienny wykres ceny rozliczeniowej z ostatnich {days} dni",
     "legend": "Wysokość słupka = cena rozliczeniowa (BLURT/godz). Pełna zieleń = wszystkie sloty zajęte (aukcja konkurencyjna). Wyblakła zieleń = część slotów zajęta. Szary = brak licytacji w danym dniu.",
-    "no_history_yet": "Brak licytacji wyróżnionych slotów w ostatnich {days} dniach. Bądź pierwszy.",
+    "no_history_yet": "Nikt nie rozpoczął jeszcze licytacji o wyróżnione sloty w ciągu ostatnich {days} dni. Bądź pierwszy.",
     "no_history_yet_active": "Brak jeszcze historii cen wyróżnionych slotów z ostatnich {days} dni."
   },
   "common": {
@@ -1669,6 +1673,10 @@
       "what_is_barter": {
         "q": "Czym jest Barter na Morphit?",
         "a": "Barter pozwala kupować i sprzedawać towary oraz usługi — nie kryptowaluty — a rozliczać się w krypto. Babcia sprzedająca koszyki, sąsiad naprawiający rowery, ktoś wymieniający skrzynkę pomarańczy: wystawiają to, co oferują, wyceniają w swojej walucie lokalnej i wybierają, jakie krypto przyjmą (np. XMR, BTC i DOGE). To **jedno ogłoszenie**, nie jedno na monetę.\n\n**Jak to działa:** opisz dokładnie ofertę w Warunkach, ustal wartość w walucie lokalnej (jedną cenę lub przedział) i zaznacz krypto naprawdę używane w twojej okolicy. Kupujący przeglądają towary jak każde ogłoszenie i mogą zapłacić tylko w krypto, które przyjmujesz — jeśli nie dodasz Decred, nikt nie zapłaci ci w Decred. Ty i kupujący ustalacie przekazanie na czacie i rozliczacie się w wybranym przez niego akceptowanym krypto.\n\n**Bez adresu w ogłoszeniu:** towary zmieniają właściciela poza Morphit — osobiście lub pocztą — więc ogłoszenie barterowe nie ma adresu krypto do odbioru, a Morphit nigdy nie dotyka ani towarów, ani płatności. Obowiązuje zdrowy rozsądek: spotkajcie się w miejscu publicznym, udostępniaj tylko to, co konieczne, i traktuj obcego jak obcego.\n\nNa Morphit Barter jest **tylko do wymiany** — nie zapłacisz nim opłat za ogłoszenie na Morphit (te pozostają Blurt/BTC/XMR). Służy do wymiany towarów, niczego więcej."
+      },
+      "what_is_a_txid": {
+        "q": "Czym jest identyfikator transakcji (lub Hash)?",
+        "a": "Gdy wysyłasz kryptowaluty, blockchain trwale zapisuje płatność i nadaje jej unikalny odcisk zwany identyfikatorem transakcji. Portfele nazywają go różnie — możesz zobaczyć „TxID”, „Transaction Hash”, „Tx Hash” albo po prostu „Hash” (Mycelium na przykład nazywa go „Hash”). To długi ciąg liter i cyfr, zwykle 64 znaki (w Blurcie 40). Jak go znaleźć: otwórz portfel, dotknij właśnie wysłanej płatności i skopiuj wyświetlony identyfikator lub Hash. Wklejenie go w Morphit pozwala twojemu kontrahentowi — a przy opłacie za wystawienie także sieci — potwierdzić, że płatność naprawdę nastąpiła. Identyfikator dowodzi tylko, że wykonano tę jedną płatność; nie ujawnia niczego o reszcie twojego portfela."
       }
     },
     "share_link": "Udostępnij",
@@ -1682,7 +1690,7 @@
   },
   "feature_bid": {
     "title": "Wyróżnij tę ofertę!",
-    "explainer": "Zapłać w BLURT, aby promować tę ofertę nad główną listą i na stronie głównej przez wybrany czas. Maks. 5 równoczesnych miejsc; wygrywają najwyższe oferty za godzinę.",
+    "explainer": "Zapłać w BLURT, aby wypromować to zlecenie ponad główną księgą zleceń oraz na stronie głównej przez {hours, plural, one {# godzinę} few {# godziny} many {# godzin} other {# godziny}}. Dostępne są tylko {slots} miejsca; wygrywa najwyższa oferta godzinowa:",
     "hours_label": "Jak długo?",
     "hours_option": "{n}h",
     "cost_label": "Łączny koszt",
@@ -1796,13 +1804,13 @@
     "heading": "Pierwsza transakcja? Oto jak to działa",
     "step_1": "Uzgodnij cenę i metodę płatności z drugą osobą.",
     "step_2_warn": "Czekaj!",
-    "step_2": "Jeśli wysyłasz kryptowalutę, poczekaj aż faktycznie otrzymasz fiat (nie tylko \"oczekujące\") przed wysłaniem kryptowaluty. Raz wysłana — nie ma odwrotu.",
+    "step_2": "Jeśli wysyłasz kryptowalutę, poczekaj, aż faktycznie otrzymasz uzgodnione świadczenie (gotówkę, barter itp.), zanim wyślesz krypto. Gdy zniknie, już nie wróci.",
     "step_3": "Po zakończeniu transakcji, zostaw opinię na /my/orders, by przyszli traderzy ufali wam obu.",
     "faq_link": "Przeczytaj pełny przewodnik",
     "dismiss_aria": "Zamknij ten przewodnik"
   },
   "footer": {
-    "tagline": "Bezpośrednio między ludźmi. Prywatne. Twoje.",
+    "tagline": "Bezpośrednia wymiana P2P, Prywatność, Własność",
     "plan": "Plan",
     "source": "Kod",
     "security": "Bezpieczeństwo",
@@ -1942,7 +1950,7 @@
   },
   "home": {
     "hero_title": "Handluj anonimowo kryptowalutami, walutą fiat, towarami, usługami i nie tylko",
-    "hero_body": "Morphit łączy kupujących i sprzedających bezpośrednio. Bez KYC, niedepozytowy, bez ciasteczek, E2EE, bez logów, bez escrow, prywatny domyślnie, otwarty kod, w pełni rozproszony",
+    "hero_body": "Morphit łączy kupujących i sprzedających bezpośrednio. Bez KYC, niepowierniczy, bez ciasteczek, E2EE, nie przechowuje logów, bez escrow, prywatny domyślnie, otwarty kod, w pełni zdecentralizowany",
     "cta_browse": "Przeglądaj księgę zleceń",
     "cta_start": "Zacznij handel",
     "coin_carousel": {
@@ -1975,11 +1983,11 @@
         "body": "Aktywa przepływają bezpośrednio wyłącznie między Kupującym a Sprzedającym. Bez portfela giełdy, depozytu, arbitrów ani pośrednika."
       },
       "unstoppable": {
-        "title": "Niezatrzymywalny z założenia",
+        "title": "Odporny na blokady",
         "body": "Dostępny przez clearnet, Tora, Lokinet, I2P, Nostr i operatorów instancji federacyjnych. Zablokuj jedno, a wiele innych zostaje."
       },
       "discoverability": {
-        "title": "Wyszukiwalność",
+        "title": "Łatwy do znalezienia",
         "body": "Federacja używa publicznego blockchaina i RSS-a do dystrybucji księgi zleceń, finalizacji transakcji i reputacji użytkowników."
       },
       "encrypted_chat": {
@@ -2201,11 +2209,10 @@
       "viewed_count": "{count} wyświetleń",
       "viewed_tooltip": "Przybliżona liczba wyświetleń tej oferty. Widoczna tylko dla Ciebie.",
       "action_relist": "Opublikuj ponownie",
-      "action_relist_hint": "Wypełnia za Ciebie formularz oryginalnymi wartościami i warunkami.",
+      "action_relist_hint": "Wstępnie wypełnia formularz pierwotnymi warunkami; zapłacisz nową opłatę za publikację.",
       "edit_window_countdown": "Okno edycji: {remaining}",
       "edit_window_tooltip": "Oferty można edytować tylko w ciągu 15 minut od opublikowania. Później trzeba anulować i opublikować ponownie.",
       "edit_window_aria": "Pozostały czas edycji: {remaining}",
-      "feedback_no_counterparty": "Brak partnera transakcji do oceny",
       "feedback_pick_prompt": "Z kim handlowałeś?",
       "not_visible_orderbook": "Niewidoczne w księdze zleceń"
     },
@@ -2242,7 +2249,8 @@
     },
     "fee_status_banner": {
       "heading": "Status opłaty",
-      "body": "Każde zlecenie poniżej pokazuje status swojej opłaty za publikację. Zlecenie pojawia się w publicznej księdze zleceń dopiero po zweryfikowaniu opłaty — etykieta „nieotrzymana”, „za niska” lub „niezweryfikowana” wyjaśnia, dlaczego zlecenia może tam brakować."
+      "body": "💡 Każde zlecenie poniżej pokazuje status swojej opłaty za wystawienie. Zlecenie pojawia się w publicznej księdze zleceń dopiero po zweryfikowaniu opłaty — etykieta „nie otrzymano”, „niedopłata” lub „jeszcze nie zweryfikowano” wyjaśnia, dlaczego zlecenie może wydawać się tam nieobecne.",
+      "dismiss": "Zamknij tę notatkę"
     }
   },
   "nav": {
@@ -2331,7 +2339,7 @@
         "wif_label": "Prywatny klucz posting (WIF)",
         "wif_placeholder": "5J… lub P5J…",
         "password_mismatch": "Hasła nie są zgodne.",
-        "wif_hint": "Zaczyna się od 5. Nigdy nie udostępniany operatorowi — szyfrowany tylko na tym urządzeniu.",
+        "wif_hint": "Zaczyna się od 5 (stary format) lub P5 (nowszy). Nigdy nie udostępniany operatorowi — szyfrowany tylko na tym urządzeniu.",
         "new_password_label": "Nowe hasło na to urządzenie",
         "new_password_hint": "Co najmniej 8 znaków. Odblokowuje Morphit na tym urządzeniu. To nie jest hasło Blurt.",
         "new_password_confirm_label": "Potwierdź hasło",
@@ -2554,8 +2562,8 @@
   },
   "order_detail": {
     "loading": "Wczytywanie zlecenia…",
-    "not_found_title": "Nie znaleziono zlecenia",
-    "not_found_body": "To zlecenie nie istnieje lub nigdy nie zostało opublikowane przez to konto.",
+    "not_found_title": "Nie znaleźliśmy tego zlecenia",
+    "not_found_body": "Jeśli właśnie je opublikowałeś, poczekaj jeszcze chwilę — blockchain może je nadal potwierdzać, więc dotknij Sprawdź ponownie. W przeciwnym razie to zlecenie może nie istnieć lub nie zostało opublikowane przez to konto.",
     "back_to_profile": "Powrót do profilu",
     "error_title": "Nie udało się wczytać tego zlecenia",
     "error_body": "Coś poszło nie tak podczas kontaktu z indekserem. Spróbuj ponownie za chwilę.",
@@ -2583,7 +2591,10 @@
     "fee_pending_external_hint": "To zlecenie używa BTC lub XMR jako opłaty za wystawienie. Morphit czeka, aż walidatorzy społeczności poświadczą płatność. Do tego czasu zlecenie jest widoczne, ale niepotwierdzone.",
     "price_label": "Cena",
     "error_load_failed": "Nie udało się załadować tego zlecenia. Spróbuj odświeżyć.",
-    "cancel_button": "Anuluj to zlecenie"
+    "cancel_button": "Anuluj to zlecenie",
+    "posting_title": "Twoje zlecenie jest publikowane…",
+    "posting_body": "To zlecenie jest potwierdzane przez blockchain i może pojawić się po chwili. Będziemy sprawdzać automatycznie — nie musisz odświeżać.",
+    "check_again": "Sprawdź ponownie"
   },
   "orderbook": {
     "heading": "Księga zleceń",
@@ -3024,7 +3035,7 @@
       "amount_entered_usd_hint": "{amount} {fiat} (≈ {usd})",
       "returning_min_hint": "Co najmniej {amount} {fiat} (≈ {usd})",
       "barter_accept_label": "Które krypto zaakceptujesz?",
-      "barter_accept_hint": "Wybierz kryptowaluty, którymi kupujący mogą ci zapłacić — te, które wolisz."
+      "barter_accept_hint": "Zaznacz krypto, którymi kupujący mogą Ci zapłacić — wybierz te, których naprawdę używasz."
     },
     "errors": {
       "fiat_empty": "Wybierz walutę fiat (np. USD lub EUR).",
@@ -3110,7 +3121,7 @@
       "xmr_hint": "Wyślij opłatę na nasz adres Monero, a następnie wklej poniżej identyfikator transakcji i dowód.",
       "txid_label": "ID transakcji",
       "txid_placeholder": "Wklej ID transakcji (64 znaki hex)",
-      "txid_required": "ID transakcji jest wymagane.",
+      "txid_required": "Wymagany jest identyfikator transakcji lub Hash.",
       "txid_malformed": "ID transakcji musi być ciągiem hex o długości 64 znaków.",
       "txid_hint": "Twoje zlecenie pojawi się w orderbooku dopiero po potwierdzeniu płatności w jego sieci.",
       "txid_tooltip": "ID transakcji z twojego portfela — długi ciąg znaków hex, który potwierdza twoją płatność. Kliknij po szczegóły, gdzie go znaleźć.",
@@ -3456,7 +3467,7 @@
       "use_full": "Użyj całego salda",
       "available_blurt": "Dostępne: {amount} BLURT",
       "available_bp": "Dostępne: {amount} BP",
-      "power_down_schedule": "To nie jest natychmiastowe: Twoje BP będzie stopniowo odstakowywane z powrotem do płynnego BLURT, przez 4 tygodnie. Dziś nic z tego, więc prosimy o cierpliwość. Stopniowe uwalnianie to reguła protokołu Blurt, nie Morphit.",
+      "power_down_schedule": "To nie jest natychmiastowe: Twój BP wraca do płynnych BLURT stopniowo, w ciągu 4 tygodni. To stopniowe uwalnianie to reguła protokołu Blurt, a nie Morphit.",
       "power_down_in_progress": "Masz już power down w toku: pozostało {amount} BP, zakończy się {date}.",
       "password_label": "Twoje hasło @{account} (do podpisania kluczem aktywnym)",
       "error_password_required": "Wpisz hasło, aby kontynuować.",
@@ -3465,7 +3476,8 @@
       "error_broadcast": "Nie udało się zakończyć operacji w łańcuchu. Spróbuj ponownie.",
       "error_chain_rejected": "Sieć odrzuciła tę transakcję: {reason}",
       "error_unreachable": "Nie udało się połączyć z Twoją instancją Morphit, aby nadać transakcję. Sprawdź połączenie i spróbuj ponownie.",
-      "error_amount": "Wpisz kwotę nieprzekraczającą dostępnego salda."
+      "error_amount": "Wpisz kwotę nieprzekraczającą dostępnego salda.",
+      "error_amount_precision": "Użyj najwyżej 3 miejsc po przecinku — najmniejsza kwota, jaką możesz wysłać, to 0,001 BLURT."
     },
     "send": {
       "title": "Wyślij BLURT",
@@ -3536,36 +3548,36 @@
   "run_a_node": {
     "title": "Uruchom węzeł Morphit",
     "subtitle": "Obsługuj własną instancję. Zarabiaj udział w opłatach aukcyjnych. Pomóż uczynić Morphit nieocenzurowalnym.",
-    "why_heading": "Dlaczego uruchomić węzeł?",
-    "why_uncensor_title": "Morphit tam, gdzie ma znaczenie",
+    "why_heading": "Dlaczego warto uruchomić węzeł?",
+    "why_uncensor_title": "Morphit tam, gdzie to się liczy",
     "why_uncensor_body": "Każdy dodatkowy węzeł utrudnia cenzurowanie sieci. Jeśli twój kraj blokuje morphit.io, twoja instancja pozostaje osiągalna. Obsługujesz użytkowników, którzy inaczej nie mieliby jak handlować.",
     "why_community_title": "Obsługuj swoją społeczność",
-    "why_community_body": "Brandyzuj interfejs dla swojego regionu, swojego języka, swoich lokalnych metod płatności. Użytkownicy ufają frontendom, które mówią ich językiem i są im znajome — twój taki będzie.",
+    "why_community_body": "Dostosuj branding twojego interfejsu dla swojego regionu, języka i swoich lokalnych metod płatności. Użytkownicy ufają frontendom, które mówią ich językiem i są im znajome — twój taki będzie.",
     "why_privacy_title": "Minimalizuj wyciek metadanych",
     "why_privacy_body": "Użytkownicy handlujący przez twoją instancję dzielą metadane tylko z tobą. Żaden inny operator, nawet Agorise, nie widzi wzorców ich aktywności.",
     "why_earn_title": "Płatność automatyczna przez Smart Contract",
-    "why_earn_body": "Każda opłata za publikację płatna w BLURT, którą przyciąga twoja instancja, płaci ci 90% — tylko 10% trafia do skarbca Morphit na finansowanie dalszego rozwoju i utrzymania samego oprogramowania Morphit. Opłaty płatne w BTC i XMR trafiają w 100% do skarbca na te same zobowiązania projektowe (mechanizm podziału on-chain działa tylko dla BLURT, ale uczyniliśmy podział BLURT agresywnie hojnym dla kompensacji — 90/10 na twoją korzyść).\n\nSmart Contract działający na blockchainie wymusza podział — nie osoba, nie firma, nikt kto może zmienić zdanie. 100% zautomatyzowane. Dowodliwie pomagasz, dowodliwie ci płacą. Gwarantowane w kodzie.\n\nWypłaty są denominowane w BLURT, więc jeśli BLURT się umacnia, twoje zarobki też — bez dodatkowej pracy.",
+    "why_earn_body": "Każda opłata w BLURT za listing ogłoszenia, którą przyciągnie twoja instancja, płaci ci 90% — tylko 10% trafia do skarbca Morphit. Środki te są niezbędne na finansowanie dalszego rozwoju i utrzymania samego oprogramowania Morphit. Opłaty płatne w BTC i XMR trafiają w 100% do skarbca na te same zobowiązania projektowe (mechanizm podziału on-chain działa tylko dla BLURT, ale uczyniliśmy podział BLURT agresywnie hojnym dla kompensacji — 90/10 na twoją korzyść).\n\nSmart Contract działający na blockchainie jest jedynym mechanizmem odpowiedzialnym za ten podział — nie osoba, nie firma, nikt kto może zmienić zdanie. Proces jest w 100% zautomatyzowany. Skutecznie pomagasz, hojnie ci płacą. Gwarancja w kodzie.\n\nWypłaty są denominowane w BLURT, więc jeśli BLURT się umacnia, twoje zarobki też — bez dodatkowej pracy.",
     "how_heading": "Jak zacząć",
     "step1_title": "Przygotuj VPS",
-    "step1_body": "Linux (Debian 12, Ubuntu 24.04 LTS, Arch, NixOS — testujemy na Debianie). 2 rdzenie CPU przy 1 GHz+, 2 GB RAM minimum (4 GB komfortowo), 20 GB SSD. Raspberry Pi 4, stary laptop lub VPS za 5 $/miesiąc — wszystko działa. Statyczny IP nie jest potrzebny — DDNS działa dobrze. Zobacz wpis FAQ o minimalnych wymaganiach sprzętowych, by zobaczyć pełny rozkład między poziomami hobbystycznym, poważnym i starego laptopa.",
+    "step1_body": "Linux (Debian 12, Ubuntu 24.04 LTS, Arch, NixOS — testujemy na Debianie). 2 rdzenie CPU przy 1 GHz+, 2 GB RAM minimum (4 GB komfortowo), 20 GB SSD. Raspberry Pi 4, stary laptop lub VPS za 5 $/miesiąc — wszystko działa. Statyczny IP nie jest potrzebny — DDNS działa dobrze. Zobacz wpis FAQ o minimalnych wymaganiach sprzętowych, by zobaczyć pełne rozróżnienie między konfiguracją hobbystyczną, poważną i starym laptopem.",
     "step2_title": "Sklonuj repozytorium i skonfiguruj",
     "step2_body": "Forkuj lub sklonuj git.agorise.net/agorise/morphit. Skopiuj przykłady env z ops/env/, ustaw swoją domenę, ustaw endpointy RPC indexera (publiczne węzły Blurt działają od razu).",
     "step3_title": "Zainstaluj usługi",
     "step3_body": "Jednostki systemd dla indexera i relay są w ops/systemd/. Konfiguracja nginx z TLS jest w ops/nginx/. Uruchom narzędzie migracji raz, aby zainicjować schemat bazy danych.",
     "step4_title": "Zarejestruj swoją tożsamość operatora",
-    "step4_body": "Uruchom narzędzie CLI register-operator z wybranym tagiem (1-64 znaków, alfanumeryczne + myślniki/underscores/kropki). Tagi są przydzielane na zasadzie kto pierwszy, ten lepszy — gdy raz nadasz operację `morphit_register_operator`, ten tag jest twój. Twoja instancja pojawia się w /operators i natychmiast zaczyna przypisywać ci zamówienia (i zarabiać twój 90% udział w opłatach za publikację zapłaconych w BLURT). Zobacz FAQ zarobków operatora po pełną ekonomię.",
-    "runbook_pointer": "Pełny podręcznik:",
+    "step4_body": "Uruchom narzędzie CLI register-operator z wybranym tagiem (1-64 znaków, alfanumeryczne + myślniki/underscores/kropki). Tagi są przydzielane na zasadzie kto pierwszy, ten lepszy — gdy raz nadasz operację `morphit_register_operator`, ten tag jest twój. Twoja instancja pojawia się w /operators i natychmiast zaczyna przypisywać ci zamówienia (i twój 90% udział w opłatach za publikację zapłaconych w BLURT). Zobacz FAQ zarobków operatora oraz pełną ekonomię.",
+    "runbook_pointer": "Pełna instrukcja uruchomienia:",
     "asset_policy_heading": "Twoja instancja, twoja polityka aktywów",
     "asset_policy_body": "Federacja Morphit pozwala każdemu operatorowi wybrać, dla których aktywów handlowych jego instancja przyjmuje nowe zlecenia. Nowe aktywa są dostarczane WŁĄCZONE domyślnie na poziomie instancji — operatorzy wyłączają je per-aktyw poprzez zmienną środowiskową `MORPHIT_INDEXER_DISABLED_ASSETS`. Tak federacja instancji może obsługiwać różne preferencje użytkowników bez potrzeby forkowania kodu przez kogokolwiek.",
     "asset_policy_default_label": "Domyślnie włączone dla nowych aktywów.",
-    "asset_policy_default_body": "Gdy projekt dodaje nowy aktyw handlowy (USDT był ostatnim), każda instancja przyjmuje zlecenia dla niego w momencie aktualizacji. Bez zmian kodu, bez kroku włączania per-aktyw.",
+    "asset_policy_default_body": "Gdy projekt dodaje nowe aktywo handlowe (USDT wdrożono jako ostatnie), każda instancja przyjmuje zlecenia dla niego w momencie aktualizacji. Bez zmian kodu, bez kroku włączania per-aktyw.",
     "asset_policy_opt_out_label": "Jedna zmienna środowiskowa, by odmówić.",
-    "asset_policy_opt_out_body": "Operatorzy preferujący, by ich instancja specjalizowała się w aktywach privacy-first lub decentralization-first, mogą wyłączyć dowolny aktyw tylko-handlowy poprzez `MORPHIT_INDEXER_DISABLED_ASSETS=\"USDT\"` (lub listę oddzieloną przecinkami dla wielu). Użytkownicy publikujący przez frontend tego operatora nie mogą wybrać wyłączonego aktywa.",
-    "asset_policy_federation_label": "Federacja pozostaje nienaruszona.",
+    "asset_policy_opt_out_body": "Operatorzy preferujący, by ich instancja specjalizowała się w aktywach privacy-first lub decentralization-first, mogą wyłączyć dowolne aktywo trade-only poprzez `MORPHIT_INDEXER_DISABLED_ASSETS=\"USDT\"` (lub listę oddzieloną przecinkami dla wielu). Użytkownicy publikujący przez frontend tego operatora nie mogą wybrać wyłączonego aktywa.",
+    "asset_policy_federation_label": "Federacja pozostaje niezmienna.",
     "asset_policy_federation_body": "Wyłączenie aktywa na twojej instancji nie ukrywa zleceń z instancji partnerskich przed twoimi użytkownikami — historia łańcucha jest współdzielona, więc orderbook nadal pokazuje je w trybie tylko-do-odczytu. Blokada dotyczy tylko NOWYCH zleceń publikowanych Z twojej instancji.",
-    "asset_policy_doc_pointer": "Pełna referencja zmiennych środowiskowych i przykłady wielo-aktywowe w",
+    "asset_policy_doc_pointer": "Pełną listę zmiennych środowiskowych oraz przykłady dla wielu aktywów znajdziesz w",
     "asset_policy_doc_pointer_suffix": "pod Trade-only asset configuration.",
-    "requirements_heading": "Wymagania zasobów",
+    "requirements_heading": "Wymagania sprzętowe",
     "req_hw_label": "Sprzęt",
     "req_hw_value": "2 rdzenie CPU, 2-4 GB RAM, 20 GB SSD",
     "req_network_label": "Sieć",
@@ -3578,11 +3590,11 @@
     "cta_directory": "Przeglądaj operatorów",
     "register": {
       "heading": "Zarezerwuj swój tag operatora",
-      "explain": "Rejestracja operatora jest bez zezwoleń. Rozgłaszaj jednorazową op, aby zarezerwować tag on-chain — kto pierwszy ten lepszy. Ten tag pojawia się w zleceniach przez twoją instancję oraz w katalogu /operators. Twój klucz posting podpisuje op, więc tylko ty kontrolujesz swój tag.",
+      "explain": "Rejestracja operatora nie wymaga zezwoleń. Rozgłaszaj jednorazową op, aby zarezerwować tag on-chain — kto pierwszy ten lepszy. Ten tag pojawia się w zleceniach przez twoją instancję oraz w katalogu /operators. Twój klucz posting podpisuje op, więc tylko ty kontrolujesz swój tag.",
       "need_signin": "Zaloguj się kontem Morphit, aby zarejestrować się jako operator.",
       "signin_cta": "Zaloguj się",
       "success": "Jesteś zarejestrowany. Op została rozgłoszona i pojawi się w następnym zindeksowanym bloku.",
-      "view_directory": "Zobacz siebie w katalogu",
+      "view_directory": "Zobacz swoją instancję w katalogu",
       "tag_label": "Tag operatora",
       "tag_placeholder": "np. alice-exchange",
       "tag_help": "1-64 znaków. Tylko małe litery, cyfry i znaki . _ - . To twój publiczny identyfikator na zawsze — wybieraj ostrożnie.",
@@ -4433,7 +4445,7 @@
     "success_ok": "Opublikowano na Twoim blogu Blurt.",
     "success_failed": "Nie udało się teraz opublikować ogłoszenia na Twoim blogu — Twoje zlecenie i tak jest aktywne. Możesz opublikować je ręcznie później, jeśli chcesz.",
     "opt_in_pitch": "Syndykacja transakcji to wszystko. Więcej oczu na ofertach = więcej partnerów, plus nagrody za upvoty bezpośrednio do twojego portfela Blurt.",
-    "first_trade_opt_in_label": "Ogłoś moją pierwszą transakcję w społeczności @morphit",
+    "first_trade_opt_in_label": "Ogłoś moją pierwszą transakcję w społeczności @morphit (za darmo)",
     "first_trade_opt_in_pitch": "Twoja pierwsza transakcja na Morphit może opublikować jednorazowe ogłoszenie \"Dołączyłem do Morphit\" w społeczności @morphit — większa widoczność i możliwość nagród za głosy, które trafiają do Twojego portfela Blurt.",
     "first_trade_opt_in_help": "To Twoja jednorazowa szansa, aby przedstawić się całej społeczności — wpis pojawi się po pomyślnym zrealizowaniu pierwszego zlecenia."
   },

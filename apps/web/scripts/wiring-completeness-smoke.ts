@@ -814,10 +814,12 @@ const CHECKS: readonly Check[] = [
 		id: 'cp34-i3-orderbook-dai-chip-rendered',
 		claim_source: 'brag_list',
 		claim_phrase: 'Dai (DAI) peer-to-peer',
+		// cp442 — the per-row ternary (`daiRowNetwork`) was extracted into the
+		// shared `networkChipFor` helper so the featured cards get the chip too.
 		anchor: {
 			kind: 'grep',
-			pattern: 'daiRowNetwork',
-			paths: ['apps/web/src/routes/[lang]/orderbook/+page.svelte']
+			pattern: "isDaiNetwork",
+			paths: ['apps/web/src/lib/orders/networkChip.ts']
 		},
 		status: 'live'
 	},
