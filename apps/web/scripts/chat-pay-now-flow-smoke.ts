@@ -158,7 +158,13 @@ const SCENARIOS: readonly Scenario[] = [
 		name: '10 — PayBlurtModal: the SAME canPay guard + broadcast use effectiveAmount, and onPaid returns it',
 		file: PAYB,
 		mustHave: [
-			'effectiveAmount > 0 &&',
+			// tt.txt #12 — the inline `effectiveAmount > 0 &&` guard in canPay was
+			// replaced by `amountValid`, which is STRICTER: a hard MIN_BLURT floor
+			// plus `hasBlurtPrecision` (toFixed(3) rounds UP, so 1.0006 would have
+			// broadcast 1.001 of someone else's money). Pin the real invariant.
+			'const canPay = $derived(',
+			'amountValid &&',
+			'amount >= MIN_BLURT && hasBlurtPrecision(amount)',
 			'Number.isFinite(effectiveAmount)',
 			'formatBlurtAmount(Number.isFinite(effectiveAmount) && effectiveAmount > 0 ? effectiveAmount : 0)',
 			'onPaid({ trxId: result.trx_id, blockNum: result.block_num, amount: effectiveAmount });',

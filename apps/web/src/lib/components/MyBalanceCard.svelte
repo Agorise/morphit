@@ -372,7 +372,11 @@
 	// CANNOT sign these — the buttons stay hidden for it (matching the
 	// /post BLURT-fee active-key gate, cp406), rather than letting the
 	// user fill a form only to hit a "no active key" wall.
-	const hasActiveKey = $derived($liveIdentity?.origin === 'morphit-seed');
+	/** CAPABILITY, not provenance (tt.txt #11). A 'posting-active' session — a
+	 *  posting-only import that chose to keep its verified Active key on this
+	 *  device — CAN sign a transfer. Asking `origin === 'morphit-seed'` would
+	 *  wrongly deny it. Ask whether the key is actually there. */
+	const hasActiveKey = $derived(($liveIdentity?.activePublicKey ?? null) !== null);
 	let powerMode = $state<'up' | 'down' | null>(null);
 	/** cp433 — when true, the liquid-BLURT odometer applies its next change
 	 *  with no red flash. Set for a few seconds after a power-DOWN so the
@@ -1007,31 +1011,33 @@
 					{exporting ? $_('profile.pnl.exporting') : $_('profile.pnl.export_button')}
 				</button>
 			</div>
-			{#if hasActiveKey}
-				<button
-					type="button"
-					onclick={openSend}
-					class="inline-flex items-center justify-center gap-2 rounded-xl bg-morphit-btn px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110 active:scale-[0.98]"
+			<!-- tt.txt #11 — Send used to be HIDDEN outright for a posting-only
+			     session. A control that silently isn't there teaches nothing; the
+			     user concludes Morphit can't send BLURT at all. The button is now
+			     always offered, and the modal explains + unlocks in place. -->
+			<button
+				type="button"
+				onclick={openSend}
+				class="inline-flex items-center justify-center gap-2 rounded-xl bg-morphit-btn px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110 active:scale-[0.98]"
+			>
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					width="16"
+					height="16"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+					class="h-4 w-4 flex-none"
 				>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						width="16"
-						height="16"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						aria-hidden="true"
-						class="h-4 w-4 flex-none"
-					>
-						<path d="m22 2-7 20-4-9-9-4Z" />
-						<path d="M22 2 11 13" />
-					</svg>
-					{$_('profile.send.send_button')}
-				</button>
-			{/if}
+					<path d="m22 2-7 20-4-9-9-4Z" />
+					<path d="M22 2 11 13" />
+				</svg>
+				{$_('profile.send.send_button')}
+			</button>
 		</div>
 		{#if exportError}
 			<p class="mt-2 text-xs text-red-700 dark:text-red-300">

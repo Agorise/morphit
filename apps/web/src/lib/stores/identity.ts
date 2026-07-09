@@ -390,6 +390,21 @@ export function updateEnvelope(env: KeystoreEnvelope): void {
 	internal.set({ state: 'unlocked', live: current.live, envelope: env });
 }
 
+/**
+ * Replace BOTH halves of an unlocked session (tt.txt #11).
+ *
+ * `updateEnvelope` alone is not enough when the identity's CAPABILITIES change:
+ * the money paths gate on `live.activePublicKey`, so a keystore that gained an
+ * active key while `live` kept the stale `activePublicKey: null` would leave the
+ * user holding a key the UI refuses to believe in. Both move together or
+ * neither does.
+ */
+export function updateUnlockedIdentity(env: KeystoreEnvelope, live: LiveIdentity): void {
+	const current = get(internal);
+	if (current.state !== 'unlocked') return;
+	internal.set({ state: 'unlocked', live, envelope: env });
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Browser sign-out hook + cross-tab sync
 // ────────────────────────────────────────────────────────────────────────────

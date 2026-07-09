@@ -274,7 +274,8 @@
     },
     "sign_in_another_device": "Accedi da un altro dispositivo",
     "lock_session": "Blocca sessione",
-    "view_my_profile": "Profilo di @{account}"
+    "view_my_profile": "Profilo di @{account}",
+    "backup_pending_aria": "Hai chiavi non ancora salvate"
   },
   "backup_keys": {
     "title": "Backup delle tue chiavi",
@@ -329,7 +330,8 @@
         "password_required": "Inserisci la password per continuare.",
         "wrong_password": "Password errata. Riprova.",
         "no_seed_posting_only": "Questo account è stato importato solo con la chiave di pubblicazione — non c'è frase seed. Usa il download del keyfile qui sotto.",
-        "generic": "Qualcosa è andato storto. Riprova."
+        "generic": "Qualcosa è andato storto. Riprova.",
+        "no_seed_posting_active": "Non esiste una frase di 12 parole per questo account, e non può esistere. Una frase DERIVA le chiavi: non può essere costruita a ritroso da chiavi che avevi già. Il keyfile qui sotto è il tuo backup e ora contiene sia la chiave di pubblicazione sia quella attiva."
       }
     },
     "paired": {
@@ -337,7 +339,8 @@
       "body": "Questo desktop è abbinato al tuo telefono, che custodisce le tue vere chiavi. Le sezioni qui sotto riguardano il backup di chiavi che non si trovano su questo dispositivo — si applicano al telefono con cui ti sei abbinato. Apri Morphit sul telefono e vai a «Esegui il backup delle mie chiavi» lì.",
       "deeplink_hint": "Se il telefono è vicino, il pulsante qui sotto apre la pagina giusta direttamente su di esso.",
       "deeplink_cta": "Apri backup sul telefono"
-    }
+    },
+    "keyfile_body_posting_active": "Il tuo keyfile ora contiene la chiave di pubblicazione E la chiave attiva, cifrate con la tua password Morphit. Conservane una copia al sicuro: è l'unico backup della chiave attiva che hai appena salvato su questo dispositivo. Non contiene le chiavi owner o memo — quelle restano dove le tieni oggi."
   },
   "chat": {
     "message_button_aria": "Invia un messaggio a {peer}",
@@ -647,11 +650,10 @@
       "recipient_label": "A",
       "from_label": "Da",
       "no_memo_notice": "Nessun memo on-chain sarà incluso — il contesto della tua operazione resta in questa chat cifrata.",
-      "password_label": "La tua password",
+      "password_label": "La tua password di @{account} (per firmare con la tua chiave attiva)",
       "confirm": "Invia BLURT",
       "paying": "Invio in corso…",
       "success_toast": "BLURT inviato. Ricevuta pubblicata nella chat.",
-      "success_toast_no_chat": "BLURT inviato. Non è stato possibile pubblicare la ricevuta nella chat — puoi segnare i fondi inviati manualmente.",
       "error": {
         "password_required": "Inserisci la tua password.",
         "bad_password": "Password errata.",
@@ -667,7 +669,8 @@
       "memo_label": "Memo",
       "with_memo_notice": "Il memo sopra sarà incluso nel trasferimento on-chain così il venditore potrà abbinare questo pagamento alla tua operazione.",
       "success_toast_no_chat_with_txid": "BLURT inviato. Impossibile pubblicare la ricevuta in chat — copia questa txid per contrassegnare manualmente i fondi inviati: {txid}",
-      "password_hint": "La password con cui sblocchi Morphit. Decifra la tua chiave attiva su questo dispositivo per firmare: non incolli mai una chiave qui e non viene inviato nulla."
+      "password_hint": "La password con cui sblocchi Morphit. Decifra la tua chiave attiva su questo dispositivo per firmare: non incolli mai una chiave qui e non viene inviato nulla.",
+      "error_amount_precision": "Usa al massimo 3 decimali: l'importo più piccolo che puoi inviare è 0,001 BLURT."
     },
     "trade_event": {
       "address_shared_title": "Nuovo indirizzo condiviso",
@@ -679,7 +682,6 @@
     "order_response_no_fee": "Nessuna commissione — stai rispondendo all'ordine di @{peer}, quindi il primo contatto è gratuito.",
     "menu": {
       "aria_open": "Opzioni conversazione",
-      "aria_dismiss": "Chiudi menu",
       "verify_peer": "Verifica contatto"
     },
     "verify_peer": {
@@ -1825,7 +1827,6 @@
     "operators": "Operatori",
     "operated_by": "Gestito da",
     "contact_operator": "Contatta questo operatore",
-    "alt_network_disabled": "Questo operatore non ha configurato un indirizzo per questa rete.",
     "alt_network_address": "Indirizzo: {address}",
     "instances": "Istanze",
     "explorer": "Explorer dei blocchi",
@@ -2249,7 +2250,7 @@
     },
     "fee_status_banner": {
       "heading": "Stato della commissione",
-      "body": "💡 Ogni ordine qui sotto mostra lo stato della sua commissione di pubblicazione. Un ordine compare nel libro ordini pubblico solo una volta verificata la commissione — un’etichetta «non ricevuta», «pagamento insufficiente» o «non ancora verificata» è il motivo per cui un ordine può sembrare mancante lì.",
+      "body": "💡 Ogni ordine qui sotto mostra lo stato della sua commissione di pubblicazione. Un ordine compare nel libro ordini pubblico solo una volta verificata la commissione — un’etichetta «non ricevuta», «pagamento insufficiente» o «non ancora verificata» è il motivo per cui un ordine può sembrare mancante.",
       "dismiss": "Ignora questa nota"
     }
   },
@@ -2562,8 +2563,8 @@
   },
   "order_detail": {
     "loading": "Caricamento dell'ordine…",
-    "not_found_title": "Non abbiamo trovato questo ordine",
-    "not_found_body": "Se l'hai appena pubblicato, aspetta un altro minuto: la blockchain potrebbe ancora confermarlo, quindi tocca Controlla di nuovo. Altrimenti questo ordine potrebbe non esistere o non essere stato pubblicato da questo account.",
+    "not_found_title": "L'ordine si sta caricando",
+    "not_found_body": "Questo ordine viene pubblicato dalla blockchain e potrebbe metterci un minuto ad apparire.",
     "back_to_profile": "Torna al profilo",
     "error_title": "Non è stato possibile caricare questo ordine",
     "error_body": "Errore durante il contatto con l'indexer. Riprova tra un momento.",
@@ -2594,7 +2595,8 @@
     "cancel_button": "Annulla questo ordine",
     "posting_title": "Il tuo ordine è in fase di pubblicazione…",
     "posting_body": "Questo ordine è in fase di conferma da parte della blockchain e può richiedere un minuto per comparire. Continueremo a controllare automaticamente: non serve ricaricare.",
-    "check_again": "Controlla di nuovo"
+    "check_again": "Controlla di nuovo",
+    "action_edit_countdown": "Modifica (entro: {remaining})"
   },
   "orderbook": {
     "heading": "Libro ordini",
@@ -3092,7 +3094,8 @@
       "feature_upsell_cta": "Configura un'offerta in evidenza",
       "edit_window_countdown": "{remaining} per modificare",
       "edit_window_tooltip": "Le modifiche sono possibili solo entro 15 minuti dalla pubblicazione. Dopo, cancella e ripubblica.",
-      "edit_window_expired": "Finestra modifica chiusa"
+      "edit_window_expired": "Finestra modifica chiusa",
+      "view_my_order_pending": "Il tuo ordine sta arrivando sulla blockchain…"
     },
     "broadcast_error": {
       "title": "L'ordine non è andato a buon fine",
@@ -3157,7 +3160,7 @@
       "fee_address_chain_pinned": "Ancorato sulla catena da {account} — ogni istanza Morphit verifica le commissioni rispetto a questo indirizzo.",
       "fee_address_chain_pinned_aria": "Autenticità dell'indirizzo ancorato sulla catena",
       "fee_address_unavailable": "Questo operatore non ha configurato un indirizzo per la commissione {asset}. Scegli BLURT invece, o pubblica il tuo ordine su un'altra istanza Morphit.",
-      "blurt_needs_active_key": "Richiede la tua chiave Attiva. Al momento hai effettuato l'accesso con la chiave di Pubblicazione — accedi con la frase seed di 12 parole o il Keyfile per pagare in BLURT, oppure paga in BTC/XMR:"
+      "blurt_needs_active_key": "Richiede la tua chiave attiva. Hai effettuato l'accesso con la chiave di pubblicazione — Morphit ti chiederà la chiave attiva (o la password principale di Blurt) al momento della pubblicazione, e non perderai nulla di ciò che hai inserito."
     },
     "draft": {
       "restored_banner": "Bozza ripristinata da {age} fa. Continua da dove avevi lasciato — o ricomincia.",
@@ -3472,7 +3475,7 @@
       "password_label": "La tua password di @{account} (per firmare con la tua chiave attiva)",
       "error_password_required": "Inserisci la tua password per continuare.",
       "error_bad_password": "Quella password non ha sbloccato la tua chiave attiva. Controllala e riprova.",
-      "error_no_active_key": "Questo dispositivo non ha una chiave attiva per firmare. Accedi con la tua frase seed per fare power up o power down.",
+      "error_no_active_key": "Questo dispositivo non ha una chiave attiva con cui firmare. Morphit ti chiederà la chiave attiva (o la password principale di Blurt) quando fai power up o power down.",
       "error_broadcast": "Non è stato possibile completare l'operazione sulla catena. Riprova.",
       "error_chain_rejected": "La rete ha rifiutato questa transazione: {reason}",
       "error_unreachable": "Impossibile raggiungere la tua istanza Morphit per la trasmissione. Controlla la connessione e riprova.",
@@ -3494,7 +3497,7 @@
       "memo_label": "Nota (facoltativa)",
       "memo_placeholder": "es. un riferimento dell'ordine",
       "memo_privacy_warning": "Le note sono salvate in modo pubblico e permanente sulla blockchain, in chiaro. Non inserire mai password, chiavi o dati privati.",
-      "error_no_active_key": "Questo dispositivo non ha una chiave attiva per firmare. Accedi con la tua frase seed per inviare BLURT.",
+      "error_no_active_key": "Questo dispositivo non ha una chiave attiva con cui firmare. Morphit ti chiederà la chiave attiva (o la password principale di Blurt) al momento dell'invio.",
       "send_button": "Invia",
       "confirm": "Invia BLURT",
       "qr_heading": "Scansiona un QR del destinatario",
@@ -3918,7 +3921,7 @@
     },
     "endpoints": {
       "heading": "Endpoint RPC",
-      "explain": "I nodi di rete con cui Morphit comunica per leggere e scrivere dati. L'app li prova in ordine di velocità di risposta. Aggiungi il tuo o uno della community.",
+      "explain": "I nodi di rete con cui gli indexer di Morphit comunicano per leggere e scrivere dati. L'app li prova in ordine di risposta più rapida.",
       "pool_note": "La tua istanza Morphit gestisce tutto il traffico della rete Blurt per te: il tuo browser non comunica mai direttamente con questi nodi. Questo è solo il loro stato in tempo reale.",
       "cooling_down": "in pausa",
       "recheck": "Ricontrolla la velocità dei nodi",
@@ -4553,5 +4556,31 @@
       "cancel": "Annulla",
       "confirm": "Visita il sito"
     }
+  },
+  "unlock_active": {
+    "title": "Questo pagamento richiede la tua chiave attiva",
+    "body": "Hai effettuato l'accesso a @{account} con la chiave di pubblicazione, che non può movimentare denaro. Inserisci la tua chiave attiva o la tua password principale di Blurt per continuare — non perderai nulla di ciò che hai inserito.",
+    "field_label": "Chiave attiva o password principale di Blurt",
+    "field_placeholder": "Inizia con 5… , oppure la tua password principale",
+    "field_help": "Morphit la verifica con il tuo account sulla blockchain prima di firmare qualsiasi cosa. Non lascia mai questo dispositivo.",
+    "cta": "Sblocca e continua",
+    "checking": "Verifica…",
+    "error": {
+      "invalid_wif": "Non sembra una chiave valida. Controlla se manca o c'è un carattere in più.",
+      "is_posting_key": "Questa è la tua chiave di pubblicazione, quella con cui hai già effettuato l'accesso. Non può movimentare denaro. Incolla invece la chiave attiva.",
+      "is_owner_key": "Questa è la tua chiave owner. Può prendere il controllo dell'intero account, quindi Morphit non la userà mai. Usa la chiave attiva.",
+      "not_this_account": "Questa non è la chiave attiva di questo account. Verifica di usare la chiave di @{account}.",
+      "empty": "Inserisci la chiave attiva o la password principale.",
+      "lookup_failed": "Impossibile raggiungere la blockchain per verificare la chiave. Riprova tra poco.",
+      "bad_device_password": "Quella password Morphit non è corretta. La tua chiave attiva non è stata salvata.",
+      "keep_failed": "Impossibile salvare la chiave attiva su questo dispositivo. Nulla è stato modificato: riprova o scegli «Dimenticala»."
+    },
+    "retention_heading": "Dopo questo pagamento",
+    "retention_once": "Dimenticala (consigliato)",
+    "retention_once_help": "Usata una volta per firmare, poi cancellata dalla memoria. La reinserirai la prossima volta.",
+    "retention_keep": "Conservala su questo dispositivo, cifrata",
+    "retention_keep_help": "D'ora in poi si sblocca con la tua password di Morphit. Chi conosce quella password potrebbe spendere i tuoi BLURT: fallo solo su un dispositivo che controlli.",
+    "device_password_label": "La tua password Morphit di @{account}",
+    "device_password_help": "La password con cui già sblocchi Morphit. Cifra la tua chiave attiva su questo dispositivo."
   }
 }

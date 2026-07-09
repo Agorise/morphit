@@ -34,6 +34,12 @@
 	 */
 
 	import { onMount, onDestroy } from 'svelte';
+	import {
+		EDIT_WINDOW_MS,
+		editWindowRemainingSeconds,
+		formatRemainingMmSs,
+		withinEditWindow as withinEditWindowFor
+	} from '$lib/orders/editWindow';
 	import { _ } from 'svelte-i18n';
 	import { page } from '$app/stores';
 	import { gotoLocale } from '$i18n/navigate';
@@ -220,7 +226,8 @@
 	// So the status pill flips Live→Expired and the "expires in"
 	// countdown updates the instant an order crosses its expiry —
 	// without a reload. 1s granularity; cleared on unmount. Mirrors
-	// the /my/orders ticker.
+	// the /my/orders ticker. #21 — it also drives the Edit-button countdown, so
+	// the button removes itself the second the 15-minute window closes.
 	let nowMs = $state(Date.now());
 	$effect(() => {
 		const t = setInterval(() => {
@@ -249,14 +256,20 @@
 		void gotoLocale('/post');
 	}
 
-	/** Edit window: 15 minutes from creation, same rule as /my/orders.
-	 *  The edit path at /post/edit/[permlink] also enforces this on
-	 *  entry, so a stale UI state just lands the user on a "window
-	 *  expired" page rather than letting them edit what they can't. */
+	/** Edit window: 15 minutes from creation, same rule as /my/orders — now
+	 *  literally the same code (`$lib/orders/editWindow`), not a second copy.
+	 *  The edit path at /post/edit/[permlink] also enforces this on entry, so a
+	 *  stale UI state just lands the user on a "window expired" page rather than
+	 *  letting them edit what they can't. */
 	function withinEditWindow(o: OrderRecord): boolean {
 		if (o.status !== 'live') return false;
-		const createdMs = new Date(o.created_at).getTime();
-		return Date.now() - createdMs < 15 * 60 * 1000;
+		return withinEditWindowFor(o.created_at, nowMs);
+	}
+
+	/** Seconds left, or null once closed. Drives the countdown label. */
+	function editSecondsLeft(o: OrderRecord): number | null {
+		if (o.status !== 'live') return null;
+		return editWindowRemainingSeconds(o.created_at, nowMs);
 	}
 
 	/** The "Editing closed (15 min window)" note is only worth showing
@@ -267,7 +280,8 @@
 	function withinEditClosedNotice(o: OrderRecord): boolean {
 		if (o.status !== 'live') return false;
 		const age = Date.now() - new Date(o.created_at).getTime();
-		return age >= 15 * 60 * 1000 && age < 20 * 60 * 1000;
+		// EDIT_WINDOW_MS, not a second literal 15 minutes on the same page.
+		return age >= EDIT_WINDOW_MS && age < EDIT_WINDOW_MS + 5 * 60 * 1000;
 	}
 
 	function requestCancel(): void {
@@ -690,12 +704,24 @@
 							{$_('my_orders.order.action_relist')}
 						</BusyButton>
 					{:else if withinEditWindow(order)}
+						{@const editLeft = editSecondsLeft(order)}
 						<div class="flex flex-col gap-2 sm:flex-row">
+							<!-- #21 (Ken) — the Edit button carries its own live countdown and
+							     removes itself the instant the 15-minute window closes. The
+							     branch is guarded by the same ticking `nowMs`, so there is no
+							     window in which the label says 0s but the button still sits
+							     there. -->
 							<BusyButton
 								variant="secondary"
 								onclick={() => gotoLocale(`/post/edit/${order!.permlink}`)}
 							>
-								{$_('my_orders.order.action_edit')}
+								{#if editLeft !== null}
+									{$_('order_detail.action_edit_countdown', {
+										values: { remaining: formatRemainingMmSs(editLeft) }
+									})}
+								{:else}
+									{$_('my_orders.order.action_edit')}
+								{/if}
 							</BusyButton>
 							<BusyButton variant="danger" onclick={requestCancel}>
 								{$_('order_detail.cancel_button')}

@@ -19,6 +19,7 @@
 	 */
 
 	import { onMount } from 'svelte';
+	import { scrollToLazySection } from '$lib/ui/scrollToLazySection';
 	import { _ } from 'svelte-i18n';
 	import { gotoLocale } from '$i18n/navigate';
 	import { get } from 'svelte/store';
@@ -59,6 +60,10 @@
 	import { instanceAdditions, instanceNameLookup } from '$lib/stores/instanceAdditions';
 	import type { OrderRecord } from '@morphit/indexer-client';
 	import { addPendingFeatured } from '$stores/pendingFeatured';
+	import {
+		editWindowRemainingSeconds as editWindowRemainingSecondsFor,
+		formatRemainingMmSs
+	} from '$lib/orders/editWindow';
 
 	const blurtAccount = getUserBlurtAccount();
 
@@ -155,7 +160,7 @@
 		feedbackPrefillSubject = peer;
 		feedbackPickerPermlink = null;
 		pendingFeedbackPermlink = permlink;
-		scrollToFeedbackForm(permlink); // #10 — smooth-scroll to the form
+		void scrollToFeedbackForm(permlink); // #10 — smooth-scroll to the form
 	}
 
 	/** Click handler for the "Mark complete / review" button. 1
@@ -171,7 +176,7 @@
 			feedbackPrefillSubject = null;
 			feedbackPickerPermlink = null;
 			pendingFeedbackPermlink = permlink;
-			scrollToFeedbackForm(permlink); // #10 — smooth-scroll to the form
+			void scrollToFeedbackForm(permlink); // #10 — smooth-scroll to the form
 		}
 	}
 
@@ -209,17 +214,7 @@
 	 *  viewport top, per Ken's request — a breath of space above the
 	 *  "🚀 Feature this order!" heading rather than flush against the top. */
 	function scrollToFeatureForm(permlink: string): void {
-		if (typeof window === 'undefined') return;
-		let attempts = 0;
-		const tryScroll = (): void => {
-			const el = document.getElementById(`feature-form-${permlink}`);
-			if (el) {
-				el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-			} else if (attempts++ < 40) {
-				requestAnimationFrame(tryScroll);
-			}
-		};
-		requestAnimationFrame(tryScroll);
+		void scrollToLazySection(`feature-form-${permlink}`, loadFeatureBidForm);
 	}
 
 	/** #10 — smooth-scroll to the just-opened "Mark this trade complete"
@@ -227,18 +222,8 @@
 	 *  form is lazy-loaded so retry across a few rAFs until it mounts, and its
 	 *  container carries `scroll-mt-24` (≈1in) so it lands a breath below the
 	 *  viewport top rather than flush against it. */
-	function scrollToFeedbackForm(permlink: string): void {
-		if (typeof window === 'undefined') return;
-		let attempts = 0;
-		const tryScroll = (): void => {
-			const el = document.getElementById(`feedback-form-${permlink}`);
-			if (el) {
-				el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-			} else if (attempts++ < 40) {
-				requestAnimationFrame(tryScroll);
-			}
-		};
-		requestAnimationFrame(tryScroll);
+	async function scrollToFeedbackForm(permlink: string): Promise<void> {
+		await scrollToLazySection(`feedback-form-${permlink}`, loadLeaveFeedbackForm);
 	}
 
 	async function load(): Promise<void> {
@@ -394,10 +379,10 @@
 	 *  "edit window expired" copy. */
 	function editWindowRemainingSeconds(o: OrderRecord): number | null {
 		if (!isLive(o)) return null;
-		const createdMs = new Date(o.created_at).getTime();
-		const remaining = createdMs + EDIT_WINDOW_MS - nowMs;
-		if (remaining <= 0) return null;
-		return Math.ceil(remaining / 1000);
+		// #21 — the rule + the formatter now live in `$lib/orders/editWindow`, so
+		// this page and the order-detail page cannot drift apart on what "15
+		// minutes" means or how it's rendered.
+		return editWindowRemainingSecondsFor(o.created_at, nowMs);
 	}
 
 	/** The "Editing closed (15 min window)" note only shows during a
@@ -413,12 +398,7 @@
 	/** Format a seconds count as `1m 23s` / `42s` for the
 	 *  countdown chip.  Hours are not possible inside a 15-minute
 	 *  window, so the format only handles minutes + seconds. */
-	function formatRemainingMmSs(seconds: number): string {
-		const m = Math.floor(seconds / 60);
-		const s = seconds % 60;
-		if (m === 0) return `${s}s`;
-		return `${m}m ${s}s`;
-	}
+
 
 	function formatAmount(n: number | null): string {
 		if (n === null) return '';

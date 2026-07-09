@@ -274,7 +274,8 @@
     },
     "sign_in_another_device": "Zaloguj się na innym urządzeniu",
     "lock_session": "Zablokuj sesję",
-    "view_my_profile": "Profil @{account}"
+    "view_my_profile": "Profil @{account}",
+    "backup_pending_aria": "Masz klucze bez kopii zapasowej"
   },
   "backup_keys": {
     "title": "Zabezpiecz swoje klucze",
@@ -329,7 +330,8 @@
         "password_required": "Wpisz hasło, aby kontynuować.",
         "wrong_password": "Złe hasło. Spróbuj jeszcze raz.",
         "no_seed_posting_only": "To konto zaimportowano tylko z kluczem postingu — nie ma frazy do pokazania. Użyj pobierania pliku kluczy poniżej.",
-        "generic": "Coś poszło nie tak. Spróbuj jeszcze raz."
+        "generic": "Coś poszło nie tak. Spróbuj jeszcze raz.",
+        "no_seed_posting_active": "Dla tego konta nie ma 12-wyrazowego ziarna i być nie może. Ziarno WYPROWADZA klucze — nie da się go zbudować wstecz z kluczy, które już masz. Twój plik klucza poniżej to twoja kopia zapasowa i zawiera teraz zarówno klucz postujący, jak i aktywny."
       }
     },
     "paired": {
@@ -337,7 +339,8 @@
       "body": "Ten komputer jest sparowany z telefonem, na którym znajdują się prawdziwe klucze. Sekcje poniżej dotyczą tworzenia kopii zapasowej kluczy, których NIE MA na tym urządzeniu — odnoszą się do telefonu, z którym się sparowałeś. Otwórz Morphit na telefonie i przejdź tam do „Utwórz kopię zapasową kluczy”.",
       "deeplink_hint": "Jeśli telefon jest w pobliżu, przycisk poniżej otwiera na nim odpowiednią stronę bezpośrednio.",
       "deeplink_cta": "Otwórz kopię zapasową w telefonie"
-    }
+    },
+    "keyfile_body_posting_active": "Twój plik klucza zawiera teraz klucz postujący ORAZ klucz aktywny, zaszyfrowane hasłem Morphit. Zachowaj kopię w bezpiecznym miejscu: to jedyna kopia zapasowa klucza aktywnego, który właśnie zapisałeś na tym urządzeniu. Nie zawiera kluczy właściciela ani memo — te pozostają tam, gdzie je trzymasz."
   },
   "chat": {
     "message_button_aria": "Wyślij wiadomość do {peer}",
@@ -647,11 +650,10 @@
       "recipient_label": "Do",
       "from_label": "Od",
       "no_memo_notice": "Żadne memo nie zostanie dodane do transakcji — kontekst transakcji pozostaje w tym szyfrowanym czacie.",
-      "password_label": "Hasło klucza aktywnego",
+      "password_label": "Twoje hasło @{account} (do podpisania kluczem aktywnym)",
       "confirm": "Wyślij BLURT",
       "paying": "Wysyłanie…",
       "success_toast": "BLURT wysłany. Potwierdzenie opublikowane w czacie.",
-      "success_toast_no_chat": "BLURT wysłany. Nie udało się opublikować potwierdzenia w czacie — możesz oznaczyć środki jako wysłane ręcznie.",
       "error": {
         "password_required": "Wprowadź hasło klucza aktywnego.",
         "bad_password": "Nieprawidłowe hasło.",
@@ -667,7 +669,8 @@
       "memo_label": "Notatka",
       "with_memo_notice": "Powyższa notatka zostanie dołączona do przelewu w łańcuchu, aby sprzedawca mógł powiązać tę płatność z twoją transakcją.",
       "success_toast_no_chat_with_txid": "BLURT wysłane. Nie można było opublikować potwierdzenia w czacie — skopiuj ten txid, aby ręcznie oznaczyć środki jako wysłane: {txid}",
-      "password_hint": "Hasło, którym odblokowujesz Morphit. Odszyfrowuje Twój klucz aktywny na tym urządzeniu, aby podpisać — nigdy nie wklejasz tu klucza, a nic nie jest nigdzie wysyłane."
+      "password_hint": "Hasło, którym odblokowujesz Morphit. Odszyfrowuje Twój klucz aktywny na tym urządzeniu, aby podpisać — nigdy nie wklejasz tu klucza, a nic nie jest nigdzie wysyłane.",
+      "error_amount_precision": "Użyj najwyżej 3 miejsc po przecinku — najmniejsza kwota, jaką możesz wysłać, to 0,001 BLURT."
     },
     "trade_event": {
       "address_shared_title": "Udostępniono nowy adres",
@@ -679,7 +682,6 @@
     "order_response_no_fee": "Bez opłaty — odpowiadasz na zlecenie @{peer}, więc pierwszy kontakt jest bezpłatny.",
     "menu": {
       "aria_open": "Opcje konwersacji",
-      "aria_dismiss": "Zamknij menu",
       "verify_peer": "Zweryfikuj rozmówcę"
     },
     "verify_peer": {
@@ -1825,7 +1827,6 @@
     "operators": "Operatorzy",
     "operated_by": "Prowadzone przez",
     "contact_operator": "Skontaktuj się z operatorem",
-    "alt_network_disabled": "Ten operator nie skonfigurował adresu dla tej sieci.",
     "alt_network_address": "Adres: {address}",
     "instances": "Instancje",
     "explorer": "Eksplorator bloków",
@@ -2249,7 +2250,7 @@
     },
     "fee_status_banner": {
       "heading": "Status opłaty",
-      "body": "💡 Każde zlecenie poniżej pokazuje status swojej opłaty za wystawienie. Zlecenie pojawia się w publicznej księdze zleceń dopiero po zweryfikowaniu opłaty — etykieta „nie otrzymano”, „niedopłata” lub „jeszcze nie zweryfikowano” wyjaśnia, dlaczego zlecenie może wydawać się tam nieobecne.",
+      "body": "💡 Każde zlecenie poniżej pokazuje status swojej opłaty za wystawienie. Zlecenie pojawia się w publicznej księdze zleceń dopiero po zweryfikowaniu opłaty — etykieta „nie otrzymano”, „niedopłata” lub „jeszcze nie zweryfikowano” wyjaśnia, dlaczego zlecenie może wydawać się nieobecne.",
       "dismiss": "Zamknij tę notatkę"
     }
   },
@@ -2562,8 +2563,8 @@
   },
   "order_detail": {
     "loading": "Wczytywanie zlecenia…",
-    "not_found_title": "Nie znaleźliśmy tego zlecenia",
-    "not_found_body": "Jeśli właśnie je opublikowałeś, poczekaj jeszcze chwilę — blockchain może je nadal potwierdzać, więc dotknij Sprawdź ponownie. W przeciwnym razie to zlecenie może nie istnieć lub nie zostało opublikowane przez to konto.",
+    "not_found_title": "Zlecenie się ładuje",
+    "not_found_body": "To zlecenie jest właśnie publikowane przez blockchain i może minąć minuta, zanim się pojawi.",
     "back_to_profile": "Powrót do profilu",
     "error_title": "Nie udało się wczytać tego zlecenia",
     "error_body": "Coś poszło nie tak podczas kontaktu z indekserem. Spróbuj ponownie za chwilę.",
@@ -2594,7 +2595,8 @@
     "cancel_button": "Anuluj to zlecenie",
     "posting_title": "Twoje zlecenie jest publikowane…",
     "posting_body": "To zlecenie jest potwierdzane przez blockchain i może pojawić się po chwili. Będziemy sprawdzać automatycznie — nie musisz odświeżać.",
-    "check_again": "Sprawdź ponownie"
+    "check_again": "Sprawdź ponownie",
+    "action_edit_countdown": "Edytuj (w ciągu: {remaining})"
   },
   "orderbook": {
     "heading": "Księga zleceń",
@@ -3092,7 +3094,8 @@
       "feature_upsell_cta": "Skonfiguruj wyróżnioną ofertę",
       "edit_window_countdown": "{remaining} na edycję",
       "edit_window_tooltip": "Edycja możliwa tylko w ciągu 15 minut od opublikowania. Później anuluj i opublikuj ponownie.",
-      "edit_window_expired": "Okno edycji minęło"
+      "edit_window_expired": "Okno edycji minęło",
+      "view_my_order_pending": "Twoje zlecenie trafia właśnie na blockchain…"
     },
     "broadcast_error": {
       "title": "Zlecenie nie przeszło",
@@ -3157,7 +3160,7 @@
       "fee_address_chain_pinned": "Zakotwiczone w łańcuchu przez {account} — każda instancja Morphit weryfikuje opłaty wobec tego adresu.",
       "fee_address_chain_pinned_aria": "Autentyczność adresu zakotwiczonego w łańcuchu",
       "fee_address_unavailable": "Ten operator nie skonfigurował adresu opłaty {asset}. Wybierz zamiast tego BLURT lub opublikuj swoje zlecenie na innej instancji Morphit.",
-      "blurt_needs_active_key": "Wymaga klucza Aktywnego. Jesteś teraz zalogowany kluczem Publikacji — zaloguj się 12-wyrazową frazą seed lub plikiem Keyfile, aby zapłacić w BLURT, albo zapłać w BTC/XMR:"
+      "blurt_needs_active_key": "Wymaga klucza aktywnego. Jesteś zalogowany kluczem postującym — Morphit poprosi o klucz aktywny (lub hasło główne Blurt) przy publikacji, a nic z tego, co wpisałeś, nie zostanie utracone."
     },
     "draft": {
       "restored_banner": "Przywrócono szkic sprzed {age}. Kontynuuj tam, gdzie skończyłeś — albo zacznij od nowa.",
@@ -3472,7 +3475,7 @@
       "password_label": "Twoje hasło @{account} (do podpisania kluczem aktywnym)",
       "error_password_required": "Wpisz hasło, aby kontynuować.",
       "error_bad_password": "To hasło nie odblokowało Twojego klucza aktywnego. Sprawdź je i spróbuj ponownie.",
-      "error_no_active_key": "To urządzenie nie ma klucza aktywnego do podpisywania. Zaloguj się za pomocą frazy seed, aby zrobić power up lub power down.",
+      "error_no_active_key": "To urządzenie nie ma klucza aktywnego do podpisania. Morphit poprosi o klucz aktywny (lub hasło główne Blurt) przy power up lub power down.",
       "error_broadcast": "Nie udało się zakończyć operacji w łańcuchu. Spróbuj ponownie.",
       "error_chain_rejected": "Sieć odrzuciła tę transakcję: {reason}",
       "error_unreachable": "Nie udało się połączyć z Twoją instancją Morphit, aby nadać transakcję. Sprawdź połączenie i spróbuj ponownie.",
@@ -3494,7 +3497,7 @@
       "memo_label": "Notatka (opcjonalnie)",
       "memo_placeholder": "np. numer zamówienia",
       "memo_privacy_warning": "Notatki są przechowywane publicznie i trwale w łańcuchu bloków, jawnym tekstem. Nigdy nie umieszczaj w nich haseł, kluczy ani niczego prywatnego.",
-      "error_no_active_key": "To urządzenie nie ma klucza aktywnego do podpisywania. Zaloguj się za pomocą frazy seed, aby wysłać BLURT.",
+      "error_no_active_key": "To urządzenie nie ma klucza aktywnego do podpisania. Morphit poprosi o klucz aktywny (lub hasło główne Blurt) przy wysyłaniu.",
       "send_button": "Wyślij",
       "confirm": "Wyślij BLURT",
       "qr_heading": "Zeskanuj QR odbiorcy",
@@ -3918,7 +3921,7 @@
     },
     "endpoints": {
       "heading": "Punkty końcowe RPC",
-      "explain": "Węzły sieciowe, z którymi Morphit komunikuje się, aby odczytywać i zapisywać dane. Aplikacja próbuje je w kolejności najszybszej odpowiedzi. Dodaj własny lub węzeł społeczności.",
+      "explain": "Węzły sieci, z którymi indeksery Morphit rozmawiają, aby odczytywać i zapisywać dane. Aplikacja próbuje ich w kolejności najszybszej odpowiedzi.",
       "pool_note": "Twoja instancja Morphit obsługuje cały ruch sieci Blurt za Ciebie — Twoja przeglądarka nigdy nie łączy się bezpośrednio z tymi węzłami. To tylko ich status na żywo.",
       "cooling_down": "przerwa",
       "recheck": "Sprawdź ponownie szybkość węzłów",
@@ -4553,5 +4556,31 @@
       "cancel": "Anuluj",
       "confirm": "Odwiedź stronę"
     }
+  },
+  "unlock_active": {
+    "title": "Ta płatność wymaga klucza aktywnego",
+    "body": "Jesteś zalogowany na @{account} kluczem postującym, który nie może przenosić środków. Wpisz klucz aktywny lub hasło główne Blurt, aby kontynuować — nie stracisz niczego, co już wpisałeś.",
+    "field_label": "Klucz aktywny lub hasło główne Blurt",
+    "field_placeholder": "Zaczyna się od 5… , albo hasło główne",
+    "field_help": "Morphit sprawdza go z twoim kontem na blockchainie przed podpisaniem czegokolwiek. Nigdy nie opuszcza tego urządzenia.",
+    "cta": "Odblokuj i kontynuuj",
+    "checking": "Sprawdzanie…",
+    "error": {
+      "invalid_wif": "To nie wygląda na prawidłowy klucz. Sprawdź, czy nie brakuje znaku lub czy nie ma jednego za dużo.",
+      "is_posting_key": "To twój klucz postujący — ten, którym już jesteś zalogowany. Nie może przenosić środków. Wklej klucz aktywny.",
+      "is_owner_key": "To twój klucz właściciela. Może przejąć całe konto, więc Morphit nigdy go nie użyje. Użyj klucza aktywnego.",
+      "not_this_account": "To nie jest klucz aktywny tego konta. Sprawdź, czy używasz klucza dla @{account}.",
+      "empty": "Wpisz klucz aktywny lub hasło główne.",
+      "lookup_failed": "Nie udało się połączyć z blockchainem, aby sprawdzić klucz. Spróbuj za chwilę.",
+      "bad_device_password": "To hasło Morphit jest nieprawidłowe. Twój klucz aktywny nie został zapisany.",
+      "keep_failed": "Nie udało się zapisać klucza aktywnego na tym urządzeniu. Nic nie zostało zmienione — spróbuj ponownie lub wybierz „Zapomnij”."
+    },
+    "retention_heading": "Po tej płatności",
+    "retention_once": "Zapomnij (zalecane)",
+    "retention_once_help": "Użyty raz do podpisu, potem usunięty z pamięci. Następnym razem wpiszesz go ponownie.",
+    "retention_keep": "Zachowaj na tym urządzeniu, zaszyfrowany",
+    "retention_keep_help": "Od teraz odblokowywany hasłem Morphit. Kto pozna to hasło, będzie mógł wydać twoje BLURT — rób to tylko na urządzeniu, które kontrolujesz.",
+    "device_password_label": "Twoje hasło Morphit dla @{account}",
+    "device_password_help": "Hasło, którym już odblokowujesz Morphit. Szyfruje twój klucz aktywny na tym urządzeniu."
   }
 }

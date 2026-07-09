@@ -48,6 +48,7 @@
 	} from '$lib/chat/readState';
 	import { getConversations, getChatReadState } from '$lib/indexer/client';
 	import { getProfilesBatch } from '$lib/indexer/profileCache';
+	import { peersNeedingProfile, mergeProfileMap } from '$lib/indexer/profileMerge';
 	import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
 	import { hiddenAccounts, hideAccount } from '$lib/utils/hiddenAccounts';
 	import { blockedAccounts, loadBlocks } from '$lib/chat/blocks';
@@ -139,15 +140,26 @@
 		}
 	});
 
-	/** Fetch profiles only for peers we don't already have — so the 5 s
-	 *  poll doesn't re-request the whole batch every tick. */
+	/** Fetch profiles for peers we don't have one for — so the 5 s poll doesn't
+	 *  re-request the whole batch every tick, but a peer whose profile we DON'T
+	 *  have is retried.
+	 *
+	 *  This used to ask `!(p in profileMap)`: a failed batch wrote `null`, the
+	 *  key then existed, and that peer was never requested again for the life of
+	 *  the page — the display name and avatar stayed stuck on `@username`.
+	 *  `profileCache` already caches a fetch FAILURE as a soft null that expires
+	 *  in seconds (vs an authoritative "no profile", cached for the full TTL),
+	 *  but it only gets to act on that if we ask again. Asking again is cheap:
+	 *  a fresh cache entry answers from memory without an HTTP request. */
 	async function fetchProfilesForNewPeers(peers: readonly string[]): Promise<void> {
-		const missing = peers.filter((p) => !(p in profileMap));
+		const missing = peersNeedingProfile(peers, profileMap);
 		if (missing.length === 0) return;
-		const fetched = await getProfilesBatch(missing).catch(() => new Map());
-		const next: Record<string, ProfileResponse | null> = { ...profileMap };
-		for (const [a, p] of fetched) next[a] = p;
-		profileMap = next;
+		const fetched = await getProfilesBatch(missing).catch(
+			() => new Map<string, ProfileResponse | null>()
+		);
+		// Keep-prior on null: a transient failure must never blank a name we
+		// already rendered successfully.
+		profileMap = mergeProfileMap(profileMap, fetched);
 	}
 
 	/** Local recent-peers fallback so the inbox shows SOMETHING when the
@@ -443,8 +455,12 @@
 			{#if activeList.length > 0}
 				{#each activeList as convo (convo.peer)}
 					{@const labelProps = extractLabelPropsFromProfile(profileMap[convo.peer])}
+					<!-- tt.txt #6 — `relative` so the chat anchor below can stretch its
+					     hit area over the WHOLE card (::after inset-0). Clicking
+					     anywhere on the card opens the conversation; only the "RE:"
+					     text itself goes to the order. -->
 					<li
-						class="flex items-stretch gap-0 overflow-hidden rounded-xl border bg-white transition hover:border-morphit-emerald hover:shadow-sm dark:bg-ink-950 dark:hover:border-morphit-emerald {convo.unread
+						class="relative flex items-stretch gap-0 overflow-hidden rounded-xl border bg-white transition hover:border-morphit-emerald hover:shadow-sm dark:bg-ink-950 dark:hover:border-morphit-emerald {convo.unread
 							? 'border-morphit-emerald/60 dark:border-morphit-emerald/50'
 							: 'border-ink-200 dark:border-ink-800'}"
 					>
@@ -457,7 +473,7 @@
 							<a
 								href={lp(`/chat/${convo.peer}`)}
 								onclick={() => handleOpen(convo.peer)}
-								class="flex items-center gap-3"
+								class="flex items-center gap-3 after:absolute after:inset-0 after:content-['']"
 								aria-label={convo.unread
 									? ($_('chat.inbox.conversation_aria_unread', {
 											values: { peer: convo.peer }
@@ -478,11 +494,15 @@
 								{:else}
 									<span class="h-2 w-2 flex-none" aria-hidden="true"></span>
 								{/if}
+								<!-- tt.txt #9 — 28px read as a smudge next to a 14px name. 36px
+								     matches the order cards and lets the identicon actually be
+								     recognised at a glance. -->
 								<IdentityLabel
 									account={convo.peer}
 									displayName={labelProps.displayName}
 									avatarSvg={labelProps.avatarSvg}
 									avatarDataUri={labelProps.avatarDataUri}
+									avatarSize={36}
 									weight={convo.unread ? 'bold' : 'semibold'}
 									showCopy={false}
 								/>
@@ -497,16 +517,22 @@
 							<!-- "RE: <order title>" — shown when this conversation is
 							     about a specific order. Its own link to the order
 							     detail page, indented to align under the username
-							     (dot 8 + gap-3 12 + avatar 28 + IdentityLabel
-							     gap-1.5 6 = 54px). The title uses the same shared
+							     (dot 8 + gap-3 12 + avatar 36 + IdentityLabel
+							     gap-1.5 6 = 62px). The title uses the same shared
 							     orderTitleParts helper (and 10-locale wording) as
 							     the orderbook / order-detail / chat-thread. -->
 							{#if convo.order}
 								{@const parts = orderTitleParts(convo.order, undefined, $_('order_title.goods_services'))}
 								{@const orderTitle = $_(parts.key, { values: parts.values }) as string}
+								<!-- tt.txt #6 — was `flex`, i.e. a BLOCK-level box: its hit area
+								     silently spanned the whole card width, so Ken kept landing on
+								     the order page when he meant to open the chat. `inline-flex` +
+								     `self-start` shrink it to its own text. `relative z-10` keeps
+								     it above the stretched chat link. `max-w-full` preserves the
+								     truncation of long titles. -->
 								<a
 									href={lp(`/@${convo.order.account}/${convo.order.permlink}`)}
-									class="flex items-baseline gap-1 pl-[54px] text-xs text-ink-500 transition-colors hover:text-morphit-emerald dark:text-ink-400 dark:hover:text-morphit-emerald"
+									class="relative z-10 inline-flex max-w-full items-baseline gap-1 self-start pl-[62px] text-xs text-ink-500 transition-colors hover:text-morphit-emerald dark:text-ink-400 dark:hover:text-morphit-emerald"
 									title={`${$_('chat.inbox.re_prefix')} ${orderTitle}`}
 								>
 									<span class="flex-none font-medium">{$_('chat.inbox.re_prefix')}</span>
@@ -522,10 +548,14 @@
 							     intentionally softer than a block: the peer
 							     isn't told anything, and unhiding is a
 							     one-click revert. -->
+							<!-- `relative z-10`: the chat anchor stretches its hit area over the
+							     whole card, so any control that must remain clickable has to
+							     sit above it. Without this, Dismiss would silently open the
+							     conversation instead. -->
 							<button
 								type="button"
 								onclick={() => handleDismiss(convo.peer)}
-								class="flex-none border-l border-ink-200 px-3 text-xs font-semibold text-ink-500 transition-colors hover:bg-ink-100 hover:text-red-600 dark:border-ink-800 dark:text-ink-400 dark:hover:bg-ink-800 dark:hover:text-red-400"
+								class="relative z-10 flex-none border-l border-ink-200 px-3 text-xs font-semibold text-ink-500 transition-colors hover:bg-ink-100 hover:text-red-600 dark:border-ink-800 dark:text-ink-400 dark:hover:bg-ink-800 dark:hover:text-red-400"
 								aria-label={$_('chat.inbox.dismiss_aria', {
 									values: { peer: convo.peer }
 								}) as string}

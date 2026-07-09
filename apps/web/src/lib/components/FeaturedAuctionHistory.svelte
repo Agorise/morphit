@@ -154,7 +154,13 @@
 		     history + "be the first" prompt below. -->
 		<FeaturedOrders embedded variant="stack" oncount={(n) => (liveFeaturedCount = n)} />
 
-		{#if latest !== null && (latest.clearing_blurt_per_hour > 0 || latest.active_visible_count > 0)}
+		<!-- Ken: with NO featured orders on the board, "1 of 3 slots filled today"
+		     is worse than useless — it sat directly above "No featured-slot bids in
+		     the last 30 days yet." and contradicted it. `liveFeaturedCount` is the
+		     authoritative count of what is actually visible right now (emitted by
+		     <FeaturedOrders> above); the auction row's `active_visible_count` is a
+		     property of that DAY'S auction, not of the board. -->
+		{#if liveFeaturedCount > 0 && latest !== null && (latest.clearing_blurt_per_hour > 0 || latest.active_visible_count > 0)}
 			<p class="mb-3 text-sm text-ink-600 dark:text-ink-300">
 				{#if latest.clearing_blurt_per_hour > 0}
 					{$_('clearing_price.summary_competitive', {

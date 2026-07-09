@@ -44,6 +44,8 @@
 	} from '$stores/identity';
 	import { hasPersistedKeystore } from '$crypto/persistentKeystore';
 	import { unreadCount, totalUnread, markRead } from '$lib/notifications';
+	import { portal } from '$lib/ui/portal';
+	import { backupMaterialPending } from '$stores/backupPending';
 	import { backupVisited } from '$utils/backupVisited';
 	// runExplicitLockExtras is dynamically imported in confirmLock() (cp271 byte
 	// budget): it pulls sign-out-only chat/trade cleanup (pubPin/tradeStatus/
@@ -261,6 +263,19 @@
 		showLockConfirm = false;
 	}
 
+	/** tt.txt #3 — the notification categories showed correct counts but were
+	 *  inert `<div>`s. A count that tells you something is waiting, and then
+	 *  refuses to take you to it, is worse than no count. Each row is now a real
+	 *  button that closes the menu and lands on the page that holds the thing.
+	 *
+	 *  Feedback lives on /my/orders (the pending-feedback banner sits at the top
+	 *  of that page), so both Orders and Feedback route there. */
+	function openCategory(path: string): void {
+		open = false;
+		showNotifications = false;
+		void gotoLocale(path);
+	}
+
 	function markAllRead(): void {
 		markRead();
 	}
@@ -352,6 +367,18 @@
 				></span>
 			{/if}
 
+			{#if $backupMaterialPending}
+				<!-- tt.txt #11 (Ken) — RED dot: this account holds key material that
+				     exists nowhere else yet. Deliberately not the emerald unread
+				     colour: "you have unread messages" and "you could permanently
+				     lose your keys" must never look the same. Bottom-left, so it
+				     can't collide with the unread badge top-right. -->
+				<span
+					class="absolute -bottom-0.5 -start-0.5 h-3 w-3 rounded-full border-2 border-white bg-red-500 dark:border-ink-950"
+					aria-hidden="true"
+				></span>
+			{/if}
+
 			{#if total > 0}
 				<!-- Badge pill. Absolute top-right, offset so it
 				     overlaps the avatar edge — looks more integrated
@@ -377,12 +404,22 @@
 		</button>
 
 		{#if open}
-			<!-- Full-page scrim: blurs + dims the rest of the page so the eye
-			     is drawn to the open menu (same treatment as the FAQ search).
-			     Sits below the menu (z-40 < the menu's z-50) and above the page;
-			     clicking it closes the menu. `fixed inset-0` escapes this
-			     `relative` wrapper to cover the whole viewport. -->
+			<!-- Full-page scrim: blurs + dims the rest of the page so the eye is
+			     drawn to the open menu (same treatment as the FAQ search).
+			     Clicking it closes the menu.
+
+			     tt.txt #1 — `fixed inset-0` does NOT cover the viewport here. This
+			     menu lives inside the sticky header, and the header carries
+			     `backdrop-blur-md`; an ancestor with `backdrop-filter` becomes the
+			     containing block for `position: fixed` descendants, so the scrim was
+			     clipped to the header bar and only the header blurred. `use:portal`
+			     moves it to <body>, escaping that containing block.
+
+			     z-30, NOT z-40: portaled to <body> it leaves the header's stacking
+			     context, so it must sit BELOW the header (z-40) or it would paint
+			     over the very menu it exists to highlight. -->
 			<button
+				use:portal
 				type="button"
 				aria-label={$_('common.close')}
 				tabindex="-1"
@@ -390,7 +427,7 @@
 					open = false;
 					showNotifications = false;
 				}}
-				class="fixed inset-0 z-40 cursor-default bg-ink-900/5 backdrop-blur-sm"
+				class="fixed inset-0 z-30 cursor-default bg-ink-900/5 backdrop-blur-sm"
 			></button>
 			<!-- Dropdown menu. Absolutely-positioned, inline on the
 			     page so the user never navigates away. Width is fixed
@@ -448,7 +485,11 @@
 					     notification system is working. -->
 					<ul class="max-h-96 overflow-y-auto p-2">
 						<li>
-							<div class="flex items-center justify-between gap-3 rounded-xl px-3 py-3">
+							<button
+								type="button"
+								onclick={() => openCategory('/my/orders')}
+								class="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-3 text-start transition-colors hover:bg-ink-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:hover:bg-ink-800"
+							>
 								<div class="min-w-0">
 									<p class="text-sm font-semibold">
 										{$_('avatar_menu.category.order')}
@@ -462,10 +503,14 @@
 								>
 									{$unreadCount.order}
 								</span>
-							</div>
+							</button>
 						</li>
 						<li>
-							<div class="flex items-center justify-between gap-3 rounded-xl px-3 py-3">
+							<button
+								type="button"
+								onclick={() => openCategory('/chat')}
+								class="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-3 text-start transition-colors hover:bg-ink-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:hover:bg-ink-800"
+							>
 								<div class="min-w-0">
 									<p class="text-sm font-semibold">
 										{$_('avatar_menu.category.chat')}
@@ -479,10 +524,14 @@
 								>
 									{$unreadCount.chat}
 								</span>
-							</div>
+							</button>
 						</li>
 						<li>
-							<div class="flex items-center justify-between gap-3 rounded-xl px-3 py-3">
+							<button
+								type="button"
+								onclick={() => openCategory('/my/orders')}
+								class="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-3 text-start transition-colors hover:bg-ink-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:hover:bg-ink-800"
+							>
 								<div class="min-w-0">
 									<p class="text-sm font-semibold">
 										{$_('avatar_menu.category.feedback')}
@@ -496,7 +545,7 @@
 								>
 									{$unreadCount.feedback}
 								</span>
-							</div>
+							</button>
 						</li>
 					</ul>
 
@@ -703,7 +752,15 @@
 										<rect x="3" y="11" width="18" height="11" rx="2" />
 										<path d="M7 11V7a5 5 0 0 1 10 0v4" />
 									</svg>
-									<span class="text-sm font-semibold">{$_('avatar_menu.backup_keys')}</span>
+									<span class="flex items-center gap-2 text-sm font-semibold">
+										{$_('avatar_menu.backup_keys')}
+										{#if $backupMaterialPending}
+											<span
+												class="h-2 w-2 flex-none rounded-full bg-red-500"
+												aria-label={$_('avatar_menu.backup_pending_aria') as string}
+											></span>
+										{/if}
+									</span>
 								</span>
 								{#if !$backupVisited}
 									<span

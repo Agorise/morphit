@@ -65,3 +65,17 @@ export function floorToBlurtPrecision(n: number): string {
 	const scale = 10 ** BLURT_DECIMALS;
 	return (Math.floor(n * scale) / scale).toFixed(BLURT_DECIMALS);
 }
+
+/**
+ * Does this NUMBER already sit on BLURT's 3-decimal grid?
+ *
+ * For amounts that arrive as numbers rather than typed text — a "pay the order
+ * amount" pill, an FX conversion — `formatBlurtAmount` would happily round them
+ * before broadcast. Rounding an amount the user did not choose is the same bug
+ * as rounding one they typed; it just has no field to complain in.
+ */
+export function hasBlurtPrecision(n: number): boolean {
+	if (!Number.isFinite(n)) return false;
+	const scaled = n * 10 ** BLURT_DECIMALS;
+	return Math.abs(scaled - Math.round(scaled)) < 1e-6;
+}

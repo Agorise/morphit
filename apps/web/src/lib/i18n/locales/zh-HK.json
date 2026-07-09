@@ -274,7 +274,8 @@
     },
     "sign_in_another_device": "喺其他裝置登入",
     "lock_session": "鎖定會話",
-    "view_my_profile": "@{account} 的個人檔案"
+    "view_my_profile": "@{account} 的個人檔案",
+    "backup_pending_aria": "你有尚未備份嘅密鑰"
   },
   "backup_keys": {
     "title": "備份你的金鑰",
@@ -329,7 +330,8 @@
         "password_required": "請輸入密碼以繼續。",
         "wrong_password": "密碼錯誤。請重試。",
         "no_seed_posting_only": "此帳戶僅透過發帖密鑰匯入 — 沒有可顯示的助記詞。請使用下方的密鑰檔案下載。",
-        "generic": "出現問題。請重試。"
+        "generic": "出現問題。請重試。",
+        "no_seed_posting_active": "呢個帳戶冇 12 詞助記詞，亦唔可能有。助記詞係用嚟「派生」密鑰嘅——無法由你已有嘅密鑰反推出嚟。下面嘅 Keyfile 就係你嘅備份，而家佢同時包含你嘅發帖密鑰同活躍密鑰。"
       }
     },
     "paired": {
@@ -337,7 +339,8 @@
       "body": "此桌面已與您的手機配對，手機保存著您真正的密鑰。下面的部分是關於備份不在此裝置上的密鑰的——它們適用於您配對的手機。在手機上開啟 Morphit，前往「備份我的密鑰」。",
       "deeplink_hint": "如果您的手機在附近，下面的按鈕會直接在手機上開啟正確的頁面。",
       "deeplink_cta": "在手機上開啟備份"
-    }
+    },
+    "keyfile_body_posting_active": "你嘅 Keyfile 而家同時保存咗發帖密鑰同活躍密鑰，並用你嘅 Morphit 密碼加密。請將副本妥善保存：呢個係你啱啱存到本裝置嘅活躍密鑰嘅唯一備份。佢唔包含擁有者密鑰或備註密鑰——嗰啲仍然喺你原本保管嘅地方。"
   },
   "chat": {
     "message_button_aria": "向 {peer} 傳訊息",
@@ -647,11 +650,10 @@
       "recipient_label": "收款人",
       "from_label": "付款人",
       "no_memo_notice": "不會包含鏈上備註 — 您的交易上下文留在此加密聊天中。",
-      "password_label": "您的密碼",
+      "password_label": "你嘅 @{account} 密碼（用嚟以活躍密鑰簽名）",
       "confirm": "發送 BLURT",
       "paying": "正在發送…",
       "success_toast": "BLURT 已發送。收據已發佈到聊天。",
-      "success_toast_no_chat": "BLURT 已發送。無法將收據發佈到聊天 — 您可以手動標記資金已發送。",
       "error": {
         "password_required": "請輸入您的密碼。",
         "bad_password": "密碼錯誤。",
@@ -667,7 +669,8 @@
       "memo_label": "備註",
       "with_memo_notice": "上面的備註將包含在鏈上轉賬中,以便賣家將此付款與您的交易匹配。",
       "success_toast_no_chat_with_txid": "BLURT 已發送。無法在聊天中發布收據 — 複製此 txid 以手動標記資金已發送：{txid}",
-      "password_hint": "您用來解鎖 Morphit 的密碼。它會在本裝置上解密您的活動密鑰以進行簽署——您無需在此貼上任何密鑰，亦不會向任何地方傳送任何內容。"
+      "password_hint": "您用來解鎖 Morphit 的密碼。它會在本裝置上解密您的活動密鑰以進行簽署——您無需在此貼上任何密鑰，亦不會向任何地方傳送任何內容。",
+      "error_amount_precision": "最多使用 3 位小數——可發送嘅最小金額為 0.001 BLURT。"
     },
     "trade_event": {
       "address_shared_title": "已共享新地址",
@@ -679,7 +682,6 @@
     "order_response_no_fee": "免費——你喺回應 @{peer} 嘅訂單，所以首次聯繫係免費嘅。",
     "menu": {
       "aria_open": "對話選項",
-      "aria_dismiss": "關閉選單",
       "verify_peer": "驗證對方"
     },
     "verify_peer": {
@@ -1825,7 +1827,6 @@
     "operators": "運營者",
     "operated_by": "營運者",
     "contact_operator": "聯絡本站營運者",
-    "alt_network_disabled": "本營運者未為此網絡配置地址。",
     "alt_network_address": "地址:{address}",
     "instances": "實例",
     "explorer": "區塊瀏覽器",
@@ -2249,7 +2250,7 @@
     },
     "fee_status_banner": {
       "heading": "費用狀態",
-      "body": "💡 下方每個訂單都會顯示其掛單費狀態。訂單只有在費用通過驗證後才會出現在公開訂單簿中——標記為「未收到」「支付不足」或「尚未驗證」就是某個訂單在那裡看起來缺失的原因。",
+      "body": "💡 下方每個訂單都會顯示其掛單費狀態。訂單只有在費用通過驗證後才會出現在公開訂單簿中——標記為「未收到」「支付不足」或「尚未驗證」就是某個訂單看起來缺失的原因。",
       "dismiss": "忽略此提示"
     }
   },
@@ -2562,8 +2563,8 @@
   },
   "order_detail": {
     "loading": "正在載入訂單…",
-    "not_found_title": "找不到此訂單",
-    "not_found_body": "如果你剛剛發佈，請再等一分鐘——區塊鏈可能仍在確認它，點擊「再次檢查」。否則此訂單可能不存在，或並非由此帳戶發佈。",
+    "not_found_title": "訂單正在載入",
+    "not_found_body": "呢張訂單正在由區塊鏈發布，可能需要一分鐘先會出現。",
     "back_to_profile": "返回個人主頁",
     "error_title": "無法載入此訂單",
     "error_body": "訪問索引器時出錯。請稍後再試。",
@@ -2594,7 +2595,8 @@
     "cancel_button": "取消呢張訂單",
     "posting_title": "你的訂單正在發佈…",
     "posting_body": "此訂單正在由區塊鏈確認，可能需要一分鐘才會出現。我們會自動持續檢查——無需重新整理。",
-    "check_again": "再次檢查"
+    "check_again": "再次檢查",
+    "action_edit_countdown": "編輯（剩餘：{remaining}）"
   },
   "orderbook": {
     "heading": "訂單簿",
@@ -3092,7 +3094,8 @@
       "feature_upsell_cta": "設定特色出價",
       "edit_window_countdown": "{remaining} 內可編輯",
       "edit_window_tooltip": "編輯僅可在發布後 15 分鐘內進行。之後請取消並重新發布。",
-      "edit_window_expired": "編輯視窗已過"
+      "edit_window_expired": "編輯視窗已過",
+      "view_my_order_pending": "你嘅訂單正在寫入區塊鏈…"
     },
     "broadcast_error": {
       "title": "訂單未能成交",
@@ -3157,7 +3160,7 @@
       "fee_address_chain_pinned": "由 {account} 在鏈上錨定 — 每個 Morphit 實例都依據此地址驗證費用。",
       "fee_address_chain_pinned_aria": "鏈上錨定地址的真實性",
       "fee_address_unavailable": "此營運者未設定 {asset} 費用地址。請改選 BLURT，或在另一個 Morphit 實例上發布您的訂單。",
-      "blurt_needs_active_key": "需要你的活躍（Active）密鑰。你目前用發文（Posting）密鑰登入——請用你的 12 個單詞種子短語或 Keyfile 登入以用 BLURT 支付，或改用 BTC/XMR 付款："
+      "blurt_needs_active_key": "需要你嘅活躍密鑰。你而家用發帖密鑰登入——發布時 Morphit 會請求你嘅活躍密鑰（或 Blurt 主密碼），你已填寫嘅內容唔會遺失。"
     },
     "draft": {
       "restored_banner": "已還原 {age} 前的草稿。從上次停下的地方繼續——或者重新開始。",
@@ -3472,7 +3475,7 @@
       "password_label": "你的 @{account} 密碼(用於以你的活躍密鑰簽名)",
       "error_password_required": "請輸入密碼以繼續。",
       "error_bad_password": "該密碼未能解鎖你的活躍密鑰。請檢查後重試。",
-      "error_no_active_key": "此裝置沒有可用於簽名的活躍密鑰。請使用助記詞登入以進行 power up 或 power down。",
+      "error_no_active_key": "本裝置冇可以用嚟簽名嘅活躍密鑰。進行 power up 或 power down 時 Morphit 會請求你嘅活躍密鑰（或 Blurt 主密碼）。",
       "error_broadcast": "該操作未能在鏈上完成。請重試。",
       "error_chain_rejected": "網絡拒絕了此交易：{reason}",
       "error_unreachable": "無法連接到你的 Morphit 實例進行廣播。請檢查網絡連接後重試。",
@@ -3494,7 +3497,7 @@
       "memo_label": "備註(可選)",
       "memo_placeholder": "例如訂單編號",
       "memo_privacy_warning": "備註會以明文形式公開且永久地儲存在區塊鏈上。切勿填寫密碼、密鑰或任何私密資訊。",
-      "error_no_active_key": "此裝置沒有可用於簽名的活躍密鑰。請使用助記詞登入以發送 BLURT。",
+      "error_no_active_key": "本裝置冇可以用嚟簽名嘅活躍密鑰。發送時 Morphit 會請求你嘅活躍密鑰（或 Blurt 主密碼）。",
       "send_button": "發送",
       "confirm": "發送 BLURT",
       "qr_heading": "掃描收款人二維碼",
@@ -3918,7 +3921,7 @@
     },
     "endpoints": {
       "heading": "RPC 節點",
-      "explain": "Morphit 用於讀寫資料的網絡節點。應用會按回應速度依次嘗試。添加你自己的或社群節點。",
+      "explain": "Morphit 索引器用嚟讀寫資料所連接嘅網絡節點。應用會按回應最快嘅次序逐一嘗試。",
       "pool_note": "你嘅 Morphit 實例為你處理所有 Blurt 網絡流量——你嘅瀏覽器從不直接同呢些節點通訊。呢度只係顯示佢哋嘅即時狀態。",
       "cooling_down": "冷卻中",
       "recheck": "重新檢測節點速度",
@@ -4236,7 +4239,7 @@
       "iphone_link": "iPhone 安裝演示"
     },
     "account_name": {
-      "heading": "帳戶名",
+      "heading": "帳戶名稱",
       "explain": "Morphit 需要知你嘅帳戶名,先可以辨認你嘅交易、訊息同鏈上活動。如果你匯入咗帶帳戶名嘅 posting 密鑰,呢個已經設定好。如果你匯入咗助記詞或 keyfile,喺呢度設定佢。",
       "current_label": "現時帳戶",
       "locked_explain": "要更改,請登出,然後用另一個帳戶重新匯入。",
@@ -4553,5 +4556,31 @@
       "cancel": "取消",
       "confirm": "前往該網站"
     }
+  },
+  "unlock_active": {
+    "title": "呢筆付款需要你嘅活躍密鑰",
+    "body": "你而家用發帖密鑰登入 @{account}，佢無法轉移資金。請輸入你嘅活躍密鑰或 Blurt 主密碼以繼續——你已填寫嘅內容唔會遺失。",
+    "field_label": "活躍密鑰或 Blurt 主密碼",
+    "field_placeholder": "以 5… 開頭，或你嘅主密碼",
+    "field_help": "喺簽名之前，Morphit 會同區塊鏈上嘅帳戶核對。佢絕不會離開本裝置。",
+    "cta": "解鎖並繼續",
+    "checking": "正在核對…",
+    "error": {
+      "invalid_wif": "呢個睇落唔似有效嘅密鑰。請檢查係咪漏咗字或者多咗字。",
+      "is_posting_key": "呢個係你嘅發帖密鑰——你已經用佢登入咗。佢無法轉移資金。請改為貼上活躍密鑰。",
+      "is_owner_key": "呢個係你嘅擁有者密鑰。佢可以接管你成個帳戶，所以 Morphit 絕不會用佢。請用活躍密鑰。",
+      "not_this_account": "呢個唔係本帳戶嘅活躍密鑰。請確認你用緊 @{account} 嘅密鑰。",
+      "empty": "請輸入你嘅活躍密鑰或主密碼。",
+      "lookup_failed": "無法連接區塊鏈以核對你嘅密鑰。請稍後再試。",
+      "bad_device_password": "呢個 Morphit 密碼唔正確。你嘅活躍密鑰未有保存。",
+      "keep_failed": "無法喺本裝置上保存你嘅活躍密鑰。冇任何更改——請重試，或者揀「之後忘記」。"
+    },
+    "retention_heading": "今次付款之後",
+    "retention_once": "之後忘記（推薦）",
+    "retention_once_help": "只用嚟簽名一次，之後由記憶體擦除。下次要重新輸入。",
+    "retention_keep": "加密保存喺本裝置上",
+    "retention_keep_help": "之後用你嘅 Morphit 密碼解鎖。知道呢個密碼嘅人就可以花掉你嘅 BLURT，所以只喺你自己掌控嘅裝置上咁做。",
+    "device_password_label": "你嘅 @{account} Morphit 密碼",
+    "device_password_help": "你解鎖 Morphit 時用嘅密碼。佢會喺本裝置上加密你嘅活躍密鑰。"
   }
 }

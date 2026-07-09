@@ -58,7 +58,19 @@ for (const loc of LOCALES) {
 }
 check('all 10 locales have not_found_* + posting_* + check_again', locOk);
 const en = JSON.parse(readFileSync(join(WEB, 'src', 'lib', 'i18n', 'locales', 'en.json'), 'utf8')).order_detail;
-check('EN not-found copy is reworded (reassuring, not "doesn\'t exist"-first)', !en.not_found_body.startsWith('This order doesn') && /Check again|another minute|still be confirming/i.test(en.not_found_body));
+// Ken specified this copy verbatim. The page a user hits seconds after paying a
+// listing fee must say WAIT, not GONE — an earlier rewrite of mine fixed the
+// tone ("We couldn't find this order") while keeping the "it's missing" meaning.
+check(
+	'EN not-found title is Ken\'s exact "Order is loading"',
+	en.not_found_title === 'Order is loading'
+);
+check(
+	'EN not-found body is Ken\'s exact wording',
+	en.not_found_body ===
+		'This order is being posted by the blockchain and may take a minute for it to appear.'
+);
+check('the copy never leads with "doesn\'t exist"', !en.not_found_body.startsWith('This order doesn'));
 
 console.log('');
 if (fail === 0) {

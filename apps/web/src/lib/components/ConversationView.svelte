@@ -32,6 +32,9 @@
 	 */
 
 	import { onDestroy, onMount, tick } from 'svelte';
+	import { markConversationRead, readAckTimestamp } from '$lib/chat/readState';
+	import { pinToBottom } from '$lib/ui/pinToBottom';
+	import { truncatePublicKey } from '$lib/crypto/publicKeyDisplay';
 	import { get } from 'svelte/store';
 	import { _ } from 'svelte-i18n';
 
@@ -874,6 +877,12 @@
 	 *  the last render so we can decide whether to auto-scroll after
 	 *  a new message arrives. Updated each scroll event. */
 	let userAtBottom = $state(true);
+	/** tt.txt #8 — the first batch of messages must land the user at the NEWEST
+	 *  message. Smooth-scrolling to a scrollHeight measured before the list has
+	 *  laid out drops them in the middle of the history. Jump instantly, then
+	 *  re-pin while the content settles. */
+	let initialScrollDone = false;
+	let cancelPin: (() => void) | null = null;
 
 	/** Tolerance in pixels for the "at bottom" check — browsers
 	 *  round scroll positions and a user who just scrolled down
@@ -897,6 +906,9 @@
 
 	function onScroll(): void {
 		if (!scrollEl) return;
+		// The user has taken control; stop re-pinning immediately.
+		cancelPin?.();
+		cancelPin = null;
 		userAtBottom = isAtBottom();
 		if (userAtBottom) {
 			unreadWhileScrolledUp = 0;
@@ -1015,7 +1027,14 @@
 			messages = [...next];
 			// After DOM updates, decide how to handle scroll.
 			void tick().then(() => {
-				if (wasAtBottom) {
+				if (!initialScrollDone && messages.length > 0) {
+					// FIRST paint of this conversation: be at the bottom, don't
+					// animate toward where the bottom used to be.
+					initialScrollDone = true;
+					cancelPin?.();
+					cancelPin = pinToBottom(scrollEl);
+					unreadWhileScrolledUp = 0;
+				} else if (wasAtBottom) {
 					scrollToBottom(true);
 				} else if (newIncoming > 0) {
 					unreadWhileScrolledUp += newIncoming;
@@ -1057,7 +1076,50 @@
 		// in one place.
 	});
 
+	/** #19 (Ken) — the inbox card stayed lit green (and bordered) for a peer he
+	 *  had *just* been chatting with.
+	 *
+	 *  The conversation was acknowledged as read exactly ONCE, on mount, from the
+	 *  /chat/[peer] route. Every message exchanged afterwards — his own included —
+	 *  carries a chain timestamp LATER than that ack, so the moment he returned to
+	 *  the inbox `isUnread()` said yes.
+	 *
+	 *  Worse, the ack stored the browser's `Date.now()` while `last_message_at`
+	 *  comes from the chain. Any clock skew in the wrong direction pinned the
+	 *  conversation to "unread" permanently, no matter how many times he opened it.
+	 *
+	 *  So: acknowledge with the newest CONFIRMED message we've actually rendered
+	 *  (clock-independent), and keep acknowledging as the conversation proceeds —
+	 *  not just when it opens, but every time a message lands while the tab is
+	 *  visible, and once more on the way out. */
+	function latestConfirmedAt(): Date | null {
+		let newest: Date | null = null;
+		for (const m of messages) {
+			const at = m.createdAt;
+			if (at === null) continue; // still pending: the chain hasn't stamped it
+			if (newest === null || at.getTime() > newest.getTime()) newest = at;
+		}
+		return newest;
+	}
+
+	function ackRead(): void {
+		if (!peer) return;
+		markConversationRead(peer, readAckTimestamp(latestConfirmedAt()));
+	}
+
+	$effect(() => {
+		// Re-runs whenever the message list changes. Acking while the tab is
+		// hidden would mark messages read that the user never saw.
+		void messages.length;
+		if (typeof document !== 'undefined' && document.hidden) return;
+		ackRead();
+	});
+
 	onDestroy(() => {
+		cancelPin?.();
+		cancelPin = null;
+		// Leaving the conversation: everything on screen has been seen.
+		ackRead();
 		controller?.destroy();
 		controller = null;
 		if (blockErrorTimeoutId !== null) {
@@ -1327,84 +1389,131 @@
 	     below the header row. -->
 	<div class="flex-none border-b border-ink-200 bg-white dark:border-ink-800 dark:bg-ink-950">
 		<header class="chat-header flex items-start justify-between gap-3 px-4 py-3">
-			<!-- cp402 [2] — peer identity + context. "Chatting with:" lead-in,
-			     then the IdentityLabel (avatar + display name + @username +
-			     truncated BLT posting key — the durable identity anchor,
-			     same as the order-detail poster card), then a "RE:" line
-			     summarizing the order this conversation is about (omitted
-			     when there's no order context). Replaces the old 📌 banner
-			     that used to sit below the header. -->
-			<div class="flex min-w-0 flex-col gap-0.5">
-				<span class="text-xs text-ink-500 dark:text-ink-400">{$_('chat.header.chatting_with')}:</span>
-				<IdentityLabel
-					account={peer}
-					displayName={peerLabelProps.displayName}
-					avatarSvg={peerLabelProps.avatarSvg}
-					avatarDataUri={peerLabelProps.avatarDataUri}
-					publicKeyString={peerPostingKey ?? undefined}
-					href={lp(`/@${peer}`)}
-					weight="bold"
-					avatarSize={32}
-				/>
-				{#if peerReputation}
-					<!-- #4 — peer reputation cluster, mirroring the order card:
-					     🌱 new-trader sprout · ⭐ composite score · trade count.
-					     Same signals a buyer/seller sees before opening a trade,
-					     now visible while chatting. -->
-					<div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
-						{#if peerReputation.isNewTrader}
-							<NewTraderChip />
-						{/if}
-						{#if peerReputation.score !== null}
-							<span
-								class="inline-flex items-center gap-1 font-semibold text-morphit-emerald"
-								aria-label={$_('orderbook.card.reputation_aria', {
-									values: { score: peerReputation.score.toFixed(2) }
-								}) as string}
-								title={$_('orderbook.card.reputation_aria', {
-									values: { score: peerReputation.score.toFixed(2) }
-								}) as string}
-							>
-								<span aria-hidden="true">⭐</span>
-								<span aria-hidden="true">{peerReputation.score.toFixed(2)}</span>
-							</span>
-						{/if}
-						<span class="text-ink-500 dark:text-ink-400">
-							{$_('orderbook.card.trades_only', {
-								values: { count: formatCountCompact(peerReputation.count) }
-							})}
-						</span>
+			<!-- cp402 [2] / tt.txt #7 — peer identity + context. "Chatting with:"
+			     lead-in, then an order-card-shaped identity cluster (avatar, name +
+			     sprout, posting key + trades + reputation, RE: line), then the kebab
+			     as the last item of that same row. Replaces the old 📌 banner that
+			     used to sit below the header. -->
+			<div class="flex min-w-0 flex-1 flex-col gap-1">
+				<span class="text-xs text-ink-500 dark:text-ink-400"
+					>{$_('chat.header.chatting_with')}:</span
+				>
+
+				<!-- tt.txt #7 (Ken) — laid out like the order cards, and for the same
+				     reason: on a phone the old single-line IdentityLabel left no room
+				     for the sprout / trade count / reputation, so they wrapped or were
+				     squeezed against the kebab.
+
+				     avatar │ line 1: display name + 🌱 sprout
+				            │ line 2: posting key · trades · ⭐ reputation
+				            │ line 3: RE: <order title>   (when there's an order)
+
+				     The kebab is the last flex item of THIS row, so `items-start` makes
+				     its top sit level with the display name — not with the "Chatting
+				     with:" lead-in above it. -->
+				<div class="flex items-start gap-3">
+					<div class="flex-none">
+						<IdentityLabel
+							account={peer}
+							avatarSvg={peerLabelProps.avatarSvg}
+							avatarDataUri={peerLabelProps.avatarDataUri}
+							avatarSize={48}
+							hideHandle
+						/>
 					</div>
-				{/if}
-				{#if orderSummary}
-					<!-- The RE: line links through to the order-detail page —
-					     the click-through the removed 📌 banner used to provide,
-					     now folded into the header. Whole line is the tap target
-					     (mobile + grandma friendly); the label stays put while the
-					     summary truncates, with the full text in the hover title. -->
-					<a
-						href={lp(`/@${orderOwner ?? peer}/${orderPermlink}`)}
-						class="flex min-w-0 items-baseline gap-1 text-xs text-ink-500 hover:text-morphit-emerald hover:underline dark:text-ink-400"
-						title={orderSummary}
-					>
-						<span class="flex-none font-medium">{$_('chat.header.re')}:</span>
-						<span class="truncate">{orderSummary}</span>
-					</a>
-				{/if}
-			</div>
-			<!-- Right column: the overflow (kebab) menu on top, the LIVE
-			     pip stacked beneath it. cp402: the standalone Block button
-			     was removed — Block/Unblock now lives INSIDE the kebab menu
-			     as "Block @username" (Ken's chat batch), decluttering the
-			     header row and matching a single-menu-for-peer-actions model. -->
-			<div class="flex flex-none flex-col items-end gap-1.5">
-				{#if $isUnlocked}
-				<div class="flex flex-none items-center gap-2">
-					<!-- Overflow (kebab) menu.  Hosts the "Block @username" /
-					     "Unblock @username" action and the opt-in "Verify peer"
-					     item.  Hidden-by-default UX: collapsed, no badges, no
-					     nag. -->
-					<div class="relative">
+
+					<div class="min-w-0 flex-1">
+						<!-- Line 1 — display name, then the sprout at the END of the name,
+						     exactly as the order cards do it. -->
+						<div class="flex items-center gap-x-2">
+							<a
+								href={lp(`/@${peer}`)}
+								class="truncate font-bold text-ink-900 hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:text-white"
+							>
+								{peerLabelProps.displayName || `@${peer}`}
+							</a>
+							{#if peerReputation?.isNewTrader}
+								<NewTraderChip />
+							{/if}
+							{#if peerReputation && peerReputation.score !== null}
+								<!-- Ken: the reputation must NEVER wrap. On a narrow viewport line 2
+								     (key · trades · ⭐) is the line that runs out of room, so the
+								     score moves up here instead. `sm:hidden` / `hidden sm:inline-flex`
+								     is a deterministic split — no measuring, no layout thrash, and
+								     the posting key (the trust anchor) never gets truncated to make
+								     room for it. -->
+								<span
+									class="inline-flex flex-none items-center gap-1 text-sm font-semibold text-morphit-emerald sm:hidden"
+									aria-label={$_('orderbook.card.reputation_aria', {
+										values: { score: peerReputation.score.toFixed(2) }
+									}) as string}
+									title={$_('orderbook.card.reputation_aria', {
+										values: { score: peerReputation.score.toFixed(2) }
+									}) as string}
+								>
+									<span aria-hidden="true">⭐</span>
+									<span aria-hidden="true">{peerReputation.score.toFixed(2)}</span>
+								</span>
+							{/if}
+						</div>
+
+						<!-- Line 2 — the durable identity anchor (posting key), then the
+						     two reputation signals a trader actually decides on. -->
+						<!-- `flex-nowrap`: this line must never break. The key truncates (it
+						     already renders truncated), the trade count and score never do. -->
+						<div
+							class="mt-0.5 flex min-w-0 flex-nowrap items-center gap-x-2 text-xs text-ink-500 dark:text-ink-400"
+						>
+							{#if peerPostingKey}
+								<span class="truncate font-mono">({truncatePublicKey(peerPostingKey)})</span>
+							{/if}
+							{#if peerReputation}
+								<span class="flex-none whitespace-nowrap">
+									{$_('orderbook.card.trades_only', {
+										values: { count: formatCountCompact(peerReputation.count) }
+									})}
+								</span>
+								{#if peerReputation.score !== null}
+									<span
+										class="hidden flex-none items-center gap-1 font-semibold text-morphit-emerald sm:inline-flex"
+										aria-label={$_('orderbook.card.reputation_aria', {
+											values: { score: peerReputation.score.toFixed(2) }
+										}) as string}
+										title={$_('orderbook.card.reputation_aria', {
+											values: { score: peerReputation.score.toFixed(2) }
+										}) as string}
+									>
+										<span aria-hidden="true">⭐</span>
+										<span aria-hidden="true">{peerReputation.score.toFixed(2)}</span>
+									</span>
+								{/if}
+							{/if}
+						</div>
+
+						<!-- Line 3 — RE: <order>. Whole line is the tap target (mobile +
+						     grandma friendly); the label stays put while the summary
+						     truncates, full text in the hover title. -->
+						{#if orderSummary}
+							<a
+								href={lp(`/@${orderOwner ?? peer}/${orderPermlink}`)}
+								class="mt-0.5 flex min-w-0 items-baseline gap-1 text-xs text-ink-500 hover:text-morphit-emerald hover:underline dark:text-ink-400"
+								title={orderSummary}
+							>
+								<span class="flex-none font-medium">{$_('chat.header.re')}:</span>
+								<span class="truncate">{orderSummary}</span>
+							</a>
+						{/if}
+					</div>
+
+					<!-- Kebab: last item of the identity row, so its top is level with
+					     the display name. LIVE now lives INSIDE this menu (see below). -->
+					<div class="flex-none">
+						{#if $isUnlocked}
+							<!-- Overflow (kebab) menu. Single home for every peer action:
+							     Chat Security / Verify peer / Block / Export, with the LIVE
+							     indicator pinned above them. cp402: the standalone Block
+							     button was removed from the header row. -->
+							<div class="relative">
 						<button
 							type="button"
 							bind:this={overflowTriggerEl}
@@ -1443,16 +1552,33 @@
 								class="absolute right-0 top-full z-40 mt-1 min-w-[12rem] rounded-lg border border-ink-200 bg-white shadow-lg dark:border-ink-700 dark:bg-ink-900"
 								role="menu"
 							>
-								<!-- cp404 — export the conversation to a printable PDF (browser
-								     Save-as-PDF; built client-side from decrypted messages, no deps). -->
-								<button
-									type="button"
-									role="menuitem"
-									class="block w-full px-4 py-2 text-left text-sm hover:bg-ink-100 dark:hover:bg-ink-800"
-									onclick={exportChatToPdf}
-								>
-									{$_('chat.export.menu_label')}
-								</button>
+								<!-- tt.txt #7 (Ken) — the animated LIVE pip used to sit beneath the
+								     kebab in the header row, eating the horizontal space the sprout /
+								     trades / reputation line needs on a phone. It lives at the top of
+								     this menu now, above a hairline divider. It is a status READOUT,
+								     not a menuitem: not focusable, no role, no click. -->
+								{#if streaming}
+									<div
+										class="flex items-center gap-1.5 px-4 py-2 text-xs"
+										aria-label={$_('chat.live') as string}
+									>
+										<span class="relative inline-flex h-2 w-2" aria-hidden="true">
+											<span
+												class="absolute inline-flex h-full w-full animate-ping rounded-full bg-morphit-emerald opacity-60"
+											></span>
+											<span class="relative inline-flex h-2 w-2 rounded-full bg-morphit-emerald"></span>
+										</span>
+										<span class="uppercase tracking-widest text-ink-500 dark:text-ink-500">
+											{$_('chat.live')}
+										</span>
+									</div>
+									<!-- Hairline divider, per Ken's ordering. Rendered WITH the LIVE row:
+									     a divider hanging at the top of the menu with nothing above it
+									     would just look broken. Exactly the old semantics — the pip only
+									     ever appeared while streaming — just relocated. -->
+									<div class="border-t border-ink-200 dark:border-ink-700"></div>
+								{/if}
+
 								<!-- cp406 — Chat Security: opt into "destroy on leave" (PFS) or
 								     keep the default readable history. Opening clears the dot. -->
 								<button
@@ -1466,19 +1592,25 @@
 										<!-- cp407 — matching one-time nudge dot at the end of the
 										     item; clears together with the kebab dot the first time
 										     Chat Security is opened (openChatSecurity → seen). -->
-										<span
-											class="h-2 w-2 flex-none rounded-full bg-red-500"
-											aria-hidden="true"
-										></span>
+										<span class="h-2 w-2 flex-none rounded-full bg-red-500" aria-hidden="true"></span>
 									{/if}
 								</button>
-								<!-- cp402: Block/Unblock moved here from a standalone
-								     header button. Reuses the confirm modal's named
-								     block/unblock label (it interpolates the peer, so it
-								     reads "Block @username"); the click closes the menu
-								     and opens the existing confirm modal (onToggleBlock →
-								     pendingBlockAction). Destructive (block) is tinted
-								     red; unblock is neutral. Disabled while in flight. -->
+
+								<button
+									type="button"
+									role="menuitem"
+									class="block w-full px-4 py-2 text-left text-sm hover:bg-ink-100 dark:hover:bg-ink-800"
+									onclick={openVerifyPeer}
+								>
+									{$_('chat.menu.verify_peer')}
+								</button>
+
+								<!-- cp402: Block/Unblock moved here from a standalone header
+								     button. Reuses the confirm modal's named block/unblock label
+								     (it interpolates the peer, so it reads "Block @username"); the
+								     click closes the menu and opens the existing confirm modal
+								     (onToggleBlock → pendingBlockAction). Destructive (block) is
+								     tinted red; unblock is neutral. Disabled while in flight. -->
 								<button
 									type="button"
 									role="menuitem"
@@ -1495,28 +1627,23 @@
 										? $_('chat.block.confirm.unblock.yes', { values: { peer } })
 										: $_('chat.block.confirm.block.yes', { values: { peer } })}
 								</button>
+
+								<!-- cp404 — export the conversation to a printable PDF (browser
+								     Save-as-PDF; built client-side from decrypted messages, no deps). -->
 								<button
 									type="button"
 									role="menuitem"
 									class="block w-full px-4 py-2 text-left text-sm hover:bg-ink-100 dark:hover:bg-ink-800"
-									onclick={openVerifyPeer}
+									onclick={exportChatToPdf}
 								>
-									{$_('chat.menu.verify_peer')}
+									{$_('chat.export.menu_label')}
 								</button>
+							</div>
+						{/if}
 							</div>
 						{/if}
 					</div>
 				</div>
-				{/if}
-				{#if streaming}
-					<span class="inline-flex items-center gap-1.5 text-xs" aria-label={$_('chat.live') as string}>
-						<span class="relative inline-flex h-2 w-2">
-							<span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-morphit-emerald opacity-60"></span>
-							<span class="relative inline-flex h-2 w-2 rounded-full bg-morphit-emerald"></span>
-						</span>
-						<span class="uppercase tracking-widest text-ink-500 dark:text-ink-500">{$_('chat.live')}</span>
-					</span>
-				{/if}
 			</div>
 		</header>
 		{#if blockActionError}

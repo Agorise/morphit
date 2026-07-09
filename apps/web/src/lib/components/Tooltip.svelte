@@ -7,6 +7,7 @@
 	import type { LocaleCode } from '$i18n/locales';
 	import type { FaqKey } from '$utils/faqIndex';
 	import type { Snippet } from 'svelte';
+	import { portal } from '$lib/ui/portal';
 
 	interface Props {
 		/** i18n key for the tooltip's explanation text. */
@@ -90,14 +91,6 @@
 	 *  `<li>` whose later siblings painted OVER an in-card absolute tooltip —
 	 *  the "appears behind other elements" bug). Combined with `position:fixed`
 	 *  + a high z-index below, the panel now floats above everything. */
-	function portal(node: HTMLElement): { destroy(): void } {
-		document.body.appendChild(node);
-		return {
-			destroy(): void {
-				if (node.parentNode) node.parentNode.removeChild(node);
-			}
-		};
-	}
 
 	function clearCloseTimer(): void {
 		if (closeTimer) {

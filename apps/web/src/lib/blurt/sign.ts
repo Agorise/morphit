@@ -35,6 +35,10 @@ import {
 import { signDigestWithNoble } from './nobleSigner';
 import { submitSignedTransaction, fetchDynamicGlobalProperties } from './broadcastTransport';
 import { OP_IDS, SIGNER_BACKEND, type MorphitOpId } from '$net/config';
+// Relative, NOT `$blurt/accountBinding`: in `tsconfig.smoke.json` the `$blurt/*`
+// alias points at apps/indexer/src/blurt/*, so the same specifier means a
+// different directory under the smoke runner than under web's Vite config.
+import { resolveBroadcastAccount } from './accountBinding';
 import type { LiveIdentity } from '$crypto/keygen';
 
 /** Convert a Uint8Array (raw 32-byte secp256k1 scalar) into a dblurt
@@ -486,13 +490,21 @@ export async function broadcastCustomJson(
 		throw new Error('broadcastCustomJson: blurtAccount is not a valid account name');
 	}
 
+	// The account we DECLARE must be one the key we SIGN with actually controls.
+	// `blurtAccount` comes from an origin-wide localStorage value that any other
+	// tab's sign-in can rewrite; the posting key is what the chain checks. So the
+	// key decides, and the stored name is only a hint for disambiguation.
+	// Anything else produces "Missing Posting Authority <someone else>" — see
+	// accountBinding.ts.
+	const signingAccount = await resolveBroadcastAccount(live, blurtAccount);
+
 	const { ref_block_num, ref_block_prefix, expiration } = await getRefBlockInfo();
 
 	const op: Operation = [
 		'custom_json',
 		{
 			required_auths: [],
-			required_posting_auths: [blurtAccount],
+			required_posting_auths: [signingAccount],
 			id,
 			json: JSON.stringify(payload)
 		}

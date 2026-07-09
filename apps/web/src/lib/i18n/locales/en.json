@@ -274,7 +274,8 @@
     },
     "sign_in_another_device": "Sign in to another device",
     "lock_session": "Lock session",
-    "view_my_profile": "@{account} profile"
+    "view_my_profile": "@{account} profile",
+    "backup_pending_aria": "You have keys that are not backed up yet"
   },
   "backup_keys": {
     "title": "Back up your keys",
@@ -329,7 +330,8 @@
         "password_required": "Type your password to continue.",
         "wrong_password": "Wrong password. Try again.",
         "no_seed_posting_only": "This account was imported with a posting key only — there's no seed phrase to show. Use the keyfile download below for backup.",
-        "generic": "Something went wrong. Try again."
+        "generic": "Something went wrong. Try again.",
+        "no_seed_posting_active": "There's no 12-word seed for this account, and there can't be. A seed derives your keys — it can't be built backwards from keys you already had. Your keyfile below is your backup, and it now contains both your Posting and Active keys."
       }
     },
     "paired": {
@@ -337,7 +339,8 @@
       "body": "This desktop is paired with your phone, which holds your real keys. The sections below are about backing up keys that aren't on this device — they apply to the phone you paired with. Open Morphit on the phone and go to \"Back up my keys\" there.",
       "deeplink_hint": "If your phone is nearby, the button below opens the right page on it directly.",
       "deeplink_cta": "Open backup on phone"
-    }
+    },
+    "keyfile_body_posting_active": "Your keyfile now holds your Posting key AND your Active key, encrypted with your Morphit password. Keep a copy somewhere safe: it's the only backup of the Active key you just saved to this device. It does not contain your Owner or Memo keys — those stay wherever you keep them today."
   },
   "chat": {
     "message_button_aria": "Message {peer}",
@@ -647,11 +650,10 @@
       "recipient_label": "To",
       "from_label": "From",
       "no_memo_notice": "No on-chain memo will be included — your trade context stays in this encrypted chat.",
-      "password_label": "Your password",
+      "password_label": "Your @{account} password (to sign with your active key)",
       "confirm": "Send BLURT",
       "paying": "Sending…",
       "success_toast": "BLURT sent. Receipt posted to chat.",
-      "success_toast_no_chat": "BLURT sent. Could not post receipt to chat — you can mark funds sent manually.",
       "error": {
         "password_required": "Enter your password.",
         "bad_password": "Wrong password.",
@@ -667,7 +669,8 @@
       "memo_label": "Memo",
       "with_memo_notice": "The memo above will be included in the on-chain transfer so the seller can match this payment to your trade.",
       "success_toast_no_chat_with_txid": "BLURT sent. Could not post receipt to chat — copy this txid to mark funds sent manually: {txid}",
-      "password_hint": "The password you unlock Morphit with. It decrypts your active key on this device to sign — you never paste a raw key here, and nothing is sent anywhere."
+      "password_hint": "The password you unlock Morphit with. It decrypts your active key on this device to sign — you never paste a raw key here, and nothing is sent anywhere.",
+      "error_amount_precision": "Use at most 3 decimal places — the smallest amount you can send is 0.001 BLURT."
     },
     "trade_event": {
       "address_shared_title": "New address shared",
@@ -679,7 +682,6 @@
     "order_response_no_fee": "No fee — you're responding to @{peer}'s order, so first contact is free.",
     "menu": {
       "aria_open": "Conversation options",
-      "aria_dismiss": "Close menu",
       "verify_peer": "Verify peer"
     },
     "verify_peer": {
@@ -1825,7 +1827,6 @@
     "operators": "Operators",
     "operated_by": "Operated by",
     "contact_operator": "Contact this operator",
-    "alt_network_disabled": "This operator has not configured an address for this network.",
     "alt_network_address": "Address: {address}",
     "instances": "Instances",
     "explorer": "Block explorer",
@@ -2249,7 +2250,7 @@
     },
     "fee_status_banner": {
       "heading": "Fee status",
-      "body": "💡 Each order below shows its listing-fee status. An order appears in the public orderbook only once its fee is verified — a badge reading “not received”, “underpaid” or “not yet verified” is why an order may appear to be missing there.",
+      "body": "💡 Each order below shows its listing-fee status. An order appears in the public orderbook only once its fee is verified — a badge reading “not received”, “underpaid” or “not yet verified” is why an order may appear to be missing.",
       "dismiss": "Dismiss this note"
     }
   },
@@ -2562,8 +2563,8 @@
   },
   "order_detail": {
     "loading": "Loading order…",
-    "not_found_title": "We couldn't find this order",
-    "not_found_body": "If you just posted it, give it another minute — the blockchain may still be confirming it, so tap Check again. Otherwise this order may not exist, or it wasn't posted by this account.",
+    "not_found_title": "Order is loading",
+    "not_found_body": "This order is being posted by the blockchain and may take a minute for it to appear.",
     "back_to_profile": "Back to profile",
     "error_title": "Couldn't load this order",
     "error_body": "Something went wrong reaching the indexer. Please try again in a moment.",
@@ -2594,7 +2595,8 @@
     "cancel_button": "Cancel this order",
     "posting_title": "Your order is being posted…",
     "posting_body": "This order is being confirmed by the blockchain and can take a minute to appear. We'll keep checking automatically — no need to refresh.",
-    "check_again": "Check again"
+    "check_again": "Check again",
+    "action_edit_countdown": "Edit (within: {remaining})"
   },
   "orderbook": {
     "heading": "Orderbook",
@@ -3092,7 +3094,8 @@
       "feature_upsell_cta": "Set up a featured bid",
       "edit_window_countdown": "{remaining} to edit",
       "edit_window_tooltip": "Edits are only possible within 15 minutes of posting. After that, cancel and re-post.",
-      "edit_window_expired": "Edit window passed"
+      "edit_window_expired": "Edit window passed",
+      "view_my_order_pending": "Your order is landing on the blockchain…"
     },
     "broadcast_error": {
       "title": "The order didn't go through",
@@ -3157,7 +3160,7 @@
       "fee_address_chain_pinned": "Chain-pinned by {account} — every Morphit instance verifies fees against this address.",
       "fee_address_chain_pinned_aria": "Chain-pinned address authenticity",
       "fee_address_unavailable": "This operator hasn't configured a {asset} fee address. Pick BLURT instead, or post your order on a different Morphit instance.",
-      "blurt_needs_active_key": "Needs your Active key. You're signed in with your Posting key right now — sign in with your 12-word seed or Keyfile to pay in BLURT, or pay in BTC/XMR instead:"
+      "blurt_needs_active_key": "Needs your Active key. You're signed in with your Posting key — Morphit will ask for your Active key (or your Blurt master password) when you post, and nothing you've filled in will be lost."
     },
     "draft": {
       "restored_banner": "Draft restored from {age} ago. Pick up where you left off — or start fresh.",
@@ -3472,7 +3475,7 @@
       "password_label": "Your @{account} password (to sign with your active key)",
       "error_password_required": "Enter your password to continue.",
       "error_bad_password": "That password didn't unlock your active key. Check it and try again.",
-      "error_no_active_key": "This device has no active key to sign with. Sign in with your seed phrase to power up or down.",
+      "error_no_active_key": "This device has no Active key to sign with. Morphit will ask for your Active key (or your Blurt master password) when you power up or down.",
       "error_broadcast": "That couldn't be completed on-chain. Please try again.",
       "error_chain_rejected": "The network rejected this transaction: {reason}",
       "error_unreachable": "Couldn't reach your Morphit instance to broadcast. Check your connection and try again.",
@@ -3494,7 +3497,7 @@
       "memo_label": "Memo (optional)",
       "memo_placeholder": "e.g. an order reference",
       "memo_privacy_warning": "Memos are stored publicly and permanently on the blockchain in plain text. Never include passwords, keys, or anything private.",
-      "error_no_active_key": "This device has no active key to sign with. Sign in with your seed phrase to send BLURT.",
+      "error_no_active_key": "This device has no Active key to sign with. Morphit will ask for your Active key (or your Blurt master password) when you send.",
       "send_button": "Send",
       "confirm": "Send BLURT",
       "qr_heading": "Scan a recipient QR",
@@ -3918,7 +3921,7 @@
     },
     "endpoints": {
       "heading": "RPC endpoints",
-      "explain": "The network nodes Morphit talks to for reading and writing data. The app tries them in order of fastest response. Add your own or a community-run node.",
+      "explain": "The network nodes that Morphit indexers talk to for reading and writing data. The app tries them in order of fastest response.",
       "pool_note": "Your Morphit instance handles all Blurt network traffic for you — your browser never talks to these nodes directly. This is just their live status.",
       "cooling_down": "cooling down",
       "recheck": "Re-check node speeds",
@@ -4236,7 +4239,7 @@
       "iphone_link": "iPhone install walkthrough"
     },
     "account_name": {
-      "heading": "account name",
+      "heading": "Account name",
       "explain": "Morphit needs to know your account name so it can recognize your trades, messages, and on-chain activity. If you imported a posting key with the account name, this is already set. If you imported a seed phrase or keyfile, set it here.",
       "current_label": "Current account",
       "locked_explain": "To change this, sign out, then re-import with a different account.",
@@ -4553,5 +4556,31 @@
       "cancel": "Cancel",
       "confirm": "Visit the site"
     }
+  },
+  "unlock_active": {
+    "title": "This payment needs your Active key",
+    "body": "You're signed in to @{account} with your Posting key, which can't move money. Enter your Active key or your Blurt master password to continue — you won't lose anything you've filled in.",
+    "field_label": "Active key or Blurt master password",
+    "field_placeholder": "Starts with 5… , or your master password",
+    "field_help": "Morphit checks it against your account on the blockchain before signing anything. It never leaves this device.",
+    "cta": "Unlock and continue",
+    "checking": "Checking…",
+    "error": {
+      "invalid_wif": "That doesn't look like a valid key. Check for a missing or extra character.",
+      "is_posting_key": "That's your Posting key — the one you're already signed in with. It can't move money. Paste your Active key instead.",
+      "is_owner_key": "That's your Owner key. It can take over your whole account, so Morphit will never use it. Please use your Active key.",
+      "not_this_account": "That isn't this account's Active key. Check you're using the key for @{account}.",
+      "empty": "Enter your Active key or master password.",
+      "lookup_failed": "Couldn't reach the blockchain to check your key. Try again in a moment.",
+      "bad_device_password": "That Morphit password is wrong. Your Active key was not saved.",
+      "keep_failed": "Couldn't save your Active key on this device. Nothing was changed — try again, or choose “Forget it”."
+    },
+    "retention_heading": "After this payment",
+    "retention_once": "Forget it (recommended)",
+    "retention_once_help": "Used once to sign, then erased from memory. You'll enter it again next time.",
+    "retention_keep": "Keep it on this device, encrypted",
+    "retention_keep_help": "Unlocked with your Morphit password from now on. Anyone who learns that password could then spend your BLURT, so only do this on a device you control.",
+    "device_password_label": "Your @{account} Morphit password",
+    "device_password_help": "The password you already unlock Morphit with. It encrypts your Active key on this device."
   }
 }

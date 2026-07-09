@@ -1512,7 +1512,7 @@
 
 		<div class="mt-6 flex flex-wrap items-center gap-3">
 			<BusyButton
-				variant="secondary"
+				variant="secondary-quiet"
 				busy={saving}
 				done={savedToast}
 				disabled={!validation.ok || validation.cleaned === saved}
@@ -1638,7 +1638,7 @@
 
 		<div class="mt-6 flex flex-wrap items-center gap-3">
 			<BusyButton
-				variant="secondary"
+				variant="secondary-quiet"
 				busy={bioSaving}
 				done={bioSavedToast}
 				disabled={!bioValidation.ok || bioValidation.cleaned === bioSaved}
@@ -1789,7 +1789,7 @@
 
 		<div class="mt-6 flex flex-wrap items-center gap-3">
 			<BusyButton
-				variant="secondary"
+				variant="secondary-quiet"
 				busy={blurtMediaSaving}
 				done={blurtMediaSavedToast}
 				disabled={!blurtMediaIsValid ||
@@ -1918,7 +1918,7 @@
 
 		<div class="mt-6 flex flex-wrap items-center gap-3">
 			<BusyButton
-				variant="secondary"
+				variant="secondary-quiet"
 				busy={nostrSaving}
 				done={nostrSavedToast}
 				disabled={!nostrIsValid || (nostrIsEmpty ? '' : nostrCleaned) === nostrSaved}

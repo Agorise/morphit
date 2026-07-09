@@ -21,7 +21,7 @@
  */
 
 import { browser } from '$app/environment';
-import { writable } from 'svelte/store';
+import { get, writable } from 'svelte/store';
 // cp165 byte-budget: `broadcastCustomJson` is dynamically imported
 // inside `broadcastProfile` (which is only called on user action).
 // A static import of '../sign' here transitively pulled dblurt into
@@ -34,6 +34,7 @@ import { OP_IDS } from '$net/config';
 import type { LiveIdentity } from '$crypto/keygen';
 import { redactPrivateKeys } from '$lib/security/privateKeyDetector';
 import { clearProfileCache } from '$lib/indexer/profileCache';
+import { identity } from '$stores/identity';
 
 const ACCOUNT_STORAGE_KEY = 'morphit.blurtAccount';
 
@@ -70,19 +71,35 @@ function readAccountFromStorage(): string | null {
 export const blurtAccountName = writable<string | null>(readAccountFromStorage());
 
 if (browser) {
-	// Cross-tab: a `storage` event fires in every OTHER tab when this
-	// key changes, so registering / signing out in one tab keeps the
-	// avatar correct everywhere without a reload.
+	// Cross-tab: a `storage` event fires in every OTHER tab when this key
+	// changes, so registering / signing out in one tab keeps the avatar correct
+	// everywhere without a reload.
+	//
+	// BUT NOT WHILE THIS TAB HOLDS KEYS. The account name is origin-wide; the
+	// KEYS are per-session and in memory. Letting another tab's sign-in rewrite
+	// this tab's account name gave us a session holding @kentest2's posting key
+	// while believing it was @kentest3 — every broadcast then declared kentest3,
+	// was signed by kentest2, and the chain answered "Missing Posting Authority
+	// kentest3". An account name that can be changed out from under a live key is
+	// not a name, it's a race.
 	window.addEventListener('storage', (e) => {
-		if (e.key === ACCOUNT_STORAGE_KEY) blurtAccountName.set(e.newValue);
-		// A full localStorage.clear() reports key === null.
-		else if (e.key === null) blurtAccountName.set(readAccountFromStorage());
+		if (e.key !== ACCOUNT_STORAGE_KEY && e.key !== null) return;
+		if (get(identity).state === 'unlocked') return; // our keys, our name
+		blurtAccountName.set(e.key === null ? readAccountFromStorage() : e.newValue);
 	});
 }
 
-/** Return the Blurt account name the user registered, or null. */
+/** Return the Blurt account name the user registered, or null.
+ *
+ *  Reads the in-memory store first: while a session is unlocked, that value is
+ *  bound to the keys this tab actually holds, and another tab's sign-in cannot
+ *  move it. localStorage is the cold-start fallback.
+ *
+ *  This is still only a HINT for broadcasting — see `accountBinding.ts`, which
+ *  resolves the authoritative account from the posting key itself. */
 export function getUserBlurtAccount(): string | null {
-	return readAccountFromStorage();
+	const inMemory = get(blurtAccountName);
+	return inMemory ?? readAccountFromStorage();
 }
 
 /** Record the Blurt account name after registration. */

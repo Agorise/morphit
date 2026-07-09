@@ -9115,3 +9115,238 @@ Gates confirmed present AND green in the run: `i18n-dead-key-gate` (3309), `loca
 **Checked and CLEAN:** the new `:focus-visible` rule excludes checkbox/radio/range/file/color, `[aria-invalid='true']` and `[class*='border-red']`, and never targets button/a/[tabindex] (verified against the compiled selector). No `<input type=submit|button>` exists to be mis-styled. Borderless fields keep a visible indicator (1px emerald ring via box-shadow). No `@html`/`innerHTML` on any touched component; the day-separator label is text-interpolated. New ICU plurals parse in all 10 locales (`@formatjs/icu-messageformat-parser`). No secrets/PII in new modules. Featured SQL skeleton verified as real SQL (CTE → JOIN → LEFT JOINs → WHERE), bind params `$1`/`$2` intact after splicing parameter-free fragments; operator-block + fee-verified filters still applied. `/v1/featured` exposes nothing the orderbook doesn't. Canary template still pure ASCII. Send-modal password state dies with the component (`{#if sendOpen}`), so nothing lingers.
 
 Verified after all fixes: web svelte-check 0/0, web vitest 878 pass, indexer tsc 0 + 610 pass, ops-cli tsc 0.
+
+## cp443 — Ken's t.txt, task by task (post-v1.2.0)
+Ken corrected me twice: I was reporting "done" from memory, and I had only ever worked the bottom third of `t.txt`. Verified all 37 tasks against source. Result: **20 already done, 10 not done, 3 present-but-unproven, 1 by-design, 1 disputed.** No status claim without a diff, from here on.
+
+**#1 (DISPUTED — no change).** The expiry tooltip's `00:00:00 UTC` is not a bug. `makeExpiryFlooredUtcDay()` floors `expires_at` to UTC midnight deliberately (cp175 F-015): a millisecond-precision expiry broadcast on a public chain lets an observer subtract the round-day interval and recover the client's exact wall-clock at submit time. The midnight is real. v1.2.0 already stopped printing the time.
+
+**#3 (BY DESIGN — no change).** `blurt-rpc.saboin.com` in DevTools is `getDirectChainClient()`, the *sole sanctioned* browser→Blurt-node reader: the boot-time release-integrity check. It must read the real chain rather than the operator's indexer, **because it exists to distrust the operator**. Routing it through our proxy would make it circular. It never probe-pings (cp268/cp408).
+
+**#2 — display name / avatar fall back to `@username`. FIXED.** Not in `profileCache` (which correctly soft-caches a fetch FAILURE for seconds vs an authoritative "no profile" for the full TTL). The chat inbox kept its OWN `profileMap` and asked `!(peer in profileMap)`: a failed batch wrote `null`, the KEY then existed, and that peer was never re-requested for the life of the page — so profileCache's soft-null retry never got asked. The same map feeds the avatar, which is why both glitched together. NEW pure `$lib/indexer/profileMerge.ts`: `peersNeedingProfile` treats null as *absence* (retry), `mergeProfileMap` keeps a known-good profile when a later fetch returns null. 10 unit tests; **tamper-tested** (restoring the presence check fails 5).
+
+**#13 — fee-status banner. FIXED.** Was one word off: `"…may appear to be missing there."` The 💡 and "appear to be" landed in cp441; the trailing locative did not. Removed in all 10 locales (each carried its own: `allí`, `là-bas`, `dort`, `lì`, `tam`, `там`, `آنجا`, `在那里`, `在那裡`). EN now byte-exact to Ken's text. The × was already correct (`safeLocal`, dismissed forever).
+
+**#20 — post-success. FIXED (both halves).** "View my order" was `{#if successPermlink && blurtAccount}` — shown the instant the broadcast returned, when the order isn't queryable yet, sending the user straight to a not-found page *seconds after paying a listing fee*. It now polls `getOrdersByAccount` every 2s and reveals the button only when the indexer can SEE the permlink; until then a "Your order is landing on the blockchain…" line with a spinner. Bounded at 20 attempts (~40s), then reveals anyway — a slow indexer must never make the order unreachable. Abandoned if superseded; torn down on destroy.
+Copy replaced with **Ken's exact words**: `"Order is loading"` / `"This order is being posted by the blockchain and may take a minute for it to appear."` ×10. **My earlier rewrite fixed the tone and missed the point** — "We couldn't find this order" still means GONE; Ken's means WAIT. `order-detail-posting-retry-smoke` was pinning MY wording; it now pins his.
+
+**#21 — order-detail Edit countdown. FIXED.** The button was a bare `Edit` computed from an inline `Date.now()`, so you could sit on the page watching a button that had silently stopped working. The 15-minute rule + the mm:ss formatter now live once in NEW `$lib/orders/editWindow.ts` (10 unit tests) and both `/my/orders` and the order-detail page consume it. Order detail renders `Edit (within: 4m 20s)` (×10 locales) off the page's existing 1s ticker, and the button removes itself the instant the window closes. Formatter deliberately NOT zero-padded — that reproduces `/my/orders`' pill byte-for-byte; changing a rendering nobody asked for is how a "shared helper" becomes a regression.
+**Also found:** a SECOND hardcoded `15 * 60 * 1000` on the order-detail page (`withinEditClosedNotice`). Now derives from `EDIT_WINDOW_MS`.
+
+**Smoke lesson repeated:** `ken-batch-2-smoke` initially failed two of its own checks because it matched against source text that included *comments* — the fix's docblock quotes the buggy expression it replaced. Comments are stripped before matching now (same bug the featured-reputation smoke had).
+
+Guarded: NEW `ken-batch-2-smoke` (23), `profileMerge.test.ts` (10), `editWindow.test.ts` (10). web svelte-check 0/0, web vitest 898 pass, i18n gates green (dead-key 3311).
+
+**Still open from t.txt:** #14 (mark-complete scroll — implemented, observed failing), #15/#37 (regression guards for key/union/notification), #17/#22 (notification latency ≤6s + dots — infra exists, unproven), #18 (chat message speed), #19 (stale green dot), #24/#25/#26 (Pay-now: **chat Pay now is NOT gated on `hasActiveKey` while wallet Send IS** — a posting-only session is handed a modal it can never complete; ambiguous "Your password" label; no amount validation; BTC/XMR paths unaudited).
+
+### t.txt #24 / #25 / #26 — the chat "Pay now" money path — FIXED
+**#25 — root cause.** A BLURT transfer is signed with the **active** key. An account imported posting-only has no active key on this device (`origin: 'morphit-seed' | 'posting-only'`), so the transfer can never be signed. The wallet's Send button has always been gated on exactly this (`MyBalanceCard`: `{#if hasActiveKey}`). The chat's Pay-now was **not gated at all** — the user chose an amount, typed their password, and only then hit `useJitKey: this account was imported posting-only — active key is not available on Morphit`. Same class as the featured cards: a guard on one surface, absent on the identical one beside it.
+- Fix: `PayBlurtModal` derives `hasActiveKey` from the live identity and, when absent, replaces the amount/password form with `chat.pay_blurt.needs_active_key` — mirroring the /post page's `blurt_needs_active_key` guidance (sign in with the 12-word seed or Keyfile, or send from another wallet and tell the partner here). **The Pay-now button is deliberately NOT hidden**: a user whose account can't pay deserves to learn why, not watch a control silently vanish.
+
+**#24 — the Pay button was never gated.** `disabled={phase.kind === 'paying'}` — enabled over an empty password and an unvalidated amount. `canPay` checked only `myAccount !== recipient && effectiveAmount > 0`.
+- The **same `toFixed(3)` rounding money-bug** as the wallet Send modal lives here: entered `1.0006` would broadcast `1.001`; `0.0004` would build `0.000 BLURT`. Typed amounts now go through the shared `validateBlurtAmount` (no balance is available in this modal, so the ceiling is left to the chain; precision + the 0.001 floor are enforced here). Pill-supplied amounts are **numbers**, not text, so they get NEW `hasBlurtPrecision()` — rounding an amount the user didn't type is the same bug with no field to complain in.
+- **Trap avoided:** the "invalid amount" message was rendered on `!canPay`. Once `canPay` included the password, an empty password would have shouted "invalid amount" at someone whose amount was fine. It now keys off the amount.
+- **Label (Ken's question: password or raw active key?).** It's the Morphit password, which decrypts the stored active key — one field, never two. `chat.pay_blurt.password_label` was `"Your password"`; it now reads `"Your @{account} password (to sign with your active key)"`, byte-identical to the wallet modal's label. The existing hint already said a raw key is never pasted.
+
+**#26 — BTC/XMR.** Verified, no bug: BLURT is broadcast by the app (active key) via `PayBlurtModal`; **every other asset** is paid externally and only *recorded* here (amount + txid) via `FundsSentModal`, signed with the posting key. `FundsSentModal` contains zero `runWithActiveKey` references — correct, and now pinned by a smoke so a future change can't quietly make an external-payment record demand an active key.
+
+Guarded: NEW `pay-now-active-key-smoke` (21), `hasBlurtPrecision` unit tests (19 total in sendValidation.test.ts). **Tamper-tested twice:** dropping `hasActiveKey` from `canPay`, and re-enabling the Pay button unconditionally — each fails its own check. Also fixed a bad test expectation of my own: `0.1 + 0.2` **is** 0.300 BLURT and must be accepted; the epsilon is what makes the predicate usable on computed amounts.
+
+Verified: web svelte-check 0/0, web vitest 902 pass, dead-key gate 3313, all touched smokes green.
+
+### t.txt #14 — "Mark complete / review" smooth scroll — FIXED (root cause, not another retry)
+The helper existed and looked right, which is why it survived review. It gave up after **40 animation frames (~0.66s at 60fps)** — but the review form sits behind `{#await loadLeaveFeedbackForm()}`, a **lazy dynamic import**. That's a *rendering* budget being spent on a *network* wait: on a cold click the chunk is still downloading, the element never appears while anyone is looking for it, and the page silently doesn't scroll. The docblock even said "retry across a few rAFs until it mounts" — nobody noticed the mount was gated on a fetch.
+- `scrollToFeatureForm` had the **identical** defect (also a lazy chunk). Both now call NEW pure `$lib/ui/scrollToLazySection.ts`, which (a) AWAITS the chunk — cached, so a second click is free — then `tick()`s, and (b) bounds the retry by **wall clock**, not frames: `requestAnimationFrame` is throttled to ~1Hz in a background tab, so a frame count silently means "0.66s in the foreground, many seconds in the background".
+- `scroll-mt-24` (6rem ≈ 1in) already on the container, so it lands a breath below the viewport top, per Ken.
+- 6 unit tests incl. the cold-chunk case. **Tamper-tested:** removing the `await loadChunk()` hangs the failed-import test for 30s (it never resolves) — exactly the silent-spin the fix prevents.
+
+### t.txt #19 — stale green dot / border on the inbox card — FIXED
+`markConversationRead` was wired in four places, so this was never missing wiring. Two real bugs:
+1. **Acked once, on mount.** The /chat/[peer] route acked at mount and never again. Every message exchanged afterwards — including Ken's own — carries a chain timestamp LATER than that ack, so returning to the inbox `isUnread()` said yes. The route's own comment conceded a "slight over-ack ... if a new message arrives during the mount frame"; the real window is the whole conversation.
+2. **Clock-dependent comparison.** `isUnread()` compares the indexer's `last_message_at` (a CHAIN timestamp) against an ack stored as the browser's `Date.now()`. Any skew in the wrong direction pins the conversation unread *permanently*, no matter how often it's opened.
+- Fix: NEW `readAckTimestamp(latestSeenAt, now)` in `readState.ts` — acknowledge with the newest **confirmed** message actually rendered (clock-independent), falling back to the local clock only when there's nothing to point at. `ConversationView` now acks on every message arrival **while the tab is visible** (acking a hidden tab would mark unseen messages read) and once more on destroy. Pending messages (no chain stamp yet) never drive the ack.
+- 5 unit tests. Tamper-tested (mount-only ack fails two checks).
+
+### t.txt #17 / #18 / #22 — VERIFIED, no code change needed
+Ken said v1.2.0 greatly improved chat speed; verified rather than assumed. The whole path is wired, link by link: `+layout.svelte` onMount → `startAmbientChannels()` → `startChatUnreadChannel()` → `startGlobalChatActivity()` (SSE) + a 5s backstop poll → `totalUnread` → favicon canvas badge + AvatarMenu dot. The inbox subscribes to the same SSE (no second connection) and polls at 5s. Messages themselves are SSE-driven with a jittered 4s fallback poll. So ≤6s is structural, not aspirational — Ken's minutes-long delay predates the cp441 SSE work that shipped in v1.2.0.
+
+### t.txt #15 / #37 — regression guards — DONE
+NEW `chat-notification-wiring-smoke` (24) pins every link of that chain — because **a channel nobody starts is indistinguishable from a channel that works**, until you wait five minutes for a message that never announces itself. **Tamper-tested:** replacing `startChatUnreadChannel()` with a no-op in `ambient.ts` fails the smoke.
+
+Verified: web svelte-check 0/0, web vitest 918 pass, dead-key gate green, all touched smokes green. Battery: 462 runners.
+
+## cp444 — Ken's tt.txt (12 items). No battery / walkthroughs / deep-deep / tarball per Ken.
+
+**#1 — avatar menu blurred only the header. FIXED, and I had wrongly called this DONE.**
+The scrim was `fixed inset-0`, and the comment above it asserted it "escapes this `relative` wrapper to cover the whole viewport." It does not. The menu lives inside the sticky header, and the header carries `backdrop-blur-md` — **an ancestor with `backdrop-filter` (or `filter`/`transform`/`perspective`/`contain`) becomes the containing block for `position: fixed` descendants.** The scrim was clipped to the header bar. `FaqSearch`'s identical scrim works only because it sits in page content with no filtered ancestor; that invisible difference is why this passed review.
+Fix: NEW `$lib/ui/portal.ts` (`use:portal`) moves the scrim to `<body>`. `z-30`, not `z-40`: portaled out of the header's stacking context it must sit BELOW the header or it would paint over the very menu it exists to highlight. `Tooltip.svelte` had a private copy of the same action — now shared.
+
+**#2 — favicon squished when the unread dot is drawn. FIXED.**
+`ctx.drawImage(img, 0, 0, 32, 32)`. The Morphit mark is `viewBox="0 0 10.889 7.049"` — WIDE. Forcing it into a square stretched it vertically. The browser renders the plain SVG correctly, so the logo only ever looked wrong at the exact moment a notification arrived. NEW pure `containFit()` (+ 6 tests) reproduces the browser's own contain-fit: scale by the smaller ratio, centre, letterbox. Falls back to filling the box when an engine reports no intrinsic size for the SVG (better a square logo than none).
+
+**#3 — notification categories weren't clickable. FIXED.** Orders/Chat/Feedback showed correct counts as inert `<div>`s. A count that tells you something is waiting and then refuses to take you to it is worse than no count. Each is now a button that closes the menu and routes (Chat → `/chat`; Orders and Feedback → `/my/orders`, where the pending-feedback banner lives).
+
+**#5 — settings. FIXED.** `settings.account_name.heading` `'account name'` → `'Account name'` ×10. The "Save locally only" buttons used `variant="secondary"` = `border-2 border-morphit-emerald`, which is the SITEWIDE secondary style (Edit, Re-list, Feature…). Ken asked only for these, so I did **not** restyle everyone's buttons: NEW `variant="secondary-quiet"` (1px, `border-morphit-emerald/40`, brightens on hover) applied to the 4 save buttons.
+
+**#6 — the "RE: order" link swallowed the whole card. FIXED.** The anchor was `flex`, i.e. a BLOCK-level box, so its hit area spanned the column even though the text was short. Now `inline-flex max-w-full self-start` (shrinks to its text, long titles still truncate) with `relative z-10`. And the card is now fully clickable: the chat anchor gets `after:absolute after:inset-0`, the `<li>` is `relative`. The Dismiss button needed `relative z-10` or the stretched link would have swallowed IT — a bug the fix would otherwise have introduced.
+
+**#8 — chat opened in the MIDDLE of the conversation. FIXED.** There was no first-load handling at all: the first batch took the ordinary "user was at bottom" path and called `scrollToBottom(smooth=true)` — animating toward a `scrollHeight` measured before bubbles, identicons, day separators and web fonts had laid out. Every late layout pass grew the list above the viewport, so it landed mid-history. NEW `$lib/ui/pinToBottom.ts`: jump INSTANTLY (assign scrollTop, don't animate), then re-pin for 600ms while content settles (ResizeObserver, rAF fallback), and cancel the moment the user scrolls — never fight the user. 5 tests.
+
+**#9 — inbox avatars too small / misaligned. FIXED.** `avatarSize` 28 → 36 (matching the order cards). The `RE:` indent arithmetic in the comment was updated with it (dot 8 + gap 12 + avatar 36 + gap 6 = 62px).
+
+**#10 — asked "was this done?" YES.** Verified byte-exact: the 💡 text ending "may appear to be missing." (the trailing "there" was removed last session, in all 10 locales), and the × persists via `safeLocal` — dismissed forever.
+
+**#7 — chat header restructure: NOT STARTED.** Bigger avatar; display name + sprout on line 1; posting key + trades + reputation on line 2; RE: on line 3; kebab top-aligned with the display name; the animated LIVE pip moved INTO the kebab above a divider, then Chat Security / Verify peer / Block @username / Export chat. This is a real layout change and `IdentityLabel` renders the name+key as one unit, so it needs care rather than a rushed edit.
+
+**#4 — needs clarification.** "kentest2 and kentest3 are in a chat together and they both have their chat screen open." is a scenario with no instruction attached.
+
+**#11 / #12 — HELD FOR DISCUSSION at Ken's explicit request** ("we must discuss these processes first before building, and i want your recommendations").
+
+Verified: web svelte-check 0/0, web vitest 924 pass, dead-key gate 3313, i18n gates green.
+
+### tt.txt #11 / #12 — Active-key unlock for posting-only sessions (Ken approved the design first)
+**Ken's correction, which changed the design:** the 12-word seed and the Keyfile are MORPHIT inventions. An existing Blurt user has neither. They hold an **Active key (WIF)** or a **pre-fork master password**. So the unlock step must accept both and tell them apart itself.
+
+NEW pure `$crypto/activeKeyUnlock.ts` — `classifySecret()` + `resolveActiveKey(account, secret, authorities)`. It never assumes: it derives the public key and checks it against the account's on-chain authorities (indexer `/keys` proxy, same-origin), returning a precise verdict:
+- `is_owner_key` → **REFUSED.** An owner key can take over the account; it has no business in a transfer flow, and accepting it teaches a catastrophic habit. Also refused when a master password derives owner but NOT active (an account whose active authority was rotated away) — we do not silently reach for the owner key.
+- `is_posting_key` → named explicitly, instead of a mystifying "couldn't sign the transfer" after the fact.
+- `not_this_account` / `invalid_wif` → a typo is caught here, not at the chain.
+**13 unit tests using REAL derived keys** (no mocks in front of money): active WIF accepted, master password accepted, posting named, owner refused, cross-account rejected, bad checksum rejected, and `never returns a scalar on failure`.
+
+**Consolidation:** the master-password derivation existed once (`masterPasswordPubKey`). I was about to write a second copy for the private path — exactly the drift class hunted all session. Instead `masterPasswordScalar()` is exported from `masterPassword.ts` and both paths use it.
+
+NEW `<UnlockActiveKeyModal>` raised IN PLACE by `PayBlurtModal`: the amount stays typed, the payment RESUMES on success (Ken: "SEAMLESSLY continue ... without losing their place"). The CTA is disabled while the amount is invalid — never enable a button first and explain afterwards.
+
+**Retention: "just this once" only, for now.** The scalar lives for the ~10ms signing window and is wiped with `sodium.memzero` on every path out, including a failed prepare. It is never written to the keystore.
+**Why "Keep on this device" is NOT shipped yet:** `hasActiveKey` is derived from `origin === 'morphit-seed'`, and `FullIdentity.origin` is a two-value union (`'morphit-seed' | 'posting-only'`), with `keys.active === null` documented as an invariant of posting-only. Persisting an active key means the identity model must stop equating origin with capability — derive `hasActiveKey` from `keys.active !== null`, bump the keystore envelope, and re-encrypt. That is a change to the gate standing in front of the money, in three call sites. **Ken should sign off before I touch it** — a rushed change there is precisely the kind that looks fine and isn't. Shipping a "Keep on this device" switch that silently does nothing would be worse than not offering it.
+
+### FINDING — the i18n dead-key gate has a hole (for the deep-deep)
+`chat.pay_blurt.needs_active_key` became orphaned (only in locale JSON, referenced from nowhere in `src/`) and the gate reported **"all 3327 checks passed — every locale leaf key is referenced in source"**. Probed it: an orphan added at the TOP level and under `settings` IS caught; an orphan under `chat.pay_blurt` is NOT. So some source construct emits a dynamic `(prefix, suffix)` pair that silently whitelists that whole namespace. The gate is not globally broken — it is namespace-poisoned, which is worse, because it still reports a big green number. Not chased down now (Ken: no deep-deep yet). The orphaned key was removed from all 10 locales.
+
+### tt.txt #12 (amount) — as agreed
+The Pay button is already disabled below `MIN_BLURT` (0.001). The ORDER's own minimum (e.g. 1 MXN ≈ 28.446 BLURT) stays a **warning, not a block** — partial payments, top-ups and a price the two parties settled in chat are all legitimate, and hard-blocking would strand real trades. Ken agreed.
+
+Still open from tt.txt: **#7** (chat header restructure — bigger avatar, sprout beside the display name, key/trades/reputation on line 2, RE: on line 3, kebab top-aligned, LIVE pip moved into the kebab above a divider then Chat Security / Verify peer / Block @username / Export chat). **#4 skipped at Ken's instruction.** Wallet Send + /post BLURT-fee paths still show the old dead-end guidance and should adopt `<UnlockActiveKeyModal>` next.
+
+Verified: web svelte-check 0/0, web vitest 937 pass, dead-key gate green, all touched smokes green. No battery / walkthroughs / deep-deep / tarball, per Ken.
+
+### tt.txt #11 — unlock wired into ALL THREE money paths
+- **Chat Pay-now** (`PayBlurtModal`): done previously.
+- **Wallet Send**: `MyBalanceCard` used to HIDE the Send button entirely for posting-only sessions (`{#if hasActiveKey}`). A control that silently isn't there teaches nothing — the user concludes Morphit can't send BLURT. The button is now always offered; `SendBlurtModal` swaps its password field for `<UnlockActiveKeyModal>` when there's no active key and resumes the send with recipient/amount/memo intact (`sendWithEphemeralActiveKey`, wipes on every path out).
+- **/post BLURT listing fee**: `broadcastNewOrder` already took a `signCallback` seam, so the ephemeral scalar slots straight in. `submitBroadcast()` now raises the unlock BEFORE preparing anything (nothing broadcast, form untouched behind the modal) and `onFeeKeyUnlocked()` re-enters `submitBroadcast()` — the user's whole order survives. `signCallback` prefers the ephemeral key and wipes it in a `finally`; otherwise falls back to `useActiveKey(envelope, password, …)`.
+- `post_order.fee_method.blurt_needs_active_key` rewritten ×10: it used to advise "sign in with your 12-word seed or Keyfile", which **no existing Blurt user has** (Ken's correction). It now says Morphit will ask for the Active key (or master password) at post time and nothing filled in will be lost.
+
+### DESIGN ANSWER — can we give an ex-posting-only user a 12-word seed + Keyfile? (Ken's proposal)
+Verified against the code, not guessed:
+- `keystore.ts:8` — "the keyfile is the same ciphertext in a JSON wrapper". The envelope encrypts the `keys` record (per-role keypairs) plus `seedBytes`. Posting-only stores `owner/active/memo = null`, `seedBytes = null`.
+- `generateFullIdentity`: `mnemonic → bip39.mnemonicToEntropy → masterSeed → deriveAllFromMasterSeed`. **One-way.**
+
+**KEYFILE: YES — feasible today, no format change.** The `active` slot already exists; it is simply null for posting-only. Once the user chooses "keep on this device", the envelope holds posting + active and the existing `downloadKeyfile()` works unchanged. It must be labelled honestly: contains Posting + Active, NOT Owner/Memo.
+
+**12-WORD SEED: NOT POSSIBLE.** Two independent reasons:
+1. **Preimage.** A seed *derives* keys through a one-way chain. Constructing a mnemonic that derives two pre-existing secp256k1 keys means inverting BIP-39 + the master-seed KDF.
+2. **Pigeonhole.** 12 words = 128 bits of entropy. Two 256-bit private keys = 512 bits. 128 bits cannot address 512 bits of key material, so no encoding trick rescues it either. (A phrase that *encodes* both keys would need ~48 words — a bespoke format no other wallet reads, with 4× the transcription-error surface, and it would be the same two secrets in a costume.)
+The only way to hand a long-time Blurt user a REAL seed is to rotate their on-chain authorities to seed-derived keys. The active key can rotate active/posting/memo — but **not owner**. So the seed's owner key would not control the account: the backup card would be telling the user a lie about their own recovery. Rotation would also break every other wallet they use and silently kill their master password. That belongs in an explicit, owner-key-gated "Migrate this account to a Morphit seed" flow, if ever — never as a side effect of paying for a trade.
+
+Agreed and accepted from Ken: "just this once" → no new backup artifacts offered; red dot on the avatar + beside "Back up my keys" when new backup material is created; /backup-keys wording adapts when signed in with posting AND active.
+
+Still open: **#7** chat header restructure; the "Keep on this device" persistence itself (identity-model change: derive `hasActiveKey` from `keys.active !== null` rather than `origin === 'morphit-seed'`, bump the keystore envelope, audit the three gate call sites).
+
+### tt.txt #11 — "Keep my Active key on this device" — BUILT (Ken approved; identity model changed)
+**The central insight, and the bug it explains:** `origin` is **provenance**; it was being used as **capability**. `hasActiveKey = origin === 'morphit-seed'` is why the wallet HID its Send button from users who could have used it. `origin` now has a third value `'posting-active'`, and every money gate asks the honest question instead: `activePublicKey !== null`. Four call sites fixed (PayBlurtModal, SendBlurtModal, MyBalanceCard, /post).
+
+**Envelope versioning — I did NOT bump `v`, and here is why.** The crypto container (Argon2id + XChaCha20-Poly1305, `v: 1`) is byte-identical; nothing about it changed. What changed is the *payload schema*: a new legal `origin`. Bumping the container version would mean touching the layered-cek (2FA) envelope, `persistentKeystore`, and every `readonly v: 1` literal type — more surface, no added safety, for a change that isn't in the container. The payload already self-describes, and an older build hitting a newer keystore now fails **loudly and actionably** ("saved by a newer version of Morphit — refresh the page"), which is the property the version bump was for. If you still want the container bumped, say so and I'll do it — but I'd be adding risk to buy nothing.
+
+**`upgradeToPostingActive(env, password, activeScalar, activePub)`** (keystore.ts):
+- The **password is the gate**: it decrypts the existing envelope first, so possession of the Active key alone cannot rewrite someone's keystore.
+- Refuses a `morphit-seed` keystore and refuses to run twice.
+- Owner and memo stay `null`; `seedBytes` stays `null`. An Active key cannot derive them — that chain is one-way.
+- Every decrypted private byte is zeroed in a `finally`, including the throw paths. The old envelope is untouched; a NEW one is returned.
+
+**`keepActiveKeyOnThisDevice()`** (`$crypto/keepActiveKey.ts`):
+- **Never silent.** Only reachable from an explicit choice, and the default is "Forget it".
+- **Disk only if disk.** `if (hasPersistedKeystore()) writeEnvelope(...)` — a user who deliberately kept this device clean does not suddenly get keys written to it.
+- Envelope and live capability move together via new `updateUnlockedIdentity()`. `updateEnvelope()` alone would have left `live.activePublicKey === null`: the user keeps their key and the UI still refuses to believe in it.
+- Wipes the scalar on every path out.
+
+**Also fixed along the way:** `jsonToIdentity`'s doc-comment claimed it rejected "a keystore claiming posting-only origin but with an owner key". **It didn't** — only the *missing-role* half was enforced. Both halves hold now (`Unexpected key role in ${origin} keystore`).
+
+**Red dot** (Ken): `backupPending` store → red dot bottom-left on the avatar and beside "Back up my keys". Deliberately **red, not emerald** — "you have unread messages" and "you could permanently lose your keys" must never look the same. Cleared on visiting /backup-keys.
+
+**/backup-keys** is origin-aware: `posting-active` gets the Keyfile (posting + active, honestly labelled: no owner, no memo) and an explicit explanation of why there is **no seed** — a seed *derives* keys, and it cannot be built backwards from keys the user already had.
+
+Guarded: NEW `posting-active-upgrade-smoke` (27) + `postingActive.test.ts` (9, real keys). **Tamper-tested three ways:** defaulting retention to 'keep' (silent promotion), writing to disk unconditionally, and reverting a money gate to provenance — each fails its own check. `pay-now-active-key-smoke` was pinning the OLD provenance rule; repinned.
+
+Verified: web svelte-check 0/0, web vitest 946 pass, dead-key gate 3337, all touched smokes green. Battery: 463 runners.
+
+**#7 (chat header restructure) is the remaining tt.txt item.** Not started — I would not rush a layout change into the same turn as the keystore.
+
+### tt.txt #7 — chat header restructured — DONE
+Ken's reason was mobile: the old header spent its horizontal budget on a single-line `IdentityLabel` plus a LIVE pip stacked under the kebab, leaving the sprout / trade count / reputation nowhere to go. The header is now shaped like an order card — and it literally mirrors `OrderPosterIdentity` rather than inventing a second layout:
+
+```
+"Chatting with:"
+┌──────┐  display name  🌱
+│ 48px │  (posting key) · N trades · ⭐ 4.87        ⋮   ← top-aligned
+└──────┘  RE: <order title>
+```
+
+- Avatar 32 → **48px**, rendered `hideHandle` so the text column is composed beside it (`IdentityLabel` renders avatar+handle as one inline unit, so this needed composition, not a prop).
+- Line 1: display name (falls back to `@peer`) + `NewTraderChip` at the END of the name, exactly as the order cards do.
+- Line 2: truncated posting key (`truncatePublicKey`, same helper as the order cards) · trade count · ⭐ reputation. **NOTE:** `OrderPosterIdentity` puts reputation on line 1; Ken's chat spec puts it on line 2 with the key and trades. Followed Ken.
+- Line 3: the RE: order link.
+- The kebab is now the **last flex item of the identity row**, so `items-start` makes its top sit level with the display name — not with the "Chatting with:" lead-in above it. The old `flex flex-col items-end` right column is gone.
+- **LIVE moved into the kebab menu**, top, above a hairline divider. It is a status READOUT, not a menuitem: no `role`, not focusable. Menu order is now exactly Ken's: **LIVE · divider · Chat Security · Verify peer · Block @username · Export chat.**
+
+Two things I deliberately did NOT do:
+- I started to add a dimmed "Offline" state for when `streaming` is false. That is a UI element and a locale string Ken never asked for, so it's out. The LIVE row renders only while streaming — identical semantics to the old pip, just relocated. The divider renders with it (a divider hanging at the top of a menu with nothing above it looks broken).
+- The `@username` no longer shows beside a display name. That matches the order cards (`{displayName || handle}`) and is the whole point of the restructure — the posting key on line 2 is the durable identity anchor.
+
+**Process note:** my first attempt at this edit sliced the menu by LINE NUMBERS and cut through comment blocks, producing dangling fragments and an orphaned `<button>`. svelte-check caught it. Rewrote the whole menu region from scratch instead. Line-indexed surgery on markup is a trap — anchor on unique strings.
+
+Guarded: NEW `chat-header-layout-smoke` (29). **Tamper-tested twice.** The first tamper (swapping two `onclick` handlers) revealed a real hole in my own smoke: the order checks keyed off i18n labels, so "Chat Security" opening Verify peer would have passed. Added four label↔handler pairing checks; the re-tamper now fails 2. `chat-header-reputation-smoke` pinned the old nesting (sprout inside the `{#if peerReputation}` block) — repinned to the new structure, intent unchanged, plus a new check that the sprout is not gated on having a reputation score.
+
+Verified: web svelte-check 0/0, web vitest 946 pass, dead-key gate 3337, all chat smokes green. Battery: 464 runners.
+
+**tt.txt is now complete: #1, #2, #3, #5, #6, #7, #8, #9, #10, #11, #12 done; #4 skipped at Ken's instruction.**
+
+## cp445 — final batch + full battery + five personas + DEEP-DEEP
+
+### A) Chat header must never wrap (Ken)
+`sm:hidden` / `hidden sm:inline-flex` split: on a narrow viewport the reputation score renders on the DISPLAY-NAME line; from `sm` up it renders on line 2 with the key and trades. Deterministic — no measuring, no layout thrash. Line 2 is now `flex-nowrap`: if anything must give it is the posting key that truncates (it already renders truncated), never the score and never the trade count. Kebab placement unchanged and re-verified: it is the last flex item of the identity row under `items-start`, so its top is level with the display name.
+
+### B) Settings → RPC endpoints copy — DONE
+`settings.endpoints.explain` × 10, EN byte-exact, "Add your own or a community-run node." dropped.
+
+### C) Orderbook featured line — DONE
+"1 of 3 slots filled today" sat directly above "No featured-slot bids in the last 30 days yet." and contradicted it. Gated on `liveFeaturedCount > 0` (the authoritative count of what is actually on the board, emitted by `<FeaturedOrders oncount>`), not on the auction row's `active_visible_count`, which is a property of that DAY'S auction rather than of the board.
+
+### D) "The settings page is broken again" — ROOT CAUSE FOUND AND FIXED
+**Not** what cp440 thought. The account name lived in ONE origin-wide localStorage key, with a `storage` listener that rewrote it whenever any OTHER tab signed in — while the keys live per-session in memory. Sign in as @kentest2 in tab A and @kentest3 in tab B, and tab A signs with kentest2's posting key while declaring `required_posting_auths: ["kentest3"]`. The chain answers **"Missing Posting Authority kentest3"** and dumps three authorities at a user who just wanted to set a display name.
+
+This is exactly the scenario in Ken's own tt.txt #4 note ("kentest2 and kentest3 are in a chat together, both screens open") — which he told me to skip. That note was the repro.
+
+cp440 "fixed" it by DELETING the pre-flight check, reasoning that chat broadcasts worked and profile ones didn't. But **chat messages travel over the relay, not the chain** — they never exercised that path at all. Deleting the check only replaced a clear error with a chain dump.
+
+Fixes:
+- NEW `src/lib/blurt/accountBinding.ts` — `resolveBroadcastAccount(live, hint)`. A signature is made by a KEY, so the account it may speak for is a property of that key, never of a string another tab can overwrite. The account is resolved FROM the posting key (`resolveAccountsByPublicKeys`); the stored name is only a hint used to disambiguate a key that controls several accounts. Refuses (`no_account_for_key` / `ambiguous` / `lookup_failed`) rather than guessing. Memoized per pubkey; **failures are never cached** (a transient indexer blip must not poison a session).
+- `broadcastCustomJson` now declares the resolved account. **Also `broadcastNewOrder`** — the BLURT-fee path builds its own 2-op transaction (`custom_json` with `required_auths` + fee transfers) and never passed through that boundary. It moves money, so it gets the same rule.
+- The `storage` listener no longer rewrites an unlocked session's account, and `getUserBlurtAccount()` reads the in-memory, session-bound value first.
+- 8 unit tests + `account-binding-smoke` (16).
+
+### DEEP-DEEP findings (one pass, 15 dimensions)
+1. **[NAMED TARGET] i18n dead-key gate namespace hole — FIXED.** `referenced()` matched `key.startsWith(pfx) && key.endsWith(sfx)`. A template with no trailing literal yields `sfx === ''`, so the pair whitelists **every key under the prefix, however deep**. The poisoner was `ChatComposer.svelte:78` — `` `chat.${peer}` `` — a **localStorage draft key, not an i18n key at all**. That is how the gate printed "all 3327 checks passed" over an orphaned `chat.pay_blurt.needs_active_key`. Two containment rules: the interpolated hole must fill **exactly one segment**, and an empty suffix requires a prefix at least two levels deep. Scoping harvest to translate-calls-only was tried first and **rejected** — the self-test proved it broke legitimately-assembled keys (`order_title.buy_range`).
+   - **The gate found 3 genuinely dead keys it had been hiding:** `chat.pay_blurt.success_toast_no_chat`, `chat.menu.aria_dismiss`, `footer.alt_network_disabled` (that last one masked by `` `footer.${network}` `` in AltNetworkIcon). Each confirmed orphaned, removed ×10.
+   - **Added the false-NEGATIVE self-test the gate never had.** It only ever guarded against false positives. A gate that cannot fail is not a gate. Tamper-verified: reverting `referenced()` makes the self-test scream.
+2. **Key material leak — FIXED.** `activeKeyUnlock.ts`: on every REFUSAL path (`is_owner_key`, `is_posting_key`, `not_this_account`) the derived scalar — possibly the **owner key**, the very one we refuse — was left in memory. Only the success path handed it to a caller that wipes. Now zeroed in a `finally` unless handed off. (`masterPasswordPubKey` was checked and already wipes its own scalar.)
+3. **Stale copy telling imported users to use a seed — FIXED ×10.** `profile.send.error_no_active_key` and `profile.wallet.error_no_active_key` both said "Sign in with your seed phrase" — advice for something an imported Blurt user **cannot have**. Same defect Ken caught on `/post`.
+4. **Toolchain trap.** `tsconfig.smoke.json` maps `$blurt/*` → `apps/indexer/src/blurt/*`, while web's Vite maps it → `apps/web/src/lib/blurt/*`. A VALUE import through it type-checks and then dies under tsx with `ERR_MODULE_NOT_FOUND` (this broke `wallet-op-builders-smoke`). **18 pre-existing web `.ts` files already import this way** and survive only because no smoke happens to import them at runtime. Fixed my own files (relative imports) + pinned. **The alias collision itself is filed, not fixed** — it touches both apps' toolchains and belongs in its own change.
+5. Capability-vs-provenance sweep: the only remaining `origin === 'morphit-seed'` outside the crypto core is `hasSeed` on /backup-keys, which is correctly provenance. All money gates ask `activePublicKey !== null`.
+6. Locale parity 3334 × 10 identical; native snapshot regenerated; never-translate tokens intact; Forgejo/ratchet guards green; new files all wired + registered.
+
+### Battery / verification (this checkpoint)
+- **Full battery: 465 runners / 13,846 scenarios / 0 failures** (8 chunks).
+- Five stale smokes caught by the battery and repinned to the NEW invariants, each verified against real code first: `wallet-power-modal` (pinned the old provenance rule), `chat-pay-now-flow` (pinned `effectiveAmount > 0`, since replaced by the STRICTER `MIN_BLURT` + `hasBlurtPrecision`), `chat-header-layout` (score now renders twice by design), `chat-header-reputation`, `pay-now-active-key`.
+- `text-input-maxlength-coverage` caught two unbounded password inputs in `UnlockActiveKeyModal` — bounded (128 / 64).
+- web svelte-check 0/0 · web vitest 954 pass / 5 skip (57 files).
+- **Recurring lesson, hit again:** a smoke that greps source must strip comments first — my own doc-comment quoted the buggy expression it replaced and "failed" the check.

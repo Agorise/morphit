@@ -81,9 +81,12 @@
 	import { identity, isUnlocked, isPairedReadOnly } from '$stores/identity';
 	import { getPreferencesSnapshot, setPreference } from '$stores/userPreferences';
 	import { useActiveKey, KeystoreError } from '$crypto/keystore';
+	import UnlockActiveKeyModal from '$components/UnlockActiveKeyModal.svelte';
+	import sodium from 'libsodium-wrappers-sumo';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
 	import { broadcastNewOrder, BroadcastError } from '$blurt/ops/order';
 	import { computeFee, BASE_FEE_BLURT, resolveFeeRecipient, type FeeQuote } from '$lib/orders/fee';
+	import { onDestroy } from 'svelte';
 	import { getOrdersByAccount } from '$lib/indexer/client';
 	import {
 		ASSET_TICKERS,
@@ -605,6 +608,61 @@
 	let passwordError = $state('');
 	let broadcastError = $state('');
 	let successPermlink: string | null = $state(null);
+
+	/** #20 (Ken) — the success page used to show "View my order" the instant the
+	 *  broadcast returned. The order isn't queryable yet at that moment, so the
+	 *  button led straight to a not-found page: "I just paid, and my order
+	 *  doesn't exist." Terrifying, and entirely our fault.
+	 *
+	 *  Instead we poll the indexer for the permlink we just broadcast and reveal
+	 *  the button only once the order is actually THERE. Until then the page says
+	 *  the order is landing. Chain is 3s blocks + indexer lag, so this is usually
+	 *  one or two ticks.
+	 *
+	 *  Bounded: `ORDER_VISIBLE_MAX_ATTEMPTS` ticks, then we surface the button
+	 *  anyway rather than trapping the user on a spinner forever — a slow indexer
+	 *  must not make the order unreachable. */
+	let orderVisibleOnChain = $state(false);
+	let orderVisiblePollTimer: ReturnType<typeof setTimeout> | null = null;
+	const ORDER_VISIBLE_POLL_MS = 2_000;
+	const ORDER_VISIBLE_MAX_ATTEMPTS = 20; // ~40s
+
+	function stopOrderVisiblePoll(): void {
+		if (orderVisiblePollTimer !== null) {
+			clearTimeout(orderVisiblePollTimer);
+			orderVisiblePollTimer = null;
+		}
+	}
+
+	async function pollUntilOrderVisible(permlink: string, account: string, attempt = 0): Promise<void> {
+		if (successPermlink !== permlink) return; // superseded (user posted another)
+		const r = await getOrdersByAccount(account, { limit: 100 });
+		if (successPermlink !== permlink) return;
+		if (r.ok && r.data.items.some((o) => o.permlink === permlink)) {
+			orderVisibleOnChain = true;
+			return;
+		}
+		if (attempt + 1 >= ORDER_VISIBLE_MAX_ATTEMPTS) {
+			// Give up waiting, but never hide the order from its owner.
+			orderVisibleOnChain = true;
+			return;
+		}
+		orderVisiblePollTimer = setTimeout(() => {
+			void pollUntilOrderVisible(permlink, account, attempt + 1);
+		}, ORDER_VISIBLE_POLL_MS);
+	}
+
+	// The poll must not outlive the page (a pending setTimeout would fire into a
+	// destroyed component).
+	onDestroy(stopOrderVisiblePoll);
+
+	function startOrderVisiblePoll(): void {
+		stopOrderVisiblePoll();
+		orderVisibleOnChain = false;
+		if (successPermlink && blurtAccount) {
+			void pollUntilOrderVisible(successPermlink, blurtAccount);
+		}
+	}
 	/** Capture whether the broadcast that just succeeded used the
 	 *  first-buy waiver. The post-broadcast success view celebrates
 	 *  more loudly + tells the user what to expect next when their
@@ -791,14 +849,15 @@
 	 *  posting WIF, or a posting-only keyfile) CANNOT sign a BLURT transfer,
 	 *  so the BLURT listing-fee path is unavailable to it — LiveIdentity's
 	 *  contract is that active-key features must guard with
-	 *  `origin === 'morphit-seed'`.  Such a user can still use the free
+	 *  an active key on this device (CAPABILITY, not provenance — a
+	 *  'posting-active' session has one).  Such a user can still use the free
 	 *  first-listing waiver or pay the fee in BTC/XMR (all posting-key only).
 	 *  Without this guard, a posting-only user picking BLURT was prompted for
 	 *  their password and then hit a generic "the chain didn't accept your
 	 *  broadcast" — a *local* pre-broadcast failure mislabeled as a chain
 	 *  rejection (the active key simply isn't on this device). */
 	const hasActiveKey = $derived(
-		$identity.state === 'unlocked' ? $identity.live.origin === 'morphit-seed' : false
+		$identity.state === 'unlocked' ? $identity.live.activePublicKey !== null : false
 	);
 	/** External transaction ID for btc/xmr methods. Must be 64-char
 	 *  hex (indexer validates; we also do a client-side check to
@@ -1842,6 +1901,35 @@
 		passwordError = '';
 	}
 
+	/** tt.txt #11 — paying the listing fee in BLURT is signed with the ACTIVE key.
+	 *  A posting-only session has none on this device, so the radio used to carry
+	 *  a red "you can't do this" note and nothing else. Now we unlock in place and
+	 *  RESUME the broadcast: every field the user filled in stays exactly as it is.
+	 *
+	 *  The scalar lives only until `signCallback` has signed, then it's wiped. It
+	 *  is never written to the keystore. */
+	let ephemeralActiveScalar: Uint8Array | null = $state(null);
+	let showUnlockForFee = $state(false);
+
+	function wipeEphemeralActive(): void {
+		if (ephemeralActiveScalar) {
+			try {
+				sodium.memzero(ephemeralActiveScalar);
+			} catch {
+				/* already zeroed */
+			}
+			ephemeralActiveScalar = null;
+		}
+	}
+
+	onDestroy(wipeEphemeralActive);
+
+	async function onFeeKeyUnlocked(scalar: Uint8Array): Promise<void> {
+		ephemeralActiveScalar = scalar;
+		showUnlockForFee = false;
+		await submitBroadcast(); // resume exactly where the user left off
+	}
+
 	async function submitBroadcast(): Promise<void> {
 		// Private-key gate: if terms contains a detected key and the
 		// user hasn't acknowledged the warning yet, show the modal
@@ -1972,6 +2060,7 @@
 					BASE_FEE_BLURT // unused for non-BLURT paths; sane default if reached
 				);
 				successPermlink = result.permlink;
+				startOrderVisiblePoll();
 				successUsedWaiver = feeMethodChoice === 'waived_first_buy';
 				// Sally finding M1/M8: stamp success time so the
 				// edit-window countdown chip can render live.
@@ -2029,6 +2118,14 @@
 			return;
 		}
 
+		if (!hasActiveKey && ephemeralActiveScalar === null) {
+			// Ask for the Active key before we prepare anything. Nothing has been
+			// broadcast, nothing is lost; the form is untouched behind the modal.
+			showUnlockForFee = true;
+			phase = 'awaiting_password'; // awaiting a credential, nothing broadcast
+			return;
+		}
+
 		try {
 			// Phase F.5 audit fix (F-18) — sign-callback pattern.
 			// broadcastNewOrder prepares the unsigned tx, calls our
@@ -2039,6 +2136,16 @@
 			const signCallback = async (
 				unsigned: import('@beblurt/dblurt').Transaction
 			): Promise<import('@beblurt/dblurt').SignedTransaction> => {
+				// A just-unlocked key signs once and is wiped immediately — the
+				// keystore never sees it.
+				if (ephemeralActiveScalar !== null) {
+					const { signOrderWithFeeWithKey } = await import('$blurt/sign');
+					try {
+						return signOrderWithFeeWithKey(unsigned, ephemeralActiveScalar);
+					} finally {
+						wipeEphemeralActive();
+					}
+				}
 				return useActiveKey(
 					state.envelope,
 					password,
@@ -2061,6 +2168,7 @@
 			);
 			// useActiveKey has wiped the scalar by now.
 			successPermlink = result.permlink;
+			startOrderVisiblePoll();
 			// We're in the BLURT-paid branch; the waived/btc/xmr
 			// branches return early at line ~939 above, so by the
 			// time we reach this point feeMethodChoice can only be
@@ -2234,6 +2342,8 @@
 		syndicateToBlog = isOrderBlogDefaultEnabled();
 		syndicationStatus = null;
 		successPermlink = null;
+		stopOrderVisiblePoll();
+		orderVisibleOnChain = false;
 		successUsedWaiver = false;
 		// Sally finding M1/M8: clear the success-stamp so the
 		// next post's countdown starts fresh, not from now-relative-
@@ -3708,13 +3818,29 @@
 			{/if}
 
 			<div class="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
-				{#if successPermlink && blurtAccount}
+				{#if successPermlink && blurtAccount && orderVisibleOnChain}
+					<!-- #20 (Ken) — only offered once the indexer can actually SEE the
+					     order. Offering it immediately sent the user to a not-found
+					     page seconds after they'd paid a listing fee. -->
 					<BusyButton
 						variant="primary"
 						onclick={() => gotoLocale(`/@${blurtAccount}/${successPermlink}`)}
 					>
 						{$_('post_order.success.view_my_order_cta')}
 					</BusyButton>
+				{:else if successPermlink && blurtAccount}
+					<!-- Landing on chain. Say so plainly instead of dangling a button
+					     that leads nowhere. -->
+					<p
+						class="flex items-center justify-center gap-2 text-sm text-ink-600 dark:text-ink-300"
+						aria-live="polite"
+					>
+						<span
+							class="inline-block h-3 w-3 animate-spin rounded-full border-2 border-morphit-emerald border-t-transparent"
+							aria-hidden="true"
+						></span>
+						{$_('post_order.success.view_my_order_pending')}
+					</p>
 				{:else}
 					<BusyButton variant="primary" onclick={() => gotoLocale('/orderbook')}>
 						{$_('post_order.success.view_cta')}
@@ -3824,4 +3950,27 @@
 	{:catch}
 		<LazyLoadError />
 	{/await}
+{/if}
+
+{#if showUnlockForFee}
+	<!-- tt.txt #11 — Active-key unlock for the BLURT listing fee. Raised OVER the
+	     form, never replacing it: cancel and every field is still there. -->
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/80 p-4 backdrop-blur-sm"
+		role="dialog"
+		aria-modal="true"
+	>
+		<div
+			class="w-full max-w-md rounded-2xl border border-ink-200 bg-white p-5 shadow-morphit-card-hover dark:border-ink-700 dark:bg-ink-900"
+		>
+			<UnlockActiveKeyModal
+				account={blurtAccount ?? ''}
+				onUnlocked={onFeeKeyUnlocked}
+				onCancel={() => {
+					showUnlockForFee = false;
+					phase = 'reviewing';
+				}}
+			/>
+		</div>
+	</div>
 {/if}

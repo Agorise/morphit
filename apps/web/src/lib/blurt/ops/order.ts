@@ -22,6 +22,7 @@
  */
 
 import { getUserBlurtAccount, BroadcastError } from '$blurt/ops/profile';
+import { resolveBroadcastAccount } from '../accountBinding';
 import { OP_IDS } from '$net/config';
 import type { LiveIdentity } from '$crypto/keygen';
 import type { Transaction, SignedTransaction } from '@beblurt/dblurt';
@@ -88,10 +89,16 @@ export async function broadcastNewOrder(
 	 *  so callers that don't pass it stay correct on the canonical deployment. */
 	feeRecipient: string = FEE_RECIPIENT
 ): Promise<BroadcastOrderResult> {
-	const account = getUserBlurtAccount();
-	if (!account) {
+	const hint = getUserBlurtAccount();
+	if (!hint) {
 		throw new BroadcastError('no_account', 'You need a Blurt account before posting an order.');
 	}
+	// cp445 — the BLURT-fee path builds its own 2-op transaction (custom_json with
+	// `required_auths: [account]`, plus the fee transfers) and never passes through
+	// broadcastCustomJson's binding. It moves MONEY, so it gets the same rule: the
+	// account is resolved from the signing key, not from an origin-wide
+	// localStorage value another tab can overwrite. See accountBinding.ts.
+	const account = await resolveBroadcastAccount(live, hint);
 
 	const feeMethod = input.feeMethod ?? 'blurt';
 	const permlink = makeOrderPermlink(input.side, input.asset, input.fiatCurrency);

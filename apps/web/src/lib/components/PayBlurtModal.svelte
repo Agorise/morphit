@@ -46,6 +46,14 @@
 
 	import { _ } from 'svelte-i18n';
 	import { runWithActiveKey } from '$crypto/runWithActiveKey';
+	import { liveIdentity } from '$stores/identity';
+	import UnlockActiveKeyModal from '$components/UnlockActiveKeyModal.svelte';
+	import sodium from 'libsodium-wrappers-sumo';
+	import {
+		validateBlurtAmount,
+		hasBlurtPrecision,
+		MIN_BLURT
+	} from '$lib/blurt/sendValidation';
 	import {
 		prepareUnsignedTransfer,
 		signTransferWithKey,
@@ -144,15 +152,91 @@
 		formatBlurtAmount(Number.isFinite(effectiveAmount) && effectiveAmount > 0 ? effectiveAmount : 0)
 	);
 
+	/** #25 (Ken) — a BLURT transfer is signed with the ACTIVE key. An account
+	 *  imported posting-only has no active key on this device, so the transfer
+	 *  can never be signed. We used to let the user pick an amount, type their
+	 *  password, and only then fail with "Could not send the transfer." The
+	 *  wallet's Send button has always been gated on exactly this
+	 *  (`MyBalanceCard`); the chat's Pay now was not. Same guard, same rule.
+	 *
+	 *  Deliberately NOT hiding the Pay-now button: a user whose account can't
+	 *  pay deserves to learn WHY and what to do about it, not to watch a control
+	 *  quietly vanish. */
+	/** CAPABILITY, not provenance (tt.txt #11). A 'posting-active' session — a
+	 *  posting-only import that chose to keep its verified Active key on this
+	 *  device — CAN sign a transfer. Asking `origin === 'morphit-seed'` would
+	 *  wrongly deny it. Ask whether the key is actually there. */
+	const hasActiveKey = $derived(($liveIdentity?.activePublicKey ?? null) !== null);
+
+	/** #24 — the password is REQUIRED. It was absent from `canPay`, so the Pay
+	 *  button sat enabled over an empty field. Non-empty is the gate; the real
+	 *  check is the Argon2id unlock at submit (too slow to run per keystroke). */
+	const passwordFilled = $derived(passwordInput.length > 0);
+
+	/** #24 — real amount validation. `formatBlurtAmount` serialises with
+	 *  `toFixed(3)`, which ROUNDS: an entered `1.0006` would broadcast `1.001`
+	 *  (more BLURT than the user chose) and `0.0004` would build `0.000 BLURT`.
+	 *  No balance is available in this modal, so the ceiling is left to the
+	 *  chain — but precision and the floor are enforced here.
+	 *
+	 *  A pill-provided amount is a number, not typed text; it gets the same
+	 *  grid check, because rounding an amount the user didn't type is the same
+	 *  bug with no field to complain in. */
+	const amountCheck = $derived(validateBlurtAmount(enteredAmount, Number.POSITIVE_INFINITY));
+	const amountPrecisionOk = $derived(amountEditable ? amountCheck.precisionOk : true);
+	const amountValid = $derived(
+		amountEditable
+			? amountCheck.valid
+			: Number.isFinite(amount) && amount >= MIN_BLURT && hasBlurtPrecision(amount)
+	);
+
 	/** Sanity guards.  These should never trip via real UI — the
 	 *  pay-now button is disabled when the conditions aren't met
 	 *  — but defense in depth. */
 	const canPay = $derived(
 		myAccount !== null &&
 			myAccount !== recipient &&
-			effectiveAmount > 0 &&
-			Number.isFinite(effectiveAmount)
+			hasActiveKey &&
+			amountValid &&
+			passwordFilled
 	);
+
+	/** tt.txt #11 — a posting-only session unlocked its Active key just for this
+	 *  payment. The scalar exists in memory for the ~10ms signing window and is
+	 *  then wiped with `sodium.memzero`; it is NEVER written to the keystore.
+	 *
+	 *  Ken: "let the user SEAMLESSLY continue doing what they were doing without
+	 *  losing their place" — so this resumes the payment with the amount already
+	 *  typed, rather than closing the modal and making them start over. */
+	async function payWithEphemeralActiveKey(activeScalar: Uint8Array): Promise<void> {
+		if (!amountValid || myAccount === null || myAccount === recipient) return;
+		phase = { kind: 'paying' };
+		try {
+			const unsignedTx = await prepareUnsignedTransfer(
+				myAccount,
+				recipient,
+				formattedAmount,
+				memo
+			);
+			// Sign, then wipe. The key must not outlive the signature.
+			let signed;
+			try {
+				signed = signTransferWithKey(unsignedTx, activeScalar);
+			} finally {
+				sodium.memzero(activeScalar);
+			}
+			const result = await broadcastSignedTransaction(signed);
+			onPaid({ trxId: result.trx_id, blockNum: result.block_num, amount: effectiveAmount });
+		} catch (e) {
+			// Wipe on every path out, including a failed prepare.
+			try {
+				sodium.memzero(activeScalar);
+			} catch {
+				/* already zeroed */
+			}
+			phase = { kind: 'error', ...classifyBroadcastError(e) };
+		}
+	}
 
 	async function confirm(): Promise<void> {
 		if (!canPay) return;
@@ -282,7 +366,15 @@
 				{#if payHint}
 					<p class="mt-1 text-xs text-morphit-teal dark:text-morphit-emerald">{payHint}</p>
 				{/if}
-				{#if enteredAmount.trim().length > 0 && !canPay && myAccount !== null && myAccount !== recipient}
+				<!-- The amount error must key off the AMOUNT, not `canPay`. `canPay` now
+				     also requires the password and an active key, so keying off it
+				     would shout "invalid amount" at someone whose amount is fine and
+				     whose password is merely still empty. -->
+				{#if enteredAmount.trim().length > 0 && !amountPrecisionOk}
+					<p class="mt-1 text-xs text-red-600 dark:text-red-400">
+						{$_('chat.pay_blurt.error_amount_precision')}
+					</p>
+				{:else if enteredAmount.trim().length > 0 && !amountValid && myAccount !== null && myAccount !== recipient}
 					<p class="mt-1 text-xs text-red-600 dark:text-red-400">
 						{$_('chat.pay_blurt.error.invalid_amount')}
 					</p>
@@ -388,11 +480,28 @@
 						{$_('common.close')}
 					</button>
 				</div>
+			{:else if !hasActiveKey}
+				<!-- #25 / tt.txt #11 — this account was imported posting-only, so there
+				     is no active key on this device and a transfer can never be signed
+				     with what we hold. Rather than a dead end (or, worse, collecting a
+				     password that cannot work), unlock IN PLACE and resume: the amount
+				     above stays exactly where the user typed it.
+				     The CTA stays disabled while the amount is invalid — we never
+				     enable a button first and explain afterwards. -->
+				<UnlockActiveKeyModal
+					account={myAccount ?? ''}
+					canProceed={amountValid}
+					onUnlocked={payWithEphemeralActiveKey}
+					onCancel={onCancel}
+				/>
 			{:else}
 				<!-- Password input -->
 				<label class="mt-5 block">
 					<span class="text-sm font-semibold">
-						{$_('chat.pay_blurt.password_label')}
+						<!-- #24 (Ken) — "Active key password" / "Your password" told the user
+						     nothing. Morphit stores the ACTIVE KEY encrypted; this field is
+						     the password that unlocks it. One field, not two. -->
+						{$_('chat.pay_blurt.password_label', { values: { account: myAccount ?? '' } })}
 					</span>
 					<input
 						type="password"
@@ -412,6 +521,8 @@
 					{/if}
 				</label>
 
+
+
 				<div class="mt-5 flex justify-center gap-2">
 					<button
 						type="button"
@@ -421,11 +532,13 @@
 					>
 						{$_('common.cancel')}
 					</button>
+					<!-- #24 — the Pay button was gated ONLY on "not currently paying": it
+					     sat enabled over an empty password and an unvalidated amount. -->
 					<button
 						type="button"
 						class="rounded-lg bg-morphit-btn px-4 py-2 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-50"
 						onclick={confirm}
-						disabled={phase.kind === 'paying'}
+						disabled={!canPay || phase.kind === 'paying'}
 					>
 						{phase.kind === 'paying' ? $_('chat.pay_blurt.paying') : $_('chat.pay_blurt.confirm')}
 					</button>

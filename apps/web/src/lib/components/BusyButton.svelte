@@ -21,7 +21,7 @@
 	interface Props {
 		/** Primary CTA, secondary, ghost, or text-link (de-emphasized
 		 *  back/cancel nav). Only one primary per screen. */
-		variant?: 'primary' | 'secondary' | 'ghost' | 'link' | 'danger';
+		variant?: 'primary' | 'secondary' | 'secondary-quiet' | 'ghost' | 'link' | 'danger';
 		/** True while the action is in flight. Shows spinner, disables button. */
 		busy?: boolean;
 		/** True briefly after a just-completed success. Shows a
@@ -67,6 +67,12 @@
 				return 'bg-morphit-btn text-white font-bold shadow hover:brightness-110 disabled:bg-ink-300 disabled:text-ink-500 disabled:shadow-none';
 			case 'secondary':
 				return 'bg-white dark:bg-ink-900 text-morphit-emerald font-semibold border-2 border-morphit-emerald hover:bg-emerald-50 dark:hover:bg-ink-800 disabled:border-ink-300 disabled:text-ink-400';
+			case 'secondary-quiet':
+				// tt.txt #5 — same shape as `secondary`, but a 1px, muted border.
+				// For save-in-place actions (Settings) where a full-strength
+				// emerald outline shouts louder than the action deserves. The
+				// border brightens on hover so it still feels like a control.
+				return 'bg-white dark:bg-ink-900 text-morphit-emerald font-semibold border border-morphit-emerald/40 hover:border-morphit-emerald hover:bg-emerald-50 dark:hover:bg-ink-800 disabled:border-ink-300 disabled:text-ink-400';
 			case 'danger':
 				// Outlined destructive action (cancel an order, etc.): dark-red
 				// text + border with a faint red wash on hover. Outlined rather

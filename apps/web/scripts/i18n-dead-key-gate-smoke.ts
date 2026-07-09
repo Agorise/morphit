@@ -53,24 +53,56 @@ function extractFromJs(code: string, staticLits: Set<string>, dynPairs: Set<stri
 			flattenPlus(node.right, out);
 		} else out.push(node);
 	}
-	function visit(node: ts.Node): void {
-		if (ts.isStringLiteralLike(node) && !ts.isTemplateExpression(node)) {
-			staticLits.add((node as ts.StringLiteralLike).text);
+	/** cp445 — a dynamic (prefix, suffix) pair whitelists everything between them,
+	 *  so harvesting them from EVERY template literal in the tree is dangerous.
+	 *  `ChatComposer.svelte` builds a localStorage draft key as `` `chat.${peer}` ``.
+	 *  That is not an i18n key at all, but it produced the pair
+	 *  ('chat.', '') — and `referenced()` then declared every single key under
+	 *  `chat.*` to be in use. The gate went on printing "all 3327 checks passed"
+	 *  over a genuinely orphaned `chat.pay_blurt.needs_active_key`.
+	 *
+	 *  A green number over a broken check is worse than a red one, so: only
+	 *  expressions passed to a TRANSLATE CALL are treated as key material. */
+	const TRANSLATE_FNS = new Set(['$_', '_', 't', '$t']);
+	function isTranslateCall(node: ts.Node): node is ts.CallExpression {
+		if (!ts.isCallExpression(node)) return false;
+		const e = node.expression;
+		if (ts.isIdentifier(e)) return TRANSLATE_FNS.has(e.text);
+		// `i18n.t(...)` / `$i18n.t(...)`
+		if (ts.isPropertyAccessExpression(e) && ts.isIdentifier(e.name)) {
+			return TRANSLATE_FNS.has(e.name.text);
 		}
-		if (ts.isTemplateExpression(node)) {
-			const prefix = node.head.text;
-			const suffix = node.templateSpans[node.templateSpans.length - 1]!.literal.text;
+		return false;
+	}
+
+	function harvestKeyExpr(arg: ts.Node): void {
+		if (ts.isTemplateExpression(arg)) {
+			const prefix = arg.head.text;
+			const suffix = arg.templateSpans[arg.templateSpans.length - 1]!.literal.text;
 			if (/[._]/.test(prefix + suffix)) dynPairs.add(prefix + SEP + suffix);
+			return;
 		}
-		if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+		if (ts.isBinaryExpression(arg) && arg.operatorToken.kind === ts.SyntaxKind.PlusToken) {
 			const ops: ts.Node[] = [];
-			flattenPlus(node, ops);
+			flattenPlus(arg, ops);
 			const first = ops[0]!;
 			const last = ops[ops.length - 1]!;
 			const prefix = ts.isStringLiteral(first) ? first.text : '';
 			const suffix = ts.isStringLiteral(last) ? last.text : '';
 			if ((prefix || suffix) && /[._]/.test(prefix + suffix)) dynPairs.add(prefix + SEP + suffix);
 		}
+	}
+
+	function visit(node: ts.Node): void {
+		if (ts.isStringLiteralLike(node) && !ts.isTemplateExpression(node)) {
+			staticLits.add((node as ts.StringLiteralLike).text);
+		}
+		// Harvest dynamic key shapes from ANY template/concat, not only from a
+		// translate call: several keys are assembled into a variable or returned
+		// from a helper (`orderTitleParts`) and translated at the call site. The
+		// containment rules in `referenced()` — not the harvest site — are what
+		// stop a pair from whitelisting a namespace.
+		harvestKeyExpr(node);
 		ts.forEachChild(node, visit);
 	}
 	visit(sf);
@@ -129,14 +161,53 @@ const DYNAMIC_ALLOWLIST = new Set<string>([
 function referenced(key: string): boolean {
 	if (staticLits.has(key) || DYNAMIC_ALLOWLIST.has(key)) return true;
 	for (const [pfx, sfx] of dynArr) {
-		if ((pfx || sfx) && key.startsWith(pfx) && key.endsWith(sfx) && key.length >= pfx.length + sfx.length) {
-			return true;
+		if (!pfx && !sfx) continue;
+		if (!key.startsWith(pfx) || !key.endsWith(sfx)) continue;
+		if (key.length < pfx.length + sfx.length) continue;
+		// cp445 — RULE 1: the interpolated hole must fill EXACTLY ONE key segment.
+		// `$_(\`a.b.\${x}\`)` can produce `a.b.foo`, never `a.b.foo.bar`. Without
+		// this, a pair with an empty suffix matched every descendant key in the
+		// namespace, however deep — which is how a dead `chat.pay_blurt.*` key
+		// slipped through while the gate printed a green number.
+		const hole = key.slice(pfx.length, key.length - sfx.length);
+		if (hole.includes('.') || hole.length === 0) continue;
+
+		// cp445 — RULE 2: an EMPTY suffix means the template ends in the hole, so
+		// the pair covers a whole namespace level. Demand that the prefix name at
+		// least two levels first. `ChatComposer` builds a localStorage draft key
+		// as `chat.${peer}` — not an i18n key at all — and that one-level prefix
+		// was whitelisting every `chat.*` key in the app.
+		if (sfx.length === 0) {
+			const depth = (pfx.match(/\./g) ?? []).length;
+			if (depth < 2) continue;
 		}
+		return true;
 	}
 	return false;
 }
 
-// ── self-test: these live keys use every dynamic-access shape and MUST resolve ─
+// ── self-test A (false NEGATIVE): the gate must be able to FAIL ──────────────
+// cp445 — the gate reported "all 3327 checks passed" while
+// `chat.pay_blurt.needs_active_key` was orphaned: `ChatComposer` builds a
+// localStorage draft key as `chat.${peer}`, which the extractor read as an i18n
+// pair ('chat.', '') and used to whitelist every key under `chat.*`. A gate that
+// cannot fail is not a gate. These synthetic keys must be reported dead.
+const MUST_BE_DEAD = [
+	'chat.__synthetic_orphan__', // 1 segment under a poisoned namespace
+	'chat.pay_blurt.__synthetic_orphan__', // deeper under the same
+	'footer.__synthetic_orphan__' // `footer.${network}` in AltNetworkIcon
+];
+const falseNegatives = MUST_BE_DEAD.filter((k) => referenced(k));
+if (falseNegatives.length > 0) {
+	console.error('\u2717 SELF-TEST FAILED — the gate would not catch these dead keys:');
+	for (const k of falseNegatives) console.error(`      ${k}`);
+	console.error('');
+	console.error('  A dynamic (prefix, suffix) pair is whitelisting a whole namespace.');
+	console.error('  The gate is NOT trustworthy. Fix `referenced()` before trusting a pass.');
+	process.exit(1);
+}
+
+// ── self-test B (false POSITIVE): these live keys use every dynamic-access shape and MUST resolve ─
 const KNOWN_LIVE = [
 	'nav.orderbook', 'nav.messages',
 	'faq.entries.why_agpl.q', 'faq.entries.what_is_bch.a',
