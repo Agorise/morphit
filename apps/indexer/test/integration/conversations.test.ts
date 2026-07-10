@@ -374,17 +374,28 @@ describe.skipIf(!INTEGRATION_ENABLED)('conversations endpoint — SQL integratio
 		expect(r.order_asset).toBe('BTC');
 	});
 
-	it('picks the MOST RECENT order-carrying message when several orders were discussed', async () => {
+	// cp446 — REPLACES 'picks the MOST RECENT order-carrying message when several
+	// orders were discussed'. That test pinned the old collapse: several orders,
+	// one card, showing whichever was cited last. Ken asked for an email inbox, so
+	// several orders is now several cards — and this same fixture proves it.
+	// (Caught by CI on real Postgres; the sandbox cannot run the integration suite.)
+	it('gives each discussed order its own thread, newest first, plus the order-less one', async () => {
 		await insertOrder(fx, 'bob', 'order-old', { asset: 'BLURT' });
 		await insertOrder(fx, 'bob', 'order-new', { asset: 'LTC' });
 		await insertMessage(fx, 'alice', 'bob', new Date('2026-04-23T10:00:00Z'), 'order-old');
-		await insertMessage(fx, 'bob', 'alice', new Date('2026-04-23T11:00:00Z')); // no order, newer
+		await insertMessage(fx, 'bob', 'alice', new Date('2026-04-23T11:00:00Z')); // no order
 		await insertMessage(fx, 'alice', 'bob', new Date('2026-04-23T12:00:00Z'), 'order-new');
 		const result = await fx.db.query<OrderRow>(CONVERSATIONS_SELECT, ['alice', 200]);
-		expect(result.rowCount).toBe(1);
-		// Most recent message WITH an order_permlink is order-new.
+
+		expect(result.rowCount).toBe(3);
+		// Newest discussion first, by last_message_at.
 		expect(result.rows[0]!.order_permlink).toBe('order-new');
 		expect(result.rows[0]!.order_asset).toBe('LTC');
+		expect(result.rows[1]!.order_permlink).toBeNull(); // the order-less thread
+		expect(result.rows[2]!.order_permlink).toBe('order-old');
+		expect(result.rows[2]!.order_asset).toBe('BLURT');
+		// All three are with the same person.
+		expect(result.rows.every((r) => r.peer === 'bob')).toBe(true);
 	});
 
 	it('still surfaces a CANCELLED order (rows persist; RE: link stays useful)', async () => {

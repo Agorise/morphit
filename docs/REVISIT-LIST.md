@@ -9481,3 +9481,27 @@ Unread is evaluated against **MAX(this thread's ack, the peer-wide ack)**. Both 
 Guarded by NEW `chat-read-state-threading-smoke` (27) + 6 new unit tests (30 total in `readState.test.ts`), including the two Ken cares about: *reading one thread does not mark another thread with the same peer read*, and *the order-less thread is a thread of its own*. Tamper-tested four ways — attributing legacy acks to the order-less thread, dropping legacy keys, letting a client forge `'*'`, and reverting the upsert to a peer key — each fails.
 
 **Full battery: 468 runners / 13,960 scenarios / 0 failures.**
+
+### cp446 (part 4) — CI caught a RELEASE BLOCKER: `order_permlink` was doing two jobs
+CI's real-Postgres run failed one integration test — `picks the MOST RECENT order-carrying message when several orders were discussed`, which pinned the **old collapse** (several orders → one card). Rewriting it to the new invariant was trivial. Chasing *why* it existed was not.
+
+**The blocker.** The chat handler rejected any message whose `order_permlink` did not name a **live order owned by the recipient**. That single rule was serving two purposes at once:
+1. **thread tag** — which discussion a message belongs to;
+2. **stranger-fee bypass proof** — "a posted order is consent to be contacted about it."
+
+Before threading, the inbox linked to `/chat/<peer>` with no `?order=`, so only the *opening* message of a thread ever carried a tag and the conflation never showed. The moment every card linked with `?order=`, two things broke:
+- **the order OWNER could not reply in their own thread** — they are not the recipient of their own listing, so every reply would be rejected `order_permlink_not_found`;
+- **nobody could speak in a thread once the order was cancelled or expired** — exactly the `(Cancelled)` threads Ken asked to display.
+
+**Fix: separate the two.** The tag is kept whenever the permlink names a real order owned by **one of the two parties** (so a tag can never be free text, nor a stranger's listing). The **bypass is granted on exactly the conditions it always had** — recipient owns it, `status='live'`, not past `expires_at`. A stranger citing a cancelled order therefore gets no bypass and falls to the stranger-fee gate she was always meant to hit. The audited BATCH19A-chat-1 defence is unchanged in strength; only its *shape* moved, so its smoke now asserts the **security property** (eve is stopped, and the gate actually ran) rather than the incidental reason string.
+
+**Verified against a real database, not by reasoning.** Installed Postgres 16 in the sandbox — the same version CI uses — and closed the gap that let this through:
+- full integration suite: **102/102**, including the three threading tests I previously could only write blind;
+- **migration 39 applied to a pre-migration database**: two legacy rows backfilled to `'*'`, and a per-thread upsert then coexists with them (2 rows for alice/bob);
+- **the documented downgrade hazard reproduced**: an old indexer's `ON CONFLICT (reader_account, peer_account)` against the migrated table gives exactly *"there is no unique or exclusion constraint matching the ON CONFLICT specification"*.
+
+Guarded: `chat-inbox-threading-smoke` 24 → 29 (tag-vs-bypass), `chat-handler-smoke` 26 → 29 (owner replies; admitted pair keeps talking after cancellation; a third party's order is still rejected). Tamper-tested: widening the bypass to "either party owns it" trips the audited security scenario; dropping the ownership clause trips the tag check.
+
+**Note (unreachable by construction, filed):** two *different* ghost permlinks with no matching `orders` row would both render as order-less cards and collide on the client's thread key. The handler now guarantees the row exists and belongs to a party, so this cannot be produced through the chain — but if the join is ever loosened, the API should return `g.order_permlink` as a thread id distinct from the joined `order`.
+
+**Full battery: 468 runners / 13,968 scenarios / 0 failures.** Integration: 102/102 on real Postgres 16.

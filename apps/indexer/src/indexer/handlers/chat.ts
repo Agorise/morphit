@@ -263,45 +263,55 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	if (claimedPermlink !== undefined && claimedPermlink !== null) {
 		const permlinkFail = validateChatOrderPermlink(claimedPermlink);
 		if (permlinkFail) return { ok: false, reason: permlinkFail };
-		const orderCheck = await client.query<{ exists: boolean }>(
-			`SELECT EXISTS (
-			   SELECT 1 FROM orders
-			    WHERE account = $1 AND permlink = $2
-			      AND status = 'live'
-			      AND (expires_at IS NULL OR expires_at > $3)
-			 ) AS exists`,
-			[recipient, claimedPermlink, ctx.blockTime]
+		// cp446 — `order_permlink` does TWO jobs, and conflating them was a bug.
+		//
+		//   1. THREAD TAG. The inbox groups conversations by (peer, order), like an
+		//      email inbox, and the transcript is scoped to one thread. Every
+		//      message in a discussion must carry the tag, INCLUDING the order
+		//      owner's replies and everything said after the order is cancelled.
+		//
+		//   2. STRANGER-FEE BYPASS PROOF. "A posted order is consent to be
+		//      contacted about it" — but only while it is actually posted, and only
+		//      for the person who posted it.
+		//
+		// The old code granted (1) and (2) together, or rejected the message
+		// outright. That meant the ORDER OWNER could not reply in their own thread
+		// (they are not the recipient of their own order), and nobody could speak
+		// in a thread once the order was cancelled or expired — which is precisely
+		// the "(Cancelled)" thread the inbox now shows.
+		//
+		// So: the tag is kept whenever the permlink names a real order belonging to
+		// ONE OF THE TWO PARTIES (a client can never tag a stranger's order, or
+		// invent one). The BYPASS is granted on exactly the conditions it always
+		// was — recipient owns it, status='live', not past expires_at. A stranger
+		// citing a cancelled order therefore still gets no bypass and still falls
+		// to the stranger-fee gate below; only people who were already allowed to
+		// talk to each other gain anything here.
+		const orderCheck = await client.query<{ account: string; live: boolean }>(
+			`SELECT account,
+			        (status = 'live' AND (expires_at IS NULL OR expires_at > $3)) AS live
+			   FROM orders
+			  WHERE permlink = $1
+			    AND account IN ($2, $4)
+			  LIMIT 1`,
+			[claimedPermlink, recipient, ctx.blockTime, ctx.signer]
 		);
-		if (!orderCheck.rows[0]?.exists) {
-			// Either the order doesn't exist at all, or it was
-			// cancelled, or its expires_at has passed.  In all
-			// cases reject — "consent to be contacted about this
-			// order" ends when the order is withdrawn or expired.
-			// The user can still pay the stranger fee to message
-			// the recipient about something else.
+		const ord = orderCheck.rows[0];
+		if (ord === undefined) {
+			// The permlink names no order owned by either party: it is either
+			// invented or points at a third party's listing. Reject, exactly as
+			// before — a tag must never be a free-text field on chain.
 			//
-			// BATCH19A-chat-1 (2026-05-02 audit): the previous
-			// version of this query did not filter by status,
-			// which meant a cancelled/expired order's permlink
-			// could be replayed indefinitely by stalkers to
-			// bypass the stranger-fee gate.  Block-list and
-			// rate-limit (layers 1+3) caught the abuse
-			// downstream, but the bypass itself was a real
-			// budget escalation.
-			//
-			// BATCH19A-order-2 follow-on: also filter by
-			// expires_at because no sweep job currently flips
-			// status='live' → 'expired' when expires_at passes,
-			// and a status-only filter would still admit
-			// past-expires_at orders.
+			// BATCH19A-chat-1 (2026-05-02 audit): the pre-cp440 query did not filter
+			// by status, so a cancelled order's permlink could be replayed
+			// indefinitely to bypass the stranger-fee gate. That filter now lives on
+			// the BYPASS decision below, where it belongs, and the gate itself is
+			// unchanged: a stranger with a cancelled permlink is still stopped.
 			return { ok: false, reason: 'order_permlink_not_found' };
 		}
-		// Order is real and is owned by the message recipient.
-		// Bypass the stranger-fee gate below for this message.
-		// We do NOT bypass the block list (already enforced
-		// above) and we do NOT bypass the rate limits (still
-		// evaluated below).
-		orderResponseBypass = true;
+		// Bypass ONLY when the recipient owns a live, unexpired order. Identical to
+		// the previous condition — deliberately so.
+		orderResponseBypass = ord.account === recipient && ord.live;
 	}
 
 	// Finding H layer 2: stranger-fee gate. First-contact

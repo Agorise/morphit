@@ -35,6 +35,7 @@ const conversations = strip(readFileSync(join(REPO, 'apps', 'indexer', 'src', 'a
 const chatApi = strip(readFileSync(join(REPO, 'apps', 'indexer', 'src', 'api', 'chat.ts'), 'utf8'));
 const stream = strip(readFileSync(join(REPO, 'apps', 'indexer', 'src', 'api', 'chatStream.ts'), 'utf8'));
 const tailer = strip(readFileSync(join(REPO, 'apps', 'indexer', 'src', 'indexer', 'chatHeadTailer.ts'), 'utf8'));
+const chatHandler = strip(readFileSync(join(REPO, 'apps', 'indexer', 'src', 'indexer', 'handlers', 'chat.ts'), 'utf8'));
 
 let pass = 0;
 let fail = 0;
@@ -63,6 +64,17 @@ check('the SSE row select carries it', /ROW_SELECT[\s\S]{0,200}order_permlink/.t
 check('the sub-6s FAST PATH carries it too (else a live message jumps threads)', /order_permlink: ev\.orderPermlink/.test(stream));
 check('…and the tailer parses it off the op body', /order_permlink[\s\S]{0,200}orderPermlink/.test(tailer));
 check('the tailer shape-validates rather than trusting the signer', /rawPermlink\.length <= 256/.test(tailer));
+
+// ─── the tag and the fee-bypass are DIFFERENT things ─────────────────
+// Conflating them meant the ORDER OWNER could not reply in their own thread (a
+// person is not the recipient of their own listing), and nobody could speak in a
+// thread once the order was cancelled — precisely the "(Cancelled)" threads the
+// inbox now shows. Caught only because the inbox began linking with `?order=`.
+check('the tag is accepted when EITHER party owns the order', /account IN \(\$2, \$4\)/.test(chatHandler));
+check('…and rejected when neither does (a tag is not a free-text field)', /return \{ ok: false, reason: 'order_permlink_not_found' \}/.test(chatHandler));
+check('the stranger-fee bypass still requires the RECIPIENT to own a LIVE order', /orderResponseBypass = ord\.account === recipient && ord\.live;/.test(chatHandler));
+check('…and liveness still excludes expired orders', /status = 'live' AND \(expires_at IS NULL OR expires_at > \$3\)/.test(chatHandler));
+check('a cancelled order no longer rejects the message outright', !/status = 'live'[\s\S]{0,120}\) AS exists/.test(chatHandler));
 
 // ─── client: the transcript is scoped to ONE thread ──────────────────
 check('every inbound record is filtered to this thread', /if \(\(rec\.order_permlink \?\? null\) !== \(deps\.orderPermlink \?\? null\)\) continue;/.test(service));
