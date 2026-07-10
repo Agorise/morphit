@@ -38,7 +38,7 @@ import { OP_IDS, SIGNER_BACKEND, type MorphitOpId } from '$net/config';
 // Relative, NOT `$blurt/accountBinding`: in `tsconfig.smoke.json` the `$blurt/*`
 // alias points at apps/indexer/src/blurt/*, so the same specifier means a
 // different directory under the smoke runner than under web's Vite config.
-import { resolveBroadcastAccount } from './accountBinding';
+import { assertKeyControlsAccount, resolveBroadcastAccount } from './accountBinding';
 import type { LiveIdentity } from '$crypto/keygen';
 
 /** Convert a Uint8Array (raw 32-byte secp256k1 scalar) into a dblurt
@@ -497,6 +497,9 @@ export async function broadcastCustomJson(
 	// Anything else produces "Missing Posting Authority <someone else>" — see
 	// accountBinding.ts.
 	const signingAccount = await resolveBroadcastAccount(live, blurtAccount);
+	// Prove it against the chain's own authority list before anything is signed.
+	// If this throws, nothing was broadcast and nothing was spent.
+	await assertKeyControlsAccount(live, signingAccount);
 
 	const { ref_block_num, ref_block_prefix, expiration } = await getRefBlockInfo();
 

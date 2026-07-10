@@ -257,7 +257,7 @@
     "help_support": "Pomoc i wsparcie",
     "sign_out_modal": {
       "title": "Wylogować z Morphit?",
-      "body": "Będziesz potrzebować swojej 12-wyrazowej frazy seed lub pliku keyfile, żeby zalogować się ponownie. Twoje klucze posting i memo zostaną natychmiast wymazane z pamięci tej sesji.\n\nTwoje dane on-chain, zlecenia i reputacja pozostają nietknięte — żyją na Blurt, nie w tej przeglądarce.",
+      "body": "Aby zalogować się ponownie, potrzebujesz frazy 12 słów, pliku klucza lub swojego klucza Blurt. Twoje klucze postujący i memo zostaną usunięte z tej sesji.\n\nTwoje dane on-chain, zlecenia i reputacja pozostają nietknięte — żyją na Blurt, nie w tej przeglądarce.",
       "confirm": "Wyloguj",
       "cancel": "Pozostań zalogowany",
       "confirm_pending": "Wylogowywanie…"
@@ -1194,7 +1194,7 @@
       },
       "lost_keys": {
         "q": "Co, jeśli zgubię hasło lub frazę?",
-        "a": "Konto jest dla Ciebie niedostępne i nie możemy go dla Ciebie odzyskać. To nie błąd — to fundament projektu. Gdyby istniał mechanizm odzyskiwania, ktoś miałby dostęp do Twoich kluczy. Nie chcemy być tym kimś. Chroń te 12 słów, jakby zależało od nich Twoje życie."
+        "a": "Konto jest dla Ciebie niedostępne i nie możemy go dla Ciebie odzyskać. To nie błąd — to fundament projektu. Gdyby istniał mechanizm odzyskiwania, ktoś miałby dostęp do Twoich kluczy. Nie chcemy być tym kimś. Chroń te 12 słów, jakby zależało od nich Twoje życie.\n\nTo samo dotyczy logowania istniejącym kontem Blurt: twój plik klucza i twoje klucze to konto. Zgub oba, a nikt — ani my, ani operator, ani blockchain — ich nie odzyska."
       },
       "what_is_blurt": {
         "q": "Dlaczego Morphit wybrał blockchain Blurt?",
@@ -1370,7 +1370,7 @@
       },
       "backup_practices": {
         "q": "Jak zrobić kopię zapasową konta Morphit? Co zapisać?",
-        "a": "Zapisz swoją 12-wyrazową frazę odzyskiwania na papierze, w kolejności, dokładnie jak pokazana. Ta fraza to wszystko — regeneruje każdy klucz, którego Morphit używa. Trzymaj papier w bezpiecznym i niepołączonym z siecią miejscu: ognioodporna skrytka, skrytka bankowa, gdzieś gdzie pożar lub kradzież nie uderzy w to samo miejsce co Twój komputer. Nigdy jej nie fotografuj, nigdy nie wysyłaj sobie mailem, nigdy nie wklejaj do menedżera haseł synchronizującego do chmury. Poza papierem osobiście lubimy używać zaszyfrowanego menedżera haseł o nazwie KeePass. Nigdy nie wpisuj jej na żadnej stronie, która nie jest Morphit. Dla dodatkowej trwałości: zapisz dwie kopie, trzymaj w oddzielnych miejscach. Dla bardzo dużej wartości: wygraweruj na stalowej płycie — papier się pali i woda go niszczy, metal przetrwa oba. Twoje 12 słów to Twoje konto; chroń je jak gotówkę."
+        "a": "Zapisz swoją 12-wyrazową frazę odzyskiwania na papierze, w kolejności, dokładnie jak pokazana. Ta fraza to wszystko — regeneruje każdy klucz, którego Morphit używa. Trzymaj papier w bezpiecznym i niepołączonym z siecią miejscu: ognioodporna skrytka, skrytka bankowa, gdzieś gdzie pożar lub kradzież nie uderzy w to samo miejsce co Twój komputer. Nigdy jej nie fotografuj, nigdy nie wysyłaj sobie mailem, nigdy nie wklejaj do menedżera haseł synchronizującego do chmury. Poza papierem osobiście lubimy używać zaszyfrowanego menedżera haseł o nazwie KeePass. Nigdy nie wpisuj jej na żadnej stronie, która nie jest Morphit. Dla dodatkowej trwałości: zapisz dwie kopie, trzymaj w oddzielnych miejscach. Dla bardzo dużej wartości: wygraweruj na stalowej płycie — papier się pali i woda go niszczy, metal przetrwa oba. Twoje 12 słów to Twoje konto; chroń je jak gotówkę.\n\nJeśli zalogowałeś się istniejącym kontem Blurt, nie masz 12-wyrazowej frazy i mieć nie możesz — fraza *wyprowadza* klucze i nie da się jej zbudować wstecz z kluczy, które już masz. Twoją kopią zapasową jest plik klucza (Keyfile), pobrany ze strony „Utwórz kopię zapasową kluczy”. Jeśli zdecydowałeś się zachować klucz aktywny na tym urządzeniu, ten plik zawiera zarówno klucz postujący, jak i aktywny, zaszyfrowane hasłem Morphit. Traktuj go dokładnie jak papier powyżej."
       },
       "trade_size_limits": {
         "q": "Czy jest minimalny lub maksymalny rozmiar transakcji na Morphit?",
@@ -3911,7 +3911,10 @@
         "locked": "Sesja jest zablokowana. Zaloguj się ponownie, by opublikować.",
         "generic": "Nie udało się rozgłosić. Spróbuj ponownie.",
         "rejected": "Sieć odrzuciła publikację: {reason}",
-        "key_mismatch": "Odblokowana tożsamość nie jest uprawniona do publikowania dla @{account}. Upewnij się, że odblokowane jest właściwe konto, a zapisana nazwa konta do niego pasuje, a potem spróbuj ponownie."
+        "key_mismatch": "Odblokowana tożsamość nie jest uprawniona do publikowania dla @{account}. Upewnij się, że odblokowane jest właściwe konto, a zapisana nazwa konta do niego pasuje, a potem spróbuj ponownie.",
+        "wrong_account": "Ta karta jest zalogowana kluczami innego konta niż to, którego według Morphit używasz. Nic nie zostało rozgłoszone. Odśwież tę stronę albo wyloguj się z Morphit w pozostałych kartach i spróbuj ponownie.",
+        "no_account_for_key": "Klucz w tej sesji nie kontroluje żadnego konta na blockchainie. Nic nie zostało rozgłoszone. Wyloguj się i zaloguj właściwym kluczem.",
+        "lookup_failed": "Morphit nie mógł połączyć się ze swoim indekserem, aby sprawdzić, jakim kontem zarządza ten klucz, więc nic nie rozgłosił. Sprawdź połączenie i spróbuj ponownie."
       },
       "broadcast_pending": "Publikacja…",
       "clear_confirm_prompt": "Usunąć twoją wyświetlaną nazwę z tego urządzenia? Możesz ustawić ją ponownie w każdej chwili.",

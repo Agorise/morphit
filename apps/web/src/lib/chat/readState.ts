@@ -42,6 +42,12 @@ const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
 /** Shape in storage: peer → ISO timestamp of last visit. */
 type ReadStateMap = Record<string, string>;
 
+export const PEER_WIDE = '*';
+
+function threadKey(peer: string, orderPermlink: string): string {
+	return `${peer}\u0000${orderPermlink}`;
+}
+
 function readRaw(): ReadStateMap {
 	const raw = safeLocal.get(KEY);
 	if (raw === null) return {};
@@ -55,14 +61,25 @@ function readRaw(): ReadStateMap {
 		// shouldn't break the inbox.
 		const out: ReadStateMap = {};
 		for (const [k, v] of Object.entries(parsed)) {
-			if (
-				typeof k === 'string' &&
-				ACCOUNT_NAME_RE.test(k) &&
-				typeof v === 'string' &&
-				!Number.isNaN(new Date(v).getTime())
-			) {
-				out[k] = v;
+			if (typeof k !== 'string' || typeof v !== 'string') continue;
+			if (Number.isNaN(new Date(v).getTime())) continue;
+
+			// cp446 — MIGRATE, don't discard. Before threading, a key was the bare
+			// peer name and the value meant "everything with this peer, up to here".
+			// That is precisely a peer-wide ack, so it becomes `peer\u0000*`. Drop
+			// it instead and every existing user's whole inbox lights up unread on
+			// the morning they upgrade.
+			const nul = k.indexOf('\u0000');
+			if (nul === -1) {
+				if (!ACCOUNT_NAME_RE.test(k)) continue;
+				out[`${k}\u0000${PEER_WIDE}`] = v;
+				continue;
 			}
+
+			const peer = k.slice(0, nul);
+			const order = k.slice(nul + 1);
+			if (!ACCOUNT_NAME_RE.test(peer) || order.length > 256) continue;
+			out[k] = v;
 		}
 		return out;
 	} catch {
@@ -106,10 +123,31 @@ export const readState: Readable<ReadStateMap> = {
  * this moment. Idempotent — the latest call wins. Persists to
  * storage and notifies subscribers.
  */
-export function markConversationRead(peer: string, at: Date = new Date()): void {
+/**
+ * cp446 — read state is per DISCUSSION, not per person (Ken: "if I read one
+ * thread from a user, it should not mark other threads with that user as read.
+ * Think of it like email.").
+ *
+ * A map key is `peer` + NUL + one of:
+ *   - the order's permlink,
+ *   - `''` for the thread that cites no order,
+ *   - `PEER_WIDE` (`'*'`) for a legacy ack, which covers every thread with that
+ *     peer up to its timestamp. Pre-cp446 clients only ever sent these, and an
+ *     old client still sends them today.
+ *
+ * NUL cannot occur in an account name or a permlink, so no two distinct threads
+ * can produce the same key. `'*'` is not a legal permlink, so a real thread can
+ * never collide with the peer-wide sentinel.
+ */
+export function markConversationRead(
+	peer: string,
+	orderPermlink: string,
+	at: Date = new Date()
+): void {
 	if (!ACCOUNT_NAME_RE.test(peer)) return;
+	if (orderPermlink === PEER_WIDE || orderPermlink.length > 256) return;
 	const current = get(readStateStore);
-	const next = cap({ ...current, [peer]: at.toISOString() });
+	const next = cap({ ...current, [threadKey(peer, orderPermlink)]: at.toISOString() });
 	writeRaw(next);
 	readStateStore.set(next);
 }
@@ -131,7 +169,7 @@ export function markConversationRead(peer: string, at: Date = new Date()): void 
  * ensure that read state only ever moves forward in time.
  */
 export function mergeRemoteReadState(
-	remote: readonly { peer: string; last_read_at: string }[]
+	remote: readonly { peer: string; last_read_at: string; order_permlink?: string }[]
 ): void {
 	const current = get(readStateStore);
 	const next: ReadStateMap = { ...current };
@@ -140,9 +178,16 @@ export function mergeRemoteReadState(
 		if (!ACCOUNT_NAME_RE.test(entry.peer)) continue;
 		const incoming = new Date(entry.last_read_at).getTime();
 		if (!Number.isFinite(incoming)) continue;
-		const local = current[entry.peer];
+		// cp446 — an ack names the discussion it acknowledges. A pre-cp446 instance
+		// omits the field, and every ack it ever stored was peer-wide; treat it as
+		// such rather than silently attributing it to the order-less thread, which
+		// would leave the user's other threads looking unread on that device.
+		const order = entry.order_permlink ?? PEER_WIDE;
+		if (order.length > 256) continue;
+		const key = threadKey(entry.peer, order);
+		const local = current[key];
 		if (local === undefined || incoming > new Date(local).getTime()) {
-			next[entry.peer] = entry.last_read_at;
+			next[key] = entry.last_read_at;
 			mutated = true;
 		}
 	}
@@ -157,10 +202,17 @@ export function mergeRemoteReadState(
  * Return the ISO timestamp at which the user last visited the
  * conversation with `peer`, or null if they've never visited.
  */
-export function getLastVisited(peer: string): string | null {
+export function getLastVisited(peer: string, orderPermlink: string): string | null {
 	if (!ACCOUNT_NAME_RE.test(peer)) return null;
 	const state = get(readStateStore);
-	return state[peer] ?? null;
+	// The later of: this thread's own ack, and any peer-wide ack that predates
+	// threading (or arrived from a device still running an old build). Both are
+	// monotonic, so MAX is the only answer that can never un-read a thread.
+	const own = state[threadKey(peer, orderPermlink)] ?? null;
+	const wide = state[threadKey(peer, PEER_WIDE)] ?? null;
+	if (own === null) return wide;
+	if (wide === null) return own;
+	return new Date(own).getTime() >= new Date(wide).getTime() ? own : wide;
 }
 
 /**
@@ -174,9 +226,9 @@ export function getLastVisited(peer: string): string | null {
  * "unread because peer replied" from "unread because I just sent
  * something" should pass the last sender and filter.
  */
-export function isUnread(peer: string, lastMessageAt: string): boolean {
+export function isUnread(peer: string, orderPermlink: string, lastMessageAt: string): boolean {
 	if (!ACCOUNT_NAME_RE.test(peer)) return false;
-	const visited = getLastVisited(peer);
+	const visited = getLastVisited(peer, orderPermlink);
 	if (!visited) return true;
 	return new Date(lastMessageAt).getTime() > new Date(visited).getTime();
 }

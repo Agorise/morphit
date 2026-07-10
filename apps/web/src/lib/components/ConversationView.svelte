@@ -1104,7 +1104,9 @@
 
 	function ackRead(): void {
 		if (!peer) return;
-		markConversationRead(peer, readAckTimestamp(latestConfirmedAt()));
+		// cp446 — ack THIS discussion. `orderPermlink` is the thread's identity;
+		// `''` is the thread that cites no order, which is a real thread of its own.
+		markConversationRead(peer, orderPermlink ?? '', readAckTimestamp(latestConfirmedAt()));
 	}
 
 	$effect(() => {
@@ -1139,6 +1141,24 @@
 	 *  shared orderTitleParts helper (identical phrasing to the orderbook
 	 *  + order-detail pages). Empty when there's no order context (no
 	 *  orderPermlink, or the order is no longer live). */
+	/** Ken — show the order's CURRENT status beside the RE: line, so a trader who
+	 *  opens an old conversation can see at a glance whether the thing they are
+	 *  negotiating over still exists. Reuses `order_detail.status_*`, which is
+	 *  already translated in all ten locales; no new strings. */
+	const orderStatusLabel = $derived.by(() => {
+		if (!orderRecord) return '';
+		switch (orderRecord.status) {
+			case 'live':
+				return $_('order_detail.status_live') as string;
+			case 'cancelled':
+				return $_('order_detail.status_cancelled') as string;
+			case 'expired':
+				return $_('order_detail.status_expired') as string;
+			default:
+				return '';
+		}
+	});
+
 	const orderSummary = $derived.by(() => {
 		if (!orderRecord) return '';
 		const parts = orderTitleParts(
@@ -1388,7 +1408,14 @@
 	     transient StatusLine for failure messages that sits
 	     below the header row. -->
 	<div class="flex-none border-b border-ink-200 bg-white dark:border-ink-800 dark:bg-ink-950">
-		<header class="chat-header flex items-start justify-between gap-3 px-4 py-3">
+		<!-- Ken — the header row wears the same dim emerald the FAQ entries use on
+		     hover (`.card-hover-emerald`: `bg-emerald-50/30` /
+		     `dark:bg-morphit-emerald/[0.05]`). Reusing those exact tokens rather than
+		     eyeballing a new green keeps one dim-emerald in the palette, and it
+		     separates the header from the sticky bar above and the transcript below. -->
+		<header
+			class="chat-header flex items-start justify-between gap-3 bg-emerald-50/30 px-4 py-3 dark:bg-morphit-emerald/[0.05]"
+		>
 			<!-- cp402 [2] / tt.txt #7 — peer identity + context. "Chatting with:"
 			     lead-in, then an order-card-shaped identity cluster (avatar, name +
 			     sprout, posting key + trades + reputation, RE: line), then the kebab
@@ -1501,6 +1528,12 @@
 							>
 								<span class="flex-none font-medium">{$_('chat.header.re')}:</span>
 								<span class="truncate">{orderSummary}</span>
+								{#if orderStatusLabel}
+									<!-- Status last and `flex-none`: the title truncates, the status
+									     never does. A trader deciding whether to keep negotiating
+									     needs "(Cancelled)" more than the tail of the title. -->
+									<span class="flex-none">({orderStatusLabel})</span>
+								{/if}
 							</a>
 						{/if}
 					</div>

@@ -97,7 +97,7 @@
 		);
 		const withFlags = visible.map((c) => ({
 			...c,
-			unread: isUnread(c.peer, c.last_message_at)
+			unread: isUnread(c.peer, c.order?.permlink ?? '', c.last_message_at)
 		}));
 		withFlags.sort((a, b) => {
 			if (a.unread && !b.unread) return -1;
@@ -123,6 +123,45 @@
 	const requestsUnread = $derived(requestsList.filter((c) => c.unread).length);
 
 	/** Which list to render based on the active tab. */
+	/** Reuses `order_detail.status_*` — already translated in all ten locales, and
+	 *  identical to what the chat thread and the order page show. */
+	function orderStatusLabel(status: string): string {
+		switch (status) {
+			case 'live':
+				return $_('order_detail.status_live') as string;
+			case 'cancelled':
+				return $_('order_detail.status_cancelled') as string;
+			case 'expired':
+				return $_('order_detail.status_expired') as string;
+			default:
+				return '';
+		}
+	}
+
+	/** A discussion is identified by (peer, order) — never by peer alone. NUL is
+	 *  used as the separator because it cannot occur in an account name or a
+	 *  permlink, so no pair of distinct threads can produce the same key. */
+	function threadKey(c: ConversationSummary): string {
+		return `${c.peer}\u0000${c.order?.permlink ?? ''}`;
+	}
+
+	/** Open the thread the card is about, scoped to its order. The conversation
+	 *  route reads `?order=` and filters the transcript to it.
+	 *
+	 *  `peer` and `permlink` arrive from the indexer, i.e. from the operator. The
+	 *  result is nevertheless always a ROOT-RELATIVE path — `localePath` prefixes
+	 *  `/<lang>` — so no `javascript:` or `//evil.example` scheme is reachable
+	 *  through it, and the permlink is percent-encoded before it enters the query
+	 *  string. The assertion below makes that structural rather than a comment:
+	 *  if `localePath` ever stops prefixing, this fails loudly in dev instead of
+	 *  quietly emitting an operator-controlled href. (`href-xss-smoke` allowlists
+	 *  this expression on exactly that basis.) */
+	function threadHref(c: ConversationSummary): string {
+		const base = lp(`/chat/${c.peer}`);
+		if (!base.startsWith('/') || base.startsWith('//')) return lp('/chat');
+		return c.order ? `${base}?order=${encodeURIComponent(c.order.permlink)}` : base;
+	}
+
 	const activeList = $derived(activeTab === 'messages' ? messagesList : requestsList);
 
 	// Smart-default: if the first load reveals an empty Messages
@@ -263,15 +302,16 @@
 	 *  than waiting for /chat/[peer] to load. That way if the
 	 *  user navigates back before [peer] fully loads, the unread
 	 *  badge is still correct. */
-	function handleOpen(peer: string): void {
-		markConversationRead(peer);
+	function handleOpen(peer: string, orderPermlink: string): void {
+		// cp446 — mark THIS discussion read, not everything from this person.
+		markConversationRead(peer, orderPermlink);
 	}
 
 	/** Mark every visible conversation as read at once. */
 	function handleMarkAllRead(): void {
 		const now = new Date();
 		for (const c of activeList) {
-			if (c.unread) markConversationRead(c.peer, now);
+			if (c.unread) markConversationRead(c.peer, c.order?.permlink ?? '', now);
 		}
 	}
 
@@ -284,7 +324,9 @@
 	 *  Also marks the conversation read so the top-level unread
 	 *  count decrements alongside the list change. */
 	function handleDismiss(peer: string): void {
-		markConversationRead(peer, new Date());
+		// A recent-peer row carries no order context, so it acks the order-less
+		// thread — never the peer as a whole.
+		markConversationRead(peer, '', new Date());
 		hideAccount(peer);
 		// Closes the UX loop: the user knows the action landed
 		// AND knows how to reverse it. Without this the row just
@@ -453,7 +495,12 @@
 
 		<ul class="space-y-2" aria-label={$_('chat.inbox.list_aria') as string}>
 			{#if activeList.length > 0}
-				{#each activeList as convo (convo.peer)}
+				<!-- cp446 (Ken) — an inbox of DISCUSSIONS, not people. The same peer
+				     appears once per order they have talked to you about, plus once
+				     more for any order-less thread, exactly like email. `peer` alone
+				     is therefore not a unique key: two cards would collide and Svelte
+				     would reuse one DOM node for both. -->
+				{#each activeList as convo (threadKey(convo))}
 					{@const labelProps = extractLabelPropsFromProfile(profileMap[convo.peer])}
 					<!-- tt.txt #6 — `relative` so the chat anchor below can stretch its
 					     hit area over the WHOLE card (::after inset-0). Clicking
@@ -471,8 +518,8 @@
 						     column so both rows sit inside the same padding. -->
 						<div class="flex min-w-0 flex-1 flex-col gap-0.5 p-3">
 							<a
-								href={lp(`/chat/${convo.peer}`)}
-								onclick={() => handleOpen(convo.peer)}
+								href={threadHref(convo)}
+								onclick={() => handleOpen(convo.peer, convo.order?.permlink ?? '')}
 								class="flex items-center gap-3 after:absolute after:inset-0 after:content-['']"
 								aria-label={convo.unread
 									? ($_('chat.inbox.conversation_aria_unread', {
@@ -494,15 +541,19 @@
 								{:else}
 									<span class="h-2 w-2 flex-none" aria-hidden="true"></span>
 								{/if}
-								<!-- tt.txt #9 — 28px read as a smudge next to a 14px name. 36px
-								     matches the order cards and lets the identicon actually be
-								     recognised at a glance. -->
+								<!-- tt.txt #9 — 28px read as a smudge next to a 14px name.
+								     cp446 — Ken wants the avatar to span the FULL height of the
+								     text beside it: the @name line plus the "RE:" subline. Those
+								     are 20px + 16px plus the 2px gap-0.5 = 38px, so 40px is the
+								     nearest size that reads as full-height without overhanging.
+								     Cards with no order (no subline) keep the same avatar — a
+								     ragged column of two sizes would look like a bug. -->
 								<IdentityLabel
 									account={convo.peer}
 									displayName={labelProps.displayName}
 									avatarSvg={labelProps.avatarSvg}
 									avatarDataUri={labelProps.avatarDataUri}
-									avatarSize={36}
+									avatarSize={40}
 									weight={convo.unread ? 'bold' : 'semibold'}
 									showCopy={false}
 								/>
@@ -517,8 +568,8 @@
 							<!-- "RE: <order title>" — shown when this conversation is
 							     about a specific order. Its own link to the order
 							     detail page, indented to align under the username
-							     (dot 8 + gap-3 12 + avatar 36 + IdentityLabel
-							     gap-1.5 6 = 62px). The title uses the same shared
+							     (dot 8 + gap-3 12 + avatar 40 + IdentityLabel
+							     gap-1.5 6 = 66px). The title uses the same shared
 							     orderTitleParts helper (and 10-locale wording) as
 							     the orderbook / order-detail / chat-thread. -->
 							{#if convo.order}
@@ -532,11 +583,17 @@
 								     truncation of long titles. -->
 								<a
 									href={lp(`/@${convo.order.account}/${convo.order.permlink}`)}
-									class="relative z-10 inline-flex max-w-full items-baseline gap-1 self-start pl-[62px] text-xs text-ink-500 transition-colors hover:text-morphit-emerald dark:text-ink-400 dark:hover:text-morphit-emerald"
+									class="relative z-10 inline-flex max-w-full items-baseline gap-1 self-start pl-[66px] text-xs text-ink-500 transition-colors hover:text-morphit-emerald dark:text-ink-400 dark:hover:text-morphit-emerald"
 									title={`${$_('chat.inbox.re_prefix')} ${orderTitle}`}
 								>
 									<span class="flex-none font-medium">{$_('chat.inbox.re_prefix')}</span>
 									<span class="min-w-0 truncate">{orderTitle}</span>
+									{#if orderStatusLabel(convo.order.status)}
+										<!-- Ken — the order's current state, so a thread about a dead
+										     order says so on the card. `flex-none`: the title truncates,
+										     the status never does. -->
+										<span class="flex-none">({orderStatusLabel(convo.order.status)})</span>
+									{/if}
 								</a>
 							{/if}
 						</div>
@@ -573,7 +630,7 @@
 					<li>
 						<a
 							href={lp(`/chat/${peer}`)}
-							onclick={() => handleOpen(peer)}
+							onclick={() => handleOpen(peer, '')}
 							class="flex items-center gap-3 rounded-xl border border-ink-200 bg-white p-3 transition hover:border-morphit-emerald hover:shadow-sm dark:border-ink-800 dark:bg-ink-950 dark:hover:border-morphit-emerald"
 						>
 							<IdentityLabel

@@ -164,6 +164,31 @@
 		triggerEl?.focus();
 	}
 
+	/** tt.txt #1 follow-up (Ken) — the menu and its scrim are PORTALED to <body>,
+	 *  so the panel can no longer position itself `absolute` against the trigger.
+	 *  Anchor it to the trigger's viewport rect instead, and keep that rect fresh
+	 *  while the menu is open. */
+	let panelTop = $state(0);
+	let panelRight = $state(0);
+
+	function measureTrigger(): void {
+		if (!triggerEl) return;
+		const r = triggerEl.getBoundingClientRect();
+		panelTop = r.bottom + 8;
+		panelRight = Math.max(8, window.innerWidth - r.right);
+	}
+
+	$effect(() => {
+		if (!open) return;
+		measureTrigger();
+		window.addEventListener('resize', measureTrigger);
+		window.addEventListener('scroll', measureTrigger, true);
+		return () => {
+			window.removeEventListener('resize', measureTrigger);
+			window.removeEventListener('scroll', measureTrigger, true);
+		};
+	});
+
 	function openNotifications(): void {
 		showNotifications = true;
 	}
@@ -403,41 +428,38 @@
 			{/if}
 		</button>
 
-		{#if open}
-			<!-- Full-page scrim: blurs + dims the rest of the page so the eye is
-			     drawn to the open menu (same treatment as the FAQ search).
-			     Clicking it closes the menu.
+		<!-- tt.txt #1 — the scrim and the menu both live at <body> level.
+		     WHY THE CONTAINER IS ALWAYS RENDERED, and `{#if open}` sits INSIDE it:
+		     a Svelte block tracks its own first and last nodes. When the scrim was
+		     the block's first node and `use:portal` moved it to <body>, the block
+		     lost its boundary — so closing the menu removed nothing. The menu stayed
+		     open, the scrim stayed on top of the page, and every click after that
+		     landed on a dead overlay. Portal a STABLE node, never a block boundary.
 
-			     tt.txt #1 — `fixed inset-0` does NOT cover the viewport here. This
-			     menu lives inside the sticky header, and the header carries
-			     `backdrop-blur-md`; an ancestor with `backdrop-filter` becomes the
-			     containing block for `position: fixed` descendants, so the scrim was
-			     clipped to the header bar and only the header blurred. `use:portal`
-			     moves it to <body>, escaping that containing block.
-
-			     z-30, NOT z-40: portaled to <body> it leaves the header's stacking
-			     context, so it must sit BELOW the header (z-40) or it would paint
-			     over the very menu it exists to highlight. -->
-			<button
-				use:portal
-				type="button"
-				aria-label={$_('common.close')}
-				tabindex="-1"
-				onclick={() => {
-					open = false;
-					showNotifications = false;
-				}}
-				class="fixed inset-0 z-30 cursor-default bg-ink-900/5 backdrop-blur-sm"
-			></button>
-			<!-- Dropdown menu. Absolutely-positioned, inline on the
-			     page so the user never navigates away. Width is fixed
-			     at sm:w-80 so content doesn't reflow; on very narrow
-			     viewports it caps at 90vw. -->
-			<div
-				bind:this={menuEl}
-				role="menu"
-				class="absolute end-0 z-50 mt-2 w-[min(90vw,20rem)] animate-fade-up rounded-2xl border border-ink-200 bg-white shadow-morphit-card-hover dark:border-ink-700 dark:bg-ink-900"
-			>
+		     z-[60] puts the container above the sticky header (z-40), so the header
+		     blurs along with the rest of the page (Ken). The header carries
+		     `backdrop-blur-md`, which makes it the containing block for any
+		     `position: fixed` descendant — which is precisely why neither of these
+		     can be left inside it. -->
+		<div
+			use:portal
+			class="fixed inset-0 z-[60] {open ? '' : 'pointer-events-none hidden'}"
+		>
+			{#if open}
+				<button
+					type="button"
+					aria-label={$_('common.close')}
+					tabindex="-1"
+					onclick={close}
+					class="pointer-events-auto absolute inset-0 cursor-default bg-ink-900/5 backdrop-blur-sm"
+				></button>
+				<!-- Dropdown menu, anchored to the trigger's viewport rect. -->
+				<div
+					bind:this={menuEl}
+					role="menu"
+					style="top: {panelTop}px; right: {panelRight}px;"
+					class="pointer-events-auto fixed w-[min(90vw,20rem)] animate-fade-up rounded-2xl border border-ink-200 bg-white shadow-morphit-card-hover dark:border-ink-700 dark:bg-ink-900"
+				>
 				{#if showNotifications}
 					<!-- Notifications fly-out pane. Back button to
 					     return to the main menu without closing. -->
@@ -951,6 +973,7 @@
 				{/if}
 			</div>
 		{/if}
+		</div>
 	</div>
 
 	<!-- Sign-out confirmation modal. Rendered inside the signed-in

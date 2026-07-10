@@ -36,7 +36,12 @@ const POLL_MS = 5_000;
 
 /** Last-fetched conversation list (peer + last_message_at only). Recount
  *  runs against this cache when read-state changes, avoiding a refetch. */
-let convos: ReadonlyArray<{ peer: string; last_message_at: string }> = [];
+let convos: ReadonlyArray<{
+	peer: string;
+	last_message_at: string;
+	/** cp446 — the discussion this row is about; null when it cites no order. */
+	order: { permlink: string } | null;
+}> = [];
 
 /** Recompute the chat count from the cached conversations + current
  *  read-state. Cheap; safe to call on every read-state change. */
@@ -50,7 +55,9 @@ function recount(): void {
 	let n = 0;
 	for (const c of convos) {
 		if (c.peer.toLowerCase() === meLc) continue;
-		if (isUnread(c.peer, c.last_message_at)) n++;
+		// cp446 — one count per DISCUSSION: three unread threads with the same
+		// person are three unread conversations, exactly as in an email inbox.
+		if (isUnread(c.peer, c.order?.permlink ?? '', c.last_message_at)) n++;
 	}
 	setCategoryCount('chat', n);
 }
@@ -69,6 +76,7 @@ async function poll(): Promise<void> {
 		if (rR.ok) mergeRemoteReadState(rR.data.items);
 		if (cR.ok) {
 			convos = cR.data.items.map((c) => ({
+				order: c.order ? { permlink: c.order.permlink } : null,
 				peer: c.peer,
 				last_message_at: c.last_message_at
 			}));

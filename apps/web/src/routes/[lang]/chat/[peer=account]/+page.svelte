@@ -181,12 +181,14 @@
 				// over-ack if a new message arrives during the mount
 				// frame; mitigated by re-opening the conversation
 				// (which re-acks).
-				markConversationRead(peer);
+				// cp446 — the on-chain ack names the discussion, so reading one thread
+				// with a peer never silences the others, on this device or any other.
+				markConversationRead(peer, orderPermlink ?? '');
 				const live = get(liveIdentity);
 				if (live) {
 					void import('$blurt/ops/chatRead').then(async (m) => {
 						try {
-							await m.broadcastChatRead(live, peer);
+							await m.broadcastChatRead(live, peer, orderPermlink ?? '');
 						} catch {
 							// Network / node error — silent. The local
 							// read state is still correct; cross-device

@@ -128,6 +128,10 @@ export interface LocalMessage {
 	 *  pending/broadcast/failed. Rendering uses it to decide
 	 *  whether to show the time line. */
 	createdAt: Date | null;
+	/** cp446 — the order this message is about, or null. The inbox threads by it
+	 *  (one card per peer+order) and this view is scoped to one thread, so a
+	 *  message about another order must not appear here. */
+	orderPermlink: string | null;
 	/** cp404 — Blurt transaction id anchoring this message on-chain,
 	 *  once known. Null while pending/broadcast/failed, and for
 	 *  not-yet-irreversible provisional copies. Populated on durable
@@ -654,6 +658,14 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		let added = false;
 
 		for (const rec of oldestFirst) {
+			// cp446 — ONE THREAD PER (peer, order). Every record enters here: the
+			// initial page, "load older" pages, and live SSE appends. Filtering at
+			// this single seam is what keeps a reply about order A out of the
+			// discussion about order B, no matter which path delivered it.
+			//
+			// `?? null` on both sides: an older instance omits the field entirely,
+			// and an order-less thread is a real thread whose key is null.
+			if ((rec.order_permlink ?? null) !== (deps.orderPermlink ?? null)) continue;
 			// Is this a confirmation of a local outgoing message?
 			if (rec.sender === deps.me) {
 				if (reconcileByClientTag(rec)) {
@@ -681,6 +693,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 						: undefined;
 				messages.push({
 					id: rec.id,
+					orderPermlink: rec.order_permlink ?? null,
 					clientTag: ownTag,
 					text: ownFromChain ?? ownCached ?? ENCRYPTED_PLACEHOLDER,
 					sender: rec.sender,
@@ -727,6 +740,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 				const d = await decryptOrPlaceholder(rec);
 				messages.push({
 					id: isDurable ? rec.id : null,
+					orderPermlink: rec.order_permlink ?? null,
 					clientTag: incomingTag,
 					text: d.text,
 					sender: rec.sender,
@@ -900,6 +914,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 			// failed message rather than silently dropping.
 			messages.push({
 				id: null,
+				orderPermlink: deps.orderPermlink ?? null,
 				clientTag: null,
 				text: trimmed,
 				sender: deps.me,
@@ -928,6 +943,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		}
 		const local: LocalMessage = {
 			id: null,
+			orderPermlink: deps.orderPermlink ?? null,
 			clientTag,
 			text: trimmed,
 			sender: deps.me,

@@ -34,13 +34,64 @@ import { OP_IDS } from '$net/config';
 import type { LiveIdentity } from '$crypto/keygen';
 import { redactPrivateKeys } from '$lib/security/privateKeyDetector';
 import { clearProfileCache } from '$lib/indexer/profileCache';
-import { identity } from '$stores/identity';
 
+/** Legacy, origin-wide. Read for migration; never written for a keyed session. */
 const ACCOUNT_STORAGE_KEY = 'morphit.blurtAccount';
+
+/**
+ * cp445 — the account name is a property of the KEY, not of the browser origin.
+ *
+ * One origin-wide key meant tab A (signed in as @kentest2) and tab B (@kentest3)
+ * shared a single name, and a `storage` listener rewrote it under whichever tab
+ * lost the race. Tab A then signed with kentest2's posting key while declaring
+ * `required_posting_auths: ["kentest3"]`, and the chain answered "Missing Posting
+ * Authority kentest3". Scoping the key to the session's posting pubkey removes
+ * the collision at the source, with no network call and no lookup to trust.
+ *
+ * The suffix is a hex prefix of the session's posting PUBLIC key — unique in
+ * practice, never secret (it is published on-chain in the account's authorities).
+ * It is deliberately not the BLT-formatted string: the formatter lives in
+ * `$crypto/keygen`, and the identity store that supplies this value is on the
+ * every-page baseline.
+ */
+function scopedAccountKey(sessionKeyId: string): string {
+	return `morphit.blurtAccount.${sessionKeyId.slice(0, 16)}`;
+}
+
+/** Id of the posting key this session holds, or null when locked. */
+function currentSessionKeyId(): string | null {
+	return get(sessionKeyIdStore);
+}
+
+/** Set once per unlock by `bindSessionPostingKey()`; cleared on lock/sign-out. */
+const sessionKeyIdStore = writable<string | null>(null);
+
+/**
+ * Bind account storage to the keys this tab actually holds. Called from the
+ * identity store whenever a session becomes unlocked, and with `null` on lock.
+ */
+export function bindSessionPostingKey(keyId: string | null): void {
+	sessionKeyIdStore.set(keyId);
+	blurtAccountName.set(readAccountFromStorage());
+}
 
 function readAccountFromStorage(): string | null {
 	if (!browser) return null;
 	try {
+		const pub = currentSessionKeyId();
+		if (pub) {
+			const scoped = window.localStorage.getItem(scopedAccountKey(pub));
+			if (scoped) return scoped;
+			// One-time migration: an origin-wide name written before this change
+			// belongs to whichever key is unlocked when it is first read.
+			const legacy = window.localStorage.getItem(ACCOUNT_STORAGE_KEY);
+			if (legacy) {
+				window.localStorage.setItem(scopedAccountKey(pub), legacy);
+				return legacy;
+			}
+			return null;
+		}
+		// Locked / pre-unlock (the avatar seeds from this): legacy value only.
 		return window.localStorage.getItem(ACCOUNT_STORAGE_KEY);
 	} catch {
 		return null;
@@ -84,7 +135,9 @@ if (browser) {
 	// not a name, it's a race.
 	window.addEventListener('storage', (e) => {
 		if (e.key !== ACCOUNT_STORAGE_KEY && e.key !== null) return;
-		if (get(identity).state === 'unlocked') return; // our keys, our name
+		// If this tab holds keys, its account name is already scoped to them and
+		// no other tab may move it. Only an unbound (locked) tab follows along.
+		if (currentSessionKeyId() !== null) return;
 		blurtAccountName.set(e.key === null ? readAccountFromStorage() : e.newValue);
 	});
 }
@@ -106,6 +159,11 @@ export function getUserBlurtAccount(): string | null {
 export function setUserBlurtAccount(name: string): void {
 	if (!browser) return;
 	try {
+		const pub = currentSessionKeyId();
+		// Write under the key that owns this name. The legacy origin-wide slot is
+		// kept in step ONLY so a locked tab still has an identicon to seed from;
+		// it is never the source of truth for a broadcast.
+		if (pub) window.localStorage.setItem(scopedAccountKey(pub), name);
 		window.localStorage.setItem(ACCOUNT_STORAGE_KEY, name);
 	} catch {
 		// Privacy Mode; the account name will need to be re-entered next

@@ -194,7 +194,7 @@ concern.
 ```json
 {
   "status": "ok",
-  "version": "1.3.0",
+  "version": "1.3.5",
   "uptime_sec": 12345,
   "chain_head_block": 80123456,
   "indexed_block": 80123441,

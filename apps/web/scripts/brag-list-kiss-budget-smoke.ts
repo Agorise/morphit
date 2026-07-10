@@ -131,7 +131,21 @@ const content = readFileSync(BRAG_PATH, 'utf-8');
 // ≥147 by +1.  The staccato exemptions ≥147 move with them:
 // 199→200, 208→209, 212→213, 215→216, 217→218.  '3', '13', '15' are
 // before the insertion point and are unchanged.
-const STACCATO_ALLOWLIST = new Set(['3', '13', '15', '200', '209', '213', '216', '218']);
+/** cp445 — this used to be keyed by ENTRY NUMBER, which silently shifted every
+ *  time an entry was inserted above it (adding three entries to §5 moved the
+ *  staccato entry from #218 to #221 and the smoke went red on unchanged prose).
+ *  A brag-list entry's number is not its identity; its opening words are. Keyed
+ *  on a distinctive prefix of the entry body, insertions can no longer break it. */
+const STACCATO_ALLOWLIST: readonly string[] = [
+	'**No email required. No phone number or SMS.',
+	'**Lightweight pages even on slow connections.',
+	'**We do not get, store, log, transmit, or otherwise touch your IP',
+	"**Morphit doesn't have admin keys.",
+	'**Some P2P platforms have admin "dispute resolution"',
+	'**No "DAO."',
+	'**No "premium" customer support.',
+	'**No leverage. No margin. No futures. No options.'
+];
 
 const SENTENCE_LIMIT = 4;
 const WORD_LIMIT = 100;
@@ -205,7 +219,8 @@ for (const e of entries) {
 	const sentences = countSentences(e.full);
 	const words = countWords(e.body);
 
-	if (sentences > SENTENCE_LIMIT && !STACCATO_ALLOWLIST.has(e.num)) {
+	const staccato = STACCATO_ALLOWLIST.some((prefix) => e.title.startsWith(prefix));
+	if (sentences > SENTENCE_LIMIT && !staccato) {
 		overSentence.push(`#${e.num}: ${sentences}s (${e.title.replace(/\*\*/g, '').slice(0, 50)}…)`);
 	}
 	if (words > WORD_LIMIT) {

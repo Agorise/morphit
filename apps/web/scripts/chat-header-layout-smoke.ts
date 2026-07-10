@@ -111,6 +111,12 @@ check('Verify peer button carries the Verify peer label', pairedIn('onclick={ope
 check('Block button carries the block/unblock label', pairedIn('onToggleBlock();', 'chat.block.confirm'));
 check('Export button carries the Export label', pairedIn('onclick={exportChatToPdf}', 'chat.export.menu_label'));
 
+// ─── Ken's batch: order status, header tint ──────────────────────────
+check('the RE: line shows the order\u2019s current status in parens', /\{#if orderStatusLabel\}[\s\S]{0,220}\(\{orderStatusLabel\}\)/.test(code));
+check('…and the status never truncates (the title does)', /flex-none">\(\{orderStatusLabel\}\)<\/span>/.test(code));
+check('the status reuses order_detail.status_* (no new locale keys)', /order_detail\.status_live/.test(code) && /order_detail\.status_cancelled/.test(code) && /order_detail\.status_expired/.test(code));
+check('the header row wears the FAQ dim-emerald (same tokens as .card-hover-emerald)', /bg-emerald-50\/30[\s\S]{0,80}dark:bg-morphit-emerald\/\[0\.05\]/.test(code));
+
 // ─── nothing lost ────────────────────────────────────────────────────
 check('Block/Unblock still opens the confirm modal', /closeOverflowMenu\(\);\s*\n\s*onToggleBlock\(\);/.test(code));
 check('Chat Security still clears its one-time nudge dot', /onclick=\{openChatSecurity\}/.test(code) && /chatSecurityNudgeSeen/.test(code));

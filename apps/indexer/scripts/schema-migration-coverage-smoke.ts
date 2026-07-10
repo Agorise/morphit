@@ -69,14 +69,14 @@ const MIGRATIONS_TS = join(REPO_ROOT, 'apps', 'indexer', 'src', 'db', 'migration
  *  was widened to recognize the cp123/cp127-era banner format
  *  `-- ─── v<N>: <description>` (previously only `-- v<N> / ...`
  *  was recognized, silently undercounting v34 and v35). */
-const SCHEMA_HEAD_VERSION = 38;
+const SCHEMA_HEAD_VERSION = 39;
 /** Highest version covered by MIGRATIONS[] (max of `version` or any
  *  `subsumesVersions[]` entry).  Bump only when a new MIGRATIONS
  *  entry lands.  cp131 DEEP-002 — bumped 27 → 35 when
  *  `subsumesVersions` was extended to match the in-place
  *  v28-v35 sections in schema.sql.  cp425 — bumped 36 → 37 when the
  *  accepted_assets migration (v37) landed. */
-const MIGRATIONS_COVERAGE_HIGH = 38;
+const MIGRATIONS_COVERAGE_HIGH = 39;
 
 interface ScenarioResult {
 	readonly name: string;

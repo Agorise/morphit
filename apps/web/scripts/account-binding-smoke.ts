@@ -65,8 +65,33 @@ const catchBlock = binding.slice(binding.indexOf('} catch (e) {'), binding.index
 check('FAILED lookups are NOT cached (no poisoned session)', catchBlock.length > 0 && !catchBlock.includes('cache.set'));
 check('the refusal paths do not cache either', !/throw new AccountBindingError[\s\S]{0,120}cache\.set/.test(binding));
 
-check('the cross-tab storage listener will not rewrite an unlocked session', /if \(get\(identity\)\.state === 'unlocked'\) return;/.test(profile));
+// cp445 (round 2) — the deeper fix. The account name is no longer origin-wide at
+// all: it is stored under a key derived from the session's posting pubkey, so two
+// tabs holding two accounts cannot collide even before any network lookup runs.
+check('the stored account name is scoped to the session\u2019s posting key', /function scopedAccountKey\(sessionKeyId: string\): string \{/.test(profile));
+check('…and the legacy origin-wide value is migrated, not trusted', /window\.localStorage\.setItem\(scopedAccountKey\(pub\), legacy\)/.test(profile));
+check('the cross-tab storage listener will not rewrite a tab that holds keys', /if \(currentSessionKeyId\(\) !== null\) return;/.test(profile));
 check('getUserBlurtAccount prefers the in-memory, session-bound value', /const inMemory = get\(blurtAccountName\);/.test(profile));
+check('profile.ts does NOT import the identity store (cycle: identity imports profile)', !/from '\$stores\/identity'/.test(profile));
+
+// The identity store drives the binding on EVERY transition, so no `internal.set`
+// call site can forget to do it.
+const idStore = strip(read('src', 'lib', 'stores', 'identity.ts'));
+check('every unlock/lock rebinds account storage to the session\u2019s key', /internal\.subscribe\(\(state\) => \{[\s\S]{0,240}bindSessionPostingKey/.test(idStore));
+// The identity store is on the every-page baseline: it must NOT reach for the
+// BLT formatter, which drags bip39 + secp256k1 into first paint (cp271).
+check('…without importing $crypto/keygen into the baseline', !/from '\$crypto\/keygen'/.test(idStore));
+check('…using the public key itself as the session key id', /function sessionKeyId\(publicKey: Uint8Array\): string/.test(idStore));
+
+// Last line of defence: never let a mismatched key reach the chain.
+check('a posting-auth op pre-flights the account\u2019s on-chain authority', /await assertKeyControlsAccount\(live, signingAccount\);/.test(sign));
+check('…and that check refuses with `key_not_in_authority`', /'key_not_in_authority'/.test(binding));
+check('the refusal names the account, so the user learns which tab they are in', /is not a posting key of @\$\{account\}/.test(binding));
+
+// The user must never read a chain dump for a two-tab mistake.
+const settings = strip(read('src', 'routes', '[lang]', 'settings', '+page.svelte'));
+check('settings maps AccountBindingError to human copy BEFORE ChainRejectedError', settings.indexOf('err instanceof AccountBindingError') < settings.indexOf('err instanceof ChainRejectedError'));
+check('…with a "wrong account" message', /broadcast_err\.wrong_account/.test(settings));
 
 // ── the alias trap that broke wallet-op-builders-smoke ──────────────
 // In `tsconfig.smoke.json`, `$blurt/*` resolves to apps/indexer/src/blurt/* —

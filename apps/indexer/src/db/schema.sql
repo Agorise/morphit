@@ -1038,7 +1038,7 @@ CREATE TABLE IF NOT EXISTS chat_read_state (
 );
 
 COMMENT ON TABLE chat_read_state IS
-    'Per-(reader, peer) chat read-ack state (Phase B inbox read receipts).';
+    'Per-(reader, peer) chat read-ack state (Phase B inbox read receipts). See v39: re-keyed per discussion.';
 COMMENT ON COLUMN chat_read_state.last_read_at IS
     'Timestamp through which reader has acknowledged reading peer''s messages. Strictly advances — later acks with earlier timestamps are rejected at handler intake.';
 COMMENT ON COLUMN chat_read_state.source_trx_id IS
@@ -2569,3 +2569,37 @@ COMMENT ON COLUMN orders.accepted_assets IS
 CREATE INDEX IF NOT EXISTS idx_accounts_posting_pubkey
     ON accounts (posting_pubkey)
     WHERE posting_pubkey IS NOT NULL;
+
+-- ─── v39: chat read-state is per DISCUSSION, not per peer (cp446) ───
+-- Ken: "if I read one thread from a user, it should not mark other threads
+-- with that user as read. Think of it like email."
+--
+-- The key column is never NULL: it is part of the primary key, and Postgres
+-- treats NULLs as DISTINCT in a unique index, so two NULL rows for the same
+-- (reader, peer) would both insert and the ON CONFLICT upsert would never fire.
+--
+--   '*'  legacy PEER-WIDE ack — what every pre-cp446 client sent, and what an
+--        old client still sends. Existing rows are peer-wide by definition, so
+--        the DEFAULT backfills them correctly and nothing looks unread on
+--        upgrade day.
+--   ''   the thread that cites no order — a real discussion of its own.
+--   else the permlink of the order the discussion is about.
+--
+-- Neither '*' nor '' is a legal Blurt permlink, so no thread collides with a
+-- sentinel. Unread is evaluated against MAX(thread ack, peer-wide ack).
+--
+-- DOWNGRADE HAZARD: an indexer older than cp446 upserts with
+-- `ON CONFLICT (reader_account, peer_account)`, and that constraint no longer
+-- exists. Rolling the indexer back after this migration breaks chat read acks
+-- until it is rolled forward again. Nothing else is affected.
+ALTER TABLE chat_read_state
+    ADD COLUMN IF NOT EXISTS order_permlink TEXT NOT NULL DEFAULT '*';
+
+ALTER TABLE chat_read_state
+    DROP CONSTRAINT IF EXISTS chat_read_state_pkey;
+
+ALTER TABLE chat_read_state
+    ADD PRIMARY KEY (reader_account, peer_account, order_permlink);
+
+COMMENT ON COLUMN chat_read_state.order_permlink IS
+    'The discussion this ack is for: a permlink, or '''' for the order-less thread, or ''*'' for a legacy peer-wide ack.';

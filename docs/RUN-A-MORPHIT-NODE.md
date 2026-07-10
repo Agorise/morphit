@@ -292,3 +292,22 @@ A healthy response is JSON with a recent block number and a small lag, like `{"h
 ---
 
 That's the whole job. Get a machine, point a name at it, run the installer, let the wizard configure it, turn on HTTPS, register — and you're an operator in the federation. Welcome aboard.
+
+## Upgrading past v1.3.5 — one database change, applied for you
+
+Upgrading an indexer to v1.3.5 or later applies a schema
+migration (v39) that re-keys the chat read-receipt table so
+that reading one conversation with somebody no longer marks
+every other conversation with that same person as read.
+
+You do not have to run anything. `sudo morphit-ops` →
+**option 2** applies it at start-up, and read receipts you
+already have keep working exactly as before.
+
+**One caution:** once that migration has run, an *older*
+indexer build can no longer write chat read receipts — it
+looks for a database constraint that no longer exists. If you
+roll the indexer back to a pre-v1.3.5 build, roll it forward
+again, or restore the database backup you took before the
+upgrade. Messages, orders and the orderbook are unaffected
+either way.

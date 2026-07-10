@@ -49,6 +49,11 @@ interface MsgRow {
 	ciphertext: string;
 	header: unknown;
 	created_at: Date;
+	/** cp446 — the order this message is about, or null. The inbox threads
+	 *  conversations by it (one card per peer+order, like an email inbox), and
+	 *  the transcript filters on it, so a reply about order A never lands in the
+	 *  discussion about order B. */
+	order_permlink: string | null;
 }
 
 export function chatRoute(db: Database): Hono {
@@ -90,7 +95,7 @@ export function chatRoute(db: Database): Hono {
 		params.push(limit + 1);
 		const limitParam = `$${params.length}`;
 
-		const sql = `SELECT id::text, sender, recipient, ciphertext, header, created_at
+		const sql = `SELECT id::text, sender, recipient, ciphertext, header, created_at, order_permlink
 			 FROM chat_messages
 			 WHERE LEAST(sender, recipient) = $1
 			   AND GREATEST(sender, recipient) = $2${cursorClause}
@@ -117,7 +122,8 @@ export function chatRoute(db: Database): Hono {
 				recipient: r.recipient,
 				ciphertext: r.ciphertext,
 				header: r.header,
-				created_at: r.created_at.toISOString()
+				created_at: r.created_at.toISOString(),
+				order_permlink: r.order_permlink
 			})),
 			next_cursor: nextCursor
 		});

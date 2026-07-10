@@ -85,6 +85,9 @@ export interface ChatFastEvent {
 	 *  against its durable twin. Extracted once here so SSE subscribers
 	 *  don't each re-parse the header. */
 	readonly clientTag: string | null;
+	/** cp446 — the order this message is about, or null. Threads the inbox and
+	 *  scopes the transcript; see chatStream.ts. */
+	readonly orderPermlink: string | null;
 }
 
 export type ChatFastListener = (ev: ChatFastEvent) => void;

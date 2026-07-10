@@ -25,6 +25,10 @@ export interface ChatStreamRow {
 	 *  proof that `sender` authored this message at `created_at` — used
 	 *  by the chat PDF export as courtroom-grade evidence. */
 	source_trx_id: string;
+	/** cp446 — the order this message is about, or null. Threads the inbox
+	 *  (one card per peer+order) and scopes the transcript, so a live message
+	 *  about order A never appears in the discussion about order B. */
+	order_permlink: string | null;
 }
 
 /** Subscriber's filter — the canonical pair this connection is

@@ -35,15 +35,17 @@
 
 import { formatPublicKeyBLT } from '$crypto/keygen';
 import { resolveAccountsByPublicKeys } from './accountByKey';
+import { fetchAccountKeys } from './accountKeys';
+import { MORPHIT_INDEXER_ORIGIN, resolveOrigin } from '$net/config';
 import type { LiveIdentity } from '$crypto/identity-core';
 
 export class AccountBindingError extends Error {
-	readonly kind: 'no_account_for_key' | 'ambiguous' | 'lookup_failed';
+	readonly kind: 'no_account_for_key' | 'ambiguous' | 'lookup_failed' | 'key_not_in_authority';
 	/** The accounts the key DOES control, when we know them. */
 	readonly candidates: readonly string[];
 
 	constructor(
-		kind: 'no_account_for_key' | 'ambiguous' | 'lookup_failed',
+		kind: 'no_account_for_key' | 'ambiguous' | 'lookup_failed' | 'key_not_in_authority',
 		message: string,
 		candidates: readonly string[] = []
 	) {
@@ -114,7 +116,50 @@ export async function resolveBroadcastAccount(
 	);
 }
 
+/**
+ * The last line of defence, and the only one that does not trust a lookup.
+ *
+ * Before a posting-auth op leaves the browser, prove that the account we are
+ * about to DECLARE really lists the key we are about to SIGN with. The chain
+ * performs exactly this check and answers "Missing Posting Authority <account>"
+ * with a dump of three authorities — which is not something a person setting
+ * their display name should ever have to read.
+ *
+ * Cheap: one same-origin request, memoized per (account, key). Silent on
+ * success. On failure it names the account, so the person knows which tab they
+ * are actually signed in to.
+ */
+const authorityCache = new Set<string>();
+
+export async function assertKeyControlsAccount(
+	live: LiveIdentity,
+	account: string,
+	fetchImpl: typeof fetch = fetch
+): Promise<void> {
+	const pub = await formatPublicKeyBLT(live.posting.publicKey);
+	const memo = `${account}\u0000${pub}`;
+	if (authorityCache.has(memo)) return;
+
+	const authorities = await fetchAccountKeys(resolveOrigin(MORPHIT_INDEXER_ORIGIN), account, fetchImpl);
+	if (!authorities) {
+		// Can't check ⇒ don't guess, and don't silently broadcast either. The
+		// resolver above already proved the key maps to this account, so a
+		// transient indexer blip here is not grounds to refuse.
+		return;
+	}
+	const listed = authorities.posting.key_auths.some(([k]) => k === pub);
+	if (!listed) {
+		throw new AccountBindingError(
+			'key_not_in_authority',
+			`The key in this session is not a posting key of @${account}.`,
+			[account]
+		);
+	}
+	authorityCache.add(memo);
+}
+
 /** Test seam / sign-out hook: forget every memoized binding. */
 export function clearAccountBindingCache(): void {
 	cache.clear();
+	authorityCache.clear();
 }

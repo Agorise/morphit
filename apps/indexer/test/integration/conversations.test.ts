@@ -37,33 +37,30 @@ const CONVERSATIONS_SELECT = `
 		o.asset             AS order_asset,
 		o.fiat_currency     AS order_fiat_currency,
 		o.amount_min::text  AS order_amount_min,
-		o.amount_max::text  AS order_amount_max
+		o.amount_max::text  AS order_amount_max,
+		o.status            AS order_status
 	FROM (
 		SELECT
 			CASE WHEN sender = $1 THEN recipient ELSE sender END AS peer,
+			order_permlink,
 			MAX(created_at) AS last_message_at,
 			COUNT(*)::text AS message_count,
 			BOOL_OR(sender = $1) AS has_user_sent
 		FROM chat_messages
 		WHERE sender = $1 OR recipient = $1
-		GROUP BY peer
+		GROUP BY peer, order_permlink
 		ORDER BY last_message_at DESC
 		LIMIT $2
 	) g
 	LEFT JOIN LATERAL (
-		SELECT m.order_permlink, m.recipient AS order_owner
-		FROM chat_messages m
-		WHERE m.order_permlink IS NOT NULL
-			AND (
-				(m.sender = $1 AND m.recipient = g.peer)
-				OR (m.sender = g.peer AND m.recipient = $1)
-			)
-		ORDER BY m.created_at DESC
+		SELECT ord.*
+		FROM orders ord
+		WHERE g.order_permlink IS NOT NULL
+			AND ord.permlink = g.order_permlink
+			AND ord.account IN ($1, g.peer)
+		ORDER BY (ord.account = g.peer) DESC
 		LIMIT 1
-	) lm ON TRUE
-	LEFT JOIN orders o
-		ON o.account = lm.order_owner
-		AND o.permlink = lm.order_permlink
+	) o ON TRUE
 	ORDER BY g.last_message_at DESC
 `;
 
@@ -267,7 +264,67 @@ describe.skipIf(!INTEGRATION_ENABLED)('conversations endpoint — SQL integratio
 		order_fiat_currency: string | null;
 		order_amount_min: string | null;
 		order_amount_max: string | null;
+		order_status: string | null;
 	};
+
+	// Ken (cp445) — the inbox card shows "(Live/Expired/Cancelled)" beside the
+	// RE: line, so a thread about a dead order says so before it is opened.
+	// NOTE: this SQL is a hand-kept COPY of `src/api/conversations.ts`. It has
+	// already drifted once; when you change one, change both.
+	it.each(['live', 'cancelled', 'expired'] as const)(
+		'surfaces the order status (%s) so the inbox can label the thread',
+		async (status) => {
+			await insertOrder(fx, 'bob', `order-${status}`, {
+				side: 'buy',
+				asset: 'BLURT',
+				fiat: 'MXN',
+				status
+			});
+			await insertMessage(fx, 'alice', 'bob', new Date('2026-04-23T10:00:00Z'), `order-${status}`);
+			const result = await fx.db.query<OrderRow>(CONVERSATIONS_SELECT, ['alice', 200]);
+			expect(result.rows[0]!.order_status).toBe(status);
+		}
+	);
+
+	// cp446 (Ken's mockup) — kentest3 talks to mariuszkarowski about TWO different
+	// orders. That is two discussions, so it is two cards.
+	it('splits one peer into one thread PER ORDER, like an email inbox', async () => {
+		await insertOrder(fx, 'bob', 'order-xmr', { side: 'sell', asset: 'XMR', fiat: 'MXN' });
+		await insertOrder(fx, 'bob', 'order-btc', { side: 'sell', asset: 'BTC', fiat: 'AUD' });
+		await insertMessage(fx, 'alice', 'bob', new Date('2026-04-23T10:00:00Z'), 'order-xmr');
+		await insertMessage(fx, 'alice', 'bob', new Date('2026-04-24T10:00:00Z'), 'order-btc');
+
+		const result = await fx.db.query<OrderRow>(CONVERSATIONS_SELECT, ['alice', 200]);
+		expect(result.rowCount).toBe(2);
+		// Newest discussion first.
+		expect(result.rows[0]!.order_permlink).toBe('order-btc');
+		expect(result.rows[1]!.order_permlink).toBe('order-xmr');
+		expect(result.rows.every((r) => r.peer === 'bob')).toBe(true);
+	});
+
+	it('an order-less thread is its own card, alongside the order threads', async () => {
+		await insertOrder(fx, 'bob', 'order-xmr', { side: 'sell', asset: 'XMR', fiat: 'MXN' });
+		await insertMessage(fx, 'alice', 'bob', new Date('2026-04-23T10:00:00Z'), 'order-xmr');
+		await insertMessage(fx, 'alice', 'bob', new Date('2026-04-24T10:00:00Z'), null);
+
+		const result = await fx.db.query<OrderRow>(CONVERSATIONS_SELECT, ['alice', 200]);
+		expect(result.rowCount).toBe(2);
+		expect(result.rows[0]!.order_permlink).toBeNull();
+		expect(result.rows[1]!.order_permlink).toBe('order-xmr');
+	});
+
+	// The owner is whichever PARTY owns an order with that permlink — not simply
+	// the message recipient, which is only the owner for the first message.
+	it('resolves the order owner from a reply, not just the opening message', async () => {
+		await insertOrder(fx, 'bob', 'order-xmr', { side: 'sell', asset: 'XMR', fiat: 'MXN' });
+		await insertMessage(fx, 'alice', 'bob', new Date('2026-04-23T10:00:00Z'), 'order-xmr');
+		// bob REPLIES, so the newest citing message has recipient = alice.
+		await insertMessage(fx, 'bob', 'alice', new Date('2026-04-23T11:00:00Z'), 'order-xmr');
+
+		const result = await fx.db.query<OrderRow>(CONVERSATIONS_SELECT, ['alice', 200]);
+		expect(result.rowCount).toBe(1);
+		expect(result.rows[0]!.order_account).toBe('bob');
+	});
 
 	it('order fields are all NULL when the conversation references no order', async () => {
 		await insertMessage(fx, 'alice', 'bob', new Date('2026-04-23T10:00:00Z'));

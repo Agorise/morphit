@@ -755,6 +755,11 @@ export interface ChatMessageRecord {
 	 *  cp404+ indexer; optional so older clients/instances still type-
 	 *  check. Consumed by the chat PDF export for on-chain evidence. */
 	readonly source_trx_id?: string;
+	/** cp446 — the order this message is about, or null. The inbox threads
+	 *  conversations by it and the transcript filters on it, so a reply about
+	 *  order A never appears in the discussion about order B. Optional so an
+	 *  older instance that doesn't send it still type-checks. */
+	readonly order_permlink?: string | null;
 }
 
 export interface ChatHistoryResponse {
@@ -844,6 +849,10 @@ export interface ConversationOrderRef {
 	readonly amount_min: number | null;
 	/** Maximum trade size, in fiat. null = no upper bound. */
 	readonly amount_max: number | null;
+	/** 'live' | 'cancelled' | 'expired'. The inbox renders it beside the
+	 *  "RE: <title>" subline, so a conversation about a dead order says so
+	 *  without the user having to open it. */
+	readonly status: string;
 }
 
 /** One peer the account has a chat history with. */
@@ -858,11 +867,15 @@ export interface ConversationSummary {
 	 *  "Requests" tabs (the latter holds first-contact threads
 	 *  admitted via Finding H layer 2's stranger-fee path). */
 	readonly has_user_sent: boolean;
-	/** The order this conversation is most recently about, or null.
-	 *  Frontend renders it as a "RE: <linked title>" subline under
-	 *  the peer's handle. */
+	/** The order THIS THREAD is about, or null when it cites none.
+	 *  Frontend renders it as a "RE: <linked title> (Live)" subline
+	 *  under the peer's handle; an order-less thread gets no subline. */
 	readonly order: ConversationOrderRef | null;
 }
+
+/* cp446 — items are DISCUSSIONS, not people. The same `peer` may appear several
+ * times, once per order discussed plus once for an order-less thread, so `peer`
+ * alone is not a unique key. Key a list on `(peer, order?.permlink ?? null)`. */
 
 /** Response from GET /v1/conversations/:account. Items sorted by
  *  `last_message_at` descending — most recent conversation first.
@@ -904,6 +917,11 @@ export interface OrderCounterpartiesResponse {
 export interface ChatReadStateEntry {
 	readonly peer: string;
 	readonly last_read_at: string;
+	/** cp446 — WHICH discussion this ack is for: the order's permlink, `''` for
+	 *  the thread that cites no order, or `'*'` for a legacy peer-wide ack.
+	 *  Optional so a client still type-checks against a pre-cp446 instance,
+	 *  where every ack was peer-wide by construction. */
+	readonly order_permlink?: string;
 }
 
 /** Response from GET /v1/chat-read-state/:account. Items sorted

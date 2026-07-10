@@ -257,7 +257,7 @@
     "help_support": "Hilfe & Support",
     "sign_out_modal": {
       "title": "Von Morphit abmelden?",
-      "body": "Du brauchst deine 12-Wort-Seed-Phrase oder dein Keyfile, um dich wieder anzumelden. Deine Posting- und Memo-Schlüssel werden sofort aus dem Speicher dieser Sitzung gelöscht.\n\nDeine On-Chain-Daten, Orders und Reputation sind nicht betroffen — sie leben auf Blurt, nicht in diesem Browser.",
+      "body": "Zum erneuten Anmelden brauchst du deine 12 Wörter, deine Keyfile oder deinen Blurt-Schlüssel. Deine Posting- und Memo-Schlüssel werden aus dieser Sitzung gelöscht.\n\nDeine On-Chain-Daten, Orders und Reputation sind nicht betroffen — sie leben auf Blurt, nicht in diesem Browser.",
       "confirm": "Abmelden",
       "cancel": "Angemeldet bleiben",
       "confirm_pending": "Melde ab…"
@@ -1194,7 +1194,7 @@
       },
       "lost_keys": {
         "q": "Was ist, wenn ich Passwort oder Wiederherstellungsphrase verliere?",
-        "a": "Dein Konto ist für dich unzugänglich, und wir können es nicht für dich zurückholen. Das ist kein Fehler — das ist das Grunddesign. Gäbe es eine Wiederherstellung, hätte jemand Zugriff auf deine Schlüssel. Dieser jemand wollen wir nicht sein. Schütze diese 12 Wörter, als hinge dein Leben davon ab."
+        "a": "Dein Konto ist für dich unzugänglich, und wir können es nicht für dich zurückholen. Das ist kein Fehler — das ist das Grunddesign. Gäbe es eine Wiederherstellung, hätte jemand Zugriff auf deine Schlüssel. Dieser jemand wollen wir nicht sein. Schütze diese 12 Wörter, als hinge dein Leben davon ab.\n\nDasselbe gilt, wenn du dich mit einem bestehenden Blurt-Konto angemeldet hast: Deine Keyfile und deine Schlüssel SIND das Konto. Verlierst du beide, kann sie niemand wiederherstellen — nicht wir, nicht der Operator, nicht die Blockchain."
       },
       "what_is_blurt": {
         "q": "Warum hat Morphit die Blurt-Blockchain gewählt?",
@@ -1370,7 +1370,7 @@
       },
       "backup_practices": {
         "q": "Wie sichere ich mein Morphit-Konto? Was sollte ich aufschreiben?",
-        "a": "Schreibe deine 12-Wörter-Wiederherstellungsphrase auf Papier, in Reihenfolge, genau wie angezeigt. Diese Phrase ist alles — sie regeneriert jeden Schlüssel, den Morphit nutzt. Lagere das Papier an einem sicheren und nicht vernetzten Ort: ein feuerfester Tresor, ein Bankschließfach, irgendwo, wo Feuer oder Diebstahl nicht denselben Ort wie deinen Computer treffen können. Fotografiere es nie, mail es dir nie selbst, füge es nie in einen Passwortmanager ein, der in die Cloud syncht. Neben Papier nutzen wir persönlich gern den verschlüsselten Passwortmanager namens KeePass. Tippe es nie auf einer Seite ein, die nicht Morphit ist. Für extra Haltbarkeit: schreibe zwei Kopien, lagere sie an getrennten Orten. Für sehr hohen Wert: graviere es auf eine Stahlplatte — Papier brennt und Wasser zerstört es, Metall überlebt beides. Deine 12 Wörter sind dein Konto; schütze sie wie Bargeld."
+        "a": "Schreibe deine 12-Wörter-Wiederherstellungsphrase auf Papier, in Reihenfolge, genau wie angezeigt. Diese Phrase ist alles — sie regeneriert jeden Schlüssel, den Morphit nutzt. Lagere das Papier an einem sicheren und nicht vernetzten Ort: ein feuerfester Tresor, ein Bankschließfach, irgendwo, wo Feuer oder Diebstahl nicht denselben Ort wie deinen Computer treffen können. Fotografiere es nie, mail es dir nie selbst, füge es nie in einen Passwortmanager ein, der in die Cloud syncht. Neben Papier nutzen wir persönlich gern den verschlüsselten Passwortmanager namens KeePass. Tippe es nie auf einer Seite ein, die nicht Morphit ist. Für extra Haltbarkeit: schreibe zwei Kopien, lagere sie an getrennten Orten. Für sehr hohen Wert: graviere es auf eine Stahlplatte — Papier brennt und Wasser zerstört es, Metall überlebt beides. Deine 12 Wörter sind dein Konto; schütze sie wie Bargeld.\n\nWenn du dich mit einem bestehenden Blurt-Konto angemeldet hast, hast du keine 12 Wörter — und es kann sie nicht geben: Ein Seed *leitet* Schlüssel ab und lässt sich nicht rückwärts aus Schlüsseln bauen, die du schon hattest. Dein Backup ist deine Keyfile, heruntergeladen auf der Seite „Meine Schlüssel sichern“. Wenn du deinen Active key auf diesem Gerät behalten hast, enthält diese Keyfile Posting- und Active key, verschlüsselt mit deinem Morphit-Passwort. Behandle sie genau wie das Papier oben."
       },
       "trade_size_limits": {
         "q": "Gibt es eine Mindest- oder Höchst-Handelsgröße auf Morphit?",
@@ -3911,7 +3911,10 @@
         "locked": "Sitzung gesperrt. Bitte neu anmelden, um zu veröffentlichen.",
         "generic": "Konnte nicht übertragen werden. Versuche es erneut.",
         "rejected": "Übertragung vom Netzwerk abgelehnt: {reason}",
-        "key_mismatch": "Die entsperrte Identität ist nicht berechtigt, für @{account} zu posten. Stelle sicher, dass das richtige Konto entsperrt ist und der hinterlegte Kontoname dazu passt, und versuche es erneut."
+        "key_mismatch": "Die entsperrte Identität ist nicht berechtigt, für @{account} zu posten. Stelle sicher, dass das richtige Konto entsperrt ist und der hinterlegte Kontoname dazu passt, und versuche es erneut.",
+        "wrong_account": "Dieser Tab ist mit den Schlüsseln eines anderen Kontos angemeldet als dem, das Morphit für deins hält. Es wurde nichts gesendet. Lade diese Seite neu oder melde dich in deinen anderen Tabs von Morphit ab, und versuche es erneut.",
+        "no_account_for_key": "Der Schlüssel dieser Sitzung kontrolliert kein Konto auf der Blockchain. Es wurde nichts gesendet. Melde dich ab und mit dem richtigen Schlüssel wieder an.",
+        "lookup_failed": "Morphit konnte seinen Indexer nicht erreichen, um zu prüfen, welches Konto dieser Schlüssel kontrolliert, und hat deshalb nichts gesendet. Prüfe deine Verbindung und versuche es erneut."
       },
       "broadcast_pending": "Veröffentlichung…",
       "clear_confirm_prompt": "Deinen Anzeigenamen von diesem Gerät entfernen? Du kannst ihn jederzeit wieder setzen.",

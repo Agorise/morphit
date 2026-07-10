@@ -638,7 +638,7 @@ back-fill.
 >   `curl http://127.0.0.1:8124/health` → `{"status":"ok","transport":"http"}`.)
 > - **Canary** — whether `apps/web/build/canary.txt` is current
 >   (parsed from its `Valid through:` line) or overdue for its weekly
->   regeneration. Since v1.3.0 the generator writes the sitewide human
+>   regeneration. Since v1.3.5 the generator writes the sitewide human
 >   format — `22 July, 2026 @ 23:45:18 UTC` — and health reads BOTH that
 >   and the older Zulu ISO form (`2026-07-22T23:45:18Z`), so a canary you
 >   signed before upgrading keeps verifying. Both are parsed strictly: a
@@ -4515,6 +4515,48 @@ Leaving `launch` permanently means the AND gate never
 activates, and any patient attacker can still sybil-attest
 their own orders with two ≥30-day-old accounts. The OR gate
 is a bootstrap mode, not a permanent posture.
+
+## 20b. Schema v39 upgrade note — chat read-state is re-keyed, and the indexer cannot be rolled back over it
+
+`morphit-ops upgrade` applies this automatically at indexer
+start-up; there is nothing for you to run by hand and no new
+environment variable.
+
+**What it does.** `chat_read_state` gains an `order_permlink`
+column and its primary key becomes
+`(reader_account, peer_account, order_permlink)`. Chat read
+receipts are now per *discussion* — one per (peer, order) —
+rather than one per peer, so reading one conversation with
+someone no longer marks every other conversation with that
+same person as read.
+
+**Existing rows are safe.** Every row written before this
+migration was, by definition, an acknowledgement covering the
+whole peer, so the column's `DEFAULT '*'` backfills them with
+exactly that meaning. Nobody's inbox lights up unread on
+upgrade day.
+
+**Table size.** One row per (reader, peer) — small. The
+`ADD PRIMARY KEY` rebuilds that index while holding an
+`ACCESS EXCLUSIVE` lock on the table. On any realistic
+instance this is well under a second, and only chat read
+receipts touch the table.
+
+> ### ⚠ DOWNGRADE HAZARD
+>
+> An indexer older than v39 writes read receipts with
+> `ON CONFLICT (reader_account, peer_account)`. That
+> constraint no longer exists after this migration, and
+> Postgres will reject the statement with *"no unique or
+> exclusion constraint matching the ON CONFLICT
+> specification"*.
+>
+> **Rolling the indexer back to a pre-v39 build after this
+> migration has run will break chat read receipts** until you
+> roll forward again. Nothing else is affected: messages,
+> orders, and the orderbook are untouched. If you must roll
+> back and stay there, restore the database from the backup
+> taken before the upgrade.
 
 ## 21. Schema v17 upgrade note — brief orderbook sequential-scan window
 
@@ -10658,8 +10700,9 @@ involved in the 2FA flow at any point.
 - **Reports of "I lost my 2FA, can you reset it?" — you can't.**
   The correct response is: "I can't reset your 2FA because
   Morphit doesn't hold your keystore or your secrets. If you
-  still have your 12-word seed phrase, you can sign out and
-  re-import to recover. If you saved your 10 backup codes at
+  still have your 12-word seed phrase — or, if you signed in with
+  an existing Blurt account, your Keyfile or your original Blurt
+  key — you can sign out and re-import to recover. If you saved your 10 backup codes at
   enrollment, type one of those at the unlock screen instead
   of the 6-digit code. If you don't have either, the keystore
   isn't recoverable." This is documented in the user-facing

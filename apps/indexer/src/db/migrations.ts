@@ -120,6 +120,44 @@ CREATE INDEX IF NOT EXISTS idx_accounts_posting_pubkey
     ON accounts (posting_pubkey)
     WHERE posting_pubkey IS NOT NULL;
 `
+	},
+	{
+		version: 39,
+		description:
+			'cp446: chat read-state is per THREAD (reader, peer, order), not per peer — like an email inbox',
+		// Ken: "if I read one thread from a user, it should not mark other threads
+		// with that user as read." A discussion is (peer, order); reading one must
+		// not silence the others.
+		//
+		// WHY A SENTINEL AND NOT NULL: this column is in the primary key, and
+		// Postgres treats NULLs as DISTINCT in a unique index — two NULL rows for
+		// the same (reader, peer) would both be insertable, and the ON CONFLICT
+		// upsert would never fire. So the key is always a non-null TEXT:
+		//
+		//    '*'  — a PEER-WIDE ack. What every pre-cp446 client sent (the op had
+		//           no order field) and what an old client still sends today. It
+		//           means "everything with this peer, up to last_read_at".
+		//    ''   — the order-LESS thread: real messages that cite no order.
+		//    else — the permlink of the order that thread is about.
+		//
+		// Neither '*' nor '' is a legal Blurt permlink, so no thread can collide
+		// with the sentinel. Existing rows are peer-wide acks by definition, so the
+		// backfill stamps them '*' and the old behaviour is preserved exactly for
+		// anyone who upgrades mid-conversation. Unread is then evaluated against
+		// MAX(thread ack, peer-wide ack), which is monotonic in both.
+		sql: `
+ALTER TABLE chat_read_state
+    ADD COLUMN IF NOT EXISTS order_permlink TEXT NOT NULL DEFAULT '*';
+
+ALTER TABLE chat_read_state
+    DROP CONSTRAINT IF EXISTS chat_read_state_pkey;
+
+ALTER TABLE chat_read_state
+    ADD PRIMARY KEY (reader_account, peer_account, order_permlink);
+
+COMMENT ON COLUMN chat_read_state.order_permlink IS
+    'The discussion this ack is for: a permlink, or '''' for the order-less thread, or ''*'' for a legacy peer-wide ack.';
+`
 	}
 	// Future migrations land here.  The v1 collapsed schema is the
 	// pre-launch baseline; from v37 forward, every new schema change is its
