@@ -696,7 +696,9 @@ const sampleConversationSummary = {
 		asset: 'BTC',
 		fiat_currency: 'USD',
 		amount_min: 50,
-		amount_max: 500
+		amount_max: 500,
+		// cp446 — the inbox card shows the order's current state beside "RE:".
+		status: 'live'
 	}
 } satisfies ConversationSummary;
 

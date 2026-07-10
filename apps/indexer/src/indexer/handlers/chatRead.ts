@@ -4,7 +4,13 @@
  * Payload shape:
  *   {
  *     "peer": string (blurt account name),
- *     "last_read_at": string (ISO 8601 UTC timestamp)
+ *     "last_read_at": string (ISO 8601 UTC timestamp),
+ *     "order_permlink"?: string (cp446 — WHICH discussion was read:
+ *        the order's permlink, or "" for the thread that cites no order.
+ *        OMITTED by pre-cp446 clients, and that means what it always
+ *        meant: everything with this peer. Stored as the '*' sentinel.
+ *        A client may not send "*" itself — it would forge a peer-wide
+ *        ack — and a permlink longer than 256 chars is rejected.)
  *   }
  *
  * Effect: record that ctx.signer has acknowledged reading their
@@ -87,6 +93,26 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		return { ok: false, reason: 'last_read_at_too_old' };
 	}
 
+	// cp446 — WHICH DISCUSSION was read. Optional: a pre-cp446 client omits it,
+	// and that op means exactly what it always meant — "everything with this peer".
+	// We record that as the '*' sentinel rather than guessing a thread, so an old
+	// client can never silently mark one thread and leave the rest looking read.
+	//
+	// A permlink is validated for shape only. It does not have to name a live
+	// order: acking a discussion about an order that has since been cancelled is
+	// perfectly legitimate, and the row is inert if the permlink is nonsense.
+	const rawOrder = ctx.payload.order_permlink;
+	let orderPermlink: string;
+	if (rawOrder === undefined || rawOrder === null) {
+		orderPermlink = '*'; // legacy peer-wide ack
+	} else if (typeof rawOrder !== 'string' || rawOrder.length > 256 || rawOrder === '*') {
+		// '*' is reserved: a client must not be able to forge a peer-wide ack by
+		// naming it as a thread, and an over-long permlink is malformed.
+		return { ok: false, reason: 'order_permlink_invalid' };
+	} else {
+		orderPermlink = rawOrder; // '' is the order-less thread; anything else is a permlink
+	}
+
 	// Insert or monotonic-advance update. The WHERE clause in the
 	// DO UPDATE makes this atomic: concurrent acks can both execute
 	// without a race, and only the later one wins if it arrives out
@@ -96,16 +122,16 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	// was just superseded).
 	await client.query(
 		`INSERT INTO chat_read_state (
-			reader_account, peer_account, last_read_at,
+			reader_account, peer_account, order_permlink, last_read_at,
 			source_block_num, source_trx_id, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6)
-		ON CONFLICT (reader_account, peer_account) DO UPDATE SET
+		) VALUES ($1, $2, $3, $4, $5, $6, $7)
+		ON CONFLICT (reader_account, peer_account, order_permlink) DO UPDATE SET
 			last_read_at = EXCLUDED.last_read_at,
 			source_block_num = EXCLUDED.source_block_num,
 			source_trx_id = EXCLUDED.source_trx_id,
 			updated_at = EXCLUDED.updated_at
 		WHERE chat_read_state.last_read_at < EXCLUDED.last_read_at`,
-		[ctx.signer, peer, new Date(lastReadMs), ctx.blockNum, ctx.trxId, ctx.blockTime]
+		[ctx.signer, peer, orderPermlink, new Date(lastReadMs), ctx.blockNum, ctx.trxId, ctx.blockTime]
 	);
 
 	return { ok: true };

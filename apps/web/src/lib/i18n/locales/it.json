@@ -257,7 +257,7 @@
     "help_support": "Aiuto e supporto",
     "sign_out_modal": {
       "title": "Disconnettersi da Morphit?",
-      "body": "Ti servirà la tua frase seed di 12 parole o il tuo keyfile per rientrare. Le tue chiavi posting e memo verranno cancellate dalla memoria di questa sessione immediatamente.\n\nI tuoi dati on-chain, ordini e reputazione non sono toccati — vivono su Blurt, non in questo browser.",
+      "body": "Per accedere di nuovo ti serviranno la frase di 12 parole, il keyfile o la tua chiave Blurt. Le chiavi di pubblicazione e memo saranno cancellate da questa sessione.\n\nI tuoi dati on-chain, ordini e reputazione non sono toccati — vivono su Blurt, non in questo browser.",
       "confirm": "Disconnetti",
       "cancel": "Resta connesso",
       "confirm_pending": "Disconnessione…"
@@ -1194,7 +1194,7 @@
       },
       "lost_keys": {
         "q": "E se perdo la password o la frase di recupero?",
-        "a": "Il tuo account ti è inaccessibile, e non possiamo recuperarlo per te. Non è un difetto — è il design centrale. Se esistesse un qualsiasi meccanismo di recupero, qualcuno avrebbe accesso alle tue chiavi. Rifiutiamo di essere quel qualcuno. Proteggi quelle 12 parole come se ne andasse della tua vita."
+        "a": "Il tuo account ti è inaccessibile, e non possiamo recuperarlo per te. Non è un difetto — è il design centrale. Se esistesse un qualsiasi meccanismo di recupero, qualcuno avrebbe accesso alle tue chiavi. Rifiutiamo di essere quel qualcuno. Proteggi quelle 12 parole come se ne andasse della tua vita.\n\nLo stesso vale se hai effettuato l'accesso con un account Blurt esistente: il tuo Keyfile e le tue chiavi sono l'account. Perdi entrambi e nessuno — né noi, né l'operatore, né la blockchain — potrà recuperarli."
       },
       "what_is_blurt": {
         "q": "Perché Morphit ha scelto la blockchain Blurt?",
@@ -1370,7 +1370,7 @@
       },
       "backup_practices": {
         "q": "Come faccio il backup del mio account Morphit? Cosa devo scrivere?",
-        "a": "Scrivi la tua frase di recupero di 12 parole su carta, in ordine, esattamente come mostrata. Quella frase è tutto — rigenera ogni chiave che Morphit usa. Conserva la carta in un posto sicuro e non in rete: una cassetta ignifuga, una cassetta di sicurezza in banca, da qualche parte dove un incendio o un furto non colpiranno lo stesso posto del tuo computer. Non fotografarla mai, non mandartela mai via email, non incollarla mai in un password manager che sincronizza sul cloud. Oltre alla carta, a noi personalmente piace usare il gestore di password cifrato chiamato KeePass. Non digitarla mai su alcun sito che non sia Morphit. Per durabilità extra: scrivi due copie, conservale in posti separati. Per valori molto alti: incidila su una piastra di acciaio — la carta brucia e l'acqua la distrugge, il metallo sopravvive a entrambi. Le tue 12 parole sono il tuo account; proteggile come contante."
+        "a": "Scrivi la tua frase di recupero di 12 parole su carta, in ordine, esattamente come mostrata. Quella frase è tutto — rigenera ogni chiave che Morphit usa. Conserva la carta in un posto sicuro e non in rete: una cassetta ignifuga, una cassetta di sicurezza in banca, da qualche parte dove un incendio o un furto non colpiranno lo stesso posto del tuo computer. Non fotografarla mai, non mandartela mai via email, non incollarla mai in un password manager che sincronizza sul cloud. Oltre alla carta, a noi personalmente piace usare il gestore di password cifrato chiamato KeePass. Non digitarla mai su alcun sito che non sia Morphit. Per durabilità extra: scrivi due copie, conservale in posti separati. Per valori molto alti: incidila su una piastra di acciaio — la carta brucia e l'acqua la distrugge, il metallo sopravvive a entrambi. Le tue 12 parole sono il tuo account; proteggile come contante.\n\nSe hai effettuato l'accesso con un account Blurt esistente, non hai una frase di 12 parole e non può esistere: una frase *deriva* le chiavi e non può essere costruita a ritroso da chiavi che avevi già. Il tuo backup è il tuo Keyfile, scaricato dalla pagina «Esegui il backup delle mie chiavi». Se hai scelto di conservare la chiave attiva su questo dispositivo, quel Keyfile contiene sia la chiave di pubblicazione sia quella attiva, cifrate con la tua password Morphit. Trattalo esattamente come la carta qui sopra."
       },
       "trade_size_limits": {
         "q": "C'è una dimensione minima o massima di trade su Morphit?",
@@ -3911,7 +3911,10 @@
         "locked": "Sessione bloccata. Accedi di nuovo per pubblicare.",
         "generic": "Non siamo riusciti a trasmettere. Riprova.",
         "rejected": "Pubblicazione rifiutata dalla rete: {reason}",
-        "key_mismatch": "L'identità sbloccata non è autorizzata a pubblicare per @{account}. Assicurati che sia sbloccato l'account corretto e che il nome account memorizzato corrisponda, poi riprova."
+        "key_mismatch": "L'identità sbloccata non è autorizzata a pubblicare per @{account}. Assicurati che sia sbloccato l'account corretto e che il nome account memorizzato corrisponda, poi riprova.",
+        "wrong_account": "Questa scheda ha effettuato l'accesso con le chiavi di un account diverso da quello che Morphit crede tu stia usando. Nulla è stato trasmesso. Ricarica questa pagina, oppure esci da Morphit nelle altre schede, e riprova.",
+        "no_account_for_key": "La chiave di questa sessione non controlla alcun account sulla blockchain. Nulla è stato trasmesso. Esci e rientra con la chiave corretta.",
+        "lookup_failed": "Morphit non è riuscito a contattare il suo indexer per verificare quale account controlla questa chiave, quindi non ha trasmesso nulla. Controlla la connessione e riprova."
       },
       "broadcast_pending": "Pubblicazione in corso…",
       "clear_confirm_prompt": "Rimuovere il tuo nome da questo dispositivo? Puoi impostarlo di nuovo in qualsiasi momento.",

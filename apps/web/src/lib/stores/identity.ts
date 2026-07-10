@@ -48,7 +48,7 @@ import {
 	readPairedSession,
 	type PairedSession
 } from '$crypto/pairedSession';
-import { clearUserBlurtAccount } from '$blurt/ops/profile';
+import { bindSessionPostingKey, clearUserBlurtAccount } from '$blurt/ops/profile';
 
 export type IdentityState =
 	| { state: 'locked' }
@@ -56,6 +56,41 @@ export type IdentityState =
 	| { state: 'paired-readonly'; paired: PairedSession };
 
 const internal = writable<IdentityState>({ state: 'locked' });
+
+/**
+ * cp445 — the persisted Blurt account name is scoped to the posting key that
+ * owns it (see `ops/profile.ts`). Every transition into or out of `unlocked`
+ * must tell the storage layer which key is now in charge, or a second tab's
+ * sign-in hands this tab the wrong account name — and the chain answers
+ * "Missing Posting Authority <someone else>".
+ *
+ * One subscription, so no `internal.set(...)` call site can forget to do it.
+ */
+internal.subscribe((state) => {
+	if (state.state === 'unlocked') {
+		bindSessionPostingKey(sessionKeyId(state.live.posting.publicKey));
+	} else {
+		bindSessionPostingKey(null);
+	}
+});
+
+/**
+ * A stable, non-secret id for the posting key of THIS session.
+ *
+ * Deliberately a raw hex prefix of the public key rather than the BLT-formatted
+ * string: `formatPublicKeyBLT` lives in `$crypto/keygen`, and this store is on
+ * the every-page baseline — importing it would drag bip39 + secp256k1 into the
+ * first paint of every route (cp271; `crypto-blurt-not-in-baseline-closure-smoke`
+ * caught exactly that). We only need an identifier that differs between keys, and
+ * the public key already is one.
+ */
+function sessionKeyId(publicKey: Uint8Array): string {
+	let out = '';
+	for (let i = 0; i < 8 && i < publicKey.length; i++) {
+		out += publicKey[i]!.toString(16).padStart(2, '0');
+	}
+	return out;
+}
 
 /** The current identity state. Subscribe in components with the normal
  *  `$` syntax: `{#if $identity.state === 'unlocked'} ...`. */

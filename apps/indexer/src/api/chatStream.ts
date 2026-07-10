@@ -81,7 +81,7 @@ const SNAPSHOT_LIMIT = 50;
 const PENDING_DURING_SNAPSHOT_CAP = 1000;
 
 const ROW_SELECT = `
-	SELECT id::text, sender, recipient, ciphertext, header, created_at, source_trx_id
+	SELECT id::text, sender, recipient, ciphertext, header, created_at, source_trx_id, order_permlink
 `;
 
 async function fetchSnapshot(db: Database, f: ChatStreamFilter): Promise<ChatStreamRow[]> {
@@ -99,6 +99,7 @@ async function fetchSnapshot(db: Database, f: ChatStreamFilter): Promise<ChatStr
 		header: unknown;
 		created_at: Date;
 		source_trx_id: string;
+		order_permlink: string | null;
 	}>(sql, [f.lo, f.hi]);
 	// pg returns BIGINT-as-string for id::text; coerce to JS number.
 	// cp138 A-3 correction: schema declares chat_messages.id as
@@ -120,7 +121,8 @@ async function fetchSnapshot(db: Database, f: ChatStreamFilter): Promise<ChatStr
 		ciphertext: r.ciphertext,
 		header: r.header,
 		created_at: r.created_at,
-		source_trx_id: r.source_trx_id
+		source_trx_id: r.source_trx_id,
+		order_permlink: r.order_permlink
 	}));
 }
 
@@ -147,6 +149,7 @@ async function fetchMessageById(
 		header: unknown;
 		created_at: Date;
 		source_trx_id: string;
+		order_permlink: string | null;
 	}>(sql, [messageId, f.lo, f.hi]);
 	const row = result.rows[0];
 	if (row === undefined) return null;
@@ -157,7 +160,8 @@ async function fetchMessageById(
 		ciphertext: row.ciphertext,
 		header: row.header,
 		created_at: row.created_at,
-		source_trx_id: row.source_trx_id
+		source_trx_id: row.source_trx_id,
+		order_permlink: row.order_permlink
 	};
 }
 
@@ -181,6 +185,7 @@ async function fetchSinceId(
 		header: unknown;
 		created_at: Date;
 		source_trx_id: string;
+		order_permlink: string | null;
 	}>(sql, [f.lo, f.hi, sinceId]);
 	return result.rows.map((r) => ({
 		id: parseInt(r.id, 10),
@@ -189,7 +194,8 @@ async function fetchSinceId(
 		ciphertext: r.ciphertext,
 		header: r.header,
 		created_at: r.created_at,
-		source_trx_id: r.source_trx_id
+		source_trx_id: r.source_trx_id,
+		order_permlink: r.order_permlink
 	}));
 }
 
@@ -306,6 +312,7 @@ export function chatStreamRoute(db: Database, poller: Poller): Hono {
 							'message_appended',
 							rowToWire({
 								id: 0,
+								order_permlink: ev.orderPermlink,
 								sender: ev.sender,
 								recipient: ev.recipient,
 								ciphertext: ev.ciphertext,

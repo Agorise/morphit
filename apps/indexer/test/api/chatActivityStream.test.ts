@@ -105,7 +105,8 @@ describe('chatActivityStreamRoute', () => {
 			ciphertext: 'SECRETCIPHERTEXTBLOB==',
 			header: { client_tag: 'x' },
 			createdAt: new Date(),
-			clientTag: 'x'
+			clientTag: 'x',
+			orderPermlink: null
 		});
 
 		const frame = await readUntil(reader, 'chat_activity');

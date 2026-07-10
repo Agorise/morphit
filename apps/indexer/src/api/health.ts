@@ -35,7 +35,7 @@ import type { ChatHeadTailer } from '$indexer/chatHeadTailer';
 // update all 10 package.json files + this constant +
 // apps/relay/src/api/health.ts VERSION + the example response
 // in docs/API.md in the same commit.
-const INDEXER_VERSION = '1.3.0';
+const INDEXER_VERSION = '1.3.5';
 
 // Blurt produces one block every 3 seconds. Used to translate the
 // block-lag count into a human "seconds behind" figure in the

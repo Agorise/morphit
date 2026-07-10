@@ -117,6 +117,11 @@ interface LocatedChatOp {
 	readonly ciphertext: string;
 	readonly header: Record<string, unknown>;
 	readonly clientTag: string;
+	/** cp446 — the order this message is about (plaintext field on the op body),
+	 *  or null. The inbox threads by it and the transcript filters on it, so a
+	 *  fast-path message that arrived without it would surface in the wrong
+	 *  discussion for the ~6s before the durable row replaced it. */
+	readonly orderPermlink: string | null;
 }
 
 /**
@@ -182,7 +187,16 @@ function locateChatOp(op: ChainOperation): LocatedChatOp | null {
 	const clientTag = clientTagFromHeader(payload.header);
 	if (clientTag === null) return null;
 
-	return { signer, recipient, ciphertext, header: payload.header, clientTag };
+	// Shape-validate only. The DURABLE handler is the authority on whether this
+	// permlink names a real order (validateChatOrderPermlink); the fast path just
+	// forwards what the signer claimed, and the durable row corrects it if wrong.
+	const rawPermlink = (payload as { order_permlink?: unknown }).order_permlink;
+	const orderPermlink =
+		typeof rawPermlink === 'string' && rawPermlink.length > 0 && rawPermlink.length <= 256
+			? rawPermlink
+			: null;
+
+	return { signer, recipient, ciphertext, header: payload.header, clientTag, orderPermlink };
 }
 
 /** Status snapshot for /v1/health. */
@@ -351,7 +365,8 @@ export class ChatHeadTailer {
 					ciphertext: located.ciphertext,
 					header: located.header,
 					createdAt,
-					clientTag: located.clientTag
+					clientTag: located.clientTag,
+					orderPermlink: located.orderPermlink
 				});
 				this.emitted++;
 			}

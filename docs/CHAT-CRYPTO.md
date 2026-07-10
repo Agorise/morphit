@@ -117,7 +117,8 @@ reasons, in descending order of importance:
 Blurt is a public ledger.  Messages are op broadcasts.  They
 may arrive out of order (RPC node lag), in batches (you opened
 the app after a week away), or on a brand-new device (you
-restored from your 12-word seed on a new phone).
+restored your keys on a new phone — from a seed, a Keyfile, or a
+posting key).
 
 A per-message-rotation protocol needs synchronized
 per-conversation state on both sides.  When state desyncs,

@@ -134,7 +134,12 @@ panel on the account-creation review screen and the `/backup-keys`
 page (the latter behind a password unlock) — the user can view and
 export their 12-word seed and all four Blurt private keys in
 standard WIF form (`owner`/`active`/`posting`/`memo`), via per-line
-copy or a downloadable `.txt`. This exists for backup and for
+copy or a downloadable `.txt`.  An account **imported** from an
+existing Blurt login has no seed and never can (a seed *derives*
+keys; it cannot be built backwards from keys the user already
+had — ADR-0050).  Such an account exports an encrypted Keyfile
+holding its Posting key, plus its Active key if the user chose to
+keep one on the device; Owner and Memo are never held. This exists for backup and for
 portability: a Morphit-created account's keys are otherwise only
 reachable through Morphit's BIP-39 seed, which other Blurt tools
 (e.g. blurtwallet.com) don't understand — they import the

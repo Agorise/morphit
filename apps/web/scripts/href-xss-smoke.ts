@@ -86,6 +86,16 @@ const SAFE_BUILDER_NAMES = [
  *  given <expr> to a value an attacker controls. */
 const ALLOWLIST_HREF_EXPR: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 	[
+		'apps/web/src/routes/[lang]/chat/+page.svelte',
+		// cp446 — the inbox threads by (peer, order), so a card's href needs a
+		// `?order=` query string and can no longer be a bare `lp()` template the
+		// tracer understands. `threadHref` builds it from localePath (a
+		// SAFE_BUILDER that prefixes `/<lang>` to single-slash internal paths),
+		// percent-encodes the permlink, and REFUSES to return anything that is not
+		// root-relative — so no operator- or peer-controlled scheme is reachable.
+		new Set(['threadHref(convo)'])
+	],
+	[
 		'apps/web/src/lib/components/OrderCard.svelte',
 		// cp404 — detailHref/profileHref/messageHref are STRING PROPS whose
 		// values the parent pages (orderbook + account) build with localePath():

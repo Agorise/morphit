@@ -257,7 +257,7 @@
     "help_support": "Ayuda y soporte",
     "sign_out_modal": {
       "title": "¿Cerrar sesión de Morphit?",
-      "body": "Necesitarás tu frase semilla de 12 palabras o tu keyfile para volver a iniciar sesión. Tus claves posting y memo se borrarán de la memoria de esta sesión de inmediato.\n\nTus datos on-chain, órdenes y reputación no se ven afectados — viven en Blurt, no en este navegador.",
+      "body": "Necesitarás tu frase de 12 palabras, tu keyfile o tu clave de Blurt para volver a iniciar sesión. Tus claves de publicación y memo se borrarán de esta sesión.\n\nTus datos on-chain, órdenes y reputación no se ven afectados — viven en Blurt, no en este navegador.",
       "confirm": "Cerrar sesión",
       "cancel": "Mantener sesión",
       "confirm_pending": "Cerrando sesión…"
@@ -1194,7 +1194,7 @@
       },
       "lost_keys": {
         "q": "¿Y si pierdo mi contraseña o mi frase de recuperación?",
-        "a": "Tu cuenta queda inaccesible y no podemos recuperarla por ti. No es un error — es el diseño central. Si hubiera un mecanismo de recuperación, alguien tendría acceso a tus claves. Nos negamos a ser ese alguien. Protege esas 12 palabras como si tu vida dependiera de ello."
+        "a": "Tu cuenta queda inaccesible y no podemos recuperarla por ti. No es un error — es el diseño central. Si hubiera un mecanismo de recuperación, alguien tendría acceso a tus claves. Nos negamos a ser ese alguien. Protege esas 12 palabras como si tu vida dependiera de ello.\n\nLo mismo ocurre si iniciaste sesión con una cuenta de Blurt existente: tu Keyfile y tus claves son la cuenta. Piérdelos y nadie —ni nosotros, ni el operador, ni la cadena de bloques— podrá restaurarlos."
       },
       "what_is_blurt": {
         "q": "¿Por qué Morphit eligió la blockchain Blurt?",
@@ -1370,7 +1370,7 @@
       },
       "backup_practices": {
         "q": "¿Cómo respaldo mi cuenta Morphit? ¿Qué debo anotar?",
-        "a": "Anota tu frase de recuperación de 12 palabras en papel, en orden, exactamente como se muestra. Esa frase lo es todo — regenera cada llave que Morphit usa. Guarda el papel en un lugar seguro y no conectado: una caja ignífuga, una caja de seguridad en el banco, en un lugar donde un incendio o robo no golpee el mismo sitio que tu computadora. Nunca la fotografíes, nunca te la envíes por email, nunca la pegues en un gestor de contraseñas que sincronice a la nube. Además del papel, a nosotros personalmente nos gusta usar el gestor de contraseñas cifrado llamado KeePass. Nunca la escribas en ningún sitio que no sea Morphit. Para durabilidad extra: escribe dos copias, guárdalas en lugares separados. Para mucho valor: grábala en una placa de acero — el papel se quema y el agua lo destruye, el metal sobrevive a ambos. Tus 12 palabras son tu cuenta; protégelas como efectivo."
+        "a": "Anota tu frase de recuperación de 12 palabras en papel, en orden, exactamente como se muestra. Esa frase lo es todo — regenera cada llave que Morphit usa. Guarda el papel en un lugar seguro y no conectado: una caja ignífuga, una caja de seguridad en el banco, en un lugar donde un incendio o robo no golpee el mismo sitio que tu computadora. Nunca la fotografíes, nunca te la envíes por email, nunca la pegues en un gestor de contraseñas que sincronice a la nube. Además del papel, a nosotros personalmente nos gusta usar el gestor de contraseñas cifrado llamado KeePass. Nunca la escribas en ningún sitio que no sea Morphit. Para durabilidad extra: escribe dos copias, guárdalas en lugares separados. Para mucho valor: grábala en una placa de acero — el papel se quema y el agua lo destruye, el metal sobrevive a ambos. Tus 12 palabras son tu cuenta; protégelas como efectivo.\n\nSi iniciaste sesión con una cuenta de Blurt existente, no tienes una frase de 12 palabras y no puede haberla: una frase *deriva* las claves y no puede construirse hacia atrás a partir de claves que ya tenías. Tu copia de seguridad es tu Keyfile, descargado desde la página «Respaldar mis claves». Si elegiste guardar tu clave activa en este dispositivo, ese Keyfile contiene tanto tu clave de publicación como la activa, cifradas con tu contraseña de Morphit. Trátalo exactamente como el papel de arriba."
       },
       "trade_size_limits": {
         "q": "¿Hay un tamaño mínimo o máximo de operación en Morphit?",
@@ -3911,7 +3911,10 @@
         "locked": "La sesión está bloqueada. Inicia sesión de nuevo para publicar.",
         "generic": "No se pudo transmitir. Inténtalo de nuevo.",
         "rejected": "La red rechazó la publicación: {reason}",
-        "key_mismatch": "La identidad desbloqueada no está autorizada a publicar para @{account}. Asegúrate de tener desbloqueada la cuenta correcta y de que el nombre de cuenta coincida, luego inténtalo de nuevo."
+        "key_mismatch": "La identidad desbloqueada no está autorizada a publicar para @{account}. Asegúrate de tener desbloqueada la cuenta correcta y de que el nombre de cuenta coincida, luego inténtalo de nuevo.",
+        "wrong_account": "Esta pestaña ha iniciado sesión con las claves de una cuenta distinta de la que Morphit cree que usas. No se emitió nada. Recarga esta página, o cierra sesión en Morphit en tus otras pestañas, y vuelve a intentarlo.",
+        "no_account_for_key": "La clave de esta sesión no controla ninguna cuenta en la cadena de bloques. No se emitió nada. Cierra sesión y vuelve a entrar con la clave correcta.",
+        "lookup_failed": "Morphit no pudo contactar con su indexador para comprobar qué cuenta controla esta clave, así que no emitió nada. Revisa tu conexión e inténtalo de nuevo."
       },
       "broadcast_pending": "Publicando…",
       "clear_confirm_prompt": "¿Eliminar tu nombre para mostrar de este dispositivo? Puedes ponerlo otra vez cuando quieras.",

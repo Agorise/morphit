@@ -47,17 +47,30 @@ function check(name: string, cond: boolean, detail = ''): void {
 
 // ─── 1. Indexer conversations query + mapping ──────────────────────────
 const conv = read('apps/indexer/src/api/conversations.ts');
+
+// cp446 — the owner is whichever PARTY owns an order with that permlink. The old
+// query took `m.recipient` from the newest citing message: correct for the FIRST
+// message of a thread, wrong for every reply, because once the owner answers the
+// recipient is the other person. Integration-tested against a reply.
+check('the order owner is resolved from either party, not from the recipient', /ord\.account IN \(\$1, g\.peer\)/.test(conv));
+check('…and NOT via the old recipient-as-owner assumption', !/m\.recipient AS order_owner/.test(conv));
+check('one row per discussion: GROUP BY (peer, order_permlink)', /GROUP BY peer, order_permlink/.test(conv));
 check(
 	'indexer query selects the latest order permlink (AS order_permlink)',
 	/AS\s+order_permlink/.test(conv)
 );
+// cp446 — REPINNED. These pinned `o.account = lm.order_owner` and
+// `m.recipient AS order_owner`, i.e. "the recipient of the newest citing message
+// owns the order". True for the FIRST message of a thread, false for every
+// reply. The query now resolves the owner as whichever PARTY owns an order with
+// that permlink.
 check(
-	'indexer query joins orders on the message recipient (order owner)',
-	/LEFT JOIN\s+orders\s+o/.test(conv) && /o\.account\s*=\s*lm\.order_owner/.test(conv)
+	'indexer joins the order via LATERAL, gated on a non-null permlink',
+	/LEFT JOIN LATERAL/.test(conv) && /g\.order_permlink\s+IS\s+NOT\s+NULL/.test(conv)
 );
 check(
-	'indexer LATERAL exposes the order-carrying message recipient as order_owner',
-	/m\.recipient\s+AS\s+order_owner/.test(conv) && /order_permlink\s+IS\s+NOT\s+NULL/.test(conv)
+	'indexer resolves the order owner from either party, not from the recipient',
+	/ord\.account IN \(\$1, g\.peer\)/.test(conv) && !/m\.recipient\s+AS\s+order_owner/.test(conv)
 );
 check(
 	'indexer maps an `order` field, gated on a non-null permlink',

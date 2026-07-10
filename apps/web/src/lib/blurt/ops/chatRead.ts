@@ -42,6 +42,11 @@ export interface ChatReadPayload {
 	/** ISO 8601 UTC timestamp through which we've read. Any
 	 *  chat_messages.created_at <= this is marked read. */
 	readonly last_read_at: string;
+	/** cp446 — WHICH discussion was read: the order's permlink, or '' for the
+	 *  thread that cites no order. Omitted only by pre-cp446 clients, where it
+	 *  meant "everything with this peer". Never '*': that sentinel is the
+	 *  indexer's own marker for those legacy acks and a client may not forge it. */
+	readonly order_permlink: string;
 	/** Unix seconds at which the op was produced. Tiebreak /
 	 *  audit aid. */
 	readonly ts: number;
@@ -70,6 +75,7 @@ export interface ChatReadPayload {
 export async function broadcastChatRead(
 	live: LiveIdentity,
 	peer: string,
+	orderPermlink: string,
 	lastReadAt: Date = new Date()
 ): Promise<{ block_num: number; trx_id: string }> {
 	const account = getUserBlurtAccount();
@@ -79,6 +85,9 @@ export async function broadcastChatRead(
 	if (!ACCOUNT_NAME_RE.test(peer)) {
 		throw new Error(`broadcastChatRead: invalid peer account name: ${peer}`);
 	}
+	if (orderPermlink === '*' || orderPermlink.length > 256) {
+		throw new Error('broadcastChatRead: invalid order_permlink');
+	}
 	if (peer === account) {
 		throw new Error('broadcastChatRead: cannot ack reads for self-chat');
 	}
@@ -86,6 +95,7 @@ export async function broadcastChatRead(
 		v: 1,
 		peer,
 		last_read_at: lastReadAt.toISOString(),
+		order_permlink: orderPermlink,
 		ts: Math.floor(Date.now() / 1000)
 	};
 	const { broadcastCustomJson } = await import('../sign');

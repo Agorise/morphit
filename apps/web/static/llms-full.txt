@@ -315,6 +315,8 @@ None. Zero cookies. Zero analytics. Zero tracking scripts. No logs of your IP. N
 
 Your account is inaccessible, and we cannot get it back for you. This is not a mistake — it's the core design. If there were any recovery mechanism, someone would have access to your keys. We refuse to be that someone. Secure those 12-words like your life depends on it.
 
+The same is true if you signed in with an existing Blurt account: your Keyfile and your keys are the account. Lose both and no one — not us, not the operator, not the blockchain — can restore them.
+
 ---
 
 ## Why did Morphit choose the Blurt blockchain?
@@ -994,6 +996,8 @@ No — that's the whole point of the federated design. Your orders, profile, fee
 **FAQ key:** `backup_practices`
 
 Write down your 12-word recovery phrase on paper, in order, exactly as shown. That phrase is everything — it regenerates every key Morphit uses. Store the paper somewhere safe and not networked: a fireproof box, a bank safety deposit box, somewhere a fire or theft can't hit the same place as your computer. Never photograph it, never email it to yourself, never paste it into a password manager that syncs to the cloud. Besides paper, we personally like to use the encrypted password manager called KeePass. Never type it into any site that isn't Morphit. For extra durability: write two copies, store them in separate locations. For very high value: engrave it on a steel plate — paper burns and water destroys it, metal survives both. Your 12 words are your account; protect them like cash.
+
+If you signed in with an existing Blurt account, you have no 12-word phrase and there can't be one — a phrase *derives* keys, and it cannot be built backwards from keys you already had. Your backup is your Keyfile, downloaded from the Back up my keys page. If you chose to keep your Active key on this device, that Keyfile holds both your Posting and Active keys, encrypted with your Morphit password. Treat it exactly like the paper above.
 
 ---
 

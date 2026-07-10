@@ -53,6 +53,7 @@
 		setUserBlurtAccount
 	} from '$blurt/ops/profile';
 	import { formatPublicKeyBLT } from '$crypto/keygen';
+	import { AccountBindingError } from '$blurt/accountBinding';
 	import { verifyPostingKey } from '$crypto/postingVerify';
 	import { fetchAccountKeys } from '$blurt/accountKeys';
 	import { ChainRejectedError } from '$blurt/broadcastTransport';
@@ -163,6 +164,23 @@
 	 *  is the difference between a user knowing their account is out of resource
 	 *  credits vs. staring at "couldn't broadcast, try again". */
 	function broadcastErrCopy(err: unknown): string {
+		// cp445 — an identity↔account mismatch is a HUMAN problem ("you have two
+		// accounts open in two tabs"), not a cryptographic one. It must never
+		// reach the user as a chain rejection with three key authorities dumped
+		// into a red box. Checked BEFORE ChainRejectedError, because the whole
+		// point is that the chain never sees this transaction.
+		if (err instanceof AccountBindingError) {
+			const owner = err.candidates[0] ?? '';
+			if (err.kind === 'key_not_in_authority' || err.kind === 'ambiguous') {
+				return $_('settings.display_name.broadcast_err.wrong_account', {
+					values: { account: owner }
+				});
+			}
+			if (err.kind === 'no_account_for_key') {
+				return $_('settings.display_name.broadcast_err.no_account_for_key');
+			}
+			return $_('settings.display_name.broadcast_err.lookup_failed');
+		}
 		if (err instanceof ChainRejectedError) {
 			return $_('settings.display_name.broadcast_err.rejected', {
 				values: { reason: err.message }

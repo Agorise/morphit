@@ -114,15 +114,15 @@ describe('explicitLock — runExplicitLockExtras', () => {
 		// readState.ts says it should be wiped on lock — and the
 		// data is privacy-sensitive (who you visited and when), so
 		// runExplicitLockExtras must call clearReadState().
-		markConversationRead('alice', new Date('2026-04-20T10:00:00Z'));
-		markConversationRead('bob', new Date('2026-04-21T11:00:00Z'));
-		expect(getLastVisited('alice')).toBe('2026-04-20T10:00:00.000Z');
-		expect(getLastVisited('bob')).toBe('2026-04-21T11:00:00.000Z');
+		markConversationRead('alice', '', new Date('2026-04-20T10:00:00Z'));
+		markConversationRead('bob', '', new Date('2026-04-21T11:00:00Z'));
+		expect(getLastVisited('alice', '')).toBe('2026-04-20T10:00:00.000Z');
+		expect(getLastVisited('bob', '')).toBe('2026-04-21T11:00:00.000Z');
 
 		runExplicitLockExtras();
 
-		expect(getLastVisited('alice')).toBeNull();
-		expect(getLastVisited('bob')).toBeNull();
+		expect(getLastVisited('alice', '')).toBeNull();
+		expect(getLastVisited('bob', '')).toBeNull();
 	});
 
 	it('clears all chat-pub pins (Option 5 / S2 wiring)', () => {

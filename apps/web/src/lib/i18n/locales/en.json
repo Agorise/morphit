@@ -257,7 +257,7 @@
     "help_support": "Help & support",
     "sign_out_modal": {
       "title": "Sign out of Morphit?",
-      "body": "You'll need your 12-word seed phrase or keyfile to sign back in. Your posting + memo keys will be wiped from this session's memory immediately.\n\nYour on-chain data, orders, and reputation aren't affected — they live on Blurt, not in this browser.",
+      "body": "You'll need your 12-word seed phrase, your keyfile, or your Blurt key to sign back in. Your posting + memo keys will be wiped from this session.\n\nYour on-chain data, orders, and reputation aren't affected — they live on Blurt, not in this browser.",
       "confirm": "Sign out",
       "cancel": "Stay signed in",
       "confirm_pending": "Signing out…"
@@ -1194,7 +1194,7 @@
       },
       "lost_keys": {
         "q": "What if I lose my password or recovery seed?",
-        "a": "Your account is inaccessible, and we cannot get it back for you. This is not a mistake — it's the core design. If there were any recovery mechanism, someone would have access to your keys. We refuse to be that someone. Secure those 12-words like your life depends on it."
+        "a": "Your account is inaccessible, and we cannot get it back for you. This is not a mistake — it's the core design. If there were any recovery mechanism, someone would have access to your keys. We refuse to be that someone. Secure those 12-words like your life depends on it.\n\nThe same is true if you signed in with an existing Blurt account: your Keyfile and your keys are the account. Lose both and no one — not us, not the operator, not the blockchain — can restore them."
       },
       "what_is_blurt": {
         "q": "Why did Morphit choose the Blurt blockchain?",
@@ -1370,7 +1370,7 @@
       },
       "backup_practices": {
         "q": "How do I back up my Morphit account? What should I write down?",
-        "a": "Write down your 12-word recovery phrase on paper, in order, exactly as shown. That phrase is everything — it regenerates every key Morphit uses. Store the paper somewhere safe and not networked: a fireproof box, a bank safety deposit box, somewhere a fire or theft can't hit the same place as your computer. Never photograph it, never email it to yourself, never paste it into a password manager that syncs to the cloud. Besides paper, we personally like to use the encrypted password manager called KeePass. Never type it into any site that isn't Morphit. For extra durability: write two copies, store them in separate locations. For very high value: engrave it on a steel plate — paper burns and water destroys it, metal survives both. Your 12 words are your account; protect them like cash."
+        "a": "Write down your 12-word recovery phrase on paper, in order, exactly as shown. That phrase is everything — it regenerates every key Morphit uses. Store the paper somewhere safe and not networked: a fireproof box, a bank safety deposit box, somewhere a fire or theft can't hit the same place as your computer. Never photograph it, never email it to yourself, never paste it into a password manager that syncs to the cloud. Besides paper, we personally like to use the encrypted password manager called KeePass. Never type it into any site that isn't Morphit. For extra durability: write two copies, store them in separate locations. For very high value: engrave it on a steel plate — paper burns and water destroys it, metal survives both. Your 12 words are your account; protect them like cash.\n\nIf you signed in with an existing Blurt account, you have no 12-word phrase and there can't be one — a phrase *derives* keys, and it cannot be built backwards from keys you already had. Your backup is your Keyfile, downloaded from the Back up my keys page. If you chose to keep your Active key on this device, that Keyfile holds both your Posting and Active keys, encrypted with your Morphit password. Treat it exactly like the paper above."
       },
       "trade_size_limits": {
         "q": "Is there a minimum or maximum trade size on Morphit?",
@@ -3911,7 +3911,10 @@
         "locked": "Session is locked. Sign in again to broadcast.",
         "generic": "Couldn't broadcast. Try again.",
         "rejected": "Broadcast rejected by the network: {reason}",
-        "key_mismatch": "The unlocked identity isn't authorized to post for @{account}. Make sure the correct account is unlocked and that the account name on file matches it, then try again."
+        "key_mismatch": "The unlocked identity isn't authorized to post for @{account}. Make sure the correct account is unlocked and that the account name on file matches it, then try again.",
+        "wrong_account": "This tab is signed in with a different account's keys than the one Morphit thinks you're using. Nothing was broadcast. Reload this page, or sign out of Morphit in your other browser tabs, then try again.",
+        "no_account_for_key": "The key in this session doesn't control any account on the blockchain. Nothing was broadcast. Sign out and sign back in with the right key.",
+        "lookup_failed": "Morphit couldn't reach its indexer to check which account this key controls, so it didn't broadcast anything. Check your connection and try again."
       },
       "broadcast_pending": "Publishing…",
       "clear_confirm_prompt": "Remove your display name from this device? You can set it again anytime.",
