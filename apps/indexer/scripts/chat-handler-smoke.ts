@@ -319,7 +319,9 @@ await scenario('Q11: bypass works for valid recipient-owned order', async () => 
 	// Insert.
 	const mock = makeMockClient([
 		{ match: 'FROM blocks', rows: [{ exists: false }] },
-		{ match: 'FROM orders', rows: [{ exists: true }] },
+		// cp446 — the orders lookup now returns WHO owns it and WHETHER it is live,
+		// so the handler can grant the thread tag and the fee bypass separately.
+		{ match: 'FROM orders', rows: [{ account: 'bob', live: true }] },
 		{
 			match: 'unique_fan_in',
 			rows: [{ unique_fan_in: '1', per_pair_count: null }]
@@ -345,11 +347,17 @@ await scenario('Q11: bypass works for valid recipient-owned order', async () => 
 			`expected 6 queries (block + orders + fan-in + chat insert + locale + push enqueue), got ${mock.queries.length}`
 		);
 	}
-	// The orders query must use both recipient and permlink as params.
+	// cp446 — the orders query binds (permlink, recipient, blockTime, signer): it
+	// looks the order up among BOTH parties so the owner can tag their own thread,
+	// and it needs blockTime to decide liveness for the bypass.
 	const ordersQuery = mock.queries[1];
-	if (ordersQuery.params[0] !== 'bob' || ordersQuery.params[1] !== 'morphit-2026-05-01-abc') {
+	if (
+		ordersQuery.params[0] !== 'morphit-2026-05-01-abc' ||
+		ordersQuery.params[1] !== 'bob' ||
+		ordersQuery.params[3] !== 'alice'
+	) {
 		throw new Error(
-			`orders query should be parameterized on (recipient, permlink); got ${JSON.stringify(ordersQuery.params)}`
+			`orders query should be parameterized on (permlink, recipient, blockTime, signer); got ${JSON.stringify(ordersQuery.params)}`
 		);
 	}
 	// BATCH19A-chat-1 regression: the orders query must filter
@@ -364,15 +372,23 @@ await scenario('Q11: bypass works for valid recipient-owned order', async () => 
 });
 
 await scenario('BATCH19A-chat-1: cancelled-order permlink does NOT bypass gate', async () => {
-	// Reproduces the bypass attack: order exists but status !=
-	// 'live' (cancelled/expired).  Mock returns no row because
-	// the fixed handler's WHERE includes status='live'.
-	// Without the fix, the query would return a row and the
-	// handler would skip the stranger-fee gate.
+	// The bypass attack: eve cites a REAL order of bob's that has since been
+	// cancelled, hoping "a posted order is consent to be contacted" still applies.
+	//
+	// cp446 changed the SHAPE of this defence, not its strength. The permlink is
+	// now also a thread tag, so a cancelled order no longer rejects the message
+	// outright — it simply grants NO BYPASS. Eve therefore falls through to the
+	// stranger-fee gate she was always supposed to hit, and is stopped there.
+	//
+	// The assertion is the SECURITY PROPERTY (eve does not get in), plus the
+	// mechanism (the gate actually ran). Asserting the old `order_permlink_not_found`
+	// reason string would have been asserting an implementation detail.
 	const mock = makeMockClient([
 		{ match: 'FROM blocks', rows: [{ exists: false }] },
-		// orders query with status='live' filter returns nothing
-		{ match: 'FROM orders', rows: [{ exists: false }] }
+		// bob's order exists, but it is not live.
+		{ match: 'FROM orders', rows: [{ account: 'bob', live: false }] },
+		// …so the stranger-fee gate RUNS: eve was never admitted and never paid.
+		{ match: 'FROM chat_messages', rows: [{ admitted: false }] }
 	]);
 	const r = await handler(
 		makeCtx({
@@ -381,19 +397,93 @@ await scenario('BATCH19A-chat-1: cancelled-order permlink does NOT bypass gate',
 		}),
 		mock.client
 	);
-	// Should reject with order_permlink_not_found because the
-	// status='live' filter excludes the cancelled row.
+	assertEqual(
+		r,
+		{ ok: false, reason: 'stranger_fee_required' },
+		'a cancelled order must not admit a stranger'
+	);
+	if (!mock.queries.some((q) => /FROM chat_messages/.test(q.text))) {
+		throw new Error(
+			'the stranger-fee gate did not run — a cancelled order silently bypassed it'
+		);
+	}
+});
+
+await scenario('cp446: the ORDER OWNER may reply in their own thread', async () => {
+	// bob owns the order. He is not the recipient of his own listing, so the old
+	// handler rejected his reply with `order_permlink_not_found` — the order owner
+	// could not answer in the very thread his order created.
+	const mock = makeMockClient([
+		{ match: 'FROM blocks', rows: [{ exists: false }] },
+		{ match: 'FROM orders', rows: [{ account: 'bob', live: true }] },
+		// No bypass (bob does not own the RECIPIENT relationship), so the gate runs
+		// and passes: alice has messaged bob before, so bob is admitted.
+		{ match: 'FROM chat_messages', rows: [{ admitted: true }] },
+		{ match: 'unique_fan_in', rows: [{ unique_fan_in: '1', per_pair_count: null }] },
+		{ match: 'INSERT INTO chat_messages' },
+		{ match: 'SELECT locale FROM push_subscriptions', rows: [{ locale: 'en' }] },
+		{ match: 'INSERT INTO push_pending' }
+	]);
+	const r = await handler(
+		makeCtx({
+			signer: 'bob',
+			payload: {
+				...goodPayload(),
+				recipient: 'alice',
+				order_permlink: 'morphit-2026-05-01-abc'
+			}
+		}),
+		mock.client
+	);
+	assertEqual(r, { ok: true }, 'the order owner must be able to reply');
+});
+
+await scenario('cp446: an ADMITTED pair may keep talking after the order is cancelled', async () => {
+	// The inbox shows "(Cancelled)" threads. They must not be write-only graves.
+	const mock = makeMockClient([
+		{ match: 'FROM blocks', rows: [{ exists: false }] },
+		{ match: 'FROM orders', rows: [{ account: 'bob', live: false }] },
+		{ match: 'FROM chat_messages', rows: [{ admitted: true }] },
+		{ match: 'unique_fan_in', rows: [{ unique_fan_in: '1', per_pair_count: null }] },
+		{ match: 'INSERT INTO chat_messages' },
+		{ match: 'SELECT locale FROM push_subscriptions', rows: [{ locale: 'en' }] },
+		{ match: 'INSERT INTO push_pending' }
+	]);
+	const r = await handler(
+		makeCtx({
+			signer: 'alice',
+			payload: { ...goodPayload(), order_permlink: 'cancelled-order-xyz' }
+		}),
+		mock.client
+	);
+	assertEqual(r, { ok: true }, 'a cancelled order must not silence an admitted pair');
+});
+
+await scenario('cp446: a permlink owned by NEITHER party is still rejected', async () => {
+	// A tag must never be a free-text field on chain.
+	const mock = makeMockClient([
+		{ match: 'FROM blocks', rows: [{ exists: false }] },
+		{ match: 'FROM orders', rows: [] }
+	]);
+	const r = await handler(
+		makeCtx({
+			signer: 'eve',
+			payload: { ...goodPayload(), order_permlink: 'carols-order-999' }
+		}),
+		mock.client
+	);
 	assertEqual(
 		r,
 		{ ok: false, reason: 'order_permlink_not_found' },
-		'cancelled order should reject as not_found'
+		'a third party\u2019s order may not be used as a tag'
 	);
 });
 
 await scenario('Q11: order_permlink not found rejects the message', async () => {
 	const mock = makeMockClient([
 		{ match: 'FROM blocks', rows: [{ exists: false }] },
-		{ match: 'FROM orders', rows: [{ exists: false }] }
+		// cp446 — "not found" is now an EMPTY result set, not a row saying so.
+		{ match: 'FROM orders', rows: [] }
 	]);
 	const r = await handler(
 		makeCtx({
@@ -455,7 +545,7 @@ await scenario('Q11: bypass does NOT override block list', async () => {
 await scenario('Q11: bypass does NOT override fan-in rate limit', async () => {
 	const mock = makeMockClient([
 		{ match: 'FROM blocks', rows: [{ exists: false }] },
-		{ match: 'FROM orders', rows: [{ exists: true }] },
+		{ match: 'FROM orders', rows: [{ account: 'bob', live: true }] },
 		{
 			match: 'unique_fan_in',
 			rows: [{ unique_fan_in: '21', per_pair_count: null }]
@@ -508,7 +598,7 @@ console.log('── #5: order_permlink persistence ─────────�
 await scenario('#5: bypass-success persists order_permlink on insert', async () => {
 	const mock = makeMockClient([
 		{ match: 'FROM blocks', rows: [{ exists: false }] },
-		{ match: 'FROM orders', rows: [{ exists: true }] },
+		{ match: 'FROM orders', rows: [{ account: 'bob', live: true }] },
 		{
 			match: 'unique_fan_in',
 			rows: [{ unique_fan_in: '1', per_pair_count: null }]

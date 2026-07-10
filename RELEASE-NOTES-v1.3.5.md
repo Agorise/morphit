@@ -10,6 +10,8 @@ Reading one of them marks **only that one** read. Three unread conversations wit
 
 Avatars on the inbox are larger, sized to the text beside them.
 
+Threads about an order that was cancelled or expired stay open: you and the person you were dealing with can keep talking. (Strangers still can't start a new conversation by pointing at a dead listing.)
+
 > **Note:** conversations you already have will split into several cards, one per order you've discussed. Nothing is lost — your messages are on the blockchain, exactly where they were.
 
 ## Fixed: "Missing Posting Authority"
