@@ -69,7 +69,8 @@ function badgeEligible(
 	const peerLc = c.peer.toLowerCase();
 	if (peerLc === meLc) return false;
 	if (hidden.has(peerLc) || blocked.has(peerLc)) return false;
-	return !isArchived(c.peer, c.order?.permlink ?? '');
+	const order = c.order?.permlink ?? '';
+	return !isArchived(c.peer, order);
 }
 
 /** Recompute the chat badge from the cached conversations + current
@@ -88,7 +89,8 @@ function recount(): void {
 		if (!badgeEligible(c, meLc, hidden, blocked)) continue;
 		// cp446 — one count per DISCUSSION: three unread threads with the same
 		// person are three unread conversations, exactly as in an email inbox.
-		if (isUnread(c.peer, c.order?.permlink ?? '', c.last_message_at)) n++;
+		const order = c.order?.permlink ?? '';
+		if (isUnread(c.peer, order, c.last_message_at)) n++;
 	}
 	setCategoryCount('chat', n);
 }

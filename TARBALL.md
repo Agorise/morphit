@@ -4,6 +4,8 @@
 >
 > **Release gates GREEN in-sandbox:** version-consistency **19/19 @ 1.4.5** (+ RELEASE-NOTES present) · lockfile-sync 3/3 · release-notes-asset-count-parity 3/3 · eli5-release-blocks 31/31 · svelte-check 0/0. The v1.4.0→v1.4.5 delta deep-deep is **clean, zero findings** (`docs/AUDIT-2026-06-DEEPDEEP.md`, cp452 entry). **The full 476-smoke battery + `vitest-must-pass` + `vite build` run in Forgejo CI — that IS the Block-2 gate** (Ken's call). No on-chain release-payload FORMAT change → backward-compatible; MORPHIT IS LIVE. Bump touched 14 package.json + relay/indexer/mcp version constants + docs/API.md + indexer README; the `@scure/bip39 ^1.4.0` dep was deliberately NOT touched.
 >
+> **CI CATCH (first Forgejo run, fixed):** the full battery reddened on `chat-inbox-threading-smoke` + `chat-read-state-threading-smoke` — my cp452 Task-1/I refactor extracted a `badgeEligible()` helper and inlined `c.order?.permlink ?? ''` at the `isArchived`/`isUnread` calls, dropping the local `const order = …` those two smokes pin (behaviour identical, shape changed). Restored the local `order` var in `badgeEligible` + `recount`; all 5 chatUnread-reading smokes green (inbox-threading 52, read-state-threading 27, notification-wiring 24, realtime-cadence 14, unread-count-wired 16), svelte-check 0/0. Re-tarballed. This is exactly the kind of shape-pin only the full battery surfaces — the subset I ran locally didn't include it.
+>
 > ---
 >
 > **▶ cp452 — chat + profile bug stack (IN the v1.4.5 cut above; was in-tree, now the release).**
