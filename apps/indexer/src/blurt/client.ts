@@ -184,6 +184,30 @@ function clientFor(url: string): Client {
 	return c;
 }
 
+/** Options shared by the generic RPC caller. `userFacing` opts a READ into
+ *  latency hedging (parallel-fire the fastest known nodes, take the winner);
+ *  `hedge` is an explicit override that wins over the userFacing default. */
+export interface RpcCallOptions {
+	userFacing?: boolean;
+	hedge?: boolean;
+}
+
+/** Resolve the effective hedge flag for an rpc-pool call.
+ *
+ *  Explicit `hedge` wins; otherwise a user-facing READ hedges and everything
+ *  else — background reads, and EVERY write — does not.
+ *
+ *  WHY THIS IS ITS OWN EXPORTED FUNCTION (cp452): hedging a WRITE parallel-
+ *  fires the same signed transaction to a second node, whose
+ *  `broadcast_transaction_synchronous` then blocks on the duplicate until the
+ *  tx expires (~60s), stalling the send. The broadcast route MUST pass
+ *  `hedge:false`, and this mapping MUST honour it over any `userFacing`. Both
+ *  are pinned by the broadcast-hedge-off smoke so neither can silently
+ *  regress back to a hedged write. */
+export function resolveHedge(options: RpcCallOptions): boolean {
+	return options.hedge ?? options.userFacing === true;
+}
+
 export class BlurtClient {
 	private readonly pool: EndpointPool;
 
@@ -282,12 +306,19 @@ export class BlurtClient {
 	}
 
 	/** Generic condenser-API escape hatch.  Background by default;
-	 *  callers can opt into hedging for user-facing paths. */
+	 *  callers can opt into hedging for user-facing READS via `userFacing`.
+	 *  WRITES (broadcast) must pass `hedge: false` explicitly: hedging a
+	 *  broadcast parallel-fires the SAME signed tx to multiple nodes, and a
+	 *  losing node's `broadcast_transaction_synchronous` then blocks on the
+	 *  duplicate until the tx expires (~60s) — the exact hang the relay's
+	 *  broadcast path forbids with its own `hedge:false`. The explicit
+	 *  `hedge` option wins over the `userFacing`-derived default. */
 	async callCondenser<T = unknown>(
 		method: string,
 		params: readonly unknown[] = [],
-		options: { userFacing?: boolean } = {}
+		options: RpcCallOptions = {}
 	): Promise<T> {
+		const hedge = resolveHedge(options);
 		return this.pool.call(
 			async (url, signal) => {
 				const client = clientFor(url);
@@ -301,7 +332,7 @@ export class BlurtClient {
 				);
 				return result as T;
 			},
-			{ hedge: options.userFacing === true }
+			{ hedge }
 		);
 	}
 }

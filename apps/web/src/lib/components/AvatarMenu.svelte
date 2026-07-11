@@ -44,6 +44,7 @@
 	} from '$stores/identity';
 	import { hasPersistedKeystore } from '$crypto/persistentKeystore';
 	import { unreadCount, totalUnread, markRead } from '$lib/notifications';
+	import { markAllChatRead } from '$lib/notifications/chatUnread';
 	import { portal } from '$lib/ui/portal';
 	import { backupMaterialPending } from '$stores/backupPending';
 	import { backupVisited } from '$utils/backupVisited';
@@ -302,7 +303,12 @@
 	}
 
 	function markAllRead(): void {
+		// Clears the event-based order + feedback counts…
 		markRead();
+		// …and acknowledges every unread chat discussion, which markRead()
+		// deliberately skips (chat is state-based). Before cp452 this button
+		// could never clear a chat badge (t.txt item I).
+		markAllChatRead();
 	}
 
 	// Outside-click + escape handlers. Attached only while open, so

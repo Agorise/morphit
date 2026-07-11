@@ -21,9 +21,11 @@ import {
 	getProfilesBatch,
 	getProfileCached,
 	clearProfileCache,
+	primeProfile,
 	_profileCacheSize,
 	_profileInFlightCount
 } from './profileCache';
+import { extractLabelPropsFromProfile } from './profileProps';
 
 /** Build a mock ProfileResponse for testing. Fields match the
  *  shared type shape; values are arbitrary. */
@@ -399,5 +401,72 @@ describe('profileCache', () => {
 		const miss2 = await getProfileCached('nobody');
 		expect(miss2).toBeNull();
 		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	// ─── cp452: primeProfile optimistic write + prime-hold window ──
+	// After the user broadcasts their OWN profile edit, the new value must show
+	// INSTANTLY (not after the 90s TTL), and a stale server read during indexer
+	// catch-up must not clobber it (t.txt items 2 + 3).
+
+	it('primeProfile makes the edit readable immediately with no fetch, round-tripping through extractLabelPropsFromProfile', async () => {
+		primeProfile('alice', {
+			displayName: 'Alice New',
+			avatarDataUri: 'data:image/webp;base64,AAAA',
+			shortBio: 'gm',
+			nostrUrl: 'https://njump.me/npub1abc'
+		});
+		const p = await getProfileCached('alice');
+		expect(fetchMock).not.toHaveBeenCalled();
+		expect(p).not.toBeNull();
+		const props = extractLabelPropsFromProfile(p);
+		expect(props.displayName).toBe('Alice New');
+		expect(props.avatarDataUri).toBe('data:image/webp;base64,AAAA');
+		expect(props.shortBio).toBe('gm');
+		expect(props.nostrUrl).toBe('https://njump.me/npub1abc');
+	});
+
+	it('a stale server read within the prime-hold window does NOT clobber the prime', async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-04-23T12:00:00Z'));
+		primeProfile('alice', { displayName: 'Alice New' });
+		// 5s later, still inside the 12s hold window: a reload forces past the
+		// cache and the server STILL returns the pre-broadcast name (indexer not
+		// caught up). The prime must win, and stay cached.
+		vi.setSystemTime(new Date('2026-04-23T12:00:05Z'));
+		fetchMock.mockResolvedValueOnce(
+			mockBatchResponse({ alice: { ...mockProfile('alice'), display_name: 'Alice OLD' } })
+		);
+		const r = await getProfilesBatch(['alice'], undefined, { reload: true });
+		expect(r.get('alice')!.display_name).toBe('Alice New');
+		const cached = await getProfileCached('alice');
+		expect(cached!.display_name).toBe('Alice New');
+	});
+
+	it('after the prime-hold window elapses, a server read takes over from the prime', async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-04-23T12:00:00Z'));
+		primeProfile('alice', { displayName: 'Alice New' });
+		// 13s later — past the 12s hold. The indexer has caught up; the
+		// authoritative server value now wins.
+		vi.setSystemTime(new Date('2026-04-23T12:00:13Z'));
+		fetchMock.mockResolvedValueOnce(
+			mockBatchResponse({ alice: { ...mockProfile('alice'), display_name: 'Alice CONFIRMED' } })
+		);
+		const r = await getProfilesBatch(['alice'], undefined, { reload: true });
+		expect(r.get('alice')!.display_name).toBe('Alice CONFIRMED');
+	});
+
+	it('clearProfileCache() also drops prime-hold state so a later server read applies', async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-04-23T12:00:00Z'));
+		primeProfile('alice', { displayName: 'Alice New' });
+		clearProfileCache();
+		// Same instant, but the prime hold was cleared with the cache, so a
+		// server read is applied instead of being held off.
+		fetchMock.mockResolvedValueOnce(
+			mockBatchResponse({ alice: { ...mockProfile('alice'), display_name: 'Alice SERVER' } })
+		);
+		const r = await getProfilesBatch(['alice']);
+		expect(r.get('alice')!.display_name).toBe('Alice SERVER');
 	});
 });

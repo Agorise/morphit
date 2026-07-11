@@ -2072,7 +2072,7 @@
     "body": "Pick the option that matches how you got here.",
     "no_account_heading": "Don't have an account?",
     "no_account_body": "Create a new account above by just picking a cool username, that's literally all there is to it.",
-    "register_cta": "🌱 Create a new account",
+    "register_cta": "Create a new account",
     "checking": "Checking your session…",
     "import_existing": "Sign in with a 12-word seed, json keyfile or posting key",
     "unlock": {

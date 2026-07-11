@@ -6672,7 +6672,11 @@ in step 5, to upload the finished files.
    export MORPHIT_CANARY_OPERATOR_ACCOUNT="<your relay account, e.g. morphit-relay>"
 
    # Optional — sensible defaults are used if you omit these:
-   # export MORPHIT_CANARY_BLURT_RPC="https://rpc.blurt.blog"
+   # The Blurt chain-head fetch fails over across the whole rotator
+   # list (DEFAULT_BLURT_RPC_ENDPOINTS) by default, so a single dead
+   # node won't stall the canary. Set this ONLY to pin one node on
+   # purpose (leaving it unset is what you want):
+   # export MORPHIT_CANARY_BLURT_RPC="https://rpc.blurt.one"
    # export MORPHIT_CANARY_NEWS_RSS="https://cointelegraph.com/rss"
    ```
 

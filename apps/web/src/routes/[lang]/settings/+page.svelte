@@ -60,6 +60,7 @@
 	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 	import { checkWaiverEligibility } from '$lib/orders/listingFee';
 	import { setSelfAvatar } from '$lib/stores/selfProfile';
+	import { primeProfile } from '$lib/indexer/profileCache';
 	import { broadcastUnblock } from '$blurt/ops/block';
 	import { blockedAccounts, refreshBlocks, markUnblocked } from '$lib/chat/blocks';
 	import { showToast } from '$lib/stores/toast';
@@ -473,6 +474,25 @@
 	// posting key when unlocked, a demo otherwise.
 	const previewPubkey = $derived($liveIdentity ? $liveIdentity.posting.publicKey : DEMO_PUBKEY);
 
+	/** cp452 (t.txt 2 + 3) — optimistically publish the user's CURRENT profile
+	 *  (all fields, from the just-saved component state) into the shared profile
+	 *  cache after a CONFIRMED broadcast, so the orderbook + every self
+	 *  IdentityLabel reflect the edit within a frame instead of after the 90s
+	 *  cache TTL. Held through indexer catch-up by profileCache's PRIME_HOLD_MS,
+	 *  then normal fetches re-confirm from chain. Every broadcast path below
+	 *  writes the WHOLE profile on-chain, so priming the whole profile keeps the
+	 *  cached entry complete (a partial prime would blank the untouched fields). */
+	function primeSelfProfile(): void {
+		primeProfile(getUserBlurtAccount() ?? '', {
+			displayName: saved,
+			avatarSvg: currentAvatarSvg,
+			avatarDataUri: currentAvatarDataUri,
+			shortBio: bioSaved || null,
+			nostrUrl: nostrSaved || null,
+			blurtMediaUrl: blurtMediaSaved || null
+		});
+	}
+
 	async function saveLocal(): Promise<void> {
 		if (!validation.ok) return;
 		saving = true;
@@ -560,6 +580,7 @@
 				short_bio: bioSaved || undefined
 			});
 			broadcastOk = true;
+			primeSelfProfile();
 			setTimeout(() => (broadcastOk = false), 3000);
 		} catch (err) {
 			console.warn('[settings] display-name broadcast failed:', err);
@@ -606,6 +627,7 @@
 				short_bio: bioSaved || undefined
 			});
 			bioBroadcastOk = true;
+			primeSelfProfile();
 			setTimeout(() => (bioBroadcastOk = false), 3000);
 		} catch (err) {
 			console.warn('[settings] short-bio broadcast failed:', err);
@@ -657,6 +679,7 @@
 				short_bio: bioSaved || undefined
 			});
 			blurtMediaBroadcastOk = true;
+			primeSelfProfile();
 			setTimeout(() => (blurtMediaBroadcastOk = false), 3000);
 		} catch (err) {
 			console.warn('[settings] broadcast failed:', err);
@@ -719,6 +742,7 @@
 				short_bio: bioSaved || undefined
 			});
 			nostrBroadcastOk = true;
+			primeSelfProfile();
 			setTimeout(() => (nostrBroadcastOk = false), 3000);
 		} catch (err) {
 			console.warn('[settings] broadcast failed:', err);
@@ -823,6 +847,7 @@
 				avatarStagedDataUri || null
 			);
 			avatarBroadcastOk = true;
+			primeSelfProfile();
 			setTimeout(() => (avatarBroadcastOk = false), 3000);
 		} catch (err) {
 			console.warn('[settings] broadcast failed:', err);
@@ -865,6 +890,7 @@
 			avatarStagedDataUri = '';
 			avatarStagedBytes = 0;
 			avatarBroadcastOk = true;
+			primeSelfProfile();
 			setTimeout(() => (avatarBroadcastOk = false), 3000);
 		} catch (err) {
 			console.warn('[settings] broadcast failed:', err);

@@ -608,7 +608,9 @@
 		     button so it never hijacks the message text as its name). -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
-			class="break-words rounded-2xl px-3 py-2 text-sm"
+			class="w-fit break-words rounded-2xl px-3 py-2 text-sm"
+			class:self-end={isOutgoing}
+			class:self-start={!isOutgoing}
 			class:cursor-pointer={fullTimestamp !== ''}
 			class:bg-morphit-emerald={isOutgoing && !isFailed}
 			class:text-ink-950={isOutgoing && !isFailed}

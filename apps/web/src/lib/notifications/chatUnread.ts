@@ -20,10 +20,18 @@
  * so a returning user sees a fresh count.
  */
 
+import { get } from 'svelte/store';
 import { getConversations, getChatReadState } from '$lib/indexer/client';
 import { getUserBlurtAccount } from '$blurt/ops/profile';
-import { readState, isUnread, mergeRemoteReadState } from '$lib/chat/readState';
+import {
+	readState,
+	isUnread,
+	mergeRemoteReadState,
+	markConversationRead
+} from '$lib/chat/readState';
 import { chatFolders, isArchived } from '$lib/chat/chatFolders';
+import { hiddenAccounts } from '$lib/utils/hiddenAccounts';
+import { blockedAccounts, loadBlocks } from '$lib/chat/blocks';
 import { setCategoryCount } from './index';
 import { startGlobalChatActivity, subscribeChatActivity } from '$lib/chat/globalChatActivityStream';
 
@@ -44,6 +52,26 @@ let convos: ReadonlyArray<{
 	order: { permlink: string } | null;
 }> = [];
 
+/** A conversation feeds the chat badge iff it is not with yourself, not
+ *  archived, and its peer is neither hidden (orderbook "hide") nor blocked —
+ *  exactly the set the inbox renders (chat/+page.svelte filters hidden +
+ *  blocked, then drops archived from the nag total). Before cp452 the badge
+ *  skipped only self + archived, so an unread thread with a hidden or blocked
+ *  peer inflated the avatar/favicon badge above the visible unread cards
+ *  (t.txt item 1 — badge said 2 while no card was lit). Keeping this predicate
+ *  identical to the inbox keeps the count and the cards in lockstep. */
+function badgeEligible(
+	c: { peer: string; order: { permlink: string } | null },
+	meLc: string,
+	hidden: ReadonlySet<string>,
+	blocked: ReadonlySet<string>
+): boolean {
+	const peerLc = c.peer.toLowerCase();
+	if (peerLc === meLc) return false;
+	if (hidden.has(peerLc) || blocked.has(peerLc)) return false;
+	return !isArchived(c.peer, c.order?.permlink ?? '');
+}
+
 /** Recompute the chat badge from the cached conversations + current
  *  read-state. Cheap; safe to call on every read-state / folder change. */
 function recount(): void {
@@ -53,20 +81,54 @@ function recount(): void {
 		return;
 	}
 	const meLc = me.toLowerCase();
+	const hidden = get(hiddenAccounts);
+	const blocked = get(blockedAccounts);
 	let n = 0;
 	for (const c of convos) {
-		if (c.peer.toLowerCase() === meLc) continue;
-		const order = c.order?.permlink ?? '';
-		// Archived discussions are triaged — they don't feed the favicon /
-		// avatar-menu badge (t.txt item 10), so archiving an unread message
-		// clears the nag and "Mark all as read" can always reach zero.
-		if (isArchived(c.peer, order)) continue;
+		if (!badgeEligible(c, meLc, hidden, blocked)) continue;
 		// cp446 — one count per DISCUSSION: three unread threads with the same
 		// person are three unread conversations, exactly as in an email inbox.
-		if (isUnread(c.peer, order, c.last_message_at)) n++;
+		if (isUnread(c.peer, c.order?.permlink ?? '', c.last_message_at)) n++;
 	}
 	setCategoryCount('chat', n);
 }
+
+/** Acknowledge EVERY badge-eligible unread discussion as read, so the
+ *  avatar-menu / favicon chat badge drops to zero the same way the inbox's own
+ *  "Mark all read" does. cp452 (t.txt item I): the avatar-menu "Mark all read"
+ *  called notifications.markRead(), which deliberately skips the state-based
+ *  chat count — so it could never clear a chat badge. This gives it a real way
+ *  to acknowledge chat, over the SAME (peer, order) read-state the inbox uses.
+ *
+ *  Clock-safe ack: markConversationRead is latest-call-wins (stores the ack
+ *  verbatim), and isUnread compares against the chain's last_message_at — so a
+ *  browser clock running behind chain would leave the thread lit if we acked
+ *  with a bare now(). Ack no earlier than the newest message we can see. */
+export function markAllChatRead(): void {
+	const me = getUserBlurtAccount();
+	if (!me) return;
+	const meLc = me.toLowerCase();
+	const hidden = get(hiddenAccounts);
+	const blocked = get(blockedAccounts);
+	const now = new Date();
+	for (const c of convos) {
+		if (!badgeEligible(c, meLc, hidden, blocked)) continue;
+		const order = c.order?.permlink ?? '';
+		if (!isUnread(c.peer, order, c.last_message_at)) continue;
+		const lastAt = new Date(c.last_message_at);
+		const ack =
+			Number.isFinite(lastAt.getTime()) && lastAt.getTime() > now.getTime() ? lastAt : now;
+		markConversationRead(c.peer, order, ack);
+	}
+	recount();
+}
+
+/** The account we've kicked a blocked-set load for. loadBlocks fetches from
+ *  the indexer; we only need it once per signed-in account (later Block/Unblock
+ *  mutations update the store directly and trigger a recount via subscription).
+ *  Without this, the badge would over-count blocked-peer threads until the user
+ *  happened to open the inbox (which is what loads blocks). */
+let blocksLoadedFor: string | null = null;
 
 /** Fetch conversations + read-state, then recount. Best-effort: a
  *  transient failure keeps the last known count. */
@@ -74,8 +136,16 @@ async function poll(): Promise<void> {
 	const me = getUserBlurtAccount();
 	if (!me) {
 		convos = [];
+		blocksLoadedFor = null;
 		setCategoryCount('chat', 0);
 		return;
+	}
+	if (blocksLoadedFor !== me) {
+		blocksLoadedFor = me;
+		// Populate the blocked set so the badge filter matches the inbox even
+		// for a user who never opens the inbox. Best-effort; a failure just
+		// leaves the set empty (badge falls back to the pre-cp452 behaviour).
+		void loadBlocks(me);
 	}
 	try {
 		const [cR, rR] = await Promise.all([getConversations(me), getChatReadState(me)]);
@@ -117,6 +187,13 @@ export function startChatUnreadChannel(): () => void {
 	// (Also fires once on subscribe.)
 	const unsubFolders = chatFolders.subscribe(() => recount());
 
+	// Hiding (orderbook "hide") or blocking a peer removes their threads from
+	// the inbox — the badge must drop in lockstep or it nags about hidden
+	// conversations (cp452, t.txt item 1). Recount when either set changes.
+	// (Both also fire once on subscribe.)
+	const unsubHidden = hiddenAccounts.subscribe(() => recount());
+	const unsubBlocked = blockedAccounts.subscribe(() => recount());
+
 	const onVisible = (): void => {
 		if (!document.hidden) void poll();
 	};
@@ -135,6 +212,8 @@ export function startChatUnreadChannel(): () => void {
 		window.clearInterval(timer);
 		unsub();
 		unsubFolders();
+		unsubHidden();
+		unsubBlocked();
 		document.removeEventListener('visibilitychange', onVisible);
 		unsubActivity();
 		stopActivityStream();
