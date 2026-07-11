@@ -111,7 +111,28 @@ function migrateLegacyTradeNotifications(prefs: NotificationPrefs): Notification
 	return prefs;
 }
 
-const internal = writable<NotificationPrefs>(migrateLegacyTradeNotifications(hydrate()));
+/** cp453 (t.txt) — chat notifications are ON for everyone by default now. The
+ *  DEFAULTS above already ship `chat:true` for new users, but anyone who
+ *  persisted prefs BEFORE the chat default flipped false→true (cp450) carries a
+ *  stale `chat:false` that overrides it. Flip that to on ONCE. A done-flag guards
+ *  it so it runs a single time per browser and never re-enables against a LATER
+ *  explicit opt-out (same discipline as the legacy trade-notification migration
+ *  above). */
+const CHAT_DEFAULT_ON_KEY = 'morphit.notif.chatDefaultOn.v1';
+function migrateEnableChatByDefault(prefs: NotificationPrefs): NotificationPrefs {
+	if (safeLocal.get(CHAT_DEFAULT_ON_KEY) !== null) return prefs; // already ran once
+	safeLocal.set(CHAT_DEFAULT_ON_KEY, '1'); // one-time — set even when already on
+	if (!prefs.categories.chat) {
+		const migrated = { ...prefs, categories: { ...prefs.categories, chat: true } };
+		persist(migrated);
+		return migrated;
+	}
+	return prefs;
+}
+
+const internal = writable<NotificationPrefs>(
+	migrateEnableChatByDefault(migrateLegacyTradeNotifications(hydrate()))
+);
 
 /** Subscribe-only view for consumers (Settings binds via set(), via
  *  the mutator functions below). */

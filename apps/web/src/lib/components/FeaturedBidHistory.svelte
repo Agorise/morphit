@@ -1,48 +1,33 @@
 <script lang="ts">
 	/**
-	 * FeaturedBidHistory — shows the current user's recent
-	 * featured-slot bid history.  Renders inline above the
-	 * FeatureBidForm so the user has context before bidding
-	 * again:
+	 * FeaturedBidHistory — cp453 (t.txt #2). Was an inline grey section above the
+	 * bid form; now a small "View prior Featured orders" LINK (rendered in the
+	 * form header, top-right) that opens an ELI5 modal listing ALL of the user's
+	 * prior featured orders, newest first. Each row: the order's human summary
+	 * line ("I'm buying 40–70 AUD worth of XMR") + its order id in parens, the bid
+	 * detail ("6h · 300.000 BLURT @ 50.00/hr · from Jul 8"), and a status pill.
 	 *
-	 *   - "Your last bid: 24h @ 50 BLURT/hr, expired yesterday,
-	 *     visible the whole time"
-	 *   - "Active: 1h left, currently outranked (paid but not
-	 *     visible)"
-	 *
-	 * Self-fetches /v1/orderbook/featured/bids?account=X on
-	 * mount and on a 60s interval.  Renders nothing on empty
-	 * (first-time bidder) — no error card, no "you haven't bid
-	 * yet" pep talk; just yield space to the bid form.
-	 *
-	 * Part 122 cp17.
+	 * Self-fetches /v1/orderbook/featured/bids?account=X on mount + every 60s.
+	 * Renders nothing on empty (first-time bidder) — just yields space to the form.
 	 */
-
 	import { onMount, onDestroy } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import { getFeaturedBidHistory } from '$lib/indexer/client';
 	import type { FeaturedBidHistoryEntry } from '@morphit/indexer-client';
+	import { orderTitleParts } from '$lib/utils/orderTitle';
 
 	interface Props {
-		/** Account to fetch bids for.  Always the current user's
-		 *  account; passed in so the component doesn't pull from
-		 *  the identity store (lets the parent control it on
-		 *  /my/orders impersonation paths). */
+		/** Account to fetch bids for — always the current user's account. */
 		account: string;
-		/** Cap the rendered rows — full list is fetched (so
-		 *  visibility counts are accurate) but only N are shown.
-		 *  Default 5; "Show all" toggles to the full 30. */
-		preview?: number;
 	}
-
-	let { account, preview = 5 }: Props = $props();
+	let { account }: Props = $props();
 
 	let bids = $state<readonly FeaturedBidHistoryEntry[]>([]);
 	let loaded = $state(false);
-	let expanded = $state(false);
+	let open = $state(false);
+	let dialogEl = $state<HTMLDialogElement | undefined>(undefined);
 	let abortController: AbortController | null = null;
 	let pollTimer: ReturnType<typeof setInterval> | null = null;
-
 	const POLL_MS = 60 * 1000;
 
 	async function refresh(): Promise<void> {
@@ -61,17 +46,25 @@
 		refresh();
 		pollTimer = setInterval(refresh, POLL_MS);
 	});
-
 	onDestroy(() => {
 		abortController?.abort();
 		if (pollTimer !== null) clearInterval(pollTimer);
+		if (dialogEl?.open) dialogEl.close();
 	});
 
-	const visibleBids = $derived.by((): readonly FeaturedBidHistoryEntry[] => {
-		return expanded ? bids : bids.slice(0, preview);
+	// Native <dialog>: showModal/close driven by `open` (focus trap + Escape free).
+	$effect(() => {
+		if (!dialogEl) return;
+		if (open && !dialogEl.open) dialogEl.showModal();
+		else if (!open && dialogEl.open) dialogEl.close();
 	});
+	function onDialogClose(): void {
+		if (open) open = false;
+	}
+	function onBackdropClick(e: MouseEvent): void {
+		if (e.target === dialogEl) open = false;
+	}
 
-	/** Bucket a bid into one of three display states. */
 	function bidState(
 		b: FeaturedBidHistoryEntry
 	): 'visible' | 'outranked' | 'expired' | 'order_inactive' {
@@ -84,80 +77,93 @@
 
 	function shortDate(iso: string): string {
 		try {
-			return new Date(iso).toLocaleDateString(undefined, {
-				month: 'short',
-				day: 'numeric'
-			});
+			return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 		} catch {
 			return iso.slice(0, 10);
 		}
 	}
+
+	/** The order's human summary parts ("I'm buying …"), or null when the order
+	 *  has since been pruned (its summary fields are absent). */
+	function summaryFor(
+		b: FeaturedBidHistoryEntry
+	): { key: string; values: Record<string, string | number> } | null {
+		if (b.order_side === null || b.order_asset === null || b.order_fiat_currency === null) {
+			return null;
+		}
+		return orderTitleParts({
+			side: b.order_side,
+			asset: b.order_asset,
+			fiat_currency: b.order_fiat_currency,
+			amount_min: b.order_amount_min,
+			amount_max: b.order_amount_max
+		});
+	}
 </script>
 
 {#if loaded && bids.length > 0}
-	<section class="card mb-3" aria-labelledby="bid-history-heading">
-		<div class="mb-2 flex items-center justify-between">
-			<h3 id="bid-history-heading" class="font-display text-sm font-bold">
-				{$_('feature_bid.history_heading')}
-			</h3>
-			{#if bids.length > preview}
+	<button
+		type="button"
+		class="shrink-0 whitespace-nowrap text-xs font-semibold text-morphit-emerald hover:underline"
+		onclick={() => (open = true)}
+	>
+		{$_('feature_bid.history_link')}
+	</button>
+
+	<dialog
+		bind:this={dialogEl}
+		onclose={onDialogClose}
+		onclick={onBackdropClick}
+		class="w-[min(32rem,calc(100vw-2rem))] rounded-2xl bg-white p-0 text-ink-900 shadow-morphit-card-hover backdrop:bg-ink-950/60 backdrop:backdrop-blur-sm dark:bg-ink-900 dark:text-ink-100"
+	>
+		<div class="p-5">
+			<div class="mb-3 flex items-start justify-between gap-3">
+				<div>
+					<h2 class="font-display text-lg font-bold">{$_('feature_bid.history_heading')}</h2>
+					<p class="mt-0.5 text-sm text-ink-600 dark:text-ink-300">
+						{$_('feature_bid.history_modal_subtitle')}
+					</p>
+				</div>
 				<button
 					type="button"
-					class="text-xs font-semibold text-morphit-emerald hover:underline"
-					onclick={() => (expanded = !expanded)}
-					aria-expanded={expanded}
+					onclick={() => (open = false)}
+					aria-label={$_('common.close')}
+					class="shrink-0 rounded-lg px-2 py-1 text-2xl leading-none text-ink-400 transition hover:text-ink-700 dark:hover:text-ink-200"
 				>
-					{expanded
-						? $_('feature_bid.history_collapse')
-						: $_('feature_bid.history_expand', { values: { extra: bids.length - preview } })}
+					×
 				</button>
-			{/if}
-		</div>
-		<ul class="space-y-1.5">
-			{#each visibleBids as b (b.order_permlink + b.effective_at)}
-				{@const state = bidState(b)}
-				<li
-					class="flex flex-wrap items-baseline justify-between gap-2 rounded-lg border border-ink-100 px-3 py-2 text-sm dark:border-ink-700"
-				>
-					<div class="min-w-0 flex-1">
-						<div class="font-mono text-xs text-ink-500 dark:text-ink-400">
-							{b.order_permlink}
-						</div>
-						<div class="mt-0.5">
-							{$_('feature_bid.history_row', {
-								values: {
-									hours: b.hours_requested,
-									blurt: parseFloat(b.blurt_paid).toFixed(3),
-									rate: parseFloat(b.blurt_per_hour).toFixed(2),
-									start: shortDate(b.effective_at)
-								}
-							})}
-						</div>
-					</div>
-					<div class="flex items-center gap-1.5">
-						{#if b.extension_count > 0}
-							<!-- cp18 — flag anti-snipe extensions on a
-							     bid.  Operator-visible "your bid got
-							     extended N times because someone tried
-							     to snipe at the deadline" — context
-							     for why expires_at is later than the
-							     hours_requested would suggest. -->
-							<span
-								class="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-bold text-blue-800 dark:bg-blue-900/30 dark:text-blue-200"
-								title={$_('feature_bid.history_extended_title', {
-									values: { n: b.extension_count }
-								}) as string}
-							>
-								{$_('feature_bid.history_extended', {
-									values: { n: b.extension_count }
+			</div>
+			<ul class="max-h-[60vh] space-y-2 overflow-y-auto">
+				{#each bids as b (b.order_permlink + b.effective_at)}
+					{@const state = bidState(b)}
+					{@const summary = summaryFor(b)}
+					<li
+						class="flex flex-wrap items-start justify-between gap-2 rounded-xl border border-ink-200 bg-ink-50/60 px-3 py-2 dark:border-ink-700 dark:bg-ink-800/40"
+					>
+						<div class="min-w-0 flex-1">
+							<p class="text-sm font-medium">
+								{#if summary}{$_(summary.key, { values: summary.values })}
+								{/if}<span class="font-mono text-xs text-ink-500 dark:text-ink-400"
+									>({b.order_permlink})</span
+								>
+							</p>
+							<p class="mt-0.5 text-xs text-ink-600 dark:text-ink-300">
+								{$_('feature_bid.history_row', {
+									values: {
+										hours: b.hours_requested,
+										blurt: parseFloat(b.blurt_paid).toFixed(3),
+										rate: parseFloat(b.blurt_per_hour).toFixed(2),
+										start: shortDate(b.effective_at)
+									}
 								})}
-							</span>
-						{/if}
+							</p>
+						</div>
 						<span
-							class="rounded-full px-2 py-0.5 text-[11px] font-bold {state === 'visible'
+							class="shrink-0 self-center rounded-full px-2 py-0.5 text-[11px] font-bold {state ===
+							'visible'
 								? 'bg-morphit-emerald/10 text-morphit-emerald'
 								: state === 'outranked'
-									? 'bg-ink-100 text-ink-800 dark:bg-ink-900/30 dark:text-ink-300'
+									? 'bg-ink-100 text-ink-800 dark:bg-ink-900/40 dark:text-ink-300'
 									: 'bg-ink-100 text-ink-600 dark:bg-ink-800 dark:text-ink-300'}"
 						>
 							{state === 'visible'
@@ -168,9 +174,9 @@
 										? $_('feature_bid.history_state_expired')
 										: $_('feature_bid.history_state_order_inactive')}
 						</span>
-					</div>
-				</li>
-			{/each}
-		</ul>
-	</section>
+					</li>
+				{/each}
+			</ul>
+		</div>
+	</dialog>
 {/if}

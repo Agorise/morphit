@@ -34,6 +34,11 @@
 	import FeaturedBidHistory from '$components/FeaturedBidHistory.svelte';
 	import { onMount } from 'svelte';
 	import { symbolAmountToUsd } from '$lib/prices';
+	import { fetchFxRates, usdToFiat } from '$lib/orders/fx';
+	import { formatFiat } from '$i18n/formatters';
+	import { userPreferences } from '$stores/userPreferences';
+	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
+	import type { FxResponse } from '@morphit/indexer-client';
 	import { MAX_FEATURED_SLOTS } from '$lib/orders/featuredSlots';
 
 	interface Props {
@@ -87,6 +92,8 @@
 	/** USD value of 1 BLURT, fetched once; drives the fiat-equivalent
 	 *  hint next to the BLURT total. null until loaded / on failure. */
 	let perBlurtUsd = $state<number | null>(null);
+	/** FX table for converting the USD fee into the user's default fiat (t.txt #3). */
+	let fxTable = $state<FxResponse | null>(null);
 
 	// Current account for the FeaturedBidHistory upsell.  Null
 	// when no account is on file (locked or pre-registration);
@@ -99,17 +106,30 @@
 	// Ceil at 3 decimals to match on-chain formatting and avoid
 	// an under-by-epsilon rendered vs. transferred discrepancy.
 	const totalBlurtDisplay = $derived((Math.ceil(totalBlurt * 1000) / 1000).toFixed(3));
-	// Fiat-equivalent hint. No persisted user fiat preference exists,
-	// so we show the always-available USD value (BLURT is priced in
-	// USD). Reactive to the hours picker.
-	const totalUsdDisplay = $derived(
-		perBlurtUsd === null ? null : (totalBlurt * perBlurtUsd).toFixed(2)
-	);
+	// Fiat-equivalent hint. cp453 (t.txt #3) — prefer the fiat the user set as
+	// their default in Settings (`userPreferences.fiat`) when we also have the FX
+	// table; otherwise fall back to the always-available USD value. Reactive to
+	// the hours picker.
+	const totalUsd = $derived(perBlurtUsd === null ? null : totalBlurt * perBlurtUsd);
+	const totalUsdDisplay = $derived(totalUsd === null ? null : totalUsd.toFixed(2));
+	/** The fee in the user's default fiat, formatted, or null → show USD. */
+	const totalFiatDisplay = $derived.by(() => {
+		const fiat = $userPreferences.fiat;
+		if (!fiat || fiat === 'USD' || totalUsd === null || fxTable === null) return null;
+		const amount = usdToFiat(fxTable, totalUsd, fiat);
+		return amount === null ? null : `${formatFiat(amount, fiat)} ${fiat}`;
+	});
 	onMount(async () => {
 		try {
 			perBlurtUsd = (await symbolAmountToUsd(1, 'BLURT')).usd;
 		} catch {
 			perBlurtUsd = null;
+		}
+		try {
+			const fx = await fetchFxRates(resolveOrigin(MORPHIT_INDEXER_ORIGIN));
+			if (fx.kind === 'ok') fxTable = fx.table;
+		} catch {
+			fxTable = null;
 		}
 	});
 	function flashPasswordBorder(): void {
@@ -202,13 +222,14 @@
 <div
 	class="rounded-xl border-2 border-morphit-emerald/40 bg-gradient-to-br from-morphit-emerald/5 to-morphit-teal/5 p-4"
 >
-	{#if historyAccount !== null}
-		<FeaturedBidHistory account={historyAccount} />
-	{/if}
-
-	<p class="mb-1 font-display text-lg font-bold">
-		🚀 {$_('feature_bid.title')}
-	</p>
+	<div class="mb-1 flex items-start justify-between gap-3">
+		<p class="font-display text-lg font-bold">
+			🚀 {$_('feature_bid.title')}
+		</p>
+		{#if historyAccount !== null}
+			<FeaturedBidHistory account={historyAccount} />
+		{/if}
+	</div>
 	<!-- Ken — the explainer names the duration the user actually picked (it
 	     updates as they tap 6h / 24h / 72h) and takes the slot count from the
 	     shared constant rather than hardcoding it in prose: this string used to
@@ -232,10 +253,10 @@
 					role="radio"
 					aria-checked={selectedHours === h}
 					onclick={() => (selectedHours = h)}
-					class="rounded-full border-2 px-3 py-1 text-sm transition active:scale-[0.98] {selectedHours ===
+					class="rounded-full border-2 px-3 py-1 text-sm transition hover:border-morphit-emerald/70 active:scale-[0.98] {selectedHours ===
 					h
 						? 'border-morphit-emerald bg-morphit-emerald/10 font-semibold'
-						: 'border-ink-300 dark:border-ink-600'}"
+						: 'border-ink-300 hover:bg-morphit-emerald/5 dark:border-ink-600'}"
 				>
 					{$_('feature_bid.hours_option', { values: { n: h } })}
 				</button>
@@ -249,7 +270,10 @@
 			{$_('feature_bid.cost_label')}
 		</p>
 		<p class="font-display text-lg font-bold">
-			{totalBlurtDisplay} BLURT{#if totalUsdDisplay}<span
+			{totalBlurtDisplay} BLURT{#if totalFiatDisplay}<span
+					class="ml-2 text-sm font-normal text-ink-500 dark:text-ink-400"
+					>(~{totalFiatDisplay})</span
+				>{:else if totalUsdDisplay}<span
 					class="ml-2 text-sm font-normal text-ink-500 dark:text-ink-400"
 					>(~${totalUsdDisplay} USD)</span
 				>{/if}

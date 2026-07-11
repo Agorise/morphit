@@ -58,6 +58,11 @@ interface BidRow {
 	expires_at: Date;
 	is_visible_now: boolean;
 	order_status: string;
+	order_side: string | null;
+	order_asset: string | null;
+	order_fiat_currency: string | null;
+	order_amount_min: string | null;
+	order_amount_max: string | null;
 	extension_count: number;
 	last_extended_at: Date | null;
 }
@@ -114,6 +119,15 @@ export function featuredBidsRoute(db: Database): Hono {
 				-- are not visible by definition.
 				(ar.rank IS NOT NULL AND ar.rank <= $2) AS is_visible_now,
 				COALESCE(o.status, 'unknown') AS order_status,
+				-- cp453 (t.txt #2) — the order's summary fields so the
+				-- "prior featured orders" modal can render a human line
+				-- ("I'm buying 40–70 AUD worth of XMR"). NULL when the
+				-- order has since been pruned (LEFT JOIN miss).
+				o.side AS order_side,
+				o.asset AS order_asset,
+				o.fiat_currency AS order_fiat_currency,
+				o.amount_min::text AS order_amount_min,
+				o.amount_max::text AS order_amount_max,
 				b.extension_count,
 				b.last_extended_at
 			FROM featured_slot_bids b
@@ -136,6 +150,11 @@ export function featuredBidsRoute(db: Database): Hono {
 			expires_at: r.expires_at.toISOString(),
 			is_visible: r.is_visible_now,
 			order_status: r.order_status,
+			order_side: r.order_side,
+			order_asset: r.order_asset,
+			order_fiat_currency: r.order_fiat_currency,
+			order_amount_min: r.order_amount_min === null ? null : Number(r.order_amount_min),
+			order_amount_max: r.order_amount_max === null ? null : Number(r.order_amount_max),
 			extension_count: r.extension_count,
 			last_extended_at: r.last_extended_at ? r.last_extended_at.toISOString() : null
 		}));

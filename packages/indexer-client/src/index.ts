@@ -354,6 +354,14 @@ export interface FeaturedBidHistoryEntry {
 	 *  bid won't appear in featured orderbook even if it would
 	 *  rank — important UX context. */
 	readonly order_status: string;
+	/** cp453 (t.txt #2) — the promoted order's summary fields, so the "prior
+	 *  featured orders" modal can render a human line. All null when the order has
+	 *  since been pruned (the bid history LEFT JOINs orders). */
+	readonly order_side: string | null;
+	readonly order_asset: string | null;
+	readonly order_fiat_currency: string | null;
+	readonly order_amount_min: number | null;
+	readonly order_amount_max: number | null;
 	/** Part 122 cp18 — number of anti-snipe extensions applied
 	 *  to this bid.  Zero on a normally-elapsed bid; non-zero
 	 *  if a later bidder triggered the soft-close extension

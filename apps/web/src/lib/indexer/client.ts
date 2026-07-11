@@ -186,9 +186,16 @@ export function getStats(signal?: AbortSignal): Promise<Result<StatsResponse>> {
 }
 
 /** GET /v1/rpc-endpoints — per-node health of the canonical Blurt RPC pool the
- *  indexer uses (for the Settings RPC card's server-only rows). */
-export function getRpcEndpoints(signal?: AbortSignal): Promise<Result<RpcEndpointsResponse>> {
-	return request<RpcEndpointsResponse>('/v1/rpc-endpoints', { signal });
+ *  indexer uses (for the Settings RPC card's server-only rows). `probe: true`
+ *  asks the indexer to ACTIVELY ping every node right now (fresh latency);
+ *  server-side it's rate-limited to once per 5s (t.txt #1). Omitted → the cheap
+ *  passive pool snapshot. */
+export function getRpcEndpoints(opts?: {
+	probe?: boolean;
+	signal?: AbortSignal;
+}): Promise<Result<RpcEndpointsResponse>> {
+	const path = opts?.probe === true ? '/v1/rpc-endpoints?probe=1' : '/v1/rpc-endpoints';
+	return request<RpcEndpointsResponse>(path, { signal: opts?.signal });
 }
 
 /** GET /v1/instances — federation directory (all known peer

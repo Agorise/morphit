@@ -42,6 +42,7 @@
 	} from '$blurt/sign';
 	import { signWithdrawVestingWithKey } from '$blurt/withdrawVestingSign';
 	import { ChainRejectedError, BroadcastUnavailableError } from '$blurt/broadcastTransport';
+	import { floorToBlurtPrecision } from '$blurt/sendValidation';
 	import {
 		blurtPowerToVests,
 		formatBlurtAmount,
@@ -108,6 +109,17 @@
 
 	const available = $derived(mode === 'up' ? blurtBalance : bpBalance);
 
+	/** The available balance FLOORED to chain display precision (3 dp). cp453 —
+	 *  `toFixed(3)` ROUNDS, so a raw balance like 74.8176 became "74.818", a hair
+	 *  ABOVE the real ceiling; "Use full balance" then failed the `<= available`
+	 *  check ("Enter an amount up to your available balance") even though the
+	 *  displayed Available read the same. Flooring can never exceed the real
+	 *  balance, so both the full-balance fill and the displayed ceiling always
+	 *  validate. Power-down still unstakes the EXACT vesting_shares (everything)
+	 *  via usingFullBalance, so the ≤0.001 the floor drops from the DISPLAY is
+	 *  never actually left behind on-chain. */
+	const availableFloor = $derived(floorToBlurtPrecision(available));
+
 	/** cp439 — remaining-BP figure for the 💡 in-progress note, formatted the
 	 *  same way the balance card shows BP (locale grouping, 3 decimals). The
 	 *  i18n string supplies the "BP" unit, so this is number-only. */
@@ -135,10 +147,10 @@
 
 	function useFullBalance(): void {
 		if (!Number.isFinite(available) || available <= 0) return;
-		// toFixed(3) is a display convenience; on confirm, power-down uses
-		// the exact vesting_shares string (usingFullBalance), so this
-		// rounding never reaches the chain for "everything".
-		enteredAmount = available.toFixed(3);
+		// FLOOR (not toFixed's round) so the fill never exceeds the real
+		// ceiling. On confirm, power-down uses the exact vesting_shares string
+		// (usingFullBalance), so this never reaches the chain for "everything".
+		enteredAmount = availableFloor;
 		usingFullBalance = mode === 'down';
 	}
 
@@ -320,10 +332,10 @@
 				<span class="text-ink-500 dark:text-ink-400">
 					{mode === 'up'
 						? $_('profile.wallet.available_blurt', {
-								values: { amount: available.toFixed(3) }
+								values: { amount: availableFloor }
 							})
 						: $_('profile.wallet.available_bp', {
-								values: { amount: available.toFixed(3) }
+								values: { amount: availableFloor }
 							})}
 				</span>
 				<button

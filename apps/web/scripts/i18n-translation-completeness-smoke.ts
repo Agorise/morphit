@@ -154,6 +154,7 @@ const ALLOW_LIST: AllowEntry[] = [
 	{ key: 'footer.api', locale: 'de', reason: '(c) "API" is a universal programming acronym; identical in every locale' },
 	{ key: 'footer.api', locale: 'es', reason: '(c) "API" is a universal programming acronym; identical in every locale' },
 	{ key: 'footer.api', locale: 'fr', reason: '(c) "API" is a universal programming acronym; identical in every locale' },
+	{ key: 'footer.contact', locale: 'fr', reason: '(a) "Contact" is also French (same spelling, same meaning)' },
 	// cp423 — the chat-inbox "RE:" prefix on the "RE: <order title>" subline.
 	// "RE:" (from Latin "in re" = "regarding") is an internationally-recognized
 	// convention rendered identically in email clients across languages; it is

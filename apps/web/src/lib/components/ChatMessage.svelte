@@ -164,7 +164,14 @@
 	 *  (which would make IdentityLabel seed a blank identicon). */
 	const whoamiAccount = $derived(message.sender || (isOutgoing ? me : (peer ?? '')));
 
-	const isInFlight = $derived(message.state === 'pending' || message.state === 'broadcast');
+	/** cp453 (t.txt #8) — the broadcast is fast (~3s) but `confirmed` waits on the
+	 *  indexer reading the message back, which lags ~45s behind head. So split the
+	 *  in-flight window: `pending` still reads "sending…", but the moment the
+	 *  broadcast succeeds (`broadcast`) we show a light "✓ Sent" (single-tick)
+	 *  instead of holding "sending…" until confirmed — the sender's perceived send
+	 *  time drops to the broadcast latency, decoupled from follower/SSE lag. */
+	const isSending = $derived(message.state === 'pending');
+	const isSent = $derived(message.state === 'broadcast');
 	const isFailed = $derived(message.state === 'failed');
 	// Placeholder = either the explicit decrypt-failed signal, or
 	// the legacy string match (for the "message sent from my other
@@ -624,7 +631,7 @@
 			class:dark:bg-red-950={isFailed}
 			class:text-red-900={isFailed}
 			class:dark:text-red-200={isFailed}
-			class:opacity-80={isInFlight}
+			class:opacity-80={isSending}
 			title={fullTimestamp || undefined}
 			onclick={onBubbleActivate}
 			onkeydown={(e) => {
@@ -1356,14 +1363,31 @@
 		     timestamp (now tap-to-reveal above), so this line renders only
 		     when there's in-flight or failed status to show — a confirmed
 		     bubble carries no meta line at all. -->
-		{#if isInFlight || isFailed}
+		{#if isSending || isSent || isFailed}
 			<div
 				class="flex items-center gap-2 text-xs text-ink-500 dark:text-ink-400"
 				class:justify-end={isOutgoing}
 				class:justify-start={!isOutgoing}
 			>
-				{#if isInFlight}
+				{#if isSending}
 					<span aria-live="polite">{$_('chat.message.sending')}</span>
+				{:else if isSent}
+					<span class="inline-flex items-center gap-0.5" aria-label={$_('chat.message.sent') as string}>
+						<svg
+							width="12"
+							height="12"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+						>
+							<path d="M20 6 9 17l-5-5" />
+						</svg>
+						{$_('chat.message.sent')}
+					</span>
 				{:else if isFailed}
 					<span class="text-red-700 dark:text-red-300">
 						{$_('chat.message.failed_label')}

@@ -356,7 +356,8 @@
       "failed_label": "Falló",
       "retry": "Reintentar",
       "retry_aria": "Reintentar el envío de este mensaje",
-      "peer_not_ready": "Este destinatario aún no ha abierto el chat de Morphit. Cuando lo haga, tu mensaje se enviará al reintentar."
+      "peer_not_ready": "Este destinatario aún no ha abierto el chat de Morphit. Cuando lo haga, tu mensaje se enviará al reintentar.",
+      "sent": "Enviado"
     },
     "composer": {
       "aria_label": "Enviar un mensaje",
@@ -1163,7 +1164,7 @@
       },
       "how_to_sell": {
         "q": "¿Cómo vendo cripto?",
-        "a": "Publica una orden indicando qué vendes, dónde estás y qué métodos de pago aceptas. Un comprador abrirá un chat contigo para acordar los detalles. Cuando confirmes que recibiste su pago, le envías el cripto (o lo que hayan acordado intercambiar). Deja una reseña honesta al terminar — ayuda a todos."
+        "a": "Publica una orden indicando qué vendes, dónde estás y qué métodos de pago aceptas. Un comprador abrirá un chat contigo para acordar los detalles. Cuando confirmes que recibiste su pago, le envías el cripto (o lo que hayan acordado intercambiar). Deja una reseña honesta al terminar — ayuda a todos. Puedes vender Bitcoin (BTC), Monero (XMR) o BLURT."
       },
       "fees": {
         "q": "¿Cuáles son las tarifas?",
@@ -1331,7 +1332,7 @@
       },
       "how_to_trade_walkthrough": {
         "q": "¿Cómo opero en Morphit? Guía paso a paso.",
-        "a": "Aquí está el flujo completo de principio a fin. **Paso 1:** Crea una cuenta gratuita (un clic, sin email, sin ID). **Paso 2:** Anota tu frase de recuperación de 12 palabras en papel (y/o cifrada en un gestor de contraseñas offline como KeePass) y guárdala en un lugar seguro. **Paso 3:** Navega el libro de órdenes y encuentra una contraparte cuya oferta coincida con lo que quieres — el activo correcto, el precio correcto, un método de pago que puedas usar, buen historial. **Paso 4:** Abre un chat cifrado con ellos usando el botón de chat en su orden. **Paso 5:** Acuerden los detalles (monto exacto, punto de encuentro si es efectivo, cuenta bancaria si es transferencia, etc). **Paso 6:** Uno de ustedes envía el fiat/cripto primero según lo acordado; el otro confirma que llegó y envía el otro lado. **Paso 7:** Déjense feedback mutuo para que futuros operadores sepan que son confiables. Eso es todo. Morphit es solo el tablón que los conecta; el intercambio ocurre directamente entre ustedes."
+        "a": "¿Nuevo en Morphit? Esta es la guía paso a paso para usuarios primerizos. Aquí está el flujo completo de principio a fin. **Paso 1:** Crea una cuenta gratuita (un clic, sin email, sin ID). **Paso 2:** Anota tu frase de recuperación de 12 palabras en papel (y/o cifrada en un gestor de contraseñas offline como KeePass) y guárdala en un lugar seguro. **Paso 3:** Navega el libro de órdenes y encuentra una contraparte cuya oferta coincida con lo que quieres — el activo correcto, el precio correcto, un método de pago que puedas usar, buen historial. **Paso 4:** Abre un chat cifrado con ellos usando el botón de chat en su orden. **Paso 5:** Acuerden los detalles (monto exacto, punto de encuentro si es efectivo, cuenta bancaria si es transferencia, etc). **Paso 6:** Uno de ustedes envía el fiat/cripto primero según lo acordado; el otro confirma que llegó y envía el otro lado. **Paso 7:** Déjense feedback mutuo para que futuros operadores sepan que son confiables. Eso es todo. Morphit es solo el tablón que los conecta; el intercambio ocurre directamente entre ustedes."
       },
       "supported_countries": {
         "q": "¿Morphit funciona en mi país?",
@@ -1716,8 +1717,6 @@
     "error_bad_password": "Esa contraseña no desbloqueó tu clave activa.",
     "error_generic": "No se pudo realizar tu oferta. Inténtalo de nuevo.",
     "history_heading": "Tus pujas destacadas recientes",
-    "history_expand": "Mostrar {extra} más",
-    "history_collapse": "Mostrar menos",
     "history_row": "{hours}h · {blurt} BLURT @ {rate}/h · desde {start}",
     "history_state_visible": "Visible",
     "history_state_outranked": "Superado",
@@ -1726,7 +1725,9 @@
     "history_extended": "Extendida ×{n}",
     "history_extended_title": "Puja extendida {n} vez/veces por anti-snipe",
     "error_chain_rejected": "La red rechazó esta transacción: {reason}",
-    "error_unreachable": "No se pudo conectar con tu instancia de Morphit para transmitir. Revisa tu conexión e inténtalo de nuevo."
+    "error_unreachable": "No se pudo conectar con tu instancia de Morphit para transmitir. Revisa tu conexión e inténtalo de nuevo.",
+    "history_link": "Ver órdenes destacadas anteriores",
+    "history_modal_subtitle": "Cada orden que has promocionado a un espacio destacado, la más reciente primero."
   },
   "featured": {
     "heading": "Destacadas ahora",
@@ -1834,7 +1835,6 @@
     "rss": "RSS",
     "rss_title": "Canal RSS de nuevas entradas del libro de órdenes",
     "operators": "Operadores",
-    "operated_by": "Operado por",
     "contact_operator": "Contactar al operador",
     "alt_network_address": "Dirección: {address}",
     "instances": "Instancias",
@@ -1856,7 +1856,8 @@
     "compare": "Comparar",
     "compare_title": "Mira cómo se compara Morphit con otras opciones",
     "stats": "Estadísticas",
-    "stats_title": "Estadísticas agregadas de la red en vivo"
+    "stats_title": "Estadísticas agregadas de la red en vivo",
+    "contact": "Contacto"
   },
   "glossary": {
     "active_key": {
@@ -2713,7 +2714,10 @@
     },
     "search_no_results_title": "Sin órdenes coincidentes",
     "search_no_results_body": "Ninguna orden cargada menciona «{query}». Prueba con otra palabra o borra la búsqueda para ver todo.",
-    "search_clear": "Borrar búsqueda"
+    "search_clear": "Borrar búsqueda",
+    "hide_confirm_title": "¿Ocultar a @{account}?",
+    "hide_confirm_body": "No verás las órdenes de {account} en el libro de órdenes, y tus chats con esta persona también se ocultarán. Puedes volver a mostrarlos en cualquier momento desde Ajustes.",
+    "hide_confirm_yes": "Ocultar"
   },
   "paired_readonly": {
     "banner_heading": "Conectado como @{account} — las claves están en el teléfono.",
@@ -4424,11 +4428,6 @@
       "body_generic": "Un operador opera esta instancia. Para problemas del sitio, creación de cuentas o preguntas del operador, usa el enlace de contacto abajo.",
       "cta": "Contactar operador",
       "no_contact_hint": "Este operador no ha publicado un enlace de contacto. Prueba la divulgación de seguridad o auto-hospedaje abajo."
-    },
-    "operator_matrix": {
-      "heading": "Habla con el operador en Matrix",
-      "body": "Esta instancia tiene un chat de grupo público en Matrix: {room}. Haz preguntas, pide un código de voucher u obtén ayuda del operador y la comunidad en tiempo real.",
-      "cta": "Abrir sala de Matrix"
     },
     "security": {
       "heading": "¿Encontraste un problema de seguridad?",

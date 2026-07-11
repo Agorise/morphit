@@ -33,6 +33,7 @@
 	import Head from '$components/Head.svelte';
 	import RssFeedPicker from '$components/RssFeedPicker.svelte';
 	import BusyButton from '$components/BusyButton.svelte';
+	import ConfirmModal from '$components/ConfirmModal.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
 	// cp165 byte-budget: FeaturedOrders + FeaturedAuctionHistory are
 	// lazy-imported below.  Both render below the orderbook fold
@@ -288,6 +289,14 @@
 	 *  marked as hidden). Flipped by the transparency link under the
 	 *  filter bar. Per-session only — doesn't touch the hidden set. */
 	let showHiddenTemporarily = $state(false);
+	/** cp453 — the account a "hide" click is awaiting confirmation for, or null.
+	 *  Hiding is gated behind a ConfirmModal because the eyeball toggle sits
+	 *  inside the card's stretched "open order" click area: a stray click used to
+	 *  hide an account in one silent, unconfirmed action — and hiding also
+	 *  swallows your chats with them (CHAT-UI-DESIGN.md: inbox filters hidden),
+	 *  so an accidental hide made a trader's messages vanish with no signal.
+	 *  Unhide stays instant (harmless + reversible). */
+	let accountPendingHide = $state<string | null>(null);
 
 	// ─── Free-text "Order details" filter (cp411) ────────────────────
 	/** Raw query for the free-text search over each order's terms/details.
@@ -1392,7 +1401,8 @@
 						)}
 						hidden={accountIsHidden}
 						blocked={accountIsBlocked}
-						onToggleHide={() => (accountIsHidden ? unhideAccount(o.account) : hideAccount(o.account))}
+						onToggleHide={() =>
+							accountIsHidden ? unhideAccount(o.account) : (accountPendingHide = o.account)}
 						onMessageClick={() => void recordOrderView(o.account, o.permlink)}
 						highlightTokens={orderDetailsTokens}
 						class="animate-fade-up"
@@ -1415,3 +1425,17 @@
 		{/if}
 	{/if}
 </div>
+
+<ConfirmModal
+	open={accountPendingHide !== null}
+	title={$_('orderbook.hide_confirm_title', { values: { account: accountPendingHide ?? '' } }) as string}
+	body={$_('orderbook.hide_confirm_body', { values: { account: accountPendingHide ?? '' } }) as string}
+	confirmLabel={$_('orderbook.hide_confirm_yes') as string}
+	cancelLabel={$_('common.cancel') as string}
+	variant="destructive"
+	onConfirm={() => {
+		if (accountPendingHide) hideAccount(accountPendingHide);
+		accountPendingHide = null;
+	}}
+	onCancel={() => (accountPendingHide = null)}
+/>

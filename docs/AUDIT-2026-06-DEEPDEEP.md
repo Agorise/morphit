@@ -16,6 +16,56 @@ lib .ts, 190 smoke scripts, 70 docs/*.md.
 
 ---
 
+## cp453 — DELTA deep-deep (v1.4.5 → v1.4.7) ✅ CLEAR
+
+Scope: only the cp453 surface (the 8 t.txt tasks + chat-notifications-default + the
+~60s sender-UX fix). Black-hatted across injection, authz, privacy, input validation,
+DoS/rate-limit, data-integrity, error-handling, races, resource-leaks, i18n,
+backward-compat, a11y. Every functional change carries a tamper-tested registered
+smoke (11 guards). **No findings.**
+
+**CLEAR:**
+- **#1 active RPC probe (SSRF / DoS / privacy)** — `probeOne` fetches ONLY
+  `DEFAULT_BLURT_RPC_ENDPOINTS` (a fixed canonical/public list); no user input reaches
+  the URL → no SSRF. The 5s guard is a single GLOBAL cache keyed on nothing, so varying
+  query params (`?probe=1&x=…`) cannot bypass it; concurrent bursts coalesce onto one
+  in-flight probe; per-node 6s timeout; the route also carries the per-IP `resource`
+  rate-limit. Response exposes only coarse public health. The browser never fetches a
+  node (indexer-only) — pinned by `endpoint-list-throttle` + `rpc-endpoints-probe`.
+- **#2 featured-bids query + modal (SQLi / XSS / cross-account leak)** — the added
+  columns are plain `o.*` references on the already-parameterized query ($1/$2/$3); the
+  LEFT JOIN keys on `o.account = b.bidder`, so a query for account X returns only X's OWN
+  featured orders (which are public promotions) — no cross-account leak, no new exposure
+  beyond the pre-existing endpoint. The modal renders `order_permlink` + the summary
+  through auto-escaped Svelte + i18n values; amounts are `Number`. Native `<dialog>`
+  closed on destroy (no leak).
+- **#3 fiat pricing** — `usdToFiat`/`formatFiat` on the public `/v1/fx` table; FX fetch
+  is try/catch with a USD fallback; no injection surface.
+- **#4 power-down floor** — `floorToBlurtPrecision` guarantees fill ≤ available (fixes
+  the `toFixed(3)` round-UP that exceeded available); tamper-pinned 25/25.
+- **#5 footer flash** — the `highlight` param is ONLY ever compared to the literal
+  `'current'`; no reflection, no injection.
+- **#6 support Matrix card removal** — pure deletion; `operator_matrix_room` (unrelated
+  about-instance schema field) verified untouched.
+- **#7 FAQ AND-search** — terms flow through normalize + `includes`; no regex/HTML
+  injection; i18n parity 10/10, completeness 4/4.
+- **#8 hide-confirm + chat-default migration + ~60s sent-state** — hide gated behind a
+  destructive ConfirmModal; the chat-default migration is one-time (done-flag) and never
+  overrides a later explicit opt-out; the sent-state is a pure client render split
+  (pending→broadcast→confirmed unchanged on the wire). On-chain payloads untouched
+  (backward-compatible — MORPHIT IS LIVE).
+
+**Backward-compat:** `FeaturedBidHistoryEntry` gained only NULLABLE fields (older
+consumers unaffected); no on-chain op or release-payload shape changed.
+
+**Guards (all registered + tamper-tested):** endpoint-list-throttle 10, rpc-endpoints-probe 6,
+featured-bid-history-modal 8, feature-pills-fiat 4, wallet-power-modal 25, footer-contact-flash 7,
+support-operator-matrix-removed 3, orderbook-hide-confirm 6, chat-notif-default-on 4,
+chat-sent-state 6, + faqIndex vitest 29 & grandma-coverage 14. Persona walkthrough 185/185.
+svelte-check 0/0, indexer tsc clean, parity 10/10, completeness 4/4.
+
+---
+
 ## PHASE 1 — Persona walkthroughs (every button / link / field / select)
 - ✅ **Bob** — Blurt multi-login (login, onboarding/import posting-key + keyfile + master-password, account switching, authenticated surfaces) — persona-walkthrough 183/183; cp346 account-switch leak closed
 - ✅ **Sally-user** — no crypto (new-account onboarding, orderbook browse, order detail, chat, feedback) — sally-walkthrough 22/22 + persona pins

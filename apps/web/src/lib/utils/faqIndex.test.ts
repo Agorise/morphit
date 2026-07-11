@@ -242,3 +242,28 @@ describe('FAQ search — quoted exact-phrase matching', () => {
 		expect(hits.map((h) => h.entry.key)).toEqual(['a']);
 	});
 });
+
+describe('FAQ search — space-separated terms are AND (cp453)', () => {
+	const corpus: FaqEntry[] = [
+		mkEntry('both', 'What is Hive Engine?', 'Hive Engine is a smart-contract sidechain for tokens.'),
+		mkEntry('hive_only', 'What is Blurt?', 'Blurt is a Hive fork with no downvotes.'),
+		mkEntry('engine_only', 'What is a search engine?', 'A search engine indexes pages.')
+	];
+
+	it('"hive engine" returns ONLY entries containing BOTH terms', () => {
+		const hits = searchEntries(corpus, 'hive engine', Infinity).map((h) => h.entry.key);
+		expect(hits).toEqual(['both']);
+	});
+
+	it('term order does not matter — still AND', () => {
+		const hits = searchEntries(corpus, 'engine hive', Infinity).map((h) => h.entry.key);
+		expect(hits).toEqual(['both']);
+	});
+
+	it('a single term is unaffected (AND is a no-op) — matches every entry containing it', () => {
+		const hits = searchEntries(corpus, 'hive', Infinity)
+			.map((h) => h.entry.key)
+			.sort();
+		expect(hits).toEqual(['both', 'hive_only']);
+	});
+});

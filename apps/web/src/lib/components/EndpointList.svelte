@@ -14,27 +14,63 @@
 	 *  PRIVACY (#1): the indexer is the ONLY source of the health shown here. */
 	let endpoints = $state<RpcEndpointHealth[]>([]);
 	/** True while the indexer health fetch is in flight (initial load or a click
-	 *  on refresh) — drives the refresh icon's spin + disables it so a
-	 *  double-click can't fire overlapping fetches. */
+	 *  on refresh) — drives the refresh icon's spin. */
 	let loading = $state(false);
+	/** Unix-ms of the last fetch START. t.txt #1 — the button stays clickable
+	 *  as fast as the user likes, but we never re-ping the indexer more than once
+	 *  per THROTTLE_MS so nobody can pound the pool. */
+	let lastFetchAt = $state(0);
+	/** Briefly true after a completed fetch (shows a ✓ so a click always reads as
+	 *  "did something", even when the stable health snapshot is unchanged). */
+	let justRefreshed = $state(false);
+	/** Briefly true when a click is rate-limited (a quick pulse ack instead of
+	 *  silently doing nothing). */
+	let justThrottled = $state(false);
+	let refreshedTimer: ReturnType<typeof setTimeout> | null = null;
+
+	/** Never re-ping the indexer faster than this (t.txt #1). */
+	const THROTTLE_MS = 5000;
+	/** Keep the spinner up at least this long so a fast fetch is still visible. */
+	const MIN_SPIN_MS = 550;
 
 	$effect(() => {
 		if (!browser) return;
-		void loadHealth();
+		void loadHealth(false);
 	});
 
-	/** Fetch the indexer's per-node health for the canonical Blurt RPC pool (the
-	 *  indexer probes them server-side; the browser never does). Best-effort: on
-	 *  any failure the list just stays as-is. */
-	async function loadHealth(): Promise<void> {
+	/** Fetch per-node health. `probe=false` → the indexer's cheap passive pool
+	 *  snapshot (used on mount). `probe=true` → ask the indexer to actively ping
+	 *  every node NOW for fresh latency (the refresh button; server-side that's
+	 *  rate-limited to once per 5s). Best-effort: on failure the list stays. */
+	async function loadHealth(probe: boolean): Promise<void> {
 		if (!browser) return;
 		loading = true;
+		lastFetchAt = Date.now();
+		const started = Date.now();
 		try {
-			const res = await getRpcEndpoints();
+			const res = await getRpcEndpoints({ probe });
 			if (res.ok) endpoints = [...res.data.endpoints];
 		} finally {
+			const wait = MIN_SPIN_MS - (Date.now() - started);
+			if (wait > 0) await new Promise((r) => setTimeout(r, wait));
 			loading = false;
+			justRefreshed = true;
+			if (refreshedTimer) clearTimeout(refreshedTimer);
+			refreshedTimer = setTimeout(() => (justRefreshed = false), 1200);
 		}
+	}
+
+	/** The refresh button handler. Always clickable; a click re-pings the indexer
+	 *  at most once per THROTTLE_MS. A rate-limited click gives a quick visual ack
+	 *  rather than silently doing nothing (t.txt #1). */
+	function onRefreshClick(): void {
+		if (loading) return;
+		if (Date.now() - lastFetchAt < THROTTLE_MS) {
+			justThrottled = true;
+			setTimeout(() => (justThrottled = false), 320);
+			return;
+		}
+		void loadHealth(true);
 	}
 
 	/** Status line for a node, derived ENTIRELY from the indexer's health
@@ -91,25 +127,42 @@
 		</p>
 		<button
 			type="button"
-			onclick={() => void loadHealth()}
-			disabled={loading}
+			onclick={onRefreshClick}
 			aria-label={$_('settings.endpoints.recheck')}
 			title={$_('settings.endpoints.recheck')}
-			class="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-ink-300 text-ink-600 transition hover:border-morphit-emerald hover:bg-ink-50 hover:text-morphit-emerald disabled:cursor-wait disabled:opacity-100 dark:border-ink-700 dark:text-ink-300 dark:hover:bg-ink-900"
+			class="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border text-ink-600 transition hover:border-morphit-emerald hover:bg-ink-50 hover:text-morphit-emerald dark:text-ink-300 dark:hover:bg-ink-900 {justRefreshed &&
+			!loading
+				? 'border-morphit-emerald text-morphit-emerald dark:text-morphit-emerald'
+				: 'border-ink-300 dark:border-ink-700'} {justThrottled ? 'scale-90' : ''}"
 		>
-			<svg
-				class="h-4 w-4 {loading ? 'animate-spin' : ''}"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-				aria-hidden="true"
-			>
-				<path d="M21 12a9 9 0 1 1-2.64-6.36" />
-				<path d="M21 3v6h-6" />
-			</svg>
+			{#if justRefreshed && !loading}
+				<svg
+					class="h-4 w-4"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+				>
+					<path d="M20 6 9 17l-5-5" />
+				</svg>
+			{:else}
+				<svg
+					class="h-4 w-4 {loading ? 'animate-spin' : ''}"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+				>
+					<path d="M21 12a9 9 0 1 1-2.64-6.36" />
+					<path d="M21 3v6h-6" />
+				</svg>
+			{/if}
 		</button>
 	</div>
 	<ul class="space-y-2">
