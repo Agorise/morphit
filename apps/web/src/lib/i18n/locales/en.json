@@ -356,7 +356,8 @@
       "failed_label": "Failed",
       "retry": "Retry",
       "retry_aria": "Retry sending this message",
-      "peer_not_ready": "This recipient hasn't opened Morphit chat yet. Once they do, your message will go through on retry."
+      "peer_not_ready": "This recipient hasn't opened Morphit chat yet. Once they do, your message will go through on retry.",
+      "sent": "Sent"
     },
     "composer": {
       "aria_label": "Send a message",
@@ -1163,7 +1164,7 @@
       },
       "how_to_sell": {
         "q": "How do I sell crypto?",
-        "a": "Post an order listing what you're selling, where you are, and which payment methods you accept. A buyer will open a chat with you to agree on details. When you confirm you received their payment, you send them the crypto (or whatever you guys agreed to exchange). Leave honest feedback when done — it helps everyone."
+        "a": "Post an order listing what you're selling — Bitcoin (BTC), Monero (XMR), or BLURT — where you are, and which payment methods you accept. A buyer will open a chat with you to agree on details. When you confirm you received their payment, you send them the crypto (or whatever you guys agreed to exchange). Leave honest feedback when done — it helps everyone."
       },
       "fees": {
         "q": "What are the fees?",
@@ -1331,7 +1332,7 @@
       },
       "how_to_trade_walkthrough": {
         "q": "How do I trade on Morphit — a step-by-step walkthrough?",
-        "a": "Here's the full flow from start to finish. **Step 1:** Create a free account (one click, no email, no ID). **Step 2:** Write down your 12-word recovery phrase on paper (and/or encrypted in an offline password manager like KeePass) and store it somewhere safe. **Step 3:** Browse the orderbook and find a counterparty whose offer matches what you want — the right asset, the right price, a payment method you can use, good feedback history. **Step 4:** Open a chat with them using the encrypted chat button on their order. **Step 5:** Agree on specifics (exact amount, meetup if cash-in-person, which bank account for transfer, etc). **Step 6:** One of you sends the fiat/crypto first depending on your agreement; the other sees it arrive and sends the other side. **Step 7:** Leave each other feedback so future traders can see you're trustworthy. That's it. Morphit is just the bulletin board that connects you; the actual trade happens between the two of you directly."
+        "a": "New to Morphit? Here's the full first-time user walkthrough, from start to finish. **Step 1:** Create a free account (one click, no email, no ID). **Step 2:** Write down your 12-word recovery phrase on paper (and/or encrypted in an offline password manager like KeePass) and store it somewhere safe. **Step 3:** Browse the orderbook and find a counterparty whose offer matches what you want — the right asset, the right price, a payment method you can use, good feedback history. **Step 4:** Open a chat with them using the encrypted chat button on their order. **Step 5:** Agree on specifics (exact amount, meetup if cash-in-person, which bank account for transfer, etc). **Step 6:** One of you sends the fiat/crypto first depending on your agreement; the other sees it arrive and sends the other side. **Step 7:** Leave each other feedback so future traders can see you're trustworthy. That's it. Morphit is just the bulletin board that connects you; the actual trade happens between the two of you directly."
       },
       "supported_countries": {
         "q": "Does Morphit work in my country?",
@@ -1716,8 +1717,6 @@
     "error_bad_password": "That password did not unlock your active key.",
     "error_generic": "Couldn't place your bid. Try again.",
     "history_heading": "Your recent featured bids",
-    "history_expand": "Show {extra} more",
-    "history_collapse": "Show fewer",
     "history_row": "{hours}h · {blurt} BLURT @ {rate}/hr · from {start}",
     "history_state_visible": "Visible",
     "history_state_outranked": "Outranked",
@@ -1726,7 +1725,9 @@
     "history_extended": "Extended ×{n}",
     "history_extended_title": "Bid extended {n} time(s) by anti-snipe",
     "error_chain_rejected": "The network rejected this transaction: {reason}",
-    "error_unreachable": "Couldn't reach your Morphit instance to broadcast. Check your connection and try again."
+    "error_unreachable": "Couldn't reach your Morphit instance to broadcast. Check your connection and try again.",
+    "history_link": "View prior Featured orders",
+    "history_modal_subtitle": "Every order you've promoted to a featured slot, newest first."
   },
   "featured": {
     "heading": "Featured right now",
@@ -1834,7 +1835,6 @@
     "rss": "RSS",
     "rss_title": "RSS feed of new orderbook entries",
     "operators": "Operators",
-    "operated_by": "Operated by",
     "contact_operator": "Contact this operator",
     "alt_network_address": "Address: {address}",
     "instances": "Instances",
@@ -1856,7 +1856,8 @@
     "compare": "Compare",
     "compare_title": "See how Morphit compares to other options",
     "stats": "Stats",
-    "stats_title": "Live aggregate network statistics"
+    "stats_title": "Live aggregate network statistics",
+    "contact": "Contact"
   },
   "glossary": {
     "active_key": {
@@ -2713,7 +2714,10 @@
     },
     "search_no_results_title": "No matching orders",
     "search_no_results_body": "No loaded orders mention \"{query}\". Try a different word, or clear the search to see everything.",
-    "search_clear": "Clear search"
+    "search_clear": "Clear search",
+    "hide_confirm_title": "Hide @{account}?",
+    "hide_confirm_body": "You won't see {account}'s orders in the orderbook, and your chats with them will be hidden too. You can unhide anytime from Settings.",
+    "hide_confirm_yes": "Hide"
   },
   "paired_readonly": {
     "banner_heading": "Signed in as @{account} — phone holds the keys.",
@@ -4424,11 +4428,6 @@
       "body_generic": "An operator runs this instance. For trouble using the site, account-creation issues, or operator-specific questions, reach out via the contact link below.",
       "cta": "Contact operator",
       "no_contact_hint": "This operator hasn't published a contact link. Try the security disclosure or self-host options below."
-    },
-    "operator_matrix": {
-      "heading": "Chat with the operator on Matrix",
-      "body": "This instance has a public Matrix group chat at {room}. Ask questions, request a voucher code, or get help from the operator and community in real time.",
-      "cta": "Open Matrix room"
     },
     "security": {
       "heading": "Found a security issue?",

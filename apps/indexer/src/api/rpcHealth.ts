@@ -76,11 +76,113 @@ export function buildRpcEndpointsResponse(
 	};
 }
 
+/**
+ * cp453 (t.txt #1) — ACTIVE per-node probe. The passive snapshot above only
+ * reflects the pool's own traffic and barely moves; the Settings "refresh"
+ * button wants FRESH latency for every canonical node on demand. This pings each
+ * node once, in parallel, and reports the round-trip.
+ *
+ * DDoS guard: a GLOBAL 5s cache (`PROBE_MIN_INTERVAL_MS`) shared across every
+ * caller and IP — no volume of clicks can make the indexer ping the Blurt nodes
+ * more than once per 5s (a concurrent burst is coalesced onto ONE in-flight
+ * probe). So a kid mashing refresh gets cached bytes, and the upstream nodes see
+ * at most one probe every 5s regardless.
+ */
+const PROBE_MIN_INTERVAL_MS = 5_000;
+const PROBE_TIMEOUT_MS = 6_000;
+
+/** Ping one node with a lightweight, universal Blurt read; return round-trip ms
+ *  on success or null on any failure/timeout. Never throws. */
+async function probeOne(url: string): Promise<{ latencyMs: number | null; ok: boolean }> {
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
+	const started = Date.now();
+	try {
+		const res = await fetch(url, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({
+				jsonrpc: '2.0',
+				id: 1,
+				method: 'condenser_api.get_dynamic_global_properties',
+				params: []
+			}),
+			signal: controller.signal
+		});
+		if (!res.ok) return { latencyMs: null, ok: false };
+		const body = (await res.json()) as { result?: unknown; error?: unknown };
+		if (body.error !== undefined || body.result === undefined) return { latencyMs: null, ok: false };
+		return { latencyMs: Date.now() - started, ok: true };
+	} catch {
+		return { latencyMs: null, ok: false };
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
+/** Fresh, on-demand health for every canonical node (parallel probes). Pure of
+ *  the pool's passive state — this is a live measurement. */
+export async function probeEndpoints(
+	canonicalUrls: readonly string[],
+	now: number = Date.now()
+): Promise<RpcEndpointsResponse> {
+	const endpoints = await Promise.all(
+		canonicalUrls.map(async (url): Promise<RpcEndpointHealth> => {
+			const { latencyMs, ok } = await probeOne(url);
+			return {
+				url,
+				healthy: ok,
+				latency_ms: latencyMs,
+				consecutive_failures: ok ? 0 : 1,
+				cooldown_ms: 0
+			};
+		})
+	);
+	return { network: 'morphit', generated_at: new Date(now).toISOString(), endpoints };
+}
+
+// Global 5s probe cache (shared across all requests/IPs).
+let probeInFlight: Promise<RpcEndpointsResponse> | null = null;
+let probeCache: { at: number; data: RpcEndpointsResponse } | null = null;
+
+/** Rate-limited active probe: returns the cached result if the last real probe
+ *  was <5s ago, coalesces concurrent callers onto one probe, else probes fresh. */
+export async function cachedProbeEndpoints(
+	canonicalUrls: readonly string[]
+): Promise<RpcEndpointsResponse> {
+	const now = Date.now();
+	if (probeCache && now - probeCache.at < PROBE_MIN_INTERVAL_MS) return probeCache.data;
+	if (probeInFlight) return probeInFlight;
+	probeInFlight = (async () => {
+		try {
+			const data = await probeEndpoints(canonicalUrls, Date.now());
+			probeCache = { at: Date.now(), data };
+			return data;
+		} finally {
+			probeInFlight = null;
+		}
+	})();
+	return probeInFlight;
+}
+
+/** Test-only: reset the module-level probe cache between unit runs. */
+export function __resetProbeCacheForTests(): void {
+	probeInFlight = null;
+	probeCache = null;
+}
+
 export function rpcEndpointsRoute(
 	snapshotFn: () => readonly EndpointState[],
 	canonicalUrls: readonly string[]
 ): Hono {
 	const app = new Hono();
-	app.get('/', (c) => c.json(buildRpcEndpointsResponse(snapshotFn(), canonicalUrls)));
+	app.get('/', async (c) => {
+		// `?probe=1` → fresh active ping of every node (5s-rate-limited server-side,
+		// t.txt #1). Anything else → the cheap passive pool snapshot.
+		if (c.req.query('probe') === '1') {
+			return c.json(await cachedProbeEndpoints(canonicalUrls));
+		}
+		return c.json(buildRpcEndpointsResponse(snapshotFn(), canonicalUrls));
+	});
 	return app;
 }

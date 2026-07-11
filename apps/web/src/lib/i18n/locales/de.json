@@ -356,7 +356,8 @@
       "failed_label": "Fehlgeschlagen",
       "retry": "Erneut versuchen",
       "retry_aria": "Diese Nachricht erneut senden",
-      "peer_not_ready": "Dieser Empfänger hat Morphit-Chat noch nicht geöffnet. Sobald er es tut, geht deine Nachricht beim erneuten Versuch durch."
+      "peer_not_ready": "Dieser Empfänger hat Morphit-Chat noch nicht geöffnet. Sobald er es tut, geht deine Nachricht beim erneuten Versuch durch.",
+      "sent": "Gesendet"
     },
     "composer": {
       "aria_label": "Nachricht senden",
@@ -1163,7 +1164,7 @@
       },
       "how_to_sell": {
         "q": "Wie verkaufe ich Krypto?",
-        "a": "Poste eine Order mit dem, was du verkaufst, wo du bist und welche Zahlungsmethoden du akzeptierst. Ein Käufer wird einen Chat mit dir öffnen, um die Details abzustimmen. Wenn du bestätigst, dass du ihre Zahlung erhalten hast, schickst du ihnen die Kryptowährung (oder was auch immer ihr zu tauschen vereinbart habt). Hinterlasse ehrliches Feedback am Ende — das hilft allen."
+        "a": "Poste eine Order mit dem, was du verkaufst, wo du bist und welche Zahlungsmethoden du akzeptierst. Ein Käufer wird einen Chat mit dir öffnen, um die Details abzustimmen. Wenn du bestätigst, dass du ihre Zahlung erhalten hast, schickst du ihnen die Kryptowährung (oder was auch immer ihr zu tauschen vereinbart habt). Hinterlasse ehrliches Feedback am Ende — das hilft allen. Du kannst Bitcoin (BTC), Monero (XMR) oder BLURT verkaufen."
       },
       "fees": {
         "q": "Welche Gebühren fallen an?",
@@ -1331,7 +1332,7 @@
       },
       "how_to_trade_walkthrough": {
         "q": "Wie handele ich auf Morphit — Schritt-für-Schritt-Anleitung?",
-        "a": "Hier ist der komplette Ablauf von Anfang bis Ende. **Schritt 1:** Erstelle ein kostenloses Konto (ein Klick, keine E-Mail, kein Ausweis). **Schritt 2:** Schreibe deine 12-Wörter-Wiederherstellungsphrase auf Papier (und/oder verschlüsselt in einem Offline-Passwortmanager wie KeePass) und bewahre sie an einem sicheren Ort auf. **Schritt 3:** Durchsuche das Orderbuch und finde einen Handelspartner, dessen Angebot zu dem passt, was du willst — der richtige Asset, der richtige Preis, eine Zahlungsmethode, die du nutzen kannst, gute Feedback-Historie. **Schritt 4:** Öffne einen verschlüsselten Chat mit ihm über den Chat-Button an seiner Order. **Schritt 5:** Einigt euch auf Details (genauer Betrag, Treffpunkt bei Bargeld, welches Bankkonto bei Überweisung, usw.). **Schritt 6:** Einer sendet Fiat/Krypto zuerst je nach Absprache; der andere sieht den Eingang und sendet die andere Seite. **Schritt 7:** Hinterlasst euch gegenseitig Feedback, damit künftige Händler sehen, dass ihr vertrauenswürdig seid. Das ist alles. Morphit ist nur das Schwarze Brett, das euch verbindet; der eigentliche Handel passiert direkt zwischen euch beiden."
+        "a": "Neu bei Morphit? Das ist die Schritt-für-Schritt-Anleitung für neue Nutzer. Hier ist der komplette Ablauf von Anfang bis Ende. **Schritt 1:** Erstelle ein kostenloses Konto (ein Klick, keine E-Mail, kein Ausweis). **Schritt 2:** Schreibe deine 12-Wörter-Wiederherstellungsphrase auf Papier (und/oder verschlüsselt in einem Offline-Passwortmanager wie KeePass) und bewahre sie an einem sicheren Ort auf. **Schritt 3:** Durchsuche das Orderbuch und finde einen Handelspartner, dessen Angebot zu dem passt, was du willst — der richtige Asset, der richtige Preis, eine Zahlungsmethode, die du nutzen kannst, gute Feedback-Historie. **Schritt 4:** Öffne einen verschlüsselten Chat mit ihm über den Chat-Button an seiner Order. **Schritt 5:** Einigt euch auf Details (genauer Betrag, Treffpunkt bei Bargeld, welches Bankkonto bei Überweisung, usw.). **Schritt 6:** Einer sendet Fiat/Krypto zuerst je nach Absprache; der andere sieht den Eingang und sendet die andere Seite. **Schritt 7:** Hinterlasst euch gegenseitig Feedback, damit künftige Händler sehen, dass ihr vertrauenswürdig seid. Das ist alles. Morphit ist nur das Schwarze Brett, das euch verbindet; der eigentliche Handel passiert direkt zwischen euch beiden."
       },
       "supported_countries": {
         "q": "Funktioniert Morphit in meinem Land?",
@@ -1716,8 +1717,6 @@
     "error_bad_password": "Dieses Passwort hat deinen Active-Key nicht entsperrt.",
     "error_generic": "Konnte dein Gebot nicht abgeben. Versuche es erneut.",
     "history_heading": "Deine letzten Featured-Gebote",
-    "history_expand": "{extra} weitere anzeigen",
-    "history_collapse": "Weniger anzeigen",
     "history_row": "{hours}h · {blurt} BLURT @ {rate}/h · ab {start}",
     "history_state_visible": "Sichtbar",
     "history_state_outranked": "Überboten",
@@ -1726,7 +1725,9 @@
     "history_extended": "Verlängert ×{n}",
     "history_extended_title": "Gebot {n}× durch Anti-Snipe verlängert",
     "error_chain_rejected": "Das Netzwerk hat diese Transaktion abgelehnt: {reason}",
-    "error_unreachable": "Deine Morphit-Instanz konnte zum Senden nicht erreicht werden. Prüfe deine Verbindung und versuche es erneut."
+    "error_unreachable": "Deine Morphit-Instanz konnte zum Senden nicht erreicht werden. Prüfe deine Verbindung und versuche es erneut.",
+    "history_link": "Frühere hervorgehobene Angebote ansehen",
+    "history_modal_subtitle": "Jedes Angebot, das du in einen hervorgehobenen Slot gestellt hast, das neueste zuerst."
   },
   "featured": {
     "heading": "Gerade hervorgehoben",
@@ -1834,7 +1835,6 @@
     "rss": "RSS",
     "rss_title": "RSS-Feed neuer Orderbuch-Einträge",
     "operators": "Betreiber",
-    "operated_by": "Betrieben von",
     "contact_operator": "Diesen Betreiber kontaktieren",
     "alt_network_address": "Adresse: {address}",
     "instances": "Instanzen",
@@ -1856,7 +1856,8 @@
     "compare": "Vergleich",
     "compare_title": "So schneidet Morphit im Vergleich zu anderen ab",
     "stats": "Statistiken",
-    "stats_title": "Aggregierte Netzwerkstatistiken in Echtzeit"
+    "stats_title": "Aggregierte Netzwerkstatistiken in Echtzeit",
+    "contact": "Kontakt"
   },
   "glossary": {
     "active_key": {
@@ -2713,7 +2714,10 @@
     },
     "search_no_results_title": "Keine passenden Aufträge",
     "search_no_results_body": "Kein geladener Auftrag erwähnt „{query}\". Versuchen Sie ein anderes Wort oder löschen Sie die Suche, um alles zu sehen.",
-    "search_clear": "Suche löschen"
+    "search_clear": "Suche löschen",
+    "hide_confirm_title": "@{account} ausblenden?",
+    "hide_confirm_body": "Du siehst die Angebote von {account} nicht mehr im Orderbuch, und auch deine Chats mit dieser Person werden ausgeblendet. Du kannst sie jederzeit in den Einstellungen wieder einblenden.",
+    "hide_confirm_yes": "Ausblenden"
   },
   "paired_readonly": {
     "banner_heading": "Angemeldet als @{account} — das Telefon hat die Schlüssel.",
@@ -4424,11 +4428,6 @@
       "body_generic": "Ein Operator betreibt diese Instanz. Bei Problemen, Kontoerstellung oder operatorspezifischen Fragen, nutze den Kontakt-Link unten.",
       "cta": "Operator kontaktieren",
       "no_contact_hint": "Dieser Operator hat keinen Kontakt veröffentlicht. Versuche die Sicherheitsmeldung oder Self-Hosting unten."
-    },
-    "operator_matrix": {
-      "heading": "Mit dem Betreiber auf Matrix chatten",
-      "body": "Diese Instanz hat einen öffentlichen Matrix-Gruppenchat unter {room}. Stelle Fragen, fordere einen Voucher-Code an oder hole dir in Echtzeit Hilfe vom Betreiber und der Community.",
-      "cta": "Matrix-Raum öffnen"
     },
     "security": {
       "heading": "Sicherheitsproblem entdeckt?",

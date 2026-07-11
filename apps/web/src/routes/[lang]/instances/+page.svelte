@@ -152,9 +152,19 @@
 		streaming = false;
 	}
 
+	/** t.txt #5 — the footer "Contact" link lands here with ?highlight=current;
+	 *  flash the current instance's card border so the eye finds "the instance
+	 *  you're actually on". */
+	let flashCurrent = $state(false);
+
 	onMount(() => {
 		if (!browser) return;
 		startStream();
+		if (new URLSearchParams(window.location.search).get('highlight') === 'current') {
+			flashCurrent = true;
+			// 5 flashes × ~0.45s ≈ 2.25s; clear a hair later so a repeat visit re-fires.
+			setTimeout(() => (flashCurrent = false), 2600);
+		}
 	});
 
 	onDestroy(() => {
@@ -329,7 +339,10 @@
 					<li
 						class="card border {isCurrentInstance(inst)
 							? 'border-morphit-emerald/40 ring-1 ring-morphit-emerald/30'
-							: 'border-ink-100 dark:border-ink-800'}"
+							: 'border-ink-100 dark:border-ink-800'} {flashCurrent &&
+						isCurrentInstance(inst)
+							? 'flash-instance'
+							: ''}"
 					>
 						<div class="flex flex-col gap-3">
 							<div class="flex items-start justify-between gap-3">
@@ -509,3 +522,23 @@
 		</aside>
 	{/if}
 </section>
+
+<style>
+	/* t.txt #5 — flash the current instance's card border (bright green) five
+	   times when the footer "Contact" link lands here with ?highlight=current, so
+	   the eye finds the instance you're actually on. */
+	@keyframes flash-instance-border {
+		0%,
+		100% {
+			box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+		}
+		50% {
+			box-shadow:
+				0 0 0 2px #22c55e,
+				0 0 10px 1px rgba(34, 197, 94, 0.55);
+		}
+	}
+	:global(.flash-instance) {
+		animation: flash-instance-border 0.45s ease-in-out 5;
+	}
+</style>

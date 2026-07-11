@@ -1315,6 +1315,23 @@ export function scoreEntry(
 	return score;
 }
 
+/** cp453 — AND semantics for a multi-word query. Space-separated terms are an
+ *  AND: "hive engine" must match entries containing BOTH "hive" AND "engine"
+ *  (each term, OR one of its synonyms, present in the question or answer), not
+ *  entries that merely match one term with a high TF-IDF score. Single-term (or
+ *  all-stopword) queries are unaffected — there is nothing to AND. Applied ONLY
+ *  to the fuzzy path; the quoted-phrase path is already an exact substring. */
+function entryMatchesAllTerms(entry: FaqEntry, rawQuery: string): boolean {
+	let terms = tokenize(rawQuery);
+	if (shouldApplyEnglishAids(rawQuery)) terms = filterStopwords(terms);
+	if (terms.length <= 1) return true;
+	const text = normalize(entry.question) + ' ' + normalize(entry.answer);
+	return terms.every((term) => {
+		const variants = shouldApplyEnglishAids(rawQuery) ? expandWithSynonyms([term]) : [term];
+		return variants.some((v) => text.includes(v));
+	});
+}
+
 export function searchEntries(entries: FaqEntry[], query: string, limit = 10): FaqHit[] {
 	if (!query.trim()) {
 		return entries.map((entry) => ({ entry, score: 0 }));
@@ -1344,7 +1361,7 @@ export function searchEntries(entries: FaqEntry[], query: string, limit = 10): F
 
 	const hits = entries
 		.map((entry) => ({ entry, score: scoreEntry(entry, query, idf) }))
-		.filter((h) => h.score > 0);
+		.filter((h) => h.score > 0 && entryMatchesAllTerms(h.entry, query));
 
 	hits.sort((a, b) => b.score - a.score);
 

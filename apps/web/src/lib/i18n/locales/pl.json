@@ -356,7 +356,8 @@
       "failed_label": "Nieudane",
       "retry": "Ponów",
       "retry_aria": "Ponów wysyłanie tej wiadomości",
-      "peer_not_ready": "Ten odbiorca jeszcze nie otworzył czatu Morphit. Gdy to zrobi, Twoja wiadomość zostanie wysłana po ponowieniu próby."
+      "peer_not_ready": "Ten odbiorca jeszcze nie otworzył czatu Morphit. Gdy to zrobi, Twoja wiadomość zostanie wysłana po ponowieniu próby.",
+      "sent": "Wysłano"
     },
     "composer": {
       "aria_label": "Wyślij wiadomość",
@@ -1163,7 +1164,7 @@
       },
       "how_to_sell": {
         "q": "Jak sprzedać kryptowalutę?",
-        "a": "Opublikuj zlecenie podając, co sprzedajesz, gdzie jesteś i jakie metody płatności akceptujesz. Kupujący otworzy z tobą czat, żeby uzgodnić szczegóły. Kiedy potwierdzisz, że otrzymałeś płatność, wysyłasz mu kryptowalutę (albo cokolwiek ustaliliście do wymiany). Zostaw uczciwą opinię na końcu — to pomaga wszystkim."
+        "a": "Opublikuj zlecenie podając, co sprzedajesz, gdzie jesteś i jakie metody płatności akceptujesz. Kupujący otworzy z tobą czat, żeby uzgodnić szczegóły. Kiedy potwierdzisz, że otrzymałeś płatność, wysyłasz mu kryptowalutę (albo cokolwiek ustaliliście do wymiany). Zostaw uczciwą opinię na końcu — to pomaga wszystkim. Możesz sprzedawać Bitcoin (BTC), Monero (XMR) lub BLURT."
       },
       "fees": {
         "q": "Jakie są opłaty?",
@@ -1331,7 +1332,7 @@
       },
       "how_to_trade_walkthrough": {
         "q": "Jak handluję na Morphit — krok po kroku?",
-        "a": "Pełny przebieg od początku do końca. **Krok 1:** Utwórz darmowe konto (jedno kliknięcie, bez emaila, bez ID). **Krok 2:** Zapisz 12-wyrazową frazę odzyskiwania na papierze (i/lub zaszyfrowaną w offline'owym menedżerze haseł jak KeePass) i przechowaj ją w bezpiecznym miejscu. **Krok 3:** Przeglądaj orderbook i znajdź kontrahenta, którego oferta pasuje do tego, czego chcesz — właściwy aktyw, właściwa cena, metoda płatności, której możesz użyć, dobra historia ocen. **Krok 4:** Otwórz szyfrowany czat z nim przez przycisk na jego ofercie. **Krok 5:** Uzgodnijcie szczegóły (dokładna kwota, miejsce spotkania jeśli gotówka, konto bankowe jeśli przelew, itd). **Krok 6:** Jeden z was wysyła fiat/krypto pierwszy zgodnie z umową; drugi widzi wpływ i wysyła drugą stronę. **Krok 7:** Zostawcie sobie wzajemnie oceny, aby przyszli handlowcy widzieli, że jesteście godni zaufania. To wszystko. Morphit to tylko tablica ogłoszeń łącząca was; sama transakcja odbywa się bezpośrednio między wami."
+        "a": "Nowy w Morphit? Oto przewodnik krok po kroku dla nowych użytkowników. Pełny przebieg od początku do końca. **Krok 1:** Utwórz darmowe konto (jedno kliknięcie, bez emaila, bez ID). **Krok 2:** Zapisz 12-wyrazową frazę odzyskiwania na papierze (i/lub zaszyfrowaną w offline'owym menedżerze haseł jak KeePass) i przechowaj ją w bezpiecznym miejscu. **Krok 3:** Przeglądaj orderbook i znajdź kontrahenta, którego oferta pasuje do tego, czego chcesz — właściwy aktyw, właściwa cena, metoda płatności, której możesz użyć, dobra historia ocen. **Krok 4:** Otwórz szyfrowany czat z nim przez przycisk na jego ofercie. **Krok 5:** Uzgodnijcie szczegóły (dokładna kwota, miejsce spotkania jeśli gotówka, konto bankowe jeśli przelew, itd). **Krok 6:** Jeden z was wysyła fiat/krypto pierwszy zgodnie z umową; drugi widzi wpływ i wysyła drugą stronę. **Krok 7:** Zostawcie sobie wzajemnie oceny, aby przyszli handlowcy widzieli, że jesteście godni zaufania. To wszystko. Morphit to tylko tablica ogłoszeń łącząca was; sama transakcja odbywa się bezpośrednio między wami."
       },
       "supported_countries": {
         "q": "Czy Morphit działa w moim kraju?",
@@ -1716,8 +1717,6 @@
     "error_bad_password": "To hasło nie odblokowało twojego klucza aktywnego.",
     "error_generic": "Nie można złożyć oferty. Spróbuj ponownie.",
     "history_heading": "Twoje ostatnie wyróżnione oferty",
-    "history_expand": "Pokaż {extra} więcej",
-    "history_collapse": "Pokaż mniej",
     "history_row": "{hours}h · {blurt} BLURT @ {rate}/h · od {start}",
     "history_state_visible": "Widoczna",
     "history_state_outranked": "Przebita",
@@ -1726,7 +1725,9 @@
     "history_extended": "Wydłużona ×{n}",
     "history_extended_title": "Oferta wydłużona {n} raz(y) przez anti-snipe",
     "error_chain_rejected": "Sieć odrzuciła tę transakcję: {reason}",
-    "error_unreachable": "Nie udało się połączyć z Twoją instancją Morphit, aby nadać transakcję. Sprawdź połączenie i spróbuj ponownie."
+    "error_unreachable": "Nie udało się połączyć z Twoją instancją Morphit, aby nadać transakcję. Sprawdź połączenie i spróbuj ponownie.",
+    "history_link": "Zobacz wcześniejsze wyróżnione zlecenia",
+    "history_modal_subtitle": "Każde zlecenie, które wyróżniłeś, od najnowszego."
   },
   "featured": {
     "heading": "Wyróżnione teraz",
@@ -1834,7 +1835,6 @@
     "rss": "RSS",
     "rss_title": "Kanał RSS nowych wpisów księgi zamówień",
     "operators": "Operatorzy",
-    "operated_by": "Prowadzone przez",
     "contact_operator": "Skontaktuj się z operatorem",
     "alt_network_address": "Adres: {address}",
     "instances": "Instancje",
@@ -1856,7 +1856,8 @@
     "compare": "Porównaj",
     "compare_title": "Zobacz, jak Morphit wypada na tle innych opcji",
     "stats": "Statystyki",
-    "stats_title": "Zbiorcze statystyki sieci na żywo"
+    "stats_title": "Zbiorcze statystyki sieci na żywo",
+    "contact": "Kontakt"
   },
   "glossary": {
     "active_key": {
@@ -2713,7 +2714,10 @@
     },
     "search_no_results_title": "Brak pasujących zleceń",
     "search_no_results_body": "Żadne załadowane zlecenie nie wspomina „{query}\". Spróbuj innego słowa lub wyczyść wyszukiwanie, aby zobaczyć wszystko.",
-    "search_clear": "Wyczyść wyszukiwanie"
+    "search_clear": "Wyczyść wyszukiwanie",
+    "hide_confirm_title": "Ukryć @{account}?",
+    "hide_confirm_body": "Nie będziesz widzieć zleceń użytkownika {account} w księdze zleceń, a Twoje czaty z tą osobą również zostaną ukryte. Możesz je w każdej chwili ponownie pokazać w Ustawieniach.",
+    "hide_confirm_yes": "Ukryj"
   },
   "paired_readonly": {
     "banner_heading": "Zalogowany jako @{account} — klucze są na telefonie.",
@@ -4424,11 +4428,6 @@
       "body_generic": "Operator prowadzi tę instancję. W sprawie problemów, konta lub pytań do operatora — użyj linku kontaktowego poniżej.",
       "cta": "Skontaktuj się z operatorem",
       "no_contact_hint": "Ten operator nie udostępnił kontaktu. Spróbuj zgłoszenia bezpieczeństwa lub samodzielnego hostingu poniżej."
-    },
-    "operator_matrix": {
-      "heading": "Porozmawiaj z operatorem na Matrix",
-      "body": "Ta instancja ma publiczny czat grupowy na Matrix: {room}. Zadawaj pytania, poproś o kod vouchera lub uzyskaj pomoc od operatora i społeczności w czasie rzeczywistym.",
-      "cta": "Otwórz pokój Matrix"
     },
     "security": {
       "heading": "Znalazłaś problem bezpieczeństwa?",

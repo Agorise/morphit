@@ -205,9 +205,23 @@ check(
 );
 check('every locale has a non-empty header title', titleStillBalance === 0);
 
+// cp453 — "Use full balance" must FLOOR to 3dp, never toFixed-ROUND (which for a
+// raw balance like 74.8176 yields "74.818", a hair above the real ceiling, so
+// the fill then failed the `<= available` check — the reported power-down bug).
+check(
+	'"Use full balance" fills the FLOORED ceiling (availableFloor via floorToBlurtPrecision)',
+	/const availableFloor = \$derived\(floorToBlurtPrecision\(available\)\)/.test(modal) &&
+		/enteredAmount = availableFloor;/.test(modal) &&
+		/import \{ floorToBlurtPrecision \}/.test(modal)
+);
+check(
+	'the full-balance fill is NOT the rounding available.toFixed(3) (could exceed available)',
+	!/enteredAmount = available\.toFixed\(3\)/.test(modal)
+);
+
 if (failures === 0) {
-	console.log('✓ all 23 wallet-power-modal scenarios passed');
+	console.log('✓ all 25 wallet-power-modal scenarios passed');
 } else {
-	console.log(`\n✗ ${failures}/23 wallet-power-modal scenarios failed`);
+	console.log(`\n✗ ${failures}/25 wallet-power-modal scenarios failed`);
 	process.exit(1);
 }

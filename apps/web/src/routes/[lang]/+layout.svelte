@@ -24,7 +24,6 @@
 	import { startAutoLockTimer } from '$stores/autoLock';
 	import { instance, initInstance } from '$stores/instance';
 	import { resetForRoute as resetGlossarySeen } from '$stores/glossarySeen';
-	import { safeContactUrl } from '$lib/utils/safeContactUrl';
 	import { initChainFee } from '$stores/chainFee';
 	import { initRelease } from '$stores/release';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
@@ -387,25 +386,6 @@
 
 			<p class="text-sm text-ink-600 dark:text-ink-400">{$_('footer.tagline')}</p>
 
-			{#if $instance.name}
-				{@const safeContact = safeContactUrl($instance.contact_url)}
-				<p class="text-sm text-ink-500 dark:text-ink-400">
-					{$_('footer.operated_by')}
-					{#if safeContact}
-						<a
-							href={safeContact}
-							class="font-medium text-morphit-emerald hover:underline"
-							title={$_('footer.contact_operator')}
-							target="_blank" rel="noopener noreferrer"
-						>
-							{$instance.name}
-						</a>
-					{:else}
-						<span class="font-medium text-ink-700 dark:text-ink-200">{$instance.name}</span>
-					{/if}
-				</p>
-			{/if}
-
 			<div class="flex flex-col items-center gap-3">
 				<p class="text-xs uppercase tracking-widest text-ink-500">{$_('footer.reachable_via')}</p>
 				<ul class="flex flex-wrap justify-center gap-2">
@@ -667,6 +647,11 @@
 				>
 				<a href={lp('/faq')} class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300 dark:hover:text-morphit-emerald"
 					>{$_('nav.faq')}</a
+				>
+				<a
+					href="{lp('/instances')}?highlight=current"
+					class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300 dark:hover:text-morphit-emerald"
+					title={$_('footer.contact_operator')}>{$_('footer.contact')}</a
 				>
 			</nav>
 
