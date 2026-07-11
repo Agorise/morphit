@@ -1722,8 +1722,6 @@
     "history_state_outranked": "Überboten",
     "history_state_expired": "Abgelaufen",
     "history_state_order_inactive": "Order beendet",
-    "history_extended": "Verlängert ×{n}",
-    "history_extended_title": "Gebot {n}× durch Anti-Snipe verlängert",
     "error_chain_rejected": "Das Netzwerk hat diese Transaktion abgelehnt: {reason}",
     "error_unreachable": "Deine Morphit-Instanz konnte zum Senden nicht erreicht werden. Prüfe deine Verbindung und versuche es erneut.",
     "history_link": "Frühere hervorgehobene Angebote ansehen",

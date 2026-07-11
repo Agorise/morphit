@@ -20,7 +20,7 @@
 	 *  as fast as the user likes, but we never re-ping the indexer more than once
 	 *  per THROTTLE_MS so nobody can pound the pool. */
 	let lastFetchAt = $state(0);
-	/** Briefly true after a completed fetch (shows a ✓ so a click always reads as
+	/** Briefly true after a completed refresh — shows a ✓ so a click always reads as
 	 *  "did something", even when the stable health snapshot is unchanged). */
 	let justRefreshed = $state(false);
 	/** Briefly true when a click is rate-limited (a quick pulse ack instead of

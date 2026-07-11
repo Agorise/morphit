@@ -1722,8 +1722,6 @@
     "history_state_outranked": "Dépassée",
     "history_state_expired": "Expirée",
     "history_state_order_inactive": "Annonce terminée",
-    "history_extended": "Prolongée ×{n}",
-    "history_extended_title": "Enchère prolongée {n} fois par l'anti-snipe",
     "error_chain_rejected": "Le réseau a rejeté cette transaction : {reason}",
     "error_unreachable": "Impossible de joindre votre instance Morphit pour diffuser. Vérifiez votre connexion et réessayez.",
     "history_link": "Voir les commandes mises en avant précédentes",

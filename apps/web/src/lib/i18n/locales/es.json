@@ -1722,8 +1722,6 @@
     "history_state_outranked": "Superado",
     "history_state_expired": "Caducado",
     "history_state_order_inactive": "Orden finalizada",
-    "history_extended": "Extendida ×{n}",
-    "history_extended_title": "Puja extendida {n} vez/veces por anti-snipe",
     "error_chain_rejected": "La red rechazó esta transacción: {reason}",
     "error_unreachable": "No se pudo conectar con tu instancia de Morphit para transmitir. Revisa tu conexión e inténtalo de nuevo.",
     "history_link": "Ver órdenes destacadas anteriores",

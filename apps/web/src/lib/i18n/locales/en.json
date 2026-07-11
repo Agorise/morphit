@@ -1722,8 +1722,6 @@
     "history_state_outranked": "Outranked",
     "history_state_expired": "Expired",
     "history_state_order_inactive": "Order ended",
-    "history_extended": "Extended ×{n}",
-    "history_extended_title": "Bid extended {n} time(s) by anti-snipe",
     "error_chain_rejected": "The network rejected this transaction: {reason}",
     "error_unreachable": "Couldn't reach your Morphit instance to broadcast. Check your connection and try again.",
     "history_link": "View prior Featured orders",
