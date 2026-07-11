@@ -54,6 +54,7 @@
 	import { instanceAdditions, instanceNameLookup } from '$lib/stores/instanceAdditions';
 	import { instance } from '$lib/stores/instance';
 	import { getProfilesBatch } from '$lib/indexer/profileCache';
+	import { selfProfile } from '$lib/stores/selfProfile';
 	import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
 	import OrderCard from '$lib/components/OrderCard.svelte';
 	import { formatOrderPriceModel } from '$lib/orders/priceModelDisplay';
@@ -685,6 +686,25 @@
 		profileMap = next;
 	}
 
+	/** cp452 (t.txt item 2) — re-read the logged-in user's OWN profile into
+	 *  profileMap when the shared selfProfile store changes. profileMap is a
+	 *  one-shot snapshot from hydrateProfiles; on a "Load it now" SW-upgrade
+	 *  reload the first profile fetch can race SW activation and come back empty
+	 *  (negative-cached a few seconds). refreshSelfProfile retries and
+	 *  repopulates the shared cache, updating selfProfile — this subscription
+	 *  then re-reads self so the user's own orders show their avatar + display
+	 *  name WITHOUT a manual refresh. Also picks up an optimistic primeProfile
+	 *  after a settings edit (item 3) if the user is already on the orderbook.
+	 *  Cache hit in the common case (no extra network); merges only a non-null
+	 *  result so a transient failure never blanks a good profile. */
+	async function rehydrateSelf(account: string): Promise<void> {
+		const fetched = await getProfilesBatch([account]);
+		const profile = fetched.get(account) ?? null;
+		if (profile !== null) {
+			profileMap = { ...profileMap, [account]: profile };
+		}
+	}
+
 	async function fetchFirstPage(): Promise<void> {
 		if (currentAbort) currentAbort.abort();
 		const myAbort = new AbortController();
@@ -861,9 +881,18 @@
 		// trigger this (no account → no fetch).
 		const me = getUserBlurtAccount();
 		if (me) void loadBlocks(me);
+		// cp452 (t.txt 2) — keep the user's OWN order cards' avatar + name fresh:
+		// re-read self into profileMap whenever the shared selfProfile store
+		// resolves or changes (a late arrival after a "Load it now" SW-upgrade
+		// race, or an optimistic edit from settings), so self's orders upgrade
+		// from the identicon without a manual refresh.
+		const unsubSelf = selfProfile.subscribe((sp) => {
+			if (sp.account) void rehydrateSelf(sp.account);
+		});
 		return () => {
 			if (currentAbort) currentAbort.abort();
 			if (filterDebounce) clearTimeout(filterDebounce);
+			unsubSelf();
 		};
 	});
 

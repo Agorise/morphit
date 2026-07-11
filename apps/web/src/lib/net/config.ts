@@ -172,14 +172,19 @@ export function resolveOrigin(originOrPath: string): string {
  *  `DEFAULT_BLURT_RPC_ENDPOINTS` in `@morphit/operator-config` (6 nodes),
  *  which the indexer + relay use SERVER-side where CORS does not apply.
  *  A browser, however, can only use a node that returns a single valid
- *  `Access-Control-Allow-Origin`. As verified 2026-06 (cp268), three
- *  canonical nodes fail browser CORS and are therefore OMITTED here:
- *    • rpc.beblurt.com      — sends TWO values (`https://morphit.io, *`)
- *    • rpc.blurt.one        — no `Access-Control-Allow-Origin` header
- *    • blurtrpc.dagobert.uk — no `Access-Control-Allow-Origin` header
- *  They remain in the canonical/server set (valid RPC nodes, just not
- *  browser-reachable). The rpc-endpoint-canon smoke enforces that this
- *  list is a SUBSET of the canonical pool (no drift, no stray node).
+ *  `Access-Control-Allow-Origin`. Re-verified live 2026-07 (cp452): FIVE of
+ *  the six canonical nodes now return a single valid `*` and are browser-
+ *  usable — drakernoise, saboin, beblurt, dagobert, and blurt.blog. beblurt
+ *  and dagobert FIXED their CORS since the cp268 check (beblurt no longer
+ *  sends a doubled `https://morphit.io, *`; dagobert now sends the header),
+ *  so they moved UP into this browser set. The one omission:
+ *    • rpc.blurt.one — no valid `Access-Control-Allow-Origin` (cp268), and
+ *      currently 521/down; stays SERVER-only until re-verified.
+ *  Liveness is a SEPARATE axis from CORS, handled by the rotator's cooldown:
+ *  a browser node that is temporarily down (e.g. blurt.blog right now — the
+ *  Blurt core team's node, expected back shortly) is skipped while cooling and
+ *  used again on recovery, so it STAYS in this CORS-clean set. The rpc-
+ *  endpoint-canon smoke enforces this list is a SUBSET of canon (no stray).
  *
  *  Order is NOT priority. The rotator picks based on measured round-trip
  *  latency + success rate; first-probe order is randomized on each boot
@@ -188,25 +193,25 @@ export function resolveOrigin(originOrPath: string): string {
  */
 export const DEFAULT_RPC_ENDPOINTS: readonly string[] = [
 	'https://rpc.drakernoise.com',
-	'https://rpc.blurt.blog',
-	'https://blurt-rpc.saboin.com'
+	'https://blurt-rpc.saboin.com',
+	'https://rpc.beblurt.com',
+	'https://blurtrpc.dagobert.uk',
+	'https://rpc.blurt.blog'
 ] as const;
 
-/** The remaining canonical Blurt RPC nodes that the indexer + relay use
- *  SERVER-side but a browser cannot reach (CORS — see the omission notes
- *  on DEFAULT_RPC_ENDPOINTS above). Listed here ONLY so the endpoint-
- *  settings panel can show the operator the COMPLETE canonical pool (the
- *  three browser-reachable nodes above + these three) and explain why the
- *  browser can't probe them — they are never added to the rotator.
+/** The canonical Blurt RPC node(s) the indexer + relay use SERVER-side but a
+ *  browser cannot reach (no valid CORS — see the omission note on
+ *  DEFAULT_RPC_ENDPOINTS above). Listed here ONLY so the endpoint-settings
+ *  panel can show the operator the COMPLETE canonical pool (the browser-
+ *  reachable nodes above + these) and explain why the browser can't probe
+ *  them — they are never added to the rotator.
  *
  *  Invariant: DEFAULT_RPC_ENDPOINTS ∪ SERVER_ONLY_CANONICAL_RPC_ENDPOINTS
  *  === the 6-node canonical pool (`DEFAULT_BLURT_RPC_ENDPOINTS` in
  *  `@morphit/operator-config`), with the two sets disjoint. The
  *  rpc-endpoint-canon smoke enforces this so the split can't drift. */
 export const SERVER_ONLY_CANONICAL_RPC_ENDPOINTS: readonly string[] = [
-	'https://rpc.beblurt.com',
-	'https://rpc.blurt.one',
-	'https://blurtrpc.dagobert.uk'
+	'https://rpc.blurt.one'
 ] as const;
 
 /** localStorage key under which the user's (possibly-modified) endpoint

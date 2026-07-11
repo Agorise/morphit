@@ -32,6 +32,8 @@ const REPO = join(WEB, '..', '..');
 const serverProfiles = readFileSync(join(REPO, 'apps', 'indexer', 'src', 'api', 'profiles.ts'), 'utf8');
 const cacheMod = readFileSync(join(WEB, 'src', 'lib', 'indexer', 'profileCache.ts'), 'utf8');
 const store = readFileSync(join(WEB, 'src', 'lib', 'stores', 'selfProfile.ts'), 'utf8');
+const settings = readFileSync(join(WEB, 'src', 'routes', '[lang]', 'settings', '+page.svelte'), 'utf8');
+const orderbook = readFileSync(join(WEB, 'src', 'routes', '[lang]', 'orderbook', '+page.svelte'), 'utf8');
 
 let pass = 0;
 let fail = 0;
@@ -66,6 +68,25 @@ check('a failed fetch is retried (a blip must not blank the session)', /SELF_PRO
 check('the retry delay outlives the 5s soft-null TTL', /6_000/.test(store));
 check('bustCache also force-reloads the browser HTTP cache', /reload: opts\?\.bustCache === true/.test(store));
 check('an authoritative "no profile" is still applied (avatar really removed)', /const props = extractLabelPropsFromProfile\(profile\);/.test(store));
+
+// ─── 4. cp452: optimistic prime + orderbook re-read (t.txt 2 + 3) ────
+// A settings edit must show INSTANTLY (not after the 90s TTL), and the user's
+// own orderbook cards must recover their avatar/name after a SW-upgrade reload
+// race WITHOUT a manual refresh.
+check('cache exports primeProfile (optimistic write for the user\u2019s own edit)', /export function primeProfile\(/.test(cacheMod));
+check('a prime is held through indexer catch-up (isPrimeHeld + PRIME_HOLD_MS)', /const PRIME_HOLD_MS = 12_000/.test(cacheMod) && /function isPrimeHeld\(/.test(cacheMod));
+check('BOTH fetch-resolution branches defer to a held prime (no stale clobber)', (cacheMod.match(/if \(isPrimeHeld\(account\)\)/g) || []).length >= 2);
+check('primeProfile writes exactly the json_metadata keys extractLabelPropsFromProfile reads', /jsonMetadata\.avatar_svg =/.test(cacheMod) && /jsonMetadata\.avatar_data_uri =/.test(cacheMod) && /jsonMetadata\.short_bio =/.test(cacheMod) && /jsonMetadata\.nostr_url =/.test(cacheMod) && /jsonMetadata\.blurt_media_url =/.test(cacheMod));
+check('clearing the cache also drops the prime hold (no stale-prime leak)', /primedAt\.clear\(\)/.test(cacheMod) && /primedAt\.delete\(account\)/.test(cacheMod));
+
+check('settings imports primeProfile', /import \{ primeProfile \} from '\$lib\/indexer\/profileCache'/.test(settings));
+check('settings primes the WHOLE current profile after a confirmed broadcast', /function primeSelfProfile\(\)/.test(settings) && /primeProfile\(getUserBlurtAccount\(\) \?\? '', \{/.test(settings));
+check('every confirmed broadcast path primes (name/bio/media/nostr/avatar/remove = 6)', (settings.match(/primeSelfProfile\(\);/g) || []).length >= 6);
+
+check('orderbook imports the selfProfile store', /import \{ selfProfile \} from '\$lib\/stores\/selfProfile'/.test(orderbook));
+check('orderbook re-reads self on selfProfile change (SW-upgrade late arrival)', /selfProfile\.subscribe\(/.test(orderbook) && /void rehydrateSelf\(/.test(orderbook));
+check('orderbook rehydrateSelf merges ONLY a non-null profile (never blanks a good one)', /async function rehydrateSelf\(account: string\)/.test(orderbook) && /if \(profile !== null\)/.test(orderbook));
+check('orderbook unsubscribes selfProfile on cleanup (no leak)', /unsubSelf\(\)/.test(orderbook));
 
 console.log('');
 if (fail === 0) {

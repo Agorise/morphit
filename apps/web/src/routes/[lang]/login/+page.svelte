@@ -733,7 +733,9 @@
 				onclick={(e) => guardSwitch(e, '/onboarding/import')}
 				class="btn-primary flex-1 text-center"
 			>
-				<span class="flex-none text-lg leading-none" aria-hidden="true">🔐</span>
+				<span
+					class="inline-flex w-6 flex-none items-center justify-center text-lg leading-none"
+					aria-hidden="true">🔐</span>
 				{$_('login.import_existing')}
 			</a>
 			<a
@@ -741,6 +743,9 @@
 				onclick={(e) => guardSwitch(e, '/onboarding')}
 				class="btn-secondary flex-1 text-center"
 			>
+				<span
+					class="inline-flex w-6 flex-none items-center justify-center text-lg leading-none"
+					aria-hidden="true">🌱</span>
 				{$_('login.register_cta')}
 			</a>
 		</div>
@@ -760,15 +765,17 @@
 				onclick={(e) => guardSwitch(e, '/login/qr-pair')}
 				class="btn-secondary flex w-full"
 			>
-				<svg
-					viewBox="-1 -1 2002 2002"
-					fill="currentColor"
-					fill-rule="evenodd"
-					aria-hidden="true"
-					class="h-5 w-5 flex-none"
-				>
-					<path d="M-.5-.5h99l447 3-1 174c-38.714-1.665-77.381-.498-116 3.5l-248 .5v366H-.5zm1537 0h463v547a7898.18 7898.18 0 0 1-177.5-1l-3.5-365h-366a5937.07 5937.07 0 0 1 2-174c27.52-1.904 54.85-4.237 82-7zm-628 365h3l-4 543-525 4-18-1 1-545zm-360 181h178v181h-181c-1.41-60.358-.41-120.691 3-181zm1087-181h3v547l-547-4 1-542zm-360 180c17.43-.287 34.77.88 52 3.5l126 .5v178h-178a2664.78 2664.78 0 0 1-4-181c1.6.268 2.93-.066 4-1zm-618 547h254v547c-182.334.17-364.667 0-547-.5l1-545.5zm-106 180c58.374-.33 116.708 1 175 4v178a3605.12 3605.12 0 0 1-178-2 1179.93 1179.93 0 0 1-4-84l1-95c2.235.29 4.235-.04 6-1zm540-180l180 1v180h-179zm185 185h357v357l-147 .5c-8.04-.28-16.04-.94-24-2l-7-4.5c-2.51-57.97-3.51-115.97-3-174h-176zm-1277 176h181v366l365 8c1.334 57.67.334 115.34-3 173H-.5zm1092 0l180 .5 1 180.5h-180zm908 185v362h-543v-177l362-4 4-365a2210.86 2210.86 0 0 1 175 3z" />
-				</svg>
+				<span class="inline-flex w-6 flex-none items-center justify-center" aria-hidden="true">
+					<svg
+						viewBox="-1 -1 2002 2002"
+						fill="currentColor"
+						fill-rule="evenodd"
+						aria-hidden="true"
+						class="h-5 w-5"
+					>
+						<path d="M-.5-.5h99l447 3-1 174c-38.714-1.665-77.381-.498-116 3.5l-248 .5v366H-.5zm1537 0h463v547a7898.18 7898.18 0 0 1-177.5-1l-3.5-365h-366a5937.07 5937.07 0 0 1 2-174c27.52-1.904 54.85-4.237 82-7zm-628 365h3l-4 543-525 4-18-1 1-545zm-360 181h178v181h-181c-1.41-60.358-.41-120.691 3-181zm1087-181h3v547l-547-4 1-542zm-360 180c17.43-.287 34.77.88 52 3.5l126 .5v178h-178a2664.78 2664.78 0 0 1-4-181c1.6.268 2.93-.066 4-1zm-618 547h254v547c-182.334.17-364.667 0-547-.5l1-545.5zm-106 180c58.374-.33 116.708 1 175 4v178a3605.12 3605.12 0 0 1-178-2 1179.93 1179.93 0 0 1-4-84l1-95c2.235.29 4.235-.04 6-1zm540-180l180 1v180h-179zm185 185h357v357l-147 .5c-8.04-.28-16.04-.94-24-2l-7-4.5c-2.51-57.97-3.51-115.97-3-174h-176zm-1277 176h181v366l365 8c1.334 57.67.334 115.34-3 173H-.5zm1092 0l180 .5 1 180.5h-180zm908 185v362h-543v-177l362-4 4-365a2210.86 2210.86 0 0 1 175 3z" />
+					</svg>
+				</span>
 				{$_('login.qr_pair_cta')}
 			</a>
 		</div>

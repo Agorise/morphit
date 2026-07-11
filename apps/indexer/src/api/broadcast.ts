@@ -123,8 +123,14 @@ export function broadcastRoute(blurt: BlurtClient): Hono {
 
 		let result: { block_num?: number; id?: string; trx_id?: string } | null;
 		try {
+			// hedge:false — NEVER parallel-fire a signed write. Hedging a
+			// broadcast sends the same tx to a second node, whose
+			// broadcast_transaction_synchronous then blocks on the duplicate
+			// until the tx expires (~60s), stalling the whole send. Reads
+			// hedge for speed; writes take the single-broadcast latency as the
+			// cost of correctness — same policy the relay's broadcast uses.
 			result = await blurt.callCondenser('broadcast_transaction_synchronous', [trx], {
-				userFacing: true
+				hedge: false
 			});
 		} catch (err) {
 			// Transport error = couldn't reach any node → 502 so the client can

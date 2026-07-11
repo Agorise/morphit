@@ -96,6 +96,23 @@ function isFresh(entry: CacheEntry): boolean {
 	return Date.now() - entry.fetchedAt < ttl;
 }
 
+/** cp452 — accounts the LOCAL user just wrote via their OWN confirmed
+ *  broadcast, and when. A server fetch that resolves within
+ *  {@link PRIME_HOLD_MS} of a prime must NOT overwrite that account's cache
+ *  entry: the indexer needs ~1-2 blocks to reflect the just-broadcast profile
+ *  op, so an in-flight or immediately-following fetch would otherwise clobber
+ *  the user's own new display name / avatar with the still-stale server read —
+ *  the "I saved it but it reverted for a few seconds" flicker (t.txt items 2 +
+ *  3). The window comfortably covers indexer catch-up; afterwards normal
+ *  fetches take over and re-confirm from the chain-indexed value. */
+const primedAt: Map<string, number> = new Map();
+const PRIME_HOLD_MS = 12_000;
+
+function isPrimeHeld(account: string): boolean {
+	const t = primedAt.get(account);
+	return t !== undefined && Date.now() - t < PRIME_HOLD_MS;
+}
+
 /**
  * Fetch a batch of profiles from the indexer. Thin wrapper around
  * the raw HTTP call — no caching or coalescing; those are handled
@@ -283,8 +300,15 @@ export async function getProfilesBatch(
 					const failed = batch === null;
 					for (const account of chunkOfAccounts) {
 						const value = batch ? (batch[account] ?? null) : null;
-						cache.set(account, { value, fetchedAt: Date.now(), soft: failed });
-						result.set(account, value);
+						// cp452 — if the user just primed this account from their OWN
+						// confirmed broadcast, don't let a possibly-stale server read
+						// (indexer not caught up yet) overwrite it; serve the prime.
+						if (isPrimeHeld(account)) {
+							result.set(account, cache.get(account)?.value ?? value);
+						} else {
+							cache.set(account, { value, fetchedAt: Date.now(), soft: failed });
+							result.set(account, value);
+						}
 						inFlight.delete(account);
 					}
 				},
@@ -295,8 +319,12 @@ export async function getProfilesBatch(
 					// up in-flight entries and fall back to null. cp428 —
 					// this is a failure, so the null is SOFT (short TTL).
 					for (const account of chunkOfAccounts) {
-						cache.set(account, { value: null, fetchedAt: Date.now(), soft: true });
-						result.set(account, null);
+						if (isPrimeHeld(account)) {
+							result.set(account, cache.get(account)?.value ?? null);
+						} else {
+							cache.set(account, { value: null, fetchedAt: Date.now(), soft: true });
+							result.set(account, null);
+						}
 						inFlight.delete(account);
 					}
 				}
@@ -378,9 +406,64 @@ export async function getProfileCachedDetailed(
 export function clearProfileCache(account?: string): void {
 	if (account === undefined) {
 		cache.clear();
+		primedAt.clear();
 		return;
 	}
 	cache.delete(account);
+	primedAt.delete(account);
+}
+
+/**
+ * cp452 — optimistically write the LOCAL user's OWN profile into the shared
+ * cache right after a CONFIRMED broadcast (block_num returned), so the
+ * orderbook and every IdentityLabel that reads this cache show the new display
+ * name / avatar / bio INSTANTLY instead of waiting on the 90s TTL + indexer
+ * catch-up (t.txt items 2 + 3). This is the shared-cache twin of
+ * stores/selfProfile.setSelfAvatar, which covers only the avatar-menu store.
+ *
+ * Gated by the caller on a CONFIRMED broadcast, so the value is already on
+ * chain and the indexer reconciles within a block or two; until then a
+ * concurrent/subsequent server fetch cannot clobber it (see {@link isPrimeHeld}
+ * / {@link PRIME_HOLD_MS}). Pass the COMPLETE current profile — any omitted
+ * field renders as cleared, not "unchanged".
+ *
+ * The json_metadata keys written here are exactly the ones
+ * extractLabelPropsFromProfile reads back (avatar_svg, avatar_data_uri,
+ * short_bio, nostr_url, blurt_media_url) plus the top-level display_name, so a
+ * primed entry round-trips to the props passed in; the profile-freshness smoke
+ * pins that contract.
+ */
+export function primeProfile(
+	account: string,
+	props: {
+		displayName?: string | null;
+		avatarSvg?: string | null;
+		avatarDataUri?: string | null;
+		shortBio?: string | null;
+		nostrUrl?: string | null;
+		blurtMediaUrl?: string | null;
+	}
+): void {
+	if (typeof account !== 'string' || account.length === 0) return;
+	const jsonMetadata: Record<string, unknown> = {};
+	if (props.avatarSvg) jsonMetadata.avatar_svg = props.avatarSvg;
+	if (props.avatarDataUri) jsonMetadata.avatar_data_uri = props.avatarDataUri;
+	if (props.shortBio) jsonMetadata.short_bio = props.shortBio;
+	if (props.nostrUrl) jsonMetadata.nostr_url = props.nostrUrl;
+	if (props.blurtMediaUrl) jsonMetadata.blurt_media_url = props.blurtMediaUrl;
+	const profile: ProfileResponse = {
+		account,
+		display_name: props.displayName ?? '',
+		json_metadata: jsonMetadata,
+		source_block_num: 0,
+		updated_at: new Date().toISOString()
+	};
+	const now = Date.now();
+	primedAt.set(account, now);
+	cache.set(account, { value: profile, fetchedAt: now, soft: false });
+	// Drop any in-flight fetch so a NEW caller re-reads the primed cache entry
+	// rather than sharing a pending pre-broadcast fetch's result.
+	inFlight.delete(account);
 }
 
 /**

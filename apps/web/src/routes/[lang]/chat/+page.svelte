@@ -32,6 +32,7 @@
 	 */
 
 	import { onMount, onDestroy } from 'svelte';
+	import { flip } from 'svelte/animate';
 	import { _ } from 'svelte-i18n';
 
 	import Head from '$components/Head.svelte';
@@ -197,6 +198,16 @@
 		const local = loadRecentPeers().filter((p) => p !== me);
 		fallbackPeers = local;
 		if (local.length > 0) await fetchProfilesForNewPeers(local);
+	}
+
+	/** Duration for the inbox card slide (t.txt item G — a newly-arrived
+	 *  message re-sorts to the top and slides into place instead of jumping).
+	 *  Returns 0 under prefers-reduced-motion so the card snaps without motion.
+	 *  Evaluated per-animation, so it tracks the OS setting live. Mirrors the
+	 *  AnimatedNumber.svelte reduced-motion check. */
+	function cardFlipDuration(): number {
+		if (typeof window === 'undefined') return 0;
+		return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 220;
 	}
 
 	/** Fetch the conversation list + server read-state and refresh the
@@ -500,90 +511,102 @@
 					     the z-10 controls; `items-stretch` lets the action box run the
 					     full card height. -->
 					<li
+						animate:flip={{ duration: cardFlipDuration() }}
 						class="relative flex items-stretch overflow-hidden rounded-xl border bg-white transition hover:border-morphit-emerald hover:shadow-sm dark:bg-ink-950 dark:hover:border-morphit-emerald {convo.unread
 							? 'border-morphit-emerald/60 dark:border-morphit-emerald/50'
 							: 'border-ink-200 dark:border-ink-800'}"
 					>
-						<div class="flex min-w-0 flex-1 flex-col gap-0.5 p-3">
-							<!-- Name row: avatar + @name (the click target), then the
-							     timestamp, then the star. The anchor's ::after stretches
-							     over the WHOLE card so a click anywhere opens the chat; the
-							     star sits above it (relative z-10) to stay its own control. -->
-							<div class="flex items-center gap-3">
-								<a
-									href={threadHref(convo)}
-									onclick={() => handleOpen(convo.peer, convo.order?.permlink ?? '')}
-									class="flex min-w-0 flex-1 items-center after:absolute after:inset-0 after:content-['']"
-									aria-label={convo.unread
-										? ($_('chat.inbox.conversation_aria_unread', {
-												values: { peer: convo.peer }
-											}) as string)
-										: ($_('chat.inbox.conversation_aria_read', {
-												values: { peer: convo.peer }
-											}) as string)}
-								>
-									<!-- Avatar spans the full height of the two text lines and is
-									     the same 40px on every card (every card now has a RE:
-									     line, so the shape never varies — t.txt item 8). -->
+						<!-- Card content: the avatar is a SIBLING of the two-line text block
+						     (name + RE:), so items-center vertically centres the 40px avatar
+						     against BOTH lines instead of just the name (t.txt alignment pass).
+						     The anchor's ::after stretches over the WHOLE card so a click
+						     anywhere opens the chat; the timestamp shows through the transparent
+						     overlay and the star sits above it (relative z-10) as its own
+						     control. -->
+						<div class="flex min-w-0 flex-1 items-center gap-3 p-3">
+							<a
+								href={threadHref(convo)}
+								onclick={() => handleOpen(convo.peer, convo.order?.permlink ?? '')}
+								class="flex min-w-0 flex-1 items-center gap-3 after:absolute after:inset-0 after:content-['']"
+								aria-label={convo.unread
+									? ($_('chat.inbox.conversation_aria_unread', {
+										values: { peer: convo.peer }
+									}) as string)
+									: ($_('chat.inbox.conversation_aria_read', {
+										values: { peer: convo.peer }
+									}) as string)}
+							>
+								<!-- Avatar only (hideHandle) — same IdentityLabel component, so the
+								     identity-label policy holds; 40px on every card so the shape never
+								     varies (t.txt item 8). -->
+								<IdentityLabel
+									account={convo.peer}
+									displayName={labelProps.displayName}
+									avatarSvg={labelProps.avatarSvg}
+									avatarDataUri={labelProps.avatarDataUri}
+									avatarSize={40}
+									hideHandle
+									showCopy={false}
+									class="flex-none"
+								/>
+								<div class="flex min-w-0 flex-1 flex-col gap-0.5">
+									<!-- @name / display name (avatar-less IdentityLabel). -->
 									<IdentityLabel
 										account={convo.peer}
 										displayName={labelProps.displayName}
 										avatarSvg={labelProps.avatarSvg}
 										avatarDataUri={labelProps.avatarDataUri}
-										avatarSize={40}
+										hideAvatar
 										weight={convo.unread ? 'bold' : 'semibold'}
 										showCopy={false}
 									/>
-								</a>
-								<span
-									class="flex-none text-xs {convo.unread
-										? 'font-semibold text-morphit-emerald'
-										: 'text-ink-500 dark:text-ink-400'}"
-								>
-									<RelativeTime iso={convo.last_message_at} format="descriptive" />
-								</span>
-								<!-- Star (t.txt item 11) — to the right of the timestamp.
-								     Empty ☆ by default; clicking it fills it gold ★ and MOVES
-								     the discussion to ★ Starred; clicking a gold star MOVES it
-								     to the Inbox. z-10 so it sits above the card-wide link. -->
-								<button
-									type="button"
-									onclick={() => handleToggleStar(convo)}
-									aria-pressed={starred}
-									aria-label={starred
-										? ($_('chat.inbox.unstar_aria') as string)
-										: ($_('chat.inbox.star_aria') as string)}
-									class="relative z-10 flex-none rounded p-0.5 text-base leading-none transition-colors {starred
-										? 'text-amber-400 hover:text-amber-500'
-										: 'text-ink-300 hover:text-amber-400 dark:text-ink-600 dark:hover:text-amber-400'}"
-								>
-									{starred ? '★' : '☆'}
-								</button>
-							</div>
-							<!-- "RE:" line (t.txt item 12) — ALWAYS present. Bound to the
-							     order when there is one ("RE: <title> (Live|Cancelled|Expired)"),
-							     otherwise "RE: -". Plain text, NOT a link (t.txt item 16): the
-							     card as a whole opens the chat. Aligned under the @name
-							     (avatar 40 + IdentityLabel gap 6 = 46px). -->
-							<div
-								class="flex min-w-0 items-baseline gap-1 pl-[46px] text-xs text-ink-500 dark:text-ink-400"
+									<!-- "RE:" line (t.txt item 12) — ALWAYS present. Bound to the order
+									     ("RE: <title> (Live|Cancelled|Expired)") or "RE: -". Inside the
+									     text block, so it lines up under the name with no manual indent. -->
+									<div class="flex min-w-0 items-baseline gap-1 text-xs text-ink-500 dark:text-ink-400">
+										<span class="flex-none font-medium">{$_('chat.inbox.re_prefix')}</span>
+										{#if convo.order}
+											{@const parts = orderTitleParts(
+												convo.order,
+												undefined,
+												$_('order_title.goods_services')
+											)}
+											{@const orderTitle = $_(parts.key, { values: parts.values }) as string}
+											<span class="min-w-0 truncate">{orderTitle}</span>
+											{#if orderStatusLabel(convo.order.status)}
+												<span class="flex-none">({orderStatusLabel(convo.order.status)})</span>
+											{/if}
+										{:else}
+											<span class="min-w-0 truncate">-</span>
+										{/if}
+									</div>
+								</div>
+							</a>
+							<!-- Timestamp — sibling of the anchor, vertically centred by the row's
+							     items-center; shows through the transparent ::after. -->
+							<span
+								class="flex-none text-xs {convo.unread
+									? 'font-semibold text-morphit-emerald'
+									: 'text-ink-500 dark:text-ink-400'}"
 							>
-								<span class="flex-none font-medium">{$_('chat.inbox.re_prefix')}</span>
-								{#if convo.order}
-									{@const parts = orderTitleParts(
-										convo.order,
-										undefined,
-										$_('order_title.goods_services')
-									)}
-									{@const orderTitle = $_(parts.key, { values: parts.values }) as string}
-									<span class="min-w-0 truncate">{orderTitle}</span>
-									{#if orderStatusLabel(convo.order.status)}
-										<span class="flex-none">({orderStatusLabel(convo.order.status)})</span>
-									{/if}
-								{:else}
-									<span class="min-w-0 truncate">-</span>
-								{/if}
-							</div>
+								<RelativeTime iso={convo.last_message_at} format="descriptive" />
+							</span>
+							<!-- Star (t.txt item 11) — empty by default; clicking fills it gold and
+							     MOVES the discussion to Starred; clicking a gold star moves it back
+							     to Inbox. z-10 so it sits above the card-wide link. -->
+							<button
+								type="button"
+								onclick={() => handleToggleStar(convo)}
+								aria-pressed={starred}
+								aria-label={starred
+									? ($_('chat.inbox.unstar_aria') as string)
+									: ($_('chat.inbox.star_aria') as string)}
+								class="relative z-10 flex-none rounded p-0.5 text-base leading-none transition-colors {starred
+									? 'text-amber-400 hover:text-amber-500'
+									: 'text-ink-300 hover:text-amber-400 dark:text-ink-600 dark:hover:text-amber-400'}"
+							>
+								{starred ? '★' : '☆'}
+							</button>
 						</div>
 						<!-- Action box (t.txt item 7) — EVERY card has one, on the far
 						     right, full height. "Archive" moves the discussion to the

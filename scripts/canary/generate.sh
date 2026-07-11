@@ -19,8 +19,12 @@
 #   $MORPHIT_CANARY_OPERATOR_ACCOUNT — Blurt account name of the
 #                                      operator (must match what's
 #                                      in morphit_operator_register_v1).
-#   $MORPHIT_CANARY_BLURT_RPC      — Blurt RPC URL for chain-head
-#                                    fetch (default: https://rpc.blurt.blog).
+#   $MORPHIT_CANARY_BLURT_RPC      — OPTIONAL. Pin ONE Blurt RPC URL for the
+#                                    chain-head fetch. Left unset (the
+#                                    default), the fetch fails over across the
+#                                    canonical DEFAULT_BLURT_RPC_ENDPOINTS
+#                                    rotator list, so a single dead node cannot
+#                                    stall the canary.
 #   $MORPHIT_CANARY_NEWS_RSS       — RSS feed URL for news entropy
 #                                    (default: https://cointelegraph.com/rss,
 #                                    operator should pick a
@@ -32,8 +36,9 @@
 #               >> /var/log/morphit/canary.log 2>&1
 #
 # Why a shell script rather than a Node program:
-#   - Reduces dependencies (gpg, curl, jq are present on every
-#     operator host already).
+#   - Few dependencies (gpg, curl, date are present on every operator
+#     host; node — for the shared RPC-rotator helper — is present on any
+#     Morphit host, since the indexer and relay run on it).
 #   - The signing key never enters JavaScript memory; gpg owns it.
 #   - Easier for an operator to audit every line.
 
@@ -55,7 +60,6 @@ required MORPHIT_CANARY_OPERATOR_NAME
 required MORPHIT_CANARY_INSTANCE_ORIGIN
 required MORPHIT_CANARY_OPERATOR_ACCOUNT
 
-BLURT_RPC="${MORPHIT_CANARY_BLURT_RPC:-https://rpc.blurt.blog}"
 NEWS_RSS="${MORPHIT_CANARY_NEWS_RSS:-https://cointelegraph.com/rss}"
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -67,24 +71,37 @@ if [ ! -f "$TEMPLATE" ]; then
 	exit 1
 fi
 
-# Tools — fail loud if any is missing.
-for tool in gpg curl jq date; do
+# Tools — fail loud if any is missing. (jq is gone: the Blurt head now
+# comes back parsed from the rotator helper; BTC + news stay plain curl.)
+for tool in gpg curl date node; do
 	if ! command -v "$tool" >/dev/null 2>&1; then
 		echo "canary: required tool '$tool' not found in PATH" >&2
 		exit 1
 	fi
 done
 
+# The Blurt chain-head fetch runs through the shared RPC rotator helper
+# (scripts/canary/fetch-blurt-head.ts), which needs tsx from the repo's
+# installed dependencies.
+RUN_TSX="$REPO_ROOT/node_modules/.bin/tsx"
+if [ ! -x "$RUN_TSX" ]; then
+	echo "canary: tsx not found at $RUN_TSX — run 'npm ci' in $REPO_ROOT first" >&2
+	exit 1
+fi
+
 # ─── Freshness proof: Blurt chain head ───────────────────────────
-
-echo "canary: fetching Blurt chain head from $BLURT_RPC..." >&2
-BLURT_RESP="$(curl -fsSL --max-time 15 -X POST -H "Content-Type: application/json" \
-	-d '{"jsonrpc":"2.0","method":"condenser_api.get_dynamic_global_properties","params":[],"id":1}' \
-	"$BLURT_RPC")"
-
-BLURT_HEAD_HEIGHT="$(echo "$BLURT_RESP" | jq -r '.result.head_block_number')"
-BLURT_HEAD_HASH="$(echo "$BLURT_RESP" | jq -r '.result.head_block_id')"
-BLURT_HEAD_TIMESTAMP="$(echo "$BLURT_RESP" | jq -r '.result.time')Z"
+# Fetched through the shared RPC rotator (scripts/canary/fetch-blurt-head.ts):
+# it hops across the canonical DEFAULT_BLURT_RPC_ENDPOINTS list until a node
+# answers, so a single witness's dead TLS cert (a 526, say) no longer stalls
+# the whole canary. Set MORPHIT_CANARY_BLURT_RPC to pin one node on purpose.
+# On success the helper prints ONE tab-separated line: <height> <hash> <time>.
+BLURT_HEAD_LINE="$("$RUN_TSX" "$REPO_ROOT/scripts/canary/fetch-blurt-head.ts")" || {
+	echo "canary: could not fetch Blurt chain head from any endpoint" >&2
+	exit 1
+}
+BLURT_HEAD_HEIGHT="$(printf '%s' "$BLURT_HEAD_LINE" | cut -f1)"
+BLURT_HEAD_HASH="$(printf '%s' "$BLURT_HEAD_LINE" | cut -f2)"
+BLURT_HEAD_TIMESTAMP="$(printf '%s' "$BLURT_HEAD_LINE" | cut -f3)Z"
 
 if [ -z "$BLURT_HEAD_HEIGHT" ] || [ "$BLURT_HEAD_HEIGHT" = "null" ]; then
 	echo "canary: Blurt RPC returned no head_block_number" >&2

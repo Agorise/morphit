@@ -2072,7 +2072,7 @@
     "body": "Choisis l'option qui correspond à ta situation.",
     "no_account_heading": "Vous n'avez pas de compte ?",
     "no_account_body": "Créez un nouveau compte ci-dessus en choisissant simplement un nom d'utilisateur cool ; c'est littéralement tout.",
-    "register_cta": "🌱 Créer un nouveau compte",
+    "register_cta": "Créer un nouveau compte",
     "checking": "Vérification de votre session…",
     "import_existing": "Se connecter avec seed de 12 mots, fichier json ou clé de posting",
     "unlock": {
