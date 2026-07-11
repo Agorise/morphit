@@ -341,14 +341,19 @@ const envSchema = z.object({
 			'VAPID subject must be a mailto: or https:// URL'
 		)
 		.optional(),
-	// Push-sender worker polling interval (ms).  Default 30s —
-	// faster than relay_pending_transfers (60s) because users
-	// expect notifications to feel immediate.
+	// Push-sender worker polling interval (ms).  Default 2s.
+	// cp450 — notifications must feel immediate: the end-to-end
+	// budget is <6s (a ~3s Blurt block + indexer enqueue + this
+	// drain + push-service delivery), so this drain is the one
+	// piece we fully control and it's kept small.  The prior 30s
+	// default blew the budget on its own.  The query is a cheap
+	// indexed SELECT (LIMIT pushBatchSize) that returns 0 rows
+	// while the queue is idle, so a 2s cadence is negligible load.
 	MORPHIT_RELAY_PUSH_POLL_INTERVAL_MS: z.coerce
 		.number()
 		.int()
 		.positive()
-		.default(30_000),
+		.default(2_000),
 	// Max queue rows drained per tick.  Bounds worst-case
 	// per-tick latency.  Default 50.
 	MORPHIT_RELAY_PUSH_BATCH_SIZE: z.coerce

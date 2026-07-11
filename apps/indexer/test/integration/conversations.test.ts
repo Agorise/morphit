@@ -22,47 +22,13 @@ import {
 	type IntegrationFixture
 } from './harness';
 
-/** Mirror of the SELECT in src/api/conversations.ts. Kept in sync
- *  so the test exercises the real query shape (incl. the order
- *  LATERAL + orders join added for the "RE: <order>" subline). */
-const CONVERSATIONS_SELECT = `
-	SELECT
-		g.peer,
-		g.last_message_at,
-		g.message_count,
-		g.has_user_sent,
-		o.permlink          AS order_permlink,
-		o.account           AS order_account,
-		o.side              AS order_side,
-		o.asset             AS order_asset,
-		o.fiat_currency     AS order_fiat_currency,
-		o.amount_min::text  AS order_amount_min,
-		o.amount_max::text  AS order_amount_max,
-		o.status            AS order_status
-	FROM (
-		SELECT
-			CASE WHEN sender = $1 THEN recipient ELSE sender END AS peer,
-			order_permlink,
-			MAX(created_at) AS last_message_at,
-			COUNT(*)::text AS message_count,
-			BOOL_OR(sender = $1) AS has_user_sent
-		FROM chat_messages
-		WHERE sender = $1 OR recipient = $1
-		GROUP BY peer, order_permlink
-		ORDER BY last_message_at DESC
-		LIMIT $2
-	) g
-	LEFT JOIN LATERAL (
-		SELECT ord.*
-		FROM orders ord
-		WHERE g.order_permlink IS NOT NULL
-			AND ord.permlink = g.order_permlink
-			AND ord.account IN ($1, g.peer)
-		ORDER BY (ord.account = g.peer) DESC
-		LIMIT 1
-	) o ON TRUE
-	ORDER BY g.last_message_at DESC
-`;
+// The production SELECT itself — imported, not duplicated (cp448).  cp447 flagged
+// that this test kept a hand-copied "kept in sync" mirror of the query, which had
+// already forced the cp446 owner-join fix to be applied in two places.  Importing
+// the exported constant makes drift impossible: change the query once, this test
+// exercises the change automatically.  (Aliased to the old local name so the
+// assertions below need no edits.)
+import { CONVERSATIONS_SQL as CONVERSATIONS_SELECT } from '../../src/api/conversations';
 
 /** Insert one chat_messages row with sensible defaults. Caller
  *  provides sender/recipient/created_at; other fields get fillers
@@ -265,6 +231,8 @@ describe.skipIf(!INTEGRATION_ENABLED)('conversations endpoint — SQL integratio
 		order_amount_min: string | null;
 		order_amount_max: string | null;
 		order_status: string | null;
+		peer_has_user_sent: boolean;
+		has_user_sent: boolean;
 	};
 
 	// Ken (cp445) — the inbox card shows "(Live/Expired/Cancelled)" beside the
@@ -324,6 +292,33 @@ describe.skipIf(!INTEGRATION_ENABLED)('conversations endpoint — SQL integratio
 		const result = await fx.db.query<OrderRow>(CONVERSATIONS_SELECT, ['alice', 200]);
 		expect(result.rowCount).toBe(1);
 		expect(result.rows[0]!.order_account).toBe('bob');
+	});
+
+	// cp447 — the Messages/Requests tabs split PEOPLE; the cards are DISCUSSIONS.
+	// A known contact's brand-new order thread must NOT land in Requests next to
+	// the paid strangers.
+	it('marks every thread of a peer as engaged once the user has replied anywhere', async () => {
+		await insertOrder(fx, 'bob', 'order-a', { asset: 'XMR' });
+		await insertOrder(fx, 'bob', 'order-b', { asset: 'BTC' });
+		// alice replied in thread A…
+		await insertMessage(fx, 'bob', 'alice', new Date('2026-04-23T10:00:00Z'), 'order-a');
+		await insertMessage(fx, 'alice', 'bob', new Date('2026-04-23T11:00:00Z'), 'order-a');
+		// …and bob opens a NEW thread B, which alice has not answered yet.
+		await insertMessage(fx, 'bob', 'alice', new Date('2026-04-23T12:00:00Z'), 'order-b');
+
+		const result = await fx.db.query<OrderRow>(CONVERSATIONS_SELECT, ['alice', 200]);
+		expect(result.rowCount).toBe(2);
+		const b = result.rows.find((r) => r.order_permlink === 'order-b')!;
+		// Per-thread: alice never spoke in B.
+		expect(b.has_user_sent).toBe(false);
+		// Per-peer: she has spoken to bob, so B belongs in Messages, not Requests.
+		expect(b.peer_has_user_sent).toBe(true);
+	});
+
+	it('a true stranger stays in Requests (no thread of theirs has a reply)', async () => {
+		await insertMessage(fx, 'eve', 'alice', new Date('2026-04-23T10:00:00Z'), null);
+		const result = await fx.db.query<OrderRow>(CONVERSATIONS_SELECT, ['alice', 200]);
+		expect(result.rows[0]!.peer_has_user_sent).toBe(false);
 	});
 
 	it('order fields are all NULL when the conversation references no order', async () => {

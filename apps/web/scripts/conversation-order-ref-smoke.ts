@@ -103,17 +103,23 @@ check(
 // ─── 3. Frontend render ────────────────────────────────────────────────
 const page = read('apps/web/src/routes/[lang]/chat/+page.svelte');
 check("chat page imports orderTitleParts", /import\s*\{\s*orderTitleParts\s*\}/.test(page));
-check('chat page renders the RE: subline gated on convo.order', /\{#if\s+convo\.order\}/.test(page));
+// cp450 (t.txt 12) — the RE: line is ALWAYS shown; the order title/status is
+// still gated on convo.order, with a "RE: -" fallback when there is no order.
+check('chat page still branches the RE: title on convo.order', /\{#if\s+convo\.order\}/.test(page));
+check('…with a "RE: -" fallback when the thread cites no order', /\{:else\}[\s\S]{0,140}truncate">-<\/span>/.test(page));
+// cp450 (t.txt 16) — the RE: line is PLAIN TEXT now: it no longer links to the
+// order page; the whole card is the click target for the conversation.
 check(
-	'RE: subline links to the order detail route (/@account/permlink)',
-	/\/@\$\{convo\.order\.account\}\/\$\{convo\.order\.permlink\}/.test(page)
+	'RE: subline no longer links to the order detail route (whole card → chat)',
+	!/\/@\$\{convo\.order\.account\}\/\$\{convo\.order\.permlink\}/.test(page) &&
+		/after:absolute after:inset-0/.test(page)
 );
 check('RE: subline uses the chat.inbox.re_prefix key', /chat\.inbox\.re_prefix/.test(page));
 check(
 	'RE: subline builds its title from orderTitleParts(convo.order, …)',
-	// cp425 — orderTitleParts now takes an optional goodsLabel 3rd arg
-	// (localized "goods/services" for barter), so allow trailing args.
-	/orderTitleParts\(convo\.order[,)]/.test(page)
+	// cp425 — orderTitleParts takes an optional goodsLabel 3rd arg; cp450 — the
+	// call may wrap across lines, so tolerate whitespace after the paren.
+	/orderTitleParts\(\s*convo\.order[,)\s]/.test(page)
 );
 
 // ─── 4. Locale coverage ────────────────────────────────────────────────

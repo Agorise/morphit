@@ -8,7 +8,8 @@
  *     peer: string,
  *     last_message_at: ISO string,
  *     message_count: number,
- *     has_user_sent: boolean,
+ *     has_user_sent: boolean,        // …in THIS thread
+ *     peer_has_user_sent: boolean,   // …ever, with this person (tab split)
  *     order: { permlink, account, side, asset, fiat_currency,
  *              amount_min, amount_max, status } | null
  *       // the order THIS THREAD is about, for the frontend's
@@ -55,6 +56,9 @@ interface ConversationRow {
 	last_message_at: Date;
 	message_count: string; // bigint → string
 	has_user_sent: boolean;
+	/** cp447 — has the caller ever replied to this PEER, in any thread? Drives the
+	 *  Messages/Requests tab split, which is about people, not discussions. */
+	peer_has_user_sent: boolean;
 	// The order this conversation is most recently about (from the
 	// latest message carrying an order_permlink), or all-null when
 	// the conversation references no order / the order row is gone.
@@ -71,55 +75,42 @@ interface ConversationRow {
 	order_status: string | null;
 }
 
-export function conversationsRoute(db: Database): Hono {
-	const app = new Hono();
-
-	app.get('/:account', async (c) => {
-		const account = c.req.param('account');
-		if (!isAccountName(account)) {
-			return c.json(errorBody('bad_request', 'invalid account name'), 400);
-		}
-
-		// Group by the "other party" — sender when the query account
-		// is the recipient, recipient when the query account is the
-		// sender. The CASE expression canonicalizes.
-		//
-		// `has_user_sent` aggregates whether any row in the group
-		// had the query account as sender (i.e. the user has
-		// replied at least once). Drives the frontend's
-		// "Requests" vs "Messages" tab split for Finding H layer 2:
-		// inbound-only conversations (has_user_sent=false) are
-		// strangers who paid the fee and are awaiting engagement.
-		//
-		// The LATERAL finds, per conversation, the MOST RECENT message
-		// that carried a plaintext `order_permlink` — so the "RE:" line
-		// tracks whatever order the two parties last referenced. The
-		// message's RECIPIENT is the order owner: chat.ts's op
-		// validator only accepts an `order_permlink` that names an
-		// order owned by the recipient, so `orders` joins on
-		// (recipient, permlink). The join tolerates a since-cancelled
-		// or expired order (those rows persist); it yields all-null
-		// only if the conversation references no order or the order
-		// row is truly gone. `order_permlink IS NOT NULL` uses the
-		// chat_messages (order_permlink, created_at DESC, sender)
-		// index (migration 25); the outer GROUP BY reuses the
-		// sender/recipient indexes.
-		// cp446 (Ken) — the inbox works like an email inbox: ONE CARD PER
-		// DISCUSSION, not one per person. Two threads with the same peer about two
-		// different orders are two different conversations, and a thread with no
-		// order is its own. So we group by (peer, order_permlink) rather than by
-		// peer, and a NULL permlink is a group in its own right — Postgres GROUP BY
-		// treats NULLs as equal, which is exactly what we want here.
-		//
-		// The order owner is whichever party actually owns an order with that
-		// permlink. The previous query assumed `m.recipient` was the owner, which
-		// holds for the first message of a thread but not for the replies.
-		const sql = `
+/**
+ * The conversations SELECT — exported as the SINGLE SOURCE OF TRUTH so the
+ * Postgres integration test (`test/integration/conversations.test.ts`) exercises
+ * the EXACT production query instead of a hand-copied duplicate that has to be
+ * "kept in sync" (cp447 flagged the drift risk after cp446's owner-join fix had
+ * to be applied in two places).  Static — parameterised by `$1` (the account)
+ * and `$2` (the row cap) only, no interpolation — so it is safe at module scope.
+ *
+ * Group by the "other party" — sender when the query account is the recipient,
+ * recipient when it is the sender; the CASE canonicalizes.  `has_user_sent`
+ * aggregates whether the user has replied at least once in THIS thread (drives
+ * the Requests-vs-Messages tab split: inbound-only threads are strangers who
+ * paid the fee and await engagement); `peer_has_user_sent` (cp447) is the same
+ * question over EVERY thread of that peer, computed with a window BEFORE the
+ * LIMIT so a peer whose older thread falls off the cap is still classified
+ * correctly (the tabs are about PEOPLE, the cards about DISCUSSIONS).
+ *
+ * The LATERAL finds, per conversation, the order the thread is about.  chat.ts's
+ * op validator only accepts an `order_permlink` naming an order owned by a PARTY
+ * to the thread, so `orders` joins on `permlink AND account IN ($1, g.peer)`,
+ * preferring the peer's own order; it tolerates a since-cancelled/expired order
+ * (those rows persist) and yields all-null only when the thread cites no order
+ * or the row is truly gone.  cp446 — the inbox is an email inbox: ONE CARD PER
+ * DISCUSSION, so we GROUP BY (peer, order_permlink) rather than by peer, and a
+ * NULL permlink is a group in its own right (Postgres GROUP BY treats NULLs as
+ * equal).  cp446 owner-join fix — the owner is whichever party actually owns an
+ * order with that permlink; the previous query assumed `m.recipient` was the
+ * owner, true for a thread's first message but not its replies.
+ */
+export const CONVERSATIONS_SQL = `
 			SELECT
 				g.peer,
 				g.last_message_at,
 				g.message_count,
 				g.has_user_sent,
+				g.peer_has_user_sent,
 				o.permlink          AS order_permlink,
 				o.account           AS order_account,
 				o.side              AS order_side,
@@ -130,15 +121,26 @@ export function conversationsRoute(db: Database): Hono {
 				o.status            AS order_status
 			FROM (
 				SELECT
-					CASE WHEN sender = $1 THEN recipient ELSE sender END AS peer,
-					order_permlink,
-					MAX(created_at) AS last_message_at,
-					COUNT(*)::text AS message_count,
-					BOOL_OR(sender = $1) AS has_user_sent
-				FROM chat_messages
-				WHERE sender = $1 OR recipient = $1
-				GROUP BY peer, order_permlink
-				ORDER BY last_message_at DESC
+					t.*,
+					-- cp447 — have I EVER replied to this person, in ANY thread?
+					-- The Messages/Requests split is about PEOPLE (cold contacts and
+					-- paid strangers go to Requests), while the cards are about
+					-- DISCUSSIONS. Computed with a window over every thread of that
+					-- peer BEFORE the LIMIT, so a peer whose older thread falls off
+					-- the end is still correctly classified.
+					BOOL_OR(t.has_user_sent) OVER (PARTITION BY t.peer) AS peer_has_user_sent
+				FROM (
+					SELECT
+						CASE WHEN sender = $1 THEN recipient ELSE sender END AS peer,
+						order_permlink,
+						MAX(created_at) AS last_message_at,
+						COUNT(*)::text AS message_count,
+						BOOL_OR(sender = $1) AS has_user_sent
+					FROM chat_messages
+					WHERE sender = $1 OR recipient = $1
+					GROUP BY peer, order_permlink
+				) t
+				ORDER BY t.last_message_at DESC
 				LIMIT $2
 			) g
 			LEFT JOIN LATERAL (
@@ -153,7 +155,23 @@ export function conversationsRoute(db: Database): Hono {
 			ORDER BY g.last_message_at DESC
 		`;
 
-		const result = await db.query<ConversationRow>(sql, [account, MAX_CONVERSATIONS]);
+export function conversationsRoute(db: Database): Hono {
+	const app = new Hono();
+
+	app.get('/:account', async (c) => {
+		const account = c.req.param('account');
+		if (!isAccountName(account)) {
+			return c.json(errorBody('bad_request', 'invalid account name'), 400);
+		}
+
+		// The query (and the full rationale for the GROUP BY, the peer/thread
+		// window, and the LATERAL owner-join) lives in the module-level
+		// CONVERSATIONS_SQL const above, which the Postgres integration test
+		// imports so it can never drift from what production runs.
+		const result = await db.query<ConversationRow>(CONVERSATIONS_SQL, [
+			account,
+			MAX_CONVERSATIONS
+		]);
 
 		return c.json({
 			account,
@@ -162,6 +180,7 @@ export function conversationsRoute(db: Database): Hono {
 				last_message_at: r.last_message_at.toISOString(),
 				message_count: parseInt(r.message_count, 10),
 				has_user_sent: r.has_user_sent,
+				peer_has_user_sent: r.peer_has_user_sent,
 				// Present only when the JOIN found a live order row for
 				// the latest order-carrying message. amount_min/max are
 				// fiat NUMERIC → ::text → Number (matches src/api/orders.ts).

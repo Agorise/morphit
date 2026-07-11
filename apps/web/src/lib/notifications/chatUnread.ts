@@ -23,6 +23,7 @@
 import { getConversations, getChatReadState } from '$lib/indexer/client';
 import { getUserBlurtAccount } from '$blurt/ops/profile';
 import { readState, isUnread, mergeRemoteReadState } from '$lib/chat/readState';
+import { chatFolders, isArchived } from '$lib/chat/chatFolders';
 import { setCategoryCount } from './index';
 import { startGlobalChatActivity, subscribeChatActivity } from '$lib/chat/globalChatActivityStream';
 
@@ -43,8 +44,8 @@ let convos: ReadonlyArray<{
 	order: { permlink: string } | null;
 }> = [];
 
-/** Recompute the chat count from the cached conversations + current
- *  read-state. Cheap; safe to call on every read-state change. */
+/** Recompute the chat badge from the cached conversations + current
+ *  read-state. Cheap; safe to call on every read-state / folder change. */
 function recount(): void {
 	const me = getUserBlurtAccount();
 	if (!me) {
@@ -55,9 +56,14 @@ function recount(): void {
 	let n = 0;
 	for (const c of convos) {
 		if (c.peer.toLowerCase() === meLc) continue;
+		const order = c.order?.permlink ?? '';
+		// Archived discussions are triaged — they don't feed the favicon /
+		// avatar-menu badge (t.txt item 10), so archiving an unread message
+		// clears the nag and "Mark all as read" can always reach zero.
+		if (isArchived(c.peer, order)) continue;
 		// cp446 — one count per DISCUSSION: three unread threads with the same
 		// person are three unread conversations, exactly as in an email inbox.
-		if (isUnread(c.peer, c.order?.permlink ?? '', c.last_message_at)) n++;
+		if (isUnread(c.peer, order, c.last_message_at)) n++;
 	}
 	setCategoryCount('chat', n);
 }
@@ -106,6 +112,11 @@ export function startChatUnreadChannel(): () => void {
 	// rather than waiting for the next poll. (Also fires once on subscribe.)
 	const unsub = readState.subscribe(() => recount());
 
+	// Archiving / restoring a discussion changes what counts toward the badge
+	// (archived is excluded), so recompute when the folder store changes too.
+	// (Also fires once on subscribe.)
+	const unsubFolders = chatFolders.subscribe(() => recount());
+
 	const onVisible = (): void => {
 		if (!document.hidden) void poll();
 	};
@@ -123,6 +134,7 @@ export function startChatUnreadChannel(): () => void {
 	return () => {
 		window.clearInterval(timer);
 		unsub();
+		unsubFolders();
 		document.removeEventListener('visibilitychange', onVisible);
 		unsubActivity();
 		stopActivityStream();

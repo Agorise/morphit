@@ -381,17 +381,166 @@ export function effectiveFastPathState(files: string[]): 'default' | 'on' | 'off
 	return state;
 }
 
-/** True if this version's indexer `schema.sql` differs from the one in the
- *  previous install (now the backup) — i.e. the upgrade crossed a schema
- *  change. Reads two files; returns false if either is missing/unreadable
- *  (can't tell → don't nag the operator). cp217. */
+/** Path to the MCP server's optional env file. systemd reads it as
+ *  `EnvironmentFile=-/etc/morphit/mcp.env`, which OVERRIDES the unit's
+ *  `Environment=` defaults. `MORPHIT_ETC_DIR` overrides `/etc/morphit` for
+ *  tests. PURE. */
+export function mcpEnvFile(): string {
+	const etc = process.env.MORPHIT_ETC_DIR ?? '/etc/morphit';
+	return join(etc, 'mcp.env');
+}
+
+/** The HTTP bind `morphit-mcp.service` actually listens on. The unit sets
+ *  `MORPHIT_MCP_HTTP_HOST=127.0.0.1` / `_PORT=8124` as DEFAULTS and reads
+ *  `/etc/morphit/mcp.env` AFTER, so a value there wins. On a BunkerWeb/Docker
+ *  host that file typically pins the bridge gateway
+ *  (`MORPHIT_MCP_HTTP_HOST=172.18.0.1`) so a reverse proxy can reach the
+ *  service — the exact reason a reachability probe must read the CONFIGURED
+ *  host and never assume loopback (a `127.0.0.1` probe would miss a
+ *  bridge-bound listener). Reads the file if present; otherwise returns the
+ *  unit defaults. Last assignment wins (mirrors `set -a; . file`). */
+export function resolveMcpHttpBind(mcpEnvPath: string): { host: string; port: number } {
+	let host = '127.0.0.1';
+	let port = 8124;
+	if (existsSync(mcpEnvPath)) {
+		let text = '';
+		try {
+			text = readFileSync(mcpEnvPath, 'utf-8');
+		} catch {
+			text = '';
+		}
+		for (const line of text.split('\n')) {
+			const h = line.match(/^\s*MORPHIT_MCP_HTTP_HOST\s*=\s*(\S+)/);
+			if (h) {
+				const v = h[1]!.replace(/^["']|["']$/g, '').trim();
+				if (v) host = v;
+			}
+			const p = line.match(/^\s*MORPHIT_MCP_HTTP_PORT\s*=\s*(\S+)/);
+			if (p) {
+				const n = Number(p[1]!.replace(/^["']|["']$/g, '').trim());
+				if (Number.isInteger(n) && n > 0 && n < 65536) port = n;
+			}
+		}
+	}
+	return { host, port };
+}
+
+/** Build the MCP `/health` URL for a host:port, bracketing IPv6 literals so
+ *  `fetch` parses them. PURE. */
+export function buildMcpHealthUrl(host: string, port: number): string {
+	const h = host.includes(':') ? `[${host}]` : host;
+	return `http://${h}:${port}/health`;
+}
+
+/** Classify a `/health` response. The MCP HTTP transport answers
+ *  `GET /health` → `200 { status: 'ok', transport: 'http' }` (liveness only —
+ *  no auth, not rate-limited; `apps/mcp-server/src/main.ts`). PURE. */
+export function classifyMcpHealth(status: number, bodyText: string): 'ok' | 'bad_status' | 'bad_body' {
+	if (status !== 200) return 'bad_status';
+	try {
+		const j = JSON.parse(bodyText) as { status?: unknown };
+		return j && j.status === 'ok' ? 'ok' : 'bad_body';
+	} catch {
+		return 'bad_body';
+	}
+}
+
+/** Probe the MCP `/health` endpoint with a few retries — the service needs a
+ *  moment to bind its listener after a restart. Best-effort: returns
+ *  reachability + a short human detail, NEVER throws. Not pure (network); the
+ *  verdict classification is the pure `classifyMcpHealth`. */
+async function probeMcpHealth(
+	url: string,
+	opts: { attempts?: number; delayMs?: number; timeoutMs?: number } = {}
+): Promise<{ reachable: boolean; detail: string }> {
+	const attempts = opts.attempts ?? 5;
+	const delayMs = opts.delayMs ?? 1500;
+	const timeoutMs = opts.timeoutMs ?? 3000;
+	let lastDetail = 'no response';
+	for (let i = 0; i < attempts; i++) {
+		const controller = new AbortController();
+		const timer = setTimeout(() => controller.abort(), timeoutMs);
+		try {
+			const res = await fetch(url, { signal: controller.signal, redirect: 'manual' });
+			const text = (await res.text()).slice(0, 4096);
+			const verdict = classifyMcpHealth(res.status, text);
+			if (verdict === 'ok') return { reachable: true, detail: `HTTP ${res.status}` };
+			lastDetail = verdict === 'bad_status' ? `HTTP ${res.status}` : `HTTP ${res.status}, unexpected body`;
+		} catch (e) {
+			lastDetail = e instanceof Error ? e.message : String(e);
+		} finally {
+			clearTimeout(timer);
+		}
+		if (i < attempts - 1) await new Promise((r) => setTimeout(r, delayMs));
+	}
+	return { reachable: false, detail: lastDetail };
+}
+/**
+ * Split schema.sql into its `-- ─── v<N> …` sections, keyed by version.
+ * Everything before the first marker is the preamble, keyed as version 0.
+ *
+ * Exported for the smoke; pure.
+ */
+export function splitSchemaSections(sql: string): Map<number, string> {
+	const out = new Map<number, string>();
+	const marker = /^-- \u2500\u2500\u2500 v(\d+)\b/gm;
+	const starts: { version: number; index: number }[] = [];
+	let m: RegExpExecArray | null;
+	while ((m = marker.exec(sql)) !== null) {
+		starts.push({ version: Number(m[1]), index: m.index });
+	}
+	if (starts.length === 0) {
+		out.set(0, sql);
+		return out;
+	}
+	out.set(0, sql.slice(0, starts[0]!.index));
+	for (let i = 0; i < starts.length; i++) {
+		const from = starts[i]!.index;
+		const to = i + 1 < starts.length ? starts[i + 1]!.index : sql.length;
+		out.set(starts[i]!.version, sql.slice(from, to));
+	}
+	return out;
+}
+
+/**
+ * Does an EXISTING database need operator attention after this upgrade?
+ *
+ * cp447 — this used to be a raw byte-diff of schema.sql, and it lied on every
+ * release. Since v37 the convention is that a schema change ships as a NEW
+ * `-- ─── v<N>` section plus a numbered entry in `MIGRATIONS[]`, which the
+ * indexer applies to an existing DB automatically at start-up. A byte-diff
+ * cannot tell that apart from the pre-v37 situation — schema.sql edited IN
+ * PLACE, which an existing DB never picks up — so it told operators their
+ * database might need a reset every time we shipped a perfectly ordinary
+ * migration. Telling someone to reset a chain-derived DB they did not need to
+ * reset is hours of re-sync for nothing, and worse, it trains them to ignore
+ * the warning that will one day be real.
+ *
+ * So: sections that are NEW in this version are the additive, self-applying
+ * kind. Strip them, and compare what remains. Anything else that moved — the
+ * preamble, a table body, an existing section rewritten — is an in-place edit
+ * that an existing DB will NOT pick up, and the operator does need to know.
+ */
 export function schemaBaselineChanged(oldInstallDir: string, newInstallDir: string): boolean {
 	const rel = join('apps', 'indexer', 'src', 'db', 'schema.sql');
 	const oldP = join(oldInstallDir, rel);
 	const newP = join(newInstallDir, rel);
 	if (!existsSync(oldP) || !existsSync(newP)) return false;
 	try {
-		return readFileSync(oldP, 'utf8') !== readFileSync(newP, 'utf8');
+		const oldSql = readFileSync(oldP, 'utf8');
+		const newSql = readFileSync(newP, 'utf8');
+		if (oldSql === newSql) return false;
+
+		const oldSections = splitSchemaSections(oldSql);
+		const newSections = splitSchemaSections(newSql);
+
+		// Every section the old install already knew about must be byte-identical,
+		// and none may have vanished. Sections only the new install has are the
+		// additive migrations the indexer runs itself.
+		for (const [version, oldBody] of oldSections) {
+			if (newSections.get(version) !== oldBody) return true;
+		}
+		return false;
 	} catch {
 		return false;
 	}
@@ -1285,8 +1434,38 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 						`deployed. Start it with \`sudo systemctl restart morphit-mcp\` and check ` +
 						`\`journalctl -u morphit-mcp\`.`
 				);
-			} else if (!mcpWasActive) {
-				info('Started morphit-mcp (it was not previously active).');
+			} else {
+				if (!mcpWasActive) {
+					info('Started morphit-mcp (it was not previously active).');
+				}
+				// ─── 10b-reach. Post-restart MCP reachability probe ──
+				// Confirm the freshly-restarted MCP actually bound its HTTP
+				// listener. Probe the CONFIGURED LOCAL bind (read from
+				// /etc/morphit/mcp.env), NOT the public site — on a BunkerWeb
+				// deployment the WAF/reverse-proxy fronts the service at /mcp,
+				// so the direct bind is the clean liveness signal, and the bind
+				// host is often the Docker-bridge gateway (172.18.0.1), which a
+				// loopback-only probe would miss. Best-effort + NON-FATAL: the
+				// MCP is isolated + read-only + non-critical, so a miss WARNS
+				// (with the exact place to look) rather than rolling back an
+				// otherwise-good upgrade.
+				const { host: mcpHost, port: mcpPort } = resolveMcpHttpBind(mcpEnvFile());
+				const healthUrl = buildMcpHealthUrl(mcpHost, mcpPort);
+				info(`Checking the MCP is reachable at ${mcpHost}:${mcpPort} ...`);
+				const probe = await probeMcpHealth(healthUrl);
+				if (probe.reachable) {
+					info(`✓ MCP is up (${healthUrl} → ok).`);
+				} else {
+					warn(
+						`MCP did not answer at ${mcpHost}:${mcpPort} (${probe.detail}). The new code ` +
+							`is deployed and the service was restarted, so this is likely a transient ` +
+							`startup delay or a bind mismatch — morphit.io itself is unaffected. Check ` +
+							`\`journalctl -u morphit-mcp\`, confirm MORPHIT_MCP_HTTP_HOST/PORT in ` +
+							`${mcpEnvFile()} points where you expect it to listen (e.g. 172.18.0.1 on a ` +
+							`Docker-bridge / BunkerWeb host, 127.0.0.1 otherwise) and that a host ` +
+							`process can reach that address.`
+					);
+				}
 			}
 		}
 	} else {
@@ -1378,10 +1557,14 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 
 	if (schemaChanged) {
 		info('');
-		info('⚠ The database schema changed in this version.');
-		info('  Existing indexer data is rebuilt from the chain, so this is safe to');
-		info('  fix. Run `morphit-ops doctor` — it now checks whether your DB needs');
-		info('  a reset, and OPERATIONS.md §46 has the reset + re-sync steps.');
+		info('⚠ The database schema changed IN PLACE in this version — not via a');
+		info('  numbered migration.');
+		info('  An existing database will NOT pick that up on its own. Indexer data is');
+		info('  rebuilt from the chain, so this is safe to fix: run `morphit-ops doctor`');
+		info('  — it checks whether your DB actually drifted — and OPERATIONS.md §46 has');
+		info('  the reset + re-sync steps.');
+		info('  (Ordinary numbered migrations are applied automatically at indexer');
+		info('   start-up and do NOT print this.)');
 	}
 
 	// cp431 — a warrant canary lives in the served build/ dir (operators sign

@@ -14,7 +14,7 @@ import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
-import { schemaBaselineChanged } from '../src/commands/upgrade.ts';
+import { schemaBaselineChanged, splitSchemaSections } from '../src/commands/upgrade.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO = join(__dirname, '..', '..', '..');
@@ -127,6 +127,66 @@ else bad('indexer main.ts drift check not wired');
 if (/\[check-schema\]/.test(indexerMain)) ok('indexer main.ts emits [check-schema] lines doctor parses');
 else bad('indexer main.ts [check-schema] output missing');
 
+// ─── cp447: additive migrations must NOT tell operators to reset the DB ──────
+//
+// This misfired for real on the v1.3.0 → v1.3.5 upgrade (migration 39, chat
+// read-state threading). The detector was a byte-diff of schema.sql, so it told
+// the operator their database "may need a reset" for a migration the indexer
+// applies by itself at start-up. Resetting a chain-derived DB that did not need
+// it is hours of re-sync for nothing — and it teaches operators to ignore the
+// warning that will one day be real.
+console.log('\n── cp447: additive section vs in-place edit ──');
+
+const BASE = [
+	'-- preamble',
+	'CREATE TABLE t (a TEXT);',
+	'',
+	'-- \u2500\u2500\u2500 v1 (initial schema) \u2500\u2500\u2500',
+	'CREATE TABLE u (b TEXT);',
+	''
+].join('\n');
+
+const PLUS_SECTION =
+	BASE + ['-- \u2500\u2500\u2500 v2 \u2500\u2500\u2500', 'ALTER TABLE u ADD COLUMN c TEXT;', ''].join('\n');
+
+const cases: [string, string, boolean][] = [
+	['an APPENDED v<N> section is a numbered migration — no reset warning', PLUS_SECTION, false],
+	['an IN-PLACE edit to an existing section still warns', BASE.replace('CREATE TABLE u (b TEXT);', 'CREATE TABLE u (b TEXT, c TEXT);'), true],
+	['an edit to the collapsed preamble still warns', BASE.replace('CREATE TABLE t (a TEXT);', 'CREATE TABLE t (a TEXT, z TEXT);'), true],
+	['a REMOVED section warns — the DB holds structures the code forgot', BASE.split('-- \u2500\u2500\u2500 v1')[0], true],
+	['an identical schema.sql never warns', BASE, false]
+];
+
+const oldInstall = mkInstall(BASE);
+for (const [name, newSql, expected] of cases) {
+	const got = schemaBaselineChanged(oldInstall, mkInstall(newSql));
+	if (got === expected) ok(name);
+	else bad(name, `expected ${expected}, got ${got}`);
+}
+
+// The real thing: this repo's schema.sql with its NEWEST section removed is what
+// the previous release shipped. Upgrading across it must be silent.
+{
+	const realSql = readFileSync(join(REPO, SCHEMA_REL), 'utf8');
+	const sections = splitSchemaSections(realSql);
+	const newest = Math.max(...[...sections.keys()]);
+	const previousSql = [...sections.entries()]
+		.filter(([v]) => v !== newest)
+		.sort((a, b) => a[0] - b[0])
+		.map(([, body]) => body)
+		.join('');
+	const got = schemaBaselineChanged(mkInstall(previousSql), mkInstall(realSql));
+	if (got === false) ok(`this repo\u2019s newest section (v${newest}) is additive — no warning`);
+	else bad(`this repo\u2019s newest section (v${newest}) must not warn`, `got ${got}`);
+
+	// …and the same file compared against a doctored copy whose v1 body was
+	// rewritten MUST warn, so the guard cannot be satisfied by always returning false.
+	const tampered = realSql.replace('CREATE TABLE IF NOT EXISTS chat_read_state (', 'CREATE TABLE IF NOT EXISTS chat_read_state ( -- tampered\n');
+	const got2 = schemaBaselineChanged(mkInstall(realSql), mkInstall(tampered));
+	if (got2 === true) ok('a rewritten baseline table body in the REAL schema still warns');
+	else bad('a rewritten baseline table body must warn', `got ${got2}`);
+}
+
 console.log('');
 console.log(`${pass} passed, ${fail} failed`);
 if (fail > 0) {
@@ -135,3 +195,4 @@ if (fail > 0) {
 }
 console.log('\u2713 schemaBaselineChanged correct; upgrade reminder + doctor check + indexer mode all wired');
 console.log(`\u2713 all ${pass} upgrade-schema-reminder scenarios passed`);
+

@@ -36,6 +36,7 @@ import { get } from 'svelte/store';
 import { MORPHIT_RELAY_ORIGIN, resolveOrigin } from '$net/config';
 import { fetchWithTimeout } from '$net/fetchWithTimeout';
 import { liveIdentity } from '$lib/stores/identity';
+import { notificationPrefs, mutedCategoriesFromPrefs } from './preferences';
 // cp165 byte budget: dblurt's PrivateKey + cryptoUtils are only
 // used inside `signSubscribe`/`signUnsubscribe`, which only fire
 // when the user toggles a notification preference.  Importing
@@ -94,6 +95,37 @@ export async function currentSubscription(): Promise<PushSubscription | null> {
 		return await reg.pushManager.getSubscription();
 	} catch {
 		return null;
+	}
+}
+
+/** Re-send this device's per-category opt-outs to the relay after the
+ *  user toggled a category (cp450 GAP A).
+ *
+ *  No-op unless the browser already holds a push subscription — a
+ *  category toggle must never CREATE a subscription, only update one
+ *  that exists. Implemented by re-running subscribe(), whose upsert
+ *  carries the fresh `muted_categories`; pushManager.subscribe() hands
+ *  back the existing subscription, so this is idempotent. Best-effort:
+ *  a locked session (can't sign) or a transient failure simply leaves
+ *  the relay with the previous list, which the next successful
+ *  subscribe corrects. Errors are swallowed so a settings toggle never
+ *  surfaces a scary push error. */
+export async function resyncPushCategories(
+	account: string,
+	privacyMode: PushPrivacyMode = 'standard'
+): Promise<void> {
+	if (!isPushSupported()) return;
+	let existing: PushSubscription | null = null;
+	try {
+		existing = await currentSubscription();
+	} catch {
+		return;
+	}
+	if (existing === null) return;
+	try {
+		await subscribe(account, privacyMode);
+	} catch {
+		// best-effort — see doc comment
 	}
 }
 
@@ -349,6 +381,9 @@ export async function subscribe(
 	}
 
 	const url = `${resolveOrigin(MORPHIT_RELAY_ORIGIN)}/v1/push/subscribe`;
+	// cp450 GAP A — send the user's per-category opt-outs so the relay
+	// only Web-Pushes categories this device wants. Absent/empty = all on.
+	const mutedCategories = mutedCategoriesFromPrefs(get(notificationPrefs));
 	let res: Response;
 	try {
 		res = await fetchWithTimeout(url, {
@@ -367,7 +402,8 @@ export async function subscribe(
 						: undefined,
 				signature: signatureHex,
 				timestamp,
-				locale
+				locale,
+				muted_categories: mutedCategories
 			})
 		});
 	} catch {

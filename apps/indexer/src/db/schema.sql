@@ -2281,6 +2281,16 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
     -- subscription that didn't include a locale.  Part 122 cp14.
     locale              TEXT        NOT NULL DEFAULT 'en',
 
+    -- Categories this device has OPTED OUT of (blocklist).  Empty
+    -- '{}' means nothing muted = every category on, which is the
+    -- pre-cp450 behaviour, so existing rows keep receiving all
+    -- pushes until their client next re-syncs.  The push-sender
+    -- skips a device whose array contains the pending row's
+    -- category, so the per-category Settings toggle now governs
+    -- Web Push (tab-closed) just as it already governed the
+    -- in-page (tab-open) path.  cp450 GAP A (v40).
+    muted_categories    TEXT[]      NOT NULL DEFAULT '{}',
+
     PRIMARY KEY (account, endpoint)
 );
 
@@ -2357,7 +2367,17 @@ CREATE TABLE IF NOT EXISTS push_pending (
 
     -- When this row was inserted by the indexer.  Used for
     -- ordering by FIFO + age-based draining.
-    enqueued_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    enqueued_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    -- Optional shared dedup tag matching the client's in-page
+    -- notificationTag (e.g. 'morphit-trade-<permlink>').  When set,
+    -- the sender emits it as the push payload's eventId, so the
+    -- service worker's tag `morphit-<category>-<eventId>` is
+    -- byte-identical to the in-page notification's tag and the
+    -- browser collapses the two into one.  NULL for pushes with no
+    -- in-page counterpart (plain chat / feedback / featured-bid) —
+    -- the sender then tags on the queue-row id.  cp450.
+    notification_id     TEXT
 );
 
 CREATE INDEX IF NOT EXISTS push_pending_enqueued_at_idx
@@ -2603,3 +2623,44 @@ ALTER TABLE chat_read_state
 
 COMMENT ON COLUMN chat_read_state.order_permlink IS
     'The discussion this ack is for: a permlink, or '''' for the order-less thread, or ''*'' for a legacy peer-wide ack.';
+
+-- ─── v40: push_subscriptions.muted_categories (cp450 GAP A) ───
+-- The per-category Settings toggle governed the in-page (tab-open)
+-- notification path but was silently ignored by Web Push (tab-closed):
+-- the push-sender fanned every chat / order / feedback push out to
+-- every subscribed device regardless of the account's toggles. This
+-- gives each device the state the sender was missing.
+--
+-- BLOCKLIST, not allowlist: the array names the categories the user
+-- turned OFF. Empty '{}' = nothing muted = all on = the pre-cp450
+-- behaviour, so every existing subscription keeps receiving everything
+-- until its client next re-syncs (no surprise silence on upgrade). It
+-- is also future-proof — a new category is on by default until muted,
+-- with no further migration. The push-sender skips a device whose
+-- muted_categories contains the pending row's category.
+--
+-- Idempotent with the inline column in the push_subscriptions CREATE
+-- TABLE above and with the v40 migration in migrations.ts.
+ALTER TABLE push_subscriptions
+    ADD COLUMN IF NOT EXISTS muted_categories TEXT[] NOT NULL DEFAULT '{}';
+
+COMMENT ON COLUMN push_subscriptions.muted_categories IS
+    'Categories this device has OPTED OUT of (blocklist). Empty = all on. The push-sender skips a device whose array contains the notification''s category.';
+
+-- ─── v41: push_pending.notification_id (cp450 dedup tag) ───
+-- An order-signal chat message fired TWO notifications for the
+-- recipient with an open-but-unfocused tab: the in-page trade listener
+-- and the category='order' Web Push each showed one, with different
+-- tags, so the browser didn't collapse them. This column carries the
+-- SAME tag id the in-page path uses ('morphit-trade-<permlink>'); the
+-- sender emits it as the push eventId, making the SW tag
+-- `morphit-order-morphit-trade-<permlink>` identical to the in-page
+-- one → the browser shows a single notification. NULL for pushes with
+-- no in-page counterpart (the sender falls back to the queue-row id).
+-- Idempotent with the inline column in the push_pending CREATE TABLE
+-- above and with the v41 migration in migrations.ts.
+ALTER TABLE push_pending
+    ADD COLUMN IF NOT EXISTS notification_id TEXT;
+
+COMMENT ON COLUMN push_pending.notification_id IS
+    'Optional shared dedup tag matching the in-page notificationTag (e.g. ''morphit-trade-<permlink>''). NULL → the sender tags on the queue-row id.';

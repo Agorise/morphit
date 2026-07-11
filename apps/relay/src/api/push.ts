@@ -95,7 +95,15 @@ const subscribeBody = z
 		// Stored on the subscription so the indexer can pick the
 		// right localized strings at push-pending enqueue time.
 		// Optional; defaults to 'en' when missing.
-		locale: z.string().min(2).max(10).optional()
+		locale: z.string().min(2).max(10).optional(),
+		// cp450 GAP A — categories this device has OPTED OUT of
+		// (blocklist). The push-sender skips a device whose list
+		// contains a push's category, so the per-category Settings
+		// toggle governs Web Push. Optional; absent = nothing muted
+		// = all on (the pre-cp450 behaviour). The store re-validates
+		// against its known-category set, so the enum here is belt +
+		// braces, not the only guard.
+		muted_categories: z.array(z.enum(['order', 'chat', 'feedback'])).max(3).optional()
 	})
 	.strict();
 
@@ -246,7 +254,8 @@ export class PushEndpoints {
 				auth: input.subscription.keys.auth,
 				userAgent: input.user_agent ?? null,
 				privacyMode: input.privacy_mode as PushPrivacyMode,
-				locale: input.locale ?? 'en'
+				locale: input.locale ?? 'en',
+				mutedCategories: input.muted_categories ?? []
 			});
 			return c.json({
 				status: 'subscribed',

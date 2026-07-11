@@ -88,9 +88,14 @@
 		try {
 			const mode: PushPrivacyMode =
 				get(notificationPrefs).pushPrivacy === 'self_hosted' ? 'self_hosted' : 'standard';
-			await subscribeToPush(account, mode);
-			setChannel('push', true);
+			// cp450 GAP A — enable the chat category BEFORE subscribing, so the
+			// subscribe payload's muted_categories list already reflects chat=on.
+			// (If we subscribed first, the relay would store chat as muted and
+			// this nudge — whose entire job is to turn chat pings ON — would
+			// silently fail to deliver them.)
 			setCategory('chat', true);
+			setChannel('push', true);
+			await subscribeToPush(account, mode);
 			enabled = true;
 			// Briefly confirm, then collapse.
 			setTimeout(() => {

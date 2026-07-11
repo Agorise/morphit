@@ -33,6 +33,7 @@
 
 	import { onDestroy, onMount, tick } from 'svelte';
 	import { markConversationRead, readAckTimestamp } from '$lib/chat/readState';
+	import { chatFolders, isStarred, toggleStar } from '$lib/chat/chatFolders';
 	import { pinToBottom } from '$lib/ui/pinToBottom';
 	import { truncatePublicKey } from '$lib/crypto/publicKeyDisplay';
 	import { get } from 'svelte/store';
@@ -195,6 +196,21 @@
 	 *  store contains the peer's account. Drives the Block/Unblock
 	 *  button label. The store is loaded on mount below. */
 	const isPeerBlocked = $derived($blockedAccounts.has(peer.toLowerCase()));
+
+	/** t.txt item 13 — is THIS discussion (same (peer, order) key the inbox uses)
+	 *  starred? Reading `$chatFolders` makes the kebab star reflect the state
+	 *  live, and stay in sync with a star toggled on the inbox. */
+	const threadStarred = $derived.by(() => {
+		void $chatFolders;
+		return isStarred(peer, orderPermlink ?? '');
+	});
+
+	/** Toggle the gold star for this discussion. Same store as the inbox, so
+	 *  leaving the chatroom lands the thread under the right tab. Does NOT close
+	 *  the kebab menu — the user sees the ☆ ⇄ ★ flip in place. */
+	function handleToggleThreadStar(): void {
+		toggleStar(peer, orderPermlink ?? '');
+	}
 
 	/** Set while a block/unblock broadcast is in flight, so the
 	 *  button can show a busy state and not double-fire. */
@@ -1585,32 +1601,49 @@
 								class="absolute right-0 top-full z-40 mt-1 min-w-[12rem] rounded-lg border border-ink-200 bg-white shadow-lg dark:border-ink-700 dark:bg-ink-900"
 								role="menu"
 							>
-								<!-- tt.txt #7 (Ken) — the animated LIVE pip used to sit beneath the
-								     kebab in the header row, eating the horizontal space the sprout /
-								     trades / reputation line needs on a phone. It lives at the top of
-								     this menu now, above a hairline divider. It is a status READOUT,
-								     not a menuitem: not focusable, no role, no click. -->
-								{#if streaming}
-									<div
-										class="flex items-center gap-1.5 px-4 py-2 text-xs"
-										aria-label={$_('chat.live') as string}
+								<!-- t.txt item 13 (Ken) — top row of the kebab menu: the star
+								     toggle pinned top-RIGHT (always present so it's always
+								     reachable and always shows the current ☆/★ state), with the
+								     animated LIVE readout to its LEFT when the thread is streaming.
+								     Toggling the star flips it in place (the menu stays open) and
+								     writes the SAME per-discussion folder the inbox reads, so
+								     leaving the chatroom lands this thread under the right tab. -->
+								<div class="flex items-center justify-between gap-2 px-4 py-2">
+									{#if streaming}
+										<span
+											class="flex items-center gap-1.5 text-xs"
+											aria-label={$_('chat.live') as string}
+										>
+											<span class="relative inline-flex h-2 w-2" aria-hidden="true">
+												<span
+													class="absolute inline-flex h-full w-full animate-ping rounded-full bg-morphit-emerald opacity-60"
+												></span>
+												<span class="relative inline-flex h-2 w-2 rounded-full bg-morphit-emerald"
+												></span>
+											</span>
+											<span class="uppercase tracking-widest text-ink-500 dark:text-ink-500">
+												{$_('chat.live')}
+											</span>
+										</span>
+									{:else}
+										<span></span>
+									{/if}
+									<button
+										type="button"
+										onclick={handleToggleThreadStar}
+										aria-pressed={threadStarred}
+										aria-label={threadStarred
+											? ($_('chat.menu.unstar_aria') as string)
+											: ($_('chat.menu.star_aria') as string)}
+										class="flex-none rounded p-0.5 text-lg leading-none transition-colors {threadStarred
+											? 'text-amber-400 hover:text-amber-500'
+											: 'text-ink-300 hover:text-amber-400 dark:text-ink-600 dark:hover:text-amber-400'}"
 									>
-										<span class="relative inline-flex h-2 w-2" aria-hidden="true">
-											<span
-												class="absolute inline-flex h-full w-full animate-ping rounded-full bg-morphit-emerald opacity-60"
-											></span>
-											<span class="relative inline-flex h-2 w-2 rounded-full bg-morphit-emerald"></span>
-										</span>
-										<span class="uppercase tracking-widest text-ink-500 dark:text-ink-500">
-											{$_('chat.live')}
-										</span>
-									</div>
-									<!-- Hairline divider, per Ken's ordering. Rendered WITH the LIVE row:
-									     a divider hanging at the top of the menu with nothing above it
-									     would just look broken. Exactly the old semantics — the pip only
-									     ever appeared while streaming — just relocated. -->
-									<div class="border-t border-ink-200 dark:border-ink-700"></div>
-								{/if}
+										{threadStarred ? '★' : '☆'}
+									</button>
+								</div>
+								<!-- Hairline divider under the status/star row. -->
+								<div class="border-t border-ink-200 dark:border-ink-700"></div>
 
 								<!-- cp406 — Chat Security: opt into "destroy on leave" (PFS) or
 								     keep the default readable history. Opening clears the dot. -->

@@ -10357,7 +10357,7 @@ privacy/security trade-offs you should be aware of.
 | Schema v33 — `push_subscriptions` | `apps/indexer/src/db/schema.sql` | One row per (account, browser) pairing |
 | Schema v33 — `push_pending` | same | Durable delivery queue (FIFO drain) |
 | Subscribe endpoints | `apps/relay/src/api/push.ts` | `GET /v1/push/vapid-public-key`, `POST /v1/push/subscribe`, `POST /v1/push/unsubscribe` |
-| Push-sender worker | `apps/relay/src/policy/pushSender.ts` | Drains `push_pending` every `MORPHIT_RELAY_PUSH_POLL_INTERVAL_MS` (default 30 s) |
+| Push-sender worker | `apps/relay/src/policy/pushSender.ts` | Drains `push_pending` every `MORPHIT_RELAY_PUSH_POLL_INTERVAL_MS` (default 2 s) |
 | Indexer enqueue | per-handler in `apps/indexer/src/indexer/handlers/` | Each notify-worthy event writes a `push_pending` row |
 | Service worker | `apps/web/src/service-worker.ts` | Decrypts pushes and shows OS notifications |
 | Client subscribe | `apps/web/src/lib/notifications/push.ts` | `pushManager.subscribe()` + relay registration |
@@ -10436,7 +10436,7 @@ unexpectedly off after you set the keys, grep the relay log for
 
 | Variable | Default | What it does |
 | --- | --- | --- |
-| `MORPHIT_RELAY_PUSH_POLL_INTERVAL_MS` | `30000` | How often the worker drains the queue.  Lower = snappier deliveries, more DB load |
+| `MORPHIT_RELAY_PUSH_POLL_INTERVAL_MS` | `2000` | How often the worker drains the queue.  Lower = snappier deliveries, more DB load |
 | `MORPHIT_RELAY_PUSH_BATCH_SIZE` | `50` | Max queue rows per tick.  Caps worst-case latency |
 | `MORPHIT_RELAY_PUSH_MAX_AGE_SECONDS` | `3600` | Drop pushes older than this.  Stale notifications are worse than no notifications |
 | `MORPHIT_RELAY_PUSH_MAX_CONSECUTIVE_FAILURES` | `5` | Delete a subscription after this many consecutive failed pushes (presumed dead browser) |
@@ -10444,15 +10444,19 @@ unexpectedly off after you set the keys, grep the relay log for
 
 ### 42.4 What the push-sender worker actually does
 
-Every `MORPHIT_RELAY_PUSH_POLL_INTERVAL_MS` (default 30 s),
+Every `MORPHIT_RELAY_PUSH_POLL_INTERVAL_MS` (default 2 s),
 the worker runs one tick:
 
 1. `SELECT … FROM push_pending ORDER BY enqueued_at ASC LIMIT
    <batch_size>` — drain the oldest rows.
 2. For each row, drop if `event_at` is older than
    `MORPHIT_RELAY_PUSH_MAX_AGE_SECONDS` ago.
-3. Join against `push_subscriptions` to find every device the
-   target account is subscribed on.
+3. Join against `push_subscriptions` to find every subscribed
+   device the target account has that has NOT opted out of the
+   pending row's category (cp450 GAP A — a device's
+   `muted_categories` blocklist, driven by the per-category
+   Settings toggle, now governs Web Push just as it already
+   governed the in-page path; an empty blocklist = all on).
 4. For each device, call `webpush.sendNotification()` — the
    library signs a VAPID JWT, encrypts the payload per
    RFC 8291 (E2E vs the push service), and POSTs to the push
@@ -10877,6 +10881,16 @@ curl http://127.0.0.1:8124/health     # → {"status":"ok","transport":"http"}
 ss -ltnp | grep 8124                    # systemd-owned listener on loopback
 morphit-ops health                       # Services: mcp — running
 ```
+
+> `morphit-ops upgrade` runs this same `/health` check for you after it
+> redeploys and restarts the MCP — but it probes the **configured** bind
+> read from `/etc/morphit/mcp.env` (`MORPHIT_MCP_HTTP_HOST`/`_PORT`), not a
+> hard-coded loopback. On a dockerized-BunkerWeb host that bind is the Docker
+> bridge gateway (`172.18.0.1:8124`), so the probe follows the service wherever
+> it actually listens. A failed probe only prints a warning (the MCP is
+> isolated, read-only, and non-critical — a miss never rolls back an otherwise
+> good upgrade); it tells you to check `journalctl -u morphit-mcp` and confirm
+> the bind in `mcp.env`.
 
 The wizard (`morphit-ops init`, step 21) also sets
 `MORPHIT_MCP_ADVERTISE=true` in your `morphit.config.env` so the

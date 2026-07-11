@@ -50,7 +50,15 @@
 	import { getProfilesBatch } from '$lib/indexer/profileCache';
 	import { peersNeedingProfile, mergeProfileMap } from '$lib/indexer/profileMerge';
 	import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
-	import { hiddenAccounts, hideAccount } from '$lib/utils/hiddenAccounts';
+	import { hiddenAccounts } from '$lib/utils/hiddenAccounts';
+	import {
+		chatFolders,
+		folderOf,
+		isStarred,
+		toggleStar,
+		archiveThread,
+		restoreThread
+	} from '$lib/chat/chatFolders';
 	import { blockedAccounts, loadBlocks } from '$lib/chat/blocks';
 	import { subscribeChatActivity } from '$lib/chat/globalChatActivityStream';
 	import { showToast } from '$lib/stores/toast';
@@ -63,33 +71,26 @@
 	let fallbackPeers: readonly string[] = $state([]);
 	let loadError: boolean = $state(false);
 
-	// ─── Unread derivation + tab partitioning ─────────────────────
-	// The $readState store read inside the $derived body makes this
-	// reactive: every time a conversation is marked read, the sort
-	// below re-runs, unread flags update, and the badge decrements
-	// automatically.
+	// ─── Folder partitioning ──────────────────────────────────────
+	// The inbox is an email inbox (Ken, t.txt). Every discussion lives in
+	// exactly one of three folders — Inbox (default), ★ Starred, Archived —
+	// tracked per-discussion in the `chatFolders` store. Reading the store
+	// inside the $derived below makes the lists (and the star/archive controls)
+	// re-render the instant a folder changes.
 
-	/** Active inbox tab. 'messages' shows conversations the user
-	 *  has engaged with (sent at least one message). 'requests'
-	 *  shows inbound-only conversations — strangers who've reached
-	 *  us via the Finding H layer-2 fee path (or any other legit
-	 *  first-contact). Default to 'messages' since it's the
-	 *  higher-frequency surface for an engaged user. */
-	type InboxTab = 'messages' | 'requests';
-	let activeTab = $state<InboxTab>('messages');
+	/** Active inbox tab. Inbox is the default and holds every discussion until
+	 *  the user stars or archives it. */
+	type InboxTab = 'inbox' | 'starred' | 'archived';
+	let activeTab = $state<InboxTab>('inbox');
 
-	/** Flag tracking whether we've applied the smart-default
-	 *  (open on Requests when Messages is empty but Requests
-	 *  has content). Only fires once so subsequent tab changes
-	 *  from the user aren't overwritten by late-arriving data. */
-	let smartDefaultApplied = $state(false);
-
-	/** All conversations with unread flags, sorted. Filters out
-	 *  peers the user has hidden (via orderbook "hide" or inbox
-	 *  "dismiss") or blocked. Shared source for both tab lists. */
+	/** All visible conversations, each tagged with its folder + unread flag,
+	 *  sorted by date newest-first (t.txt item 6 — the star/archive folders all
+	 *  sort by date, not unread-first). Filters out peers the user has hidden
+	 *  (orderbook "hide") or blocked — those never appear in any folder. */
 	const sortedConversations = $derived.by(() => {
-		// Explicit store read to register reactivity on the derived.
+		// Explicit store reads so the derived re-runs on read/folder changes.
 		void $readState;
+		void $chatFolders;
 		const hidden = $hiddenAccounts;
 		const blocked = $blockedAccounts;
 		const visible = conversations.filter(
@@ -97,30 +98,29 @@
 		);
 		const withFlags = visible.map((c) => ({
 			...c,
-			unread: isUnread(c.peer, c.order?.permlink ?? '', c.last_message_at)
+			unread: isUnread(c.peer, c.order?.permlink ?? '', c.last_message_at),
+			folder: folderOf(c.peer, c.order?.permlink ?? '')
 		}));
-		withFlags.sort((a, b) => {
-			if (a.unread && !b.unread) return -1;
-			if (!a.unread && b.unread) return 1;
-			return b.last_message_at.localeCompare(a.last_message_at);
-		});
+		withFlags.sort((a, b) => b.last_message_at.localeCompare(a.last_message_at));
 		return withFlags;
 	});
 
-	/** Conversations where the user has replied at least once. */
-	const messagesList = $derived(sortedConversations.filter((c) => c.has_user_sent));
-	/** Inbound-only conversations — strangers awaiting reply. */
-	const requestsList = $derived(sortedConversations.filter((c) => !c.has_user_sent));
+	type InboxRow = (typeof sortedConversations)[number];
 
-	/** Total unread across both tabs. Used for the top badge so
-	 *  the "there's something for you" signal doesn't depend on
-	 *  which tab you're currently on. */
-	const unreadTotal = $derived(sortedConversations.filter((c) => c.unread).length);
-	/** Per-tab unread counts, driving the pill badges on each tab
-	 *  button — the signal that nudges users toward the tab
-	 *  containing new activity. */
-	const messagesUnread = $derived(messagesList.filter((c) => c.unread).length);
-	const requestsUnread = $derived(requestsList.filter((c) => c.unread).length);
+	/** The three folder lists. A discussion is in exactly one. */
+	const inboxList = $derived(sortedConversations.filter((c) => c.folder === 'inbox'));
+	const starredList = $derived(sortedConversations.filter((c) => c.folder === 'starred'));
+	const archivedList = $derived(sortedConversations.filter((c) => c.folder === 'archived'));
+
+	/** Total unread across the folders that still nag you — Inbox + Starred.
+	 *  Archived is triaged, so it doesn't feed the header pill (nor, in
+	 *  chatUnread.ts, the favicon / avatar-menu badge). */
+	const unreadTotal = $derived(
+		sortedConversations.filter((c) => c.folder !== 'archived' && c.unread).length
+	);
+	/** Per-tab unread counts for the tab pill badges. */
+	const inboxUnread = $derived(inboxList.filter((c) => c.unread).length);
+	const starredUnread = $derived(starredList.filter((c) => c.unread).length);
 
 	/** Which list to render based on the active tab. */
 	/** Reuses `order_detail.status_*` — already translated in all ten locales, and
@@ -162,22 +162,9 @@
 		return c.order ? `${base}?order=${encodeURIComponent(c.order.permlink)}` : base;
 	}
 
-	const activeList = $derived(activeTab === 'messages' ? messagesList : requestsList);
-
-	// Smart-default: if the first load reveals an empty Messages
-	// tab but a non-empty Requests tab, switch to Requests so the
-	// user lands on their actual inbox content. Fires once; user
-	// clicks after this are respected without override.
-	$effect(() => {
-		if (smartDefaultApplied) return;
-		// Wait until we actually have data loaded (conversations
-		// populated or a confirmed empty-inbox from indexer).
-		if (conversations.length === 0) return;
-		smartDefaultApplied = true;
-		if (messagesList.length === 0 && requestsList.length > 0) {
-			activeTab = 'requests';
-		}
-	});
+	const activeList = $derived(
+		activeTab === 'starred' ? starredList : activeTab === 'archived' ? archivedList : inboxList
+	);
 
 	/** Fetch profiles for peers we don't have one for — so the 5 s poll doesn't
 	 *  re-request the whole batch every tick, but a peer whose profile we DON'T
@@ -307,31 +294,40 @@
 		markConversationRead(peer, orderPermlink);
 	}
 
-	/** Mark every visible conversation as read at once. */
+	/** Mark every discussion that still nags (Inbox + Starred) as read, so the
+	 *  header pill and the favicon / avatar-menu badge all drop to zero at once
+	 *  (t.txt item 10 — "once all messages are read … the green dots disappear").
+	 *  Archived threads are already triaged and don't feed the badge. */
 	function handleMarkAllRead(): void {
 		const now = new Date();
-		for (const c of activeList) {
-			if (c.unread) markConversationRead(c.peer, c.order?.permlink ?? '', now);
+		for (const c of sortedConversations) {
+			if (c.folder !== 'archived' && c.unread) {
+				markConversationRead(c.peer, c.order?.permlink ?? '', now);
+			}
 		}
 	}
 
-	/** Dismiss a request — client-side hide via the shared
-	 *  hiddenAccounts primitive. The conversation disappears from
-	 *  inbox AND orderbook until the user unhides from Settings.
-	 *  Intentionally softer than a block: no on-chain op, no
-	 *  signal to the other party, and fully reversible.
-	 *
-	 *  Also marks the conversation read so the top-level unread
-	 *  count decrements alongside the list change. */
-	function handleDismiss(peer: string): void {
-		// A recent-peer row carries no order context, so it acks the order-less
-		// thread — never the peer as a whole.
-		markConversationRead(peer, '', new Date());
-		hideAccount(peer);
-		// Closes the UX loop: the user knows the action landed
-		// AND knows how to reverse it. Without this the row just
-		// vanishes — mystifying the first time it happens.
-		showToast($_('chat.inbox.dismiss_toast', { values: { peer } }) as string, 'info');
+	/** Archive THIS discussion (per-discussion, not the whole person — the old
+	 *  "Dismiss" hid every thread with a peer at once). It moves to the Archived
+	 *  tab; its card's action box becomes "Restore". Also marks it read so the
+	 *  badge decrements alongside the move. */
+	function handleArchive(row: InboxRow): void {
+		const order = row.order?.permlink ?? '';
+		markConversationRead(row.peer, order, new Date());
+		archiveThread(row.peer, order);
+		showToast($_('chat.inbox.archive_toast') as string, 'info');
+	}
+
+	/** Restore an archived discussion back to the Inbox. */
+	function handleRestore(row: InboxRow): void {
+		restoreThread(row.peer, row.order?.permlink ?? '');
+		showToast($_('chat.inbox.restore_toast') as string, 'info');
+	}
+
+	/** Toggle the gold star. Starring MOVES the card to ★ Starred (from wherever
+	 *  it was); un-starring MOVES it to the Inbox. */
+	function handleToggleStar(row: InboxRow): void {
+		toggleStar(row.peer, row.order?.permlink ?? '');
 	}
 
 	// Last-message timestamps render via the unified <RelativeTime>
@@ -408,13 +404,10 @@
 			</p>
 		{/if}
 
-		<!-- Tabs: Messages (engaged conversations) and Requests
-		     (strangers awaiting reply, typically admitted via
-		     Finding H layer-2 stranger-fee). The requests tab is
-		     hidden when there are no requests AND the user isn't
-		     already on it — avoids teaching a UX element for a
-		     case most users never encounter. -->
-		{#if !loadError && conversations.length > 0 && (requestsList.length > 0 || activeTab === 'requests')}
+		<!-- Tabs: Inbox (everything, until you star or archive it), ★ Starred
+		     (gold-starred discussions), and Archived. All three always show —
+		     an email inbox doesn't hide its folders. -->
+		{#if !loadError && conversations.length > 0}
 			<div
 				role="tablist"
 				aria-label={$_('chat.inbox.tabs_aria') as string}
@@ -423,65 +416,61 @@
 				<button
 					type="button"
 					role="tab"
-					aria-selected={activeTab === 'messages'}
-					onclick={() => (activeTab = 'messages')}
+					aria-selected={activeTab === 'inbox'}
+					onclick={() => (activeTab = 'inbox')}
 					class="flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-semibold transition-colors {activeTab ===
-					'messages'
+					'inbox'
 						? 'border-morphit-emerald text-morphit-emerald'
 						: 'border-transparent text-ink-600 hover:text-ink-900 dark:text-ink-400 dark:hover:text-ink-100'}"
 				>
-					{$_('chat.inbox.tab_messages')}
-					{#if messagesUnread > 0}
+					{$_('chat.inbox.tab_inbox')}
+					{#if inboxUnread > 0}
 						<span
 							class="rounded-full bg-morphit-emerald/15 px-2 py-0.5 text-xs font-bold text-morphit-emerald"
-							aria-label={$_('chat.inbox.unread_aria', {
-								values: { n: messagesUnread }
-							}) as string}
+							aria-label={$_('chat.inbox.unread_aria', { values: { n: inboxUnread } }) as string}
 						>
-							{messagesUnread}
+							{inboxUnread}
 						</span>
 					{/if}
 				</button>
 				<button
 					type="button"
 					role="tab"
-					aria-selected={activeTab === 'requests'}
-					onclick={() => (activeTab = 'requests')}
+					aria-selected={activeTab === 'starred'}
+					onclick={() => (activeTab = 'starred')}
 					class="flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-semibold transition-colors {activeTab ===
-					'requests'
+					'starred'
 						? 'border-morphit-emerald text-morphit-emerald'
 						: 'border-transparent text-ink-600 hover:text-ink-900 dark:text-ink-400 dark:hover:text-ink-100'}"
 				>
-					{$_('chat.inbox.tab_requests')}
-					{#if requestsUnread > 0}
+					<!-- Literal gold star in the tab label (Ken: "★ Starred"). -->
+					<span class="text-amber-400" aria-hidden="true">★</span>
+					{$_('chat.inbox.tab_starred')}
+					{#if starredUnread > 0}
 						<span
 							class="rounded-full bg-morphit-emerald/15 px-2 py-0.5 text-xs font-bold text-morphit-emerald"
-							aria-label={$_('chat.inbox.unread_aria', {
-								values: { n: requestsUnread }
-							}) as string}
+							aria-label={$_('chat.inbox.unread_aria', { values: { n: starredUnread } }) as string}
 						>
-							{requestsUnread}
+							{starredUnread}
 						</span>
 					{/if}
+				</button>
+				<button
+					type="button"
+					role="tab"
+					aria-selected={activeTab === 'archived'}
+					onclick={() => (activeTab = 'archived')}
+					class="flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-semibold transition-colors {activeTab ===
+					'archived'
+						? 'border-morphit-emerald text-morphit-emerald'
+						: 'border-transparent text-ink-600 hover:text-ink-900 dark:text-ink-400 dark:hover:text-ink-100'}"
+				>
+					{$_('chat.inbox.tab_archived')}
 				</button>
 			</div>
 		{/if}
 
-		{#if activeTab === 'requests' && requestsList.length === 0}
-			<!-- Requests tab specifically empty. Different from the
-			     whole-inbox empty state — we tell the user what this
-			     tab is for so they know when it'll light up. -->
-			<div
-				class="rounded-2xl border-2 border-dashed border-ink-300 p-8 text-center dark:border-ink-700"
-			>
-				<p class="mb-2 font-semibold">
-					{$_('chat.inbox.requests_empty_heading')}
-				</p>
-				<p class="text-sm text-ink-600 dark:text-ink-300">
-					{$_('chat.inbox.requests_empty_body')}
-				</p>
-			</div>
-		{:else if unreadTotal > 0 && conversations.length > 0}
+		{#if unreadTotal > 0 && conversations.length > 0}
 			<div class="mb-3 flex justify-end">
 				<button
 					type="button"
@@ -502,122 +491,122 @@
 				     would reuse one DOM node for both. -->
 				{#each activeList as convo (threadKey(convo))}
 					{@const labelProps = extractLabelPropsFromProfile(profileMap[convo.peer])}
-					<!-- tt.txt #6 — `relative` so the chat anchor below can stretch its
-					     hit area over the WHOLE card (::after inset-0). Clicking
-					     anywhere on the card opens the conversation; only the "RE:"
-					     text itself goes to the order. -->
+					{@const starred = convo.folder === 'starred'}
+					{@const archived = convo.folder === 'archived'}
+					<!-- One card per DISCUSSION (peer + order), like an email inbox.
+					     The whole card is one click target → the conversation; only the
+					     star and the action box on the right are their own controls
+					     (t.txt item 16). `relative` anchors the stretched hit-area and
+					     the z-10 controls; `items-stretch` lets the action box run the
+					     full card height. -->
 					<li
-						class="relative flex items-stretch gap-0 overflow-hidden rounded-xl border bg-white transition hover:border-morphit-emerald hover:shadow-sm dark:bg-ink-950 dark:hover:border-morphit-emerald {convo.unread
+						class="relative flex items-stretch overflow-hidden rounded-xl border bg-white transition hover:border-morphit-emerald hover:shadow-sm dark:bg-ink-950 dark:hover:border-morphit-emerald {convo.unread
 							? 'border-morphit-emerald/60 dark:border-morphit-emerald/50'
 							: 'border-ink-200 dark:border-ink-800'}"
 					>
-						<!-- Chat link + optional "RE: <order>" subline share a
-						     column so the order line can be its OWN anchor (to the
-						     order detail page) as a SIBLING of the chat anchor — a
-						     nested <a> would be invalid HTML. The p-3 moves to the
-						     column so both rows sit inside the same padding. -->
 						<div class="flex min-w-0 flex-1 flex-col gap-0.5 p-3">
-							<a
-								href={threadHref(convo)}
-								onclick={() => handleOpen(convo.peer, convo.order?.permlink ?? '')}
-								class="flex items-center gap-3 after:absolute after:inset-0 after:content-['']"
-								aria-label={convo.unread
-									? ($_('chat.inbox.conversation_aria_unread', {
-											values: { peer: convo.peer }
-										}) as string)
-									: ($_('chat.inbox.conversation_aria_read', {
-											values: { peer: convo.peer }
-										}) as string)}
-							>
-								<!-- Unread indicator dot. aria-hidden because the
-								     unread status is already conveyed via the
-								     aria-label on the anchor. The hidden sibling
-								     span when read preserves alignment between
-								     read/unread rows so identity labels align in
-								     a column. -->
-								{#if convo.unread}
-									<span class="h-2 w-2 flex-none rounded-full bg-morphit-emerald" aria-hidden="true"
-									></span>
-								{:else}
-									<span class="h-2 w-2 flex-none" aria-hidden="true"></span>
-								{/if}
-								<!-- tt.txt #9 — 28px read as a smudge next to a 14px name.
-								     cp446 — Ken wants the avatar to span the FULL height of the
-								     text beside it: the @name line plus the "RE:" subline. Those
-								     are 20px + 16px plus the 2px gap-0.5 = 38px, so 40px is the
-								     nearest size that reads as full-height without overhanging.
-								     Cards with no order (no subline) keep the same avatar — a
-								     ragged column of two sizes would look like a bug. -->
-								<IdentityLabel
-									account={convo.peer}
-									displayName={labelProps.displayName}
-									avatarSvg={labelProps.avatarSvg}
-									avatarDataUri={labelProps.avatarDataUri}
-									avatarSize={40}
-									weight={convo.unread ? 'bold' : 'semibold'}
-									showCopy={false}
-								/>
+							<!-- Name row: avatar + @name (the click target), then the
+							     timestamp, then the star. The anchor's ::after stretches
+							     over the WHOLE card so a click anywhere opens the chat; the
+							     star sits above it (relative z-10) to stay its own control. -->
+							<div class="flex items-center gap-3">
+								<a
+									href={threadHref(convo)}
+									onclick={() => handleOpen(convo.peer, convo.order?.permlink ?? '')}
+									class="flex min-w-0 flex-1 items-center after:absolute after:inset-0 after:content-['']"
+									aria-label={convo.unread
+										? ($_('chat.inbox.conversation_aria_unread', {
+												values: { peer: convo.peer }
+											}) as string)
+										: ($_('chat.inbox.conversation_aria_read', {
+												values: { peer: convo.peer }
+											}) as string)}
+								>
+									<!-- Avatar spans the full height of the two text lines and is
+									     the same 40px on every card (every card now has a RE:
+									     line, so the shape never varies — t.txt item 8). -->
+									<IdentityLabel
+										account={convo.peer}
+										displayName={labelProps.displayName}
+										avatarSvg={labelProps.avatarSvg}
+										avatarDataUri={labelProps.avatarDataUri}
+										avatarSize={40}
+										weight={convo.unread ? 'bold' : 'semibold'}
+										showCopy={false}
+									/>
+								</a>
 								<span
-									class="ml-auto text-xs {convo.unread
+									class="flex-none text-xs {convo.unread
 										? 'font-semibold text-morphit-emerald'
 										: 'text-ink-500 dark:text-ink-400'}"
 								>
 									<RelativeTime iso={convo.last_message_at} format="descriptive" />
 								</span>
-							</a>
-							<!-- "RE: <order title>" — shown when this conversation is
-							     about a specific order. Its own link to the order
-							     detail page, indented to align under the username
-							     (dot 8 + gap-3 12 + avatar 40 + IdentityLabel
-							     gap-1.5 6 = 66px). The title uses the same shared
-							     orderTitleParts helper (and 10-locale wording) as
-							     the orderbook / order-detail / chat-thread. -->
-							{#if convo.order}
-								{@const parts = orderTitleParts(convo.order, undefined, $_('order_title.goods_services'))}
-								{@const orderTitle = $_(parts.key, { values: parts.values }) as string}
-								<!-- tt.txt #6 — was `flex`, i.e. a BLOCK-level box: its hit area
-								     silently spanned the whole card width, so Ken kept landing on
-								     the order page when he meant to open the chat. `inline-flex` +
-								     `self-start` shrink it to its own text. `relative z-10` keeps
-								     it above the stretched chat link. `max-w-full` preserves the
-								     truncation of long titles. -->
-								<a
-									href={lp(`/@${convo.order.account}/${convo.order.permlink}`)}
-									class="relative z-10 inline-flex max-w-full items-baseline gap-1 self-start pl-[66px] text-xs text-ink-500 transition-colors hover:text-morphit-emerald dark:text-ink-400 dark:hover:text-morphit-emerald"
-									title={`${$_('chat.inbox.re_prefix')} ${orderTitle}`}
+								<!-- Star (t.txt item 11) — to the right of the timestamp.
+								     Empty ☆ by default; clicking it fills it gold ★ and MOVES
+								     the discussion to ★ Starred; clicking a gold star MOVES it
+								     to the Inbox. z-10 so it sits above the card-wide link. -->
+								<button
+									type="button"
+									onclick={() => handleToggleStar(convo)}
+									aria-pressed={starred}
+									aria-label={starred
+										? ($_('chat.inbox.unstar_aria') as string)
+										: ($_('chat.inbox.star_aria') as string)}
+									class="relative z-10 flex-none rounded p-0.5 text-base leading-none transition-colors {starred
+										? 'text-amber-400 hover:text-amber-500'
+										: 'text-ink-300 hover:text-amber-400 dark:text-ink-600 dark:hover:text-amber-400'}"
 								>
-									<span class="flex-none font-medium">{$_('chat.inbox.re_prefix')}</span>
+									{starred ? '★' : '☆'}
+								</button>
+							</div>
+							<!-- "RE:" line (t.txt item 12) — ALWAYS present. Bound to the
+							     order when there is one ("RE: <title> (Live|Cancelled|Expired)"),
+							     otherwise "RE: -". Plain text, NOT a link (t.txt item 16): the
+							     card as a whole opens the chat. Aligned under the @name
+							     (avatar 40 + IdentityLabel gap 6 = 46px). -->
+							<div
+								class="flex min-w-0 items-baseline gap-1 pl-[46px] text-xs text-ink-500 dark:text-ink-400"
+							>
+								<span class="flex-none font-medium">{$_('chat.inbox.re_prefix')}</span>
+								{#if convo.order}
+									{@const parts = orderTitleParts(
+										convo.order,
+										undefined,
+										$_('order_title.goods_services')
+									)}
+									{@const orderTitle = $_(parts.key, { values: parts.values }) as string}
 									<span class="min-w-0 truncate">{orderTitle}</span>
 									{#if orderStatusLabel(convo.order.status)}
-										<!-- Ken — the order's current state, so a thread about a dead
-										     order says so on the card. `flex-none`: the title truncates,
-										     the status never does. -->
 										<span class="flex-none">({orderStatusLabel(convo.order.status)})</span>
 									{/if}
-								</a>
-							{/if}
+								{:else}
+									<span class="min-w-0 truncate">-</span>
+								{/if}
+							</div>
 						</div>
-						{#if activeTab === 'requests'}
-							<!-- Dismiss button. Client-side hide via the
-							     shared hiddenAccounts primitive — the peer
-							     disappears from inbox (and orderbook) until
-							     the user unhides from Settings. This is
-							     intentionally softer than a block: the peer
-							     isn't told anything, and unhiding is a
-							     one-click revert. -->
-							<!-- `relative z-10`: the chat anchor stretches its hit area over the
-							     whole card, so any control that must remain clickable has to
-							     sit above it. Without this, Dismiss would silently open the
-							     conversation instead. -->
+						<!-- Action box (t.txt item 7) — EVERY card has one, on the far
+						     right, full height. "Archive" moves the discussion to the
+						     Archived tab; on an already-archived card it reads "Restore"
+						     and moves it back to the Inbox. z-10 to sit above the
+						     card-wide link. -->
+						{#if archived}
 							<button
 								type="button"
-								onclick={() => handleDismiss(convo.peer)}
-								class="relative z-10 flex-none border-l border-ink-200 px-3 text-xs font-semibold text-ink-500 transition-colors hover:bg-ink-100 hover:text-red-600 dark:border-ink-800 dark:text-ink-400 dark:hover:bg-ink-800 dark:hover:text-red-400"
-								aria-label={$_('chat.inbox.dismiss_aria', {
-									values: { peer: convo.peer }
-								}) as string}
+								onclick={() => handleRestore(convo)}
+								class="relative z-10 flex-none border-l border-ink-200 px-3 text-xs font-semibold text-ink-500 transition-colors hover:bg-morphit-emerald/10 hover:text-morphit-emerald dark:border-ink-800 dark:text-ink-400 dark:hover:bg-morphit-emerald/20 dark:hover:text-morphit-emerald"
+								aria-label={$_('chat.inbox.restore_aria', { values: { peer: convo.peer } }) as string}
 							>
-								{$_('common.dismiss')}
+								{$_('chat.inbox.action_restore')}
+							</button>
+						{:else}
+							<button
+								type="button"
+								onclick={() => handleArchive(convo)}
+								class="relative z-10 flex-none border-l border-ink-200 px-3 text-xs font-semibold text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-900 dark:border-ink-800 dark:text-ink-400 dark:hover:bg-ink-800 dark:hover:text-ink-100"
+								aria-label={$_('chat.inbox.archive_aria', { values: { peer: convo.peer } }) as string}
+							>
+								{$_('chat.inbox.action_archive')}
 							</button>
 						{/if}
 					</li>

@@ -867,6 +867,12 @@ export interface ConversationSummary {
 	 *  "Requests" tabs (the latter holds first-contact threads
 	 *  admitted via Finding H layer 2's stranger-fee path). */
 	readonly has_user_sent: boolean;
+	/** cp447 — has the caller ever replied to this PEER, in any thread? The
+	 *  Messages/Requests split is about PEOPLE — Requests means a cold contact or
+	 *  a stranger who paid the fee — while the cards are about DISCUSSIONS. Using
+	 *  `has_user_sent` for the tabs would drop a known contact's new order thread
+	 *  into Requests. Optional so an older instance still type-checks. */
+	readonly peer_has_user_sent?: boolean;
 	/** The order THIS THREAD is about, or null when it cites none.
 	 *  Frontend renders it as a "RE: <linked title> (Live)" subline
 	 *  under the peer's handle; an order-less thread gets no subline. */

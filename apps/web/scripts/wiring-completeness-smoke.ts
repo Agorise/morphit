@@ -107,12 +107,12 @@ const CHECKS: readonly Check[] = [
 
 	// ─── Chat inbox ─────────────────────────────────────────────
 	{
-		id: 'chat-inbox-messages-requests-tabs',
+		id: 'chat-inbox-folders',
 		claim_source: 'faq',
-		claim_phrase: 'Messages',
+		claim_phrase: 'Archived',
 		anchor: {
 			kind: 'grep',
-			pattern: 'Requests',
+			pattern: 'tab_archived',
 			paths: ['apps/web/src/routes/[lang]/chat']
 		},
 		status: 'live'

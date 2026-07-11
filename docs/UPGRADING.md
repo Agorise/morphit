@@ -14,8 +14,10 @@ sudo -u morphit npx morphit-ops upgrade
 That command checks for a new release, shows you the notes, asks
 for confirmation, backs up your current install, applies the new
 tarball, runs `npm ci`, rebuilds and redeploys the web frontend
-(then verifies it's actually being served), and restarts services.
-If anything fails, it rolls back automatically.
+(then verifies it's actually being served), rebuilds the compiled
+`morphit-ops`/MCP bundles, redeploys and restarts the MCP server
+(then checks it answered on its configured bind), and restarts
+services. If anything fails, it rolls back automatically.
 
 The rest of this doc covers the details: how the trust chain
 works, the manual procedure (for operators who prefer to apply

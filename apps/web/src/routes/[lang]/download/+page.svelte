@@ -113,7 +113,8 @@
 						href={m.url}
 						target="_blank"
 						rel="noopener noreferrer external"
-						class="card-interactive card-hover-emerald flex items-center justify-between gap-3 {m.status === 'primary'
+						class="card-interactive card-hover-emerald flex cursor-pointer items-center justify-between gap-3 {m.status ===
+						'primary'
 							? 'border-morphit-emerald/40 bg-morphit-emerald/5'
 							: ''}"
 					>

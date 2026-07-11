@@ -558,11 +558,21 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 				const bodyStr = isOrderSignal
 					? localize(locale, 'order_body', ctx.signer)
 					: localize(locale, 'chat_body', ctx.signer);
+				// cp450 — for an order signal, tag the push with the SAME id
+				// the in-page trade listener uses (`morphit-trade-<permlink>`),
+				// so the SW's `morphit-order-<id>` tag matches the in-page one
+				// and the browser collapses the two into a single notification.
+				// Plain chat has no in-page counterpart → NULL (sender tags on
+				// the queue-row id).
+				const pushNotificationId =
+					isOrderSignal && typeof claimedPermlink === 'string'
+						? `morphit-trade-${claimedPermlink}`
+						: null;
 				await client.query(
 					`INSERT INTO push_pending
-					   (account, category, title, body, click_path, event_at)
-					 VALUES ($1, $2, $3, $4, $5, $6)`,
-					[recipient, pushCategory, titleStr, bodyStr, pushClickPath, ctx.blockTime]
+					   (account, category, title, body, click_path, event_at, notification_id)
+					 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+					[recipient, pushCategory, titleStr, bodyStr, pushClickPath, ctx.blockTime, pushNotificationId]
 				);
 			}
 		} catch (err) {

@@ -36,6 +36,7 @@
 		currentSubscription,
 		subscribe as subscribeToPush,
 		unsubscribe as unsubscribeFromPush,
+		resyncPushCategories,
 		type SubscribeError,
 		type PushPrivacyMode
 	} from '$lib/notifications/push';
@@ -96,6 +97,24 @@
 			}
 		})();
 	});
+
+	// cp450 GAP A — toggling a category updates the client prefs AND,
+	// if this device already has a Web Push subscription, re-syncs the
+	// muted list to the relay so tab-closed pushes obey the toggle too.
+	// Best-effort (a locked session just defers the sync to the next
+	// subscribe) — the visual toggle state never depends on the relay.
+	function handleCategoryToggle(
+		category: 'order' | 'chat' | 'feedback',
+		value: boolean
+	): void {
+		setCategory(category, value);
+		if (!pushSubscribed) return;
+		const account = getUserBlurtAccount();
+		if (!account) return;
+		const mode: PushPrivacyMode =
+			$notificationPrefs.pushPrivacy === 'self_hosted' ? 'self_hosted' : 'standard';
+		void resyncPushCategories(account, mode);
+	}
 
 	async function handlePushSubscribe(): Promise<void> {
 		if (pushBusy) return;
@@ -181,7 +200,7 @@
 					<input
 						type="checkbox"
 						checked={$notificationPrefs.categories.order}
-						onchange={(e) => setCategory('order', (e.currentTarget as HTMLInputElement).checked)}
+						onchange={(e) => handleCategoryToggle('order', (e.currentTarget as HTMLInputElement).checked)}
 						class="mt-1 h-5 w-5 flex-none accent-morphit-emerald"
 					/>
 				</label>
@@ -199,7 +218,7 @@
 					<input
 						type="checkbox"
 						checked={$notificationPrefs.categories.chat}
-						onchange={(e) => setCategory('chat', (e.currentTarget as HTMLInputElement).checked)}
+						onchange={(e) => handleCategoryToggle('chat', (e.currentTarget as HTMLInputElement).checked)}
 						class="mt-1 h-5 w-5 flex-none accent-morphit-emerald"
 					/>
 				</label>
@@ -217,7 +236,7 @@
 					<input
 						type="checkbox"
 						checked={$notificationPrefs.categories.feedback}
-						onchange={(e) => setCategory('feedback', (e.currentTarget as HTMLInputElement).checked)}
+						onchange={(e) => handleCategoryToggle('feedback', (e.currentTarget as HTMLInputElement).checked)}
 						class="mt-1 h-5 w-5 flex-none accent-morphit-emerald"
 					/>
 				</label>

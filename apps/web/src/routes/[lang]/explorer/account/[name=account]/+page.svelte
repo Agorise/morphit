@@ -45,6 +45,7 @@
 	import { getProfilesBatch } from '$lib/indexer/profileCache';
 	import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
 	import Head from '$components/Head.svelte';
+	import LoadingDots from '$components/LoadingDots.svelte';
 
 	// name is a route parameter; always defined when this page
 	// renders.  The non-null assertion is safe because SvelteKit
@@ -130,6 +131,14 @@
 	}
 	let ops = $state<OpRow[]>([]);
 	let oldestSeqLoaded = $state<number | null>(null);
+	/** t.txt item 1 — history streams into the ops list AFTER the account is
+	 *  already on screen (the page reveals on `balance`, not on the heaviest
+	 *  fetch). `historyLoading` drives the "Loading operations…" placeholder;
+	 *  `historyError` drives an inline notice if the first page threw. Both are
+	 *  for the INITIAL load only — the poll, refresh, and load-more use their
+	 *  own flags and never blank an already-populated list. */
+	let historyLoading = $state(true);
+	let historyError = $state(false);
 	let loadingMore = $state(false);
 	/** True while a manual "refresh now" is in flight (spins the icon,
 	 *  disables the button). */
@@ -189,11 +198,62 @@
 
 	async function loadInitial(): Promise<void> {
 		status = 'loading';
+		historyLoading = true;
+		historyError = false;
+		// t.txt item 1 — speed. All four fetches are INDEPENDENT, so fire them
+		// concurrently AND reveal the account the moment `balance` resolves
+		// (~one round-trip) rather than after the slowest of the four. The
+		// heaviest fetch — history — streams into the ops list on its own; keys
+		// and avatar likewise fill in as they arrive. None of them gates the
+		// page appearing; only `balance` does (it decides not-found / error).
+		const balanceP = fetchAccountBalance(resolveOrigin(MORPHIT_INDEXER_ORIGIN), account);
+		const keysP = fetchAccountKeys(resolveOrigin(MORPHIT_INDEXER_ORIGIN), account, fetch).catch(
+			(err) => {
+				console.warn('[explorer/account] keys load failed:', err);
+				return null;
+			}
+		);
+		const avatarP = getProfilesBatch([account]).catch((err) => {
+			console.warn('[explorer/account] avatar load failed:', err);
+			return null;
+		});
+
+		// Keys + avatar stream in and update their own state; they never block
+		// the page. (fire-and-forget — reactive $state re-renders on arrival.)
+		void keysP.then((k) => {
+			if (k !== null) {
+				keys = {
+					owner: firstAuthKey(k.owner),
+					active: firstAuthKey(k.active),
+					posting: firstAuthKey(k.posting),
+					memo: typeof k.memo_key === 'string' ? k.memo_key : null
+				};
+			}
+		});
+		void avatarP.then((map) => {
+			if (map !== null) {
+				const props = extractLabelPropsFromProfile(map.get(account) ?? null);
+				avatarSvg = props.avatarSvg;
+				avatarDataUri = props.avatarDataUri;
+			}
+		});
+
+		// First page of history — non-fatal, with its own loading/error state so
+		// a slow or failed history never blanks the account that's already shown.
+		void fetchHistory(-1)
+			.catch((err) => {
+				console.warn('[explorer/account] history load failed:', err);
+				historyError = true;
+			})
+			.finally(() => {
+				historyLoading = false;
+			});
+
 		try {
-			// Account + DGP via the indexer (privacy: no direct RPC from
-			// the browser). The balance proxy returns balance / vesting /
-			// manabar / dgp / posting_pub — everything this page renders.
-			const r = await fetchAccountBalance(resolveOrigin(MORPHIT_INDEXER_ORIGIN), account);
+			// Account + DGP via the indexer (privacy: no direct RPC from the
+			// browser). The balance proxy returns balance / vesting / manabar /
+			// dgp / posting_pub — everything the page header renders.
+			const r = await balanceP;
 			if (r.kind === 'not_found') {
 				status = 'not_found';
 				return;
@@ -206,38 +266,7 @@
 				throw new Error(`indexer returned ${acct.name} but ${account} was requested`);
 			}
 			applyBalanceData(r.data);
-
-			// All four public keys (owner / active / posting / memo) via the
-			// indexer's same-origin /keys proxy. Non-fatal: a keys failure
-			// must not blank a page that already loaded balances + history.
-			try {
-				const k = await fetchAccountKeys(resolveOrigin(MORPHIT_INDEXER_ORIGIN), account, fetch);
-				if (k !== null) {
-					keys = {
-						owner: firstAuthKey(k.owner),
-						active: firstAuthKey(k.active),
-						posting: firstAuthKey(k.posting),
-						memo: typeof k.memo_key === 'string' ? k.memo_key : null
-					};
-				}
-			} catch (err) {
-				console.warn('[explorer/account] keys load failed:', err);
-			}
-
-			// Custom avatar (SVG or WebP data-URI) from the account's profile
-			// json_metadata via the shared, cached profile batch. Non-fatal: a
-			// failure just leaves the name-seeded identicon fallback in place.
-			try {
-				const map = await getProfilesBatch([account]);
-				const props = extractLabelPropsFromProfile(map.get(account) ?? null);
-				avatarSvg = props.avatarSvg;
-				avatarDataUri = props.avatarDataUri;
-			} catch (err) {
-				console.warn('[explorer/account] avatar load failed:', err);
-			}
-
-			// First page of history.
-			await fetchHistory(-1);
+			// Reveal the page NOW — keys, avatar, and history fill in around it.
 			status = 'ok';
 		} catch (err) {
 			console.warn('[explorer/account] account load failed:', err);
@@ -426,7 +455,7 @@
 	</nav>
 
 	{#if status === 'loading'}
-		<p class="text-ink-500">{$_('explorer.account.loading')}</p>
+		<p class="text-ink-500"><LoadingDots label={$_('explorer.account.loading')} /></p>
 	{:else if status === 'not_found'}
 		<div class="card">
 			<h1 class="font-display text-xl font-bold">
@@ -655,7 +684,15 @@
 				</button>
 			</div>
 			<p class="mb-3 text-xs text-ink-500">{$_('explorer.account.delay_notice')}</p>
-			{#if ops.length === 0}
+			{#if historyLoading && ops.length === 0}
+				<p class="text-sm text-ink-500">
+					<LoadingDots label={$_('explorer.account.loading_ops')} />
+				</p>
+			{:else if historyError && ops.length === 0}
+				<p class="text-sm text-red-700 dark:text-red-300">
+					{$_('explorer.account.ops_error')}
+				</p>
+			{:else if ops.length === 0}
 				<p class="text-sm text-ink-500">{$_('explorer.account.no_ops')}</p>
 			{:else}
 				<ul class="divide-y divide-ink-200 dark:divide-ink-800">
@@ -664,7 +701,14 @@
 						{@const txUrl = morphitExplorerTxUrl(op.trxId)}
 						{@const blockUrl = morphitExplorerBlockUrl(op.block)}
 						{@const iso = op.timestamp.endsWith('Z') ? op.timestamp : `${op.timestamp}Z`}
-						<li class="py-3">
+						<!-- t.txt item 3 — hovering a row tints it the same dim emerald the
+						     FAQ articles use (`card-hover-emerald` = bg-emerald-50/30 / dark
+						     morphit-emerald/[0.05]). `-mx-2 px-2 rounded-lg` gives the tint
+						     rounded edges with breathing room without shifting the content;
+						     bg-only (no border) so the divide-y separators keep their colour. -->
+						<li
+							class="-mx-2 rounded-lg px-2 py-3 transition-colors hover:bg-emerald-50/30 dark:hover:bg-morphit-emerald/[0.05]"
+						>
 							<div class="flex items-baseline justify-between gap-2">
 								<span
 									class="rounded-md px-2 py-0.5 text-xs font-semibold {dec.isMorphitOp

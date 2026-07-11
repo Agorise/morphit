@@ -585,7 +585,7 @@ file in the same turn.
       `push_disabled_no_vapid_keys` (missing).  The
       worker's drain interval is tunable via
       `MORPHIT_RELAY_PUSH_POLL_INTERVAL_MS` (default
-      30000).  Subscribe-endpoint authentication
+      2000).  Subscribe-endpoint authentication
       requires a valid posting-key signature by default
       (Part 122 cp14, `MORPHIT_RELAY_PUSH_REQUIRE_SIGNED=true`).
       Full operator reference at
