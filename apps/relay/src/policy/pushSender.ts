@@ -54,6 +54,7 @@ interface PendingRow {
 	click_path: string | null;
 	event_at: Date;
 	enqueued_at: Date;
+	notification_id: string | null; // cp450 — shared dedup tag id (or null)
 }
 
 export interface PushSendTickResult {
@@ -138,7 +139,7 @@ export class PushSender {
 		// enqueued_at so older events go first; the worker is FIFO.
 		const result = await this.db.query<PendingRow>(
 			`SELECT id, account, category, title, body, click_path,
-			        event_at, enqueued_at
+			        event_at, enqueued_at, notification_id
 			   FROM push_pending
 			  ORDER BY enqueued_at ASC
 			  LIMIT $1`,
@@ -160,10 +161,12 @@ export class PushSender {
 				continue;
 			}
 
-			// Fetch all devices for the target account.
-			const devices = await this.subs.listByAccount(row.account);
+			// Fetch the account's devices that HAVEN'T opted out of this
+			// category — the per-category Settings toggle is applied here
+			// (cp450 GAP A). A device that muted `row.category` is skipped.
+			const devices = await this.subs.listByAccount(row.account, row.category);
 			if (devices.length === 0) {
-				// No subscribed devices — drop the row, nothing to do.
+				// No subscribed devices for this category — drop the row.
 				out.droppedNoSubscriptions++;
 				await this.db.query(`DELETE FROM push_pending WHERE id = $1`, [row.id]);
 				continue;
@@ -176,9 +179,13 @@ export class PushSender {
 				body: row.body,
 				category: row.category,
 				clickPath: row.click_path,
-				// Provide an event_id so the SW can deduplicate
-				// re-deliveries across devices on the same user.
-				eventId: row.id,
+				// eventId doubles as the SW's notification tag id
+				// (`morphit-<category>-<eventId>`). When the indexer set a
+				// shared `notification_id` (an order signal, matching the
+				// in-page notificationTag), use it so the two notifications
+				// collapse to one; otherwise fall back to the queue-row id
+				// (per-event dedup for pushes with no in-page twin). cp450.
+				eventId: row.notification_id ?? row.id,
 				eventAt: row.event_at.toISOString()
 			});
 

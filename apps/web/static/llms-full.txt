@@ -1527,7 +1527,7 @@ The only attack class Morphit can't fix for you is **social engineering you, the
 
 Three layers, designed so that small-scale legitimate first contact stays cheap while mass spam becomes expensive fast.
 
-**Layer 1 — Block list.** You can block any account on-chain. The indexer enforces it: blocked sender's messages to you simply don't land, no notification, no UI surface. They can't bypass by switching accounts unless they're willing to pay the layer-2 stranger fee from each new account, and even then you'll see the new account in your Requests tab and can block it too.
+**Layer 1 — Block list.** You can block any account on-chain. The indexer enforces it: blocked sender's messages to you simply don't land, no notification, no UI surface. They can't bypass by switching accounts unless they're willing to pay the layer-2 stranger fee from each new account, and even then you'll see the new account in your Inbox and can block it too.
 
 **Layer 2 — Stranger fee per recipient (with rapid-send escalation).** A first message from someone you've never exchanged with requires either a paid stranger-fee transaction (about $0.01 in Blurt, equivalent at the time of payment) sent to the operator's fees account, OR a prior message from you to them. Once any message has flowed in either direction between the two of you, the pair is unrestricted forever — replies don't cost anything.
 
@@ -1546,7 +1546,7 @@ Why $0.01 base specifically: it's small enough that legitimate first contact (a 
 
 **Layer 3 — Rate limits on never-replied conversations.** Even if a sender pays the (escalating) stranger fee, they're capped at 20 unique never-replied recipients per rolling 24 hours and 50 messages per recipient pair before you reply. The moment you reply to them, both caps lift forever for that pair. So a serious counterparty stays unrestricted as soon as you engage; a flooder gets cut off after their first burst, and has to wait or pay again from a fresh account.
 
-The combined effect: legitimate trade chat is essentially free and unrestricted; broadcast spam is priced into oblivion; harassment is one click away from being shut down via Layer 1. See 'How does the chat inbox work? Can I mute or unmute someone?' below for what the Requests tab and block button actually look like.
+The combined effect: legitimate trade chat is essentially free and unrestricted; broadcast spam is priced into oblivion; harassment is one click away from being shut down via Layer 1. See 'How does the chat inbox work? Can I mute or unmute someone?' below for what the inbox and block button actually look like.
 
 ---
 
@@ -1554,23 +1554,25 @@ The combined effect: legitimate trade chat is essentially free and unrestricted;
 
 **FAQ key:** `chat_inbox_features`
 
-The chat inbox lives at the chat icon in the header and has two tabs:
+The chat inbox lives at the chat icon in the header and works like an email inbox: **one card per discussion**, not one per person.
 
-**Messages** — conversations where you've sent at least one reply. These are people you've already engaged with; they get the traditional inbox treatment (latest activity on top, unread counts, full-history scroll-back).
+If you and the same trader have talked about three different orders, that is three cards, each with a "RE:" line naming the order and its current state — **(Live)**, **(Cancelled)** or **(Expired)** — so a thread about a dead order says so before you open it. A discussion that isn't about an order still gets its own card; its second line simply reads "RE: -". Open a card and you see only that discussion. Newest activity is always on top.
 
-**Requests** — inbound-only conversations from people you haven't replied to yet. Strangers who paid the layer-2 fee to reach you (see 'How does Morphit stop spam and unsolicited messages from strangers?' below) land here. The Requests tab keeps cold contacts visually separate from your active trade conversations so you don't lose track of an in-flight deal among first-contact noise.
+Reading one card marks **only that one** read — three unread conversations with the same person stay three unread conversations, on this device and every other one you sign in from. Unread cards keep an emerald border, and the chat icon (plus the browser tab and favicon) carries the unread count. Reading a card, or clicking **Mark all as read**, clears it.
 
-Unread counts appear next to each tab and on the chat icon in the header. The first time you reply to a Requests conversation, it transitions to Messages on next inbox load and you'll see a brief 'moved to Messages' confirmation toast.
+The inbox has three tabs, exactly like an email client:
 
-**Smart-default open tab.** When you open the inbox and Messages is empty but Requests has new content, it opens on Requests automatically — so a brand-new user pinged for the first time doesn't land on an empty Messages tab.
+**Inbox** — where everything lands by default and stays until you move it. New conversations, replies, and first contact from someone you've never met all show up here.
 
-**Mute / unmute (block + unblock).** Inside any conversation, the header has a Block button. Clicking it asks for confirmation, then broadcasts an on-chain block op — that account can no longer reach you from any of their existing handles, and the indexer enforces it server-side regardless of which Morphit instance the sender uses. To unmute, go to **Settings → Blocked accounts**: you'll see your full block list, and each entry has an Unblock button. Unblocking is also an on-chain op and takes effect immediately.
+**★ Starred** — tap the empty star to the right of a card's time and the discussion moves here; tap the gold star to send it back to the Inbox. The same star sits in the conversation's ⋮ menu, so you can flag a thread from inside the chatroom too.
 
-**Dismiss (soft hide).** Don't want to make a public block but also don't want a stranger's request cluttering your inbox? Use Dismiss in the Requests tab. It hides the conversation locally (per-browser, never on-chain, never visible to the other party) and you can restore it from **Settings → Hidden accounts**. Unlike block, dismiss doesn't notify or signal anything to the dismissed account.
+**Archived** — done with a discussion but don't want to block anyone? Tap **Archive** on the right of the card. It moves to Archived, stops counting toward your unread badge, and its button becomes **Restore** to bring it back to the Inbox. Archiving is per-discussion, local to your browser, never on-chain, and never visible to the other party.
 
-**Block vs Dismiss vs Hide:** Block is on-chain and protocol-level (cross-instance, cross-account-history). Dismiss is your inbox curation, local-only. Hide (the orderbook button — see 'Can I hide orders from specific users?' below) is the same per-browser local-hide concept extended to orderbook rows.
+**Mute / unmute (block + unblock).** Inside any conversation, the header's ⋮ menu has a Block button. It asks for confirmation, then broadcasts an on-chain block op — that account can no longer reach you from any handle, enforced server-side by the indexer no matter which Morphit instance they use. To unmute, go to **Settings → Blocked accounts** and click Unblock; that's an on-chain op too, effective immediately.
 
-Desktop and mobile both get optional push notifications for new messages — see 'How do push notifications work with my privacy?' for the privacy footprint. Notifications can be turned off at any time from Settings.
+**Block vs Archive vs Hide:** Block is on-chain and protocol-level (cross-instance, cross-account-history). Archive is your own inbox curation — local-only and per-discussion. Hide (the orderbook button — see 'Can I hide orders from specific users?' below) is the same local-hide idea extended to orderbook rows.
+
+Desktop and mobile both get optional push notifications for new messages — see 'How do push notifications work with my privacy?' for the privacy footprint. Turn them off any time from Settings.
 
 ---
 
@@ -1580,11 +1582,12 @@ Desktop and mobile both get optional push notifications for new messages — see
 
 Morphit has a built-in notifications system designed to keep you informed without being annoying. It works in layers — quiet ambient signals first, with louder OS-level pings as opt-ins on top — and ties to a chat inbox where conversations live.
 
-**The inbox.** Click the chat icon in the header. Two tabs:
-• **Messages** — conversations where you've replied at least once. Your active threads.
-• **Requests** — inbound contacts from people you haven't replied to yet, including strangers who paid the anti-spam fee to reach you.
+**The inbox.** Click the chat icon in the header. It works like email, with three tabs:
+• **Inbox** — every discussion by default, newest first. New conversations and first contact from strangers who paid the anti-spam fee all land here.
+• **★ Starred** — the discussions you've flagged with the gold star, one tap away.
+• **Archived** — discussions you've filed away; they stop counting toward your unread badge until you restore them.
 
-Unread counts surface on both tabs. See "How does the chat inbox work? Can I mute or unmute someone?" for muting, blocking, and request triage.
+The unread count surfaces on the Inbox tab and on the chat icon. See "How does the chat inbox work? Can I mute or unmute someone?" for starring, archiving, muting, and blocking.
 
 **Ambient channels (always on, no permission needed).** Three quiet signals update in your peripheral vision whenever something happens:
 • The browser tab title is prefixed with the unread count — for example, "(3) Morphit — Orderbook".

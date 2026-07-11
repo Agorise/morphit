@@ -26,6 +26,7 @@
 import { clearDraft, clearDraftsMatching } from '$lib/drafts';
 import { clearRecentPeers } from '$lib/chat/recentPeers';
 import { clearReadState } from '$lib/chat/readState';
+import { clearChatFolders } from '$lib/chat/chatFolders';
 import { clearAllPins } from '$lib/chat/pubPin';
 import { clearAllTradeStates } from '$lib/trades/tradeStatus';
 import { _clearVerifyCache } from '$lib/chat/blurtVerify';
@@ -54,6 +55,10 @@ export function runExplicitLockExtras(): void {
 	// with — exactly the sort of state an explicit lock should
 	// not leak.
 	clearReadState();
+	// And the per-discussion folder state (which threads the user starred or
+	// archived). Same privacy class as read-state — it reveals which
+	// discussions the user has been organising — so an explicit lock wipes it.
+	clearChatFolders();
 	// And the chain-anchored chat-pub pins (Option 5 / S2
 	// mitigation).  The pin set reveals which peers the user has
 	// chatted with, same privacy class as recentPeers and

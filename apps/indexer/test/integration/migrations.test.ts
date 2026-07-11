@@ -25,9 +25,10 @@ describe.skipIf(!INTEGRATION_ENABLED)('migrations — integration', () => {
 		if (fx) await fx.teardown();
 	});
 
-	it('applies v1 → v3 without SQL errors', async () => {
-		// applyMigrations runs each SQL file in order. It'll throw
-		// on any error, which vitest turns into a failure.
+	it('applies the full migration chain (v1 → head) without SQL errors', async () => {
+		// applyMigrations runs runMigrations(db), which applies every
+		// entry in MIGRATIONS[] in order (v1 through the current head).
+		// It throws on any SQL error, which vitest turns into a failure.
 		await fx.applyMigrations();
 	});
 
@@ -86,6 +87,57 @@ describe.skipIf(!INTEGRATION_ENABLED)('migrations — integration', () => {
 		await expect(
 			fx.db.query(`UPDATE orders SET fee_status = 'bogus' WHERE permlink = 'sell-btc-usd-aaa'`)
 		).rejects.toThrow();
+	});
+
+	it('push_subscriptions has the muted_categories column added in v40 (all-on default)', async () => {
+		// cp450 GAP A — the per-category Web Push opt-in blocklist.
+		const res = await fx.db.query<{ column_name: string; data_type: string }>(
+			`SELECT column_name, data_type FROM information_schema.columns
+			 WHERE table_schema = $1 AND table_name = 'push_subscriptions'
+			   AND column_name = 'muted_categories'`,
+			[fx.schema]
+		);
+		expect(res.rowCount).toBe(1);
+		expect(res.rows[0]!.data_type).toBe('ARRAY');
+		// A row inserted without the column defaults to '{}' (all categories on).
+		await fx.db.query(
+			`INSERT INTO push_subscriptions (account, endpoint, p256dh, auth, privacy_mode)
+			 VALUES ('mc_default', 'https://ep/mc', 'p', 'a', 'standard')`
+		);
+		const def = await fx.db.query<{ empty: boolean }>(
+			`SELECT muted_categories = '{}' AS empty FROM push_subscriptions
+			 WHERE account = 'mc_default'`
+		);
+		expect(def.rows[0]!.empty).toBe(true);
+	});
+
+	it('push_pending has the notification_id column added in v41 (nullable dedup tag)', async () => {
+		// cp450 double-fire fix — shared tag so an order-signal push and its
+		// in-page notification collapse.
+		const res = await fx.db.query<{ column_name: string; is_nullable: string }>(
+			`SELECT column_name, is_nullable FROM information_schema.columns
+			 WHERE table_schema = $1 AND table_name = 'push_pending'
+			   AND column_name = 'notification_id'`,
+			[fx.schema]
+		);
+		expect(res.rowCount).toBe(1);
+		expect(res.rows[0]!.is_nullable).toBe('YES');
+		// An order-signal row carries the shared tag; a plain row leaves it null.
+		await fx.db.query(
+			`INSERT INTO push_pending (account, category, title, body, click_path, event_at, notification_id)
+			 VALUES ('nid_order', 'order', 't', 'b', '/nid_order/o', NOW(), 'morphit-trade-o')`
+		);
+		await fx.db.query(
+			`INSERT INTO push_pending (account, category, title, body, click_path, event_at)
+			 VALUES ('nid_plain', 'chat', 't', 'b', '/chat', NOW())`
+		);
+		const rows = await fx.db.query<{ account: string; notification_id: string | null }>(
+			`SELECT account, notification_id FROM push_pending
+			 WHERE account IN ('nid_order', 'nid_plain') ORDER BY account`
+		);
+		const byAcct = Object.fromEntries(rows.rows.map((r) => [r.account, r.notification_id]));
+		expect(byAcct['nid_order']).toBe('morphit-trade-o');
+		expect(byAcct['nid_plain']).toBeNull();
 	});
 
 	it('related_accounts enforces canonical a < b ordering', async () => {

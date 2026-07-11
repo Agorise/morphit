@@ -64,7 +64,7 @@ export interface NotificationPrefs {
 }
 
 const DEFAULTS: NotificationPrefs = {
-	categories: { order: true, chat: false, feedback: true },
+	categories: { order: true, chat: true, feedback: true },
 	channels: { native: false, push: false, audio: false, vibrate: false },
 	pushPrivacy: 'standard',
 	quietHours: { enabled: false, from: '22:00', to: '07:00' },
@@ -118,6 +118,14 @@ const internal = writable<NotificationPrefs>(migrateLegacyTradeNotifications(hyd
 export const notificationPrefs: Readable<NotificationPrefs> = {
 	subscribe: internal.subscribe
 };
+
+/** The categories the user has turned OFF, in the shape the relay
+ *  stores on a push subscription as its `muted_categories` blocklist
+ *  (cp450 GAP A). Empty = nothing muted = every category on. Order is
+ *  stable so an unchanged pref set produces an unchanged payload. */
+export function mutedCategoriesFromPrefs(p: NotificationPrefs): string[] {
+	return (['order', 'chat', 'feedback'] as const).filter((c) => !p.categories[c]);
+}
 
 /** Persist current state to storage. Called after every mutator. */
 function persist(p: NotificationPrefs): void {

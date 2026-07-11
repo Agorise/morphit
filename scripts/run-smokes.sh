@@ -103,6 +103,9 @@ SMOKES=(
 	"apps/relay:drainer-defense-smoke"
 	"apps/relay:clock-drift-smoke"
 	"apps/relay:key-envelope-smoke"
+	"apps/relay:push-category-optin-smoke"
+	"apps/relay:push-tag-dedup-smoke"
+	"apps/relay:notification-latency-budget-smoke"
 	"apps/relay:fee-divergence-smoke"
 	"apps/relay:ip-bucketing-canonicalization-smoke"
 	"apps/relay:trusted-proxy-smoke"
@@ -153,6 +156,7 @@ SMOKES=(
 	"apps/web:chain-op-verify-smoke"
 	"apps/web:order-fee-active-auth-smoke"
 	"apps/web:wallet-op-builders-smoke"
+	"apps/web:smoke-tsconfig-alias-parity-smoke"
 	"apps/web:wallet-power-modal-smoke"
 	"apps/web:send-blurt-modal-smoke"
 	"apps/web:fee-split-smoke"
@@ -358,6 +362,7 @@ SMOKES=(
 	"apps/ops-cli:upgrade-schema-reminder-smoke"
 	"apps/ops-cli:upgrade-fastpath-ensure-smoke"
 	"apps/ops-cli:upgrade-rebuilds-dist-workspaces-smoke"
+	"apps/ops-cli:upgrade-mcp-reachability-smoke"
 	"apps/ops-cli:install-invariants-smoke"
 	"apps/ops-cli:compiled-bundle-smoke"
 	"packages/asset-registry:usdt-network-picker-required-smoke"
@@ -429,6 +434,7 @@ SMOKES=(
 	"apps/web:eli5-release-blocks-smoke"
 	"apps/web:avatar-menu-portal-smoke"
 	"apps/web:chat-inbox-threading-smoke"
+	"apps/web:explorer-download-polish-smoke"
 	"apps/web:chat-read-state-threading-smoke"
 	"apps/web:no-bare-root-href-in-lang-subtree-smoke"
 	"apps/web:balance-via-indexer-not-rpc-smoke"
@@ -505,12 +511,26 @@ for entry in "${SMOKES[@]}"; do
 		failed=$((failed + 1))
 		continue
 	fi
-	# Unified smoke tsconfig (cp63 LL #66) — merges path aliases from
-	# apps/web ($lib, $components, ...) and apps/indexer ($api, $config, ...)
-	# so cross-workspace smoke imports (e.g. indexer-tree smokes importing
-	# from apps/web/src/lib/) resolve.  Smokes that don't use any path
-	# alias don't care; tsx ignores the paths block when not needed.
-	if [ -f "$repo/tsconfig.smoke.json" ]; then
+	# Smoke tsconfig selection (cp63 LL #66; per-workspace override cp448).
+	# The repo-root `tsconfig.smoke.json` is the unified default — it merges
+	# path aliases from apps/web ($lib, $components, ...) and apps/indexer
+	# ($api, $config, ...) so cross-workspace smoke imports resolve, and a
+	# smoke that uses no alias doesn't care (tsx ignores the paths block).
+	#
+	# BUT a few SvelteKit `$`-aliases are PER-APP and genuinely conflict:
+	# `$blurt`/`$indexer` mean apps/web/src/lib/{blurt,indexer} in the web
+	# app and apps/indexer/src/{blurt,indexer} in the indexer.  A single
+	# flat `paths` map can't express both, so the root config maps them to
+	# the indexer.  A workspace that needs its own resolution ships its own
+	# `<workspace>/tsconfig.smoke.json` (apps/web does, so its smokes can
+	# `import()` a `$blurt/*`-importing web module without the module
+	# silently binding the indexer's copy).  Prefer the workspace-local
+	# config when present, else the unified root config.
+	# `smoke-tsconfig-alias-parity-smoke.ts` keeps both in sync with the
+	# runtime aliases in svelte.config.js / apps/indexer/tsconfig.json.
+	if [ -f "$repo/$dir/tsconfig.smoke.json" ]; then
+		TSX_ARGS=(--tsconfig "$repo/$dir/tsconfig.smoke.json")
+	elif [ -f "$repo/tsconfig.smoke.json" ]; then
 		TSX_ARGS=(--tsconfig "$repo/tsconfig.smoke.json")
 	else
 		TSX_ARGS=()

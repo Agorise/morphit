@@ -99,7 +99,12 @@ check('the conversation view acks the thread it is showing', /markConversationRe
 check('the thread route acks on-chain with the order', /broadcastChatRead\(live, peer, orderPermlink \?\? ''\)/.test(thread));
 check('the inbox marks one discussion read, not a person', /function handleOpen\(peer: string, orderPermlink: string\)/.test(inbox));
 check('mark-all-read walks discussions', /markConversationRead\(c\.peer, c\.order\?\.permlink \?\? '', now\)/.test(inbox));
-check('the unread badge counts discussions', /isUnread\(c\.peer, c\.order\?\.permlink \?\? '', c\.last_message_at\)/.test(badge));
+check(
+	'the unread badge counts unread discussions, excluding archived (t.txt 10)',
+	/const order = c\.order\?\.permlink \?\? '';/.test(badge) &&
+		/isArchived\(c\.peer, order\)/.test(badge) &&
+		/isUnread\(c\.peer, order, c\.last_message_at\)/.test(badge)
+);
 
 console.log('');
 if (fail === 0) console.log(`\u2713 all ${pass} chat-read-state-threading scenarios passed`);

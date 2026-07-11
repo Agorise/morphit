@@ -158,6 +158,68 @@ ALTER TABLE chat_read_state
 COMMENT ON COLUMN chat_read_state.order_permlink IS
     'The discussion this ack is for: a permlink, or '''' for the order-less thread, or ''*'' for a legacy peer-wide ack.';
 `
+	},
+	{
+		version: 40,
+		description:
+			'cp450 (GAP A): per-subscription muted_categories so Web Push obeys the user’s per-category opt-in',
+		// The push_subscriptions row had no notion of which categories the user
+		// wants. The push-sender fanned every chat / order / feedback push out to
+		// every subscribed device regardless of the account's Settings toggles —
+		// so the per-category switch worked for the in-page (tab-open) path but
+		// was silently ignored for Web Push (tab-closed). This adds the missing
+		// state.
+		//
+		// A BLOCKLIST, not an allowlist: the array names the categories the user
+		// has turned OFF. Empty '{}' therefore means "nothing muted = all on",
+		// which is exactly the current behaviour — so every pre-existing row
+		// keeps receiving everything until its client next re-syncs (no surprise
+		// silence on upgrade). It's also future-proof: a brand-new category is on
+		// by default for everyone until they explicitly mute it, with no further
+		// migration. The push-sender skips a device whose muted_categories
+		// contains the pending row's category.
+		//
+		// Idempotent with the inline column in the CREATE TABLE in schema.sql;
+		// the ALTER is a no-op on a fresh install and runs on upgrade.
+		sql: `
+ALTER TABLE push_subscriptions
+    ADD COLUMN IF NOT EXISTS muted_categories TEXT[] NOT NULL DEFAULT '{}';
+
+COMMENT ON COLUMN push_subscriptions.muted_categories IS
+    'Categories this device has OPTED OUT of (blocklist). Empty = all on. The push-sender skips a device whose array contains the notification''s category.';
+`
+	},
+	{
+		version: 41,
+		description:
+			'cp450: push_pending.notification_id — shared dedup tag so an order-signal Web Push and its in-page notification collapse into one',
+		// An order-signal chat message (one that cites an order permlink) fires
+		// TWO notifications for the recipient when their tab is open but not
+		// focused: the in-page trade listener shows an OS notification tagged
+		// `morphit-order-morphit-trade-<permlink>`, and — because the same
+		// message is also enqueued as a category='order' Web Push — the service
+		// worker shows a SECOND one tagged `morphit-order-<queue_row_id>`.
+		// Different tags → the browser doesn't collapse them → the user sees the
+		// same event twice.
+		//
+		// The fix gives the push the SAME tag id the in-page path uses. The SW
+		// already builds `morphit-<category>-<eventId>`, so when the push carries
+		// `notification_id = 'morphit-trade-<permlink>'` (exactly the client's
+		// in-page notificationTag), the two tags are identical and the browser
+		// shows ONE notification (the later one replaces the earlier in place).
+		//
+		// NULL for every push with no in-page counterpart (plain chat, feedback,
+		// featured-bid) — the sender falls back to the queue-row id, so those keep
+		// their per-event tag. Nullable + no backfill: push_pending is a
+		// transient queue drained within seconds, so in-flight rows simply use
+		// the fallback. Idempotent with the inline column in schema.sql.
+		sql: `
+ALTER TABLE push_pending
+    ADD COLUMN IF NOT EXISTS notification_id TEXT;
+
+COMMENT ON COLUMN push_pending.notification_id IS
+    'Optional shared dedup tag matching the in-page notificationTag (e.g. ''morphit-trade-<permlink>'') so an order-signal push and its in-page notification collapse. NULL → the sender tags on the queue-row id.';
+`
 	}
 	// Future migrations land here.  The v1 collapsed schema is the
 	// pre-launch baseline; from v37 forward, every new schema change is its
