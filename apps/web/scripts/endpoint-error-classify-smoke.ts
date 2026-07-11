@@ -59,7 +59,7 @@ check(
 	'EndpointList shows node health from the INDEXER (getRpcEndpoints → loadHealth)',
 	/import \{ getRpcEndpoints \}/.test(list) &&
 		/function loadHealth/.test(list) &&
-		/getRpcEndpoints\(\)/.test(list)
+		/getRpcEndpoints\(\{ probe \}\)/.test(list)
 );
 check(
 	'healthStatus derives cooling-down / unreachable / latency from indexer health',
@@ -77,8 +77,8 @@ check(
 		!/saveEndpoints|resetEndpoints|refreshRotator|addEndpoint|removeEndpoint/.test(list)
 );
 check(
-	'the refresh button re-fetches the indexer (not a browser probe)',
-	/onclick=\{\(\) => void loadHealth\(\)\}/.test(list)
+	'the refresh button re-fetches the indexer via an active probe (not a browser probe)',
+	/onclick=\{onRefreshClick\}/.test(list) && /void loadHealth\(true\)/.test(list)
 );
 
 // ─── 2. The rotator still classifies REAL-call failures ─────────────────────

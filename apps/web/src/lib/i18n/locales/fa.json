@@ -1722,8 +1722,6 @@
     "history_state_outranked": "پیشنهاد بالاتر",
     "history_state_expired": "منقضی شده",
     "history_state_order_inactive": "سفارش پایان یافته",
-    "history_extended": "تمدید‌شده ×{n}",
-    "history_extended_title": "پیشنهاد {n} بار توسط ضد-اسنایپ تمدید شد",
     "error_chain_rejected": "شبکه این تراکنش را رد کرد: {reason}",
     "error_unreachable": "برای انتشار نتوانستیم به نمونهٔ Morphit شما دسترسی پیدا کنیم. اتصال خود را بررسی کنید و دوباره تلاش کنید.",
     "history_link": "مشاهده سفارش‌های ویژه قبلی",

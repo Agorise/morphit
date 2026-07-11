@@ -1722,8 +1722,6 @@
     "history_state_outranked": "Przebita",
     "history_state_expired": "Wygasła",
     "history_state_order_inactive": "Oferta zakończona",
-    "history_extended": "Wydłużona ×{n}",
-    "history_extended_title": "Oferta wydłużona {n} raz(y) przez anti-snipe",
     "error_chain_rejected": "Sieć odrzuciła tę transakcję: {reason}",
     "error_unreachable": "Nie udało się połączyć z Twoją instancją Morphit, aby nadać transakcję. Sprawdź połączenie i spróbuj ponownie.",
     "history_link": "Zobacz wcześniejsze wyróżnione zlecenia",

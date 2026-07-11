@@ -1722,8 +1722,6 @@
     "history_state_outranked": "Перебита",
     "history_state_expired": "Истекла",
     "history_state_order_inactive": "Ордер завершён",
-    "history_extended": "Продлено ×{n}",
-    "history_extended_title": "Ставка продлена {n} раз(а) защитой от снайпинга",
     "error_chain_rejected": "Сеть отклонила эту транзакцию: {reason}",
     "error_unreachable": "Не удалось связаться с вашим экземпляром Morphit для трансляции. Проверьте соединение и попробуйте снова.",
     "history_link": "Прежние избранные ордера",

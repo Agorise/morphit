@@ -1722,8 +1722,6 @@
     "history_state_outranked": "已被超越",
     "history_state_expired": "已過期",
     "history_state_order_inactive": "訂單已結束",
-    "history_extended": "已延期 ×{n}",
-    "history_extended_title": "該競價被反狙擊機制延長咗 {n} 次",
     "error_chain_rejected": "網絡拒絕了此交易：{reason}",
     "error_unreachable": "無法連接到你的 Morphit 實例進行廣播。請檢查網絡連接後重試。",
     "history_link": "查看之前的推薦訂單",

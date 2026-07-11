@@ -146,7 +146,7 @@ Open the orderbook and Filter it by the cryptocurrency that you want. Pick a sel
 
 **FAQ key:** `how_to_sell`
 
-Post an order listing what you're selling, where you are, and which payment methods you accept. A buyer will open a chat with you to agree on details. When you confirm you received their payment, you send them the crypto (or whatever you guys agreed to exchange). Leave honest feedback when done — it helps everyone.
+Post an order listing what you're selling — Bitcoin (BTC), Monero (XMR), or BLURT — where you are, and which payment methods you accept. A buyer will open a chat with you to agree on details. When you confirm you received their payment, you send them the crypto (or whatever you guys agreed to exchange). Leave honest feedback when done — it helps everyone.
 
 ---
 
@@ -886,7 +886,7 @@ No. Morphit never asks for your identity, your name, your phone number, your gov
 
 **FAQ key:** `how_to_trade_walkthrough`
 
-Here's the full flow from start to finish. **Step 1:** Create a free account (one click, no email, no ID). **Step 2:** Write down your 12-word recovery phrase on paper (and/or encrypted in an offline password manager like KeePass) and store it somewhere safe. **Step 3:** Browse the orderbook and find a counterparty whose offer matches what you want — the right asset, the right price, a payment method you can use, good feedback history. **Step 4:** Open a chat with them using the encrypted chat button on their order. **Step 5:** Agree on specifics (exact amount, meetup if cash-in-person, which bank account for transfer, etc). **Step 6:** One of you sends the fiat/crypto first depending on your agreement; the other sees it arrive and sends the other side. **Step 7:** Leave each other feedback so future traders can see you're trustworthy. That's it. Morphit is just the bulletin board that connects you; the actual trade happens between the two of you directly.
+New to Morphit? Here's the full first-time user walkthrough, from start to finish. **Step 1:** Create a free account (one click, no email, no ID). **Step 2:** Write down your 12-word recovery phrase on paper (and/or encrypted in an offline password manager like KeePass) and store it somewhere safe. **Step 3:** Browse the orderbook and find a counterparty whose offer matches what you want — the right asset, the right price, a payment method you can use, good feedback history. **Step 4:** Open a chat with them using the encrypted chat button on their order. **Step 5:** Agree on specifics (exact amount, meetup if cash-in-person, which bank account for transfer, etc). **Step 6:** One of you sends the fiat/crypto first depending on your agreement; the other sees it arrive and sends the other side. **Step 7:** Leave each other feedback so future traders can see you're trustworthy. That's it. Morphit is just the bulletin board that connects you; the actual trade happens between the two of you directly.
 
 ---
 
