@@ -16,6 +16,59 @@ lib .ts, 190 smoke scripts, 70 docs/*.md.
 
 ---
 
+## cp454–cp456 — DELTA deep-deep (v1.4.7 → v1.4.8) ✅ CLEAR
+
+Scope: only the v1.4.8 surface — the 8 t.txt tasks (#1 profile-field clear, #2 mark-all-read
+under all tabs, #3 chatroom loading-vs-empty, #5 remove ✓Sent, #6 background notifications,
+#7 green toolbar buttons, #8 contact-flash), the null-`pathname` layout crash fix, the
+`(peer, order)` chat-thread remount fix (the #4 root cause), and the opt-in chat debug
+instrumentation (client + server). Black-hatted across injection, authz, privacy, input
+validation, DoS/rate-limit, data-integrity, error-handling, races, resource-leaks, i18n,
+backward-compat, a11y. Every functional change carries a tamper-tested registered smoke.
+**No findings.**
+
+**CLEAR:**
+- **Chat debug instrumentation (privacy / info-leak — the highest-risk addition).** OFF by
+  default at every layer: client gated on `chatDebugEnabled()` (localStorage/`?chatdebug=1`),
+  server gated on `MORPHIT_CHAT_DEBUG=1` env. Verified by grep that NO log call anywhere
+  (`chatDebug`/`chatDbg`/`tailerDbg`/`streamDbg`) passes ciphertext, plaintext, or decrypted
+  text — metadata only (sender/recipient/order_permlink/id/decrypt-ok flag). `client_tag` is
+  truncated to 10 chars via `tagPreview`. No behavior change when disabled (early-return
+  no-ops). Privacy-is-priority-#1 preserved. Remove after Ken confirms the #4 fix live.
+- **#4 `(peer, order)` remount fix (correctness / data-integrity).** The `{#key}` forces a
+  clean ConversationView remount when thread identity changes, so `deps.orderPermlink` (an
+  onMount snapshot) can never go stale. Remount re-fetches history + reconnects the SSE, both
+  per-(me,peer) and idempotent — no dup/leak. Closes BOTH the mis-tag (sender) and the
+  mis-filter (receiver, line-668) halves. Fresh loads unaffected (the `$derived` reads
+  `?order=` synchronously). Tamper-tested `chat-thread-remount-smoke` (5).
+- **#1 profile-field clear (data-integrity / the indexer merge contract).** `buildProfileBody`
+  now sends a PRESENT-but-empty text field as `''` (the clear signal the indexer merge honors:
+  `''`⇒clear, absent⇒keep), aligned to the avatar convention. Only op with a mergeable
+  metadata blob; localStorage prefs are wholesale-written so unaffected. redactPrivateKeys
+  still runs on the non-empty branch → no key-leak regression. `profile.clear.test.ts` (6,
+  tamper-tested) + updated `ops.redaction.test.ts` (empty⇒'' clear, absent⇒omit distinction).
+- **Null-`pathname` layout crash fix (error-handling / robustness).** `afterNavigate` now
+  reads `nav.from.url?.pathname === nav.to?.url?.pathname` and the layout's other three
+  `$page.url?.pathname ?? ''` reads are guarded. A null `nav.to.url` no longer throws through
+  SvelteKit's afterNavigate callback Set (which aborted later callbacks). No behavior change on
+  the happy path; strictly removes a crash.
+- **#6 background notifications (DoS / correctness).** Lifting `!document.hidden` off the
+  global-chat-activity ping handler makes a backgrounded tab refresh its favicon/title badge.
+  The ping is event-driven and cheap; the idle interval backstop stays gated → no polling-storm
+  regression. Tamper-tested `chat-bg-notify-v148-smoke` (4).
+- **#2/#3/#5/#7/#8 (UI, low-risk).** Pure client render/formatting; no authz/data surface.
+  `chat-ui-v148-smoke` (6) + updated `chat-sent-state-smoke` (6) + `footer-contact-flash-smoke`
+  (7). i18n parity held (10/10) after #5's key removal + #3's key addition; snapshot regenerated.
+
+**Verification totals:** web vitest 982 (2 stale redaction tests corrected: empty⇒'' clear),
+indexer vitest 610, svelte-check 0/0, indexer tsc 0, vite build ✓, i18n parity 10/10,
+native-floor 11/11, dead-key clean, persona-walkthrough 185/185, full smoke battery 14117
+scenarios (4 runner shape-pins updated for the null-safety guard + debug-log block form; no
+behavior pins moved), version-consistency 19/19 @ 1.4.8. No DB migration ships; on-chain
+release-payload format unchanged (backward-compatible; MORPHIT IS LIVE).
+
+---
+
 ## cp453 — DELTA deep-deep (v1.4.5 → v1.4.7) ✅ CLEAR
 
 Scope: only the cp453 surface (the 8 t.txt tasks + chat-notifications-default + the

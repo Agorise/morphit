@@ -237,7 +237,19 @@
 	</section>
 {:else if me && ConversationViewComponent}
 	{@const Component = ConversationViewComponent}
-	<Component {me} {peer} {orderPermlink} />
+	<!-- A conversation's identity is (peer, order). The controller captures
+	     `peer` and `orderPermlink` once in onMount (runtimeDeps), so if the
+	     ?order= query param changes on the SAME peer without a remount — e.g.
+	     navigating between the null-order thread and the order thread — the
+	     controller keeps a STALE orderPermlink and outgoing messages get the
+	     wrong thread tag (or none), landing them in a different thread than the
+	     one the user is viewing. Keying on (peer, order) forces a clean remount
+	     whenever either changes, so deps.orderPermlink always matches the URL.
+	     Fresh loads already have the right value (the $derived reads the query
+	     param synchronously), so this only adds a remount on an actual change. -->
+	{#key `${peer}\u0000${orderPermlink ?? ''}`}
+		<Component {me} {peer} {orderPermlink} />
+	{/key}
 {:else}
 	<!-- Loading shell — same vertical layout as ConversationView so
 	     there's no layout shift when the component swaps in.  The

@@ -1,13 +1,10 @@
 /**
- * chat-sent-state-smoke — cp453 (t.txt #8, ~60s perceived send time)
+ * chat-sent-state-smoke — v1.4.8 (t.txt)
  *
- * The broadcast is fast (~3s) but a message stayed "sending…" until `confirmed`,
- * which waits on the ~45s-behind indexer read-back — so a sent message looked
- * stuck for ~a minute. Fix: the moment the broadcast succeeds (`broadcast`
- * state) the bubble shows a light "✓ Sent" (single-tick) instead of holding
- * "sending…"; only `pending` reads "sending…"; `confirmed` stays clean. This
- * decouples the sender's PERCEIVED send time from follower/SSE lag entirely.
- * Source-level invariants, tamper-tested.
+ * A sent message stops reading "sending…" the instant the broadcast succeeds
+ * (fast perceived send), and then the bubble goes CLEAN — no checkmark, no
+ * "Sent" label (Ken found that annoying). "sending…" shows ONLY while `pending`;
+ * `broadcast`/`confirmed` render no status. Tamper-tested.
  */
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -26,28 +23,26 @@ function check(name: string, cond: boolean): void {
 }
 
 check(
-	'"sending…" is shown ONLY while pending (isSending === state pending)',
+	'"sending…" shows ONLY while pending (isSending === state pending)',
 	/const isSending = \$derived\(message\.state === 'pending'\)/.test(src)
 );
 check(
-	'a "Sent" state exists for a successful broadcast (isSent === state broadcast)',
-	/const isSent = \$derived\(message\.state === 'broadcast'\)/.test(src)
-);
-check(
-	'the meta line no longer holds "sending…" through the broadcast state',
+	'"sending…" does NOT persist through the broadcast state',
 	!/message\.state === 'pending' \|\| message\.state === 'broadcast'/.test(src)
 );
 check(
-	'the broadcast state renders a light ✓ "Sent" (single-tick, checkmark + label)',
-	/\{#if isSending\}[\s\S]*?chat\.message\.sending[\s\S]*?\{:else if isSent\}[\s\S]*?M20 6 9 17l-5-5[\s\S]*?chat\.message\.sent/.test(
-		src
-	)
+	'the broadcast state shows NO checkmark / "Sent" indicator',
+	!/isSent/.test(src) && !/M20 6 9 17l-5-5/.test(src) && !/chat\.message\.sent\b/.test(src)
+);
+check('the dead chat.message.sent label is removed', en.chat.message.sent === undefined);
+check(
+	'the meta line only renders for pending or failed (clean once sent)',
+	/\{#if isSending \|\| isFailed\}/.test(src)
 );
 check(
 	'the bubble is dimmed only while actively sending (opacity-80 on isSending)',
 	/class:opacity-80=\{isSending\}/.test(src) && !/class:opacity-80=\{isInFlight\}/.test(src)
 );
-check('the chat.message.sent label exists', Boolean(en.chat.message.sent));
 
 if (failures === 0) {
 	console.log('✓ all 6 chat-sent-state scenarios passed');

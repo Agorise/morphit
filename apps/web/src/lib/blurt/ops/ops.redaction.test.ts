@@ -224,11 +224,23 @@ describe('buildProfileBody — redaction chokepoint', () => {
 		assertNoRawKeyAnywhere(body);
 	});
 
-	it('omits short_bio from json_metadata when empty or whitespace', () => {
-		expect('json_metadata' in buildProfileBody(mkPayload({ short_bio: '' }), FIXED_TS)).toBe(false);
-		expect('json_metadata' in buildProfileBody(mkPayload({ short_bio: '   ' }), FIXED_TS)).toBe(
-			false
-		);
+	it('preserves empty short_bio as the explicit-clear signal', () => {
+		// cp454 (t.txt #1): a PRESENT-but-empty text field is the "clear this
+		// field" signal — it must reach json_metadata as '' so the indexer merge
+		// blanks the stored value, exactly like avatar_svg above. Omitting it (the
+		// old behaviour) left a cleared field stuck at its old on-chain value.
+		expect((buildProfileBody(mkPayload({ short_bio: '' }), FIXED_TS).json_metadata as
+			Record<string, unknown>).short_bio).toBe('');
+		expect((buildProfileBody(mkPayload({ short_bio: '   ' }), FIXED_TS).json_metadata as
+			Record<string, unknown>).short_bio).toBe('');
+	});
+
+	it('omits short_bio entirely when the field is ABSENT (undefined, not touched)', () => {
+		// The distinction the clear-signal relies on: absent ⇒ don't send the key
+		// at all (leave the stored value alone); present-but-empty ⇒ send '' (clear).
+		const body = buildProfileBody(mkPayload({}), FIXED_TS);
+		const meta = body.json_metadata as Record<string, unknown> | undefined;
+		expect(meta === undefined || !('short_bio' in meta)).toBe(true);
 	});
 
 	it('redacts a WIF accidentally embedded in an SVG text node (avatar_svg)', () => {
@@ -252,11 +264,13 @@ describe('buildProfileBody — redaction chokepoint', () => {
 		expect(meta.avatar_svg).toBe('');
 	});
 
-	it('omits nostr_url when absent or whitespace-only', () => {
+	it('preserves empty nostr_url as the explicit-clear signal', () => {
+		// cp454 (t.txt #1): present-but-empty ⇒ '' (clear), same as short_bio /
+		// blurt_media_url / avatar_svg. Was previously (wrongly) omitted.
 		const body1 = buildProfileBody(mkPayload({ nostr_url: '' }), FIXED_TS);
-		expect(body1.json_metadata).toBeUndefined();
+		expect((body1.json_metadata as Record<string, unknown>).nostr_url).toBe('');
 		const body2 = buildProfileBody(mkPayload({ nostr_url: '   ' }), FIXED_TS);
-		expect(body2.json_metadata).toBeUndefined();
+		expect((body2.json_metadata as Record<string, unknown>).nostr_url).toBe('');
 	});
 
 	it('trims whitespace around nostr_url / blurt_media_url before redacting', () => {

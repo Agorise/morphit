@@ -79,7 +79,7 @@ const SCENARIOS: readonly Scenario[] = [
 	},
 	{
 		name: '7 — seenIds dedup is gated on isDurable (a provisional id 0 must not collide in seenIds)',
-		mustHave: ['if (isDurable && seenIds.has(rec.id)) continue;'],
+		mustHave: ['if (isDurable && seenIds.has(rec.id)) {'],
 		// The pre-change unconditional form must be gone.
 		mustNotHave: ['\t\t\t\tif (seenIds.has(rec.id)) continue;\n\t\t\t\tconst d = await decryptOrPlaceholder']
 	},

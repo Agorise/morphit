@@ -43,8 +43,10 @@ check('the Contact link comes after the FAQ link', faqIdx !== -1 && contactIdx >
 
 // 3. The instances page reacts to ?highlight=current by flashing the CURRENT card.
 check(
-	'instances page reads highlight=current + drives a flashCurrent flag',
-	/highlight'\) === 'current'/.test(instances) && /flashCurrent = true/.test(instances)
+	'instances page reacts to highlight=current once the snapshot arrives + drives flashCurrent',
+	/searchParams\.get\('highlight'\)/.test(instances) &&
+		/snapshotReceived/.test(instances) &&
+		/flashCurrent = true/.test(instances)
 );
 check(
 	'the flash class is applied only to the current instance card',

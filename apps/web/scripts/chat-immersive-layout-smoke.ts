@@ -52,7 +52,7 @@ const SCENARIOS: readonly Scenario[] = [
 		file: LAYOUT,
 		mustHave: [
 			'const isImmersiveChat = $derived.by(() => {',
-			"const parts = $page.url.pathname.split('/').filter(Boolean);",
+			"const parts = ($page.url?.pathname ?? '').split('/').filter(Boolean);",
 			"return parts.length === 3 && parts[1] === 'chat';"
 		]
 	},

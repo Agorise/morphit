@@ -205,9 +205,17 @@ export function startChatUnreadChannel(): () => void {
 	// message lands for this account; re-poll immediately so the badge/tab
 	// update in real time instead of on the ≤5s backstop. Same-origin,
 	// content-free ping — see globalChatActivityStream.ts.
+	//
+	// v1.4.8 (t.txt #6) — do NOT gate this on `!document.hidden`. A background
+	// notification is exactly the case where the tab IS hidden: the whole point
+	// is that the favicon/title badge updates while the user is on another tab so
+	// they see there's a new message when they glance back. The ping is
+	// event-driven (fires only on a real new message for this account), so a poll
+	// per ping is cheap even when hidden. The interval backstop above stays gated
+	// to avoid idle polling; the event stream covers the hidden-tab case.
 	const stopActivityStream = startGlobalChatActivity();
 	const unsubActivity = subscribeChatActivity(() => {
-		if (!document.hidden) void poll();
+		void poll();
 	});
 
 	return () => {

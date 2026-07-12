@@ -73,7 +73,7 @@
 	 *  any other route NO), so EVERY non-chat route keeps the normal
 	 *  min-h-[100dvh] + footer layout byte-for-byte unchanged. */
 	const isImmersiveChat = $derived.by(() => {
-		const parts = $page.url.pathname.split('/').filter(Boolean);
+		const parts = ($page.url?.pathname ?? '').split('/').filter(Boolean);
 		return parts.length === 3 && parts[1] === 'chat';
 	});
 
@@ -108,7 +108,7 @@
 		// Skip the first page load (no `from`) and same-page
 		// hash changes — those don't represent a route change.
 		if (!nav.from) return;
-		if (nav.from.url.pathname === nav.to?.url.pathname) return;
+		if (nav.from.url?.pathname === nav.to?.url?.pathname) return;
 		// Ensure focus actually lands.  queueMicrotask so the
 		// DOM has settled after the route swap.  preventScroll: the
 		// a11y benefit is moving focus to the <main> landmark, NOT
@@ -159,7 +159,7 @@
 	// only on actual pathname change (resetForRoute is a no-op
 	// when the pathname matches).
 	$effect(() => {
-		resetGlossarySeen($page.url.pathname);
+		resetGlossarySeen($page.url?.pathname ?? '');
 	});
 
 	// Auto-lock: starts when the user becomes unlocked,
@@ -234,7 +234,7 @@
 		// for the no-prefix design: the test was startsWith
 		// rather than equal so /faq highlighted for both /faq
 		// and /faq#fees.
-		const path = $page.url.pathname;
+		const path = $page.url?.pathname ?? '';
 		return path.startsWith(href);
 	}
 </script>

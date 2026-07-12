@@ -356,8 +356,7 @@
       "failed_label": "Failed",
       "retry": "Retry",
       "retry_aria": "Retry sending this message",
-      "peer_not_ready": "This recipient hasn't opened Morphit chat yet. Once they do, your message will go through on retry.",
-      "sent": "Sent"
+      "peer_not_ready": "This recipient hasn't opened Morphit chat yet. Once they do, your message will go through on retry."
     },
     "composer": {
       "aria_label": "Send a message",
@@ -753,7 +752,8 @@
     "pay_prefill": {
       "hint": "The order's minimum is {min} {fiat} (≈ {amount} {asset}).",
       "hint_market": "The order's minimum is {min} {fiat} (≈ {amount} {asset} at current market price)."
-    }
+    },
+    "empty_state_loading": "Messaging with @{peer} is loading… Say hi!"
   },
   "cheat_sheet": {
     "heading": "Morphit cheat-sheet",

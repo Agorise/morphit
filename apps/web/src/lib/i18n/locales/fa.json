@@ -356,8 +356,7 @@
       "failed_label": "ناموفق",
       "retry": "تلاش مجدد",
       "retry_aria": "تلاش مجدد برای ارسال این پیام",
-      "peer_not_ready": "این گیرنده هنوز چت Morphit را باز نکرده است. وقتی باز کند، پیام شما در تلاش مجدد ارسال می‌شود.",
-      "sent": "ارسال شد"
+      "peer_not_ready": "این گیرنده هنوز چت Morphit را باز نکرده است. وقتی باز کند، پیام شما در تلاش مجدد ارسال می‌شود."
     },
     "composer": {
       "aria_label": "ارسال یک پیام",
@@ -753,7 +752,8 @@
     "pay_prefill": {
       "hint": "حداقل سفارش {min} {fiat} است (≈ {amount} {asset}).",
       "hint_market": "حداقل سفارش {min} {fiat} است (≈ {amount} {asset} به قیمت فعلی بازار)."
-    }
+    },
+    "empty_state_loading": "در حال بارگذاری گفتگو با @{peer}… سلام کن!"
   },
   "cheat_sheet": {
     "heading": "برگه راهنمای Morphit",

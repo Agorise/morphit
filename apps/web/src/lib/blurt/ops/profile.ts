@@ -284,14 +284,23 @@ export function buildProfileBody(
 	// upstream; a WIF doesn't parse as a URL), but the chokepoint
 	// discipline means no op leaves this module unredacted.
 	const jsonMetadata: Record<string, unknown> = {};
-	if (payload.nostr_url && payload.nostr_url.trim().length > 0) {
-		jsonMetadata.nostr_url = redactPrivateKeys(payload.nostr_url.trim());
+	// Text link/bio fields. Match the avatar convention below: an
+	// explicit empty string is a deliberate CLEAR signal (the indexer
+	// merge drops the key), while `undefined` means "not part of this
+	// update" and is omitted so the prior on-chain value is preserved.
+	// (Prior to v1.4.8 these used a truthy check that swallowed the
+	// empty string, so tapping Clear + Save silently kept the old value.)
+	if (payload.nostr_url !== undefined) {
+		const t = payload.nostr_url.trim();
+		jsonMetadata.nostr_url = t.length > 0 ? redactPrivateKeys(t) : '';
 	}
-	if (payload.blurt_media_url && payload.blurt_media_url.trim().length > 0) {
-		jsonMetadata.blurt_media_url = redactPrivateKeys(payload.blurt_media_url.trim());
+	if (payload.blurt_media_url !== undefined) {
+		const t = payload.blurt_media_url.trim();
+		jsonMetadata.blurt_media_url = t.length > 0 ? redactPrivateKeys(t) : '';
 	}
-	if (payload.short_bio && payload.short_bio.trim().length > 0) {
-		jsonMetadata.short_bio = redactPrivateKeys(payload.short_bio.trim());
+	if (payload.short_bio !== undefined) {
+		const t = payload.short_bio.trim();
+		jsonMetadata.short_bio = t.length > 0 ? redactPrivateKeys(t) : '';
 	}
 	// Avatar fields. We trust the sanitizer/encoder output — that's
 	// the chokepoint for safety — but still run redactPrivateKeys
