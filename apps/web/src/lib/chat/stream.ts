@@ -40,6 +40,15 @@
 import { browser } from '$app/environment';
 import { MORPHIT_INDEXER_ORIGIN, resolveOrigin } from '$net/config';
 import type { ChatMessageRecord } from '@morphit/indexer-client';
+import { chatDebug, tagPreview } from './debug';
+
+function headerTag(header: unknown): string | null {
+	if (header && typeof header === 'object' && 'client_tag' in header) {
+		const t = (header as { client_tag?: unknown }).client_tag;
+		return typeof t === 'string' ? t : null;
+	}
+	return null;
+}
 
 export interface ChatSnapshot {
 	readonly items: readonly ChatMessageRecord[];
@@ -140,11 +149,29 @@ export function createChatStream(args: {
 			return;
 		}
 		const url = buildStreamUrl(me, peer);
+		chatDebug('sse.connect', { me, peer, url });
 		eventSource = new EventSource(url);
+
+		eventSource.addEventListener('open', () => {
+			chatDebug('sse.open', { me, peer });
+		});
 
 		eventSource.addEventListener('snapshot', (ev: MessageEvent) => {
 			try {
 				const snap = JSON.parse(ev.data) as ChatSnapshot;
+				chatDebug('sse.snapshot', {
+					me,
+					peer,
+					count: snap.items.length,
+					indexed_block: snap.indexed_block,
+					items: snap.items.map((it) => ({
+						id: it.id,
+						sender: it.sender,
+						recipient: it.recipient,
+						order: it.order_permlink ?? null,
+						tag: tagPreview(headerTag(it.header))
+					}))
+				});
 				// Drop any pending buffered diffs — snapshot is
 				// authoritative.
 				buffer.length = 0;
@@ -167,6 +194,16 @@ export function createChatStream(args: {
 		eventSource.addEventListener('message_appended', (ev: MessageEvent) => {
 			try {
 				const rec = JSON.parse(ev.data) as ChatMessageRecord;
+				chatDebug('sse.appended', {
+					me,
+					peer,
+					id: rec.id,
+					provisional: rec.id === 0,
+					sender: rec.sender,
+					recipient: rec.recipient,
+					order: rec.order_permlink ?? null,
+					tag: tagPreview(headerTag(rec.header))
+				});
 				if (buffer.length >= MAX_BUFFER_SIZE) {
 					// Drop oldest event to make room.  In a healthy
 					// workload we never hit this path; if we do, the
@@ -186,6 +223,11 @@ export function createChatStream(args: {
 			// EventSource auto-reconnects.  Mark streaming false
 			// transiently so the UI can dim the "Live" pip; flips
 			// back true when the next snapshot arrives.
+			chatDebug('sse.error', {
+				me,
+				peer,
+				readyState: eventSource?.readyState ?? -1 // 0=connecting,1=open,2=closed
+			});
 			setStreaming(false);
 		});
 	}

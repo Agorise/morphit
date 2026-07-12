@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
+	import { page } from '$app/stores';
 	import { _ } from 'svelte-i18n';
 	import { browser } from '$app/environment';
 	import Head from '$components/Head.svelte';
@@ -152,19 +153,27 @@
 		streaming = false;
 	}
 
-	/** t.txt #5 — the footer "Contact" link lands here with ?highlight=current;
-	 *  flash the current instance's card border so the eye finds "the instance
-	 *  you're actually on". */
+	/** t.txt (v1.4.8) — the footer "Contact" link lands here with
+	 *  ?highlight=current; flash the current instance's card border so the eye
+	 *  finds "the instance you're actually on". The directory loads ASYNC over a
+	 *  stream, so a blind onMount timer used to reset the flag before the card even
+	 *  rendered (bug: no flash). Instead fire it once, the moment the snapshot has
+	 *  arrived AND the param is present — read reactively from the page store. */
 	let flashCurrent = $state(false);
+	let flashFired = false;
 
 	onMount(() => {
 		if (!browser) return;
 		startStream();
-		if (new URLSearchParams(window.location.search).get('highlight') === 'current') {
-			flashCurrent = true;
-			// 5 flashes × ~0.45s ≈ 2.25s; clear a hair later so a repeat visit re-fires.
-			setTimeout(() => (flashCurrent = false), 2600);
-		}
+	});
+
+	$effect(() => {
+		if (flashFired || !snapshotReceived) return;
+		if ($page.url.searchParams.get('highlight') !== 'current') return;
+		flashFired = true;
+		flashCurrent = true;
+		// 5 flashes × ~0.45s ≈ 2.25s; clear a hair later.
+		setTimeout(() => (flashCurrent = false), 2600);
 	});
 
 	onDestroy(() => {

@@ -118,6 +118,10 @@
 
 	let controller: ChatController | null = null;
 	let messages = $state<LocalMessage[]>([]);
+	/** v1.4.8 (t.txt) — false until the controller delivers its first snapshot,
+	 *  so the empty area can say "…is loading" while connecting and only switch to
+	 *  "No messages yet" once we KNOW the conversation is genuinely empty. */
+	let hasLoadedOnce = $state(false);
 
 	/** True while the SSE stream is connected; renders a small
 	 *  "Live" pip in the header so users know the conversation is
@@ -1041,6 +1045,7 @@
 			const prevMaxSeq = messages.reduce((m, x) => (x.localSeq > m ? x.localSeq : m), 0);
 			const newIncoming = next.filter((m) => m.localSeq > prevMaxSeq && m.sender !== me).length;
 			messages = [...next];
+			hasLoadedOnce = true;
 			// After DOM updates, decide how to handle scroll.
 			void tick().then(() => {
 				if (!initialScrollDone && messages.length > 0) {
@@ -1740,7 +1745,11 @@
 		{#if !hasMessages}
 			<div class="flex h-full items-center justify-center text-center">
 				<p class="max-w-sm text-sm text-ink-500 dark:text-ink-400">
-					{$_('chat.empty_state', { values: { peer } })}
+					{#if hasLoadedOnce}
+						{$_('chat.empty_state', { values: { peer } })}
+					{:else}
+						{$_('chat.empty_state_loading', { values: { peer } })}
+					{/if}
 				</p>
 			</div>
 		{:else}
@@ -1877,7 +1886,7 @@
 					{#if showPayNowButton}
 						<button
 							type="button"
-							class="rounded-lg bg-[var(--morphit-btn-face)] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+							class="rounded-lg border border-morphit-teal/40 px-3 py-1.5 text-xs font-semibold text-morphit-teal transition-colors hover:border-morphit-teal hover:bg-morphit-teal/5 dark:border-morphit-emerald/40 dark:text-morphit-emerald dark:hover:bg-morphit-emerald/10"
 							onclick={() => {
 								// cp402 [7] — composer "Pay now". Clear any stale
 								// pill context first. BLURT is sent by the app

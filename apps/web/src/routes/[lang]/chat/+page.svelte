@@ -167,6 +167,14 @@
 		activeTab === 'starred' ? starredList : activeTab === 'archived' ? archivedList : inboxList
 	);
 
+	/** t.txt (v1.4.8) — "Mark all as read" belongs only where there's a MARKABLE
+	 *  unread: the Inbox or Starred tab with unread cards. Archived items don't
+	 *  count toward unread (and the action skips them), so the button never shows
+	 *  on Archived — nor on any tab with nothing unread to clear. */
+	const activeTabHasUnread = $derived(
+		activeTab === 'archived' ? false : activeList.some((c) => c.unread)
+	);
+
 	/** Fetch profiles for peers we don't have one for — so the 5 s poll doesn't
 	 *  re-request the whole batch every tick, but a peer whose profile we DON'T
 	 *  have is retried.
@@ -481,7 +489,7 @@
 			</div>
 		{/if}
 
-		{#if unreadTotal > 0 && conversations.length > 0}
+		{#if activeTabHasUnread && conversations.length > 0}
 			<div class="mb-3 flex justify-end">
 				<button
 					type="button"

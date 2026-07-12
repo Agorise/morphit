@@ -81,7 +81,7 @@ check('…and liveness still excludes expired orders', /status = 'live' AND \(ex
 check('a cancelled order no longer rejects the message outright', !/status = 'live'[\s\S]{0,120}\) AS exists/.test(chatHandler));
 
 // ─── client: the transcript is scoped to ONE thread ──────────────────
-check('every inbound record is filtered to this thread', /if \(\(rec\.order_permlink \?\? null\) !== \(deps\.orderPermlink \?\? null\)\) continue;/.test(service));
+check('every inbound record is filtered to this thread', /if \(\(rec\.order_permlink \?\? null\) !== \(deps\.orderPermlink \?\? null\)\) \{/.test(service));
 check('…at the single seam every record passes through', /for \(const rec of oldestFirst\) \{[\s\S]{0,400}continue;/.test(service));
 check('both outgoing sites (pending + failed) inherit the thread\u2019s order', (service.match(/orderPermlink: deps\.orderPermlink \?\? null/g) ?? []).length === 2);
 check('wire messages keep the order they arrived with', (service.match(/orderPermlink: rec\.order_permlink \?\? null/g) ?? []).length === 2);

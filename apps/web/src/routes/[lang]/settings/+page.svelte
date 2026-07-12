@@ -577,7 +577,7 @@
 				display_name: saved,
 				nostr_url: nostrCleaned || undefined,
 				blurt_media_url: blurtMediaCleaned || undefined,
-				short_bio: bioSaved || undefined
+				short_bio: bioSaved
 			});
 			broadcastOk = true;
 			primeSelfProfile();
@@ -622,9 +622,9 @@
 			// broadcast).
 			await broadcastProfile(live, {
 				display_name: saved,
-				nostr_url: nostrSaved || undefined,
-				blurt_media_url: blurtMediaSaved || undefined,
-				short_bio: bioSaved || undefined
+				nostr_url: nostrSaved,
+				blurt_media_url: blurtMediaSaved,
+				short_bio: bioSaved
 			});
 			bioBroadcastOk = true;
 			primeSelfProfile();
@@ -674,9 +674,9 @@
 			// previously-broadcast Nostr URL.
 			await broadcastProfile(live, {
 				display_name: displayName,
-				nostr_url: nostrSaved || undefined,
-				blurt_media_url: blurtMediaSaved || undefined,
-				short_bio: bioSaved || undefined
+				nostr_url: nostrSaved,
+				blurt_media_url: blurtMediaSaved,
+				short_bio: bioSaved
 			});
 			blurtMediaBroadcastOk = true;
 			primeSelfProfile();
@@ -737,9 +737,9 @@
 		try {
 			await broadcastProfile(live, {
 				display_name: displayName,
-				nostr_url: nostrSaved || undefined,
-				blurt_media_url: blurtMediaSaved || undefined,
-				short_bio: bioSaved || undefined
+				nostr_url: nostrSaved,
+				blurt_media_url: blurtMediaSaved,
+				short_bio: bioSaved
 			});
 			nostrBroadcastOk = true;
 			primeSelfProfile();
@@ -826,9 +826,9 @@
 		try {
 			await broadcastProfile(live, {
 				display_name: displayName,
-				nostr_url: nostrSaved || undefined,
-				blurt_media_url: blurtMediaSaved || undefined,
-				short_bio: bioSaved || undefined,
+				nostr_url: nostrSaved,
+				blurt_media_url: blurtMediaSaved,
+				short_bio: bioSaved,
 				// Pass BOTH fields explicitly so the indexer knows
 				// exactly which one is active; empty string clears
 				// the other half of the pair.
@@ -872,9 +872,9 @@
 		try {
 			await broadcastProfile(live, {
 				display_name: displayName,
-				nostr_url: nostrSaved || undefined,
-				blurt_media_url: blurtMediaSaved || undefined,
-				short_bio: bioSaved || undefined,
+				nostr_url: nostrSaved,
+				blurt_media_url: blurtMediaSaved,
+				short_bio: bioSaved,
 				avatar_svg: '',
 				avatar_data_uri: ''
 			});

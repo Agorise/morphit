@@ -71,6 +71,14 @@ import { logger } from '$log';
 
 const log = logger('chat-head-tailer');
 
+/** Opt-in fast-path emit tracing. Same gate as the durable handler
+ *  (MORPHIT_CHAT_DEBUG=1). Metadata only. Shows whether a head-block
+ *  message is emitted to SSE subscribers or dropped by the block check. */
+const CHAT_DEBUG = process.env.MORPHIT_CHAT_DEBUG === '1';
+function tailerDbg(event: string, data: Record<string, unknown>): void {
+	if (CHAT_DEBUG) log.info(event, data);
+}
+
 /** The one op id this tailer cares about. Kept as a local literal
  *  (not imported from the dispatcher) so this file has no dependency
  *  on the full handler-dispatch graph; the parity smoke asserts it
@@ -351,12 +359,27 @@ export class ChatHeadTailer {
 					// blocked, we don't emit (the durable path will
 					// deliver it once irreversible, with its own check).
 					log.warn('block_check_failed', {}, err);
+					tailerDbg('tailer.DROP.blockCheckFailed', {
+						sender: located.signer,
+						recipient: located.recipient
+					});
 					continue;
 				}
-				if (blocked) continue;
+				if (blocked) {
+					tailerDbg('tailer.DROP.blocked', {
+						sender: located.signer,
+						recipient: located.recipient
+					});
+					continue;
+				}
 
 				const lo = located.signer < located.recipient ? located.signer : located.recipient;
 				const hi = located.signer < located.recipient ? located.recipient : located.signer;
+				tailerDbg('tailer.EMIT', {
+					sender: located.signer,
+					recipient: located.recipient,
+					order: located.orderPermlink ?? null
+				});
 				chatEventBus.emitFast({
 					lo,
 					hi,

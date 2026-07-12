@@ -356,8 +356,7 @@
       "failed_label": "Fallito",
       "retry": "Riprova",
       "retry_aria": "Riprova l'invio di questo messaggio",
-      "peer_not_ready": "Questo destinatario non ha ancora aperto la chat Morphit. Quando lo farà, il tuo messaggio verrà inviato al tentativo successivo.",
-      "sent": "Inviato"
+      "peer_not_ready": "Questo destinatario non ha ancora aperto la chat Morphit. Quando lo farà, il tuo messaggio verrà inviato al tentativo successivo."
     },
     "composer": {
       "aria_label": "Invia un messaggio",
@@ -753,7 +752,8 @@
     "pay_prefill": {
       "hint": "Il minimo dell'ordine è {min} {fiat} (≈ {amount} {asset}).",
       "hint_market": "Il minimo dell'ordine è {min} {fiat} (≈ {amount} {asset} al prezzo di mercato attuale)."
-    }
+    },
+    "empty_state_loading": "La chat con @{peer} si sta caricando… Saluta!"
   },
   "cheat_sheet": {
     "heading": "Foglio di riferimento Morphit",

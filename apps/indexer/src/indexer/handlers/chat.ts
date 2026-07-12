@@ -80,6 +80,17 @@ import { localize, normalizeLocale } from '$indexer/pushLocalize';
 
 const log = logger('chat');
 
+/** Opt-in per-message delivery tracing. OFF by default; enable with
+ *  MORPHIT_CHAT_DEBUG=1 in the indexer's env, then read via
+ *  `sudo docker logs <indexer-container>`. Logs METADATA ONLY (never
+ *  ciphertext): sender, recipient, order_permlink, and the exact
+ *  admission decision, so an operator can see precisely why a given
+ *  message was persisted or dropped. */
+const CHAT_DEBUG = process.env.MORPHIT_CHAT_DEBUG === '1';
+function chatDbg(event: string, data: Record<string, unknown>): void {
+	if (CHAT_DEBUG) log.info(event, data);
+}
+
 const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
 /** Hard cap on ciphertext envelope size.
  *
@@ -227,6 +238,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		[recipient, ctx.signer]
 	);
 	if (blockCheck.rows[0]?.exists) {
+		chatDbg('chat.DROP.blocked', { sender: ctx.signer, recipient });
 		return { ok: false, reason: 'recipient_blocked_sender' };
 	}
 
@@ -312,6 +324,15 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		// Bypass ONLY when the recipient owns a live, unexpired order. Identical to
 		// the previous condition — deliberately so.
 		orderResponseBypass = ord.account === recipient && ord.live;
+		chatDbg('chat.orderCheck', {
+			sender: ctx.signer,
+			recipient,
+			claimedPermlink,
+			orderOwner: ord.account,
+			ownerIsRecipient: ord.account === recipient,
+			orderLive: ord.live,
+			bypass: orderResponseBypass
+		});
 	}
 
 	// Finding H layer 2: stranger-fee gate. First-contact
@@ -375,8 +396,10 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			[recipient, ctx.signer]
 		);
 		if (!admitCheck.rows[0]?.admitted) {
+			chatDbg('chat.DROP.strangerGate', { sender: ctx.signer, recipient });
 			return { ok: false, reason: 'stranger_fee_required' };
 		}
+		chatDbg('chat.admit.strangerGatePassed', { sender: ctx.signer, recipient });
 	}
 
 	// Finding H layer 3: fan-in and per-sender rate limits.
@@ -443,6 +466,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	if (row) {
 		const fanIn = Number(row.unique_fan_in);
 		if (Number.isFinite(fanIn) && fanIn > FAN_IN_UNIQUE_SENDERS_24H) {
+			chatDbg('chat.DROP.fanIn', { sender: ctx.signer, recipient, fanIn });
 			return { ok: false, reason: 'recipient_fan_in_exceeded' };
 		}
 		if (row.per_pair_count !== null) {
@@ -451,10 +475,17 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			// reject when accepting this would push the count
 			// past the cap — i.e. when already ≥ cap.
 			if (Number.isFinite(perPair) && perPair >= PER_PAIR_NO_REPLY_CAP) {
+				chatDbg('chat.DROP.perPairCap', { sender: ctx.signer, recipient, perPair });
 				return { ok: false, reason: 'sender_no_reply_cap_exceeded' };
 			}
 		}
 	}
+	chatDbg('chat.ADMITTED', {
+		sender: ctx.signer,
+		recipient,
+		order: claimedPermlink ?? null,
+		bypass: orderResponseBypass
+	});
 
 	try {
 		const insertRes = await client.query<{ id: string }>(

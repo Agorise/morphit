@@ -356,8 +356,7 @@
       "failed_label": "Nieudane",
       "retry": "Ponów",
       "retry_aria": "Ponów wysyłanie tej wiadomości",
-      "peer_not_ready": "Ten odbiorca jeszcze nie otworzył czatu Morphit. Gdy to zrobi, Twoja wiadomość zostanie wysłana po ponowieniu próby.",
-      "sent": "Wysłano"
+      "peer_not_ready": "Ten odbiorca jeszcze nie otworzył czatu Morphit. Gdy to zrobi, Twoja wiadomość zostanie wysłana po ponowieniu próby."
     },
     "composer": {
       "aria_label": "Wyślij wiadomość",
@@ -753,7 +752,8 @@
     "pay_prefill": {
       "hint": "Minimum zlecenia wynosi {min} {fiat} (≈ {amount} {asset}).",
       "hint_market": "Minimum zlecenia wynosi {min} {fiat} (≈ {amount} {asset} po bieżącej cenie rynkowej)."
-    }
+    },
+    "empty_state_loading": "Czat z @{peer} się ładuje… Przywitaj się!"
   },
   "cheat_sheet": {
     "heading": "Ściąga Morphit",

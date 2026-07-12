@@ -60,6 +60,16 @@ import {
 
 const log = logger('chat-stream');
 
+/** Opt-in SSE fast-forward tracing (MORPHIT_CHAT_DEBUG=1). Shows, per
+ *  OPEN client connection, whether an emitted fast-path event matched
+ *  this connection's (lo, hi) filter and was pushed. Pinpoints a
+ *  subscription/filter mismatch between "tailer emitted" and "client
+ *  received". Metadata only. */
+const CHAT_DEBUG = process.env.MORPHIT_CHAT_DEBUG === '1';
+function streamDbg(event: string, data: Record<string, unknown>): void {
+	if (CHAT_DEBUG) log.info(event, data);
+}
+
 /** Backstop poll interval — catches messages the bus missed.
  *  60s matches the orderbook stream; chat is more
  *  latency-sensitive but at <1msg/s typical the bus path is
@@ -357,7 +367,17 @@ export function chatStreamRoute(db: Database, poller: Poller): Hono {
 				// fires.
 				unsubscribeFastBus = chatEventBus.onFast((ev) => {
 					if (cancelled) return;
-					if (!eventMatchesFilter(ev, filter)) return;
+					const matches = eventMatchesFilter(ev, filter);
+					streamDbg('stream.fastEvent', {
+						connFilter: { lo: filter.lo, hi: filter.hi },
+						evPair: { lo: ev.lo, hi: ev.hi },
+						sender: ev.sender,
+						recipient: ev.recipient,
+						matches,
+						snapshotSent,
+						willPush: matches && snapshotSent
+					});
+					if (!matches) return;
 					if (!snapshotSent) {
 						if (pendingFastDuringSnapshot.length >= PENDING_DURING_SNAPSHOT_CAP) {
 							return;

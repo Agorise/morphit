@@ -356,8 +356,7 @@
       "failed_label": "失败",
       "retry": "重试",
       "retry_aria": "重试发送此消息",
-      "peer_not_ready": "该接收者尚未打开 Morphit 聊天。一旦打开,重试时你的消息就能发送过去。",
-      "sent": "已发送"
+      "peer_not_ready": "该接收者尚未打开 Morphit 聊天。一旦打开,重试时你的消息就能发送过去。"
     },
     "composer": {
       "aria_label": "发送消息",
@@ -753,7 +752,8 @@
     "pay_prefill": {
       "hint": "订单最低额为 {min} {fiat}（≈ {amount} {asset}）。",
       "hint_market": "订单最低额为 {min} {fiat}（≈ {amount} {asset}，按当前市场价）。"
-    }
+    },
+    "empty_state_loading": "正在加载与 @{peer} 的聊天… 打个招呼吧！"
   },
   "cheat_sheet": {
     "heading": "Morphit 速查表",
