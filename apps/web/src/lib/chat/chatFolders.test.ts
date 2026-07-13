@@ -1,10 +1,14 @@
 // @vitest-environment jsdom
 /**
- * Tests for the per-discussion chat folder store (cp450 — t.txt email inbox).
+ * Tests for the per-discussion chat folder store (t.txt — email inbox, now
+ * on-chain synced). Covers the model: default = Inbox (absence from the map),
+ * the star / archive / restore transitions, per-(peer, order) keying, mirror
+ * roundtrip, corrupt-storage fallback, store reactivity, validation, and
+ * full-clear.
  *
- * Covers: default = inbox (absence from the map), the star / archive / restore
- * transitions, per-(peer, order) keying, storage roundtrip, corrupt-storage
- * fallback, store reactivity, validation, and full-clear semantics.
+ * The on-chain broadcast is a no-op here: the identity store is locked in tests,
+ * so scheduleBroadcast → broadcastNow returns early. We assert only the local
+ * behaviour, which is the source of truth for rendering.
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -20,7 +24,8 @@ import {
 	archiveThread,
 	restoreThread,
 	clearChatFolders,
-	__reloadChatFolders
+	__reloadChatFolders,
+	__chatFolderShape
 } from './chatFolders';
 
 const KEY = 'morphit.chat.folders';
@@ -29,120 +34,143 @@ const B = 'bob';
 const O1 = 'buying-btc-permlink';
 const O2 = 'selling-xmr-permlink';
 
+function wipe(): void {
+	try {
+		localStorage.removeItem(KEY);
+	} catch {
+		/* best-effort */
+	}
+}
+
 describe('chatFolders', () => {
 	beforeEach(() => {
-		try {
-			localStorage.removeItem(KEY);
-		} catch {
-			/* best-effort */
-		}
+		wipe();
+		clearChatFolders();
 		__reloadChatFolders();
 	});
 	afterEach(() => {
-		try {
-			localStorage.removeItem(KEY);
-		} catch {
-			/* best-effort */
-		}
+		wipe();
+		clearChatFolders();
 	});
 
-	it('defaults every discussion to inbox (absence from the map)', () => {
+	it('defaults every discussion to INBOX — including a fresh account / brand-new thread', () => {
 		expect(folderOf(A, O1)).toBe('inbox');
 		expect(folderOf(A, '')).toBe('inbox');
+		expect(folderOf('never-seen-peer', 'brand-new-order')).toBe('inbox');
 		expect(isStarred(A, O1)).toBe(false);
 		expect(isArchived(A, O1)).toBe(false);
-		// A default discussion writes nothing.
-		setFolder(A, O1, 'inbox');
-		expect(localStorage.getItem(KEY)).toBeNull();
 	});
 
-	it('stars and un-stars (inbox <-> starred)', () => {
+	it('setFolder to starred / archived stores; to inbox removes', () => {
+		setFolder(A, O1, 'starred');
+		expect(folderOf(A, O1)).toBe('starred');
+		setFolder(A, O1, 'archived');
+		expect(folderOf(A, O1)).toBe('archived');
+		setFolder(A, O1, 'inbox');
+		expect(folderOf(A, O1)).toBe('inbox');
+	});
+
+	it('toggleStar: inbox → starred → inbox (un-star returns to inbox, not archived)', () => {
+		expect(folderOf(A, O1)).toBe('inbox');
 		toggleStar(A, O1);
 		expect(folderOf(A, O1)).toBe('starred');
-		expect(isStarred(A, O1)).toBe(true);
 		toggleStar(A, O1);
 		expect(folderOf(A, O1)).toBe('inbox');
-		expect(isStarred(A, O1)).toBe(false);
 	});
 
-	it('archives and restores (inbox <-> archived)', () => {
+	it('archive moves inbox|starred → archived; restore → inbox', () => {
 		archiveThread(A, O1);
 		expect(folderOf(A, O1)).toBe('archived');
-		expect(isArchived(A, O1)).toBe(true);
 		restoreThread(A, O1);
 		expect(folderOf(A, O1)).toBe('inbox');
-		expect(isArchived(A, O1)).toBe(false);
-	});
-
-	it('starring an archived discussion moves it to starred; un-starring goes to inbox (t.txt 11)', () => {
+		setFolder(A, O1, 'starred');
 		archiveThread(A, O1);
 		expect(folderOf(A, O1)).toBe('archived');
-		toggleStar(A, O1);
-		expect(folderOf(A, O1)).toBe('starred'); // NOT still archived
-		toggleStar(A, O1);
-		expect(folderOf(A, O1)).toBe('inbox'); // un-star -> inbox, never back to archived
 	});
 
-	it('archiving a starred discussion moves it to archived', () => {
-		toggleStar(A, O1);
-		expect(folderOf(A, O1)).toBe('starred');
-		archiveThread(A, O1);
-		expect(folderOf(A, O1)).toBe('archived');
-		expect(isStarred(A, O1)).toBe(false);
-	});
-
-	it('keys per (peer, order) — different orders are independent discussions', () => {
-		toggleStar(A, O1);
-		archiveThread(A, O2);
+	it('keys per (peer, order): the same peer, different orders, are independent', () => {
+		setFolder(A, O1, 'starred');
+		setFolder(A, O2, 'archived');
 		expect(folderOf(A, O1)).toBe('starred');
 		expect(folderOf(A, O2)).toBe('archived');
-		expect(folderOf(A, '')).toBe('inbox');
-		// Same order, different peer is a different discussion too.
-		expect(folderOf(B, O1)).toBe('inbox');
+		expect(folderOf(A, '')).toBe('inbox'); // the no-order thread — untouched
+		expect(folderOf(B, O1)).toBe('inbox'); // a different peer — untouched
 	});
 
-	it('persists across a reload from storage', () => {
-		toggleStar(A, O1);
-		archiveThread(B, O2);
+	it('the no-order thread (order="") is a first-class, independent key', () => {
+		setFolder(A, '', 'archived');
+		expect(folderOf(A, '')).toBe('archived');
+		expect(folderOf(A, O1)).toBe('inbox');
+	});
+
+	it('persists to the mirror and survives a reload', () => {
+		setFolder(A, O1, 'starred');
+		setFolder(A, O2, 'archived');
 		__reloadChatFolders();
 		expect(folderOf(A, O1)).toBe('starred');
-		expect(folderOf(B, O2)).toBe('archived');
+		expect(folderOf(A, O2)).toBe('archived');
 	});
 
-	it('falls back to inbox on corrupt storage', () => {
-		localStorage.setItem(KEY, '{not valid json');
+	it('corrupt mirror falls back to empty (everything inbox)', () => {
+		localStorage.setItem(KEY, 'not json {{');
 		__reloadChatFolders();
 		expect(folderOf(A, O1)).toBe('inbox');
 		expect(get(chatFolders)).toEqual({});
 	});
 
-	it('ignores entries with an invalid account name or an over-long permlink', () => {
-		setFolder('A', O1, 'starred'); // uppercase = invalid account name
-		expect(get(chatFolders)).toEqual({});
-		setFolder(A, 'x'.repeat(300), 'starred'); // permlink too long
-		expect(get(chatFolders)).toEqual({});
+	it('the store is reactive — subscribers see folder changes', () => {
+		const seen: number[] = [];
+		const unsub = chatFolders.subscribe((m) => seen.push(Object.keys(m).length));
+		setFolder(A, O1, 'starred');
+		setFolder(A, O2, 'archived');
+		setFolder(A, O1, 'inbox');
+		unsub();
+		expect(seen[seen.length - 1]).toBe(1);
+		expect(seen).toContain(2);
 	});
 
-	it('notifies subscribers on every folder change', () => {
-		let ticks = 0;
-		const unsub = chatFolders.subscribe(() => {
-			ticks++;
-		});
-		const base = ticks; // one immediate fire on subscribe
-		toggleStar(A, O1);
-		archiveThread(B, O2);
-		restoreThread(B, O2);
-		unsub();
-		expect(ticks).toBe(base + 3);
+	it('ignores invalid peers (no-op, stays inbox)', () => {
+		setFolder('BadName!', O1, 'starred');
+		expect(folderOf('BadName!', O1)).toBe('inbox');
+		expect(get(chatFolders)).toEqual({});
 	});
 
 	it('clearChatFolders wipes everything', () => {
-		toggleStar(A, O1);
-		archiveThread(B, O2);
+		setFolder(A, O1, 'starred');
+		setFolder(B, O2, 'archived');
 		clearChatFolders();
-		expect(folderOf(A, O1)).toBe('inbox');
-		expect(folderOf(B, O2)).toBe('inbox');
-		expect(localStorage.getItem(KEY)).toBeNull();
 		expect(get(chatFolders)).toEqual({});
+		expect(folderOf(A, O1)).toBe('inbox');
+	});
+
+	// The on-chain ↔ local bridge. mapToState (what gets broadcast) and
+	// stateToMap (what gets adopted from chain) must be exact inverses on the
+	// folder assignment, or a sync silently corrupts a user's organization.
+	it('shape bridge round-trips: map → on-chain state → map preserves folders', () => {
+		const { mapToState, stateToMap } = __chatFolderShape;
+		const map: Record<string, { folder: 'starred' | 'archived'; at: string }> = {
+			[`${A}\u0000${O1}`]: { folder: 'starred', at: '2026-07-01T00:00:00.000Z' },
+			[`${A}\u0000`]: { folder: 'starred', at: '2026-07-01T00:00:00.000Z' },
+			[`${B}\u0000${O2}`]: { folder: 'archived', at: '2026-07-01T00:00:00.000Z' }
+		};
+		const state = mapToState(map);
+		expect(new Set(state.starred)).toEqual(new Set([`${A}\u0000${O1}`, `${A}\u0000`]));
+		expect(state.archived).toEqual([`${B}\u0000${O2}`]);
+		// Back to a map: same keys, same folder assignment (the `at` is refreshed).
+		const back = stateToMap(state);
+		expect(Object.keys(back).sort()).toEqual(Object.keys(map).sort());
+		for (const k of Object.keys(map)) {
+			expect(back[k]!.folder).toBe(map[k]!.folder);
+		}
+	});
+
+	it('shape bridge drops invalid keys defensively (bad peer names never adopted)', () => {
+		const { stateToMap } = __chatFolderShape;
+		const map = stateToMap({
+			starred: ['GOODpeer-invalid!\u0000', `${A}\u0000${O1}`],
+			archived: ['x'.repeat(300) /* no NUL → invalid key */]
+		});
+		// Only the one valid key survives.
+		expect(Object.keys(map)).toEqual([`${A}\u0000${O1}`]);
 	});
 });

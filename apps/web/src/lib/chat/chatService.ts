@@ -1095,6 +1095,16 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		if (deps.orderPermlink !== null) {
 			payload.order_permlink = deps.orderPermlink;
 		}
+		chatDebug('send.outgoing', {
+			me: deps.me,
+			peer: deps.peer,
+			// The exact thread tag this message will carry on-chain. If this is
+			// null while the URL has ?order=…, the (peer,order) deps snapshot went
+			// stale — the message will land in the null thread and spawn a second
+			// inbox card (t.txt #4 second-thread bug).
+			order_permlink: (payload.order_permlink as string | undefined) ?? null,
+			tag: tagPreview(clientTag)
+		});
 
 		try {
 			await deps.broadcast(live, payload, deps.me);

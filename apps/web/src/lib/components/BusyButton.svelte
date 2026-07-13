@@ -36,6 +36,11 @@
 		type?: 'button' | 'submit' | 'reset';
 		/** Full-width layout inside a container. */
 		fullWidth?: boolean;
+		/** Button size. 'md' (default) is the standard CTA. 'sm' is a compact
+		 *  variant (~half the padding + smaller label + smaller spinner) for
+		 *  dense per-row action rows like the my/orders card buttons
+		 *  (t.txt v1.4.9 #4). Ignored for the 'link' variant. */
+		size?: 'md' | 'sm';
 		/** Click handler. Can be async — busy state handled by caller. */
 		onclick?: (e: MouseEvent) => void;
 		/** Main button label (children). */
@@ -52,6 +57,7 @@
 		busyLabel,
 		type = 'button',
 		fullWidth = false,
+		size = 'md',
 		onclick,
 		children,
 		'aria-label': ariaLabel
@@ -89,12 +95,20 @@
 	});
 
 	// Layout differs for the link variant: no button padding/rounding/
-	// scale, so it reads as an inline text link.
-	const layoutClass = $derived(
-		variant === 'link'
-			? 'inline-flex items-center gap-1.5 text-base transition disabled:cursor-not-allowed'
-			: 'inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-base transition active:scale-[0.97] disabled:cursor-not-allowed disabled:active:scale-100'
-	);
+	// scale, so it reads as an inline text link. For real buttons, `size`
+	// selects standard vs compact chrome.
+	const layoutClass = $derived.by(() => {
+		if (variant === 'link') {
+			return 'inline-flex items-center gap-1.5 text-base transition disabled:cursor-not-allowed';
+		}
+		const pad =
+			size === 'sm'
+				? 'gap-1.5 rounded-xl px-3 py-1.5 text-sm'
+				: 'gap-2 rounded-2xl px-5 py-3 text-base';
+		return `inline-flex items-center justify-center ${pad} transition active:scale-[0.97] disabled:cursor-not-allowed disabled:active:scale-100`;
+	});
+	// Spinner/checkmark glyph scales with the button size.
+	const glyphClass = $derived(size === 'sm' ? 'h-4 w-4' : 'h-5 w-5');
 </script>
 
 <button
@@ -108,7 +122,7 @@
 	{#if busy}
 		<!-- Inline spinner. Uses currentColor so it matches the button
 		     variant automatically. Sized to match typography line-height. -->
-		<svg class="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+		<svg class="{glyphClass} animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
 			<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" stroke-opacity="0.25" />
 			<path
 				d="M21 12a9 9 0 0 0-9-9"
@@ -124,7 +138,7 @@
 	{:else if done}
 		<!-- Checkmark celebrating a just-completed action. Tuned to be
 		     visible without being cartoonish; the label stays primary. -->
-		<svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+		<svg class="{glyphClass}" viewBox="0 0 24 24" fill="none" aria-hidden="true">
 			<path
 				d="M5 12l4 4L19 7"
 				stroke="currentColor"

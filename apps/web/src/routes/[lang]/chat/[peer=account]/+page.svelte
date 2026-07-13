@@ -246,7 +246,11 @@
 	     one the user is viewing. Keying on (peer, order) forces a clean remount
 	     whenever either changes, so deps.orderPermlink always matches the URL.
 	     Fresh loads already have the right value (the $derived reads the query
-	     param synchronously), so this only adds a remount on an actual change. -->
+	     param synchronously), so this only adds a remount on an actual change.
+
+	     >>> THREADING MODEL INV-5 (client tag point). Read
+	     >>> docs/CHAT-THREADING-MODEL.md before removing or changing this key.
+	     >>> Guarded by chat-thread-remount-smoke (tamper-tested). -->
 	{#key `${peer}\u0000${orderPermlink ?? ''}`}
 		<Component {me} {peer} {orderPermlink} />
 	{/key}

@@ -2188,6 +2188,7 @@
     "loading": "Loading your orders…",
     "empty_title": "You haven't posted anything yet",
     "empty_body": "When you're ready, posting an order takes about a minute.",
+    "empty_category": "No orders are in this category.",
     "empty_cta": "Post your first order",
     "error_title": "Could not load your orders",
     "error_body": "The indexer didn't respond. Try again in a moment.",
@@ -3089,7 +3090,7 @@
     },
     "success": {
       "title": "Your order is live!",
-      "body": "It'll appear in the orderbook within a few seconds.",
+      "body": "It'll appear in the orderbook in under 1 minute.",
       "view_cta": "View your order",
       "post_another": "Post another",
       "edit_cta": "Edit this order",
@@ -3196,6 +3197,21 @@
       "barter_sentence_buy": "You're looking for goods/services worth {value}, paying in {cryptos}.",
       "barter_sentence_sell_novalue": "You're offering goods/services and accepting {cryptos}.",
       "barter_sentence_buy_novalue": "You're looking for goods/services and paying in {cryptos}."
+    },
+    "terms_md_guide": {
+      "tooltip_title": "Markdown Guide",
+      "tooltip_body": "Use basic formatting to make your order look nice!",
+      "heading": "Markdown Guide",
+      "col_element": "Element",
+      "col_syntax": "Markdown Syntax",
+      "el_heading": "Heading",
+      "el_bold": "Bold",
+      "el_italic": "Italic",
+      "el_blockquote": "Blockquote",
+      "el_ordered": "Ordered List",
+      "el_unordered": "Unordered List",
+      "el_hr": "Horizontal Rule",
+      "el_link": "Link"
     }
   },
   "prices": {

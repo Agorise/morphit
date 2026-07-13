@@ -97,6 +97,13 @@
 		 *  featuring only changes the frame, so a featured order reads exactly
 		 *  like every other card plus the badge. */
 		featured?: boolean;
+		/** t.txt (v1.4.9 #9) — true when this card was just prepended to a
+		 *  live-updating orderbook (a brand-new on-chain order arriving while
+		 *  the user watches). Plays a one-shot slide-in on the card's root, so
+		 *  the new order slides into first place instead of popping in. Default
+		 *  false — every other OrderCard usage (initial load, static lists) is
+		 *  unaffected. Reduced-motion users get no animation (CSS media query). */
+		justArrived?: boolean;
 	}
 
 	let {
@@ -117,7 +124,8 @@
 		onMessageClick = null,
 		highlightTokens = [],
 		class: cls = '',
-		featured = false
+		featured = false,
+		justArrived = false
 	}: Props = $props();
 
 	// count / score / postingKey / tradesLine now live inside
@@ -169,7 +177,7 @@
 		? 'opacity-50'
 		: ''} {featured
 		? 'border-2 border-morphit-emerald/40 bg-gradient-to-br from-morphit-emerald/5 to-morphit-teal/5'
-		: ''} {cls}"
+		: ''} {cls} {justArrived ? 'order-slide-in' : ''}"
 >
 	<!-- Stretched link: whole card opens the order detail page (z-0).
 	     Interactive children below are raised to z-10. -->
@@ -397,3 +405,29 @@
 		</div>
 	{/if}
 </li>
+
+<style>
+	/* t.txt (v1.4.9 #9) — a brand-new order prepended to the LIVE orderbook
+	   slides into first place instead of popping in. One-shot: the page clears
+	   the `justArrived` flag after the animation so it never replays. `:global`
+	   because the class is applied via a dynamic `{justArrived ? … : ''}`
+	   expression, which Svelte's scoped-CSS pass would otherwise tree-shake. */
+	@keyframes order-slide-in {
+		from {
+			opacity: 0;
+			transform: translateY(-0.75rem);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
+	:global(.order-slide-in) {
+		animation: order-slide-in 0.32s ease-out;
+	}
+	@media (prefers-reduced-motion: reduce) {
+		:global(.order-slide-in) {
+			animation: none;
+		}
+	}
+</style>

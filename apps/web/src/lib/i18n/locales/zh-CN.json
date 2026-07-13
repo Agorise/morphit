@@ -2188,6 +2188,7 @@
     "loading": "正在加载您的订单…",
     "empty_title": "您还没有发布任何订单",
     "empty_body": "准备好的时候,发布一个订单大约需要一分钟。",
+    "empty_category": "此类别中没有订单。",
     "empty_cta": "发布您的第一个订单",
     "error_title": "无法加载您的订单",
     "error_body": "索引器没有响应。请稍后重试。",
@@ -3089,7 +3090,7 @@
     },
     "success": {
       "title": "您的订单已上线!",
-      "body": "几秒内就会出现在订单簿中。",
+      "body": "1 分钟内就会出现在订单簿中。",
       "view_cta": "查看订单",
       "post_another": "再发一个",
       "edit_cta": "编辑此订单",
@@ -3196,6 +3197,21 @@
       "barter_sentence_buy": "你想要价值 {value} 的商品/服务,用 {cryptos} 付款。",
       "barter_sentence_sell_novalue": "你提供商品/服务,接受 {cryptos}。",
       "barter_sentence_buy_novalue": "你想要商品/服务,用 {cryptos} 付款。"
+    },
+    "terms_md_guide": {
+      "tooltip_title": "Markdown 指南",
+      "tooltip_body": "使用基本格式让你的订单更美观！",
+      "heading": "Markdown 指南",
+      "col_element": "元素",
+      "col_syntax": "Markdown 语法",
+      "el_heading": "标题",
+      "el_bold": "粗体",
+      "el_italic": "斜体",
+      "el_blockquote": "引用",
+      "el_ordered": "有序列表",
+      "el_unordered": "无序列表",
+      "el_hr": "水平线",
+      "el_link": "链接"
     }
   },
   "prices": {

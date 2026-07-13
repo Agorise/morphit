@@ -2188,6 +2188,7 @@
     "loading": "Orders werden geladen…",
     "empty_title": "Du hast noch nichts gepostet",
     "empty_body": "Wenn du bereit bist, dauert das Posten einer Order etwa eine Minute.",
+    "empty_category": "Keine Orders in dieser Kategorie.",
     "empty_cta": "Erste Order posten",
     "error_title": "Orders konnten nicht geladen werden",
     "error_body": "Der Indexer hat nicht geantwortet. Versuche es gleich nochmal.",
@@ -3089,7 +3090,7 @@
     },
     "success": {
       "title": "Deine Order ist live!",
-      "body": "Sie erscheint in wenigen Sekunden im Orderbook.",
+      "body": "Sie erscheint in unter 1 Minute im Orderbook.",
       "view_cta": "Order ansehen",
       "post_another": "Noch eine posten",
       "edit_cta": "Diese Order bearbeiten",
@@ -3196,6 +3197,21 @@
       "barter_sentence_buy": "Du suchst Waren/Dienstleistungen im Wert von {value} und zahlst in {cryptos}.",
       "barter_sentence_sell_novalue": "Du bietest Waren/Dienstleistungen an und akzeptierst {cryptos}.",
       "barter_sentence_buy_novalue": "Du suchst Waren/Dienstleistungen und zahlst in {cryptos}."
+    },
+    "terms_md_guide": {
+      "tooltip_title": "Markdown-Anleitung",
+      "tooltip_body": "Nutze einfache Formatierung, damit deine Order gut aussieht!",
+      "heading": "Markdown-Anleitung",
+      "col_element": "Element",
+      "col_syntax": "Markdown-Syntax",
+      "el_heading": "Überschrift",
+      "el_bold": "Fett",
+      "el_italic": "Kursiv",
+      "el_blockquote": "Zitat",
+      "el_ordered": "Nummerierte Liste",
+      "el_unordered": "Aufzählungsliste",
+      "el_hr": "Trennlinie",
+      "el_link": "Link"
     }
   },
   "prices": {

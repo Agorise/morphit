@@ -53,6 +53,7 @@
 	import { formatOrderPriceModel } from '$lib/orders/priceModelDisplay';
 	import { isOrderExpired, isOrderLive } from '$lib/orders/orderExpiry';
 	import { buildRelistPrefill, RELIST_PREFILL_KEY } from '$lib/orders/relist';
+	import { recordCancel, applyRecentCancels } from '$lib/orders/recentCancels';
 	import { MORPHIT_INDEXER_ORIGIN, resolveOrigin } from '$net/config';
 	import { safeSession, safeLocal } from '$lib/utils/safeStorage';
 	import { orderTitleParts } from '$lib/utils/orderTitle';
@@ -109,7 +110,10 @@
 
 	// ─── Filter state ──────────────────────────────────────────────
 	type FilterKind = 'all' | 'live' | 'cancelled' | 'expired';
-	let filter = $state<FilterKind>('all');
+	// t.txt (v1.4.9 #3) — default to the Live pill/orders. Most people
+	// arriving here want to see what they currently have posted; All /
+	// Cancelled / Expired are a click away.
+	let filter = $state<FilterKind>('live');
 
 	// ─── Counts per state (derived) ────────────────────────────────
 	const counts = $derived.by(() => {
@@ -240,7 +244,10 @@
 			phase = 'error';
 			return;
 		}
-		items = [...result.data.items];
+		// t.txt #7 — reflect a just-cancelled order even if the indexer hasn't
+		// caught up yet (e.g. arriving here right after cancelling from the
+		// order page). Chain is truth; this only bridges the ~1min lag.
+		items = applyRecentCancels(result.data.items);
 		phase = 'ready';
 		// Task #14 — kick off viewcount fetches in parallel.
 		// Each one independently updates viewCounts as it
@@ -509,12 +516,22 @@
 
 		try {
 			await broadcastOrderCancel(state.live, permlink);
-			// Success — refetch to get the indexer's view. Briefly
-			// wait 1.5s so the indexer catches the block before we
-			// query it; if we race ahead the status will still be
-			// 'live' in the response.
-			await new Promise((r) => setTimeout(r, 1_500));
-			await load();
+			// Success — the cancel is on chain. The indexer lags ~1min, so do
+			// NOT block on a refetch (it would still report 'live' and leave the
+			// modal sitting open). Instead give INSTANT feedback (t.txt #6):
+			// record the cancel + optimistically flip this order to 'cancelled'
+			// right here, so the card AND the Live/Cancelled pill counts update
+			// immediately (counts derive from `items`), then close the modal.
+			recordCancel(permlink);
+			items = applyRecentCancels(items);
+			pendingCancelPermlink = null;
+			// Background reconcile (non-blocking) — picks up anything else that
+			// changed; applyRecentCancels inside load() keeps THIS order shown as
+			// cancelled until the indexer catches up (t.txt #7).
+			void (async () => {
+				await new Promise((r) => setTimeout(r, 1_500));
+				await load();
+			})();
 		} catch (err) {
 			console.warn('[my/orders] cancel broadcast failed:', err);
 			cancelErrorPermlink = permlink;
@@ -934,6 +951,7 @@
 										/>
 									{:else}
 										<BusyButton
+											size="sm"
 											variant="secondary"
 											onclick={() => {
 												pendingFeaturePermlink = o.permlink;
@@ -1008,7 +1026,7 @@
 									     on a fresh / just-re-listed card, so render nothing. -->
 									{void 0}
 								{:else}
-									<BusyButton variant="secondary" onclick={() => startFeedback(o.permlink)}>
+									<BusyButton size="sm" variant="secondary" onclick={() => startFeedback(o.permlink)}>
 										{$_('my_orders.order.action_feedback')}
 									</BusyButton>
 								{/if}
@@ -1023,7 +1041,7 @@
 										density="inline"
 									/>
 								{:else}
-									<BusyButton variant="danger" onclick={() => requestCancel(o.permlink)}>
+									<BusyButton size="sm" variant="danger" onclick={() => requestCancel(o.permlink)}>
 										{$_('order_detail.cancel_button')}
 									</BusyButton>
 								{/if}
@@ -1036,7 +1054,7 @@
 								<!-- Ken — a cancelled order can be re-listed, exactly like an expired
 								     one: same pre-filled form, fresh permlink, fresh listing fee. The
 								     cancelled order itself is immutable on-chain and stays cancelled. -->
-								<BusyButton variant="secondary" onclick={() => relistOrder(o)}>
+								<BusyButton size="sm" variant="secondary" onclick={() => relistOrder(o)}>
 									{$_('my_orders.order.action_relist')}
 								</BusyButton>
 								<span class="max-w-[13rem] text-xs text-ink-500 dark:text-ink-400">
@@ -1047,7 +1065,7 @@
 								     post form with the original terms; user can edit,
 								     promote to Featured, pays a fresh listing fee.
 								     Avoids retyping. -->
-								<BusyButton variant="secondary" onclick={() => relistOrder(o)}>
+								<BusyButton size="sm" variant="secondary" onclick={() => relistOrder(o)}>
 									{$_('my_orders.order.action_relist')}
 								</BusyButton>
 								<span class="max-w-[13rem] text-xs text-ink-500 dark:text-ink-400">
@@ -1108,6 +1126,14 @@
 				</li>
 			{/each}
 		</ul>
+			<!-- t.txt (v1.4.9 #8) — the user HAS orders (so the "no orders at
+			     all" state above did not fire), but the selected pill yields
+			     none. A centered, quiet note beats a bare gap. -->
+			{#if visibleItems.length === 0}
+				<p class="mt-6 text-center text-sm text-ink-500 dark:text-ink-400">
+					{$_('my_orders.empty_category')}
+				</p>
+			{/if}
 	{/if}
 
 	<ConfirmModal
@@ -1117,9 +1143,7 @@
 		confirmLabel={$_('my_orders.cancel.confirm_button') as string}
 		cancelLabel={$_('my_orders.cancel.cancel_button') as string}
 		busyLabel={$_('my_orders.cancel.cancelling') as string}
-		onConfirm={() => {
-			if (pendingCancelPermlink) void confirmCancel(pendingCancelPermlink);
-		}}
+		onConfirm={() => (pendingCancelPermlink ? confirmCancel(pendingCancelPermlink) : undefined)}
 		onCancel={abortCancel}
 	/>
 </div>

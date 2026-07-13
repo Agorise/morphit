@@ -75,6 +75,7 @@ import { chatStreamRoute } from '$api/chatStream';
 import { chatActivityStreamRoute } from '$api/chatActivityStream';
 import { chatIdentityRoute } from '$api/chatIdentity';
 import { chatReadStateRoute } from '$api/chatReadState';
+import { chatFoldersRoute } from '$api/chatFolders';
 import { chatAdmissionRoute } from '$api/chatAdmission';
 import { blocksRoute } from '$api/blocks';
 import { attestorEligibilityRoute } from '$api/attestorEligibility';
@@ -574,6 +575,13 @@ async function main(): Promise<void> {
 	chatReadStateApp.use('*', rateLimit('list', config.listRatePerMin));
 	chatReadStateApp.route('/', chatReadStateRoute(db));
 	app.route('/v1/chat-read-state', chatReadStateApp);
+
+	// Encrypted chat folder organization (t.txt v1.4.9 #5). Read-only GET; the
+	// blob is opaque ciphertext. Rate-limited like the other list reads.
+	const chatFoldersApp = new Hono();
+	chatFoldersApp.use('*', rateLimit('list', config.listRatePerMin));
+	chatFoldersApp.route('/', chatFoldersRoute(db));
+	app.route('/v1/chat-folders', chatFoldersApp);
 
 	// Finding H layer 1 — block list surface. Returns the
 	// accounts currently blocked by :account. Used by the

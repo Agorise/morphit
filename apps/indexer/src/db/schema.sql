@@ -2664,3 +2664,22 @@ ALTER TABLE push_pending
 
 COMMENT ON COLUMN push_pending.notification_id IS
     'Optional shared dedup tag matching the in-page notificationTag (e.g. ''morphit-trade-<permlink>''). NULL → the sender tags on the queue-row id.';
+
+-- ─── v42: chat_folders (encrypted chat folder organization) ───
+-- t.txt (v1.4.9 #5). Per-account ENCRYPTED chat folder state: which threads
+-- the user keeps in Inbox / Starred (everything else is Archived by default),
+-- synced across devices. The client encrypts the thread lists with a
+-- posting-key-derived key, so the indexer stores + serves OPAQUE ciphertext and
+-- never learns a user's chat organization. Written ONLY by the
+-- morphit_chat_folders_v1 handler; latest broadcast (by block) wins.
+-- Idempotent with the v42 migration in migrations.ts.
+CREATE TABLE IF NOT EXISTS chat_folders (
+    account TEXT PRIMARY KEY,
+    enc TEXT NOT NULL,
+    source_block_num BIGINT NOT NULL,
+    source_trx_id TEXT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+COMMENT ON TABLE chat_folders IS
+    'Per-account ENCRYPTED chat folder organization (which threads are kept in Inbox/Starred; all others Archived). Opaque ciphertext — encrypted client-side with a posting-key-derived key, so the indexer never learns a user''s chat organization. Written only by morphit_chat_folders_v1; latest by block wins.';

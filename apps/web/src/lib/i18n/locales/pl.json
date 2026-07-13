@@ -2188,6 +2188,7 @@
     "loading": "Wczytywanie zleceń…",
     "empty_title": "Jeszcze nic nie opublikowałeś",
     "empty_body": "Gdy będziesz gotowy, publikacja zlecenia zajmie około minutę.",
+    "empty_category": "Brak zleceń w tej kategorii.",
     "empty_cta": "Opublikuj pierwsze zlecenie",
     "error_title": "Nie udało się wczytać Twoich zleceń",
     "error_body": "Indexer nie odpowiedział. Spróbuj ponownie za chwilę.",
@@ -3089,7 +3090,7 @@
     },
     "success": {
       "title": "Twoje zlecenie jest aktywne!",
-      "body": "Pojawi się w orderbooku za kilka sekund.",
+      "body": "Pojawi się w orderbooku w niecałą minutę.",
       "view_cta": "Zobacz zlecenie",
       "post_another": "Opublikuj kolejne",
       "edit_cta": "Edytuj",
@@ -3196,6 +3197,21 @@
       "barter_sentence_buy": "Szukasz towarów/usług o wartości {value}, płacąc w {cryptos}.",
       "barter_sentence_sell_novalue": "Oferujesz towary/usługi, akceptując {cryptos}.",
       "barter_sentence_buy_novalue": "Szukasz towarów/usług, płacąc w {cryptos}."
+    },
+    "terms_md_guide": {
+      "tooltip_title": "Przewodnik Markdown",
+      "tooltip_body": "Użyj podstawowego formatowania, aby Twoje zlecenie wyglądało ładnie!",
+      "heading": "Przewodnik Markdown",
+      "col_element": "Element",
+      "col_syntax": "Składnia Markdown",
+      "el_heading": "Nagłówek",
+      "el_bold": "Pogrubienie",
+      "el_italic": "Kursywa",
+      "el_blockquote": "Cytat",
+      "el_ordered": "Lista numerowana",
+      "el_unordered": "Lista punktowana",
+      "el_hr": "Linia pozioma",
+      "el_link": "Odnośnik"
     }
   },
   "prices": {

@@ -230,6 +230,7 @@ export const OP_IDS = {
 	chatMessage: 'morphit_chat_v1',
 	chatIdentity: 'morphit_chat_identity_v1',
 	chatRead: 'morphit_chat_read_v1',
+	chatFolders: 'morphit_chat_folders_v1',
 	releaseDiscovery: 'morphit_release_v1',
 	feeAttest: 'morphit_fee_attest_v1',
 	featureBid: 'morphit_feature_bid_v1',

@@ -220,6 +220,29 @@ ALTER TABLE push_pending
 COMMENT ON COLUMN push_pending.notification_id IS
     'Optional shared dedup tag matching the in-page notificationTag (e.g. ''morphit-trade-<permlink>'') so an order-signal push and its in-page notification collapse. NULL → the sender tags on the queue-row id.';
 `
+	},
+	{
+		version: 42,
+		description:
+			'cp462: chat_folders — per-account ENCRYPTED chat folder organization (Inbox/Starred; rest Archived), synced across devices. morphit_chat_folders_v1.',
+		// t.txt (v1.4.9 #5). One row per account holding the ENCRYPTED folder
+		// state — the client encrypts the thread lists with a posting-key-derived
+		// key, so the indexer stores + serves OPAQUE ciphertext and never learns a
+		// user's chat organization. Written ONLY by the morphit_chat_folders_v1
+		// handler; the latest broadcast (by block) wins. Idempotent with the
+		// CREATE TABLE in schema.sql.
+		sql: `
+CREATE TABLE IF NOT EXISTS chat_folders (
+    account TEXT PRIMARY KEY,
+    enc TEXT NOT NULL,
+    source_block_num BIGINT NOT NULL,
+    source_trx_id TEXT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+COMMENT ON TABLE chat_folders IS
+    'Per-account ENCRYPTED chat folder organization (which threads are kept in Inbox/Starred; all others Archived). Opaque ciphertext — encrypted client-side with a posting-key-derived key, so the indexer never learns a user''s chat organization. Written only by morphit_chat_folders_v1; latest by block wins.';
+`
 	}
 	// Future migrations land here.  The v1 collapsed schema is the
 	// pre-launch baseline; from v37 forward, every new schema change is its

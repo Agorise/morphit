@@ -1324,3 +1324,74 @@ svelte-check 0/0 after.
 
 **Walkthroughs:** persona 182/182, sally 22/22 green. Charlie (MCP) and Josie (ops-cli)
 unaffected — no MCP or ops-cli runtime touched (docs only).
+
+## cp466 — v1.4.8 → v1.4.9 delta deep-deep (focused on the changed surface) 🟢
+
+Scope: everything that changed since the v1.4.8 cut. The ONLY meaningful new attack
+surface is t.txt #5 (on-chain chat folders): a new posting-signed custom_json op
+(`morphit_chat_folders_v1`), a new crypto module, a new indexer handler + table +
+public endpoint, and a new client-side sync. Everything else (#1 contact-flash
+by-origin fix, #2 Terms markdown-guide modal, #3/#4 my-orders defaults + button
+size prop, #6/#7 optimistic cancel via recentCancels, #8 empty-category note, #9
+orderbook slide-in) is UI/logic with no new privileged path.
+
+### #5 on-chain chat folders — audited across the crypto/op/indexer/endpoint/client layers
+
+- ✅ **Confidentiality (priority #1).** The folder state (which peers/orders a user
+  keeps in Starred/Archived) is encrypted before it ever leaves the client:
+  `folderCrypto.encryptFolderState` — BLAKE2b-256-keyed derivation from the POSTING
+  key (domain-separated tag `morphit-chat-folders-v1/state/<account>`, so it can
+  never collide with the chat-identity key), ChaCha20-Poly1305 IETF, wire =
+  base64(nonce‖ct). The op body is exactly `{ v: 1, enc }` — no thread keys in the
+  clear (pinned by `chat-folders-onchain-smoke` + a runtime no-leak test). Verified:
+  fresh `randombytes_buf(12)` nonce per encryption (no reuse); derived key wiped
+  (`memzero`) on both encrypt and decrypt.
+- ✅ **Integrity / no forgery.** AEAD tag rejects any tampered blob (decrypt → null,
+  no throw, no partial-plaintext leak). KAT (known-answer test) freezes the wire
+  format so a future change to derivation/nonce/AAD/cipher/base64 fails the test
+  instead of silently orphaning every on-chain blob.
+- ✅ **No impersonation.** The indexer handler keys the row on `ctx.signer` (the op's
+  cryptographic signer), NOT any payload field — a user can only write their OWN
+  account's folder state. SQL fully parameterized ($1..$5, zero interpolation).
+- ✅ **DoS / bloat bounded.** Handler rejects non-object payload, v≠1, non-string /
+  empty / >96 KB / non-base64 `enc`. Upsert is latest-by-block
+  (`source_block_num < EXCLUDED.source_block_num`), so a replayed OLD op can't
+  overwrite newer state. Endpoint is rate-limited (`list` bucket) and validates the
+  account name.
+- ✅ **Public endpoint leaks nothing.** GET /v1/chat-folders/:account returns only the
+  opaque `enc` + a timestamp. Reading another account's blob yields ciphertext that
+  is undecryptable without THAT account's posting key — so the endpoint being public
+  is safe (the block timestamp is already public on chain anyway).
+- ✅ **Migration hygiene.** v42 lands in BOTH `migrations.ts` (existing DBs) and the
+  `schema.sql` baseline (fresh DBs) with identical columns; `SCHEMA_HEAD_VERSION` +
+  `MIGRATIONS_COVERAGE_HIGH` bumped to 42 (found by the battery — see below). Column
+  parity pinned by the smoke.
+- ✅ **Posting-only users supported; memo key never touched** (pinned).
+
+### Note (no fix — accepted within the trust model)
+
+- **Rollback-on-read.** The client adopts whatever `enc` the indexer serves for its
+  account. A malicious or buggy indexer could serve a STALE (but genuine) blob,
+  rolling a user's folder organization back to an earlier state. Accepted because:
+  (a) the indexer is the user's OWN trusted instance (a hostile one has far graver
+  levers); (b) the AEAD still prevents FORGERY — only real past blobs can be served,
+  never fabricated ones; (c) impact is minor and self-healing — the next folder
+  action re-broadcasts current state. Not worth a monotonic-version gate on read.
+
+### Battery (full ~492-smoke run, in chunks) — 3 real regressions found + fixed 🟢
+
+Running the full battery in-sandbox (not just the changed-file smokes) caught three
+issues the representative subset would have missed — all fixed, all re-verified:
+1. `schema-migration-coverage-smoke` — my v42 banner exceeded the pinned
+   `SCHEMA_HEAD_VERSION=41`. Bumped the pin (+ `MIGRATIONS_COVERAGE_HIGH`) to 42.
+2. `i18n-translation-completeness-smoke` — two #2 Terms-guide keys are byte-identical
+   to English in German (`col_element`="Element", `el_link`="Link"). Both are correct
+   German (cognate + hyperlink loanword), added to the allow-list with (a)/(b) reasons.
+3. `cancel-redirect-and-relist-smoke` — a stale pin still expected the old 1.5s
+   pre-navigation indexer wait; #6/#7 replaced that with the optimistic `recordCancel`
+   → `applyRecentCancels` override. Updated the pin to the new mechanism.
+
+**CLEAR.** In-sandbox green: full battery 489/489 · full vitest (via
+`vitest-must-pass-smoke`) · 5-persona walkthroughs (via `persona-walkthrough-smoke`)
+· vite build ✓ · web svelte-check 0/0 · indexer tsc 0. #5 guarded by 28 unit tests +
+20 tamper-tested shape-pin checks (KAT backward-compat + no-leak privacy included).
