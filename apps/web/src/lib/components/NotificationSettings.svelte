@@ -40,6 +40,7 @@
 		type SubscribeError,
 		type PushPrivacyMode
 	} from '$lib/notifications/push';
+	import { pushBlockedHelpKey } from '$lib/notifications/pushBlockedHelp';
 	import { getUserBlurtAccount } from '$lib/blurt/ops/profile';
 	import StatusLine from './StatusLine.svelte';
 	import { onMount } from 'svelte';
@@ -319,8 +320,12 @@
 							{$_('settings.notifications.channel_push_help')}
 						</p>
 						{#if pushError}
+							{@const pushErrKey =
+								pushError === 'push_service_unavailable'
+									? pushBlockedHelpKey()
+									: `push_error_${pushError}`}
 							<p class="mt-2 text-sm text-rose-700 dark:text-rose-300" role="alert">
-								{$_(`settings.notifications.push_error_${pushError}`)}
+								{$_(`settings.notifications.${pushErrKey}`)}
 							</p>
 						{/if}
 					</div>
@@ -469,7 +474,7 @@
 						type="time"
 						value={$notificationPrefs.quietHours.from}
 						onchange={(e) => setQuietHours({ from: (e.currentTarget as HTMLInputElement).value })}
-						class="rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+						class="rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
 					/>
 				</label>
 				<label class="flex flex-col gap-1">
@@ -478,7 +483,7 @@
 						type="time"
 						value={$notificationPrefs.quietHours.to}
 						onchange={(e) => setQuietHours({ to: (e.currentTarget as HTMLInputElement).value })}
-						class="rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+						class="rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
 					/>
 				</label>
 			</div>

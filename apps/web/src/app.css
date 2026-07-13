@@ -350,10 +350,16 @@ body {
 	 * field that is wrong must not look valid just because the cursor is in it.
 	 * Checkbox/radio/range/file/color are not bordered text fields and keep the
 	 * glow. Specificity: the generic rule uses `:where(...)` (zero specificity),
-	 * so these element selectors win without `!important`. */
+	 * so these element selectors win without `!important`.
+	 *
+	 * `no-app-focus-ring` opt-out: a borderless inner <input> inside a custom
+	 * select (FiatCurrencySelect / PaymentFilterSelect) must NOT get this ring —
+	 * its wrapper already draws the emerald border + ring on focus, and a second
+	 * ring on the inner input reads as a double green border. Mark those inputs
+	 * with `no-app-focus-ring` and the wrapper owns the focus treatment. */
 	input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not(
 			[type='color']
-		):not([aria-invalid='true']):not([class*='border-red']):focus-visible,
+		):not([aria-invalid='true']):not([class*='border-red']):not([class*='no-app-focus-ring']):focus-visible,
 	textarea:not([aria-invalid='true']):not([class*='border-red']):focus-visible,
 	select:not([aria-invalid='true']):not([class*='border-red']):focus-visible {
 		border-color: theme('colors.morphit.emerald');

@@ -583,7 +583,7 @@
 						bind:value={password}
 						autocomplete="current-password"
 						use:focusOnMount
-						class="block w-full rounded-xl border border-ink-200 bg-white px-4 py-3 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+						class="block w-full rounded-xl border border-ink-200 bg-white px-4 py-3 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
 						required
 						disabled={needTotp}
 					/>
@@ -606,7 +606,7 @@
 							autocomplete="one-time-code"
 							use:focusOnMount
 							placeholder={$_('settings.totp.unlock_prompt.code_placeholder')}
-							class="block w-full rounded-xl border border-ink-200 bg-white px-4 py-3 font-mono tracking-wide focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+							class="block w-full rounded-xl border border-ink-200 bg-white px-4 py-3 font-mono tracking-wide focus:outline-none dark:border-ink-700 dark:bg-ink-900"
 							required
 						/>
 					</div>

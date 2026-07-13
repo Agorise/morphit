@@ -175,8 +175,8 @@
 	<div
 		onfocusin={() => (focused = true)}
 		onfocusout={() => (focused = false)}
-		class="flex flex-wrap items-center gap-1 rounded-xl border-2 border-ink-200 dark:border-ink-700 transition-colors duration-150 ease-out hover:border-ink-300 dark:hover:border-ink-600 {focused || open
-			? 'ring-2 ring-morphit-emerald'
+		class="flex flex-wrap items-center gap-1 rounded-xl border border-ink-200 dark:border-ink-700 transition-colors duration-150 ease-out hover:border-ink-300 dark:hover:border-ink-600 {focused || open
+			? 'border-morphit-emerald ring-1 ring-morphit-emerald'
 			: ''} bg-white px-2 py-1.5 dark:bg-ink-900"
 	>
 		{#if single}
@@ -244,7 +244,7 @@
 				: value.length
 					? ''
 					: ($_('orderbook.filters.fiat_search_placeholder') as string)}
-			class="grow border-0 bg-transparent px-1 py-0.5 text-sm focus:outline-none focus:ring-0"
+			class="grow border-0 bg-transparent px-1 py-0.5 text-sm focus:outline-none focus:ring-0 no-app-focus-ring"
 		/>
 	</div>
 

@@ -288,9 +288,9 @@
 		{disabled}
 		aria-label={ariaLabel}
 		{name}
-		class="pk-textarea w-full rounded-xl border-2 {isOver
-			? 'border-red-500 focus:ring-red-500 dark:border-red-500'
-			: 'border-ink-200 focus:ring-morphit-emerald dark:border-ink-700'} bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 dark:bg-ink-900"
+		class="pk-textarea w-full rounded-xl border {isOver
+			? 'border-red-500 focus:ring-2 focus:ring-red-500 dark:border-red-500'
+			: 'border-ink-200 dark:border-ink-700'} bg-white px-3 py-2 text-sm focus:outline-none dark:bg-ink-900"
 		class:pk-flash-yellow={flashOn}
 	></textarea>
 

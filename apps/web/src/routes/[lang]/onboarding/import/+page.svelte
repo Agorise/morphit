@@ -945,9 +945,9 @@
 						maxlength="120"
 						onblur={normalizeSeedInput}
 						oninput={() => (seedInvalid = false)}
-						class="w-full rounded-xl border-2 bg-white p-3 font-mono text-base focus:outline-none focus:ring-2 dark:bg-ink-950 {seedInvalid
+						class="w-full rounded-xl border bg-white p-3 font-mono text-base focus:outline-none dark:bg-ink-950 {seedInvalid
 							? 'border-red-400 focus:ring-red-400 dark:border-red-500'
-							: 'border-ink-200 focus:ring-morphit-emerald dark:border-ink-700'}"
+							: 'border-ink-200 dark:border-ink-700'}"
 					></textarea>
 					<span class="mt-2 block text-sm text-ink-500 dark:text-ink-400">
 						{$_('onboarding.import.seed_hint')}
@@ -974,9 +974,9 @@
 						bind:value={password}
 						autocomplete="current-password"
 						oninput={() => (keyfilePwInvalid = false)}
-						class="w-full rounded-xl border-2 bg-white px-3 py-2 focus:outline-none focus:ring-2 dark:bg-ink-900 {keyfilePwInvalid
+						class="w-full rounded-xl border bg-white px-3 py-2 focus:outline-none dark:bg-ink-900 {keyfilePwInvalid
 							? 'border-red-400 focus:ring-red-400 dark:border-red-500'
-							: 'border-ink-200 focus:ring-morphit-emerald dark:border-ink-700'}"
+							: 'border-ink-200 dark:border-ink-700'}"
 					/>
 				</label>
 			{:else}
@@ -1027,10 +1027,10 @@
 								void detectAccountFromWif();
 							}}
 							placeholder={$_('onboarding.import.posting_only.wif_placeholder')}
-							class="w-full rounded-xl border-2 bg-white px-3 py-2 pe-10 font-mono focus:outline-none focus:ring-2 dark:bg-ink-900 {wifKeyInvalid ||
+							class="w-full rounded-xl border bg-white px-3 py-2 pe-10 font-mono focus:outline-none dark:bg-ink-900 {wifKeyInvalid ||
 							wifLooksInvalid
 								? 'border-red-400 focus:ring-red-400 dark:border-red-500'
-								: 'border-ink-200 focus:ring-morphit-emerald dark:border-ink-700'}"
+								: 'border-ink-200 dark:border-ink-700'}"
 						/>
 						{#if wifStatus === 'valid'}
 							<span
@@ -1100,10 +1100,10 @@
 								oninput={onManualAccountInput}
 								onblur={() => void validateManualAccount()}
 								placeholder={$_('onboarding.import.posting_only.manual_account_placeholder')}
-								class="w-full rounded-xl border-2 bg-white px-3 py-2 pe-10 lowercase focus:outline-none focus:ring-2 dark:bg-ink-900 {manualAccountStatus ===
+								class="w-full rounded-xl border bg-white px-3 py-2 pe-10 lowercase focus:outline-none dark:bg-ink-900 {manualAccountStatus ===
 								'invalid'
 									? 'border-red-400 focus:ring-red-400 dark:border-red-500'
-									: 'border-ink-200 focus:ring-morphit-emerald dark:border-ink-700'}"
+									: 'border-ink-200 dark:border-ink-700'}"
 							/>
 							{#if manualAccountStatus === 'valid'}
 								<span
@@ -1184,7 +1184,7 @@
 						maxlength="64"
 						bind:value={postingNewPassword}
 						autocomplete="new-password"
-						class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+						class="w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
 					/>
 					<span class="mt-1 block text-xs text-ink-500 dark:text-ink-400">
 						{$_('onboarding.import.posting_only.new_password_hint')}
@@ -1202,9 +1202,9 @@
 						onblur={() => (postingConfirmBlurred = true)}
 						autocomplete="new-password"
 						aria-invalid={postingConfirmMismatch}
-						class="w-full rounded-xl border-2 bg-white px-3 py-2 focus:outline-none focus:ring-2 dark:bg-ink-900 {postingConfirmMismatch
+						class="w-full rounded-xl border bg-white px-3 py-2 focus:outline-none dark:bg-ink-900 {postingConfirmMismatch
 							? 'border-red-400 focus:ring-red-400 dark:border-red-500'
-							: 'border-ink-200 focus:ring-morphit-emerald dark:border-ink-700'}"
+							: 'border-ink-200 dark:border-ink-700'}"
 					/>
 					{#if postingConfirmMismatch}
 						<span class="mt-1 block text-xs text-red-600 dark:text-red-400">
@@ -1273,7 +1273,7 @@
 							bind:value={rememberPassword}
 							autocomplete="new-password"
 							minlength="8"
-							class="mt-1 w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+							class="mt-1 w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
 						/>
 						<span class="mt-1 block text-xs text-ink-500">
 							{$_('onboarding.import.remember_me.password_hint')}
@@ -1300,9 +1300,9 @@
 							maxlength="64"
 							bind:value={rememberPasswordConfirm}
 							autocomplete="new-password"
-							class="mt-1 w-full rounded-xl border-2 bg-white px-3 py-2 focus:outline-none focus:ring-2 dark:bg-ink-900 {rememberConfirmMismatch
+							class="mt-1 w-full rounded-xl border bg-white px-3 py-2 focus:outline-none dark:bg-ink-900 {rememberConfirmMismatch
 								? 'border-red-400 focus:ring-red-400 dark:border-red-500'
-								: 'border-ink-200 focus:ring-morphit-emerald dark:border-ink-700'}"
+								: 'border-ink-200 dark:border-ink-700'}"
 						/>
 					</label>
 					{#if rememberConfirmMismatch}

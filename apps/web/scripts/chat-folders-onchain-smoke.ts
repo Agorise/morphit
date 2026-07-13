@@ -130,6 +130,30 @@ check(
 	/syncChatFoldersFromChain\(\)/.test(inbox) && /\$isUnlocked/.test(inbox)
 );
 
+// v1.4.10 — Gmail-style un-archive on new activity.
+check(
+	'chatFolders resurrects archived threads on newer activity (compares lastMessageAt to archived-at)',
+	/export function resurrectArchivedOnNewActivity/.test(chatFolders) &&
+		/lastMsgMs > archivedAtMs/.test(chatFolders)
+);
+check(
+	'the inbox runs the resurrect over the conversation list',
+	/resurrectArchivedOnNewActivity\(/.test(inbox) && /last_message_at/.test(inbox)
+);
+check(
+	'the GLOBAL unread channel runs the resurrect too (badge fires on any page / hidden tab)',
+	/resurrectArchivedOnNewActivity\(/.test(read('apps/web/src/lib/notifications/chatUnread.ts'))
+);
+check(
+	'the badge counts STARRED threads too — its predicate excludes only archived, never starred',
+	/return !isArchived\(/.test(read('apps/web/src/lib/notifications/chatUnread.ts')) &&
+		!/isStarred|=== 'starred'/.test(
+			read('apps/web/src/lib/notifications/chatUnread.ts')
+				.split('function badgeEligible')[1]
+				?.split('function recount')[0] ?? ''
+		)
+);
+
 if (failures === 0) {
 	console.log(`✓ all ${total} chat-folders-onchain scenarios passed`);
 } else {

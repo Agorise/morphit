@@ -445,9 +445,7 @@
         "body": "请放慢节奏。人们不喜欢未经请求的联系,可能屏蔽你,而屏蔽是链上可见的 — 你账户上的多次屏蔽会损害你作为对手方的声誉。在首次联系之间等待 5 分钟以上即可重置到基础费率。"
       }
     },
-    "conversation": {
-      "moved_to_messages": "此会话已移至消息。"
-    },
+    "conversation": {},
     "security": {
       "pub_pin_tampered_same_ref": "无法安全发送:此收件人的聊天密钥记录看起来被篡改。你的索引器所报告的密钥与链上发布的不一致。试试另一个 Morphit 实例,或请收件人通过其他方式确认其聊天密钥。",
       "pub_pin_older_indexer_ref": "无法安全发送:你的索引器正在报告一条比你已经见过的更旧的聊天密钥记录。在只能向前推进的链上这种情况不应发生。请尝试刷新或切换到另一个 Morphit 实例。",
@@ -4075,7 +4073,10 @@
       "push_error_signature_required": "此实例要求签名的订阅请求。请确保账号已解锁后重试。",
       "push_error_signature_invalid": "中继拒绝了你的签名。请重新解锁账号后再试。",
       "push_error_locked_session": "会话已锁定。请先解锁账号以启用推送通知。",
-      "push_error_push_service_unavailable": "你的浏览器屏蔽了网页推送——通常是隐私功能，例如 Brave 的 Shields、uBlock Origin 或其他广告/追踪器拦截器（网页推送经由 Google 的服务器，会被它们拦截）。你可以为本站降低浏览器的防护以允许它，或者让推送保持关闭——上面的通知方式仍然有效。推送只在 Morphit 完全关闭时才有意义。"
+      "push_error_push_service_unavailable": "你的浏览器屏蔽了网页推送——通常是因为浏览器的推送服务已关闭，或广告/追踪器拦截器（如 uBlock Origin）拦截了它。检查你的浏览器针对本站的通知/隐私设置并允许它，然后重试。或者让推送保持关闭——当 Morphit 打开时应用内徽章仍然有效。",
+      "push_error_push_service_unavailable_brave": "Brave 默认屏蔽网页推送——这是浏览器设置，而非 Shields。解决方法：打开 brave://settings/privacy，开启 \"Use Google services for push messaging\"，重启 Brave，然后在此重新开启推送。（它经由 Google 的服务器——仅元数据，绝不含你的消息内容。）或者让推送保持关闭；当 Morphit 打开时应用内徽章仍然有效。",
+      "push_error_push_service_unavailable_firefox": "Firefox 屏蔽了网页推送。常见原因：隐私窗口（那里推送是关闭的——请用普通窗口），或增强型跟踪保护（点击地址栏中的盾牌并允许本站）。仍然不行？打开 about:config 并将 dom.push.enabled 设为 true，然后重试。或者让推送保持关闭；当 Morphit 打开时应用内徽章仍然有效。",
+      "push_error_push_service_unavailable_safari": "Safari 屏蔽了网页推送。在 Mac 上需要 macOS 13 (Ventura)+ 和 Safari 16+。打开 Safari → Settings → Websites → Notifications，将 morphit.io 设为 Allow，然后重试。在较旧的 macOS 上，请用 Chrome、Brave 或 Firefox 进行推送。或者让推送保持关闭；当 Morphit 打开时应用内徽章仍然有效。"
     },
     "hidden_accounts": {
       "heading": "已隐藏的账户",

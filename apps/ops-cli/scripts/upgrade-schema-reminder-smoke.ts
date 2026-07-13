@@ -149,8 +149,15 @@ const BASE = [
 const PLUS_SECTION =
 	BASE + ['-- \u2500\u2500\u2500 v2 \u2500\u2500\u2500', 'ALTER TABLE u ADD COLUMN c TEXT;', ''].join('\n');
 
+// cp466 — the real-world append: a blank line is placed BEFORE the new marker
+// (the schema.sql convention), which lands in the formerly-last section's body.
+// That is boundary whitespace, not a schema change, and must NOT warn.
+const PLUS_SECTION_BLANK_BEFORE_MARKER =
+	BASE + ['', '-- \u2500\u2500\u2500 v2 \u2500\u2500\u2500', 'ALTER TABLE u ADD COLUMN c TEXT;', ''].join('\n');
+
 const cases: [string, string, boolean][] = [
 	['an APPENDED v<N> section is a numbered migration — no reset warning', PLUS_SECTION, false],
+	['a later append adding a boundary blank line to the previous section does NOT warn (cp466)', PLUS_SECTION_BLANK_BEFORE_MARKER, false],
 	['an IN-PLACE edit to an existing section still warns', BASE.replace('CREATE TABLE u (b TEXT);', 'CREATE TABLE u (b TEXT, c TEXT);'), true],
 	['an edit to the collapsed preamble still warns', BASE.replace('CREATE TABLE t (a TEXT);', 'CREATE TABLE t (a TEXT, z TEXT);'), true],
 	['a REMOVED section warns — the DB holds structures the code forgot', BASE.split('-- \u2500\u2500\u2500 v1')[0], true],

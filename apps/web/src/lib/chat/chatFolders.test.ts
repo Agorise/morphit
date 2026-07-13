@@ -23,6 +23,7 @@ import {
 	toggleStar,
 	archiveThread,
 	restoreThread,
+	resurrectArchivedOnNewActivity,
 	clearChatFolders,
 	__reloadChatFolders,
 	__chatFolderShape
@@ -172,5 +173,46 @@ describe('chatFolders', () => {
 		});
 		// Only the one valid key survives.
 		expect(Object.keys(map)).toEqual([`${A}\u0000${O1}`]);
+	});
+
+	// v1.4.10 — Gmail-style un-archive on new activity.
+	it('resurrects an archived thread when a message arrives AFTER archiving', () => {
+		archiveThread(A, O1);
+		expect(folderOf(A, O1)).toBe('archived');
+		const future = new Date(Date.now() + 60_000).toISOString();
+		resurrectArchivedOnNewActivity([{ peer: A, orderPermlink: O1, lastMessageAt: future }]);
+		expect(folderOf(A, O1)).toBe('inbox');
+	});
+
+	it('leaves an archived thread put when its newest message PREDATES archiving', () => {
+		archiveThread(A, O1);
+		const past = new Date(Date.now() - 60_000).toISOString();
+		resurrectArchivedOnNewActivity([{ peer: A, orderPermlink: O1, lastMessageAt: past }]);
+		expect(folderOf(A, O1)).toBe('archived');
+	});
+
+	it('never disturbs Inbox or Starred threads (and starred stays badge-eligible)', () => {
+		setFolder(A, O1, 'starred');
+		setFolder(B, O2, 'inbox');
+		const future = new Date(Date.now() + 60_000).toISOString();
+		resurrectArchivedOnNewActivity([
+			{ peer: A, orderPermlink: O1, lastMessageAt: future },
+			{ peer: B, orderPermlink: O2, lastMessageAt: future }
+		]);
+		expect(folderOf(A, O1)).toBe('starred');
+		expect(folderOf(B, O2)).toBe('inbox');
+		// Starred is never archived → the global badge (which excludes only
+		// archived) counts a new message to a starred thread. So a notification
+		// fires for archived (via resurrect) AND starred (already eligible).
+		expect(isArchived(A, O1)).toBe(false);
+	});
+
+	it('is idempotent — re-running after a resurrection changes nothing', () => {
+		archiveThread(A, O1);
+		const future = new Date(Date.now() + 60_000).toISOString();
+		resurrectArchivedOnNewActivity([{ peer: A, orderPermlink: O1, lastMessageAt: future }]);
+		expect(folderOf(A, O1)).toBe('inbox');
+		resurrectArchivedOnNewActivity([{ peer: A, orderPermlink: O1, lastMessageAt: future }]);
+		expect(folderOf(A, O1)).toBe('inbox');
 	});
 });
