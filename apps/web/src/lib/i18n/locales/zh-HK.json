@@ -445,9 +445,7 @@
         "body": "請放慢節奏。人哋唔鍾意未經請求嘅聯絡,可能會封鎖你,而封鎖係鏈上可見嘅 — 你帳戶上嘅多次封鎖會損害你作為對手方嘅聲譽。喺首次聯絡之間等待 5 分鐘以上就可以重置到基本費率。"
       }
     },
-    "conversation": {
-      "moved_to_messages": "此對話已移至訊息。"
-    },
+    "conversation": {},
     "security": {
       "pub_pin_tampered_same_ref": "無法安全發送:呢個收件人嘅聊天密鑰記錄睇落畀人改過。你個索引器報嘅密鑰同鏈上公佈嘅唔一樣。試吓另一個 Morphit 實例,或者叫收件人用其他途徑確認佢個聊天密鑰。",
       "pub_pin_older_indexer_ref": "無法安全發送:你個索引器報嘅聊天密鑰記錄,比你之前見過嘅仲要舊。喺一條淨係向前行嘅鏈上面,呢樣嘢唔應該發生。試吓重新整理,或者轉去另一個 Morphit 實例。",
@@ -4075,7 +4073,10 @@
       "push_error_signature_required": "呢個實例要求簽名訂閱請求。請確認賬戶已解鎖再重試。",
       "push_error_signature_invalid": "中繼拒絕咗你嘅簽名。請重新解鎖賬戶再試。",
       "push_error_locked_session": "你嘅會話已鎖定。請先解鎖賬戶,啟用推送通知。",
-      "push_error_push_service_unavailable": "你的瀏覽器封鎖了網頁推送——通常是私隱功能，例如 Brave 的 Shields、uBlock Origin 或其他廣告/追蹤器攔截器（網頁推送經由 Google 的伺服器，會被它們攔截）。你可以為本站降低瀏覽器的防護以允許它，或者讓推送保持關閉——上面的通知方式仍然有效。推送只在 Morphit 完全關閉時才有意義。"
+      "push_error_push_service_unavailable": "你的瀏覽器封鎖了網頁推送——通常是因為瀏覽器的推送服務已關閉，或廣告/追蹤器攔截器（如 uBlock Origin）攔截了它。檢查你的瀏覽器針對本站的通知/私隱設定並允許它，然後再試一次。或者讓推送保持關閉——當 Morphit 開啟時應用程式內徽章仍然有效。",
+      "push_error_push_service_unavailable_brave": "Brave 預設封鎖網頁推送——這是瀏覽器設定，而非 Shields。解決方法：開啟 brave://settings/privacy，啟用 \"Use Google services for push messaging\"，重新啟動 Brave，然後在此重新開啟推送。（它經由 Google 的伺服器——僅中繼資料，絕不含你的訊息內容。）或者讓推送保持關閉；當 Morphit 開啟時應用程式內徽章仍然有效。",
+      "push_error_push_service_unavailable_firefox": "Firefox 封鎖了網頁推送。常見原因：私密視窗（那裡推送是關閉的——請用普通視窗），或增強型追蹤保護（點擊地址欄中的盾牌並允許本站）。仍然不行？開啟 about:config 並將 dom.push.enabled 設為 true，然後再試一次。或者讓推送保持關閉；當 Morphit 開啟時應用程式內徽章仍然有效。",
+      "push_error_push_service_unavailable_safari": "Safari 封鎖了網頁推送。在 Mac 上需要 macOS 13 (Ventura)+ 和 Safari 16+。開啟 Safari → Settings → Websites → Notifications，將 morphit.io 設為 Allow，然後再試一次。在較舊的 macOS 上，請用 Chrome、Brave 或 Firefox 進行推送。或者讓推送保持關閉；當 Morphit 開啟時應用程式內徽章仍然有效。"
     },
     "hidden_accounts": {
       "heading": "已隱藏的帳戶",

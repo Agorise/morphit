@@ -393,7 +393,7 @@
 				aria-autocomplete="list"
 				autocomplete="off"
 				placeholder={$_('faq.search_placeholder')}
-				class="w-full rounded-2xl border-2 border-ink-200 bg-white py-4 pe-4 ps-12 text-base shadow-morphit-card transition hover:border-ink-300 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900 dark:hover:border-white/15"
+				class="w-full rounded-2xl border border-ink-200 bg-white py-4 pe-4 ps-12 text-base shadow-morphit-card transition hover:border-ink-300 focus:outline-none dark:border-ink-700 dark:bg-ink-900 dark:hover:border-white/15"
 			/>
 		</div>
 

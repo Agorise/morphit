@@ -534,11 +534,21 @@ export function schemaBaselineChanged(oldInstallDir: string, newInstallDir: stri
 		const oldSections = splitSchemaSections(oldSql);
 		const newSections = splitSchemaSections(newSql);
 
-		// Every section the old install already knew about must be byte-identical,
-		// and none may have vanished. Sections only the new install has are the
-		// additive migrations the indexer runs itself.
+		// Every section the old install already knew about must still carry the
+		// same SQL, and none may have vanished. Sections only the new install has
+		// are the additive migrations the indexer runs itself.
+		//
+		// Compare with each section's boundary whitespace normalized (`.trim()`):
+		// a section's trailing whitespace SHIFTS whenever a LATER section is
+		// appended after it (the new `-- ─── v<N>` marker moves where this
+		// section ends — e.g. the formerly-last section gains the blank line that
+		// now precedes the next marker). That is never a real schema change, so a
+		// byte-exact compare would cry drift on every release that adds a section.
+		// Only a change to a section's actual CONTENT means an existing DB is
+		// missing something.
 		for (const [version, oldBody] of oldSections) {
-			if (newSections.get(version) !== oldBody) return true;
+			const newBody = newSections.get(version);
+			if (newBody === undefined || newBody.trim() !== oldBody.trim()) return true;
 		}
 		return false;
 	} catch {

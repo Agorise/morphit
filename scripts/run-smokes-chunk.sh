@@ -15,6 +15,8 @@ else
 fi
 mapfile -t SMOKES < <(grep -E '^[[:space:]]*"[^"]+"' scripts/run-smokes.sh | sed -E 's/^[[:space:]]*"([^"]+)".*/\1/')
 total=0; failed=0
+# Mirror run-smokes.sh: per-smoke wall-clock, overridable for slow hosts.
+SMOKE_TIMEOUT="${MORPHIT_SMOKE_TIMEOUT:-240}"
 SMOKE_OUT="$(mktemp -t morphit-smoke.XXXXXX.out)"
 trap 'rm -f "$SMOKE_OUT"' EXIT
 idx=0
@@ -24,7 +26,11 @@ for entry in "${SMOKES[@]}"; do
   dir="${entry%:*}"; name="${entry##*:}"
   path="$repo/$dir/scripts/$name.ts"
   if [ ! -f "$path" ]; then echo "  ✗ [$idx] $name (missing)"; failed=$((failed+1)); continue; fi
-  if (cd "$repo/$dir" && timeout --signal=TERM --kill-after=5 240 "$TSX" --tsconfig "$repo/tsconfig.smoke.json" "scripts/$name.ts" >"$SMOKE_OUT" 2>&1); then
+  # Prefer a workspace-local tsconfig.smoke.json (cp448) — apps/web ships its
+  # own so $blurt/$indexer resolve to WEB, not the indexer. Mirror run-smokes.sh
+  # exactly; hardcoding the repo-root config mis-resolves those per-app aliases.
+  if [ -f "$repo/$dir/tsconfig.smoke.json" ]; then CFG="$repo/$dir/tsconfig.smoke.json"; else CFG="$repo/tsconfig.smoke.json"; fi
+  if (cd "$repo/$dir" && timeout --signal=TERM --kill-after=5 "$SMOKE_TIMEOUT" "$TSX" --tsconfig "$CFG" "scripts/$name.ts" >"$SMOKE_OUT" 2>&1); then
     n=$(grep "^✓ all" "$SMOKE_OUT" | sed "s/.*all \([0-9]*\).*/\1/")
     if [ -z "$n" ] || [ "$n" -eq 0 ] 2>/dev/null; then
       failed=$((failed+1)); echo "  ✗ [$idx] $name (no canonical line)"; tail -4 "$SMOKE_OUT" | sed 's/^/      /'

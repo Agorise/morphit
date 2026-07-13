@@ -236,7 +236,7 @@
 					bind:value={challengeHex}
 					maxlength="512"
 					rows="2"
-					class="mt-1 w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+					class="mt-1 w-full rounded-xl border border-ink-200 bg-white px-3 py-2 font-mono text-sm focus:outline-none dark:border-ink-700 dark:bg-ink-900"
 				></textarea>
 				<span class="text-xs text-ink-500 dark:text-ink-400">
 					Default is 64 zero bytes. You can compare the YubiKey's output for this against `ykman otp
@@ -253,7 +253,7 @@
 					maxlength="64"
 					bind:value={secretHex}
 					autocomplete="off"
-					class="mt-1 w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+					class="mt-1 w-full rounded-xl border border-ink-200 bg-white px-3 py-2 font-mono text-sm focus:outline-none dark:border-ink-700 dark:bg-ink-900"
 					placeholder="Optional — paste the HMAC-SHA1 key you programmed into the slot"
 				/>
 				<span class="text-xs text-ink-500 dark:text-ink-400">

@@ -1101,7 +1101,7 @@
 						</span>
 						<select
 							bind:value={side}
-							class="w-full cursor-pointer rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+							class="w-full cursor-pointer rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
 						>
 							<option value="">{$_('orderbook.filters.side_any')}</option>
 							<option value="buy">{$_('orderbook.filters.side_buy')}</option>
@@ -1135,7 +1135,7 @@
 							bind:value={region}
 							maxlength="128"
 							autocomplete="off"
-							class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+							class="w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
 							placeholder={regionPlaceholder}
 						/>
 					</label>
@@ -1168,7 +1168,7 @@
 						bind:value={orderDetailsQuery}
 						maxlength="128"
 						autocomplete="off"
-						class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+						class="w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
 						placeholder={orderDetailsPlaceholder}
 					/>
 				</label>
@@ -1185,7 +1185,7 @@
 						</span>
 						<select
 							bind:value={minTrades}
-							class="w-full cursor-pointer rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+							class="w-full cursor-pointer rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
 						>
 							<option value={0}>{$_('orderbook.filters.min_trades_any')}</option>
 							<option value={5}>{$_('orderbook.filters.min_trades_5')}</option>
@@ -1202,7 +1202,7 @@
 						</span>
 						<select
 							bind:value={sortMode}
-							class="w-full cursor-pointer rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+							class="w-full cursor-pointer rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
 						>
 							<option value="recent">{$_('orderbook.filters.sort_recent')}</option>
 							<option value="rating">{$_('orderbook.filters.sort_rating')}</option>

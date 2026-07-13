@@ -445,9 +445,7 @@
         "body": "Zwolnij. Ludzie nie lubią niechcianego kontaktu, mogą cię zablokować, a blokady są widoczne on-chain — wiele blokad przeciwko twojemu kontu szkodzi twojej reputacji jako kontrahenta. Odczekaj 5+ minut między pierwszymi kontaktami, by zresetować do bazy."
       }
     },
-    "conversation": {
-      "moved_to_messages": "Ta rozmowa została przeniesiona do Wiadomości."
-    },
+    "conversation": {},
     "security": {
       "pub_pin_tampered_same_ref": "Nie udało się bezpiecznie wysłać: zapis klucza czatu tego odbiorcy wygląda na zmodyfikowany. Klucz zgłaszany przez Twój indeksator nie pasuje do tego, co opublikowano w łańcuchu. Spróbuj innej instancji Morphit, albo poproś odbiorcę o potwierdzenie klucza inną drogą.",
       "pub_pin_older_indexer_ref": "Nie udało się bezpiecznie wysłać: Twój indeksator zgłasza zapis klucza czatu starszy niż znany Ci do tej pory. Na łańcuchu, który posuwa się tylko do przodu, nie powinno to się zdarzyć. Spróbuj odświeżyć lub przełączyć się na inną instancję Morphit.",
@@ -4075,7 +4073,10 @@
       "push_error_signature_required": "Ta instancja wymaga podpisanego żądania subskrypcji. Upewnij się, że twoje konto jest odblokowane i spróbuj ponownie.",
       "push_error_signature_invalid": "Relay odrzucił twój podpis. Odblokuj konto ponownie i spróbuj jeszcze raz.",
       "push_error_locked_session": "Twoja sesja jest zablokowana. Odblokuj najpierw konto, aby włączyć powiadomienia push.",
-      "push_error_push_service_unavailable": "Twoja przeglądarka zablokowała web push — zwykle to funkcja prywatności, jak Shields w Brave, uBlock Origin lub inny bloker reklam/trackerów (web push działa przez serwery Google, które są blokowane). Obniż osłony przeglądarki dla tej strony, aby na to zezwolić, albo zostaw push wyłączony — opcje powiadomień powyżej nadal działają. Push ma znaczenie tylko wtedy, gdy Morphit jest całkowicie zamknięty."
+      "push_error_push_service_unavailable": "Twoja przeglądarka zablokowała web push — zwykle dlatego, że usługa push przeglądarki jest wyłączona lub bloker reklam/trackerów (jak uBlock Origin) go blokuje. Sprawdź ustawienia powiadomień/prywatności przeglądarki dla tej witryny i zezwól na to, potem spróbuj ponownie. Albo zostaw push wyłączony — plakietki w aplikacji nadal działają, gdy Morphit jest otwarty.",
+      "push_error_push_service_unavailable_brave": "Brave domyślnie blokuje web push — to ustawienie przeglądarki, nie Shields. Rozwiązanie: otwórz brave://settings/privacy, włącz \"Use Google services for push messaging\", uruchom ponownie Brave i włącz push tutaj ponownie. (Przechodzi przez serwery Google — tylko metadane, nigdy treść Twoich wiadomości.) Albo zostaw push wyłączony; plakietki w aplikacji nadal działają, gdy Morphit jest otwarty.",
+      "push_error_push_service_unavailable_firefox": "Firefox zablokował web push. Częste przyczyny: okno prywatne (tam push jest wyłączony — użyj zwykłego okna), lub Wzmocniona ochrona przed śledzeniem (kliknij tarczę na pasku adresu i zezwól tej witrynie). Nadal nie działa? Otwórz about:config i ustaw dom.push.enabled na true, potem spróbuj ponownie. Albo zostaw push wyłączony; plakietki w aplikacji nadal działają, gdy Morphit jest otwarty.",
+      "push_error_push_service_unavailable_safari": "Safari zablokował web push. Na Macu wymaga macOS 13 (Ventura)+ i Safari 16+. Otwórz Safari → Settings → Websites → Notifications, ustaw morphit.io na Allow, potem spróbuj ponownie. Na starszym macOS użyj Chrome, Brave lub Firefox do push. Albo zostaw push wyłączony; plakietki w aplikacji nadal działają, gdy Morphit jest otwarty."
     },
     "hidden_accounts": {
       "heading": "Ukryte konta",

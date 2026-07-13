@@ -59,7 +59,8 @@
 		toggleStar,
 		archiveThread,
 		restoreThread,
-		syncChatFoldersFromChain
+		syncChatFoldersFromChain,
+		resurrectArchivedOnNewActivity
 	} from '$lib/chat/chatFolders';
 	import { isUnlocked } from '$stores/identity';
 	import { blockedAccounts, loadBlocks } from '$lib/chat/blocks';
@@ -266,6 +267,20 @@
 	// first time an account with no on-chain state syncs.
 	$effect(() => {
 		if ($isUnlocked) void syncChatFoldersFromChain();
+	});
+
+	// v1.4.10 — Gmail-style un-archive: whenever the conversation list changes
+	// (initial load, 5s poll, or the sub-second activity ping), pull any archived
+	// thread that got a message AFTER it was archived back into the Inbox, so a
+	// new reply surfaces + feeds the unread badge instead of hiding in Archived.
+	$effect(() => {
+		resurrectArchivedOnNewActivity(
+			conversations.map((c) => ({
+				peer: c.peer,
+				orderPermlink: c.order?.permlink ?? '',
+				lastMessageAt: c.last_message_at
+			}))
+		);
 	});
 
 	onMount(() => {

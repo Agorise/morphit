@@ -29,7 +29,7 @@ import {
 	mergeRemoteReadState,
 	markConversationRead
 } from '$lib/chat/readState';
-import { chatFolders, isArchived } from '$lib/chat/chatFolders';
+import { chatFolders, isArchived, resurrectArchivedOnNewActivity } from '$lib/chat/chatFolders';
 import { hiddenAccounts } from '$lib/utils/hiddenAccounts';
 import { blockedAccounts, loadBlocks } from '$lib/chat/blocks';
 import { setCategoryCount } from './index';
@@ -158,6 +158,21 @@ async function poll(): Promise<void> {
 				peer: c.peer,
 				last_message_at: c.last_message_at
 			}));
+			// v1.4.10 — Gmail-style un-archive, GLOBALLY. This channel runs on
+			// every page (and re-polls on the activity ping even while the tab is
+			// hidden), so doing the resurrect here — not only on the inbox page —
+			// is what guarantees a new message to an ARCHIVED thread surfaces + the
+			// favicon/avatar badge (and sound) fire even when the user is on another
+			// page or off in another browser tab. Un-archiving moves the thread into
+			// the badge-eligible set; the folder-store change triggers recount via
+			// the subscription below, and recount() runs anyway.
+			resurrectArchivedOnNewActivity(
+				convos.map((c) => ({
+					peer: c.peer,
+					orderPermlink: c.order?.permlink ?? '',
+					lastMessageAt: c.last_message_at
+				}))
+			);
 			recount();
 		}
 	} catch {

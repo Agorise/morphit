@@ -238,6 +238,47 @@ export function restoreThread(peer: string, orderPermlink: string): void {
 	setFolder(peer, orderPermlink, 'inbox');
 }
 
+/**
+ * Gmail-style: pull an archived thread back into the Inbox when a message
+ * arrives AFTER it was archived, so a new reply is never silently buried in
+ * Archived (where it wouldn't show in the Inbox tab or feed the unread badge).
+ *
+ * "After it was archived" is the whole point: we compare each archived thread's
+ * newest-message time to the wall-clock time we recorded when the user archived
+ * it (`entry.at`). A thread the user archived AFTER reading — where the newest
+ * message predates the archive — stays put, so opening the app doesn't dump the
+ * whole Archived tab back into the Inbox. Only genuinely-newer activity resurfaces.
+ *
+ * Called by the inbox whenever the conversation list changes (poll / live ping).
+ * Restoring removes the entry (Inbox = absence) and syncs on chain, so both
+ * devices agree. Idempotent: a resurrected thread is no longer archived, so a
+ * re-run does nothing.
+ */
+export function resurrectArchivedOnNewActivity(
+	threads: ReadonlyArray<{ peer: string; orderPermlink: string; lastMessageAt: string }>
+): void {
+	const current = get(foldersStore);
+	let changed = false;
+	const next: FolderMap = { ...current };
+	for (const t of threads) {
+		if (!ACCOUNT_NAME_RE.test(t.peer)) continue;
+		const entry = next[threadKey(t.peer, t.orderPermlink)];
+		if (entry === undefined || entry.folder !== 'archived') continue;
+		const archivedAtMs = new Date(entry.at).getTime();
+		const lastMsgMs = new Date(t.lastMessageAt).getTime();
+		if (Number.isFinite(archivedAtMs) && Number.isFinite(lastMsgMs) && lastMsgMs > archivedAtMs) {
+			delete next[threadKey(t.peer, t.orderPermlink)]; // → Inbox (absence)
+			changed = true;
+		}
+	}
+	if (changed) {
+		const capped = cap(next);
+		writeMirror(capped);
+		foldersStore.set(capped);
+		scheduleBroadcast();
+	}
+}
+
 // ─── On-chain load / migration ─────────────────────────────────
 let syncedThisSession = false;
 

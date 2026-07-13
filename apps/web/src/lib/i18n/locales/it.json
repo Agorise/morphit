@@ -445,9 +445,7 @@
         "body": "Per favore, rallenta. Alle persone non piace il contatto non richiesto, potrebbero bloccarti, e i blocchi sono visibili on-chain — più blocchi contro il tuo account danneggiano la tua reputazione come controparte. Aspetta 5+ minuti tra primi contatti per tornare alla base."
       }
     },
-    "conversation": {
-      "moved_to_messages": "Questa conversazione è stata spostata in Messaggi."
-    },
+    "conversation": {},
     "security": {
       "pub_pin_tampered_same_ref": "Non abbiamo potuto inviare in sicurezza: il record della chiave di chat di questo destinatario sembra manomesso. La chiave segnalata dal tuo indexer non corrisponde a quella pubblicata sulla catena. Prova un'altra istanza Morphit, oppure chiedi al destinatario di confermare la chiave fuori canale.",
       "pub_pin_older_indexer_ref": "Non abbiamo potuto inviare in sicurezza: il tuo indexer segnala un record di chiave di chat più vecchio di quello che avevi già visto. Su una catena solo-in-avanti non dovrebbe succedere. Prova ad aggiornare o passare a un'altra istanza Morphit.",
@@ -4075,7 +4073,10 @@
       "push_error_signature_required": "Questa istanza richiede una richiesta di iscrizione firmata. Assicurati che il tuo account sia sbloccato e riprova.",
       "push_error_signature_invalid": "Il relay ha rifiutato la tua firma. Sblocca di nuovo il tuo account e riprova.",
       "push_error_locked_session": "La tua sessione è bloccata. Sblocca prima il tuo account per attivare le notifiche push.",
-      "push_error_push_service_unavailable": "Il tuo browser ha bloccato le notifiche push web, di solito per una funzione di privacy come gli Shields di Brave, uBlock Origin o un altro blocco di pubblicità/tracker (il push web passa dai server di Google, che vengono bloccati). Abbassa le protezioni del browser per questo sito per consentirlo, oppure lascia il push disattivato: le opzioni di notifica qui sopra funzionano comunque. Il push conta solo quando Morphit è completamente chiuso."
+      "push_error_push_service_unavailable": "Il tuo browser ha bloccato le notifiche push web — di solito perché il servizio push del browser è disattivato o un blocco di pubblicità/tracker (come uBlock Origin) lo blocca. Controlla le impostazioni di notifiche/privacy del tuo browser per questo sito e consentilo, poi riprova. Oppure lascia il push disattivato: i badge nell'app funzionano comunque quando Morphit è aperto.",
+      "push_error_push_service_unavailable_brave": "Brave blocca il push web per impostazione predefinita — è un'impostazione del browser, non Shields. Soluzione: apri brave://settings/privacy, attiva \"Use Google services for push messaging\", riavvia Brave e riattiva il push qui. (Passa dai server di Google — solo metadati, mai il contenuto dei tuoi messaggi.) Oppure lascia il push disattivato; i badge nell'app funzionano comunque quando Morphit è aperto.",
+      "push_error_push_service_unavailable_firefox": "Firefox ha bloccato il push web. Cause comuni: una finestra anonima (lì il push è disattivato — usa una finestra normale), o la Protezione antitracciamento avanzata (clicca sullo scudo nella barra degli indirizzi e consenti questo sito). Ancora bloccato? Apri about:config e imposta dom.push.enabled su true, poi riprova. Oppure lascia il push disattivato; i badge nell'app funzionano comunque quando Morphit è aperto.",
+      "push_error_push_service_unavailable_safari": "Safari ha bloccato il push web. Su Mac serve macOS 13 (Ventura)+ e Safari 16+. Apri Safari → Settings → Websites → Notifications, imposta morphit.io su Allow, poi riprova. Su macOS più vecchio, usa Chrome, Brave o Firefox per il push. Oppure lascia il push disattivato; i badge nell'app funzionano comunque quando Morphit è aperto."
     },
     "hidden_accounts": {
       "heading": "Account nascosti",

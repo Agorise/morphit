@@ -1362,35 +1362,6 @@
 
 	async function handleSend(text: string): Promise<void> {
 		if (!controller) return;
-		// Capture "have I sent before" BEFORE the send so we can
-		// tell if this is the first reply — the kind of send that
-		// transitions the conversation from Requests → Messages
-		// on next inbox load.
-		//
-		// Two conditions must both hold for the toast to fire:
-		// 1. Snapshot is non-empty (history has loaded). An empty
-		//    snapshot could mean "brand-new conversation" or
-		//    "history hasn't arrived yet" — we can't distinguish,
-		//    so we don't toast.
-		// 2. No prior 'me' messages exist. Failed messages don't
-		//    count — they never reached the peer, so this is
-		//    still a first real send.
-		//
-		// The only case we miss is "stranger messaged me, I open
-		// the chat and immediately type before history loads."
-		// Acceptable — missing the toast is better than firing it
-		// wrongly on a re-engagement of an existing conversation.
-		// Part 73 fix: was `m.sender !== 'me'` — the string literal
-		// 'me' instead of the prop `me`.  `m.sender` holds an
-		// actual Blurt account name (e.g. 'alice'), never the
-		// literal string 'me'.  The bug made `isFirstReply` always
-		// true for any non-empty snapshot, firing the
-		// moved-to-messages toast on every re-engagement.  Now
-		// uses the prop, so the toast fires only when there are no
-		// prior successful messages from the local user.
-		const snapshot = controller.snapshot();
-		const isFirstReply =
-			snapshot.length > 0 && snapshot.every((m) => m.sender !== me || m.state === 'failed');
 
 		await controller.sendMessage(text);
 
@@ -1398,15 +1369,6 @@
 		// sending IS an expression of attention on the conversation.
 		await tick();
 		scrollToBottom(true);
-
-		if (isFirstReply) {
-			showToast(
-				$_('chat.conversation.moved_to_messages', {
-					values: { peer }
-				}) as string,
-				'info'
-			);
-		}
 	}
 
 	function handleRetry(localSeq: number): void {

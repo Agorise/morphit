@@ -445,9 +445,7 @@
         "body": "Bitte verlangsame dich. Menschen mögen unaufgeforderten Kontakt nicht, können dich blockieren, und Blocks sind on-chain sichtbar — mehrfache Blocks gegen dein Konto schaden deinem Ansehen als Gegenpartei. Warte 5+ Minuten zwischen Erstkontakten, um auf den Basiswert zurückzusetzen."
       }
     },
-    "conversation": {
-      "moved_to_messages": "Diese Unterhaltung wurde nach Nachrichten verschoben."
-    },
+    "conversation": {},
     "security": {
       "pub_pin_tampered_same_ref": "Konnten nicht sicher senden: Der Chat-Schlüssel-Eintrag dieses Empfängers wirkt manipuliert. Der Schlüssel, den dein Indexer meldet, stimmt nicht mit dem in der Blockchain veröffentlichten überein. Versuche eine andere Morphit-Instanz, oder lass den Empfänger seinen Chat-Schlüssel auf einem anderen Weg bestätigen.",
       "pub_pin_older_indexer_ref": "Konnten nicht sicher senden: Dein Indexer meldet einen Chat-Schlüssel-Eintrag, der älter ist als der bereits bekannte. Das sollte auf einer vorwärts-laufenden Blockchain nicht passieren. Versuche zu aktualisieren oder zu einer anderen Morphit-Instanz zu wechseln.",
@@ -4075,7 +4073,10 @@
       "push_error_signature_required": "Diese Instanz erfordert eine signierte Anmeldeanfrage. Stelle sicher, dass dein Konto entsperrt ist, und versuche es erneut.",
       "push_error_signature_invalid": "Der Relay hat deine Signatur abgelehnt. Entsperre dein Konto erneut und versuche es noch einmal.",
       "push_error_locked_session": "Deine Sitzung ist gesperrt. Entsperre zuerst dein Konto, um Push-Benachrichtigungen zu aktivieren.",
-      "push_error_push_service_unavailable": "Dein Browser hat Web-Push blockiert – meist eine Datenschutzfunktion wie Braves Shields, uBlock Origin oder ein anderer Werbe-/Tracker-Blocker (Web-Push läuft über Googles Server, die sie blockieren). Senke die Schutzschilde deines Browsers für diese Seite, um es zu erlauben, oder lass Push aus – die Benachrichtigungsoptionen oben funktionieren weiterhin. Push zählt nur, wenn Morphit ganz geschlossen ist."
+      "push_error_push_service_unavailable": "Dein Browser hat Web-Push blockiert — meist weil der Push-Dienst des Browsers aus ist oder ein Werbe-/Tracker-Blocker (wie uBlock Origin) ihn blockiert. Prüfe die Benachrichtigungs-/Datenschutzeinstellungen deines Browsers für diese Seite und erlaube es, dann versuche es erneut. Oder lass Push aus – die In-App-Badges funktionieren weiterhin, wenn Morphit offen ist.",
+      "push_error_push_service_unavailable_brave": "Brave blockiert Web-Push standardmäßig — es ist eine Browser-Einstellung, nicht Shields. Lösung: Öffne brave://settings/privacy, aktiviere \"Use Google services for push messaging\", starte Brave neu und schalte Push hier wieder ein. (Es läuft über Googles Server — nur Metadaten, niemals dein Nachrichteninhalt.) Oder lass Push aus; die In-App-Badges funktionieren weiterhin, wenn Morphit offen ist.",
+      "push_error_push_service_unavailable_firefox": "Firefox hat Web-Push blockiert. Häufige Ursachen: ein privates Fenster (dort ist Push aus — nutze ein normales Fenster) oder der Verbesserte Schutz vor Aktivitätenverfolgung (klicke auf das Schild in der Adressleiste und erlaube diese Seite). Klappt es immer noch nicht? Öffne about:config und setze dom.push.enabled auf true, dann versuche es erneut. Oder lass Push aus; die In-App-Badges funktionieren weiterhin, wenn Morphit offen ist.",
+      "push_error_push_service_unavailable_safari": "Safari hat Web-Push blockiert. Auf dem Mac braucht es macOS 13 (Ventura)+ und Safari 16+. Öffne Safari → Settings → Websites → Notifications, stelle morphit.io auf Allow, dann versuche es erneut. Auf älterem macOS nutze Chrome, Brave oder Firefox für Push. Oder lass Push aus; die In-App-Badges funktionieren weiterhin, wenn Morphit offen ist."
     },
     "hidden_accounts": {
       "heading": "Ausgeblendete Konten",
