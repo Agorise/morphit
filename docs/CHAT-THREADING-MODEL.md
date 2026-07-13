@@ -90,6 +90,21 @@ There are **TWO tag points, and they MUST agree**:
   _Guard:_ `chat-inbox-threading-smoke` (the order-filter line), plus the
   reconciliation guard in `chat-fastpath-dedup-smoke`.
 
+- **Every delivery path must carry the tag (cp470).** The viewer filter above is
+  only as good as the `order_permlink` on each message it sees. A message reaches
+  the client by TWO paths — the REST history endpoint (`/v1/chat/:a/:b`) and the
+  SSE stream (`/v1/chat/:a/:b/stream`, both the fast-path provisional and the
+  durable push). BOTH serialize through code that MUST include `order_permlink`.
+  cp470: the SSE serializer `rowToWire` (`apps/indexer/src/api/chatStreamHelpers.ts`)
+  omitted it, so every live message shipped an implicit `null` tag; order-thread
+  messages were filtered out on the receive path and only surfaced ~one
+  main-indexer lag later via the REST fallback poll — the "fast chat is broken in
+  order threads" bug. General/order-less threads hid it (their tag is genuinely
+  null). The DB query + `ChatStreamRow` already carried the column; only the wire
+  dropped it.
+  _Guard:_ `chat-sse-order-permlink-smoke` (functional — calls `rowToWire` and
+  asserts the tag survives for a real permlink AND for the null order-less case).
+
 ## The lesson, so this is never chased again
 
 Chat threading has **two tag points — the client's `deps` and the server's

@@ -332,8 +332,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 					? localize(locale, 'feedback_body_one', ctx.signer, String(rating))
 					: localize(locale, 'feedback_body_many', ctx.signer, String(rating));
 			// Click-through: canonical account-profile page is
-			// /{account} (the [x+40][account=account] route in
-			// apps/web/src/routes/[lang]/), which displays a feedback
+			// /{locale}/@{account} (the [x+40][account=account] route
+			// in apps/web/src/routes/[lang]/), which displays a feedback
 			// section anchored at #reviews-heading.  Per cp82-B2
 			// audit the prior `/profile/{subject}#feedback` had no
 			// matching route at all (no /profile namespace, and the
@@ -341,6 +341,9 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			// SW gate (cp81-D22b sanitizeClickPath) would have
 			// caught the cross-origin risk, but the user would have
 			// landed on a 404 — broken UX. Fixed to the real route.
+			// cp470: further fixed a locale-less, @-less
+			// `/{subject}#reviews-heading` that STILL 404'd — both the
+			// [lang] segment and the `@` are required (no reroute hook).
 			await client.query(
 				`INSERT INTO push_pending
 				   (account, category, title, body, click_path, event_at)
@@ -349,7 +352,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 					subject,
 					titleStr,
 					bodyStr,
-					`/${subject}#reviews-heading`,
+					`/${locale}/@${subject}#reviews-heading`,
 					ctx.blockTime
 				]
 			);

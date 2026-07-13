@@ -554,28 +554,26 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		// failure: the message is already stored.
 		const isOrderSignal = orderResponseBypass === true && typeof claimedPermlink === 'string';
 		const pushCategory = isOrderSignal ? 'order' : 'chat';
-		// Click-through targets:
-		//   - order signal: canonical order URL is /{account}/{permlink}
-		//     per apps/web/src/routes/[lang]/[x+40][account=account]/
-		//     [permlink=permlink]/+page.svelte (SEO-routes spec line ~198).
-		//     The locale prefix is added on the client side by the
-		//     SvelteKit router resolving the user's `[lang]` segment;
-		//     we emit the locale-less canonical here.
-		//   - plain chat: /chat is the chat-list landing
+		// Click-through targets (built below, once the recipient's push
+		// locale is resolved):
+		//   - order signal: the canonical order page is
+		//     /{locale}/@{account}/{permlink} — the
+		//     [x+40][account=account]/[permlink=permlink] route under
+		//     apps/web/src/routes/[lang]/.  Both the `@` and the locale
+		//     segment are REQUIRED: there is no reroute hook, so a
+		//     locale-less or @-less path 404s.
+		//   - plain chat: /{locale}/chat is the chat-list landing
 		//     (apps/web/src/routes/[lang]/chat/+page.svelte).
 		//
 		// Both flow through sanitizeClickPath in the service worker
 		// (cp81-D22b) before clients.openWindow() is called, so any
 		// malformed path falls back to '/' safely.
 		//
-		// cp82-B1 audit: prior version emitted `/order/${recipient}/
-		// ${permlink}` which had no matching route; the SW gate
-		// sanitized the cross-origin risk but the user landed on a
-		// 404.  Fixed to the canonical SEO-routes pattern.
-		const pushClickPath =
-			isOrderSignal && typeof claimedPermlink === 'string'
-				? `/${recipient}/${claimedPermlink}`
-				: '/chat';
+		// History: cp82-B1 fixed a `/order/${recipient}/${permlink}`
+		// path that had no matching route — but that fix emitted a
+		// locale-less, @-less `/${recipient}/${permlink}` which STILL
+		// 404'd (kentest3 landed on /kentest3/order-… → 404; correct is
+		// /en/@kentest3/order-…). cp470 emits the full localized path.
 		try {
 			const localeRow = await client.query<{ locale: string }>(
 				`SELECT locale FROM push_subscriptions
@@ -591,6 +589,13 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 				// no-op; user has no push subs.
 			} else {
 				const locale = normalizeLocale(localeRow.rows[0]?.locale);
+				// cp470 — full localized click target (see note above): order
+				// signals deep-link to the @account/permlink order page; plain
+				// chat to the chat list. Both carry the [lang] segment.
+				const pushClickPath =
+					isOrderSignal && typeof claimedPermlink === 'string'
+						? `/${locale}/@${recipient}/${claimedPermlink}`
+						: `/${locale}/chat`;
 				const titleStr = isOrderSignal
 					? localize(locale, 'order_title')
 					: localize(locale, 'chat_title');

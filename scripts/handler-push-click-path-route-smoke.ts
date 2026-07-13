@@ -33,11 +33,14 @@
  * Each (handler, line, click_path-template) tuple counts as one
  * scenario.
  *
- * NB: this is a STRUCTURAL smoke — it cannot verify the i18n
- * locale prefix or per-locale resolution.  The service-worker
- * sanitizeClickPath gate (cp81-D22b) handles cross-origin /
- * malformed click_paths; this smoke handles the orthogonal
- * "route doesn't exist" failure mode.
+ * NB: cp470 — this smoke now DOES verify the i18n locale prefix.
+ * Every app route lives under `[lang]`, so a valid click_path must be
+ * `/${locale}/<route>` (with `@{account}` for the account route). Route
+ * shapes are locale-prefixed and `[x+40]` is decoded to `@`, so a
+ * locale-less or @-less path — the cp82-B1/B2 and cp470 (kentest3) 404
+ * bug class — no longer matches anything and fails loudly. The service-
+ * worker sanitizeClickPath gate (cp81-D22b) still handles the orthogonal
+ * cross-origin / malformed-path failure mode.
  */
 
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
@@ -74,12 +77,29 @@ function pathShape(path: string): string {
 	// Anchors and trailing slashes are caller's responsibility.
 	const segs = path.split('/').filter(Boolean);
 	const out = segs.map((s) => {
-		// SvelteKit bracketed segment (possibly compound like
-		// [x+40][account=account]) → `*`
-		if (s.startsWith('[') || s.includes('[')) return '*';
+		// SvelteKit bracketed segment. cp470: decode [x+HH] literal-char
+		// encodings FIRST (e.g. [x+40] → '@', so the account route
+		// `[x+40][account=account]` becomes the URL shape `@*`), THEN collapse
+		// any remaining [param] brackets to `*`. The `@` matters: an account
+		// page is `/@{account}`, not `/{account}`, and conflating them is
+		// exactly the locale-less/@-less 404 bug this smoke exists to catch.
+		if (s.includes('[')) {
+			return s
+				.replace(/\[x\+([0-9a-fA-F]{2})\]/g, (_, hh) => String.fromCharCode(parseInt(hh, 16)))
+				.replace(/\[[^\]]*\]/g, '*');
+		}
 		return s;
 	});
 	return '/' + out.join('/');
+}
+
+// cp470 — every app route lives under `[lang]`, and every handler click_path
+// is emitted as `/${locale}/…`. walkRoutes + routes.ts give us [lang]-RELATIVE
+// shapes; prefix each with a locale wildcard so a correct click_path
+// (`/*/@*/*`, `/*/chat`, …) matches AND a locale-less one (the pre-cp470 bug,
+// e.g. `/${recipient}/${permlink}` → `/*/*`) matches nothing and fails.
+function localePrefix(shape: string): string {
+	return shape === '/' ? '/*' : '/*' + shape;
 }
 
 // Source A — routes.ts registry
@@ -88,7 +108,7 @@ const routeShapes = new Set<string>();
 const ROUTE_PATH_RE = /path:\s*['"]([^'"]+)['"]/g;
 let m: RegExpExecArray | null;
 while ((m = ROUTE_PATH_RE.exec(routesText)) !== null) {
-	routeShapes.add(pathShape(m[1]!));
+	routeShapes.add(localePrefix(pathShape(m[1]!)));
 }
 
 // Source B — filesystem traversal of routes/[lang]/
@@ -100,7 +120,7 @@ function walkRoutes(dir: string, prefix = ''): void {
 		if (st.isDirectory()) {
 			walkRoutes(abs, `${prefix}/${entry}`);
 		} else if (entry === '+page.svelte') {
-			routeShapes.add(pathShape(prefix || '/'));
+			routeShapes.add(localePrefix(pathShape(prefix || '/')));
 		}
 	}
 }

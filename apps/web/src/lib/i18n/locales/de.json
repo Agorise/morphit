@@ -673,7 +673,8 @@
       "with_memo_notice": "Das obige Memo wird in die On-Chain-Überweisung aufgenommen, damit der Verkäufer diese Zahlung deinem Handel zuordnen kann.",
       "success_toast_no_chat_with_txid": "BLURT gesendet. Konnte Beleg nicht im Chat veröffentlichen — kopiere diese txid, um die gesendeten Mittel manuell zu markieren: {txid}",
       "password_hint": "Das Passwort, mit dem du Morphit entsperrst. Es entschlüsselt deinen Active Key auf diesem Gerät zum Signieren – du fügst hier nie einen Schlüssel ein, und nichts wird irgendwohin gesendet.",
-      "error_amount_precision": "Verwende höchstens 3 Nachkommastellen – der kleinste Betrag, den du senden kannst, ist 0,001 BLURT."
+      "error_amount_precision": "Verwende höchstens 3 Nachkommastellen – der kleinste Betrag, den du senden kannst, ist 0,001 BLURT.",
+      "error_below_min": "Das Minimum für diese Bestellung beträgt {min}."
     },
     "trade_event": {
       "address_shared_title": "Neue Adresse geteilt",

@@ -673,7 +673,8 @@
       "with_memo_notice": "上面的備註將包含在鏈上轉賬中,以便賣家將此付款與您的交易匹配。",
       "success_toast_no_chat_with_txid": "BLURT 已發送。無法在聊天中發布收據 — 複製此 txid 以手動標記資金已發送：{txid}",
       "password_hint": "您用來解鎖 Morphit 的密碼。它會在本裝置上解密您的活動密鑰以進行簽署——您無需在此貼上任何密鑰，亦不會向任何地方傳送任何內容。",
-      "error_amount_precision": "最多使用 3 位小數——可發送嘅最小金額為 0.001 BLURT。"
+      "error_amount_precision": "最多使用 3 位小數——可發送嘅最小金額為 0.001 BLURT。",
+      "error_below_min": "此訂單的最低金額為 {min}。"
     },
     "trade_event": {
       "address_shared_title": "已共享新地址",

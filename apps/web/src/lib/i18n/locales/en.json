@@ -673,7 +673,8 @@
       "with_memo_notice": "The memo above will be included in the on-chain transfer so the seller can match this payment to your trade.",
       "success_toast_no_chat_with_txid": "BLURT sent. Could not post receipt to chat — copy this txid to mark funds sent manually: {txid}",
       "password_hint": "The password you unlock Morphit with. It decrypts your active key on this device to sign — you never paste a raw key here, and nothing is sent anywhere.",
-      "error_amount_precision": "Use at most 3 decimal places — the smallest amount you can send is 0.001 BLURT."
+      "error_amount_precision": "Use at most 3 decimal places — the smallest amount you can send is 0.001 BLURT.",
+      "error_below_min": "The minimum for this order is {min}."
     },
     "trade_event": {
       "address_shared_title": "New address shared",

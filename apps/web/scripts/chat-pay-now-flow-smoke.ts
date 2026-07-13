@@ -150,7 +150,12 @@ const SCENARIOS: readonly Scenario[] = [
 		mustHave: [
 			'amount?: number;',
 			'amountEditable?: boolean;',
-			"let enteredAmount = $state('');",
+			// cp470 — enteredAmount is no longer empty-init; it pre-fills the
+			// order-minimum seed (via untrack(() => … seedToInput(amount) …)) so
+			// the field starts valid. Assert the state declaration + the pre-fill,
+			// not the old empty string.
+			'let enteredAmount = $state(',
+			'seedToInput(amount)',
 			'const effectiveAmount = $derived(amountEditable ? Number(enteredAmount.trim()) : amount);'
 		]
 	},

@@ -101,7 +101,7 @@
 		fetchListingFee,
 		type WaiverEligibility
 	} from '$lib/orders/listingFee';
-	import { fetchFxRates, fiatToUsd, firstOrderMinInFiat, usdMinInFiat } from '$lib/orders/fx';
+	import { fetchFxRates, fiatToUsd, firstOrderMinInFiat, usdMinInFiat, usdToFiat } from '$lib/orders/fx';
 	import type { FxResponse } from '@morphit/indexer-client';
 	import { MORPHIT_INDEXER_ORIGIN, resolveOrigin } from '$net/config';
 	import type { OrderFormInput } from '$lib/orders/payload';
@@ -609,6 +609,16 @@
 
 	let password = $state('');
 	let passwordError = $state('');
+
+	/** cp470 — focus a field the moment it mounts.  Applied to the
+	 *  unlock-password input so entering the awaiting_password step (via
+	 *  "Pay and Post this order") drops the cursor straight in: type the
+	 *  password, press Enter (handled below), done — no click required.
+	 *  A `use:` action rather than the `autofocus` attribute avoids the
+	 *  Svelte a11y warning and fires exactly once, when the field appears. */
+	function focusOnMount(node: HTMLElement): void {
+		node.focus();
+	}
 	let broadcastError = $state('');
 	let successPermlink: string | null = $state(null);
 
@@ -729,6 +739,27 @@
 	// floor falls back to treating amount_min as already-USD (exactly
 	// like the indexer), and no default is seeded.
 	let fxTable: FxResponse | null = $state(null);
+
+	/** cp470 — the listing fee's fiat equivalent, shown parenthesized
+	 *  under the BLURT amount.  The fee is USD-equivalent; when the user
+	 *  has a fiat set (their order `fiat`, seeded from the saved
+	 *  preference) and the FX table can convert to it, echo the fee in
+	 *  THAT currency — the same USD→fiat path the Min-value default uses.
+	 *  Otherwise fall back to the operator's denomination (USD).  Null →
+	 *  nothing to show (operator sent no fiat-per-BLURT, or no fee yet). */
+	const feeFiatEcho = $derived.by(() => {
+		if (fiatPerBlurt === null || feeQuote === null) return null;
+		const inDenom = feeQuote.blurtAmount * fiatPerBlurt; // in denominationFiat
+		if (
+			fiat !== '' &&
+			fiat.toUpperCase() !== denominationFiat.toUpperCase() &&
+			denominationFiat.toUpperCase() === 'USD'
+		) {
+			const inPref = usdToFiat(fxTable, inDenom, fiat);
+			if (inPref !== null) return formatFiat(inPref, fiat);
+		}
+		return formatFiat(inDenom, denominationFiat);
+	});
 	// Tracks which fiat the Min-value default was last seeded for, so
 	// the seed re-syncs when the user switches currency (while the
 	// field is still untouched) but never fights a user-typed value.
@@ -3698,9 +3729,9 @@
 							{feeQuote.blurtFormatted}
 						</span>
 					</div>
-					{#if fiatPerBlurt !== null}
+					{#if feeFiatEcho !== null}
 						<p class="mt-1 text-right text-xs text-ink-500">
-							~{formatFiat(feeQuote.blurtAmount * fiatPerBlurt, denominationFiat)}
+							(≈&nbsp;{feeFiatEcho})
 						</p>
 					{/if}
 					<p class="mt-4 text-sm text-ink-600 dark:text-ink-300">
@@ -3768,6 +3799,7 @@
 				</span>
 				<FocusedField focused={password.length === 0} valid={password.length >= 8}>
 					<input
+						use:focusOnMount
 						type="password"
 						maxlength="64"
 						bind:value={password}

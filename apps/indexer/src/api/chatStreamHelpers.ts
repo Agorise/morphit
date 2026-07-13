@@ -38,7 +38,18 @@ export interface ChatStreamFilter {
 	readonly hi: string;
 }
 
-/** Convert a raw DB row to the wire shape the frontend expects. */
+/** Convert a raw DB row to the wire shape the frontend expects.
+ *
+ * cp470 — `order_permlink` MUST be included. The client threads a chat by
+ * (peer, order) and drops any live message whose `order_permlink` doesn't
+ * match the open thread (the cp446 order-thread filter in chatService.ts).
+ * Omitting it here shipped every SSE event (snapshot, fast-path provisional,
+ * and durable bus push) with an implicit `null` tag, so live messages in an
+ * ORDER thread were filtered out and only surfaced ~one main-indexer lag
+ * later via the REST fallback poll (which serializes the tag correctly) —
+ * the ~60s "fast chat is broken" symptom. General (order-less) threads were
+ * unaffected because their tag is genuinely null. Both DB queries already
+ * SELECT it and `ChatStreamRow` already carries it; it just wasn't copied. */
 export function rowToWire(r: ChatStreamRow): {
 	id: number;
 	sender: string;
@@ -47,6 +58,7 @@ export function rowToWire(r: ChatStreamRow): {
 	header: unknown;
 	created_at: string;
 	source_trx_id: string;
+	order_permlink: string | null;
 } {
 	return {
 		id: r.id,
@@ -55,7 +67,8 @@ export function rowToWire(r: ChatStreamRow): {
 		ciphertext: r.ciphertext,
 		header: r.header,
 		created_at: r.created_at.toISOString(),
-		source_trx_id: r.source_trx_id
+		source_trx_id: r.source_trx_id,
+		order_permlink: r.order_permlink
 	};
 }
 

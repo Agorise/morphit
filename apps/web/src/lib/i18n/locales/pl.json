@@ -673,7 +673,8 @@
       "with_memo_notice": "Powyższa notatka zostanie dołączona do przelewu w łańcuchu, aby sprzedawca mógł powiązać tę płatność z twoją transakcją.",
       "success_toast_no_chat_with_txid": "BLURT wysłane. Nie można było opublikować potwierdzenia w czacie — skopiuj ten txid, aby ręcznie oznaczyć środki jako wysłane: {txid}",
       "password_hint": "Hasło, którym odblokowujesz Morphit. Odszyfrowuje Twój klucz aktywny na tym urządzeniu, aby podpisać — nigdy nie wklejasz tu klucza, a nic nie jest nigdzie wysyłane.",
-      "error_amount_precision": "Użyj najwyżej 3 miejsc po przecinku — najmniejsza kwota, jaką możesz wysłać, to 0,001 BLURT."
+      "error_amount_precision": "Użyj najwyżej 3 miejsc po przecinku — najmniejsza kwota, jaką możesz wysłać, to 0,001 BLURT.",
+      "error_below_min": "Minimum dla tego zlecenia to {min}."
     },
     "trade_event": {
       "address_shared_title": "Udostępniono nowy adres",

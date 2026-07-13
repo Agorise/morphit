@@ -673,7 +673,8 @@
       "with_memo_notice": "El memo anterior se incluirá en la transferencia en cadena para que el vendedor pueda asociar este pago con tu operación.",
       "success_toast_no_chat_with_txid": "BLURT enviado. No se pudo publicar el recibo en el chat — copia este txid para marcar los fondos enviados manualmente: {txid}",
       "password_hint": "La contraseña con la que desbloqueas Morphit. Descifra tu clave activa en este dispositivo para firmar: nunca pegas una clave aquí y no se envía nada a ningún sitio.",
-      "error_amount_precision": "Usa como máximo 3 decimales: la cantidad más pequeña que puedes enviar es 0.001 BLURT."
+      "error_amount_precision": "Usa como máximo 3 decimales: la cantidad más pequeña que puedes enviar es 0.001 BLURT.",
+      "error_below_min": "El mínimo para esta orden es {min}."
     },
     "trade_event": {
       "address_shared_title": "Nueva dirección compartida",
