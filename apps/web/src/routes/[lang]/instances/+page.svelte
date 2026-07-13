@@ -8,10 +8,31 @@
 	import RelativeTime from '$components/RelativeTime.svelte';
 	import { MORPHIT_INDEXER_ORIGIN, resolveOrigin } from '$net/config';
 	import { getInstances } from '$indexer/client';
-	import { instance } from '$stores/instance';
 	import { safeContactUrl, safeInstanceOrigin } from '$lib/utils/safeContactUrl';
 	import { formatDayMonth, formatDayMonthTime } from '$i18n/formatters';
 	import type { InstanceDirectoryEntry, InstanceProbeStatus } from '@morphit/indexer-client';
+
+	/** Normalize an origin for identity comparison: parse it and take the
+	 *  canonical `scheme://host[:port]` (lowercased host, no path / trailing
+	 *  slash). Returns null for anything unparseable. */
+	function normOrigin(raw: string | null | undefined): string | null {
+		if (raw === null || raw === undefined) return null;
+		try {
+			return new URL(raw).origin.toLowerCase();
+		} catch {
+			return null;
+		}
+	}
+	/** The origin the browser is currently on — i.e. the instance the user is
+	 *  literally viewing. This is how "the current instance" is identified in the
+	 *  directory. The pre-cp461 check compared a directory entry's
+	 *  `operator_account` to `$instance.relay_account`, which is ALWAYS false on
+	 *  any instance that runs separate operator/relay accounts (e.g. the
+	 *  canonical morphit.io with @morphit / @morphit-relay / @morphit-fees) — so
+	 *  the "you are here" highlight, badge, sort-to-top, and the footer
+	 *  Contact-link flash never fired. Origin-matching is robust regardless of
+	 *  how many Blurt accounts the operator runs. */
+	const currentOrigin = normOrigin(browser ? window.location.origin : null);
 
 	// Map keyed by origin so SSE diffs can apply in O(1).  Filter
 	// is applied at render time via the `filtered` derived array
@@ -202,8 +223,8 @@
 		// to find them.  The remaining sort (status rank, then
 		// recency) applies to everything else.
 		return after.sort((a, b) => {
-			const aIsCurrent = a.operator_account === $instance.relay_account;
-			const bIsCurrent = b.operator_account === $instance.relay_account;
+			const aIsCurrent = isCurrentInstance(a);
+			const bIsCurrent = isCurrentInstance(b);
 			if (aIsCurrent && !bIsCurrent) return -1;
 			if (!aIsCurrent && bIsCurrent) return 1;
 			const sa = STATUS_RANK[a.status as InstanceProbeStatus] ?? 8;
@@ -250,13 +271,16 @@
 		);
 	}
 
-	/** Whether `entry` describes the same instance the user is
-	 *  currently viewing.  Compared by operator account because
-	 *  the local frontend reliably knows its instance's
-	 *  relay_account (sourced from /v1/instance) but not its
-	 *  own origin (browser URL can lie behind proxies). */
+	/** Whether `entry` describes the same instance the user is currently
+	 *  viewing. Matched by ORIGIN (see `currentOrigin` above): the browser is
+	 *  literally on this instance, so its origin identifies it unambiguously —
+	 *  no matter how many Blurt accounts the operator runs. (The old account
+	 *  comparison was always false on any multi-account instance.) A user who
+	 *  reaches the instance via a non-canonical mirror domain simply gets no
+	 *  highlight rather than a wrong one. */
 	function isCurrentInstance(entry: InstanceDirectoryEntry): boolean {
-		return entry.operator_account === $instance.relay_account;
+		const eo = normOrigin(entry.origin);
+		return eo !== null && currentOrigin !== null && eo === currentOrigin;
 	}
 </script>
 
@@ -533,18 +557,21 @@
 </section>
 
 <style>
-	/* t.txt #5 — flash the current instance's card border (bright green) five
-	   times when the footer "Contact" link lands here with ?highlight=current, so
-	   the eye finds the instance you're actually on. */
+	/* t.txt (v1.4.9 #1) — flash the current instance's card border a warm
+	   amber-yellow five times when the footer "Contact" link lands here with
+	   ?highlight=current, so the eye finds the instance you're actually on. The
+	   current instance is matched by ORIGIN (see isCurrentInstance) — the old
+	   account-field match was always false on multi-account instances, so this
+	   flash never actually fired on the canonical instance until cp461. */
 	@keyframes flash-instance-border {
 		0%,
 		100% {
-			box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+			box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
 		}
 		50% {
 			box-shadow:
-				0 0 0 2px #22c55e,
-				0 0 10px 1px rgba(34, 197, 94, 0.55);
+				0 0 0 2px #f59e0b,
+				0 0 12px 2px rgba(245, 158, 11, 0.6);
 		}
 	}
 	:global(.flash-instance) {

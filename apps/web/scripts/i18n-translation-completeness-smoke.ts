@@ -1058,7 +1058,14 @@ const ALLOW_LIST: AllowEntry[] = [
 	{ key: 'profile.wallet.power_up_title', locale: 'fr', reason: '(c) "Power up BLURT" is all Blurt terms (Power up + BLURT); invariant across locales' },
 	{ key: 'profile.wallet.power_down_title', locale: 'de', reason: '(c) "Power down BP" is all Blurt terms (Power down + BP); invariant across locales' },
 	{ key: 'profile.wallet.power_down_title', locale: 'es', reason: '(c) "Power down BP" is all Blurt terms (Power down + BP); invariant across locales' },
-	{ key: 'profile.wallet.power_down_title', locale: 'fr', reason: '(c) "Power down BP" is all Blurt terms (Power down + BP); invariant across locales' }
+	{ key: 'profile.wallet.power_down_title', locale: 'fr', reason: '(c) "Power down BP" is all Blurt terms (Power down + BP); invariant across locales' },
+	// cp466 — the #2 Terms markdown-guide modal (post_order.terms_md_guide.*).
+	// German translates most element names (Heading→Überschrift, Bold→Fett,
+	// Link's row label stays a table cell) but two are byte-identical to English
+	// by correct German usage, not a miss: "Element" is a German cognate, and
+	// "Link" is the standard German loanword for a hyperlink (der Link).
+	{ key: 'post_order.terms_md_guide.col_element', locale: 'de', reason: '(a) "Element" is a German cognate — spelled identically to English' },
+	{ key: 'post_order.terms_md_guide.el_link', locale: 'de', reason: '(b) "Link" is the standard German loanword for a hyperlink (der Link)' }
 ];
 
 const allowSet = new Set(ALLOW_LIST.map((e) => `${e.key}::${e.locale}`));

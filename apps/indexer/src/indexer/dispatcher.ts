@@ -43,6 +43,7 @@ import feedbackResponseHandler from '$indexer/handlers/feedbackResponse';
 import chatHandler from '$indexer/handlers/chat';
 import chatIdentityHandler from '$indexer/handlers/chatIdentity';
 import chatReadHandler from '$indexer/handlers/chatRead';
+import chatFoldersHandler from '$indexer/handlers/chatFolders';
 import releaseHandler from '$indexer/handlers/release';
 import feeAttestHandler from '$indexer/handlers/feeAttest';
 import featureBidHandler from '$indexer/handlers/featureBid';
@@ -66,6 +67,7 @@ export const OP_IDS = {
 	chatMessage: 'morphit_chat_v1',
 	chatIdentity: 'morphit_chat_identity_v1',
 	chatRead: 'morphit_chat_read_v1',
+	chatFolders: 'morphit_chat_folders_v1',
 	releaseDiscovery: 'morphit_release_v1',
 	feeAttest: 'morphit_fee_attest_v1',
 	featureBid: 'morphit_feature_bid_v1',
@@ -100,6 +102,7 @@ const HANDLERS: Readonly<Record<string, Handler>> = {
 	[OP_IDS.chatMessage]: chatHandler,
 	[OP_IDS.chatIdentity]: chatIdentityHandler,
 	[OP_IDS.chatRead]: chatReadHandler,
+	[OP_IDS.chatFolders]: chatFoldersHandler,
 	[OP_IDS.releaseDiscovery]: releaseHandler,
 	[OP_IDS.feeAttest]: feeAttestHandler,
 	[OP_IDS.featureBid]: featureBidHandler,

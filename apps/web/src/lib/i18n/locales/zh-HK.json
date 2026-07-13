@@ -2188,6 +2188,7 @@
     "loading": "正在載入您的訂單…",
     "empty_title": "您還沒有發布任何訂單",
     "empty_body": "準備好的時候,發布一個訂單大約需要一分鐘。",
+    "empty_category": "此類別中沒有訂單。",
     "empty_cta": "發布您的第一個訂單",
     "error_title": "無法載入您的訂單",
     "error_body": "索引器沒有回應。請稍後重試。",
@@ -3089,7 +3090,7 @@
     },
     "success": {
       "title": "您的訂單已上線!",
-      "body": "幾秒內就會出現在訂單簿中。",
+      "body": "1 分鐘內就會出現在訂單簿中。",
       "view_cta": "查看訂單",
       "post_another": "再發一個",
       "edit_cta": "編輯此訂單",
@@ -3196,6 +3197,21 @@
       "barter_sentence_buy": "你想要價值 {value} 嘅商品/服務,用 {cryptos} 畀錢。",
       "barter_sentence_sell_novalue": "你提供商品/服務,接受 {cryptos}。",
       "barter_sentence_buy_novalue": "你想要商品/服務,用 {cryptos} 畀錢。"
+    },
+    "terms_md_guide": {
+      "tooltip_title": "Markdown 指南",
+      "tooltip_body": "用基本格式令你嘅訂單更靚！",
+      "heading": "Markdown 指南",
+      "col_element": "元素",
+      "col_syntax": "Markdown 語法",
+      "el_heading": "標題",
+      "el_bold": "粗體",
+      "el_italic": "斜體",
+      "el_blockquote": "引用",
+      "el_ordered": "有序清單",
+      "el_unordered": "無序清單",
+      "el_hr": "水平線",
+      "el_link": "連結"
     }
   },
   "prices": {

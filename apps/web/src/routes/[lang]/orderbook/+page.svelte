@@ -60,6 +60,7 @@
 	import OrderCard from '$lib/components/OrderCard.svelte';
 	import { formatOrderPriceModel } from '$lib/orders/priceModelDisplay';
 	import { createOrderbookStream } from '$lib/orderbook/stream';
+	import { SvelteSet } from 'svelte/reactivity';
 	import type { AssetTicker } from '@morphit/asset-registry';
 	import type { OrderbookQuery, OrderRecord, ProfileResponse } from '@morphit/indexer-client';
 
@@ -437,6 +438,11 @@
 	 *  the server enforces it.  Updated by the upsert/remove
 	 *  callbacks below. */
 	const streamedIds = new Set<string>();
+	// t.txt (v1.4.9 #9) — IDs of orders that arrived LIVE (prepended via the
+	// stream while the user is watching), so their card plays the one-shot
+	// slide-in. Reactive (SvelteSet) because it drives OrderCard rendering; each
+	// id is auto-cleared shortly after the animation so it never replays.
+	const justArrivedIds = new SvelteSet<string>();
 
 	/** The signed-in user's Blurt account name, or null if signed
 	 *  out / not yet registered.  Derived so the banner above and
@@ -850,6 +856,12 @@
 				} else {
 					// New row — prepend (recent sort puts newest first).
 					items = [entry, ...items];
+					// t.txt #9 — this is a genuinely-live new order (the initial
+					// snapshot goes through applySnapshot, not here), so slide its
+					// card into first place. Clear the flag just after the CSS
+					// animation (0.32s) so a later re-render never replays it.
+					justArrivedIds.add(id);
+					setTimeout(() => justArrivedIds.delete(id), 360);
 				}
 				if (!streamedIds.has(id)) {
 					streamedIds.add(id);
@@ -1384,6 +1396,7 @@
 					{@const networkChip = networkChipFor(o, $_)}
 					<OrderCard
 						order={o}
+						justArrived={justArrivedIds.has(o.account + '/' + o.permlink)}
 						title={cardTitle(o)}
 						displayName={labelProps.displayName}
 						avatarSvg={labelProps.avatarSvg}

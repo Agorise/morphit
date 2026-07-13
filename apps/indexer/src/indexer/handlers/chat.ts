@@ -500,14 +500,22 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 				headerSize.serialized,
 				ctx.blockTime,
 				ctx.trxId,
-				// Store ONLY when the field validated above; null
-				// otherwise.  We re-use `claimedPermlink` (the
-				// sender's claim) rather than re-deriving — the
-				// validator either rejected or set
-				// `orderResponseBypass`, so by this point we know
-				// the value, if non-null, points to a real order
-				// owned by `recipient`.
-				orderResponseBypass ? (claimedPermlink as string) : null
+				// Store the tag whenever `claimedPermlink` survived the
+				// validation above. By this point a non-null value has been
+				// confirmed to name a real order owned by ONE OF THE TWO
+				// PARTIES (orderCheck's `account IN (recipient, signer)`,
+				// line 307) — so it is a legitimate thread tag for THIS
+				// conversation no matter which party owns the order.
+				// `orderResponseBypass` stays narrow: it governs ONLY the
+				// stranger-fee gate (recipient owns a live, unexpired order).
+				// It must NOT gate storage — doing so stripped the order
+				// OWNER's own replies of their tag, splitting the thread into
+				// a phantom null "RE: -" card the other party never sees.
+				//
+				// >>> THREADING MODEL INV-5 (server tag point). Read
+				// >>> docs/CHAT-THREADING-MODEL.md before touching this line.
+				// >>> Guarded by chat-order-tag-storage-smoke (tamper-tested).
+				claimedPermlink ?? null
 			]
 		);
 		// Bus emit: canonical pair (lo, hi) so subscribers can

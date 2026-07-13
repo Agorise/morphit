@@ -22,6 +22,7 @@ import type {
 	ChatHistoryResponse,
 	ChatIdentityResponse,
 	ChatReadStateResponse,
+	ChatFoldersResponse,
 	ConversationsResponse,
 	OrderCounterpartiesResponse,
 	FeaturedOrderbookResponse,
@@ -455,6 +456,20 @@ export function getChatReadState(
 	signal?: AbortSignal
 ): Promise<Result<ChatReadStateResponse>> {
 	return request<ChatReadStateResponse>(`/v1/chat-read-state/${encodeURIComponent(account)}`, {
+		signal
+	});
+}
+
+/**
+ * GET /v1/chat-folders/:account — the account's ENCRYPTED chat folder
+ * organization blob (t.txt v1.4.9 #5), or `enc: null` if never saved. The blob
+ * is opaque ciphertext; the caller decrypts it with a posting-key-derived key.
+ */
+export function getChatFolders(
+	account: string,
+	signal?: AbortSignal
+): Promise<Result<ChatFoldersResponse>> {
+	return request<ChatFoldersResponse>(`/v1/chat-folders/${encodeURIComponent(account)}`, {
 		signal
 	});
 }

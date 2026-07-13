@@ -58,8 +58,10 @@
 		isStarred,
 		toggleStar,
 		archiveThread,
-		restoreThread
+		restoreThread,
+		syncChatFoldersFromChain
 	} from '$lib/chat/chatFolders';
+	import { isUnlocked } from '$stores/identity';
 	import { blockedAccounts, loadBlocks } from '$lib/chat/blocks';
 	import { subscribeChatActivity } from '$lib/chat/globalChatActivityStream';
 	import { showToast } from '$lib/stores/toast';
@@ -256,6 +258,15 @@
 	let pollTimer: ReturnType<typeof setInterval> | null = null;
 	let onVisible: (() => void) | null = null;
 	let unsubActivity: (() => void) | null = null;
+
+	// t.txt (v1.4.9 #5) — pull the on-chain chat folder organization once the
+	// identity is unlocked (it's encrypted with the posting key, so it can only
+	// be decrypted while unlocked). No-op when locked: the local mirror renders
+	// meanwhile. Also performs the one-time migration (local stars → chain) the
+	// first time an account with no on-chain state syncs.
+	$effect(() => {
+		if ($isUnlocked) void syncChatFoldersFromChain();
+	});
 
 	onMount(() => {
 		try {

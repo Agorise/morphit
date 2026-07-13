@@ -45,7 +45,12 @@ function check(name: string, ok: boolean): void {
 
 // ─── 1. cancel → /my/orders ──────────────────────────────────────────
 check('confirmCancel navigates to /my/orders after a successful broadcast', /await gotoLocale\('\/my\/orders'\);/.test(detail));
-check('it waits for the indexer before landing (no stale "live" flash)', /await new Promise\(\(r\) => setTimeout\(r, 1_500\)\);[\s\S]{0,2000}gotoLocale\('\/my\/orders'\)/.test(detail));
+// cp462 (#6/#7) — the stale "live" flash is now prevented OPTIMISTICALLY, not
+// by waiting: the order page records the cancel (sessionStorage) before landing,
+// and /my/orders' applyRecentCancels overrides the just-cancelled order's status
+// to "cancelled" immediately — so there is no window where it reads "live". The
+// old 1.5s indexer wait is gone (it was redundant and made cancel feel slow).
+check('it records the cancel before landing (recentCancels overrides any stale "live" flash on /my/orders)', /recordCancel\(order\.permlink\);[\s\S]{0,2000}gotoLocale\('\/my\/orders'\)/.test(detail));
 check('the confirm modal is closed before navigating', /\} finally \{[\s\S]{0,60}pendingCancel = false;[\s\S]{0,1400}await gotoLocale\('\/my\/orders'\)/.test(detail));
 // A SvelteKit navigation can reject. If gotoLocale sat inside the try, that
 // rejection would be caught and rendered as "the broadcast failed" — a lie

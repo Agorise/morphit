@@ -130,7 +130,7 @@ sudo chown morphit-relay:morphit-relay /etc/morphit/relay.env
 sudo systemctl enable --now morphit-indexer morphit-relay
 ```
 
-**nginx.** Serve the built website over HTTPS and proxy the API to the local services. The shipped `ops/nginx/web.conf` is a complete, ready-to-adapt server block — copy it and change `yourdomain.com` to your domain. The security headers and no-cache rules you must keep in sync are reproduced in §11.
+**nginx.** Serve the built website over HTTPS and proxy the API to the local services. The shipped `ops/nginx/web.conf` is a complete, ready-to-adapt server block — copy it and change `yourdomain.com` to your domain. The security headers and no-cache rules you must keep in sync are reproduced in §11. One thing worth setting while you're in there: the live-chat endpoints (`/v1/chat/…/stream` and `/v1/chat-activity`) are held-open "streaming" connections, so instead of the usual per-minute request limit they want a **per-visitor cap on how many streams one address can hold open at once** (a generous number — a few dozen — so nobody with several tabs is affected). This stops one bad actor from tying up connections without slowing chat down for everyone else. `OPERATIONS.md` (the BunkerWeb / reverse-proxy section) shows the exact `limit_conn` snippet.
 
 ---
 

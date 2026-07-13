@@ -947,6 +947,16 @@ export interface ChatReadStateResponse {
 	readonly items: readonly ChatReadStateEntry[];
 }
 
+/** GET /v1/chat-folders/:account — the account's ENCRYPTED chat folder
+ *  organization blob (t.txt v1.4.9 #5), or `enc: null` if never saved. The
+ *  blob is opaque ciphertext, decrypted client-side with a posting-key-derived
+ *  key. */
+export interface ChatFoldersResponse {
+	readonly account: string;
+	readonly enc: string | null;
+	readonly updated_at: string | null;
+}
+
 // ─── Block list (Finding H layer 1) ───────────────────────────────
 // One entry per account the owner has currently blocked. Rows with
 // state='unblocked' are omitted server-side; this type represents

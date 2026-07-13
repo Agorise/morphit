@@ -56,6 +56,7 @@
 	import { identity, isUnlocked, isPairedReadOnly } from '$stores/identity';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
 	import { broadcastOrderCancel, BroadcastError } from '$blurt/ops/order';
+	import { recordCancel } from '$lib/orders/recentCancels';
 	import { KeystoreError } from '$crypto/keystore';
 	import { getOrdersByAccount } from '$lib/indexer/client';
 	import { getProfileCached } from '$lib/indexer/profileCache';
@@ -306,10 +307,12 @@
 		try {
 			await broadcastOrderCancel(state.live, order.permlink);
 			cancelled = true;
-			// The 1.5s pause lets the indexer see the block first (same wait the
-			// /my/orders page itself uses after a cancel), so the list we land on
-			// already reflects the new status rather than flashing the old one.
-			await new Promise((r) => setTimeout(r, 1_500));
+			// t.txt #6/#7 — record the cancel so /my/orders reflects it INSTANTLY
+			// on arrival: its load() runs applyRecentCancels, which shows this
+			// order as Cancelled (and fixes the Live/Cancelled pill counts) even
+			// though the indexer lags ~1min. No artificial wait needed — the
+			// override bridges the gap, so we navigate immediately.
+			recordCancel(order.permlink);
 		} catch (err) {
 			console.warn('[listing-detail] cancel broadcast failed:', err);
 			if (err instanceof BroadcastError && err.code === 'locked') {

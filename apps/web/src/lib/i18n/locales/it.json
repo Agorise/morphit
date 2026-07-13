@@ -2188,6 +2188,7 @@
     "loading": "Caricamento dei tuoi ordini…",
     "empty_title": "Non hai ancora pubblicato niente",
     "empty_body": "Quando sei pronto, pubblicare un ordine richiede circa un minuto.",
+    "empty_category": "Nessun ordine in questa categoria.",
     "empty_cta": "Pubblica il tuo primo ordine",
     "error_title": "Impossibile caricare i tuoi ordini",
     "error_body": "L'indexer non ha risposto. Riprova tra un momento.",
@@ -3089,7 +3090,7 @@
     },
     "success": {
       "title": "Il tuo ordine è pubblicato!",
-      "body": "Apparirà nell'orderbook in pochi secondi.",
+      "body": "Apparirà nell'orderbook in meno di 1 minuto.",
       "view_cta": "Vedi l'ordine",
       "post_another": "Pubblicane un altro",
       "edit_cta": "Modifica questo ordine",
@@ -3196,6 +3197,21 @@
       "barter_sentence_buy": "Cerchi beni/servizi del valore di {value}, pagando in {cryptos}.",
       "barter_sentence_sell_novalue": "Offri beni/servizi accettando {cryptos}.",
       "barter_sentence_buy_novalue": "Cerchi beni/servizi pagando in {cryptos}."
+    },
+    "terms_md_guide": {
+      "tooltip_title": "Guida Markdown",
+      "tooltip_body": "Usa una formattazione di base per rendere il tuo ordine più bello!",
+      "heading": "Guida Markdown",
+      "col_element": "Elemento",
+      "col_syntax": "Sintassi Markdown",
+      "el_heading": "Titolo",
+      "el_bold": "Grassetto",
+      "el_italic": "Corsivo",
+      "el_blockquote": "Citazione",
+      "el_ordered": "Elenco ordinato",
+      "el_unordered": "Elenco puntato",
+      "el_hr": "Linea orizzontale",
+      "el_link": "Collegamento"
     }
   },
   "prices": {

@@ -40,6 +40,7 @@
 	import FocusedField from '$components/FocusedField.svelte';
 	import Tooltip from '$components/Tooltip.svelte';
 	import TermsText from '$components/TermsText.svelte';
+	import MarkdownGuideModal from '$components/MarkdownGuideModal.svelte';
 	import type { FaqKey } from '$utils/faqIndex';
 	import Term from '$components/Term.svelte';
 	// cp165 byte-budget: ListingFeeAddressPanel renders only when
@@ -210,6 +211,8 @@
 	let acceptedAssets: AssetTicker[] = $state([]);
 	let region = $state('');
 	let terms = $state('');
+	// t.txt (v1.4.9 #2) — the markdown-guide modal for the Terms field.
+	let mdGuideOpen = $state(false);
 
 	// cp372 — animated "typewriter" placeholder for the Terms field.
 	// A deliberately MULTI-LINGUAL, UNTRANSLATED set of example terms:
@@ -3137,7 +3140,49 @@
 				{/if}
 
 				<label class="mb-4 block">
-					<span class="mb-1 block text-sm font-semibold">{$_('post_order.form.terms_label')}</span>
+					<span class="mb-1 flex items-center justify-between gap-2 text-sm font-semibold">
+					<span>{$_('post_order.form.terms_label')}</span>
+					<!-- t.txt #2 — subdued markdown-guide icon over the field's top-right
+					     corner. `group` drives the two-line hover tooltip; preventDefault
+					     stops the wrapping <label> from stealing focus to the textarea. -->
+					<button
+						type="button"
+						class="group relative inline-flex text-ink-400 transition-colors hover:text-morphit-emerald focus:outline-none focus-visible:text-morphit-emerald"
+						aria-label={$_('post_order.terms_md_guide.tooltip_title') as string}
+						onclick={(e) => {
+							e.preventDefault();
+							e.stopPropagation();
+							mdGuideOpen = true;
+						}}
+					>
+						<svg class="h-4 w-6" viewBox="0 0 208 128" fill="none" aria-hidden="true">
+							<rect
+								x="5"
+								y="5"
+								width="198"
+								height="118"
+								rx="12"
+								stroke="currentColor"
+								stroke-width="12"
+							/>
+							<path
+								fill="currentColor"
+								d="M30 98V30h20l20 25 20-25h20v68H90V59L70 84 50 59v39zm132 0-30-33h20V30h20v35h20z"
+							/>
+						</svg>
+						<span
+							class="pointer-events-none absolute end-0 top-6 z-10 hidden w-56 rounded-lg bg-ink-900 p-2 text-start text-xs font-normal text-white shadow-lg group-hover:block dark:bg-ink-700"
+							role="tooltip"
+						>
+							<span class="block font-semibold"
+								>{$_('post_order.terms_md_guide.tooltip_title')}</span
+							>
+							<span class="mt-0.5 block text-ink-300"
+								>{$_('post_order.terms_md_guide.tooltip_body')}</span
+							>
+						</span>
+					</button>
+				</span>
 					<ProtectedTextarea
 						bind:value={terms}
 						name="order-terms"
@@ -3974,3 +4019,6 @@
 		</div>
 	</div>
 {/if}
+
+<!-- t.txt (v1.4.9 #2) — markdown reference for the order Terms field. -->
+<MarkdownGuideModal open={mdGuideOpen} onClose={() => (mdGuideOpen = false)} />
