@@ -476,7 +476,9 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 						displaced.bidder,
 						titleStr,
 						bodyStr,
-						`/my/orders#order-${displaced.order_permlink}`,
+						// cp470 — the [lang] segment is required; a locale-less
+					// /my/orders 404s (no reroute hook).
+					`/${locale}/my/orders#order-${displaced.order_permlink}`,
 						ctx.blockTime
 					]
 				);

@@ -673,7 +673,8 @@
       "with_memo_notice": "Le mémo ci-dessus sera inclus dans le transfert on-chain pour que le vendeur puisse associer ce paiement à votre échange.",
       "success_toast_no_chat_with_txid": "BLURT envoyé. Impossible de publier le reçu dans le chat — copiez ce txid pour marquer les fonds envoyés manuellement : {txid}",
       "password_hint": "Le mot de passe avec lequel vous déverrouillez Morphit. Il déchiffre votre clé active sur cet appareil pour signer — vous ne collez jamais de clé ici, et rien n'est envoyé nulle part.",
-      "error_amount_precision": "Utilisez au maximum 3 décimales — le plus petit montant que vous pouvez envoyer est 0,001 BLURT."
+      "error_amount_precision": "Utilisez au maximum 3 décimales — le plus petit montant que vous pouvez envoyer est 0,001 BLURT.",
+      "error_below_min": "Le minimum pour cette commande est {min}."
     },
     "trade_event": {
       "address_shared_title": "Nouvelle adresse partagée",

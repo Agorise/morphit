@@ -45,6 +45,7 @@
 	 */
 
 	import { _ } from 'svelte-i18n';
+	import { untrack } from 'svelte';
 	import { runWithActiveKey } from '$crypto/runWithActiveKey';
 	import { liveIdentity } from '$stores/identity';
 	import UnlockActiveKeyModal from '$components/UnlockActiveKeyModal.svelte';
@@ -137,10 +138,25 @@
 	let phase = $state<Phase>({ kind: 'ready' });
 	let passwordInput = $state('');
 	let passwordError = $state('');
+	/** cp470 — format a seed number to a clean BLURT-precision input string
+	 *  (≤3 decimals, no trailing zeros / scientific notation) so a pre-filled
+	 *  value can never fail the shape check through float representation. */
+	function seedToInput(n: number): string {
+		return String(Number(n.toFixed(3)));
+	}
+
 	/** cp402 [7b] — the in-modal amount for the composer flow. Ignored
 	 *  when `amountEditable` is false (the pill-provided `amount` is used
-	 *  verbatim, exactly as before). */
-	let enteredAmount = $state('');
+	 *  verbatim, exactly as before).
+	 *  cp470 — pre-filled with the order-minimum seed (passed via `amount`
+	 *  in the composer flow) so the field starts VALID and the user can just
+	 *  confirm — or raise it. Previously it started empty, which left the
+	 *  amount invalid, `canPay` false, and no Send button in sight. */
+	let enteredAmount = $state(
+		untrack(() =>
+			amountEditable && Number.isFinite(amount) && amount > 0 ? seedToInput(amount) : ''
+		)
+	);
 
 	const myAccount = getUserBlurtAccount();
 
@@ -184,9 +200,23 @@
 	 *  bug with no field to complain in. */
 	const amountCheck = $derived(validateBlurtAmount(enteredAmount, Number.POSITIVE_INFINITY));
 	const amountPrecisionOk = $derived(amountEditable ? amountCheck.precisionOk : true);
+
+	/** cp470 — the order's minimum in BLURT (the seed passed via `amount` in
+	 *  the composer flow). The user may RAISE the amount but not drop it below
+	 *  this floor; too-low gets a red border + a specific message. Falls back
+	 *  to the absolute MIN_BLURT when the order min couldn't be derived (seed
+	 *  0), so the field is still floored at the chain minimum. */
+	const orderMinBlurt = $derived(
+		amountEditable && Number.isFinite(amount) && amount > 0 ? amount : MIN_BLURT
+	);
+	const enteredNum = $derived(Number(enteredAmount.trim()));
+	const aboveOrderMin = $derived(
+		!amountEditable || (Number.isFinite(enteredNum) && enteredNum + 1e-9 >= orderMinBlurt)
+	);
+
 	const amountValid = $derived(
 		amountEditable
-			? amountCheck.valid
+			? amountCheck.valid && aboveOrderMin
 			: Number.isFinite(amount) && amount >= MIN_BLURT && hasBlurtPrecision(amount)
 	);
 
@@ -200,6 +230,43 @@
 			amountValid &&
 			passwordFilled
 	);
+
+	/** cp470 — whether to show the confirm summary + credential entry.  This
+	 *  MUST be independent of `passwordFilled` and `hasActiveKey`: the password
+	 *  field (active-key path) AND the posting-only UnlockActiveKeyModal both
+	 *  live INSIDE the summary, so gating the summary on `canPay` (which
+	 *  requires those) was circular — the control needed to fill the password
+	 *  sat behind a gate that required the password already filled, and the
+	 *  posting-only unlock branch was unreachable entirely.  The Pay button
+	 *  stays gated on `canPay` (amount + password + active key). */
+	const amountReady = $derived(
+		myAccount !== null && myAccount !== recipient && amountValid
+	);
+
+	/** cp470 — red border when the typed amount is present but invalid (bad
+	 *  numeric shape, or below the order minimum). Empty stays neutral. */
+	const amountFieldInvalid = $derived(
+		amountEditable && enteredAmount.trim().length > 0 && !amountValid
+	);
+
+	/** cp470 — the order minimum, formatted for the below-minimum message. */
+	const minBlurtDisplay = $derived(formatBlurtAmount(orderMinBlurt));
+
+	/** cp470 — keep the amount field numeric: digits + at most one dot + ≤3
+	 *  decimals (BLURT precision). Letters and stray characters never appear
+	 *  (belt-and-suspenders with the shape check, which also rejects them).
+	 *  Reads the DOM value (not the bound state) so it is independent of
+	 *  listener ordering; reflects the cleaned value immediately. */
+	function sanitizeAmount(e: Event): void {
+		const el = e.currentTarget as HTMLInputElement;
+		let v = el.value.replace(/[^0-9.]/g, '');
+		const dot = v.indexOf('.');
+		if (dot !== -1) {
+			v = v.slice(0, dot + 1) + v.slice(dot + 1).replace(/\./g, '').slice(0, 3);
+		}
+		enteredAmount = v;
+		if (el.value !== v) el.value = v;
+	}
 
 	/** tt.txt #11 — a posting-only session unlocked its Active key just for this
 	 *  payment. The scalar exists in memory for the ~10ms signing window and is
@@ -355,13 +422,16 @@
 				<span class="text-sm font-semibold">{$_('chat.pay_blurt.amount_label')}</span>
 				<input
 					type="text"
-					bind:value={enteredAmount}
+					value={enteredAmount}
+					oninput={sanitizeAmount}
 					maxlength="20"
 					inputmode="decimal"
 					autocomplete="off"
 					disabled={phase.kind === 'paying'}
 					placeholder={$_('chat.pay_blurt.amount_placeholder') as string}
-					class="mt-1 w-full rounded-lg border border-ink-300 bg-white px-3 py-2 font-mono text-sm dark:border-ink-700 dark:bg-ink-900"
+					class="mt-1 w-full rounded-lg border bg-white px-3 py-2 font-mono text-sm dark:bg-ink-900 {amountFieldInvalid
+						? 'border-red-500 dark:border-red-500'
+						: 'border-ink-300 dark:border-ink-700'}"
 				/>
 				{#if payHint}
 					<p class="mt-1 text-xs text-morphit-teal dark:text-morphit-emerald">{payHint}</p>
@@ -373,6 +443,10 @@
 				{#if enteredAmount.trim().length > 0 && !amountPrecisionOk}
 					<p class="mt-1 text-xs text-red-600 dark:text-red-400">
 						{$_('chat.pay_blurt.error_amount_precision')}
+					</p>
+				{:else if enteredAmount.trim().length > 0 && amountPrecisionOk && !aboveOrderMin}
+					<p class="mt-1 text-xs text-red-600 dark:text-red-400">
+						{$_('chat.pay_blurt.error_below_min', { values: { min: minBlurtDisplay } })}
 					</p>
 				{:else if enteredAmount.trim().length > 0 && !amountValid && myAccount !== null && myAccount !== recipient}
 					<p class="mt-1 text-xs text-red-600 dark:text-red-400">
@@ -386,7 +460,7 @@
 			</label>
 		{/if}
 
-		{#if !canPay}
+		{#if !amountReady}
 			{#if myAccount === null || myAccount === recipient || !amountEditable}
 				<div
 					class="mt-5 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-700 dark:bg-red-950 dark:text-red-200"
