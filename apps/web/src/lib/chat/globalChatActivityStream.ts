@@ -103,8 +103,23 @@ export function startGlobalChatActivity(): () => void {
 	// Re-check the signed-in account so login/logout (re)connects promptly.
 	const watch = window.setInterval(sync, 5_000);
 
+	// cp471 — the service worker receives Web Pushes even for a backgrounded
+	// tab (it is not throttled) and postMessages every tab `{ type: 'CHAT_PUSH' }`.
+	// Treat that exactly like an EventSource ping: refresh the conversation
+	// summary so the unread badges (favicon + avatar dots) and the OS app-badge
+	// update promptly even when this tab is inactive and its own stream/poll is
+	// throttled. This is what lets an untouched tab badge like Element does.
+	const onSwMessage = (ev: MessageEvent): void => {
+		const data = ev.data as { type?: unknown } | null;
+		if (data && data.type === 'CHAT_PUSH') fire();
+	};
+	const swContainer =
+		typeof navigator !== 'undefined' ? navigator.serviceWorker : undefined;
+	swContainer?.addEventListener('message', onSwMessage);
+
 	return () => {
 		window.clearInterval(watch);
+		swContainer?.removeEventListener('message', onSwMessage);
 		if (fireTimer !== null) {
 			clearTimeout(fireTimer);
 			fireTimer = null;

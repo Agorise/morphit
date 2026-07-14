@@ -50,16 +50,18 @@ function read(rel: string): string {
 const chat = read('src/indexer/handlers/chat.ts');
 const feature = read('src/indexer/handlers/featureBid.ts');
 const feedback = read('src/indexer/handlers/feedback.ts');
+// cp471 — chat click-paths now live in the shared enqueue module.
+const enqueue = read('src/indexer/chatPushEnqueue.ts');
 
 // ── Positive: the correct locale-prefixed shapes are present ──────────
-scenario('chat.ts order click_path is /${locale}/@${recipient}/${permlink}', () => {
+scenario('chatPushEnqueue.ts order click_path is /${locale}/chat/${sender}?order=${permlink}', () => {
 	assert(
-		chat.includes('`/${locale}/@${recipient}/${claimedPermlink}`'),
-		'chat.ts order click_path is not the localized /@account/permlink shape'
+		enqueue.includes('`/${locale}/chat/${params.sender}?order=${params.orderPermlink}`'),
+		'chatPushEnqueue.ts order click_path is not the localized /chat/{sender}?order= deep-link'
 	);
 });
-scenario('chat.ts plain-chat click_path is /${locale}/chat', () => {
-	assert(chat.includes('`/${locale}/chat`'), 'chat.ts plain-chat click_path missing locale prefix');
+scenario('chatPushEnqueue.ts plain-chat click_path is /${locale}/chat', () => {
+	assert(enqueue.includes('`/${locale}/chat`'), 'chatPushEnqueue.ts plain-chat click_path missing locale prefix');
 });
 scenario('featureBid.ts outbid click_path is /${locale}/my/orders#…', () => {
 	assert(
@@ -92,16 +94,17 @@ scenario('feedback.ts: no locale-less /${subject} path', () => {
 });
 
 // ── Sweep: any template literal that looks like a notification click
-//    target (has `@${`, `/my/orders`, or `#reviews-heading`) must be
-//    locale-prefixed.  Catches a NEW enqueue site that forgets. ────────
+//    target (has `@${`, `/my/orders`, `#reviews-heading`, or `?order=`) must
+//    be locale-prefixed.  Catches a NEW enqueue site that forgets. ──────────
 for (const [name, src] of [
 	['chat.ts', chat],
+	['chatPushEnqueue.ts', enqueue],
 	['featureBid.ts', feature],
 	['feedback.ts', feedback]
 ] as const) {
 	const literals = src.match(/`\/[^`]*`/g) ?? [];
 	for (const lit of literals) {
-		if (/@\$\{|\/my\/orders|#reviews-heading/.test(lit)) {
+		if (/@\$\{|\/my\/orders|#reviews-heading|\?order=/.test(lit)) {
 			scenario(`${name}: click-target literal ${lit} is locale-prefixed`, () => {
 				assert(lit.startsWith('`/${locale}/'), `${lit} is missing the /${'${locale}'}/ prefix`);
 			});

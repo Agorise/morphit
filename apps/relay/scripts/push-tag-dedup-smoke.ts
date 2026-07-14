@@ -36,6 +36,8 @@ const sw = read('apps/web/src/service-worker.ts');
 const dispatch = read('apps/web/src/lib/trades/listenerDispatch.ts');
 const listener = read('apps/web/src/lib/trades/tradeEventListener.ts');
 const chat = read('apps/indexer/src/indexer/handlers/chat.ts');
+// cp471 — the chat push enqueue (incl. the dedup tag) moved to a shared module.
+const enqueue = read('apps/indexer/src/indexer/chatPushEnqueue.ts');
 const sender = read('apps/relay/src/policy/pushSender.ts');
 
 let pass = 0;
@@ -70,10 +72,10 @@ check(
 	/category: 'order'/.test(listener) && /id: plan\.notify\.notificationTag/.test(listener)
 );
 check(
-	'chat.ts sets push_pending.notification_id = `morphit-trade-${claimedPermlink}` for an order signal',
-	/`morphit-trade-\$\{claimedPermlink\}`/.test(chat) &&
-		/notification_id/.test(chat) &&
-		/isOrderSignal && typeof claimedPermlink === 'string'/.test(chat)
+	'chatPushEnqueue sets push_pending.notification_id = `morphit-trade-${orderPermlink}` for an order signal',
+	/`morphit-trade-\$\{params\.orderPermlink\}`/.test(enqueue) &&
+		/notification_id/.test(enqueue) &&
+		/isOrderSignal/.test(enqueue)
 );
 check(
 	'the sender emits notification_id as the payload eventId (falls back to the row id)',
@@ -92,7 +94,7 @@ check(
 // ── plain chat keeps its own per-event tag (no bogus collapse) ──────
 check(
 	'plain (non-order) chat leaves notification_id null → sender uses the row id',
-	/: null;/.test(chat) && /const pushNotificationId =/.test(chat)
+	/: null;/.test(enqueue) && /const notificationId =/.test(enqueue)
 );
 
 console.log('');

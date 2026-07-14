@@ -36,6 +36,7 @@ const chatApi = strip(readFileSync(join(REPO, 'apps', 'indexer', 'src', 'api', '
 const stream = strip(readFileSync(join(REPO, 'apps', 'indexer', 'src', 'api', 'chatStream.ts'), 'utf8'));
 const tailer = strip(readFileSync(join(REPO, 'apps', 'indexer', 'src', 'indexer', 'chatHeadTailer.ts'), 'utf8'));
 const chatHandler = strip(readFileSync(join(REPO, 'apps', 'indexer', 'src', 'indexer', 'handlers', 'chat.ts'), 'utf8'));
+const gates = strip(readFileSync(join(REPO, 'apps', 'indexer', 'src', 'indexer', 'chatGates.ts'), 'utf8'));
 const chatFolders = strip(readFileSync(join(WEB, 'src', 'lib', 'chat', 'chatFolders.ts'), 'utf8'));
 const chatUnread = strip(readFileSync(join(WEB, 'src', 'lib', 'notifications', 'chatUnread.ts'), 'utf8'));
 const explicitLock = strip(readFileSync(join(WEB, 'src', 'lib', 'chat', 'explicitLock.ts'), 'utf8'));
@@ -74,10 +75,10 @@ check('the tailer shape-validates rather than trusting the signer', /rawPermlink
 // person is not the recipient of their own listing), and nobody could speak in a
 // thread once the order was cancelled — precisely the "(Cancelled)" threads the
 // inbox now shows. Caught only because the inbox began linking with `?order=`.
-check('the tag is accepted when EITHER party owns the order', /account IN \(\$2, \$4\)/.test(chatHandler));
+check('the tag is accepted when EITHER party owns the order', /account IN \(\$2, \$4\)/.test(gates));
 check('…and rejected when neither does (a tag is not a free-text field)', /return \{ ok: false, reason: 'order_permlink_not_found' \}/.test(chatHandler));
-check('the stranger-fee bypass still requires the RECIPIENT to own a LIVE order', /orderResponseBypass = ord\.account === recipient && ord\.live;/.test(chatHandler));
-check('…and liveness still excludes expired orders', /status = 'live' AND \(expires_at IS NULL OR expires_at > \$3\)/.test(chatHandler));
+check('the stranger-fee bypass still requires the RECIPIENT to own a LIVE order', /orderResponseBypass = orderCheck\.ownedByRecipient && orderCheck\.live/.test(chatHandler) && /ownedByRecipient:\s*ord\.account === args\.recipient/.test(gates));
+check('…and liveness still excludes expired orders', /status = 'live' AND \(expires_at IS NULL OR expires_at > \$3\)/.test(gates));
 check('a cancelled order no longer rejects the message outright', !/status = 'live'[\s\S]{0,120}\) AS exists/.test(chatHandler));
 
 // ─── client: the transcript is scoped to ONE thread ──────────────────

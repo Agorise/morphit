@@ -21,6 +21,17 @@
 # reads, and that no placeholder ever creeps back in. If you change a command
 # here, that smoke tells you whether the command is real.
 #
+# HOW TO PRESENT THE OUTPUT (Ken's repeated request — do NOT miss this)
+# ---------------------------------------------------------------------
+# Relay the blocks below as SEPARATE fenced code blocks, each containing ONLY
+# the raw shell commands Ken runs. Nothing else goes inside a code block: no
+# "BLOCK N" label, no description, no "wait for CI green" gate text, no
+# "choose option N" instruction. Those are NOTES — they go as plain text
+# BETWEEN the code blocks, never inside them. Every code block must paste into
+# a terminal and run verbatim, with zero editing-out of non-command lines.
+# This script's output already separates commands from notes correctly; relay
+# it faithfully rather than re-wrapping labels/gates into code blocks.
+#
 # GATES (do not collapse these):
 #   • BLOCK 2 waits for CI to go green — the signed tag fires release.yml.
 #   • BLOCK 4 derives the manifest from the VPS's SERVED /verify.json, never a

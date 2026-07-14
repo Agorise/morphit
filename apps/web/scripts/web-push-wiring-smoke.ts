@@ -215,21 +215,20 @@ results.push({
 	)
 });
 results.push({
-	name: 'Indexer chat handler enqueues push_pending',
-	ok: fileContains(
-		'apps/indexer/src/indexer/handlers/chat.ts',
-		'INSERT INTO push_pending'
-	)
+	name: 'Indexer chat push enqueue INSERTs push_pending (shared module)',
+	ok:
+		fileContains('apps/indexer/src/indexer/chatPushEnqueue.ts', 'INSERT INTO push_pending') &&
+		fileContains('apps/indexer/src/indexer/handlers/chat.ts', 'enqueueChatPush(client')
 });
 results.push({
 	name: 'Chat enqueue routes order-permlink messages under category=order',
 	ok:
 		fileContains(
-			'apps/indexer/src/indexer/handlers/chat.ts',
+			'apps/indexer/src/indexer/chatPushEnqueue.ts',
 			'isOrderSignal'
 		) &&
 		fileContains(
-			'apps/indexer/src/indexer/handlers/chat.ts',
+			'apps/indexer/src/indexer/chatPushEnqueue.ts',
 			"isOrderSignal ? 'order' : 'chat'"
 		)
 });
@@ -331,9 +330,9 @@ results.push({
 	)
 });
 results.push({
-	name: 'cp14 — chat handler uses pushLocalize',
+	name: 'cp14 — chat push enqueue uses pushLocalize',
 	ok: fileContains(
-		'apps/indexer/src/indexer/handlers/chat.ts',
+		'apps/indexer/src/indexer/chatPushEnqueue.ts',
 		'pushLocalize'
 	)
 });

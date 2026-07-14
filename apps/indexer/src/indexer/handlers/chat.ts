@@ -76,7 +76,8 @@ import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contrac
 import { checkJsonbSize } from '$indexer/payloadSize';
 import { validateChatOrderPermlink } from '$indexer/permlink';
 import { logger } from '$log';
-import { localize, normalizeLocale } from '$indexer/pushLocalize';
+import { checkChatOrder } from '$indexer/chatGates';
+import { enqueueChatPush } from '$indexer/chatPushEnqueue';
 
 const log = logger('chat');
 
@@ -299,17 +300,14 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		// citing a cancelled order therefore still gets no bypass and still falls
 		// to the stranger-fee gate below; only people who were already allowed to
 		// talk to each other gain anything here.
-		const orderCheck = await client.query<{ account: string; live: boolean }>(
-			`SELECT account,
-			        (status = 'live' AND (expires_at IS NULL OR expires_at > $3)) AS live
-			   FROM orders
-			  WHERE permlink = $1
-			    AND account IN ($2, $4)
-			  LIMIT 1`,
-			[claimedPermlink, recipient, ctx.blockTime, ctx.signer]
-		);
-		const ord = orderCheck.rows[0];
-		if (ord === undefined) {
+		const orderCheck = await checkChatOrder(client, {
+			// validateChatOrderPermlink above already rejected any non-string.
+			permlink: claimedPermlink as string,
+			recipient,
+			signer: ctx.signer,
+			blockTime: ctx.blockTime
+		});
+		if (!orderCheck.found) {
 			// The permlink names no order owned by either party: it is either
 			// invented or points at a third party's listing. Reject, exactly as
 			// before — a tag must never be a free-text field on chain.
@@ -323,14 +321,17 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		}
 		// Bypass ONLY when the recipient owns a live, unexpired order. Identical to
 		// the previous condition — deliberately so.
-		orderResponseBypass = ord.account === recipient && ord.live;
+		// cp471: the order-tag query + this bypass are now the shared
+		// `checkChatOrder` (chatGates.ts) so the fast notification path
+		// evaluates order validity identically. Bypass ONLY when the
+		// recipient owns a live, unexpired order — deliberately unchanged.
+		orderResponseBypass = orderCheck.ownedByRecipient && orderCheck.live;
 		chatDbg('chat.orderCheck', {
 			sender: ctx.signer,
 			recipient,
 			claimedPermlink,
-			orderOwner: ord.account,
-			ownerIsRecipient: ord.account === recipient,
-			orderLive: ord.live,
+			ownerIsRecipient: orderCheck.ownedByRecipient,
+			orderLive: orderCheck.live,
 			bypass: orderResponseBypass
 		});
 	}
@@ -552,79 +553,18 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		// plaintext.  Chat is E2EE on chain; the indexer doesn't
 		// have the keys to decrypt anyway.  Non-fatal on enqueue
 		// failure: the message is already stored.
-		const isOrderSignal = orderResponseBypass === true && typeof claimedPermlink === 'string';
-		const pushCategory = isOrderSignal ? 'order' : 'chat';
-		// Click-through targets (built below, once the recipient's push
-		// locale is resolved):
-		//   - order signal: the canonical order page is
-		//     /{locale}/@{account}/{permlink} — the
-		//     [x+40][account=account]/[permlink=permlink] route under
-		//     apps/web/src/routes/[lang]/.  Both the `@` and the locale
-		//     segment are REQUIRED: there is no reroute hook, so a
-		//     locale-less or @-less path 404s.
-		//   - plain chat: /{locale}/chat is the chat-list landing
-		//     (apps/web/src/routes/[lang]/chat/+page.svelte).
-		//
-		// Both flow through sanitizeClickPath in the service worker
-		// (cp81-D22b) before clients.openWindow() is called, so any
-		// malformed path falls back to '/' safely.
-		//
-		// History: cp82-B1 fixed a `/order/${recipient}/${permlink}`
-		// path that had no matching route — but that fix emitted a
-		// locale-less, @-less `/${recipient}/${permlink}` which STILL
-		// 404'd (kentest3 landed on /kentest3/order-… → 404; correct is
-		// /en/@kentest3/order-…). cp470 emits the full localized path.
-		try {
-			const localeRow = await client.query<{ locale: string }>(
-				`SELECT locale FROM push_subscriptions
-				  WHERE account = $1
-				  ORDER BY created_at DESC
-				  LIMIT 1`,
-				[recipient]
-			);
-			// DD-meta-cp1718-1: skip enqueue when no push
-			// subscription exists.  See feedback.ts + featureBid.ts
-			// for the same guard.
-			if (localeRow.rowCount === 0) {
-				// no-op; user has no push subs.
-			} else {
-				const locale = normalizeLocale(localeRow.rows[0]?.locale);
-				// cp470 — full localized click target (see note above): order
-				// signals deep-link to the @account/permlink order page; plain
-				// chat to the chat list. Both carry the [lang] segment.
-				const pushClickPath =
-					isOrderSignal && typeof claimedPermlink === 'string'
-						? `/${locale}/@${recipient}/${claimedPermlink}`
-						: `/${locale}/chat`;
-				const titleStr = isOrderSignal
-					? localize(locale, 'order_title')
-					: localize(locale, 'chat_title');
-				const bodyStr = isOrderSignal
-					? localize(locale, 'order_body', ctx.signer)
-					: localize(locale, 'chat_body', ctx.signer);
-				// cp450 — for an order signal, tag the push with the SAME id
-				// the in-page trade listener uses (`morphit-trade-<permlink>`),
-				// so the SW's `morphit-order-<id>` tag matches the in-page one
-				// and the browser collapses the two into a single notification.
-				// Plain chat has no in-page counterpart → NULL (sender tags on
-				// the queue-row id).
-				const pushNotificationId =
-					isOrderSignal && typeof claimedPermlink === 'string'
-						? `morphit-trade-${claimedPermlink}`
-						: null;
-				await client.query(
-					`INSERT INTO push_pending
-					   (account, category, title, body, click_path, event_at, notification_id)
-					 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-					[recipient, pushCategory, titleStr, bodyStr, pushClickPath, ctx.blockTime, pushNotificationId]
-				);
-			}
-		} catch (err) {
-			log.warn('push_enqueue_failed', {
-				recipient,
-				err: String((err as Error)?.message ?? err)
-			});
-		}
+		// cp471 — enqueue the chat Web Push through the shared, dedup-aware
+		// helper (chatPushEnqueue.ts). source_trx_id = the on-chain trx id, so
+		// this durable enqueue and the fast head-block enqueue collapse to
+		// exactly ONE notification (fast when the tailer wins). Order signal =
+		// a valid order tag is present (both directions). Non-fatal on failure.
+		await enqueueChatPush(client, {
+			recipient,
+			sender: ctx.signer,
+			orderPermlink: typeof claimedPermlink === 'string' ? claimedPermlink : null,
+			sourceTrxId: ctx.trxId,
+			eventAt: ctx.blockTime
+		});
 	} catch (err) {
 		if (isUniqueViolation(err)) {
 			return { ok: false, reason: 'duplicate_message' };

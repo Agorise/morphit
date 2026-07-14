@@ -322,16 +322,51 @@ self.addEventListener('push', (event: PushEvent) => {
 			: `morphit-${category}`;
 
 	event.waitUntil(
-		self.registration.showNotification(title, {
-			body,
-			tag, // dedup key — same eventId across devices doesn't double-notify
-			data: { clickPath, category },
-			// `requireInteraction: false` so notifications auto-dismiss
-			// after the OS-default window; "loud about orders, silent
-			// about chat noise" is governed at the relay side by the
-			// per-category enqueue, not by SW config.
-			requireInteraction: false
-		})
+		(async () => {
+			await self.registration.showNotification(title, {
+				body,
+				tag, // dedup key — same eventId across devices doesn't double-notify
+				data: { clickPath, category },
+				// `requireInteraction: false` so notifications auto-dismiss
+				// after the OS-default window; "loud about orders, silent
+				// about chat noise" is governed at the relay side by the
+				// per-category enqueue, not by SW config.
+				requireInteraction: false
+			});
+
+			// cp471 — fast badge. The SW is NOT throttled, so on every push we
+			// poke every open Morphit tab to repaint its in-page unread badges
+			// (favicon + avatar dots) immediately, even a backgrounded tab whose
+			// own EventSource/poll the browser has throttled. This is the
+			// Element-style "badge an inactive tab" behaviour. Metadata only
+			// (the category), never the notification content.
+			try {
+				const tabs = await self.clients.matchAll({
+					type: 'window',
+					includeUncontrolled: true
+				});
+				for (const client of tabs) {
+					client.postMessage({ type: 'CHAT_PUSH', category });
+				}
+			} catch {
+				// Best-effort; the notification already showed.
+			}
+
+			// cp471 — OS app-badge for an installed PWA (dock / taskbar / home
+			// screen). A focused page sets the precise count itself; setting a
+			// generic badge here keeps it prompt while backgrounded. Guarded —
+			// the Badging API is not in every browser's service worker scope.
+			try {
+				const nav = self.navigator as unknown as {
+					setAppBadge?: () => Promise<void>;
+				};
+				if (typeof nav.setAppBadge === 'function') {
+					await nav.setAppBadge();
+				}
+			} catch {
+				// Badging unsupported — ignore.
+			}
+		})()
 	);
 });
 
