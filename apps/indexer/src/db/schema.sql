@@ -2683,3 +2683,21 @@ CREATE TABLE IF NOT EXISTS chat_folders (
 
 COMMENT ON TABLE chat_folders IS
     'Per-account ENCRYPTED chat folder organization (which threads are kept in Inbox/Starred; all others Archived). Opaque ciphertext — encrypted client-side with a posting-key-derived key, so the indexer never learns a user''s chat organization. Written only by morphit_chat_folders_v1; latest by block wins.';
+
+-- ─── v43: push_pending.source_trx_id (cp471 fast-notification dedup) ───
+-- Fast notifications. The head-block tailer (chatHeadTailer.ts) now enqueues the
+-- chat Web Push ~5s after send, alongside the durable handler (~irreversible).
+-- Both set source_trx_id = the on-chain trx id; the partial UNIQUE index makes
+-- the later INSERT a no-op, so the recipient gets exactly ONE notification —
+-- fast when the tailer wins. featureBid/feedback leave source_trx_id NULL
+-- (single-path, no dedup); the partial index ignores NULLs.
+-- Idempotent with the v43 migration in migrations.ts.
+ALTER TABLE push_pending
+    ADD COLUMN IF NOT EXISTS source_trx_id TEXT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS push_pending_account_source_trx_uidx
+    ON push_pending (account, source_trx_id)
+    WHERE source_trx_id IS NOT NULL;
+
+COMMENT ON COLUMN push_pending.source_trx_id IS
+    'cp471 fast-notifications dedup key: the on-chain trx id of the source message. The fast head-block enqueue and the durable enqueue of the same message share it; the partial UNIQUE (account, source_trx_id) makes the later INSERT a no-op so exactly one push is delivered. NULL for single-path pushes (featureBid/feedback); the partial index ignores NULLs.';

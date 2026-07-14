@@ -67,6 +67,8 @@ import type { Database } from '$db/pool';
 import { extractSigner, parseJsonPayload, type CustomJsonOp } from '$blurt/verify';
 import { checkJsonbSize } from '$indexer/payloadSize';
 import { chatEventBus } from '$indexer/chatEventBus';
+import { checkChatOrder, recipientHasReplied } from '$indexer/chatGates';
+import { enqueueChatPush } from '$indexer/chatPushEnqueue';
 import { logger } from '$log';
 
 const log = logger('chat-head-tailer');
@@ -341,7 +343,8 @@ export class ChatHeadTailer {
 		// Head-block timestamps are UTC; normalise like the dispatcher.
 		const createdAt = new Date(block.timestamp + (block.timestamp.endsWith('Z') ? '' : 'Z'));
 
-		for (const trx of block.transactions) {
+		for (let ti = 0; ti < block.transactions.length; ti++) {
+			const trx = block.transactions[ti];
 			if (!trx) continue;
 			for (const op of trx.operations) {
 				if (!op) continue;
@@ -392,7 +395,68 @@ export class ChatHeadTailer {
 					orderPermlink: located.orderPermlink
 				});
 				this.emitted++;
+
+				// cp471 — fast Web Push for this (already block-passed) message.
+				// Gated inside maybeFastNotify to a SAFE subset of durable
+				// admission so a first-contact stranger is never fast-notified.
+				const trxId = block.transaction_ids[ti];
+				if (trxId !== undefined) {
+					await this.maybeFastNotify(located, trxId, createdAt);
+				}
 			}
+		}
+	}
+
+	/** cp471 — enqueue a fast chat Web Push for an already-block-passed message,
+	 *  but ONLY when it is clearly allowed: the order tag (if any) names a real
+	 *  order owned by a party, AND either the two have an established
+	 *  conversation or this is a response to the recipient's live order. A SAFE
+	 *  SUBSET of durable admission — a first-contact stranger (whom the durable
+	 *  stranger-fee gate would gate) is NEVER fast-notified, so the fast path
+	 *  can never be a notification-spam vector. Dedup on the trx id collapses
+	 *  this with the durable enqueue to exactly one notification. Non-fatal. */
+	private async maybeFastNotify(
+		located: LocatedChatOp,
+		trxId: string,
+		createdAt: Date
+	): Promise<void> {
+		try {
+			let orderFound = false;
+			let orderResponseBypass = false;
+			if (located.orderPermlink !== null) {
+				const oc = await checkChatOrder(this.db, {
+					permlink: located.orderPermlink,
+					recipient: located.recipient,
+					signer: located.signer,
+					blockTime: createdAt
+				});
+				// A tag naming no real owned order → the durable REJECTS the
+				// message (order_permlink_not_found). Never fast-notify for it.
+				if (!oc.found) return;
+				orderFound = true;
+				orderResponseBypass = oc.ownedByRecipient && oc.live;
+			}
+			const recipientReplied = await recipientHasReplied(this.db, {
+				recipient: located.recipient,
+				sender: located.signer
+			});
+			// A genuine two-way conversation (the recipient has replied) OR a
+			// response to the recipient's own live order = safe to fast-notify.
+			// An unengaged / one-way sender is left to the durable path (gated by
+			// the stranger-fee + no-reply + fan-in caps the fast path can't run).
+			if (!recipientReplied && !orderResponseBypass) return;
+			await enqueueChatPush(this.db, {
+				recipient: located.recipient,
+				sender: located.signer,
+				orderPermlink: orderFound ? located.orderPermlink : null,
+				sourceTrxId: trxId,
+				eventAt: createdAt
+			});
+		} catch (err) {
+			log.warn('fast_notify_failed', {
+				recipient: located.recipient,
+				err: String((err as Error)?.message ?? err)
+			});
 		}
 	}
 

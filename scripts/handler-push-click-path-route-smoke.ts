@@ -153,11 +153,19 @@ function literalToShape(literal: string): string {
 	) {
 		s = s.slice(1, -1);
 	}
-	// Strip anchor suffix
+	// Replace `${...}` interpolations with `*` FIRST — so a ternary `?`/`#` or
+	// any punctuation INSIDE an interpolation can't confuse the anchor/query
+	// strip below.
+	s = s.replace(/\$\{[^}]*\}/g, '*');
+	// Strip `#anchor` suffix (browser-side, route-irrelevant).
 	const hashIdx = s.indexOf('#');
 	if (hashIdx >= 0) s = s.slice(0, hashIdx);
-	// Replace `${...}` interpolations with `*`
-	s = s.replace(/\$\{[^}]*\}/g, '*');
+	// cp471 — strip `?query` suffix too. A click_path like
+	// `/${locale}/chat/${signer}?order=${permlink}` deep-links to the
+	// [lang]/chat/[peer] route (shape `/*/chat/*`); the ?order= is a query the
+	// route reads, not a path segment, so it must not affect route matching.
+	const qIdx = s.indexOf('?');
+	if (qIdx >= 0) s = s.slice(0, qIdx);
 	// Trailing slash normalize
 	if (s.length > 1 && s.endsWith('/')) s = s.slice(0, -1);
 	return s;
@@ -172,6 +180,9 @@ function literalToShape(literal: string): string {
 const handlerFiles = readdirSync(HANDLER_DIR)
 	.filter((f) => f.endsWith('.ts'))
 	.map((f) => join(HANDLER_DIR, f));
+// cp471 — the chat push enqueue moved to a shared module; scan it too so the
+// chat click_path stays covered by this route guard.
+handlerFiles.push(join(REPO, 'apps/indexer/src/indexer/chatPushEnqueue.ts'));
 
 for (const handlerPath of handlerFiles) {
 	const text = readFileSync(handlerPath, 'utf8');

@@ -29,6 +29,15 @@ const code = src
 	})
 	.join('\n');
 
+// cp471 — the order-validation lookup moved to the shared chatGates module.
+const gates = readFileSync(join(repo, 'apps/indexer/src/indexer/chatGates.ts'), 'utf8')
+	.split('\n')
+	.map((l) => {
+		const i = l.indexOf('//');
+		return i === -1 ? l : l.slice(0, i);
+	})
+	.join('\n');
+
 let failures = 0;
 let total = 0;
 function check(name: string, cond: boolean): void {
@@ -39,8 +48,8 @@ function check(name: string, cond: boolean): void {
 
 // 1. The order-validation lookup accepts an order owned by EITHER party.
 check(
-	'orderCheck validates against account IN (recipient, signer) — either party',
-	/account IN \(\$2, \$4\)/.test(code)
+	'checkChatOrder validates against account IN (recipient, signer) — either party',
+	/account IN \(\$2, \$4\)/.test(gates)
 );
 
 // 2. The INSERT's order_permlink value column stores the validated permlink
@@ -58,7 +67,8 @@ check(
 //    (it must remain narrow, not be deleted).
 check(
 	'orderResponseBypass is still computed (recipient owns a live order)',
-	/orderResponseBypass\s*=\s*ord\.account === recipient && ord\.live/.test(code)
+	/orderResponseBypass\s*=\s*orderCheck\.ownedByRecipient && orderCheck\.live/.test(code) &&
+		/ownedByRecipient:\s*ord\.account === args\.recipient/.test(gates)
 );
 check(
 	'orderResponseBypass still gates the stranger-fee admission path',

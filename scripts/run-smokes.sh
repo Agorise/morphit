@@ -27,6 +27,7 @@ SMOKES=(
 	"apps/indexer:chat-handler-smoke"
 	"apps/indexer:push-clickpath-locale-smoke"
 	"apps/indexer:chat-sse-order-permlink-smoke"
+	"apps/indexer:chat-fast-notification-smoke"
 	"apps/indexer:chat-identity-handler-smoke"
 	"apps/indexer:order-handler-smoke"
 	"apps/indexer:broadcast-chain-proxy-rate-limit-smoke"
