@@ -21,6 +21,7 @@
 	import { startAmbientChannels } from '$lib/notifications/ambient';
 	import { bannerTriggered, clearBannerTrigger } from '$lib/notifications/native';
 	import { isUnlocked, lockSession } from '$stores/identity';
+	import { initSettingsSync } from '$lib/settings/settingsSync';
 	import { startAutoLockTimer } from '$stores/autoLock';
 	import { instance, initInstance } from '$stores/instance';
 	import { resetForRoute as resetGlossarySeen } from '$stores/glossarySeen';
@@ -174,6 +175,16 @@
 			lockSession();
 		});
 		return stop;
+	});
+
+	// v1.5.0 — settings-to-chain mirror. Same lifecycle as auto-lock: on
+	// unlock, fetch + apply the on-chain settings blob, then watch the local
+	// settings stores and broadcast (debounced, encrypted) on change; teardown
+	// on lock. Best-effort — a signed-out or read-only session just keeps its
+	// device-local settings.
+	$effect(() => {
+		if (!$isUnlocked) return;
+		return initSettingsSync();
 	});
 
 	// Phase F.5 — Global trade-event listener.  Opens chat SSE
@@ -661,7 +672,7 @@
 						href="{lp('/faq')}?q=why_agpl&lang={currentLang}"
 						class="underline decoration-dotted underline-offset-2 transition-colors hover:text-morphit-emerald"
 						title={$_('footer.agpl_title')}>AGPL-3.0</a
-					> · No cookies · No analytics · No logs
+					> · #noaggression #countereconomics
 				</p>
 				<!-- Language switcher lives here (cp401): shares the copyright
 				     row at the far end (bottom-right in LTR, bottom-left in RTL —

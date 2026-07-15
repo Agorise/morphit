@@ -136,7 +136,11 @@ const SCENARIOS: readonly Scenario[] = [
 			'{#if methodLocked}',
 			"$_('chat.funds_sent.locked_method_label'",
 			'{:else}',
-			'role="tablist"'
+			// v1.5.0 (tt.txt B): the unlocked branch renders the coin SELECT, not
+			// the old 16-button tablist. The invariant is unchanged — a LOCKED
+			// asset must show the read-only pill and no picker at all — only the
+			// widget that proves "picker present" in the {:else} branch changed.
+			'<AssetChoiceSelect'
 		]
 	},
 	{

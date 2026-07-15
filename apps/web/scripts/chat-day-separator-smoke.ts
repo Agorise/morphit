@@ -48,7 +48,16 @@ check('divider renders only when a label exists', /\{#if daySep\}/.test(cv));
 
 // ─── visual contract ─────────────────────────────────────────────────
 check('divider is an <li> (valid child of the role=log <ul>)', /<li class="chat-day-separator/.test(cv));
-check('date is centred ABOVE the line', /text-center[\s\S]{0,120}\{daySep\}[\s\S]{0,200}h-px w-full/.test(cv));
+// Whitespace-flattened + a window wide enough to span the tooltip wrapper.
+// The original 120-char gap between `text-center` and `{daySep}` was a FALSE
+// NEGATIVE the moment anything legitimately sat between them — v1.5.0 added
+// the midnight-UTC `title` tooltip span (and its comment), and this failed
+// while the visual contract it guards was perfectly intact. What actually
+// matters is the ORDER: a centred date, then the hairline rule beneath it.
+check(
+	'date is centred ABOVE the line',
+	/text-center[\s\S]{0,400}\{daySep\}[\s\S]{0,200}h-px w-full/.test(cv.replace(/\s+/g, ' '))
+);
 check('the rule spans the full width and is a hairline (h-px)', /h-px w-full bg-ink-200 dark:bg-ink-800/.test(cv));
 check('subtle: small, muted, non-interactive (no button/anchor)', /text-\[11px\][\s\S]{0,80}text-ink-400/.test(cv) && !/<button[^>]*chat-day-separator/.test(cv));
 check('accessible: exposed as a separator with the date as its label', /role="separator"[\s\S]{0,60}aria-label=\{daySep\}/.test(cv));

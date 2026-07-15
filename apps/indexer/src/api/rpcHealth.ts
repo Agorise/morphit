@@ -22,6 +22,43 @@ import { Hono } from 'hono';
 
 import type { EndpointState } from '@morphit/rpc-pool';
 
+/**
+ * cp471 (tt.txt C) — WHY an active probe failed.
+ *
+ * Ken: a flat red "unreachable" is useless — a node whose operator confirms
+ * "all responses are 200" was being labelled unreachable because probeOne
+ * collapsed EVERY failure mode (TLS, non-2xx, JSON-RPC error, timeout, DNS)
+ * into a bare `ok:false`. These codes are a CLOSED, stable vocabulary.
+ *
+ * PRIVACY (#1) + safety: a raw error message can carry internal paths, IPs, or
+ * upstream hostnames, and this endpoint is PUBLIC. So we publish only this enum
+ * plus a numeric HTTP status — never the underlying message.
+ *
+ * NOTE there is no 'cors' code and there never can be: this probe runs
+ * SERVER-SIDE in the indexer (the browser never touches a Blurt node — that's
+ * the privacy design locked by endpoint-error-classify-smoke). CORS is a
+ * browser-only concept, so it cannot be the cause of a node showing red here.
+ */
+export type RpcProbeFailure =
+	/** Deadline hit — no response within PROBE_TIMEOUT_MS. */
+	| 'timeout'
+	/** TLS/certificate problem (expired, untrusted chain, wrong host). */
+	| 'tls'
+	/** DNS name resolution failed. */
+	| 'dns'
+	/** Connection actively refused. */
+	| 'refused'
+	/** Any other transport-level failure (reset, unroutable). Truly "not
+	 *  pingable" — Ken: plain "Unreachable" is fine for this one. */
+	| 'network'
+	/** The node ANSWERED with a non-2xx (see `http_status`) — e.g. a WAF /
+	 *  security policy returning 403, or a bad gateway. */
+	| 'http'
+	/** HTTP 200, but the JSON-RPC envelope carried an error / no result. */
+	| 'rpc_error'
+	/** HTTP 200, but the body wasn't parseable JSON. */
+	| 'bad_body';
+
 /** Health of one canonical RPC node, as the indexer currently sees it. */
 export interface RpcEndpointHealth {
 	readonly url: string;
@@ -33,6 +70,13 @@ export interface RpcEndpointHealth {
 	readonly consecutive_failures: number;
 	/** Remaining cooldown in ms before the node is retried (0 when available). */
 	readonly cooldown_ms: number;
+	/** cp471 (tt.txt C): WHY the most recent ACTIVE probe failed, so the card
+	 *  can show a one-line reason instead of a flat "unreachable". Null/absent
+	 *  when healthy, or on the passive pool snapshot (the pool doesn't retain a
+	 *  reason — the card falls back to the generic label there). */
+	readonly failure_reason?: RpcProbeFailure | null;
+	/** HTTP status when `failure_reason === 'http'`, else null/absent. */
+	readonly http_status?: number | null;
 }
 
 export interface RpcEndpointsResponse {
@@ -91,9 +135,62 @@ export function buildRpcEndpointsResponse(
 const PROBE_MIN_INTERVAL_MS = 5_000;
 const PROBE_TIMEOUT_MS = 6_000;
 
+/**
+ * cp471 (tt.txt C) — map a thrown fetch error to a stable {@link RpcProbeFailure}.
+ *
+ * Node's fetch wraps transport errors as `TypeError: fetch failed` with the real
+ * cause on `err.cause` carrying a `code`. An aborted request surfaces as an
+ * AbortError (name), not a code. Anything we don't recognize degrades to
+ * 'network' — the honest "not pingable" bucket.
+ *
+ * Exported for the smoke: this mapping is the whole point of the feature, so it
+ * is tested directly rather than through a live socket.
+ */
+export function classifyProbeError(err: unknown): RpcProbeFailure {
+	const e = err as { name?: string; code?: string; cause?: { code?: string; name?: string } };
+	if (e?.name === 'AbortError' || e?.cause?.name === 'AbortError') return 'timeout';
+	const code = e?.cause?.code ?? e?.code;
+	switch (code) {
+		// Certificate / TLS handshake. THE case Ken hit: the node's operator
+		// renovated the balancer certificate, so the node answered 200 to him
+		// while our probe was failing the TLS handshake — and we rendered that
+		// as "unreachable", which sent him chasing the wrong problem.
+		case 'CERT_HAS_EXPIRED':
+		case 'CERT_NOT_YET_VALID':
+		case 'DEPTH_ZERO_SELF_SIGNED_CERT':
+		case 'SELF_SIGNED_CERT_IN_CHAIN':
+		case 'UNABLE_TO_VERIFY_LEAF_SIGNATURE':
+		case 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY':
+		case 'ERR_TLS_CERT_ALTNAME_INVALID':
+		case 'ERR_SSL_WRONG_VERSION_NUMBER':
+		case 'EPROTO':
+			return 'tls';
+		case 'ENOTFOUND':
+		case 'EAI_AGAIN':
+			return 'dns';
+		case 'ECONNREFUSED':
+			return 'refused';
+		case 'UND_ERR_HEADERS_TIMEOUT':
+		case 'UND_ERR_BODY_TIMEOUT':
+		case 'UND_ERR_CONNECT_TIMEOUT':
+		case 'ETIMEDOUT':
+			return 'timeout';
+		default:
+			return 'network';
+	}
+}
+
+/** Result of one active probe: latency on success, or WHY it failed. */
+interface ProbeResult {
+	latencyMs: number | null;
+	ok: boolean;
+	reason: RpcProbeFailure | null;
+	httpStatus: number | null;
+}
+
 /** Ping one node with a lightweight, universal Blurt read; return round-trip ms
- *  on success or null on any failure/timeout. Never throws. */
-async function probeOne(url: string): Promise<{ latencyMs: number | null; ok: boolean }> {
+ *  on success, or the classified reason on failure. Never throws. */
+async function probeOne(url: string): Promise<ProbeResult> {
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
 	const started = Date.now();
@@ -109,12 +206,24 @@ async function probeOne(url: string): Promise<{ latencyMs: number | null; ok: bo
 			}),
 			signal: controller.signal
 		});
-		if (!res.ok) return { latencyMs: null, ok: false };
-		const body = (await res.json()) as { result?: unknown; error?: unknown };
-		if (body.error !== undefined || body.result === undefined) return { latencyMs: null, ok: false };
-		return { latencyMs: Date.now() - started, ok: true };
-	} catch {
-		return { latencyMs: null, ok: false };
+		// The node ANSWERED — a non-2xx is a very different diagnosis from
+		// "unreachable" (403 = a WAF / security policy in front of the node,
+		// 502 = the balancer can't reach its backend), so carry the status.
+		if (!res.ok) {
+			return { latencyMs: null, ok: false, reason: 'http', httpStatus: res.status };
+		}
+		let body: { result?: unknown; error?: unknown };
+		try {
+			body = (await res.json()) as { result?: unknown; error?: unknown };
+		} catch {
+			return { latencyMs: null, ok: false, reason: 'bad_body', httpStatus: res.status };
+		}
+		if (body.error !== undefined || body.result === undefined) {
+			return { latencyMs: null, ok: false, reason: 'rpc_error', httpStatus: res.status };
+		}
+		return { latencyMs: Date.now() - started, ok: true, reason: null, httpStatus: null };
+	} catch (err) {
+		return { latencyMs: null, ok: false, reason: classifyProbeError(err), httpStatus: null };
 	} finally {
 		clearTimeout(timer);
 	}
@@ -128,13 +237,15 @@ export async function probeEndpoints(
 ): Promise<RpcEndpointsResponse> {
 	const endpoints = await Promise.all(
 		canonicalUrls.map(async (url): Promise<RpcEndpointHealth> => {
-			const { latencyMs, ok } = await probeOne(url);
+			const { latencyMs, ok, reason, httpStatus } = await probeOne(url);
 			return {
 				url,
 				healthy: ok,
 				latency_ms: latencyMs,
 				consecutive_failures: ok ? 0 : 1,
-				cooldown_ms: 0
+				cooldown_ms: 0,
+				failure_reason: reason,
+				http_status: httpStatus
 			};
 		})
 	);

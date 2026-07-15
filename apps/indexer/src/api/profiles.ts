@@ -26,6 +26,11 @@ interface ProfileRow {
 	json_metadata: unknown;
 	source_block_num: string;
 	updated_at: Date;
+	/** cp471 (D7/E): the account's posting public key (base58 TEXT),
+	 *  joined from `accounts`, so profile cards can show the truncated
+	 *  key under a display name. Null for an account we've never indexed
+	 *  a key for. */
+	posting_pubkey: string | null;
 }
 
 /** Max accounts per batch request. Caps worst-case query cost and
@@ -67,7 +72,8 @@ function rowToProfile(r: ProfileRow) {
 		display_name: r.display_name,
 		json_metadata: r.json_metadata,
 		source_block_num: parseInt(r.source_block_num, 10),
-		updated_at: r.updated_at.toISOString()
+		updated_at: r.updated_at.toISOString(),
+		posting_pubkey: r.posting_pubkey
 	};
 }
 
@@ -124,9 +130,11 @@ export function profilesRoute(db: Database): Hono {
 		// arrays. Safe against SQL injection — the array is a bound
 		// parameter, not interpolated into the query string.
 		const result = await db.query<ProfileRow>(
-			`SELECT account, display_name, json_metadata,
-			        source_block_num::text, updated_at
-			 FROM profiles WHERE account = ANY($1::text[])`,
+			`SELECT p.account, p.display_name, p.json_metadata,
+			        p.source_block_num::text, p.updated_at, a.posting_pubkey
+			 FROM profiles p
+			 LEFT JOIN accounts a ON a.name = p.account
+			 WHERE p.account = ANY($1::text[])`,
 			[accounts]
 		);
 
@@ -155,9 +163,11 @@ export function profilesRoute(db: Database): Hono {
 		}
 
 		const result = await db.query<ProfileRow>(
-			`SELECT account, display_name, json_metadata,
-			        source_block_num::text, updated_at
-			 FROM profiles WHERE account = $1`,
+			`SELECT p.account, p.display_name, p.json_metadata,
+			        p.source_block_num::text, p.updated_at, a.posting_pubkey
+			 FROM profiles p
+			 LEFT JOIN accounts a ON a.name = p.account
+			 WHERE p.account = $1`,
 			[account]
 		);
 		if (result.rowCount === 0) {

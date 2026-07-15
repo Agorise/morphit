@@ -73,6 +73,48 @@
 		void loadHealth(true);
 	}
 
+	/** cp471 (tt.txt C) — a ONE-LINE reason a node is red, instead of a flat
+	 *  "unreachable" that sends the reader chasing the wrong problem (Ken's
+	 *  case: the node's operator had renovated the balancer certificate, so the
+	 *  node answered 200 to him while our TLS handshake failed).
+	 *
+	 *  The reason comes from the INDEXER's server-side probe — the browser never
+	 *  pings a node (privacy #1). That's also why no branch here says "CORS":
+	 *  a server-side probe cannot hit CORS, so naming it would be a lie.
+	 *
+	 *  Falls back to the plain "Unreachable" label when the indexer sent no
+	 *  reason (older indexer, or the passive pool snapshot) or when the node is
+	 *  genuinely not pingable — per Ken, "Unreachable" suffices for that. */
+	function failureText(h: RpcEndpointHealth): string {
+		switch (h.failure_reason) {
+			case 'timeout':
+				return $_('settings.endpoints.err_timeout');
+			case 'tls':
+				return $_('settings.endpoints.err_tls');
+			case 'dns':
+				return $_('settings.endpoints.err_dns');
+			case 'refused':
+				return $_('settings.endpoints.err_refused');
+			case 'rpc_error':
+				return $_('settings.endpoints.err_rpc');
+			case 'bad_body':
+				return $_('settings.endpoints.err_body');
+			case 'http': {
+				const status = h.http_status ?? 0;
+				// 401/403/451 = something in FRONT of the node refused us (WAF,
+				// security policy, geo-block) — the node itself may be perfectly
+				// healthy, which is exactly the distinction Ken asked for.
+				if (status === 401 || status === 403 || status === 451) {
+					return $_('settings.endpoints.err_http_blocked', { values: { status } });
+				}
+				if (status === 429) return $_('settings.endpoints.err_http_rate');
+				return $_('settings.endpoints.err_http', { values: { status } });
+			}
+			default:
+				return $_('settings.endpoints.unreachable');
+		}
+	}
+
 	/** Status line for a node, derived ENTIRELY from the indexer's health
 	 *  snapshot: latency when healthy, a cooling-down / unreachable reason
 	 *  otherwise, or "probing" before the first measurement lands. */
@@ -81,7 +123,7 @@
 			return { text: $_('settings.endpoints.cooling_down'), cls: 'text-ink-700 dark:text-ink-400' };
 		}
 		if (h.consecutive_failures > 0) {
-			return { text: $_('settings.endpoints.unreachable'), cls: 'text-red-600 dark:text-red-400' };
+			return { text: failureText(h), cls: 'text-red-600 dark:text-red-400' };
 		}
 		if (h.latency_ms != null) {
 			return {

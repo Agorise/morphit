@@ -474,8 +474,6 @@
       "share_button_aria": "分享你的加密收款地址",
       "modal_title": "共享一個收款地址",
       "modal_subtitle": "將您的 BTC 或 XMR 收款地址發送給您的交易夥伴。",
-      "method_btc": "比特幣",
-      "method_xmr": "門羅幣",
       "address_label": "收款地址",
       "address_placeholder_btc": "bc1q… 或 1… 或 3…",
       "address_placeholder_xmr": "8… (建議) 或 4…",
@@ -492,7 +490,6 @@
       "pill_copied": "已複製!",
       "pill_for_order": "用於訂單",
       "verify_warning": "發送前務必核實地址。加密貨幣交易無法撤銷。",
-      "method_blurt": "Blurt",
       "address_placeholder_blurt": "帳戶名",
       "address_invalid_blurt": "這看起來不像一個有效的帳戶名。",
       "pill_method_blurt": "Blurt 帳戶",
@@ -518,15 +515,12 @@
       "xmr_jitter_send_exact_hint": "告訴買家的錢包傳送此精確金額,包括長小數位。",
       "xmr_jitter_off_warning_heading": "私隱性降低",
       "xmr_jitter_off_warning_body": "整數金額在 Monero 鏈上更易關聯。除非有理由傳送精確數字,否則保持 jitter 開啟。",
-      "method_usdt": "USDT",
-      "method_bch": "比特幣現金",
       "address_placeholder_usdt": "泰達幣地址（同你揀嘅網絡匹配）",
       "address_placeholder_bch": "bitcoincash:q… 或 1… 或 3…",
       "address_invalid_usdt": "呢個地址同你揀嘅 USDT 網絡唔匹配。發送前請仔細核對 — 跨網絡發送會損失你嘅資金。",
       "address_invalid_bch": "呢個唔似有效嘅比特幣現金地址。",
       "pill_method_usdt": "USDT 地址",
       "pill_method_bch": "比特幣現金地址",
-      "method_ltc": "萊特幣",
       "address_placeholder_ltc": "L… 或 M… 或 ltc1…",
       "address_invalid_ltc": "這看起來不是有效的萊特幣地址。",
       "pill_method_ltc": "萊特幣地址",
@@ -544,46 +538,38 @@
       "payjoin_explain": "PayJoin (BIP-78) 是一種合作的 Bitcoin 交易協議：付款人和接收人都向同一筆交易添加輸入，擊敗鏈分析師用來分組 UTXO 的 common-input-ownership 啟發式。",
       "payjoin_badge": "PayJoin 可用",
       "payjoin_badge_tooltip": "賣家的錢包支持 PayJoin (BIP-78)。如果你的錢包也支持，打開此 URI 將協商一個改善私隱的合作交易。",
-      "method_dash": "Dash",
       "address_placeholder_dash": "X… 或 7…",
       "address_invalid_dash": "這看起來不是有效的 Dash 地址。",
       "pill_method_dash": "Dash 地址",
-      "method_usdc": "USDC",
       "address_placeholder_usdc": "USD Coin 地址（與所選網絡匹配）",
       "address_invalid_usdc": "所選網絡的 USDC 地址無效。EVM 網絡：0x + 40 個十六進制字符。Solana：32-44 個 base58 字符。請檢查你在訂單表單中選擇了正確的網絡。",
       "pill_method_usdc": "USDC 地址",
-      "method_dai": "DAI",
       "address_invalid_dai": "不是有效的 DAI 地址格式（預期 EVM 0x[40 hex]）。",
       "address_placeholder_dai": "0x... (EVM 格式 DAI 地址)",
       "pill_method_dai": "DAI {network}",
-      "method_doge": "狗狗幣",
       "address_placeholder_doge": "D… 9… 或 A…",
       "address_invalid_doge": "這看起來不是有效的 Dogecoin 地址。",
       "pill_method_doge": "狗狗幣地址",
-      "method_zec": "Zcash",
       "address_placeholder_zec": "t1… t3… zs1… 或 u1…",
       "address_invalid_zec": "這看起來不是有效的 Zcash 地址。",
       "pill_method_zec": "Zcash 地址",
-      "method_arrr": "ARRR",
       "address_placeholder_arrr": "你的 ARRR 地址 (zs1...)",
       "address_invalid_arrr": "不是有效的 Pirate Chain 地址。預期 `zs1` 前綴 + 75 個 bech32 數據字符（總共 78 個字符）。",
       "pill_method_arrr": "Pirate Chain (ARRR)",
-      "method_dcr": "DCR",
       "address_placeholder_dcr": "你的 DCR 地址 (Ds... 或 Dc...)",
       "address_invalid_dcr": "不是有效的 Decred 地址。預期 `Ds` 或 `Dc` 前綴 + 33 個 base58 字符（總共 35 個字符）。",
       "pill_method_dcr": "Decred (DCR)",
-      "method_sol": "SOL",
       "address_placeholder_sol": "你的 SOL 地址 (32-44 個 base58 字符)",
       "address_invalid_sol": "不是有效的 Solana 地址。預期 32-44 個 base58 字符（大多數為 44 個）。",
       "pill_method_sol": "Solana (SOL)",
-      "method_eth": "ETH",
       "address_placeholder_eth": "你的 ETH 地址 (0x + 40 個十六進制字符)",
       "address_invalid_eth": "不是有效的 Ethereum 地址。預期 0x 後跟 40 個十六進制字符（總共 42 個字符）。",
       "pill_method_eth": "以太坊 (ETH)",
-      "method_xrp": "XRP",
       "address_placeholder_xrp": "你的 XRP 地址 (r + 24-34 個 base58 字符)",
       "address_invalid_xrp": "不是有效的 XRP Ledger 地址。預期以 r 開頭，後跟 24-34 個 base58 字符的地址（此字段中沒有 destination tag）。",
-      "pill_method_xrp": "Ripple (XRP)"
+      "pill_method_xrp": "Ripple (XRP)",
+      "blurt_account_not_found": "唔存在使用該名稱嘅 Blurt 帳戶。",
+      "asset_label": "幣種"
     },
     "funds_sent": {
       "button": "立即付款",
@@ -641,7 +627,9 @@
       "pill_title_dcr": "DCR 已發送",
       "pill_title_sol": "SOL 已發送",
       "pill_title_eth": "ETH 已發送",
-      "pill_title_xrp": "XRP 已發送"
+      "pill_title_xrp": "XRP 已發送",
+      "pill_title_blurt_received": "已收到 Blurt",
+      "receipt_title": "付款收據"
     },
     "unknown_version": "此訊息使用較新的協議。請更新 Morphit 以讀取。",
     "pay_blurt": {
@@ -752,7 +740,12 @@
       "hint": "訂單最低額為 {min} {fiat}（≈ {amount} {asset}）。",
       "hint_market": "訂單最低額為 {min} {fiat}（≈ {amount} {asset}，按當前市場價）。"
     },
-    "empty_state_loading": "正在載入與 @{peer} 的聊天… 打個招呼吧！"
+    "empty_state_loading": "正在載入與 @{peer} 的聊天… 打個招呼吧！",
+    "day_separator_tooltip": "午夜，UTC",
+    "feedback": {
+      "left_label": "已留下評價：",
+      "leave_prompt": "留下評價"
+    }
   },
   "cheat_sheet": {
     "heading": "Morphit 速查表",
@@ -1777,7 +1770,8 @@
     "form": {
       "aria_label": "回覆此評價",
       "heading": "你的回覆",
-      "subheading": "對此評價留下公開回覆。由你簽署,免費,發佈到鏈上。查看你個人主頁的任何人都能看到。",
+      "subheading": "你正在回覆上方的評價——講返你嗰邊嘅情況。佢會公開顯示喺你個人檔案中佢哋嘅評價下面。免費、由你簽名、上鏈而且永久。",
+      "not_rating": "呢個係回覆，唔係評分。想畀呢位交易者評分，請喺同佢嘅傾偈度留低評價。",
       "comment_label": "回覆",
       "comment_placeholder": "你的說法。",
       "submit": "發佈回覆",
@@ -2196,7 +2190,8 @@
       "all": "全部",
       "live": "活躍",
       "cancelled": "已取消",
-      "expired": "已過期"
+      "expired": "已過期",
+      "paid": "已付款"
     },
     "order": {
       "posted_prefix": "已發布",
@@ -2223,7 +2218,10 @@
       "edit_window_tooltip": "訂單僅可在發布後 15 分鐘內編輯。之後需要取消並重新發布。",
       "edit_window_aria": "剩餘編輯時間:{remaining}",
       "feedback_pick_prompt": "你同邊個完成咗交易？",
-      "not_visible_orderbook": "未在訂單簿中顯示"
+      "not_visible_orderbook": "未在訂單簿中顯示",
+      "state_completed": "已完成",
+      "action_complete": "標記為已完成",
+      "feedback_no_counterparty": "尚未與任何交易對手傾偈"
     },
     "cancel": {
       "confirm_title": "取消此訂單?",
@@ -2260,6 +2258,13 @@
       "heading": "費用狀態",
       "body": "💡 下方每個訂單都會顯示其掛單費狀態。訂單只有在費用通過驗證後才會出現在公開訂單簿中——標記為「未收到」「支付不足」或「尚未驗證」就是某個訂單看起來缺失的原因。",
       "dismiss": "忽略此提示"
+    },
+    "complete": {
+      "confirm_title": "將此訂單標記為已完成？",
+      "confirm_body": "這會確認交易已完成，並把訂單從公共訂單簿中移除。此操作無法撤銷。",
+      "confirm_button": "標記完成",
+      "cancel_button": "保持上架",
+      "completing": "標記中…"
     }
   },
   "nav": {
@@ -2604,7 +2609,8 @@
     "posting_title": "你的訂單正在發佈…",
     "posting_body": "此訂單正在由區塊鏈確認，可能需要一分鐘才會出現。我們會自動持續檢查——無需重新整理。",
     "check_again": "再次檢查",
-    "action_edit_countdown": "編輯（剩餘：{remaining}）"
+    "action_edit_countdown": "編輯（剩餘：{remaining}）",
+    "status_completed": "已完成並已付款"
   },
   "orderbook": {
     "heading": "訂單簿",
@@ -3428,11 +3434,11 @@
     "active_orders_sort_hint": "最舊的在前——即將到期的先顯示。",
     "expires_in": "{t} 後到期",
     "expires_now": "即將到期",
-    "given_heading": "此用戶留下的評價",
+    "given_heading": "@{account} 評價咗",
+    "given_rated": "我畀 @{account} 嘅評分：",
     "loading_given": "正在載入已留評價…",
     "given_error": "現在無法載入此用戶留下的評價。",
     "no_given_yet": "還沒有。此用戶尚未給任何對方留下回饋。",
-    "given_prefix": "評價了",
     "rss_subscribe_label": "RSS — 關注呢個交易者",
     "rss_subscribe_title": "當呢個交易者發布新嘅買/賣單時透過 RSS 收到通知。注意:輪詢按交易者嘅訂閱比全站訂閱稍微更具揭示性。",
     "feedback_suppressed_chip": "唔計入評分 — 評論者被標記為關聯戶口",
@@ -3912,8 +3918,7 @@
       "placeholder": "例如：咖啡、BTC，仲有喺區塊鏈上面散步。",
       "hint": "睇落唔錯。",
       "broadcast_ok_detail": "你嘅簡短簡介而家已經發佈，所有人都睇到。",
-      "clear": "清除",
-      "clear_confirm_prompt": "從此裝置移除你的簡短簡介？你可以隨時重新設定。"
+      "clear": "清除"
     },
     "title": "設定",
     "subtitle": "你嘅身份,你話事。儲喺你部機,唔會上我哋伺服器。",
@@ -3943,9 +3948,6 @@
         "lookup_failed": "Morphit 無法連線到索引器去確認呢個密鑰控制邊個帳戶，所以冇廣播任何嘢。請檢查網絡連線後再試。"
       },
       "broadcast_pending": "發佈中…",
-      "clear_confirm_prompt": "要從這台裝置移除您的顯示名嗎?您隨時可以再設定一次。",
-      "clear_confirm_yes": "是的,移除",
-      "clear_confirm_cancel": "保留",
       "broadcast_ok_detail": "你的顯示名稱現已公開。"
     },
     "endpoints": {
@@ -3955,7 +3957,16 @@
       "cooling_down": "冷卻中",
       "recheck": "重新檢測節點速度",
       "probing": "測試中…",
-      "unreachable": "無法連線"
+      "unreachable": "無法連線",
+      "err_timeout": "未喺時限內回應（逾時）",
+      "err_tls": "TLS 憑證問題",
+      "err_dns": "DNS 解析失敗",
+      "err_refused": "連線被拒絕",
+      "err_rpc": "有回應，但 RPC 呼叫失敗",
+      "err_body": "回應內容無法解析",
+      "err_http": "節點回應 HTTP {status}",
+      "err_http_blocked": "被安全政策攔截（HTTP {status}）",
+      "err_http_rate": "被節點限速（HTTP 429）"
     },
     "session": {
       "autolock_changed": "已改為 {label}",
@@ -3973,10 +3984,10 @@
     },
     "nostr_url": {
       "heading": "Nostr 連結",
-      "explain": "可選。新增你的 Nostr 個人資料 URL,一個小的 Nostr 圖示將出現在 Morphit 各處你的用戶名旁邊。幫助人們在這個市場之外聯繫你。",
+      "explain": "喺此新增你嘅 Nostr 個人資料 URL，方便人們喺 Morphit 之外聯繫你。喺你嘅個人檔案頁面上，佢帶連結嘅圖示會顯示喺你嘅頭像旁邊。",
       "label": "你的 Nostr URL",
       "placeholder": "nostr:npub1... 或 https://...",
-      "hint_empty": "如果你不想顯示 Nostr 連結,請留空。",
+      "hint_empty": "喺此貼上你嘅 Nostr 個人資料 URL，或留空。",
       "hint_ok": "看起來不錯。",
       "error": {
         "too_long": "太長了。保持在 512 個字符以下。",
@@ -3988,12 +3999,12 @@
       "save_and_broadcast": "儲存並廣播",
       "broadcast_pending": "發佈中…",
       "clear": "清除",
-      "reminder_title": "它會出現在哪裡",
-      "reminder_body": "一旦發佈,Nostr 圖示會出現在你的用戶名旁邊——在每個訂單、每條回饋條目、每條聊天訊息上,在每個 Morphit 實例上,不只是這個。其他用戶點擊它會在他們喜歡的用戶端中開啟你的 Nostr 個人資料。"
+      "reminder_title": "可選 — 您可以略過。",
+      "reminder_body": "冇咗呢個網址，你嘅 Morphit 身分都照樣運作。佢只係一個禮貌性連結，方便嗰啲可能都想睇你嘅 Nostr 個人檔案嘅人。"
     },
     "blurt_media_url": {
-      "heading": "Blurt.media 個人資料 URL",
-      "explain": "指向你喺 blurt.media 上個人檔案嘅連結，blurt.media 係一個流行嘅 Blurt 串流前端。會喺 Morphit 各處顯示喺你嘅用戶名旁邊。可選。",
+      "heading": "Blurt.media 個人資料",
+      "explain": "指向你喺 blurt.media 上個人檔案嘅連結，blurt.media 係一個流行嘅 Blurt 串流前端。喺你嘅個人檔案頁面上，佢帶連結嘅圖示會顯示喺你嘅頭像旁邊。",
       "label": "Blurt.media 網址",
       "placeholder": "https://blurt.media/@您的名字",
       "hint_empty": "在此貼上您的 blurt.media 個人資料 URL,或留空。",
@@ -4088,7 +4099,10 @@
       "unhide_all": "全部取消隱藏",
       "unhide_all_confirm": "取消隱藏全部 {count} 個帳戶?這將使他們的訂單再次在你的 orderbook 檢視中可見。",
       "unhide_all_confirm_yes": "是的,全部取消隱藏",
-      "unhide_all_confirm_cancel": "保持隱藏"
+      "unhide_all_confirm_cancel": "保持隱藏",
+      "refresh": "重新整理",
+      "refreshed": "已刷新！",
+      "refresh_aria": "重新整理隱藏帳戶列表"
     },
     "avatar": {
       "heading": "頭像",
@@ -4170,9 +4184,8 @@
       "first_trade_help": "當您為首次 Morphit 交易留下反饋時，也在 Blurt 上的 @morphit 社群發布一則簡短的「我加入了 Morphit」帖子。每個帳戶只發布一次。逐訂單聯合發布是訂單表單上的一個獨立複選框。",
       "pitch_heading": "為何開啟?",
       "pitch_body": "辛迪加發布至關重要。更多眼睛 = 更多夥伴 + 點讚獎勵直接進入 Blurt 錢包。關閉 = 不公開。",
-      "blog_default_explain": "你已完成首筆交易,很好。現在 Morphit 可以在每個新訂單上為你預先勾選「將此訂單發佈到我的 Blurt 網誌」,讓你的報價自動分享。每篇帖子仍由你簽名,你亦可在任何單一訂單上取消勾選。",
-      "blog_default_label": "預設將我的訂單發佈到我的 Blurt 網誌",
-      "blog_default_help": "在下單表單上為每個訂單預先勾選「同步到我的網誌」。你隨時可以為某個訂單取消勾選。關閉 = 每次都從未勾選開始。"
+      "blog_default_explain": "現在 Morphit 可以在每個新訂單上為你預先勾選「將此訂單發佈到我的 Blurt 網誌」，讓你的報價自動推送出去。每篇帖子仍由你簽名，你亦可在任何單一訂單上取消勾選。",
+      "blog_default_label": "預設將我的訂單發佈到我的 Blurt 網誌"
     },
     "privacy": {
       "heading": "私隱",
@@ -4485,13 +4498,13 @@
   "trade_status": {
     "address_shared": "已共享地址",
     "payment_pending": "付款待處理",
-    "paid": "已付款",
     "payment_mismatch": "付款不匹配",
     "payment_unverifiable": "付款無法驗證",
     "released": "已釋放",
     "disputed": "爭議中",
     "completed": "已完成",
-    "in_progress": "交易進行中"
+    "in_progress": "交易進行中",
+    "paid_by": "付款人"
   },
   "update": {
     "title": "Morphit 有更新",
@@ -4586,9 +4599,9 @@
   },
   "unlock_active": {
     "title": "呢筆付款需要你嘅活躍密鑰",
-    "body": "你而家用發帖密鑰登入 @{account}，佢無法轉移資金。請輸入你嘅活躍密鑰或 Blurt 主密碼以繼續——你已填寫嘅內容唔會遺失。",
-    "field_label": "活躍密鑰或 Blurt 主密碼",
-    "field_placeholder": "以 5… 開頭，或你嘅主密碼",
+    "body": "你而家淨係用發帖密鑰登入 @{account}，佢無法轉移資金。請將你嘅活躍密鑰貼上輸入框以繼續。",
+    "field_label": "活躍密鑰",
+    "field_placeholder": "以 5… 開頭",
     "field_help": "喺簽名之前，Morphit 會同區塊鏈上嘅帳戶核對。佢絕不會離開本裝置。",
     "cta": "解鎖並繼續",
     "checking": "正在核對…",

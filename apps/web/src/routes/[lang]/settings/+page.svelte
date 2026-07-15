@@ -35,7 +35,7 @@
 	import { hasPersistedKeystore } from '$crypto/persistentKeystore';
 	import { changePassword } from '$crypto/changePassword';
 	import { scorePassword, isPasswordAcceptable } from '$lib/auth/passwordStrength';
-	import { hiddenAccounts, unhideAccount, clearAllHidden } from '$lib/utils/hiddenAccounts';
+	import { hiddenAccounts, unhideAccount, clearAllHidden, refreshHidden } from '$lib/utils/hiddenAccounts';
 	import {
 		firstTradeAnnounce,
 		setFirstTradeAnnounce,
@@ -206,14 +206,8 @@
 	let bioBroadcasting = $state(false);
 	let bioBroadcastError = $state('');
 	let bioBroadcastOk = $state(false);
-	/** True when the user has tapped Clear and we're waiting for them
-	 *  to confirm. Per UX-STANDARD rule #5 — destructive actions get
-	 *  one (and only one) confirmation. */
-	let confirmingClear = $state(false);
-	/** Bio counterpart of confirmingClear (short-bio Clear button). */
-	let confirmingBioClear = $state(false);
 
-	/** Tier 3.2 (Part 99) — same pattern as confirmingClear, but
+	/** Tier 3.2 (Part 99) — a two-step confirm (like the preferences Clear), but
 	 *  scoped to clearing the user's stored fiat / region
 	 *  preferences in the new "Preferences" settings section.
 	 *  Two-step confirm so a misclick doesn't silently wipe the
@@ -429,9 +423,16 @@
 	});
 
 	const validation = $derived(validateDisplayName(input));
+	/** v1.5.0 (t.txt line 5): the field has been emptied while a name is still
+	 *  saved — a "remove my display name" intent. An empty name is otherwise
+	 *  invalid (too short), so this gates the Save buttons + handlers to allow
+	 *  saving the removal. */
+	const clearing = $derived(input.trim().length === 0 && saved.length > 0);
 	const remaining = $derived(DISPLAY_NAME_MAX_LENGTH - [...input].length);
 
 	const bioValidation = $derived(validateShortBio(bioInput));
+	/** v1.5.0 (t.txt line 5): bio counterpart of `clearing`. */
+	const bioClearing = $derived(bioInput.trim().length === 0 && bioSaved.length > 0);
 	const bioRemaining = $derived(SHORT_BIO_MAX_LENGTH - [...bioInput].length);
 
 	// Blurt.media URL validation. Same contract as Nostr —
@@ -494,11 +495,12 @@
 	}
 
 	async function saveLocal(): Promise<void> {
-		if (!validation.ok) return;
+		if (!validation.ok && !clearing) return;
 		saving = true;
 		const cleaned = validation.cleaned;
 		try {
-			window.localStorage.setItem(STORAGE_KEY, cleaned);
+			if (cleaned.length === 0) window.localStorage.removeItem(STORAGE_KEY);
+			else window.localStorage.setItem(STORAGE_KEY, cleaned);
 		} catch {
 			// Privacy Mode; keeps the change in memory only.
 		}
@@ -592,7 +594,7 @@
 
 	// ── Short bio — save locally, or save + broadcast ──────────────
 	async function saveBioLocal(): Promise<void> {
-		if (!bioValidation.ok) return;
+		if (!bioValidation.ok && !bioClearing) return;
 		bioSaving = true;
 		const cleaned = bioValidation.cleaned;
 		try {
@@ -907,43 +909,16 @@
 	}
 
 	function beginClear(): void {
-		// Stage 1 of the destructive action. Opens the inline
-		// confirmation prompt; does not yet mutate state.
-		confirmingClear = true;
-	}
-
-	function cancelClear(): void {
-		confirmingClear = false;
-	}
-
-	function confirmClear(): void {
-		try {
-			window.localStorage.removeItem(STORAGE_KEY);
-		} catch {
-			// ignore
-		}
-		saved = '';
+		// v1.5.0 (t.txt line 5): "Clear" now just empties the field — no red
+		// confirmation. The two Save buttons light up (see `clearing`) so the
+		// user removes the name locally or on-chain by saving the empty value.
 		input = '';
-		confirmingClear = false;
 	}
 
 	function beginBioClear(): void {
-		confirmingBioClear = true;
-	}
-
-	function cancelBioClear(): void {
-		confirmingBioClear = false;
-	}
-
-	function confirmBioClear(): void {
-		try {
-			window.localStorage.removeItem(SHORT_BIO_STORAGE_KEY);
-		} catch {
-			// ignore
-		}
-		bioSaved = '';
+		// v1.5.0 (t.txt line 5): mirror beginClear — empty the field so the two
+		// Save buttons light up (see `bioClearing`) and the user removes the bio.
 		bioInput = '';
-		confirmingBioClear = false;
 	}
 
 	// Auto-lock timeout handler. Parses the <select> value — the
@@ -1083,6 +1058,16 @@
 	 *  reacts to mutations in other tabs too (storage event). */
 	const hiddenList = $derived([...$hiddenAccounts].sort());
 	let confirmingUnhideAll = $state(false);
+	/** v1.5.0 — briefly true after a manual refresh so the Hidden card can
+	 *  flash a "Refreshed!" confirmation (~2s), mirroring the Blocked card. */
+	let hiddenRefreshed = $state(false);
+	let hiddenRefreshedTimer: ReturnType<typeof setTimeout> | null = null;
+	function onRefreshHidden(): void {
+		refreshHidden();
+		hiddenRefreshed = true;
+		if (hiddenRefreshedTimer) clearTimeout(hiddenRefreshedTimer);
+		hiddenRefreshedTimer = setTimeout(() => (hiddenRefreshed = false), 2000);
+	}
 
 	// ─── Blocked accounts (Finding H layer 1) ───────────────────
 	/** Sorted alphabetically so the list is stable across unblocks.
@@ -1311,6 +1296,7 @@
 			<div class="mt-4 flex flex-wrap gap-3">
 				<BusyButton
 					variant="primary"
+					size="sm"
 					busy={accountVerifying}
 					disabled={!$isUnlocked || !accountInput.trim()}
 					onclick={verifyAndSaveAccountName}
@@ -1438,6 +1424,7 @@
 			{#if $isUnlocked && (avatarStagedSvg || avatarStagedDataUri)}
 				<BusyButton
 					variant="primary"
+					size="sm"
 					busy={avatarBroadcasting}
 					done={avatarBroadcastOk}
 					busyLabel={$_('common.broadcasting')}
@@ -1557,9 +1544,10 @@
 		<div class="mt-6 flex flex-wrap items-center gap-3">
 			<BusyButton
 				variant="secondary-quiet"
+				size="sm"
 				busy={saving}
 				done={savedToast}
-				disabled={!validation.ok || validation.cleaned === saved}
+				disabled={!clearing && (!validation.ok || validation.cleaned === saved)}
 				busyLabel={$_('common.saving')}
 				onclick={saveLocal}
 			>
@@ -1572,9 +1560,10 @@
 			{#if $isUnlocked}
 				<BusyButton
 					variant="primary"
+					size="sm"
 					busy={broadcasting}
 					done={broadcastOk}
-					disabled={!validation.ok}
+					disabled={!clearing && !validation.ok}
 					busyLabel={$_('settings.display_name.broadcast_pending')}
 					onclick={saveAndBroadcast}
 				>
@@ -1585,35 +1574,12 @@
 					{/if}
 				</BusyButton>
 			{/if}
-			{#if saved && !confirmingClear}
+			{#if input.trim().length > 0}
 				<BusyButton variant="ghost" onclick={beginClear}>
 					{$_('settings.display_name.clear')}
 				</BusyButton>
 			{/if}
 		</div>
-
-		{#if confirmingClear}
-			<!-- Inline destructive-action confirmation prompt. Per
-			     UX-STANDARD rule #5: one confirmation, not two; the
-			     confirming action is the heavier of the pair. -->
-			<div
-				class="mt-4 rounded-2xl border-2 border-red-300 bg-red-50 p-4 dark:border-red-700 dark:bg-red-950"
-				role="alertdialog"
-				aria-live="polite"
-			>
-				<p class="text-sm text-red-900 dark:text-red-100">
-					{$_('settings.display_name.clear_confirm_prompt')}
-				</p>
-				<div class="mt-3 flex flex-wrap gap-2">
-					<BusyButton variant="primary" onclick={confirmClear}>
-						{$_('settings.display_name.clear_confirm_yes')}
-					</BusyButton>
-					<BusyButton variant="ghost" onclick={cancelClear}>
-						{$_('settings.display_name.clear_confirm_cancel')}
-					</BusyButton>
-				</div>
-			</div>
-		{/if}
 
 		{#if broadcastError}
 			<div class="mt-3">
@@ -1683,9 +1649,10 @@
 		<div class="mt-6 flex flex-wrap items-center gap-3">
 			<BusyButton
 				variant="secondary-quiet"
+				size="sm"
 				busy={bioSaving}
 				done={bioSavedToast}
-				disabled={!bioValidation.ok || bioValidation.cleaned === bioSaved}
+				disabled={!bioClearing && (!bioValidation.ok || bioValidation.cleaned === bioSaved)}
 				busyLabel={$_('common.saving')}
 				onclick={saveBioLocal}
 			>
@@ -1698,9 +1665,10 @@
 			{#if $isUnlocked}
 				<BusyButton
 					variant="primary"
+					size="sm"
 					busy={bioBroadcasting}
 					done={bioBroadcastOk}
-					disabled={!bioValidation.ok}
+					disabled={!bioClearing && !bioValidation.ok}
 					busyLabel={$_('settings.display_name.broadcast_pending')}
 					onclick={saveAndBroadcastBio}
 				>
@@ -1711,34 +1679,12 @@
 					{/if}
 				</BusyButton>
 			{/if}
-			{#if bioSaved && !confirmingBioClear}
+			{#if bioInput.trim().length > 0}
 				<BusyButton variant="ghost" onclick={beginBioClear}>
 					{$_('settings.short_bio.clear')}
 				</BusyButton>
 			{/if}
 		</div>
-
-		{#if confirmingBioClear}
-			<!-- Same inline destructive-action confirmation as the display-name
-			     card (UX-STANDARD rule #5: one confirmation, heavier action). -->
-			<div
-				class="mt-4 rounded-2xl border-2 border-red-300 bg-red-50 p-4 dark:border-red-700 dark:bg-red-950"
-				role="alertdialog"
-				aria-live="polite"
-			>
-				<p class="text-sm text-red-900 dark:text-red-100">
-					{$_('settings.short_bio.clear_confirm_prompt')}
-				</p>
-				<div class="mt-3 flex flex-wrap gap-2">
-					<BusyButton variant="primary" onclick={confirmBioClear}>
-						{$_('settings.display_name.clear_confirm_yes')}
-					</BusyButton>
-					<BusyButton variant="ghost" onclick={cancelBioClear}>
-						{$_('settings.display_name.clear_confirm_cancel')}
-					</BusyButton>
-				</div>
-			</div>
-		{/if}
 
 		{#if bioBroadcastError}
 			<div class="mt-3">
@@ -1834,6 +1780,7 @@
 		<div class="mt-6 flex flex-wrap items-center gap-3">
 			<BusyButton
 				variant="secondary-quiet"
+				size="sm"
 				busy={blurtMediaSaving}
 				done={blurtMediaSavedToast}
 				disabled={!blurtMediaIsValid ||
@@ -1850,6 +1797,7 @@
 			{#if $isUnlocked}
 				<BusyButton
 					variant="primary"
+					size="sm"
 					busy={blurtMediaBroadcasting}
 					done={blurtMediaBroadcastOk}
 					disabled={!blurtMediaIsValid}
@@ -1963,6 +1911,7 @@
 		<div class="mt-6 flex flex-wrap items-center gap-3">
 			<BusyButton
 				variant="secondary-quiet"
+				size="sm"
 				busy={nostrSaving}
 				done={nostrSavedToast}
 				disabled={!nostrIsValid || (nostrIsEmpty ? '' : nostrCleaned) === nostrSaved}
@@ -1978,6 +1927,7 @@
 			{#if $isUnlocked}
 				<BusyButton
 					variant="primary"
+					size="sm"
 					busy={nostrBroadcasting}
 					done={nostrBroadcastOk}
 					disabled={!nostrIsValid}
@@ -2146,9 +2096,6 @@
 					<p class="font-semibold">
 						{$_('settings.syndication.blog_default_label')}
 					</p>
-					<p class="mt-1 text-sm text-ink-600 dark:text-ink-300">
-						{$_('settings.syndication.blog_default_help')}
-					</p>
 				</div>
 			</label>
 		{/if}
@@ -2156,9 +2103,30 @@
 
 	<!-- ─── Hidden accounts (client-side moderation, Q1.4) ─── -->
 	<section class="card mt-6" aria-labelledby="hidden-accounts-heading">
-		<h2 id="hidden-accounts-heading" class="font-display text-xl font-bold">
-			{$_('settings.hidden_accounts.heading')}
-		</h2>
+		<div class="flex items-start justify-between gap-4">
+			<h2 id="hidden-accounts-heading" class="min-w-0 font-display text-xl font-bold">
+				{$_('settings.hidden_accounts.heading')}
+			</h2>
+			<div class="flex flex-none items-center gap-2">
+				{#if hiddenRefreshed}
+					<span
+						class="text-xs font-medium text-emerald-600 dark:text-emerald-400"
+						role="status"
+						aria-live="polite"
+					>
+						✓ {$_('settings.hidden_accounts.refreshed')}
+					</span>
+				{/if}
+				<button
+					type="button"
+					onclick={onRefreshHidden}
+					class="rounded-lg border border-ink-300 px-3 py-1 text-xs font-semibold transition-colors hover:border-morphit-emerald hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:border-ink-700"
+					aria-label={$_('settings.hidden_accounts.refresh_aria') as string}
+				>
+					{$_('settings.hidden_accounts.refresh')}
+				</button>
+			</div>
+		</div>
 		<p class="mt-2 text-ink-600 dark:text-ink-300">
 			{$_('settings.hidden_accounts.explain')}
 		</p>
@@ -2213,6 +2181,7 @@
 						<div class="mt-3 flex flex-wrap gap-2">
 							<BusyButton
 								variant="primary"
+								size="sm"
 								onclick={() => {
 									clearAllHidden();
 									confirmingUnhideAll = false;
@@ -2362,6 +2331,7 @@
 						<div class="mt-3 flex flex-wrap gap-2">
 							<BusyButton
 								variant="primary"
+								size="sm"
 								onclick={() => {
 									clearPreferences();
 									confirmingClearPrefs = false;
@@ -2509,6 +2479,7 @@
 					<div class="mt-3">
 						<BusyButton
 							variant="primary"
+							size="sm"
 							busy={pwBusy}
 							disabled={!pwCanSubmit}
 							onclick={submitChangePassword}

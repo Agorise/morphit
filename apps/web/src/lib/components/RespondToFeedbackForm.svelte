@@ -203,7 +203,7 @@
 </script>
 
 <div
-	class="mt-3 rounded-xl border-2 border-morphit-teal/40 bg-morphit-teal/5 p-3"
+	class="mt-3 rounded-xl border border-ink-200 bg-ink-50 p-3 dark:border-ink-700/70 dark:bg-ink-800/40"
 	role="group"
 	aria-label={$_('feedback_response.form.aria_label')}
 >
@@ -228,8 +228,11 @@
 		</p>
 	{/if}
 	<p class="mb-2 font-semibold">{$_('feedback_response.form.heading')}</p>
-	<p class="mb-3 text-xs text-ink-600 dark:text-ink-300">
+	<p class="mb-1 text-xs text-ink-600 dark:text-ink-300">
 		{$_('feedback_response.form.subheading')}
+	</p>
+	<p class="mb-3 text-xs text-ink-500 dark:text-ink-400">
+		{$_('feedback_response.form.not_rating')}
 	</p>
 
 	<label class="mb-2 block">
@@ -256,7 +259,7 @@
 		<StatusLine kind="warn">{errorMessage}</StatusLine>
 	{/if}
 
-	<div class="mt-2 flex flex-col gap-2 sm:flex-row sm:justify-end">
+	<div class="mt-2 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
 		<BusyButton variant="ghost" disabled={submitting} onclick={onCancel}>
 			{$_('common.cancel')}
 		</BusyButton>

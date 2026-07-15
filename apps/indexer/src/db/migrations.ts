@@ -265,6 +265,35 @@ CREATE UNIQUE INDEX IF NOT EXISTS push_pending_account_source_trx_uidx
 COMMENT ON COLUMN push_pending.source_trx_id IS
     'cp471 fast-notifications dedup key: the on-chain trx id of the source message. The fast head-block enqueue and the durable enqueue of the same message share it; the partial UNIQUE (account, source_trx_id) makes the later INSERT a no-op so exactly one push is delivered. NULL for single-path pushes (featureBid/feedback); the partial index ignores NULLs.';
 `
+	},
+	{
+		version: 44,
+		description:
+			'v1.5.0: orders.status += "completed" — the morphit_order_complete_v1 op flips a finished trade\'s order from live to completed so it leaves the public orderbook (second removal path parallel to cancel).',
+		// New order-complete op (order owner marks a settled trade done).
+		// Postgres can't modify a CHECK in place; drop and re-add. The re-add
+		// validates existing rows — safe because 'completed' is strictly
+		// additive. Idempotent with schema.sql.
+		sql: `
+ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_status_check;
+ALTER TABLE orders ADD CONSTRAINT orders_status_check CHECK (
+    status IN ('live', 'cancelled', 'expired', 'completed')
+);
+`
+	},
+	{
+		version: 45,
+		description:
+			'v1.5.0: user_settings — one ENCRYPTED blob per account mirroring device-local settings (notifications/quiet-hours, privacy, syndication, hidden accounts, preferences) so they follow the user to a fresh device. Posting-key-derived key; the indexer stores only opaque ciphertext. Same shape as chat_folders.',
+		sql: `
+CREATE TABLE IF NOT EXISTS user_settings (
+    account TEXT PRIMARY KEY,
+    enc TEXT NOT NULL,
+    source_block_num BIGINT NOT NULL,
+    source_trx_id TEXT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+`
 	}
 	// Future migrations land here.  The v1 collapsed schema is the
 	// pre-launch baseline; from v37 forward, every new schema change is its

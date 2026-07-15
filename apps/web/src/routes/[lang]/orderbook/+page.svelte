@@ -1004,7 +1004,7 @@
 				{/if}
 			</p>
 		</div>
-		<a href={lp('/post')} class="btn-primary self-end whitespace-nowrap sm:self-start">
+		<a href={lp('/post')} class="btn-primary-sm self-end whitespace-nowrap sm:self-start">
 			{$_('orderbook.post_cta')}
 		</a>
 	</header>

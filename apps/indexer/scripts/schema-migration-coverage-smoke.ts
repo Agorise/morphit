@@ -69,7 +69,13 @@ const MIGRATIONS_TS = join(REPO_ROOT, 'apps', 'indexer', 'src', 'db', 'migration
  *  was widened to recognize the cp123/cp127-era banner format
  *  `-- ─── v<N>: <description>` (previously only `-- v<N> / ...`
  *  was recognized, silently undercounting v34 and v35). */
-const SCHEMA_HEAD_VERSION = 43;
+// v1.5.0 (cp471): 43 → 45. v44 = orders.status += 'completed' (the
+// morphit_order_complete_v1 op); v45 = user_settings, the ENCRYPTED
+// settings-to-chain blob. Both verified present + idempotent in schema.sql
+// AND migrations.ts before bumping — this pin attests to that, it is not a
+// rubber stamp. The guard caught these: v44/v45 were added in earlier v1.5.0
+// turns without the same-turn bump it exists to force.
+const SCHEMA_HEAD_VERSION = 45;
 /** Highest version covered by MIGRATIONS[] (max of `version` or any
  *  `subsumesVersions[]` entry).  Bump only when a new MIGRATIONS
  *  entry lands.  cp131 DEEP-002 — bumped 27 → 35 when
@@ -77,7 +83,8 @@ const SCHEMA_HEAD_VERSION = 43;
  *  v28-v35 sections in schema.sql.  cp425 — bumped 36 → 37 when the
  *  accepted_assets migration (v37) landed.  cp466 — bumped 41 → 42
  *  when the chat_folders migration (v42, t.txt #5) landed. */
-const MIGRATIONS_COVERAGE_HIGH = 43;
+// v1.5.0 (cp471): 43 → 45, in lockstep with SCHEMA_HEAD_VERSION above.
+const MIGRATIONS_COVERAGE_HIGH = 45;
 
 interface ScenarioResult {
 	readonly name: string;

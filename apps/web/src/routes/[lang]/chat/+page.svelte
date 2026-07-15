@@ -47,7 +47,7 @@
 		mergeRemoteReadState,
 		isUnread
 	} from '$lib/chat/readState';
-	import { getConversations, getChatReadState } from '$lib/indexer/client';
+	import { getConversations, getChatReadState, getFeedbackGiven } from '$lib/indexer/client';
 	import { getProfilesBatch } from '$lib/indexer/profileCache';
 	import { peersNeedingProfile, mergeProfileMap } from '$lib/indexer/profileMerge';
 	import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
@@ -62,12 +62,13 @@
 		syncChatFoldersFromChain,
 		resurrectArchivedOnNewActivity
 	} from '$lib/chat/chatFolders';
-	import { isUnlocked } from '$stores/identity';
+	import { isUnlocked, isPairedReadOnly } from '$stores/identity';
+	import { tradeStates } from '$lib/trades/tradeStatus';
 	import { blockedAccounts, loadBlocks } from '$lib/chat/blocks';
 	import { subscribeChatActivity } from '$lib/chat/globalChatActivityStream';
 	import { showToast } from '$lib/stores/toast';
 	import RequireLiveSession from '$components/RequireLiveSession.svelte';
-	import type { ConversationSummary, ProfileResponse } from '@morphit/indexer-client';
+	import type { ConversationSummary, ProfileResponse, FeedbackRecord } from '@morphit/indexer-client';
 
 	let me: string | null = $state(null);
 	let conversations: readonly ConversationSummary[] = $state([]);
@@ -283,6 +284,45 @@
 		);
 	});
 
+	// ─── v1.5.0 bidirectional feedback (inbox) ──────────────────
+	//  Each settled-trade card gets a 3rd line: "Leave feedback" (a prompt
+	//  that opens the thread, where the form lives) or "Feedback left: ★★★★★".
+	//  Uses ONE /feedback-given fetch for the whole list (keyed by
+	//  subject+order), same directional-safe check as the chat thread.
+	let feedbackGivenMap = $state<Map<string, FeedbackRecord>>(new Map());
+	let feedbackGivenChecked = $state(false);
+	async function loadFeedbackGiven(): Promise<void> {
+		if (!me) return;
+		try {
+			const r = await getFeedbackGiven(me, { limit: 100 });
+			if (r.ok) {
+				const m = new Map<string, FeedbackRecord>();
+				for (const f of r.data.items) {
+					m.set(`${f.subject}\u0000${f.order_permlink ?? ''}`, f);
+				}
+				feedbackGivenMap = m;
+			}
+		} catch {
+			/* best-effort — no feedback prompt is a safe default */
+		}
+		feedbackGivenChecked = true;
+	}
+	/** Per-card feedback state: can the current user review this peer for this
+	 *  order (settled trade, not yet reviewed, unlocked), and/or have they
+	 *  already (→ show the rating). */
+	function feedbackStateFor(convo: ConversationSummary): {
+		canLeave: boolean;
+		record: FeedbackRecord | null;
+	} {
+		const permlink = convo.order?.permlink;
+		if (!permlink) return { canLeave: false, record: null };
+		const record = feedbackGivenMap.get(`${convo.peer}\u0000${permlink}`) ?? null;
+		const settled = ($tradeStates.get(permlink)?.phase ?? 'address_shared') !== 'address_shared';
+		const canLeave =
+			settled && record === null && feedbackGivenChecked && $isUnlocked && !$isPairedReadOnly;
+		return { canLeave, record };
+	}
+
 	onMount(() => {
 		try {
 			me = getUserBlurtAccount();
@@ -299,6 +339,7 @@
 		// real-time refactor.
 		void loadBlocks(me);
 		void refresh(true);
+		void loadFeedbackGiven();
 
 		// Real-time inbox: re-poll on the fastchat cadence (≤6 s target).
 		// Paused while the tab is hidden; an immediate poll on refocus so a
@@ -538,6 +579,7 @@
 					{@const labelProps = extractLabelPropsFromProfile(profileMap[convo.peer])}
 					{@const starred = convo.folder === 'starred'}
 					{@const archived = convo.folder === 'archived'}
+					{@const fb = feedbackStateFor(convo)}
 					<!-- One card per DISCUSSION (peer + order), like an email inbox.
 					     The whole card is one click target → the conversation; only the
 					     star and the action box on the right are their own controls
@@ -614,6 +656,26 @@
 											<span class="min-w-0 truncate">-</span>
 										{/if}
 									</div>
+									{#if fb.canLeave}
+										<div class="flex items-baseline gap-1 text-xs font-semibold text-morphit-emerald">
+											<span>{$_('chat.feedback.leave_prompt')}</span>
+											<span aria-hidden="true">→</span>
+										</div>
+									{:else if fb.record !== null}
+										<div
+											class="flex flex-wrap items-baseline gap-1 text-xs text-ink-500 dark:text-ink-400"
+										>
+											<span class="font-medium">{$_('chat.feedback.left_label')}</span>
+											<span class="text-amber-500" aria-hidden="true"
+												>{'★'.repeat(fb.record.rating)}{'☆'.repeat(5 - fb.record.rating)}</span
+											>
+											{#if fb.record.comment}
+												<span class="min-w-0 truncate text-ink-500 dark:text-ink-400"
+													>{fb.record.comment}</span
+												>
+											{/if}
+										</div>
+									{/if}
 								</div>
 							</a>
 							<!-- Timestamp — sibling of the anchor, vertically centred by the row's

@@ -20,6 +20,7 @@
 
 	import { _ } from 'svelte-i18n';
 	import { tradeStates } from '$lib/trades/tradeStatus';
+	import IdentityLabel from '$components/IdentityLabel.svelte';
 
 	interface Props {
 		orderPermlink: string;
@@ -49,11 +50,15 @@
 			{$_('trade_status.payment_pending')}
 		</span>
 	{:else if state.phase === 'paid_verified'}
+		<!-- v1.5.0 — name the payer ("Paid by @peer") in a green pill;
+		     IdentityLabel keeps the avatar so look-alike handles can't be
+		     confused. -->
 		<span
 			class="inline-flex items-center gap-1 rounded-full border border-emerald-400 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-900 dark:border-emerald-600 dark:bg-emerald-950 dark:text-emerald-100"
 		>
 			<span aria-hidden="true">✓</span>
-			{$_('trade_status.paid')}
+			{$_('trade_status.paid_by')}
+			<IdentityLabel account={state.peer} avatarSize={16} weight="bold" />
 		</span>
 	{:else if state.phase === 'paid_mismatch'}
 		<span

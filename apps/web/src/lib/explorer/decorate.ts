@@ -30,6 +30,7 @@ export type OpDecorationKind =
 	| 'morphit_order'
 	| 'morphit_order_replace'
 	| 'morphit_order_cancel'
+	| 'morphit_order_complete'
 	| 'morphit_feedback'
 	| 'morphit_feedback_response'
 	| 'morphit_chat'
@@ -69,6 +70,7 @@ const OP_ID_TO_KIND: ReadonlyMap<string, OpDecorationKind> = new Map<string, OpD
 	[OP_IDS.order, 'morphit_order'],
 	[OP_IDS.orderReplace, 'morphit_order_replace'],
 	[OP_IDS.orderCancel, 'morphit_order_cancel'],
+	[OP_IDS.orderComplete, 'morphit_order_complete'],
 	[OP_IDS.feedback, 'morphit_feedback'],
 	[OP_IDS.feedbackResponse, 'morphit_feedback_response'],
 	[OP_IDS.chatMessage, 'morphit_chat'],

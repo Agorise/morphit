@@ -40,6 +40,7 @@
 	import { _ } from 'svelte-i18n';
 
 	import ChatMessage from '$components/ChatMessage.svelte';
+	import LeaveFeedbackForm from '$components/LeaveFeedbackForm.svelte';
 	import ChatComposer from '$components/ChatComposer.svelte';
 	import FirstTradeHelper from '$components/FirstTradeHelper.svelte';
 	import ChatNotificationNudge from '$components/ChatNotificationNudge.svelte';
@@ -66,7 +67,12 @@
 	} from '$stores/chatSecurity';
 	import { blockedAccounts, loadBlocks, markBlocked, markUnblocked } from '$lib/chat/blocks';
 	import { broadcastBlock, broadcastUnblock } from '$blurt/ops/block';
-	import { getChatAdmission, getOrdersByAccount, getReputationReceipt } from '$lib/indexer/client';
+	import {
+		getChatAdmission,
+		getOrdersByAccount,
+		getReputationReceipt,
+		getFeedbackGiven
+	} from '$lib/indexer/client';
 	import { chatMoneyFlow } from '$lib/chat/orderRole';
 	import { fetchAccountKeys } from '$blurt/accountKeys';
 	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
@@ -95,11 +101,11 @@
 		isDaiNetwork,
 		type DaiNetwork
 	} from '$lib/assets/networks';
-	import { recordFundsSent } from '$lib/trades/tradeStatus';
+	import { recordFundsSent, tradeStates } from '$lib/trades/tradeStatus';
 	import ConfirmModal from '$components/ConfirmModal.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
 	import VerifyPeerPanel from '$components/VerifyPeerPanel.svelte';
-	import type { ProfileResponse, OrderRecord } from '@morphit/indexer-client';
+	import type { ProfileResponse, OrderRecord, FeedbackRecord } from '@morphit/indexer-client';
 
 	interface Props {
 		/** Local user's Blurt account name. */
@@ -195,6 +201,55 @@
 	/** True when the resolved order is OURS (we posted it). Flips the peer's
 	 *  trade side, so Pay-now / Share-address gate correctly either way. */
 	const orderIsMine = $derived(orderOwner !== null && orderOwner === me);
+
+	// ─── v1.5.0 bidirectional feedback ──────────────────────────
+	//  After a trade settles (a Payment Receipt has landed), EITHER party
+	//  can review the other right here in the chat. We show the form only
+	//  when the current user can review this peer for this order (a real,
+	//  paid trade) AND hasn't already — the "already reviewed" check reads
+	//  /feedback-given for the current user, which works in BOTH trade
+	//  directions (the counterparties endpoint is owner-keyed and only
+	//  answers owner→counterparty).
+	let myFeedbackForPeer = $state<FeedbackRecord | null>(null);
+	let feedbackChecked = $state(false);
+	let justSubmittedFeedback = $state(false);
+	let feedbackFetchStarted = false;
+	$effect(() => {
+		if (feedbackFetchStarted || orderPermlink === undefined || !me || !peer) return;
+		feedbackFetchStarted = true;
+		void (async () => {
+			try {
+				const r = await getFeedbackGiven(me, { limit: 100 });
+				if (r.ok) {
+					myFeedbackForPeer =
+						r.data.items.find(
+							(f) => f.subject === peer && f.order_permlink === orderPermlink
+						) ?? null;
+				}
+			} catch {
+				/* best-effort — the form's submit + the indexer still gate correctly */
+			}
+			feedbackChecked = true;
+		})();
+	});
+	/** A funds-sent (Payment Receipt) has landed for this order — the trade
+	 *  has progressed past address-sharing, so it's reviewable. */
+	const tradeSettled = $derived(
+		orderPermlink !== undefined &&
+			(($tradeStates.get(orderPermlink)?.phase ?? 'address_shared') !== 'address_shared')
+	);
+	const canLeaveFeedback = $derived(
+		orderPermlink !== undefined &&
+			tradeSettled &&
+			feedbackChecked &&
+			myFeedbackForPeer === null &&
+			!justSubmittedFeedback &&
+			$isUnlocked &&
+			!$isPairedReadOnly
+	);
+	function onChatFeedbackSuccess(): void {
+		justSubmittedFeedback = true;
+	}
 
 	/** Derived block status for this peer. True iff the blocks
 	 *  store contains the peer's account. Drives the Block/Unblock
@@ -1533,7 +1588,7 @@
 						<button
 							type="button"
 							bind:this={overflowTriggerEl}
-							class="relative rounded-xl border-2 border-ink-300 bg-white px-2 py-1.5 text-ink-700 hover:bg-ink-100 dark:border-ink-600 dark:bg-ink-900 dark:text-ink-200 dark:hover:bg-ink-800"
+							class="relative rounded-xl bg-white px-2 py-1.5 text-ink-700 hover:bg-ink-100 dark:bg-ink-900 dark:text-ink-200 dark:hover:bg-ink-800"
 							aria-haspopup="menu"
 							aria-expanded={overflowMenuOpen}
 							aria-label={$_('chat.menu.aria_open') as string}
@@ -1730,7 +1785,10 @@
 						     "that day" in a long lazy-loaded history, not a UI element. -->
 						<li class="chat-day-separator mt-2 select-none first:mt-0">
 							<div class="text-center text-[11px] leading-none text-ink-400 dark:text-ink-500">
-								{daySep}
+								<!-- tt.txt v1.5.0 — the divider marks the midnight-UTC day boundary. -->
+								<span class="cursor-help" title={$_('chat.day_separator_tooltip') as string}
+									>{daySep}</span
+								>
 							</div>
 							<div
 								class="mt-1 h-px w-full bg-ink-200 dark:bg-ink-800"
@@ -1772,6 +1830,37 @@
 				{$_('chat.new_messages_pill', { values: { n: unreadWhileScrolledUp } })} ↓
 			</button>
 		</div>
+	{/if}
+
+	<!-- v1.5.0 — bidirectional feedback: once a trade has settled (a Payment
+	     Receipt landed), either party can review the other right from the
+	     chat. Sits directly below the last message, above the composer. -->
+	{#if orderPermlink}
+		{#if canLeaveFeedback}
+			<div class="mx-2 mb-2 rounded-xl border-2 border-morphit-emerald bg-morphit-emerald/5 p-3">
+				<LeaveFeedbackForm
+					{orderPermlink}
+					prefillSubject={peer}
+					lockSubject={true}
+					onSuccess={onChatFeedbackSuccess}
+				/>
+			</div>
+		{:else if myFeedbackForPeer !== null || justSubmittedFeedback}
+			<div
+				class="mx-2 mb-2 flex flex-wrap items-center gap-2 rounded-xl border-2 border-morphit-emerald/40 bg-morphit-emerald/5 px-3 py-2 text-sm"
+			>
+				<span aria-hidden="true">✓</span>
+				<span class="font-semibold">{$_('chat.feedback.left_label')}</span>
+				{#if myFeedbackForPeer !== null}
+					<span class="text-amber-500" aria-hidden="true"
+						>{'★'.repeat(myFeedbackForPeer.rating)}{'☆'.repeat(5 - myFeedbackForPeer.rating)}</span
+					>
+					{#if myFeedbackForPeer.comment}
+						<span class="min-w-0 text-ink-700 dark:text-ink-200">{myFeedbackForPeer.comment}</span>
+					{/if}
+				{/if}
+			</div>
+		{/if}
 	{/if}
 
 	<!-- Pinned composer. Admission state (Finding H layer 2)
@@ -1819,7 +1908,7 @@
 			     there's no live order to act on (showChatActionToolbar). -->
 			{#if !locked && showChatActionToolbar}
 				<div
-					class="flex-none border-t border-ink-200 bg-ink-50 px-4 py-2 dark:border-ink-800 dark:bg-ink-900"
+					class="flex-none border-t border-ink-200 bg-emerald-50/30 px-4 py-2 dark:border-ink-800 dark:bg-morphit-emerald/[0.05]"
 				>
 					<div
 						class="mx-auto flex max-w-2xl flex-wrap items-center justify-center gap-2"

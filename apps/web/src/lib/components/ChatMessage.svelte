@@ -46,8 +46,7 @@
 		daiExplorerUrl,
 		usdtExplorerUrls,
 		usdcExplorerUrls,
-		daiExplorerUrls,
-		blurtWalletExplorerFallbackUrl
+		daiExplorerUrls
 	} from '$lib/explorer/urls';
 	import ExplorerLink from '$lib/components/ExplorerLink.svelte';
 	import { isUsdtNetwork, isUsdcNetwork, isDaiNetwork } from '$lib/assets/networks';
@@ -666,12 +665,16 @@
 				{@const p = decoded.payload}
 				{@const isIncoming = !isOutgoing}
 				{@const parsedAmount = p.amount !== undefined ? parseFloat(p.amount) : NaN}
+				{@const alreadyPaid =
+					p.orderPermlink !== undefined &&
+					($tradeStates.get(p.orderPermlink)?.phase ?? 'address_shared') !== 'address_shared'}
 				{@const canPayNow =
 					onPayNow !== undefined &&
 					p.method === 'blurt' &&
 					isIncoming &&
 					!Number.isNaN(parsedAmount) &&
-					parsedAmount > 0}
+					parsedAmount > 0 &&
+					!alreadyPaid}
 				{@const canMarkSent =
 					onMarkSent !== undefined &&
 					(p.method === 'btc' ||
@@ -991,6 +994,14 @@
 				{@const daiFundsNetworkValid =
 					p.method === 'dai' && p.network !== undefined && isDaiNetwork(p.network)}
 				<div class="flex flex-col gap-2">
+					<!-- v1.5.0 — Payment Receipt title header (grandma-friendly:
+					     names the bubble before the details). -->
+					<div
+						class="flex items-center gap-1.5 border-b border-black/10 pb-1.5 text-sm font-bold dark:border-white/10"
+					>
+						<span aria-hidden="true">🧾</span>
+						{$_('chat.funds_sent.receipt_title')}
+					</div>
 					<div
 						class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider opacity-70"
 					>
@@ -1049,12 +1060,14 @@
 							{/if}
 							{$_('chat.funds_sent.pill_title_dai')}
 						{:else}
-							{$_('chat.funds_sent.pill_title_blurt')}
-						{/if}
-						{#if p.amount}
-							<span class="font-mono">· {p.amount}</span>
+							{isOutgoing
+								? $_('chat.funds_sent.pill_title_blurt')
+								: $_('chat.funds_sent.pill_title_blurt_received')}
 						{/if}
 					</div>
+					{#if p.amount}
+						<div class="font-mono text-lg font-bold leading-tight">{p.amount}</div>
+					{/if}
 					{#if p.method === 'blurt' && verifyResult !== null}
 						<!-- Phase F.4 verification badge, extended in
 						     F.5 audit (F-14) to cover self-verification
@@ -1151,25 +1164,21 @@
 							>
 								{p.txid}
 							</code>
-							{#if explorerLinksForTxid(p.method, p.txid, p.network).length > 0}
+							{#if p.method !== 'blurt' && explorerLinksForTxid(p.method, p.txid, p.network).length > 0}
+								<!-- v1.5.0 — external-chain (BTC/XMR/etc) receipts keep their
+								     block-explorer link; there is no local explorer for those
+								     assets. Blurt uses the local verify link below. -->
 								<ExplorerLink urls={explorerLinksForTxid(p.method, p.txid, p.network)} />
 							{/if}
-							{#if p.method === 'blurt'}
-								{@const verifyUrl = blurtWalletExplorerFallbackUrl('tx', p.txid)}
+							{#if p.method === 'blurt' && verifyResult !== null && verifyResult !== 'pending' && verifyResult.kind === 'verified'}
+								{@const verifyUrl = morphitExplorerTxUrl(p.txid)}
 								{#if verifyUrl}
-									<!-- cp410 — independent "Verify" link. The verification
-									     badge above is computed via the operator's indexer;
-									     this opens an INDEPENDENT third-party Blurt explorer
-									     so a cautious seller can confirm the payment landed
-									     WITHOUT trusting their instance operator. Opening it
-									     is a deliberate one-off action (it reveals the user's
-									     IP to that explorer), which is why it's an opt-in
-									     link rather than an automatic check. -->
+									<!-- v1.5.0 — THIS instance's explorer only (no off-site
+									     explorer; privacy #1 — no IP leak to a third party).
+									     Shown only once the transfer is chain-verified. -->
 									<a
 										href={verifyUrl}
-										target="_blank"
-										rel="noopener noreferrer"
-										class="inline-flex w-fit items-center gap-1 text-xs font-semibold text-morphit-emerald hover:underline"
+										class="-mx-1 inline-flex w-fit items-center gap-1 rounded px-1 py-0.5 text-xs font-semibold text-morphit-emerald transition-colors hover:bg-morphit-emerald/15 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
 									>
 										<span aria-hidden="true">🔎</span>
 										{$_('chat.funds_sent.verify_independently')}

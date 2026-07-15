@@ -45,7 +45,7 @@
 
 	import { identity, isUnlocked, isPairedReadOnly, hasAnySession } from '$stores/identity';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
-	import { broadcastOrderCancel, BroadcastError } from '$blurt/ops/order';
+	import { broadcastOrderCancel, broadcastOrderComplete, BroadcastError } from '$blurt/ops/order';
 	import { KeystoreError } from '$crypto/keystore';
 	import { getOrdersByAccount, getOrderCounterparties } from '$lib/indexer/client';
 	import { fetchListingFee } from '$lib/orders/listingFee';
@@ -54,6 +54,7 @@
 	import { isOrderExpired, isOrderLive } from '$lib/orders/orderExpiry';
 	import { buildRelistPrefill, RELIST_PREFILL_KEY } from '$lib/orders/relist';
 	import { recordCancel, applyRecentCancels } from '$lib/orders/recentCancels';
+	import { recordComplete, applyRecentCompletes } from '$lib/orders/recentCompletes';
 	import { MORPHIT_INDEXER_ORIGIN, resolveOrigin } from '$net/config';
 	import { safeSession, safeLocal } from '$lib/utils/safeStorage';
 	import { orderTitleParts } from '$lib/utils/orderTitle';
@@ -61,6 +62,7 @@
 	import { instanceAdditions, instanceNameLookup } from '$lib/stores/instanceAdditions';
 	import type { OrderRecord } from '@morphit/indexer-client';
 	import { addPendingFeatured } from '$stores/pendingFeatured';
+	import { tradeStates } from '$lib/trades/tradeStatus';
 	import {
 		editWindowRemainingSeconds as editWindowRemainingSecondsFor,
 		formatRemainingMmSs
@@ -109,17 +111,63 @@
 	const viewCounts: Record<string, number> = $state({});
 
 	// ─── Filter state ──────────────────────────────────────────────
-	type FilterKind = 'all' | 'live' | 'cancelled' | 'expired';
+	type FilterKind = 'all' | 'live' | 'paid' | 'cancelled' | 'expired';
 	// t.txt (v1.4.9 #3) — default to the Live pill/orders. Most people
 	// arriving here want to see what they currently have posted; All /
 	// Cancelled / Expired are a click away.
 	let filter = $state<FilterKind>('live');
 
 	// ─── Counts per state (derived) ────────────────────────────────
-	const counts = $derived.by(() => {
-		const c = { all: items.length, live: 0, cancelled: 0, expired: 0 };
+	// v1.5.0 — a trade whose payment is verified (or beyond) counts as "Paid".
+	//  Read from the shared trade-status store; drives the Paid filter + hides
+	//  the Feature/Cancel buttons + the "Visible in orderbook" pill.
+	const PAID_PHASES = new Set(['paid_verified', 'released', 'completed']);
+	const paidPermlinks = $derived(
+		new Set(
+			[...$tradeStates.entries()]
+				.filter(([, st]) => PAID_PHASES.has(st.phase))
+				.map(([permlink]) => permlink)
+		)
+	);
+
+	// v1.5.0 — AUTO-COMPLETE. Once the seller's client has VERIFIED the
+	//  payment on one of their own live orders (paid_verified), the trade
+	//  is settled, so post morphit_order_complete_v1 to drop the order from
+	//  the public orderbook. /my/orders shows ONLY the current user's own
+	//  orders, so the handler's owner-only guard is always satisfied here
+	//  (unlike the app-wide verify listener, whose payee isn't always the
+	//  order owner). Fire-once per order per session, unlocked-only (needs
+	//  the posting key), best-effort — the manual "Mark as complete" button
+	//  is the fallback for off-chain trades and for locked/paired sessions.
+	const autoCompletedPermlinks = new Set<string>();
+	$effect(() => {
+		const st = $identity;
+		if (st.state !== 'unlocked') return;
 		for (const o of items) {
-			if (isLive(o)) c.live++;
+			if (
+				o.status === 'live' &&
+				paidPermlinks.has(o.permlink) &&
+				!autoCompletedPermlinks.has(o.permlink)
+			) {
+				autoCompletedPermlinks.add(o.permlink); // mark BEFORE await — fire once
+				void (async () => {
+					try {
+						await broadcastOrderComplete(st.live, o.permlink);
+						recordComplete(o.permlink);
+						items = applyRecentCompletes(items);
+					} catch (err) {
+						console.warn('[my/orders] auto-complete failed:', o.permlink, err);
+						autoCompletedPermlinks.delete(o.permlink); // allow retry next tick
+					}
+				})();
+			}
+		}
+	});
+	const counts = $derived.by(() => {
+		const c = { all: items.length, live: 0, paid: 0, cancelled: 0, expired: 0 };
+		for (const o of items) {
+			if (o.status === 'completed' || paidPermlinks.has(o.permlink)) c.paid++;
+			else if (isLive(o)) c.live++;
 			else if (o.status === 'cancelled') c.cancelled++;
 			else if (isExpired(o)) c.expired++;
 		}
@@ -133,6 +181,11 @@
 	let pendingCancelPermlink: string | null = $state(null);
 	let cancelErrorPermlink: string | null = $state(null);
 	let cancelErrorMessage = $state('');
+
+	// ─── Complete state (per-row) — v1.5.0 "Mark as complete" ─────
+	let pendingCompletePermlink: string | null = $state(null);
+	let completeErrorPermlink: string | null = $state(null);
+	let completeErrorMessage = $state('');
 
 	// ─── Feature-bid state (per-row) ───────────────────────────────
 	// Same one-at-a-time disclosure pattern as cancel. The form
@@ -247,7 +300,7 @@
 		// t.txt #7 — reflect a just-cancelled order even if the indexer hasn't
 		// caught up yet (e.g. arriving here right after cancelling from the
 		// order page). Chain is truth; this only bridges the ~1min lag.
-		items = applyRecentCancels(result.data.items);
+		items = applyRecentCompletes(applyRecentCancels(result.data.items));
 		phase = 'ready';
 		// Task #14 — kick off viewcount fetches in parallel.
 		// Each one independently updates viewCounts as it
@@ -360,7 +413,9 @@
 	const visibleItems = $derived.by(() => {
 		switch (filter) {
 			case 'live':
-				return items.filter((o) => isLive(o));
+				return items.filter((o) => isLive(o) && !paidPermlinks.has(o.permlink));
+			case 'paid':
+				return items.filter((o) => o.status === 'completed' || paidPermlinks.has(o.permlink));
 			case 'cancelled':
 				return items.filter((o) => o.status === 'cancelled');
 			case 'expired':
@@ -418,6 +473,9 @@
 	}
 
 	function stateLabel(o: OrderRecord): string {
+		// A completed trade reads "Completed" regardless of the clock — the
+		// seller marked it done, so it's not "Expired" even if past expires_at.
+		if (o.status === 'completed') return $_('my_orders.order.state_completed');
 		// A 'live' order past its expires_at reads "Expired", matching the
 		// orderbook (which has already dropped it) — see isExpired().
 		if (isExpired(o)) return $_('my_orders.order.state_expired');
@@ -549,6 +607,56 @@
 		}
 	}
 
+	function requestComplete(permlink: string): void {
+		pendingCompletePermlink = permlink;
+		completeErrorPermlink = null;
+		completeErrorMessage = '';
+	}
+
+	function abortComplete(): void {
+		pendingCompletePermlink = null;
+	}
+
+	async function confirmComplete(permlink: string): Promise<void> {
+		const state = get(identity);
+		if (state.state !== 'unlocked') {
+			completeErrorPermlink = permlink;
+			completeErrorMessage = $_('post_order.broadcast_error.body_locked');
+			pendingCompletePermlink = null;
+			return;
+		}
+
+		completeErrorPermlink = null;
+		completeErrorMessage = '';
+
+		try {
+			await broadcastOrderComplete(state.live, permlink);
+			// Optimistic (same bridge as cancel): flip to 'completed' so the card
+			// + Live/Paid pill counts update instantly; the indexer lags ~1min.
+			recordComplete(permlink);
+			items = applyRecentCompletes(items);
+			pendingCompletePermlink = null;
+			void (async () => {
+				await new Promise((r) => setTimeout(r, 1_500));
+				await load();
+			})();
+		} catch (err) {
+			console.warn('[my/orders] complete broadcast failed:', err);
+			completeErrorPermlink = permlink;
+			if (err instanceof BroadcastError && err.code === 'locked') {
+				completeErrorMessage = $_('post_order.broadcast_error.body_locked');
+			} else if (err instanceof KeystoreError && err.kind === 'bad_password') {
+				completeErrorMessage = $_('post_order.broadcast_error.body_bad_password');
+			} else if (err instanceof KeystoreError && err.kind === 'identity_mismatch') {
+				completeErrorMessage = $_('crypto.error.identity_mismatch');
+			} else {
+				completeErrorMessage = $_('post_order.broadcast_error.body_generic');
+			}
+		} finally {
+			pendingCompletePermlink = null;
+		}
+	}
+
 	// Part 121 cp7 — per-locale internal-link wrapper.  See
 	// $i18n/path.localePath() + the analogous helper in
 	// [lang]/+layout.svelte for design rationale.
@@ -577,7 +685,7 @@
 				</p>
 			{/if}
 		</div>
-		<a href={lp('/post')} class="btn-primary self-start whitespace-nowrap">
+		<a href={lp('/post')} class="btn-primary-sm self-start whitespace-nowrap">
 			{$_('orderbook.post_cta')}
 		</a>
 	</header>
@@ -706,7 +814,7 @@
 		<section class="mb-4">
 			<p class="mb-2 text-sm font-semibold">{$_('my_orders.filter.heading')}</p>
 			<div class="flex gap-2">
-				{#each ['all', 'live', 'cancelled', 'expired'] as f}
+				{#each ['all', 'live', 'paid', 'cancelled', 'expired'] as f}
 					<button
 						type="button"
 						onclick={() => (filter = f as FilterKind)}
@@ -780,13 +888,18 @@
 								{/if}
 							</div>
 							<div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
-								<span
-									class="rounded-full border px-2 py-0.5 font-semibold {isLive(o)
-										? 'border-morphit-emerald bg-emerald-50 text-emerald-900 dark:bg-ink-800 dark:text-emerald-100'
-										: 'border-ink-300 text-ink-600 dark:border-ink-600 dark:text-ink-300'}"
-								>
-									{stateLabel(o)}
-								</span>
+								{#if !paidPermlinks.has(o.permlink)}
+									<!-- v1.5.0 — a verifiably-paid order is effectively taken; hide
+									     the "Visible in orderbook" state pill (the "Paid by @peer"
+									     badge below conveys the state). -->
+									<span
+										class="rounded-full border px-2 py-0.5 font-semibold {isLive(o)
+											? 'border-morphit-emerald bg-emerald-50 text-emerald-900 dark:bg-ink-800 dark:text-emerald-100'
+											: 'border-ink-300 text-ink-600 dark:border-ink-600 dark:text-ink-300'}"
+									>
+										{stateLabel(o)}
+									</span>
+								{/if}
 								<PaymentStatusBadge orderPermlink={o.permlink} />
 								{#if !isLive(o)}
 									<!-- cp429/cp440 — an order that is no longer live (EXPIRED or
@@ -949,7 +1062,7 @@
 											orderPermlink={o.permlink}
 											density="inline"
 										/>
-									{:else}
+									{:else if !paidPermlinks.has(o.permlink)}
 										<BusyButton
 											size="sm"
 											variant="secondary"
@@ -1001,14 +1114,22 @@
 										<p class="text-xs text-ink-500 dark:text-ink-400">
 											{$_('my_orders.order.feedback_pick_prompt')}
 										</p>
-										{#each reviewableCounterparties[o.permlink] ?? [] as peer (peer)}
-											<BusyButton
-												variant="secondary"
-												onclick={() => openFeedback(o.permlink, peer)}
-											>
-												<IdentityLabel account={peer} />
-											</BusyButton>
-										{/each}
+										<!-- v1.5.0: tight avatar menu (reads like a select) —
+										     keeps the identicon so look-alike handles can't be
+										     confused. Picking opens the subject-locked form. -->
+										<div
+											class="divide-y divide-morphit-emerald/20 overflow-hidden rounded-xl border-2 border-morphit-emerald bg-morphit-emerald/5"
+										>
+											{#each reviewableCounterparties[o.permlink] ?? [] as peer (peer)}
+												<button
+													type="button"
+													class="flex w-full items-center px-3 py-2 text-left text-sm transition-colors hover:bg-morphit-emerald/10 focus:outline-none focus-visible:bg-morphit-emerald/10"
+													onclick={() => openFeedback(o.permlink, peer)}
+												>
+													<IdentityLabel account={peer} />
+												</button>
+											{/each}
+										</div>
 										<button
 											type="button"
 											class="self-start text-xs text-ink-500 underline hover:text-ink-700 dark:text-ink-400 dark:hover:text-ink-200"
@@ -1018,13 +1139,17 @@
 										</button>
 									</div>
 								{:else if reviewableCounterparties[o.permlink]?.length === 0}
-									<!-- cp421 / #8: loaded, but nobody has provably traded on
-									     this order yet (no two-way conversation), so a review
-									     would be dropped by the indexer gate — we must NOT
-									     offer the review button here. Ken #8: the old "No
-									     trade partner to review yet" line read as confusing
-									     on a fresh / just-re-listed card, so render nothing. -->
-									{void 0}
+									<!-- v1.5.0 (t.txt line 1): loaded, but nobody has provably
+									     traded on this order yet (no two-way conversation), so
+									     there's no one to review. Ken now wants an explicit
+									     empty-state here (superseding the earlier #8 "render
+									     nothing"), worded clearly so it doesn't read as a
+									     broken review prompt. -->
+									<div
+										class="rounded-xl border-2 border-morphit-emerald/40 bg-morphit-emerald/5 px-3 py-2 text-xs text-ink-500 dark:text-ink-400"
+									>
+										{$_('my_orders.order.feedback_no_counterparty')}
+									</div>
 								{:else}
 									<BusyButton size="sm" variant="secondary" onclick={() => startFeedback(o.permlink)}>
 										{$_('my_orders.order.action_feedback')}
@@ -1041,8 +1166,20 @@
 										density="inline"
 									/>
 								{:else}
-									<BusyButton size="sm" variant="danger" onclick={() => requestCancel(o.permlink)}>
-										{$_('order_detail.cancel_button')}
+									{#if !paidPermlinks.has(o.permlink)}
+										<BusyButton size="sm" variant="danger" onclick={() => requestCancel(o.permlink)}>
+											{$_('order_detail.cancel_button')}
+										</BusyButton>
+									{/if}
+								{/if}
+								{#if !$isPairedReadOnly && $tradeStates.has(o.permlink)}
+									<!-- v1.5.0 — "Mark as complete": second removal path parallel to
+									     Cancel, shown once a trade is in progress on this live order.
+									     For on-chain Blurt trades the auto-complete effect usually
+									     fires first; this is the reliable path for off-chain
+									     settlements (BTC/XMR/cash) and a manual force. -->
+									<BusyButton size="sm" variant="secondary" onclick={() => requestComplete(o.permlink)}>
+										{$_('my_orders.order.action_complete')}
 									</BusyButton>
 								{/if}
 							{:else if o.status === 'cancelled'}
@@ -1074,6 +1211,9 @@
 							{/if}
 							{#if cancelErrorPermlink === o.permlink && cancelErrorMessage}
 								<StatusLine kind="warn">{cancelErrorMessage}</StatusLine>
+							{/if}
+							{#if completeErrorPermlink === o.permlink && completeErrorMessage}
+								<StatusLine kind="warn">{completeErrorMessage}</StatusLine>
 							{/if}
 						</div>
 					</div>
@@ -1145,5 +1285,16 @@
 		busyLabel={$_('my_orders.cancel.cancelling') as string}
 		onConfirm={() => (pendingCancelPermlink ? confirmCancel(pendingCancelPermlink) : undefined)}
 		onCancel={abortCancel}
+	/>
+
+	<ConfirmModal
+		open={pendingCompletePermlink !== null}
+		title={$_('my_orders.complete.confirm_title') as string}
+		body={$_('my_orders.complete.confirm_body') as string}
+		confirmLabel={$_('my_orders.complete.confirm_button') as string}
+		cancelLabel={$_('my_orders.complete.cancel_button') as string}
+		busyLabel={$_('my_orders.complete.completing') as string}
+		onConfirm={() => (pendingCompletePermlink ? confirmComplete(pendingCompletePermlink) : undefined)}
+		onCancel={abortComplete}
 	/>
 </div>

@@ -237,4 +237,27 @@ export async function broadcastOrderCancel(
 	return { ...result, permlink };
 }
 
+/**
+ * Broadcast a `morphit_order_complete_v1` op (v1.5.0). The seller
+ * posts this once a trade's payment is confirmed — automatically
+ * the moment their client verifies the payment on-chain, or via
+ * the manual "Mark as complete" action for off-chain settlements.
+ * A completed order leaves the public orderbook (indexer flips
+ * status live→completed); the owner still sees it in
+ * /v1/orders/:account. Only the order OWNER can complete it, so a
+ * buyer cannot grief a listing off the book.
+ */
+export async function broadcastOrderComplete(
+	live: LiveIdentity,
+	permlink: string
+): Promise<{ block_num: number; trx_id: string; permlink: string }> {
+	const account = getUserBlurtAccount();
+	if (!account) {
+		throw new BroadcastError('no_account', 'No Blurt account registered.');
+	}
+	const { broadcastCustomJson } = await import('$blurt/sign');
+	const result = await broadcastCustomJson(live, OP_IDS.orderComplete, { permlink }, account);
+	return { ...result, permlink };
+}
+
 export { BroadcastError };

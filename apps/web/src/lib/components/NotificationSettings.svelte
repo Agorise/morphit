@@ -505,7 +505,7 @@
 			<button
 				type="button"
 				onclick={unmute}
-				class="mt-3 rounded-xl border border-ink-300 bg-white px-4 py-2 font-semibold text-ink-700 transition hover:border-morphit-emerald hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:border-ink-600 dark:bg-ink-900 dark:text-ink-200"
+				class="mt-3 rounded-xl border border-ink-300 bg-white px-4 py-2 font-semibold text-ink-700 transition-colors hover:border-morphit-emerald hover:bg-morphit-emerald/5 hover:text-morphit-emerald dark:hover:bg-morphit-emerald/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:border-ink-600 dark:bg-ink-900 dark:text-ink-200"
 			>
 				{$_('settings.notifications.mute_unmute')}
 			</button>
@@ -514,21 +514,21 @@
 				<button
 					type="button"
 					onclick={() => muteFor(HOUR_MS)}
-					class="rounded-xl border border-ink-300 bg-white px-4 py-2 text-sm font-semibold text-ink-700 transition hover:border-morphit-emerald hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:border-ink-600 dark:bg-ink-900 dark:text-ink-200"
+					class="rounded-xl border border-ink-300 bg-white px-4 py-2 text-sm font-semibold text-ink-700 transition-colors hover:border-morphit-emerald hover:bg-morphit-emerald/5 hover:text-morphit-emerald dark:hover:bg-morphit-emerald/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:border-ink-600 dark:bg-ink-900 dark:text-ink-200"
 				>
 					{$_('settings.notifications.mute_1h')}
 				</button>
 				<button
 					type="button"
 					onclick={() => muteFor(4 * HOUR_MS)}
-					class="rounded-xl border border-ink-300 bg-white px-4 py-2 text-sm font-semibold text-ink-700 transition hover:border-morphit-emerald hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:border-ink-600 dark:bg-ink-900 dark:text-ink-200"
+					class="rounded-xl border border-ink-300 bg-white px-4 py-2 text-sm font-semibold text-ink-700 transition-colors hover:border-morphit-emerald hover:bg-morphit-emerald/5 hover:text-morphit-emerald dark:hover:bg-morphit-emerald/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:border-ink-600 dark:bg-ink-900 dark:text-ink-200"
 				>
 					{$_('settings.notifications.mute_4h')}
 				</button>
 				<button
 					type="button"
 					onclick={() => muteFor(NINETY_NINE_YEARS)}
-					class="rounded-xl border border-ink-300 bg-white px-4 py-2 text-sm font-semibold text-ink-700 transition hover:border-morphit-emerald hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:border-ink-600 dark:bg-ink-900 dark:text-ink-200"
+					class="rounded-xl border border-ink-300 bg-white px-4 py-2 text-sm font-semibold text-ink-700 transition-colors hover:border-morphit-emerald hover:bg-morphit-emerald/5 hover:text-morphit-emerald dark:hover:bg-morphit-emerald/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:border-ink-600 dark:bg-ink-900 dark:text-ink-200"
 				>
 					{$_('settings.notifications.mute_until_unmute')}
 				</button>

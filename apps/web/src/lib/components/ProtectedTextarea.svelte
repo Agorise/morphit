@@ -109,6 +109,12 @@
 	}: Props = $props();
 
 	let textareaEl: HTMLTextAreaElement;
+	/** v1.5.0 — let the parent (e.g. ChatComposer) return focus to the input,
+	 *  so the cursor stays in the field after a send unless the user clicks
+	 *  elsewhere. Safe before mount (`textareaEl` is set by bind:this). */
+	export function focus(): void {
+		textareaEl?.focus();
+	}
 
 	// cp384 (#4) / cp425: flash the border yellow 8× over ~8s whenever flashToken
 	// changes. Toggling the class off → on (next frame) restarts the CSS

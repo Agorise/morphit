@@ -374,6 +374,8 @@
 				return $_('order_detail.status_cancelled') as string;
 			case 'expired':
 				return $_('order_detail.status_expired') as string;
+			case 'completed':
+				return $_('order_detail.status_completed') as string;
 			default:
 				return '';
 		}
@@ -397,6 +399,11 @@
 				return (
 					base +
 					'border-ink-300 bg-ink-50 text-ink-700 dark:border-ink-600 dark:bg-ink-900 dark:text-ink-300'
+				);
+			case 'completed':
+				return (
+					base +
+					'border-morphit-emerald bg-morphit-emerald/10 text-emerald-900 dark:border-morphit-emerald/60 dark:bg-morphit-emerald/15 dark:text-emerald-100'
 				);
 			default:
 				return base + 'border-ink-300 text-ink-600';

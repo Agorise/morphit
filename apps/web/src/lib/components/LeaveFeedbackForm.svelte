@@ -24,6 +24,13 @@
 	import { onMount } from 'svelte';
 	import BusyButton from '$components/BusyButton.svelte';
 	import IdentityLabel from '$components/IdentityLabel.svelte';
+	import { getProfileCached } from '$lib/indexer/profileCache';
+	import type { ProfileResponse } from '@morphit/indexer-client';
+	import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
+	import { getReputationReceipt } from '$lib/indexer/client';
+	import NewTraderChip from '$lib/components/NewTraderChip.svelte';
+	import { fetchAccountKeys } from '$blurt/accountKeys';
+	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 	import StatusLine from '$components/StatusLine.svelte';
 	import ProtectedTextarea from '$components/ProtectedTextarea.svelte';
 	import PrivateKeyWarningModal from '$components/PrivateKeyWarningModal.svelte';
@@ -82,6 +89,46 @@
 	// the form is rendered.
 	// svelte-ignore state_referenced_locally
 	let subject = $state(prefillSubject ?? '');
+	// v1.5.0 — enrich the "You're reviewing" box with the counterparty's
+	//  avatar, display name (@handle), and truncated posting key. Fetched from
+	//  the same-origin indexer; stale results are ignored; NO reputation is
+	//  shown (Ken: it mustn't bias the review).
+	let subjectProfile = $state<ProfileResponse | null>(null);
+	let subjectPostingKey = $state<string | null>(null);
+	let subjectIsNewTrader = $state(false);
+	let subjectFetchSeq = 0;
+	const subjectLabelProps = $derived(extractLabelPropsFromProfile(subjectProfile));
+	$effect(() => {
+		const acct = subject.trim();
+		if (!acct) {
+			subjectProfile = null;
+			subjectPostingKey = null;
+			subjectIsNewTrader = false;
+			return;
+		}
+		const seq = ++subjectFetchSeq;
+		void (async () => {
+			try {
+				const [profile, keys, rep] = await Promise.all([
+					getProfileCached(acct),
+					fetchAccountKeys(resolveOrigin(MORPHIT_INDEXER_ORIGIN), acct),
+					getReputationReceipt(acct)
+				]);
+				if (seq !== subjectFetchSeq) return;
+				subjectProfile = profile;
+				subjectPostingKey = keys?.posting?.key_auths?.[0]?.[0] ?? null;
+				// v1.5.0 — new-trader pill (NO reputation score). Matches the
+				//  orderbook's "< 4 verified-fee trades" rule, approximated by the
+				//  received-feedback count from the public reputation receipt.
+				subjectIsNewTrader = rep.ok ? rep.data.summary.count_total < 4 : false;
+			} catch {
+				if (seq !== subjectFetchSeq) return;
+				subjectProfile = null;
+				subjectPostingKey = null;
+				subjectIsNewTrader = false;
+			}
+		})();
+	});
 	let rating: 1 | 2 | 3 | 4 | 5 | null = $state(null);
 	/** Star index (1–5) currently hovered/focused, 0 when none. Drives
 	 *  the emerald fill-on-hover preview; never persisted. */
@@ -230,7 +277,10 @@
 	function discardDraft(): void {
 		clearDraft(DRAFT_KEY);
 		draftSavedAt = null;
-		subject = '';
+		// v1.5.0 — keep the locked/prefilled counterparty so the "You're
+		// reviewing" box never dead-ends after a discard (Ken: the box must
+		// always hold a counterparty). Only the draft's rating + comment go.
+		subject = prefillSubject ?? '';
 		rating = null;
 		comment = '';
 		subjectTouched = false;
@@ -410,7 +460,7 @@
 				</span>
 				<button
 					type="button"
-					class="flex-none text-xs font-semibold text-ink-700 underline decoration-dotted underline-offset-2 hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:text-ink-200"
+					class="flex-none text-xs font-semibold text-ink-700 underline decoration-dotted underline-offset-2 hover:no-underline hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:text-ink-200"
 					onclick={discardDraft}
 				>
 					{$_('post_order.draft.discard')}
@@ -431,9 +481,20 @@
 				{$_('feedback.form.subject_locked_label')}
 			</span>
 			<div
-				class="w-full rounded-xl border-2 border-morphit-emerald bg-morphit-emerald/5 px-3 py-2 font-mono text-sm font-semibold text-ink-900 dark:text-ink-50"
+				class="w-full rounded-xl border-2 border-morphit-emerald bg-morphit-emerald/5 px-3 py-2 text-sm font-semibold text-ink-900 dark:text-ink-50"
 			>
-				<IdentityLabel account={subject} />
+				<div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+					<IdentityLabel
+						account={subject}
+						displayName={subjectLabelProps.displayName}
+						avatarSvg={subjectLabelProps.avatarSvg}
+						avatarDataUri={subjectLabelProps.avatarDataUri}
+						publicKeyString={subjectPostingKey ?? undefined}
+					/>
+					{#if subjectIsNewTrader}
+						<NewTraderChip />
+					{/if}
+				</div>
 			</div>
 		</div>
 	{:else}

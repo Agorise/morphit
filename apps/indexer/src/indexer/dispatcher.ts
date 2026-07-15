@@ -38,12 +38,14 @@ import profileHandler from '$indexer/handlers/profile';
 import orderHandler from '$indexer/handlers/order';
 import orderReplaceHandler from '$indexer/handlers/orderReplace';
 import orderCancelHandler from '$indexer/handlers/orderCancel';
+import orderCompleteHandler from '$indexer/handlers/orderComplete';
 import feedbackHandler from '$indexer/handlers/feedback';
 import feedbackResponseHandler from '$indexer/handlers/feedbackResponse';
 import chatHandler from '$indexer/handlers/chat';
 import chatIdentityHandler from '$indexer/handlers/chatIdentity';
 import chatReadHandler from '$indexer/handlers/chatRead';
 import chatFoldersHandler from '$indexer/handlers/chatFolders';
+import settingsHandler from '$indexer/handlers/settings';
 import releaseHandler from '$indexer/handlers/release';
 import feeAttestHandler from '$indexer/handlers/feeAttest';
 import featureBidHandler from '$indexer/handlers/featureBid';
@@ -62,12 +64,14 @@ export const OP_IDS = {
 	order: 'morphit_order_v1',
 	orderReplace: 'morphit_order_replace_v1',
 	orderCancel: 'morphit_order_cancel_v1',
+	orderComplete: 'morphit_order_complete_v1',
 	feedback: 'morphit_feedback_v1',
 	feedbackResponse: 'morphit_feedback_response_v1',
 	chatMessage: 'morphit_chat_v1',
 	chatIdentity: 'morphit_chat_identity_v1',
 	chatRead: 'morphit_chat_read_v1',
 	chatFolders: 'morphit_chat_folders_v1',
+	settings: 'morphit_settings_v1',
 	releaseDiscovery: 'morphit_release_v1',
 	feeAttest: 'morphit_fee_attest_v1',
 	featureBid: 'morphit_feature_bid_v1',
@@ -97,12 +101,14 @@ const HANDLERS: Readonly<Record<string, Handler>> = {
 	[OP_IDS.order]: orderHandler,
 	[OP_IDS.orderReplace]: orderReplaceHandler,
 	[OP_IDS.orderCancel]: orderCancelHandler,
+	[OP_IDS.orderComplete]: orderCompleteHandler,
 	[OP_IDS.feedback]: feedbackHandler,
 	[OP_IDS.feedbackResponse]: feedbackResponseHandler,
 	[OP_IDS.chatMessage]: chatHandler,
 	[OP_IDS.chatIdentity]: chatIdentityHandler,
 	[OP_IDS.chatRead]: chatReadHandler,
 	[OP_IDS.chatFolders]: chatFoldersHandler,
+	[OP_IDS.settings]: settingsHandler,
 	[OP_IDS.releaseDiscovery]: releaseHandler,
 	[OP_IDS.feeAttest]: feeAttestHandler,
 	[OP_IDS.featureBid]: featureBidHandler,

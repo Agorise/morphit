@@ -51,7 +51,7 @@ interface OrderRow {
 	/** cp425 — accepted crypto set for a BARTER order; null for crypto assets. */
 	accepted_assets: string[] | null;
 	terms: string | null;
-	status: 'live' | 'cancelled' | 'expired';
+	status: 'live' | 'cancelled' | 'expired' | 'completed';
 	fee_status:
 		| 'unverified'
 		| 'verified'

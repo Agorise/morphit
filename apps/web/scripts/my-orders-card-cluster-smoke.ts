@@ -42,8 +42,15 @@ const pillIdx = editBlock.indexOf('edit_window_countdown');
 const btnIdx = editBlock.indexOf('action_edit');
 check('#8 pill is rendered ABOVE the Edit button', pillIdx !== -1 && btnIdx !== -1 && pillIdx < btnIdx);
 check(
-	'#8 "No trade partner to review yet" line is gone (but the empty branch stays)',
-	!/feedback_no_counterparty/.test(page) && /length === 0\}/.test(page) && /\{void 0\}/.test(page)
+	'#8 the 0-counterparty branch explains itself, and still withholds the review button',
+	// SUPERSEDED, v1.5.0 (t.txt line 1). The original ask was to delete the
+	// confusing "No trade partner to review yet" line, leaving `{void 0}` — so
+	// this asserted the key was ABSENT. Ken then revised it: an empty gap left
+	// users wondering why no review button appeared, so the branch now renders a
+	// green box ("No chats with a counterparty have happened yet").
+	// The SAFETY property is unchanged and still checked: with zero reviewable
+	// counterparties we must NOT offer the review button.
+	/feedback_no_counterparty/.test(page) && /length === 0\}/.test(page)
 );
 
 // ── #9 fee-status banner ────────────────────────────────────────────────────

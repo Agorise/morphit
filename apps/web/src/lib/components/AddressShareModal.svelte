@@ -47,7 +47,10 @@
 		validateDaiAddress,
 		type DaiNetwork
 	} from '$lib/assets/networks';
+	import { fetchAccountKeys } from '$blurt/accountKeys';
+	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 	import PrivacyWarningChip from './PrivacyWarningChip.svelte';
+	import AssetChoiceSelect from './AssetChoiceSelect.svelte';
 	import UsdtNetworkPicker from './UsdtNetworkPicker.svelte';
 	import UsdcNetworkPicker from './UsdcNetworkPicker.svelte';
 	import DaiNetworkPicker from './DaiNetworkPicker.svelte';
@@ -252,6 +255,36 @@
 	const trimmedAmount = $derived(amount.trim());
 	const trimmedNote = $derived(note.trim());
 
+	/** v1.5.0 — real-time BLURT account-existence check. A BLURT receiving
+	 *  address IS an account name; verify it exists on chain — via the
+	 *  SAME-ORIGIN indexer (privacy: never a direct-RPC probe) — and flag a
+	 *  missing account with a red border + error, like our other account-name
+	 *  inputs. Debounced; stale results ignored; fails OPEN on lookup error. */
+	let blurtAccountState = $state<'idle' | 'checking' | 'found' | 'missing'>('idle');
+	let blurtLookupSeq = 0;
+	$effect(() => {
+		const acct = trimmedAddress;
+		if (method !== 'blurt' || !isValidAddress('blurt', acct)) {
+			blurtAccountState = 'idle';
+			return;
+		}
+		blurtAccountState = 'checking';
+		const seq = ++blurtLookupSeq;
+		const timer = setTimeout(() => {
+			void (async () => {
+				try {
+					const keys = await fetchAccountKeys(resolveOrigin(MORPHIT_INDEXER_ORIGIN), acct);
+					if (seq !== blurtLookupSeq) return;
+					blurtAccountState = keys ? 'found' : 'missing';
+				} catch {
+					if (seq !== blurtLookupSeq) return;
+					blurtAccountState = 'idle';
+				}
+			})();
+		}, 400);
+		return () => clearTimeout(timer);
+	});
+
 	const addressLooksValid = $derived(
 		trimmedAddress.length > 0 &&
 			(method === 'usdt'
@@ -260,7 +293,8 @@
 					? usdcNetwork !== null && validateUsdcAddress(usdcNetwork, trimmedAddress)
 					: method === 'dai'
 						? daiNetwork !== null && validateDaiAddress(daiNetwork, trimmedAddress)
-						: isValidAddress(method, trimmedAddress))
+						: isValidAddress(method, trimmedAddress) &&
+							(method !== 'blurt' || blurtAccountState !== 'missing'))
 	);
 	/** cp26 — Address-reuse detection.  Reads the local-only
 	 *  address-history (see lib/privacy/addressHistory.ts) and
@@ -320,6 +354,10 @@
 		const minTyped = method === 'blurt' ? 3 : 10;
 		if (trimmedAddress.length < minTyped) return null;
 		if (addressLooksValid) return null;
+		// v1.5.0 — BLURT: format-valid but the account doesn't exist on chain.
+		if (method === 'blurt' && isValidAddress('blurt', trimmedAddress) && blurtAccountState === 'missing') {
+			return 'chat.address.blurt_account_not_found';
+		}
 		if (method === 'btc') return 'chat.address.address_invalid_btc';
 		if (method === 'xmr') return 'chat.address.address_invalid_xmr';
 		if (method === 'usdt') return 'chat.address.address_invalid_usdt';
@@ -337,6 +375,12 @@
 		if (method === 'xrp') return 'chat.address.address_invalid_xrp';
 		return 'chat.address.address_invalid_blurt';
 	});
+
+	/** v1.5.0 — red border on the address input whenever it's invalid
+	 *  (format OR, for BLURT, a non-existent account). */
+	const addressBorderClass = $derived(
+		addressErrorKey ? 'border-red-400 dark:border-red-500' : 'border-ink-300 dark:border-ink-700'
+	);
 
 	/** Phase F.3 — soft subaddress nudge.  XMR addresses starting
 	 *  with `4` (standard or integrated) reuse the same view-key
@@ -468,7 +512,12 @@
 	onkeydown={onModalKeydown}
 	tabindex="-1"
 >
-	<div class="card w-full max-w-md">
+	<!-- v1.5.0 (tt.txt B2): the card had NO max-height and NO overflow, so on a
+	     phone the content (coin picker + privacy warnings + address + amount +
+	     QR) ran past the viewport with no way to scroll to the Send button.
+	     Matches the sibling chat modals (MailingAddressModal / ShipmentModal):
+	     cap at 95vh and scroll inside. -->
+	<div class="card max-h-[95vh] w-full max-w-md overflow-y-auto">
 		<h2 id="address-share-heading" class="font-display text-xl font-bold">
 			{$_('chat.address.modal_title')}
 		</h2>
@@ -476,21 +525,22 @@
 			{$_('chat.address.modal_subtitle')}
 		</p>
 
-		<!-- Method tabs -->
-		<div class="mt-5 flex flex-wrap gap-2" role="tablist">
-			{#each visibleMethods as m (m)}
-				<button
-					type="button"
-					role="tab"
-					aria-selected={method === m}
-					class="flex-1 rounded-lg border-2 px-3 py-2 text-sm font-semibold transition {method === m
-						? 'border-morphit-emerald bg-morphit-emerald/10 text-morphit-emerald'
-						: 'border-ink-200 hover:border-ink-300 dark:border-ink-700 dark:hover:border-ink-600'}"
-					onclick={() => selectMethod(m)}
-				>
-					{$_(`chat.address.method_${m}`)}
-				</button>
-			{/each}
+		<!-- v1.5.0 (tt.txt B1): coin SELECT (with logos), replacing the old
+		     one-tab-per-asset row. 16 `flex-1` tab buttons wrapped into a wall
+		     of blocks that was the main reason this modal didn't fit a phone. -->
+		<div class="mt-5">
+			<label for="address-share-asset" class="mb-1 block text-sm font-semibold">
+				{$_('chat.address.asset_label')}
+			</label>
+			<div id="address-share-asset">
+				<AssetChoiceSelect
+					options={visibleMethods}
+					value={method}
+					disabled={sending}
+					ariaLabel={$_('chat.address.asset_label') as string}
+					onSelect={selectMethod}
+				/>
+			</div>
 		</div>
 
 		<!-- Part 121 — USDT privacy warning + network picker.
@@ -591,7 +641,7 @@
 				autocapitalize="none"
 				autocorrect="off"
 				spellcheck="false"
-				class="mt-1 w-full rounded-lg border border-ink-300 bg-white px-3 py-2 font-mono text-sm dark:border-ink-700 dark:bg-ink-900"
+				class="mt-1 w-full rounded-lg border {addressBorderClass} bg-white px-3 py-2 font-mono text-sm dark:bg-ink-900"
 			/>
 			{#if addressErrorKey}
 				<p class="mt-1 text-xs text-red-600 dark:text-red-400">
