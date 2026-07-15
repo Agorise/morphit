@@ -587,7 +587,7 @@
       "send": "标记已发送",
       "pill_title_btc": "比特币已发送",
       "pill_title_xmr": "门罗币已发送",
-      "pill_txid_label": "交易",
+      "pill_txid_label": "交易 ID",
       "pill_title_blurt": "Blurt 已发送",
       "verify_pending": "正在链上验证…",
       "verify_verified": "链上已验证",
@@ -743,8 +743,8 @@
     "empty_state_loading": "正在加载与 @{peer} 的聊天… 打个招呼吧！",
     "day_separator_tooltip": "午夜，UTC",
     "feedback": {
-      "left_label": "已留下评价：",
-      "leave_prompt": "留下评价"
+      "leave_prompt": "留下评价",
+      "sent_toast": "评价已发送"
     }
   },
   "cheat_sheet": {
@@ -2709,7 +2709,6 @@
       "accept_label": "我接受",
       "location_label": "位置",
       "terms_label": "条款",
-      "trades_since": "自 {month} 起 {count} 笔交易",
       "trades_only": "{count} 笔交易",
       "reputation_aria": "信誉评分 {score}（满分 5）",
       "message_word": "消息",
@@ -3424,7 +3423,7 @@
     "feedback_error": "现在无法加载反馈。",
     "rating_count": "{n} 条评分",
     "no_feedback_yet": "暂无反馈。还没有对方评价过该用户。",
-    "reviews_heading": "评价",
+    "reviews_heading": "@{account} 收到了来自以下用户的评价",
     "review_order_link": "查看订单",
     "load_more": "加载更多",
     "active_orders_heading": "活跃订单",
@@ -3539,7 +3538,8 @@
       "qr_camera_denied": "摄像头访问被阻止。请在浏览器设置中允许后重试。",
       "qr_no_camera": "此设备没有可用于扫描的摄像头。",
       "qr_invalid": "该二维码不包含 Blurt 账户。请换一个。"
-    }
+    },
+    "given_said": "我说："
   },
   "relative_time": {
     "descriptive": {

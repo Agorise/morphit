@@ -50,7 +50,16 @@ function check(name: string, ok: boolean): void {
 // ─── 1. Server: negative batch results are never cached ──────────────
 check('server defines a separate no-store header for partial batches', /BATCH_CACHE_CONTROL_PARTIAL = 'no-store'/.test(serverProfiles));
 check('server keeps the 90s header for complete batches', /BATCH_CACHE_CONTROL = 'public, max-age=90, stale-while-revalidate=60'/.test(serverProfiles));
-check('server picks the header by batch completeness', /const complete = result\.rows\.length === accounts\.length;/.test(serverProfiles) && /complete \? BATCH_CACHE_CONTROL : BATCH_CACHE_CONTROL_PARTIAL/.test(serverProfiles));
+// v1.5.5 (t155): completeness is measured by has_profile, NOT row count.
+// The batch was re-anchored on `accounts` so a key-only account resolves (its
+// posting key was previously unreachable — the query started at `profiles` and
+// returned nothing for anyone who never set one). That silently broke THIS
+// policy: a profile-less account now comes back as a ROW, so a row-count test
+// would call such a batch complete and pin "no profile" for the full 90s —
+// exactly the negative-caching failure cp428 exists to prevent. Row presence
+// stopped meaning "has a profile"; only has_profile does.
+check('server picks the header by batch completeness', /const complete = result\.rows\.filter\(\(r\) => r\.has_profile\)\.length === accounts\.length;/.test(serverProfiles) && /complete \? BATCH_CACHE_CONTROL : BATCH_CACHE_CONTROL_PARTIAL/.test(serverProfiles));
+check('completeness cannot regress to a row count (a profile-less row is not a profile)', !/const complete = result\.rows\.length === accounts\.length;/.test(serverProfiles));
 check('the single-profile 404 is no-store too (404s are heuristically cacheable)', /c\.header\('Cache-Control', BATCH_CACHE_CONTROL_PARTIAL\);[\s\S]{0,160}errorBody\('not_found'/.test(serverProfiles));
 
 // ─── 2. Client cache: failure is distinguishable + reload path ───────

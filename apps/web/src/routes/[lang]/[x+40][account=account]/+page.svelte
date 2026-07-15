@@ -733,7 +733,7 @@
 	{#if feedbackState === 'ready' && feedbackItems.length > 0}
 		<section aria-labelledby="reviews-heading">
 			<h2 id="reviews-heading" class="mb-3 font-display text-lg font-bold">
-				{$_('profile.reviews_heading')}
+				{$_('profile.reviews_heading', { values: { account } })}
 			</h2>
 			<ul class="space-y-3">
 				{#each feedbackItems as fb (fb.id)}
@@ -756,6 +756,7 @@
 						<div class="mb-2 flex flex-wrap items-baseline justify-between gap-2">
 							<IdentityLabel
 								account={fb.reviewer}
+								showHandleAfterName={true}
 								displayName={reviewerProps.displayName}
 								avatarSvg={reviewerProps.avatarSvg}
 								avatarDataUri={reviewerProps.avatarDataUri}
@@ -830,10 +831,11 @@
 							{@const responderProps = extractLabelPropsFromProfile(
 								reviewerProfileMap[resp.responder]
 							)}
-							<div class="mt-3 border-l-2 border-ink-200 pl-3 dark:border-ink-700">
+							<div class="ml-6 mt-3 border-l-2 border-ink-200 pl-3 dark:border-ink-700">
 								<div class="mb-1 flex flex-wrap items-baseline justify-between gap-2">
 									<IdentityLabel
 										account={resp.responder}
+										showHandleAfterName={true}
 										displayName={responderProps.displayName}
 										avatarSvg={responderProps.avatarSvg}
 										avatarDataUri={responderProps.avatarDataUri}
@@ -958,6 +960,7 @@
 							<div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
 								<IdentityLabel
 									account={fb.subject}
+									showHandleAfterName={true}
 									displayName={subjectProps.displayName}
 									avatarSvg={subjectProps.avatarSvg}
 									avatarDataUri={subjectProps.avatarDataUri}
@@ -1015,7 +1018,13 @@
 							{/if}
 						</div>
 						{#if fb.comment}
+							<!-- t155: "add 'I said:' so that the feedback line reads as:
+							     'I said: Thx for the Blurt dude :)'". This is the GIVEN
+							     list — the profile owner is the reviewer, so the comment
+							     is their own words. The received list keeps no prefix:
+							     there the comment is what someone else said about you. -->
 							<p class="whitespace-pre-wrap text-sm text-ink-700 dark:text-ink-200">
+								<span class="text-ink-500 dark:text-ink-400">{$_('profile.given_said')}</span>
 								{fb.comment}
 							</p>
 						{/if}
@@ -1040,10 +1049,11 @@
 							{@const responderProps = extractLabelPropsFromProfile(
 								reviewerProfileMap[resp.responder]
 							)}
-							<div class="mt-3 border-l-2 border-ink-200 pl-3 dark:border-ink-700">
+							<div class="ml-6 mt-3 border-l-2 border-ink-200 pl-3 dark:border-ink-700">
 								<div class="mb-1 flex flex-wrap items-baseline justify-between gap-2">
 									<IdentityLabel
 										account={resp.responder}
+										showHandleAfterName={true}
 										displayName={responderProps.displayName}
 										avatarSvg={responderProps.avatarSvg}
 										avatarDataUri={responderProps.avatarDataUri}

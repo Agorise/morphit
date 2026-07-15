@@ -587,7 +587,7 @@
       "send": "علامت‌گذاری ارسال شد",
       "pill_title_btc": "بیت‌کوین ارسال شد",
       "pill_title_xmr": "مونرو ارسال شد",
-      "pill_txid_label": "تراکنش",
+      "pill_txid_label": "شناسه تراکنش",
       "pill_title_blurt": "Blurt ارسال شد",
       "verify_pending": "در حال راستی‌آزمایی روی زنجیره…",
       "verify_verified": "در زنجیره تأیید شد",
@@ -743,8 +743,8 @@
     "empty_state_loading": "در حال بارگذاری گفتگو با @{peer}… سلام کن!",
     "day_separator_tooltip": "نیمه‌شب، UTC",
     "feedback": {
-      "left_label": "بازخورد ثبت شد:",
-      "leave_prompt": "ثبت بازخورد"
+      "leave_prompt": "ثبت بازخورد",
+      "sent_toast": "بازخورد ارسال شد"
     }
   },
   "cheat_sheet": {
@@ -2709,7 +2709,6 @@
       "accept_label": "می‌پذیرم",
       "location_label": "مکان",
       "terms_label": "شرایط",
-      "trades_since": "{count} معامله از {month}",
       "trades_only": "{count} معامله",
       "reputation_aria": "امتیاز اعتبار {score} از ۵",
       "message_word": "پیام",
@@ -3424,7 +3423,7 @@
     "feedback_error": "در حال حاضر نمی‌توان بازخوردها را بارگذاری کرد.",
     "rating_count": "{n} ارزیابی",
     "no_feedback_yet": "هنوز بازخوردی نیست. هیچ طرف مقابلی این کاربر را بررسی نکرده است.",
-    "reviews_heading": "بررسی‌ها",
+    "reviews_heading": "@{account} بازخوردهایی دریافت کرده است از",
     "review_order_link": "دیدن سفارش",
     "load_more": "بارگذاری بیشتر",
     "active_orders_heading": "سفارش‌های فعال",
@@ -3539,7 +3538,8 @@
       "qr_camera_denied": "دسترسی به دوربین مسدود شد. آن را در تنظیمات مرورگر خود اجازه دهید و دوباره تلاش کنید.",
       "qr_no_camera": "این دستگاه دوربینی برای اسکن ندارد.",
       "qr_invalid": "آن QR حاوی حساب Blurt نبود. یکی دیگر را امتحان کنید."
-    }
+    },
+    "given_said": "من گفتم:"
   },
   "relative_time": {
     "descriptive": {

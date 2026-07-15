@@ -587,7 +587,7 @@
       "send": "Oznacz wysłane",
       "pill_title_btc": "Bitcoin wysłany",
       "pill_title_xmr": "Monero wysłane",
-      "pill_txid_label": "Transakcja",
+      "pill_txid_label": "ID transakcji",
       "pill_title_blurt": "Blurt wysłany",
       "verify_pending": "Weryfikacja w łańcuchu…",
       "verify_verified": "Zweryfikowane w łańcuchu",
@@ -743,8 +743,8 @@
     "empty_state_loading": "Czat z @{peer} się ładuje… Przywitaj się!",
     "day_separator_tooltip": "Północ, UTC",
     "feedback": {
-      "left_label": "Wystawiono opinię:",
-      "leave_prompt": "Wystaw opinię"
+      "leave_prompt": "Wystaw opinię",
+      "sent_toast": "Opinia wysłana"
     }
   },
   "cheat_sheet": {
@@ -2709,7 +2709,6 @@
       "accept_label": "Akceptuję",
       "location_label": "Lokalizacja",
       "terms_label": "Warunki",
-      "trades_since": "{count} transakcji od {month}",
       "trades_only": "{count} transakcji",
       "reputation_aria": "Ocena reputacji {score} na 5",
       "message_word": "Wiadomość",
@@ -3424,7 +3423,7 @@
     "feedback_error": "Nie udało się teraz wczytać opinii.",
     "rating_count": "{n, plural, one {# ocena} few {# oceny} many {# ocen} other {# ocen}}",
     "no_feedback_yet": "Brak opinii. Ten użytkownik nie został jeszcze oceniony przez żadnego kontrahenta.",
-    "reviews_heading": "Recenzje",
+    "reviews_heading": "@{account} otrzymał(a) opinie od",
     "review_order_link": "Zobacz zlecenie",
     "load_more": "Wczytaj więcej",
     "active_orders_heading": "Aktywne zlecenia",
@@ -3539,7 +3538,8 @@
       "qr_camera_denied": "Dostęp do aparatu został zablokowany. Zezwól na niego w ustawieniach przeglądarki i spróbuj ponownie.",
       "qr_no_camera": "To urządzenie nie ma aparatu do skanowania.",
       "qr_invalid": "Ten kod QR nie zawierał konta Blurt. Spróbuj innego."
-    }
+    },
+    "given_said": "Napisałem(-am):"
   },
   "relative_time": {
     "descriptive": {

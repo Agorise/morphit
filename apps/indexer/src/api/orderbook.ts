@@ -7,7 +7,9 @@
  *   - fiat_currency:    comma-separated ISO codes, order matches any of (optional)
  *   - location_region:  string up to 128, prefix-matched (optional)
  *   - payment_methods:  comma-separated list, order matches any of (optional)
- *   - min_trades:       integer ≥0, filter to traders with ≥N received-feedback rows (optional)
+ *   - min_trades:       integer ≥0, filter to traders with ≥N COMPLETED TRADES (optional).
+ *                       v1.5.5: real completions (both parties credited), not
+ *                       the pre-v1.5.5 received-feedback proxy.
  *   - sort:             'recent' (default) | 'rating' | 'trades'
  *   - limit:            1..100 (default 50)
  *   - cursor:           opaque (returned from previous response)
@@ -30,7 +32,12 @@
 
 import { Hono } from 'hono';
 import { computeReputationScore } from '$indexer/reputation/score';
-import { feedbackAggregateJoin, accountsJoin, engagementJoin } from '$api/reputationJoin';
+import {
+	feedbackAggregateJoin,
+	accountsJoin,
+	engagementJoin,
+	tradeCountJoin
+} from '$api/reputationJoin';
 import { z } from 'zod';
 
 import type { Database } from '$db/pool';
@@ -85,8 +92,14 @@ interface Cursor {
 	 *  doesn't match the cursor's `s` returns 400 invalid cursor. */
 	readonly s?: 'recent' | 'rating' | 'trades';
 	/** Sort-value tie-breakers. `r` is the cursor row's
-	 *  weighted_rating (or null if count=0); `c` is the cursor
-	 *  row's feedback count. Present for sort=rating/trades,
+	 *  weighted_rating (or null if count=0).
+	 *
+	 *  `c` is the cursor row's numeric seek key, and v1.5.5 made it
+	 *  MODE-DEPENDENT: the FEEDBACK count under sort=rating (where it is the
+	 *  tiebreaker behind `r`), the TRADE count under sort=trades (where it is
+	 *  the primary key). It must always match the column the ORDER BY uses for
+	 *  that mode, or the seek walks a different ordering than the sort
+	 *  produces and pages skip/repeat rows. Present for sort=rating/trades,
 	 *  absent for sort=recent (where updated_at alone suffices). */
 	readonly r?: number | null;
 	readonly c?: number;
@@ -141,11 +154,19 @@ interface OrderRow {
 	terms: string | null;
 	/** ADR-0011 §10 — how this order's fee was paid. */
 	fee_method: 'blurt' | 'waived_first_buy' | 'btc' | 'xmr';
-	/** Number of feedback rows received by this account. Proxy
-	 *  for "trades completed where this account was a party."
-	 *  Derived from the orderbook LEFT JOIN. Zero means no
-	 *  received feedback yet. */
+	/** Number of feedback rows received by this account — i.e. how many
+	 *  RATINGS back `weighted_rating`.
+	 *
+	 *  v1.5.5: this used to double as the proxy for "trades completed where
+	 *  this account was a party" because no trade data existed. It no longer
+	 *  does — see `trade_count`. Conflating them made "★5.00 (34)" ambiguous
+	 *  between 34 ratings and 34 trades, and let an unreviewed real trade
+	 *  count for nothing. */
 	feedback_count: number;
+	/** v1.5.5 — REAL completed trades for this account, crediting BOTH sides
+	 *  of every completed order and filtered for sock-puppet pairs. Drives
+	 *  is_new_trader, min_trades and sort=trades. */
+	trade_count: number;
 	/** Average rating across all received feedback (1-5 scale).
 	 *  Null when feedback_count is zero. */
 	weighted_rating: string | null; // NUMERIC returns as string from pg
@@ -205,6 +226,7 @@ function rowToWire(r: OrderRow) {
 			weightedAvg: r.weighted_rating === null ? null : Number(r.weighted_rating),
 			lastFeedbackAtMs: r.last_feedback_at === null ? null : r.last_feedback_at.getTime()
 		}),
+		trade_count: r.trade_count,
 		is_new_trader: r.is_new_trader,
 		engagement_24h: r.engagement_24h,
 		first_trade_at:
@@ -324,7 +346,12 @@ export function orderbookRoute(db: Database, poller: Poller, operatorAccount: st
 		// subquery (joined below). We reference f.c, treating NULL
 		// (no feedback rows at all) as zero.
 		if (typeof q.min_trades === 'number' && q.min_trades > 0) {
-			where.push(`COALESCE(f.c, 0) >= ${p(q.min_trades)}`);
+			// v1.5.5 — filters REAL completed trades. This read `f.c` (the
+			// FEEDBACK count) while calling itself min_trades, so the orderbook
+			// could show "3 trades · ★…" from the new count and still filter
+			// that trader out at min_trades=3 because they had 2 reviews. Two
+			// different numbers under one name.
+			where.push(`COALESCE(tc.c, 0) >= ${p(q.min_trades)}`);
 		}
 
 		// Sort mode. Default "recent" preserves pre-phase-5d
@@ -393,12 +420,14 @@ export function orderbookRoute(db: Database, poller: Poller, operatorAccount: st
 				}
 			} else {
 				// sort === 'trades'
-				// Primary: feedback_count DESC. Tiebreakers updated_at
-				// DESC, account ASC, permlink ASC.
+				// v1.5.5 — Primary: trade_count DESC (was feedback_count, the
+				// pre-v1.5.5 proxy). "Most experienced first" must mean most
+				// TRADES, or an unreviewed veteran sorts below a chatty novice.
+				// Tiebreakers updated_at DESC, account ASC, permlink ASC.
 				const cParam = p(c2.c ?? 0);
 				where.push(
-					`(COALESCE(f.c, 0) < ${cParam} OR ` +
-						`(COALESCE(f.c, 0) = ${cParam} AND (o.updated_at < ${uParam} OR ` +
+					`(COALESCE(tc.c, 0) < ${cParam} OR ` +
+						`(COALESCE(tc.c, 0) = ${cParam} AND (o.updated_at < ${uParam} OR ` +
 						`(o.updated_at = ${uParam} AND o.account > ${aParam}) OR ` +
 						`(o.updated_at = ${uParam} AND o.account = ${aParam} AND o.permlink > ${pParam}))))`
 				);
@@ -414,7 +443,12 @@ export function orderbookRoute(db: Database, poller: Poller, operatorAccount: st
 			orderBy =
 				'f.r DESC NULLS LAST, COALESCE(f.c, 0) DESC, o.updated_at DESC, o.account ASC, o.permlink ASC';
 		} else if (sort === 'trades') {
-			orderBy = 'COALESCE(f.c, 0) DESC, o.updated_at DESC, o.account ASC, o.permlink ASC';
+			// v1.5.5 — sorts REAL trades. This MUST stay in lockstep with the
+			// sort='trades' seek predicate above: the cursor's `c` is compared
+			// against the same expression the ORDER BY uses, so if one reads
+			// tc.c and the other f.c the seek walks a different ordering than
+			// the sort produces and pagination silently skips or repeats rows.
+			orderBy = 'COALESCE(tc.c, 0) DESC, o.updated_at DESC, o.account ASC, o.permlink ASC';
 		} else {
 			orderBy = 'o.updated_at DESC, o.account ASC, o.permlink ASC';
 		}
@@ -426,13 +460,21 @@ export function orderbookRoute(db: Database, poller: Poller, operatorAccount: st
 			        COALESCE(f.c, 0)::int AS feedback_count,
 			        CASE WHEN f.r IS NOT NULL THEN f.r::text ELSE NULL END AS weighted_rating,
 			        f.last_feedback_at,
-			        (COALESCE(f.c, 0) < 4) AS is_new_trader,
+			        -- v1.5.5 — REAL completed trades, not the feedback proxy.
+			        -- Everything trade-shaped on this endpoint (is_new_trader,
+			        -- min_trades, sort=trades) used feedback_count as a stand-in
+			        -- because no trade data existed. It does now: completions
+			        -- credit BOTH parties, so a taker who owns no order finally
+			        -- has a count, and a trade nobody reviewed still counts.
+			        COALESCE(tc.c, 0) AS trade_count,
+			        (COALESCE(tc.c, 0) < 4) AS is_new_trader,
 			        COALESCE(e.distinct_senders_24h, 0)::int AS engagement_24h,
 			        a.first_trade_complete_at,
 			        a.posting_pubkey,
 			        o.created_at, o.updated_at, o.expires_at
 			 FROM orders o
 			 ${feedbackAggregateJoin('o')}
+${tradeCountJoin('o')}
 			 ${engagementJoin('o')}
 			 ${accountsJoin('o', 'a')}
 			 WHERE ${where.join(' AND ')}
@@ -455,7 +497,13 @@ export function orderbookRoute(db: Database, poller: Poller, operatorAccount: st
 				a: last.account,
 				p: last.permlink,
 				s: sort,
-				c: last.feedback_count,
+				// v1.5.5 — `c` is the cursor's numeric seek key, and the two sorts
+				// key off DIFFERENT columns now: sort=rating still tiebreaks on
+				// the FEEDBACK count, while sort=trades is primary-keyed on the
+				// TRADE count. Minting feedback_count for both would make the
+				// trades seek compare a rating count against a trade count and
+				// silently skip or repeat rows across pages.
+				c: sort === 'trades' ? last.trade_count : last.feedback_count,
 				r: last.weighted_rating === null ? null : Number(last.weighted_rating)
 			};
 			nextCursor = encodeCursor(cursorPayload);

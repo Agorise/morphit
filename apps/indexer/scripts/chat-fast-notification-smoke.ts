@@ -104,15 +104,34 @@ scenario('tailer drops a blocked sender with continue', () => {
 });
 
 // ── Stranger gate: no fast push for a first-contact stranger ─────────
-scenario('maybeFastNotify fast-notifies only on recipient-reply OR order-response bypass', () => {
+scenario('the fast path acts only on recipient-reply OR order-response bypass', () => {
+	// v1.5.5: the gate moved out of maybeFastNotify into `fastNotifyAllowed`,
+	// because its answer now drives TWO things — the fast push AND whether the
+	// event may be REPLAYED into a chatroom opened moments later. Evaluating
+	// "is this sender established?" twice is precisely how two call sites
+	// silently drift apart. Same rule, one evaluation, shared answer.
 	assert(
-		tailer.includes('if (!recipientReplied && !orderResponseBypass) return'),
-		'maybeFastNotify lacks the (recipientReplied || orderResponseBypass) safe gate'
+		/return recipientReplied \|\| orderResponseBypass;/.test(tailer),
+		'fastNotifyAllowed lacks the (recipientReplied || orderResponseBypass) safe gate'
 	);
-	assert(tailer.includes('recipientHasReplied(this.db'), 'maybeFastNotify does not check recipient-reply');
+	assert(tailer.includes('recipientHasReplied(this.db'), 'the fast gate does not check recipient-reply');
+	// …and the gate must actually be APPLIED, not merely defined: both the push
+	// and replayability hang off the one answer.
+	assert(
+		/const fastAllowed = await this\.fastNotifyAllowed\(/.test(tailer),
+		'the fast gate is never evaluated in scanBlock'
+	);
+	assert(
+		/if \(fastAllowed && trxId !== undefined\) \{[\s\S]{0,120}?await this\.maybeFastNotify\(/.test(tailer),
+		'the fast push is not gated on fastAllowed — a first-contact stranger could fast-notify'
+	);
+	assert(
+		/replayable: fastAllowed/.test(tailer),
+		'snapshot replay is not gated on fastAllowed — an ungated message could be replayed into a fresh chatroom even though the durable path may reject it (a ghost that vanishes on reload)'
+	);
 });
-scenario('maybeFastNotify returns on a bogus order tag (durable would reject)', () => {
-	assert(tailer.includes('if (!oc.found) return'), 'maybeFastNotify does not skip an invalid order tag');
+scenario('the fast gate denies a bogus order tag (durable would reject)', () => {
+	assert(tailer.includes('if (!oc.found) return false'), 'the fast gate does not deny an invalid order tag');
 });
 
 // ── No divergence: order validity has ONE implementation ─────────────

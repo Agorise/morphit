@@ -9,7 +9,7 @@ describe('feedback handler', () => {
 		const mock = makeMockClient([
 			{
 				match: 'FROM chat_messages',
-				rows: [{ from_reviewer: '2', from_subject: '2', span_seconds: '900', has_recip_flag: false }]
+				rows: [{ from_a: '2', from_b: '2', span_seconds: '900', has_recip_flag: false }]
 			},
 			{ match: 'INSERT INTO feedback' }
 		]);
@@ -79,7 +79,7 @@ describe('feedback handler', () => {
 		const mock = makeMockClient([
 			{
 				match: 'FROM chat_messages',
-				rows: [{ from_reviewer: '2', from_subject: '2', span_seconds: '900', has_recip_flag: false }]
+				rows: [{ from_a: '2', from_b: '2', span_seconds: '900', has_recip_flag: false }]
 			},
 			{ match: 'INSERT INTO feedback', throwError: pgErr }
 		]);
@@ -100,7 +100,7 @@ describe('feedback handler', () => {
 		const mock = makeMockClient([
 			{
 				match: 'FROM chat_messages',
-				rows: [{ from_reviewer: '2', from_subject: '2', span_seconds: '900', has_recip_flag: false }]
+				rows: [{ from_a: '2', from_b: '2', span_seconds: '900', has_recip_flag: false }]
 			},
 			{ match: 'INSERT INTO feedback', throwError: pgErr }
 		]);
@@ -145,7 +145,7 @@ describe('feedback handler — delayed welcome bonus (ADR-0011)', () => {
 			{ match: 'FROM orders', rowCount: 1 },
 			{
 				match: 'FROM chat_messages',
-				rows: [{ from_reviewer: '2', from_subject: '2', span_seconds: '900', has_recip_flag: false }]
+				rows: [{ from_a: '2', from_b: '2', span_seconds: '900', has_recip_flag: false }]
 			},
 			{ match: 'INSERT INTO feedback' },
 			{ match: 'SAVEPOINT' },
@@ -187,7 +187,7 @@ describe('feedback handler — delayed welcome bonus (ADR-0011)', () => {
 			{ match: 'FROM orders', rowCount: 1 },
 			{
 				match: 'FROM chat_messages',
-				rows: [{ from_reviewer: '2', from_subject: '2', span_seconds: '900', has_recip_flag: false }]
+				rows: [{ from_a: '2', from_b: '2', span_seconds: '900', has_recip_flag: false }]
 			},
 			{ match: 'INSERT INTO feedback' },
 			{ match: 'SAVEPOINT' },
@@ -226,7 +226,7 @@ describe('feedback handler — delayed welcome bonus (ADR-0011)', () => {
 			{ match: 'FROM orders', rowCount: 1 },
 			{
 				match: 'FROM chat_messages',
-				rows: [{ from_reviewer: '2', from_subject: '2', span_seconds: '900', has_recip_flag: false }]
+				rows: [{ from_a: '2', from_b: '2', span_seconds: '900', has_recip_flag: false }]
 			},
 			{ match: 'INSERT INTO feedback' },
 			{ match: 'SAVEPOINT' },
@@ -266,7 +266,7 @@ describe('feedback handler — delayed welcome bonus (ADR-0011)', () => {
 			{ match: 'FROM orders', rowCount: 1 },
 			{
 				match: 'FROM chat_messages',
-				rows: [{ from_reviewer: '2', from_subject: '2', span_seconds: '900', has_recip_flag: false }]
+				rows: [{ from_a: '2', from_b: '2', span_seconds: '900', has_recip_flag: false }]
 			},
 			{ match: 'INSERT INTO feedback' },
 			{ match: 'SAVEPOINT' },
@@ -301,13 +301,13 @@ describe('feedback handler — delayed welcome bonus (ADR-0011)', () => {
 
 describe('feedback handler — provable-counterparty gate (cp420)', () => {
 	it('rejects a ghost review: no chat with the subject', async () => {
-		// from_reviewer/from_subject both 0 = the reviewer never had a
+		// from_a/from_b both 0 = the reviewer never had a
 		// conversation with the subject. Pre-cp420 this inserted (chat
 		// was only a badge); now it is a hard gate.
 		const mock = makeMockClient([
 			{
 				match: 'FROM chat_messages',
-				rows: [{ from_reviewer: '0', from_subject: '0', span_seconds: null, has_recip_flag: false }]
+				rows: [{ from_a: '0', from_b: '0', span_seconds: null, has_recip_flag: false }]
 			}
 		]);
 		const r = await handler(
@@ -325,7 +325,7 @@ describe('feedback handler — provable-counterparty gate (cp420)', () => {
 		const mock = makeMockClient([
 			{
 				match: 'FROM chat_messages',
-				rows: [{ from_reviewer: '3', from_subject: '0', span_seconds: '600', has_recip_flag: false }]
+				rows: [{ from_a: '3', from_b: '0', span_seconds: '600', has_recip_flag: false }]
 			}
 		]);
 		const r = await handler(
@@ -341,7 +341,7 @@ describe('feedback handler — provable-counterparty gate (cp420)', () => {
 		const mock = makeMockClient([
 			{
 				match: 'FROM chat_messages',
-				rows: [{ from_reviewer: '5', from_subject: '5', span_seconds: '9000', has_recip_flag: true }]
+				rows: [{ from_a: '5', from_b: '5', span_seconds: '9000', has_recip_flag: true }]
 			}
 		]);
 		const r = await handler(
@@ -359,7 +359,7 @@ describe('feedback handler — provable-counterparty gate (cp420)', () => {
 		const mock = makeMockClient([
 			{
 				match: 'FROM chat_messages',
-				rows: [{ from_reviewer: '1', from_subject: '1', span_seconds: null, has_recip_flag: false }]
+				rows: [{ from_a: '1', from_b: '1', span_seconds: null, has_recip_flag: false }]
 			}
 		]);
 		const r = await handler(
@@ -376,7 +376,7 @@ describe('feedback handler — provable-counterparty gate (cp420)', () => {
 		const mock = makeMockClient([
 			{
 				match: 'FROM chat_messages',
-				rows: [{ from_reviewer: '4', from_subject: '4', span_seconds: '300', has_recip_flag: false }]
+				rows: [{ from_a: '4', from_b: '4', span_seconds: '300', has_recip_flag: false }]
 			}
 		]);
 		const r = await handler(
@@ -392,7 +392,7 @@ describe('feedback handler — provable-counterparty gate (cp420)', () => {
 		const mock = makeMockClient([
 			{
 				match: 'FROM chat_messages',
-				rows: [{ from_reviewer: '2', from_subject: '2', span_seconds: '900', has_recip_flag: false }]
+				rows: [{ from_a: '2', from_b: '2', span_seconds: '900', has_recip_flag: false }]
 			},
 			{ match: 'INSERT INTO feedback' }
 		]);
@@ -413,7 +413,7 @@ describe('feedback handler — provable-counterparty gate (cp420)', () => {
 			{ match: 'FROM orders', rowCount: 1 },
 			{
 				match: 'FROM chat_messages',
-				rows: [{ from_reviewer: '2', from_subject: '2', span_seconds: '900', has_recip_flag: false }]
+				rows: [{ from_a: '2', from_b: '2', span_seconds: '900', has_recip_flag: false }]
 			},
 			{ match: 'INSERT INTO feedback' },
 			{ match: 'SAVEPOINT' },

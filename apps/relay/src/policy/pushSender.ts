@@ -65,6 +65,18 @@ export interface PushSendTickResult {
 	readonly subscriptionsDeleted: number;
 }
 
+/** v1.5.5 — how long a delivered row is retained as its own dedup tombstone
+ *  before the pruner reclaims it. Must comfortably exceed the fast→durable gap
+ *  (~60s normally, much more while the indexer catches up) or duplicate
+ *  notifications return. One hour is ~60x the observed gap and still bounds
+ *  the table. */
+const PUSH_TOMBSTONE_RETENTION_SECONDS = 3600;
+
+/** v1.5.5 — how often the tombstone pruner runs. Far cheaper than the retention
+ *  window is long, so 5 minutes keeps the table bounded without scanning for
+ *  deletions on every poll tick. */
+const PUSH_PRUNE_INTERVAL_MS = 5 * 60 * 1000;
+
 export class PushSender {
 	private abort = new AbortController();
 	private runningLoop: Promise<void> | null = null;
@@ -106,6 +118,12 @@ export class PushSender {
 	}
 
 	private async loop(): Promise<void> {
+		// v1.5.5 — the tombstone pruner rides this loop rather than a second
+		// timer: it must not run every tick (that would be a DELETE scan every
+		// few seconds for nothing), and it must not be forgotten either, or
+		// push_pending grows without bound now that rows are retained instead
+		// of deleted. Throttled to its own interval below.
+		let lastPruneMs = 0;
 		while (!this.abort.signal.aborted) {
 			try {
 				const r = await this.tick();
@@ -117,6 +135,11 @@ export class PushSender {
 						dropped_no_subs: r.droppedNoSubscriptions,
 						subs_deleted: r.subscriptionsDeleted
 					});
+				}
+				const now = Date.now();
+				if (now - lastPruneMs >= PUSH_PRUNE_INTERVAL_MS) {
+					lastPruneMs = now;
+					await this.prune();
 				}
 			} catch (err) {
 				log.error('tick_failed', {}, err as Error);
@@ -141,6 +164,7 @@ export class PushSender {
 			`SELECT id, account, category, title, body, click_path,
 			        event_at, enqueued_at, notification_id
 			   FROM push_pending
+			  WHERE sent_at IS NULL
 			  ORDER BY enqueued_at ASC
 			  LIMIT $1`,
 			[this.config.pushBatchSize]
@@ -157,7 +181,7 @@ export class PushSender {
 			const ageMs = now - row.event_at.getTime();
 			if (ageMs > maxAgeMs) {
 				out.droppedExpired++;
-				await this.db.query(`DELETE FROM push_pending WHERE id = $1`, [row.id]);
+				await this.markSent(row.id);
 				continue;
 			}
 
@@ -166,9 +190,9 @@ export class PushSender {
 			// (cp450 GAP A). A device that muted `row.category` is skipped.
 			const devices = await this.subs.listByAccount(row.account, row.category);
 			if (devices.length === 0) {
-				// No subscribed devices for this category — drop the row.
+				// No subscribed devices for this category — nothing to deliver.
 				out.droppedNoSubscriptions++;
-				await this.db.query(`DELETE FROM push_pending WHERE id = $1`, [row.id]);
+				await this.markSent(row.id);
 				continue;
 			}
 
@@ -214,11 +238,11 @@ export class PushSender {
 				}
 			}
 
-			// Drop the pending row.  We've fanned out to every
-			// device we knew about at this moment.  If pushes
-			// failed, the user simply doesn't see them — durably
-			// retrying after fan-out invites duplicates.
-			await this.db.query(`DELETE FROM push_pending WHERE id = $1`, [row.id]);
+			// Retire the row.  We've fanned out to every device we knew
+			// about at this moment.  If pushes failed, the user simply
+			// doesn't see them — durably retrying after fan-out invites
+			// duplicates.
+			await this.markSent(row.id);
 
 			if (anySubDeleted) {
 				log.info('subscriptions_pruned', { account: row.account });
@@ -226,6 +250,47 @@ export class PushSender {
 		}
 
 		return out;
+	}
+
+	/**
+	 * v1.5.5 — retire a row by STAMPING `sent_at`, never by deleting it.
+	 *
+	 * This is the whole duplicate-notification fix. The fast head-block tailer
+	 * and the durable chat handler both enqueue the SAME message keyed on its
+	 * on-chain trx id, and `ON CONFLICT (account, source_trx_id) DO NOTHING`
+	 * is what collapses them to one push. But this worker used to DELETE the
+	 * row the moment it delivered it (~5s), and the durable enqueue arrives
+	 * ~60s later — by which time there was nothing left to conflict with, so
+	 * it inserted and the user got a SECOND notification. The dedup could only
+	 * ever have worked if the durable insert lost a race it wins by ~55s.
+	 *
+	 * Keeping the row makes it a tombstone: the dedup key stays live until the
+	 * pruner reclaims it, long after the durable path has been and gone. The
+	 * partial index `push_pending_unsent_idx` keeps the claim query off the
+	 * retained rows.
+	 */
+	private async markSent(id: number | string): Promise<void> {
+		await this.db.query(`UPDATE push_pending SET sent_at = NOW() WHERE id = $1`, [id]);
+	}
+
+	/**
+	 * v1.5.5 — reclaim retired rows once they're older than the dedup window.
+	 *
+	 * The retention must comfortably outlive the gap between the fast enqueue
+	 * and the durable one (~60s in practice, and far more when the indexer is
+	 * catching up), or the duplicate comes straight back. An hour is ~60x the
+	 * observed gap and still bounds the table.
+	 */
+	async prune(): Promise<number> {
+		const res = await this.db.query(
+			`DELETE FROM push_pending
+			  WHERE sent_at IS NOT NULL
+			    AND sent_at < NOW() - ($1::int * INTERVAL '1 second')`,
+			[PUSH_TOMBSTONE_RETENTION_SECONDS]
+		);
+		const n = res.rowCount ?? 0;
+		if (n > 0) log.info('push_pending_pruned', { rows: n });
+		return n;
 	}
 
 	private async sendOne(

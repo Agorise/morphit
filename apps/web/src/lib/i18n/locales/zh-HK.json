@@ -587,7 +587,7 @@
       "send": "標記已發送",
       "pill_title_btc": "比特幣已發送",
       "pill_title_xmr": "門羅幣已發送",
-      "pill_txid_label": "交易",
+      "pill_txid_label": "交易 ID",
       "pill_title_blurt": "Blurt 已發送",
       "verify_pending": "正在鏈上驗證…",
       "verify_verified": "鏈上已驗證",
@@ -743,8 +743,8 @@
     "empty_state_loading": "正在載入與 @{peer} 的聊天… 打個招呼吧！",
     "day_separator_tooltip": "午夜，UTC",
     "feedback": {
-      "left_label": "已留下評價：",
-      "leave_prompt": "留下評價"
+      "leave_prompt": "留下評價",
+      "sent_toast": "評價已傳送"
     }
   },
   "cheat_sheet": {
@@ -2709,7 +2709,6 @@
       "accept_label": "我接受",
       "location_label": "位置",
       "terms_label": "條款",
-      "trades_since": "自 {month} 起 {count} 筆交易",
       "trades_only": "{count} 筆交易",
       "reputation_aria": "信譽評分 {score}（滿分 5）",
       "message_word": "訊息",
@@ -3424,7 +3423,7 @@
     "feedback_error": "現在無法載入回饋。",
     "rating_count": "{n} 條評分",
     "no_feedback_yet": "暫無回饋。還沒有對方評價過該用戶。",
-    "reviews_heading": "評價",
+    "reviews_heading": "@{account} 收到咗以下用戶嘅評價",
     "review_order_link": "查看訂單",
     "load_more": "載入更多",
     "active_orders_heading": "活躍訂單",
@@ -3539,7 +3538,8 @@
       "qr_camera_denied": "鏡頭存取被封鎖。請在瀏覽器設定中允許後重試。",
       "qr_no_camera": "此裝置沒有可用於掃描的鏡頭。",
       "qr_invalid": "該二維碼不包含 Blurt 帳戶。請換一個。"
-    }
+    },
+    "given_said": "我話："
   },
   "relative_time": {
     "descriptive": {

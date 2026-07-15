@@ -215,6 +215,23 @@ export interface OrderRecord {
 	 *  the first review regardless — this flag is purely a UI
 	 *  hint that sticks around for the first four trades to give
 	 *  newcomers a visible grace period. */
+	/** v1.5.5: the account the owner traded WITH on this completed order, as
+	 *  named in morphit_order_complete_v1 (and only stored when that pair
+	 *  cleared the provable-counterparty bar). Null/absent otherwise. */
+	readonly completed_counterparty?: string | null;
+	/** v1.5.5: COMPLETED-TRADE count for this order's owner — completions, not
+	 *  reviews, and both sides of a trade are credited. Distinct from the
+	 *  ratings count (`feedback_count`), which says how many RATINGS back the
+	 *  star average; a trade with no stars counts here and not there.
+	 *
+	 *  Returned by BOTH the orderbook and the owner-view /v1/orders/:account,
+	 *  so an order card renders "1 trade · ★5.00 (34)" identically wherever it
+	 *  appears. Also drives `is_new_trader`, the `min_trades` filter and
+	 *  `sort=trades` — all three used the feedback count as a stand-in before
+	 *  v1.5.5, because no trade data existed. Optional/absent from older
+	 *  indexers. */
+	readonly trade_count?: number;
+	/** v1.5.5: now `trade_count < 4` (was: fewer than 4 reviews). */
 	readonly is_new_trader?: boolean;
 	/** Number of distinct accounts who have messaged this order's
 	 *  owner about THIS order in the last 24h.  Drives a "💬 N
@@ -392,10 +409,16 @@ export interface AccountOrdersResponse {
 
 export interface ProfileResponse {
 	readonly account: string;
-	readonly display_name: string;
+	/** v1.5.5: NULL when the account is known on-chain but has never set a
+	 *  Morphit profile. The batch endpoint is anchored on `accounts` so such an
+	 *  account still resolves — that's how a review card can show its truncated
+	 *  posting key without the person having set a display name. */
+	readonly display_name: string | null;
 	readonly json_metadata: unknown;
-	readonly source_block_num: number;
-	readonly updated_at: string;
+	/** v1.5.5: NULL for a profile-less account (no profile op to source). */
+	readonly source_block_num: number | null;
+	/** v1.5.5: NULL for a profile-less account. */
+	readonly updated_at: string | null;
 	/** cp471 (D7/E): the account's posting public key (base58), joined
 	 *  from `accounts`, so a profile/review card can render the truncated
 	 *  key under a display name. Optional/absent from older indexers;

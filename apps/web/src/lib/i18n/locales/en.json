@@ -587,7 +587,7 @@
       "send": "Mark sent",
       "pill_title_btc": "Bitcoin sent",
       "pill_title_xmr": "Monero sent",
-      "pill_txid_label": "Transaction",
+      "pill_txid_label": "Transaction ID",
       "pill_title_blurt": "Blurt sent",
       "verify_pending": "Verifying on chain…",
       "verify_verified": "Verified on chain",
@@ -743,8 +743,8 @@
     "empty_state_loading": "Messaging with @{peer} is loading… Say hi!",
     "day_separator_tooltip": "Midnight, UTC",
     "feedback": {
-      "left_label": "Feedback left:",
-      "leave_prompt": "Leave feedback"
+      "leave_prompt": "Leave feedback",
+      "sent_toast": "Feedback sent"
     }
   },
   "cheat_sheet": {
@@ -2709,7 +2709,6 @@
       "accept_label": "I accept",
       "location_label": "Location",
       "terms_label": "Terms",
-      "trades_since": "{count} trades since {month}",
       "trades_only": "{count} trades",
       "reputation_aria": "Reputation score {score} out of 5",
       "message_word": "Message",
@@ -3424,7 +3423,7 @@
     "feedback_error": "Couldn't load feedback right now.",
     "rating_count": "{n, plural, one {# rating} other {# ratings}}",
     "no_feedback_yet": "No feedback yet. This user has not been reviewed by any counterparty.",
-    "reviews_heading": "Reviews",
+    "reviews_heading": "@{account} has received reviews from",
     "review_order_link": "View the order",
     "load_more": "Load more",
     "active_orders_heading": "Active orders",
@@ -3539,7 +3538,8 @@
       "qr_camera_denied": "Camera access was blocked. Allow it in your browser settings, then try again.",
       "qr_no_camera": "This device has no camera to scan with.",
       "qr_invalid": "That QR didn't contain a Blurt account. Try another."
-    }
+    },
+    "given_said": "I said:"
   },
   "relative_time": {
     "descriptive": {

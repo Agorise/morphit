@@ -587,7 +587,7 @@
       "send": "Segna inviato",
       "pill_title_btc": "Bitcoin inviato",
       "pill_title_xmr": "Monero inviato",
-      "pill_txid_label": "Transazione",
+      "pill_txid_label": "ID transazione",
       "pill_title_blurt": "Blurt inviato",
       "verify_pending": "Verifica sulla chain…",
       "verify_verified": "Verificato sulla chain",
@@ -743,8 +743,8 @@
     "empty_state_loading": "La chat con @{peer} si sta caricando… Saluta!",
     "day_separator_tooltip": "Mezzanotte, UTC",
     "feedback": {
-      "left_label": "Recensione lasciata:",
-      "leave_prompt": "Lascia recensione"
+      "leave_prompt": "Lascia recensione",
+      "sent_toast": "Recensione inviata"
     }
   },
   "cheat_sheet": {
@@ -2709,7 +2709,6 @@
       "accept_label": "Accetto",
       "location_label": "Località",
       "terms_label": "Termini",
-      "trades_since": "{count} scambi da {month}",
       "trades_only": "{count} scambi",
       "reputation_aria": "Punteggio di reputazione {score} su 5",
       "message_word": "Messaggio",
@@ -3424,7 +3423,7 @@
     "feedback_error": "Non è stato possibile caricare i feedback adesso.",
     "rating_count": "{n, plural, one {# valutazione} other {# valutazioni}}",
     "no_feedback_yet": "Nessun feedback ancora. Questo utente non è stato recensito da nessuna controparte.",
-    "reviews_heading": "Recensioni",
+    "reviews_heading": "@{account} ha ricevuto recensioni da",
     "review_order_link": "Vedi l'ordine",
     "load_more": "Carica altri",
     "active_orders_heading": "Ordini attivi",
@@ -3539,7 +3538,8 @@
       "qr_camera_denied": "L'accesso alla fotocamera è stato bloccato. Consentilo nelle impostazioni del browser e riprova.",
       "qr_no_camera": "Questo dispositivo non ha una fotocamera per scansionare.",
       "qr_invalid": "Quel QR non conteneva un account Blurt. Provane un altro."
-    }
+    },
+    "given_said": "Ho detto:"
   },
   "relative_time": {
     "descriptive": {
