@@ -37,6 +37,7 @@
 	import StatusLine from '$components/StatusLine.svelte';
 	import BusyButton from '$components/BusyButton.svelte';
 	import IdentityLabel from '$components/IdentityLabel.svelte';
+	import RatingChip from '$components/RatingChip.svelte';
 	import AltNetworkIcon from '$components/AltNetworkIcon.svelte';
 	import { validateNostrUrlForRender } from '$utils/nostrUrl';
 	import { validateBlurtMediaUrlForRender } from '$utils/blurtMediaUrl';
@@ -760,6 +761,7 @@
 								avatarDataUri={reviewerProps.avatarDataUri}
 								nostrUrl={reviewerProps.nostrUrl}
 								blurtMediaUrl={reviewerProps.blurtMediaUrl}
+								publicKeyString={reviewerProfileMap[fb.reviewer]?.posting_pubkey ?? undefined}
 								href={lp(`/@${fb.reviewer}`)}
 								weight="semibold"
 								avatarSize={24}
@@ -810,7 +812,7 @@
 						{#if fb.order_permlink}
 							<p class="mt-2 text-xs text-ink-500">
 								<a
-									href={lp(`/@${account}/${fb.order_permlink}`)}
+									href={lp(`/@${fb.order_account ?? account}/${fb.order_permlink}`)}
 									class="hover:text-morphit-emerald hover:underline"
 								>
 									{$_('profile.review_order_link')}
@@ -922,7 +924,7 @@
 	<!-- ─── Feedback given (reviews this account has left) ──── -->
 	<section class="mt-8" aria-labelledby="given-heading">
 		<h2 id="given-heading" class="mb-3 font-display text-lg font-bold">
-			{$_('profile.given_heading')}
+			{$_('profile.given_heading', { values: { account } })}
 		</h2>
 
 		{#if feedbackGivenState === 'loading'}
@@ -947,11 +949,13 @@
 								{$_('profile.feedback_suppressed_chip')}
 							</a>
 						{/if}
-						<div class="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-							<div class="flex flex-wrap items-baseline gap-2 text-sm">
-								<span class="text-ink-500">
-									{$_('profile.given_prefix')}
-								</span>
+						<div class="mb-2 flex items-start justify-between gap-2">
+							<!-- v1.5.0 (t.txt E): avatar + display name (truncated posting
+							     key stacked under it by IdentityLabel) + the reviewed
+							     account's CURRENT reputation. flex-wrap so the chip drops
+							     to its own line on a narrow phone instead of squashing
+							     the name. -->
+							<div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
 								<IdentityLabel
 									account={fb.subject}
 									displayName={subjectProps.displayName}
@@ -959,44 +963,57 @@
 									avatarDataUri={subjectProps.avatarDataUri}
 									nostrUrl={subjectProps.nostrUrl}
 									blurtMediaUrl={subjectProps.blurtMediaUrl}
+									publicKeyString={reviewerProfileMap[fb.subject]?.posting_pubkey ?? undefined}
 									href={lp(`/@${fb.subject}`)}
 									weight="semibold"
-									avatarSize={24}
+									avatarSize={36}
 								/>
+								{#if fb.subject_reputation && fb.subject_reputation.count > 0}
+									<RatingChip
+										count={fb.subject_reputation.count}
+										rating={fb.subject_reputation.weighted_rating}
+									/>
+								{/if}
 							</div>
-							<span class="text-xs text-ink-500">
+							<span class="flex-none text-xs text-ink-500">
 								<RelativeTime iso={fb.created_at} format="terse" />
 							</span>
 						</div>
+						<!-- v1.5.0 (t.txt E): "I rated @X: ★★★★★" with the Verified-chat
+						     pill on the SAME line as the stars; wraps cleanly on narrow
+						     screens via flex-wrap. -->
 						<div
-							class="mb-2"
+							class="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm"
 							aria-label={$_('feedback.form.rating_n_stars', {
 								values: { n: fb.rating }
 							}) as string}
 						>
+							<span class="text-ink-600 dark:text-ink-300">
+								{$_('profile.given_rated', { values: { account: fb.subject } })}
+							</span>
 							<span class="text-morphit-emerald" aria-hidden="true">
 								{starString(fb.rating)}
 							</span>
+							{#if fb.has_verified_chat}
+								<a
+									href={lp('/faq#verified_chat_badge')}
+									class="inline-flex items-center gap-1 rounded-full border border-morphit-emerald/40 bg-morphit-emerald/5 px-2 py-0.5 text-xs text-morphit-emerald hover:bg-morphit-emerald/10 dark:border-morphit-emerald/50 dark:bg-morphit-emerald/10 dark:hover:bg-morphit-emerald/20"
+									title={$_('feedback.verified_chat_badge.tooltip') as string}
+								>
+									<svg viewBox="0 0 16 16" class="h-3 w-3" fill="currentColor" aria-hidden="true">
+										<path
+											d="M3 8l3 3 7-7"
+											stroke="currentColor"
+											stroke-width="2"
+											fill="none"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+										/>
+									</svg>
+									{$_('feedback.verified_chat_badge.label')}
+								</a>
+							{/if}
 						</div>
-						{#if fb.has_verified_chat}
-							<a
-								href={lp('/faq#verified_chat_badge')}
-								class="mb-2 inline-flex items-center gap-1 rounded-full border border-morphit-emerald/40 bg-morphit-emerald/5 px-2 py-0.5 text-xs text-morphit-emerald hover:bg-morphit-emerald/10 dark:border-morphit-emerald/50 dark:bg-morphit-emerald/10 dark:hover:bg-morphit-emerald/20"
-								title={$_('feedback.verified_chat_badge.tooltip') as string}
-							>
-								<svg viewBox="0 0 16 16" class="h-3 w-3" fill="currentColor" aria-hidden="true">
-									<path
-										d="M3 8l3 3 7-7"
-										stroke="currentColor"
-										stroke-width="2"
-										fill="none"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-									/>
-								</svg>
-								{$_('feedback.verified_chat_badge.label')}
-							</a>
-						{/if}
 						{#if fb.comment}
 							<p class="whitespace-pre-wrap text-sm text-ink-700 dark:text-ink-200">
 								{fb.comment}
@@ -1005,7 +1022,7 @@
 						{#if fb.order_permlink}
 							<p class="mt-2 text-xs text-ink-500">
 								<a
-									href={lp(`/@${fb.subject}/${fb.order_permlink}`)}
+									href={lp(`/@${fb.order_account ?? fb.subject}/${fb.order_permlink}`)}
 									class="hover:text-morphit-emerald hover:underline"
 								>
 									{$_('profile.review_order_link')}

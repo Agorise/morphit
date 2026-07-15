@@ -110,6 +110,16 @@ export function clearAllHidden(): void {
 	});
 }
 
+/**
+ * v1.5.0 — re-read the hidden set from localStorage into the store. The store
+ * already reacts to cross-tab storage events; a manual Refresh button in
+ * Settings gives the same reassurance as the blocked-accounts one (and picks
+ * up any change made outside this store's own mutators).
+ */
+export function refreshHidden(): void {
+	internal.set(readHidden());
+}
+
 /** Pure check — is this account in the hidden set? Callers that
  *  need reactivity should subscribe to `hiddenAccounts` instead of
  *  calling this per render.

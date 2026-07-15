@@ -474,8 +474,6 @@
       "share_button_aria": "Condividi il tuo indirizzo di ricezione cripto",
       "modal_title": "Condividi un indirizzo di ricezione",
       "modal_subtitle": "Invia il tuo indirizzo di ricezione BTC o XMR al tuo partner di scambio.",
-      "method_btc": "Bitcoin",
-      "method_xmr": "Monero",
       "address_label": "Indirizzo di ricezione",
       "address_placeholder_btc": "bc1q… o 1… o 3…",
       "address_placeholder_xmr": "8… (consigliato) o 4…",
@@ -492,7 +490,6 @@
       "pill_copied": "Copiato!",
       "pill_for_order": "Per l'ordine",
       "verify_warning": "Verifica sempre l'indirizzo prima di inviare. Le transazioni cripto non possono essere annullate.",
-      "method_blurt": "Blurt",
       "address_placeholder_blurt": "nome-account",
       "address_invalid_blurt": "Non sembra un nome account valido.",
       "pill_method_blurt": "Account Blurt",
@@ -518,15 +515,12 @@
       "xmr_jitter_send_exact_hint": "Dì al wallet dell'acquirente di inviare esattamente questo importo, inclusi i decimali lunghi.",
       "xmr_jitter_off_warning_heading": "Privacy ridotta",
       "xmr_jitter_off_warning_body": "Gli importi tondi sono più facili da correlare sulla chain Monero. Lascia il jitter attivo a meno che tu non abbia motivo di inviare cifre esatte.",
-      "method_usdt": "USDT",
-      "method_bch": "Bitcoin Cash",
       "address_placeholder_usdt": "Indirizzo Tether (corrispondente alla rete scelta)",
       "address_placeholder_bch": "bitcoincash:q… o 1… o 3…",
       "address_invalid_usdt": "Questo indirizzo non corrisponde alla rete USDT scelta. Controlla due volte prima di inviare — gli invii cross-network perdono i fondi.",
       "address_invalid_bch": "Non sembra un indirizzo Bitcoin Cash valido.",
       "pill_method_usdt": "Indirizzo USDT",
       "pill_method_bch": "Indirizzo Bitcoin Cash",
-      "method_ltc": "Litecoin",
       "address_placeholder_ltc": "L… o M… o ltc1…",
       "address_invalid_ltc": "Non sembra un indirizzo Litecoin valido.",
       "pill_method_ltc": "Indirizzo Litecoin",
@@ -544,46 +538,38 @@
       "payjoin_explain": "PayJoin (BIP-78) è un protocollo cooperativo di transazione Bitcoin: il pagatore e il destinatario aggiungono entrambi input alla stessa transazione, sconfiggendo l'euristica common-input-ownership che gli analisti di chain usano per raggruppare gli UTXO.",
       "payjoin_badge": "PayJoin disponibile",
       "payjoin_badge_tooltip": "Il wallet del venditore supporta PayJoin (BIP-78). Se anche il tuo wallet lo supporta, aprire questo URI negozierà una transazione cooperativa che migliora la privacy.",
-      "method_dash": "Dash",
       "address_placeholder_dash": "X… o 7…",
       "address_invalid_dash": "Non sembra un indirizzo Dash valido.",
       "pill_method_dash": "Indirizzo Dash",
-      "method_usdc": "USDC",
       "address_placeholder_usdc": "Indirizzo USD Coin (corrispondente alla rete scelta)",
       "address_invalid_usdc": "Indirizzo USDC non valido per la rete scelta. Reti EVM: 0x + 40 hex. Solana: 32-44 base58. Controlla di aver scelto la rete giusta nel formulario d'ordine.",
       "pill_method_usdc": "Indirizzo USDC",
-      "method_dai": "DAI",
       "address_invalid_dai": "Forma di indirizzo DAI non valida (atteso EVM 0x[40 hex]).",
       "address_placeholder_dai": "0x... (indirizzo DAI in formato EVM)",
       "pill_method_dai": "DAI {network}",
-      "method_doge": "Dogecoin",
       "address_placeholder_doge": "D… 9… o A…",
       "address_invalid_doge": "Non sembra un indirizzo Dogecoin valido.",
       "pill_method_doge": "Indirizzo Dogecoin",
-      "method_zec": "Zcash",
       "address_placeholder_zec": "t1… t3… zs1… o u1…",
       "address_invalid_zec": "Non sembra un indirizzo Zcash valido.",
       "pill_method_zec": "Indirizzo Zcash",
-      "method_arrr": "ARRR",
       "address_placeholder_arrr": "Il tuo indirizzo ARRR (zs1...)",
       "address_invalid_arrr": "Indirizzo Pirate Chain non valido.  Atteso prefisso `zs1` + 75 caratteri dati bech32 (78 totali).",
       "pill_method_arrr": "Pirate Chain (ARRR)",
-      "method_dcr": "DCR",
       "address_placeholder_dcr": "Il tuo indirizzo DCR (Ds... o Dc...)",
       "address_invalid_dcr": "Indirizzo Decred non valido.  Atteso prefisso `Ds` o `Dc` + 33 caratteri base58 (35 totali).",
       "pill_method_dcr": "Decred (DCR)",
-      "method_sol": "SOL",
       "address_placeholder_sol": "Il tuo indirizzo SOL (32-44 caratteri base58)",
       "address_invalid_sol": "Indirizzo Solana non valido.  Attesi 32-44 caratteri base58 (la maggior parte sono 44).",
       "pill_method_sol": "Solana (SOL)",
-      "method_eth": "ETH",
       "address_placeholder_eth": "Il tuo indirizzo ETH (0x + 40 caratteri hex)",
       "address_invalid_eth": "Indirizzo Ethereum non valido.  Atteso 0x seguito da 40 caratteri hex (42 totali).",
       "pill_method_eth": "Ethereum (ETH)",
-      "method_xrp": "XRP",
       "address_placeholder_xrp": "Il tuo indirizzo XRP (r + 24-34 caratteri base58)",
       "address_invalid_xrp": "Indirizzo XRP Ledger non valido.  Atteso un indirizzo che inizia con r seguito da 24-34 caratteri base58 (nessun destination tag in questo campo).",
-      "pill_method_xrp": "Ripple (XRP)"
+      "pill_method_xrp": "Ripple (XRP)",
+      "blurt_account_not_found": "Non esiste alcun account Blurt con quel nome.",
+      "asset_label": "Moneta"
     },
     "funds_sent": {
       "button": "Paga ora",
@@ -641,7 +627,9 @@
       "pill_title_dcr": "DCR inviato",
       "pill_title_sol": "SOL inviato",
       "pill_title_eth": "ETH inviato",
-      "pill_title_xrp": "XRP inviato"
+      "pill_title_xrp": "XRP inviato",
+      "pill_title_blurt_received": "Blurt ricevuto",
+      "receipt_title": "Ricevuta di pagamento"
     },
     "unknown_version": "Questo messaggio usa un protocollo più recente. Aggiorna Morphit per leggerlo.",
     "pay_blurt": {
@@ -752,7 +740,12 @@
       "hint": "Il minimo dell'ordine è {min} {fiat} (≈ {amount} {asset}).",
       "hint_market": "Il minimo dell'ordine è {min} {fiat} (≈ {amount} {asset} al prezzo di mercato attuale)."
     },
-    "empty_state_loading": "La chat con @{peer} si sta caricando… Saluta!"
+    "empty_state_loading": "La chat con @{peer} si sta caricando… Saluta!",
+    "day_separator_tooltip": "Mezzanotte, UTC",
+    "feedback": {
+      "left_label": "Recensione lasciata:",
+      "leave_prompt": "Lascia recensione"
+    }
   },
   "cheat_sheet": {
     "heading": "Foglio di riferimento Morphit",
@@ -1777,7 +1770,8 @@
     "form": {
       "aria_label": "Rispondi a questa recensione",
       "heading": "La tua risposta",
-      "subheading": "Lascia una risposta pubblica a questa recensione. Firmata da te, gratis, pubblicata on-chain. Visibile a chiunque legga il tuo profilo.",
+      "subheading": "Stai rispondendo alla recensione qui sopra — racconta la tua versione. Appare pubblicamente sotto la loro recensione sul tuo profilo. Gratis, firmata da te, on-chain e permanente.",
+      "not_rating": "Questa è una risposta, non una valutazione. Per valutare questo trader, lascia una recensione dalla tua chat con lui.",
       "comment_label": "Risposta",
       "comment_placeholder": "La tua versione dei fatti.",
       "submit": "Pubblica risposta",
@@ -2196,7 +2190,8 @@
       "all": "Tutti",
       "live": "Attivi",
       "cancelled": "Cancellati",
-      "expired": "Scaduti"
+      "expired": "Scaduti",
+      "paid": "Pagato"
     },
     "order": {
       "posted_prefix": "Pubblicato",
@@ -2223,7 +2218,10 @@
       "edit_window_tooltip": "Gli ordini si possono modificare solo entro 15 minuti dalla pubblicazione. Dopo serve cancellarli e ripubblicarli.",
       "edit_window_aria": "Tempo rimanente per modifica: {remaining}",
       "feedback_pick_prompt": "Con chi hai scambiato?",
-      "not_visible_orderbook": "Non visibile nel book ordini"
+      "not_visible_orderbook": "Non visibile nel book ordini",
+      "state_completed": "Completato",
+      "action_complete": "Segna come completato",
+      "feedback_no_counterparty": "Ancora nessuna chat con una controparte"
     },
     "cancel": {
       "confirm_title": "Cancellare questo ordine?",
@@ -2260,6 +2258,13 @@
       "heading": "Stato della commissione",
       "body": "💡 Ogni ordine qui sotto mostra lo stato della sua commissione di pubblicazione. Un ordine compare nel libro ordini pubblico solo una volta verificata la commissione — un’etichetta «non ricevuta», «pagamento insufficiente» o «non ancora verificata» è il motivo per cui un ordine può sembrare mancante.",
       "dismiss": "Ignora questa nota"
+    },
+    "complete": {
+      "confirm_title": "Segnare questo ordine come completato?",
+      "confirm_body": "Conferma che lo scambio è concluso e rimuove l'ordine dal book pubblico. Non può essere annullato.",
+      "confirm_button": "Segna completato",
+      "cancel_button": "Mantienilo attivo",
+      "completing": "Contrassegno…"
     }
   },
   "nav": {
@@ -2604,7 +2609,8 @@
     "posting_title": "Il tuo ordine è in fase di pubblicazione…",
     "posting_body": "Questo ordine è in fase di conferma da parte della blockchain e può richiedere un minuto per comparire. Continueremo a controllare automaticamente: non serve ricaricare.",
     "check_again": "Controlla di nuovo",
-    "action_edit_countdown": "Modifica (entro: {remaining})"
+    "action_edit_countdown": "Modifica (entro: {remaining})",
+    "status_completed": "Completato e pagato"
   },
   "orderbook": {
     "heading": "Libro ordini",
@@ -3428,11 +3434,11 @@
     "active_orders_sort_hint": "I più vecchi prima — quelli più vicini alla scadenza.",
     "expires_in": "Scade tra {t}",
     "expires_now": "In scadenza adesso",
-    "given_heading": "Recensioni lasciate da questo utente",
+    "given_heading": "@{account} ha lasciato una recensione per",
+    "given_rated": "Ho valutato @{account}:",
     "loading_given": "Caricamento recensioni lasciate…",
     "given_error": "Non è stato possibile caricare le recensioni lasciate da questo utente.",
     "no_given_yet": "Nulla ancora. Questo utente non ha lasciato feedback a nessuna controparte.",
-    "given_prefix": "Ha recensito",
     "rss_subscribe_label": "RSS — segui questo trader",
     "rss_subscribe_title": "Ricevi notifiche via RSS quando questo trader pubblica un nuovo ordine di acquisto o vendita. Nota: interrogare un feed per-trader è leggermente più rivelatore del feed mondiale.",
     "feedback_suppressed_chip": "Non conta per la valutazione — recensori segnalati come collegati",
@@ -3912,8 +3918,7 @@
       "placeholder": "es. Caffè, BTC e lunghe passeggiate sulla blockchain.",
       "hint": "Sembra a posto.",
       "broadcast_ok_detail": "La tua breve bio è ora pubblicata e visibile a tutti.",
-      "clear": "Cancella",
-      "clear_confirm_prompt": "Rimuovere la tua breve bio da questo dispositivo? Puoi reimpostarla in qualsiasi momento."
+      "clear": "Cancella"
     },
     "title": "Impostazioni",
     "subtitle": "La tua identità, le tue regole. Salvate sul tuo dispositivo, mai sui nostri server.",
@@ -3943,9 +3948,6 @@
         "lookup_failed": "Morphit non è riuscito a contattare il suo indexer per verificare quale account controlla questa chiave, quindi non ha trasmesso nulla. Controlla la connessione e riprova."
       },
       "broadcast_pending": "Pubblicazione in corso…",
-      "clear_confirm_prompt": "Rimuovere il tuo nome da questo dispositivo? Puoi impostarlo di nuovo in qualsiasi momento.",
-      "clear_confirm_yes": "Sì, rimuovi",
-      "clear_confirm_cancel": "Mantieni",
       "broadcast_ok_detail": "Il tuo nome visualizzato è ora pubblico per tutti."
     },
     "endpoints": {
@@ -3955,7 +3957,16 @@
       "cooling_down": "in pausa",
       "recheck": "Ricontrolla la velocità dei nodi",
       "probing": "test in corso…",
-      "unreachable": "irraggiungibile"
+      "unreachable": "irraggiungibile",
+      "err_timeout": "Nessuna risposta in tempo (timeout)",
+      "err_tls": "Problema con il certificato TLS",
+      "err_dns": "Ricerca DNS non riuscita",
+      "err_refused": "Connessione rifiutata",
+      "err_rpc": "Ha risposto, ma la chiamata RPC non è riuscita",
+      "err_body": "Ha risposto con dati illeggibili",
+      "err_http": "Il nodo ha risposto HTTP {status}",
+      "err_http_blocked": "Bloccato da una policy di sicurezza (HTTP {status})",
+      "err_http_rate": "Limitato dal nodo (HTTP 429)"
     },
     "session": {
       "autolock_changed": "Cambiato in {label}",
@@ -3973,10 +3984,10 @@
     },
     "nostr_url": {
       "heading": "Link Nostr",
-      "explain": "Opzionale. Aggiungi l'URL del tuo profilo Nostr e una piccola icona Nostr appare accanto al tuo nome utente ovunque su Morphit. Aiuta le persone a raggiungerti fuori da questo marketplace.",
+      "explain": "Aggiungi qui l'URL del tuo profilo Nostr per aiutare le persone a raggiungerti fuori da Morphit. Nella tua pagina profilo, la sua icona collegata è mostrata accanto al tuo avatar.",
       "label": "Il tuo URL Nostr",
       "placeholder": "nostr:npub1... o https://...",
-      "hint_empty": "Lascia vuoto se non vuoi mostrare un link Nostr.",
+      "hint_empty": "Incolla qui l'URL del tuo profilo Nostr, o lascia vuoto.",
       "hint_ok": "Va bene.",
       "error": {
         "too_long": "Troppo lungo. Mantienilo sotto i 512 caratteri.",
@@ -3988,12 +3999,12 @@
       "save_and_broadcast": "Salva e trasmetti",
       "broadcast_pending": "Pubblicazione…",
       "clear": "Cancella",
-      "reminder_title": "Dove appare",
-      "reminder_body": "Una volta pubblicata, l'icona Nostr appare accanto al tuo nome utente su ogni ordine, ogni feedback, ogni messaggio di chat — su ogni istanza Morphit, non solo questa. Altri utenti la toccano per aprire il tuo profilo Nostr nel loro client preferito."
+      "reminder_title": "Opzionale — puoi saltare.",
+      "reminder_body": "La tua identità Morphit funziona benissimo senza questo URL. È un link di cortesia per le persone che potrebbero voler vedere anche il tuo profilo Nostr."
     },
     "blurt_media_url": {
-      "heading": "URL profilo Blurt.media",
-      "explain": "Un collegamento al tuo profilo su blurt.media, un popolare frontend di Blurt per lo streaming. Mostrato accanto al tuo nome utente ovunque su Morphit. Facoltativo.",
+      "heading": "Profilo Blurt.media",
+      "explain": "Un collegamento al tuo profilo su blurt.media, un popolare frontend di Blurt per lo streaming. Nella tua pagina profilo, la sua icona collegata è mostrata accanto al tuo avatar.",
       "label": "URL Blurt.media",
       "placeholder": "https://blurt.media/@tuonome",
       "hint_empty": "Incolla qui l'URL del tuo profilo blurt.media, o lascia vuoto.",
@@ -4088,7 +4099,10 @@
       "unhide_all": "Mostra tutti",
       "unhide_all_confirm": "Mostrare tutti {count} account? Questo renderà i loro ordini di nuovo visibili nella tua vista orderbook.",
       "unhide_all_confirm_yes": "Sì, mostra tutti",
-      "unhide_all_confirm_cancel": "Tienili nascosti"
+      "unhide_all_confirm_cancel": "Tienili nascosti",
+      "refresh": "Aggiorna",
+      "refreshed": "Aggiornato!",
+      "refresh_aria": "Aggiorna l'elenco degli account nascosti"
     },
     "avatar": {
       "heading": "Avatar",
@@ -4170,9 +4184,8 @@
       "first_trade_help": "Quando lasci un feedback per il tuo primo scambio Morphit, pubblica anche un breve post \"Mi sono unito a Morphit\" sulla community @morphit su Blurt. Pubblicato solo una volta per account. La sindacazione per-ordine è una casella separata sul modulo ordine.",
       "pitch_heading": "Perché attivarlo?",
       "pitch_body": "La sindicazione è tutto. Più occhi = più partner e ricompense upvote direttamente sul Wallet Blurt. Off = nulla di pubblico.",
-      "blog_default_explain": "Hai fatto la tua prima operazione, bene. Ora Morphit può spuntare per te la casella \"pubblica questo ordine sul mio blog Blurt\" a ogni nuovo ordine, così le tue offerte vengono condivise automaticamente. Ogni post resta firmato da te e puoi togliere la spunta su un singolo ordine.",
-      "blog_default_label": "Pubblica i miei ordini sul mio blog Blurt per impostazione predefinita",
-      "blog_default_help": "Spunta in anticipo la casella \"diffondi sul mio blog\" di ogni ordine nel modulo. Puoi sempre togliere la spunta per un ordine specifico. Disattivato = la casella parte senza spunta ogni volta."
+      "blog_default_explain": "Ora Morphit può spuntare per te la casella \"pubblica questo ordine sul mio blog Blurt\" a ogni nuovo ordine, così le tue offerte vengono pubblicate automaticamente. Ogni post resta firmato da te e puoi togliere la spunta su un singolo ordine.",
+      "blog_default_label": "Pubblica i miei ordini sul mio blog Blurt per impostazione predefinita"
     },
     "privacy": {
       "heading": "Privacy",
@@ -4485,13 +4498,13 @@
   "trade_status": {
     "address_shared": "Indirizzo condiviso",
     "payment_pending": "Pagamento in attesa",
-    "paid": "Pagato",
     "payment_mismatch": "Discrepanza di pagamento",
     "payment_unverifiable": "Pagamento non verificabile",
     "released": "Rilasciato",
     "disputed": "Contestato",
     "completed": "Completato",
-    "in_progress": "Operazione in corso"
+    "in_progress": "Operazione in corso",
+    "paid_by": "Pagato da"
   },
   "update": {
     "title": "È disponibile un aggiornamento di Morphit",
@@ -4586,9 +4599,9 @@
   },
   "unlock_active": {
     "title": "Questo pagamento richiede la tua chiave attiva",
-    "body": "Hai effettuato l'accesso a @{account} con la chiave di pubblicazione, che non può movimentare denaro. Inserisci la tua chiave attiva o la tua password principale di Blurt per continuare — non perderai nulla di ciò che hai inserito.",
-    "field_label": "Chiave attiva o password principale di Blurt",
-    "field_placeholder": "Inizia con 5… , oppure la tua password principale",
+    "body": "Hai effettuato l'accesso a @{account} solo con la chiave di pubblicazione, che non può movimentare denaro. Incolla la tua chiave attiva nel campo per continuare.",
+    "field_label": "Chiave attiva",
+    "field_placeholder": "Inizia con 5…",
     "field_help": "Morphit la verifica con il tuo account sulla blockchain prima di firmare qualsiasi cosa. Non lascia mai questo dispositivo.",
     "cta": "Sblocca e continua",
     "checking": "Verifica…",

@@ -32,6 +32,12 @@ export interface ListenerDispatchContext {
 	 *  empty string in non-browser contexts; the dispatcher
 	 *  treats that as "not on chat page." */
 	readonly currentPathname: string;
+	/** Current UI locale (e.g. 'en', 'zh-CN'). The chat route is
+	 *  locale-prefixed (/[lang]/chat/[account]), so BOTH the
+	 *  same-page suppression path AND the click-through href must
+	 *  carry it — otherwise the suppression never matches (toast
+	 *  fires even while viewing the chat) and the link 404s. */
+	readonly lang: string;
 }
 
 /** A store mutation the caller should apply. */
@@ -176,7 +182,7 @@ export function planListenerDispatch(
 	}
 
 	// ─── Notify effect (suppressed when on matching chat page) ──
-	const expectedPath = `/chat/${ctx.sender}`;
+	const expectedPath = `/${ctx.lang}/chat/${ctx.sender}`;
 	const onMatchingChatPage =
 		ctx.currentPathname === expectedPath || ctx.currentPathname.startsWith(`${expectedPath}/`);
 
@@ -185,7 +191,7 @@ export function planListenerDispatch(
 		// F-28: truncate long permlinks for visual display.
 		const displayPermlink =
 			orderPermlink.length > 22 ? `${orderPermlink.slice(0, 19)}…` : orderPermlink;
-		const href = `/chat/${encodeURIComponent(ctx.sender)}?order=${encodeURIComponent(orderPermlink)}`;
+		const href = `/${ctx.lang}/chat/${encodeURIComponent(ctx.sender)}?order=${encodeURIComponent(orderPermlink)}`;
 		const notificationTag = `morphit-trade-${orderPermlink}`;
 
 		if (decoded.kind === 'address') {

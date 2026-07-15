@@ -24,7 +24,7 @@
 	 * identity check) lives in the parent ConversationView.
 	 */
 
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { _ } from 'svelte-i18n';
 
 	import ProtectedTextarea from '$components/ProtectedTextarea.svelte';
@@ -79,6 +79,9 @@
 
 	let text = $state('');
 	let sending = $state(false);
+	/** v1.5.0 — bound to the composer input so we can re-focus it after a
+	 *  send (keeps the cursor in the field unless the user clicks away). */
+	let inputRef: { focus: () => void } | undefined = $state();
 
 	// ─── Private-key protection ────────────────────────────────────
 	let keyMatches: readonly PrivateKeyMatch[] = $state([]);
@@ -201,6 +204,11 @@
 			userAckedKeyWarning = false;
 		} finally {
 			sending = false;
+			// v1.5.0 — keep the cursor in the composer after a send (success OR
+			// failure) unless the user clicks elsewhere. tick() first so the
+			// textarea is re-enabled (disabled while `sending`) before focus.
+			await tick();
+			inputRef?.focus();
 		}
 	}
 
@@ -275,6 +283,7 @@
 	     above this row. -->
 	<div class="flex items-center gap-2">
 		<ProtectedTextarea
+			bind:this={inputRef}
 			class="flex-1"
 			bind:value={text}
 			name="chat-message"

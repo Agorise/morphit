@@ -76,6 +76,7 @@ import { chatActivityStreamRoute } from '$api/chatActivityStream';
 import { chatIdentityRoute } from '$api/chatIdentity';
 import { chatReadStateRoute } from '$api/chatReadState';
 import { chatFoldersRoute } from '$api/chatFolders';
+import { settingsRoute } from '$api/settings';
 import { chatAdmissionRoute } from '$api/chatAdmission';
 import { blocksRoute } from '$api/blocks';
 import { attestorEligibilityRoute } from '$api/attestorEligibility';
@@ -582,6 +583,11 @@ async function main(): Promise<void> {
 	chatFoldersApp.use('*', rateLimit('list', config.listRatePerMin));
 	chatFoldersApp.route('/', chatFoldersRoute(db));
 	app.route('/v1/chat-folders', chatFoldersApp);
+
+	const settingsApp = new Hono();
+	settingsApp.use('*', rateLimit('list', config.listRatePerMin));
+	settingsApp.route('/', settingsRoute(db));
+	app.route('/v1/settings', settingsApp);
 
 	// Finding H layer 1 — block list surface. Returns the
 	// accounts currently blocked by :account. Used by the

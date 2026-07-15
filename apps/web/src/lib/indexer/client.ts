@@ -23,6 +23,7 @@ import type {
 	ChatIdentityResponse,
 	ChatReadStateResponse,
 	ChatFoldersResponse,
+	UserSettingsResponse,
 	ConversationsResponse,
 	OrderCounterpartiesResponse,
 	FeaturedOrderbookResponse,
@@ -470,6 +471,20 @@ export function getChatFolders(
 	signal?: AbortSignal
 ): Promise<Result<ChatFoldersResponse>> {
 	return request<ChatFoldersResponse>(`/v1/chat-folders/${encodeURIComponent(account)}`, {
+		signal
+	});
+}
+
+/**
+ * GET /v1/settings/:account — the account's ENCRYPTED settings blob (v1.5.0
+ * settings-to-chain mirroring), or `enc: null` if never saved. The caller
+ * decrypts it with a posting-key-derived key.
+ */
+export function getUserSettings(
+	account: string,
+	signal?: AbortSignal
+): Promise<Result<UserSettingsResponse>> {
+	return request<UserSettingsResponse>(`/v1/settings/${encodeURIComponent(account)}`, {
 		signal
 	});
 }

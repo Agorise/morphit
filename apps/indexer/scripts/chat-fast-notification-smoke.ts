@@ -31,6 +31,12 @@ import { fileURLToPath } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..'); // apps/indexer
 const WEB = join(ROOT, '..', 'web');
 
+/** Collapse whitespace so source assertions survive prettier reflowing a call
+ *  across lines. A formatting-sensitive regex is a false-negative generator:
+ *  it fails while the wiring it guards is perfectly intact, which trains us to
+ *  ignore the guard. Match on structure, not layout. */
+const flat = (src: string): string => src.replace(/\s+/g, ' ');
+
 let failures = 0;
 let scenarios = 0;
 function scenario(name: string, fn: () => void): void {
@@ -138,15 +144,27 @@ scenario('enqueueChatPush refuses self-chat', () => {
 scenario('service worker pokes every tab with CHAT_PUSH on push', () => {
 	assert(sw.includes("addEventListener('push'"), 'no SW push handler');
 	assert(sw.includes('matchAll('), 'SW does not enumerate tabs');
-	assert(/postMessage\(\{ type: 'CHAT_PUSH'/.test(sw), 'SW does not postMessage CHAT_PUSH');
+	// Whitespace-insensitive: the call is prettier-formatted across several
+	// lines, so a single-line regex here was a FALSE NEGATIVE (the wiring was
+	// present and working). Flatten before matching — cp471.
+	assert(
+		/postMessage\(\s*\{\s*type: 'CHAT_PUSH'/.test(flat(sw)),
+		'SW does not postMessage CHAT_PUSH'
+	);
 });
 scenario('service worker sets the OS app-badge on push', () => {
 	assert(sw.includes('setAppBadge'), 'SW does not set the OS app-badge');
 });
 scenario('page treats a CHAT_PUSH message as a chat-activity ping (fire)', () => {
 	assert(globalStream.includes("data.type === 'CHAT_PUSH'"), 'page does not listen for CHAT_PUSH');
+	// The assertion is "fire() happens INSIDE the CHAT_PUSH branch", not "fire()
+	// is within N characters of it". The original 40-char window was a FALSE
+	// NEGATIVE the moment the branch legitimately grew: v1.5.0 added the
+	// archived-thread fast-restore between the guard and the fire() call. Match
+	// on the flattened source with a window wide enough to span the branch body
+	// but far too narrow to reach any unrelated fire() elsewhere in the file.
 	assert(
-		/CHAT_PUSH'\) fire\(\)/.test(globalStream) || /CHAT_PUSH[\s\S]{0,40}fire\(\)/.test(globalStream),
+		/data\.type === 'CHAT_PUSH'[\s\S]{0,600}?fire\(\)/.test(flat(globalStream)),
 		'page does not fire() on CHAT_PUSH'
 	);
 	assert(globalStream.includes("serviceWorker") && globalStream.includes("'message'"), 'page does not bind the SW message channel');

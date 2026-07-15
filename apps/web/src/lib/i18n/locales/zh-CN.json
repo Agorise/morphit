@@ -474,8 +474,6 @@
       "share_button_aria": "分享你的加密收款地址",
       "modal_title": "共享一个收款地址",
       "modal_subtitle": "将您的 BTC 或 XMR 收款地址发送给您的交易伙伴。",
-      "method_btc": "比特币",
-      "method_xmr": "门罗币",
       "address_label": "收款地址",
       "address_placeholder_btc": "bc1q… 或 1… 或 3…",
       "address_placeholder_xmr": "8… (推荐) 或 4…",
@@ -492,7 +490,6 @@
       "pill_copied": "已复制!",
       "pill_for_order": "用于订单",
       "verify_warning": "发送前务必核实地址。加密货币交易无法撤销。",
-      "method_blurt": "Blurt",
       "address_placeholder_blurt": "账户名",
       "address_invalid_blurt": "这看起来不像一个有效的账户名。",
       "pill_method_blurt": "Blurt 账户",
@@ -518,15 +515,12 @@
       "xmr_jitter_send_exact_hint": "告诉买家的钱包发送此精确金额,包括长小数位。",
       "xmr_jitter_off_warning_heading": "隐私性降低",
       "xmr_jitter_off_warning_body": "整数金额在 Monero 链上更易关联。除非有理由发送精确数字,否则保持 jitter 开启。",
-      "method_usdt": "USDT",
-      "method_bch": "比特币现金",
       "address_placeholder_usdt": "泰达币地址（匹配你选择的网络）",
       "address_placeholder_bch": "bitcoincash:q… 或 1… 或 3…",
       "address_invalid_usdt": "此地址与你选择的 USDT 网络不匹配。发送前请仔细核对 — 跨网络发送会损失你的资金。",
       "address_invalid_bch": "这看起来不像有效的比特币现金地址。",
       "pill_method_usdt": "USDT 地址",
       "pill_method_bch": "比特币现金地址",
-      "method_ltc": "莱特币",
       "address_placeholder_ltc": "L… 或 M… 或 ltc1…",
       "address_invalid_ltc": "这看起来不是有效的莱特币地址。",
       "pill_method_ltc": "莱特币地址",
@@ -544,46 +538,38 @@
       "payjoin_explain": "PayJoin (BIP-78) 是一种合作的 Bitcoin 交易协议：付款人和接收人都向同一笔交易添加输入，击败链分析师用来分组 UTXO 的 common-input-ownership 启发式。",
       "payjoin_badge": "PayJoin 可用",
       "payjoin_badge_tooltip": "卖家的钱包支持 PayJoin (BIP-78)。如果您的钱包也支持，打开此 URI 将协商一个改善隐私的合作交易。",
-      "method_dash": "Dash",
       "address_placeholder_dash": "X… 或 7…",
       "address_invalid_dash": "这不像是有效的 Dash 地址。",
       "pill_method_dash": "Dash 地址",
-      "method_usdc": "USDC",
       "address_placeholder_usdc": "USD Coin 地址（与所选网络匹配）",
       "address_invalid_usdc": "所选网络的 USDC 地址无效。EVM 网络：0x + 40 个十六进制字符。Solana：32-44 个 base58 字符。请检查您在订单表单中选择了正确的网络。",
       "pill_method_usdc": "USDC 地址",
-      "method_dai": "DAI",
       "address_invalid_dai": "不是有效的 DAI 地址格式（预期 EVM 0x[40 hex]）。",
       "address_placeholder_dai": "0x... (EVM 格式 DAI 地址)",
       "pill_method_dai": "DAI {network}",
-      "method_doge": "狗狗币",
       "address_placeholder_doge": "D… 9… 或 A…",
       "address_invalid_doge": "这不像是有效的 Dogecoin 地址。",
       "pill_method_doge": "狗狗币地址",
-      "method_zec": "Zcash",
       "address_placeholder_zec": "t1… t3… zs1… 或 u1…",
       "address_invalid_zec": "这不像是有效的 Zcash 地址。",
       "pill_method_zec": "Zcash 地址",
-      "method_arrr": "ARRR",
       "address_placeholder_arrr": "您的 ARRR 地址 (zs1...)",
       "address_invalid_arrr": "不是有效的 Pirate Chain 地址。预期 `zs1` 前缀 + 75 个 bech32 数据字符（总共 78 个字符）。",
       "pill_method_arrr": "Pirate Chain (ARRR)",
-      "method_dcr": "DCR",
       "address_placeholder_dcr": "您的 DCR 地址 (Ds... 或 Dc...)",
       "address_invalid_dcr": "不是有效的 Decred 地址。预期 `Ds` 或 `Dc` 前缀 + 33 个 base58 字符（总共 35 个字符）。",
       "pill_method_dcr": "Decred (DCR)",
-      "method_sol": "SOL",
       "address_placeholder_sol": "您的 SOL 地址 (32-44 个 base58 字符)",
       "address_invalid_sol": "不是有效的 Solana 地址。预期 32-44 个 base58 字符（大多数为 44 个）。",
       "pill_method_sol": "Solana (SOL)",
-      "method_eth": "ETH",
       "address_placeholder_eth": "您的 ETH 地址 (0x + 40 个十六进制字符)",
       "address_invalid_eth": "不是有效的 Ethereum 地址。预期 0x 后跟 40 个十六进制字符（总共 42 个字符）。",
       "pill_method_eth": "以太坊 (ETH)",
-      "method_xrp": "XRP",
       "address_placeholder_xrp": "您的 XRP 地址 (r + 24-34 个 base58 字符)",
       "address_invalid_xrp": "不是有效的 XRP Ledger 地址。预期以 r 开头，后跟 24-34 个 base58 字符的地址（此字段中没有 destination tag）。",
-      "pill_method_xrp": "Ripple (XRP)"
+      "pill_method_xrp": "Ripple (XRP)",
+      "blurt_account_not_found": "不存在使用该名称的 Blurt 账户。",
+      "asset_label": "币种"
     },
     "funds_sent": {
       "button": "立即支付",
@@ -641,7 +627,9 @@
       "pill_title_dcr": "DCR 已发送",
       "pill_title_sol": "SOL 已发送",
       "pill_title_eth": "ETH 已发送",
-      "pill_title_xrp": "XRP 已发送"
+      "pill_title_xrp": "XRP 已发送",
+      "pill_title_blurt_received": "已收到 Blurt",
+      "receipt_title": "付款收据"
     },
     "unknown_version": "此消息使用较新的协议。请更新 Morphit 以读取。",
     "pay_blurt": {
@@ -752,7 +740,12 @@
       "hint": "订单最低额为 {min} {fiat}（≈ {amount} {asset}）。",
       "hint_market": "订单最低额为 {min} {fiat}（≈ {amount} {asset}，按当前市场价）。"
     },
-    "empty_state_loading": "正在加载与 @{peer} 的聊天… 打个招呼吧！"
+    "empty_state_loading": "正在加载与 @{peer} 的聊天… 打个招呼吧！",
+    "day_separator_tooltip": "午夜，UTC",
+    "feedback": {
+      "left_label": "已留下评价：",
+      "leave_prompt": "留下评价"
+    }
   },
   "cheat_sheet": {
     "heading": "Morphit 速查表",
@@ -1777,7 +1770,8 @@
     "form": {
       "aria_label": "回复此评价",
       "heading": "你的回复",
-      "subheading": "对此评价留下公开回复。由你签署,免费,发布到链上。查看你个人主页的任何人都能看到。",
+      "subheading": "你正在回复上方的评价——说说你的说法。它会公开显示在你个人资料中他们的评价下方。免费、由你签名、上链且永久。",
+      "not_rating": "这是回复，不是评分。要给这位交易者评分，请在与他的聊天中留下反馈。",
       "comment_label": "回复",
       "comment_placeholder": "你的说法。",
       "submit": "发布回复",
@@ -2196,7 +2190,8 @@
       "all": "全部",
       "live": "活跃",
       "cancelled": "已取消",
-      "expired": "已过期"
+      "expired": "已过期",
+      "paid": "已付款"
     },
     "order": {
       "posted_prefix": "已发布",
@@ -2223,7 +2218,10 @@
       "edit_window_tooltip": "订单仅可在发布后 15 分钟内编辑。之后需要取消并重新发布。",
       "edit_window_aria": "剩余编辑时间:{remaining}",
       "feedback_pick_prompt": "你和谁完成了交易？",
-      "not_visible_orderbook": "未在订单簿中显示"
+      "not_visible_orderbook": "未在订单簿中显示",
+      "state_completed": "已完成",
+      "action_complete": "标记为已完成",
+      "feedback_no_counterparty": "尚未与任何交易对手聊天"
     },
     "cancel": {
       "confirm_title": "取消此订单?",
@@ -2260,6 +2258,13 @@
       "heading": "费用状态",
       "body": "💡 下方每个订单都会显示其挂单费状态。订单只有在费用通过验证后才会出现在公共订单簿中——标记为“未收到”“支付不足”或“尚未验证”就是某个订单看起来缺失的原因。",
       "dismiss": "忽略此提示"
+    },
+    "complete": {
+      "confirm_title": "将此订单标记为已完成？",
+      "confirm_body": "这将确认交易已完成，并把订单从公共订单簿中移除。此操作无法撤销。",
+      "confirm_button": "标记完成",
+      "cancel_button": "保持上架",
+      "completing": "标记中…"
     }
   },
   "nav": {
@@ -2604,7 +2609,8 @@
     "posting_title": "你的订单正在发布…",
     "posting_body": "此订单正在由区块链确认，可能需要一分钟才会出现。我们会自动持续检查——无需刷新。",
     "check_again": "再次检查",
-    "action_edit_countdown": "编辑（剩余：{remaining}）"
+    "action_edit_countdown": "编辑（剩余：{remaining}）",
+    "status_completed": "已完成并已付款"
   },
   "orderbook": {
     "heading": "订单簿",
@@ -3428,11 +3434,11 @@
     "active_orders_sort_hint": "最旧的在前——即将到期的先显示。",
     "expires_in": "{t} 后到期",
     "expires_now": "即将到期",
-    "given_heading": "此用户留下的评价",
+    "given_heading": "@{account} 评价了",
+    "given_rated": "我给 @{account} 的评分：",
     "loading_given": "正在加载已留评价…",
     "given_error": "现在无法加载此用户留下的评价。",
     "no_given_yet": "还没有。此用户尚未给任何对方留下反馈。",
-    "given_prefix": "评价了",
     "rss_subscribe_label": "RSS — 关注该交易者",
     "rss_subscribe_title": "当该交易者发布新的买/卖单时通过 RSS 收到通知。注意:轮询按交易者的订阅比全站订阅稍稍更具揭示性。",
     "feedback_suppressed_chip": "不计入评分 — 评论者被标记为关联账户",
@@ -3912,8 +3918,7 @@
       "placeholder": "例如：咖啡、BTC，还有在区块链上的漫步。",
       "hint": "看起来不错。",
       "broadcast_ok_detail": "你的简短简介现已发布，所有人都能看到。",
-      "clear": "清除",
-      "clear_confirm_prompt": "从此设备移除你的简短简介？你可以随时重新设置。"
+      "clear": "清除"
     },
     "title": "设置",
     "subtitle": "你的身份,你的规矩。保存在你自己的设备上,绝不上传到我们的服务器。",
@@ -3943,9 +3948,6 @@
         "lookup_failed": "Morphit 无法连接到索引器以确认此密钥控制哪个账户，因此没有广播任何内容。请检查网络连接后重试。"
       },
       "broadcast_pending": "发布中…",
-      "clear_confirm_prompt": "要从这台设备移除您的显示名吗?您随时可以再设置一次。",
-      "clear_confirm_yes": "是的,移除",
-      "clear_confirm_cancel": "保留",
       "broadcast_ok_detail": "你的显示名称现已公开。"
     },
     "endpoints": {
@@ -3955,7 +3957,16 @@
       "cooling_down": "冷却中",
       "recheck": "重新检测节点速度",
       "probing": "探测中…",
-      "unreachable": "无法连接"
+      "unreachable": "无法连接",
+      "err_timeout": "未在规定时间内响应（超时）",
+      "err_tls": "TLS 证书问题",
+      "err_dns": "DNS 解析失败",
+      "err_refused": "连接被拒绝",
+      "err_rpc": "有响应，但 RPC 调用失败",
+      "err_body": "响应内容无法解析",
+      "err_http": "节点返回 HTTP {status}",
+      "err_http_blocked": "被安全策略拦截（HTTP {status}）",
+      "err_http_rate": "被节点限流（HTTP 429）"
     },
     "session": {
       "autolock_changed": "已改为 {label}",
@@ -3973,10 +3984,10 @@
     },
     "nostr_url": {
       "heading": "Nostr 链接",
-      "explain": "可选。添加你的 Nostr 个人资料 URL,一个小的 Nostr 图标将出现在 Morphit 各处你的用户名旁边。帮助人们在这个市场之外联系你。",
+      "explain": "在此添加你的 Nostr 个人资料 URL，方便人们在 Morphit 之外联系你。在你的个人资料页面上，其带链接的图标会显示在你的头像旁边。",
       "label": "你的 Nostr URL",
       "placeholder": "nostr:npub1... 或 https://...",
-      "hint_empty": "如果你不想显示 Nostr 链接,请留空。",
+      "hint_empty": "在此粘贴你的 Nostr 个人资料 URL，或留空。",
       "hint_ok": "看起来不错。",
       "error": {
         "too_long": "太长了。保持在 512 个字符以下。",
@@ -3988,12 +3999,12 @@
       "save_and_broadcast": "保存并广播",
       "broadcast_pending": "发布中…",
       "clear": "清除",
-      "reminder_title": "它会出现在哪里",
-      "reminder_body": "一旦发布,Nostr 图标会出现在你的用户名旁边——在每个订单、每条反馈条目、每条聊天消息上,在每个 Morphit 实例上,不只是这个。其他用户点击它会在他们喜欢的客户端中打开你的 Nostr 个人资料。"
+      "reminder_title": "可选 — 您可以跳过。",
+      "reminder_body": "没有这个网址，你的 Morphit 身份也能正常使用。它只是一个礼节性链接，方便那些可能也想看你的 Nostr 个人资料的人。"
     },
     "blurt_media_url": {
-      "heading": "Blurt.media 个人资料 URL",
-      "explain": "指向你在 blurt.media 上个人资料的链接，blurt.media 是一个流行的 Blurt 流媒体前端。会在 Morphit 各处显示在你的用户名旁边。可选。",
+      "heading": "Blurt.media 个人资料",
+      "explain": "指向你在 blurt.media 上个人资料的链接，blurt.media 是一个流行的 Blurt 流媒体前端。在你的个人资料页面上，其带链接的图标会显示在你的头像旁边。",
       "label": "Blurt.media 网址",
       "placeholder": "https://blurt.media/@您的名字",
       "hint_empty": "在此粘贴您的 blurt.media 个人资料 URL,或留空。",
@@ -4088,7 +4099,10 @@
       "unhide_all": "全部取消隐藏",
       "unhide_all_confirm": "取消隐藏全部 {count} 个账户?这将使他们的订单再次在你的 orderbook 视图中可见。",
       "unhide_all_confirm_yes": "是的,全部取消隐藏",
-      "unhide_all_confirm_cancel": "保持隐藏"
+      "unhide_all_confirm_cancel": "保持隐藏",
+      "refresh": "刷新",
+      "refreshed": "已刷新！",
+      "refresh_aria": "刷新隐藏账户列表"
     },
     "avatar": {
       "heading": "头像",
@@ -4170,9 +4184,8 @@
       "first_trade_help": "当您为首次 Morphit 交易留下反馈时，也在 Blurt 上的 @morphit 社区发布一条简短的「我加入了 Morphit」帖子。每个账户只发布一次。逐订单联合发布是订单表单上的一个单独复选框。",
       "pitch_heading": "为何开启?",
       "pitch_body": "辛迪加发布至关重要。更多眼睛 = 更多伙伴 + 点赞奖励直接进入 Blurt 钱包。关闭 = 不公开。",
-      "blog_default_explain": "你已完成首笔交易,很好。现在 Morphit 可以在每个新订单上为你预先勾选\"将此订单发布到我的 Blurt 博客\",让你的报价自动分享。每篇帖子仍由你签名,你也可以在任意单个订单上取消勾选。",
-      "blog_default_label": "默认将我的订单发布到我的 Blurt 博客",
-      "blog_default_help": "在下单表单上为每个订单预先勾选\"同步到我的博客\"。你随时可以为某个订单取消勾选。关闭 = 每次都从未勾选开始。"
+      "blog_default_explain": "现在 Morphit 可以在每个新订单上为你预先勾选\"将此订单发布到我的 Blurt 博客\"，让你的报价自动推送出去。每篇帖子仍由你签名，你也可以在任意单个订单上取消勾选。",
+      "blog_default_label": "默认将我的订单发布到我的 Blurt 博客"
     },
     "privacy": {
       "heading": "隐私",
@@ -4485,13 +4498,13 @@
   "trade_status": {
     "address_shared": "已共享地址",
     "payment_pending": "付款待处理",
-    "paid": "已付款",
     "payment_mismatch": "付款不匹配",
     "payment_unverifiable": "付款无法验证",
     "released": "已释放",
     "disputed": "争议中",
     "completed": "已完成",
-    "in_progress": "交易进行中"
+    "in_progress": "交易进行中",
+    "paid_by": "付款人"
   },
   "update": {
     "title": "Morphit 有可用更新",
@@ -4586,9 +4599,9 @@
   },
   "unlock_active": {
     "title": "这笔付款需要你的活跃密钥",
-    "body": "你目前用发帖密钥登录 @{account}，它无法转移资金。请输入你的活跃密钥或 Blurt 主密码以继续——你已填写的内容不会丢失。",
-    "field_label": "活跃密钥或 Blurt 主密码",
-    "field_placeholder": "以 5… 开头，或你的主密码",
+    "body": "你目前仅用发帖密钥登录 @{account}，它无法转移资金。请将你的活跃密钥粘贴到输入框以继续。",
+    "field_label": "活跃密钥",
+    "field_placeholder": "以 5… 开头",
     "field_help": "在签名之前，Morphit 会与区块链上的账户核对。它绝不会离开本设备。",
     "cta": "解锁并继续",
     "checking": "正在核对…",

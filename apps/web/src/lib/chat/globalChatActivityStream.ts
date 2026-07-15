@@ -21,6 +21,8 @@
 
 import { getUserBlurtAccount } from '$blurt/ops/profile';
 
+import { folderOf, restoreThread } from '$lib/chat/chatFolders';
+
 type Listener = () => void;
 
 const listeners = new Set<Listener>();
@@ -110,8 +112,17 @@ export function startGlobalChatActivity(): () => void {
 	// update promptly even when this tab is inactive and its own stream/poll is
 	// throttled. This is what lets an untouched tab badge like Element does.
 	const onSwMessage = (ev: MessageEvent): void => {
-		const data = ev.data as { type?: unknown } | null;
-		if (data && data.type === 'CHAT_PUSH') fire();
+		const data = ev.data as { type?: unknown; peer?: unknown; order?: unknown } | null;
+		if (data && data.type === 'CHAT_PUSH') {
+			// v1.5.0 fast archived-restore — if the push names an ARCHIVED thread,
+			// pull it back into the Inbox immediately (Gmail-style) rather than
+			// waiting ~irreversibility for getConversations to surface the message.
+			if (typeof data.peer === 'string' && data.peer) {
+				const order = typeof data.order === 'string' ? data.order : '';
+				if (folderOf(data.peer, order) === 'archived') restoreThread(data.peer, order);
+			}
+			fire();
+		}
 	};
 	const swContainer =
 		typeof navigator !== 'undefined' ? navigator.serviceWorker : undefined;

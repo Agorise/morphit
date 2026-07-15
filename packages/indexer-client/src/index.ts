@@ -148,7 +148,7 @@ export interface OrderRecord {
 	 *  every crypto asset (they settle in themselves) and on pre-cp425 rows. */
 	readonly accepted_assets?: readonly string[] | null;
 	readonly terms: string | null;
-	readonly status?: 'live' | 'cancelled' | 'expired';
+	readonly status?: 'live' | 'cancelled' | 'expired' | 'completed';
 	readonly fee_status?:
 		| 'verified'
 		// ADR-0011 sub-phase 4b: external-chain payment path for
@@ -396,6 +396,11 @@ export interface ProfileResponse {
 	readonly json_metadata: unknown;
 	readonly source_block_num: number;
 	readonly updated_at: string;
+	/** cp471 (D7/E): the account's posting public key (base58), joined
+	 *  from `accounts`, so a profile/review card can render the truncated
+	 *  key under a display name. Optional/absent from older indexers;
+	 *  null when no key has been indexed for the account. */
+	readonly posting_pubkey?: string | null;
 }
 
 /** Response shape for `GET /v1/account/:account/balance` (cp295).
@@ -542,6 +547,13 @@ export interface FeedbackRecord {
 	readonly rating: 1 | 2 | 3 | 4 | 5;
 	readonly comment: string | null;
 	readonly order_permlink: string | null;
+	/** cp471 (D1/D2): the OWNER account of the cited order — the
+	 *  subject OR the reviewer (intake cp420 accepts either). The
+	 *  "View the order" link must target THIS account, not the review's
+	 *  subject, or it 404s to the "being posted" limbo. Null when there's
+	 *  no cited order; optional/absent from older indexers (fall back to
+	 *  the subject). */
+	readonly order_account?: string | null;
 	readonly created_at: string;
 	/** The trx_id of the original feedback op. Needed when the
 	 *  subject wants to publish a `morphit_feedback_response_v1`
@@ -560,6 +572,16 @@ export interface FeedbackRecord {
 	 *  behavior for indexers that haven't run the signal detectors
 	 *  yet on a fresh DB. */
 	readonly suppressed?: boolean;
+	/** cp471 (t.txt E): the REVIEWED account's current reputation —
+	 *  exclusion-filtered + decay-weighted, identical to the headline
+	 *  figure on their own profile. Present on `/feedback-given`
+	 *  responses so a "reviews this user has left" card can show
+	 *  "★ 4.97 (12)" without a per-subject fetch. `weighted_rating` is
+	 *  null when `count` is 0. Optional/absent from older indexers. */
+	readonly subject_reputation?: {
+		readonly count: number;
+		readonly weighted_rating: number | null;
+	} | null;
 	/** ADR-0014 verified-chat badge.  True iff the (reviewer,
 	 *  subject) pair satisfied the bidirectional-chat conformance
 	 *  at the time the feedback was signed:
@@ -735,12 +757,33 @@ export interface StatsResponse {
  * filtered out server-side). Kept in sync with the indexer's
  * buildRpcEndpointsResponse (apps/indexer/src/api/rpcHealth.ts).
  */
+/** cp471 (tt.txt C) — WHY the indexer's active probe of a node failed. Closed
+ *  vocabulary; mirrors `RpcProbeFailure` in the indexer's api/rpcHealth.ts.
+ *  NOTE: there is deliberately no 'cors' member — the probe is server-side, so
+ *  CORS can never be the cause of a node showing red on the settings card. */
+export type RpcProbeFailure =
+	| 'timeout'
+	| 'tls'
+	| 'dns'
+	| 'refused'
+	| 'network'
+	| 'http'
+	| 'rpc_error'
+	| 'bad_body';
+
 export interface RpcEndpointHealth {
 	readonly url: string;
 	readonly healthy: boolean;
 	readonly latency_ms: number | null;
 	readonly consecutive_failures: number;
 	readonly cooldown_ms: number;
+	/** cp471 (tt.txt C): why the most recent ACTIVE probe failed, so the card
+	 *  shows a one-line reason instead of a flat "unreachable". Absent/null when
+	 *  healthy or on the passive pool snapshot (no reason retained there). */
+	readonly failure_reason?: RpcProbeFailure | null;
+	/** HTTP status when `failure_reason === 'http'` (e.g. 403 = blocked by a
+	 *  security policy in front of the node), else absent/null. */
+	readonly http_status?: number | null;
 }
 export interface RpcEndpointsResponse {
 	readonly network: 'morphit';
@@ -952,6 +995,16 @@ export interface ChatReadStateResponse {
  *  blob is opaque ciphertext, decrypted client-side with a posting-key-derived
  *  key. */
 export interface ChatFoldersResponse {
+	readonly account: string;
+	readonly enc: string | null;
+	readonly updated_at: string | null;
+}
+
+/** GET /v1/settings/:account — the account's ENCRYPTED settings blob
+ *  (v1.5.0 settings-to-chain mirroring), or `enc: null` if never saved. The
+ *  blob is opaque ciphertext, decrypted client-side with a posting-key-
+ *  derived key. Same shape as ChatFoldersResponse. */
+export interface UserSettingsResponse {
 	readonly account: string;
 	readonly enc: string | null;
 	readonly updated_at: string | null;

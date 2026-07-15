@@ -32,7 +32,7 @@
 
 /** The minimal shape these helpers need from an OrderRecord. */
 export interface OrderExpiryFields {
-	readonly status?: 'live' | 'cancelled' | 'expired';
+	readonly status?: 'live' | 'cancelled' | 'expired' | 'completed';
 	readonly expires_at: string | null;
 }
 

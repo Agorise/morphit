@@ -22,6 +22,7 @@ import { z } from 'zod';
 
 import type { Database } from '$db/pool';
 import { decodeCursor, encodeCursor, errorBody, isAccountName } from '$api/shared';
+import { FEEDBACK_EXCLUSIONS_SQL } from '$api/reputationJoin';
 
 const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 50;
@@ -69,6 +70,9 @@ interface FeedbackRow {
 	created_at: Date;
 	source_trx_id: string;
 	has_verified_chat: boolean;
+	/** cp471 (D1/D2): the cited order's OWNER (subject or reviewer),
+	 *  so the frontend links "View the order" to the right account. */
+	order_account: string | null;
 }
 
 interface ResponseRow {
@@ -116,21 +120,32 @@ export function feedbackByAccountRoute(db: Database): Hono {
 		// aggregate the user reads as "trader's reputation."
 		const summary = await db.query<SummaryRow>(
 			`WITH non_suppressed AS (
-				SELECT f.rating, f.created_at, o.side
+				SELECT f.rating, f.created_at,
+				       -- cp471 (t.txt F/H): the cited order may have been
+				       -- posted by EITHER party (intake allows account IN
+				       -- (subject, reviewer), cp420), so the SUBJECT's side is
+				       -- the order's side when the subject owns it, else the
+				       -- OPPOSITE (the subject was the taker on the maker's order).
+				       CASE
+				         WHEN o.account = f.subject THEN o.side
+				         WHEN o.account = f.reviewer THEN
+				           CASE o.side WHEN 'buy' THEN 'sell' WHEN 'sell' THEN 'buy' ELSE o.side END
+				         ELSE NULL
+				       END AS side
 				  FROM feedback f
-				  -- cp124 H5: JOIN to orders so we can classify each
-				  -- feedback row by the cited order's side (buy/sell).
-				  -- The existing intake-time check already guarantees:
-				  --   - order_permlink IS NOT NULL (the WHERE filter)
-				  --   - the cited order exists, belongs to subject,
-				  --     AND has fee_status='verified'
-				  -- so an INNER JOIN is structurally guaranteed to
-				  -- find a row.  Defensive: if we ever loosen that
-				  -- check, INNER JOIN cleanly drops orphan rows from
-				  -- the by_side breakdown without polluting totals.
-				  JOIN orders o
-				    ON o.account = f.subject
-				   AND o.permlink = f.order_permlink
+				  -- cp471 (t.txt F/H) — was a JOIN on o.account =
+				  -- f.subject, which DROPPED every review whose cited order
+				  -- was posted by the REVIEWER (a maker reviewing the taker,
+				  -- citing the maker's OWN order — valid per intake cp420),
+				  -- silently zeroing the subject's whole reputation ("No
+				  -- feedback yet" despite a real verified review). Mirror the
+				  -- intake: the order is owned by EITHER party; LEFT so a
+				  -- since-removed order can't drop the count either. Match on
+				  -- account+permlink (the unique key — a bare permlink can
+				  -- collide across accounts).
+				  LEFT JOIN orders o
+				    ON o.permlink = f.order_permlink
+				   AND o.account IN (f.subject, f.reviewer)
 				 WHERE f.subject = $1
 				   AND f.order_permlink IS NOT NULL
 				   AND NOT EXISTS (
@@ -281,7 +296,15 @@ export function feedbackByAccountRoute(db: Database): Hono {
 
 		const fbSql = `SELECT id::text, reviewer, subject, rating, comment,
 			        order_permlink, created_at, source_trx_id,
-			        has_verified_chat
+			        has_verified_chat,
+			        -- cp471 (t.txt D1/D2): the cited order may belong to
+			        -- the subject OR the reviewer (intake cp420). The
+			        -- "View the order" link must target the order's real
+			        -- OWNER, else it 404s to the "being posted" limbo.
+			        (SELECT o.account FROM orders o
+			          WHERE o.permlink = feedback.order_permlink
+			            AND o.account IN (feedback.subject, feedback.reviewer)
+			          LIMIT 1) AS order_account
 			 FROM feedback
 			 WHERE subject = $1${cursorClause}
 			 ORDER BY created_at DESC, id ASC
@@ -380,6 +403,8 @@ export function feedbackByAccountRoute(db: Database): Hono {
 				rating: r.rating,
 				comment: r.comment,
 				order_permlink: r.order_permlink,
+				/** cp471 (D1/D2): the cited order's owner account. */
+				order_account: r.order_account,
 				created_at: r.created_at.toISOString(),
 				source_trx_id: r.source_trx_id,
 				/** True iff the (reviewer, subject) pair is in
@@ -455,7 +480,14 @@ export function feedbackByAccountRoute(db: Database): Hono {
 
 		const fbSql = `SELECT id::text, reviewer, subject, rating, comment,
 			        order_permlink, created_at, source_trx_id,
-			        has_verified_chat
+			        has_verified_chat,
+			        -- cp471 (t.txt D1/D2): same owner rule as the received
+			        -- list — the cited order may belong to EITHER party, so
+			        -- the "View the order" link needs the real owner.
+			        (SELECT o.account FROM orders o
+			          WHERE o.permlink = feedback.order_permlink
+			            AND o.account IN (feedback.subject, feedback.reviewer)
+			          LIMIT 1) AS order_account
 			 FROM feedback
 			 WHERE reviewer = $1${cursorClause}
 			 ORDER BY created_at DESC, id ASC
@@ -535,6 +567,39 @@ export function feedbackByAccountRoute(db: Database): Hono {
 			for (const r of flagResult.rows) flaggedSubjects.add(r.subject);
 		}
 
+		// ─── Reviewed-account reputation (cp471, t.txt E) ────────
+		// Each "reviews this user has left" card shows the CURRENT
+		// reputation of the person who was reviewed (★ 4.97 (12)).
+		// Computed here, scoped to this page's subjects, so the card
+		// costs ZERO extra round trips (a per-subject fetch would be
+		// up to DEFAULT_LIMIT=50 requests from one profile page).
+		// Uses the CANONICAL shared FEEDBACK_EXCLUSIONS_SQL — never a
+		// local copy — so this number can't drift from the headline
+		// rating on the subject's own profile (the whole reason that
+		// SQL lives in reputationJoin.ts).
+		const subjectReputation = new Map<string, { count: number; weighted_rating: number | null }>();
+		if (subjects.length > 0) {
+			const repResult = await db.query<{ subject: string; c: number; r: string | null }>(
+				`SELECT fb.subject, COUNT(*)::int AS c,
+				        ROUND(
+				          SUM(fb.rating * POWER(0.5, EXTRACT(EPOCH FROM (NOW() - fb.created_at)) / (365 * 86400.0))) /
+				          NULLIF(SUM(POWER(0.5, EXTRACT(EPOCH FROM (NOW() - fb.created_at)) / (365 * 86400.0))), 0),
+				          2
+				        )::text AS r
+				   FROM feedback fb
+${FEEDBACK_EXCLUSIONS_SQL}
+				    AND fb.subject = ANY($1::text[])
+				  GROUP BY fb.subject`,
+				[subjects]
+			);
+			for (const row of repResult.rows) {
+				subjectReputation.set(row.subject, {
+					count: row.c,
+					weighted_rating: row.r === null ? null : parseFloat(row.r)
+				});
+			}
+		}
+
 		const items = rows.map((r) => {
 			const fid = parseInt(r.id, 10);
 			const responses = responsesByFeedbackId.get(fid) ?? [];
@@ -545,9 +610,16 @@ export function feedbackByAccountRoute(db: Database): Hono {
 				rating: r.rating,
 				comment: r.comment,
 				order_permlink: r.order_permlink,
+				/** cp471 (D1/D2): the cited order's owner account. */
+				order_account: r.order_account,
 				created_at: r.created_at.toISOString(),
 				source_trx_id: r.source_trx_id,
 				suppressed: flaggedSubjects.has(r.subject),
+				/** cp471 (E): the reviewed account's CURRENT reputation
+				 *  (exclusion-filtered + decay-weighted, same as their own
+				 *  profile headline). null when they have no counting
+				 *  feedback yet. */
+				subject_reputation: subjectReputation.get(r.subject) ?? { count: 0, weighted_rating: null },
 				/** ADR-0014 verified-chat badge — see the matching
 				 *  projection in the /feedback route above for full
 				 *  semantics.  Same column, same meaning; mirrored

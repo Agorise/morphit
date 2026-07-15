@@ -125,32 +125,59 @@ for (const comp of COMPONENTS) {
 	// barter order). We now verify (a) the templated tab wiring is present, and
 	// (b) each expected coin is listed in ALL_METHODS (what the template
 	// iterates) — equivalent coverage to the old per-coin aria-selected check.
+	// v1.5.0 (tt.txt B): the 16-button tablist became a coin SELECT
+	// (AssetChoiceSelect) — 16 `flex-1` tabs wrapped into a wall of blocks that
+	// pushed the modal off a phone screen. The INVARIANT this smoke exists for
+	// is unchanged and still enforced: the picker must be driven by a template
+	// over `visibleMethods` (never a hand-written per-coin list), and every
+	// expected coin must appear in ALL_METHODS — which is what the picker
+	// iterates. Only the widget it checks for changed.
 	scenarios.push({
-		name: `${comp.name}: templated tablist wiring present`,
+		name: `${comp.name}: templated asset-picker wiring present`,
 		run: () => {
 			if (!existsSync(absPath)) return null;
-			const src = readFileSync(absPath, 'utf8');
+			const src = readFileSync(absPath, 'utf8').replace(/\s+/g, ' ');
 			const ok =
-				src.includes('{#each visibleMethods as m') &&
-				src.includes('aria-selected={method === m}') &&
-				src.includes('selectMethod(m)');
+				src.includes('<AssetChoiceSelect') &&
+				src.includes('options={visibleMethods}') &&
+				src.includes('onSelect={selectMethod}');
 			return ok
 				? null
-				: `templated tablist wiring missing ({#each visibleMethods as m} + aria-selected={method === m} + selectMethod(m))`;
+				: `templated asset-picker wiring missing (<AssetChoiceSelect options={visibleMethods} … onSelect={selectMethod}>). If the picker was replaced again, keep it driven by visibleMethods — a hand-written coin list is how DAI was silently omitted (Part 122 cp36).`;
 		}
 	});
 
 	for (const lowerTicker of expected) {
 		scenarios.push({
-			name: `${comp.name}: tablist offers method ${lowerTicker.toUpperCase()}`,
+			name: `${comp.name}: asset picker offers method ${lowerTicker.toUpperCase()}`,
 			run: () => {
 				if (!existsSync(absPath)) return null;
 				const src = readFileSync(absPath, 'utf8');
-				// The coin must be listed in ALL_METHODS (the array the {#each}
-				// iterates); a bare quoted lower-case ticker is its entry.
-				return src.includes(`'${lowerTicker}'`)
+				// cp471 — THIS CHECK WAS TOOTHLESS AND IS NOW REAL.
+				//
+				// It used to be `src.includes("'dai'")` — "does this ticker appear
+				// ANYWHERE in the file" — with a comment claiming that was
+				// "equivalent coverage" to the old per-coin check. It was not:
+				// every multi-network coin also appears in its own branches
+				// (`method === 'dai'`, validateDaiAddress, the invalid-address
+				// i18n key…), so deleting 'dai' from ALL_METHODS left 7 other
+				// matches and the smoke happily passed. In other words, the guard
+				// written to prevent a silently-omitted DAI could not detect a
+				// silently-omitted DAI. Proven by tamper test.
+				//
+				// Parse the ALL_METHODS array itself and check membership there —
+				// that array is what the picker iterates, so it is the only place
+				// that decides whether a coin is reachable.
+				const arr = /const ALL_METHODS: readonly ChatAssetTicker\[\] = \[([\s\S]*?)\];/.exec(src);
+				if (!arr) {
+					return 'ALL_METHODS array not found — the picker source shape changed; update this smoke rather than dropping the coverage.';
+				}
+				const listed = new Set(
+					[...arr[1].matchAll(/'([a-z0-9]+)'/g)].map((m2) => m2[1] as string)
+				);
+				return listed.has(lowerTicker)
 					? null
-					: `method '${lowerTicker}' not listed in ALL_METHODS — its tab would never render`;
+					: `method '${lowerTicker}' is NOT in ALL_METHODS — the coin would be unreachable in this modal (the exact DAI bug this smoke exists to prevent).`;
 			}
 		});
 	}

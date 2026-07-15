@@ -289,6 +289,41 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
 // We never log payload content (privacy-preserving) and we never
 // raise a notification for malformed payloads — silently dropping
 // is safer than guessing wrong.
+/** v1.5.0 — true when a tab's URL is the SAME chat thread a chat push
+ *  targets: same locale-prefixed /chat/[peer] path AND same ?order. Used
+ *  to suppress a redundant OS notification while the user is actively
+ *  viewing that exact conversation (focused tab). */
+function chatTargetMatches(clientUrl: string, clickPath: string): boolean {
+	try {
+		const client = new URL(clientUrl);
+		const target = new URL(clickPath, client.origin);
+		return (
+			client.pathname === target.pathname &&
+			(client.searchParams.get('order') ?? '') === (target.searchParams.get('order') ?? '')
+		);
+	} catch {
+		return false;
+	}
+}
+
+/** v1.5.0 — extract the (peer, order) a chat push targets from its
+ *  clickPath (/[lang]/chat/[peer]?order=[permlink]), so the badge-poke can
+ *  tell tabs WHICH archived thread just woke and un-archive it immediately —
+ *  without waiting ~irreversibility for the durable indexer to surface the
+ *  message. Stays on-device (postMessage to same-origin tabs only). */
+function chatThreadFromClickPath(clickPath: string): { peer: string; order: string } | null {
+	try {
+		const u = new URL(clickPath, self.location.origin);
+		const parts = u.pathname.split('/').filter(Boolean);
+		const chatIdx = parts.indexOf('chat');
+		const peer = chatIdx >= 0 ? parts[chatIdx + 1] : undefined;
+		if (!peer) return null;
+		return { peer, order: u.searchParams.get('order') ?? '' };
+	} catch {
+		return null;
+	}
+}
+
 self.addEventListener('push', (event: PushEvent) => {
 	let payload: {
 		title?: unknown;
@@ -323,16 +358,36 @@ self.addEventListener('push', (event: PushEvent) => {
 
 	event.waitUntil(
 		(async () => {
-			await self.registration.showNotification(title, {
-				body,
-				tag, // dedup key — same eventId across devices doesn't double-notify
-				data: { clickPath, category },
-				// `requireInteraction: false` so notifications auto-dismiss
-				// after the OS-default window; "loud about orders, silent
-				// about chat noise" is governed at the relay side by the
-				// per-category enqueue, not by SW config.
-				requireInteraction: false
-			});
+			// v1.5.0 — suppress a redundant OS notification when a FOCUSED tab is
+			// already on this exact chat thread (same /chat/peer?order). Order and
+			// feedback categories always notify. The fastchat badge poke below is
+			// unchanged, so in-page badges still update — no regression.
+			let activelyViewing = false;
+			if (category === 'chat') {
+				try {
+					const focusedTabs = await self.clients.matchAll({
+						type: 'window',
+						includeUncontrolled: true
+					});
+					activelyViewing = focusedTabs.some(
+						(c) => c.focused && chatTargetMatches(c.url, clickPath)
+					);
+				} catch {
+					// matchAll unavailable — default to showing the notification.
+				}
+			}
+			if (!activelyViewing) {
+				await self.registration.showNotification(title, {
+					body,
+					tag, // dedup key — same eventId across devices doesn't double-notify
+					data: { clickPath, category },
+					// `requireInteraction: false` so notifications auto-dismiss
+					// after the OS-default window; "loud about orders, silent
+					// about chat noise" is governed at the relay side by the
+					// per-category enqueue, not by SW config.
+					requireInteraction: false
+				});
+			}
 
 			// cp471 — fast badge. The SW is NOT throttled, so on every push we
 			// poke every open Morphit tab to repaint its in-page unread badges
@@ -345,8 +400,13 @@ self.addEventListener('push', (event: PushEvent) => {
 					type: 'window',
 					includeUncontrolled: true
 				});
+				const chatThread = category === 'chat' ? chatThreadFromClickPath(clickPath) : null;
 				for (const client of tabs) {
-					client.postMessage({ type: 'CHAT_PUSH', category });
+					client.postMessage({
+						type: 'CHAT_PUSH',
+						category,
+						...(chatThread ? { peer: chatThread.peer, order: chatThread.order } : {})
+					});
 				}
 			} catch {
 				// Best-effort; the notification already showed.

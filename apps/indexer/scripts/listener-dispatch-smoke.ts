@@ -44,10 +44,17 @@ function assertNotNull<T>(value: T | null, label: string): asserts value is T {
 	if (value === null) throw new Error(`${label}: expected non-null`);
 }
 
+// cp471: `lang` is a REQUIRED field on ListenerDispatchCtx — the chat route
+// is locale-prefixed (/[lang]/chat/[account]). This fixture omitted it, and
+// because tsx strips types rather than checking them, it silently passed
+// `undefined`, making the F-38 suppression path compute '/undefined/chat/bob'
+// and never match. The two F-38 scenarios below were asserting against a path
+// shape the app cannot produce.
 const baseCtx = {
 	sender: 'bob',
 	me: 'alice',
-	currentPathname: '/my/orders'
+	currentPathname: '/my/orders',
+	lang: 'en'
 };
 
 const baseAddress: DecodeResult = {
@@ -231,7 +238,7 @@ scenario('funds_sent without amount → funds_sent_body key', () => {
 scenario('F-38: on /chat/<sender> exact path → notify suppressed', () => {
 	const plan = planListenerDispatch(baseAddress, {
 		...baseCtx,
-		currentPathname: '/chat/bob'
+		currentPathname: '/en/chat/bob'
 	});
 	assertNotNull(plan.store, 'store still applied');
 	assertNull(plan.notify, 'notify suppressed');
@@ -240,7 +247,7 @@ scenario('F-38: on /chat/<sender> exact path → notify suppressed', () => {
 scenario('F-38: on /chat/<sender>/sub-route → notify suppressed', () => {
 	const plan = planListenerDispatch(baseAddress, {
 		...baseCtx,
-		currentPathname: '/chat/bob/something'
+		currentPathname: '/en/chat/bob/something'
 	});
 	assertNull(plan.notify, 'notify suppressed (sub-route)');
 });

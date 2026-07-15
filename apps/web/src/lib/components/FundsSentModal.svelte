@@ -41,6 +41,7 @@
 		isDaiNetwork,
 		type DaiNetwork
 	} from '$lib/assets/networks';
+	import AssetChoiceSelect from './AssetChoiceSelect.svelte';
 	import UsdtNetworkPicker from './UsdtNetworkPicker.svelte';
 	import UsdcNetworkPicker from './UsdcNetworkPicker.svelte';
 	import DaiNetworkPicker from './DaiNetworkPicker.svelte';
@@ -351,7 +352,10 @@
 	onkeydown={onModalKeydown}
 	tabindex="-1"
 >
-	<div class="card w-full max-w-md">
+	<!-- v1.5.0 (tt.txt B2, sibling of AddressShareModal): same defect — no
+	     max-height, no overflow, so a phone couldn't scroll to the Send
+	     button. Same fix as the other chat modals. -->
+	<div class="card max-h-[95vh] w-full max-w-md overflow-y-auto">
 		<h2 id="funds-sent-heading" class="font-display text-xl font-bold">
 			{$_('chat.funds_sent.modal_title', { values: { peer } })}
 		</h2>
@@ -371,20 +375,21 @@
 				})}
 			</div>
 		{:else}
-			<div class="mt-5 flex flex-wrap gap-2" role="tablist">
-				{#each visibleMethods as m (m)}
-					<button
-						type="button"
-						role="tab"
-						aria-selected={method === m}
-						class="flex-1 rounded-lg border-2 px-3 py-2 text-sm font-semibold transition {method === m
-							? 'border-morphit-emerald bg-morphit-emerald/10 text-morphit-emerald'
-							: 'border-ink-200 hover:border-ink-300 dark:border-ink-700 dark:hover:border-ink-600'}"
-						onclick={() => selectMethod(m)}
-					>
-						{$_(`chat.address.method_${m}`)}
-					</button>
-				{/each}
+			<!-- v1.5.0 (tt.txt B1, sibling of AddressShareModal): coin SELECT with
+			     logos, replacing the 16 `flex-1` tab buttons. -->
+			<div class="mt-5">
+				<label for="funds-sent-asset" class="mb-1 block text-sm font-semibold">
+					{$_('chat.address.asset_label')}
+				</label>
+				<div id="funds-sent-asset">
+					<AssetChoiceSelect
+						options={visibleMethods}
+						value={method}
+						disabled={sending}
+						ariaLabel={$_('chat.address.asset_label') as string}
+						onSelect={selectMethod}
+					/>
+				</div>
 			</div>
 		{/if}
 

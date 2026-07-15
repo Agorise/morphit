@@ -2701,3 +2701,37 @@ CREATE UNIQUE INDEX IF NOT EXISTS push_pending_account_source_trx_uidx
 
 COMMENT ON COLUMN push_pending.source_trx_id IS
     'cp471 fast-notifications dedup key: the on-chain trx id of the source message. The fast head-block enqueue and the durable enqueue of the same message share it; the partial UNIQUE (account, source_trx_id) makes the later INSERT a no-op so exactly one push is delivered. NULL for single-path pushes (featureBid/feedback); the partial index ignores NULLs.';
+
+-- ─── v44: orders.status += 'completed' (v1.5.0 order-complete op) ───
+-- New morphit_order_complete_v1 op: the order OWNER marks a finished
+-- trade done, flipping the order from 'live' to 'completed' so it
+-- leaves the public orderbook (second removal path parallel to
+-- morphit_order_cancel_v1). Postgres can't modify a CHECK in place;
+-- drop and re-add. 'completed' is strictly additive, so the re-add
+-- validates existing rows safely. Idempotent with the v44 migration
+-- in migrations.ts.
+ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_status_check;
+ALTER TABLE orders ADD CONSTRAINT orders_status_check CHECK (
+    status IN ('live', 'cancelled', 'expired', 'completed')
+);
+
+-- ─── v45: user_settings (v1.5.0 settings-to-chain mirroring) ───
+-- One ENCRYPTED blob per account mirroring device-local settings
+-- (notification prefs + quiet hours, privacy toggles, syndication
+-- targets, hidden accounts, UI preferences) so they follow the user
+-- to a fresh device. Encrypted client-side with a posting-key-derived
+-- key (settingsCrypto) — the indexer only ever stores opaque
+-- ciphertext, never learning a user's preferences or which accounts
+-- they've hidden. Written ONLY by morphit_settings_v1; full-replace,
+-- latest broadcast (by block) wins. Same shape as chat_folders.
+-- Idempotent with the v45 migration in migrations.ts.
+CREATE TABLE IF NOT EXISTS user_settings (
+    account TEXT PRIMARY KEY,
+    enc TEXT NOT NULL,
+    source_block_num BIGINT NOT NULL,
+    source_trx_id TEXT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+COMMENT ON TABLE user_settings IS
+    'Per-account ENCRYPTED device-local settings mirror (notifications/quiet-hours, privacy, syndication, hidden accounts, preferences) so settings follow the user to a fresh device. Opaque ciphertext — encrypted client-side with a posting-key-derived key, so the indexer never learns a user''s preferences or hidden accounts. Written only by morphit_settings_v1; latest by block wins.';

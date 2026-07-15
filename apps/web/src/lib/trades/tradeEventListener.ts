@@ -51,7 +51,7 @@ import { triggerBlurtVerification } from '$lib/trades/tradeVerify';
 import { planListenerDispatch } from '$lib/trades/listenerDispatch';
 import { showToast } from '$lib/stores/toast';
 import { get } from 'svelte/store';
-import { _ } from 'svelte-i18n';
+import { _, locale } from 'svelte-i18n';
 import { liveIdentity } from '$stores/identity';
 import { notify } from '$lib/notifications';
 import type { ChatMessageRecord } from '@morphit/indexer-client';
@@ -188,7 +188,8 @@ async function handleAppend(peer: string, rec: ChatMessageRecord): Promise<void>
 	const plan = planListenerDispatch(decoded, {
 		sender: rec.sender,
 		me,
-		currentPathname: typeof window !== 'undefined' ? window.location.pathname : ''
+		currentPathname: typeof window !== 'undefined' ? window.location.pathname : '',
+		lang: get(locale) ?? 'en'
 	});
 
 	if (plan.store !== null) {

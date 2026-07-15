@@ -130,12 +130,33 @@ if (ADDR_PICKED_RE.test(addrBody)) {
 // literal `method_usdt` string anymore. Verify 'usdt' is one of the tab
 // methods AND the templated label render is present (both are needed for a
 // selectable USDT tab — which is what makes the network-required gate reachable).
-if (/ALL_METHODS[\s\S]*?'usdt'[\s\S]*?\]/.test(addrBody) && /method_\$\{m\}/.test(addrBody)) {
-	pass('AddressShareModal has USDT tab');
+// v1.5.0 (tt.txt B): the 16-button tablist became a coin SELECT
+// (AssetChoiceSelect), whose labels come from the asset registry — the old
+// `chat.address.method_${m}` i18n labels are gone (pruned as dead keys). The
+// INVARIANT is unchanged: USDT must be SELECTABLE, because that is what makes
+// the network-required gate reachable. It is selectable iff it is in
+// ALL_METHODS (the list the picker iterates) AND the picker is templated over
+// that list rather than hand-written.
+// NOTE the array is parsed, not substring-matched. The previous
+// `/ALL_METHODS[\s\S]*?'usdt'[\s\S]*?\]/` scanned the ENTIRE file, so it kept
+// matching the `method === 'usdt'` / usdtNetwork code further down even after
+// USDT was deleted from ALL_METHODS — i.e. it could not detect the very
+// omission it guards against (proven by tamper test, cp471).
+const addrMethods = /const ALL_METHODS: readonly ChatAssetTicker\[\] = \[([\s\S]*?)\];/.exec(
+	addrBody
+);
+const addrListed = new Set(
+	addrMethods ? [...addrMethods[1].matchAll(/'([a-z0-9]+)'/g)].map((m) => m[1] as string) : []
+);
+if (
+	addrListed.has('usdt') &&
+	/<AssetChoiceSelect[\s\S]*?options=\{visibleMethods\}/.test(addrBody)
+) {
+	pass('AddressShareModal offers USDT in its asset picker');
 } else {
 	fail(
-		'AddressShareModal has USDT tab',
-		'no USDT method in ALL_METHODS or dynamic `method_${m}` tablist label missing'
+		'AddressShareModal offers USDT in its asset picker',
+		'no USDT in ALL_METHODS, or the picker is no longer templated over visibleMethods — USDT would be unselectable and the network-required gate unreachable'
 	);
 }
 

@@ -201,14 +201,19 @@
 	// chunk) and is lazy-loaded.  We expose `fullKey` here as
 	// component-local $state, resolving via the async
 	// formatPublicKeyBLT helper on first hover, focus, or copy.
-	const identity = $derived(
-		publicKey && publicKey.length > 0
-			? formatIdentity(displayName, publicKey)
-			: {
-					name: displayName ?? (account ? `@${account}` : ''),
-					fingerprint: ''
-				}
+	// v1.5.0 (t.txt line 5): a removed display name can arrive here as an empty
+	// string (broadcast display_name: ''), not just null — normalize so that
+	// "no display name" always renders as @username, never blank or key-only.
+	const cleanDisplayName = $derived(
+		displayName != null && displayName.trim().length > 0 ? displayName.trim() : null
 	);
+	const identity = $derived.by(() => {
+		if (publicKey && publicKey.length > 0) {
+			const base = formatIdentity(cleanDisplayName, publicKey);
+			return { name: base.name || (account ? `@${account}` : ''), fingerprint: base.fingerprint };
+		}
+		return { name: cleanDisplayName ?? (account ? `@${account}` : ''), fingerprint: '' };
+	});
 
 	const { name, fingerprint } = $derived(identity);
 

@@ -474,8 +474,6 @@
       "share_button_aria": "Udostępnij swój adres odbioru krypto",
       "modal_title": "Udostępnij adres odbioru",
       "modal_subtitle": "Wyślij swój adres odbioru BTC lub XMR partnerowi handlowemu.",
-      "method_btc": "Bitcoin",
-      "method_xmr": "Monero",
       "address_label": "Adres odbioru",
       "address_placeholder_btc": "bc1q… lub 1… lub 3…",
       "address_placeholder_xmr": "8… (zalecany) lub 4…",
@@ -492,7 +490,6 @@
       "pill_copied": "Skopiowano!",
       "pill_for_order": "Do zlecenia",
       "verify_warning": "Zawsze sprawdź adres przed wysłaniem. Transakcji kryptowalutowych nie można cofnąć.",
-      "method_blurt": "Blurt",
       "address_placeholder_blurt": "nazwa-konta",
       "address_invalid_blurt": "To nie wygląda na poprawną nazwę konta.",
       "pill_method_blurt": "Konto Blurt",
@@ -518,15 +515,12 @@
       "xmr_jitter_send_exact_hint": "Powiedz portfelowi kupującego, aby wysłał dokładnie tę kwotę, łącznie z długimi miejscami po przecinku.",
       "xmr_jitter_off_warning_heading": "Prywatność zmniejszona",
       "xmr_jitter_off_warning_body": "Okrągłe kwoty łatwiej skorelować w łańcuchu Monero. Zostaw jitter włączony, chyba że masz powód, by wysłać dokładną kwotę.",
-      "method_usdt": "USDT",
-      "method_bch": "Bitcoin Cash",
       "address_placeholder_usdt": "Adres Tether (pasujący do wybranej sieci)",
       "address_placeholder_bch": "bitcoincash:q… lub 1… lub 3…",
       "address_invalid_usdt": "Ten adres nie pasuje do wybranej sieci USDT. Sprawdź dwukrotnie przed wysłaniem — wysyłka między sieciami traci środki.",
       "address_invalid_bch": "To nie wygląda na prawidłowy adres Bitcoin Cash.",
       "pill_method_usdt": "Adres USDT",
       "pill_method_bch": "Adres Bitcoin Cash",
-      "method_ltc": "Litecoin",
       "address_placeholder_ltc": "L… lub M… lub ltc1…",
       "address_invalid_ltc": "To nie wygląda na prawidłowy adres Litecoin.",
       "pill_method_ltc": "Adres Litecoin",
@@ -544,46 +538,38 @@
       "payjoin_explain": "PayJoin (BIP-78) to kooperacyjny protokół transakcji Bitcoin: zarówno płatnik, jak i odbiorca dodają wejścia do tej samej transakcji, pokonując heurystykę common-input-ownership, której analitycy łańcucha używają do grupowania UTXO.",
       "payjoin_badge": "PayJoin dostępny",
       "payjoin_badge_tooltip": "Portfel sprzedającego obsługuje PayJoin (BIP-78). Jeśli Twój portfel również go obsługuje, otwarcie tego URI wynegocjuje transakcję kooperacyjną, która zwiększa prywatność.",
-      "method_dash": "Dash",
       "address_placeholder_dash": "X… lub 7…",
       "address_invalid_dash": "To nie wygląda na prawidłowy adres Dash.",
       "pill_method_dash": "Adres Dash",
-      "method_usdc": "USDC",
       "address_placeholder_usdc": "Adres USD Coin (zgodny z wybraną siecią)",
       "address_invalid_usdc": "Nieprawidłowy adres USDC dla wybranej sieci. Sieci EVM: 0x + 40 hex. Solana: 32-44 base58. Sprawdź, czy wybrałeś właściwą sieć w formularzu zlecenia.",
       "pill_method_usdc": "Adres USDC",
-      "method_dai": "DAI",
       "address_invalid_dai": "Nieprawidłowy format adresu DAI (oczekiwany EVM 0x[40 hex]).",
       "address_placeholder_dai": "0x... (adres DAI w formacie EVM)",
       "pill_method_dai": "DAI {network}",
-      "method_doge": "Dogecoin",
       "address_placeholder_doge": "D… 9… lub A…",
       "address_invalid_doge": "To nie wygląda na prawidłowy adres Dogecoin.",
       "pill_method_doge": "Adres Dogecoin",
-      "method_zec": "Zcash",
       "address_placeholder_zec": "t1… t3… zs1… lub u1…",
       "address_invalid_zec": "To nie wygląda na prawidłowy adres Zcash.",
       "pill_method_zec": "Adres Zcash",
-      "method_arrr": "ARRR",
       "address_placeholder_arrr": "Twój adres ARRR (zs1...)",
       "address_invalid_arrr": "Nieprawidłowy adres Pirate Chain.  Oczekiwany prefiks `zs1` + 75 znaków bech32 (łącznie 78).",
       "pill_method_arrr": "Pirate Chain (ARRR)",
-      "method_dcr": "DCR",
       "address_placeholder_dcr": "Twój adres DCR (Ds... lub Dc...)",
       "address_invalid_dcr": "Nieprawidłowy adres Decred.  Oczekiwany prefiks `Ds` lub `Dc` + 33 znaki base58 (łącznie 35).",
       "pill_method_dcr": "Decred (DCR)",
-      "method_sol": "SOL",
       "address_placeholder_sol": "Twój adres SOL (32-44 znaków base58)",
       "address_invalid_sol": "Nieprawidłowy adres Solana.  Oczekiwane 32-44 znaki base58 (większość ma 44).",
       "pill_method_sol": "Solana (SOL)",
-      "method_eth": "ETH",
       "address_placeholder_eth": "Twój adres ETH (0x + 40 znaków hex)",
       "address_invalid_eth": "Nieprawidłowy adres Ethereum.  Oczekiwane 0x + 40 znaków hex (łącznie 42).",
       "pill_method_eth": "Ethereum (ETH)",
-      "method_xrp": "XRP",
       "address_placeholder_xrp": "Twój adres XRP (r + 24-34 znaków base58)",
       "address_invalid_xrp": "Nieprawidłowy adres XRP Ledger.  Oczekiwany adres zaczynający się od r, po którym następuje 24-34 znaków base58 (brak destination tag w tym polu).",
-      "pill_method_xrp": "Ripple (XRP)"
+      "pill_method_xrp": "Ripple (XRP)",
+      "blurt_account_not_found": "Nie istnieje konto Blurt o tej nazwie.",
+      "asset_label": "Moneta"
     },
     "funds_sent": {
       "button": "Zapłać teraz",
@@ -641,7 +627,9 @@
       "pill_title_dcr": "DCR wysłany",
       "pill_title_sol": "SOL wysłany",
       "pill_title_eth": "ETH wysłany",
-      "pill_title_xrp": "XRP wysłany"
+      "pill_title_xrp": "XRP wysłany",
+      "pill_title_blurt_received": "Otrzymano Blurt",
+      "receipt_title": "Potwierdzenie płatności"
     },
     "unknown_version": "Ta wiadomość używa nowszego protokołu. Zaktualizuj Morphit, aby ją odczytać.",
     "pay_blurt": {
@@ -752,7 +740,12 @@
       "hint": "Minimum zlecenia wynosi {min} {fiat} (≈ {amount} {asset}).",
       "hint_market": "Minimum zlecenia wynosi {min} {fiat} (≈ {amount} {asset} po bieżącej cenie rynkowej)."
     },
-    "empty_state_loading": "Czat z @{peer} się ładuje… Przywitaj się!"
+    "empty_state_loading": "Czat z @{peer} się ładuje… Przywitaj się!",
+    "day_separator_tooltip": "Północ, UTC",
+    "feedback": {
+      "left_label": "Wystawiono opinię:",
+      "leave_prompt": "Wystaw opinię"
+    }
   },
   "cheat_sheet": {
     "heading": "Ściąga Morphit",
@@ -1777,7 +1770,8 @@
     "form": {
       "aria_label": "Odpowiedz na tę recenzję",
       "heading": "Twoja odpowiedź",
-      "subheading": "Zostaw publiczną odpowiedź na tę recenzję. Podpisana przez Ciebie, za darmo, opublikowana on-chain. Widoczna dla każdego, kto czyta Twój profil.",
+      "subheading": "Odpowiadasz na recenzję powyżej — przedstaw swoją wersję. Pojawi się publicznie pod ich recenzją w Twoim profilu. Za darmo, podpisana przez Ciebie, on-chain i trwała.",
+      "not_rating": "To odpowiedź, a nie ocena. Aby ocenić tego tradera, zostaw recenzję z czatu z nim.",
       "comment_label": "Odpowiedź",
       "comment_placeholder": "Twoja wersja wydarzeń.",
       "submit": "Opublikuj odpowiedź",
@@ -2196,7 +2190,8 @@
       "all": "Wszystkie",
       "live": "Aktywne",
       "cancelled": "Anulowane",
-      "expired": "Wygasłe"
+      "expired": "Wygasłe",
+      "paid": "Zapłacone"
     },
     "order": {
       "posted_prefix": "Opublikowano",
@@ -2223,7 +2218,10 @@
       "edit_window_tooltip": "Oferty można edytować tylko w ciągu 15 minut od opublikowania. Później trzeba anulować i opublikować ponownie.",
       "edit_window_aria": "Pozostały czas edycji: {remaining}",
       "feedback_pick_prompt": "Z kim handlowałeś?",
-      "not_visible_orderbook": "Niewidoczne w księdze zleceń"
+      "not_visible_orderbook": "Niewidoczne w księdze zleceń",
+      "state_completed": "Zakończone",
+      "action_complete": "Oznacz jako zakończone",
+      "feedback_no_counterparty": "Nie było jeszcze żadnych czatów z kontrahentem"
     },
     "cancel": {
       "confirm_title": "Anulować to zlecenie?",
@@ -2260,6 +2258,13 @@
       "heading": "Status opłaty",
       "body": "💡 Każde zlecenie poniżej pokazuje status swojej opłaty za wystawienie. Zlecenie pojawia się w publicznej księdze zleceń dopiero po zweryfikowaniu opłaty — etykieta „nie otrzymano”, „niedopłata” lub „jeszcze nie zweryfikowano” wyjaśnia, dlaczego zlecenie może wydawać się nieobecne.",
       "dismiss": "Zamknij tę notatkę"
+    },
+    "complete": {
+      "confirm_title": "Oznaczyć to zlecenie jako zakończone?",
+      "confirm_body": "Potwierdza to, że transakcja została zakończona, i usuwa zlecenie z publicznej księgi zleceń. Nie można tego cofnąć.",
+      "confirm_button": "Oznacz zakończone",
+      "cancel_button": "Zostaw aktywne",
+      "completing": "Oznaczanie…"
     }
   },
   "nav": {
@@ -2604,7 +2609,8 @@
     "posting_title": "Twoje zlecenie jest publikowane…",
     "posting_body": "To zlecenie jest potwierdzane przez blockchain i może pojawić się po chwili. Będziemy sprawdzać automatycznie — nie musisz odświeżać.",
     "check_again": "Sprawdź ponownie",
-    "action_edit_countdown": "Edytuj (w ciągu: {remaining})"
+    "action_edit_countdown": "Edytuj (w ciągu: {remaining})",
+    "status_completed": "Zrealizowane i opłacone"
   },
   "orderbook": {
     "heading": "Księga zleceń",
@@ -3428,11 +3434,11 @@
     "active_orders_sort_hint": "Najstarsze pierwsze — te, które najbliżej są wygaśnięcia.",
     "expires_in": "Wygasa za {t}",
     "expires_now": "Właśnie wygasa",
-    "given_heading": "Recenzje wystawione przez tego użytkownika",
+    "given_heading": "@{account} zostawił(a) recenzję dla",
+    "given_rated": "Oceniłem(-am) @{account}:",
     "loading_given": "Wczytywanie wystawionych recenzji…",
     "given_error": "Nie udało się wczytać recenzji wystawionych przez tego użytkownika.",
     "no_given_yet": "Jeszcze nic. Ten użytkownik nie wystawił opinii żadnemu kontrahentowi.",
-    "given_prefix": "Ocenił/a",
     "rss_subscribe_label": "RSS — śledź tego tradera",
     "rss_subscribe_title": "Powiadomienia przez RSS, gdy ten trader opublikuje nowe zlecenie kupna lub sprzedaży. Uwaga: odpytywanie kanału per-trader jest nieco bardziej ujawniające niż ogólnoświatowy.",
     "feedback_suppressed_chip": "Nie wlicza się do oceny — recenzenci oznaczeni jako powiązani",
@@ -3912,8 +3918,7 @@
       "placeholder": "np. Kawa, BTC i długie spacery po blockchainie.",
       "hint": "Wygląda dobrze.",
       "broadcast_ok_detail": "Twoje krótkie bio jest teraz opublikowane i widoczne dla wszystkich.",
-      "clear": "Wyczyść",
-      "clear_confirm_prompt": "Usunąć krótki opis z tego urządzenia? Możesz go ustawić ponownie w każdej chwili."
+      "clear": "Wyczyść"
     },
     "title": "Ustawienia",
     "subtitle": "Twoja tożsamość, Twoje zasady. Zapisane u Ciebie, nigdy na naszych serwerach.",
@@ -3943,9 +3948,6 @@
         "lookup_failed": "Morphit nie mógł połączyć się ze swoim indekserem, aby sprawdzić, jakim kontem zarządza ten klucz, więc nic nie rozgłosił. Sprawdź połączenie i spróbuj ponownie."
       },
       "broadcast_pending": "Publikacja…",
-      "clear_confirm_prompt": "Usunąć twoją wyświetlaną nazwę z tego urządzenia? Możesz ustawić ją ponownie w każdej chwili.",
-      "clear_confirm_yes": "Tak, usuń",
-      "clear_confirm_cancel": "Zatrzymaj",
       "broadcast_ok_detail": "Twoja wyświetlana nazwa jest teraz widoczna dla wszystkich."
     },
     "endpoints": {
@@ -3955,7 +3957,16 @@
       "cooling_down": "przerwa",
       "recheck": "Sprawdź ponownie szybkość węzłów",
       "probing": "sprawdzam…",
-      "unreachable": "nieosiągalny"
+      "unreachable": "nieosiągalny",
+      "err_timeout": "Brak odpowiedzi na czas (przekroczono limit)",
+      "err_tls": "Problem z certyfikatem TLS",
+      "err_dns": "Wyszukiwanie DNS nie powiodło się",
+      "err_refused": "Połączenie odrzucone",
+      "err_rpc": "Odpowiedział, ale wywołanie RPC nie powiodło się",
+      "err_body": "Odpowiedział nieczytelną odpowiedzią",
+      "err_http": "Węzeł odpowiedział HTTP {status}",
+      "err_http_blocked": "Zablokowane przez politykę bezpieczeństwa (HTTP {status})",
+      "err_http_rate": "Ograniczone przez węzeł (HTTP 429)"
     },
     "session": {
       "autolock_changed": "Zmieniono na {label}",
@@ -3973,10 +3984,10 @@
     },
     "nostr_url": {
       "heading": "Link Nostr",
-      "explain": "Opcjonalne. Dodaj URL swojego profilu Nostr, a mała ikona Nostr pojawi się obok Twojej nazwy użytkownika wszędzie na Morphit. Pomaga ludziom dotrzeć do Ciebie poza tym rynkiem.",
+      "explain": "Dodaj tutaj URL swojego profilu Nostr, aby pomóc ludziom dotrzeć do Ciebie poza Morphit. Na twojej stronie profilu jego ikona z odnośnikiem jest wyświetlana obok twojego awatara.",
       "label": "Twój URL Nostr",
       "placeholder": "nostr:npub1... lub https://...",
-      "hint_empty": "Pozostaw puste, jeśli nie chcesz pokazywać linku Nostr.",
+      "hint_empty": "Wklej tutaj URL swojego profilu Nostr lub zostaw puste.",
       "hint_ok": "Wygląda dobrze.",
       "error": {
         "too_long": "Za długie. Utrzymaj poniżej 512 znaków.",
@@ -3988,12 +3999,12 @@
       "save_and_broadcast": "Zapisz i rozgłoś",
       "broadcast_pending": "Publikuję…",
       "clear": "Wyczyść",
-      "reminder_title": "Gdzie to się pojawia",
-      "reminder_body": "Po opublikowaniu ikona Nostr pojawia się obok Twojej nazwy użytkownika przy każdym zleceniu, każdej opinii, każdej wiadomości czatu — w każdej instancji Morphit, nie tylko tej. Inni użytkownicy dotkną jej, aby otworzyć Twój profil Nostr w swoim preferowanym kliencie."
+      "reminder_title": "Opcjonalne — możesz pominąć.",
+      "reminder_body": "Twoja tożsamość w Morphit działa dobrze bez tego adresu URL. To grzecznościowy link dla osób, które mogą chcieć zobaczyć także twój profil Nostr."
     },
     "blurt_media_url": {
-      "heading": "URL profilu Blurt.media",
-      "explain": "Link do twojego profilu na blurt.media, popularnym frontendzie Blurt do streamingu. Wyświetlany obok twojej nazwy użytkownika wszędzie w Morphit. Opcjonalne.",
+      "heading": "Profil Blurt.media",
+      "explain": "Link do twojego profilu na blurt.media, popularnym frontendzie Blurt do streamingu. Na twojej stronie profilu jego ikona z odnośnikiem jest wyświetlana obok twojego awatara.",
       "label": "URL Blurt.media",
       "placeholder": "https://blurt.media/@twojanazwa",
       "hint_empty": "Wklej tutaj URL swojego profilu blurt.media lub zostaw puste.",
@@ -4088,7 +4099,10 @@
       "unhide_all": "Odkryj wszystkich",
       "unhide_all_confirm": "Odkryć wszystkie {count} kont? To sprawi, że ich zlecenia znów będą widoczne w twoim widoku orderbook.",
       "unhide_all_confirm_yes": "Tak, odkryj wszystkich",
-      "unhide_all_confirm_cancel": "Trzymaj ich ukrytych"
+      "unhide_all_confirm_cancel": "Trzymaj ich ukrytych",
+      "refresh": "Odśwież",
+      "refreshed": "Odświeżono!",
+      "refresh_aria": "Odśwież listę ukrytych kont"
     },
     "avatar": {
       "heading": "Awatar",
@@ -4170,9 +4184,8 @@
       "first_trade_help": "Gdy zostawisz opinię o pierwszym handlu w Morphit, opublikuj również krótki post \"Dołączyłem do Morphit\" w społeczności @morphit na Blurt. Publikuje tylko raz na konto. Syndykacja per-zamówienie to osobne pole wyboru na formularzu zamówienia.",
       "pitch_heading": "Po co to włączać?",
       "pitch_body": "Syndykacja to wszystko. Więcej oczu = więcej partnerów i nagrody za upvoty na portfel Blurt. Off = nic publicznego.",
-      "blog_default_explain": "Masz za sobą pierwszą transakcję — świetnie. Morphit może teraz automatycznie zaznaczać pole \"opublikuj to zlecenie na moim blogu Blurt\" przy każdym nowym zleceniu, aby Twoje oferty były udostępniane automatycznie. Każdy wpis nadal jest podpisany przez Ciebie i możesz odznaczyć go przy konkretnym zleceniu.",
-      "blog_default_label": "Domyślnie publikuj moje zlecenia na moim blogu Blurt",
-      "blog_default_help": "Zaznacza z góry pole \"udostępnij na moim blogu\" dla każdego zlecenia w formularzu. Zawsze możesz je odznaczyć dla konkretnego zlecenia. Wyłączone = pole za każdym razem zaczyna niezaznaczone."
+      "blog_default_explain": "Morphit może teraz automatycznie zaznaczać pole \"opublikuj to zlecenie na moim blogu Blurt\" przy każdym nowym zleceniu, aby Twoje oferty były publikowane automatycznie. Każdy wpis nadal jest podpisany przez Ciebie i możesz odznaczyć go przy konkretnym zleceniu.",
+      "blog_default_label": "Domyślnie publikuj moje zlecenia na moim blogu Blurt"
     },
     "privacy": {
       "heading": "Prywatność",
@@ -4485,13 +4498,13 @@
   "trade_status": {
     "address_shared": "Adres udostępniony",
     "payment_pending": "Oczekuje na płatność",
-    "paid": "Zapłacono",
     "payment_mismatch": "Niezgodność płatności",
     "payment_unverifiable": "Płatność nieweryfikowalna",
     "released": "Wydane",
     "disputed": "Sporne",
     "completed": "Ukończone",
-    "in_progress": "Transakcja w toku"
+    "in_progress": "Transakcja w toku",
+    "paid_by": "Zapłacone przez"
   },
   "update": {
     "title": "Dostępna jest aktualizacja Morphita",
@@ -4586,9 +4599,9 @@
   },
   "unlock_active": {
     "title": "Ta płatność wymaga klucza aktywnego",
-    "body": "Jesteś zalogowany na @{account} kluczem postującym, który nie może przenosić środków. Wpisz klucz aktywny lub hasło główne Blurt, aby kontynuować — nie stracisz niczego, co już wpisałeś.",
-    "field_label": "Klucz aktywny lub hasło główne Blurt",
-    "field_placeholder": "Zaczyna się od 5… , albo hasło główne",
+    "body": "Jesteś zalogowany na @{account} tylko kluczem postującym, który nie może przenosić środków. Wklej klucz aktywny w pole, aby kontynuować.",
+    "field_label": "Klucz aktywny",
+    "field_placeholder": "Zaczyna się od 5…",
     "field_help": "Morphit sprawdza go z twoim kontem na blockchainie przed podpisaniem czegokolwiek. Nigdy nie opuszcza tego urządzenia.",
     "cta": "Odblokuj i kontynuuj",
     "checking": "Sprawdzanie…",
