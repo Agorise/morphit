@@ -48,10 +48,36 @@ function key(seed: number): Uint8Array {
 	return k;
 }
 
+/*
+ * Long, unique canary values — NOT short ones like 'MXN'.
+ *
+ * cp471: the confidentiality check below originally searched for 'MXN' (3
+ * chars) in the base64 BLOB TEXT, and it was wrong in BOTH directions:
+ *
+ *   FALSE POSITIVE — ciphertext base64 is effectively random text over a
+ *   64-char alphabet, so a 3-char needle collides by pure chance in a ~228
+ *   char blob about 1 run in 1000 (measured: 3/3000). CI's triple-pulse duly
+ *   caught it: two pulses green, the third red on a blob that was perfectly
+ *   encrypted.
+ *
+ *   FALSE NEGATIVE (the serious one) — base64 re-encodes each 3 bytes into 4
+ *   chars, so plaintext sitting IN the blob does not survive as a literal
+ *   substring of the base64: a blob containing {"preferences":{"fiat":"MXN"}}
+ *   verbatim contains no 'MXN' in its base64 at ANY of the 3 byte alignments
+ *   (verified). The check could therefore MISS a total plaintext leak — the
+ *   exact catastrophe it exists to catch.
+ *
+ * The fix is both halves: DECODE the blob to raw bytes and search THOSE, and
+ * use needles long enough that a random collision is impossible (a 20+ char
+ * needle in ~170 random bytes has probability ~256^-20).
+ */
+const CANARY_FIAT = 'CANARY_FIAT_c9f24a7b1e8d42';
+const CANARY_HIDDEN = 'CANARY_HIDDEN_5b1e07d3a64299';
+
 const STATE = {
 	notifications: { enabled: true, quietHours: { from: '22:00', to: '07:00' } },
-	hidden: ['@spammer'],
-	preferences: { fiat: 'MXN', region: 'MX' }
+	hidden: [CANARY_HIDDEN],
+	preferences: { fiat: CANARY_FIAT, region: 'MX' }
 };
 
 async function main(): Promise<void> {
@@ -65,13 +91,18 @@ async function main(): Promise<void> {
 	}
 
 	// ── 2. The blob must not leak the plaintext ──────────────────────
-	// It lands on a public, permanent chain.
-	if (!blob.includes('MXN') && !blob.includes('spammer') && !blob.includes('quietHours')) {
-		ok('the on-chain blob carries no plaintext settings values');
+	// It lands on a public, permanent chain. Decode to RAW BYTES first —
+	// searching the base64 text is both flaky and blind (see the note above
+	// the canaries).
+	const raw = Buffer.from(blob, 'base64');
+	const needles = [CANARY_FIAT, CANARY_HIDDEN, 'quietHours', 'preferences'];
+	const leaked = needles.filter((n) => raw.includes(Buffer.from(n, 'utf8')));
+	if (leaked.length === 0) {
+		ok('the on-chain blob carries no plaintext settings values (checked on decoded bytes)');
 	} else {
 		bad(
 			'confidentiality',
-			'the encrypted blob contains recognizable plaintext — settings would be world-readable, forever.'
+			`the encrypted blob contains plaintext ${leaked.map((l) => `"${l}"`).join(', ')} — settings would be world-readable, forever.`
 		);
 	}
 
