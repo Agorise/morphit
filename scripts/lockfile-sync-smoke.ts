@@ -186,6 +186,50 @@ try {
 }
 
 let failed = 0;
+// ─── Workspace VERSION parity (cp472) ──────────────────────────────
+// This smoke only ever checked that each workspace is PRESENT in the
+// lockfile (the cp140 `npm ci` EUSAGE bug). It never checked the version
+// each entry reports — so the lockfile silently sat at 1.4.12 through the
+// whole of v1.5.0 while every package.json said 1.5.0, and CI stayed green.
+// `npm install` heals it locally, which is exactly why nobody noticed.
+// Ken: "i do not like anything to go stale, so fix where necessary, always."
+//
+// Version-only drift doesn't break `npm ci`, but it makes the lockfile lie
+// about what the repo is: anything reading it (supply-chain tooling, an
+// operator diffing a tarball against a tag, `npm ls`) gets the wrong answer.
+// Regenerate with: npm install --package-lock-only
+{
+	const name = 'lockfile workspace versions match their package.json';
+	try {
+		const lock = JSON.parse(readFileSync(resolvePath(REPO_ROOT, 'package-lock.json'), 'utf8')) as {
+			packages?: Record<string, { version?: string }>;
+		};
+		const pkgs = lock.packages ?? {};
+		const drift: string[] = [];
+		// '' is the root workspace entry; the rest are keyed by their path.
+		for (const [key, entry] of Object.entries(pkgs)) {
+			if (key.startsWith('node_modules/')) continue;
+			const manifestPath = resolvePath(REPO_ROOT, key === '' ? 'package.json' : `${key}/package.json`);
+			if (!existsSync(manifestPath)) continue;
+			const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as { version?: string };
+			if (manifest.version === undefined) continue;
+			if (entry.version !== manifest.version) {
+				drift.push(`${key === '' ? '(root)' : key}: lockfile ${entry.version ?? '<none>'} vs package.json ${manifest.version}`);
+			}
+		}
+		if (drift.length === 0) {
+			pass(name);
+		} else {
+			fail(
+				name,
+				`${drift.length} stale version(s) — regenerate with \`npm install --package-lock-only\` (version-only; it must not touch resolved/integrity):\n      ${drift.join('\n      ')}`
+			);
+		}
+	} catch (err) {
+		fail(name, `could not compare lockfile versions: ${String(err)}`);
+	}
+}
+
 for (const r of results) {
 	if (r.passed) {
 		console.log(`  ${ANSI_GREEN}✓${ANSI_RESET} ${r.name}`);

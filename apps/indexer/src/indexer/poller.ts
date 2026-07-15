@@ -25,7 +25,7 @@ import type { Database } from '$db/pool';
 import { applyBlock } from '$indexer/dispatcher';
 import { orderbookEventBus } from '$indexer/orderbookEventBus';
 import { chatEventBus } from '$indexer/chatEventBus';
-import { detectSuspiciousReciprocity, detectRelatedAccounts, detectOneWayPileOn, detectReviewConcentration } from '$indexer/signals';
+import { detectSuspiciousReciprocity, detectRelatedAccounts, detectOneWayPileOn, detectReviewConcentration, detectTradeConcentration } from '$indexer/signals';
 import { WitnessFeePoller } from '$indexer/witnessFeePoller';
 import { LowBalanceScanner } from '$indexer/lowBalanceScanner';
 import { OperatorAccountBalanceScanner } from '$indexer/operatorAccountBalanceScanner';
@@ -770,6 +770,24 @@ export class Poller {
 			}
 		} catch (err) {
 			log.error('signal_d_failed', {}, err);
+		}
+		try {
+			// Signal E — completed-trade concentration (v1.5.5).
+			// The TRADE analogue of Signal D. v1.5.5 credits the counterparty
+			// an order owner NAMES, and the provable-counterparty bar it must
+			// clear is per-PAIR, not per-trade — so after one genuine
+			// conversation an owner could keep completing orders naming the
+			// same confederate and mint a trade credit per listing fee,
+			// forever. None of the review signals see it (suspicious_
+			// reciprocity watches mutual REVIEWS). This flags an account whose
+			// trade credits are ≥80% concentrated on one peer across the
+			// window; TRADE_COUNT_SQL then stops counting those credits.
+			const flaggedE = await detectTradeConcentration(this.db);
+			if (flaggedE > 0) {
+				log.info('signal_e_flagged', { new_pairs: flaggedE });
+			}
+		} catch (err) {
+			log.error('signal_e_failed', {}, err);
 		}
 	}
 

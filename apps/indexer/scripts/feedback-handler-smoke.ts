@@ -70,12 +70,17 @@ await scenario('G1.1: feedback WITHOUT order_permlink does NOT trigger bonus', a
 	});
 	const exps: QueryExpectation[] = [
 		// Verified-chat conformance query runs first (ADR-0014).
+		// cp472: the gate moved to $indexer/chatGates (ONE impl, shared with
+		// morphit_order_complete_v1's counterparty check). Identical rule and
+		// identical SQL shape — only the column ALIASES are generic now
+		// (from_a/from_b instead of from_reviewer/from_subject), since the
+		// helper doesn't know it's a review. Behaviour unchanged.
 		{
 			match: 'COUNT(*) FILTER (WHERE sender',
 			rows: [
 				{
-					from_reviewer: '2',
-					from_subject: '2',
+					from_a: '2',
+					from_b: '2',
 					span_seconds: '900',
 					has_recip_flag: false
 				}
@@ -118,8 +123,8 @@ await scenario('G1.1: feedback WITH valid order_permlink DOES trigger bonus', as
 			match: 'COUNT(*) FILTER (WHERE sender',
 			rows: [
 				{
-					from_reviewer: '2',
-					from_subject: '2',
+					from_a: '2',
+					from_b: '2',
 					span_seconds: '900',
 					has_recip_flag: false
 				}
@@ -296,8 +301,8 @@ await scenario(
 				match: 'COUNT(*) FILTER (WHERE sender',
 				rows: [
 					{
-						from_reviewer: '2',
-						from_subject: '2',
+						from_a: '2',
+						from_b: '2',
 						span_seconds: '900',
 						has_recip_flag: false
 					}
@@ -450,8 +455,8 @@ await scenario('O3.3: NFC-normalizes comment before length check', async () => {
 			match: 'COUNT(*) FILTER (WHERE sender',
 			rows: [
 				{
-					from_reviewer: '2',
-					from_subject: '2',
+					from_a: '2',
+					from_b: '2',
 					span_seconds: '900',
 					has_recip_flag: false
 				}
@@ -510,8 +515,8 @@ await scenario('ADR-0014: badge=true when 2+ in each direction, ≥15min span, n
 			match: 'COUNT(*) FILTER (WHERE sender',
 			rows: [
 				{
-					from_reviewer: '3',
-					from_subject: '4',
+					from_a: '3',
+					from_b: '4',
 					span_seconds: '1800', // 30 min
 					has_recip_flag: false
 				}
@@ -541,8 +546,8 @@ await scenario('cp421: gate REJECTS when only 1 message from reviewer (below ver
 			match: 'COUNT(*) FILTER (WHERE sender',
 			rows: [
 				{
-					from_reviewer: '1',
-					from_subject: '5',
+					from_a: '1',
+					from_b: '5',
 					span_seconds: '1800',
 					has_recip_flag: false
 				}
@@ -569,8 +574,8 @@ await scenario('cp421: gate REJECTS when span < 15 minutes (below verified-chat 
 			match: 'COUNT(*) FILTER (WHERE sender',
 			rows: [
 				{
-					from_reviewer: '3',
-					from_subject: '4',
+					from_a: '3',
+					from_b: '4',
 					span_seconds: '600', // 10 min, too fast
 					has_recip_flag: false
 				}
@@ -593,8 +598,8 @@ await scenario('cp421: gate REJECTS a flagged suspicious_reciprocity pair', asyn
 			match: 'COUNT(*) FILTER (WHERE sender',
 			rows: [
 				{
-					from_reviewer: '5',
-					from_subject: '5',
+					from_a: '5',
+					from_b: '5',
 					span_seconds: '7200', // 2h — plenty
 					has_recip_flag: true // but flagged
 				}
@@ -617,8 +622,8 @@ await scenario('cp421: gate REJECTS when no chat messages exist (span_seconds=nu
 			match: 'COUNT(*) FILTER (WHERE sender',
 			rows: [
 				{
-					from_reviewer: '0',
-					from_subject: '0',
+					from_a: '0',
+					from_b: '0',
 					span_seconds: null, // pg returns NULL on empty set
 					has_recip_flag: false
 				}

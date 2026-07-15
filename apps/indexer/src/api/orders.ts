@@ -15,6 +15,7 @@ import { z } from 'zod';
 import type { Database } from '$db/pool';
 import type { AssetTicker } from '@morphit/asset-registry';
 import { decodeCursor, encodeCursor, errorBody, isAccountName } from '$api/shared';
+import { tradeCountJoin } from '$api/reputationJoin';
 
 const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 50;
@@ -69,7 +70,15 @@ interface OrderRow {
 		| 'reused';
 	/** ADR-0011 — how this order's listing fee was paid. */
 	fee_method: 'blurt' | 'waived_first_buy' | 'btc' | 'xmr';
-	/** Derived from accounts.first_trade_complete_at via LEFT JOIN. */
+	/** v1.5.5: the OTHER party of this completed trade, as named by the owner
+	 *  in morphit_order_complete_v1. NULL unless completed (and unnamed/
+	 *  unproven completions stay NULL). */
+	completed_counterparty: string | null;
+	/** v1.5.5: the owner's COMPLETED-TRADE count (both sides credited,
+	 *  sock-puppet-pair filtered). Ratings live separately in `f.c`. */
+	trade_count: number;
+	/** v1.5.5: now `trade_count < 4` — reviews are optional, completions are
+	 *  the real experience signal (was: feedback count < 4). */
 	is_new_trader: boolean;
 	created_at: Date;
 	updated_at: Date;
@@ -93,6 +102,8 @@ function rowToWire(r: OrderRow) {
 		status: r.status,
 		fee_status: r.fee_status,
 		fee_method: r.fee_method,
+		completed_counterparty: r.completed_counterparty,
+		trade_count: r.trade_count,
 		is_new_trader: r.is_new_trader,
 		created_at: r.created_at.toISOString(),
 		updated_at: r.updated_at.toISOString(),
@@ -143,7 +154,13 @@ export function ordersByAccountRoute(db: Database, operatorAccount: string): Hon
 			        o.amount_min::text, o.amount_max::text, o.price_model,
 			        o.location_region, o.payment_methods, o.accepted_assets, o.terms,
 			        o.status, o.fee_status, o.fee_method,
-			        (COALESCE(f.c, 0) < 4) AS is_new_trader,
+			        o.completed_counterparty,
+			        -- v1.5.5 (Ken): the 🌱 new-trader chip now keys off COMPLETED
+			        -- TRADES, not reviews. A trader who has actually completed
+			        -- trades shouldn't still read as new just because nobody left
+			        -- stars — reviews are optional, trades are the real signal.
+			        COALESCE(tc.c, 0) AS trade_count,
+			        (COALESCE(tc.c, 0) < 4) AS is_new_trader,
 			        o.created_at, o.updated_at, o.expires_at
 			 FROM orders o
 			 LEFT JOIN (
@@ -173,6 +190,7 @@ export function ordersByAccountRoute(db: Database, operatorAccount: string): Hon
 			    )
 			    GROUP BY subject
 			 ) f ON f.subject = o.account
+${tradeCountJoin('o')}
 			 WHERE o.account = $1${cursorClause}
 			   AND NOT EXISTS (SELECT 1 FROM operator_blocks ob WHERE ob.operator = ${opParam} AND ob.blocked = o.account AND ob.state = 'blocked')
 			 ORDER BY o.updated_at DESC, o.permlink ASC

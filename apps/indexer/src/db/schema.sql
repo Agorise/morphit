@@ -2735,3 +2735,78 @@ CREATE TABLE IF NOT EXISTS user_settings (
 
 COMMENT ON TABLE user_settings IS
     'Per-account ENCRYPTED device-local settings mirror (notifications/quiet-hours, privacy, syndication, hidden accounts, preferences) so settings follow the user to a fresh device. Opaque ciphertext — encrypted client-side with a posting-key-derived key, so the indexer never learns a user''s preferences or hidden accounts. Written only by morphit_settings_v1; latest by block wins.';
+
+-- ─── v46: orders.completed_counterparty (v1.5.5 both-sides trade credit) ───
+-- The OTHER party of a completed trade, named by the order owner in the
+-- morphit_order_complete_v1 payload. Without it, only the order OWNER could
+-- ever be credited a completed trade — the counterparty owns no order of their
+-- own, so they'd read "0 trades" forever no matter how many trades they
+-- completed. Optional: NULL when the completing client didn't name one, and for
+-- every pre-v1.5.5 completion.
+-- Idempotent with the v46 migration in migrations.ts.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS completed_counterparty TEXT;
+
+COMMENT ON COLUMN orders.completed_counterparty IS
+    'v1.5.5: the account the owner traded WITH on this completed order, as named in the morphit_order_complete_v1 payload. Lets the counterparty (who owns no order of their own) be credited the completed trade. NULL when the completing client did not name one, or for pre-v1.5.5 completions.';
+
+-- Trade credit is looked up BY counterparty ("how many completed trades does
+-- account X have?"), which no existing index serves: the orders PK leads with
+-- `account` (the owner), so a counterparty lookup would seq-scan the whole
+-- table on every profile/order card render.
+CREATE INDEX IF NOT EXISTS orders_completed_counterparty_idx
+    ON orders (completed_counterparty)
+    WHERE status = 'completed' AND completed_counterparty IS NOT NULL;
+
+-- ─── v47: push_pending.sent_at (v1.5.5 duplicate-notification fix) ───
+-- The fast/durable dedup was structurally broken: the relay drained a row and
+-- DELETED it (~5s after send), so when the durable handler enqueued the SAME
+-- trx ~60s later, ON CONFLICT (account, source_trx_id) had nothing left to
+-- conflict with and inserted a SECOND push. The row must OUTLIVE delivery for
+-- the dedup key to mean anything, so the sender stamps sent_at instead of
+-- deleting and a pruner reclaims it later.
+-- Idempotent with the v47 migration in migrations.ts.
+ALTER TABLE push_pending ADD COLUMN IF NOT EXISTS sent_at TIMESTAMPTZ;
+
+COMMENT ON COLUMN push_pending.sent_at IS
+    'v1.5.5: when this row was delivered (or dropped as undeliverable/expired). NULL = still queued. The sender claims rows WHERE sent_at IS NULL and stamps this instead of deleting, so the row survives as the dedup tombstone for (account, source_trx_id) until a pruner reclaims it. Deleting on send is what caused duplicate notifications.';
+
+CREATE INDEX IF NOT EXISTS push_pending_unsent_idx
+    ON push_pending (enqueued_at)
+    WHERE sent_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS push_pending_sent_at_idx
+    ON push_pending (sent_at)
+    WHERE sent_at IS NOT NULL;
+
+-- ─── v48: trade_concentration (v1.5.5, Signal E) ──────────────────
+-- The trade analogue of Signal D (review_concentration).
+--
+-- v1.5.5 grounds the trade count in COMPLETED ORDERS and credits the
+-- counterparty the owner NAMES, which opens a farming shape none of the review
+-- signals watch: once a pair has ONE verified conversation (the provable-
+-- counterparty bar is per-pair, not per-trade), the owner can keep completing
+-- orders naming the same confederate — one listing fee per minted trade
+-- credit, forever. suspicious_reciprocity only fires on mutual REVIEWS, so it
+-- never sees this.
+--
+-- Signal E flags an account whose completed-trade credits are >=80%
+-- concentrated on a single peer over the window (>=5 trades). Same shape,
+-- thresholds and rationale as Signal D — concentration PERCENTAGE rather than
+-- an absolute count, so an attacker who diversifies with a couple of throwaway
+-- trades still gets caught while staying focused on the target.
+-- Idempotent with the v48 migration in migrations.ts.
+CREATE TABLE IF NOT EXISTS trade_concentration (
+    account          TEXT NOT NULL,
+    dominant_peer    TEXT NOT NULL,
+    detected_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    concentration_pct NUMERIC(5, 2) NOT NULL CHECK (concentration_pct >= 0 AND concentration_pct <= 100),
+    trade_count      INTEGER NOT NULL CHECK (trade_count >= 0),
+    window_days      INTEGER NOT NULL,
+    PRIMARY KEY (account, dominant_peer)
+);
+
+CREATE INDEX IF NOT EXISTS trade_concentration_peer_idx
+    ON trade_concentration (dominant_peer);
+
+COMMENT ON TABLE trade_concentration IS
+    'v1.5.5 Signal E: accounts whose COMPLETED-TRADE credits are concentrated (>=80%) on a single peer over the detection window. The trade analogue of review_concentration — v1.5.5 credits the counterparty an order owner names, so without this a pair with one verified conversation could mint unlimited trade credit at a listing fee each. Excluded from the trade count by TRADE_COUNT_SQL.';

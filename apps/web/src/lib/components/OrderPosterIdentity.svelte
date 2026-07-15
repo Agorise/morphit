@@ -16,8 +16,8 @@
 	import type { OrderRecord } from '@morphit/indexer-client';
 	import IdentityLabel from '$lib/components/IdentityLabel.svelte';
 	import NewTraderChip from '$lib/components/NewTraderChip.svelte';
+	import TradeRepCluster from '$lib/components/TradeRepCluster.svelte';
 	import { truncatePublicKey } from '$lib/crypto/publicKeyDisplay';
-	import { formatCountCompact, formatMonthYear } from '$lib/i18n/formatters';
 
 	interface Props {
 		order: OrderRecord;
@@ -44,20 +44,21 @@
 	}: Props = $props();
 
 	const handle = $derived('@' + order.account);
-	const count = $derived(order.feedback_count ?? 0);
+	// v1.5.5 — two DIFFERENT numbers now: `ratingCount` says how many RATINGS
+	// back the star average; `tradeCount` counts COMPLETED TRADES (both sides
+	// credited). A trade nobody reviewed counts in the second and not the first.
+	const ratingCount = $derived(order.feedback_count ?? 0);
+	const tradeCount = $derived(order.trade_count ?? 0);
 	const score = $derived(order.reputation_score ?? null);
 	const postingKey = $derived(truncatePublicKey(postingKeyOverride ?? order.posting_pubkey ?? ''));
 
-	// "852 trades since July, 2026" — count always shown (0 when none); the
-	// "since {month}" tail only when a first trade exists.
-	const tradesLine = $derived.by(() => {
-		const c = formatCountCompact(count);
-		return order.first_trade_at
-			? ($_('orderbook.card.trades_since', {
-					values: { count: c, month: formatMonthYear(order.first_trade_at) }
-				}) as string)
-			: ($_('orderbook.card.trades_only', { values: { count: c } }) as string);
-	});
+	// v1.5.5 — the trade count moved into TradeRepCluster ("1 trade · ★5.00
+	// (34)"), which owns the wording. The old "852 trades since July, 2026"
+	// tail is deliberately gone from this row: the cluster is `whitespace-
+	// nowrap` by contract (Ken: the chunk must never break mid-way), and a
+	// "since {month}" tail makes it long enough to overflow a phone instead of
+	// wrapping — the exact tightness problem Ken asked to fix. The first-trade
+	// date remains available on the profile.
 </script>
 
 <!-- Identity row: avatar tucks up under the title; name + key beside. -->
@@ -77,29 +78,21 @@
 			{#if order.is_new_trader}
 				<NewTraderChip />
 			{/if}
-			{#if score !== null}
-				<span
-					class="inline-flex items-center gap-1 text-sm font-semibold text-morphit-emerald"
-					aria-label={$_('orderbook.card.reputation_aria', {
-						values: { score: score.toFixed(2) }
-					}) as string}
-					title={$_('orderbook.card.reputation_aria', {
-						values: { score: score.toFixed(2) }
-					}) as string}
-				>
-					<span aria-hidden="true">⭐</span>
-					<span aria-hidden="true">{score.toFixed(2)}</span>
-				</span>
-			{/if}
+			<!-- v1.5.5 — ONE cluster: "1 trade · ★5.00 (34)". Unbreakable
+			     (TradeRepCluster is nowrap + flex-none); this row is flex-wrap,
+			     so it sits at the end of the name line when it fits and drops
+			     WHOLE onto its own line when it doesn't. Replaces the old bare
+			     ⭐ score span — the emoji star read as a different thing from
+			     the emerald ★ used for feedback, and the trade count used to
+			     live on a separate grey line below. -->
+			<TradeRepCluster {tradeCount} rating={score} {ratingCount} />
 		</div>
-		<!-- Line 2: truncated posting key · trade count since {month} -->
-		<div
-			class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-500 dark:text-ink-400"
-		>
-			{#if postingKey}
+		<!-- Line 2: truncated posting key (the trade count moved up into the
+		     cluster on line 1 — see above). -->
+		{#if postingKey}
+			<div class="mt-0.5 text-xs text-ink-500 dark:text-ink-400">
 				<span class="font-mono">({postingKey})</span>
-			{/if}
-			<span>{tradesLine}</span>
-		</div>
+			</div>
+		{/if}
 	</div>
 </div>

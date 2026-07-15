@@ -249,6 +249,16 @@
 	);
 	function onChatFeedbackSuccess(): void {
 		justSubmittedFeedback = true;
+		// t155 (Ken): "that 'Feedback left:' card (or row, whatever it is) does
+		// not look good. after a feedback is left, then just show a nice toast or
+		// snackbar for a few seconds that says 'Feedback sent'."
+		//
+		// The card it replaced is gone from the markup below. Losing nothing:
+		// the standing record of a review belongs on the profile and on the
+		// inbox row ("I rated @x: ★★★★★"), not pinned to the top of the
+		// chatroom forever — and it was showing on every reload of an old
+		// conversation, long after "you just did this" stopped being news.
+		showToast($_('chat.feedback.sent_toast') as string, 'success');
 	}
 
 	/** Derived block status for this peer. True iff the blocks
@@ -1838,27 +1848,21 @@
 	{#if orderPermlink}
 		{#if canLeaveFeedback}
 			<div class="mx-2 mb-2 rounded-xl border-2 border-morphit-emerald bg-morphit-emerald/5 p-3">
+				<!-- v1.5.5 — completeOwnedOrder: this panel is headed "Mark this
+				     trade complete", so when the cited order is OURS, submitting
+				     must actually mark it complete (naming the peer as the
+				     counterparty so both sides get trade credit). Gated on
+				     orderIsMine because a chat may equally be about the PEER's
+				     order — completing is owner-only, and in that direction it's
+				     the peer's job. Ken's kentest3 owned the order and reviewed
+				     from here, which is exactly why it sat "Live" forever. -->
 				<LeaveFeedbackForm
 					{orderPermlink}
 					prefillSubject={peer}
 					lockSubject={true}
+					completeOwnedOrder={orderIsMine}
 					onSuccess={onChatFeedbackSuccess}
 				/>
-			</div>
-		{:else if myFeedbackForPeer !== null || justSubmittedFeedback}
-			<div
-				class="mx-2 mb-2 flex flex-wrap items-center gap-2 rounded-xl border-2 border-morphit-emerald/40 bg-morphit-emerald/5 px-3 py-2 text-sm"
-			>
-				<span aria-hidden="true">✓</span>
-				<span class="font-semibold">{$_('chat.feedback.left_label')}</span>
-				{#if myFeedbackForPeer !== null}
-					<span class="text-amber-500" aria-hidden="true"
-						>{'★'.repeat(myFeedbackForPeer.rating)}{'☆'.repeat(5 - myFeedbackForPeer.rating)}</span
-					>
-					{#if myFeedbackForPeer.comment}
-						<span class="min-w-0 text-ink-700 dark:text-ink-200">{myFeedbackForPeer.comment}</span>
-					{/if}
-				{/if}
 			</div>
 		{/if}
 	{/if}

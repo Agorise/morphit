@@ -294,6 +294,66 @@ CREATE TABLE IF NOT EXISTS user_settings (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 `
+	},
+	{
+		version: 46,
+		description:
+			'v1.5.5: orders.completed_counterparty — the OTHER party of a completed trade, named by the owner in morphit_order_complete_v1. Without it only the order OWNER could ever be credited a trade: the counterparty owns no order, so they would sit at "0 trades" forever no matter how many trades they completed. Optional (NULL) — older clients omit it and older completed rows keep NULL.',
+		sql: `
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS completed_counterparty TEXT;
+
+COMMENT ON COLUMN orders.completed_counterparty IS
+    'v1.5.5: the account the owner traded WITH on this completed order, as named in the morphit_order_complete_v1 payload. Lets the counterparty (who owns no order of their own) be credited the completed trade. NULL when the completing client did not name one, or for pre-v1.5.5 completions.';
+
+-- Trade credit is looked up BY counterparty ("how many completed trades does
+-- account X have?"), which no existing index serves: the orders PK leads with
+-- the owner account, so a counterparty lookup would seq-scan the whole table
+-- on every profile/order card render.
+CREATE INDEX IF NOT EXISTS orders_completed_counterparty_idx
+    ON orders (completed_counterparty)
+    WHERE status = 'completed' AND completed_counterparty IS NOT NULL;
+`
+	},
+	{
+		version: 47,
+		description:
+			'v1.5.5: push_pending.sent_at — the fast/durable dedup was structurally broken. The relay drained a row and DELETED it (~5s), so when the durable handler enqueued the SAME trx ~60s later, ON CONFLICT (account, source_trx_id) had nothing left to conflict with and inserted a SECOND push — the duplicate notification Ken hit. The row must OUTLIVE delivery for the dedup key to work, so the sender now stamps sent_at instead of deleting, a pruner reclaims later, and the durable insert lands on a real conflict.',
+		sql: `
+ALTER TABLE push_pending ADD COLUMN IF NOT EXISTS sent_at TIMESTAMPTZ;
+
+COMMENT ON COLUMN push_pending.sent_at IS
+    'v1.5.5: when this row was delivered (or dropped as undeliverable/expired). NULL = still queued. The sender claims rows WHERE sent_at IS NULL and stamps this instead of deleting, so the row survives as the dedup tombstone for (account, source_trx_id) until a pruner reclaims it. Deleting on send is what caused duplicate notifications.';
+
+-- The sender now claims only unsent rows; without this it would re-scan every
+-- retained tombstone on every poll tick.
+CREATE INDEX IF NOT EXISTS push_pending_unsent_idx
+    ON push_pending (enqueued_at)
+    WHERE sent_at IS NULL;
+
+-- The pruner reclaims by sent_at.
+CREATE INDEX IF NOT EXISTS push_pending_sent_at_idx
+    ON push_pending (sent_at)
+    WHERE sent_at IS NOT NULL;
+`
+	},
+	{
+		version: 48,
+		description:
+			'v1.5.5: trade_concentration — Signal E. v1.5.5 grounds the trade count in COMPLETED ORDERS and credits the counterparty the owner names, which opens a farming shape the review signals do not watch: once a pair has ONE verified conversation, an owner can keep completing orders naming the same confederate at a listing fee each, minting trade credit forever. suspicious_reciprocity only watches mutual REVIEWS, so it never fires. Signal E is the trade analogue of Signal D (review_concentration): flag an account whose completed-trade credits are >=80% concentrated on a single peer over the window.',
+		sql: `
+CREATE TABLE IF NOT EXISTS trade_concentration (
+    account          TEXT NOT NULL,
+    dominant_peer    TEXT NOT NULL,
+    detected_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    concentration_pct NUMERIC(5, 2) NOT NULL CHECK (concentration_pct >= 0 AND concentration_pct <= 100),
+    trade_count      INTEGER NOT NULL CHECK (trade_count >= 0),
+    window_days      INTEGER NOT NULL,
+    PRIMARY KEY (account, dominant_peer)
+);
+
+CREATE INDEX IF NOT EXISTS trade_concentration_peer_idx
+    ON trade_concentration (dominant_peer);
+`
 	}
 	// Future migrations land here.  The v1 collapsed schema is the
 	// pre-launch baseline; from v37 forward, every new schema change is its

@@ -40,10 +40,18 @@
 
 	const { count, rating }: Props = $props();
 
-	/** Small-sample threshold. 3+ reviews feels like the
+	/** Small-sample threshold. 3+ ratings feels like the
 	 *  smallest count where an average starts conveying signal;
-	 *  fewer than that we show the same data in a muted color
-	 *  to flag "take this rating with a grain of salt." */
+	 *  below that the star goes HOLLOW (☆) to flag "take this
+	 *  rating with a grain of salt."
+	 *
+	 *  v1.5.5 (Ken): this used to grey the WHOLE chip out. That's what made
+	 *  the reputation star look white next to the emerald ★★★★★ used for
+	 *  feedback everywhere else — Ken asked for one green star convention
+	 *  sitewide. The chip is now always emerald and the small-sample signal
+	 *  moved onto the star's SHAPE, which is strictly better: hollow-vs-solid
+	 *  still reads for a colourblind user where emerald-vs-grey may not, and
+	 *  it reuses the ★/☆ convention the feedback stars already established. */
 	const SAMPLE_CONFIDENCE = 3;
 
 	const muted = $derived(count < SAMPLE_CONFIDENCE);
@@ -55,9 +63,7 @@
 
 {#if count > 0 && rating !== null}
 	<span
-		class="rating-chip inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ring-1 {muted
-			? 'bg-ink-500/10 text-ink-500 ring-ink-500/30 dark:bg-ink-300/10 dark:text-ink-300 dark:ring-ink-300/30'
-			: 'bg-morphit-emerald/10 text-morphit-emerald ring-morphit-emerald/30'}"
+		class="rating-chip inline-flex items-center gap-1 rounded-full bg-morphit-emerald/10 px-2 py-0.5 text-xs font-medium text-morphit-emerald ring-1 ring-morphit-emerald/30"
 		aria-label={$t('orderbook.order.rating_aria', {
 			values: { rating: ratingStr, count }
 		})}
@@ -65,7 +71,18 @@
 			values: { rating: ratingStr, count }
 		})}
 	>
-		<span aria-hidden="true">★</span>
+		<!-- v1.5.5 (Ken): the star is ALWAYS emerald, and the small-sample signal
+	     is carried by its SHAPE — hollow ☆ below 3 ratings, solid ★ at or
+	     above. Ken: "make it the green star hollowed-out (the stroke outline
+	     only of the star and the center of the star is transparent)."
+	     The "white star" he spotted was this chip at count < 3: the whole pill
+	     greyed to flag a thin sample, which greyed the star with it and made
+	     the reputation star look like a different thing from the emerald
+	     ★★★★★ used for feedback everywhere else. Stars are green, sitewide.
+	     Shape beats colour here: hollow-vs-solid still reads for a colourblind
+	     user, where emerald-vs-grey may not. Same ★/☆ convention the feedback
+	     stars already use. -->
+	<span aria-hidden="true" class="text-morphit-emerald">{muted ? '☆' : '★'}</span>
 		<span aria-hidden="true">{ratingStr}</span>
 		<span aria-hidden="true" class="opacity-70">({count})</span>
 	</span>

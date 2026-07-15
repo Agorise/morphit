@@ -124,6 +124,20 @@
 		 *  already shown by the parent, e.g. a detail page header that renders a 96px
 		 *  hero avatar + the username label underneath). */
 		hideAvatar?: boolean;
+		/** t155 — render the account's @handle in parentheses right after the
+		 *  DISPLAY NAME, on the same line. Ken: "they all show the avatar and
+		 *  display name, but right after the display name please show that user's
+		 *  @username in parenthesis on the same line as the display name."
+		 *
+		 *  Opt-in, and a no-op when the account has no display name: `name`
+		 *  already falls back to `@account` in that case, so appending the handle
+		 *  unconditionally would render "@kentest3 (@kentest3)".
+		 *
+		 *  Scoped to the profile's review cards for now, where you're reading
+		 *  about someone you may not recognise by display name. Elsewhere (chat
+		 *  headers, order cards) the handle is either already shown or the
+		 *  display name is the point. */
+		showHandleAfterName?: boolean;
 		/** Hide the @handle/displayName text + copy button, keeping only
 		 *  the avatar (if shown) and the nostr/blurt.media link glyphs.
 		 *  Used where the handle is already shown elsewhere (e.g. the
@@ -138,6 +152,7 @@
 		publicKeyString,
 		account,
 		displayName = null,
+		showHandleAfterName = false,
 		nostrUrl = null,
 		blurtMediaUrl = null,
 		avatarSvg = null,
@@ -326,6 +341,12 @@
 	});
 </script>
 
+{#snippet nameText()}
+	<span class={weightCls}>{name}</span>{#if showHandleAfterName && cleanDisplayName !== null && account}<span
+			class="ml-1 font-normal text-ink-500 dark:text-ink-400">(@{account})</span
+		>{/if}
+{/snippet}
+
 {#snippet label()}
 	{#if name && (fingerprint || publicKeyString)}
 		<!-- cp397: the truncated posting key sits on its own line directly
@@ -333,7 +354,7 @@
 		     human label and the cryptographic identity read as a stacked
 		     pair rather than a long inline run. -->
 		<span class="inline-flex min-w-0 flex-col leading-tight">
-			<span class={weightCls}>{name}</span>
+			<span class="truncate">{@render nameText()}</span>
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<bdi
 				class="ltr-in-rtl font-mono text-[0.7em] text-ink-500 dark:text-ink-400"
@@ -343,7 +364,7 @@
 			>
 		</span>
 	{:else if name}
-		<span class={weightCls}>{name}</span>
+		{@render nameText()}
 	{:else}
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<bdi

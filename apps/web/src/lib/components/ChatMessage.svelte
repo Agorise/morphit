@@ -611,12 +611,23 @@
 		     the a11y suppressions — the div is intentionally not a
 		     button so it never hijacks the message text as its name). -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<!-- t155 (Ken): "all of the green bubbles (the Payment Receipts too) are a
+		     bit too bright and it makes the thin black text hard for me to see.
+		     maybe dim that green just a bit and make the text on the bubble a bit
+		     bolder."
+		
+		     `font-medium` on the whole bubble is the "a bit bolder" half — it
+		     lifts 400 → 500, which thickens the strokes without shouting the way
+		     font-semibold would. It applies to the Payment Receipt too, since the
+		     receipt renders INSIDE this bubble and inherits both the deepened
+		     background and this weight — which is what Ken asked for ("the Payment
+		     Receipts too"). -->
 		<div
-			class="w-fit break-words rounded-2xl px-3 py-2 text-sm"
+			class="w-fit break-words rounded-2xl px-3 py-2 text-sm font-medium"
 			class:self-end={isOutgoing}
 			class:self-start={!isOutgoing}
 			class:cursor-pointer={fullTimestamp !== ''}
-			class:bg-morphit-emerald={isOutgoing && !isFailed}
+			class:bg-morphit-emerald-bubble={isOutgoing && !isFailed}
 			class:text-ink-950={isOutgoing && !isFailed}
 			class:bg-ink-200={!isOutgoing && !isFailed}
 			class:text-ink-900={!isOutgoing && !isFailed}
@@ -802,7 +813,7 @@
 							class="flex-none rounded-md border px-2 py-1 text-xs font-semibold {copiedKind ===
 							'address'
 								? 'border-green-600 bg-green-600 text-white opacity-100'
-								: 'border-current opacity-70 hover:opacity-100'}"
+							: 'border-current opacity-70 hover:bg-current/10 hover:opacity-100'}"
 							onclick={() => copyText(p.address, 'address')}
 							aria-label={$_('common.copy') as string}
 						>
@@ -1171,14 +1182,28 @@
 								<ExplorerLink urls={explorerLinksForTxid(p.method, p.txid, p.network)} />
 							{/if}
 							{#if p.method === 'blurt' && verifyResult !== null && verifyResult !== 'pending' && verifyResult.kind === 'verified'}
-								{@const verifyUrl = morphitExplorerTxUrl(p.txid)}
-								{#if verifyUrl}
+								<!-- t155 (Ken): "when i click on that text/hyperlink, it takes me
+								     to a 404 Not Found page." morphitExplorerTxUrl returns a
+								     LOCALE-LESS path (`/explorer/tx/…`); every other caller wraps
+								     it in lp() — this one didn't, so the URL had no [lang] segment
+								     and matched no route. Same class of bug as the cp470 push
+								     click_path 404. -->
+								{@const verifyPath = morphitExplorerTxUrl(p.txid)}
+								{#if verifyPath}
 									<!-- v1.5.0 — THIS instance's explorer only (no off-site
 									     explorer; privacy #1 — no IP leak to a third party).
 									     Shown only once the transfer is chain-verified. -->
+										<!-- t155 (Ken): "I cannot see the text/link that is next to the
+										     magnifying glass emoji/icon." It was text-morphit-emerald ON
+										     the emerald receipt bubble — emerald on emerald. Now inherits
+										     the bubble's own foreground (currentColor) — the convention
+										     the Copy button beside it already uses — so it stays legible
+										     on every bubble variant instead of being pinned to one
+										     background. Underlined so it reads as a link without relying
+										     on colour, with a stronger hover per Ken. -->
 									<a
-										href={verifyUrl}
-										class="-mx-1 inline-flex w-fit items-center gap-1 rounded px-1 py-0.5 text-xs font-semibold text-morphit-emerald transition-colors hover:bg-morphit-emerald/15 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
+										href={lp(verifyPath)}
+										class="-mx-1 inline-flex w-fit items-center gap-1 rounded px-1 py-0.5 text-xs font-semibold text-current underline decoration-current/40 underline-offset-2 opacity-90 transition-all hover:bg-current/10 hover:opacity-100 hover:decoration-current focus:outline-none focus-visible:ring-2 focus-visible:ring-current"
 									>
 										<span aria-hidden="true">🔎</span>
 										{$_('chat.funds_sent.verify_independently')}
@@ -1186,12 +1211,19 @@
 								{/if}
 							{/if}
 						</div>
+						<!-- t155 (Ken): "the Copy button is not properly aligned next to the
+						     Transaction field". The row is `items-start`, so Copy pinned to
+						     the TOP while the Transaction column beside it is three stacked
+						     lines (label → txid → verify link) — so it sat level with the
+						     label instead of the field. self-center overrides just this
+						     child; the row keeps items-start for the address pill above, whose
+						     column is a different height. -->
 						<button
 							type="button"
-							class="flex-none rounded-md border px-2 py-1 text-xs font-semibold {copiedKind ===
+							class="flex-none self-center rounded-md border px-2 py-1 text-xs font-semibold transition-all {copiedKind ===
 							'txid'
 								? 'border-green-600 bg-green-600 text-white opacity-100'
-								: 'border-current opacity-70 hover:opacity-100'}"
+							: 'border-current opacity-70 hover:bg-current/10 hover:opacity-100'}"
 							onclick={() => copyText(p.txid, 'txid')}
 							aria-label={$_('common.copy') as string}
 						>

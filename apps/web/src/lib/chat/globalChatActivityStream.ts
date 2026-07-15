@@ -36,6 +36,41 @@ export function subscribeChatActivity(fn: Listener): () => void {
 	};
 }
 
+/** v1.5.5 — fast-push observers, told WHICH thread a Web Push announced.
+ *
+ *  Separate from the plain activity ping above, which is content-free and only
+ *  says "something happened, go refetch". A refetch is exactly what does NOT
+ *  help here: the FAST path never writes chat_messages (it emits to SSE and
+ *  enqueues the push, nothing more), so refetching at ~5s returns the same
+ *  stale conversation list and the badge stays dark until the durable handler
+ *  lands ~60s later. Subscribers get (peer, order) so they can act on the push
+ *  itself.
+ *
+ *  Deliberately a subscription rather than importing chatUnread here:
+ *  chatUnread already imports THIS module, so calling into it directly would
+ *  close an import cycle. The dependency arrow stays one-way. */
+type FastPushListener = (peer: string, orderPermlink: string) => void;
+const fastPushListeners = new Set<FastPushListener>();
+
+/** Register a callback fired for each Web Push naming a thread.
+ *  Returns an unsubscribe function. */
+export function subscribeFastPush(fn: FastPushListener): () => void {
+	fastPushListeners.add(fn);
+	return () => {
+		fastPushListeners.delete(fn);
+	};
+}
+
+function emitFastPush(peer: string, orderPermlink: string): void {
+	for (const fn of fastPushListeners) {
+		try {
+			fn(peer, orderPermlink);
+		} catch {
+			// A badge observer must never break push handling.
+		}
+	}
+}
+
 /** Coalesce bursts (e.g. a spammer sending rapidly, or a snapshot of several
  *  messages) into a single fire so subscribers don't refresh in a storm. */
 const FIRE_DEBOUNCE_MS = 300;
@@ -120,6 +155,18 @@ export function startGlobalChatActivity(): () => void {
 			if (typeof data.peer === 'string' && data.peer) {
 				const order = typeof data.order === 'string' ? data.order : '';
 				if (folderOf(data.peer, order) === 'archived') restoreThread(data.peer, order);
+				// v1.5.5 — light the badge NOW, straight off the push, instead of
+				// waiting for the indexer. `fire()` below only triggers a refetch,
+				// and the FAST path never writes chat_messages (it emits to SSE +
+				// enqueues the push and nothing else) — so the refetch at ~5s
+				// returns the same stale last_message_at and the badge stayed dark
+				// for ~60s. That's Ken's kentest3, sitting on another tab with the
+				// system notification already delivered.
+				//
+				// No spam risk and no gate duplicated here: the fast-notify gate
+				// upstream refuses to push for anyone but an established
+				// counterparty, so no push means no bump.
+				emitFastPush(data.peer, order);
 			}
 			fire();
 		}

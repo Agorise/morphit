@@ -50,6 +50,11 @@ function read(rel: string): string {
 const chat = read('src/indexer/handlers/chat.ts');
 const feature = read('src/indexer/handlers/featureBid.ts');
 const feedback = read('src/indexer/handlers/feedback.ts');
+// v1.5.5 — the feedback push enqueue (locale lookup, title/body, click path,
+// trx dedup key) moved OUT of the handler into this shared module so the FAST
+// head-block path notifies with the identical shape. The click-path invariant
+// this smoke exists for is unchanged; only its address moved.
+const feedbackEnqueue = read('src/indexer/feedbackPushEnqueue.ts');
 // cp471 — chat click-paths now live in the shared enqueue module.
 const enqueue = read('src/indexer/chatPushEnqueue.ts');
 
@@ -69,10 +74,22 @@ scenario('featureBid.ts outbid click_path is /${locale}/my/orders#…', () => {
 		'featureBid.ts outbid click_path missing locale prefix'
 	);
 });
-scenario('feedback.ts click_path is /${locale}/@${subject}#reviews-heading', () => {
+scenario('feedback click_path is /${locale}/@${subject}#reviews-heading', () => {
 	assert(
-		feedback.includes('`/${locale}/@${subject}#reviews-heading`'),
-		'feedback.ts click_path is not the localized /@account#reviews-heading shape'
+		feedbackEnqueue.includes('`/${locale}/@${params.subject}#reviews-heading`'),
+		'the feedback click_path is not the localized /@account#reviews-heading shape (cp82-B2 + cp470: BOTH the [lang] segment and the @ are required or the notification lands on a 404)'
+	);
+});
+scenario('the durable feedback handler delegates to the shared enqueue', () => {
+	// One enqueue impl, so the fast + durable notifications can never drift in
+	// wording, click path, or — critically — the source_trx_id dedup key.
+	assert(
+		feedback.includes('enqueueFeedbackPush(client'),
+		'handlers/feedback.ts no longer delegates to enqueueFeedbackPush'
+	);
+	assert(
+		/sourceTrxId: ctx\.trxId/.test(feedback),
+		'the durable feedback enqueue does not pass the trx dedup key — with a fast path also enqueuing, the subject would get the SAME review notification twice'
 	);
 });
 

@@ -587,7 +587,7 @@
       "send": "Отметить отправленным",
       "pill_title_btc": "Bitcoin отправлен",
       "pill_title_xmr": "Monero отправлен",
-      "pill_txid_label": "Транзакция",
+      "pill_txid_label": "ID транзакции",
       "pill_title_blurt": "Blurt отправлен",
       "verify_pending": "Проверка в блокчейне…",
       "verify_verified": "Подтверждено в блокчейне",
@@ -743,8 +743,8 @@
     "empty_state_loading": "Чат с @{peer} загружается… Поздоровайтесь!",
     "day_separator_tooltip": "Полночь, UTC",
     "feedback": {
-      "left_label": "Отзыв оставлен:",
-      "leave_prompt": "Оставить отзыв"
+      "leave_prompt": "Оставить отзыв",
+      "sent_toast": "Отзыв отправлен"
     }
   },
   "cheat_sheet": {
@@ -2709,7 +2709,6 @@
       "accept_label": "Принимаю",
       "location_label": "Местоположение",
       "terms_label": "Условия",
-      "trades_since": "{count} сделок с {month}",
       "trades_only": "{count} сделок",
       "reputation_aria": "Рейтинг репутации {score} из 5",
       "message_word": "Сообщение",
@@ -3424,7 +3423,7 @@
     "feedback_error": "Не удалось загрузить отзывы.",
     "rating_count": "{n, plural, one {# оценка} few {# оценки} many {# оценок} other {# оценок}}",
     "no_feedback_yet": "Отзывов пока нет. Этого пользователя ещё не оценил ни один контрагент.",
-    "reviews_heading": "Отзывы",
+    "reviews_heading": "@{account} получил(а) отзывы от",
     "review_order_link": "Посмотреть ордер",
     "load_more": "Загрузить ещё",
     "active_orders_heading": "Активные ордера",
@@ -3539,7 +3538,8 @@
       "qr_camera_denied": "Доступ к камере заблокирован. Разрешите его в настройках браузера и попробуйте снова.",
       "qr_no_camera": "На этом устройстве нет камеры для сканирования.",
       "qr_invalid": "В этом QR-коде не было аккаунта Blurt. Попробуйте другой."
-    }
+    },
+    "given_said": "Я написал(а):"
   },
   "relative_time": {
     "descriptive": {

@@ -76,6 +76,80 @@ export const FEEDBACK_EXCLUSIONS_SQL = `	    WHERE fb.order_permlink IS NOT NULL
 	    )`;
 
 /**
+ * v1.5.5 — COMPLETED-TRADE count per account, sock-puppet filtered.
+ *
+ * Ken: "if an order was marked as completed (not canceled or expired), then
+ * imo that counts as 1 completed trade even if no stars were left." So the
+ * trade count is now grounded in COMPLETIONS, not reviews — a real trade where
+ * nobody bothered to leave stars still counts, and a zero-review trade never
+ * drags a score down (it isn't in the rating average at all).
+ *
+ * BOTH sides are credited: the order's OWNER, and the `counterparty` the owner
+ * named in morphit_order_complete_v1. Without the second half only owners could
+ * ever accrue trades — a taker owns no order and would read "0 trades" forever
+ * however many trades they completed.
+ *
+ * EXCLUSIONS (Ken, cp472 tightening #2): the same sock-puppet PAIR signals the
+ * rating aggregate applies —
+ *   1. suspicious_reciprocity — flagged repetitive pairs
+ *   2. related_accounts       — known-linked accounts
+ *   3. trade_concentration    — Signal E (v1.5.5), the TRADE analogue of
+ *                               Signal D: credits from a peer this account's
+ *                               trades are >=80% concentrated on. Closes the
+ *                               residual where one verified conversation lets
+ *                               a pair mint unlimited trade credit at a
+ *                               listing fee each (the per-pair provable-
+ *                               counterparty bar is not per-trade).
+ * so a puppet pair can't farm trades any more than they can farm ratings.
+ *
+ * Signals C (one_way_pile_on) and D (review_concentration) are deliberately NOT
+ * applied here: both describe REVIEW patterns (attackers piling reviews onto a
+ * subject; a reviewer aiming ≥80% of their REVIEWS at one subject). Neither has
+ * a trade analogue in the data, and pretending otherwise would silently void
+ * legitimate trades. See REVISIT for the documented residual (a pair with no
+ * flag can still mint repeat trade credits at one listing fee each).
+ *
+ * A completion with NO named counterparty still credits the owner: there's no
+ * pair to judge, so there's nothing to exclude.
+ */
+export const TRADE_COUNT_SQL = `
+	    SELECT t.account, COUNT(*)::int AS c
+	      FROM (
+	        SELECT o.account AS account, o.completed_counterparty AS peer
+	          FROM orders o
+	         WHERE o.status = 'completed'
+	        UNION ALL
+	        SELECT o.completed_counterparty AS account, o.account AS peer
+	          FROM orders o
+	         WHERE o.status = 'completed'
+	           AND o.completed_counterparty IS NOT NULL
+	      ) t
+	     WHERE t.peer IS NULL
+	        OR (
+	             NOT EXISTS (
+	               SELECT 1 FROM suspicious_reciprocity sr
+	                WHERE sr.account_a = LEAST(t.account, t.peer)
+	                  AND sr.account_b = GREATEST(t.account, t.peer)
+	             )
+	         AND NOT EXISTS (
+	               SELECT 1 FROM related_accounts ra
+	                WHERE ra.account_a = LEAST(t.account, t.peer)
+	                  AND ra.account_b = GREATEST(t.account, t.peer)
+	             )
+	         -- Signal E (v1.5.5): drop credits from a peer this account's
+	         -- trades are >=80% concentrated on. DIRECTED, not a pair check:
+	         -- it voids the farmed account's inflated credits without voiding
+	         -- the same trades for a legitimately busy counterparty who merely
+	         -- happens to be their dominant peer.
+	         AND NOT EXISTS (
+	               SELECT 1 FROM trade_concentration tcx
+	                WHERE tcx.account = t.account
+	                  AND tcx.dominant_peer = t.peer
+	             )
+	           )
+	     GROUP BY t.account`;
+
+/**
  * The LEFT JOIN that attaches the sock-puppet-filtered, time-decayed feedback
  * aggregate to an orders row, exposing:
  *
@@ -121,6 +195,27 @@ export function feedbackAggregateJoin(orderAlias = 'o', scopeSubjectsSql?: strin
 ${FEEDBACK_EXCLUSIONS_SQL}${scope}
 	    GROUP BY subject
 	 ) f ON f.subject = ${orderAlias}.account`;
+}
+
+/**
+ * v1.5.5 — the LEFT JOIN attaching {@link TRADE_COUNT_SQL} to an orders row,
+ * exposing `tc.c` (int) — the account's COMPLETED-TRADE count (0 via COALESCE
+ * at the use site).
+ *
+ * Kept as its own join rather than folded into {@link feedbackAggregateJoin}
+ * because trades and ratings are now DIFFERENT numbers with different sources:
+ * trades come from completed ORDERS, ratings from FEEDBACK. Ken asked for them
+ * shown side by side ("1 trade · ★5.00 (34)") precisely so the ratings count
+ * still says how many ratings back the average — folding them together is what
+ * would make "★5.00 (34)" imply 34 ratings when 34 might be trades.
+ *
+ * @param orderAlias alias of the `orders` table in the caller's query.
+ * @param alias alias to give this join (default `tc`).
+ */
+export function tradeCountJoin(orderAlias = 'o', alias = 'tc'): string {
+	return `	 LEFT JOIN (
+${TRADE_COUNT_SQL}
+	 ) ${alias} ON ${alias}.account = ${orderAlias}.account`;
 }
 
 /**

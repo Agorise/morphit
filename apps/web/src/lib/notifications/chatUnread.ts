@@ -33,7 +33,11 @@ import { chatFolders, isArchived, resurrectArchivedOnNewActivity } from '$lib/ch
 import { hiddenAccounts } from '$lib/utils/hiddenAccounts';
 import { blockedAccounts, loadBlocks } from '$lib/chat/blocks';
 import { setCategoryCount } from './index';
-import { startGlobalChatActivity, subscribeChatActivity } from '$lib/chat/globalChatActivityStream';
+import {
+	startGlobalChatActivity,
+	subscribeChatActivity,
+	subscribeFastPush
+} from '$lib/chat/globalChatActivityStream';
 
 /** How often to re-poll the conversation list while the tab is visible.
  *  Fastchat target: a peer's ping / new message must surface (inbox green
@@ -51,6 +55,50 @@ let convos: ReadonlyArray<{
 	/** cp446 — the discussion this row is about; null when it cites no order. */
 	order: { permlink: string } | null;
 }> = [];
+
+/** v1.5.5 — OPTIMISTIC fast-chat overlay: threads a Web Push has told us about
+ *  but the indexer hasn't published yet. Keyed `peer\u0000order`, value = when the
+ *  push arrived.
+ *
+ *  WHY. `convos` is DB-derived, and the FAST path is deliberately ephemeral: the
+ *  head-block tailer emits to SSE and enqueues the push, but it does NOT write
+ *  chat_messages — only the durable handler does, ~60s later. So a push could
+ *  land in ~5s while `last_message_at` sat unchanged and the badge stayed dark
+ *  for the best part of a minute. Ken, on kentest3 sitting on another tab:
+ *  "he should have received a fastnotif (not just the fast system notif)".
+ *
+ *  This is NOT a second source of truth. It only ever ADDS a thread to the
+ *  count, it holds no message content, and the next poll (≤5s) supersedes it
+ *  with the real row the moment the indexer catches up.
+ *
+ *  SPAM-SAFE BY CONSTRUCTION, without duplicating the anti-spam gates: the only
+ *  thing that can put an entry here is a delivered Web Push, and the fast-notify
+ *  gate already refuses to push for anyone but an established counterparty. No
+ *  push, no bump. Ken: "unless it's a spammer, fastnotifs please." */
+const fastPending = new Map<string, number>();
+
+/** Discard an optimistic entry once the real conversation catches up or it goes
+ *  stale. Generous vs the ~60s durable lag, since the cost of holding one is a
+ *  single lit thread and the cost of dropping it early is the dark badge we're
+ *  fixing. */
+const FAST_PENDING_TTL_MS = 10 * 60 * 1000;
+
+function fastKey(peer: string, order: string): string {
+	return `${peer.toLowerCase()}\u0000${order}`;
+}
+
+/**
+ * v1.5.5 — record that a Web Push announced a message on (peer, order), and
+ * light the badge NOW rather than waiting for the indexer.
+ *
+ * Called from the CHAT_PUSH service-worker handler. Idempotent; the newest
+ * timestamp wins.
+ */
+export function noteFastChatPush(peer: string, orderPermlink: string): void {
+	if (!peer) return;
+	fastPending.set(fastKey(peer, orderPermlink), Date.now());
+	recount();
+}
 
 /** A conversation feeds the chat badge iff it is not with yourself, not
  *  archived, and its peer is neither hidden (orderbook "hide") nor blocked —
@@ -85,12 +133,52 @@ function recount(): void {
 	const hidden = get(hiddenAccounts);
 	const blocked = get(blockedAccounts);
 	let n = 0;
+	const counted = new Set<string>();
 	for (const c of convos) {
 		if (!badgeEligible(c, meLc, hidden, blocked)) continue;
 		// cp446 — one count per DISCUSSION: three unread threads with the same
 		// person are three unread conversations, exactly as in an email inbox.
 		const order = c.order?.permlink ?? '';
+		counted.add(fastKey(c.peer, order));
 		if (isUnread(c.peer, order, c.last_message_at)) n++;
+	}
+	// v1.5.5 — add threads a push announced that the indexer hasn't published
+	// yet, so the badge lights in ~5s instead of ~60s. Drop an entry as soon as
+	// the real conversation carries the message (its last_message_at has caught
+	// up past the push), or once it's simply stale.
+	const now = Date.now();
+	for (const [key, at] of fastPending) {
+		if (now - at > FAST_PENDING_TTL_MS) {
+			fastPending.delete(key);
+			continue;
+		}
+		const sep = key.indexOf('\u0000');
+		const peer = key.slice(0, sep);
+		const order = key.slice(sep + 1);
+		const real = convos.find(
+			(c) => c.peer.toLowerCase() === peer && (c.order?.permlink ?? '') === order
+		);
+		if (real && new Date(real.last_message_at).getTime() >= at) {
+			// The durable row landed — the loop above already judged it.
+			fastPending.delete(key);
+			continue;
+		}
+		if (counted.has(key)) continue; // already counted as unread above
+		// SAME eligibility as every other counted thread — a push must never
+		// light the badge for a self/hidden/blocked/archived thread the inbox
+		// won't show, or the count outruns the visible cards (the cp452 bug).
+		if (!badgeEligible({ peer, order: order ? { permlink: order } : null }, meLc, hidden, blocked)) {
+			continue;
+		}
+		// Judge it by the SAME read-state rule as a real conversation, treating
+		// the push's arrival as the message time. Without this the entry would
+		// count unconditionally and OPENING the thread wouldn't clear the badge
+		// — it would sit lit until the TTL expired.
+		if (!isUnread(peer, order, new Date(at).toISOString())) {
+			fastPending.delete(key);
+			continue;
+		}
+		n++;
 	}
 	setCategoryCount('chat', n);
 }
@@ -232,6 +320,15 @@ export function startChatUnreadChannel(): () => void {
 	const unsubActivity = subscribeChatActivity(() => {
 		void poll();
 	});
+	// v1.5.5 — a Web Push names the thread it's about, so light that thread's
+	// badge immediately instead of waiting for the indexer. The poll above is
+	// the reconciler, not the trigger: the fast path never writes
+	// chat_messages, so polling on a push just re-reads the same stale
+	// last_message_at (the ~60s dark badge Ken reported on kentest3's other
+	// tab).
+	const unsubFastPush = subscribeFastPush((peer, order) => {
+		noteFastChatPush(peer, order);
+	});
 
 	return () => {
 		window.clearInterval(timer);
@@ -239,6 +336,7 @@ export function startChatUnreadChannel(): () => void {
 		unsubFolders();
 		unsubHidden();
 		unsubBlocked();
+		unsubFastPush();
 		document.removeEventListener('visibilitychange', onVisible);
 		unsubActivity();
 		stopActivityStream();

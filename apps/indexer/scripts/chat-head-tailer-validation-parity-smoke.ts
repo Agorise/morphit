@@ -166,18 +166,41 @@ function firstQuoted(src: string, anchor: string): string | null {
 	// The durable emit() must NOT be called from the tailer (that path is
 	// the poller's, and it requires a real DB messageId).
 	const usesDurableEmit = /chatEventBus\.emit\s*\(/.test(tailer);
-	// Chat-only: the tailer must not reference any other morphit op id.
+	// v1.5.5 — this was "CHAT ONLY: exactly one op id". Ken asked for
+	// fastfeedback ("kentest2 left a 4-star feedback for kentest3, but kentest3
+	// did not get a notification at all"), so morphit_feedback_v1 now rides the
+	// same tailer.
+	//
+	// The INVARIANT this scenario actually protects is unchanged, and is the
+	// reason the allowlist stays short: the fast path is PROVISIONAL (a reorg
+	// can orphan anything it saw) and it must never carry financially material
+	// state. Orders, fees, transfers, profile edits, settings — never. Feedback
+	// is admitted for NOTIFICATION ONLY: the tailer enqueues a push (dedup-keyed
+	// on the trx id so the durable enqueue collapses into it) and writes no
+	// feedback row. The durable handler remains the sole author of reputation.
+	const FAST_ALLOWED_OP_IDS = new Set(['morphit_chat_v1', 'morphit_feedback_v1']);
 	const otherOpIds = (tailer.match(/morphit_[a-z_]+_v\d+/g) ?? []).filter(
-		(id) => id !== 'morphit_chat_v1'
+		(id) => !FAST_ALLOWED_OP_IDS.has(id)
 	);
+	// Notification-only: the tailer may enqueue pushes, never write the durable
+	// tables the durable handlers own.
+	const durableWrites = /INSERT INTO (feedback|orders|profiles|chat_messages)\b/i.test(tailer);
 	if (!usesEmitFast) {
-		bad('7 — fast-channel/chat-only', 'tailer does not call emitFast()');
+		bad('7 — fast-channel/allowed-ops', 'tailer does not call emitFast()');
 	} else if (usesDurableEmit) {
-		bad('7 — fast-channel/chat-only', 'tailer calls the durable chatEventBus.emit() — must use emitFast only');
+		bad('7 — fast-channel/allowed-ops', 'tailer calls the durable chatEventBus.emit() — must use emitFast only');
 	} else if (otherOpIds.length > 0) {
-		bad('7 — fast-channel/chat-only', `tailer references non-chat op id(s): ${[...new Set(otherOpIds)].join(', ')}`);
+		bad(
+			'7 — fast-channel/allowed-ops',
+			`tailer references op id(s) outside the fast allowlist: ${[...new Set(otherOpIds)].join(', ')}. The fast path is provisional (a reorg can orphan it) and must never carry financially material state — orders, fees, transfers.`
+		);
+	} else if (durableWrites) {
+		bad(
+			'7 — fast-channel/allowed-ops',
+			'tailer writes a durable table directly — the fast path may only emit + enqueue notifications; the durable handlers own reputation and orderbook state'
+		);
 	} else {
-		ok('7 — SAFETY: tailer emits on the fast channel only + is chat-only');
+		ok('7 — SAFETY: tailer emits on the fast channel only, carries only chat + feedback (notification-only), and writes no durable table');
 	}
 }
 

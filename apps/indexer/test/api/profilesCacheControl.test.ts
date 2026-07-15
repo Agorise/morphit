@@ -21,19 +21,47 @@ import type { Database } from '$db/pool';
 
 interface Row {
 	account: string;
-	display_name: string;
+	// v1.5.5: nullable — the batch is anchored on `accounts`, so an account
+	// with a posting key but no profile op resolves with these NULL.
+	display_name: string | null;
 	json_metadata: unknown;
-	source_block_num: string;
-	updated_at: Date;
+	source_block_num: string | null;
+	updated_at: Date | null;
+	/** v1.5.5: does a `profiles` row exist? The completeness check keys off
+	 *  THIS, not row presence — see `profileLessRow` below. */
+	has_profile: boolean;
 }
 
+/** A row for an account that HAS a profile. */
 function row(account: string): Row {
 	return {
 		account,
 		display_name: `${account} display`,
 		json_metadata: {},
 		source_block_num: '100',
-		updated_at: new Date('2026-07-08T00:00:00.000Z')
+		updated_at: new Date('2026-07-08T00:00:00.000Z'),
+		has_profile: true
+	};
+}
+
+/**
+ * v1.5.5 — a row for an account that EXISTS on-chain but has never set a
+ * profile. Impossible before the batch was re-anchored on `accounts`: such an
+ * account simply returned nothing, which is why its posting key never reached
+ * the profile's review cards (t155, Ken: no truncated key under @kentest2).
+ *
+ * It is the whole reason the completeness check can no longer count rows. This
+ * row IS returned, but it is NOT a profile — pinning a batch containing one
+ * would hide that user's profile for the full 90s the moment they create it.
+ */
+function profileLessRow(account: string): Row {
+	return {
+		account,
+		display_name: null,
+		json_metadata: null,
+		source_block_num: null,
+		updated_at: null,
+		has_profile: false
 	};
 }
 
@@ -57,6 +85,39 @@ describe('GET /v1/profiles — batch Cache-Control', () => {
 		);
 		const body = (await res.json()) as { profiles: Record<string, unknown> };
 		expect(Object.keys(body.profiles).sort()).toEqual(['alice', 'bob']);
+	});
+
+	it('does NOT cache a batch containing a PROFILE-LESS account (v1.5.5)', async () => {
+		// The regression this exists for. v1.5.5 re-anchored the batch on
+		// `accounts` so a key-only account resolves (t155: the truncated posting
+		// key was missing under @kentest2, because the query started at
+		// `profiles` and returned NOTHING for anyone who never set one).
+		//
+		// That silently broke the negative-caching rule: bob now comes back as a
+		// ROW, so a `rows.length === accounts.length` completeness test calls
+		// this batch complete and pins it for 90 seconds — and bob stays
+		// invisible for a minute and a half after creating his first profile.
+		// Row presence stopped meaning "has a profile"; only has_profile does.
+		const app = mount([row('alice'), profileLessRow('bob')]);
+		const res = await app.request('/v1/profiles?accounts=alice,bob');
+		expect(res.status).toBe(200);
+		expect(res.headers.get('Cache-Control')).toBe('no-store');
+	});
+
+	it('still RETURNS the profile-less account, so its posting key is usable (v1.5.5)', async () => {
+		// Not cacheable is not the same as not useful: bob must still come back,
+		// key and all — that IS the t155 fix. His profile fields are simply null.
+		const app = mount([row('alice'), profileLessRow('bob')]);
+		const res = await app.request('/v1/profiles?accounts=alice,bob');
+		const body = (await res.json()) as {
+			profiles: Record<string, { display_name: string | null; updated_at: string | null }>;
+		};
+		expect(Object.keys(body.profiles).sort()).toEqual(['alice', 'bob']);
+		// And the null-safety half: rowToProfile used to call
+		// updated_at.toISOString() / parseInt(source_block_num) unconditionally,
+		// which THREW the moment a profile-less row could reach it.
+		expect(body.profiles.bob?.display_name).toBeNull();
+		expect(body.profiles.bob?.updated_at).toBeNull();
 	});
 
 	it('does NOT cache a PARTIAL batch (an account is missing → negative result)', async () => {

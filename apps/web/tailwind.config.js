@@ -16,6 +16,12 @@ export default {
 					lime: '#8EEF26',
 					accent: '#7FED2D',
 					emerald: '#00DA69',
+					// Deepened brand emerald for chat bubbles — mirrors
+					// --morphit-emerald-bubble in app.css (see the rationale there).
+					// Same pattern as `btn` below: the pure brand colour is too bright
+					// a field to read thin text on, so the bubble gets a deepened
+					// sibling rather than an opacity (which would blend with the page).
+					'emerald-bubble': '#00B85A',
 					teal: '#02A6B2',
 					// Primary button face — mirrors --morphit-btn-face in app.css.
 					// A deepened brand teal (white text clears WCAG AA); this is

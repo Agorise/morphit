@@ -207,12 +207,21 @@ results.push({
 });
 
 // ─── 10. Indexer enqueues push_pending for feedback + chat ──
+// v1.5.5 (t155): the feedback enqueue MOVED out of the handler into the shared
+// `feedbackPushEnqueue` module, so the durable path and the new fast-notify path
+// use ONE implementation. That matters: the durable feedback push carried no
+// dedup key (no source_trx_id), which was harmless only while it was the sole
+// path — the moment a second path existed it would have duplicated, exactly the
+// bug Ken hit on chat. So assert BOTH: the shared module does the insert, and
+// the handler still routes through it (a handler that quietly stopped enqueuing
+// would leave reviews silently un-notified).
 results.push({
-	name: 'Indexer feedback handler enqueues push_pending',
-	ok: fileContains(
-		'apps/indexer/src/indexer/handlers/feedback.ts',
-		'INSERT INTO push_pending'
-	)
+	name: 'Indexer feedback push enqueue lives in the shared module',
+	ok: fileContains('apps/indexer/src/indexer/feedbackPushEnqueue.ts', 'INSERT INTO push_pending')
+});
+results.push({
+	name: 'Indexer feedback handler delegates to the shared enqueue',
+	ok: fileContains('apps/indexer/src/indexer/handlers/feedback.ts', 'enqueueFeedbackPush')
 });
 results.push({
 	name: 'Indexer chat push enqueue INSERTs push_pending (shared module)',

@@ -246,17 +246,33 @@ export async function broadcastOrderCancel(
  * status live→completed); the owner still sees it in
  * /v1/orders/:account. Only the order OWNER can complete it, so a
  * buyer cannot grief a listing off the book.
+ *
+ * v1.5.5 — `counterparty` (optional): who the owner traded WITH. Pass it
+ * whenever the client knows (it reads the peer out of the chat the trade
+ * happened in). Without it, ONLY the owner is credited the completed trade:
+ * the counterparty owns no order of their own, so they'd read "0 trades"
+ * forever however many trades they completed. Omitted → the indexer stores
+ * NULL and the owner still gets their own credit, so older clients degrade
+ * cleanly and the payload stays backward-compatible.
  */
 export async function broadcastOrderComplete(
 	live: LiveIdentity,
-	permlink: string
+	permlink: string,
+	counterparty?: string
 ): Promise<{ block_num: number; trx_id: string; permlink: string }> {
 	const account = getUserBlurtAccount();
 	if (!account) {
 		throw new BroadcastError('no_account', 'No Blurt account registered.');
 	}
 	const { broadcastCustomJson } = await import('$blurt/sign');
-	const result = await broadcastCustomJson(live, OP_IDS.orderComplete, { permlink }, account);
+	// Never name yourself — the indexer rejects a self-counterparty outright,
+	// which would cost the user the whole completion (and their listing would
+	// stay live). Drop it here instead and complete without the credit.
+	const payload =
+		typeof counterparty === 'string' && counterparty.length > 0 && counterparty !== account
+			? { permlink, counterparty }
+			: { permlink };
+	const result = await broadcastCustomJson(live, OP_IDS.orderComplete, payload, account);
 	return { ...result, permlink };
 }
 

@@ -41,6 +41,7 @@
 		validateFeedback,
 		FeedbackValidationError
 	} from '$blurt/ops/feedback';
+	import { broadcastOrderComplete } from '$blurt/ops/order';
 	import { BroadcastError, getUserBlurtAccount } from '$blurt/ops/profile';
 	import { publishFirstTradePost } from '$lib/syndication/publish';
 	import { isFirstTradeAnnounceEnabled } from '$lib/utils/syndicationPrefs';
@@ -67,6 +68,22 @@
 		 *  reviewed and no way to redirect the stars to another account.
 		 *  Requires prefillSubject to be set. */
 		lockSubject?: boolean;
+		/** v1.5.5 — set ONLY when the CURRENT USER owns `orderPermlink`, in
+		 *  which case submitting also marks that order complete
+		 *  (morphit_order_complete_v1), naming the reviewed subject as the
+		 *  counterparty so BOTH sides get trade credit.
+		 *
+		 *  WHY: the my/orders button literally reads "Mark complete / review"
+		 *  and the chat panel is headed "Mark this trade complete" — but
+		 *  neither ever broadcast the completion, so a settled trade sat
+		 *  "Live" forever, stayed in the orderbook, kept its Cancel button and
+		 *  counted 0 in the Paid pill. Ken hit exactly this.
+		 *
+		 *  The CALLER asserts ownership because only it knows: my/orders lists
+		 *  nothing but the user's own orders, and the chat resolves the order's
+		 *  real owner (`orderIsMine`). The handler is owner-only regardless, so
+		 *  a wrong caller just wastes an op rather than griefing anyone. */
+		completeOwnedOrder?: boolean;
 		/** Called on successful broadcast with the trx_id. Parent
 		 *  typically refetches its list and closes the disclosure. */
 		onSuccess?: (result: { trx_id: string }) => void;
@@ -74,7 +91,14 @@
 		onCancel?: () => void;
 	}
 
-	let { orderPermlink, prefillSubject, lockSubject = false, onSuccess, onCancel }: Props = $props();
+	let {
+		orderPermlink,
+		prefillSubject,
+		lockSubject = false,
+		completeOwnedOrder = false,
+		onSuccess,
+		onCancel
+	}: Props = $props();
 
 	// localStorage key — once set, we skip the Post A broadcast for
 	// subsequent feedback. The flag is keyed by account so switching
@@ -358,6 +382,27 @@
 				comment: outgoingComment.length > 0 ? outgoingComment : undefined,
 				order_permlink: orderPermlink
 			});
+			// v1.5.5 — the review landed; now honour the button. When the
+			// reviewer OWNS this order ("Mark complete / review" on my/orders,
+			// "Mark this trade complete" in chat), also flip it live→completed
+			// and NAME the reviewed subject as the counterparty so both sides
+			// are credited a trade. Until now neither surface broadcast this,
+			// so a settled trade stayed Live, stayed in the orderbook, kept its
+			// Cancel button and counted 0 under the Paid pill.
+			//
+			// Deliberately AFTER the review and best-effort: the review is the
+			// thing the user typed and it is already irreversible on-chain. If
+			// the completion op fails (locked key, RPC hiccup), we must not
+			// report the whole submit as failed and invite a duplicate review —
+			// the indexer rejects the second one anyway. The manual complete
+			// action stays as the fallback.
+			if (completeOwnedOrder) {
+				try {
+					await broadcastOrderComplete(state.live, orderPermlink, subject);
+				} catch (err) {
+					console.warn('[feedback] order-complete broadcast failed:', orderPermlink, err);
+				}
+			}
 			// Successful broadcast. Fire Post A if this is the first
 			// feedback ever for this account on this device AND the
 			// user hasn't disabled auto-announce in Settings.
@@ -575,18 +620,34 @@
 	{/if}
 
 
-	<div class="mt-3 flex flex-col gap-2">
+	<!-- t155 (Ken): "let's put the 'Submit feedback' and 'Cancel' buttons side by
+	     side with the cancel button on the left if possible, or underneath if on
+	     mobile and there isn't enough room for side by side."
+	
+	     DOM order is Cancel → Submit, which gives `sm:flex-row` exactly that:
+	     Cancel left, Submit right. On narrow screens `flex-col-reverse` stacks
+	     them with SUBMIT ON TOP — the primary action stays first under the thumb
+	     and the reading order matches what was there before, so nothing jumps for
+	     existing users. `sm:justify-end` keeps the pair anchored to the form's
+	     right edge rather than stretched across it.
+	
+	     Cancel keeps its `ghost` hover fill; Submit moves primary → secondary,
+	     which IS "green border with green text" plus a hover — Ken: "i do not
+	     like the color of the 'Submit feedback' button so please change it to
+	     green border with green text and a nice mouseover effect on both
+	     buttons." No new variant needed; both already exist. -->
+	<div class="mt-3 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+		<BusyButton variant="ghost" disabled={submitting} onclick={onCancel}>
+			{$_('common.cancel')}
+		</BusyButton>
 		<BusyButton
-			variant="primary"
+			variant="secondary"
 			busy={submitting}
 			busyLabel={$_('feedback.form.submitting') as string}
 			disabled={!canSubmit}
 			onclick={submit}
 		>
 			{$_('feedback.form.submit')}
-		</BusyButton>
-		<BusyButton variant="ghost" disabled={submitting} onclick={onCancel}>
-			{$_('common.cancel')}
 		</BusyButton>
 	</div>
 	{/if}

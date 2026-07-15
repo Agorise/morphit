@@ -34,7 +34,8 @@
 import type pg from 'pg';
 import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contract';
 import { logger } from '$log';
-import { localize, normalizeLocale } from '$indexer/pushLocalize';
+import { enqueueFeedbackPush } from '$indexer/feedbackPushEnqueue';
+import { hasVerifiedChat as verifiedChatGate } from '$indexer/chatGates';
 
 const log = logger('feedback');
 
@@ -194,43 +195,17 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	//
 	// Self-feedback already rejected upstream (line ~71); we don't
 	// re-check the (reviewer != subject) invariant here.
-	const conformance = await client.query<{
-		from_reviewer: string;
-		from_subject: string;
-		span_seconds: string | null;
-		has_recip_flag: boolean;
-	}>(
-		`SELECT
-		   COUNT(*) FILTER (WHERE sender = $1 AND recipient = $2)
-		     AS from_reviewer,
-		   COUNT(*) FILTER (WHERE sender = $2 AND recipient = $1)
-		     AS from_subject,
-		   EXTRACT(EPOCH FROM (MAX(created_at) - MIN(created_at)))::text
-		     AS span_seconds,
-		   EXISTS (
-		     SELECT 1 FROM suspicious_reciprocity sr
-		      WHERE sr.account_a = LEAST($1::text, $2::text)
-		        AND sr.account_b = GREATEST($1::text, $2::text)
-		   ) AS has_recip_flag
-		 FROM chat_messages
-		 WHERE (
-		         (sender = $1 AND recipient = $2)
-		      OR (sender = $2 AND recipient = $1)
-		     )
-		   AND created_at <= $3`,
-		[ctx.signer, subject, ctx.blockTime]
-	);
-	const c = conformance.rows[0]!;
-	const fromReviewer = Number(c.from_reviewer);
-	const fromSubject = Number(c.from_subject);
-	const spanSec = c.span_seconds === null ? 0 : Number(c.span_seconds);
-	const hasRecipFlag = c.has_recip_flag === true;
-	const hasVerifiedChat =
-		fromReviewer >= 2 &&
-		fromSubject >= 2 &&
-		Number.isFinite(spanSec) &&
-		spanSec >= 15 * 60 &&
-		!hasRecipFlag;
+	// cp472 — the bar itself now lives in $indexer/chatGates (ONE
+	// implementation), because morphit_order_complete_v1's `counterparty`
+	// must clear the identical bar. Behaviour here is unchanged: same
+	// ≥2-each-way / ≥15-min / not-reciprocity-flagged rule, same block-time
+	// bound. Divergence between the two call sites would be a security bug,
+	// which is exactly why it is shared rather than copied.
+	const hasVerifiedChat = await verifiedChatGate(client, {
+		a: ctx.signer,
+		b: subject,
+		asOf: ctx.blockTime
+	});
 
 	// ─── cp420/cp421 PROVABLE-COUNTERPARTY GATE (Ken) ────────────
 	// A review must attach to someone the reviewer PROVABLY interacted
@@ -310,53 +285,22 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	// matching row → 'en'.  See pushLocalize.ts for the
 	// translation table.
 	try {
-		const localeRow = await client.query<{ locale: string }>(
-			`SELECT locale FROM push_subscriptions
-			  WHERE account = $1
-			  ORDER BY created_at DESC
-			  LIMIT 1`,
-			[subject]
-		);
-		// DD-meta-cp1718-1: skip enqueue when no push subscription
-		// exists.  Sender would gracefully drop the row anyway but
-		// enqueue-then-drop wastes work and pollutes operator
-		// metrics.  No-subs is the common case for users who
-		// haven't opted into Web Push.
-		if (localeRow.rowCount === 0) {
-			// no-op; user has no push subs.
-		} else {
-			const locale = normalizeLocale(localeRow.rows[0]?.locale);
-			const titleStr = localize(locale, 'feedback_title');
-			const bodyStr =
-				rating === 1
-					? localize(locale, 'feedback_body_one', ctx.signer, String(rating))
-					: localize(locale, 'feedback_body_many', ctx.signer, String(rating));
-			// Click-through: canonical account-profile page is
-			// /{locale}/@{account} (the [x+40][account=account] route
-			// in apps/web/src/routes/[lang]/), which displays a feedback
-			// section anchored at #reviews-heading.  Per cp82-B2
-			// audit the prior `/profile/{subject}#feedback` had no
-			// matching route at all (no /profile namespace, and the
-			// #feedback fragment id didn't exist on any page).  The
-			// SW gate (cp81-D22b sanitizeClickPath) would have
-			// caught the cross-origin risk, but the user would have
-			// landed on a 404 — broken UX. Fixed to the real route.
-			// cp470: further fixed a locale-less, @-less
-			// `/{subject}#reviews-heading` that STILL 404'd — both the
-			// [lang] segment and the `@` are required (no reroute hook).
-			await client.query(
-				`INSERT INTO push_pending
-				   (account, category, title, body, click_path, event_at)
-				 VALUES ($1, 'feedback', $2, $3, $4, $5)`,
-				[
-					subject,
-					titleStr,
-					bodyStr,
-					`/${locale}/@${subject}#reviews-heading`,
-					ctx.blockTime
-				]
-			);
-		}
+		// v1.5.5 — the enqueue (locale lookup, localized title/body, click path,
+		// dedup key) now lives in $indexer/feedbackPushEnqueue, shared with the
+		// FAST head-block path so a review notifies in ~5s instead of ~60s.
+		//
+		// It also fixes a latent bug: this insert carried NO source_trx_id, so
+		// the moment a second delivery path existed the two would both insert
+		// and the subject would get the review notification TWICE — exactly the
+		// chat duplicate Ken reported. Both paths now pass the trx id and the
+		// partial UNIQUE (account, source_trx_id) collapses them to one.
+		await enqueueFeedbackPush(client, {
+			subject,
+			reviewer: ctx.signer,
+			rating,
+			sourceTrxId: ctx.trxId,
+			eventAt: ctx.blockTime
+		});
 	} catch (err) {
 		// Non-fatal — log and continue.  The feedback row is
 		// already in.  push_pending failure most likely means the

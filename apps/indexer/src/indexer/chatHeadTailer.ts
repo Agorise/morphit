@@ -67,7 +67,8 @@ import type { Database } from '$db/pool';
 import { extractSigner, parseJsonPayload, type CustomJsonOp } from '$blurt/verify';
 import { checkJsonbSize } from '$indexer/payloadSize';
 import { chatEventBus } from '$indexer/chatEventBus';
-import { checkChatOrder, recipientHasReplied } from '$indexer/chatGates';
+import { checkChatOrder, recipientHasReplied, hasVerifiedChat } from '$indexer/chatGates';
+import { enqueueFeedbackPush } from '$indexer/feedbackPushEnqueue';
 import { enqueueChatPush } from '$indexer/chatPushEnqueue';
 import { logger } from '$log';
 
@@ -86,6 +87,11 @@ function tailerDbg(event: string, data: Record<string, unknown>): void {
  *  on the full handler-dispatch graph; the parity smoke asserts it
  *  matches OP_IDS.chatMessage. */
 const CHAT_OP_ID = 'morphit_chat_v1';
+
+/** v1.5.5 fastfeedback — the review op the tailer also watches. Same
+ *  hardcoded-id reasoning as CHAT_OP_ID above (fast path, no cross-package
+ *  import); the op-id parity smoke pins both against OP_IDS. */
+const FEEDBACK_OP_ID = 'morphit_feedback_v1';
 
 // ─── Validation constants — MUST match handlers/chat.ts ─────────────
 // Duplicated deliberately (same rationale as the dispatcher↔frontend
@@ -113,11 +119,68 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 
 /** Extract a non-empty string `client_tag` from a message header, or
  *  null. Mirror of the client's clientTagFromHeader; the client dedupes
- *  on exactly this value. */
-function clientTagFromHeader(header: unknown): string | null {
+ *  on exactly this value.
+ *
+ *  EXPORTED (v1.5.5) so the SSE snapshot replay dedupes on the IDENTICAL rule
+ *  rather than growing a second extractor that could drift from this one. */
+export function clientTagFromHeader(header: unknown): string | null {
 	if (!isPlainObject(header)) return null;
 	const v = header.client_tag;
 	return typeof v === 'string' && v.length > 0 ? v : null;
+}
+
+/** v1.5.5 — a feedback op located in a head block, narrowed to what the fast
+ *  notification needs. */
+interface LocatedFeedbackOp {
+	readonly reviewer: string;
+	readonly subject: string;
+	readonly rating: number;
+	readonly orderPermlink: string;
+}
+
+/**
+ * Parse + shape-validate one custom_json op as a review. Returns null unless it
+ * is a well-formed morphit_feedback_v1 the durable handler would also accept in
+ * shape: named subject, 1-5 rating, a cited order.
+ *
+ * Shape only — admissibility (fee-verified order, provable counterparty, no
+ * duplicate) is checked against the DB in fastFeedbackAllowed. Untethered
+ * feedback (no order_permlink) is never fast-notified: the durable handler
+ * drops it from reputation anyway, so notifying fast would advertise something
+ * that doesn't count.
+ */
+function locateFeedbackOp(op: ChainOperation): LocatedFeedbackOp | null {
+	const [opName, opBody] = op;
+	if (opName !== 'custom_json') return null;
+	const body = opBody as { id?: unknown; json?: unknown; required_posting_auths?: unknown } | null;
+	if (!body || body.id !== FEEDBACK_OP_ID) return null;
+
+	const auths = body.required_posting_auths;
+	if (!Array.isArray(auths) || auths.length !== 1) return null;
+	const reviewer = auths[0];
+	if (typeof reviewer !== 'string' || !ACCOUNT_NAME_RE.test(reviewer)) return null;
+
+	let payload: unknown;
+	try {
+		payload = typeof body.json === 'string' ? JSON.parse(body.json) : null;
+	} catch {
+		return null;
+	}
+	if (!isPlainObject(payload)) return null;
+
+	const subject = payload.subject;
+	if (typeof subject !== 'string' || !ACCOUNT_NAME_RE.test(subject)) return null;
+	if (subject === reviewer) return null; // self-review; durable rejects
+
+	const rating = payload.rating;
+	if (typeof rating !== 'number' || !Number.isInteger(rating) || rating < 1 || rating > 5) {
+		return null;
+	}
+
+	const orderPermlink = payload.order_permlink;
+	if (typeof orderPermlink !== 'string' || orderPermlink.length === 0) return null;
+
+	return { reviewer, subject, rating, orderPermlink };
 }
 
 /** A chat op located in a head block, narrowed to what we emit. */
@@ -348,6 +411,22 @@ export class ChatHeadTailer {
 			if (!trx) continue;
 			for (const op of trx.operations) {
 				if (!op) continue;
+
+				// v1.5.5 fastfeedback — Ken: "kentest2 left a 4-star feedback for
+				// kentest3, but kentest3 did not get a notification at all (let
+				// alone within 6 seconds)". Only chat had a head-block path, so a
+				// review notification could never beat the durable ~60s. Same
+				// shape as the chat fast path: a strict SUBSET of durable
+				// admission, deduped with the durable enqueue on the trx id.
+				const feedbackOp = locateFeedbackOp(op);
+				if (feedbackOp !== null) {
+					const trxIdFb = block.transaction_ids[ti];
+					if (trxIdFb !== undefined) {
+						await this.maybeFastFeedbackNotify(feedbackOp, trxIdFb, createdAt);
+					}
+					continue;
+				}
+
 				const located = locateChatOp(op);
 				if (located === null) continue;
 
@@ -378,10 +457,18 @@ export class ChatHeadTailer {
 
 				const lo = located.signer < located.recipient ? located.signer : located.recipient;
 				const hi = located.signer < located.recipient ? located.recipient : located.signer;
+				// cp471/v1.5.5 — evaluate the SAFE-SUBSET gate ONCE, here, and use
+				// the single answer for BOTH the fast Web Push and whether this
+				// event may be replayed into a later-opened chatroom. Two
+				// independent evaluations of "is this sender established?" is
+				// exactly the drift chatGates.ts exists to prevent.
+				const trxId = block.transaction_ids[ti];
+				const fastAllowed = await this.fastNotifyAllowed(located, createdAt);
 				tailerDbg('tailer.EMIT', {
 					sender: located.signer,
 					recipient: located.recipient,
-					order: located.orderPermlink ?? null
+					order: located.orderPermlink ?? null,
+					replayable: fastAllowed
 				});
 				chatEventBus.emitFast({
 					lo,
@@ -392,36 +479,39 @@ export class ChatHeadTailer {
 					header: located.header,
 					createdAt,
 					clientTag: located.clientTag,
-					orderPermlink: located.orderPermlink
+					orderPermlink: located.orderPermlink,
+					// Ungated messages still stream LIVE to an open chatroom (as
+					// they always have); they're just never replayed into a fresh
+					// snapshot, since the durable path may still reject them.
+					replayable: fastAllowed
 				});
 				this.emitted++;
 
 				// cp471 — fast Web Push for this (already block-passed) message.
-				// Gated inside maybeFastNotify to a SAFE subset of durable
-				// admission so a first-contact stranger is never fast-notified.
-				const trxId = block.transaction_ids[ti];
-				if (trxId !== undefined) {
+				// Gated to a SAFE SUBSET of durable admission so a first-contact
+				// stranger is never fast-notified.
+				if (fastAllowed && trxId !== undefined) {
 					await this.maybeFastNotify(located, trxId, createdAt);
 				}
 			}
 		}
 	}
 
-	/** cp471 — enqueue a fast chat Web Push for an already-block-passed message,
-	 *  but ONLY when it is clearly allowed: the order tag (if any) names a real
-	 *  order owned by a party, AND either the two have an established
-	 *  conversation or this is a response to the recipient's live order. A SAFE
-	 *  SUBSET of durable admission — a first-contact stranger (whom the durable
-	 *  stranger-fee gate would gate) is NEVER fast-notified, so the fast path
-	 *  can never be a notification-spam vector. Dedup on the trx id collapses
-	 *  this with the durable enqueue to exactly one notification. Non-fatal. */
-	private async maybeFastNotify(
-		located: LocatedChatOp,
-		trxId: string,
-		createdAt: Date
-	): Promise<void> {
+	/** cp471/v1.5.5 — the SAFE-SUBSET gate, evaluated ONCE per message.
+	 *
+	 *  True iff this already-block-passed message is clearly allowed: the order
+	 *  tag (if any) names a real order owned by a party, AND either the two have
+	 *  an established conversation or this is a response to the recipient's live
+	 *  order. A strict SUBSET of durable admission — a first-contact stranger
+	 *  (whom the durable stranger-fee gate would gate) never passes, so neither
+	 *  the fast push nor snapshot replay can become a spam vector.
+	 *
+	 *  Extracted in v1.5.5 because the answer now drives TWO things — the push
+	 *  AND replayability — and evaluating "is this sender established?" twice is
+	 *  how the two silently drift apart. Non-fatal: on error, deny (the durable
+	 *  path still delivers, just at its own pace). */
+	private async fastNotifyAllowed(located: LocatedChatOp, createdAt: Date): Promise<boolean> {
 		try {
-			let orderFound = false;
 			let orderResponseBypass = false;
 			if (located.orderPermlink !== null) {
 				const oc = await checkChatOrder(this.db, {
@@ -431,9 +521,8 @@ export class ChatHeadTailer {
 					blockTime: createdAt
 				});
 				// A tag naming no real owned order → the durable REJECTS the
-				// message (order_permlink_not_found). Never fast-notify for it.
-				if (!oc.found) return;
-				orderFound = true;
+				// message (order_permlink_not_found). Never fast-path it.
+				if (!oc.found) return false;
 				orderResponseBypass = oc.ownedByRecipient && oc.live;
 			}
 			const recipientReplied = await recipientHasReplied(this.db, {
@@ -441,14 +530,32 @@ export class ChatHeadTailer {
 				sender: located.signer
 			});
 			// A genuine two-way conversation (the recipient has replied) OR a
-			// response to the recipient's own live order = safe to fast-notify.
-			// An unengaged / one-way sender is left to the durable path (gated by
-			// the stranger-fee + no-reply + fan-in caps the fast path can't run).
-			if (!recipientReplied && !orderResponseBypass) return;
+			// response to the recipient's own live order = safe.
+			return recipientReplied || orderResponseBypass;
+		} catch (err) {
+			log.warn('fast_gate_failed', {
+				recipient: located.recipient,
+				err: String((err as Error)?.message ?? err)
+			});
+			return false;
+		}
+	}
+
+	/** cp471 — enqueue a fast chat Web Push for an already-block-passed message
+	 *  whose safe-subset gate has ALREADY passed (see fastNotifyAllowed — the
+	 *  caller evaluates it once and shares the answer with snapshot replay).
+	 *  Dedup on the trx id collapses this with the durable enqueue to exactly
+	 *  one notification. Non-fatal. */
+	private async maybeFastNotify(
+		located: LocatedChatOp,
+		trxId: string,
+		createdAt: Date
+	): Promise<void> {
+		try {
 			await enqueueChatPush(this.db, {
 				recipient: located.recipient,
 				sender: located.signer,
-				orderPermlink: orderFound ? located.orderPermlink : null,
+				orderPermlink: located.orderPermlink,
 				sourceTrxId: trxId,
 				eventAt: createdAt
 			});
@@ -458,6 +565,93 @@ export class ChatHeadTailer {
 				err: String((err as Error)?.message ?? err)
 			});
 		}
+	}
+
+	/** v1.5.5 fastfeedback — notify a review's SUBJECT within ~5s instead of the
+	 *  durable ~60s.
+	 *
+	 *  GATED to a strict SUBSET of durable admission, for the same reason the
+	 *  chat fast path is: anyone can broadcast a `morphit_feedback_v1` op, and
+	 *  the durable handler will happily reject it — but a notification already
+	 *  sent cannot be recalled. Without a gate, a stranger could spam review
+	 *  notifications with ops that never index. So we re-check, cheaply, the
+	 *  three things that actually decide admission:
+	 *
+	 *    1. the cited order exists, is owned by one of the two parties, and its
+	 *       listing fee is VERIFIED — the economic cost that makes a fake review
+	 *       expensive;
+	 *    2. the pair clears the PROVABLE-COUNTERPARTY bar (shared impl in
+	 *       chatGates — the same one the durable handler and order-completion
+	 *       use); and
+	 *    3. no review already exists for (reviewer, subject, order) — otherwise
+	 *       a re-broadcast the durable path rejects as duplicate would still
+	 *       fire a fresh notification.
+	 *
+	 *  Anything the durable handler additionally rejects (comment charset,
+	 *  length) only costs a notification for a review that then doesn't appear —
+	 *  bounded, and only reachable by an established counterparty paying an op
+	 *  fee per attempt.
+	 *
+	 *  Non-fatal: on any error we simply don't fast-notify; the durable handler
+	 *  still enqueues, deduped on the same trx id. */
+	private async maybeFastFeedbackNotify(
+		fb: LocatedFeedbackOp,
+		trxId: string,
+		createdAt: Date
+	): Promise<void> {
+		try {
+			const allowed = await this.fastFeedbackAllowed(fb, createdAt);
+			if (!allowed) return;
+			await enqueueFeedbackPush(this.db, {
+				subject: fb.subject,
+				reviewer: fb.reviewer,
+				rating: fb.rating,
+				sourceTrxId: trxId,
+				eventAt: createdAt
+			});
+		} catch (err) {
+			log.warn('fast_feedback_notify_failed', {
+				subject: fb.subject,
+				err: String((err as Error)?.message ?? err)
+			});
+		}
+	}
+
+	/** The strict-subset admission check for fastfeedback. See
+	 *  maybeFastFeedbackNotify for the rationale. */
+	private async fastFeedbackAllowed(fb: LocatedFeedbackOp, createdAt: Date): Promise<boolean> {
+		// 1. Fee-verified order citation owned by one of the two parties. Same
+		//    shape as the durable handler's citation gate.
+		const ord = await this.db.query<{ ok: boolean }>(
+			`SELECT EXISTS (
+			   SELECT 1 FROM orders
+			    WHERE permlink = $1
+			      AND account IN ($2, $3)
+			      AND fee_status IN ('verified', 'verified_by_attestation')
+			 ) AS ok`,
+			[fb.orderPermlink, fb.subject, fb.reviewer]
+		);
+		if (ord.rows[0]?.ok !== true) return false;
+
+		// 3. Duplicate — a re-broadcast the durable path rejects must not
+		//    re-notify. (Checked before the heavier conformance query.)
+		const dup = await this.db.query<{ exists: boolean }>(
+			`SELECT EXISTS (
+			   SELECT 1 FROM feedback
+			    WHERE reviewer = $1 AND subject = $2 AND order_permlink = $3
+			 ) AS exists`,
+			[fb.reviewer, fb.subject, fb.orderPermlink]
+		);
+		if (dup.rows[0]?.exists === true) return false;
+
+		// 2. The provable-counterparty bar — ONE shared implementation with the
+		//    durable review gate and order-completion (chatGates), so the fast
+		//    path can never quietly admit what the durable path refuses.
+		return hasVerifiedChat(this.db, {
+			a: fb.reviewer,
+			b: fb.subject,
+			asOf: createdAt
+		});
 	}
 
 	/** SAME block-list check the durable chat handler runs. Returns true

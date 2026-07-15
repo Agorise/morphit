@@ -999,7 +999,17 @@
 						</div>
 
 						<!-- Action column -->
-						<div class="flex flex-none flex-col gap-2 sm:min-w-[10rem]">
+						<!-- t155 (Ken): "look at the green buttons that say 'Re-list this order'.
+						     THAT is the size of the buttons that i want." Re-list is already
+						     `size="sm"` — and so were these. The size prop was never the
+						     problem: this column was `flex-col` (children STRETCH to the
+						     column width) with a `sm:min-w-[10rem]` floor, so the actions were
+						     forced to >=160px wide regardless of their labels. Re-list sits in a
+						     plain flex-col with no floor, so it hugs its text — the exact
+						     difference Ken is pointing at. `items-end` lets each button size to
+						     its own label and keeps the column right-aligned against the card
+						     edge. -->
+						<div class="flex flex-none flex-col items-end gap-2">
 							{#if isLive(o)}
 								{#if withinEditWindow(o)}
 									{@const remaining = editWindowRemainingSeconds(o)}
@@ -1244,10 +1254,15 @@
 					{#if pendingFeedbackPermlink === o.permlink && $isUnlocked}
 						{#await loadLeaveFeedbackForm() then LeaveFeedbackForm}
 							<div class="mt-3 scroll-mt-24" id="feedback-form-{o.permlink}">
+								<!-- v1.5.5 — completeOwnedOrder: this page lists ONLY the
+								     signed-in user's own orders, so the owner-only completion
+								     guard is always satisfied here. Makes the "Mark complete /
+								     review" button finally do the "mark complete" half. -->
 								<LeaveFeedbackForm
 									orderPermlink={o.permlink}
 									prefillSubject={feedbackPrefillSubject ?? undefined}
 									lockSubject={feedbackPrefillSubject !== null}
+									completeOwnedOrder={true}
 									onSuccess={() => {
 										pendingFeedbackPermlink = null;
 										feedbackPrefillSubject = null;

@@ -138,6 +138,17 @@
 				return $_('order_detail.status_cancelled') as string;
 			case 'expired':
 				return $_('order_detail.status_expired') as string;
+			case 'completed':
+				// t155: "it says (Live) on the title of that completed order, it
+				// should say (Paid)". This case was simply missing, so a settled
+				// trade's card fell through to '' and kept whatever the title
+				// said — reading "(Live)" long after the trade was done.
+				//
+				// Deliberately `my_orders.filter.paid` ("Paid") rather than
+				// order_detail.status_completed ("Completed & paid"): this is a
+				// terse parenthetical beside the order title, and it should match
+				// the word on the my/orders Paid pill the user just came from.
+				return $_('my_orders.filter.paid') as string;
 			default:
 				return '';
 		}
@@ -665,8 +676,18 @@
 										<div
 											class="flex flex-wrap items-baseline gap-1 text-xs text-ink-500 dark:text-ink-400"
 										>
-											<span class="font-medium">{$_('chat.feedback.left_label')}</span>
-											<span class="text-amber-500" aria-hidden="true"
+											<!-- t155: "Feedback left:" → "I rated @kentest2:". Reuses
+											     profile.given_rated, which already says exactly that
+											     in all ten locales and is what the profile's own
+											     given-review card uses — same sentence, one string. -->
+											<span class="font-medium"
+												>{$_('profile.given_rated', { values: { account: convo.peer } })}</span
+											>
+											<!-- t155: stars are EMERALD, not amber. Ken: "i love the
+											     green stars that i see for a user review/feedback.
+											     lets standardize on that." This row was the last
+											     amber ★★★★★ outside the emerald convention. -->
+											<span class="text-morphit-emerald" aria-hidden="true"
 												>{'★'.repeat(fb.record.rating)}{'☆'.repeat(5 - fb.record.rating)}</span
 											>
 											{#if fb.record.comment}

@@ -234,7 +234,7 @@ describe('Part 111 — welcome bonus federation gate (feedback handler)', () => 
 			// run at all.
 			{
 				match: 'FROM chat_messages',
-				rows: [{ from_reviewer: '2', from_subject: '2', span_seconds: '900', has_recip_flag: false }]
+				rows: [{ from_a: '2', from_b: '2', span_seconds: '900', has_recip_flag: false }]
 			},
 			// Feedback row insert.
 			{ match: 'INSERT INTO feedback' },

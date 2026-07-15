@@ -22,10 +22,19 @@ import { errorBody, isAccountName } from '$api/shared';
 
 interface ProfileRow {
 	account: string;
-	display_name: string;
+	/** v1.5.5: NULL when the account exists on-chain but has never set a
+	 *  Morphit profile. See the batch query's accounts-anchored join. */
+	display_name: string | null;
 	json_metadata: unknown;
-	source_block_num: string;
-	updated_at: Date;
+	/** v1.5.5: NULL for a profile-less account (no profile op to source). */
+	source_block_num: string | null;
+	/** v1.5.5: NULL for a profile-less account. */
+	updated_at: Date | null;
+	/** v1.5.5: does a `profiles` row actually exist for this account? Drives
+	 *  the negative-caching decision, which must NOT key off row presence any
+	 *  more — an accounts-anchored batch returns a row for every known
+	 *  account. */
+	has_profile: boolean;
 	/** cp471 (D7/E): the account's posting public key (base58 TEXT),
 	 *  joined from `accounts`, so profile cards can show the truncated
 	 *  key under a display name. Null for an account we've never indexed
@@ -71,8 +80,11 @@ function rowToProfile(r: ProfileRow) {
 		account: r.account,
 		display_name: r.display_name,
 		json_metadata: r.json_metadata,
-		source_block_num: parseInt(r.source_block_num, 10),
-		updated_at: r.updated_at.toISOString(),
+		// v1.5.5 — both NULL for an account with no profile op. This used to
+		// call parseInt()/toISOString() unconditionally, which was safe only
+		// because the query could never return a profile-less row. Now it can.
+		source_block_num: r.source_block_num === null ? null : parseInt(r.source_block_num, 10),
+		updated_at: r.updated_at === null ? null : r.updated_at.toISOString(),
 		posting_pubkey: r.posting_pubkey
 	};
 }
@@ -129,12 +141,25 @@ export function profilesRoute(db: Database): Hono {
 		// of list size; Postgres plans it as a hash lookup for larger
 		// arrays. Safe against SQL injection — the array is a bound
 		// parameter, not interpolated into the query string.
+		// v1.5.5 (t155) — anchored on ACCOUNTS, not profiles.
+		//
+		// Ken: the truncated posting key was missing under @kentest2 on the
+		// profile's review cards. The key lives on `accounts`, but this query
+		// STARTED at `profiles` — so an account that never set a display name or
+		// avatar has no profiles row and the batch returned NOTHING for them,
+		// key included. Every account WITH a profile showed its key, which is
+		// why it looked like a per-card bug and wasn't.
+		//
+		// Flipping the anchor returns a row for any account we've indexed, with
+		// the profile columns NULL when there's no profile op. An account we've
+		// never seen at all still returns nothing, which is correct.
 		const result = await db.query<ProfileRow>(
-			`SELECT p.account, p.display_name, p.json_metadata,
-			        p.source_block_num::text, p.updated_at, a.posting_pubkey
-			 FROM profiles p
-			 LEFT JOIN accounts a ON a.name = p.account
-			 WHERE p.account = ANY($1::text[])`,
+			`SELECT a.name AS account, p.display_name, p.json_metadata,
+			        p.source_block_num::text, p.updated_at, a.posting_pubkey,
+			        (p.account IS NOT NULL) AS has_profile
+			 FROM accounts a
+			 LEFT JOIN profiles p ON p.account = a.name
+			 WHERE a.name = ANY($1::text[])`,
 			[accounts]
 		);
 
@@ -147,11 +172,18 @@ export function profilesRoute(db: Database): Hono {
 			profiles[row.account] = rowToProfile(row);
 		}
 
-		// #2 — only a COMPLETE batch (every requested account resolved to a
-		// row) is safe to cache. A partial result carries negative entries
+		// #2 — only a COMPLETE batch (every requested account actually HAS a
+		// profile) is safe to cache. A partial result carries negative entries
 		// that are usually just indexer lag, and pinning them in the browser's
 		// HTTP cache makes a fresh profile invisible across refreshes.
-		const complete = result.rows.length === accounts.length;
+		//
+		// v1.5.5 — this MUST key off `has_profile`, not `rows.length`. The query
+		// is now accounts-anchored, so a profile-less account returns a row like
+		// any other; the old length test would call such a batch "complete" and
+		// pin it for the full 90s, meaning someone who sets their first profile
+		// stays invisible for a minute and a half. Row presence stopped meaning
+		// "has a profile" the moment the anchor moved.
+		const complete = result.rows.filter((r) => r.has_profile).length === accounts.length;
 		c.header('Cache-Control', complete ? BATCH_CACHE_CONTROL : BATCH_CACHE_CONTROL_PARTIAL);
 		return c.json({ profiles });
 	});
@@ -162,9 +194,20 @@ export function profilesRoute(db: Database): Hono {
 			return c.json(errorBody('bad_request', 'invalid account name'), 400);
 		}
 
+		// v1.5.5 — this route stays PROFILES-anchored, deliberately, unlike the
+		// batch above. Its contract is "the profile for this account, or 404" —
+		// a caller asking /v1/profiles/:account wants a profile, and inventing a
+		// 200 with every field null would break that. The batch is different: it
+		// is a bulk "tell me what you can render for these accounts" lookup, and
+		// a posting key alone is renderable.
+		//
+		// `TRUE AS has_profile` is tautological here (the WHERE requires a
+		// profiles row) but keeps the row honest against ProfileRow rather than
+		// leaving the field undefined behind an unchecked query<> cast.
 		const result = await db.query<ProfileRow>(
 			`SELECT p.account, p.display_name, p.json_metadata,
-			        p.source_block_num::text, p.updated_at, a.posting_pubkey
+			        p.source_block_num::text, p.updated_at, a.posting_pubkey,
+			        TRUE AS has_profile
 			 FROM profiles p
 			 LEFT JOIN accounts a ON a.name = p.account
 			 WHERE p.account = $1`,

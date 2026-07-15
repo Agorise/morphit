@@ -50,19 +50,33 @@ const card = read('src/lib/components/OrderCard.svelte');
 // that row now read from it; card-level assertions stay on OrderCard.
 const identity = read('src/lib/components/OrderPosterIdentity.svelte');
 
-// ─── Reputation score vs trade count: separate signals ────────────
+// ─── Trades vs ratings: THREE separate signals ────────────────────
+// v1.5.5 (t155): trades and ratings are different numbers from different
+// sources now. Before, the "trade count" WAS the feedback count — the orderbook
+// even documented it as a "proxy for trades completed" — so a real trade nobody
+// reviewed counted for nothing, and a taker (who owns no order) read "0 trades"
+// forever. Trades come from COMPLETED ORDERS crediting both sides; the rating
+// count still says how many RATINGS back the star average, because "★5.00 (34)"
+// has to mean 34 ratings.
+const cluster = read('src/lib/components/TradeRepCluster.svelte');
 check(
-	'1 reputation score rendered from reputation_score (not the raw rating)',
-	/order\.reputation_score/.test(identity) && /score\.toFixed\(2\)/.test(identity)
+	'1 the identity row renders the trades·rating cluster',
+	/<TradeRepCluster \{tradeCount\} rating=\{score\} \{ratingCount\} \/>/.test(identity)
 );
 check(
-	'2 trade count rendered via formatCountCompact(feedback_count)',
-	/formatCountCompact/.test(identity) && /order\.feedback_count/.test(identity)
+	'2 trade count comes from order.trade_count, NOT the feedback count',
+	/const tradeCount = \$derived\(order\.trade_count \?\? 0\)/.test(identity) &&
+		!/formatCountCompact\(count\)/.test(identity),
+	'sourcing trades from feedback_count is the pre-v1.5.5 proxy: it drops unreviewed trades and starves takers'
 );
 check(
-	'3 score and count are distinct (score has ⭐, count has its own line)',
-	identity.indexOf('reputation_score') !== identity.indexOf('feedback_count') &&
-		/⭐/.test(identity)
+	'3 the rating count still counts RATINGS (feedback_count)',
+	/const ratingCount = \$derived\(order\.feedback_count \?\? 0\)/.test(identity),
+	'"★5.00 (34)" must mean 34 ratings — sourcing that from trades would make the chip lie'
+);
+check(
+	'3b the cluster keeps the two numbers apart',
+	/tradeCount: number/.test(cluster) && /ratingCount\?: number/.test(cluster)
 );
 
 // ─── Buyer / seller framing ───────────────────────────────────────
@@ -75,10 +89,15 @@ check(
 
 // ─── "trades since {month}" gating ────────────────────────────────
 check(
-	'5 first_trade_at present → trades_since, absent → trades_only',
-	/order\.first_trade_at[\s\S]*orderbook\.card\.trades_since[\s\S]*orderbook\.card\.trades_only/.test(
-		identity
-	) && /formatMonthYear/.test(identity)
+	'5 the cluster is UNBREAKABLE (nowrap + flex-none in a wrapping row)',
+	// Ken: "none of that chunk ever gets broken, no wrap. it stays together as a
+	// chunk of text or else it must go onto its own line." nowrap stops it
+	// breaking internally; flex-none stops a long display name squeezing it.
+	// The old "852 trades since July, 2026" line is deliberately gone: with the
+	// chunk nowrap by contract, a "since {month}" tail overflows a phone rather
+	// than wrapping.
+	/whitespace-nowrap/.test(cluster) && /flex-none/.test(cluster),
+	'without nowrap+flex-none the chunk breaks mid-way or ellipsises on a narrow screen'
 );
 
 // ─── Stretched link + z-index pattern ─────────────────────────────
@@ -182,12 +201,17 @@ check(
 
 // ─── i18n parity for the 8 new keys ───────────────────────────────
 const LOCALES_DIR = resolve(WEB, 'src/lib/i18n/locales');
+// v1.5.5 (t155): `trades_since` is deliberately GONE — the "852 trades since
+// July, 2026" line was removed when the trade count moved into the nowrap
+// TradeRepCluster ("1 trade · ★5.00 (34)"). With that chunk unbreakable by
+// contract, a "since {month}" tail overflows a phone rather than wrapping. The
+// key was pruned from all 10 locales, and the i18n dead-key gate enforces that
+// no locale keeps a leaf that nothing references.
 const NEW_KEYS = [
 	'pay_with_label',
 	'accept_label',
 	'location_label',
 	'terms_label',
-	'trades_since',
 	'trades_only',
 	'reputation_aria',
 	'message_word'
@@ -202,13 +226,14 @@ for (const lf of localeFiles) {
 	};
 	const cardKeys = d.orderbook?.card ?? {};
 	const missing = NEW_KEYS.filter((k) => typeof cardKeys[k] !== 'string' || cardKeys[k].length === 0);
-	check(`18.${loc} has all 8 orderbook.card keys`, missing.length === 0, `missing: ${missing.join(', ')}`);
-	// placeholder integrity
-	const since = cardKeys['trades_since'] ?? '';
+	check(`18.${loc} has all 7 orderbook.card keys`, missing.length === 0, `missing: ${missing.join(', ')}`);
+	// placeholder integrity — v1.5.5: trades_since is gone, so this now guards
+	// trades_only, the surviving count-bearing key.
+	const only = cardKeys['trades_only'] ?? '';
 	check(
-		`19.${loc} trades_since keeps {count} and {month}`,
-		since.includes('{count}') && since.includes('{month}'),
-		since
+		`19.${loc} trades_only keeps {count}`,
+		only.includes('{count}'),
+		only
 	);
 	const aria = cardKeys['reputation_aria'] ?? '';
 	check(`20.${loc} reputation_aria keeps {score}`, aria.includes('{score}'), aria);

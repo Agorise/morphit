@@ -48,6 +48,7 @@ import type { Database } from '$db/pool';
 import type { Poller } from '$indexer/poller';
 import { logger } from '$log';
 import { chatEventBus, type ChatEvent, type ChatFastEvent } from '$indexer/chatEventBus';
+import { clientTagFromHeader } from '$indexer/chatHeadTailer';
 import { errorBody } from '$api/shared';
 import {
 	eventMatchesFilter,
@@ -397,6 +398,50 @@ export function chatStreamRoute(db: Database, poller: Poller): Hono {
 						if (row.id > latestEmittedId) {
 							latestEmittedId = row.id;
 						}
+					}
+					// v1.5.5 — top the snapshot up with recent REPLAYABLE fast
+					// events the indexer hasn't durably stored yet.
+					//
+					// The fast path never writes chat_messages, so it only ever
+					// helped a chatroom that was ALREADY open. Ken's kentest3 was
+					// on another tab: push in ~6s, tap through, and the chatroom
+					// loaded a DB snapshot that didn't have the message — "about a
+					// minute to actually appear on kentest3's chatroom page".
+					//
+					// Only events that cleared the fast-path's safe-subset gate are
+					// retained (see chatEventBus.retainFast), so a first-contact
+					// stranger's message is never replayed — the durable handler
+					// may still reject it under caps the fast path can't run, and a
+					// replayed reject would be a ghost that vanishes on reload.
+					//
+					// Deduped against the DB rows by the on-chain client_tag — the
+					// same key the client already uses to collapse a provisional
+					// message into its durable twin, so a message that landed
+					// durably between the emit and this snapshot can't render twice.
+					const seenTags = new Set(
+						rows.map((r) => clientTagFromHeader(r.header)).filter((t): t is string => t !== null)
+					);
+					for (const ev of chatEventBus.recentFast(filter.lo, filter.hi)) {
+						// No client_tag → the client cannot collapse this against its
+						// durable twin, so replaying it risks rendering the message
+						// twice. Skip; it arrives durably like any other. (The tailer
+						// already declines to emit untagged messages, so this is
+						// belt-and-braces.)
+						if (ev.clientTag === null || seenTags.has(ev.clientTag)) continue;
+						items.push(
+							rowToWire({
+								id: 0,
+								order_permlink: ev.orderPermlink,
+								sender: ev.sender,
+								recipient: ev.recipient,
+								ciphertext: ev.ciphertext,
+								header: ev.header,
+								created_at: ev.createdAt,
+								// Provisional: no settled on-chain anchor yet. Same
+								// contract as the live fast push (see pushFast).
+								source_trx_id: ''
+							})
+						);
 					}
 					const indexedBlock = poller.getStatus().indexedBlock;
 					safePush(

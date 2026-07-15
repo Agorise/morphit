@@ -58,6 +58,24 @@
 	--morphit-lime: #8eef26;
 	--morphit-accent: #7fed2d;
 	--morphit-emerald: #00da69;
+	/* t155 (Ken): "all of the green bubbles (the Payment Receipts too) on the
+	 * chatroom page are a bit too bright and it makes the thin black text hard
+	 * for me to see. maybe dim that green just a bit."
+	 *
+	 * A DEEPENED brand emerald for chat bubbles — same move, and same reason, as
+	 * --morphit-btn-face below (a deepened brand teal). The problem isn't the
+	 * contrast RATIO: near-black ink on #00da69 already measures ~11:1, way past
+	 * WCAG AAA. It's glare — a large saturated field at that luminance is
+	 * fatiguing to read thin text on, which is exactly what Ken described.
+	 *
+	 * Deliberately NOT an opacity (`/85`): translucency blends with whatever is
+	 * behind, so on a LIGHT page it would wash toward white and make the black
+	 * text harder to read, not easier — the opposite of the ask. A fixed
+	 * deepened value behaves the same on both themes.
+	 *
+	 * #00b85a still measures ~8:1 against the bubble's ink — comfortably past
+	 * AAA (7:1), so dimming costs no accessibility. */
+	--morphit-emerald-bubble: #00b85a;
 	--morphit-teal: #02a6b2;
 	--morphit-gradient: linear-gradient(90deg, #8eef26 0%, #00da69 50%, #02a6b2 100%);
 
@@ -193,8 +211,24 @@ body {
 	border: 0;
 }
 
-/* Focus rings — visible, thick, brand-colored, never removed on focus */
-:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+/* Focus rings — visible, thick, brand-colored, never removed on focus
+ *
+ * t155 (Ken): "there is a weird green border around the main part of the page,
+ * especially across the bottom of the page. get rid of that."
+ *
+ * Cause: `[tabindex]` matched <main tabindex="-1">, the route-announce focus
+ * target the router focuses after every navigation (see [lang]/+layout.svelte).
+ * So navigating drew a full brand ring around the entire content region — which
+ * reads as a stray page border, not as focus.
+ *
+ * `tabindex="-1"` means "focusable only programmatically, never in the tab
+ * order", so such an element is never a keyboard-focus DESTINATION a user
+ * navigated to and never needs a focus ring. Excluding it costs no
+ * accessibility: the ring exists to tell a keyboard user where they ARE, and
+ * you cannot tab to a -1 element. Genuinely tabbable widgets (tabindex="0" and
+ * above) keep their ring.
+ */
+:where(a, button, input, select, textarea, [tabindex]):not([tabindex='-1']):focus-visible {
 	outline: 2px solid transparent;
 	box-shadow: var(--focus-ring);
 	border-radius: 8px;

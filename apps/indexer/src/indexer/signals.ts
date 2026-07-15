@@ -461,3 +461,104 @@ export async function detectReviewConcentrationInTx(client: pg.PoolClient): Prom
 	]);
 	return result.rowCount ?? 0;
 }
+
+// ─── Signal E — trade concentration (v1.5.5) ────────────────────────
+
+/** Detection window, mirroring Signal D. */
+const SIGNAL_E_WINDOW_DAYS = 30;
+/** Minimum completed-trade credits in the window before concentration is even
+ *  meaningful. Below this, "100% with one peer" is just a new trader's first
+ *  trade — the 🌱 chip already says that, and flagging it would be noise. */
+const SIGNAL_E_MIN_TRADE_COUNT = 5;
+/** Share of an account's trade credits coming from ONE peer that trips the
+ *  signal. A percentage rather than an absolute count for the same reason as
+ *  Signal D: an attacker who sprinkles a couple of throwaway trades to look
+ *  diversified is still caught while staying focused on the target. */
+const SIGNAL_E_MIN_CONCENTRATION_PCT = 80;
+
+/**
+ * Run Signal E — completed-trade concentration.
+ *
+ * WHY IT EXISTS. v1.5.5 grounds the trade count in COMPLETED ORDERS and credits
+ * the `counterparty` the order owner names. The provable-counterparty gate makes
+ * the owner prove a real two-way conversation with that account first — but that
+ * bar is PER PAIR, not per trade. So once Alice and Bob have had one genuine
+ * conversation, Alice can keep completing orders naming Bob and mint him a trade
+ * credit for the price of a listing fee each, forever. None of the review
+ * signals see it: suspicious_reciprocity watches mutual REVIEWS, and Signals C/D
+ * are review-pattern detectors with no trade analogue. This is that analogue.
+ *
+ * Measured on the BENEFICIARY's side — what share of THIS account's trade
+ * credits come from a single peer — because that's the sock-puppet shape: the
+ * farmed account has one source and the farmer has many victims-of-convenience.
+ *
+ * KNOWN COST (documented, same trade-off Ken accepted for Signal D): two people
+ * who genuinely only ever trade with each other — a regular customer and their
+ * regular seller — look identical to this from the outside and will be flagged.
+ * They keep their ratings; only the concentrated TRADE credits stop counting.
+ * The alternative (no signal) prices a fake trade at one listing fee.
+ *
+ * Returns the number of NEW rows inserted this run.
+ */
+export async function detectTradeConcentration(db: Database): Promise<number> {
+	return db.withTx((client) => detectTradeConcentrationInTx(client));
+}
+
+/** Implementation that operates on a caller-provided transaction. */
+export async function detectTradeConcentrationInTx(client: pg.PoolClient): Promise<number> {
+	const sql = `
+		WITH credits AS (
+			-- One row per trade CREDIT: both sides of every completed order in
+			-- the window. Mirrors TRADE_COUNT_SQL's UNION ALL so the signal
+			-- measures exactly what the count credits.
+			SELECT o.account AS account, o.completed_counterparty AS peer
+			  FROM orders o
+			 WHERE o.status = 'completed'
+			   AND o.completed_counterparty IS NOT NULL
+			   AND o.updated_at >= NOW() - INTERVAL '${SIGNAL_E_WINDOW_DAYS} days'
+			UNION ALL
+			SELECT o.completed_counterparty AS account, o.account AS peer
+			  FROM orders o
+			 WHERE o.status = 'completed'
+			   AND o.completed_counterparty IS NOT NULL
+			   AND o.updated_at >= NOW() - INTERVAL '${SIGNAL_E_WINDOW_DAYS} days'
+		),
+		account_totals AS (
+			SELECT account, COUNT(*)::int AS total_trades
+			  FROM credits
+			 GROUP BY account
+		),
+		account_peer_stats AS (
+			SELECT account, peer, COUNT(*)::int AS pair_count
+			  FROM credits
+			 GROUP BY account, peer
+		),
+		concentration AS (
+			SELECT
+				ps.account,
+				ps.peer AS dominant_peer,
+				ps.pair_count,
+				(ps.pair_count::NUMERIC * 100.0 / at.total_trades)::NUMERIC(5,2) AS concentration_pct
+			  FROM account_peer_stats ps
+			  JOIN account_totals at ON at.account = ps.account
+			 WHERE at.total_trades >= $1
+		)
+		INSERT INTO trade_concentration
+			(account, dominant_peer, concentration_pct, trade_count, window_days)
+		SELECT
+			account,
+			dominant_peer,
+			concentration_pct,
+			pair_count,
+			$3::int
+		FROM concentration
+		WHERE concentration_pct >= $2
+		ON CONFLICT (account, dominant_peer) DO NOTHING
+	`;
+	const result = await client.query(sql, [
+		SIGNAL_E_MIN_TRADE_COUNT,
+		SIGNAL_E_MIN_CONCENTRATION_PCT,
+		SIGNAL_E_WINDOW_DAYS
+	]);
+	return result.rowCount ?? 0;
+}
