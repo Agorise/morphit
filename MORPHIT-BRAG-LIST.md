@@ -43,7 +43,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 5. **Send a chat message to a stranger for ~$0.01.** Welcome to a marketplace where contacting a counterparty costs less than a stamp. Spammer/solicitor filters are also built-in.
 
-6. **Three-second block confirmations.** New orders show up in the orderbook in three seconds — fast enough to prevent the eBay-style last-second sniping that plagues some other P2P platforms.
+6. **Three-second blocks — and your own actions show up instantly.** Blurt makes a block every three seconds, so your order is on chain in about three — and your own screen doesn't even wait for that: post an order and it's right there, marked "confirming" until the chain settles it. Strangers wait about a minute, on purpose: the public orderbook only lists orders that are irreversible and fee-paid, because we'd rather show someone nothing than an unpaid listing a reorg can erase. You get feedback in seconds and finality when the chain says so, and we tell you which one you're looking at (ADR-0051).
 
 7. **No transaction-fee auctions.** No gas wars. No priority-fee arms races. Listing fees are flat (with a Sybil-tier multiplier for spammers, see §9).
 
@@ -371,7 +371,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 161. **Source code at git.agorise.net/agorise/morphit.** Self-hosted Forgejo (Git forge), not GitHub. The project's own infrastructure is decentralized too.
 
-162. **49 ADRs** (Architectural Decision Records) in `docs/adr/`, numbered 0001–0050 (0016 retracted), each recording a design choice with its alternatives and tradeoff. Topics span key custody (0010), chat reputation + crypto (0014, 0015), YubiKey unlock (0017), release trust anchor (0019), QR pairing (0022), one ADR per tradable-asset addition (0023–0036), cash-by-mail (0037), reputation hardening (0038), self-sovereign pricing (0039–0042), opt-in TOTP 2FA (0043), AI-agent integration via MCP (0044), shared network-defense primitives (0045), Blurt signing off `elliptic` (0046), Tor-onion + host-hardening by default (0047), sub-6s chat delivery (0048), payment-proof reputation deferred to protect transaction privacy (0049), and provenance-is-not-capability (0050).
+162. **50 ADRs** (Architectural Decision Records) in `docs/adr/`, numbered 0001–0051 (0016 retracted), each recording a design choice with its alternatives and tradeoff. Topics span key custody (0010), chat reputation + crypto (0014, 0015), YubiKey unlock (0017), release trust anchor (0019), QR pairing (0022), one ADR per tradable-asset addition (0023–0036), cash-by-mail (0037), reputation hardening (0038), self-sovereign pricing (0039–0042), opt-in TOTP 2FA (0043), AI-agent integration via MCP (0044), shared network-defense primitives (0045), Blurt signing off `elliptic` (0046), Tor-onion + host-hardening by default (0047), sub-6s chat delivery (0048), payment-proof reputation deferred to protect transaction privacy (0049), and provenance-is-not-capability (0050).
 
 163. **49 design and operations documents** in `docs/`. Architecture, operations runbook, security model, fees-and-rewards reference, threat model, metadata-leak catalog, integration test design, automation audit — all public.
 
@@ -759,7 +759,7 @@ Every claim in this document is verifiable. The repository is at **git.agorise.n
 
 - **Smoke suite**: `bash scripts/run-smokes.sh` — runs several thousand self-checks across ~280 runners, triple-pulse stable
 - **Audit log**: `docs/AUDIT-2026-05.md`
-- **Architecture decisions**: `docs/adr/0001-*.md` through `docs/adr/0050-*.md` (49 ADRs; 0016 was retracted and the number isn't reused)
+- **Architecture decisions**: `docs/adr/0001-*.md` through `docs/adr/0051-*.md` (50 ADRs; 0016 was retracted and the number isn't reused)
 - **Fees and rewards**: `docs/FEES-AND-REWARDS.md` (line-cited to source)
 - **Public API**: `docs/API.md`
 - **Operator runbook**: `docs/OPERATIONS.md`

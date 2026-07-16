@@ -1,6 +1,6 @@
 {
 	"name": "@morphit/net-defense",
-	"version": "1.5.7",
+	"version": "1.7.0",
 	"private": true,
 	"type": "module",
 	"description": "Shared network-defense primitives (private-address detection, SSRF building blocks).  Lifted from apps/indexer/src/indexer/federationProbe.ts at cp154 so both the indexer and the MCP server can compose their SSRF defenses from the same building blocks.  Pure functions, zero runtime dependencies — consumers compose policy with the helpers.",

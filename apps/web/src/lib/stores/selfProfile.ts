@@ -110,10 +110,17 @@ export function clearSelfProfile(): void {
 /**
  * Optimistically set the self avatar right after a CONFIRMED broadcast
  * (block_num returned) so the avatar menu / labels update instantly
- * instead of waiting for the indexer to catch up (1–2 blocks). Safe
- * because the caller only invokes this once the chain accepted the op;
- * the next account-change refresh re-confirms from the indexer. Pass
- * null/null to reflect an avatar removal.
+ * instead of waiting for the indexer to catch up. Safe because the caller only
+ * invokes this once the chain accepted the op; the next account-change refresh
+ * re-confirms from the indexer. Pass null/null to reflect an avatar removal.
+ *
+ * v1.7.0 — this used to say the indexer needed "1–2 blocks". It needs 45-63s:
+ * the poller applies only blocks up to last-irreversible (ADR-0008). The
+ * MECHANISM here was always right (don't wait — you already know what you
+ * broadcast), so nothing changed but the number. The same "1–2 blocks" belief
+ * written into a TIMEOUT is what broke profileCache's prime hold (12s), the
+ * order-detail retry (24s) and the order-visible poll (40s) — all of them
+ * expiring before the indexer could possibly have the answer.
  */
 export function setSelfAvatar(
 	account: string,

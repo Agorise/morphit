@@ -48,6 +48,7 @@ import type { Database } from '$db/pool';
 import type { Poller } from '$indexer/poller';
 import { logger } from '$log';
 import { orderbookEventBus } from '$indexer/orderbookEventBus';
+import { validateOrderPermlink } from '$indexer/permlink';
 import { errorBody } from '$api/shared';
 import {
 	accountsJoin,
@@ -106,6 +107,23 @@ const SNAPSHOT_LIMIT = 50;
  *  The output type is structurally compatible with the plain
  *  OrderbookStreamQuery interface from helpers. */
 const orderbookStreamQuerySchema = z.object({
+	// v1.7.0 — watch ONE order (the detail page subscribes with both).
+	//
+	// Just a length bound, deliberately NOT a copy of ACCOUNT_NAME_RE. That regex
+	// already exists twice (handlers/chat.ts and headTailer.ts) with a parity
+	// smoke holding the two in step; a third copy here would be a third thing to
+	// drift, and it would buy nothing — `buildWhereClauses` parameterises this
+	// value, so the protection is the bound parameter, not the shape check. An
+	// account name that can't exist simply matches no rows.
+	account: z.string().min(3).max(16).optional(),
+	// Reuses the canonical order-permlink validator (charset + 1..32) rather than
+	// mirroring its regex here. A mirrored copy is a copy that drifts, and this
+	// one would drift silently — a stricter chain rule would leave this filter
+	// accepting shapes no real order can have.
+	permlink: z
+		.string()
+		.refine((v) => validateOrderPermlink(v) === null)
+		.optional(),
 	asset: z.enum(ASSET_TICKERS).optional(),
 	side: z.enum(['buy', 'sell']).optional(),
 	fiat_currency: z
@@ -270,6 +288,8 @@ export function orderbookStreamRoute(db: Database, poller: Poller, operatorAccou
 		const tracked = new Set<string>(); // orderIds we've sent as upserts
 		const insertOrder: string[] = []; // FIFO for MAX_TRACKED_ORDERS bound
 
+
+
 		// F-5/F-6 audit fixes — concurrency control:
 		//
 		// snapshotSent flips true once we've pushed the snapshot
@@ -288,6 +308,7 @@ export function orderbookStreamRoute(db: Database, poller: Poller, operatorAccou
 		const pendingDuringSnapshot = new Set<string>();
 
 		let unsubscribeBus: (() => void) | null = null;
+		let unsubscribeProvisional: (() => void) | null = null;
 		let pollTimer: ReturnType<typeof setInterval> | null = null;
 		let keepaliveTimer: ReturnType<typeof setInterval> | null = null;
 		let cancelled = false;
@@ -303,11 +324,35 @@ export function orderbookStreamRoute(db: Database, poller: Poller, operatorAccou
 					}
 				};
 
+				/** Untrack an order and tell this subscriber to drop it.
+				 *
+				 *  Extracted (v1.7.0) because the provisional head-block path needs the
+				 *  IDENTICAL removal — same untracking, same FIFO bookkeeping, same
+				 *  wire shape. Two copies would drift the first time one learned
+				 *  something the other didn't, and the symptom would be a phantom order
+				 *  the user cannot dismiss. */
+				const emitRemoval = (orderId: string): void => {
+					tracked.delete(orderId);
+					const idx = insertOrder.indexOf(orderId);
+					if (idx >= 0) insertOrder.splice(idx, 1);
+					const slash = orderId.indexOf('/');
+					safePush(
+						sseEvent('order_removed', {
+							account: orderId.slice(0, slash),
+							permlink: orderId.slice(slash + 1)
+						})
+					);
+				};
+
 				const cleanup = (): void => {
 					cancelled = true;
 					if (unsubscribeBus !== null) {
 						unsubscribeBus();
 						unsubscribeBus = null;
+					}
+					if (unsubscribeProvisional !== null) {
+						unsubscribeProvisional();
+						unsubscribeProvisional = null;
 					}
 					if (pollTimer !== null) {
 						clearInterval(pollTimer);
@@ -356,16 +401,7 @@ export function orderbookStreamRoute(db: Database, poller: Poller, operatorAccou
 								trackUpsert(orderId);
 								safePush(sseEvent('order_upserted', rowToWire(row)));
 							} else if (tracked.has(orderId)) {
-								tracked.delete(orderId);
-								const idx = insertOrder.indexOf(orderId);
-								if (idx >= 0) insertOrder.splice(idx, 1);
-								const slash = orderId.indexOf('/');
-								safePush(
-									sseEvent('order_removed', {
-										account: orderId.slice(0, slash),
-										permlink: orderId.slice(slash + 1)
-									})
-								);
+								emitRemoval(orderId);
 							}
 							// If row is null AND not tracked: orderId
 							// doesn't match filter AND wasn't visible
@@ -400,6 +436,29 @@ export function orderbookStreamRoute(db: Database, poller: Poller, operatorAccou
 						return;
 					}
 					processOrderChange(orderId);
+				});
+
+				// ─── v1.7.0: head-block (provisional) order status changes ────
+				//
+				// ADR-0051. A cancel/complete seen at the chain head, ~45-63s before
+				// the durable poller will apply it. Both transitions take the order
+				// out of live views, so this can only ever REMOVE — see the bus's
+				// note on why that's a safety boundary and not a scope decision.
+				//
+				// Deliberately does NOT re-query the row: the durable table still
+				// holds the OLD status, so a query would return a live order and we'd
+				// emit `order_upserted` with stale data — the exact opposite of the
+				// intent.
+				//
+				// `tracked.has()` is the whole gate, and it makes this safe by
+				// construction: we only ever remove something we ourselves already
+				// sent this subscriber. An order that doesn't match their filter, or
+				// that arrived before the snapshot finished, simply isn't tracked and
+				// this is a no-op — the durable pass corrects within ~60s either way.
+				unsubscribeProvisional = orderbookEventBus.onProvisional((ev) => {
+					if (cancelled) return;
+					if (!tracked.has(ev.orderId)) return;
+					emitRemoval(ev.orderId);
 				});
 
 				// ─── Initial snapshot ────

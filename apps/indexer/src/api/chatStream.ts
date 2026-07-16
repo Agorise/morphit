@@ -48,7 +48,7 @@ import type { Database } from '$db/pool';
 import type { Poller } from '$indexer/poller';
 import { logger } from '$log';
 import { chatEventBus, type ChatEvent, type ChatFastEvent } from '$indexer/chatEventBus';
-import { clientTagFromHeader } from '$indexer/chatHeadTailer';
+import { clientTagFromHeader } from '$indexer/headTailer';
 import { errorBody } from '$api/shared';
 import {
 	eventMatchesFilter,

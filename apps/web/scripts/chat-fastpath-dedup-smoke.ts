@@ -2,7 +2,7 @@
 /**
  * chat-fastpath-dedup-smoke (cp403 [1], ADR-0048).
  *
- * The indexer head-block fast path (chatHeadTailer.ts) streams a chat
+ * The indexer head-block fast path (headTailer.ts) streams a chat
  * message over SSE as a PROVISIONAL copy (wire id 0) seconds before its
  * durable, irreversible copy arrives. Both copies carry the same on-chain
  * client_tag. The frontend merge (chatService.ts) must collapse the two

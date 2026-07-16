@@ -255,15 +255,17 @@ Messages in a chat show up within a few seconds. Your node does this by watching
 
 It's safe: this fast lane only ever *reads* the chain, never writes to your database, and it only handles chat (never money or orders — those always wait for permanence). It still respects your users' block lists. If a block gets reorganized away by the network (rare), a message that flashed up live just won't be saved to history — fine for chat.
 
-You can see whether it's on at any time from the node-health screen — `morphit-ops` → **Node health** (main menu item 13) shows a **Fast chat** line next to your price feeds. An upgrade also prints a one-line confirmation that it's on.
+You can check on it any time from the node-health screen — `morphit-ops` → **Node health** (main menu item 13) shows a **Fast path** line next to your price feeds. It tells you whether the fast lane is keeping up with the chain, and how many blocks behind it is if it isn't.
 
-If you'd rather messages only appear once they're permanent, or you want to trim the small amount of extra chain traffic this adds, open `ops/env/indexer.env` and set:
+There's no switch to turn this off, and that's deliberate: the fast lane only ever reads, so the worst it can do is fail to be fast. There's nothing to protect you from, and nobody prefers slow. (If you have an old `MORPHIT_INDEXER_CHAT_FASTPATH_ENABLED` line in `ops/env/indexer.env`, it does nothing now — you can delete it.)
+
+If the small amount of extra chain traffic is a problem for your node, you can slow the fast lane down rather than lose it — open `ops/env/indexer.env` and raise:
 
 ```
-MORPHIT_INDEXER_CHAT_FASTPATH_ENABLED=false
+MORPHIT_INDEXER_FASTPATH_INTERVAL_MS=2000
 ```
 
-then restart the indexer. (`OPERATIONS.md` §19 has the full details, including the tuning knob and the `/v1/health` status field.)
+then restart the indexer. (`OPERATIONS.md` §19 has the full details, including the `/v1/health` status field.)
 
 ### 11.7 Everything else
 

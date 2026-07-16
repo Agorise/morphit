@@ -28,7 +28,12 @@ import type { LiveIdentity } from '$crypto/keygen';
 import type { Transaction, SignedTransaction } from '@beblurt/dblurt';
 
 import { FEE_RECIPIENT, computeFee, feeMemoFor, feeTransfersFor, type FeeQuote } from '$lib/orders/fee';
-import { buildOrderPayload, makeOrderPermlink, type OrderFormInput } from '$lib/orders/payload';
+import {
+	buildOrderPayload,
+	makeOrderPermlink,
+	type OrderFormInput,
+	type OrderPayload
+} from '$lib/orders/payload';
 
 export interface BroadcastOrderResult {
 	readonly block_num: number;
@@ -38,6 +43,16 @@ export interface BroadcastOrderResult {
 	 *  paid). Waived and btc/xmr orders have no quote. */
 	readonly feeQuote: FeeQuote | null;
 	readonly feeMethod: 'blurt' | 'waived_first_buy' | 'btc' | 'xmr';
+	/** v1.7.0 — the payload that actually went on chain.
+	 *
+	 *  Returned so a caller can stage an optimistic copy of the order
+	 *  (`pendingOrders`, "fastpostorder") from EXACTLY what was broadcast rather
+	 *  than re-deriving it from the form. Re-deriving would mean two independent
+	 *  paths from `OrderFormInput` to a rendered card, and the day one grew a
+	 *  normalisation the other didn't, the optimistic card would quietly disagree
+	 *  with the chain — surfacing ~60s later as the durable row "changing" the
+	 *  user's order. One derivation, no disagreement. */
+	readonly payload: OrderPayload;
 }
 
 /**
@@ -116,7 +131,8 @@ export async function broadcastNewOrder(
 			trx_id: result.trx_id,
 			permlink,
 			feeQuote: null,
-			feeMethod: 'waived_first_buy'
+			feeMethod: 'waived_first_buy',
+			payload
 		};
 	}
 
@@ -139,7 +155,8 @@ export async function broadcastNewOrder(
 			trx_id: result.trx_id,
 			permlink,
 			feeQuote: null,
-			feeMethod
+			feeMethod,
+			payload
 		};
 	}
 
@@ -180,7 +197,8 @@ export async function broadcastNewOrder(
 		trx_id: result.trx_id,
 		permlink,
 		feeQuote,
-		feeMethod: 'blurt'
+		feeMethod: 'blurt',
+		payload
 	};
 }
 

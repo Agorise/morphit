@@ -45,7 +45,11 @@
 		feedbackTrxId: string;
 		/** Called on successful broadcast. Parent typically
 		 *  refetches the feedback list and closes the disclosure. */
-		onSuccess?: (result: { trx_id: string }) => void;
+		/** v1.7.0 — `comment` is the exact text that went on chain (post-validation,
+		 *  post-normalisation), so a caller can stage an optimistic echo of the reply
+		 *  without re-deriving it from the form and risking a copy that disagrees
+		 *  with what the chain will serve. */
+		onSuccess?: (result: { trx_id: string; comment: string }) => void;
 		/** Called when the user dismisses the form. */
 		onCancel?: () => void;
 	}
@@ -174,7 +178,7 @@
 			// Broadcast succeeded — drop the draft.
 			clearDraft(DRAFT_KEY);
 			draftSavedAt = null;
-			onSuccess?.({ trx_id: result.trx_id });
+			onSuccess?.({ trx_id: result.trx_id, comment: outgoing });
 		} catch (err) {
 			console.warn('[RespondToFeedbackForm] broadcast failed:', err);
 			if (err instanceof BroadcastError) {

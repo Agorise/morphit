@@ -24,6 +24,7 @@
 
 import { redactPrivateKeys } from '$lib/security/privateKeyDetector';
 import type { AssetTicker } from '@morphit/asset-registry';
+import type { OrderRecord } from '@morphit/indexer-client';
 
 const PERMLINK_CHARSET = 'abcdefghjkmnpqrstuvwxyz23456789'; // no i/l/o/1 → ambiguity
 const PERMLINK_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -304,4 +305,54 @@ export function makeExpiryFlooredUtcDay(expiresDays: number): Date {
 	const target = Date.now() + expiresDays * 86_400_000;
 	const floored = Math.floor(target / 86_400_000) * 86_400_000;
 	return new Date(floored);
+}
+
+/**
+ * The order payload we just broadcast, shaped as the OrderRecord the rest of the
+ * UI renders (v1.7.0, "fastpostorder", ADR-0051).
+ *
+ * WHY FROM THE PAYLOAD, NOT THE FORM. The payload is what actually went on
+ * chain — `buildOrderPayload` trims, upper-cases the fiat code, and redacts
+ * private keys out of free text. Building the optimistic record from the raw
+ * form instead would let the card show something subtly different from what the
+ * chain will eventually serve, and the difference would only surface ~60s later
+ * when the durable row replaced it. Deriving from the payload makes disagreement
+ * impossible rather than unlikely.
+ *
+ * WHAT IS DELIBERATELY ABSENT. Every field OrderRecord marks optional is
+ * DERIVED by the indexer — `fee_status`, `trade_count`, `reputation_score`,
+ * `is_new_trader`, `engagement_24h`, `feedback_count`, `weighted_rating`. None
+ * are set here, and that is the point, not a shortcut: ADR-0051 keeps money and
+ * reputation durable-only, so a provisional card must not invent a trade count
+ * or a rating. It is a happy accident that OrderRecord's required/optional split
+ * already draws almost exactly that line — the type will not let a caller forget
+ * a real field, and will not tempt them into fabricating a derived one.
+ *
+ * PURE.
+ */
+export function orderPayloadToRecord(
+	account: string,
+	payload: OrderPayload,
+	nowIso: string
+): OrderRecord {
+	return {
+		account,
+		permlink: payload.permlink,
+		side: payload.side,
+		asset: payload.asset,
+		fiat_currency: payload.fiat_currency,
+		amount_min: payload.amount_min,
+		amount_max: payload.amount_max,
+		price_model: payload.price_model,
+		location_region: payload.location_region,
+		payment_methods: payload.payment_methods,
+		terms: payload.terms,
+		created_at: nowIso,
+		updated_at: nowIso,
+		expires_at: payload.expires_at,
+		// A freshly-broadcast order is live by definition — nothing has had the
+		// chance to cancel, fill or expire it yet.
+		status: 'live',
+		...(payload.fee_method !== undefined ? { fee_method: payload.fee_method } : {})
+	};
 }

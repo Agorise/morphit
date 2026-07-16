@@ -61,7 +61,7 @@ function read(abs: string): string {
 }
 
 const chat = read(join(ROOT, 'src/indexer/handlers/chat.ts'));
-const tailer = read(join(ROOT, 'src/indexer/chatHeadTailer.ts'));
+const tailer = read(join(ROOT, 'src/indexer/headTailer.ts'));
 const gates = read(join(ROOT, 'src/indexer/chatGates.ts'));
 const enqueue = read(join(ROOT, 'src/indexer/chatPushEnqueue.ts'));
 const migrations = read(join(ROOT, 'src/db/migrations.ts'));

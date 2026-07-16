@@ -315,18 +315,28 @@ export interface HealthSummary {
 	 *  indexer build) — the renderer then shows a one-line hint. */
 	readonly priceFeeds: PriceFeedsHealthSummary | null;
 	/** cp403 [1] — chat head-block fast-path status from the operator-only
-	 *  top-level `chat_fastpath` block (same X-Morphit-Local-Health gate as
+	 *  top-level `fastpath` block (same X-Morphit-Local-Health gate as
 	 *  price_feeds). null when absent (relay health, or a pre-fast-path
 	 *  indexer build) — the renderer then shows a one-line hint. */
-	readonly chatFastPath: ChatFastPathSummary | null;
+	readonly fastPath: FastPathSummary | null;
 }
 
-/** cp403 [1] — chat head-block fast-path status (mirrors the indexer's
- *  ChatHeadTailerStatus). `enabled:false` → an operator turned fast chat
- *  off (messages appear only once irreversible). `running` + a rising
- *  `scannedHead` → it's actively tailing the chain head. */
-export interface ChatFastPathSummary {
-	readonly enabled: boolean;
+/** v1.7.0 — head-block fast-path status (mirrors the indexer's
+ *  HeadTailerStatus). `running` + a rising `scannedHead` → it's actively
+ *  tailing the chain head.
+ *
+ *  `enabled` was REMOVED with the knob it reported (ADR-0051). It could only
+ *  ever say `true`, and an operator who read it once and concluded fast was
+ *  optional was worse off than one who never saw it. What they actually need
+ *  is whether it's tailing and how far behind head it is — which is what the
+ *  renderer now shows. */
+/** How many blocks behind head the tailer may sit and still be "keeping up".
+ *  The scanner polls every ~2s and Blurt blocks are ~3s, so 0-2 blocks is
+ *  normal and anything past a handful means it is not delivering the ≤6s the
+ *  whole fast path exists for. */
+export const FASTPATH_HEALTHY_LAG_BLOCKS = 4;
+
+export interface FastPathSummary {
 	readonly running: boolean;
 	readonly scannedHead: number | null;
 	readonly emitted: number | null;
@@ -402,19 +412,18 @@ export function summarizeHealth(body: unknown): HealthSummary {
 		relayBalance: typeof b.blurt_balance === 'string' ? b.blurt_balance : null,
 		priceFeed: parsePriceFeed(b.price_feed),
 		priceFeeds: parsePriceFeedsHealth(b.price_feeds),
-		chatFastPath: parseChatFastPath(b.chat_fastpath)
+		fastPath: parseFastPath(b.fastpath)
 	};
 }
 
-/** Interpret the operator-only top-level `chat_fastpath` block from a
+/** Interpret the operator-only top-level `fastpath` block from a
  *  `/v1/health` body (present only when the X-Morphit-Local-Health
  *  header is sent, which the ops-cli does). Keys are camelCase — the
  *  indexer forwards its ChatHeadTailerStatus object verbatim. PURE. */
-export function parseChatFastPath(v: unknown): ChatFastPathSummary | null {
+export function parseFastPath(v: unknown): FastPathSummary | null {
 	if (v === null || typeof v !== 'object') return null;
 	const o = v as Record<string, unknown>;
 	return {
-		enabled: o.enabled === true,
 		running: o.running === true,
 		scannedHead: numOrNull(o.scannedHead),
 		emitted: numOrNull(o.emitted),
@@ -1048,34 +1057,47 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 				`      ${c.dim('Price feeds:   per-source status unavailable (older indexer build)')}`
 			);
 		}
-		// cp403 [1] — chat head-block fast path (operator-only; same
-		// top-level block + X-Morphit-Local-Health gate as the price feeds
-		// above).  Shows admins whether sub-6s chat delivery is on and
-		// actively tailing the chain head, plus any last error.
-		if (s.chatFastPath !== null) {
-			const cf = s.chatFastPath;
+		// v1.7.0 — head-block fast path (operator-only; same top-level block +
+		// X-Morphit-Local-Health gate as the price feeds above).
+		//
+		// This used to lead with on/off. That line is gone with the knob it
+		// reported (ADR-0051): it could only ever say "on", and a status field
+		// that can't vary is noise at best and misleading at worst — an operator
+		// who reads "on" infers "off" is a thing they might want.
+		//
+		// What replaces it is the number that actually matters: how far behind
+		// the chain head the tailer is. "Running" is not the question; "is it
+		// KEEPING UP" is. A tailer that is running but 400 blocks behind is a
+		// broken tailer, and the old line called that one "on".
+		if (s.fastPath !== null) {
+			const fp = s.fastPath;
 			let line: string;
-			if (!cf.enabled) {
-				line = `${c.dim('off')} ${c.dim('\u2014 messages appear once irreversible (~45-60s)')}`;
-			} else if (cf.running) {
-				const head =
-					cf.scannedHead !== null && cf.scannedHead > 0
-						? ` @ head block ${cf.scannedHead}`
-						: '';
-				const delivered =
-					cf.emitted !== null ? ` ${c.dim(`(${cf.emitted} delivered)`)}` : '';
-				line = `${c.green('on')} \u2014 tailing${head}${delivered}`;
+			if (!fp.running) {
+				line = c.yellow('starting \u2014 not tailing yet');
+			} else if (fp.scannedHead === null || fp.scannedHead <= 0) {
+				line = c.yellow('tailing \u2014 head not established yet');
 			} else {
-				line = c.yellow('on but not tailing yet');
+				// Lag against the chain head we already read for this same body,
+				// so the two numbers can never disagree.
+				const lag = s.chainHeadBlock !== null ? s.chainHeadBlock - fp.scannedHead : null;
+				const lagTxt =
+					lag === null
+						? ` @ head block ${fp.scannedHead}`
+						: lag <= FASTPATH_HEALTHY_LAG_BLOCKS
+							? ` ${c.dim(`\u2014 ${lag} block(s) behind head`)}`
+							: ` ${c.yellow(`\u2014 ${lag} blocks behind head`)}`;
+				const delivered = fp.emitted !== null ? ` ${c.dim(`(${fp.emitted} delivered)`)}` : '';
+				const state = lag !== null && lag > FASTPATH_HEALTHY_LAG_BLOCKS ? c.yellow('lagging') : c.green('keeping up');
+				line = `${state}${lagTxt}${delivered}`;
 			}
-			console.log(`      Fast chat:     ${line}`);
-			if (cf.lastError !== null) {
-				console.log(`            ${c.dim(`↳ last error: ${cf.lastError}`)}`);
+			console.log(`      Fast path:     ${line}`);
+			if (fp.lastError !== null) {
+				console.log(`            ${c.dim(`↳ last error: ${fp.lastError}`)}`);
 			}
 		} else {
-			// Indexer up but no chat_fastpath block → a pre-fast-path build.
+			// Indexer up but no fastpath block → a pre-fast-path build.
 			console.log(
-				`      ${c.dim('Fast chat:     status unavailable (older indexer build)')}`
+				`      ${c.dim('Fast path:     status unavailable (older indexer build)')}`
 			);
 		}
 	} else if (indexer.kind === 'unreachable') {

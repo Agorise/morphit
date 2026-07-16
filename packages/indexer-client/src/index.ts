@@ -263,6 +263,16 @@ export interface OrderRecord {
 }
 
 export interface OrderbookQuery {
+	/** v1.7.0 — narrow to ONE trader, or with `permlink`, to ONE order.
+	 *
+	 *  Added for the order detail page's live subscription: it wants that order's
+	 *  events and nothing else, rather than a snapshot of every order the trader
+	 *  has live. Server-side, these compose with the existing predicates at the
+	 *  same chokepoint (`buildWhereClauses`), so a watched order is still subject
+	 *  to live-only, fee-verified-only, unexpired-only and the operator block
+	 *  list — this NARROWS the result set, it never widens it. */
+	readonly account?: string;
+	readonly permlink?: string;
 	readonly asset?: AssetTicker;
 	readonly side?: 'buy' | 'sell';
 	readonly fiat_currency?: string;

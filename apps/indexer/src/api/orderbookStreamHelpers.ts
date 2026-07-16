@@ -24,6 +24,17 @@ import type { AssetTicker } from '@morphit/asset-registry';
  *  is a plain TS interface so the smoke runner doesn't need
  *  zod installed. */
 export interface OrderbookStreamQuery {
+	/** v1.7.0 — watch ONE order. The order detail page subscribes with both, so it
+	 *  gets a one-row snapshot and only that order's events, instead of every
+	 *  order the trader has live.
+	 *
+	 *  Not a privacy widening: everything reachable through this filter is already
+	 *  public via REST `/v1/orderbook` and the page the user is looking at. It's a
+	 *  narrowing — the same rows, fewer of them. All the existing predicates (live,
+	 *  fee-verified, unexpired, operator block list) still apply, because they're
+	 *  built before these and this shares that one chokepoint. */
+	account?: string;
+	permlink?: string;
 	asset?: AssetTicker;
 	side?: 'buy' | 'sell';
 	fiat_currency?: string;
@@ -155,6 +166,9 @@ export function buildWhereClauses(
 		);
 	}
 
+	// v1.7.0 — exact-match, parameterised like every other predicate here.
+	if (q.account) where.push(`o.account = ${p(q.account)}`);
+	if (q.permlink) where.push(`o.permlink = ${p(q.permlink)}`);
 	if (q.asset) where.push(`o.asset = ${p(q.asset)}`);
 	if (q.side) where.push(`o.side = ${p(q.side)}`);
 	if (q.fiat_currency) {
