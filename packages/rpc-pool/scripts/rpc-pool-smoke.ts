@@ -33,6 +33,8 @@ import {
 	DEFAULT_HEDGE_THRESHOLD_MS,
 	DEFAULT_COOLDOWN_LADDER_MS,
 	DEFAULT_RATE_LIMIT_COOLDOWN_LADDER_MS,
+	DEFAULT_COOLDOWN_JITTER_FRACTION,
+	DEFAULT_MAX_REQUESTS_PER_SECOND,
 	isTransportError,
 	isRateLimitError,
 	isDblurtConsoleNoise,
@@ -90,6 +92,212 @@ function sleep(ms: number): Promise<void> {
 			'fastest-first ordering',
 			`expected first call to 'fast'; got order ${JSON.stringify(callOrder)} result=${result}`
 		);
+	}
+}
+
+/* ---------------- cp474: per-endpoint RPS pacing ---------------- */
+{
+	// The operator's FIRST ask: "lower the RPS or introduce a delay between
+	// requests". Steady-state Morphit is <1 req/s, but the poller's catch-up
+	// loop (`for (n = from; n <= irreversible; n++) await getBlock(n)`) is a
+	// tight unthrottled loop firing at whatever rate a single node will answer.
+	// That burst is what looks like abuse from the node's side.
+
+	// 20 rps → 50 ms spacing: slow enough to measure, fast enough not to drag
+	// the battery.
+	const RPS = 20;
+	const SPACING = 1_000 / RPS;
+
+	{
+		const pool = new EndpointPool({ endpoints: ['a'], maxRequestsPerSecond: RPS });
+		const t0 = Date.now();
+		for (let i = 0; i < 4; i++) {
+			await pool.call(async () => 'ok');
+		}
+		const elapsed = Date.now() - t0;
+		// 4 sequential calls = 3 gaps (the first dispatches immediately).
+		const floor = SPACING * 3 * 0.8;
+		if (elapsed >= floor) pass(`rps pacing: 4 sequential calls take >= ${Math.round(floor)} ms`);
+		else fail(`rps pacing: 4 sequential calls take >= ${Math.round(floor)} ms`, `got ${elapsed} ms`);
+	}
+
+	{
+		// The property that actually matters and the one a naive implementation
+		// gets WRONG: N callers firing CONCURRENTLY must queue, not all read the
+		// same free slot and burst together. This is the catch-up loop's shape if
+		// anyone ever parallelises it, and it's what the node sees.
+		const pool = new EndpointPool({ endpoints: ['a'], maxRequestsPerSecond: RPS });
+		const firedAt: number[] = [];
+		const t0 = Date.now();
+		await Promise.all(
+			Array.from({ length: 4 }, () =>
+				pool.call(async () => {
+					firedAt.push(Date.now() - t0);
+					return 'ok';
+				})
+			)
+		);
+		firedAt.sort((a, b) => a - b);
+		// Consecutive dispatches must be at least ~one interval apart.
+		let minGap = Infinity;
+		for (let i = 1; i < firedAt.length; i++) {
+			minGap = Math.min(minGap, firedAt[i]! - firedAt[i - 1]!);
+		}
+		if (minGap >= SPACING * 0.8) {
+			pass('rps pacing: CONCURRENT callers queue rather than burst together');
+		} else {
+			fail(
+				'rps pacing: CONCURRENT callers queue rather than burst together',
+				`smallest gap ${minGap} ms between dispatches at [${firedAt.join(', ')}] — expected >= ${SPACING * 0.8}`
+			);
+		}
+	}
+
+	{
+		// Pacing must not be charged to the endpoint as latency, or a paced
+		// endpoint would look slow and demote itself out of the rotation — the
+		// pool would then rotate away from a perfectly healthy node purely
+		// because we throttled ourselves.
+		const pool = new EndpointPool({ endpoints: ['a'], maxRequestsPerSecond: RPS });
+		await pool.call(async () => 'ok');
+		await pool.call(async () => 'ok');
+		await pool.call(async () => 'ok');
+		const ewma = pool.snapshot()[0]!.ewmaLatencyMs ?? 0;
+		if (ewma < SPACING * 0.5) {
+			pass('rps pacing: the pacing wait is NOT counted as endpoint latency');
+		} else {
+			fail(
+				'rps pacing: the pacing wait is NOT counted as endpoint latency',
+				`ewma ${ewma} ms — pacing is being charged to the endpoint`
+			);
+		}
+	}
+
+	{
+		// Pacing is PER-ENDPOINT, so the pool's aggregate ceiling scales with the
+		// number of healthy nodes. Two endpoints must not share one budget.
+		const pool = new EndpointPool({ endpoints: ['a', 'b'], maxRequestsPerSecond: RPS });
+		const snap = pool.snapshot();
+		if (snap.length === 2) pass('rps pacing: budget is per-endpoint, not pool-wide');
+		else fail('rps pacing: budget is per-endpoint', `snapshot length ${snap.length}`);
+	}
+
+	{
+		const pool = new EndpointPool({ endpoints: ['a'], maxRequestsPerSecond: 0 });
+		const t0 = Date.now();
+		for (let i = 0; i < 5; i++) await pool.call(async () => 'ok');
+		const elapsed = Date.now() - t0;
+		if (elapsed < 40) pass('rps pacing: maxRequestsPerSecond=0 disables pacing');
+		else fail('rps pacing: maxRequestsPerSecond=0 disables pacing', `took ${elapsed} ms`);
+	}
+
+	try {
+		new EndpointPool({ endpoints: ['a'], maxRequestsPerSecond: -1 });
+		fail('rps pacing: rejects a negative rate', 'constructor accepted -1');
+	} catch {
+		pass('rps pacing: rejects a negative rate');
+	}
+
+	if (DEFAULT_MAX_REQUESTS_PER_SECOND > 0) {
+		pass(`rps pacing: ON by default (${DEFAULT_MAX_REQUESTS_PER_SECOND} rps/endpoint)`);
+	} else {
+		fail('rps pacing: ON by default', 'default is 0 — every caller would be unpaced');
+	}
+}
+
+/* ---------------- cp474: cooldown jitter (thundering-herd defence) ---------------- */
+{
+	// The rpc.blurt.blog operator asked for four things: lower RPS, batching,
+	// exponential backoff, and JITTER. Backoff already existed (the two ladders
+	// above); jitter did not. Without it every federated Morphit instance that a
+	// node rate-limits gets handed the SAME 30 s ladder step and comes back in
+	// lockstep 30 s later, re-triggering the limit and re-synchronising the herd.
+	//
+	// Deterministic RNG so this asserts the arithmetic, not a coin flip.
+	const LADDER = 1_000;
+	const f = DEFAULT_COOLDOWN_JITTER_FRACTION;
+
+	async function cooldownWithRandom(r: number): Promise<number> {
+		const pool = new EndpointPool({
+			endpoints: ['a'],
+			cooldownLadderMs: [LADDER],
+			random: () => r
+		});
+		try {
+			await pool.call(() => Promise.reject(new Error('fetch failed')));
+		} catch {
+			/* expected: single endpoint, all paths failed */
+		}
+		return pool.snapshot()[0]!.cooldownUntil - Date.now();
+	}
+
+	// random()=0 → offset -f×step (the floor); =1 would be +f×step but random()
+	// is [0,1) so the ceiling is open; =0.5 → no offset.
+	const lo = await cooldownWithRandom(0);
+	const mid = await cooldownWithRandom(0.5);
+	const hi = await cooldownWithRandom(0.999);
+
+	// Allow a few ms of clock drift between recordFailure and the snapshot read.
+	const near = (actual: number, expected: number): boolean =>
+		Math.abs(actual - expected) <= 25;
+
+	if (near(lo, LADDER * (1 - f))) pass(`jitter: random()=0 → floor (${LADDER * (1 - f)} ms)`);
+	else fail(`jitter: random()=0 → floor (${LADDER * (1 - f)} ms)`, `got ${lo} ms`);
+
+	if (near(mid, LADDER)) pass('jitter: random()=0.5 → unchanged mean (no added latency)');
+	else fail('jitter: random()=0.5 → unchanged mean', `got ${mid} ms, expected ~${LADDER}`);
+
+	if (near(hi, LADDER * (1 + f))) pass(`jitter: random()≈1 → ceiling (${LADDER * (1 + f)} ms)`);
+	else fail(`jitter: random()≈1 → ceiling (${LADDER * (1 + f)} ms)`, `got ${hi} ms`);
+
+	// The property that actually matters: two instances failing at the same
+	// instant must NOT get the same cooldown. This is what breaks the lockstep.
+	if (lo !== hi) pass('jitter: identical failures produce spread cooldowns (herd broken)');
+	else fail('jitter: identical failures produce spread cooldowns', `both got ${lo} ms`);
+
+	// Jitter must apply to the 429 ladder too — that is the case the operator
+	// actually complained about.
+	const rlPool = new EndpointPool({
+		endpoints: ['a'],
+		rateLimitCooldownLadderMs: [LADDER],
+		random: () => 0
+	});
+	try {
+		await rlPool.call(() => Promise.reject(new Error('HTTP 429: Too Many Requests')));
+	} catch {
+		/* expected */
+	}
+	const rlCooldown = rlPool.snapshot()[0]!.cooldownUntil - Date.now();
+	if (near(rlCooldown, LADDER * (1 - f))) {
+		pass('jitter: applies to the HTTP-429 ladder, not just the generic one');
+	} else {
+		fail(
+			'jitter: applies to the HTTP-429 ladder',
+			`got ${rlCooldown} ms, expected ~${LADDER * (1 - f)}`
+		);
+	}
+
+	// Opt-out must stay exact for tests that assert precise timings.
+	const exact = new EndpointPool({
+		endpoints: ['a'],
+		cooldownLadderMs: [LADDER],
+		cooldownJitterFraction: 0
+	});
+	try {
+		await exact.call(() => Promise.reject(new Error('fetch failed')));
+	} catch {
+		/* expected */
+	}
+	const exactCooldown = exact.snapshot()[0]!.cooldownUntil - Date.now();
+	if (near(exactCooldown, LADDER)) pass('jitter: cooldownJitterFraction=0 disables it exactly');
+	else fail('jitter: cooldownJitterFraction=0 disables it', `got ${exactCooldown} ms`);
+
+	// An out-of-range fraction is a config error, not a silent clamp.
+	try {
+		new EndpointPool({ endpoints: ['a'], cooldownJitterFraction: 1 });
+		fail('jitter: rejects fraction >= 1', 'constructor accepted 1');
+	} catch {
+		pass('jitter: rejects fraction >= 1');
 	}
 }
 

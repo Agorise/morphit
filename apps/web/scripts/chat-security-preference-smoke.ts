@@ -121,3 +121,9 @@ if (failures > 0) {
 	process.exit(1);
 }
 console.log(`✓ all ${count} chat-security-preference scenarios passed`);
+
+// cp474 — module marker. Without a top-level import/export tsc treats this
+// file as a global script, so its `scenarios`/`failed` consts collide with every
+// other script-style smoke when the suite is typechecked as one project. This
+// has no runtime effect under tsx.
+export {};

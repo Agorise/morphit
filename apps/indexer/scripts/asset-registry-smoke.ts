@@ -294,14 +294,29 @@ scenario('memoCapableAssets includes BLURT, excludes BTC + XMR', () => {
 	}
 });
 
-scenario('registry is frozen-ish (immutable shape contract)', () => {
-	// @ts-expect-error -- testing runtime
+scenario('registry is frozen at runtime (immutable shape contract)', () => {
+	// cp474 — this scenario used to read `original` and then compare
+	// `ASSETS[0].ticker !== original`: a value against itself, which is true by
+	// construction and can never fail.  The mutation it describes had gone
+	// missing, leaving an orphaned `@ts-expect-error` on the harmless read (that
+	// unused directive is what surfaced this).  The registry is Object.freeze()d
+	// at both levels, so the mutation below must not take effect.  `readonly`
+	// alone is a COMPILE-time claim; a federated peer running plain JS gets no
+	// such guarantee, which is exactly why the runtime freeze is the contract
+	// worth asserting.
 	const original = ASSETS[0]!.ticker;
-	// Try mutating; readonly should make this a compile error,
-	// but at runtime ASSETS may not be Object.frozen.  Check the
-	// shape contract holds.
+	try {
+		// @ts-expect-error -- deliberately violating the readonly contract to
+		// prove the RUNTIME freeze holds, not merely the compile-time type.
+		ASSETS[0]!.ticker = 'MUTATED-BY-SMOKE';
+	} catch {
+		// ES modules are always strict mode, so assigning to a frozen object's
+		// property throws TypeError.  That throw IS the freeze working.
+	}
 	if (ASSETS[0]!.ticker !== original) {
-		throw new Error('registry mutated unexpectedly');
+		throw new Error(
+			`registry mutated unexpectedly — ASSETS is not frozen (ticker became ${ASSETS[0]!.ticker})`
+		);
 	}
 });
 

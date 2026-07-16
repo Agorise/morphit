@@ -222,7 +222,10 @@ for (const a of ASSETS) {
 	let mutated = false;
 	try {
 		(first as { ticker: string }).ticker = 'HACKED';
-		mutated = first.ticker === 'HACKED';
+		// cp474 — read through the same cast the write used. Reading `first.ticker`
+		// directly let TS narrow to the AssetTicker union and call the comparison
+		// impossible; the runtime check is exactly what this scenario is for.
+		mutated = (first as { ticker: string }).ticker === 'HACKED';
 	} catch {
 		// Frozen object throws on assignment in strict mode — good.
 	}
@@ -246,6 +249,12 @@ for (const a of ASSETS) {
 			supportedNetworks: ['mainnet'],
 			defaultNetwork: null,
 			privacyWarningKey: null,
+			// cp474 — REQUIRED by AssetEntry since Part 122 cp26 and missing here.
+			privacyFeatures: {
+				freshAddressAdvice: 'hd-derived',
+				optInPrivacyTech: null,
+				privacyGuideKey: 'privacy.guides.hack'
+			},
 			addressShape: /./
 		});
 		mutated = ASSETS.length !== originalLength;

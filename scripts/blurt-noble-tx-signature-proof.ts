@@ -68,7 +68,7 @@ function signDigestWithNoble(digest32: Uint8Array, priv: Uint8Array): string {
 			opts.extraEntropy = e;
 		}
 		const sig = secp.sign(digest32, priv, opts);
-		const c = sig.toBytes('compact');
+		const c = sig.toBytes();
 		const r = c.slice(0, 32);
 		const s = c.slice(32, 64);
 		if ((r[0] & 0x80) !== 0 || (s[0] & 0x80) !== 0) continue;

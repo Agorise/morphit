@@ -149,7 +149,10 @@ async function main(): Promise<void> {
 			}
 		});
 		check('happy: exit 0', code === 0, `code=${code}`);
-		check('happy: POSTed the self-test', posted === true);
+		// cp474 — `posted` is set inside the selfTest callback, which TS's flow
+		// analysis can't see, so it stayed narrowed to the literal `false` and
+		// `=== true` looked impossible. Pass the boolean straight through.
+		check('happy: POSTed the self-test', posted);
 		check('happy: threaded the configured healthcheck port to the POST', portUsed === TEST_PORT, `port=${portUsed}`);
 		check(
 			'happy: confirms delivery + invite-acceptance hint',

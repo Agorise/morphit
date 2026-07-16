@@ -44,6 +44,24 @@ import { getChatFolders } from '$indexer/client';
 import type { ChatFolderState } from '$blurt/ops/chatFolders';
 
 const KEY = 'morphit.chat.folders';
+/** cp474 (t.txt #5, "fastmessagestatusupdate") — wall-clock ms of the newest
+ *  LOCAL folder change, persisted beside the mirror so it survives a reload.
+ *
+ *  THE BUG THIS FIXES. `syncChatFoldersFromChain` used to adopt the on-chain
+ *  state UNCONDITIONALLY. A folder move updates the mirror instantly and
+ *  schedules a 1.5s-debounced broadcast, which then has to reach a block and be
+ *  indexed — so for roughly a minute the chain still serves the PRE-move state.
+ *  Refresh inside that window and the mount-time sync overwrote the mirror with
+ *  the stale chain copy: the move visibly UNDID itself and only "took effect"
+ *  once the indexer caught up. That is exactly Ken's report — a move that
+ *  doesn't stick for about a minute.
+ *
+ *  The endpoint has always returned `updated_at` (the indexer's row time) and
+ *  the client type has always carried it; nobody read it. Comparing it against
+ *  this stamp turns a blind overwrite into last-write-wins, with no change to
+ *  the on-chain payload — so an older peer reading or writing
+ *  `morphit_chat_folders_v1` is unaffected. */
+const LOCAL_CHANGED_KEY = 'morphit.chat.folders.localChangedAt';
 /** Matches the on-chain per-list cap in the handler. Overflow drops
  *  oldest-touched. Only filed (starred/archived) discussions are stored. */
 const MAX_ENTRIES = 300;
@@ -110,6 +128,38 @@ function writeMirror(state: FolderMap): void {
 	}
 }
 
+/** cp474 — read the newest local-change stamp. 0 when never set (fresh
+ *  profile, cleared storage), which makes the chain authoritative — the right
+ *  default, and the pre-cp474 behaviour. */
+function readLocalChangedAt(): number {
+	const raw = safeLocal.get(LOCAL_CHANGED_KEY);
+	if (raw === null) return 0;
+	const n = Number(raw);
+	return Number.isFinite(n) ? n : 0;
+}
+
+/** cp474 — stamp a LOCAL change. Called from the mutators, never from the
+ *  chain-adopt path: adopting a remote change must not make the local copy look
+ *  newer than the chain it just came from, or the device would refuse every
+ *  subsequent sync. */
+function markLocalChange(): void {
+	try {
+		safeLocal.set(LOCAL_CHANGED_KEY, String(Date.now()));
+	} catch {
+		/* best-effort — see writeMirror. */
+	}
+}
+
+/** cp474 — clear the stamp once the chain is known to carry our change, so the
+ *  device stops treating itself as ahead. */
+function clearLocalChange(): void {
+	try {
+		safeLocal.remove(LOCAL_CHANGED_KEY);
+	} catch {
+		/* best-effort */
+	}
+}
+
 /** Keep the MAX_ENTRIES most-recently-touched entries. */
 function cap(state: FolderMap): FolderMap {
 	const entries = Object.entries(state);
@@ -134,11 +184,36 @@ function mapToState(map: FolderMap): ChatFolderState {
 	return { starred, archived };
 }
 
-function stateToMap(state: ChatFolderState): FolderMap {
+/**
+ * On-chain shape → local map.
+ *
+ * cp474 — `previous` matters more than it looks. The on-chain payload is
+ * `{ starred: string[], archived: string[] }` and carries NO timestamps, so this
+ * has to invent an `at` for every entry it adopts. Stamping `now` unconditionally
+ * (which is what it used to do) quietly breaks
+ * `resurrectArchivedOnNewActivity`: that compares a thread's newest message time
+ * against `entry.at`, so re-stamping every archived thread to "now" on each sync
+ * makes ALL real message times look older than the archive, and a message that
+ * landed while the user was away can never resurface. The Gmail behaviour the
+ * function documents — "Only genuinely-newer activity resurfaces" — was being
+ * switched off by its own neighbour.
+ *
+ * So: carry the local `at` forward for any thread we already had filed the same
+ * way. The chain and the mirror agree about that thread, and the mirror is the
+ * only place the real archive time still exists. `now` is kept only for entries
+ * genuinely new to this device, where we honestly don't know when they were
+ * filed — and where "don't resurface old history" is the right default anyway.
+ */
+function stateToMap(state: ChatFolderState, previous: FolderMap = {}): FolderMap {
 	const now = new Date().toISOString();
 	const out: FolderMap = {};
-	for (const k of state.starred) if (validKey(k)) out[k] = { folder: 'starred', at: now };
-	for (const k of state.archived) if (validKey(k)) out[k] = { folder: 'archived', at: now };
+	const at = (k: string, folder: StoredFolder): string => {
+		const prev = previous[k];
+		return prev !== undefined && prev.folder === folder ? prev.at : now;
+	};
+	for (const k of state.starred) if (validKey(k)) out[k] = { folder: 'starred', at: at(k, 'starred') };
+	for (const k of state.archived)
+		if (validKey(k)) out[k] = { folder: 'archived', at: at(k, 'archived') };
 	return out;
 }
 
@@ -218,6 +293,7 @@ export function setFolder(peer: string, orderPermlink: string, folder: ChatFolde
 	}
 	const capped = cap(next);
 	writeMirror(capped);
+	markLocalChange();
 	foldersStore.set(capped);
 	scheduleBroadcast();
 }
@@ -274,6 +350,7 @@ export function resurrectArchivedOnNewActivity(
 	if (changed) {
 		const capped = cap(next);
 		writeMirror(capped);
+		markLocalChange();
 		foldersStore.set(capped);
 		scheduleBroadcast();
 	}
@@ -317,12 +394,47 @@ export async function syncChatFoldersFromChain(): Promise<void> {
 		return;
 	}
 
+	// cp474 (t.txt #5) — LAST-WRITE-WINS, not blind adopt.
+	//
+	// This used to overwrite the mirror with whatever the chain served. But a
+	// folder move updates the mirror instantly and only reaches the chain after a
+	// 1.5s debounce + a block + indexing — so for ~a minute the chain still
+	// serves the PRE-move state. Refreshing inside that window handed the stale
+	// copy straight back over the user's own change: the move undid itself and
+	// only "took effect" once the indexer caught up. That is Ken's ~1-minute
+	// symptom, and it was a correctness bug, not a latency one.
+	//
+	// `updated_at` is the indexer's row time for this account's newest folder op.
+	// It has always been on the response and on the client type — nobody read it.
+	// If our newest LOCAL change is newer, the chain is behind us: keep local and
+	// make sure the broadcast is still on its way. Otherwise the chain is
+	// genuinely newer (another device filed something) and we adopt, which is
+	// what cross-device sync is for. No on-chain payload change, so an older peer
+	// reading or writing `morphit_chat_folders_v1` is unaffected.
+	const chainAtMs = res.data.updated_at !== null ? new Date(res.data.updated_at).getTime() : 0;
+	const localAtMs = readLocalChangedAt();
+	if (localAtMs > 0 && Number.isFinite(chainAtMs) && chainAtMs < localAtMs) {
+		syncedThisSession = true;
+		// A reload inside the 1.5s debounce drops the timer with the page, which
+		// would strand the move on this device. Re-arm it.
+		scheduleBroadcast();
+		return;
+	}
+
 	try {
 		const { decryptFolderState } = await import('./folderCrypto');
 		const decrypted = await decryptFolderState(id.live.posting.privateKey, account, res.data.enc);
 		if (decrypted !== null && isFolderState(decrypted)) {
-			const map = cap(stateToMap(decrypted));
+			// Pass the current mirror so real archive times survive the adopt — see
+			// stateToMap's note on why `now` for everything breaks resurrect.
+			const map = cap(stateToMap(decrypted, get(foldersStore)));
 			writeMirror(map);
+			// The chain has caught up to (or overtaken) us, so this device is no
+			// longer ahead. Belt-and-braces: chain timestamps advance monotonically,
+			// so a stale stamp would self-heal on the next remote write anyway — but
+			// carrying an "I'm ahead" claim we know to be false is how a later
+			// refactor grows a real bug.
+			clearLocalChange();
 			foldersStore.set(map);
 			syncedThisSession = true;
 		}
@@ -341,6 +453,11 @@ export function clearChatFolders(): void {
 	}
 	syncedThisSession = false;
 	safeLocal.remove(KEY);
+	// cp474 — drop the local-change stamp with the state it described. Leaving it
+	// behind would make the next session look "ahead of the chain" while holding
+	// an empty map, and the last-write-wins check would then refuse to adopt the
+	// user's real folders back from chain.
+	clearLocalChange();
 	foldersStore.set({});
 }
 

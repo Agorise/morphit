@@ -48,6 +48,11 @@ export interface OrderbookStreamRow {
 	terms: string | null;
 	fee_method: 'blurt' | 'waived_first_buy' | 'btc' | 'xmr' | null;
 	feedback_count: number;
+	/** cp473 — REAL completed trades (both sides credited), sock-puppet
+	 *  filtered. A DIFFERENT number from feedback_count: a trade nobody
+	 *  reviewed counts here and not there. The order card reads this; an
+	 *  endpoint that omits it silently renders "no trades". */
+	trade_count: number;
 	weighted_rating: string | null;
 	/** MAX(created_at) of included feedback — recency factor for the
 	 *  composite reputation score. NULL when no included feedback. */
@@ -87,6 +92,7 @@ export function rowToWire(r: OrderbookStreamRow): Record<string, unknown> {
 		terms: r.terms,
 		fee_method: r.fee_method,
 		feedback_count: r.feedback_count,
+		trade_count: r.trade_count,
 		weighted_rating: r.weighted_rating === null ? null : Number(r.weighted_rating),
 		reputation_score: computeReputationScore({
 			count: r.feedback_count,
@@ -172,7 +178,12 @@ export function buildWhereClauses(
 		}
 	}
 	if (typeof q.min_trades === 'number' && q.min_trades > 0) {
-		where.push(`COALESCE(f.c, 0) >= ${p(q.min_trades)}`);
+		// cp473 — filters REAL completed trades (tc.c), matching the REST
+		// endpoint. This read `f.c` (the FEEDBACK count) while calling itself
+		// min_trades, so the same filter value selected a DIFFERENT set of
+		// traders depending on whether a row arrived over REST or the stream —
+		// and the stream's snapshot is the one that wins.
+		where.push(`COALESCE(tc.c, 0) >= ${p(q.min_trades)}`);
 	}
 	return { where, params };
 }

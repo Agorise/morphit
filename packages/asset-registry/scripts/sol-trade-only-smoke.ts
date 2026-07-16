@@ -91,9 +91,7 @@ if (!feSol) {
 	pass('frontend registry contains sol entry');
 	if (feSol.canBeTraded === true) pass('frontend sol.canBeTraded === true');
 	else fail('frontend sol.canBeTraded === true', `actual: ${feSol.canBeTraded}`);
-	// @ts-expect-error
 	if (feSol.canBeUsedForListingFee === false) pass('frontend sol.canBeUsedForListingFee === false (memory #23)');
-	// @ts-expect-error
 	else fail('frontend sol.canBeUsedForListingFee === false', `actual: ${feSol.canBeUsedForListingFee}`);
 	if (feSol.decimals === 9) pass('frontend sol.decimals === 9');
 	else fail('frontend sol.decimals === 9', `actual: ${feSol.decimals}`);

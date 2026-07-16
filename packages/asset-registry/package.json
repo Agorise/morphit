@@ -1,6 +1,6 @@
 {
 	"name": "@morphit/asset-registry",
-	"version": "1.5.5",
+	"version": "1.5.7",
 	"private": true,
 	"type": "module",
 	"description": "Single source-of-truth for the set of assets Morphit supports (BTC, XMR, BLURT, …) — ticker enum, decimals, basic shape validators, capability flags. The indexer, relay, and frontend all import from here so adding a new traded asset is a one-file edit.",

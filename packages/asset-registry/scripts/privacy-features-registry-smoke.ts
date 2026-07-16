@@ -176,7 +176,10 @@ for (const [ticker, expected] of Object.entries(EXPECTED_TECH)) {
 			);
 		} else if (
 			actual.length !== expected.length ||
-			!expected.every((t) => actual.includes(t))
+			// cp474 — `expected` is the smoke's own string[] table; `actual` is the
+			// registry's narrow union. Compare as strings rather than asking the
+			// union to accept an arbitrary string.
+			!expected.every((t) => (actual as readonly string[]).includes(t))
 		) {
 			fail(
 				`${ticker}.optInPrivacyTech === [${expected.join(', ')}]`,

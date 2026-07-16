@@ -75,7 +75,9 @@ interface OrderRow {
 	 *  unproven completions stay NULL). */
 	completed_counterparty: string | null;
 	/** v1.5.5: the owner's COMPLETED-TRADE count (both sides credited,
-	 *  sock-puppet-pair filtered). Ratings live separately in `f.c`. */
+	 *  sock-puppet-pair filtered). This endpoint is the owner's own view and
+	 *  deliberately carries no rating aggregate — ratings are a card/profile
+	 *  concern, served by /v1/orderbook and /v1/accounts/:account/feedback. */
 	trade_count: number;
 	/** v1.5.5: now `trade_count < 4` — reviews are optional, completions are
 	 *  the real experience signal (was: feedback count < 4). */
@@ -163,33 +165,6 @@ export function ordersByAccountRoute(db: Database, operatorAccount: string): Hon
 			        (COALESCE(tc.c, 0) < 4) AS is_new_trader,
 			        o.created_at, o.updated_at, o.expires_at
 			 FROM orders o
-			 LEFT JOIN (
-			   -- Same trustworthy-feedback-count CTE as /v1/orderbook
-			   -- (filters sock-puppet pairs and untethered feedback).
-			   -- Aligns is_new_trader semantics across endpoints —
-			   -- previously this endpoint used
-			   -- (a.first_trade_complete_at IS NULL) which is a
-			   -- different threshold (welcome-bonus trigger, not
-			   -- low-rep signal).  Closes Memory #11 Category O
-			   -- finding O-11 (Part 101).  The field is currently
-			   -- unconsumed by the frontend, so this realignment is
-			   -- a no-op for users; future consumers see the
-			   -- documented semantics.
-			   SELECT subject, COUNT(*)::int AS c
-			     FROM feedback fb
-			    WHERE fb.order_permlink IS NOT NULL
-			      AND NOT EXISTS (
-			        SELECT 1 FROM suspicious_reciprocity sr
-			         WHERE sr.account_a = LEAST(fb.reviewer, fb.subject)
-			           AND sr.account_b = GREATEST(fb.reviewer, fb.subject)
-			    )
-			      AND NOT EXISTS (
-			        SELECT 1 FROM related_accounts ra
-			         WHERE ra.account_a = LEAST(fb.reviewer, fb.subject)
-			           AND ra.account_b = GREATEST(fb.reviewer, fb.subject)
-			    )
-			    GROUP BY subject
-			 ) f ON f.subject = o.account
 ${tradeCountJoin('o')}
 			 WHERE o.account = $1${cursorClause}
 			   AND NOT EXISTS (SELECT 1 FROM operator_blocks ob WHERE ob.operator = ${opParam} AND ob.blocked = o.account AND ob.state = 'blocked')

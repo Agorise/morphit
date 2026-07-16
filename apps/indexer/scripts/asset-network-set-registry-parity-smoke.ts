@@ -43,7 +43,11 @@ console.log('\n── asset-network-set-registry-parity (cp175 F-013 guard) ─�
 
 // Registry truth: supportedNetworks for each multi-network asset, as sorted arrays.
 function registryNetworks(ticker: string): string[] {
-	const a = ASSETS.find((x) => x.ticker === ticker || x.displayTicker === ticker);
+	// cp474 — the `|| x.displayTicker === ticker` fallback that used to live here
+	// was dead: this ASSETS is @morphit/asset-registry's `AssetEntry`, which has
+	// no displayTicker (that field is on apps/web's separate `AssetMetadata`).
+	// It read `undefined` on every entry and could never match.
+	const a = ASSETS.find((x) => x.ticker === ticker);
 	if (!a) throw new Error(`registry has no asset '${ticker}'`);
 	return [...a.supportedNetworks].sort();
 }

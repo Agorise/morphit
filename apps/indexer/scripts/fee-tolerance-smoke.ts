@@ -69,7 +69,9 @@ function btcVerifier(observedSats: number): BitcoinExplorerFeeVerifier {
 			feeAddress: FEE_ADDRESS,
 			explorerUrls: ['https://blockstream.info/api'],
 			minConfirmations: 1,
-			requestTimeoutMs: 5_000
+			requestTimeoutMs: 5_000,
+			// cp474 — Part 109 quorum gate; required by the config type.
+			minSuccessfulResponses: 1
 		},
 		btcFetch(observedSats)
 	);
@@ -78,6 +80,9 @@ const claim = (expectedAmount: number): FeeClaim => ({
 	feeMethod: 'btc',
 	expectedAmount,
 	externalTxId: VALID_TXID,
+	// cp474 — REQUIRED by FeeClaim; `undefined` is not `null`, and the Monero
+	// verifier discriminates on `txProof === null`.
+	txProof: null,
 	permlink: 'order-01',
 	signer: 'alice'
 });

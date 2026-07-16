@@ -108,16 +108,28 @@
 	{:else if block.type === 'hr'}
 		<hr class="my-3 border-ink-200 dark:border-ink-700" />
 	{:else if block.type === 'ul'}
-		<ul class="mt-1 list-disc space-y-0.5 pl-5">
+		<ul class="mt-1 list-disc space-y-0.5 ps-5">
 			{#each block.items as item}<li>{@render inline(item)}</li>{/each}
 		</ul>
 	{:else if block.type === 'ol'}
-		<ol class="mt-1 list-decimal space-y-0.5 pl-5">
+		<ol class="mt-1 list-decimal space-y-0.5 ps-5">
 			{#each block.items as item}<li>{@render inline(item)}</li>{/each}
 		</ol>
 	{:else if block.type === 'blockquote'}
+		<!-- cp474 (t.txt #12) — Ken: "whenever i use a blockquote (markdown) in
+		     the terms textarea, please indent that rendered blockquote on the ui."
+		     It had a quote BAR (border + pl-3 inside it) but no margin, so the bar
+		     sat flush against the same edge as every paragraph and the quote never
+		     read as set apart — the one thing a blockquote is for. `ms-4` indents
+		     the whole quote, bar included.
+
+		     Logical properties, not physical: `dir` really is flipped for Farsi
+		     (app.html sets documentElement.dir = 'rtl' for fa), so the old
+		     `border-l-4` + `pl-3` put the quote bar on the far side of its own
+		     right-aligned text for those readers. `border-s`/`ps`/`ms` are
+		     identical to `border-l`/`pl`/`ml` in LTR and correct in RTL. -->
 		<blockquote
-			class="mt-2 whitespace-pre-line border-l-4 border-morphit-emerald/40 pl-3 text-ink-600 first:mt-0 dark:text-ink-300"
+			class="ms-4 mt-2 whitespace-pre-line border-s-4 border-morphit-emerald/40 ps-3 text-ink-600 first:mt-0 dark:text-ink-300"
 			>{@render inline(block.runs)}</blockquote
 		>
 	{:else}

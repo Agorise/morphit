@@ -161,7 +161,12 @@
 	 *  resolved / on failure (the cluster then just doesn't render). */
 	let peerReputation = $state<{
 		score: number | null;
-		count: number;
+		/** COMPLETED TRADES — what the "{count} trades" line and the 🌱 sprout
+		 *  read. cp473: this line used to be fed the RATING count, so the header
+		 *  stated "9 trades" for someone with 9 reviews and no trades. */
+		trades: number;
+		/** RATINGS that back the star average — a different number on purpose. */
+		ratings: number;
 		isNewTrader: boolean;
 	} | null>(null);
 
@@ -991,10 +996,29 @@
 
 	function onScroll(): void {
 		if (!scrollEl) return;
-		// The user has taken control; stop re-pinning immediately.
-		cancelPin?.();
-		cancelPin = null;
 		userAtBottom = isAtBottom();
+		// cp474 (t.txt #7) — cancel the pin only when the scroll LEAVES the bottom.
+		//
+		// This used to cancel on ANY scroll event, which meant the pin killed
+		// itself: `pinToBottom` works by assigning `scrollTop`, the browser fires a
+		// scroll event for that assignment on the next frame, and this handler tore
+		// the pin down before it had re-pinned even once. The "keep it pinned while
+		// the content settles" window was therefore never real — first load was a
+		// single instant jump, and anything that grew the list afterwards (web-font
+		// swap, the Payment Receipt bubble, decrypted bodies, avatars) pushed the
+		// newest message back below the fold. That is Ken's "STILL does not always
+		// scroll to the last message".
+		//
+		// Testing the POSITION instead of the event source needs no flags or
+		// timers and is what we actually mean: our own pin always lands AT the
+		// bottom, so it can never cancel itself; a user scrolling UP leaves the
+		// bottom and cancels instantly, which is the property that matters (never
+		// fight a user who scrolled); and a user scrolling DOWN to the bottom is
+		// asking for the bottom, so leaving the pin alone is correct there too.
+		if (!userAtBottom) {
+			cancelPin?.();
+			cancelPin = null;
+		}
 		if (userAtBottom) {
 			unreadWhileScrolledUp = 0;
 		}
@@ -1014,19 +1038,39 @@
 
 	/** #4 — fetch the peer's public reputation for the header cluster. The
 	 *  reputation-receipt summary carries the SAME composite `reputation_score`
-	 *  the order cards show, plus the received-feedback count; a new-trader has
-	 *  fewer than 4 received rows (same rule as the orderbook's 🌱 chip).
+	 *  the order cards show, the received-RATING count that backs the star
+	 *  average, and (cp473) the COMPLETED-TRADE count the 🌱 sprout keys off —
+	 *  the same rule the order cards use since v1.5.5.
 	 *  Best-effort + silent on failure — the cluster is a nice-to-have, never a
-	 *  blocker for the conversation. */
+	 *  blocker for the conversation.
+	 *
+	 *  cp473 — this previously read `isNewTrader: count_total < 4`, which was
+	 *  wrong twice over, on the surface where it matters most (the chat header
+	 *  is where you size up a stranger before handing them money):
+	 *
+	 *    1. `count_total` counts RATINGS, so the sprout meant "<4 reviews" here
+	 *       while the order card next to it meant "<4 trades".
+	 *    2. Worse, `count_total` is the receipt's deliberately UNFILTERED total
+	 *       — it includes the rows the indexer threw out as suspicious_
+	 *       reciprocity / related_accounts / one_way_pile_on / review_
+	 *       concentration fraud. So four sock-puppet reviews that contributed
+	 *       NOTHING to the score still cleared the sprout, quietly retiring the
+	 *       "new trader, be careful" warning for an account whose real
+	 *       reputation was zero. The score stayed null; only the warning went.
+	 */
 	async function loadPeerReputation(): Promise<void> {
 		try {
 			const r = await getReputationReceipt(peer);
 			if (!r.ok) return;
-			const count = r.data.summary.count_total;
+			// The count that backs the star average is the INCLUDED one, not the
+			// receipt's raw total (which deliberately counts excluded fraud).
+			const ratings = r.data.summary.count_included;
+			const trades = r.data.summary.trade_count ?? 0;
 			peerReputation = {
 				score: r.data.summary.reputation_score ?? null,
-				count,
-				isNewTrader: count < 4
+				trades,
+				ratings,
+				isNewTrader: trades < 4
 			};
 		} catch {
 			peerReputation = null;
@@ -1543,11 +1587,20 @@
 								<span class="truncate font-mono">({truncatePublicKey(peerPostingKey)})</span>
 							{/if}
 							{#if peerReputation}
-								<span class="flex-none whitespace-nowrap">
-									{$_('orderbook.card.trades_only', {
-										values: { count: formatCountCompact(peerReputation.count) }
-									})}
-								</span>
+								{#if peerReputation.trades > 0}
+									<!-- cp473 — the REAL completed-trade count. This was fed
+									     `peerReputation.count`, the RATING count, so a peer with
+									     9 reviews and no trades was announced as "9 trades" — a
+									     false statement, on the screen where you decide whether
+									     to trust a stranger with money. Hidden at 0, matching
+									     TradeRepCluster, so a brand-new peer's line stays tight
+									     instead of reading "0 trades". -->
+									<span class="flex-none whitespace-nowrap">
+										{$_('orderbook.card.trades_only', {
+											values: { count: formatCountCompact(peerReputation.trades) }
+										})}
+									</span>
+								{/if}
 								{#if peerReputation.score !== null}
 									<span
 										class="hidden flex-none items-center gap-1 font-semibold text-morphit-emerald sm:inline-flex"

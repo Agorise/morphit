@@ -12,7 +12,7 @@
  * silently stripped (defense-in-depth — verified below).
  */
 
-import { TreasurySource } from '../src/indexer/treasurySource';
+import { TreasurySource, type TreasurySourceEnvFallback } from '../src/indexer/treasurySource';
 
 let scenarios = 0;
 let failures = 0;
@@ -42,18 +42,25 @@ const VALID_BTC_ADDR_1 = 'bc1q' + 'a'.repeat(38);
 const VALID_BTC_ADDR_2 = 'bc1q' + 'b'.repeat(38);
 const VALID_XMR_ADDR = '4' + 'A'.repeat(94);
 
-const ENV_FALLBACK = {
+const ENV_FALLBACK: TreasurySourceEnvFallback = {
 	btcAddress: 'bc1q' + 'e'.repeat(38),
 	btcSatoshis: 416,
 	xmrAddress: '4' + 'E'.repeat(94),
-	xmrPiconero: '781250000'
+	xmrPiconero: '781250000',
+	// cp474 — REQUIRED since cp372 and absent here until now.  `resolveBlurt`
+	// gates on `this.env.blurtBase > 0`; with the field missing that read
+	// `undefined > 0` === false, so the env-fallback branch was unreachable in
+	// every scenario in this file.
+	blurtBase: 3
 };
 
-const EMPTY_ENV = {
+const EMPTY_ENV: TreasurySourceEnvFallback = {
 	btcAddress: '',
 	btcSatoshis: 0,
 	xmrAddress: '',
-	xmrPiconero: ''
+	xmrPiconero: '',
+	// cp474 — 0 is the "operator set nothing" sentinel resolveBlurt tests for.
+	blurtBase: 0
 };
 
 async function run(): Promise<void> {
@@ -171,11 +178,12 @@ async function run(): Promise<void> {
 	// disabled"; in Part 109 the verifier works fine (per-payment
 	// proofs from users; no operator-side viewkey required).
 	{
-		const partialEnv = {
+		const partialEnv: TreasurySourceEnvFallback = {
 			btcAddress: '',
 			btcSatoshis: 0,
 			xmrAddress: '',
-			xmrPiconero: ''
+			xmrPiconero: '',
+			blurtBase: 0 // cp474 — required since cp372
 		};
 		const db = new FakeDatabase([
 			{
@@ -207,15 +215,23 @@ async function run(): Promise<void> {
 			{ treasury: { btc: { address: VALID_BTC_ADDR_1, satoshis: 500 }, xmr: null } }
 		]);
 		const src = new TreasurySource(db as unknown as never, ENV_FALLBACK, 30_000, clock);
+		// cp474 — read the counter into a fresh local at each checkpoint. Comparing
+		// `db.queries` directly let TS narrow it to the literal `1` at the first
+		// guard and keep that narrowing across the awaits (it can't see
+		// `src.current()` mutate the fake), which made the final `!== 2` look
+		// like an impossible comparison.
 		await src.current();
-		if (db.queries !== 1) throw new Error(`first call queries=${db.queries}`);
+		const afterFirst = db.queries;
+		if (afterFirst !== 1) throw new Error(`first call queries=${afterFirst}`);
 		now += 10_000; // within TTL
 		await src.current();
-		if (db.queries !== 1) throw new Error(`cached call queried again, queries=${db.queries}`);
+		const afterCached = db.queries;
+		if (afterCached !== 1) throw new Error(`cached call queried again, queries=${afterCached}`);
 		now += 30_000; // past TTL
 		await src.current();
-		if (db.queries !== 2) {
-			throw new Error(`past-TTL call did not requery, queries=${db.queries}`);
+		const afterTtl = db.queries;
+		if (afterTtl !== 2) {
+			throw new Error(`past-TTL call did not requery, queries=${afterTtl}`);
 		}
 		console.log('  ✓ Part 109: cache TTL respected, requery after expiry');
 		scenarios++;
@@ -286,11 +302,12 @@ async function run(): Promise<void> {
 
 	// Case 10: env-only XMR with empty piconero → null.
 	{
-		const partialEnv = {
+		const partialEnv: TreasurySourceEnvFallback = {
 			btcAddress: '',
 			btcSatoshis: 0,
 			xmrAddress: VALID_XMR_ADDR,
-			xmrPiconero: ''
+			xmrPiconero: '',
+			blurtBase: 0 // cp474 — required since cp372
 		};
 		const db = new FakeDatabase([]);
 		const src = new TreasurySource(db as unknown as never, partialEnv);

@@ -341,7 +341,9 @@ const ADR_RANGE_RE =
 interface Scenario {
 	doc: string;
 	line: number;
-	kind: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G';
+	// cp474 — 'H' (ADR filename-range claims, cp131 MED-004) was wired into
+	// KIND_LABEL and the report loop but never added to this union.
+	kind: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H';
 	claim: string;
 	failure?: string;
 }

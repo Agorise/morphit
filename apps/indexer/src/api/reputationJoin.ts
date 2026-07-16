@@ -111,8 +111,20 @@ export const FEEDBACK_EXCLUSIONS_SQL = `	    WHERE fb.order_permlink IS NOT NULL
  *
  * A completion with NO named counterparty still credits the owner: there's no
  * pair to judge, so there's nothing to exclude.
+ *
+ * @param scopeAccountsSql optional SQL returning the ONLY accounts whose trades
+ *   need counting (e.g. `SELECT bidder FROM winning_bids`). Mirrors {@link
+ *   feedbackAggregateJoin}'s scope and exists for the same reason: the
+ *   orderbook lists many accounts and needs the whole aggregate, but the
+ *   featured strip returns at most three rows and is polled by every homepage
+ *   visitor, so counting every completed order on the instance there would be a
+ *   real cost for no benefit. Applied to the OUTER account, so it only ever
+ *   REMOVES accounts — it can never relax a sock-puppet exclusion or change the
+ *   count of an account it keeps.
  */
-export const TRADE_COUNT_SQL = `
+export function tradeCountSql(scopeAccountsSql?: string): string {
+	const scope = scopeAccountsSql ? `\n\t       AND t.account IN (${scopeAccountsSql})` : '';
+	return `
 	    SELECT t.account, COUNT(*)::int AS c
 	      FROM (
 	        SELECT o.account AS account, o.completed_counterparty AS peer
@@ -124,7 +136,7 @@ export const TRADE_COUNT_SQL = `
 	         WHERE o.status = 'completed'
 	           AND o.completed_counterparty IS NOT NULL
 	      ) t
-	     WHERE t.peer IS NULL
+	     WHERE (t.peer IS NULL
 	        OR (
 	             NOT EXISTS (
 	               SELECT 1 FROM suspicious_reciprocity sr
@@ -146,8 +158,13 @@ export const TRADE_COUNT_SQL = `
 	                WHERE tcx.account = t.account
 	                  AND tcx.dominant_peer = t.peer
 	             )
-	           )
+	           ))${scope}
 	     GROUP BY t.account`;
+}
+
+/** The unscoped whole-instance trade count. Kept as a named export because the
+ *  orderbook needs it for every listed account. */
+export const TRADE_COUNT_SQL = tradeCountSql();
 
 /**
  * The LEFT JOIN that attaches the sock-puppet-filtered, time-decayed feedback
@@ -211,26 +228,49 @@ ${FEEDBACK_EXCLUSIONS_SQL}${scope}
  *
  * @param orderAlias alias of the `orders` table in the caller's query.
  * @param alias alias to give this join (default `tc`).
+ * @param scopeAccountsSql optional restriction — see {@link tradeCountSql}.
  */
-export function tradeCountJoin(orderAlias = 'o', alias = 'tc'): string {
+export function tradeCountJoin(orderAlias = 'o', alias = 'tc', scopeAccountsSql?: string): string {
 	return `	 LEFT JOIN (
-${TRADE_COUNT_SQL}
+${tradeCountSql(scopeAccountsSql)}
 	 ) ${alias} ON ${alias}.account = ${orderAlias}.account`;
 }
 
 /**
- * The SELECT columns every order-card surface needs from {@link
- * feedbackAggregateJoin} plus a `LEFT JOIN accounts a ON a.name = <alias>.account`.
- * Keep in lockstep with `reputationFieldsFromRow`.
+ * The SELECT columns every order-card surface needs. The caller MUST supply all
+ * three joins these columns read:
+ *
+ *   {@link feedbackAggregateJoin}  → f.c, f.r, f.last_feedback_at
+ *   {@link tradeCountJoin}         → tc.c
+ *   {@link accountsJoin}           → a.first_trade_complete_at, a.posting_pubkey
+ *
+ * Keep in lockstep with {@link ReputationRow} and `reputationFieldsFromRow`.
+ *
+ * cp473 — `trade_count` and the trade-derived `is_new_trader` are emitted HERE
+ * rather than left to each caller. v1.5.5 re-pointed both at real completions
+ * (`tc.c`) on /v1/orderbook + /v1/orders/:account by hand-editing those two
+ * queries, but this shared helper still read the FEEDBACK proxy (`f.c`) — so
+ * the featured strip, its only caller, kept publishing the pre-v1.5.5
+ * semantics: no trade count at all, and a 🌱 sprout that meant "fewer than 4
+ * REVIEWS". Two surfaces, two meanings, one card component. Emitting the
+ * trade-shaped columns from the shared helper is what makes that unable to
+ * recur: a surface either uses this and gets the current semantics, or it does
+ * not compile.
  *
  * @param orderAlias alias of the `orders` table.
  * @param accountsAlias alias of the joined `accounts` table.
+ * @param tradeAlias alias given to {@link tradeCountJoin} (default `tc`).
  */
-export function reputationSelectColumns(orderAlias = 'o', accountsAlias = 'a'): string {
+export function reputationSelectColumns(
+	orderAlias = 'o',
+	accountsAlias = 'a',
+	tradeAlias = 'tc'
+): string {
 	return `COALESCE(f.c, 0)::int AS feedback_count,
 	       CASE WHEN f.r IS NOT NULL THEN f.r::text ELSE NULL END AS weighted_rating,
 	       f.last_feedback_at,
-	       (COALESCE(f.c, 0) < 4) AS is_new_trader,
+	       COALESCE(${tradeAlias}.c, 0)::int AS trade_count,
+	       (COALESCE(${tradeAlias}.c, 0) < 4) AS is_new_trader,
 	       ${accountsAlias}.first_trade_complete_at,
 	       ${accountsAlias}.posting_pubkey`;
 }
@@ -303,6 +343,10 @@ ${scope}
 /** Row shape produced by {@link reputationSelectColumns}. */
 export interface ReputationRow {
 	feedback_count: number;
+	/** v1.5.5 — COMPLETED trades (both sides credited), sock-puppet filtered.
+	 *  A DIFFERENT number from `feedback_count`: a trade nobody reviewed counts
+	 *  here and not there. */
+	trade_count: number;
 	weighted_rating: string | null;
 	last_feedback_at: Date | null;
 	is_new_trader: boolean;
@@ -317,6 +361,7 @@ export interface ReputationRow {
  */
 export function reputationFieldsFromRow(r: ReputationRow): {
 	feedback_count: number;
+	trade_count: number;
 	weighted_rating: number | null;
 	reputation_score: number | null;
 	is_new_trader: boolean;
@@ -326,6 +371,7 @@ export function reputationFieldsFromRow(r: ReputationRow): {
 	const weightedAvg = r.weighted_rating === null ? null : Number(r.weighted_rating);
 	return {
 		feedback_count: r.feedback_count,
+		trade_count: r.trade_count,
 		weighted_rating: weightedAvg,
 		reputation_score: computeReputationScore({
 			count: r.feedback_count,

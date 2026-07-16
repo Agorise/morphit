@@ -512,17 +512,46 @@
 		});
 	});
 
-	/** cp402 [5] — full date + time revealed on tap/click of a
-	 *  confirmed bubble (the persistent below-bubble timestamp was
-	 *  removed per Ken's chat batch). Uses the canonical Morphit
-	 *  formatter → "30 June, 2026 @ 8:52:42 PM": day-number,
-	 *  translated full month, comma, 4-digit year, @ localized time
-	 *  with seconds. Empty for pending / broadcast / failed messages
-	 *  (no on-chain createdAt yet). */
+	/** cp402 [5] — full date + time for a confirmed bubble (the persistent
+	 *  below-bubble timestamp was removed per Ken's chat batch). Uses the
+	 *  canonical Morphit formatter → "14 May, 2026 @ 05:03:22 UTC": day-number,
+	 *  translated full month, comma, 4-digit year, @ 24-hour UTC with seconds.
+	 *  Empty for pending / broadcast / failed messages (no on-chain createdAt
+	 *  yet).
+	 *
+	 *  cp474 — the example above used to read "@ 8:52:42 PM (localized time)".
+	 *  `formatDayMonthTime` emits 24-hour UTC and has for a while; the comment
+	 *  had simply drifted. Ordinary bubbles reveal this on tap; a Payment
+	 *  Receipt prints it on its face instead (see `timestampRevealable`). */
 	const fullTimestamp = $derived.by(() => {
 		if (message.state !== 'confirmed' || !message.createdAt) return '';
 		return formatDayMonthTime(message.createdAt);
 	});
+
+	/** cp474 (t.txt #8) — a Payment Receipt PRINTS its timestamp on the
+	 *  SENT/RECEIVED line, so it opts out of the tap-to-reveal popover the other
+	 *  bubbles use.
+	 *
+	 *  Ken: "when you mouseover anywhere on the payment receipt, that date/time
+	 *  alt text appears and it's annoying", and "the entire Payment Receipt
+	 *  bubble seems to be hyperlinked to nothing". Both are this one mechanism:
+	 *  the bubble carried `title={fullTimestamp}` (the native tooltip, which
+	 *  fires anywhere on the card and cannot be styled or dismissed) plus
+	 *  `cursor-pointer` + an onclick (which is what makes it LOOK like a link
+	 *  that goes nowhere — it only toggled a popover showing the very same
+	 *  timestamp).
+	 *
+	 *  A receipt is a document: the time it happened belongs printed on its face,
+	 *  not hidden behind a hover. Once it's on the face, the popover is a
+	 *  duplicate of information already on screen — so the honest fix is to drop
+	 *  the affordance here rather than keep a control whose only output is
+	 *  already visible.
+	 *
+	 *  Ordinary message bubbles keep the popover (cp402 [5]): their timestamp
+	 *  ISN'T printed anywhere, so tap-to-reveal is the only way to get it. */
+	const isReceipt = $derived(decoded?.kind === 'funds_sent');
+	/** The timestamp affordance applies only to bubbles that don't print it. */
+	const timestampRevealable = $derived(fullTimestamp !== '' && !isReceipt);
 
 	/** cp402 [5] — whether the tap-to-reveal timestamp popover is
 	 *  showing for this bubble. Toggled by tapping the bubble;
@@ -533,7 +562,8 @@
 	 *  interactive elements (address-pill Pay-now / Mark-sent
 	 *  buttons, the retry button, links) don't also toggle it. */
 	function onBubbleActivate(e: MouseEvent | KeyboardEvent): void {
-		if (fullTimestamp === '') return;
+		// cp474 — a receipt prints its own time; nothing to reveal.
+		if (!timestampRevealable) return;
 		const target = e.target as HTMLElement | null;
 		if (target?.closest('button, a, input, textarea, [role="button"]')) return;
 		showTimestamp = !showTimestamp;
@@ -626,7 +656,7 @@
 			class="w-fit break-words rounded-2xl px-3 py-2 text-sm font-medium"
 			class:self-end={isOutgoing}
 			class:self-start={!isOutgoing}
-			class:cursor-pointer={fullTimestamp !== ''}
+			class:cursor-pointer={timestampRevealable}
 			class:bg-morphit-emerald-bubble={isOutgoing && !isFailed}
 			class:text-ink-950={isOutgoing && !isFailed}
 			class:bg-ink-200={!isOutgoing && !isFailed}
@@ -640,7 +670,7 @@
 			class:text-red-900={isFailed}
 			class:dark:text-red-200={isFailed}
 			class:opacity-80={isSending}
-			title={fullTimestamp || undefined}
+			title={timestampRevealable ? fullTimestamp : undefined}
 			onclick={onBubbleActivate}
 			onkeydown={(e) => {
 				if (e.key === 'Enter' || e.key === ' ') {
@@ -712,8 +742,18 @@
 				{@const daiNetworkValid =
 					p.method === 'dai' && p.network !== undefined && isDaiNetwork(p.network)}
 				<div class="flex flex-col gap-2">
+					<!-- cp474 (t.txt #8) — Ken: 'change that text to say "BLURT
+					     SENT|RECEIVED on 14 May, 2026 @ 05:03:22 UTC" and remove that
+					     date/time from everywhere else on the Payment Receipt.'
+					     `formatDayMonthTime` already emits exactly that shape (the
+					     sitewide day-first / full-month / 24h-UTC-with-seconds standard),
+					     so this prints the canonical formatter's output rather than
+					     inventing a second date format on one card.
+					     `normal-case` on the timestamp: the row is `uppercase`, which would
+					     otherwise shout "14 MAY, 2026" — the month name is a word, not a
+					     label. -->
 					<div
-						class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider opacity-70"
+						class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs font-semibold uppercase tracking-wider opacity-70"
 					>
 						{#if p.method === 'btc'}
 							{$_('chat.address.pill_method_btc')}
@@ -1075,6 +1115,11 @@
 								? $_('chat.funds_sent.pill_title_blurt')
 								: $_('chat.funds_sent.pill_title_blurt_received')}
 						{/if}
+						{#if fullTimestamp !== ''}
+							<span class="font-normal normal-case tracking-normal">
+								{$_('chat.funds_sent.receipt_when', { values: { when: fullTimestamp } })}
+							</span>
+						{/if}
 					</div>
 					{#if p.amount}
 						<div class="font-mono text-lg font-bold leading-tight">{p.amount}</div>
@@ -1200,10 +1245,20 @@
 										     the Copy button beside it already uses — so it stays legible
 										     on every bubble variant instead of being pinned to one
 										     background. Underlined so it reads as a link without relying
-										     on colour, with a stronger hover per Ken. -->
+										     on colour, with a stronger hover per Ken.
+
+										     cp474 (t.txt #8) — Ken: "get rid of the underline that appears
+										     under the magnifying glass and its text ... only show that
+										     underline (as dots) when i mouseover". So: no underline at
+										     rest, a DOTTED one on hover/focus. The link is still
+										     discoverable without it — it's a magnifying glass next to the
+										     words "Verify on block explorer", inside a receipt, and it
+										     keeps its hover background + focus ring. Focus-visible gets the
+										     same dots as hover: a keyboard user has no pointer to reveal
+										     them with, and the ring alone shouldn't be the only signal. -->
 									<a
 										href={lp(verifyPath)}
-										class="-mx-1 inline-flex w-fit items-center gap-1 rounded px-1 py-0.5 text-xs font-semibold text-current underline decoration-current/40 underline-offset-2 opacity-90 transition-all hover:bg-current/10 hover:opacity-100 hover:decoration-current focus:outline-none focus-visible:ring-2 focus-visible:ring-current"
+										class="-mx-1 inline-flex w-fit items-center gap-1 rounded px-1 py-0.5 text-xs font-semibold text-current no-underline decoration-current decoration-dotted underline-offset-2 opacity-90 transition-all hover:bg-current/10 hover:underline hover:opacity-100 focus:outline-none focus-visible:underline focus-visible:ring-2 focus-visible:ring-current"
 									>
 										<span aria-hidden="true">🔎</span>
 										{$_('chat.funds_sent.verify_independently')}

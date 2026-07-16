@@ -44,6 +44,7 @@ import {
 	feedbackAggregateJoin,
 	accountsJoin,
 	engagementJoin,
+	tradeCountJoin,
 	reputationSelectColumns,
 	reputationFieldsFromRow,
 	type ReputationRow
@@ -53,7 +54,15 @@ import {
  *  slots. Keeps the feature scarce and visually manageable. */
 const MAX_SLOTS = 3;
 
-interface FeaturedRow extends ReputationRow {
+/**
+ * One joined featured row. EXPORTED (cp473) so the unit test's fixture can be
+ * typed against it: the fixture was an untyped object literal, so a column
+ * added to the query was simply absent from the fixture, `reputationFieldsFromRow`
+ * mapped it to `undefined`, and `JSON.stringify` dropped the key — the endpoint
+ * silently stopped emitting a field while the test stayed green. That is exactly
+ * how `trade_count` went missing here.
+ */
+export interface FeaturedRow extends ReputationRow {
 	// Order columns (subset matching /v1/orderbook list shape)
 	account: string;
 	permlink: string;
@@ -136,6 +145,7 @@ export function featuredRoute(db: Database, operatorAccount: string): Hono {
 			  ON o.account = w.bidder
 			 AND o.permlink = w.order_permlink
 			${feedbackAggregateJoin('o', 'SELECT bidder FROM winning_bids')}
+			${tradeCountJoin('o', 'tc', 'SELECT bidder FROM winning_bids')}
 			${engagementJoin('o', 'SELECT bidder FROM winning_bids')}
 			${accountsJoin('o', 'a')}
 			WHERE o.status = 'live'

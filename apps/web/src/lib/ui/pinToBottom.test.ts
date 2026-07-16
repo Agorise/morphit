@@ -51,6 +51,77 @@ describe('pinToBottom', () => {
 		expect(el.scrollTop).toBe(1000); // left alone
 	});
 
+	// ─── cp474 (t.txt #7) ─────────────────────────────────────────
+	//
+	// Ken: "it STILL does not always scroll ... so that i can see the last, most
+	// recent message." The settle window used to be a fixed wall-clock deadline,
+	// which is a guess about how slow the slowest asset is. Anything that lays out
+	// after it — a web-font swap, the Payment Receipt bubble, a decrypted body —
+	// grew the list ABOVE the viewport with no re-pin left to correct it.
+	it('keeps pinning through growth that arrives LATE, past the old deadline', () => {
+		const raf = installRaf();
+		let t = 0;
+		const el = fakeEl(1000);
+		pinToBottom(el, { now: () => t, settleMs: 100, maxMs: 10_000 });
+
+		// Content keeps trickling in, each burst further out than the last.
+		for (const [at, height] of [
+			[50, 1500],
+			[120, 2200], // past a 100ms FIXED deadline — the old code had let go here
+			[400, 3000],
+			[900, 4200] // a slow web font finally swaps
+		] as const) {
+			t = at;
+			(el as { scrollHeight: number }).scrollHeight = height;
+			raf.flush(1);
+			expect(el.scrollTop).toBe(height);
+		}
+	});
+
+	it('lets go once the content has been STABLE for the settle window', () => {
+		const raf = installRaf();
+		let t = 0;
+		const el = fakeEl(1000);
+		pinToBottom(el, { now: () => t, settleMs: 100, maxMs: 10_000 });
+
+		// Grows at t=50, so the quiet period restarts there.
+		t = 50;
+		(el as { scrollHeight: number }).scrollHeight = 2000;
+		raf.flush(1);
+		expect(el.scrollTop).toBe(2000);
+
+		// Quiet from 50 → 151 is longer than settleMs: we let go.
+		t = 151;
+		raf.flush(1);
+		t = 200;
+		(el as { scrollHeight: number }).scrollHeight = 9000;
+		raf.flush(3);
+		expect(el.scrollTop).toBe(2000); // left alone — the user owns it now
+	});
+
+	it('is bounded by maxMs even if the content never stops growing', () => {
+		const raf = installRaf();
+		let t = 0;
+		const el = fakeEl(1000);
+		pinToBottom(el, { now: () => t, settleMs: 100, maxMs: 500 });
+
+		// A pathological page that grows on every single frame must not let us pin
+		// forever — that would be a page fighting its own user.
+		for (const at of [100, 200, 300, 400]) {
+			t = at;
+			(el as { scrollHeight: number }).scrollHeight += 100;
+			raf.flush(1);
+		}
+		t = 600; // past maxMs
+		raf.flush(1);
+		const settled = el.scrollTop;
+
+		t = 700;
+		(el as { scrollHeight: number }).scrollHeight += 5000;
+		raf.flush(3);
+		expect(el.scrollTop).toBe(settled);
+	});
+
 	it('cancel() stops it dead — never fight a user who scrolled', () => {
 		const raf = installRaf();
 		const el = fakeEl(1000);

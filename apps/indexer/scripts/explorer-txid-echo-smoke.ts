@@ -111,6 +111,9 @@ function btcClaim(): FeeClaim {
 		feeMethod: 'btc',
 		expectedAmount: 2_500,
 		externalTxId: VALID_TXID,
+		// cp474 — REQUIRED by FeeClaim; `undefined` is not `null`, and the
+		// Monero verifier discriminates on `txProof === null`.
+		txProof: null,
 		permlink: 'my-order-01',
 		signer: 'alice'
 	};
@@ -166,7 +169,9 @@ async function run(): Promise<void> {
 				feeAddress: BTC_FEE_ADDRESS,
 				explorerUrls: ['https://example-explorer.test/api'],
 				minConfirmations: 1,
-				requestTimeoutMs: 1000
+				requestTimeoutMs: 1000,
+				// cp474 — Part 109 quorum gate; required by the config type.
+				minSuccessfulResponses: 1
 			},
 			btcFetch(VALID_TXID)
 		);
@@ -185,7 +190,9 @@ async function run(): Promise<void> {
 				feeAddress: BTC_FEE_ADDRESS,
 				explorerUrls: ['https://example-explorer.test/api'],
 				minConfirmations: 1,
-				requestTimeoutMs: 1000
+				requestTimeoutMs: 1000,
+				// cp474 — Part 109 quorum gate; required by the config type.
+				minSuccessfulResponses: 1
 			},
 			btcFetch(WRONG_TXID)
 		);
@@ -207,7 +214,9 @@ async function run(): Promise<void> {
 				feeAddress: BTC_FEE_ADDRESS,
 				explorerUrls: ['https://example-explorer.test/api'],
 				minConfirmations: 1,
-				requestTimeoutMs: 1000
+				requestTimeoutMs: 1000,
+				// cp474 — Part 109 quorum gate; required by the config type.
+				minSuccessfulResponses: 1
 			},
 			btcFetch(VALID_TXID.toUpperCase())
 		);
@@ -226,7 +235,9 @@ async function run(): Promise<void> {
 				feeAddress: XMR_FEE_ADDRESS,
 				explorerUrls: ['https://example-explorer.test'],
 				minConfirmations: 1,
-				requestTimeoutMs: 1000
+				requestTimeoutMs: 1000,
+				// cp474 — Part 109 quorum gate; required by the config type.
+				minSuccessfulResponses: 1
 			},
 			xmrFetch(VALID_TXID)
 		);
@@ -245,7 +256,9 @@ async function run(): Promise<void> {
 				feeAddress: XMR_FEE_ADDRESS,
 				explorerUrls: ['https://example-explorer.test'],
 				minConfirmations: 1,
-				requestTimeoutMs: 1000
+				requestTimeoutMs: 1000,
+				// cp474 — Part 109 quorum gate; required by the config type.
+				minSuccessfulResponses: 1
 			},
 			xmrFetch(WRONG_TXID)
 		);
@@ -269,7 +282,9 @@ async function run(): Promise<void> {
 				feeAddress: XMR_FEE_ADDRESS,
 				explorerUrls: ['https://example-explorer.test'],
 				minConfirmations: 1,
-				requestTimeoutMs: 1000
+				requestTimeoutMs: 1000,
+				// cp474 — Part 109 quorum gate; required by the config type.
+				minSuccessfulResponses: 1
 			},
 			xmrFetch(undefined)
 		);

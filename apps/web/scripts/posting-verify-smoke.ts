@@ -18,8 +18,8 @@
  *   - multisig-style authorities (multiple keys, our user owns one)
  */
 
-import { verifyPostingKey } from '../../web/src/lib/crypto/postingVerify.ts';
-import type { BlurtAccount } from '../../web/src/lib/blurt/client.ts';
+import { verifyPostingKey } from '../src/lib/crypto/postingVerify.ts';
+import type { BlurtAccount } from '../src/lib/blurt/client.ts';
 
 let failures = 0;
 let scenarios = 0;

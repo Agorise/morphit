@@ -91,9 +91,7 @@ if (!feEth) {
 	pass('frontend registry contains eth entry');
 	if (feEth.canBeTraded === true) pass('frontend eth.canBeTraded === true');
 	else fail('frontend eth.canBeTraded === true', `actual: ${feEth.canBeTraded}`);
-	// @ts-expect-error
 	if (feEth.canBeUsedForListingFee === false) pass('frontend eth.canBeUsedForListingFee === false (memory #23)');
-	// @ts-expect-error
 	else fail('frontend eth.canBeUsedForListingFee === false', `actual: ${feEth.canBeUsedForListingFee}`);
 	if (feEth.decimals === 18) pass('frontend eth.decimals === 18');
 	else fail('frontend eth.decimals === 18', `actual: ${feEth.decimals}`);

@@ -327,6 +327,11 @@ describe('healthRoute — explorer diagnostics reflect EndpointPool state', () =
 			consecutiveFailures: 0,
 			cooldownUntil: 0,
 			lastSuccessAt: 0,
+			// cp474 — the RPS pacer's per-endpoint cursor. The health endpoint
+			// projects named fields rather than spreading EndpointState, so this
+			// never reaches the wire; it's here because the factory is TYPED, which
+			// is what made tsc flag the new field rather than let it drift.
+			nextAllowedAt: 0,
 			...overrides
 		};
 	}

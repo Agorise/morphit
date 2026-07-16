@@ -39,12 +39,34 @@ export function peerCryptoSide(rawOrderSide: string, orderIsMine: boolean): Cryp
  *  are hidden. With a live order, exactly one shows, per peerCryptoSide():
  *  peer BUYS ⇒ I send crypto ⇒ Pay now; peer SELLS ⇒ I receive crypto ⇒ Share
  *  address. The physical mailing/shipment controls layer on top of these
- *  (see ConversationView.orderCanShip). */
+ *  (see ConversationView.orderCanShip).
+ *
+ *  cp474 (t.txt #6) — "no longer live" now actually means it.
+ *
+ *  This function used to test `if (!order)` and nothing else, so "no longer
+ *  live" only held for a chat with no order AT ALL. But the chat resolves its
+ *  order from `getOrdersByAccount`, which returns the account's orders
+ *  whatever their state — that is how the RE: line can show "(Cancelled)". So
+ *  a COMPLETED order still arrived here as a perfectly good `{side}` and lit
+ *  the button row. Ken hit it on a fulfilled BLURT trade where both parties
+ *  already held a Payment Receipt: the chat was still offering "Pay now" for a
+ *  trade that was paid and closed — an invitation to pay twice.
+ *
+ *  The gate is a DENYLIST of dead states, not an allowlist of `=== 'live'`,
+ *  because `status` is OPTIONAL on OrderRecord: a federated peer running an
+ *  older indexer omits it, and an allowlist would silently strip the buttons
+ *  from every chat against those instances. An unknown/absent status keeps
+ *  today's behaviour; only a state we positively know is finished hides them. */
+const DEAD_ORDER_STATES: ReadonlySet<string> = new Set(['completed', 'cancelled', 'expired']);
+
 export function chatMoneyFlow(
-	order: { side: string } | null,
+	order: { side: string; status?: string } | null,
 	orderIsMine: boolean
 ): { payNow: boolean; shareAddress: boolean } {
 	if (!order) return { payNow: false, shareAddress: false };
+	if (order.status !== undefined && DEAD_ORDER_STATES.has(order.status)) {
+		return { payNow: false, shareAddress: false };
+	}
 	const side = peerCryptoSide(order.side, orderIsMine);
 	return { payNow: side === 'buy', shareAddress: side === 'sell' };
 }

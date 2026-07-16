@@ -327,6 +327,46 @@ export function startChatUnreadChannel(): () => void {
 	// last_message_at (the ~60s dark badge Ken reported on kentest3's other
 	// tab).
 	const unsubFastPush = subscribeFastPush((peer, order) => {
+		// cp474 (t.txt #3 + #4) — a push for an ARCHIVED thread used to light
+		// nothing for ~60s, and this is why.
+		//
+		// `noteFastChatPush` files the thread in `fastPending`, but `recount()`
+		// then runs it through `badgeEligible`, which ends in `!isArchived(...)`
+		// — so an archived thread's push was counted, judged, and dropped. The
+		// badge could only light once the MAIN indexer wrote `chat_messages`
+		// (~60s), `poll()` read a fresh `last_message_at`, and the resurrect below
+		// finally un-archived the thread. That single dependency produced BOTH of
+		// Ken's symptoms at once: the ~1-minute dark badge, and the new message
+		// sitting in Archived instead of moving to the Inbox.
+		//
+		// The eligibility check itself is right and stays (cp452: a badge that
+		// outruns the visible cards nags about threads the inbox won't show). The
+		// error was treating "archived" as a reason to stay silent, when a message
+		// arriving after you archived a thread is precisely the Gmail-style
+		// new-activity signal that should un-archive it. The push IS that signal —
+		// it fires only for a genuinely new message for this account — so resurrect
+		// on the push rather than waiting for the indexer to publish the same fact
+		// a minute later.
+		//
+		// Resurrect FIRST, then note: un-archiving sets the folder store, whose
+		// existing subscription recounts, and `noteFastChatPush`'s own recount then
+		// sees a thread that is both eligible and fast-pending. Both land inside the
+		// push's own ~6s latency, and both happen wherever the user is standing —
+		// this is an AMBIENT channel, not the chat page's.
+		//
+		// Wall-clock is the honest activity time here: the push carries no message
+		// timestamp, and it means "a message just landed", so now ≈ message time to
+		// within the push latency. `resurrectArchivedOnNewActivity` only acts when
+		// the activity POSTDATES the archive, so a thread archived after its last
+		// message still stays put — the property that keeps the Archived tab from
+		// dumping itself into the Inbox.
+		//
+		// Starred threads are deliberately NOT touched: folders are exclusive, so
+		// moving one to the Inbox would silently destroy the star the user chose.
+		// They already badge correctly — `badgeEligible` excludes only archived.
+		resurrectArchivedOnNewActivity([
+			{ peer, orderPermlink: order, lastMessageAt: new Date().toISOString() }
+		]);
 		noteFastChatPush(peer, order);
 	});
 

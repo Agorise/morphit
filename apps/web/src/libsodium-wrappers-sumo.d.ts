@@ -82,6 +82,31 @@ declare module 'libsodium-wrappers-sumo' {
 		crypto_scalarmult_base(secretKey: Uint8Array): Uint8Array;
 		crypto_scalarmult(secretKey: Uint8Array, publicKey: Uint8Array): Uint8Array;
 
+		// ── Ed25519 detached signatures ─────────────────────────
+		//
+		// cp474 — added the moment `scripts/**` became typechecked, which is
+		// exactly the trigger this file's header describes.  Used by
+		// `desktop-pairing-crypto-smoke.ts` to stand in for a real Blurt posting
+		// key when exercising the pairing-bundle sign/verify round trip: it needs
+		// SOME Ed25519 keypair, and sodium is already a dependency.  No
+		// apps/web/src module calls these — Blurt signing is secp256k1 via
+		// @noble/secp256k1, not Ed25519 — so this surface is test-only today.
+		/** Derive a deterministic Ed25519 keypair from a 32-byte seed. */
+		crypto_sign_seed_keypair(seed: Uint8Array): {
+			publicKey: Uint8Array;
+			privateKey: Uint8Array;
+			keyType: string;
+		};
+		/** Sign a message, returning the 64-byte detached signature. */
+		crypto_sign_detached(message: Uint8Array | string, privateKey: Uint8Array): Uint8Array;
+		/** Verify a detached signature.  Throws on malformed input rather than
+		 *  returning false, so callers wrap it in try/catch. */
+		crypto_sign_verify_detached(
+			signature: Uint8Array,
+			message: Uint8Array | string,
+			publicKey: Uint8Array
+		): boolean;
+
 		// ── secretbox (XSalsa20-Poly1305) ───────────────────────
 		crypto_secretbox_easy(
 			message: Uint8Array | string,

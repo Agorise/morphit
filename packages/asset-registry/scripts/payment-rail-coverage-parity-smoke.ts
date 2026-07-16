@@ -54,7 +54,15 @@ if (missing.length === 0 && extra.length === 0) {
 // Also assert tradable-vs-frontend parity
 const frontTickers = new Set(FRONTEND.filter((a) => a.canBeTraded).map((a) => a.ticker));
 const canonLower = new Set([...tradableTickers]);
-const drift = [...canonLower].filter((t) => !frontTickers.has(t)).concat([...frontTickers].filter((t) => !canonLower.has(t)));
+// cp474 — compare the two registries as plain strings.  They're typed with
+// different unions (canonical AssetTicker vs the frontend's ChatAssetTicker),
+// so a direct `.has()` across them is a type error; widening at the comparison
+// is the honest expression of "same set of tickers, different type homes".
+const frontStr = new Set<string>([...frontTickers].map(String));
+const canonStr = new Set<string>([...canonLower].map(String));
+const drift = [...canonStr]
+	.filter((t) => !frontStr.has(t))
+	.concat([...frontStr].filter((t) => !canonStr.has(t)));
 if (drift.length === 0) {
 	console.log(`  ✓ Canonical canBeTraded set == Frontend canBeTraded set`);
 	passed++;

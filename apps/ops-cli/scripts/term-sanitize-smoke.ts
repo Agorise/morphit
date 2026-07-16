@@ -54,6 +54,10 @@ initColor({
 	databaseUrl: '',
 	relayAccount: '',
 	feesAccount: '',
+	// cp474 — both REQUIRED by Config and absent until now. `initColor` only
+	// reads `.color`, so nothing broke, but the literal stopped being a Config.
+	officialAccount: '',
+	operatorAccount: '',
 	signupDailyCeiling: 0,
 	thresholds: {
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any

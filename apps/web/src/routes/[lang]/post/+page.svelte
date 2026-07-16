@@ -214,6 +214,34 @@
 	// t.txt (v1.4.9 #2) — the markdown-guide modal for the Terms field.
 	let mdGuideOpen = $state(false);
 
+	/** cp474 (t.txt #11) — whether the markdown-icon's hover tooltip is showing.
+	 *
+	 *  THE BUG. Ken: "when i am typing in the Terms/details textarea, and I
+	 *  accidentally mouseover the markdown icon, the tooltip won't disappear when
+	 *  I stop mousing over the markdown icon."
+	 *
+	 *  It was a pure-CSS `group-hover:block` tooltip, so the ONLY thing that could
+	 *  dismiss it was the pointer physically moving off the icon. That is a bad
+	 *  bargain for this particular tooltip, because it is absolutely positioned
+	 *  BELOW a 16px icon that sits directly above the Terms textarea — so it
+	 *  covers the very field you are typing into. And while you type, browsers
+	 *  hide the mouse cursor and do not re-evaluate `:hover` until the pointer
+	 *  actually moves: a tooltip that opened as your hand left the mouse just sits
+	 *  there over your text, with no mouseleave coming, until you jiggle the mouse.
+	 *
+	 *  So the tooltip is state-driven now, and TYPING dismisses it — the one
+	 *  signal that unambiguously means "I'm using the field, not the icon".
+	 *  Pointer and keyboard entry still open it; leaving/blurring still closes it. */
+	let mdTipOpen = $state(false);
+
+	// Typing in Terms dismisses the tooltip. `terms` is bound to the textarea, so
+	// it changes on every keystroke — no new prop on the shared ProtectedTextarea.
+	// Re-arms on the next deliberate hover/focus of the icon.
+	$effect(() => {
+		void terms;
+		mdTipOpen = false;
+	});
+
 	// cp372 — animated "typewriter" placeholder for the Terms field.
 	// A deliberately MULTI-LINGUAL, UNTRANSLATED set of example terms:
 	// seeing real-world notes in several languages cycle through tells
@@ -3174,15 +3202,32 @@
 					<span class="mb-1 flex items-center justify-between gap-2 text-sm font-semibold">
 					<span>{$_('post_order.form.terms_label')}</span>
 					<!-- t.txt #2 — subdued markdown-guide icon over the field's top-right
-					     corner. `group` drives the two-line hover tooltip; preventDefault
-					     stops the wrapping <label> from stealing focus to the textarea. -->
+					     corner. preventDefault stops the wrapping <label> from stealing
+					     focus to the textarea.
+					     cp474 (t.txt #11) — the tooltip is state-driven, not
+					     `group-hover:block`. CSS hover could only be undone by moving the
+					     pointer, and this tooltip covers the textarea it sits above, so
+					     while you typed it just sat there over your text (browsers hide
+					     the cursor and don't re-evaluate :hover until the pointer moves).
+					     Typing now dismisses it — see `mdTipOpen`. Pointer AND keyboard
+					     both open it; Escape closes it without moving the mouse. -->
 					<button
 						type="button"
-						class="group relative inline-flex text-ink-400 transition-colors hover:text-morphit-emerald focus:outline-none focus-visible:text-morphit-emerald"
+						class="relative inline-flex text-ink-400 transition-colors hover:text-morphit-emerald focus:outline-none focus-visible:text-morphit-emerald"
 						aria-label={$_('post_order.terms_md_guide.tooltip_title') as string}
+						onmouseenter={() => (mdTipOpen = true)}
+						onmouseleave={() => (mdTipOpen = false)}
+						onfocus={() => (mdTipOpen = true)}
+						onblur={() => (mdTipOpen = false)}
+						onkeydown={(e) => {
+							if (e.key === 'Escape') mdTipOpen = false;
+						}}
 						onclick={(e) => {
 							e.preventDefault();
 							e.stopPropagation();
+							// The modal supersedes the tooltip — leaving it up would strand it
+							// behind the dialog with no pointer left to un-hover it.
+							mdTipOpen = false;
 							mdGuideOpen = true;
 						}}
 					>
@@ -3201,8 +3246,9 @@
 								d="M30 98V30h20l20 25 20-25h20v68H90V59L70 84 50 59v39zm132 0-30-33h20V30h20v35h20z"
 							/>
 						</svg>
+						{#if mdTipOpen}
 						<span
-							class="pointer-events-none absolute end-0 top-6 z-10 hidden w-56 rounded-lg bg-ink-900 p-2 text-start text-xs font-normal text-white shadow-lg group-hover:block dark:bg-ink-700"
+							class="pointer-events-none absolute end-0 top-6 z-10 block w-56 rounded-lg bg-ink-900 p-2 text-start text-xs font-normal text-white shadow-lg dark:bg-ink-700"
 							role="tooltip"
 						>
 							<span class="block font-semibold"
@@ -3212,6 +3258,7 @@
 								>{$_('post_order.terms_md_guide.tooltip_body')}</span
 							>
 						</span>
+						{/if}
 					</button>
 				</span>
 					<ProtectedTextarea

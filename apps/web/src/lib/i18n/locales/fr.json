@@ -629,7 +629,8 @@
       "pill_title_eth": "ETH envoyé",
       "pill_title_xrp": "XRP envoyé",
       "pill_title_blurt_received": "Blurt reçu",
-      "receipt_title": "Reçu de paiement"
+      "receipt_title": "Reçu de paiement",
+      "receipt_when": "le {when}"
     },
     "unknown_version": "Ce message utilise un protocole plus récent. Mettez à jour Morphit pour le lire.",
     "pay_blurt": {
