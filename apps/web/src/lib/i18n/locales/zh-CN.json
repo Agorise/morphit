@@ -629,7 +629,8 @@
       "pill_title_eth": "ETH 已发送",
       "pill_title_xrp": "XRP 已发送",
       "pill_title_blurt_received": "已收到 Blurt",
-      "receipt_title": "付款收据"
+      "receipt_title": "付款收据",
+      "receipt_when": "于 {when}"
     },
     "unknown_version": "此消息使用较新的协议。请更新 Morphit 以读取。",
     "pay_blurt": {

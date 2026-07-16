@@ -80,7 +80,12 @@ function blurtSignNoble(digest32: Uint8Array, priv: Uint8Array): Buffer {
 			opts.extraEntropy = e;
 		}
 		const sig = secp.sign(digest32, priv, opts);
-		const compact = sig.toBytes('compact');
+		// cp474 — @noble/secp256k1 v2's `Signature.toBytes()` takes NO arguments;
+	// the 'compact' we used to pass was silently ignored. It already returns the
+	// 64-byte compact (r || s) form (it's the inverse of `fromBytes`, and
+	// `toCompactRawBytes()` is its explicit alias), so behaviour is unchanged —
+	// but the call now says what it actually does.
+	const compact = sig.toBytes();
 		const r = compact.slice(0, 32);
 		const s = compact.slice(32, 64);
 		if ((r[0] & 0x80) !== 0 || (s[0] & 0x80) !== 0) continue; // not canonical (high-R/high-S) — retry

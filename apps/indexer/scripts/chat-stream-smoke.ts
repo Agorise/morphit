@@ -139,6 +139,11 @@ function makeRow(overrides: Partial<ChatStreamRow> = {}): ChatStreamRow {
 		ciphertext: 'opaque-base64-blob',
 		header: { client_tag: 'abc123', ephemeral_pub: 'xyz', nonce: '789' },
 		created_at: new Date('2026-04-27T12:00:00Z'),
+		// cp474 — both REQUIRED by ChatStreamRow and previously absent, so every
+		// makeRow() built a shape the SQL never returns and `rowToWire`'s copy of
+		// them was asserted by nothing.
+		source_trx_id: 'aabbccdd11223344556677889900aabbccddeeff',
+		order_permlink: null,
 		...overrides
 	};
 }
@@ -146,6 +151,46 @@ function makeRow(overrides: Partial<ChatStreamRow> = {}): ChatStreamRow {
 scenario('rowToWire: created_at becomes ISO string', () => {
 	const w = rowToWire(makeRow());
 	assertEqual(w.created_at, '2026-04-27T12:00:00.000Z', 'iso');
+});
+
+// ─── cp474 drift guard ───────────────────────────────────────────
+//
+// cp470 fixed a HIGH bug: `rowToWire` simply wasn't copying
+// `order_permlink`, so every SSE event (snapshot, fast-path provisional AND
+// durable bus push) went out with an implicit `null` tag.  The client threads
+// by (peer, order) and drops live messages whose tag doesn't match the open
+// thread, so messages in an ORDER thread vanished until the REST fallback poll
+// re-fetched them a main-indexer lag later — the ~60s "fast chat is broken"
+// symptom.  That fix shipped with NO smoke guarding it: the fixture omitted the
+// field entirely, so nothing could have caught its removal.
+//
+// A hand-written per-field assertion would only guard the fields someone
+// remembered.  This walks the row instead: because `makeRow` is typed
+// `ChatStreamRow` and the suite is now typechecked, any field ADDED to
+// ChatStreamRow must appear in the fixture, and this scenario then forces
+// `rowToWire` to carry it to the wire.  Dropping a field can't pass again.
+scenario('rowToWire: every ChatStreamRow field reaches the wire (drift guard)', () => {
+	const row = makeRow({ order_permlink: 'sell-btc-eur-2026-04' });
+	const w = rowToWire(row) as Record<string, unknown>;
+	const dropped = Object.keys(row).filter((k) => !(k in w));
+	if (dropped.length > 0) {
+		throw new Error(
+			`rowToWire dropped field(s) the client needs: ${dropped.join(', ')} — ` +
+				'see cp470 (order_permlink omission = ~60s fast-chat outage)'
+		);
+	}
+	// Value fidelity for the two the cp470 bug actually hit. `created_at` is
+	// deliberately transformed to an ISO string and is covered above.
+	assertEqual(w.order_permlink, 'sell-btc-eur-2026-04', 'order_permlink tag copied');
+	assertEqual(w.source_trx_id, row.source_trx_id, 'source_trx_id copied');
+});
+
+scenario('rowToWire: a general (order-less) thread keeps a null tag', () => {
+	// The null case is the one that masked the cp470 bug — general threads were
+	// unaffected because their tag is genuinely null, so the bug only showed up
+	// in order threads.  Pin both.
+	const w = rowToWire(makeRow({ order_permlink: null }));
+	assertEqual(w.order_permlink, null, 'null tag preserved, not undefined');
 });
 
 scenario('rowToWire: header passes through unchanged', () => {

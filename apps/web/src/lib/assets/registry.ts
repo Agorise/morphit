@@ -303,8 +303,23 @@ const validateXrp: AddressValidator = (s) => XRP_RE.test(s);
 /** The full registry, ordered for display purposes (Monero
  *  first per the project's audience-priority statement;
  *  Bitcoin second; BLURT last because it's the chain-of-record,
- *  not the typical traded asset). */
-export const ASSETS: ReadonlyArray<AssetMetadata> = [
+ *  not the typical traded asset).
+ *
+ *  cp474 — the literal below is `as const`, which is a COMPILE-time
+ *  claim only: it vanishes at runtime, so anything holding a
+ *  reference could rewrite an entry in place.  This registry ships
+ *  to the BROWSER and carries `addressShape` (the regex behind
+ *  inline address-typo detection) and the display tickers users
+ *  read before sending funds, so a mutated entry is a
+ *  user-visible integrity problem, not just a tidiness one.  The
+ *  sibling `@morphit/asset-registry` freezes for exactly this
+ *  reason ("an escape hatch can't corrupt the registry's
+ *  invariants"); this copy had simply never been given the same
+ *  treatment.  Freeze the array AND each entry.  Nothing mutates
+ *  ASSETS in place (`ReadonlyArray` denies push/sort at compile
+ *  time, and callers already spread-then-sort), so this is
+ *  enforcement of an existing contract, not a behaviour change. */
+const ASSETS_SOURCE: ReadonlyArray<AssetMetadata> = [
 	{
 		ticker: 'xmr',
 		displayTicker: 'XMR',
@@ -803,6 +818,10 @@ export const ASSETS: ReadonlyArray<AssetMetadata> = [
 		privacyWarningKey: null
 	}
 ] as const;
+
+export const ASSETS: ReadonlyArray<AssetMetadata> = Object.freeze(
+	ASSETS_SOURCE.map((a) => Object.freeze(a))
+);
 
 const BY_TICKER: Readonly<Record<ChatAssetTicker, AssetMetadata>> = Object.freeze(
 	ASSETS.reduce(

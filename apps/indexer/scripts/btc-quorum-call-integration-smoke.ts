@@ -23,7 +23,7 @@
  */
 
 import { createServer, type Server } from 'node:http';
-import { AddressInfo } from 'node:net';
+import type { AddressInfo } from 'node:net';
 import { BitcoinExplorerFeeVerifier } from '$indexer/fee/bitcoinExplorerVerifier';
 import type { FeeClaim } from '$indexer/fee/verifier';
 

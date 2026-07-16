@@ -224,14 +224,17 @@ export interface OrderRecord {
 	 *  ratings count (`feedback_count`), which says how many RATINGS back the
 	 *  star average; a trade with no stars counts here and not there.
 	 *
-	 *  Returned by BOTH the orderbook and the owner-view /v1/orders/:account,
-	 *  so an order card renders "1 trade · ★5.00 (34)" identically wherever it
-	 *  appears. Also drives `is_new_trader`, the `min_trades` filter and
-	 *  `sort=trades` — all three used the feedback count as a stand-in before
-	 *  v1.5.5, because no trade data existed. Optional/absent from older
-	 *  indexers. */
+	 *  Returned by EVERY surface that feeds an order card — /v1/orderbook, its
+	 *  SSE stream, /v1/orderbook/featured and the owner-view
+	 *  /v1/orders/:account — so a card renders "1 trade · ★5.00 (34)"
+	 *  identically wherever it appears, and does not change meaning when the
+	 *  live stream replaces a polled row. Also drives `is_new_trader`, the
+	 *  `min_trades` filter and `sort=trades` — all three used the feedback
+	 *  count as a stand-in before v1.5.5, because no trade data existed.
+	 *  Optional/absent from older indexers. */
 	readonly trade_count?: number;
-	/** v1.5.5: now `trade_count < 4` (was: fewer than 4 reviews). */
+	/** v1.5.5: now `trade_count < 4` (was: fewer than 4 reviews). Consistent
+	 *  across all four card surfaces since cp473. */
 	readonly is_new_trader?: boolean;
 	/** Number of distinct accounts who have messaged this order's
 	 *  owner about THIS order in the last 24h.  Drives a "💬 N
@@ -700,9 +703,17 @@ export interface ReputationReceiptResponse {
 	readonly decay_half_life_days: number; // canonical: 365
 	readonly formula: string; // human-readable formula description
 	readonly summary: {
+		/** ALL rating rows about this subject, INCLUDING ones this endpoint
+		 *  excluded as fraud. It exists for the audit trail — do not use it as
+		 *  a trust signal (see `trade_count`). */
 		readonly count_total: number;
 		readonly count_included: number;
 		readonly count_excluded: number;
+		/** cp473 — COMPLETED TRADES (both parties credited, sock-puppet-pair
+		 *  filtered). What the 🌱 new-trader sprout keys off since v1.5.5,
+		 *  matching every order-card surface. Optional/absent from older
+		 *  indexers; treat absent as 0. */
+		readonly trade_count?: number;
 		readonly weight_sum: number;
 		readonly weighted_rating: number | null;
 		// Composite reputation score + factor breakdown (cp404) — the

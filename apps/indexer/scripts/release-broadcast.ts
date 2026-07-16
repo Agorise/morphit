@@ -72,7 +72,11 @@ try {
 } catch (e) {
 	die(`cannot read ${fileArg}: ${errMsg(e)}`);
 }
-let op;
+// cp474 — annotate rather than leave `op` implicitly `any`.  This is the
+// laptop-only release-broadcast CLI: the op it builds is what gets SIGNED and
+// pushed on-chain, so `any` here erased type checking on the one payload in
+// the repo that is irreversible once broadcast.
+let op: ReturnType<typeof buildReleaseCustomJsonOp>;
 try {
 	op = buildReleaseCustomJsonOp(payloadJson, signer);
 } catch (e) {

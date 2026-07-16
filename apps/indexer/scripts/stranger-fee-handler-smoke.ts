@@ -82,7 +82,7 @@ function ctxFor(override: {
 		config: {
 			feeRecipient: 'morphit-fees',
 			feeTolerance: 0.02
-		} as unknown as Parameters<typeof makeCtx>[0]['config']
+		} as unknown as NonNullable<Parameters<typeof makeCtx>[0]>['config']
 	});
 }
 

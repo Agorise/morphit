@@ -545,6 +545,11 @@ const mkState = (o: Partial<EndpointState> & { url: string }): EndpointState => 
 	ewmaLatencyMs: o.ewmaLatencyMs ?? null,
 	consecutiveFailures: o.consecutiveFailures ?? 0,
 	cooldownUntil: o.cooldownUntil ?? 0,
+	// cp474 — the RPS pacer's per-endpoint cursor. Present only so this fixture
+	// satisfies EndpointState; `buildRpcEndpointsResponse` projects named fields
+	// and deliberately does NOT publish it (an internal pacing cursor is not
+	// operator-facing), which is exactly what the shape assertions below pin.
+	nextAllowedAt: o.nextAllowedAt ?? 0,
 	lastSuccessAt: o.lastSuccessAt ?? 0
 });
 const CANON = ['https://a.example', 'https://b.example', 'https://c.example'];

@@ -96,9 +96,7 @@ if (!feArrr) {
 	pass('frontend registry contains arrr entry');
 	if (feArrr.canBeTraded === true) pass('frontend arrr.canBeTraded === true');
 	else fail('frontend arrr.canBeTraded === true', `actual: ${feArrr.canBeTraded}`);
-	// @ts-expect-error — canBeUsedForListingFee is the frontend's name
 	if (feArrr.canBeUsedForListingFee === false) pass('frontend arrr.canBeUsedForListingFee === false (memory #23)');
-	// @ts-expect-error — canBeUsedForListingFee
 	else fail('frontend arrr.canBeUsedForListingFee === false', `actual: ${feArrr.canBeUsedForListingFee}`);
 	if (feArrr.decimals === 8) pass('frontend arrr.decimals === 8');
 	else fail('frontend arrr.decimals === 8', `actual: ${feArrr.decimals}`);

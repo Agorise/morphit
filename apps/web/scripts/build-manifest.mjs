@@ -131,6 +131,15 @@ function normalizePrefix(p) {
  * SERVED URL path (`/<rel>`) → its `sha256-<base64>` SRI hash, sorted
  * by key.  Optionally scoped to entries whose path starts with one of
  * `prefixes`.  Returns the manifest OBJECT (caller serializes).
+ *
+ * cp474 — the JSDoc types below are load-bearing, not decoration: with
+ * `prefixes = []` and no annotation, TypeScript infers the default as
+ * `never[]`, so every typed caller passing real prefixes was an error the
+ * moment `scripts/**` started being typechecked.
+ *
+ * @param {ReadonlyArray<{ rel: string, sri: string }>} entries
+ * @param {{ prefixes?: readonly string[] }} [options]
+ * @returns {Record<string, string>}
  */
 export function buildReleaseManifest(entries, { prefixes = [] } = {}) {
 	const norm = prefixes.map(normalizePrefix).filter((p) => p.length > 0);

@@ -15,12 +15,19 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 
-import { featuredRoute } from '$api/featuredOrderbook';
+import { featuredRoute, type FeaturedRow } from '$api/featuredOrderbook';
 import { feedbackAggregateJoin, accountsJoin } from '$api/reputationJoin';
 import type { Database } from '$db/pool';
 
-/** One winning featured slot, as the joined query would return it. */
-function row(overrides: Record<string, unknown> = {}) {
+/** One winning featured slot, as the joined query would return it.
+ *
+ *  cp473 — typed as `FeaturedRow`, not an untyped literal. Previously a column
+ *  added to the real query could be missing here with nothing failing (the
+ *  mapper produced `undefined`, JSON.stringify dropped the key, and the test
+ *  asserted only the fields it already knew about). `Partial<FeaturedRow>`
+ *  overrides also mean a typo'd key like `is_new_trder` is now a compile error
+ *  rather than a silently-ignored no-op. */
+function row(overrides: Partial<FeaturedRow> = {}): FeaturedRow {
 	return {
 		account: 'alice',
 		permlink: 'order-1',
@@ -44,6 +51,7 @@ function row(overrides: Record<string, unknown> = {}) {
 		fee_method: 'blurt',
 		// reputation columns
 		feedback_count: 12,
+		trade_count: 7,
 		weighted_rating: '4.50',
 		last_feedback_at: new Date('2026-07-01T00:00:00Z'),
 		is_new_trader: false,
@@ -84,6 +92,10 @@ describe('GET /v1/featured — order-card trust signals', () => {
 		const order = body.featured[0]!.order;
 
 		expect(order.feedback_count).toBe(12);
+		// cp473 — the trade count this test's TITLE always claimed to cover but
+		// never asserted. It is a DIFFERENT number from feedback_count on
+		// purpose: the card renders "7 trades · ★4.50 (12)".
+		expect(order.trade_count).toBe(7);
 		expect(order.weighted_rating).toBe(4.5);
 		// Composite score, computed by the SAME function the orderbook uses.
 		expect(typeof order.reputation_score).toBe('number');
@@ -97,6 +109,7 @@ describe('GET /v1/featured — order-card trust signals', () => {
 		const { app } = mount([
 			row({
 				feedback_count: 0,
+				trade_count: 0,
 				weighted_rating: null,
 				last_feedback_at: null,
 				is_new_trader: true,
@@ -109,9 +122,38 @@ describe('GET /v1/featured — order-card trust signals', () => {
 
 		expect(order.is_new_trader).toBe(true);
 		expect(order.feedback_count).toBe(0);
+		expect(order.trade_count).toBe(0);
 		expect(order.weighted_rating).toBeNull();
 		expect(order.reputation_score).toBeNull();
 		expect(order.first_trade_at).toBeNull();
+	});
+
+	it('cp473 — a veteran with real trades but NO reviews is not sprouted, and shows the trade count', async () => {
+		// The case the pre-cp473 featured strip got exactly backwards: it derived
+		// the sprout from the FEEDBACK count, so 5 completed trades with nobody
+		// bothering to leave stars read as "new trader" — and the trade count was
+		// absent from the payload entirely, so the card said nothing at all.
+		const { app } = mount([
+			row({
+				feedback_count: 0,
+				trade_count: 5,
+				weighted_rating: null,
+				last_feedback_at: null,
+				is_new_trader: false,
+				first_trade_complete_at: new Date('2026-02-01T00:00:00Z')
+			})
+		]);
+		const res = await app.request('/v1/featured');
+		const body = (await res.json()) as { featured: { order: Record<string, unknown> }[] };
+		const order = body.featured[0]!.order;
+
+		expect(order.trade_count).toBe(5);
+		expect(order.is_new_trader).toBe(false);
+		// Ratings stay a separate number: no stars means no average, and the
+		// card must NOT invent one from the trades.
+		expect(order.feedback_count).toBe(0);
+		expect(order.weighted_rating).toBeNull();
+		expect(order.reputation_score).toBeNull();
 	});
 
 	it('tolerates an account row with no posting key yet', async () => {

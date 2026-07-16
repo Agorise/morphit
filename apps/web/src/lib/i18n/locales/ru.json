@@ -629,7 +629,8 @@
       "pill_title_eth": "ETH отправлен",
       "pill_title_xrp": "XRP отправлен",
       "pill_title_blurt_received": "Blurt получен",
-      "receipt_title": "Квитанция об оплате"
+      "receipt_title": "Квитанция об оплате",
+      "receipt_when": "{when}"
     },
     "unknown_version": "Это сообщение использует более новый протокол. Обновите Morphit, чтобы прочитать его.",
     "pay_blurt": {

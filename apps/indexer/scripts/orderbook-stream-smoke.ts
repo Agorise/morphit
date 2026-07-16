@@ -86,9 +86,20 @@ function makeRow(overrides: Partial<OrderbookStreamRow> = {}): OrderbookStreamRo
 		price_model: 'mid+1%',
 		location_region: 'Berlin',
 		payment_methods: ['cash', 'sepa'],
+		// cp474 — REQUIRED by OrderbookStreamRow and previously absent from this
+		// fixture, so every makeRow() produced a shape the SQL never emits.
+		// `rowToWire` reads engagement_24h with no `??` default, so the wire
+		// payload silently dropped the key. null here = a crypto (non-barter)
+		// order, which is what this BTC row is.
+		accepted_assets: null,
+		engagement_24h: 3,
 		terms: 'meet at café',
 		fee_method: 'blurt',
 		feedback_count: 5,
+		// cp473 — a DIFFERENT number from feedback_count on purpose. The card
+		// reads this; when the stream omitted it, every live orderbook card
+		// rendered "no trades".
+		trade_count: 9,
 		weighted_rating: '4.5',
 		// cp404 — reputation-score inputs + posting key now read by rowToWire.
 		last_feedback_at: new Date('2026-04-20T00:00:00Z'),
@@ -197,7 +208,10 @@ scenario('buildWhereClauses: payment_methods empty after filter → no EXISTS', 
 
 scenario('buildWhereClauses: min_trades > 0 adds clause', () => {
 	const { where, params } = buildWhereClauses({ min_trades: 3 });
-	assertEqual(where[3], 'COALESCE(f.c, 0) >= $1', 'min_trades clause');
+	// cp473 — was pinned to `COALESCE(f.c, 0)`, i.e. this scenario ENCODED the
+	// bug: a filter named min_TRADES that actually counted REVIEWS, disagreeing
+	// with the REST endpoint the stream's snapshot then overwrote.
+	assertEqual(where[3], 'COALESCE(tc.c, 0) >= $1', 'min_trades clause');
 	assertEqual(params, [3], 'params');
 });
 
@@ -216,7 +230,7 @@ scenario('buildWhereClauses: combined filter binds in order', () => {
 	assertEqual(where[3], 'o.asset = $1', 'asset $1');
 	assertEqual(where[4], 'o.side = $2', 'side $2');
 	assertEqual(where[5], 'o.fiat_currency = ANY($3::text[])', 'fiat $3');
-	assertEqual(where[6], 'COALESCE(f.c, 0) >= $4', 'min_trades $4');
+	assertEqual(where[6], 'COALESCE(tc.c, 0) >= $4', 'min_trades $4');
 	assertEqual(params, ['BTC', 'sell', ['EUR'], 2], 'params in order');
 });
 
@@ -241,6 +255,16 @@ scenario('rowToWire: full row → full wire shape', () => {
 	assertEqual(w.amount_max, 500, 'amount_max as number');
 	assertEqual(w.weighted_rating, 4.5, 'weighted_rating as number');
 	assertEqual(w.feedback_count, 5, 'feedback_count');
+	// cp473 — trade_count MUST cross the wire. The orderbook page treats this
+	// stream's snapshot as authoritative and replaces the REST rows with it, so
+	// a missing field here doesn't degrade the live path — it wipes the trade
+	// count off cards the REST fetch had already rendered correctly.
+	assertEqual(w.trade_count, 9, 'trade_count crosses the wire');
+	assertEqual(
+		w.trade_count !== w.feedback_count,
+		true,
+		'trades and ratings stay two different numbers'
+	);
 	assertEqual(w.created_at, '2026-04-01T10:00:00.000Z', 'created_at iso');
 	assertEqual(w.updated_at, '2026-04-26T12:00:00.000Z', 'updated_at iso');
 	assertEqual(w.expires_at, '2026-05-01T00:00:00.000Z', 'expires_at iso');

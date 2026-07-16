@@ -60,7 +60,7 @@ function ctxFor(override: { signer?: string; orderAccount?: string; phase?: 'lau
 		blockTime: NOW,
 		config: {
 			attestationPhase: override.phase ?? 'launch'
-		} as unknown as Parameters<typeof makeCtx>[0]['config']
+		} as unknown as NonNullable<Parameters<typeof makeCtx>[0]>['config']
 	});
 }
 

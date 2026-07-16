@@ -230,7 +230,7 @@ for (const e of entries) {
 
 if (overSentence.length === 0) {
 	pass(
-		`every entry within ≤${SENTENCE_LIMIT}-sentence budget (excluding ${STACCATO_ALLOWLIST.size} staccato-exempt: ${[...STACCATO_ALLOWLIST].join(', ')})`
+		`every entry within ≤${SENTENCE_LIMIT}-sentence budget (excluding ${STACCATO_ALLOWLIST.length} staccato-exempt: ${[...STACCATO_ALLOWLIST].join(', ')})`
 	);
 } else {
 	fail(

@@ -16,11 +16,12 @@
  *
  * Default sort (recent): (updated_at DESC, account, permlink).
  * sort=rating: (weighted_rating DESC NULLS LAST, feedback_count DESC, ...tiebreakers).
- * sort=trades: (feedback_count DESC, ...tiebreakers).
+ * sort=trades: (trade_count DESC, ...tiebreakers).
  *
- * Each row now carries feedback_count + weighted_rating from the
- * LEFT JOIN on an aggregate of the feedback table. is_new_trader
- * is derived as feedback_count < 4, giving new traders a four-
+ * Each row carries feedback_count + weighted_rating from the LEFT
+ * JOIN on an aggregate of the feedback table, and trade_count from
+ * a separate aggregate over COMPLETED ORDERS. is_new_trader is
+ * derived as trade_count < 4, giving new traders a four-
  * trade sprout window on the UI. The underlying welcome-bonus
  * trigger in accounts.first_trade_complete_at still fires once on
  * the first counterparty review, independent of this UI flag.
@@ -174,9 +175,10 @@ interface OrderRow {
 	 *  recency factor of the composite reputation score. NULL when the
 	 *  account has no included feedback. */
 	last_feedback_at: Date | null;
-	/** Derived from feedback_count < 4 — shows the 🌱 sprout chip
-	 *  during the account's first four counterparty reviews. The
-	 *  underlying welcome-bonus trigger (accounts.first_trade_
+	/** Derived from trade_count < 4 — shows the 🌱 sprout chip
+	 *  during the account's first four COMPLETED TRADES (v1.5.5;
+	 *  was: first four received reviews). The underlying
+	 *  welcome-bonus trigger (accounts.first_trade_
 	 *  complete_at) fires ONCE on the first review regardless;
 	 *  this flag is purely a UI hint and shouldn't be confused
 	 *  with the bonus trigger. */

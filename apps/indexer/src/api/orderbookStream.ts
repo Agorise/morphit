@@ -50,6 +50,12 @@ import { logger } from '$log';
 import { orderbookEventBus } from '$indexer/orderbookEventBus';
 import { errorBody } from '$api/shared';
 import {
+	accountsJoin,
+	engagementJoin,
+	feedbackAggregateJoin,
+	tradeCountJoin
+} from '$api/reputationJoin';
+import {
 	buildWhereClauses,
 	makeFetchSerializer,
 	rowToWire,
@@ -114,69 +120,31 @@ const orderbookStreamQuerySchema = z.object({
 	min_trades: z.coerce.number().int().min(0).max(100).optional()
 });
 
-const FEEDBACK_AGGREGATE_JOIN = `
-	LEFT JOIN (
-	  SELECT subject, COUNT(*)::int AS c,
-	         MAX(created_at) AS last_feedback_at,
-	         -- cp123 H1: time-decay weighted rating with 365-day
-	         -- half-life.  Mirrors apps/indexer/src/api/orderbook.ts
-	         -- + apps/indexer/src/api/feedback.ts so the SSE stream
-	         -- shows the same numbers as the polled API.
-	         ROUND(
-	           SUM(rating * POWER(0.5, EXTRACT(EPOCH FROM (NOW() - created_at)) / (365 * 86400.0))) /
-	           NULLIF(SUM(POWER(0.5, EXTRACT(EPOCH FROM (NOW() - created_at)) / (365 * 86400.0))), 0),
-	           2
-	         )::numeric AS r
-	    FROM feedback fb
-	   WHERE fb.order_permlink IS NOT NULL
-	     AND NOT EXISTS (
-	       SELECT 1 FROM suspicious_reciprocity sr
-	        WHERE sr.account_a = LEAST(fb.reviewer, fb.subject)
-	          AND sr.account_b = GREATEST(fb.reviewer, fb.subject)
-	   )
-	     AND NOT EXISTS (
-	       SELECT 1 FROM related_accounts ra
-	        WHERE ra.account_a = LEAST(fb.reviewer, fb.subject)
-	          AND ra.account_b = GREATEST(fb.reviewer, fb.subject)
-	   )
-	     -- Signal C exclusion (Part 113): drop rows from coordinated
-	     -- pile-on attackers.  Same filter as orderbook.ts.
-	     AND NOT EXISTS (
-	       SELECT 1 FROM one_way_pile_on owpo,
-	                    jsonb_array_elements(owpo.attacking_reviewers) attacker
-	        WHERE owpo.subject = fb.subject
-	          AND attacker->>'reviewer' = fb.reviewer
-	   )
-	     -- Signal D exclusion (cp123 H2): drop rows from reviewers
-	     -- flagged for concentrating ≥80% of their reviews on a
-	     -- single subject.  See signals.ts: detectReviewConcentration.
-	     AND NOT EXISTS (
-	       SELECT 1 FROM review_concentration rc
-	        WHERE rc.reviewer = fb.reviewer
-	          AND rc.dominant_subject = fb.subject
-	   )
-	   GROUP BY subject
-	) f ON f.subject = o.account
-	LEFT JOIN (
-	  -- Engagement counter (Q11 follow-up): mirrors the same
-	  -- aggregate used in /v1/orderbook so the SSE stream stays
-	  -- in sync with the polled list.  See orderbook.ts for the
-	  -- privacy posture comment + BATCH14-2 sock-puppet filter
-	  -- rationale.
-	  SELECT recipient, order_permlink,
-	         COUNT(DISTINCT sender)::int AS distinct_senders_24h
-	    FROM chat_messages cm
-	   WHERE order_permlink IS NOT NULL
-	     AND created_at > NOW() - INTERVAL '24 hours'
-	     AND sender <> recipient
-	     AND EXISTS (
-	       SELECT 1 FROM feedback fb_eng
-	        WHERE fb_eng.subject = cm.sender
-	          AND fb_eng.order_permlink IS NOT NULL
-	     )
-	   GROUP BY recipient, order_permlink
-	) e ON e.recipient = o.account AND e.order_permlink = o.permlink
-	LEFT JOIN accounts a ON a.name = o.account
+/**
+ * Every join an order-card row needs, from the CANONICAL builders in
+ * $api/reputationJoin. Named CARD_JOINS, not FEEDBACK_AGGREGATE_JOIN: it now
+ * carries the feedback aggregate, the engagement counter, the accounts join AND
+ * the trade count, and a feedback-only name is how a reader talks themselves
+ * out of checking whether the trade-shaped columns are here too.
+ *
+ * cp473 — this block used to be a HAND COPY of the feedback aggregate, the
+ * engagement counter and the accounts join, kept in sync with /v1/orderbook by
+ * hand. reputationJoin's own docstring says why that is a mistake: "Getting one
+ * of those exclusions wrong in a COPY of this SQL would silently publish
+ * sock-puppet-inflated reputation on that surface only — so the SQL lives here,
+ * once, and callers paste it in rather than re-derive it."
+ *
+ * The copies happened to still be in sync (verified byte-identical to the
+ * builders' output before this refactor, so the swap is behaviour-neutral) —
+ * but the trade-count bug this file just carried WAS a drift-between-copies
+ * bug, and leaving the neighbouring copies in place would leave the next one
+ * loaded. There is now one implementation.
+ */
+const CARD_JOINS = `
+${feedbackAggregateJoin('o')}
+${engagementJoin('o')}
+	${accountsJoin('o', 'a')}
+${tradeCountJoin('o')}
 `;
 
 const ROW_SELECT = `
@@ -187,7 +155,15 @@ const ROW_SELECT = `
 	       COALESCE(f.c, 0)::int AS feedback_count,
 	       CASE WHEN f.r IS NOT NULL THEN f.r::text ELSE NULL END AS weighted_rating,
 	       f.last_feedback_at,
-	       (COALESCE(f.c, 0) < 4) AS is_new_trader,
+	       -- cp473 — REAL completed trades, matching /v1/orderbook.
+	       -- This stream's snapshot REPLACES the REST rows on the orderbook
+	       -- page (see the page's onSnapshot: "Snapshot is authoritative"), so
+	       -- omitting trade_count here didn't just leave the live path stale —
+	       -- it wiped the trade count off cards the REST fetch had just
+	       -- rendered correctly, and flipped 🌱 from "<4 trades" to "<4
+	       -- reviews" a moment after load.
+	       COALESCE(tc.c, 0)::int AS trade_count,
+	       (COALESCE(tc.c, 0) < 4) AS is_new_trader,
 	       COALESCE(e.distinct_senders_24h, 0)::int AS engagement_24h,
 	       a.first_trade_complete_at,
 	       a.posting_pubkey,
@@ -200,7 +176,7 @@ async function fetchSnapshot(db: Database, q: OrderbookStreamQuery, operatorAcco
 	const { where, params } = buildWhereClauses(q, 0, operatorAccount);
 	const sql = `${ROW_SELECT}
 		 FROM orders o
-		 ${FEEDBACK_AGGREGATE_JOIN}
+		 ${CARD_JOINS}
 		 WHERE ${where.join(' AND ')}
 		 ORDER BY o.updated_at DESC, o.account ASC, o.permlink ASC
 		 LIMIT ${SNAPSHOT_LIMIT}`;
@@ -228,7 +204,7 @@ async function fetchOrderIfMatchesFilter(
 	const { where, params } = buildWhereClauses(q, 2, operatorAccount);
 	const sql = `${ROW_SELECT}
 		 FROM orders o
-		 ${FEEDBACK_AGGREGATE_JOIN}
+		 ${CARD_JOINS}
 		 WHERE o.account = $1 AND o.permlink = $2
 		   AND ${where.join(' AND ')}
 		 LIMIT 1`;
@@ -246,7 +222,7 @@ async function fetchRecentlyChanged(
 	const { where, params } = buildWhereClauses(q, 1, operatorAccount);
 	const sql = `${ROW_SELECT}
 		 FROM orders o
-		 ${FEEDBACK_AGGREGATE_JOIN}
+		 ${CARD_JOINS}
 		 WHERE o.updated_at > $1
 		   AND ${where.join(' AND ')}
 		 ORDER BY o.updated_at DESC, o.account ASC, o.permlink ASC

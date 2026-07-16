@@ -174,3 +174,9 @@ if (failed === 0) {
 	console.error(`✗ ${failed} anti-snipe scenarios failed`);
 	process.exit(1);
 }
+
+// cp474 — module marker. Without a top-level import/export tsc treats this
+// file as a global script, so its `scenarios`/`failed` consts collide with every
+// other script-style smoke when the suite is typechecked as one project. This
+// has no runtime effect under tsx.
+export {};

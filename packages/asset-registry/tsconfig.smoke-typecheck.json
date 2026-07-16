@@ -1,0 +1,65 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "noUncheckedIndexedAccess": false,
+    "lib": [
+      "DOM",
+      "DOM.Iterable",
+      "WebWorker",
+      "es2023"
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "$lib": [
+        "../../apps/web/src/lib"
+      ],
+      "$lib/*": [
+        "../../apps/web/src/lib/*"
+      ],
+      "$components": [
+        "../../apps/web/src/lib/components"
+      ],
+      "$components/*": [
+        "../../apps/web/src/lib/components/*"
+      ],
+      "$crypto": [
+        "../../apps/web/src/lib/crypto"
+      ],
+      "$crypto/*": [
+        "../../apps/web/src/lib/crypto/*"
+      ],
+      "$i18n": [
+        "../../apps/web/src/lib/i18n"
+      ],
+      "$i18n/*": [
+        "../../apps/web/src/lib/i18n/*"
+      ],
+      "$stores": [
+        "../../apps/web/src/lib/stores"
+      ],
+      "$stores/*": [
+        "../../apps/web/src/lib/stores/*"
+      ],
+      "$utils": [
+        "../../apps/web/src/lib/utils"
+      ],
+      "$utils/*": [
+        "../../apps/web/src/lib/utils/*"
+      ],
+      "$net": [
+        "../../apps/web/src/lib/net"
+      ],
+      "$net/*": [
+        "../../apps/web/src/lib/net/*"
+      ]
+    }
+  },
+  "include": [
+    "scripts/**/*.ts",
+    "src/**/*.d.ts"
+  ]
+}

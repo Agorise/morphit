@@ -98,9 +98,7 @@ if (!feXrp) {
 	pass('frontend registry contains xrp entry');
 	if (feXrp.canBeTraded === true) pass('frontend xrp.canBeTraded === true');
 	else fail('frontend xrp.canBeTraded === true', `actual: ${feXrp.canBeTraded}`);
-	// @ts-expect-error
 	if (feXrp.canBeUsedForListingFee === false) pass('frontend xrp.canBeUsedForListingFee === false (memory #23)');
-	// @ts-expect-error
 	else fail('frontend xrp.canBeUsedForListingFee === false', `actual: ${feXrp.canBeUsedForListingFee}`);
 	if (feXrp.decimals === 6) pass('frontend xrp.decimals === 6');
 	else fail('frontend xrp.decimals === 6', `actual: ${feXrp.decimals}`);

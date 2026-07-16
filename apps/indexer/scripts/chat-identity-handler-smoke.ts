@@ -64,6 +64,11 @@ function makeCtx(payload: unknown, signer = 'alice'): OpContext {
 		config: undefined as any,
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		feeVerifiers: undefined as any,
+		// cp474 — both REQUIRED by OpContext (Part 106 fee amounts, FX floor).
+		// The chat-identity handler reads neither, but a fixture that omits
+		// required fields stops modelling the contract the handler is given.
+		feeAmounts: {},
+		fiatToUsd: () => null,
 		recordOrderbookChange: () => {},
 		recordChatChange: () => {}
 	};

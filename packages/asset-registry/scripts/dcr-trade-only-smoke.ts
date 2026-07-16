@@ -90,9 +90,7 @@ if (!feDcr) {
 	pass('frontend registry contains dcr entry');
 	if (feDcr.canBeTraded === true) pass('frontend dcr.canBeTraded === true');
 	else fail('frontend dcr.canBeTraded === true', `actual: ${feDcr.canBeTraded}`);
-	// @ts-expect-error
 	if (feDcr.canBeUsedForListingFee === false) pass('frontend dcr.canBeUsedForListingFee === false (memory #23)');
-	// @ts-expect-error
 	else fail('frontend dcr.canBeUsedForListingFee === false', `actual: ${feDcr.canBeUsedForListingFee}`);
 	if (feDcr.decimals === 8) pass('frontend dcr.decimals === 8');
 	else fail('frontend dcr.decimals === 8', `actual: ${feDcr.decimals}`);

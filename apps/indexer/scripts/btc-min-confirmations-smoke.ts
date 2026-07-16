@@ -68,6 +68,10 @@ function baseClaim(): FeeClaim {
 		feeMethod: 'btc',
 		expectedAmount: 2_500,
 		externalTxId: VALID_TXID,
+		// cp474 — REQUIRED by FeeClaim. Omitted here the field was `undefined`,
+		// not `null`; moneroProofVerifier gates on `txProof === null` and would
+		// fall through to `.length` on undefined. BTC claims carry no proof.
+		txProof: null,
 		permlink: 'my-order-01',
 		signer: 'alice'
 	};
@@ -86,7 +90,9 @@ async function run(): Promise<void> {
 				feeAddress: FEE_ADDRESS,
 				explorerUrls: ['https://blockstream.info/api'],
 				minConfirmations: 1,
-				requestTimeoutMs: 5_000
+				requestTimeoutMs: 5_000,
+				// cp474 — Part 109 quorum gate; required by the config type.
+				minSuccessfulResponses: 1
 			},
 			makeFetch(txBody)
 		);
@@ -106,7 +112,9 @@ async function run(): Promise<void> {
 				feeAddress: FEE_ADDRESS,
 				explorerUrls: ['https://blockstream.info/api'],
 				minConfirmations: 3,
-				requestTimeoutMs: 5_000
+				requestTimeoutMs: 5_000,
+				// cp474 — Part 109 quorum gate; required by the config type.
+				minSuccessfulResponses: 1
 			},
 			// tip = 800_002 → depth = 800_002 + 1 - 800_000 = 3
 			makeFetch(txBody, '800002')
@@ -127,7 +135,9 @@ async function run(): Promise<void> {
 				feeAddress: FEE_ADDRESS,
 				explorerUrls: ['https://blockstream.info/api'],
 				minConfirmations: 3,
-				requestTimeoutMs: 5_000
+				requestTimeoutMs: 5_000,
+				// cp474 — Part 109 quorum gate; required by the config type.
+				minSuccessfulResponses: 1
 			},
 			// tip = 800_000 → depth = 1
 			makeFetch(txBody, '800000')
@@ -148,7 +158,9 @@ async function run(): Promise<void> {
 				feeAddress: FEE_ADDRESS,
 				explorerUrls: ['https://blockstream.info/api'],
 				minConfirmations: 3,
-				requestTimeoutMs: 5_000
+				requestTimeoutMs: 5_000,
+				// cp474 — Part 109 quorum gate; required by the config type.
+				minSuccessfulResponses: 1
 			},
 			makeFetch(txBody, '800002')
 		);
@@ -172,7 +184,9 @@ async function run(): Promise<void> {
 				feeAddress: FEE_ADDRESS,
 				explorerUrls: ['https://blockstream.info/api'],
 				minConfirmations: 3,
-				requestTimeoutMs: 5_000
+				requestTimeoutMs: 5_000,
+				// cp474 — Part 109 quorum gate; required by the config type.
+				minSuccessfulResponses: 1
 			},
 			makeFetch(txBody, undefined, true)
 		);
@@ -196,7 +210,9 @@ async function run(): Promise<void> {
 				feeAddress: FEE_ADDRESS,
 				explorerUrls: ['https://blockstream.info/api'],
 				minConfirmations: 3,
-				requestTimeoutMs: 5_000
+				requestTimeoutMs: 5_000,
+				// cp474 — Part 109 quorum gate; required by the config type.
+				minSuccessfulResponses: 1
 			},
 			makeFetch(txBody, 'NOT-AN-INTEGER')
 		);
@@ -220,7 +236,9 @@ async function run(): Promise<void> {
 				feeAddress: FEE_ADDRESS,
 				explorerUrls: ['https://blockstream.info/api'],
 				minConfirmations: 6,
-				requestTimeoutMs: 5_000
+				requestTimeoutMs: 5_000,
+				// cp474 — Part 109 quorum gate; required by the config type.
+				minSuccessfulResponses: 1
 			},
 			// tip = 800_005 → depth = 6
 			makeFetch(txBody, '800005')

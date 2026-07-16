@@ -162,7 +162,8 @@ const sampleAnswers: WizardAnswers = {
 	dailyCeiling: 25,
 	contactUrl: 'https://example.com/contact',
 	origin: null,
-	altNetworks: { tor: null, lokinet: null, i2pB32: null, i2pName: null, nostr: null },
+	// cp474 — `ens` is REQUIRED by AltNetworkResult and was never added here.
+	altNetworks: { tor: null, lokinet: null, i2pB32: null, i2pName: null, nostr: null, ens: null },
 	feeExplorers: {
 		btc: ['https://blockstream.info/api', 'https://mempool.space/api'],
 		xmr: [
@@ -840,7 +841,13 @@ scenario('writeWizardOutput: alt-network addresses written when present', () => 
 				lokinet: null,
 				i2pB32: 'xyz.b32.i2p',
 				i2pName: 'morphit.i2p',
-				nostr: null
+				nostr: null,
+				// cp474 — REQUIRED by AltNetworkResult and absent until now. Absent it
+				// read `undefined`, and render.ts gates on `altNetworks.ens !== null`
+				// — which `undefined` PASSES — so this fixture was rendering a junk
+				// `MORPHIT_INSTANCE_ENS_NAME=undefined` line that nothing asserted on.
+				// Populate it so the ENS write path is actually exercised.
+				ens: 'morphit.eth'
 			}
 		};
 		const result = writeWizardOutput(withAlt, tmp);
@@ -848,6 +855,8 @@ scenario('writeWizardOutput: alt-network addresses written when present', () => 
 		assertContains(content, 'MORPHIT_INSTANCE_TOR_ADDRESS=abc.onion', 'tor written');
 		assertContains(content, 'MORPHIT_INSTANCE_I2P_B32_ADDRESS=xyz.b32.i2p', 'i2p b32 written');
 		assertContains(content, 'MORPHIT_INSTANCE_I2P_NAME_ADDRESS=morphit.i2p', 'i2p name written');
+		// cp474 — the ENS write path had no coverage at all.
+		assertContains(content, 'MORPHIT_INSTANCE_ENS_NAME=morphit.eth', 'ens written');
 		assertTrue(!content.includes('MORPHIT_INSTANCE_I2P_ADDRESS='), 'no legacy single-i2p key');
 		assertTrue(!content.includes('MORPHIT_INSTANCE_LOKINET_ADDRESS'), 'no lokinet');
 		assertTrue(!content.includes('MORPHIT_INSTANCE_NOSTR_PUBKEY'), 'no nostr');

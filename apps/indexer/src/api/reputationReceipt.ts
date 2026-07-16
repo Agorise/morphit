@@ -73,6 +73,7 @@ import { z } from 'zod';
 
 import type { Database } from '$db/pool';
 import { errorBody, isAccountName } from '$api/shared';
+import { tradeCountSql } from '$api/reputationJoin';
 import {
 	reputationDecayWeight,
 	REPUTATION_DECAY_HALF_LIFE_DAYS
@@ -113,6 +114,17 @@ interface ReceiptResponse {
 		count_total: number; // ALL feedback rows about this subject
 		count_included: number; // rows that count toward weighted_rating
 		count_excluded: number;
+		/** cp473 — COMPLETED TRADES (both parties credited, sock-puppet-pair
+		 *  filtered). A DIFFERENT number from every count above: those are
+		 *  RATINGS. This is what the 🌱 new-trader sprout keys off since v1.5.5,
+		 *  everywhere it renders.
+		 *
+		 *  Do NOT substitute `count_total` for this. `count_total` deliberately
+		 *  includes rows this endpoint EXCLUDED as sock-puppet / pile-on /
+		 *  concentration fraud — that is the point of a receipt. Using it as a
+		 *  trust signal inverts the meaning: four thrown-out sock reviews would
+		 *  clear the sprout for an account whose real reputation is zero. */
+		trade_count: number;
 		weight_sum: number; // sum of decay weights of included rows
 		weighted_rating: number | null; // null when count_included = 0
 		// Composite reputation score + factor breakdown (cp404).
@@ -188,7 +200,7 @@ export function reputationReceiptRoute(db: Database): Hono {
 		// ─── Pull flag sets in parallel ─────────────────────────────
 		// All four signal tables are queried; for each, build a set
 		// of canonical "a|b" pair strings for O(1) membership tests.
-		const [sr, ra, owpo, rc] = await Promise.all([
+		const [sr, ra, owpo, rc, tcRes] = await Promise.all([
 			db.query<{ account_a: string; account_b: string }>(
 				`SELECT account_a, account_b FROM suspicious_reciprocity
 				  WHERE account_a = $1 OR account_b = $1`,
@@ -209,6 +221,19 @@ export function reputationReceiptRoute(db: Database): Hono {
 			db.query<{ reviewer: string; dominant_subject: string }>(
 				`SELECT reviewer, dominant_subject FROM review_concentration
 				  WHERE dominant_subject = $1`,
+				[account]
+			),
+			// cp473 — the account's COMPLETED-TRADE count, from the canonical
+			// aggregate (never a local copy — see reputationJoin's warning).
+			// Scoped to this one account, so this adds a bounded lookup, not a
+			// whole-instance aggregate.
+			//
+			// The receipt is the ONE per-account reputation endpoint the chat
+			// header already calls, and the header needs the trade count to
+			// render the 🌱 sprout on the SAME rule as the order cards. Serving
+			// it here keeps that at zero extra round trips.
+			db.query<{ c: number }>(
+				`SELECT COALESCE((SELECT t.c FROM (${tradeCountSql(`SELECT $1::text`)}) t), 0)::int AS c`,
 				[account]
 			)
 		]);
@@ -300,6 +325,7 @@ export function reputationReceiptRoute(db: Database): Hono {
 				count_total: rowsRes.rows.length,
 				count_included: countIncluded,
 				count_excluded: rowsRes.rows.length - countIncluded,
+				trade_count: tcRes.rows[0]?.c ?? 0,
 				weight_sum: Math.round(weightSum * 100000) / 100000,
 				weighted_rating: weightedRating,
 				reputation_score: scoreBreakdown.score,

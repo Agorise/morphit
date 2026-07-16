@@ -29,6 +29,7 @@
  */
 
 import { formatPriceModel, formatOrderPriceModel } from '../src/lib/orders/priceModelDisplay.ts';
+import type { OrderRecord } from '@morphit/indexer-client';
 
 let failures = 0;
 let scenarios = 0;
@@ -168,7 +169,10 @@ scenario('fixed with negative price → still rendered (caller validates)', () =
 // ─── formatOrderPriceModel adapter ────────────────────────
 
 scenario('formatOrderPriceModel routes through correctly', () => {
-	const order = {
+	// cp474 — `asset` is REQUIRED by the Pick<> this takes and was absent, so
+	// `isGoodsAsset(o.asset)` read `undefined` in every scenario here.
+	const order: Pick<OrderRecord, 'asset' | 'price_model' | 'fiat_currency'> = {
+		asset: 'BTC',
 		price_model: { kind: 'spread', percent: 0 },
 		fiat_currency: 'EUR'
 	};
@@ -177,12 +181,30 @@ scenario('formatOrderPriceModel routes through correctly', () => {
 });
 
 scenario('formatOrderPriceModel passes fiat through to fixed', () => {
-	const order = {
+	const order: Pick<OrderRecord, 'asset' | 'price_model' | 'fiat_currency'> = {
+		asset: 'BTC',
 		price_model: { kind: 'fixed', price: 100 },
 		fiat_currency: 'JPY'
 	};
 	const r = formatOrderPriceModel(order, t);
 	expect(r, 'orderbook.price_model.fixed|price=100,fiat=JPY');
+});
+
+// cp474 — suppressing the price line for BARTER (cp425) is the ONLY thing
+// `formatOrderPriceModel` does that `formatPriceModel` doesn't, and it had no
+// coverage: both scenarios above omitted `asset`, so `isGoodsAsset(undefined)`
+// took the non-goods path every time. A goods order ships an inert price_model
+// that would otherwise render as "Market rate" on the card.
+scenario('formatOrderPriceModel suppresses the price line for BARTER (cp425)', () => {
+	const order: Pick<OrderRecord, 'asset' | 'price_model' | 'fiat_currency'> = {
+		asset: 'BARTER',
+		price_model: { kind: 'spread', percent: 0 },
+		fiat_currency: 'EUR'
+	};
+	const r = formatOrderPriceModel(order, t);
+	if (r !== null) {
+		throw new Error(`goods order must render no price line, got ${JSON.stringify(r)}`);
+	}
 });
 
 // ─── Contract: post form ↔ display ─────────────────────────

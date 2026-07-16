@@ -60,6 +60,13 @@ export interface EndpointState {
 	 *  or 0 if never.  Diagnostic only — exposed via `snapshot()`
 	 *  for operator health views. */
 	lastSuccessAt: number;
+	/** cp474 — Unix-ms timestamp before which the next request to this
+	 *  endpoint must not be dispatched, enforcing the per-endpoint RPS
+	 *  ceiling.  Each in-flight caller RESERVES its slot by advancing this
+	 *  cursor synchronously before it awaits, so N concurrent callers pace
+	 *  into a queue rather than all reading the same "now" and firing
+	 *  together.  0 = no request paced yet. */
+	nextAllowedAt: number;
 }
 
 /** Cooldown ladder in milliseconds.  Same shape the two existing
@@ -86,6 +93,55 @@ export const DEFAULT_RATE_LIMIT_COOLDOWN_LADDER_MS: readonly number[] = [
 	120_000,
 	300_000
 ] as const;
+
+/** cp474 — Jitter fraction applied to every cooldown ladder step.
+ *  0.25 means an endpoint's cooldown lands uniformly in
+ *  [0.75×step, 1.25×step].
+ *
+ *  WHY: the ladder steps are fixed constants, so without jitter every
+ *  Morphit instance that hit the same node at roughly the same moment
+ *  re-probes it at roughly the same moment — and Morphit is FEDERATED, so
+ *  "every instance" is the normal case, not a hypothetical.  A node that
+ *  rate-limits N instances hands them all the same 30 s ladder step and
+ *  therefore gets all N back simultaneously 30 s later, re-triggering the
+ *  limit and re-synchronising the herd.  Jitter is what breaks that lockstep,
+ *  and it's the fourth of the four things the rpc.blurt.blog operator asked
+ *  us for (lower RPS, batch, exponential backoff, add jitter).
+ *
+ *  Applied to BOTH ladders: the generic one matters for a node that
+ *  restarts (every client sees the same transport failure at the same
+ *  instant), and the 429 one matters for exactly the case above.
+ *
+ *  This is spread, not delay: the mean cooldown is unchanged, so nothing
+ *  gets slower on average and the pool keeps serving from other endpoints
+ *  while one is parked. */
+export const DEFAULT_COOLDOWN_JITTER_FRACTION = 0.25;
+
+/** cp474 — Default per-endpoint request ceiling, in requests per second.
+ *
+ *  This is the rpc.blurt.blog operator's FIRST ask ("lower the RPS or
+ *  introduce a delay between requests"), and the pool is the only place
+ *  that can honour it for every caller at once.
+ *
+ *  WHY IT WAS NEEDED: steady-state Morphit is nowhere near this — the
+ *  poller asks for the global properties plus a block roughly once per
+ *  `blockIntervalMs`, well under 1 req/s.  But the poller's CATCH-UP loop
+ *  (`for (n = from; n <= irreversible; n++) await getBlock(n)`) is a tight
+ *  unthrottled loop: after any downtime it fires `get_block` back-to-back
+ *  as fast as the node will answer, against a SINGLE endpoint (the pool
+ *  sends traffic to the fastest healthy endpoint, it does not round-robin).
+ *  That burst is indistinguishable from abuse from the node's side, and
+ *  it's the shape that earns an HTTP 429.
+ *
+ *  WHY 10: steady-state is <1 req/s, so this is a no-op for normal
+ *  operation and costs nothing on the fast-notification path.  It bounds a
+ *  catch-up to 10 blocks/s — still ~30× faster than Blurt produces them
+ *  (one per 3 s), so a node that fell a full day behind (~28.8k blocks)
+ *  still recovers in under an hour, while never presenting a burst a
+ *  volunteer node operator would notice.
+ *
+ *  Set to 0 to disable pacing entirely. */
+export const DEFAULT_MAX_REQUESTS_PER_SECOND = 10;
 
 /** EWMA smoothing factor.  0.25 means a single observation moves
  *  the average ~25% of the way toward it — fast enough to react to
@@ -184,6 +240,19 @@ export interface EndpointPoolOptions {
 	 *  ladder so a quota'd endpoint is parked, not re-probed every
 	 *  couple of seconds. */
 	readonly rateLimitCooldownLadderMs?: readonly number[];
+	/** cp474 — override the jitter fraction applied to cooldown ladder steps.
+	 *  Must be in [0, 1).  0 disables jitter (deterministic cooldowns — only
+	 *  appropriate in tests that assert exact timings). */
+	readonly cooldownJitterFraction?: number;
+	/** cp474 — per-endpoint request ceiling in requests/second.  Defaults to
+	 *  DEFAULT_MAX_REQUESTS_PER_SECOND.  0 disables pacing.  This is a
+	 *  per-ENDPOINT cap, not a pool-wide one: the pool's aggregate ceiling is
+	 *  this times the number of healthy endpoints. */
+	readonly maxRequestsPerSecond?: number;
+	/** cp474 — injectable RNG, for tests that need deterministic jitter.
+	 *  Defaults to Math.random.  Jitter is a thundering-herd defence, not a
+	 *  secret, so Math.random is the right tool: no crypto entropy needed. */
+	readonly random?: () => number;
 	/** Override the EWMA smoothing factor.  Must be in (0, 1]. */
 	readonly ewmaAlpha?: number;
 	/** Latency above which a hedge is fired when hedging is enabled
@@ -220,6 +289,9 @@ export class EndpointPool {
 	private readonly endpoints: EndpointState[];
 	private readonly cooldownLadder: readonly number[];
 	private readonly rateLimitLadder: readonly number[];
+	private readonly jitterFraction: number;
+	private readonly random: () => number;
+	private readonly minRequestIntervalMs: number;
 	private readonly alpha: number;
 	private readonly hedgeThresholdMs: number;
 	private readonly hedgeStaggerFloorMs: number;
@@ -233,7 +305,8 @@ export class EndpointPool {
 			ewmaLatencyMs: null,
 			consecutiveFailures: 0,
 			cooldownUntil: 0,
-			lastSuccessAt: 0
+			lastSuccessAt: 0,
+			nextAllowedAt: 0
 		}));
 		this.cooldownLadder = options.cooldownLadderMs ?? DEFAULT_COOLDOWN_LADDER_MS;
 		if (this.cooldownLadder.length === 0) {
@@ -241,6 +314,18 @@ export class EndpointPool {
 		}
 		this.rateLimitLadder =
 			options.rateLimitCooldownLadderMs ?? DEFAULT_RATE_LIMIT_COOLDOWN_LADDER_MS;
+		this.jitterFraction = options.cooldownJitterFraction ?? DEFAULT_COOLDOWN_JITTER_FRACTION;
+		if (this.jitterFraction < 0 || this.jitterFraction >= 1) {
+			throw new Error('EndpointPool: cooldownJitterFraction must be in [0, 1)');
+		}
+		this.random = options.random ?? Math.random;
+		const rps = options.maxRequestsPerSecond ?? DEFAULT_MAX_REQUESTS_PER_SECOND;
+		if (rps < 0) {
+			throw new Error('EndpointPool: maxRequestsPerSecond must be >= 0 (0 disables pacing)');
+		}
+		// Store the derived spacing, not the rate: it's what every dispatch needs,
+		// and computing it once keeps the hot path free of a division.
+		this.minRequestIntervalMs = rps === 0 ? 0 : 1_000 / rps;
 		if (this.rateLimitLadder.length === 0) {
 			throw new Error('EndpointPool: rate-limit cooldown ladder must be non-empty');
 		}
@@ -455,6 +540,46 @@ export class EndpointPool {
 		}
 	}
 
+	/** cp474 — hold the caller until this endpoint's RPS budget allows the
+	 *  next dispatch, and reserve that slot.
+	 *
+	 *  The reservation is the important part.  Reading `now`, sleeping, and
+	 *  THEN advancing the cursor would let N concurrent callers all observe the
+	 *  same free slot and fire together — the exact burst this exists to stop.
+	 *  Instead each caller advances `nextAllowedAt` SYNCHRONOUSLY (before any
+	 *  await), so callers form an orderly queue: the k-th concurrent caller
+	 *  waits k×interval.
+	 *
+	 *  The wait is NOT counted as latency: EWMA is measured around `fn` in
+	 *  attemptSingle, so pacing can't make an endpoint look slow and demote
+	 *  itself out of the rotation.
+	 *
+	 *  The abort signal is honoured while waiting — a paced-but-not-yet-fired
+	 *  request must still cancel on timeout rather than sit in the queue. */
+	private async pace(ep: EndpointState, signal: AbortSignal): Promise<void> {
+		if (this.minRequestIntervalMs === 0) return;
+		const now = Date.now();
+		const slot = Math.max(now, ep.nextAllowedAt);
+		ep.nextAllowedAt = slot + this.minRequestIntervalMs;
+		const waitMs = slot - now;
+		if (waitMs <= 0) return;
+		await new Promise<void>((resolve, reject) => {
+			const timer = setTimeout(() => {
+				signal.removeEventListener('abort', onAbort);
+				resolve();
+			}, waitMs);
+			const onAbort = (): void => {
+				clearTimeout(timer);
+				reject(new Error('paced request aborted before dispatch'));
+			};
+			if (signal.aborted) {
+				onAbort();
+				return;
+			}
+			signal.addEventListener('abort', onAbort, { once: true });
+		});
+	}
+
 	private async attemptSingle<T>(
 		ep: EndpointState,
 		fn: (url: string, signal: AbortSignal) => Promise<T>,
@@ -462,17 +587,21 @@ export class EndpointPool {
 	): Promise<T> {
 		const ctl = new AbortController();
 		const handle = setTimeout(() => ctl.abort(), timeoutMs);
-		const startedAt = Date.now();
 		try {
-			const result = await fn(ep.url, ctl.signal);
-			const latency = Date.now() - startedAt;
-			this.recordSuccess(ep, latency);
-			return result;
-		} catch (err) {
-			if (isTransportError(err)) {
-				this.recordFailure(ep, isRateLimitError(err));
+			await this.pace(ep, ctl.signal);
+			// Start the latency clock AFTER pacing — see pace()'s note on EWMA.
+			const startedAt = Date.now();
+			try {
+				const result = await fn(ep.url, ctl.signal);
+				const latency = Date.now() - startedAt;
+				this.recordSuccess(ep, latency);
+				return result;
+			} catch (err) {
+				if (isTransportError(err)) {
+					this.recordFailure(ep, isRateLimitError(err));
+				}
+				throw err;
 			}
-			throw err;
 		} finally {
 			clearTimeout(handle);
 		}
@@ -534,12 +663,25 @@ export class EndpointPool {
 		// indexed by the shared consecutive-failure count.
 		const ladder = rateLimited ? this.rateLimitLadder : this.cooldownLadder;
 		const idx = Math.min(ep.consecutiveFailures - 1, ladder.length - 1);
-		ep.cooldownUntil = Date.now() + ladder[idx]!;
+		ep.cooldownUntil = Date.now() + this.jitter(ladder[idx]!);
 		// Wipe EWMA on failure so a recovered endpoint must re-prove
 		// its latency before climbing back to the front.  Otherwise
 		// a once-fast endpoint that has since become slow would stay
 		// preferred until 4+ slow successes drag the EWMA up.
 		ep.ewmaLatencyMs = null;
+	}
+
+	/** cp474 — spread a ladder step uniformly over
+	 *  [(1-f)×step, (1+f)×step] so federated instances that were
+	 *  rate-limited together don't come back together.  Mean is unchanged;
+	 *  the result is clamped at 0 for safety and rounded to whole ms so
+	 *  `cooldownUntil` stays an integer timestamp. */
+	private jitter(stepMs: number): number {
+		if (this.jitterFraction === 0) return stepMs;
+		const spread = stepMs * this.jitterFraction;
+		// random() ∈ [0,1) → offset ∈ [-spread, +spread)
+		const offset = (this.random() * 2 - 1) * spread;
+		return Math.max(0, Math.round(stepMs + offset));
 	}
 
 	/**
