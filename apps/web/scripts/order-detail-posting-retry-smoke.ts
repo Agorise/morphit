@@ -35,7 +35,15 @@ function check(name: string, ok: boolean): void {
 
 check("Phase type includes 'pending'", /type Phase =[^;]*'pending'/.test(page));
 check('loadOrder retries on not-found instead of giving up immediately', /attempt < ORDER_RETRY_ATTEMPTS/.test(page) && /loadOrder\(attempt \+ 1\)/.test(page));
-check('retry window comfortably exceeds block+indexer lag (~24s)', /ORDER_RETRY_ATTEMPTS = 8/.test(page) && /ORDER_RETRY_INTERVAL_MS = 3000/.test(page));
+// The window is deliberately modest and NOT sized against indexer lag — sizing
+// it that way is what broke it. Nothing here should ever grow this to "cover"
+// irreversibility: 90s of spinner is not a fix, and the owner never reaches this
+// path any more.
+check('a modest retry still smooths a genuine race', /ORDER_RETRY_ATTEMPTS = 8/.test(page) && /ORDER_RETRY_INTERVAL_MS = 3000/.test(page));
+// THE thing that actually delivers Ken's #16: the owner cannot hit not-found,
+// because their own browser staged the order at broadcast.
+check("the owner can't reach not-found at all (the staged order answers first)", /mergePendingOrders\(r\.data\.items, get\(pendingOrders\)/.test(page));
+check('the retry is no longer what stands between a poster and "not found"', /pendingOrders/.test(page));
 check('only shows pending (not not_found) while retries remain', /phase = 'pending';[\s\S]{0,120}orderRetryTimer = setTimeout/.test(page));
 check('retry timer is cleared on destroy (no dangling timer)', /onDestroy\(\(\) => \{[\s\S]{0,120}clearTimeout\(orderRetryTimer\)/.test(page));
 check('manual retryLoadOrder exists', /function retryLoadOrder/.test(page));

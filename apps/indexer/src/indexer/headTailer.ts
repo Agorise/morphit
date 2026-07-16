@@ -55,9 +55,9 @@
  *     are logged and the loop retries next interval. A broken fast path
  *     must never take down the indexer — the durable poller is unaffected.
  *
- * ON BY DEFAULT (config.chatFastPathEnabled, ADR-0048). `run()` returns
- * immediately when an operator has explicitly disabled it. The matching
- * client-side dedup ships in the same release, so a standard upgrade
+ * ALWAYS ON (v1.7.0, ADR-0051 — the opt-out was removed, not renamed).
+ * The matching client-side dedup ships in the same release, so a standard
+ * upgrade
  * deploys both the fast path and the client that understands it together.
  */
 
@@ -67,12 +67,13 @@ import type { Database } from '$db/pool';
 import { extractSigner, parseJsonPayload, type CustomJsonOp } from '$blurt/verify';
 import { checkJsonbSize } from '$indexer/payloadSize';
 import { chatEventBus } from '$indexer/chatEventBus';
+import { orderbookEventBus } from '$indexer/orderbookEventBus';
 import { checkChatOrder, recipientHasReplied, hasVerifiedChat } from '$indexer/chatGates';
 import { enqueueFeedbackPush } from '$indexer/feedbackPushEnqueue';
 import { enqueueChatPush } from '$indexer/chatPushEnqueue';
 import { logger } from '$log';
 
-const log = logger('chat-head-tailer');
+const log = logger('head-tailer');
 
 /** Opt-in fast-path emit tracing. Same gate as the durable handler
  *  (MORPHIT_CHAT_DEBUG=1). Metadata only. Shows whether a head-block
@@ -97,7 +98,7 @@ const FEEDBACK_OP_ID = 'morphit_feedback_v1';
 // Duplicated deliberately (same rationale as the dispatcher↔frontend
 // OP_IDS duplication): this file is on the latency-critical fast path
 // and stays decoupled from the handler's DB-stateful machinery. The
-// `chat-head-tailer-validation-parity-smoke` asserts these three
+// `head-tailer-validation-parity-smoke` asserts these three
 // constants still match handlers/chat.ts so they can't silently drift.
 
 /** Blurt account-name shape. Mirror of ACCOUNT_NAME_RE in handlers/chat.ts. */
@@ -127,6 +128,89 @@ export function clientTagFromHeader(header: unknown): string | null {
 	if (!isPlainObject(header)) return null;
 	const v = header.client_tag;
 	return typeof v === 'string' && v.length > 0 ? v : null;
+}
+
+/** v1.7.0 (ADR-0051) — the two order ops the tailer watches.
+ *
+ *  ONLY these two, and the exclusions are a SAFETY boundary rather than a scope
+ *  decision — read before adding a third:
+ *
+ *    - `morphit_order_v1` (new order) is EXCLUDED because the public orderbook
+ *      gates on `fee_status IN ('verified','verified_by_attestation')`. A
+ *      head-block order has not had its fee verified, and verification is money,
+ *      which ADR-0051 keeps durable-only. Publishing one provisionally would let
+ *      anyone put unpaid orders in front of every user for ~60s at a time — a fee
+ *      bypass with extra steps. The person who POSTED an order sees it instantly
+ *      anyway, client-side, via `pendingOrders` — which is what Ken actually asked
+ *      for ("the order i just placed") and costs no such hole.
+ *    - `morphit_order_replace_v1` (edit) is EXCLUDED because it carries the
+ *      order's free text. A rejected edit would flash arbitrary content into every
+ *      open orderbook for ~60s, repeatably.
+ *
+ *  What's left carries no free text at all — cancel is `{permlink}`, complete is
+ *  `{permlink, counterparty}` — acts on an order that is ALREADY fee-verified and
+ *  public, and is owner-signed (both durable handlers gate on
+ *  `account = signer`). The worst a bogus one can do is make an order briefly
+ *  vanish from live views and reappear on the next durable pass. */
+const ORDER_CANCEL_OP_ID = 'morphit_order_cancel_v1';
+const ORDER_COMPLETE_OP_ID = 'morphit_order_complete_v1';
+
+/** An order status transition seen at head. */
+interface LocatedOrderStatusOp {
+	/** `account/permlink` — the id shape the durable handlers pass to
+	 *  `recordOrderbookChange`, so both channels name the same order the same way. */
+	readonly orderId: string;
+	readonly kind: 'cancelled' | 'completed';
+}
+
+/**
+ * Extract an order cancel/complete from a head-block op.
+ *
+ * The order id is `signer/permlink` because BOTH durable handlers are owner-only:
+ * orderCancel runs `WHERE account = $1 AND permlink = $2` with `$1 = ctx.signer`,
+ * and orderComplete's `account = signer` guard means only the owner can complete
+ * their own listing. So a signer can only ever name an order they own — which is
+ * also why this needs no ownership lookup of its own.
+ *
+ * PURE.
+ */
+function locateOrderStatusOp(op: ChainOperation): LocatedOrderStatusOp | null {
+	const [opName, opBody] = op;
+	if (opName !== 'custom_json') return null;
+	const body = opBody as { id?: unknown; json?: unknown; required_posting_auths?: unknown } | null;
+	if (!body) return null;
+
+	const kind =
+		body.id === ORDER_CANCEL_OP_ID
+			? ('cancelled' as const)
+			: body.id === ORDER_COMPLETE_OP_ID
+				? ('completed' as const)
+				: null;
+	if (kind === null) return null;
+
+	const auths = body.required_posting_auths;
+	if (!Array.isArray(auths) || auths.length !== 1) return null;
+	const signer = auths[0];
+	if (typeof signer !== 'string' || !ACCOUNT_NAME_RE.test(signer)) return null;
+
+	let payload: unknown;
+	try {
+		payload = typeof body.json === 'string' ? JSON.parse(body.json) : null;
+	} catch {
+		return null;
+	}
+	if (!isPlainObject(payload)) return null;
+
+	const permlink = payload.permlink;
+	// Shape-only. The durable handler is the authority on whether this permlink
+	// names a real live order the signer owns; we're deciding whether to tell an
+	// open orderbook "stop showing this", and being wrong there costs a row
+	// blinking out and back at the next durable pass. Guarding against a
+	// malformed string is enough; re-implementing the handler's validation here
+	// would just be a second copy to drift.
+	if (typeof permlink !== 'string' || permlink.length === 0 || permlink.length > 256) return null;
+
+	return { orderId: `${signer}/${permlink}`, kind };
 }
 
 /** v1.5.5 — a feedback op located in a head block, narrowed to what the fast
@@ -272,9 +356,15 @@ function locateChatOp(op: ChainOperation): LocatedChatOp | null {
 	return { signer, recipient, ciphertext, header: payload.header, clientTag, orderPermlink };
 }
 
-/** Status snapshot for /v1/health. */
-export interface ChatHeadTailerStatus {
-	readonly enabled: boolean;
+/** Status snapshot for /v1/health.
+ *
+ *  v1.7.0 — `enabled` was REMOVED with the config knob it reported (ADR-0051).
+ *  A field that can only ever say `true` tells an operator nothing, and an
+ *  operator who reads it once and believes fast is optional is worse off than
+ *  one who never saw it. What they actually need to know is whether the tailer
+ *  is RUNNING and how far behind it is — which `running` and `scannedHead`
+ *  already say. */
+export interface HeadTailerStatus {
 	readonly running: boolean;
 	/** Highest head block scanned so far (0 before the first tick). */
 	readonly scannedHead: number;
@@ -284,7 +374,7 @@ export interface ChatHeadTailerStatus {
 	readonly lastErrorAt: Date | null;
 }
 
-export class ChatHeadTailer {
+export class HeadTailer {
 	private readonly abort = new AbortController();
 	private scannedHead = 0;
 	private emitted = 0;
@@ -298,9 +388,8 @@ export class ChatHeadTailer {
 		private readonly blurt: BlurtClient
 	) {}
 
-	getStatus(): ChatHeadTailerStatus {
+	getStatus(): HeadTailerStatus {
 		return {
-			enabled: this.config.chatFastPathEnabled,
 			running: this.running,
 			scannedHead: this.scannedHead,
 			emitted: this.emitted,
@@ -310,14 +399,13 @@ export class ChatHeadTailer {
 	}
 
 	/** Drive the tailer loop. Fire-and-forget from main.ts; resolves on
-	 *  stop(). No-op (returns immediately) when the fast path is
-	 *  disabled. */
+	 *  stop().
+	 *
+	 *  v1.7.0 (ADR-0051) — there is no longer an enabled check here. The fast
+	 *  path is unconditional: it never writes to the DB, so the worst it can
+	 *  do is fail to make things fast, and nobody prefers slow. */
 	async run(): Promise<void> {
-		if (!this.config.chatFastPathEnabled) {
-			log.info('fastpath_disabled');
-			return;
-		}
-		log.info('fastpath_enabled', { interval_ms: this.config.chatFastPathIntervalMs });
+		log.info('fastpath_start', { interval_ms: this.config.fastPathIntervalMs });
 		this.running = true;
 
 		// Initialise the watermark to the CURRENT head so we only tail
@@ -336,7 +424,7 @@ export class ChatHeadTailer {
 		}
 
 		while (!this.abort.signal.aborted) {
-			await sleep(this.config.chatFastPathIntervalMs, this.abort.signal);
+			await sleep(this.config.fastPathIntervalMs, this.abort.signal);
 			if (this.abort.signal.aborted) break;
 			try {
 				await this.tick();
@@ -418,6 +506,17 @@ export class ChatHeadTailer {
 				// review notification could never beat the durable ~60s. Same
 				// shape as the chat fast path: a strict SUBSET of durable
 				// admission, deduped with the durable enqueue on the trx id.
+				// v1.7.0 (ADR-0051) — order status transitions seen at head. Emit
+				// only; the durable poller remains the sole writer. See
+				// locateOrderStatusOp for why exactly two op ids qualify.
+				const orderOp = locateOrderStatusOp(op);
+				if (orderOp !== null) {
+					orderbookEventBus.emitProvisional({ orderId: orderOp.orderId, kind: orderOp.kind });
+					this.emitted++;
+					tailerDbg('tailer.EMIT.orderStatus', { order: orderOp.orderId, kind: orderOp.kind });
+					continue;
+				}
+
 				const feedbackOp = locateFeedbackOp(op);
 				if (feedbackOp !== null) {
 					const trxIdFb = block.transaction_ids[ti];

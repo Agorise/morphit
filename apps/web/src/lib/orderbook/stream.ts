@@ -66,6 +66,9 @@ interface BufferedEvent {
  *  query-string format the REST orderbook endpoint accepts. */
 function buildStreamUrl(query: OrderbookQuery): string {
 	const params = new URLSearchParams();
+	// v1.7.0 — watch one trader, or with permlink, one order (the detail page).
+	if (query.account) params.set('account', query.account);
+	if (query.permlink) params.set('permlink', query.permlink);
 	if (query.asset) params.set('asset', query.asset);
 	if (query.side) params.set('side', query.side);
 	if (query.fiat_currency) params.set('fiat_currency', query.fiat_currency);

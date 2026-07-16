@@ -1,8 +1,8 @@
 #!/usr/bin/env tsx
 /**
- * chat-head-tailer-validation-parity-smoke (cp403 [1], ADR-0048).
+ * head-tailer-validation-parity-smoke (cp403 [1], ADR-0048).
  *
- * The head-block fast-path tailer (chatHeadTailer.ts) deliberately
+ * The head-block fast-path tailer (headTailer.ts) deliberately
  * duplicates the durable chat handler's intake validation (account-name
  * shape, ciphertext cap, base64 shape) and the block-list check, rather
  * than importing them — the tailer stays on the latency-critical path,
@@ -27,7 +27,7 @@
  *      requirement that every instance gets it without opting in)
  *
  * Usage:
- *   cd apps/indexer && npx tsx scripts/chat-head-tailer-validation-parity-smoke.ts
+ *   cd apps/indexer && npx tsx scripts/head-tailer-validation-parity-smoke.ts
  */
 
 import { readFileSync } from 'node:fs';
@@ -36,7 +36,7 @@ import { join } from 'node:path';
 const REPO = join(import.meta.dirname, '..', '..', '..');
 const SRC = join(REPO, 'apps/indexer/src');
 
-const tailer = readFileSync(join(SRC, 'indexer/chatHeadTailer.ts'), 'utf8');
+const tailer = readFileSync(join(SRC, 'indexer/headTailer.ts'), 'utf8');
 const handler = readFileSync(join(SRC, 'indexer/handlers/chat.ts'), 'utf8');
 const dispatcher = readFileSync(join(SRC, 'indexer/dispatcher.ts'), 'utf8');
 const config = readFileSync(join(SRC, 'config/index.ts'), 'utf8');
@@ -166,20 +166,57 @@ function firstQuoted(src: string, anchor: string): string | null {
 	// The durable emit() must NOT be called from the tailer (that path is
 	// the poller's, and it requires a real DB messageId).
 	const usesDurableEmit = /chatEventBus\.emit\s*\(/.test(tailer);
-	// v1.5.5 — this was "CHAT ONLY: exactly one op id". Ken asked for
-	// fastfeedback ("kentest2 left a 4-star feedback for kentest3, but kentest3
-	// did not get a notification at all"), so morphit_feedback_v1 now rides the
-	// same tailer.
+	// This was "CHAT ONLY: exactly one op id" (cp403), then +feedback (v1.5.5),
+	// now +order status (v1.7.0). Each widening must be argued, not assumed —
+	// that is the entire job of this allowlist.
 	//
-	// The INVARIANT this scenario actually protects is unchanged, and is the
-	// reason the allowlist stays short: the fast path is PROVISIONAL (a reorg
-	// can orphan anything it saw) and it must never carry financially material
-	// state. Orders, fees, transfers, profile edits, settings — never. Feedback
-	// is admitted for NOTIFICATION ONLY: the tailer enqueues a push (dedup-keyed
-	// on the trx id so the durable enqueue collapses into it) and writes no
-	// feedback row. The durable handler remains the sole author of reputation.
-	const FAST_ALLOWED_OP_IDS = new Set(['morphit_chat_v1', 'morphit_feedback_v1']);
-	const otherOpIds = (tailer.match(/morphit_[a-z_]+_v\d+/g) ?? []).filter(
+	// THE INVARIANT IS UNCHANGED AND NON-NEGOTIABLE: the fast path is PROVISIONAL
+	// (a reorg can orphan anything it saw) and must never carry financially
+	// material state. ADR-0051 sharpened HOW that invariant is applied — a
+	// head-block op may drive provisional DISPLAY, but never money or reputation —
+	// which is why this list is longer than "chat" without being weaker.
+	//
+	// Each entry earns its place differently:
+	//   morphit_chat_v1      — provisional display. Orphaned = a message flashed
+	//                          and vanished. An annoyance, not a lie.
+	//   morphit_feedback_v1  — NOTIFICATION ONLY. The tailer enqueues a push
+	//                          (dedup-keyed on trx id so the durable enqueue
+	//                          collapses into it) and writes no feedback row. The
+	//                          durable handler stays the sole author of reputation:
+	//                          a review SCORE that moved on a head block would be a
+	//                          lie we told about a person.
+	//   morphit_order_cancel_v1 / morphit_order_complete_v1
+	//                        — status transitions on an order that ALREADY exists
+	//                          durably and is ALREADY fee-verified. They carry no
+	//                          free text (a permlink; complete adds a counterparty
+	//                          name), are owner-signed (both durable handlers gate
+	//                          on `account = signer`), and BOTH remove the order
+	//                          from live views — so this path can only ever remove,
+	//                          never add. Nothing financially material moves: the
+	//                          trade COUNT still waits for the durable pass.
+	//
+	// The two order ops deliberately NOT here are the whole reason this list is
+	// checked at all — see `fastpath-order-scope-smoke`, which owns that argument:
+	//   morphit_order_v1          — no verified fee at head. Publishing it would
+	//                               put UNPAID orders in every orderbook for ~60s.
+	//   morphit_order_replace_v1  — carries the order's free text; a rejected edit
+	//                               would flash arbitrary content to everyone.
+	const FAST_ALLOWED_OP_IDS = new Set([
+		'morphit_chat_v1',
+		'morphit_feedback_v1',
+		'morphit_order_cancel_v1',
+		'morphit_order_complete_v1'
+	]);
+	// Match op ids in CODE, not in prose. The tailer documents at length WHY
+	// morphit_order_v1 and morphit_order_replace_v1 are excluded, and a guard that
+	// fails because someone explained a safety decision is a guard that gets
+	// deleted — so strip comments first, then look at what the code actually
+	// references. This still catches an inline hardcoded id, which a
+	// declarations-only match would miss.
+	const tailerCode = tailer
+		.replace(/\/\*[\s\S]*?\*\//g, '') // block comments (incl. JSDoc)
+		.replace(/\/\/.*$/gm, ''); // line comments
+	const otherOpIds = (tailerCode.match(/morphit_[a-z_]+_v\d+/g) ?? []).filter(
 		(id) => !FAST_ALLOWED_OP_IDS.has(id)
 	);
 	// Notification-only: the tailer may enqueue pushes, never write the durable
@@ -192,7 +229,7 @@ function firstQuoted(src: string, anchor: string): string | null {
 	} else if (otherOpIds.length > 0) {
 		bad(
 			'7 — fast-channel/allowed-ops',
-			`tailer references op id(s) outside the fast allowlist: ${[...new Set(otherOpIds)].join(', ')}. The fast path is provisional (a reorg can orphan it) and must never carry financially material state — orders, fees, transfers.`
+			`tailer references op id(s) outside the fast allowlist: ${[...new Set(otherOpIds)].join(', ')}. The fast path is provisional (a reorg can orphan it) and must never carry financially material state. Widening this list is a SAFETY decision — see ADR-0051's per-entity matrix and fastpath-order-scope-smoke before adding one.`
 		);
 	} else if (durableWrites) {
 		bad(
@@ -214,22 +251,21 @@ function firstQuoted(src: string, anchor: string): string | null {
 	}
 }
 
-// ── 9. fast path ON by default in config ──
-{
-	// Extract the .default(...) for the ENABLED enum. Product requirement:
-	// every instance (incl. existing operators on upgrade) gets the fast
-	// path without setting anything, so the default must be 'true'.
-	const m = config.match(
-		/MORPHIT_INDEXER_CHAT_FASTPATH_ENABLED[\s\S]{0,120}?\.default\('([^']+)'\)/
-	);
-	if (m === null) {
-		bad('9 — default-on', 'could not find MORPHIT_INDEXER_CHAT_FASTPATH_ENABLED .default(...)');
-	} else if (m[1] !== 'true') {
-		bad('9 — default-on', `fast path defaults to '${m[1]}' — must be 'true' so every instance gets it`);
-	} else {
-		ok("9 — fast path is ON by default (MORPHIT_INDEXER_CHAT_FASTPATH_ENABLED .default('true'))");
-	}
-}
+// ── 9. RETIRED (v1.7.0, ADR-0051) ──
+//
+// This slot used to assert MORPHIT_INDEXER_CHAT_FASTPATH_ENABLED defaulted to
+// 'true'. That variable no longer exists — the fast path is unconditional now,
+// so there is no default left to get wrong.
+//
+// It was also in the wrong file. This smoke exists to pin that the tailer's
+// DUPLICATED VALIDATION CONSTANTS still match handlers/chat.ts; a config
+// default is not validation parity, it was just squatting here. The successor
+// concern — "the opt-out must never come back" — is owned properly by
+// `apps/ops-cli:fastpath-always-on-smoke`, which pins it across the env schema,
+// the Config type, run(), the status shape, the env example, and the health
+// renderer, and tamper-proves the load-bearing premise (the tailer never writes
+// the DB). Renumbering the scenarios below would churn every label for nothing,
+// so the slot stays vacant and explains itself.
 
 // ── 10. cp406 self-copy bound parity ──
 {
@@ -254,7 +290,7 @@ function firstQuoted(src: string, anchor: string): string | null {
 
 console.log(`\n${count} scenarios, ${failures} failed`);
 if (failures > 0) {
-	console.error('chat-head-tailer-validation-parity-smoke FAILED');
+	console.error('head-tailer-validation-parity-smoke FAILED');
 	process.exit(1);
 }
-console.log(`✓ all ${count} chat-head-tailer-validation-parity scenarios passed`);
+console.log(`✓ all ${count} head-tailer-validation-parity scenarios passed`);

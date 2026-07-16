@@ -28,7 +28,7 @@ import { backfillPostingKeys, ensurePostingPubkeyColumn } from '$indexer/posting
 import { seedFederationDirectory } from '$indexer/federationSeed';
 import { BlurtClient } from '$blurt/client';
 import { Poller } from '$indexer/poller';
-import { ChatHeadTailer } from '$indexer/chatHeadTailer';
+import { HeadTailer } from '$indexer/headTailer';
 import { createMultiAssetPriceSources, createDisagreementMonitor } from '$indexer/price/factory';
 import { createFxRateSource } from '$indexer/fx/factory';
 import type { FxRateSource } from '$indexer/fx/source';
@@ -363,8 +363,8 @@ async function main(): Promise<void> {
 	// Fire-and-forget; a crash here must NOT take down the process (unlike
 	// the poller), so its errors are contained inside run() — the catch is
 	// a belt-and-suspenders that just logs, never exits.
-	const chatTailer = new ChatHeadTailer(config, db, blurt);
-	const chatTailerPromise = chatTailer.run().catch((err) => {
+	const headTailer = new HeadTailer(config, db, blurt);
+	const headTailerPromise = headTailer.run().catch((err) => {
 		pollerLog.error('chat_fastpath_fatal', {}, err);
 	});
 
@@ -381,7 +381,7 @@ async function main(): Promise<void> {
 	// list, feedback list, chat history) at the lower `list` limit;
 	// single-resource endpoints (profile, release) at the higher
 	// `resource` limit.
-	app.route('/v1/health', healthRoute(config, poller, priceSource, disagreementMonitors, peerMonitorResults, fxSource, multiAssetSources, chatTailer));
+	app.route('/v1/health', healthRoute(config, poller, priceSource, disagreementMonitors, peerMonitorResults, fxSource, multiAssetSources, headTailer));
 	app.route('/v1/instance', instanceRoute(config, () => poller.currentTreasuryAddresses()));
 	app.route('/v1/instances/stream', instancesStreamRoute(db));
 	app.route('/v1/instances', instancesRoute(db));
@@ -757,7 +757,7 @@ async function main(): Promise<void> {
 		// cp403 [1] — stop the chat fast-path tailer too. It holds no DB
 		// transaction (read-only + in-process emits), so it stops cleanly
 		// at its next loop boundary; no timeout race needed.
-		chatTailer.stop();
+		headTailer.stop();
 		// Give the poller up to 10 seconds to wrap up. If it's stuck
 		// on a slow RPC call, we've told it to abort via AbortSignal
 		// but the underlying fetch might not honor that in time.
@@ -766,7 +766,7 @@ async function main(): Promise<void> {
 		// The tailer resolves promptly on abort (its only in-flight work
 		// is a block fetch); await it briefly so the promise isn't left
 		// dangling, but never block shutdown on it.
-		await Promise.race([chatTailerPromise, new Promise<void>((r) => setTimeout(r, 2_000))]);
+		await Promise.race([headTailerPromise, new Promise<void>((r) => setTimeout(r, 2_000))]);
 
 		// Stop all price sources.  cp131 LOW-005 — pre-cp131 had
 		// a separate priceSource.stop() for the standalone BLURT

@@ -56,9 +56,13 @@
 	import { identity, isUnlocked, isPairedReadOnly } from '$stores/identity';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
 	import { broadcastOrderCancel, BroadcastError } from '$blurt/ops/order';
-	import { recordCancel } from '$lib/orders/recentCancels';
+	import { recordCancel, applyRecentCancels } from '$lib/orders/recentCancels';
+	import { applyRecentCompletes } from '$lib/orders/recentCompletes';
 	import { KeystoreError } from '$crypto/keystore';
 	import { getOrdersByAccount } from '$lib/indexer/client';
+	import { createOrderbookStream, type OrderbookStreamHandle } from '$lib/orderbook/stream';
+	import { pendingOrders, mergePendingOrders, pendingOrderKeys } from '$lib/stores/pendingOrders';
+	import { orderEchoKey } from '$lib/stores/pendingEcho';
 	import { getProfileCached } from '$lib/indexer/profileCache';
 	import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
 	import { fetchAccountKeys } from '$blurt/accountKeys';
@@ -85,9 +89,21 @@
 	let errorMessage = $state('');
 
 	// #16 — retry window for a freshly-posted order that hasn't indexed yet.
-	// ~8 tries × 3s ≈ 24s, comfortably longer than Blurt block time + indexer
-	// poll lag, so a just-posted order resolves to 'ready' without the user
-	// ever seeing not-found.
+	//
+	// v1.7.0 — this used to read "~8 tries × 3s ≈ 24s, comfortably longer than
+	// Blurt block time + indexer poll lag". It wasn't. It reasoned about POLL lag
+	// (~3s) and never accounted for IRREVERSIBILITY: the indexer applies only
+	// blocks up to last-irreversible (ADR-0008), which trails head by 45-63s. So
+	// this told a user who had just posted an order — correctly, on chain — that
+	// their order did not exist, 24 seconds after they clicked "View my order".
+	// The comment below says the whole point is to stop that reading as "my money
+	// vanished", and then it caused exactly that.
+	//
+	// The fix is NOT a longer retry (that just replaces "Order not found" with 90
+	// seconds of spinner). `pendingOrders` means this browser already has the
+	// order it just broadcast, so the not-found path is now only reachable for an
+	// order this browser did NOT post — where "not found" is the honest answer and
+	// a long retry would be pure delay. The window stays modest on purpose.
 	const ORDER_RETRY_ATTEMPTS = 8;
 	const ORDER_RETRY_INTERVAL_MS = 3000;
 	let orderRetryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -148,7 +164,35 @@
 			phase = 'error';
 			return;
 		}
-		const found = r.data.items.find((o) => o.permlink === permlink);
+		// v1.7.0 — consult this browser's own just-broadcast orders alongside the
+		// indexer's. The indexer is authoritative and wins whenever it has the row
+		// (findOrderWithPending prefers it); the staged copy only covers the
+		// ~45-63s window where the order is on chain but not yet irreversible.
+		// v1.7.0 — two provisional overlays, each authoritative for its own case:
+		//
+		//   applyRecentCancels / applyRecentCompletes — a cancel or complete this
+		//     session broadcast. This page RECORDED cancels (t.txt #6/#7) and never
+		//     APPLIED either, so cancelling or completing from /my/orders and then
+		//     opening the order showed it "live" for the ~45-63s the indexer needs.
+		//     It recorded the truth and then didn't use it.
+		//   mergePendingOrders — an order this browser just posted, which the indexer
+		//     cannot see yet at all.
+		//
+		// Both overlays exist already and are session-scoped (sessionStorage), which
+		// is right for a status CHANGE: falling back to the indexer after a reload
+		// would show a cancelled order as live. Applied to the MERGED result, not to
+		// the indexer's list, because a staged post the user has since cancelled
+		// isn't in that list at all. The indexer still wins whenever it has the row —
+		// both overlays become no-ops once it catches up.
+		// Merge FIRST, then apply cancels over the result. Order matters: a staged
+		// post that the user has since cancelled is not in `r.data.items` at all
+		// (the indexer has never seen it), so applying cancels to that list alone
+		// would leave the staged copy reading "live" on a cancelled order.
+		const merged = mergePendingOrders(r.data.items, get(pendingOrders), Date.now());
+		const found =
+			applyRecentCompletes(applyRecentCancels(merged)).find(
+				(o) => o.account === account && o.permlink === permlink
+			) ?? null;
 		if (found) {
 			order = found;
 			phase = 'ready';
@@ -199,10 +243,66 @@
 		}
 	}
 
+	/** v1.7.0 "fastorderstatuschange" (ADR-0051) — live subscription for THIS order.
+	 *
+	 *  Ken: "if i am looking at an order detail page and its status changes, i want
+	 *  the pills to update WHILE i am looking at the page."
+	 *
+	 *  Only ONE case is actually stale, and it's worth being precise about which:
+	 *    - Live→Expired already flips client-side off `expires_at`.
+	 *    - Payment status ("funds sent") is a CHAT message, so it already rides the
+	 *      chat fast path (cp403).
+	 *    - Cancel/complete by the OWNER, viewed by the owner, is instant already —
+	 *      they did it on this page (`recordCancel`).
+	 *  What's left: watching SOMEONE ELSE'S order when the owner cancels or
+	 *  completes it. Both durable handlers gate on `account = signer`, so the owner
+	 *  is the only one who can change it — which is exactly why a watcher has no
+	 *  way to know without being told.
+	 *
+	 *  Polling can't fix this: the durable row doesn't change for 45-63s, so a poll
+	 *  would just ask a stale table more often. The head tailer is the only source
+	 *  that knows sooner (ADR-0051).
+	 *
+	 *  We subscribe with account+permlink, so the server sends a one-row snapshot
+	 *  and only this order's events. That stream is live-only + fee-verified-only,
+	 *  so `order_removed` means "this order is no longer a live listing" — which is
+	 *  all we claim. We deliberately do NOT paint a specific new status from it: the
+	 *  head-block op that caused it isn't irreversible yet, and guessing "cancelled"
+	 *  when it might be "completed" would be inventing detail we don't have. The
+	 *  durable refetch below supplies the real status; until then the user is told
+	 *  the honest thing, which is that it's no longer available and still settling. */
+	let noLongerLive = $state(false);
+	let orderStream: OrderbookStreamHandle | null = null;
+
+	function startOrderStream(): void {
+		if (orderStream !== null) return;
+		orderStream = createOrderbookStream({
+			query: () => ({ account, permlink }),
+			onSnapshot: () => {
+				// A one-row snapshot confirming the order is (still) a live listing.
+				// Nothing to do — loadOrder() already rendered it, and the snapshot
+				// carries no status the durable fetch didn't.
+			},
+			applyUpsert: () => {
+				// The order is still live and matched the filter; loadOrder()'s copy is
+				// authoritative for everything this page renders.
+			},
+			applyRemove: (id) => {
+				if (id.account !== account || id.permlink !== permlink) return;
+				noLongerLive = true;
+				// Refetch so the durable status replaces our "no longer live" hedge as
+				// soon as the indexer catches up. Cheap: one request, once.
+				void loadOrder(0);
+			}
+		});
+		orderStream.start();
+	}
+
 	onMount(() => {
 		void loadOrder();
 		void loadPosterProfile();
 		void loadPosterPostingKey();
+		startOrderStream();
 	});
 
 	onDestroy(() => {
@@ -210,6 +310,10 @@
 			clearTimeout(orderRetryTimer);
 			orderRetryTimer = null;
 		}
+		// An EventSource that outlives the page holds a server connection open for a
+		// user who has navigated away.
+		orderStream?.stop();
+		orderStream = null;
 	});
 
 	// ─── Ownership + owner-only actions ────────────────────────────
@@ -230,6 +334,31 @@
 	// the /my/orders ticker. #21 — it also drives the Edit-button countdown, so
 	// the button removes itself the second the 15-minute window closes.
 	let nowMs = $state(Date.now());
+
+	/** v1.7.0 "fastdisplaycurrentstatus" (ADR-0051 §3) — is the order on screen the
+	 *  one THIS browser just broadcast, rather than one the indexer served?
+	 *
+	 *  Ken: "never make the user wonder what is going on."
+	 *
+	 *  A staged order renders from `pendingOrders` with `status: 'live'`, which is
+	 *  true — and, unlabelled, misleading. It is on chain; it is NOT yet in the
+	 *  public orderbook, because that gates on `fee_status IN
+	 *  ('verified','verified_by_attestation')` and nothing has verified the fee
+	 *  yet. Left unmarked, the honest reading of the page is "my order is live",
+	 *  and the user's first clue otherwise is a friend saying they can't find it.
+	 *
+	 *  ADR-0051 §3 requires exactly this label and I owed it: "the user gets
+	 *  feedback in ~6s, not finality in ~6s, and is never misled about which one
+	 *  they have."
+	 *
+	 *  Self-clearing: the moment the indexer's row lands, `mergePendingOrders`
+	 *  drops the staged copy and this goes false on the next load. */
+	const isProvisional = $derived(
+		order !== null &&
+			pendingOrderKeys($pendingOrders, new Set(), nowMs).has(
+				orderEchoKey({ account: order.account, permlink: order.permlink })
+			)
+	);
 	$effect(() => {
 		const t = setInterval(() => {
 			nowMs = Date.now();
@@ -498,6 +627,42 @@
 				<span class={statusChipClasses(effectiveStatus(order))}>
 					{statusLabel(effectiveStatus(order))}
 				</span>
+				{#if isProvisional}
+					<!-- v1.7.0 (ADR-0051 §3) — this order came from THIS browser's own
+					     broadcast, not from the indexer. It's on chain and it's real, but
+					     it isn't in the public orderbook until its fee verifies, so a bare
+					     "Live" pill would let the user believe strangers can already see
+					     it. Say which one they have. -->
+					<span
+						class="inline-flex items-center gap-1.5 rounded-full border border-morphit-emerald/30 bg-morphit-emerald/5 px-2 py-0.5 text-xs text-morphit-emerald"
+						aria-live="polite"
+					>
+						<span
+							class="inline-block h-2 w-2 animate-pulse rounded-full bg-morphit-emerald"
+							aria-hidden="true"
+						></span>
+						{$_('order_detail.status_confirming')}
+					</span>
+				{/if}
+				{#if noLongerLive && effectiveStatus(order) === 'live'}
+					<!-- v1.7.0 (ADR-0051) — the live stream told us this order just left
+					     live listings, ~45-63s before the indexer will say why. We say
+					     exactly that and no more: the head-block op isn't irreversible
+					     yet, and painting "Cancelled" when it might be "Completed" would
+					     be inventing a detail we don't have. This chip disappears on its
+					     own the moment the durable status lands (the refetch is already
+					     in flight), so the user never has to act on the hedge. -->
+					<span
+						class="inline-flex items-center gap-1.5 rounded-full border border-warn-500/30 bg-warn-500/5 px-2 py-0.5 text-xs text-warn-700 dark:text-warn-300"
+						aria-live="polite"
+					>
+						<span
+							class="inline-block h-2 w-2 animate-pulse rounded-full bg-warn-500"
+							aria-hidden="true"
+						></span>
+						{$_('order_detail.status_settling')}
+					</span>
+				{/if}
 				{#if isOrderLive(order, nowMs) && order.expires_at}
 					<span
 						class="rounded-full border border-morphit-emerald/30 bg-morphit-emerald/5 px-2 py-0.5 text-xs text-morphit-emerald"

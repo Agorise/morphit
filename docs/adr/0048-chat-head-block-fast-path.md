@@ -1,6 +1,19 @@
 # ADR-0048 — Chat head-block fast path (sub-6s message delivery)
 
-**Status:** Accepted (implemented), 2026-07-02
+**Status:** Accepted — **partially superseded by ADR-0051 (2026-07-16)**
+
+> **Superseded in part.** ADR-0051 keeps this ADR's load-bearing invariant —
+> the tailer NEVER writes the database — and its latency budget, but replaces:
+>
+> - **Invariant #2 ("CHAT ONLY … orders et al. stay irreversible-only,
+>   always")** with a per-entity matrix: a head-block op may drive *provisional
+>   display*, but never money or reputation. The half of #2 that still holds is
+>   *"must never drive money or state"*.
+> - **The `MORPHIT_INDEXER_CHAT_FASTPATH_ENABLED` opt-out**, which was removed
+>   rather than renamed — the tailer cannot corrupt anything, so there was
+>   nothing for the switch to protect.
+>
+> Read ADR-0051 before relying on anything below about scope or configuration. (implemented), 2026-07-02
 **Supersedes:** none
 **Superseded by:** none
 **Related:** ADR-0008 (irreversible-only indexing), ADR-0015 (chat E2EE envelope)

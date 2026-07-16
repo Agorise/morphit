@@ -4373,12 +4373,22 @@ poller (which only applies irreversible blocks) is
 unchanged and stays the sole source of truth for chat
 history and everything else.
 
-**On by default.** Two knobs, both in `ops/env/indexer.env`:
+**Always on — there is no off switch** (v1.7.0, ADR-0051). The
+scanner never writes the database, so the worst a broken fast
+path can do is fail to make things fast; there is nothing to
+protect you from, and nobody prefers slow. The old
+`MORPHIT_INDEXER_CHAT_FASTPATH_ENABLED` was **removed, not
+renamed** — if it is still in your env file it is now inert and
+can be deleted.
+
+One knob remains, in `ops/env/indexer.env`:
 
 ```
-MORPHIT_INDEXER_CHAT_FASTPATH_ENABLED=true    # default true
-MORPHIT_INDEXER_CHAT_FASTPATH_INTERVAL_MS=2000 # default 2000
+MORPHIT_INDEXER_FASTPATH_INTERVAL_MS=2000 # default 2000
 ```
+
+Raise it to reduce head-poll traffic on a straining node; lower
+it for tighter latency.
 
 - It **never writes the database** — read-only (block feed +
   a block-list lookup) plus in-process SSE. A crash in it

@@ -29,7 +29,8 @@ import {
 	summarizeHealth,
 	parsePriceFeed,
 	parsePriceFeedsHealth,
-	parseChatFastPath,
+	parseFastPath,
+	FASTPATH_HEALTHY_LAG_BLOCKS,
 	classifyHealthResult,
 	bridgeGatewayHosts,
 	candidateHealthUrls,
@@ -617,13 +618,18 @@ expect('HV-1e an unparseable string passes through', ensureHealthPath('not a url
 	);
 }
 
-// ── HV-12: chat head-block fast-path status (cp403 [1], ADR-0048) ──
+// ── HV-12: head-block fast-path status (v1.7.0, ADR-0051) ──
 {
-	// parseChatFastPath — tolerant parse of the operator-only top-level
-	// `chat_fastpath` block (camelCase keys, forwarded verbatim from the
-	// indexer's ChatHeadTailerStatus).
-	const on = parseChatFastPath({
-		enabled: true,
+	// parseFastPath — tolerant parse of the operator-only top-level `fastpath`
+	// block (camelCase keys, forwarded verbatim from the indexer's
+	// HeadTailerStatus).
+	//
+	// v1.7.0 — the `enabled` cases here are GONE with the field. They asserted a
+	// value that could only ever be true, so HV-12b ("disabled parsed") was
+	// pinning a state no deployment could reach. What replaced them is the
+	// property that can actually vary and that an operator actually needs:
+	// whether the tailer is keeping up with the chain head.
+	const on = parseFastPath({
 		running: true,
 		scannedHead: 59500000,
 		emitted: 42,
@@ -631,63 +637,76 @@ expect('HV-1e an unparseable string passes through', ensureHealthPath('not a url
 		lastErrorAt: null
 	});
 	expect(
-		'HV-12a chat_fastpath running parsed',
-		on !== null && on.enabled && on.running && on.scannedHead === 59500000 && on.emitted === 42
+		'HV-12a fastpath running parsed',
+		on !== null && on.running && on.scannedHead === 59500000 && on.emitted === 42
 	);
-	const off = parseChatFastPath({ enabled: false, running: false, scannedHead: 0, emitted: 0, lastError: null });
-	expect('HV-12b disabled parsed (enabled:false)', off !== null && !off.enabled);
+	const starting = parseFastPath({ running: false, scannedHead: 0, emitted: 0, lastError: null });
+	expect('HV-12b not-yet-tailing parsed', starting !== null && !starting.running);
 	expect(
 		'HV-12c absent/null block → null',
-		parseChatFastPath(undefined) === null && parseChatFastPath(null) === null
+		parseFastPath(undefined) === null && parseFastPath(null) === null
 	);
-	const err = parseChatFastPath({ enabled: true, running: false, lastError: 'rpc getBlock 502' });
+	const err = parseFastPath({ running: false, lastError: 'rpc getBlock 502' });
 	expect(
 		'HV-12d lastError surfaced, missing numeric fields → null (tolerant)',
 		err !== null && err.lastError === 'rpc getBlock 502' && err.scannedHead === null && err.emitted === null
 	);
 	expect(
 		'HV-12e non-object → null',
-		parseChatFastPath(42) === null && parseChatFastPath('on') === null
+		parseFastPath(42) === null && parseFastPath('on') === null
+	);
+	// The threshold the renderer judges "keeping up" by must stay tight enough to
+	// mean something: blocks are ~3s and the scanner polls every ~2s, so a
+	// tailer more than a few blocks back is not delivering the ≤6s the fast path
+	// exists for. A large value here would let a broken tailer read as healthy.
+	expect(
+		'HV-12f healthy-lag threshold is tight (<= 6 blocks ≈ 18s)',
+		FASTPATH_HEALTHY_LAG_BLOCKS > 0 && FASTPATH_HEALTHY_LAG_BLOCKS <= 6
 	);
 
-	// Render source-assertion: the node-health view prints a "Fast chat:"
-	// line with the on / off / not-tailing-yet branches + an older-build
-	// fallback, so admins always see the status (like the price feeds).
+	// Render source-assertion: the node-health view prints a "Fast path:" line.
+	//
+	// v1.7.0 — the old assertions pinned an on/off/disabled line ("messages
+	// appear once irreversible"). Those states no longer exist (ADR-0051), and a
+	// smoke that still demanded them would have forced the dead branch to stay.
+	// What's pinned now is that the line reports LAG: a tailer that is running
+	// but far behind head is broken, and the old line called that one "on".
 	const healthSrc = readFileSync(
 		join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'commands', 'health.ts'),
 		'utf-8'
 	);
-	expect('HV-12f render has a "Fast chat:" label', healthSrc.includes('Fast chat:'));
+	expect('HV-12g render has a "Fast path:" label', healthSrc.includes('Fast path:'));
 	expect(
-		'HV-12g render shows the disabled state (irreversible note)',
-		healthSrc.includes('messages appear once irreversible')
+		'HV-12h render reports lag against head, not an on/off boolean',
+		healthSrc.includes('behind head') && healthSrc.includes('FASTPATH_HEALTHY_LAG_BLOCKS')
 	);
 	expect(
-		'HV-12h render shows the tailing state + delivered count',
-		healthSrc.includes('tailing') && healthSrc.includes('delivered')
+		'HV-12i render still shows a delivered count + keeping-up state',
+		healthSrc.includes('delivered') && healthSrc.includes('keeping up')
 	);
 	expect(
-		'HV-12i render has the older-build fallback',
-		healthSrc.includes('Fast chat:     status unavailable (older indexer build)')
+		'HV-12j render has the older-build fallback',
+		healthSrc.includes('Fast path:     status unavailable (older indexer build)')
+	);
+	expect(
+		'HV-12k render no longer offers a disabled state',
+		!healthSrc.includes('messages appear once irreversible')
 	);
 
-	// Indexer-side: chat_fastpath must be in the OPERATOR-ONLY top-level
-	// block (the `localDiag` / X-Morphit-Local-Health gate the ops-cli
-	// uses) — NOT only in the ?verbose=1 diagnostics block, or the
-	// node-health view (which doesn't send verbose=1) would never see it.
+	// Indexer-side: `fastpath` must be in the OPERATOR-ONLY top-level block (the
+	// `localDiag` / X-Morphit-Local-Health gate the ops-cli uses) — NOT only in
+	// the ?verbose=1 diagnostics block, or the node-health view (which doesn't
+	// send verbose=1) would never see it.
 	const idxHealthSrc = readFileSync(
 		join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'indexer', 'src', 'api', 'health.ts'),
 		'utf-8'
 	);
 	const localDiagIdx = idxHealthSrc.indexOf('if (localDiag) {');
-	const fastPathIdx = idxHealthSrc.indexOf('body.chat_fastpath');
+	const fastPathIdx = idxHealthSrc.indexOf('body.fastpath');
 	const verboseIdx = idxHealthSrc.indexOf('if (verbose) {');
+	expect('HV-12l indexer emits body.fastpath', fastPathIdx >= 0);
 	expect(
-		'HV-12j indexer emits body.chat_fastpath',
-		fastPathIdx >= 0
-	);
-	expect(
-		'HV-12k chat_fastpath is inside the localDiag (operator-only) block, before the verbose block',
+		'HV-12m fastpath is inside the localDiag (operator-only) block, before the verbose block',
 		localDiagIdx >= 0 && fastPathIdx > localDiagIdx && (verboseIdx < 0 || fastPathIdx < verboseIdx)
 	);
 }

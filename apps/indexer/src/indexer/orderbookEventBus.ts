@@ -27,8 +27,49 @@
 
 export type OrderbookListener = (orderId: string) => void;
 
+/**
+ * v1.7.0 (ADR-0051) — a head-block op that changes an EXISTING order's status,
+ * seen ~45-63s before the durable poller will apply it.
+ *
+ * WHY THIS IS A SEPARATE CHANNEL FROM `emit`. The durable contract is "here's an
+ * order id, go re-query the table" — which works precisely because the row is
+ * already committed when it fires. A provisional event is the opposite: the row
+ * still holds the OLD status, so a re-query would return the pre-change state
+ * and the subscriber would emit `order_upserted` with stale data. Reusing the
+ * same channel would mean every listener had to know which kind it was looking
+ * at, which is how a listener eventually gets it wrong.
+ *
+ * WHY IT CAN ONLY EVER REMOVE. Provisional order events carry a status
+ * TRANSITION on an order that already exists durably — never a new order. That
+ * is a hard safety boundary, not a scope decision:
+ *
+ *   - The public orderbook gates on `fee_status IN ('verified',
+ *     'verified_by_attestation')`. A head-block `morphit_order_v1` has NOT had
+ *     its fee verified — verification is money, which ADR-0051 keeps durable-only
+ *     — so publishing one provisionally would let anyone put unpaid orders in
+ *     front of every user for ~60s at a time. A fee bypass with extra steps.
+ *   - `morphit_order_replace_v1` carries the order's free text, so a rejected
+ *     edit could flash arbitrary content into every open orderbook.
+ *
+ * `morphit_order_cancel_v1` and `morphit_order_complete_v1` carry no free text
+ * at all (a permlink, and for complete a counterparty name), act on an order
+ * that is already fee-verified and public, and are signed by the owner. The
+ * worst a bogus one can do is make an order briefly vanish from live views and
+ * reappear on the next durable pass — bounded, self-correcting, and impossible
+ * to spam WITH.
+ */
+export interface ProvisionalOrderEvent {
+	/** `account/permlink` — the same order id shape the durable channel uses. */
+	readonly orderId: string;
+	/** The transition seen at head. Both remove the order from live views. */
+	readonly kind: 'cancelled' | 'completed';
+}
+
+export type ProvisionalOrderListener = (event: ProvisionalOrderEvent) => void;
+
 class OrderbookEventBus {
 	private readonly listeners: Set<OrderbookListener> = new Set();
+	private readonly provisionalListeners: Set<ProvisionalOrderListener> = new Set();
 
 	/** Subscribe a listener.  Returns an unsubscribe function;
 	 *  the SSE handler calls it on connection close. */
@@ -56,6 +97,32 @@ class OrderbookEventBus {
 				// worth surfacing in journal.
 				const msg = err instanceof Error ? err.message : String(err);
 				process.stderr.write(`orderbook-event-bus: listener threw: ${msg}\n`);
+			}
+		}
+	}
+
+	/** Subscribe to head-block (provisional) order status changes.  Returns an
+	 *  unsubscribe function; the SSE handler calls it on connection close. */
+	onProvisional(listener: ProvisionalOrderListener): () => void {
+		this.provisionalListeners.add(listener);
+		return () => {
+			this.provisionalListeners.delete(listener);
+		};
+	}
+
+	/** Emit a provisional order status change.  Same fire-and-forget contract as
+	 *  `emit`: synchronous, listeners' throws are contained.
+	 *
+	 *  MUST NOT be called from anywhere that writes the database. The head tailer
+	 *  is the only caller by design — see ADR-0051 invariant #1. */
+	emitProvisional(event: ProvisionalOrderEvent): void {
+		const snapshot = Array.from(this.provisionalListeners);
+		for (const listener of snapshot) {
+			try {
+				listener(event);
+			} catch (err) {
+				const msg = err instanceof Error ? err.message : String(err);
+				process.stderr.write(`orderbook-event-bus: provisional listener threw: ${msg}\n`);
 			}
 		}
 	}

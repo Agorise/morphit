@@ -5,7 +5,7 @@
  * feature bids (top MAX_SLOTS win). The durable indexer applies blocks
  * only up to last-irreversible (ADR-0008), ~50-90s behind the chain
  * head, so a freshly-broadcast feature bid takes ~a minute to surface.
- * The chat fast-path (chatHeadTailer) is DELIBERATELY chat-only — a
+ * The chat fast-path (headTailer) is DELIBERATELY chat-only — a
  * head-block op isn't irreversible and must never drive money/state, so
  * paid feature bids are (correctly) excluded from it.
  *
@@ -31,18 +31,24 @@
 
 import { writable } from 'svelte/store';
 import type { FeaturedSlot, OrderRecord } from '@morphit/indexer-client';
+import { PENDING_TTL_MS, liveEntries, upsertEntry, orderEchoKey } from './pendingEcho';
 
-/** ~2.5 min: Blurt's last-irreversible lag (~60s) plus generous margin
- *  so a slow indexer catch-up doesn't drop the card before it confirms,
- *  while a losing bid still clears in bounded time. */
-export const PENDING_TTL_MS = 150_000;
+// v1.7.0 — the TTL and the expiry/dedupe rules moved to `pendingEcho`, shared
+// with `pendingOrders`. They encode facts about the CHAIN (how long
+// last-irreversible takes), not about featured slots, so a change to one is a
+// change to both — and two hand-copies is exactly how they drift apart, one
+// getting a fix the other doesn't while both still look right.
+// Re-exported so this module's public API is unchanged for its callers.
+export { PENDING_TTL_MS };
 
 export interface PendingFeaturedSlot {
 	readonly slot: FeaturedSlot;
 	readonly addedAt: number;
 }
 
-const slotKey = (o: { account: string; permlink: string }): string => `${o.account}/${o.permlink}`;
+/** Shared with every other echo store, so two of them can't disagree about what
+ *  "the same order" means. */
+const slotKey = orderEchoKey;
 
 const store = writable<readonly PendingFeaturedSlot[]>([]);
 
@@ -67,10 +73,7 @@ export function addPendingFeatured(order: OrderRecord, blurtPaid: number): void 
 			expires_at: new Date(now + 6 * 3_600_000).toISOString()
 		}
 	};
-	store.update((list) => [
-		...list.filter((p) => slotKey(p.slot.order) !== slotKey(order) && now - p.addedAt < PENDING_TTL_MS),
-		{ slot, addedAt: now }
-	]);
+	store.update((list) => upsertEntry(list, { slot, addedAt: now }, (p) => slotKey(p.slot.order)));
 }
 
 /**
@@ -84,9 +87,7 @@ export function mergeablePending(
 	confirmedKeys: ReadonlySet<string>,
 	nowMs: number
 ): readonly FeaturedSlot[] {
-	return pending
-		.filter((p) => !confirmedKeys.has(slotKey(p.slot.order)) && nowMs - p.addedAt < PENDING_TTL_MS)
-		.map((p) => p.slot);
+	return liveEntries(pending, (p) => slotKey(p.slot.order), confirmedKeys, nowMs).map((p) => p.slot);
 }
 
 export { slotKey as pendingFeaturedKey };

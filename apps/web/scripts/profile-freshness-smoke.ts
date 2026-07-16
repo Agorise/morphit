@@ -31,6 +31,7 @@ const REPO = join(WEB, '..', '..');
 
 const serverProfiles = readFileSync(join(REPO, 'apps', 'indexer', 'src', 'api', 'profiles.ts'), 'utf8');
 const cacheMod = readFileSync(join(WEB, 'src', 'lib', 'indexer', 'profileCache.ts'), 'utf8');
+const echoMod = readFileSync(join(WEB, 'src', 'lib', 'stores', 'pendingEcho.ts'), 'utf8');
 const store = readFileSync(join(WEB, 'src', 'lib', 'stores', 'selfProfile.ts'), 'utf8');
 const settings = readFileSync(join(WEB, 'src', 'routes', '[lang]', 'settings', '+page.svelte'), 'utf8');
 const orderbook = readFileSync(join(WEB, 'src', 'routes', '[lang]', 'orderbook', '+page.svelte'), 'utf8');
@@ -83,7 +84,19 @@ check('an authoritative "no profile" is still applied (avatar really removed)', 
 // own orderbook cards must recover their avatar/name after a SW-upgrade reload
 // race WITHOUT a manual refresh.
 check('cache exports primeProfile (optimistic write for the user\u2019s own edit)', /export function primeProfile\(/.test(cacheMod));
-check('a prime is held through indexer catch-up (isPrimeHeld + PRIME_HOLD_MS)', /const PRIME_HOLD_MS = 12_000/.test(cacheMod) && /function isPrimeHeld\(/.test(cacheMod));
+// v1.7.0 — this check's NAME was right and its ASSERTION was wrong, which is the
+// worst combination: it pinned `PRIME_HOLD_MS = 12_000`, so it was actively
+// holding the bug in place. 12s cannot "hold through indexer catch-up" —
+// `profiles` is written only by handlers/profile.ts, which runs from the poller's
+// applyBlock, and the poller applies blocks only up to last-irreversible
+// (ADR-0008), 45-63s behind head. The hold expired ~40s BEFORE the indexer could
+// know about the edit, and the next fetch reverted the user's own just-saved
+// name — the exact "I saved it but it reverted" flicker (t.txt 2+3) this exists
+// to prevent. Now pins the REQUIREMENT (a window that outlasts irreversibility,
+// via the shared chain constant) rather than a literal that was never right.
+check('a prime is held through indexer catch-up (isPrimeHeld + PRIME_HOLD_MS)', /const PRIME_HOLD_MS = PENDING_TTL_MS/.test(cacheMod) && /function isPrimeHeld\(/.test(cacheMod));
+check('the hold uses the shared chain constant, not a hand-tuned copy', /import \{ PENDING_TTL_MS \} from '\$lib\/stores\/pendingEcho'/.test(cacheMod));
+check('PENDING_TTL_MS actually outlasts Blurt irreversibility (45-63s)', /export const PENDING_TTL_MS = 150_000/.test(echoMod));
 check('BOTH fetch-resolution branches defer to a held prime (no stale clobber)', (cacheMod.match(/if \(isPrimeHeld\(account\)\)/g) || []).length >= 2);
 check('primeProfile writes exactly the json_metadata keys extractLabelPropsFromProfile reads', /jsonMetadata\.avatar_svg =/.test(cacheMod) && /jsonMetadata\.avatar_data_uri =/.test(cacheMod) && /jsonMetadata\.short_bio =/.test(cacheMod) && /jsonMetadata\.nostr_url =/.test(cacheMod) && /jsonMetadata\.blurt_media_url =/.test(cacheMod));
 check('clearing the cache also drops the prime hold (no stale-prime leak)', /primedAt\.clear\(\)/.test(cacheMod) && /primedAt\.delete\(account\)/.test(cacheMod));

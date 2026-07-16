@@ -95,10 +95,10 @@ scenario('fast-path provisional carries ev.orderPermlink into the wire', () => {
 	);
 });
 
-scenario('chatHeadTailer extracts + forwards the on-chain order_permlink', () => {
-	const ht = readFileSync(join(SRC, 'indexer/chatHeadTailer.ts'), 'utf8');
-	assert(/\.order_permlink/.test(ht), 'chatHeadTailer no longer reads payload.order_permlink off the on-chain op');
-	assert(/orderPermlink/.test(ht), 'chatHeadTailer no longer forwards orderPermlink in the fast event');
+scenario('headTailer extracts + forwards the on-chain order_permlink', () => {
+	const ht = readFileSync(join(SRC, 'indexer/headTailer.ts'), 'utf8');
+	assert(/\.order_permlink/.test(ht), 'headTailer no longer reads payload.order_permlink off the on-chain op');
+	assert(/orderPermlink/.test(ht), 'headTailer no longer forwards orderPermlink in the fast event');
 });
 
 if (failures === 0) {

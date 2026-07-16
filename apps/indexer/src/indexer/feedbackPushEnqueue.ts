@@ -3,7 +3,7 @@
  *
  * v1.5.5 — shared feedback Web Push enqueue, used by BOTH delivery paths:
  *   • the DURABLE handler (handlers/feedback.ts), ~irreversible, and
- *   • the FAST head-block tailer (chatHeadTailer.ts), ~5s after broadcast.
+ *   • the FAST head-block tailer (headTailer.ts), ~5s after broadcast.
  *
  * Ken: "kentest2 left a 4-star feedback (with text in the textarea) for
  * kentest3, but kentest3 did not get a notification at all (let alone within 6

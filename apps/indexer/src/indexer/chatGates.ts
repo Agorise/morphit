@@ -2,7 +2,7 @@
  * apps/indexer/src/indexer/chatGates.ts
  *
  * cp471 — shared chat admission checks, so the DURABLE handler (chat.ts) and
- * the FAST head-block tailer (chatHeadTailer.ts) evaluate order-tag validity
+ * the FAST head-block tailer (headTailer.ts) evaluate order-tag validity
  * and prior-exchange IDENTICALLY and can never drift apart. Divergence here
  * would be a security bug (the stranger-fee bypass and the fast-notify gate
  * both hang off these), so there is exactly ONE implementation.

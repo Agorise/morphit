@@ -242,6 +242,65 @@ scenario('buildWhereClauses: startIndex offsets parameter numbering', () => {
 	assertEqual(params, ['XMR'], 'one param');
 });
 
+// ─── v1.7.0: watch-one-order filter (ADR-0051) ───────────────────
+//
+// The order detail page subscribes with account+permlink so it gets a one-row
+// snapshot and only that order's events, instead of every order the trader has
+// live. The safety property being pinned is that this NARROWS — it must never
+// let a row through that the unfiltered stream wouldn't already serve.
+
+scenario('buildWhereClauses: account+permlink narrow to one order', () => {
+	const { where, params } = buildWhereClauses({ account: 'kentest3', permlink: 'sell-btc-1' });
+	assertTrue(where.includes('o.account = $1'), 'account predicate');
+	assertTrue(where.includes('o.permlink = $2'), 'permlink predicate');
+	assertEqual(params, ['kentest3', 'sell-btc-1'], 'both bound as params');
+});
+
+scenario('buildWhereClauses: the watch filter never drops a base predicate', () => {
+	// This is the whole safety argument. If account/permlink were ever built
+	// BEFORE the base clauses (or replaced them), the detail page could subscribe
+	// to an unpaid, cancelled, expired, or operator-blocked order and be told it
+	// was live. They must ADD to the same chokepoint every other path shares.
+	const { where } = buildWhereClauses({ account: 'kentest3', permlink: 'sell-btc-1' }, 0, 'morphit');
+	assertTrue(where.includes(`o.status = 'live'`), 'still live-only');
+	assertTrue(
+		where.includes(`o.fee_status IN ('verified', 'verified_by_attestation')`),
+		'still fee-verified-only — the gate that keeps unpaid orders unpublished'
+	);
+	assertTrue(
+		where.includes(`(o.expires_at IS NULL OR o.expires_at > NOW())`),
+		'still unexpired-only'
+	);
+	assertTrue(
+		where.some((w) => w.includes('operator_blocks')),
+		'still honours the operator block list'
+	);
+});
+
+scenario('buildWhereClauses: account alone is legal (all of a trader\'s live orders)', () => {
+	const { where, params } = buildWhereClauses({ account: 'kentest3' });
+	assertTrue(where.includes('o.account = $1'), 'account predicate');
+	assertTrue(!where.some((w) => w.startsWith('o.permlink')), 'no permlink predicate');
+	assertEqual(params, ['kentest3'], 'one param');
+});
+
+scenario('buildWhereClauses: the watch filter composes with the others', () => {
+	const { where, params } = buildWhereClauses({ account: 'kentest3', asset: 'BTC', side: 'sell' });
+	assertTrue(where.includes('o.account = $1'), 'account');
+	assertTrue(where.includes('o.asset = $2'), 'asset');
+	assertTrue(where.includes('o.side = $3'), 'side');
+	assertEqual(params, ['kentest3', 'BTC', 'sell'], 'param order matches placeholder order');
+});
+
+scenario('buildWhereClauses: watch filter respects startIndex (per-row lookup path)', () => {
+	// The per-row lookup binds account+permlink as $1,$2 and starts filter params
+	// at $3. An off-by-one here would silently bind the wrong value to the wrong
+	// column — a filter that matches the wrong order.
+	const { where, params } = buildWhereClauses({ account: 'kentest3' }, 2);
+	assertTrue(where.includes('o.account = $3'), 'placeholder offset by startIndex');
+	assertEqual(params, ['kentest3'], 'params unaffected by offset');
+});
+
 // ─── rowToWire ───────────────────────────────────────────────────
 
 scenario('rowToWire: full row → full wire shape', () => {

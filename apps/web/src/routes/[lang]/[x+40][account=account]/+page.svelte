@@ -48,7 +48,9 @@
 	// action).  Lazy-import both.
 	// import RespondToFeedbackForm from '$components/RespondToFeedbackForm.svelte';
 	// import MyBalanceCard from '$components/MyBalanceCard.svelte';
+	import { get } from 'svelte/store';
 	import RelativeTime from '$components/RelativeTime.svelte';
+	import { pendingFeedbackReplies, addPendingReply, mergePendingReplies } from '$lib/stores/pendingFeedbackReplies';
 	import WriteBlockedReadOnly from '$components/WriteBlockedReadOnly.svelte';
 	import { identiconDataUri } from '$crypto/identicon';
 	import {
@@ -210,17 +212,28 @@
 		const r = await getFeedback(account, { cursor });
 		if (r.ok) {
 			feedback = r.data;
+			// v1.7.0 "fastrepliestofeedbacks" (ADR-0051) — slot in any reply this
+			// browser just broadcast. The indexer can't see it for ~45-63s, so
+			// without this the page said "Reply posted ✓" and then showed no reply:
+			// the user's own words missing from their own profile for a minute, which
+			// reads as "it didn't work". The indexer's copy wins the moment it lands —
+			// the merge drops the echo once ANY durable response exists for that row.
+			const merged = mergePendingReplies(r.data.items, get(pendingFeedbackReplies), Date.now());
 			if (cursor) {
-				feedbackItems = [...feedbackItems, ...r.data.items];
+				feedbackItems = [...feedbackItems, ...merged];
 			} else {
-				feedbackItems = [...r.data.items];
+				feedbackItems = [...merged];
 			}
 			feedbackNextCursor = r.data.next_cursor;
 			feedbackState = 'ready';
 			// Hydrate profile data for reviewers + responders in this
 			// page of results. Fire-and-forget; IdentityLabel falls
 			// back to identicons until this resolves.
-			void hydrateReviewerProfiles(r.data.items, 'received');
+			// `merged`, not `r.data.items`: hydration walks each row's responses to
+			// resolve responder avatars, and a staged reply's responder isn't in the
+			// indexer's copy. Without this the user's own just-posted reply renders
+			// with an identicon instead of their avatar until the durable row lands.
+			void hydrateReviewerProfiles(merged, 'received');
 		} else {
 			console.warn('[profile] feedback load failed:', r.message);
 			feedbackError = $_('profile.error.feedback_load_failed');
@@ -884,15 +897,20 @@
 									{#await loadRespondToFeedbackForm() then RespondToFeedbackForm}
 										<RespondToFeedbackForm
 											feedbackTrxId={fb.source_trx_id}
-											onSuccess={() => {
+											onSuccess={(res) => {
 												replyingTo = null;
+												// v1.7.0 — stage the reply so it renders where it will
+												// permanently live, instead of a "posted" line above a
+												// visibly empty reply slot for ~45-63s. Staged only
+												// after the broadcast resolved ok, so it means "on
+												// chain, not yet irreversible" — never "we hope".
+												addPendingReply(fb.source_trx_id, account, res.comment);
 												// Snapshot-set update — Svelte 5 tracks
 												// by reference, so we replace the whole
 												// Set to trigger reactivity.
 												recentlyRepliedIds = new Set([...recentlyRepliedIds, fb.id]);
-												// Kick off a refetch so the response
-												// record lands in the DOM. The success
-												// line stays visible until then.
+												// Refetch so the durable copy takes over as soon as the
+												// indexer has it; the merge drops the echo at that point.
 												void loadFeedbackPage();
 											}}
 											onCancel={() => (replyingTo = null)}

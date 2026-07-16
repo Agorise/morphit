@@ -36,6 +36,7 @@
  */
 
 import { MORPHIT_INDEXER_ORIGIN, resolveOrigin } from '$net/config';
+import { PENDING_TTL_MS } from '$lib/stores/pendingEcho';
 import type { BatchProfilesResponse, ProfileResponse } from '@morphit/indexer-client';
 
 /** Cache TTL, matching server Cache-Control max-age. */
@@ -99,14 +100,30 @@ function isFresh(entry: CacheEntry): boolean {
 /** cp452 — accounts the LOCAL user just wrote via their OWN confirmed
  *  broadcast, and when. A server fetch that resolves within
  *  {@link PRIME_HOLD_MS} of a prime must NOT overwrite that account's cache
- *  entry: the indexer needs ~1-2 blocks to reflect the just-broadcast profile
- *  op, so an in-flight or immediately-following fetch would otherwise clobber
- *  the user's own new display name / avatar with the still-stale server read —
- *  the "I saved it but it reverted for a few seconds" flicker (t.txt items 2 +
- *  3). The window comfortably covers indexer catch-up; afterwards normal
- *  fetches take over and re-confirm from the chain-indexed value. */
+ *  entry, or an in-flight or immediately-following fetch clobbers the user's own
+ *  new display name / avatar with the still-stale server read — the "I saved it
+ *  but it reverted for a few seconds" flicker (t.txt items 2 + 3).
+ *
+ *  v1.7.0 — this window was **12 seconds**, with a comment claiming the indexer
+ *  "needs ~1-2 blocks" and that 12s "comfortably covers indexer catch-up". It
+ *  doesn't, and couldn't: `profiles` is written only by handlers/profile.ts,
+ *  which runs from the poller's `applyBlock` — and the poller applies blocks only
+ *  up to last-irreversible (ADR-0008), which trails head by **45-63 seconds**.
+ *  So the hold expired roughly 40 seconds before the indexer could possibly know
+ *  about the edit, and the next fetch reverted it. The exact flicker this
+ *  constant exists to prevent, reliably.
+ *
+ *  Same root error as the order-detail retry (24s), the order-visible poll (40s),
+ *  and `setSelfAvatar`'s "1–2 blocks" note: all reasoned about BLOCK time when
+ *  the real wait is IRREVERSIBILITY. See ADR-0051.
+ *
+ *  Now shares `PENDING_TTL_MS` with the optimistic echo stores, because it is the
+ *  same question with the same answer — "how long until the indexer can be
+ *  trusted to know about my own op?" — and that is a fact about the CHAIN, not
+ *  about profiles. Two hand-tuned copies is how one gets fixed and the other
+ *  doesn't. */
 const primedAt: Map<string, number> = new Map();
-const PRIME_HOLD_MS = 12_000;
+const PRIME_HOLD_MS = PENDING_TTL_MS;
 
 function isPrimeHeld(account: string): boolean {
 	const t = primedAt.get(account);

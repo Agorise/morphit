@@ -16,6 +16,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { PENDING_TTL_MS } from '$lib/stores/pendingEcho';
 
 import {
 	getProfilesBatch,
@@ -442,13 +443,38 @@ describe('profileCache', () => {
 		expect(cached!.display_name).toBe('Alice New');
 	});
 
+	it('the prime outlasts the indexer\'s irreversibility lag (the whole point)', async () => {
+		// v1.7.0 — this test used to assert the OPPOSITE, at 13s, on the premise
+		// that "the indexer has caught up". It hasn't and can't: `profiles` is
+		// written only by handlers/profile.ts, which runs from the poller's
+		// applyBlock, and the poller applies blocks only up to last-irreversible
+		// (ADR-0008) — 45-63s behind head. The old 12s hold therefore expired ~40s
+		// BEFORE the indexer could possibly know about the edit, and the next fetch
+		// reverted the user's own just-saved name. That is exactly the "I saved it
+		// but it reverted" flicker the hold exists to prevent, happening reliably.
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-04-23T12:00:00Z'));
+		primeProfile('alice', { displayName: 'Alice New' });
+
+		// 63s: the far end of Blurt's last-irreversible lag. A server read landing
+		// here is still, legitimately, stale — the user's own value must survive it.
+		vi.setSystemTime(new Date('2026-04-23T12:01:03Z'));
+		fetchMock.mockResolvedValueOnce(
+			mockBatchResponse({ alice: { ...mockProfile('alice'), display_name: 'Alice STALE' } })
+		);
+		const held = await getProfilesBatch(['alice'], undefined, { reload: true });
+		expect(held.get('alice')!.display_name).toBe('Alice New');
+	});
+
 	it('after the prime-hold window elapses, a server read takes over from the prime', async () => {
 		vi.useFakeTimers();
 		vi.setSystemTime(new Date('2026-04-23T12:00:00Z'));
 		primeProfile('alice', { displayName: 'Alice New' });
-		// 13s later — past the 12s hold. The indexer has caught up; the
-		// authoritative server value now wins.
-		vi.setSystemTime(new Date('2026-04-23T12:00:13Z'));
+		// Past the hold: the indexer has had well over the irreversibility lag to
+		// catch up, so the authoritative server value wins again. The prime must not
+		// pin a stale local value forever — if the broadcast never landed, the user
+		// needs to find that out.
+		vi.setSystemTime(new Date(Date.now() + PENDING_TTL_MS + 1_000));
 		fetchMock.mockResolvedValueOnce(
 			mockBatchResponse({ alice: { ...mockProfile('alice'), display_name: 'Alice CONFIRMED' } })
 		);

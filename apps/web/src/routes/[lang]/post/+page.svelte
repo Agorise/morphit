@@ -86,6 +86,8 @@
 	import sodium from 'libsodium-wrappers-sumo';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
 	import { broadcastNewOrder, BroadcastError } from '$blurt/ops/order';
+	import { addPendingOrder } from '$lib/stores/pendingOrders';
+	import { orderPayloadToRecord, type OrderPayload } from '$lib/orders/payload';
 	import { computeFee, BASE_FEE_BLURT, resolveFeeRecipient, type FeeQuote } from '$lib/orders/fee';
 	import { onDestroy } from 'svelte';
 	import { getOrdersByAccount } from '$lib/indexer/client';
@@ -655,55 +657,31 @@
 	 *  button led straight to a not-found page: "I just paid, and my order
 	 *  doesn't exist." Terrifying, and entirely our fault.
 	 *
-	 *  Instead we poll the indexer for the permlink we just broadcast and reveal
-	 *  the button only once the order is actually THERE. Until then the page says
-	 *  the order is landing. Chain is 3s blocks + indexer lag, so this is usually
-	 *  one or two ticks.
+	 *  v1.7.0 — that was solved by POLLING the indexer until the order appeared,
+	 *  and revealing the button only then. The poll has been removed, because it
+	 *  never actually worked and could not have:
 	 *
-	 *  Bounded: `ORDER_VISIBLE_MAX_ATTEMPTS` ticks, then we surface the button
-	 *  anyway rather than trapping the user on a spinner forever — a slow indexer
-	 *  must not make the order unreachable. */
-	let orderVisibleOnChain = $state(false);
-	let orderVisiblePollTimer: ReturnType<typeof setTimeout> | null = null;
-	const ORDER_VISIBLE_POLL_MS = 2_000;
-	const ORDER_VISIBLE_MAX_ATTEMPTS = 20; // ~40s
-
-	function stopOrderVisiblePoll(): void {
-		if (orderVisiblePollTimer !== null) {
-			clearTimeout(orderVisiblePollTimer);
-			orderVisiblePollTimer = null;
-		}
+	 *    - Its own comment said "chain is 3s blocks + indexer lag, so this is
+	 *      usually one or two ticks". It isn't. The indexer applies only blocks up
+	 *      to last-irreversible (ADR-0008), which trails head by 45-63s — 22 to 31
+	 *      ticks. The bound was 20 (~40s), so the poll RELIABLY timed out and
+	 *      surfaced the button anyway ("a slow indexer must not make the order
+	 *      unreachable"). The user then clicked it and the detail page, whose own
+	 *      retry was also calibrated against poll lag, said "Order not found".
+	 *      Both workarounds reasoned about the same wrong number, so the exact
+	 *      scenario this comment was written to prevent happened every time.
+	 *    - Making the poll longer would only have replaced a not-found with 60+
+	 *      seconds of spinner. The order isn't missing; the indexer is behind.
+	 *
+	 *  `pendingOrders` fixes it at the root: this browser stages the order it just
+	 *  broadcast, and the detail page reads it, so the button is safe to offer
+	 *  immediately. No poll, no gate, no ~40s of extra `/v1/orders` requests per
+	 *  post. ("fastpostorder", ADR-0051.) */
+	function stagePostedOrder(payload: OrderPayload): void {
+		if (!blurtAccount) return;
+		addPendingOrder(orderPayloadToRecord(blurtAccount, payload, new Date().toISOString()));
 	}
 
-	async function pollUntilOrderVisible(permlink: string, account: string, attempt = 0): Promise<void> {
-		if (successPermlink !== permlink) return; // superseded (user posted another)
-		const r = await getOrdersByAccount(account, { limit: 100 });
-		if (successPermlink !== permlink) return;
-		if (r.ok && r.data.items.some((o) => o.permlink === permlink)) {
-			orderVisibleOnChain = true;
-			return;
-		}
-		if (attempt + 1 >= ORDER_VISIBLE_MAX_ATTEMPTS) {
-			// Give up waiting, but never hide the order from its owner.
-			orderVisibleOnChain = true;
-			return;
-		}
-		orderVisiblePollTimer = setTimeout(() => {
-			void pollUntilOrderVisible(permlink, account, attempt + 1);
-		}, ORDER_VISIBLE_POLL_MS);
-	}
-
-	// The poll must not outlive the page (a pending setTimeout would fire into a
-	// destroyed component).
-	onDestroy(stopOrderVisiblePoll);
-
-	function startOrderVisiblePoll(): void {
-		stopOrderVisiblePoll();
-		orderVisibleOnChain = false;
-		if (successPermlink && blurtAccount) {
-			void pollUntilOrderVisible(successPermlink, blurtAccount);
-		}
-	}
 	/** Capture whether the broadcast that just succeeded used the
 	 *  first-buy waiver. The post-broadcast success view celebrates
 	 *  more loudly + tells the user what to expect next when their
@@ -2122,7 +2100,11 @@
 					BASE_FEE_BLURT // unused for non-BLURT paths; sane default if reached
 				);
 				successPermlink = result.permlink;
-				startOrderVisiblePoll();
+				// v1.7.0 "fastpostorder" — stage the order this browser just put on
+				// chain, from the payload that was actually broadcast. The detail page
+				// reads this, so "View my order" works instantly instead of hitting a
+				// not-found for the ~45-63s the indexer needs to reach irreversibility.
+				stagePostedOrder(result.payload);
 				successUsedWaiver = feeMethodChoice === 'waived_first_buy';
 				// Sally finding M1/M8: stamp success time so the
 				// edit-window countdown chip can render live.
@@ -2230,7 +2212,8 @@
 			);
 			// useActiveKey has wiped the scalar by now.
 			successPermlink = result.permlink;
-			startOrderVisiblePoll();
+			// v1.7.0 "fastpostorder" — see the sibling branch above.
+			stagePostedOrder(result.payload);
 			// We're in the BLURT-paid branch; the waived/btc/xmr
 			// branches return early at line ~939 above, so by the
 			// time we reach this point feeMethodChoice can only be
@@ -2404,8 +2387,6 @@
 		syndicateToBlog = isOrderBlogDefaultEnabled();
 		syndicationStatus = null;
 		successPermlink = null;
-		stopOrderVisiblePoll();
-		orderVisibleOnChain = false;
 		successUsedWaiver = false;
 		// Sally finding M1/M8: clear the success-stamp so the
 		// next post's countdown starts fresh, not from now-relative-
@@ -3942,29 +3923,21 @@
 			{/if}
 
 			<div class="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
-				{#if successPermlink && blurtAccount && orderVisibleOnChain}
-					<!-- #20 (Ken) — only offered once the indexer can actually SEE the
-					     order. Offering it immediately sent the user to a not-found
-					     page seconds after they'd paid a listing fee. -->
+				{#if successPermlink && blurtAccount}
+					<!-- #20 (Ken) — this used to be gated on the indexer having SEEN the
+					     order, because offering it immediately sent the user to a
+					     not-found page seconds after they'd paid a listing fee.
+					     v1.7.0: the gate is gone because the destination is now safe —
+					     the detail page reads the order this browser staged at broadcast
+					     (`pendingOrders`), so there is nothing to wait for. The gate was
+					     also failing open after ~40s anyway, against a 45-63s wait, so it
+					     was sending users to the not-found page it existed to prevent. -->
 					<BusyButton
 						variant="primary"
 						onclick={() => gotoLocale(`/@${blurtAccount}/${successPermlink}`)}
 					>
 						{$_('post_order.success.view_my_order_cta')}
 					</BusyButton>
-				{:else if successPermlink && blurtAccount}
-					<!-- Landing on chain. Say so plainly instead of dangling a button
-					     that leads nowhere. -->
-					<p
-						class="flex items-center justify-center gap-2 text-sm text-ink-600 dark:text-ink-300"
-						aria-live="polite"
-					>
-						<span
-							class="inline-block h-3 w-3 animate-spin rounded-full border-2 border-morphit-emerald border-t-transparent"
-							aria-hidden="true"
-						></span>
-						{$_('post_order.success.view_my_order_pending')}
-					</p>
 				{:else}
 					<BusyButton variant="primary" onclick={() => gotoLocale('/orderbook')}>
 						{$_('post_order.success.view_cta')}

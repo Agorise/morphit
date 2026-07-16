@@ -61,7 +61,7 @@ export type ChatListener = (ev: ChatEvent) => void;
 /**
  * cp403 [1] — head-block fast-path event.
  *
- * Emitted by the chatHeadTailer (ADR-0048) for a chat message seen in
+ * Emitted by the headTailer (ADR-0048) for a chat message seen in
  * a chain HEAD block, BEFORE it is irreversible and therefore before
  * the durable poller has inserted it into `chat_messages`. Because
  * there is no DB row yet, this event carries the FULL message payload

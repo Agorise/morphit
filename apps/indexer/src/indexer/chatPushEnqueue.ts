@@ -3,7 +3,7 @@
  *
  * cp471 — shared chat Web Push enqueue, used by BOTH delivery paths:
  *   • the DURABLE handler (chat.ts), ~irreversible, and
- *   • the FAST head-block tailer (chatHeadTailer.ts), ~5s after send.
+ *   • the FAST head-block tailer (headTailer.ts), ~5s after send.
  *
  * Both set `source_trx_id` = the on-chain trx id; the partial UNIQUE
  * (account, source_trx_id) index (migration v43) makes the SECOND insert a
@@ -15,7 +15,7 @@
  * a blocked sender must NEVER reach here. Both call sites do:
  *   • chat.ts drops "recipient blocked sender" (chat.DROP.blocked) before the
  *     enqueue, and
- *   • chatHeadTailer.scanBlock runs recipientBlockedSender BEFORE emitting.
+ *   • headTailer.scanBlock runs recipientBlockedSender BEFORE emitting.
  * This function does NOT re-check — it trusts that gate. The smoke
  * `chat-fast-notification-smoke` pins BOTH call sites so the gate can't be
  * refactored out from under the enqueue.
