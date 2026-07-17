@@ -28,7 +28,14 @@
  *   data: {}
  *
  *   event: chat_activity
- *   data: {"peer":"<account>"}
+ *   data: {"peer":"<account>","order":"<permlink>|''|null","inbound":true|false,
+ *          "at":<epoch-ms>|null}
+ *
+ *   `order` is the thread's order permlink ('' for an order-less thread), or
+ *   null on the durable path where the event carries no order — the client
+ *   treats null as "just reconcile". `inbound` is true when the message was sent
+ *   TO this account; a participant stream also fires for what you SEND, and a
+ *   client must not badge you about your own words.
  *
  *   :keepalive
  *
@@ -98,11 +105,38 @@ export function chatActivityStreamRoute(): Hono {
 					}
 				};
 
-				// Push a lightweight activity ping: ONLY the peer account
-				// (on-chain-public), never content. The client re-fetches its
-				// conversation summary (same-origin) in response.
-				const pushActivity = (peer: string): void => {
-					safePush(sseEvent('chat_activity', { peer }));
+				// Push a lightweight activity ping: the peer account, the order the
+				// thread is about, and whether the message was INBOUND — all
+				// on-chain-public metadata, never content.
+				//
+				// v1.7.5 (t.txt #1) — `order` and `inbound` are new, and they are what
+				// make the badge fast for a user who has NOT granted push permission.
+				// Before, this ping said only "something happened with <peer>", so the
+				// client's only move was to re-poll `getConversations` — which reads
+				// the durable table the fast path deliberately never writes, so the
+				// poll returned the same stale `last_message_at` and the badge stayed
+				// dark for ~45-63s. The Web Push carried the thread; this ping didn't,
+				// so the badge was only ever as fast as the user's push permission.
+				//
+				// Both fields are strictly on-chain-public, so the header's privacy
+				// argument is unchanged: the chat op itself names sender, recipient and
+				// order_permlink on a public chain. Anyone who wants this can read
+				// Blurt directly — this endpoint still exposes nothing the indexer (or
+				// the chain) didn't already have, and still no ciphertext, header, or
+				// message id.
+				//
+				// `inbound` matters as much as `order`: this stream fires for messages
+				// the account SENT as well as received (it's a participant stream). A
+				// client that lit its badge on every ping would nag the sender about
+				// their own message on their other devices — exactly the bug t.txt #2
+				// reports. The client uses this to light only what's genuinely waiting.
+				const pushActivity = (
+					peer: string,
+					order: string | null,
+					inbound: boolean,
+					atMs?: number
+				): void => {
+					safePush(sseEvent('chat_activity', { peer, order, inbound, at: atMs ?? null }));
 				};
 
 				// Durable path — fires after the message is inserted. ChatEvent
@@ -111,7 +145,12 @@ export function chatActivityStreamRoute(): Hono {
 				unsubscribeBus = chatEventBus.on((ev) => {
 					if (cancelled) return;
 					if (ev.lo !== account && ev.hi !== account) return;
-					pushActivity(ev.lo === account ? ev.hi : ev.lo);
+					// ChatEvent carries only the canonical pair, so there's no order and
+					// no direction here — and none is needed: this fires AFTER the row is
+					// inserted, so the client's re-poll reads the real thing. `order:
+					// null` tells the client "no fast hint, just reconcile", which is
+					// exactly right for the durable path.
+					pushActivity(ev.lo === account ? ev.hi : ev.lo, null, false);
 				});
 
 				// Head-block fast path (ADR-0048) — sub-second, pre-DB. No-op
@@ -120,8 +159,58 @@ export function chatActivityStreamRoute(): Hono {
 				unsubscribeFastBus = chatEventBus.onFast((ev) => {
 					if (cancelled) return;
 					if (ev.lo !== account && ev.hi !== account) return;
-					pushActivity(ev.sender === account ? ev.recipient : ev.sender);
+					// The fast event carries sender/recipient/orderPermlink directly, so
+					// this ping can name the exact thread — which is what lets the client
+					// light the badge NOW instead of re-polling a table that won't know
+					// about this message for another ~45-63s.
+					pushActivity(
+						ev.sender === account ? ev.recipient : ev.sender,
+						ev.orderPermlink ?? '',
+						ev.recipient === account
+					);
 				});
+
+				// v1.7.5 (t.txt #1) — REPLAY before `ready`.
+				//
+				// Ken: "even when the browser itself or tab is closed completely, and
+				// then I open a new tab and go to Morphit, I want the badges in 6
+				// seconds or less."
+				//
+				// A cold start cannot learn this any other way. The page mounts and
+				// reads `getConversations`, which is the durable table — and the fast
+				// path deliberately never writes it (ADR-0051 invariant #1), so a
+				// message younger than irreversibility is legitimately absent for
+				// 45-63s. The live ping above only helps a client that was already
+				// connected when it fired; a closed browser was not. So the events have
+				// to be handed to whoever shows up next, which is what the ring is for
+				// — it already does exactly this for a chatroom opened just after a
+				// message lands (`recentFast`); this is the same hand-off for a badge.
+				//
+				// Ordering matters: replay FIRST, then `ready`. `ready` triggers the
+				// client's reconciling poll, so this order means the badge is lit from
+				// the ring and then confirmed against the indexer, never the reverse
+				// (which would blink).
+				//
+				// `at` is the event's ORIGINAL block time, not now(). Replaying with
+				// now() would date an old message to this instant and push it past the
+				// user's read cursor — lighting a badge for something they already
+				// read. The ring's whole purpose is to say what happened and WHEN.
+				try {
+					for (const ev of chatEventBus.recentFastForAccount(account)) {
+						pushActivity(
+							ev.sender === account ? ev.recipient : ev.sender,
+							ev.orderPermlink ?? '',
+							ev.recipient === account,
+							ev.createdAt.getTime()
+						);
+					}
+				} catch (err) {
+					// A replay failure must never stop the live stream from starting.
+					log.warn('chat_activity_replay_failed', {
+						account,
+						error: err instanceof Error ? err.message : String(err)
+					});
+				}
 
 				// Tell the client the stream is live so it can do one immediate
 				// sync (and re-sync after any auto-reconnect). No data.

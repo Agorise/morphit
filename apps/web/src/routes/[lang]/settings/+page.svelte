@@ -908,19 +908,6 @@
 		return `${(n / 1024).toFixed(1)} KB`;
 	}
 
-	function beginClear(): void {
-		// v1.5.0 (t.txt line 5): "Clear" now just empties the field — no red
-		// confirmation. The two Save buttons light up (see `clearing`) so the
-		// user removes the name locally or on-chain by saving the empty value.
-		input = '';
-	}
-
-	function beginBioClear(): void {
-		// v1.5.0 (t.txt line 5): mirror beginClear — empty the field so the two
-		// Save buttons light up (see `bioClearing`) and the user removes the bio.
-		bioInput = '';
-	}
-
 	// Auto-lock timeout handler. Parses the <select> value — the
 	// 'never' option maps to the NEVER_LOCK sentinel, all others are
 	// numeric minutes. Setting immediately persists via
@@ -1574,11 +1561,6 @@
 					{/if}
 				</BusyButton>
 			{/if}
-			{#if input.trim().length > 0}
-				<BusyButton variant="ghost" onclick={beginClear}>
-					{$_('settings.display_name.clear')}
-				</BusyButton>
-			{/if}
 		</div>
 
 		{#if broadcastError}
@@ -1592,17 +1574,6 @@
 				{$_('settings.display_name.broadcast_ok_detail')}
 			</p>
 		{/if}
-
-		<div class="mt-6 text-sm text-ink-600 dark:text-ink-300">
-			<p>
-				<strong>{$_('settings.display_name.save')}</strong> =
-				{$_('settings.display_name.save_legend_desc')}
-			</p>
-			<p class="mt-1">
-				<strong>{$_('settings.display_name.save_and_broadcast')}</strong> =
-				{$_('settings.display_name.broadcast_legend_desc')}
-			</p>
-		</div>
 
 		<div
 			class="mt-6 rounded-xl border border-ink-200 bg-white p-4 text-sm text-ink-600 dark:border-ink-700 dark:bg-ink-900 dark:text-ink-300"
@@ -1677,11 +1648,6 @@
 					{:else}
 						{$_('settings.display_name.save_and_broadcast')}
 					{/if}
-				</BusyButton>
-			{/if}
-			{#if bioInput.trim().length > 0}
-				<BusyButton variant="ghost" onclick={beginBioClear}>
-					{$_('settings.short_bio.clear')}
 				</BusyButton>
 			{/if}
 		</div>

@@ -115,4 +115,158 @@ describe('chatActivityStreamRoute', () => {
 		expect(frame).not.toContain('SECRETCIPHERTEXTBLOB');
 		expect(frame).not.toContain('ciphertext');
 	});
+
+	// ─── v1.7.5 (t.txt #1): the COLD START ───────────────────────────
+	//
+	// Ken: "even when the browser itself or tab is closed completely, and then I
+	// open a new tab and go to Morphit, I want the badges in 6 seconds or less."
+	//
+	// This is the one case no live stream can serve: the message arrived while no
+	// page existed to hear it, and `getConversations` legitimately cannot help
+	// because the fast path never writes that table (ADR-0051 invariant #1). The
+	// events have to be handed to whoever connects next.
+
+	it('replays what a CLOSED browser missed, so a cold start badges immediately', async () => {
+		// Recent on purpose: the ring prunes by BLOCK time against a 5-minute TTL
+		// (rightly — past that the indexer has the message anyway), so a fixed
+		// past date would be pruned before the connect and prove nothing. 10s ago
+		// models Ken opening a tab right after the message landed.
+		const at = new Date(Date.now() - 10_000);
+		// A message lands while nobody is connected — Ken's browser is shut.
+		chatEventBus.emitFast({
+			lo: 'alice',
+			hi: 'frank',
+			sender: 'frank',
+			recipient: 'alice',
+			ciphertext: 'COLDSTARTCIPHERTEXT==',
+			header: { client_tag: 'c1' },
+			createdAt: at,
+			clientTag: 'c1',
+			orderPermlink: 'order-cold',
+			replayable: true
+		});
+
+		// NOW he opens a tab and signs in. No live event will ever fire for that
+		// message again.
+		const app = chatActivityStreamRoute();
+		const res = await app.request('/alice/stream');
+		const reader = res.body!.getReader();
+		openReader = reader;
+
+		const frame = await readUntil(reader, 'chat_activity');
+		expect(frame).toContain('"peer":"frank"');
+		expect(frame).toContain('"order":"order-cold"');
+		expect(frame).toContain('"inbound":true');
+		// The message's REAL time, not now(). Replaying with now() would date an
+		// old message to this instant, push it past the read cursor, and light a
+		// badge for something already read.
+		expect(frame).toContain(`"at":${at.getTime()}`);
+		// Still no content, replay or not.
+		expect(frame).not.toContain('COLDSTARTCIPHERTEXT');
+	});
+
+	it('replays BEFORE ready, so the badge lights then reconciles (never blinks)', async () => {
+		chatEventBus.emitFast({
+			lo: 'alice',
+			hi: 'grace',
+			sender: 'grace',
+			recipient: 'alice',
+			ciphertext: 'X==',
+			header: {},
+			createdAt: new Date(Date.now() - 10_000),
+			clientTag: null,
+			orderPermlink: null,
+			replayable: true
+		});
+		const app = chatActivityStreamRoute();
+		const res = await app.request('/alice/stream');
+		const reader = res.body!.getReader();
+		openReader = reader;
+
+		const frame = await readUntil(reader, 'event: ready');
+		// Assert PRESENCE first. Without this the ordering check passes vacuously:
+		// indexOf returns -1 when absent, and -1 is less than any real index — so a
+		// replay that never happened would "prove" correct ordering.
+		expect(frame).toContain('"peer":"grace"');
+		// `ready` triggers the client's reconciling poll. Replaying after it would
+		// paint the badge, poll a table that doesn't have the message, and blink.
+		expect(frame.indexOf('chat_activity')).toBeLessThan(frame.indexOf('event: ready'));
+	});
+
+	it('never replays a message the account has nothing to do with', async () => {
+		// A fresh account: the ring is a module-level singleton, so reusing `alice`
+		// here would trip over the other tests' fixtures and prove nothing.
+		chatEventBus.emitFast({
+			lo: 'bob',
+			hi: 'carol',
+			sender: 'bob',
+			recipient: 'carol',
+			ciphertext: 'X==',
+			header: {},
+			createdAt: new Date(Date.now() - 10_000),
+			clientTag: null,
+			orderPermlink: null,
+			replayable: true
+		});
+		const app = chatActivityStreamRoute();
+		const res = await app.request('/zara/stream');
+		const reader = res.body!.getReader();
+		openReader = reader;
+
+		const frame = await readUntil(reader, 'event: ready');
+		expect(frame).not.toContain('chat_activity');
+	});
+
+	it("marks a REPLAYED message the account SENT as not inbound (never badge your own words)", async () => {
+		// t.txt #2's bug, at the replay layer: this is a PARTICIPANT stream, so it
+		// replays what Ken SENT from his PC too. Badging that on his phone is
+		// exactly what he reported.
+		chatEventBus.emitFast({
+			lo: 'heidi',
+			hi: 'yuri',
+			sender: 'yuri',
+			recipient: 'heidi',
+			ciphertext: 'X==',
+			header: {},
+			createdAt: new Date(Date.now() - 10_000),
+			clientTag: null,
+			orderPermlink: null,
+			replayable: true
+		});
+		const app = chatActivityStreamRoute();
+		const res = await app.request('/yuri/stream');
+		const reader = res.body!.getReader();
+		openReader = reader;
+
+		const frame = await readUntil(reader, 'chat_activity');
+		expect(frame).toContain('"peer":"heidi"');
+		expect(frame).toContain('"inbound":false');
+	});
+
+	it('does NOT replay a first-contact stranger (the durable path may reject it)', async () => {
+		// Fresh account for the same singleton-ring reason.
+		// `replayable` is the same safe-subset gate that authorises a fast push. A
+		// stranger's message still streams LIVE, but replaying it would show a ghost
+		// that vanishes on reload if the durable handler rejects it under the
+		// stranger-fee / fan-in caps the fast path cannot run.
+		chatEventBus.emitFast({
+			lo: 'ivan',
+			hi: 'wanda',
+			sender: 'ivan',
+			recipient: 'wanda',
+			ciphertext: 'X==',
+			header: {},
+			createdAt: new Date(Date.now() - 10_000),
+			clientTag: null,
+			orderPermlink: null,
+			replayable: false
+		});
+		const app = chatActivityStreamRoute();
+		const res = await app.request('/wanda/stream');
+		const reader = res.body!.getReader();
+		openReader = reader;
+
+		const frame = await readUntil(reader, 'event: ready');
+		expect(frame).not.toContain('"peer":"ivan"');
+	});
 });

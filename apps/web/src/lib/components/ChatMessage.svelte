@@ -616,14 +616,24 @@
 			     truncation). No `href`: the header already links to the
 			     profile, and omitting it keeps one fewer tab stop per group.
 			     For the local user's own runs, IdentityLabel falls back to
-			     the selfProfile avatar automatically (isSelf). -->
+			     the selfProfile avatar automatically (isSelf).
+
+			     v1.7.5 (t.txt #9) — the avatar was 18px against a TWO-line stack
+			     (@handle over the truncated BLT key), so it covered barely half of
+			     what it was labelling. Ken: "make it span the full height of the
+			     username/postingkey lines."
+			     34px is measured, not eyeballed: this row inherits the 16px page
+			     base, and IdentityLabel's keyed path stacks the two lines with
+			     `leading-tight` (1.25) where the key is text-[0.7em] —
+			     16×1.25 + 16×0.7×1.25 = 20 + 14 = 34px. IdentityLabel's root is
+			     `items-center`, so the avatar centres against the stack for free. -->
 			<div class="max-w-full" class:self-end={isOutgoing} class:self-start={!isOutgoing}>
 				<IdentityLabel
 					account={whoamiAccount}
 					publicKeyString={senderPostingKey ?? undefined}
 					avatarSvg={senderAvatarSvg}
 					avatarDataUri={senderAvatarDataUri}
-					avatarSize={18}
+					avatarSize={34}
 					weight="normal"
 				/>
 			</div>

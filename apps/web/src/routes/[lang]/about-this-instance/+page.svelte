@@ -370,8 +370,18 @@
 			</div>
 			<ul class="mt-4 space-y-2 text-sm">
 				<li>
+					<!-- v1.7.5 (t.txt #10) — `rel="noopener noreferrer"`, like every other
+					     outbound link in the app. This was the only external anchor without
+					     it. It matters MORE here than it looks: on a FEDERATED instance this
+					     link points off-instance, so without noreferrer the destination
+					     learns "a user of <this operator's node> clicked through" — a
+					     cross-instance correlation hint, handed over for free, on the page
+					     whose whole purpose is telling a worried user how to check their
+					     operator. `noopener` also denies the target window a handle back. -->
 					<a
 						href="https://morphit.io"
+						target="_blank"
+						rel="noopener noreferrer"
 						class="select-all text-morphit-emerald underline decoration-dotted underline-offset-2 hover:decoration-solid"
 					>
 						morphit.io

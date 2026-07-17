@@ -115,6 +115,33 @@ export async function fetchVerifiedRelease(): Promise<ReleaseFetchResult> {
 	// detect a malicious operator serving a tampered build, so it must read the
 	// real chain — routing it through the operator's own indexer would let that
 	// operator forge a "verified" release and defeat the whole check.
+	//
+	// ─── THE PRIVACY COST, STATED (v1.7.5, t.txt #10) ──────────────────────────
+	// This call is the ONE place a user's browser touches a third-party host, and
+	// that host sees their IP. It fires once per session, from `initRelease()` in
+	// the root layout, so it happens on EVERY page — including the explorer.
+	// Previously this file argued the security case at length and never named the
+	// cost, which made the tradeoff invisible to the next reader.
+	//
+	// It is a real tradeoff and it does not reduce:
+	//   • Direct  → a Blurt node learns "some IP loaded Morphit". It learns
+	//     nothing else: not the account, not the orders, not the chat. But the
+	//     client learns the TRUE latest release, which is what makes
+	//     `staleBuild` (payload.version !== RUNNING_VERSION) meaningful.
+	//   • Indexer → zero third-party exposure (the operator already serves the
+	//     page and knows the IP anyway). But the operator then decides what
+	//     "latest" means, so they can pin every user to an old, genuine,
+	//     validly-signed build forever and no banner ever fires. Signature
+	//     checking does NOT close this: a rollback replays a real signature.
+	//
+	// So the direct call protects users from the operator at the cost of exposing
+	// them to one node. Given Morphit's threat model — "don't trust the operator"
+	// is the product — that trade currently favours keeping it. It is Ken's call,
+	// and it is recorded in docs/REVISIT-LIST.md rather than buried here.
+	//
+	// NOTE: `faq.entries.data_collection.a` currently tells users "No third-party
+	// services on any Morphit page." That is not accurate while this call exists.
+	// Whichever way the tradeoff is settled, the copy and the code must agree.
 	const client = getDirectChainClient();
 
 	// ─── 1. Find the latest release op in @morphit's history.  ──

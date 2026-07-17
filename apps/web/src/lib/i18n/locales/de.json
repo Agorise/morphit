@@ -1193,7 +1193,7 @@
 			},
 			"data_collection": {
 				"q": "Welche Daten sammelt Morphit über mich?",
-				"a": "Keine. Null Cookies. Null Analytik. Null Tracking-Skripte. Keine IP-Logs. Keine Drittanbieter-Dienste. Wir wissen nicht einmal, dass du hier bist."
+				"a": "Keine. Null Cookies. Null Analytik. Null Tracking-Skripte. Null Telemetrie. Morphit sieht oder protokolliert Ihre IP-Adresse niemals, wir behalten also keinerlei Aufzeichnung darüber, dass Sie hier waren."
 			},
 			"lost_keys": {
 				"q": "Was ist, wenn ich Passwort oder Wiederherstellungsphrase verliere?",
@@ -1682,6 +1682,10 @@
 			"what_is_a_txid": {
 				"q": "Was ist eine Transaktions-ID (oder ein Hash)?",
 				"a": "Wenn du Krypto sendest, hält die Blockchain deine Zahlung dauerhaft fest und gibt ihr einen eindeutigen Fingerabdruck namens Transaktions-ID. Wallets benennen sie unterschiedlich – du siehst vielleicht „TxID“, „Transaction Hash“, „Tx Hash“ oder einfach „Hash“ (Mycelium nennt sie zum Beispiel „Hash“). Es ist eine lange Folge aus Buchstaben und Zahlen, meist 64 Zeichen lang (bei Blurt sind es 40). So findest du sie: Öffne deine Wallet, tippe auf die soeben gesendete Zahlung und kopiere die angezeigte ID bzw. den Hash. Fügst du ihn in Morphit ein, kann dein Handelspartner – und bei einer Listing-Gebühr das Netzwerk – bestätigen, dass die Zahlung wirklich erfolgt ist. Die ID beweist nur, dass genau diese Zahlung getätigt wurde; über den Rest deiner Wallet verrät sie nichts."
+			},
+			"ip_address_and_rpc_nodes": {
+				"q": "Sieht oder leakt irgendjemand meine IP-Adresse, wenn ich Morphit nutze?",
+				"a": "Privatsphäre ist Morphits Priorität Nr. 1. Morphit sieht oder protokolliert Ihre IP-Adresse niemals — keine Cookies, keine Analytik, keine Tracker, keine Telemetrie. Die Ratenbegrenzung hält einen Zähler ein paar Sekunden im Speicher und verwirft ihn; nichts wird notiert, also gibt es nichts, was beschlagnahmt, verkauft oder später geleakt werden könnte.\n\nIhre Orders, Ihr Chat, Ihre Guthaben und der Block-Explorer laufen alle über den Indexer Ihres Betreibers. Morphits Indexer leiten diese Lesezugriffe weiter, damit Ihr Browser nie fremde Endpoints berührt.\n\n**Die eine Ausnahme.** Einmal pro Sitzung fragt Ihr Browser einen Netzwerkknoten — einen privat betriebenen RPC-Endpoint — direkt nach dem signierten Release-Eintrag, der angibt, welche Morphit-Version aktuell ist. Dieser Knoten sieht die IP, die gefragt hat. Im Netzwerk-Tab können Sie es sehen: eine Anfrage nach draußen, alles andere an Morphit.\n\n**Warum.** Dieser Eintrag ist die Art, wie Ihr Browser weiß, dass der gerade ausgeführte Code wirklich unserer ist. Keine bösartigen Knoten, die Ihre Daten stehlen. Leiten Sie ihn über Ihren Betreiber, könnte ein unehrlicher Betreiber einen alten, echt signierten Eintrag mit einem alten Build mit Hintertür kombinieren — und Ihr Browser würde sagen, alles sei in Ordnung. Für immer. Ein wiedereingespielter alter Eintrag trägt eine echte Signatur, Signaturprüfung erwischt das also nicht. Uns ist lieber, ein Knoten erfährt, dass eine IP eine Seite geladen hat, als einen Betreiber Sie still auf eine Hintertür festnageln zu lassen.\n\n**Was dieser Knoten erfährt.** Eine IP, und dass jemand nach dem Release-Verlauf von @morphit gefragt hat. Nicht Ihren Benutzernamen, Ihre Orders, Ihren Chat oder Ihre Guthaben. Nichts davon verlässt den Indexer Ihres Betreibers.\n\n**Nutzen Sie Tor oder ein VPN, und die Sache ist erledigt.** Wenn Sie wegen Monero hier sind, tun Sie das fast sicher schon — dann ist es für Sie bereits erledigt. Es verbirgt Ihre IP zugleich vor allen Netzwerkknoten, allen Endpoints und Ihrem Provider. Derselbe Rat, den wir fürs Senden von XMR geben, und besser als alles, was wir in die App einbauen könnten, weil er Sie auch vor uns schützt."
 			}
 		},
 		"share_link": "Teilen",
@@ -2661,7 +2665,6 @@
 		"error_body": "Der Indexer ist momentan nicht erreichbar. Bitte versuche es in Kürze noch einmal.",
 		"load_more": "Mehr laden",
 		"order": {
-			"updated_prefix": "Aktualisiert",
 			"new_trader_aria": "Neuer Händler — erster Handel noch nicht abgeschlossen",
 			"new_trader_tooltip": "Dieser Händler ist neu bei Morphit. Hilf ihm zu starten!",
 			"rating_aria": "{rating} Sterne aus {count, plural, one {# abgeschlossenem Trade} other {# abgeschlossenen Trades}}",
@@ -2675,7 +2678,8 @@
 			"expires_in_minutes_seconds": "Läuft ab in {minutes}min {seconds}s",
 			"expires_in_seconds": "Läuft ab in {seconds}s",
 			"expires_aria": "Die Order läuft am {date} ab",
-			"open_aria": "Orderdetails ansehen: {title}"
+			"open_aria": "Orderdetails ansehen: {title}",
+			"posted_ago": "Vor {age} veröffentlicht"
 		},
 		"post_cta": "Order posten",
 		"hidden_count_notice": "{count} Orders aus deiner Ansicht ausgeblendet.",
@@ -2712,8 +2716,7 @@
 			"accept_label": "Ich akzeptiere",
 			"location_label": "Standort",
 			"terms_label": "Bedingungen",
-			"trades_only": "{count} Trades",
-			"reputation_aria": "Reputationswert {score} von 5",
+			"trades_only": "{n, plural, one {{count} Trade} other {{count} Trades}}",
 			"message_word": "Nachricht",
 			"message_before": "Nachricht an {handle} vor dem {date}",
 			"message_compact": "Nachricht an {handle}"
@@ -3012,7 +3015,7 @@
 			"expires_90d": "In 90 Tagen (Standard)",
 			"asset_explainer": {
 				"btc": "Bitcoin (BTC) — die originale Kryptowährung, weltweit verwendet. Öffentliches Hauptbuch; Transaktionen sind sichtbar. Netzwerkgebühren und Bestätigungszeit variieren mit der Nachfrage.",
-				"xmr": "Monero (XMR) — datenschutz-orientierte Kryptowährung. Verbirgt Beträge, Absender und Empfänger standardmäßig. Ideal, wenn Privatsphäre dir wichtig ist.",
+				"xmr": "Monero (XMR) — Kryptowährung mit Privatsphäre an erster Stelle. Verbirgt standardmäßig Beträge, Guthaben, Absender und Empfänger. Ideal, wenn Ihnen Privatsphäre wichtig ist.",
 				"blurt": "BLURT — die soziale Blockchain, auf der Morphit läuft. Schnell (3-Sekunden-Blöcke), gebührenfreie Überweisungen und ein integriertes Belohnungssystem. Perfekt, um Reputation aufzubauen, deine Trades dauerhaft festzuhalten und dich mit Gleichgesinnten zu vernetzen.",
 				"usdt": "Tether (USDT) — ein Stablecoin 1:1 an den USD gekoppelt. Zentral kontrolliert — Tether Inc. kann jede Adresse einfrieren.",
 				"bch": "Bitcoin Cash (BCH). 2017 von Bitcoin abgespalten, um größere Blöcke und niedrigere Transaktionsgebühren statt einer Gebührenmarkt-Dynamik zu bevorzugen. Transparentes Ledger wie BTC; kein Herausgeber kann Adressen einfrieren. Nur handelbar auf Morphit — Listing-Gebühren werden weiterhin in BLURT, BTC oder XMR bezahlt.",
@@ -3712,7 +3715,7 @@
 		"keys_title": "Deine Schlüssel verlassen dein Gerät niemals.",
 		"keys_body": "Schlüssel werden in deinem Browser mit libsodium generiert. Sie werden mit einem Passwort, das du wählst (Argon2id + XSalsa20-Poly1305), verschlüsselt, bevor sie gespeichert werden. Kein Morphit-Server sieht sie je.",
 		"tracking_title": "Null Tracking, null Logging.",
-		"tracking_body": "Keine Cookies. Keine Analytics. Keine Drittanbieter-Skripte. Kein IP-Logging. Keine Telemetrie. Wenn du den Netzwerk-Tab in deinem Browser anschaust, geht jede Anfrage zu Morphit und nirgendwo sonst.",
+		"tracking_body": "Keine Cookies. Keine Analytik. Keine Skripte von Dritten. Keine IP-Protokollierung. Keine Telemetrie. Morphit sieht oder protokolliert Ihre IP-Adresse niemals. Schauen Sie in den Netzwerk-Tab Ihres Browsers: Ihre Orders, Ihr Chat und Ihre Guthaben gehen an Morphit und nirgendwo sonst.",
 		"chat_title": "Chat ist Ende-zu-Ende verschlüsselt.",
 		"chat_body": "Jede Nachricht nutzt X25519-Schlüsselaustausch plus ChaCha20-Poly1305-authentifizierte Verschlüsselung (libsodium-Primitive) mit frischem Ephemeral-Schlüssel pro Nachricht. Klartext existiert nur in deinem Browser und dem deines Handelspartners. Morphits Server, die zugrunde liegende Chain und jeder dazwischen sehen nur Chiffretext. Das vollständige Protokoll — inklusive der bewussten Tradeoffs (keine Per-Message-Forward-Secrecy) — ist in {chat_crypto_doc}.",
 		"reproducible_title": "Reproduzierbare Builds.",
@@ -3919,14 +3922,11 @@
 			"input_label": "Deine Kurzbio",
 			"placeholder": "z. B. Kaffee, BTC und lange Spaziergänge auf der Blockchain.",
 			"hint": "Sieht gut aus.",
-			"broadcast_ok_detail": "Deine Kurzbio ist jetzt für alle sichtbar veröffentlicht.",
-			"clear": "Löschen"
+			"broadcast_ok_detail": "Deine Kurzbio ist jetzt für alle sichtbar veröffentlicht."
 		},
 		"title": "Einstellungen",
 		"subtitle": "Deine Identität, deine Regeln. Auf deinem Gerät gespeichert, nie auf unseren Servern.",
 		"display_name": {
-			"save_legend_desc": "zeigt den Namen nur hier an, sodass nur du ihn siehst.",
-			"broadcast_legend_desc": "veröffentlicht den Namen on-chain, sodass alle (und all deine Geräte) ihn sehen.",
 			"heading": "Anzeigename",
 			"explain": "Ein freundliches Etikett neben deinem Avatar. Er ERSETZT nicht deinen Public Key — der steht immer in Klammern daneben, und genau dem sollten Leute trauen.",
 			"input_label": "Wähle deinen Anzeigenamen",
@@ -3934,7 +3934,6 @@
 			"preview_label": "So siehst du aus",
 			"hint": "Sieht gut aus.",
 			"save": "Nur lokal speichern",
-			"clear": "Löschen",
 			"saved_toast": "Gespeichert.",
 			"reminder_title": "💡 Anzeigenamen sind nicht eindeutig.",
 			"reminder_body": "Jeder kann jeden Namen nutzen. Der kurze Schlüssel in Klammern ist es, der dich wirklich ausweist, und den kann niemand kopieren. Prüfe beim Handeln immer den Schlüssel.",
@@ -3955,7 +3954,7 @@
 		"endpoints": {
 			"heading": "RPC-Endpunkte",
 			"explain": "Die Netzwerk-Knoten, mit denen die Morphit-Indexer sprechen, um Daten zu lesen und zu schreiben. Die App probiert sie in der Reihenfolge der schnellsten Antwort.",
-			"pool_note": "Deine Morphit-Instanz wickelt den gesamten Blurt-Netzwerkverkehr für dich ab — dein Browser kommuniziert nie direkt mit diesen Nodes. Dies ist nur ihr Live-Status.",
+			"pool_note": "Ihre Morphit-Instanz spricht für Sie mit diesen Knoten — Ihre Orders, Ihr Chat und Ihre Guthaben laufen alle über sie, nicht über Ihren Browser. Dies ist nur ihr Live-Status.",
 			"cooling_down": "pausiert",
 			"recheck": "Node-Geschwindigkeiten erneut prüfen",
 			"probing": "prüfe…",

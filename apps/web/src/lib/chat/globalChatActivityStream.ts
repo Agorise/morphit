@@ -49,7 +49,12 @@ export function subscribeChatActivity(fn: Listener): () => void {
  *  Deliberately a subscription rather than importing chatUnread here:
  *  chatUnread already imports THIS module, so calling into it directly would
  *  close an import cycle. The dependency arrow stays one-way. */
-type FastPushListener = (peer: string, orderPermlink: string) => void;
+/** v1.7.5 — `atMs` is the message's REAL time, present only on REPLAYED events
+ *  (a browser that was closed when the message landed; see the indexer's
+ *  chatActivityStream replay). Live pushes omit it and mean "now", which is true
+ *  to within the push latency. Honouring it is what stops a replayed old message
+ *  from being dated to this instant and lighting a badge already cleared. */
+type FastPushListener = (peer: string, orderPermlink: string, atMs?: number) => void;
 const fastPushListeners = new Set<FastPushListener>();
 
 /** Register a callback fired for each Web Push naming a thread.
@@ -61,10 +66,10 @@ export function subscribeFastPush(fn: FastPushListener): () => void {
 	};
 }
 
-function emitFastPush(peer: string, orderPermlink: string): void {
+function emitFastPush(peer: string, orderPermlink: string, atMs?: number): void {
 	for (const fn of fastPushListeners) {
 		try {
-			fn(peer, orderPermlink);
+			fn(peer, orderPermlink, atMs);
 		} catch {
 			// A badge observer must never break push handling.
 		}
@@ -114,7 +119,46 @@ function connectFor(me: string): void {
 		connectedMe = null;
 		return;
 	}
-	es.addEventListener('chat_activity', fire);
+	// v1.7.5 (t.txt #1) — the ping now NAMES the thread, so act on it rather than
+	// only re-polling.
+	//
+	// This is what makes the badge fast for a user who never granted push
+	// permission. Before, this listener was just `fire` — a re-poll of
+	// `getConversations`, which reads the durable table the fast path
+	// deliberately never writes (ADR-0051 invariant #1). So the poll re-read the
+	// same stale `last_message_at` and the badge sat dark for ~45-63s. The Web
+	// Push carried the thread; this ping didn't. The badge was therefore only ever
+	// as fast as the user's notification permission — and silently slow for
+	// everyone else.
+	//
+	// Same handling as CHAT_PUSH, deliberately: resurrect an archived thread, then
+	// light it. Two paths, one rule.
+	es.addEventListener('chat_activity', (ev) => {
+		try {
+			const d = JSON.parse((ev as MessageEvent).data as string) as {
+				peer?: unknown;
+				order?: unknown;
+				inbound?: unknown;
+				at?: unknown;
+			};
+			// `inbound !== true` covers BOTH the durable path (which sends
+			// inbound:false because its event carries no direction) and a message
+			// this account SENT. Badging on either would nag the sender about their
+			// own words on their other devices — t.txt #2. Falling through to
+			// `fire()` still reconciles, which is all the durable path needs.
+			if (d.inbound === true && typeof d.peer === 'string' && d.peer && typeof d.order === 'string') {
+				if (folderOf(d.peer, d.order) === 'archived') restoreThread(d.peer, d.order);
+				// `at` is present on REPLAYED events (a browser that was closed when the
+				// message landed) and carries the message's real block time. Passing it
+				// through is what stops a replayed old message from being dated to now
+				// and lighting a badge the user already cleared.
+				emitFastPush(d.peer, d.order, typeof d.at === 'number' ? d.at : undefined);
+			}
+		} catch {
+			// A malformed ping must never break the backstop poll below.
+		}
+		fire();
+	});
 	es.addEventListener('ready', fire);
 	// No error handler needed to reconnect — EventSource does that itself.
 }

@@ -34,13 +34,17 @@ const cv = readFileSync(join(WEB, 'src', 'lib', 'components', 'ConversationView.
 
 let pass = 0;
 let fail = 0;
-function check(name: string, ok: boolean): void {
+// v1.7.5 — optional failure detail. These checks were rewritten to pin the
+// OUTCOME (the peer's rating is rendered by the shared cluster) after they were
+// found pinning the hand-rolled gold-star markup they were meant to police, so
+// each carries a note explaining what replaced the landmark.
+function check(name: string, ok: boolean, detail?: string): void {
 	if (ok) {
 		pass++;
 		console.log(`  \u2713 ${name}`);
 	} else {
 		fail++;
-		console.error(`  \u2717 ${name}`);
+		console.error(`  \u2717 ${name}${detail ? `\n      ${detail}` : ''}`);
 	}
 }
 
@@ -65,9 +69,38 @@ check('loadPeerReputation kicked off on mount', /void loadPeerReputation\(\);/.t
 // intent is unchanged: it renders iff the peer is a new trader.
 check('header renders NewTraderChip when the peer is new', /\{#if peerReputation\?\.isNewTrader\}[\s\S]{0,60}<NewTraderChip \/>/.test(cv));
 check('the sprout is NOT gated on having a reputation score', !/peerReputation\.score[\s\S]{0,120}<NewTraderChip \/>/.test(cv));
-check('header renders the ⭐ score using the shared reputation aria string', /peerReputation\.score !== null[\s\S]{0,400}orderbook\.card\.reputation_aria[\s\S]{0,200}\u2b50/.test(cv));
-check('header renders the trade count via the shared trades string, fed the TRADE count', /orderbook\.card\.trades_only[\s\S]{0,120}formatCountCompact\(peerReputation\.trades\)/.test(cv));
-check('the trades line is hidden at zero (a new peer never reads "0 trades")', /\{#if peerReputation\.trades > 0\}/.test(cv));
+// v1.7.5 (t.txt #8) — these three checks pinned the HAND-ROLLED implementation
+// (a literal gold-star emoji, a bare trades_only span, a `trades > 0` guard) —
+// which is exactly the implementation Ken reported as broken. The emoji renders
+// GOLD when the app's star convention has been the emerald one since v1.5.5, and
+// printing the score alone left the trade count and the RATING count absent, on
+// the screen where you decide whether to trust a stranger with money. Pinning
+// those literals meant these guards would have FORCED the bug to stay.
+//
+// The requirements are unchanged and still pinned. They now assert the OUTCOME —
+// one shared cluster carrying the rating and both counts — instead of the shape
+// of a hand-rolled copy of it.
+const cluster = readFileSync(join(WEB, 'src', 'lib', 'components', 'TradeRepCluster.svelte'), 'utf8');
+check(
+	'the header reputation comes from the SHARED cluster, not a hand-rolled copy',
+	/import TradeRepCluster from/.test(cv) && (cv.match(/<TradeRepCluster/g) ?? []).length === 2,
+	'order cards and the chatroom must agree — one component, one convention'
+);
+check(
+	'no gold star emoji is RENDERED in the chatroom',
+	!/aria-hidden="true">\u2b50</.test(cv),
+	"stars are emerald sitewide (v1.5.5); the emoji reads as a different thing"
+);
+check(
+	'the cluster gets the TRADE count and the RATING count separately',
+	/tradeCount=\{peerReputation\.trades\}[\s\S]{0,140}ratingCount=\{peerReputation\.ratings\}/.test(cv),
+	'cp473: trades are completed ORDERS, ratings are reviews — fusing them lies'
+);
+check(
+	'zero trades still renders nothing (a new peer never reads "0 trades")',
+	/const showTrades = \$derived\(tradeCount > 0\);/.test(cluster),
+	'the rule moved INTO the shared component — same guarantee, one place'
+);
 check('cluster sits in the header, before the RE: order line', cv.indexOf('{#if peerReputation}') < cv.indexOf('{#if orderSummary}'));
 
 console.log('');

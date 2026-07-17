@@ -400,7 +400,23 @@ self.addEventListener('push', (event: PushEvent) => {
 					type: 'window',
 					includeUncontrolled: true
 				});
-				const chatThread = category === 'chat' ? chatThreadFromClickPath(clickPath) : null;
+				// v1.7.5 — parse for BOTH chat-ish categories, not just 'chat'.
+				//
+				// This was the other half of Ken's ~1-minute dark badge, and the two
+				// halves were a perfect inversion: the server sets category='order'
+				// for an order-scoped message — and THAT is the clickPath that
+				// carries the peer — while category='chat' went with `/en/chat`,
+				// which carried none. So the branch that had the peer was never
+				// parsed, and the branch that was parsed had no peer. Every chat push
+				// therefore reached the page with no thread, the page's
+				// `if (data.peer)` guard dropped it, and the whole v1.5.5/cp474 fast
+				// badge + archived-resurrect path was dead code in production.
+				//
+				// Both categories name a chat thread; only the ?order scope differs.
+				const chatThread =
+					category === 'chat' || category === 'order'
+						? chatThreadFromClickPath(clickPath)
+						: null;
 				for (const client of tabs) {
 					client.postMessage({
 						type: 'CHAT_PUSH',

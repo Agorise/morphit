@@ -84,6 +84,16 @@
 	     stars already use. -->
 	<span aria-hidden="true" class="text-morphit-emerald">{muted ? '☆' : '★'}</span>
 		<span aria-hidden="true">{ratingStr}</span>
-		<span aria-hidden="true" class="opacity-70">({count})</span>
+		<!-- v1.7.5 (t.txt #7) — full opacity.
+		     Ken asked for this pill to be "just as bright as the Expires pill", so I
+		     measured his screenshot rather than guessing. The pill's tokens ALREADY
+		     match it: both peak at #00DA69, both ring at emerald/30 (#0B4F33 vs
+		     #0B4F34 on screen), and this chip's background is actually the brighter
+		     of the two (/10 vs the Expires pill's /5 — #0D2824 vs #0E1E20 rendered).
+		     The one thing genuinely dimmed was this count, at 70%. That's now gone.
+		     The hollow ☆ is deliberately untouched: it is Ken's own v1.5.5
+		     small-sample signal (<3 ratings), and its thin stroke is most of why the
+		     chip reads quieter than a pill full of solid glyphs. -->
+		<span aria-hidden="true">({count})</span>
 	</span>
 {/if}

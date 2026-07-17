@@ -1193,7 +1193,7 @@
 			},
 			"data_collection": {
 				"q": "What data does Morphit collect about me?",
-				"a": "None. Zero cookies. Zero analytics. Zero tracking scripts. No logs of your IP. No third-party services on any Morphit page. We don't know you're here."
+				"a": "None. Zero cookies. Zero analytics. Zero tracking scripts. No telemetry. Morphit never sees or logs your IP address, so we keep no record that you were ever here."
 			},
 			"lost_keys": {
 				"q": "What if I lose my password or recovery seed?",
@@ -1682,6 +1682,10 @@
 			"what_is_a_txid": {
 				"q": "What is a Transaction ID (or Hash)?",
 				"a": "When you send crypto, the blockchain records your payment permanently and gives it a unique fingerprint called the Transaction ID. Wallets label it in different ways — you might see “TxID”, “Transaction Hash”, “Tx Hash”, or simply “Hash” (Mycelium, for example, calls it “Hash”). It's a long string of letters and numbers, usually 64 characters long (Blurt's are 40). To find it: open your wallet, tap the payment you just sent, and copy the ID or Hash it shows you. Pasting it into Morphit lets your trade partner — and, for a listing fee, the network — confirm the payment really happened. The ID only proves that this one payment was made; it reveals nothing about the rest of your wallet."
+			},
+			"ip_address_and_rpc_nodes": {
+				"q": "Does anything see or leak my IP address when I use Morphit?",
+				"a": "Privacy is Morphit's #1 priority and never sees or logs your IP address. No cookies, no analytics, no trackers, no telemetry. Rate limiting holds a counter in memory for a few seconds and drops it — nothing is written down, so there is nothing to subpoena, sell, or leak later.\n\nYour orders, chat, balances and the block explorer all go through your operator's indexer. Morphit's indexers proxy those reads so your browser never touches third-party endpoints.\n\n**The one exception.** Once per session your browser asks a network node — a privately-run RPC endpoint — directly for the signed release record that says which version of Morphit is current. That node sees the IP that asked. You can watch it in the Network tab: one request out, everything else to Morphit.\n\n**Why.** That record is how your browser knows the code it just ran is really ours. No rogue nodes stealing your data. Route it through your operator and a dishonest one could pair an old, genuinely-signed record with an old, backdoored build — and your browser would say all clear, forever. A replayed record carries a real signature, so checking signatures misses it. We would rather one node learn that an IP loaded a page than let an operator quietly pin you to a backdoor.\n\n**What that node learns.** An IP, and that someone asked for @morphit's release history. Not your username, orders, chat or balances. None of that leaves your operator's indexer.\n\n**Use Tor or a VPN and this is closed.** If you are here for Monero you almost certainly already do — so it is already closed for you. It hides your IP from every network node, every endpoint, and your ISP at once. Same advice we give for broadcasting XMR, and better than anything we could build into the app, because it protects you from us too."
 			}
 		},
 		"share_link": "Share",
@@ -2661,7 +2665,6 @@
 		"error_body": "The indexer is unreachable at the moment. Please try again in a little while.",
 		"load_more": "Load more",
 		"order": {
-			"updated_prefix": "Updated",
 			"new_trader_aria": "New trader — first trade not yet completed",
 			"new_trader_tooltip": "This trader is new to Morphit. Help them get started!",
 			"rating_aria": "{rating} stars from {count, plural, one {# completed trade} other {# completed trades}}",
@@ -2675,7 +2678,8 @@
 			"expires_in_minutes_seconds": "Expires in {minutes}m {seconds}s",
 			"expires_in_seconds": "Expires in {seconds}s",
 			"expires_aria": "Order expires on {date}",
-			"open_aria": "View order details: {title}"
+			"open_aria": "View order details: {title}",
+			"posted_ago": "Posted {age} ago"
 		},
 		"post_cta": "Post an order",
 		"hidden_count_notice": "{count} orders hidden from your view.",
@@ -2712,8 +2716,7 @@
 			"accept_label": "I accept",
 			"location_label": "Location",
 			"terms_label": "Terms",
-			"trades_only": "{count} trades",
-			"reputation_aria": "Reputation score {score} out of 5",
+			"trades_only": "{n, plural, one {{count} trade} other {{count} trades}}",
 			"message_word": "Message",
 			"message_before": "Message {handle} before {date}",
 			"message_compact": "Message {handle}"
@@ -3012,7 +3015,7 @@
 			"expires_90d": "In 90 days (default)",
 			"asset_explainer": {
 				"btc": "Bitcoin (BTC) — the original cryptocurrency, used worldwide. Public ledger; transactions are visible. Network fees and confirmation time vary with network demand.",
-				"xmr": "Monero (XMR) — privacy-first cryptocurrency. Hides amounts, sender, and recipient by default. Ideal if privacy matters to you.",
+				"xmr": "Monero (XMR) — privacy-first cryptocurrency. Hides amounts, balances, senders and recipients by default. Ideal if privacy matters to you.",
 				"blurt": "BLURT — the social blockchain Morphit runs on. Fast (3-second blocks), zero-fee transfers, built-in rewards system. Perfect for reputation-building, trade posterity and connecting with like-minded people.",
 				"usdt": "Tether (USDT) — a stablecoin pegged 1:1 to USD. Centrally controlled — Tether Inc. can freeze any address.",
 				"bch": "Bitcoin Cash (BCH). Forked from Bitcoin in 2017 to favor bigger blocks and lower per-transaction fees over fee-market dynamics. Transparent ledger like BTC; no issuer can freeze addresses. Trade-only on Morphit — listing fees still paid in BLURT, BTC, or XMR.",
@@ -3712,7 +3715,7 @@
 		"keys_title": "Your keys never leave your device.",
 		"keys_body": "Keys are generated in your browser using libsodium. They are encrypted with a password you choose (Argon2id + XSalsa20-Poly1305) before being stored. No Morphit server ever sees them.",
 		"tracking_title": "Zero tracking, zero logging.",
-		"tracking_body": "No cookies. No analytics. No third-party scripts. No IP logging. No telemetry. If you look at the Network tab in your browser, every request goes to Morphit and nowhere else.",
+		"tracking_body": "No cookies. No analytics. No third-party scripts. No IP logging. No telemetry. Morphit never sees or logs your IP address. Look at the Network tab in your browser: your orders, your chat, and your balances all go to Morphit and nowhere else.",
 		"chat_title": "Chat is end-to-end encrypted.",
 		"chat_body": "Every message uses X25519 key agreement plus ChaCha20-Poly1305 authenticated encryption (libsodium primitives) with a fresh ephemeral key per message. Plaintext exists only inside your browser and your trading partner's browser. Morphit's servers, the underlying chain, and anyone in between see only ciphertext. The full protocol — including the deliberate tradeoffs we accept (no per-message forward secrecy) — is in {chat_crypto_doc}.",
 		"reproducible_title": "Reproducible builds.",
@@ -3919,14 +3922,11 @@
 			"input_label": "Your short bio",
 			"placeholder": "e.g. Coffee, BTC, and long walks on the blockchain.",
 			"hint": "Looks good.",
-			"broadcast_ok_detail": "Your short bio is now published for everyone to see.",
-			"clear": "Clear"
+			"broadcast_ok_detail": "Your short bio is now published for everyone to see."
 		},
 		"title": "Settings",
 		"subtitle": "Your identity, your rules. Stored on your device, never on our servers.",
 		"display_name": {
-			"save_legend_desc": "just display the name here so that only you see it.",
-			"broadcast_legend_desc": "post the name on-chain so everyone (and all devices) see it.",
 			"heading": "Display name",
 			"explain": "A friendly label that shows up next to your avatar. It does NOT replace your public key — that's always shown in parentheses, and that's the part people should trust.",
 			"input_label": "Choose your display name",
@@ -3934,7 +3934,6 @@
 			"preview_label": "This is how you'll appear",
 			"hint": "Looks good.",
 			"save": "Save locally only",
-			"clear": "Clear",
 			"saved_toast": "Saved.",
 			"reminder_title": "💡 Display names are not unique.",
 			"reminder_body": "Anyone can use any name. The short key in parentheses is what really identifies you, and it cannot be copied by anyone else. Always check the key when you're trading.",
@@ -3955,7 +3954,7 @@
 		"endpoints": {
 			"heading": "RPC endpoints",
 			"explain": "The network nodes that Morphit indexers talk to for reading and writing data. The app tries them in order of fastest response.",
-			"pool_note": "Your Morphit instance handles all Blurt network traffic for you — your browser never talks to these nodes directly. This is just their live status.",
+			"pool_note": "Your Morphit instance talks to these nodes for you — your orders, chat and balances all go through it, not your browser. This is just their live status.",
 			"cooling_down": "cooling down",
 			"recheck": "Re-check node speeds",
 			"probing": "probing…",

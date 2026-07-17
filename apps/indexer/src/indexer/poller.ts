@@ -119,6 +119,19 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
 
 /** The Poller is a long-lived object — constructed once, `run()` is
  *  called to drive the loop, `stop()` triggers graceful shutdown. */
+/** v1.7.5 (t.txt #4) — blocks per JSON-RPC batch during catch-up.
+ *
+ *  20 is a deliberate middle: it cuts catch-up request count by 20x (a 5,000
+ *  block backlog goes from 5,000 requests to 250), while keeping any single
+ *  response small enough that a node isn't asked to marshal megabytes at once
+ *  and a timeout doesn't discard much work. It also stays well under the pool's
+ *  per-endpoint budget, so one batch is one paced request, not a burst.
+ *
+ *  Not operator-tunable on purpose: the number that matters here belongs to the
+ *  node operators we are asking to carry us, not to whoever runs this instance.
+ */
+const BLOCK_FETCH_BATCH = 20;
+
 export class Poller {
 	private readonly startedAt = new Date();
 	private status: PollerStatus;
@@ -644,8 +657,25 @@ export class Poller {
 		// a long catch-up could otherwise leave the transaction open
 		// for minutes, holding locks and bloating WAL. One-block-per-tx
 		// keeps pressure on the DB predictable.
-		for (let n = from; n <= irreversible && !this.abort.signal.aborted; n++) {
-			const block = await this.blurt.getBlock(n);
+		//
+		// v1.7.5 (t.txt #4): the RPC FETCH is now batched even though the DB write
+		// is not. These are different pressures and they want opposite answers —
+		// the DB wants small transactions, the volunteer-run RPC nodes want few
+		// requests. Prefetching a window with ONE JSON-RPC batch and then applying
+		// it one-block-per-tx satisfies both: the paragraph above still holds
+		// exactly as written, and a 5,000-block catch-up stops being 5,000 HTTP
+		// requests aimed at rpc.blurt.blog.
+		for (let cursor = from; cursor <= irreversible && !this.abort.signal.aborted; ) {
+			const hi = Math.min(cursor + BLOCK_FETCH_BATCH - 1, irreversible);
+			const window: number[] = [];
+			for (let b = cursor; b <= hi; b++) window.push(b);
+
+			// ONE request for the whole window (or a transparent per-node fallback).
+			const fetched = await this.blurt.getBlocks(window);
+
+			for (let i = 0; i < fetched.length && !this.abort.signal.aborted; i++) {
+				const n = window[i]!;
+				const block = fetched[i]!;
 			if (!block) {
 				// Chain said it was irreversible but node hasn't served
 				// it yet — endpoint inconsistency. Stop this tick; the
@@ -710,6 +740,9 @@ export class Poller {
 					rejected: counts.rejected
 				});
 			}
+			}
+
+			cursor = hi + 1;
 		}
 	}
 

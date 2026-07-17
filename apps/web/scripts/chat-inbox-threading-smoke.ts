@@ -44,13 +44,16 @@ const convView = strip(readFileSync(join(WEB, 'src', 'lib', 'components', 'Conve
 
 let pass = 0;
 let fail = 0;
-const check = (name: string, ok: boolean): void => {
+// v1.7.5 — optional third arg: a failure detail, printed only when the check
+// fires. The rewritten checks pass one to explain WHY a requirement holds when
+// the landmark it used to key off has moved.
+const check = (name: string, ok: boolean, detail?: string): void => {
 	if (ok) {
 		pass++;
 		console.log(`  \u2713 ${name}`);
 	} else {
 		fail++;
-		console.error(`  \u2717 ${name}`);
+		console.error(`  \u2717 ${name}${detail ? `\n      ${detail}` : ''}`);
 	}
 };
 
@@ -135,6 +138,54 @@ check('…that reading one card marks only that one read', /only that one/i.test
 check('…it describes the three folders Inbox / Starred / Archived', /\bInbox\b/.test(faq) && /\bStarred\b/.test(faq) && /\bArchived\b/.test(faq));
 check('…the star, archive and restore actions', /star/i.test(faq) && /\bArchive\b/.test(faq) && /\bRestore\b/.test(faq));
 check('…with no leftover Messages/Requests/Dismiss model', !/Messages tab/i.test(faq) && !/Requests tab/i.test(faq) && !/\bDismiss\b/.test(faq));
+
+// ─── v1.7.5 (t.txt #3): the card must not squish on a phone ──────────
+//
+// Ken's screenshot: "Super loong display name" wrapped to FOUR lines, dragging
+// the 40px avatar and the RE: line out of alignment with it, and turning one
+// conversation into a ~600px-tall card.
+//
+// Cause: on a ~360px phone the card's FIXED furniture — 40px avatar, "25 min
+// ago", the star, the full-height Archive box, p-3 padding and three gap-3 gaps
+// — consumed ~250px, leaving the text block ~110px. An inbox truncates names
+// (every mail client does); it never reflows the row around one.
+const identityLabel = strip(
+	readFileSync(join(WEB, 'src', 'lib', 'components', 'IdentityLabel.svelte'), 'utf8')
+);
+
+// The real bug. IdentityLabel had TWO name paths, and only the one WITH a
+// posting key under it truncated — which is why an order card looked fine and
+// the chat inbox card (which passes no key) did not.
+check(
+	'a display name with no posting key still truncates (the four-line wrap)',
+	/\{:else if name\}\s*<span class="min-w-0 truncate">\{@render nameText\(\)\}<\/span>/.test(identityLabel)
+);
+check(
+	'…and keeps min-w-0, without which truncate is inert in a flex row',
+	/<span class="min-w-0 truncate">\{@render nameText\(\)\}<\/span>/.test(identityLabel),
+	"a flex item's default min-width is auto — never smaller than its content"
+);
+check(
+	'the keyed name path still truncates too (unchanged)',
+	/<span class="truncate">\{@render nameText\(\)\}<\/span>/.test(identityLabel)
+);
+
+// The furniture. Tighter on mobile ONLY — every rule below is `sm:`-restored, so
+// the desktop card Ken already signed off on is byte-identical.
+check(
+	'the card row is tighter on mobile and unchanged from sm up',
+	/flex min-w-0 flex-1 items-center gap-2 p-2 sm:gap-3 sm:p-3/.test(inbox)
+);
+check(
+	'the timestamp is terse on a phone ("25m ago") and descriptive from sm up',
+	/<span class="sm:hidden">[\s\S]{0,160}?format="terse" ago[\s\S]{0,120}?<span class="hidden sm:inline">[\s\S]{0,160}?format="descriptive"/.test(inbox),
+	'the descriptive form costs ~40px of a ~360px card'
+);
+check(
+	'the archive/restore gutter is narrower on mobile, restored at sm',
+	(inbox.match(/border-l border-ink-200 px-2 [^"]*sm:px-3/g) ?? []).length >= 2,
+	'both the Archive and Restore variants — they are separate elements'
+);
 
 console.log('');
 if (fail === 0) console.log(`\u2713 all ${pass} chat-inbox-threading scenarios passed`);

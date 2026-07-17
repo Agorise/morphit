@@ -104,6 +104,7 @@ export const FAQ_KEYS = [
 	'privacy_mode',
 	'privacy_practices',
 	'data_collection',
+	'ip_address_and_rpc_nodes',
 	'use_vpn',
 	'monero_amount_jitter',
 	'privacy_coins_onchain',
@@ -932,6 +933,29 @@ const STOPWORDS_EN = new Set([
  * real confusion shows up.
  */
 const SYNONYMS_EN: Record<string, readonly string[]> = {
+	// v1.7.5 (t.txt #10) — route IP/leak/exposure questions to the ONE article
+	// that discloses the boot-time direct-to-node release check. These are the
+	// words a worried user actually types, none of which appear in a phrase like
+	// "signed release record": they either fear a leak, or they opened the Network
+	// tab, saw a single request to a Blurt node, and searched for what it was.
+	ip: ['leak', 'address', 'rpc', 'node', 'anonymity', 'tor', 'vpn'],
+	leak: ['ip', 'address', 'expose', 'reveal', 'anonymity', 'privacy'],
+	leaks: ['ip', 'address', 'expose', 'reveal', 'anonymity', 'privacy'],
+	leaked: ['ip', 'address', 'expose', 'reveal', 'anonymity', 'privacy'],
+	leaking: ['ip', 'address', 'expose', 'reveal', 'anonymity', 'privacy'],
+	expose: ['ip', 'leak', 'reveal', 'privacy'],
+	exposed: ['ip', 'leak', 'reveal', 'privacy'],
+	exposure: ['ip', 'leak', 'reveal', 'privacy'],
+	reveal: ['ip', 'leak', 'expose', 'privacy'],
+	reveals: ['ip', 'leak', 'expose', 'privacy'],
+	rpc: ['ip', 'node', 'leak', 'blurt'],
+	nodes: ['ip', 'rpc', 'node', 'leak'],
+	deanonymize: ['ip', 'privacy', 'anonymity', 'leak'],
+	// The Network tab is how a suspicious user finds this on their own: the page
+	// invites them to look, and the one non-Morphit request is what they'll ask
+	// about. Make that search land on the article that explains it.
+	network: ['ip', 'rpc', 'node', 'leak'],
+	devtools: ['ip', 'rpc', 'node', 'network'],
 	// Safety/security
 	safety: ['security', 'safe', 'attack'],
 	secure: ['security', 'safe'],
@@ -971,7 +995,8 @@ const SYNONYMS_EN: Record<string, readonly string[]> = {
 	thorough: ['rigor', 'audit'],
 	// Identity / privacy
 	kyc: ['identity', 'verification'],
-	anonymous: ['privacy', 'anonymity'],
+	// v1.7.5 (t.txt #10) — extended toward the IP/RPC disclosure article.
+	anonymous: ['privacy', 'anonymity', 'ip', 'tor', 'vpn'],
 	identity: ['kyc', 'verification'],
 	// Pricing
 	price: ['fee', 'fees', 'cost'],
@@ -993,7 +1018,9 @@ const SYNONYMS_EN: Record<string, readonly string[]> = {
 	swap: ['exchange', 'trade'],
 	// Operators
 	operator: ['node', 'instance', 'run'],
-	node: ['operator', 'instance'],
+	// v1.7.5 (t.txt #10) — 'node' now also reaches the IP/RPC article: a user who
+	// opens the Network tab and spots one Blurt request searches this word.
+	node: ['operator', 'instance', 'ip', 'rpc', 'leak'],
 	instance: ['node', 'operator'],
 	server: ['node', 'operator', 'run'],
 	host: ['node', 'operator', 'run'],

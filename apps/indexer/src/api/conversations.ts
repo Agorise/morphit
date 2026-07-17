@@ -10,6 +10,7 @@
  *     message_count: number,
  *     has_user_sent: boolean,        // …in THIS thread
  *     peer_has_user_sent: boolean,   // …ever, with this person (tab split)
+ *     last_message_is_mine: boolean, // the last word in this thread is yours
  *     order: { permlink, account, side, asset, fiat_currency,
  *              amount_min, amount_max, status } | null
  *       // the order THIS THREAD is about, for the frontend's
@@ -59,6 +60,10 @@ interface ConversationRow {
 	/** cp447 — has the caller ever replied to this PEER, in any thread? Drives the
 	 *  Messages/Requests tab split, which is about people, not discussions. */
 	peer_has_user_sent: boolean;
+	/** v1.7.5 — was the most recent message in this thread sent BY the caller?
+	 *  A thread whose last word is your own has nothing waiting to be read, on
+	 *  ANY of your devices. */
+	last_message_is_mine: boolean;
 	// The order this conversation is most recently about (from the
 	// latest message carrying an order_permlink), or all-null when
 	// the conversation references no order / the order row is gone.
@@ -111,6 +116,7 @@ export const CONVERSATIONS_SQL = `
 				g.message_count,
 				g.has_user_sent,
 				g.peer_has_user_sent,
+				g.last_message_is_mine,
 				o.permlink          AS order_permlink,
 				o.account           AS order_account,
 				o.side              AS order_side,
@@ -135,7 +141,23 @@ export const CONVERSATIONS_SQL = `
 						order_permlink,
 						MAX(created_at) AS last_message_at,
 						COUNT(*)::text AS message_count,
-						BOOL_OR(sender = $1) AS has_user_sent
+						BOOL_OR(sender = $1) AS has_user_sent,
+						-- v1.7.5 (t.txt #2) — was the LAST message in this thread mine?
+						--
+						-- Ken: signed in on a PC and a phone; he sends a message from the
+						-- PC and his PHONE lights up "unread". It was his own message. The
+						-- client could not know that: isUnread compares last_message_at
+						-- against the local read cursor and has no idea WHO sent it, and
+						-- has_user_sent answers a different question ("have I ever sent in
+						-- this thread"), so a thread you are actively talking in reads as
+						-- unread on every other device you own.
+						--
+						-- This picks the sender of the row with the greatest created_at in
+						-- the group, i.e. exactly the row MAX(created_at) reports as
+						-- last_message_at. Ties are vanishingly rare and resolve
+						-- deterministically either way; mis-attributing one costs a badge.
+						(ARRAY_AGG(sender ORDER BY created_at DESC))[1] = $1
+							AS last_message_is_mine
 					FROM chat_messages
 					WHERE sender = $1 OR recipient = $1
 					GROUP BY peer, order_permlink
@@ -181,6 +203,7 @@ export function conversationsRoute(db: Database): Hono {
 				message_count: parseInt(r.message_count, 10),
 				has_user_sent: r.has_user_sent,
 				peer_has_user_sent: r.peer_has_user_sent,
+				last_message_is_mine: r.last_message_is_mine,
 				// Present only when the JOIN found a live order row for
 				// the latest order-carrying message. amount_min/max are
 				// fiat NUMERIC → ::text → Number (matches src/api/orders.ts).

@@ -207,13 +207,17 @@ const LOCALES_DIR = resolve(WEB, 'src/lib/i18n/locales');
 // contract, a "since {month}" tail overflows a phone rather than wrapping. The
 // key was pruned from all 10 locales, and the i18n dead-key gate enforces that
 // no locale keeps a leaf that nothing references.
+// v1.7.5 (t.txt #8) — `reputation_aria` is deliberately gone. It backed the
+// chatroom's HAND-ROLLED `⭐ {score}`, which was replaced by the shared
+// TradeRepCluster; the shared RatingChip announces via `orderbook.order.rating_aria`
+// instead, so screen-reader coverage is unchanged and this key had no consumer
+// left. The i18n dead-key gate would fail on a locale leaf nothing references.
 const NEW_KEYS = [
 	'pay_with_label',
 	'accept_label',
 	'location_label',
 	'terms_label',
 	'trades_only',
-	'reputation_aria',
 	'message_word'
 ];
 const localeFiles = readdirSync(LOCALES_DIR).filter((f) => f.endsWith('.json'));
@@ -226,7 +230,7 @@ for (const lf of localeFiles) {
 	};
 	const cardKeys = d.orderbook?.card ?? {};
 	const missing = NEW_KEYS.filter((k) => typeof cardKeys[k] !== 'string' || cardKeys[k].length === 0);
-	check(`18.${loc} has all 7 orderbook.card keys`, missing.length === 0, `missing: ${missing.join(', ')}`);
+	check(`18.${loc} has all 6 orderbook.card keys`, missing.length === 0, `missing: ${missing.join(', ')}`);
 	// placeholder integrity — v1.5.5: trades_since is gone, so this now guards
 	// trades_only, the surviving count-bearing key.
 	const only = cardKeys['trades_only'] ?? '';
@@ -235,8 +239,16 @@ for (const lf of localeFiles) {
 		only.includes('{count}'),
 		only
 	);
-	const aria = cardKeys['reputation_aria'] ?? '';
-	check(`20.${loc} reputation_aria keeps {score}`, aria.includes('{score}'), aria);
+	// v1.7.5 — the score's accessible name moved to the SHARED RatingChip, which
+	// announces via `orderbook.order.rating_aria`. Assert it where it now lives, so
+	// screen-reader coverage stays pinned rather than silently dropped along with
+	// the key it used to use.
+	const ratingAria = (
+		JSON.parse(readFileSync(join(LOCALES_DIR, lf), 'utf8')) as {
+			orderbook?: { order?: Record<string, string> };
+		}
+	).orderbook?.order?.['rating_aria'] ?? '';
+	check(`20.${loc} the shared rating aria keeps {rating}`, ratingAria.includes('{rating}'), ratingAria);
 }
 
 console.log('');
@@ -244,4 +256,65 @@ if (failed > 0) {
 	console.log(`\u2717 ${failed}/${total} order-card scenarios failed`);
 	process.exit(1);
 }
+
+// ─── v1.7.5 (t.txt #5, #6, #7) ───────────────────────────────────────
+const chip = read('src/lib/components/OrderExpiryChip.svelte');
+const ratingChip = read('src/lib/components/RatingChip.svelte');
+
+// t.txt #5 — Ken asked for "Posted 1h ago" and added "assuming that is correct".
+// It wasn't, quite: `orders.updated_at` starts equal to created_at but feeAttest
+// MOVES it when a BTC/XMR listing fee verifies — to a LIVE order, hours after
+// posting. So relabelling alone would have said "Posted 5m ago" about an order
+// posted two hours earlier. The FIELD changed too.
+check(
+	'20 the expiry chip takes the POSTED time, not updated_at',
+	/<OrderExpiryChip expiresAt=\{order\.expires_at\} postedAtIso=\{order\.created_at\} \/>/.test(card),
+	'feeAttest moves updated_at on a live order — it does not mean "posted"'
+);
+check('21 the chip prop is named for what it holds', /postedAtIso\?: string;/.test(chip));
+check(
+	'22 no caller still feeds updated_at to the chip',
+	!/updatedAtIso/.test(chip) && !/updatedAtIso/.test(card)
+);
+check('23 the tooltip says posted, not updated', /orderbook\.order\.posted_ago/.test(chip));
+
+// t.txt #6 — 0 hides entirely; 1 is singular; >1 plural.
+check('24 zero trades renders nothing at all', /const showTrades = \$derived\(tradeCount > 0\);/.test(cluster));
+check(
+	'25 the plural selector gets the RAW count, not the compacted string',
+	/values: \{ n: tradeCount, count: formatCountCompact\(tradeCount\) \}/.test(cluster),
+	'formatCountCompact yields "1.2K"; a string never matches an ICU plural rule'
+);
+
+// t.txt #7 — rating pill FIRST, trade count to its right at the pill's size.
+const ratingIdx = cluster.indexOf('<RatingChip count={ratingCount} {rating} />');
+const tradesIdx = cluster.indexOf('<span class="text-xs">{tradesText}</span>');
+check('26 the rating pill renders before the trade count', ratingIdx > 0 && tradesIdx > ratingIdx);
+check('27 the trade count matches the pill\'s text-xs', tradesIdx > 0);
+check(
+	'28 the cluster is still ONE unbreakable chunk',
+	/inline-flex flex-none items-center gap-1\.5 whitespace-nowrap/.test(cluster),
+	"Ken: none of that chunk ever gets broken, no wrap"
+);
+check(
+	'29 the rating count is no longer dimmed to 70%',
+	!/class="opacity-70">\(\{count\}\)/.test(ratingChip),
+	'measured: the pill already matches the Expires pill; this was the one real dimming'
+);
+check(
+	'30 the rating pill keeps the Expires pill\'s emerald + ring',
+	/bg-morphit-emerald\/10/.test(ratingChip) && /ring-1 ring-morphit-emerald\/30/.test(ratingChip)
+);
+
+// Every locale must pluralise — not just English.
+for (const lf of localeFiles) {
+	const loc = lf.replace('.json', '');
+	const d = JSON.parse(readFileSync(join(LOCALES_DIR, lf), 'utf8')) as {
+		orderbook?: { card?: Record<string, string> };
+	};
+	const only = d.orderbook?.card?.['trades_only'] ?? '';
+	check(`31.${loc} trades_only is ICU-pluralised`, /\{n, plural,/.test(only), only);
+	check(`32.${loc} trades_only still shows the count`, only.includes('{count}'), only);
+}
+
 console.log(`\u2713 all ${total} order-card scenarios passed`);

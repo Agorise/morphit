@@ -76,22 +76,52 @@ describe('readState', () => {
 	});
 
 	it('isUnread returns true when never visited', () => {
-		expect(isUnread('alice', '', '2026-04-24T12:00:00Z')).toBe(true);
+		expect(isUnread('alice', '', '2026-04-24T12:00:00Z', false)).toBe(true);
 	});
 
 	it('isUnread returns true when message is newer than visit', () => {
 		markConversationRead('alice', '', new Date('2026-04-24T10:00:00Z'));
-		expect(isUnread('alice', '', '2026-04-24T12:00:00Z')).toBe(true);
+		expect(isUnread('alice', '', '2026-04-24T12:00:00Z', false)).toBe(true);
 	});
 
 	it('isUnread returns false when visit is newer than message', () => {
 		markConversationRead('alice', '', new Date('2026-04-24T15:00:00Z'));
-		expect(isUnread('alice', '', '2026-04-24T12:00:00Z')).toBe(false);
+		expect(isUnread('alice', '', '2026-04-24T12:00:00Z', false)).toBe(false);
 	});
 
 	it('isUnread returns false for invalid account names', () => {
-		expect(isUnread('', '', '2026-04-24T12:00:00Z')).toBe(false);
-		expect(isUnread('TOO-UPPER', '', '2026-04-24T12:00:00Z')).toBe(false);
+		expect(isUnread('', '', '2026-04-24T12:00:00Z', false)).toBe(false);
+		expect(isUnread('TOO-UPPER', '', '2026-04-24T12:00:00Z', false)).toBe(false);
+	});
+
+	it('your own last word is never unread — on ANY device (t.txt #2)', () => {
+		// Ken: signed in on a PC and a phone. He sends "badges test" from the PC;
+		// his PHONE lights up unread. His own message, nagging him.
+		//
+		// The phone's read cursor is per-device and stale by definition — it has
+		// no idea the PC just sent that. So the ownership check has to win outright
+		// rather than being one input to the cursor comparison: a thread whose last
+		// word is yours has nothing waiting to be read, no matter which device you
+		// pick up or when it last looked.
+		//
+		// The old doc comment on isUnread had already spotted this and told callers
+		// to "pass the last sender and filter" — which no caller could do, because
+		// `ConversationSummary` carried no such field. It described the bug for
+		// releases instead of fixing it.
+		expect(isUnread('alice', '', '2026-04-24T12:00:00Z', true)).toBe(false);
+	});
+
+	it('ownership beats the cursor even when never visited', () => {
+		// The never-visited branch returns true unconditionally, so it's the one
+		// that would leak the bug back if the ownership check were placed after it.
+		expect(isUnread('bob', 'order-xmr', '2026-04-24T12:00:00Z', false)).toBe(true);
+		expect(isUnread('bob', 'order-xmr', '2026-04-24T12:00:00Z', true)).toBe(false);
+	});
+
+	it("the peer's reply after your message is unread again", () => {
+		// The other direction: ownership must not sticky-mark a thread read. Once
+		// they reply, the last word is theirs and it's unread.
+		expect(isUnread('alice', '', '2026-04-24T12:00:00Z', false)).toBe(true);
 	});
 
 	it('clearReadState wipes everything', () => {
@@ -163,30 +193,30 @@ describe('readState', () => {
 		localStorage.setItem(KEY, JSON.stringify({ alice: '2026-04-24T12:00:00Z' }));
 		__reloadFromStorage();
 		// Every discussion with alice, whatever its order, is read up to that time.
-		expect(isUnread('alice', '', '2026-04-24T11:00:00Z')).toBe(false);
-		expect(isUnread('alice', 'order-xmr', '2026-04-24T11:00:00Z')).toBe(false);
+		expect(isUnread('alice', '', '2026-04-24T11:00:00Z', false)).toBe(false);
+		expect(isUnread('alice', 'order-xmr', '2026-04-24T11:00:00Z', false)).toBe(false);
 		// …and anything newer is still unread.
-		expect(isUnread('alice', 'order-xmr', '2026-04-24T13:00:00Z')).toBe(true);
+		expect(isUnread('alice', 'order-xmr', '2026-04-24T13:00:00Z', false)).toBe(true);
 	});
 
 	// THE BEHAVIOUR KEN ASKED FOR: reading one thread must not read the others.
 	it('reading one thread does not mark another thread with the same peer read', () => {
 		markConversationRead('alice', 'order-xmr', new Date('2026-04-24T12:00:00Z'));
-		expect(isUnread('alice', 'order-xmr', '2026-04-24T11:00:00Z')).toBe(false);
-		expect(isUnread('alice', 'order-btc', '2026-04-24T11:00:00Z')).toBe(true);
-		expect(isUnread('alice', '', '2026-04-24T11:00:00Z')).toBe(true);
+		expect(isUnread('alice', 'order-xmr', '2026-04-24T11:00:00Z', false)).toBe(false);
+		expect(isUnread('alice', 'order-btc', '2026-04-24T11:00:00Z', false)).toBe(true);
+		expect(isUnread('alice', '', '2026-04-24T11:00:00Z', false)).toBe(true);
 	});
 
 	it('the order-less thread is a thread of its own', () => {
 		markConversationRead('alice', '', new Date('2026-04-24T12:00:00Z'));
-		expect(isUnread('alice', '', '2026-04-24T11:00:00Z')).toBe(false);
-		expect(isUnread('alice', 'order-xmr', '2026-04-24T11:00:00Z')).toBe(true);
+		expect(isUnread('alice', '', '2026-04-24T11:00:00Z', false)).toBe(false);
+		expect(isUnread('alice', 'order-xmr', '2026-04-24T11:00:00Z', false)).toBe(true);
 	});
 
 	it('a client cannot forge a peer-wide ack by naming the sentinel', () => {
 		markConversationRead('alice', PEER_WIDE, new Date('2026-04-24T12:00:00Z'));
 		expect(get(readState)).toEqual({});
-		expect(isUnread('alice', 'order-xmr', '2026-04-24T11:00:00Z')).toBe(true);
+		expect(isUnread('alice', 'order-xmr', '2026-04-24T11:00:00Z', false)).toBe(true);
 	});
 
 	it('caps at MAX_PEERS keeping the most-recently-visited', () => {
@@ -298,8 +328,8 @@ describe('mergeRemoteReadState', () => {
 		mergeRemoteReadState([
 			{ peer: 'alice', order_permlink: 'order-xmr', last_read_at: '2026-04-24T12:00:00Z' }
 		]);
-		expect(isUnread('alice', 'order-xmr', '2026-04-24T11:00:00Z')).toBe(false);
-		expect(isUnread('alice', 'order-btc', '2026-04-24T11:00:00Z')).toBe(true);
+		expect(isUnread('alice', 'order-xmr', '2026-04-24T11:00:00Z', false)).toBe(false);
+		expect(isUnread('alice', 'order-btc', '2026-04-24T11:00:00Z', false)).toBe(true);
 	});
 
 	it('a remote ack from a PRE-cp446 instance is peer-wide, not order-less', () => {
@@ -307,7 +337,7 @@ describe('mergeRemoteReadState', () => {
 		// that to the order-less thread would leave the user's other threads
 		// looking unread on this device, which is the exact bug we are fixing.
 		mergeRemoteReadState([{ peer: 'alice', last_read_at: '2026-04-24T12:00:00Z' }]);
-		expect(isUnread('alice', 'order-xmr', '2026-04-24T11:00:00Z')).toBe(false);
-		expect(isUnread('alice', '', '2026-04-24T11:00:00Z')).toBe(false);
+		expect(isUnread('alice', 'order-xmr', '2026-04-24T11:00:00Z', false)).toBe(false);
+		expect(isUnread('alice', '', '2026-04-24T11:00:00Z', false)).toBe(false);
 	});
 });

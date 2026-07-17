@@ -295,6 +295,21 @@ A healthy response is JSON with a recent block number and a small lag, like `{"h
 
 That's the whole job. Get a machine, point a name at it, run the installer, let the wizard configure it, turn on HTTPS, register — and you're an operator in the federation. Welcome aboard.
 
+## Your node is a good neighbour to the Blurt RPC nodes (v1.7.5)
+
+The public Blurt RPC nodes are run by volunteers, for free, and
+Morphit leans on them.  Your indexer is built not to abuse that:
+it caps its own request rate, backs off exponentially when a node
+pushes back, jitters its retries so every Morphit instance in the
+federation doesn't stampede the same node at the same second, and
+fetches blocks in batches of 20 rather than one request at a time
+when it is catching up after downtime.
+
+You don't configure any of this and there is nothing to tune.  It
+is listed here so you know what your node is doing on your behalf,
+and because if you ever run your own Blurt node, this is the
+behaviour you'll be receiving.
+
 ## Upgrading past v1.3.5 — one database change, applied for you
 
 Upgrading an indexer to v1.3.5 or later applies a schema

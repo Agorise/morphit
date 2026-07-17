@@ -364,7 +364,20 @@
 			>
 		</span>
 	{:else if name}
-		{@render nameText()}
+		<!-- v1.7.5 (t.txt #3) — TRUNCATE, don't wrap.
+		     This branch (a display name with no posting key under it) was the only
+		     one that let a name wrap. The branch above already truncates, which is
+		     why an order card with its key visible looked fine while the chat inbox
+		     card did not: on a ~360px phone the card's fixed furniture — 40px
+		     avatar, "25 min ago", the star, the full-height Archive box, padding and
+		     gaps — leaves the text block roughly 100px, so "Super loong display
+		     name" wrapped to four lines and dragged the avatar and the RE: line out
+		     of alignment with it. An inbox truncates names (every mail client does);
+		     it never reflows the row around one.
+		     `min-w-0` is what actually permits the shrink: a flex item's default
+		     min-width is auto, i.e. "never smaller than my content", so `truncate`
+		     alone would be inert here. -->
+		<span class="min-w-0 truncate">{@render nameText()}</span>
 	{:else}
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<bdi

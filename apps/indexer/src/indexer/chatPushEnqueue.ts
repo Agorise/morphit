@@ -82,13 +82,24 @@ export async function enqueueChatPush(db: ChatPushDb, params: ChatPushParams): P
 		const isOrderSignal =
 			typeof params.orderPermlink === 'string' && params.orderPermlink.length > 0;
 		const category = isOrderSignal ? 'order' : 'chat';
-		// Order signal → deep-link to the order-scoped chat with the sender
-		// (cp471). Plain chat → the chat list. Both localized; the [lang] segment
-		// + the ?order query survive sanitizeClickPath (same-origin pathname +
-		// search). Guarded by handler-push-click-path-route-smoke.
+		// Both deep-link to the thread with the sender; the order signal adds the
+		// ?order scope. Localized; the [lang] segment + the ?order query survive
+		// sanitizeClickPath (same-origin pathname + search). Guarded by
+		// handler-push-click-path-route-smoke.
+		//
+		// v1.7.5 — plain chat used to point at `/${locale}/chat` (the LIST), and
+		// that one missing path segment was half of Ken's ~1-minute dark badge.
+		// The service worker recovers the thread for the in-page fast badge by
+		// PARSING this path (`chatThreadFromClickPath` reads `…/chat/<peer>`), so
+		// a path with no peer means the SW posts CHAT_PUSH with no peer, the page's
+		// `if (data.peer)` guard fails, and neither the archived-thread resurrect
+		// nor `emitFastPush` ever runs — leaving the badge dark until the durable
+		// poll catches up ~60s later. Naming the peer here is also just better:
+		// tapping a chat notification now opens the conversation instead of the
+		// list. `/[lang]/chat/[peer=account]` handles a null-order thread already.
 		const clickPath = isOrderSignal
 			? `/${locale}/chat/${params.sender}?order=${params.orderPermlink}`
-			: `/${locale}/chat`;
+			: `/${locale}/chat/${params.sender}`;
 		const title = isOrderSignal ? localize(locale, 'order_title') : localize(locale, 'chat_title');
 		const body = isOrderSignal
 			? localize(locale, 'order_body', params.sender)

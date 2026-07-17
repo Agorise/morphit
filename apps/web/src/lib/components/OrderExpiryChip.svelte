@@ -63,13 +63,13 @@
 		/** ISO-8601 timestamp string from the indexer.  Caller is
 		 *  responsible for filtering null and skipping the chip. */
 		expiresAt: string;
-		/** Optional ISO-8601 last-updated timestamp. When provided, a
+		/** Optional ISO-8601 timestamp of when the order was POSTED. When provided, a
 		 *  terse "Updated 5m/2h/3d" is folded into the chip's hover
 		 *  tooltip (the orderbook card no longer shows a separate
 		 *  "Updated 1d" line — it lives here on the expires pill). */
-		updatedAtIso?: string;
+		postedAtIso?: string;
 	}
-	let { expiresAt, updatedAtIso }: Props = $props();
+	let { expiresAt, postedAtIso }: Props = $props();
 
 	/** Cached parsed value — re-derived if the prop changes. */
 	const expiresAtMs = $derived.by(() => {
@@ -195,10 +195,10 @@
 	/** Terse "Updated {ago}" for the tooltip. Mirrors RelativeTime's
 	 *  terse ladder (same relative_time.terse.* keys) — kept inline so
 	 *  the chip's native title can carry it without a wrapper element
-	 *  stealing the hover. null when no updatedAtIso is supplied. */
-	const updatedTooltip = $derived.by(() => {
-		if (!updatedAtIso) return null;
-		const ms = Date.parse(updatedAtIso);
+	 *  stealing the hover. null when no postedAtIso is supplied. */
+	const postedTooltip = $derived.by(() => {
+		if (!postedAtIso) return null;
+		const ms = Date.parse(postedAtIso);
 		if (!Number.isFinite(ms)) return null;
 		const seconds = Math.max(0, Math.floor((now - ms) / 1000));
 		let rel: string;
@@ -229,12 +229,23 @@
 				}
 			}
 		}
-		return `${$_('orderbook.order.updated_prefix')} ${rel}`;
+		return $_('orderbook.order.posted_ago', { values: { age: rel } }) as string;
 	});
 
-	/** Title/aria shown on hover: the expiry deadline, plus the
-	 *  "Updated {ago}" suffix when a last-updated time is supplied. */
-	const titleText = $derived(updatedTooltip ? `${ariaLabel} · ${updatedTooltip}` : ariaLabel);
+	/** Title/aria shown on hover: the expiry deadline, plus the "Posted {ago} ago"
+	 *  suffix when a posted time is supplied.
+	 *
+	 *  v1.7.5 (t.txt #5) — this read "Updated {ago}" and was fed `order.updated_at`.
+	 *  Ken asked for "Posted {ago} ago" and added "assuming that is correct". It
+	 *  wasn't, quite — so the FIELD changed too, not just the wording.
+	 *  `orders.updated_at` starts equal to `created_at`, but `feeAttest` moves it
+	 *  when a BTC/XMR listing fee is verified, which happens to a LIVE order and
+	 *  can be hours after posting. (`orderCancel`/`orderComplete` move it too, but
+	 *  those orders leave the orderbook.) So relabelling alone would have told a
+	 *  confident lie — "Posted 5m ago" on an order posted two hours earlier. The
+	 *  chip now takes `created_at`, which is what the word "Posted" means and what
+	 *  Ken actually wanted to see. */
+	const titleText = $derived(postedTooltip ? `${ariaLabel} · ${postedTooltip}` : ariaLabel);
 </script>
 
 <span

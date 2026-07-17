@@ -54,6 +54,9 @@ let convos: ReadonlyArray<{
 	last_message_at: string;
 	/** cp446 — the discussion this row is about; null when it cites no order. */
 	order: { permlink: string } | null;
+	/** v1.7.5 (t.txt #2) — the last word in this thread is the signed-in user's
+	 *  own, so there is nothing here to read on ANY of their devices. */
+	last_message_is_mine: boolean;
 }> = [];
 
 /** v1.5.5 — OPTIMISTIC fast-chat overlay: threads a Web Push has told us about
@@ -94,9 +97,15 @@ function fastKey(peer: string, order: string): string {
  * Called from the CHAT_PUSH service-worker handler. Idempotent; the newest
  * timestamp wins.
  */
-export function noteFastChatPush(peer: string, orderPermlink: string): void {
+export function noteFastChatPush(peer: string, orderPermlink: string, atMs?: number): void {
 	if (!peer) return;
-	fastPending.set(fastKey(peer, orderPermlink), Date.now());
+	// v1.7.5 — `atMs` is the message's real time, for REPLAYED events (a browser
+	// that was closed when the message landed; see chatActivityStream's replay).
+	// Defaulting to now() is right for a live push — it just arrived — but wrong
+	// for a replay: it would date a 4-minute-old message to this instant, push it
+	// past the user's read cursor, and light a badge for something they already
+	// read. Live callers pass nothing and keep the old behaviour.
+	fastPending.set(fastKey(peer, orderPermlink), atMs ?? Date.now());
 	recount();
 }
 
@@ -140,7 +149,10 @@ function recount(): void {
 		// person are three unread conversations, exactly as in an email inbox.
 		const order = c.order?.permlink ?? '';
 		counted.add(fastKey(c.peer, order));
-		if (isUnread(c.peer, order, c.last_message_at)) n++;
+		// v1.7.5 (t.txt #2) — a thread whose last word is mine is not unread on ANY
+		// of my devices. Absent (older instance) → false, i.e. the old
+		// timestamp-only rule, rather than silently marking everything read.
+		if (isUnread(c.peer, order, c.last_message_at, c.last_message_is_mine === true)) n++;
 	}
 	// v1.5.5 — add threads a push announced that the indexer hasn't published
 	// yet, so the badge lights in ~5s instead of ~60s. Drop an entry as soon as
@@ -174,7 +186,9 @@ function recount(): void {
 		// the push's arrival as the message time. Without this the entry would
 		// count unconditionally and OPENING the thread wouldn't clear the badge
 		// — it would sit lit until the TTL expired.
-		if (!isUnread(peer, order, new Date(at).toISOString())) {
+		// A Web Push is inbound by definition — nobody pushes you your own message
+		// — so `false` here is a statement of fact, not a default.
+		if (!isUnread(peer, order, new Date(at).toISOString(), false)) {
 			fastPending.delete(key);
 			continue;
 		}
@@ -204,7 +218,7 @@ export function markAllChatRead(): void {
 	for (const c of convos) {
 		if (!badgeEligible(c, meLc, hidden, blocked)) continue;
 		const order = c.order?.permlink ?? '';
-		if (!isUnread(c.peer, order, c.last_message_at)) continue;
+		if (!isUnread(c.peer, order, c.last_message_at, c.last_message_is_mine === true)) continue;
 		const lastAt = new Date(c.last_message_at);
 		const ack =
 			Number.isFinite(lastAt.getTime()) && lastAt.getTime() > now.getTime() ? lastAt : now;
@@ -244,7 +258,8 @@ async function poll(): Promise<void> {
 			convos = cR.data.items.map((c) => ({
 				order: c.order ? { permlink: c.order.permlink } : null,
 				peer: c.peer,
-				last_message_at: c.last_message_at
+				last_message_at: c.last_message_at,
+				last_message_is_mine: c.last_message_is_mine === true
 			}));
 			// v1.4.10 — Gmail-style un-archive, GLOBALLY. This channel runs on
 			// every page (and re-polls on the activity ping even while the tab is
@@ -326,7 +341,7 @@ export function startChatUnreadChannel(): () => void {
 	// chat_messages, so polling on a push just re-reads the same stale
 	// last_message_at (the ~60s dark badge Ken reported on kentest3's other
 	// tab).
-	const unsubFastPush = subscribeFastPush((peer, order) => {
+	const unsubFastPush = subscribeFastPush((peer, order, atMs) => {
 		// cp474 (t.txt #3 + #4) — a push for an ARCHIVED thread used to light
 		// nothing for ~60s, and this is why.
 		//
@@ -364,10 +379,17 @@ export function startChatUnreadChannel(): () => void {
 		// Starred threads are deliberately NOT touched: folders are exclusive, so
 		// moving one to the Inbox would silently destroy the star the user chose.
 		// They already badge correctly — `badgeEligible` excludes only archived.
-		resurrectArchivedOnNewActivity([
-			{ peer, orderPermlink: order, lastMessageAt: new Date().toISOString() }
-		]);
-		noteFastChatPush(peer, order);
+		//
+		// v1.7.5 — `atMs` is set for REPLAYED events (a browser that was closed when
+		// the message landed). Use the message's real time for BOTH calls: the
+		// resurrect only acts when activity POSTDATES the archive, and the badge is
+		// judged against the read cursor — so dating an old message to now() would
+		// wrongly un-archive a thread the user archived afterwards, and light a
+		// badge they'd already cleared. Live pushes pass nothing and mean "now",
+		// which for them is true to within the push latency.
+		const atIso = new Date(atMs ?? Date.now()).toISOString();
+		resurrectArchivedOnNewActivity([{ peer, orderPermlink: order, lastMessageAt: atIso }]);
+		noteFastChatPush(peer, order, atMs);
 	});
 
 	return () => {

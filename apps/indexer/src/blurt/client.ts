@@ -175,6 +175,29 @@ function withSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
  *  per call is cheap but allocates; cache them by URL so the same
  *  Client instance is reused across calls. */
 const clientCache = new Map<string, Client>();
+/** v1.7.5 (t.txt #4) — a node told us it does not speak JSON-RPC batch.
+ *
+ *  A distinct class, not a string match, because this must NOT look like a
+ *  transport failure: `isTransportError` matches on message TEXT ('fetch
+ *  failed', 'timeout', 'network', 'aborted', …), and a match would rotate the
+ *  endpoint and start its cooldown ladder — punishing a perfectly healthy node
+ *  for the crime of being an older build. The message below is deliberately
+ *  free of every word on that list. */
+class BatchUnsupportedError extends Error {
+	constructor(url: string) {
+		super(`endpoint does not support JSON-RPC batch: ${url}`);
+		this.name = 'BatchUnsupportedError';
+	}
+}
+
+/** v1.7.5 (t.txt #4) — URLs that answered a JSON-RPC batch with something other
+ *  than an array, i.e. nodes that don't speak batch. Process-lifetime memo: a
+ *  node's batch support doesn't flip while we're running, and re-probing it on
+ *  every catch-up would spend exactly the requests batching exists to save.
+ *  Deliberately NOT persisted — a restart re-probes once, which is the cheapest
+ *  possible way to notice a node that has since upgraded. */
+const batchUnsupported = new Set<string>();
+
 function clientFor(url: string): Client {
 	let c = clientCache.get(url);
 	if (c === undefined) {
@@ -242,6 +265,123 @@ export class BlurtClient {
 			}
 			return dgp;
 		});
+	}
+
+	/** v1.7.5 (t.txt #4) — fetch a RANGE of blocks in ONE HTTP request, using a
+	 *  JSON-RPC 2.0 batch (an array request → an array response).
+	 *
+	 *  WHY THIS EXISTS: "batch" is the last of the four things the rpc.blurt.blog
+	 *  operator asked us for — lower RPS, batch, exponential backoff, add jitter.
+	 *  The other three shipped in v1.7.0 (DEFAULT_MAX_REQUESTS_PER_SECOND,
+	 *  DEFAULT_*_COOLDOWN_LADDER_MS, DEFAULT_COOLDOWN_JITTER_FRACTION).
+	 *
+	 *  WHAT IT FIXES: the poller's catch-up walked blocks one HTTP request at a
+	 *  time. At the head that's ~1 request per 3 s and nobody notices. After any
+	 *  downtime it is thousands of requests fired as fast as pacing allows, from
+	 *  every federated instance, at a handful of volunteer-run nodes — which is
+	 *  exactly the HTTP 429 the operator complained about. One batch of N blocks
+	 *  is 1 request instead of N.
+	 *
+	 *  NOT ALL NODES SUPPORT IT. Blurt nodes vary, and this repo cannot reach one
+	 *  to check (no network in the sandbox), so batch support is DISCOVERED, never
+	 *  assumed: the first batch to a URL either works or it doesn't, the answer is
+	 *  cached per URL, and a node that can't batch silently gets the old
+	 *  one-at-a-time path forever. A node that has never been asked is not
+	 *  penalised, and a node that says no is not asked twice.
+	 *
+	 *  Errors are phrased so the pool's own classifiers see them: `isRateLimitError`
+	 *  matches /\bhttp 429\b/ on the message, so a batch that gets rate-limited
+	 *  rotates and cools down exactly like a single call would.
+	 *
+	 *  Returns results POSITIONALLY (result[i] ↔ nums[i]). JSON-RPC does not
+	 *  promise response order, so responses are matched by `id`, never by index.
+	 */
+	async getBlocks(nums: readonly number[]): Promise<ReadonlyArray<BlockHeader | null>> {
+		if (nums.length === 0) return [];
+		// One block is not a batch; skip the array framing entirely.
+		if (nums.length === 1) return [await this.getBlock(nums[0]!)];
+
+		try {
+			return await this.pool.call(async (url, signal) => {
+				if (batchUnsupported.has(url)) throw new BatchUnsupportedError(url);
+
+				const body = nums.map((n, i) => ({
+					jsonrpc: '2.0' as const,
+					id: i,
+					method: 'condenser_api.get_block',
+					params: [n]
+				}));
+
+				let res: Response;
+				try {
+					res = await fetch(url, {
+						method: 'POST',
+						headers: { 'content-type': 'application/json' },
+						body: JSON.stringify(body),
+						signal
+					});
+				} catch (err) {
+					// Network-level failure — let the pool rotate + cool down.
+					throw new Error(`batch get_block transport failure: ${String(err)}`);
+				}
+
+				if (res.status === 429) throw new Error('HTTP 429 (batch get_block)');
+				if (!res.ok) throw new Error(`HTTP ${res.status} (batch get_block)`);
+
+				const json: unknown = await res.json();
+
+				// A node that doesn't do batch answers a single object (often a
+				// parse error), not an array. That is a CAPABILITY answer, not a
+				// transport failure: remember it, and bail out to the paced
+				// fallback WITHOUT cooling the endpoint down for being honest.
+				if (!Array.isArray(json)) {
+					batchUnsupported.add(url);
+					throw new BatchUnsupportedError(url);
+				}
+				if (json.length !== nums.length) {
+					throw new Error(
+						`batch get_block returned ${json.length} responses for ${nums.length} requests`
+					);
+				}
+
+				// Match by id — JSON-RPC explicitly permits any response order.
+				const byId = new Map<number, unknown>();
+				for (const entry of json as ReadonlyArray<Record<string, unknown>>) {
+					const id = entry['id'];
+					if (typeof id !== 'number') throw new Error('batch get_block response missing id');
+					const error = entry['error'];
+					if (error !== undefined && error !== null) {
+						throw new Error(`batch get_block rpc error: ${JSON.stringify(error)}`);
+					}
+					byId.set(id, entry['result']);
+				}
+
+				return nums.map((_n, i) => {
+					if (!byId.has(i)) throw new Error(`batch get_block missing response for id ${i}`);
+					return (byId.get(i) as BlockHeader | null | undefined) ?? null;
+				});
+			});
+		} catch (err) {
+			if (!(err instanceof BatchUnsupportedError)) throw err;
+
+			// ─── PACED fallback (v1.7.5 deep-deep) ────────────────────────────
+			// This walk MUST go back through this.getBlock(), i.e. one
+			// pool.call() per block. The obvious shortcut — looping inside the
+			// callback above — is a trap that makes this whole task backwards:
+			// EndpointPool.attemptSingle awaits pace(ep) ONCE and then invokes
+			// the callback, so N requests fired inside a single callback are N
+			// requests with NO pacing between them. A node that cannot batch
+			// would receive a 20-request BURST where it used to receive 20 paced
+			// requests — worse than the behaviour this task exists to fix, and
+			// aimed at exactly the older, smaller nodes least able to absorb it.
+			//
+			// Going through getBlock() costs an endpoint re-selection per block
+			// and that is fine: correctness of the request RATE is the entire
+			// point, and this path only runs on nodes that already can't batch.
+			const out: Array<BlockHeader | null> = [];
+			for (const n of nums) out.push(await this.getBlock(n));
+			return out;
+		}
 	}
 
 	/** Fetch a specific block.  Background call (poller). */

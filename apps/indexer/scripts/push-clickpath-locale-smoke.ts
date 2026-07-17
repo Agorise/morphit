@@ -65,8 +65,23 @@ scenario('chatPushEnqueue.ts order click_path is /${locale}/chat/${sender}?order
 		'chatPushEnqueue.ts order click_path is not the localized /chat/{sender}?order= deep-link'
 	);
 });
-scenario('chatPushEnqueue.ts plain-chat click_path is /${locale}/chat', () => {
-	assert(enqueue.includes('`/${locale}/chat`'), 'chatPushEnqueue.ts plain-chat click_path missing locale prefix');
+// v1.7.5 (t.txt #1) — this used to assert the LITERAL `/${locale}/chat`, and in
+// doing so it pinned the bug it was written near. A plain-chat push whose click
+// path had no peer landed the user on the inbox with nothing selected, the page
+// dropped the notification (`if (data.peer)`), and the badge waited ~60s for the
+// durable poll — the exact "slow badges" symptom. The fix was to add the sender,
+// which made this literal vanish and this check fail.
+//
+// So pin the REQUIREMENT, not the string: BOTH click paths must be
+// locale-prefixed AND must name the peer, because a click path without a peer is
+// the defect. This now fails if either property is lost, and does not fail merely
+// because the shape improved.
+scenario('chatPushEnqueue.ts plain-chat click_path is locale-prefixed AND names the peer', () => {
+	assert(
+		enqueue.includes('`/${locale}/chat/${params.sender}`'),
+		'chatPushEnqueue.ts plain-chat click_path must be `/${locale}/chat/${params.sender}` — ' +
+			'locale-prefixed and carrying the peer, or the service worker cannot light the badge'
+	);
 });
 scenario('featureBid.ts outbid click_path is /${locale}/my/orders#…', () => {
 	assert(

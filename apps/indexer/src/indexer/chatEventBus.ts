@@ -228,6 +228,32 @@ class ChatEventBus {
 		return this.fastRing.filter((e) => e.lo === lo && e.hi === hi);
 	}
 
+	/**
+	 * v1.7.5 (t.txt #1) — recent replayable fast events this ACCOUNT is a party
+	 * to, oldest first. The participant-scoped sibling of `recentFast`.
+	 *
+	 * WHY: `recentFast(lo, hi)` answers "what did I miss in THIS conversation",
+	 * which is what an opening chatroom needs. A browser that was CLOSED needs a
+	 * different question — "did anything arrive for me at all?" — because it has
+	 * no thread in mind yet, only a badge to paint.
+	 *
+	 * Without this, a cold start could not know about any message younger than
+	 * irreversibility: the page mounts, reads `getConversations`, and the durable
+	 * table legitimately has nothing (ADR-0051 invariant #1 — the fast path never
+	 * writes it). The live SSE ping only helps if you were already connected when
+	 * it fired. So Ken opens a tab 10s after a message lands and sees a dark
+	 * badge for the rest of the minute — through no fault of any single component.
+	 *
+	 * Same ring, same TTL, same cap, same `replayable` gate as the chatroom
+	 * replay: a first-contact stranger's message still never replays, because the
+	 * durable handler may yet reject it under the stranger-fee / fan-in caps the
+	 * fast path cannot run.
+	 */
+	recentFastForAccount(account: string): ChatFastEvent[] {
+		this.pruneFastRing();
+		return this.fastRing.filter((e) => e.lo === account || e.hi === account);
+	}
+
 	/** Retained fast events, for /v1/health. */
 	fastRingSize(): number {
 		this.pruneFastRing();

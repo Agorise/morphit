@@ -672,6 +672,32 @@ curl -s "http://127.0.0.1:8081/v1/health?verbose=1" \
 #    cooldown_remaining_ms, ewma_latency_ms, last_success_age_s }]
 ```
 
+### Catch-up fetches blocks in batches (v1.7.5)
+
+The poller does **not** spend one HTTP request per block while
+catching up.  It prefetches a 20-block window with a single
+JSON-RPC 2.0 batch, then still applies those blocks one-per-
+database-transaction.  A 5,000-block backlog is therefore 250
+requests at the RPC node, not 5,000.
+
+This matters because catch-up — not steady-state — is what gets
+an instance rate-limited.  At the chain head an indexer asks for
+about one block every 3 s and no node notices.  After downtime it
+asks for thousands as fast as the pacer allows, and Morphit is
+federated, so the nodes see that burst from every instance at
+once.  Batching is the second of the four things the
+`rpc.blurt.blog` operator asked us for (lower RPS, **batch**,
+exponential backoff, jitter); the other three landed in v1.7.0.
+
+Batch support is **discovered, not assumed**.  A node that
+answers a batch with a single object rather than an array is
+recorded for the lifetime of the process and quietly served by
+the old one-block-at-a-time path from then on.  Nothing to
+configure, and nothing breaks on a node that can't batch.  If you
+want to confirm your node is getting the benefit, watch the
+request rate against a node during a catch-up: batching is
+working if it is roughly a twentieth of the block rate.
+
 `state` is `open` while an endpoint is in cooldown after
 transport failures, `half_open` just after cooldown expires
 (eligible to retry, not yet proven), `closed` when healthy.

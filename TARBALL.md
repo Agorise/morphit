@@ -1,4 +1,41 @@
+# TARBALL
+
+> ## cp476 — v1.7.5 READY TO SHIP (t.txt #1–#15 complete)
+>
+> **Version bumped 1.7.0 → 1.7.5 across all 19 touchpoints; `RELEASE-NOTES-v1.7.5.md` at repo root. No DB migration (schema still v48, from v1.5.5 — verified, not assumed).**
+>
+> **Shipped:** #1 slow badges (fast path was dead code in production — push category/click-path inversion; + cold-start ring replay carrying real block time). #2 cross-device self-message unread (`last_message_is_mine`, SQL-only, no migration). #3 squished mobile chat cards (+~40% on a 360px phone; desktop byte-identical). #4 **RPC batching** — completes the rpc.blurt.blog operator's four asks (lower RPS, **batch**, exp backoff, jitter); catch-up 5,000 requests → 250. #5 Expires tooltip (field changed, not just the label — `updated_at` genuinely diverges via feeAttest). #6 ICU pluralisation (pl/ru get all four forms). #7 rating pill first + one real dimming removed. #8 chat-header reputation via the shared cluster. #9 whoami avatar 18→34. #10 **privacy audit** — the browser DOES hit a node once/session by design; THREE false claims found and corrected; one FAQ article discloses it, guarded. #11 docs (first pass; see REVISIT-LIST). #12 operator readiness — silent-node warning. #13/#14/#15 settings + XMR copy.
+>
+> **Green:** full battery 512 runners / ~15,300 scenarios / 0 fail (run in ~50-runner chunks). indexer 646, web 1054. 25/25 workspaces compile-clean. Five personas walked (Josie's version-skew proven in both directions). Deep-deep found a real pacing bug in #4 and fixed it.
+>
+> **Not shipped / Ken's call:** (1) FAQ AND-search returns nothing on one unknown word. (2) `RELEASE-NOTES-v1.0.0-beta.46.md` claims "your browser never contacts a Blurt node directly" — false, historical, needs an erratum decision. (3) #11 zero-drift remainder (env parity, fenced commands, API.md router table, a doc-drift guard — there is none). (4) #12 option (c): a no-Matrix alerting fallback, now the priority since not everyone uses Matrix. (5) "Blurt" no longer appears in the IP article, so a user who opens the Network tab, sees `rpc.blurt.blog`, and searches "blurt" won't find it.
+
 # Tarball history
+
+
+> **v1.7.5 IN PROGRESS (cp476) — DO NOT SHIP. Version deliberately still 1.7.0.** t.txt #1, #2, #3, #5, #6, #7, #8, #9 done. Remaining: #4, #10-#15, explorer poll cap, battery/walkthroughs/deep-deep/release.
+>
+> **t.txt #8/#9 (chatroom):** the header hand-rolled `⭐ {score}` instead of using TradeRepCluster — which is precisely why it was wrong in both ways Ken reported (gold emoji vs the emerald ★ convention; no trade/rating counts). Now the shared cluster in both render sites. Avatar alignment fixed with `self-center` on the avatar and NOT `items-center` on the row — verified the kebab is a direct child of that row and depends on `items-start`. Whoami avatar 18px → 34px, measured from the stack (16px base × 1.25 + 16 × 0.7 × 1.25).
+>
+> **EIGHT more guards were pinning the bug** (the 5th instance this batch). Rewritten to pin the outcome, then re-tampered.
+>
+> **t.txt #3 (squished mobile cards):** `IdentityLabel` had TWO name paths and only the KEYED one truncated — which is why order cards looked fine and chat cards wrapped a long name over four lines. `min-w-0` is as load-bearing as `truncate` (a flex item's default min-width is `auto`). Plus mobile-only furniture tightening, all `sm:`-restored so desktop is byte-identical. **Measured: text block ~110px → ~157px on a 360px phone.**
+>
+> **t.txt #5:** Ken wrote "assuming that is correct" — it wasn't. `updated_at` is moved by **feeAttest** on a LIVE order hours after posting, so relabelling alone would have said "Posted 5m ago" about a 2-hour-old order. Changed the FIELD (`created_at`) as well as the wording.
+>
+> **t.txt #6:** ICU plurals, not a `=== 1` ternary — Polish and Russian have FOUR forms, so "singular vs plural" isn't a distinction they make. `n` (raw) selects; `count` (compacted) displays. Verified by rendering all 10 locales.
+>
+> **t.txt #7 brightness — MEASURED from Ken's screenshot, not guessed.** Both pills peak at #00DA69 and ring at emerald/30; the rating chip's background is the BRIGHTER one (/10 vs /5). The only real dimming was `({count})` at opacity-70 — removed. The hollow ☆ is Ken's own v1.5.5 small-sample signal, left alone.
+>
+> **THE FAST BADGE HAD NEVER RUN IN PRODUCTION.** Built in v1.5.5, extended in cp474, unit-tested — and dead code, because the server and the service worker disagreed in a perfect inversion: `category='order'` went with the clickPath that HAD the peer, and the SW only parsed `category==='chat'`, whose clickPath (`/en/chat`) had none. Every chat push reached the page with no thread; the `if (data.peer)` guard dropped it; the badge waited for the durable poll. That is Ken's minute, and it explains both his symptoms (dark badge AND the message stuck in Archived).
+>
+> **Why nothing caught it:** `chatUnread.test.ts` mocks the bridge and calls the listener directly — it tested everything except the broken link. `handler-push-click-path-route-smoke` checked the clickPath hit a real ROUTE (it did), not that it named a peer. New `fast-badge-push-contract-smoke` (30 checks, 8 tampers) pins the contract BETWEEN the files.
+>
+> **Two more holes found while VERIFYING Ken's "always fast?" question rather than answering it:** (1) the push path is only as fast as notification permission — the always-on SSE sent `{peer}` with no order, so the client couldn't name the thread (cp446: key is `(peer, order)`); now `{peer, order, inbound, at}`, all on-chain-public. (2) **The COLD START** — browser closed when the message landed. The fast ring already solved this for chatrooms (`recentFast`); added `recentFastForAccount` and replay-on-connect BEFORE `ready`, carrying the REAL block time (now() would badge something already read).
+>
+> **t.txt #2:** `isUnread` had no idea who sent the last message, so Ken's own PC message nagged his phone. Its own doc comment described the bug and told callers to "pass the last sender and filter" — impossible, the API had no such field. Now `last_message_is_mine` (no migration), REQUIRED so tsc forced all 22 call sites to decide.
+>
+> **VERIFY:** web vitest 1054/5 skip; indexer 646/1 skip; svelte-check 0/0; fast-badge-push-contract 30/30; smoke-registration-integrity 4/4.
 
 > **▶ v1.7.0 — WORK IN PROGRESS, NOT CUT, DO NOT SHIP (cp475, 16 July 2026).** "fasteverything" (fast-Fast-FAST.txt). **v1.7.0 "fasteverything" — READY TO SHIP.** All 6 increments complete. Version bumped 1.5.7 → **1.7.0** (19/19 touchpoints). Full battery: **509 runners / 14,597 scenarios / 0 failed**. Version deliberately still **1.5.7**. A checkpoint, not a release.
 >

@@ -33,13 +33,16 @@ const code = src
 
 let pass = 0;
 let fail = 0;
-const check = (name: string, ok: boolean): void => {
+// v1.7.5 — third arg is an optional failure detail. The rewritten checks pass one
+// (they explain WHY the requirement holds when the landmark it used to key off
+// has moved), and printing it only on failure is where it's actually wanted.
+const check = (name: string, ok: boolean, detail?: string): void => {
 	if (ok) {
 		pass++;
 		console.log(`  \u2713 ${name}`);
 	} else {
 		fail++;
-		console.error(`  \u2717 ${name}`);
+		console.error(`  \u2717 ${name}${detail ? `\n      ${detail}` : ''}`);
 	}
 };
 
@@ -56,7 +59,14 @@ check('the sprout sits at the end of the display-name line', at('peerLabelProps.
 check('line 2 carries the truncated posting key', /truncatePublicKey\(peerPostingKey\)/.test(code));
 check('line 2 carries the trade count', at('truncatePublicKey(peerPostingKey)') < at('orderbook.card.trades_only'));
 check('the sprout is on line 1, ABOVE the key/trades line', at('<NewTraderChip />') < at('truncatePublicKey(peerPostingKey)'));
-check('line 3 is the RE: order link, below all of it', at('orderbook.card.trades_only') < at('chat.header.re'));
+check(
+	'line 3 is the RE: order link, below all of it',
+	at('<TradeRepCluster') < at('chat.header.re'),
+	// v1.7.5 — was proxied by `orderbook.card.trades_only`, which moved INTO
+	// TradeRepCluster and no longer appears here. The REQUIREMENT (RE: comes
+	// last) is unchanged; only the landmark moved.
+	'the RE: line must sit below the identity cluster'
+);
 
 // ─── Ken: the reputation must NEVER wrap ─────────────────────────────
 // On a narrow viewport line 2 (key · trades · ⭐) is the line that runs out of
@@ -66,13 +76,46 @@ check('line 3 is the RE: order link, below all of it', at('orderbook.card.trades
 // to hold no longer does.
 // Each variant uses the score three times: aria-label, title, and the visible
 // text. Two variants → six. Pinning the number keeps a third stray copy out.
-const scoreHits = (code.match(/peerReputation\.score\.toFixed\(2\)/g) ?? []).length;
-check('the score is rendered in exactly two places (mobile + desktop)', scoreHits === 6);
-check('the mobile score sits on the display-name line and hides from `sm` up', /sm:hidden[\s\S]{0,200}peerReputation\.score\.toFixed\(2\)/.test(code) && at('sm:hidden') < at('truncatePublicKey(peerPostingKey)'));
-check('the desktop score sits on line 2 and appears only from `sm` up', /hidden flex-none items-center gap-1 font-semibold text-morphit-emerald sm:inline-flex/.test(code));
+// v1.7.5 (t.txt #8) — the four checks below pinned the HAND-ROLLED score
+// (`peerReputation.score.toFixed(2)` and a long literal class string). That
+// implementation is the bug Ken reported — a GOLD emoji where the app's star has
+// been emerald since v1.5.5, and no counts beside the average. Pinning its
+// literals would have forced it to stay.
+//
+// Every REQUIREMENT below is unchanged and still pinned. They now assert against
+// the shared cluster, which is what actually carries them.
+const clusterHits = (code.match(/<TradeRepCluster/g) ?? []).length;
+check(
+	'the reputation is rendered in exactly two places (mobile + desktop)',
+	clusterHits === 2,
+	`found ${clusterHits}`
+);
+check(
+	'the mobile cluster sits on the display-name line and hides from `sm` up',
+	/<span class="sm:hidden">[\s\S]{0,200}<TradeRepCluster/.test(code) &&
+		at('<span class="sm:hidden">') < at('truncatePublicKey(peerPostingKey)'),
+	'Ken: the reputation must NEVER wrap — on a phone it rides line 1 instead'
+);
+check(
+	'the desktop cluster sits on line 2 and appears only from `sm` up',
+	/<span class="hidden sm:inline-flex">[\s\S]{0,200}<TradeRepCluster/.test(code) &&
+		at('<span class="hidden sm:inline-flex">') > at('truncatePublicKey(peerPostingKey)'),
+	'the posting key is the trust anchor and must never be truncated for the score'
+);
 check('line 2 cannot wrap at all (flex-nowrap)', /mt-0\.5 flex min-w-0 flex-nowrap items-center/.test(code));
 check('if anything must give, it is the posting key that truncates', /<span class="truncate font-mono">\(\{truncatePublicKey\(peerPostingKey\)\}\)<\/span>/.test(code));
-check('the trade count never wraps or truncates', /flex-none whitespace-nowrap/.test(code));
+// v1.7.5 — `flex-none whitespace-nowrap` was on the hand-rolled trades span. The
+// rule now lives inside TradeRepCluster, which is where it belongs: the cluster
+// is ONE unbreakable chunk by contract (Ken: "none of that chunk ever gets
+// broken, no wrap"). Assert it where it actually is, rather than pinning a
+// literal in a file that no longer owns the rule.
+check(
+	'the trade count never wraps or truncates',
+	/inline-flex flex-none items-center gap-1\.5 whitespace-nowrap/.test(
+		readFileSync(join(WEB, 'src', 'lib', 'components', 'TradeRepCluster.svelte'), 'utf8')
+	),
+	'the cluster must stay nowrap + flex-none or a narrow phone breaks it mid-chunk'
+);
 check('the RE: line still links to the order', /\/@\$\{orderOwner \?\? peer\}\/\$\{orderPermlink\}/.test(code));
 
 // ─── the kebab ───────────────────────────────────────────────────────
@@ -122,6 +165,42 @@ check('Block/Unblock still opens the confirm modal', /closeOverflowMenu\(\);\s*\
 check('Chat Security still clears its one-time nudge dot', /onclick=\{openChatSecurity\}/.test(code) && /chatSecurityNudgeSeen/.test(code));
 check('Export chat still wired', /onclick=\{exportChatToPdf\}/.test(code));
 check('the whole menu is still gated on an unlocked session', /\{#if \$isUnlocked\}/.test(code));
+
+// ─── v1.7.5 (t.txt #8 avatar alignment, #9 whoami avatar) ───────────
+//
+// #8: Ken — "the avatar image is not properly vertically aligned with the 3
+// (sometimes 2) lines of text that appear to the right of the avatar image. i
+// love its current size though, so please do not change that."
+check(
+	'the header avatar centres itself against the 2-3 text lines',
+	/<div class="flex-none self-center">/.test(code),
+	'items-start left a 48px avatar pinned to the top of a 3-line block'
+);
+check(
+	'…while the ROW stays items-start, because the kebab depends on it',
+	/<div class="flex items-start gap-3">/.test(code),
+	'the kebab is the last flex item of this same row; its top must sit level ' +
+		'with the display name, so centring the row would fix the avatar and break it'
+);
+check(
+	'the header avatar keeps its size (Ken: "do not change that")',
+	/avatarSize=\{48\}/.test(code)
+);
+
+// #9: Ken — "the avatar image is too small. make it span the full height of the
+// username/postingkey lines." 34px is measured, not eyeballed: the row inherits
+// the 16px page base and IdentityLabel's keyed path stacks two leading-tight
+// (1.25) lines where the key is text-[0.7em] — 16x1.25 + 16x0.7x1.25 = 34.
+const chatMessage = readFileSync(join(WEB, 'src', 'lib', 'components', 'ChatMessage.svelte'), 'utf8');
+check(
+	'the whoami avatar spans the full height of the handle + key stack',
+	/avatarSize=\{34\}/.test(chatMessage),
+	'was 18px against a two-line stack — barely half of what it labelled'
+);
+check(
+	'the whoami still renders the posting key (the anti-impersonation anchor)',
+	/publicKeyString=\{senderPostingKey \?\? undefined\}/.test(chatMessage)
+);
 
 console.log('');
 if (fail === 0) console.log(`\u2713 all ${pass} chat-header-layout scenarios passed`);

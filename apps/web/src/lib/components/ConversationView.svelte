@@ -46,6 +46,7 @@
 	import ChatNotificationNudge from '$components/ChatNotificationNudge.svelte';
 	import IdentityLabel from '$components/IdentityLabel.svelte';
 	import NewTraderChip from '$components/NewTraderChip.svelte';
+	import TradeRepCluster from '$components/TradeRepCluster.svelte';
 	import { formatCountCompact, formatDayMonth } from '$lib/i18n/formatters';
 	import { daySeparatorAt } from '$lib/chat/daySeparator';
 	import WriteBlockedReadOnly from '$components/WriteBlockedReadOnly.svelte';
@@ -153,7 +154,7 @@
 	let peerPostingKey = $state<string | null>(null);
 
 	/** #4 — the peer's public reputation cluster for the header (new-trader
-	 *  sprout + ⭐ composite score + trade count), mirroring the order card so
+	 *  sprout + emerald ★ rating + trade count), mirroring the order card so
 	 *  you can size up who you're chatting with at a glance. Derived from the
 	 *  same reputation the order cards show (reputation-receipt summary, which
 	 *  runs the identical score computation). Best-effort, same-origin; the
@@ -1524,14 +1525,26 @@
 				     squeezed against the kebab.
 
 				     avatar │ line 1: display name + 🌱 sprout
-				            │ line 2: posting key · trades · ⭐ reputation
+				            │ line 2: posting key · ★ rating · trades  (TradeRepCluster)
 				            │ line 3: RE: <order title>   (when there's an order)
 
 				     The kebab is the last flex item of THIS row, so `items-start` makes
 				     its top sit level with the display name — not with the "Chatting
 				     with:" lead-in above it. -->
 				<div class="flex items-start gap-3">
-					<div class="flex-none">
+					<!-- v1.7.5 (t.txt #8) — `self-center` on the AVATAR only.
+					     Ken: "the avatar image is not properly vertically aligned with the
+					     3 (sometimes 2) lines of text that appear to the right of it. i love
+					     its current size though, so please do not change that." — so the size
+					     stays 48 and only the alignment moves.
+					     The row keeps `items-start` because the KEBAB depends on it: it is the
+					     last flex item of this same row, and its top must sit level with the
+					     display name rather than drift to the middle of a 2- or 3-line block.
+					     Centring the row would fix the avatar and break the kebab. `self-center`
+					     overrides the alignment for this one item, which is exactly the ask —
+					     and it self-adjusts between the 2-line (no order) and 3-line (RE: line)
+					     cases with no measuring. -->
+					<div class="flex-none self-center">
 						<IdentityLabel
 							account={peer}
 							avatarSvg={peerLabelProps.avatarSvg}
@@ -1554,24 +1567,28 @@
 							{#if peerReputation?.isNewTrader}
 								<NewTraderChip />
 							{/if}
-							{#if peerReputation && peerReputation.score !== null}
+							{#if peerReputation}
 								<!-- Ken: the reputation must NEVER wrap. On a narrow viewport line 2
-								     (key · trades · ⭐) is the line that runs out of room, so the
-								     score moves up here instead. `sm:hidden` / `hidden sm:inline-flex`
-								     is a deterministic split — no measuring, no layout thrash, and
-								     the posting key (the trust anchor) never gets truncated to make
-								     room for it. -->
-								<span
-									class="inline-flex flex-none items-center gap-1 text-sm font-semibold text-morphit-emerald sm:hidden"
-									aria-label={$_('orderbook.card.reputation_aria', {
-										values: { score: peerReputation.score.toFixed(2) }
-									}) as string}
-									title={$_('orderbook.card.reputation_aria', {
-										values: { score: peerReputation.score.toFixed(2) }
-									}) as string}
-								>
-									<span aria-hidden="true">⭐</span>
-									<span aria-hidden="true">{peerReputation.score.toFixed(2)}</span>
+								     (key · trades · rating) is the line that runs out of room, so the
+								     cluster moves up here instead. `sm:hidden` / `hidden sm:inline-flex`
+								     is a deterministic split — no measuring, no layout thrash, and the
+								     posting key (the trust anchor) never gets truncated to make room
+								     for it. The name beside it truncates, so the cluster always fits.
+								
+								     v1.7.5 (t.txt #8) — this was a hand-rolled `⭐ 3.42`, and being
+								     hand-rolled is exactly why it was wrong in BOTH ways Ken reported:
+								     the emoji renders GOLD (the app's star convention is the emerald ★,
+								     settled in v1.5.5), and it printed the score alone — so the trade
+								     count and the rating count were simply absent, on the screen where
+								     you decide whether to trust a stranger with money. TradeRepCluster
+								     is what the order cards already use: emerald, both counts, one
+								     unbreakable chunk. -->
+								<span class="sm:hidden">
+									<TradeRepCluster
+										tradeCount={peerReputation.trades}
+										rating={peerReputation.score}
+										ratingCount={peerReputation.ratings}
+									/>
 								</span>
 							{/if}
 						</div>
@@ -1587,34 +1604,24 @@
 								<span class="truncate font-mono">({truncatePublicKey(peerPostingKey)})</span>
 							{/if}
 							{#if peerReputation}
-								{#if peerReputation.trades > 0}
-									<!-- cp473 — the REAL completed-trade count. This was fed
-									     `peerReputation.count`, the RATING count, so a peer with
-									     9 reviews and no trades was announced as "9 trades" — a
-									     false statement, on the screen where you decide whether
-									     to trust a stranger with money. Hidden at 0, matching
-									     TradeRepCluster, so a brand-new peer's line stays tight
-									     instead of reading "0 trades". -->
-									<span class="flex-none whitespace-nowrap">
-										{$_('orderbook.card.trades_only', {
-											values: { count: formatCountCompact(peerReputation.trades) }
-										})}
-									</span>
-								{/if}
-								{#if peerReputation.score !== null}
-									<span
-										class="hidden flex-none items-center gap-1 font-semibold text-morphit-emerald sm:inline-flex"
-										aria-label={$_('orderbook.card.reputation_aria', {
-											values: { score: peerReputation.score.toFixed(2) }
-										}) as string}
-										title={$_('orderbook.card.reputation_aria', {
-											values: { score: peerReputation.score.toFixed(2) }
-										}) as string}
-									>
-										<span aria-hidden="true">⭐</span>
-										<span aria-hidden="true">{peerReputation.score.toFixed(2)}</span>
-									</span>
-								{/if}
+								<!-- v1.7.5 (t.txt #8) — ONE cluster, replacing a hand-rolled trades
+								     span PLUS a hand-rolled `⭐ score`. Same component as the order
+								     cards, so the star is emerald rather than the gold emoji and the
+								     RATING count "(34)" finally appears beside the average it backs —
+								     Ken reported both as wrong/missing here.
+								     cp473's distinction survives inside the component: trades are
+								     completed ORDERS, ratings are reviews, and fusing them would make the
+								     chip lie (this line once announced "9 trades" for 9 reviews and no
+								     trades). Zero trades still renders nothing.
+								     `hidden sm:inline-flex`: on a phone this line is just the key, and the
+								     cluster rides line 1 instead. -->
+								<span class="hidden sm:inline-flex">
+									<TradeRepCluster
+										tradeCount={peerReputation.trades}
+										rating={peerReputation.score}
+										ratingCount={peerReputation.ratings}
+									/>
+								</span>
 							{/if}
 						</div>
 

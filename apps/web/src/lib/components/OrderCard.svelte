@@ -194,7 +194,11 @@
 	<div class="absolute right-3 top-3 z-10 flex flex-col items-end gap-1.5 sm:right-4 sm:top-4">
 		{#if order.expires_at}
 			<div class="hidden sm:block">
-				<OrderExpiryChip expiresAt={order.expires_at} updatedAtIso={order.updated_at} />
+				<!-- v1.7.5 (t.txt #5) — `created_at`, NOT `updated_at`. The tooltip says
+					     "Posted {age} ago", and `updated_at` doesn't mean that: feeAttest
+					     moves it when a BTC/XMR listing fee verifies, which happens to a
+					     live order hours after posting. -->
+					<OrderExpiryChip expiresAt={order.expires_at} postedAtIso={order.created_at} />
 			</div>
 		{/if}
 		{#if priceModelLabel}

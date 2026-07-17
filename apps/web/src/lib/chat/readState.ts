@@ -216,18 +216,41 @@ export function getLastVisited(peer: string, orderPermlink: string): string | nu
 }
 
 /**
- * Convenience predicate: is this conversation unread? A
- * conversation is unread if its `last_message_at` is newer than
- * the user's last visit, OR the user has never visited.
+ * Is this conversation unread? Unread means its `last_message_at` is newer than
+ * your last visit (or you've never visited) AND the last word isn't your own.
  *
- * A conversation started by the user themselves (where the last
- * message is outbound) is technically "unread" by this definition
- * until they re-open it. Callers that want to distinguish
- * "unread because peer replied" from "unread because I just sent
- * something" should pass the last sender and filter.
+ * v1.7.5 (t.txt #2) — `lastMessageIsMine` is new, and the old doc comment here
+ * had already spotted the bug it fixes:
+ *
+ *   "A conversation started by the user themselves (where the last message is
+ *    outbound) is technically 'unread' by this definition until they re-open it.
+ *    Callers that want to distinguish ... should pass the last sender and filter."
+ *
+ * No caller ever did, because they COULDN'T: `ConversationSummary` carried no
+ * such field. `has_user_sent` answers a different question ("have I ever sent in
+ * this thread"). So the note asked callers to do something the API made
+ * impossible, and the bug sat there being described rather than fixed: Ken sends
+ * a message from his PC and his PHONE lights up unread — his own words, nagging
+ * him from another device.
+ *
+ * The flag is REQUIRED rather than defaulted. A default of `false` reproduces the
+ * old behaviour silently, so every future caller would inherit the bug by saying
+ * nothing; making it required means the compiler asks the question. Pass `false`
+ * when you genuinely don't know (an inbound Web Push, say — nobody pushes you
+ * your own message).
  */
-export function isUnread(peer: string, orderPermlink: string, lastMessageAt: string): boolean {
+export function isUnread(
+	peer: string,
+	orderPermlink: string,
+	lastMessageAt: string,
+	lastMessageIsMine: boolean
+): boolean {
 	if (!ACCOUNT_NAME_RE.test(peer)) return false;
+	// Your own last word: nothing is waiting to be read, on ANY device. This
+	// precedes the cursor check on purpose — the cursor is per-device, and the
+	// whole point is that the answer must not depend on which device you're
+	// holding.
+	if (lastMessageIsMine) return false;
 	const visited = getLastVisited(peer, orderPermlink);
 	if (!visited) return true;
 	return new Date(lastMessageAt).getTime() > new Date(visited).getTime();
