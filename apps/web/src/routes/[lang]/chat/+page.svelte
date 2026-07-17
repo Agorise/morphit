@@ -103,7 +103,14 @@
 		);
 		const withFlags = visible.map((c) => ({
 			...c,
-			unread: isUnread(c.peer, c.order?.permlink ?? '', c.last_message_at),
+			// v1.7.5 (t.txt #2) — identical rule to the badge channel's, so the cards
+			// and the count stay in lockstep (the cp452 property).
+			unread: isUnread(
+				c.peer,
+				c.order?.permlink ?? '',
+				c.last_message_at,
+				c.last_message_is_mine === true
+			),
 			folder: folderOf(c.peer, c.order?.permlink ?? '')
 		}));
 		withFlags.sort((a, b) => b.last_message_at.localeCompare(a.last_message_at));
@@ -610,11 +617,16 @@
 						     anywhere opens the chat; the timestamp shows through the transparent
 						     overlay and the star sits above it (relative z-10) as its own
 						     control. -->
-						<div class="flex min-w-0 flex-1 items-center gap-3 p-3">
+						<!-- v1.7.5 (t.txt #3) — tighter on mobile, unchanged from `sm` up.
+						     On a ~360px phone the card's fixed furniture (40px avatar,
+						     timestamp, star, the full-height Archive box, padding, gaps) left
+						     the text block ~100px, which is what squeezed the name into four
+						     lines and dragged the avatar out of line with it. -->
+						<div class="flex min-w-0 flex-1 items-center gap-2 p-2 sm:gap-3 sm:p-3">
 							<a
 								href={threadHref(convo)}
 								onclick={() => handleOpen(convo.peer, convo.order?.permlink ?? '')}
-								class="flex min-w-0 flex-1 items-center gap-3 after:absolute after:inset-0 after:content-['']"
+								class="flex min-w-0 flex-1 items-center gap-2 after:absolute after:inset-0 after:content-[''] sm:gap-3"
 								aria-label={convo.unread
 									? ($_('chat.inbox.conversation_aria_unread', {
 										values: { peer: convo.peer }
@@ -706,7 +718,16 @@
 									? 'font-semibold text-morphit-emerald'
 									: 'text-ink-500 dark:text-ink-400'}"
 							>
-								<RelativeTime iso={convo.last_message_at} format="descriptive" />
+								<!-- v1.7.5 (t.txt #3) — "25m" on a phone, "25 min ago" from `sm` up.
+								     The descriptive form costs ~40px of a ~360px card, which is
+								     ~40% of what the text block had left. Same component and same
+								     locale strings, so nothing about the wording drifts. -->
+								<span class="sm:hidden">
+									<RelativeTime iso={convo.last_message_at} format="terse" ago />
+								</span>
+								<span class="hidden sm:inline">
+									<RelativeTime iso={convo.last_message_at} format="descriptive" />
+								</span>
 							</span>
 							<!-- Star (t.txt item 11) — empty by default; clicking fills it gold and
 							     MOVES the discussion to Starred; clicking a gold star moves it back
@@ -734,7 +755,7 @@
 							<button
 								type="button"
 								onclick={() => handleRestore(convo)}
-								class="relative z-10 flex-none border-l border-ink-200 px-3 text-xs font-semibold text-ink-500 transition-colors hover:bg-morphit-emerald/10 hover:text-morphit-emerald dark:border-ink-800 dark:text-ink-400 dark:hover:bg-morphit-emerald/20 dark:hover:text-morphit-emerald"
+								class="relative z-10 flex-none border-l border-ink-200 px-2 text-xs font-semibold text-ink-500 transition-colors hover:bg-morphit-emerald/10 sm:px-3 hover:text-morphit-emerald dark:border-ink-800 dark:text-ink-400 dark:hover:bg-morphit-emerald/20 dark:hover:text-morphit-emerald"
 								aria-label={$_('chat.inbox.restore_aria', { values: { peer: convo.peer } }) as string}
 							>
 								{$_('chat.inbox.action_restore')}
@@ -743,7 +764,7 @@
 							<button
 								type="button"
 								onclick={() => handleArchive(convo)}
-								class="relative z-10 flex-none border-l border-ink-200 px-3 text-xs font-semibold text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-900 dark:border-ink-800 dark:text-ink-400 dark:hover:bg-ink-800 dark:hover:text-ink-100"
+								class="relative z-10 flex-none border-l border-ink-200 px-2 text-xs font-semibold text-ink-500 transition-colors hover:bg-ink-100 sm:px-3 hover:text-ink-900 dark:border-ink-800 dark:text-ink-400 dark:hover:bg-ink-800 dark:hover:text-ink-100"
 								aria-label={$_('chat.inbox.archive_aria', { values: { peer: convo.peer } }) as string}
 							>
 								{$_('chat.inbox.action_archive')}

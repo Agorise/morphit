@@ -37,12 +37,13 @@ const ORDER = 'im-selling-200-mxn-of-xmr';
 
 /** The listener `startChatUnreadChannel` hands to `subscribeFastPush`. Captured
  *  so a test can fire a push without standing up a service worker. */
-let fastPushListener: ((peer: string, orderPermlink: string) => void) | null = null;
+let fastPushListener: ((peer: string, orderPermlink: string, atMs?: number) => void) | null =
+	null;
 
 vi.mock('$lib/chat/globalChatActivityStream', () => ({
 	startGlobalChatActivity: () => () => {},
 	subscribeChatActivity: () => () => {},
-	subscribeFastPush: (fn: (peer: string, orderPermlink: string) => void) => {
+	subscribeFastPush: (fn: (peer: string, orderPermlink: string, atMs?: number) => void) => {
 		fastPushListener = fn;
 		return () => {
 			fastPushListener = null;

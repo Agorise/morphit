@@ -36,13 +36,16 @@ const loadingDots = strip(
 
 let pass = 0;
 let fail = 0;
-const check = (name: string, ok: boolean): void => {
+// v1.7.5 — optional third arg: a failure detail, printed only when the check
+// fires. The rewritten checks pass one to explain WHY a requirement holds when
+// the landmark it used to key off has moved.
+const check = (name: string, ok: boolean, detail?: string): void => {
 	if (ok) {
 		pass++;
 		console.log(`  \u2713 ${name}`);
 	} else {
 		fail++;
-		console.error(`  \u2717 ${name}`);
+		console.error(`  \u2717 ${name}${detail ? `\n      ${detail}` : ''}`);
 	}
 };
 

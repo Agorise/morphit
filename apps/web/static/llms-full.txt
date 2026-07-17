@@ -305,7 +305,7 @@ No, once posted it is permanent. This is what makes reputation meaningful — no
 
 **FAQ key:** `data_collection`
 
-None. Zero cookies. Zero analytics. Zero tracking scripts. No logs of your IP. No third-party services on any Morphit page. We don't know you're here.
+None. Zero cookies. Zero analytics. Zero tracking scripts. No telemetry. Morphit never sees or logs your IP address, so we keep no record that you were ever here.
 
 ---
 
@@ -2357,9 +2357,27 @@ When you send crypto, the blockchain records your payment permanently and gives 
 
 ---
 
+## Does anything see or leak my IP address when I use Morphit?
+
+**FAQ key:** `ip_address_and_rpc_nodes`
+
+Privacy is Morphit's #1 priority and never sees or logs your IP address. No cookies, no analytics, no trackers, no telemetry. Rate limiting holds a counter in memory for a few seconds and drops it — nothing is written down, so there is nothing to subpoena, sell, or leak later.
+
+Your orders, chat, balances and the block explorer all go through your operator's indexer. Morphit's indexers proxy those reads so your browser never touches third-party endpoints.
+
+**The one exception.** Once per session your browser asks a network node — a privately-run RPC endpoint — directly for the signed release record that says which version of Morphit is current. That node sees the IP that asked. You can watch it in the Network tab: one request out, everything else to Morphit.
+
+**Why.** That record is how your browser knows the code it just ran is really ours. No rogue nodes stealing your data. Route it through your operator and a dishonest one could pair an old, genuinely-signed record with an old, backdoored build — and your browser would say all clear, forever. A replayed record carries a real signature, so checking signatures misses it. We would rather one node learn that an IP loaded a page than let an operator quietly pin you to a backdoor.
+
+**What that node learns.** An IP, and that someone asked for @morphit's release history. Not your username, orders, chat or balances. None of that leaves your operator's indexer.
+
+**Use Tor or a VPN and this is closed.** If you are here for Monero you almost certainly already do — so it is already closed for you. It hides your IP from every network node, every endpoint, and your ISP at once. Same advice we give for broadcasting XMR, and better than anything we could build into the app, because it protects you from us too.
+
+---
+
 ## Metadata
 
-Total FAQ entries: 142
+Total FAQ entries: 143
 Canonical URL: https://morphit.io/faq
 License: AGPL-3.0 (content may be quoted/redistributed)
 Source of truth: https://git.agorise.net/agorise/morphit

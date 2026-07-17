@@ -103,7 +103,17 @@ check(
 	'the unread badge counts unread discussions, excluding archived (t.txt 10)',
 	/const order = c\.order\?\.permlink \?\? '';/.test(badge) &&
 		/isArchived\(c\.peer, order\)/.test(badge) &&
-		/isUnread\(c\.peer, order, c\.last_message_at\)/.test(badge)
+		// v1.7.5 (t.txt #2) — this used to pin the THREE-arg
+		// `isUnread(c.peer, order, c.last_message_at)`, which is the call
+		// signature from BEFORE the cross-device fix. `isUnread` could not see
+		// who sent the last message, so a message you sent from your PC came
+		// back as unread on your phone: the per-device cursor had never seen it.
+		// The fix made `lastMessageIsMine` a REQUIRED 4th argument, and this
+		// check failed — the guard was pinning the bug's shape.
+		//
+		// Pin the requirement instead: the badge must pass the thread AND must
+		// tell isUnread whose message it was. Both properties, neither literal.
+		/isUnread\(\s*c\.peer,\s*order,\s*c\.last_message_at,\s*c\.last_message_is_mine/.test(badge)
 );
 
 console.log('');

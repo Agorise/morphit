@@ -968,6 +968,17 @@ export interface ConversationSummary {
 	 *  `has_user_sent` for the tabs would drop a known contact's new order thread
 	 *  into Requests. Optional so an older instance still type-checks. */
 	readonly peer_has_user_sent?: boolean;
+	/** v1.7.5 — was the most recent message in this thread sent BY the caller?
+	 *
+	 *  A thread whose last word is your own has nothing waiting to be read, on ANY
+	 *  device. Without this the client can only compare `last_message_at` against
+	 *  a LOCAL read cursor, so a message you send from your laptop marks the
+	 *  thread unread on your phone — your own words, nagging you (t.txt #2).
+	 *
+	 *  Optional so an older instance still type-checks; absent is treated as
+	 *  "unknown", which falls back to the old timestamp-only rule rather than
+	 *  silently marking everything read. */
+	readonly last_message_is_mine?: boolean;
 	/** The order THIS THREAD is about, or null when it cites none.
 	 *  Frontend renders it as a "RE: <linked title> (Live)" subline
 	 *  under the peer's handle; an order-less thread gets no subline. */

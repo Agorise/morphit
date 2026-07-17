@@ -187,6 +187,56 @@
       when: enable_journald_monitor | default(false)
 
   post_tasks:
+    # v1.7.5 (t.txt #12) — an operator must not be able to finish an install
+    # believing they are monitored when they are not.
+    #
+    # `enable_matrix_bot` CANNOT default to true: the role asserts on
+    # `matrix_bot_access_token`, a secret only the operator can mint, so
+    # flipping the default would fail every fresh install at the assert
+    # instead of producing alerts. The monitors default off with it, since
+    # a monitor with nowhere to report is just a timer burning CPU.
+    #
+    # So the default is right and the DOCS were the gap: nothing in the run
+    # told a new operator that their node is silent. Ansible printing green
+    # is exactly when someone stops reading. This block is the last thing
+    # they see.
+    - name: Warn when the node has no alerting
+      ansible.builtin.debug:
+        msg: |
+          ─────────────────────────────────────────────────────────
+          ⚠  THIS NODE HAS NO ALERTING.
+
+          enable_matrix_bot is false, so nothing will tell you when
+          this node runs out of disk, fails a backup, gets its TLS
+          cert expired, or falls over at 3am.  You will find out
+          from your users.
+
+          It is off by default because it needs a secret we cannot
+          generate for you — a Matrix access token.  Ten minutes of
+          setup, once:
+
+            1. Make a Matrix account for the bot (any homeserver).
+            2. Get its access token.
+            3. Put it in group_vars/vault.yml (encrypted):
+                 vault_matrix_bot_access_token: "syt_..."
+            4. In group_vars/all.yml set:
+                 enable_matrix_bot: true
+                 matrix_bot_homeserver: "https://matrix.org"
+                 matrix_bot_alert_mxid: "@you:matrix.org"
+            5. Turn the monitors on — they report THROUGH the bot,
+               so they stay quiet until it exists:
+                 enable_host_monitor: true
+                 enable_smartctl_monitor: true
+                 enable_certbot_monitor: true
+                 enable_apt_monitor: true
+                 enable_systemd_monitor: true
+            6. Re-run this playbook with --tags monitors.
+
+          Running a Morphit node unmonitored is a choice.  Make it
+          on purpose, not by not reading.
+          ─────────────────────────────────────────────────────────
+      when: not (enable_matrix_bot | default(false))
+
     - name: Print verification reminder
       ansible.builtin.debug:
         msg: |
