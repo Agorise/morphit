@@ -32,7 +32,9 @@
 	 */
 
 	import { onMount, onDestroy } from 'svelte';
+	import { tick } from 'svelte';
 	import { flip } from 'svelte/animate';
+	import { slide } from 'svelte/transition';
 	import { _ } from 'svelte-i18n';
 
 	import Head from '$components/Head.svelte';
@@ -45,8 +47,9 @@
 		readState,
 		markConversationRead,
 		mergeRemoteReadState,
-		isUnread
+		readAckTimestamp
 	} from '$lib/chat/readState';
+	import { threadIsUnread, fastPendingTick } from '$lib/notifications/chatUnread';
 	import { getConversations, getChatReadState, getFeedbackGiven } from '$lib/indexer/client';
 	import { getProfilesBatch } from '$lib/indexer/profileCache';
 	import { peersNeedingProfile, mergeProfileMap } from '$lib/indexer/profileMerge';
@@ -87,6 +90,44 @@
 	 *  the user stars or archives it. */
 	type InboxTab = 'inbox' | 'starred' | 'archived';
 	let activeTab = $state<InboxTab>('inbox');
+	/** True for the single update in which the user switched tabs.
+	 *
+	 *  t.txt #4 asks for a slide when a card "appears or disappears ... from
+	 *  Inbox, Starred, or Archived" — i.e. when the user FILES something and the
+	 *  card leaves the list it is in. Switching tabs replaces the entire list, so
+	 *  a naive `transition:slide` also fires there: twenty cards collapsing while
+	 *  twenty more expand into the same <ul>, all at once. That is not what he
+	 *  asked for, it is not information — it is noise, and on a phone it is noise
+	 *  that costs a frame budget.
+	 *
+	 *  Set immediately, cleared after the DOM settles. The ordering is what makes
+	 *  it work: Svelte reads a transition's parameters when the transition STARTS,
+	 *  which is inside the same update, so the flag is still true then and zero
+	 *  wins; `tick()` resolves afterwards, so the next real filing animates
+	 *  normally. */
+	let switchingTab = $state(false);
+	/** False until the inbox has been populated once.
+	 *
+	 *  The list arrives from a fetch, not from the server-rendered page, so every
+	 *  card is CREATED after mount — and a Svelte intro transition plays on
+	 *  creation. Without this, Ken's first visit to /chat shows twenty cards
+	 *  sliding in at once, every single load. That is a page-load flash, not the
+	 *  thing he asked for: t.txt #4 wants the eye to follow a card when it is
+	 *  FILED, and an animation that fires on arrival trains the eye to ignore the
+	 *  one that matters.
+	 *
+	 *  Same shape as `switchingTab`, and it works for the same reason: Svelte
+	 *  reads a transition's parameters when the transition STARTS, inside the
+	 *  update that created the element, so the flag is still false then. */
+	let listReady = $state(false);
+	function setTab(t: InboxTab): void {
+		if (t === activeTab) return;
+		switchingTab = true;
+		activeTab = t;
+		void tick().then(() => {
+			switchingTab = false;
+		});
+	}
 
 	/** All visible conversations, each tagged with its folder + unread flag,
 	 *  sorted by date newest-first (t.txt item 6 — the star/archive folders all
@@ -101,11 +142,23 @@
 		const visible = conversations.filter(
 			(c) => !hidden.has(c.peer.toLowerCase()) && !blocked.has(c.peer.toLowerCase())
 		);
+		// v1.7.7 — read the tick so this block re-runs when a push lands. Without
+		// it, `threadIsUnread` would be consulted only when `conversations`
+		// changed — i.e. on the ~60s durable poll — which is the very lag the fast
+		// path exists to avoid.
+		void $fastPendingTick;
 		const withFlags = visible.map((c) => ({
 			...c,
 			// v1.7.5 (t.txt #2) — identical rule to the badge channel's, so the cards
 			// and the count stay in lockstep (the cp452 property).
-			unread: isUnread(
+			//
+			// v1.7.7 — and now literally the same FUNCTION, not the same rule
+			// re-typed. This called `isUnread` against the durable
+			// `last_message_at`, which is stale for ~60s after a push (the fast
+			// path never writes chat_messages), so Ken's message landed, the
+			// thread resurrected into his Inbox, and the card still showed it
+			// READ — no green border. `threadIsUnread` folds in the pending push.
+			unread: threadIsUnread(
 				c.peer,
 				c.order?.permlink ?? '',
 				c.last_message_at,
@@ -239,6 +292,40 @@
 		if (typeof window === 'undefined') return 0;
 		return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 220;
 	}
+	/** Duration for a card sliding IN or OUT of the visible tab (t.txt #4).
+	 *
+	 *  [KEN]: "whenever a message appears or disappears (manually or dynamically/
+	 *  automatically) from Inbox, Starred, or Archived, please use a smooth
+	 *  slide-in or slide-out effect so the eye can see easier what is happening."
+	 *
+	 *  `animate:flip` above handles a card MOVING within a list. It cannot help
+	 *  when a card leaves the list entirely — archiving one made it vanish between
+	 *  frames, which is precisely the moment the eye most needs to follow it.
+	 *
+	 *  REDUCED MOTION IS NOT FREE HERE, despite appearances. app.css carries the
+	 *  usual global `@media (prefers-reduced-motion: reduce)` rule forcing
+	 *  `animation-duration: 0ms !important` — but **Svelte 5 transitions are not
+	 *  CSS**: they run through `element.animate()` (WAAPI), which that rule cannot
+	 *  touch, and Svelte does not check the preference itself. Trusting app.css
+	 *  would ship a full-length animation to every user who asked for less motion,
+	 *  with nothing failing and nothing visible in review. Hence the same explicit
+	 *  check `cardFlipDuration` makes, for the same reason.
+	 *
+	 *  Evaluated per-transition, so it tracks the OS setting live — which matters:
+	 *  someone toggling that preference mid-session is usually doing it BECAUSE
+	 *  something moved.
+	 *
+	 *  250ms matches the orderbook filter panel, the app's only other slide. Long
+	 *  enough for the eye to follow a card leaving, short enough that filing twenty
+	 *  threads in a row never feels like waiting on an animation. */
+	function cardSlideDuration(): number {
+		if (typeof window === 'undefined') return 0;
+		// A tab switch is navigation, not filing. See `switchingTab`.
+		if (switchingTab) return 0;
+		// The first paint is arrival, not filing. See `listReady`.
+		if (!listReady) return 0;
+		return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 250;
+	}
 
 	/** Fetch the conversation list + server read-state and refresh the
 	 *  inbox. Called once on mount and then every POLL_MS so new messages,
@@ -267,8 +354,13 @@
 		if (readR.ok) mergeRemoteReadState(readR.data.items);
 
 		if (convoR.ok) {
+			const firstFill = !listReady;
 			conversations = convoR.data.items;
 			loadError = false;
+			// Let the first paint land without motion, then arm the slide for real
+			// filing. tick() resolves after the DOM update that created the cards,
+			// so their intros have already read `listReady === false`.
+			if (firstFill) void tick().then(() => (listReady = true));
 			await fetchProfilesForNewPeers(conversations.map((c) => c.peer));
 		} else if (initial) {
 			await fallbackToRecentPeers();
@@ -279,13 +371,50 @@
 	let onVisible: (() => void) | null = null;
 	let unsubActivity: (() => void) | null = null;
 
+	/** v1.7.7 (t.txt #5) — how often to re-read the on-chain folder state.
+	 *
+	 *  15s is chosen against what it is FIXING, not against a round number: Ken
+	 *  archived on his PC and his phone still showed the thread "even after a few
+	 *  minutes". Anything under ~20s reads as "it just moved" to someone holding
+	 *  both devices, which is the bar he set — "i would like for messages to
+	 *  automatically move themselves dynamically".
+	 *
+	 *  It is not faster because folder moves are a HUMAN action, not a message
+	 *  feed: nobody archives twice a second, and every poll that finds no change
+	 *  is a request every federated instance's indexer serves for nothing.
+	 *  Un-archive still feels instant regardless — it is re-derived locally on the
+	 *  5s conversation poll and never waits on this at all. */
+	const FOLDER_SYNC_MS = 15_000;
+
 	// t.txt (v1.4.9 #5) — pull the on-chain chat folder organization once the
 	// identity is unlocked (it's encrypted with the posting key, so it can only
 	// be decrypted while unlocked). No-op when locked: the local mirror renders
 	// meanwhile. Also performs the one-time migration (local stars → chain) the
 	// first time an account with no on-chain state syncs.
+	//
+	// v1.7.7 (t.txt #5) — RE-SYNC, don't sync once.
+	//
+	// This effect fires when `$isUnlocked` flips true, i.e. once per page load.
+	// So a device read the chain on mount and never again: Ken archived a thread
+	// on his PC and his PHONE kept it in the Inbox until he manually refreshed.
+	//
+	// Ken also spotted the asymmetry that explains it — un-archiving DID move
+	// across devices without a refresh. That was never syncing. Un-archive is
+	// RE-DERIVED locally by resurrectArchivedOnNewActivity on every conversation
+	// poll, from data each device already has. Archiving cannot be re-derived: it
+	// is a decision, and it only exists on chain. Nothing was re-reading it.
+	//
+	// The interval is safe because syncChatFoldersFromChain compares the fetched
+	// `enc` blob against the last one it adopted and returns before decrypting
+	// when nothing changed — so the steady-state cost is one small GET, and the
+	// posting key is only used when there is genuinely a new decision to adopt.
+	// Adoption is already last-write-wins (cp474), so a device with a pending
+	// local change is not stomped by an older chain state.
 	$effect(() => {
-		if ($isUnlocked) void syncChatFoldersFromChain();
+		if (!$isUnlocked) return;
+		void syncChatFoldersFromChain();
+		const t = setInterval(() => void syncChatFoldersFromChain(), FOLDER_SYNC_MS);
+		return () => clearInterval(t);
 	});
 
 	// v1.4.10 — Gmail-style un-archive: whenever the conversation list changes
@@ -393,9 +522,27 @@
 	 *  than waiting for /chat/[peer] to load. That way if the
 	 *  user navigates back before [peer] fully loads, the unread
 	 *  badge is still correct. */
-	function handleOpen(peer: string, orderPermlink: string): void {
+	function handleOpen(peer: string, orderPermlink: string, lastMessageAt?: string): void {
 		// cp446 — mark THIS discussion read, not everything from this person.
-		markConversationRead(peer, orderPermlink);
+		//
+		// v1.7.7 — CLAMP the cursor, don't stamp the local clock.
+		//
+		// `isUnread()` compares the cursor against `last_message_at`, which is a
+		// BLOCK time. Writing `new Date()` here compared a user's wall clock to
+		// the chain's — the same mistake that made Ken's archive bounce back out
+		// of the Archived folder. On a slow clock the cursor lands BEHIND the
+		// message just read, `lastMsg > cursor` stays true, and the thread you
+		// literally just opened stays green.
+		//
+		// `readAckTimestamp` is max(latestSeen, now) — the same watermark idea,
+		// and it already existed; these call sites just weren't using it. With no
+		// message time (fallback-peer list) it degrades to `now`, which is the
+		// best available answer and no worse than before.
+		markConversationRead(
+			peer,
+			orderPermlink,
+			readAckTimestamp(lastMessageAt !== undefined ? new Date(lastMessageAt) : null)
+		);
 	}
 
 	/** Mark every discussion that still nags (Inbox + Starred) as read, so the
@@ -418,7 +565,8 @@
 	function handleArchive(row: InboxRow): void {
 		const order = row.order?.permlink ?? '';
 		markConversationRead(row.peer, order, new Date());
-		archiveThread(row.peer, order);
+		// v1.7.7 — hand over the thread's newest BLOCK time; see chatFolders.watermark().
+		archiveThread(row.peer, order, row.last_message_at);
 		showToast($_('chat.inbox.archive_toast') as string, 'info');
 	}
 
@@ -431,7 +579,8 @@
 	/** Toggle the gold star. Starring MOVES the card to ★ Starred (from wherever
 	 *  it was); un-starring MOVES it to the Inbox. */
 	function handleToggleStar(row: InboxRow): void {
-		toggleStar(row.peer, row.order?.permlink ?? '');
+		// v1.7.7 — same watermark basis as archiveThread; see chatFolders.toggleStar().
+		toggleStar(row.peer, row.order?.permlink ?? '', row.last_message_at);
 	}
 
 	// Last-message timestamps render via the unified <RelativeTime>
@@ -521,7 +670,7 @@
 					type="button"
 					role="tab"
 					aria-selected={activeTab === 'inbox'}
-					onclick={() => (activeTab = 'inbox')}
+					onclick={() => setTab('inbox')}
 					class="flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-semibold transition-colors {activeTab ===
 					'inbox'
 						? 'border-morphit-emerald text-morphit-emerald'
@@ -541,7 +690,7 @@
 					type="button"
 					role="tab"
 					aria-selected={activeTab === 'starred'}
-					onclick={() => (activeTab = 'starred')}
+					onclick={() => setTab('starred')}
 					class="flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-semibold transition-colors {activeTab ===
 					'starred'
 						? 'border-morphit-emerald text-morphit-emerald'
@@ -563,7 +712,7 @@
 					type="button"
 					role="tab"
 					aria-selected={activeTab === 'archived'}
-					onclick={() => (activeTab = 'archived')}
+					onclick={() => setTab('archived')}
 					class="flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-semibold transition-colors {activeTab ===
 					'archived'
 						? 'border-morphit-emerald text-morphit-emerald'
@@ -606,6 +755,7 @@
 					     full card height. -->
 					<li
 						animate:flip={{ duration: cardFlipDuration() }}
+						transition:slide={{ duration: cardSlideDuration() }}
 						class="relative flex items-stretch overflow-hidden rounded-xl border bg-white transition hover:border-morphit-emerald hover:shadow-sm dark:bg-ink-950 dark:hover:border-morphit-emerald {convo.unread
 							? 'border-morphit-emerald/60 dark:border-morphit-emerald/50'
 							: 'border-ink-200 dark:border-ink-800'}"
@@ -625,7 +775,7 @@
 						<div class="flex min-w-0 flex-1 items-center gap-2 p-2 sm:gap-3 sm:p-3">
 							<a
 								href={threadHref(convo)}
-								onclick={() => handleOpen(convo.peer, convo.order?.permlink ?? '')}
+								onclick={() => handleOpen(convo.peer, convo.order?.permlink ?? '', convo.last_message_at)}
 								class="flex min-w-0 flex-1 items-center gap-2 after:absolute after:inset-0 after:content-[''] sm:gap-3"
 								aria-label={convo.unread
 									? ($_('chat.inbox.conversation_aria_unread', {
@@ -685,22 +835,34 @@
 											<span aria-hidden="true">→</span>
 										</div>
 									{:else if fb.record !== null}
-										<div
-											class="flex flex-wrap items-baseline gap-1 text-xs text-ink-500 dark:text-ink-400"
-										>
-											<!-- t155: "Feedback left:" → "I rated @kentest2:". Reuses
-											     profile.given_rated, which already says exactly that
-											     in all ten locales and is what the profile's own
-											     given-review card uses — same sentence, one string. -->
-											<span class="font-medium"
-												>{$_('profile.given_rated', { values: { account: convo.peer } })}</span
-											>
+										<!-- v1.7.7 (t.txt #9) — "I rated @kentest2:" REMOVED, and that one
+									     deletion fixes three things Ken flagged as separate bugs.
+									     On a phone the label wrapped to a second line ("I rated" /
+									     "@kentest3:"), which pushed the stars down onto their own
+									     row and left the comment a sliver of width — so it truncated
+									     at "You showed up …" with the card half empty. It also said
+									     nothing: this row is inside a conversation with that exact
+									     person, under their name and avatar. The stars ARE the
+									     sentence.
+									     `flex-wrap` goes with it: wrapping is what let the row grow
+									     instead of the comment truncating honestly at the edge.
+									     Stars are flex-none so the comment gets every remaining
+									     pixel; `items-center` (not baseline) so the stars sit level
+									     with the "37m ago" text to their right, as Ken asked. -->
+									<div class="flex items-center gap-2 text-xs text-ink-500 dark:text-ink-400">
 											<!-- t155: stars are EMERALD, not amber. Ken: "i love the
 											     green stars that i see for a user review/feedback.
 											     lets standardize on that." This row was the last
 											     amber ★★★★★ outside the emerald convention. -->
-											<span class="text-morphit-emerald" aria-hidden="true"
+											<span class="flex-none text-morphit-emerald" aria-hidden="true"
 												>{'★'.repeat(fb.record.rating)}{'☆'.repeat(5 - fb.record.rating)}</span
+											>
+											<!-- The stars are decorative above; this carries the meaning
+											     for a screen reader, which lost its sentence when the
+											     visible label went. -->
+											<span class="sr-only"
+												>{$_('profile.given_rated', { values: { account: convo.peer } })}
+												{fb.record.rating}/5</span
 											>
 											{#if fb.record.comment}
 												<span class="min-w-0 truncate text-ink-500 dark:text-ink-400"

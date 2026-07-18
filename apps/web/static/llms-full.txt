@@ -68,27 +68,21 @@ What Morphit doesn't have that they did: escrow, human arbitration, per-market m
 
 **FAQ key:** `vs_atomic_swap_dexes`
 
-BasicSwap is a kindred project in the no-middleman peer-to-peer space, but makes different architectural choices than Morphit.
+BasicSwap is a kindred project in the no-middleman peer-to-peer space, but it makes different architectural choices than Morphit. It does cross-chain atomic swaps directly between two wallets — no escrow, no arbitrator, no central server. We're aligned on the principle; the tradeoffs differ.
 
-**BasicSwap** takes a structurally different approach: cross-chain atomic swaps directly between two wallets, no escrow, no arbitrator, no central server. Aligned with Morphit on the "no middleman" principle. The tradeoffs differ from Morphit's tradeoffs:
+• **You have to install it first.** BasicSwap is a desktop app or Docker setup: you install and run it before you can even browse the orderbook. Morphit's orderbook is a public web page on any instance, browsable from any phone without installing anything.
 
-• Installation gate. BasicSwap is a desktop app (or Docker setup); users have to install and run it before they can even browse the orderbook or see live offers. Morphit's orderbook is a public web page at /orderbook on any instance, browsable from any phone or computer without installing anything.
+• **It runs full nodes.** BasicSwap typically runs a full node for every chain it trades — Bitcoin, Monero, Litecoin. First sync takes hours to days, and storage, CPU and bandwidth costs continue. Morphit is a browser tab.
 
-• Heavy local infrastructure. BasicSwap typically runs full nodes for every chain it trades — Bitcoin, Monero, Litecoin, and so on. First-time sync can take hours to days; ongoing storage, CPU, RAM, and bandwidth costs are substantial. Morphit is a browser tab.
+• **Swaps are slow, and both parties must stay online.** A cross-chain atomic swap needs confirmations on both chains; a BTC ↔ XMR swap typically locks coins for 30 minutes to several hours. Both wallets must be live for the whole multi-step exchange — if your counterparty disappears mid-swap, you wait out the refund timelock to get your coins back. Morphit trades need no simultaneous presence: you post an order, the other party acts when they're ready. Coordination finalizes on the next block, about 3 seconds. (Settlement of the underlying asset still takes whatever the chosen chain or payment method takes — Morphit doesn't claim otherwise.)
 
-• Slow swap completion. Cross-chain atomic swaps need multiple block confirmations on both chains to be safe; a single BTC ↔ XMR atomic swap typically takes 30 minutes to several hours of locked coins waiting for time-locks to clear. Morphit's coordination layer finalizes each step on the next block — about 3 seconds — so the workflow itself never stalls. (The actual asset transfer still depends on whatever chain or payment method the two parties chose; Morphit doesn't claim faster settlement of the underlying coins — just faster coordination on top of whatever the parties chose.)
+• **Crypto-only, no fiat.** BasicSwap trades crypto for crypto. Morphit also does fiat ↔ crypto in whatever payment method two people agree on — bank transfer, cash, gift card, in-game currency — plus barter (gold bars, banana trees, whatever).
 
-• No in-app reputation. BasicSwap has no built-in, network-wide feedback or rating system. Morphit feedback is signed on-chain and follows your public key forever — you carry your reputation with you across every instance.
+• **No reputation, no chat.** BasicSwap has no network-wide feedback system and no messaging layer; negotiation happens somewhere else. Morphit feedback is signed on-chain and follows your public key across every instance, and chat is end-to-end encrypted on your device, stored as ciphertext on the chain.
 
-• No E2EE chat. BasicSwap doesn't ship a messaging layer for negotiating, asking questions, or sending payment details — those conversations happen outside the protocol. Morphit chat is end-to-end encrypted on the device and stored as ciphertext on the chain.
+**On the July 2026 exploit.** BasicSwap was exploited on 14 July 2026, with confirmed losses of more than 0.66 BTC (about $42,000 at the time), reported by the project's own developer @ofrnxmr and by Orangefren. We mention it because anyone choosing between two ways to trade should know it happened — not to score a point. Atomic swaps are still a beautiful piece of cryptographic engineering, and the idea is not what broke. Morphit has no room to gloat here either: we are software, we have bugs, and the honest difference is architectural rather than moral. Morphit never takes custody of your coins, so there is no pot for an attacker to drain — but a bug in our code could still cost you a trade, and we would rather say so plainly than pretend otherwise.
 
-• Both parties online during the swap. The atomic-swap protocol requires both wallets to be live for the full multi-step exchange; if your counterparty stalls or disappears mid-swap, you wait out the refund timelock (often hours) to recover your coins. Morphit trades don't require simultaneous presence — you post an order, the counterparty acts when they're ready, and either party can return to the trade on their own schedule.
-
-• Crypto-only, no fiat. BasicSwap trades crypto-to-crypto only. Morphit additionally supports fiat ↔ crypto in whatever payment method two parties agree on (bank transfer, cash, gift card, in-game currency, whatever they prefer), plus bartering (gold bars, banana trees, whatever).
-
-• Mandatory client updates. BasicSwap users must keep their client current to stay compatible with peers, and updates can involve resync work. Morphit auto-updates in the browser like any web page; operators upgrade their server-side instance independently.
-
-BasicSwap's strength — true cross-chain atomic swaps with no middleman — is real and a beautiful piece of cryptographic engineering. Morphit makes a different choice: a coordination + reputation layer that works for fiat, crypto and barter, accessible from any browser on any device, where the privacy work happens in transport (Tor/Lokinet/I2P) and chat (E2EE) rather than in a swap protocol alone. Both designs are valid; they serve different users.
+Both designs are valid. They serve different users.
 
 ---
 
@@ -1242,17 +1236,15 @@ The 9-hour default assumes "I left my screen for the workday" rather than "I ste
 
 Push notifications let Morphit alert you when your order fills, a chat message arrives, or feedback lands — even when the Morphit tab is closed or your phone is locked. They require a "push service" running somewhere that holds a queue of pending notifications for you.
 
-Morphit lets you choose how private that push service is:
+**The honest version:** your browser picks that push service, not us. Chrome uses Google FCM, Firefox uses Mozilla, Safari uses Apple. There is no setting anywhere — in Morphit or in your browser — that points it at a different server.
 
-**Self-hosted only** — Only your operator's push server delivers notifications to you. Most private: no Google, no Mozilla, no third parties ever see that you received a ping. Requires your operator to run a push server (not all do; check /about-this-instance).
+What that service sees is metadata: that this browser received a push from morphit.io at this timestamp. What it never sees is the content. Every push is end-to-end encrypted per the Web Push specification, so the push service only ever handles ciphertext. It cannot read your messages, your orders, or your balances.
 
-**Standard (browser default)** — Uses your browser's built-in push service. Chrome uses Google FCM; Firefox uses Mozilla autopush; Safari uses Apple. These services see metadata ("this user got a push from morphit.io at this timestamp") but NEVER see the content — every message is end-to-end encrypted per the Web Push specification. The push service only sees ciphertext.
+If that metadata bothers you, turn push off. You still get badges on the avatar, favicon and title bar whenever the Morphit tab is open — those never leave your browser. That is the only honest way to keep Google out of it today.
 
-**Off** — No push notifications at all. You only see ambient badges (avatar, favicon, title bar) when the Morphit tab is open.
+**What we removed, and why.** Older builds offered a "Self-hosted only" option. It did nothing. Your choice was recorded and then ignored — Chrome still delivered through Google exactly as before — while this article told you no third party could see your pings. That was wrong, and a privacy switch that does nothing is worse than no switch, because it turns your caution into false confidence. It is gone.
 
-Default is "Standard" because it works on every platform with no extra infrastructure, and the message content is e2e-encrypted regardless. Privacy-focused users can switch to self-hosted if their operator supports it, or Off for total paranoia mode.
-
-You can change this any time in Settings → Notifications → Push privacy level.
+We would like to do this properly with UnifiedPush, which is the one design where you really do choose your own push server. Until that exists, this page tells you what actually happens.
 
 ---
 
@@ -2367,7 +2359,7 @@ Your orders, chat, balances and the block explorer all go through your operator'
 
 **The one exception.** Once per session your browser asks a network node — a privately-run RPC endpoint — directly for the signed release record that says which version of Morphit is current. That node sees the IP that asked. You can watch it in the Network tab: one request out, everything else to Morphit.
 
-**Why.** That record is how your browser knows the code it just ran is really ours. No rogue nodes stealing your data. Route it through your operator and a dishonest one could pair an old, genuinely-signed record with an old, backdoored build — and your browser would say all clear, forever. A replayed record carries a real signature, so checking signatures misses it. We would rather one node learn that an IP loaded a page than let an operator quietly pin you to a backdoor.
+**Why.** That record is how your browser knows the code it just ran is really ours. Rogue nodes can't forge it, and none of your data rides along with the request. Route it through your operator and a dishonest one could pair an old, genuinely-signed record with an old, backdoored build — and your browser would say all clear, forever. A replayed record carries a real signature, so checking signatures misses it. We would rather one node learn that an IP loaded a page than let an operator quietly pin you to a backdoor.
 
 **What that node learns.** An IP, and that someone asked for @morphit's release history. Not your username, orders, chat or balances. None of that leaves your operator's indexer.
 

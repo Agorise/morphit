@@ -175,6 +175,26 @@
 				// state still updates and we'll ack next time the user
 				// is unlocked and re-opens.
 				//
+				// v1.7.7 — this ack CANNOT be clamped, and that is fine.
+				// This page is a shell: it lazy-loads ConversationView and holds
+				// no messages, so there is no block time here to clamp against
+				// (`readAckTimestamp` needs the newest message it is acking).
+				// It does not need one, because it is the WEAKEST of three acks
+				// and the only unclamped one:
+				//   1. inbox `handleOpen` — clamped against the row's
+				//      last_message_at, fires on navigation (v1.7.7).
+				//   2. this one — a belt-and-braces ack in case ConversationView
+				//      never renders.
+				//   3. ConversationView `ackRead()` — clamped against
+				//      latestConfirmedAt(), and authoritative.
+				// A slow clock makes THIS ack a no-op (the cursor lands behind
+				// the message, so the thread simply stays unread) rather than
+				// wrong — and (1) and (3) both correct it with real block times.
+				// Never make this one "smarter" by inventing a timestamp: an
+				// unclamped cursor that RUNS AHEAD would silence a message the
+				// user never saw, which is the one failure that actually costs
+				// something.
+				//
 				// Ack timestamp is Date.now(): the user is looking at
 				// the conversation now, so any message they haven't
 				// yet seen would not be in their view either. Slight

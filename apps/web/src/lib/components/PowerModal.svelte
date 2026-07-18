@@ -264,7 +264,7 @@
 	}}
 	tabindex="-1"
 >
-	<div class="card w-full max-w-md">
+	<div class="card max-h-[95dvh] overflow-y-auto overscroll-contain w-full max-w-md">
 		<h2 id="power-modal-heading" class="font-display text-xl font-bold">
 			{mode === 'up' ? $_('profile.wallet.power_up_title') : $_('profile.wallet.power_down_title')}
 		</h2>

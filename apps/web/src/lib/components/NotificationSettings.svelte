@@ -112,8 +112,11 @@
 		if (!pushSubscribed) return;
 		const account = getUserBlurtAccount();
 		if (!account) return;
-		const mode: PushPrivacyMode =
-			$notificationPrefs.pushPrivacy === 'self_hosted' ? 'self_hosted' : 'standard';
+		// v1.7.7 (t.txt #6) — always 'standard'. The wire/relay still ACCEPT
+		// 'self_hosted' so a browser running pre-1.7.7 cached JS keeps working,
+		// but this client no longer produces it: it selected a mode nothing
+		// downstream ever read.
+		const mode: PushPrivacyMode = 'standard';
 		void resyncPushCategories(account, mode);
 	}
 
@@ -124,8 +127,8 @@
 			pushError = 'subscribe_failed';
 			return;
 		}
-		const mode: PushPrivacyMode =
-			$notificationPrefs.pushPrivacy === 'self_hosted' ? 'self_hosted' : 'standard';
+		// v1.7.7 (t.txt #6) — always 'standard'; see the note at the other call site.
+		const mode: PushPrivacyMode = 'standard';
 		pushBusy = true;
 		pushError = null;
 		try {
@@ -376,7 +379,24 @@
 						{$_('settings.notifications.channel_push_privacy_label')}
 					</legend>
 					<div class="mt-2 space-y-2">
-						{#each [['self_hosted', 'channel_push_privacy_self'], ['standard', 'channel_push_privacy_standard'], ['off', 'channel_push_privacy_off']] as const as [value, key] (value)}
+						<!-- v1.7.7 (t.txt #6) — "Self-hosted only" REMOVED.
+						     It never did anything. `privacy_mode` was validated by the
+						     relay (api/push.ts), written to the DB (pushSubscriptions.ts)
+						     — and read by nothing. `pushSender.ts` never looked at it. So
+						     a user picked the private option, the FAQ told them "no
+						     Google, no Mozilla, no third parties ever see that you
+						     received a ping", and Chrome kept delivering via FCM exactly
+						     as before.
+						     A privacy control that does nothing is worse than no control:
+						     it converts a user's caution into false confidence, and this
+						     is the panel where that costs the most. It cannot be made to
+						     work under Web Push either — pushManager.subscribe() returns
+						     an endpoint minted by the BROWSER's push service; there is no
+						     API to point it at your own server. The real answer is
+						     UnifiedPush (user-chosen distributor), which is a feature, not
+						     a radio button. Until that ships, the option is gone and the
+						     FAQ says what actually happens. -->
+						{#each [['standard', 'channel_push_privacy_standard'], ['off', 'channel_push_privacy_off']] as const as [value, key] (value)}
 							<label class="flex items-center gap-3">
 								<input
 									type="radio"

@@ -355,7 +355,7 @@
 	<!-- v1.5.0 (tt.txt B2, sibling of AddressShareModal): same defect — no
 	     max-height, no overflow, so a phone couldn't scroll to the Send
 	     button. Same fix as the other chat modals. -->
-	<div class="card max-h-[95vh] w-full max-w-md overflow-y-auto">
+	<div class="card max-h-[95dvh] w-full max-w-md overflow-y-auto">
 		<h2 id="funds-sent-heading" class="font-display text-xl font-bold">
 			{$_('chat.funds_sent.modal_title', { values: { peer } })}
 		</h2>

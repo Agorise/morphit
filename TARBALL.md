@@ -1,5 +1,58 @@
 # TARBALL
 
+> ## cp477 — v1.7.7 READY TO SHIP. Bumped 1.7.5 → 1.7.7, all 19 touchpoints.
+>
+> **Full battery green at 1.7.7: 519 runners, ~14,900 scenarios, 0 failures.** 1078 web tests, svelte-check 0/0, 25/25 workspaces compile-clean. `RELEASE-NOTES-v1.7.7.md` at repo root.
+>
+> **All 6 t.txt tasks done.** Details in REVISIT-LIST. Two gates were respected: Ken answered the clock question before any change, and approved the BasicSwap copy before it shipped.
+>
+> ### What Ken's questions found that no task named
+> | | Finding |
+> |---|---|
+> | 🔴 | **Hostile-indexer timestamp (federation vuln).** A hostile operator serving `last_message_at: 2099` set the user's read cursor to 2099 → every real message read as already-seen → **silently deaf**, on the screen where a counterparty's payment message arrives. Fixed with `sanitizeBlockTime` at the boundary. |
+> | 🔴 | **Rapid-filing clobber.** `markLocalChange` stamped `Date.now()`; the sync compared it to a BLOCK time — on a slow clock the sync adopts the chain's OLDER state and reverts every un-broadcast click. **The v1.7.7 15s re-sync armed it.** |
+> | 🔴 | **Broadcast deadlock** introduced by my own in-flight guard (no timeout → one hung request queues every later change for the session). |
+> | 🔴 | **The inverse vector** the sanitiser created: `isUnread` still read the raw stamp, so a hostile 2099 pinned a badge the user could never clear. Found in the Charlie walkthrough. Half a fix is not a fix. |
+> | 🔴 | **A Chinese character in a Russian sentence** that 3,368 i18n checks passed. New wrong-script guard. |
+> | 🟡 | **`app.css` `min-height: 100dvh; min-height: 100vh;`** — losing order, so the dvh line has NEVER applied. **Reported, not fixed. Ken's call.** |
+>
+> ### The session's defining pattern — ~17 instances
+> **Guards that pin a LITERAL fail on correct changes and pass broken ones.** Five battery runners failed on the first full pass; **every one was a literal-pin broken by a fix that strengthened the very property the guard protected.** Not one caught a real regression. All re-pinned to requirements; four gained an extra check. Several were my own.
+>
+> Also: two of my own tests were **vacuous** (a fixed mock latency cannot expose an ordering race; "all 20 arrived" passes with no debounce), one test modelled something **impossible** (a genuine message from tomorrow while the clock says today), and eight REVISIT-LIST writes were **silent no-ops** because `str.replace` does not raise on a miss.
+>
+> ### Sandbox notes
+> - **`vitest-must-pass-smoke` takes 165s** — it dies under `MORPHIT_SMOKE_TIMEOUT=90` reporting `failing=0` with a partial `passing=646`. Same artifact class as `svelte-check`. Use the 240s default.
+> - **Playwright IS available** (`/home/claude/.npm-global/lib/node_modules/playwright`, browsers at `/opt/pw-browsers`). Layout claims can be measured at a real viewport instead of reasoned about — the send-modal fix was verified at 360x800, 800x360 and 320x568.
+>
+> ### Still owed
+> ELI5 release ceremony (`bash scripts/eli5-release.sh 1.7.7 "..."`). Nothing else.
+
+> ## cp477 — v1.7.7 WORK COMPLETE, NOT SHIPPED. Version still 1.7.5.
+>
+> **All 6 tasks from the second t.txt are done.** Nothing is bumped; the version bump + RELEASE-NOTES + ELI5 are still owed.
+>
+> | # | Task | Outcome |
+> |---|------|---------|
+> | 1 | Clock / sync question | **Answered: money was already good-to-go** (every tx expiration derives from chain head block time; zero `Date.now()` in any signing path). Fixed 2 bare read cursors Ken approved. Corrected his premise: the badge lag was NOT the clock. |
+> | 2 | BasicSwap FAQ | **Ken approved the copy, then shipped to 10 locales.** 9 bullets → 5, 19–25% shorter. Exploit stated, sources named, no xcancel link (verified programmatically). |
+> | 3 | RPC User-Agent | **Sysadmin's guess was wrong** — we send `user-agent: node`, not `node-fetch/1.0` (verified on Node 22). Now `Morphit/<version> (+contact)` via a global fetch wrapper, the only thing that reaches dblurt. |
+> | 4 | Chat slide transitions | Done. **app.css's reduced-motion guard does NOT cover Svelte transitions** (WAAPI, not CSS) — explicit check added. Tab switches deliberately don't animate. |
+> | 5 | Send modal on mobile | **Was in 12 modals, not 1.** Reproduced in Chromium at Ken's exact size. Every `role="dialog"` now caps its height + scrolls, in `dvh`. |
+> | 6 | Review-card truncation | `(@username)` removed + its now-dead prop; the key stays as the identity anchor. |
+>
+> **Findings Ken's questions produced that no task named:**
+> - 🔴 **Hostile-indexer timestamp (federation vuln).** A hostile operator serving `last_message_at: 2099` sets the user's read cursor to 2099 → every real message reads as already-seen → **silently deaf**. Fixed with `sanitizeBlockTime` at the boundary.
+> - 🔴 **Rapid-filing clobber.** `markLocalChange` stamped `Date.now()` and the sync compared it to a BLOCK time — on a slow clock the sync adopts the chain's OLDER state and reverts every un-broadcast click. **The v1.7.7 15s re-sync armed it.**
+> - 🔴 **Broadcast deadlock** that my own in-flight guard introduced (no timeout → one hung request queues every later change for the session).
+> - 🔴 **A Chinese character in a Russian sentence** that 3,368 i18n checks passed.
+> - **app.css `min-height: 100dvh; min-height: 100vh;`** — losing order, the dvh line has never applied. **Reported, not fixed. Ken's call.**
+>
+> **Battery: 519 registered** (+5 this session: public-doc-drift, push-privacy-honesty, identity-label-truncation, block-time-vs-wall-clock, rpc-user-agent, chat-inbox-motion, modal-viewport-fit).
+> **1076 web tests, svelte-check 0/0, 25/25 workspaces compile-clean.**
+>
+> **Still owed before ship:** full battery in ~50-runner chunks, 5-persona walkthroughs, deep-deep, bump 1.7.5 → 1.7.7 (19 touchpoints), RELEASE-NOTES-v1.7.7.md at repo root, ELI5.
+
 > ## cp476 — v1.7.5 READY TO SHIP (t.txt #1–#15 complete)
 >
 > **Version bumped 1.7.0 → 1.7.5 across all 19 touchpoints; `RELEASE-NOTES-v1.7.5.md` at repo root. No DB migration (schema still v48, from v1.5.5 — verified, not assumed).**

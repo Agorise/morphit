@@ -55,16 +55,36 @@ vi.mock('$lib/chat/globalChatActivityStream', () => ({
 // point. The fast path does not write `chat_messages`, so for ~60s after the
 // push the conversation list still carries the OLD last_message_at. If a test
 // let the poll return the new message, it would prove nothing.
+// v1.7.7 — THE MOCK WAS LYING, AND IT HID A PRODUCTION BUG FOR TWO RELEASES.
+//
+// It returned a BARE ARRAY. The real poller does `if (cR.ok) { convos =
+// cR.data.items… }` — so `cR.ok` was undefined, the branch never ran, and
+// `convos` stayed EMPTY in every test in this file. Every fast-push test here
+// was therefore exercising the empty-durable-list path only: `counted` was
+// always empty, so nothing could ever be wrongly skipped, so the badge always
+// lit and the suite was always green.
+//
+// Meanwhile in production `convos` is full, and Ken's badge never lit at all.
+//
+// A mock that returns the wrong SHAPE doesn't fail loudly — it fails silently by
+// making the code under test skip the very branch you meant to exercise. Shape
+// the mock like the real response, always.
 vi.mock('$lib/indexer/client', () => ({
-	getConversations: vi.fn(async () => [
-		{
-			peer: PEER,
-			order: { permlink: ORDER },
-			// Older than the archive below — the indexer has not caught up.
-			last_message_at: '2026-07-14T10:00:00.000Z'
+	getConversations: vi.fn(async () => ({
+		ok: true as const,
+		data: {
+			items: [
+				{
+					peer: PEER,
+					order: { permlink: ORDER },
+					// Older than the archive below — the indexer has not caught up.
+					last_message_at: '2026-07-14T10:00:00.000Z',
+					last_message_is_mine: false
+				}
+			]
 		}
-	]),
-	getChatReadState: vi.fn(async () => null)
+	})),
+	getChatReadState: vi.fn(async () => ({ ok: true as const, data: { items: [] } }))
 }));
 
 // Spread the real module: `identity.ts` (pulled in transitively by chatFolders)
@@ -88,6 +108,8 @@ vi.mock('$lib/utils/hiddenAccounts', async () => {
 	return { hiddenAccounts: writable(new Set<string>()) };
 });
 
+import { getConversations } from '$lib/indexer/client';
+import { markConversationRead } from '$lib/chat/readState';
 import { startChatUnreadChannel } from './chatUnread';
 import { unreadCount } from './index';
 import {
@@ -161,6 +183,61 @@ describe('cp474 — fast push into an ARCHIVED thread (t.txt #3 + #4)', () => {
 
 		expect(isArchived(PEER, ORDER)).toBe(false);
 		expect(isArchived('someone-else', 'unrelated-order')).toBe(true);
+	});
+
+	// ── v1.7.7 — KEN'S REPRO, VERBATIM ─────────────────────────────────
+	// "both kentest2 and kentest3 have the message sitting in their archive
+	//  folders … kentest2 opens the old archived message thread and sends a
+	//  'badge now?' message … kentest3 gets the system notification immediately
+	//  … and does not receive any badge notifications at all … the message
+	//  thread [is] revived automatically in his inbox … but the message is not
+	//  marked as unread … and still no badges ever appeared at all."
+	//
+	// The 1054-test suite was green through all of this. It never caught it
+	// because every existing fast-push test used a thread that was either absent
+	// from the durable list or already unread in it — never the one shape that
+	// breaks: PRESENT, STALE, and READ. That combination is not exotic; it is
+	// what EVERY old archived conversation looks like the moment a reply lands.
+	it("lights the badge for a push on an OLD thread whose durable row is stale-but-read (Ken's repro)", async () => {
+		// kentest3 read this thread on the 14th, then archived it. The durable row
+		// still says the 14th, because the fast path never writes chat_messages.
+		vi.setSystemTime(new Date('2026-07-14T11:00:00.000Z'));
+		markConversationRead(PEER, ORDER, new Date('2026-07-14T10:00:00.000Z'));
+		archiveThread(PEER, ORDER);
+
+		// A minute later, kentest2 sends "badge now?" — push only, no durable row.
+		vi.setSystemTime(new Date('2026-07-15T09:00:00.000Z'));
+		stop = startChatUnreadChannel();
+
+		// LET THE DURABLE POLL LAND, and PROVE it landed.
+		//
+		// This await is the entire test. `convos` is what fills `counted`, and
+		// every other fast-push test fires the push before the first poll
+		// resolves — so `convos` is empty, `counted` is empty, nothing can be
+		// wrongly skipped, and the bug is invisible. That is how 1054 green tests
+		// missed a badge that never lit in production.
+		//
+		// Waiting on `unreadCount === 0` does NOT work and is worth remembering:
+		// the store STARTS at 0, so vi.waitFor returns on the first tick having
+		// waited for nothing. The first draft of this test did exactly that and
+		// passed against the BUGGY code — a regression test that cannot catch the
+		// regression. Wait on the fetch itself, which is unambiguous.
+		await vi.waitFor(() => {
+			expect(getConversations).toHaveBeenCalled();
+		});
+		await Promise.resolve();
+		expect(get(unreadCount).chat).toBe(0); // read + archived → nothing lit
+
+		fastPushListener!(PEER, ORDER);
+		await Promise.resolve();
+
+		// The thread must resurrect (this always worked — it is local state) …
+		expect(isArchived(PEER, ORDER)).toBe(false);
+		// … AND the badge must light. Before the fix this was 0: the durable loop
+		// filed the thread in `counted` merely for being eligible, and the fast
+		// loop then skipped it as "already counted as unread" when it had been
+		// counted as nothing at all.
+		expect(get(unreadCount).chat).toBe(1);
 	});
 
 	it('does not disturb a thread that was never archived', async () => {

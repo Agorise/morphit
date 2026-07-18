@@ -20,7 +20,7 @@
  * so a returning user sees a fresh count.
  */
 
-import { get } from 'svelte/store';
+import { get, writable } from 'svelte/store';
 import { getConversations, getChatReadState } from '$lib/indexer/client';
 import { getUserBlurtAccount } from '$blurt/ops/profile';
 import {
@@ -78,6 +78,49 @@ let convos: ReadonlyArray<{
  *  thing that can put an entry here is a delivered Web Push, and the fast-notify
  *  gate already refuses to push for anyone but an established counterparty. No
  *  push, no bump. Ken: "unless it's a spammer, fastnotifs please." */
+/** v1.7.7 — bumped whenever `fastPending` changes, so Svelte `$derived` blocks
+ *  that consult `threadIsUnread` re-run when a push lands. `fastPending` is a
+ *  plain Map (it is hot, and recount() walks it every 5s); this is the smallest
+ *  possible reactive handle on it. */
+export const fastPendingTick = writable(0);
+
+/** THE unread rule for a chat thread — the ONE both the avatar/favicon badge and
+ *  the inbox cards must use.
+ *
+ *  v1.7.7 — the inbox card used to call `isUnread()` directly against the
+ *  DURABLE `last_message_at`, which is stale for ~60s after a push because the
+ *  fast path never writes chat_messages (ADR-0051 invariant #1). So Ken's
+ *  "badge now?" message arrived, the thread resurrected into his Inbox, and the
+ *  card showed it as READ — no green border — because the row backing it still
+ *  described the previous message.
+ *
+ *  The badge and the cards have to agree: cp452 established that a badge which
+ *  outruns the visible cards nags about threads the inbox won't show, and the
+ *  inverse (a lit card with no badge, or Ken's case — neither, despite a
+ *  delivered push) is the same defect wearing a different hat. Two call sites
+ *  applying "the same rule" by copy-paste is how they drift. One function.
+ *
+ *  A pending push counts as unread iff the durable row hasn't caught up AND the
+ *  push post-dates the read cursor — judged by the same `isUnread` as everything
+ *  else, so opening the thread clears it immediately rather than leaving it lit
+ *  until the TTL expires. */
+export function threadIsUnread(
+	peer: string,
+	orderPermlink: string,
+	lastMessageAt: string,
+	lastMessageIsMine: boolean
+): boolean {
+	if (isUnread(peer, orderPermlink, lastMessageAt, lastMessageIsMine)) return true;
+	const at = fastPending.get(fastKey(peer, orderPermlink));
+	if (at === undefined) return false;
+	if (Date.now() - at > FAST_PENDING_TTL_MS) return false;
+	// The durable row landed and already had its say above — don't re-judge it.
+	const landed = new Date(lastMessageAt).getTime();
+	if (Number.isFinite(landed) && landed >= at) return false;
+	// A Web Push is inbound by definition — nobody pushes you your own message.
+	return isUnread(peer, orderPermlink, new Date(at).toISOString(), false);
+}
+
 const fastPending = new Map<string, number>();
 
 /** Discard an optimistic entry once the real conversation catches up or it goes
@@ -106,6 +149,7 @@ export function noteFastChatPush(peer: string, orderPermlink: string, atMs?: num
 	// past the user's read cursor, and light a badge for something they already
 	// read. Live callers pass nothing and keep the old behaviour.
 	fastPending.set(fastKey(peer, orderPermlink), atMs ?? Date.now());
+	fastPendingTick.update((n) => n + 1);
 	recount();
 }
 
@@ -142,17 +186,45 @@ function recount(): void {
 	const hidden = get(hiddenAccounts);
 	const blocked = get(blockedAccounts);
 	let n = 0;
+	/** Threads the DURABLE loop below counted as unread — NOT merely threads it
+	 *  looked at. The fast-push loop skips these to avoid double-counting.
+	 *
+	 *  v1.7.7 — this set used to be filled for every ELIGIBLE conversation, and
+	 *  that one line ate Ken's badge entirely. The failure needs three ordinary
+	 *  facts to line up, and his test hits all three:
+	 *
+	 *    1. The thread ALREADY EXISTS in `convos` — it's an old conversation.
+	 *    2. Its `last_message_at` is STALE, because the fast path never writes
+	 *       chat_messages (ADR-0051 invariant #1: the fast path does not touch
+	 *       the DB). The new message is not in the durable row for ~60s.
+	 *    3. It is therefore NOT unread — the read cursor is newer than the old
+	 *       message — so the durable loop did not count it.
+	 *
+	 *  …and then the fast loop skipped it anyway, under a comment that said
+	 *  "already counted as unread above", because the key was in this set. It was
+	 *  never counted. It was only SEEN. The push — the one signal that actually
+	 *  knew a new message existed — was discarded, and the badge could not light
+	 *  until the indexer published the same fact a minute later.
+	 *
+	 *  This is precisely why Ken saw a system notification instantly, watched the
+	 *  thread resurrect out of Archived (that path is local and worked), and still
+	 *  got no badge and no unread border. Every visible symptom, one line.
+	 *
+	 *  Seen vs counted is the whole distinction: only a thread that was actually
+	 *  counted may suppress the push that announces new activity on it. */
 	const counted = new Set<string>();
 	for (const c of convos) {
 		if (!badgeEligible(c, meLc, hidden, blocked)) continue;
 		// cp446 — one count per DISCUSSION: three unread threads with the same
 		// person are three unread conversations, exactly as in an email inbox.
 		const order = c.order?.permlink ?? '';
-		counted.add(fastKey(c.peer, order));
 		// v1.7.5 (t.txt #2) — a thread whose last word is mine is not unread on ANY
 		// of my devices. Absent (older instance) → false, i.e. the old
 		// timestamp-only rule, rather than silently marking everything read.
-		if (isUnread(c.peer, order, c.last_message_at, c.last_message_is_mine === true)) n++;
+		if (isUnread(c.peer, order, c.last_message_at, c.last_message_is_mine === true)) {
+			counted.add(fastKey(c.peer, order));
+			n++;
+		}
 	}
 	// v1.5.5 — add threads a push announced that the indexer hasn't published
 	// yet, so the badge lights in ~5s instead of ~60s. Drop an entry as soon as
@@ -175,6 +247,10 @@ function recount(): void {
 			fastPending.delete(key);
 			continue;
 		}
+		// v1.7.7 — `counted` now holds only threads the durable loop ACTUALLY counted
+		// as unread, so this skip means what its comment says. When it held every
+		// eligible thread, this line silently discarded the push for any old thread
+		// whose durable row was stale-but-read — i.e. every thread in Ken's repro.
 		if (counted.has(key)) continue; // already counted as unread above
 		// SAME eligibility as every other counted thread — a push must never
 		// light the badge for a self/hidden/blocked/archived thread the inbox

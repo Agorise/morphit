@@ -120,7 +120,7 @@ function applyRestored(state: UserSettingsState): void {
 		for (const k of ['native', 'push', 'audio', 'vibrate'] as const) {
 			if (typeof chans[k] === 'boolean') setChannel(k, chans[k] as boolean);
 		}
-		if (n.pushPrivacy === 'self_hosted' || n.pushPrivacy === 'standard' || n.pushPrivacy === 'off') {
+		if (n.pushPrivacy === 'standard' || n.pushPrivacy === 'off') {
 			setPushPrivacy(n.pushPrivacy);
 		}
 		if (isObj(n.quietHours)) {

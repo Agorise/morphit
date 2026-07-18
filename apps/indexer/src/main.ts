@@ -91,6 +91,8 @@ import { instancePaymentMethodsRoute } from '$api/instancePaymentMethods';
 import { operatorBlocksRoute } from '$api/operatorBlocks';
 import { logger } from '$log';
 import { suppressDblurtConsoleNoise } from '@morphit/rpc-pool';
+import { installMorphitUserAgent } from '$blurt/userAgent';
+import { INDEXER_VERSION } from '$api/health';
 
 const bootLog = logger('boot');
 const httpLog = logger('http');
@@ -99,6 +101,14 @@ const procLog = logger('process');
 const pollerLog = logger('poller');
 
 async function main(): Promise<void> {
+	// v1.7.7 (t.txt #3) — identify ourselves to RPC nodes BEFORE any client is
+	// built. Ken's sysadmin runs a public Blurt node and asked us to stop looking
+	// like an anonymous bot; we were sending `user-agent: node`, which is what
+	// every unnamed Node service on the internet sends. Must run first: dblurt
+	// captures nothing at construction, but the direct batch fetch and the price
+	// feed both fire early, and a wrapper installed after them would miss them.
+	installMorphitUserAgent(INDEXER_VERSION);
+
 	// Drop @beblurt/dblurt's redundant internal failover chatter
 	// ("Didn't failover for error code: [...]") — our EndpointPool does
 	// the real failover and /v1/health -> rpc_endpoints is the real

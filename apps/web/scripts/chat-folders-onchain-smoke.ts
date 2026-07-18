@@ -124,6 +124,7 @@ check(
 	/export async function syncChatFoldersFromChain/.test(chatFolders) &&
 		/getChatFolders\(account\)/.test(chatFolders)
 );
+// The inbox page is already read at the top of this file — reuse it.
 const inbox = read('apps/web/src/routes/[lang]/chat/+page.svelte');
 check(
 	'the inbox calls syncChatFoldersFromChain when unlocked',
@@ -152,6 +153,106 @@ check(
 				.split('function badgeEligible')[1]
 				?.split('function recount')[0] ?? ''
 		)
+);
+
+// ── v1.7.7: the archive watermark must not mix TIME BASES ──────────
+// Ken's kentest3: archive a thread, refresh a minute later, it is BACK in the
+// Inbox; archive again and it sticks. kentest2 never reproduced it on identical
+// code — because it was never the code, never the older Brave build, never a
+// cache. It was his CLOCK. `resurrectArchivedOnNewActivity` compares a folder
+// entry's `at` against a thread's `last_message_at` (a BLOCK time), and `at` was
+// stamped `new Date()` — the user's LOCAL WALL CLOCK. A slow clock writes a
+// watermark EARLIER than the message already sitting in the thread, and the
+// resurrect rule reads that as "new activity since you archived".
+//
+// Pin the requirement: the watermark is measured in the same units it is
+// compared against, and can never sit behind a message already in the thread.
+// `chatFolders` is already read at the top of this file — reuse it rather than
+// opening the same file twice under a second name.
+const folders = chatFolders;
+check(
+	'archive watermark clamps to the newest KNOWN message time (no wall-clock vs block-time compare)',
+	// v1.7.7 — pins the REQUIREMENT (clamp UP to the newest known message time)
+	// rather than the variable name. `Math.max(now, seen)` broke when the hostile-
+	// timestamp sanitiser renamed the local to `seenDate` — a change that closes a
+	// federation vector, not one that weakens this.
+	/function watermark\([\s\S]{0,700}?Math\.max\(now, seen(Date\.getTime\(\)|)\)/.test(folders)
+);
+// An unsanitised far-future last_message_at makes an archived thread
+// unresurrectable (nothing is ever "newer" than 2099) and immune to cap()'s
+// eviction (it sorts newest forever). This file's check() takes no detail
+// argument — the name has to carry the meaning.
+check(
+	'…and the value it clamps against is SANITISED (a federated indexer is not trusted)',
+	/const seenDate = sanitizeBlockTime\(lastMessageAt, now\);/.test(folders)
+);
+check(
+	'setFolder stamps via watermark(), never bare new Date()',
+	/next\[key\] = \{ folder, at: watermark\(lastMessageAt\) \}/.test(folders) &&
+		!/next\[key\] = \{ folder, at: new Date\(\)\.toISOString\(\) \}/.test(folders)
+);
+check(
+	'archiveThread accepts the block time to clamp against',
+	/export function archiveThread\(\s*peer: string,\s*orderPermlink: string,\s*lastMessageAt\?: string\s*\)/.test(
+		folders
+	) || /export function archiveThread\(peer: string, orderPermlink: string, lastMessageAt\?: string\)/.test(folders)
+);
+check(
+	'the resurrect rule survives the fix (a genuinely newer message still surfaces)',
+	/lastMsgMs > archivedAtMs/.test(folders)
+);
+
+// ── v1.7.7 (t.txt #5): folder moves must PROPAGATE, not just publish ──
+// Ken: archived on his PC, phone kept the thread in the Inbox "even after a few
+// minutes" until he manually refreshed. The publish side was fine — the op was
+// on chain. The READ side ran exactly once, from a $effect that fired when
+// $isUnlocked flipped true. One read per page load.
+//
+// Ken also named the asymmetry that explains it: un-archive DID cross devices
+// without a refresh. That was never syncing — resurrectArchivedOnNewActivity
+// RE-DERIVES it locally on every 5s conversation poll from data the device
+// already has. Archiving cannot be re-derived; it is a decision, and it only
+// exists on chain. Nothing re-read the chain.
+check(
+	'the inbox RE-syncs folder state on an interval, not once per page load',
+	/setInterval\(\(\) => void syncChatFoldersFromChain\(\), FOLDER_SYNC_MS\)/.test(inbox)
+);
+check(
+	'…and clears that interval on teardown',
+	/return \(\) => clearInterval\(t\)/.test(inbox)
+);
+check(
+	'…at an interval a human reads as "it just moved" (<= 20s)',
+	(() => {
+		const m = /const FOLDER_SYNC_MS = ([0-9_]+);/.exec(inbox);
+		if (!m) return false;
+		const ms = Number(m[1].replace(/_/g, ''));
+		return ms > 0 && ms <= 20_000;
+	})()
+);
+check(
+	'a repeat sync SKIPS the posting-key decrypt when the chain has not moved',
+	/if \(lastAdoptedAt !== null && res\.data\.updated_at === lastAdoptedAt\) return;/.test(
+		chatFolders
+	)
+);
+check(
+	'…keyed on updated_at, never on the enc ciphertext',
+	!/=== lastAdoptedEnc/.test(chatFolders)
+);
+// v1.7.7 — the memo now goes through setLastAdoptedAt() because it is PERSISTED
+// (module state died with the tab, which left the watermark nothing to clamp
+// against right after a refresh). Pin the requirement — set only inside the
+// successful-adopt branch — not the assignment syntax.
+check(
+	'…and the memo is set only on a SUCCESSFUL adopt',
+	/isFolderState\(decrypted\)\) \{[\s\S]{0,500}?setLastAdoptedAt\(res\.data\.updated_at\);/.test(
+		chatFolders
+	)
+);
+check(
+	'…and dies with the folder store (per-account state)',
+	/syncedThisSession = false;[\s\S]{0,500}?setLastAdoptedAt\(null\);/.test(chatFolders)
 );
 
 if (failures === 0) {

@@ -253,7 +253,23 @@ export function isUnread(
 	if (lastMessageIsMine) return false;
 	const visited = getLastVisited(peer, orderPermlink);
 	if (!visited) return true;
-	return new Date(lastMessageAt).getTime() > new Date(visited).getTime();
+	// v1.7.7 — SANITISE here too, or the fix to readAckTimestamp is only half a
+	// fix and it shows.
+	//
+	// `lastMessageAt` comes from the operator's indexer, and Morphit is
+	// federated. Before the cursor was sanitised, a hostile `2099` set the READ
+	// CURSOR to 2099 and every real message afterwards read as already-seen — the
+	// user went silently deaf. That is fixed. But this comparison still took the
+	// raw value, so the same lie now pins `2099 > cursor` true forever: a badge
+	// the user can never clear, on a thread that will not stop shouting. Severity
+	// fell from dangerous to maddening; it did not reach zero.
+	//
+	// Treating an untrustworthy stamp as `now` is the honest reading of "we do not
+	// know when the last message was": it counts as unread until the user opens
+	// the thread, and then it clears, exactly like any other message.
+	const at = sanitizeBlockTime(lastMessageAt);
+	const atMs = at === null ? Date.now() : at.getTime();
+	return atMs > new Date(visited).getTime();
 }
 
 /**
@@ -290,7 +306,57 @@ export function __reloadFromStorage(): void {
  *
  * @param latestSeenAt the newest CONFIRMED message time in view, or null.
  */
+/** v1.7.7 — the furthest ahead of our own clock we will believe a "block time".
+ *
+ *  Generous, because the local clock is the thing we already know we cannot
+ *  trust: a user whose PC runs an hour slow must still be able to read their
+ *  chat. Finite, because a value from the network must never be able to push a
+ *  read cursor to the year 2099.
+ *
+ *  This is not paranoia about a hypothetical. Morphit is FEDERATED: the value
+ *  arrives from whichever operator's indexer the user chose, and "my operator is
+ *  honest" is exactly the assumption the whole design refuses to make everywhere
+ *  else. */
+const MAX_FUTURE_SKEW_MS = 60 * 60 * 1000;
+
+/** Reject a block time that cannot be real.
+ *
+ *  A block time is a chain fact and cannot meaningfully lead our clock — Blurt
+ *  won't accept a block from the future, so anything materially ahead of `now`
+ *  is a lie or a bug, and either way it must not be trusted.
+ *
+ *  WHAT THIS DEFENDS (found in the v1.7.7 adversarial pass, prompted by Ken:
+ *  "this is exactly the type of thing that a black hat would try to do"):
+ *  a hostile or compromised operator serves `last_message_at: '2099-01-01'`.
+ *  Unsanitised, that value:
+ *    1. becomes the user's READ CURSOR the moment they open the thread — so
+ *       every genuine message afterwards is marked already-read. The user goes
+ *       SILENTLY DEAF: no badge, no green border, no notification. In a
+ *       marketplace that is a counterparty's payment message you never see, an
+ *       order that expires, and a dispute you lose. This is the one that costs
+ *       money.
+ *    2. becomes an archived thread's watermark, so it can never resurrect.
+ *    3. sorts newest forever, making the entry immune to cap()'s eviction.
+ *
+ *  Clamping to null means "we have no trustworthy message time here", and every
+ *  caller already has a correct answer for that case: fall back to `now`. The
+ *  worst a hostile timestamp can then do is nothing at all. */
+export function sanitizeBlockTime(at: string | Date | null | undefined, now: number = Date.now()): Date | null {
+	if (at === null || at === undefined) return null;
+	const d = at instanceof Date ? at : new Date(at);
+	const t = d.getTime();
+	if (!Number.isFinite(t)) return null;
+	if (t > now + MAX_FUTURE_SKEW_MS) return null;
+	// Hand back the CALLER'S Date when it was already one. Allocating a copy is
+	// wasteful and, more to the point, silently breaks reference equality for
+	// every caller that compares identity — `readAck.test.ts` does exactly that.
+	return d;
+}
+
 export function readAckTimestamp(latestSeenAt: Date | null, now: Date = new Date()): Date {
-	if (latestSeenAt === null || Number.isNaN(latestSeenAt.getTime())) return now;
-	return latestSeenAt.getTime() > now.getTime() ? latestSeenAt : now;
+	// v1.7.7 — sanitise BEFORE clamping. `max(seen, now)` is exactly the shape
+	// that hands a poisoned future timestamp straight through to the cursor.
+	const seen = sanitizeBlockTime(latestSeenAt, now.getTime());
+	if (seen === null || Number.isNaN(seen.getTime())) return now;
+	return seen.getTime() > now.getTime() ? seen : now;
 }

@@ -131,7 +131,7 @@
 	tabindex="-1"
 >
 	<div
-		class="max-h-[95vh] w-full max-w-xl overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl dark:bg-ink-900 sm:rounded-2xl sm:p-6"
+		class="max-h-[95dvh] w-full max-w-xl overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl dark:bg-ink-900 sm:rounded-2xl sm:p-6"
 	>
 		<h2
 			id="shipment-modal-title"

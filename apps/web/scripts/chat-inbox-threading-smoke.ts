@@ -125,7 +125,24 @@ check('…keyed exactly like read-state (peer NUL order)', /\$\{peer\}\\u0000\$\
 check('the folder state is wiped on explicit lock (same privacy class as read-state)', /clearChatFolders\(\)/.test(explicitLock));
 
 // ─── the chatroom star mirrors the inbox star (t.txt item 13) ────────
-check('the chatroom kebab star toggles the SAME folder state', /toggleStar\(peer, orderPermlink \?\? ''\)/.test(convView) && /threadStarred \? '★' : '☆'/.test(convView));
+// v1.7.7 — pins the REQUIREMENT (the kebab stars THIS thread, keyed by peer +
+// order, and reflects it) rather than the exact argument list. The original
+// spelled out `toggleStar(peer, orderPermlink ?? '')`, so it failed when the
+// block-time argument was threaded through — a change that FIXED a real skew:
+// starred entries were stamping a bare local clock while archived ones clamped
+// to block time, and `cap()` sorts every entry by that field to decide what to
+// evict, so on a slow clock starred threads were evicted first.
+check(
+	'the chatroom kebab star toggles the SAME folder state',
+	/toggleStar\(\s*peer,\s*orderPermlink \?\? ''/.test(convView) &&
+		/threadStarred \? '★' : '☆'/.test(convView)
+);
+check(
+	'…and passes a block time, so starred shares one basis with archived',
+	/toggleStar\(peer, orderPermlink \?\? '', seen !== null \? seen\.toISOString\(\) : undefined\)/.test(
+		convView
+	)
+);
 
 // ─── the unread badge excludes archived discussions (t.txt item 10) ──
 check('the favicon / avatar-menu count skips archived discussions', /isArchived\(c\.peer, order\)/.test(chatUnread));

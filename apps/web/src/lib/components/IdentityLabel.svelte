@@ -137,7 +137,6 @@
 		 *  about someone you may not recognise by display name. Elsewhere (chat
 		 *  headers, order cards) the handle is either already shown or the
 		 *  display name is the point. */
-		showHandleAfterName?: boolean;
 		/** Hide the @handle/displayName text + copy button, keeping only
 		 *  the avatar (if shown) and the nostr/blurt.media link glyphs.
 		 *  Used where the handle is already shown elsewhere (e.g. the
@@ -152,7 +151,6 @@
 		publicKeyString,
 		account,
 		displayName = null,
-		showHandleAfterName = false,
 		nostrUrl = null,
 		blurtMediaUrl = null,
 		avatarSvg = null,
@@ -341,10 +339,20 @@
 	});
 </script>
 
+<!-- v1.7.7 (t.txt #6) — the "(@username)" suffix is GONE, and with it the
+     `showHandleAfterName` prop, which existed only to draw it.
+     [KEN]: "no need to show the (@username) in parenthesis, and be sure to
+     truncate the display name line since it is too wide for mobile. the layout
+     of those feedback/review cards on mobile is attrocious."
+     It cost roughly half the width of a phone-sized card to repeat something the
+     card already answers better: every one of those four call sites passes
+     `publicKeyString`, so the posting key renders directly underneath, and the
+     label itself links to /@account. The KEY is the identity here — a display
+     name is user-chosen and not unique, which is exactly why the key is shown —
+     so the handle was the redundant one of the three, and it was the one pushing
+     the name off the edge. -->
 {#snippet nameText()}
-	<span class={weightCls}>{name}</span>{#if showHandleAfterName && cleanDisplayName !== null && account}<span
-			class="ml-1 font-normal text-ink-500 dark:text-ink-400">(@{account})</span
-		>{/if}
+	<span class={weightCls}>{name}</span>
 {/snippet}
 
 {#snippet label()}
@@ -389,7 +397,19 @@
 	{/if}
 {/snippet}
 
-<span class="group inline-flex items-center gap-1.5 {cls}">
+<!-- v1.7.7 (t.txt #9) — `min-w-0 max-w-full` on the ROOT is what makes every
+     `truncate` inside this component actually work.
+     Without them a long display name ran past the card edge and collided with
+     the Restore button, and the RE: line below truncated at "RE: I'm bu…" while
+     the name above it ran twice as wide — the two lines disagreeing about how
+     much room they had, in the same card.
+     Why: this span is `inline-flex` (sizes to content) AND a flex item (default
+     `min-width: auto`, i.e. "never smaller than my content"). Two independent
+     reasons to refuse to shrink. The parent handed it a bounded width, it
+     ignored that, and so the inner `min-w-0 truncate` spans never saw a
+     constraint to truncate against — they were inert, not missing.
+     `max-w-full` bounds it to the parent; `min-w-0` permits the shrink. -->
+<span class="group inline-flex min-w-0 max-w-full items-center gap-1.5 {cls}">
 	<!--
 		Identicon avatar. Always rendered unless hideAvatar is set (rare).
 		The image is a data-URI SVG generated locally from the seed bytes —
@@ -449,12 +469,12 @@
 		{#if href}
 			<a
 				{href}
-				class="inline-flex items-baseline rounded-md hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
+				class="inline-flex min-w-0 max-w-full items-baseline rounded-md hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
 			>
 				{@render label()}
 			</a>
 		{:else}
-			<span class="inline-flex items-baseline">
+			<span class="inline-flex min-w-0 max-w-full items-baseline">
 				{@render label()}
 			</span>
 		{/if}

@@ -1,5 +1,326 @@
 # Morphit pre-launch revisit list
 
+> ### v1.7.7 — FULL BATTERY GREEN. 519 runners, ~15,300 scenarios, 0 failures. And the battery's own report card is damning.
+>
+> **Five runners failed on the first pass. Every single one was a guard pinning a LITERAL, broken by a change that STRENGTHENED the property the guard exists to protect.** Not one caught a real regression.
+>
+> | Guard | Pinned | Broken by | Which actually… |
+> |---|---|---|---|
+> | `address-share-modal-ux` B2 | the entire class string `class="card max-h-[95vh] w-full max-w-md overflow-y-auto"` | `vh` → `dvh` | **fixes B2's own bug** — on a phone `vh` counts the space behind the URL bar, so a 95vh card can still exceed the visible viewport |
+> | `chat-notification-wiring` | `latestSeenAt.getTime() > now.getTime() ? latestSeenAt : now` | the sanitiser's `seen` local | **closes a federation vector** — a hostile indexer's `last_message_at: 2099` becomes the read cursor and the user goes silently deaf |
+> | `chat-notification-wiring` | `Number.isNaN(latestSeenAt.getTime())` | same | same |
+> | `chat-inbox-threading` | `toggleStar(peer, orderPermlink ?? '')` | the block-time argument | **fixes a real skew** — starred stamped a bare local clock while archived clamped to block time, and `cap()` sorts every entry by that field |
+> | `chat-folders-onchain` | `Math.max(now, seen)` | the rename to `seenDate` | same sanitiser |
+>
+> **All five re-pinned to requirements, all re-tamper-proven, and four gained an EXTRA check** covering the thing the fix introduced (the sanitiser, the shared basis) — so the guards now protect more than they did before they broke.
+>
+> **THIS IS THE SESSION'S DEFINING FINDING, and it is now ~17 instances.** The failure mode is not "guards are wrong". It is:
+>
+> > **A guard that pins a literal fails on correct changes and passes broken ones. It trains the developer to edit the guard until it goes quiet — which is exactly how it ends up guarding nothing.** Pin the OUTCOME. Tamper-prove by reverting the actual fix. If a guard fires, ask whether the CODE regressed or the GUARD is describing shape instead of substance.
+>
+> Also confirmed this run: **`vitest-must-pass-smoke` takes 165s** and dies under `MORPHIT_SMOKE_TIMEOUT=90`, reporting `failing=0` while showing a partial `passing=646`. Same sandbox artifact class as `svelte-check`; it passes 4/4 (1076 tests) at the default 240s. **Do not export a 90s timeout for chunks containing it.**
+
+> ### v1.7.7 t.txt #4/#5/#6 — chat slide, send modal, review cards. All three done.
+>
+> ### t.txt #5 — SEND MODAL. Ken met it on one screen; it was in TWELVE.
+>
+> **[KEN]:** *"the send modal is too big for my mobile screen and will not let me scroll my screen up or down so that i can see its full height or the submit button at the bottom."*
+>
+> **Cause:** `fixed inset-0` + `flex items-center`, no height cap, no scroller. `fixed` pins the backdrop to exactly one viewport so there is nothing to scroll; and centring an over-tall flex child overflows **both** ends at once — and overflow past the START edge is **unreachable**, because no scrollbar takes you upward past a container's own origin. Title off the top, submit below the fold, permanently. Nothing errors.
+>
+> **Reproduced in Chromium at Ken's exact size** (1080px @ DPR 3 = 360x800 CSS): card top **-22px**, submit unreachable *even after scrolling to the end*. Also fails at 800x360 (landscape) and 320x568. All three fixed. **Playwright is available in the sandbox — layout claims can be measured rather than reasoned about, and should be.**
+>
+> **It was 12 modals, not 1.** Ken only hit the send screen, but **PayBlurtModal is the same bug on the other money screen**, and **PrivateKeyWarningModal is the dialog that warns you BEFORE you paste a private key**. Every `role="dialog"` in the app now caps its height and scrolls.
+>
+> **THREE THINGS WORTH KEEPING:**
+> 1. **I nearly invented a third pattern.** My first fix was `items-start` + backdrop scroller + `my-auto` wrapper. It works — verified — but `FundsSentModal` and `MarkdownGuideModal` **already** solved this with `max-h + overflow-y-auto` on the card, needing no wrapper. Browser-tested both; identical outcome. **A third pattern for the same problem is worse than a simpler one**, so I reverted to theirs.
+> 2. **`dvh`, never `vh`.** On a phone `vh` is the LARGE viewport — it counts the space behind the URL bar — so a `95vh` card can *still* stand taller than what is visible. **All four modals that already capped their height used `vh`.** This is Ken's bug in miniature, and on FundsSentModal it puts the dismiss button just under the fold.
+> 3. **No vh/dvh fallback pair.** Tailwind emits utilities in *its* order, not the class attribute's, so `max-h-[95vh] max-h-[95dvh]` gives no control over which lands last — and last wins. **A fallback you cannot order is a coin flip.** dvh has been in every major engine since 2022.
+>
+> **🔴 PRE-EXISTING BUG FOUND, NOT FIXED (Ken's call):** `apps/web/src/app.css` line 194-195 —
+> ```
+> body { min-height: 100dvh; min-height: 100vh; }
+> ```
+> **That is the losing order: `vh` comes second, so it wins, and the `dvh` line has never once applied.** The intent was clearly dvh-with-vh-fallback; correct order is `vh` first, `dvh` second. Left alone deliberately — changing global body height mid-task is not the moment — but it should be swapped. Harmless for `body { min-height }`, and it is evidence the convention is misread here.
+>
+> Guard: `modal-viewport-fit-smoke` (7 checks, registered, tamper-proven). Repo-wide: every `role="dialog"` caps its height; every cap is paired with a scroller (a cap alone CLIPS instead of scrolling); every cap uses dvh. Dropdown click-catchers (`fixed inset-0 cursor-default`, no content, no dialog role) are correctly exempt and check 6 pins that. **The guard found one I missed** — `FeaturedBidHistory`'s `max-h-[60vh]`.
+>
+> ### t.txt #4 — CHAT SLIDE. The reduced-motion guard in app.css does NOT cover Svelte transitions.
+>
+> **[KEN]:** *"whenever a message appears or disappears (manually or dynamically/automatically) from Inbox, Starred, or Archived, please use a smooth slide-in or slide-out effect so the eye can see easier what is happening."*
+>
+> `animate:flip` already handled cards MOVING within a list; it cannot help when a card leaves entirely — archiving made it vanish between frames, which is exactly the moment the eye most needs to follow it. Added `transition:slide` to the (already keyed) card.
+>
+> **🔴 THE TRAP:** app.css carries the standard `@media (prefers-reduced-motion: reduce) { animation-duration: 0ms !important }`. That rule is real and it works — **for CSS. Svelte 5 transitions are not CSS.** They run through `element.animate()` (WAAPI), which `!important` cannot reach, and **Svelte does not check the preference itself** — no `matchMedia` anywhere in its transitions.js. **Trusting app.css would ship a full-length animation to every user who asked for less motion, with nothing failing and nothing visible in review.** Verified against the installed Svelte (5.55.7). Same shape as everything else this session: a guard that looks present while doing nothing.
+>
+> **I nearly added a 7th duplicate.** Wrote a `motion.ts` with a reactive `MediaQuery` before noticing `cardFlipDuration()` already sits on that very page doing the same check, and that its own comment says it "Mirrors the AnimatedNumber.svelte reduced-motion check". **14 files reference the preference; 6 have inline `matchMedia` copies.** Deleted mine and mirrored the local one. **Extracting one shared helper is a real cleanup — noted, NOT done: it touches 6 working call sites and buys the user nothing.**
+>
+> **A tab switch is navigation, not filing.** A naive `transition:slide` also fires when `activeTab` changes — 20 cards collapsing while 20 expand into the same `<ul>`. Not what Ken asked for and not information. `switchingTab` suppresses it; the ordering is the trick (Svelte reads transition params when the transition STARTS, inside the same update, so the flag is still true; `tick()` clears it after).
+>
+> Guard: `chat-inbox-motion-smoke` (12 checks, registered, 4 tampers fire).
+>
+> ### t.txt #6 — REVIEW CARDS. One prop deleted; the layout followed.
+>
+> **[KEN]:** *"no need to show the (@username) in parenthesis, and be sure to truncate the display name line since it is too wide for mobile. the layout of those feedback/review cards on mobile is attrocious."*
+>
+> Removed `showHandleAfterName` from all 4 call sites — which made the prop **dead**, so it went too (a prop with no callers is cruft the compiler cannot see). **Removing the handle is only safe because the KEY stays:** every one of those call sites passes `publicKeyString`, so the posting key renders directly underneath, and the label links to `/@account`. A display name is user-chosen and **not unique** — which is exactly why the key is shown — so the handle was the redundant one of the three, and the one pushing the name off the edge. Checks 17/18 pin that reasoning so a future edit cannot drop the key and keep the trim.
+>
+> The truncation itself was already fixed earlier this session by `min-w-0 max-w-full` on IdentityLabel's root. **Worth recording why the two branches differ:** the key-bearing branch (which review cards take) has bare `truncate` while the other has `min-w-0 truncate` — that is CORRECT, not an oversight. `min-width:auto` only applies on a flex container's MAIN axis; in a `flex-col` the main axis is vertical, so the name's width comes from `align-items: stretch` against a container that already has `min-w-0`.
+>
+> Guard: `identity-label-truncation-smoke` now **20 checks**, tamper-proven.
+
+> ### v1.7.7 t.txt #2 — BasicSwap FAQ rewritten + trimmed. **Ken approved the copy before ship** ("that faq draft looks great. go with it.").
+>
+> **Trim:** 9 bullets → 5. EN 3,448 → 2,796 chars; every locale down 19–25%. Merged "slow swaps" with "both parties online" (one root cause — the timelock) and "no reputation" with "no chat" (both are "the protocol doesn't ship it"). Cut mandatory-client-updates as the weakest.
+>
+> **The exploit paragraph — deliberately NOT a dunk, and this is the editorial call worth keeping.** BasicSwap exploited 14 July 2026, >0.66 BTC (~$42k), per @ofrnxmr (the project's own dev) and Orangefren. **No link to the xcancel reference** (Ken: "do not link to that page from morphit") — verified programmatically across all 10 locales, not eyeballed.
+>
+> Adding a competitor's hack to a comparison page invites "you're smearing them", and the article's existing tone is respectful ("a beautiful piece of cryptographic engineering") — kept. So: state the fact, name the sources, then say plainly that **Morphit has no room to gloat: we are software, we have bugs, and the honest difference is architectural rather than moral.** We never take custody, so there is no pot to drain — but a bug in our code could still cost someone a trade. That framing is both honest AND the stronger argument: a reader who smells FUD stops trusting the whole page.
+>
+> **Did NOT speculate about the mechanism.** Ken supplied the date, the amount, and who confirmed — not how. "The idea is not what broke" is as far as the copy goes. **If Ken learns whether it was the swap protocol or the client, that line can sharpen.**
+>
+> ### 🔴 AND SHIPPING IT FOUND A REAL GAP: a Chinese character sat inside a Russian sentence
+>
+> `но他 делает` — one Han glyph, mid-word, in ru.json. **3,368 i18n checks passed.** Key coverage: fine. Parity: fine. Dead keys: fine. **Every existing i18n guard asks "is the key there?" and none asks "is the text in the right alphabet?"**
+>
+> This is a translation-time hazard, not a typo: when ten locales are written in one pass, characters bleed between them. It is also nearly invisible on review — catching it means reading a language you may not speak and noticing one glyph. A machine notices instantly.
+>
+> **Guard: a wrong-script scenario added to `i18n-translation-completeness-smoke` (now 5 scenarios).** Deliberately narrow — it flags only scripts that have no business in a locale AT ALL, and says nothing about Latin inside a non-Latin locale, because brand names, protocol terms and placeholders legitimately stay Latin everywhere (that file already carries a reasoned allow-list for exactly that). Han in Cyrillic prose, or Cyrillic in Persian, is never deliberate. **Tamper-proven with the exact bug** (`но他`) plus a Cyrillic-into-Persian leak; both fire.
+>
+> Post-edit chores done: `native-translations-snapshot-rebuild.ts` + `build:llms-full` (143 entries, exploit text present). floor-smoke 11 ✓, locale-parity 10 ✓, dead-key 3,368 ✓, public-doc-drift 24 ✓.
+
+> ### v1.7.7 t.txt #3 — RPC User-Agent (done). The sysadmin's guess was wrong; the answer for him is `node`.
+>
+> **[KEN's sysadmin, who runs a public Blurt RPC node]:** *"Are you using the User Agent: node-fetch/1.0? ... please change our user agent to something like: Morphit/1.7.5 (+contact...) ... to avoid the Bot Trap."*
+>
+> **ANSWER FOR HIM — we do NOT send `node-fetch/1.0`. We send `user-agent: node`.** Verified against Node 22 with a live loopback server, not assumed. `@beblurt/dblurt` calls the global `fetch` and sets no User-Agent of its own; Node's built-in fetch (undici) defaults to the bare string `node`. **This matters practically: a bot-trap rule written against `node-fetch/1.0` would match none of our traffic.** `node` is what every anonymous Node service on the internet sends — it names a runtime, not an application, and leaves an operator nobody to contact.
+>
+> **WHY A GLOBAL FETCH WRAPPER, which is otherwise a thing to avoid.** Two transports, only one of them ours:
+>   1. `blurt/client.ts`'s direct `fetch` for batched `get_block` — ours; now names itself explicitly.
+>   2. `@beblurt/dblurt`'s `Client` — **everything else**. `ClientOptions` exposes `chainId`, `timeout`, `failoverThreshold`, `backoff`, `agent` — **and no way to set a header.** Confirmed by reading the bundle.
+>
+> A wrapper installed once at startup is the only thing that reaches BOTH. Fixing only our own call site would leave dblurt — the majority of our traffic — anonymous, which is the entire complaint. Deliberately narrow: only ever ADDS a header (a caller that named itself keeps its name, so `morphit-indexer/federation-probe` survives — "which job" beats "which app" in a node operator's log); merges rather than overwrites a `Request`'s own headers; idempotent; server-side only (changing a browser UA is impossible and would be a fingerprinting risk — check 11 pins that the web app never imports it).
+>
+> **Sends:** `Morphit/<version> (+https://git.agorise.net/agorise/morphit)`. Contact is the project source, not a personal address — Morphit is federated, so the node operator and the instance operator are rarely the same person, and an operator who wants us to back off needs somewhere durable to shout. Verified end-to-end: bare `node` before install → tagged after → a named caller keeps its name.
+>
+> **THE TRAP I NEARLY WALKED INTO:** documenting the literal `User-Agent: Morphit/1.7.5` in RUN-A-MORPHIT-NODE.md created a **20th version touchpoint that nothing guarded** — `version-consistency-smoke` pins 19 and does not cover that file, so the next bump would leave it stale forever. That is exactly the doc-drift class I built a guard for earlier this session. Fixed by making the example version-free (`Morphit/<your indexer version>`): **no 20th touchpoint, nothing to go stale, and the operator still learns what to expect.** The UA string itself takes `INDEXER_VERSION` (now exported) — check 3 fails on any hardcoded version, because a literal there would dodge the 19-touchpoint net and announce a stale version to every node operator on the network.
+>
+> **Also worth knowing (for the reply to the sysadmin):** the indexer already caps its rate, backs off exponentially on 429 (30/60/120/300s ladder, ±25% jitter so the federation doesn't stampede one node), and batches `get_block` 20-at-a-time when catching up. RUN-A-MORPHIT-NODE.md's "good neighbour" section now documents the UA alongside all of that.
+>
+> Guard: `apps/indexer/scripts/rpc-user-agent-smoke.ts` (11 checks, registered, tamper-proven — hardcoded version, late install, and overwriting a named caller all fire). **One tamper was itself a no-op first** (the `replace` missed because a comment sat between the anchor lines) — caught by asserting the tamper applied before trusting its result. Same family as everything else this session.
+
+> ### v1.7.7 — ADVERSARIAL PASS on the fast-click surface. Found a FEDERATION vulnerability that can silently deafen a user.
+>
+> **[KEN]:** *"when we do the walkthroughs and deep deep before a release, this is exactly the type of thing that a black hat would try to do. he wants to break things. so if he fastclicks on a whole bunch of things at once, changing their read/unread/starred/unstarred/folder-location status, he might just succeed and we don't want him to be able to break anything by doing that."*
+>
+> Re-ran the rapid-filing surface as an ATTACK rather than a UX case. The clicking itself is now sound (debounce batches, broadcasts serialize, local writes are synchronous, watermarks are clock-independent). **The real find was upstream of the clicks.**
+>
+> ### 🔴 HOSTILE INDEXER TIMESTAMP — a hostile operator can make a user go silently deaf
+>
+> Morphit is **FEDERATED**: `last_message_at` arrives from **whichever operator's indexer the user chose**. v1.7.7 made that value load-bearing in three places at once — the read cursor, the archive watermark, and `cap()`'s eviction order. *"My operator is honest"* is the single assumption this project refuses to make everywhere else, and these consumers were quietly making it.
+>
+> Serve `last_message_at: '2099-01-01'` and:
+>   1. **THE BAD ONE.** The user opens the thread → `readAckTimestamp` clamps their READ CURSOR up to 2099 → **every genuine message afterwards reads as already-seen.** No badge, no green border, no notification. In a P2P marketplace that is a counterparty's payment message you never see, an order that expires, and a dispute you lose. **This one costs money.**
+>   2. An archived thread's watermark becomes 2099 → nothing is ever "newer" → **it can never resurrect.**
+>   3. That entry sorts newest forever → **immune to `cap()` eviction**, permanently holding a slot.
+>
+> **Provenance, honestly:** the cursor vector PRE-DATES this session (`readAckTimestamp` is cp446-era, used by ConversationView). **My v1.7.7 work widened it** — the watermark and `handleOpen`'s clamp are new consumers of the same untrusted value. It took Ken's black-hat framing to look at it that way; the UX framing had me checking that clicks land, not that the inputs are honest.
+>
+> **FIX — `sanitizeBlockTime()` in readState.ts, applied at the boundary.** A block time is a chain fact and cannot meaningfully lead our clock (Blurt won't accept a block from the future), so anything materially ahead of `now` is a lie or a bug. `MAX_FUTURE_SKEW_MS = 1 hour`: generous, because the local clock is the thing we already know we can't trust — a user whose PC runs an hour slow must still be able to read their chat — but finite, because a network value must never push a cursor to 2099. Rejecting to `null` means "no trustworthy time here", and every caller already had a correct answer for that: fall back to `now`. **Verified: all three vectors closed, and honest 30s skew still believed.**
+>
+> `hostileTimestamp.test.ts` (4 tests, jsdom), tamper-proven — removing either sanitiser re-opens its vector.
+>
+> ### Attacks CHECKED and found sound (worth recording so the next pass doesn't redo them)
+> - **Broadcast storm**: click / pause 1.6s / repeat → one signed op every 1.6s. Self-limiting — it is the attacker's OWN account and Blurt RCs are the meter. No amplification, no effect on anyone else.
+> - **`cap()` eviction**: `MAX_ENTRIES = 300`, and it only ever evicts the attacker's own entries. Now that starred and archived share one time basis (see the Starred entry above), there is no bias in what goes first.
+> - **Key injection**: `ACCOUNT_NAME_RE.test(peer)` + `order.length <= 256` reject malformed keys at `setFolder`; `PEER_WIDE ('*')` is rejected outright by `markConversationRead`.
+> - **Interleaved star/unstar/archive/restore**: last-write-wins locally, synchronous, no intermediate state to catch — verified in `noOrderThread.test.ts` and `rapidFiling.test.ts`.
+>
+> ### AND THREE MORE OF MY OWN GUARDS PINNED LITERALS
+> Checks 4 and 8 spelled out variable names (`latestSeenAt`, `Math.max(now, seen)`) and broke when the sanitiser introduced a `seen`/`seenDate` local — correct changes failing checks they never violated. Re-pinned to requirements. Also `readAck.test.ts` uses `toBe` (IDENTITY), so the sanitiser must hand back the CALLER'S Date rather than an equal copy — worth keeping: allocating a copy silently breaks reference equality for every caller that compares identity.
+>
+> Guard: `block-time-vs-wall-clock-smoke` **31 checks**. 1076 tests.
+
+> ### v1.7.7 — "click every second, then refresh": ANSWERED. Nothing is lost — but the question found two holes in my own fix.
+>
+> **[KEN]:** *"what happens if i click one every second and then a couple seconds later refresh my browser tab? are my changes to the messages lost then?"*
+>
+> **ANSWER: no.** Three things have to hold, and all three now do:
+>   1. **The local write is SYNCHRONOUS.** `writeMirror` → `safeLocal.set` on every click, before any await. A refresh one millisecond later still has every move. This is what makes a 1.5s broadcast debounce safe to have at all.
+>   2. **The reload re-arms the broadcast.** `syncChatFoldersFromChain`, on finding itself ahead, calls `scheduleBroadcast()` rather than just returning — cp474 already had this, with the right comment: *"A reload inside the 1.5s debounce drops the timer with the page, which would strand the move on this device. Re-arm it."*
+>   3. **The stamp survives, so the re-arm isn't overwritten first.** ← this is what was broken.
+>
+> **HOLE 1 — `lastAdoptedAt` was MODULE STATE.** My watermark clamps `markLocalChange()` to `max(Date.now(), lastAdoptedAt)`. After a refresh `lastAdoptedAt` is `null` until the first sync completes, so the watermark had nothing to clamp against and **degraded to a bare `Date.now()` — the exact bug it exists to prevent.** Archive right after a refresh, on kentest3's slow clock, and the next sync clobbers it. Modelled: warm page survives, post-refresh gets clobbered. **Fixed: persisted to `morphit.chat.folders.lastAdoptedAt`.** It is durable knowledge (a block time we have observed) and never belonged in a variable that dies with the page.
+>
+> **HOLE 2 — my in-flight guard introduced a DEADLOCK.** `broadcastChatFolders` has **no timeout**, so a request that never settles pins `broadcastInFlight = true` forever and every later folder change queues behind it **for the rest of the session** — silently, with the UI still showing the move. **Worse than the race the guard prevents, and it would have been MY doing: before the guard, a hung request blocked nothing.** Fixed with `BROADCAST_TIMEOUT_MS = 30_000` via `Promise.race`. A timeout turns "hung" into "failed", which is a state already handled correctly: the dirty stamp survives, the next sync re-arms, the change still gets out. **Note what a timeout does NOT do: it releases our flag, it does not cancel the request. Blurt's own 60s tx expiration is the backstop for a zombie op landing late.**
+>
+> **Found it via a leaking test** — the hung-broadcast test pinned `broadcastInFlight` across cases and blocked the next test. Module state leaking between tests is the same shape as the bug in production. `__reloadChatFolders()` now resets the in-flight state, because it exists to model a page reload and a reload drops exactly that.
+>
+> `rapidFiling.test.ts` now **7 tests**, incl. Ken's refresh scenario and the deadlock. **The deadlock test was wrong first**: `runOnlyPendingTimersAsync()` forced the hung op to complete, modelling a different scenario, and it asserted on landing ORDER — which the client cannot control once a timeout has fired. Now asserts only what matters: the second change ESCAPES rather than queueing forever.
+>
+> **AND THREE OF MY OWN GUARDS PINNED LITERALS AND BROKE ON A CORRECT CHANGE** — moving the broadcast inside a `Promise.race` and routing the memo through `setLastAdoptedAt()` failed checks whose requirements neither change violated. Re-pinned to the requirements. **This is now ~13 instances of the family, and the last several have been mine.**
+>
+> Guards: `block-time-vs-wall-clock-smoke` **27 checks**, `chat-folders-onchain-smoke` 35. Tampers fire on removing the timeout, un-persisting the memo, and clearing the stamp before confirmation.
+
+> ### v1.7.7 — RAPID FILING. [KEN]'s "20 threads, one click every half second" question found the worst clock bug in the codebase.
+>
+> **[KEN]:** *"if i have 20 messages sitting in my inbox, and i want every single one of them to move to Archived and i click on one archive link for each message every half second, then nothing will malfunction or break, right? ... experienced users will be clicking stuff pretty damn fast."*
+>
+> **Answer: it broke — and the v1.7.7 15s re-sync is what armed it.**
+>
+> **THE BUG (the worst of the clock family, because it corrupts the guard that PROTECTS the user's clicks):** `markLocalChange()` stamped `Date.now()`; `syncChatFoldersFromChain` compared it to `res.data.updated_at` (a BLOCK time) to answer "am I ahead of the chain?":
+>
+> ```
+> if (localAtMs > 0 && chainAtMs < localAtMs) return;   // "I'm ahead, don't adopt"
+> ```
+>
+> On a clock slower than the age of the chain's last write, `localAtMs` sits BEHIND `chainAtMs`, the guard reads *"the chain is ahead of me"*, and the sync **adopts the chain's OLDER state — silently reverting every click still sitting in the 1.5s broadcast debounce.** Modelled: correct and 30s-slow survive; **90s-slow and 10min-slow lose all 20.** kentest3's clock is exactly this. Before t.txt #5 this was a once-per-page-load window; **my 15s re-sync made it fire every 15 seconds.**
+>
+> **WHAT I GOT WRONG FIRST, AND WHAT CAUGHT IT.** I replaced the timestamp with a plain dirty BOOLEAN. That removes the clock and breaks something worse: a device holding an un-broadcast change would **never** adopt from another device, so a star made on the phone dies the moment the laptop next broadcasts. `chatFoldersSync.test.ts` states that property in as many words — *"cross-device sync must still win — this is the property the fix must not trade away"* — and failed immediately. I then tried a version/branch-point model; the tests showed that too was wrong, because distinguishing "stale chain, my own broadcast not indexed yet" from "another device genuinely wrote later" **is** a temporal question. **The last-write-wins MODEL was never the problem. Only its units were.**
+>
+> **THE FIX — the same watermark as #4:** `markLocalChange()` stamps `max(Date.now(), lastAdoptedAt)`, where `lastAdoptedAt` is the newest block time this device has actually seen. It can never read older than the chain state we already hold, whatever the local clock says, while a genuinely newer remote write still sorts above us and wins. Guard flips `<` → **`<=`**, because the watermark makes the common case EQUAL and `<` read that as "chain is ahead".
+>
+> **ALSO FIXED — the overlapping-broadcast race (the second half of Ken's question).** Click, pause 2s (op A departs with S0), click again (op B departs with S1). Two ops in flight; the handler is LATEST-BY-BLOCK, so if A lands in a later block the chain's final answer is the **stale** S0 and the newer change is undone. Nothing errors — the user just watches a thread crawl back out of Archived and concludes the app is broken. Now one broadcast in flight at a time; anything arriving meanwhile re-schedules. And the dirty stamp clears **only after a broadcast SUCCEEDS** — clearing earlier lets the next sync adopt over a change that never left the device.
+>
+> **ALREADY CORRECT, worth recording:** the debounce genuinely batches. `broadcastNow` reads `get(foldersStore)` at FIRE time, not schedule time, so twenty clicks inside 1.5s collapse into ONE op carrying the final state. Ken guessed this ("you might even have to save all of those changes in a batch") and it was already there.
+>
+> **`rapidFiling.test.ts` (4 tests) — and BOTH broadcast tests were VACUOUS at first**, passing against the tampered code:
+>   - the serialize test used a FIXED mock latency, so ops always completed in departure order — the one case that cannot expose the race. Fixed: first op slow (9s), second fast (100ms), so a missing guard lets the stale state land last.
+>   - the batching test asserted only "all 20 eventually arrived", which passes with no debounce at all (20 ops, last one carrying everything). Fixed: assert `broadcasts.length === 1`.
+>   **Both now fail against the broken code.** Same lesson as the two lying mocks: a test that cannot fail is documentation, not a test.
+>
+> Guard: `block-time-vs-wall-clock-smoke` now **25 checks** (+6), tampers fire on the bare stamp, on `<=` → `<`, and on clearing the flag before confirmation.
+
+> ### v1.7.7 — STARRED folder folded into the clock rule. [KEN] caught this; the v1.7.7 watermark fix had introduced it.
+>
+> **[KEN]:** *"you did not mention the Starred tab/folder though. did you forget about that one?"*
+>
+> **Not a live bug when he asked**, and worth writing down why: `resurrectArchivedOnNewActivity` bails on `entry.folder !== 'archived'`, so a STARRED entry's `at` never met a block time. The clock rule genuinely did not reach it.
+>
+> **But two things made it worth fixing, and the first is my own doing:**
+>   1. **`cap()` sorts EVERY entry by `at`** to evict at `MAX_ENTRIES = 300`. Once archived entries clamped to `max(now, blockTime)` (v1.7.7) while starred still stamped bare `now`, that single sort compared **two time bases**. On a slow clock archived entries stamp AHEAD of local now, sort newer, and **STARRED entries get evicted first**. Before the watermark fix both were `new Date()` — consistently wrong, but comparable. **The fix for #4 introduced this skew.** Verified with a model: mixed bases evict starred; one basis is a tie, no systematic bias.
+>   2. **Ken has already floated resurrecting starred threads on new activity** (earlier t.txt: *"or too and from the starred folder as well?"*). The day that ships, a bare `now` here is the archive bug all over again.
+>
+> **Fix:** `toggleStar(peer, orderPermlink, lastMessageAt?)` → `setFolder(..., lastMessageAt)`. Inbox star passes `row.last_message_at`; ConversationView's star passes `latestConfirmedAt()` — the same block time its read-ack already clamps against. **One basis for every entry in the map.**
+>
+> Guard: `block-time-vs-wall-clock-smoke` now **19 checks** (+4), tampers fire on reverting `toggleStar` to a bare stamp and on the inbox star dropping the block time. `noOrderThread.test.ts` now **10 tests** (+4 starred): starring the order thread leaves the girlfriends thread unstarred and vice versa; un-starring returns to Inbox (never Archived); a starred thread is NOT resurrected out of its tab by new activity — a star is a deliberate filing decision, not "hide until something happens".
+>
+> **The lesson worth keeping:** a fix that makes ONE call site correct can make a SHARED consumer inconsistent. `cap()` never changed, was never reviewed as part of #4, and quietly became wrong because two of its inputs stopped agreeing. When changing what a value MEANS, the question is not "is this call site right?" but "who else reads this field, and do they still agree?"
+
+> ### v1.7.7 — THE CLOCK RULE, answered + enforced. New t.txt #1.
+>
+> **[KEN]:** *"i guess we should no longer rely on the user's clock on their local pc, right? ... we do not want to have any sync issues in the future, or especially when money is being transfered. let me know first if we need to make any changes, or if we are already good-to-go."*
+>
+> **ANSWER — money was ALREADY good-to-go, and no change was needed there.** Every Blurt tx derives expiration from CHAIN HEAD BLOCK TIME: `const head = new Date(props.time + 'Z').getTime(); const expiration = new Date(head + 60_000)...`. **Zero `Date.now()`** in `sign.ts`, `ops/comment.ts`, `withdrawVestingSign.ts`, `client.ts`. A user with a broken clock can still send. (cp344 already routes that head read same-origin via the indexer, so it doesn't leak to a third-party RPC either.)
+>
+> **CORRECTION TO THE PREMISE (told Ken plainly):** the BADGE lag was **not** a clock problem — it was the `counted` set discarding the push, and would have failed identically on a perfect clock. The ARCHIVE bounce **was** the clock. They arrived in one report and looked like one bug. They weren't.
+>
+> **WHAT WAS ACTUALLY BROKEN — the same bug class, third instance:** `isUnread()` compares the read cursor against `last_message_at` (BLOCK time), but two call sites stamped a bare `new Date()` — `chat/+page.svelte handleOpen` and `chat/[peer]/+page.svelte`. **On a slow clock the cursor lands behind the message you just read, so the thread you opened stays green.** The clamp already existed (`readAckTimestamp` = max(latestSeen, now), the same watermark idea) and ConversationView already used it; these two just didn't. **Ken approved the fix.** `handleOpen(peer, order, lastMessageAt?)` now clamps, and the inbox hands it `convo.last_message_at`.
+>
+> **The `[peer]` page CANNOT be clamped, deliberately:** it is a shell that lazy-loads ConversationView and holds no messages, so there is no block time to clamp against. It doesn't need one — it is the weakest of three acks (inbox handleOpen ✓ clamped, this one, ConversationView `ackRead()` ✓ clamped and authoritative). A slow clock makes it a **no-op**, not wrong, and the other two correct it. **Documented in-file: never make it "smarter" by inventing a timestamp — a cursor that runs AHEAD would silence a message the user never saw, which is the only failure here that costs anything.**
+>
+> **PUSH SUBSCRIBE: left alone, on purpose.** `pushSubscribeSig.ts MAX_SIG_SKEW_SECONDS = 5*60` rejects signatures off the relay's clock by >5 min. That is legitimate anti-replay — it MUST be time-based, ±5 min is generous, and it fails loudly with a reason. Chain-sourcing wouldn't help: the relay still compares against its own wall clock.
+>
+> ### [KEN] — THE TWO CHAT THREAD SHAPES. Do not forget this.
+> *"sometimes users use the chatroom to discuss a specific order with a permlink (showing it on the subject (RE:) line), but other times those same users might just want to message each other to have a separate chat thread about their girlfriends and that thread does not have an order id permlink attached to it at all."*
+>
+> `''` is a **REAL thread key**, not an absence — and it is distinct from BOTH an order-scoped thread with the same peer AND from the legacy `PEER_WIDE` (`'*'`), which `markConversationRead` **rejects outright** (readState.ts:148). Three shapes, not two. The inbox renders `RE: <title> (Live|Cancelled|Expired)` or `RE: -` accordingly.
+>
+> Verified with `apps/web/src/lib/chat/noOrderThread.test.ts` (6 tests, jsdom): acking the order thread doesn't silence the girlfriends thread and vice versa; archiving either leaves the other in the Inbox; the v1.7.7 clamp works for a no-order thread WITH a block time; and degrades to `now` for the fallback-peer list that has none.
+>
+> ### Guard: `apps/web/scripts/block-time-vs-wall-clock-smoke.ts` (15 checks, registered, tamper-proven)
+> **THE RULE: anything compared against a block time must be measured in block time.** Pins the money paths (expiration from chain head, no `Date.now()` in any signing path), the read cursors, the archive watermark, and the no-order thread going through the identical clamp. **Tampers fire**, including sourcing a tx expiration from the browser clock and collapsing `?? ''` into `convo.order.permlink` (Ken's exact worry).
+>
+> Why a guard and not just a fix: every instance of this bug passes typecheck, passes every test, and works perfectly on the machine of whoever wrote it. It needs someone ELSE's clock to be a bit off — which no CI will ever have.
+>
+> **ALSO FIXED — a guard pinning a literal (the recurring finding, again):** `chat-read-state-threading-smoke`'s "the inbox marks one discussion read, not a person" spelled out `handleOpen(peer: string, orderPermlink: string)` exactly, so adding the clamp argument failed a check whose own name the change never violated. Re-pinned to the requirement (discussion-scoped + acks that thread); still catches dropping the permlink.
+
+> ### v1.7.7 — CLOCK AUDIT (Ken's question) + read-cursor clamp. THE RULE: anything compared against a block time is measured in block time.
+>
+> **[KEN]:** *"i guess we should no longer rely on the user's clock on their local pc, right? ... we do not want to have any sync issues in the future, or especially when money is being transfered. let me know first if we need to make any changes, or if we are already good-to-go."*
+>
+> **MONEY: ALREADY CORRECT, no changes needed.** `sign.ts:169` and `ops/comment.ts:163` both derive `expiration` from `new Date(props.time + 'Z')` — the CHAIN HEAD BLOCK TIME, fetched same-origin through the indexer (cp344). **Zero `Date.now()` in `sign.ts`, `ops/comment.ts`, `withdrawVestingSign.ts`, `client.ts`.** A user with a broken clock can still send BLURT. (Had it been wall-clock, a skewed machine could not send at all — the node rejects the expiration outright.)
+>
+> **CORRECTION TO THE PREMISE, on the record:** the BADGE lag was **not** a clock problem — it was the `counted` set discarding the push, and would have failed identically on a perfect clock. The ARCHIVE bounce **was** the clock. Both were reported in one message and looked like one bug. They were two.
+>
+> **FIXED (Ken approved): the two bare read-cursor call sites.** `isUnread()` compares the cursor against `last_message_at` (BLOCK time), and `handleOpen` stamped a bare `new Date()` — so on a slow clock the cursor lands BEHIND the message just read and **the thread you literally just opened stays green**. Same bug class as the archive watermark. The clamp already existed (`readAckTimestamp` = `max(latestSeen, now)`) and was already used by `ConversationView` and `chatUnread`; these sites simply weren't calling it. `handleOpen(peer, order, lastMessageAt?)` now clamps, and the inbox caller passes `convo.last_message_at`, which it already had. Verified: 90s-slow / 10min-slow / correct / 5min-fast all clear, and a later message still reads unread.
+>
+> **The `[peer]` page's ack CANNOT be clamped, and does not need to be — documented in place.** That page is a shell: it lazy-loads ConversationView and holds no messages, so there is no block time to clamp against. It is the weakest of three acks (inbox `handleOpen` clamped → this belt-and-braces one → ConversationView's clamped, authoritative one). On a slow clock it is a NO-OP (cursor lands behind, thread stays unread) rather than wrong, and the other two correct it. **Never make it "smarter" by inventing a timestamp: a cursor that RUNS AHEAD silences a message the user never saw — the one failure here that actually costs something.**
+>
+> **PUSH SUBSCRIBE: leave alone.** `pushSubscribeSig.ts:70` `MAX_SIG_SKEW_SECONDS = 5*60` — the relay rejects signatures >5min off ITS clock. Legitimate anti-replay (it must be time-based), generous window, fails loudly with a reason. Chain-sourcing wouldn't help: the relay still compares against its own clock.
+>
+> **GUARD: `apps/web/scripts/block-time-vs-wall-clock-smoke.ts` (12 checks, registered, 3 tampers incl. the MONEY path).** Why a guard rather than just a fix: every instance of this bug **passes typecheck, passes every test, and works perfectly on the machine of whoever wrote it.** It needs someone else's clock to be slightly off — which no CI will ever have. Three instances so far (archive watermark, read cursor, and the money paths that were right by luck-or-care and must stay that way).
+>
+> **AND THE RECURRING FINDING AGAIN — this time in an existing guard.** `chat-read-state-threading-smoke`'s check "the inbox marks one discussion read, not a person" pinned the LITERAL signature `/function handleOpen\(peer: string, orderPermlink: string\)/`. Adding the `lastMessageAt` parameter failed a check whose own name the change never violated. Rewritten to pin the requirement (handleOpen is discussion-scoped AND passes the permlink through), then re-tampered to confirm it still catches the real regression. **A guard that fails on a correct change teaches people to edit the guard — which is how it ends up guarding nothing.**
+
+> ### v1.7.7 t.txt #9 — TRUNCATION (done). The `truncate` classes were already there. They were INERT.
+>
+> **`IdentityLabel.svelte` root was `<span class="group inline-flex items-center gap-1.5">`** — no `min-w-0`, no `max-w-full`. That is TWO independent refusals to shrink: an inline-flex box sizes to its content, AND a flex item defaults to `min-width: auto` ("never smaller than my content"). So the root ignored the width its parent handed it, and **every `min-w-0 truncate` inside the component never saw a constraint to truncate against.**
+>
+> **This is the trap worth remembering:** the fix LOOKS present in the markup. You can read `truncate` on the name span, believe the component truncates, and be wrong — correctness lives in the CHAIN, not in any one element. One `min-width:auto` anywhere above pins everything below it. It also explains the thing that looked contradictory in Ken's screenshot: the display name ran past the card edge into Restore, while the RE: line directly beneath it truncated at "RE: I'm bu…". Same card, two lines, disagreeing about their width — because the name's chain was pinned and the RE: line's was not. Fixed root + name anchor + no-href span (`min-w-0 max-w-full`); whole chain verified 5/5.
+>
+> **The feedback row: one deletion fixed three reported bugs.** Removing the visible `profile.given_rated` ("I rated @kentest2:") also fixed the stars being pushed onto their own line and the comment truncating at "You showed up …". On a phone the label wrapped, which shoved the stars down and starved the comment. It also said nothing — the row sits inside a conversation with that exact person, under their name and avatar. **The stars ARE the sentence.** Kept as `sr-only` so removing a visual label doesn't remove the meaning. Dropped `flex-wrap` (wrapping is what let the row grow instead of truncating honestly), `flex-none` on the stars so the comment gets every leftover pixel, `items-center` so the stars sit level with "37m ago" as Ken asked. `profile.given_rated` stays alive — the profile page uses it (dead-key gate: 3368 ✓).
+>
+> **Guard: `apps/web/scripts/identity-label-truncation-smoke.ts` (14 checks, registered, 4 tampers fire).** Worth having because IdentityLabel renders in **18 files** and this regression is SILENT — nothing errors, no test fails, text just overflows on a narrow screen and only ever surfaces in a screenshot from a phone. Tampers: root loses min-w-0 (Ken's exact bug), a mid-chain pin on the anchor, the "I rated" label creeping back, stars losing flex-none.
+>
+> **Blast radius checked:** chat-header-layout-smoke 43 ✓, chat-inbox-threading-smoke 58 ✓, 1055 tests ✓, svelte-check 0/0.
+>
+> **Ken should eyeball this one on his phone.** Every check here is structural (the chain permits shrinking); whether the RE: line now shows *enough* characters before the ellipsis is a taste call that needs his eyes on a real device, not a regex.
+
+> ### v1.7.7 (cp477) — IN PROGRESS, NOT CUT. Version still 1.7.5.
+>
+> **PROCESS FAILURE, RECORDED FIRST BECAUSE IT ALMOST ATE THIS WHOLE PAGE.** Every REVISIT-LIST update earlier in cp477 used `s.replace("# REVISIT LIST\n\n", head, 1)`. The real heading is `# Morphit pre-launch revisit list`. Python's `str.replace` does not raise on a miss — it returns the string unchanged — so eight consecutive writes rewrote the file byte-for-byte identically while printing "recorded". Same failure family this session kept finding in guards and mocks: **a silent no-op that reports success.** The other edits in this session all carried `assert old in s`; these did not. **Rule: never `.replace()` into a file without asserting the anchor matched.**
+>
+> ---
+>
+> ### t.txt #1 — DOC DRIFT + GUARD (done)
+> `scripts/public-doc-drift-smoke.ts` — 24 checks, registered, tamper-proven. Covers the 18 docs a stranger opens (README, the start-here hub + its 11 targets, API, SECURITY, four app/ops READMEs). NOT all 222 .md: most are point-in-time audit records, and demanding those stay current would force falsifying history.
+>
+> **The gap it fills:** `operator-doc-env-var-parity-smoke` (F-006/cp308, 109 scenarios) and `operator-doc-fenced-path-existence-smoke` already existed, but both check **FENCED blocks in 2 docs only**. 16 public docs and every prose reference were unguarded.
+>
+> **3 real drifts found + fixed, each of which would silently hurt an operator:**
+> 1. `apps/indexer/README.md` documented `MORPHIT_INDEXER_BLURT_RPC_ENDPOINTS`; the code reads `MORPHIT_INDEXER_RPC_ENDPOINTS`. Setting it did nothing — no error, defaults used. Survived because it was an inline list item, not a fenced block.
+> 2. `docs/POST-LAUNCH-WEEK-ONE.md` → `MORPHIT_INDEXER_KLINGEX_BASE_URL` (never existed). Code reads `MORPHIT_INDEXER_BLURT_PRICE_FEED_URL`.
+> 3. `docs/FEES-AND-REWARDS.md` → `apps/indexer/src/api/feeAttest.ts`; really `apps/indexer/src/indexer/handlers/feeAttest.ts`.
+>
+> **The guard nearly certified its own bug (9th of the family):** reintroducing the ghost var didn't fire it, because the guard's own header names the ghost, the header isn't markdown, and it read its own prose as proof the var was real. Fixed by stripping comments before treating a file as evidence. Comment-stripping then surfaced two more, both correctly allow-listed with reasons: `MORPHIT_FAIL2BAN_SSHD_CRITICAL` (runtime-assembled `MORPHIT_FAIL2BAN_<JAIL>_CRITICAL`) and `MORPHIT_RELAY_KEYSTORE_PATH`/`_PASSPHRASE_FILE` (named in OPERATIONS.md **as the F-007 warning** — punishing that would delete the warning).
+>
+> Also removed a `git grep` dependency that made the guard lie on the tarball tree (no `.git` → silent empty result). One filesystem-walk code path now.
+>
+> **Still owed:** D-3 only checks `npm run`; bare shell commands in fences unverified. Nothing checks `docs/API.md` against the real router table.
+>
+> ### t.txt #3 — BADGE LAG (fixed) — one line
+> `chatUnread.ts` `recount()` did `counted.add(fastKey(...))` for every **ELIGIBLE** conversation but `n++` only for **UNREAD** ones; the fast-push loop then skipped any key in `counted` under "already counted as unread above". The set held everything it had merely **SEEN**. Three facts every old archived thread has: it's already in `convos`; its `last_message_at` is STALE (fast path never writes chat_messages, ADR-0051 invariant #1); so it isn't unread. The push was discarded, forever. Explains every symptom at once: notification instant, thread resurrects (local), no badge, no green border. **Never a timing problem.** Fix: `counted.add` moved inside the `isUnread` branch.
+>
+> **THE MOCK WAS LYING — why 1054 green tests missed it.** `chatUnread.test.ts` mocked `getConversations` as a **bare array**; the real poller does `if (cR.ok) { convos = cR.data.items… }`, so `cR.ok` was undefined, the branch never ran, and **`convos` was permanently empty in every test in that file**. Every fast-push test exercised only the empty-list path where `counted` is empty and nothing can be wrongly skipped. Fixed to the real response shape. **My first regression test was ALSO vacuous** — it waited on `count === 0`, which starts at 0, so `vi.waitFor` returned instantly; now waits on `getConversations` having been called. Tamper-proven.
+>
+> ### t.txt #3b — GREEN BORDER (fixed)
+> Same root cause, second surface. The card called `isUnread()` against the durable `last_message_at`. Now `threadIsUnread(peer, order, lastAt, isMine)` — exported from `chatUnread.ts`, used by BOTH badge and cards, folding the pending push in once. **The cp452 invariant ("badge and cards must agree") was enforced by two call sites applying "the same rule" with a comment at each saying so. That is a wish, not enforcement — and Ken's repro is the drift it permitted.** `fastPendingTick` is the reactive handle; without it the card only re-derives on the 60s poll. Guard: `chat-read-state-threading-smoke` 33 checks (+6), 3 tampers.
+>
+> ### t.txt #4 — ARCHIVE BOUNCES BACK (fixed) — it was the CLOCK
+> `setFolder` stamped `at: new Date()` (LOCAL wall clock); `resurrectArchivedOnNewActivity` compares it to `last_message_at` (BLOCK time). **Two time bases.** A slow clock writes a watermark EARLIER than the message already in the thread → "new activity" → bounce. Reproduces Ken's report exactly, including archive-again-and-it-sticks, and why kentest2 never saw it on identical code. **The older Brave build and the cache were both red herrings.** Fix: `at` is a WATERMARK clamped to `max(now, lastMessageAt)` — same units as what it's compared against. No schema change. `archiveThread(peer, order, lastMessageAt?)`. Verified across 90s-slow / 10min-slow / correct / 5min-fast, and a genuinely newer message still resurrects. Guard: `chat-folders-onchain-smoke` +4, tampers fire. **Worth telling Ken: check `timedatectl` on that box.**
+>
+> ### t.txt #5 — ARCHIVE DIDN'T SYNC PC→PHONE (fixed)
+> `chat/+page.svelte` `$effect(() => { if ($isUnlocked) void syncChatFoldersFromChain(); })` fired **once per page load**. Ken's own observation was the diagnosis: un-archive DID cross devices — because it was never syncing; `resurrectArchivedOnNewActivity` re-derives it locally every 5s poll. Archiving can't be re-derived: it's a decision, and only exists on chain. Nothing re-read it. Fix: 15s re-sync while unlocked, cleared on teardown. Made cheap: `syncChatFoldersFromChain` returns before the posting-key decrypt when `updated_at` matches `lastAdoptedAt`. **Three bugs in my own optimisation, all caught by tests pushing back:** keyed on the `enc` ciphertext instead of `updated_at`; memo not cleared with the store (leaked across sign-outs AND tests); memo set on a FAILED decrypt would skip that state forever. **And `chatFoldersSync.test.ts` lies the same way the badge mock did** — constant `enc` while varying decrypted state. Second wrong-shape mock this session. Guard: +7 checks, 4 tampers.
+>
+> ### t.txt #6 — PUSH PRIVACY (resolved: Ken chose remove-and-fix-the-FAQ)
+> Asked for a URL field. Two things were true instead: **(1)** a user-supplied push URL is impossible under Web Push — `pushManager.subscribe({applicationServerKey})`, the BROWSER mints the endpoint, no API redirects it; **(2)** the option was already **decorative** — `privacy_mode` validated, stored, and **read by nothing** (`pushSender.ts` never looked), while the FAQ promised *"no Google, no Mozilla, no third parties ever see that you received a ping."* False the whole time.
+>
+> **[KEN]: "zero users have touched that setting"** → no migration written. Removed the radio option and `PushPrivacy['self_hosted']` (the compiler then found all 5 dead branches), plus `channel_push_privacy_self` in 10 locales. `preferences.ts` now VALIDATES stored prefs (not migration — parsing user-writable localStorage). **Wire left tolerant**: `relay/api/push.ts` still accepts `'self_hosted'` for pre-1.7.7 cached clients. FAQ rewritten in 10 locales to say what actually happens, and to name the removal rather than quietly drop it. Guard: `push-privacy-honesty-smoke` 13 checks, registered, 3 tampers. **Check 13 is the one that matters in a year: if `self_hosted` returns to the client, `pushSender` MUST branch on it.**
+>
+> **UnifiedPush — DEMAND-GATED, do NOT build speculatively. [KEN, v1.7.7]:** *"when someone asks for it, then i will act on that feature, but not until then."* Not a backlog item, not a TODO, not to be raised again unprompted. Recorded only so the reasoning survives: it is the only design where a user genuinely picks their own push server (ntfy / own distributor), and the real privacy answer on Android. Ken's "url field" instinct was right — it just belongs to UnifiedPush, not Web Push. Scope if it ever lands: new subscription path, distributor discovery, relay-side delivery.
+>
+> ### t.txt #7/#8/#10/#11 (done)
+> #7 `settings.endpoints.pool_note` deleted entirely (10 locales) + markup removed; the flex holding it was `justify-between` with the refresh button, switched to `justify-end` or the button would silently left-align. `explain` already matched Ken's target text verbatim. #8 rogue-node sentence replaced, **diffed: article otherwise identical to Ken's v1.7.5 text**. #10 post-page region label + hint. #11 orderbook filter labels. `settings.preferences.region_label` deliberately untouched — Ken named two surfaces, not three.
+>
+> ### STILL OPEN for v1.7.7
+> - **t.txt #9** — message-text-truncation.jpg: display-name + subject `…` truncation, subject/feedback cut too soon, remove "I rated @kentest3", stars left-aligned to "37m ago".
+> - **Ken's 2 additional tasks** — not yet sent.
+> - Then: full battery in ~50-runner chunks, 5-persona walkthroughs, deep-deep, bump 1.7.5 → 1.7.7 (19 touchpoints) + `RELEASE-NOTES-v1.7.7.md`.
+>
+> ### THE RECURRING FINDING, NOW ~11 DEEP
+> ken-batch-2 #20, `profileCache.test.ts`, `profile-freshness-smoke`, `order-detail-posting-retry-smoke`, the 8 chat-header guards, `push-clickpath-locale-smoke`, `chat-read-state-threading-smoke`, the rpc-batch guard's own check 10 (mine, same day), the public-doc-drift guard nearly certifying its own bug, the two lying mocks, and my own eight silent doc-write no-ops. **A guard/mock/write that pins a literal or reports success without doing anything will certify the bug it was written to catch.** Pin the OUTCOME, tamper-prove by reverting the actual fix, shape mocks like the real response, and assert your anchors.
+
 > ### v1.7.0 (cp475) — WORK IN PROGRESS, NOT CUT, 16 July 2026 ("fasteverything", fast-Fast-FAST.txt)
 >
 > **STATUS: v1.7.0 "fasteverything" READY TO SHIP. All 6 increments complete, version bumped 1.5.7 → 1.7.0 (19/19 touchpoints), full battery green (509 runners / 14,597 scenarios / 0 failed). Version deliberately still 1.5.7 — no bump, nothing shipped.**

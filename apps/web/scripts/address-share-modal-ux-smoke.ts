@@ -72,12 +72,22 @@ if (/loading="lazy"/.test(flatSelect)) {
 }
 
 // ── B2 — the modal fits a phone and scrolls ─────────────────────────
-if (/class="card max-h-\[95vh\] w-full max-w-md overflow-y-auto"/.test(flatModal)) {
-	ok('B2: the card is height-capped and scrollable (fits a phone; Send stays reachable)');
+// v1.7.7 — pins the REQUIREMENT (capped AND scrollable), not the exact class
+// string. The original spelled out `class="card max-h-[95vh] w-full max-w-md
+// overflow-y-auto"` verbatim, so it failed the moment the cap was corrected from
+// `vh` to `dvh` — a change that STRENGTHENS the very property B2 exists to
+// protect. (On a phone `vh` counts the space behind the URL bar, so a 95vh card
+// can still stand taller than the visible viewport: B2's own bug, in miniature.)
+// A guard that fails on a correct fix teaches people to edit the guard, which is
+// how it ends up guarding nothing.
+const capped = /class="card[^"]*\bmax-h-\[\d+dvh\]/.test(flatModal);
+const scrolls = /class="card[^"]*\boverflow-y-auto\b/.test(flatModal);
+if (capped && scrolls) {
+	ok('B2: the card is height-capped (dvh) and scrollable (fits a phone; Send stays reachable)');
 } else {
 	bad(
 		'B2',
-		'the modal card lost its `max-h-[95vh] … overflow-y-auto` — on a phone the content runs past the viewport with no way to scroll to Send (tt.txt B2).'
+		`the modal card must cap its height in dvh AND scroll, or on a phone the content runs past the viewport with no way to reach Send (tt.txt B2). capped=${capped} scrolls=${scrolls}`
 	);
 }
 

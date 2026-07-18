@@ -324,6 +324,47 @@
 	});
 </script>
 
+<!-- v1.7.7 (t.txt #5) — the modal must FIT, and when it can't, it must SCROLL.
+     [KEN]: "the send modal is too big for my mobile screen and will not let me
+     scroll my screen up or down so that i can see its full height or the submit
+     button at the bottom. please size it correctly on load and let me scroll to
+     see the whole thing."
+
+     What was wrong: `fixed inset-0` + `items-center` with no height cap and no
+     scroller. `fixed` pins the backdrop to exactly one viewport, so there is
+     nothing to scroll, and centring an over-tall flex child overflows BOTH ends
+     at once — and overflow past the START edge is unreachable, no scrollbar will
+     ever take you up to it. That is why Ken's screenshot loses the subtitle at
+     the top AND the submit button at the bottom. Nothing errors. The button just
+     cannot be reached, on the screen that moves money.
+
+     Reproduced in Chromium at Ken's exact size (1080px @ DPR 3 = 360x800 CSS):
+     card top at -22px, submit unreachable even after scrolling to the end.
+     With the fix: top +20px, submit reachable.
+
+     Not a rare case either — this modal grows. The memo warning, the "needs your
+     Active key" panel, the key field and its explainer, and the "After this
+     payment" summary are all conditional; the long form overflows any phone.
+
+     WHY THIS SHAPE: it is the pattern FundsSentModal and MarkdownGuideModal
+     already use — cap the card's height and let the CARD scroll. Two other
+     shapes work equally well in a browser test, but a third pattern for the same
+     problem is worse than a simpler one, and this needs no extra wrapper element.
+
+     WHY dvh AND NOT vh: on a phone `vh` is the LARGE viewport — it counts the
+     space behind the URL bar, so `95vh` can be taller than what is actually on
+     screen, which re-creates this very bug in miniature. `dvh` tracks the
+     viewport as the bar shows and hides. ConversationView reaches for `svh` for
+     the same reason.
+
+     And NO vh fallback pair here, deliberately. Tailwind emits utilities in its
+     own order, not the order they appear in the class attribute, so
+     `max-h-[95vh] max-h-[95dvh]` gives no control over which declaration lands
+     last — and in CSS, last wins. A fallback you cannot order is not a fallback;
+     it is a coin flip. `dvh` has been in every major engine since 2022, so the
+     pair buys nothing and risks silently pinning the wrong one.
+     (See REVISIT-LIST: `app.css` body has exactly that pair, in the losing
+     order — `100dvh` then `100vh` — so its dvh line has never once applied.) -->
 <div
 	class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/80 p-4 backdrop-blur-sm"
 	role="dialog"
@@ -335,7 +376,8 @@
 	}}
 	tabindex="-1"
 >
-	<div class="card w-full max-w-md">
+	<div class="card max-h-[95dvh] w-full min-w-0 max-w-md overflow-y-auto overscroll-contain">
+
 		<h2 id="send-blurt-heading" class="font-display text-xl font-bold">
 			{$_('profile.send.title')}
 		</h2>

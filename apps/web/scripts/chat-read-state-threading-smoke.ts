@@ -48,13 +48,18 @@ const schema = readFileSync(join(REPO, 'apps', 'indexer', 'src', 'db', 'schema.s
 
 let pass = 0;
 let fail = 0;
-const check = (name: string, ok: boolean): void => {
+// v1.7.7 — optional failure DETAIL, printed only when a check fires. The
+// lockstep checks below carry one because "the card judges unread via the shared
+// predicate" is meaningless to whoever trips it six months from now; the detail
+// is what tells them a raw isUnread on the page means a stale row and Ken's
+// missing green border.
+const check = (name: string, ok: boolean, detail?: string): void => {
 	if (ok) {
 		pass++;
 		console.log(`  \u2713 ${name}`);
 	} else {
 		fail++;
-		console.error(`  \u2717 ${name}`);
+		console.error(`  \u2717 ${name}${detail ? `\n      ${detail}` : ''}`);
 	}
 };
 
@@ -97,7 +102,17 @@ check('…and warns about the indexer downgrade hazard', /DOWNGRADE HAZARD/.test
 // ─── every caller passes the thread ──────────────────────────────────
 check('the conversation view acks the thread it is showing', /markConversationRead\(peer, orderPermlink \?\? '', readAckTimestamp/.test(view));
 check('the thread route acks on-chain with the order', /broadcastChatRead\(live, peer, orderPermlink \?\? ''\)/.test(thread));
-check('the inbox marks one discussion read, not a person', /function handleOpen\(peer: string, orderPermlink: string\)/.test(inbox));
+// v1.7.7 — pins the REQUIREMENT (handleOpen is discussion-scoped: it takes an
+// order permlink and acks THAT thread), not the literal signature. The old regex
+// spelled the parameter list out exactly, so adding the `lastMessageAt` argument
+// needed for the block-time clamp failed a check whose own name — "not a person"
+// — the change never violated. A guard that fails on a correct change teaches
+// people to edit the guard, which is how it ends up guarding nothing.
+check(
+	'the inbox marks one discussion read, not a person',
+	/function handleOpen\(\s*peer: string,\s*orderPermlink: string/.test(inbox) &&
+		/markConversationRead\(\s*peer,\s*orderPermlink[,)]/.test(inbox)
+);
 check('mark-all-read walks discussions', /markConversationRead\(c\.peer, c\.order\?\.permlink \?\? '', now\)/.test(inbox));
 check(
 	'the unread badge counts unread discussions, excluding archived (t.txt 10)',
@@ -114,6 +129,49 @@ check(
 		// Pin the requirement instead: the badge must pass the thread AND must
 		// tell isUnread whose message it was. Both properties, neither literal.
 		/isUnread\(\s*c\.peer,\s*order,\s*c\.last_message_at,\s*c\.last_message_is_mine/.test(badge)
+);
+
+
+// ── v1.7.7: the badge and the inbox cards must share ONE predicate ──
+// cp452 established the invariant: a badge that disagrees with the visible cards
+// is a bug in whichever direction it leans. It was enforced by two call sites
+// applying "the same rule" — which is how they drifted. Ken's repro is the
+// drift: a push landed, the thread resurrected into his Inbox, the badge stayed
+// dark AND the card showed READ, because both read a durable `last_message_at`
+// that the fast path never updates (ADR-0051 invariant #1).
+//
+// `threadIsUnread` folds the pending push into the rule ONCE. These checks pin
+// that both surfaces go through it, and that the page does not quietly go back
+// to judging unread by the stale durable row on its own.
+const page = strip(readFileSync(join(WEB, 'src', 'routes', '[lang]', 'chat', '+page.svelte'), 'utf8'));
+const unreadMod = strip(readFileSync(join(WEB, 'src', 'lib', 'notifications', 'chatUnread.ts'), 'utf8'));
+
+check(
+	'the inbox card judges unread via the SHARED threadIsUnread predicate',
+	/unread: threadIsUnread\(/.test(page),
+	'the card must not re-implement the rule against the durable last_message_at'
+);
+check(
+	'…imported from the badge channel, not re-typed locally',
+	/import \{[^}]*threadIsUnread[^}]*\} from '\$lib\/notifications\/chatUnread'/.test(page)
+);
+check(
+	'…and the card no longer calls raw isUnread directly',
+	!/\bisUnread\(/.test(page),
+	'raw isUnread on the page means the card sees a stale row again — Ken s missing green border'
+);
+check(
+	'threadIsUnread consults the pending-push overlay',
+	/export function threadIsUnread[\s\S]{0,600}?fastPending\.get\(/.test(unreadMod)
+);
+check(
+	'…and a stale durable row cannot veto a newer push',
+	/landed >= at/.test(unreadMod) || /landed\s*>=\s*at/.test(unreadMod)
+);
+check(
+	'the card re-derives when a push lands (reads the tick)',
+	/\$fastPendingTick/.test(page),
+	'without the tick the card only re-runs on the ~60s poll — the exact lag the fast path exists to remove'
 );
 
 console.log('');
