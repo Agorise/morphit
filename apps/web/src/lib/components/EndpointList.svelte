@@ -163,10 +163,12 @@
 </script>
 
 <div>
-	<div class="mb-3 flex items-start justify-between gap-3">
-		<p class="text-xs text-ink-500 dark:text-ink-400">
-			{$_('settings.endpoints.pool_note')}
-		</p>
+	<!-- v1.7.7 (t.txt #7) — the pool note is gone; `settings.endpoints.explain`
+	     above already says what these nodes are and how they're picked, and the
+	     second paragraph only restated it. `justify-end` (not `justify-between`)
+	     because the refresh button is now the only child, and justify-between
+	     with one child silently left-aligns it. -->
+	<div class="mb-3 flex items-start justify-end gap-3">
 		<button
 			type="button"
 			onclick={onRefreshClick}

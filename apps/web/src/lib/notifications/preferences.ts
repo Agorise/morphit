@@ -30,7 +30,14 @@ import { safeLocal } from '../utils/safeStorage';
 
 const STORAGE_KEY = 'morphit.notifications.prefs.v1';
 
-export type PushPrivacy = 'self_hosted' | 'standard' | 'off';
+/** v1.7.7 (t.txt #6) — `self_hosted` REMOVED. It was never wired to anything:
+ *  the relay validated it and stored it, and `pushSender.ts` never read it, so
+ *  the "private" choice delivered via Google FCM exactly like the default while
+ *  the FAQ promised the opposite. It cannot be made real under Web Push either —
+ *  `pushManager.subscribe()` returns an endpoint minted by the BROWSER's push
+ *  service, and there is no API to redirect it. UnifiedPush is the real answer
+ *  and is a feature, not an enum member. */
+export type PushPrivacy = 'standard' | 'off';
 
 export interface NotificationPrefs {
 	/** Which event categories produce notifications. */
@@ -81,7 +88,22 @@ function hydrate(): NotificationPrefs {
 		return {
 			categories: { ...DEFAULTS.categories, ...(parsed.categories ?? {}) },
 			channels: { ...DEFAULTS.channels, ...(parsed.channels ?? {}) },
-			pushPrivacy: parsed.pushPrivacy ?? DEFAULTS.pushPrivacy,
+			// v1.7.7 (t.txt #6) — MIGRATE anyone already pinned to 'self_hosted'.
+			//
+			// The option is gone from the UI because it never did anything:
+			// privacy_mode was stored and never read (pushSender.ts ignores it), so
+			// these users were being delivered via FCM/Mozilla/Apple all along while
+			// the FAQ told them otherwise. Leaving the stored value in place would
+			// hide them behind a setting they can no longer see or change — the
+			// value would sit in localStorage forever, unpickable and inert.
+			// 'standard' is what was ALREADY happening to them; this just stops
+			// v1.7.7 — validate rather than trust: localStorage is user-writable and
+			// may hold a value from any past build. Anything not in the current set
+			// falls back to the default.
+			pushPrivacy:
+				parsed.pushPrivacy === 'off' || parsed.pushPrivacy === 'standard'
+					? parsed.pushPrivacy
+					: DEFAULTS.pushPrivacy,
 			quietHours: { ...DEFAULTS.quietHours, ...(parsed.quietHours ?? {}) },
 			mutedUntil: typeof parsed.mutedUntil === 'number' ? parsed.mutedUntil : 0
 		};

@@ -86,8 +86,11 @@
 		busy = true;
 		errorCode = null;
 		try {
-			const mode: PushPrivacyMode =
-				get(notificationPrefs).pushPrivacy === 'self_hosted' ? 'self_hosted' : 'standard';
+			// v1.7.7 (t.txt #6) — always 'standard'. The wire/relay still ACCEPT
+			// 'self_hosted' so a browser running pre-1.7.7 cached JS keeps working,
+			// but this client no longer produces it: it selected a mode nothing
+			// downstream ever read.
+			const mode: PushPrivacyMode = 'standard';
 			// cp450 GAP A — enable the chat category BEFORE subscribing, so the
 			// subscribe payload's muted_categories list already reflects chat=on.
 			// (If we subscribed first, the relay would store chat as muted and

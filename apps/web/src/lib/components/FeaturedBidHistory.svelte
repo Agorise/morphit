@@ -133,7 +133,7 @@
 					×
 				</button>
 			</div>
-			<ul class="max-h-[60vh] space-y-2 overflow-y-auto">
+			<ul class="max-h-[60dvh] space-y-2 overflow-y-auto">
 				{#each bids as b (b.order_permlink + b.effective_at)}
 					{@const state = bidState(b)}
 					{@const summary = summaryFor(b)}

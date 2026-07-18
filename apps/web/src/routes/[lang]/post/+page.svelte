@@ -4058,7 +4058,7 @@
 		aria-modal="true"
 	>
 		<div
-			class="w-full max-w-md rounded-2xl border border-ink-200 bg-white p-5 shadow-morphit-card-hover dark:border-ink-700 dark:bg-ink-900"
+			class="max-h-[95dvh] w-full max-w-md overflow-y-auto overscroll-contain rounded-2xl border border-ink-200 bg-white p-5 shadow-morphit-card-hover dark:border-ink-700 dark:bg-ink-900"
 		>
 			<UnlockActiveKeyModal
 				account={blurtAccount ?? ''}

@@ -36,6 +36,8 @@
  */
 
 import { Client } from '@beblurt/dblurt';
+import { morphitUserAgent } from './userAgent';
+import { INDEXER_VERSION } from '$api/health';
 import { EndpointPool, isTransportError } from '@morphit/rpc-pool';
 import type { Config } from '$config';
 
@@ -316,7 +318,16 @@ export class BlurtClient {
 				try {
 					res = await fetch(url, {
 						method: 'POST',
-						headers: { 'content-type': 'application/json' },
+						// v1.7.7 — name ourselves explicitly rather than lean on the
+						// global wrapper in `blurt/userAgent.ts`. The wrapper exists to
+						// reach dblurt, which gives us no other way in; this call site is
+						// ours, and a request that states its own identity keeps working
+						// if the wrapper is ever moved, reordered, or dropped. The
+						// wrapper only fills a MISSING user-agent, so this wins here.
+						headers: {
+							'content-type': 'application/json',
+							'user-agent': morphitUserAgent(INDEXER_VERSION)
+						},
 						body: JSON.stringify(body),
 						signal
 					});

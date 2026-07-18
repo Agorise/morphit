@@ -93,7 +93,7 @@ All config comes from the process environment. See
 variables:
 
 - `MORPHIT_INDEXER_DATABASE_URL` — Postgres connection string
-- `MORPHIT_INDEXER_BLURT_RPC_ENDPOINTS` — comma-separated list
+- `MORPHIT_INDEXER_RPC_ENDPOINTS` — comma-separated list
 - `MORPHIT_INDEXER_CHAIN_ID` — 64-hex mainnet chain id, pinned at
   DB init; the poller refuses to start if the DB's recorded chain
   id differs
@@ -194,7 +194,7 @@ concern.
 ```json
 {
   "status": "ok",
-  "version": "1.7.5",
+  "version": "1.7.7",
   "uptime_sec": 12345,
   "chain_head_block": 80123456,
   "indexed_block": 80123441,

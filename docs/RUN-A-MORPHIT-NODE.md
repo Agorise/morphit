@@ -305,6 +305,46 @@ federation doesn't stampede the same node at the same second, and
 fetches blocks in batches of 20 rather than one request at a time
 when it is catching up after downtime.
 
+It also **says who it is**.  Every request your indexer makes to a
+Blurt RPC node carries:
+
+```
+User-Agent: Morphit/<your indexer version> (+https://git.agorise.net/agorise/morphit)
+```
+
+(`<your indexer version>` is the same version `/v1/health` reports —
+so an operator can tell an old instance from a current one.)
+
+That matters more than it looks.  Node's built-in `fetch` sends
+`user-agent: node` by default — the same string as every anonymous
+script on the internet — which is exactly what bot-detection rules
+are written to catch, and it gives an RPC operator nobody to contact
+if your traffic misbehaves.  Naming ourselves means an operator who
+wants us to back off can find us instead of just blocking us.
+
+Two of Morphit's own background jobs identify themselves more precisely
+still — `morphit-indexer/federation-probe` and
+`morphit-indexer/signup-anomaly-probe` — because a node operator
+reading logs is better served by "which job" than by "which app".
+
+If you run a public Blurt RPC node and Morphit traffic is causing you
+grief, the contact URL above is the right place to say so.
+
+**Be aware of what this means for your server.**  The header goes on
+*every* outbound request your indexer makes — the Blurt RPC nodes, the
+BLURT price feed, and the federation probe that checks other instances.
+So any host your indexer contacts learns that the IP calling it is
+running Morphit, and which version.
+
+We think that is the right trade and we are not hiding it: an RPC node
+operator who cannot tell who is calling can only block, never ask.
+Your server's IP is visible to those hosts either way, and the public
+instances list already names the instances that want naming.  But if you
+are running an instance you would rather nobody enumerate, know that
+this header is one of the ways they could — and note that it says
+nothing whatsoever about your *users*.  Your users' browsers are not
+touched by this; their requests go to your indexer, not through it.
+
 You don't configure any of this and there is nothing to tune.  It
 is listed here so you know what your node is doing on your behalf,
 and because if you ever run your own Blurt node, this is the

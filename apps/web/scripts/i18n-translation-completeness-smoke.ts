@@ -1116,7 +1116,69 @@ console.log('');
 console.log('── i18n translation completeness smoke ─────────────────');
 console.log('');
 
+// ─── v1.7.7: WRONG-SCRIPT LEAK ──────────────────────────────────────
+// A single Chinese character sat in the middle of a Russian sentence
+// ("но他 делает") and 3,368 i18n checks passed. Key coverage was fine, parity
+// was fine, dead keys were fine — every existing guard asks "is the key there?"
+// and none asks "is the text in the right alphabet?".
+//
+// This is a translation-time hazard, not a typo: when ten locales are written in
+// one pass, characters bleed between them. It is also nearly invisible on
+// review, because catching it means reading a language you may not speak and
+// noticing one glyph. A machine notices instantly.
+//
+// Deliberately narrow — it only flags a locale carrying a script that has no
+// business in it at all. It says nothing about Latin text inside a non-Latin
+// locale, because brand names, protocol terms and placeholders legitimately stay
+// Latin everywhere (there is already a reasoned allow-list above for exactly
+// that). Han characters in Cyrillic prose, or Cyrillic in Persian, are never
+// deliberate.
+const HAN = /[\u4e00-\u9fff\u3400-\u4dbf]/;
+const CYRILLIC = /[\u0400-\u04ff]/;
+const ARABIC = /[\u0600-\u06ff]/;
+const HANGUL = /[\uac00-\ud7af]/;
+const KANA = /[\u3040-\u30ff]/;
+
+/** Scripts that must NEVER appear in a given locale's strings. */
+const FORBIDDEN_SCRIPTS: Record<string, Array<{ name: string; re: RegExp }>> = {
+	en: [{ name: 'Han', re: HAN }, { name: 'Cyrillic', re: CYRILLIC }, { name: 'Arabic', re: ARABIC }, { name: 'Hangul', re: HANGUL }, { name: 'Kana', re: KANA }],
+	es: [{ name: 'Han', re: HAN }, { name: 'Cyrillic', re: CYRILLIC }, { name: 'Arabic', re: ARABIC }, { name: 'Hangul', re: HANGUL }, { name: 'Kana', re: KANA }],
+	fr: [{ name: 'Han', re: HAN }, { name: 'Cyrillic', re: CYRILLIC }, { name: 'Arabic', re: ARABIC }, { name: 'Hangul', re: HANGUL }, { name: 'Kana', re: KANA }],
+	de: [{ name: 'Han', re: HAN }, { name: 'Cyrillic', re: CYRILLIC }, { name: 'Arabic', re: ARABIC }, { name: 'Hangul', re: HANGUL }, { name: 'Kana', re: KANA }],
+	it: [{ name: 'Han', re: HAN }, { name: 'Cyrillic', re: CYRILLIC }, { name: 'Arabic', re: ARABIC }, { name: 'Hangul', re: HANGUL }, { name: 'Kana', re: KANA }],
+	pl: [{ name: 'Han', re: HAN }, { name: 'Cyrillic', re: CYRILLIC }, { name: 'Arabic', re: ARABIC }, { name: 'Hangul', re: HANGUL }, { name: 'Kana', re: KANA }],
+	// Russian legitimately carries Latin brand names; Han/Arabic/Hangul/Kana never.
+	ru: [{ name: 'Han', re: HAN }, { name: 'Arabic', re: ARABIC }, { name: 'Hangul', re: HANGUL }, { name: 'Kana', re: KANA }],
+	// Persian legitimately carries Latin brand names and Arabic script IS its script.
+	fa: [{ name: 'Han', re: HAN }, { name: 'Cyrillic', re: CYRILLIC }, { name: 'Hangul', re: HANGUL }, { name: 'Kana', re: KANA }],
+	// Chinese legitimately carries Latin brand names; Cyrillic/Arabic/Hangul never.
+	// Kana is excluded: it is NOT Chinese, and a stray one means text bled in.
+	'zh-CN': [{ name: 'Cyrillic', re: CYRILLIC }, { name: 'Arabic', re: ARABIC }, { name: 'Hangul', re: HANGUL }, { name: 'Kana', re: KANA }],
+	'zh-HK': [{ name: 'Cyrillic', re: CYRILLIC }, { name: 'Arabic', re: ARABIC }, { name: 'Hangul', re: HANGUL }, { name: 'Kana', re: KANA }]
+};
+
+const scriptLeaks: string[] = [];
+for (const loc of locales) {
+	const forbidden = FORBIDDEN_SCRIPTS[loc];
+	if (forbidden === undefined) continue;
+	const strings = data.get(loc);
+	if (strings === undefined) continue;
+	for (const [key, value] of strings) {
+		for (const { name, re } of forbidden) {
+			const m = re.exec(value);
+			if (m !== null) {
+				scriptLeaks.push(`${loc}: ${name} character ${JSON.stringify(m[0])} in ${key}`);
+			}
+		}
+	}
+}
+
 const scenarios = [
+	{
+		name: `no wrong-script leaks across all ${SUPPORTED_LOCALES.length} locales`,
+		ok: scriptLeaks.length === 0,
+		detail: scriptLeaks.slice(0, 5).join('; ')
+	},
 	{
 		name: `all ${SUPPORTED_LOCALES.length} locale files were loaded successfully`,
 		ok: locales.length === SUPPORTED_LOCALES.length

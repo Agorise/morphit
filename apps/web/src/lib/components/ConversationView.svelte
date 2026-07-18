@@ -284,7 +284,11 @@
 	 *  leaving the chatroom lands the thread under the right tab. Does NOT close
 	 *  the kebab menu — the user sees the ☆ ⇄ ★ flip in place. */
 	function handleToggleThreadStar(): void {
-		toggleStar(peer, orderPermlink ?? '');
+		// v1.7.7 — same block time this view already clamps its read-ack against,
+		// so a starred entry's watermark shares one basis with every other entry.
+		// See chatFolders.toggleStar() for why that matters to cap()'s eviction.
+		const seen = latestConfirmedAt();
+		toggleStar(peer, orderPermlink ?? '', seen !== null ? seen.toISOString() : undefined);
 	}
 
 	/** Set while a block/unblock broadcast is in flight, so the

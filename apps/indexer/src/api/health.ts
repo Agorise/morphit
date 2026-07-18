@@ -35,7 +35,11 @@ import type { HeadTailer } from '$indexer/headTailer';
 // update all 10 package.json files + this constant +
 // apps/relay/src/api/health.ts VERSION + the example response
 // in docs/API.md in the same commit.
-const INDEXER_VERSION = '1.7.5';
+// v1.7.7 — EXPORTED so the RPC User-Agent can name the same version this
+// endpoint reports. It stays hardcoded here on purpose: it is one of the 19
+// version touchpoints the version-consistency smoke pins, and reading it from
+// package.json at runtime would take it out of that net.
+export const INDEXER_VERSION = '1.7.7';
 
 // Blurt produces one block every 3 seconds. Used to translate the
 // block-lag count into a human "seconds behind" figure in the

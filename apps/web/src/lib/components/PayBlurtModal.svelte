@@ -404,7 +404,7 @@
 	}}
 	tabindex="-1"
 >
-	<div class="card w-full max-w-md">
+	<div class="card max-h-[95dvh] overflow-y-auto overscroll-contain w-full max-w-md">
 		<h2 id="pay-blurt-heading" class="font-display text-xl font-bold">
 			{$_('chat.pay_blurt.title', { values: { recipient } })}
 		</h2>

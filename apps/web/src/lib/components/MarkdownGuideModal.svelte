@@ -59,7 +59,7 @@
 	>
 		<!-- Dialog panel. stopPropagation so clicks inside don't dismiss. -->
 		<div
-			class="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-5 shadow-xl dark:bg-ink-900"
+			class="max-h-[85dvh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-5 shadow-xl dark:bg-ink-900"
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby={titleId}

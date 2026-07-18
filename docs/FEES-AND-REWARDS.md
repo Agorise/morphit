@@ -93,7 +93,7 @@ fee-recipient account.
   4th order = 1×, 5th = 2×, 6th = 4×, 7th+ = 8×.  See
   `apps/indexer/src/indexer/fee.ts` for `expectedFeeBlurt(nth, base)`.
 - User can also pay in BTC or XMR (operator-configured equivalent),
-  see `apps/indexer/src/api/feeAttest.ts`.
+  see `apps/indexer/src/indexer/handlers/feeAttest.ts`.
 - First-time waiver: free, buy-side only, once per account.  See
   `apps/web/src/lib/blurt/ops/order.ts` `fee_method='waived_first_buy'`.
 - Memo: `morphit-fee:<order-permlink>` — binds the fee transfer to

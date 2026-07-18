@@ -315,7 +315,7 @@ are BLURT-native; USD prices are display-only).
    ```
    (This is the canonical endpoint path the indexer
    uses; override base URL via
-   `MORPHIT_INDEXER_KLINGEX_BASE_URL` if Klingex has
+   `MORPHIT_INDEXER_BLURT_PRICE_FEED_URL` if Klingex has
    moved the API since this doc was written.)
 2. Check Coingecko:
    ```bash

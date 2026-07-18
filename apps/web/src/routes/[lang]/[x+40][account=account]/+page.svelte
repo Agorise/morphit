@@ -769,7 +769,6 @@
 						<div class="mb-2 flex flex-wrap items-baseline justify-between gap-2">
 							<IdentityLabel
 								account={fb.reviewer}
-								showHandleAfterName={true}
 								displayName={reviewerProps.displayName}
 								avatarSvg={reviewerProps.avatarSvg}
 								avatarDataUri={reviewerProps.avatarDataUri}
@@ -848,7 +847,6 @@
 								<div class="mb-1 flex flex-wrap items-baseline justify-between gap-2">
 									<IdentityLabel
 										account={resp.responder}
-										showHandleAfterName={true}
 										displayName={responderProps.displayName}
 										avatarSvg={responderProps.avatarSvg}
 										avatarDataUri={responderProps.avatarDataUri}
@@ -978,7 +976,6 @@
 							<div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
 								<IdentityLabel
 									account={fb.subject}
-									showHandleAfterName={true}
 									displayName={subjectProps.displayName}
 									avatarSvg={subjectProps.avatarSvg}
 									avatarDataUri={subjectProps.avatarDataUri}
@@ -1071,7 +1068,6 @@
 								<div class="mb-1 flex flex-wrap items-baseline justify-between gap-2">
 									<IdentityLabel
 										account={resp.responder}
-										showHandleAfterName={true}
 										displayName={responderProps.displayName}
 										avatarSvg={responderProps.avatarSvg}
 										avatarDataUri={responderProps.avatarDataUri}

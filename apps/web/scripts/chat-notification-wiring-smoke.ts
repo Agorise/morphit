@@ -72,8 +72,29 @@ check('neither scroll helper keeps a private frame-count retry', !/attempts\+\+ 
 check('the review form container still carries scroll-mt-24 (\u22481in below the top)', /scroll-mt-24" id="feedback-form-/.test(myOrders));
 
 // ─── #19 read acknowledgement ────────────────────────────────────────
-check('readAckTimestamp prefers the CHAIN timestamp over a lagging clock', /export function readAckTimestamp/.test(readState) && /latestSeenAt\.getTime\(\) > now\.getTime\(\) \? latestSeenAt : now/.test(code(readState)));
-check('an unparseable timestamp falls back to the local clock', /Number\.isNaN\(latestSeenAt\.getTime\(\)\)/.test(code(readState)));
+// v1.7.7 — both re-pinned to the REQUIREMENT rather than the exact expression.
+// They spelled out `latestSeenAt.getTime() > now.getTime() ? latestSeenAt : now`
+// and `Number.isNaN(latestSeenAt.getTime())`, so both failed when the hostile-
+// timestamp sanitiser introduced a `seen` local — changes that STRENGTHEN what
+// these checks protect. (A federated indexer can serve `last_message_at: 2099`;
+// unsanitised, that becomes the read cursor and the user goes silently deaf.)
+check(
+	'readAckTimestamp prefers the CHAIN timestamp over a lagging clock',
+	/export function readAckTimestamp/.test(readState) &&
+		/\.getTime\(\) > now\.getTime\(\) \?[\s\S]{0,40}?: now;/.test(code(readState))
+);
+check(
+	'an unparseable timestamp falls back to the local clock',
+	/export function readAckTimestamp\([\s\S]{0,400}?Number\.isNaN\([\s\S]{0,30}?\.getTime\(\)\)[\s\S]{0,20}?return now;/.test(
+		code(readState)
+	)
+);
+// v1.7.7 — and the sanitiser itself, so the deafening vector cannot quietly reopen.
+check(
+	'…and a block time from the network is sanitised before it can become a cursor',
+	/export function sanitizeBlockTime\(/.test(code(readState)) &&
+		/const seen = sanitizeBlockTime\(latestSeenAt, now\.getTime\(\)\);/.test(code(readState))
+);
 check('ConversationView acks with the newest CONFIRMED message', /function latestConfirmedAt\(\)/.test(convo) && /readAckTimestamp\(latestConfirmedAt\(\)\)/.test(code(convo)));
 check('pending messages (no chain stamp) never drive the ack', /if \(at === null\) continue;/.test(code(convo)));
 check('the conversation re-acks as messages arrive, not only on mount', /\$effect\(\(\) => \{[\s\S]{0,260}ackRead\(\);/.test(code(convo)));

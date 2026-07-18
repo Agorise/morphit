@@ -204,7 +204,7 @@
 	}}
 	tabindex="-1"
 >
-	<div class="card w-full max-w-lg" role="document">
+	<div class="card max-h-[95dvh] overflow-y-auto overscroll-contain w-full max-w-lg" role="document">
 		<h2 id="verify-peer-heading" class="font-display text-xl font-bold">
 			{$_('chat.verify_peer.title')}
 		</h2>

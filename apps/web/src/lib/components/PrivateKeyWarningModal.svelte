@@ -113,7 +113,7 @@
 		aria-modal="true"
 		aria-labelledby="privkey-warn-title"
 		aria-describedby="privkey-warn-body"
-		class="max-w-md rounded-2xl border-4 border-red-500 bg-white p-5 shadow-2xl dark:bg-ink-900"
+		class="max-h-[95dvh] max-w-md overflow-y-auto overscroll-contain rounded-2xl border-4 border-red-500 bg-white p-5 shadow-2xl dark:bg-ink-900"
 	>
 		<h2
 			id="privkey-warn-title"

@@ -231,7 +231,7 @@
 	role="presentation"
 >
 	<div
-		class="card w-full max-w-md"
+		class="card max-h-[95dvh] overflow-y-auto overscroll-contain w-full max-w-md"
 		role="dialog"
 		aria-modal="true"
 		aria-labelledby="stranger-fee-heading"

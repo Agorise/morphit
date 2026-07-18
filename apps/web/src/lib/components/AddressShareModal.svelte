@@ -517,7 +517,7 @@
 	     QR) ran past the viewport with no way to scroll to the Send button.
 	     Matches the sibling chat modals (MailingAddressModal / ShipmentModal):
 	     cap at 95vh and scroll inside. -->
-	<div class="card max-h-[95vh] w-full max-w-md overflow-y-auto">
+	<div class="card max-h-[95dvh] w-full max-w-md overflow-y-auto overscroll-contain">
 		<h2 id="address-share-heading" class="font-display text-xl font-bold">
 			{$_('chat.address.modal_title')}
 		</h2>
