@@ -300,7 +300,7 @@ The full operator reference — every configuration setting, the complete nginx 
 curl https://yourdomain.com/v1/health
 ```
 
-A healthy response is JSON with a recent block number and a small lag, like `{"head_block": 12345678, "lag_blocks": 2}`. If that works but the site doesn't, the problem is in the website/nginx layer, not the services.
+A healthy response is JSON with a recent block number and a small lag, like `{"chain_head_block": 12345678, "lag_blocks": 2}`. If that works but the site doesn't, the problem is in the website/nginx layer, not the services.
 
 ---
 
@@ -314,7 +314,12 @@ it caps its own request rate, backs off exponentially when a node
 pushes back, jitters its retries so every Morphit instance in the
 federation doesn't stampede the same node at the same second, and
 fetches blocks in batches of 20 rather than one request at a time
-when it is catching up after downtime.
+when it is catching up after downtime.  If a node's firewall
+refuses those batches (some public nodes return an HTTP 406/403 to
+a batched request while serving single ones fine), your indexer
+notices and quietly switches to one-at-a-time for that node — so a
+single strict node can't stall your catch-up, and you never have to
+hand-pick endpoints (since v1.8.1).
 
 It also **says who it is**.  Every request your indexer makes to a
 Blurt RPC node carries:

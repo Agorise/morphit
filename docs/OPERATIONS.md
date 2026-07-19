@@ -695,13 +695,24 @@ once.  Batching is the second of the four things the
 exponential backoff, jitter); the other three landed in v1.7.0.
 
 Batch support is **discovered, not assumed**.  A node that
-answers a batch with a single object rather than an array is
-recorded for the lifetime of the process and quietly served by
-the old one-block-at-a-time path from then on.  Nothing to
-configure, and nothing breaks on a node that can't batch.  If you
-want to confirm your node is getting the benefit, watch the
-request rate against a node during a catch-up: batching is
-working if it is roughly a twentieth of the block rate.
+answers a batch with a single object rather than an array — or
+one whose edge firewall rejects the batch array outright with a
+4xx (many public Blurt nodes return HTTP 406 or 403 to a JSON-RPC
+`[...]` POST while happily serving single calls; handled since
+v1.8.1) — is recorded for the lifetime of the process and quietly
+served by the old one-block-at-a-time path from then on.  Nothing
+to configure, and nothing breaks on a node that can't (or won't)
+batch: a single strict node can no longer stall the poller, so the
+default six-node set works as-is with no manual endpoint-picking.
+(Before v1.8.1 a batch 4xx was a fatal, non-rotatable error, so one
+firewalled node leading the pool could freeze catch-up entirely —
+`lag_blocks` climbing with a repeating `HTTP 406 (batch get_block)`
+in the log.  If you see that on an older build, pinning
+`MORPHIT_INDEXER_RPC_ENDPOINTS` to a node that serves batches is the
+interim workaround; upgrading is the fix.)  If you want to confirm
+your node is getting the benefit, watch the request rate against a
+node during a catch-up: batching is working if it is roughly a
+twentieth of the block rate.
 
 `state` is `open` while an endpoint is in cooldown after
 transport failures, `half_open` just after cooldown expires

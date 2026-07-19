@@ -55,10 +55,22 @@ if (!existsSync(APP_HTML)) {
 	console.error(`og-fallback-meta-smoke: app.html not found at ${APP_HTML}`);
 	process.exit(1);
 }
-// Analyse the real markup only: strip HTML comments so the explanatory
-// comment block (which necessarily mentions %sveltekit.head% and the words
-// "static <title>") can't create false positives.
-const html = readFileSync(APP_HTML, 'utf-8').replace(/<!--[\s\S]*?-->/g, '');
+const raw = readFileSync(APP_HTML, 'utf-8');
+
+// GUARD (v1.8.1 regression): an HTML comment must NEVER contain a %sveltekit.*%
+// token. SvelteKit string-replaces those tokens everywhere in app.html — inside
+// comments too — and the injected head's Svelte hydration markers terminate the
+// comment early, spilling its prose onto the visible top of the page. The
+// explanatory block above therefore describes the placeholder in PROSE.
+const commentBlocks = raw.match(/<!--[\s\S]*?-->/g) ?? [];
+check(
+	'no app.html comment embeds a %sveltekit.*% token (it would be replaced and break the comment)',
+	commentBlocks.every((c) => !/%sveltekit\.[a-z]+%/.test(c))
+);
+
+// Analyse the real markup only: strip HTML comments so the explanatory comment
+// block (which mentions the words "static <title>") can't create false positives.
+const html = raw.replace(/<!--[\s\S]*?-->/g, '');
 
 const headIdx = html.indexOf('%sveltekit.head%');
 const ogTitleMatch = html.match(/<meta\s+property="og:title"\s+content="([^"]*)"/);
