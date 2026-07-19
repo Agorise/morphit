@@ -83,21 +83,27 @@
 			DEFAULT social-share metadata (v1.8.0, t.txt: "pasted a morphit link into
 			Element and it generated a horrible preview — logo cut off, wrong title").
 
+			IMPORTANT (v1.8.1): describe the SvelteKit head placeholder in PROSE here —
+			never write its literal percent-delimited token inside this comment.
+			SvelteKit string-replaces that token everywhere in app.html, comments
+			included, and the injected head carries Svelte hydration markers that
+			terminate this comment early and spill its text onto the visible page.
+
 			Why this is here and not only in Head.svelte: the site ships with
 			`fallback: 'index.html'` (svelte.config.js), so any URL that isn't one of
 			the prerendered `/<lang>/…` routes — a bare `/chat`, a dynamic
 			`/<lang>/chat/<peer>`, or a link a user pastes WITHOUT the locale prefix —
-			is served the SPA shell, whose `%sveltekit.head%` is empty until JS
+			is served the SPA shell, whose SvelteKit-injected head is empty until JS
 			hydrates. A link-preview scraper never runs that JS, so with no OG tags it
 			fell back to scraping the visible <noscript> <h1> ("Morphit works without
 			JavaScript — partly.") as the title and the favicon as the image (cropped
 			to the preview's thumbnail). These static tags give every such URL a
 			correct default card instead.
 
-			On a prerendered route Head.svelte re-emits og:*/twitter:* into
-			`%sveltekit.head%` BELOW these, and link-preview parsers use the LAST value
+			On a prerendered route Head.svelte re-emits og:*/twitter:* into the
+			injected head BELOW these, and link-preview parsers use the LAST value
 			for a scalar property, so the route-specific title/description/url win
-			there — these only take effect when `%sveltekit.head%` contributed none
+			there — these only take effect when the injected head contributed none
 			(the fallback case). Deliberately NO static <title>: browsers honour the
 			FIRST <title>, so a static one would override every route's tab title;
 			og:title (last-wins) is what scrapers read anyway. Absolute morphit.io URLs

@@ -344,7 +344,26 @@ export class BlurtClient {
 				}
 
 				if (res.status === 429) throw new Error('HTTP 429 (batch get_block)');
-				if (!res.ok) throw new Error(`HTTP ${res.status} (batch get_block)`);
+				if (!res.ok) {
+					// A 4xx here means this node's edge (a WAF/proxy) rejects the
+					// JSON-RPC ARRAY framing specifically. Many Blurt nodes return
+					// 406 (or 403) to a batch `[...]` POST while serving single calls
+					// fine — proven in production: a single get_block returns 200 on
+					// every node that 406s the batch. That is a batch-CAPABILITY
+					// answer, not a transport failure, so treat it exactly like a node
+					// that can't batch: remember it and fall back to the paced
+					// one-at-a-time path (which works everywhere), instead of dying on
+					// a non-rotatable 4xx. This is the fix for the v1.8.1 firefight:
+					// four of the six default nodes 406'd the batch, and because a 4xx
+					// is not in the pool's rotate list, one such node leading the pool
+					// froze the whole poller (indexed_block stuck, lag climbing).
+					// 5xx / 52x stay transport errors so the pool rotates + cools down.
+					if (res.status >= 400 && res.status < 500) {
+						batchUnsupported.add(url);
+						throw new BatchUnsupportedError(url);
+					}
+					throw new Error(`HTTP ${res.status} (batch get_block)`);
+				}
 
 				const json: unknown = await res.json();
 

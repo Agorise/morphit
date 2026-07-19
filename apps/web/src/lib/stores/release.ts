@@ -36,8 +36,13 @@
  *     was rotated (legit but our pin is stale) or someone is
  *     trying to forge the release op.  Either way, the release
  *     can't be trusted; the banner says exactly that.
- *   - Asset hash mismatch → CRITICAL alert.  CDN tampering or
- *     deploy-time mismatch.  The banner names the affected files.
+ *   - Asset hash mismatch → CRITICAL alert, but ONLY when the served
+ *     /verify.json version equals the announced version (a genuine
+ *     SAME-version byte change).  During a deploy the served build runs
+ *     ahead of the chain-pin, so a version-skewed mismatch is skipped
+ *     ('deploy_skew') instead of alarmed — routine upgrades no longer
+ *     flash the "Build integrity check failed" banner.  When it does
+ *     fire, the banner names the affected files.
  *
  * No periodic refresh in the store itself.  Releases are
  * infrequent; one fetch per session is sufficient.  Long-lived
@@ -70,6 +75,7 @@ export type AssetCheckState =
 	| { kind: 'loading' }
 	| { kind: 'ok' }
 	| { kind: 'mismatch'; mismatches: readonly AssetMismatch[] }
+	| { kind: 'deploy_skew' }
 	| { kind: 'fetch_failed'; path: string; cause: string };
 
 const releaseStore = writable<ReleaseStoreState>({ kind: 'idle' });
@@ -127,6 +133,27 @@ export const chainPinnedTreasury: Readable<
 	return $r.release.payload.treasury ?? null;
 });
 
+/** Read the version the operator is CURRENTLY serving, from /verify.json
+ *  (same-origin, cache-busted so a proxy can't answer stale). Returns null on
+ *  any failure — the caller treats "unknown" the same as "differs": we never
+ *  raise the tamper alarm without positive evidence that the served build IS
+ *  the chain-pinned one. NOTE: this is a SAME-ORIGIN request to the operator
+ *  who already serves the page (and already sees the IP); it is NOT the
+ *  sanctioned browser→Blurt-node disclosure, so it adds no privacy cost. */
+async function fetchServedVersion(): Promise<string | null> {
+	try {
+		const { parseDeployedVersion, verifyJsonPollUrl } = await import(
+			'$lib/updates/deployedVersion'
+		);
+		const { fetchWithTimeout } = await import('$net/fetchWithTimeout');
+		const res = await fetchWithTimeout(verifyJsonPollUrl(), { cache: 'no-store' });
+		if (!res.ok) return null;
+		return parseDeployedVersion(await res.text());
+	} catch {
+		return null;
+	}
+}
+
 /** Idempotent boot: kick off the verified fetch + hash check.
  *  Safe to call repeatedly; subsequent calls return immediately
  *  without re-firing. */
@@ -149,6 +176,27 @@ export async function initRelease(): Promise<void> {
 	// banner appears immediately while the tamper check works.
 	assetCheckStore.set({ kind: 'loading' });
 	try {
+		// The hash check re-fetches the SERVED asset bytes and compares them to
+		// the chain-pinned manifest. That is only a valid tamper test when the
+		// operator is actually serving the chain-pinned build. During a deploy
+		// the served build races AHEAD of the chain-pin (the operator broadcasts
+		// the matching manifest moments later, in a separate release step), so
+		// every served asset mismatches the still-OLD manifest — which is exactly
+		// what flashed a false "Build integrity check failed" alarm on routine
+		// upgrades. Gate on the served /verify.json version: only run the byte
+		// check when it equals the announced version. If it differs — or can't be
+		// read — a deploy is in flight (or we lack positive evidence), so we skip
+		// rather than cry wolf; the "Load it now" snackbar picks up the new build.
+		// Morphit builds are not byte-reproducible across machines, so a version
+		// match is the precondition for the byte comparison to mean anything. A
+		// GENUINE tamper is a SAME-version byte change, which still trips below.
+		const announcedVersion = fetchResult.value.payload.version;
+		const servedVersion = await fetchServedVersion();
+		if (servedVersion !== announcedVersion) {
+			assetCheckStore.set({ kind: 'deploy_skew' });
+			return;
+		}
+
 		const { checkManifestAgainstRunningBundle } = await import('$net/releaseHashCheck');
 		const hashResult = await checkManifestAgainstRunningBundle(
 			fetchResult.value.payload.hash_manifest
