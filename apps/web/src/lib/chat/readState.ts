@@ -227,11 +227,10 @@ export function getLastVisited(peer: string, orderPermlink: string): string | nu
  *    Callers that want to distinguish ... should pass the last sender and filter."
  *
  * No caller ever did, because they COULDN'T: `ConversationSummary` carried no
- * such field. `has_user_sent` answers a different question ("have I ever sent in
- * this thread"). So the note asked callers to do something the API made
- * impossible, and the bug sat there being described rather than fixed: Ken sends
- * a message from his PC and his PHONE lights up unread — his own words, nagging
- * him from another device.
+ * field naming who sent the last message. So the note asked callers to do
+ * something the API made impossible, and the bug sat there being described
+ * rather than fixed: Ken sends a message from his PC and his PHONE lights up
+ * unread — his own words, nagging him from another device.
  *
  * The flag is REQUIRED rather than defaulted. A default of `false` reproduces the
  * old behaviour silently, so every future caller would inherit the bug by saying

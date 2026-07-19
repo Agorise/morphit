@@ -94,7 +94,6 @@ const PROSE_GUIDANCE_PATHS = new Set<string>([
 	// REVISIT-LIST and TARBALL are the project journal — they
 	// describe past findings about :latest.
 	'docs/REVISIT-LIST.md',
-	'docs/REVISIT-LIST-ARCHIVE.md',
 	'TARBALL.md',
 	// cp155 this smoke and its source-of-truth ADR mention
 	// `:latest` to explain what they enforce.

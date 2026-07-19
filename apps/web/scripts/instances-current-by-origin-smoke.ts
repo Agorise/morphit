@@ -68,10 +68,12 @@ check(
 	/highlight=current/.test(layout)
 );
 
-// 4. The flash is the warm amber-yellow Ken asked for, not the old green.
+// 4. The flash is the brand emerald (v1.8.0: recoloured from the warm
+//    amber-yellow #f59e0b to #00da69 so the highlight matches the palette),
+//    and never the older green (#22c55e) or the retired amber.
 check(
-	'flash color is warm amber-yellow (#f59e0b), not the old green (#22c55e)',
-	/#f59e0b/.test(pageRaw) && !/#22c55e/.test(pageRaw)
+	'flash color is brand emerald (#00da69), not amber (#f59e0b) or old green (#22c55e)',
+	/#00da69/i.test(pageRaw) && !/#f59e0b/i.test(pageRaw) && !/#22c55e/i.test(pageRaw)
 );
 check(
 	'the flash keyframe + .flash-instance animation are still present',

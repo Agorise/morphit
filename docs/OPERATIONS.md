@@ -186,26 +186,31 @@ without abbreviation.
 ### Blurt account name constraints
 
 Morphit's indexer validates account names against
-`/^[a-z][a-z0-9-]{2,15}$/`, which means:
+`/^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/`, which means:
 
 - Length: **3 to 16 characters** total.
 - First character: lowercase letter `a-z` (not a digit,
-  not a hyphen).
-- Remaining characters: lowercase `a-z`, digits `0-9`, or
-  hyphen `-`.
+  a dot, or a hyphen).
+- Middle characters: lowercase `a-z`, digits `0-9`, dot
+  `.`, or hyphen `-`.
+- Last character: lowercase `a-z` or a digit `0-9` — a
+  name can't end in a dot or a hyphen.
 - Permanent — once registered, the name exists forever
   and can't be renamed or transferred to a different
   identity without an ownership change ceremony.
 
-Blurt itself permits some additional patterns (subaccounts
-with dots, for example) that Morphit's handlers don't
-accept. Stick to the constraints above and you'll be
-compatible with every Morphit handler.
+The regex accepts a dot or hyphen in the middle (so a
+dotted name like `alice.trade` is legal), but it's a
+single flat pattern — it does not enforce Blurt's full
+per-segment subaccount grammar. For a top-level operator
+account, plain lowercase-plus-hyphen names are the
+clearest choice; stick to the constraints above and
+you'll be compatible with every Morphit handler.
 
 **Domain patterns that DON'T fit:**
 
-- Compound TLDs (`trade.example.co.uk` — too long and
-  dots aren't legal).
+- Compound TLDs (`trade.example.co.uk` — 19 chars, over
+  the 16-char cap).
 - Domains with underscores or uppercase (not legal in
   Blurt names).
 - Long brand names (`community-barter-exchange.com` — the
@@ -1033,7 +1038,7 @@ sudo journalctl -u morphit-indexer.service \
 
    In the BLURT-native model, the listing fee is set
    directly by `MORPHIT_INDEXER_FEE_BASE_BLURT` (default
-   `60`).  No amortization formula, no operational margin —
+   `125`).  No amortization formula, no operational margin —
    the operator picks a flat BLURT amount per their
    tolerance.
 
@@ -1066,7 +1071,7 @@ sudo journalctl -u morphit-indexer.service \
 ## 5. Responding to a relay-queue-stuck alert
 
 If you notice rows in `relay_pending_transfers` with
-`error_count` near the `queueMaxRetries` ceiling (default 10),
+`error_count` near the `queueMaxRetries` ceiling (default 3),
 something is stuck.
 
 ### Inspect the queue
@@ -1522,7 +1527,7 @@ static floor. Values refresh every 5 minutes in the background. When
 every upstream fails, the indexer keeps serving the last good
 value with `stale=true`. If no upstream has ever succeeded
 since boot, it falls back to the static floor
-(`MORPHIT_INDEXER_BLURT_PRICE_USD`).
+(`MORPHIT_INDEXER_PRICE_FEED_STATIC_FLOOR`).
 
 **cp128 update — denomination is operator-configurable**: by
 default the BLURT price echo on `/v1/listing-fee` is expressed
@@ -1569,8 +1574,8 @@ bad number can no longer move the published price — any feed that
 returns nothing is simply dropped from the median.
 Each source has its own cache and refresh schedule.  Two new
 env vars set per-asset static floors:
-`MORPHIT_INDEXER_PRICE_FEED_BTC_STATIC_FLOOR` (default 60000) and
-`MORPHIT_INDEXER_PRICE_FEED_XMR_STATIC_FLOOR` (default 200).
+`MORPHIT_INDEXER_PRICE_FEED_BTC_STATIC_FLOOR` (default 64700) and
+`MORPHIT_INDEXER_PRICE_FEED_XMR_STATIC_FLOOR` (default 333).
 The cp129 peer-price monitor now spawns one instance per asset,
 so disagreement on BTC alerts separately from disagreement on
 BLURT — and each asset is sampled independently from peers.
@@ -1667,7 +1672,7 @@ Defaults to OFF so a brand-new instance with zero trade history
 doesn't try to derive from empty data.
 
 > **Quick action:** if you just need to update the static
-> floor during an outage, set `MORPHIT_INDEXER_BLURT_PRICE_USD`
+> floor during an outage, set `MORPHIT_INDEXER_PRICE_FEED_STATIC_FLOOR`
 > in your SystemD `Environment=` directive (or wherever your
 > deployment manages env vars) and restart the indexer. The
 > runbook below is for when you also want to investigate why
@@ -1731,7 +1736,7 @@ Example all-upstreams-failed-since-boot:
 ### What to check
 
 1. **Is the price actually wrong?** The `static_floor` is your
-   `MORPHIT_INDEXER_BLURT_PRICE_USD` — if you've kept that
+   `MORPHIT_INDEXER_PRICE_FEED_STATIC_FLOOR` — if you've kept that
    reasonably close to market, stale behavior is not
    user-visible as incorrect fees.
 
@@ -1759,7 +1764,7 @@ Example all-upstreams-failed-since-boot:
 
 If the feed is stale and you need the live price reflected in
 listing-fee quotes **right now**, adjust
-`MORPHIT_INDEXER_BLURT_PRICE_USD` to match current market and
+`MORPHIT_INDEXER_PRICE_FEED_STATIC_FLOOR` to match current market and
 restart the indexer. The static floor becomes the served value
 immediately. Revert to the live feed once the upstream is back
 up — there's no penalty for overriding temporarily.
@@ -4350,14 +4355,20 @@ into a provocation.
 messages between two accounts that have never exchanged
 require either (a) a prior admitted message in either
 direction, (b) a paid `morphit_stranger_fee_v1` op carrying
-a $0.01-USD-equivalent BLURT transfer to @morphit-fees
-with memo binding `morphit-stranger:<recipient>`. The memo
-binding prevents a single paid transfer from admitting
-conversations with multiple peers. The $0.01 fee is fixed
-in indexer code — **operators cannot configure it** (this
-is intentional: a lax operator lowering the fee would
-undercut the anti-spam economics across the whole
-ecosystem).
+a BLURT transfer to @morphit-fees with memo binding
+`morphit-stranger:<recipient>`. The memo binding prevents a
+single paid transfer from admitting conversations with
+multiple peers. The base fee is **5 BLURT** (~$0.01 at
+current BLURT prices), and it **escalates by doubling** for
+rapid repeat stranger-messaging: 1× for the first stranger
+fee inside a rolling 5-minute window, 2× for the second, 4×
+for the third, … capping at 128× (640 BLURT) from the 8th
+onward. A single genuine first-contact stays cheap; a burst
+of unsolicited first-contacts to many peers gets expensive
+fast. The BLURT base and the doubling schedule are fixed in
+indexer code — **operators cannot configure them** (this is
+intentional: a lax operator lowering the fee would undercut
+the anti-spam economics across the whole ecosystem).
 
 **Layer 3 — rate limits.** Two caps on "recipient has not
 yet replied" conversations: fan-in (≤20 unique never-
@@ -4436,35 +4447,41 @@ it for tighter latency.
   increase in block-feed calls. Raise the interval to reduce
   load, lower it for tighter latency.
 
-**When to turn it off.** Set `..._ENABLED=false` if you want
-messages shown only once irreversible, or to shed the extra
-RPC load. Restart the indexer to apply.
+**No off switch.** Fast chat can't be disabled — the old
+`..._ENABLED` flag was removed in v1.7.0 (ADR-0051). The one
+knob is `MORPHIT_INDEXER_FASTPATH_INTERVAL_MS` above: raise it
+to shed head-poll RPC load, lower it for tighter latency. (The
+scanner never writes the DB, so there's nothing to protect
+against by turning it off — a broken fast path can only fail
+to make things fast.)
 
 **Checking status.** The simplest check is the node-health
 view — `morphit-ops health` (main menu item #13) — which
-shows a **Fast chat:** line right below the price feeds:
-`on — tailing @ head block N (M delivered)` when it's live,
-`off — messages appear once irreversible (~45-60s)` when an
-operator disabled it, or `on but not tailing yet` just after
-a restart. Under the hood that comes from an operator-only
-top-level `chat_fastpath` block on `/v1/health`
-(`{enabled, running, scannedHead, emitted, lastError,
-lastErrorAt}`), gated on the same `X-Morphit-Local-Health`
-header the public edge strips — the same gate as the
-per-source `price_feeds` block, so a public caller can't see
-it. (It is deliberately NOT in the `?verbose=1` diagnostics
-block, so the node-health view — which doesn't pass
-`verbose=1` — always sees it.)
+shows a **Fast path:** line right below the price feeds:
+`keeping up @ head block N (M delivered)` (or `— K block(s)
+behind head`) when it's live and current, `lagging — K blocks
+behind head` if it has fallen behind, `tailing — head not
+established yet` just after a restart, or `status unavailable
+(older indexer build)` against a pre-fast-path indexer. There
+is no "off" state — it's always on. Under the hood that comes
+from an operator-only top-level `fastpath` block on
+`/v1/health` (`{running, scannedHead, emitted, lastError,
+lastErrorAt}` — renamed from `chat_fastpath`, and the
+`enabled` field dropped, in v1.7.0), gated on the same
+`X-Morphit-Local-Health` header the public edge strips — the
+same gate as the per-source `price_feeds` block, so a public
+caller can't see it. (It is deliberately NOT in the
+`?verbose=1` diagnostics block, so the node-health view —
+which doesn't pass `verbose=1` — always sees it.)
 
-**Upgrade note.** Fast chat is on by default and the indexer
-runs from source, so a normal `morphit-ops upgrade` turns it
-on for any instance that hasn't explicitly disabled it — the
-upgrade prints a `✓ Fast chat is on` (or a note if you've
-disabled it) at the end so you always know. The matching
-client-side dedupe ships in the same release, so both halves
-deploy together — no partial-deploy window. A browser tab
-still on a pre-upgrade frontend could briefly show a message
-twice until it reloads; harmless and self-healing.
+**Upgrade note.** Fast chat is on for every instance (no off
+switch since v1.7.0), so a normal `morphit-ops upgrade` carries
+it forward automatically — confirm afterward with the **Fast
+path:** line in `morphit-ops health`. The matching client-side
+dedupe ships in the same release, so both halves deploy
+together — no partial-deploy window. A browser tab still on a
+pre-upgrade frontend could briefly show a message twice until
+it reloads; harmless and self-healing.
 
 ## 20. Attestation phase transition (Finding I)
 
@@ -4825,9 +4842,9 @@ env var.
 
 Anything in the OS environment wins over this file. So:
 
-- `export MORPHIT_INDEXER_BLURT_PRICE_USD=0.003`
+- `export MORPHIT_INDEXER_PRICE_FEED_STATIC_FLOOR=0.003`
   in your SystemD `Environment=` directive → wins
-- `MORPHIT_INDEXER_BLURT_PRICE_USD=0.003` in
+- `MORPHIT_INDEXER_PRICE_FEED_STATIC_FLOOR=0.003` in
   `morphit.config.env` → loses to the SystemD setting,
   applied if SystemD doesn't set it
 
@@ -4837,17 +4854,27 @@ additive.
 
 ### What's in the file
 
-Seven keys, listed below with their purpose. Anything else
-in the file causes a hard error at boot — so an operator
-who pastes the wrong file (e.g., a deployment `.env` with
-DATABASE_URL in it) gets a clear "you can't set that here"
-message rather than silent corruption.
+The allowlist accepts **29 keys** — the complete set is
+listed (commented, ready to uncomment) in
+`morphit.config.env.example` and enforced by
+`@morphit/operator-config`. The handful you'd actually
+reach for *after* launch are detailed below with their
+purpose; the remainder (per-instance branding, SEO
+overrides, alt-network addresses, the operator tag) are
+the values `morphit-ops init` writes for you and are rarely
+hand-edited. Anything NOT on the allowlist causes a clear
+"you can't set that here" hard error at boot — so an
+operator who pastes the wrong file (e.g., a deployment
+`.env` with DATABASE_URL in it) gets a clean rejection
+rather than silent corruption.
 
 **Pricing — survives a Coingecko outage.**
-`MORPHIT_INDEXER_BLURT_PRICE_USD` (default `0.002`) is the
-absolute price floor used when Coingecko is unreachable. Live feeds always win when reachable;
-this only kicks in during an outage. Update it during
-prolonged outages so the indexer's emergency fallback
+`MORPHIT_INDEXER_PRICE_FEED_STATIC_FLOOR` (default `0.001`,
+renamed from the old `MORPHIT_INDEXER_BLURT_PRICE_USD` — if you
+still have the old name set, switch it) is the absolute price
+floor used when the live feed is unreachable. Live feeds always
+win when reachable; this only kicks in during an outage. Update
+it during prolonged outages so the indexer's emergency fallback
 matches reality. See §13 for the full price-feed runbook.
 
 **Registration kill-switch.** `MORPHIT_RELAY_SIGNUP_ENABLED`
@@ -4857,7 +4884,7 @@ Use during active spam-account waves, maintenance, or
 suspected drain attacks (§7, §18).
 
 **Listing fee.** `MORPHIT_INDEXER_FEE_BASE_BLURT` (default
-`60`) is the BLURT base fee per order listing.  It targets the
+`125`) is the BLURT base fee per order listing.  It targets the
 canonical ~12.5¢ USD-equivalent (`LISTING_FEE_USD.blurt` in
 `@morphit/asset-registry`); at BLURT ≈ $0.002 that's about 60–62
 BLURT.  **As of cp372 this base is chain-pinned and auto-tracked**
@@ -4940,7 +4967,7 @@ known price.
    `cp morphit.config.env.example morphit.config.env`.
 4. Edit `morphit.config.env`:
    ```
-   MORPHIT_INDEXER_BLURT_PRICE_USD=0.0026
+   MORPHIT_INDEXER_PRICE_FEED_STATIC_FLOOR=0.0026
    ```
 5. `sudo systemctl restart morphit-indexer.service`.
 6. The indexer logs will show:
@@ -4987,7 +5014,7 @@ boot indicating what the loader did:
 
 ```
 [operator-config] loaded /opt/morphit/morphit.config.env (2 applied, 1 skipped — env wins)
-[operator-config] skipped (already in env): MORPHIT_INDEXER_BLURT_PRICE_USD
+[operator-config] skipped (already in env): MORPHIT_INDEXER_PRICE_FEED_STATIC_FLOOR
 ```
 
 The `skipped` list is the key signal: if you edited a
@@ -5284,7 +5311,7 @@ gpg --verify CHECKSUMS.asc CHECKSUMS
    gpg --verify morphit-v1.2.3-source.tar.gz.asc \
                 morphit-v1.2.3-source.tar.gz
    ```
-4. **Upload to forgejo's releases page.**  Drop all five
+4. **Upload to forgejo's releases page.**  Drop all six
    files (tarball + .sha256 + .sha512 + .asc + CHECKSUMS +
    CHECKSUMS.asc) into the Forgejo release UI.
 5. **Broadcast a `morphit_release_v1` op on the Blurt chain.**
@@ -5361,7 +5388,7 @@ Headline numbers (for context — full breakdown in the doc):
 - **Listing fee:** targets ~12.5¢ USD-equivalent in BLURT (~25¢ in
   BTC/XMR) — the canonical `LISTING_FEE_USD` in
   `@morphit/asset-registry`. Env base `MORPHIT_INDEXER_FEE_BASE_BLURT`
-  (default 60 BLURT, ≈ the target at BLURT ≈ $0.002).
+  (default 125 BLURT, ≈ the target at BLURT ≈ $0.001).
 - **Stranger fee:** 5 BLURT for cold messages, escalates with abuse.
 - **Featured-slot bid:** 50 BLURT/hour, ≥6 hours minimum.
 - **Account-creation cost:** ~100 BLURT per signup (operator's
@@ -5406,7 +5433,7 @@ already landed. So "monitoring earnings" is two independent things:
 ### Verifying earnings are flowing
 
 ```
-curl -s http://localhost:8080/v1/operators/yourtag | jq
+curl -s http://localhost:8081/v1/operators/yourtag | jq
 ```
 
 Look for:
@@ -5716,7 +5743,7 @@ ops/systemd/morphit-backup.timer    # daily at 04:00 local
 
 ### Wizard flow
 
-`morphit-ops init` step 16 asks: "Enable daily DB backup automation?" — default **Yes**. If yes, also asks for:
+`morphit-ops init` step 17 asks: "Enable daily DB backup automation?" — default **Yes**. If yes, also asks for:
 
 - Backup directory (default `/home/morphit/backups`)
 - Retention days (default 30)
@@ -5840,7 +5867,49 @@ BunkerWeb passes an upstream `Cache-Control: no-cache` through and honors it for
 
 **Beta gate note:** if you front the beta site with HTTP Basic Auth, **exempt `/verify.json`** from the auth (e.g. `auth_basic off;` inside its `location` block) so the version poll and auto-verify can read it. The poll sends the visitor's existing credentials, so it works through the gate either way, but the exemption is what lets the "About this instance" auto-verify succeed instead of reporting "Could not auto-verify."
 
+#### If your reverse proxy serves the build directly (single-nginx topology)
+
+The two shipped nginx configs above assume the **canonical two-container split** — BunkerWeb terminates TLS and reverse-proxies to a *separate* `frontend` nginx that serves the static build, and the no-cache blocks live in that frontend's `nginx.conf`. Some instances instead run a **single nginx that does everything**: it terminates TLS, serves `/usr/share/nginx/html` directly, AND proxies `/relay/`, `/v1/`, `/rss/` to the host. (Tell-tale: `docker ps` shows one edge container bound to `:80` and `:443` and there is no separate `frontend` service; `docker exec <edge> nginx -T` shows `root /usr/share/nginx/html;` alongside your `proxy_pass` blocks.) In that topology the shipped `ops/bunkerweb/frontend/nginx.conf` is **not** the file serving `/service-worker.js` and `/verify.json`, so its no-cache blocks never apply — and the update prompt silently breaks even though the repo "has" the fix. This is the single most common way a hand-rolled node ends up with a stale-worker problem.
+
+Put the blocks in **the server config that actually serves the build** — the same one holding your `location /`, `/relay/`, and `/v1/` blocks — inside the port-443 `server { … }`:
+
+```nginx
+location = /service-worker.js {
+    add_header Cache-Control "no-cache" always;
+    try_files $uri =404;
+}
+location = /verify.json {
+    add_header Cache-Control "no-cache" always;
+    try_files $uri =404;
+}
+```
+
+**Header-inheritance caveat.** The instant you add ANY `add_header` inside a `location`, nginx stops applying the `add_header` directives set higher up — so a bare version of the blocks above strips the CSP and HSTS headers from those two responses. If your server block sets CSP/HSTS via `add_header`, re-emit them inside each block so the two paths stay identical to every other response:
+
+```nginx
+location = /service-worker.js {
+    # re-emit the SAME Content-Security-Policy + Strict-Transport-Security
+    # add_header lines your server block already uses (copy them verbatim), then:
+    add_header Cache-Control "no-cache" always;
+    try_files $uri =404;
+}
+```
+
+(For a script file and a small JSON blob the missing CSP/HSTS is low-risk — the document's CSP and the domain's HSTS ride on the real navigations — but re-emitting is tidy and avoids surprises in a header audit.)
+
+Then reload the container so nginx re-reads the config, and **verify the headers flipped** — this is the confirmation the fix is live:
+
+```
+docker exec <your-edge-container> nginx -t     # syntax check before restarting
+docker restart <your-edge-container>
+curl -sI https://yourdomain.com/service-worker.js | grep -i cache-control
+curl -sI https://yourdomain.com/verify.json       | grep -i cache-control
+```
+
+Both must show `cache-control: no-cache`. Until they do, a stale service worker can persist on a visitor's device indefinitely and they never receive a deploy until they hard-refresh — which almost no one does.
+
 ### What BunkerWeb adds on top of Caddy/nginx
+
 
 | Feature | Caddy / nginx alone | BunkerWeb |
 |---|---|---|
@@ -6481,7 +6550,7 @@ sudo ufw deny 5432/tcp comment 'morphit DB — never public'
 ```
 
 The same applies to Docker: `127.0.0.1:5432:5432` not
-`5432:5432` — the latter binds to all interfaces (see §28
+`5432:5432` — the latter binds to all interfaces (see §33
 Docker compose example, which gets this right).
 
 ### fail2ban — second-layer SSH defense
@@ -6656,8 +6725,9 @@ The trick: in many places the law can force you to spy AND forbid
 you from saying so — but it generally cannot force you to keep
 *actively lying* on a schedule. So if you are ever served such an
 order, you simply **stop updating the canary**. After 14 days of
-staleness, Morphit's frontend shows your users a warning banner
-and they move to another instance. You never have to say a word.
+staleness, users (or a watchdog) who read the canary's `Generated:`
+date treat it as silent and move to another instance. You never
+have to say a word.
 
 So your only ongoing job is boring: keep the file fresh — you
 re-sign it about weekly **on your own machine and upload it to
@@ -6755,8 +6825,9 @@ in step 5, to upload the finished files.
 
    - **Re-sign + re-upload about weekly** (repeat steps 4–5); set a
      recurring reminder somewhere you'll see it. If you're ever
-     compelled to spy on users, you simply stop — the 14-day
-     staleness banner is automatic in the frontend.
+     compelled to spy on users, you simply stop — after 14 days a
+     stale `Generated:` date is the signal users (or a watchdog) act
+     on (there is no automatic banner; see the note below).
    - **Re-upload after every `morphit-ops upgrade`.** An upgrade
      rebuilds `build/`, which wipes the canary; the upgrade prints a
      reminder, and `morphit-ops health` will show it "missing" until
@@ -6776,8 +6847,11 @@ in step 5, to upload the finished files.
    fi
    ```
 
-   (The user-facing 14-day banner is automatic in the frontend —
-   nothing to set up there.)
+   (The Security page already explains the 14-day rule to users and
+   links to your `/canary.txt` — nothing to set up there. Note there
+   is no *automatic* staleness banner: detecting a stopped canary is
+   the user's / a watchdog's job, done by reading the `Generated:`
+   date. That manual check IS the canary's whole point.)
 
 ### What to do if you are served with a gag order
 
@@ -6786,16 +6860,18 @@ the canary. Your users switch to other operators (the
 federation), and Morphit's marketplace continues without you.
 That is by design. If you cannot even tell anyone you have
 stopped, just stop re-signing and re-uploading it — the
-`Generated:` date stops advancing, and after 14 days users see
-the banner and switch.
+`Generated:` date stops advancing, and users (or a watchdog)
+who read it treat a canary that hasn't updated in 14 days as
+silent and switch — the Security page states exactly that rule.
 
 ### Privacy considerations
 
-The generator fetches three external resources WHEN THE CRON RUNS
-(on your server, never on user devices):
+The generator fetches three external resources when you run it
+(on your signing machine, never on user devices):
 
-- a Blurt RPC for the chain head (default rpc.blurt.blog — any
-  Blurt RPC works; use your own if you prefer),
+- a Blurt RPC for the chain head (defaults to the built-in
+  `DEFAULT_BLURT_RPC_ENDPOINTS` rotator with failover — any Blurt
+  RPC works; pin one with `MORPHIT_CANARY_BLURT_RPC` if you prefer),
 - blockstream.info for the Bitcoin chain head (currently
   hardcoded; file an issue if you need your own bitcoind),
 - an RSS feed for news entropy (default Cointelegraph — choose any
@@ -9360,10 +9436,11 @@ payload carrying the `treasury` block.  Full shape
 ```
 
 A helper script generates this for you.  Note the
-`hash_manifest` is NOT hand-typed — it is the SRI JSON
-file produced by `apps/web/scripts/build-manifest.mjs
---release-json` (step 0 below); you give the builder its
-path.  See the numbered flow below for the exact commands.
+`hash_manifest` is NOT hand-typed — you derive it from the
+VPS's served `/verify.json` with
+`apps/web/scripts/verify-json-to-release-manifest.mjs` (step 0
+below), never a laptop build; you give the builder its path.
+See the numbered flow below for the exact commands.
 
 The script:
 
@@ -9399,15 +9476,18 @@ helper that does it from the same machine, using the same
 Blurt library the relay uses (`@beblurt/dblurt`):
 
 ```
-# 0) build the frontend, then generate the SRI hash manifest
-#    (JSON object of /<served-path>: sha256-<base64>, scoped to the
-#    tamper-critical BOOTSTRAP — shell + service worker + entry loader —
-#    to stay under the indexer's 4 KB per-field JSONB cap; the full
-#    per-file coverage is the served /verify.json):
-cd apps/web && npm run build && \
-  node scripts/build-manifest.mjs --release-json \
-    --prefix index.html --prefix service-worker --prefix _app/immutable/entry/
-cd ../..
+# 0) derive the SRI hash manifest from the VPS's SERVED /verify.json —
+#    NOT a laptop build. Vite/Rollup output is not byte-reproducible
+#    across machines, so a laptop-built manifest won't match the deployed
+#    bundle and trips the frontend's "Build integrity check failed"
+#    banner. Upgrade the VPS FIRST (`morphit-ops upgrade`) so /verify.json
+#    reflects the new bundle, then convert its tamper-critical BOOTSTRAP
+#    subset (shell + service worker + entry loader — stays under the
+#    indexer's 4 KB per-field JSONB cap; /verify.json keeps the full
+#    per-file coverage):
+curl -fsSL https://<your-instance>/verify.json -o ~/verify.json
+node apps/web/scripts/verify-json-to-release-manifest.mjs ~/verify.json \
+  > apps/web/build-manifest.release.json
 
 # 1) build the payload — BTC/XMR treasury pre-filled from
 #    apps/indexer/src/config/canonicalTreasury.ts; you supply the
@@ -9653,7 +9733,7 @@ Why this is robust:
 MORPHIT_INSTANCE_OPERATOR_TAG=morphit
 ```
 
-Wizard step 16 captures this at `morphit-ops init`
+Wizard step 18 captures this at `morphit-ops init`
 time.  Same step is reachable via
 `morphit-ops edit → Operator tag (federation attribution)`
 for ongoing maintenance.
@@ -9666,7 +9746,7 @@ operator" and queues NO payouts.  The relay does
 nothing.  Better to pay nothing than to pay for
 ops you can't prove are yours.
 
-A community operator who skips wizard step 16 will
+A community operator who skips wizard step 18 will
 see their indexer running fine (orderbook updates,
 chat works, fee verification works) but their
 relay queue will be empty.  The fix is to set the
@@ -9678,7 +9758,7 @@ env var and restart the indexer, or re-run
 For a community operator standing up
 `example-community.com`:
 
-1. **Pick your operator tag.**  Wizard step 16
+1. **Pick your operator tag.**  Wizard step 18
    prompts, and now defaults it to your domain
    (e.g. `example-community.com`) — a great choice
    since it's unique and recognizable.  Constraints:

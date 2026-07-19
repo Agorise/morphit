@@ -366,8 +366,7 @@ const ChatIdentityResponseSchema = z.object({
 const ConversationSummarySchema = z.object({
 	peer: z.string(),
 	last_message_at: z.string(),
-	message_count: z.number(),
-	has_user_sent: z.boolean()
+	message_count: z.number()
 });
 
 const ConversationsResponseSchema = z.object({
@@ -685,7 +684,6 @@ const sampleConversationSummary = {
 	peer: 'bob',
 	last_message_at: '2026-05-15T00:00:00Z',
 	message_count: 5,
-	has_user_sent: true,
 	// cp425 — ConversationSummary now carries the order the conversation is
 	// about (ConversationOrderRef | null). Sample a real ref: bob is asking
 	// alice (the recipient / order owner) about her BTC sell order.
@@ -1000,8 +998,8 @@ const scenarios: Scenario[] = [
 		name: 'ConversationSummary',
 		schema: ConversationSummarySchema,
 		valid: sampleConversationSummary,
-		invalidate: (s) => ({ ...s, has_user_sent: 1 }),
-		invalidReason: 'has_user_sent=1 (must be boolean)'
+		invalidate: (s) => ({ ...s, message_count: 'five' }),
+		invalidReason: 'message_count="five" (must be a number)'
 	},
 	{
 		name: 'ConversationsResponse',

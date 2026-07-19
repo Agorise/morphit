@@ -16,9 +16,10 @@
  *   tsx scripts/operator-config-smoke.ts
  */
 
-import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { writeFileSync, mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
 	loadOperatorConfig,
@@ -104,6 +105,10 @@ await scenario('allowlist contains the documented operator keys', () => {
 		'MORPHIT_INDEXER_XMR_FEE_PICONERO',
 		'MORPHIT_INDEXER_FEATURE_FEE_BLURT_PER_HOUR',
 		'MORPHIT_INDEXER_PRICE_FEED_ENABLED',
+		// Phase 5 — emergency BLURT/USD floor, config.env-tunable
+		// (the doc's flagship "live feed is down" workflow depends
+		// on this being allowlisted; superseded BLURT_PRICE_USD).
+		'MORPHIT_INDEXER_PRICE_FEED_STATIC_FLOOR',
 		'MORPHIT_INDEXER_VERBOSE_HEALTH',
 		'MORPHIT_INDEXER_OPERATOR_BALANCE_RELAY_THRESHOLD_BLURT',
 		'MORPHIT_INDEXER_OPERATOR_BALANCE_FEES_THRESHOLD_BLURT',
@@ -151,6 +156,48 @@ await scenario('allowlist deliberately excludes spam-economic constants', () => 
 		if (a.has(k)) {
 			throw new Error(`allowlist must NOT contain ${k} but it does`);
 		}
+	}
+});
+
+// ─── Template parity ─────────────────────────────────────────
+// OPERATIONS.md §23 tells operators to `cp morphit.config.env.example
+// morphit.config.env`, so that template MUST exist and MUST list
+// exactly the allowlisted keys — no more (an operator would
+// uncomment a key that hard-errors at boot), no fewer (a tunable
+// knob nobody can discover). This guards the exact drift that let
+// the defunct BLURT_PRICE_USD survive in the docs.
+await scenario('morphit.config.env.example exists and matches the allowlist exactly', () => {
+	const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
+	const examplePath = join(repoRoot, 'morphit.config.env.example');
+	if (!existsSync(examplePath)) {
+		throw new Error(
+			'morphit.config.env.example is missing — OPERATIONS.md §23 tells operators to copy it'
+		);
+	}
+	const text = readFileSync(examplePath, 'utf8');
+	// Every MORPHIT_* token that appears as a key line (commented or
+	// not) in the template.
+	const inExample = new Set(
+		Array.from(text.matchAll(/^#?\s*(MORPHIT_[A-Z0-9_]+)=/gm)).map((m) => m[1])
+	);
+	const allow = getAllowlist();
+
+	const notAllowlisted = [...inExample].filter((k) => !allow.has(k));
+	if (notAllowlisted.length > 0) {
+		throw new Error(
+			`template lists keys NOT in the allowlist (would hard-error at boot): ${notAllowlisted.join(', ')}`
+		);
+	}
+	const missingFromExample = [...allow].filter((k) => !inExample.has(k));
+	if (missingFromExample.length > 0) {
+		throw new Error(
+			`allowlisted keys absent from the template (undiscoverable): ${missingFromExample.join(', ')}`
+		);
+	}
+	// And the defunct name must not creep back as a SETTABLE key
+	// (a comment mentioning it for context is fine and helpful).
+	if (/^#?\s*MORPHIT_INDEXER_BLURT_PRICE_USD=/m.test(text)) {
+		throw new Error('template offers the defunct MORPHIT_INDEXER_BLURT_PRICE_USD as a key');
 	}
 });
 

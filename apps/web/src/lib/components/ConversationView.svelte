@@ -31,7 +31,7 @@
 	 * keyboard.
 	 */
 
-	import { onDestroy, onMount, tick } from 'svelte';
+	import { onDestroy, onMount, tick, untrack } from 'svelte';
 	import { markConversationRead, readAckTimestamp } from '$lib/chat/readState';
 	import { chatFolders, isStarred, toggleStar } from '$lib/chat/chatFolders';
 	import { pinToBottom } from '$lib/ui/pinToBottom';
@@ -129,6 +129,70 @@
 	 *  so the empty area can say "…is loading" while connecting and only switch to
 	 *  "No messages yet" once we KNOW the conversation is genuinely empty. */
 	let hasLoadedOnce = $state(false);
+
+	// ─── Message windowing (t.txt: keep opening a long thread fast) ────
+	// A thread with hundreds of messages must not render every bubble the
+	// instant it opens — decrypting + laying out hundreds of ChatMessages
+	// is a visible stall before the newest message even appears. Instead
+	// render only the last INITIAL_WINDOW (the newest, enough to fill the
+	// screen plus a little) and reveal older ones TRANSPARENTLY as the
+	// reader scrolls up. This is a purely background operation: no button,
+	// no visible "load older" — the UX just feels fast. The newest messages
+	// are ALWAYS in the window (we slice from the end), so incoming/sent
+	// messages appear immediately, and an append GROWS the window rather
+	// than sliding it, so nothing already on screen scrolls away. Switching
+	// conversations resets the window to the newest slice.
+	const INITIAL_WINDOW = 30;
+	const OLDER_CHUNK = 40;
+	// Reveal the next older batch once the reader scrolls within this many
+	// px of the top of what's currently rendered.
+	const OLDER_REVEAL_THRESHOLD_PX = 400;
+	let visibleCount = $state(INITIAL_WINDOW);
+	let windowPrevPeer = peer;
+	let windowPrevLen = 0;
+	let revealingOlder = false;
+
+	$effect(() => {
+		const len = messages.length;
+		const p = peer;
+		// untrack: we mutate visibleCount from here but must not depend on it,
+		// or the write would re-trigger this effect. Dependencies stay just
+		// `messages` (length) and `peer`.
+		untrack(() => {
+			if (p !== windowPrevPeer) {
+				windowPrevPeer = p;
+				visibleCount = INITIAL_WINDOW;
+			} else if (len > windowPrevLen) {
+				// Appended (new/sent) → grow the window by the delta so the
+				// older messages already revealed stay put (windowStart is
+				// unchanged) and the new ones show too.
+				visibleCount += len - windowPrevLen;
+			}
+			windowPrevLen = len;
+		});
+	});
+
+	const windowStart = $derived(Math.max(0, messages.length - visibleCount));
+	const visibleMessages = $derived(messages.slice(windowStart));
+	const hasOlder = $derived(windowStart > 0);
+
+	/** Background lazy-load: when the reader nears the top of the rendered
+	 *  window and older messages exist, extend the window by OLDER_CHUNK.
+	 *  Prepending content would jump the scroll, so measure height before and
+	 *  restore the delta after the DOM settles — the reader stays anchored on
+	 *  the same message and never sees a jump. A guard flag prevents a burst
+	 *  of scroll events from revealing several chunks at once. */
+	async function maybeRevealOlder(): Promise<void> {
+		if (revealingOlder || !hasOlder) return;
+		const el = scrollEl;
+		if (!el || el.scrollTop > OLDER_REVEAL_THRESHOLD_PX) return;
+		revealingOlder = true;
+		const before = el.scrollHeight;
+		visibleCount = Math.min(messages.length, visibleCount + OLDER_CHUNK);
+		await tick();
+		el.scrollTop += el.scrollHeight - before;
+		revealingOlder = false;
+	}
 
 	/** True while the SSE stream is connected; renders a small
 	 *  "Live" pip in the header so users know the conversation is
@@ -1002,6 +1066,10 @@
 	function onScroll(): void {
 		if (!scrollEl) return;
 		userAtBottom = isAtBottom();
+		// t.txt — background lazy-load: reveal older messages as the reader
+		// nears the top of the rendered window. Fire-and-forget; guarded so a
+		// burst of scroll events reveals at most one chunk at a time.
+		void maybeRevealOlder();
 		// cp474 (t.txt #7) — cancel the pin only when the scroll LEAVES the bottom.
 		//
 		// This used to cancel on ANY scroll event, which meant the pin killed
@@ -1032,8 +1100,8 @@
 	/** Ken — day separators in the message log. Grouping + the pending-message
 	 *  rule live in `$lib/chat/daySeparator` so they can be unit-tested; this
 	 *  wrapper just turns the returned Date into the sitewide label. */
-	function daySeparatorLabelAt(i: number): string | null {
-		const at = daySeparatorAt(messages, i);
+	function daySeparatorLabelAt(arr: readonly LocalMessage[], i: number): string | null {
+		const at = daySeparatorAt(arr, i);
 		return at ? formatDayMonth(at) : null;
 	}
 
@@ -1850,8 +1918,8 @@
 				aria-live="polite"
 				aria-label={$_('chat.messages_aria') as string}
 			>
-				{#each messages as m, i (m.localSeq)}
-					{@const daySep = daySeparatorLabelAt(i)}
+				{#each visibleMessages as m, i (m.localSeq)}
+					{@const daySep = daySeparatorLabelAt(visibleMessages, i)}
 					{#if daySep}
 						<!-- Ken — day divider: a hairline all the way across the log with
 						     the date centred just above it. Deliberately quiet (11px,
@@ -1878,7 +1946,7 @@
 						onRetry={handleRetry}
 						onPayNow={handlePayNowClick}
 						onMarkSent={handleMarkSentClick}
-						showWhoami={messages[i - 1]?.sender !== m.sender}
+						showWhoami={visibleMessages[i - 1]?.sender !== m.sender}
 						senderAvatarSvg={m.sender === me ? myAvatarSvg : peerLabelProps.avatarSvg}
 						senderAvatarDataUri={m.sender === me
 							? myAvatarDataUri

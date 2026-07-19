@@ -87,7 +87,7 @@ Then choose **option 2**.
 \`\`\`
 curl -fsSL https://morphit.io/verify.json -o ~/verify.json
 node apps/web/scripts/verify-json-to-release-manifest.mjs ~/verify.json > apps/web/build-manifest.release.json
-MORPHIT_BUILD_VERSION=${VERSION} MORPHIT_BUILD_HASH_MANIFEST_FILE=apps/web/build-manifest.release.json npx tsx apps/indexer/scripts/release-build-payload.ts < /dev/null > release.json
+MORPHIT_BUILD_VERSION=${VERSION} MORPHIT_BUILD_BLURT_BASE=125 MORPHIT_BUILD_HASH_MANIFEST_FILE=apps/web/build-manifest.release.json npx tsx apps/indexer/scripts/release-build-payload.ts < /dev/null > release.json
 npx tsx apps/indexer/scripts/release-broadcast.ts release.json --dry-run
 \`\`\`
 

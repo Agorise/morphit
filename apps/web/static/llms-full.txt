@@ -1399,7 +1399,7 @@ When you're viewing your own profile, you'll see a 'Reply' button under each rev
 
 **FAQ key:** `share_order_link`
 
-Yes. Every order has a shareable URL in the form /@username/order-permlink. This is the same page anyone visiting Morphit can use to read your full offer — terms, payment methods, location, your reputation — and it works without signing in. You can post the link on Nostr, paste it into a chat, share it in a forum. The page is public by design; ordering decisions benefit from being link-shareable the same way any marketplace listing is. The permlink itself is stable for the life of the order, so the link keeps working until the order is cancelled, filled, or expires.
+Yes. Every order has a shareable URL in the form /@username/order-permlink. This is the same page anyone visiting Morphit can use to read your full offer — terms, payment methods, location, your reputation — and it works without signing in. You can post the link on Nostr, paste it into a chat, share it in a forum. The page is public by design; ordering decisions benefit from being link-shareable the same way any marketplace listing is. The permlink itself is stable for the life of the order, so the link keeps working until the order is canceled, filled, or expires.
 
 ---
 
@@ -1548,7 +1548,7 @@ The combined effect: legitimate trade chat is essentially free and unrestricted;
 
 The chat inbox lives at the chat icon in the header and works like an email inbox: **one card per discussion**, not one per person.
 
-If you and the same trader have talked about three different orders, that is three cards, each with a "RE:" line naming the order and its current state — **(Live)**, **(Cancelled)** or **(Expired)** — so a thread about a dead order says so before you open it. A discussion that isn't about an order still gets its own card; its second line simply reads "RE: -". Open a card and you see only that discussion. Newest activity is always on top.
+If you and the same trader have talked about three different orders, that is three cards, each with a "RE:" line naming the order and its current state — **(Live)**, **(Canceled)** or **(Expired)** — so a thread about a dead order says so before you open it. A discussion that isn't about an order still gets its own card; its second line simply reads "RE: -". Open a card and you see only that discussion. Newest activity is always on top.
 
 Reading one card marks **only that one** read — three unread conversations with the same person stay three unread conversations, on this device and every other one you sign in from. Unread cards keep an emerald border, and the chat icon (plus the browser tab and favicon) carries the unread count. Reading a card, or clicking **Mark all as read**, clears it.
 

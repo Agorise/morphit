@@ -307,7 +307,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 131. **Bitcoin support is genuine.** Not a "we technically allow BTC" afterthought. The fee verifier, the explorer URL builder, the asset registry, the FAQ — all treat BTC as a primary asset.
 
-132. **Lightning support is on the roadmap.** Currently on-chain BTC. Lightning integration is documented in `docs/PHASE-5-BACKLOG.md` for honest disclosure of where we are.
+132. **Lightning support is on the roadmap.** Currently on-chain BTC; Lightning integration is a tracked roadmap item, honestly disclosed rather than overpromised as already-shipped.
 
 133. **No "Bitcoin only" tribalism.** Morphit serves BTC users without sneering at Monero users (and vice versa). The two communities trade with each other; the platform reflects that.
 

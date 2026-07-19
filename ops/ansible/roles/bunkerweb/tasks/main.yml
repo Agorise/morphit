@@ -119,6 +119,39 @@
     build: always
   when: bunkerweb_compose.changed or bunkerweb_env.changed or bunkerweb_frontend.changed
 
+- name: Verify the update surface is served no-cache (stale-worker guard)
+  # A missing no-cache header on /service-worker.js + /verify.json lets an edge
+  # cache pin a stale service worker on visitors' devices, so they stop receiving
+  # deploys until they hard-refresh. The shipped frontend config sets no-cache;
+  # this confirms it actually reached the wire. Non-fatal (a not-yet-ready site
+  # shouldn't abort the run) but it reports loudly so the operator can't miss it.
+  ansible.builtin.shell: >-
+    set -o pipefail;
+    curl -fsSI "https://{{ morphit_domain }}/verify.json"
+    | grep -i '^cache-control:' | grep -qi 'no-cache'
+  args:
+    executable: /bin/bash
+  register: morphit_nocache_check
+  changed_when: false
+  failed_when: false
+  retries: 10
+  delay: 6
+  until: morphit_nocache_check.rc == 0
+  when: bunkerweb_compose.changed or bunkerweb_env.changed or bunkerweb_frontend.changed
+
+- name: Report update-surface no-cache result
+  ansible.builtin.debug:
+    msg: >-
+      {{ '✓ /verify.json is served no-cache — the update surface is fresh; visitors will auto-receive deploys.'
+         if morphit_nocache_check.rc == 0
+         else '✗ WARNING: could not confirm /verify.json is no-cache. If the site is up,
+               visitors may be stuck on a stale service worker and stop receiving deploys.
+               Ensure the server config that serves the build carries the no-cache blocks for
+               /service-worker.js and /verify.json, then re-check with:
+               curl -sI https://' ~ morphit_domain ~ '/verify.json | grep -i cache-control
+               — see docs/OPERATIONS.md §"Caching the update surface".' }}
+  when: bunkerweb_compose.changed or bunkerweb_env.changed or bunkerweb_frontend.changed
+
 - name: Print BunkerWeb verification reminder
   ansible.builtin.debug:
     msg: |

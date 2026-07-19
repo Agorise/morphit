@@ -40,8 +40,7 @@ const REPO_ROOT = join(__dirname, '..', '..', '..');
 // which trips a substring match on "gitea".  The registration
 // is the smoke's own identity, not a project mention of Gitea.
 //
-// `TARBALL.md`, `docs/REVISIT-LIST.md`, and
-// `docs/REVISIT-LIST-ARCHIVE.md` are allow-listed
+// `TARBALL.md` and `docs/REVISIT-LIST.md` are allow-listed
 // because they are META-DOCUMENTATION about the policy — they
 // explain what was changed FROM (Gitea) and TO (Forgejo) in
 // past parts.  Erasing the historical context would make future
@@ -50,12 +49,6 @@ const REPO_ROOT = join(__dirname, '..', '..', '..');
 // context of fixing them; that's the right place for the word
 // to appear.
 //
-// REVISIT-LIST-ARCHIVE.md was split out of REVISIT-LIST.md at
-// cp150 (2026-05-27) to keep the live file under ~310KB.  The
-// archive inherits the same allowlist posture as the file it
-// was split from — historical Gitea→Forgejo discussion lives
-// in past parts that are now archived.
-//
 // `MORPHIT-BRAG-LIST.md` is NOT allow-listed — the brag list
 // is public-facing marketing and must use "Forgejo" cleanly,
 // even when describing past fixes.  If a "Gitea" mention
@@ -63,8 +56,7 @@ const REPO_ROOT = join(__dirname, '..', '..', '..');
 const ALLOW_LIST: ReadonlySet<string> = new Set([
 	'scripts/run-smokes.sh',
 	'TARBALL.md',
-	'docs/REVISIT-LIST.md',
-	'docs/REVISIT-LIST-ARCHIVE.md'
+	'docs/REVISIT-LIST.md'
 ]);
 
 const SCAN_EXTENSIONS = new Set([
@@ -166,11 +158,10 @@ const scenarios = [
 	},
 	{
 		name: 'allow-list contains the documented self-references and meta-docs',
-		ok: ALLOW_LIST.size === 4 &&
+		ok: ALLOW_LIST.size === 3 &&
 			ALLOW_LIST.has('scripts/run-smokes.sh') &&
 			ALLOW_LIST.has('TARBALL.md') &&
-			ALLOW_LIST.has('docs/REVISIT-LIST.md') &&
-			ALLOW_LIST.has('docs/REVISIT-LIST-ARCHIVE.md')
+			ALLOW_LIST.has('docs/REVISIT-LIST.md')
 	},
 	{
 		name: 'this smoke file scans the right extensions',

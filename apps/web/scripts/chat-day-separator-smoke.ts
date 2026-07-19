@@ -43,7 +43,7 @@ check('the first timestamped message in the log IS labelled', /No earlier timest
 // ─── wiring ──────────────────────────────────────────────────────────
 check('ConversationView imports the shared helper', /import \{ daySeparatorAt \} from '\$lib\/chat\/daySeparator';/.test(cv));
 check('label uses the sitewide locale-aware date (formatDayMonth)', /formatDayMonth\(at\)/.test(cv) && /formatDayMonth/.test(cv));
-check('separator is computed per message inside the log loop', /\{@const daySep = daySeparatorLabelAt\(i\)\}/.test(cv));
+check('separator is computed per message inside the log loop', /\{@const daySep = daySeparatorLabelAt\(visibleMessages, i\)\}/.test(cv));
 check('divider renders only when a label exists', /\{#if daySep\}/.test(cv));
 
 // ─── visual contract ─────────────────────────────────────────────────

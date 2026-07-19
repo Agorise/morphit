@@ -42,6 +42,8 @@
 		FeedbackValidationError
 	} from '$blurt/ops/feedback';
 	import { broadcastOrderComplete } from '$blurt/ops/order';
+	import { announceSettledElsewhere } from '$lib/chat/settledElsewhere';
+	import { runtimeSettledElsewhereDeps } from '$lib/chat/settledElsewhereRuntime';
 	import { BroadcastError, getUserBlurtAccount } from '$blurt/ops/profile';
 	import { publishFirstTradePost } from '$lib/syndication/publish';
 	import { isFirstTradeAnnounceEnabled } from '$lib/utils/syndicationPrefs';
@@ -399,6 +401,18 @@
 			if (completeOwnedOrder) {
 				try {
 					await broadcastOrderComplete(state.live, orderPermlink, subject);
+					// t.txt #5 — the trade is settled WITH `subject`; tell every
+					// OTHER inquirer on this order so they aren't left hanging.
+					// Fire-and-forget + best-effort: the completion above is already
+					// on-chain, and the auto-reply must never block or fail the
+					// submit. Gated to owner-completes (completeOwnedOrder), and the
+					// announcer excludes `subject` (the trader we chose) itself.
+					if (reviewerAccount) {
+						void announceSettledElsewhere(
+							runtimeSettledElsewhereDeps(reviewerAccount, () => state.live),
+							{ orderPermlink, counterparty: subject, me: reviewerAccount, live: state.live }
+						);
+					}
 				} catch (err) {
 					console.warn('[feedback] order-complete broadcast failed:', orderPermlink, err);
 				}

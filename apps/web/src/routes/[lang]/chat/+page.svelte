@@ -39,7 +39,7 @@
 
 	import Head from '$components/Head.svelte';
 	import IdentityLabel from '$components/IdentityLabel.svelte';
-	import RelativeTime from '$components/RelativeTime.svelte';
+	import { formatDayMonthTime } from '$i18n/formatters';
 	import { orderTitleParts } from '$lib/utils/orderTitle';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
 	import { loadRecentPeers } from '$lib/chat/recentPeers';
@@ -214,9 +214,32 @@
 		}
 	}
 
-	/** A discussion is identified by (peer, order) — never by peer alone. NUL is
-	 *  used as the separator because it cannot occur in an account name or a
-	 *  permlink, so no pair of distinct threads can produce the same key. */
+	/** Hover tooltip for a card's last-message time (t.txt #10). The visible
+	 *  "2h ago" is gone from the card body — it was eating ~40px of a ~360px
+	 *  phone card, squeezing the name/subject/feedback — so the timing now lives
+	 *  in the card's `title`: the project's canonical "14 July, 2026 @ 14:03:21
+	 *  UTC" plus the same "· 2h ago" the card used to show. Mirrors
+	 *  RelativeTime's descriptive ladder so the two never disagree. Computed at
+	 *  render (Date.now()); a native title is hover-only and the absolute UTC
+	 *  part is always exact, so a between-render "· 2h ago" drift is immaterial. */
+	function whenTooltip(iso: string): string {
+		const abs = formatDayMonthTime(iso);
+		const then = new Date(iso).getTime();
+		if (!Number.isFinite(then)) return abs;
+		const s = Math.max(0, Math.floor((Date.now() - then) / 1000));
+		const t = $_ as (k: string, o?: { values: Record<string, unknown> }) => string;
+		let rel: string;
+		if (s < 60) rel = t('relative_time.descriptive.just_now');
+		else if (s < 3600) rel = t('relative_time.descriptive.minutes', { values: { n: Math.floor(s / 60) } });
+		else if (s < 86400) rel = t('relative_time.descriptive.hours', { values: { n: Math.floor(s / 3600) } });
+		else if (s < 2592000) rel = t('relative_time.descriptive.days', { values: { n: Math.floor(s / 86400) } });
+		else if (s < 31104000)
+			rel = t('relative_time.descriptive.months', { values: { n: Math.floor(s / 2592000) } });
+		else rel = t('relative_time.descriptive.years', { values: { n: Math.floor(s / 31104000) } });
+		return `${abs} · ${rel}`;
+	}
+
+
 	function threadKey(c: ConversationSummary): string {
 		return `${c.peer}\u0000${c.order?.permlink ?? ''}`;
 	}
@@ -583,11 +606,10 @@
 		toggleStar(row.peer, row.order?.permlink ?? '', row.last_message_at);
 	}
 
-	// Last-message timestamps render via the unified <RelativeTime>
-	// component (Part 89) — descriptive format for the chat inbox
-	// since the timestamp is the primary recency indicator. NaN
-	// safety, locale routing, and 60s ticking are all handled by
-	// the component.
+	// Last-message timing lives in each card's hover `title` (t.txt #10) via
+	// whenTooltip() above — the canonical "14 July, 2026 @ 14:03:21 UTC · 2h
+	// ago". The visible inline timestamp was removed to give the name/subject/
+	// feedback lines the full card width on a phone.
 
 	// Part 121 cp7 — per-locale internal-link wrapper.  See
 	// $i18n/path.localePath() + the analogous helper in
@@ -776,6 +798,7 @@
 							<a
 								href={threadHref(convo)}
 								onclick={() => handleOpen(convo.peer, convo.order?.permlink ?? '', convo.last_message_at)}
+								title={whenTooltip(convo.last_message_at)}
 								class="flex min-w-0 flex-1 items-center gap-2 after:absolute after:inset-0 after:content-[''] sm:gap-3"
 								aria-label={convo.unread
 									? ($_('chat.inbox.conversation_aria_unread', {
@@ -873,40 +896,6 @@
 									{/if}
 								</div>
 							</a>
-							<!-- Timestamp — sibling of the anchor, vertically centred by the row's
-							     items-center; shows through the transparent ::after. -->
-							<span
-								class="flex-none text-xs {convo.unread
-									? 'font-semibold text-morphit-emerald'
-									: 'text-ink-500 dark:text-ink-400'}"
-							>
-								<!-- v1.7.5 (t.txt #3) — "25m" on a phone, "25 min ago" from `sm` up.
-								     The descriptive form costs ~40px of a ~360px card, which is
-								     ~40% of what the text block had left. Same component and same
-								     locale strings, so nothing about the wording drifts. -->
-								<span class="sm:hidden">
-									<RelativeTime iso={convo.last_message_at} format="terse" ago />
-								</span>
-								<span class="hidden sm:inline">
-									<RelativeTime iso={convo.last_message_at} format="descriptive" />
-								</span>
-							</span>
-							<!-- Star (t.txt item 11) — empty by default; clicking fills it gold and
-							     MOVES the discussion to Starred; clicking a gold star moves it back
-							     to Inbox. z-10 so it sits above the card-wide link. -->
-							<button
-								type="button"
-								onclick={() => handleToggleStar(convo)}
-								aria-pressed={starred}
-								aria-label={starred
-									? ($_('chat.inbox.unstar_aria') as string)
-									: ($_('chat.inbox.star_aria') as string)}
-								class="relative z-10 flex-none rounded p-0.5 text-base leading-none transition-colors {starred
-									? 'text-amber-400 hover:text-amber-500'
-									: 'text-ink-300 hover:text-amber-400 dark:text-ink-600 dark:hover:text-amber-400'}"
-							>
-								{starred ? '★' : '☆'}
-							</button>
 						</div>
 						<!-- Action box (t.txt item 7) — EVERY card has one, on the far
 						     right, full height. "Archive" moves the discussion to the
@@ -932,6 +921,26 @@
 								{$_('chat.inbox.action_archive')}
 							</button>
 						{/if}
+						<!-- Star badge (t.txt #10) — the discussion's star lives here now: a round
+						     badge tucked into the top-right corner, merged with the card, instead
+						     of a column in the row, so the name/subject/feedback get the full card
+						     width. Gold when starred, faint outline when not; clicking toggles
+						     Starred. Positioned inside the corner (not spilling out) because the
+						     <li> is overflow-hidden for the slide-collapse. z-20 sits above the
+						     card link and the Archive box (z-10). -->
+						<button
+							type="button"
+							onclick={() => handleToggleStar(convo)}
+							aria-pressed={starred}
+							aria-label={starred
+								? ($_('chat.inbox.unstar_aria') as string)
+								: ($_('chat.inbox.star_aria') as string)}
+							class="absolute right-1 top-1 z-20 flex h-6 w-6 items-center justify-center rounded-full border bg-white text-base leading-none shadow-sm transition-colors {starred
+								? 'border-amber-300 text-amber-400 hover:text-amber-500 dark:border-amber-400/50 dark:bg-ink-900'
+								: 'border-ink-200 text-ink-300 hover:text-amber-400 dark:border-ink-700 dark:bg-ink-900 dark:text-ink-400 dark:hover:text-amber-400'}"
+						>
+							{starred ? '★' : '☆'}
+						</button>
 					</li>
 				{/each}
 			{:else}

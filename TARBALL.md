@@ -1,57 +1,387 @@
 # TARBALL
 
-> ## cp477 — v1.7.7 READY TO SHIP. Bumped 1.7.5 → 1.7.7, all 19 touchpoints.
+> # ✅ cp502 — CI GREEN FIX: the two runners that failed on the v1.8.0 push are fixed. SUPERSEDES cp501. Extract → commit + push → CI goes green → resume at BLOCK 2. Tree still at 1.8.0.
 >
-> **Full battery green at 1.7.7: 519 runners, ~14,900 scenarios, 0 failures.** 1078 web tests, svelte-check 0/0, 25/25 workspaces compile-clean. `RELEASE-NOTES-v1.7.7.md` at repo root.
+> **1. untrusted-parseint-safety** — cp500's new `?limit` parse in `apps/indexer/src/api/orderCounterparties.ts` called `Number.parseInt(rawLimit, 10)` without the mandated `/^\d+$/` pre-check (`parseInt('12abc',10) === 12` would slip a malformed value through). FIXED: added `if (!/^\d+$/.test(rawLimit)) return 400;` BEFORE the parseInt; dropped the now-redundant `Number.isFinite` (digits-only ⇒ always finite), kept `n < 1 → 400`. All test cases still hold (abc/0/-5 → 400; 200 → 200; 9999 → 500). parseint-safety 1/1 (103 sites clean).
 >
-> **All 6 t.txt tasks done.** Details in REVISIT-LIST. Two gates were respected: Ken answered the clock question before any change, and approved the BasicSwap copy before it shipped.
+> **2. lockfile-sync** — the cp501 version bump touched the 14 package.json but NOT `package-lock.json`, leaving all workspace self-versions (root + 13) at 1.7.7. FIXED: bumped every morphit workspace `"version": "1.7.7"` → `1.8.0` in package-lock.json (15 textual entries = root ×2 [top-level + `packages[""]`] + 13 workspaces; version-only, confirmed NO third-party dep sat at 1.7.7). Lockfile stays valid (lockfileVersion 3); `npm ci --dry-run` still succeeds. lockfile-sync 4/4.
 >
-> ### What Ken's questions found that no task named
-> | | Finding |
-> |---|---|
-> | 🔴 | **Hostile-indexer timestamp (federation vuln).** A hostile operator serving `last_message_at: 2099` set the user's read cursor to 2099 → every real message read as already-seen → **silently deaf**, on the screen where a counterparty's payment message arrives. Fixed with `sanitizeBlockTime` at the boundary. |
-> | 🔴 | **Rapid-filing clobber.** `markLocalChange` stamped `Date.now()`; the sync compared it to a BLOCK time — on a slow clock the sync adopts the chain's OLDER state and reverts every un-broadcast click. **The v1.7.7 15s re-sync armed it.** |
-> | 🔴 | **Broadcast deadlock** introduced by my own in-flight guard (no timeout → one hung request queues every later change for the session). |
-> | 🔴 | **The inverse vector** the sanitiser created: `isUnread` still read the raw stamp, so a hostile 2099 pinned a badge the user could never clear. Found in the Charlie walkthrough. Half a fix is not a fix. |
-> | 🔴 | **A Chinese character in a Russian sentence** that 3,368 i18n checks passed. New wrong-script guard. |
-> | 🟡 | **`app.css` `min-height: 100dvh; min-height: 100vh;`** — losing order, so the dvh line has NEVER applied. **Reported, not fixed. Ken's call.** |
+> Verified: parseint-safety 1/1, lockfile-sync 4/4, indexer tsc 0, version-consistency 19/19, eli5-release-blocks 33/33. The other 14955 scenarios were already green, and both fixes are deterministic (fail identically across all three pulses), so this clears the whole job.
 >
-> ### The session's defining pattern — ~17 instances
-> **Guards that pin a LITERAL fail on correct changes and pass broken ones.** Five battery runners failed on the first full pass; **every one was a literal-pin broken by a fix that strengthened the very property the guard protected.** Not one caught a real regression. All re-pinned to requirements; four gained an extra check. Several were my own.
->
-> Also: two of my own tests were **vacuous** (a fixed mock latency cannot expose an ordering race; "all 20 arrived" passes with no debounce), one test modelled something **impossible** (a genuine message from tomorrow while the clock says today), and eight REVISIT-LIST writes were **silent no-ops** because `str.replace` does not raise on a miss.
->
-> ### Sandbox notes
-> - **`vitest-must-pass-smoke` takes 165s** — it dies under `MORPHIT_SMOKE_TIMEOUT=90` reporting `failing=0` with a partial `passing=646`. Same artifact class as `svelte-check`. Use the 240s default.
-> - **Playwright IS available** (`/home/claude/.npm-global/lib/node_modules/playwright`, browsers at `/opt/pw-browsers`). Layout claims can be measured at a real viewport instead of reasoned about — the send-modal fix was verified at 360x800, 800x360 and 320x568.
->
-> ### Still owed
-> ELI5 release ceremony (`bash scripts/eli5-release.sh 1.7.7 "..."`). Nothing else.
+> **Lesson:** a package.json version bump is NOT complete until `package-lock.json` is bumped too — add it to the 19-touchpoint ritual as the lockfile step (or the lockfile-sync CI gate catches it, as it just did).
 
-> ## cp477 — v1.7.7 WORK COMPLETE, NOT SHIPPED. Version still 1.7.5.
+
+> # ✅ cp501 — v1.8.0 RELEASE PREP: version bumped 1.7.7 → 1.8.0 (all 19 touchpoints + RELEASE-NOTES-v1.8.0.md), and the 125-BLURT floor PINNED in the ELI5 payload build + smoke-enforced. **Tree now at 1.8.0 — READY TO RELEASE.** SUPERSEDES cp500. version-consistency 19/19, workspace-typecheck 26/26, eli5-release-blocks 33/33, release-validator 80/80, canonical-treasury 13/13, treasury-repin 22/22, rpc-user-agent 14/14, deployed-version-poll 8/8.
 >
-> **All 6 tasks from the second t.txt are done.** Nothing is bumped; the version bump + RELEASE-NOTES + ELI5 are still owed.
+> **Version bump (19 touchpoints → 1.8.0):** 14 package.json (root + 13 workspaces) + 3 TS constants (`apps/relay/src/api/health.ts` VERSION, `apps/indexer/src/api/health.ts` INDEXER_VERSION, `apps/mcp-server/src/main.ts` MCP_VERSION) + 2 doc examples (`docs/API.md`, `apps/indexer/README.md`). Plus **RELEASE-NOTES-v1.8.0.md** (version-consistency treats it as a release requirement) — user-facing narrative notes in Ken's voice covering: the settlement auto-reply, per-order threads, the mobile chat card, banner→toast, page title, the 125 fee floor, the missing-message/no-cache story, the RPC UA retirement, and the i2p setup spinner. version-consistency 19/19; no hardcoded 1.7.7 left (only historical comments); workspace-typecheck 26/26. (Health-comment `// v1.7.7 — EXPORTED …` left as-is: it dates when the export landed, not the current version.)
+>
+> **125-floor PINNED (the release-step owed):** BLOCK 4 runs the payload builder with `< /dev/null`, so every prompt takes its default — and `blurtBase`'s default was `MORPHIT_BUILD_BLURT_BASE ?? ''` (EMPTY → the floor would be OMITTED, silently falling back to each instance's env). FIX: BLOCK 4 of `scripts/eli5-release.sh` now sets `MORPHIT_BUILD_BLURT_BASE=125` (explicit chain-pin); `eli5-release-blocks-smoke` gained a check that BLOCK 4 pins 125 (+ the env var joined the read-by-builder loop) → 31→33 checks; `release-build-payload.ts`'s stale "e.g. 62.5" prompt example corrected to 125 (62.5 was ~12.5¢ at the old 0.002 price; at today's 0.001 the same 12.5¢ is 125 BLURT). The env floor (`MORPHIT_INDEXER_FEE_BASE_BLURT default(125)`) is the backstop; the chain-pin now wins.
+>
+> **READY TO SHIP.** Ken: extract this tarball → the tree is release-ready at 1.8.0 → run the 6 ELI5 blocks (relayed in chat). BLOCK 1 commits everything, BLOCK 2 tags after CI green, BLOCK 4 pins 125 into the payload, BLOCK 5 broadcasts, BLOCK 6 repairs the canary. The whole v1.8.0 body (cp498 no-cache/vestigial, cp499 battery-green, cp500 auto-reply enumeration fix, cp501 version+floor) is in this tree.
+
+
+> # ✅ cp500 — v1.8.0 WIP: fixed the #5 auto-reply ENUMERATION CAP (the cp499 deep-deep finding). The settlement auto-reply now reaches EVERY inquirer on an order — per-order enumeration, not bounded by the owner's inbox. Tree still 1.7.7, NO release. SUPERSEDES cp499. Indexer tsc 0, web typecheck 26/26 (incl. svelte-check), settled-elsewhere 8/8, wiring-completeness 56/56, api-shape 76/76, my-orders 13/13.
+>
+> **The finding:** `announceSettledElsewhere` enumerated inquirers via `getConversations(me)`, which the endpoint caps at `MAX_CONVERSATIONS=200` — the owner's 200 MOST-RECENT threads across ALL orders/people. A busy owner (200+ threads) could miss an inquirer on the completed order whose thread had aged past that cap, even for an order with few inquirers. (My cp499 note called the fix "uncapped" — but the obvious swap target, the counterparties endpoint, was ITSELF capped at 50, which would have been WORSE; so the fix had to make that endpoint accept a generous limit.)
+>
+> **The fix — enumerate PER ORDER, uncapped-by-inbox:**
+> - `apps/indexer/src/api/orderCounterparties.ts` — added optional `?limit=N` (parsed; non-numeric/`n<1` → 400; clamped to a new hard cap `MAX_COUNTERPARTIES=500`; the lean `DEFAULT_COUNTERPARTIES=50` is unchanged so /my/orders is untouched). This endpoint is the authoritative per-order source: `SELECT DISTINCT sender WHERE recipient=owner AND order_permlink=order AND sender<>owner`.
+> - `apps/web/src/lib/indexer/client.ts` — `getOrderCounterparties(owner, permlink, opts?: {limit?, signal?})` (sole caller /my/orders passes 2 args → default, unchanged).
+> - `apps/web/src/lib/chat/settledElsewhere.ts` — the announcer dep is now `fetchOrderInquirers(owner, orderPermlink): Promise<readonly string[]>` (per-order, self-excluded server-side); dropped the order-permlink/order-less filtering (the source is already scoped) + the `SettledElsewhereThread` interface, keeping only the counterparty + defensive-self exclusion.
+> - `apps/web/src/lib/chat/settledElsewhereRuntime.ts` — `fetchOrderInquirers` calls `getOrderCounterparties(owner, permlink, {limit: 500})` → maps `.peer`.
+> - `apps/web/scripts/settled-elsewhere-announce-smoke.ts` — mock + fixture rewritten for the per-order dep (A-1 exclusions now counterparty+self only; A-6 = only-the-counterparty-inquired; A-7 = fetchOrderInquirers failure). 8/8.
+> - `apps/indexer/test/api/orderCounterparties.test.ts` — added: default binds 50, `?limit=200` binds 200, `?limit=9999` clamps to 500, non-numeric/0/negative → 400 (Postgres test; CI runs it).
+> - RESULT: the auto-reply reaches every inquirer on an order up to 500 (>> the realistic ~15), regardless of how busy the owner's inbox is. The 200-total-threads gap is gone; the counterparties endpoint's own 50-cap is bypassed for this caller.
+>
+> **cp499 deep-deep otherwise CLEAN:** conversations SQL collapse semantically equivalent; auto-reply un-abusable (rides "recipient already messaged me", text-free, owner-completes-only) and leaks no counterparty (payload = {v,kind,orderPermlink}); Charlie/MCP genuinely read-only (5 read tools, no write/sign); IP 40/40, XSS 1/1, CSP 30/30; 5-persona walkthroughs (Bob/Sally-user/Sally-operator/Josie/Charlie) all clear.
+>
+> **NEXT:** the ELI5 release with the **125-BLURT floor pinned in the `morphit_release_v1` treasury payload**.
+
+
+> # ✅ cp499 — v1.8.0 WIP: FULL 525-runner smoke battery run in chunks → GREEN. 8 real regressions found + fixed (2 mine from cp498, 6 batch-3), 2 timeout false-failures verified green standalone. Tree still 1.7.7, NO release. SUPERSEDES cp498. All fixed smokes re-verified individually + previously-failing chunks re-run clean.
+>
+> **Battery = 525 runners** (my earlier "482" undercounted — `grep '^\s*"[a-z]'` missed the root `.:` smokes; the integrity smoke counts 525 after the 2 registrations below). Run as chunks with `MORPHIT_SMOKE_TIMEOUT=90`. Two runners TIME OUT in-chunk (known, NOT real failures): `vitest-must-pass-smoke` (runs ~1974 tests across 3 workspaces; standalone: indexer 646 / relay 250 / web 1078, all ≥ baseline) and `workspace-typecheck-smoke` (26 workspaces incl. svelte-check apps/web; standalone 26/26). Both verified green standalone.
+>
+> **8 real regressions fixed (each re-verified green individually):**
+> - **[csp-header-consistency]** (MINE, cp498) — my OPERATIONS.md BunkerWeb-direct subsection had a literal `add_header Content-Security-Policy "…your exact policy…"` placeholder; the root smoke extracts EVERY CSP add_header from OPERATIONS.md + compares byte-identical across web.conf/RUN-A/OPERATIONS/BunkerWeb → mismatch. FIX: replaced the CSP+HSTS literal lines in the caveat block with a comment. 30/30.
+> - **[locale-source-of-truth]** (batch-3, cp496) — `order-settled-elsewhere-payload-smoke.ts:120` hardcoded the 10-locale array. FIX: `import { SUPPORTED_LOCALES } from '../src/lib/i18n/locales'` + `const LOCALES = SUPPORTED_LOCALES.map((l) => l.code)`. 2/2 (order-settled still 7/7).
+> - **[fetch-must-have-timeout]** (batch-3, item 6/7) — `apps/indexer/src/api/rpcHealth.ts` probeOne's native-UA comment lengthened the options block, pushing `signal: controller.signal` past the smoke's ~10-line look-forward window. The fetch was CORRECT (had signal+timeout). FIX: moved `signal` to right after `method: 'POST'`. 1/1 (indexer tsc 0).
+> - **[color-contrast]** (batch-3, item 11) — the mobile chat card's empty-star button used `dark:text-ink-600` on `dark:bg-ink-900` = 2.06:1 (fails WCAG AA). FIX: `dark:text-ink-400`. 6/6 (0 below AA).
+> - **[persona-walkthrough F14]** (batch-3) — the sentinel expected OPERATIONS.md to call the DB-backup wizard step "step 16", but a Homepage-SEO-meta step (step 16) was inserted ahead of it → steps.ts (`step(17,…,'Daily DB backup')`) AND OPERATIONS.md now say step 17 (they AGREE); the smoke was the stale outlier. FIX: updated F14 mustHave→"step 17", mustNotHave→{15,16}, refreshed the comment (step 17 of 23). 185/185.
+> - **[smoke-registration-integrity]** (batch-3, items 9/10) — `page-title-anchor-smoke` + `upgrade-banner-behavior-smoke` existed but were UNREGISTERED. FIX: registered both in run-smokes.sh (523 → 525). 4/4, 0 orphans.
+> - **[llms-full-freshness]** (batch-3, items 11/12) — `apps/web/static/llms-full.txt` (the generated LLM FAQ mirror) drifted from en.json (the Canceled + share-link + chat-inbox FAQ edits). FIX: `node scripts/build-llms-full.mjs` (143 entries, 236563 chars). 6/6.
+> - **[order-completion-semantics]** (batch-3, cp497 #5 sender) — the smoke's whitespace-normalized regex expected `broadcastOrderComplete(...); } catch` ADJACENT, but the #5 sender (`void announceSettledElsewhere(...)`) now sits between them INSIDE the same best-effort try (so completion AND sender are both caught — code is CORRECT). FIX: loosened the regex to `broadcastOrderComplete(...);.*?} catch`. 8/8.
+> (Of the 8, TWO — csp + … — I introduced in cp498; the other 6 are batch-3 changes whose smokes/docs weren't updated at the time, surfaced now by the first FULL battery re-run since batch-3. This is exactly why the full battery matters.)
+>
+> **Confirmation re-runs after fixes:** [201..320] → only workspace-typecheck "fails" (verified green standalone); [361..445] → 0 fail; [441..525] → 0 fail. Fixes hold in-battery, no interactions.
+>
+> **NEXT before v1.8.0 release:** 5-persona walkthroughs (Bob/Sally-user/Sally-operator/Josie/Charlie) + a deep-deep, THEN the ELI5 release with the **125-BLURT floor pinned in the `morphit_release_v1` treasury payload** (chain-pin > env fallback).
+
+
+> # ✅ cp498 — v1.8.0 WIP: (1) the "messages disappear" bug (#4) SOLVED — root cause was INFRA (stale service worker), fixed LIVE on Ken's VPS; (2) vestigial Requests/Messages scaffolding DELETED; (3) new-operator setup hardened to self-verify the no-cache update surface. Tree still 1.7.7, NO release. SUPERSEDES cp497. Indexer + indexer-client tsc clean, matrix-bot response-shape 76/76, update-surface-nocache 6/6; Postgres conversations.test updated (imports the real query → CI confirms); FULL battery still PENDING.
+>
+> **#4 "messages disappear" — SOLVED; the pipeline was never broken, it was a STALE SERVICE WORKER (infra, not code).** Long live-VPS diagnosis with Ken (full detail in the transcript). Proven CORRECT end-to-end: messages stored, `/v1/conversations/:acct` serves ALL threads incl. the one in question, kentest3 had even REPLIED (`last_message_is_mine=true`); not hidden/blocked/auto-archived; indexer healthy. Actual cause: kentest3's browser ran STALE cached client code (DevTools Network: `index.html` + JS bundles sourced from `(ServiceWorker)`), because Ken's HAND-ROLLED BunkerWeb nginx served `/service-worker.js` + `/verify.json` with **NO `Cache-Control` header** → the edge cached them → BOTH update-detection paths (SW byte-diff AND the `verify.json` version poll) were defeated → the "Load it now" prompt never fired → users stuck on old code until a HARD refresh (a soft refresh goes through the SW). The SW push handler kept firing notifications regardless of app version = the exact "badge lights, no card" symptom. FIXED LIVE: added `location = /service-worker.js` + `= /verify.json` no-cache blocks (with CSP/HSTS re-emitted, since add_header in a location drops inherited headers) to `/opt/bunkerweb/frontend/nginx.conf` (backup `.before-nocache`), `nginx -t` clean, `docker restart bunkerweb-frontend-1`; `curl -sI` now returns `cache-control: no-cache` on both, and after a hard refresh kentest3's threads reappeared — confirming the whole chain. Compounded by WIP-no-version-bump (deployed==running==1.7.7 blinds the version poll); once Ken cuts a REAL versioned release the poll path comes back online too, and the #5 sender becomes E2E-testable.
+>
+> **Vestigial Requests/Messages cleanup — DONE + VERIFIED.** The old inbox model (Requests vs Messages tabs) was replaced long ago by folders (inbox/starred/archived), but the backend still COMPUTED `has_user_sent` + `peer_has_user_sent` (the latter a per-request `BOOL_OR(...) OVER (PARTITION BY peer)` window function) that NO frontend code consumes (grep-confirmed: only a stale comment). REMOVED: (a) `apps/indexer/src/api/conversations.ts` — COLLAPSED `CONVERSATIONS_SQL` from two nested subqueries into ONE (dropped the window wrapper), removed both columns + the `ConversationRow` fields + the response serialization + the Messages/Requests doc comments; (b) `packages/indexer-client/src/index.ts` — removed both from `ConversationSummary`; (c) `apps/indexer/test/integration/conversations.test.ts` — removed the two cp447 Messages/Requests test cases + the `OrderRow` field decls (the test imports the real `CONVERSATIONS_SQL`, so CI exercises the collapsed query); (d) `apps/matrix-bot/scripts/api-response-shape-smoke.ts` — removed from the schema + fixture, repointed the invalidation test to `message_count:'five'`; (e) `apps/web/src/lib/chat/readState.ts` — comment. KEPT `last_message_is_mine` (frontend uses it for cross-device unread). Sheds a per-request window-function cost + deletes confusing old-model scaffolding. VERIFIED: whole-repo grep clean, indexer tsc 0, indexer-client tsc 0, matrix-bot 76/76. (Postgres test can't run in sandbox — no PG; CI confirms.)
+>
+> **New-operator setup hardened for no-cache (Ken's "SUPER SMOOTH" ask) — DONE.** The AUTOMATED path was already correct: the Ansible bunkerweb role copies `ops/bunkerweb/frontend/nginx.conf` (which HAS the no-cache blocks) + the Dockerfile bakes it, and `update-surface-nocache-config-smoke` (6/6) already guards ALL 3 shipped configs (web.conf, bunkerweb frontend nginx.conf, RUN-A example) against no-cache regression (incl. a no-cache→max-age swap). Ken's node missed it ONLY because it's hand-rolled into a single-nginx topology none of the shipped configs represent. ADDED: (1) `docs/OPERATIONS.md` §"Caching the update surface" — a new subsection documenting the BunkerWeb-direct/single-nginx topology (proxy serves the build DIRECTLY, like Ken's) with the exact no-cache blocks + the CSP/HSTS re-emission caveat + a verify-the-headers curl; (2) `docs/RUN-A-MORPHIT-NODE.md` §11.2 — a post-setup verification step (curl the update surface, expect `cache-control: no-cache`) so manual operators catch a missing config BEFORE announcing; (3) `ops/ansible/roles/bunkerweb/tasks/main.yml` — a NON-FATAL post-deploy self-check that curls `/verify.json` (retry-until-up) and prints ✓/✗ WARNING, so an Ansible-provisioned node reports its own header state. (Created a duplicate no-cache smoke, then found the existing one is strictly more comprehensive → deleted the dup + unregistered it.)
+>
+> **Still owed before v1.8.0 release:** FULL ~524-runner battery in SMALL chunks + 5-persona walkthroughs (Bob/Sally-user/Sally-operator/Josie/Charlie) + deep-deep, THEN the ELI5 release — with the **125-BLURT floor pinned in the `morphit_release_v1` treasury payload** (chain-pin > env fallback). Optional: fast-tailer honest-notification hardening (documented, not built).
+
+
+> # ✅ v1.8.0 — batch 3 cont.: settlement auto-reply SENDER built + unit-tested + wired (cp497); #4 delivery-bug VERDICT (code correct → runtime). CODE (apps/web chat) + 2 new modules + a new unit smoke + manifest. Still v1.8.0 WIP, tree at 1.7.7, NO release. SUPERSEDES cp496. Sender/receiver/wiring/i18n smokes green + type-clean; E2E delivery awaits the #4 runtime fix on the VPS; FULL battery still PENDING.
+>
+> **Task #5 SENDER — built, unit-tested, wired (completes the feature started in cp496's receiver):**
+> - **Announcer** (`apps/web/src/lib/chat/settledElsewhere.ts`, PURE + injected-deps for testability): `announceSettledElsewhere(deps, {orderPermlink, counterparty, me, live})` enumerates the owner's threads on the completed order, EXCLUDES the counterparty they traded with (+ themselves), and E2E-sends each remaining inquirer the text-free `order_settled_elsewhere` payload. Best-effort throughout: never throws; returns {sent, skipped (no chat pubkey), failed}. Identity + wire encoded ONCE; per-recipient encryption; self-copy so the owner can reread it; `order_permlink` attached as the THREAD TAG.
+> - **Runtime wiring** (`apps/web/src/lib/chat/settledElsewhereRuntime.ts`, SEPARATE file so the pure logic stays test-light): `runtimeSettledElsewhereDeps` borrows the (security-sensitive) TOFU-pin + envelope + broadcast primitives from a single `runtimeDeps` rather than re-implementing them, + `getConversations` for enumeration.
+> - **Trigger** = `LeaveFeedbackForm` after `broadcastOrderComplete` succeeds (leaving feedback IS what closes the trade; en.json:1452). Gated to `completeOwnedOrder` (owner-only) with `subject` as the known counterparty. My/orders complete is NOT a trigger (it passes no counterparty to exclude). Fire-and-forget: never blocks or fails the feedback submit.
+> - **Admission (why it lands):** the auto-reply (owner→inquirer) does NOT get the order-bypass (the order is owned by the SENDER, not the recipient). It rides the stranger gate's "recipient already messaged me" condition — TRUE because the inquirer sent first. So the reply is admitted IFF the original inquiry was stored (couples cleanly to #4).
+> - **Smoke** (`apps/web/scripts/settled-elsewhere-announce-smoke.ts`, 8 checks A-1..A-8, fully mocked deps): enumeration (excludes counterparty/self/other-order/order-less), wire = order_settled_elsewhere payload, broadcast shape (recipient + order_permlink tag + ciphertext), skip-no-pubkey, best-effort-on-broadcast-failure, empty→no-sends, graceful-on-fetch-failure, self-copy in header. Registered in `run-smokes.sh` → ~524 runners.
+> - **CERTIFIED:** announcer 8/8, receiver payload 7/7, wiring-completeness 56/56, i18n-parity 10/10; tsc type-clean (0 errors in the new files; the 107 pre-existing errors are all elsewhere — test files, pendingFeedbackReplies, chatService — and unchanged). E2E delivery awaits the #4 runtime fix.
+>
+> **Task #4 delivery bug — VERDICT: the code path is correct end-to-end; the failure is RUNTIME.** Traced all 5 stages: frontend sets order_permlink (orderbook messageHref `?order=`), durable order-response bypass applies (checkChatOrder finds the live, fee-verified, indexed order owned by the recipient), message admitted + stored, conversations query returns it (line 162, NO fee filter — "Requests=fee-payers" is a CLASSIFICATION label, not an inbox exclusion), frontend shows it in the Inbox folder. New orders INSERT with status='live' immediately. So kentest2's "hi" SHOULD appear → the live-VPS failure is runtime (durable poller stalled/lagging is the prime suspect: the fast head-tailer fires the notification independently of the poller, so a message that never gets durably stored produces a phantom badge that clears after the fast-pending TTL ~4.5min). **Architectural finding:** the fast tailer runs ONLY the block check (headTailer 40-45) — the admission gate is NOT replicated — so ANY unstored message (gate-dropped OR poller-lost) fires a phantom badge. Documented for deliberate hardening; NOT patched speculatively (wouldn't fix a stalled poller + untestable without Postgres/VPS). Diagnostics: `docker ps | grep indexer`; `/v1/health` lag_blocks; `MORPHIT_CHAT_DEBUG=1` → trace chat.orderCheck→ADMITTED→stored.
+>
+> **Still open this batch:** confirm the poller on the VPS (then the sender is E2E-testable) + optional fast-tailer honest-notification hardening.
+
+
+> # ✅ v1.8.0 — batch 3 cont.: settlement auto-reply RECEIVER + approved copy (cp496); #5-PartA verified; #2 doc-ELI5 assessed (no cut). CODE (apps/web chat payload + render) + 10 locales + a new smoke + smoke-manifest. Still v1.8.0 WIP, tree at 1.7.7, NO release. SUPERSEDES cp495. Payload/i18n/render smokes green; FULL battery + the #5 SENDER still PENDING.
+>
+> **Task #5 Part A (Ken's hunch — VERIFIED FALSE; the wiring is correct).** Multiple different people messaging about the SAME order DO appear as separate threads. `apps/indexer/src/api/conversations.ts` CONVERSATIONS_SQL does `GROUP BY peer, order_permlink` (line 163) — the thread key is `(peer, order)`, not peer alone, so N inquirers on one order render as N separate cards. Ken can reply to each independently. `chat-thread-model` 16/16 already pins this.
+>
+> **Task #5 Part B — RECEIVER half built + verified (SENDER deferred, see below):**
+> - **Payload contract.** New `OrderSettledElsewherePayload` in `payload.ts` (`{v:1, kind:'morphit_order_settled_elsewhere', orderPermlink}`) + `encodeOrderSettledElsewherePayload` + a decode branch + the `DecodeResult` entry + added to `StructuredPayload`. It is a SYSTEM message: the wire carries ONLY `order_permlink` (snake_case) — NO text — because each recipient renders the copy in THEIR OWN locale. Encoder validates the permlink; a missing/malformed permlink decodes to plaintext (a text-free anchor-less message is meaningless).
+> - **Render.** New `{:else if decoded?.kind === 'order_settled_elsewhere'}` branch in `ChatMessage.svelte` — 🤝 + `$_('chat.system.order_settled_elsewhere')`, so the reader sees the warm copy in their own language.
+> - **10-locale copy** (Ken's approved Option-A warm text). New `chat.system` namespace created in ALL 10 locales with `order_settled_elsewhere`, faithfully translated (en/es/fr/de/it/pl/ru/fa/zh-CN/zh-HK). Parity holds (3369 keys × 10).
+> - **Smoke.** New `apps/web/scripts/order-settled-elsewhere-payload-smoke.ts` (7 checks: roundtrip, snake-case wire, invalid-permlink reject, missing/malformed→plaintext, 10-locale non-empty copy, render wiring). Registered in `run-smokes.sh` (~523 runners).
+> - **CERTIFIED:** new smoke 7/7; shipping-payload-roundtrip 17/17 (payload.ts still loads/works); wiring-completeness 56/56; i18n-locale-parity 10/10; i18n-dead-key-gate 3369/3369.
+>
+> **🔴 The #5 SENDER is deferred to build ALONGSIDE #4 (so it's testable).** The sender = the order owner's client, right after its `morphit_order_complete_v1` broadcast (from `broadcastOrderComplete` — LeaveFeedbackForm on feedback, or my-orders on settle), enumerating the OTHER inquirers on that order (their own conversations filtered to the order, minus the counterparty) and E2EE-sending each an `order_settled_elsewhere` (client-side because the message is encrypted per recipient — the indexer can't encrypt). It touches the E2EE broadcast path and is UNTESTABLE end-to-end until the parked #4 delivery bug is fixed on the live VPS — so it belongs in the same unit as the #4 fix. The receiver is forward-compatible: clients handle the message the moment senders start emitting it.
+>
+> **Task #2 (RUN-A-NODE + OPERATIONS ELI5) — ASSESSED, NO CUT (honest engineering call).** Read RUN-A-NODE end-to-end (371 lines — already 2771→371 via cp377: fast-version box, Ansible-first "recommended" §5a, one-command steps, technical density quarantined in hands-on §5b + reference §11) + surveyed OPERATIONS.md's 54 sections (operator ENCYCLOPEDIA — incident response, security, upgrade/schema notes). A section-length smoke ALREADY caps both (OPERATIONS 600 / RUN-A-NODE 400 lines per `##`, 4/4 green). No responsible cut exists: RUN-A-NODE has no fat without removing grandma context; OPERATIONS.md's length is inherent to its job (consulted DURING incidents) — gutting it strips operator-protecting content. The "SUPER SMOOTH, minimal-decisions" lever is the Ansible playbook + wizard (code, already front-and-center + just improved via the 6-dot spinner). Offered Ken an optional §7 reassurance (the wizard's defaults cover most of the 23 steps) — pending his say-so.
+>
+> **Still open this batch:** parked delivery bug (#4) + the #5 SENDER (build together, testable).
+
+
+> # ✅ v1.8.0 — batch 3 cont.: mobile chat-card redesign (cp495). CODE (apps/web chat inbox) — NO files added/deleted. Still v1.8.0 WIP, tree at 1.7.7, NO release. SUPERSEDES cp494. All 8 chat smokes green; FULL battery still PENDING; svelte-check times out (eyeball the rendered card).
+>
+> Task #10 (screenshot "chat-messages-look-a-bit-too-squished"): on a ~360px phone the inbox card's fixed furniture (avatar + inline timestamp + inline star + Archive gutter) left the name/subject/feedback ~100px, squishing them. In `apps/web/src/routes/[lang]/chat/+page.svelte`:
+>
+> - **Visible timestamp → hover tooltip.** Removed the inline `<RelativeTime>` (terse-on-phone / descriptive-on-sm) block; its info now lives in the card anchor's `title` via new `whenTooltip(iso)` = `formatDayMonthTime(iso)` ("14 July, 2026 @ 14:03:21 UTC") + " · " + the descriptive relative ("2h ago"), mirroring RelativeTime's ladder. The anchor's `::after` covers the whole card, so hovering anywhere shows it. RelativeTime import dropped (now unused).
+> - **Star → corner badge.** Moved the star out of the flex row to a round `absolute right-1 top-1 z-20` badge tucked into the top-right corner (gold when starred, faint outline when not, toggles Starred). ⚠️ NOTE: it sits INSIDE the corner (merged with the card), NOT spilling outside — the sliding `<li>` requires `overflow-hidden` (chat-inbox-motion check 10: "without overflow-hidden the contents spill during the collapse"), which would clip any true half-out badge. A real half-out would need the slide moved onto an inner wrapper (its own trade-offs during collapse). Flagged for Ken.
+> - **Full-width text.** With the timestamp + star gone from the row, the name (IdentityLabel truncate) / RE:subject(status) / feedback lines span the full card width and truncate with `…` at the real edge. The (Live)/(Canceled)/(Expired)/(Paid) parenthetical is unchanged.
+> - **Smoke** (`chat-inbox-threading-smoke`): replaced the visible-terse/descriptive-timestamp check with a tooltip check (title=whenTooltip + formatDayMonthTime + no `<RelativeTime`) + a corner-badge check (absolute right-1 top-1 z-20 rounded-full + handleToggleStar + old inline star gone).
+> - **CERTIFIED:** all 8 chat smokes green — chat-inbox-threading 60/60, chat-inbox-motion 12/12, chat-header-layout 43/43, chat-read-state-threading 33/33, chat-realtime-cadence 14/14, chat-thread-model 16/16, chat-folders-onchain 36/36, chat-notification-wiring 25/25. svelte-check times out (can't visually verify) — eyeball the rendered card, esp. the corner badge over the Archive gutter.
+>
+> **Still open this batch:** RUN-A-NODE + OPERATIONS ELI5 (#2), settlement auto-reply (#5), parked delivery bug (#4).
+
+
+> # ✅ v1.8.0 — batch 3 cont.: UA monkey-patch retired + relay dblurt native UA (cp494). CODE (indexer + relay RPC path) + a new file. Still v1.8.0 WIP, tree at 1.7.7, NO release. SUPERSEDES cp493 (contains everything in it). Targeted smokes + tsc green; FULL battery still PENDING.
+>
+> Task #6 (a standing REVISIT item). The indexer once installed a GLOBAL fetch wrapper (`installMorphitUserAgent`) to give dblurt traffic a UA — dblurt's ClientOptions had no header field. **dblurt 0.17.0 added a native `userAgent` option**, so:
+>
+> - **Relay dblurt native UA** (the relay was ANONYMOUS — bare `user-agent: node`). New `apps/relay/src/blurt/userAgent.ts` (`morphitUserAgent` → `Morphit/${VERSION} (+contact)`, same shape as the indexer so an operator allowlist matching `Morphit/` catches both); relay `VERSION` exported from `api/health.ts` (verified still pinned — version-consistency 19/19); relay dblurt Client at `blurt/client.ts:729` now passes `userAgent: morphitUserAgent(VERSION)`. The relay's ONLY outbound RPC is that Client (no raw fetch sites), so this fully covers it.
+> - **rpcHealth self-identifies** — the ONE remaining anonymous indexer raw fetch (`api/rpcHealth.ts:198`, the active RPC probe) now sets `user-agent: morphitUserAgent(INDEXER_VERSION)`. A 403 from a bot-trap is otherwise indistinguishable from a real node outage.
+> - **Indexer wrapper RETIRED** — removed the `installMorphitUserAgent` call + import from `main.ts`, slimmed `blurt/userAgent.ts` to just the `morphitUserAgent` builder (dropped the global-fetch override, the idempotency var, the reset helper), updated the stale "wrapper KEPT" comment in `client.ts`. FULL AUDIT first confirmed every indexer outbound path already named itself (dblurt native, direct batch fetch explicit, price/fx via `priceUpstreamHeaders`, probes explicit) — rpcHealth was the only gap.
+> - **Smoke rewritten** (`rpc-user-agent-smoke`, 12 → 14 checks). Replaced the 5 wrapper-behavior checks with: wrapper retired (not defined/called), rpcHealth names itself, relay Client native UA, relay UA shape + version-source. **Check 8 is a NEW regression guard** that walks EVERY indexer `.ts` file and fails if any raw `fetch(` lacks a nearby UA marker — the CI-time replacement for the wrapper's runtime catch-all, so a future anonymous fetch fails CI instead of shipping silently.
+> - **CERTIFIED:** rpc-user-agent 14/14, indexer tsc 0, relay tsc 0, version-consistency 19/19.
+>
+> **Still open this batch:** mobile chat-card redesign (#10), RUN-A-NODE/OPERATIONS ELI5 (#2), settlement auto-reply (#5), parked delivery bug (#4).
+
+
+> # ✅ v1.8.0 — new t.txt batch: fee floor 125 + fallback prices + Cancelled→Canceled + wizard spinner + page-title fix + scary-banner→toast (cp493). CODE + docs + a DELETED component. Still v1.8.0 WIP, tree at 1.7.7, NO release. Targeted smokes green; FULL battery + 5-persona walkthroughs + deep-deep PENDING before release.
+>
+> Working the new 12-task `t.txt` + mobile chat screenshot (Ken: "go"/"plow"). Done so far this batch:
+>
+> **Fee floor → 125 BLURT** (Ken: "floor to 125"). `config.feeBaseBlurt` default `MORPHIT_INDEXER_FEE_BASE_BLURT` **60→125** (the env-fallback enforcement floor; the LIVE listing fee already self-corrects via cp372 Model-A, so this fixes only the stale floor). Docs to match: FEES (D-6-pinned "env default base is 125", the `default(125)` source pointer, operator-income example recomputed — one listing fee now exceeds a signup's cost) + OPERATIONS (two runbook "default 60"→125 + headline "≈$0.002"→"≈$0.001"). LEFT `FEE_REFERENCE_PRICE_USD.blurt` (0.002) / `FEE_FALLBACK.blurtBase` (62.5) as the historical test-and-fallback anchor — that's what let this land with ZERO test churn (order-handler fee-math tests use the 62.5 anchor via `context.ts`). **PENDING RELEASE-STEP:** the AUTHORITATIVE floor is chain-pinned by the latest `morphit_release_v1` treasury payload (chain-pin > env fallback) — the v1.8.0 release payload MUST pin the BLURT floor to 125 (flagged in the release checklist). Verified: indexer tsc 0, D-6 `listing-fee base=125 (code⇔docs)` 32/32, economics-canonical 64/64, order-handler 58/58.
+>
+> **Fallback/static prices refreshed** (BLURT ≈ halved to ~$0.001 since these were set). `apps/indexer/src/config/index.ts` price-feed static floors: BLURT 0.002→0.001, BTC 60_000→64_700, XMR 200→333 (+ OPERATIONS "default" lines). LAST-RESORT floors only — the CoinGecko fx auto-update (main.ts `source.start()`/`fxSource.start()` background setInterval) is the live path, verified wired. treasury-repin 22/22, env-var-parity 109/109.
+>
+> **Chat-delivery diagnostic — `chat.stored` debug line** (to help pin the parked "hi"-message bug post-install). `handlers/chat.ts` logs a gated `chatDbg('chat.stored', …)` after the successful INSERT, so the happy path traces `chat.orderCheck → chat.ADMITTED → chat.stored` under `MORPHIT_CHAT_DEBUG=1`. Ships in v1.8.0; the runtime bug itself stays parked for dev-tools diagnostics on the live VPS (indexer is in Docker → `127.0.0.1:8081` isn't host-mapped; use `docker logs` + `/v1/health` lag).
+>
+> **Cancelled → Canceled** (shorter display word). en.json only — 7 capitalized status labels + 3 lowercase prose → "Canceled"/"canceled"; internal `'cancelled'` status enum + keys (status_/state_/action_cancelled) UNTOUCHED; other 9 locales use native words (Cancelado/Annulé/…) so untouched; no code (all display via keys). i18n suite green (parity 10/10, completeness 5/5, hardcoded-english 1/1, native-floor 11/11, key-coverage 2/2).
+>
+> **Wizard 6-dot animation** (show motion during the minutes-long alt-DNS generation so operators don't Ctrl-C). New dependency-free `apps/ops-cli/src/init/spinner.ts` (braille "dots" spinner, TTY-aware [non-tty prints label once + no-ops], idempotent cursor-restoring stop, `timer.unref()`), wired around the slow `generateI2pDestination()` in `init.ts` with the exact message "Stand by, generating alt-dns addresses (this might take a few minutes)…", stopped on BOTH success and error paths. (Onion is background+instant → no spinner.) `i2p-wizard-wiring` 22/22 (+6 spinner guards), init-smoke 54/54, ops-cli tsc 0.
+>
+> **Page-title bug fix** (browser tab showed the wrong page, e.g. "Conversation" on the orderbook). Root cause: `ambient.ts` captured `originalTitle` ONCE at first load and kept stamping the `(N)` unread prefix onto that stale title after every navigation. Fix: ambient exports `setBaseTitle(base)` (resets originalTitle + re-applies the count via `setTitle(lastTotal)`, SSR-safe; added `lastTotal` tracking in the unread subscription); `Head.svelte` calls it reactively via `$effect` keyed on its computed `<title>`, so the prefix always rides the CURRENT page. New `page-title-anchor-smoke` 7/7; chat-notification-wiring 25/25, chat-unread-count-wired 16/16 (no regression).
+>
+> **Scary-banner → toast** (after a server upgrade, want ONLY the translucent "Load it now" toast). **(a)** DELETED `StaleBuildBanner.svelte` (the emerald reload-bar — redundant with the UpdateBanner snackbar): removed the layout import+render, deleted the component, deleted `release.stale_build.*` from all 10 locales, rebuilt the native-translations snapshot. **(b)** The RED `TamperAlertBanner` false-fired on EVERY routine upgrade — the tamper check `checkManifestAgainstRunningBundle` hashes the OLD running bundle against the NEW manifest, which always mismatches during a version bump. Gated the ASSET-mismatch alert on `!staleBuild` (an expected old-bundle-vs-new-manifest mismatch isn't tampering; the snackbar handles the reload; genuine same-version tampering still fires). SAFE: `staleBuild` requires a valid chain-SIGNED newer release, so an attacker can't fabricate it to hide. Pubkey-mismatch + invalid-payload alerts stay UNCONDITIONAL. UpdateBanner keeps "Load it now" + "Later" (the cancel). New `upgrade-banner-behavior-smoke` 9/9; i18n suite + wiring-completeness 56/56 green.
+>
+> **Still open this batch:** UA monkey-patch retirement (#6), mobile chat-card redesign (#10), RUN-A-NODE/OPERATIONS ELI5 shortening (#2), settlement auto-reply build (Option A, #5 — coupled to the parked delivery bug), + the parked "hi"-message delivery bug (#4). THEN full battery in small chunks → 5-persona walkthroughs + deep-deep → ELI5 v1.8.0 release (with the floor-125 treasury re-pin in the payload).
+
+
+> # ✅ v1.8.0 — value-parity guard (D-6) + REVISIT-LIST-ARCHIVE.md deleted (cp492). Smoke + doc cleanup, NO production code. Still v1.8.0 WIP, tree at 1.7.7, NO release.
+>
+> Two follow-ups to the doc-accuracy campaign (Ken: "do #2 … it is OK to delete the big audit/archive docs").
+>
+> **(1) D-6 value parity added to `public-doc-drift-smoke` (24 → 32 checks, still 1 runner).** D-1..D-5 pin *requirements* ("a var is read", "a path exists") and by design "never a literal" — which is exactly why the §19/§28 grind kept finding numbers stale in prose while the code was right. D-6 closes that gap: for a curated set of high-value constants it reads the value from CODE (source of truth) and asserts every listed public doc states the SAME number, so changing a code constant fails the smoke until the doc follows. Eight pins, all verified passing: stranger-fee base (`STRANGER_FEE_BASE_BLURT=5` ⇔ FEES), listing-fee base (`default(60)` ⇔ FEES "env default base is `60`"), featured min hours (`MIN_HOURS=6` ⇔ FEES), first-fee welcome BP (`FIRST_FEE_WELCOME_BP=1` ⇔ FEES), cross-page listener cap (`MAX_LISTENER_STREAMS=5` ⇔ OPS "caps the listener to **5**"), chat fan-in (`FAN_IN_UNIQUE_SENDERS_24H=20` ⇔ OPS "≤20 unique"), chat per-pair cap (`PER_PAIR_NO_REPLY_CAP=50` ⇔ OPS "≤50"), attestor loyalty (`ATTESTOR_LOYALTY_THRESHOLD_BLURT=100` ⇔ OPS "≥100 BLURT cumulative"). `TOTAL_STEPS` deliberately excluded — `wizard-step-count-doc-parity-smoke` already owns it. **TAMPER-PROVEN:** flipped FEES `MIN_HOURS = 6`→9, smoke FAILED (✗ D-6 featured, 1/32); reverted →6, PASSED (32/32); doc restored.
+>
+> **(2) Deleted `docs/REVISIT-LIST-ARCHIVE.md` (1.8M).** Purely internal (0 refs anywhere in `apps/web/src`); safe to remove. Cleaned every functional reference: allowlist entries in `no-docker-latest-tag-smoke` and `db-password-placeholder-smoke`, plus `forgejo-not-gitea-smoke`'s ALLOW_LIST entry AND its self-test (`ALLOW_LIST.size === 4` → `=== 3`, dropped the `.has('…ARCHIVE.md')` assertion) + the explanatory comment. All 3 edited smokes GREEN (3/3, 8/8, 3/3). Historical journal mentions in TARBALL.md/REVISIT-LIST.md LEFT per no-rewrite-history — both path-existence smokes (`operator-doc-fenced-path-existence`, `no-sandbox-path`) explicitly exclude those append-only ledgers, so no dangling-ref failure.
+>
+> **KEPT `docs/AUDIT-2026-05.md` (1.4M) — deliberately NOT deleted.** It is USER-FACING: the security FAQ in ALL 10 locales tells users to clone the repo and read `docs/AUDIT-2026-05.md` as the public security-transparency artifact. Deleting it would break that public promise and force a 10-locale FAQ rewrite. (The smaller checkpoint audits — AUDIT-2026-06-DEEPDEEP 222K, AUDIT-cp139/cp175, PHASE-F-AUDIT, AUDIT-FINDINGS — are candidates if Ken wants a deeper cleanup; not touched this unit.)
+>
+> **CERTIFIED:** public-doc-drift 32/32 (incl. D-6), operator-doc-env-var-parity 109/109, operator-doc-fenced-path-existence 244/244, wizard-step-count-doc-parity 8/8, + the 3 edited smokes green. No production code touched (smoke + doc-deletion only), so the app is unchanged since cp491's certification.
+
+
+> # ✅ v1.8.0 — OPERATIONS §24–§43 grind COMPLETE (cp491). Doc-only, 11 fixes. Still v1.8.0 WIP, tree at 1.7.7, NO release.
+>
+> Finished the exhaustive OPERATIONS.md line-by-line pass — §24 through §43 (the end). Verified every falsifiable claim against code; the doc held up extremely well (§32 BunkerWeb, §33 Docker, §37 hardening, §38 squatter-defense, §40 treasury all fully accurate). **11 real fixes, all doc-only** (no code, no env-var-name, no dep changes):
+> - **§26 (release signing):** step 4 said "all **five** files" but `release-sign.sh` produces **six** (tarball + .sha256 + .sha512 + .asc + CHECKSUMS + CHECKSUMS.asc — the parenthetical already listed six). Fixed to "six".
+> - **§28 (earnings) — real bug:** the verify-earnings `curl` hit `localhost:8080/v1/operators/yourtag`, but `/v1/operators` is an **indexer** route (main.ts:655) and the indexer is **8081** (8080 is the relay). Every other `/v1/` curl in the doc correctly uses 8081; line 4094's 8080 is correct (indexer→relay health). Fixed 8080→8081.
+> - **§34 (UFW/fail2ban):** cross-ref "see **§28** Docker compose example" → **§33** (§28 has only `docker-compose exec` cmds; the compose file with `127.0.0.1:5432:5432` is in §33).
+> - **§36 (warrant canary) — 4 fixes:** two stale "the frontend shows an automatic 14-day staleness banner" claims (lines 6686, 6786) contradicted the section's own correct "there is NO automatic banner" (6808/6810) — verified in code there's no canary-staleness banner component; corrected both to "users/watchdog read the `Generated:` date." Plus the Privacy section said the generator runs "on your server WHEN THE CRON RUNS" (contradicts the whole off-server dead-man's-switch model — server cron is explicitly forbidden) → "when you run it on your signing machine"; and "default rpc.blurt.blog" → "defaults to the `DEFAULT_BLURT_RPC_ENDPOINTS` rotator" (matches line 6741 + fetch-blurt-head.ts).
+> - **§31 + §41 (wizard step numbers) — off by 1–2:** the authoritative `apps/ops-cli/src/init/steps.ts` numbering is step 16=Homepage SEO, **17=Daily DB backup**, **18=Operator tag**. §31 called the DB-backup prompt "step 16" (→17); §41 called the operator-tag prompt "step 16" in **three** places (→18). Verified the other wizard-step refs (12=block-explorer links, 13=trade-only assets, 14=payment-method policy, 21=MCP) are all correct.
+> - **Two verify-only (NO change):** (1) **localmonero.co/blocks** — Ken flagged it's still live despite the P2P marketplace shutting down (Nov 2024). Verified: the block explorer at `localmonero.co/blocks` is genuinely current (serving blocks timestamped today, height 3.72M, "Operated by LocalMonero"), and the moneroexamples reference project still lists it. So its inclusion in §40.4 + the indexer XMR-explorer defaults (`config.ts:1181`, `moneroProofVerifier.ts:143`) is **correct as-is**. (2) **§40.6** manifest flow was **already** on the canonical VPS-served-`/verify.json` → `verify-json-to-release-manifest.mjs` path (my earlier read was stale); nothing to fix.
+> - **CERTIFIED:** public-doc-drift 24/24, operator-doc-env-var-parity 109/109, operator-doc-fenced-path-existence 244/244. Doc-only session — no code/dep change, so no full battery needed.
+>
+> **OPERATIONS.md grind is now COMPLETE end to end: §0–§43 all read line-by-line and reconciled to code.**
+
+
+> # ✅ v1.8.0 — OPERATIONS §19 fast-path cluster + stranger-fee fix (cp490). Doc + 1 code comment. Still v1.8.0 WIP, tree at 1.7.7, NO release.
+>
+> Continuing the exhaustive OPERATIONS.md grind (Ken: "go"). Verified §14–§21 line-by-line against code. §14 (topology: LOOPBACK_PEERS, origin defaults, cp344 write-proxies), §15 (hardening), §18 (signup-drain: all 5 layers' env-vars + endpoints), §20 (attestation phase + thresholds + endpoint + error codes), §20b (schema-v39 chat read-state re-key), §21 (schema-v17 index rename) all confirmed ACCURATE. **§19 had a real cluster of drift** — the v1.7.0 "fast chat is always-on" change (ADR-0051) was never fully propagated into the section:
+> - **Stranger fee (biggest):** doc said "a **$0.01-USD-equivalent** BLURT transfer … the **$0.01 fee** is fixed in indexer code." Real code (`strangerFeePricing.ts`): base is **5 BLURT** (fixed in BLURT, ~$0.01 only at today's price), and it **doubles** for rapid repeats — 1×,2×,4×… capping at **128× (640 BLURT)** from the 8th send in a rolling **5-minute** window (`STRANGER_FEE_BASE_BLURT=5`, `MAX_DOUBLINGS=8`, `WINDOW_MINUTES=5`). Rewrote Layer 2 to state the BLURT base + doubling schedule; kept "operators cannot configure them" (correct — these are federation-uniform, not allowlisted).
+> - **Off-switch contradiction:** §19 said both "**Always on — there is no off switch**, `..._ENABLED` removed" (correct — the var is gone from the Zod schema; `HeadTailer.run()` is called unconditionally) AND, two paragraphs later, "**When to turn it off.** Set `..._ENABLED=false`." Removed the stale "turn it off" paragraph (replaced with the interval-knob note).
+> - **"Checking status" wrong on 4 counts:** health line is labelled **`Fast path:`** not "Fast chat:"; the block was **renamed `chat_fastpath` → `fastpath`** in v1.7.0 and the **`enabled` field dropped**; the real states are `keeping up / lagging / tailing — head not established / status unavailable` (doc had `on — tailing / off — … / on but not tailing`); and the **"off" state can't occur**. Rewrote to match `health.ts`.
+> - **"Upgrade note" false claim:** doc said the upgrade "prints a `✓ Fast chat is on`" — `upgrade.ts` prints **`✓ Upgrade complete`**, no fast-chat line. Removed the false print + the "hasn't explicitly disabled it" phrasing.
+> - **1 stale code comment** (`apps/indexer/src/main.ts:372`) said the tailer "runs unless the operator set `..._ENABLED=false`" — corrected to "always on, flag removed in v1.7.0" (comment-only, no logic change).
+> - **CERTIFIED:** public-doc-drift 24/24; fastpath-always-on 10/10; operator-doc-env-var-parity 109/109; indexer `tsc` 0. (No new/deleted files, no dep change; comment-only code edit.)
+
+
+> # ✅ v1.8.0 — operator-config price-floor fix (cp489). Code + new file + smoke + docs. Ken approved. Still v1.8.0 WIP, tree at 1.7.7, NO release.
+>
+> The exhaustive OPERATIONS.md grind surfaced a real REGRESSION (not just doc drift): §23's flagship "the live feed is down → set the price floor in `morphit.config.env`" workflow would **crash the indexer at boot**. Root cause: the static-floor var was renamed `MORPHIT_INDEXER_BLURT_PRICE_USD` → `MORPHIT_INDEXER_PRICE_FEED_STATIC_FLOOR` in Phase 5, but (a) it was never added back to the `@morphit/operator-config` allowlist, so setting it in config.env hard-errors ("contains keys not in the operator allowlist"), and (b) the docs still used the defunct name. The drift smoke missed it because the old name survives in a `source.ts` comment.
+> - **Code:** added `MORPHIT_INDEXER_PRICE_FEED_STATIC_FLOOR` to the operator-config ALLOWLIST (the price-feed section). config.ts already reads it from process.env, so the full path now works.
+> - **New file:** created `morphit.config.env.example` — the template §23 tells operators to `cp` (it never existed; the `cp` instruction would fail). All **29** allowlisted keys, commented, grouped, ready to uncomment.
+> - **Smoke:** extended `operator-config-smoke` — pinned the new key in the `expected` allowlist + a NEW parity scenario asserting `morphit.config.env.example` exists and lists EXACTLY the allowlist (no more/no fewer) and never offers the defunct name as a key. 12→13 scenarios.
+> - **Docs:** OPERATIONS.md §23 — renamed all **9** `BLURT_PRICE_USD` → `PRICE_FEED_STATIC_FLOOR`, corrected "**Seven keys**" → the real **29** (pointing to the example template), added a "(renamed from…)" continuity note.
+> - **CERTIFIED:** end-to-end proof (config.env → loader applies → process.env → indexer reads; previously hard-errored); operator-config-smoke 13/13 + tsc 0; public-doc-drift 24/24; operator-doc-fenced-path 244/244; operator-doc-env-var-parity 109/109; workspace-typecheck 26/26; **FULL 521-runner battery GREEN (~14,900 scenarios, 0 failed)**. No functionality lost — the config.env price floor is now RESTORED as designed.
+> - **⚠ package.json unchanged, but a NEW file + code changed** → on extract run `npm ci`, `svelte-kit sync`, workspace-typecheck.
+
+
+> # 🚧 v1.8.0 — doc-accuracy sweep, continued (cp484). Still v1.8.0 WIP, tree at 1.7.7, NO release. Doc-only (no code/lock changes).
+>
+> Thorough pass over more current-state docs, verifying every checkable claim against code. **Fixed:**
+> - **ARCHITECTURE.md:** RPC pool diagram listed 3 of the 6 default endpoints and abbreviated "blurt-rpc.saboin" → now "6 defaults, e.g." + 2 correct examples. Replace-window said "**3-min**" but code is `REPLACE_WINDOW_MS = 15 min` (ADR-0001/0009, bumped from 3 because 3 locked users out) → fixed.
+> - **OPERATIONS.md:** claimed twice that a "**14-day canary staleness banner is automatic in the frontend**" — there is NO such banner; the Security page shows static 14-day guidance + a link to /canary.txt, and staleness detection is the user's/watchdog's job (reading `Generated:`). Both corrected (security-relevant — the old text implied auto-warning users don't get).
+> **Verified ACCURATE (no change):** NOTIFICATIONS-DESIGN (ambient.ts/push.ts, web-push ^3.6.7, push_pending queue, RFC 8291, 410 handling), CHAT-CRYPTO (`morphit-chat-v1/identity/${account}` domain string matches crypto.ts, X25519+ChaCha20-Poly1305-IETF+BLAKE2b), keystore Argon2id+XSalsa20-Poly1305, fee-verifier paths, op IDs, MAX_EXPIRES_AT_DAYS 365, and all fee/reward constants. PLAN.md left as-is (phased-plan record with a self-correcting preamble that already states "15 minutes is authoritative").
+> **Doc smokes green:** public-doc-drift 24/24, operator-doc-fenced-path 244/244. Sweep continues (multi-session) — rest of the 494KB OPERATIONS.md + remaining design/current-state docs.
+
+
+> # 🚧 v1.8.0 — perf audit + doc-accuracy sweep progress (cp483). Still v1.8.0 WIP, tree at 1.7.7, NO release. Doc-only + verification session (no code changes).
+>
+> - **Perf audit (#5) DONE — verdict: already lean, no significant win (a real production build was analyzed, not guessed).** Frontend initial JS **112KB brotli** over the wire on the `orderbook` route; per-locale prerendered; every heavy lib (libsodium 1MB, jspdf, qr-scanner, qrcode) code-split and absent from the initial modulepreload of every prerendered route; 525 `.gz` + 525 `.br` precompressed; `web.conf` gzip_static/brotli_static + 1-yr immutable cache; coin icons on-demand as cached `<img>`. libsodium **sumo is required** (uses `crypto_scalarmult` for chat ECDH + `crypto_hash_sha256`, both sumo-only) and is code-split anyway. Backend: indexer 12 / relay 9 deps, 55 indexes/43 tables, bounded queries, sane env-tunable poll intervals, gzip on API. Details in REVISIT-LIST.
+> - **Doc sweep (#3) progress:** fixed API.md (orderbook `limit` default 25→**50**; added omitted DAI `asset_network`). Code-verified accurate: rate limits, stale threshold, all fee/reward constants, 16 assets, 10 locales. `public-doc-drift-smoke` 24/24 + `operator-doc-fenced-path-existence` 244/244 confirm env-var/path/version integrity. Sweep continues (multi-session) on ARCHITECTURE/DESIGN/OPERATIONS docs.
+>
+> No package/lock/code changes this checkpoint — docs + REVISIT/TARBALL only.
+
+
+> # ✅ v1.8.0 — `@beblurt/dblurt` 0.10.9 → 0.17.0 (cp482). ELLIPTIC REMOVED. Its own dedicated, fully-tested change (Ken said go). Still v1.8.0 WIP, tree at 1.7.7, NO release.
+>
+> The one standing crypto-library risk is gone. dblurt 0.17.0 dropped the `secp256k1@4`→`elliptic` chain for `@noble/secp256k1` internally, so bumping it **removed `elliptic` from the tree entirely** — web AND relay — verified 0 dirs in `node_modules` + 0 entries in `package-lock.json`. This was #8 and #9 from the last `t.txt` (they were the same fix).
+> - **Bumped** dblurt to `^0.17.0` in apps/web, apps/relay, apps/indexer, apps/ops-cli; `npm install` refreshed the lock.
+> - **Certified before shipping:** workspace-typecheck 26/26; the byte-identity guard (manual digest == dblurt `transactionDigest`) still holds; round-trip sign→recover passes for every op-class (wallet-op-builders 28/28, chain-op-verify, wif-roundtrip, master-password, canonical-message, release-broadcast, treasury-repin); npm-audit-gate 5/5 (no new HIGH/CRITICAL). Graphene is a consensus serialization format, so the digest bytes were expected to match — confirmed.
+> - **Phantom dep fixed:** `apps/ops-cli` did `await import('@beblurt/dblurt')` without declaring it (worked via hoisting; broke once dblurt nested per-app) → now a proper dependency.
+> - **Native userAgent adopted** on the indexer's dblurt `Client` (0.17.0's new option); global-`fetch` monkey-patch KEPT as belt-and-suspenders (retire after a production access-log confirms the native UA). `rpc-user-agent-smoke` +1 check (12).
+> - **SECURITY.md** elliptic entry: Accepted → **Resolved**. **Follow-ups** (REVISIT): relay dblurt-Client UA; retire the wrapper post-confirmation; noble v1/v2 coexist nested (harmless).
+>
+> **⚠️ package.json + package-lock changed** → on extract run `npm ci` (installs 0.17.0), then `svelte-kit sync`, then `workspace-typecheck`.
+
+
+> # 🚧 v1.8.0 batch 2 (second `t.txt`, this session) — still v1.8.0 WIP, tree at 1.7.7, NO release. Two code tasks + doc fixes + housecleaning + the dep recommendations Ken asked for. Full battery + typecheck green.
+>
+> - **China balance colours (#1):** `AnimatedNumber` opt-in `localeSignColors` inverts the gain/loss flash for zh-CN/zh-HK (up=red, down=green — 红涨绿跌); set on the 4 money balances in `MyBalanceCard`, NOT the mana meter. New `balance-locale-sign-colors-smoke` (runner **521**).
+> - **iOS PWA splash (#2):** it's a PWA, so the startup screen is OS-generated. Added 16 `apple-touch-startup-image` PNGs (gradient wordmark on the dark `#0a0e16`, in `static/splash/`) + `<link>` tags in `app.html` → iOS shows the huge wordmark on dark, startup-only. Android's Chrome auto-splash (icon + app-name) can't be overridden by a PWA — a TWA/Capacitor shell would be needed (revisit-listed).
+> - **FEES doc (#3):** the "**Future:** fee addresses will be pinned on-chain" line was wrong — it's SHIPPED (Part 106, `ReleaseTreasuryBlock`). Rewrote to present-tense. Broad "read every doc" sweep continues (multi-session); housecleaning shrank the set.
+> - **Housecleaning (#4):** deleted 12 point-in-time docs (phase status/backlog, reviews, persona walkthroughs; ~215KB; 74→62 docs), updated `db-password-placeholder-smoke`'s allowlist. Audit/design docs left for Ken's explicit call (they're referenced from README/smoke/code).
+> - **Recommendations (#6–#9) → REVISIT-LIST "SECURITY / DEPENDENCY FOLLOW-UPS":** npm confirms dblurt 0.10.9 pulls `secp256k1@4→elliptic`, while **0.17.0 dropped it for `@noble/secp256k1`**. So dumping elliptic and upgrading dblurt are the SAME fix — **recommend the dblurt 0.17.0 bump** (removes elliptic web+relay, gives native userAgent, modernizes to noble) as its own fully-tested checkpoint; do NOT do a separate SIGNER_BACKEND flip. Not executing until Ken says go.
+> - **Still open:** perf audit (#5, not started) + the full doc accuracy sweep (#3, multi-session).
+>
+> **⚠️ FULL tarball** (12 docs deleted, 16 splash images + 1 smoke added). Verify on extract: `svelte-kit sync` then `workspace-typecheck`; full battery green in-session.
+
+
+> # 🚧 v1.8.0 IN PROGRESS — 12-task `t.txt` batch + 2 screenshots. Working tree still v1.7.7 (version bump is Ken's release step). NO release. Full 520-runner battery GREEN, workspace-typecheck 26/26.
+>
+> Twelve tasks, all landed and verified; details + the near-term RPC-node plan and the dblurt-v0.17.0 `userAgent` opportunity are in `docs/REVISIT-LIST.md` (top section). Highlights:
+>
+> - **Chat (#2, #3):** background message windowing in `ConversationView.svelte` — render the newest 30, reveal older 40-at-a-time transparently on upward scroll with scroll-position preserved (NO new UI, per Ken's correction). Bubbles: `font-medium`→`font-semibold`; bubble green `#00b85a`→`#009e51` (app.css + tailwind, still AA).
+> - **Feedback cards (#5, biggest):** received card reworked to mirror the given card (avatar 36, reviewer `RatingChip`, "@X rated me:"/"@X said:" prefixes, inline verified pill, `ago` on all timestamps, mobile flex-wrap). Indexer: received endpoint now sends `reviewer_reputation` (batched, shared exclusions SQL); `reviewer_reputation?` added to `FeedbackRecord`; new `received_rated`/`received_said` in all 10 locales.
+> - **OG preview (#9):** static default `og:*`/`twitter:*` in `app.html` so bare/unmatched URLs (SPA `fallback: index.html`) get a real card instead of the noscript `<h1>` + favicon. New `og-fallback-meta-smoke` (runner 520).
+> - **Flash (#4):** instances `?highlight=current` amber→emerald, 5→3 pulses, 2s each. **Two** smokes pinned the color (`footer-contact-flash` + `instances-current-by-origin`) — both updated.
+> - **Polish (#1, #6, #7, #8, #10):** BasicSwap heart removed from the comparison image (rebuilt PNG+mediakit); dotted-underline links hide on hover globally; MarkDown modal `cursor-default` (Preflight `[role=button]` pointer); privacy-terms 3 edits × 10 locales.
+> - **Investigations (#11, #12):** run-a-node page has NO code bug (form/gate/error-i18n all correct, handler smoke 45/45) — likely environmental; FEES-AND-REWARDS.md Sybil tier multiplier corrected (was a stale doubling scheme; now the real ×1.25→×1.5 compounding ladder), all other fee/reward numbers verified against code.
+>
+> **⚠️ Locale JSON is TAB-indented** — edit via `json.dump(indent='\t')` (the memory's `indent=2` is wrong and reformats every line). **This is a FULL tarball** (comparison PNG + mediakit zip regenerated, one runner added). Verify on extract: `svelte-kit sync` then `workspace-typecheck`; the full battery is green in-session.
+
+
+> # cp479 — follow-up on Ken's decisions (same session as cp478). Dead code deleted; open threads reconciled. Still v1.7.7, no version bump, no new user-facing behavior.
+>
+> Ken reviewed the cp478 findings and made calls that let me close things out:
+>
+> - **morphit-ops is CLI-only — no web UI for node-operator admins, ever.** That settles the one item cp478 flagged: `apps/web/src/lib/blurt/ops/operatorBlock.ts` (a `morphit_operator_block_v1` builder meant for a web admin surface) is confirmed dead and **deleted**. Verified fully unreferenced (0 imports of the module; 0 references to any of its 4 exports — `OPERATOR_BLOCK_REASON_MAX`, `OperatorBlockPayload`, `validateOperatorBlockPayload`, `OperatorBlockRecord`). **Kept the OP-ID registration (`net/config.ts:246`) and explorer decoration (`explorer/decorate.ts`)** — those are independent of the deleted module and must stay so the explorer renders historical / other-instance `morphit_operator_block_v1` ops. VERIFY: svelte-check 0/0; `explorer-op-label-values-parity` + the explorer web cluster (461-464) + `explorer-link-lang-prefix` + `explorer-urls-multi` + `mcp-tool-name-parity` all green; `workspace-typecheck` 26/26.
+> - **Stop waiting on Pablo's RPC access log** ("scratch that"). Removed as an in-flight item. The User-Agent string was proven by hand to clear the bot trap and shipped in v1.7.7 — treat it as done, not pending.
+> - **Badges: looking good, but STILL TESTING** — Ken explicitly did not want it called totally closed. Kept as provisional-good/testing.
+> - **Chat slide** ("looks great. done.") and the **BasicSwap exploit mention** ("that task is done.") — both closed.
+> - **The "6 inline `matchMedia` copies" note dropped.** Ken didn't recognize it because it was a *prior-session* internal-cleanup observation (extract one shared reduced-motion helper across 6 files that each inline `window.matchMedia('(prefers-reduced-motion: reduce)')`), never a task he asked for. Re-verified the 6 copies are SSR-safe and behave identically → nothing to fix; removed from tracking rather than left as noise.
+>
+> Net tree change this follow-up: one file deleted (`operatorBlock.ts`) + REVISIT/TARBALL bookkeeping. No locale work, not brag-list material. **The REVISIT "open, deliberately" frontend list is now empty.** cp478's own fixes (the workspace-typecheck root fix + app.css + viewport.ts) are unchanged and carried forward in this tarball.
+
+> # cp478 — fresh-session review of the v1.7.7 tarball. One green-CI bug fixed at root, two flagged items closed. NO version bump, NO tarball cut (v1.7.7 stays live).
+>
+> Resumed from the `morphit-cp478-v1_7_7-LIVE` tarball with the standing ask (deeply review, recommend next, fix what should be fixed). The state is healthy — but the review found a real defect that would have gone red on Ken's **next** push, and it had been invisible for exactly the reason such bugs stay hidden.
+>
+> ## 🔴 THE FIND — `workspace-typecheck-smoke` is RED on any FRESH tree, and our warm workspaces hid it
+>
+> `apps/web/tsconfig.json` extends `./.svelte-kit/tsconfig.json`, a file **generated by `svelte-kit sync`**. Nothing in the install path creates it: apps/web has no `prepare` script (so `npm ci` never runs sync), and CI's run-smokes job builds only `apps/mcp-server`. So on a genuinely cold tree — a CI checkout, a handoff-tarball extract, a fresh Forgejo runner — the file is **absent** when this smoke starts. tsc then emits `TS5083: Cannot read file '…/.svelte-kit/tsconfig.json'` and, with the whole `paths` map gone, 28 cascade errors. Two land in `scripts/`, which the gate reads → **red**. A false red on a byte-correct tree.
+>
+> **It never fired for us because a warm workspace always had the file already** — ours from prior work, a reused runner from a prior job. I reproduced it deterministically: `rm -rf apps/web/.svelte-kit` → the smoke goes 24/1 red with exactly that TS5083 + cascade.
+>
+> **This is a RE-ENTRY, not a novel bug.** `docs/AUDIT-2026-05.md` §7714 found this exact trap ("the smoke runner does NOT run `svelte-kit sync` before tsc, so strict TypeScript caught nothing") and closed it — for svelte-check. cp474's newer `smoke-typecheck` phase re-opened it one door over by extending `./tsconfig.json` (the same missing generated file). The lesson from the sessions holds: a fix that closes a trap at one call site doesn't close it at the next one that grows the same dependency.
+>
+> ## THE FIX (two parts, both tamper-proven)
+>
+> 1. **Hoisted `svelte-kit sync` to the TOP of the smoke**, ahead of BOTH typecheck phases (it used to sit inside the svelte-check loop at the bottom — too late; the smoke-typecheck phase above it already read the broken config). Sync once, up front; every phase and any future one inherits a config that resolves. **Tamper:** neutralise the hoisted sync → red on TS5083.
+> 2. **Closed the vacuity hole the failure exposed.** The smoke-typecheck phase filtered tsc output to `scripts/`-prefixed lines only, so a **config-level** error (TS5083 — tsc couldn't even set the project up) was swallowed and reported PASS *while typechecking nothing*. The ONLY reason the gate went red at all was that one unrelated smoke (`smoke-tsconfig-alias-parity-smoke.ts`, written for cp448) happens to import through `$` aliases — accidental honesty. Make its imports relative and the gate reports clean with the whole alias map broken. Now: a tsc error with **no `file(line,col):` prefix** fails on its own, per workspace. **Tamper (the vacuity scenario):** delete `.svelte-kit` AND make that one smoke's imports relative → `scripts/`-prefixed errors drop to 0, but the gate still fails on the config error. This is exactly the "pin the OUTCOME, tamper-prove by reverting the actual fix" discipline the v1.7.7 session kept hammering — a guard that describes shape instead of substance eventually guards nothing.
+>
+> Same class of correctness as everything the last session logged: a check that *looks* present while doing nothing.
+>
+> ## ✅ Two flagged items closed
+>
+> - **`app.css` 194-195 min-height losing order** (was 🟡 on the REVISIT list) — the pair was `100dvh` then `100vh`, so `vh` won and the `dvh` line had **never once applied**; on a phone `vh` counts the strip behind the URL bar, making even a short page scroll a little. Swapped to `vh` first, `dvh` second, with a comment explaining a `vh`/`dvh` PAIR is only safe in hand-written CSS (source order is real) — the opposite of the modals' bare-`dvh` rule, where Tailwind reorders utilities so a pair is a coin flip. **Guarded**: extended `modal-viewport-fit-smoke` with check 7 (any `vh`/`dvh` pair in any `.css` must put `dvh` last — pinned as an outcome, robust to 100→90 or min-height→height) + check 8 (it isn't passing vacuously). Tamper-proven.
+> - **`apps/web/src/lib/stores/viewport.ts` deleted** — an abandoned-refactor orphan. Created cp396 solely for `MyBalanceCard`'s mobile voting-% decimals; that card later moved to a pure-CSS `hidden sm:inline`/`sm:hidden` swap, orphaning the store. Verified dead repo-wide (`isMobileViewport`/`mediaQueryStore` referenced only inside the file; no `import.meta.glob`, no build-config reference). Tree-shaken out of the bundle already → zero user impact, pure source hygiene (priority #4).
+>
+> ## 🟡 Flagged, NOT changed — `operatorBlock.ts` (Ken's feature-intent call)
+>
+> `apps/web/src/lib/blurt/ops/operatorBlock.ts` builds a `morphit_operator_block_v1` op for an operator to broadcast a block *from the web admin UI*. Its builder has **0 importers** (every sibling op module has ≥1) — but its OP-ID *is* still registered (`net/config.ts`) and decorated (`explorer/decorate.ts`), which is correct (historical / other-instance ops must render). Blocking shipped in cp196 as a **server-side `morphit-ops block` CLI action** (origin='local', no posting key), so the web builder was never wired. Either a future web-admin block button uses it, or it's superseded dead code. Left in place pending Ken's call — same treatment as the deliberately-kept Phase-3 price scaffolding.
+>
+> ## VERIFY (cp478)
+>
+> `workspace-typecheck-smoke` **26/26, 0 skipped** on a freshly-desynced tree (the exact fresh-tree state the bug needed); `modal-viewport-fit-smoke` **9/9** + tamper; svelte-check **0/0**; smoke chunks around every gate my edits could touch (web modals/motion 405-420, alias-parity 140-150, CSP 230-236, SEO 360-365, marketing 508-512) all **0 runners failed**. No locale strings touched (a CSS pair + a smoke + a deleted store = zero i18n), so no 10-locale work and no mediakit. **NOT brag-list material** (test-infra + hygiene + a cosmetic CSS fix). **package.json stays 1.7.7** — these fold into the next release Ken cuts; there's no user-facing feature here to ship on its own.
+>
+> ## Sandbox notes (unchanged, re-confirmed)
+>
+> - Working tree has **NO .git** — `git grep`/`git ls-files` silently return nothing.
+> - **`svelte-kit sync` is the thing to run first** on a cold tree before any apps/web typecheck (this session's whole find). The smoke now does it automatically; a bare `tsc -p apps/web/...` by hand still needs it.
+> - `vitest-must-pass-smoke` (~165s) and `workspace-typecheck-smoke` (~150-200s) both false-fail under `MORPHIT_SMOKE_TIMEOUT=90`; give them ≥240s.
+
+> # cp477 — v1.7.7 SHIPPED AND DEPLOYED. Live on morphit.io.
+>
+> Ken confirmed: **"v1.7.7 is now installed, frontends have it loaded, and canary renewed."** The 6-block ELI5 ceremony ran clean. Repo is at 1.7.7, all 19 touchpoints, `RELEASE-NOTES-v1.7.7.md` at root. **Battery green at 1.7.7: 519 runners, ~14,900 scenarios, 0 failures.** 1078 web tests, svelte-check 0/0, 25/25 workspaces compile-clean.
+>
+> ## 🟢 THE BADGES ARE FIXED — Ken's own read, a few hours after deploy
+>
+> **[KEN]:** *"i think the badges are finally fixed! they are fast and they show up when they're supposed to. over the next few days i will test them more, but right now they do seem to work."*
+>
+> **Treat this as provisional-good, not closed.** It is hours of real use, not days, and Ken said so himself. If a badge complaint appears next session, this is the first thing to re-open — do NOT assume it stayed fixed.
+>
+> Worth remembering how it got here: **I misdiagnosed it.** I blamed the clock; the cause was the `counted` set from a prior session. Ken's original report bundled two symptoms — badge lag AND archives bouncing back — and only the second one was the clock. Splitting a bundled bug report into its actual causes was the whole game.
+>
+> ## 🔄 IN FLIGHT — the only open thread
+>
+> **RPC rate-limit verification.** Ken has asked the rpc.blurt.blog sysadmin (**Pablo**) for his access log. Awaiting reply.
+>
+> Pablo already proved the STRING works, by hand, before we deployed:
+> - `curl -A 'node'` → **429** on rpc.blurt.blog (our 1.7.5 was being trapped live)
+> - `curl -A 'Morphit/1.7.7 (+https://git.agorise.net/agorise/morphit)'` → **200**
+> - rpc.drakernoise.com → 200 for both, so the trap is node-specific, not universal
+>
+> **What is still unproven:** that our *indexer* actually emits the string in production — as opposed to the string working when curl'd by hand. Only Pablo's log closes that. The asks sent to him:
+> ```
+> grep 'Morphit/1.7.7' /var/log/nginx/access.log | tail -5
+> grep '<vps-ip>' /var/log/nginx/access.log | awk '{print $9}' | sort | uniq -c
+> ```
+> All 200s, no 429s = proven end-to-end. **Claude cannot test this from the sandbox** — egress is npm/github/pypi only, so morphit.io and rpc.blurt.blog are both unreachable. Give Ken commands; never pretend to have run them.
+>
+> Indirect instrument if Pablo is slow: `/v1/health` exposes `rpc_endpoints_healthy` / `rpc_endpoints_total`. Equal = nothing serving cooldown. The rpc-pool is deliberately silent (it suppresses dblurt's console noise), so **cooldowns never reach the logs** — health is the only window.
+>
+> ## 🟡 REPORTED, NOT FIXED — Ken's call, both deliberate
+>
+> 1. **`apps/web/src/app.css` line 194-195:**
+>    ```
+>    body { min-height: 100dvh; min-height: 100vh; }
+>    ```
+>    **Losing order — `vh` comes second, so it wins, and the `dvh` line has NEVER once applied.** Intent was clearly dvh-with-vh-fallback; correct order is `vh` first, `dvh` second. Left alone because changing global body height mid-task was not the moment. Harmless for `min-height`, but it is evidence the convention is misread here.
+> 2. **The chat slide on a real phone.** Structure verified, 250ms matches the orderbook's only other slide, reduced-motion handled — but whether it *feels* right is Ken's eye, not a regex.
+> 3. **One shared reduced-motion helper.** 14 files reference the preference; **6 have inline `matchMedia` copies.** Extracting one helper is real cleanup — noted, NOT done: it touches 6 working call sites and buys the user nothing.
+>
+> ## What v1.7.7 actually shipped (all 6 t.txt tasks)
 >
 > | # | Task | Outcome |
 > |---|------|---------|
-> | 1 | Clock / sync question | **Answered: money was already good-to-go** (every tx expiration derives from chain head block time; zero `Date.now()` in any signing path). Fixed 2 bare read cursors Ken approved. Corrected his premise: the badge lag was NOT the clock. |
-> | 2 | BasicSwap FAQ | **Ken approved the copy, then shipped to 10 locales.** 9 bullets → 5, 19–25% shorter. Exploit stated, sources named, no xcancel link (verified programmatically). |
-> | 3 | RPC User-Agent | **Sysadmin's guess was wrong** — we send `user-agent: node`, not `node-fetch/1.0` (verified on Node 22). Now `Morphit/<version> (+contact)` via a global fetch wrapper, the only thing that reaches dblurt. |
-> | 4 | Chat slide transitions | Done. **app.css's reduced-motion guard does NOT cover Svelte transitions** (WAAPI, not CSS) — explicit check added. Tab switches deliberately don't animate. |
-> | 5 | Send modal on mobile | **Was in 12 modals, not 1.** Reproduced in Chromium at Ken's exact size. Every `role="dialog"` now caps its height + scrolls, in `dvh`. |
-> | 6 | Review-card truncation | `(@username)` removed + its now-dead prop; the key stays as the identity anchor. |
+> | 1 | Clock/sync | **Money was already safe** — every tx expiration derives from chain HEAD BLOCK TIME; zero `Date.now()` in any signing path. Fixed 2 bare read cursors. **THE RULE: anything compared against a block time must be measured in block time.** |
+> | 2 | BasicSwap FAQ | Ken approved copy first. 9 bullets → 5, 19–25% shorter, 10 locales. Exploit stated, sources named, **no xcancel link** (verified programmatically). |
+> | 3 | RPC User-Agent | **Sysadmin's guess was wrong** — we sent `user-agent: node`, not `node-fetch/1.0`. Global fetch wrapper; `installMorphitUserAgent` at top of main(). |
+> | 4 | Chat slide | **app.css's reduced-motion guard does NOT cover Svelte transitions** (WAAPI, not CSS). Explicit check. Tab switches and first paint deliberately don't animate. |
+> | 5 | Send modal | **Was 7 broken windows + 5 with the wrong unit, not 1.** Reproduced in Chromium at 360x800. Every `role="dialog"` now caps + scrolls, in **dvh not vh**. |
+> | 6 | Review cards | `(@username)` removed + its now-dead prop. Safe only because the KEY stays. |
 >
-> **Findings Ken's questions produced that no task named:**
-> - 🔴 **Hostile-indexer timestamp (federation vuln).** A hostile operator serving `last_message_at: 2099` sets the user's read cursor to 2099 → every real message reads as already-seen → **silently deaf**. Fixed with `sanitizeBlockTime` at the boundary.
-> - 🔴 **Rapid-filing clobber.** `markLocalChange` stamped `Date.now()` and the sync compared it to a BLOCK time — on a slow clock the sync adopts the chain's OLDER state and reverts every un-broadcast click. **The v1.7.7 15s re-sync armed it.**
-> - 🔴 **Broadcast deadlock** that my own in-flight guard introduced (no timeout → one hung request queues every later change for the session).
-> - 🔴 **A Chinese character in a Russian sentence** that 3,368 i18n checks passed.
-> - **app.css `min-height: 100dvh; min-height: 100vh;`** — losing order, the dvh line has never applied. **Reported, not fixed. Ken's call.**
+> ## 🔴 Findings Ken's questions produced that no task named
 >
-> **Battery: 519 registered** (+5 this session: public-doc-drift, push-privacy-honesty, identity-label-truncation, block-time-vs-wall-clock, rpc-user-agent, chat-inbox-motion, modal-viewport-fit).
-> **1076 web tests, svelte-check 0/0, 25/25 workspaces compile-clean.**
+> - **Hostile-indexer timestamp (federation vuln).** `last_message_at: 2099` from a hostile operator → read cursor pinned to 2099 → every real message reads as already-seen → **user silently deaf**, on the screen where a counterparty's payment message arrives. Fixed via `sanitizeBlockTime` at the boundary (1hr future skew).
+> - **The INVERSE vector my own fix created.** `isUnread` still read the raw stamp → hostile 2099 pinned a badge the user could **never clear**. Found in the Charlie walkthrough. **Half a fix is not a fix.**
+> - **Rapid-filing clobber.** `markLocalChange` stamped `Date.now()`; sync compared it to a BLOCK time → slow clock reverts un-broadcast clicks. **v1.7.7's own 15s re-sync armed it.** Fixed with a watermark (`max(Date.now(), lastAdoptedAt)`, `<` → `<=`).
+> - **Broadcast deadlock** my in-flight guard introduced (no timeout → one hung request queues every later change). `BROADCAST_TIMEOUT_MS = 30_000` via `Promise.race`.
+> - **Starred/archived mixed time bases** → `cap()` (MAX_ENTRIES=300) sorts ALL entries by `at` to evict, so starred got evicted first on a slow clock. **A fix making ONE call site correct can make a SHARED consumer inconsistent.**
+> - **A Chinese character in a Russian sentence** (`но他`) that 3,368 i18n checks passed. New wrong-script guard.
 >
-> **Still owed before ship:** full battery in ~50-runner chunks, 5-persona walkthroughs, deep-deep, bump 1.7.5 → 1.7.7 (19 touchpoints), RELEASE-NOTES-v1.7.7.md at repo root, ELI5.
+> ## THE SESSION'S DEFINING PATTERN — ~17 instances
+>
+> **A guard that pins a LITERAL fails on correct changes and passes broken ones. It trains the developer to edit the guard until it goes quiet — which is exactly how it ends up guarding nothing.**
+>
+> Five battery runners failed on the first full pass. **Every one was a literal-pin broken by a fix that STRENGTHENED the property the guard existed to protect.** Not one caught a real regression. All re-pinned to requirements; four gained an extra check. Several were mine.
+>
+> Related failures, all mine, all this session:
+> - **Two tests were VACUOUS** — a fixed mock latency cannot expose an ordering race; "all 20 arrived" passes with no debounce.
+> - **One test modelled something IMPOSSIBLE** — a genuine message from tomorrow while the clock says today. Block time never leads the clock.
+> - **Eight REVISIT-LIST writes were silent no-ops** — `str.replace` does not raise on a miss. **Always assert the anchor.**
+> - **One smoke passed at runtime but failed typecheck** — `tsx` ignores extra args, so a wrong-arity `check()` call runs fine and lies.
+>
+> **LESSON: pin the OUTCOME. Tamper-prove by reverting the actual fix. Shape mocks like the real response. If a guard fires, ask whether the CODE regressed or the GUARD describes shape instead of substance.**
+>
+> ## Sandbox notes for next session
+>
+> - **Playwright IS available** — `/home/claude/.npm-global/lib/node_modules/playwright`, browsers at `/opt/pw-browsers`. CJS, so `import pkg from '...'; const { chromium } = pkg;` and run from a dir where it resolves. **Layout claims can be MEASURED at a real viewport instead of reasoned about.**
+> - **`vitest-must-pass-smoke` takes 165s** and dies under `MORPHIT_SMOKE_TIMEOUT=90`, reporting `failing=0` with a partial `passing=646`. Same artifact class as `svelte-check`. **Use the 240s default for any chunk containing it.**
+> - Working tree has **NO .git** — `git grep` / `git ls-files` silently return nothing.
 
 > ## cp476 — v1.7.5 READY TO SHIP (t.txt #1–#15 complete)
 >

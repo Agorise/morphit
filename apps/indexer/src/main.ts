@@ -91,8 +91,6 @@ import { instancePaymentMethodsRoute } from '$api/instancePaymentMethods';
 import { operatorBlocksRoute } from '$api/operatorBlocks';
 import { logger } from '$log';
 import { suppressDblurtConsoleNoise } from '@morphit/rpc-pool';
-import { installMorphitUserAgent } from '$blurt/userAgent';
-import { INDEXER_VERSION } from '$api/health';
 
 const bootLog = logger('boot');
 const httpLog = logger('http');
@@ -101,13 +99,12 @@ const procLog = logger('process');
 const pollerLog = logger('poller');
 
 async function main(): Promise<void> {
-	// v1.7.7 (t.txt #3) — identify ourselves to RPC nodes BEFORE any client is
-	// built. Ken's sysadmin runs a public Blurt node and asked us to stop looking
-	// like an anonymous bot; we were sending `user-agent: node`, which is what
-	// every unnamed Node service on the internet sends. Must run first: dblurt
-	// captures nothing at construction, but the direct batch fetch and the price
-	// feed both fire early, and a wrapper installed after them would miss them.
-	installMorphitUserAgent(INDEXER_VERSION);
+	// Identify ourselves to RPC nodes. Every outbound path now names itself:
+	// the dblurt Client via its native `userAgent` option (dblurt 0.17.0), the
+	// direct batch fetch + the rpcHealth probe via explicit `user-agent`
+	// headers, and the price/fx feeds via `priceUpstreamHeaders()`. The old
+	// global-fetch wrapper (installMorphitUserAgent) that this replaced is
+	// retired — `rpc-user-agent-smoke` now guards that no raw fetch is anonymous.
 
 	// Drop @beblurt/dblurt's redundant internal failover chatter
 	// ("Didn't failover for error code: [...]") — our EndpointPool does
@@ -368,8 +365,9 @@ async function main(): Promise<void> {
 	// ─── 6b. Chat head-block fast-path tailer (cp403 [1], ADR-0048) ──
 	// Tails the chain HEAD (not the irreversible point) to emit chat SSE
 	// within a few seconds instead of ~45-60s. NEVER writes the DB — the
-	// poller above stays the sole source of truth. ON by default; runs
-	// unless the operator set MORPHIT_INDEXER_CHAT_FASTPATH_ENABLED=false.
+	// poller above stays the sole source of truth. Always on — the
+	// MORPHIT_INDEXER_CHAT_FASTPATH_ENABLED flag was removed in v1.7.0
+	// (ADR-0051); the tailer runs unconditionally.
 	// Fire-and-forget; a crash here must NOT take down the process (unlike
 	// the poller), so its errors are contained inside run() — the catch is
 	// a belt-and-suspenders that just logs, never exits.

@@ -73,9 +73,13 @@
 	 * text harder to read, not easier — the opposite of the ask. A fixed
 	 * deepened value behaves the same on both themes.
 	 *
-	 * #00b85a still measures ~8:1 against the bubble's ink — comfortably past
-	 * AAA (7:1), so dimming costs no accessibility. */
-	--morphit-emerald-bubble: #00b85a;
+	 * v1.8.0 (Ken): dimmed one more step, #00b85a → #009e51, because the
+	 * previous green still read as too bright behind the thin bubble text. The
+	 * new value measures ~5.8:1 against the bubble's ink (ink-950 #070A10) —
+	 * still comfortably past WCAG AA (4.5:1) with the now-heavier bubble weight,
+	 * so the extra dim costs no readability. Kept a fixed value (not an opacity)
+	 * for the theme-stable reason above. */
+	--morphit-emerald-bubble: #009e51;
 	--morphit-teal: #02a6b2;
 	--morphit-gradient: linear-gradient(90deg, #8eef26 0%, #00da69 50%, #02a6b2 100%);
 
@@ -190,9 +194,21 @@ html {
 	text-size-adjust: 100%;
 }
 
+/* The two min-height lines are a fallback PAIR, and the order is the whole
+   point: a browser that doesn't understand `dvh` drops that declaration and
+   keeps `vh`; one that does understand it takes `dvh`, because later wins.
+   Written the other way round (dvh first) the `dvh` line never applies to
+   anybody — which is exactly how this sat until cp478.  On a phone `vh` is the
+   LARGE viewport: it counts the strip behind the URL bar, so `min-height: 100vh`
+   makes even a short page taller than the screen and it scrolls a little for no
+   reason.  `dvh` tracks what is actually visible.  Same rule as the modals, which
+   is why they use bare `dvh` — Tailwind emits utilities in ITS order, not the
+   class attribute's, so a `vh`/`dvh` pair in a class string is a coin flip and
+   `modal-viewport-fit-smoke` requires the single `dvh`.  A pair is only safe here,
+   in hand-written CSS, where source order is real. */
 body {
-	min-height: 100dvh;
 	min-height: 100vh;
+	min-height: 100dvh;
 	text-rendering: optimizeLegibility;
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;

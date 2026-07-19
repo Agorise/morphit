@@ -47,9 +47,9 @@
    ┌─────────────────────┐
    │  Blurt RPC pool     │
    │  (public, rotated)  │
-   │  rpc.blurt.blog     │
-   │  blurt-rpc.saboin   │
-   │  rpc.beblurt.com    │
+   │  6 defaults, e.g.:  │
+   │  rpc.blurt.blog,    │
+   │  rpc.beblurt.com …  │
    └─────────────────────┘
 
    Parallel paths (independent of the services above):
@@ -168,7 +168,7 @@ No single host, domain, operator, or network is load-bearing.
 - Output: PostgreSQL state + REST API at `/v1/*` + Server-Sent
   Events for the orderbook + chat fan-out buses + the federation
   endpoints other indexers consume
-- Enforces application-layer rules (3-min replace window, sybil fee
+- Enforces application-layer rules (15-min replace window, sybil fee
   check, self-trade detection, suppression Signals A/B/C, attestation
   phase eligibility).  Note that `custom_json` ops are protocol-level
   immutable; "edits" are handled as layer-2 `_replace_v1` ops that

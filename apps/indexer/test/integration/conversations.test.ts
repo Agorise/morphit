@@ -231,8 +231,6 @@ describe.skipIf(!INTEGRATION_ENABLED)('conversations endpoint — SQL integratio
 		order_amount_min: string | null;
 		order_amount_max: string | null;
 		order_status: string | null;
-		peer_has_user_sent: boolean;
-		has_user_sent: boolean;
 	};
 
 	// Ken (cp445) — the inbox card shows "(Live/Expired/Cancelled)" beside the
@@ -292,33 +290,6 @@ describe.skipIf(!INTEGRATION_ENABLED)('conversations endpoint — SQL integratio
 		const result = await fx.db.query<OrderRow>(CONVERSATIONS_SELECT, ['alice', 200]);
 		expect(result.rowCount).toBe(1);
 		expect(result.rows[0]!.order_account).toBe('bob');
-	});
-
-	// cp447 — the Messages/Requests tabs split PEOPLE; the cards are DISCUSSIONS.
-	// A known contact's brand-new order thread must NOT land in Requests next to
-	// the paid strangers.
-	it('marks every thread of a peer as engaged once the user has replied anywhere', async () => {
-		await insertOrder(fx, 'bob', 'order-a', { asset: 'XMR' });
-		await insertOrder(fx, 'bob', 'order-b', { asset: 'BTC' });
-		// alice replied in thread A…
-		await insertMessage(fx, 'bob', 'alice', new Date('2026-04-23T10:00:00Z'), 'order-a');
-		await insertMessage(fx, 'alice', 'bob', new Date('2026-04-23T11:00:00Z'), 'order-a');
-		// …and bob opens a NEW thread B, which alice has not answered yet.
-		await insertMessage(fx, 'bob', 'alice', new Date('2026-04-23T12:00:00Z'), 'order-b');
-
-		const result = await fx.db.query<OrderRow>(CONVERSATIONS_SELECT, ['alice', 200]);
-		expect(result.rowCount).toBe(2);
-		const b = result.rows.find((r) => r.order_permlink === 'order-b')!;
-		// Per-thread: alice never spoke in B.
-		expect(b.has_user_sent).toBe(false);
-		// Per-peer: she has spoken to bob, so B belongs in Messages, not Requests.
-		expect(b.peer_has_user_sent).toBe(true);
-	});
-
-	it('a true stranger stays in Requests (no thread of theirs has a reply)', async () => {
-		await insertMessage(fx, 'eve', 'alice', new Date('2026-04-23T10:00:00Z'), null);
-		const result = await fx.db.query<OrderRow>(CONVERSATIONS_SELECT, ['alice', 200]);
-		expect(result.rows[0]!.peer_has_user_sent).toBe(false);
 	});
 
 	it('order fields are all NULL when the conversation references no order', async () => {

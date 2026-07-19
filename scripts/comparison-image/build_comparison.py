@@ -120,7 +120,7 @@ SECTIONS = [
     ]),
     ('Custody & trade safety', [
         ('Fully non-custodial (no platform holdings)',                       ['Y','Y','Y','-','Y'], None),
-        ('Never been hacked — platform holds no funds to drain',             ['Y','-','-','-','Y'], None),
+        ('Never been hacked — platform holds no funds to drain',             ['Y','-','-','-','-'], None),
         ('Multi-signature escrow deposit required',                          ['-','Y','Y','-','-'], None),
         ('Trustless cryptographic atomic swaps',                             ['-','-','-','-','Y'], None),
         ('Third-party arbitrators for dispute resolution',                   ['-','Y','Y','Y','-'], None),

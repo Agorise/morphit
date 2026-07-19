@@ -53,11 +53,13 @@ check(
 	/flashCurrent &&\s*isCurrentInstance\(inst\)\s*\?\s*'flash-instance'/.test(instances)
 );
 
-// 4. The flash is a bright-green border that pulses exactly 5 times.
+// 4. The flash is a bright-green border that pulses exactly 3 times (v1.8.0:
+//    slowed from 5×0.45s to 3×2s and recoloured amber → brand emerald).
 check(
-	'a flash-instance keyframe pulses the border 5 times',
+	'a flash-instance keyframe pulses the border 3 times in brand emerald',
 	/@keyframes flash-instance-border/.test(instances) &&
-		/animation: flash-instance-border [^;]* 5;/.test(instances)
+		/animation: flash-instance-border [^;]* 3;/.test(instances) &&
+		/#00da69/i.test(instances)
 );
 
 if (failures === 0) {

@@ -130,7 +130,7 @@ Liveness check — also exposes block lag and indexer version.
 ```json
 {
   "status": "ok",
-  "version": "1.7.7",
+  "version": "1.8.0",
   "uptime_sec": 3742,
   "chain_head_block": 17234569,
   "indexed_block": 17234567,
@@ -279,13 +279,13 @@ Query parameters (all optional):
 | Param            | Type    | Description |
 |---|---|---|
 | `asset`          | string  | Filter to `BTC`, `XMR`, `BLURT`, `USDT`, `USDC`, `DAI`, `BCH`, `LTC`, `DASH`, `DOGE`, `ZEC`, `ARRR`, `DCR`, `SOL`, `ETH`, or `XRP` |
-| `asset_network`  | string  | For multi-network assets: USDT → `erc20`/`trc20`/`spl`/`bep20`; USDC → `erc20`/`spl`/`base`/`polygon` |
+| `asset_network`  | string  | For multi-network assets: USDT → `erc20`/`trc20`/`spl`/`bep20`; USDC → `erc20`/`spl`/`base`/`polygon`; DAI → `erc20`/`polygon`/`base`/`arbitrum` |
 | `side`           | string  | `buy` or `sell` |
 | `fiat_currency`  | string  | ISO-4217 e.g. `USD`, `EUR` |
 | `payment_method` | string  | e.g. `bank_transfer`, `paypal`; case-insensitive |
 | `location_region`| string  | e.g. `US`, `EU` |
 | `sort`           | string  | `recent` (default), `rating`, `trades` |
-| `limit`          | integer | 1–100, default 25 |
+| `limit`          | integer | 1–100, default 50 |
 | `cursor`         | string  | opaque cursor from previous response's `next_cursor` |
 
 Response:

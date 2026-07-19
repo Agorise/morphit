@@ -194,9 +194,19 @@ check(
 	/flex min-w-0 flex-1 items-center gap-2 p-2 sm:gap-3 sm:p-3/.test(inbox)
 );
 check(
-	'the timestamp is terse on a phone ("25m ago") and descriptive from sm up',
-	/<span class="sm:hidden">[\s\S]{0,160}?format="terse" ago[\s\S]{0,120}?<span class="hidden sm:inline">[\s\S]{0,160}?format="descriptive"/.test(inbox),
-	'the descriptive form costs ~40px of a ~360px card'
+	'the last-message time is a hover tooltip, not a column that squeezes the row',
+	/title=\{whenTooltip\(convo\.last_message_at\)\}/.test(inbox) &&
+		/function whenTooltip\(iso: string\)/.test(inbox) &&
+		/formatDayMonthTime\(iso\)/.test(inbox) &&
+		!/<RelativeTime/.test(inbox),
+	't.txt #10 — "2h ago" moved into the card title ("… UTC · 2h ago") so the name/subject/feedback get the full width'
+);
+check(
+	'the star is a round badge in the top-right corner, not inline in the row',
+	/absolute right-1 top-1 z-20[\s\S]{0,80}?rounded-full/.test(inbox) &&
+		/handleToggleStar\(convo\)/.test(inbox) &&
+		!/relative z-10 flex-none rounded p-0\.5 text-base leading-none transition-colors/.test(inbox),
+	't.txt #10 — the star moved out of the flex row to a corner badge; the old inline star button is gone'
 );
 check(
 	'the archive/restore gutter is narrower on mobile, restored at sm',

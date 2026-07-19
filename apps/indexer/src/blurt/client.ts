@@ -203,7 +203,14 @@ const batchUnsupported = new Set<string>();
 function clientFor(url: string): Client {
 	let c = clientCache.get(url);
 	if (c === undefined) {
-		c = new Client(url, { timeout: 10_000 });
+		// dblurt 0.17.0 (v1.8.0 upgrade) added a native `userAgent` ClientOptions
+		// field — the reason the old global-fetch wrapper existed. Pass it here so
+		// dblurt's own RPC traffic identifies Morphit natively. The startup
+		// `installMorphitUserAgent` global wrapper has been RETIRED now that the
+		// native UA is confirmed in production node logs and every other call site
+		// names itself (rpcHealth got its own header too); `rpc-user-agent-smoke`
+		// guards that no raw fetch is left anonymous.
+		c = new Client(url, { timeout: 10_000, userAgent: morphitUserAgent(INDEXER_VERSION) });
 		clientCache.set(url, c);
 	}
 	return c;

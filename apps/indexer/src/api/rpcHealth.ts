@@ -21,6 +21,8 @@
 import { Hono } from 'hono';
 
 import type { EndpointState } from '@morphit/rpc-pool';
+import { morphitUserAgent } from '$blurt/userAgent';
+import { INDEXER_VERSION } from './health';
 
 /**
  * cp471 (tt.txt C) — WHY an active probe failed.
@@ -197,14 +199,21 @@ async function probeOne(url: string): Promise<ProbeResult> {
 	try {
 		const res = await fetch(url, {
 			method: 'POST',
-			headers: { 'content-type': 'application/json' },
+			signal: controller.signal,
+			headers: {
+				'content-type': 'application/json',
+				// Identify ourselves to the node being probed (a 403 from a
+				// bot-trap is otherwise indistinguishable from a real outage).
+				// This is the only indexer fetch that lacked its own UA; it
+				// no longer relies on the retired global wrapper.
+				'user-agent': morphitUserAgent(INDEXER_VERSION)
+			},
 			body: JSON.stringify({
 				jsonrpc: '2.0',
 				id: 1,
 				method: 'condenser_api.get_dynamic_global_properties',
 				params: []
-			}),
-			signal: controller.signal
+			})
 		});
 		// The node ANSWERED — a non-2xx is a very different diagnosis from
 		// "unreachable" (403 = a WAF / security policy in front of the node,

@@ -24,6 +24,7 @@ import { dirname, join } from 'node:path';
 const here = dirname(fileURLToPath(import.meta.url));
 const initSrc = readFileSync(join(here, '../src/commands/init.ts'), 'utf8');
 const renderSrc = readFileSync(join(here, '../src/init/render.ts'), 'utf8');
+const spinnerSrc = readFileSync(join(here, '../src/init/spinner.ts'), 'utf8');
 
 let pass = 0;
 let fail = 0;
@@ -61,6 +62,23 @@ expect(
 expect('generation failure is non-fatal (wrapped in try/catch)', /try \{[\s\S]{0,200}generateI2pDestination/.test(initSrc));
 expect('injects the resolved address into altNetworks', initSrc.includes('altNetworksFinal'));
 expect('passes i2pDestination into the answers', /i2pDestination\b/.test(initSrc));
+
+// ─── slow-generation spinner (Ken t.txt #1) ──────────────────────────
+// i2pd's destination generation can take minutes on a small VPS; without
+// on-screen motion an operator assumes a hang and Ctrl-C's out, losing the
+// work. A 6-dot braille spinner + a "stand by" label reassures them.
+expect('shows a spinner during the slow alt-dns generation', initSrc.includes('startDotsSpinner('));
+expect(
+	'spinner uses the exact stand-by message',
+	initSrc.includes('Stand by, generating alt-dns addresses (this might take a few minutes)')
+);
+expect(
+	'spinner is stopped on BOTH the success and the error path',
+	(initSrc.match(/stopSpinner\(\)/g) ?? []).length >= 2
+);
+expect('spinner is TTY-aware (no animation on a non-tty)', /isTTY/.test(spinnerSrc));
+expect('spinner stop is idempotent (guards a double-clear)', /stopped\b/.test(spinnerSrc));
+expect('spinner restores the cursor on stop', spinnerSrc.includes('?25h'));
 
 // ─── render.ts: writes the keyfile + tunnel stanza + the env var ─────
 expect('render writes the i2pd keyfile', renderSrc.includes('I2P_KEYFILE_NAME'));

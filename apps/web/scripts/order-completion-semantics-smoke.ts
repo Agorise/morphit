@@ -86,7 +86,7 @@ check(
 // ── 3. best-effort, and AFTER the review ────────────────────────────
 check(
 	'the completion cannot fail the review (best-effort, caught)',
-	/if \(completeOwnedOrder\) \{ try \{ await broadcastOrderComplete\([^)]*\); \} catch/.test(form),
+	/if \(completeOwnedOrder\) \{ try \{ await broadcastOrderComplete\([^)]*\);.*?\} catch/.test(form),
 	'the review is already irreversible on-chain; a failed completion must not report the submit as failed and invite a duplicate review'
 );
 check(

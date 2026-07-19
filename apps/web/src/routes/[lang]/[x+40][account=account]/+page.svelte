@@ -766,59 +766,85 @@
 								{$_('profile.feedback_suppressed_chip')}
 							</a>
 						{/if}
-						<div class="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-							<IdentityLabel
-								account={fb.reviewer}
-								displayName={reviewerProps.displayName}
-								avatarSvg={reviewerProps.avatarSvg}
-								avatarDataUri={reviewerProps.avatarDataUri}
-								nostrUrl={reviewerProps.nostrUrl}
-								blurtMediaUrl={reviewerProps.blurtMediaUrl}
-								publicKeyString={reviewerProfileMap[fb.reviewer]?.posting_pubkey ?? undefined}
-								href={lp(`/@${fb.reviewer}`)}
-								weight="semibold"
-								avatarSize={24}
-							/>
-							<span class="text-xs text-ink-500">
-								<RelativeTime iso={fb.created_at} format="terse" />
+						<div class="mb-2 flex items-start justify-between gap-2">
+							<!-- v1.8.0 (t.txt): received card now mirrors the given
+							     card — avatar + display name (truncated posting key
+							     stacked under it by IdentityLabel) + the REVIEWER's
+							     current reputation. flex-wrap so the chip drops to its
+							     own line on a narrow phone instead of squashing the
+							     name. -->
+							<div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+								<IdentityLabel
+									account={fb.reviewer}
+									displayName={reviewerProps.displayName}
+									avatarSvg={reviewerProps.avatarSvg}
+									avatarDataUri={reviewerProps.avatarDataUri}
+									nostrUrl={reviewerProps.nostrUrl}
+									blurtMediaUrl={reviewerProps.blurtMediaUrl}
+									publicKeyString={reviewerProfileMap[fb.reviewer]?.posting_pubkey ?? undefined}
+									href={lp(`/@${fb.reviewer}`)}
+									weight="semibold"
+									avatarSize={36}
+								/>
+								{#if fb.reviewer_reputation && fb.reviewer_reputation.count > 0}
+									<RatingChip
+										count={fb.reviewer_reputation.count}
+										rating={fb.reviewer_reputation.weighted_rating}
+									/>
+								{/if}
+							</div>
+							<span class="flex-none text-xs text-ink-500">
+								<RelativeTime iso={fb.created_at} format="terse" ago />
 							</span>
 						</div>
+						<!-- v1.8.0 (t.txt): "@X rated me: ★★★★☆" with the Verified-chat
+						     pill on the SAME line as the stars; wraps cleanly on narrow
+						     screens via flex-wrap. -->
 						<div
-							class="mb-2"
+							class="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm"
 							aria-label={$_('feedback.form.rating_n_stars', {
 								values: { n: fb.rating }
 							}) as string}
 						>
+							<span class="text-ink-600 dark:text-ink-300">
+								{$_('profile.received_rated', { values: { account: fb.reviewer } })}
+							</span>
 							<span class="text-morphit-emerald" aria-hidden="true">
 								{starString(fb.rating)}
 							</span>
+							{#if fb.has_verified_chat}
+								<!-- ADR-0014 verified-chat badge. A bidirectional
+								     conversation preceded this review (≥2 messages each
+								     side, ≥15min span, no recip flag). Does NOT prove
+								     distinct identity — see the linked FAQ. -->
+								<a
+									href={lp('/faq#verified_chat_badge')}
+									class="inline-flex items-center gap-1 rounded-full border border-morphit-emerald/40 bg-morphit-emerald/5 px-2 py-0.5 text-xs text-morphit-emerald hover:bg-morphit-emerald/10 dark:border-morphit-emerald/50 dark:bg-morphit-emerald/10 dark:hover:bg-morphit-emerald/20"
+									title={$_('feedback.verified_chat_badge.tooltip') as string}
+								>
+									<svg viewBox="0 0 16 16" class="h-3 w-3" fill="currentColor" aria-hidden="true">
+										<path
+											d="M3 8l3 3 7-7"
+											stroke="currentColor"
+											stroke-width="2"
+											fill="none"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+										/>
+									</svg>
+									{$_('feedback.verified_chat_badge.label')}
+								</a>
+							{/if}
 						</div>
-						{#if fb.has_verified_chat}
-							<!-- ADR-0014 verified-chat badge.  Indicates that a
-							     bidirectional conversation preceded this review
-							     (≥2 messages each side, ≥15min span, no recip
-							     flag).  Does NOT prove distinct identity — see
-							     the linked FAQ. -->
-							<a
-								href={lp('/faq#verified_chat_badge')}
-								class="mb-2 inline-flex items-center gap-1 rounded-full border border-morphit-emerald/40 bg-morphit-emerald/5 px-2 py-0.5 text-xs text-morphit-emerald hover:bg-morphit-emerald/10 dark:border-morphit-emerald/50 dark:bg-morphit-emerald/10 dark:hover:bg-morphit-emerald/20"
-								title={$_('feedback.verified_chat_badge.tooltip') as string}
-							>
-								<svg viewBox="0 0 16 16" class="h-3 w-3" fill="currentColor" aria-hidden="true">
-									<path
-										d="M3 8l3 3 7-7"
-										stroke="currentColor"
-										stroke-width="2"
-										fill="none"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-									/>
-								</svg>
-								{$_('feedback.verified_chat_badge.label')}
-							</a>
-						{/if}
 						{#if fb.comment}
+							<!-- v1.8.0 (t.txt): "@X said:" prefix, mirroring the given
+							     card's "I said:". Here the comment is what the REVIEWER
+							     said about the profile owner, so the prefix names the
+							     reviewer. -->
 							<p class="whitespace-pre-wrap text-sm text-ink-700 dark:text-ink-200">
+								<span class="text-ink-500 dark:text-ink-400"
+									>{$_('profile.received_said', { values: { account: fb.reviewer } })}</span
+								>
 								{fb.comment}
 							</p>
 						{/if}
@@ -857,7 +883,7 @@
 										avatarSize={20}
 									/>
 									<span class="text-xs text-ink-500">
-										<RelativeTime iso={resp.created_at} format="terse" />
+										<RelativeTime iso={resp.created_at} format="terse" ago />
 									</span>
 								</div>
 								{#if resp.comment}
@@ -994,7 +1020,7 @@
 								{/if}
 							</div>
 							<span class="flex-none text-xs text-ink-500">
-								<RelativeTime iso={fb.created_at} format="terse" />
+								<RelativeTime iso={fb.created_at} format="terse" ago />
 							</span>
 						</div>
 						<!-- v1.5.0 (t.txt E): "I rated @X: ★★★★★" with the Verified-chat
@@ -1078,7 +1104,7 @@
 										avatarSize={20}
 									/>
 									<span class="text-xs text-ink-500">
-										<RelativeTime iso={resp.created_at} format="terse" />
+										<RelativeTime iso={resp.created_at} format="terse" ago />
 									</span>
 								</div>
 								{#if resp.comment}

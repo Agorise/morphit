@@ -79,9 +79,13 @@ check('the blocks never invoke ops-cli (release tooling lives in apps/indexer)',
 
 // ─── env vars must match what the payload builder actually reads ───
 const builder = readFileSync(join(REPO, 'apps', 'indexer', 'scripts', 'release-build-payload.ts'), 'utf8');
-for (const v of ['MORPHIT_BUILD_VERSION', 'MORPHIT_BUILD_HASH_MANIFEST_FILE']) {
+for (const v of ['MORPHIT_BUILD_VERSION', 'MORPHIT_BUILD_HASH_MANIFEST_FILE', 'MORPHIT_BUILD_BLURT_BASE']) {
 	check(`${v} is read by release-build-payload.ts and named in the blocks`, builder.includes(`process.env.${v}`) && out.includes(v));
 }
+// The BLURT floor must be CHAIN-PINNED, not left to the builder's empty default:
+// BLOCK 4 runs with `< /dev/null`, so an unset value would OMIT the floor and let
+// each instance silently fall back to its own env. Pin the canonical 125.
+check('BLOCK 4 pins the BLURT floor to 125', /MORPHIT_BUILD_BLURT_BASE=125\b/.test(out));
 
 // ─── the gates ───
 check('BLOCK 2 waits for CI to go green', /GATE: wait for CI to go green/.test(out));

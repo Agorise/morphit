@@ -1,9 +1,9 @@
 {
 	"name": "morphit-indexer",
-	"version": "1.7.7",
+	"version": "1.8.0",
 	"private": true,
 	"type": "module",
-	"description": "Morphit chain indexer — reads morphit_* ops from Blurt, maintains queryable state in Postgres",
+	"description": "Morphit chain indexer \u2014 reads morphit_* ops from Blurt, maintains queryable state in Postgres",
 	"license": "AGPL-3.0-only",
 	"engines": {
 		"node": ">=22.0.0"
@@ -21,7 +21,7 @@
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@beblurt/dblurt": "^0.10.9",
+		"@beblurt/dblurt": "^0.17.0",
 		"@hono/node-server": "^1.13.0",
 		"@morphit/asset-registry": "*",
 		"@morphit/net-defense": "*",

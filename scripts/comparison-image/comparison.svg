@@ -268,7 +268,7 @@
 <text x="1305" y="2122" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
 <text x="1595" y="2122" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
 <text x="1885" y="2122" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
-<text x="2175" y="2124.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="2175" y="2122" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
 <rect x="80" y="2142" width="2240" height="64" fill="#0d1119"/>
 <rect x="870" y="2142" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
 <text x="110" y="2182" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Multi-signature escrow deposit required</text>
@@ -1171,6 +1171,6 @@
 <text x="1595" y="9586" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
 <text x="1885" y="9586" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
 <text x="2175" y="9586" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
-<text x="1200" y="9641" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="20" font-weight="600" fill="#8b949e">Morphit: 132/137 · Bisq: 20/137 · Haveno: 23/137 · OpenMonero: 20/137 · BasicSwap: 28/137</text>
+<text x="1200" y="9641" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="20" font-weight="600" fill="#8b949e">Morphit: 132/137 · Bisq: 20/137 · Haveno: 23/137 · OpenMonero: 20/137 · BasicSwap: 27/137</text>
 <text x="1200" y="9663" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" fill="#8b949e">As of 2 July, 2026. Information about other platforms gathered from their public docs and recent independent reviews; corrections welcome via Matrix #agorise:matrix.org.</text>
 </svg>

@@ -618,6 +618,17 @@ export interface FeedbackRecord {
 		readonly count: number;
 		readonly weighted_rating: number | null;
 	} | null;
+	/** v1.8.0 (t.txt): the REVIEWER's current reputation —
+	 *  exclusion-filtered + decay-weighted, identical to the headline
+	 *  figure on their own profile. Present on `/accounts/:account/feedback`
+	 *  (received) responses so a "reviews this user has received" card can
+	 *  show "★ 4.97 (12)" next to the reviewer without a per-reviewer fetch,
+	 *  mirroring `subject_reputation` on the given endpoint. `weighted_rating`
+	 *  is null when `count` is 0. Optional/absent from older indexers. */
+	readonly reviewer_reputation?: {
+		readonly count: number;
+		readonly weighted_rating: number | null;
+	} | null;
 	/** ADR-0014 verified-chat badge.  True iff the (reviewer,
 	 *  subject) pair satisfied the bidirectional-chat conformance
 	 *  at the time the feedback was signed:
@@ -955,19 +966,6 @@ export interface ConversationSummary {
 	readonly peer: string;
 	readonly last_message_at: string;
 	readonly message_count: number;
-	/** Whether the account has ever sent a message to `peer`.
-	 *  False means this conversation is inbound-only — the peer
-	 *  has messaged us but we haven't yet replied. Frontend uses
-	 *  this to partition the inbox into "Messages" and
-	 *  "Requests" tabs (the latter holds first-contact threads
-	 *  admitted via Finding H layer 2's stranger-fee path). */
-	readonly has_user_sent: boolean;
-	/** cp447 — has the caller ever replied to this PEER, in any thread? The
-	 *  Messages/Requests split is about PEOPLE — Requests means a cold contact or
-	 *  a stranger who paid the fee — while the cards are about DISCUSSIONS. Using
-	 *  `has_user_sent` for the tabs would drop a known contact's new order thread
-	 *  into Requests. Optional so an older instance still type-checks. */
-	readonly peer_has_user_sent?: boolean;
 	/** v1.7.5 — was the most recent message in this thread sent BY the caller?
 	 *
 	 *  A thread whose last word is your own has nothing waiting to be read, on ANY

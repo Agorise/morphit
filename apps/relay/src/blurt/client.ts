@@ -23,6 +23,8 @@
 
 import { Client, PrivateKey } from '@beblurt/dblurt';
 import { EndpointPool } from '@morphit/rpc-pool';
+import { VERSION } from '../api/health.ts';
+import { morphitUserAgent } from './userAgent.ts';
 
 /** Parse a Graphene asset string like "1234.567 BLURT" or
  *  "9876543.210987 VESTS" into its raw integer amount (BigInt),
@@ -726,7 +728,7 @@ const clientCache = new Map<string, Client>();
 function clientFor(url: string): Client {
 	let c = clientCache.get(url);
 	if (c === undefined) {
-		c = new Client(url, { timeout: 10_000 });
+		c = new Client(url, { timeout: 10_000, userAgent: morphitUserAgent(VERSION) });
 		clientCache.set(url, c);
 	}
 	return c;

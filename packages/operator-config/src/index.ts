@@ -214,6 +214,14 @@ const ALLOWLIST: ReadonlySet<string> = new Set([
 	// /v1/listing-fee for frontend display.  Fee verification
 	// itself doesn't depend on the feed.
 	'MORPHIT_INDEXER_PRICE_FEED_ENABLED',
+	// Emergency BLURT/USD price floor — the value the indexer
+	// falls back to at cold-start before any live feed has
+	// answered (and the absolute floor the composite source
+	// never prices below).  Default 0.002.  Operator-tunable
+	// here so it can be nudged during a prolonged upstream
+	// outage without touching the SystemD unit.  (Superseded the
+	// old MORPHIT_INDEXER_BLURT_PRICE_USD name in Phase 5.)
+	'MORPHIT_INDEXER_PRICE_FEED_STATIC_FLOOR',
 
 	// ─── Verbose health endpoint ──────────────────────────────
 	// Off by default in production. Useful for operator

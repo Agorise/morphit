@@ -997,7 +997,32 @@ export interface FundsSentPayload {
 	readonly network?: string;
 }
 
-export type StructuredPayload = AddressPayload | FundsSentPayload;
+export type StructuredPayload = AddressPayload | FundsSentPayload | OrderSettledElsewherePayload;
+
+/**
+ * cp496 (t.txt #5) — "order settled with someone else" auto-reply.
+ *
+ * When an order owner completes their order with a chosen trader, every OTHER
+ * open thread on that order gets one of these, so the losing inquirers hear
+ * back instead of being left hanging. It is a SYSTEM message: it carries NO
+ * text of its own — only the order it refers to — and each recipient's client
+ * renders the (Ken-approved, warm) copy in the RECIPIENT's own locale from
+ * `chat.system.order_settled_elsewhere`. That is the whole point of making it
+ * structured: 15 losing traders each read it in their own language, and the
+ * sender never has to write (or translate) a word.
+ *
+ * The sender is the order owner's client, best-effort, right after the
+ * `morphit_order_complete_v1` broadcast (client-side because the message is
+ * E2E-encrypted per recipient — the indexer can't encrypt on anyone's behalf).
+ */
+export interface OrderSettledElsewherePayload {
+	readonly v: 1;
+	readonly kind: 'morphit_order_settled_elsewhere';
+	/** The order the sender just completed with a different trader. The
+	 *  recipient's client uses it to render "RE: <that order>" context and to
+	 *  keep the message pinned to the right thread. */
+	readonly orderPermlink: string;
+}
 
 /** Result of decoding plaintext.  Either a recognized structured
  *  payload, an unknown future version we should render as
@@ -1008,6 +1033,10 @@ export type StructuredPayload = AddressPayload | FundsSentPayload;
 export type DecodeResult =
 	| { readonly kind: 'address'; readonly payload: AddressPayload }
 	| { readonly kind: 'funds_sent'; readonly payload: FundsSentPayload }
+	| {
+			readonly kind: 'order_settled_elsewhere';
+			readonly payload: OrderSettledElsewherePayload;
+	  }
 	| { readonly kind: 'mailing_address'; readonly payload: MailingAddressPayload }
 	| { readonly kind: 'shipment'; readonly payload: ShipmentPayload }
 	| { readonly kind: 'unknown_version'; readonly version: number }
@@ -1993,6 +2022,24 @@ export function encodeShipmentPayload(p: ShipmentPayload): string {
  *  understand renders as `unknown_version` so the UI can show
  *  "this message uses a newer protocol — please update" rather
  *  than the raw JSON. */
+/**
+ * Encode an OrderSettledElsewherePayload to wire JSON (cp496, t.txt #5). The
+ * wire carries ONLY the order permlink — no text — because each recipient
+ * renders the localized copy itself. See the interface for the full rationale.
+ */
+export function encodeOrderSettledElsewherePayload(p: OrderSettledElsewherePayload): string {
+	if (p.v !== 1) throw new Error('payload: unsupported version');
+	if (p.kind !== 'morphit_order_settled_elsewhere') throw new Error('payload: wrong kind');
+	if (typeof p.orderPermlink !== 'string' || !ORDER_PERMLINK_RE.test(p.orderPermlink)) {
+		throw new Error('payload: invalid order_permlink');
+	}
+	return JSON.stringify({
+		v: 1,
+		kind: 'morphit_order_settled_elsewhere',
+		order_permlink: p.orderPermlink
+	});
+}
+
 export function decodePayload(plaintext: string): DecodeResult {
 	if (typeof plaintext !== 'string') return { kind: 'plaintext' };
 	const trimmed = plaintext.trim();
@@ -2078,6 +2125,21 @@ export function decodePayload(plaintext: string): DecodeResult {
 		const result = optionalFieldsFundsSent(payload, o);
 		if (result === null) return { kind: 'plaintext' };
 		return { kind: 'funds_sent', payload: result };
+	}
+
+	if (o.kind === 'morphit_order_settled_elsewhere') {
+		// System message — the only field is the order it refers to.
+		if (typeof o.order_permlink !== 'string' || !ORDER_PERMLINK_RE.test(o.order_permlink)) {
+			return { kind: 'plaintext' };
+		}
+		return {
+			kind: 'order_settled_elsewhere',
+			payload: {
+				v: 1,
+				kind: 'morphit_order_settled_elsewhere',
+				orderPermlink: o.order_permlink
+			}
+		};
 	}
 
 	// cp120: mailing-address decoder.  All required fields must

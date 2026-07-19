@@ -101,7 +101,7 @@
 		<p class="mt-3 text-sm">
 			<a
 				href={lp('/faq#morphit_mirrors')}
-				class="text-morphit-emerald underline decoration-dotted underline-offset-2 hover:decoration-solid"
+				class="text-morphit-emerald underline decoration-dotted underline-offset-2 hover:no-underline"
 			>
 				{$_('download.why_mirrors', { values: { count: MIRRORS.length } })}
 			</a>

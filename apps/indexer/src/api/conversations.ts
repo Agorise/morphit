@@ -8,8 +8,6 @@
  *     peer: string,
  *     last_message_at: ISO string,
  *     message_count: number,
- *     has_user_sent: boolean,        // …in THIS thread
- *     peer_has_user_sent: boolean,   // …ever, with this person (tab split)
  *     last_message_is_mine: boolean, // the last word in this thread is yours
  *     order: { permlink, account, side, asset, fiat_currency,
  *              amount_min, amount_max, status } | null
@@ -56,10 +54,6 @@ interface ConversationRow {
 	peer: string;
 	last_message_at: Date;
 	message_count: string; // bigint → string
-	has_user_sent: boolean;
-	/** cp447 — has the caller ever replied to this PEER, in any thread? Drives the
-	 *  Messages/Requests tab split, which is about people, not discussions. */
-	peer_has_user_sent: boolean;
 	/** v1.7.5 — was the most recent message in this thread sent BY the caller?
 	 *  A thread whose last word is your own has nothing waiting to be read, on
 	 *  ANY of your devices. */
@@ -89,13 +83,9 @@ interface ConversationRow {
  * and `$2` (the row cap) only, no interpolation — so it is safe at module scope.
  *
  * Group by the "other party" — sender when the query account is the recipient,
- * recipient when it is the sender; the CASE canonicalizes.  `has_user_sent`
- * aggregates whether the user has replied at least once in THIS thread (drives
- * the Requests-vs-Messages tab split: inbound-only threads are strangers who
- * paid the fee and await engagement); `peer_has_user_sent` (cp447) is the same
- * question over EVERY thread of that peer, computed with a window BEFORE the
- * LIMIT so a peer whose older thread falls off the cap is still classified
- * correctly (the tabs are about PEOPLE, the cards about DISCUSSIONS).
+ * recipient when it is the sender; the CASE canonicalizes.  `last_message_is_mine`
+ * marks whether the newest message in a thread is the caller's own, so a thread
+ * the caller is actively talking in doesn't nag as "unread" on their other devices.
  *
  * The LATERAL finds, per conversation, the order the thread is about.  chat.ts's
  * op validator only accepts an `order_permlink` naming an order owned by a PARTY
@@ -114,8 +104,6 @@ export const CONVERSATIONS_SQL = `
 				g.peer,
 				g.last_message_at,
 				g.message_count,
-				g.has_user_sent,
-				g.peer_has_user_sent,
 				g.last_message_is_mine,
 				o.permlink          AS order_permlink,
 				o.account           AS order_account,
@@ -127,42 +115,29 @@ export const CONVERSATIONS_SQL = `
 				o.status            AS order_status
 			FROM (
 				SELECT
-					t.*,
-					-- cp447 — have I EVER replied to this person, in ANY thread?
-					-- The Messages/Requests split is about PEOPLE (cold contacts and
-					-- paid strangers go to Requests), while the cards are about
-					-- DISCUSSIONS. Computed with a window over every thread of that
-					-- peer BEFORE the LIMIT, so a peer whose older thread falls off
-					-- the end is still correctly classified.
-					BOOL_OR(t.has_user_sent) OVER (PARTITION BY t.peer) AS peer_has_user_sent
-				FROM (
-					SELECT
-						CASE WHEN sender = $1 THEN recipient ELSE sender END AS peer,
-						order_permlink,
-						MAX(created_at) AS last_message_at,
-						COUNT(*)::text AS message_count,
-						BOOL_OR(sender = $1) AS has_user_sent,
-						-- v1.7.5 (t.txt #2) — was the LAST message in this thread mine?
-						--
-						-- Ken: signed in on a PC and a phone; he sends a message from the
-						-- PC and his PHONE lights up "unread". It was his own message. The
-						-- client could not know that: isUnread compares last_message_at
-						-- against the local read cursor and has no idea WHO sent it, and
-						-- has_user_sent answers a different question ("have I ever sent in
-						-- this thread"), so a thread you are actively talking in reads as
-						-- unread on every other device you own.
-						--
-						-- This picks the sender of the row with the greatest created_at in
-						-- the group, i.e. exactly the row MAX(created_at) reports as
-						-- last_message_at. Ties are vanishingly rare and resolve
-						-- deterministically either way; mis-attributing one costs a badge.
-						(ARRAY_AGG(sender ORDER BY created_at DESC))[1] = $1
-							AS last_message_is_mine
-					FROM chat_messages
-					WHERE sender = $1 OR recipient = $1
-					GROUP BY peer, order_permlink
-				) t
-				ORDER BY t.last_message_at DESC
+					CASE WHEN sender = $1 THEN recipient ELSE sender END AS peer,
+					order_permlink,
+					MAX(created_at) AS last_message_at,
+					COUNT(*)::text AS message_count,
+					-- v1.7.5 (t.txt #2) — was the LAST message in this thread mine?
+					--
+					-- Ken: signed in on a PC and a phone; he sends a message from the
+					-- PC and his PHONE lights up "unread". It was his own message. The
+					-- client could not know that: isUnread compares last_message_at
+					-- against the local read cursor and has no idea WHO sent it, so a
+					-- thread you are actively talking in reads as unread on every other
+					-- device you own.
+					--
+					-- This picks the sender of the row with the greatest created_at in
+					-- the group, i.e. exactly the row MAX(created_at) reports as
+					-- last_message_at. Ties are vanishingly rare and resolve
+					-- deterministically either way; mis-attributing one costs a badge.
+					(ARRAY_AGG(sender ORDER BY created_at DESC))[1] = $1
+						AS last_message_is_mine
+				FROM chat_messages
+				WHERE sender = $1 OR recipient = $1
+				GROUP BY peer, order_permlink
+				ORDER BY last_message_at DESC
 				LIMIT $2
 			) g
 			LEFT JOIN LATERAL (
@@ -201,8 +176,6 @@ export function conversationsRoute(db: Database): Hono {
 				peer: r.peer,
 				last_message_at: r.last_message_at.toISOString(),
 				message_count: parseInt(r.message_count, 10),
-				has_user_sent: r.has_user_sent,
-				peer_has_user_sent: r.peer_has_user_sent,
 				last_message_is_mine: r.last_message_is_mine,
 				// Present only when the JOIN found a live order row for
 				// the latest order-carrying message. amount_min/max are

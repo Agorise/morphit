@@ -656,14 +656,14 @@
 		     maybe dim that green just a bit and make the text on the bubble a bit
 		     bolder."
 		
-		     `font-medium` on the whole bubble is the "a bit bolder" half — it
-		     lifts 400 → 500, which thickens the strokes without shouting the way
-		     font-semibold would. It applies to the Payment Receipt too, since the
-		     receipt renders INSIDE this bubble and inherits both the deepened
-		     background and this weight — which is what Ken asked for ("the Payment
-		     Receipts too"). -->
+		     v1.8.0 (Ken): "the text is still hard to read, make it more bold." Lifted
+		     font-medium (500) → font-semibold (600) — the next real step up, which
+		     thickens the strokes noticeably. Paired with the further-dimmed bubble
+		     green (#009e51) so the two readability levers move together. It applies to
+		     the Payment Receipt too, since the receipt renders INSIDE this bubble and
+		     inherits both the deepened background and this weight. -->
 		<div
-			class="w-fit break-words rounded-2xl px-3 py-2 text-sm font-medium"
+			class="w-fit break-words rounded-2xl px-3 py-2 text-sm font-semibold"
 			class:self-end={isOutgoing}
 			class:self-start={!isOutgoing}
 			class:cursor-pointer={timestampRevealable}
@@ -712,6 +712,17 @@
 						{$_(placeholderI18nKey)}
 					</span>
 				{/if}
+			{:else if decoded?.kind === 'order_settled_elsewhere'}
+				<!-- cp496 (t.txt #5) — system auto-reply: the order owner completed
+				     the trade with a different trader. NO text travels on the wire;
+				     we render the (Ken-approved) warm copy in THIS reader's OWN
+				     locale, so 15 losing inquirers each read it in their language. -->
+				<div class="flex items-start gap-2 text-sm">
+					<span aria-hidden="true">🤝</span>
+					<p class="min-w-0 whitespace-pre-wrap break-words opacity-90">
+						{$_('chat.system.order_settled_elsewhere')}
+					</p>
+				</div>
 			{:else if decoded?.kind === 'address'}
 				{@const p = decoded.payload}
 				{@const isIncoming = !isOutgoing}

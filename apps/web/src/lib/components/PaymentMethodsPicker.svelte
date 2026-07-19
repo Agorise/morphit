@@ -494,7 +494,7 @@
 				href={safeContactUrlMemo}
 				target="_blank"
 				rel="noopener noreferrer"
-				class="font-semibold text-morphit-emerald underline decoration-dotted underline-offset-2 hover:decoration-solid"
+				class="font-semibold text-morphit-emerald underline decoration-dotted underline-offset-2 hover:no-underline"
 			>
 				{$_('payment_method.request_missing_link')}
 			</a>

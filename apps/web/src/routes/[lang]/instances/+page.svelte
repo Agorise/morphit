@@ -193,8 +193,9 @@
 		if ($page.url.searchParams.get('highlight') !== 'current') return;
 		flashFired = true;
 		flashCurrent = true;
-		// 5 flashes × ~0.45s ≈ 2.25s; clear a hair later.
-		setTimeout(() => (flashCurrent = false), 2600);
+		// v1.8.0: 3 flashes × 2s = 6s; clear a hair later so the last pulse
+		// finishes cleanly before the class is removed.
+		setTimeout(() => (flashCurrent = false), 6200);
 	});
 
 	onDestroy(() => {
@@ -557,24 +558,28 @@
 </section>
 
 <style>
-	/* t.txt (v1.4.9 #1) — flash the current instance's card border a warm
-	   amber-yellow five times when the footer "Contact" link lands here with
-	   ?highlight=current, so the eye finds the instance you're actually on. The
-	   current instance is matched by ORIGIN (see isCurrentInstance) — the old
-	   account-field match was always false on multi-account instances, so this
-	   flash never actually fired on the canonical instance until cp461. */
+	/* t.txt (v1.4.9 #1) — flash the current instance's card border when the
+	   footer "Contact" link lands here with ?highlight=current, so the eye finds
+	   the instance you're actually on. The current instance is matched by ORIGIN
+	   (see isCurrentInstance) — the old account-field match was always false on
+	   multi-account instances, so this flash never actually fired on the canonical
+	   instance until cp461.
+	   v1.8.0 (Ken): recoloured the warm amber-yellow to the brand emerald
+	   (#00da69) so the highlight matches the rest of the palette, and slowed it
+	   to a calmer cadence — 3 pulses at 2s each (one flash every ~2 seconds)
+	   instead of 5 quick 0.45s blinks. */
 	@keyframes flash-instance-border {
 		0%,
 		100% {
-			box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
+			box-shadow: 0 0 0 0 rgba(0, 218, 105, 0);
 		}
 		50% {
 			box-shadow:
-				0 0 0 2px #f59e0b,
-				0 0 12px 2px rgba(245, 158, 11, 0.6);
+				0 0 0 2px #00da69,
+				0 0 12px 2px rgba(0, 218, 105, 0.6);
 		}
 	}
 	:global(.flash-instance) {
-		animation: flash-instance-border 0.45s ease-in-out 5;
+		animation: flash-instance-border 2s ease-in-out 3;
 	}
 </style>

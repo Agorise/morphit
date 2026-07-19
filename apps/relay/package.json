@@ -1,7 +1,7 @@
 {
 	"name": "morphit-relay",
-	"version": "1.7.7",
-	"description": "Morphit posting relay — pays Blurt account-creation fees on behalf of new users. Never holds user private keys.",
+	"version": "1.8.0",
+	"description": "Morphit posting relay \u2014 pays Blurt account-creation fees on behalf of new users. Never holds user private keys.",
 	"type": "module",
 	"private": true,
 	"license": "AGPL-3.0-only",
@@ -18,7 +18,7 @@
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@beblurt/dblurt": "^0.10.9",
+		"@beblurt/dblurt": "^0.17.0",
 		"@hono/node-server": "^1.13.0",
 		"@morphit/asset-registry": "*",
 		"@morphit/operator-config": "*",

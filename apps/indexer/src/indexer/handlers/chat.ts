@@ -542,6 +542,18 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 				messageId: parseInt(inserted.id, 10)
 			});
 		}
+		// MORPHIT_CHAT_DEBUG diagnostic (metadata-only, gated): confirms the row
+		// COMMITTED, not merely that admission passed. `chat.ADMITTED` fires just
+		// before the INSERT; if that line appears in the log but this one does not,
+		// the INSERT threw after admission (re-thrown above → surfaces as a poller
+		// error) or the surrounding op-batch transaction rolled back. The full
+		// happy path reads: chat.orderCheck → chat.ADMITTED → chat.stored.
+		chatDbg('chat.stored', {
+			id: inserted?.id ?? null,
+			sender: ctx.signer,
+			recipient,
+			order: claimedPermlink ?? null
+		});
 
 		// ─── Web Push enqueue (Part 122 cp13; localized cp14) ──
 		// Notify `recipient` of an inbound message.  When the
