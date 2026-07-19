@@ -46,9 +46,15 @@
 <svelte:window onkeydown={open ? onKeydown : undefined} />
 
 {#if open}
-	<!-- Backdrop: click to dismiss. -->
+	<!-- Backdrop: click to dismiss. `cursor-default` because Tailwind Preflight
+	     forces `cursor: pointer` on every `[role="button"]`, and this backdrop is
+	     full-screen (`fixed inset-0`) — without the override the pointer finger
+	     shows over the ENTIRE page while the modal is open, which reads as "the
+	     whole page is clickable." Same convention as the dropdown click-catchers
+	     (FaqSearch / FiatCurrencySelect / PaymentFilterSelect). Clicking still
+	     dismisses; only the cursor changes. -->
 	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+		class="fixed inset-0 z-50 flex cursor-default items-center justify-center bg-black/50 p-4"
 		role="button"
 		tabindex="-1"
 		aria-label={$_('common.close') as string}

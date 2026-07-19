@@ -746,6 +746,9 @@
 		"feedback": {
 			"leave_prompt": "Leave feedback",
 			"sent_toast": "Feedback sent"
+		},
+		"system": {
+			"order_settled_elsewhere": "Thank you for reaching out about this order. I've now completed this trade with another trader, so it's no longer available. I'm sorry it didn't work out this time — I really appreciate your interest, and I hope we can trade in the future."
 		}
 	},
 	"cheat_sheet": {
@@ -954,7 +957,7 @@
 		"not_yours_title": "You can only edit your own orders",
 		"not_yours_body": "That order belongs to someone else. Only the poster can replace it.",
 		"not_live_title": "This order isn't live anymore",
-		"not_live_body": "Cancelled or expired orders can't be edited. Post a new one if you'd like to re-list.",
+		"not_live_body": "Canceled or expired orders can't be edited. Post a new one if you'd like to re-list.",
 		"expired_title": "The 15-minute window has passed",
 		"expired_body": "After 15 minutes, listings lock in so buyers and sellers can trust the terms. Cancel this one and post a new one if you'd like to change it.",
 		"time_remaining_prefix": "Time to edit:",
@@ -1085,7 +1088,7 @@
 				"morphit_profile": "Profile update",
 				"morphit_order": "Order posted",
 				"morphit_order_replace": "Order edited",
-				"morphit_order_cancel": "Order cancelled",
+				"morphit_order_cancel": "Order canceled",
 				"morphit_feedback": "Feedback",
 				"morphit_feedback_response": "Feedback response",
 				"morphit_chat": "Chat message",
@@ -1477,7 +1480,7 @@
 			},
 			"share_order_link": {
 				"q": "Can I share a link to my order?",
-				"a": "Yes. Every order has a shareable URL in the form /@username/order-permlink. This is the same page anyone visiting Morphit can use to read your full offer — terms, payment methods, location, your reputation — and it works without signing in. You can post the link on Nostr, paste it into a chat, share it in a forum. The page is public by design; ordering decisions benefit from being link-shareable the same way any marketplace listing is. The permlink itself is stable for the life of the order, so the link keeps working until the order is cancelled, filled, or expires."
+				"a": "Yes. Every order has a shareable URL in the form /@username/order-permlink. This is the same page anyone visiting Morphit can use to read your full offer — terms, payment methods, location, your reputation — and it works without signing in. You can post the link on Nostr, paste it into a chat, share it in a forum. The page is public by design; ordering decisions benefit from being link-shareable the same way any marketplace listing is. The permlink itself is stable for the life of the order, so the link keeps working until the order is canceled, filled, or expires."
 			},
 			"forward_secrecy": {
 				"q": "Does Morphit chat have forward secrecy?",
@@ -1501,7 +1504,7 @@
 			},
 			"chat_inbox_features": {
 				"q": "How does the chat inbox work? Can I mute or unmute someone?",
-				"a": "The chat inbox lives at the chat icon in the header and works like an email inbox: **one card per discussion**, not one per person.\n\nIf you and the same trader have talked about three different orders, that is three cards, each with a \"RE:\" line naming the order and its current state — **(Live)**, **(Cancelled)** or **(Expired)** — so a thread about a dead order says so before you open it. A discussion that isn't about an order still gets its own card; its second line simply reads \"RE: -\". Open a card and you see only that discussion. Newest activity is always on top.\n\nReading one card marks **only that one** read — three unread conversations with the same person stay three unread conversations, on this device and every other one you sign in from. Unread cards keep an emerald border, and the chat icon (plus the browser tab and favicon) carries the unread count. Reading a card, or clicking **Mark all as read**, clears it.\n\nThe inbox has three tabs, exactly like an email client:\n\n**Inbox** — where everything lands by default and stays until you move it. New conversations, replies, and first contact from someone you've never met all show up here.\n\n**★ Starred** — tap the empty star to the right of a card's time and the discussion moves here; tap the gold star to send it back to the Inbox. The same star sits in the conversation's ⋮ menu, so you can flag a thread from inside the chatroom too.\n\n**Archived** — done with a discussion but don't want to block anyone? Tap **Archive** on the right of the card. It moves to Archived, stops counting toward your unread badge, and its button becomes **Restore** to bring it back to the Inbox. Archiving is per-discussion, local to your browser, never on-chain, and never visible to the other party.\n\n**Mute / unmute (block + unblock).** Inside any conversation, the header's ⋮ menu has a Block button. It asks for confirmation, then broadcasts an on-chain block op — that account can no longer reach you from any handle, enforced server-side by the indexer no matter which Morphit instance they use. To unmute, go to **Settings → Blocked accounts** and click Unblock; that's an on-chain op too, effective immediately.\n\n**Block vs Archive vs Hide:** Block is on-chain and protocol-level (cross-instance, cross-account-history). Archive is your own inbox curation — local-only and per-discussion. Hide (the orderbook button — see 'Can I hide orders from specific users?' below) is the same local-hide idea extended to orderbook rows.\n\nDesktop and mobile both get optional push notifications for new messages — see 'How do push notifications work with my privacy?' for the privacy footprint. Turn them off any time from Settings."
+				"a": "The chat inbox lives at the chat icon in the header and works like an email inbox: **one card per discussion**, not one per person.\n\nIf you and the same trader have talked about three different orders, that is three cards, each with a \"RE:\" line naming the order and its current state — **(Live)**, **(Canceled)** or **(Expired)** — so a thread about a dead order says so before you open it. A discussion that isn't about an order still gets its own card; its second line simply reads \"RE: -\". Open a card and you see only that discussion. Newest activity is always on top.\n\nReading one card marks **only that one** read — three unread conversations with the same person stay three unread conversations, on this device and every other one you sign in from. Unread cards keep an emerald border, and the chat icon (plus the browser tab and favicon) carries the unread count. Reading a card, or clicking **Mark all as read**, clears it.\n\nThe inbox has three tabs, exactly like an email client:\n\n**Inbox** — where everything lands by default and stays until you move it. New conversations, replies, and first contact from someone you've never met all show up here.\n\n**★ Starred** — tap the empty star to the right of a card's time and the discussion moves here; tap the gold star to send it back to the Inbox. The same star sits in the conversation's ⋮ menu, so you can flag a thread from inside the chatroom too.\n\n**Archived** — done with a discussion but don't want to block anyone? Tap **Archive** on the right of the card. It moves to Archived, stops counting toward your unread badge, and its button becomes **Restore** to bring it back to the Inbox. Archiving is per-discussion, local to your browser, never on-chain, and never visible to the other party.\n\n**Mute / unmute (block + unblock).** Inside any conversation, the header's ⋮ menu has a Block button. It asks for confirmation, then broadcasts an on-chain block op — that account can no longer reach you from any handle, enforced server-side by the indexer no matter which Morphit instance they use. To unmute, go to **Settings → Blocked accounts** and click Unblock; that's an on-chain op too, effective immediately.\n\n**Block vs Archive vs Hide:** Block is on-chain and protocol-level (cross-instance, cross-account-history). Archive is your own inbox curation — local-only and per-discussion. Hide (the orderbook button — see 'Can I hide orders from specific users?' below) is the same local-hide idea extended to orderbook rows.\n\nDesktop and mobile both get optional push notifications for new messages — see 'How do push notifications work with my privacy?' for the privacy footprint. Turn them off any time from Settings."
 			},
 			"notifications_overview": {
 				"q": "How does Morphit let me know when something happens — a new message, an order filling, feedback arriving?",
@@ -2147,7 +2150,7 @@
 		"expired_body": "Codes only work for 5 minutes. Tap below for a fresh one.",
 		"rejected_heading": "Couldn't verify the sign-in",
 		"rejected_body": "Something didn't match up. Tap below to try a fresh code.",
-		"cancelled": "Cancelled."
+		"cancelled": "Canceled."
 	},
 	"mailing_address_modal": {
 		"heading": "Share your mailing address",
@@ -2194,19 +2197,19 @@
 			"heading": "Show",
 			"all": "All",
 			"live": "Live",
-			"cancelled": "Cancelled",
+			"cancelled": "Canceled",
 			"expired": "Expired",
 			"paid": "Paid"
 		},
 		"order": {
 			"posted_prefix": "Posted",
 			"state_live": "Live",
-			"state_cancelled": "Cancelled",
+			"state_cancelled": "Canceled",
 			"state_expired": "Expired",
 			"fee_verified": "Visible in orderbook",
 			"action_edit": "Edit",
 			"action_edit_expired": "Editing closed (15 min window)",
-			"action_cancelled": "Cancelled",
+			"action_cancelled": "Canceled",
 			"action_feature": "Feature",
 			"action_feedback": "Mark complete / review",
 			"fee_pending_external": "Awaiting attestation",
@@ -2220,7 +2223,7 @@
 			"action_relist": "Re-list this order",
 			"action_relist_hint": "Pre-fills the form for you with the original values and terms.",
 			"edit_window_countdown": "Edit window: {remaining}",
-			"edit_window_tooltip": "Orders can only be edited within 15 minutes of posting. After that they have to be cancelled and re-posted.",
+			"edit_window_tooltip": "Orders can only be edited within 15 minutes of posting. After that they have to be canceled and re-posted.",
 			"edit_window_aria": "Edit window remaining: {remaining}",
 			"feedback_pick_prompt": "Who did you trade with?",
 			"not_visible_orderbook": "Not visible in orderbook",
@@ -2599,7 +2602,7 @@
 		"fee_missing": "Fee not yet received",
 		"fee_reused": "Fee already used by another listing",
 		"status_live": "Live",
-		"status_cancelled": "Cancelled",
+		"status_cancelled": "Canceled",
 		"status_expired": "Expired",
 		"cta_hint": "Interested in this trade? Use the Message button above to coordinate payment details with the poster. Settlement happens directly between you — Morphit never holds funds.",
 		"owner_actions_heading": "Your order",
@@ -3387,12 +3390,12 @@
 	"privacy_terms": {
 		"heading": "Privacy & Terms",
 		"privacy_heading": "Privacy",
-		"privacy_body_1": "Morphit runs in your browser. Your keys are generated on your device and never leave it. Morphit does not collect tracking cookies, analytics, or your IP address for any purpose beyond what's technically required to serve the page.",
+		"privacy_body_1": "Morphit runs in your browser. Your keys are generated on your device and never leave it. Morphit does not collect anything about you. Pick a memorable username, that's it.",
 		"privacy_body_2": "Every offer you post — along with the feedback and reviews you leave and receive — is public on the blockchain, for reputation-building, posterity, and your own research on other traders.",
 		"privacy_body_protected": "By contrast, your private conversations stay private. Direct messages between traders are end-to-end encrypted — they live on the blockchain only as ciphertext that you and your trade partner can read, never the operator, the indexers, or anyone else watching the chain. Morphit also collects no name, email, phone, or ID, and the payment details you exchange (such as a receiving address) move through that encrypted channel instead of the public orderbook.",
-		"privacy_body_3": "We encourage you to use a VPN, Tor, Lokinet, or I2P when accessing Morphit — anything that hides your IP from the server you're talking to is a good idea. We don't fingerprint your browser, we don't profile you, and we explicitly design our defenses against abuse so they don't punish privacy-conscious users. Our rate limits are crude (a handful of signups per IP per day) and easily defeated by VPN rotation — that's a conscious tradeoff. We'd rather accept more abuse than make privacy-respecting users feel unwelcome. If a defense would require tracking you to work, we don't ship it.",
+		"privacy_body_3": "We encourage you to use a VPN, Tor, Lokinet, or I2P when accessing Morphit — anything that hides your IP from the server you're talking to is a good idea. We don't fingerprint your browser, we don't profile you, and we explicitly design our defenses against abuse so they don't punish privacy-conscious users. Our rate limits are crude (a handful of signups per user per day) and easily defeated by VPN rotation — that's a conscious tradeoff. We'd rather accept more abuse than make privacy-respecting users feel unwelcome. If a defense would require tracking you to work, we don't ship it.",
 		"terms_heading": "Terms",
-		"terms_body": "Please abide by the Non-Aggression Principle (NAP). Cursing is acceptable, but just keep in mind that there are all ages that use Morphit. Elderly, teens and everyone in between. All OPINIONS are welcome here, but directed insults are not. Your Buy/Sell orders, the Feedback section and Chats are immutable, so wording is everything. State your opinion, then stop. Don't start fights. Do not post illegal or obviously objectionable stuff. Remember your manners, be nice. 💚💙"
+		"terms_body": "Please abide by the Non-Aggression Principle (NAP). Cursing is acceptable, but just keep in mind that there are all ages that use Morphit. Elderly, teens and everyone in between. All OPINIONS are welcome here, but directed insults are not. Your buy/sell orders, your private chats and the feedback section are immutable, so wording is everything. State your opinion, then stop. Don't start fights. Do not post illegal or obviously objectionable stuff. Remember your manners, be nice. 💚💙"
 	},
 	"privkey_warn": {
 		"title": "Stop — that looks like a private key",
@@ -3544,7 +3547,9 @@
 			"qr_no_camera": "This device has no camera to scan with.",
 			"qr_invalid": "That QR didn't contain a Blurt account. Try another."
 		},
-		"given_said": "I said:"
+		"given_said": "I said:",
+		"received_rated": "@{account} rated me:",
+		"received_said": "@{account} said:"
 	},
 	"relative_time": {
 		"descriptive": {
@@ -3579,10 +3584,6 @@
 			"action_sign_out": "Sign out",
 			"action_compare_source": "Compare to source",
 			"action_try_other_instance": "Try another operator"
-		},
-		"stale_build": {
-			"body": "A new version of Morphit is available. Refresh to load it — your data stays untouched.",
-			"reload": "Refresh"
 		}
 	},
 	"run_a_node": {

@@ -21,7 +21,7 @@ export default {
 					// Same pattern as `btn` below: the pure brand colour is too bright
 					// a field to read thin text on, so the bubble gets a deepened
 					// sibling rather than an opacity (which would blend with the page).
-					'emerald-bubble': '#00B85A',
+					'emerald-bubble': '#009E51',
 					teal: '#02A6B2',
 					// Primary button face — mirrors --morphit-btn-face in app.css.
 					// A deepened brand teal (white text clears WCAG AA); this is

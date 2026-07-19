@@ -34,7 +34,12 @@ import { Hono } from 'hono';
 import type { Database } from '$db/pool';
 import { errorBody, isAccountName } from '$api/shared';
 
-const MAX_COUNTERPARTIES = 50;
+// /my/orders wants a manageable candidate list, so it omits ?limit and gets
+// the default. The settlement auto-reply sender (settledElsewhere.ts) passes a
+// generous ?limit so it can reach EVERY inquirer on a popular order rather than
+// just the alphabetical first slice; the value is clamped to the hard cap.
+const DEFAULT_COUNTERPARTIES = 50;
+const MAX_COUNTERPARTIES = 500;
 
 /** Permlink policy identical to handlers/feedback.ts: ≤32 chars,
  *  lowercase alnum segments joined by single hyphens. */
@@ -59,6 +64,23 @@ export function orderCounterpartiesRoute(db: Database): Hono {
 		}
 		if (!isValidPermlink(permlink)) {
 			return c.json(errorBody('bad_request', 'invalid permlink'), 400);
+		}
+
+		// Optional ?limit — omitted → the lean default for /my/orders; the
+		// settlement auto-reply passes a high value to enumerate every inquirer.
+		// Digits-only guard BEFORE parseInt: Number.parseInt('12abc', 10) === 12
+		// would otherwise let a malformed value slip past validation.
+		const rawLimit = c.req.query('limit');
+		let limit = DEFAULT_COUNTERPARTIES;
+		if (rawLimit !== undefined) {
+			if (!/^\d+$/.test(rawLimit)) {
+				return c.json(errorBody('bad_request', 'invalid limit'), 400);
+			}
+			const n = Number.parseInt(rawLimit, 10);
+			if (n < 1) {
+				return c.json(errorBody('bad_request', 'invalid limit'), 400);
+			}
+			limit = Math.min(n, MAX_COUNTERPARTIES);
 		}
 
 		// Candidate peers = DISTINCT senders who named THIS order when
@@ -104,7 +126,7 @@ export function orderCounterpartiesRoute(db: Database): Hono {
 			LIMIT $3
 		`;
 
-		const result = await db.query<CounterpartyRow>(sql, [owner, permlink, MAX_COUNTERPARTIES]);
+		const result = await db.query<CounterpartyRow>(sql, [owner, permlink, limit]);
 
 		return c.json({
 			owner,

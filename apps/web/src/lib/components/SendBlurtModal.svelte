@@ -498,7 +498,7 @@
 					type="button"
 					onclick={useFullBalance}
 					disabled={phase.kind === 'sending' || !(blurtBalance > 0)}
-					class="cursor-pointer font-semibold text-morphit-teal underline decoration-dotted underline-offset-2 hover:text-morphit-emerald disabled:cursor-not-allowed disabled:opacity-50 dark:text-morphit-emerald"
+					class="cursor-pointer font-semibold text-morphit-teal underline decoration-dotted underline-offset-2 hover:text-morphit-emerald hover:no-underline disabled:cursor-not-allowed disabled:opacity-50 dark:text-morphit-emerald"
 				>
 					{$_('profile.wallet.use_full')}
 				</button>

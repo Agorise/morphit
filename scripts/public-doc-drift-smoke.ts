@@ -317,6 +317,89 @@ check(
 	versionClaims.join('\n      ')
 );
 
+// ── D-6: value parity for the most-cited constants ──────────────────
+// D-1..D-5 pin REQUIREMENTS (a var is read, a path exists, a link resolves).
+// None of them can catch a NUMBER going stale — and the v1.8.0 doc grind found
+// by hand that the stranger-fee base, the listing-fee base, the cross-page
+// listener cap and the chat caps had all drifted in prose while the code was
+// right. This pins those literals: the value is read from CODE (the single
+// source of truth) and every listed public doc must state the SAME number, so
+// changing a code constant fails the smoke until the doc is updated to match.
+// Keep this list SMALL and every regex UNAMBIGUOUS — a flaky value check gets
+// muted, and a muted check guards nothing. (TOTAL_STEPS is deliberately absent:
+// wizard-step-count-doc-parity-smoke already owns the wizard step count.)
+type ValuePin = {
+	label: string;
+	code: { file: string; re: RegExp };
+	docs: { file: string; re: RegExp }[];
+};
+const VALUE_PINS: ValuePin[] = [
+	{
+		label: 'stranger-fee base (BLURT)',
+		code: { file: 'apps/indexer/src/indexer/strangerFeePricing.ts', re: /STRANGER_FEE_BASE_BLURT\s*=\s*(\d+)/ },
+		docs: [{ file: 'docs/FEES-AND-REWARDS.md', re: /STRANGER_FEE_BASE_BLURT\s*=\s*(\d+)/ }]
+	},
+	{
+		label: 'listing-fee base (BLURT)',
+		code: { file: 'apps/indexer/src/config/index.ts', re: /MORPHIT_INDEXER_FEE_BASE_BLURT[^\n;]*?default\((\d+)\)/ },
+		docs: [{ file: 'docs/FEES-AND-REWARDS.md', re: /env default base is `(\d+)` BLURT/ }]
+	},
+	{
+		label: 'featured-slot minimum hours',
+		code: { file: 'apps/indexer/src/indexer/handlers/featureBid.ts', re: /MIN_HOURS\s*=\s*(\d+)/ },
+		docs: [{ file: 'docs/FEES-AND-REWARDS.md', re: /MIN_HOURS\s*=\s*(\d+)/ }]
+	},
+	{
+		label: 'first-fee welcome BP',
+		code: { file: 'apps/indexer/src/indexer/loyalty.ts', re: /FIRST_FEE_WELCOME_BP\s*=\s*(\d+)/ },
+		docs: [{ file: 'docs/FEES-AND-REWARDS.md', re: /FIRST_FEE_WELCOME_BP\s*=\s*(\d+)/ }]
+	},
+	{
+		label: 'cross-page trade-event listener cap',
+		code: { file: 'apps/web/src/lib/trades/tradeEventListener.ts', re: /MAX_LISTENER_STREAMS\s*=\s*(\d+)/ },
+		docs: [{ file: 'docs/OPERATIONS.md', re: /caps the listener to \*\*(\d+)\*\*/ }]
+	},
+	{
+		label: 'chat fan-in cap (unique never-replied senders / 24h)',
+		code: { file: 'apps/indexer/src/indexer/handlers/chat.ts', re: /FAN_IN_UNIQUE_SENDERS_24H\s*=\s*(\d+)/ },
+		docs: [{ file: 'docs/OPERATIONS.md', re: /fan-in \(\u2264(\d+) unique/ }]
+	},
+	{
+		label: 'chat per-pair no-reply cap',
+		code: { file: 'apps/indexer/src/indexer/handlers/chat.ts', re: /PER_PAIR_NO_REPLY_CAP\s*=\s*(\d+)/ },
+		docs: [{ file: 'docs/OPERATIONS.md', re: /per-pair no-reply cap \(\u2264(\d+)/ }]
+	},
+	{
+		label: 'attestor loyalty threshold (BLURT)',
+		code: { file: 'apps/indexer/src/indexer/attestorEligibility.ts', re: /ATTESTOR_LOYALTY_THRESHOLD_BLURT\s*=\s*(\d+)/ },
+		docs: [{ file: 'docs/OPERATIONS.md', re: /\u2265(\d+) BLURT cumulative/ }]
+	}
+];
+
+function pinValue(file: string, re: RegExp): string | null {
+	try {
+		const m = readFileSync(join(ROOT, file), 'utf8').match(re);
+		return m && m[1] !== undefined ? m[1] : null;
+	} catch {
+		return null;
+	}
+}
+
+for (const pin of VALUE_PINS) {
+	const codeVal = pinValue(pin.code.file, pin.code.re);
+	if (codeVal === null) {
+		check(`D-6 ${pin.label}: code literal located`, false, `no match in ${pin.code.file}`);
+		continue;
+	}
+	const problems: string[] = [];
+	for (const d of pin.docs) {
+		const docVal = pinValue(d.file, d.re);
+		if (docVal === null) problems.push(`${d.file}: no value matched`);
+		else if (docVal !== codeVal) problems.push(`${d.file} states ${docVal}, code says ${codeVal}`);
+	}
+	check(`D-6 ${pin.label} = ${codeVal} (code \u21d4 docs)`, problems.length === 0, problems.join('; '));
+}
+
 console.log('');
 if (fail === 0) console.log(`\u2713 all ${pass} public-doc-drift checks passed`);
 else {

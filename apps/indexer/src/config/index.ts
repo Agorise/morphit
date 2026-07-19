@@ -166,7 +166,7 @@ export interface Config {
 	 *  transfers when verifying orders. Default: 'morphit-fees'.
 	 *  MUST match FEE_RECIPIENT on the frontend. */
 	readonly feeRecipient: string;
-	/** Base BLURT fee per listing (pre-multiplier). Default: 60 BLURT.
+	/** Base BLURT fee per listing (pre-multiplier). Default: 125 BLURT.
 	 *
 	 *  After Morphit's BLURT-native fee refactor, listing fees are
 	 *  denominated directly in BLURT rather than translated from a
@@ -398,7 +398,7 @@ export interface Config {
 	 *  non-USD denominations should override these to match their
 	 *  unit (e.g. on a EUR-denominated instance, set
 	 *  MORPHIT_INDEXER_PRICE_FEED_BTC_STATIC_FLOOR to a rough
-	 *  BTC/EUR value like 55_000 instead of the USD-shaped 60_000). */
+	 *  BTC/EUR value like 55_000 instead of the USD-shaped 64_700). */
 	readonly priceFeedBtcStaticFloor: number;
 	readonly priceFeedXmrStaticFloor: number;
 
@@ -838,7 +838,7 @@ const envSchema = z.object({
 	// when it's empty or malformed. /v1/instance then advertises the RESOLVED
 	// account, so the frontend always pays the same place the indexer verifies.
 	MORPHIT_INDEXER_FEE_RECIPIENT: z.string().default(CANONICAL_TREASURY.blurt),
-	MORPHIT_INDEXER_FEE_BASE_BLURT: z.coerce.number().positive().default(60),
+	MORPHIT_INDEXER_FEE_BASE_BLURT: z.coerce.number().positive().default(125),
 	MORPHIT_INDEXER_FEE_TOLERANCE: z.coerce.number().positive().max(0.5).default(0.001),
 
 	/** Operator-level instance-wide asset disable list (Part 121,
@@ -987,7 +987,7 @@ const envSchema = z.object({
 		.enum(['true', 'false'])
 		.default('true')
 		.transform((s) => s === 'true'),
-	MORPHIT_INDEXER_PRICE_FEED_STATIC_FLOOR: z.coerce.number().positive().default(0.002),
+	MORPHIT_INDEXER_PRICE_FEED_STATIC_FLOOR: z.coerce.number().positive().default(0.001),
 	MORPHIT_INDEXER_PRICE_REFRESH_INTERVAL_MS: z.coerce
 		.number()
 		.int()
@@ -1108,8 +1108,8 @@ const envSchema = z.object({
 	MORPHIT_INDEXER_PRICE_FEED_BTC_STATIC_FLOOR: z.coerce
 		.number()
 		.positive()
-		.default(60_000),
-	MORPHIT_INDEXER_PRICE_FEED_XMR_STATIC_FLOOR: z.coerce.number().positive().default(200),
+		.default(64_700),
+	MORPHIT_INDEXER_PRICE_FEED_XMR_STATIC_FLOOR: z.coerce.number().positive().default(333),
 
 	// Featured-slot auction.
 	MORPHIT_INDEXER_FEATURE_FEE_BLURT_PER_HOUR: z.coerce.number().positive().default(50),

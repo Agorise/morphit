@@ -24,8 +24,15 @@ import {
 } from './containFit';
 
 /** Holds the original (badge-less) title so we can restore it when
- *  the count goes to zero. Captured on first run. */
+ *  the count goes to zero. Kept in sync with the CURRENT page by
+ *  setBaseTitle (Head.svelte calls it on every navigation), so the
+ *  (N) prefix is never stranded on a previous page's title. */
 let originalTitle: string | null = null;
+
+/** Most recent unread total, so setBaseTitle can re-apply the (N)
+ *  prefix to a freshly-navigated page title immediately, without
+ *  waiting for the next unreadCount tick. */
+let lastTotal = 0;
 
 /** Holds the original favicon href. */
 let originalFaviconHref: string | null = null;
@@ -57,6 +64,21 @@ function setTitle(count: number): void {
 	} else {
 		document.title = originalTitle;
 	}
+}
+
+/**
+ * Re-anchor the ambient (N) prefix to the CURRENT page's clean title.
+ *
+ * Head.svelte calls this reactively whenever its computed <title> changes —
+ * i.e. on every navigation. Without it, `originalTitle` was captured ONCE at
+ * first load and `setTitle` stamped the (N) prefix onto that stale title, so a
+ * chat page's "Conversation" leaked onto the orderbook (and "Browse Offers"
+ * onto chat). No-op during SSR.
+ */
+export function setBaseTitle(base: string): void {
+	if (typeof document === 'undefined') return;
+	originalTitle = base;
+	setTitle(lastTotal);
 }
 
 /**
@@ -188,6 +210,7 @@ export function startAmbientChannels(): () => void {
 
 	const unsubscribe = unreadCount.subscribe((c: UnreadCounts) => {
 		const total = totalUnread(c);
+		lastTotal = total;
 		setTitle(total);
 		void setFaviconBadge(total);
 		setAppBadge(total);

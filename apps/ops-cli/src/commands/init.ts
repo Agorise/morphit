@@ -31,6 +31,7 @@ import {
 	i2pdAvailable,
 	type I2pDestinationResult
 } from '../init/i2pGenerate.ts';
+import { startDotsSpinner } from '../init/spinner.ts';
 import { validateAltAddress } from '../lib/altAddressValidate.ts';
 import { sanitizeForTerm } from '../render/term.ts';
 import {
@@ -400,11 +401,16 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 		if (existingI2p) {
 			i2pB32 = existingI2p;
 		} else if (i2pdAvailable()) {
+			console.log('');
+			const stopSpinner = startDotsSpinner(
+				'Stand by, generating alt-dns addresses (this might take a few minutes)\u2026'
+			);
 			try {
-				console.log('\n  Generating a default I2P address with i2pd\u2026');
 				i2pDestination = await generateI2pDestination();
+				stopSpinner();
 				i2pB32 = i2pDestination.b32;
 			} catch (e) {
+				stopSpinner();
 				console.log(
 					`  \u2139 Could not auto-generate an I2P address (${
 						e instanceof Error ? e.message : 'unknown error'

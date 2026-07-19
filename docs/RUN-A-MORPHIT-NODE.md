@@ -224,6 +224,17 @@ location = /service-worker.js { expires -1; try_files $uri =404; }
 location = /verify.json       { expires -1; try_files $uri =404; }
 ```
 
+These blocks go in **the server config that actually serves the website files** — the one holding your `location /` and API proxy blocks. If your reverse proxy (e.g. BunkerWeb) serves the build *directly* rather than proxying to a separate frontend nginx, that's the file to edit; see OPERATIONS.md §"Caching the update surface" for that topology and the header-inheritance caveat.
+
+**Verify it after setup — one command, and it's the difference between updates working or not.** Once your site is live, check the two files come back uncacheable:
+
+```
+curl -sI https://yourdomain.com/service-worker.js | grep -i cache-control
+curl -sI https://yourdomain.com/verify.json       | grep -i cache-control
+```
+
+You want `cache-control: no-cache` on **both**. If either line is missing or shows something cacheable (`max-age=…`, `public`, or an `age:` above 0), the no-cache rule isn't reaching those files — fix that before announcing your node. Without it, a stale service worker sticks on visitors' devices and they stop receiving your deploys until they manually hard-refresh (which almost no one does), so they can silently miss bug fixes and even see chat messages fail to appear.
+
 **Don't add your own caching on top of `/v1/...`.** The indexer already sets the right `Cache-Control` per response, and it varies deliberately: `GET /v1/profiles` returns `max-age=90` only when every requested account was found, and `no-store` when any account is missing. A missing account usually just means the indexer hasn't caught up with that person's brand-new profile yet — if an edge cache pins that answer, visitors see their display name as `@account` and their avatar as the default identicon, and refreshing the page won't fix it. Proxy `/v1/` straight through and let the upstream headers win. (If you enable BunkerWeb's `USE_CACHE`, check it isn't configured to override upstream cache directives.)
 
 ### 11.3 Security headers (copy verbatim)

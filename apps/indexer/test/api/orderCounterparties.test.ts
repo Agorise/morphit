@@ -65,6 +65,36 @@ describe('GET /v1/orders/:owner/:permlink/counterparties', () => {
 		expect(typeof cap[0]!.params[2]).toBe('number');
 	});
 
+	it('binds the default candidate cap when no ?limit is given', async () => {
+		const cap: Captured[] = [];
+		const app = mount([], cap);
+		await app.request('/v1/orders/alice/buy-btc-usd-2026-07/counterparties');
+		expect(cap[0]!.params[2]).toBe(50);
+	});
+
+	it('honors ?limit for the auto-reply and clamps it to the hard cap', async () => {
+		// The settlement auto-reply passes a generous ?limit so it reaches every
+		// inquirer on a busy order (not just the default candidate slice).
+		const cap: Captured[] = [];
+		const app = mount([], cap);
+		await app.request('/v1/orders/alice/buy-btc-usd-2026-07/counterparties?limit=200');
+		expect(cap[0]!.params[2]).toBe(200);
+		// Above the hard cap (500) → clamped, so no caller can force an unbounded
+		// scan even on an absurdly popular order.
+		const cap2: Captured[] = [];
+		const app2 = mount([], cap2);
+		await app2.request('/v1/orders/alice/buy-btc-usd-2026-07/counterparties?limit=9999');
+		expect(cap2[0]!.params[2]).toBe(500);
+	});
+
+	it('400s on a non-numeric or non-positive ?limit', async () => {
+		const app = mount([]);
+		const base = '/v1/orders/alice/buy-btc-usd-2026-07/counterparties';
+		expect((await app.request(`${base}?limit=abc`)).status).toBe(400);
+		expect((await app.request(`${base}?limit=0`)).status).toBe(400);
+		expect((await app.request(`${base}?limit=-5`)).status).toBe(400);
+	});
+
 	it('returns an empty list when nobody is a reviewable counterparty', async () => {
 		const app = mount([]);
 		const res = await app.request('/v1/orders/alice/buy-btc-usd-2026-07/counterparties');

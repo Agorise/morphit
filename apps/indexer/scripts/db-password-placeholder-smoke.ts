@@ -89,11 +89,6 @@ const ALLOWED_PATHS = new Set([
 	// Memorized facts in REVISIT-LIST mention placeholders by
 	// name in the operator-action checklist.
 	'docs/REVISIT-LIST.md',
-	// cp150 split: pre-cp100 history was moved out of REVISIT-LIST.md
-	// to keep the live file under ~310KB.  The archive carries
-	// the same placeholder-sentinel references the live file
-	// always had (operator-action recaps from cp82+ era).
-	'docs/REVISIT-LIST-ARCHIVE.md',
 	// Operator-facing setup doc names the sentinel by spelling
 	// in step 7 + step 8 (so the operator recognizes it).
 	'docs/RUN-A-MORPHIT-NODE.md',
@@ -131,23 +126,10 @@ const ALLOWED_PATHS = new Set([
 	// in the implicit-allowlist set via docs/ blanket
 	// inclusion below; this entry just makes the
 	// rationale explicit.
-	'docs/PRE-LAUNCH-CHECKLIST.md',
-	// cp139 three-persona walkthrough — Sally-operator
-	// section names the placeholder sentinels in the
-	// context of the 3-tier denylist defense (init.sql +
-	// indexer config + relay config).  Same trust posture
-	// as the other walkthrough/audit docs above; removing
-	// the literal names would weaken the closure narrative.
-	'docs/THREE-PERSONA-WALKTHROUGH-cp139.md',
-	// cp137 three-persona walkthrough — likewise mentions
-	// placeholder sentinels in the operator-facing section.
-	'docs/THREE-PERSONA-WALKTHROUGH-cp137.md',
-	// cp148 four-persona walkthrough — same audience-coverage
-	// doc adding Charlie (AI agent) as a fourth persona.  The
-	// standing-memory-items table at the end mentions the
-	// CHANGE_ME_BEFORE_PRODUCTION denylist sentinel in the
-	// same explanatory posture as cp137/cp139.
-	'docs/FOUR-PERSONA-WALKTHROUGH-cp148.md'
+	'docs/PRE-LAUNCH-CHECKLIST.md'
+	// v1.8.0 housecleaning: the three persona-walkthrough docs
+	// (cp137/cp139/cp148) that used to be allowlisted here were
+	// deleted as point-in-time records — nothing left to scan.
 ]);
 
 // ─── Directories to skip while walking ────────────────────────────────

@@ -39,7 +39,7 @@
 -->
 <script lang="ts">
 	import { _ } from 'svelte-i18n';
-	import { release, assetCheck } from '$stores/release';
+	import { release, assetCheck, staleBuild } from '$stores/release';
 
 	const showPubkeyMismatch = $derived.by(() => {
 		const r = $release;
@@ -56,7 +56,18 @@
 		return a.kind === 'mismatch' ? a.mismatches.map((m) => m.path) : [];
 	});
 
-	const show = $derived(showPubkeyMismatch || showInvalidPayload || tamperedPaths.length > 0);
+	// An asset mismatch is EXPECTED (and harmless) while the running bundle is
+	// simply OLDER than a newly-announced, chain-SIGNED release: the tamper check
+	// compares the running bundle's bytes against the NEW manifest, so every
+	// routine upgrade would otherwise flash this red alert. Suppress the asset-
+	// mismatch case during a stale build — the "Load it now" snackbar
+	// (UpdateBanner) handles the reload. Genuine tampering is same-version-
+	// different-bytes, which still fires here once the running version matches
+	// the announced one. staleBuild requires a valid chain-signed newer release,
+	// so an attacker can't fabricate it to hide a tampered same-version bundle.
+	const assetTamper = $derived(tamperedPaths.length > 0 && $staleBuild !== true);
+
+	const show = $derived(showPubkeyMismatch || showInvalidPayload || assetTamper);
 
 	let expanded = $state(false);
 </script>

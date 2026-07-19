@@ -180,10 +180,12 @@ async function gatherInputs(): Promise<Inputs> {
 
 	// cp372 — chain-pinned BLURT fee base.  Empty omits it (older
 	// shape); when set, makes the BLURT floor deterministic across
-	// the federation like BTC/XMR.  Defaults to the canonical
-	// fallback (~12.5¢ at the reference price).
+	// the federation like BTC/XMR.  The canonical floor is 125 BLURT
+	// (~12.5¢ at the $0.001 reference price); the release ceremony passes it
+	// explicitly via MORPHIT_BUILD_BLURT_BASE so a `< /dev/null` build pins the
+	// floor rather than omitting it and falling back to each instance's env.
 	const blurtBase = await ask(
-		'BLURT fee base (whole BLURT, e.g. 62.5; empty to omit)',
+		'BLURT fee base (whole BLURT, e.g. 125; empty to omit)',
 		process.env.MORPHIT_BUILD_BLURT_BASE ?? ''
 	);
 

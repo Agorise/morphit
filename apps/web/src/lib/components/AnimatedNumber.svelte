@@ -65,6 +65,14 @@
 		 *  actually moving is BP, released weekly over 4 weeks). Normal
 		 *  balance changes leave this false and animate as usual. */
 		silent?: boolean;
+		/** v1.8.0 (t.txt) — when true AND the app locale is Chinese
+		 *  (zh-CN / zh-HK), INVERT the gain/loss flash colours to match the
+		 *  Chinese financial convention: a value going UP flashes RED, a value
+		 *  going DOWN flashes GREEN (红涨绿跌 — the opposite of the Western
+		 *  green-up/red-down). Left false for non-money numbers like the mana /
+		 *  voting-power meter, which reads like a battery (up = green) in every
+		 *  locale; set true only on money balances. No effect outside zh. */
+		localeSignColors?: boolean;
 	}
 	let {
 		value,
@@ -73,7 +81,8 @@
 		epsilon = 1e-9,
 		grouping = true,
 		ariaLabel,
-		silent = false
+		silent = false,
+		localeSignColors = false
 	}: Props = $props();
 
 	/** The number currently shown.  Tweens between values.
@@ -233,6 +242,17 @@
 		if (flashTimer !== null) clearTimeout(flashTimer);
 	});
 
+	/** v1.8.0 — the flash colour class actually applied. In a Chinese locale
+	 *  with `localeSignColors`, swap gain↔loss so UP shows red and DOWN shows
+	 *  green (红涨绿跌). Everywhere else it's the direction unchanged. */
+	const effectiveFlash = $derived.by<'gain' | 'loss' | null>(() => {
+		if (flash === null) return null;
+		const invert =
+			localeSignColors && ($locale === 'zh-CN' || $locale === 'zh-HK');
+		if (!invert) return flash;
+		return flash === 'gain' ? 'loss' : 'gain';
+	});
+
 	const formatted = $derived.by(() => {
 		if (!Number.isFinite(displayed)) return '--';
 		// Format per the APP's selected locale (the language the user picked in
@@ -262,8 +282,8 @@
 
 <span
 	class="animated-number tabular-nums transition-colors duration-300"
-	class:flash-gain={flash === 'gain'}
-	class:flash-loss={flash === 'loss'}
+	class:flash-gain={effectiveFlash === 'gain'}
+	class:flash-loss={effectiveFlash === 'loss'}
 	aria-label={ariaLabel}
 	aria-live="polite"
 	aria-atomic="true"

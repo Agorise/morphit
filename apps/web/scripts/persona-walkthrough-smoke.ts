@@ -771,16 +771,15 @@ const SCENARIOS: readonly Scenario[] = [
 		// Part 122 cp5 — F14 (MEDIUM) — operator-doc wizard-step
 		// number had drifted from the code.  OPERATIONS.md said
 		// "morphit-ops init step 12 asks: Enable daily DB backup"
-		// but in current code the backup prompt is step 15
-		// (stepBackup at position 15 of 17 in
-		// apps/ops-cli/src/commands/init.ts).  Pre-Part-109 backup
-		// was step 12; Part 109 added stepFeeExplorers + stepChatLink
-		// in front of it; subsequent steps were added too.  The doc
-		// drifted three positions behind.
+		// but the backup prompt has migrated forward as steps were
+		// inserted ahead of it: pre-Part-109 it was step 12; Part 109
+		// added stepFeeExplorers + stepChatLink; later the Homepage-SEO
+		// meta step (step 16) landed just ahead of it, taking backup to
+		// step 17 of 23.
 		//
 		// Sentinel pins both legs of the contract:
-		//   (a) TOTAL_STEPS = 18 in steps.ts (the canonical count)
-		//   (b) OPERATIONS.md references "step 16" for backup
+		//   (a) TOTAL_STEPS = 23 in steps.ts (the canonical count)
+		//   (b) OPERATIONS.md references "step 17" for backup
 		//       (matching stepBackup's actual position)
 		// If a future wizard restructure changes TOTAL_STEPS or
 		// reorders stepBackup, this sentinel fails and forces
@@ -789,11 +788,11 @@ const SCENARIOS: readonly Scenario[] = [
 		file: 'docs/OPERATIONS.md',
 		rootRelative: true,
 		mustHave: [
-			'`morphit-ops init` step 16 asks: "Enable daily DB backup automation?"'
+			'`morphit-ops init` step 17 asks: "Enable daily DB backup automation?"'
 		],
 		mustNotHave: [
-			'`morphit-ops init` step 12 asks: "Enable daily DB backup automation?"',
-			'`morphit-ops init` step 15 asks: "Enable daily DB backup automation?"'
+			'`morphit-ops init` step 15 asks: "Enable daily DB backup automation?"',
+			'`morphit-ops init` step 16 asks: "Enable daily DB backup automation?"'
 		]
 	},
 	{

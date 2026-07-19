@@ -373,6 +373,44 @@ export function feedbackByAccountRoute(db: Database): Hono {
 			for (const r of flagResult.rows) flaggedReviewers.add(r.reviewer);
 		}
 
+		// ─── Reviewer reputation (v1.8.0, t.txt) ───────────────────
+		// The "reviews this user has received" card now shows the CURRENT
+		// reputation of the REVIEWER (the person who left the review) — the
+		// mirror of what the feedback-given card already shows for the
+		// subject. A reviewer's reputation is the weighted rating of the
+		// feedback where THEY are the subject, so this reuses the exact same
+		// CANONICAL FEEDBACK_EXCLUSIONS_SQL + decay formula as the summary
+		// and the given-card computation — it can never drift from the
+		// headline figure on that reviewer's own profile. Batched over the
+		// page's distinct reviewers so the card costs ZERO extra round trips
+		// (a per-reviewer fetch would be up to DEFAULT_LIMIT requests from a
+		// single profile view).
+		const reviewerReputation = new Map<
+			string,
+			{ count: number; weighted_rating: number | null }
+		>();
+		if (reviewers.length > 0) {
+			const repResult = await db.query<{ subject: string; c: number; r: string | null }>(
+				`SELECT fb.subject, COUNT(*)::int AS c,
+				        ROUND(
+				          SUM(fb.rating * POWER(0.5, EXTRACT(EPOCH FROM (NOW() - fb.created_at)) / (365 * 86400.0))) /
+				          NULLIF(SUM(POWER(0.5, EXTRACT(EPOCH FROM (NOW() - fb.created_at)) / (365 * 86400.0))), 0),
+				          2
+				        )::text AS r
+				   FROM feedback fb
+${FEEDBACK_EXCLUSIONS_SQL}
+				    AND fb.subject = ANY($1::text[])
+				  GROUP BY fb.subject`,
+				[reviewers]
+			);
+			for (const row of repResult.rows) {
+				reviewerReputation.set(row.subject, {
+					count: row.c,
+					weighted_rating: row.r === null ? null : parseFloat(row.r)
+				});
+			}
+		}
+
 		// ─── Responses for this page's feedback ids ───────────────
 		const ids = rows.map((r) => parseInt(r.id, 10));
 		const responsesByFeedbackId = new Map<number, ResponseRow[]>();
@@ -414,6 +452,16 @@ export function feedbackByAccountRoute(db: Database): Hono {
 				 *  flag lets the frontend show a clear visual cue so
 				 *  the list reconciles with the summary (Finding R15). */
 				suppressed: flaggedReviewers.has(r.reviewer),
+				/** v1.8.0 (t.txt): the REVIEWER's current reputation —
+				 *  exclusion-filtered + decay-weighted, identical to the
+				 *  headline figure on their own profile. Lets the received
+				 *  card render "★ 4.97 (12)" next to the reviewer, mirroring
+				 *  the feedback-given card's subject_reputation. null-rating
+				 *  when count is 0. */
+				reviewer_reputation: reviewerReputation.get(r.reviewer) ?? {
+					count: 0,
+					weighted_rating: null
+				},
 				/** ADR-0014 verified-chat badge.  True iff the
 				 *  (reviewer, subject) pair satisfied the
 				 *  bidirectional-chat conformance at the time the

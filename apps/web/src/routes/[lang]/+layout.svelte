@@ -7,7 +7,6 @@
 	import LanguageSwitcher from '$components/LanguageSwitcher.svelte';
 	import RssFeedPicker from '$components/RssFeedPicker.svelte';
 	import UpdateBanner from '$components/UpdateBanner.svelte';
-	import StaleBuildBanner from '$components/StaleBuildBanner.svelte';
 	import TamperAlertBanner from '$components/TamperAlertBanner.svelte';
 	import OperatorBlockBanner from '$components/OperatorBlockBanner.svelte';
 	import AltNetworkIcon from '$components/AltNetworkIcon.svelte';
@@ -670,7 +669,7 @@
 				<p class="min-w-0 text-xs text-ink-500">
 					<a
 						href="{lp('/faq')}?q=why_agpl&lang={currentLang}"
-						class="underline decoration-dotted underline-offset-2 transition-colors hover:text-morphit-emerald"
+						class="underline decoration-dotted underline-offset-2 transition-colors hover:text-morphit-emerald hover:no-underline"
 						title={$_('footer.agpl_title')}>AGPL-3.0</a
 					> · #noaggression #countereconomics
 				</p>
@@ -693,7 +692,6 @@
 	{/if}
 
 	<UpdateBanner />
-	<StaleBuildBanner />
 	<TamperAlertBanner />
 	<OperatorBlockBanner />
 	<ToastRegion />

@@ -567,7 +567,7 @@ this list deserves immediate triage.
 
 | Package | Severity | Status |
 |---|---|---|
-| `elliptic <=6.6.1` (via `ecurve` + the `secp256k1` JS fallback, both under `@beblurt/dblurt`) | Medium (CVSS ~5.6) | Accepted |
+| `elliptic <=6.6.1` (previously via `secp256k1@^4.0.3`'s pure-JS fallback under `@beblurt/dblurt@0.10.9`) | Medium (CVSS ~5.6) | **Resolved (v1.8.0)** — removed from the tree |
 
 `elliptic` carries two relevant advisory classes:
 - The long-standing timing-side-channel advisory
@@ -581,16 +581,23 @@ this list deserves immediate triage.
   a correct signature over the same input + key, an attacker could
   potentially derive the secret key.
 
-**No fix is available** — CVE-2025-14505 affects ALL published
-versions of `elliptic` (≤ 6.6.1, which is the latest), and the
-package is effectively unmaintained (no release in ~12 months).
-`elliptic` is a foundational JS crypto library used across the
-entire BLURT/STEEM/HIVE ecosystem; it reaches Morphit transitively
-through `@beblurt/dblurt`'s `ecurve` dependency and the `secp256k1`
-native package's pure-JS fallback. Removing it would mean replacing
-`@beblurt/dblurt` and its upstream chain, which is out of scope.
-Morphit is already pinned to the latest `@beblurt/dblurt` (0.10.9);
-no newer release drops the chain.
+**RESOLVED in v1.8.0 by upgrading `@beblurt/dblurt` 0.10.9 → 0.17.0.**
+When first assessed, `elliptic` reached Morphit transitively through
+`@beblurt/dblurt@0.10.9`'s `secp256k1@^4.0.3` dependency, whose
+pure-JS/browser fallback is `elliptic`; no dblurt release then dropped
+that chain, so it was accepted with the threat model below. dblurt
+**0.17.0** replaced that dependency with `@noble/secp256k1` +
+`@noble/hashes` internally, so upgrading removed `elliptic` from the
+dependency tree **entirely** — for both the browser and the relay in a
+single move (verified: zero `elliptic` directories under `node_modules`,
+zero entries in `package-lock.json`). Morphit's own signing already used
+`@noble/secp256k1` for key-derivation and the power-down path; the
+upgrade also modernized dblurt's internal ECDSA to noble. CVE-2025-14505
+(the RFC-6979 nonce-truncation flaw above) and the timing-side-channel
+advisory no longer apply — the package is gone. The upgrade was certified
+before shipping with byte-identity serialization + round-trip signing
+tests across every op-class (transfer, custom_json, comment, feature_bid,
+stranger_fee, withdraw_vesting, account_create, delegate_vesting_shares).
 
 **Threat model assessment for Morphit:**
 - *Browser signing* (frontend, user's keys): exploitation requires

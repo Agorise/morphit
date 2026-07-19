@@ -6,6 +6,7 @@
 	import { canonicalFor, hreflangAlternates, ogLocale, ogLocaleAlternates, CANONICAL_ORIGIN } from '$lib/seo/urls';
 	import { computeOnionLocation } from '$lib/seo/onionLocation';
 	import { instance } from '$stores/instance';
+	import { setBaseTitle } from '$lib/notifications/ambient';
 
 	interface Props {
 		/**
@@ -100,6 +101,15 @@
 			return $instance.seo.title;
 		}
 		return $instance.name ? `${baseTitle} — ${$instance.name}` : baseTitle;
+	});
+
+	// Keep the ambient (N)-unread title prefix anchored to THIS page's title.
+	// ambient.ts captured the title once at first load; after a navigation it
+	// stamped its prefix onto that stale title, so a chat page's "Conversation"
+	// leaked onto the orderbook (and "Browse Offers" onto chat). $effect is
+	// browser-only and setBaseTitle no-ops during SSR, so this is client-only.
+	$effect(() => {
+		setBaseTitle(title);
 	});
 	const description = $derived.by(() => {
 		if (routeKey === 'home' && $instance.seo?.description) {

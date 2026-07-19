@@ -129,6 +129,64 @@ check(
 	'they hold no content — capping their height would mean nothing'
 );
 
+// ── hand-written CSS: a vh/dvh fallback pair must be ORDERED (cp478) ───
+//
+// Checks 1-6 cover the .svelte class attributes, where the rule is "bare dvh, never
+// a pair" — Tailwind emits utilities in ITS order, not the class attribute's, so a
+// pair there is a coin flip.  app.css is the other case: source order IS real, so a
+// pair is legitimate — and therefore so is getting it backwards.
+//
+// app.css carried `min-height: 100dvh; min-height: 100vh;` from before v1.7.7.  Both
+// lines valid, nothing warns, and the dvh line had never once applied to a single
+// visitor, because later wins.  The intent was obvious and the effect was its exact
+// inverse.  Caught by reading, not by any gate.
+//
+// Pinned as an OUTCOME, not a literal: this finds any property declared twice in one
+// block with a vh value and a dvh value, and requires dvh last.  It keeps holding if
+// someone changes 100 to 90, swaps min-height for height, or adds a pair somewhere
+// new — none of which is the bug, all of which would break a literal pin.
+const cssFiles = (function walkCss(dir: string, out: string[] = []): string[] {
+	for (const e of readdirSync(dir, { withFileTypes: true })) {
+		const p = join(dir, e.name);
+		if (e.isDirectory()) walkCss(p, out);
+		else if (e.name.endsWith('.css')) out.push(p);
+	}
+	return out;
+})(WEB);
+
+const badPairs: string[] = [];
+let pairsFound = 0;
+for (const f of cssFiles) {
+	const src = readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, ''); // prose is not CSS
+	for (const [, body] of src.matchAll(/\{([^{}]*)\}/g)) {
+		// property → the order its vh / dvh declarations appear in
+		const seen = new Map<string, string[]>();
+		for (const [, prop, value] of body.matchAll(/([a-z-]+)\s*:\s*([^;]*(?:d?vh)[^;]*);/g)) {
+			const unit = /\d\s*dvh/.test(value) ? 'dvh' : 'vh';
+			seen.set(prop, [...(seen.get(prop) ?? []), unit]);
+		}
+		for (const [prop, units] of seen) {
+			if (!units.includes('vh') || !units.includes('dvh')) continue; // not a pair
+			pairsFound++;
+			if (units.lastIndexOf('dvh') < units.lastIndexOf('vh')) {
+				badPairs.push(`${f.split('/').pop()}: ${prop} — ${units.join(' then ')}`);
+			}
+		}
+	}
+}
+check(
+	'7 a vh/dvh fallback pair in hand-written CSS puts dvh LAST',
+	badPairs.length === 0,
+	`dvh first means the vh line wins and the dvh line applies to nobody — the ` +
+		`inverse of the intent, silently: ${badPairs.join('; ')}`
+);
+check(
+	'8 …and the guard is looking at a real pair (it would notice if one vanished)',
+	pairsFound > 0,
+	'no vh/dvh pair found in any .css — check 7 is passing vacuously; if the pairs were ' +
+		'deliberately removed, remove this check with them rather than leaving it green on nothing'
+);
+
 console.log('');
 if (fail === 0) console.log(`\u2713 all ${pass} modal-viewport-fit checks passed`);
 else { console.error(`\u2717 ${fail} of ${pass + fail} modal-viewport-fit checks FAILED`); process.exit(1); }

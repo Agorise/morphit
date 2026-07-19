@@ -224,7 +224,7 @@
 			</span>
 			<button
 				type="button"
-				class="flex-none text-xs font-semibold text-ink-700 underline decoration-dotted underline-offset-2 hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:text-ink-200"
+				class="flex-none text-xs font-semibold text-ink-700 underline decoration-dotted underline-offset-2 hover:text-red-600 hover:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:text-ink-200"
 				onclick={discardDraft}
 			>
 				{$_('post_order.draft.discard')}

@@ -746,6 +746,9 @@
 		"feedback": {
 			"leave_prompt": "Lascia recensione",
 			"sent_toast": "Recensione inviata"
+		},
+		"system": {
+			"order_settled_elsewhere": "Grazie per l'interesse dimostrato per questo ordine. Ho ormai completato questo scambio con un altro commerciante, quindi non è più disponibile. Mi dispiace che non sia andata a buon fine questa volta — apprezzo molto il tuo interesse e spero che potremo commerciare in futuro."
 		}
 	},
 	"cheat_sheet": {
@@ -3387,12 +3390,12 @@
 	"privacy_terms": {
 		"heading": "Privacy e Termini",
 		"privacy_heading": "Privacy",
-		"privacy_body_1": "Morphit funziona nel tuo browser. Le tue chiavi vengono generate sul tuo dispositivo e non lo lasciano mai. Morphit non raccoglie cookie di tracciamento, analytics né il tuo indirizzo IP per scopi che vadano oltre quanto tecnicamente necessario per servire la pagina.",
+		"privacy_body_1": "Morphit funziona nel tuo browser. Le tue chiavi vengono generate sul tuo dispositivo e non lo lasciano mai. Morphit non raccoglie nulla su di te. Scegli un nome utente facile da ricordare, tutto qui.",
 		"privacy_body_2": "Ogni offerta che pubblichi — insieme ai feedback e alle recensioni che lasci e ricevi — è pubblica sulla blockchain, per costruire reputazione, per memoria e per le tue ricerche sugli altri trader.",
 		"privacy_body_protected": "Al contrario, le tue conversazioni private restano private. I messaggi diretti tra trader sono cifrati end-to-end: risiedono sulla blockchain solo come testo cifrato che possono leggere soltanto tu e la tua controparte, mai l'operatore, gli indicizzatori o chiunque altro osservi la catena. Morphit inoltre non raccoglie alcun nome, e-mail, telefono o documento d'identità, e i dati di pagamento che scambi (come un indirizzo di ricezione) viaggiano attraverso quel canale cifrato anziché nel registro ordini pubblico.",
-		"privacy_body_3": "Ti incoraggiamo a usare una VPN, Tor, Lokinet o I2P quando accedi a Morphit — qualsiasi cosa che nasconda il tuo IP al server con cui parli è una buona idea. Non rileviamo l'impronta del tuo browser, non ti profiliamo, e progettiamo esplicitamente le nostre difese contro gli abusi in modo che non puniscano gli utenti attenti alla privacy. I nostri limiti di frequenza sono grossolani (pochi registrazioni per IP al giorno) e facilmente aggirabili ruotando VPN — è un compromesso cosciente. Preferiamo accettare più abusi che far sentire a disagio gli utenti che rispettano la propria privacy. Se una difesa richiedesse di tracciarti per funzionare, non la implementiamo.",
+		"privacy_body_3": "Ti incoraggiamo a usare una VPN, Tor, Lokinet o I2P quando accedi a Morphit — qualsiasi cosa che nasconda il tuo IP al server con cui parli è una buona idea. Non rileviamo l'impronta del tuo browser, non ti profiliamo, e progettiamo esplicitamente le nostre difese contro gli abusi in modo che non puniscano gli utenti attenti alla privacy. I nostri limiti di frequenza sono grossolani (pochi registrazioni per utente al giorno) e facilmente aggirabili ruotando VPN — è un compromesso cosciente. Preferiamo accettare più abusi che far sentire a disagio gli utenti che rispettano la propria privacy. Se una difesa richiedesse di tracciarti per funzionare, non la implementiamo.",
 		"terms_heading": "Termini",
-		"terms_body": "Per favore rispetta il Principio di Non-Aggressione (PNA). Imprecare è accettabile, ma ricorda che Morphit è usato da persone di tutte le età — anziani, adolescenti e tutti quelli nel mezzo. Tutte le OPINIONI sono benvenute, gli insulti diretti no. I tuoi ordini di acquisto/vendita, recensioni e chat sono immutabili, quindi le parole contano. Dì la tua opinione e basta. Non iniziare litigi. Non pubblicare cose illegali o manifestamente offensive. Ricorda le buone maniere, sii gentile. 💚💙"
+		"terms_body": "Per favore rispetta il Principio di Non-Aggressione (PNA). Imprecare è accettabile, ma ricorda che Morphit è usato da persone di tutte le età — anziani, adolescenti e tutti quelli nel mezzo. Tutte le OPINIONI sono benvenute, gli insulti diretti no. I tuoi ordini di acquisto/vendita, le tue chat private e la sezione recensioni sono immutabili, quindi le parole contano. Dì la tua opinione e basta. Non iniziare litigi. Non pubblicare cose illegali o manifestamente offensive. Ricorda le buone maniere, sii gentile. 💚💙"
 	},
 	"privkey_warn": {
 		"title": "Fermo — sembra una chiave privata",
@@ -3544,7 +3547,9 @@
 			"qr_no_camera": "Questo dispositivo non ha una fotocamera per scansionare.",
 			"qr_invalid": "Quel QR non conteneva un account Blurt. Provane un altro."
 		},
-		"given_said": "Ho detto:"
+		"given_said": "Ho detto:",
+		"received_rated": "@{account} mi ha valutato:",
+		"received_said": "@{account} ha detto:"
 	},
 	"relative_time": {
 		"descriptive": {
@@ -3579,10 +3584,6 @@
 			"action_sign_out": "Esci",
 			"action_compare_source": "Confronta con il sorgente",
 			"action_try_other_instance": "Prova un altro operatore"
-		},
-		"stale_build": {
-			"body": "È disponibile una nuova versione di Morphit. Ricarica per caricarla — i tuoi dati restano intatti.",
-			"reload": "Ricarica"
 		}
 	},
 	"run_a_node": {

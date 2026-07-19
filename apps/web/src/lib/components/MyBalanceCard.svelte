@@ -818,6 +818,7 @@
 									decimals={3}
 									durationMs={3000}
 									silent={suppressBlurtFlashOnce}
+									localeSignColors
 								/></span
 							><!-- Mobile: floored integer; tap to reveal the exact amount (cp396). -->
 							<span class="relative sm:hidden" data-exact-tip
@@ -832,6 +833,7 @@
 										grouping={false}
 										durationMs={3000}
 										silent={suppressBlurtFlashOnce}
+										localeSignColors
 									/></button
 								>{#if openExact === 'blurt'}{@render exactTip(exactBlurt)}{/if}</span
 							>
@@ -859,7 +861,7 @@
 				<dd class="font-mono text-lg font-semibold">
 					<!-- Desktop: full BP precision with grouping. -->
 					<span class="hidden sm:inline"
-						><AnimatedNumber value={bpBalance} decimals={3} durationMs={3000} /></span
+						><AnimatedNumber value={bpBalance} decimals={3} durationMs={3000} localeSignColors /></span
 					><!-- Mobile: floored integer; tap to reveal the exact amount (cp396). -->
 					<span class="relative sm:hidden" data-exact-tip
 						><button
@@ -872,6 +874,7 @@
 								decimals={0}
 								grouping={false}
 								durationMs={3000}
+								localeSignColors
 							/></button
 						>{#if openExact === 'bp'}{@render exactTip(exactBp)}{/if}</span
 					>

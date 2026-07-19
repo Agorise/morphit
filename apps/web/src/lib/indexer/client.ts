@@ -437,11 +437,12 @@ export function getConversations(
 export function getOrderCounterparties(
 	owner: string,
 	permlink: string,
-	signal?: AbortSignal
+	opts: { limit?: number; signal?: AbortSignal } = {}
 ): Promise<Result<OrderCounterpartiesResponse>> {
+	const qs = opts.limit !== undefined ? `?limit=${opts.limit}` : '';
 	return request<OrderCounterpartiesResponse>(
-		`/v1/orders/${encodeURIComponent(owner)}/${encodeURIComponent(permlink)}/counterparties`,
-		{ signal }
+		`/v1/orders/${encodeURIComponent(owner)}/${encodeURIComponent(permlink)}/counterparties${qs}`,
+		{ signal: opts.signal }
 	);
 }
 

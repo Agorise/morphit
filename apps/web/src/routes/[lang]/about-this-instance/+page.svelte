@@ -336,7 +336,7 @@
 					target="_blank"
 					rel="noopener"
 					data-sveltekit-reload
-					class="text-morphit-emerald underline decoration-dotted underline-offset-2 hover:decoration-solid"
+					class="text-morphit-emerald underline decoration-dotted underline-offset-2 hover:no-underline"
 				>
 					{$_('about_this_instance.integrity.raw_link')}
 				</a>
@@ -382,7 +382,7 @@
 						href="https://morphit.io"
 						target="_blank"
 						rel="noopener noreferrer"
-						class="select-all text-morphit-emerald underline decoration-dotted underline-offset-2 hover:decoration-solid"
+						class="select-all text-morphit-emerald underline decoration-dotted underline-offset-2 hover:no-underline"
 					>
 						morphit.io
 					</a>
@@ -395,7 +395,7 @@
 				{$_('about_this_instance.worried.faq_pointer')}
 				<a
 					href={lp('/faq#rogue_operator')}
-					class="text-morphit-emerald underline decoration-dotted underline-offset-2 hover:decoration-solid"
+					class="text-morphit-emerald underline decoration-dotted underline-offset-2 hover:no-underline"
 				>
 					{$_('about_this_instance.worried.faq_link')}
 				</a>
@@ -404,7 +404,7 @@
 				{$_('about_this_instance.worried.compare_tool_pointer')}
 				<a
 					href={lp('/compare')}
-					class="text-morphit-emerald underline decoration-dotted underline-offset-2 hover:decoration-solid"
+					class="text-morphit-emerald underline decoration-dotted underline-offset-2 hover:no-underline"
 				>
 					{$_('about_this_instance.worried.compare_tool_label')}
 				</a>.

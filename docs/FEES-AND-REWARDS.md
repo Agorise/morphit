@@ -56,9 +56,17 @@ running Morphit.)
   instance worldwide**, flow to the **canonical BTC/XMR accounts**.
   No federation split, no operator share.
 
-**Future:** the canonical BTC/XMR/BLURT fee-receiving addresses
-will be pinned on-chain (extending the release-anchor pattern) so
-anyone can verify them independently.
+**On-chain verification (shipped — Part 106, NOT future):** the
+canonical BTC and XMR fee-receiving addresses are pinned on-chain in
+the signed `morphit_release_v1` **treasury block** (the release-anchor
+pattern), so anyone can verify them independently. When present, the
+pin *authoritatively* declares those addresses: the post-order page
+renders them with copy + QR, and every federated indexer uses them for
+fee verification. The BLURT fee base is chain-pinned the same way
+(`treasury.blurt.base`, cp372). The pin is optional per release and
+carries only public information (address + memo policy) — see
+`packages/release-schema/src/release.ts` (`ReleaseTreasuryBlock`) and
+the Part 107 privacy invariant.
 
 ---
 
@@ -76,7 +84,7 @@ fee-recipient account.
   inlined): `{ blurt: 0.125, btc: 0.25, xmr: 0.25 }`.  Both the
   frontend quote and the indexer validation import from there, so
   they cannot drift.  At BLURT ≈ $0.002 that's roughly 60–62 BLURT;
-  the env default base is `60` BLURT.
+  the env default base is `125` BLURT.
 - **Chain-pinned + auto-tracked (cp372).**  The enforced BLURT base
   — like the BTC/XMR amounts — comes from the most recent signed
   `morphit_release_v1` `treasury.blurt.base`, resolved chain-pin →
@@ -87,11 +95,15 @@ fee-recipient account.
   the market moves, with failsafes + a manual Plan B.  See
   `docs/OPERATIONS.md §40.3a`.
 - Source: `apps/indexer/src/config/index.ts`
-  (`MORPHIT_INDEXER_FEE_BASE_BLURT.default(60)` — now the Plan-B
+  (`MORPHIT_INDEXER_FEE_BASE_BLURT.default(125)` — now the Plan-B
   fallback/override), with the USD target in `@morphit/asset-registry`
-- Sybil tier multiplier scales for prolific posters within 24h:
-  4th order = 1×, 5th = 2×, 6th = 4×, 7th+ = 8×.  See
-  `apps/indexer/src/indexer/fee.ts` for `expectedFeeBlurt(nth, base)`.
+- Sybil tier multiplier scales for prolific posters within 24h: the
+  first **3 orders are 1×** (base), then the multiplier **compounds
+  ×1.25 per order from the 4th through the 10th** (4th = 1.25×,
+  5th ≈ 1.56×, 6th ≈ 1.95×, 7th ≈ 2.44×, 8th ≈ 3.05×, 9th ≈ 3.81×,
+  10th ≈ 4.77×), and **×1.5 per additional order beyond the 10th**.
+  See `apps/indexer/src/indexer/fee.ts` — `sybilMultiplier(nth)` /
+  `expectedFeeBlurt(nth, base)`.
 - User can also pay in BTC or XMR (operator-configured equivalent),
   see `apps/indexer/src/indexer/handlers/feeAttest.ts`.
 - First-time waiver: free, buy-side only, once per account.  See
@@ -348,14 +360,16 @@ fact.  That feedback IS visible.  But the money flow is not.
 
 ## Net economics for an operator at steady state
 
-To break even on chain costs, an operator needs roughly
-**5 listing fees for every 1 new user signup**.
+At the current calibration a single listing fee (125 BLURT)
+already exceeds the cost of a new-user signup (~100 BLURT), so an
+operator is net positive at roughly **1 listing fee per new user
+signup**.
 
-- Income per listing: 60 BLURT
+- Income per listing: 125 BLURT
 - Cost per signup: ~100 BLURT
-- 5 listings × 60 = 300 BLURT income
+- 5 listings × 125 = 625 BLURT income
 - 1 signup × 100 = 100 BLURT cost
-- Net: +200 BLURT per (5-listing × 1-signup) cycle
+- Net: +525 BLURT per (5-listing × 1-signup) cycle
 
 Welcome bonuses paid out (20 BLURT × users who actually trade)
 come from the same revenue pool.  Loyalty BP delegations are

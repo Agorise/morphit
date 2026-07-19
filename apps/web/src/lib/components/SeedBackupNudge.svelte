@@ -78,7 +78,7 @@
 			<div class="flex flex-shrink-0 items-center gap-3 pl-7 sm:pl-0">
 				<a
 					href={lp('/faq#lost_keys')}
-					class="group font-semibold underline decoration-dotted underline-offset-2 transition hover:decoration-solid"
+					class="group font-semibold underline decoration-dotted underline-offset-2 transition hover:no-underline"
 				>
 					{$_('seed_backup_nudge.show_me_how')}
 					<span class="nav-arrow nav-arrow-right" aria-hidden="true">⇨</span>
