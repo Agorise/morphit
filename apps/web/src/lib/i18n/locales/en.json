@@ -635,13 +635,10 @@
 		"unknown_version": "This message uses a newer protocol. Please update Morphit to read it.",
 		"pay_blurt": {
 			"title": "Send BLURT to @{recipient}",
-			"subtitle": "Send BLURT directly from your Morphit account.",
 			"amount_label": "Amount",
 			"amount_placeholder": "0.000",
-			"amount_help": "Enter the BLURT amount you agreed to send.",
 			"recipient_label": "To",
 			"from_label": "From",
-			"no_memo_notice": "No on-chain memo will be included — your trade context stays in this encrypted chat.",
 			"password_label": "Your @{account} password (to sign with your active key)",
 			"confirm": "Send BLURT",
 			"paying": "Sending…",
@@ -738,8 +735,8 @@
 			"footer": "Morphit chat record — locked, read-only. Verify each message on a block explorer."
 		},
 		"pay_prefill": {
-			"hint": "The order's minimum is {min} {fiat} (≈ {amount} {asset}).",
-			"hint_market": "The order's minimum is {min} {fiat} (≈ {amount} {asset} at current market price)."
+			"hint": "Orders minimum is {min} {fiat} (≈ {amount} {asset}).",
+			"hint_market": "Orders minimum is {min} {fiat} (≈ {amount} {asset} at market price)."
 		},
 		"empty_state_loading": "Messaging with @{peer} is loading… Say hi!",
 		"day_separator_tooltip": "Midnight, UTC",
@@ -2237,7 +2234,7 @@
 	},
 	"my_orders": {
 		"heading": "Your orders",
-		"subtitle": "Every order you've posted on Morphit. Edit recent ones, cancel the ones you're done with.",
+		"subtitle": "Every order you've posted on Morphit.",
 		"loading": "Loading your orders…",
 		"empty_title": "You haven't posted anything yet",
 		"empty_body": "When you're ready, posting an order takes about a minute.",
@@ -2274,14 +2271,13 @@
 			"viewed_tooltip": "Approximate count of times this offer has been viewed. Visible only to you.",
 			"action_relist": "Re-list this order",
 			"action_relist_hint": "Pre-fills the form for you with the original values and terms.",
-			"edit_window_countdown": "Edit window: {remaining}",
-			"edit_window_tooltip": "Orders can only be edited within 15 minutes of posting. After that they have to be canceled and re-posted.",
-			"edit_window_aria": "Edit window remaining: {remaining}",
 			"feedback_pick_prompt": "Who did you trade with?",
 			"not_visible_orderbook": "Not visible in orderbook",
 			"state_completed": "Completed",
 			"action_complete": "Mark as complete",
-			"feedback_no_counterparty": "No chats with a counterparty have happened yet"
+			"feedback_no_counterparty": "No chats with a counterparty have happened yet",
+			"posting": "Posting…",
+			"feature_arming_hint": "Available the moment your order is live"
 		},
 		"cancel": {
 			"confirm_title": "Cancel this order?",
@@ -2656,6 +2652,7 @@
 		"status_live": "Live",
 		"status_cancelled": "Canceled",
 		"status_expired": "Expired",
+		"status_paid": "Paid",
 		"cta_hint": "Interested in this trade? Use the Message button above to coordinate payment details with the poster. Settlement happens directly between you — Morphit never holds funds.",
 		"owner_actions_heading": "Your order",
 		"owner_locked_hint": "Unlock your session to edit or cancel this order.",
@@ -4569,9 +4566,7 @@
 		"payment_pending": "Payment pending",
 		"payment_mismatch": "Payment mismatch",
 		"payment_unverifiable": "Payment unverifiable",
-		"released": "Released",
 		"disputed": "Disputed",
-		"completed": "Completed",
 		"in_progress": "Trade in progress",
 		"paid_by": "Paid by"
 	},

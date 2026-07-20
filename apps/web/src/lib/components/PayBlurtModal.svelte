@@ -408,9 +408,6 @@
 		<h2 id="pay-blurt-heading" class="font-display text-xl font-bold">
 			{$_('chat.pay_blurt.title', { values: { recipient } })}
 		</h2>
-		<p class="mt-2 text-sm text-ink-600 dark:text-ink-300">
-			{$_('chat.pay_blurt.subtitle')}
-		</p>
 
 		{#if amountEditable}
 			<!-- cp402 [7b] — composer "Pay now": the amount is entered here
@@ -451,10 +448,6 @@
 				{:else if enteredAmount.trim().length > 0 && !amountValid && myAccount !== null && myAccount !== recipient}
 					<p class="mt-1 text-xs text-red-600 dark:text-red-400">
 						{$_('chat.pay_blurt.error.invalid_amount')}
-					</p>
-				{:else}
-					<p class="mt-1 text-xs text-ink-500 dark:text-ink-400">
-						{$_('chat.pay_blurt.amount_help')}
 					</p>
 				{/if}
 			</label>
@@ -532,9 +525,11 @@
 				</dl>
 			</div>
 
-			<p class="mt-3 text-xs text-ink-500 dark:text-ink-400">
-				{memo !== '' ? $_('chat.pay_blurt.with_memo_notice') : $_('chat.pay_blurt.no_memo_notice')}
-			</p>
+			{#if memo !== ''}
+				<p class="mt-3 text-xs text-ink-500 dark:text-ink-400">
+					{$_('chat.pay_blurt.with_memo_notice')}
+				</p>
+			{/if}
 
 			{#if phase.kind === 'error'}
 				<div

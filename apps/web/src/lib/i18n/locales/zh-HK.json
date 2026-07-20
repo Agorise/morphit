@@ -635,13 +635,10 @@
 		"unknown_version": "此訊息使用較新的協議。請更新 Morphit 以讀取。",
 		"pay_blurt": {
 			"title": "向 @{recipient} 發送 BLURT",
-			"subtitle": "直接從您的 Morphit 帳戶發送 BLURT。",
 			"amount_label": "金額",
 			"amount_placeholder": "0.000",
-			"amount_help": "輸入您約定發送的 BLURT 金額。",
 			"recipient_label": "收款人",
 			"from_label": "付款人",
-			"no_memo_notice": "不會包含鏈上備註 — 您的交易上下文留在此加密聊天中。",
 			"password_label": "你嘅 @{account} 密碼（用嚟以活躍密鑰簽名）",
 			"confirm": "發送 BLURT",
 			"paying": "正在發送…",
@@ -739,7 +736,7 @@
 		},
 		"pay_prefill": {
 			"hint": "訂單最低額為 {min} {fiat}（≈ {amount} {asset}）。",
-			"hint_market": "訂單最低額為 {min} {fiat}（≈ {amount} {asset}，按當前市場價）。"
+			"hint_market": "訂單最低額為 {min} {fiat}（≈ {amount} {asset}，按市場價）。"
 		},
 		"empty_state_loading": "正在載入與 @{peer} 的聊天… 打個招呼吧！",
 		"day_separator_tooltip": "午夜，UTC",
@@ -2237,7 +2234,7 @@
 	},
 	"my_orders": {
 		"heading": "您的訂單",
-		"subtitle": "您發布的所有訂單。編輯最近的,取消不要的。",
+		"subtitle": "您發布的所有訂單。",
 		"loading": "正在載入您的訂單…",
 		"empty_title": "您還沒有發布任何訂單",
 		"empty_body": "準備好的時候,發布一個訂單大約需要一分鐘。",
@@ -2274,14 +2271,13 @@
 			"viewed_tooltip": "此報價大致被查看的次數。只有你可見。",
 			"action_relist": "重新發佈",
 			"action_relist_hint": "用原始數值和條款為你預先填好表單。",
-			"edit_window_countdown": "編輯視窗:{remaining}",
-			"edit_window_tooltip": "訂單僅可在發布後 15 分鐘內編輯。之後需要取消並重新發布。",
-			"edit_window_aria": "剩餘編輯時間:{remaining}",
 			"feedback_pick_prompt": "你同邊個完成咗交易？",
 			"not_visible_orderbook": "未在訂單簿中顯示",
 			"state_completed": "已完成",
 			"action_complete": "標記為已完成",
-			"feedback_no_counterparty": "尚未與任何交易對手傾偈"
+			"feedback_no_counterparty": "尚未與任何交易對手傾偈",
+			"posting": "發佈中…",
+			"feature_arming_hint": "訂單上線後即可使用"
 		},
 		"cancel": {
 			"confirm_title": "取消此訂單?",
@@ -2656,6 +2652,7 @@
 		"status_live": "活躍",
 		"status_cancelled": "已取消",
 		"status_expired": "已到期",
+		"status_paid": "已付款",
 		"cta_hint": "對這筆交易感興趣？使用上方嘅「傳訊息」按鈕同發佈者協調付款細節。結算直接喺你哋之間進行 — Morphit 從非託管資金。",
 		"owner_actions_heading": "你的訂單",
 		"owner_locked_hint": "解鎖會話以編輯或取消此訂單。",
@@ -4569,9 +4566,7 @@
 		"payment_pending": "付款待處理",
 		"payment_mismatch": "付款不匹配",
 		"payment_unverifiable": "付款無法驗證",
-		"released": "已釋放",
 		"disputed": "爭議中",
-		"completed": "已完成",
 		"in_progress": "交易進行中",
 		"paid_by": "付款人"
 	},

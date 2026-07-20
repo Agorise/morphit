@@ -190,9 +190,24 @@ export async function initRelease(): Promise<void> {
 		// Morphit builds are not byte-reproducible across machines, so a version
 		// match is the precondition for the byte comparison to mean anything. A
 		// GENUINE tamper is a SAME-version byte change, which still trips below.
+		//
+		// cp508 (tt.txt #3) — ALSO require the RUNNING bundle to be the announced
+		// version. The byte check below re-fetches each asset, and those fetches
+		// almost always hit the browser/SW cache (the running bundle's own bytes),
+		// NOT the network. Right after a deploy — most visibly on mobile, where the
+		// service worker keeps serving the previous bundle until it swaps —
+		// RUNNING_VERSION is still the OLD build while /verify.json + the chain-pin
+		// have already advanced to NEW. The old gate (served === announced) passed,
+		// then every OLD cached asset mismatched the NEW manifest → the scary red
+		// banner, which only cleared on a SECOND "Load it now" refresh once the SW
+		// finally swapped. A stale running bundle is a deploy-skew, not tampering:
+		// the staleBuild snackbar already tells the user to reload, so we skip the
+		// byte check here. It resumes — and can only ever alarm — once running ===
+		// served === announced, i.e. we are genuinely running the operator's
+		// current, chain-pinned build.
 		const announcedVersion = fetchResult.value.payload.version;
 		const servedVersion = await fetchServedVersion();
-		if (servedVersion !== announcedVersion) {
+		if (servedVersion !== announcedVersion || RUNNING_VERSION !== announcedVersion) {
 			assetCheckStore.set({ kind: 'deploy_skew' });
 			return;
 		}

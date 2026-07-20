@@ -67,9 +67,34 @@ export interface ProvisionalOrderEvent {
 
 export type ProvisionalOrderListener = (event: ProvisionalOrderEvent) => void;
 
+/**
+ * cp508 (tt.txt #1/#2) — a short-lived memory of orders the fast path has
+ * provisionally REMOVED (a cancel/complete seen at head), so a freshly-opened
+ * orderbook stream doesn't re-show them.
+ *
+ * THE GAP THIS CLOSES. `emitProvisional` is fire-and-forget with no memory: an
+ * already-open orderbook stream gets the removal in ~2s, but a stream that
+ * connects AFTER the event fired takes its snapshot from the durable table —
+ * where the poller is still ~45-63s behind and the row still says 'live' — so
+ * the cancelled order reappears for up to a minute (the "took almost a minute
+ * to disappear" report). Recording the id here and having the snapshot +
+ * fallback queries skip it makes removal ~2s for fresh views too.
+ *
+ * TTL = 90s: comfortably longer than the durable poller's catch-up window, so
+ * by the time an entry is pruned the poller has swept the row to
+ * cancelled/completed and it fails the visibility query on its own —
+ * self-healing. If the head op is orphaned by a reorg the order simply
+ * reappears after the TTL, the same bounded, self-correcting trade-off the
+ * fast path already makes (ADR-0051 invariant #3).
+ */
+const RECENTLY_REMOVED_TTL_MS = 90_000;
+
 class OrderbookEventBus {
 	private readonly listeners: Set<OrderbookListener> = new Set();
 	private readonly provisionalListeners: Set<ProvisionalOrderListener> = new Set();
+	/** orderId → epoch-ms expiry. Populated by emitProvisional; read by
+	 *  isRecentlyRemoved. See RECENTLY_REMOVED_TTL_MS. */
+	private readonly recentlyRemoved: Map<string, number> = new Map();
 
 	/** Subscribe a listener.  Returns an unsubscribe function;
 	 *  the SSE handler calls it on connection close. */
@@ -116,6 +141,9 @@ class OrderbookEventBus {
 	 *  MUST NOT be called from anywhere that writes the database. The head tailer
 	 *  is the only caller by design — see ADR-0051 invariant #1. */
 	emitProvisional(event: ProvisionalOrderEvent): void {
+		// Remember it so a fresh snapshot skips this order until the durable
+		// poller catches up (see RECENTLY_REMOVED_TTL_MS).
+		this.recentlyRemoved.set(event.orderId, Date.now() + RECENTLY_REMOVED_TTL_MS);
 		const snapshot = Array.from(this.provisionalListeners);
 		for (const listener of snapshot) {
 			try {
@@ -125,6 +153,20 @@ class OrderbookEventBus {
 				process.stderr.write(`orderbook-event-bus: provisional listener threw: ${msg}\n`);
 			}
 		}
+	}
+
+	/** True if `orderId` was provisionally removed within the last
+	 *  RECENTLY_REMOVED_TTL_MS. Prunes expired entries on every call, which
+	 *  also bounds the map (each entry lives at most the TTL). The orderbook
+	 *  snapshot + fallback queries call this to skip a just-cancelled/completed
+	 *  order the durable table hasn't caught up on yet. */
+	isRecentlyRemoved(orderId: string): boolean {
+		const now = Date.now();
+		for (const [id, expiry] of this.recentlyRemoved) {
+			if (expiry <= now) this.recentlyRemoved.delete(id);
+		}
+		const expiry = this.recentlyRemoved.get(orderId);
+		return expiry !== undefined && expiry > now;
 	}
 
 	/** Number of active subscribers.  Used by the diagnostics

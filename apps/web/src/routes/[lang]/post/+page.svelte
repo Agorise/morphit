@@ -4002,7 +4002,7 @@
 					</p>
 					<a
 						class="text-morphit-orchid group mt-3 inline-block font-semibold underline decoration-dotted underline-offset-2 transition hover:no-underline"
-						href={lp('/my/orders')}
+						href={lp(successPermlink ? `/my/orders?featuring=${successPermlink}` : '/my/orders')}
 					>
 						{$_('post_order.success.feature_upsell_cta')}
 						<span class="nav-arrow nav-arrow-right" aria-hidden="true">⇨</span>

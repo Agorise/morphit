@@ -99,7 +99,7 @@ check('an order-less card opens the plain conversation', /return c\.order \? .* 
 check('the avatar is a uniform 40px on every card (t.txt 8)', /avatarSize=\{40\}/.test(inbox));
 
 // t.txt item 12 — the "RE:" line is ALWAYS shown; "RE: -" when there is no order.
-check('the RE: prefix renders unconditionally (not gated on convo.order)', /re_prefix'\)\}<\/span>\s*\{#if convo\.order\}/.test(inbox));
+check('the RE: prefix renders unconditionally (not gated on convo.order)', /re_prefix'\)\}<\/span>\s*\{#if convo\.(pending|order)\}/.test(inbox));
 check('…with a "RE: -" fallback when the thread cites no order', /\{:else\}[\s\S]{0,140}truncate">-<\/span>/.test(inbox));
 // t.txt item 16 — the RE: line is plain text now; the whole card opens the chat.
 check('the RE: line no longer links to the order page', !/\/@\$\{convo\.order\.account\}\/\$\{convo\.order\.permlink\}/.test(inbox));
