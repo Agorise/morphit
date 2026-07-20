@@ -635,13 +635,10 @@
 		"unknown_version": "Diese Nachricht verwendet ein neueres Protokoll. Aktualisiere Morphit, um sie zu lesen.",
 		"pay_blurt": {
 			"title": "BLURT an @{recipient} senden",
-			"subtitle": "Sende BLURT direkt von deinem Morphit-Konto.",
 			"amount_label": "Betrag",
 			"amount_placeholder": "0.000",
-			"amount_help": "Gib den BLURT-Betrag ein, den du senden willst.",
 			"recipient_label": "An",
 			"from_label": "Von",
-			"no_memo_notice": "Kein On-Chain-Memo wird beigefügt — der Handelskontext bleibt in diesem verschlüsselten Chat.",
 			"password_label": "Dein @{account}-Passwort (zum Signieren mit deinem Active key)",
 			"confirm": "BLURT senden",
 			"paying": "Wird gesendet…",
@@ -739,7 +736,7 @@
 		},
 		"pay_prefill": {
 			"hint": "Das Minimum der Order beträgt {min} {fiat} (≈ {amount} {asset}).",
-			"hint_market": "Das Minimum der Order beträgt {min} {fiat} (≈ {amount} {asset} zum aktuellen Marktpreis)."
+			"hint_market": "Das Minimum der Order beträgt {min} {fiat} (≈ {amount} {asset} zum Marktpreis)."
 		},
 		"empty_state_loading": "Chat mit @{peer} wird geladen… Sag Hallo!",
 		"day_separator_tooltip": "Mitternacht, UTC",
@@ -2237,7 +2234,7 @@
 	},
 	"my_orders": {
 		"heading": "Deine Orders",
-		"subtitle": "Jede Order, die du gepostet hast. Bearbeite neue, storniere alte.",
+		"subtitle": "Jede Order, die du gepostet hast.",
 		"loading": "Orders werden geladen…",
 		"empty_title": "Du hast noch nichts gepostet",
 		"empty_body": "Wenn du bereit bist, dauert das Posten einer Order etwa eine Minute.",
@@ -2274,14 +2271,13 @@
 			"viewed_tooltip": "Ungefähre Anzahl, wie oft dieses Angebot angesehen wurde. Nur für dich sichtbar.",
 			"action_relist": "Order erneut einstellen",
 			"action_relist_hint": "Füllt das Formular für dich mit den ursprünglichen Werten und Bedingungen aus.",
-			"edit_window_countdown": "Bearbeitungsfenster: {remaining}",
-			"edit_window_tooltip": "Angebote können nur innerhalb von 15 Minuten nach dem Posten bearbeitet werden. Danach müssen sie storniert und neu erstellt werden.",
-			"edit_window_aria": "Verbleibende Bearbeitungszeit: {remaining}",
 			"feedback_pick_prompt": "Mit wem hast du gehandelt?",
 			"not_visible_orderbook": "Nicht im Orderbuch sichtbar",
 			"state_completed": "Abgeschlossen",
 			"action_complete": "Als abgeschlossen markieren",
-			"feedback_no_counterparty": "Noch keine Chats mit einer Gegenpartei"
+			"feedback_no_counterparty": "Noch keine Chats mit einer Gegenpartei",
+			"posting": "Wird veröffentlicht…",
+			"feature_arming_hint": "Verfügbar, sobald Ihr Auftrag aktiv ist"
 		},
 		"cancel": {
 			"confirm_title": "Diese Order stornieren?",
@@ -2656,6 +2652,7 @@
 		"status_live": "Aktiv",
 		"status_cancelled": "Storniert",
 		"status_expired": "Abgelaufen",
+		"status_paid": "Bezahlt",
 		"cta_hint": "Interesse an diesem Trade? Nutze den Nachricht-Button oben, um Zahlungsdetails mit dem Ersteller abzustimmen. Die Abwicklung läuft direkt zwischen euch — Morphit verwahrt nie Gelder.",
 		"owner_actions_heading": "Deine Order",
 		"owner_locked_hint": "Entsperre deine Sitzung, um diese Order zu bearbeiten oder zu stornieren.",
@@ -4569,9 +4566,7 @@
 		"payment_pending": "Zahlung ausstehend",
 		"payment_mismatch": "Zahlungsabweichung",
 		"payment_unverifiable": "Zahlung nicht überprüfbar",
-		"released": "Freigegeben",
 		"disputed": "Strittig",
-		"completed": "Abgeschlossen",
 		"in_progress": "Handel läuft",
 		"paid_by": "Bezahlt von"
 	},

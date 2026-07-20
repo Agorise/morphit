@@ -299,8 +299,10 @@
 			ariaLabel={$_('chat.composer.input_aria') as string}
 		/>
 
+		<!-- cp508 (tt.txt #9) — Ken: the chat Send button should look like the
+		     "Submit feedback" button, which is variant="secondary". -->
 		<BusyButton
-			variant="primary"
+			variant="secondary"
 			busy={sending}
 			busyLabel={$_('common.sending') as string}
 			disabled={!canSend}

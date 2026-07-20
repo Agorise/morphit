@@ -1231,16 +1231,34 @@
 							</div>
 						{/if}
 					{/if}
-					<div class="flex items-start gap-2">
-						<div class="flex min-w-0 flex-1 flex-col gap-0.5">
-							<span class="text-xs opacity-70">
-								{$_('chat.funds_sent.pill_txid_label')}
-							</span>
+					<div class="flex flex-col gap-0.5">
+						<span class="text-xs opacity-70">
+							{$_('chat.funds_sent.pill_txid_label')}
+						</span>
+						<!-- cp508 (tt.txt #12) — Copy rides ON the txid row, vertically centered
+						     with the field, so it lines up perfectly with the Transaction ID no
+						     matter how many verify/explorer links follow below. (The old
+						     `self-center` sat level with the middle of a 2-3 line column, not the
+						     field itself — Ken flagged the misalignment twice.) -->
+						<div class="flex items-center gap-2">
 							<code
-								class="break-all rounded-md bg-black/10 px-2 py-1.5 font-mono text-xs dark:bg-black/30"
+								class="min-w-0 flex-1 break-all rounded-md bg-black/10 px-2 py-1.5 font-mono text-xs dark:bg-black/30"
 							>
 								{p.txid}
 							</code>
+							<button
+								type="button"
+								class="flex-none rounded-md border px-2 py-1 text-xs font-semibold transition-all {copiedKind ===
+							'txid'
+								? 'border-green-600 bg-green-600 text-white opacity-100'
+							: 'border-current opacity-70 hover:bg-current/10 hover:opacity-100'}"
+								onclick={() => copyText(p.txid, 'txid')}
+								aria-label={$_('common.copy') as string}
+							>
+								{#if copiedKind === 'txid'}<span aria-hidden="true">✓</span>
+									{$_('chat.address.pill_copied')}{:else}{$_('common.copy')}{/if}
+							</button>
+						</div>
 							{#if p.method !== 'blurt' && explorerLinksForTxid(p.method, p.txid, p.network).length > 0}
 								<!-- v1.5.0 — external-chain (BTC/XMR/etc) receipts keep their
 								     block-explorer link; there is no local explorer for those
@@ -1286,26 +1304,6 @@
 									</a>
 								{/if}
 							{/if}
-						</div>
-						<!-- t155 (Ken): "the Copy button is not properly aligned next to the
-						     Transaction field". The row is `items-start`, so Copy pinned to
-						     the TOP while the Transaction column beside it is three stacked
-						     lines (label → txid → verify link) — so it sat level with the
-						     label instead of the field. self-center overrides just this
-						     child; the row keeps items-start for the address pill above, whose
-						     column is a different height. -->
-						<button
-							type="button"
-							class="flex-none self-center rounded-md border px-2 py-1 text-xs font-semibold transition-all {copiedKind ===
-							'txid'
-								? 'border-green-600 bg-green-600 text-white opacity-100'
-							: 'border-current opacity-70 hover:bg-current/10 hover:opacity-100'}"
-							onclick={() => copyText(p.txid, 'txid')}
-							aria-label={$_('common.copy') as string}
-						>
-							{#if copiedKind === 'txid'}<span aria-hidden="true">✓</span>
-								{$_('chat.address.pill_copied')}{:else}{$_('common.copy')}{/if}
-						</button>
 					</div>
 					{#if p.note}
 						<p class="text-xs italic opacity-80">{p.note}</p>

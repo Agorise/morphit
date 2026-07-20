@@ -49,7 +49,7 @@
 		mergeRemoteReadState,
 		readAckTimestamp
 	} from '$lib/chat/readState';
-	import { threadIsUnread, fastPendingTick } from '$lib/notifications/chatUnread';
+	import { threadIsUnread, fastPendingTick, listFastPending } from '$lib/notifications/chatUnread';
 	import { getConversations, getChatReadState, getFeedbackGiven } from '$lib/indexer/client';
 	import { getProfilesBatch } from '$lib/indexer/profileCache';
 	import { peersNeedingProfile, mergeProfileMap } from '$lib/indexer/profileMerge';
@@ -164,8 +164,52 @@
 				c.last_message_at,
 				c.last_message_is_mine === true
 			),
-			folder: folderOf(c.peer, c.order?.permlink ?? '')
+			folder: folderOf(c.peer, c.order?.permlink ?? ''),
+			// cp508 (tt.txt #7) — durable rows are never "pending"; the flag marks
+			// the optimistic placeholder cards below so the template can render a
+			// neutral subline until the full order details land.
+			pending: false
 		}));
+
+		// cp508 (tt.txt #7) — inject an optimistic card for any fast-push thread
+		// the durable list doesn't carry yet, so a BRAND-NEW conversation appears
+		// as fast as the badge lights (~5s) instead of on the ~60s durable poll
+		// ("kentest3 goes to the inbox and there is nothing there ... shows up
+		// ~50 seconds [later]"). Order-less (no-RE:) threads are handled the same
+		// way — the push carries an empty permlink and the key still matches its
+		// future durable twin. Reconciled automatically: once `conversations`
+		// carries the thread the reconciler clears the pending entry and the
+		// durable card (with full order details) replaces it; the key check
+		// dedupes the brief overlap before that reconcile runs.
+		const durableKeys = new Set(
+			withFlags.map((c) => `${c.peer.toLowerCase()}\\u0000${c.order?.permlink ?? ''}`)
+		);
+		for (const p of listFastPending()) {
+			const peerLc = p.peer.toLowerCase();
+			if (hidden.has(peerLc) || blocked.has(peerLc)) continue;
+			if (durableKeys.has(`${peerLc}\\u0000${p.orderPermlink}`)) continue;
+			withFlags.push({
+				peer: p.peer,
+				last_message_at: new Date(p.atMs).toISOString(),
+				message_count: 1,
+				last_message_is_mine: false,
+				order: p.orderPermlink
+					? {
+							permlink: p.orderPermlink,
+							account: '',
+							side: '',
+							asset: '',
+							fiat_currency: '',
+							amount_min: null,
+							amount_max: null,
+							status: ''
+						}
+					: null,
+				unread: true,
+				folder: folderOf(p.peer, p.orderPermlink),
+				pending: true
+			});
+		}
 		withFlags.sort((a, b) => b.last_message_at.localeCompare(a.last_message_at));
 		return withFlags;
 	});
@@ -837,7 +881,15 @@
 									     text block, so it lines up under the name with no manual indent. -->
 									<div class="flex min-w-0 items-baseline gap-1 text-xs text-ink-500 dark:text-ink-400">
 										<span class="flex-none font-medium">{$_('chat.inbox.re_prefix')}</span>
-										{#if convo.order}
+										{#if convo.pending}
+										<!-- cp508 (tt.txt #7) — optimistic placeholder card: the message just
+										     arrived via the fast push, so the thread exists but the order's
+										     details aren't known yet (they land with the durable row). Show a
+										     neutral loading dash, not a half-filled "RE:" line; the real title +
+										     status pop in on reconcile. Clicking already works (href uses the
+										     permlink we have; the conversation view streams the message). -->
+											<span class="min-w-0 truncate" aria-hidden="true">…</span>
+										{:else if convo.order}
 											{@const parts = orderTitleParts(
 												convo.order,
 												undefined,

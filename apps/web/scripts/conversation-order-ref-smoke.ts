@@ -105,7 +105,13 @@ const page = read('apps/web/src/routes/[lang]/chat/+page.svelte');
 check("chat page imports orderTitleParts", /import\s*\{\s*orderTitleParts\s*\}/.test(page));
 // cp450 (t.txt 12) — the RE: line is ALWAYS shown; the order title/status is
 // still gated on convo.order, with a "RE: -" fallback when there is no order.
-check('chat page still branches the RE: title on convo.order', /\{#if\s+convo\.order\}/.test(page));
+// cp508 (tt.txt #7) — an optimistic placeholder branch (`{#if convo.pending}`,
+// a neutral loading dash) now precedes it, so the order title branches on
+// `{:else if convo.order}` rather than a leading `{#if convo.order}`.
+check(
+	'chat page still branches the RE: title on convo.order (after the pending placeholder)',
+	/\{:else if\s+convo\.order\}/.test(page) && /\{#if\s+convo\.pending\}/.test(page)
+);
 check('…with a "RE: -" fallback when the thread cites no order', /\{:else\}[\s\S]{0,140}truncate">-<\/span>/.test(page));
 // cp450 (t.txt 16) — the RE: line is PLAIN TEXT now: it no longer links to the
 // order page; the whole card is the click target for the conversation.

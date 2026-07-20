@@ -30,6 +30,7 @@ SMOKES=(
 	"apps/indexer:chat-sse-order-permlink-smoke"
 	"apps/indexer:chat-fast-notification-smoke"
 	"apps/indexer:dispatcher-admission-order-smoke"
+	"apps/indexer:orderbook-provisional-removal-memory-smoke"
 	"apps/indexer:chat-identity-handler-smoke"
 	"apps/indexer:order-handler-smoke"
 	"apps/indexer:broadcast-chain-proxy-rate-limit-smoke"

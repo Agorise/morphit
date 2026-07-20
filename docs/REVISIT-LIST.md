@@ -1,5 +1,13 @@
 # Morphit pre-launch revisit list
 
+> ## 🚀 cp508 — v1.8.3 BUMPED (tree now 1.8.3), all gates green, ELI5 ceremony ready for Ken to run on his laptop (batch from `tt.txt`). Full per-task detail in TARBALL.md cp508.
+> - **13 of 13 tasks done.** Version bumped 1.8.2→1.8.3 across all 19 touchpoints + package-lock.json (15 morphit entries) + RELEASE-NOTES-v1.8.3.md. svelte-check 0 err; indexer tsc clean; all 10 locales at parity (3405 keys).
+> - **Full 531-runner battery GREEN** (~14,990 scenarios) + **all 5 release gates GREEN** (version-consistency 19, lockfile-sync 4, release-notes-asset-count-parity 3, eli5-release-blocks 33, release-validator 80). vitest 4/4 (2001 tests) + workspace-typecheck 26/26 verified standalone.
+> - **Ceremony:** the 6 ELI5 blocks from `bash scripts/eli5-release.sh 1.8.3 "…"` were relayed to Ken. Block 4 pins `MORPHIT_BUILD_BLURT_BASE=125` (canonical floor, confirmed in release-build-payload.ts). Block 5 (real @morphit broadcast) + all git pushes are laptop-only (posting key never on server). AFTER v1.8.3 deploys, no standing post-deploy reminders are pending for this release.
+> - **Follow-ups deferred this session:**
+>   - Task 10: OPTIONAL static-guard smoke for the verify retry structure (setTimeout-based retry is hard to unit-test with real timers). Also the LEGACY no-orderPermlink verify path (ChatMessage L498-514, verifyResultLocal) still has NO retry — rare (pre-F.5/hand-crafted funds-sent payloads), left as-is.
+>   - Task 1c: the chat INBOX list (chat/+page.svelte) shows (Live)/(Canceled)/(Expired) but NOT (Paid); adding it there is a possible parity follow-up (the ConversationView header (Paid) covers Ken's "beside the avatar" ask). The chat FAQ answer lists (Live)/(Canceled)/(Expired) but not (Paid) — a minor doc-accuracy update (would require llms-full regen).
+
 > ## ✅ cp507 — v1.8.2 RELEASED (full battery + 5-persona walkthroughs + deep-deep; tree bumped 1.8.1→1.8.2, READY TO SHIP). Full detail in TARBALL.md cp507.
 > - **Full 530-runner battery GREEN** after fixing 4 real issues it caught: locale-source-of-truth (faq-glossary-terms hardcoded locales → derived from SUPPORTED_LOCALES), vitest-must-pass (stale profileProps.test.ts missing Task-B `websiteUrl` → web 1076→1078), llms-full-freshness (regenerated the FAQ mirror), + a stale `blurt_media` test comment. Two in-chunk timeouts (vitest, workspace-typecheck) verified standalone (4/4, 26/26).
 > - **5-persona walkthroughs + deep-deep clean** (dispatcher sort stability; webUrl XSS/privacy; 8192 payload budget; 30/30 broadcast parity; release-schema untouched).

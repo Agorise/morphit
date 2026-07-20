@@ -2,10 +2,12 @@
 /**
  * Smoke: my/orders card cluster (#8, #9, #10). Anchor 2026-07-08.
  *
- *   #8  edit-window countdown pill: warm yellow (amber, not red), CENTERED
- *       ABOVE the Edit button, keeps its pulse near expiry; the confusing
- *       "No trade partner to review yet" line is gone (but the review button
- *       is still correctly withheld when there's no counterparty).
+ *   #8  edit-window countdown MERGED into the Edit button (cp508 tt.txt #5):
+ *       the ✏️ glyph + inline "· mm:ss" countdown live inside a compact
+ *       (size="sm"), full-width Edit button — the old separate amber pill above
+ *       an oversized button is gone. The confusing "No trade partner to review
+ *       yet" line is gone too (but the review button is still correctly withheld
+ *       when there's no counterparty).
  *   #9  top fee-status explainer: 💡 prefix, "may appear to be missing"
  *       wording, and an X that dismisses it forever (localStorage).
  *   #10 "Mark complete / review" smooth-scrolls to the feedback form.
@@ -32,15 +34,12 @@ function check(name: string, ok: boolean): void {
 	}
 }
 
-// ── #8 edit-window pill ─────────────────────────────────────────────────────
+// ── #8 edit-window countdown MERGED into the Edit button (cp508 tt.txt #5) ───
 const editBlock = /\{#if withinEditWindow\(o\)\}[\s\S]*?\{:else if withinEditClosedNotice/.exec(page)?.[0] ?? '';
-check('#8 pill uses warm amber, not red', /bg-amber-100[\s\S]*text-amber-900/.test(editBlock) && !/bg-red-100/.test(editBlock));
-check('#8 pill is centered (self-center, not self-end)', /self-center/.test(editBlock) && !/self-end/.test(editBlock));
-check('#8 pill keeps the pulse near expiry', /remaining <=\s*\n?\s*30[\s\S]*animate-pulse/.test(editBlock));
-// pill appears ABOVE the Edit button (its <span> comes before the Edit BusyButton)
-const pillIdx = editBlock.indexOf('edit_window_countdown');
-const btnIdx = editBlock.indexOf('action_edit');
-check('#8 pill is rendered ABOVE the Edit button', pillIdx !== -1 && btnIdx !== -1 && pillIdx < btnIdx);
+check('#8 the Edit button carries the ✏️ glyph + action_edit', /my_orders\.order\.action_edit'\)/.test(editBlock) && editBlock.includes('✏️'));
+check('#8 the countdown is INLINE in the Edit button (formatRemainingMmSs), not a separate pill', /formatRemainingMmSs/.test(editBlock) && /\{#if remaining !== null\}/.test(editBlock));
+check('#8 the old separate amber edit-window pill is GONE (merged away)', !/edit_window_countdown/.test(editBlock) && !/bg-amber-100/.test(editBlock));
+check('#8 the merged Edit button is compact (size="sm") + full-width', /size="sm"/.test(editBlock) && /fullWidth/.test(editBlock));
 check(
 	'#8 the 0-counterparty branch explains itself, and still withholds the review button',
 	// SUPERSEDED, v1.5.0 (t.txt line 1). The original ask was to delete the

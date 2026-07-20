@@ -199,7 +199,13 @@ async function fetchSnapshot(db: Database, q: OrderbookStreamQuery, operatorAcco
 		 ORDER BY o.updated_at DESC, o.account ASC, o.permlink ASC
 		 LIMIT ${SNAPSHOT_LIMIT}`;
 	const result = await db.query<OrderbookStreamRow>(sql, params);
-	return result.rows;
+	// cp508 (tt.txt #1/#2) — skip orders the fast path just provisionally
+	// removed (cancel/complete at head) that the durable table hasn't caught up
+	// on, so a freshly-connected stream doesn't re-show a just-cancelled order
+	// for ~60s. Self-heals via the memory's TTL once the poller sweeps the row.
+	return result.rows.filter(
+		(r) => !orderbookEventBus.isRecentlyRemoved(`${r.account}/${r.permlink}`)
+	);
 }
 
 /** Look up a single order by orderId ("account/permlink") AND
@@ -247,7 +253,13 @@ async function fetchRecentlyChanged(
 		 LIMIT ${MAX_TRACKED_ORDERS}`;
 	const cutoff = new Date(Date.now() - FALLBACK_LOOKBACK_MS);
 	const result = await db.query<OrderbookStreamRow>(sql, [cutoff, ...params]);
-	return result.rows;
+	// cp508 — same guard as fetchSnapshot: the fallback poll must not re-upsert
+	// an order the fast path just provisionally removed but whose durable row is
+	// still 'live' (poller behind). Without this, a just-cancelled order that
+	// was recently updated would flicker back in on the next 60s poll.
+	return result.rows.filter(
+		(r) => !orderbookEventBus.isRecentlyRemoved(`${r.account}/${r.permlink}`)
+	);
 }
 
 export function orderbookStreamRoute(db: Database, poller: Poller, operatorAccount: string): Hono {

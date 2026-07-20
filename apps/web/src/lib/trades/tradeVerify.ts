@@ -60,6 +60,25 @@ export interface VerifyTriggerArgs {
 	readonly txid: string;
 }
 
+/** cp508 (tt.txt #10) — a freshly-broadcast transfer isn't queryable for a few
+ *  seconds: it has to land in a block and be indexed by the RPC. So the FIRST
+ *  verify — especially the SENDER's own immediate self-check — comes back
+ *  `not_found` or `rpc_error`. That is transient, not a failure. Recording it
+ *  as final was what made the sender's receipt read "Could not verify on chain
+ *  (RPC unreachable)" while the receiver still showed "Verifying…". We retry a
+ *  transient result on a short interval for up to this window before recording
+ *  it; the trade entry stays 'pending' (set on funds-sent) throughout, so BOTH
+ *  parties show "Verifying…" until the transfer clears (or the window lapses and
+ *  the real error is finally shown). */
+const VERIFY_RETRY_WINDOW_MS = 90_000;
+const VERIFY_RETRY_INTERVAL_MS = 6_000;
+
+/** orderPermlink\u0000txid currently inside a retry chain — so re-renders that
+ *  re-call triggerBlurtVerification don't spawn parallel chains hammering the
+ *  RPC. verifyBlurtTransfer already caches DEFINITIVE results, but transient
+ *  ones (the whole point of the retry) are deliberately not cached. */
+const verifyInFlight = new Set<string>();
+
 /** Kick off a BLURT chain verification and route the result to
  *  the trade-status store.  Returns void — callers don't need
  *  to await; the store mutation is the side effect.  Errors are
@@ -81,29 +100,49 @@ export function triggerBlurtVerification(args: VerifyTriggerArgs): void {
 		expectedMemo = trade.expectedMemo;
 	}
 
-	void verifyBlurtTransfer(args.txid, {
-		recipient: args.recipient,
-		sender: args.sender,
-		amountBlurt: args.amountBlurt,
-		memo: expectedMemo
-	}).then((r) => {
-		recordVerification({
-			orderPermlink: args.orderPermlink,
-			verifyResult: r
-		});
-		// When the chain confirms the transfer landed, the
-		// recipient's BLURT balance has just changed.  Nudge any
-		// visible balance card to refetch.  Safe to call from any
-		// caller of triggerBlurtVerification — `args.recipient` is
-		// always the current user (the listener only routes
-		// transfers TO us; outbound transfers go through a
-		// different path).
-		if (r.kind === 'verified') {
-			triggerBalanceRefresh();
-		}
-	});
-	// No catch: verifyBlurtTransfer wraps RPC errors and returns
-	// `{ kind: 'rpc_error', message }` rather than throwing.  If
-	// it threw unexpectedly, we'd want to know — letting the
-	// promise's rejection surface to the browser console is fine.
+	const key = `${args.orderPermlink}\u0000${args.txid}`;
+	if (verifyInFlight.has(key)) return; // a retry chain is already running
+	verifyInFlight.add(key);
+
+	const startedAt = Date.now();
+	const attempt = (): void => {
+		void verifyBlurtTransfer(args.txid, {
+			recipient: args.recipient,
+			sender: args.sender,
+			amountBlurt: args.amountBlurt,
+			memo: expectedMemo
+		})
+			.then((r) => {
+				// not_found / rpc_error right after broadcast just means the tx
+				// hasn't been included + indexed yet — retry within the window
+				// and leave the entry 'pending' ("Verifying…"). verified /
+				// mismatch / wrong_op are definitive (the tx WAS found), so record
+				// immediately and stop.
+				const transient = r.kind === 'not_found' || r.kind === 'rpc_error';
+				if (transient && Date.now() - startedAt < VERIFY_RETRY_WINDOW_MS) {
+					setTimeout(attempt, VERIFY_RETRY_INTERVAL_MS);
+					return;
+				}
+				verifyInFlight.delete(key);
+				recordVerification({
+					orderPermlink: args.orderPermlink,
+					verifyResult: r
+				});
+				// When the chain confirms the transfer landed, the recipient's
+				// BLURT balance has just changed. Nudge any visible balance card to
+				// refetch. Safe from any caller — args.recipient is always the
+				// current user (the listener only routes transfers TO us).
+				if (r.kind === 'verified') {
+					triggerBalanceRefresh();
+				}
+			})
+			.catch(() => {
+				// verifyBlurtTransfer wraps RPC errors into rpc_error rather than
+				// throwing; this only fires on a truly unexpected throw. Free the
+				// key so the trade isn't wedged un-verifiable, and leave the entry
+				// 'pending' for a later re-trigger.
+				verifyInFlight.delete(key);
+			});
+	};
+	attempt();
 }

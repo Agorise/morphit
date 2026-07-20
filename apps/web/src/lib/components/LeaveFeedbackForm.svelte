@@ -540,7 +540,7 @@
 				{$_('feedback.form.subject_locked_label')}
 			</span>
 			<div
-				class="w-full rounded-xl border-2 border-morphit-emerald bg-morphit-emerald/5 px-3 py-2 text-sm font-semibold text-ink-900 dark:text-ink-50"
+				class="w-full rounded-xl border border-ink-200 bg-ink-50 px-3 py-2 text-sm font-semibold text-ink-900 dark:border-ink-700 dark:bg-ink-800/40 dark:text-ink-50"
 			>
 				<div class="flex flex-wrap items-center gap-x-2 gap-y-1">
 					<IdentityLabel

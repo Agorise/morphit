@@ -293,17 +293,20 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
  *  targets: same locale-prefixed /chat/[peer] path AND same ?order. Used
  *  to suppress a redundant OS notification while the user is actively
  *  viewing that exact conversation (focused tab). */
-function chatTargetMatches(clientUrl: string, clickPath: string): boolean {
-	try {
-		const client = new URL(clientUrl);
-		const target = new URL(clickPath, client.origin);
-		return (
-			client.pathname === target.pathname &&
-			(client.searchParams.get('order') ?? '') === (target.searchParams.get('order') ?? '')
-		);
-	} catch {
-		return false;
-	}
+/** cp508 (tt.txt #8) — true when a tab is viewing a chat thread with the SAME
+ *  PEER a chat push targets. Ken: while "actually chatting with that person"
+ *  there's no reason to pop a system notification for them — only for "someone
+ *  else who is trying to chat with me". So we deliberately match on the PEER
+ *  and ignore the ?order scope: a per-thread match would still interrupt you
+ *  with the same person's message in a different order thread. A different peer
+ *  never matches, so their notifications still come through. Locale-robust —
+ *  compares the peer extracted from the `/chat/<peer>` segment, not the whole
+ *  locale-prefixed pathname, so a push minted under one locale still suppresses
+ *  for a tab browsing in another. */
+function chatPeerMatches(clientUrl: string, clickPath: string): boolean {
+	const a = chatThreadFromClickPath(clientUrl);
+	const b = chatThreadFromClickPath(clickPath);
+	return a !== null && b !== null && a.peer.toLowerCase() === b.peer.toLowerCase();
 }
 
 /** v1.5.0 — extract the (peer, order) a chat push targets from its
@@ -358,19 +361,25 @@ self.addEventListener('push', (event: PushEvent) => {
 
 	event.waitUntil(
 		(async () => {
-			// v1.5.0 — suppress a redundant OS notification when a FOCUSED tab is
-			// already on this exact chat thread (same /chat/peer?order). Order and
-			// feedback categories always notify. The fastchat badge poke below is
-			// unchanged, so in-page badges still update — no regression.
+			// v1.5.0 — suppress a redundant OS notification when a tab the user is
+			// looking at is already on a chat thread with this PEER (cp508 tt.txt
+			// #8 — peer, not the exact order thread). Order and feedback categories
+			// always notify. The fastchat badge poke below is unchanged, so in-page
+			// badges still update — no regression.
 			let activelyViewing = false;
 			if (category === 'chat') {
 				try {
-					const focusedTabs = await self.clients.matchAll({
+					const openWindows = await self.clients.matchAll({
 						type: 'window',
 						includeUncontrolled: true
 					});
-					activelyViewing = focusedTabs.some(
-						(c) => c.focused && chatTargetMatches(c.url, clickPath)
+					// visibilityState (on screen) rather than focused: a mobile tab a
+					// user is actively reading can report focused=false, which let the
+					// notification through mid-conversation; 'visible' is the reliable
+					// "the user is looking at it" signal and still excludes a
+					// backgrounded ('hidden') tab, which SHOULD still notify.
+					activelyViewing = openWindows.some(
+						(c) => c.visibilityState === 'visible' && chatPeerMatches(c.url, clickPath)
 					);
 				} catch {
 					// matchAll unavailable — default to showing the notification.

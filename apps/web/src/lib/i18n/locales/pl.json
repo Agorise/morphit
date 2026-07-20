@@ -635,13 +635,10 @@
 		"unknown_version": "Ta wiadomość używa nowszego protokołu. Zaktualizuj Morphit, aby ją odczytać.",
 		"pay_blurt": {
 			"title": "Wyślij BLURT do @{recipient}",
-			"subtitle": "Wyślij BLURT bezpośrednio ze swojego konta Morphit.",
 			"amount_label": "Kwota",
 			"amount_placeholder": "0.000",
-			"amount_help": "Podaj kwotę BLURT, którą zgodziłeś się wysłać.",
 			"recipient_label": "Do",
 			"from_label": "Od",
-			"no_memo_notice": "Żadne memo nie zostanie dodane do transakcji — kontekst transakcji pozostaje w tym szyfrowanym czacie.",
 			"password_label": "Twoje hasło @{account} (do podpisania kluczem aktywnym)",
 			"confirm": "Wyślij BLURT",
 			"paying": "Wysyłanie…",
@@ -739,7 +736,7 @@
 		},
 		"pay_prefill": {
 			"hint": "Minimum zlecenia wynosi {min} {fiat} (≈ {amount} {asset}).",
-			"hint_market": "Minimum zlecenia wynosi {min} {fiat} (≈ {amount} {asset} po bieżącej cenie rynkowej)."
+			"hint_market": "Minimum zlecenia wynosi {min} {fiat} (≈ {amount} {asset} po cenie rynkowej)."
 		},
 		"empty_state_loading": "Czat z @{peer} się ładuje… Przywitaj się!",
 		"day_separator_tooltip": "Północ, UTC",
@@ -2237,7 +2234,7 @@
 	},
 	"my_orders": {
 		"heading": "Twoje zlecenia",
-		"subtitle": "Wszystkie zlecenia, które opublikowałeś. Edytuj nowe, anuluj te, których już nie chcesz.",
+		"subtitle": "Wszystkie zlecenia, które opublikowałeś.",
 		"loading": "Wczytywanie zleceń…",
 		"empty_title": "Jeszcze nic nie opublikowałeś",
 		"empty_body": "Gdy będziesz gotowy, publikacja zlecenia zajmie około minutę.",
@@ -2274,14 +2271,13 @@
 			"viewed_tooltip": "Przybliżona liczba wyświetleń tej oferty. Widoczna tylko dla Ciebie.",
 			"action_relist": "Opublikuj ponownie",
 			"action_relist_hint": "Wstępnie wypełnia formularz pierwotnymi warunkami; zapłacisz nową opłatę za publikację.",
-			"edit_window_countdown": "Okno edycji: {remaining}",
-			"edit_window_tooltip": "Oferty można edytować tylko w ciągu 15 minut od opublikowania. Później trzeba anulować i opublikować ponownie.",
-			"edit_window_aria": "Pozostały czas edycji: {remaining}",
 			"feedback_pick_prompt": "Z kim handlowałeś?",
 			"not_visible_orderbook": "Niewidoczne w księdze zleceń",
 			"state_completed": "Zakończone",
 			"action_complete": "Oznacz jako zakończone",
-			"feedback_no_counterparty": "Nie było jeszcze żadnych czatów z kontrahentem"
+			"feedback_no_counterparty": "Nie było jeszcze żadnych czatów z kontrahentem",
+			"posting": "Publikowanie…",
+			"feature_arming_hint": "Dostępne, gdy tylko Twoje zlecenie będzie aktywne"
 		},
 		"cancel": {
 			"confirm_title": "Anulować to zlecenie?",
@@ -2656,6 +2652,7 @@
 		"status_live": "Aktywne",
 		"status_cancelled": "Anulowane",
 		"status_expired": "Wygasłe",
+		"status_paid": "Opłacone",
 		"cta_hint": "Interesuje Cię ta wymiana? Użyj przycisku Wiadomość powyżej, aby uzgodnić szczegóły płatności z wystawcą. Rozliczenie odbywa się bezpośrednio między wami — Morphit nigdy nie przechowuje środków.",
 		"owner_actions_heading": "Twoje zlecenie",
 		"owner_locked_hint": "Odblokuj sesję, aby edytować lub anulować to zlecenie.",
@@ -4569,9 +4566,7 @@
 		"payment_pending": "Oczekuje na płatność",
 		"payment_mismatch": "Niezgodność płatności",
 		"payment_unverifiable": "Płatność nieweryfikowalna",
-		"released": "Wydane",
 		"disputed": "Sporne",
-		"completed": "Ukończone",
 		"in_progress": "Transakcja w toku",
 		"paid_by": "Zapłacone przez"
 	},

@@ -60,6 +60,8 @@
 	import OrderCard from '$lib/components/OrderCard.svelte';
 	import { formatOrderPriceModel } from '$lib/orders/priceModelDisplay';
 	import { createOrderbookStream } from '$lib/orderbook/stream';
+	import { isOrderLive } from '$lib/orders/orderExpiry';
+	import { nowMs } from '$lib/stores/now';
 	import { SvelteSet } from 'svelte/reactivity';
 	import type { AssetTicker } from '@morphit/asset-registry';
 	import type { OrderbookQuery, OrderRecord, ProfileResponse } from '@morphit/indexer-client';
@@ -510,7 +512,16 @@
 		const tokens = orderDetailsTokens;
 		const hidden = $hiddenAccounts;
 		const blocked = $blockedAccounts;
+		const now = $nowMs;
 		return items.filter((o) => {
+			// cp508 (tt.txt #1) — hide an order the instant its expiry passes,
+			// client-side, so a live-streamed orderbook agrees with a fresh server
+			// snapshot (the indexer already drops expired orders at query time).
+			// Expiry fires no op or SSE event — it's purely the clock advancing —
+			// so without this the order lingered for up to ~60s past `expires_at`.
+			// isOrderLive also fails-closed on any stray non-live row
+			// (cancelled/completed) that ever slipped into `items`.
+			if (!isOrderLive(o, now)) return false;
 			// Moderation filter — skipped when the transparency toggle is on.
 			if (!showHiddenTemporarily) {
 				const acct = o.account.toLowerCase();

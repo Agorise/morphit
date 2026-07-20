@@ -635,13 +635,10 @@
 		"unknown_version": "Questo messaggio usa un protocollo più recente. Aggiorna Morphit per leggerlo.",
 		"pay_blurt": {
 			"title": "Invia BLURT a @{recipient}",
-			"subtitle": "Invia BLURT direttamente dal tuo account Morphit.",
 			"amount_label": "Importo",
 			"amount_placeholder": "0.000",
-			"amount_help": "Inserisci l'importo in BLURT che hai concordato di inviare.",
 			"recipient_label": "A",
 			"from_label": "Da",
-			"no_memo_notice": "Nessun memo on-chain sarà incluso — il contesto della tua operazione resta in questa chat cifrata.",
 			"password_label": "La tua password di @{account} (per firmare con la tua chiave attiva)",
 			"confirm": "Invia BLURT",
 			"paying": "Invio in corso…",
@@ -739,7 +736,7 @@
 		},
 		"pay_prefill": {
 			"hint": "Il minimo dell'ordine è {min} {fiat} (≈ {amount} {asset}).",
-			"hint_market": "Il minimo dell'ordine è {min} {fiat} (≈ {amount} {asset} al prezzo di mercato attuale)."
+			"hint_market": "Il minimo dell'ordine è {min} {fiat} (≈ {amount} {asset} al prezzo di mercato)."
 		},
 		"empty_state_loading": "La chat con @{peer} si sta caricando… Saluta!",
 		"day_separator_tooltip": "Mezzanotte, UTC",
@@ -2237,7 +2234,7 @@
 	},
 	"my_orders": {
 		"heading": "I tuoi ordini",
-		"subtitle": "Tutti gli ordini che hai pubblicato. Modifica quelli recenti, cancella quelli che non vuoi più.",
+		"subtitle": "Tutti gli ordini che hai pubblicato.",
 		"loading": "Caricamento dei tuoi ordini…",
 		"empty_title": "Non hai ancora pubblicato niente",
 		"empty_body": "Quando sei pronto, pubblicare un ordine richiede circa un minuto.",
@@ -2274,14 +2271,13 @@
 			"viewed_tooltip": "Conteggio approssimativo di quante volte quest'offerta è stata visualizzata. Visibile solo a te.",
 			"action_relist": "Ripubblica ordine",
 			"action_relist_hint": "Precompila il modulo per te con i valori e i termini originali.",
-			"edit_window_countdown": "Finestra modifica: {remaining}",
-			"edit_window_tooltip": "Gli ordini si possono modificare solo entro 15 minuti dalla pubblicazione. Dopo serve cancellarli e ripubblicarli.",
-			"edit_window_aria": "Tempo rimanente per modifica: {remaining}",
 			"feedback_pick_prompt": "Con chi hai scambiato?",
 			"not_visible_orderbook": "Non visibile nel book ordini",
 			"state_completed": "Completato",
 			"action_complete": "Segna come completato",
-			"feedback_no_counterparty": "Ancora nessuna chat con una controparte"
+			"feedback_no_counterparty": "Ancora nessuna chat con una controparte",
+			"posting": "Pubblicazione…",
+			"feature_arming_hint": "Disponibile appena il tuo ordine è attivo"
 		},
 		"cancel": {
 			"confirm_title": "Cancellare questo ordine?",
@@ -2656,6 +2652,7 @@
 		"status_live": "Attivo",
 		"status_cancelled": "Annullato",
 		"status_expired": "Scaduto",
+		"status_paid": "Pagato",
 		"cta_hint": "Ti interessa questo scambio? Usa il pulsante Messaggio qui sopra per coordinare i dettagli di pagamento con chi lo ha pubblicato. Il saldo avviene direttamente tra di voi — Morphit non custodisce mai fondi.",
 		"owner_actions_heading": "Il tuo ordine",
 		"owner_locked_hint": "Sblocca la tua sessione per modificare o annullare questo ordine.",
@@ -4569,9 +4566,7 @@
 		"payment_pending": "Pagamento in attesa",
 		"payment_mismatch": "Discrepanza di pagamento",
 		"payment_unverifiable": "Pagamento non verificabile",
-		"released": "Rilasciato",
 		"disputed": "Contestato",
-		"completed": "Completato",
 		"in_progress": "Operazione in corso",
 		"paid_by": "Pagato da"
 	},

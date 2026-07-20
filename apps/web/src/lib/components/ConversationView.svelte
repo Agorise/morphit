@@ -91,6 +91,8 @@
 	import { isGoodsAsset } from '@morphit/asset-registry';
 	import { computeOrderPayAmount } from '$lib/orders/payAmount';
 	import { fetchFxRates } from '$lib/orders/fx';
+	import { isOrderLive } from '$lib/orders/orderExpiry';
+	import { nowMs } from '$lib/stores/now';
 	import { getPrice, priceStore, type PricedSymbol } from '$lib/prices';
 	import type { FxResponse } from '@morphit/indexer-client';
 	import { orderUsesShippableMethod } from '$lib/payments/registry';
@@ -1347,9 +1349,29 @@
 	/** Ken — show the order's CURRENT status beside the RE: line, so a trader who
 	 *  opens an old conversation can see at a glance whether the thing they are
 	 *  negotiating over still exists. Reuses `order_detail.status_*`, which is
-	 *  already translated in all ten locales; no new strings. */
+	 *  already translated in all ten locales.
+	 *
+	 *  cp508 (tt.txt #10 / #1) — two upgrades so the label is LIVE:
+	 *   • (Paid) is checked FIRST and outranks everything: the moment this
+	 *     thread's transfer clears (trade phase → paid_verified/released/
+	 *     completed) OR the order reaches the durable 'completed' status, the
+	 *     header flips to "(Paid)" — the at-a-glance "who paid / did it clear"
+	 *     signal Ken wanted beside the avatar.
+	 *   • expiry is time-aware via the shared 1s clock: an order past its
+	 *     deadline reads "(Expired)" even while the indexer still reports 'live'
+	 *     (the indexer lags ~1min), so the label never lies about a dead order. */
 	const orderStatusLabel = $derived.by(() => {
 		if (!orderRecord) return '';
+		const phase = orderPermlink ? $tradeStates.get(orderPermlink)?.phase : undefined;
+		const paid =
+			phase === 'paid_verified' ||
+			phase === 'released' ||
+			phase === 'completed' ||
+			orderRecord.status === 'completed';
+		if (paid) return $_('order_detail.status_paid') as string;
+		if (orderRecord.status === 'live' && !isOrderLive(orderRecord, $nowMs)) {
+			return $_('order_detail.status_expired') as string;
+		}
 		switch (orderRecord.status) {
 			case 'live':
 				return $_('order_detail.status_live') as string;
@@ -1396,12 +1418,33 @@
 	// Both crypto buttons come from the one tested pure helper (chatMoneyFlow):
 	// no live order ⇒ both false; a live order ⇒ exactly one true.
 	const cryptoButtons = $derived(chatMoneyFlow(orderRecord, orderIsMine));
+
+	/** cp508 (tt.txt #9) — once a payment has been SENT for this order (this
+	 *  thread's trade reached 'paid' or beyond), neither the "Pay now" (sender)
+	 *  nor the "Share crypto address" (receiver) button belongs on screen for
+	 *  EITHER party — the money is moving and the row is spent. `address_shared`
+	 *  (rank 0) is the only pre-payment phase, so any other phase means funds
+	 *  were sent. Reads the reactive tradeStates map — which BOTH sides populate
+	 *  (the sender on `recordFundsSent`, the receiver when the funds-sent receipt
+	 *  is decoded in chatService) — so the whole row disappears the moment that
+	 *  receipt lands, for sender and receiver alike. Folded into the two source
+	 *  deriveds below, so the cash-by-mail "Share mailing address" / "Record
+	 *  shipment" buttons that derive from them also drop (by then crypto is
+	 *  settled and they're done too). */
+	const paymentAlreadySent = $derived.by(() => {
+		if (!orderPermlink) return false;
+		const st = $tradeStates.get(orderPermlink);
+		return st !== undefined && st.phase !== 'address_shared';
+	});
+
 	/** I send the crypto ⇒ show "Pay now". Only when a live order is connected
-	 *  AND the peer is buying the asset. Hidden with no live order. */
-	const showPayNowButton = $derived(cryptoButtons.payNow);
+	 *  AND the peer is buying the asset. Hidden with no live order — and once the
+	 *  order has been paid (paymentAlreadySent). */
+	const showPayNowButton = $derived(cryptoButtons.payNow && !paymentAlreadySent);
 	/** I receive the crypto ⇒ show "Share crypto address". Only when a live
-	 *  order is connected AND the peer is selling. Hidden with no live order. */
-	const showShareAddressButton = $derived(cryptoButtons.shareAddress);
+	 *  order is connected AND the peer is selling. Hidden with no live order —
+	 *  and once the order has been paid. */
+	const showShareAddressButton = $derived(cryptoButtons.shareAddress && !paymentAlreadySent);
 
 	// cp406 (Ken) — the "Share mailing address" + "Record shipment" controls
 	// only matter when the trade moves a PHYSICAL thing that can be posted:
@@ -1979,7 +2022,10 @@
 	     chat. Sits directly below the last message, above the composer. -->
 	{#if orderPermlink}
 		{#if canLeaveFeedback}
-			<div class="mx-2 mb-2 rounded-xl border-2 border-morphit-emerald bg-morphit-emerald/5 p-3">
+			<!-- cp508 (tt.txt #9) — no green border/tint on the "Mark this trade
+			     complete" card; the LeaveFeedbackForm inside carries its own subtle
+			     card styling, so this is just spacing now. -->
+			<div class="mx-2 mb-2">
 				<!-- v1.5.5 — completeOwnedOrder: this panel is headed "Mark this
 				     trade complete", so when the cited order is OURS, submitting
 				     must actually mark it complete (naming the peer as the

@@ -17,6 +17,17 @@
  * byte comparison (and thus only ever alarm) when the served version equals the
  * announced version. A genuine tamper is a SAME-version byte change, which still
  * trips the check. This guard pins the gate so it can't be removed by accident.
+ *
+ * cp508 (tt.txt #3) — MOBILE persistence follow-up. checkManifestAgainstRunning-
+ * Bundle re-fetches each asset, and those fetches hit the browser/service-worker
+ * cache (the running bundle's own bytes), not the network. Right after a deploy
+ * — most visibly on mobile, where the SW keeps serving the previous bundle until
+ * it swaps — the RUNNING version is still OLD while served + announced are NEW,
+ * so served===announced passed the v1.8.1 gate and every OLD cached asset then
+ * mismatched the NEW manifest → the scary banner, which only cleared on a SECOND
+ * refresh. The gate now ALSO requires RUNNING_VERSION === announcedVersion: a
+ * stale running bundle is a deploy-skew (the staleBuild snackbar handles the
+ * reload), not tampering. This guard pins that second clause too.
  */
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -52,6 +63,18 @@ check(
 check(
 	'the gate runs BEFORE the manifest byte check',
 	skewIdx !== -1 && checkIdx !== -1 && skewIdx < checkIdx
+);
+
+// 4b (cp508) — the deploy_skew gate ALSO short-circuits when the RUNNING bundle
+//     is not the announced version (the mobile stale-SW case). Without this the
+//     OLD cached bundle's bytes mismatch the NEW manifest and flash the banner
+//     until a 2nd refresh swaps the SW.
+const gateMatch = src.match(
+	/if\s*\(\s*(servedVersion[^)]*)\)\s*\{\s*assetCheckStore\.set\(\{\s*kind:\s*'deploy_skew'\s*\}\);\s*return;/
+);
+check(
+	'the deploy_skew gate short-circuits on running≠announced too (cp508 mobile fix)',
+	!!gateMatch && /RUNNING_VERSION\s*!==\s*announcedVersion/.test(gateMatch[1])
 );
 
 // 3 — the skew branch RETURNS, so a mismatch state is never set during a deploy.

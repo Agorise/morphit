@@ -62,6 +62,8 @@
 	import { instanceAdditions, instanceNameLookup } from '$lib/stores/instanceAdditions';
 	import type { OrderRecord } from '@morphit/indexer-client';
 	import { addPendingFeatured } from '$stores/pendingFeatured';
+	import { pendingOrders, mergePendingOrders, pendingOrderKeys } from '$lib/stores/pendingOrders';
+	import { orderEchoKey } from '$lib/stores/pendingEcho';
 	import { tradeStates } from '$lib/trades/tradeStatus';
 	import {
 		editWindowRemainingSeconds as editWindowRemainingSecondsFor,
@@ -164,8 +166,8 @@
 		}
 	});
 	const counts = $derived.by(() => {
-		const c = { all: items.length, live: 0, paid: 0, cancelled: 0, expired: 0 };
-		for (const o of items) {
+		const c = { all: mergedItems.length, live: 0, paid: 0, cancelled: 0, expired: 0 };
+		for (const o of mergedItems) {
 			if (o.status === 'completed' || paidPermlinks.has(o.permlink)) c.paid++;
 			else if (isLive(o)) c.live++;
 			else if (o.status === 'cancelled') c.cancelled++;
@@ -410,18 +412,42 @@
 		return isOrderLive(o, nowMs);
 	}
 
+	// cp508 (tt.txt #4) — merge THIS browser's just-posted orders (staged in
+	// `pendingOrders` by the post flow) so a freshly-posted order shows on
+	// my/orders IMMEDIATELY as a data-bearing placeholder, ~50-90s before the
+	// durable indexer surfaces it (the fast head-tailer is chat-only by design,
+	// so paid order posts correctly aren't in it). Self-reconciling:
+	// mergePendingOrders drops an entry the instant the confirmed list contains
+	// it or it ages past PENDING_TTL_MS.
+	const mergedItems = $derived(mergePendingOrders(items, $pendingOrders, nowMs));
+	// Which merged rows are still PROVISIONAL (broadcast, not yet durable). Their
+	// card shows a "Posting…" pill + an ARMING (disabled) Feature button — a
+	// feature bid needs a confirmed order, so featuring is IMPOSSIBLE until then.
+	// HARD RULE: presentational/arming ONLY, never a real feature action before
+	// the order exists on chain.
+	const provisionalKeys = $derived(
+		pendingOrderKeys($pendingOrders, new Set(items.map(orderEchoKey)), nowMs)
+	);
+	function isProvisional(o: OrderRecord): boolean {
+		return provisionalKeys.has(orderEchoKey(o));
+	}
+	// cp508 (tt.txt #4) — the post-confirmation "set up a featured bid" link deep-
+	// links here as /my/orders?featuring=<permlink>; we ring + scroll that card so
+	// the user lands right on the order they want to feature.
+	const featuringPermlink = $derived($page.url.searchParams.get('featuring'));
+
 	const visibleItems = $derived.by(() => {
 		switch (filter) {
 			case 'live':
-				return items.filter((o) => isLive(o) && !paidPermlinks.has(o.permlink));
+				return mergedItems.filter((o) => isLive(o) && !paidPermlinks.has(o.permlink));
 			case 'paid':
-				return items.filter((o) => o.status === 'completed' || paidPermlinks.has(o.permlink));
+				return mergedItems.filter((o) => o.status === 'completed' || paidPermlinks.has(o.permlink));
 			case 'cancelled':
-				return items.filter((o) => o.status === 'cancelled');
+				return mergedItems.filter((o) => o.status === 'cancelled');
 			case 'expired':
-				return items.filter((o) => isExpired(o));
+				return mergedItems.filter((o) => isExpired(o));
 			default:
-				return items;
+				return mergedItems;
 		}
 	});
 
@@ -870,7 +896,9 @@
 				)}
 				<li
 					id="order-{o.permlink}"
-					class="card-interactive scroll-mt-20 card-hover-emerald"
+					class="card-interactive scroll-mt-20 card-hover-emerald {o.permlink === featuringPermlink
+						? 'ring-2 ring-morphit-emerald ring-offset-2 dark:ring-offset-ink-900'
+						: ''}"
 				>
 					<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
 						<div class="flex-1">
@@ -888,7 +916,18 @@
 								{/if}
 							</div>
 							<div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
-								{#if !paidPermlinks.has(o.permlink)}
+								{#if isProvisional(o)}
+									<!-- cp508 (tt.txt #4) — just-posted, not yet durable: a "Posting…" pill
+									     (animated dot) says so at a glance; drops to the normal pills the
+									     instant the indexer confirms the order. -->
+									<span
+										class="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 font-semibold text-amber-900 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
+									>
+										<span class="inline-block h-2 w-2 animate-pulse rounded-full bg-amber-500"></span>
+										{$_('my_orders.order.posting')}
+									</span>
+								{/if}
+								{#if !paidPermlinks.has(o.permlink) && !(o.status === 'completed' && o.completed_counterparty)}
 									<!-- v1.5.0 — a verifiably-paid order is effectively taken; hide
 									     the "Visible in orderbook" state pill (the "Paid by @peer"
 									     badge below conveys the state). -->
@@ -900,7 +939,10 @@
 										{stateLabel(o)}
 									</span>
 								{/if}
-								<PaymentStatusBadge orderPermlink={o.permlink} />
+								<PaymentStatusBadge
+									orderPermlink={o.permlink}
+									completedCounterparty={o.completed_counterparty ?? null}
+								/>
 								{#if !isLive(o)}
 									<!-- cp429/cp440 — an order that is no longer live (EXPIRED or
 									     CANCELLED) is not on the orderbook anymore. This is NOT a
@@ -1009,39 +1051,39 @@
 						     difference Ken is pointing at. `items-end` lets each button size to
 						     its own label and keeps the column right-aligned against the card
 						     edge. -->
-						<div class="flex flex-none flex-col items-end gap-2">
-							{#if isLive(o)}
+						<!-- cp508 (tt.txt #5) — fixed-width action column with items-stretch so
+						     Edit / Feature / "No chats" / Cancel all render the SAME width. -->
+						<div class="flex w-44 flex-none flex-col items-stretch gap-2">
+							{#if isProvisional(o)}
+								<!-- cp508 (tt.txt #4) — the just-posted order is not on-chain-confirmed
+								     yet, so featuring it is IMPOSSIBLE (a feature bid needs a live
+								     order). Show an ARMING, disabled Feature button — presentational
+								     ONLY, never a real feature action — that lights up the moment the
+								     order confirms and this becomes a normal live row. -->
+								<BusyButton size="sm" variant="secondary" fullWidth disabled>
+									🚀 {$_('my_orders.order.action_feature')}
+								</BusyButton>
+								<span class="text-center text-[11px] text-ink-500 dark:text-ink-400">
+									{$_('my_orders.order.feature_arming_hint')}
+								</span>
+							{:else if isLive(o)}
 								{#if withinEditWindow(o)}
 									{@const remaining = editWindowRemainingSeconds(o)}
-									<!-- #8 — edit-window countdown pill: warm yellow to match
-									     the theme's "warn" tone, CENTERED ABOVE the Edit
-									     button, and it keeps pulsing under 30s so the user
-									     feels the deadline approaching (Sally M1/M8, Part 68).
-									     Was red + right-justified + below the button. -->
-									{#if remaining !== null}
-										<span
-											class="self-center rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-amber-900 dark:bg-amber-900/40 dark:text-amber-200 {remaining <=
-											30
-												? 'animate-pulse'
-												: ''}"
-											title={$_('my_orders.order.edit_window_tooltip') as string}
-											aria-label={$_('my_orders.order.edit_window_aria', {
-												values: { remaining: formatRemainingMmSs(remaining) }
-											}) as string}
-										>
-											{$_('my_orders.order.edit_window_countdown', {
-												values: { remaining: formatRemainingMmSs(remaining) }
-											})}
-										</span>
-									{/if}
+									<!-- cp508 (tt.txt #5) — edit-window countdown MERGED INTO the Edit
+									     button (was an amber pill above an oversized button); now compact
+									     (size="sm"), full-width, with the ✏️ glyph to match 🚀 on Feature. -->
 									<BusyButton
+										size="sm"
 										variant="secondary"
+										fullWidth
 										onclick={() => gotoLocale(`/post/edit/${o.permlink}`)}
 									>
-										{$_('my_orders.order.action_edit')}
+										✏️ {$_('my_orders.order.action_edit')}{#if remaining !== null} · {formatRemainingMmSs(
+											remaining
+										)}{/if}
 									</BusyButton>
 								{:else if withinEditClosedNotice(o)}
-									<span class="text-xs text-ink-500">
+									<span class="text-center text-xs text-ink-500">
 										{$_('my_orders.order.action_edit_expired')}
 									</span>
 								{/if}
@@ -1076,6 +1118,7 @@
 										<BusyButton
 											size="sm"
 											variant="secondary"
+											fullWidth
 											onclick={() => {
 												pendingFeaturePermlink = o.permlink;
 												// Lazy-fetch the operator's configured
@@ -1161,7 +1204,7 @@
 										{$_('my_orders.order.feedback_no_counterparty')}
 									</div>
 								{:else}
-									<BusyButton size="sm" variant="secondary" onclick={() => startFeedback(o.permlink)}>
+									<BusyButton size="sm" variant="secondary" fullWidth onclick={() => startFeedback(o.permlink)}>
 										{$_('my_orders.order.action_feedback')}
 									</BusyButton>
 								{/if}
@@ -1177,7 +1220,7 @@
 									/>
 								{:else}
 									{#if !paidPermlinks.has(o.permlink)}
-										<BusyButton size="sm" variant="danger" onclick={() => requestCancel(o.permlink)}>
+										<BusyButton size="sm" variant="danger" fullWidth onclick={() => requestCancel(o.permlink)}>
 											{$_('order_detail.cancel_button')}
 										</BusyButton>
 									{/if}
@@ -1188,7 +1231,7 @@
 									     For on-chain Blurt trades the auto-complete effect usually
 									     fires first; this is the reliable path for off-chain
 									     settlements (BTC/XMR/cash) and a manual force. -->
-									<BusyButton size="sm" variant="secondary" onclick={() => requestComplete(o.permlink)}>
+									<BusyButton size="sm" variant="secondary" fullWidth onclick={() => requestComplete(o.permlink)}>
 										{$_('my_orders.order.action_complete')}
 									</BusyButton>
 								{/if}

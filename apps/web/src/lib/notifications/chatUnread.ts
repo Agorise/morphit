@@ -153,6 +153,35 @@ export function noteFastChatPush(peer: string, orderPermlink: string, atMs?: num
 	recount();
 }
 
+/**
+ * cp508 (tt.txt #7) — the pending fast-pushes as structured entries, so the
+ * inbox can render an optimistic CARD for a brand-new thread the same way the
+ * badge already COUNTS it.
+ *
+ * THE BUG THIS ENABLES FIXING. "kentest3 goes to the chat inbox and there is
+ * nothing there. BUT the message shows up ~50 seconds [later]." The badge lit
+ * in ~5s (this same `fastPending`), but the conversation LIST is built from the
+ * durable `getConversations`, which the fast path never writes — so it had no
+ * row to render until the durable handler landed ~60s later. Surfacing the
+ * pending threads lets the inbox synthesise a placeholder card immediately.
+ *
+ * Reconciliation is free: the same reconciler that clears `fastPending` once
+ * the durable row catches up removes the entry here too, and the real card
+ * (with full order details) takes its place. Peer is stored lower-cased in the
+ * key; Blurt account names are already lower-case, so nothing is lost.
+ */
+export function listFastPending(): { peer: string; orderPermlink: string; atMs: number }[] {
+	const out: { peer: string; orderPermlink: string; atMs: number }[] = [];
+	for (const [key, atMs] of fastPending) {
+		const sep = key.indexOf('\\u0000');
+		if (sep < 0) continue;
+		const peer = key.slice(0, sep);
+		const orderPermlink = key.slice(sep + '\\u0000'.length);
+		if (peer) out.push({ peer, orderPermlink, atMs });
+	}
+	return out;
+}
+
 /** A conversation feeds the chat badge iff it is not with yourself, not
  *  archived, and its peer is neither hidden (orderbook "hide") nor blocked —
  *  exactly the set the inbox renders (chat/+page.svelte filters hidden +
