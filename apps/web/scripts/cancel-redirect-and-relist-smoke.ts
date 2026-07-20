@@ -64,13 +64,21 @@ check('a failed cancel still surfaces its error instead of navigating', /cancelE
 // ─── 2. re-list a cancelled order ────────────────────────────────────
 const cancelledBranch = myOrders.slice(
 	myOrders.indexOf("{:else if o.status === 'cancelled'}"),
-	myOrders.indexOf('{:else if isExpired(o)}')
+	myOrders.indexOf("{:else if o.status === 'completed' || paidPermlinks.has(o.permlink)}")
 );
 check('the cancelled branch exists and still shows the Cancelled pill', /action_cancelled/.test(cancelledBranch));
 check('the cancelled branch now offers Re-list', /relistOrder\(o\)/.test(cancelledBranch) && /action_relist'/.test(cancelledBranch));
 check('the cancelled branch shows the re-list hint', /action_relist_hint/.test(cancelledBranch));
+// Ken (2026-07-19): Paid orders are re-listable too — you sold, and want to
+// offer the same again. Same fresh-permlink prefill path; the paid order stays.
+const paidBranch = myOrders.slice(
+	myOrders.indexOf("{:else if o.status === 'completed' || paidPermlinks.has(o.permlink)}"),
+	myOrders.indexOf('{:else if isExpired(o)}')
+);
+check('the Paid branch offers Re-list', /relistOrder\(o\)/.test(paidBranch) && /action_relist'/.test(paidBranch));
+check('the Paid branch shows the re-list hint', /action_relist_hint/.test(paidBranch));
 check('expired orders keep their Re-list button', /\{:else if isExpired\(o\)\}[\s\S]{0,600}relistOrder\(o\)/.test(myOrders));
-check('re-list is still offered on exactly the two terminal states', (myOrders.match(/relistOrder\(o\)/g) ?? []).length === 2);
+check('re-list is offered on exactly the three settled states (cancelled, paid, expired)', (myOrders.match(/relistOrder\(o\)/g) ?? []).length === 3);
 
 // ─── 3. re-listing does not mutate the original ──────────────────────
 check('relistOrder only writes a prefill + navigates to /post', /safeSession\.set\(RELIST_PREFILL_KEY[\s\S]{0,120}gotoLocale\('\/post'\)/.test(myOrders));

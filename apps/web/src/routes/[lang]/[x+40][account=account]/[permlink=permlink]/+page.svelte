@@ -835,7 +835,7 @@
 		</section>
 
 		<!-- ─── Owner-only actions ────────────────────────────── -->
-		{#if isOwner && (isOrderLive(order, nowMs) || isOrderExpired(order, nowMs))}
+		{#if isOwner && (isOrderLive(order, nowMs) || isOrderExpired(order, nowMs) || order.status === 'cancelled')}
 			<section
 				class="card mb-6 border-morphit-emerald/30 bg-morphit-emerald/5"
 				aria-labelledby="owner-actions-heading"
@@ -871,10 +871,14 @@
 					     its brief grace period) sits on its own line above
 					     a full-width Cancel button, instead of being
 					     cramped beside it. -->
-					{#if isOrderExpired(order, nowMs)}
-						<!-- Expired: nothing live to cancel — offer a fresh
-						     Re-list (a new order with a new permlink + expiry)
-						     via the same prefill path as /my/orders. -->
+					{#if isOrderExpired(order, nowMs) || order.status === 'cancelled'}
+						<!-- Expired OR cancelled: nothing live to edit or cancel —
+						     offer a fresh Re-list (a new order with a new permlink +
+						     expiry) via the same prefill path as /my/orders. Ken: a
+						     cancelled order re-lists here exactly like an expired one;
+						     the on-chain order itself stays cancelled/immutable. Being
+						     the first branch, it also skips the Edit/Cancel actions
+						     below, which don't apply once the order is off the book. -->
 						<BusyButton variant="secondary" onclick={relistOrder}>
 							{$_('my_orders.order.action_relist')}
 						</BusyButton>

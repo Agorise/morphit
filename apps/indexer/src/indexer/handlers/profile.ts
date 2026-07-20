@@ -136,11 +136,13 @@ function validate(payload: unknown): ValidatedPayload | { reason: string } {
 /** json_metadata keys the profile op recognizes. CLOSED set: a merge
  *  only ever touches these, so partial updates can't accumulate unbounded
  *  keys across ops. Keep in sync with the frontend profileProps extractor
- *  (short_bio, nostr_url, blurt_media_url, avatar_svg, avatar_data_uri). */
+ *  (short_bio, nostr_url, streaming_url, website_url, avatar_svg,
+ *  avatar_data_uri). */
 const PROFILE_METADATA_KEYS = [
 	'short_bio',
 	'nostr_url',
-	'blurt_media_url',
+	'streaming_url',
+	'website_url',
 	'avatar_svg',
 	'avatar_data_uri'
 ] as const;

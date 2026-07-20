@@ -418,8 +418,6 @@ const ALLOW_LIST: AllowEntry[] = [
 	{ key: 'post_order.form.price_model_fiat_placeholder', locale: 'fr', reason: '(b) "fiat" loanword' },
 	{ key: 'post_order.form.price_model_fiat_placeholder', locale: 'it', reason: '(b) "fiat" loanword' },
 	{ key: 'post_order.form.price_model_fiat_placeholder', locale: 'pl', reason: '(b) "fiat" loanword' },
-	// Brand-prefix labels
-	{ key: 'settings.blurt_media_url.label', locale: 'fr', reason: '(c) brand+protocol' },
 	// run_a_node terms
 	{ key: 'run_a_node.key_terms.term_indexer', locale: 'it', reason: '(b) "indexer" Italian tech loanword' },
 	{ key: 'run_a_node.key_terms.term_indexer', locale: 'pl', reason: '(b) "indexer" Polish tech loanword' },
@@ -1065,7 +1063,58 @@ const ALLOW_LIST: AllowEntry[] = [
 	// by correct German usage, not a miss: "Element" is a German cognate, and
 	// "Link" is the standard German loanword for a hyperlink (der Link).
 	{ key: 'post_order.terms_md_guide.col_element', locale: 'de', reason: '(a) "Element" is a German cognate — spelled identically to English' },
-	{ key: 'post_order.terms_md_guide.el_link', locale: 'de', reason: '(b) "Link" is the standard German loanword for a hyperlink (der Link)' }
+	{ key: 'post_order.terms_md_guide.el_link', locale: 'de', reason: '(b) "Link" is the standard German loanword for a hyperlink (der Link)' },
+	// ─── FAQ glossary acronyms (2026-07-19, Ken): the 12 technical
+	//     acronyms added as glossary terms have TITLES equal to the
+	//     acronym itself (ECIES / X25519 / TLS / …). Acronyms are not
+	//     translated, so the title is byte-identical to English in every
+	//     locale by design — exactly like the Blurt key-role identifiers
+	//     above. The BODIES are fully translated. (c) invariant.
+	{ key: 'glossary.aead.title', locale: 'de', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
+	{ key: 'glossary.aead.title', locale: 'es', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
+	{ key: 'glossary.aead.title', locale: 'fr', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
+	{ key: 'glossary.dns.title', locale: 'de', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
+	{ key: 'glossary.dns.title', locale: 'es', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
+	{ key: 'glossary.dns.title', locale: 'fr', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
+	{ key: 'glossary.ecdh.title', locale: 'de', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
+	{ key: 'glossary.ecdh.title', locale: 'es', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
+	{ key: 'glossary.ecdh.title', locale: 'fr', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
+	{ key: 'glossary.ecies.title', locale: 'de', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
+	{ key: 'glossary.ecies.title', locale: 'es', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
+	{ key: 'glossary.ecies.title', locale: 'fr', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
+	{ key: 'glossary.ens.title', locale: 'de', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
+	{ key: 'glossary.ens.title', locale: 'es', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
+	{ key: 'glossary.ens.title', locale: 'fr', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
+	{ key: 'glossary.ipfs.title', locale: 'de', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
+	{ key: 'glossary.ipfs.title', locale: 'es', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
+	{ key: 'glossary.ipfs.title', locale: 'fr', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
+	{ key: 'glossary.mcp.title', locale: 'de', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
+	{ key: 'glossary.mcp.title', locale: 'es', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
+	{ key: 'glossary.mcp.title', locale: 'fr', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
+	{ key: 'glossary.p2p.title', locale: 'de', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
+	{ key: 'glossary.p2p.title', locale: 'es', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
+	{ key: 'glossary.p2p.title', locale: 'fr', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
+	{ key: 'glossary.pwa.title', locale: 'de', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
+	{ key: 'glossary.pwa.title', locale: 'es', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
+	{ key: 'glossary.pwa.title', locale: 'fr', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
+	{ key: 'glossary.rss.title', locale: 'de', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
+	{ key: 'glossary.rss.title', locale: 'es', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
+	{ key: 'glossary.rss.title', locale: 'fr', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
+	{ key: 'glossary.tls.title', locale: 'de', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
+	{ key: 'glossary.tls.title', locale: 'es', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
+	{ key: 'glossary.tls.title', locale: 'fr', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
+	{ key: 'glossary.x25519.title', locale: 'de', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
+	{ key: 'glossary.x25519.title', locale: 'es', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
+	{ key: 'glossary.x25519.title', locale: 'fr', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
+	// Website / Streaming profile cards (cp506)
+	{ key: 'footer.globe', locale: 'de', reason: '(b) "Website" is a German loanword, spelled identically to English' },
+	{ key: 'identity.website_link_tooltip', locale: 'de', reason: '(b) "Website" is a German loanword, spelled identically to English' },
+	{ key: 'footer.play', locale: 'de', reason: '(b) "Streaming" is a loanword, spelled identically to English' },
+	{ key: 'footer.play', locale: 'es', reason: '(b) "Streaming" is a loanword, spelled identically to English' },
+	{ key: 'footer.play', locale: 'fr', reason: '(b) "Streaming" is a loanword, spelled identically to English' },
+	{ key: 'settings.website_url.placeholder', locale: 'de', reason: '(c) "https://..." URL placeholder template — invariant across locales' },
+	{ key: 'settings.website_url.placeholder', locale: 'es', reason: '(c) "https://..." URL placeholder template — invariant across locales' },
+	{ key: 'settings.website_url.placeholder', locale: 'fr', reason: '(c) "https://..." URL placeholder template — invariant across locales' }
 ];
 
 const allowSet = new Set(ALLOW_LIST.map((e) => `${e.key}::${e.locale}`));

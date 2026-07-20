@@ -443,6 +443,47 @@ function collectMorphitOps(block: BlockHeader, trxIds: readonly string[]): Morph
  *  the caller owns (the poller's per-block tx). Individual handler
  *  rejections are logged and swallowed; only unexpected exceptions
  *  bubble up (and get rolled back by the caller). */
+/**
+ * Stable-sort a block's located ops so admission-AFFECTING ops run before
+ * admission-CONSUMING ops (chat_v1) within the SAME block. Blurt does not
+ * order the transactions in a block by dependency, so a user can pay a
+ * stranger-fee — or post the very order they are then messaged about — in one
+ * tx and have the chat land in an EARLIER tx of the same block. Without this
+ * reordering the chat handler runs first and hard-rejects a message that
+ * should have been admitted.
+ *
+ * Three admission signals gate a first-contact chat, so each of their
+ * source-ops must be materialised before chat_v1 runs:
+ *   - block_v1        → Layer 1, the recipient's block list.
+ *   - stranger_fee_v1 → Layer 2, the paid-fee bypass.
+ *   - order_v1        → the Q11 order bypass: a first message about a LIVE
+ *                       order the recipient owns is admitted without a fee.
+ *                       order_v1 was previously OMITTED from this set, so a
+ *                       same-block "post order + first message about it" could
+ *                       run chat_v1 before the order existed in the DB and
+ *                       reject the message with `order_permlink_not_found` —
+ *                       dropping it permanently and suppressing its
+ *                       notification. Including order_v1 closes that race
+ *                       (the chat_v1 order-tag bug: first message to a brand-
+ *                       new order was lost + never notified).
+ *
+ * Stable sort (ES2019) preserves (trxInBlock, opInTrx) order within each
+ * class, so stranger-fee escalation and block/unblock pairs from the same
+ * sender in one block still honor chronological order.
+ */
+export const PRE_CHAT_ADMISSION_OP_IDS: ReadonlySet<string> = new Set([
+	OP_IDS.block,
+	OP_IDS.strangerFee,
+	OP_IDS.order
+]);
+
+export function sortOpsForAdmission<T extends { op: { id: string } }>(located: readonly T[]): T[] {
+	const priority = (opId: string): number => (PRE_CHAT_ADMISSION_OP_IDS.has(opId) ? 0 : 1);
+	// Array.prototype.sort is stable per ES2019, so equal-priority ops keep
+	// their original (trxInBlock, opInTrx) order.
+	return [...located].sort((a, b) => priority(a.op.id) - priority(b.op.id));
+}
+
 export async function applyBlock(
 	client: pg.PoolClient,
 	blockNum: number,
@@ -512,32 +553,11 @@ export async function applyBlock(
 
 	const located = collectMorphitOps(block, block.transaction_ids);
 
-	// Per Finding A9: stable-sort located ops so admission-
-	// affecting ops (block_v1, stranger_fee_v1) run before
-	// admission-consuming ops (chat_v1).  Without this, a same-
-	// block race where the user pays a stranger-fee in tx_A and
-	// broadcasts the chat in tx_B can land tx_B before tx_A —
-	// chat handler runs first, sees no stranger_fees row yet,
-	// rejects with `stranger_fee_required`.  The user paid the
-	// fee but their first message is silently dropped.
-	//
-	// Three priority classes:
-	//   0 = admission-affecting (block_v1, stranger_fee_v1)
-	//   1 = everything else (the default)
-	//
-	// Stable sort preserves (trxInBlock, opInTrx) order within
-	// each class, so escalation between multiple stranger-fees
-	// from the same sender in one block still applies correctly,
-	// and a block_v1/unblock_v1 pair from the same user in one
-	// block honors chronological order.
-	const ADMISSION_OP_IDS: ReadonlySet<string> = new Set([OP_IDS.block, OP_IDS.strangerFee]);
-	function priority(opId: string): number {
-		return ADMISSION_OP_IDS.has(opId) ? 0 : 1;
-	}
-	// Array.prototype.sort is stable per ES2019.  Decorating with
-	// the original index would also work, but the spec already
-	// guarantees stability, and we trust the runtime here.
-	const orderedLocated = [...located].sort((a, b) => priority(a.op.id) - priority(b.op.id));
+	// Per Finding A9 (+ the chat_v1 order-tag fix): stable-sort located ops so
+	// admission-AFFECTING ops (block_v1, stranger_fee_v1, order_v1) run before
+	// admission-CONSUMING ops (chat_v1) within a block. See sortOpsForAdmission
+	// above for the full rationale and why order_v1 belongs in the set.
+	const orderedLocated = sortOpsForAdmission(located);
 
 	let applied = 0;
 	let rejected = 0;

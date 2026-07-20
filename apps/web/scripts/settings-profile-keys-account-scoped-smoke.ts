@@ -43,7 +43,7 @@ console.log('\nsettings-profile-keys-account-scoped smoke:\n');
 
 const settings = read(join(webRoot, 'src/routes/[lang]/settings/+page.svelte'));
 
-const bases = ['morphit.displayName', 'morphit.nostrUrl', 'morphit.blurtMediaUrl', 'morphit.shortBio'];
+const bases = ['morphit.displayName', 'morphit.nostrUrl', 'morphit.streamingUrl', 'morphit.websiteUrl', 'morphit.shortBio'];
 
 // 1. The per-account suffix is derived from the logged-in account.
 check(
@@ -88,7 +88,8 @@ check(
 check(
 	'tracks which fields have no local draft for this account',
 	/const noLocalName = !s;/.test(settings) &&
-		/const noLocalBlurtMedia = !bm;/.test(settings) &&
+		/const noLocalStreaming = !bm;/.test(settings) &&
+		/const noLocalWebsite = !ws;/.test(settings) &&
 		/const noLocalBio = !bio;/.test(settings) &&
 		/const noLocalNostr = !n;/.test(settings)
 );
@@ -96,7 +97,8 @@ check(
 	'hydrates empty fields from extractLabelPropsFromProfile',
 	/if \(noLocalName && props\.displayName\)/.test(settings) &&
 		/if \(noLocalBio && props\.shortBio\)/.test(settings) &&
-		/if \(noLocalBlurtMedia && props\.blurtMediaUrl\)/.test(settings) &&
+		/if \(noLocalStreaming && props\.streamingUrl\)/.test(settings) &&
+		/if \(noLocalWebsite && props\.websiteUrl\)/.test(settings) &&
 		/if \(noLocalNostr && props\.nostrUrl\)/.test(settings)
 );
 

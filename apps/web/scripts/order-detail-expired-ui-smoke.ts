@@ -75,16 +75,16 @@ check(
 	!/order\.status === 'live'/.test(detail)
 );
 
-// ─── owner actions: Cancel while live, Re-list once expired ─────────────────
+// ─── owner actions: Cancel while live, Re-list once expired OR cancelled ─────
 check(
-	'owner-actions card shows for live OR expired (not just stored-live)',
-	/\{#if isOwner && \(isOrderLive\(order, nowMs\) \|\| isOrderExpired\(order, nowMs\)\)\}/.test(
+	'owner-actions card shows for live OR expired OR cancelled',
+	/\{#if isOwner && \(isOrderLive\(order, nowMs\) \|\| isOrderExpired\(order, nowMs\) \|\| order\.status === 'cancelled'\)\}/.test(
 		detail
 	)
 );
 check(
-	'expired branch offers Re-list (action_relist), not Cancel',
-	/\{#if isOrderExpired\(order, nowMs\)\}[\s\S]*?action_relist[\s\S]*?\{:else if withinEditWindow/.test(
+	'expired-or-cancelled branch offers Re-list (action_relist), not Cancel',
+	/\{#if isOrderExpired\(order, nowMs\) \|\| order\.status === 'cancelled'\}[\s\S]*?action_relist[\s\S]*?\{:else if withinEditWindow/.test(
 		detail
 	)
 );

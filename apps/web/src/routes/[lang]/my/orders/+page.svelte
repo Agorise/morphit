@@ -1207,6 +1207,20 @@
 								<span class="max-w-[13rem] text-xs text-ink-500 dark:text-ink-400">
 									{$_('my_orders.order.action_relist_hint')}
 								</span>
+							{:else if o.status === 'completed' || paidPermlinks.has(o.permlink)}
+								<!-- Ken — a Paid order can be re-listed too (you sold, and want to
+								     offer the same again): same pre-filled form, fresh permlink,
+								     fresh listing fee.  The paid order itself is immutable on-chain
+								     and stays as it is.  Matches the 'paid' filter's own test
+								     (status 'completed' OR a verified paid permlink); in-progress
+								     live orders are caught by the isLive branch above, so this only
+								     fires on a settled one. -->
+								<BusyButton size="sm" variant="secondary" onclick={() => relistOrder(o)}>
+									{$_('my_orders.order.action_relist')}
+								</BusyButton>
+								<span class="max-w-[13rem] text-xs text-ink-500 dark:text-ink-400">
+									{$_('my_orders.order.action_relist_hint')}
+								</span>
 							{:else if isExpired(o)}
 								<!-- Item 4: Re-list expired orders.  Pre-fills the
 								     post form with the original terms; user can edit,

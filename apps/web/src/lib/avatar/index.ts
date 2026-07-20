@@ -14,7 +14,7 @@
  *
  * Both paths enforce a size budget that fits comfortably inside
  * the 8 KB profile-metadata cap, with headroom for JSON escaping
- * and sibling fields (display_name, nostr_url, blurt_media_url).
+ * and sibling fields (display_name, nostr_url, streaming_url).
  *
  * ─── SVG sanitization, in detail ────────────────────────────────
  *

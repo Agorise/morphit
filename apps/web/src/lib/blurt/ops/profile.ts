@@ -12,7 +12,7 @@
  * the message; the display name is already saved locally.
  *
  * Security note: every free-text field (display_name, nostr_url,
- * blurt_media_url) is run through redactPrivateKeys() before broadcast.
+ * streaming_url) is run through redactPrivateKeys() before broadcast.
  * Same defense-in-depth pattern as buildOrderPayload — no order op or
  * profile op can leak a private key to chain, regardless of what the
  * UI layer did. URL fields are already URL-validated at form time, so
@@ -209,12 +209,16 @@ export interface ProfilePayload {
 	 *  Validated client-side at render time — see IdentityLabel's
 	 *  validateNostrUrl helper. */
 	nostr_url?: string;
-	/** Optional Blurt.media profile URL (https://blurt.media/@…).
-	 *  Stored in json_metadata.blurt_media_url on-chain; surfaces
-	 *  alongside the Nostr link when populated. Validated client-
-	 *  side via validateBlurtMediaUrl — host must be exactly
-	 *  blurt.media, HTTPS only. */
-	blurt_media_url?: string;
+	/** Optional streaming-profile URL (YouTube, Rumble, Blurt.media,
+	 *  Twitch, …). Stored in json_metadata.streaming_url on-chain;
+	 *  surfaces as a play glyph next to the username when populated.
+	 *  Validated client-side via validateWebUrl — any http/https host. */
+	streaming_url?: string;
+	/** Optional website / blog URL (any http/https host). Stored in
+	 *  json_metadata.website_url on-chain; surfaces as a globe link icon
+	 *  next to the username when populated. Validated client-side via
+	 *  validateWebUrl — http/https only, any host, no dangerous schemes. */
+	website_url?: string;
 	/** Optional short bio / tagline (≤128 codepoints, validated by
 	 *  caller via validateShortBio). Stored in json_metadata.short_bio
 	 *  on-chain; surfaces on the account profile page. Free text. */
@@ -294,9 +298,13 @@ export function buildProfileBody(
 		const t = payload.nostr_url.trim();
 		jsonMetadata.nostr_url = t.length > 0 ? redactPrivateKeys(t) : '';
 	}
-	if (payload.blurt_media_url !== undefined) {
-		const t = payload.blurt_media_url.trim();
-		jsonMetadata.blurt_media_url = t.length > 0 ? redactPrivateKeys(t) : '';
+	if (payload.streaming_url !== undefined) {
+		const t = payload.streaming_url.trim();
+		jsonMetadata.streaming_url = t.length > 0 ? redactPrivateKeys(t) : '';
+	}
+	if (payload.website_url !== undefined) {
+		const t = payload.website_url.trim();
+		jsonMetadata.website_url = t.length > 0 ? redactPrivateKeys(t) : '';
 	}
 	if (payload.short_bio !== undefined) {
 		const t = payload.short_bio.trim();

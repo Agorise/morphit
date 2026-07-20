@@ -897,6 +897,24 @@
 								</div>
 							</a>
 						</div>
+						<!-- Star (t.txt #10, moved) — plain gold glyph sitting just LEFT of
+						     the Archive box (no round badge). Gold when starred, faint when not;
+						     clicking toggles the ★ Starred folder. flex-none so it never steals
+						     width from the name/subject; z-10 to sit above the card-wide link;
+						     items-center lines it up with the Archive label. -->
+						<button
+							type="button"
+							onclick={() => handleToggleStar(convo)}
+							aria-pressed={starred}
+							aria-label={starred
+								? ($_('chat.inbox.unstar_aria') as string)
+								: ($_('chat.inbox.star_aria') as string)}
+							class="relative z-10 flex flex-none items-center px-1.5 text-lg leading-none transition-colors {starred
+								? 'text-amber-400 hover:text-amber-500'
+								: 'text-ink-300 hover:text-amber-400 dark:text-ink-500 dark:hover:text-amber-400'}"
+						>
+							{starred ? '★' : '☆'}
+						</button>
 						<!-- Action box (t.txt item 7) — EVERY card has one, on the far
 						     right, full height. "Archive" moves the discussion to the
 						     Archived tab; on an already-archived card it reads "Restore"
@@ -921,26 +939,6 @@
 								{$_('chat.inbox.action_archive')}
 							</button>
 						{/if}
-						<!-- Star badge (t.txt #10) — the discussion's star lives here now: a round
-						     badge tucked into the top-right corner, merged with the card, instead
-						     of a column in the row, so the name/subject/feedback get the full card
-						     width. Gold when starred, faint outline when not; clicking toggles
-						     Starred. Positioned inside the corner (not spilling out) because the
-						     <li> is overflow-hidden for the slide-collapse. z-20 sits above the
-						     card link and the Archive box (z-10). -->
-						<button
-							type="button"
-							onclick={() => handleToggleStar(convo)}
-							aria-pressed={starred}
-							aria-label={starred
-								? ($_('chat.inbox.unstar_aria') as string)
-								: ($_('chat.inbox.star_aria') as string)}
-							class="absolute right-1 top-1 z-20 flex h-6 w-6 items-center justify-center rounded-full border bg-white text-base leading-none shadow-sm transition-colors {starred
-								? 'border-amber-300 text-amber-400 hover:text-amber-500 dark:border-amber-400/50 dark:bg-ink-900'
-								: 'border-ink-200 text-ink-300 hover:text-amber-400 dark:border-ink-700 dark:bg-ink-900 dark:text-ink-400 dark:hover:text-amber-400'}"
-						>
-							{starred ? '★' : '☆'}
-						</button>
 					</li>
 				{/each}
 			{:else}

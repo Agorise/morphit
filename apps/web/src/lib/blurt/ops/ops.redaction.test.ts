@@ -197,13 +197,13 @@ describe('buildProfileBody — redaction chokepoint', () => {
 		assertNoRawKeyAnywhere(body);
 	});
 
-	it('redacts a WIF in blurt_media_url', () => {
+	it('redacts a WIF in streaming_url', () => {
 		const body = buildProfileBody(
-			mkPayload({ blurt_media_url: `https://blurt.media/${FAKE_WIF}` }),
+			mkPayload({ streaming_url: `https://blurt.media/${FAKE_WIF}` }),
 			FIXED_TS
 		);
 		const meta = body.json_metadata as Record<string, unknown>;
-		expect(meta.blurt_media_url).not.toContain(FAKE_WIF);
+		expect(meta.streaming_url).not.toContain(FAKE_WIF);
 		assertNoRawKeyAnywhere(body);
 	});
 
@@ -266,14 +266,14 @@ describe('buildProfileBody — redaction chokepoint', () => {
 
 	it('preserves empty nostr_url as the explicit-clear signal', () => {
 		// cp454 (t.txt #1): present-but-empty ⇒ '' (clear), same as short_bio /
-		// blurt_media_url / avatar_svg. Was previously (wrongly) omitted.
+		// streaming_url / avatar_svg. Was previously (wrongly) omitted.
 		const body1 = buildProfileBody(mkPayload({ nostr_url: '' }), FIXED_TS);
 		expect((body1.json_metadata as Record<string, unknown>).nostr_url).toBe('');
 		const body2 = buildProfileBody(mkPayload({ nostr_url: '   ' }), FIXED_TS);
 		expect((body2.json_metadata as Record<string, unknown>).nostr_url).toBe('');
 	});
 
-	it('trims whitespace around nostr_url / blurt_media_url before redacting', () => {
+	it('trims whitespace around nostr_url / streaming_url before redacting', () => {
 		const body = buildProfileBody(
 			mkPayload({ nostr_url: '  https://iris.to/npub1xyz  ' }),
 			FIXED_TS

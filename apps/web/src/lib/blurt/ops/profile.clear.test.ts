@@ -20,7 +20,7 @@ import { buildProfileBody } from './profile';
  * avatar_data_uri which already behaved this way.
  */
 const TS = 1_700_000_000;
-const TEXT_FIELDS = ['nostr_url', 'blurt_media_url', 'short_bio'] as const;
+const TEXT_FIELDS = ['nostr_url', 'streaming_url', 'short_bio'] as const;
 
 describe('buildProfileBody — clear signal for text fields', () => {
 	it('INCLUDES a cleared field as an empty string (so the indexer clears it)', () => {
@@ -46,32 +46,32 @@ describe('buildProfileBody — clear signal for text fields', () => {
 			{
 				display_name: 'ken',
 				nostr_url: '  npub1abc  ',
-				blurt_media_url: 'https://blurt.media/@ken',
+				streaming_url: 'https://blurt.media/@ken',
 				short_bio: 'agorist'
 			},
 			TS
 		);
 		const meta = body.json_metadata ?? {};
 		expect(meta.nostr_url).toBe('npub1abc');
-		expect(meta.blurt_media_url).toBe('https://blurt.media/@ken');
+		expect(meta.streaming_url).toBe('https://blurt.media/@ken');
 		expect(meta.short_bio).toBe('agorist');
 	});
 
 	it('treats whitespace-only as a clear (trims to empty ⇒ included as "")', () => {
-		const body = buildProfileBody({ display_name: 'ken', blurt_media_url: '   ' }, TS);
+		const body = buildProfileBody({ display_name: 'ken', streaming_url: '   ' }, TS);
 		const meta = body.json_metadata ?? {};
-		expect(meta.blurt_media_url).toBe('');
+		expect(meta.streaming_url).toBe('');
 	});
 
 	it('mixed update: clear one field, set another, leave a third untouched', () => {
-		// User had blurt_media + nostr set; clears blurt_media, keeps nostr,
+		// User had streaming_url + nostr set; clears streaming_url, keeps nostr,
 		// never touched short_bio (undefined).
 		const body = buildProfileBody(
-			{ display_name: 'ken', blurt_media_url: '', nostr_url: 'npub1keep' },
+			{ display_name: 'ken', streaming_url: '', nostr_url: 'npub1keep' },
 			TS
 		);
 		const meta = body.json_metadata ?? {};
-		expect(meta.blurt_media_url).toBe(''); // cleared
+		expect(meta.streaming_url).toBe(''); // cleared
 		expect(meta.nostr_url).toBe('npub1keep'); // set/kept
 		expect(Object.prototype.hasOwnProperty.call(meta, 'short_bio')).toBe(false); // omitted
 	});

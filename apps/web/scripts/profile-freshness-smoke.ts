@@ -98,7 +98,7 @@ check('a prime is held through indexer catch-up (isPrimeHeld + PRIME_HOLD_MS)', 
 check('the hold uses the shared chain constant, not a hand-tuned copy', /import \{ PENDING_TTL_MS \} from '\$lib\/stores\/pendingEcho'/.test(cacheMod));
 check('PENDING_TTL_MS actually outlasts Blurt irreversibility (45-63s)', /export const PENDING_TTL_MS = 150_000/.test(echoMod));
 check('BOTH fetch-resolution branches defer to a held prime (no stale clobber)', (cacheMod.match(/if \(isPrimeHeld\(account\)\)/g) || []).length >= 2);
-check('primeProfile writes exactly the json_metadata keys extractLabelPropsFromProfile reads', /jsonMetadata\.avatar_svg =/.test(cacheMod) && /jsonMetadata\.avatar_data_uri =/.test(cacheMod) && /jsonMetadata\.short_bio =/.test(cacheMod) && /jsonMetadata\.nostr_url =/.test(cacheMod) && /jsonMetadata\.blurt_media_url =/.test(cacheMod));
+check('primeProfile writes exactly the json_metadata keys extractLabelPropsFromProfile reads', /jsonMetadata\.avatar_svg =/.test(cacheMod) && /jsonMetadata\.avatar_data_uri =/.test(cacheMod) && /jsonMetadata\.short_bio =/.test(cacheMod) && /jsonMetadata\.nostr_url =/.test(cacheMod) && /jsonMetadata\.streaming_url =/.test(cacheMod) && /jsonMetadata\.website_url =/.test(cacheMod));
 check('clearing the cache also drops the prime hold (no stale-prime leak)', /primedAt\.clear\(\)/.test(cacheMod) && /primedAt\.delete\(account\)/.test(cacheMod));
 
 check('settings imports primeProfile', /import \{ primeProfile \} from '\$lib\/indexer\/profileCache'/.test(settings));

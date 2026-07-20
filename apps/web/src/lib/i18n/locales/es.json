@@ -257,7 +257,7 @@
 		"help_support": "Ayuda y soporte",
 		"sign_out_modal": {
 			"title": "¿Cerrar sesión de Morphit?",
-			"body": "Necesitarás tu frase de 12 palabras, tu keyfile o tu clave de Blurt para volver a iniciar sesión. Tus claves de publicación y memo se borrarán de esta sesión.\n\nTus datos on-chain, órdenes y reputación no se ven afectados — viven en Blurt, no en este navegador.",
+			"body": "Necesitarás tu frase de 12 palabras, tu keyfile o tu clave de Blurt para volver a iniciar sesión. Tus claves de publicación y memo se borrarán de esta sesión.\n\nTus datos on-chain, órdenes y reputación no se ven afectados — viven on-chain, no en este navegador.",
 			"confirm": "Cerrar sesión",
 			"cancel": "Mantener sesión",
 			"confirm_pending": "Cerrando sesión…"
@@ -728,14 +728,14 @@
 			"you": "Tú",
 			"encrypted": "(mensaje cifrado)",
 			"no_messages": "Aún no hay mensajes.",
-			"subtitle": "Conversación cifrada de extremo a extremo, anclada en la cadena de bloques Blurt.",
+			"subtitle": "Conversación cifrada de extremo a extremo, anclada en la cadena de bloques.",
 			"parties_heading": "Partes",
 			"posting_key_label": "Clave de publicación",
 			"verify_heading": "Cómo verificar este registro",
 			"verify_body": "Cada mensaje a continuación es una entrada permanente en la cadena de bloques pública Blurt, firmada criptográficamente por la cuenta del remitente. El código «Prueba en la cadena de bloques» de cada mensaje es su ID de transacción: cualquiera puede pegarlo en un explorador de bloques de Blurt (por ejemplo, blocks.blurtwallet.com) para confirmar que esta cuenta exacta envió un mensaje a la otra en el momento indicado. El texto mostrado es el mensaje privado, descifrado con las claves de la cuenta indicada arriba. Como cada prueba reside en un libro público y permanente, este registro no puede alterarse en secreto: cambiar cualquier línea aquí ya no coincidiría con la cadena de bloques.",
 			"proof_label": "Prueba en la cadena de bloques",
 			"pending_label": "confirmación pendiente",
-			"footer": "Registro de chat de Morphit — bloqueado, solo lectura. Verifique cada mensaje en un explorador de bloques de Blurt."
+			"footer": "Registro de chat de Morphit — bloqueado, solo lectura. Verifique cada mensaje en un explorador de bloques."
 		},
 		"pay_prefill": {
 			"hint": "El mínimo de la orden es {min} {fiat} (≈ {amount} {asset}).",
@@ -981,7 +981,7 @@
 			"submit": "Buscar",
 			"hint": "Los nombres de cuenta empiezan con una letra. Los ID de transacción son 40 caracteres hex. Los números de bloque son enteros positivos.",
 			"error_invalid": "Esa entrada no se pudo convertir en una búsqueda válida.",
-			"error_unknown": "No pude identificar qué es eso. Prueba con un usuario de Blurt, ID de transacción o número de bloque.",
+			"error_unknown": "No pude identificar qué es eso. Prueba con un usuario, ID de transacción o número de bloque.",
 			"delay_notice": "¿Acabas de hacer una transacción? Puede tardar hasta un minuto en aparecer. Abre la cuenta y toca actualizar para cargar lo último de la cadena."
 		},
 		"nav": {
@@ -989,7 +989,7 @@
 			"activity_title": "Actividad",
 			"activity_description": "Volumen de operaciones y anuncios activos.",
 			"fallback_title": "blocks.blurtwallet.com",
-			"fallback_description": "Explorador Blurt independiente."
+			"fallback_description": "Explorador de bloques independiente."
 		},
 		"account": {
 			"loading": "Cargando cuenta…",
@@ -1236,7 +1236,7 @@
 			},
 			"who_runs_it": {
 				"q": "¿Quién gestiona Morphit?",
-				"a": "El proyecto es de código abierto; el indexador, el relay de publicación y el bot de soporte los puede operar cualquiera. La instancia morphit.io la opera Agorise (cuatro agorists frikis), pero todo el diseño asume que morphit.io podría caer — tu app sigue funcionando desde la caché, desde espejos, desde Tor o desde Lokinet."
+				"a": "El proyecto es de código abierto; el indexador, el relay de publicación y el bot de soporte los puede operar cualquiera. La instancia morphit.io la opera Agorise (cuatro agorists frikis), pero todo el diseño asume que morphit.io podría caer — tu app sigue funcionando desde la caché, desde espejos, desde Tor, desde I2P o desde Lokinet."
 			},
 			"run_your_own": {
 				"q": "¿Puedo ejecutar mi propio Morphit?",
@@ -1244,7 +1244,7 @@
 			},
 			"security_attack_vectors": {
 				"q": "¿Es Morphit vulnerable a ataques, robo de datos o bloqueos?",
-				"a": "La mejor defensa es el diseño mismo. Morphit no es custodial — tus claves privadas de Blurt nunca salen de tu dispositivo y nunca se transmiten a nuestros servidores, por lo que no hay una base de datos de claves que alguien pueda robar. No hay cuentas, ni contraseñas, ni sesiones, ni estado de inicio de sesión, lo que significa que no existe phishing de credenciales, secuestro de sesiones ni toma de cuentas. No recopilamos KYC ni registramos IPs, así que no hay una base de datos de información personal que pueda ser filtrada o requerida por orden judicial. La lista de órdenes vive en la blockchain — cualquier usuario puede ejecutar su propio indexador y su propio frontend — por lo que la censura y los bloqueos no pueden eliminar órdenes, solo ocultarlas de un espejo en particular. Las superficies de ataque web estándar (XSS, CSRF, SSRF, RCE, inyección SQL, contaminación de parámetros) se abordan mediante una combinación de encabezados CSP estrictos, listas CORS de origen exacto, cuerpos de solicitud validados por esquema con longitudes de campo acotadas, sin eval ni código dinámico, sin consultas de base de datos del lado del servidor sobre la entrada del usuario, y un servicio de retransmisión que solo habla con endpoints RPC preconfigurados. Tampoco usamos PHP, WordPress, xmlrpc.php ni una capa OAuth, por lo que clases enteras de vulnerabilidades que afectan a otras plataformas simplemente no aplican aquí. El DDoS volumétrico (a nivel de red) está fuera del alcance de cualquier aplicación — eso corresponde al proveedor del VPS o a un servicio de mitigación upstream — pero el abuso a nivel de aplicación se mitiga con límites de velocidad por IP, tope de 64 KiB en el cuerpo de las solicitudes, y techos ajustados de recursos. El modelo de amenazas completo está documentado en SECURITY.md y ADR-0006 en el repositorio del proyecto."
+				"a": "La mejor defensa es el diseño mismo. Morphit no es custodial — tus claves privadas nunca salen de tu dispositivo y nunca se transmiten a nuestros servidores, por lo que no hay una base de datos de claves que alguien pueda robar. No hay cuentas, ni contraseñas, ni sesiones, ni estado de inicio de sesión, lo que significa que no existe phishing de credenciales, secuestro de sesiones ni toma de cuentas. No recopilamos KYC ni registramos IPs, así que no hay una base de datos de información personal que pueda ser filtrada o requerida por orden judicial. La lista de órdenes vive en la blockchain — cualquier usuario puede ejecutar su propio indexador y su propio frontend — por lo que la censura y los bloqueos no pueden eliminar órdenes, solo ocultarlas de un espejo en particular. Las superficies de ataque web estándar (XSS, CSRF, SSRF, RCE, inyección SQL, contaminación de parámetros) se abordan mediante una combinación de encabezados CSP estrictos, listas CORS de origen exacto, cuerpos de solicitud validados por esquema con longitudes de campo acotadas, sin eval ni código dinámico, sin consultas de base de datos del lado del servidor sobre la entrada del usuario, y un servicio de retransmisión que solo habla con endpoints RPC preconfigurados. Tampoco usamos PHP, WordPress, xmlrpc.php ni una capa OAuth, por lo que clases enteras de vulnerabilidades que afectan a otras plataformas simplemente no aplican aquí. El DDoS volumétrico (a nivel de red) está fuera del alcance de cualquier aplicación — eso corresponde al proveedor del VPS o a un servicio de mitigación upstream — pero el abuso a nivel de aplicación se mitiga con límites de velocidad por IP, tope de 64 KiB en el cuerpo de las solicitudes, y techos ajustados de recursos. El modelo de amenazas completo está documentado en SECURITY.md y ADR-0006 en el repositorio del proyecto."
 			},
 			"security_engineering_rigor": {
 				"q": "¿Qué tan riguroso es el proceso de revisión de seguridad de Morphit?",
@@ -1320,7 +1320,7 @@
 			},
 			"why_chat_on_chain": {
 				"q": "¿Por qué el chat está en la blockchain en vez de un servidor normal?",
-				"a": "Dos razones: no depender de la infraestructura de Morphit, y durabilidad a nivel de cadena.\n\nSi el chat corriera en un servidor de Morphit:\n\n• Morphit podría ser obligado a entregar ciphertexts por cualquier autoridad con jurisdicción. Sigue estando cifrado de extremo a extremo, así que el contenido está a salvo, pero los metadatos — quién chateó con quién y cuándo — no.\n\n• Si Morphit se cae (DDoS, acción legal, quiebra) el chat se cae. Para una operación de dos días donde comprador y vendedor necesitan comunicarse, eso es un riesgo real.\n\n• Los operadores dependerían de un servicio centralizado para tener funcionalidad de chat, socavando el punto de que Morphit sea pluggable por operador.\n\nEl chat on-chain en cambio significa:\n\n• Cualquier indexer puede servir los mensajes. Si el indexer por defecto de Morphit es inalcanzable, un usuario puede apuntar su cliente a otro.\n\n• Los ciphertexts son inmutables una vez confirmados. Nadie puede editarlos o censurarlos retroactivamente.\n\n• Hay una sola fuente de verdad. Sin dolores de cabeza de sincronización entre la copia de Morphit y la tuya.\n\nEl compromiso es la latencia de bloque: los mensajes se confirman en ~3 segundos (tiempo de bloque de Blurt) en vez de al instante. Para coordinar una operación — el caso de uso principal — está bien. Para chat casual en tiempo real, es un retraso semi-perceptible."
+				"a": "Dos razones: no depender de la infraestructura de Morphit, y durabilidad a nivel de cadena.\n\nSi el chat corriera en un servidor de Morphit:\n\n• Morphit podría ser obligado a entregar ciphertexts por cualquier autoridad con jurisdicción. Sigue estando cifrado de extremo a extremo, así que el contenido está a salvo, pero los metadatos — quién chateó con quién y cuándo — no.\n\n• Si Morphit se cae (DDoS, acción legal, quiebra) el chat se cae. Para una operación de dos días donde comprador y vendedor necesitan comunicarse, eso es un riesgo real.\n\n• Los operadores dependerían de un servicio centralizado para tener funcionalidad de chat, socavando el punto de que Morphit sea pluggable por operador.\n\nEl chat on-chain en cambio significa:\n\n• Cualquier indexer puede servir los mensajes. Si el indexer por defecto de Morphit es inalcanzable, un usuario puede apuntar su cliente a otro.\n\n• Los ciphertexts son inmutables una vez confirmados. Nadie puede editarlos o censurarlos retroactivamente.\n\n• Hay una sola fuente de verdad. Sin dolores de cabeza de sincronización entre la copia de Morphit y la tuya.\n\nEl compromiso es la latencia de bloque: los mensajes se confirman en ~3 segundos (el tiempo de bloque de la cadena) en vez de al instante. Para coordinar una operación — el caso de uso principal — está bien. Para chat casual en tiempo real, es un retraso semi-perceptible."
 			},
 			"kyc_requirement": {
 				"q": "¿Morphit requiere KYC, verificación de identidad o documento oficial?",
@@ -1384,11 +1384,11 @@
 			},
 			"rogue_operator": {
 				"q": "¿Si un operador malo empieza a mentirle a los usuarios, pueden cerrarlo?",
-				"a": "Respuesta corta: **no**, y es una característica, no un error.\n\nCualquiera puede montar una instancia de Morphit. Pagan su propio servidor, corren el código de fuente abierta, leen la blockchain pública. No hay autoridad central que apruebe operadores o pueda tumbarlos. Nadie les dio una licencia que podamos revocar.\n\nEspecíficamente, no podemos: (1) hacer que su servidor se detenga — no tenemos acceso, (2) bloquear que los usuarios los alcancen — no hay puerta central, (3) impedirles leer Blurt — es público, (4) impedir que cobren comisiones de operador si los usuarios publican a través de su frontend — el protocolo trata a todos los operadores igual, (5) demandarlos — son anónimos, sin KYC, sin jurisdicción, sin empresa.\n\nLo que **sí** podemos hacer es **advertir** a los usuarios. Si un operador sirve datos falsos, corre un clon phishing, o miente sobre el estado en cadena, se lo decimos a la gente por los canales que controlamos: nuestra página principal, Matrix (`#agorise:matrix.org`), la cuenta `@morphit` en Blurt, la release-op firmada en la cadena. Los usuarios leen esas fuentes y deciden por sí mismos en qué instancia confiar.\n\nTambién publicamos herramientas para que los usuarios verifiquen una instancia por sí mismos: el hash del bundle del sitio está firmado en cadena; cualquier instancia que sirva un bundle alterado no coincidirá visiblemente.\n\nEl encuadre honesto: \"detener\" no es el objetivo, porque si pudiéramos detener a un operador rebelde, un gobierno podría presionarnos para detener a uno bueno. En el momento en que existe un apagado central, la resistencia a la censura muere. El objetivo es **verdad** — darle a los usuarios la información para elegir bien.\n\nLa consecuencia práctica: **un operador con mejor aspecto y mejor tiempo en línea debería conseguir más usuarios y ganar más que morphit.io**. Eso es correcto. Ese es el mercado funcionando. Mantenemos morphit.io valioso haciéndolo realmente mejor, no bloqueando competidores."
+				"a": "Respuesta corta: **no**, y es una característica, no un error.\n\nCualquiera puede montar una instancia de Morphit. Pagan su propio servidor, corren el código de fuente abierta, leen la blockchain pública. No hay autoridad central que apruebe operadores o pueda tumbarlos. Nadie les dio una licencia que podamos revocar.\n\nEspecíficamente, no podemos: (1) hacer que su servidor se detenga — no tenemos acceso, (2) bloquear que los usuarios los alcancen — no hay puerta central, (3) impedirles leer la blockchain — es público, (4) impedir que cobren comisiones de operador si los usuarios publican a través de su frontend — el protocolo trata a todos los operadores igual, (5) demandarlos — son anónimos, sin KYC, sin jurisdicción, sin empresa.\n\nLo que **sí** podemos hacer es **advertir** a los usuarios. Si un operador sirve datos falsos, corre un clon phishing, o miente sobre el estado en cadena, se lo decimos a la gente por los canales que controlamos: nuestra página principal, Matrix (`#agorise:matrix.org`), la cuenta `@morphit` en Blurt, la release-op firmada en la cadena. Los usuarios leen esas fuentes y deciden por sí mismos en qué instancia confiar.\n\nTambién publicamos herramientas para que los usuarios verifiquen una instancia por sí mismos: el hash del bundle del sitio está firmado en cadena; cualquier instancia que sirva un bundle alterado no coincidirá visiblemente.\n\nEl encuadre honesto: \"detener\" no es el objetivo, porque si pudiéramos detener a un operador rebelde, un gobierno podría presionarnos para detener a uno bueno. En el momento en que existe un apagado central, la resistencia a la censura muere. El objetivo es **verdad** — darle a los usuarios la información para elegir bien.\n\nLa consecuencia práctica: **un operador con mejor aspecto y mejor tiempo en línea debería conseguir más usuarios y ganar más que morphit.io**. Eso es correcto. Ese es el mercado funcionando. Mantenemos morphit.io valioso haciéndolo realmente mejor, no bloqueando competidores."
 			},
 			"xmr_txid": {
 				"q": "¿Qué es un TxID de Monero y dónde lo encuentro?",
-				"a": "Un TxID de Monero (ID de transacción) es una cadena hexadecimal de 64 caracteres que identifica de forma única una transacción en la cadena XMR. Se ve así: `c1a2b3…deadbeef`. Morphit te pide un TxID cuando necesitas probar que enviaste o recibiste un pago en Monero — por ejemplo, para atestiguar que la transferencia XMR reclamada por tu contraparte realmente ocurrió.\n\nDónde encontrarlo:\n• En la **Monero GUI wallet**: abre Transacciones, haz clic en la transacción que quieres, el TxID es la cadena hexadecimal larga arriba del panel de detalles. Botón de copiar justo ahí.\n• En **Cake Wallet / Monero.com móvil**: toca la transacción en tu historial; el TxID aparece arriba con icono de copiar.\n• En **Feather Wallet**: pestaña Transactions → clic derecho o toca una fila → Copy → Transaction ID.\n• En **monero-wallet-cli línea de comandos**: el TxID se imprime cuando ejecutas `show_transfers out` — es el hex largo después de la fecha.\n\nEl TxID es información pública (es visible para cualquiera con un explorador blockchain). Publicarlo en Morphit para atestiguar una operación NO revela quién eres, tu view key ni tu saldo — sólo que ocurrió una transacción específica.\n\n**Una nota honesta para los maximalistas de la privacidad.** Si decides pagar tu *tarifa de publicación* en Monero, el TxID de esa transacción de tarifa queda registrado en tu operación de orden en la blockchain pública (para que cualquier indexador pueda verificar la tarifa sin la clave de vista de la tesorería). Ese es el único lugar donde un TxID de Monero toca Blurt — y es una tarifa de ~0,25 USD a la dirección pública de la tesorería, nunca la liquidación real de tu intercambio (el XMR que vendes a una contraparte se mueve de igual a igual y nunca toca Blurt). Si quieres *cero* vínculo entre Monero y la blockchain, simplemente paga tu tarifa de publicación en BLURT — es la opción predeterminada, cuesta la mitad y no se difunde ningún TxID de Monero."
+				"a": "Un TxID de Monero (ID de transacción) es una cadena hexadecimal de 64 caracteres que identifica de forma única una transacción en la cadena XMR. Se ve así: `c1a2b3…deadbeef`. Morphit te pide un TxID cuando necesitas probar que enviaste o recibiste un pago en Monero — por ejemplo, para atestiguar que la transferencia XMR reclamada por tu contraparte realmente ocurrió.\n\nDónde encontrarlo:\n• En la **Monero GUI wallet**: abre Transacciones, haz clic en la transacción que quieres, el TxID es la cadena hexadecimal larga arriba del panel de detalles. Botón de copiar justo ahí.\n• En **Cake Wallet / Monero.com móvil**: toca la transacción en tu historial; el TxID aparece arriba con icono de copiar.\n• En **Feather Wallet**: pestaña Transactions → clic derecho o toca una fila → Copy → Transaction ID.\n• En **monero-wallet-cli línea de comandos**: el TxID se imprime cuando ejecutas `show_transfers out` — es el hex largo después de la fecha.\n\nEl TxID es información pública (es visible para cualquiera con un explorador blockchain). Publicarlo en Morphit para atestiguar una operación NO revela quién eres, tu view key ni tu saldo — sólo que ocurrió una transacción específica.\n\n**Una nota honesta para los maximalistas de la privacidad.** Si decides pagar tu *tarifa de publicación* en Monero, el TxID de esa transacción de tarifa queda registrado en tu operación de orden en la blockchain pública (para que cualquier indexador pueda verificar la tarifa sin la clave de vista de la tesorería). Ese es el único lugar donde un TxID de Monero toca la cadena de Blurt — y es una tarifa de ~0,25 USD a la dirección pública de la tesorería, nunca la liquidación real de tu intercambio (el XMR que vendes a una contraparte se mueve de igual a igual y nunca toca la cadena de Blurt). Si quieres *cero* vínculo entre Monero y la blockchain, simplemente paga tu tarifa de publicación en BLURT — es la opción predeterminada, cuesta la mitad y no se difunde ningún TxID de Monero."
 			},
 			"xmr_tx_proof": {
 				"q": "¿Qué es una prueba de transacción Monero (tx_proof) y por qué la pide Morphit?",
@@ -1488,11 +1488,11 @@
 			},
 			"chat_dispute_recourse": {
 				"q": "Si después discrepo con mi contraparte, ¿puedo demostrar lo que acordamos en el chat?",
-				"a": "Sí — porque el chat de Morphit vive en la blockchain, ambos tienen un registro criptográfico permanente de cada mensaje enviado. El texto cifrado es inmutable una vez confirmado; nadie puede editar o borrar silenciosamente lo que se dijo.\n\n**Lo que esto te da:**\n\n• **Un rastro verificable.** Cada mensaje tiene un número de bloque, una marca de tiempo y una firma con la clave de publicación del remitente. No hay debate sobre si un mensaje específico fue enviado en un momento específico.\n\n• **Descifrado a demanda.** Tanto tú como tu contraparte pueden descifrar toda la conversación en cualquier momento — las claves no caducan. Si más tarde necesitas mostrar a un mediador, amigo de confianza, contador, o incluso un tribunal de menor cuantía lo que se acordó, puedes exportar el texto plano desde tu lado.\n\n• **Sin intermediación de operadores.** Como el chat está en la cadena y no en un servidor de Morphit, ningún operador o administrador puede revelar u ocultar partes selectivamente del registro. Lo que está ahí, está ahí para todos los que tengan una clave de descifrado.\n\n**Lo que esto NO te da:**\n\n• **Sin arbitraje automático.** Morphit no tiene servicio al cliente, ni equipo de resolución de disputas, ni depósito en garantía. Tener la evidencia no obliga a la otra parte a respetarla. Mira '¿Por qué no hay servicio de depósito o arbitraje?' para entender por qué es deliberado.\n\n• **Sin divulgación forzada.** Tu contraparte no puede ser obligada a descifrar su lado de la conversación. El registro es simétrico — si se niegan a cooperar, aún tienes tu copia, pero no puedes desbloquear la suya.\n\n• **Sin precedente vinculante.** Un registro de chat es evidencia, no un contrato. Si un tribunal o mediador lo valora depende de su jurisdicción y la naturaleza de la disputa.\n\n**Consejo práctico.** Para cualquier operación lo bastante grande como para que una disputa importe, usa el chat para toda la negociación: confirma por escrito el activo, la cantidad, el método de pago, y cualquier término especial antes de que alguien transfiera algo. Los mensajes breves que fijan los términos exactos son más útiles después que largas conversaciones casuales.\n\nSi quieres que tu registro sea legible para personas fuera de Morphit, puedes pegar extractos de mensajes descifrados (con marcas de tiempo y números de bloque) en un correo o documento — el número de bloque es el ancla que cualquier otra persona puede verificar de forma independiente contra Blurt.\n\n**Exportación lista para un tribunal, con un toque.** No tienes que copiar y pegar nada de esto a mano. Abre el menú ⋯ de la conversación y elige «Exportar chat»: Morphit genera un PDF bloqueado (solo ver / imprimir / copiar, sin edición) con cada mensaje, su marca de tiempo UTC y su ID de transacción de Blurt como «Prueba en la cadena de bloques» reverificable, además de una página en lenguaje sencillo que guía a un mediador o a un tribunal de menor cuantía para comprobar cada línea contra la cadena pública. No puede obligar a una contraparte deshonesta a actuar bien, pero reemplaza el «él dijo / ella dijo» por un registro hecho para sostenerse fuera de Morphit."
+				"a": "Sí — porque el chat de Morphit vive en la blockchain, ambos tienen un registro criptográfico permanente de cada mensaje enviado. El texto cifrado es inmutable una vez confirmado; nadie puede editar o borrar silenciosamente lo que se dijo.\n\n**Lo que esto te da:**\n\n• **Un rastro verificable.** Cada mensaje tiene un número de bloque, una marca de tiempo y una firma con la clave de publicación del remitente. No hay debate sobre si un mensaje específico fue enviado en un momento específico.\n\n• **Descifrado a demanda.** Tanto tú como tu contraparte pueden descifrar toda la conversación en cualquier momento — las claves no caducan. Si más tarde necesitas mostrar a un mediador, amigo de confianza, contador, o incluso un tribunal de menor cuantía lo que se acordó, puedes exportar el texto plano desde tu lado.\n\n• **Sin intermediación de operadores.** Como el chat está en la cadena y no en un servidor de Morphit, ningún operador o administrador puede revelar u ocultar partes selectivamente del registro. Lo que está ahí, está ahí para todos los que tengan una clave de descifrado.\n\n**Lo que esto NO te da:**\n\n• **Sin arbitraje automático.** Morphit no tiene servicio al cliente, ni equipo de resolución de disputas, ni depósito en garantía. Tener la evidencia no obliga a la otra parte a respetarla. Mira '¿Por qué no hay servicio de depósito o arbitraje?' para entender por qué es deliberado.\n\n• **Sin divulgación forzada.** Tu contraparte no puede ser obligada a descifrar su lado de la conversación. El registro es simétrico — si se niegan a cooperar, aún tienes tu copia, pero no puedes desbloquear la suya.\n\n• **Sin precedente vinculante.** Un registro de chat es evidencia, no un contrato. Si un tribunal o mediador lo valora depende de su jurisdicción y la naturaleza de la disputa.\n\n**Consejo práctico.** Para cualquier operación lo bastante grande como para que una disputa importe, usa el chat para toda la negociación: confirma por escrito el activo, la cantidad, el método de pago, y cualquier término especial antes de que alguien transfiera algo. Los mensajes breves que fijan los términos exactos son más útiles después que largas conversaciones casuales.\n\nSi quieres que tu registro sea legible para personas fuera de Morphit, puedes pegar extractos de mensajes descifrados (con marcas de tiempo y números de bloque) en un correo o documento — el número de bloque es el ancla que cualquier otra persona puede verificar de forma independiente contra la cadena de bloques.\n\n**Exportación lista para un tribunal, con un toque.** No tienes que copiar y pegar nada de esto a mano. Abre el menú ⋯ de la conversación y elige «Exportar chat»: Morphit genera un PDF bloqueado (solo ver / imprimir / copiar, sin edición) con cada mensaje, su marca de tiempo UTC y su ID de transacción en la cadena como «Prueba en la cadena de bloques» reverificable, además de una página en lenguaje sencillo que guía a un mediador o a un tribunal de menor cuantía para comprobar cada línea contra la cadena pública. No puede obligar a una contraparte deshonesta a actuar bien, pero reemplaza el «él dijo / ella dijo» por un registro hecho para sostenerse fuera de Morphit."
 			},
 			"chat_vs_feedback_visibility": {
 				"q": "¿Qué es público y qué es privado en mis operaciones en Morphit?",
-				"a": "Morphit divide tu huella comercial en dos capas muy diferentes, a propósito.\n\n**Privado (cifrado, solo ustedes dos pueden leer):**\n\n• **Mensajes de chat.** El contenido real de lo que discuten — precios, detalles de pago, negociación, contexto personal — está cifrado de extremo a extremo entre tu dispositivo y el de tu contraparte. Los operadores de Morphit, los indexadores y los observadores de la cadena solo ven texto cifrado opaco. Mira '¿Son privados mis chats?' para los detalles criptográficos.\n\n• **Detalles de pago que intercambian.** Números de cuenta bancaria, direcciones cripto, ubicaciones de encuentro, números de teléfono — cualquier cosa que escribas en el chat hereda la protección E2EE del chat.\n\n**Público (texto plano, cualquiera puede leer):**\n\n• **Tus órdenes y sus precios.** Tus entradas del libro de órdenes en vivo son publicaciones en Blurt que cualquiera puede leer sin siquiera usar Morphit. Así funciona el libro de órdenes accesible en todo el mundo.\n\n• **Feedback y reputación.** Calificaciones por estrellas, comentarios de reseñas y respuestas a reseñas son **texto plano en la cadena** y visibles para todos. Esto es deliberado — la reputación solo funciona como señal pública. Mira '¿Se puede editar o eliminar el feedback?' y '¿Quién puede ver las reseñas que he dejado para otros traders?'.\n\n• **Metadatos del chat.** Quién (@scooby) chateó con quién (@dingleberry), cuándo, y aproximadamente qué tan grandes eran los mensajes. El contenido de los mensajes sí está totalmente cifrado; el hecho de la comunicación no.\n\nTodo lo anterior — cifrado privado de chat, feedback público, órdenes públicas — vive en la blockchain y no puede ser editado, eliminado o censurado retroactivamente. La diferencia es quién puede leer el texto plano, no si existe.\n\n**Por qué la asimetría tiene sentido.**\n\nEl chat necesita privacidad para que discutir una operación específica no filtre detalles de pago al mundo. El feedback necesita publicidad para que la reputación sea auditable — una reseña que nadie pudiera leer no valdría como señal de confianza. La permanencia sirve a ambos: el chat permanente te da recurso ante disputas (mira 'Si después discrepo con mi contraparte, ¿puedo demostrar lo que acordamos en el chat?'); el feedback permanente significa que los malos actores no pueden borrar silenciosamente un historial de quejas.\n\nSi quieres que incluso los metadatos de tu comunicación estén ocultos, usa un mensajero seguro dedicado fuera de banda para cualquier cosa sensible más allá de la operación misma."
+				"a": "Morphit divide tu huella comercial en dos capas muy diferentes, a propósito.\n\n**Privado (cifrado, solo ustedes dos pueden leer):**\n\n• **Mensajes de chat.** El contenido real de lo que discuten — precios, detalles de pago, negociación, contexto personal — está cifrado de extremo a extremo entre tu dispositivo y el de tu contraparte. Los operadores de Morphit, los indexadores y los observadores de la cadena solo ven texto cifrado opaco. Mira '¿Son privados mis chats?' para los detalles criptográficos.\n\n• **Detalles de pago que intercambian.** Números de cuenta bancaria, direcciones cripto, ubicaciones de encuentro, números de teléfono — cualquier cosa que escribas en el chat hereda la protección E2EE del chat.\n\n**Público (texto plano, cualquiera puede leer):**\n\n• **Tus órdenes y sus precios.** Tus entradas del libro de órdenes en vivo son publicaciones en la cadena de bloques que cualquiera puede leer sin siquiera usar Morphit. Así funciona el libro de órdenes accesible en todo el mundo.\n\n• **Feedback y reputación.** Calificaciones por estrellas, comentarios de reseñas y respuestas a reseñas son **texto plano en la cadena** y visibles para todos. Esto es deliberado — la reputación solo funciona como señal pública. Mira '¿Se puede editar o eliminar el feedback?' y '¿Quién puede ver las reseñas que he dejado para otros traders?'.\n\n• **Metadatos del chat.** Quién (@scooby) chateó con quién (@dingleberry), cuándo, y aproximadamente qué tan grandes eran los mensajes. El contenido de los mensajes sí está totalmente cifrado; el hecho de la comunicación no.\n\nTodo lo anterior — cifrado privado de chat, feedback público, órdenes públicas — vive en la blockchain y no puede ser editado, eliminado o censurado retroactivamente. La diferencia es quién puede leer el texto plano, no si existe.\n\n**Por qué la asimetría tiene sentido.**\n\nEl chat necesita privacidad para que discutir una operación específica no filtre detalles de pago al mundo. El feedback necesita publicidad para que la reputación sea auditable — una reseña que nadie pudiera leer no valdría como señal de confianza. La permanencia sirve a ambos: el chat permanente te da recurso ante disputas (mira 'Si después discrepo con mi contraparte, ¿puedo demostrar lo que acordamos en el chat?'); el feedback permanente significa que los malos actores no pueden borrar silenciosamente un historial de quejas.\n\nSi quieres que incluso los metadatos de tu comunicación estén ocultos, usa un mensajero seguro dedicado fuera de banda para cualquier cosa sensible más allá de la operación misma."
 			},
 			"how_morphit_protects_me": {
 				"q": "¿Cómo me protege Morphit de los estafadores e impide que obtengan mis claves privadas o datos personales?",
@@ -1676,7 +1676,7 @@
 			},
 			"privacy_coins_onchain": {
 				"q": "¿Cómo mantiene Morphit privadas mis operaciones con monedas de privacidad?",
-				"a": "Morphit opera con varias monedas de privacidad — Monero (XMR), Zcash (ZEC), Pirate Chain (ARRR), Dash (DASH) y Decred (DCR) — y aplica las mismas protecciones de huella en cadena a todas ellas.\n\n**Tu liquidación real nunca toca Blurt.** Cuando operas con una moneda de privacidad, las monedas se mueven de igual a igual entre tu monedero y el de tu contraparte, directamente en la cadena propia de esa moneda. Esa transferencia nunca se difunde, registra ni es visible desde la blockchain que Morphit usa para coordinar. Blurt solo transporta la orden pública (el anuncio) y el chat cifrado de extremo a extremo.\n\n**Lo que la orden revela en Blurt — y lo que le hemos quitado:**\n• La orden es un anuncio, así que su lado/activo/rango de importe/métodos de pago son necesariamente públicos (así te encuentra un comprador). Esto es inherente a cualquier libro de órdenes público.\n• Pero eliminamos todo lo que no tenía que estar ahí: el permlink de la orden ahora es un token aleatorio opaco (`order-…`), no `sell-xmr-usd-…`, así que el nombre del activo ya no se filtra al permlink en cadena, las URLs de la orden, los feeds RSS ni los exploradores. La marca de tiempo de caducidad se redondea al día, para que no pueda identificar el momento exacto en que publicaste. Nunca se adjunta IP, zona horaria, idioma ni huella del navegador — lo que escribes en el formulario \"Publicar ahora\" es todo lo que va a la cadena.\n\n**Variación de importe en cada moneda.** Cuando compartes un importe a recibir en el chat, Morphit añade una pequeña cola aleatoria (hasta la unidad más pequeña de la moneda — piconero para XMR, escala satoshi para las demás) para que el importe en cadena no pueda emparejarse con tu orden publicada. Activado por defecto.\n\n**ZEC, ARRR, DASH y DCR son solo para operar — su TxID nunca aparece en Blurt.** No puedes pagar la tarifa de publicación de Morphit con ellas, y la liquidación es de igual a igual, así que no hay ningún punto en el que el identificador de transacción de esas monedas se escriba en la cadena pública. Para estas cuatro, la historia en cadena es aún más limpia que la de Monero.\n\n**Monero tiene exactamente un contacto entre cadenas opcional, con opción de evitarlo.** XMR es uno de los tres activos (con BLURT y BTC) que *puedes* usar para pagar la pequeña tarifa de publicación; si lo haces, el TxID de ese pago de tarifa se registra en tu orden en Blurt (para que cualquier operador pueda verificar la tarifa con un tx_proof de Monero — sin clave de vista, ver la FAQ del TxID de Monero). Ese es el único lugar donde un TxID de XMR toca Blurt, y es una tarifa de ~0,25 USD a una dirección pública, nunca tu operación. ¿Quieres cero vínculo Monero-Blurt? Paga la tarifa en BLURT — es la opción por defecto y la mitad de precio.\n\nPara la guía completa por moneda consulta /privacy/{asset} (p. ej. /privacy/xmr, /privacy/zec), y el inventario completo de filtraciones está en el catálogo de filtraciones de metadatos del proyecto."
+				"a": "Morphit opera con varias monedas de privacidad — Monero (XMR), Zcash (ZEC), Pirate Chain (ARRR), Dash (DASH) y Decred (DCR) — y aplica las mismas protecciones de huella en cadena a todas ellas.\n\n**Tu liquidación real nunca toca la blockchain.** Cuando operas con una moneda de privacidad, las monedas se mueven de igual a igual entre tu monedero y el de tu contraparte, directamente en la cadena propia de esa moneda. Esa transferencia nunca se difunde, registra ni es visible desde la blockchain que Morphit usa para coordinar. Esa cadena solo transporta la orden pública (el anuncio) y el chat cifrado de extremo a extremo.\n\n**Lo que la orden revela en la cadena — y lo que le hemos quitado:**\n• La orden es un anuncio, así que su lado/activo/rango de importe/métodos de pago son necesariamente públicos (así te encuentra un comprador). Esto es inherente a cualquier libro de órdenes público.\n• Pero eliminamos todo lo que no tenía que estar ahí: el permlink de la orden ahora es un token aleatorio opaco (`order-…`), no `sell-xmr-usd-…`, así que el nombre del activo ya no se filtra al permlink en cadena, las URLs de la orden, los feeds RSS ni los exploradores. La marca de tiempo de caducidad se redondea al día, para que no pueda identificar el momento exacto en que publicaste. Nunca se adjunta IP, zona horaria, idioma ni huella del navegador — lo que escribes en el formulario \"Publicar ahora\" es todo lo que va a la cadena.\n\n**Variación de importe en cada moneda.** Cuando compartes un importe a recibir en el chat, Morphit añade una pequeña cola aleatoria (hasta la unidad más pequeña de la moneda — piconero para XMR, escala satoshi para las demás) para que el importe en cadena no pueda emparejarse con tu orden publicada. Activado por defecto.\n\n**ZEC, ARRR, DASH y DCR son solo para operar — su TxID nunca aparece en la cadena.** No puedes pagar la tarifa de publicación de Morphit con ellas, y la liquidación es de igual a igual, así que no hay ningún punto en el que el identificador de transacción de esas monedas se escriba en la cadena pública. Para estas cuatro, la historia en cadena es aún más limpia que la de Monero.\n\n**Monero tiene exactamente un contacto entre cadenas opcional, con opción de evitarlo.** XMR es uno de los tres activos (con BLURT y BTC) que *puedes* usar para pagar la pequeña tarifa de publicación; si lo haces, el TxID de ese pago de tarifa se registra en tu orden en la cadena (para que cualquier operador pueda verificar la tarifa con un tx_proof de Monero — sin clave de vista, ver la FAQ del TxID de Monero). Ese es el único lugar donde un TxID de XMR toca la cadena de Blurt, y es una tarifa de ~0,25 USD a una dirección pública, nunca tu operación. ¿Quieres cero vínculo entre Monero y la cadena de Blurt? Paga la tarifa en BLURT — es la opción por defecto y la mitad de precio.\n\nPara la guía completa por moneda consulta /privacy/{asset} (p. ej. /privacy/xmr, /privacy/zec), y el inventario completo de filtraciones está en el catálogo de filtraciones de metadatos del proyecto."
 			},
 			"what_is_barter": {
 				"q": "¿Qué es el Trueque en Morphit?",
@@ -1856,7 +1856,9 @@
 		"compare_title": "Mira cómo se compara Morphit con otras opciones",
 		"stats": "Estadísticas",
 		"stats_title": "Estadísticas agregadas de la red en vivo",
-		"contact": "Contacto"
+		"contact": "Contacto",
+		"globe": "Sitio web",
+		"play": "Streaming"
 	},
 	"glossary": {
 		"active_key": {
@@ -1956,6 +1958,54 @@
 		"footnote": "Estas definiciones son deliberadamente cortas. Para respuestas más largas o más técnicas, consulta el {faqOpen}FAQ{faqClose}.",
 		"tooltip": {
 			"open_full": "Abrir entrada completa del glosario"
+		},
+		"aead": {
+			"title": "AEAD",
+			"body": "Cifrado autenticado: cifra el mensaje y a la vez detecta cualquier manipulación, en un solo paso."
+		},
+		"dns": {
+			"title": "DNS",
+			"body": "Domain Name System: el directorio de internet que convierte un nombre como morphit.io en una dirección de servidor."
+		},
+		"ecdh": {
+			"title": "ECDH",
+			"body": "Elliptic-Curve Diffie–Hellman: un método para que dos partes deriven un secreto compartido sin llegar a enviarlo."
+		},
+		"ecies": {
+			"title": "ECIES",
+			"body": "Un esquema estándar para cifrar un mensaje hacia la clave pública de alguien, de modo que solo quien tenga la clave privada correspondiente pueda leerlo."
+		},
+		"ens": {
+			"title": "ENS",
+			"body": "Ethereum Name Service: asocia nombres legibles como morphit.eth con contenido web descentralizado."
+		},
+		"ipfs": {
+			"title": "IPFS",
+			"body": "InterPlanetary File System: una red entre pares que sirve archivos por su hash de contenido en vez de por una dirección de servidor."
+		},
+		"mcp": {
+			"title": "MCP",
+			"body": "Model Context Protocol: un estándar abierto que permite a los asistentes de IA leer datos mediante herramientas bien definidas."
+		},
+		"p2p": {
+			"title": "P2P",
+			"body": "Entre pares (peer-to-peer): los participantes se conectan y operan directamente, sin servidor central ni intermediario."
+		},
+		"pwa": {
+			"title": "PWA",
+			"body": "Progressive Web App: un sitio web que puedes instalar y usar como una app nativa, incluso sin conexión."
+		},
+		"rss": {
+			"title": "RSS",
+			"body": "Un formato estándar de fuente web para suscribirse a las novedades de un sitio — aquí, el feed de órdenes en vivo de Morphit."
+		},
+		"tls": {
+			"title": "TLS",
+			"body": "Transport Layer Security: el cifrado que protege los datos en tránsito — la 'S' de HTTPS."
+		},
+		"x25519": {
+			"title": "X25519",
+			"body": "Una curva elíptica rápida y moderna para el acuerdo de claves: ambas partes calculan un secreto compartido a partir de sus claves públicas."
 		}
 	},
 	"home": {
@@ -2019,8 +2069,10 @@
 		"copy_full_key_aria": "Copiar clave pública completa",
 		"nostr_link_aria": "Visitar el perfil Nostr de este usuario",
 		"nostr_link_tooltip": "Perfil Nostr",
-		"blurt_media_link_aria": "Perfil de Blurt.media (se abre en nueva pestaña)",
-		"blurt_media_link_tooltip": "Abrir el perfil de Blurt.media de este usuario"
+		"streaming_link_aria": "Visita el perfil de streaming de este usuario (se abre en una pestaña nueva)",
+		"streaming_link_tooltip": "Perfil de streaming",
+		"website_link_aria": "Visita el sitio web de este usuario (se abre en una pestaña nueva)",
+		"website_link_tooltip": "Sitio web"
 	},
 	"instances": {
 		"title": "Instancias Morphit conocidas",
@@ -3090,14 +3142,14 @@
 			"tier_label_normal": "Tarifa estándar",
 			"tier_label_busy": "Nivel publicador frecuente {nth} — tarifa adicional",
 			"tier_label_high": "Nivel publicador intensivo — las tarifas aumentan con el uso",
-			"explainer": "Una pequeña tarifa desalienta el spam haciendo costoso inundar el orderbook con listados basura. El monto arriba es lo que llega a @morphit-fees.",
+			"explainer": "Una pequeña tarifa desalienta el spam haciendo costoso inundar el orderbook con listados basura.",
 			"loading": "Calculando tarifa…",
 			"error_friendly": "No se pudo cargar tu cotización de tarifa — verifica tu conexión e intenta recargar la página."
 		},
 		"submit": {
 			"primary_label": "Pagar y publicar esta orden",
 			"pending_broadcasting": "Publicando tu orden…",
-			"review_hint": "Una vez publicado, los primeros 15 minutos te permiten corregir erratas. Después, cancela y vuelve a publicar si necesitas cambiarlo.",
+			"review_hint": "Una vez publicado, tienes 15 minutos para corregir cualquier errata. También puedes Cancelar y Volver a publicar si lo necesitas",
 			"primary_label_waived": "Publicar gratis",
 			"primary_label_external": "Publicar orden"
 		},
@@ -4003,17 +4055,34 @@
 			"reminder_title": "Opcional — puedes saltarlo.",
 			"reminder_body": "Tu identidad de Morphit funciona bien sin esta URL. Es un enlace de cortesía para las personas que quizá quieran ver también tu perfil de Nostr."
 		},
-		"blurt_media_url": {
-			"heading": "Perfil de Blurt.media",
-			"explain": "Un enlace a tu perfil en blurt.media, un popular frontend de Blurt para streaming. En tu página de perfil, su ícono enlazado se muestra junto a tu avatar.",
-			"label": "URL de Blurt.media",
-			"placeholder": "https://blurt.media/@tunombre",
-			"hint_empty": "Pega tu URL de perfil blurt.media aquí, o déjalo en blanco.",
+		"website_url": {
+			"heading": "URL de sitio web o blog",
+			"explain": "Si tienes un sitio web o blog, pega aquí su dirección. En tu página de perfil, su icono enlazado se muestra junto a tu avatar.",
+			"label": "URL de sitio web o blog",
+			"placeholder": "https://...",
+			"hint_empty": "Pega aquí la URL de tu sitio web o blog, o déjalo en blanco.",
 			"hint_ok": "Se ve bien.",
 			"error": {
 				"too_long": "La URL es demasiado larga.",
-				"invalid_scheme": "La URL debe usar HTTPS.",
-				"wrong_host": "Sólo se aceptan URLs de blurt.media aquí.",
+				"invalid_scheme": "La URL debe empezar por http:// o https://.",
+				"malformed": "La URL está mal formada."
+			},
+			"preview_label": "Vista previa:",
+			"saved_toast": "Guardado en este dispositivo.",
+			"save_and_broadcast": "Guardar y emitir",
+			"clear": "Limpiar",
+			"reminder_title": "Opcional — puedes saltarlo.",
+			"reminder_body": "Tu identidad de Morphit funciona bien sin esta URL. Es un enlace de cortesía para quienes también quieran ver el contenido e imágenes de tu perfil, etc."
+		},
+		"streaming_url": {
+			"heading": "URL de streaming",
+			"explain": "Un enlace a tu perfil de streaming (YouTube, Rumble, Blurt.media, Twitch, etc). En tu página de perfil, su icono enlazado se muestra junto a tu avatar.",
+			"label": "URL del perfil de streaming",
+			"hint_empty": "Pega aquí la URL de tus vídeos/pódcasts, o déjalo en blanco.",
+			"hint_ok": "Se ve bien.",
+			"error": {
+				"too_long": "La URL es demasiado larga.",
+				"invalid_scheme": "La URL debe empezar por http:// o https://.",
 				"malformed": "La URL está mal formada."
 			},
 			"preview_label": "Vista previa:",

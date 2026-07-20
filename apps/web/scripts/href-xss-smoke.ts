@@ -468,8 +468,8 @@ function detectUnsafeHref(absPath: string): readonly Hit[] {
 		// string-or-null.  Same rationale as the safe* prefix
 		// recognition below for template literals: lets call sites
 		// stay readable without forcing a wrapping function call.
-		// Catches: `validatedNostrUrl`, `validatedBlurtMediaUrl`,
-		// `validatedContactUrl`, etc.  Part 74.
+		// Catches: `validatedNostrUrl`, `validatedStreamingUrl`,
+		// `validatedWebsiteUrl`, `validatedContactUrl`, etc.  Part 74.
 		if (/^validated[A-Z]\w*$/.test(expr)) continue;
 
 		// Skip template literals whose leading interpolation is a

@@ -73,9 +73,14 @@
 		 *  inflect ("fiat" / "fiat currencies" / "fiats" all
 		 *  point at the same glossary entry). */
 		children?: import('svelte').Snippet;
+		/** When true, the dotted underline DISAPPEARS on hover/focus
+		 *  (border goes transparent) instead of recolouring to emerald.
+		 *  Ken asked for this specifically on the FAQ acronym tooltips;
+		 *  default false preserves the recolour behaviour everywhere else. */
+		hideUnderlineOnHover?: boolean;
 	}
 
-	let { key, children }: Props = $props();
+	let { key, children, hideUnderlineOnHover = false }: Props = $props();
 
 	// One-time decision per instance: do we render with the
 	// tooltip cue, or plain text?  Decided at mount time
@@ -230,7 +235,9 @@
 		<button
 			bind:this={triggerEl}
 			type="button"
-			class="cursor-help border-b border-dotted border-ink-400 text-ink-900 hover:border-morphit-emerald hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:border-ink-500 dark:text-ink-50 dark:hover:text-morphit-emerald-light"
+			class="cursor-help border-b border-dotted border-ink-400 text-ink-900 {hideUnderlineOnHover
+				? 'hover:border-transparent'
+				: 'hover:border-morphit-emerald'} hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:border-ink-500 dark:text-ink-50 dark:hover:text-morphit-emerald-light"
 			aria-describedby={open ? popoverId : undefined}
 			aria-expanded={open}
 			onmouseenter={openTooltip}
