@@ -202,11 +202,12 @@ check(
 	't.txt #10 — "2h ago" moved into the card title ("… UTC · 2h ago") so the name/subject/feedback get the full width'
 );
 check(
-	'the star is a round badge in the top-right corner, not inline in the row',
-	/absolute right-1 top-1 z-20[\s\S]{0,80}?rounded-full/.test(inbox) &&
+	'the star is a plain inline glyph just left of the Archive box, not a round corner badge',
+	!/absolute right-1 top-1[\s\S]{0,120}?rounded-full/.test(inbox) &&
 		/handleToggleStar\(convo\)/.test(inbox) &&
-		!/relative z-10 flex-none rounded p-0\.5 text-base leading-none transition-colors/.test(inbox),
-	't.txt #10 — the star moved out of the flex row to a corner badge; the old inline star button is gone'
+		/starred \? '★' : '☆'/.test(inbox) &&
+		inbox.indexOf('handleToggleStar(convo)') < inbox.indexOf("_('chat.inbox.action_archive')"),
+	't.txt #10 (moved) — the star is now a plain glyph left of the Archive box (no round badge, no circle); it precedes the Archive action in source order'
 );
 check(
 	'the archive/restore gutter is narrower on mobile, restored at sm',

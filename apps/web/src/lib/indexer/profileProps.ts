@@ -4,7 +4,7 @@
  * A ProfileResponse has an opaque `json_metadata` object whose
  * shape is convention-not-protocol. IdentityLabel expects specific
  * props (displayName, avatarSvg, avatarDataUri, nostrUrl,
- * blurtMediaUrl) and this helper bridges the two.
+ * streamingUrl) and this helper bridges the two.
  *
  * Every field defaults to null if the profile is null, the
  * metadata isn't an object, or the individual value is absent /
@@ -37,7 +37,9 @@ export interface IdentityLabelProfileProps {
 	readonly avatarSvg: string | null;
 	readonly avatarDataUri: string | null;
 	readonly nostrUrl: string | null;
-	readonly blurtMediaUrl: string | null;
+	readonly streamingUrl: string | null;
+	/** json_metadata.website_url — a website/blog link, globe icon. */
+	readonly websiteUrl: string | null;
 	/** json_metadata.short_bio — used by the settings form to hydrate the
 	 *  bio field from the current account's on-chain profile (cp346). Not
 	 *  rendered by IdentityLabel itself; other callers simply ignore it. */
@@ -103,7 +105,8 @@ export function extractLabelPropsFromProfile(
 			avatarSvg: null,
 			avatarDataUri: null,
 			nostrUrl: null,
-			blurtMediaUrl: null,
+			streamingUrl: null,
+			websiteUrl: null,
 			shortBio: null
 		};
 	}
@@ -119,7 +122,8 @@ export function extractLabelPropsFromProfile(
 			avatarSvg: null,
 			avatarDataUri: null,
 			nostrUrl: null,
-			blurtMediaUrl: null,
+			streamingUrl: null,
+			websiteUrl: null,
 			shortBio: null
 		};
 	}
@@ -146,7 +150,8 @@ export function extractLabelPropsFromProfile(
 		avatarSvg: safeSvg,
 		avatarDataUri: safeDataUri,
 		nostrUrl: str('nostr_url'),
-		blurtMediaUrl: str('blurt_media_url'),
+		streamingUrl: str('streaming_url'),
+		websiteUrl: str('website_url'),
 		shortBio: str('short_bio')
 	};
 }

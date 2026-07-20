@@ -27,7 +27,7 @@ export const MAX_JSONB_BYTES = 4096;
 
 /** Larger cap for the profile handler, which needs room for an
  *  inline avatar (SVG text or base64-encoded WebP data URI)
- *  alongside display_name + nostr_url + blurt_media_url. Set to
+ *  alongside display_name + nostr_url + streaming_url + website_url. Set to
  *  match the Blurt chain-level custom_json ceiling so we don't
  *  reject a payload the chain itself would have accepted. */
 export const MAX_JSONB_BYTES_PROFILE = 8192;

@@ -40,7 +40,7 @@
 	import RatingChip from '$components/RatingChip.svelte';
 	import AltNetworkIcon from '$components/AltNetworkIcon.svelte';
 	import { validateNostrUrlForRender } from '$utils/nostrUrl';
-	import { validateBlurtMediaUrlForRender } from '$utils/blurtMediaUrl';
+	import { validateWebUrlForRender } from '$utils/webUrl';
 	// cp165 byte-budget: MyBalanceCard renders only on a viewer's
 	// OWN profile (rare path — most profile-page traffic is people
 	// looking at counterparties).  RespondToFeedbackForm renders
@@ -319,20 +319,22 @@
 
 	/** Centralized profile-derived identity props.  This is the
 	 *  single source of truth for displayName/avatarSvg/avatarDataUri/
-	 *  nostrUrl/blurtMediaUrl extraction.  Per Finding G2.2 the
+	 *  nostrUrl/streamingUrl extraction.  Per Finding G2.2 the
 	 *  helper re-sanitizes avatar_svg from indexer data, so the hero
 	 *  on this page (which inlines avatarSvg via {@html}) is
 	 *  defense-in-depth-protected against malicious indexer content
 	 *  or non-Morphit-client profile ops. */
 	const labelProps = $derived(extractLabelPropsFromProfile(profile));
 	const nostrUrl = $derived(labelProps.nostrUrl);
-	const blurtMediaUrl = $derived(labelProps.blurtMediaUrl);
+	const streamingUrl = $derived(labelProps.streamingUrl);
+	const websiteUrl = $derived(labelProps.websiteUrl);
 
 	// cp377 — render-safe validation for the hero's avatar-corner glyphs.
 	// Mirrors IdentityLabel's own render guard so an unsafe or malformed
 	// URL can never reach an <a href> on this page either.
 	const validatedNostrUrl = $derived(validateNostrUrlForRender(nostrUrl));
-	const validatedBlurtMediaUrl = $derived(validateBlurtMediaUrlForRender(blurtMediaUrl));
+	const validatedStreamingUrl = $derived(validateWebUrlForRender(streamingUrl));
+	const validatedWebsiteUrl = $derived(validateWebUrlForRender(websiteUrl));
 	/** Optional short bio from the profile's json_metadata blob. */
 	const shortBio = $derived.by(() => {
 		const md = profile?.json_metadata;
@@ -490,7 +492,7 @@
 					decoding="async"
 				/>
 			{/if}
-			{#if validatedNostrUrl || validatedBlurtMediaUrl}
+			{#if validatedNostrUrl || validatedWebsiteUrl || validatedStreamingUrl}
 				<div class="flex flex-col gap-2 pb-1">
 					{#if validatedNostrUrl}
 						<a
@@ -504,16 +506,28 @@
 							<AltNetworkIcon network="nostr" size={18} class="h-[18px] w-[18px]" />
 						</a>
 					{/if}
-					{#if validatedBlurtMediaUrl}
+					{#if validatedWebsiteUrl}
 						<a
-							href={validatedBlurtMediaUrl}
+							href={validatedWebsiteUrl}
 							target="_blank"
 							rel="noopener noreferrer external"
-							aria-label={$_('identity.blurt_media_link_aria')}
-							title={$_('identity.blurt_media_link_tooltip')}
+							aria-label={$_('identity.website_link_aria')}
+							title={$_('identity.website_link_tooltip')}
 							class="inline-flex h-7 w-7 flex-none items-center justify-center rounded-lg text-ink-500 transition hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:text-ink-400"
 						>
-							<AltNetworkIcon network="blurt" size={18} class="h-[18px] w-[18px]" />
+							<AltNetworkIcon network="globe" size={18} class="h-[18px] w-[18px]" />
+						</a>
+					{/if}
+					{#if validatedStreamingUrl}
+						<a
+							href={validatedStreamingUrl}
+							target="_blank"
+							rel="noopener noreferrer external"
+							aria-label={$_('identity.streaming_link_aria')}
+							title={$_('identity.streaming_link_tooltip')}
+							class="inline-flex h-7 w-7 flex-none items-center justify-center rounded-lg text-ink-500 transition hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:text-ink-400"
+						>
+							<AltNetworkIcon network="play" size={18} class="h-[18px] w-[18px]" />
 						</a>
 					{/if}
 				</div>
@@ -780,7 +794,7 @@
 									avatarSvg={reviewerProps.avatarSvg}
 									avatarDataUri={reviewerProps.avatarDataUri}
 									nostrUrl={reviewerProps.nostrUrl}
-									blurtMediaUrl={reviewerProps.blurtMediaUrl}
+									streamingUrl={reviewerProps.streamingUrl}
 									publicKeyString={reviewerProfileMap[fb.reviewer]?.posting_pubkey ?? undefined}
 									href={lp(`/@${fb.reviewer}`)}
 									weight="semibold"
@@ -877,7 +891,7 @@
 										avatarSvg={responderProps.avatarSvg}
 										avatarDataUri={responderProps.avatarDataUri}
 										nostrUrl={responderProps.nostrUrl}
-										blurtMediaUrl={responderProps.blurtMediaUrl}
+										streamingUrl={responderProps.streamingUrl}
 										href={lp(`/@${resp.responder}`)}
 										weight="semibold"
 										avatarSize={20}
@@ -1006,7 +1020,7 @@
 									avatarSvg={subjectProps.avatarSvg}
 									avatarDataUri={subjectProps.avatarDataUri}
 									nostrUrl={subjectProps.nostrUrl}
-									blurtMediaUrl={subjectProps.blurtMediaUrl}
+									streamingUrl={subjectProps.streamingUrl}
 									publicKeyString={reviewerProfileMap[fb.subject]?.posting_pubkey ?? undefined}
 									href={lp(`/@${fb.subject}`)}
 									weight="semibold"
@@ -1098,7 +1112,7 @@
 										avatarSvg={responderProps.avatarSvg}
 										avatarDataUri={responderProps.avatarDataUri}
 										nostrUrl={responderProps.nostrUrl}
-										blurtMediaUrl={responderProps.blurtMediaUrl}
+										streamingUrl={responderProps.streamingUrl}
 										href={lp(`/@${resp.responder}`)}
 										weight="semibold"
 										avatarSize={20}

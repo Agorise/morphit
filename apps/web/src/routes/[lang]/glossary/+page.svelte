@@ -45,6 +45,7 @@
 	 *  locale JSONs, done. */
 	const TERMS = [
 		'active_key',
+		'aead',
 		'blockchain',
 		'blurt',
 		'blurt_power',
@@ -52,21 +53,32 @@
 		'counterparty',
 		'custom_json',
 		'delegation',
+		'dns',
+		'ecdh',
+		'ecies',
+		'ens',
 		'federation',
 		'feedback',
 		'fiat',
 		'indexer',
 		'instance',
+		'ipfs',
 		'listing_fee',
+		'mcp',
 		'network_fee',
 		'operator',
+		'p2p',
 		'password',
 		'permlink',
 		'posting_key',
+		'pwa',
 		'relay',
 		'release_op',
+		'rss',
 		'seed_phrase',
-		'sign'
+		'sign',
+		'tls',
+		'x25519'
 	] as const;
 </script>
 

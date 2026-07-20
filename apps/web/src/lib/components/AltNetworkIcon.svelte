@@ -48,7 +48,7 @@
 	import { onMount, onDestroy } from 'svelte';
 
 	interface Props {
-		network: 'tor' | 'lokinet' | 'i2p' | 'nostr' | 'blurt' | 'ens';
+		network: 'tor' | 'lokinet' | 'i2p' | 'nostr' | 'blurt' | 'ens' | 'globe' | 'play';
 		/** Pixel size. Defaults to 24. */
 		size?: number;
 		/** Extra CSS classes on the wrapper for alignment overrides. */

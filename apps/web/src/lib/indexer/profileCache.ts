@@ -446,7 +446,7 @@ export function clearProfileCache(account?: string): void {
  *
  * The json_metadata keys written here are exactly the ones
  * extractLabelPropsFromProfile reads back (avatar_svg, avatar_data_uri,
- * short_bio, nostr_url, blurt_media_url) plus the top-level display_name, so a
+ * short_bio, nostr_url, streaming_url) plus the top-level display_name, so a
  * primed entry round-trips to the props passed in; the profile-freshness smoke
  * pins that contract.
  */
@@ -458,7 +458,8 @@ export function primeProfile(
 		avatarDataUri?: string | null;
 		shortBio?: string | null;
 		nostrUrl?: string | null;
-		blurtMediaUrl?: string | null;
+		streamingUrl?: string | null;
+		websiteUrl?: string | null;
 	}
 ): void {
 	if (typeof account !== 'string' || account.length === 0) return;
@@ -467,7 +468,8 @@ export function primeProfile(
 	if (props.avatarDataUri) jsonMetadata.avatar_data_uri = props.avatarDataUri;
 	if (props.shortBio) jsonMetadata.short_bio = props.shortBio;
 	if (props.nostrUrl) jsonMetadata.nostr_url = props.nostrUrl;
-	if (props.blurtMediaUrl) jsonMetadata.blurt_media_url = props.blurtMediaUrl;
+	if (props.streamingUrl) jsonMetadata.streaming_url = props.streamingUrl;
+	if (props.websiteUrl) jsonMetadata.website_url = props.websiteUrl;
 	const profile: ProfileResponse = {
 		account,
 		display_name: props.displayName ?? '',

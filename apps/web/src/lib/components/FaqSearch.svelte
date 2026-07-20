@@ -17,6 +17,8 @@
 	import { SUPPORTED_LOCALES, setLocale, currentLocale, type LocaleCode } from '$i18n';
 	import { renderFaqInline } from '$lib/faq/renderInline';
 	import { stripMarkdown } from '$lib/seo/stripMarkdown';
+	import { splitFaqAnswerForGlossary } from '$lib/faq/glossaryTerms';
+	import Term from '$components/Term.svelte';
 
 	let query = $state('');
 	let activeIndex = $state(0);
@@ -543,7 +545,7 @@
 						id="faq-body-{entry.key}"
 						class="animate-fade-up px-5 pb-5 text-ink-700 dark:text-ink-200"
 					>
-						<p class="whitespace-pre-line leading-relaxed">{@html renderFaqInline(entry.answer, lp)}</p>
+						<p class="whitespace-pre-line leading-relaxed">{#each splitFaqAnswerForGlossary(entry.answer) as seg}{#if seg.kind === 'term'}<Term key={seg.key} hideUnderlineOnHover>{seg.text}</Term>{:else}{@html renderFaqInline(seg.text, lp)}{/if}{/each}</p>
 
 						{#if entry.related.length > 0}
 							<!-- ─── Related row ───

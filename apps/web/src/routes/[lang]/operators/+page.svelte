@@ -176,7 +176,7 @@
 							IdentityLabel carries the identicon avatar + display_name
 							+ account fingerprint. display_name comes from the
 							operator registration op (canonical for operators);
-							avatarSvg / avatarDataUri / nostrUrl / blurtMediaUrl
+							avatarSvg / avatarDataUri / nostrUrl / streamingUrl
 							are hydrated separately from the operator's regular
 							profile record.
 						-->

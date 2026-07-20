@@ -13,7 +13,7 @@
 		SHORT_BIO_MAX_LENGTH
 	} from '$crypto/profile';
 	import { validateNostrUrl } from '$utils/nostrUrl';
-	import { validateBlurtMediaUrl } from '$utils/blurtMediaUrl';
+	import { validateWebUrl } from '$utils/webUrl';
 	import IdentityLabel from '$components/IdentityLabel.svelte';
 	import EndpointList from '$components/EndpointList.svelte';
 	import Head from '$components/Head.svelte';
@@ -122,14 +122,16 @@
 	const PROFILE_KEY_SUFFIX = PROFILE_KEY_SCOPE ? `.${PROFILE_KEY_SCOPE}` : '';
 	const STORAGE_KEY = `morphit.displayName${PROFILE_KEY_SUFFIX}`;
 	const NOSTR_URL_STORAGE_KEY = `morphit.nostrUrl${PROFILE_KEY_SUFFIX}`;
-	const BLURT_MEDIA_URL_STORAGE_KEY = `morphit.blurtMediaUrl${PROFILE_KEY_SUFFIX}`;
+	const STREAMING_URL_STORAGE_KEY = `morphit.streamingUrl${PROFILE_KEY_SUFFIX}`;
+	const WEBSITE_URL_STORAGE_KEY = `morphit.websiteUrl${PROFILE_KEY_SUFFIX}`;
 	const SHORT_BIO_STORAGE_KEY = `morphit.shortBio${PROFILE_KEY_SUFFIX}`;
 	/** The pre-cp346 GLOBAL keys, purged on mount so the leaked drafts don't
 	 *  linger (they are never read again once scoping is in effect). */
 	const LEGACY_GLOBAL_PROFILE_KEYS = [
 		'morphit.displayName',
 		'morphit.nostrUrl',
-		'morphit.blurtMediaUrl',
+		'morphit.streamingUrl',
+		'morphit.websiteUrl',
 		'morphit.shortBio'
 	] as const;
 
@@ -252,13 +254,80 @@
 	// Rendered BEFORE the Nostr section per UX directive: Blurt is
 	// the native platform for Morphit, and most users will have a
 	// Blurt.media profile before they ever look at Nostr.
-	let blurtMediaInput = $state('');
-	let blurtMediaSaved = $state('');
-	let blurtMediaSaving = $state(false);
-	let blurtMediaSavedToast = $state(false);
-	let blurtMediaBroadcasting = $state(false);
-	let blurtMediaBroadcastError = $state('');
-	let blurtMediaBroadcastOk = $state(false);
+	let streamingInput = $state('');
+	let streamingSaved = $state('');
+	let streamingSaving = $state(false);
+	let streamingSavedToast = $state(false);
+	let streamingBroadcasting = $state(false);
+	let streamingBroadcastError = $state('');
+	let streamingBroadcastOk = $state(false);
+	let websiteInput = $state('');
+	let websiteSaved = $state('');
+	let websiteSaving = $state(false);
+	let websiteSavedToast = $state(false);
+	let websiteBroadcasting = $state(false);
+	let websiteBroadcastError = $state('');
+	let websiteBroadcastOk = $state(false);
+	// Streaming URL field placeholder — an animated "someone is typing" cycle of
+	// example streaming URLs (same treatment as the orderbook search fields), so
+	// grandma sees the KIND of link that belongs here. Pauses while the user has
+	// typed something; collapses to one static example under reduced-motion.
+	const STREAMING_PLACEHOLDERS = [
+		'https://youtube.com/username',
+		'https://blurt.media/@username',
+		'https://twitch.tv/username',
+		'https://rumble.com/c/username'
+	] as const;
+	let streamingPlaceholder = $state<string>(STREAMING_PLACEHOLDERS[0]);
+	const streamingHasText = $derived(streamingInput.trim().length > 0);
+	$effect(() => {
+		if (streamingHasText) return;
+		if (
+			typeof window !== 'undefined' &&
+			window.matchMedia('(prefers-reduced-motion: reduce)').matches
+		) {
+			streamingPlaceholder = STREAMING_PLACEHOLDERS[0];
+			return;
+		}
+		const TYPE_MS = 70;
+		const DELETE_MS = 35;
+		const HOLD_MS = 1600;
+		const GAP_MS = 450;
+		let urlIdx = 0;
+		let charIdx = 0;
+		let phase: 'typing' | 'holding' | 'deleting' = 'typing';
+		let timer: ReturnType<typeof setTimeout>;
+		const tick = (): void => {
+			const url = STREAMING_PLACEHOLDERS[urlIdx] ?? STREAMING_PLACEHOLDERS[0];
+			if (phase === 'typing') {
+				charIdx += 1;
+				streamingPlaceholder = url.slice(0, charIdx);
+				if (charIdx >= url.length) {
+					phase = 'holding';
+					timer = setTimeout(tick, HOLD_MS);
+				} else {
+					timer = setTimeout(tick, TYPE_MS);
+				}
+			} else if (phase === 'holding') {
+				phase = 'deleting';
+				timer = setTimeout(tick, DELETE_MS);
+			} else {
+				charIdx -= 1;
+				streamingPlaceholder = url.slice(0, Math.max(charIdx, 0));
+				if (charIdx <= 0) {
+					phase = 'typing';
+					charIdx = 0;
+					urlIdx = (urlIdx + 1) % STREAMING_PLACEHOLDERS.length;
+					timer = setTimeout(tick, GAP_MS);
+				} else {
+					timer = setTimeout(tick, DELETE_MS);
+				}
+			}
+		};
+		streamingPlaceholder = '';
+		timer = setTimeout(tick, GAP_MS);
+		return () => clearTimeout(timer);
+	});
 
 	// ── Nostr URL — same shape as display_name state ────────────────
 	// The form stores the URL locally for pre-population across
@@ -322,10 +391,15 @@
 				saved = s;
 				input = s;
 			}
-			const bm = window.localStorage.getItem(BLURT_MEDIA_URL_STORAGE_KEY);
+			const bm = window.localStorage.getItem(STREAMING_URL_STORAGE_KEY);
 			if (bm) {
-				blurtMediaSaved = bm;
-				blurtMediaInput = bm;
+				streamingSaved = bm;
+				streamingInput = bm;
+			}
+			const ws = window.localStorage.getItem(WEBSITE_URL_STORAGE_KEY);
+			if (ws) {
+				websiteSaved = ws;
+				websiteInput = ws;
 			}
 			const bio = window.localStorage.getItem(SHORT_BIO_STORAGE_KEY);
 			if (bio) {
@@ -342,7 +416,8 @@
 			// account (or this account on a new device) shows its real on-chain
 			// values instead of blanks. A local draft is a pending edit and wins.
 			const noLocalName = !s;
-			const noLocalBlurtMedia = !bm;
+			const noLocalStreaming = !bm;
+			const noLocalWebsite = !ws;
 			const noLocalBio = !bio;
 			const noLocalNostr = !n;
 			// Hydrate the account-name section.  If posting-WIF
@@ -383,9 +458,13 @@
 									saved = props.displayName;
 									input = props.displayName;
 								}
-								if (noLocalBlurtMedia && props.blurtMediaUrl) {
-									blurtMediaSaved = props.blurtMediaUrl;
-									blurtMediaInput = props.blurtMediaUrl;
+								if (noLocalStreaming && props.streamingUrl) {
+									streamingSaved = props.streamingUrl;
+									streamingInput = props.streamingUrl;
+								}
+								if (noLocalWebsite && props.websiteUrl) {
+									websiteSaved = props.websiteUrl;
+									websiteInput = props.websiteUrl;
 								}
 								if (noLocalBio && props.shortBio) {
 									bioSaved = props.shortBio;
@@ -437,20 +516,40 @@
 
 	// Blurt.media URL validation. Same contract as Nostr —
 	// null = empty/unset, { ok: true } = valid, { ok: false } = error.
-	const blurtMediaValidation = $derived(validateBlurtMediaUrl(blurtMediaInput));
-	const blurtMediaIsEmpty = $derived(blurtMediaInput.trim().length === 0);
-	const blurtMediaIsValid = $derived(
-		blurtMediaIsEmpty ||
-			(blurtMediaValidation !== null && 'ok' in blurtMediaValidation && blurtMediaValidation.ok)
+	const streamingValidation = $derived(validateWebUrl(streamingInput));
+	const streamingIsEmpty = $derived(streamingInput.trim().length === 0);
+	const streamingIsValid = $derived(
+		streamingIsEmpty ||
+			(streamingValidation !== null && 'ok' in streamingValidation && streamingValidation.ok)
 	);
-	const blurtMediaCleaned = $derived(
-		blurtMediaValidation && 'ok' in blurtMediaValidation && blurtMediaValidation.ok
-			? blurtMediaValidation.cleaned
+	const streamingCleaned = $derived(
+		streamingValidation && 'ok' in streamingValidation && streamingValidation.ok
+			? streamingValidation.cleaned
 			: ''
 	);
-	const blurtMediaErrorReason = $derived(
-		blurtMediaValidation && 'ok' in blurtMediaValidation && !blurtMediaValidation.ok
-			? blurtMediaValidation.reason
+	const streamingErrorReason = $derived(
+		streamingValidation && 'ok' in streamingValidation && !streamingValidation.ok
+			? streamingValidation.reason
+			: null
+	);
+
+	// Website / blog URL validation. Same contract as the streaming field —
+	// null = empty/unset, { ok: true } = valid, { ok: false } = error. Any
+	// http/https host is accepted (the only rule: a valid URL).
+	const websiteValidation = $derived(validateWebUrl(websiteInput));
+	const websiteIsEmpty = $derived(websiteInput.trim().length === 0);
+	const websiteIsValid = $derived(
+		websiteIsEmpty ||
+			(websiteValidation !== null && 'ok' in websiteValidation && websiteValidation.ok)
+	);
+	const websiteCleaned = $derived(
+		websiteValidation && 'ok' in websiteValidation && websiteValidation.ok
+			? websiteValidation.cleaned
+			: ''
+	);
+	const websiteErrorReason = $derived(
+		websiteValidation && 'ok' in websiteValidation && !websiteValidation.ok
+			? websiteValidation.reason
 			: null
 	);
 
@@ -490,7 +589,8 @@
 			avatarDataUri: currentAvatarDataUri,
 			shortBio: bioSaved || null,
 			nostrUrl: nostrSaved || null,
-			blurtMediaUrl: blurtMediaSaved || null
+			streamingUrl: streamingSaved || null,
+			websiteUrl: websiteSaved || null
 		});
 	}
 
@@ -570,7 +670,7 @@
 		broadcastError = '';
 		broadcastOk = false;
 		try {
-			// Include nostr_url and blurt_media_url in the broadcast
+			// Include nostr_url and streaming_url in the broadcast
 			// so all profile fields stay in sync on-chain. The
 			// indexer stores the whole json_metadata blob, and
 			// IdentityLabel reads specific keys out of it on every
@@ -578,7 +678,8 @@
 			await broadcastProfile(live, {
 				display_name: saved,
 				nostr_url: nostrCleaned || undefined,
-				blurt_media_url: blurtMediaCleaned || undefined,
+				streaming_url: streamingCleaned || undefined,
+				website_url: websiteCleaned || undefined,
 				short_bio: bioSaved
 			});
 			broadcastOk = true;
@@ -625,7 +726,8 @@
 			await broadcastProfile(live, {
 				display_name: saved,
 				nostr_url: nostrSaved,
-				blurt_media_url: blurtMediaSaved,
+				streaming_url: streamingSaved,
+				website_url: websiteSaved,
 				short_bio: bioSaved
 			});
 			bioBroadcastOk = true;
@@ -640,35 +742,35 @@
 	}
 
 	// ── Blurt.media URL — save locally, or save + broadcast ─────────
-	async function saveBlurtMediaLocal(): Promise<void> {
-		if (!blurtMediaIsValid) return;
-		blurtMediaSaving = true;
-		const cleaned = blurtMediaIsEmpty ? '' : blurtMediaCleaned;
+	async function saveStreamingLocal(): Promise<void> {
+		if (!streamingIsValid) return;
+		streamingSaving = true;
+		const cleaned = streamingIsEmpty ? '' : streamingCleaned;
 		try {
 			if (cleaned) {
-				window.localStorage.setItem(BLURT_MEDIA_URL_STORAGE_KEY, cleaned);
+				window.localStorage.setItem(STREAMING_URL_STORAGE_KEY, cleaned);
 			} else {
-				window.localStorage.removeItem(BLURT_MEDIA_URL_STORAGE_KEY);
+				window.localStorage.removeItem(STREAMING_URL_STORAGE_KEY);
 			}
 		} catch {
 			// Privacy Mode; in-memory only.
 		}
 		await new Promise((resolve) => setTimeout(resolve, 250));
-		blurtMediaSaved = cleaned;
-		blurtMediaInput = cleaned;
-		blurtMediaSaving = false;
-		blurtMediaSavedToast = true;
-		setTimeout(() => (blurtMediaSavedToast = false), 1800);
+		streamingSaved = cleaned;
+		streamingInput = cleaned;
+		streamingSaving = false;
+		streamingSavedToast = true;
+		setTimeout(() => (streamingSavedToast = false), 1800);
 	}
 
-	async function saveAndBroadcastBlurtMedia(): Promise<void> {
-		await saveBlurtMediaLocal();
+	async function saveAndBroadcastStreaming(): Promise<void> {
+		await saveStreamingLocal();
 		const live = $liveIdentity;
 		if (!live) return;
 		const displayName = saved || (validation.ok ? validation.cleaned : '');
-		blurtMediaBroadcasting = true;
-		blurtMediaBroadcastError = '';
-		blurtMediaBroadcastOk = false;
+		streamingBroadcasting = true;
+		streamingBroadcastError = '';
+		streamingBroadcastOk = false;
 		try {
 			// Broadcast ALL known profile fields together so the
 			// indexer's stored json_metadata reflects the user's full
@@ -677,28 +779,88 @@
 			await broadcastProfile(live, {
 				display_name: displayName,
 				nostr_url: nostrSaved,
-				blurt_media_url: blurtMediaSaved,
+				streaming_url: streamingSaved,
+				website_url: websiteSaved,
 				short_bio: bioSaved
 			});
-			blurtMediaBroadcastOk = true;
+			streamingBroadcastOk = true;
 			primeSelfProfile();
-			setTimeout(() => (blurtMediaBroadcastOk = false), 3000);
+			setTimeout(() => (streamingBroadcastOk = false), 3000);
 		} catch (err) {
 			console.warn('[settings] broadcast failed:', err);
-			blurtMediaBroadcastError = broadcastErrCopy(err);
+			streamingBroadcastError = broadcastErrCopy(err);
 		} finally {
-			blurtMediaBroadcasting = false;
+			streamingBroadcasting = false;
 		}
 	}
 
-	function clearBlurtMedia(): void {
+	function clearStreaming(): void {
 		try {
-			window.localStorage.removeItem(BLURT_MEDIA_URL_STORAGE_KEY);
+			window.localStorage.removeItem(STREAMING_URL_STORAGE_KEY);
 		} catch {
 			// ignore
 		}
-		blurtMediaSaved = '';
-		blurtMediaInput = '';
+		streamingSaved = '';
+		streamingInput = '';
+	}
+
+	// ── Website / blog URL — save locally, or save + broadcast ──────────
+	async function saveWebsiteLocal(): Promise<void> {
+		if (!websiteIsValid) return;
+		websiteSaving = true;
+		const cleaned = websiteIsEmpty ? '' : websiteCleaned;
+		try {
+			if (cleaned) {
+				window.localStorage.setItem(WEBSITE_URL_STORAGE_KEY, cleaned);
+			} else {
+				window.localStorage.removeItem(WEBSITE_URL_STORAGE_KEY);
+			}
+		} catch {
+			// Privacy Mode; in-memory only.
+		}
+		await new Promise((resolve) => setTimeout(resolve, 250));
+		websiteSaved = cleaned;
+		websiteInput = cleaned;
+		websiteSaving = false;
+		websiteSavedToast = true;
+		setTimeout(() => (websiteSavedToast = false), 1800);
+	}
+
+	async function saveAndBroadcastWebsite(): Promise<void> {
+		await saveWebsiteLocal();
+		const live = $liveIdentity;
+		if (!live) return;
+		const displayName = saved || (validation.ok ? validation.cleaned : '');
+		websiteBroadcasting = true;
+		websiteBroadcastError = '';
+		websiteBroadcastOk = false;
+		try {
+			await broadcastProfile(live, {
+				display_name: displayName,
+				nostr_url: nostrSaved,
+				streaming_url: streamingSaved,
+				website_url: websiteSaved,
+				short_bio: bioSaved
+			});
+			websiteBroadcastOk = true;
+			primeSelfProfile();
+			setTimeout(() => (websiteBroadcastOk = false), 3000);
+		} catch (err) {
+			console.warn('[settings] broadcast failed:', err);
+			websiteBroadcastError = broadcastErrCopy(err);
+		} finally {
+			websiteBroadcasting = false;
+		}
+	}
+
+	function clearWebsite(): void {
+		try {
+			window.localStorage.removeItem(WEBSITE_URL_STORAGE_KEY);
+		} catch {
+			// ignore
+		}
+		websiteSaved = '';
+		websiteInput = '';
 	}
 
 	// ── Nostr URL — save locally, or save + broadcast ───────────────
@@ -740,7 +902,8 @@
 			await broadcastProfile(live, {
 				display_name: displayName,
 				nostr_url: nostrSaved,
-				blurt_media_url: blurtMediaSaved,
+				streaming_url: streamingSaved,
+				website_url: websiteSaved,
 				short_bio: bioSaved
 			});
 			nostrBroadcastOk = true;
@@ -829,7 +992,8 @@
 			await broadcastProfile(live, {
 				display_name: displayName,
 				nostr_url: nostrSaved,
-				blurt_media_url: blurtMediaSaved,
+				streaming_url: streamingSaved,
+				website_url: websiteSaved,
 				short_bio: bioSaved,
 				// Pass BOTH fields explicitly so the indexer knows
 				// exactly which one is active; empty string clears
@@ -875,7 +1039,8 @@
 			await broadcastProfile(live, {
 				display_name: displayName,
 				nostr_url: nostrSaved,
-				blurt_media_url: blurtMediaSaved,
+				streaming_url: streamingSaved,
+				website_url: websiteSaved,
 				short_bio: bioSaved,
 				avatar_svg: '',
 				avatar_data_uri: ''
@@ -1141,7 +1306,7 @@
 	{#if $isPairedReadOnly}
 		<!-- Paired-readonly session (ADR-0022 QR-pair, Option A).  The
 		     edit forms on this page all sign with the posting key
-		     (display-name, blurt-media, nostr, avatar, syndication,
+		     (display-name, website, streaming, nostr, avatar, syndication,
 		     blocklist — every account_update op).  Paired sessions
 		     don't hold posting key material on this device, so all
 		     those edit affordances are already disabled by their
@@ -1665,80 +1830,76 @@
 		{/if}
 	</section>
 
-	<!-- ─── Blurt.media URL ─── -->
-	<!-- Rendered BEFORE the Nostr section per UX directive: Blurt is
-	     the native platform for Morphit, so a Blurt.media link is
-	     the more common case than a Nostr link for most users. -->
-	<section class="card mt-6" aria-labelledby="blurt-media-heading">
-		<h2 id="blurt-media-heading" class="font-display text-xl font-bold">
-			{$_('settings.blurt_media_url.heading')}
+	<!-- ─── Website / Blog URL ─── -->
+	<!-- Rendered ABOVE the Streaming card: a personal site/blog is the most
+	     general "who am I" link, so it leads. New on-chain field website_url;
+	     a globe glyph shows next to the avatar on the profile page. -->
+	<section class="card mt-6" aria-labelledby="website-url-heading">
+		<h2 id="website-url-heading" class="font-display text-xl font-bold">
+			{$_('settings.website_url.heading')}
 		</h2>
 		<p class="mt-2 text-ink-600 dark:text-ink-300">
-			{$_('settings.blurt_media_url.explain')}
+			{$_('settings.website_url.explain')}
 		</p>
 
-		<label for="blurt-media-url-input" class="sr-only">
-			{$_('settings.blurt_media_url.label')}
+		<label for="website-url-input" class="sr-only">
+			{$_('settings.website_url.label')}
 		</label>
 		<input
-			id="blurt-media-url-input"
+			id="website-url-input"
 			type="text"
 			autocomplete="url"
 			inputmode="url"
 			spellcheck="false"
-			bind:value={blurtMediaInput}
+			bind:value={websiteInput}
 			maxlength="512"
-			placeholder={$_('settings.blurt_media_url.placeholder')}
-			aria-invalid={!blurtMediaIsValid}
-			aria-describedby="blurt-media-url-help"
-			class="mt-4 w-full rounded-xl border bg-white px-3 py-2 font-mono text-sm transition-colors focus:outline-none dark:bg-ink-900 {!blurtMediaIsValid
+			placeholder={$_('settings.website_url.placeholder')}
+			aria-invalid={!websiteIsValid}
+			aria-describedby="website-url-help"
+			class="mt-4 w-full rounded-xl border bg-white px-3 py-2 font-mono text-sm transition-colors focus:outline-none dark:bg-ink-900 {!websiteIsValid
 				? 'border-red-500 focus:ring-2 focus:ring-red-500 dark:border-red-500'
 				: 'border-ink-300 dark:border-ink-700'}"
 		/>
 
-		<p id="blurt-media-url-help" class="mt-2 text-sm">
-			{#if blurtMediaErrorReason === 'too_long'}
+		<p id="website-url-help" class="mt-2 text-sm">
+			{#if websiteErrorReason === 'too_long'}
 				<span class="text-red-600">
-					{$_('settings.blurt_media_url.error.too_long')}
+					{$_('settings.website_url.error.too_long')}
 				</span>
-			{:else if blurtMediaErrorReason === 'invalid_scheme'}
+			{:else if websiteErrorReason === 'invalid_scheme'}
 				<span class="text-red-600">
-					{$_('settings.blurt_media_url.error.invalid_scheme')}
+					{$_('settings.website_url.error.invalid_scheme')}
 				</span>
-			{:else if blurtMediaErrorReason === 'wrong_host'}
+			{:else if websiteErrorReason === 'malformed'}
 				<span class="text-red-600">
-					{$_('settings.blurt_media_url.error.wrong_host')}
+					{$_('settings.website_url.error.malformed')}
 				</span>
-			{:else if blurtMediaErrorReason === 'malformed'}
-				<span class="text-red-600">
-					{$_('settings.blurt_media_url.error.malformed')}
-				</span>
-			{:else if blurtMediaIsEmpty}
+			{:else if websiteIsEmpty}
 				<span class="text-ink-500">
-					{$_('settings.blurt_media_url.hint_empty')}
+					{$_('settings.website_url.hint_empty')}
 				</span>
 			{:else}
 				<span class="text-ink-500">
-					{$_('settings.blurt_media_url.hint_ok')}
+					{$_('settings.website_url.hint_ok')}
 				</span>
 			{/if}
 		</p>
 
 		<!-- Preview — mirrors the Nostr preview, showing the user
-		     what their Blurt.media link will look like next to their
+		     what their website link will look like next to their
 		     display name everywhere. Updates live as they type. -->
-		{#if blurtMediaCleaned && saved}
+		{#if websiteCleaned && saved}
 			<div
 				class="mt-4 rounded-xl border border-ink-200 bg-white p-4 dark:border-ink-700 dark:bg-ink-900"
 			>
 				<p class="mb-2 text-xs uppercase tracking-wider text-ink-500">
-					{$_('settings.blurt_media_url.preview_label')}
+					{$_('settings.website_url.preview_label')}
 				</p>
 				<IdentityLabel
 					account={accountSaved ?? undefined}
 					displayName={saved}
 					publicKey={previewPubkey}
-					blurtMediaUrl={blurtMediaCleaned}
+					websiteUrl={websiteCleaned}
 				/>
 			</div>
 		{/if}
@@ -1747,14 +1908,14 @@
 			<BusyButton
 				variant="secondary-quiet"
 				size="sm"
-				busy={blurtMediaSaving}
-				done={blurtMediaSavedToast}
-				disabled={!blurtMediaIsValid ||
-					(blurtMediaIsEmpty ? '' : blurtMediaCleaned) === blurtMediaSaved}
+				busy={websiteSaving}
+				done={websiteSavedToast}
+				disabled={!websiteIsValid ||
+					(websiteIsEmpty ? '' : websiteCleaned) === websiteSaved}
 				busyLabel={$_('common.saving')}
-				onclick={saveBlurtMediaLocal}
+				onclick={saveStreamingLocal}
 			>
-				{#if blurtMediaSavedToast}
+				{#if websiteSavedToast}
 					{$_('settings.display_name.saved_toast')}
 				{:else}
 					{$_('settings.display_name.save')}
@@ -1764,42 +1925,177 @@
 				<BusyButton
 					variant="primary"
 					size="sm"
-					busy={blurtMediaBroadcasting}
-					done={blurtMediaBroadcastOk}
-					disabled={!blurtMediaIsValid}
+					busy={websiteBroadcasting}
+					done={websiteBroadcastOk}
+					disabled={!websiteIsValid}
 					busyLabel={$_('common.broadcasting')}
-					onclick={saveAndBroadcastBlurtMedia}
+					onclick={saveAndBroadcastStreaming}
 				>
-					{#if blurtMediaBroadcastOk}
+					{#if websiteBroadcastOk}
 						{$_('common.broadcasted')}
 					{:else}
-						{$_('settings.blurt_media_url.save_and_broadcast')}
+						{$_('settings.website_url.save_and_broadcast')}
 					{/if}
 				</BusyButton>
 			{/if}
-			{#if blurtMediaSaved}
-				<BusyButton variant="ghost" onclick={clearBlurtMedia}>
-					{$_('settings.blurt_media_url.clear')}
+			{#if websiteSaved}
+				<BusyButton variant="ghost" onclick={clearStreaming}>
+					{$_('settings.website_url.clear')}
 				</BusyButton>
 			{/if}
-			{#if blurtMediaSavedToast}
+			{#if websiteSavedToast}
 				<span class="text-sm font-medium text-morphit-emerald" role="status">
-					{$_('settings.blurt_media_url.saved_toast')}
+					{$_('settings.website_url.saved_toast')}
 				</span>
 			{/if}
 		</div>
 
-		{#if blurtMediaBroadcastError}
+		{#if websiteBroadcastError}
 			<div class="mt-3">
-				<StatusLine kind="error">{blurtMediaBroadcastError}</StatusLine>
+				<StatusLine kind="error">{websiteBroadcastError}</StatusLine>
 			</div>
 		{/if}
 
 		<div
 			class="mt-6 rounded-xl border border-ink-200 bg-white p-4 text-sm text-ink-600 dark:border-ink-700 dark:bg-ink-900 dark:text-ink-300"
 		>
-			<strong>{$_('settings.blurt_media_url.reminder_title')}</strong>
-			<p class="mt-1">{$_('settings.blurt_media_url.reminder_body')}</p>
+			<strong>{$_('settings.website_url.reminder_title')}</strong>
+			<p class="mt-1">{$_('settings.website_url.reminder_body')}</p>
+		</div>
+	</section>
+
+	<!-- ─── Streaming URL ─── -->
+	<!-- The former Blurt.media card, generalized to any streaming profile
+	     (YouTube, Rumble, Blurt.media, Twitch, …). Still stored on-chain as
+	     streaming_url (field name unchanged); a play-triangle glyph shows
+	     on the profile page. Rendered after Website, before Nostr. -->
+	<section class="card mt-6" aria-labelledby="streaming-heading">
+		<h2 id="streaming-heading" class="font-display text-xl font-bold">
+			{$_('settings.streaming_url.heading')}
+		</h2>
+		<p class="mt-2 text-ink-600 dark:text-ink-300">
+			{$_('settings.streaming_url.explain')}
+		</p>
+
+		<label for="streaming-url-input" class="sr-only">
+			{$_('settings.streaming_url.label')}
+		</label>
+		<input
+			id="streaming-url-input"
+			type="text"
+			autocomplete="url"
+			inputmode="url"
+			spellcheck="false"
+			bind:value={streamingInput}
+			maxlength="512"
+			placeholder={streamingPlaceholder}
+			aria-invalid={!streamingIsValid}
+			aria-describedby="streaming-url-help"
+			class="mt-4 w-full rounded-xl border bg-white px-3 py-2 font-mono text-sm transition-colors focus:outline-none dark:bg-ink-900 {!streamingIsValid
+				? 'border-red-500 focus:ring-2 focus:ring-red-500 dark:border-red-500'
+				: 'border-ink-300 dark:border-ink-700'}"
+		/>
+
+		<p id="streaming-url-help" class="mt-2 text-sm">
+			{#if streamingErrorReason === 'too_long'}
+				<span class="text-red-600">
+					{$_('settings.streaming_url.error.too_long')}
+				</span>
+			{:else if streamingErrorReason === 'invalid_scheme'}
+				<span class="text-red-600">
+					{$_('settings.streaming_url.error.invalid_scheme')}
+				</span>
+			{:else if streamingErrorReason === 'malformed'}
+				<span class="text-red-600">
+					{$_('settings.streaming_url.error.malformed')}
+				</span>
+			{:else if streamingIsEmpty}
+				<span class="text-ink-500">
+					{$_('settings.streaming_url.hint_empty')}
+				</span>
+			{:else}
+				<span class="text-ink-500">
+					{$_('settings.streaming_url.hint_ok')}
+				</span>
+			{/if}
+		</p>
+
+		<!-- Preview — mirrors the Nostr preview, showing the user
+		     what their Blurt.media link will look like next to their
+		     display name everywhere. Updates live as they type. -->
+		{#if streamingCleaned && saved}
+			<div
+				class="mt-4 rounded-xl border border-ink-200 bg-white p-4 dark:border-ink-700 dark:bg-ink-900"
+			>
+				<p class="mb-2 text-xs uppercase tracking-wider text-ink-500">
+					{$_('settings.streaming_url.preview_label')}
+				</p>
+				<IdentityLabel
+					account={accountSaved ?? undefined}
+					displayName={saved}
+					publicKey={previewPubkey}
+					streamingUrl={streamingCleaned}
+				/>
+			</div>
+		{/if}
+
+		<div class="mt-6 flex flex-wrap items-center gap-3">
+			<BusyButton
+				variant="secondary-quiet"
+				size="sm"
+				busy={streamingSaving}
+				done={streamingSavedToast}
+				disabled={!streamingIsValid ||
+					(streamingIsEmpty ? '' : streamingCleaned) === streamingSaved}
+				busyLabel={$_('common.saving')}
+				onclick={saveStreamingLocal}
+			>
+				{#if streamingSavedToast}
+					{$_('settings.display_name.saved_toast')}
+				{:else}
+					{$_('settings.display_name.save')}
+				{/if}
+			</BusyButton>
+			{#if $isUnlocked}
+				<BusyButton
+					variant="primary"
+					size="sm"
+					busy={streamingBroadcasting}
+					done={streamingBroadcastOk}
+					disabled={!streamingIsValid}
+					busyLabel={$_('common.broadcasting')}
+					onclick={saveAndBroadcastStreaming}
+				>
+					{#if streamingBroadcastOk}
+						{$_('common.broadcasted')}
+					{:else}
+						{$_('settings.streaming_url.save_and_broadcast')}
+					{/if}
+				</BusyButton>
+			{/if}
+			{#if streamingSaved}
+				<BusyButton variant="ghost" onclick={clearStreaming}>
+					{$_('settings.streaming_url.clear')}
+				</BusyButton>
+			{/if}
+			{#if streamingSavedToast}
+				<span class="text-sm font-medium text-morphit-emerald" role="status">
+					{$_('settings.streaming_url.saved_toast')}
+				</span>
+			{/if}
+		</div>
+
+		{#if streamingBroadcastError}
+			<div class="mt-3">
+				<StatusLine kind="error">{streamingBroadcastError}</StatusLine>
+			</div>
+		{/if}
+
+		<div
+			class="mt-6 rounded-xl border border-ink-200 bg-white p-4 text-sm text-ink-600 dark:border-ink-700 dark:bg-ink-900 dark:text-ink-300"
+		>
+			<strong>{$_('settings.streaming_url.reminder_title')}</strong>
+			<p class="mt-1">{$_('settings.streaming_url.reminder_body')}</p>
 		</div>
 	</section>
 

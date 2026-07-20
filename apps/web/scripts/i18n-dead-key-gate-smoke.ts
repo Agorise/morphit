@@ -156,7 +156,13 @@ const leaves: string[] = [];
 
 const dynArr = [...dynPairs].map((s) => s.split(SEP) as [string, string]);
 const DYNAMIC_ALLOWLIST = new Set<string>([
-	// (empty) keys assembled purely from runtime values with no literal fragment.
+	// AltNetworkIcon renders `footer.${network}` as its <img> alt. The globe
+	// (website) and play (streaming) alts are reached ONLY via that dynamic
+	// path — there is no static `$_('footer.globe')` call — so allowlist them.
+	// (The other network alts — tor/nostr/ens/… — also appear as static
+	// `$_('footer.tor')` etc. in the homepage grid, so they don't need this.)
+	'footer.globe',
+	'footer.play'
 ]);
 function referenced(key: string): boolean {
 	if (staticLits.has(key) || DYNAMIC_ALLOWLIST.has(key)) return true;

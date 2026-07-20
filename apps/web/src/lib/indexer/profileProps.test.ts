@@ -23,7 +23,8 @@ describe('extractLabelPropsFromProfile', () => {
 			avatarSvg: null,
 			avatarDataUri: null,
 			nostrUrl: null,
-			blurtMediaUrl: null,
+			streamingUrl: null,
+			websiteUrl: null,
 			shortBio: null
 		};
 		expect(nullResult).toEqual(allNull);
@@ -56,7 +57,7 @@ describe('extractLabelPropsFromProfile', () => {
 		expect(r.avatarSvg).toBeNull();
 		expect(r.avatarDataUri).toBeNull();
 		expect(r.nostrUrl).toBeNull();
-		expect(r.blurtMediaUrl).toBeNull();
+		expect(r.streamingUrl).toBeNull();
 		// display_name is not in json_metadata so it's preserved.
 		expect(r.displayName).toBe('Alice');
 	});
@@ -88,14 +89,16 @@ describe('extractLabelPropsFromProfile', () => {
 					avatar_svg: cleanSvg,
 					avatar_data_uri: cleanDataUri,
 					nostr_url: 'nostr:npub1xyz',
-					blurt_media_url: 'https://blurt.media/alice'
+					streaming_url: 'https://blurt.media/alice',
+					website_url: 'https://alice.example'
 				}
 			})
 		);
 		expect(r.displayName).toBe('Alice');
 		expect(r.avatarDataUri).toBe(cleanDataUri);
 		expect(r.nostrUrl).toBe('nostr:npub1xyz');
-		expect(r.blurtMediaUrl).toBe('https://blurt.media/alice');
+		expect(r.streamingUrl).toBe('https://blurt.media/alice');
+		expect(r.websiteUrl).toBe('https://alice.example');
 		// SVG survived — has the circle that the input contained.
 		expect(r.avatarSvg).not.toBeNull();
 		expect(r.avatarSvg).toContain('circle');
@@ -146,10 +149,11 @@ describe('extractLabelPropsFromProfile', () => {
 		expect(Object.keys(r).sort()).toEqual([
 			'avatarDataUri',
 			'avatarSvg',
-			'blurtMediaUrl',
 			'displayName',
 			'nostrUrl',
-			'shortBio'
+			'shortBio',
+			'streamingUrl',
+			'websiteUrl'
 		]);
 	});
 
