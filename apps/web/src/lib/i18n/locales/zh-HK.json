@@ -3608,8 +3608,7 @@
 			"qr_invalid": "該二維碼不包含 Blurt 帳戶。請換一個。"
 		},
 		"given_said": "我話：",
-		"received_rated": "@{account} 畀我嘅評分：",
-		"received_said": "@{account} 話："
+		"received_rated": "畀我嘅評分："
 	},
 	"relative_time": {
 		"descriptive": {
@@ -4058,7 +4057,6 @@
 			"saved_toast": "已儲存 ✓",
 			"save_and_broadcast": "儲存並廣播",
 			"broadcast_pending": "發佈中…",
-			"clear": "清除",
 			"reminder_title": "可選 — 您可以略過。",
 			"reminder_body": "冇咗呢個網址，你嘅 Morphit 身分都照樣運作。佢只係一個禮貌性連結，方便嗰啲可能都想睇你嘅 Nostr 個人檔案嘅人。"
 		},
@@ -4076,7 +4074,6 @@
 			},
 			"saved_toast": "已儲存到此裝置。",
 			"save_and_broadcast": "儲存並廣播",
-			"clear": "清除",
 			"reminder_title": "可選 — 您可以略過。",
 			"reminder_body": "冇咗呢個網址，你嘅 Morphit 身分一樣運作正常。呢個只係一個方便連結，畀想睇埋你個人檔案內容同相片等等嘅人。"
 		},
@@ -4093,7 +4090,6 @@
 			},
 			"saved_toast": "已儲存到此裝置。",
 			"save_and_broadcast": "儲存並廣播",
-			"clear": "清除",
 			"reminder_title": "可選 — 您可以略過。",
 			"reminder_body": "冇咗呢個網址，你嘅 Morphit 身分都照樣運作。佢只係一個禮貌性連結，方便嗰啲可能都想睇你嘅影片或者播客嘅人。"
 		},

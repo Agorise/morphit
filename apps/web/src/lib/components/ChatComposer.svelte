@@ -311,6 +311,12 @@
 			{$_('chat.composer.send')}
 		</BusyButton>
 	</div>
+
+	<!-- cp512 [C6] — E2E reassurance sits a couple px under the textarea,
+	     inside the composer's own padding, so there's no wasted row below. -->
+	<p class="mt-1 text-center text-xs text-ink-400 dark:text-ink-500">
+		{$_('chat.composer_e2e_note', { values: { peer } })}
+	</p>
 </form>
 
 {#if showKeyWarning}

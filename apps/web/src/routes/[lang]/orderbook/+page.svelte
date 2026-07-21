@@ -433,6 +433,14 @@
 	 *  auto-updating; flips false on transient EventSource errors and
 	 *  back true when the next snapshot arrives. */
 	let streaming = $state(false);
+	/** cp512 [O8] — true once the CURRENT stream's authoritative snapshot has
+	 *  landed. Reset at the top of every buildStream() (a fresh stream = no
+	 *  snapshot yet). fetchFirstPage() reads it so a late REST prefetch never
+	 *  clobbers the snapshot (or a just-arrived upsert) — the flash-then-vanish
+	 *  bug: a just-posted+paid order showed for a blink, then the stale REST
+	 *  response that had queried a moment before it went live overwrote items
+	 *  and blanked it. The SSE snapshot is a live DB read, so it wins. */
+	let currentStreamHadSnapshot = false;
 	/** Set of (account/permlink) ids the SSE stream has told us about
 	 *  since connect.  Used to know whether an order_removed event is
 	 *  for something currently rendered.  Bounded by the indexer's
@@ -750,13 +758,29 @@
 
 		if (!result.ok) {
 			console.warn('[orderbook] first-page fetch failed:', result.message);
-			errorMessage = $_('orderbook.error.fetch_failed');
-			phase = 'error';
+			// cp512 [O8] — if the stream's snapshot already populated the list,
+			// the SSE stream is our source of truth; don't flip to an error
+			// card over a failed REST prefetch.
+			if (currentStreamHadSnapshot) {
+				phase = 'ready';
+			} else {
+				errorMessage = $_('orderbook.error.fetch_failed');
+				phase = 'error';
+			}
 			return;
 		}
-		items = [...result.data.items];
 		cursor = result.data.next_cursor;
 		phase = 'ready';
+		// cp512 [O8] — do NOT clobber the authoritative SSE snapshot. If the
+		// stream already replaced items (snapshot, or a live upsert of a
+		// just-verified order), a late REST prefetch that queried a moment
+		// before that order went live would otherwise overwrite items and
+		// blank it (the flash-then-vanish Ken saw). When no snapshot has
+		// landed yet, render the REST page as the initial view; the snapshot
+		// replaces it shortly.
+		if (!currentStreamHadSnapshot) {
+			items = [...result.data.items];
+		}
 		// Kick off profile hydration — deliberately not awaited.
 		// The identicon fallback renders immediately; custom avatars
 		// swap in as profiles arrive.
@@ -826,9 +850,16 @@
 	let streamHandle: ReturnType<typeof createOrderbookStream> | null = null;
 
 	function buildStream(): ReturnType<typeof createOrderbookStream> {
+		// A brand-new stream has not yet delivered its snapshot, so an
+		// in-flight fetchFirstPage() is free to render the REST page until
+		// the snapshot lands. Runs synchronously after fetchFirstPage()'s
+		// synchronous prologue in both mount and restart, and after the old
+		// stream's stop() in restart — so no stale snapshot survives.
+		currentStreamHadSnapshot = false;
 		return createOrderbookStream({
 			query: () => currentQuery(),
 			onSnapshot: (snap) => {
+				currentStreamHadSnapshot = true;
 				// Snapshot is authoritative: replace the live-page
 				// portion of items with the server's view.  We don't
 				// touch any rows the user has already paginated into

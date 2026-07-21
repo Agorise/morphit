@@ -3608,8 +3608,7 @@
 			"qr_invalid": "该二维码不包含 Blurt 账户。请换一个。"
 		},
 		"given_said": "我说：",
-		"received_rated": "@{account} 给我的评分：",
-		"received_said": "@{account} 说："
+		"received_rated": "给我的评分："
 	},
 	"relative_time": {
 		"descriptive": {
@@ -4058,7 +4057,6 @@
 			"saved_toast": "已保存 ✓",
 			"save_and_broadcast": "保存并广播",
 			"broadcast_pending": "发布中…",
-			"clear": "清除",
 			"reminder_title": "可选 — 您可以跳过。",
 			"reminder_body": "没有这个网址，你的 Morphit 身份也能正常使用。它只是一个礼节性链接，方便那些可能也想看你的 Nostr 个人资料的人。"
 		},
@@ -4076,7 +4074,6 @@
 			},
 			"saved_toast": "已保存到此设备。",
 			"save_and_broadcast": "保存并广播",
-			"clear": "清除",
 			"reminder_title": "可选 — 您可以跳过。",
 			"reminder_body": "没有这个网址，你的 Morphit 身份也能正常使用。这只是一个便民链接，方便想要查看你个人资料内容和图片等的人。"
 		},
@@ -4093,7 +4090,6 @@
 			},
 			"saved_toast": "已保存到此设备。",
 			"save_and_broadcast": "保存并广播",
-			"clear": "清除",
 			"reminder_title": "可选 — 您可以跳过。",
 			"reminder_body": "没有这个网址，你的 Morphit 身份也能正常使用。它只是一个礼节性链接，方便那些可能也想看你的视频或播客的人。"
 		},

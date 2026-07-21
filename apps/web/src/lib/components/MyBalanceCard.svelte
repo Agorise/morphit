@@ -899,6 +899,7 @@
 						<Tooltip
 							textKey="profile.my_balance.delegated_in_label"
 							textValues={{ bp: fmtExact(receivedBp, 3) }}
+							noBorder
 						/>
 					{/if}
 				</dd>

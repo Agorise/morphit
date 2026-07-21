@@ -3608,8 +3608,7 @@
 			"qr_invalid": "Quel QR non conteneva un account Blurt. Provane un altro."
 		},
 		"given_said": "Ho detto:",
-		"received_rated": "@{account} mi ha valutato:",
-		"received_said": "@{account} ha detto:"
+		"received_rated": "Mi ha valutato:"
 	},
 	"relative_time": {
 		"descriptive": {
@@ -4058,7 +4057,6 @@
 			"saved_toast": "Salvato ✓",
 			"save_and_broadcast": "Salva e trasmetti",
 			"broadcast_pending": "Pubblicazione…",
-			"clear": "Cancella",
 			"reminder_title": "Opzionale — puoi saltare.",
 			"reminder_body": "La tua identità Morphit funziona benissimo senza questo URL. È un link di cortesia per le persone che potrebbero voler vedere anche il tuo profilo Nostr."
 		},
@@ -4076,7 +4074,6 @@
 			},
 			"saved_toast": "Salvato su questo dispositivo.",
 			"save_and_broadcast": "Salva e trasmetti",
-			"clear": "Cancella",
 			"reminder_title": "Opzionale — puoi saltare.",
 			"reminder_body": "La tua identità Morphit funziona bene senza questo URL. È un link di cortesia per chi vuole vedere anche i contenuti e le immagini del tuo profilo, ecc."
 		},
@@ -4093,7 +4090,6 @@
 			},
 			"saved_toast": "Salvato su questo dispositivo.",
 			"save_and_broadcast": "Salva e trasmetti",
-			"clear": "Cancella",
 			"reminder_title": "Opzionale — puoi saltare.",
 			"reminder_body": "La tua identità Morphit funziona benissimo senza questo URL. È un link di cortesia per le persone che potrebbero voler vedere anche i tuoi video o podcast."
 		},

@@ -794,16 +794,6 @@
 		}
 	}
 
-	function clearStreaming(): void {
-		try {
-			window.localStorage.removeItem(STREAMING_URL_STORAGE_KEY);
-		} catch {
-			// ignore
-		}
-		streamingSaved = '';
-		streamingInput = '';
-	}
-
 	// ── Website / blog URL — save locally, or save + broadcast ──────────
 	async function saveWebsiteLocal(): Promise<void> {
 		if (!websiteIsValid) return;
@@ -851,16 +841,6 @@
 		} finally {
 			websiteBroadcasting = false;
 		}
-	}
-
-	function clearWebsite(): void {
-		try {
-			window.localStorage.removeItem(WEBSITE_URL_STORAGE_KEY);
-		} catch {
-			// ignore
-		}
-		websiteSaved = '';
-		websiteInput = '';
 	}
 
 	// ── Nostr URL — save locally, or save + broadcast ───────────────
@@ -915,16 +895,6 @@
 		} finally {
 			nostrBroadcasting = false;
 		}
-	}
-
-	function clearNostr(): void {
-		try {
-			window.localStorage.removeItem(NOSTR_URL_STORAGE_KEY);
-		} catch {
-			// ignore
-		}
-		nostrSaved = '';
-		nostrInput = '';
 	}
 
 	// ─── Avatar upload / broadcast ──────────────────────────────────
@@ -1495,18 +1465,22 @@
 
 		<!-- Permanence warning — high-contrast callout so it doesn't
 		     get skimmed past. On-chain means public forever, no
-		     delete, no takedown. -->
-		<div
-			class="mt-4 rounded-xl border-2 border-red-500/60 bg-red-50 p-4 text-sm dark:border-red-500/50 dark:bg-red-900/20"
-			role="note"
-		>
-			<p class="font-semibold text-red-900 dark:text-red-200">
-				⚠ {$_('settings.avatar.permanence_heading')}
-			</p>
-			<p class="mt-1 text-red-900 dark:text-red-100">
-				{$_('settings.avatar.permanence_body')}
-			</p>
-		</div>
+		     delete, no takedown. cp512 [S3]: once a custom avatar is
+		     already on chain the user has crossed this bridge, so the
+		     warning is just noise — hide it. -->
+		{#if !hasCustomAvatar}
+			<div
+				class="mt-4 rounded-xl border-2 border-red-500/60 bg-red-50 p-4 text-sm dark:border-red-500/50 dark:bg-red-900/20"
+				role="note"
+			>
+				<p class="font-semibold text-red-900 dark:text-red-200">
+					⚠ {$_('settings.avatar.permanence_heading')}
+				</p>
+				<p class="mt-1 text-red-900 dark:text-red-100">
+					{$_('settings.avatar.permanence_body')}
+				</p>
+			</div>
+		{/if}
 
 		<!-- File input -->
 		<div class="mt-6">
@@ -1919,11 +1893,6 @@
 					{/if}
 				</BusyButton>
 			{/if}
-			{#if websiteSaved}
-				<BusyButton variant="ghost" onclick={clearStreaming}>
-					{$_('settings.website_url.clear')}
-				</BusyButton>
-			{/if}
 			{#if websiteSavedToast}
 				<span class="text-sm font-medium text-morphit-emerald" role="status">
 					{$_('settings.website_url.saved_toast')}
@@ -2035,11 +2004,6 @@
 					{/if}
 				</BusyButton>
 			{/if}
-			{#if streamingSaved}
-				<BusyButton variant="ghost" onclick={clearStreaming}>
-					{$_('settings.streaming_url.clear')}
-				</BusyButton>
-			{/if}
 			{#if streamingSavedToast}
 				<span class="text-sm font-medium text-morphit-emerald" role="status">
 					{$_('settings.streaming_url.saved_toast')}
@@ -2076,7 +2040,11 @@
 		<input
 			id="nostr-url-input"
 			type="text"
+			name="nostr-profile-url"
 			autocomplete="url"
+			data-1p-ignore
+			data-lpignore="true"
+			data-bwignore
 			inputmode="url"
 			spellcheck="false"
 			bind:value={nostrInput}
@@ -2144,11 +2112,6 @@
 					{:else}
 						{$_('settings.nostr_url.save_and_broadcast')}
 					{/if}
-				</BusyButton>
-			{/if}
-			{#if nostrSaved}
-				<BusyButton variant="ghost" onclick={clearNostr}>
-					{$_('settings.nostr_url.clear')}
 				</BusyButton>
 			{/if}
 			{#if nostrSavedToast}

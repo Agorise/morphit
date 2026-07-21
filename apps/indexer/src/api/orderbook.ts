@@ -519,6 +519,15 @@ ${tradeCountJoin('o')}
 			nextCursor = encodeCursor(cursorPayload);
 		}
 
+		// cp512 [O8] — the live orderbook must never be cached. The default
+		// security-middleware header is `public, max-age=3`, which let a
+		// browser (and any shared/edge cache) serve a stale, order-less list
+		// for a few seconds — long enough that a just-posted, just-paid order
+		// looked absent right after navigating here, and a phone reload kept
+		// showing the stale copy while my/orders showed it Live. `no-store`
+		// guarantees each page load is fresh; the SSE stream carries ongoing
+		// updates from there. (featuredOrderbook keeps its own max-age=10.)
+		c.header('cache-control', 'no-store');
 		return c.json({
 			items: rows.map(rowToWire),
 			next_cursor: nextCursor,

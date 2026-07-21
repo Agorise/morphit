@@ -315,23 +315,10 @@
 			     summary. -->
 			<li>
 				<label
-					class="flex items-start justify-between gap-4 rounded-xl border border-ink-200 p-4 dark:border-ink-700"
+					class="block rounded-xl border border-ink-200 p-4 dark:border-ink-700"
 				>
-					<div class="min-w-0">
-						<p class="font-semibold">{$_('settings.notifications.channel_push_label')}</p>
-						<p class="mt-1 text-sm text-ink-500 dark:text-ink-400">
-							{$_('settings.notifications.channel_push_help')}
-						</p>
-						{#if pushError}
-							{@const pushErrKey =
-								pushError === 'push_service_unavailable'
-									? pushBlockedHelpKey()
-									: `push_error_${pushError}`}
-							<p class="mt-2 text-sm text-rose-700 dark:text-rose-300" role="alert">
-								{$_(`settings.notifications.${pushErrKey}`)}
-							</p>
-						{/if}
-					</div>
+					<div class="flex items-start justify-between gap-4">
+						<p class="min-w-0 font-semibold">{$_('settings.notifications.channel_push_label')}</p>
 					<div class="flex flex-none flex-col items-end gap-2">
 						{#if !supportsPush}
 							<span
@@ -368,6 +355,19 @@
 							</button>
 						{/if}
 					</div>
+					</div>
+					<p class="mt-2 text-sm text-ink-500 dark:text-ink-400">
+						{$_('settings.notifications.channel_push_help')}
+					</p>
+					{#if pushError}
+						{@const pushErrKey =
+							pushError === 'push_service_unavailable'
+								? pushBlockedHelpKey()
+								: `push_error_${pushError}`}
+						<p class="mt-2 text-sm text-rose-700 dark:text-rose-300" role="alert">
+							{$_(`settings.notifications.${pushErrKey}`)}
+						</p>
+					{/if}
 				</label>
 
 				<!-- Privacy-level radios — stays visible so the user
