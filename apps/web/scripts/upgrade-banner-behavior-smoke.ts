@@ -55,7 +55,26 @@ expect(
 );
 expect(
 	'asset-mismatch alert is gated on a non-stale build',
-	/tamperedPaths\.length > 0 && \$staleBuild !== true/.test(tamperSrc)
+	/tamperedPaths\.length > 0 &&\s*\$staleBuild !== true/.test(tamperSrc)
+);
+// cp514 (t.txt A) — the scary red "Build integrity check failed" banner still
+// flashed during a routine upgrade, before the friendly "Load it now" snackbar.
+// The asset-hash case is now ALSO suppressed while a service-worker update is
+// pending and for a short post-boot grace window, so the update path leads. A
+// genuine same-version tamper on a settled bundle still fires once these clear.
+expect(
+	'cp514 — TamperAlertBanner imports the SW-update + grace gates',
+	/import \{[^}]*swUpdatePending[^}]*tamperGraceElapsed[^}]*\} from '\$lib\/updates\/tamperBannerGate'/.test(
+		tamperSrc
+	)
+);
+expect(
+	'cp514 — asset-mismatch is suppressed while a SW update is pending',
+	/!\$swUpdatePending/.test(tamperSrc)
+);
+expect(
+	'cp514 — asset-mismatch is suppressed during the post-boot grace window',
+	/\$tamperGraceElapsed/.test(tamperSrc)
 );
 expect(
 	'pubkey-mismatch + invalid-payload stay ungated (only assetTamper is gated)',

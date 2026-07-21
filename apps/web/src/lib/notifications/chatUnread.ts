@@ -173,10 +173,10 @@ export function noteFastChatPush(peer: string, orderPermlink: string, atMs?: num
 export function listFastPending(): { peer: string; orderPermlink: string; atMs: number }[] {
 	const out: { peer: string; orderPermlink: string; atMs: number }[] = [];
 	for (const [key, atMs] of fastPending) {
-		const sep = key.indexOf('\\u0000');
+		const sep = key.indexOf('\u0000');
 		if (sep < 0) continue;
 		const peer = key.slice(0, sep);
-		const orderPermlink = key.slice(sep + '\\u0000'.length);
+		const orderPermlink = key.slice(sep + '\u0000'.length);
 		if (peer) out.push({ peer, orderPermlink, atMs });
 	}
 	return out;

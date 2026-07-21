@@ -110,7 +110,7 @@ vi.mock('$lib/utils/hiddenAccounts', async () => {
 
 import { getConversations } from '$lib/indexer/client';
 import { markConversationRead } from '$lib/chat/readState';
-import { startChatUnreadChannel } from './chatUnread';
+import { startChatUnreadChannel, listFastPending, noteFastChatPush } from './chatUnread';
 import { unreadCount } from './index';
 import {
 	archiveThread,
@@ -248,5 +248,42 @@ describe('cp474 — fast push into an ARCHIVED thread (t.txt #3 + #4)', () => {
 		// the map untouched rather than writing an entry (which would then be
 		// broadcast on chain for no reason).
 		expect(get(chatFolders)).toEqual(before);
+	});
+});
+
+// ── cp514 (t.txt B) — listFastPending must round-trip fastKey ──────────
+// THE BUG THIS GUARDS. The badge lit in ~5s but the conversation CARD only
+// appeared on the ~60s durable poll: "kentest3 goes to his chat inbox, but
+// there is nothing there. about a minute later, the … message … appears."
+//
+// The optimistic card is injected from listFastPending(). fastKey builds its
+// keys with a REAL NUL separator (the `\u0000` escape → U+0000); the parser
+// searched for the LITERAL 6-char string '\\u0000' (a doubled backslash), so
+// indexOf() never matched, EVERY entry was skipped, and listFastPending()
+// always returned [] — no card, ever. The prior fast-push tests drive the
+// badge (unreadCount) but never call listFastPending(), so the whole suite
+// stayed green while the inbox card was dead. This exercises the round-trip
+// directly, so a re-broken separator fails loudly.
+describe('cp514 (t.txt B) — listFastPending round-trips a fast push (optimistic inbox card)', () => {
+	it('returns the (peer, order) a push filed, so the inbox can synthesise a card', () => {
+		const peer = 'ken-fastb-peer';
+		const order = 'im-buying-7-mxn-of-blurt';
+		// Date.now() (not a fixed past time): recount() prunes fast-pending
+		// entries older than the TTL, so a live push must be timestamped now.
+		const atMs = Date.now();
+		noteFastChatPush(peer, order, atMs);
+		const hit = listFastPending().find((p) => p.peer === peer && p.orderPermlink === order);
+		expect(hit).toBeDefined();
+		expect(hit?.atMs).toBe(atMs);
+	});
+
+	it('round-trips an ORDER-LESS thread (empty permlink) — separator still present', () => {
+		// A no-RE: thread pushes an empty permlink; the key is `peer\u0000`, and
+		// the parser must yield peer + '' rather than dropping the entry.
+		const peer = 'ken-noorder';
+		noteFastChatPush(peer, '', Date.now());
+		const hit = listFastPending().find((p) => p.peer === peer);
+		expect(hit).toBeDefined();
+		expect(hit?.orderPermlink).toBe('');
 	});
 });

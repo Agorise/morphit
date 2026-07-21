@@ -41,6 +41,7 @@
 		validateFeedback,
 		FeedbackValidationError
 	} from '$blurt/ops/feedback';
+	import { noteFeedbackGiven } from '$lib/feedback/optimisticFeedbackGiven';
 	import { broadcastOrderComplete } from '$blurt/ops/order';
 	import { announceSettledElsewhere } from '$lib/chat/settledElsewhere';
 	import { runtimeSettledElsewhereDeps } from '$lib/chat/settledElsewhereRuntime';
@@ -441,6 +442,24 @@
 			// belt-and-suspenders: clear first.
 			clearDraft(DRAFT_KEY);
 			draftSavedAt = null;
+			// cp514 (t.txt D) — record the just-landed feedback optimistically so
+			// the chat inbox flips this peer's card from the green "Leave feedback"
+			// prompt to the ★ rating immediately, without waiting for the durable
+			// /feedback-given fetch to catch up. rating + reviewerAccount are
+			// non-null here (submit early-returns otherwise, line ~355).
+			if (rating !== null && reviewerAccount) {
+				noteFeedbackGiven({
+					id: -1,
+					reviewer: reviewerAccount,
+					subject,
+					rating,
+					comment: outgoingComment.length > 0 ? outgoingComment : null,
+					order_permlink: orderPermlink,
+					created_at: new Date().toISOString(),
+					source_trx_id: result.trx_id,
+					responses: []
+				});
+			}
 			onSuccess?.({ trx_id: result.trx_id });
 		} catch (err) {
 			console.warn('[LeaveFeedbackForm] broadcast failed:', err);

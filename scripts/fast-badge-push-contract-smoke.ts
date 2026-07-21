@@ -118,6 +118,29 @@ check(
 	'Ken was on another tab; a focused-only poke would never reach him'
 );
 
+// ─── 2b. the SW SUPPRESSES a redundant notification for BOTH categories (cp514 / t.txt C) ──
+// While both parties are actively in the same chatroom, no OS notification
+// should keep popping. The suppression check must run for the 'order' category
+// too: an order-scoped chat message (messaging from an order card) is labelled
+// 'order', not 'chat', so the old 'chat'-only guard left every reply popping a
+// notification mid-conversation. NOTE: check 2's regex now also matches the
+// badge-poke's own `chat || order`; this pins the SUPPRESSION guard specifically.
+check(
+	'the notification-suppression guard covers BOTH chat and order categories',
+	/let activelyViewing = false;\s*if \(category === 'chat' \|\| category === 'order'\) \{/.test(sw),
+	"a 'chat'-only suppression pops a notification for every order-scoped reply while you're in the room"
+);
+check(
+	'suppression keys on a VISIBLE tab viewing the SAME-peer chat thread',
+	/visibilityState === 'visible' && chatPeerMatches\(c\.url, clickPath\)/.test(sw),
+	'a peer match on a visible tab — so a different thread/peer, or an order-lifecycle push, still notifies'
+);
+check(
+	'activelyViewing actually gates whether the notification is shown',
+	/if \(!activelyViewing\) \{[\s\S]{0,80}?showNotification/.test(sw),
+	'the suppression only matters if it skips showNotification'
+);
+
 // ─── 3. the page acts on it ──────────────────────────────────────
 check('the bridge listens for CHAT_PUSH from the SW', /data\.type === 'CHAT_PUSH'/.test(bridge));
 check(

@@ -363,11 +363,22 @@ self.addEventListener('push', (event: PushEvent) => {
 		(async () => {
 			// v1.5.0 — suppress a redundant OS notification when a tab the user is
 			// looking at is already on a chat thread with this PEER (cp508 tt.txt
-			// #8 — peer, not the exact order thread). Order and feedback categories
-			// always notify. The fastchat badge poke below is unchanged, so in-page
-			// badges still update — no regression.
+			// #8 — peer, not the exact order thread).
+			//
+			// cp514 (t.txt C) — ALSO suppress the 'order' category. An order-SCOPED
+			// chat message (someone messaging you from your order card) is sent with
+			// category='order' — it carries the order signal and deep-links to
+			// /chat/<peer> — NOT 'chat'. So while both parties were actively in the
+			// SAME chatroom, every reply still popped an OS notification: the
+			// suppression only ran for 'chat'. The fastchat badge poke below already
+			// parses BOTH categories for exactly this reason; the suppression now
+			// matches it. This only ever fires when a VISIBLE tab is on
+			// /chat/<same-peer> (chatPeerMatches), so a true order-LIFECYCLE push —
+			// which deep-links to the order page, not /chat/<peer> — never matches
+			// and still notifies. Feedback always notifies. In-page badges are
+			// unaffected — no regression.
 			let activelyViewing = false;
-			if (category === 'chat') {
+			if (category === 'chat' || category === 'order') {
 				try {
 					const openWindows = await self.clients.matchAll({
 						type: 'window',
