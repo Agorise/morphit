@@ -91,6 +91,15 @@ export function rowToWire(r: OrderbookStreamRow): Record<string, unknown> {
 	return {
 		account: r.account,
 		permlink: r.permlink,
+		// cp513 [O8] — the SSE twin of the REST cp510 [11d] fix. buildWhereClauses
+		// guarantees o.status = 'live', so this is always 'live', BUT the mapping
+		// omitted it — so every streamed order arrived with status=undefined. The
+		// frontend guard isOrderLive(o) = (o.status === 'live' && !expired) then
+		// filtered EVERY snapshot/upsert row out of visibleItems, so the live
+		// orderbook rendered empty even though the rows were present in `items`.
+		// REST rows carried status='live' and showed; the status-less snapshot
+		// replaced them and they vanished — the real "flash then vanish".
+		status: 'live' as const,
 		side: r.side,
 		asset: r.asset,
 		fiat_currency: r.fiat_currency,
