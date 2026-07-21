@@ -128,23 +128,48 @@ fi
 
 # ─── Freshness proof: news entropy ───────────────────────────────
 
-echo "canary: fetching news headline from $NEWS_RSS..." >&2
-NEWS_XML="$(curl -fsSL --max-time 15 "$NEWS_RSS")"
-# Extract the first <title> after <item> — robust against varying
-# RSS layouts.  Strip CDATA wrappers and HTML entities.
-NEWS_HEADLINE="$(echo "$NEWS_XML" \
-	| awk 'BEGIN{RS="<item>"} NR==2{print}' \
-	| grep -o '<title>[^<]*</title>' \
-	| head -1 \
-	| sed -e 's|<title>||' -e 's|</title>||' \
-	      -e 's|<!\[CDATA\[||g' -e 's|\]\]>||g' \
-	      -e 's|&amp;|\&|g' -e 's|&lt;|<|g' -e 's|&gt;|>|g' -e 's|&quot;|"|g' \
-	      -e 's|&apos;|'\''|g')"
+# Try the operator's configured feed first, then reliable public
+# fallbacks. A single hard-coded source is a single point of failure:
+# Cloudflare-fronted feeds (e.g. Cointelegraph) intermittently 403 a
+# plain curl, and under `set -e` that would abort the whole canary even
+# though the two chain heads above already prove freshness. So every
+# fetch is best-effort (never fatal), we stop at the first feed that
+# yields a headline, and record which feed actually won.
+NEWS_UA='Mozilla/5.0 (X11; Linux x86_64) Morphit-Canary'
+NEWS_HEADLINE=''
+NEWS_WON_SRC=''
+for feed in "$NEWS_RSS" \
+	"https://feeds.bbci.co.uk/news/rss.xml" \
+	"https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml"; do
+	echo "canary: fetching news headline from $feed..." >&2
+	# `|| true` keeps a failed/blocked fetch from tripping `set -e`.
+	NEWS_XML="$(curl -fsSL --max-time 15 -A "$NEWS_UA" "$feed" || true)"
+	[ -n "$NEWS_XML" ] || continue
+	# Extract the first <title> after <item> - robust against varying RSS
+	# layouts. Strip CDATA wrappers and HTML entities. Trailing `|| true`
+	# lets a feed with no <item>/<title> match fall through, not abort.
+	NEWS_HEADLINE="$(echo "$NEWS_XML" \
+		| awk 'BEGIN{RS="<item>"} NR==2{print}' \
+		| grep -o '<title>[^<]*</title>' \
+		| head -1 \
+		| sed -e 's|<title>||' -e 's|</title>||' \
+		      -e 's|<!\[CDATA\[||g' -e 's|\]\]>||g' \
+		      -e 's|&amp;|\&|g' -e 's|&lt;|<|g' -e 's|&gt;|>|g' -e 's|&quot;|"|g' \
+		      -e 's|&apos;|'\''|g' || true)"
+	[ -n "$NEWS_HEADLINE" ] || continue
+	NEWS_WON_SRC="$feed"
+	break
+done
 
-if [ -z "$NEWS_HEADLINE" ]; then
-	# Fall back to channel title rather than failing — most public RSS
-	# feeds work, but some operators may use a custom feed shape.
-	NEWS_HEADLINE="(no headline extracted from $NEWS_RSS)"
+if [ -n "$NEWS_WON_SRC" ]; then
+	# Record the feed that actually produced the headline (emitted below
+	# as NEWS_SOURCE in the signed canary).
+	NEWS_RSS="$NEWS_WON_SRC"
+else
+	# Every feed failed or yielded nothing - do NOT abort. The Blurt and
+	# Bitcoin chain heads above are the primary, sufficient freshness
+	# proof; this news line is only supplementary entropy.
+	NEWS_HEADLINE="(no news headline available; see chain heads above for freshness)"
 fi
 
 # ─── Compose ─────────────────────────────────────────────────────

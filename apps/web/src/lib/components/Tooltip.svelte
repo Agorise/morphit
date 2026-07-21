@@ -35,9 +35,22 @@
 		 *  render a dynamic string (e.g. "+ 260.901 BP delegated to you"). When
 		 *  omitted the key is rendered with no values, exactly as before. */
 		textValues?: Record<string, string | number>;
+		/** cp512 [PR4] — drop the circular border on the default ⓘ trigger, for
+		 *  places where the icon sits inline beside text (e.g. the delegated-BP
+		 *  hint next to the BP balance) and the badge outline reads as clutter.
+		 *  Ignored when a custom `trigger` is supplied. */
+		noBorder?: boolean;
 	}
 
-	let { textKey, faqKey, ariaLabel, trigger, hoverOpenDelayMs = 0, textValues }: Props = $props();
+	let {
+		textKey,
+		faqKey,
+		ariaLabel,
+		trigger,
+		hoverOpenDelayMs = 0,
+		textValues,
+		noBorder = false
+	}: Props = $props();
 
 	// Sally finding S-12 (Part 119): pre-fix this defaulted to the
 	// English string 'More info', which leaked into ARIA labels for
@@ -275,13 +288,20 @@
 	// asset block or its tooltip, the tooltip needs to instantly disappear").
 	// A capture-phase document `pointerover` fires on every element boundary
 	// the pointer crosses; if the new target is inside neither region, close
-	// now (no 140ms bridge). Skipped while pinned (tap) or keyboard-focused —
-	// those have their own dismiss paths (outside-tap / blur / Escape) and a
-	// roaming mouse must not yank a tooltip a keyboard user opened.
+	// now (no 140ms bridge). Only a `pinned` (tap-toggle) tooltip is exempt —
+	// it has its own outside-tap dismiss. A tooltip merely held open by focus
+	// is NOT exempt: `pointerover` only fires when a MOUSE moves, so a mouse
+	// roaming away should dismiss even if the trigger still holds focus.
+	// cp512 [P4]: clicking a Step-1 asset block to SELECT it focuses the
+	// block, which previously left the explainer stuck open until you clicked
+	// elsewhere. Keyboard users never move a mouse, so their focus-opened
+	// tooltips are untouched. We also clear the focus/hover flags so
+	// `recompute()` can't immediately re-open it while the element still
+	// holds DOM focus.
 	$effect(() => {
 		if (!open || typeof document === 'undefined') return;
 		const onPointerOver = (e: Event): void => {
-			if (pinned || focusWithin || panelFocusWithin) return;
+			if (pinned) return;
 			const t = e.target as Node | null;
 			if (!t) return;
 			const insideWrapper = wrapperEl?.contains(t) ?? false;
@@ -289,6 +309,8 @@
 			if (insideWrapper || insidePanel) return;
 			hovering = false;
 			panelHovering = false;
+			focusWithin = false;
+			panelFocusWithin = false;
 			clearOpenTimer();
 			clearCloseTimer();
 			open = false;
@@ -329,7 +351,9 @@
 	{:else}
 		<button
 			type="button"
-			class="inline-flex h-6 w-6 items-center justify-center rounded-full border border-ink-300 text-ink-500 hover:border-morphit-emerald hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:border-ink-600 dark:text-ink-400"
+			class={noBorder
+				? 'inline-flex h-6 w-6 items-center justify-center rounded-full text-ink-500 hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:text-ink-400'
+				: 'inline-flex h-6 w-6 items-center justify-center rounded-full border border-ink-300 text-ink-500 hover:border-morphit-emerald hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:border-ink-600 dark:text-ink-400'}
 			aria-label={effectiveAriaLabel}
 			aria-expanded={open}
 			aria-describedby={open ? `tip-${textKey}` : undefined}

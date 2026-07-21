@@ -3555,7 +3555,7 @@
 		},
 		"as_buyer": "as buyer",
 		"as_seller": "as seller",
-		"last_traded_label": "Last traded:",
+		"last_traded_label": "Last trade:",
 		"wallet": {
 			"power_up_action": "Power up",
 			"power_down_action": "Power down",
@@ -3608,8 +3608,7 @@
 			"qr_invalid": "That QR didn't contain a Blurt account. Try another."
 		},
 		"given_said": "I said:",
-		"received_rated": "@{account} rated me:",
-		"received_said": "@{account} said:"
+		"received_rated": "Rated me:"
 	},
 	"relative_time": {
 		"descriptive": {
@@ -4080,7 +4079,6 @@
 			"saved_toast": "Saved ✓",
 			"save_and_broadcast": "Save & broadcast",
 			"broadcast_pending": "Publishing…",
-			"clear": "Clear",
 			"reminder_title": "Optional — you can skip this.",
 			"reminder_body": "Your Morphit identity works fine without this URL. It's a courtesy link for people who might want to also see your Nostr profile."
 		},
@@ -4098,7 +4096,6 @@
 			},
 			"saved_toast": "Saved on this device.",
 			"save_and_broadcast": "Save & broadcast",
-			"clear": "Clear",
 			"reminder_title": "Optional — you can skip this.",
 			"reminder_body": "Your Morphit identity works fine without this URL. It's a courtesy link for people who might want to also see your profile content and images, etc."
 		},
@@ -4115,7 +4112,6 @@
 			},
 			"saved_toast": "Saved on this device.",
 			"save_and_broadcast": "Save & broadcast",
-			"clear": "Clear",
 			"reminder_title": "Optional — you can skip this.",
 			"reminder_body": "Your Morphit identity works fine without this URL. It's a courtesy link for people who might want to also see your videos or podcasts."
 		},

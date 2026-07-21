@@ -629,53 +629,12 @@
 			<h2 id="reputation-heading" class="font-display text-lg font-bold">
 				{$_('profile.reputation_heading')}
 			</h2>
-			{#if feedback}
-				<!-- cp511 [E] — suspicious-reciprocity (Signal B, ADR-0009 §5)
-				     status pill. GREEN when the account carries no reciprocity
-				     flag; amber when flagged. Shown whenever the summary has
-				     loaded — including for accounts with no reviews yet, which are
-				     trivially clean — so a clean account gets a positive signal. -->
-				{#if feedback.summary.reciprocity_flagged}
-					<span
-						class="inline-flex flex-none items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-800 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
-					>
-						<svg
-							aria-hidden="true"
-							width="13"
-							height="13"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2.5"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						>
-							<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
-							<path d="M12 9v4" />
-							<path d="M12 17h.01" />
-						</svg>
-						{$_('profile.reciprocity_flagged_pill')}
-					</span>
-				{:else}
-					<span
-						class="inline-flex flex-none items-center gap-1 rounded-full border border-morphit-emerald/40 bg-morphit-emerald/10 px-2.5 py-0.5 text-xs font-semibold text-morphit-emerald"
-					>
-						<svg
-							aria-hidden="true"
-							width="13"
-							height="13"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2.5"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						>
-							<path d="M20 6 9 17l-5-5" />
-						</svg>
-						{$_('profile.reciprocity_clean_pill')}
-					</span>
-				{/if}
+			{#if feedback && feedback.summary.last_traded_at !== null}
+				<!-- cp512 [PR2] — "Last trade: N ago" moved to the top-right corner. -->
+				<div class="flex-none text-xs text-ink-500">
+					<span>{$_('profile.last_traded_label')}</span>
+					<RelativeTime iso={feedback.summary.last_traded_at} format="descriptive" />
+				</div>
 			{/if}
 		</div>
 
@@ -760,16 +719,57 @@
 			<!-- cp124 H6: dormancy signal.  Surface "last traded N ago" so
 			     readers see freshness without changing the score.  Hidden
 			     when null (brand-new account, never traded). -->
-			{#if feedback.summary.last_traded_at !== null}
-				<div class="mt-3 text-xs text-ink-500">
-					<span>{$_('profile.last_traded_label')}</span>
-					<RelativeTime iso={feedback.summary.last_traded_at} format="descriptive" />
-				</div>
-			{/if}
 		{:else}
 			<p class="text-sm text-ink-600 dark:text-ink-300">
 				{$_('profile.no_feedback_yet')}
 			</p>
+		{/if}
+
+		<!-- cp512 [PR1] — reciprocity pill pinned to the bottom-right corner. -->
+		{#if feedback}
+			<div class="mt-4 flex justify-end">
+				{#if feedback.summary.reciprocity_flagged}
+					<span
+						class="inline-flex flex-none items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-800 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
+					>
+						<svg
+							aria-hidden="true"
+							width="13"
+							height="13"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+							<path d="M12 9v4" />
+							<path d="M12 17h.01" />
+						</svg>
+						{$_('profile.reciprocity_flagged_pill')}
+					</span>
+				{:else}
+					<span
+						class="inline-flex flex-none items-center gap-1 rounded-full border border-morphit-emerald/40 bg-morphit-emerald/10 px-2.5 py-0.5 text-xs font-semibold text-morphit-emerald"
+					>
+						<svg
+							aria-hidden="true"
+							width="13"
+							height="13"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<path d="M20 6 9 17l-5-5" />
+						</svg>
+						{$_('profile.reciprocity_clean_pill')}
+					</span>
+				{/if}
+			</div>
 		{/if}
 	</section>
 
@@ -777,7 +777,7 @@
 	<div
 		role="tablist"
 		aria-label={$_('profile.tabs_aria')}
-		class="mb-4 flex gap-1 overflow-x-auto border-b border-ink-200 dark:border-ink-800"
+		class="no-scrollbar mb-4 flex gap-1 overflow-x-auto border-b border-ink-200 dark:border-ink-800"
 	>
 		{#each tabDefs as tab (tab.id)}
 			<button
@@ -943,8 +943,6 @@
 									displayName={reviewerProps.displayName}
 									avatarSvg={reviewerProps.avatarSvg}
 									avatarDataUri={reviewerProps.avatarDataUri}
-									nostrUrl={reviewerProps.nostrUrl}
-									streamingUrl={reviewerProps.streamingUrl}
 									publicKeyString={reviewerProfileMap[fb.reviewer]?.posting_pubkey ?? undefined}
 									href={lp(`/@${fb.reviewer}`)}
 									weight="semibold"
@@ -971,7 +969,7 @@
 							}) as string}
 						>
 							<span class="text-ink-600 dark:text-ink-300">
-								{$_('profile.received_rated', { values: { account: fb.reviewer } })}
+								{$_('profile.received_rated')}
 							</span>
 							<span class="text-morphit-emerald" aria-hidden="true">
 								{starString(fb.rating)}
@@ -1001,14 +999,9 @@
 							{/if}
 						</div>
 						{#if fb.comment}
-							<!-- v1.8.0 (t.txt): "@X said:" prefix, mirroring the given
-							     card's "I said:". Here the comment is what the REVIEWER
-							     said about the profile owner, so the prefix names the
-							     reviewer. -->
+							<!-- cp512 [PR6] — the "@X said:" prefix was removed; the reviewer
+							     is already named by the IdentityLabel above the rating. -->
 							<p class="whitespace-pre-wrap text-sm text-ink-700 dark:text-ink-200">
-								<span class="text-ink-500 dark:text-ink-400"
-									>{$_('profile.received_said', { values: { account: fb.reviewer } })}</span
-								>
 								{fb.comment}
 							</p>
 						{/if}
@@ -1040,8 +1033,6 @@
 										displayName={responderProps.displayName}
 										avatarSvg={responderProps.avatarSvg}
 										avatarDataUri={responderProps.avatarDataUri}
-										nostrUrl={responderProps.nostrUrl}
-										streamingUrl={responderProps.streamingUrl}
 										href={lp(`/@${resp.responder}`)}
 										weight="semibold"
 										avatarSize={20}
@@ -1176,8 +1167,6 @@
 									displayName={subjectProps.displayName}
 									avatarSvg={subjectProps.avatarSvg}
 									avatarDataUri={subjectProps.avatarDataUri}
-									nostrUrl={subjectProps.nostrUrl}
-									streamingUrl={subjectProps.streamingUrl}
 									publicKeyString={reviewerProfileMap[fb.subject]?.posting_pubkey ?? undefined}
 									href={lp(`/@${fb.subject}`)}
 									weight="semibold"
@@ -1268,8 +1257,6 @@
 										displayName={responderProps.displayName}
 										avatarSvg={responderProps.avatarSvg}
 										avatarDataUri={responderProps.avatarDataUri}
-										nostrUrl={responderProps.nostrUrl}
-										streamingUrl={responderProps.streamingUrl}
 										href={lp(`/@${resp.responder}`)}
 										weight="semibold"
 										avatarSize={20}

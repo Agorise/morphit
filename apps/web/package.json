@@ -1,6 +1,6 @@
 {
 	"name": "morphit-web",
-	"version": "1.8.4",
+	"version": "1.8.5",
 	"private": true,
 	"type": "module",
 	"description": "Morphit web frontend \u2014 SvelteKit SSG, PWA, No-JS read-only paths",

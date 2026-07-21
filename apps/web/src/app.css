@@ -2,6 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer utilities {
+	/* cp512 [PR3] — hide scrollbars while keeping scroll functionality, so the
+	   profile tab strip can still swipe on narrow screens without an ugly bar
+	   under (or beside) it. */
+	.no-scrollbar {
+		scrollbar-width: none; /* Firefox */
+		-ms-overflow-style: none; /* IE / legacy Edge */
+	}
+	.no-scrollbar::-webkit-scrollbar {
+		display: none; /* Chrome / Safari / Chromium Edge */
+	}
+}
+
 /* -----------------------------------------------------------------------------
  * Typography — Comfortaa (SIL OFL). Subsetted locally; no external font services.
  * We ship Latin + Latin-Extended by default; CJK loaded on demand when the

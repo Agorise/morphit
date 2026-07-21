@@ -267,6 +267,7 @@ SMOKES=(
 	".:license-disclosure-smoke"
 	".:handler-push-click-path-route-smoke"
 	".:fast-badge-push-contract-smoke"
+	".:orderbook-freshness-contract-smoke"
 	".:sidecar-shell-quoting-smoke"
 	".:sidecar-envelope-error-path-smoke"
 	".:last-char-tamper-anti-pattern-smoke"
