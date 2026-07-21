@@ -746,7 +746,8 @@
 		},
 		"system": {
 			"order_settled_elsewhere": "Merci de l'intérêt que vous portez à cette annonce. J'ai désormais conclu cette transaction avec un autre commerçant, elle n'est donc plus disponible. Je suis désolé que cela n'ait pas pu aboutir cette fois-ci — j'apprécie sincèrement votre intérêt et j'espère que nous pourrons commercer à l'avenir."
-		}
+		},
+		"composer_e2e_note": "Personne d'autre ne peut lire ce chat. Seuls toi et @{peer} détenez les clés."
 	},
 	"cheat_sheet": {
 		"heading": "Aide-mémoire Morphit",
@@ -1501,7 +1502,7 @@
 			},
 			"chat_inbox_features": {
 				"q": "Comment fonctionne la boîte de réception du chat ? Puis-je masquer ou réactiver quelqu'un ?",
-				"a": "La boîte de réception du chat se trouve sur l'icône de chat dans l'en-tête et fonctionne comme une boîte mail : **une carte par discussion**, et non une par personne.\n\nSi vous et le même trader avez parlé de trois commandes différentes, cela fait trois cartes, chacune avec une ligne « RE: » nommant la commande et son état actuel — **(Active)**, **(Annulée)** ou **(Expirée)** — ainsi un fil au sujet d'une commande qui n'existe plus le dit avant même que vous l'ouvriez. Une discussion qui ne porte sur aucune commande a aussi sa propre carte ; sa deuxième ligne indique simplement « RE: - ». Ouvrez une carte et vous ne voyez que cette discussion. L'activité la plus récente est toujours en haut.\n\nLire une carte marque **seulement celle-là** comme lue — trois conversations non lues avec la même personne restent trois conversations non lues, sur cet appareil et sur tous les autres où vous vous connectez. Les cartes non lues gardent une bordure émeraude, et l'icône de chat (ainsi que l'onglet du navigateur et le favicon) porte le compteur de non-lus. Lire une carte, ou cliquer sur **Tout marquer comme lu**, le remet à zéro.\n\nLa boîte a trois onglets, exactement comme un client de messagerie :\n\n**Réception** — où tout arrive par défaut et reste jusqu'à ce que vous le déplaciez. Les nouvelles conversations, les réponses et le premier contact de quelqu'un que vous ne connaissez pas apparaissent ici.\n\n**★ Favoris** — touchez l'étoile vide à droite de l'heure d'une carte et la discussion se déplace ici ; touchez l'étoile dorée pour la renvoyer en Réception. La même étoile se trouve dans le menu ⋮ de la conversation, vous pouvez donc marquer un fil depuis l'intérieur du chat.\n\n**Archivés** — vous en avez fini avec une discussion mais ne voulez bloquer personne ? Touchez **Archiver** à droite de la carte. Elle passe en Archivés, cesse de compter dans votre badge de non-lus, et son bouton devient **Restaurer** pour la renvoyer en Réception. L'archivage se fait par discussion, en local dans votre navigateur, jamais sur la chaîne, et jamais visible pour l'autre partie.\n\n**Masquer / réactiver (bloquer + débloquer).** Dans n'importe quelle conversation, le menu ⋮ de l'en-tête a un bouton Bloquer. Il demande confirmation, puis diffuse une opération de blocage sur la chaîne — ce compte ne peut plus vous joindre depuis aucun alias, et l'indexeur l'applique côté serveur quelle que soit l'instance Morphit utilisée. Pour réactiver, allez dans **Paramètres → Comptes bloqués** et cliquez sur Débloquer ; c'est aussi une opération sur la chaîne, effective immédiatement.\n\n**Bloquer vs Archiver vs Masquer :** Bloquer est au niveau du protocole et sur la chaîne (entre instances, sur tout l'historique du compte). Archiver, c'est votre propre organisation de la boîte — uniquement local et par discussion. Masquer (le bouton du carnet d'ordres — voir « Puis-je masquer des ordres de certains utilisateurs ? » plus bas) est la même idée de masquage local, étendue aux lignes du carnet d'ordres.\n\nSur ordinateur comme sur mobile, des notifications push facultatives signalent les nouveaux messages — voir « Comment les notifications push fonctionnent-elles avec ma vie privée ? » pour leur empreinte de confidentialité. Désactivez-les à tout moment depuis les Paramètres."
+				"a": "La boîte de réception du chat se trouve sur l'icône de chat dans l'en-tête et fonctionne comme une boîte mail : **une carte par discussion**, et non une par personne.\n\nSi vous et le même trader avez parlé de trois commandes différentes, cela fait trois cartes, chacune avec une ligne « RE: » nommant la commande et son état actuel — **(Active)**, **(Annulée)**, **(Expirée)** ou **(Payé)** — ainsi un fil au sujet d'une commande qui n'existe plus le dit avant même que vous l'ouvriez. Une discussion qui ne porte sur aucune commande a aussi sa propre carte ; sa deuxième ligne indique simplement « RE: - ». Ouvrez une carte et vous ne voyez que cette discussion. L'activité la plus récente est toujours en haut.\n\nLire une carte marque **seulement celle-là** comme lue — trois conversations non lues avec la même personne restent trois conversations non lues, sur cet appareil et sur tous les autres où vous vous connectez. Les cartes non lues gardent une bordure émeraude, et l'icône de chat (ainsi que l'onglet du navigateur et le favicon) porte le compteur de non-lus. Lire une carte, ou cliquer sur **Tout marquer comme lu**, le remet à zéro.\n\nLa boîte a trois onglets, exactement comme un client de messagerie :\n\n**Réception** — où tout arrive par défaut et reste jusqu'à ce que vous le déplaciez. Les nouvelles conversations, les réponses et le premier contact de quelqu'un que vous ne connaissez pas apparaissent ici.\n\n**★ Favoris** — touchez l'étoile vide à droite de l'heure d'une carte et la discussion se déplace ici ; touchez l'étoile dorée pour la renvoyer en Réception. La même étoile se trouve dans le menu ⋮ de la conversation, vous pouvez donc marquer un fil depuis l'intérieur du chat.\n\n**Archivés** — vous en avez fini avec une discussion mais ne voulez bloquer personne ? Touchez **Archiver** à droite de la carte. Elle passe en Archivés, cesse de compter dans votre badge de non-lus, et son bouton devient **Restaurer** pour la renvoyer en Réception. L'archivage se fait par discussion, en local dans votre navigateur, jamais sur la chaîne, et jamais visible pour l'autre partie.\n\n**Masquer / réactiver (bloquer + débloquer).** Dans n'importe quelle conversation, le menu ⋮ de l'en-tête a un bouton Bloquer. Il demande confirmation, puis diffuse une opération de blocage sur la chaîne — ce compte ne peut plus vous joindre depuis aucun alias, et l'indexeur l'applique côté serveur quelle que soit l'instance Morphit utilisée. Pour réactiver, allez dans **Paramètres → Comptes bloqués** et cliquez sur Débloquer ; c'est aussi une opération sur la chaîne, effective immédiatement.\n\n**Bloquer vs Archiver vs Masquer :** Bloquer est au niveau du protocole et sur la chaîne (entre instances, sur tout l'historique du compte). Archiver, c'est votre propre organisation de la boîte — uniquement local et par discussion. Masquer (le bouton du carnet d'ordres — voir « Puis-je masquer des ordres de certains utilisateurs ? » plus bas) est la même idée de masquage local, étendue aux lignes du carnet d'ordres.\n\nSur ordinateur comme sur mobile, des notifications push facultatives signalent les nouveaux messages — voir « Comment les notifications push fonctionnent-elles avec ma vie privée ? » pour leur empreinte de confidentialité. Désactivez-les à tout moment depuis les Paramètres."
 			},
 			"notifications_overview": {
 				"q": "Comment Morphit me prévient-il quand quelque chose se passe — nouveau message, ordre rempli, retour reçu ?",
@@ -3146,7 +3147,7 @@
 		"submit": {
 			"primary_label": "Payer et publier cet ordre",
 			"pending_broadcasting": "Publication de votre ordre…",
-			"review_hint": "Une fois publié, tu as 15 minutes pour corriger les fautes de frappe. Tu peux aussi Annuler et Republier si besoin",
+			"review_hint": "Une fois publié, tu as 15 minutes pour corriger les fautes de frappe. Tu peux aussi Annuler et Republier si besoin.",
 			"primary_label_waived": "Publier gratuitement",
 			"primary_label_external": "Publier l'ordre"
 		},
@@ -3476,6 +3477,15 @@
 			}
 		},
 		"reputation_heading": "Réputation",
+		"reciprocity_clean_pill": "Aucun signalement d'avis mutuels",
+		"reciprocity_flagged_pill": "Avis mutuels signalés",
+		"tab_reviews_received": "Avis reçus",
+		"tab_reviews_given": "Avis donnés",
+		"tab_active_orders": "Ordres actifs",
+		"tab_trade_history": "Historique des échanges",
+		"tabs_aria": "Détails du profil",
+		"no_trade_history": "Aucun échange terminé pour l'instant.",
+		"trade_history_with": "avec @{account}",
 		"loading_feedback": "Chargement des avis…",
 		"feedback_error": "Impossible de charger les avis pour le moment.",
 		"rating_count": "{n, plural, one {# évaluation} other {# évaluations}}",
@@ -3514,7 +3524,8 @@
 			"unclaimed_label": "Récompenses non réclamées",
 			"claim_now": "Réclamer",
 			"claiming": "Réclamation…",
-			"claim_error": "Impossible de réclamer pour le moment. Réessaie."
+			"claim_error": "Impossible de réclamer pour le moment. Réessaie.",
+			"delegated_in_label": "+ {bp} BP délégués à toi"
 		},
 		"pnl": {
 			"export_button": "Exporter P&L (12 derniers mois)",
@@ -4044,7 +4055,6 @@
 				"invalid_scheme": "Seules les URL nostr:, https:// et http:// sont autorisées.",
 				"malformed": "Cela ne ressemble pas à une URL valide."
 			},
-			"preview_label": "Aperçu",
 			"saved_toast": "Enregistré ✓",
 			"save_and_broadcast": "Enregistrer et diffuser",
 			"broadcast_pending": "Publication…",
@@ -4064,7 +4074,6 @@
 				"invalid_scheme": "L'URL doit commencer par http:// ou https://.",
 				"malformed": "URL mal formée."
 			},
-			"preview_label": "Aperçu :",
 			"saved_toast": "Enregistré sur cet appareil.",
 			"save_and_broadcast": "Enregistrer et diffuser",
 			"clear": "Effacer",
@@ -4082,7 +4091,6 @@
 				"invalid_scheme": "L'URL doit commencer par http:// ou https://.",
 				"malformed": "URL mal formée."
 			},
-			"preview_label": "Aperçu :",
 			"saved_toast": "Enregistré sur cet appareil.",
 			"save_and_broadcast": "Enregistrer et diffuser",
 			"clear": "Effacer",
@@ -4105,7 +4113,7 @@
 			"channel_native_label": "Notifications bureau",
 			"channel_native_help": "Notification native de l'OS quand un nouvel événement arrive et que cet onglet n'est pas focus. Demande permission la première fois.",
 			"channel_push_label": "Notifications push (onglet fermé)",
-			"channel_push_help": "Notifie aussi quand Morphit n'est pas ouvert du tout. Nécessite un service push — vous pouvez choisir auto-hébergé, navigateur standard, ou désactivé.",
+			"channel_push_help": "Notifie aussi quand Morphit n'est pas ouvert du tout. Nécessite un service Web Push.",
 			"channel_push_privacy_label": "Niveau de confidentialité push",
 			"channel_push_privacy_standard": "Standard (navigateur par défaut)",
 			"channel_push_privacy_off": "Désactivé",
@@ -4271,7 +4279,7 @@
 			"heading": "Clé matérielle",
 			"explain": "Lie une YubiKey à ton keystore comme deuxième méthode de déverrouillage, ou comme unique méthode. Ajoute un second facteur solide qu'un mot de passe volé seul ne peut pas contourner.",
 			"unsupported_title": "Ton navigateur ne prend pas en charge les clés matérielles",
-			"unsupported_body": "Le déverrouillage par YubiKey nécessite WebHID, actuellement disponible uniquement dans Chrome, Edge, Brave et d'autres navigateurs basés sur Chromium. Firefox et Safari n'exposent pas cette API. Tu peux continuer à utiliser ton mot de passe comme avant.",
+			"unsupported_body": "Le déverrouillage par YubiKey nécessite l'API WebHID, qui n'est pas disponible dans tous les navigateurs web. Tu peux continuer à utiliser ton mot de passe comme avant.",
 			"seed_only_note": "Les clés matérielles ne sont disponibles que si tu as un keystore persisté. Tu utilises le mode phrase-de-récupération-uniquement — aucune enveloppe n'est stockée sur cet appareil, il n'y a donc rien à lier à une clé.",
 			"unnamed_key": "YubiKey sans nom",
 			"slot_label": "Emplacement {slot}",

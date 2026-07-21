@@ -746,7 +746,8 @@
 		},
 		"system": {
 			"order_settled_elsewhere": "Vielen Dank für Ihr Interesse an diesem Angebot. Ich habe diesen Handel inzwischen mit einem anderen Händler abgeschlossen, daher ist es nicht mehr verfügbar. Es tut mir leid, dass es diesmal nicht geklappt hat — ich weiß Ihr Interesse sehr zu schätzen und hoffe, dass wir in Zukunft handeln können."
-		}
+		},
+		"composer_e2e_note": "Niemand sonst kann diesen Chat lesen. Nur du und @{peer} habt die Schlüssel."
 	},
 	"cheat_sheet": {
 		"heading": "Morphit-Spickzettel",
@@ -1501,7 +1502,7 @@
 			},
 			"chat_inbox_features": {
 				"q": "Wie funktioniert der Chat-Posteingang? Kann ich jemanden stummschalten oder das rückgängig machen?",
-				"a": "Der Chat-Posteingang liegt hinter dem Chat-Symbol in der Kopfzeile und funktioniert wie ein E-Mail-Postfach: **eine Karte pro Unterhaltung**, nicht eine pro Person.\n\nWenn du und derselbe Händler über drei verschiedene Angebote gesprochen habt, sind das drei Karten, jede mit einer „RE:\"-Zeile, die das Angebot und seinen aktuellen Status nennt — **(Aktiv)**, **(Storniert)** oder **(Abgelaufen)** — sodass ein Verlauf über ein nicht mehr existierendes Angebot das sagt, bevor du ihn öffnest. Eine Unterhaltung, die um kein Angebot geht, bekommt trotzdem ihre eigene Karte; ihre zweite Zeile lautet einfach „RE: -\". Öffne eine Karte und du siehst nur diese Unterhaltung. Die neueste Aktivität steht immer oben.\n\nEine Karte zu lesen markiert **nur diese** als gelesen — drei ungelesene Unterhaltungen mit derselben Person bleiben drei ungelesene Unterhaltungen, auf diesem Gerät und auf jedem anderen, an dem du dich anmeldest. Ungelesene Karten behalten einen smaragdgrünen Rand, und das Chat-Symbol (sowie der Browser-Tab und das Favicon) trägt die Ungelesen-Zahl. Eine Karte zu lesen oder auf **Alle als gelesen markieren** zu klicken setzt sie auf null.\n\nDer Posteingang hat drei Tabs, genau wie ein E-Mail-Programm:\n\n**Posteingang** — wo alles standardmäßig landet und bleibt, bis du es verschiebst. Neue Unterhaltungen, Antworten und der Erstkontakt von jemandem, den du nicht kennst, erscheinen hier.\n\n**★ Markiert** — tippe auf den leeren Stern rechts neben der Uhrzeit einer Karte und die Unterhaltung wandert hierher; tippe auf den goldenen Stern, um sie zurück in den Posteingang zu schicken. Derselbe Stern sitzt im ⋮-Menü der Unterhaltung, du kannst einen Verlauf also auch aus dem Chatraum heraus markieren.\n\n**Archiviert** — fertig mit einer Unterhaltung, willst aber niemanden blockieren? Tippe auf **Archivieren** rechts an der Karte. Sie wandert ins Archiv, zählt nicht mehr für dein Ungelesen-Abzeichen, und ihr Knopf wird zu **Wiederherstellen**, um sie in den Posteingang zurückzuholen. Archivieren geschieht pro Unterhaltung, lokal in deinem Browser, nie auf der Kette und nie für die andere Seite sichtbar.\n\n**Stummschalten / aufheben (blockieren + entsperren).** In jeder Unterhaltung hat das ⋮-Menü der Kopfzeile einen Blockieren-Knopf. Er fragt nach Bestätigung und sendet dann eine Blockier-Operation auf die Kette — dieses Konto kann dich von keinem Alias mehr erreichen, und der Indexer erzwingt das serverseitig, egal welche Morphit-Instanz der Absender nutzt. Zum Aufheben gehe zu **Einstellungen → Blockierte Konten** und klicke auf Entsperren; auch das ist eine Operation auf der Kette und wirkt sofort.\n\n**Blockieren vs Archivieren vs Ausblenden:** Blockieren ist auf Protokollebene und auf der Kette (instanzübergreifend, über den gesamten Kontoverlauf). Archivieren ist deine eigene Posteingangs-Pflege — nur lokal und pro Unterhaltung. Ausblenden (der Knopf im Orderbuch — siehe „Kann ich Angebote bestimmter Nutzer ausblenden?\" unten) ist dieselbe lokale Ausblend-Idee, erweitert auf Orderbuch-Zeilen.\n\nDesktop und Mobil erhalten beide optionale Push-Benachrichtigungen für neue Nachrichten — siehe „Wie funktionieren Push-Benachrichtigungen mit meiner Privatsphäre?\" für den Datenschutz-Fußabdruck. Schalte sie jederzeit in den Einstellungen aus."
+				"a": "Der Chat-Posteingang liegt hinter dem Chat-Symbol in der Kopfzeile und funktioniert wie ein E-Mail-Postfach: **eine Karte pro Unterhaltung**, nicht eine pro Person.\n\nWenn du und derselbe Händler über drei verschiedene Angebote gesprochen habt, sind das drei Karten, jede mit einer „RE:\"-Zeile, die das Angebot und seinen aktuellen Status nennt — **(Aktiv)**, **(Storniert)**, **(Abgelaufen)** oder **(Bezahlt)** — sodass ein Verlauf über ein nicht mehr existierendes Angebot das sagt, bevor du ihn öffnest. Eine Unterhaltung, die um kein Angebot geht, bekommt trotzdem ihre eigene Karte; ihre zweite Zeile lautet einfach „RE: -\". Öffne eine Karte und du siehst nur diese Unterhaltung. Die neueste Aktivität steht immer oben.\n\nEine Karte zu lesen markiert **nur diese** als gelesen — drei ungelesene Unterhaltungen mit derselben Person bleiben drei ungelesene Unterhaltungen, auf diesem Gerät und auf jedem anderen, an dem du dich anmeldest. Ungelesene Karten behalten einen smaragdgrünen Rand, und das Chat-Symbol (sowie der Browser-Tab und das Favicon) trägt die Ungelesen-Zahl. Eine Karte zu lesen oder auf **Alle als gelesen markieren** zu klicken setzt sie auf null.\n\nDer Posteingang hat drei Tabs, genau wie ein E-Mail-Programm:\n\n**Posteingang** — wo alles standardmäßig landet und bleibt, bis du es verschiebst. Neue Unterhaltungen, Antworten und der Erstkontakt von jemandem, den du nicht kennst, erscheinen hier.\n\n**★ Markiert** — tippe auf den leeren Stern rechts neben der Uhrzeit einer Karte und die Unterhaltung wandert hierher; tippe auf den goldenen Stern, um sie zurück in den Posteingang zu schicken. Derselbe Stern sitzt im ⋮-Menü der Unterhaltung, du kannst einen Verlauf also auch aus dem Chatraum heraus markieren.\n\n**Archiviert** — fertig mit einer Unterhaltung, willst aber niemanden blockieren? Tippe auf **Archivieren** rechts an der Karte. Sie wandert ins Archiv, zählt nicht mehr für dein Ungelesen-Abzeichen, und ihr Knopf wird zu **Wiederherstellen**, um sie in den Posteingang zurückzuholen. Archivieren geschieht pro Unterhaltung, lokal in deinem Browser, nie auf der Kette und nie für die andere Seite sichtbar.\n\n**Stummschalten / aufheben (blockieren + entsperren).** In jeder Unterhaltung hat das ⋮-Menü der Kopfzeile einen Blockieren-Knopf. Er fragt nach Bestätigung und sendet dann eine Blockier-Operation auf die Kette — dieses Konto kann dich von keinem Alias mehr erreichen, und der Indexer erzwingt das serverseitig, egal welche Morphit-Instanz der Absender nutzt. Zum Aufheben gehe zu **Einstellungen → Blockierte Konten** und klicke auf Entsperren; auch das ist eine Operation auf der Kette und wirkt sofort.\n\n**Blockieren vs Archivieren vs Ausblenden:** Blockieren ist auf Protokollebene und auf der Kette (instanzübergreifend, über den gesamten Kontoverlauf). Archivieren ist deine eigene Posteingangs-Pflege — nur lokal und pro Unterhaltung. Ausblenden (der Knopf im Orderbuch — siehe „Kann ich Angebote bestimmter Nutzer ausblenden?\" unten) ist dieselbe lokale Ausblend-Idee, erweitert auf Orderbuch-Zeilen.\n\nDesktop und Mobil erhalten beide optionale Push-Benachrichtigungen für neue Nachrichten — siehe „Wie funktionieren Push-Benachrichtigungen mit meiner Privatsphäre?\" für den Datenschutz-Fußabdruck. Schalte sie jederzeit in den Einstellungen aus."
 			},
 			"notifications_overview": {
 				"q": "Wie benachrichtigt mich Morphit, wenn etwas passiert — neue Nachricht, Auftrag gefüllt, Bewertung eingetroffen?",
@@ -3146,7 +3147,7 @@
 		"submit": {
 			"primary_label": "Bezahlen und diese Order posten",
 			"pending_broadcasting": "Deine Order wird veröffentlicht…",
-			"review_hint": "Einmal veröffentlicht, hast du 15 Minuten, um Tippfehler zu korrigieren. Du kannst auch Stornieren und neu veröffentlichen, falls nötig",
+			"review_hint": "Einmal veröffentlicht, hast du 15 Minuten, um Tippfehler zu korrigieren. Du kannst auch Stornieren und neu veröffentlichen, falls nötig.",
 			"primary_label_waived": "Kostenlos posten",
 			"primary_label_external": "Order posten"
 		},
@@ -3476,6 +3477,15 @@
 			}
 		},
 		"reputation_heading": "Reputation",
+		"reciprocity_clean_pill": "Keine Markierung gegenseitiger Bewertungen",
+		"reciprocity_flagged_pill": "Gegenseitige Bewertungen markiert",
+		"tab_reviews_received": "Erhaltene Bewertungen",
+		"tab_reviews_given": "Abgegebene Bewertungen",
+		"tab_active_orders": "Aktive Angebote",
+		"tab_trade_history": "Handelsverlauf",
+		"tabs_aria": "Profildetails",
+		"no_trade_history": "Noch keine abgeschlossenen Trades.",
+		"trade_history_with": "mit @{account}",
 		"loading_feedback": "Feedback wird geladen…",
 		"feedback_error": "Feedback konnte gerade nicht geladen werden.",
 		"rating_count": "{n, plural, one {# Bewertung} other {# Bewertungen}}",
@@ -3514,7 +3524,8 @@
 			"unclaimed_label": "Nicht abgeholte Belohnungen",
 			"claim_now": "Jetzt abholen",
 			"claiming": "Wird abgeholt…",
-			"claim_error": "Abholen gerade nicht möglich. Bitte versuche es erneut."
+			"claim_error": "Abholen gerade nicht möglich. Bitte versuche es erneut.",
+			"delegated_in_label": "+ {bp} BP an dich delegiert"
 		},
 		"pnl": {
 			"export_button": "P&L exportieren (letzte 12 Monate)",
@@ -4044,7 +4055,6 @@
 				"invalid_scheme": "Nur nostr:, https:// und http://-URLs sind erlaubt.",
 				"malformed": "Das sieht nicht wie eine gültige URL aus."
 			},
-			"preview_label": "Vorschau",
 			"saved_toast": "Gespeichert ✓",
 			"save_and_broadcast": "Speichern & senden",
 			"broadcast_pending": "Veröffentliche…",
@@ -4064,7 +4074,6 @@
 				"invalid_scheme": "Die URL muss mit http:// oder https:// beginnen.",
 				"malformed": "URL ist ungültig."
 			},
-			"preview_label": "Vorschau:",
 			"saved_toast": "Auf diesem Gerät gespeichert.",
 			"save_and_broadcast": "Speichern & senden",
 			"clear": "Leeren",
@@ -4082,7 +4091,6 @@
 				"invalid_scheme": "Die URL muss mit http:// oder https:// beginnen.",
 				"malformed": "URL ist ungültig."
 			},
-			"preview_label": "Vorschau:",
 			"saved_toast": "Auf diesem Gerät gespeichert.",
 			"save_and_broadcast": "Speichern & senden",
 			"clear": "Leeren",
@@ -4105,7 +4113,7 @@
 			"channel_native_label": "Desktop-Benachrichtigungen",
 			"channel_native_help": "OS-native Benachrichtigung, wenn ein neues Ereignis eintrifft und dieser Tab nicht fokussiert ist. Fragt beim ersten Mal nach Berechtigung.",
 			"channel_push_label": "Push-Benachrichtigungen (Tab geschlossen)",
-			"channel_push_help": "Benachrichtigt auch, wenn Morphit überhaupt nicht offen ist. Erfordert einen Push-Dienst — selbst gehostet, Standard-Browser, oder aus.",
+			"channel_push_help": "Benachrichtigt auch, wenn Morphit überhaupt nicht offen ist. Erfordert einen Web-Push-Dienst.",
 			"channel_push_privacy_label": "Push-Datenschutz-Level",
 			"channel_push_privacy_standard": "Standard (Browser-Default)",
 			"channel_push_privacy_off": "Aus",
@@ -4271,7 +4279,7 @@
 			"heading": "Hardware-Schlüssel",
 			"explain": "Binde einen YubiKey an deinen Keystore als zweite Entsperr-Methode oder als einzige Methode. Fügt einen starken zweiten Faktor hinzu, den ein gestohlenes Passwort allein nicht umgehen kann.",
 			"unsupported_title": "Dein Browser unterstützt keine Hardware-Schlüssel",
-			"unsupported_body": "YubiKey-Entsperrung benötigt WebHID, das derzeit nur in Chrome, Edge, Brave und anderen Chromium-basierten Browsern verfügbar ist. Firefox und Safari bieten diese API nicht. Du kannst dein Passwort wie bisher weiter verwenden.",
+			"unsupported_body": "YubiKey-Entsperrung benötigt die WebHID-API, die nicht in allen Webbrowsern verfügbar ist. Du kannst dein Passwort wie bisher weiter verwenden.",
 			"seed_only_note": "Hardware-Schlüssel sind nur verfügbar, wenn du einen persistierten Keystore hast. Du verwendest den Nur-Seed-Modus — auf diesem Gerät ist kein Umschlag gespeichert, an den ein Schlüssel gebunden werden könnte.",
 			"unnamed_key": "Unbenannter YubiKey",
 			"slot_label": "Slot {slot}",

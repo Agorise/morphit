@@ -424,6 +424,56 @@
 		return n % 1 === 0 ? String(n) : n.toFixed(2);
 	}
 
+	// ─── cp511 [B]: tabbed detail section ───────────────────────────
+	// Groups the four profile detail views under the Reputation card so
+	// the page reads as a compact card stack instead of a long scroll.
+	// Tab order follows Ken's list: reviews received / reviews given /
+	// active orders / trade history. Default = reviews-received (the
+	// reputation drill-down that pairs with the summary card above).
+	type ProfileTab = 'reviews' | 'given' | 'orders' | 'history';
+	let activeTab = $state<ProfileTab>('reviews');
+	// cp511 [B] (Ken): Trade history is OWNER-ONLY — it surfaces completed
+	// orders, so the tab appears only when you're viewing your own profile.
+	const tabDefs = $derived(
+		[
+			{ id: 'reviews' as const, label: $_('profile.tab_reviews_received') },
+			{ id: 'given' as const, label: $_('profile.tab_reviews_given') },
+			{ id: 'orders' as const, label: $_('profile.tab_active_orders') },
+			{ id: 'history' as const, label: $_('profile.tab_trade_history') }
+		].filter((t) => t.id !== 'history' || isOwnProfile)
+	);
+	// Visible-tab order for roving-tabindex keyboard nav — derived from
+	// tabDefs so a hidden tab (trade history on someone else's profile) is
+	// never a keyboard-nav target.
+	const tabOrder = $derived(tabDefs.map((t) => t.id));
+	// Roving-tabindex keyboard nav (WAI-ARIA tabs pattern): arrows wrap,
+	// Home/End jump to ends, and focus follows selection.
+	function onTabKeydown(e: KeyboardEvent, id: ProfileTab): void {
+		const order = tabOrder;
+		const idx = order.indexOf(id);
+		let next = -1;
+		if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (idx + 1) % order.length;
+		else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp')
+			next = (idx - 1 + order.length) % order.length;
+		else if (e.key === 'Home') next = 0;
+		else if (e.key === 'End') next = order.length - 1;
+		if (next < 0) return;
+		e.preventDefault();
+		const nextId = order[next]!;
+		activeTab = nextId;
+		requestAnimationFrame(() => document.getElementById(`tab-${nextId}`)?.focus());
+	}
+	// Completed trades for the Trade history tab. Same source as
+	// liveOrders — allOrders is already fetched via getOrdersByAccount and
+	// carries every status — filtered to completed, newest-first. No new
+	// endpoint or public exposure; counterparty shows only when the owner
+	// named it in morphit_order_complete_v1.
+	const completedOrders = $derived.by(() =>
+		[...allOrders]
+			.filter((o) => o.status === 'completed')
+			.sort((a, b) => b.created_at.localeCompare(a.created_at))
+	);
+
 	/** Canonical order title — the same unified sentence used on the
 	 *  orderbook, /my/orders, and the order-detail page. Replaces the
 	 *  old per-card formatting that mislabelled the fiat trade-size
@@ -449,15 +499,17 @@
 <div class="mx-auto max-w-3xl px-4 py-10 md:py-14">
 	<!-- ─── Hero: avatar + display name + account + links ────── -->
 	<section class="mb-8 flex flex-col items-center text-center">
-		<!-- Avatar with the user's social-link glyphs (Nostr / Blurt.media)
-		     stacked at its bottom-right corner.  The avatar and the glyph
-		     column are centered together as one unit (items-end aligns the
-		     column's bottom to the avatar's bottom), so when glyphs are
-		     present the avatar sits slightly left of centre and the pair
-		     stays centred on the page.  Nostr renders first (top); Blurt.media
-		     second (bottom).  With a single glyph the column collapses to one
-		     icon which bottom-aligns into that same corner spot. -->
-		<div class="mb-3 flex items-end justify-center gap-2">
+		<!-- Avatar with the user's social-link glyphs (Nostr / Website / Blurt.media)
+		     to its RIGHT. `items-center` vertically centres the glyph column
+		     against the avatar (cp511 [D] — Ken: "perfectly to the right of the
+		     avatar … perfectly spaced"), so 1, 2, or all 3 icons sit level with
+		     the avatar's middle rather than clinging to its bottom corner. The
+		     avatar + glyph column are centred together as one unit (justify-center)
+		     so the pair stays centred on the page; `gap-2` is the even spacing
+		     between avatar and column, and `gap-2` inside the column spaces the
+		     icons from one another. These glyphs appear ONLY here — nowhere else
+		     on the profile page renders THIS user's link icons. -->
+		<div class="mb-3 flex items-center justify-center gap-2">
 			{#if avatarSvg}
 				<span
 					class="flex h-24 w-24 items-center justify-center overflow-hidden rounded-2xl bg-ink-800/50 ring-1 ring-ink-700 dark:bg-ink-800"
@@ -493,7 +545,7 @@
 				/>
 			{/if}
 			{#if validatedNostrUrl || validatedWebsiteUrl || validatedStreamingUrl}
-				<div class="flex flex-col gap-2 pb-1">
+				<div class="flex flex-col gap-2">
 					{#if validatedNostrUrl}
 						<a
 							href={validatedNostrUrl}
@@ -573,9 +625,59 @@
 
 	<!-- ─── Feedback summary card ────────────────────────────── -->
 	<section class="card mb-6" aria-labelledby="reputation-heading">
-		<h2 id="reputation-heading" class="mb-3 font-display text-lg font-bold">
-			{$_('profile.reputation_heading')}
-		</h2>
+		<div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+			<h2 id="reputation-heading" class="font-display text-lg font-bold">
+				{$_('profile.reputation_heading')}
+			</h2>
+			{#if feedback}
+				<!-- cp511 [E] — suspicious-reciprocity (Signal B, ADR-0009 §5)
+				     status pill. GREEN when the account carries no reciprocity
+				     flag; amber when flagged. Shown whenever the summary has
+				     loaded — including for accounts with no reviews yet, which are
+				     trivially clean — so a clean account gets a positive signal. -->
+				{#if feedback.summary.reciprocity_flagged}
+					<span
+						class="inline-flex flex-none items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-800 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
+					>
+						<svg
+							aria-hidden="true"
+							width="13"
+							height="13"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+							<path d="M12 9v4" />
+							<path d="M12 17h.01" />
+						</svg>
+						{$_('profile.reciprocity_flagged_pill')}
+					</span>
+				{:else}
+					<span
+						class="inline-flex flex-none items-center gap-1 rounded-full border border-morphit-emerald/40 bg-morphit-emerald/10 px-2.5 py-0.5 text-xs font-semibold text-morphit-emerald"
+					>
+						<svg
+							aria-hidden="true"
+							width="13"
+							height="13"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<path d="M20 6 9 17l-5-5" />
+						</svg>
+						{$_('profile.reciprocity_clean_pill')}
+					</span>
+				{/if}
+			{/if}
+		</div>
 
 		{#if feedbackState === 'loading'}
 			<StatusLine kind="loading">{$_('profile.loading_feedback')}</StatusLine>
@@ -671,9 +773,43 @@
 		{/if}
 	</section>
 
+	<!-- ─── cp511 [B]: tabbed detail navigation (WAI-ARIA tabs) ─── -->
+	<div
+		role="tablist"
+		aria-label={$_('profile.tabs_aria')}
+		class="mb-4 flex gap-1 overflow-x-auto border-b border-ink-200 dark:border-ink-800"
+	>
+		{#each tabDefs as tab (tab.id)}
+			<button
+				role="tab"
+				id="tab-{tab.id}"
+				type="button"
+				aria-selected={activeTab === tab.id}
+				aria-controls="panel-{tab.id}"
+				tabindex={activeTab === tab.id ? 0 : -1}
+				onclick={() => (activeTab = tab.id)}
+				onkeydown={(e) => onTabKeydown(e, tab.id)}
+				class="-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald {activeTab ===
+				tab.id
+					? 'border-morphit-emerald text-morphit-emerald'
+					: 'border-transparent text-ink-500 hover:text-ink-800 dark:text-ink-400 dark:hover:text-ink-100'}"
+			>
+				{tab.label}
+			</button>
+		{/each}
+	</div>
+
 	<!-- ─── Active orders ────────────────────────────────────── -->
-	<section class="mb-6" aria-labelledby="active-orders-heading">
-		<h2 id="active-orders-heading" class="mb-3 font-display text-lg font-bold">
+	<!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
+	<section
+		role="tabpanel"
+		id="panel-orders"
+		aria-labelledby="tab-orders"
+		tabindex="0"
+		class="mb-6"
+		hidden={activeTab !== 'orders'}
+	>
+		<h2 id="active-orders-heading" class="sr-only">
 			{$_('profile.active_orders_heading')}
 		</h2>
 
@@ -757,11 +893,25 @@
 	</section>
 
 	<!-- ─── Feedback items list ──────────────────────────────── -->
-	{#if feedbackState === 'ready' && feedbackItems.length > 0}
-		<section aria-labelledby="reviews-heading">
-			<h2 id="reviews-heading" class="mb-3 font-display text-lg font-bold">
-				{$_('profile.reviews_heading', { values: { account } })}
-			</h2>
+	<!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
+	<section
+		role="tabpanel"
+		id="panel-reviews"
+		aria-labelledby="tab-reviews"
+		tabindex="0"
+		hidden={activeTab !== 'reviews'}
+	>
+		<h2 id="reviews-heading" class="sr-only">
+			{$_('profile.reviews_heading', { values: { account } })}
+		</h2>
+		{#if feedbackState === 'loading'}
+			<StatusLine kind="loading">{$_('profile.loading_feedback')}</StatusLine>
+		{:else if feedbackState === 'error'}
+			<StatusLine kind="warn">{$_('profile.feedback_error')}</StatusLine>
+			<p class="mt-1 text-xs text-ink-500">{feedbackError}</p>
+		{:else if feedbackItems.length === 0}
+			<p class="text-sm text-ink-600 dark:text-ink-300">{$_('profile.no_feedback_yet')}</p>
+		{:else}
 			<ul class="space-y-3">
 				{#each feedbackItems as fb (fb.id)}
 					{@const reviewerProps = extractLabelPropsFromProfile(reviewerProfileMap[fb.reviewer])}
@@ -976,12 +1126,19 @@
 					</BusyButton>
 				</div>
 			{/if}
-		</section>
-	{/if}
+		{/if}
+	</section>
 
 	<!-- ─── Feedback given (reviews this account has left) ──── -->
-	<section class="mt-8" aria-labelledby="given-heading">
-		<h2 id="given-heading" class="mb-3 font-display text-lg font-bold">
+	<!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
+	<section
+		role="tabpanel"
+		id="panel-given"
+		aria-labelledby="tab-given"
+		tabindex="0"
+		hidden={activeTab !== 'given'}
+	>
+		<h2 id="given-heading" class="sr-only">
 			{$_('profile.given_heading', { values: { account } })}
 		</h2>
 
@@ -1141,4 +1298,46 @@
 			{/if}
 		{/if}
 	</section>
+	{#if isOwnProfile}
+	<!-- ─── cp511 [B]: Trade history (completed trades) ─────── -->
+	<!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
+	<section
+		role="tabpanel"
+		id="panel-history"
+		aria-labelledby="tab-history"
+		tabindex="0"
+		hidden={activeTab !== 'history'}
+	>
+		<h2 id="history-heading" class="sr-only">
+			{$_('profile.tab_trade_history')}
+		</h2>
+		{#if ordersState === 'loading'}
+			<StatusLine kind="loading">{$_('profile.loading_orders')}</StatusLine>
+		{:else if ordersState === 'error'}
+			<StatusLine kind="warn">{$_('profile.orders_error')}</StatusLine>
+			<p class="mt-1 text-xs text-ink-500">{ordersError}</p>
+		{:else if completedOrders.length === 0}
+			<p class="text-sm text-ink-600 dark:text-ink-300">
+				{$_('profile.no_trade_history')}
+			</p>
+		{:else}
+			<ul class="space-y-3">
+				{#each completedOrders as o (o.permlink)}
+					<li class="card">
+						<div class="font-medium">{cardTitle(o)}</div>
+						<div class="mt-1 text-xs text-ink-500 dark:text-ink-400">
+							{#if o.completed_counterparty}
+								{$_('profile.trade_history_with', {
+									values: { account: o.completed_counterparty }
+								})}
+								<span aria-hidden="true">·</span>
+							{/if}
+							<RelativeTime iso={o.created_at} format="descriptive" />
+						</div>
+					</li>
+				{/each}
+			</ul>
+		{/if}
+	</section>
+	{/if}
 </div>

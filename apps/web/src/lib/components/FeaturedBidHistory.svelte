@@ -5,7 +5,7 @@
 	 * form header, top-right) that opens an ELI5 modal listing ALL of the user's
 	 * prior featured orders, newest first. Each row: the order's human summary
 	 * line ("I'm buying 40–70 AUD worth of XMR") + its order id in parens, the bid
-	 * detail ("6h · 300.000 BLURT @ 50.00/hr · from Jul 8"), and a status pill.
+	 * detail ("6h · 300.000 BLURT @ 50.00/hr · from 8 Jul"), and a status pill.
 	 *
 	 * Self-fetches /v1/orderbook/featured/bids?account=X on mount + every 60s.
 	 * Renders nothing on empty (first-time bidder) — just yields space to the form.
@@ -15,6 +15,7 @@
 	import { getFeaturedBidHistory } from '$lib/indexer/client';
 	import type { FeaturedBidHistoryEntry } from '@morphit/indexer-client';
 	import { orderTitleParts } from '$lib/utils/orderTitle';
+	import { formatDayMonthShort } from '$lib/i18n/formatters';
 
 	interface Props {
 		/** Account to fetch bids for — always the current user's account. */
@@ -76,11 +77,12 @@
 	}
 
 	function shortDate(iso: string): string {
-		try {
-			return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-		} catch {
-			return iso.slice(0, 10);
-		}
+		// cp509 (v1.8.4 D) — sitewide date standard: day-first, localized month
+		// ("8 Jul", not the old month-first "Jul 8"). formatDayMonthShort is the
+		// sanctioned compact form (day + 3-char localized month, UTC); fall back to
+		// the ISO date prefix only if it can't parse (shouldn't happen for a real
+		// bid timestamp).
+		return formatDayMonthShort(iso) || iso.slice(0, 10);
 	}
 
 	/** The order's human summary parts ("I'm buying …"), or null when the order

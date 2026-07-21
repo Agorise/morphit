@@ -330,6 +330,24 @@
 		}
 	}
 
+	// cp510 [11c] — SILENT re-fetch: same query as load() but without the
+	// phase='loading' flip (no spinner flicker) and without the hash-scroll.
+	// Polled (below) while an order is still provisional so the indexer's
+	// confirmed row REPLACES the "Posting…" placeholder the moment it lands.
+	// Before this, load() ran once on mount and nothing re-fetched, so the
+	// placeholder aged out at PENDING_TTL_MS and the card VANISHED until a
+	// manual refresh (Ken: "after about a minute the card suddenly disappeared
+	// … i refresh the page and the ordercard appeared"). On a transient fetch
+	// error we keep the current view (and the placeholder) rather than blanking.
+	async function silentRefetch(): Promise<void> {
+		if (!blurtAccount) return;
+		const result = await getOrdersByAccount(blurtAccount, { limit: 100 });
+		if (!result.ok) return;
+		items = applyRecentCompletes(applyRecentCancels(result.data.items));
+		void loadViewCounts();
+		void loadCounterparties();
+	}
+
 	async function loadViewCounts(): Promise<void> {
 		if (!blurtAccount) return;
 		const account = blurtAccount;
@@ -430,6 +448,35 @@
 	);
 	function isProvisional(o: OrderRecord): boolean {
 		return provisionalKeys.has(orderEchoKey(o));
+	}
+	// cp510 [11c] — poll the indexer while ANY order is still provisional, so
+	// its confirmed row lands (and drops the placeholder) on its own. Depends on
+	// the BOOLEAN, not on `nowMs`, so it doesn't tear down + re-arm every tick —
+	// it (re)arms only when provisional-ness flips, and self-stops the instant
+	// nothing is provisional (confirmed, or aged out at PENDING_TTL_MS).
+	const hasProvisional = $derived(provisionalKeys.size > 0);
+	$effect(() => {
+		if (!hasProvisional) return;
+		const iv = setInterval(() => {
+			void silentRefetch();
+		}, 10_000);
+		return () => clearInterval(iv);
+	});
+	// cp510 [11b] — a ~1-minute countdown for the "Posting…" pill so the user
+	// has a sense of how long until the order is durable (and the Feature button
+	// un-arms). Basis is the order's own created_at (broadcast time, set at
+	// addPendingOrder); clamped to [0,60] and reads `nowMs` so it ticks. Returns
+	// 0 once elapsed — the pill then shows just "Posting…" (no stuck 0:00), the
+	// poll above having almost certainly swapped in the real card by then.
+	function postingCountdownSeconds(o: OrderRecord): number {
+		const createdMs = new Date(o.created_at).getTime();
+		if (!Number.isFinite(createdMs)) return 0;
+		const remain = 60 - Math.floor((nowMs - createdMs) / 1000);
+		return remain > 0 ? Math.min(60, remain) : 0;
+	}
+	function postingCountdownLabel(o: OrderRecord): string {
+		const s = postingCountdownSeconds(o);
+		return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 	}
 	// cp508 (tt.txt #4) — the post-confirmation "set up a featured bid" link deep-
 	// links here as /my/orders?featuring=<permlink>; we ring + scroll that card so
@@ -925,9 +972,12 @@
 									>
 										<span class="inline-block h-2 w-2 animate-pulse rounded-full bg-amber-500"></span>
 										{$_('my_orders.order.posting')}
+										{#if postingCountdownSeconds(o) > 0}
+											<span class="tabular-nums opacity-75">{postingCountdownLabel(o)}</span>
+										{/if}
 									</span>
 								{/if}
-								{#if !paidPermlinks.has(o.permlink) && !(o.status === 'completed' && o.completed_counterparty)}
+								{#if !paidPermlinks.has(o.permlink) && !(o.status === 'completed' && o.completed_counterparty) && !isProvisional(o)}
 									<!-- v1.5.0 — a verifiably-paid order is effectively taken; hide
 									     the "Visible in orderbook" state pill (the "Paid by @peer"
 									     badge below conveys the state). -->

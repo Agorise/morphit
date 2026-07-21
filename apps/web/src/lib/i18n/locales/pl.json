@@ -746,7 +746,8 @@
 		},
 		"system": {
 			"order_settled_elsewhere": "Dziękuję za zainteresowanie tym zleceniem. Zawarłem już tę transakcję z innym handlowcem, więc nie jest już dostępna. Przykro mi, że tym razem się nie udało — bardzo doceniam Twoje zainteresowanie i mam nadzieję, że w przyszłości uda nam się przeprowadzić transakcję."
-		}
+		},
+		"composer_e2e_note": "Nikt inny nie może przeczytać tego czatu. Tylko ty i @{peer} macie klucze."
 	},
 	"cheat_sheet": {
 		"heading": "Ściąga Morphit",
@@ -1501,7 +1502,7 @@
 			},
 			"chat_inbox_features": {
 				"q": "Jak działa skrzynka czatu? Czy mogę kogoś wyciszyć lub wyłączyć wyciszenie?",
-				"a": "Skrzynka czatu znajduje się pod ikoną czatu w nagłówku i działa jak skrzynka e-mail: **jedna karta na rozmowę**, a nie jedna na osobę.\n\nJeśli ty i ten sam handlowiec rozmawialiście o trzech różnych ofertach, to trzy karty, każda z wierszem „RE:\" nazywającym ofertę i jej obecny stan — **(Aktywna)**, **(Anulowana)** lub **(Wygasła)** — więc wątek o ofercie, która już nie istnieje, mówi o tym, zanim ją otworzysz. Rozmowa, która nie dotyczy żadnej oferty, też ma własną kartę; jej drugi wiersz to po prostu „RE: -\". Otwórz kartę, a zobaczysz tylko tę rozmowę. Najnowsza aktywność jest zawsze na górze.\n\nPrzeczytanie jednej karty oznacza jako przeczytaną **tylko ją** — trzy nieprzeczytane rozmowy z tą samą osobą pozostają trzema nieprzeczytanymi rozmowami, na tym urządzeniu i na każdym innym, na którym się zalogujesz. Nieprzeczytane karty zachowują szmaragdową obwódkę, a ikona czatu (oraz karta przeglądarki i favicon) niesie licznik nieprzeczytanych. Przeczytanie karty lub kliknięcie **Oznacz wszystko jako przeczytane** zeruje go.\n\nSkrzynka ma trzy zakładki, dokładnie jak klient poczty:\n\n**Odebrane** — gdzie wszystko trafia domyślnie i zostaje, dopóki tego nie przeniesiesz. Nowe rozmowy, odpowiedzi i pierwszy kontakt od kogoś, kogo nie znasz, pojawiają się tutaj.\n\n**★ Oznaczone** — dotknij pustej gwiazdki po prawej stronie godziny karty, a rozmowa przeniesie się tutaj; dotknij złotej gwiazdki, aby odesłać ją do Odebranych. Ta sama gwiazdka jest w menu ⋮ rozmowy, więc możesz oznaczyć wątek także z wnętrza czatu.\n\n**Zarchiwizowane** — skończyłeś z rozmową, ale nie chcesz nikogo blokować? Dotknij **Archiwizuj** po prawej stronie karty. Przenosi się do Zarchiwizowanych, przestaje liczyć się do twojej odznaki nieprzeczytanych, a jej przycisk zmienia się w **Przywróć**, by odesłać ją do Odebranych. Archiwizacja jest na rozmowę, lokalna dla twojej przeglądarki, nigdy w łańcuchu i nigdy widoczna dla drugiej strony.\n\n**Wyciszanie / wyłączanie wyciszenia (blokowanie + odblokowanie).** W dowolnej rozmowie menu ⋮ w nagłówku ma przycisk Blokuj. Prosi o potwierdzenie, a potem rozgłasza operację blokady w łańcuchu — to konto nie może już do ciebie dotrzeć z żadnego aliasu, a indekser egzekwuje to po stronie serwera niezależnie od tego, której instancji Morphit używa nadawca. Aby wyłączyć wyciszenie, wejdź w **Ustawienia → Zablokowane konta** i kliknij Odblokuj; to również operacja w łańcuchu i działa natychmiast.\n\n**Blokowanie vs Archiwizacja vs Ukrywanie:** Blokowanie jest na poziomie protokołu i w łańcuchu (między instancjami, w całej historii konta). Archiwizacja to twoje własne porządkowanie skrzynki — tylko lokalne i na rozmowę. Ukrywanie (przycisk w księdze ofert — zobacz „Czy mogę ukrywać oferty konkretnych użytkowników?\" poniżej) to ta sama idea lokalnego ukrywania, rozszerzona na wiersze księgi ofert.\n\nZarówno na komputerze, jak i na telefonie dostępne są opcjonalne powiadomienia push o nowych wiadomościach — zobacz „Jak powiadomienia push działają z moją prywatnością?\", by poznać ich ślad prywatności. Wyłącz je w dowolnej chwili w Ustawieniach."
+				"a": "Skrzynka czatu znajduje się pod ikoną czatu w nagłówku i działa jak skrzynka e-mail: **jedna karta na rozmowę**, a nie jedna na osobę.\n\nJeśli ty i ten sam handlowiec rozmawialiście o trzech różnych ofertach, to trzy karty, każda z wierszem „RE:\" nazywającym ofertę i jej obecny stan — **(Aktywna)**, **(Anulowana)**, **(Wygasła)** lub **(Opłacone)** — więc wątek o ofercie, która już nie istnieje, mówi o tym, zanim ją otworzysz. Rozmowa, która nie dotyczy żadnej oferty, też ma własną kartę; jej drugi wiersz to po prostu „RE: -\". Otwórz kartę, a zobaczysz tylko tę rozmowę. Najnowsza aktywność jest zawsze na górze.\n\nPrzeczytanie jednej karty oznacza jako przeczytaną **tylko ją** — trzy nieprzeczytane rozmowy z tą samą osobą pozostają trzema nieprzeczytanymi rozmowami, na tym urządzeniu i na każdym innym, na którym się zalogujesz. Nieprzeczytane karty zachowują szmaragdową obwódkę, a ikona czatu (oraz karta przeglądarki i favicon) niesie licznik nieprzeczytanych. Przeczytanie karty lub kliknięcie **Oznacz wszystko jako przeczytane** zeruje go.\n\nSkrzynka ma trzy zakładki, dokładnie jak klient poczty:\n\n**Odebrane** — gdzie wszystko trafia domyślnie i zostaje, dopóki tego nie przeniesiesz. Nowe rozmowy, odpowiedzi i pierwszy kontakt od kogoś, kogo nie znasz, pojawiają się tutaj.\n\n**★ Oznaczone** — dotknij pustej gwiazdki po prawej stronie godziny karty, a rozmowa przeniesie się tutaj; dotknij złotej gwiazdki, aby odesłać ją do Odebranych. Ta sama gwiazdka jest w menu ⋮ rozmowy, więc możesz oznaczyć wątek także z wnętrza czatu.\n\n**Zarchiwizowane** — skończyłeś z rozmową, ale nie chcesz nikogo blokować? Dotknij **Archiwizuj** po prawej stronie karty. Przenosi się do Zarchiwizowanych, przestaje liczyć się do twojej odznaki nieprzeczytanych, a jej przycisk zmienia się w **Przywróć**, by odesłać ją do Odebranych. Archiwizacja jest na rozmowę, lokalna dla twojej przeglądarki, nigdy w łańcuchu i nigdy widoczna dla drugiej strony.\n\n**Wyciszanie / wyłączanie wyciszenia (blokowanie + odblokowanie).** W dowolnej rozmowie menu ⋮ w nagłówku ma przycisk Blokuj. Prosi o potwierdzenie, a potem rozgłasza operację blokady w łańcuchu — to konto nie może już do ciebie dotrzeć z żadnego aliasu, a indekser egzekwuje to po stronie serwera niezależnie od tego, której instancji Morphit używa nadawca. Aby wyłączyć wyciszenie, wejdź w **Ustawienia → Zablokowane konta** i kliknij Odblokuj; to również operacja w łańcuchu i działa natychmiast.\n\n**Blokowanie vs Archiwizacja vs Ukrywanie:** Blokowanie jest na poziomie protokołu i w łańcuchu (między instancjami, w całej historii konta). Archiwizacja to twoje własne porządkowanie skrzynki — tylko lokalne i na rozmowę. Ukrywanie (przycisk w księdze ofert — zobacz „Czy mogę ukrywać oferty konkretnych użytkowników?\" poniżej) to ta sama idea lokalnego ukrywania, rozszerzona na wiersze księgi ofert.\n\nZarówno na komputerze, jak i na telefonie dostępne są opcjonalne powiadomienia push o nowych wiadomościach — zobacz „Jak powiadomienia push działają z moją prywatnością?\", by poznać ich ślad prywatności. Wyłącz je w dowolnej chwili w Ustawieniach."
 			},
 			"notifications_overview": {
 				"q": "Jak Morphit daje mi znać, gdy coś się dzieje — nowa wiadomość, zrealizowane zlecenie, opinia?",
@@ -3146,7 +3147,7 @@
 		"submit": {
 			"primary_label": "Zapłać i opublikuj to zlecenie",
 			"pending_broadcasting": "Publikowanie zlecenia…",
-			"review_hint": "Po opublikowaniu masz 15 minut na poprawienie literówek. Możesz też Anulować i opublikować ponownie, jeśli trzeba",
+			"review_hint": "Po opublikowaniu masz 15 minut na poprawienie literówek. Możesz też Anulować i opublikować ponownie, jeśli trzeba.",
 			"primary_label_waived": "Opublikuj za darmo",
 			"primary_label_external": "Opublikuj zlecenie"
 		},
@@ -3476,6 +3477,15 @@
 			}
 		},
 		"reputation_heading": "Reputacja",
+		"reciprocity_clean_pill": "Brak flag wzajemnych recenzji",
+		"reciprocity_flagged_pill": "Flaga wzajemnych recenzji",
+		"tab_reviews_received": "Otrzymane opinie",
+		"tab_reviews_given": "Wystawione opinie",
+		"tab_active_orders": "Aktywne oferty",
+		"tab_trade_history": "Historia transakcji",
+		"tabs_aria": "Szczegóły profilu",
+		"no_trade_history": "Brak zakończonych transakcji.",
+		"trade_history_with": "z @{account}",
 		"loading_feedback": "Wczytywanie opinii…",
 		"feedback_error": "Nie udało się teraz wczytać opinii.",
 		"rating_count": "{n, plural, one {# ocena} few {# oceny} many {# ocen} other {# ocen}}",
@@ -3514,7 +3524,8 @@
 			"unclaimed_label": "Nieodebrane nagrody",
 			"claim_now": "Odbierz teraz",
 			"claiming": "Odbieranie…",
-			"claim_error": "Nie udało się teraz odebrać. Spróbuj ponownie."
+			"claim_error": "Nie udało się teraz odebrać. Spróbuj ponownie.",
+			"delegated_in_label": "+ {bp} BP delegowane tobie"
 		},
 		"pnl": {
 			"export_button": "Eksportuj P&L (ostatnie 12 miesięcy)",
@@ -4044,7 +4055,6 @@
 				"invalid_scheme": "Dozwolone są tylko adresy nostr:, https:// i http://.",
 				"malformed": "To nie wygląda na prawidłowy URL."
 			},
-			"preview_label": "Podgląd",
 			"saved_toast": "Zapisano ✓",
 			"save_and_broadcast": "Zapisz i rozgłoś",
 			"broadcast_pending": "Publikuję…",
@@ -4064,7 +4074,6 @@
 				"invalid_scheme": "URL musi zaczynać się od http:// lub https://.",
 				"malformed": "URL jest nieprawidłowy."
 			},
-			"preview_label": "Podgląd:",
 			"saved_toast": "Zapisano na tym urządzeniu.",
 			"save_and_broadcast": "Zapisz i rozgłoś",
 			"clear": "Wyczyść",
@@ -4082,7 +4091,6 @@
 				"invalid_scheme": "URL musi zaczynać się od http:// lub https://.",
 				"malformed": "URL jest nieprawidłowy."
 			},
-			"preview_label": "Podgląd:",
 			"saved_toast": "Zapisano na tym urządzeniu.",
 			"save_and_broadcast": "Zapisz i rozgłoś",
 			"clear": "Wyczyść",
@@ -4105,7 +4113,7 @@
 			"channel_native_label": "Powiadomienia pulpitu",
 			"channel_native_help": "Natywne powiadomienie OS, gdy przychodzi nowe zdarzenie, a ta karta nie jest aktywna. Pyta o pozwolenie przy pierwszym użyciu.",
 			"channel_push_label": "Powiadomienia push (zamknięta karta)",
-			"channel_push_help": "Powiadamia także, gdy Morphit w ogóle nie jest otwarty. Wymaga usługi push — możesz wybrać self-hosted, standardową przeglądarki lub wyłączone.",
+			"channel_push_help": "Powiadamia także, gdy Morphit w ogóle nie jest otwarty. Wymaga usługi Web Push.",
 			"channel_push_privacy_label": "Poziom prywatności push",
 			"channel_push_privacy_standard": "Standardowe (domyślne przeglądarki)",
 			"channel_push_privacy_off": "Wyłączone",
@@ -4271,7 +4279,7 @@
 			"heading": "Klucz sprzętowy",
 			"explain": "Powiąż YubiKey z keystore'em jako drugą metodę odblokowania lub jako jedyną metodę. Dodaje silny drugi czynnik, którego skradzione hasło samo w sobie nie obejdzie.",
 			"unsupported_title": "Twoja przeglądarka nie obsługuje kluczy sprzętowych",
-			"unsupported_body": "Odblokowanie YubiKey wymaga WebHID, dostępnego obecnie tylko w Chrome, Edge, Brave i innych przeglądarkach opartych na Chromium. Firefox i Safari nie udostępniają tego API. Możesz dalej używać hasła tak jak wcześniej.",
+			"unsupported_body": "Odblokowanie YubiKey wymaga API WebHID, które nie jest dostępne we wszystkich przeglądarkach internetowych. Możesz dalej używać hasła tak jak wcześniej.",
 			"seed_only_note": "Klucze sprzętowe są dostępne tylko, gdy masz utrwalony keystore. Używasz trybu tylko-seed — na tym urządzeniu nie ma zaszyfrowanej koperty, do której można by powiązać klucz.",
 			"unnamed_key": "YubiKey bez nazwy",
 			"slot_label": "Slot {slot}",

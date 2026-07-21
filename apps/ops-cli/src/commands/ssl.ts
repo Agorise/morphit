@@ -206,7 +206,10 @@ export async function runSsl(ctx: SslCtx): Promise<number> {
 	// word was given, else positional[0].
 	const modeWordPresent = first === 'setup' || first === 'status';
 	const explicit = modeWordPresent ? ctx.positional[1] : ctx.positional[0];
-	let domain = explicit ?? null;
+	// Typed string | null explicitly: `explicit` is `string` (indexed access),
+	// so the initializer would otherwise narrow `domain` to `string` and reject
+	// the origin-fallback assignment below.
+	let domain: string | null = explicit ?? null;
 	if (domain === null) {
 		const origin = await readPublicOrigin(installDir);
 		domain = origin === '' ? null : domainFromOrigin(origin);

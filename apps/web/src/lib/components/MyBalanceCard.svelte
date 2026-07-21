@@ -60,6 +60,7 @@
 	import { broadcastClaimReward } from '$blurt/sign';
 	import { liveIdentity } from '$stores/identity';
 	import AnimatedNumber from '$components/AnimatedNumber.svelte';
+	import Tooltip from '$components/Tooltip.svelte';
 	import LazyLoadError from '$components/LazyLoadError.svelte';
 
 	/** cp424 — the Power up / Power down modal is lazy-loaded: it pulls in
@@ -91,6 +92,12 @@
 	let errorMsg = $state('');
 	let blurtBalance = $state(NaN);
 	let bpBalance = $state(NaN);
+	// cp510 [12] — BP delegated IN to this account (received_vesting_shares
+	// converted to BP). Separate from own staked BP (vesting_shares): it's
+	// power lent to the user — e.g. Morphit's welcome delegation from
+	// morphit-relay — not owned stake, so it's surfaced as its own line rather
+	// than folded into the "staked BLURT" figure.
+	let receivedBp = $state(NaN);
 	/** cp424 — captured for the Power up / Power down modal. `vestingFund`
 	 *  + `totalVests` are the raw DGP pool strings that drive the BP→VESTS
 	 *  conversion for a partial power-down (blurtPowerToVests parses them);
@@ -241,6 +248,13 @@
 			blurtBalance = parseAssetAmount(acct.balance);
 			bpBalance = vestsToBlurtPower(
 				acct.vesting_shares,
+				dgp.total_vesting_fund_blurt,
+				dgp.total_vesting_shares
+			);
+			// cp510 [12] — delegated-in BP (received_vesting_shares → BP), same
+			// pool conversion. Shown as a separate "+ N BP delegated to you" line.
+			receivedBp = vestsToBlurtPower(
+				acct.received_vesting_shares,
 				dgp.total_vesting_fund_blurt,
 				dgp.total_vesting_shares
 			);
@@ -741,7 +755,7 @@
 			{$_('profile.my_balance.title', { values: { account } })}
 		</h2>
 		<div class="flex items-center gap-2">
-			<span class="text-xs text-ink-500 dark:text-ink-400">
+			<span class="hidden text-xs text-ink-500 dark:text-ink-400 sm:inline">
 				{$_('profile.my_balance.private_label')}
 			</span>
 			<button
@@ -858,7 +872,7 @@
 				<dt class="text-xs text-ink-500 dark:text-ink-400">
 					{$_('profile.my_balance.bp_staked_label')}
 				</dt>
-				<dd class="font-mono text-lg font-semibold">
+				<dd class="flex items-center gap-1.5 font-mono text-lg font-semibold">
 					<!-- Desktop: full BP precision with grouping. -->
 					<span class="hidden sm:inline"
 						><AnimatedNumber value={bpBalance} decimals={3} durationMs={3000} localeSignColors /></span
@@ -878,6 +892,15 @@
 							/></button
 						>{#if openExact === 'bp'}{@render exactTip(exactBp)}{/if}</span
 					>
+					{#if Number.isFinite(receivedBp) && receivedBp > 0}
+						<!-- cp511 [12-revise] — delegated-in BP as a tiny tap/hover info icon
+						     (NOT a line — keeps the card uncluttered). Reveals "+ N BP delegated
+						     to you" only when a delegation exists. -->
+						<Tooltip
+							textKey="profile.my_balance.delegated_in_label"
+							textValues={{ bp: fmtExact(receivedBp, 3) }}
+						/>
+					{/if}
 				</dd>
 				{#if Number.isFinite(vestingApr)}
 					<!-- Batch K: APR display.  Phrased as "Currently

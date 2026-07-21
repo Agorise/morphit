@@ -746,7 +746,8 @@
 		},
 		"system": {
 			"order_settled_elsewhere": "Grazie per l'interesse dimostrato per questo ordine. Ho ormai completato questo scambio con un altro commerciante, quindi non è più disponibile. Mi dispiace che non sia andata a buon fine questa volta — apprezzo molto il tuo interesse e spero che potremo commerciare in futuro."
-		}
+		},
+		"composer_e2e_note": "Nessun altro può leggere questa chat. Solo tu e @{peer} avete le chiavi."
 	},
 	"cheat_sheet": {
 		"heading": "Foglio di riferimento Morphit",
@@ -1501,7 +1502,7 @@
 			},
 			"chat_inbox_features": {
 				"q": "Come funziona la casella di chat? Posso silenziare o riattivare qualcuno?",
-				"a": "La casella di chat si trova sull'icona di chat nell'intestazione e funziona come una casella email: **una scheda per discussione**, non una per persona.\n\nSe tu e lo stesso trader avete parlato di tre ordini diversi, sono tre schede, ciascuna con una riga \"RE:\" che nomina l'ordine e il suo stato attuale — **(Attivo)**, **(Annullato)** o **(Scaduto)** — così un thread su un ordine che non esiste più lo dice prima ancora che tu lo apra. Una discussione che non riguarda alcun ordine ha comunque la sua scheda; la sua seconda riga dice semplicemente \"RE: -\". Apri una scheda e vedi solo quella discussione. L'attività più recente è sempre in alto.\n\nLeggere una scheda segna come letta **solo quella** — tre conversazioni non lette con la stessa persona restano tre conversazioni non lette, su questo dispositivo e su ogni altro da cui accedi. Le schede non lette mantengono un bordo smeraldo, e l'icona di chat (oltre alla scheda del browser e alla favicon) porta il conteggio dei non letti. Leggere una scheda, o toccare **Segna tutto come letto**, lo azzera.\n\nLa casella ha tre schede, esattamente come un client email:\n\n**In arrivo** — dove tutto arriva per impostazione predefinita e resta finché non lo sposti. Le nuove conversazioni, le risposte e il primo contatto di qualcuno che non conosci compaiono qui.\n\n**★ Speciali** — tocca la stella vuota a destra dell'ora di una scheda e la discussione si sposta qui; tocca la stella dorata per rimandarla in arrivo. La stessa stella è nel menu ⋮ della conversazione, così puoi contrassegnare un thread anche da dentro la chat.\n\n**Archiviati** — hai finito con una discussione ma non vuoi bloccare nessuno? Tocca **Archivia** a destra della scheda. Si sposta in Archiviati, smette di contare nel tuo badge dei non letti, e il suo pulsante diventa **Ripristina** per riportarla in arrivo. L'archiviazione è per discussione, locale al tuo browser, mai sulla catena e mai visibile all'altra parte.\n\n**Silenzia / riattiva (blocca + sblocca).** All'interno di qualsiasi conversazione, il menu ⋮ dell'intestazione ha un pulsante Blocca. Chiede conferma, poi trasmette un'operazione di blocco sulla catena — quell'account non può più raggiungerti da nessun alias, e l'indexer lo applica lato server indipendentemente dall'istanza Morphit che usa. Per riattivare, vai su **Impostazioni → Account bloccati** e tocca Sblocca; anche questa è un'operazione sulla catena e ha effetto immediato.\n\n**Blocca vs Archivia vs Nascondi:** Bloccare è a livello di protocollo e sulla catena (tra istanze, su tutta la cronologia dell'account). Archiviare è la tua cura personale della casella — solo locale e per discussione. Nascondere (il pulsante del book degli ordini — vedi 'Posso nascondere ordini di utenti specifici?' più sotto) è la stessa idea di nascondere in locale, estesa alle righe del book.\n\nSia su desktop che su mobile ci sono notifiche push facoltative per i nuovi messaggi — vedi 'Come funzionano le notifiche push con la mia privacy?' per l'impronta sulla privacy. Disattivale in qualsiasi momento dalle Impostazioni."
+				"a": "La casella di chat si trova sull'icona di chat nell'intestazione e funziona come una casella email: **una scheda per discussione**, non una per persona.\n\nSe tu e lo stesso trader avete parlato di tre ordini diversi, sono tre schede, ciascuna con una riga \"RE:\" che nomina l'ordine e il suo stato attuale — **(Attivo)**, **(Annullato)**, **(Scaduto)** o **(Pagato)** — così un thread su un ordine che non esiste più lo dice prima ancora che tu lo apra. Una discussione che non riguarda alcun ordine ha comunque la sua scheda; la sua seconda riga dice semplicemente \"RE: -\". Apri una scheda e vedi solo quella discussione. L'attività più recente è sempre in alto.\n\nLeggere una scheda segna come letta **solo quella** — tre conversazioni non lette con la stessa persona restano tre conversazioni non lette, su questo dispositivo e su ogni altro da cui accedi. Le schede non lette mantengono un bordo smeraldo, e l'icona di chat (oltre alla scheda del browser e alla favicon) porta il conteggio dei non letti. Leggere una scheda, o toccare **Segna tutto come letto**, lo azzera.\n\nLa casella ha tre schede, esattamente come un client email:\n\n**In arrivo** — dove tutto arriva per impostazione predefinita e resta finché non lo sposti. Le nuove conversazioni, le risposte e il primo contatto di qualcuno che non conosci compaiono qui.\n\n**★ Speciali** — tocca la stella vuota a destra dell'ora di una scheda e la discussione si sposta qui; tocca la stella dorata per rimandarla in arrivo. La stessa stella è nel menu ⋮ della conversazione, così puoi contrassegnare un thread anche da dentro la chat.\n\n**Archiviati** — hai finito con una discussione ma non vuoi bloccare nessuno? Tocca **Archivia** a destra della scheda. Si sposta in Archiviati, smette di contare nel tuo badge dei non letti, e il suo pulsante diventa **Ripristina** per riportarla in arrivo. L'archiviazione è per discussione, locale al tuo browser, mai sulla catena e mai visibile all'altra parte.\n\n**Silenzia / riattiva (blocca + sblocca).** All'interno di qualsiasi conversazione, il menu ⋮ dell'intestazione ha un pulsante Blocca. Chiede conferma, poi trasmette un'operazione di blocco sulla catena — quell'account non può più raggiungerti da nessun alias, e l'indexer lo applica lato server indipendentemente dall'istanza Morphit che usa. Per riattivare, vai su **Impostazioni → Account bloccati** e tocca Sblocca; anche questa è un'operazione sulla catena e ha effetto immediato.\n\n**Blocca vs Archivia vs Nascondi:** Bloccare è a livello di protocollo e sulla catena (tra istanze, su tutta la cronologia dell'account). Archiviare è la tua cura personale della casella — solo locale e per discussione. Nascondere (il pulsante del book degli ordini — vedi 'Posso nascondere ordini di utenti specifici?' più sotto) è la stessa idea di nascondere in locale, estesa alle righe del book.\n\nSia su desktop che su mobile ci sono notifiche push facoltative per i nuovi messaggi — vedi 'Come funzionano le notifiche push con la mia privacy?' per l'impronta sulla privacy. Disattivale in qualsiasi momento dalle Impostazioni."
 			},
 			"notifications_overview": {
 				"q": "Come mi avvisa Morphit quando succede qualcosa — un messaggio nuovo, un ordine che si chiude, un feedback?",
@@ -3146,7 +3147,7 @@
 		"submit": {
 			"primary_label": "Paga e pubblica questo ordine",
 			"pending_broadcasting": "Pubblicazione del tuo ordine…",
-			"review_hint": "Una volta pubblicato, hai 15 minuti per correggere eventuali refusi. Puoi anche Annullare e Ripubblicare se necessario",
+			"review_hint": "Una volta pubblicato, hai 15 minuti per correggere eventuali refusi. Puoi anche Annullare e Ripubblicare se necessario.",
 			"primary_label_waived": "Pubblica gratis",
 			"primary_label_external": "Pubblica l'ordine"
 		},
@@ -3476,6 +3477,15 @@
 			}
 		},
 		"reputation_heading": "Reputazione",
+		"reciprocity_clean_pill": "Nessuna segnalazione di recensioni reciproche",
+		"reciprocity_flagged_pill": "Recensioni reciproche segnalate",
+		"tab_reviews_received": "Recensioni ricevute",
+		"tab_reviews_given": "Recensioni date",
+		"tab_active_orders": "Ordini attivi",
+		"tab_trade_history": "Cronologia scambi",
+		"tabs_aria": "Dettagli del profilo",
+		"no_trade_history": "Ancora nessuno scambio completato.",
+		"trade_history_with": "con @{account}",
 		"loading_feedback": "Caricamento feedback…",
 		"feedback_error": "Non è stato possibile caricare i feedback adesso.",
 		"rating_count": "{n, plural, one {# valutazione} other {# valutazioni}}",
@@ -3514,7 +3524,8 @@
 			"unclaimed_label": "Ricompense non riscosse",
 			"claim_now": "Riscuoti ora",
 			"claiming": "Riscossione…",
-			"claim_error": "Riscossione non riuscita. Riprova."
+			"claim_error": "Riscossione non riuscita. Riprova.",
+			"delegated_in_label": "+ {bp} BP delegati a te"
 		},
 		"pnl": {
 			"export_button": "Esporta P&L (ultimi 12 mesi)",
@@ -4044,7 +4055,6 @@
 				"invalid_scheme": "Sono consentiti solo URL nostr:, https:// e http://.",
 				"malformed": "Non sembra un URL valido."
 			},
-			"preview_label": "Anteprima",
 			"saved_toast": "Salvato ✓",
 			"save_and_broadcast": "Salva e trasmetti",
 			"broadcast_pending": "Pubblicazione…",
@@ -4064,7 +4074,6 @@
 				"invalid_scheme": "L'URL deve iniziare con http:// o https://.",
 				"malformed": "URL malformato."
 			},
-			"preview_label": "Anteprima:",
 			"saved_toast": "Salvato su questo dispositivo.",
 			"save_and_broadcast": "Salva e trasmetti",
 			"clear": "Cancella",
@@ -4082,7 +4091,6 @@
 				"invalid_scheme": "L'URL deve iniziare con http:// o https://.",
 				"malformed": "URL malformato."
 			},
-			"preview_label": "Anteprima:",
 			"saved_toast": "Salvato su questo dispositivo.",
 			"save_and_broadcast": "Salva e trasmetti",
 			"clear": "Cancella",
@@ -4105,7 +4113,7 @@
 			"channel_native_label": "Notifiche desktop",
 			"channel_native_help": "Notifica nativa dell'OS quando arriva un nuovo evento e questa tab non è in focus. Chiede permesso la prima volta.",
 			"channel_push_label": "Notifiche push (tab chiusa)",
-			"channel_push_help": "Notifica anche quando Morphit non è aperto. Richiede un servizio push — puoi scegliere self-hosted, standard browser, o disattivato.",
+			"channel_push_help": "Notifica anche quando Morphit non è aperto. Richiede un servizio Web Push.",
 			"channel_push_privacy_label": "Livello privacy push",
 			"channel_push_privacy_standard": "Standard (browser predefinito)",
 			"channel_push_privacy_off": "Disattivato",
@@ -4271,7 +4279,7 @@
 			"heading": "Chiave hardware",
 			"explain": "Collega una YubiKey al tuo keystore come secondo metodo di sblocco, o come unico metodo. Aggiunge un secondo fattore robusto che una password rubata da sola non può aggirare.",
 			"unsupported_title": "Il tuo browser non supporta le chiavi hardware",
-			"unsupported_body": "Lo sblocco con YubiKey richiede WebHID, attualmente disponibile solo in Chrome, Edge, Brave e altri browser basati su Chromium. Firefox e Safari non espongono questa API. Puoi continuare a usare la password come prima.",
+			"unsupported_body": "Lo sblocco con YubiKey richiede l'API WebHID, non disponibile in tutti i browser web. Puoi continuare a usare la password come prima.",
 			"seed_only_note": "Le chiavi hardware sono disponibili solo se hai un keystore persistente. Stai usando la modalità solo-seed — su questo dispositivo non c'è alcun involucro a cui legare una chiave.",
 			"unnamed_key": "YubiKey senza nome",
 			"slot_label": "Slot {slot}",

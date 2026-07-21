@@ -247,6 +247,22 @@ export function feedbackByAccountRoute(db: Database): Hono {
 		);
 		const lastTradedAt = dormancy.rows[0]?.last_traded_at ?? null;
 
+		// ─── cp511 [E]: suspicious-reciprocity flag (profile trust pill) ───
+		// True iff this account appears in ANY suspicious_reciprocity pair (as
+		// account_a OR account_b) — i.e. Signal B (ADR-0009 §5) caught it
+		// exchanging mutual reviews with another account. The pairwise flag is
+		// already implicit in the reviews this summary EXCLUDES above, so the
+		// boolean leaks nothing new; it just lets the profile show "clean"
+		// (green) vs "flagged" without a reputation-receipt round-trip.
+		const reciprocity = await db.query<{ flagged: boolean }>(
+			`SELECT EXISTS (
+			          SELECT 1 FROM suspicious_reciprocity sr
+			           WHERE sr.account_a = $1 OR sr.account_b = $1
+			        ) AS flagged`,
+			[account]
+		);
+		const reciprocityFlagged = reciprocity.rows[0]?.flagged ?? false;
+
 		const summaryObj = {
 			count: parseInt(s.count, 10),
 			weighted_rating: s.weighted_rating === null ? 0 : Number(s.weighted_rating),
@@ -277,7 +293,9 @@ export function feedbackByAccountRoute(db: Database): Hono {
 			// feedback (brand-new account).  Readers see "last traded
 			// 3 days ago" vs "last traded 2 years ago" — informs
 			// trust without changing any numeric score.
-			last_traded_at: lastTradedAt === null ? null : lastTradedAt.toISOString()
+			last_traded_at: lastTradedAt === null ? null : lastTradedAt.toISOString(),
+			// cp511 [E] — see the suspicious-reciprocity query above.
+			reciprocity_flagged: reciprocityFlagged
 		};
 
 		// ─── Feedback page ────────────────────────────────────────

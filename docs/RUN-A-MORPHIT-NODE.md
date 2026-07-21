@@ -191,7 +191,7 @@ Once registered, orders posted on your instance carry your tag, and your share o
 
 ## 10. Keeping it running
 
-**Backups.** Your data lives in PostgreSQL. The wizard (and the automated playbook) can set up a daily database backup on a timer; the backup recipe and off-site options are in `OPERATIONS.md`. Back up before any upgrade.
+**Backups.** Your data lives in PostgreSQL. The wizard (and the automated playbook) set up a daily database backup on a timer by default. If your Postgres runs in a Docker container (a BunkerWeb / `docker-compose` setup), that's handled automatically — the wizard, and every `sudo morphit-ops upgrade`, detect the container and dump it via `docker exec` (you never look up the container name). The full backup recipe, the Docker-aware `DB_CONTAINER` field, off-site options, and the quarterly restore drill are in `OPERATIONS.md`. Back up before any upgrade.
 
 **Upkeep — how often will I touch this?** Rarely. To update Morphit, `git pull`, then `sudo morphit-ops upgrade` — it rebuilds and redeploys the website (and the read-only helper) and restarts the services for you, then double-checks that the read-only helper answered back on the address it's set to listen on (if it doesn't, you get a plain warning pointing at `journalctl -u morphit-mcp` — the website itself is unaffected). Check on things any time with `morphit-ops status`, or the live health endpoint at `https://yourdomain.com/v1/health`.
 

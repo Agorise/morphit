@@ -1373,6 +1373,21 @@
 					{$_('orderbook.show_hidden_temporarily')}
 				</button>
 			</section>
+		{:else if visibleItems.length === 0}
+			<!-- cp510 [11d] — CATCH-ALL: items loaded but every one filtered out
+			     for a reason the branches above do not name (e.g. all expired
+			     client-side between the server snapshot and the local clock).
+			     Show the standard filtered-empty card, NEVER a blank <ul> — Ken
+			     saw a blank orders section here (the "no orders match your
+			     filters" card was missing entirely). -->
+			<section class="card text-center">
+				<h2 class="font-display text-lg font-bold">
+					{$_('orderbook.empty_title')}
+				</h2>
+				<p class="mt-2 text-ink-600 dark:text-ink-300">
+					{$_('orderbook.empty_body')}
+				</p>
+			</section>
 		{:else}
 			{#if hiddenInView > 0}
 				<!-- Transparency line: some items filtered. Users can

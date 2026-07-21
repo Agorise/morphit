@@ -215,7 +215,7 @@ const sampleAnswers: WizardAnswers = {
 		source: 'default'
 	},
 	seo: { title: null, description: null, keywords: null },
-	backup: { enabled: false, backupDir: null, retainDays: null },
+	backup: { enabled: false, backupDir: null, retainDays: null, dbContainer: null, dbName: 'morphit_indexer', dbUser: 'morphit_indexer' },
 	operatorTag: { tag: 'morphit' },
 	// Part 122 cp39 — disabledAssets fixture field.  The sampleAnswers
 	// fixture had been missing `disabledAssets` since the wizard
@@ -890,7 +890,10 @@ scenario('writeWizardOutput: backup enabled writes backup.env with operator valu
 			backup: {
 				enabled: true,
 				backupDir: '/data/morphit-backups',
-				retainDays: 14
+				retainDays: 14,
+				dbContainer: null,
+				dbName: 'morphit_indexer',
+				dbUser: 'morphit_indexer'
 			}
 		};
 		const result = writeWizardOutput(withBackup, tmp);
@@ -913,7 +916,10 @@ scenario('writeWizardOutput: backup.env has 0600 permissions', () => {
 			backup: {
 				enabled: true,
 				backupDir: '/home/morphit/backups',
-				retainDays: 30
+				retainDays: 30,
+				dbContainer: null,
+				dbName: 'morphit_indexer',
+				dbUser: 'morphit_indexer'
 			}
 		};
 		const result = writeWizardOutput(withBackup, tmp);

@@ -351,7 +351,7 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 	);
 	const listingFee = await recall('listingFee', () => stepListingFee());
 	const seo = await recall('seo', () => stepSeo());
-	const backup = await recall('backup', () => stepBackup());
+	const backup = await recall('backup', () => stepBackup(databaseUrl));
 	const operatorTag = await recall('operatorTag', () => stepOperatorTag(origin));
 	const matrix = await recall('matrix', () => stepMatrixSurfaces());
 	// 19th step (F-2 from the cp136 walkthrough): RPC endpoints.

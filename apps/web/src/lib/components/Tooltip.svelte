@@ -31,9 +31,13 @@
 		 *  tooltip). Only the mouse-hover path is delayed — keyboard focus and
 		 *  tap-to-pin still open instantly, so touch + a11y are unaffected. */
 		hoverOpenDelayMs?: number;
+		/** cp511 — optional interpolation values for `textKey`, so a tooltip can
+		 *  render a dynamic string (e.g. "+ 260.901 BP delegated to you"). When
+		 *  omitted the key is rendered with no values, exactly as before. */
+		textValues?: Record<string, string | number>;
 	}
 
-	let { textKey, faqKey, ariaLabel, trigger, hoverOpenDelayMs = 0 }: Props = $props();
+	let { textKey, faqKey, ariaLabel, trigger, hoverOpenDelayMs = 0, textValues }: Props = $props();
 
 	// Sally finding S-12 (Part 119): pre-fix this defaulted to the
 	// English string 'More info', which leaked into ARIA labels for
@@ -263,6 +267,36 @@
 		};
 	});
 
+	// cp510 [9] — INSTANT dismiss when the pointer rests over NEITHER the
+	// trigger nor the panel. With a portaled, fixed panel a plain mouseleave
+	// can be missed — the pointer jumps to an element painted above, or the
+	// w-64 card overlaps neighbouring chips — leaving `panelHovering` stuck
+	// true so the tooltip lingers (Ken: "if my mouse is not resting over the
+	// asset block or its tooltip, the tooltip needs to instantly disappear").
+	// A capture-phase document `pointerover` fires on every element boundary
+	// the pointer crosses; if the new target is inside neither region, close
+	// now (no 140ms bridge). Skipped while pinned (tap) or keyboard-focused —
+	// those have their own dismiss paths (outside-tap / blur / Escape) and a
+	// roaming mouse must not yank a tooltip a keyboard user opened.
+	$effect(() => {
+		if (!open || typeof document === 'undefined') return;
+		const onPointerOver = (e: Event): void => {
+			if (pinned || focusWithin || panelFocusWithin) return;
+			const t = e.target as Node | null;
+			if (!t) return;
+			const insideWrapper = wrapperEl?.contains(t) ?? false;
+			const insidePanel = panelEl?.contains(t) ?? false;
+			if (insideWrapper || insidePanel) return;
+			hovering = false;
+			panelHovering = false;
+			clearOpenTimer();
+			clearCloseTimer();
+			open = false;
+		};
+		document.addEventListener('pointerover', onPointerOver, true);
+		return () => document.removeEventListener('pointerover', onPointerOver, true);
+	});
+
 	onDestroy(() => {
 		clearCloseTimer();
 		clearOpenTimer();
@@ -349,7 +383,9 @@
 				role="tooltip"
 				class="w-64 animate-fade-up rounded-xl border border-ink-200 bg-white p-3 text-sm shadow-morphit-card dark:border-ink-700 dark:bg-ink-900"
 			>
-				<p class="text-ink-800 dark:text-ink-100">{$_(textKey)}</p>
+				<p class="text-ink-800 dark:text-ink-100">
+					{$_(textKey, textValues ? { values: textValues } : undefined)}
+				</p>
 				{#if faqKey}
 					<button
 						type="button"

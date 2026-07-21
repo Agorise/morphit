@@ -201,6 +201,15 @@ morphit_indexer_attestation_phase: launch
 # Daily backup timer fires at this systemd OnCalendar spec.
 morphit_backup_schedule: "*-*-* 04:00:00"
 
+# Docker-aware backup: set to the Postgres container name if this node
+# runs its DB in a container (BunkerWeb / docker-compose). The daily
+# backup then dumps THROUGH `docker exec <container> pg_dump …`. Leave
+# EMPTY for a host-installed Postgres — the Ansible role installs
+# Postgres on the host by default, so this is normally unset. (A manual
+# /opt/morphit box with a containerized DB sets DB_CONTAINER in
+# /etc/morphit/backup.env directly; `morphit-ops` auto-detects it there.)
+morphit_db_container: ""
+
 # Optional rsync/scp destination for off-host backup.
 # CRITICAL: backups on the same disk as the DB are not backups.
 # Leave EMPTY to keep backups local-only; the operator MUST

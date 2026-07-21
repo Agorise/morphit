@@ -674,6 +674,11 @@ export interface FeedbackSummary {
 	// Readers see "last traded N days/months/years ago" — informs
 	// trust without changing the numeric score.
 	readonly last_traded_at: string | null;
+	// cp511 [E]: true iff the account appears in a suspicious_reciprocity
+	// pair (Signal B, ADR-0009 §5) — surfaced as a trust pill on the profile
+	// Reputation card (green when false = no reciprocity concerns). Optional so
+	// older payloads without the field read as "not flagged".
+	readonly reciprocity_flagged?: boolean;
 }
 
 export interface AccountFeedbackResponse {

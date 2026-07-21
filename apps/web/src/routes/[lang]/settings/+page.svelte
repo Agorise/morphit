@@ -1885,25 +1885,6 @@
 			{/if}
 		</p>
 
-		<!-- Preview — mirrors the Nostr preview, showing the user
-		     what their website link will look like next to their
-		     display name everywhere. Updates live as they type. -->
-		{#if websiteCleaned && saved}
-			<div
-				class="mt-4 rounded-xl border border-ink-200 bg-white p-4 dark:border-ink-700 dark:bg-ink-900"
-			>
-				<p class="mb-2 text-xs uppercase tracking-wider text-ink-500">
-					{$_('settings.website_url.preview_label')}
-				</p>
-				<IdentityLabel
-					account={accountSaved ?? undefined}
-					displayName={saved}
-					publicKey={previewPubkey}
-					websiteUrl={websiteCleaned}
-				/>
-			</div>
-		{/if}
-
 		<div class="mt-6 flex flex-wrap items-center gap-3">
 			<BusyButton
 				variant="secondary-quiet"
@@ -1913,7 +1894,7 @@
 				disabled={!websiteIsValid ||
 					(websiteIsEmpty ? '' : websiteCleaned) === websiteSaved}
 				busyLabel={$_('common.saving')}
-				onclick={saveStreamingLocal}
+				onclick={saveWebsiteLocal}
 			>
 				{#if websiteSavedToast}
 					{$_('settings.display_name.saved_toast')}
@@ -1929,7 +1910,7 @@
 					done={websiteBroadcastOk}
 					disabled={!websiteIsValid}
 					busyLabel={$_('common.broadcasting')}
-					onclick={saveAndBroadcastStreaming}
+					onclick={saveAndBroadcastWebsite}
 				>
 					{#if websiteBroadcastOk}
 						{$_('common.broadcasted')}
@@ -2019,25 +2000,6 @@
 				</span>
 			{/if}
 		</p>
-
-		<!-- Preview — mirrors the Nostr preview, showing the user
-		     what their Blurt.media link will look like next to their
-		     display name everywhere. Updates live as they type. -->
-		{#if streamingCleaned && saved}
-			<div
-				class="mt-4 rounded-xl border border-ink-200 bg-white p-4 dark:border-ink-700 dark:bg-ink-900"
-			>
-				<p class="mb-2 text-xs uppercase tracking-wider text-ink-500">
-					{$_('settings.streaming_url.preview_label')}
-				</p>
-				<IdentityLabel
-					account={accountSaved ?? undefined}
-					displayName={saved}
-					publicKey={previewPubkey}
-					streamingUrl={streamingCleaned}
-				/>
-			</div>
-		{/if}
 
 		<div class="mt-6 flex flex-wrap items-center gap-3">
 			<BusyButton
@@ -2150,25 +2112,6 @@
 				</span>
 			{/if}
 		</p>
-
-		<!-- Preview — reuses IdentityLabel so the user sees exactly
-		     what their Nostr link looks like beside their display
-		     name everywhere on the site. Updates live as they type. -->
-		{#if nostrCleaned && saved}
-			<div
-				class="mt-4 rounded-xl border border-ink-200 bg-white p-4 dark:border-ink-700 dark:bg-ink-900"
-			>
-				<p class="mb-2 text-xs uppercase tracking-wider text-ink-500">
-					{$_('settings.nostr_url.preview_label')}
-				</p>
-				<IdentityLabel
-					account={accountSaved ?? undefined}
-					displayName={saved}
-					publicKey={previewPubkey}
-					nostrUrl={nostrCleaned}
-				/>
-			</div>
-		{/if}
 
 		<div class="mt-6 flex flex-wrap items-center gap-3">
 			<BusyButton

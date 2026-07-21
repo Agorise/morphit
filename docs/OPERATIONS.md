@@ -5773,6 +5773,32 @@ sudo systemctl enable --now morphit-backup.timer
 
 The script is installed to `/usr/local/lib/morphit/morphit-backup.sh` (NOT executed in-place from the repo). This decouples the systemd unit from the operator's repo location: the unit's `ExecStart` is hardcoded to the stable system path, so it works regardless of whether the repo is at `/home/morphit/morphit`, `/opt/morphit`, or anywhere else. When `git pull` brings in script changes, the operator re-runs just the `sudo install -m 755 ops/backup/morphit-backup.sh ...` command.
 
+### Containerized Postgres (Docker-aware backups)
+
+If your Postgres runs inside a **Docker container** (a BunkerWeb or `docker-compose` stack — there's no `pg_dump` on the host, and the DB isn't on a host socket), the backup dumps **through the container**:
+
+```
+docker exec "$DB_CONTAINER" pg_dump -U "$DB_USER" "$DB_NAME" | gzip > backup.sql.gz
+```
+
+driven by one field in `/etc/morphit/backup.env`:
+
+```
+DB_CONTAINER=bunkerweb-db-1   # set → docker-exec path; empty → host pg_dump
+```
+
+**You do not set this by hand.** `morphit-ops init` and **every** `morphit-ops upgrade` auto-detect a containerized Postgres and fill `DB_CONTAINER` for you — detection is name-agnostic (it finds a running Postgres-family container that actually hosts the morphit database via the same trust/peer path the backup will use, never a hard-coded name). `DB_NAME` and `DB_USER` are likewise **derived from your `MORPHIT_INDEXER_DATABASE_URL`** at setup (init and harden), so a non-standard box — e.g. a BunkerWeb DB on `morphit_user`/`morphit_db` — is backed up correctly without any hand-editing; probing the container under the real identity also makes detection a provable match rather than a best-guess. On the container path, `pg_dump` runs *inside* the container against its own local socket, so `DB_HOST`/`DB_PORT` are ignored and no password is needed (container-local trust/peer auth).
+
+If you set up backups **before** this became automatic and your DB is containerized, the daily backup was quietly dumping the host (capturing nothing). The next `morphit-ops upgrade` detects that drift and prints the exact one-line fix, e.g.:
+
+```
+sudo sed -i 's/^DB_CONTAINER=.*/DB_CONTAINER=bunkerweb-db-1/' /etc/morphit/backup.env
+sudo systemctl start morphit-backup.service   # test it now
+journalctl -u morphit-backup.service -e
+```
+
+The backup user must be able to run `docker` (in the `docker` group); if `DB_CONTAINER` is set but `docker` isn't reachable, the script loud-fails rather than silently falling back to a host dump of the wrong (or empty) database. Restoring a containerized DB likewise goes through the container — see the restore drill below.
+
 ### Why systemd timer (not cron)
 
 - Failures land in `journalctl -u morphit-backup.service` alongside Morphit's other service logs.
@@ -5813,6 +5839,17 @@ dropdb morphit_indexer_test
 ```
 
 The two counts should be within ±1 (some orders may have expired between the snapshot and "now"). If they differ by more than that, your backups aren't capturing complete state — investigate before trusting the backups for real recovery.
+
+If your Postgres is containerized (`DB_CONTAINER` set), run the same drill **through the container** — the dump was taken that way, so restore it that way:
+
+```
+docker exec "$DB_CONTAINER" createdb -U "$DB_USER" morphit_indexer_test
+gunzip < /home/morphit/backups/morphit-YYYYMMDD-HHMMSS.sql.gz | docker exec -i "$DB_CONTAINER" psql -U "$DB_USER" morphit_indexer_test
+docker exec "$DB_CONTAINER" psql -U "$DB_USER" morphit_indexer_test -c "SELECT COUNT(*) FROM orders WHERE expired = false"
+docker exec "$DB_CONTAINER" dropdb -U "$DB_USER" morphit_indexer_test
+```
+
+(Substitute your real `DB_NAME`/`DB_USER` from `/etc/morphit/backup.env`.)
 
 ### Off-server replication
 

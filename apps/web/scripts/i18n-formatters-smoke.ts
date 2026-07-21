@@ -3,8 +3,9 @@
  * Smoke for the centralized i18n formatters.
  *
  * Validates that `formatFiat`, `formatPercent`, `formatBlurt`,
- * `formatCount`, `formatDateLong`, `formatDateMedium`, and
- * `formatDateTime` produce locale-aware output and don't
+ * `formatCount`, and the canonical date/time formatters
+ * (`formatDayMonth`, `formatDayMonthTime`, `formatDayMonthShort`,
+ * `formatMonthYear`) produce locale-aware output and don't
  * regress between locales.
  *
  * The exact glyphs the runtime ICU library produces vary
@@ -22,8 +23,10 @@
  *   - formatBlurt(60) produces 3 fractional digits.
  *   - formatCount(1234) contains the digits but possibly with
  *     a separator.
- *   - formatDateLong/Medium/Time return non-empty strings
- *     that include the year as 4 digits in some script.
+ *   - the canonical date formatters return non-empty strings
+ *     that include the year as 4 digits in some script, day-first
+ *     with a full month name; formatDayMonthTime appends 24-hour
+ *     UTC time WITH seconds and an explicit "UTC" suffix.
  *
  * The smoke also checks for graceful failure on NaN /
  * undefined / out-of-range inputs.
@@ -39,9 +42,6 @@ import {
 	formatPercent,
 	formatBlurt,
 	formatCount,
-	formatDateLong,
-	formatDateMedium,
-	formatDateTime,
 	formatDayMonth,
 	formatDayMonthTime,
 	formatDayMonthShort,
@@ -196,33 +196,6 @@ const scenarios: readonly Scenario[] = [
 			const digitsOnly = out.replace(/[^\d]/g, '');
 			return digitsOnly === '1234';
 		}
-	},
-
-	// ─── Date formatters ───────────────────────────────
-	{
-		name: 'formatDateLong(ISO) — year present',
-		fn: () => {
-			const out = formatDateLong('2026-05-09T12:00:00Z');
-			return out.length > 0 && /\d{4}|[۰-۹]{4}|[٠-٩]{4}/.test(out);
-		}
-	},
-	{
-		name: 'formatDateMedium(Date) — non-empty',
-		fn: () => {
-			const out = formatDateMedium(new Date('2026-05-09'));
-			return out.length > 0;
-		}
-	},
-	{
-		name: 'formatDateTime(ISO) — has time component',
-		fn: () => {
-			const out = formatDateTime('2026-05-09T15:30:00Z');
-			return out.length > 0 && /[0-9۰-۹]+[:．]?[0-9۰-۹]+/.test(out);
-		}
-	},
-	{
-		name: 'formatDateLong(invalid) — returns "—"',
-		fn: () => formatDateLong('not-a-date') === '—'
 	},
 
 	// ─── Canonical UI date/time (Ken's sitewide standard) ──

@@ -81,7 +81,7 @@ check(
 );
 check(
 	'9 the status badge never shrinks (it is short and must stay legible)',
-	/<span class="flex-none">\(\{orderStatusLabel\(convo\.order\.status\)\}\)<\/span>/.test(page)
+	/<span class="flex-none">\(\{orderStatusLabel\(convo\.order\)\}\)<\/span>/.test(page)
 );
 
 // ── t.txt #9: the feedback row ──────────────────────────────────────

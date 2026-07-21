@@ -207,6 +207,14 @@ function rowToWire(r: OrderRow) {
 	return {
 		account: r.account,
 		permlink: r.permlink,
+		// cp510 [11d] — the query's WHERE clause guarantees o.status = 'live'
+		// (and expires_at > NOW()), but this mapping previously OMITTED status,
+		// so every wire order arrived with status=undefined. The frontend's
+		// client-side expiry guard isOrderLive(o) = (o.status === 'live' && …)
+		// then filtered out EVERY order, blanking the orderbook whenever it had
+		// any orders (Ken saw a live order missing + no empty-state card). The
+		// column is 'live' for every row this query returns, so it's a constant.
+		status: 'live' as const,
 		side: r.side,
 		asset: r.asset,
 		// Part 121 — null for single-network assets; one of

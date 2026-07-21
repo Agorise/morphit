@@ -20,7 +20,20 @@
 #        SSH_KEY            — SSH key for rsync auth (used when
 #                             REMOTE_DESTINATION is set)
 #        DB_HOST / DB_PORT  — Postgres host/port (default
-#                             localhost:5432)
+#                             localhost:5432); used only for a
+#                             HOST-reachable Postgres.
+#        DB_CONTAINER       — name of a Docker container running
+#                             Postgres.  When set, the dump runs
+#                             THROUGH `docker exec "$DB_CONTAINER"
+#                             pg_dump …` (Docker-aware path — for a
+#                             containerized DB like a BunkerWeb /
+#                             docker-compose Postgres).  The wizard
+#                             auto-detects + fills this on install +
+#                             every upgrade; DB_HOST/DB_PORT are
+#                             ignored on this path (the pg_dump runs
+#                             inside the container, hitting its
+#                             container-local socket = trust/peer
+#                             auth, no password).
 #   2. pg_dump the indexer DB, gzip the output, optionally
 #      pipe through `age -r "$AGE_RECIPIENT"` for encryption,
 #      write to a .partial file first.
@@ -133,6 +146,7 @@ fi
 : "${DB_USER:=morphit_indexer}"
 : "${DB_HOST:=}"
 : "${DB_PORT:=}"
+: "${DB_CONTAINER:=}"
 : "${AGE_RECIPIENT:=}"
 : "${REMOTE_DESTINATION:=}"
 : "${SSH_KEY:=}"
@@ -148,6 +162,13 @@ if [ -n "$REMOTE_DESTINATION" ] && [ -n "$(is_placeholder "$REMOTE_DESTINATION")
 	echo "morphit-backup: warning: REMOTE_DESTINATION looks like a placeholder (\"$REMOTE_DESTINATION\"); skipping off-host push" >&2
 	echo "  Hint: set REMOTE_DESTINATION=user@your-backup-host:/morphit/ in /etc/morphit/backup.env" >&2
 	REMOTE_DESTINATION=""
+fi
+# A placeholder DB_CONTAINER (Ansible template left unfilled, or auto-detection
+# wrote a marker) → treat as unset and fall back to the host pg_dump path
+# rather than docker-exec'ing a bogus container name.
+if [ -n "$DB_CONTAINER" ] && [ -n "$(is_placeholder "$DB_CONTAINER")" ]; then
+	echo "morphit-backup: warning: DB_CONTAINER looks like a placeholder (\"$DB_CONTAINER\"); ignoring it and using a host pg_dump" >&2
+	DB_CONTAINER=""
 fi
 
 # If age encryption is requested, confirm `age` is on PATH BEFORE
@@ -166,6 +187,19 @@ if [ -n "$REMOTE_DESTINATION" ]; then
 	if ! command -v rsync >/dev/null 2>&1; then
 		echo "morphit-backup: error: REMOTE_DESTINATION is set but \`rsync\` binary is not on PATH" >&2
 		echo "  Hint: \`apt install rsync\`" >&2
+		exit 3
+	fi
+fi
+# Docker-aware path: if DB_CONTAINER is set we dump THROUGH `docker exec`, so
+# `docker` must be on PATH AND runnable by the backup user. Loud-fail fast
+# (same posture as age/rsync) rather than silently falling back to a host
+# pg_dump the operator never configured — a silent fallback could dump the
+# WRONG database (or nothing) while the operator believes their containerized
+# DB is safely backed up.
+if [ -n "$DB_CONTAINER" ]; then
+	if ! command -v docker >/dev/null 2>&1; then
+		echo "morphit-backup: error: DB_CONTAINER is set (\"$DB_CONTAINER\") but \`docker\` is not on PATH" >&2
+		echo "  Hint: the backup runs as the systemd unit's user; ensure that user can run docker (add it to the 'docker' group), or unset DB_CONTAINER in /etc/morphit/backup.env to use a host pg_dump instead." >&2
 		exit 3
 	fi
 fi
@@ -193,6 +227,18 @@ PG_ARGS="-U $DB_USER"
 [ -n "$DB_HOST" ] && PG_ARGS="$PG_ARGS -h $DB_HOST"
 [ -n "$DB_PORT" ] && PG_ARGS="$PG_ARGS -p $DB_PORT"
 
+# Choose HOST vs CONTAINER dump. For a containerized Postgres the pg_dump runs
+# INSIDE the container via `docker exec`, connecting to the container's own
+# local socket (trust/peer auth — no password, no host/port). DB_HOST/DB_PORT
+# are host-relative and meaningless in-container, so the container path uses
+# -U + DB_NAME only. Container names never contain whitespace, so the unquoted
+# expansion in the pipeline below word-splits cleanly.
+if [ -n "$DB_CONTAINER" ]; then
+	DUMP_CMD="docker exec $DB_CONTAINER pg_dump -U $DB_USER"
+else
+	DUMP_CMD="pg_dump $PG_ARGS"
+fi
+
 # ─── Dump → (optionally encrypt) → atomically rename ──────────────────
 # Write to .partial first so a half-written file isn't named like
 # a finished backup.  The umask above makes files 600 from
@@ -213,11 +259,11 @@ PG_ARGS="-U $DB_USER"
 # shellcheck disable=SC3040  # pipefail isn't POSIX but bash/dash modern support it
 ( set -o pipefail 2>/dev/null || true ) >/dev/null
 if [ -n "$AGE_RECIPIENT" ]; then
-	# shellcheck disable=SC2086  # PG_ARGS deliberately word-split
-	pg_dump $PG_ARGS "$DB_NAME" | gzip | age -r "$AGE_RECIPIENT" > "$TMPFILE"
+	# shellcheck disable=SC2086  # DUMP_CMD/PG_ARGS deliberately word-split
+	$DUMP_CMD "$DB_NAME" | gzip | age -r "$AGE_RECIPIENT" > "$TMPFILE"
 else
 	# shellcheck disable=SC2086
-	pg_dump $PG_ARGS "$DB_NAME" | gzip > "$TMPFILE"
+	$DUMP_CMD "$DB_NAME" | gzip > "$TMPFILE"
 fi
 # Belt-and-braces: if the pipeline produced an empty file the dump
 # silently failed (pg_dump returned 0 but couldn't connect, etc.).
