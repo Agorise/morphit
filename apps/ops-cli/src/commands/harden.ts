@@ -34,6 +34,7 @@
 
 import { writeFileSync, existsSync, readFileSync, chmodSync } from 'node:fs';
 import { defaultRepoRoot } from '../lib/repoRoot.ts';
+import { readDeployedDatabaseUrl } from '../lib/dbContainer.ts';
 import { resolve, join } from 'node:path';
 
 import { askChoice } from '../init/prompt.ts';
@@ -138,7 +139,9 @@ export async function runHarden(ctx: HardenCtx): Promise<number> {
 					'  restart the relay.  See OPERATIONS.md §32.\n'
 			);
 		} else if (choice === 3) {
-			const backup = await stepBackup();
+			// Pass the deployed connection URL so the backup targets the real DB
+			// (non-standard boxes on morphit_user/morphit_db work without editing).
+			const backup = await stepBackup(readDeployedDatabaseUrl(repoRoot) ?? '');
 			if (backup.enabled) {
 				console.log(
 					'  To activate the shipped backup timer:\n' +

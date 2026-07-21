@@ -2192,6 +2192,12 @@
 				</div>
 			{/if}
 			<ChatComposer {peer} onSend={handleSend} isLocked={locked} />
+			<!-- cp510 [8] — subdued E2E reassurance pinned under the composer. -->
+			<p
+				class="flex-none px-4 pb-2 pt-0.5 text-center text-xs text-ink-400 dark:text-ink-500"
+			>
+				{$_('chat.composer_e2e_note', { values: { peer } })}
+			</p>
 		{/if}
 	{:else}
 		<!-- needs_fee (and no order context): show pay-to-message

@@ -159,6 +159,52 @@ const ALLOWLIST: readonly AllowlistEntry[] = [
 			'the tested source of truth (no `npm audit fix`). Reviewed cp270. Revisit if a ' +
 			'non-breaking patched vite is already in range or if the dev server is ever ' +
 			'exposed in production.'
+	},
+	{
+		package: 'brace-expansion',
+		maxSeverity: 'high',
+		acceptedTitles: [
+			'brace-expansion: DoS via exponential-time expansion of consecutive non-expanding {} groups'
+		],
+		lastReviewed: '2026-07-20',
+		rationale:
+			'Build/dev-only transitive dependency (reached via minimatch/glob under vite, ' +
+			'rollup, eslint, tailwind, and the test tooling — never shipped to operators; ' +
+			'production serves prebuilt static assets). The advisory (GHSA-3jxr-9vmj-r5cp) ' +
+			'is a ReDoS: brace-expansion takes exponential time on a crafted pattern with ' +
+			'many consecutive non-expanding `{}` groups. Exploiting it requires an attacker ' +
+			'to control the GLOB/BRACE PATTERN string fed to brace-expansion, but every ' +
+			'pattern in our stack is developer-authored at build time (file globs in configs, ' +
+			'test match patterns) — no runtime path lets untrusted user input reach a ' +
+			'brace-expansion call, so the DoS is not reachable in production or in the ' +
+			'served app. No safe transitive override exists across every consumer without ' +
+			'churning the lockfile, and the lockfile is the tested source of truth (no ' +
+			'`npm audit fix`). Revisit if a patched brace-expansion lands non-breakingly ' +
+			'in range for all consumers, or if any runtime code ever brace-expands ' +
+			'user-supplied input. Reviewed cp509 (2026-07-20).'
+	},
+	{
+		package: 'js-yaml',
+		maxSeverity: 'high',
+		acceptedTitles: [
+			'JS-YAML: Quadratic-complexity DoS in merge key handling via repeated aliases',
+			'js-yaml: YAML merge-key chains can force quadratic CPU consumption'
+		],
+		lastReviewed: '2026-07-20',
+		rationale:
+			'Build/dev-only transitive dependency (reached via eslint -> @eslint/eslintrc ' +
+			'-> js-yaml; never shipped to operators — production serves prebuilt static ' +
+			'assets). Both advisories (GHSA-h67p-54hq-rp68, GHSA-52cp-r559-cp3m) are ' +
+			'quadratic-complexity DoS: a crafted YAML document with merge-key chains / ' +
+			'repeated aliases forces quadratic CPU in js-yaml\'s parser. Exploiting either ' +
+			'requires an attacker to control the YAML fed to js-yaml.load, but js-yaml is ' +
+			'reached ONLY by ESLint at lint-time, parsing the project\'s own ' +
+			'developer-authored ESLint config — no runtime path lets untrusted user input ' +
+			'reach a js-yaml parse call, and Morphit source imports js-yaml nowhere. So the ' +
+			'DoS is not reachable in production or in the served app. The lockfile is the ' +
+			'tested source of truth (no `npm audit fix`). Revisit if a patched js-yaml ' +
+			'(>=4.3.0) lands non-breakingly in range under eslint, or if any runtime code ' +
+			'ever parses user-supplied YAML. Reviewed cp511 (2026-07-20).'
 	}
 ];
 

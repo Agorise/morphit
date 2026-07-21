@@ -50,6 +50,7 @@ import {
 } from '../../../indexer/src/lib/feeAmountCalc.ts';
 import { LISTING_FEE_USD } from '@morphit/asset-registry';
 import type { ListingFeeResult } from './render.ts';
+import { detectDbContainer, dbIdentityFromUrl, BACKUP_DB_NAME, BACKUP_DB_USER } from '../lib/dbContainer.ts';
 
 export const TOTAL_STEPS = 23;
 
@@ -752,9 +753,20 @@ export interface BackupResult {
 	readonly enabled: boolean;
 	readonly backupDir: string | null;
 	readonly retainDays: number | null;
+	/** Auto-detected Docker container running the morphit Postgres, or null for
+	 *  a host Postgres / when detection couldn't run. Drives the backup script's
+	 *  Docker-aware `docker exec … pg_dump` path (cp509 / v1.8.4 B). */
+	readonly dbContainer: string | null;
+	/** Database name + authenticating user the backup targets, resolved from the
+	 *  operator's connection URL (falling back to the init.sql defaults). Written
+	 *  into backup.env so a non-standard box — e.g. a BunkerWeb DB on
+	 *  `morphit_user`/`morphit_db` — is backed up correctly without hand-editing
+	 *  (cp509 / v1.8.4). */
+	readonly dbName: string;
+	readonly dbUser: string;
 }
 
-export async function stepBackup(): Promise<BackupResult> {
+export async function stepBackup(databaseUrl: string): Promise<BackupResult> {
 	step(17, TOTAL_STEPS, 'Daily DB backup');
 	explain(
 		"The indexer's PostgreSQL database is rebuildable from the\n" +
@@ -768,6 +780,13 @@ export async function stepBackup(): Promise<BackupResult> {
 			'pruned automatically.  Strongly recommended for production.'
 	);
 
+	// Resolve the REAL database name + user from the connection URL the operator
+	// just entered (cp509 / v1.8.4) — so a non-standard DB (e.g. a BunkerWeb box
+	// on morphit_user/morphit_db) is backed up correctly and its container is
+	// probed under the right identity. Falls back to the init.sql defaults if
+	// the URL can't be parsed.
+	const identity = dbIdentityFromUrl(databaseUrl) ?? { dbName: BACKUP_DB_NAME, dbUser: BACKUP_DB_USER };
+
 	const enabled = await askYesNo('Enable daily DB backup automation?', true);
 	if (!enabled) {
 		console.log(
@@ -775,7 +794,14 @@ export async function stepBackup(): Promise<BackupResult> {
 				'     `morphit-ops init` again, or follow the manual recipe\n' +
 				'     in docs/RUN-A-MORPHIT-NODE.md §10.\n'
 		);
-		return { enabled: false, backupDir: null, retainDays: null };
+		return {
+			enabled: false,
+			backupDir: null,
+			retainDays: null,
+			dbContainer: null,
+			dbName: identity.dbName,
+			dbUser: identity.dbUser
+		};
 	}
 
 	const backupDir = await ask('Backup directory', '/home/morphit/backups');
@@ -785,10 +811,33 @@ export async function stepBackup(): Promise<BackupResult> {
 		default: 30
 	});
 
+	// Docker-aware detection (cp509 / v1.8.4 B): if the Postgres runs in a
+	// container (BunkerWeb / docker-compose Postgres), find its name so the
+	// backup dumps THROUGH `docker exec … pg_dump` instead of a host pg_dump
+	// that finds nothing. Best-effort + silent: null on a host Postgres, a
+	// fresh box where the DB container isn't up yet, or when docker is absent —
+	// the every-upgrade check re-detects later. Probes under the operator's
+	// real DB name/user (resolved above), so it matches provably.
+	let dbContainer: string | null = null;
+	try {
+		dbContainer = detectDbContainer(identity.dbUser, identity.dbName);
+	} catch {
+		dbContainer = null;
+	}
+	if (dbContainer !== null) {
+		console.log(
+			`  ✓ Detected a containerized Postgres ("${dbContainer}") — backups will\n` +
+				'    dump it via `docker exec`.\n'
+		);
+	}
+
 	return {
 		enabled: true,
 		backupDir,
-		retainDays
+		retainDays,
+		dbContainer,
+		dbName: identity.dbName,
+		dbUser: identity.dbUser
 	};
 }
 

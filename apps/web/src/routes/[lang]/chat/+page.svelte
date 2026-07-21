@@ -234,25 +234,33 @@
 	/** Which list to render based on the active tab. */
 	/** Reuses `order_detail.status_*` — already translated in all ten locales, and
 	 *  identical to what the chat thread and the order page show. */
-	function orderStatusLabel(status: string): string {
-		switch (status) {
+	function orderStatusLabel(order: { status: string; permlink: string }): string {
+		// cp509 (v1.8.4 A2) — match the ConversationView header's fast (Paid):
+		// flip to "Paid" the instant THIS thread's local trade phase reaches
+		// paid_verified/released/completed, not only once the durable order status
+		// becomes 'completed' (the indexer lags ~1min). Checked FIRST so it
+		// outranks a stale 'live'. Both sides populate tradeStates, so this reads
+		// true for buyer and seller alike. (t155 already handled the slow path:
+		// order.status === 'completed' → Paid.)
+		const phase = $tradeStates.get(order.permlink)?.phase;
+		if (
+			phase === 'paid_verified' ||
+			phase === 'released' ||
+			phase === 'completed' ||
+			order.status === 'completed'
+		) {
+			// Deliberately `my_orders.filter.paid` ("Paid") — a terse parenthetical
+			// beside the order title that matches the word on the my/orders Paid
+			// pill the user just came from.
+			return $_('my_orders.filter.paid') as string;
+		}
+		switch (order.status) {
 			case 'live':
 				return $_('order_detail.status_live') as string;
 			case 'cancelled':
 				return $_('order_detail.status_cancelled') as string;
 			case 'expired':
 				return $_('order_detail.status_expired') as string;
-			case 'completed':
-				// t155: "it says (Live) on the title of that completed order, it
-				// should say (Paid)". This case was simply missing, so a settled
-				// trade's card fell through to '' and kept whatever the title
-				// said — reading "(Live)" long after the trade was done.
-				//
-				// Deliberately `my_orders.filter.paid` ("Paid") rather than
-				// order_detail.status_completed ("Completed & paid"): this is a
-				// terse parenthetical beside the order title, and it should match
-				// the word on the my/orders Paid pill the user just came from.
-				return $_('my_orders.filter.paid') as string;
 			default:
 				return '';
 		}
@@ -838,7 +846,7 @@
 						     timestamp, star, the full-height Archive box, padding, gaps) left
 						     the text block ~100px, which is what squeezed the name into four
 						     lines and dragged the avatar out of line with it. -->
-						<div class="flex min-w-0 flex-1 items-center gap-2 p-2 sm:gap-3 sm:p-3">
+						<div class="relative flex min-w-0 flex-1 items-center gap-2 p-2 sm:gap-3 sm:p-3">
 							<a
 								href={threadHref(convo)}
 								onclick={() => handleOpen(convo.peer, convo.order?.permlink ?? '', convo.last_message_at)}
@@ -866,16 +874,20 @@
 									class="flex-none"
 								/>
 								<div class="flex min-w-0 flex-1 flex-col gap-0.5">
-									<!-- @name / display name (avatar-less IdentityLabel). -->
-									<IdentityLabel
-										account={convo.peer}
-										displayName={labelProps.displayName}
-										avatarSvg={labelProps.avatarSvg}
-										avatarDataUri={labelProps.avatarDataUri}
-										hideAvatar
-										weight={convo.unread ? 'bold' : 'semibold'}
-										showCopy={false}
-									/>
+									<!-- @name / display name. pr-7 so the name clears the star now pinned
+									     at the card's top-right; lines 2/3 below have no such padding and
+									     use the full width (cp510 [5]). -->
+									<div class="min-w-0 pr-7">
+										<IdentityLabel
+											account={convo.peer}
+											displayName={labelProps.displayName}
+											avatarSvg={labelProps.avatarSvg}
+											avatarDataUri={labelProps.avatarDataUri}
+											hideAvatar
+											weight={convo.unread ? 'bold' : 'semibold'}
+											showCopy={false}
+										/>
+									</div>
 									<!-- "RE:" line (t.txt item 12) — ALWAYS present. Bound to the order
 									     ("RE: <title> (Live|Cancelled|Expired)") or "RE: -". Inside the
 									     text block, so it lines up under the name with no manual indent. -->
@@ -897,8 +909,8 @@
 											)}
 											{@const orderTitle = $_(parts.key, { values: parts.values }) as string}
 											<span class="min-w-0 truncate">{orderTitle}</span>
-											{#if orderStatusLabel(convo.order.status)}
-												<span class="flex-none">({orderStatusLabel(convo.order.status)})</span>
+											{#if orderStatusLabel(convo.order)}
+												<span class="flex-none">({orderStatusLabel(convo.order)})</span>
 											{/if}
 										{:else}
 											<span class="min-w-0 truncate">-</span>
@@ -948,25 +960,25 @@
 									{/if}
 								</div>
 							</a>
+							<!-- Star (cp510 [5]) — pinned at the card's top-right (line-1 row)
+							     instead of a full-height centred column, so lines 2/3 extend the
+							     full width. Absolute + z-10 so it sits above the card-wide link
+							     and steals no flow width; anchored to the now-relative content
+							     box, so `right` lands just left of the Archive rail. -->
+							<button
+								type="button"
+								onclick={() => handleToggleStar(convo)}
+								aria-pressed={starred}
+								aria-label={starred
+									? ($_('chat.inbox.unstar_aria') as string)
+									: ($_('chat.inbox.star_aria') as string)}
+								class="absolute right-1 top-1 z-10 flex items-center px-1.5 py-0.5 text-lg leading-none transition-colors {starred
+									? 'text-amber-400 hover:text-amber-500'
+									: 'text-ink-300 hover:text-amber-400 dark:text-ink-500 dark:hover:text-amber-400'}"
+								>
+									{starred ? '★' : '☆'}
+								</button>
 						</div>
-						<!-- Star (t.txt #10, moved) — plain gold glyph sitting just LEFT of
-						     the Archive box (no round badge). Gold when starred, faint when not;
-						     clicking toggles the ★ Starred folder. flex-none so it never steals
-						     width from the name/subject; z-10 to sit above the card-wide link;
-						     items-center lines it up with the Archive label. -->
-						<button
-							type="button"
-							onclick={() => handleToggleStar(convo)}
-							aria-pressed={starred}
-							aria-label={starred
-								? ($_('chat.inbox.unstar_aria') as string)
-								: ($_('chat.inbox.star_aria') as string)}
-							class="relative z-10 flex flex-none items-center px-1.5 text-lg leading-none transition-colors {starred
-								? 'text-amber-400 hover:text-amber-500'
-								: 'text-ink-300 hover:text-amber-400 dark:text-ink-500 dark:hover:text-amber-400'}"
-						>
-							{starred ? '★' : '☆'}
-						</button>
 						<!-- Action box (t.txt item 7) — EVERY card has one, on the far
 						     right, full height. "Archive" moves the discussion to the
 						     Archived tab; on an already-archived card it reads "Restore"

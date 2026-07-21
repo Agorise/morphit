@@ -356,60 +356,6 @@ export function formatCountCompact(n: number): string {
 // ─── Date formatters ───────────────────────────────────────────
 
 /**
- * Format an ISO timestamp or Date as a localized full-date string, in
- * UTC. "Saturday, May 9, 2026" in en, "samedi 9 mai 2026" in fr. UTC so
- * every displayed date is unambiguous and identical for all parties (see
- * {@link formatDayMonthTime} for the rationale) — the weekday matches the
- * UTC calendar day too.
- */
-export function formatDateLong(input: string | Date): string {
-	const d = typeof input === 'string' ? new Date(input) : input;
-	if (isNaN(d.getTime())) return '—';
-	return getDateFormat(activeLocale(), {
-		year: 'numeric',
-		month: 'long',
-		day: 'numeric',
-		weekday: 'long',
-		timeZone: 'UTC'
-	}).format(d);
-}
-
-/**
- * Format an ISO timestamp or Date as a localized medium-date string, in
- * UTC. "May 9, 2026" in en, "9 mai 2026" in fr.
- */
-export function formatDateMedium(input: string | Date): string {
-	const d = typeof input === 'string' ? new Date(input) : input;
-	if (isNaN(d.getTime())) return '—';
-	return getDateFormat(activeLocale(), {
-		year: 'numeric',
-		month: 'short',
-		day: 'numeric',
-		timeZone: 'UTC'
-	}).format(d);
-}
-
-/**
- * Localized date-and-time string in 24-hour UTC. "May 9, 2026, 17:47" in
- * en. Superseded for most UI by {@link formatDayMonthTime} (the canonical
- * "30 June, 2026 @ HH:MM:SS UTC"); kept UTC + 24-hour here so any future
- * caller stays consistent with the sitewide standard.
- */
-export function formatDateTime(input: string | Date): string {
-	const d = typeof input === 'string' ? new Date(input) : input;
-	if (isNaN(d.getTime())) return '—';
-	return getDateFormat(activeLocale(), {
-		year: 'numeric',
-		month: 'short',
-		day: 'numeric',
-		hour: '2-digit',
-		minute: '2-digit',
-		hour12: false,
-		timeZone: 'UTC'
-	}).format(d);
-}
-
-/**
  * The project's CANONICAL UI date format: day number, full
  * (translated) month name, a comma, then the 4-digit year —
  * "11 June, 2026" in en, "11 junio, 2026" in es, "11 Juni, 2026"

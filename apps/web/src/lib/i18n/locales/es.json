@@ -746,7 +746,8 @@
 		},
 		"system": {
 			"order_settled_elsewhere": "Gracias por tu interés en esta orden. Ya he completado esta operación con otro comerciante, así que ya no está disponible. Lamento que no haya podido ser esta vez; agradezco mucho tu interés y espero que podamos comerciar en el futuro."
-		}
+		},
+		"composer_e2e_note": "Nadie más puede leer este chat. Solo tú y @{peer} tenéis las claves."
 	},
 	"cheat_sheet": {
 		"heading": "Hoja de referencia de Morphit",
@@ -1501,7 +1502,7 @@
 			},
 			"chat_inbox_features": {
 				"q": "¿Cómo funciona la bandeja de chat? ¿Puedo silenciar o desilenciar a alguien?",
-				"a": "La bandeja de chat vive en el icono de chat de la cabecera y funciona como una bandeja de correo: **una tarjeta por conversación**, no una por persona.\n\nSi tú y el mismo comerciante habéis hablado de tres pedidos distintos, son tres tarjetas, cada una con una línea \"RE:\" que nombra el pedido y su estado actual — **(Activo)**, **(Cancelado)** o **(Caducado)** — para que un hilo sobre un pedido que ya no existe lo diga antes de abrirlo. Una conversación que no trata de ningún pedido también tiene su propia tarjeta; su segunda línea simplemente pone \"RE: -\". Abre una tarjeta y verás solo esa conversación. La actividad más reciente siempre está arriba.\n\nLeer una tarjeta marca como leída **solo esa** — tres conversaciones sin leer con la misma persona siguen siendo tres conversaciones sin leer, en este dispositivo y en cualquier otro desde el que inicies sesión. Las tarjetas sin leer conservan un borde esmeralda, y el icono de chat (además de la pestaña del navegador y el favicon) lleva el número de no leídos. Leer una tarjeta, o pulsar **Marcar todo como leído**, lo pone a cero.\n\nLa bandeja tiene tres pestañas, igual que un cliente de correo:\n\n**Recibidos** — donde todo llega por defecto y se queda hasta que lo muevas. Las conversaciones nuevas, las respuestas y el primer contacto de alguien a quien no conoces aparecen aquí.\n\n**★ Destacados** — pulsa la estrella vacía a la derecha de la hora de una tarjeta y la conversación se mueve aquí; pulsa la estrella dorada para devolverla a Recibidos. La misma estrella está en el menú ⋮ de la conversación, así que también puedes marcar un hilo desde dentro del chat.\n\n**Archivados** — ¿ya terminaste con una conversación pero no quieres bloquear a nadie? Pulsa **Archivar** a la derecha de la tarjeta. Se mueve a Archivados, deja de contar en tu insignia de no leídos, y su botón pasa a ser **Restaurar** para devolverla a Recibidos. Archivar es por conversación, local a tu navegador, nunca en la cadena y nunca visible para la otra parte.\n\n**Silenciar / desilenciar (bloquear + desbloquear).** Dentro de cualquier conversación, el menú ⋮ de la cabecera tiene un botón Bloquear. Pide confirmación y luego difunde una operación de bloqueo en la cadena — esa cuenta ya no puede alcanzarte desde ningún alias, y el indexador lo aplica en el servidor sin importar qué instancia de Morphit use. Para desilenciar, ve a **Ajustes → Cuentas bloqueadas** y pulsa Desbloquear; también es una operación en la cadena y surte efecto de inmediato.\n\n**Bloquear vs Archivar vs Ocultar:** Bloquear es a nivel de protocolo y en la cadena (entre instancias, en todo el historial de la cuenta). Archivar es tu propia curaduría de la bandeja — solo local y por conversación. Ocultar (el botón del libro de órdenes — mira '¿Puedo ocultar órdenes de usuarios concretos?' más abajo) es la misma idea de ocultar en local, extendida a las filas del libro de órdenes.\n\nTanto en escritorio como en móvil hay notificaciones push opcionales para mensajes nuevos — mira 'Cómo funcionan las notificaciones push con mi privacidad' para conocer su huella de privacidad. Puedes desactivarlas en cualquier momento desde Ajustes."
+				"a": "La bandeja de chat vive en el icono de chat de la cabecera y funciona como una bandeja de correo: **una tarjeta por conversación**, no una por persona.\n\nSi tú y el mismo comerciante habéis hablado de tres pedidos distintos, son tres tarjetas, cada una con una línea \"RE:\" que nombra el pedido y su estado actual — **(Activo)**, **(Cancelado)**, **(Caducado)** o **(Pagado)** — para que un hilo sobre un pedido que ya no existe lo diga antes de abrirlo. Una conversación que no trata de ningún pedido también tiene su propia tarjeta; su segunda línea simplemente pone \"RE: -\". Abre una tarjeta y verás solo esa conversación. La actividad más reciente siempre está arriba.\n\nLeer una tarjeta marca como leída **solo esa** — tres conversaciones sin leer con la misma persona siguen siendo tres conversaciones sin leer, en este dispositivo y en cualquier otro desde el que inicies sesión. Las tarjetas sin leer conservan un borde esmeralda, y el icono de chat (además de la pestaña del navegador y el favicon) lleva el número de no leídos. Leer una tarjeta, o pulsar **Marcar todo como leído**, lo pone a cero.\n\nLa bandeja tiene tres pestañas, igual que un cliente de correo:\n\n**Recibidos** — donde todo llega por defecto y se queda hasta que lo muevas. Las conversaciones nuevas, las respuestas y el primer contacto de alguien a quien no conoces aparecen aquí.\n\n**★ Destacados** — pulsa la estrella vacía a la derecha de la hora de una tarjeta y la conversación se mueve aquí; pulsa la estrella dorada para devolverla a Recibidos. La misma estrella está en el menú ⋮ de la conversación, así que también puedes marcar un hilo desde dentro del chat.\n\n**Archivados** — ¿ya terminaste con una conversación pero no quieres bloquear a nadie? Pulsa **Archivar** a la derecha de la tarjeta. Se mueve a Archivados, deja de contar en tu insignia de no leídos, y su botón pasa a ser **Restaurar** para devolverla a Recibidos. Archivar es por conversación, local a tu navegador, nunca en la cadena y nunca visible para la otra parte.\n\n**Silenciar / desilenciar (bloquear + desbloquear).** Dentro de cualquier conversación, el menú ⋮ de la cabecera tiene un botón Bloquear. Pide confirmación y luego difunde una operación de bloqueo en la cadena — esa cuenta ya no puede alcanzarte desde ningún alias, y el indexador lo aplica en el servidor sin importar qué instancia de Morphit use. Para desilenciar, ve a **Ajustes → Cuentas bloqueadas** y pulsa Desbloquear; también es una operación en la cadena y surte efecto de inmediato.\n\n**Bloquear vs Archivar vs Ocultar:** Bloquear es a nivel de protocolo y en la cadena (entre instancias, en todo el historial de la cuenta). Archivar es tu propia curaduría de la bandeja — solo local y por conversación. Ocultar (el botón del libro de órdenes — mira '¿Puedo ocultar órdenes de usuarios concretos?' más abajo) es la misma idea de ocultar en local, extendida a las filas del libro de órdenes.\n\nTanto en escritorio como en móvil hay notificaciones push opcionales para mensajes nuevos — mira 'Cómo funcionan las notificaciones push con mi privacidad' para conocer su huella de privacidad. Puedes desactivarlas en cualquier momento desde Ajustes."
 			},
 			"notifications_overview": {
 				"q": "¿Cómo me avisa Morphit cuando pasa algo: un mensaje nuevo, una orden que se llena, una valoración?",
@@ -3146,7 +3147,7 @@
 		"submit": {
 			"primary_label": "Pagar y publicar esta orden",
 			"pending_broadcasting": "Publicando tu orden…",
-			"review_hint": "Una vez publicado, tienes 15 minutos para corregir cualquier errata. También puedes Cancelar y Volver a publicar si lo necesitas",
+			"review_hint": "Una vez publicado, tienes 15 minutos para corregir cualquier errata. También puedes Cancelar y Volver a publicar si lo necesitas.",
 			"primary_label_waived": "Publicar gratis",
 			"primary_label_external": "Publicar orden"
 		},
@@ -3476,6 +3477,15 @@
 			}
 		},
 		"reputation_heading": "Reputación",
+		"reciprocity_clean_pill": "Sin alertas de reseñas mutuas",
+		"reciprocity_flagged_pill": "Alerta de reseñas mutuas",
+		"tab_reviews_received": "Reseñas recibidas",
+		"tab_reviews_given": "Reseñas dadas",
+		"tab_active_orders": "Órdenes activas",
+		"tab_trade_history": "Historial de operaciones",
+		"tabs_aria": "Detalles del perfil",
+		"no_trade_history": "Aún no hay operaciones completadas.",
+		"trade_history_with": "con @{account}",
 		"loading_feedback": "Cargando comentarios…",
 		"feedback_error": "No se pudieron cargar los comentarios ahora mismo.",
 		"rating_count": "{n, plural, one {# valoración} other {# valoraciones}}",
@@ -3514,7 +3524,8 @@
 			"unclaimed_label": "Recompensas sin reclamar",
 			"claim_now": "Reclamar ahora",
 			"claiming": "Reclamando…",
-			"claim_error": "No se pudo reclamar ahora. Inténtalo de nuevo."
+			"claim_error": "No se pudo reclamar ahora. Inténtalo de nuevo.",
+			"delegated_in_label": "+ {bp} BP delegados a ti"
 		},
 		"pnl": {
 			"export_button": "Exportar P&L (últimos 12 meses)",
@@ -4044,7 +4055,6 @@
 				"invalid_scheme": "Solo se permiten URLs de nostr:, https:// y http://.",
 				"malformed": "Eso no parece una URL válida."
 			},
-			"preview_label": "Vista previa",
 			"saved_toast": "Guardado ✓",
 			"save_and_broadcast": "Guardar y difundir",
 			"broadcast_pending": "Publicando…",
@@ -4064,7 +4074,6 @@
 				"invalid_scheme": "La URL debe empezar por http:// o https://.",
 				"malformed": "La URL está mal formada."
 			},
-			"preview_label": "Vista previa:",
 			"saved_toast": "Guardado en este dispositivo.",
 			"save_and_broadcast": "Guardar y emitir",
 			"clear": "Limpiar",
@@ -4082,7 +4091,6 @@
 				"invalid_scheme": "La URL debe empezar por http:// o https://.",
 				"malformed": "La URL está mal formada."
 			},
-			"preview_label": "Vista previa:",
 			"saved_toast": "Guardado en este dispositivo.",
 			"save_and_broadcast": "Guardar y emitir",
 			"clear": "Limpiar",
@@ -4105,7 +4113,7 @@
 			"channel_native_label": "Notificaciones de escritorio",
 			"channel_native_help": "Notificación nativa del SO cuando llega un evento nuevo y esta pestaña no está enfocada. Pide permiso la primera vez que lo necesita.",
 			"channel_push_label": "Notificaciones push (pestaña cerrada)",
-			"channel_push_help": "También avisar cuando Morphit no está abierto. Requiere un servicio push — puedes elegir auto-hospedado, estándar del navegador, o desactivado.",
+			"channel_push_help": "También avisar cuando Morphit no está abierto. Requiere un servicio Web Push.",
 			"channel_push_privacy_label": "Nivel de privacidad push",
 			"channel_push_privacy_standard": "Estándar (navegador por defecto)",
 			"channel_push_privacy_off": "Desactivado",
@@ -4271,7 +4279,7 @@
 			"heading": "Llave de hardware",
 			"explain": "Vincula una YubiKey a tu keystore como segundo método de desbloqueo, o como único método. Añade un segundo factor robusto que una contraseña robada por sí sola no puede saltarse.",
 			"unsupported_title": "Tu navegador no admite llaves de hardware",
-			"unsupported_body": "El desbloqueo con YubiKey requiere WebHID, que actualmente solo está disponible en Chrome, Edge, Brave y otros navegadores basados en Chromium. Firefox y Safari no exponen esta API. Puedes seguir usando tu contraseña como antes.",
+			"unsupported_body": "El desbloqueo con YubiKey requiere la API WebHID, que no está disponible en todos los navegadores web. Puedes seguir usando tu contraseña como antes.",
 			"seed_only_note": "Las llaves de hardware solo están disponibles cuando tienes un keystore persistido. Estás usando el modo solo-frase-semilla — no hay ningún sobre cifrado en este dispositivo al que vincular una llave.",
 			"unnamed_key": "YubiKey sin nombre",
 			"slot_label": "Ranura {slot}",

@@ -322,8 +322,26 @@
 				<div
 					class="mt-4 rounded-xl border border-ink-200 bg-ink-50 p-4 text-ink-700 dark:border-ink-700 dark:bg-ink-900 dark:text-ink-300"
 				>
-					<p class="font-semibold">
-						{$_('settings.hardware_key.unsupported_title')}
+					<p class="flex items-start gap-2 font-semibold">
+						<!-- Subdued, non-scary info-circle (not a red warning): an FYI, not
+						     an error — the user can still use their password. -->
+						<svg
+							class="mt-0.5 h-4 w-4 flex-none text-ink-400 dark:text-ink-500"
+							width="16"
+							height="16"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+						>
+							<circle cx="12" cy="12" r="10" />
+							<path d="M12 16v-4" />
+							<path d="M12 8h.01" />
+						</svg>
+						<span>{$_('settings.hardware_key.unsupported_title')}</span>
 					</p>
 					<p class="mt-1 text-sm">
 						{$_('settings.hardware_key.unsupported_body')}

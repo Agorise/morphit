@@ -53,6 +53,10 @@
 	import { verifyBlurtTransfer, type VerifyResult } from '$lib/chat/blurtVerify';
 	import { tradeStates } from '$lib/trades/tradeStatus';
 	import { triggerBlurtVerification } from '$lib/trades/tradeVerify';
+	import {
+		VERIFY_RETRY_WINDOW_MS,
+		VERIFY_RETRY_INTERVAL_MS
+	} from '$lib/trades/tradeVerify';
 	import { isPairedReadOnly } from '$lib/stores/identity';
 	import QrPanel from '$components/QrPanel.svelte';
 
@@ -501,15 +505,35 @@
 		const myGen = ++verifyGen;
 		verifyResultLocal = 'pending';
 
-		void verifyBlurtTransfer(p.txid, {
-			recipient: chainRecipient,
-			sender: chainSender,
-			amountBlurt: amountNum,
-			memo: p.memo ?? ''
-		}).then((r) => {
-			if (myGen !== verifyGen) return; // stale
-			verifyResultLocal = r;
-		});
+		// cp509 (v1.8.4 A1) — same transient-retry as the centralized path
+		// (cp508 Task 10): a freshly-broadcast transfer isn't queryable for a few
+		// seconds (it has to land in a block and be indexed), so the FIRST verify
+		// comes back not_found/rpc_error. Retry within the window, leaving the
+		// receipt on 'pending' ("Verifying…"), so this legacy no-orderPermlink
+		// receipt doesn't flash "Could not verify (RPC unreachable)" right after
+		// broadcast either. A definitive result (verified/mismatch/wrong_op)
+		// records immediately. The verifyGen guard abandons a superseded chain
+		// (a newer message/verify bumped verifyGen), which also stops its timer.
+		const legacyVerifyStartedAt = Date.now();
+		const attemptLegacyVerify = (): void => {
+			void verifyBlurtTransfer(p.txid, {
+				recipient: chainRecipient,
+				sender: chainSender,
+				amountBlurt: amountNum,
+				memo: p.memo ?? ''
+			}).then((r) => {
+				if (myGen !== verifyGen) return; // stale — superseded
+				const transient = r.kind === 'not_found' || r.kind === 'rpc_error';
+				if (transient && Date.now() - legacyVerifyStartedAt < VERIFY_RETRY_WINDOW_MS) {
+					setTimeout(() => {
+						if (myGen === verifyGen) attemptLegacyVerify();
+					}, VERIFY_RETRY_INTERVAL_MS);
+					return;
+				}
+				verifyResultLocal = r;
+			});
+		};
+		attemptLegacyVerify();
 	});
 
 	/** cp402 [5] — full date + time for a confirmed bubble (the persistent

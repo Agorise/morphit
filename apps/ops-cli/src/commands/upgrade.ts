@@ -102,6 +102,16 @@ import { error as printError, info, warn, sanitizeForTerm } from '../render/term
 import { refreshManagedUnits } from '../lib/refreshUnits.ts';
 import { daemonReload } from '../lib/restartServices.ts';
 import {
+	detectDbContainer,
+	parseBackupDbContainer,
+	assessBackupDockerDrift,
+	dbIdentityFromUrl,
+	readDeployedDatabaseUrl,
+	type DbIdentity,
+	BACKUP_DB_NAME,
+	BACKUP_DB_USER
+} from '../lib/dbContainer.ts';
+import {
 	MATRIX_BOT_UNIT,
 	matrixBotReadiness,
 	readMatrixBotEnv,
@@ -430,6 +440,66 @@ async function probeMcpHealth(
 		if (i < attempts - 1) await new Promise((r) => setTimeout(r, delayMs));
 	}
 	return { reachable: false, detail: lastDetail };
+}
+
+/** Path to the operator's backup config. Root-owned; the upgrade (privileged)
+ *  can read it. */
+function backupEnvFile(): string {
+	const etc = process.env.MORPHIT_ETC_DIR ?? '/etc/morphit';
+	return join(etc, 'backup.env');
+}
+
+/** Resolve the DB name + user the backup should target by parsing the deployed
+ *  morphit.env's MORPHIT_INDEXER_DATABASE_URL (falls back to the init.sql
+ *  defaults). Read-only; never throws. IMPURE. */
+function resolveDbIdentity(installDir: string): DbIdentity {
+	const url = readDeployedDatabaseUrl(installDir);
+	if (url) {
+		const id = dbIdentityFromUrl(url);
+		if (id) return id;
+	}
+	return { dbName: BACKUP_DB_NAME, dbUser: BACKUP_DB_USER };
+}
+
+/** Every-upgrade Docker-aware assurance (cp509 / v1.8.4 B): if the operator has
+ *  a backup configured but its DB_CONTAINER is empty WHILE their Postgres is
+ *  actually containerized, the daily backup is dumping the host (= nothing).
+ *  Detect that drift and WARN with the exact one-line fix. Best-effort + never
+ *  throws: an unreadable/absent backup.env, or a host Postgres, is a silent
+ *  no-op. We deliberately do NOT auto-edit the operator's root-owned /etc
+ *  config (same warn-don't-mutate posture as the MCP + canary checks). IMPURE. */
+function ensureBackupDockerAware(installDir: string): void {
+	try {
+		const path = backupEnvFile();
+		if (!existsSync(path)) return; // backups not configured — nothing to nag
+		let text: string;
+		try {
+			text = readFileSync(path, 'utf-8');
+		} catch {
+			return; // unreadable as this user — skip silently
+		}
+		const configured = parseBackupDbContainer(text);
+		if (configured !== '') return; // already Docker-aware — nothing to do
+		// DB_CONTAINER is empty. Is the DB actually containerized? Probe under the
+		// operator's REAL db name/user (from the deployed connection URL), so a
+		// non-standard box (e.g. morphit_user/morphit_db) matches provably.
+		const { dbName, dbUser } = resolveDbIdentity(installDir);
+		const detected = detectDbContainer(dbUser, dbName);
+		const verdict = assessBackupDockerDrift(true, configured, detected);
+		if (verdict.kind !== 'drift') return;
+		info('');
+		warn(
+			`Your Postgres is running in the container "${verdict.container}", but ${path} has ` +
+				`DB_CONTAINER empty — your daily backup is dumping the HOST, not the container, so it ` +
+				`is likely capturing nothing. Make it Docker-aware (one line, then it dumps via ` +
+				`\`docker exec ${verdict.container} pg_dump\`):\n` +
+				`      sudo sed -i 's/^DB_CONTAINER=.*/DB_CONTAINER=${verdict.container}/' ${path}\n` +
+				`  Test it immediately with \`sudo systemctl start morphit-backup.service\` and check ` +
+				`\`journalctl -u morphit-backup.service\`.`
+		);
+	} catch {
+		/* best-effort assurance; never fail an upgrade over the backup check */
+	}
 }
 /**
  * Split schema.sql into its `-- ─── v<N> …` sections, keyed by version.
@@ -1489,6 +1559,13 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 				`units in ops/systemd/ so future upgrades restart them automatically.`
 		);
 	}
+
+	// ─── 10e. Keep the DB backup Docker-aware (cp509 / v1.8.4 B) ──
+	// If the operator's Postgres is containerized but their backup.env still
+	// points a host pg_dump at it (DB_CONTAINER empty), the daily backup
+	// silently captures nothing. Detect + warn with the one-line fix. No-op for
+	// a host Postgres or an already-Docker-aware config.
+	ensureBackupDockerAware(installDir);
 
 	// ─── 11. Cleanup + prune old backups ───────────────────────
 	cleanupTmp(tmpDir);

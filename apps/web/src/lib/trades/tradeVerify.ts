@@ -70,8 +70,8 @@ export interface VerifyTriggerArgs {
  *  it; the trade entry stays 'pending' (set on funds-sent) throughout, so BOTH
  *  parties show "Verifying…" until the transfer clears (or the window lapses and
  *  the real error is finally shown). */
-const VERIFY_RETRY_WINDOW_MS = 90_000;
-const VERIFY_RETRY_INTERVAL_MS = 6_000;
+export const VERIFY_RETRY_WINDOW_MS = 90_000;
+export const VERIFY_RETRY_INTERVAL_MS = 6_000;
 
 /** orderPermlink\u0000txid currently inside a retry chain — so re-renders that
  *  re-call triggerBlurtVerification don't spawn parallel chains hammering the

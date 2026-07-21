@@ -746,7 +746,8 @@
 		},
 		"system": {
 			"order_settled_elsewhere": "Thank you for reaching out about this order. I've now completed this trade with another trader, so it's no longer available. I'm sorry it didn't work out this time — I really appreciate your interest, and I hope we can trade in the future."
-		}
+		},
+		"composer_e2e_note": "Nobody else can read this chat. Only you and @{peer} hold the keys."
 	},
 	"cheat_sheet": {
 		"heading": "Morphit cheat-sheet",
@@ -1501,7 +1502,7 @@
 			},
 			"chat_inbox_features": {
 				"q": "How does the chat inbox work? Can I mute or unmute someone?",
-				"a": "The chat inbox lives at the chat icon in the header and works like an email inbox: **one card per discussion**, not one per person.\n\nIf you and the same trader have talked about three different orders, that is three cards, each with a \"RE:\" line naming the order and its current state — **(Live)**, **(Canceled)** or **(Expired)** — so a thread about a dead order says so before you open it. A discussion that isn't about an order still gets its own card; its second line simply reads \"RE: -\". Open a card and you see only that discussion. Newest activity is always on top.\n\nReading one card marks **only that one** read — three unread conversations with the same person stay three unread conversations, on this device and every other one you sign in from. Unread cards keep an emerald border, and the chat icon (plus the browser tab and favicon) carries the unread count. Reading a card, or clicking **Mark all as read**, clears it.\n\nThe inbox has three tabs, exactly like an email client:\n\n**Inbox** — where everything lands by default and stays until you move it. New conversations, replies, and first contact from someone you've never met all show up here.\n\n**★ Starred** — tap the empty star to the right of a card's time and the discussion moves here; tap the gold star to send it back to the Inbox. The same star sits in the conversation's ⋮ menu, so you can flag a thread from inside the chatroom too.\n\n**Archived** — done with a discussion but don't want to block anyone? Tap **Archive** on the right of the card. It moves to Archived, stops counting toward your unread badge, and its button becomes **Restore** to bring it back to the Inbox. Archiving is per-discussion, local to your browser, never on-chain, and never visible to the other party.\n\n**Mute / unmute (block + unblock).** Inside any conversation, the header's ⋮ menu has a Block button. It asks for confirmation, then broadcasts an on-chain block op — that account can no longer reach you from any handle, enforced server-side by the indexer no matter which Morphit instance they use. To unmute, go to **Settings → Blocked accounts** and click Unblock; that's an on-chain op too, effective immediately.\n\n**Block vs Archive vs Hide:** Block is on-chain and protocol-level (cross-instance, cross-account-history). Archive is your own inbox curation — local-only and per-discussion. Hide (the orderbook button — see 'Can I hide orders from specific users?' below) is the same local-hide idea extended to orderbook rows.\n\nDesktop and mobile both get optional push notifications for new messages — see 'How do push notifications work with my privacy?' for the privacy footprint. Turn them off any time from Settings."
+				"a": "The chat inbox lives at the chat icon in the header and works like an email inbox: **one card per discussion**, not one per person.\n\nIf you and the same trader have talked about three different orders, that is three cards, each with a \"RE:\" line naming the order and its current state — **(Live)**, **(Canceled)**, **(Expired)** or **(Paid)** — so a thread about a dead order says so before you open it. A discussion that isn't about an order still gets its own card; its second line simply reads \"RE: -\". Open a card and you see only that discussion. Newest activity is always on top.\n\nReading one card marks **only that one** read — three unread conversations with the same person stay three unread conversations, on this device and every other one you sign in from. Unread cards keep an emerald border, and the chat icon (plus the browser tab and favicon) carries the unread count. Reading a card, or clicking **Mark all as read**, clears it.\n\nThe inbox has three tabs, exactly like an email client:\n\n**Inbox** — where everything lands by default and stays until you move it. New conversations, replies, and first contact from someone you've never met all show up here.\n\n**★ Starred** — tap the empty star to the right of a card's time and the discussion moves here; tap the gold star to send it back to the Inbox. The same star sits in the conversation's ⋮ menu, so you can flag a thread from inside the chatroom too.\n\n**Archived** — done with a discussion but don't want to block anyone? Tap **Archive** on the right of the card. It moves to Archived, stops counting toward your unread badge, and its button becomes **Restore** to bring it back to the Inbox. Archiving is per-discussion, local to your browser, never on-chain, and never visible to the other party.\n\n**Mute / unmute (block + unblock).** Inside any conversation, the header's ⋮ menu has a Block button. It asks for confirmation, then broadcasts an on-chain block op — that account can no longer reach you from any handle, enforced server-side by the indexer no matter which Morphit instance they use. To unmute, go to **Settings → Blocked accounts** and click Unblock; that's an on-chain op too, effective immediately.\n\n**Block vs Archive vs Hide:** Block is on-chain and protocol-level (cross-instance, cross-account-history). Archive is your own inbox curation — local-only and per-discussion. Hide (the orderbook button — see 'Can I hide orders from specific users?' below) is the same local-hide idea extended to orderbook rows.\n\nDesktop and mobile both get optional push notifications for new messages — see 'How do push notifications work with my privacy?' for the privacy footprint. Turn them off any time from Settings."
 			},
 			"notifications_overview": {
 				"q": "How does Morphit let me know when something happens — a new message, an order filling, feedback arriving?",
@@ -3146,7 +3147,7 @@
 		"submit": {
 			"primary_label": "Pay and Post this order",
 			"pending_broadcasting": "Publishing your order…",
-			"review_hint": "Once posted, you get 15 minutes to fix any typos. You can also Cancel and Re-list if you need to",
+			"review_hint": "Once posted, you get 15 minutes to fix any typos. You can also Cancel and Re-list if you need to.",
 			"primary_label_waived": "Post for free",
 			"primary_label_external": "Post order"
 		},
@@ -3476,6 +3477,15 @@
 			}
 		},
 		"reputation_heading": "Reputation",
+		"reciprocity_clean_pill": "No mutual-review flags",
+		"reciprocity_flagged_pill": "Mutual-review flag",
+		"tab_reviews_received": "Reviews received",
+		"tab_reviews_given": "Reviews given",
+		"tab_active_orders": "Active orders",
+		"tab_trade_history": "Trade history",
+		"tabs_aria": "Profile details",
+		"no_trade_history": "No completed trades yet.",
+		"trade_history_with": "with @{account}",
 		"loading_feedback": "Loading feedback…",
 		"feedback_error": "Couldn't load feedback right now.",
 		"rating_count": "{n, plural, one {# rating} other {# ratings}}",
@@ -3514,7 +3524,8 @@
 			"unclaimed_label": "Unclaimed rewards",
 			"claim_now": "Claim now",
 			"claiming": "Claiming…",
-			"claim_error": "Couldn't claim right now. Please try again."
+			"claim_error": "Couldn't claim right now. Please try again.",
+			"delegated_in_label": "+ {bp} BP delegated to you"
 		},
 		"pnl": {
 			"export_button": "Export P&L (last 12 months)",
@@ -4066,7 +4077,6 @@
 				"invalid_scheme": "Only nostr:, https://, and http:// URLs are allowed.",
 				"malformed": "That does not look like a valid URL."
 			},
-			"preview_label": "Preview",
 			"saved_toast": "Saved ✓",
 			"save_and_broadcast": "Save & broadcast",
 			"broadcast_pending": "Publishing…",
@@ -4086,7 +4096,6 @@
 				"invalid_scheme": "URL must start with http:// or https://.",
 				"malformed": "URL is malformed."
 			},
-			"preview_label": "Preview:",
 			"saved_toast": "Saved on this device.",
 			"save_and_broadcast": "Save & broadcast",
 			"clear": "Clear",
@@ -4104,7 +4113,6 @@
 				"invalid_scheme": "URL must start with http:// or https://.",
 				"malformed": "URL is malformed."
 			},
-			"preview_label": "Preview:",
 			"saved_toast": "Saved on this device.",
 			"save_and_broadcast": "Save & broadcast",
 			"clear": "Clear",
@@ -4127,7 +4135,7 @@
 			"channel_native_label": "Desktop notifications",
 			"channel_native_help": "OS-native notification when a new event arrives and this tab isn't focused. Asks permission the first time we need it.",
 			"channel_push_label": "Push notifications (tab closed)",
-			"channel_push_help": "Also notify when Morphit is not open at all. Requires a push service — you can choose self-hosted, standard browser, or off.",
+			"channel_push_help": "Also notify when Morphit is not open at all. Requires a Web Push service.",
 			"channel_push_privacy_label": "Push privacy level",
 			"channel_push_privacy_standard": "Standard (browser default)",
 			"channel_push_privacy_off": "Off",
@@ -4271,7 +4279,7 @@
 			"heading": "Hardware key",
 			"explain": "Bind a YubiKey to your keystore as a second unlock method, or as your only unlock method. Adds a strong second factor that a stolen password alone can't bypass.",
 			"unsupported_title": "Your browser doesn't support hardware keys",
-			"unsupported_body": "YubiKey unlock requires WebHID, which is currently only available in Chrome, Edge, Brave, and other Chromium-based browsers. Firefox and Safari don't expose this API. You can keep using your password as before.",
+			"unsupported_body": "YubiKey unlock requires the WebHID API, which is not available for all web browsers. You can keep using your password as before.",
 			"seed_only_note": "Hardware keys are only available when you have a persisted keystore. You're using seed-only mode — no envelope is stored on this device, so there's nothing to bind a key to.",
 			"unnamed_key": "Unnamed YubiKey",
 			"slot_label": "Slot {slot}",

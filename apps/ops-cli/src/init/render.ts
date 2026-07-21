@@ -1224,10 +1224,22 @@ function renderBackupEnv(answers: WizardAnswers): string {
 	lines.push('# deleted during each run.');
 	lines.push(`RETAIN_DAYS=${days}`);
 	lines.push('');
-	lines.push('# Postgres database name and authenticating user.');
-	lines.push('# Defaults match what init.sql creates.');
-	lines.push('DB_NAME=morphit_indexer');
-	lines.push('DB_USER=morphit_indexer');
+	lines.push('# Postgres database name and authenticating user. Derived from');
+	lines.push('# your MORPHIT_INDEXER_DATABASE_URL at setup (falls back to the');
+	lines.push('# init.sql defaults if it could not be parsed).');
+	lines.push(`DB_NAME=${quote(answers.backup.dbName)}`);
+	lines.push(`DB_USER=${quote(answers.backup.dbUser)}`);
+	lines.push('');
+	lines.push('# Docker-aware backup: name of the container running Postgres.');
+	lines.push('# When set, the dump runs THROUGH `docker exec <container>');
+	lines.push('# pg_dump …` (for a BunkerWeb / docker-compose Postgres). Leave');
+	lines.push('# EMPTY for a host-installed Postgres. `morphit-ops init` and');
+	lines.push('# every `morphit-ops upgrade` auto-detect + fill this for you.');
+	if (answers.backup.dbContainer) {
+		lines.push(`DB_CONTAINER=${quote(answers.backup.dbContainer)}`);
+	} else {
+		lines.push('DB_CONTAINER=');
+	}
 	lines.push('');
 	return lines.join('\n');
 }

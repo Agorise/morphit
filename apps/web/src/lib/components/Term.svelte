@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { localePath } from '$i18n/path';
+	import { portal } from '$lib/ui/portal';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	/**
 	 * Term — inline glossary-link with hover/tap tooltip.
@@ -257,8 +258,17 @@
 		</button>
 
 		{#if open}
+			<!-- cp511 [A] — PORTAL the popover to <body>. It's position:fixed, but
+			     an FAQ answer carries `animate-fade-up`, whose end keyframe leaves
+			     a `transform` on the container — and a non-none transform makes a
+			     fixed descendant position relative to THAT box, not the viewport,
+			     so the popover flew to the corner ("way off" from the term). As a
+			     body child there's no transformed ancestor, so the viewport-space
+			     coords reposition() computes are honoured. (Same fix Tooltip.svelte
+			     uses for its portaled panel.) -->
 			<span
 				bind:this={popoverEl}
+				use:portal
 				id={popoverId}
 				role="tooltip"
 				style={popStyle}
