@@ -51,6 +51,10 @@
 	} from '$lib/chat/readState';
 	import { threadIsUnread, fastPendingTick, listFastPending } from '$lib/notifications/chatUnread';
 	import { getConversations, getChatReadState, getFeedbackGiven } from '$lib/indexer/client';
+	import {
+		getOptimisticFeedbackGiven,
+		optimisticFeedbackTick
+	} from '$lib/feedback/optimisticFeedbackGiven';
 	import { getProfilesBatch } from '$lib/indexer/profileCache';
 	import { peersNeedingProfile, mergeProfileMap } from '$lib/indexer/profileMerge';
 	import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
@@ -538,7 +542,14 @@
 	} {
 		const permlink = convo.order?.permlink;
 		if (!permlink) return { canLeave: false, record: null };
-		const record = feedbackGivenMap.get(`${convo.peer}\u0000${permlink}`) ?? null;
+		// cp514 (t.txt D) — prefer the durable indexer record, but fall back to an
+		// optimistic one the chatroom recorded the instant feedback was broadcast,
+		// so this card shows the ★ stars immediately instead of a stale "Leave
+		// feedback" until the next /feedback-given poll. Reading the tick re-runs
+		// this the moment a feedback lands.
+		void $optimisticFeedbackTick;
+		const durable = feedbackGivenMap.get(`${convo.peer}\u0000${permlink}`) ?? null;
+		const record = durable ?? getOptimisticFeedbackGiven(convo.peer, permlink);
 		const settled = ($tradeStates.get(permlink)?.phase ?? 'address_shared') !== 'address_shared';
 		const canLeave =
 			settled && record === null && feedbackGivenChecked && $isUnlocked && !$isPairedReadOnly;

@@ -40,6 +40,7 @@
 <script lang="ts">
 	import { _ } from 'svelte-i18n';
 	import { release, assetCheck, staleBuild } from '$stores/release';
+	import { swUpdatePending, tamperGraceElapsed } from '$lib/updates/tamperBannerGate';
 
 	const showPubkeyMismatch = $derived.by(() => {
 		const r = $release;
@@ -65,7 +66,21 @@
 	// different-bytes, which still fires here once the running version matches
 	// the announced one. staleBuild requires a valid chain-signed newer release,
 	// so an attacker can't fabricate it to hide a tampered same-version bundle.
-	const assetTamper = $derived(tamperedPaths.length > 0 && $staleBuild !== true);
+	//
+	// cp514 (t.txt A) — ALSO suppress while a service-worker update is pending
+	// (a new build is landing → the "Load it now" snackbar owns that window) and
+	// for a short grace window after boot (the async update poll / reg.update()
+	// can resolve just after the byte check, so the banner would otherwise flash
+	// before the snackbar appears). Genuine same-version tamper on a fully-
+	// settled bundle still fires once both gates clear. Only the asset-hash case
+	// is gated — pubkey/invalid-payload are on-chain-signature alarms, unrelated
+	// to a frontend byte swap, and are never suppressed.
+	const assetTamper = $derived(
+		tamperedPaths.length > 0 &&
+			$staleBuild !== true &&
+			!$swUpdatePending &&
+			$tamperGraceElapsed
+	);
 
 	const show = $derived(showPubkeyMismatch || showInvalidPayload || assetTamper);
 

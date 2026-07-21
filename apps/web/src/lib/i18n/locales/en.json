@@ -735,8 +735,8 @@
 			"footer": "Morphit chat record — locked, read-only. Verify each message on a block explorer."
 		},
 		"pay_prefill": {
-			"hint": "Orders minimum is {min} {fiat} (≈ {amount} {asset}).",
-			"hint_market": "Orders minimum is {min} {fiat} (≈ {amount} {asset} at market price)."
+			"hint": "Order minimum is {min} {fiat} (≈ {amount} {asset}).",
+			"hint_market": "Order minimum is {min} {fiat} (≈ {amount} {asset} at market price)."
 		},
 		"empty_state_loading": "Messaging with @{peer} is loading… Say hi!",
 		"day_separator_tooltip": "Midnight, UTC",
