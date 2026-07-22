@@ -64,6 +64,15 @@ export function orderTitleParts(
 	const hasMin = o.amount_min !== null && o.amount_min !== undefined;
 	const hasMax = o.amount_max !== null && o.amount_max !== undefined;
 
+	// v1.8.9 — a range whose ends are equal is not a range. Pinning both bounds
+	// to the same figure is a legitimate way to say "this exact amount", and the
+	// generic branch rendered it "40–40 MXN worth of BLURT".
+	if (hasMin && hasMax && o.amount_min === o.amount_max) {
+		return {
+			key: `order_title.${side}_exact`,
+			values: { amount: fmt(o.amount_min as number), fiat, asset }
+		};
+	}
 	if (hasMin && hasMax) {
 		return {
 			key: `order_title.${side}_range`,
@@ -82,5 +91,9 @@ export function orderTitleParts(
 			values: { amount: fmt(o.amount_max as number), fiat, asset }
 		};
 	}
-	return { key: `order_title.${side}_any`, values: { asset } };
+	// v1.8.9 — the no-amounts case used to render just "I'm buying BLURT",
+	// dropping the fiat entirely: the least specific listing produced the least
+	// informative title, exactly when a reader most needs to know what you'd pay
+	// with. It now carries the fiat like every other branch.
+	return { key: `order_title.${side}_any`, values: { asset, fiat } };
 }

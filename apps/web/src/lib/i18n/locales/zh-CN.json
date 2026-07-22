@@ -4546,14 +4546,14 @@
 			"body": "![](https://img.blurt.blog/blurtimage/morphit/e3d56ddc849685c391dcdb03526463b8264f3e09.png)\n\n我加入 Morphit，是为了终于可以在不依赖中心化交易所（CEX）的情况下交易加密货币和法币。无 KYC、无日志、无 cookie，且无对手方风险。\n\n没有比 Morphit 更安全、更快、更可靠的地方来交易加密货币和法币。\n\n看看我在 Morphit 的个人主页！\nhttps://morphit.io/{lang}/@{username}"
 		},
 		"order_post": {
-			"title_buy": "我正在用 {asset2} 正在买入 {asset1}。想交易吗？",
-			"title_sell": "我正在用 {asset2} 正在卖出 {asset1}。想交易吗？",
-			"body_buy": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\n我正在用 {asset2} 正在买入 {asset1}。想交易吗？\n\n没有比 Morphit 更安全、更快、更可靠的地方来交易加密货币和法币。\n\n看看我在 Morphit 上的报价！\nhttps://morphit.io/{lang}/@{username}/{permlink}",
-			"body_sell": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\n我正在用 {asset2} 正在卖出 {asset1}。想交易吗？\n\n没有比 Morphit 更安全、更快、更可靠的地方来交易加密货币和法币。\n\n看看我在 Morphit 上的报价！\nhttps://morphit.io/{lang}/@{username}/{permlink}"
+			"title_buy": "{subject}。想交易吗？",
+			"title_sell": "{subject}。想交易吗？",
+			"body_buy": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\n{subject}。想交易吗？\n\n没有比 Morphit 更安全、更快、更可靠的地方来交易加密货币和法币。\n\n看看我在 Morphit 上的报价！\nhttps://morphit.io/{lang}/@{username}/{permlink}",
+			"body_sell": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\n{subject}。想交易吗？\n\n没有比 Morphit 更安全、更快、更可靠的地方来交易加密货币和法币。\n\n看看我在 Morphit 上的报价！\nhttps://morphit.io/{lang}/@{username}/{permlink}"
 		},
 		"opt_in_label": "将我的订单同步发布到 Blurt 博客",
-		"review_on_title": "此订单也将发布到你的博客",
-		"review_on_body": "提交后，简短公告将立即发布到你的 Blurt 博客,让其他人能找到你的报价。由你签署,免费。",
+		"review_on_title": "同步发布",
+		"review_on_body": "发布此订单后，简短公告将立即发布到你的 Blurt 博客,让其他人能发现你的报价。由你签署,免费。",
 		"success_pending": "正在将公告发布到你的 Blurt 博客…",
 		"success_ok": "已发布到你的 Blurt 博客。",
 		"success_failed": "目前无法将公告发布到你的博客——你的订单仍然有效。如果愿意,你可以稍后手动发布。",
@@ -4632,15 +4632,17 @@
 		"cta": "完成设置"
 	},
 	"order_title": {
-		"buy_min": "我想买价值 {amount} {fiat} 或以上的 {asset}",
-		"sell_min": "我想卖价值 {amount} {fiat} 或以上的 {asset}",
+		"buy_min": "我至少收购 {amount} {fiat} 的 {asset}",
+		"sell_min": "我至少出售 {amount} {fiat} 的 {asset}",
 		"buy_max": "我想买价值最多 {amount} {fiat} 的 {asset}",
 		"sell_max": "我想卖价值最多 {amount} {fiat} 的 {asset}",
 		"buy_range": "我想买价值 {min}–{max} {fiat} 的 {asset}",
 		"sell_range": "我想卖价值 {min}–{max} {fiat} 的 {asset}",
-		"buy_any": "我想买 {asset}",
-		"sell_any": "我想卖 {asset}",
-		"goods_services": "商品/服务"
+		"buy_any": "我用 {fiat} 收购任意数量的 {asset}",
+		"sell_any": "我出售任意数量的 {asset} 换 {fiat}",
+		"goods_services": "商品/服务",
+		"buy_exact": "我想买价值正好 {amount} {fiat} 的 {asset}",
+		"sell_exact": "我想卖价值正好 {amount} {fiat} 的 {asset}"
 	},
 	"stats": {
 		"page_title": "网络统计",

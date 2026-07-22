@@ -4546,14 +4546,14 @@
 			"body": "![](https://img.blurt.blog/blurtimage/morphit/e3d56ddc849685c391dcdb03526463b8264f3e09.png)\n\nبه Morphit پیوستم تا بالاخره بتوانم رمزارزها و ارزهای فیات را بدون وابستگی به یک صرافی متمرکز (CEX) معامله کنم. بدون KYC، بدون لاگ، بدون کوکی، و بدون طرف مقابل.\n\nهیچ جای امن‌تر، سریع‌تر و قابل‌اعتمادتری برای معامله رمزارزها و فیات‌ها از Morphit وجود ندارد.\n\nپروفایل من را در Morphit ببینید!\nhttps://morphit.io/{lang}/@{username}"
 		},
 		"order_post": {
-			"title_buy": "دارم {asset1} را با {asset2} می‌خرم. می‌خواهید معامله کنید؟",
-			"title_sell": "دارم {asset1} را در ازای {asset2} می‌فروشم. می‌خواهید معامله کنید؟",
-			"body_buy": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\nدارم {asset1} را با {asset2} می‌خرم. می‌خواهید معامله کنید؟\n\nهیچ جای امن‌تر، سریع‌تر و قابل‌اعتمادتری برای معامله رمزارزها و فیات‌ها از Morphit وجود ندارد.\n\nپیشنهاد من را در Morphit ببینید!\nhttps://morphit.io/{lang}/@{username}/{permlink}",
-			"body_sell": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\nدارم {asset1} را در ازای {asset2} می‌فروشم. می‌خواهید معامله کنید؟\n\nهیچ جای امن‌تر، سریع‌تر و قابل‌اعتمادتری برای معامله رمزارزها و فیات‌ها از Morphit وجود ندارد.\n\nپیشنهاد من را در Morphit ببینید!\nhttps://morphit.io/{lang}/@{username}/{permlink}"
+			"title_buy": "{subject}. مایل به معامله‌اید؟",
+			"title_sell": "{subject}. مایل به معامله‌اید؟",
+			"body_buy": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\n{subject}. مایل به معامله‌اید؟\n\nهیچ جای امن‌تر، سریع‌تر و قابل‌اعتمادتری برای معامله رمزارزها و فیات‌ها از Morphit وجود ندارد.\n\nپیشنهاد من را در Morphit ببینید!\nhttps://morphit.io/{lang}/@{username}/{permlink}",
+			"body_sell": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\n{subject}. مایل به معامله‌اید؟\n\nهیچ جای امن‌تر، سریع‌تر و قابل‌اعتمادتری برای معامله رمزارزها و فیات‌ها از Morphit وجود ندارد.\n\nپیشنهاد من را در Morphit ببینید!\nhttps://morphit.io/{lang}/@{username}/{permlink}"
 		},
 		"opt_in_label": "سفارش من را در وبلاگ Blurt منتشر کن",
-		"review_on_title": "این سفارش در وبلاگ شما هم منتشر خواهد شد",
-		"review_on_body": "درست بعد از ارسال، یک اعلان کوتاه در وبلاگ Blurt شما منتشر می‌شود تا دیگران پیشنهاد شما را پیدا کنند. امضاشده توسط شما، رایگان.",
+		"review_on_title": "بازنشر",
+		"review_on_body": "درست بعد از انتشار این سفارش، یک اعلان کوتاه در وبلاگ Blurt شما منتشر می‌شود تا دیگران پیشنهاد شما را کشف کنند. امضاشده توسط شما، رایگان.",
 		"success_pending": "در حال انتشار اعلان در وبلاگ Blurt شما…",
 		"success_ok": "در وبلاگ Blurt شما منتشر شد.",
 		"success_failed": "انتشار اعلان در وبلاگ شما در حال حاضر ممکن نشد — سفارش شما در هر صورت فعال است. اگر بخواهید می‌توانید بعداً به‌صورت دستی منتشر کنید.",
@@ -4632,15 +4632,17 @@
 		"cta": "تکمیل راه‌اندازی"
 	},
 	"order_title": {
-		"buy_min": "{asset} به ارزش {amount} {fiat} یا بیشتر می‌خرم",
-		"sell_min": "{asset} به ارزش {amount} {fiat} یا بیشتر می‌فروشم",
+		"buy_min": "دست‌کم {amount} {fiat} از {asset} می‌خرم",
+		"sell_min": "دست‌کم {amount} {fiat} از {asset} می‌فروشم",
 		"buy_max": "{asset} به ارزش حداکثر {amount} {fiat} می‌خرم",
 		"sell_max": "{asset} به ارزش حداکثر {amount} {fiat} می‌فروشم",
 		"buy_range": "{asset} به ارزش {min} تا {max} {fiat} می‌خرم",
 		"sell_range": "{asset} به ارزش {min} تا {max} {fiat} می‌فروشم",
-		"buy_any": "{asset} می‌خرم",
-		"sell_any": "{asset} می‌فروشم",
-		"goods_services": "کالا/خدمات"
+		"buy_any": "هر مقدار {asset} با {fiat} می‌خرم",
+		"sell_any": "هر مقدار {asset} در برابر {fiat} می‌فروشم",
+		"goods_services": "کالا/خدمات",
+		"buy_exact": "{asset} به ارزش دقیقاً {amount} {fiat} می‌خرم",
+		"sell_exact": "{asset} به ارزش دقیقاً {amount} {fiat} می‌فروشم"
 	},
 	"stats": {
 		"page_title": "آمار شبکه",

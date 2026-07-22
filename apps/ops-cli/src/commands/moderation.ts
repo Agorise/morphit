@@ -30,7 +30,9 @@ import {
 	fetchBlockStatuses,
 	type ReciprocityFlag,
 	type RelatedFlag,
-	type BlockStatus
+	type BlockStatus,
+	clearFlag,
+	fetchClearances
 } from '../lib/moderationSignals.ts';
 import { applyLocalBlock, normalizeAccount } from '../lib/localBlock.ts';
 
@@ -95,6 +97,118 @@ export async function runModeration(ctx: CommandCtx): Promise<number> {
 	if (process.stdin.isTTY !== true) return 0;
 	if (accounts.length === 0) return 0;
 	return resolutionLoop(ctx, operator);
+}
+
+/** Clear a self-trade flag so a wrongly-flagged account is restored.
+ *
+ *  Restores immediately: every reputation/review read path still reads the
+ *  flag tables, so removing the row brings the reputation card back and
+ *  un-subdues the reviews with no rebuild. The recorded clearance is what
+ *  makes it stick — the detectors would otherwise re-raise the identical flag
+ *  on their next pass, so a bare delete appears to work and then silently
+ *  undoes itself.
+ */
+async function clearFlagFlow(ctx: CommandCtx, operator: string): Promise<void> {
+	void operator; // clearances are instance-wide, not per-operator
+	// "Both" leads, because it is the common case: a pair that trips Signal A
+	// (same creator, near-simultaneous first activity) usually trips Signal B
+	// too once they review each other, and the operator sees the consequences
+	// as one problem — a hidden reputation card AND subdued reviews.
+	const kind = await askChoice(
+		'Which flag?',
+		[
+			'Both signals for this pair (usual choice)',
+			'Mutual-review flag only (suspicious reciprocity — Signal B)',
+			'Related-accounts flag only (Signal A)',
+			'Show clearances already in force',
+			'Cancel'
+		],
+		4
+	);
+	if (kind === 4) return;
+
+	if (kind === 3) {
+		const rows = await fetchClearances(ctx.db, 50);
+		blank();
+		if (rows.length === 0) {
+			info(fmt.dim('  No clearances in force.'));
+		} else {
+			for (const r of rows) {
+				const life =
+					r.watermark === null
+						? fmt.dim('permanent')
+						: fmt.dim(`watched from ${r.watermark} mutual reviews`);
+				info(
+					`  ${r.cleared_at.toISOString().slice(0, 10)}  ${fmt.bold(r.signal.padEnd(12))}` +
+						`@${r.account_a} \u2194 @${r.account_b}  ${life}` +
+						(r.note !== '' ? `  ${fmt.dim(r.note)}` : '')
+				);
+			}
+			info(
+				fmt.dim(
+					'  A clearance keeps the detector from re-raising that pair. ' +
+						'Re-run this step and pick the same signal to undo one.'
+				)
+			);
+		}
+		blank();
+		return;
+	}
+
+	const signals: readonly ('reciprocity' | 'related')[] =
+		kind === 0 ? ['reciprocity', 'related'] : kind === 1 ? ['reciprocity'] : ['related'];
+	const accountA = (await ask('First account (without @)')).trim().replace(/^@/, '');
+	if (accountA === '') return;
+	const accountB = (await ask('Second account (without @)')).trim().replace(/^@/, '');
+	if (accountB === '') return;
+	if (accountA.toLowerCase() === accountB.toLowerCase()) {
+		info(fmt.red('  A flag is always between two DIFFERENT accounts.'));
+		return;
+	}
+
+	const label = signals.length === 2 ? 'both flags' : `the ${signals[0]} flag`;
+	const undo = await askYesNo(`Clear ${label} between @${accountA} and @${accountB}?`, false);
+	if (!undo) return;
+	const note = (await ask('Note for your own records (optional)')).slice(0, 500);
+
+	let removed = 0;
+	for (const signal of signals) {
+		const { cleared } = await clearFlag(ctx.db, { signal, accountA, accountB, note });
+		removed += cleared;
+	}
+	blank();
+	if (removed > 0) {
+		info(
+			fmt.green(
+				`  \u2713 Cleared. @${accountA} and @${accountB} are restored: the reputation ` +
+					'card returns and their reviews stop being subdued.'
+			)
+		);
+	} else {
+		info(
+			fmt.dim(
+				'  No matching flag row was present — the clearance is recorded anyway, ' +
+					'so this pair will not be flagged for those signals in future.'
+			)
+		);
+	}
+	info(
+		fmt.dim(
+			'  Instance-local: nothing was broadcast and no other instance is affected.'
+		)
+	);
+	if (signals.includes('related')) {
+		info(fmt.dim('  Related-accounts (Signal A): permanent — it rests on facts that cannot change.'));
+	}
+	if (signals.includes('reciprocity')) {
+		info(
+			fmt.dim(
+				'  Mutual-review (Signal B): their reviews so far are forgiven, but the pair is ' +
+					'still watched — it re-fires if they build up another full signal\u2019s worth.'
+			)
+		);
+	}
+	blank();
 }
 
 /** Tag an account name with its block state for display. */
@@ -167,11 +281,26 @@ async function resolutionLoop(ctx: CommandCtx, operator: string): Promise<number
 		blank();
 		const choice = await askChoice(
 			'Resolve a flag?',
-			['Block an account', 'Unblock an account', 'Done'],
+			[
+				'Block an account',
+				'Unblock an account',
+				'Clear a flag (restore an account)',
+				'Done'
+			],
 			2,
 			{ showList: true }
 		);
-		if (choice === 2) return 0;
+		if (choice === 3) return 0;
+		if (choice === 2) {
+			// v1.8.9 — a flag is a signal, not a verdict, and until now the only
+			// options were to block or to live with it. A legitimate operator can
+			// trip Signals A/B (two handles on one LAN will do it), which hides
+			// their reputation card and subdues every review behind a "reviewers
+			// flagged as related" pill. Clearing removes the flag AND records the
+			// decision so the detector does not simply re-raise it next pass.
+			await clearFlagFlow(ctx, operator);
+			continue;
+		}
 		const action = choice === 0 ? 'block' : 'unblock';
 
 		const raw = await ask(`Which account to ${action}? (leave blank to cancel)`);

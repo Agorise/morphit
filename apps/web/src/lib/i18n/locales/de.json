@@ -4546,14 +4546,14 @@
 			"body": "![](https://img.blurt.blog/blurtimage/morphit/e3d56ddc849685c391dcdb03526463b8264f3e09.png)\n\nIch bin Morphit beigetreten, um endlich Kryptowährungen und Fiatwährungen tauschen zu können, ohne auf eine zentralisierte Börse (CEX) angewiesen zu sein. Kein KYC, keine Logs, keine Cookies, und gegenparteifrei.\n\nEs gibt keinen sichereren, schnelleren oder verlässlicheren Ort, um Kryptos und Fiats zu handeln als Morphit.\n\nSchau dir mein Profil auf Morphit an!\nhttps://morphit.io/{lang}/@{username}"
 		},
 		"order_post": {
-			"title_buy": "Ich kaufe {asset1} gegen {asset2}. Lust zu handeln?",
-			"title_sell": "Ich verkaufe {asset1} gegen {asset2}. Lust zu handeln?",
-			"body_buy": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\nIch kaufe {asset1} gegen {asset2}. Lust zu handeln?\n\nEs gibt keinen sichereren, schnelleren oder verlässlicheren Ort, um Kryptos und Fiats zu handeln als Morphit.\n\nSchau dir mein Angebot auf Morphit an!\nhttps://morphit.io/{lang}/@{username}/{permlink}",
-			"body_sell": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\nIch verkaufe {asset1} gegen {asset2}. Lust zu handeln?\n\nEs gibt keinen sichereren, schnelleren oder verlässlicheren Ort, um Kryptos und Fiats zu handeln als Morphit.\n\nSchau dir mein Angebot auf Morphit an!\nhttps://morphit.io/{lang}/@{username}/{permlink}"
+			"title_buy": "{subject}. Willst du handeln?",
+			"title_sell": "{subject}. Willst du handeln?",
+			"body_buy": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\n{subject}. Willst du handeln?\n\nEs gibt keinen sichereren, schnelleren oder verlässlicheren Ort, um Kryptos und Fiats zu handeln als Morphit.\n\nSchau dir mein Angebot auf Morphit an!\nhttps://morphit.io/{lang}/@{username}/{permlink}",
+			"body_sell": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\n{subject}. Willst du handeln?\n\nEs gibt keinen sichereren, schnelleren oder verlässlicheren Ort, um Kryptos und Fiats zu handeln als Morphit.\n\nSchau dir mein Angebot auf Morphit an!\nhttps://morphit.io/{lang}/@{username}/{permlink}"
 		},
 		"opt_in_label": "Meine Order im Blurt-Blog veröffentlichen",
-		"review_on_title": "Diese Order wird auch auf deinem Blog veröffentlicht",
-		"review_on_body": "Direkt nach dem Abschicken wird eine kurze Ankündigung auf deinem Blurt-Blog veröffentlicht, damit andere dein Angebot finden. Von dir signiert, kostenlos.",
+		"review_on_title": "Syndizierung",
+		"review_on_body": "Direkt nach dem Veröffentlichen dieser Order wird eine kurze Ankündigung auf deinem Blurt-Blog veröffentlicht, damit andere dein Angebot entdecken. Von dir signiert, kostenlos.",
 		"success_pending": "Ankündigung wird auf deinem Blurt-Blog veröffentlicht…",
 		"success_ok": "Auf deinem Blurt-Blog veröffentlicht.",
 		"success_failed": "Die Ankündigung konnte gerade nicht auf deinem Blog veröffentlicht werden — deine Order ist trotzdem aktiv. Du kannst sie später manuell posten, wenn du willst.",
@@ -4632,15 +4632,17 @@
 		"cta": "Einrichtung abschließen"
 	},
 	"order_title": {
-		"buy_min": "Ich kaufe {asset} im Wert von {amount} {fiat} oder mehr",
-		"sell_min": "Ich verkaufe {asset} im Wert von {amount} {fiat} oder mehr",
+		"buy_min": "Ich kaufe mindestens {amount} {fiat} von {asset}",
+		"sell_min": "Ich verkaufe mindestens {amount} {fiat} von {asset}",
 		"buy_max": "Ich kaufe {asset} im Wert von bis zu {amount} {fiat}",
 		"sell_max": "Ich verkaufe {asset} im Wert von bis zu {amount} {fiat}",
 		"buy_range": "Ich kaufe {asset} im Wert von {min}–{max} {fiat}",
 		"sell_range": "Ich verkaufe {asset} im Wert von {min}–{max} {fiat}",
-		"buy_any": "Ich kaufe {asset}",
-		"sell_any": "Ich verkaufe {asset}",
-		"goods_services": "Waren/Dienstleistungen"
+		"buy_any": "Ich kaufe eine beliebige Menge {asset} mit {fiat}",
+		"sell_any": "Ich verkaufe eine beliebige Menge {asset} für {fiat}",
+		"goods_services": "Waren/Dienstleistungen",
+		"buy_exact": "Ich kaufe {asset} im Wert von genau {amount} {fiat}",
+		"sell_exact": "Ich verkaufe {asset} im Wert von genau {amount} {fiat}"
 	},
 	"stats": {
 		"page_title": "Netzwerkstatistiken",

@@ -4546,14 +4546,14 @@
 			"body": "![](https://img.blurt.blog/blurtimage/morphit/e3d56ddc849685c391dcdb03526463b8264f3e09.png)\n\nЯ присоединился к Morphit, чтобы наконец-то иметь возможность обменивать криптовалюты и фиатные валюты без опоры на централизованную биржу (CEX). Без KYC, без логирования, без cookies, и без контрагента.\n\nНет более безопасного, быстрого и надёжного места для торговли криптой и фиатом, чем Morphit.\n\nВзгляните на мой профиль на Morphit!\nhttps://morphit.io/{lang}/@{username}"
 		},
 		"order_post": {
-			"title_buy": "покупаю {asset1} за {asset2}. Хотите обменять?",
-			"title_sell": "продаю {asset1} за {asset2}. Хотите обменять?",
-			"body_buy": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\nпокупаю {asset1} за {asset2}. Хотите обменять?\n\nНет более безопасного, быстрого и надёжного места для торговли криптой и фиатом, чем Morphit.\n\nВзгляните на моё предложение на Morphit!\nhttps://morphit.io/{lang}/@{username}/{permlink}",
-			"body_sell": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\nпродаю {asset1} за {asset2}. Хотите обменять?\n\nНет более безопасного, быстрого и надёжного места для торговли криптой и фиатом, чем Morphit.\n\nВзгляните на моё предложение на Morphit!\nhttps://morphit.io/{lang}/@{username}/{permlink}"
+			"title_buy": "{subject}. Хотите обменять?",
+			"title_sell": "{subject}. Хотите обменять?",
+			"body_buy": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\n{subject}. Хотите обменять?\n\nНет более безопасного, быстрого и надёжного места для торговли криптой и фиатом, чем Morphit.\n\nВзгляните на моё предложение на Morphit!\nhttps://morphit.io/{lang}/@{username}/{permlink}",
+			"body_sell": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\n{subject}. Хотите обменять?\n\nНет более безопасного, быстрого и надёжного места для торговли криптой и фиатом, чем Morphit.\n\nВзгляните на моё предложение на Morphit!\nhttps://morphit.io/{lang}/@{username}/{permlink}"
 		},
 		"opt_in_label": "Опубликовать мой ордер в блоге Blurt",
-		"review_on_title": "Этот ордер также будет опубликован в вашем блоге",
-		"review_on_body": "Сразу после отправки краткое объявление будет опубликовано в вашем блоге на Blurt, чтобы другие могли найти ваше предложение. Подписано вами, бесплатно.",
+		"review_on_title": "Синдикация",
+		"review_on_body": "Сразу после публикации этого ордера краткое объявление будет опубликовано в вашем блоге на Blurt, чтобы другие могли обнаружить ваше предложение. Подписано вами, бесплатно.",
 		"success_pending": "Публикация объявления в вашем блоге на Blurt…",
 		"success_ok": "Опубликовано в вашем блоге на Blurt.",
 		"success_failed": "Не удалось сейчас опубликовать объявление в вашем блоге — ваш ордер всё равно активен. Вы можете опубликовать его вручную позже, если хотите.",
@@ -4632,15 +4632,17 @@
 		"cta": "Завершить настройку"
 	},
 	"order_title": {
-		"buy_min": "Покупаю {asset} на {amount} {fiat} или больше",
-		"sell_min": "Продаю {asset} на {amount} {fiat} или больше",
+		"buy_min": "Покупаю минимум на {amount} {fiat} {asset}",
+		"sell_min": "Продаю минимум на {amount} {fiat} {asset}",
 		"buy_max": "Покупаю {asset} на сумму до {amount} {fiat}",
 		"sell_max": "Продаю {asset} на сумму до {amount} {fiat}",
 		"buy_range": "Покупаю {asset} на {min}–{max} {fiat}",
 		"sell_range": "Продаю {asset} на {min}–{max} {fiat}",
-		"buy_any": "Покупаю {asset}",
-		"sell_any": "Продаю {asset}",
-		"goods_services": "товары/услуги"
+		"buy_any": "Покупаю любое количество {asset} за {fiat}",
+		"sell_any": "Продаю любое количество {asset} за {fiat}",
+		"goods_services": "товары/услуги",
+		"buy_exact": "Покупаю {asset} ровно на {amount} {fiat}",
+		"sell_exact": "Продаю {asset} ровно на {amount} {fiat}"
 	},
 	"stats": {
 		"page_title": "Статистика сети",

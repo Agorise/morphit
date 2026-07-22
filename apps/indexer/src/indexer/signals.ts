@@ -58,6 +58,11 @@ import type { Database } from '$db/pool';
 const SIGNAL_B_MIN_COUNT = 3;
 /** Minimum average rating to consider a review cluster "high-star." */
 const SIGNAL_B_MIN_AVG_RATING = 4.8;
+/** How much NEW mutual-review activity re-arms a cleared Signal B pair.
+ *  A fresh trigger needs SIGNAL_B_MIN_COUNT reviews in EACH direction, so a
+ *  whole signal's worth is twice that — i.e. a cleared pair must earn the flag
+ *  all over again from scratch, rather than on any single stray review. */
+const SIGNAL_B_CLEARANCE_GROWTH = 2 * SIGNAL_B_MIN_COUNT;
 /** Time window for the reciprocity check (ADR-0009 §5). */
 const SIGNAL_B_WINDOW_DAYS = 7;
 
@@ -149,9 +154,33 @@ export async function detectSuspiciousReciprocityInTx(client: pg.PoolClient): Pr
 			(x_to_y_count + y_to_x_count)::INTEGER AS mutual_review_count,
 			((x_to_y_avg + y_to_x_avg) / 2)::NUMERIC(3,2) AS avg_rating
 		FROM mutual
+		-- v1.8.9 — never re-raise a flag the operator has cleared. Without this
+		-- the clear is cosmetic: the row comes straight back on the next pass.
+		--
+		-- But Signal B is BEHAVIOURAL, so the clearance forgives the reviews that
+		-- existed at clear time WITHOUT blinding us to new ones: it stops covering
+		-- the pair once they add another full signal's worth of mutual reviews
+		-- past the watermark ($3). A genuinely colluding pair cleared by mistake
+		-- is therefore caught again by fresh behaviour, while an honest pair is
+		-- not re-flagged on the same forgiven history. A NULL watermark (or a
+		-- Signal A row) means permanent.
+		WHERE NOT EXISTS (
+			SELECT 1 FROM moderation_flag_clearances c
+			 WHERE c.signal = 'reciprocity'
+			   AND c.account_a = acct_x
+			   AND c.account_b = acct_y
+			   AND (
+					c.watermark IS NULL
+					OR (x_to_y_count + y_to_x_count) <= c.watermark + $3
+			   )
+		)
 		ON CONFLICT (account_a, account_b) DO NOTHING
 	`;
-	const result = await client.query(sql, [SIGNAL_B_MIN_COUNT, SIGNAL_B_MIN_AVG_RATING]);
+	const result = await client.query(sql, [
+		SIGNAL_B_MIN_COUNT,
+		SIGNAL_B_MIN_AVG_RATING,
+		SIGNAL_B_CLEARANCE_GROWTH
+	]);
 	return result.rowCount ?? 0;
 }
 
@@ -229,6 +258,13 @@ export async function detectRelatedAccountsInTx(
 			)
 		FROM candidates
 		WHERE gap_seconds <= $1
+		  -- v1.8.9 — see the Signal B insert: a cleared pair must stay cleared.
+		  AND NOT EXISTS (
+			SELECT 1 FROM moderation_flag_clearances c
+			 WHERE c.signal = 'related'
+			   AND c.account_a = acct_a
+			   AND c.account_b = acct_b
+		  )
 		ON CONFLICT (account_a, account_b) DO NOTHING
 	`;
 	const result = await client.query(sql, [SIGNAL_A_PROXIMITY_MINUTES * 60, excludeCreators]);

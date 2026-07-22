@@ -40,6 +40,7 @@
  * already on-chain — failing to syndicate is a soft error.
  */
 
+import { orderTitleParts } from '$lib/utils/orderTitle';
 import { get } from 'svelte/store';
 import { _, locale } from 'svelte-i18n';
 
@@ -166,6 +167,11 @@ export interface OrderPostContext {
 	 *  would be the other crypto ticker. From the order's
 	 *  fiat_currency field. */
 	readonly counterAsset: string;
+	/** The order's amount bounds, as entered (null/undefined when left blank).
+	 *  Present so the blog post can render the SAME subject as the order card
+	 *  instead of its own vaguer sentence. */
+	readonly amountMin?: number | null;
+	readonly amountMax?: number | null;
 }
 
 /** Fire Post B. Returns an explicit Result so the order-success
@@ -184,8 +190,27 @@ export async function publishOrderPost(
 		ctx.side === 'buy' ? 'syndicate.order_post.title_buy' : 'syndicate.order_post.title_sell';
 	const bodyKey =
 		ctx.side === 'buy' ? 'syndicate.order_post.body_buy' : 'syndicate.order_post.body_sell';
+	// v1.8.9 — derive the headline from the SAME builder the order card uses, so
+	// the two can never drift. The blog used to say "I'm buying BLURT with MXN"
+	// while the card said "I'm buying BLURT": two sentences for one order, each
+	// missing something the other had.
+	const subject = (() => {
+		const parts = orderTitleParts(
+			{
+				side: ctx.side,
+				asset: ctx.asset,
+				fiat_currency: ctx.counterAsset,
+				amount_min: ctx.amountMin ?? null,
+				amount_max: ctx.amountMax ?? null
+			},
+			(n) => String(n),
+			t('order_title.goods_services') as string
+		);
+		return t(parts.key, { values: parts.values }) as string;
+	})();
 	const title = t(titleKey, {
 		values: {
+			subject,
 			asset1: ctx.asset,
 			asset2: ctx.counterAsset
 		}
@@ -193,6 +218,7 @@ export async function publishOrderPost(
 	const lang = (get(locale) ?? DEFAULT_LOCALE) as string;
 	const body = t(bodyKey, {
 		values: {
+			subject,
 			asset1: ctx.asset,
 			asset2: ctx.counterAsset,
 			username: account,

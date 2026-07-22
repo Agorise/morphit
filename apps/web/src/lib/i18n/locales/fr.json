@@ -4546,14 +4546,14 @@
 			"body": "![](https://img.blurt.blog/blurtimage/morphit/e3d56ddc849685c391dcdb03526463b8264f3e09.png)\n\nJ'ai rejoint Morphit pour enfin pouvoir échanger cryptos et devises sans dépendre d'un exchange centralisé (CEX). Sans KYC, sans journalisation, sans cookies, et sans contrepartie.\n\nIl n'existe pas d'endroit plus sûr, plus rapide, ni plus fiable pour trader cryptos et devises que Morphit.\n\nJette un œil à mon profil sur Morphit !\nhttps://morphit.io/{lang}/@{username}"
 		},
 		"order_post": {
-			"title_buy": "Je achète {asset1} contre {asset2}. Envie d'échanger ?",
-			"title_sell": "Je vends {asset1} contre {asset2}. Envie d'échanger ?",
-			"body_buy": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\nJe achète {asset1} contre {asset2}. Envie d'échanger ?\n\nIl n'existe pas d'endroit plus sûr, plus rapide, ni plus fiable pour trader cryptos et devises que Morphit.\n\nJette un œil à mon offre sur Morphit !\nhttps://morphit.io/{lang}/@{username}/{permlink}",
-			"body_sell": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\nJe vends {asset1} contre {asset2}. Envie d'échanger ?\n\nIl n'existe pas d'endroit plus sûr, plus rapide, ni plus fiable pour trader cryptos et devises que Morphit.\n\nJette un œil à mon offre sur Morphit !\nhttps://morphit.io/{lang}/@{username}/{permlink}"
+			"title_buy": "{subject}. Envie d’échanger ?",
+			"title_sell": "{subject}. Envie d’échanger ?",
+			"body_buy": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\n{subject}. Envie d’échanger ?\n\nIl n'existe pas d'endroit plus sûr, plus rapide, ni plus fiable pour trader cryptos et devises que Morphit.\n\nJette un œil à mon offre sur Morphit !\nhttps://morphit.io/{lang}/@{username}/{permlink}",
+			"body_sell": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\n{subject}. Envie d’échanger ?\n\nIl n'existe pas d'endroit plus sûr, plus rapide, ni plus fiable pour trader cryptos et devises que Morphit.\n\nJette un œil à mon offre sur Morphit !\nhttps://morphit.io/{lang}/@{username}/{permlink}"
 		},
 		"opt_in_label": "Diffuser mon ordre sur le blog Blurt",
-		"review_on_title": "Cet ordre sera aussi publié sur ton blog",
-		"review_on_body": "Juste après soumission, une courte annonce sera publiée sur ton blog Blurt pour que d'autres trouvent ton offre. Signée par toi, gratuite.",
+		"review_on_title": "Diffusion",
+		"review_on_body": "Juste après la publication de cet ordre, une courte annonce sera publiée sur ton blog Blurt pour que d'autres découvrent ton offre. Signée par toi, gratuite.",
 		"success_pending": "Publication de l'annonce sur ton blog Blurt…",
 		"success_ok": "Publié sur ton blog Blurt.",
 		"success_failed": "Impossible de publier l'annonce sur ton blog pour le moment — ton ordre est actif de toute façon. Tu peux la publier manuellement plus tard si tu veux.",
@@ -4632,15 +4632,17 @@
 		"cta": "Terminer la configuration"
 	},
 	"order_title": {
-		"buy_min": "J'achète {amount} {fiat} ou plus en {asset}",
-		"sell_min": "Je vends {amount} {fiat} ou plus en {asset}",
+		"buy_min": "J'achète au moins {amount} {fiat} de {asset}",
+		"sell_min": "Je vends au moins {amount} {fiat} de {asset}",
 		"buy_max": "J'achète jusqu'à {amount} {fiat} en {asset}",
 		"sell_max": "Je vends jusqu'à {amount} {fiat} en {asset}",
 		"buy_range": "J'achète entre {min} et {max} {fiat} en {asset}",
 		"sell_range": "Je vends entre {min} et {max} {fiat} en {asset}",
-		"buy_any": "J'achète du {asset}",
-		"sell_any": "Je vends du {asset}",
-		"goods_services": "biens/services"
+		"buy_any": "J'achète n'importe quel montant de {asset} avec {fiat}",
+		"sell_any": "Je vends n'importe quel montant de {asset} contre {fiat}",
+		"goods_services": "biens/services",
+		"buy_exact": "J'achète exactement {amount} {fiat} en {asset}",
+		"sell_exact": "Je vends exactement {amount} {fiat} en {asset}"
 	},
 	"stats": {
 		"page_title": "Statistiques du réseau",
