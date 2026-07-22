@@ -37,14 +37,42 @@
     group: "{{ morphit_service_group }}"
     mode: '0640'
 
+# cp514 — the shipped unit's ExecStart is a HARDCODED
+# /usr/local/lib/morphit/morphit-backup.sh (deliberately decoupled from
+# wherever the operator checked out the repo).  This role used to drop the
+# script in /usr/local/bin instead, so systemd could not find it and every
+# Ansible-provisioned node's backup died 203/EXEC — silently, nightly.  The
+# path now matches the unit, OPERATIONS.md and the init wizard; a parity
+# smoke pins all four together.
+- name: Ensure /usr/local/lib/morphit exists (backup script install dir)
+  ansible.builtin.file:
+    path: /usr/local/lib/morphit
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
 - name: Deploy morphit-backup.sh
   ansible.builtin.copy:
     src: "{{ morphit_repo_path }}/ops/backup/morphit-backup.sh"
-    dest: /usr/local/bin/morphit-backup.sh
+    dest: /usr/local/lib/morphit/morphit-backup.sh
     remote_src: true
     owner: root
     group: root
     mode: '0755'
+
+# cp514 — on a containerized Postgres the backup dumps THROUGH
+# `docker exec <container> pg_dump`, and the unit runs as
+# {{ morphit_service_user }}.  Without docker-group membership the script
+# loud-fails and the node has no backups at all — and this role's OWN
+# bunkerweb path provisions exactly that topology.  Docker-group membership
+# is root-equivalent, so it is granted ONLY when a container is configured.
+- name: Allow the morphit service user to reach docker (containerized DB only)
+  ansible.builtin.user:
+    name: "{{ morphit_service_user }}"
+    groups: docker
+    append: true
+  when: morphit_db_container | default('') | length > 0
 
 - name: Install systemd unit files from repo
   ansible.builtin.copy:

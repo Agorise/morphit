@@ -50,7 +50,12 @@
 		readAckTimestamp
 	} from '$lib/chat/readState';
 	import { threadIsUnread, fastPendingTick, listFastPending } from '$lib/notifications/chatUnread';
-	import { getConversations, getChatReadState, getFeedbackGiven } from '$lib/indexer/client';
+	import {
+		getConversations,
+		getChatReadState,
+		getFeedbackGiven,
+		getOrdersByAccount
+	} from '$lib/indexer/client';
 	import {
 		getOptimisticFeedbackGiven,
 		optimisticFeedbackTick
@@ -75,7 +80,12 @@
 	import { subscribeChatActivity } from '$lib/chat/globalChatActivityStream';
 	import { showToast } from '$lib/stores/toast';
 	import RequireLiveSession from '$components/RequireLiveSession.svelte';
-	import type { ConversationSummary, ProfileResponse, FeedbackRecord } from '@morphit/indexer-client';
+	import type {
+		ConversationSummary,
+		ConversationOrderRef,
+		ProfileResponse,
+		FeedbackRecord
+	} from '@morphit/indexer-client';
 
 	let me: string | null = $state(null);
 	let conversations: readonly ConversationSummary[] = $state([]);
@@ -137,6 +147,60 @@
 	 *  sorted by date newest-first (t.txt item 6 — the star/archive folders all
 	 *  sort by date, not unread-first). Filters out peers the user has hidden
 	 *  (orderbook "hide") or blocked — those never appear in any folder. */
+	// cp515 (t.txt) — RESOLVE THE ORDER BEHIND AN OPTIMISTIC CARD.
+	//
+	// The fast push carries only (peer, orderPermlink), so the injected card had
+	// no order DETAILS and its "RE:" line rendered a placeholder — Ken watched
+	// "RE: …" sit there for about a minute before the durable row arrived with
+	// the real subject. The card itself is instant now (cp514 fixed the
+	// separator bug); this makes its SUBJECT instant too, which is what he asked
+	// for: "please make the subject line show up immediately as well if it has
+	// an order id permlink attached to it".
+	//
+	// The order is public data and always belongs to one of the two
+	// participants — the peer (they listed it, you messaged them) or you (you
+	// listed it, they messaged you) — so try the peer first, then yourself.
+	// Looked up once per permlink and cached; the durable row supersedes it on
+	// the next poll.
+	let pendingOrders = $state<Map<string, ConversationOrderRef>>(new Map());
+	/** Permlinks with a lookup in flight — a plain Set, deliberately NOT $state:
+	 *  it must not re-trigger the effect that reads it. */
+	const pendingOrderLookups = new Set<string>();
+
+	async function resolvePendingOrder(peer: string, permlink: string): Promise<void> {
+		if (!permlink || pendingOrders.has(permlink) || pendingOrderLookups.has(permlink)) return;
+		pendingOrderLookups.add(permlink);
+		try {
+			for (const owner of [peer, me]) {
+				if (!owner) continue;
+				const r = await getOrdersByAccount(owner, { limit: 100 });
+				if (!r.ok) continue;
+				const rec = r.data.items.find((o) => o.permlink === permlink);
+				if (!rec) continue;
+				// Reassign (not mutate) so the derived actually re-runs.
+				const next = new Map(pendingOrders);
+				next.set(permlink, {
+					permlink: rec.permlink,
+					account: rec.account,
+					side: rec.side,
+					asset: rec.asset,
+					fiat_currency: rec.fiat_currency,
+					amount_min: rec.amount_min,
+					amount_max: rec.amount_max,
+					// Absent status → no label, rather than inventing "(Live)" for an
+					// order that might be cancelled. The durable row settles it shortly.
+					status: rec.status ?? ''
+				});
+				pendingOrders = next;
+				return;
+			}
+		} catch {
+			// Best-effort: the placeholder simply remains until the durable poll.
+		} finally {
+			pendingOrderLookups.delete(permlink);
+		}
+	}
+
 	const sortedConversations = $derived.by(() => {
 		// Explicit store reads so the derived re-runs on read/folder changes.
 		void $readState;
@@ -192,13 +256,16 @@
 			const peerLc = p.peer.toLowerCase();
 			if (hidden.has(peerLc) || blocked.has(peerLc)) continue;
 			if (durableKeys.has(`${peerLc}\\u0000${p.orderPermlink}`)) continue;
+			// cp515 — real order details when we've resolved them, so the "RE:" line
+			// carries the true subject on first paint.
+			const resolved = p.orderPermlink ? pendingOrders.get(p.orderPermlink) : undefined;
 			withFlags.push({
 				peer: p.peer,
 				last_message_at: new Date(p.atMs).toISOString(),
 				message_count: 1,
 				last_message_is_mine: false,
 				order: p.orderPermlink
-					? {
+					? (resolved ?? {
 							permlink: p.orderPermlink,
 							account: '',
 							side: '',
@@ -207,11 +274,15 @@
 							amount_min: null,
 							amount_max: null,
 							status: ''
-						}
+						})
 					: null,
 				unread: true,
 				folder: folderOf(p.peer, p.orderPermlink),
-				pending: true
+				// `pending` drives ONLY the "RE:" placeholder, so it means "a subject is
+				// still loading" — true only while an order exists and is unresolved. An
+				// order-LESS thread has no subject to wait for and now correctly shows
+				// the "-" line immediately instead of a placeholder that never resolves.
+				pending: p.orderPermlink !== '' && resolved === undefined
 			});
 		}
 		withFlags.sort((a, b) => b.last_message_at.localeCompare(a.last_message_at));
@@ -515,6 +586,20 @@
 	//  that opens the thread, where the form lives) or "Feedback left: ★★★★★".
 	//  Uses ONE /feedback-given fetch for the whole list (keyed by
 	//  subject+order), same directional-safe check as the chat thread.
+	// cp515 (t.txt) — kick off the order lookup for any optimistic card still
+	// showing a placeholder subject. Deliberately an EFFECT, not a call inside
+	// `sortedConversations`: a $derived must stay pure, and firing a fetch from
+	// inside one would re-enter on its own result. Re-runs when the list or the
+	// resolved-orders map changes; the `has()` check plus the in-flight Set mean
+	// each permlink is fetched exactly once.
+	$effect(() => {
+		for (const c of sortedConversations) {
+			if (c.pending && c.order && !pendingOrders.has(c.order.permlink)) {
+				void resolvePendingOrder(c.peer, c.order.permlink);
+			}
+		}
+	});
+
 	let feedbackGivenMap = $state<Map<string, FeedbackRecord>>(new Map());
 	let feedbackGivenChecked = $state(false);
 	async function loadFeedbackGiven(): Promise<void> {

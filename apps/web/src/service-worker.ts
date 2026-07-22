@@ -384,14 +384,32 @@ self.addEventListener('push', (event: PushEvent) => {
 						type: 'window',
 						includeUncontrolled: true
 					});
-					// visibilityState (on screen) rather than focused: a mobile tab a
-					// user is actively reading can report focused=false, which let the
-					// notification through mid-conversation; 'visible' is the reliable
-					// "the user is looking at it" signal and still excludes a
-					// backgrounded ('hidden') tab, which SHOULD still notify.
-					activelyViewing = openWindows.some(
-						(c) => c.visibilityState === 'visible' && chatPeerMatches(c.url, clickPath)
-					);
+					// cp515 (t.txt) — HAVING THE THREAD OPEN IS THE SIGNAL; visibility is
+					// not. cp514 extended this to the 'order' category and Ken STILL got a
+					// pop on every reply, because the surviving
+					// `visibilityState === 'visible'` gate fails in the ordinary case: two
+					// participants in one conversation are, on any single machine, two tabs
+					// — and only ONE tab can be 'visible' at a time, so the other was
+					// judged "not looking" and notified, every message, mid-conversation.
+					// The same gate misfires whenever someone reads on their phone while a
+					// desktop tab holds the thread.
+					//
+					// Ken's rule: "if both users are in the same chatroom with each other,
+					// then there is no need to keep giving each user a system notification
+					// … of course if some other user is pinging me … I definitely want to
+					// get notified then, but not notified about the guy I am already
+					// chatting with." So: an OPEN /chat/<peer> client suppresses that
+					// peer's chat pushes. Every other peer, and every order-lifecycle or
+					// feedback push, still notifies normally.
+					//
+					// SCOPE OF THE TRADE-OFF, stated plainly: a tab left open on a thread
+					// and abandoned will not raise an OS notification for THAT peer on
+					// THAT device. Suppression is per-device (each SW decides on its own
+					// clients), so a phone with the thread closed still notifies; the
+					// in-page badge, the inbox card and the unread count are all
+					// untouched. Missing a chat ping you have on screen is the cost of not
+					// being buzzed about the message you are already reading.
+					activelyViewing = openWindows.some((c) => chatPeerMatches(c.url, clickPath));
 				} catch {
 					// matchAll unavailable — default to showing the notification.
 				}

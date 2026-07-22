@@ -69,6 +69,12 @@ console.log('\n── fast-badge-push-contract (v1.7.5 / t.txt #1) ────�
 
 const enqueue = read('apps/indexer/src/indexer/chatPushEnqueue.ts');
 const sw = read('apps/web/src/service-worker.ts');
+/** Comment lines stripped: a fix's own comment necessarily NAMES the anti-pattern
+ *  it removed, and scanning raw source would flag that documentation as the bug. */
+const swCode = sw
+	.split('\n')
+	.filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l))
+	.join('\n');
 const bridge = read('apps/web/src/lib/chat/globalChatActivityStream.ts');
 const unread = read('apps/web/src/lib/notifications/chatUnread.ts');
 
@@ -130,10 +136,22 @@ check(
 	/let activelyViewing = false;\s*if \(category === 'chat' \|\| category === 'order'\) \{/.test(sw),
 	"a 'chat'-only suppression pops a notification for every order-scoped reply while you're in the room"
 );
+// cp515 — suppression keys on HAVING THE THREAD OPEN, not on tab visibility.
+// cp514 extended the guard to the 'order' category and the pop STILL happened
+// on every reply, because `visibilityState === 'visible'` fails in the ordinary
+// case: the two participants of one conversation are, on a single machine, two
+// tabs — and only ONE can be 'visible', so the other was judged "not looking"
+// and notified mid-conversation. Re-introducing a visibility condition here
+// would resurrect exactly that bug.
 check(
-	'suppression keys on a VISIBLE tab viewing the SAME-peer chat thread',
-	/visibilityState === 'visible' && chatPeerMatches\(c\.url, clickPath\)/.test(sw),
-	'a peer match on a visible tab — so a different thread/peer, or an order-lifecycle push, still notifies'
+	'suppression keys on an OPEN same-peer chat client (peer match alone)',
+	/activelyViewing = openWindows\.some\(\(c\) => chatPeerMatches\(c\.url, clickPath\)\);/.test(sw),
+	'a peer match on any open client — a different thread/peer, or an order-lifecycle push, still notifies'
+);
+check(
+	'suppression is NOT gated on visibilityState (the cp514 regression)',
+	!/visibilityState/.test(swCode),
+	'only one tab can be visible at a time, so a visibility gate notifies the person you are chatting with'
 );
 check(
 	'activelyViewing actually gates whether the notification is shown',

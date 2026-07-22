@@ -705,7 +705,12 @@ function printNextSteps(
 		console.log('     installs script + config + systemd units, then enables');
 		console.log('     the timer):');
 		console.log(
-			`       sudo install -m 600 -o root -g root ${result.backupEnvPath} /etc/morphit/backup.env`
+			// cp514 — 640 root:morphit, NOT 600 root:root. The unit runs
+			// `User=morphit` and the script gates on `[ -r $BACKUP_ENV ]`, so a
+			// root-only file makes the operator's FIRST `systemctl start` fail with
+			// `cannot read /etc/morphit/backup.env`. The Ansible template already
+			// gets this right (root:morphit 0640); this printed line was the outlier.
+			`       sudo install -m 640 -o root -g morphit ${result.backupEnvPath} /etc/morphit/backup.env`
 		);
 		console.log('       sudo install -d -m 755 /usr/local/lib/morphit');
 		console.log('       sudo install -m 755 ops/backup/morphit-backup.sh /usr/local/lib/morphit/');

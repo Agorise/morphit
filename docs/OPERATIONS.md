@@ -5762,7 +5762,7 @@ ops/systemd/morphit-backup.timer    # daily at 04:00 local
 The wizard writes `ops/backup/backup.env` to the repo with operator-specific values (the script and systemd units are static and stay generic). The post-install summary prints these install commands:
 
 ```
-sudo install -m 600 -o root -g root ops/backup/backup.env /etc/morphit/backup.env
+sudo install -m 640 -o root -g morphit ops/backup/backup.env /etc/morphit/backup.env
 sudo install -d -m 755 /usr/local/lib/morphit
 sudo install -m 755 ops/backup/morphit-backup.sh /usr/local/lib/morphit/
 sudo install -m 644 ops/systemd/morphit-backup.service /etc/systemd/system/
@@ -5770,6 +5770,15 @@ sudo install -m 644 ops/systemd/morphit-backup.timer /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now morphit-backup.timer
 ```
+
+**Two preconditions that will otherwise bite you.** The shipped unit runs as `User=morphit`, not root:
+
+- **The env file must be readable by that user.** That is why the install above is `-m 640 -o root -g morphit` and not `-m 600 -o root -g root` — with root-only permissions the script's `[ -r "$BACKUP_ENV" ]` guard fails and the very first `systemctl start` dies with `cannot read /etc/morphit/backup.env`.
+- **On a containerized Postgres, that user needs docker.** The dump runs through `docker exec`, so the backup user must be in the `docker` group (`sudo usermod -aG docker morphit`). Docker-group membership is root-equivalent — grant it only on nodes that actually run a containerized DB.
+
+Also: if your backup directory already exists and is owned by **root** — e.g. an earlier root-run backup script created it — hand it to the service user (`sudo chown -R morphit:morphit /home/morphit/backups`), or the dump cannot be written.
+
+**Always prove the first dump.** A backup you have never seen succeed is not a backup; run the `systemctl start` + `journalctl` check below and confirm a real byte count and a real file on disk.
 
 The script is installed to `/usr/local/lib/morphit/morphit-backup.sh` (NOT executed in-place from the repo). This decouples the systemd unit from the operator's repo location: the unit's `ExecStart` is hardcoded to the stable system path, so it works regardless of whether the repo is at `/home/morphit/morphit`, `/opt/morphit`, or anywhere else. When `git pull` brings in script changes, the operator re-runs just the `sudo install -m 755 ops/backup/morphit-backup.sh ...` command.
 

@@ -317,7 +317,7 @@ export function writeWizardOutput(answers: WizardAnswers, repoRoot: string): Wri
 		const backupDir = join(repoRoot, 'ops', 'backup');
 		backupEnvPath = join(backupDir, 'backup.env');
 		mkdirSync(backupDir, { recursive: true });
-		const backupContent = renderBackupEnv(answers);
+		const backupContent = renderBackupEnv(answers.backup);
 		writeFileSync(backupEnvPath, backupContent, { mode: 0o600 });
 		chmodSync(backupEnvPath, 0o600);
 		backupEnvBytes = Buffer.byteLength(backupContent, 'utf8');
@@ -1201,12 +1201,18 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
  *  automation is enabled.  This is shell-snippet format, sourced
  *  by ops/backup/morphit-backup.sh on every run.  Mirrors the
  *  shape of ops/backup/backup.env.example. */
-function renderBackupEnv(answers: WizardAnswers): string {
-	if (!answers.backup.enabled) {
+/** Render the operator's backup.env. Takes the backup slice (not the whole
+ *  WizardAnswers) so `morphit-ops harden` can produce the SAME populated file
+ *  as `init` — cp514: harden used to point operators at the generic
+ *  ops/backup/backup.env.example, which ships an empty DB_CONTAINER and the
+ *  init.sql default DB name/user, silently discarding the container + identity
+ *  it had just auto-detected. */
+export function renderBackupEnv(backup: BackupResult): string {
+	if (!backup.enabled) {
 		throw new Error('renderBackupEnv called with backup disabled');
 	}
-	const dir = answers.backup.backupDir ?? '/home/morphit/backups';
-	const days = answers.backup.retainDays ?? 30;
+	const dir = backup.backupDir ?? '/home/morphit/backups';
+	const days = backup.retainDays ?? 30;
 
 	const lines: string[] = [];
 	lines.push('# ──────────────────────────────────────────────────────');
@@ -1227,16 +1233,16 @@ function renderBackupEnv(answers: WizardAnswers): string {
 	lines.push('# Postgres database name and authenticating user. Derived from');
 	lines.push('# your MORPHIT_INDEXER_DATABASE_URL at setup (falls back to the');
 	lines.push('# init.sql defaults if it could not be parsed).');
-	lines.push(`DB_NAME=${quote(answers.backup.dbName)}`);
-	lines.push(`DB_USER=${quote(answers.backup.dbUser)}`);
+	lines.push(`DB_NAME=${quote(backup.dbName)}`);
+	lines.push(`DB_USER=${quote(backup.dbUser)}`);
 	lines.push('');
 	lines.push('# Docker-aware backup: name of the container running Postgres.');
 	lines.push('# When set, the dump runs THROUGH `docker exec <container>');
 	lines.push('# pg_dump …` (for a BunkerWeb / docker-compose Postgres). Leave');
 	lines.push('# EMPTY for a host-installed Postgres. `morphit-ops init` and');
 	lines.push('# every `morphit-ops upgrade` auto-detect + fill this for you.');
-	if (answers.backup.dbContainer) {
-		lines.push(`DB_CONTAINER=${quote(answers.backup.dbContainer)}`);
+	if (backup.dbContainer) {
+		lines.push(`DB_CONTAINER=${quote(backup.dbContainer)}`);
 	} else {
 		lines.push('DB_CONTAINER=');
 	}
