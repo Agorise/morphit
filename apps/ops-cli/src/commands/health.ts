@@ -34,7 +34,7 @@
 
 import { networkInterfaces, cpus, totalmem, freemem } from 'node:os';
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { statfs } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -732,6 +732,226 @@ function serviceLine(
 	return `      ${name} ${dot}`;
 }
 
+// ─── Backups (v1.8.9) ─────────────────────────────────────────────
+//
+// WHY THIS EXISTS. The built-in daily backup shipped in v1.8.4 and never
+// produced a single dump on any Debian/Ubuntu host: the script ran
+// `set -o pipefail` under dash, which rejects it, and because `set` is a
+// special builtin the shell died on the spot — silently, before pg_dump, every
+// night. `morphit-ops health` reported indexer sync, relay, price feeds and
+// canary freshness, and said NOTHING about backups, so the failure went unseen
+// for three releases. An operator's most important disaster-recovery artefact
+// was the one thing the health command didn't look at.
+//
+// The decisive signal is not "did the timer fire" but "did the timer fire and
+// leave nothing behind" — that is exactly the shape the dash bug had. So we
+// compare the newest dump against the timer's own last trigger, and surface a
+// FAILED unit directly.
+
+/** Raw facts, gathered by `readBackupFacts`. Split out so the decision logic
+ *  below stays pure and unit-testable. */
+export interface BackupFacts {
+	/** Whether /etc/morphit/backup.env exists at all — absent simply means the
+	 *  operator hasn't opted into the built-in backup, which is not a fault. */
+	readonly configured: boolean;
+	/** False when the env file or the dump directory can't be read by THIS
+	 *  user — an inspection failure, not a backup failure. Never conflate the
+	 *  two: reporting "no backups" because we lacked permission would be a lie. */
+	readonly readable: boolean;
+	readonly dir: string | null;
+	readonly newest: { readonly name: string; readonly atMs: number; readonly bytes: number } | null;
+	/** The TIMER's last trigger. A manual `systemctl start` does not update it,
+	 *  so a hand-run dump never reads as a failure. Null when unavailable. */
+	readonly lastTriggerMs: number | null;
+	/** The one-shot service sitting in systemd's `failed` state. */
+	readonly serviceFailed: boolean;
+}
+
+export interface BackupStatus {
+	readonly state: 'fresh' | 'stale' | 'failing' | 'missing' | 'not-configured' | 'unreadable';
+	readonly detail: string;
+	readonly newestName: string | null;
+	readonly ageMs: number | null;
+	readonly bytes: number | null;
+}
+
+/** The timer is daily, so a dump older than this means at least one run was
+ *  lost. Wide enough to absorb the unit's RandomizedDelaySec jitter. */
+export const BACKUP_STALE_AFTER_MS = 36 * 60 * 60 * 1000;
+/** A healthy run writes its dump within seconds of the trigger. More than this
+ *  between "the timer fired" and "the newest dump" means it fired and produced
+ *  nothing — the silent-failure signature. */
+export const BACKUP_TRIGGER_SLACK_MS = 15 * 60 * 1000;
+
+/** PURE given the facts and the clock. */
+export function checkBackups(facts: BackupFacts, now: Date): BackupStatus {
+	const none = { newestName: null, ageMs: null, bytes: null } as const;
+	if (!facts.configured) {
+		return {
+			state: 'not-configured',
+			detail:
+				'no /etc/morphit/backup.env — the built-in daily backup is not set up ' +
+				'(run `morphit-ops harden` and pick "Set up automatic daily database backups")',
+			...none
+		};
+	}
+	if (!facts.readable) {
+		return {
+			state: 'unreadable',
+			detail:
+				'configured, but this user cannot read the env file or the backup directory — ' +
+				're-run as the morphit user (or with sudo) to see backup freshness',
+			...none
+		};
+	}
+	const newestName = facts.newest?.name ?? null;
+	const bytes = facts.newest?.bytes ?? null;
+	const ageMs = facts.newest === null ? null : now.getTime() - facts.newest.atMs;
+
+	// A failed unit is the most direct evidence there is; say so before anything
+	// else, and point at the journal rather than making the operator guess.
+	if (facts.serviceFailed) {
+		return {
+			state: 'failing',
+			detail:
+				'morphit-backup.service is in a FAILED state — inspect it with ' +
+				'`sudo journalctl -u morphit-backup.service -e --no-pager`',
+			newestName,
+			ageMs,
+			bytes
+		};
+	}
+	if (facts.newest === null) {
+		return {
+			state: 'missing',
+			detail:
+				facts.lastTriggerMs === null
+					? 'configured, but no dump has ever been written — start one now with ' +
+						'`sudo systemctl start morphit-backup.service` and watch it report a byte count'
+					: 'the timer HAS fired but no dump exists — the backup is running and failing; ' +
+						'check `sudo journalctl -u morphit-backup.service -e --no-pager`',
+			newestName: null,
+			ageMs: null,
+			bytes: null
+		};
+	}
+	// Fired, but left nothing newer behind: the exact shape of the dash bug.
+	if (
+		facts.lastTriggerMs !== null &&
+		facts.lastTriggerMs > facts.newest.atMs + BACKUP_TRIGGER_SLACK_MS
+	) {
+		return {
+			state: 'failing',
+			detail:
+				'the timer fired more recently than the newest dump — a run produced nothing; ' +
+				'check `sudo journalctl -u morphit-backup.service -e --no-pager`',
+			newestName,
+			ageMs,
+			bytes
+		};
+	}
+	if (ageMs !== null && ageMs > BACKUP_STALE_AFTER_MS) {
+		return {
+			state: 'stale',
+			detail:
+				'the newest dump is over a day and a half old — at least one nightly run was missed',
+			newestName,
+			ageMs,
+			bytes
+		};
+	}
+	return { state: 'fresh', detail: 'a recent dump is on disk', newestName, ageMs, bytes };
+}
+
+/** The TIMER's last trigger as epoch ms, or null when unavailable.
+ *  `--timestamp=unix` is asked for explicitly so the value arrives as `@<secs>`
+ *  and never has to be parsed out of a locale-formatted date — the same trap
+ *  documented on the canary clock above. Anything unexpected degrades to null,
+ *  which only costs the "fired but wrote nothing" check. */
+export function readBackupTimerLastTrigger(): number | null {
+	let out: string;
+	try {
+		out = execFileSync(
+			'systemctl',
+			[
+				'show',
+				'morphit-backup.timer',
+				'--property=LastTriggerUSec',
+				'--value',
+				'--timestamp=unix',
+				'--no-pager'
+			],
+			{ stdio: ['ignore', 'pipe', 'ignore'], timeout: 3000, encoding: 'utf8' }
+		);
+	} catch {
+		return null;
+	}
+	const secs = /^@(\d+)$/.exec(out.trim())?.[1];
+	if (secs === undefined) return null;
+	const ms = Number(secs) * 1000;
+	return Number.isFinite(ms) && ms > 0 ? ms : null;
+}
+
+/** Gather backup facts from disk + systemd. All I/O lives here. */
+export function readBackupFacts(envPath = '/etc/morphit/backup.env'): BackupFacts {
+	const serviceFailed = checkService('morphit-backup.service') === 'failed';
+	const lastTriggerMs = readBackupTimerLastTrigger();
+	if (!existsSync(envPath)) {
+		return {
+			configured: false,
+			readable: false,
+			dir: null,
+			newest: null,
+			lastTriggerMs,
+			serviceFailed
+		};
+	}
+	let txt: string;
+	try {
+		txt = readFileSync(envPath, 'utf8');
+	} catch {
+		// 640 root:morphit — a different user simply can't look. Not a fault.
+		return { configured: true, readable: false, dir: null, newest: null, lastTriggerMs, serviceFailed };
+	}
+	const raw = /^\s*BACKUP_DIR=(.*)$/m.exec(txt)?.[1]?.trim() ?? '';
+	const dir = raw.replace(/^['"]|['"]$/g, '');
+	if (dir === '') {
+		return { configured: true, readable: false, dir: null, newest: null, lastTriggerMs, serviceFailed };
+	}
+	let newest: BackupFacts['newest'] = null;
+	try {
+		for (const name of readdirSync(dir)) {
+			if (!name.endsWith('.sql.gz')) continue; // ignore .partial and anything else
+			const st = statSync(`${dir}/${name}`);
+			if (newest === null || st.mtimeMs > newest.atMs) {
+				newest = { name, atMs: st.mtimeMs, bytes: st.size };
+			}
+		}
+	} catch {
+		// The dir is 700 morphit:morphit; another user can't list it.
+		return { configured: true, readable: false, dir, newest: null, lastTriggerMs, serviceFailed };
+	}
+	return { configured: true, readable: true, dir, newest, lastTriggerMs, serviceFailed };
+}
+
+/** "13h ago" / "2d ago" / "45m ago" — coarse on purpose; this is a glanceable
+ *  freshness cue, not an audit trail. */
+export function formatBackupAge(ms: number): string {
+	const mins = Math.floor(ms / 60000);
+	if (mins < 1) return 'just now';
+	if (mins < 60) return `${mins}m ago`;
+	const hours = Math.floor(mins / 60);
+	if (hours < 48) return `${hours}h ago`;
+	return `${Math.floor(hours / 24)}d ago`;
+}
+
+/** Human size for a dump, matching the `ls -lh` shape operators already read. */
+export function formatBackupSize(bytes: number): string {
+	if (bytes < 1024) return `${bytes}B`;
+	if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)}K`;
+	return `${(bytes / (1024 * 1024)).toFixed(1)}M`;
+}
+
 // ─── System resources (local host, read-only, non-privileged) ──────
 //
 // CPU / memory / disk for the box the node runs on, so the operator
@@ -919,6 +1139,7 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 		{ unit: 'morphit-mcp', state: checkService('morphit-mcp') }
 	];
 	const canary = checkCanary(canaryFilePath(), now);
+	const backups = checkBackups(readBackupFacts(), now);
 
 	// Local host CPU / memory / disk (read-only, non-privileged).
 	const sys = await readSystemResources();
@@ -1171,6 +1392,27 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 	console.log('');
 	console.log(`  ${c.bold('Services')}  ${c.dim('(systemd, read-only)')}`);
 	for (const svc of services) console.log(serviceLine(c, svc.unit, svc.state));
+
+	// ── Backups block ──
+	// Deliberately sits next to Services and Canary: all three answer "is the
+	// boring background thing that protects me actually happening?".
+	console.log('');
+	const backupTag =
+		backups.state === 'fresh'
+			? c.green('✓')
+			: backups.state === 'failing' || backups.state === 'missing'
+				? c.red('✗')
+				: backups.state === 'not-configured'
+					? c.dim('○')
+					: c.yellow('⚠');
+	console.log(`  ${c.bold('Backups')}   ${backupTag} ${backups.state}`);
+	if (backups.newestName !== null && backups.ageMs !== null && backups.bytes !== null) {
+		console.log(
+			`      Newest dump:   ${safe(backups.newestName)} ` +
+				`${c.dim(`(${formatBackupSize(backups.bytes)}, ${formatBackupAge(backups.ageMs)})`)}`
+		);
+	}
+	console.log(`      ${c.dim(backups.detail)}`);
 
 	// ── Canary block ──
 	console.log('');

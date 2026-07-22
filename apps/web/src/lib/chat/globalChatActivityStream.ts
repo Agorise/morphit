@@ -19,6 +19,10 @@
  * network errors. Consumers register via `subscribeChatActivity`.
  */
 
+import {
+	chatThreadFromClickPath,
+	dismissChatNotificationsFor
+} from '$lib/notifications/chatThread';
 import { getUserBlurtAccount } from '$blurt/ops/profile';
 
 import { folderOf, restoreThread } from '$lib/chat/chatFolders';
@@ -211,6 +215,23 @@ export function startGlobalChatActivity(): () => void {
 				// upstream refuses to push for anyone but an established
 				// counterparty, so no push means no bump.
 				emitFastPush(data.peer, order);
+				// v1.8.9 — and if this tab is ALREADY showing that peer's thread,
+				// take the OS notification back down.
+				//
+				// The worker is supposed to never raise it (it suppresses when a
+				// client is open on the thread), but a service worker is the one
+				// part of the app that does not update on reload: a new one installs
+				// and WAITS while the old one keeps handling pushes. Three releases
+				// of suppression fixes shipped and Ken still got buzzed by the person
+				// he was actively chatting with, because the worker running on his
+				// machines predated every one of them. Page code has no such problem
+				// — it is fresh on every load — so it can undo what a stale worker
+				// does. Only this peer's notifications, only while their thread is on
+				// screen; everyone else's are untouched.
+				const here = chatThreadFromClickPath(window.location.pathname);
+				if (here !== null && here.peer.toLowerCase() === data.peer.toLowerCase()) {
+					void dismissChatNotificationsFor(data.peer);
+				}
 			}
 			fire();
 		}

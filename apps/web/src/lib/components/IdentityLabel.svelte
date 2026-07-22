@@ -42,9 +42,6 @@
 	import { onDestroy } from 'svelte';
 	import { formatIdentity } from '$crypto/profile';
 	import { identiconDataUri } from '$crypto/identicon';
-	import AltNetworkIcon from '$components/AltNetworkIcon.svelte';
-	import { validateNostrUrlForRender } from '$utils/nostrUrl';
-	import { validateWebUrlForRender } from '$utils/webUrl';
 	import { selfProfile } from '$lib/stores/selfProfile';
 	import { truncatePublicKey } from '$lib/crypto/publicKeyDisplay';
 
@@ -80,27 +77,13 @@
 		account?: string;
 		/** User-chosen human label. Not authoritative. */
 		displayName?: string | null;
-		/**
-		 * User-populated Nostr profile URL from their json_metadata.
-		 * When present (and validly shaped), a Nostr glyph renders
-		 * alongside the username so other users can reach their
-		 * Nostr identity. Only populated by call sites that have
-		 * already fetched the profile (e.g. the profile page,
-		 * expanded order detail) — list-view callers that only
-		 * have `account` omit this and the glyph silently doesn't
-		 * render.
-		 */
-		nostrUrl?: string | null;
-		/**
-		 * User-populated streaming-profile URL (YouTube, Rumble, Blurt.media,
-		 * Twitch, …) from their json_metadata. Stored on-chain as
-		 * streaming_url; renders a play glyph next to the username. Any
-		 * http/https host — see validateWebUrlForRender.
-		 */
-		streamingUrl?: string | null;
-		/** User-populated website/blog URL from json_metadata. Renders a globe
-		 *  glyph next to the username when populated; any http/https host. */
-		websiteUrl?: string | null;
+		/* v1.8.9 — the nostrUrl / streamingUrl / websiteUrl props and their
+		 * glyphs were REMOVED. They were unreachable in practice: no call site
+		 * ever passed them, so the props defaulted to null and the three {#if}
+		 * blocks never rendered. Those links now live in exactly one place —
+		 * the profile hero, beside the large avatar — and IdentityLabel (which
+		 * appears in chat, order cards, feedback forms and elsewhere) must not
+		 * grow a second copy of that feature. */
 		/**
 		 * User-uploaded custom avatar as sanitized SVG text. Takes
 		 * precedence over the deterministic heart identicon when
@@ -154,9 +137,6 @@
 		publicKeyString,
 		account,
 		displayName = null,
-		nostrUrl = null,
-		streamingUrl = null,
-		websiteUrl = null,
 		avatarSvg = null,
 		avatarDataUri = null,
 		href = null,
@@ -190,9 +170,6 @@
 	 * on their own profile; the risk of profile-based XSS outweighs
 	 * the convenience.
 	 */
-	const validatedNostrUrl = $derived(validateNostrUrlForRender(nostrUrl));
-	const validatedStreamingUrl = $derived(validateWebUrlForRender(streamingUrl));
-	const validatedWebsiteUrl = $derived(validateWebUrlForRender(websiteUrl));
 
 	// Derive identicon seed bytes. The ACCOUNT NAME wins when present: an
 	// identicon is a stable visual anchor for an identity, so it should NOT
@@ -485,47 +462,6 @@
 		{/if}
 	{/if}
 
-	{#if validatedWebsiteUrl}
-		<a
-			href={validatedWebsiteUrl}
-			target="_blank"
-			rel="noopener noreferrer external"
-			aria-label={$_('identity.website_link_aria')}
-			title={$_('identity.website_link_tooltip')}
-			class="inline-flex h-5 w-5 flex-none items-center justify-center rounded text-ink-500 transition hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:text-ink-400"
-			onclick={(e) => e.stopPropagation()}
-		>
-			<AltNetworkIcon network="globe" size={14} class="h-3.5 w-3.5" />
-		</a>
-	{/if}
-
-	{#if validatedStreamingUrl}
-		<a
-			href={validatedStreamingUrl}
-			target="_blank"
-			rel="noopener noreferrer external"
-			aria-label={$_('identity.streaming_link_aria')}
-			title={$_('identity.streaming_link_tooltip')}
-			class="inline-flex h-5 w-5 flex-none items-center justify-center rounded text-ink-500 transition hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:text-ink-400"
-			onclick={(e) => e.stopPropagation()}
-		>
-			<AltNetworkIcon network="play" size={14} class="h-3.5 w-3.5" />
-		</a>
-	{/if}
-
-	{#if validatedNostrUrl}
-		<a
-			href={validatedNostrUrl}
-			target="_blank"
-			rel="noopener noreferrer external"
-			aria-label={$_('identity.nostr_link_aria')}
-			title={$_('identity.nostr_link_tooltip')}
-			class="inline-flex h-5 w-5 flex-none items-center justify-center rounded text-ink-500 transition hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:text-ink-400"
-			onclick={(e) => e.stopPropagation()}
-		>
-			<AltNetworkIcon network="nostr" size={14} class="h-3.5 w-3.5" />
-		</a>
-	{/if}
 
 	{#if showCopy && full && !hideHandle}
 		<button

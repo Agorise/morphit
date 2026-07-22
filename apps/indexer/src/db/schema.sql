@@ -1542,6 +1542,44 @@ CREATE TABLE order_views (
 -- audit trail of "operator blocked alice on day X, unblocked on
 -- day Y" stays visible.
 
+-- v50 / v1.8.9 — moderation_flag_clearances: a self-trade flag is a signal,
+-- not a verdict, and must be reversible.  Deleting a flag row alone does not
+-- hold (the detector re-inserts on its next pass), so a clearance records the
+-- operator's decision and the DETECTOR checks it before inserting.  The
+-- reputation and review read paths are untouched: they still read the flag
+-- tables, and a cleared pair simply is not in them any more.
+CREATE TABLE IF NOT EXISTS moderation_flag_clearances (
+    -- Which detector's flag this clears.  Scoped per signal so clearing a
+    -- reciprocity flag does not silently also clear a related-accounts one.
+    signal      varchar(16)  NOT NULL CHECK (signal IN ('reciprocity', 'related')),
+    -- Canonically ordered (account_a < account_b), matching how both detectors
+    -- store their pairs, so a clearance matches regardless of which way round
+    -- the operator typed the two names.
+    account_a   varchar(16)  NOT NULL,
+    account_b   varchar(16)  NOT NULL,
+    -- Signal B ONLY: the mutual-review count at the moment of clearing.
+    -- Signal B is BEHAVIOURAL, so a clearance forgives what has happened
+    -- without blinding the detector to what happens next: it re-fires once the
+    -- pair accumulates another full signal's worth of mutual reviews beyond
+    -- this mark.  Signal A leaves it NULL and the clearance is permanent --
+    -- that signal keys on account-CREATION facts (same creator, first activity
+    -- minutes apart) which are immutable, so a re-arming clearance would
+    -- re-flag the same pair forever on evidence that can never change.
+    watermark   integer      NULL CHECK (watermark IS NULL OR watermark >= 0),
+    note        text         NOT NULL DEFAULT '',
+    cleared_at  timestamptz  NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (signal, account_a, account_b),
+    CHECK (account_a < account_b),
+    CHECK (length(note) <= 500)
+);
+
+-- v49 / v1.8.9 — operator_blocks.origin REPAIR.  The `origin` column below
+-- was added to this CREATE TABLE with no matching entry in MIGRATIONS[], so
+-- fresh installs had it and every database created before that change did
+-- not.  `morphit-ops` Moderation selects it, so on a long-lived instance the
+-- whole moderation screen crashed with `column "origin" does not exist` --
+-- the one screen an operator needs in order to undo a bad flag.  MIGRATIONS[49]
+-- adds it idempotently; a fresh DB gets it here and the migration no-ops.
 CREATE TABLE operator_blocks (
     operator               varchar(16)  NOT NULL,
     blocked                varchar(16)  NOT NULL,

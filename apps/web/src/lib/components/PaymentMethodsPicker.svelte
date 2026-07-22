@@ -86,6 +86,14 @@
 	}: Props = $props();
 
 	let query = $state('');
+	let searchEl = $state<HTMLInputElement | undefined>(undefined);
+
+	/** Empty the field and hand focus back, so a keyboard user can retype
+	 *  immediately instead of hunting for the input again. */
+	function clearSearch(): void {
+		query = '';
+		searchEl?.focus();
+	}
 	// O (cp295): the four standard category sections start COLLAPSED so
 	// the picker opens compact — the user expands only the category they
 	// pay with. (The operator's own "instance additions" section, if any,
@@ -262,23 +270,52 @@
 
 	<!-- Search box ─────────────────────────────────────────── -->
 	<div>
-		<input
-			type="text"
-			name="payment-methods-search"
-			bind:value={query}
-			maxlength="64"
-			placeholder={$_('payment_method.search_placeholder')}
-			aria-invalid={invalid || noMatch || undefined}
-			aria-describedby={invalid && describedById ? describedById : undefined}
-			class="w-full rounded-xl border bg-white px-3 py-2 focus:outline-none dark:bg-ink-900 {noMatch ||
-			invalid
-				? 'border-red-500 focus:ring-2 focus:ring-red-500 dark:border-red-500'
-				: 'border-ink-200 dark:border-ink-700'}"
-			autocomplete="off"
-			autocapitalize="off"
-			autocorrect="off"
-			spellcheck="false"
-		/>
+		<!-- v1.8.9 — `relative` so the clear button can sit inside the field; the
+		     input gets right padding so a long query never runs under it. -->
+		<div class="relative">
+			<input
+				type="text"
+				name="payment-methods-search"
+				bind:this={searchEl}
+				bind:value={query}
+				maxlength="64"
+				placeholder={$_('payment_method.search_placeholder')}
+				aria-invalid={invalid || noMatch || undefined}
+				aria-describedby={invalid && describedById ? describedById : undefined}
+				class="w-full rounded-xl border bg-white py-2 pl-3 pr-10 focus:outline-none dark:bg-ink-900 {noMatch ||
+				invalid
+					? 'border-red-500 focus:ring-2 focus:ring-red-500 dark:border-red-500'
+					: 'border-ink-200 dark:border-ink-700'}"
+				autocomplete="off"
+				autocapitalize="off"
+				autocorrect="off"
+				spellcheck="false"
+			/>
+			{#if query.trim().length >= 2}
+				<!-- Held back until 2 characters: at 1 character the field is trivial
+				     to clear by hand, and a control that flickers in and out on every
+				     first keystroke is more distracting than useful. -->
+				<button
+					type="button"
+					onclick={clearSearch}
+					aria-label={$_('orderbook.search_clear')}
+					title={$_('orderbook.search_clear')}
+					class="absolute right-1.5 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-ink-500 transition hover:bg-ink-100 hover:text-ink-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:text-ink-400 dark:hover:bg-ink-800 dark:hover:text-ink-100"
+				>
+					<svg
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						class="h-4 w-4"
+						aria-hidden="true"
+					>
+						<path d="M18 6 6 18M6 6l12 12" />
+					</svg>
+				</button>
+			{/if}
+		</div>
 		<p class="mt-1 text-xs text-ink-500 dark:text-ink-400">
 			{$_('payment_method.search_hint')}
 		</p>

@@ -545,17 +545,22 @@
 				/>
 			{/if}
 			{#if validatedNostrUrl || validatedWebsiteUrl || validatedStreamingUrl}
-				<div class="flex flex-col gap-2">
-					{#if validatedNostrUrl}
+				<!-- v1.8.9 — `self-end` bottom-aligns the stack with the 96px avatar
+				     (the row is items-center, which floated it mid-height); `gap-1`
+				     tightens the glyphs so they read as one cluster. Order is
+				     play → globe → nostr top-to-bottom, so nostr always anchors the
+				     bottom regardless of which links a profile actually has. -->
+				<div class="flex flex-col gap-1 self-end">
+					{#if validatedStreamingUrl}
 						<a
-							href={validatedNostrUrl}
+							href={validatedStreamingUrl}
 							target="_blank"
 							rel="noopener noreferrer external"
-							aria-label={$_('identity.nostr_link_aria')}
-							title={$_('identity.nostr_link_tooltip')}
+							aria-label={$_('identity.streaming_link_aria')}
+							title={$_('identity.streaming_link_tooltip')}
 							class="inline-flex h-7 w-7 flex-none items-center justify-center rounded-lg text-ink-500 transition hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:text-ink-400"
 						>
-							<AltNetworkIcon network="nostr" size={18} class="h-[18px] w-[18px]" />
+							<AltNetworkIcon network="play" size={18} class="h-[18px] w-[18px]" />
 						</a>
 					{/if}
 					{#if validatedWebsiteUrl}
@@ -570,16 +575,16 @@
 							<AltNetworkIcon network="globe" size={18} class="h-[18px] w-[18px]" />
 						</a>
 					{/if}
-					{#if validatedStreamingUrl}
+					{#if validatedNostrUrl}
 						<a
-							href={validatedStreamingUrl}
+							href={validatedNostrUrl}
 							target="_blank"
 							rel="noopener noreferrer external"
-							aria-label={$_('identity.streaming_link_aria')}
-							title={$_('identity.streaming_link_tooltip')}
+							aria-label={$_('identity.nostr_link_aria')}
+							title={$_('identity.nostr_link_tooltip')}
 							class="inline-flex h-7 w-7 flex-none items-center justify-center rounded-lg text-ink-500 transition hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:text-ink-400"
 						>
-							<AltNetworkIcon network="play" size={18} class="h-[18px] w-[18px]" />
+							<AltNetworkIcon network="nostr" size={18} class="h-[18px] w-[18px]" />
 						</a>
 					{/if}
 				</div>

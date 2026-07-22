@@ -2357,7 +2357,11 @@
 			orderPermlink,
 			side: side === 'sell' ? 'sell' : 'buy',
 			asset,
-			counterAsset: fiat.trim().toUpperCase()
+			counterAsset: fiat.trim().toUpperCase(),
+			// Blank stays blank: '' must become null (an "any amount" listing),
+			// never 0, which would read as a real bound of zero.
+			amountMin: amountMin.trim() === '' ? null : Number(amountMin),
+			amountMax: amountMax.trim() === '' ? null : Number(amountMax)
 		});
 		if (result.ok) {
 			syndicationStatus = 'ok';

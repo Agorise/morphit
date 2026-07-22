@@ -438,18 +438,84 @@ body {
 	 * (there's no CSS to override the highlight colour directly), and the
 	 * 5000s transition defeats the animated re-tint that fires on blur.
 	 * Dark-only theme, so one ink-900 surface + ink-100 text covers every case. */
+	/* v1.8.9 — cp407 covered ONLY `-webkit-autofill`, which Firefox does not
+	 * implement, so none of it ever applied there and Firefox went on tinting
+	 * saved-login fields its own olive-yellow (Ken hit it on the unlock-keystore
+	 * password field). The standard `:autofill` selector plus the `-moz-` alias
+	 * are what Firefox actually matches, so all three are listed.
+	 *
+	 * Belt and braces per engine, because each blocks a different property:
+	 * WebKit/Blink force the background with UA `!important`, so the only way in
+	 * is an inset shadow painted over it — hence BOTH the prefixed and standard
+	 * `box-shadow` (Firefox honours the standard one, and an inset shadow sits
+	 * above the background but below the text). Firefox also paints via
+	 * `background-image`, so that is cleared explicitly, and `filter: none`
+	 * undoes the tint some versions apply on top. `-webkit-text-fill-color`
+	 * beats WebKit's forced text colour; plain `color` covers the rest.
+	 *
+	 * Dark-only theme, so one ink-900 surface + ink-100 text is every case. */
+	input:autofill,
 	input:-webkit-autofill,
+	input:-moz-autofill,
+	input:autofill:hover,
 	input:-webkit-autofill:hover,
+	input:autofill:focus,
 	input:-webkit-autofill:focus,
+	input:autofill:active,
 	input:-webkit-autofill:active,
+	textarea:autofill,
 	textarea:-webkit-autofill,
+	textarea:-moz-autofill,
+	textarea:autofill:focus,
 	textarea:-webkit-autofill:focus,
+	select:autofill,
 	select:-webkit-autofill,
+	select:-moz-autofill,
+	select:autofill:focus,
 	select:-webkit-autofill:focus {
 		-webkit-box-shadow: 0 0 0 1000px #0f141c inset;
+		box-shadow: 0 0 0 1000px #0f141c inset;
+		background-image: none !important;
+		background-color: #0f141c !important;
+		filter: none;
 		-webkit-text-fill-color: #eef1f5;
+		color: #eef1f5;
 		caret-color: #eef1f5;
 		transition: background-color 5000s ease-in-out 0s;
+	}
+
+	/* v1.8.9 — oversized card watermark. The icon is a ::before rather than an
+	 * <img> so nothing has to be added to the card's markup beyond one class,
+	 * and `> * { position: relative }` lifts every direct child above it so the
+	 * heading and form text read normally over the artwork. `isolation: isolate`
+	 * keeps the z-index conversation inside the card. Decorative only: a
+	 * pseudo-element is invisible to assistive tech, which is exactly right —
+	 * the card already has a heading saying what it is. */
+	.card-watermark {
+		position: relative;
+		isolation: isolate;
+		overflow: hidden;
+	}
+
+	.card-watermark::before {
+		content: '';
+		position: absolute;
+		top: -1.5rem;
+		right: -1.5rem;
+		width: 9rem;
+		height: 9rem;
+		background-image: var(--card-watermark);
+		background-repeat: no-repeat;
+		background-size: contain;
+		background-position: center;
+		opacity: 0.5;
+		pointer-events: none;
+		z-index: 0;
+	}
+
+	.card-watermark > * {
+		position: relative;
+		z-index: 1;
 	}
 
 	.brand-gradient-text {

@@ -4546,14 +4546,14 @@
 			"body": "![](https://img.blurt.blog/blurtimage/morphit/e3d56ddc849685c391dcdb03526463b8264f3e09.png)\n\nDołączyłem do Morphit, żeby wreszcie móc wymieniać kryptowaluty i fiaty bez polegania na scentralizowanej giełdzie (CEX). Bez KYC, bez logowania, bez ciasteczek i bez kontrahenta.\n\nNie ma bezpieczniejszego, szybszego ani pewniejszego miejsca do handlu kryptami i fiatami niż Morphit.\n\nZobacz mój profil na Morphit!\nhttps://morphit.io/{lang}/@{username}"
 		},
 		"order_post": {
-			"title_buy": "kupuję {asset1} za {asset2}. Chcesz handlować?",
-			"title_sell": "sprzedaję {asset1} za {asset2}. Chcesz handlować?",
-			"body_buy": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\nkupuję {asset1} za {asset2}. Chcesz handlować?\n\nNie ma bezpieczniejszego, szybszego ani pewniejszego miejsca do handlu kryptami i fiatami niż Morphit.\n\nZobacz moją ofertę na Morphit!\nhttps://morphit.io/{lang}/@{username}/{permlink}",
-			"body_sell": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\nsprzedaję {asset1} za {asset2}. Chcesz handlować?\n\nNie ma bezpieczniejszego, szybszego ani pewniejszego miejsca do handlu kryptami i fiatami niż Morphit.\n\nZobacz moją ofertę na Morphit!\nhttps://morphit.io/{lang}/@{username}/{permlink}"
+			"title_buy": "{subject}. Chcesz handlować?",
+			"title_sell": "{subject}. Chcesz handlować?",
+			"body_buy": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\n{subject}. Chcesz handlować?\n\nNie ma bezpieczniejszego, szybszego ani pewniejszego miejsca do handlu kryptami i fiatami niż Morphit.\n\nZobacz moją ofertę na Morphit!\nhttps://morphit.io/{lang}/@{username}/{permlink}",
+			"body_sell": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\n{subject}. Chcesz handlować?\n\nNie ma bezpieczniejszego, szybszego ani pewniejszego miejsca do handlu kryptami i fiatami niż Morphit.\n\nZobacz moją ofertę na Morphit!\nhttps://morphit.io/{lang}/@{username}/{permlink}"
 		},
 		"opt_in_label": "Opublikuj moje zlecenie na blogu Blurt",
-		"review_on_title": "To zlecenie zostanie też opublikowane na Twoim blogu",
-		"review_on_body": "Zaraz po zatwierdzeniu krótkie ogłoszenie zostanie opublikowane na Twoim blogu Blurt, aby inni mogli znaleźć Twoją ofertę. Podpisane przez Ciebie, za darmo.",
+		"review_on_title": "Syndykacja",
+		"review_on_body": "Zaraz po opublikowaniu tego zlecenia krótkie ogłoszenie zostanie opublikowane na Twoim blogu Blurt, aby inni mogli odkryć Twoją ofertę. Podpisane przez Ciebie, za darmo.",
 		"success_pending": "Publikowanie ogłoszenia na Twoim blogu Blurt…",
 		"success_ok": "Opublikowano na Twoim blogu Blurt.",
 		"success_failed": "Nie udało się teraz opublikować ogłoszenia na Twoim blogu — Twoje zlecenie i tak jest aktywne. Możesz opublikować je ręcznie później, jeśli chcesz.",
@@ -4632,15 +4632,17 @@
 		"cta": "Dokończ konfigurację"
 	},
 	"order_title": {
-		"buy_min": "Kupuję {asset} za {amount} {fiat} lub więcej",
-		"sell_min": "Sprzedaję {asset} za {amount} {fiat} lub więcej",
+		"buy_min": "Kupuję co najmniej {amount} {fiat} {asset}",
+		"sell_min": "Sprzedaję co najmniej {amount} {fiat} {asset}",
 		"buy_max": "Kupuję {asset} za maksymalnie {amount} {fiat}",
 		"sell_max": "Sprzedaję {asset} za maksymalnie {amount} {fiat}",
 		"buy_range": "Kupuję {asset} za {min}–{max} {fiat}",
 		"sell_range": "Sprzedaję {asset} za {min}–{max} {fiat}",
-		"buy_any": "Kupuję {asset}",
-		"sell_any": "Sprzedaję {asset}",
-		"goods_services": "towary/usługi"
+		"buy_any": "Kupuję dowolną ilość {asset} za {fiat}",
+		"sell_any": "Sprzedaję dowolną ilość {asset} za {fiat}",
+		"goods_services": "towary/usługi",
+		"buy_exact": "Kupuję {asset} za dokładnie {amount} {fiat}",
+		"sell_exact": "Sprzedaję {asset} za dokładnie {amount} {fiat}"
 	},
 	"stats": {
 		"page_title": "Statystyki sieci",

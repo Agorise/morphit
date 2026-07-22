@@ -5780,6 +5780,42 @@ Also: if your backup directory already exists and is owned by **root** — e.g. 
 
 **Always prove the first dump.** A backup you have never seen succeed is not a backup; run the `systemctl start` + `journalctl` check below and confirm a real byte count and a real file on disk.
 
+### Clearing a self-trade flag (restoring an account)
+
+Signals A and B are heuristics, and honest activity can trip them — two accounts created from the same machine and reviewing each other looks, to a detector, exactly like self-dealing. A flagged account loses its reputation card, and its reviews are shown subdued behind a "Not counted toward rating — reviewers flagged as related" pill.
+
+Since v1.8.9, `morphit-ops` → **Moderation** offers **"Clear a flag (restore an account)"** alongside block and unblock. Pick the signal, name the two accounts (either order), and confirm. The account is restored immediately — the reputation card returns and the reviews stop being subdued — because every reputation and review query still reads the flag tables and the pair is simply no longer in them.
+
+The clearance is also recorded, and that half matters just as much: the detectors re-run continuously and would re-raise the identical flag on their next pass, so **deleting a flag row on its own appears to work and then silently undoes itself.** A recorded clearance is what makes the restore permanent.
+
+**The two signals are cleared with different lifetimes, on purpose.**
+
+- **Related accounts (Signal A) — permanent.** It keys on account-*creation* facts: same creator, first activity minutes apart. That evidence is immutable, so a clearance that expired would re-flag the same pair forever on the same unchangeable evidence, and you would be clearing it on a treadmill.
+- **Mutual reviews (Signal B) — forgiven, then watched.** It is behavioural, so clearing records a *watermark*: the pair's mutual-review count at that moment. Everything up to the mark is forgiven; the flag re-fires only once they accumulate another full signal's worth beyond it. A pair cleared by mistake is therefore still caught by *new* behaviour, while an honest pair is never re-flagged on the same forgiven history. Note that a fixed time window would do the opposite — it re-flags on the old evidence the moment it expires.
+
+Because a pair that trips one signal usually trips both, the menu offers **"Both signals for this pair"** as the leading option; the clearances list shows each one's lifetime (`permanent`, or `watched from N mutual reviews`).
+
+Clearances are instance-local, like blocking: nothing is broadcast, and no other instance's view of those accounts changes. The same menu lists the clearances in force so you can review or undo them; undoing simply makes the pair eligible for flagging again — it does not re-raise a flag by hand.
+
+**Then let `morphit-ops health` watch it for you.** Since v1.8.9 the health report carries a `Backups` line beside `Services` and `Canary`:
+
+```
+  Backups   ✓ fresh
+      Newest dump:   morphit-20260722-042219.sql.gz (398K, 13h ago)
+      a recent dump is on disk
+```
+
+The states are worth knowing, because they are not all equally bad:
+
+- `✓ fresh` — a dump landed within the last 36 hours (wide enough to absorb the timer's randomised delay).
+- `⚠ stale` — the newest dump is older than that, so at least one nightly run was missed.
+- `✗ failing` — either the unit is in systemd's `failed` state, or **the timer fired more recently than the newest dump**, meaning a run executed and produced nothing. That second case is the one worth understanding: it is exactly the shape of the v1.8.4–v1.8.7 dash bug, where the timer ran faithfully every night and silently wrote nothing.
+- `✗ missing` — configured, but no dump has ever been written.
+- `○ not-configured` — no `/etc/morphit/backup.env`. Running your own backup instead is a legitimate choice, so this is reported neutrally rather than as a fault.
+- `⚠ unreadable` — the CLI could not read the env file or the backup directory. Note this is deliberately **not** reported as "missing": `backup.env` is `640 root:morphit` and the dump directory is `700 morphit:morphit`, so another user genuinely cannot look. Run as the morphit user (or with sudo) to see freshness.
+
+A manual `systemctl start` does not update the timer's last-trigger, so a hand-run dump never reads as a failure.
+
 The script is installed to `/usr/local/lib/morphit/morphit-backup.sh` (NOT executed in-place from the repo). This decouples the systemd unit from the operator's repo location: the unit's `ExecStart` is hardcoded to the stable system path, so it works regardless of whether the repo is at `/home/morphit/morphit`, `/opt/morphit`, or anywhere else. When `git pull` brings in script changes, the operator re-runs just the `sudo install -m 755 ops/backup/morphit-backup.sh ...` command.
 
 ### Containerized Postgres (Docker-aware backups)

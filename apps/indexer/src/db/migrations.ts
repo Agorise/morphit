@@ -354,6 +354,60 @@ CREATE TABLE IF NOT EXISTS trade_concentration (
 CREATE INDEX IF NOT EXISTS trade_concentration_peer_idx
     ON trade_concentration (dominant_peer);
 `
+	},
+	{
+		version: 49,
+		description:
+			"v1.8.9: operator_blocks.origin — REPAIR. The column was added to the fresh-install CREATE TABLE in schema.sql (distinguishing a federated on-chain block from an instance-local `morphit-ops block`) but NO migration ever added it to databases created before that change. Fresh installs had it; every existing instance did not. The gap surfaced when `morphit-ops` → Moderation crashed with `column \"origin\" does not exist`, because fetchBlockStatuses selects it — so on a long-lived instance the entire moderation screen was unreachable, which is precisely where an operator goes to undo a bad flag. Idempotent: ADD COLUMN IF NOT EXISTS with the same default the baseline declares, so a fresh DB is a no-op and an old one converges on the identical shape. The CHECK is added separately and guarded, since Postgres has no ADD CONSTRAINT IF NOT EXISTS.",
+		sql: `
+ALTER TABLE operator_blocks
+    ADD COLUMN IF NOT EXISTS origin varchar(8) NOT NULL DEFAULT 'chain';
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+         WHERE conrelid = 'operator_blocks'::regclass
+           AND conname  = 'operator_blocks_origin_check'
+    ) THEN
+        ALTER TABLE operator_blocks
+            ADD CONSTRAINT operator_blocks_origin_check
+            CHECK (origin IN ('chain', 'local'));
+    END IF;
+END
+$$;
+`
+	},
+	{
+		version: 50,
+		description:
+			"v1.8.9: moderation_flag_clearances — make a self-trade flag REVERSIBLE. Signals A/B are heuristics, and a legitimate operator can trip them (Ken flagged his own account testing two handles on one LAN), which hides the reputation card and subdues every review behind a \"reviewers flagged as related\" pill. Until now a flag could only be lived with: `morphit-ops` Moderation offered block/unblock and nothing else, and simply DELETING the rows does not hold because the detector re-inserts them on its next pass. A clearance is therefore a permanent instance-local decision the DETECTOR consults before inserting, so the delete sticks. Deliberately NOT read by the ~10 reputation/review query paths: they keep reading the flag tables exactly as before, and clearing works by removing the row and preventing its return. Instance-local only — never broadcast, no effect on any other instance's view. Two lifetimes, because the two signals differ in kind: Signal A keys on immutable account-CREATION facts, so its clearance is PERMANENT (a re-arming one would re-flag the same pair forever on evidence that can never change); Signal B is behavioural, so its clearance stores a WATERMARK of the mutual-review count at clear time and re-fires once the pair adds another full signal's worth beyond it — forgiving the past without going blind to the future.",
+		sql: `
+CREATE TABLE IF NOT EXISTS moderation_flag_clearances (
+    -- Which detector's flag this clears.  Scoped per signal so clearing a
+    -- reciprocity flag does not silently also clear a related-accounts one.
+    signal      varchar(16)  NOT NULL CHECK (signal IN ('reciprocity', 'related')),
+    -- Canonically ordered (account_a < account_b), matching how both detectors
+    -- store their pairs, so a clearance matches regardless of which way round
+    -- the operator typed the two names.
+    account_a   varchar(16)  NOT NULL,
+    account_b   varchar(16)  NOT NULL,
+    -- Signal B ONLY: the mutual-review count at the moment of clearing.
+    -- Signal B is BEHAVIOURAL, so a clearance forgives what has happened
+    -- without blinding the detector to what happens next: it re-fires once the
+    -- pair accumulates another full signal's worth of mutual reviews beyond
+    -- this mark.  Signal A leaves it NULL and the clearance is permanent --
+    -- that signal keys on account-CREATION facts (same creator, first activity
+    -- minutes apart) which are immutable, so a re-arming clearance would
+    -- re-flag the same pair forever on evidence that can never change.
+    watermark   integer      NULL CHECK (watermark IS NULL OR watermark >= 0),
+    note        text         NOT NULL DEFAULT '',
+    cleared_at  timestamptz  NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (signal, account_a, account_b),
+    CHECK (account_a < account_b),
+    CHECK (length(note) <= 500)
+);
+`
 	}
 	// Future migrations land here.  The v1 collapsed schema is the
 	// pre-launch baseline; from v37 forward, every new schema change is its

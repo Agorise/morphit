@@ -1808,7 +1808,11 @@
 	<!-- Rendered ABOVE the Streaming card: a personal site/blog is the most
 	     general "who am I" link, so it leads. New on-chain field website_url;
 	     a globe glyph shows next to the avatar on the profile page. -->
-	<section class="card mt-6" aria-labelledby="website-url-heading">
+	<section
+		class="card card-watermark mt-6"
+		style="--card-watermark: url('/icons/icon-globe.svg')"
+		aria-labelledby="website-url-heading"
+	>
 		<h2 id="website-url-heading" class="font-display text-xl font-bold">
 			{$_('settings.website_url.heading')}
 		</h2>
@@ -1919,7 +1923,11 @@
 	     (YouTube, Rumble, Blurt.media, Twitch, …). Still stored on-chain as
 	     streaming_url (field name unchanged); a play-triangle glyph shows
 	     on the profile page. Rendered after Website, before Nostr. -->
-	<section class="card mt-6" aria-labelledby="streaming-heading">
+	<section
+		class="card card-watermark mt-6"
+		style="--card-watermark: url('/icons/icon-play.svg')"
+		aria-labelledby="streaming-heading"
+	>
 		<h2 id="streaming-heading" class="font-display text-xl font-bold">
 			{$_('settings.streaming_url.heading')}
 		</h2>
@@ -2026,7 +2034,11 @@
 	</section>
 
 	<!-- ─── Nostr URL ─── -->
-	<section class="card mt-6" aria-labelledby="nostr-heading">
+	<section
+		class="card card-watermark mt-6"
+		style="--card-watermark: url('/icons/icon-nostr.svg')"
+		aria-labelledby="nostr-heading"
+	>
 		<h2 id="nostr-heading" class="font-display text-xl font-bold">
 			{$_('settings.nostr_url.heading')}
 		</h2>

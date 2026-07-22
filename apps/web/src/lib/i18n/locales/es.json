@@ -4546,14 +4546,14 @@
 			"body": "![](https://img.blurt.blog/blurtimage/morphit/e3d56ddc849685c391dcdb03526463b8264f3e09.png)\n\nMe uní a Morphit para poder por fin intercambiar criptomonedas y divisas sin depender de un exchange centralizado (CEX). Sin KYC, sin registros, sin cookies, y libre de contrapartes.\n\nNo hay lugar más seguro, rápido y fiable para operar con criptos y divisas que Morphit.\n\n¡Mira mi perfil en Morphit!\nhttps://morphit.io/{lang}/@{username}"
 		},
 		"order_post": {
-			"title_buy": "Estoy comprando {asset1} con {asset2}. ¿Quieres operar?",
-			"title_sell": "Estoy vendiendo {asset1} por {asset2}. ¿Quieres operar?",
-			"body_buy": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\nEstoy comprando {asset1} con {asset2}. ¿Quieres operar?\n\nNo hay lugar más seguro, rápido y fiable para operar con criptos y divisas que Morphit.\n\n¡Mira mi oferta en Morphit!\nhttps://morphit.io/{lang}/@{username}/{permlink}",
-			"body_sell": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\nEstoy vendiendo {asset1} por {asset2}. ¿Quieres operar?\n\nNo hay lugar más seguro, rápido y fiable para operar con criptos y divisas que Morphit.\n\n¡Mira mi oferta en Morphit!\nhttps://morphit.io/{lang}/@{username}/{permlink}"
+			"title_buy": "{subject}. ¿Quieres comerciar?",
+			"title_sell": "{subject}. ¿Quieres comerciar?",
+			"body_buy": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\n{subject}. ¿Quieres comerciar?\n\nNo hay lugar más seguro, rápido y fiable para operar con criptos y divisas que Morphit.\n\n¡Mira mi oferta en Morphit!\nhttps://morphit.io/{lang}/@{username}/{permlink}",
+			"body_sell": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\n{subject}. ¿Quieres comerciar?\n\nNo hay lugar más seguro, rápido y fiable para operar con criptos y divisas que Morphit.\n\n¡Mira mi oferta en Morphit!\nhttps://morphit.io/{lang}/@{username}/{permlink}"
 		},
 		"opt_in_label": "Sindicar mi orden en el blog de Blurt",
-		"review_on_title": "Esta orden también se publicará en tu blog",
-		"review_on_body": "Justo después de enviar, un breve anuncio se publicará en tu blog de Blurt para que otros encuentren tu oferta. Firmado por ti, gratis.",
+		"review_on_title": "Sindicación",
+		"review_on_body": "Justo después de publicar esta orden, un breve anuncio se publicará en tu blog de Blurt para que otros descubran tu oferta. Firmado por ti, gratis.",
 		"success_pending": "Publicando el anuncio en tu blog de Blurt…",
 		"success_ok": "Publicado en tu blog de Blurt.",
 		"success_failed": "No se pudo publicar el anuncio en tu blog ahora mismo — tu orden está activa de todas formas. Puedes publicarlo manualmente más tarde si lo deseas.",
@@ -4632,15 +4632,17 @@
 		"cta": "Completar configuración"
 	},
 	"order_title": {
-		"buy_min": "Compro {amount} {fiat} o más en {asset}",
-		"sell_min": "Vendo {amount} {fiat} o más en {asset}",
+		"buy_min": "Compro al menos {amount} {fiat} de {asset}",
+		"sell_min": "Vendo al menos {amount} {fiat} de {asset}",
 		"buy_max": "Compro hasta {amount} {fiat} en {asset}",
 		"sell_max": "Vendo hasta {amount} {fiat} en {asset}",
 		"buy_range": "Compro entre {min} y {max} {fiat} en {asset}",
 		"sell_range": "Vendo entre {min} y {max} {fiat} en {asset}",
-		"buy_any": "Compro {asset}",
-		"sell_any": "Vendo {asset}",
-		"goods_services": "bienes/servicios"
+		"buy_any": "Compro cualquier cantidad de {asset} con {fiat}",
+		"sell_any": "Vendo cualquier cantidad de {asset} por {fiat}",
+		"goods_services": "bienes/servicios",
+		"buy_exact": "Compro exactamente {amount} {fiat} en {asset}",
+		"sell_exact": "Vendo exactamente {amount} {fiat} en {asset}"
 	},
 	"stats": {
 		"page_title": "Estadísticas de la red",

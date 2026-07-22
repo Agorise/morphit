@@ -70,6 +70,7 @@
 import { build, files, prerendered, version } from '$service-worker';
 import { sanitizeClickPath } from '$lib/notifications/sanitizeClickPath';
 import { isDynamicDataPath } from '$lib/net/dynamicPaths';
+import { chatThreadFromClickPath, chatPeerMatches } from '$lib/notifications/chatThread';
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -303,29 +304,16 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
  *  compares the peer extracted from the `/chat/<peer>` segment, not the whole
  *  locale-prefixed pathname, so a push minted under one locale still suppresses
  *  for a tab browsing in another. */
-function chatPeerMatches(clientUrl: string, clickPath: string): boolean {
-	const a = chatThreadFromClickPath(clientUrl);
-	const b = chatThreadFromClickPath(clickPath);
-	return a !== null && b !== null && a.peer.toLowerCase() === b.peer.toLowerCase();
-}
+
 
 /** v1.5.0 — extract the (peer, order) a chat push targets from its
  *  clickPath (/[lang]/chat/[peer]?order=[permlink]), so the badge-poke can
  *  tell tabs WHICH archived thread just woke and un-archive it immediately —
  *  without waiting ~irreversibility for the durable indexer to surface the
  *  message. Stays on-device (postMessage to same-origin tabs only). */
-function chatThreadFromClickPath(clickPath: string): { peer: string; order: string } | null {
-	try {
-		const u = new URL(clickPath, self.location.origin);
-		const parts = u.pathname.split('/').filter(Boolean);
-		const chatIdx = parts.indexOf('chat');
-		const peer = chatIdx >= 0 ? parts[chatIdx + 1] : undefined;
-		if (!peer) return null;
-		return { peer, order: u.searchParams.get('order') ?? '' };
-	} catch {
-		return null;
-	}
-}
+// chatThreadFromClickPath / chatPeerMatches now live in
+// $lib/notifications/chatThread so the page can take a notification DOWN using
+// exactly the rule the worker used to decide whether to put it UP.
 
 self.addEventListener('push', (event: PushEvent) => {
 	let payload: {
