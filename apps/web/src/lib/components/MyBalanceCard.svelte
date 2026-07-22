@@ -853,8 +853,15 @@
 							>
 						</span>
 						{#if usdLabel}
+							<!-- cp515 (t.txt) — `relative -top-0.5` optical lift. The row is
+							     `items-baseline`, so the two texts share a TRUE baseline — which is
+							     typographically correct and still reads as "sitting low", because
+							     text-xs next to text-lg mono digits has a much smaller cap-height,
+							     so its optical centre falls well below the big number's. Nudging it
+							     up ~2px aligns the perceived centres without breaking the baseline
+							     row or the wrap behaviour. -->
 							<span
-								class="font-sans text-xs font-normal leading-tight text-ink-500 dark:text-ink-400"
+								class="relative -top-0.5 font-sans text-xs font-normal leading-tight text-ink-500 dark:text-ink-400"
 								>({usdLabel})</span
 							>
 						{/if}
@@ -896,11 +903,17 @@
 						<!-- cp511 [12-revise] — delegated-in BP as a tiny tap/hover info icon
 						     (NOT a line — keeps the card uncluttered). Reveals "+ N BP delegated
 						     to you" only when a delegation exists. -->
-						<Tooltip
-							textKey="profile.my_balance.delegated_in_label"
-							textValues={{ bp: fmtExact(receivedBp, 3) }}
-							noBorder
-						/>
+						<!-- cp515 (t.txt) — `relative -top-px` optical lift. `items-center` centres
+						     the icon in the ROW's line box, and that box includes descender space
+						     the mono digits never use, so a centred icon reads as low against
+						     them. 1px up sits it on the digits' optical centre. -->
+						<span class="relative -top-px inline-flex">
+							<Tooltip
+								textKey="profile.my_balance.delegated_in_label"
+								textValues={{ bp: fmtExact(receivedBp, 3) }}
+								noBorder
+							/>
+						</span>
 					{/if}
 				</dd>
 				{#if Number.isFinite(vestingApr)}

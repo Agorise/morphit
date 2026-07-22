@@ -253,11 +253,22 @@ fi
 # available so that gzip's or age's failure isn't masked by the
 # trailing redirect's success.
 #
-# We can't use `set -o pipefail` portably (dash doesn't support it
-# in older versions), but the chained pipe-status check below
-# handles both cases.
-# shellcheck disable=SC3040  # pipefail isn't POSIX but bash/dash modern support it
-( set -o pipefail 2>/dev/null || true ) >/dev/null
+# `set -o pipefail` is NOT POSIX and dash rejects it outright.
+#
+# The guard MUST live in a CONDITION context. `set` is a SPECIAL
+# builtin, so on an unsupported option dash exits the shell
+# immediately -- it never reaches a trailing `|| true`, and a bare
+# subshell's non-zero status then trips the parent's `set -e`. The
+# previous form here, `( set -o pipefail 2>/dev/null || true )`,
+# looked defensive but killed the script dead on every Ubuntu box
+# (where /bin/sh is dash), with `2>/dev/null` swallowing the only
+# clue -- a silent exit 2 before pg_dump ever ran, i.e. backups
+# that never happened. Inside an `if` condition `set -e` is
+# suppressed and the failing subshell simply reads as false.
+# shellcheck disable=SC3040  # pipefail isn't POSIX; probed before use
+if ( set -o pipefail ) 2>/dev/null; then
+	set -o pipefail
+fi
 if [ -n "$AGE_RECIPIENT" ]; then
 	# shellcheck disable=SC2086  # DUMP_CMD/PG_ARGS deliberately word-split
 	$DUMP_CMD "$DB_NAME" | gzip | age -r "$AGE_RECIPIENT" > "$TMPFILE"

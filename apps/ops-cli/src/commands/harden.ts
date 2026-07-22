@@ -32,14 +32,14 @@
  * BunkerWeb decision in context would be a footgun.
  */
 
-import { writeFileSync, existsSync, readFileSync, chmodSync } from 'node:fs';
+import { writeFileSync, existsSync, readFileSync, chmodSync, mkdirSync } from 'node:fs';
 import { defaultRepoRoot } from '../lib/repoRoot.ts';
 import { readDeployedDatabaseUrl } from '../lib/dbContainer.ts';
-import { resolve, join } from 'node:path';
+import { resolve, join, dirname } from 'node:path';
 
 import { askChoice } from '../init/prompt.ts';
 import { stepBunkerWeb, stepHardening, stepBackup } from '../init/steps.ts';
-import { renderHardeningChecklist } from '../init/render.ts';
+import { renderHardeningChecklist, renderBackupEnv } from '../init/render.ts';
 import { sanitizeForTerm } from '../render/term.ts';
 
 export interface HardenCtx {
@@ -143,16 +143,62 @@ export async function runHarden(ctx: HardenCtx): Promise<number> {
 			// (non-standard boxes on morphit_user/morphit_db work without editing).
 			const backup = await stepBackup(readDeployedDatabaseUrl(repoRoot) ?? '');
 			if (backup.enabled) {
+				// cp514 — this whole block used to print THREE steps that could not
+				// work: it never installed the script (the unit's ExecStart is a
+				// hardcoded /usr/local/lib/morphit path) nor the .service/.timer unit
+				// files, so `systemctl enable --now morphit-backup.timer` failed with
+				// "Unit morphit-backup.service not found"; it pointed at the GENERIC
+				// backup.env.example, discarding the container + DB identity detected
+				// moments earlier; and its paths were relative, so they only worked
+				// from the repo root. Print the same complete, absolute sequence
+				// `init` does, and write a populated env file to install FROM.
+				const backupEnvPath = join(repoRoot, 'ops', 'backup', 'backup.env');
+				mkdirSync(dirname(backupEnvPath), { recursive: true });
+				writeFileSync(backupEnvPath, renderBackupEnv(backup), { mode: 0o600 });
+				chmodSync(backupEnvPath, 0o600);
+				const backupDir = backup.backupDir ?? '/home/morphit/backups';
+				console.log(`  ✓ wrote ${sanitizeForTerm(backupEnvPath)}`);
+				console.log('');
+				console.log('  To activate the shipped backup timer, run these in order:');
+				console.log('');
 				console.log(
-					'  To activate the shipped backup timer:\n' +
-						'    1. sudo install -m 600 ops/backup/backup.env.example \\\n' +
-						'         /etc/morphit/backup.env\n' +
-						`    2. Edit /etc/morphit/backup.env — set the backup directory\n` +
-						`       (${sanitizeForTerm(backup.backupDir ?? '/home/morphit/backups')}) and retention\n` +
-						`       (${backup.retainDays ?? 30} days).\n` +
-						'    3. sudo systemctl enable --now morphit-backup.timer\n' +
-						'  Full reference: docs/RUN-A-MORPHIT-NODE.md §10, OPERATIONS.md.\n'
+					`    sudo install -m 640 -o root -g morphit ${sanitizeForTerm(backupEnvPath)} /etc/morphit/backup.env`
 				);
+				console.log('    sudo install -d -m 755 /usr/local/lib/morphit');
+				console.log(
+					`    sudo install -m 755 ${sanitizeForTerm(join(repoRoot, 'ops', 'backup', 'morphit-backup.sh'))} /usr/local/lib/morphit/`
+				);
+				console.log(
+					`    sudo install -m 644 ${sanitizeForTerm(join(repoRoot, 'ops', 'systemd', 'morphit-backup.service'))} /etc/systemd/system/`
+				);
+				console.log(
+					`    sudo install -m 644 ${sanitizeForTerm(join(repoRoot, 'ops', 'systemd', 'morphit-backup.timer'))} /etc/systemd/system/`
+				);
+				console.log('    sudo systemctl daemon-reload');
+				console.log('    sudo systemctl enable --now morphit-backup.timer');
+				console.log('');
+				console.log('  Then PROVE it dumps — a working run prints a byte count:');
+				console.log('');
+				console.log('    sudo systemctl start morphit-backup.service');
+				console.log('    sudo journalctl -u morphit-backup.service -e --no-pager');
+				console.log(`    sudo ls -lh ${sanitizeForTerm(backupDir)}`);
+				console.log('');
+				if (backup.dbContainer !== null) {
+					console.log('  Your Postgres runs in a container, so the dump goes through');
+					console.log('  `docker exec`. The unit runs as the morphit user, which must be');
+					console.log('  able to reach docker — note this is root-equivalent access:');
+					console.log('');
+					console.log('    sudo usermod -aG docker morphit');
+					console.log('');
+				}
+				console.log(`  If ${sanitizeForTerm(backupDir)} already exists owned by root (an`);
+				console.log('  earlier root-run backup script, say), hand it over or the');
+				console.log('  morphit-user service cannot write into it:');
+				console.log('');
+				console.log(`    sudo chown -R morphit:morphit ${sanitizeForTerm(backupDir)}`);
+				console.log('');
+				console.log('  Full reference: docs/RUN-A-MORPHIT-NODE.md §10, OPERATIONS.md.');
+				console.log('');
 			}
 		} else if (choice === 4) {
 			printAnsiblePath();
