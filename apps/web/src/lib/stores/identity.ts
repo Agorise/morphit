@@ -40,6 +40,7 @@ import { browser } from '$app/environment';
 import { decryptIdentity, type KeystoreEnvelope } from '$crypto/keystore';
 import { toLiveIdentity, wipeLiveIdentity, type LiveIdentity } from '$crypto/identity-core';
 import { KEYSTORE_ENVELOPE_STORAGE_KEY, clearKeystore, hasPersistedKeystore } from '$crypto/persistentKeystore';
+import { sweepAccountStorageOnSignOut } from '$lib/storage/signOutSweep';
 import { safeSession } from '../utils/safeStorage';
 import {
 	PAIRED_SESSION_STORAGE_KEY,
@@ -763,6 +764,14 @@ export function handleSessionHandoffMessage(
 		// lives only in broadcastSignOut, never in reset), so this can't
 		// loop. Fires only on an explicit sign-out, never on tab-close.
 		reset({ clearDisk: true });
+		// v1.8.11 (Ken) — also drop the cached self-avatar. `broadcastSignOut()`
+		// clears it in the tab that signed out, but `reset()` deliberately does
+		// NOT (lock/pagehide must keep it), so a SIBLING tab held the previous
+		// user's avatar in memory after an explicit sign-out. On a shared
+		// machine that is the same wrong as leaving their bio in localStorage.
+		void import('$lib/stores/selfProfile')
+			.then((mod) => mod.clearSelfProfile())
+			.catch(() => {});
 	}
 }
 
@@ -959,6 +968,15 @@ export function broadcastSignOut(): void {
 	// convenience cache would force the user to re-enter their account name
 	// every session — the name-clear is the mark of an EXPLICIT sign-out.
 	bestEffort(clearUserBlurtAccount);
+	// Forget every OTHER account-derived key too (display name, bio, links,
+	// chat peers/pins/read-state, unsent drafts, and the NOT-account-scoped
+	// `morphit.userPreferences.v1`). Before this, all of that survived an
+	// explicit sign-out: Ken watched his kentest3 region setting carry into a
+	// fresh kencode session, and a signed-out person's bio and chat peers sat
+	// in localStorage on a shared machine. Allow-list based, so a NEW
+	// per-account key is forgotten by default rather than surviving until
+	// someone remembers to add it. See $lib/storage/signOutSweep.
+	bestEffort(sweepAccountStorageOnSignOut);
 	// Also drop the cached self-avatar (shown in the menu + IdentityLabels).
 	// Dynamically imported to keep selfProfile's deps out of this store's
 	// static graph; EXPLICIT sign-out only (reset()/lockSession keep it —

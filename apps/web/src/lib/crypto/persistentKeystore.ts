@@ -19,6 +19,8 @@
  * and the user falls through to seed-import every session.
  */
 
+import { writable } from 'svelte/store';
+import { browser } from '$app/environment';
 import { safeLocal } from '../utils/safeStorage';
 import type { KeystoreEnvelope, SimplePassphraseEnvelope } from '$crypto/keystore';
 import { validateLayeredEnvelope, validateSimpleEnvelope } from '$crypto/keystore';
@@ -62,6 +64,7 @@ export function readKeystoreMode(): KeystoreMode | null {
  *  when the user picks password-fast vs seed-every-time. */
 export function writeKeystoreMode(mode: KeystoreMode): void {
 	safeLocal.set(MODE_KEY, mode);
+	notifyKeystoreChanged();
 }
 
 /** Persist the encrypted envelope. Only called when mode is
@@ -86,6 +89,7 @@ export function writeEnvelope(env: KeystoreEnvelope): boolean {
 		return false;
 	}
 	const ok = safeLocal.set(ENVELOPE_KEY, serialized);
+	notifyKeystoreChanged();
 	// Stamp the first-persist anchor ONCE — set on the first
 	// successful write, untouched on subsequent writes (rotate,
 	// add yubikey, etc.).  Cleared only by clearKeystore (full
@@ -141,11 +145,33 @@ export function hasPersistedKeystore(): boolean {
 	return readKeystoreMode() === 'password' && readEnvelope() !== null;
 }
 
+/** Reactive mirror of `hasPersistedKeystore()`.
+ *
+ *  v1.8.11 (Ken) — the header CTA read the plain function inside a `$derived`
+ *  keyed on `$hasAnySession`, which works for lock (session flips true→false)
+ *  but NOT for signing out while ALREADY locked: `hasAnySession` is false both
+ *  before and after, so the derived never re-ran and the button stayed on
+ *  "Unlock" when it should have become "Start". That path is reachable — the
+ *  welcome-back/unlock screen offers sign-out.
+ *
+ *  localStorage is not reactive, so every mutator below notifies this store.
+ *  Read it from UI instead of calling the function directly. */
+export const persistedKeystorePresent = writable<boolean>(
+	browser ? readKeystoreMode() === 'password' && readEnvelope() !== null : false
+);
+
+/** Re-read the real state and publish it. Called by every keystore mutator so
+ *  the store can never drift from what is actually on disk. */
+function notifyKeystoreChanged(): void {
+	persistedKeystorePresent.set(hasPersistedKeystore());
+}
+
 /** Wipe the persisted envelope but keep the mode. Used by Lock
  *  Session — wait, actually Lock Session KEEPS the envelope so the
  *  user can unlock next session. This is actually used by Sign Out. */
 export function clearEnvelope(): void {
 	safeLocal.remove(ENVELOPE_KEY);
+	notifyKeystoreChanged();
 }
 
 /** Full wipe — mode AND envelope. The nuclear option, used by Sign
@@ -153,6 +179,7 @@ export function clearEnvelope(): void {
 export function clearKeystore(): void {
 	safeLocal.remove(ENVELOPE_KEY);
 	safeLocal.remove(MODE_KEY);
+	notifyKeystoreChanged();
 	// Clear the nudge anchors too — a sign-out is a full
 	// session reset, and a future re-onboarding should restart
 	// the 7-day prompt schedule.

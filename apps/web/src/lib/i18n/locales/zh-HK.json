@@ -3609,7 +3609,8 @@
 		},
 		"given_said": "我話：",
 		"received_rated": "畀我嘅評分：",
-		"average_rating_detail": "平均評分：{avg}"
+		"average_rating_detail": "平均評分：{avg}",
+		"feedback_all_excluded": "下面的評價未計入此評分——留下這些評價的帳戶已被我們的自我交易檢查標記。"
 	},
 	"relative_time": {
 		"descriptive": {
@@ -4488,6 +4489,14 @@
 			"confirm_password_to_begin": "確認您嘅密碼以開始",
 			"confirm_password": "確認您嘅密碼",
 			"yubikey_protected": "呢個 keystore 受 YubiKey 保護。此版本唔支持將基於 TOTP 嘅 2FA 添加到受 YubiKey 保護嘅 keystore。您嘅 YubiKey 已經提供咗比 TOTP 更強嘅加密身份驗證。"
+		},
+		"visibility": {
+			"public": "公開",
+			"private": "私密",
+			"device": "僅本裝置",
+			"public_detail": "以明文儲存在區塊鏈上——任何人都能永久讀取。",
+			"private_detail": "在離開你的裝置前已加密。連營運者也無法讀取。",
+			"device_detail": "保留在此瀏覽器中，絕不會傳送到任何地方。"
 		}
 	},
 	"shipment_modal": {

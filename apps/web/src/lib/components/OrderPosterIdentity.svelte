@@ -18,6 +18,7 @@
 	import NewTraderChip from '$lib/components/NewTraderChip.svelte';
 	import TradeRepCluster from '$lib/components/TradeRepCluster.svelte';
 	import { truncatePublicKey } from '$lib/crypto/publicKeyDisplay';
+	import { resolvePostingKey } from '$blurt/postingKeyResolver';
 
 	interface Props {
 		order: OrderRecord;
@@ -50,7 +51,33 @@
 	const ratingCount = $derived(order.feedback_count ?? 0);
 	const tradeCount = $derived(order.trade_count ?? 0);
 	const score = $derived(order.reputation_score ?? null);
-	const postingKey = $derived(truncatePublicKey(postingKeyOverride ?? order.posting_pubkey ?? ''));
+	// v1.8.11 (Ken) — resolve through the shared resolver instead of trusting
+	// `order.posting_pubkey` alone. That column is filled by a BACKFILL JOB, so
+	// for an account new to Morphit it is briefly empty and the card rendered
+	// with no key while the order detail page — which does a live authority
+	// lookup — showed it fine. The key is the anti-impersonation anchor, so
+	// "present only once a background job has run" is the wrong contract.
+	// The inline value short-circuits the resolver, so a populated column costs
+	// nothing; only the gap triggers a (cached, de-duplicated) lookup.
+	let resolvedKey = $state<string | null>(null);
+	$effect(() => {
+		const acct = order.account;
+		const inline = order.posting_pubkey ?? null;
+		resolvedKey = inline;
+		if (inline !== null || !acct) return;
+		let cancelled = false;
+		void resolvePostingKey(acct, inline).then((k) => {
+			// Discard if the card was re-used for a DIFFERENT order while the
+			// lookup was in flight — otherwise one poster's key could land on
+			// another poster's card, which is the one mistake a trust anchor
+			// must never make.
+			if (!cancelled && order.account === acct) resolvedKey = k;
+		});
+		return () => {
+			cancelled = true;
+		};
+	});
+	const postingKey = $derived(truncatePublicKey(postingKeyOverride ?? resolvedKey ?? ''));
 
 	// v1.5.5 — the trade count moved into TradeRepCluster ("1 trade · ★5.00
 	// (34)"), which owns the wording. The old "852 trades since July, 2026"

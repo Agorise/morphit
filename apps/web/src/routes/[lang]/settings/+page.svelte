@@ -65,17 +65,32 @@
 	import { blockedAccounts, refreshBlocks, markUnblocked } from '$lib/chat/blocks';
 	import { showToast } from '$lib/stores/toast';
 	import RequireLiveSession from '$components/RequireLiveSession.svelte';
+	import VisibilityBadge from '$components/VisibilityBadge.svelte';
 
 	// cp346: profile-field DRAFTS are scoped per account. These keys used to
 	// be global (`morphit.displayName` etc.), so signing out of one account
 	// and into another showed the previous account's cached field values in
-	// the form (a correctness + privacy bug). getUserBlurtAccount() is set at
-	// login and stable for this page's life (sign-out navigates away → the
-	// component remounts on the next login), so resolving the suffix once here
-	// is correct. With no account (not logged in) the keys fall back to the
-	// bare base, which is harmless — there's no account whose draft could leak,
-	// and the legacy global keys are purged on mount (see the rehydrate effect).
-	const PROFILE_KEY_SCOPE = browser ? (getUserBlurtAccount() ?? '') : '';
+	// the form (a correctness + privacy bug).
+	//
+	// v1.8.11 (Ken) — this was a `const` resolved ONCE at component init, on
+	// the assumption that "sign-out navigates away → the component remounts on
+	// the next login". That assumption is false in an SPA: sign out and sign
+	// back in as someone else WITHOUT a page reload and this component is
+	// never torn down, so the suffix stays pinned to the PREVIOUS account and
+	// the new person is shown the old person's drafts. Exactly what Ken hit
+	// going kentest3 → kencode, and the same "captured once, never re-derived"
+	// shape as the profile-page reputation bug.
+	//
+	// Now derived from the session: `$isUnlocked` / `$isPairedReadOnly` flip on
+	// both sign-out and sign-in, so the suffix re-resolves at each transition
+	// without needing localStorage itself to be reactive. Signed out resolves
+	// to '' (the bare legacy key), which is harmless — the rehydrate effect
+	// purges those, and sign-out now sweeps them anyway.
+	const PROFILE_KEY_SCOPE = $derived.by((): string => {
+		if (!browser) return '';
+		if (!$isUnlocked && !$isPairedReadOnly) return '';
+		return getUserBlurtAccount() ?? '';
+	});
 	// Syndication card phase. Two signals flip it to the post-first-trade
 	// (Phase 2) state, OR'd because they cover different cases:
 	//   • hasFiredFirstTrade — the local "first feedback fired" marker, set
@@ -119,12 +134,16 @@
 			cancelled = true;
 		};
 	});
-	const PROFILE_KEY_SUFFIX = PROFILE_KEY_SCOPE ? `.${PROFILE_KEY_SCOPE}` : '';
-	const STORAGE_KEY = `morphit.displayName${PROFILE_KEY_SUFFIX}`;
-	const NOSTR_URL_STORAGE_KEY = `morphit.nostrUrl${PROFILE_KEY_SUFFIX}`;
-	const STREAMING_URL_STORAGE_KEY = `morphit.streamingUrl${PROFILE_KEY_SUFFIX}`;
-	const WEBSITE_URL_STORAGE_KEY = `morphit.websiteUrl${PROFILE_KEY_SUFFIX}`;
-	const SHORT_BIO_STORAGE_KEY = `morphit.shortBio${PROFILE_KEY_SUFFIX}`;
+	// All five must be $derived, not plain consts: they are built FROM the
+	// reactive scope above, and a const would freeze at whichever account was
+	// signed in when this component first rendered — reintroducing the exact
+	// cross-account bug the scope fix removes, one layer down.
+	const PROFILE_KEY_SUFFIX = $derived(PROFILE_KEY_SCOPE ? `.${PROFILE_KEY_SCOPE}` : '');
+	const STORAGE_KEY = $derived(`morphit.displayName${PROFILE_KEY_SUFFIX}`);
+	const NOSTR_URL_STORAGE_KEY = $derived(`morphit.nostrUrl${PROFILE_KEY_SUFFIX}`);
+	const STREAMING_URL_STORAGE_KEY = $derived(`morphit.streamingUrl${PROFILE_KEY_SUFFIX}`);
+	const WEBSITE_URL_STORAGE_KEY = $derived(`morphit.websiteUrl${PROFILE_KEY_SUFFIX}`);
+	const SHORT_BIO_STORAGE_KEY = $derived(`morphit.shortBio${PROFILE_KEY_SUFFIX}`);
 	/** The pre-cp346 GLOBAL keys, purged on mount so the leaked drafts don't
 	 *  linger (they are never read again once scoping is in effect). */
 	const LEGACY_GLOBAL_PROFILE_KEYS = [
@@ -1370,6 +1389,7 @@
 		<h2 id="account-name-heading" class="font-display text-xl font-bold">
 			{$_('settings.account_name.heading')}
 		</h2>
+		<div class="mt-1"><VisibilityBadge scope="device" /></div>
 		<p class="mt-2 text-ink-600 dark:text-ink-300">
 			{$_('settings.account_name.explain')}
 		</p>
@@ -1464,6 +1484,7 @@
 		<h2 id="avatar-heading" class="font-display text-xl font-bold">
 			{$_('settings.avatar.heading')}
 		</h2>
+		<div class="mt-1"><VisibilityBadge scope="public" /></div>
 		<p class="mt-2 text-ink-600 dark:text-ink-300">
 			{$_('settings.avatar.explain')}
 		</p>
@@ -1668,6 +1689,7 @@
 		<h2 id="display-name-heading" class="font-display text-xl font-bold">
 			{$_('settings.display_name.heading')}
 		</h2>
+		<div class="mt-1"><VisibilityBadge scope="public" /></div>
 		<p class="mt-2 text-ink-600 dark:text-ink-300">
 			{$_('settings.display_name.explain')}
 		</p>
@@ -1770,6 +1792,7 @@
 		<h2 id="short-bio-heading" class="font-display text-xl font-bold">
 			{$_('settings.short_bio.heading')}
 		</h2>
+		<div class="mt-1"><VisibilityBadge scope="public" /></div>
 		<p class="mt-2 text-ink-600 dark:text-ink-300">
 			{$_('settings.short_bio.explain')}
 		</p>
@@ -1859,6 +1882,7 @@
 		<h2 id="website-url-heading" class="font-display text-xl font-bold">
 			{$_('settings.website_url.heading')}
 		</h2>
+		<div class="mt-1"><VisibilityBadge scope="public" /></div>
 		<p class="mt-2 text-ink-600 dark:text-ink-300">
 			{$_('settings.website_url.explain')}
 		</p>
@@ -1974,6 +1998,7 @@
 		<h2 id="streaming-heading" class="font-display text-xl font-bold">
 			{$_('settings.streaming_url.heading')}
 		</h2>
+		<div class="mt-1"><VisibilityBadge scope="public" /></div>
 		<p class="mt-2 text-ink-600 dark:text-ink-300">
 			{$_('settings.streaming_url.explain')}
 		</p>
@@ -2085,6 +2110,7 @@
 		<h2 id="nostr-heading" class="font-display text-xl font-bold">
 			{$_('settings.nostr_url.heading')}
 		</h2>
+		<div class="mt-1"><VisibilityBadge scope="public" /></div>
 		<p class="mt-2 text-ink-600 dark:text-ink-300">
 			{$_('settings.nostr_url.explain')}
 		</p>
@@ -2250,6 +2276,7 @@
 		<h2 id="endpoints-heading" class="font-display text-xl font-bold">
 			{$_('settings.endpoints.heading')}
 		</h2>
+		<div class="mt-1"><VisibilityBadge scope="device" /></div>
 		<p class="mt-2 text-ink-600 dark:text-ink-300">
 			{$_('settings.endpoints.explain')}
 		</p>
@@ -2264,6 +2291,7 @@
 		<h2 id="syndication-heading" class="font-display text-xl font-bold">
 			{$_('settings.syndication.heading')}
 		</h2>
+		<div class="mt-1"><VisibilityBadge scope="private" /></div>
 		{#if !syndicationPhaseKnown}
 			<!-- Determining whether the first-trade milestone is past (one
 			     indexer round-trip on mount). Show only the heading meanwhile
@@ -2330,6 +2358,7 @@
 			<h2 id="hidden-accounts-heading" class="min-w-0 font-display text-xl font-bold">
 				{$_('settings.hidden_accounts.heading')}
 			</h2>
+		<div class="mt-1"><VisibilityBadge scope="private" /></div>
 			<div class="flex flex-none items-center gap-2">
 				{#if hiddenRefreshed}
 					<span
@@ -2428,6 +2457,7 @@
 			<h2 id="blocked-accounts-heading" class="min-w-0 font-display text-xl font-bold">
 				{$_('settings.blocked_accounts.heading')}
 			</h2>
+		<div class="mt-1"><VisibilityBadge scope="private" /></div>
 			<div class="flex flex-none items-center gap-2">
 				{#if blockedRefreshed}
 					<span
@@ -2501,6 +2531,7 @@
 		<h2 id="preferences-heading" class="font-display text-xl font-bold">
 			{$_('settings.preferences.heading')}
 		</h2>
+		<div class="mt-1"><VisibilityBadge scope="private" /></div>
 		<p class="mt-2 text-ink-600 dark:text-ink-300">
 			{$_('settings.preferences.explain')}
 		</p>
@@ -2578,6 +2609,7 @@
 			<h2 id="session-heading" class="font-display text-xl font-bold">
 				{$_('settings.session.heading')}
 			</h2>
+			<div class="mt-1"><VisibilityBadge scope="device" /></div>
 			<p class="mt-2 text-ink-600 dark:text-ink-300">
 				{$_('settings.session.explain')}
 			</p>

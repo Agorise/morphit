@@ -100,6 +100,40 @@ describe('refreshSelfProfile', () => {
 		expect(get(selfProfile).avatarDataUri).toBeNull();
 	});
 
+	it('KEN v1.8.11: retries when the profile is not indexed YET, then shows it', async () => {
+		// A profile op takes ~45-63s to be indexed. On a fresh sign-in the
+		// first read can legitimately come back "no such profile" — which used
+		// to be applied as final, leaving the header on an identicon while the
+		// profile page (which fetches independently) showed the real avatar on
+		// the same screen. Ken hit exactly that in a private window.
+		fetchMock
+			.mockResolvedValueOnce(mockBatchResponse({})) // not indexed yet
+			.mockResolvedValue(mockBatchResponse({ alice: mockProfileWithAvatar('alice') }));
+
+		vi.useFakeTimers();
+		const p = refreshSelfProfile('alice');
+		await vi.runAllTimersAsync();
+		await p;
+
+		expect(get(selfProfile).avatarDataUri).toBe(AVATAR_URI);
+		expect(fetchMock.mock.calls.length).toBeGreaterThan(1);
+	});
+
+	it('does NOT retry a removal — an account that never had an avatar settles quietly', async () => {
+		// The discriminator: retry only when we have never seen an avatar for
+		// THIS account. Someone who genuinely has none must not be re-queried
+		// forever, and someone who just removed theirs must clear immediately
+		// (covered by the authoritative-null test above).
+		fetchMock.mockResolvedValue(mockBatchResponse({}));
+
+		vi.useFakeTimers();
+		const p = refreshSelfProfile('alice');
+		await vi.runAllTimersAsync();
+		await p;
+
+		expect(get(selfProfile).avatarDataUri).toBeNull();
+	});
+
 	it('blanks the avatar on an account SWITCH even when the fetch fails', async () => {
 		setSelfAvatar('alice', null, AVATAR_URI);
 		fetchMock.mockRejectedValue(new TypeError('network down'));

@@ -3609,7 +3609,8 @@
 		},
 		"given_said": "我说：",
 		"received_rated": "给我的评分：",
-		"average_rating_detail": "平均评分：{avg}"
+		"average_rating_detail": "平均评分：{avg}",
+		"feedback_all_excluded": "下面的评价未计入此评分——留下这些评价的账户已被我们的自我交易检查标记。"
 	},
 	"relative_time": {
 		"descriptive": {
@@ -4488,6 +4489,14 @@
 			"confirm_password_to_begin": "确认您的密码以开始",
 			"confirm_password": "确认您的密码",
 			"yubikey_protected": "此 keystore 受 YubiKey 保护。此版本不支持将基于 TOTP 的 2FA 添加到受 YubiKey 保护的 keystore。您的 YubiKey 已经提供了比 TOTP 更强的加密身份验证。"
+		},
+		"visibility": {
+			"public": "公开",
+			"private": "私密",
+			"device": "仅本设备",
+			"public_detail": "以明文保存在区块链上——任何人都能永久读取。",
+			"private_detail": "在离开你的设备前已加密。连运营者也无法读取。",
+			"device_detail": "保留在此浏览器中，绝不会发送到任何地方。"
 		}
 	},
 	"shipment_modal": {

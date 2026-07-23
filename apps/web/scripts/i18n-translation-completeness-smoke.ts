@@ -1114,7 +1114,14 @@ const ALLOW_LIST: AllowEntry[] = [
 	{ key: 'footer.play', locale: 'fr', reason: '(b) "Streaming" is a loanword, spelled identically to English' },
 	{ key: 'settings.website_url.placeholder', locale: 'de', reason: '(c) "https://..." URL placeholder template — invariant across locales' },
 	{ key: 'settings.website_url.placeholder', locale: 'es', reason: '(c) "https://..." URL placeholder template — invariant across locales' },
-	{ key: 'settings.website_url.placeholder', locale: 'fr', reason: '(c) "https://..." URL placeholder template — invariant across locales' }
+	{ key: 'settings.website_url.placeholder', locale: 'fr', reason: '(c) "https://..." URL placeholder template — invariant across locales' },
+	// v1.8.11 — the visibility badge. "Public" is genuinely the French word for
+	// public; there is no distinct native alternative to reach for, unlike the
+	// v1.8.9 case where FR "Syndication" was replaced with the natural
+	// "Diffusion" rather than allow-listed. The sibling strings (private,
+	// device, and all three detail sentences) ARE translated, so this is a
+	// single-word coincidence and not an untranslated section.
+	{ key: 'settings.visibility.public', locale: 'fr', reason: '(b) coincidental same spelling — "Public" is the correct French word' }
 ];
 
 const allowSet = new Set(ALLOW_LIST.map((e) => `${e.key}::${e.locale}`));

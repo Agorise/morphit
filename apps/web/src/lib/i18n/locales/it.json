@@ -3609,7 +3609,8 @@
 		},
 		"given_said": "Ho detto:",
 		"received_rated": "Mi ha valutato:",
-		"average_rating_detail": "Valutazione media: {avg}"
+		"average_rating_detail": "Valutazione media: {avg}",
+		"feedback_all_excluded": "Le recensioni qui sotto non sono incluse in questo punteggio: gli account che le hanno lasciate sono stati segnalati dai nostri controlli anti-autoscambio."
 	},
 	"relative_time": {
 		"descriptive": {
@@ -4488,6 +4489,14 @@
 			"confirm_password_to_begin": "Conferma la tua password per iniziare",
 			"confirm_password": "Conferma la tua password",
 			"yubikey_protected": "Questo keystore è protetto con una YubiKey. Aggiungere 2FA basato su TOTP a un keystore protetto da YubiKey non è supportato in questa versione. La tua YubiKey fornisce già un’autenticazione crittograficamente più forte di quanto farebbe TOTP."
+		},
+		"visibility": {
+			"public": "Pubblico",
+			"private": "Privato",
+			"device": "Solo questo dispositivo",
+			"public_detail": "Salvato in chiaro sulla blockchain: chiunque può leggerlo, per sempre.",
+			"private_detail": "Cifrato prima di lasciare il tuo dispositivo. Nemmeno l'operatore può leggerlo.",
+			"device_detail": "Resta in questo browser. Non viene mai inviato altrove."
 		}
 	},
 	"shipment_modal": {

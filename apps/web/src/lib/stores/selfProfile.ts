@@ -12,7 +12,7 @@
  * leaves the previous value in place and retries, rather than blanking a good
  * avatar to the identicon (#2); the identicon fallback covers the empty case.
  */
-import { writable } from 'svelte/store';
+import { get, writable } from 'svelte/store';
 import { getProfileCachedDetailed, clearProfileCache } from '$lib/indexer/profileCache';
 import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
 
@@ -64,8 +64,13 @@ export async function refreshSelfProfile(
 			// in-memory entry, but the batch endpoint sets `max-age=90`, so the
 			// browser's own HTTP cache would keep replaying the PRE-broadcast
 			// response and the user wouldn't see the avatar they just set.
+			// `reload` on ANY retry, not just an explicit bustCache: clearing our
+			// in-memory entry alone leaves the browser's own HTTP cache (the
+			// batch endpoint sets max-age=90) free to replay the very response
+			// we are retrying because of. A retry that re-reads the same cached
+			// answer is not a retry.
 			const { profile, failed } = await getProfileCachedDetailed(account, undefined, {
-				reload: opts?.bustCache === true
+				reload: opts?.bustCache === true || attempt > 0
 			});
 			// A newer refresh (account switch) superseded this one — discard.
 			if (token !== latest) return;
@@ -87,6 +92,60 @@ export async function refreshSelfProfile(
 				return;
 			}
 			const props = extractLabelPropsFromProfile(profile);
+			// v1.8.11 (Ken) — "no profile yet" is NOT a final answer.
+			//
+			// The retry above only covered a FAILED fetch. A fetch that
+			// SUCCEEDS and reports "this account has no profile" fell straight
+			// through to here, stored a null avatar, and never looked again —
+			// so the menu sat on an identicon while the profile page, which
+			// fetches independently, showed the real avatar on the same screen.
+			// That is exactly what Ken saw, and why it "fixed itself" minutes
+			// later: only a remount plus the 90s cache expiry could dislodge it.
+			//
+			// The absence is genuinely transient for the case that matters: a
+			// profile op takes ~45-63s to be indexed, so a user who has just
+			// set an avatar — or just signed in on a fresh browser while the
+			// indexer is still catching up — legitimately reads as "no profile"
+			// for a while. So retry on absence too, bursting the cache each
+			// time (an unbusted retry would just re-read the same cached null).
+			//
+			// A user who genuinely has no avatar simply retries twice in the
+			// background and settles on the identicon, which is what they
+			// should see anyway — the cost of being wrong here is two extra
+			// requests, against an avatar that never appears.
+			const gotAvatar = props.avatarSvg !== null || props.avatarDataUri !== null;
+			// DISCRIMINATOR between the two ways "no avatar" can arrive:
+			//
+			//   • We already had one for THIS account and the server now says
+			//     none  ⇒  the user REMOVED it. Authoritative; apply at once,
+			//     or "Remove avatar" would appear not to work for 12s.
+			//   • We never had one  ⇒  absence may simply mean "not indexed
+			//     yet" (a profile op takes ~45-63s to land), so retry.
+			//
+			// Without this split, fixing Ken's stuck-identicon would have
+			// broken avatar removal — which `selfProfile.test.ts` catches.
+			const hadAvatarForThisAccount = (() => {
+				const cur = get(selfProfile);
+				return (
+					cur.account === account && (cur.avatarSvg !== null || cur.avatarDataUri !== null)
+				);
+			})();
+			if (!gotAvatar && !hadAvatarForThisAccount && attempt < SELF_PROFILE_RETRIES) {
+				// Blank FIRST if the store still holds a different account.
+				// Retrying without this would leave the PREVIOUS account's
+				// avatar in the store for the whole retry window — the exact
+				// cross-account bleed the rest of this release exists to kill.
+				// Same rule as the `failed` branch above: keep what we have for
+				// THIS account (a transient blip must not clear a good avatar),
+				// blank on an account SWITCH.
+				selfProfile.update((cur) =>
+					cur.account === account ? cur : { account, avatarSvg: null, avatarDataUri: null }
+				);
+				await new Promise((r) => setTimeout(r, SELF_PROFILE_RETRY_DELAY_MS));
+				if (token !== latest) return;
+				clearProfileCache(account);
+				continue;
+			}
 			selfProfile.set({
 				account,
 				avatarSvg: props.avatarSvg,

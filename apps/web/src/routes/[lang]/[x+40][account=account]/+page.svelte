@@ -830,6 +830,21 @@
 			<!-- cp124 H6: dormancy signal.  Surface "last traded N ago" so
 			     readers see freshness without changing the score.  Hidden
 			     when null (brand-new account, never traded). -->
+		{:else if feedbackItems.length > 0}
+			<!-- v1.8.11 (Ken) — reviews EXIST but none of them COUNT.
+			     The summary is computed over non-suppressed feedback while the
+			     list below returns every row (suppressed ones marked and shown
+			     subdued), so an account whose reviewers are all flagged scored
+			     zero while its reviews sat visibly underneath. The page then
+			     asserted "This user has not been reviewed by any counterparty"
+			     directly above two five-star reviews — Ken screenshotted
+			     exactly that, and it reads as a straightforward bug even though
+			     the filtering is working as designed.
+			     Excluding them from the score is right; claiming they do not
+			     exist is not. Say what is actually true instead. -->
+			<p class="text-sm text-ink-600 dark:text-ink-300">
+				{$_('profile.feedback_all_excluded')}
+			</p>
 		{:else}
 			<p class="text-sm text-ink-600 dark:text-ink-300">
 				{$_('profile.no_feedback_yet')}

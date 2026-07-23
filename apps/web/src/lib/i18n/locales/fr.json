@@ -3609,7 +3609,8 @@
 		},
 		"given_said": "J'ai dit :",
 		"received_rated": "M'a noté :",
-		"average_rating_detail": "Note moyenne : {avg}"
+		"average_rating_detail": "Note moyenne : {avg}",
+		"feedback_all_excluded": "Les avis ci-dessous ne sont pas inclus dans cette note : les comptes qui les ont laissés ont été signalés par nos contrôles anti-autotransaction."
 	},
 	"relative_time": {
 		"descriptive": {
@@ -4488,6 +4489,14 @@
 			"confirm_password_to_begin": "Confirmez votre mot de passe pour commencer",
 			"confirm_password": "Confirmez votre mot de passe",
 			"yubikey_protected": "Ce porte-clés est protégé par une YubiKey. L’ajout du 2FA basé sur TOTP à un porte-clés protégé par YubiKey n’est pas pris en charge dans cette version. Votre YubiKey fournit déjà une authentification cryptographiquement plus forte que ne le ferait TOTP."
+		},
+		"visibility": {
+			"public": "Public",
+			"private": "Privé",
+			"device": "Cet appareil uniquement",
+			"public_detail": "Enregistré en clair sur la blockchain : lisible par tous, de façon permanente.",
+			"private_detail": "Chiffré avant de quitter votre appareil. Même l'opérateur ne peut pas le lire.",
+			"device_detail": "Reste dans ce navigateur. N'est jamais envoyé ailleurs."
 		}
 	},
 	"shipment_modal": {

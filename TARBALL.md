@@ -1,19 +1,21 @@
 # TARBALL
 
-> # 📍 SESSION HANDOFF — START HERE (written 2026-07-23, end of the v1.8.10 session)
-> **Tarball for the new session: `morphit-v1.8.10-cp529.tar.gz`. Unpack to `/home/claude/morphit/` so the tree lives at `/home/claude/morphit/morphit/`.**
+> # 📍 SESSION HANDOFF — START HERE (written 2026-07-23, end of the v1.8.11 session)
+> **Tarball for the new session: `morphit-v1.8.11-cp533.tar.gz`. Unpack to `/home/claude/morphit/` so the tree lives at `/home/claude/morphit/morphit/`.**
 >
 > ## Where things stand
-> **v1.8.10 is RELEASE-READY IN THE TREE.** Tree is at **1.8.10** (all 19 touchpoints + 15 lockfile entries), RELEASE-NOTES-v1.8.10.md is written, and all 5 release gates are green. Battery = **544 smokes, all green**, verified against THIS exact tree; both known false in-chunk timeouts verified standalone. **Ken has NOT yet run the ELI5 ceremony** — pushing, signed-tagging, upgrading the VPS, broadcasting the on-chain payload and renewing the canary are still ahead of him. If he arrives saying the deploy is done, believe him and move on; if he arrives with new tasks instead, the tree is a clean base.
+> **v1.8.11 is RELEASE-READY IN THE TREE.** Tree is at **1.8.11** (19 touchpoints + 15 lockfile entries), RELEASE-NOTES-v1.8.11.md written, all 5 release gates green, battery **546 smokes / 0 real failures** verified against THIS tree. **Ken has NOT yet run the ELI5 ceremony** — push, signed tag, VPS upgrade, on-chain payload and canary are still ahead of him. If he says the deploy is done, believe him and move on.
 > No work is half-finished. There is no in-flight task.
 >
-> ## What v1.8.10 contained (for context, not action)
-> Ken's t.txt batch — 5 real bugs + 3 polish — plus the cp526 backup defect. The bugs: a profile showed the PREVIOUS person's reputation until a manual refresh (SvelteKit reuses the page component across /@a → /@b, and the loads were in a one-shot `onMount`); one trader carried TWO different headline scores (profile showed the raw average, order cards/chat show the composite); an old Steem-era account could sign in but never broadcast (pre-fork keys are invisible to both reverse indexes, and empty was treated as "no such account"); avatar size limits were checked against hardcoded numbers that matched neither the real cap nor each other; and the reserved-name guard blocked the RIGHTFUL OWNER of @agorise/@kencode from writing their own name. Plus the backup script banking FAILED dumps as real ones. 3 new smokes → battery 541→544. NO migrations.
+> ## What v1.8.11 was about (context, not action)
+> One arc: **cross-account contamination**. Ken signed out of @kentest3, into @kencode, and saw kentest3's settings. Four independent faults, all found from his own DevTools localStorage dumps — sign-out kept account-derived keys; the settings storage scope was resolved once at component init; `settingsSync` restored-if-present with no reset-if-absent (THE root cause — an account that never broadcast settings inherited the previous one's); and syndication was never mirrored despite a reserved slot. Plus: header CTA stuck on "Unlock" after sign-out-while-locked, avatar menu stuck on an identicon, posting key missing on order cards (a BACKFILL-timing issue, NOT pre-fork status), and a reputation card claiming an account had no reviews directly above its visible reviews.
+> **The systemic fix is `apps/web/src/lib/storage/storageKeyRegistry.ts`** — all 47 localStorage keys classified account/device/session with the two-tier rule written down, the sign-out sweep DERIVING its allow-list from it, and `storage-key-classification-smoke` failing the build on any unclassified key. It found 5 more leaks on its first run. **If you add a localStorage key, you must classify it there.**
 >
-> ## The TWO things Ken owes his box after deploying
-> 1. `sudo install -m 755 /opt/morphit/ops/backup/morphit-backup.sh /usr/local/lib/morphit/` — `morphit-ops upgrade` does NOT replace the installed backup script, so the fix that stops a failed dump being kept only lands when he re-installs.
-> 2. `ls -lS` his backup dir and DELETE anything measured in bytes rather than KB — those are failed runs the pre-fix script banked as restore points, and they are why the freshness alarm stayed quiet.
-> **DO NOT re-nag about:** the MCP docker-bridge (live on `172.18.0.1:8124`) or the interim `morphit-db-backup.timer` (retired 2026-07-22). Both are DONE.
+> ## Nothing is owed on Ken's box
+> No migrations, no config changes, no operator action — v1.8.11 is entirely browser-side. The v1.8.10 backup re-install is DONE and **backups are VERIFIED HEALTHY (2026-07-23)**: 20 daily dumps, unbroken 03:00 cadence, 205K→412K growth, `gzip -t` OK, 42 `CREATE TABLE`. **Do NOT re-raise backups, the MCP docker-bridge, or the retired interim timer.**
+>
+> ## Known false in-chunk timeouts — THREE now, verify standalone before believing them
+> `vitest-must-pass` (#201), `workspace-typecheck` (#330), and **`doctor-smoke` (#104, new in v1.8.11 — it self-builds the ops-cli bundle)**. All pass standalone. Positions shift as smokes are added, so match by NAME, never by number.
 >
 > ## Sandbox facts (unchanged)
 > No `.git` and no Postgres in the sandbox; node v22. Validation commands: `cd apps/indexer && timeout 300 npx tsc --noEmit`; `cd apps/web && npx svelte-check --tsconfig ./tsconfig.json`; web vitest **1087 pass / 5 skipped / 71 files**, indexer **649 pass / 1 skipped**, relay 250, ops-cli **37**. Battery ALWAYS in ~50-smoke chunks: `MORPHIT_SMOKE_TIMEOUT=90 bash scripts/run-smokes-chunk.sh START END`. Two smokes ALWAYS false-timeout in-chunk and MUST be re-verified standalone: `vitest-must-pass` (`timeout 700 npx tsx --tsconfig tsconfig.smoke.json apps/web/scripts/vitest-must-pass-smoke.ts`) and `workspace-typecheck` (`timeout 900 npx tsx --tsconfig tsconfig.smoke.json scripts/workspace-typecheck-smoke.ts`, from the ROOT).

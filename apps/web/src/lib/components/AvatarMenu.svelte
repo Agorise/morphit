@@ -42,7 +42,7 @@
 		broadcastSignOut,
 		lockSession
 	} from '$stores/identity';
-	import { hasPersistedKeystore } from '$crypto/persistentKeystore';
+	import { persistedKeystorePresent } from '$crypto/persistentKeystore';
 	import { unreadCount, totalUnread, markRead } from '$lib/notifications';
 	import { markAllChatRead } from '$lib/notifications/chatUnread';
 	import { portal } from '$lib/ui/portal';
@@ -76,7 +76,9 @@
 	 *  also hide Lock (no password to gate a subsequent unlock; the
 	 *  keys live on the phone), which `hasPersistedKeystore()`
 	 *  correctly returns false for since no envelope is persisted. */
-	const canLock = $derived(hasPersistedKeystore() && !$isPairedReadOnly);
+	// Reactive for the same reason as the CTA label below: a keystore written
+	// or wiped mid-session must move this immediately.
+	const canLock = $derived($persistedKeystorePresent && !$isPairedReadOnly);
 
 	/** Whether to show "Sign in to another device" (QR-pair, ADR-0022).
 	 *  Only an UNLOCKED, named session can sign the pairing challenge that
@@ -90,10 +92,17 @@
 	/** Signed-out header CTA label. When this device has a remembered
 	 *  keystore, clicking it lands on the welcome-back UNLOCK screen
 	 *  (not a fresh import), so the button reads "Unlock" instead of
-	 *  "Start". Keyed off $hasAnySession so it re-evaluates when the
-	 *  session is locked (e.g. after a refresh) or restored. */
+	 *  "Start".
+	 *
+	 *  v1.8.11 (Ken) — this used to call `hasPersistedKeystore()` directly and
+	 *  rely on $hasAnySession to retrigger. That covers LOCK (session flips
+	 *  true→false) but NOT signing out while ALREADY locked: $hasAnySession is
+	 *  false on both sides, so the derived never re-ran and the button stayed
+	 *  on "Unlock" after the keystore had been wiped. Reading the reactive
+	 *  $persistedKeystorePresent store instead makes the label track the real
+	 *  keystore state on every path. */
 	const signedOutCtaLabel = $derived(
-		!$hasAnySession && hasPersistedKeystore() ? $_('common.unlock') : $_('nav.start')
+		!$hasAnySession && $persistedKeystorePresent ? $_('common.unlock') : $_('nav.start')
 	);
 
 	/** Whether to show the View profile menu item.  Sally finding

@@ -29,13 +29,13 @@ function read(p: string): string {
 
 let passed = 0;
 let failed = 0;
-function check(label: string, cond: boolean): void {
+function check(label: string, cond: boolean, detail = ''): void {
 	if (cond) {
 		passed++;
 		console.log(`  \u2713 ${label}`);
 	} else {
 		failed++;
-		console.log(`  \u2717 ${label}`);
+		console.log(`  \u2717 ${label}${detail ? `: ${detail}` : ''}`);
 	}
 }
 
@@ -46,10 +46,28 @@ const settings = read(join(webRoot, 'src/routes/[lang]/settings/+page.svelte'));
 const bases = ['morphit.displayName', 'morphit.nostrUrl', 'morphit.streamingUrl', 'morphit.websiteUrl', 'morphit.shortBio'];
 
 // 1. The per-account suffix is derived from the logged-in account.
+// v1.8.11 — this used to require the scope be a plain `const … = browser ?
+// (getUserBlurtAccount() …`, i.e. resolved ONCE at component init. That is
+// precisely the bug Ken hit: sign out and back in as someone else without a
+// page reload and the component never remounts, so the suffix stays pinned to
+// the PREVIOUS account and the new person reads their drafts. The requirement
+// is now the STRONGER one — the scope must be REACTIVE — so the assertion
+// pins $derived rather than the const form it replaced.
 check(
-	'profile-key suffix derives from getUserBlurtAccount()',
-	/PROFILE_KEY_SCOPE\s*=\s*browser\s*\?\s*\(getUserBlurtAccount\(\)/.test(settings) &&
-		/PROFILE_KEY_SUFFIX\s*=\s*PROFILE_KEY_SCOPE\s*\?\s*`\.\$\{PROFILE_KEY_SCOPE\}`/.test(settings)
+	'profile-key scope is REACTIVE (re-resolves on sign-out/sign-in), not resolved once',
+	/PROFILE_KEY_SCOPE\s*=\s*\$derived/.test(settings),
+	'a const captured at init keeps the previous account\'s suffix across an in-SPA account switch'
+);
+check(
+	'profile-key scope still derives from getUserBlurtAccount()',
+	/PROFILE_KEY_SCOPE\s*=\s*\$derived[\s\S]{0,400}?getUserBlurtAccount\(\)/.test(settings)
+);
+check(
+	'the suffix, and every key built from it, are reactive too',
+	/PROFILE_KEY_SUFFIX\s*=\s*\$derived\(PROFILE_KEY_SCOPE\s*\?\s*`\.\$\{PROFILE_KEY_SCOPE\}`/.test(
+		settings
+	),
+	'a const suffix would freeze at the first account, reintroducing the bug one layer down'
 );
 
 // 2. Each of the four keys is defined WITH the scope suffix.

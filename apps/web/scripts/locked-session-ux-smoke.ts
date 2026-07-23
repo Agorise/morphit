@@ -41,20 +41,36 @@ const en = JSON.parse(read('src', 'lib', 'i18n', 'locales', 'en.json')) as Recor
 
 let failures = 0;
 let checks = 0;
-function check(name: string, cond: boolean): void {
+function check(name: string, cond: boolean, detail = ''): void {
 	checks++;
 	if (cond) {
 		console.log(`  ✓ ${name}`);
 	} else {
 		failures++;
-		console.log(`  ✗ ${name}`);
+		console.log(`  ✗ ${name}${detail ? `: ${detail}` : ''}`);
 	}
 }
 
 // ── 1. Header CTA: conditional Unlock vs Start ───────────────────────────────
+// v1.8.11 — this required the label read `hasPersistedKeystore()`, a plain
+// localStorage call. Inside a $derived that only re-runs when $hasAnySession
+// changes, it covers LOCK (session flips true→false) but NOT signing out while
+// ALREADY locked: $hasAnySession is false on both sides, the derived never
+// re-runs, and the button stays on "Unlock" after the keystore has been wiped.
+// That path is reachable — the welcome-back screen offers sign-out. The label
+// now reads the reactive $persistedKeystorePresent store, so the assertion
+// requires the reactive source rather than the function it replaced.
 check(
-	'AvatarMenu derives a signed-out CTA label gated on hasPersistedKeystore()',
-	/signedOutCtaLabel\s*=\s*\$derived\([\s\S]*?hasPersistedKeystore\(\)/.test(avatar)
+	'AvatarMenu CTA reads the REACTIVE keystore store, not a one-shot localStorage call',
+	/signedOutCtaLabel\s*=\s*\$derived\([\s\S]*?\$persistedKeystorePresent/.test(avatar),
+	'hasPersistedKeystore() cannot retrigger a derived, so sign-out-while-locked left the label stale'
+);
+const keystoreSrc = read('src', 'lib', 'crypto', 'persistentKeystore.ts');
+check(
+	'the keystore store exists and is notified by its mutators',
+	/export const persistedKeystorePresent/.test(keystoreSrc) &&
+		(keystoreSrc.match(/notifyKeystoreChanged\(\)/g) ?? []).length >= 4,
+	'a store nobody updates is worse than the function it replaced — every write/clear path must notify'
 );
 check(
 	'signed-out CTA chooses common.unlock (remembered) vs nav.start (fresh)',

@@ -20,6 +20,7 @@ import { broadcastSettings, type UserSettingsState } from '$blurt/ops/settings';
 import {
 	userPreferences,
 	setPreference,
+	clearPreferences,
 	getPreferencesSnapshot,
 	type UserPreferences
 } from '$stores/userPreferences';
@@ -30,6 +31,7 @@ import {
 	setChannel,
 	setPushPrivacy,
 	setQuietHours,
+	resetNotificationPrefsToDefaults,
 	type NotificationPrefs
 } from '$lib/notifications/preferences';
 import {
@@ -37,6 +39,12 @@ import {
 	enableCrossPageTradeEvents,
 	disableCrossPageTradeEvents
 } from '$lib/notifications/crossPageTradeEvents';
+import {
+	firstTradeAnnounce,
+	orderBlogDefault,
+	setFirstTradeAnnounce,
+	setOrderBlogDefault
+} from '$lib/utils/syndicationPrefs';
 
 /** Coalesce rapid consecutive settings edits into a single broadcast. */
 const BROADCAST_DEBOUNCE_MS = 4000;
@@ -56,6 +64,15 @@ let broadcastTimer: ReturnType<typeof setTimeout> | null = null;
 function aggregate(): UserSettingsState {
 	const n = get(notificationPrefs);
 	return {
+		// v1.8.11 — syndication joins the mirror. The blob shape has reserved a
+		// `syndication` slot since v1.5.0 but nothing ever filled it, so these
+		// two account-level opt-ins lived only in GLOBAL localStorage keys:
+		// they leaked between accounts on a shared browser and did not follow
+		// the user to a new one, unlike every other setting on that screen.
+		syndication: {
+			firstTradeAnnounce: get(firstTradeAnnounce),
+			orderBlogDefault: get(orderBlogDefault)
+		},
 		preferences: getPreferencesSnapshot(),
 		hidden: [...get(hiddenAccounts)],
 		notifications: {
@@ -98,6 +115,41 @@ function scheduleBroadcast(): void {
  *  `ready === false` so these writes never trigger a re-broadcast. Every field
  *  is validated + optional — an absent/garbage section leaves the device value
  *  untouched. */
+/**
+ * Return every mirrored store to factory defaults.
+ *
+ * v1.8.11 (Ken) — THE BUG THIS FIXES. `applyRestored` below only ever applies
+ * the fields a blob actually CONTAINS, and it is only reached when a blob
+ * exists at all. So an account that has never broadcast its settings — a brand
+ * new one, or one that simply hasn't changed anything yet — restored NOTHING,
+ * and these device-local stores silently kept whatever the PREVIOUS account
+ * left in them. `morphit.userPreferences.v1` is not even account-scoped, so
+ * Ken watched his @kentest3 region ("Your place or mine, whatever.") appear in
+ * a fresh @kencode session.
+ *
+ * Resetting FIRST makes "nothing on chain" mean factory defaults rather than
+ * "inherit the last person". It also fixes the subtler PARTIAL case: a blob
+ * holding only `preferences` used to leave the previous account's notification
+ * settings and hidden-account list untouched.
+ *
+ * Called inside the `ready` gate, so these writes never echo back out as a
+ * broadcast and cannot overwrite the on-chain blob with defaults.
+ */
+function resetMirroredStores(): void {
+	clearPreferences();
+	clearAllHidden();
+	resetNotificationPrefsToDefaults();
+	// Cross-page trade events default to OFF: it is a privacy-affecting
+	// convenience, so a fresh account must opt IN rather than inherit an
+	// opt-in it never made.
+	disableCrossPageTradeEvents();
+	// Both syndication opt-ins default OFF. They publish on the user's behalf,
+	// so a fresh account must opt IN rather than inherit an opt-in it never
+	// made — the same reasoning as cross-page trade events above.
+	setFirstTradeAnnounce(false);
+	setOrderBlogDefault(false);
+}
+
 function applyRestored(state: UserSettingsState): void {
 	if (state.preferences && typeof state.preferences === 'object') {
 		const p = state.preferences as Partial<UserPreferences>;
@@ -132,6 +184,11 @@ function applyRestored(state: UserSettingsState): void {
 			setQuietHours(patch);
 		}
 	}
+	if (isObj(state.syndication)) {
+		const sy = state.syndication;
+		if (typeof sy.firstTradeAnnounce === 'boolean') setFirstTradeAnnounce(sy.firstTradeAnnounce);
+		if (typeof sy.orderBlogDefault === 'boolean') setOrderBlogDefault(sy.orderBlogDefault);
+	}
 	if (isObj(state.privacy)) {
 		const pv = state.privacy;
 		if (typeof pv.crossPageTradeEvents === 'boolean') {
@@ -155,13 +212,19 @@ export function initSettingsSync(): () => void {
 		userPreferences.subscribe(() => scheduleBroadcast()),
 		hiddenAccounts.subscribe(() => scheduleBroadcast()),
 		notificationPrefs.subscribe(() => scheduleBroadcast()),
-		crossPageTradeEventsEnabled.subscribe(() => scheduleBroadcast())
+		crossPageTradeEventsEnabled.subscribe(() => scheduleBroadcast()),
+		firstTradeAnnounce.subscribe(() => scheduleBroadcast()),
+		orderBlogDefault.subscribe(() => scheduleBroadcast())
 	];
 
 	void (async () => {
 		const id = get(identity);
 		const account = getUserBlurtAccount();
 		if (id.state === 'unlocked' && account) {
+			// Clear the previous account's settings BEFORE restoring this one's.
+			// Unconditional on purpose: the no-blob and partial-blob cases are
+			// exactly the ones that used to inherit. See resetMirroredStores().
+			resetMirroredStores();
 			try {
 				const r = await getUserSettings(account);
 				if (r.ok && r.data.enc !== null) {
