@@ -166,6 +166,23 @@ export const notificationPrefs: Readable<NotificationPrefs> = {
  *  stores on a push subscription as its `muted_categories` blocklist
  *  (cp450 GAP A). Empty = nothing muted = every category on. Order is
  *  stable so an unchanged pref set produces an unchanged payload. */
+/** Reset every notification preference to its factory default.
+ *
+ *  v1.8.11 — needed by `settingsSync`, which restores the on-chain settings
+ *  blob on sign-in. That restore only ever APPLIED fields the blob contained,
+ *  so an account with no blob (or a partial one) silently inherited whatever
+ *  the PREVIOUS account had left in these device-local stores. Resetting to
+ *  defaults first makes "no settings on chain" mean factory defaults, which is
+ *  what a fresh account should see. */
+export function resetNotificationPrefsToDefaults(): void {
+	// Match the mutators above: write through `internal` (the exported store is
+	// a subscribe-only facade) and persist, so the reset survives a reload
+	// rather than being silently re-hydrated from the previous account's stored values.
+	const next: NotificationPrefs = structuredClone(DEFAULTS);
+	persist(next);
+	internal.set(next);
+}
+
 export function mutedCategoriesFromPrefs(p: NotificationPrefs): string[] {
 	return (['order', 'chat', 'feedback'] as const).filter((c) => !p.categories[c]);
 }

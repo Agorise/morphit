@@ -474,6 +474,8 @@ SMOKES=(
 	"apps/web:txid-hash-clarity-smoke"
 	"apps/web:chat-header-reputation-smoke"
 	"apps/web:avatar-size-thresholds-smoke"
+	"apps/web:storage-key-classification-smoke"
+	"apps/web:settings-visibility-scope-smoke"
 	"apps/web:profile-account-change-reload-smoke"
 	"apps/web:profile-freshness-smoke"
 	"apps/web:profile-website-url-smoke"

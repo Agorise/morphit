@@ -3609,7 +3609,8 @@
 		},
 		"given_said": "Dije:",
 		"received_rated": "Me calificó:",
-		"average_rating_detail": "Valoración media: {avg}"
+		"average_rating_detail": "Valoración media: {avg}",
+		"feedback_all_excluded": "Las reseñas de abajo no se incluyen en esta puntuación: las cuentas que las dejaron fueron marcadas por nuestras comprobaciones de autocomercio."
 	},
 	"relative_time": {
 		"descriptive": {
@@ -4488,6 +4489,14 @@
 			"confirm_password_to_begin": "Confirma tu contraseña para comenzar",
 			"confirm_password": "Confirma tu contraseña",
 			"yubikey_protected": "Este llavero está protegido con una YubiKey. Agregar 2FA basada en TOTP a un llavero protegido por YubiKey no es compatible en esta versión. Tu YubiKey ya proporciona una autenticación criptográficamente más fuerte que la que TOTP haría."
+		},
+		"visibility": {
+			"public": "Público",
+			"private": "Privado",
+			"device": "Solo este dispositivo",
+			"public_detail": "Se guarda abiertamente en la cadena de bloques: cualquiera puede leerlo, de forma permanente.",
+			"private_detail": "Se cifra antes de salir de tu dispositivo. Ni siquiera el operador puede leerlo.",
+			"device_detail": "Permanece en este navegador. Nunca se envía a ninguna parte."
 		}
 	},
 	"shipment_modal": {
