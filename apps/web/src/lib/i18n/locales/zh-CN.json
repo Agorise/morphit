@@ -2438,7 +2438,8 @@
 				"manual_account_label": "你的 Blurt 用户名",
 				"manual_account_placeholder": "例如 alice",
 				"manual_account_hint": "我们无法通过此密钥检测到你的账户——它可能是在 Blurt 出现之前创建的。请输入你的 Blurt 用户名，以便确认此密钥属于该账户。",
-				"manual_account_invalid": "该用户名与此密钥不匹配。请检查拼写，或确认你粘贴的是正确的发帖私钥。"
+				"manual_account_invalid": "该用户名与此密钥不匹配。请检查拼写，或确认你粘贴的是正确的发帖私钥。",
+				"detected_account": "已识别——此密钥属于 @{account}。无需填写用户名。"
 			},
 			"error": {
 				"seed_word_count": "Blurt 助记词恰好是 12 个单词——你输入了 {count} 个。请确保 12 个单词齐全，每个之间用一个空格分隔。",
@@ -3610,7 +3611,8 @@
 		"given_said": "我说：",
 		"received_rated": "给我的评分：",
 		"average_rating_detail": "平均评分：{avg}",
-		"feedback_all_excluded": "下面的评价未计入此评分——留下这些评价的账户已被我们的自我交易检查标记。"
+		"feedback_all_excluded": "下面的评价未计入此评分——留下这些评价的账户已被我们的自我交易检查标记。",
+		"headline_is_average": "平均评分"
 	},
 	"relative_time": {
 		"descriptive": {

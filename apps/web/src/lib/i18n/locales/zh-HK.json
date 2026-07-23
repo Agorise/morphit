@@ -2438,7 +2438,8 @@
 				"manual_account_label": "你的 Blurt 用戶名",
 				"manual_account_placeholder": "例如 alice",
 				"manual_account_hint": "我們無法透過此密鑰偵測到你的帳戶——它可能是喺 Blurt 出現之前建立嘅。請輸入你嘅 Blurt 用戶名，以便確認此密鑰屬於該帳戶。",
-				"manual_account_invalid": "該用戶名與此密鑰不符。請檢查拼寫，或確認你貼上嘅係正確嘅發文私鑰。"
+				"manual_account_invalid": "該用戶名與此密鑰不符。請檢查拼寫，或確認你貼上嘅係正確嘅發文私鑰。",
+				"detected_account": "已識別——此密鑰屬於 @{account}。無需填寫用戶名。"
 			},
 			"error": {
 				"seed_word_count": "Blurt 助記詞剛好是 12 個單詞——你輸入了 {count} 個。請確保 12 個單詞齊全，每個之間用一個空格分隔。",
@@ -3610,7 +3611,8 @@
 		"given_said": "我話：",
 		"received_rated": "畀我嘅評分：",
 		"average_rating_detail": "平均評分：{avg}",
-		"feedback_all_excluded": "下面的評價未計入此評分——留下這些評價的帳戶已被我們的自我交易檢查標記。"
+		"feedback_all_excluded": "下面的評價未計入此評分——留下這些評價的帳戶已被我們的自我交易檢查標記。",
+		"headline_is_average": "平均評分"
 	},
 	"relative_time": {
 		"descriptive": {

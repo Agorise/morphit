@@ -2438,7 +2438,8 @@
 				"manual_account_label": "Dein Blurt-Benutzername",
 				"manual_account_placeholder": "z. B. alice",
 				"manual_account_hint": "Wir konnten dein Konto anhand dieses Schlüssels nicht erkennen — es stammt vielleicht aus der Zeit vor Blurt. Gib deinen Blurt-Benutzernamen ein, damit wir bestätigen können, dass der Schlüssel dazugehört.",
-				"manual_account_invalid": "Dieser Benutzername passt nicht zu diesem Schlüssel. Prüfe die Schreibweise oder ob du den richtigen privaten Posting-Schlüssel eingefügt hast."
+				"manual_account_invalid": "Dieser Benutzername passt nicht zu diesem Schlüssel. Prüfe die Schreibweise oder ob du den richtigen privaten Posting-Schlüssel eingefügt hast.",
+				"detected_account": "Erkannt – dieser Schlüssel gehört zu @{account}. Kein Benutzername nötig."
 			},
 			"error": {
 				"seed_word_count": "Eine Blurt-Seed-Phrase besteht aus genau 12 Wörtern — du hast {count} eingegeben. Stelle sicher, dass alle 12 vorhanden sind, jeweils durch ein einzelnes Leerzeichen getrennt.",
@@ -3610,7 +3611,8 @@
 		"given_said": "Ich sagte:",
 		"received_rated": "Hat mich bewertet:",
 		"average_rating_detail": "Durchschnittsbewertung: {avg}",
-		"feedback_all_excluded": "Die Bewertungen unten fließen nicht in diese Punktzahl ein – die Konten, die sie hinterlassen haben, wurden von unseren Eigengeschäfts-Prüfungen markiert."
+		"feedback_all_excluded": "Die Bewertungen unten fließen nicht in diese Punktzahl ein – die Konten, die sie hinterlassen haben, wurden von unseren Eigengeschäfts-Prüfungen markiert.",
+		"headline_is_average": "Durchschnittsbewertung"
 	},
 	"relative_time": {
 		"descriptive": {

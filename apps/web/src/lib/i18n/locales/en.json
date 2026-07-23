@@ -2438,7 +2438,8 @@
 				"manual_account_label": "Your Blurt username",
 				"manual_account_placeholder": "e.g. alice",
 				"manual_account_hint": "We couldn't detect your account from this key — it may be from before Blurt existed. Type your Blurt username so we can confirm the key belongs to it.",
-				"manual_account_invalid": "That username doesn't match this key. Check the spelling, or that you pasted the right Posting Private Key."
+				"manual_account_invalid": "That username doesn't match this key. Check the spelling, or that you pasted the right Posting Private Key.",
+				"detected_account": "Recognised — this key belongs to @{account}. No username needed."
 			},
 			"error": {
 				"seed_word_count": "A Blurt seed phrase is exactly 12 words — you've entered {count}. Make sure all 12 are present, each separated by a single space.",
@@ -3610,7 +3611,8 @@
 		"given_said": "I said:",
 		"received_rated": "Rated me:",
 		"average_rating_detail": "Average rating: {avg}",
-		"feedback_all_excluded": "The reviews below aren't included in this score — the accounts that left them were flagged by our self-dealing checks."
+		"feedback_all_excluded": "The reviews below aren't included in this score — the accounts that left them were flagged by our self-dealing checks.",
+		"headline_is_average": "Average rating"
 	},
 	"relative_time": {
 		"descriptive": {
