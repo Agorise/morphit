@@ -22,7 +22,7 @@
  */
 
 import { getUserBlurtAccount, BroadcastError } from '$blurt/ops/profile';
-import { resolveBroadcastAccount } from '../accountBinding';
+import { assertKeyControlsAccount, resolveBroadcastAccount } from '../accountBinding';
 import { OP_IDS } from '$net/config';
 import type { LiveIdentity } from '$crypto/keygen';
 import type { Transaction, SignedTransaction } from '@beblurt/dblurt';
@@ -114,6 +114,17 @@ export async function broadcastNewOrder(
 	// account is resolved from the signing key, not from an origin-wide
 	// localStorage value another tab can overwrite. See accountBinding.ts.
 	const account = await resolveBroadcastAccount(live, hint);
+	// Prove the session key really is an authority on this account BEFORE any
+	// money moves. Every other order path reaches this check inside
+	// `broadcastCustomJson`, but the BLURT-fee path below signs with the ACTIVE
+	// key and broadcasts a prepared transaction directly, so it would otherwise
+	// skip it entirely. That matters more since v1.8.10: `resolveBroadcastAccount`
+	// now falls back to the user-supplied hint for pre-fork accounts that neither
+	// reverse index can see, and this forward check against the account's real
+	// on-chain authority is what makes that fallback safe. Without it, a wrong
+	// hint here would be caught only by the chain — after the user had already
+	// approved a fee transfer, and in language nobody can act on.
+	await assertKeyControlsAccount(live, account);
 
 	const feeMethod = input.feeMethod ?? 'blurt';
 	const permlink = makeOrderPermlink(input.side, input.asset, input.fiatCurrency);

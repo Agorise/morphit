@@ -3608,7 +3608,8 @@
 			"qr_invalid": "Dieser QR enthielt kein Blurt-Konto. Versuche einen anderen."
 		},
 		"given_said": "Ich sagte:",
-		"received_rated": "Hat mich bewertet:"
+		"received_rated": "Hat mich bewertet:",
+		"average_rating_detail": "Durchschnittsbewertung: {avg}"
 	},
 	"relative_time": {
 		"descriptive": {
@@ -4210,7 +4211,8 @@
 				"processing_failed": "Konnten dieses Bild nicht verarbeiten. Probiere eine andere Datei."
 			},
 			"remove_confirm_title": "Avatar entfernen?",
-			"remove_confirm_body": "Dadurch wird ein Profil-Update gesendet, das deinen Avatar auf der Blockchain entfernt. Du kannst jederzeit einen neuen hochladen."
+			"remove_confirm_body": "Dadurch wird ein Profil-Update gesendet, das deinen Avatar auf der Blockchain entfernt. Du kannst jederzeit einen neuen hochladen.",
+			"preview_too_large": "Zu groß zum Senden — das Maximum ist {cap}. Versuche ein einfacheres Bild oder eine kleinere Quelle."
 		},
 		"blocked_accounts": {
 			"heading": "Blockierte Konten",

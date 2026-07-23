@@ -36,10 +36,13 @@
 #                             auth, no password).
 #   2. pg_dump the indexer DB, gzip the output, optionally
 #      pipe through `age -r "$AGE_RECIPIENT"` for encryption,
-#      write to a .partial file first.
-#   3. Atomically rename the .partial → final filename on
-#      success.  Any earlier failure leaves a .partial behind
-#      that the next run will see and clean up.
+#      write to a .partial file first.  pg_dump's OWN exit status
+#      is recorded through a status file, because POSIX sh has no
+#      `pipefail` and the pipeline otherwise reports gzip's 0.
+#   3. Atomically rename the .partial → final filename ONLY when
+#      the dump exited 0 AND produced more than an empty stream.
+#      Any earlier failure leaves a .partial behind that the next
+#      run will see and clean up.
 #   4. If REMOTE_DESTINATION is set, rsync the final file off
 #      the host (using SSH_KEY if provided).
 #   5. Prune local backups older than $RETAIN_DAYS days.
@@ -69,6 +72,10 @@
 #
 # Failure modes the script defends against:
 #   - Half-written backup file (.partial → atomic rename)
+#   - A FAILED dump being kept as a real backup (pg_dump's status
+#     is captured explicitly; the pipeline's own status is gzip's,
+#     which is 0 even when pg_dump died, and gzip-of-nothing is
+#     ~20 bytes so an emptiness check alone cannot see it)
 #   - World-readable backups leaking DB contents (umask 077,
 #     explicit chmod 600)
 #   - Backup-dir not yet created (mkdir -p, chmod 700)
@@ -269,18 +276,62 @@ fi
 if ( set -o pipefail ) 2>/dev/null; then
 	set -o pipefail
 fi
-if [ -n "$AGE_RECIPIENT" ]; then
+#
+# ...BUT THE PROBE IS FALSE ON THE PLATFORM WE ACTUALLY TARGET, so it
+# cannot be the only defence.  Debian/Ubuntu build dash WITHOUT pipefail
+# (verified at runtime on 0.5.12-6ubuntu5: `set -o pipefail` is rejected),
+# so on every production Morphit box the pipeline reports GZIP's status --
+# which is 0 even when pg_dump died -- and `set -e` sees a clean run.
+#
+# The `-s` guard below could not save it either: gzip of a FAILED dump is
+# still a valid ~20-byte member, and `age` of that is ~200 bytes, so both
+# are NON-empty.  A refused DB connection therefore wrote a 20-byte file,
+# renamed it to a real backup name, printed "wrote ... (20 bytes)" and
+# exited 0 -- and `morphit-ops health` then reported that as a FRESH
+# backup.  Truncated garbage is worse than nothing precisely because it
+# also silences the freshness alarm added to catch nothing.
+#
+# So record pg_dump's OWN exit status through a file the pipeline cannot
+# swallow, and size the artifact against what THIS pipeline yields for an
+# empty dump.
+DUMP_STATUS="$BACKUP_DIR/.morphit-backup-status.$$"
+rm -f "$DUMP_STATUS"
+
+run_dump() {
+	# The `&&`/`||` list is load-bearing: a bare `$DUMP_CMD ...` would trip
+	# `set -e` and kill this subshell BEFORE the status file is written,
+	# leaving us unable to tell "dump failed" from "shell died".
 	# shellcheck disable=SC2086  # DUMP_CMD/PG_ARGS deliberately word-split
-	$DUMP_CMD "$DB_NAME" | gzip | age -r "$AGE_RECIPIENT" > "$TMPFILE"
+	$DUMP_CMD "$DB_NAME" && dump_rc=0 || dump_rc=$?
+	echo "$dump_rc" > "$DUMP_STATUS"
+}
+
+if [ -n "$AGE_RECIPIENT" ]; then
+	run_dump | gzip | age -r "$AGE_RECIPIENT" > "$TMPFILE"
+	EMPTY_SIZE=$(printf '' | gzip | age -r "$AGE_RECIPIENT" | wc -c | tr -d ' ')
 else
-	# shellcheck disable=SC2086
-	$DUMP_CMD "$DB_NAME" | gzip > "$TMPFILE"
+	run_dump | gzip > "$TMPFILE"
+	EMPTY_SIZE=$(printf '' | gzip | wc -c | tr -d ' ')
 fi
-# Belt-and-braces: if the pipeline produced an empty file the dump
-# silently failed (pg_dump returned 0 but couldn't connect, etc.).
-# Refuse to rename an empty file to a real backup name.
-if [ ! -s "$TMPFILE" ]; then
-	echo "morphit-backup: error: produced an empty backup file at $TMPFILE — pg_dump likely failed silently" >&2
+
+# A missing status file means the dump subshell never reached its final
+# line (killed, OOM, disk full) -- treat that as failure, never success.
+DUMP_RC=$(cat "$DUMP_STATUS" 2>/dev/null || echo 127)
+rm -f "$DUMP_STATUS"
+if [ "$DUMP_RC" != "0" ]; then
+	echo "morphit-backup: error: pg_dump exited $DUMP_RC — refusing to keep a truncated backup" >&2
+	echo "  The pipeline's own status is gzip's, so this is checked explicitly (see the note above)." >&2
+	echo "  Hint: run the dump by hand to see the real error, e.g. \`$DUMP_CMD $DB_NAME >/dev/null\`" >&2
+	rm -f "$TMPFILE"
+	exit 4
+fi
+
+# Belt-and-braces: pg_dump CAN exit 0 having emitted nothing at all.
+# Compare against the empty-stream baseline rather than a bare `-s`,
+# because gzip/age of nothing is NOT zero bytes.
+ACTUAL_SIZE=$(wc -c < "$TMPFILE" | tr -d ' ')
+if [ "$ACTUAL_SIZE" -le "$EMPTY_SIZE" ]; then
+	echo "morphit-backup: error: dump produced no data — $ACTUAL_SIZE bytes at $TMPFILE, at or below the ${EMPTY_SIZE}-byte empty-stream baseline" >&2
 	rm -f "$TMPFILE"
 	exit 4
 fi
@@ -310,6 +361,10 @@ find "$BACKUP_DIR" -maxdepth 1 \( -name 'morphit-*.sql.gz' -o -name 'morphit-*.s
 # days).  Don't touch today's .partial — that's the current run's
 # tmpfile, but at this point we've already mv'd it out.
 find "$BACKUP_DIR" -maxdepth 1 -name '*.partial' -mtime +1 -delete
+
+# Same for a dump-status file leaked by a run that died between the
+# pipeline and the status read (this run removes its own on both paths).
+find "$BACKUP_DIR" -maxdepth 1 -name '.morphit-backup-status.*' -mtime +1 -delete
 
 # ─── Success ──────────────────────────────────────────────────────────
 SIZE=$(stat -c '%s' "$OUTFILE" 2>/dev/null || stat -f '%z' "$OUTFILE")

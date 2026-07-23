@@ -3608,7 +3608,8 @@
 			"qr_invalid": "Quel QR non conteneva un account Blurt. Provane un altro."
 		},
 		"given_said": "Ho detto:",
-		"received_rated": "Mi ha valutato:"
+		"received_rated": "Mi ha valutato:",
+		"average_rating_detail": "Valutazione media: {avg}"
 	},
 	"relative_time": {
 		"descriptive": {
@@ -4210,7 +4211,8 @@
 				"processing_failed": "Non siamo riusciti a processare questa immagine. Prova un altro file."
 			},
 			"remove_confirm_title": "Rimuovere il tuo avatar?",
-			"remove_confirm_body": "Questo trasmette un aggiornamento del profilo che cancella il tuo avatar sulla chain. Puoi caricarne uno nuovo quando vuoi."
+			"remove_confirm_body": "Questo trasmette un aggiornamento del profilo che cancella il tuo avatar sulla chain. Puoi caricarne uno nuovo quando vuoi.",
+			"preview_too_large": "Troppo grande per la trasmissione — il massimo è {cap}. Prova un'immagine più semplice o una sorgente più piccola."
 		},
 		"blocked_accounts": {
 			"heading": "Account bloccati",

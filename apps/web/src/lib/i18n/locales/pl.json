@@ -3608,7 +3608,8 @@
 			"qr_invalid": "Ten kod QR nie zawierał konta Blurt. Spróbuj innego."
 		},
 		"given_said": "Napisałem(-am):",
-		"received_rated": "Ocenił(a) mnie:"
+		"received_rated": "Ocenił(a) mnie:",
+		"average_rating_detail": "Średnia ocena: {avg}"
 	},
 	"relative_time": {
 		"descriptive": {
@@ -4210,7 +4211,8 @@
 				"processing_failed": "Nie udało się przetworzyć tego obrazu. Wypróbuj inny plik."
 			},
 			"remove_confirm_title": "Usunąć Twój awatar?",
-			"remove_confirm_body": "Spowoduje to rozgłoszenie aktualizacji profilu, która usunie Twój awatar z łańcucha. W każdej chwili możesz wgrać nowy."
+			"remove_confirm_body": "Spowoduje to rozgłoszenie aktualizacji profilu, która usunie Twój awatar z łańcucha. W każdej chwili możesz wgrać nowy.",
+			"preview_too_large": "Za duży, aby wysłać — maksimum to {cap}. Spróbuj prostszego obrazu lub mniejszego źródła."
 		},
 		"blocked_accounts": {
 			"heading": "Zablokowane konta",

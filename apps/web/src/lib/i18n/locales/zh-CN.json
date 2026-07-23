@@ -3608,7 +3608,8 @@
 			"qr_invalid": "该二维码不包含 Blurt 账户。请换一个。"
 		},
 		"given_said": "我说：",
-		"received_rated": "给我的评分："
+		"received_rated": "给我的评分：",
+		"average_rating_detail": "平均评分：{avg}"
 	},
 	"relative_time": {
 		"descriptive": {
@@ -4210,7 +4211,8 @@
 				"processing_failed": "无法处理此图片。请尝试其他文件。"
 			},
 			"remove_confirm_title": "移除您的头像？",
-			"remove_confirm_body": "这将广播一次资料更新，清除链上的头像。您随时可以上传新的头像。"
+			"remove_confirm_body": "这将广播一次资料更新，清除链上的头像。您随时可以上传新的头像。",
+			"preview_too_large": "太大，无法广播——上限为 {cap}。请尝试更简单的图片或更小的源文件。"
 		},
 		"blocked_accounts": {
 			"heading": "已屏蔽账户",

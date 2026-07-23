@@ -782,6 +782,18 @@ export const BACKUP_STALE_AFTER_MS = 36 * 60 * 60 * 1000;
  *  between "the timer fired" and "the newest dump" means it fired and produced
  *  nothing — the silent-failure signature. */
 export const BACKUP_TRIGGER_SLACK_MS = 15 * 60 * 1000;
+/** Below this, the file cannot be a dump of the Morphit schema.
+ *
+ *  WHY (cp526). Before the status-capture fix in `ops/backup/morphit-backup.sh`,
+ *  a FAILED pg_dump still left a valid ~20-byte gzip member behind, which the
+ *  script renamed to a real backup name and reported as written. Freshness
+ *  alone therefore CANNOT be trusted: the dash bug's successor produces a dump
+ *  that is perfectly recent and completely useless, and this check is what
+ *  stops us blessing it. The floor is deliberately far below anything real —
+ *  the indexer schema alone gzips to tens of KB, so a legitimate dump is never
+ *  within two orders of magnitude of 1 KiB and false positives are impossible.
+ *  Any operator who ran v1.8.4–v1.8.9 through a DB hiccup has these on disk. */
+export const BACKUP_MIN_PLAUSIBLE_BYTES = 1024;
 
 /** PURE given the facts and the clock. */
 export function checkBackups(facts: BackupFacts, now: Date): BackupStatus {
@@ -833,6 +845,23 @@ export function checkBackups(facts: BackupFacts, now: Date): BackupStatus {
 			newestName: null,
 			ageMs: null,
 			bytes: null
+		};
+	}
+	// A dump too small to BE a dump. Checked before the timing rules because it
+	// is a direct fact about the artefact rather than an inference from clocks,
+	// and because a truncated dump is typically brand new — it would otherwise
+	// sail through both the trigger and staleness checks and read as "fresh".
+	if (facts.newest.bytes < BACKUP_MIN_PLAUSIBLE_BYTES) {
+		return {
+			state: 'failing',
+			detail:
+				`the newest dump is only ${facts.newest.bytes} bytes — far too small to be a real ` +
+				'dump, so a run failed and kept the fragment; check ' +
+				'`sudo journalctl -u morphit-backup.service -e --no-pager`, and delete the ' +
+				'undersized files so they cannot be mistaken for restore points',
+			newestName,
+			ageMs,
+			bytes
 		};
 	}
 	// Fired, but left nothing newer behind: the exact shape of the dash bug.

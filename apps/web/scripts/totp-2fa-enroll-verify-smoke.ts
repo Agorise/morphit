@@ -41,6 +41,14 @@ const { verifyTotpOrBackup } = await import('../src/lib/crypto/keystoreTotp.ts')
 const { encryptIdentity, decryptIdentity } = await import('../src/lib/crypto/keystore.ts');
 const { generateFullIdentity } = await import('../src/lib/crypto/keygen.ts');
 
+// A single wall-clock sample for the RFC round-trip below. Note: the
+// keystore-gate verifies (`verifyTotpOrBackup`, steps 3 and 5) deliberately do
+// NOT pass this — they let `computeCode` default to the current time. Those
+// verifies run AFTER slow Argon2id encrypt/decrypt work, so on a loaded box the
+// wall clock can advance past the TOTP step boundary between here and there;
+// a code pinned to this `now` would then fall outside the ±1-step (90s) window
+// and fail intermittently. The round-trip at step 1 is safe with `now` only
+// because its compute+verify are microseconds apart with no slow op between.
 const now = Math.floor(Date.now() / 1000);
 
 // 1. RFC 6238 algorithm round-trip.
@@ -58,14 +66,16 @@ const enrolled = await enrollTotp(full, OLD_PW, secret, backupCodes);
 const id1 = await decryptIdentity(enrolled.envelope as never, OLD_PW);
 ok(!!id1.totpSecret, 'enrolled envelope decrypts to an identity carrying totpSecret');
 
-const gate1 = await verifyTotpOrBackup(id1, await computeCode(id1.totpSecret!, now));
+const gate1 = await verifyTotpOrBackup(id1, await computeCode(id1.totpSecret!));
 ok(gate1.kind === 'ok', 'verifyTotpOrBackup accepts a freshly-computed code');
 
 // 4. Wrong code rejected.
 let wrongRejected = false;
 try {
-	// A code that is not valid for the current step (offset far outside the ±1 window).
-	const wrong = await computeCode(id1.totpSecret!, now + 10_000);
+	// A code that is not valid for the current step (offset far outside the ±1
+	// window). Sampled at live time, not the stale `now` above: the wrong-code
+	// property must hold no matter how long the preceding Argon2id work took.
+	const wrong = await computeCode(id1.totpSecret!, Math.floor(Date.now() / 1000) + 10_000);
 	await verifyTotpOrBackup(id1, wrong);
 	wrongRejected = false;
 } catch {
@@ -78,7 +88,7 @@ const reDecrypted = await decryptIdentity(enrolled.envelope as never, OLD_PW);
 const newEnv = await encryptIdentity(reDecrypted, NEW_PW);
 const id2 = await decryptIdentity(newEnv as never, NEW_PW);
 ok(!!id2.totpSecret, 'after a password change, totpSecret is still present');
-const gate2 = await verifyTotpOrBackup(id2, await computeCode(id2.totpSecret!, now));
+const gate2 = await verifyTotpOrBackup(id2, await computeCode(id2.totpSecret!));
 ok(gate2.kind === 'ok', 'after a password change, a TOTP code still verifies');
 
 // 6. Backup code redemption.

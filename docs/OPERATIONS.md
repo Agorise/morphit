@@ -5809,12 +5809,32 @@ The states are worth knowing, because they are not all equally bad:
 
 - `✓ fresh` — a dump landed within the last 36 hours (wide enough to absorb the timer's randomised delay).
 - `⚠ stale` — the newest dump is older than that, so at least one nightly run was missed.
-- `✗ failing` — either the unit is in systemd's `failed` state, or **the timer fired more recently than the newest dump**, meaning a run executed and produced nothing. That second case is the one worth understanding: it is exactly the shape of the v1.8.4–v1.8.7 dash bug, where the timer ran faithfully every night and silently wrote nothing.
+- `✗ failing` — one of three things: the unit is in systemd's `failed` state, **the timer fired more recently than the newest dump** (a run executed and produced nothing), or **the newest dump is too small to be a dump at all**. The second case is the shape of the v1.8.4–v1.8.7 dash bug, where the timer ran faithfully every night and silently wrote nothing. The third is its successor, fixed in v1.8.10 and described below — a dump that is perfectly *recent* and completely useless.
 - `✗ missing` — configured, but no dump has ever been written.
 - `○ not-configured` — no `/etc/morphit/backup.env`. Running your own backup instead is a legitimate choice, so this is reported neutrally rather than as a fault.
 - `⚠ unreadable` — the CLI could not read the env file or the backup directory. Note this is deliberately **not** reported as "missing": `backup.env` is `640 root:morphit` and the dump directory is `700 morphit:morphit`, so another user genuinely cannot look. Run as the morphit user (or with sudo) to see freshness.
 
 A manual `systemctl start` does not update the timer's last-trigger, so a hand-run dump never reads as a failure.
+
+### A failed dump is no longer kept (v1.8.10)
+
+Through v1.8.9 the backup script could report success on a dump that had failed. POSIX `sh` has no `pipefail`, and Debian/Ubuntu build `dash` without it, so `pg_dump | gzip` reported **gzip's** exit status — zero — even when `pg_dump` had died. The emptiness guard could not catch it either, because gzip of a failed dump is still a valid ~20-byte file. A refused database connection therefore wrote 20 bytes, renamed it to a real backup filename, printed `wrote … (20 bytes)` and exited 0. The freshness check above then reported it as `✓ fresh`, because it genuinely was the newest file.
+
+From v1.8.10 the script captures `pg_dump`'s own exit status through a file the pipeline cannot swallow, and compares the result against what the same pipeline produces for an empty dump. A failed or empty dump is deleted and the run exits 4 with the real reason. Separately, `morphit-ops health` now reports any newest dump under 1 KiB as `✗ failing` rather than `fresh` — the indexer schema alone compresses to tens of kilobytes, so a legitimate dump is never close to that floor.
+
+**What this means if you are upgrading.** If your database has an intermittent problem, you may now see backup failures where you previously saw silent success. That is the fix working, not a new fault — those runs were already failing, you were just not being told. Two things are worth doing once:
+
+```bash
+# 1. Re-install the script so the box runs the fixed version.
+sudo install -m 755 ops/backup/morphit-backup.sh /usr/local/lib/morphit/
+
+# 2. Look for fragments left by the old behaviour, and delete any you find.
+#    A real dump is tens of KB at minimum; anything in the tens of BYTES is
+#    a failed run that was banked as a restore point.
+ls -lS /home/morphit/backups | tail -20
+```
+
+Then run `morphit-ops health` and confirm the **Backups** line reports a plausible size alongside the age.
 
 The script is installed to `/usr/local/lib/morphit/morphit-backup.sh` (NOT executed in-place from the repo). This decouples the systemd unit from the operator's repo location: the unit's `ExecStart` is hardcoded to the stable system path, so it works regardless of whether the repo is at `/home/morphit/morphit`, `/opt/morphit`, or anywhere else. When `git pull` brings in script changes, the operator re-runs just the `sudo install -m 755 ops/backup/morphit-backup.sh ...` command.
 
