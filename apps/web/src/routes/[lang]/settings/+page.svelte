@@ -2355,10 +2355,12 @@
 	<!-- ─── Hidden accounts (client-side moderation, Q1.4) ─── -->
 	<section class="card mt-6" aria-labelledby="hidden-accounts-heading">
 		<div class="flex items-start justify-between gap-4">
-			<h2 id="hidden-accounts-heading" class="min-w-0 font-display text-xl font-bold">
+			<div class="min-w-0">
+				<h2 id="hidden-accounts-heading" class="min-w-0 font-display text-xl font-bold">
 				{$_('settings.hidden_accounts.heading')}
 			</h2>
-		<div class="mt-1"><VisibilityBadge scope="private" /></div>
+				<div class="mt-1"><VisibilityBadge scope="private" /></div>
+			</div>
 			<div class="flex flex-none items-center gap-2">
 				{#if hiddenRefreshed}
 					<span
@@ -2454,10 +2456,12 @@
 	<!-- ─── Blocked accounts (Finding H layer 1) ─── -->
 	<section class="card mt-6" aria-labelledby="blocked-accounts-heading">
 		<div class="flex items-start justify-between gap-4">
-			<h2 id="blocked-accounts-heading" class="min-w-0 font-display text-xl font-bold">
+			<div class="min-w-0">
+				<h2 id="blocked-accounts-heading" class="min-w-0 font-display text-xl font-bold">
 				{$_('settings.blocked_accounts.heading')}
 			</h2>
-		<div class="mt-1"><VisibilityBadge scope="private" /></div>
+				<div class="mt-1"><VisibilityBadge scope="private" /></div>
+			</div>
 			<div class="flex flex-none items-center gap-2">
 				{#if blockedRefreshed}
 					<span

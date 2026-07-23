@@ -2438,7 +2438,8 @@
 				"manual_account_label": "Tu nombre de usuario de Blurt",
 				"manual_account_placeholder": "p. ej. alice",
 				"manual_account_hint": "No pudimos detectar tu cuenta a partir de esta clave — puede ser de antes de que Blurt existiera. Escribe tu nombre de usuario de Blurt para confirmar que la clave le pertenece.",
-				"manual_account_invalid": "Ese nombre de usuario no coincide con esta clave. Revisa la ortografía o que hayas pegado la Clave Privada de Publicación correcta."
+				"manual_account_invalid": "Ese nombre de usuario no coincide con esta clave. Revisa la ortografía o que hayas pegado la Clave Privada de Publicación correcta.",
+				"detected_account": "Reconocido: esta clave pertenece a @{account}. No hace falta el nombre de usuario."
 			},
 			"error": {
 				"seed_word_count": "Una frase semilla de Blurt tiene exactamente 12 palabras — has introducido {count}. Asegúrate de que estén las 12, separadas por un solo espacio.",
@@ -3610,7 +3611,8 @@
 		"given_said": "Dije:",
 		"received_rated": "Me calificó:",
 		"average_rating_detail": "Valoración media: {avg}",
-		"feedback_all_excluded": "Las reseñas de abajo no se incluyen en esta puntuación: las cuentas que las dejaron fueron marcadas por nuestras comprobaciones de autocomercio."
+		"feedback_all_excluded": "Las reseñas de abajo no se incluyen en esta puntuación: las cuentas que las dejaron fueron marcadas por nuestras comprobaciones de autocomercio.",
+		"headline_is_average": "Valoración media"
 	},
 	"relative_time": {
 		"descriptive": {

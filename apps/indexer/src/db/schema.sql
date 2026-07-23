@@ -1542,6 +1542,20 @@ CREATE TABLE order_views (
 -- audit trail of "operator blocked alice on day X, unblocked on
 -- day Y" stays visible.
 
+-- v51 / v1.8.12 — moderation_flag_clearances.signal covers ALL FOUR
+-- suppression signals, not two.  The reputation summary excludes feedback
+-- matched by suspicious_reciprocity (B), related_accounts (A),
+-- one_way_pile_on (C) and review_concentration (D) — but the CHECK below
+-- originally permitted only the first two, so C and D were unclearable at the
+-- DATABASE level: an operator could delete the flag row and the detector
+-- re-created it on the next pass, suppressing a reputation permanently with no
+-- recourse.  Ken hit exactly that on his own test accounts (two
+-- review_concentration rows, invisible to `morphit-ops moderation`, deleted by
+-- hand, restored, and suppressed again on the next detector run).
+-- MIGRATIONS[51] widens this for EXISTING installs; the CHECK below is what
+-- gives a FRESH install the same constraint — without it every new node would
+-- ship with C and D unclearable.
+
 -- v50 / v1.8.9 — moderation_flag_clearances: a self-trade flag is a signal,
 -- not a verdict, and must be reversible.  Deleting a flag row alone does not
 -- hold (the detector re-inserts on its next pass), so a clearance records the
@@ -1551,7 +1565,8 @@ CREATE TABLE order_views (
 CREATE TABLE IF NOT EXISTS moderation_flag_clearances (
     -- Which detector's flag this clears.  Scoped per signal so clearing a
     -- reciprocity flag does not silently also clear a related-accounts one.
-    signal      varchar(16)  NOT NULL CHECK (signal IN ('reciprocity', 'related')),
+    -- v51: all FOUR suppression signals — see the v51 banner above.
+    signal      varchar(16)  NOT NULL CHECK (signal IN ('reciprocity', 'related', 'pile_on', 'concentration')),
     -- Canonically ordered (account_a < account_b), matching how both detectors
     -- store their pairs, so a clearance matches regardless of which way round
     -- the operator typed the two names.

@@ -61,6 +61,12 @@ export function utcMidnightToday(now: Date = new Date()): Date {
 /** Parse "24h", "1d", "10m" etc. into seconds.  Returns null on
  *  invalid format.  Used by the --since flags. */
 export function parseDurationSpec(spec: string): number | null {
+	// v1.8.12 — "all" means no window. Added because `morphit-ops moderation`
+	// now tells an operator that older flags are still suppressing reputation
+	// and points them at `--since=all`; advice that errors out would be worse
+	// than the silence it replaced. 100 years is effectively unbounded here
+	// while staying a real number the existing cutoff arithmetic can use.
+	if (spec.trim().toLowerCase() === 'all') return 100 * 365 * 86400;
 	const m = spec.match(/^(\d+)\s*(s|m|h|d)$/i);
 	if (!m) return null;
 	const n = parseInt(m[1]!, 10);

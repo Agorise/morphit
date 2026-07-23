@@ -408,7 +408,21 @@ CREATE TABLE IF NOT EXISTS moderation_flag_clearances (
     CHECK (length(note) <= 500)
 );
 `
+	}	,
+	{
+		version: 51,
+		description:
+			"v1.8.12: widen moderation_flag_clearances.signal to all FOUR suppression signals. The clearance table shipped in v1.8.9 permitted only 'reciprocity' and 'related' — but the reputation summary in apps/indexer/src/api/feedback.ts suppresses on FOUR tables: it also excludes feedback matched by one_way_pile_on (Signal C) and review_concentration (Signal D). Those two were therefore unclearable at the DATABASE level, not merely missing from the CLI: an operator could delete the row by hand, and the detector re-created it on its next pass, so a false positive suppressed a reputation permanently with no recourse. Ken hit exactly that — two review_concentration rows on his own test accounts, invisible to `morphit-ops moderation` (which only ever queried two of the four tables), deleted by hand, reputations restored, and suppressed again on the next detector run. Widening the CHECK is the schema half; detectReviewConcentrationInTx now consults the table like Signals A and B already did, and clearFlag/unclearFlag accept all four. No data migration: existing rows keep their values and every previously-valid signal stays valid, so this only ADDS permitted values.",
+		sql: `
+ALTER TABLE moderation_flag_clearances
+    DROP CONSTRAINT IF EXISTS moderation_flag_clearances_signal_check;
+
+ALTER TABLE moderation_flag_clearances
+    ADD CONSTRAINT moderation_flag_clearances_signal_check
+    CHECK (signal IN ('reciprocity', 'related', 'pile_on', 'concentration'));
+`
 	}
+
 	// Future migrations land here.  The v1 collapsed schema is the
 	// pre-launch baseline; from v37 forward, every new schema change is its
 	// own additive migration with its own version number.  No further

@@ -92,6 +92,35 @@ for (const [headingId, scope] of EXPECTED) {
 	);
 }
 
+// v1.8.12 (Ken) — a badge must never become an extra child of a flex row that
+// already holds the heading and a button: it then competes for width and
+// collides with the title. Two cards shipped that way in v1.8.11 (Hidden
+// accounts, Blocked accounts, both of which carry a Refresh button) and Ken
+// photographed the overlap. The heading and its badge must sit inside ONE
+// wrapper so the row still has exactly two children.
+const settingsLines = src.split('\n');
+const collided: string[] = [];
+for (let i = 0; i < settingsLines.length; i++) {
+	if (!settingsLines[i]!.includes('<h2 id="')) continue;
+	const before = settingsLines.slice(Math.max(0, i - 3), i).join('\n');
+	const after = settingsLines.slice(i, i + 6).join('\n');
+	if (!after.includes('VisibilityBadge')) continue;
+	// A flex ancestor within 3 lines means the h2 is a direct flex child. That
+	// is fine ONLY if a wrapper div opens immediately before it.
+	const inFlexRow = /class="flex[^"]*"/.test(before);
+	const wrapped = /<div class="min-w-0">\s*$/.test(before);
+	if (inFlexRow && !wrapped) {
+		collided.push(settingsLines[i]!.split('id="')[1]!.split('"')[0]!);
+	}
+}
+check(
+	'no badge is squeezed into a flex row beside its heading',
+	collided.length === 0,
+	collided.length > 0
+		? `${collided.join(', ')} → wrap the <h2> and its badge in a single <div class="min-w-0"> child`
+		: ''
+);
+
 // Every public label must correspond to a field the PROFILE op actually
 // broadcasts — the check that keeps this mapping honest rather than merely
 // self-consistent.

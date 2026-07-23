@@ -385,6 +385,18 @@ export function feedbackByAccountRoute(db: Database): Hono {
 				                  jsonb_array_elements(owpo.attacking_reviewers) attacker
 				      WHERE owpo.subject = pc.subject
 				        AND attacker->>'reviewer' = pc.reviewer
+				 ) OR EXISTS (
+				     -- v1.8.12 (Ken): Signal D was MISSING here while the
+				     -- summary CTE has excluded on it since cp123. A review
+				     -- from a concentration-flagged reviewer therefore
+				     -- rendered as a perfectly normal review that silently
+				     -- contributed nothing to the score — the same
+				     -- "list disagrees with summary" this flag exists to
+				     -- prevent, and the same 3-of-4 signal gap found in the
+				     -- moderation CLI this release.
+				     SELECT 1 FROM review_concentration rc
+				      WHERE rc.reviewer = pc.reviewer
+				        AND rc.dominant_subject = pc.subject
 				 )`,
 				[reviewers, account]
 			);
@@ -469,7 +481,17 @@ ${FEEDBACK_EXCLUSIONS_SQL}
 				 *  rating + count (Finding R2); exposing the per-row
 				 *  flag lets the frontend show a clear visual cue so
 				 *  the list reconciles with the summary (Finding R15). */
-				suppressed: flaggedReviewers.has(r.reviewer),
+				// v1.8.12 (Ken) — ALSO true when the review carries no
+				// order_permlink. The summary CTE requires
+				// `order_permlink IS NOT NULL` (an unanchored review cannot be
+				// checked against a real trade, so counting it would let anyone
+				// inflate a reputation with reviews tied to nothing), but the
+				// list query has no such filter. Such a review therefore
+				// displayed as an ordinary one while contributing nothing to
+				// the score, with nothing on screen saying so. `order_permlink`
+				// is nullable and the intake treats it as optional, so this is
+				// reachable, not theoretical.
+				suppressed: flaggedReviewers.has(r.reviewer) || r.order_permlink === null,
 				/** v1.8.0 (t.txt): the REVIEWER's current reputation —
 				 *  exclusion-filtered + decay-weighted, identical to the
 				 *  headline figure on their own profile. Lets the received

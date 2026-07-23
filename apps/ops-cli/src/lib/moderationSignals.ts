@@ -60,6 +60,49 @@ export async function fetchReciprocityFlags(
 	return r.rows;
 }
 
+/** How many flags are ACTIVE but fall outside the display window.
+ *
+ *  v1.8.12 (Ken) — THE OPERATOR BLIND SPOT. The flag lists above are windowed
+ *  (`WHERE detected_at >= $1`, default 7d), but the reputation suppression in
+ *  `apps/indexer/src/api/feedback.ts` has NO time filter: any row in these
+ *  tables excludes that pair's feedback from the score forever. So a flag older
+ *  than the window keeps a reputation suppressed while being INVISIBLE to the
+ *  operator — who then cannot clear what they cannot see.
+ *
+ *  Ken hit this precisely: `morphit-ops moderation` reported "0 flags
+ *  (0 reciprocity, 0 related-account)" while @kentest3's reputation card showed
+ *  every review excluded. Reproduced against real Postgres: operator view 0,
+ *  enforcement 1, resulting score count 0.
+ *
+ *  Reported as a count rather than silently widening the window: the window is
+ *  a useful triage default, and quietly changing it would trade one surprise
+ *  for another. The operator is told what is hidden and how to see it. */
+export async function countActiveFlagsOutsideWindow(
+	db: Database,
+	cutoff: Date
+): Promise<{ reciprocity: number; related: number; pile_on: number; concentration: number }> {
+	const r = await db.query<{
+		reciprocity: string;
+		related: string;
+		pile_on: string;
+		concentration: string;
+	}>(
+		`SELECT
+		   (SELECT COUNT(*) FROM suspicious_reciprocity WHERE detected_at < $1)::text AS reciprocity,
+		   (SELECT COUNT(*) FROM related_accounts       WHERE detected_at < $1)::text AS related,
+		   (SELECT COUNT(*) FROM one_way_pile_on        WHERE detected_at < $1)::text AS pile_on,
+		   (SELECT COUNT(*) FROM review_concentration   WHERE detected_at < $1)::text AS concentration`,
+		[cutoff]
+	);
+	const row = r.rows[0];
+	return {
+		reciprocity: Number(row?.reciprocity ?? 0),
+		related: Number(row?.related ?? 0),
+		pile_on: Number(row?.pile_on ?? 0),
+		concentration: Number(row?.concentration ?? 0)
+	};
+}
+
 export async function fetchRelatedFlags(
 	db: Database,
 	cutoff: Date,
@@ -71,6 +114,56 @@ export async function fetchRelatedFlags(
 		 WHERE detected_at >= $1
 		 ORDER BY detected_at DESC
 		 LIMIT $2`,
+		[cutoff, limit]
+	);
+	return r.rows;
+}
+
+/** Signal C — one-way pile-on. Subject-centric: a cluster of reviewers
+ *  attacking one subject. Rendered as a pair (subject, attacker) so it fits the
+ *  same shape as A/B and can be cleared with the same command.
+ *
+ *  v1.8.12 (Ken) — C and D were never listed by `morphit-ops moderation`, which
+ *  queried only suspicious_reciprocity and related_accounts. They suppress
+ *  reputation exactly like A and B, so an operator saw "0 flags" while a
+ *  reputation sat suppressed. That is what cost Ken an afternoon. */
+export async function fetchPileOnFlags(
+	db: Database,
+	cutoff: Date,
+	limit: number
+): Promise<RelatedFlag[]> {
+	const r = await db.query<RelatedFlag>(
+		`SELECT owpo.subject AS account_a,
+		        attacker->>'reviewer' AS account_b,
+		        owpo.detected_at,
+		        'one-way pile-on: ' || (attacker->>'reviewer') || ' → ' || owpo.subject AS reason
+		   FROM one_way_pile_on owpo,
+		        jsonb_array_elements(owpo.attacking_reviewers) attacker
+		  WHERE owpo.detected_at >= $1
+		  ORDER BY owpo.detected_at DESC
+		  LIMIT $2`,
+		[cutoff, limit]
+	);
+	return r.rows;
+}
+
+/** Signal D — review concentration. Directional (reviewer → dominant_subject);
+ *  reported as the pair so it reads like the others. */
+export async function fetchConcentrationFlags(
+	db: Database,
+	cutoff: Date,
+	limit: number
+): Promise<RelatedFlag[]> {
+	const r = await db.query<RelatedFlag>(
+		`SELECT reviewer AS account_a,
+		        dominant_subject AS account_b,
+		        detected_at,
+		        'review concentration: ' || concentration_pct || '% of '
+		          || review_count || ' reviews on one subject' AS reason
+		   FROM review_concentration
+		  WHERE detected_at >= $1
+		  ORDER BY detected_at DESC
+		  LIMIT $2`,
 		[cutoff, limit]
 	);
 	return r.rows;
@@ -114,6 +207,25 @@ export async function fetchBlockStatuses(
 	return map;
 }
 
+/** Every signal that can suppress a reputation. All four are clearable as of
+ *  v1.8.12; before that only the first two were, which made C and D permanent. */
+export type ModerationSignal = 'reciprocity' | 'related' | 'pile_on' | 'concentration';
+
+const SIGNAL_TABLE: Record<ModerationSignal, string> = {
+	reciprocity: 'suspicious_reciprocity',
+	related: 'related_accounts',
+	pile_on: 'one_way_pile_on',
+	concentration: 'review_concentration'
+};
+
+/** The two columns holding the pair, per table. */
+const SIGNAL_PAIR_COLUMNS: Record<ModerationSignal, readonly [string, string]> = {
+	reciprocity: ['account_a', 'account_b'],
+	related: ['account_a', 'account_b'],
+	pile_on: ['subject', 'subject'],
+	concentration: ['reviewer', 'dominant_subject']
+};
+
 /** Clear a self-trade flag for a pair and stop the detector re-raising it.
  *
  *  Both halves matter. Deleting the flag row is what restores the account
@@ -134,7 +246,7 @@ export async function fetchBlockStatuses(
 export async function clearFlag(
 	db: Database,
 	params: {
-		readonly signal: 'reciprocity' | 'related';
+		readonly signal: ModerationSignal;
 		readonly accountA: string;
 		readonly accountB: string;
 		readonly note: string;
@@ -143,7 +255,13 @@ export async function clearFlag(
 	const a = params.accountA.toLowerCase();
 	const b = params.accountB.toLowerCase();
 	const [lo, hi] = a < b ? [a, b] : [b, a];
-	const table = params.signal === 'reciprocity' ? 'suspicious_reciprocity' : 'related_accounts';
+	// v1.8.12 (Ken) — all FOUR signals, not two. Signals C and D suppress
+	// reputation exactly like A and B, but had no clearance path at all: the
+	// operator could not see them in `morphit-ops moderation` and could not
+	// clear them, so a false positive suppressed a reputation permanently.
+	// Deleting the row by hand did not help either — the detector simply
+	// re-created it on the next pass (which is what Ken observed).
+	const table = SIGNAL_TABLE[params.signal];
 
 	// Signal B is behavioural, so capture WHERE the pair stands at clear time.
 	// The detector forgives everything up to this mark and re-fires once they
@@ -152,6 +270,23 @@ export async function clearFlag(
 	// and its clearance is permanent; a re-arming one would re-flag the same
 	// pair forever on evidence that can never change.
 	let watermark: number | null = null;
+	// v1.8.12 — Signal D is BEHAVIOURAL like Signal B, so its clearance must
+	// re-arm too: forgive the concentration accumulated so far, but re-flag if
+	// the pair keeps concentrating beyond it. A NULL watermark here would make
+	// the clearance permanent, which is right for Signal A (immutable
+	// account-creation facts) and wrong for a pattern that can resume.
+	// Directional table, so take the higher of the two orientations — the pair
+	// is what was cleared, not one direction of it.
+	if (params.signal === 'concentration') {
+		const cur = await db.query(
+			`SELECT MAX(review_count) AS review_count FROM review_concentration
+			  WHERE (reviewer = $1 AND dominant_subject = $2)
+			     OR (reviewer = $2 AND dominant_subject = $1)`,
+			[lo, hi]
+		);
+		const row = cur.rows[0] as { review_count?: number | null } | undefined;
+		watermark = typeof row?.review_count === 'number' ? row.review_count : 0;
+	}
 	if (params.signal === 'reciprocity') {
 		const cur = await db.query(
 			`SELECT mutual_review_count FROM suspicious_reciprocity
@@ -171,8 +306,13 @@ export async function clearFlag(
 		 DO UPDATE SET watermark = EXCLUDED.watermark, note = EXCLUDED.note, cleared_at = NOW()`,
 		[params.signal, lo, hi, watermark, params.note.slice(0, 500)]
 	);
+	// Column names differ per table: A/B use (account_a, account_b); D uses
+	// (reviewer, dominant_subject) and is DIRECTIONAL, so both orientations are
+	// removed — the pair is what the operator cleared, not one direction of it.
+	const cols = SIGNAL_PAIR_COLUMNS[params.signal];
 	const del = await db.query(
-		`DELETE FROM ${table} WHERE account_a = $1 AND account_b = $2`,
+		`DELETE FROM ${table} WHERE (${cols[0]} = $1 AND ${cols[1]} = $2)
+		                         OR (${cols[0]} = $2 AND ${cols[1]} = $1)`,
 		[lo, hi]
 	);
 	return { cleared: del.rowCount ?? 0 };
@@ -184,7 +324,7 @@ export async function clearFlag(
 export async function unclearFlag(
 	db: Database,
 	params: {
-		readonly signal: 'reciprocity' | 'related';
+		readonly signal: ModerationSignal;
 		readonly accountA: string;
 		readonly accountB: string;
 	}

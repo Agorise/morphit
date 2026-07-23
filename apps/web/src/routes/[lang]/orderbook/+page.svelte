@@ -54,7 +54,13 @@
 	import { ASSETS } from '$lib/assets/registry';
 	import { instanceAdditions, instanceNameLookup } from '$lib/stores/instanceAdditions';
 	import { instance } from '$lib/stores/instance';
-	import { getProfilesBatch } from '$lib/indexer/profileCache';
+	import { getProfilesBatch, isSoftMiss } from '$lib/indexer/profileCache';
+
+	/** Bounded re-ask for profiles whose fetch failed transiently. Just past the
+	 *  cache's 5s soft TTL, so the retry actually re-reads rather than replaying
+	 *  the same cached miss. */
+	const PROFILE_HYDRATE_RETRIES = 2;
+	const PROFILE_HYDRATE_RETRY_MS = 5_500;
 	import { selfProfile } from '$lib/stores/selfProfile';
 	import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
 	import OrderCard from '$lib/components/OrderCard.svelte';
@@ -707,7 +713,8 @@
 	 *  so navigating or filtering aborts profile fetches too. */
 	async function hydrateProfiles(
 		orders: readonly OrderRecord[],
-		signal?: AbortSignal
+		signal?: AbortSignal,
+		attempt = 0
 	): Promise<void> {
 		const accounts = Array.from(new Set(orders.map((o) => o.account)));
 		if (accounts.length === 0) return;
@@ -718,7 +725,36 @@
 			next[account] = profile;
 		}
 		profileMap = next;
+
+		// v1.8.12 (Ken) — re-ask for accounts whose read was a TRANSIENT FAILURE.
+		//
+		// The cache distinguishes a failed fetch (soft-cached 5s) from an
+		// authoritative "no profile" (90s), on the reasoning that the short entry
+		// would expire and "the next render re-fetches". Nothing ever did: this
+		// function runs once per page load and once per loadMore, so on a settled
+		// orderbook the soft entry expired into silence and the row kept its
+		// identicon until the user navigated or refreshed. That is the display
+		// name / avatar that "every once in a while" did not appear.
+		//
+		// Retrying HERE rather than inside the cache is the point. Writing to
+		// `profileMap` is what re-renders the cards, and only this component can
+		// do that — a retry inside the cache would need its own notification
+		// channel, which is what sank two earlier attempts. `isSoftMiss` asks the
+		// cache the one question it alone can answer, and the retry lives where
+		// the reactivity already is.
+		//
+		// Only soft misses are retried, so an account that genuinely has no
+		// profile costs nothing: it settles on its identicon first time, as it
+		// should.
+		if (attempt >= PROFILE_HYDRATE_RETRIES) return;
+		const transient = accounts.filter((a) => isSoftMiss(a));
+		if (transient.length === 0) return;
+		setTimeout(() => {
+			if (signal?.aborted) return;
+			void hydrateProfiles(orders, signal, attempt + 1);
+		}, PROFILE_HYDRATE_RETRY_MS);
 	}
+
 
 	/** cp452 (t.txt item 2) — re-read the logged-in user's OWN profile into
 	 *  profileMap when the shared selfProfile store changes. profileMap is a
@@ -1451,6 +1487,18 @@
 					{@const accountIsBlocked = $blockedAccounts.has(o.account.toLowerCase())}
 					{@const labelProps = extractLabelPropsFromProfile(profileMap[o.account])}
 					{@const networkChip = networkChipFor(o, $_)}
+					<!-- v1.8.12 (Ken): the Message button now shows for SIGNED-OUT
+					     visitors too. It was hidden whenever `viewerAccount` was
+					     null, so someone browsing the orderbook saw a wall of
+					     orders and no way to begin — the one action the page
+					     exists to produce. Ken reported it missing; his
+					     screenshots show the header "Start" button, i.e. a
+					     signed-out session.
+					     Nothing unsafe follows: /chat/:peer is already guarded,
+					     and an anonymous visitor is bounced to onboarding or the
+					     unlock screen carrying ?next=, landing back in this exact
+					     conversation once they have keys. Still hidden on the
+					     viewer's OWN order — you cannot message yourself. -->
 					<OrderCard
 						order={o}
 						justArrived={justArrivedIds.has(o.account + '/' + o.permlink)}
@@ -1460,9 +1508,9 @@
 						avatarDataUri={labelProps.avatarDataUri}
 						detailHref={lp(`/@${o.account}/${o.permlink}`)}
 						profileHref={lp(`/@${o.account}`)}
-						messageHref={viewerAccount !== null && viewerAccount !== o.account
-							? lp(`/chat/${o.account}?order=${encodeURIComponent(o.permlink)}`)
-							: null}
+						messageHref={viewerAccount === o.account
+							? null
+							: lp(`/chat/${o.account}?order=${encodeURIComponent(o.permlink)}`)}
 						paymentLabels={displayNamesForMethods(o.payment_methods, instLookup)}
 						{networkChip}
 						priceModelLabel={formatOrderPriceModel(

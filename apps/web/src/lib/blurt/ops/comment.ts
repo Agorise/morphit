@@ -265,6 +265,63 @@ export function buildCommentOperation(payload: CommentPayload, account: string):
 	];
 }
 
+/** Maximum liquid share of the AUTHOR reward, in basis points.
+ *
+ *  v1.8.12 (Ken): "BP is not needed at all, we really want as much liquid BLURT
+ *  as possible to go to the user/author."
+ *
+ *  Blurt pays the author's share as 25% liquid BLURT / 75% Blurt Power BY
+ *  DEFAULT, and that split is the author's choice at posting time — expressed
+ *  through the `percent_blurt` extension on `comment_options`. Morphit never
+ *  broadcast a `comment_options` op at all, so every syndicated post silently
+ *  took the default.
+ *
+ *  NOT the 50/50 Ken observed between author and curators: that division is a
+ *  CHAIN parameter ("up to 50% of the reward for each post goes to the people
+ *  who upvoted it") and is not settable per post. There is an
+ *  `allow_curation_rewards` boolean, but disabling it on Steem-family chains
+ *  returns those rewards to the POOL rather than to the author, so it would
+ *  shrink the total payout without helping — deliberately left alone.
+ *
+ *  UNVERIFIED CEILING: Blurt's docs describe the default and an opt-in to 100%
+ *  BP, but never advertise going ABOVE 25% liquid. Whether consensus accepts
+ *  10000 here, clamps it, or rejects the operation is not something we can
+ *  determine from documentation — which is exactly why the options op is
+ *  broadcast in its own transaction (see below). If the chain refuses it, the
+ *  post still stands and the author simply keeps the default split. */
+const PERCENT_BLURT_MAX_LIQUID = 10000;
+
+/** Build the `comment_options` op that asks for the maximum liquid payout.
+ *
+ *  Shape verified against dblurt's own serializer:
+ *    comment_options(13) = [author, permlink, max_accepted_payout, allow_votes,
+ *                           allow_curation_rewards,
+ *                           extensions: StaticVariant[ {beneficiaries}, {percent_blurt} ]]
+ *  `percent_blurt` is variant index 1; beneficiaries is 0. We send NO
+ *  beneficiaries — Ken: "the morphit community itself does not need to get any
+ *  beneficiary rewards at all" — which is also the status quo, since Morphit has
+ *  never set any. */
+export function buildCommentOptionsOperation(
+	author: string,
+	permlink: string
+): [string, Record<string, unknown>] {
+	return [
+		'comment_options',
+		{
+			author,
+			permlink,
+			// Effectively unlimited; declining payout is not what the user asked
+			// for, and a low cap would silently burn rewards.
+			max_accepted_payout: '1000000.000 BLURT',
+			allow_votes: true,
+			// Left TRUE: see the note above — disabling curation returns those
+			// rewards to the pool, not to the author.
+			allow_curation_rewards: true,
+			extensions: [[1, { percent_blurt: PERCENT_BLURT_MAX_LIQUID }]]
+		}
+	];
+}
+
 export async function broadcastComment(
 	live: LiveIdentity,
 	payload: CommentPayload
@@ -307,7 +364,54 @@ export async function broadcastComment(
 	// cp344: broadcast SAME-ORIGIN through the indexer proxy (direct-RPC
 	// fallback). `comment` is on the proxy's op whitelist.
 	const result = await submitSignedTransaction(signed);
+
+	// v1.8.12 (Ken) — ask for the maximum liquid payout, in a SEPARATE
+	// transaction.
+	//
+	// dblurt's own helper puts `comment` and `comment_options` in ONE
+	// transaction, which is exactly what we must not do here: if the chain
+	// rejects the options op — and the acceptable range of `percent_blurt` is
+	// not something we could establish from Blurt's documentation — the whole
+	// transaction fails and THE POST DOES NOT EXIST. Posting is the primary
+	// function; the reward split is an optimisation on top of it. An
+	// optimisation must never be able to destroy the thing it optimises.
+	//
+	// So: post first, then ask. A failure here is swallowed deliberately and
+	// the author simply keeps Blurt's default 25%/75% split, which is what they
+	// get today anyway. The post is already irreversibly on-chain by this point,
+	// so there is nothing to roll back and nothing the user needs to act on.
+	try {
+		await broadcastCommentOptions(live, account, payload.permlink);
+	} catch (err) {
+		console.warn('[comment] comment_options rejected; post kept default reward split:', err);
+	}
+
 	return result;
+}
+
+/** Broadcast `comment_options` for a post that already exists on chain.
+ *  Separate transaction by design — see the call site above. */
+async function broadcastCommentOptions(
+	live: LiveIdentity,
+	author: string,
+	permlink: string
+): Promise<void> {
+	const op = buildCommentOptionsOperation(author, permlink);
+	const { ref_block_num, ref_block_prefix, expiration } = await getRefBlockInfo();
+	const tx: Transaction = {
+		ref_block_num,
+		ref_block_prefix,
+		expiration,
+		operations: [op as unknown as Transaction['operations'][number]],
+		extensions: []
+	};
+	const postingKey = await rawToPrivateKey(live.posting.privateKey);
+	const signed: SignedTransaction = await signTransactionWithKey(
+		tx,
+		postingKey,
+		live.posting.privateKey
+	);
+	await submitSignedTransaction(signed);
 }
 
 /** Deterministic permlink for a syndication announcement. Used

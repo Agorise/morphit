@@ -60,7 +60,12 @@
 		getOrdersByAccount,
 		getReputationReceipt
 	} from '$lib/indexer/client';
-	import { getProfilesBatch } from '$lib/indexer/profileCache';
+	import { getProfilesBatch, isSoftMiss } from '$lib/indexer/profileCache';
+
+	/** Bounded re-ask for profiles whose fetch failed transiently — mirrors the
+	 *  orderbook. Just past the cache's 5s soft TTL so the retry re-reads. */
+	const PROFILE_HYDRATE_RETRIES = 2;
+	const PROFILE_HYDRATE_RETRY_MS = 5_500;
 	import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
 	import { displayNamesForMethods } from '$lib/payments/display';
 	import OrderCard from '$lib/components/OrderCard.svelte';
@@ -132,6 +137,22 @@
 	const headlineRating = $derived(
 		reputationScore ?? (feedback === null ? 0 : feedback.summary.weighted_rating)
 	);
+	/** WHICH metric the big number currently is.
+	 *
+	 *  v1.8.12 (Ken) — the fallback above silently swaps metrics, and until now
+	 *  said so nowhere. Ken compared two profiles and found the one with a
+	 *  4-star review (kentest3, 4.80) outranking the one with five perfect
+	 *  5-star reviews (kentest2, 4.24) — impossible, until you notice they were
+	 *  not the same measurement: kentest2's composite had resolved and was
+	 *  shrunk toward the neutral prior, while kentest3's had not, so its
+	 *  headline was the RAW average shown in identical styling.
+	 *
+	 *  That is the very bug this fallback was introduced to fix in v1.8.10 (one
+	 *  trader, two different headline numbers), reappearing one level up: now
+	 *  it is two TRADERS whose headlines cannot be compared. Two numbers under
+	 *  the same styling must mean the same thing, so when the composite is
+	 *  unavailable the label says plainly that this is an average instead. */
+	const headlineIsComposite = $derived(reputationScore !== null);
 	let feedbackItems = $state<FeedbackRecord[]>([]);
 	let feedbackNextCursor: string | null = $state(null);
 	let feedbackError = $state('');
@@ -185,7 +206,8 @@
 	 *  responders. Batched into the shared profile cache. */
 	async function hydrateReviewerProfiles(
 		items: readonly FeedbackRecord[],
-		kind: 'received' | 'given'
+		kind: 'received' | 'given',
+		attempt = 0
 	): Promise<void> {
 		const accounts = new Set<string>();
 		for (const fb of items) {
@@ -199,12 +221,25 @@
 			}
 		}
 		if (accounts.size === 0) return;
-		const fetched = await getProfilesBatch(Array.from(accounts));
+		const list = Array.from(accounts);
+		const fetched = await getProfilesBatch(list);
 		const next = { ...reviewerProfileMap };
 		for (const [a, p] of fetched) {
 			next[a] = p;
 		}
 		reviewerProfileMap = next;
+
+		// v1.8.12 (Ken) — same rule as the orderbook: re-ask for reviewers whose
+		// read was a TRANSIENT failure, so a reviewer's name and avatar are not
+		// stuck on an identicon until the page is refreshed. Only soft misses
+		// are retried, so a reviewer who genuinely has no profile settles first
+		// time. Retried HERE because writing `reviewerProfileMap` is what
+		// re-renders the review cards.
+		if (attempt >= PROFILE_HYDRATE_RETRIES) return;
+		if (!list.some((a) => isSoftMiss(a))) return;
+		setTimeout(() => {
+			void hydrateReviewerProfiles(items, kind, attempt + 1);
+		}, PROFILE_HYDRATE_RETRY_MS);
 	}
 
 	async function loadProfile(): Promise<void> {
@@ -757,6 +792,13 @@
 					<span aria-hidden="true" class="text-morphit-emerald">
 						{starString(Math.round(headlineRating) as 1 | 2 | 3 | 4 | 5)}
 					</span>
+					{#if !headlineIsComposite}
+						<!-- Names the metric so a raw average is never mistaken for,
+						     or compared against, another profile's composite score. -->
+						<span class="mt-1 text-xs font-medium text-ink-400">
+							{$_('profile.headline_is_average')}
+						</span>
+					{/if}
 					<span class="mt-1 text-xs text-ink-500">
 						{$_('profile.rating_count', {
 							values: { n: feedback.summary.count }
@@ -973,6 +1015,12 @@
 							: daiRowNetwork
 								? { label: $_(`assets.dai.network.${daiRowNetwork}.displayName`) as string, tone: 'dai' as const }
 								: null}
+					<!-- v1.8.12 (Ken) — same rule as the orderbook: the Message
+					     button shows for SIGNED-OUT visitors too. /chat/:peer is
+					     already guarded and bounces an anonymous visitor to
+					     onboarding/unlock carrying ?next=, returning them to this
+					     conversation once they have keys. Hidden only on the
+					     viewer's OWN order — you cannot message yourself. -->
 					<OrderCard
 						order={o}
 						title={cardTitle(o)}
@@ -981,9 +1029,9 @@
 						{avatarDataUri}
 						detailHref={lp(`/@${account}/${o.permlink}`)}
 						profileHref={lp(`/@${account}`)}
-						messageHref={viewerAccount !== null && viewerAccount !== account
-							? lp(`/chat/${account}?order=${encodeURIComponent(o.permlink)}`)
-							: null}
+						messageHref={viewerAccount === account
+							? null
+							: lp(`/chat/${account}?order=${encodeURIComponent(o.permlink)}`)}
 						paymentLabels={displayNamesForMethods(o.payment_methods, instLookup)}
 						{networkChip}
 						priceModelLabel={formatOrderPriceModel(

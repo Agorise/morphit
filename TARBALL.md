@@ -1,21 +1,22 @@
 # TARBALL
 
-> # 📍 SESSION HANDOFF — START HERE (written 2026-07-23, end of the v1.8.11 session)
-> **Tarball for the new session: `morphit-v1.8.11-cp533.tar.gz`. Unpack to `/home/claude/morphit/` so the tree lives at `/home/claude/morphit/morphit/`.**
+> # 📍 SESSION HANDOFF — START HERE (written 2026-07-23, end of the v1.8.12 session)
+> **Tarball: `morphit-v1.8.12-cp540.tar.gz`. Unpack to `/home/claude/morphit/` so the tree lives at `/home/claude/morphit/morphit/`.**
 >
 > ## Where things stand
-> **v1.8.11 is RELEASE-READY IN THE TREE.** Tree is at **1.8.11** (19 touchpoints + 15 lockfile entries), RELEASE-NOTES-v1.8.11.md written, all 5 release gates green, battery **546 smokes / 0 real failures** verified against THIS tree. **Ken has NOT yet run the ELI5 ceremony** — push, signed tag, VPS upgrade, on-chain payload and canary are still ahead of him. If he says the deploy is done, believe him and move on.
-> No work is half-finished. There is no in-flight task.
+> **v1.8.12 is RELEASE-READY IN THE TREE.** Tree at **1.8.12** (19 touchpoints + 15 lockfile), RELEASE-NOTES-v1.8.12.md written, all 5 gates green, battery **550 / 0 real failures** against THIS tree. **Ken has NOT run the ELI5 ceremony yet.** No work is half-finished.
+> **THIS RELEASE HAS A MIGRATION (51)** — the first since v1.8.9. It widens `moderation_flag_clearances.signal` to all four suppression signals. `schema.sql` was widened too (fresh installs), verified byte-identical to a migrated DB on real PG.
 >
-> ## What v1.8.11 was about (context, not action)
-> One arc: **cross-account contamination**. Ken signed out of @kentest3, into @kencode, and saw kentest3's settings. Four independent faults, all found from his own DevTools localStorage dumps — sign-out kept account-derived keys; the settings storage scope was resolved once at component init; `settingsSync` restored-if-present with no reset-if-absent (THE root cause — an account that never broadcast settings inherited the previous one's); and syndication was never mirrored despite a reserved slot. Plus: header CTA stuck on "Unlock" after sign-out-while-locked, avatar menu stuck on an identicon, posting key missing on order cards (a BACKFILL-timing issue, NOT pre-fork status), and a reputation card claiming an account had no reviews directly above its visible reviews.
-> **The systemic fix is `apps/web/src/lib/storage/storageKeyRegistry.ts`** — all 47 localStorage keys classified account/device/session with the two-tier rule written down, the sign-out sweep DERIVING its allow-list from it, and `storage-key-classification-smoke` failing the build on any unclassified key. It found 5 more leaks on its first run. **If you add a localStorage key, you must classify it there.**
+> ## What v1.8.12 was about (context, not action)
+> Three independent "N-of-4 signal" gaps. The reputation summary suppresses on FOUR tables; the moderation CLI knew 2, the feedback row-flag knew 3, and `schema.sql` knew 2. Each was invisible in a different way, and Ken's `0 flags` output was the thread that unravelled all of it. **Two of my hypotheses were wrong and he corrected both** — the lesson is in the ledger: query all the sources before theorising.
+> Also: display name/avatar retry (third attempt; first two reverted rather than shipped), Message button hidden from signed-out visitors, `percent_blurt` for liquid author rewards, and three v1.8.10/v1.8.11 regressions of mine.
 >
-> ## Nothing is owed on Ken's box
-> No migrations, no config changes, no operator action — v1.8.11 is entirely browser-side. The v1.8.10 backup re-install is DONE and **backups are VERIFIED HEALTHY (2026-07-23)**: 20 daily dumps, unbroken 03:00 cadence, 205K→412K growth, `gzip -t` OK, 42 `CREATE TABLE`. **Do NOT re-raise backups, the MCP docker-bridge, or the retired interim timer.**
+> ## Ken's box
+> Nothing owed. Backups VERIFIED HEALTHY 2026-07-23 — **do NOT re-raise** backups, the MCP bridge, or the retired interim timer.
+> **ONE THING TO CHECK IN ~7 DAYS:** the payout on `@kentest3/percent-blurt-probe-mrxzwv2p`. He ran `apps/indexer/scripts/percent-blurt-probe.ts` and the chain ACCEPTED `percent_blurt: 10000` — but acceptance only proves the value is in range, not that the payout honours it. If that post pays out more than 25% liquid, the constant is right. If it pays exactly 25%, Blurt clamps internally and the constant should be documented as aspirational. That probe post is a throwaway; he can ignore or delete it.
 >
-> ## Known false in-chunk timeouts — THREE now, verify standalone before believing them
-> `vitest-must-pass` (#201), `workspace-typecheck` (#330), and **`doctor-smoke` (#104, new in v1.8.11 — it self-builds the ops-cli bundle)**. All pass standalone. Positions shift as smokes are added, so match by NAME, never by number.
+> ## Known false in-chunk timeouts — verify STANDALONE, match by NAME not number
+> `vitest-must-pass` (#203), `workspace-typecheck` (#332), `doctor-smoke` (#104, self-builds the ops-cli bundle). Positions shift as smokes are added.
 >
 > ## Sandbox facts (unchanged)
 > No `.git` and no Postgres in the sandbox; node v22. Validation commands: `cd apps/indexer && timeout 300 npx tsc --noEmit`; `cd apps/web && npx svelte-check --tsconfig ./tsconfig.json`; web vitest **1087 pass / 5 skipped / 71 files**, indexer **649 pass / 1 skipped**, relay 250, ops-cli **37**. Battery ALWAYS in ~50-smoke chunks: `MORPHIT_SMOKE_TIMEOUT=90 bash scripts/run-smokes-chunk.sh START END`. Two smokes ALWAYS false-timeout in-chunk and MUST be re-verified standalone: `vitest-must-pass` (`timeout 700 npx tsx --tsconfig tsconfig.smoke.json apps/web/scripts/vitest-must-pass-smoke.ts`) and `workspace-typecheck` (`timeout 900 npx tsx --tsconfig tsconfig.smoke.json scripts/workspace-typecheck-smoke.ts`, from the ROOT).

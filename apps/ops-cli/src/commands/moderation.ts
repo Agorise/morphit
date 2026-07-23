@@ -14,7 +14,9 @@
  *
  * Flags:
  *   --type=reciprocity|related   Show only one signal.  Default: both.
- *   --since=DUR                  Window.  Default 7d.
+ *   --since=DUR                  Window.  Default 7d.  Use `all` for no window
+ *                                (suppression is NOT time-limited, so older
+ *                                flags still exclude feedback from scores).
  *   --json                       Emit JSON, skip the resolution prompt.
  */
 
@@ -26,6 +28,9 @@ import { ask, askChoice, askYesNo } from '../init/prompt.ts';
 import {
 	fetchReciprocityFlags,
 	fetchRelatedFlags,
+	fetchPileOnFlags,
+	fetchConcentrationFlags,
+	countActiveFlagsOutsideWindow,
 	collectFlaggedAccounts,
 	fetchBlockStatuses,
 	type ReciprocityFlag,
@@ -43,17 +48,23 @@ export async function runModeration(ctx: CommandCtx): Promise<number> {
 	const sinceSec = parseDurationSpec(sinceSpec);
 	if (sinceSec === null) {
 		error(`Invalid --since value: ${sinceSpec}`);
-		info('Examples: 24h, 7d, 30d');
+		info('Examples: 24h, 7d, 30d, all');
 		return 1;
 	}
 	const type = ctx.flags.type;
-	if (type !== undefined && type !== 'reciprocity' && type !== 'related') {
+	// v1.8.12 — all FOUR suppression signals. C and D were never listed here,
+	// so an operator saw "0 flags" while a reputation sat suppressed by one of
+	// them, with no way to find out which. They suppress exactly like A and B.
+	const VALID_TYPES = ['reciprocity', 'related', 'pile_on', 'concentration'];
+	if (type !== undefined && !VALID_TYPES.includes(type)) {
 		error(`Invalid --type value: ${type}`);
-		info('Use: --type=reciprocity or --type=related');
+		info(`Use: --type=${VALID_TYPES.join(' | ')}`);
 		return 1;
 	}
 	const showReciprocity = type === undefined || type === 'reciprocity';
 	const showRelated = type === undefined || type === 'related';
+	const showPileOn = type === undefined || type === 'pile_on';
+	const showConcentration = type === undefined || type === 'concentration';
 	const json = ctx.flags.json === 'true';
 	const cutoff = new Date(Date.now() - sinceSec * 1000);
 	const limit = json ? HUMAN_LIMIT * 10 : HUMAN_LIMIT;
@@ -61,14 +72,26 @@ export async function runModeration(ctx: CommandCtx): Promise<number> {
 
 	const reciprocity = showReciprocity ? await fetchReciprocityFlags(ctx.db, cutoff, limit) : [];
 	const related = showRelated ? await fetchRelatedFlags(ctx.db, cutoff, limit) : [];
-	const accounts = collectFlaggedAccounts(reciprocity, related);
+	const pileOn = showPileOn ? await fetchPileOnFlags(ctx.db, cutoff, limit) : [];
+	const concentration = showConcentration
+		? await fetchConcentrationFlags(ctx.db, cutoff, limit)
+		: [];
+	const accounts = collectFlaggedAccounts(
+		[...reciprocity, ...pileOn, ...concentration],
+		related
+	);
 	const blocks = await fetchBlockStatuses(ctx.db, operator, accounts);
 
 	if (json) {
 		emitJson({
 			since_sec: sinceSec,
 			type: type ?? 'all',
-			counts: { suspicious_reciprocity: reciprocity.length, related_accounts: related.length },
+			counts: {
+				suspicious_reciprocity: reciprocity.length,
+				related_accounts: related.length,
+				one_way_pile_on: pileOn.length,
+				review_concentration: concentration.length
+			},
 			reciprocity: reciprocity.map((r) => ({
 				account_a: r.account_a,
 				account_b: r.account_b,
@@ -76,6 +99,18 @@ export async function runModeration(ctx: CommandCtx): Promise<number> {
 				reason: r.reason
 			})),
 			related: related.map((r) => ({
+				account_a: r.account_a,
+				account_b: r.account_b,
+				detected_at: r.detected_at.toISOString(),
+				reason: r.reason
+			})),
+			pile_on: pileOn.map((r) => ({
+				account_a: r.account_a,
+				account_b: r.account_b,
+				detected_at: r.detected_at.toISOString(),
+				reason: r.reason
+			})),
+			concentration: concentration.map((r) => ({
 				account_a: r.account_a,
 				account_b: r.account_b,
 				detected_at: r.detected_at.toISOString(),
@@ -90,7 +125,8 @@ export async function runModeration(ctx: CommandCtx): Promise<number> {
 		return 0;
 	}
 
-	renderHuman(sinceSec, reciprocity, related, blocks);
+	const hidden = await countActiveFlagsOutsideWindow(ctx.db, cutoff);
+	renderHuman(sinceSec, reciprocity, related, pileOn, concentration, blocks, hidden);
 
 	// Interactive resolution: only on a real TTY (the menu path and
 	// direct interactive runs). Piped stdin / CI just print the report.
@@ -224,17 +260,43 @@ function renderHuman(
 	sinceSec: number,
 	reciprocity: readonly ReciprocityFlag[],
 	related: readonly RelatedFlag[],
-	blocks: Map<string, BlockStatus>
+	pileOn: readonly RelatedFlag[],
+	concentration: readonly RelatedFlag[],
+	blocks: Map<string, BlockStatus>,
+	hidden: { reciprocity: number; related: number; pile_on: number; concentration: number }
 ): void {
 	section(`Moderation — flags & blocking (last ${formatDuration(sinceSec)})`);
 
-	const total = reciprocity.length + related.length;
+	const total = reciprocity.length + related.length + pileOn.length + concentration.length;
 	const blocked = [...blocks.values()].filter((b) => b.state === 'blocked').length;
 	info(
 		`  ${total} flag${total === 1 ? '' : 's'} ` +
-			fmt.dim(`(${reciprocity.length} reciprocity, ${related.length} related-account)`) +
+			fmt.dim(
+				`(${reciprocity.length} reciprocity, ${related.length} related-account, ` +
+					`${pileOn.length} pile-on, ${concentration.length} concentration)`
+			) +
 			(blocked > 0 ? `  ${fmt.red(`${blocked} flagged account(s) currently blocked here`)}` : '')
 	);
+	// v1.8.12 — the lists above are windowed, but reputation SUPPRESSION is not:
+	// any row in these tables excludes that pair's feedback from the score
+	// forever. A flag older than the window therefore keeps a reputation
+	// suppressed while showing up nowhere here, and the operator cannot clear
+	// what they cannot see. Say so rather than reporting a misleading zero.
+	const hiddenTotal = hidden.reciprocity + hidden.related + hidden.pile_on + hidden.concentration;
+	if (hiddenTotal > 0) {
+		info(
+			`  ${fmt.yellow(`⚠ ${hiddenTotal} older flag${hiddenTotal === 1 ? '' : 's'} outside this window`)} ` +
+				fmt.dim(
+					`(${hidden.reciprocity} reciprocity, ${hidden.related} related-account, ` +
+						`${hidden.pile_on} pile-on, ${hidden.concentration} concentration)`
+				)
+		);
+		info(
+			fmt.dim(
+				'    These STILL suppress reputation — suppression is not time-limited. Re-run with --since=all to see and clear them.'
+			)
+		);
+	}
 	blank();
 
 	info(fmt.bold('Suspicious reciprocity (Self-trade Signal B):'));
@@ -259,6 +321,35 @@ function renderHuman(
 			const age = formatDuration(ageSeconds(r.detected_at));
 			info(
 				`  ${age.padEnd(10)}${tag(r.account_a, blocks)} \u2194 ${tag(r.account_b, blocks)}  ${fmt.dim(r.reason)}`
+			);
+		}
+	}
+	blank();
+
+	// v1.8.12 — Signals C and D. They suppress reputation exactly like A and B
+	// but were never listed here, so a suppressed reputation had no visible
+	// cause and the operator was shown a misleading "0 flags".
+	info(fmt.bold('One-way pile-on (Signal C):'));
+	if (pileOn.length === 0) {
+		info(fmt.dim('  None in this window.'));
+	} else {
+		for (const r of pileOn) {
+			const age = formatDuration(ageSeconds(r.detected_at));
+			info(
+				`  ${age.padEnd(10)}${tag(r.account_b, blocks)} \u2192 ${tag(r.account_a, blocks)}  ${fmt.dim(r.reason)}`
+			);
+		}
+	}
+	blank();
+
+	info(fmt.bold('Review concentration (Signal D):'));
+	if (concentration.length === 0) {
+		info(fmt.dim('  None in this window.'));
+	} else {
+		for (const r of concentration) {
+			const age = formatDuration(ageSeconds(r.detected_at));
+			info(
+				`  ${age.padEnd(10)}${tag(r.account_a, blocks)} \u2192 ${tag(r.account_b, blocks)}  ${fmt.dim(r.reason)}`
 			);
 		}
 	}

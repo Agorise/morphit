@@ -2438,7 +2438,8 @@
 				"manual_account_label": "Twoja nazwa użytkownika Blurt",
 				"manual_account_placeholder": "np. alice",
 				"manual_account_hint": "Nie udało się wykryć Twojego konta na podstawie tego klucza — może pochodzić sprzed Blurt. Wpisz swoją nazwę użytkownika Blurt, abyśmy mogli potwierdzić, że klucz do niego należy.",
-				"manual_account_invalid": "Ta nazwa użytkownika nie pasuje do tego klucza. Sprawdź pisownię lub czy wkleiłeś właściwy prywatny klucz publikowania."
+				"manual_account_invalid": "Ta nazwa użytkownika nie pasuje do tego klucza. Sprawdź pisownię lub czy wkleiłeś właściwy prywatny klucz publikowania.",
+				"detected_account": "Rozpoznano — ten klucz należy do @{account}. Nazwa użytkownika nie jest potrzebna."
 			},
 			"error": {
 				"seed_word_count": "Fraza seed Blurt ma dokładnie 12 słów — wpisano {count}. Upewnij się, że jest wszystkie 12, każde oddzielone pojedynczą spacją.",
@@ -3610,7 +3611,8 @@
 		"given_said": "Napisałem(-am):",
 		"received_rated": "Ocenił(a) mnie:",
 		"average_rating_detail": "Średnia ocena: {avg}",
-		"feedback_all_excluded": "Poniższe opinie nie są wliczane do tej oceny — konta, które je wystawiły, zostały oznaczone przez nasze kontrole samodzielnego handlu."
+		"feedback_all_excluded": "Poniższe opinie nie są wliczane do tej oceny — konta, które je wystawiły, zostały oznaczone przez nasze kontrole samodzielnego handlu.",
+		"headline_is_average": "Średnia ocena"
 	},
 	"relative_time": {
 		"descriptive": {

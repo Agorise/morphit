@@ -2438,7 +2438,8 @@
 				"manual_account_label": "Votre nom d'utilisateur Blurt",
 				"manual_account_placeholder": "ex. alice",
 				"manual_account_hint": "Nous n'avons pas pu détecter votre compte à partir de cette clé — il date peut-être d'avant Blurt. Saisissez votre nom d'utilisateur Blurt pour confirmer que la clé lui appartient.",
-				"manual_account_invalid": "Ce nom d'utilisateur ne correspond pas à cette clé. Vérifiez l'orthographe, ou que vous avez collé la bonne Clé Privée de Publication."
+				"manual_account_invalid": "Ce nom d'utilisateur ne correspond pas à cette clé. Vérifiez l'orthographe, ou que vous avez collé la bonne Clé Privée de Publication.",
+				"detected_account": "Reconnu — cette clé appartient à @{account}. Aucun nom d'utilisateur requis."
 			},
 			"error": {
 				"seed_word_count": "Une phrase de récupération Blurt comporte exactement 12 mots — tu en as saisi {count}. Vérifie que les 12 sont présents, séparés par une seule espace.",
@@ -3610,7 +3611,8 @@
 		"given_said": "J'ai dit :",
 		"received_rated": "M'a noté :",
 		"average_rating_detail": "Note moyenne : {avg}",
-		"feedback_all_excluded": "Les avis ci-dessous ne sont pas inclus dans cette note : les comptes qui les ont laissés ont été signalés par nos contrôles anti-autotransaction."
+		"feedback_all_excluded": "Les avis ci-dessous ne sont pas inclus dans cette note : les comptes qui les ont laissés ont été signalés par nos contrôles anti-autotransaction.",
+		"headline_is_average": "Note moyenne"
 	},
 	"relative_time": {
 		"descriptive": {

@@ -1081,6 +1081,28 @@
 					</span>
 				</label>
 
+				{#if detectedAccount}
+					<!-- v1.8.12 (Ken) — CONFIRM the auto-detection.
+					     `detectedAccount` was set here but rendered NOWHERE, so a
+					     successful lookup produced no visible change at all: the
+					     username field simply never appeared and the user was left
+					     staring at a key field wondering what had gone wrong. Ken
+					     hit exactly this on @kencode and asked whether the feature
+					     had been removed or broken. It had done neither — it had
+					     started WORKING (his account is now in the indexer's
+					     posting-key index, so the reverse lookup resolves where it
+					     previously came back empty), but silently.
+					     A silent success that looks identical to a silent failure
+					     is a bug in its own right. Say what was found. -->
+					<p
+						class="mt-4 rounded-xl border border-morphit-emerald/30 bg-morphit-emerald/10 px-3 py-2 text-sm text-morphit-emerald"
+					>
+						{$_('onboarding.import.posting_only.detected_account', {
+							values: { account: detectedAccount }
+						})}
+					</p>
+				{/if}
+
 				{#if accountFieldNeeded}
 					<!-- cp434 — shown ONLY when the account can't be auto-detected from
 					     the key (typically a pre-Blurt/prefork account). Required, and

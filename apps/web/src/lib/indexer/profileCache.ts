@@ -53,6 +53,7 @@ const CACHE_TTL_MS = 90_000;
  *  long enough to prevent a retry storm during a sustained outage. */
 const FAILED_FETCH_TTL_MS = 5_000;
 
+
 /** Server-side batch limit. Larger requests are split into multiple
  *  HTTP calls; the resulting promises are awaited in parallel. */
 const MAX_BATCH_SIZE = 100;
@@ -188,6 +189,7 @@ async function fetchBatch(
 		clearTimeout(timeoutId);
 	}
 }
+
 
 /** Compose multiple AbortSignals. Aborts when any input aborts.
  *  Duplicate of the helper in indexer/client.ts; kept separate so
@@ -420,6 +422,30 @@ export async function getProfileCachedDetailed(
  * When `account` is provided, only that account's entry is removed;
  * otherwise the full cache is cleared.
  */
+/** Did this account's last read come back as a TRANSIENT FAILURE rather than an
+ *  authoritative "no profile"?
+ *
+ *  v1.8.12 (Ken) — cp428 already drew this distinction internally: a failed
+ *  fetch is cached SOFT (5s) while a real absence is cached for the full 90s,
+ *  on the reasoning that the short entry would "expire in seconds and the next
+ *  render re-fetches". The reasoning was right; the trigger was missing.
+ *  `hydrateProfiles` runs once per page load and once per loadMore, so on a
+ *  settled orderbook NOTHING asks again — the soft entry expired into silence
+ *  and the row kept its identicon until the user navigated or refreshed. Ken:
+ *  "i should never have to refresh the page to see the truth."
+ *
+ *  Exposing the distinction (rather than retrying in here) is deliberate. Two
+ *  previous attempts put the retry inside this module and both failed: one
+ *  blocked first render and broke the tested fail-fast contract, the other
+ *  needed a notification channel to reach the UI at all, because updating the
+ *  cache does not re-render anything. The CALLER already owns reactive state —
+ *  writing to it is what refreshes the view — so the caller retries and this
+ *  module just answers the one question it alone can answer: was that a real
+ *  answer, or a blip? */
+export function isSoftMiss(account: string): boolean {
+	return cache.get(account)?.soft === true;
+}
+
 export function clearProfileCache(account?: string): void {
 	if (account === undefined) {
 		cache.clear();

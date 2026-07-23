@@ -401,6 +401,10 @@ export async function detectOneWayPileOnInTx(client: pg.PoolClient): Promise<num
 
 /** Window over which a reviewer's concentration is computed. */
 const SIGNAL_D_WINDOW_DAYS = 30;
+/** How much further a cleared pair may concentrate before being re-flagged.
+ *  Mirrors SIGNAL_B_CLEARANCE_GROWTH: a clearance forgives the history it was
+ *  granted against, not all future behaviour. */
+const SIGNAL_D_CLEARANCE_GROWTH = 5;
 /** Minimum total reviews in the window for the signal to even apply.
  *  Below this, concentration is noise — a reviewer with only 2-3
  *  reviews can legitimately have one dominant subject (their only
@@ -487,13 +491,34 @@ export async function detectReviewConcentrationInTx(client: pg.PoolClient): Prom
 			$4::int
 		FROM concentration
 		WHERE concentration_pct >= $3
+		-- v1.8.12 (Ken): honour operator clearances, as Signals A and B already
+		-- do. Without this, Signal D was UNCLEARABLE — an operator could delete
+		-- the row, but the very next detector pass re-created it, so a
+		-- reputation suppressed by a false positive stayed suppressed forever.
+		-- Ken hit exactly that: he deleted two rows, watched both reputations
+		-- return, reloaded, and found them suppressed again.
+		--
+		-- Watermark semantics match Signal B: the clearance forgives the
+		-- history it was granted against, and the pair is re-flagged only if
+		-- concentration continues to GROW past that point (so a genuinely
+		-- self-dealing pair is caught again by fresh behaviour, while a
+		-- forgiven pair is not re-flagged on the same history). A NULL
+		-- watermark is permanent.
+		AND NOT EXISTS (
+			SELECT 1 FROM moderation_flag_clearances c
+			 WHERE c.signal = 'concentration'
+			   AND c.account_a = LEAST(reviewer, dominant_subject)
+			   AND c.account_b = GREATEST(reviewer, dominant_subject)
+			   AND (c.watermark IS NULL OR pair_count <= c.watermark + $5)
+		)
 		ON CONFLICT (reviewer, dominant_subject) DO NOTHING
 	`;
 	const result = await client.query(sql, [
 		SIGNAL_D_MIN_REVIEW_COUNT,
 		SIGNAL_D_MIN_AVG_RATING,
 		SIGNAL_D_MIN_CONCENTRATION_PCT,
-		SIGNAL_D_WINDOW_DAYS
+		SIGNAL_D_WINDOW_DAYS,
+		SIGNAL_D_CLEARANCE_GROWTH
 	]);
 	return result.rowCount ?? 0;
 }

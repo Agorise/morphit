@@ -24,7 +24,8 @@ import {
 	clearProfileCache,
 	primeProfile,
 	_profileCacheSize,
-	_profileInFlightCount
+	_profileInFlightCount,
+	isSoftMiss
 } from './profileCache';
 import { extractLabelPropsFromProfile } from './profileProps';
 
@@ -77,6 +78,49 @@ describe('profileCache', () => {
 	});
 
 	// ─── Basic behaviors ────────────────────────────────────────
+
+	// ─── isSoftMiss (v1.8.12, Ken) ──────────────────────────────
+	// The cache has always distinguished a TRANSIENT fetch failure (soft-cached
+	// 5s) from an authoritative "no profile" (90s), on the reasoning that the
+	// short entry would expire and "the next render re-fetches". Nothing ever
+	// did: hydrateProfiles runs once per page load and once per loadMore, so on
+	// a settled orderbook the soft entry expired into silence and the row kept
+	// its identicon until the user navigated or refreshed. Ken: "i should never
+	// have to refresh the page to see the truth."
+	// Reporting the distinction is what lets the orderbook re-ask for the first
+	// case and settle quietly on the second.
+
+	it('isSoftMiss: a FAILED fetch is a soft miss — worth re-asking', async () => {
+		fetchMock.mockRejectedValueOnce(new TypeError('network down'));
+		expect((await getProfilesBatch(['alice'])).get('alice')).toBeNull();
+		expect(isSoftMiss('alice')).toBe(true);
+	});
+
+	it('isSoftMiss: an authoritative "no profile" is NOT a soft miss', async () => {
+		fetchMock.mockResolvedValue(mockBatchResponse({}));
+		expect((await getProfilesBatch(['ghost'])).get('ghost')).toBeNull();
+		expect(isSoftMiss('ghost')).toBe(false);
+	});
+
+	it('isSoftMiss: a successful read is not a soft miss', async () => {
+		fetchMock.mockResolvedValue(mockBatchResponse({ alice: mockProfile('alice') }));
+		await getProfilesBatch(['alice']);
+		expect(isSoftMiss('alice')).toBe(false);
+	});
+
+	it('THE FIX END TO END: blip, then re-ask, then the real profile appears', async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-04-23T12:00:00Z'));
+		fetchMock.mockRejectedValueOnce(new TypeError('down'));
+		await getProfilesBatch(['alice']);
+		expect(isSoftMiss('alice')).toBe(true); // → the orderbook schedules a re-ask
+
+		// The re-ask lands just past the 5s soft TTL.
+		vi.setSystemTime(new Date('2026-04-23T12:00:06Z'));
+		fetchMock.mockResolvedValue(mockBatchResponse({ alice: mockProfile('alice') }));
+		expect((await getProfilesBatch(['alice'])).get('alice')).not.toBeNull();
+		expect(isSoftMiss('alice')).toBe(false);
+	});
 
 	it('returns an empty Map for an empty input', async () => {
 		const r = await getProfilesBatch([]);
