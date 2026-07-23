@@ -27,7 +27,7 @@
  */
 
 import { formatPublicKey } from './keygen';
-import { impersonatesReservedName } from './confusables';
+import { impersonatesReservedName, ownsReservedName } from './confusables';
 
 // cp404 — capDisplayName + the length constants live in the keygen-free
 // $lib/crypto/displayName module so light, baseline-closure consumers
@@ -80,7 +80,7 @@ function isControlChar(code: number): boolean {
  * Validate + normalize a display name. Returns the cleaned form plus an
  * error i18n key if anything is wrong.
  */
-export function validateDisplayName(raw: string): DisplayNameValidation {
+export function validateDisplayName(raw: string, signer?: string): DisplayNameValidation {
 	if (typeof raw !== 'string') {
 		return { ok: false, reasonKey: 'profile.display_name.errors.invalid', cleaned: '' };
 	}
@@ -138,7 +138,13 @@ export function validateDisplayName(raw: string): DisplayNameValidation {
 	// chars) take precedence — easier for the user to understand
 	// "the @ sign isn't allowed" than "your name is a homograph
 	// of a reserved operator".
-	if (impersonatesReservedName(s)) {
+	// v1.8.10 (Ken): the signed-in account is exempt on its OWN reserved name —
+	// @agorise setting "Agorise" is not impersonation. Mirrors the indexer,
+	// which enforces the same rule against the chain-authenticated signer and
+	// remains the authority; this keeps the FORM from rejecting what the chain
+	// would accept. Callers that don't know the account pass nothing and get the
+	// old, strict behaviour.
+	if (!(signer !== undefined && ownsReservedName(signer, s)) && impersonatesReservedName(s)) {
 		return {
 			ok: false,
 			reasonKey: 'profile.display_name.errors.impersonation',

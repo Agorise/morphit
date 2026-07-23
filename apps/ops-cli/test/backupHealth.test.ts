@@ -24,6 +24,7 @@ import {
 	formatBackupSize,
 	BACKUP_STALE_AFTER_MS,
 	BACKUP_TRIGGER_SLACK_MS,
+	BACKUP_MIN_PLAUSIBLE_BYTES,
 	type BackupFacts
 } from '../src/commands/health.ts';
 
@@ -133,8 +134,40 @@ describe('checkBackups', () => {
 
 	it('goes stale once a nightly run has clearly been missed', () => {
 		const atMs = NOW.getTime() - (BACKUP_STALE_AFTER_MS + HOUR);
-		const s = checkBackups(facts({ newest: { name: 'old.sql.gz', atMs, bytes: 1 }, lastTriggerMs: atMs }), NOW);
+		const s = checkBackups(
+			facts({ newest: { name: 'old.sql.gz', atMs, bytes: 407487 }, lastTriggerMs: atMs }),
+			NOW
+		);
 		expect(s.state).toBe('stale');
+	});
+
+	it('THE TRUNCATED-DUMP CASE: a recent but implausibly small dump is failing, not fresh', () => {
+		// Before the cp526 status-capture fix, a pg_dump that could not connect
+		// still left a valid ~20-byte gzip member, which the script renamed to a
+		// real backup name. It is perfectly RECENT, so every timing rule passes —
+		// only the size can tell the operator their restore point is worthless.
+		const atMs = NOW.getTime() - 13 * HOUR;
+		const s = checkBackups(
+			facts({ newest: { name: 'morphit-20260722-042219.sql.gz', atMs, bytes: 20 }, lastTriggerMs: atMs }),
+			NOW
+		);
+		expect(s.state).toBe('failing');
+		expect(s.detail).toContain('too small');
+		expect(s.bytes).toBe(20);
+	});
+
+	it('the plausibility floor sits far below any real dump, so it cannot false-positive', () => {
+		// The indexer schema alone gzips to tens of KB.
+		expect(BACKUP_MIN_PLAUSIBLE_BYTES).toBeLessThan(10_000);
+		const atMs = NOW.getTime() - HOUR;
+		const s = checkBackups(
+			facts({
+				newest: { name: 'small-but-real.sql.gz', atMs, bytes: BACKUP_MIN_PLAUSIBLE_BYTES },
+				lastTriggerMs: atMs
+			}),
+			NOW
+		);
+		expect(s.state).toBe('fresh');
 	});
 
 	it('the stale window absorbs the timer jitter of a normal daily run', () => {
@@ -142,7 +175,10 @@ describe('checkBackups', () => {
 		// apart. That must not read as stale, or the signal becomes noise operators
 		// learn to ignore.
 		const atMs = NOW.getTime() - 25 * HOUR;
-		const s = checkBackups(facts({ newest: { name: 'ok.sql.gz', atMs, bytes: 1 }, lastTriggerMs: atMs }), NOW);
+		const s = checkBackups(
+			facts({ newest: { name: 'ok.sql.gz', atMs, bytes: 407487 }, lastTriggerMs: atMs }),
+			NOW
+		);
 		expect(s.state).toBe('fresh');
 		expect(BACKUP_STALE_AFTER_MS).toBeGreaterThan(24.5 * HOUR);
 	});

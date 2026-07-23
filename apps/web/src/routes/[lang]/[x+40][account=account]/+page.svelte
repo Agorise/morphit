@@ -27,7 +27,7 @@
 	 * a "Load more" button.
 	 */
 
-	import { onMount } from 'svelte';
+	import { untrack } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import { page } from '$app/stores';
 
@@ -57,7 +57,8 @@
 		getProfile,
 		getFeedback,
 		getFeedbackGiven,
-		getOrdersByAccount
+		getOrdersByAccount,
+		getReputationReceipt
 	} from '$lib/indexer/client';
 	import { getProfilesBatch } from '$lib/indexer/profileCache';
 	import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
@@ -116,6 +117,21 @@
 	let ordersState = $state<LoadState>('loading');
 	let profile = $state<ProfileResponse | null>(null);
 	let feedback = $state<AccountFeedbackResponse | null>(null);
+	/** The composite reputation score (cp404 Bayesian-shrunk, experience- and
+	 *  recency-adjusted) — the SAME number every order card and chat header
+	 *  shows. Distinct from `feedback.summary.weighted_rating`, which is the raw
+	 *  time-decayed mean. Ken hit the mismatch: the profile trumpeted the raw
+	 *  4.75 while the trade-decision surfaces showed the composite 3.97 for the
+	 *  same trader. The headline now shows THIS, so the number a viewer sees on
+	 *  the profile matches the one they saw before clicking through. */
+	let reputationScore = $state<number | null>(null);
+	/** The number shown large at the top of the reputation card. Prefers the
+	 *  composite score (what order cards and chat show) and falls back to the raw
+	 *  weighted average when no score is available — so the card never renders
+	 *  blank on an account with ratings but no computable score. */
+	const headlineRating = $derived(
+		reputationScore ?? (feedback === null ? 0 : feedback.summary.weighted_rating)
+	);
 	let feedbackItems = $state<FeedbackRecord[]>([]);
 	let feedbackNextCursor: string | null = $state(null);
 	let feedbackError = $state('');
@@ -192,7 +208,12 @@
 	}
 
 	async function loadProfile(): Promise<void> {
-		const r = await getProfile(account);
+		// Capture the account this call is FOR. If the user navigates away before
+		// the fetch resolves, `account` will have changed and we must NOT write a
+		// stale response into the new profile's view (the cross-account race).
+		const forAccount = account;
+		const r = await getProfile(forAccount);
+		if (forAccount !== account) return;
 		if (r.ok) {
 			profile = r.data;
 		} else {
@@ -209,7 +230,11 @@
 	}
 
 	async function loadFeedbackPage(cursor?: string): Promise<void> {
-		const r = await getFeedback(account, { cursor });
+		const forAccount = account;
+		const r = await getFeedback(forAccount, { cursor });
+		// Discard a response that arrived after the user navigated to a different
+		// profile — otherwise the previous account's reviews land in this view.
+		if (forAccount !== account) return;
 		if (r.ok) {
 			feedback = r.data;
 			// v1.7.0 "fastrepliestofeedbacks" (ADR-0051) — slot in any reply this
@@ -252,7 +277,9 @@
 	}
 
 	async function loadFeedbackGivenPage(cursor?: string): Promise<void> {
-		const r = await getFeedbackGiven(account, { cursor });
+		const forAccount = account;
+		const r = await getFeedbackGiven(forAccount, { cursor });
+		if (forAccount !== account) return;
 		if (r.ok) {
 			if (cursor) {
 				feedbackGivenItems = [...feedbackGivenItems, ...r.data.items];
@@ -280,13 +307,15 @@
 	}
 
 	async function loadOrders(): Promise<void> {
+		const forAccount = account;
 		ordersState = 'loading';
 		ordersError = '';
 		// Max limit so we capture all live orders for almost every
 		// realistic user. Power users with >100 live orders would
 		// need pagination here; not implemented as it's not a
 		// Phase 5 problem.
-		const r = await getOrdersByAccount(account, { limit: 100 });
+		const r = await getOrdersByAccount(forAccount, { limit: 100 });
+		if (forAccount !== account) return;
 		if (r.ok) {
 			allOrders = [...r.data.items];
 			ordersState = 'ready';
@@ -297,14 +326,72 @@
 		}
 	}
 
-	onMount(() => {
-		// Parallel fetch — profile, feedback (received), feedback
-		// (given), and orders are all independent. Each updates
-		// its own loading state.
-		void loadProfile();
-		void loadFeedbackPage();
-		void loadFeedbackGivenPage();
-		void loadOrders();
+	/** Fetch the composite reputation score from the same receipt endpoint the
+	 *  order cards and chat header use, so the profile headline agrees with them.
+	 *  Stale-guarded like the others. A missing score (no included feedback, or
+	 *  an older indexer that doesn't compute it) leaves the headline to fall back
+	 *  to the raw weighted average — never worse than before this change. */
+	async function loadReputationScore(): Promise<void> {
+		const forAccount = account;
+		const r = await getReputationReceipt(forAccount);
+		if (forAccount !== account) return;
+		if (r.ok) {
+			reputationScore = r.data.summary.reputation_score ?? null;
+		} else {
+			// Non-fatal: the hero falls back to the raw weighted average.
+			console.warn('[profile] reputation receipt load failed:', r.message);
+			reputationScore = null;
+		}
+	}
+
+	// Reload whenever the account changes — NOT just onMount. SvelteKit reuses
+	// this component instance when navigating /@a → /@b (same route, new param),
+	// so onMount fires only for the first profile viewed. Without this effect,
+	// every subsequent profile rendered the PREVIOUS user's data — reputation,
+	// reviews and orders all stale — until a hard refresh forced a fresh mount.
+	// Ken hit exactly this: /@kentest3 showed kentest2's 5-star card.
+	//
+	// Reading `account` registers the dependency. On each change we first RESET
+	// every per-account slice back to its loading baseline (so the old user's
+	// data can never flash on the new user's page, even for the moment before
+	// the fetch resolves), then re-fire the four independent loads. The reset is
+	// the load-bearing half: the reputation card derives from `feedback`, and a
+	// stale `feedback` is precisely what rendered the wrong score.
+	$effect(() => {
+		const forAccount = account; // the ONE dependency: re-run only on account change
+		if (!forAccount) return;
+
+		// Everything below is untracked so the effect can never re-fire on an
+		// incidental reactive read inside a load function (now or as this file
+		// grows) — the account is the only thing that should retrigger a reload.
+		untrack(() => {
+			// Reset to first-load state. Keep this in sync with the $state
+			// declarations above — anything account-scoped must be cleared here.
+			profile = null;
+			feedback = null;
+			reputationScore = null;
+			feedbackItems = [];
+			feedbackNextCursor = null;
+			feedbackError = '';
+			feedbackState = 'loading';
+			feedbackGivenItems = [];
+			feedbackGivenNextCursor = null;
+			feedbackGivenError = '';
+			feedbackGivenState = 'loading';
+			allOrders = [];
+			ordersError = '';
+			ordersState = 'loading';
+			reviewerProfileMap = {};
+
+			// Parallel fetch — profile, feedback (received + given) and orders are
+			// all independent. Each updates its own loading state and self-guards
+			// against a stale cross-account response (see the load fns above).
+			void loadProfile();
+			void loadFeedbackPage();
+			void loadFeedbackGivenPage();
+			void loadOrders();
+			void loadReputationScore();
+		});
 	});
 
 	// ─── Derived view state ────────────────────────────────────────
@@ -650,19 +737,38 @@
 			<p class="mt-1 text-xs text-ink-500">{feedbackError}</p>
 		{:else if feedback && feedback.summary.count > 0}
 			<div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-6">
-				<!-- Big number + stars -->
+				<!-- Big number + stars.
+				     v1.8.10 (Ken): this headline used to be the RAW time-decayed
+				     average (`weighted_rating`), while every order card and chat
+				     header showed the COMPOSITE `reputation_score`. Same trader,
+				     two different headline numbers depending on the page — and the
+				     profile always flattered, because the composite shrinks a thin
+				     sample toward neutral. Ken spotted 4.75 here vs 3.97 there.
+				     The headline is now the composite, so the number you see after
+				     clicking a trader's name matches the one that made you click.
+				     The raw average stays visible directly below, labelled, since
+				     it is what the histogram beneath actually plots.
+				     Falls back to the raw average when the score is unavailable
+				     (no included feedback, or an older indexer). -->
 				<div class="flex flex-none flex-col items-center sm:items-start">
 					<span class="font-display text-4xl font-extrabold">
-						{feedback.summary.weighted_rating.toFixed(2)}
+						{headlineRating.toFixed(2)}
 					</span>
 					<span aria-hidden="true" class="text-morphit-emerald">
-						{starString(Math.round(feedback.summary.weighted_rating) as 1 | 2 | 3 | 4 | 5)}
+						{starString(Math.round(headlineRating) as 1 | 2 | 3 | 4 | 5)}
 					</span>
 					<span class="mt-1 text-xs text-ink-500">
 						{$_('profile.rating_count', {
 							values: { n: feedback.summary.count }
 						})}
 					</span>
+					{#if reputationScore !== null}
+						<span class="mt-1 text-xs text-ink-500">
+							{$_('profile.average_rating_detail', {
+								values: { avg: feedback.summary.weighted_rating.toFixed(2) }
+							})}
+						</span>
+					{/if}
 				</div>
 
 				<!-- Histogram -->

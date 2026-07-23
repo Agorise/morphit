@@ -122,7 +122,18 @@ check('the RE: line still links to the order', /\/@\$\{orderOwner \?\? peer\}\/\
 // NB: match the kebab's MARKUP (`bind:this=`), not the identifier — the latter
 // is declared in <script>, thousands of characters before any of this.
 check('the kebab is the last item of the identity ROW (top-aligned with the name)', at('items-start gap-3') < at('bind:this={overflowTriggerEl}'));
-check('…and the RE: line comes before the kebab in that row', at('chat.header.re') < at('bind:this={overflowTriggerEl}'));
+// v1.8.10 (Ken) — this used to assert the RE: line came BEFORE the kebab, i.e.
+// that it lived inside the identity row. That was the bug: the kebab is
+// `flex-none`, so sitting in the same row it reserved its footprint against all
+// three lines and the subject truncated early with visible empty space beside
+// it. The RE: line is now a SIBLING of the row, so it spans the full header
+// width — which means it must come AFTER the kebab in source order. Pinning the
+// new direction keeps the old structure from creeping back.
+check(
+	'the RE: line sits AFTER the identity row, so it spans the full header width',
+	at('chat.header.re') > at('bind:this={overflowTriggerEl}'),
+	'inside the row it shares width with the flex-none kebab and truncates early'
+);
 check('the old right-hand column wrapper is gone', !/flex flex-none flex-col items-end/.test(code));
 
 // ─── LIVE moved into the menu, in Ken's order ────────────────────────

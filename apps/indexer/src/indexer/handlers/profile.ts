@@ -14,7 +14,7 @@
 import type pg from 'pg';
 import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contract';
 import { checkJsonbSize, MAX_JSONB_BYTES_PROFILE } from '$indexer/payloadSize';
-import { impersonatesReservedName } from '$indexer/confusables';
+import { impersonatesReservedName, ownsReservedName } from '$indexer/confusables';
 
 const DISPLAY_NAME_MAX = 64;
 
@@ -43,7 +43,7 @@ interface ValidatedPayload {
 	readonly json_metadata: Record<string, unknown>;
 }
 
-function validate(payload: unknown): ValidatedPayload | { reason: string } {
+function validate(payload: unknown, signer: string): ValidatedPayload | { reason: string } {
 	if (!isPlainObject(payload)) return { reason: 'payload_not_object' };
 
 	// display_name is OPTIONAL — a profile may set only an avatar
@@ -107,7 +107,21 @@ function validate(payload: unknown): ValidatedPayload | { reason: string } {
 	// their own canonical display).
 	// Mirror of apps/web/src/lib/crypto/confusables.ts — keep the
 	// two tables synchronized.
-	if (impersonatesReservedName(trimmed)) {
+	//
+	// v1.8.10 (Ken): the SIGNER is exempt from the check on their OWN name.
+	// Impersonation means claiming to be someone you are not, so @agorise
+	// writing "Agorise" — or @kencode writing "KenCode" — is not impersonation
+	// by definition; it is the only person on the chain for whom that name is
+	// simply true. The guard is substring-based with a byte-equality escape, so
+	// before this the rightful owner could set exactly `agorise` and nothing
+	// else: `Agorise` (capitalised!), `@agorise`, and `Ken @ Agorise` were all
+	// rejected. Ken hit that on his own accounts.
+	//
+	// This does NOT widen the guard for anyone else: the exemption is keyed on
+	// `ctx.signer`, which is chain-authenticated by `extractSigner`, so it
+	// cannot be asserted by a third party. Everyone else is still blocked from
+	// every confusable form, which is the case the check was built for.
+	if (!ownsReservedName(signer, trimmed) && impersonatesReservedName(trimmed)) {
 		return { reason: 'display_name_impersonates_reserved' };
 	}
 
@@ -148,7 +162,7 @@ const PROFILE_METADATA_KEYS = [
 ] as const;
 
 const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<HandlerResult> => {
-	const v = validate(ctx.payload);
+	const v = validate(ctx.payload, ctx.signer);
 	if ('reason' in v) return { ok: false, reason: v.reason };
 
 	// MERGE json_metadata rather than wholesale-replace, so a partial

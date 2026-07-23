@@ -72,12 +72,23 @@
 			case 'primary':
 				return 'bg-morphit-btn text-white font-bold shadow hover:brightness-110 disabled:bg-ink-300 disabled:text-ink-500 disabled:shadow-none';
 			case 'secondary':
-				return 'bg-white dark:bg-ink-900 text-morphit-emerald font-semibold border-2 border-morphit-emerald hover:bg-emerald-50 dark:hover:bg-ink-800 disabled:border-ink-300 disabled:text-ink-400';
+				// v1.8.10 (Ken): the disabled colours carry `dark:` variants now.
+				// `border-ink-300 / text-ink-400` are LIGHT-theme greys — on the
+				// dark chat surface they render as a near-white outline and label,
+				// so a disabled Send button was the brightest thing on the screen
+				// and read as the primary call to action. Ken asked that it match
+				// the textarea beside it, which is `dark:border-ink-700`; the label
+				// takes ink-600 so it sits just above the placeholder text rather
+				// than shouting. Applies while `sending` too, since BusyButton
+				// disables during flight — that was the "too bright when Sending"
+				// half of the same report.
+				return 'bg-white dark:bg-ink-900 text-morphit-emerald font-semibold border-2 border-morphit-emerald hover:bg-emerald-50 dark:hover:bg-ink-800 disabled:border-ink-300 disabled:text-ink-400 dark:disabled:border-ink-700 dark:disabled:text-ink-600';
 			case 'secondary-quiet':
 				// v1.5.0 — like `secondary` but a 1px (not 2px) border, for
 				// save-in-place actions (Settings). Full-strength emerald: the
 				// old 40%-opacity border read as washed-out/pink on some displays.
-				return 'bg-white dark:bg-ink-900 text-morphit-emerald font-semibold border border-morphit-emerald hover:bg-emerald-100 dark:hover:bg-ink-800 disabled:border-ink-300 disabled:text-ink-400';
+				// v1.8.10 — same dark-theme disabled fix as `secondary` above.
+				return 'bg-white dark:bg-ink-900 text-morphit-emerald font-semibold border border-morphit-emerald hover:bg-emerald-100 dark:hover:bg-ink-800 disabled:border-ink-300 disabled:text-ink-400 dark:disabled:border-ink-700 dark:disabled:text-ink-600';
 			case 'danger':
 				// Outlined destructive action (cancel an order, etc.): dark-red
 				// text + border with a faint red wash on hover. Outlined rather

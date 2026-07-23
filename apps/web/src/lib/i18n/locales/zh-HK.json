@@ -3608,7 +3608,8 @@
 			"qr_invalid": "該二維碼不包含 Blurt 帳戶。請換一個。"
 		},
 		"given_said": "我話：",
-		"received_rated": "畀我嘅評分："
+		"received_rated": "畀我嘅評分：",
+		"average_rating_detail": "平均評分：{avg}"
 	},
 	"relative_time": {
 		"descriptive": {
@@ -4210,7 +4211,8 @@
 				"processing_failed": "無法處理此圖片。請嘗試其他檔案。"
 			},
 			"remove_confirm_title": "移除您的頭像？",
-			"remove_confirm_body": "這會廣播一次資料更新，清除鏈上的頭像。您隨時可以上載新的頭像。"
+			"remove_confirm_body": "這會廣播一次資料更新，清除鏈上的頭像。您隨時可以上載新的頭像。",
+			"preview_too_large": "太大，無法廣播——上限為 {cap}。請嘗試更簡單的圖片或更細的原檔。"
 		},
 		"blocked_accounts": {
 			"heading": "已封鎖帳戶",

@@ -110,6 +110,27 @@ check(
 	'under ~25h a normal jittered run reads as stale and operators learn to ignore the signal'
 );
 
+// ─── a dump too small to BE a dump (cp526) ───────────────────────
+// Freshness alone is not enough. The pre-cp526 backup script renamed a FAILED
+// pg_dump's ~20-byte gzip member to a real backup name, so the useless
+// artefact was also the NEWEST one — every timing rule passes and only size
+// betrays it. Without this floor the health line greenlights a directory of
+// worthless restore points.
+const floorBytes = /BACKUP_MIN_PLAUSIBLE_BYTES = (\d+)/.exec(health)?.[1];
+check('a minimum plausible dump size is declared', floorBytes !== undefined);
+check(
+	`the floor (${floorBytes ?? '?'}B) is above a bare gzip member but far below a real dump`,
+	floorBytes !== undefined && Number(floorBytes) > 200 && Number(floorBytes) <= 10_000,
+	'too low and a 20-byte fragment passes; too high and a legitimate small dump false-positives'
+);
+check(
+	'the size check runs BEFORE the timing rules, so a fresh fragment cannot slip through',
+	health.indexOf('BACKUP_MIN_PLAUSIBLE_BYTES') !== -1 &&
+		health.indexOf('facts.newest.bytes < BACKUP_MIN_PLAUSIBLE_BYTES') <
+			health.indexOf('facts.lastTriggerMs > facts.newest.atMs + BACKUP_TRIGGER_SLACK_MS'),
+	'a truncated dump is typically brand new — checked after the clocks, it reads as fresh'
+);
+
 // ─── documented for operators, in BOTH docs ──────────────────────
 // Specific enough that they cannot pass on words that merely happen to appear.
 check(

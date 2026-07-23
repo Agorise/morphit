@@ -355,6 +355,24 @@
 	/** Byte size of the staged payload. Drives the "getting large"
 	 *  soft-warning hint. Zero means nothing staged. */
 	let avatarStagedBytes = $state(0);
+	/** Avatar size thresholds, MIRRORED from `$lib/avatar` (MAX_AVATAR_BYTES /
+	 *  SOFT_WARN_AVATAR_BYTES).
+	 *
+	 *  Mirrored rather than imported because `$lib/avatar` carries the SVG
+	 *  sanitizer, minifier and raster encoder, and is deliberately lazy-imported
+	 *  so none of that lands in the initial bundle just to render a settings
+	 *  page. `avatar-size-thresholds-smoke` pins these two numbers to the
+	 *  module's exports so the mirror cannot drift.
+	 *
+	 *  v1.8.10 (Ken) — these were previously hardcoded as 2048 (warn) and 3072
+	 *  (cap), and BOTH were wrong. The real cap is 6144, so the preview told
+	 *  users "of 3.0 KB maximum" for a limit that did not exist, and a 3.5 KB
+	 *  image was reported as over a maximum it was comfortably under. The warn
+	 *  threshold sat at 2048 — 33% of the actual cap — so a perfectly fine
+	 *  2.9 KB avatar was shown a red error saying it was near a limit it was
+	 *  nowhere near. Ken hit both. */
+	const AVATAR_CAP_BYTES = 6144;
+	const AVATAR_SOFT_WARN_BYTES = 4096;
 	/** Non-empty while the user is resizing / encoding. Blocks the
 	 *  form during the brief (<500ms typical) browser work. */
 	let avatarProcessing = $state(false);
@@ -501,7 +519,13 @@
 		}
 	});
 
-	const validation = $derived(validateDisplayName(input));
+	// v1.8.10 (Ken): pass the signed-in account so the reserved-name guard can
+	// exempt its rightful owner — @agorise setting "Agorise" is not
+	// impersonation. `?? undefined` keeps the strict behaviour for a signed-out
+	// or unknown session rather than passing an empty string that matches
+	// nothing. The indexer re-checks against the chain-authenticated signer and
+	// is the authority; this only stops the FORM rejecting what the chain allows.
+	const validation = $derived(validateDisplayName(input, getUserBlurtAccount() ?? undefined));
 	/** v1.5.0 (t.txt line 5): the field has been emptied while a name is still
 	 *  saved — a "remove my display name" intent. An empty name is otherwise
 	 *  invalid (too short), so this gates the Save buttons + handlers to allow
@@ -1518,7 +1542,7 @@
 				<p class="mb-3 text-xs uppercase tracking-wider text-ink-500">
 					{$_('settings.avatar.preview_label')}
 				</p>
-				<div class="flex items-center gap-4">
+				<div class="flex flex-wrap items-center gap-4">
 					<IdentityLabel
 						displayName={saved || $_('settings.avatar.preview_display_name_placeholder')}
 						publicKey={previewPubkey}
@@ -1526,17 +1550,36 @@
 						avatarDataUri={avatarStagedDataUri || null}
 						avatarSize={96}
 					/>
-					<div class="text-sm text-ink-500">
+					<!-- v1.8.10 (Ken): `min-w-0 flex-1` stops this column being squeezed
+					     into a two-words-per-line ribbon beside the 96px avatar. It had
+					     no width basis at all, so the flex row gave it whatever was
+					     left; on a narrow card that was almost nothing. flex-wrap on the
+					     row lets it drop below the avatar rather than shrink to
+					     unreadable. -->
+					<div class="min-w-0 flex-1 text-sm text-ink-500">
 						<p>
 							{$_('settings.avatar.preview_size', {
 								values: {
 									bytes: formatBytes(avatarStagedBytes),
-									cap: formatBytes(3072)
+									cap: formatBytes(AVATAR_CAP_BYTES)
 								}
 							})}
 						</p>
-						{#if avatarStagedBytes > 2048}
+						<!-- Three distinct states, because they call for three different
+						     actions. Previously ONE message ("getting close to the size
+						     limit") covered every case above a 2048 threshold that bore no
+						     relation to the real 6144 cap — so it fired on files that were
+						     comfortably fine, and said the same reassuring "getting close"
+						     about a file that was actually OVER the limit and could not be
+						     broadcast at all. -->
+						{#if avatarStagedBytes > AVATAR_CAP_BYTES}
 							<p class="mt-1 text-red-600 dark:text-red-400">
+								{$_('settings.avatar.preview_too_large', {
+									values: { cap: formatBytes(AVATAR_CAP_BYTES) }
+								})}
+							</p>
+						{:else if avatarStagedBytes > AVATAR_SOFT_WARN_BYTES}
+							<p class="mt-1 text-amber-600 dark:text-amber-400">
 								{$_('settings.avatar.preview_getting_large')}
 							</p>
 						{/if}

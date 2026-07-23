@@ -583,3 +583,25 @@ export function isReservedTag(tag: string): boolean {
 	}
 	return false;
 }
+
+/** v1.8.10 — mirror of the indexer's `ownsReservedName`.
+ *
+ *  The impersonation guard is substring-based, so any text CONTAINING a
+ *  reserved name trips it. Correct for a stranger, wrong for the account
+ *  itself: @agorise writing "Agorise" or "Ken @ Agorise" is not impersonating
+ *  anyone. Without this the owner could set EXACTLY `agorise` and nothing else,
+ *  not even capitalised — which is what Ken hit on his own accounts.
+ *
+ *  This exists so the FORM does not reject something the chain will accept. The
+ *  indexer performs the same check against the chain-authenticated signer and
+ *  remains the authority; this copy only keeps the client from lying to the
+ *  user. Keep the two in sync — `reserved-name-owner-parity-smoke` pins them. */
+export function ownsReservedName(signer: string, input: string): boolean {
+	const lower = signer.toLowerCase();
+	for (const raw of RESERVED_NAMES_RAW) {
+		if (lower !== raw) continue;
+		const re = compileReservedRegex(raw);
+		if (re.test(input)) return true;
+	}
+	return false;
+}

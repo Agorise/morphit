@@ -3608,7 +3608,8 @@
 			"qr_invalid": "Ce QR ne contenait pas de compte Blurt. Essayez-en un autre."
 		},
 		"given_said": "J'ai dit :",
-		"received_rated": "M'a noté :"
+		"received_rated": "M'a noté :",
+		"average_rating_detail": "Note moyenne : {avg}"
 	},
 	"relative_time": {
 		"descriptive": {
@@ -4210,7 +4211,8 @@
 				"processing_failed": "Impossible de traiter cette image. Essaie un autre fichier."
 			},
 			"remove_confirm_title": "Supprimer votre avatar ?",
-			"remove_confirm_body": "Cela diffuse une mise à jour de profil qui efface votre avatar sur la chaîne. Vous pourrez en téléverser un nouveau à tout moment."
+			"remove_confirm_body": "Cela diffuse une mise à jour de profil qui efface votre avatar sur la chaîne. Vous pourrez en téléverser un nouveau à tout moment.",
+			"preview_too_large": "Trop volumineux pour être diffusé — le maximum est {cap}. Essayez une image plus simple ou une source plus petite."
 		},
 		"blocked_accounts": {
 			"heading": "Comptes bloqués",

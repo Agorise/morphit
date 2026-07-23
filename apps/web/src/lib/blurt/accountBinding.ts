@@ -91,6 +91,36 @@ export async function resolveBroadcastAccount(
 	}
 
 	if (accounts.length === 0) {
+		// PRE-FORK / STEEM-ERA ACCOUNTS (v1.8.10, Ken).
+		//
+		// An empty result does NOT mean the key controls nothing — it means
+		// neither reverse-lookup source could SEE the account. Blurt's
+		// `account_by_key` plugin only indexes keys set by a post-fork op, so a
+		// Steem-era account that never re-set its posting key returns [] from
+		// the chain even though that key is a perfectly valid current authority;
+		// and the indexer's own `accounts.posting_pubkey` only covers accounts
+		// that have already touched Morphit. A long-dormant account satisfies
+		// neither, so both come back empty.
+		//
+		// Refusing here was wrong, and produced a genuinely baffling state: the
+		// user could SIGN IN fine (the import flow falls back to manual
+		// account-name entry on exactly this empty result) and then be told, on
+		// every broadcast, that their key "doesn't control any account" — while
+		// the same key logs into other Blurt front-ends without complaint.
+		//
+		// So fall back to the name the user gave us, and let the FORWARD check
+		// decide. That check (`assertKeyControlsAccount`, called by every
+		// broadcast path right after this) fetches the account's real on-chain
+		// posting authority and refuses unless our key is actually listed in it.
+		// That is the true security boundary and it does not depend on either
+		// reverse index: a wrong or malicious hint fails it. The reverse lookup
+		// was only ever a convenience for picking among candidates.
+		if (hint) {
+			// NOT cached: the hint is unverified at this point, and caching it
+			// would let one unverified guess stand in for every later op in the
+			// session. The forward authority check does its own memoization.
+			return hint;
+		}
 		throw new AccountBindingError(
 			'no_account_for_key',
 			'The key in this session does not control any account on the blockchain.'

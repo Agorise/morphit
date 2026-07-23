@@ -1740,25 +1740,6 @@
 							{/if}
 						</div>
 
-						<!-- Line 3 — RE: <order>. Whole line is the tap target (mobile +
-						     grandma friendly); the label stays put while the summary
-						     truncates, full text in the hover title. -->
-						{#if orderSummary}
-							<a
-								href={lp(`/@${orderOwner ?? peer}/${orderPermlink}`)}
-								class="mt-0.5 flex min-w-0 items-baseline gap-1 text-xs text-ink-500 hover:text-morphit-emerald hover:underline dark:text-ink-400"
-								title={orderSummary}
-							>
-								<span class="flex-none font-medium">{$_('chat.header.re')}:</span>
-								<span class="truncate">{orderSummary}</span>
-								{#if orderStatusLabel}
-									<!-- Status last and `flex-none`: the title truncates, the status
-									     never does. A trader deciding whether to keep negotiating
-									     needs "(Cancelled)" more than the tail of the title. -->
-									<span class="flex-none">({orderStatusLabel})</span>
-								{/if}
-							</a>
-						{/if}
 					</div>
 
 					<!-- Kebab: last item of the identity row, so its top is level with
@@ -1917,6 +1898,35 @@
 						{/if}
 					</div>
 				</div>
+
+				<!-- Line 3 — RE: <order>.  v1.8.10 (Ken): this used to live INSIDE the
+				     text column of the identity row above, which made it share that
+				     column's width with the kebab menu.  The kebab is `flex-none`, so it
+				     reserved its footprint against ALL THREE lines — and the subject
+				     truncated early with obvious empty space beside it, because the space
+				     under the kebab was not the column's to use.  Ken spotted exactly
+				     that ("maybe that 3-dots kebab menu is in a column that is stopping
+				     the subject line short?").  As a SIBLING of the row it spans the full
+				     header width, so the title gets every pixel before truncating, while
+				     the kebab keeps its top level with the display name (the reason the
+				     row is `items-start`).  Whole line is still the tap target; the label
+				     stays put while the summary truncates; full text in the hover title. -->
+				{#if orderSummary}
+					<a
+						href={lp(`/@${orderOwner ?? peer}/${orderPermlink}`)}
+						class="mt-0.5 flex min-w-0 items-baseline gap-1 text-xs text-ink-500 hover:text-morphit-emerald hover:underline dark:text-ink-400"
+						title={orderSummary}
+					>
+						<span class="flex-none font-medium">{$_('chat.header.re')}:</span>
+						<span class="truncate">{orderSummary}</span>
+						{#if orderStatusLabel}
+							<!-- Status last and `flex-none`: the title truncates, the status
+							     never does. A trader deciding whether to keep negotiating
+							     needs "(Cancelled)" more than the tail of the title. -->
+							<span class="flex-none">({orderStatusLabel})</span>
+						{/if}
+					</a>
+				{/if}
 			</div>
 		</header>
 		{#if blockActionError}

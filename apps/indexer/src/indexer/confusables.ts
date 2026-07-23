@@ -276,6 +276,37 @@ export function impersonatesReservedName(input: string): boolean {
 	return false;
 }
 
+/** Is `signer` the rightful owner of a reserved name that `input` resembles?
+ *
+ *  The impersonation guard is substring-based, so any text CONTAINING a
+ *  reserved name trips it. That is right for a stranger and wrong for the
+ *  account itself: @agorise writing "Agorise", "@agorise" or "Ken @ Agorise"
+ *  is not impersonating anybody — it is the one account for which the claim is
+ *  true. Without this, the byte-equality escape in `impersonatesReservedName`
+ *  let the owner set EXACTLY `agorise` and nothing else, not even capitalised.
+ *
+ *  Deliberately narrow: it only exempts the signer with respect to the reserved
+ *  name they actually hold. @kencode gets no latitude on "morphit-fees", and an
+ *  unrelated account gets none at all. `signer` comes from `extractSigner`, so
+ *  it is chain-authenticated and cannot be spoofed by the payload.
+ *
+ *  Tag charset is ASCII `[a-z0-9._-]+`, so a lowercase comparison is the whole
+ *  check on the signer side. */
+export function ownsReservedName(signer: string, input: string): boolean {
+	const lower = signer.toLowerCase();
+	for (const raw of RESERVED_NAMES_RAW) {
+		if (lower !== raw) continue;
+		// The signer holds this reserved name. Exempt them only when the text
+		// they are setting is actually about THAT name — matched with the same
+		// confusable-aware regex the guard uses, so the exemption covers every
+		// form the guard would otherwise reject (case, @-prefix, surrounding
+		// words, homoglyphs), and nothing beyond it.
+		const re = compileReservedRegex(raw);
+		if (re.test(input)) return true;
+	}
+	return false;
+}
+
 /** P6-3 audit fix: check whether an operator-tag matches a
  *  project-reserved name.  Tag charset is `[a-z0-9._-]+` (ASCII)
  *  so case-insensitive equality against RESERVED_NAMES_RAW is the
