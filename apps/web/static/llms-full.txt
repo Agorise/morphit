@@ -1730,19 +1730,25 @@ A small green checkmark badge that appears on a feedback row when the reviewer a
 
 **FAQ key:** `feedback_suppressed`
 
-Morphit runs two pattern detectors on the public feedback table to spot reviews that look like sock-puppet manipulation rather than genuine trading. When a (reviewer, subject) pair triggers either detector, those reviews are flagged and excluded from the headline rating + review count. They still appear in the reviews list (transparency matters) but with a chip explaining "Not counted toward rating — reviewers flagged as related" and reduced opacity.
+Morphit runs four pattern detectors on the public feedback table to spot reviews that look like sock-puppet manipulation rather than genuine trading. When a (reviewer, subject) pair triggers any of them, those reviews are excluded from the headline rating + review count. They still appear in the reviews list — transparency matters — but marked "Not counted toward the rating" and at reduced opacity.
 
-**Two patterns we flag:**
+**The four patterns we flag:**
 
-1. **Same-creator close-timing.** Two accounts created by the same Blurt creator (other than @morphit-relay, which onboards most legitimate users) whose first Morphit activities are within 5 minutes of each other. This pattern matches the typical sock-puppet farm setup where one operator creates multiple accounts via blurt-cli and immediately starts using them. Real users who happen to share a creator (a friend who helped onboard them via blurt-cli) and start using Morphit minutes apart can occasionally trip this.
+1. **Same-creator close-timing (Signal A).** Two accounts created by the same Blurt creator (other than @morphit-relay, which onboards most legitimate users) whose first Morphit activities are within 5 minutes of each other — the typical sock-puppet farm setup.
 
-2. **Mutual high-star with no third party.** Two accounts that exchange 3+ five-star reviews of each other in 7 days AND have not reviewed any third party in that window. This pattern matches a sock-puppet farm doing wash trades to inflate ratings. Real heavy-traders almost always have third-party reviews mixed in, so this rarely false-positives on legitimate users. If you have been flagged and you are a real user, complete a few trades with different counterparties — the rolling 7-day window will let the flag fall off naturally next time the detector runs.
+2. **Mutual high-star with no third party (Signal B).** Two accounts exchanging 3+ five-star reviews of each other in 7 days with no third-party reviews in that window — a wash-trading pattern. Real heavy traders almost always have third-party reviews mixed in.
 
-**Why we flag rather than hide:** the reviews stay visible because the chain itself is public — anyone running their own indexer can see them. Hiding them in this UI would be cosmetic only, and it would be dishonest about what the reputation system is actually doing. The chip + reduced opacity convey "this exists but does not count" clearly while preserving transparency.
+3. **One-way pile-on (Signal C).** A cluster of reviewers concentrating on a single subject.
 
-**Why headline excludes them:** the rating + count at the top of the profile is the at-a-glance trust signal traders use to decide whether to engage. Including suppressed reviews in that number would defeat the purpose of detecting them. The list view is for due-diligence reading; the headline is for snap judgments.
+4. **Review concentration (Signal D).** A reviewer whose reviews overwhelmingly target one counterparty rather than being spread across their trading.
 
-**False positives:** the detectors are not perfect. If you believe you have been wrongly flagged, the operator running the indexer instance you are looking at can manually unflag a pair — open a thread on the project discussion forum or contact the instance operator.
+**Also excluded:** a review not linked to a specific order. It cannot be checked against a real trade, so counting it would let anyone inflate a reputation with reviews tied to nothing.
+
+**Why we flag rather than hide:** the reviews stay visible because the chain itself is public — anyone running their own indexer can see them. Hiding them here would be cosmetic only, and dishonest about what the reputation system is doing. The chip plus reduced opacity convey "this exists but does not count" while preserving transparency.
+
+**Why the headline excludes them:** the rating + count at the top of a profile is the at-a-glance trust signal traders use to decide whether to engage. Including suppressed reviews there would defeat the point of detecting them. The list is for due diligence; the headline is for snap judgments.
+
+**False positives:** the detectors are not perfect. If you believe you have been wrongly flagged, the operator of the instance you are looking at can clear any of the four signals for a pair — contact them, or open a thread on the project discussion forum.
 
 See also "How does Morphit reputation system work?" for the bigger picture.
 
