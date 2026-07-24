@@ -43,6 +43,7 @@ import type { AssetTicker } from '@morphit/asset-registry';
 import {
 	feedbackAggregateJoin,
 	accountsJoin,
+	profileJoin,
 	engagementJoin,
 	tradeCountJoin,
 	reputationSelectColumns,
@@ -137,6 +138,11 @@ export function featuredRoute(db: Database, operatorAccount: string): Hono {
 				o.expires_at AS expires_at_order,
 				o.fee_status, o.fee_method,
 				${reputationSelectColumns('o', 'a')},
+				-- v1.8.14 (Ken): identity INLINE here too — a featured slot is the
+				-- MOST prominent card on the page, so an identity that rewrites
+				-- itself there is the worst possible place for it.
+				pr.display_name,
+				pr.json_metadata AS profile_json_metadata,
 				COALESCE(e.distinct_senders_24h, 0)::int AS engagement_24h,
 				w.hours_requested, w.blurt_paid, w.blurt_per_hour,
 				w.effective_at, w.expires_at_bid
@@ -148,6 +154,7 @@ export function featuredRoute(db: Database, operatorAccount: string): Hono {
 			${tradeCountJoin('o', 'tc', 'SELECT bidder FROM winning_bids')}
 			${engagementJoin('o', 'SELECT bidder FROM winning_bids')}
 			${accountsJoin('o', 'a')}
+			${profileJoin('o', 'pr')}
 			WHERE o.status = 'live'
 			  AND o.expires_at > NOW()
 			  AND o.fee_status IN ('verified', 'verified_by_attestation')

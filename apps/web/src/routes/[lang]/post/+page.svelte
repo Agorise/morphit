@@ -1928,15 +1928,22 @@
 			void submitBroadcast();
 			return;
 		}
-		// BLURT fee = a chain TRANSFER, which needs the active key.  A
-		// posting-only session doesn't have it, so don't prompt for a password
-		// that can't succeed — surface a clear, actionable error instead of the
-		// old generic "chain didn't accept" (a local failure, not a chain one).
-		if (!hasActiveKey) {
-			broadcastError = $_('post_order.broadcast_error.body_posting_only');
-			phase = 'error';
-			return;
-		}
+		// BLURT fee = a chain TRANSFER, which needs the active key.
+		//
+		// v1.8.14 (Ken) — this used to bail out with an error here, on the
+		// reasoning "don't prompt for a password that can't succeed". That was
+		// true when it was written and became false when `UnlockActiveKeyModal`
+		// was added: a posting-only session CAN supply an Active key on the spot,
+		// which is exactly what the modal is for, and what the fee-step copy has
+		// been promising all along ("Morphit will ask for your Active key when
+		// you post"). The stale guard fired first, so the promise was never kept
+		// — Ken filled in a whole order, pressed Pay and Post, and got "The order
+		// didn't go through" without ever being asked for anything.
+		//
+		// Fall through instead: `submitBroadcast()` below already opens the modal
+		// when `!hasActiveKey && ephemeralActiveScalar === null`, and nothing has
+		// been broadcast at that point, so the filled-in form is untouched behind
+		// it. The key is used to sign and is never persisted.
 		phase = 'awaiting_password';
 		passwordError = '';
 	}

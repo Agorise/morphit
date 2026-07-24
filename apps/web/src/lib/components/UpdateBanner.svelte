@@ -213,6 +213,23 @@
 	// are network-first, so that reload still pulls the fresh shell.
 	function applyUpdate(): void {
 		applying = true;
+		// v1.8.14 (Ken) — RECORD THE ACCEPTANCE BEFORE RELOADING.
+		//
+		// This is why "Load it now" kept appearing twice on mobile, and why the
+		// previous fix (a more generous handoff timeout) never finished the job:
+		// a timeout only NARROWS the race, it cannot remove it. Clicking accept
+		// reloaded without noting that the user had already said yes to THIS
+		// build, so whenever the reload landed before the new worker had taken
+		// control, the verify.json poll re-detected the same mismatch and offered
+		// the same update again. Slower devices lose that race more often —
+		// exactly matching "still shows twice every time on mobile".
+		//
+		// Recording it makes the fix timing-INDEPENDENT: the second offer is
+		// suppressed because the answer is already known, not because we hope the
+		// handoff won. Safe by construction — it is sessionStorage (closing the
+		// tab resets it) and keyed to the version, so a genuinely NEWER deploy
+		// still prompts.
+		rememberHandled();
 		let reloaded = false;
 		const reloadOnce = (): void => {
 			if (reloaded) return;
@@ -249,13 +266,20 @@
 	// hidden for the rest of this browser session (sessionStorage, so closing +
 	// reopening the tab resets it), and reappears immediately if an even newer
 	// version is deployed (dismissedForCurrent goes false).
-	function dismiss(): void {
+	/** Remember that this build has been ANSWERED — accepted or postponed — so it
+	 *  is not offered again this session. Shared by both paths so the two can
+	 *  never drift apart. */
+	function rememberHandled(): void {
 		dismissedVersion = deployedVersion ?? SW_ONLY;
 		try {
 			window.sessionStorage.setItem(DISMISS_KEY, dismissedVersion);
 		} catch {
-			// ignore
+			// ignore — a private-mode storage denial must not block the reload
 		}
+	}
+
+	function dismiss(): void {
+		rememberHandled();
 	}
 </script>
 

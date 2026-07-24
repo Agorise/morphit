@@ -1,21 +1,23 @@
 # TARBALL
 
-> # 📍 SESSION HANDOFF — START HERE (written 2026-07-24, end of the v1.8.13 session)
-> **Tarball: `morphit-v1.8.13-cp547.tar.gz`. Unpack to `/home/claude/morphit/` so the tree lives at `/home/claude/morphit/morphit/`.**
+> # 📍 SESSION HANDOFF — START HERE (written 2026-07-24, end of the v1.8.14 session)
+> **Tarball: `morphit-v1.8.14-cp553.tar.gz`. Unpack to `/home/claude/morphit/` so the tree lives at `/home/claude/morphit/morphit/`.**
 >
 > ## Where things stand
-> **v1.8.13 is RELEASE-READY IN THE TREE.** Tree at **1.8.13** (19 touchpoints + 15 lockfile), RELEASE-NOTES-v1.8.13.md written, all 5 gates green, battery **552 / 0 real failures** against THIS tree. **Ken has NOT run the ELI5 ceremony yet.** Nothing is half-finished.
-> **NO MIGRATION in this release** (51 shipped in v1.8.12). Frontend + ops-cli only — no database action for operators.
+> **v1.8.14 is RELEASE-READY IN THE TREE.** Tree at **1.8.14** (19 touchpoints + 15 lockfile), RELEASE-NOTES-v1.8.14.md written, all 5 gates green, battery **552 / 0 real failures** against THIS tree. **Ken has NOT run the ELI5 ceremony yet.** Nothing is half-finished.
+> **NO MIGRATION** — frontend only, no operator action.
 >
-> ## What v1.8.13 was about (context, not action)
-> One theme: **an identity that rewrites itself in front of you is a trust defect, not a loading state.** Order cards and chat headers painted `@account` + identicon and swapped to the real name/avatar seconds later. Fixed two ways — the orderbook now serves identity INLINE (profiles LEFT JOINed), and `IdentityLabel` gained a `pending` state so every other surface waits rather than guessing. Plus: the moderation clear-MENU still offered only 2 of 4 signals (v1.8.12 fixed the view and clearFlag but not the menu), the suppression chip named one signal when four apply, the FAQ said two detectors when there are four (now correct in all 10 locales), and two upgrade-UX faults Ken hit on his own install (a FALSE "schema changed in place" warning that recommended a DB reset, and ~20 getcwd errors).
+> ## What v1.8.14 was about (context, not action)
+> Finishing things earlier releases only half-did. The identity swap (v1.8.13 fixed ONE of three order-row queries — the LIVE stream and Featured were missed, which is why it stayed intermittent); the active-key prompt (the modal existed and was wired, but a stale guard bailed out before reaching it, so a posting-only user filled a whole order and got a dead error); the double "Load it now" snackbar (asked FIVE times, every prior fix widened a timeout when the mechanism itself was wrong); five strings promising Morphit might ask for a master password (it never will). Plus a new trust-score explainer modal on the rating pill.
 >
-> ## The rule that came out of this arc — apply it
-> **Enumerate, don't recall.** Ken asked "what about... other pages that i have not thought of?" after I hand-fixed two surfaces. Writing the check FIRST found 8, and the check then found its OWN blind spot (it missed the order-detail page because that renders a WRAPPER, not `<IdentityLabel>` directly). `identity-no-swap-smoke` now names any surface that neither receives identity inline nor passes `pending`.
+> ## The three rules this arc produced — apply them
+> 1. **Enumerate, don't recall.** Write the check that FINDS the surfaces, don't list the ones you remember. It has now caught four incomplete fixes of mine, and once found its own blind spot.
+> 2. **A comment can outlive its own truth.** The active-key guard cited a limitation that had since been removed. When a guard explains itself by citing a constraint, verify the constraint still holds.
+> 3. **When a fix must be repeated, the mechanism is wrong, not the tuning.** Five timeout widenings never closed a race that needed a recorded decision.
 >
 > ## Ken's box
 > Nothing owed. Backups VERIFIED HEALTHY 2026-07-23 — **do NOT re-raise** backups, the MCP bridge, or the retired interim timer.
-> **CHECK ~30 JULY:** the payout on `@kentest3/percent-blurt-probe-mrxzwv2p`. Ken ran the probe and the chain ACCEPTED `percent_blurt: 10000`, but acceptance only proves the value is in RANGE. If that post pays out MORE than 25% liquid the constant is genuinely effective; if exactly 25%, Blurt clamps internally and the constant should be documented as aspirational. Throwaway post — he can delete it after.
+> **CHECK ~30 JULY:** the payout on `@kentest3/percent-blurt-probe-mrxzwv2p`. The chain ACCEPTED `percent_blurt: 10000`, but acceptance only proves the value is in RANGE. More than 25% liquid = the constant is effective; exactly 25% = Blurt clamps internally and it should be documented as aspirational. Throwaway post, deletable after.
 >
 > ## Known false in-chunk timeouts — verify STANDALONE, match by NAME not number
 > `vitest-must-pass` (#203), `workspace-typecheck` (#332), `doctor-smoke` (#104, self-builds the ops-cli bundle). Positions shift as smokes are added.

@@ -836,7 +836,8 @@
 		"learn_more": "En savoir plus",
 		"unlock": "Déverrouiller",
 		"password_too_short": "Le mot de passe doit faire au moins 8 caractères.",
-		"lazy_load_failed": "Impossible de charger cette section."
+		"lazy_load_failed": "Impossible de charger cette section.",
+		"ok": "Compris"
 	},
 	"compare": {
 		"heading": "Comparer les orderbooks",
@@ -3178,7 +3179,7 @@
 			"body_insufficient_funds": "Votre compte n'a pas assez de BLURT pour payer les frais de listing.",
 			"body_locked": "La session est verrouillée. Déverrouillez votre mot de passe pour réessayer.",
 			"body_bad_password": "Ce mot de passe n'a pas déverrouillé ton keystore. Réessaie.",
-			"body_posting_only": "Payer les frais de publication en BLURT nécessite votre clé active, et elle n'est pas sur cet appareil — vous êtes connecté uniquement avec votre clé de publication. Connectez-vous avec votre mot de passe maître ou votre keyfile complet pour payer en BLURT, ou revenez en arrière et payez en BTC/XMR (ou utilisez votre première publication gratuite).",
+			"body_posting_only": "Payer les frais d'annonce en BLURT nécessite votre clé Active. Morphit vous la demandera au moment de publier : elle signe les frais et n'est jamais conservée sur cet appareil. Vous pouvez aussi revenir en arrière et payer en BTC/XMR, ou utiliser votre première annonce gratuite.",
 			"body_recipient_missing": "Les frais de publication n'ont pas pu être envoyés : le compte de trésorerie auquel ils sont versés (@morphit-fees) semble ne pas encore exister sur Blurt. Rien n'a été payé. Si vous gérez cette instance, ce compte doit être créé ; sinon, veuillez le signaler.",
 			"body_insufficient_rc": "Blurt prélève de petits frais de réseau pour cette action sur votre BLURT liquide, et votre compte n'a pas pu les couvrir. Ajoutez un peu de BLURT liquide (les transferts entrants sont gratuits) et réessayez. Rien n'a été payé.",
 			"body_authority": "Blurt a rejeté la signature du paiement des frais : la clé Active de votre compte ne correspond peut-être pas à celle sur la chaîne. Rien n'a été payé. Essayez de vous reconnecter avec votre phrase seed de 12 mots ou votre Keyfile."
@@ -3235,7 +3236,7 @@
 			"fee_address_chain_pinned": "Ancré sur la chaîne par {account} — chaque instance Morphit vérifie les frais contre cette adresse.",
 			"fee_address_chain_pinned_aria": "Authenticité de l'adresse ancrée sur la chaîne",
 			"fee_address_unavailable": "Cet opérateur n'a pas configuré d'adresse de frais {asset}. Choisissez BLURT à la place, ou publiez votre ordre sur une autre instance Morphit.",
-			"blurt_needs_active_key": "Nécessite votre clé active. Vous êtes connecté avec votre clé de publication — Morphit vous demandera votre clé active (ou votre mot de passe maître Blurt) au moment de publier, et rien de ce que vous avez saisi ne sera perdu."
+			"blurt_needs_active_key": "Nécessite votre clé Active. Vous êtes connecté avec votre clé Posting — Morphit vous demandera votre clé Active au moment de publier, et rien de ce que vous avez saisi ne sera perdu."
 		},
 		"draft": {
 			"restored_banner": "Brouillon restauré d'il y a {age}. Reprends où tu t'étais arrêté — ou recommence.",
@@ -3575,7 +3576,7 @@
 			"password_label": "Votre mot de passe @{account} (pour signer avec votre clé active)",
 			"error_password_required": "Saisissez votre mot de passe pour continuer.",
 			"error_bad_password": "Ce mot de passe n'a pas déverrouillé votre clé active. Vérifiez-le et réessayez.",
-			"error_no_active_key": "Cet appareil n'a pas de clé active pour signer. Morphit vous demandera votre clé active (ou votre mot de passe maître Blurt) lors du power up ou power down.",
+			"error_no_active_key": "Cet appareil n'a pas de clé Active pour signer. Morphit vous demandera votre clé Active lors d'un power up ou power down.",
 			"error_broadcast": "L'opération n'a pas pu être finalisée sur la chaîne. Veuillez réessayer.",
 			"error_chain_rejected": "Le réseau a rejeté cette transaction : {reason}",
 			"error_unreachable": "Impossible de joindre votre instance Morphit pour diffuser. Vérifiez votre connexion et réessayez.",
@@ -3597,7 +3598,7 @@
 			"memo_label": "Note (facultatif)",
 			"memo_placeholder": "p. ex. une référence de commande",
 			"memo_privacy_warning": "Les notes sont stockées publiquement et de façon permanente sur la blockchain, en clair. N'y mettez jamais de mots de passe, de clés ni rien de privé.",
-			"error_no_active_key": "Cet appareil n'a pas de clé active pour signer. Morphit vous demandera votre clé active (ou votre mot de passe maître Blurt) au moment de l'envoi.",
+			"error_no_active_key": "Cet appareil n'a pas de clé Active pour signer. Morphit vous demandera votre clé Active lors de l'envoi.",
 			"send_button": "Envoyer",
 			"confirm": "Envoyer des BLURT",
 			"qr_heading": "Scanner un QR de destinataire",
@@ -4693,7 +4694,7 @@
 			"is_posting_key": "C'est votre clé de publication, celle avec laquelle vous êtes déjà connecté. Elle ne peut pas déplacer d'argent. Collez plutôt votre clé active.",
 			"is_owner_key": "C'est votre clé propriétaire. Elle peut prendre le contrôle de tout votre compte, Morphit ne l'utilisera donc jamais. Utilisez votre clé active.",
 			"not_this_account": "Ce n'est pas la clé active de ce compte. Vérifiez que vous utilisez la clé de @{account}.",
-			"empty": "Saisissez votre clé active ou votre mot de passe maître.",
+			"empty": "Saisissez votre clé Active.",
 			"lookup_failed": "Impossible de joindre la blockchain pour vérifier votre clé. Réessayez dans un instant.",
 			"bad_device_password": "Ce mot de passe Morphit est incorrect. Votre clé active n'a pas été enregistrée.",
 			"keep_failed": "Impossible d'enregistrer votre clé active sur cet appareil. Rien n'a été modifié — réessayez, ou choisissez « L'oublier »."
@@ -4706,5 +4707,11 @@
 		"device_password_label": "Votre mot de passe Morphit @{account}",
 		"device_password_help": "Le mot de passe avec lequel vous déverrouillez déjà Morphit. Il chiffre votre clé active sur cet appareil."
 	},
-	"notifications": {}
+	"notifications": {},
+	"trust_score": {
+		"heading": "Pourquoi {score} et pas la moyenne ?",
+		"what_it_is": "Le {score} est un score de confiance. Il ne prend pas la moyenne au pied de la lettre : il place chacun près de 3.00 au départ et ne vous laisse monter vers votre vraie moyenne qu'au fil des échanges. Cinq notes parfaites vous mènent presque au bout, pas jusqu'au bout.",
+		"why": "Pourquoi ? Sinon je fais trois faux échanges avec un ami, on se met 5 étoiles, et je parais aussitôt aussi fiable que quelqu'un ayant 200 vrais échanges à 4.9. Le score de confiance fait qu'un parcours irréprochable se mérite au lieu de se proclamer.",
+		"drift": "À mesure que les vrais échanges s'accumulent, {score} peut monter tout seul vers la moyenne."
+	}
 }

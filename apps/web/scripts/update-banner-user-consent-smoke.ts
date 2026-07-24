@@ -121,6 +121,33 @@ check(
 	/catch\s*\{[\s\S]*?cache\.match/.test(sw)
 );
 
+// ─── the snackbar must never offer the SAME build twice (v1.8.14, Ken) ───
+// Ken reported this FIVE times. Earlier attempts widened the SW handoff
+// timeout, which only narrows the race: if the reload lands before the new
+// worker takes control, the verify.json poll re-detects the same mismatch and
+// re-offers. Slower devices lose that race more often — hence "still shows
+// twice every time on mobile".
+// The fix is to RECORD the acceptance before reloading, making suppression
+// timing-independent: the second offer is skipped because the answer is known,
+// not because the handoff happened to win.
+check(
+	'accepting an update records it BEFORE the reload',
+	/function applyUpdate\(\): void \{[\s\S]*?rememberHandled\(\);[\s\S]*?window\.location\.reload/.test(
+		src
+	),
+	'without this the post-reload version poll re-offers the very build the user just accepted'
+);
+check(
+	'accept and postpone share one memory path, so they cannot drift',
+	/function dismiss\(\): void \{\s*rememberHandled\(\);\s*\}/.test(src),
+	'two copies of "remember this build" is how one of them gets missed'
+);
+check(
+	'the memory is per-VERSION, so a genuinely newer deploy still prompts',
+	/dismissedVersion = deployedVersion \?\? SW_ONLY;/.test(src),
+	'suppressing all future updates would be worse than the double-offer'
+);
+
 console.log('');
 if (failures === 0) {
 	console.log(`✓ all ${checks} update-banner-user-consent scenarios passed`);

@@ -140,15 +140,27 @@
 
 	<label class="block">
 		<span class="text-sm font-semibold">{$_('unlock_active.field_label')}</span>
+		<!-- Mobile (v1.8.14, Ken): two deliberate choices here.
+		     • `text-base` (16px), not text-sm. iOS auto-ZOOMS the page whenever a
+		       focused input is under 16px, which on a key field means the modal
+		       jumps and half of it slides off screen the moment you tap it.
+		     • `autocapitalize="none"` + `autocorrect="off"` alongside the
+		       existing spellcheck=false. A WIF is CASE-SENSITIVE; a mobile
+		       keyboard silently capitalising or "correcting" a character yields
+		       an invalid key and an error the user cannot see the cause of.
+		     `py-3` gives a comfortable touch target without changing the desktop
+		     look meaningfully. -->
 		<input
 			type="password"
 			bind:value={secret}
 			maxlength="128"
 			autocomplete="off"
 			spellcheck="false"
+			autocapitalize="none"
+			autocorrect="off"
 			disabled={busy}
 			placeholder={$_('unlock_active.field_placeholder') as string}
-			class="mt-1 w-full rounded-lg border border-ink-300 bg-white px-3 py-2 font-mono text-sm dark:border-ink-700 dark:bg-ink-900"
+			class="mt-1 w-full rounded-lg border border-ink-300 bg-white px-3 py-3 font-mono text-base dark:border-ink-700 dark:bg-ink-900"
 		/>
 		<p class="mt-1 text-xs text-ink-500 dark:text-ink-400">{$_('unlock_active.field_help')}</p>
 		{#if errorKey}

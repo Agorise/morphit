@@ -836,7 +836,8 @@
 		"learn_more": "Learn more",
 		"unlock": "Unlock",
 		"password_too_short": "Password must be at least 8 characters.",
-		"lazy_load_failed": "Couldn't load this section."
+		"lazy_load_failed": "Couldn't load this section.",
+		"ok": "OK"
 	},
 	"compare": {
 		"heading": "Compare orderbooks",
@@ -3178,7 +3179,7 @@
 			"body_insufficient_funds": "Your account doesn't have enough BLURT to pay the listing fee.",
 			"body_locked": "The session is locked. Unlock your password to try again.",
 			"body_bad_password": "That password didn't unlock your keystore. Try again.",
-			"body_posting_only": "Paying the listing fee in BLURT needs your active key, and it isn't on this device — you're signed in with your posting key only. Sign in with your master password or full keyfile to pay in BLURT, or go back and pay in BTC/XMR (or use your free first listing).",
+			"body_posting_only": "Paying the listing fee in BLURT needs your Active key. Morphit will ask for it when you post — it signs the fee and is never stored on this device. You can also go back and pay in BTC/XMR, or use your free first listing.",
 			"body_recipient_missing": "The listing fee couldn't be sent — the treasury account it pays to (@morphit-fees) doesn't seem to exist on Blurt yet. Nothing was paid. If you run this instance, that account needs to be created; otherwise, please report this.",
 			"body_insufficient_rc": "Blurt takes a small network fee for this action from your liquid BLURT, and your account could not cover it. Top up a little liquid BLURT (incoming transfers are free) and try again. Nothing was paid.",
 			"body_authority": "Blurt rejected the signature on the fee payment — your account's Active key may not match what's on-chain. Nothing was paid. Try signing in again with your 12-word seed or Keyfile."
@@ -3235,7 +3236,7 @@
 			"fee_address_chain_pinned": "Chain-pinned by {account} — every Morphit instance verifies fees against this address.",
 			"fee_address_chain_pinned_aria": "Chain-pinned address authenticity",
 			"fee_address_unavailable": "This operator hasn't configured a {asset} fee address. Pick BLURT instead, or post your order on a different Morphit instance.",
-			"blurt_needs_active_key": "Needs your Active key. You're signed in with your Posting key — Morphit will ask for your Active key (or your Blurt master password) when you post, and nothing you've filled in will be lost."
+			"blurt_needs_active_key": "Needs your Active key. You're signed in with your Posting key — Morphit will ask for your Active key when you post, and nothing you've filled in will be lost."
 		},
 		"draft": {
 			"restored_banner": "Draft restored from {age} ago. Pick up where you left off — or start fresh.",
@@ -3575,7 +3576,7 @@
 			"password_label": "Your @{account} password (to sign with your active key)",
 			"error_password_required": "Enter your password to continue.",
 			"error_bad_password": "That password didn't unlock your active key. Check it and try again.",
-			"error_no_active_key": "This device has no Active key to sign with. Morphit will ask for your Active key (or your Blurt master password) when you power up or down.",
+			"error_no_active_key": "This device has no Active key to sign with. Morphit will ask for your Active key when you power up or down.",
 			"error_broadcast": "That couldn't be completed on-chain. Please try again.",
 			"error_chain_rejected": "The network rejected this transaction: {reason}",
 			"error_unreachable": "Couldn't reach your Morphit instance to broadcast. Check your connection and try again.",
@@ -3597,7 +3598,7 @@
 			"memo_label": "Memo (optional)",
 			"memo_placeholder": "e.g. an order reference",
 			"memo_privacy_warning": "Memos are stored publicly and permanently on the blockchain in plain text. Never include passwords, keys, or anything private.",
-			"error_no_active_key": "This device has no Active key to sign with. Morphit will ask for your Active key (or your Blurt master password) when you send.",
+			"error_no_active_key": "This device has no Active key to sign with. Morphit will ask for your Active key when you send.",
 			"send_button": "Send",
 			"confirm": "Send BLURT",
 			"qr_heading": "Scan a recipient QR",
@@ -4693,7 +4694,7 @@
 			"is_posting_key": "That's your Posting key — the one you're already signed in with. It can't move money. Paste your Active key instead.",
 			"is_owner_key": "That's your Owner key. It can take over your whole account, so Morphit will never use it. Please use your Active key.",
 			"not_this_account": "That isn't this account's Active key. Check you're using the key for @{account}.",
-			"empty": "Enter your Active key or master password.",
+			"empty": "Enter your Active key.",
 			"lookup_failed": "Couldn't reach the blockchain to check your key. Try again in a moment.",
 			"bad_device_password": "That Morphit password is wrong. Your Active key was not saved.",
 			"keep_failed": "Couldn't save your Active key on this device. Nothing was changed — try again, or choose “Forget it”."
@@ -4706,5 +4707,11 @@
 		"device_password_label": "Your @{account} Morphit password",
 		"device_password_help": "The password you already unlock Morphit with. It encrypts your Active key on this device."
 	},
-	"notifications": {}
+	"notifications": {},
+	"trust_score": {
+		"heading": "Why {score} and not the average?",
+		"what_it_is": "The {score} is a trust score. It doesn't take an average at face value — it starts everyone near 3.00 and only lets you climb toward your true average as you rack up more trades. Five perfect ratings gets you most of the way there, not all the way.",
+		"why": "Why bother? Otherwise I do three fake trades with my friend, we give each other 5 stars, and I instantly look as trustworthy as someone with 200 real trades at 4.9. The trust score makes a spotless record earned rather than claimed.",
+		"drift": "As real trades pile up, {score} can drift up toward the plain average on its own."
+	}
 }

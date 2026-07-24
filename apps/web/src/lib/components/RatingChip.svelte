@@ -28,6 +28,7 @@
 	 */
 
 	import { t } from '$lib/i18n';
+	import TrustScoreModal from '$components/TrustScoreModal.svelte';
 
 	interface Props {
 		/** Number of feedback rows this account has received.
@@ -39,6 +40,16 @@
 	}
 
 	const { count, rating }: Props = $props();
+
+	/** v1.8.14 (Ken) — the chip is now a BUTTON that explains itself.
+	 *  The number is a Bayesian-shrunk trust score, not the plain average, and
+	 *  nothing on screen said so: Ken had to ask why a profile showing "Average
+	 *  rating: 5.00" carried a 4.24 headline. If the person who commissioned the
+	 *  system has to ask, every trader will quietly assume the site is
+	 *  inconsistent — which is worse than the number being lower.
+	 *  The docblock above called this chip "informational, not interactive";
+	 *  that is now out of date by design. */
+	let explainerOpen = $state(false);
 
 	/** Small-sample threshold. 3+ ratings feels like the
 	 *  smallest count where an average starts conveying signal;
@@ -62,8 +73,16 @@
 </script>
 
 {#if count > 0 && rating !== null}
-	<span
-		class="rating-chip inline-flex items-center gap-1 rounded-full bg-morphit-emerald/10 px-2 py-0.5 text-xs font-medium text-morphit-emerald ring-1 ring-morphit-emerald/30"
+	<button
+		type="button"
+		onclick={(e) => {
+			// The chip often sits inside a card-wide link; opening the explainer
+			// must not also navigate to the trader's profile.
+			e.preventDefault();
+			e.stopPropagation();
+			explainerOpen = true;
+		}}
+		class="rating-chip inline-flex items-center gap-1 rounded-full bg-morphit-emerald/10 px-2 py-0.5 text-xs font-medium text-morphit-emerald ring-1 ring-morphit-emerald/30 hover:bg-morphit-emerald/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
 		aria-label={$t('orderbook.order.rating_aria', {
 			values: { rating: ratingStr, count }
 		})}
@@ -95,5 +114,15 @@
 		     small-sample signal (<3 ratings), and its thin stroke is most of why the
 		     chip reads quieter than a pill full of solid glyphs. -->
 		<span aria-hidden="true">({count})</span>
-	</span>
+	</button>
+
+	<!-- Rendered next to the chip rather than in a layout-level portal: the
+	     backdrop is `fixed inset-0` so stacking context is not an issue, and
+	     keeping it here means every surface that shows a chip gets the
+	     explanation without wiring anything. -->
+	<TrustScoreModal
+		score={rating}
+		open={explainerOpen}
+		onClose={() => (explainerOpen = false)}
+	/>
 {/if}

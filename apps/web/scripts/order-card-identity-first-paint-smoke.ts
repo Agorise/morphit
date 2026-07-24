@@ -57,6 +57,35 @@ const check = (name: string, cond: boolean, detail = ''): void => {
 
 console.log('\n── order-card-identity-first-paint (v1.8.13) ─────────\n');
 
+// v1.8.14 (Ken) — EVERY query that builds an order row must join profiles, not
+// just the one I happened to fix. v1.8.13 added it to the REST orderbook query
+// only; `orderbookStream.ts` (the LIVE feed) and `featuredOrderbook.ts` were
+// missed, so orders arriving or refreshing through those paths still painted
+// @account + identicon and swapped. Ken: "it STILL takes 5-6 seconds... not all
+// of the time, but half of the time or so" — the intermittency WAS the tell:
+// different rows arrived by different paths.
+// `accountsJoin` marks a query that builds order rows, so it is the anchor:
+// wherever it appears, `profileJoin` must too.
+const ORDER_ROW_QUERIES = [
+	'apps/indexer/src/api/orderbook.ts',
+	'apps/indexer/src/api/orderbookStream.ts',
+	'apps/indexer/src/api/featuredOrderbook.ts'
+];
+for (const q of ORDER_ROW_QUERIES) {
+	const qs = readFileSync(join(REPO, q), 'utf8');
+	const name = q.split('/').pop()!;
+	check(
+		`${name}: joins profiles wherever it joins accounts`,
+		!/accountsJoin\(/.test(qs) || /profileJoin\(/.test(qs),
+		'an order row without inline identity paints @account + identicon, then swaps'
+	);
+	check(
+		`${name}: selects the display name and avatar metadata`,
+		!/accountsJoin\(/.test(qs) || (/pr\.display_name/.test(qs) && /profile_json_metadata/.test(qs)),
+		'joined but unselected is the same as not joined'
+	);
+}
+
 check(
 	'a profiles join helper exists',
 	/export function profileJoin\(/.test(joins),

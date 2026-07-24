@@ -52,6 +52,7 @@ import { validateOrderPermlink } from '$indexer/permlink';
 import { errorBody } from '$api/shared';
 import {
 	accountsJoin,
+	profileJoin,
 	engagementJoin,
 	feedbackAggregateJoin,
 	tradeCountJoin
@@ -162,6 +163,7 @@ const CARD_JOINS = `
 ${feedbackAggregateJoin('o')}
 ${engagementJoin('o')}
 	${accountsJoin('o', 'a')}
+	${profileJoin('o', 'pr')}
 ${tradeCountJoin('o')}
 `;
 
@@ -185,6 +187,12 @@ const ROW_SELECT = `
 	       COALESCE(e.distinct_senders_24h, 0)::int AS engagement_24h,
 	       a.first_trade_complete_at,
 	       a.posting_pubkey,
+	       -- v1.8.14 (Ken): identity INLINE on the live path too. v1.8.13 added
+	       -- this to the REST query only, so orders arriving or refreshing via
+	       -- the stream still painted @account + identicon and swapped seconds
+	       -- later. That is why it was intermittent: "half of the time or so".
+	       pr.display_name,
+	       pr.json_metadata AS profile_json_metadata,
 	       o.created_at, o.updated_at, o.expires_at
 `;
 
