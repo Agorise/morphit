@@ -24,6 +24,9 @@
 		order: OrderRecord;
 		/** Resolved display name (null → the @handle is shown instead). */
 		displayName?: string | null;
+		/** Forwarded: true while the poster's profile is still loading, so the
+		 *  label waits rather than asserting @account + identicon (v1.8.13). */
+		pending?: boolean;
 		avatarSvg?: string | null;
 		avatarDataUri?: string | null;
 		/** Locale-aware href to the poster's profile. */
@@ -38,6 +41,7 @@
 	let {
 		order,
 		displayName = null,
+		pending = false,
 		avatarSvg = null,
 		avatarDataUri = null,
 		profileHref,
@@ -91,7 +95,7 @@
 <!-- Identity row: avatar tucks up under the title; name + key beside. -->
 <div class="flex items-start gap-3">
 	<div class="relative z-0 flex-none">
-		<IdentityLabel account={order.account} {avatarSvg} {avatarDataUri} avatarSize={52} hideHandle />
+		<IdentityLabel account={order.account} {pending} {avatarSvg} {avatarDataUri} avatarSize={52} hideHandle />
 	</div>
 	<div class="min-w-0 flex-1 pt-1">
 		<!-- Line 1: display name · new-trader · reputation score -->

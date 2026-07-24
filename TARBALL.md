@@ -1,19 +1,21 @@
 # TARBALL
 
-> # 📍 SESSION HANDOFF — START HERE (written 2026-07-23, end of the v1.8.12 session)
-> **Tarball: `morphit-v1.8.12-cp540.tar.gz`. Unpack to `/home/claude/morphit/` so the tree lives at `/home/claude/morphit/morphit/`.**
+> # 📍 SESSION HANDOFF — START HERE (written 2026-07-24, end of the v1.8.13 session)
+> **Tarball: `morphit-v1.8.13-cp547.tar.gz`. Unpack to `/home/claude/morphit/` so the tree lives at `/home/claude/morphit/morphit/`.**
 >
 > ## Where things stand
-> **v1.8.12 is RELEASE-READY IN THE TREE.** Tree at **1.8.12** (19 touchpoints + 15 lockfile), RELEASE-NOTES-v1.8.12.md written, all 5 gates green, battery **550 / 0 real failures** against THIS tree. **Ken has NOT run the ELI5 ceremony yet.** No work is half-finished.
-> **THIS RELEASE HAS A MIGRATION (51)** — the first since v1.8.9. It widens `moderation_flag_clearances.signal` to all four suppression signals. `schema.sql` was widened too (fresh installs), verified byte-identical to a migrated DB on real PG.
+> **v1.8.13 is RELEASE-READY IN THE TREE.** Tree at **1.8.13** (19 touchpoints + 15 lockfile), RELEASE-NOTES-v1.8.13.md written, all 5 gates green, battery **552 / 0 real failures** against THIS tree. **Ken has NOT run the ELI5 ceremony yet.** Nothing is half-finished.
+> **NO MIGRATION in this release** (51 shipped in v1.8.12). Frontend + ops-cli only — no database action for operators.
 >
-> ## What v1.8.12 was about (context, not action)
-> Three independent "N-of-4 signal" gaps. The reputation summary suppresses on FOUR tables; the moderation CLI knew 2, the feedback row-flag knew 3, and `schema.sql` knew 2. Each was invisible in a different way, and Ken's `0 flags` output was the thread that unravelled all of it. **Two of my hypotheses were wrong and he corrected both** — the lesson is in the ledger: query all the sources before theorising.
-> Also: display name/avatar retry (third attempt; first two reverted rather than shipped), Message button hidden from signed-out visitors, `percent_blurt` for liquid author rewards, and three v1.8.10/v1.8.11 regressions of mine.
+> ## What v1.8.13 was about (context, not action)
+> One theme: **an identity that rewrites itself in front of you is a trust defect, not a loading state.** Order cards and chat headers painted `@account` + identicon and swapped to the real name/avatar seconds later. Fixed two ways — the orderbook now serves identity INLINE (profiles LEFT JOINed), and `IdentityLabel` gained a `pending` state so every other surface waits rather than guessing. Plus: the moderation clear-MENU still offered only 2 of 4 signals (v1.8.12 fixed the view and clearFlag but not the menu), the suppression chip named one signal when four apply, the FAQ said two detectors when there are four (now correct in all 10 locales), and two upgrade-UX faults Ken hit on his own install (a FALSE "schema changed in place" warning that recommended a DB reset, and ~20 getcwd errors).
+>
+> ## The rule that came out of this arc — apply it
+> **Enumerate, don't recall.** Ken asked "what about... other pages that i have not thought of?" after I hand-fixed two surfaces. Writing the check FIRST found 8, and the check then found its OWN blind spot (it missed the order-detail page because that renders a WRAPPER, not `<IdentityLabel>` directly). `identity-no-swap-smoke` now names any surface that neither receives identity inline nor passes `pending`.
 >
 > ## Ken's box
 > Nothing owed. Backups VERIFIED HEALTHY 2026-07-23 — **do NOT re-raise** backups, the MCP bridge, or the retired interim timer.
-> **ONE THING TO CHECK IN ~7 DAYS:** the payout on `@kentest3/percent-blurt-probe-mrxzwv2p`. He ran `apps/indexer/scripts/percent-blurt-probe.ts` and the chain ACCEPTED `percent_blurt: 10000` — but acceptance only proves the value is in range, not that the payout honours it. If that post pays out more than 25% liquid, the constant is right. If it pays exactly 25%, Blurt clamps internally and the constant should be documented as aspirational. That probe post is a throwaway; he can ignore or delete it.
+> **CHECK ~30 JULY:** the payout on `@kentest3/percent-blurt-probe-mrxzwv2p`. Ken ran the probe and the chain ACCEPTED `percent_blurt: 10000`, but acceptance only proves the value is in RANGE. If that post pays out MORE than 25% liquid the constant is genuinely effective; if exactly 25%, Blurt clamps internally and the constant should be documented as aspirational. Throwaway post — he can delete it after.
 >
 > ## Known false in-chunk timeouts — verify STANDALONE, match by NAME not number
 > `vitest-must-pass` (#203), `workspace-typecheck` (#332), `doctor-smoke` (#104, self-builds the ops-cli bundle). Positions shift as smokes are added.

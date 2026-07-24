@@ -257,6 +257,20 @@ export interface OrderRecord {
 	 *  not captured yet, or on pre-cp404 indexer instances. Never used for
 	 *  verification — signatures resolve keys live from the chain. */
 	readonly posting_pubkey?: string | null;
+	/** The poster's display name and profile metadata, served INLINE by the
+	 *  indexer (LEFT JOIN profiles) so an order card renders the correct
+	 *  identity on FIRST paint.
+	 *
+	 *  v1.8.13 (Ken): without these the browser made a SECOND round-trip for
+	 *  names and avatars, so cards painted `@account` + identicon and swapped to
+	 *  the real identity seconds later (~7s on morphit.io). His objection was
+	 *  not slowness but TRUST — a card that rewrites its own identity in front
+	 *  of you is indistinguishable from a scam. On a marketplace where the
+	 *  counterparty's identity is the product, that is a defect, not polish.
+	 *  Optional so an older indexer simply omits them and the client falls back
+	 *  to the batch fetch as before. */
+	readonly display_name?: string | null;
+	readonly profile_json_metadata?: unknown;
 	readonly created_at: string;
 	readonly updated_at: string;
 	readonly expires_at: string | null;

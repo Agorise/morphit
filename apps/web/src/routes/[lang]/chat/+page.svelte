@@ -90,6 +90,11 @@
 	let me: string | null = $state(null);
 	let conversations: readonly ConversationSummary[] = $state([]);
 	let profileMap = $state<Record<string, ProfileResponse | null>>({});
+	/** False until this surface's profile hydrate has completed once.
+	 *  v1.8.13 (Ken) — while false, identity labels render a neutral placeholder
+	 *  instead of asserting @account + identicon and then rewriting themselves.
+	 *  An identity that visibly changes is indistinguishable from a swap attack. */
+	let profilesHydrated = $state(false);
 	let fallbackPeers: readonly string[] = $state([]);
 	let loadError: boolean = $state(false);
 
@@ -400,17 +405,7 @@
 		activeTab === 'archived' ? false : activeList.some((c) => c.unread)
 	);
 
-	/** Fetch profiles for peers we don't have one for — so the 5 s poll doesn't
-	 *  re-request the whole batch every tick, but a peer whose profile we DON'T
-	 *  have is retried.
-	 *
-	 *  This used to ask `!(p in profileMap)`: a failed batch wrote `null`, the
-	 *  key then existed, and that peer was never requested again for the life of
-	 *  the page — the display name and avatar stayed stuck on `@username`.
-	 *  `profileCache` already caches a fetch FAILURE as a soft null that expires
-	 *  in seconds (vs an authoritative "no profile", cached for the full TTL),
-	 *  but it only gets to act on that if we ask again. Asking again is cheap:
-	 *  a fresh cache entry answers from memory without an HTTP request. */
+
 	async function fetchProfilesForNewPeers(peers: readonly string[]): Promise<void> {
 		const missing = peersNeedingProfile(peers, profileMap);
 		if (missing.length === 0) return;
@@ -420,6 +415,7 @@
 		// Keep-prior on null: a transient failure must never blank a name we
 		// already rendered successfully.
 		profileMap = mergeProfileMap(profileMap, fetched);
+		profilesHydrated = true;
 	}
 
 	/** Local recent-peers fallback so the inbox shows SOMETHING when the
@@ -960,6 +956,7 @@
 								     identity-label policy holds; 40px on every card so the shape never
 								     varies (t.txt item 8). -->
 								<IdentityLabel
+									pending={!profilesHydrated}
 									account={convo.peer}
 									displayName={labelProps.displayName}
 									avatarSvg={labelProps.avatarSvg}
@@ -975,6 +972,7 @@
 									     use the full width (cp510 [5]). -->
 									<div class="min-w-0 pr-7">
 										<IdentityLabel
+									pending={!profilesHydrated}
 											account={convo.peer}
 											displayName={labelProps.displayName}
 											avatarSvg={labelProps.avatarSvg}
@@ -1113,6 +1111,7 @@
 							class="flex items-center gap-3 rounded-xl border border-ink-200 bg-white p-3 transition hover:border-morphit-emerald hover:shadow-sm dark:border-ink-800 dark:bg-ink-950 dark:hover:border-morphit-emerald"
 						>
 							<IdentityLabel
+									pending={!profilesHydrated}
 								account={peer}
 								displayName={labelProps.displayName}
 								avatarSvg={labelProps.avatarSvg}

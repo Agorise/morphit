@@ -1,4 +1,9 @@
 <script lang="ts">
+	/** False until this surface's profile hydrate has completed once.
+	 *  v1.8.13 (Ken) — while false, identity labels render a neutral placeholder
+	 *  instead of asserting @account + identicon and then rewriting themselves.
+	 *  An identity that visibly changes is indistinguishable from a swap attack. */
+	let profilesHydrated = $state(false);
 	/**
 	 * LeaveFeedbackForm — inline UI for leaving feedback on a trade.
 	 *
@@ -121,6 +126,12 @@
 	//  the same-origin indexer; stale results are ignored; NO reputation is
 	//  shown (Ken: it mustn't bias the review).
 	let subjectProfile = $state<ProfileResponse | null>(null);
+	/** False until the counterparty's profile has resolved.
+	 *  v1.8.13 (Ken) — the review form shows WHO you are about to rate; asserting
+	 *  `@account` + identicon and then rewriting it is the identity swap Ken
+	 *  objected to, and this is a particularly bad place for it. */
+	let subjectProfileResolved = $state(false);
+
 	let subjectPostingKey = $state<string | null>(null);
 	let subjectIsNewTrader = $state(false);
 	let subjectFetchSeq = 0;
@@ -143,6 +154,7 @@
 				]);
 				if (seq !== subjectFetchSeq) return;
 				subjectProfile = profile;
+				subjectProfileResolved = true;
 				subjectPostingKey = keys?.posting?.key_auths?.[0]?.[0] ?? null;
 				// v1.5.0 — new-trader pill (NO reputation score). Matches the
 				//  orderbook's "< 4 verified-fee trades" rule, approximated by the
@@ -563,6 +575,7 @@
 			>
 				<div class="flex flex-wrap items-center gap-x-2 gap-y-1">
 					<IdentityLabel
+						pending={!subjectProfileResolved}
 						account={subject}
 						displayName={subjectLabelProps.displayName}
 						avatarSvg={subjectLabelProps.avatarSvg}

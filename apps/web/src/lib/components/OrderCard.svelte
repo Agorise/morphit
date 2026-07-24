@@ -59,6 +59,9 @@
 		title: string;
 		/** Poster's display name, or null to fall back to "@account". */
 		displayName?: string | null;
+		/** Forwarded: true while the poster's profile is still loading, so the
+		 *  label waits rather than asserting @account + identicon (v1.8.13). */
+		pending?: boolean;
 		/** Poster's sanitized avatar SVG (takes precedence over dataUri). */
 		avatarSvg?: string | null;
 		/** Poster's raster avatar as a data URI. */
@@ -110,6 +113,7 @@
 		order,
 		title,
 		displayName = null,
+		pending = false,
 		avatarSvg = null,
 		avatarDataUri = null,
 		detailHref,
@@ -257,7 +261,7 @@
 	     OrderPosterIdentity). cp420 — the avatar now sits cleanly below the
 	     title (was -mt-2, which tucked it up under the title). -->
 	<div class="mt-1">
-		<OrderPosterIdentity {order} {displayName} {avatarSvg} {avatarDataUri} {profileHref} />
+		<OrderPosterIdentity {order} {pending} {displayName} {avatarSvg} {avatarDataUri} {profileHref} />
 	</div>
 
 	<!-- Network chip (multi-network assets only). -->

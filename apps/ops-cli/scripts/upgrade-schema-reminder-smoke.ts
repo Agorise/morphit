@@ -92,9 +92,26 @@ const indexerMain = readFileSync(join(REPO, 'apps', 'indexer', 'src', 'main.ts')
 // the operator at doctor + OPERATIONS §23.
 if (/export function schemaBaselineChanged/.test(upgradeSrc)) ok('upgrade.ts exports schemaBaselineChanged');
 else bad('upgrade.ts no longer exports schemaBaselineChanged');
-if (/schemaBaselineChanged\(backupDir, installDir\)/.test(upgradeSrc))
-	ok('upgrade.ts computes schemaChanged from backup vs new install');
-else bad('upgrade.ts no longer computes schemaChanged (backupDir vs installDir)');
+// v1.8.12 (Ken) — this used to require `schemaBaselineChanged(backupDir,
+// installDir)` directly, which is a WEAKER condition than the warning needs.
+// That function only diffs schema.sql; it says nothing about whether a
+// numbered migration carries the change to existing databases. So ANY schema
+// edit fired the "changed IN PLACE — not via a numbered migration" reminder,
+// even when a migration existed and had already been applied at indexer
+// start-up. Ken hit that upgrading to v1.8.12 (which ships MIGRATION 51): his
+// DB was correctly updated and the upgrade told him it was not, pointing him
+// at a reset + re-sync. A false alarm that recommends rebuilding a database
+// costs more than no alarm.
+// The requirement is now the STRONGER one — BOTH conditions.
+if (/schemaChangedWithoutMigration\(backupDir, installDir\)/.test(upgradeSrc))
+	ok('upgrade.ts gates the reminder on schema-change AND no-new-migration');
+else bad('upgrade.ts must use schemaChangedWithoutMigration, not the bare schema diff');
+if (/export function schemaChangedWithoutMigration/.test(upgradeSrc))
+	ok('upgrade.ts exports schemaChangedWithoutMigration');
+else bad('upgrade.ts no longer exports schemaChangedWithoutMigration');
+if (/export function highestMigrationVersion/.test(upgradeSrc))
+	ok('upgrade.ts can read the tree\'s highest migration version');
+else bad('upgrade.ts cannot determine whether a new migration shipped');
 if (/if \(schemaChanged\)/.test(upgradeSrc)) ok('upgrade.ts gates the reminder on schemaChanged');
 else bad('upgrade.ts reminder not gated on schemaChanged');
 if (/database schema changed/i.test(upgradeSrc) && /doctor/.test(upgradeSrc) && /\u00a746/.test(upgradeSrc))

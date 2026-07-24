@@ -109,6 +109,20 @@
 
 	/** Profile data for featured slots' posters. */
 	let profileMap = $state<Record<string, ProfileResponse | null>>({});
+	/** False until this surface's profile hydrate has completed once.
+	 *  v1.8.13 (Ken) — while false, identity labels render a neutral placeholder
+	 *  instead of asserting @account + identicon and then rewriting themselves.
+	 *  An identity that visibly changes is indistinguishable from a swap attack. */
+
+	/** False until this surface's profile hydrate has completed once.
+	 *
+	 *  v1.8.13 (Ken) — while false, identity labels render a neutral placeholder
+	 *  instead of asserting `@account` + identicon and then rewriting themselves
+	 *  once the fetch lands. Ken on chat: "imagine chatting with someone in the
+	 *  chatroom and then all of a sudden their avatar and/or display name changes
+	 *  on you like that. would you do a trade with that user? hell no." An
+	 *  identity that visibly mutates is indistinguishable from a swap attack. */
+	let profilesHydrated = $state(false);
 
 	async function hydrateProfiles(
 		featuredSlots: readonly FeaturedSlot[],
@@ -123,6 +137,7 @@
 			next[account] = profile;
 		}
 		profileMap = next;
+		profilesHydrated = true;
 	}
 
 	// cp431 — refresh() only hydrates the indexer's slots; an optimistic
@@ -192,6 +207,7 @@
 			     the chip is not decoration. Same helper the orderbook rows use. -->
 			{@const networkChip = networkChipFor(o, $_)}
 			<OrderCard
+				pending={!profilesHydrated}
 				order={o}
 				{networkChip}
 				title={cardTitle(o)}

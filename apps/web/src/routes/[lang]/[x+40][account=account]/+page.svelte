@@ -121,6 +121,12 @@
 	});
 	let ordersState = $state<LoadState>('loading');
 	let profile = $state<ProfileResponse | null>(null);
+	/** False until THIS page's subject profile has resolved.
+	 *  v1.8.13 (Ken) — the Active-orders tab renders the subject's own order
+	 *  cards, so it needs the same guarantee as the orderbook: no `@account` +
+	 *  identicon asserted before the real identity is known. */
+	let subjectProfileResolved = $state(false);
+
 	let feedback = $state<AccountFeedbackResponse | null>(null);
 	/** The composite reputation score (cp404 Bayesian-shrunk, experience- and
 	 *  recency-adjusted) — the SAME number every order card and chat header
@@ -200,6 +206,11 @@
 	 *  and multiple response rows; the shared profile cache
 	 *  deduplicates across all calls. */
 	let reviewerProfileMap = $state<Record<string, ProfileResponse | null>>({});
+	/** False until the reviewer-profile hydrate has completed once.
+	 *  v1.8.13 (Ken) — a review list whose author names and avatars rewrite
+	 *  themselves undermines the very thing the list exists to establish. */
+	let reviewerProfilesHydrated = $state(false);
+
 
 	/** Collect every account referenced in a feedback list — reviewers
 	 *  (for 'received') or subjects (for 'given'), plus all response
@@ -228,6 +239,7 @@
 			next[a] = p;
 		}
 		reviewerProfileMap = next;
+		reviewerProfilesHydrated = true;
 
 		// v1.8.12 (Ken) — same rule as the orderbook: re-ask for reviewers whose
 		// read was a TRANSIENT failure, so a reviewer's name and avatar are not
@@ -249,6 +261,7 @@
 		const forAccount = account;
 		const r = await getProfile(forAccount);
 		if (forAccount !== account) return;
+		subjectProfileResolved = true;
 		if (r.ok) {
 			profile = r.data;
 		} else {
@@ -1022,6 +1035,7 @@
 					     conversation once they have keys. Hidden only on the
 					     viewer's OWN order — you cannot message yourself. -->
 					<OrderCard
+						pending={!subjectProfileResolved}
 						order={o}
 						title={cardTitle(o)}
 						displayName={labelProps.displayName}
@@ -1113,6 +1127,7 @@
 							     name. -->
 							<div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
 								<IdentityLabel
+							pending={!reviewerProfilesHydrated}
 									account={fb.reviewer}
 									displayName={reviewerProps.displayName}
 									avatarSvg={reviewerProps.avatarSvg}
@@ -1203,6 +1218,7 @@
 							<div class="ml-6 mt-3 border-l-2 border-ink-200 pl-3 dark:border-ink-700">
 								<div class="mb-1 flex flex-wrap items-baseline justify-between gap-2">
 									<IdentityLabel
+							pending={!reviewerProfilesHydrated}
 										account={resp.responder}
 										displayName={responderProps.displayName}
 										avatarSvg={responderProps.avatarSvg}
@@ -1337,6 +1353,7 @@
 							     the name. -->
 							<div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
 								<IdentityLabel
+							pending={!reviewerProfilesHydrated}
 									account={fb.subject}
 									displayName={subjectProps.displayName}
 									avatarSvg={subjectProps.avatarSvg}
@@ -1427,6 +1444,7 @@
 							<div class="ml-6 mt-3 border-l-2 border-ink-200 pl-3 dark:border-ink-700">
 								<div class="mb-1 flex flex-wrap items-baseline justify-between gap-2">
 									<IdentityLabel
+							pending={!reviewerProfilesHydrated}
 										account={resp.responder}
 										displayName={responderProps.displayName}
 										avatarSvg={responderProps.avatarSvg}

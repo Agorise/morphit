@@ -54,7 +54,18 @@ const at = (needle: string): number => {
 
 // ─── the identity cluster ────────────────────────────────────────────
 check('the avatar is bigger (48px) and rendered without its inline handle', /avatarSize=\{48\}/.test(code) && /hideHandle/.test(code));
-check('line 1 is the display name', /peerLabelProps\.displayName \|\| `@\$\{peer\}`/.test(code));
+// v1.8.13 (Ken) — line 1 is still the display name, but it no longer falls
+// back to `@peer` UNCONDITIONALLY. While the peer profile is loading it shows a
+// neutral placeholder instead: asserting the handle and then rewriting it to a
+// display name is a mid-conversation identity change, which Ken rightly called
+// out as indistinguishable from a swap attack. The requirement is the intent
+// (display name leads) plus the new one (never assert before we know).
+check('line 1 leads with the display name', /\{peerLabelProps\.displayName\}/.test(code));
+check(
+	'…and does not assert @peer before the profile resolves',
+	/\{:else if peerProfileResolved\}/.test(code),
+	'an identity that appears then changes reads as a swap attack'
+);
 check('the sprout sits at the end of the display-name line', at('peerLabelProps.displayName') < at('<NewTraderChip />'));
 check('line 2 carries the truncated posting key', /truncatePublicKey\(peerPostingKey\)/.test(code));
 check('line 2 carries the trade count', at('truncatePublicKey(peerPostingKey)') < at('orderbook.card.trades_only'));

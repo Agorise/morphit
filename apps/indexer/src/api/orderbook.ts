@@ -36,6 +36,7 @@ import { computeReputationScore } from '$indexer/reputation/score';
 import {
 	feedbackAggregateJoin,
 	accountsJoin,
+	profileJoin,
 	engagementJoin,
 	tradeCountJoin
 } from '$api/reputationJoin';
@@ -198,6 +199,8 @@ interface OrderRow {
 	/** Primary posting public key (base58 "BLT…") for the display-only
 	 *  identity anchor on order cards. NULL when not captured yet. */
 	posting_pubkey: string | null;
+	display_name: string | null;
+	profile_json_metadata: unknown;
 	created_at: Date;
 	updated_at: Date;
 	expires_at: Date | null;
@@ -242,6 +245,8 @@ function rowToWire(r: OrderRow) {
 		first_trade_at:
 			r.first_trade_complete_at === null ? null : r.first_trade_complete_at.toISOString(),
 		posting_pubkey: r.posting_pubkey ?? null,
+		display_name: r.display_name ?? null,
+		profile_json_metadata: r.profile_json_metadata ?? null,
 		created_at: r.created_at.toISOString(),
 		updated_at: r.updated_at.toISOString(),
 		expires_at: r.expires_at === null ? null : r.expires_at.toISOString()
@@ -481,12 +486,19 @@ export function orderbookRoute(db: Database, poller: Poller, operatorAccount: st
 			        COALESCE(e.distinct_senders_24h, 0)::int AS engagement_24h,
 			        a.first_trade_complete_at,
 			        a.posting_pubkey,
+			        -- v1.8.13 (Ken): inline so the card is correct on FIRST paint.
+			        -- Without these the browser made a second round-trip and the
+			        -- card visibly swapped @account+identicon for the real
+			        -- identity seconds later, which reads as a scam.
+			        pr.display_name,
+			        pr.json_metadata AS profile_json_metadata,
 			        o.created_at, o.updated_at, o.expires_at
 			 FROM orders o
 			 ${feedbackAggregateJoin('o')}
 ${tradeCountJoin('o')}
 			 ${engagementJoin('o')}
 			 ${accountsJoin('o', 'a')}
+			 ${profileJoin('o', 'pr')}
 			 WHERE ${where.join(' AND ')}
 			 ORDER BY ${orderBy}
 			 LIMIT ${p(limit + 1)}`;

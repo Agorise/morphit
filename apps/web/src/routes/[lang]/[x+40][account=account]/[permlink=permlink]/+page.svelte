@@ -135,6 +135,12 @@
 	 *  cache, so a user who came from the orderbook page gets it
 	 *  instantly without a second round-trip. */
 	let posterProfile = $state<ProfileResponse | null>(null);
+	/** False until the poster's profile has been fetched at least once.
+	 *  v1.8.13 (Ken) — without this the card asserted `@account` + identicon and
+	 *  rewrote itself once the fetch landed. On the page where someone decides
+	 *  whether to trade with this person, an identity that changes on its own is
+	 *  a trust defect, not a loading state. */
+	let posterProfileResolved = $state(false);
 
 	/** Poster identity-label props derived from the profile fetch.
 	 *  Hoisted for the same reason as priceModelLabel above. */
@@ -228,6 +234,7 @@
 		// Silent: if the profile fetch fails, OrderPosterIdentity renders
 		// its identicon fallback cleanly.
 		posterProfile = await getProfileCached(account);
+		posterProfileResolved = true;
 	}
 
 	async function loadPosterPostingKey(): Promise<void> {
@@ -682,6 +689,7 @@
 				{$_('order_detail.posted_by')}
 			</h2>
 			<OrderPosterIdentity
+				pending={!posterProfileResolved}
 				{order}
 				displayName={posterLabelProps.displayName}
 				avatarSvg={posterLabelProps.avatarSvg}

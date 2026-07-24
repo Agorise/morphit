@@ -276,6 +276,31 @@ export function reputationSelectColumns(
 }
 
 /** The accounts join that supplies first_trade_complete_at + posting_pubkey. */
+/**
+ * LEFT JOIN the poster's PROFILE so a listing row carries its own display name
+ * and avatar. Exposes `<alias>.display_name` and `<alias>.json_metadata`.
+ *
+ * v1.8.13 (Ken) — WHY THIS IS A TRUST FIX, NOT A PERFORMANCE ONE.
+ *
+ * The orderbook returned `posting_pubkey` inline but not the profile, so the
+ * browser had to make a SECOND round-trip for names and avatars. Cards
+ * therefore painted with `@account` + identicon and swapped to the real
+ * identity a few seconds later — Ken measured ~7s on morphit.io.
+ *
+ * His objection was not that it looked slow. It was that a card which rewrites
+ * its own identity in front of you is indistinguishable from a scam: "if i were
+ * an interested user in that order, i would think twice... it feels like i
+ * could get scammed." On a marketplace where the counterparty's identity IS the
+ * product, a visibly mutating identity is a trust defect.
+ *
+ * Joining it here means the row arrives complete and the card is correct on
+ * FIRST paint. `profiles` is keyed by account and already LEFT JOINed the same
+ * way elsewhere, so this adds no extra query and no fan-out.
+ */
+export function profileJoin(orderAlias = 'o', profileAlias = 'pr'): string {
+	return `LEFT JOIN profiles ${profileAlias} ON ${profileAlias}.account = ${orderAlias}.account`;
+}
+
 export function accountsJoin(orderAlias = 'o', accountsAlias = 'a'): string {
 	return `LEFT JOIN accounts ${accountsAlias} ON ${accountsAlias}.name = ${orderAlias}.account`;
 }

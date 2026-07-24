@@ -127,6 +127,37 @@ check(
 	'the ROOT cause: C and D were unclearable at the database level'
 );
 
+// ─── 3b. the INTERACTIVE menu can actually reach all four ────────
+// v1.8.12 (Ken): the view was fixed to show C and D, and `clearFlag` was fixed
+// to accept them — but the interactive "Which flag?" menu still listed only A
+// and B. Ken saw his two concentration flags correctly, chose "Both signals",
+// and the command recorded clearances for A and B while leaving the
+// concentration flags untouched, reporting success. Being able to clear a
+// signal is useless if the operator cannot SELECT it.
+// Match the MENU ENTRIES specifically, not the bare label: "Signal D" also
+// appears in the post-clear explanation text, so a substring check passed even
+// with the menu option deleted. (Caught by tamper-testing this very check.)
+const MENU_ENTRIES = [
+	"'Mutual-review only (suspicious reciprocity — Signal B)'",
+	"'Related-accounts only (Signal A)'",
+	"'One-way pile-on only (Signal C)'",
+	"'Review concentration only (Signal D)'"
+];
+for (const entry of MENU_ENTRIES) {
+	check(
+		`the clear menu offers ${entry.slice(1, -1)}`,
+		modCmd.includes(entry),
+		'a signal the operator cannot pick cannot be cleared, however capable clearFlag is'
+	);
+}
+check(
+	'the "all signals" option really means all four',
+	/ALL_SIGNALS: readonly ModerationSignal\[\] = \[\s*'reciprocity',\s*'related',\s*'pile_on',\s*'concentration'\s*\]/.test(
+		modCmd
+	),
+	'"Both signals" clearing 2 of 4 while reporting success is worse than refusing — it looks resolved'
+);
+
 // ─── 4. each DETECTOR honours a clearance ────────────────────────
 // Without this a clearance is cosmetic: the row returns on the next pass.
 const detectorsNeedingClearance = [

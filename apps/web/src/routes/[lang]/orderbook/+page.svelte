@@ -505,6 +505,10 @@
 	 *  handles reactive deep-updates on plain objects well, and the
 	 *  lookup idiom `profileMap[account]` in the template is natural. */
 	let profileMap = $state<Record<string, ProfileResponse | null>>({});
+	/** False until this surface's profile hydrate has completed once.
+	 *  v1.8.13 (Ken) — while false, identity labels render a neutral placeholder
+	 *  instead of asserting @account + identicon and then rewriting themselves.
+	 *  An identity that visibly changes is indistinguishable from a swap attack. */
 
 	/** Items filtered by the user's hidden-accounts AND blocked-
 	 *  accounts sets.  Hidden is local-only ("invisible to me on
@@ -711,6 +715,19 @@
 	 *
 	 *  Signal is optional and inherits from the page's currentAbort
 	 *  so navigating or filtering aborts profile fetches too. */
+	/** Build a ProfileResponse-shaped object from the fields the orderbook now
+	 *  serves inline, or null when this indexer does not send them (older
+	 *  instance) — in which case the batch hydrate below still fills them in. */
+	function inlineProfileOf(o: OrderRecord): ProfileResponse | null {
+		if (o.display_name === undefined && o.profile_json_metadata === undefined) return null;
+		if (o.display_name === null && o.profile_json_metadata == null) return null;
+		return {
+			account: o.account,
+			display_name: o.display_name ?? null,
+			json_metadata: (o.profile_json_metadata ?? {}) as Record<string, unknown>
+		} as ProfileResponse;
+	}
+
 	async function hydrateProfiles(
 		orders: readonly OrderRecord[],
 		signal?: AbortSignal,
@@ -1485,7 +1502,20 @@
 				{#each visibleItems as o (o.account + '/' + o.permlink)}
 					{@const accountIsHidden = $hiddenAccounts.has(o.account.toLowerCase())}
 					{@const accountIsBlocked = $blockedAccounts.has(o.account.toLowerCase())}
-					{@const labelProps = extractLabelPropsFromProfile(profileMap[o.account])}
+				<!-- v1.8.13 (Ken) — prefer the INLINE profile the orderbook now
+				     returns, so the card is correct on FIRST paint and never
+				     shows @account + identicon before swapping to the real
+				     identity. That swap took ~7s on morphit.io and read as a
+				     scam signal: "it feels like i could get scammed... i should
+				     NEVER see the default username and identicon if a custom
+				     display name and custom avatar have been set."
+				     The hydrated map still wins when present — it is fresher
+				     (a profile edited after this page loaded) — and an older
+				     indexer that omits the inline fields falls back to exactly
+				     the previous behaviour. -->
+				{@const labelProps = extractLabelPropsFromProfile(
+					profileMap[o.account] ?? inlineProfileOf(o)
+				)}
 					{@const networkChip = networkChipFor(o, $_)}
 					<!-- v1.8.12 (Ken): the Message button now shows for SIGNED-OUT
 					     visitors too. It was hidden whenever `viewerAccount` was

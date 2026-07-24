@@ -49,6 +49,23 @@ SRC="$REPO_DIR/apps/mcp-server"
 	exit 1
 }
 
+# v1.8.12 (Ken) — step off a possibly-DELETED working directory.
+#
+# `morphit-ops upgrade` swaps /opt/morphit for a fresh tree, so the shell that
+# invoked it — typically sitting IN /opt/morphit — is left on an inode that no
+# longer exists. Every subshell then inherits that dead cwd and bash prints
+#   shell-init: error retrieving current directory: getcwd: ...
+#   job-working-directory: error retrieving current directory: ...
+# once per subshell. Ken's v1.8.12 upgrade emitted ~20 of them around this
+# script. Harmless — the deploy completed correctly — but noise that looks like
+# breakage teaches operators to skim past the real warnings beside it.
+#
+# Placed AFTER the path resolution above, deliberately: REPO_DIR falls back to
+# resolving $0, which is RELATIVE when someone runs `bash ops/scripts/
+# deploy-mcp.sh` by hand. Changing directory before that would break the
+# fallback. Everything below this line uses absolute paths.
+cd / 2>/dev/null || true
+
 echo "morphit-mcp deploy: $SRC  ->  $DEST  (service user: $SVC_USER)"
 
 # ── 1. Lay down the MCP source ─────────────────────────────────────

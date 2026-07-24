@@ -480,6 +480,8 @@ SMOKES=(
 	"apps/web:settings-visibility-scope-smoke"
 	"apps/web:order-card-message-visibility-smoke"
 	"apps/web:profile-hydrate-retry-smoke"
+	"apps/web:order-card-identity-first-paint-smoke"
+	"apps/web:identity-no-swap-smoke"
 	"apps/web:profile-account-change-reload-smoke"
 	"apps/web:profile-freshness-smoke"
 	"apps/web:profile-website-url-smoke"

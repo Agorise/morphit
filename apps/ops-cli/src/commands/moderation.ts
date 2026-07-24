@@ -28,6 +28,7 @@ import { ask, askChoice, askYesNo } from '../init/prompt.ts';
 import {
 	fetchReciprocityFlags,
 	fetchRelatedFlags,
+	type ModerationSignal,
 	fetchPileOnFlags,
 	fetchConcentrationFlags,
 	countActiveFlagsOutsideWindow,
@@ -150,20 +151,29 @@ async function clearFlagFlow(ctx: CommandCtx, operator: string): Promise<void> {
 	// (same creator, near-simultaneous first activity) usually trips Signal B
 	// too once they review each other, and the operator sees the consequences
 	// as one problem — a hidden reputation card AND subdued reviews.
+	// v1.8.12 (Ken) — offers ALL FOUR signals. It previously listed only A and
+	// B, so "Both signals" meant both of TWO while four can suppress a
+	// reputation. Ken's kentest2/kentest3 pair was flagged by Signal D: the
+	// upgraded view showed the flags correctly, he picked "Both", and the
+	// command recorded clearances for A and B — leaving the concentration flags
+	// untouched and the reputations still hidden. Clearing the wrong thing while
+	// reporting success is worse than refusing, because it looks resolved.
 	const kind = await askChoice(
 		'Which flag?',
 		[
-			'Both signals for this pair (usual choice)',
-			'Mutual-review flag only (suspicious reciprocity — Signal B)',
-			'Related-accounts flag only (Signal A)',
+			'ALL signals for this pair (usual choice)',
+			'Mutual-review only (suspicious reciprocity — Signal B)',
+			'Related-accounts only (Signal A)',
+			'One-way pile-on only (Signal C)',
+			'Review concentration only (Signal D)',
 			'Show clearances already in force',
 			'Cancel'
 		],
-		4
+		6
 	);
-	if (kind === 4) return;
+	if (kind === 6) return;
 
-	if (kind === 3) {
+	if (kind === 5) {
 		const rows = await fetchClearances(ctx.db, 50);
 		blank();
 		if (rows.length === 0) {
@@ -191,8 +201,22 @@ async function clearFlagFlow(ctx: CommandCtx, operator: string): Promise<void> {
 		return;
 	}
 
-	const signals: readonly ('reciprocity' | 'related')[] =
-		kind === 0 ? ['reciprocity', 'related'] : kind === 1 ? ['reciprocity'] : ['related'];
+	const ALL_SIGNALS: readonly ModerationSignal[] = [
+		'reciprocity',
+		'related',
+		'pile_on',
+		'concentration'
+	];
+	const signals: readonly ModerationSignal[] =
+		kind === 0
+			? ALL_SIGNALS
+			: kind === 1
+				? ['reciprocity']
+				: kind === 2
+					? ['related']
+					: kind === 3
+						? ['pile_on']
+						: ['concentration'];
 	const accountA = (await ask('First account (without @)')).trim().replace(/^@/, '');
 	if (accountA === '') return;
 	const accountB = (await ask('Second account (without @)')).trim().replace(/^@/, '');
@@ -202,7 +226,7 @@ async function clearFlagFlow(ctx: CommandCtx, operator: string): Promise<void> {
 		return;
 	}
 
-	const label = signals.length === 2 ? 'both flags' : `the ${signals[0]} flag`;
+	const label = signals.length > 1 ? 'all flags' : `the ${signals[0]} flag`;
 	const undo = await askYesNo(`Clear ${label} between @${accountA} and @${accountB}?`, false);
 	if (!undo) return;
 	const note = (await ask('Note for your own records (optional)')).slice(0, 500);
@@ -241,6 +265,26 @@ async function clearFlagFlow(ctx: CommandCtx, operator: string): Promise<void> {
 			fmt.dim(
 				'  Mutual-review (Signal B): their reviews so far are forgiven, but the pair is ' +
 					'still watched — it re-fires if they build up another full signal\u2019s worth.'
+			)
+		);
+	}
+	// v1.8.12 — C and D were never explained here, because they could not be
+	// cleared at all. Both are behavioural, so both re-arm rather than being
+	// permanent, and saying so matters: an operator who believes a clearance is
+	// final will not understand a later re-flag.
+	if (signals.includes('pile_on')) {
+		info(
+			fmt.dim(
+				'  One-way pile-on (Signal C): the reviews behind this flag are forgiven; a fresh ' +
+					'pile-on can raise it again.'
+			)
+		);
+	}
+	if (signals.includes('concentration')) {
+		info(
+			fmt.dim(
+				'  Review concentration (Signal D): their concentration so far is forgiven, but the ' +
+					'pair is still watched — it re-fires if they keep reviewing only each other.'
 			)
 		);
 	}

@@ -25,6 +25,11 @@
 	 *  canonical source for operator display-name, which may be
 	 *  stricter-validated than a regular profile name. */
 	let profileMap = $state<Record<string, ProfileResponse | null>>({});
+	/** False until the operator-profile hydrate has completed once.
+	 *  v1.8.13 (Ken) — identity labels wait rather than asserting `@account` +
+	 *  identicon and rewriting themselves seconds later. */
+	let profilesHydrated = $state(false);
+
 
 	onMount(async () => {
 		const res = await getOperators();
@@ -41,6 +46,7 @@
 						next[a] = p;
 					}
 					profileMap = next;
+					profilesHydrated = true;
 				});
 			}
 		} else {
@@ -181,6 +187,7 @@
 							profile record.
 						-->
 						<IdentityLabel
+							pending={!profilesHydrated}
 							account={op.account}
 							displayName={op.display_name}
 							avatarSvg={labelProps.avatarSvg}

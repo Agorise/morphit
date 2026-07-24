@@ -547,6 +547,54 @@ export function splitSchemaSections(sql: string): Map<number, string> {
  * preamble, a table body, an existing section rewritten — is an in-place edit
  * that an existing DB will NOT pick up, and the operator does need to know.
  */
+/** Highest `version:` in the tree's MIGRATIONS[] array, or 0 if unreadable.
+ *
+ *  Read from SOURCE rather than the DB: this runs during an upgrade, before
+ *  the indexer restarts, so the DB has not seen the new migration yet. */
+export function highestMigrationVersion(installDir: string): number {
+	const p = join(installDir, 'apps', 'indexer', 'src', 'db', 'migrations.ts');
+	if (!existsSync(p)) return 0;
+	try {
+		const src = readFileSync(p, 'utf8');
+		let highest = 0;
+		for (const m of src.matchAll(/^\s*version:\s*(\d+)\s*,/gm)) {
+			const n = Number(m[1]);
+			if (Number.isFinite(n) && n > highest) highest = n;
+		}
+		return highest;
+	} catch {
+		return 0;
+	}
+}
+
+/** Did this upgrade edit schema.sql WITHOUT shipping a migration to carry the
+ *  change to existing databases?
+ *
+ *  v1.8.12 (Ken) — `schemaBaselineChanged()` alone is not that question. It
+ *  diffs schema.sql and nothing else, so ANY schema edit triggered the
+ *  "changed IN PLACE — not via a numbered migration" warning, even when a
+ *  numbered migration existed and had already been applied automatically at
+ *  indexer start-up.
+ *
+ *  Ken hit exactly that upgrading to v1.8.12, which ships MIGRATION 51: his
+ *  database was correctly updated, and the upgrade told him it was not and
+ *  pointed him at a reset + re-sync procedure. A false alarm that recommends
+ *  rebuilding a database is worse than no alarm — it spends the operator's
+ *  trust and invites unnecessary downtime.
+ *
+ *  The real condition is BOTH: schema.sql changed AND no new migration
+ *  arrived to carry it. */
+export function schemaChangedWithoutMigration(
+	oldInstallDir: string,
+	newInstallDir: string
+): boolean {
+	if (!schemaBaselineChanged(oldInstallDir, newInstallDir)) return false;
+	const before = highestMigrationVersion(oldInstallDir);
+	const after = highestMigrationVersion(newInstallDir);
+	// A new numbered migration means the change IS carried to existing DBs.
+	return after <= before;
+}
+
 export function schemaBaselineChanged(oldInstallDir: string, newInstallDir: string): boolean {
 	const rel = join('apps', 'indexer', 'src', 'db', 'schema.sql');
 	const oldP = join(oldInstallDir, rel);
@@ -1201,7 +1249,10 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	// at this point. If the baseline changed, an existing DB won't pick up
 	// the in-place schema edits on its own, so we remind the operator at the
 	// end to reset + re-sync the (chain-derived) indexer DB.
-	const schemaChanged = schemaBaselineChanged(backupDir, installDir);
+	// Only warn when the schema moved WITHOUT a migration to carry it — a
+	// numbered migration is applied automatically at indexer start-up, so
+	// warning then is a false alarm that invites an unnecessary DB reset.
+	const schemaChanged = schemaChangedWithoutMigration(backupDir, installDir);
 
 	// ─── 9. Install workspace dependencies ─────────────────────
 	try {

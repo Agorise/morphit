@@ -77,6 +77,29 @@
 		account?: string;
 		/** User-chosen human label. Not authoritative. */
 		displayName?: string | null;
+		/** True while this account's profile is still being fetched.
+		 *
+		 *  v1.8.13 (Ken) — WHY THIS EXISTS. Identity has THREE states, and this
+		 *  component only modelled two: "has a custom identity" and
+		 *  "@account + identicon". It conflated the third — NOT KNOWN YET — with
+		 *  the second, so any surface that fetches profiles after mount painted
+		 *  a confident, WRONG identity and then rewrote it seconds later.
+		 *
+		 *  Ken on the orderbook: "i should NEVER see the default username and
+		 *  identicon if a custom display name and custom avatar have been set."
+		 *  And on chat, where it is far worse: "imagine chatting with someone in
+		 *  the chatroom and then all of a sudden their avatar and/or display name
+		 *  changes on you like that. would you do a trade with that user?"
+		 *
+		 *  He is right that this is a TRUST defect. A counterparty whose identity
+		 *  mutates mid-conversation is indistinguishable from a swap attack, and
+		 *  the honest response to being uncertain is to SAY SO rather than to
+		 *  assert a fallback. With `pending`, the transition is unknown → known
+		 *  instead of wrong → right.
+		 *
+		 *  Defaults false so existing call sites are unchanged; a surface opts in
+		 *  once it knows its profile is still in flight. */
+		pending?: boolean;
 		/* v1.8.9 — the nostrUrl / streamingUrl / websiteUrl props and their
 		 * glyphs were REMOVED. They were unreachable in practice: no call site
 		 * ever passed them, so the props defaulted to null and the three {#if}
@@ -137,6 +160,7 @@
 		publicKeyString,
 		account,
 		displayName = null,
+		pending = false,
 		avatarSvg = null,
 		avatarDataUri = null,
 		href = null,
@@ -207,6 +231,9 @@
 			const base = formatIdentity(cleanDisplayName, publicKey);
 			return { name: base.name || (account ? `@${account}` : ''), fingerprint: base.fingerprint };
 		}
+		// While pending, do NOT fall back to `@account`: that is an assertion we
+		// cannot yet make. An empty name renders as a neutral placeholder.
+		if (cleanDisplayName === null && pending) return { name: '', fingerprint: '' };
 		return { name: cleanDisplayName ?? (account ? `@${account}` : ''), fingerprint: '' };
 	});
 
@@ -433,6 +460,18 @@
 				class="flex-none rounded-full bg-ink-200/50 object-cover ring-1 ring-ink-300 dark:bg-ink-800/50 dark:ring-ink-700"
 				aria-hidden="true"
 			/>
+		{:else if pending}
+			<!-- v1.8.13 (Ken) — profile still loading: show a neutral placeholder,
+			     NOT the identicon. The identicon is a real answer ("this account
+			     has no custom avatar"), and asserting it before we know produces
+			     the swap Ken objected to — an avatar that changes on its own
+			     reads as a swap attack, especially mid-conversation. A quiet
+			     circle says "not known yet", which is the truth. -->
+			<span
+				style="width:{avatarSize}px;height:{avatarSize}px"
+				class="flex-none animate-pulse rounded-full bg-ink-200 ring-1 ring-ink-300 dark:bg-ink-800 dark:ring-ink-700"
+				aria-hidden="true"
+			></span>
 		{:else}
 			<img
 				src={avatarSrc}

@@ -1107,8 +1107,21 @@
 		return at ? formatDayMonth(at) : null;
 	}
 
+	/** False until the peer's profile has been fetched at least once.
+	 *
+	 *  v1.8.13 (Ken) — the header used to render `@peer` + identicon while this
+	 *  was in flight, then rewrite itself to the real name and avatar. Ken:
+	 *  "imagine chatting with someone in the chatroom and then all of a sudden
+	 *  their avatar and/or display name changes on you like that. would you do a
+	 *  trade with that user? hell no." He is right — mid-conversation identity
+	 *  mutation is exactly what a swap attack looks like, and it is worse here
+	 *  than on a listing because a trade is actively being negotiated.
+	 *  `pending` makes the transition unknown → known instead of wrong → right. */
+	let peerProfileResolved = $state(false);
+
 	async function loadPeerProfile(): Promise<void> {
 		peerProfile = await getProfileCached(peer);
+		peerProfileResolved = true;
 	}
 
 	/** #4 — fetch the peer's public reputation for the header cluster. The
@@ -1665,6 +1678,7 @@
 							avatarSvg={peerLabelProps.avatarSvg}
 							avatarDataUri={peerLabelProps.avatarDataUri}
 							avatarSize={48}
+							pending={!peerProfileResolved}
 							hideHandle
 						/>
 					</div>
@@ -1677,7 +1691,21 @@
 								href={lp(`/@${peer}`)}
 								class="truncate font-bold text-ink-900 hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:text-white"
 							>
-								{peerLabelProps.displayName || `@${peer}`}
+								<!-- v1.8.13 (Ken): while the profile is loading, show a
+								     neutral placeholder rather than asserting `@peer`.
+								     Falling back to the handle and then rewriting it to a
+								     display name is the mid-conversation identity change
+								     Ken called out — indistinguishable from a swap. -->
+								{#if peerLabelProps.displayName}
+									{peerLabelProps.displayName}
+								{:else if peerProfileResolved}
+									{`@${peer}`}
+								{:else}
+									<span
+										class="inline-block h-4 w-28 animate-pulse rounded bg-ink-200 align-middle dark:bg-ink-800"
+										aria-hidden="true"
+									></span>
+								{/if}
 							</a>
 							{#if peerReputation?.isNewTrader}
 								<NewTraderChip />
