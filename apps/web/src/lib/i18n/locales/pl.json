@@ -836,7 +836,8 @@
 		"learn_more": "Dowiedz się więcej",
 		"unlock": "Odblokuj",
 		"password_too_short": "Hasło musi mieć co najmniej 8 znaków.",
-		"lazy_load_failed": "Nie udało się załadować tej sekcji."
+		"lazy_load_failed": "Nie udało się załadować tej sekcji.",
+		"ok": "OK"
 	},
 	"compare": {
 		"heading": "Porównaj orderbooki",
@@ -3178,7 +3179,7 @@
 			"body_insufficient_funds": "Twoje konto nie ma wystarczająco BLURT na opłatę za listing.",
 			"body_locked": "Sesja jest zablokowana. Odblokuj hasłem, aby spróbować ponownie.",
 			"body_bad_password": "To hasło nie odblokowało twojego keystore. Spróbuj ponownie.",
-			"body_posting_only": "Opłata za ogłoszenie w BLURT wymaga klucza aktywnego, którego nie ma na tym urządzeniu — jesteś zalogowany tylko kluczem publikacji. Zaloguj się hasłem głównym lub pełnym keyfile, aby zapłacić w BLURT, albo wróć i zapłać w BTC/XMR (lub skorzystaj z darmowego pierwszego ogłoszenia).",
+			"body_posting_only": "Opłata za ogłoszenie w BLURT wymaga klucza Active. Morphit poprosi o niego przy publikacji — podpisuje opłatę i nigdy nie jest zapisywany na tym urządzeniu. Możesz też wrócić i zapłacić w BTC/XMR lub wykorzystać pierwsze darmowe ogłoszenie.",
 			"body_recipient_missing": "Nie udało się wysłać opłaty za ogłoszenie — konto skarbca, na które trafia (@morphit-fees), wygląda na to, że jeszcze nie istnieje na Blurt. Nic nie zapłacono. Jeśli prowadzisz tę instancję, to konto trzeba utworzyć; w przeciwnym razie zgłoś to.",
 			"body_insufficient_rc": "Blurt pobiera za tę akcję małą opłatę sieciową z twojego płynnego BLURT, a twoje konto nie mogło jej pokryć. Doładuj trochę płynnego BLURT (przelewy przychodzące są darmowe) i spróbuj ponownie. Nic nie zapłacono.",
 			"body_authority": "Blurt odrzucił podpis płatności opłaty — klucz Aktywny twojego konta może nie zgadzać się z tym w łańcuchu. Nic nie zapłacono. Spróbuj zalogować się ponownie 12-wyrazową frazą seed lub plikiem Keyfile."
@@ -3235,7 +3236,7 @@
 			"fee_address_chain_pinned": "Zakotwiczone w łańcuchu przez {account} — każda instancja Morphit weryfikuje opłaty wobec tego adresu.",
 			"fee_address_chain_pinned_aria": "Autentyczność adresu zakotwiczonego w łańcuchu",
 			"fee_address_unavailable": "Ten operator nie skonfigurował adresu opłaty {asset}. Wybierz zamiast tego BLURT lub opublikuj swoje zlecenie na innej instancji Morphit.",
-			"blurt_needs_active_key": "Wymaga klucza aktywnego. Jesteś zalogowany kluczem postującym — Morphit poprosi o klucz aktywny (lub hasło główne Blurt) przy publikacji, a nic z tego, co wpisałeś, nie zostanie utracone."
+			"blurt_needs_active_key": "Wymaga klucza Active. Jesteś zalogowany kluczem Posting — Morphit poprosi o klucz Active przy publikacji, a nic z tego, co wpisałeś, nie zostanie utracone."
 		},
 		"draft": {
 			"restored_banner": "Przywrócono szkic sprzed {age}. Kontynuuj tam, gdzie skończyłeś — albo zacznij od nowa.",
@@ -3575,7 +3576,7 @@
 			"password_label": "Twoje hasło @{account} (do podpisania kluczem aktywnym)",
 			"error_password_required": "Wpisz hasło, aby kontynuować.",
 			"error_bad_password": "To hasło nie odblokowało Twojego klucza aktywnego. Sprawdź je i spróbuj ponownie.",
-			"error_no_active_key": "To urządzenie nie ma klucza aktywnego do podpisania. Morphit poprosi o klucz aktywny (lub hasło główne Blurt) przy power up lub power down.",
+			"error_no_active_key": "To urządzenie nie ma klucza Active do podpisu. Morphit poprosi o klucz Active przy power up lub power down.",
 			"error_broadcast": "Nie udało się zakończyć operacji w łańcuchu. Spróbuj ponownie.",
 			"error_chain_rejected": "Sieć odrzuciła tę transakcję: {reason}",
 			"error_unreachable": "Nie udało się połączyć z Twoją instancją Morphit, aby nadać transakcję. Sprawdź połączenie i spróbuj ponownie.",
@@ -3597,7 +3598,7 @@
 			"memo_label": "Notatka (opcjonalnie)",
 			"memo_placeholder": "np. numer zamówienia",
 			"memo_privacy_warning": "Notatki są przechowywane publicznie i trwale w łańcuchu bloków, jawnym tekstem. Nigdy nie umieszczaj w nich haseł, kluczy ani niczego prywatnego.",
-			"error_no_active_key": "To urządzenie nie ma klucza aktywnego do podpisania. Morphit poprosi o klucz aktywny (lub hasło główne Blurt) przy wysyłaniu.",
+			"error_no_active_key": "To urządzenie nie ma klucza Active do podpisu. Morphit poprosi o klucz Active przy wysyłce.",
 			"send_button": "Wyślij",
 			"confirm": "Wyślij BLURT",
 			"qr_heading": "Zeskanuj QR odbiorcy",
@@ -4693,7 +4694,7 @@
 			"is_posting_key": "To twój klucz postujący — ten, którym już jesteś zalogowany. Nie może przenosić środków. Wklej klucz aktywny.",
 			"is_owner_key": "To twój klucz właściciela. Może przejąć całe konto, więc Morphit nigdy go nie użyje. Użyj klucza aktywnego.",
 			"not_this_account": "To nie jest klucz aktywny tego konta. Sprawdź, czy używasz klucza dla @{account}.",
-			"empty": "Wpisz klucz aktywny lub hasło główne.",
+			"empty": "Wpisz swój klucz Active.",
 			"lookup_failed": "Nie udało się połączyć z blockchainem, aby sprawdzić klucz. Spróbuj za chwilę.",
 			"bad_device_password": "To hasło Morphit jest nieprawidłowe. Twój klucz aktywny nie został zapisany.",
 			"keep_failed": "Nie udało się zapisać klucza aktywnego na tym urządzeniu. Nic nie zostało zmienione — spróbuj ponownie lub wybierz „Zapomnij”."
@@ -4706,5 +4707,11 @@
 		"device_password_label": "Twoje hasło Morphit dla @{account}",
 		"device_password_help": "Hasło, którym już odblokowujesz Morphit. Szyfruje twój klucz aktywny na tym urządzeniu."
 	},
-	"notifications": {}
+	"notifications": {},
+	"trust_score": {
+		"heading": "Dlaczego {score}, a nie średnia?",
+		"what_it_is": "{score} to wskaźnik zaufania. Nie bierze średniej wprost — każdy zaczyna blisko 3.00 i dopiero z kolejnymi transakcjami wspina się ku swojej prawdziwej średniej. Pięć idealnych ocen zabiera cię prawie na szczyt, ale nie na sam szczyt.",
+		"why": "Po co? Inaczej robię trzy fikcyjne transakcje ze znajomym, wystawiamy sobie 5 gwiazdek i od razu wyglądam na tak wiarygodnego jak ktoś z 200 prawdziwymi transakcjami po 4.9. Wskaźnik zaufania sprawia, że nieskazitelną historię trzeba zapracować, nie ogłosić.",
+		"drift": "W miarę przybywania prawdziwych transakcji {score} sam może rosnąć w stronę średniej."
+	}
 }

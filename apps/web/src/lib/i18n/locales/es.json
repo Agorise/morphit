@@ -836,7 +836,8 @@
 		"learn_more": "Más información",
 		"unlock": "Desbloquear",
 		"password_too_short": "La contraseña debe tener al menos 8 caracteres.",
-		"lazy_load_failed": "No se pudo cargar esta sección."
+		"lazy_load_failed": "No se pudo cargar esta sección.",
+		"ok": "Aceptar"
 	},
 	"compare": {
 		"heading": "Comparar orderbooks",
@@ -3178,7 +3179,7 @@
 			"body_insufficient_funds": "Tu cuenta no tiene suficiente BLURT para pagar la tarifa de listado.",
 			"body_locked": "La sesión está bloqueada. Desbloquea con tu contraseña para volver a intentarlo.",
 			"body_bad_password": "Esa contraseña no desbloqueó tu keystore. Inténtalo de nuevo.",
-			"body_posting_only": "Pagar la tarifa de publicación en BLURT requiere tu clave activa, y no está en este dispositivo: has iniciado sesión solo con tu clave de publicación. Inicia sesión con tu contraseña maestra o tu keyfile completo para pagar en BLURT, o vuelve y paga en BTC/XMR (o usa tu primera publicación gratuita).",
+			"body_posting_only": "Pagar la tarifa de publicación en BLURT necesita tu clave Active. Morphit te la pedirá al publicar: firma la tarifa y nunca se guarda en este dispositivo. También puedes volver y pagar en BTC/XMR, o usar tu primera publicación gratuita.",
 			"body_recipient_missing": "No se pudo enviar la tarifa de publicación: la cuenta del tesoro a la que se paga (@morphit-fees) parece no existir todavía en Blurt. No se pagó nada. Si administras esta instancia, esa cuenta debe crearse; de lo contrario, informa de esto.",
 			"body_insufficient_rc": "Blurt cobra una pequeña comisión de red por esta acción desde tu BLURT líquido, y tu cuenta no pudo cubrirla. Añade un poco de BLURT líquido (las transferencias entrantes son gratuitas) e inténtalo de nuevo. No se pagó nada.",
 			"body_authority": "Blurt rechazó la firma del pago de la tarifa: puede que la clave Activa de tu cuenta no coincida con la que está en la cadena. No se pagó nada. Intenta iniciar sesión de nuevo con tu frase semilla de 12 palabras o tu Keyfile."
@@ -3235,7 +3236,7 @@
 			"fee_address_chain_pinned": "Anclado en la cadena por {account} — todas las instancias de Morphit verifican las tarifas contra esta dirección.",
 			"fee_address_chain_pinned_aria": "Autenticidad de la dirección anclada en la cadena",
 			"fee_address_unavailable": "Este operador no ha configurado una dirección de tarifa para {asset}. Elige BLURT en su lugar, o publica tu orden en otra instancia de Morphit.",
-			"blurt_needs_active_key": "Necesita tu clave activa. Has iniciado sesión con tu clave de publicación — Morphit te pedirá tu clave activa (o tu contraseña maestra de Blurt) al publicar, y no perderás nada de lo que hayas rellenado."
+			"blurt_needs_active_key": "Necesita tu clave Active. Has iniciado sesión con tu clave Posting: Morphit te pedirá tu clave Active al publicar, y no se perderá nada de lo que hayas escrito."
 		},
 		"draft": {
 			"restored_banner": "Borrador restaurado desde hace {age}. Continúa donde lo dejaste — o empieza de nuevo.",
@@ -3575,7 +3576,7 @@
 			"password_label": "Tu contraseña de @{account} (para firmar con tu clave activa)",
 			"error_password_required": "Introduce tu contraseña para continuar.",
 			"error_bad_password": "Esa contraseña no desbloqueó tu clave activa. Revísala e inténtalo de nuevo.",
-			"error_no_active_key": "Este dispositivo no tiene una clave activa con la que firmar. Morphit te pedirá tu clave activa (o tu contraseña maestra de Blurt) al hacer power up o power down.",
+			"error_no_active_key": "Este dispositivo no tiene clave Active para firmar. Morphit te pedirá tu clave Active al hacer power up o power down.",
 			"error_broadcast": "No se pudo completar en la cadena. Inténtalo de nuevo.",
 			"error_chain_rejected": "La red rechazó esta transacción: {reason}",
 			"error_unreachable": "No se pudo conectar con tu instancia de Morphit para transmitir. Revisa tu conexión e inténtalo de nuevo.",
@@ -3597,7 +3598,7 @@
 			"memo_label": "Nota (opcional)",
 			"memo_placeholder": "p. ej. una referencia de pedido",
 			"memo_privacy_warning": "Las notas se guardan de forma pública y permanente en la blockchain, en texto plano. Nunca incluyas contraseñas, claves ni nada privado.",
-			"error_no_active_key": "Este dispositivo no tiene una clave activa con la que firmar. Morphit te pedirá tu clave activa (o tu contraseña maestra de Blurt) al enviar.",
+			"error_no_active_key": "Este dispositivo no tiene clave Active para firmar. Morphit te pedirá tu clave Active al enviar.",
 			"send_button": "Enviar",
 			"confirm": "Enviar BLURT",
 			"qr_heading": "Escanear un QR de destinatario",
@@ -4693,7 +4694,7 @@
 			"is_posting_key": "Esa es tu clave de publicación, con la que ya has iniciado sesión. No puede mover dinero. Pega tu clave activa.",
 			"is_owner_key": "Esa es tu clave de propietario. Puede apoderarse de toda tu cuenta, así que Morphit nunca la usará. Usa tu clave activa.",
 			"not_this_account": "Esa no es la clave activa de esta cuenta. Comprueba que usas la clave de @{account}.",
-			"empty": "Introduce tu clave activa o contraseña maestra.",
+			"empty": "Introduce tu clave Active.",
 			"lookup_failed": "No se pudo contactar con la blockchain para comprobar tu clave. Inténtalo de nuevo en un momento.",
 			"bad_device_password": "Esa contraseña de Morphit es incorrecta. Tu clave activa no se guardó.",
 			"keep_failed": "No se pudo guardar tu clave activa en este dispositivo. No se cambió nada: inténtalo de nuevo o elige «Olvidarla»."
@@ -4706,5 +4707,11 @@
 		"device_password_label": "Tu contraseña de Morphit de @{account}",
 		"device_password_help": "La contraseña con la que ya desbloqueas Morphit. Cifra tu clave activa en este dispositivo."
 	},
-	"notifications": {}
+	"notifications": {},
+	"trust_score": {
+		"heading": "¿Por qué {score} y no la media?",
+		"what_it_is": "El {score} es una puntuación de confianza. No toma la media al pie de la letra: empieza a todo el mundo cerca de 3.00 y solo te deja subir hacia tu media real a medida que acumulas operaciones. Cinco valoraciones perfectas te llevan casi todo el camino, no todo.",
+		"why": "¿Por qué molestarse? Si no, hago tres operaciones falsas con un amigo, nos damos 5 estrellas y de golpe parezco tan fiable como alguien con 200 operaciones reales a 4.9. La puntuación de confianza hace que un historial impecable se gane, no se declare.",
+		"drift": "A medida que se acumulan operaciones reales, {score} puede subir por sí solo hacia la media."
+	}
 }

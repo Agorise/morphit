@@ -836,7 +836,8 @@
 		"learn_more": "Mehr erfahren",
 		"unlock": "Entsperren",
 		"password_too_short": "Das Passwort muss mindestens 8 Zeichen haben.",
-		"lazy_load_failed": "Dieser Abschnitt konnte nicht geladen werden."
+		"lazy_load_failed": "Dieser Abschnitt konnte nicht geladen werden.",
+		"ok": "Verstanden"
 	},
 	"compare": {
 		"heading": "Orderbooks vergleichen",
@@ -3178,7 +3179,7 @@
 			"body_insufficient_funds": "Dein Konto hat nicht genug BLURT, um die Listing-Gebühr zu bezahlen.",
 			"body_locked": "Die Sitzung ist gesperrt. Entsperre dein Passwort, um es erneut zu versuchen.",
 			"body_bad_password": "Dieses Passwort hat dein Keystore nicht entsperrt. Versuche es erneut.",
-			"body_posting_only": "Die Zahlung der Inseratsgebühr in BLURT benötigt deinen Active Key, und er ist nicht auf diesem Gerät – du bist nur mit deinem Posting Key angemeldet. Melde dich mit deinem Master-Passwort oder deinem vollständigen Keyfile an, um in BLURT zu zahlen, oder geh zurück und zahle in BTC/XMR (oder nutze dein kostenloses erstes Inserat).",
+			"body_posting_only": "Die Inseratsgebühr in BLURT zu zahlen erfordert deinen Active-Key. Morphit fragt beim Veröffentlichen danach — er signiert die Gebühr und wird nie auf diesem Gerät gespeichert. Du kannst auch zurückgehen und in BTC/XMR zahlen oder dein kostenloses erstes Inserat nutzen.",
 			"body_recipient_missing": "Die Inseratsgebühr konnte nicht gesendet werden – das Treasury-Konto, an das sie geht (@morphit-fees), scheint auf Blurt noch nicht zu existieren. Es wurde nichts bezahlt. Wenn du diese Instanz betreibst, muss dieses Konto erstellt werden; andernfalls melde dies bitte.",
 			"body_insufficient_rc": "Blurt erhebt für diese Aktion eine kleine Netzwerkgebühr aus deinem liquiden BLURT, und dein Konto konnte sie nicht decken. Lade etwas liquides BLURT auf (eingehende Überweisungen sind kostenlos) und versuche es erneut. Es wurde nichts bezahlt.",
 			"body_authority": "Blurt hat die Signatur der Gebührenzahlung abgelehnt – der Active Key deines Kontos stimmt möglicherweise nicht mit dem auf der Chain überein. Es wurde nichts bezahlt. Melde dich erneut mit deiner 12-Wort-Seed-Phrase oder deinem Keyfile an."
@@ -3235,7 +3236,7 @@
 			"fee_address_chain_pinned": "Auf der Blockchain durch {account} verankert — jede Morphit-Instanz prüft Gebühren gegen diese Adresse.",
 			"fee_address_chain_pinned_aria": "Authentizität der blockchain-verankerten Adresse",
 			"fee_address_unavailable": "Dieser Betreiber hat keine {asset}-Gebührenadresse konfiguriert. Wählen Sie stattdessen BLURT oder posten Sie Ihren Auftrag auf einer anderen Morphit-Instanz.",
-			"blurt_needs_active_key": "Benötigt deinen Active key. Du bist mit deinem Posting key angemeldet — Morphit fragt beim Veröffentlichen nach deinem Active key (oder deinem Blurt-Master-Passwort); nichts von dem, was du eingegeben hast, geht verloren."
+			"blurt_needs_active_key": "Benötigt deinen Active-Key. Du bist mit deinem Posting-Key angemeldet — Morphit fragt beim Veröffentlichen nach deinem Active-Key, und nichts von dem, was du eingegeben hast, geht verloren."
 		},
 		"draft": {
 			"restored_banner": "Entwurf von vor {age} wiederhergestellt. Mach da weiter, wo du aufgehört hast — oder fang neu an.",
@@ -3575,7 +3576,7 @@
 			"password_label": "Dein @{account}-Passwort (zum Signieren mit deinem Active Key)",
 			"error_password_required": "Gib dein Passwort ein, um fortzufahren.",
 			"error_bad_password": "Mit diesem Passwort ließ sich dein Active Key nicht entsperren. Prüfe es und versuche es erneut.",
-			"error_no_active_key": "Auf diesem Gerät ist kein Active key zum Signieren vorhanden. Morphit fragt beim Power up oder Power down nach deinem Active key (oder deinem Blurt-Master-Passwort).",
+			"error_no_active_key": "Dieses Gerät hat keinen Active-Key zum Signieren. Morphit fragt beim Power up oder Power down nach deinem Active-Key.",
 			"error_broadcast": "Das konnte nicht auf der Blockchain abgeschlossen werden. Bitte versuche es erneut.",
 			"error_chain_rejected": "Das Netzwerk hat diese Transaktion abgelehnt: {reason}",
 			"error_unreachable": "Deine Morphit-Instanz konnte zum Senden nicht erreicht werden. Prüfe deine Verbindung und versuche es erneut.",
@@ -3597,7 +3598,7 @@
 			"memo_label": "Notiz (optional)",
 			"memo_placeholder": "z. B. eine Bestellreferenz",
 			"memo_privacy_warning": "Notizen werden öffentlich und dauerhaft im Klartext auf der Blockchain gespeichert. Gib niemals Passwörter, Schlüssel oder etwas Privates ein.",
-			"error_no_active_key": "Auf diesem Gerät ist kein Active key zum Signieren vorhanden. Morphit fragt beim Senden nach deinem Active key (oder deinem Blurt-Master-Passwort).",
+			"error_no_active_key": "Dieses Gerät hat keinen Active-Key zum Signieren. Morphit fragt beim Senden nach deinem Active-Key.",
 			"send_button": "Senden",
 			"confirm": "BLURT senden",
 			"qr_heading": "Empfänger-QR scannen",
@@ -4693,7 +4694,7 @@
 			"is_posting_key": "Das ist dein Posting key — der, mit dem du bereits angemeldet bist. Er kann kein Geld bewegen. Füge stattdessen deinen Active key ein.",
 			"is_owner_key": "Das ist dein Owner key. Er kann dein ganzes Konto übernehmen, deshalb wird Morphit ihn niemals verwenden. Bitte nutze deinen Active key.",
 			"not_this_account": "Das ist nicht der Active key dieses Kontos. Prüfe, ob du den Schlüssel für @{account} verwendest.",
-			"empty": "Gib deinen Active key oder dein Master-Passwort ein.",
+			"empty": "Gib deinen Active-Key ein.",
 			"lookup_failed": "Die Blockchain konnte nicht erreicht werden, um deinen Schlüssel zu prüfen. Versuche es gleich noch einmal.",
 			"bad_device_password": "Dieses Morphit-Passwort ist falsch. Dein Active key wurde nicht gespeichert.",
 			"keep_failed": "Dein Active key konnte auf diesem Gerät nicht gespeichert werden. Es wurde nichts geändert — versuche es erneut oder wähle „Vergessen“."
@@ -4706,5 +4707,11 @@
 		"device_password_label": "Dein Morphit-Passwort für @{account}",
 		"device_password_help": "Das Passwort, mit dem du Morphit bereits entsperrst. Es verschlüsselt deinen Active key auf diesem Gerät."
 	},
-	"notifications": {}
+	"notifications": {},
+	"trust_score": {
+		"heading": "Warum {score} und nicht der Durchschnitt?",
+		"what_it_is": "Der {score} ist ein Vertrauenswert. Er nimmt den Durchschnitt nicht für bare Münze — er startet bei allen nahe 3.00 und lässt dich erst mit wachsender Handelszahl zu deinem echten Durchschnitt aufsteigen. Fünf perfekte Bewertungen bringen dich fast ans Ziel, nicht ganz.",
+		"why": "Warum der Aufwand? Sonst mache ich drei Scheingeschäfte mit einem Freund, wir geben uns 5 Sterne, und ich wirke sofort so vertrauenswürdig wie jemand mit 200 echten Trades bei 4.9. Der Vertrauenswert macht eine blütenweiße Bilanz verdient statt behauptet.",
+		"drift": "Mit echten Trades kann {score} von selbst Richtung Durchschnitt steigen."
+	}
 }

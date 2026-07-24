@@ -836,7 +836,8 @@
 		"learn_more": "Scopri di più",
 		"unlock": "Sblocca",
 		"password_too_short": "La password deve avere almeno 8 caratteri.",
-		"lazy_load_failed": "Impossibile caricare questa sezione."
+		"lazy_load_failed": "Impossibile caricare questa sezione.",
+		"ok": "Ho capito"
 	},
 	"compare": {
 		"heading": "Confronta orderbook",
@@ -3178,7 +3179,7 @@
 			"body_insufficient_funds": "Il tuo account non ha abbastanza BLURT per pagare la tariffa di listing.",
 			"body_locked": "La sessione è bloccata. Sblocca con la tua password per riprovare.",
 			"body_bad_password": "Quella password non ha sbloccato il tuo keystore. Riprova.",
-			"body_posting_only": "Pagare la commissione di pubblicazione in BLURT richiede la tua chiave attiva, che non è su questo dispositivo: hai effettuato l'accesso solo con la chiave di pubblicazione. Accedi con la password principale o il keyfile completo per pagare in BLURT, oppure torna indietro e paga in BTC/XMR (o usa la tua prima inserzione gratuita).",
+			"body_posting_only": "Pagare la tariffa di inserzione in BLURT richiede la tua chiave Active. Morphit te la chiederà al momento di pubblicare: firma la tariffa e non viene mai salvata su questo dispositivo. Puoi anche tornare indietro e pagare in BTC/XMR, oppure usare la tua prima inserzione gratuita.",
 			"body_recipient_missing": "Non è stato possibile inviare la commissione di pubblicazione: il conto di tesoreria a cui viene pagata (@morphit-fees) sembra non esistere ancora su Blurt. Non è stato pagato nulla. Se gestisci questa istanza, quel conto deve essere creato; altrimenti, segnala il problema.",
 			"body_insufficient_rc": "Blurt applica una piccola commissione di rete per questa azione dal tuo BLURT liquido, e il tuo account non è riuscito a coprirla. Aggiungi un po' di BLURT liquido (i trasferimenti in entrata sono gratuiti) e riprova. Non è stato pagato nulla.",
 			"body_authority": "Blurt ha rifiutato la firma del pagamento della commissione: la chiave Attiva del tuo account potrebbe non corrispondere a quella on-chain. Non è stato pagato nulla. Prova ad accedere di nuovo con la frase seed di 12 parole o il Keyfile."
@@ -3235,7 +3236,7 @@
 			"fee_address_chain_pinned": "Ancorato sulla catena da {account} — ogni istanza Morphit verifica le commissioni rispetto a questo indirizzo.",
 			"fee_address_chain_pinned_aria": "Autenticità dell'indirizzo ancorato sulla catena",
 			"fee_address_unavailable": "Questo operatore non ha configurato un indirizzo per la commissione {asset}. Scegli BLURT invece, o pubblica il tuo ordine su un'altra istanza Morphit.",
-			"blurt_needs_active_key": "Richiede la tua chiave attiva. Hai effettuato l'accesso con la chiave di pubblicazione — Morphit ti chiederà la chiave attiva (o la password principale di Blurt) al momento della pubblicazione, e non perderai nulla di ciò che hai inserito."
+			"blurt_needs_active_key": "Richiede la tua chiave Active. Hai effettuato l'accesso con la chiave Posting: Morphit ti chiederà la chiave Active al momento di pubblicare, e nulla di ciò che hai inserito andrà perso."
 		},
 		"draft": {
 			"restored_banner": "Bozza ripristinata da {age} fa. Continua da dove avevi lasciato — o ricomincia.",
@@ -3575,7 +3576,7 @@
 			"password_label": "La tua password di @{account} (per firmare con la tua chiave attiva)",
 			"error_password_required": "Inserisci la tua password per continuare.",
 			"error_bad_password": "Quella password non ha sbloccato la tua chiave attiva. Controllala e riprova.",
-			"error_no_active_key": "Questo dispositivo non ha una chiave attiva con cui firmare. Morphit ti chiederà la chiave attiva (o la password principale di Blurt) quando fai power up o power down.",
+			"error_no_active_key": "Questo dispositivo non ha una chiave Active per firmare. Morphit ti chiederà la chiave Active quando fai power up o power down.",
 			"error_broadcast": "Non è stato possibile completare l'operazione sulla catena. Riprova.",
 			"error_chain_rejected": "La rete ha rifiutato questa transazione: {reason}",
 			"error_unreachable": "Impossibile raggiungere la tua istanza Morphit per la trasmissione. Controlla la connessione e riprova.",
@@ -3597,7 +3598,7 @@
 			"memo_label": "Nota (facoltativa)",
 			"memo_placeholder": "es. un riferimento dell'ordine",
 			"memo_privacy_warning": "Le note sono salvate in modo pubblico e permanente sulla blockchain, in chiaro. Non inserire mai password, chiavi o dati privati.",
-			"error_no_active_key": "Questo dispositivo non ha una chiave attiva con cui firmare. Morphit ti chiederà la chiave attiva (o la password principale di Blurt) al momento dell'invio.",
+			"error_no_active_key": "Questo dispositivo non ha una chiave Active per firmare. Morphit ti chiederà la chiave Active quando invii.",
 			"send_button": "Invia",
 			"confirm": "Invia BLURT",
 			"qr_heading": "Scansiona un QR del destinatario",
@@ -4693,7 +4694,7 @@
 			"is_posting_key": "Questa è la tua chiave di pubblicazione, quella con cui hai già effettuato l'accesso. Non può movimentare denaro. Incolla invece la chiave attiva.",
 			"is_owner_key": "Questa è la tua chiave owner. Può prendere il controllo dell'intero account, quindi Morphit non la userà mai. Usa la chiave attiva.",
 			"not_this_account": "Questa non è la chiave attiva di questo account. Verifica di usare la chiave di @{account}.",
-			"empty": "Inserisci la chiave attiva o la password principale.",
+			"empty": "Inserisci la tua chiave Active.",
 			"lookup_failed": "Impossibile raggiungere la blockchain per verificare la chiave. Riprova tra poco.",
 			"bad_device_password": "Quella password Morphit non è corretta. La tua chiave attiva non è stata salvata.",
 			"keep_failed": "Impossibile salvare la chiave attiva su questo dispositivo. Nulla è stato modificato: riprova o scegli «Dimenticala»."
@@ -4706,5 +4707,11 @@
 		"device_password_label": "La tua password Morphit di @{account}",
 		"device_password_help": "La password con cui già sblocchi Morphit. Cifra la tua chiave attiva su questo dispositivo."
 	},
-	"notifications": {}
+	"notifications": {},
+	"trust_score": {
+		"heading": "Perché {score} e non la media?",
+		"what_it_is": "Il {score} è un punteggio di fiducia. Non prende la media alla lettera: parte tutti vicino a 3.00 e ti lascia salire verso la tua media reale solo man mano che accumuli scambi. Cinque valutazioni perfette ti portano quasi in fondo, non fino in fondo.",
+		"why": "Perché? Altrimenti faccio tre scambi finti con un amico, ci diamo 5 stelle, e di colpo sembro affidabile quanto chi ha 200 scambi veri a 4.9. Il punteggio di fiducia fa sì che una fedina immacolata si guadagni invece di dichiararsi.",
+		"drift": "Con l'accumularsi di scambi reali, {score} può salire da solo verso la media."
+	}
 }

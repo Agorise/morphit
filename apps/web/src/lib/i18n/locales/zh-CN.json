@@ -836,7 +836,8 @@
 		"learn_more": "了解更多",
 		"unlock": "解锁",
 		"password_too_short": "密码至少需要 8 个字符。",
-		"lazy_load_failed": "无法加载此部分。"
+		"lazy_load_failed": "无法加载此部分。",
+		"ok": "好"
 	},
 	"compare": {
 		"heading": "比较 orderbook",
@@ -3178,7 +3179,7 @@
 			"body_insufficient_funds": "您的账户没有足够的 BLURT 来支付挂单费。",
 			"body_locked": "会话已锁定。请解锁密码后重试。",
 			"body_bad_password": "该密码未解锁你的 keystore。请重试。",
-			"body_posting_only": "用 BLURT 支付挂单费需要你的活跃密钥，而此设备上没有它——你目前仅用发帖密钥登录。请用主密码或完整的 keyfile 登录以使用 BLURT 支付，或返回改用 BTC/XMR 支付（也可使用你的首次免费挂单）。",
+			"body_posting_only": "用 BLURT 支付挂单费需要你的 Active 密钥。发布时 Morphit 会向你索取——它用于签署费用，且绝不会保存在本设备上。你也可以返回改用 BTC/XMR 支付，或使用你的首次免费挂单。",
 			"body_recipient_missing": "无法发送挂单费——它要支付到的资金账户（@morphit-fees）似乎在 Blurt 上尚不存在。未支付任何费用。如果你运营此实例，需要创建该账户；否则请报告此问题。",
 			"body_insufficient_rc": "Blurt 会为此操作从你的流动 BLURT 中收取一笔小额网络费用，而你的账户无法支付。请补充一点流动 BLURT（转入是免费的）后再试。未支付任何费用。",
 			"body_authority": "Blurt 拒绝了手续费支付的签名——你账户的活跃（Active）密钥可能与链上的不匹配。未支付任何费用。请用你的 12 个单词种子短语或 Keyfile 重新登录。"
@@ -3235,7 +3236,7 @@
 			"fee_address_chain_pinned": "由 {account} 在链上锚定 — 每个 Morphit 实例都依据此地址验证费用。",
 			"fee_address_chain_pinned_aria": "链上锚定地址的真实性",
 			"fee_address_unavailable": "此运营商未配置 {asset} 费用地址。请改选 BLURT,或在另一个 Morphit 实例上发布您的订单。",
-			"blurt_needs_active_key": "需要你的活跃密钥。你现在用发帖密钥登录——发布时 Morphit 会请求你的活跃密钥（或 Blurt 主密码），你已填写的内容不会丢失。"
+			"blurt_needs_active_key": "需要你的 Active 密钥。你目前使用 Posting 密钥登录——发布时 Morphit 会向你索取 Active 密钥，你已填写的内容不会丢失。"
 		},
 		"draft": {
 			"restored_banner": "已恢复 {age} 前的草稿。从上次停下的地方继续——或者重新开始。",
@@ -3575,7 +3576,7 @@
 			"password_label": "你的 @{account} 密码(用于以你的活跃密钥签名)",
 			"error_password_required": "请输入密码以继续。",
 			"error_bad_password": "该密码未能解锁你的活跃密钥。请检查后重试。",
-			"error_no_active_key": "本设备没有可用于签名的活跃密钥。进行 power up 或 power down 时 Morphit 会请求你的活跃密钥（或 Blurt 主密码）。",
+			"error_no_active_key": "本设备没有可用于签名的 Active 密钥。进行 power up 或 power down 时，Morphit 会向你索取 Active 密钥。",
 			"error_broadcast": "该操作未能在链上完成。请重试。",
 			"error_chain_rejected": "网络拒绝了此交易：{reason}",
 			"error_unreachable": "无法连接到你的 Morphit 实例进行广播。请检查网络连接后重试。",
@@ -3597,7 +3598,7 @@
 			"memo_label": "备注(可选)",
 			"memo_placeholder": "例如订单编号",
 			"memo_privacy_warning": "备注会以明文形式公开且永久地存储在区块链上。切勿填写密码、密钥或任何隐私信息。",
-			"error_no_active_key": "本设备没有可用于签名的活跃密钥。发送时 Morphit 会请求你的活跃密钥（或 Blurt 主密码）。",
+			"error_no_active_key": "本设备没有可用于签名的 Active 密钥。发送时 Morphit 会向你索取 Active 密钥。",
 			"send_button": "发送",
 			"confirm": "发送 BLURT",
 			"qr_heading": "扫描收款人二维码",
@@ -4693,7 +4694,7 @@
 			"is_posting_key": "这是你的发帖密钥——你已经用它登录了。它无法转移资金。请改为粘贴活跃密钥。",
 			"is_owner_key": "这是你的所有者密钥。它可以接管你的整个账户，因此 Morphit 绝不会使用它。请使用活跃密钥。",
 			"not_this_account": "这不是本账户的活跃密钥。请确认你使用的是 @{account} 的密钥。",
-			"empty": "请输入你的活跃密钥或主密码。",
+			"empty": "请输入你的 Active 密钥。",
 			"lookup_failed": "无法连接区块链以核对你的密钥。请稍后重试。",
 			"bad_device_password": "该 Morphit 密码不正确。你的活跃密钥未被保存。",
 			"keep_failed": "无法在本设备上保存你的活跃密钥。没有任何更改——请重试，或选择“随后忘记”。"
@@ -4706,5 +4707,11 @@
 		"device_password_label": "你的 @{account} Morphit 密码",
 		"device_password_help": "你解锁 Morphit 时使用的密码。它会在本设备上加密你的活跃密钥。"
 	},
-	"notifications": {}
+	"notifications": {},
+	"trust_score": {
+		"heading": "为什么是 {score} 而不是平均分？",
+		"what_it_is": "{score} 是信任分。它不会照单全收平均分——所有人都从接近 3.00 开始，随着交易累积才逐步靠近你真正的平均分。五个满分评价能让你走完大半路程，但不是全程。",
+		"why": "为什么要这样？否则我和朋友做三笔假交易，互给五星，我立刻就显得和一个有 200 笔真实交易、平均 4.9 的人一样可信。信任分让一份干净的记录是挣来的，而不是自称的。",
+		"drift": "随着真实交易累积，{score} 会自行向平均分靠拢。"
+	}
 }
