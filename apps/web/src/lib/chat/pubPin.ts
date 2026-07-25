@@ -244,9 +244,12 @@ export interface ChainPubResult {
  *                         as a ChatPubPin candidate.
  *   - `verifyOnChain`   : function returning the chain-authoritative
  *                         ChainPubResult (or null if the chain has
- *                         no record).  Called only on the
- *                         'newer_ref' branch — i.e. when the
- *                         indexer indicates a key rotation.
+ *                         no record).  Receives the peer AND the
+ *                         indexer's claimed reference so it can
+ *                         chase that exact op (O(1)) rather than
+ *                         re-deriving "the latest" from a bounded,
+ *                         witness-defeating history window.  Called
+ *                         on the 'no_pin' and 'newer_ref' branches.
  *
  * Returns: the base64-encoded pub the caller should encrypt to.
  * Throws: PubPinError on any tamper signal; the underlying
@@ -255,7 +258,7 @@ export interface ChainPubResult {
 export async function resolveChatPubFromIndexer(
 	peer: string,
 	indexerPin: ChatPubPin,
-	verifyOnChain: (peer: string) => Promise<ChainPubResult | null>
+	verifyOnChain: (peer: string, claimedRef: ChatPubPin) => Promise<ChainPubResult | null>
 ): Promise<string> {
 	// Validate the incoming pin shape before letting it flow into
 	// the state machine.  The TS types claim these fields are
@@ -289,7 +292,7 @@ export async function resolveChatPubFromIndexer(
 			// permanently (subsequent fetches match the now-pinned
 			// hostile pub).  Now: verify with the chain quorum
 			// before pinning.
-			const chain = await verifyOnChain(peer);
+			const chain = await verifyOnChain(peer, indexerPin);
 			if (chain === null) {
 				throw new PubPinError(
 					PUB_PIN_ERROR.chain_reports_none,
@@ -342,7 +345,7 @@ export async function resolveChatPubFromIndexer(
 			// Indexer reports a NEWER op than the one we pinned —
 			// looks like a legitimate posting-key rotation.  Don't
 			// take the indexer's word; go to the chain.
-			const chain = await verifyOnChain(peer);
+			const chain = await verifyOnChain(peer, indexerPin);
 			if (chain === null) {
 				throw new PubPinError(
 					PUB_PIN_ERROR.chain_reports_none,

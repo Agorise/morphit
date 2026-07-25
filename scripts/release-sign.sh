@@ -1,16 +1,27 @@
 #!/usr/bin/env bash
 #
-# Morphit — release tarball signing script.
+# Morphit — release tarball signing script (OFFLINE / FALLBACK ONLY).
 #
-# Builds a source-release tarball from the current git checkout
-# and produces:
+# ⚠️  THE CANONICAL RELEASE IS BUILT BY CI, NOT BY THIS SCRIPT.  ⚠️
+# `.forgejo/workflows/release.yml` (fired by the pushed signed tag) builds the
+# tarball, hashes it (SHA-256), signs it if a signing secret is set, PUBLISHES
+# the Forgejo release, attaches the assets, and writes the on-chain
+# `distribution-anchor.env`. The bytes people download come from THAT job, and
+# the ELI5 ceremony fetches the anchor it wrote. You normally never run this.
 #
-#   release/morphit-v$VERSION-source.tar.gz
-#   release/morphit-v$VERSION-source.tar.gz.sha256
-#   release/morphit-v$VERSION-source.tar.gz.sha512
-#   release/morphit-v$VERSION-source.tar.gz.asc       (if GPG configured)
-#   release/CHECKSUMS                                  (combined manifest)
-#   release/CHECKSUMS.asc                              (if GPG configured)
+# This script builds the tarball a DIFFERENT way — `git archive` with a
+# `morphit-v$VERSION/` prefix and no in-tarball `release-info.json` — so its
+# SHA-256 does NOT match the CI-published tarball. Therefore:
+#
+#   • Do NOT anchor this script's hash on-chain for a CI release. The ceremony
+#     uses the anchor CI wrote; anchoring this hash instead would make
+#     verify-download.mjs fail against the real (CI-served) download.
+#   • Use this only for offline / air-gapped signing when CI is unavailable —
+#     and then you MUST also publish THIS script's exact tarball as the release
+#     asset, so the served bytes match the hash this writes.
+#
+# Outputs (release/ dir): morphit-v$VERSION.tar.gz plus .sha256 / .sha512 /
+# .asc (if GPG configured), CHECKSUMS(.asc), and distribution-anchor.env.
 #
 # Usage:
 #
@@ -29,8 +40,8 @@
 # the same automated context, by separation-of-privilege principle.
 #
 # Verification on the user's end:
-#   sha256sum -c morphit-v1.2.3-source.tar.gz.sha256
-#   gpg --verify morphit-v1.2.3-source.tar.gz.asc   morphit-v1.2.3-source.tar.gz
+#   sha256sum -c morphit-v1.2.3.tar.gz.sha256
+#   gpg --verify morphit-v1.2.3.tar.gz.asc   morphit-v1.2.3.tar.gz
 #   gpg --verify CHECKSUMS.asc CHECKSUMS
 
 set -euo pipefail
@@ -53,7 +64,7 @@ fi
 # Strip leading 'v' if present so we always have a clean semver
 VERSION="${VERSION#v}"
 
-ARTIFACT_NAME="morphit-v${VERSION}-source.tar.gz"
+ARTIFACT_NAME="morphit-v${VERSION}.tar.gz"
 ARTIFACT_PATH="${RELEASE_DIR}/${ARTIFACT_NAME}"
 
 echo "▶ Morphit release signing"
@@ -155,15 +166,55 @@ else
     gpg ${GPG_OPTS} --armor --detach-sign --output CHECKSUMS.asc CHECKSUMS
     echo "  ✓ CHECKSUMS.asc"
 
-    # Show the signing key fingerprint so the operator can publish it
-    # alongside the release
-    SIGNER_KEY="$(gpg --verify CHECKSUMS.asc CHECKSUMS 2>&1 | grep -E 'using.*key' | head -1 | sed -E 's/.*key (\w+).*/\1/')"
-    if [[ -n "${SIGNER_KEY}" ]]; then
+    # Full GPG fingerprint (40-hex v4 / 64-hex v5) — the `fpr` colon
+    # record is the whole fingerprint, unlike the "using ... key XXXX"
+    # line which is only the long key-id. cp556: the distribution anchor
+    # pins the FULL fingerprint, so extract it here.
+    FPR_KEYSPEC="${MORPHIT_GPG_KEY:-}"
+    GPG_FINGERPRINT="$(gpg --list-secret-keys --with-colons ${FPR_KEYSPEC} 2>/dev/null \
+        | awk -F: '$1=="fpr"{print $10; exit}')"
+    if [[ -n "${GPG_FINGERPRINT}" ]]; then
         echo
-        echo "  Signed by key fingerprint: ${SIGNER_KEY}"
+        echo "  Signed by key fingerprint: ${GPG_FINGERPRINT}"
         echo "  Publish this fingerprint alongside the release so users can"
         echo "  verify they have the right public key."
     fi
+
+    # ─── cp556: distribution-anchor values, ready to paste ────────────
+    # These feed the release-op payload builder so the SAME signed bytes
+    # can be anchored on-chain (morphit_release_v1 → distribution). The
+    # payload build step `source`s the env file written below.
+    #
+    # Mirrors default to the hosts Forgejo auto-mirrors commits+tags to
+    # (Codeberg + GitHub). Override with MORPHIT_RELEASE_MIRRORS (a
+    # comma-separated list) if your repo lives elsewhere. IPFS is
+    # OPTIONAL and off by default — set MORPHIT_BUILD_IPFS_CID before the
+    # payload build only if you pin the tarball to IPFS.
+    MIRRORS="${MORPHIT_RELEASE_MIRRORS:-https://codeberg.org/agorise/morphit,https://github.com/agorise/morphit}"
+    echo
+    echo "  ── Distribution anchor (sourced automatically in the payload build) ──"
+    echo "  MORPHIT_BUILD_SOURCE_SHA256=${SHA256_HEX}"
+    if [[ -n "${GPG_FINGERPRINT}" ]]; then
+        echo "  MORPHIT_BUILD_GPG_FINGERPRINT=${GPG_FINGERPRINT}"
+    fi
+    echo "  MORPHIT_BUILD_MIRRORS=${MIRRORS}"
+
+    # Persist the values to a sourceable env file so the release ceremony
+    # (eli5-release.sh) can `source` them into the payload-build step
+    # rather than re-deriving or hand-pasting.
+    ANCHOR_ENV="${RELEASE_DIR}/distribution-anchor.env"
+    {
+        echo "# Morphit distribution anchor for v${VERSION} — source this before building the release-op payload."
+        echo "export MORPHIT_BUILD_SOURCE_SHA256=${SHA256_HEX}"
+        if [[ -n "${GPG_FINGERPRINT}" ]]; then
+            echo "export MORPHIT_BUILD_GPG_FINGERPRINT=${GPG_FINGERPRINT}"
+        fi
+        echo "export MORPHIT_BUILD_MIRRORS=${MIRRORS}"
+        echo "# Optional — set only if you pin the tarball to IPFS:"
+        echo "# export MORPHIT_BUILD_IPFS_CID=<cid>"
+    } > "${ANCHOR_ENV}"
+    echo
+    echo "  Wrote ${ANCHOR_ENV} (sourced by the payload-build step)."
 fi
 echo
 
@@ -171,9 +222,26 @@ echo
 echo "▶ Release ${VERSION} prepared in ${RELEASE_DIR}/"
 ls -la "${RELEASE_DIR}/"
 echo
-echo "Next steps:"
-echo "  1. Upload to forgejo: git.agorise.net/agorise/morphit/releases"
-echo "  2. Broadcast morphit_release_v1 op on Blurt chain pointing"
-echo "     at the release tarball + SHA-256.  See"
-echo "     apps/indexer/src/indexer/handlers/release.ts for the op shape."
-echo "  3. Update the project's website to reference the new version."
+echo "Next steps (decentralized distribution — same signed bytes, many hosts):"
+echo "  1. Attach these artifacts to the Forgejo release page:"
+echo "       ${ARTIFACT_NAME}, .sha256, .sha512, .asc, CHECKSUMS, CHECKSUMS.asc"
+echo "     (The names already match the release-asset convention — no rename needed.)"
+echo "  2. Mirroring is AUTOMATIC — Forgejo pushes commits + the signed tag to"
+echo "     GitHub + Codeberg on push, so the code is already on 3 independent hosts."
+echo "     Nothing to do here (those hosts are the default anchor mirrors). NOTE the"
+echo "     mirrors carry the signed TAG, not this release asset — so the source_sha256"
+echo "     anchor is for THIS canonical tarball; 'git verify-tag' is the mirror-agnostic"
+echo "     check."
+echo "  3. Once uploaded you can DELETE the local release/ tarball — the anchor is"
+echo "     already in release/distribution-anchor.env, which the payload build sources."
+echo "  4. ANCHOR on-chain — the ELI5 ceremony (scripts/eli5-release.sh) sources"
+echo "     release/distribution-anchor.env and broadcasts morphit_release_v1 with"
+echo "     the distribution block (source_sha256 + gpg_fingerprint + mirrors)."
+echo "  5. (Optional) pin the tarball to IPFS and set MORPHIT_BUILD_IPFS_CID before"
+echo "     the payload build to add a content-addressed copy to the anchor."
+echo "  6. Anyone can then verify a download against the chain — re-fetch the canonical"
+echo "     tarball from the release page (you need not keep a local copy) and run:"
+echo "       node scripts/verify-download.mjs \"${ARTIFACT_NAME}\"    # tarball vs chain anchor"
+echo "       git verify-tag v${VERSION}                              # signed tag from any mirror"
+echo "     (see docs/VERIFY-YOUR-DOWNLOAD.md)."
+echo "  7. Update the project's website to reference the new version."

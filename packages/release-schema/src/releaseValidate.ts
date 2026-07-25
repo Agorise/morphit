@@ -83,7 +83,17 @@ export type ReleaseValidateError =
 	| 'treasury_xmr_piconero_too_large'
 	| 'treasury_blurt_not_object'
 	| 'treasury_blurt_base_invalid'
-	| 'treasury_blurt_base_too_large';
+	| 'treasury_blurt_base_too_large'
+	// cp556 — decentralized-distribution anchor validation reasons.
+	// Mirror the indexer's `validateDistribution()` reasons in
+	// apps/indexer/src/indexer/handlers/release.ts exactly.
+	| 'distribution_not_object'
+	| 'distribution_too_large'
+	| 'distribution_source_sha256_invalid'
+	| 'distribution_gpg_fingerprint_invalid'
+	| 'distribution_ipfs_cid_invalid'
+	| 'distribution_mirrors_not_array'
+	| 'distribution_mirror_invalid';
 
 export type ReleaseValidateResult =
 	| { ok: true; value: ReleasePayloadV1 }
@@ -129,6 +139,23 @@ const BLURT_BASE_MAX = 10_000_000;
  *  no whitespace, reasonable length. */
 const ORIGIN_RE = /^https:\/\/[a-zA-Z0-9.-]+(?::\d+)?(?:\/[A-Za-z0-9._~/-]*)?$/;
 const MAX_ORIGIN_LEN = 256;
+
+/** cp556 — distribution-anchor shape checks. Deliberately strict +
+ *  bounded, same philosophy as the treasury regexes above. */
+/** Lowercase-hex SHA-256, exactly 64 chars — as `sha256sum` prints. */
+const SOURCE_SHA256_RE = /^[0-9a-f]{64}$/;
+/** GPG fingerprint: v4 (40-hex, SHA-1) or v5 (64-hex, SHA-256),
+ *  case-insensitive, NO spaces (the builder strips GPG's display
+ *  spaces before this ever runs). */
+const GPG_FINGERPRINT_RE = /^(?:[0-9A-Fa-f]{40}|[0-9A-Fa-f]{64})$/;
+/** IPFS CID: v0 (`Qm…`, base58btc, 46 chars) or v1 base32 (`b…`, the
+ *  default of `ipfs add --cid-version 1`). Bounded. */
+const IPFS_CID_RE = /^(?:Qm[1-9A-HJ-NP-Za-km-z]{44}|b[a-z2-7]{58,110})$/;
+/** Belt-and-suspenders ceiling; a CID never approaches this. */
+const IPFS_CID_MAX_LEN = 128;
+/** No release needs more than a handful of mirrors. */
+const MIRRORS_MAX = 8;
+const DISTRIBUTION_MAX_SERIALIZED_BYTES = 4096;
 
 /** Validate a parsed payload.  Returns `{ ok: true, value }` or
  *  `{ ok: false, reason }`.  The error reasons mirror the indexer's
@@ -221,6 +248,13 @@ export function validateReleasePayload(payload: unknown): ReleaseValidateResult 
 		return { ok: false, reason: treasuryResult.reason };
 	}
 
+	// cp556 — optional decentralized-distribution anchor.  Structural
+	// validation only (parity with the indexer handler).
+	const distributionResult = validateDistribution(payload.distribution);
+	if (!distributionResult.ok) {
+		return { ok: false, reason: distributionResult.reason };
+	}
+
 	return {
 		ok: true,
 		value: {
@@ -228,9 +262,84 @@ export function validateReleasePayload(payload: unknown): ReleaseValidateResult 
 			hash_manifest: hashManifest as Record<string, string>,
 			...(validEndpoints !== undefined ? { endpoints: validEndpoints } : {}),
 			...(signature !== undefined ? { signature } : {}),
-			...(treasuryResult.value !== null ? { treasury: treasuryResult.value } : {})
+			...(treasuryResult.value !== null ? { treasury: treasuryResult.value } : {}),
+			...(distributionResult.value !== null ? { distribution: distributionResult.value } : {})
 		}
 	};
+}
+
+/**
+ * Validate the optional `distribution` field of a release payload
+ * (cp556).  Mirrors the indexer-side `validateDistribution()` in
+ * `apps/indexer/src/indexer/handlers/release.ts` — same regexes,
+ * same ceilings, same reason names — so a release the indexer stores
+ * `valid=true` always passes here, and vice versa.
+ *
+ * Structural + shape validation ONLY.  It does NOT fetch the tarball,
+ * check the IPFS CID resolves, or verify the GPG signature — those are
+ * the downloader's job (`scripts/verify-download.mjs`).  What it
+ * guarantees is that every field is well-formed, so a hostile signer
+ * can't stuff arbitrary data into the anchor.
+ *
+ * Returns:
+ *   { ok: true, value: null } when distribution was undefined/null
+ *   { ok: true, value: ReleaseDistributionBlock } when present + valid
+ *   { ok: false, reason } when present + structurally invalid
+ */
+export function validateDistribution(d: unknown):
+	| { ok: true; value: import('./release.js').ReleaseDistributionBlock | null }
+	| { ok: false; reason: ReleaseValidateError } {
+	if (d === undefined || d === null) return { ok: true, value: null };
+	if (!isPlainObject(d)) return { ok: false, reason: 'distribution_not_object' };
+
+	const sha = d.source_sha256;
+	if (typeof sha !== 'string' || !SOURCE_SHA256_RE.test(sha)) {
+		return { ok: false, reason: 'distribution_source_sha256_invalid' };
+	}
+
+	const fpr = d.gpg_fingerprint;
+	if (typeof fpr !== 'string' || !GPG_FINGERPRINT_RE.test(fpr)) {
+		return { ok: false, reason: 'distribution_gpg_fingerprint_invalid' };
+	}
+
+	let ipfs_cid: string | undefined;
+	if (d.ipfs_cid !== undefined && d.ipfs_cid !== null) {
+		const cid = d.ipfs_cid;
+		if (typeof cid !== 'string' || cid.length > IPFS_CID_MAX_LEN || !IPFS_CID_RE.test(cid)) {
+			return { ok: false, reason: 'distribution_ipfs_cid_invalid' };
+		}
+		ipfs_cid = cid;
+	}
+
+	let mirrors: string[] | undefined;
+	if (d.mirrors !== undefined && d.mirrors !== null) {
+		if (!Array.isArray(d.mirrors)) {
+			return { ok: false, reason: 'distribution_mirrors_not_array' };
+		}
+		if (d.mirrors.length > MIRRORS_MAX) {
+			return { ok: false, reason: 'distribution_mirror_invalid' };
+		}
+		for (const m of d.mirrors) {
+			if (typeof m !== 'string' || m.length === 0 || m.length > MAX_ORIGIN_LEN || !ORIGIN_RE.test(m)) {
+				return { ok: false, reason: 'distribution_mirror_invalid' };
+			}
+		}
+		mirrors = d.mirrors as string[];
+	}
+
+	// Attach optional fields ONLY when present, so a minimal anchor
+	// (sha + fingerprint) serializes byte-identically across builder,
+	// chain, and re-validation — no phantom keys to break fixtures.
+	const value: import('./release.js').ReleaseDistributionBlock = {
+		source_sha256: sha,
+		gpg_fingerprint: fpr,
+		...(ipfs_cid !== undefined ? { ipfs_cid } : {}),
+		...(mirrors !== undefined ? { mirrors } : {})
+	};
+	if (byteLengthOfJson(value) > DISTRIBUTION_MAX_SERIALIZED_BYTES) {
+		return { ok: false, reason: 'distribution_too_large' };
+	}
+	return { ok: true, value };
 }
 
 /**

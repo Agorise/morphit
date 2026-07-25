@@ -1,14 +1,17 @@
 import { describe, expect, it, beforeAll } from 'vitest';
 import { classifySecret, resolveActiveKey, type AccountAuthorityKeys } from './activeKeyUnlock';
-import { masterPasswordPubKey, masterPasswordScalar } from './masterPassword';
 import { rawPrivateKeyToWif } from './wif';
 import { formatPublicKeyBLT, ensureSodium } from './keygen';
 import * as secp256k1 from '@noble/secp256k1';
 
 const ACCOUNT = 'kentest2';
-const PASSWORD = 'P5KQZ0correcthorsebatterystaple';
 
-/** Real keys, derived the same way Blurt derives them. No mocks in front of money. */
+/**
+ * Real secp256k1 keys — no mocks in front of the money. Generated randomly
+ * (NOT derived from any account-wide secret): Morphit's unlock flow accepts an
+ * Active-key WIF and nothing else, so all we need is four valid keypairs whose
+ * public keys become the account's on-chain authorities.
+ */
 let activeWif: string;
 let postingWif: string;
 let ownerWif: string;
@@ -20,10 +23,10 @@ const pubOf = async (scalar: Uint8Array) =>
 
 beforeAll(async () => {
 	await ensureSodium();
-	const a = (await masterPasswordScalar(ACCOUNT, 'active', PASSWORD))!;
-	const p = (await masterPasswordScalar(ACCOUNT, 'posting', PASSWORD))!;
-	const o = (await masterPasswordScalar(ACCOUNT, 'owner', PASSWORD))!;
-	const s = (await masterPasswordScalar('someoneelse', 'active', PASSWORD))!;
+	const a = secp256k1.utils.randomPrivateKey();
+	const p = secp256k1.utils.randomPrivateKey();
+	const o = secp256k1.utils.randomPrivateKey();
+	const s = secp256k1.utils.randomPrivateKey();
 	activeWif = await rawPrivateKeyToWif(a);
 	postingWif = await rawPrivateKeyToWif(p);
 	ownerWif = await rawPrivateKeyToWif(o);
@@ -39,8 +42,8 @@ describe('classifySecret', () => {
 	it('recognises a WIF by shape', async () => {
 		expect(classifySecret(activeWif)).toBe('wif');
 	});
-	it('treats anything else as a candidate master password', () => {
-		expect(classifySecret('hunter2')).toBe('master_password');
+	it('treats anything that is NOT a WIF as not_wif (never an account-wide secret)', () => {
+		expect(classifySecret('hunter2')).toBe('not_wif');
 	});
 	it('reports empty', () => {
 		expect(classifySecret('   ')).toBe('empty');
@@ -54,10 +57,12 @@ describe('resolveActiveKey — the gate in front of the money', () => {
 		if (r.ok) expect(r.source).toBe('wif');
 	});
 
-	it('accepts a pre-fork master password and derives the active key', async () => {
-		const r = await resolveActiveKey(ACCOUNT, PASSWORD, auth);
-		expect(r.ok).toBe(true);
-		if (r.ok) expect(r.source).toBe('master_password');
+	// SECURITY (Ken): Morphit NEVER accepts an account-wide secret that could
+	// derive every role's key (owner included). A non-WIF string is refused
+	// outright as invalid — it is never tried as anything else.
+	it('REFUSES a non-WIF secret outright (invalid_wif) — never derives keys from a password', async () => {
+		const r = await resolveActiveKey(ACCOUNT, 'some account-wide secret phrase', auth);
+		expect(r).toEqual({ ok: false, reason: 'invalid_wif' });
 	});
 
 	// The three mistakes a real user actually makes:
@@ -83,19 +88,8 @@ describe('resolveActiveKey — the gate in front of the money', () => {
 		if (!r.ok) expect(['invalid_wif', 'not_this_account']).toContain(r.reason);
 	});
 
-	it('rejects a wrong master password', async () => {
-		const r = await resolveActiveKey(ACCOUNT, 'not-the-password', auth);
-		expect(r).toEqual({ ok: false, reason: 'not_this_account' });
-	});
-
 	it('rejects empty input', async () => {
 		expect(await resolveActiveKey(ACCOUNT, '', auth)).toEqual({ ok: false, reason: 'empty' });
-	});
-
-	it('an account whose active authority was rotated away from the master password is refused, not owner-signed', async () => {
-		const rotated: AccountAuthorityKeys = { ...auth, active: ['BLT-someone-elses-key'] };
-		const r = await resolveActiveKey(ACCOUNT, PASSWORD, rotated);
-		expect(r).toEqual({ ok: false, reason: 'is_owner_key' });
 	});
 
 	it('never returns a scalar on failure', async () => {

@@ -164,24 +164,52 @@ const ALLOWLIST: readonly AllowlistEntry[] = [
 		package: 'brace-expansion',
 		maxSeverity: 'high',
 		acceptedTitles: [
-			'brace-expansion: DoS via exponential-time expansion of consecutive non-expanding {} groups'
+			'brace-expansion: DoS via exponential-time expansion of consecutive non-expanding {} groups',
+			'brace-expansion: DoS via unbounded expansion length causing an out-of-memory process crash'
 		],
-		lastReviewed: '2026-07-20',
+		lastReviewed: '2026-07-24',
 		rationale:
 			'Build/dev-only transitive dependency (reached via minimatch/glob under vite, ' +
 			'rollup, eslint, tailwind, and the test tooling — never shipped to operators; ' +
-			'production serves prebuilt static assets). The advisory (GHSA-3jxr-9vmj-r5cp) ' +
-			'is a ReDoS: brace-expansion takes exponential time on a crafted pattern with ' +
-			'many consecutive non-expanding `{}` groups. Exploiting it requires an attacker ' +
-			'to control the GLOB/BRACE PATTERN string fed to brace-expansion, but every ' +
-			'pattern in our stack is developer-authored at build time (file globs in configs, ' +
-			'test match patterns) — no runtime path lets untrusted user input reach a ' +
-			'brace-expansion call, so the DoS is not reachable in production or in the ' +
-			'served app. No safe transitive override exists across every consumer without ' +
-			'churning the lockfile, and the lockfile is the tested source of truth (no ' +
-			'`npm audit fix`). Revisit if a patched brace-expansion lands non-breakingly ' +
-			'in range for all consumers, or if any runtime code ever brace-expands ' +
-			'user-supplied input. Reviewed cp509 (2026-07-20).'
+			'production serves prebuilt static assets). Two advisories, same DoS class: ' +
+			'GHSA-3jxr-9vmj-r5cp (exponential-time ReDoS on many consecutive non-expanding ' +
+			'`{}` groups) and GHSA-mh99-v99m-4gvg (unbounded expansion length → OOM crash). ' +
+			'Both require an attacker to control the GLOB/BRACE PATTERN string fed to ' +
+			'brace-expansion, but every pattern in our stack is developer-authored at build ' +
+			'time (file globs in configs, test match patterns) — no runtime path lets ' +
+			'untrusted user input reach a brace-expansion call, so neither DoS is reachable ' +
+			'in production or in the served app. No safe transitive override exists across ' +
+			'every consumer without churning the lockfile, and the lockfile is the tested ' +
+			'source of truth (no `npm audit fix`). Revisit if a patched brace-expansion ' +
+			'lands non-breakingly in range for all consumers, or if any runtime code ever ' +
+			'brace-expands user-supplied input. First reviewed cp509 (2026-07-20); ' +
+			'GHSA-mh99 added + re-reviewed at the v1.8.15 cut (2026-07-24).'
+	},
+	{
+		package: 'postcss',
+		maxSeverity: 'high',
+		acceptedTitles: [
+			'PostCSS: Path Traversal in Previous Source Map Auto-Loading (sourceMappingURL) leads to Arbitrary .map File Disclosure'
+		],
+		lastReviewed: '2026-07-24',
+		rationale:
+			'postcss@8.5.14 is reached two ways, neither of which reaches the vulnerable ' +
+			'path. (1) Web BUILD tooling — autoprefixer, tailwindcss, eslint-plugin-svelte, ' +
+			'and postcss directly — runs only at build time over OUR OWN authored CSS; ' +
+			'production serves prebuilt static assets, so postcss is not in the served app ' +
+			'at all. (2) matrix-bot → matrix-bot-sdk → sanitize-html uses postcss at runtime ' +
+			'only to parse inline `style` ATTRIBUTE fragments while sanitizing HTML — it does ' +
+			'not process full stylesheets and does not enable source-map auto-loading. The ' +
+			'advisory (GHSA-r28c-9q8g-f849) requires postcss to process CSS carrying a ' +
+			'`sourceMappingURL` comment WITH previous-map resolution enabled so it reads a ' +
+			'`.map` file off disk via a traversal path; no consumer here feeds untrusted CSS ' +
+			'through that option (the build CSS is developer-authored with fixed inputs; ' +
+			'sanitize-html parses attribute-value snippets without map loading), so the ' +
+			'arbitrary `.map` disclosure is not reachable. No patched postcss is in range for ' +
+			'every consumer without churning the lockfile (the tested source of truth — no ' +
+			'`npm audit fix`). Revisit when a fixed postcss lands non-breakingly across all ' +
+			'consumers, or if any runtime code processes untrusted CSS with previous-source-map ' +
+			'loading enabled. Reviewed at the v1.8.15 cut (2026-07-24).'
 	},
 	{
 		package: 'js-yaml',

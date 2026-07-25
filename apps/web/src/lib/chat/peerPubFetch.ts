@@ -36,7 +36,7 @@
  */
 
 import { resolveChatPubFromIndexer, PubPinError, type ChatPubPin } from '$lib/chat/pubPin';
-import { fetchLatestChatIdentityFromChainQuorum } from '$lib/chat/chainVerify';
+import { verifyPeerChatIdentityOnChain } from '$lib/chat/chainVerify';
 import { decodeChatPub } from '$lib/chat/crypto';
 import { getChatIdentity } from '$lib/indexer/client';
 
@@ -80,9 +80,11 @@ export async function fetchPeerChatPubChainVerified(peer: string): Promise<PeerP
 		trustedPubB64 = await resolveChatPubFromIndexer(
 			peer,
 			indexerPin,
-			// S14: same opt-in as chatService — pin-mismatch hot
-			// path warrants the cryptographic re-verify.
-			(p) => fetchLatestChatIdentityFromChainQuorum(p, 3, 2, true)
+			// Same claimed-op-first verifier as chatService, so the
+			// OOB fingerprint is computed over the exact chain pub the
+			// send path trusts — including for witness peers whose
+			// identity op is buried beyond the history window.
+			(p, claimed) => verifyPeerChatIdentityOnChain(p, claimed)
 		);
 	} catch (err) {
 		// IMPORTANT: discriminate PubPinError (real tamper signal

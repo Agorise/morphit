@@ -147,11 +147,18 @@ scenario('buildWhereClauses: empty operator account skips the block clause', () 
 	assertTrue(where.length === 3, 'no block clause when no operator supplied');
 });
 
-scenario('buildWhereClauses: asset filter binds correctly', () => {
+scenario('buildWhereClauses: asset filter matches traded OR pays-with OR accepted (REST parity)', () => {
 	const { where, params } = buildWhereClauses({ asset: 'BTC' });
 	assertTrue(where.length === 4, 'four clauses (3 base + asset)');
-	assertEqual(where[3], 'o.asset = $1', 'asset clause');
-	assertEqual(params, ['BTC'], 'params');
+	// v1.8.15 — broadened to match the REST orderbook.ts asset filter: an order
+	// INVOLVING the crypto (traded asset OR pay_<ticker> payment method OR
+	// barter-accepted via accepted_assets). Binds TWO params: asset + pay_<ticker>.
+	assertEqual(
+		where[3],
+		'(o.asset = $1 OR EXISTS (SELECT 1 FROM unnest(o.payment_methods) pm WHERE lower(pm) = $2) OR $1 = ANY(o.accepted_assets))',
+		'asset clause (broadened)'
+	);
+	assertEqual(params, ['BTC', 'pay_btc'], 'asset + pay_<ticker> params');
 });
 
 scenario('buildWhereClauses: side filter binds correctly', () => {
@@ -166,22 +173,24 @@ scenario('buildWhereClauses: fiat_currency filter binds correctly', () => {
 	assertEqual(params, [['USD']], 'params');
 });
 
-scenario('buildWhereClauses: location_region uses ILIKE prefix match', () => {
+scenario('buildWhereClauses: location_region uses ILIKE substring match', () => {
 	const { where, params } = buildWhereClauses({ location_region: 'Berl' });
 	assertTrue(
 		where[3]!.includes('ILIKE') && where[3]!.includes("ESCAPE '\\'"),
-		'ILIKE prefix with escape'
+		'ILIKE substring with escape'
 	);
-	assertEqual(params, ['Berl%'], 'normalized + suffixed param');
+	// v1.8.15 — case-insensitive SUBSTRING (contains) match, was prefix region%,
+	// so "mzt" finds "Mazatlán MZT". Param is wrapped %...%.
+	assertEqual(params, ['%Berl%'], 'normalized + wrapped param');
 });
 
 scenario('buildWhereClauses: location_region NFC-normalizes input', () => {
 	// "é" decomposed (e + combining acute) NFC-normalizes to
-	// "é" precomposed.  After normalization + escapeLike + '%'.
+	// "é" precomposed.  After normalization + escapeLike + wrapping in %...%.
 	const decomposed = 'Caf\u0065\u0301'; // "Café" decomposed
 	const { params } = buildWhereClauses({ location_region: decomposed });
 	const normalized = decomposed.normalize('NFC');
-	assertEqual(params, [normalized + '%'], 'normalized form');
+	assertEqual(params, ['%' + normalized + '%'], 'normalized form, wrapped');
 });
 
 scenario('buildWhereClauses: payment_methods splits + lowercases tokens', () => {
@@ -227,19 +236,31 @@ scenario('buildWhereClauses: combined filter binds in order', () => {
 		fiat_currency: 'EUR',
 		min_trades: 2
 	});
-	assertEqual(where[3], 'o.asset = $1', 'asset $1');
-	assertEqual(where[4], 'o.side = $2', 'side $2');
-	assertEqual(where[5], 'o.fiat_currency = ANY($3::text[])', 'fiat $3');
-	assertEqual(where[6], 'COALESCE(tc.c, 0) >= $4', 'min_trades $4');
-	assertEqual(params, ['BTC', 'sell', ['EUR'], 2], 'params in order');
+	// v1.8.15 — the asset clause now binds TWO params (asset + pay_<ticker>),
+	// so every subsequent placeholder shifts up by one.
+	assertEqual(
+		where[3],
+		'(o.asset = $1 OR EXISTS (SELECT 1 FROM unnest(o.payment_methods) pm WHERE lower(pm) = $2) OR $1 = ANY(o.accepted_assets))',
+		'asset clause (broadened)'
+	);
+	assertEqual(where[4], 'o.side = $3', 'side $3');
+	assertEqual(where[5], 'o.fiat_currency = ANY($4::text[])', 'fiat $4');
+	assertEqual(where[6], 'COALESCE(tc.c, 0) >= $5', 'min_trades $5');
+	assertEqual(params, ['BTC', 'pay_btc', 'sell', ['EUR'], 2], 'params in order');
 });
 
 scenario('buildWhereClauses: startIndex offsets parameter numbering', () => {
 	// Caller has already bound $1, $2 (account, permlink) — tells
 	// builder to start at $3 for the filter params.
 	const { where, params } = buildWhereClauses({ asset: 'XMR' }, 2);
-	assertEqual(where[3], 'o.asset = $3', 'param starts at $3');
-	assertEqual(params, ['XMR'], 'one param');
+	// v1.8.15 — broadened asset clause binds two params starting at the offset,
+	// so $3 (asset) and $4 (pay_<ticker>).
+	assertEqual(
+		where[3],
+		'(o.asset = $3 OR EXISTS (SELECT 1 FROM unnest(o.payment_methods) pm WHERE lower(pm) = $4) OR $3 = ANY(o.accepted_assets))',
+		'param numbering offset by startIndex'
+	);
+	assertEqual(params, ['XMR', 'pay_xmr'], 'asset + pay_<ticker> params');
 });
 
 // ─── v1.7.0: watch-one-order filter (ADR-0051) ───────────────────
@@ -287,9 +308,16 @@ scenario('buildWhereClauses: account alone is legal (all of a trader\'s live ord
 scenario('buildWhereClauses: the watch filter composes with the others', () => {
 	const { where, params } = buildWhereClauses({ account: 'kentest3', asset: 'BTC', side: 'sell' });
 	assertTrue(where.includes('o.account = $1'), 'account');
-	assertTrue(where.includes('o.asset = $2'), 'asset');
-	assertTrue(where.includes('o.side = $3'), 'side');
-	assertEqual(params, ['kentest3', 'BTC', 'sell'], 'param order matches placeholder order');
+	// v1.8.15 — asset clause broadened + binds two params ($2 asset, $3 pay_btc),
+	// so side shifts to $4.
+	assertTrue(
+		where.includes(
+			'(o.asset = $2 OR EXISTS (SELECT 1 FROM unnest(o.payment_methods) pm WHERE lower(pm) = $3) OR $2 = ANY(o.accepted_assets))'
+		),
+		'asset (broadened)'
+	);
+	assertTrue(where.includes('o.side = $4'), 'side');
+	assertEqual(params, ['kentest3', 'BTC', 'pay_btc', 'sell'], 'param order matches placeholder order');
 });
 
 scenario('buildWhereClauses: watch filter respects startIndex (per-row lookup path)', () => {

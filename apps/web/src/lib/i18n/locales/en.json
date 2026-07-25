@@ -1395,7 +1395,7 @@
 			},
 			"morphit_mirrors": {
 				"q": "Why is Morphit's source mirrored to so many code hosts?",
-				"a": "Decentralization — it's priority #2 in Morphit's design, right behind privacy. A project that lives in one place can be killed in one place: a platform can suspend the account, a government can order a takedown, a host can simply disappear. So Morphit's source code (AGPL-3.0) is mirrored across many independent code hosts — our own Forgejo server at git.agorise.net is the canonical copy, GitHub is live, and more are being added (Codeberg, GitLab, Bitbucket, SourceForge, Gitee, Launchpad, GitFlic, SourceHut, Radicle), plus a content-addressed copy on IPFS that no single host controls. If any one of them blocks or drops Morphit, every other copy is still there — and because it's AGPL, anyone can re-host, audit, or fork it. The full, current list is on the Download page.\n\n(There's nothing to install from an app store — Morphit runs as a Progressive Web App (PWA) you add straight from your browser. The mirrors are for the source code, so the project can't be silenced by taking down a single repository.)\n\nYou can confirm any running instance serves untampered code: each release's SHA-256 hashes are published on the blockchain — see /about-this-instance."
+				"a": "Decentralization — it's priority #2 in Morphit's design, right behind privacy. A project that lives in one place can be killed in one place: a platform can suspend the account, a government can order a takedown, a host can simply disappear. So Morphit's source code (AGPL-3.0) is mirrored across many independent code hosts — our own Forgejo server at git.agorise.net is the canonical copy, GitHub and Codeberg are live, and more are being added (GitLab, Bitbucket, SourceForge, Gitee, Launchpad, GitFlic, SourceHut, Radicle), plus a content-addressed copy on IPFS that no single host controls. If any one of them blocks or drops Morphit, every other copy is still there — and because it's AGPL, anyone can re-host, audit, or fork it. The full, current list is on the Download page.\n\n(There's nothing to install from an app store — Morphit runs as a Progressive Web App (PWA) you add straight from your browser. The mirrors are for the source code, so the project can't be silenced by taking down a single repository.)\n\nYou can confirm any running instance serves untampered code: each release's SHA-256 hashes are published on the blockchain — see /about-this-instance."
 			},
 			"android_sideload": {
 				"q": "How do I install Morphit on Android?",
@@ -2643,6 +2643,8 @@
 		"posted_by": "Posted by",
 		"details_heading": "Details",
 		"payment_methods": "Payment methods",
+		"i_can_pay_with": "I can pay with",
+		"i_accept": "I accept",
 		"location": "Location",
 		"terms": "Terms",
 		"posted_on": "Posted on",
@@ -4636,9 +4638,9 @@
 		"private_label": "Private key (WIF)",
 		"download": "Download as text file",
 		"downloaded": "Saved",
-		"no_master_password": "There is no master password. Morphit never creates or uses one — your 12 words and these keys are everything.",
+		"no_account_wide_password": "Morphit has no single account-wide password — your 12 words and these keys are everything.",
 		"txt_warning": "KEEP THIS PRIVATE. Anyone who has a private key below can take full control of your account and funds. Never share it with anyone, never type it into a website you don't trust, and never send it in a message or email.",
-		"txt_footer": "Your 12-word seed phrase is your Morphit backup. These four keys let you use this account in other Blurt tools. There is no master password."
+		"txt_footer": "Your 12-word seed phrase is your Morphit backup. These four keys let you use this account in other Blurt tools. Morphit has no single account-wide password."
 	},
 	"needs_account_name": {
 		"heading": "Almost set up",

@@ -35,6 +35,29 @@
 	// (no version string from verify.json yet).
 	const SW_ONLY = '__sw__';
 
+	// v1.8.15 (t.txt #6) — the LAST piece of the "Load it now twice on mobile"
+	// bug. v1.8.14 recorded dismissedVersion = deployedVersion ?? SW_ONLY on
+	// accept, which is TIMING-DEPENDENT: if the version poll hasn't resolved
+	// when a reload lands back on the OLD shell (mobile throttles that poll),
+	// the SW_ONLY sentinel recorded at accept never equals the CONCRETE version
+	// the poll then reports — so dismissedForCurrent is false and the snackbar
+	// re-offers. This marker closes the hole with a value we ALWAYS know: the
+	// version baked into the bundle we're running. On accept we record it; while
+	// a later mount is still on that SAME bundle (the reload didn't land the
+	// update), the snackbar is suppressed outright — no second offer, regardless
+	// of poll timing or SW-vs-version detection path. The instant a reload lands
+	// on ANY different bundle, runningVersion changes, the marker stops matching,
+	// and normal offering resumes (there's nothing to offer once we're current).
+	// sessionStorage, so reopening the tab clears it — a genuinely wedged client
+	// self-heals rather than staying suppressed forever.
+	const ACCEPTED_KEY = 'morphit.updateAcceptedRunning';
+	// runningVersion the user last clicked "Load it now" on (restored on mount).
+	let acceptedRunning = $state<string | null>(null);
+	// True while we're still running the exact bundle an accept was issued from
+	// — i.e. that reload hasn't landed the update yet. Suppresses a duplicate
+	// offer without depending on when the version poll resolves.
+	const acceptPending = $derived(acceptedRunning !== null && acceptedRunning === runningVersion);
+
 	// v1.1.5 — the "Load it now twice on mobile" bug was NOT the SW handoff
 	// timing (cp364→438 all chased that and failed on-device). The real cause:
 	// a reload could be answered from a stale HTTP-cached index.html, landing
@@ -147,6 +170,17 @@
 		try {
 			const remembered = window.sessionStorage.getItem(DISMISS_KEY);
 			if (remembered !== null) dismissedVersion = remembered;
+			// Restore the accept marker. If we're no longer on that bundle the
+			// update landed (or the tab moved on), so the marker is stale — drop
+			// it rather than carry inert state.
+			const accepted = window.sessionStorage.getItem(ACCEPTED_KEY);
+			if (accepted !== null) {
+				if (accepted === runningVersion) {
+					acceptedRunning = accepted;
+				} else {
+					window.sessionStorage.removeItem(ACCEPTED_KEY);
+				}
+			}
 		} catch {
 			// ignore
 		}
@@ -213,6 +247,16 @@
 	// are network-first, so that reload still pulls the fresh shell.
 	function applyUpdate(): void {
 		applying = true;
+		// v1.8.15 (t.txt #6) — record the bundle we're accepting FROM, so a
+		// reload that lands back on this same shell (mobile) doesn't re-offer.
+		// Timing-independent: runningVersion is baked in, always known here,
+		// unlike deployedVersion which the poll may not have resolved yet.
+		try {
+			window.sessionStorage.setItem(ACCEPTED_KEY, runningVersion);
+		} catch {
+			// private-mode denial must not block the reload
+		}
+		acceptedRunning = runningVersion;
 		// v1.8.14 (Ken) — RECORD THE ACCEPTANCE BEFORE RELOADING.
 		//
 		// This is why "Load it now" kept appearing twice on mobile, and why the
@@ -283,7 +327,7 @@
 	}
 </script>
 
-{#if (waitingWorker || newerVersionDeployed) && !applying && !dismissedForCurrent}
+{#if (waitingWorker || newerVersionDeployed) && !applying && !dismissedForCurrent && !acceptPending}
 	<div
 		role="status"
 		aria-live="polite"

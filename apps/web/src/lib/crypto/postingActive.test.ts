@@ -7,20 +7,22 @@ import {
 } from './keystore';
 import { importPostingOnlyFullIdentity, generateFullIdentity, ensureSodium } from './keygen';
 import { toLiveIdentity } from './identity-core';
-import { masterPasswordScalar } from './masterPassword';
 import * as secp256k1 from '@noble/secp256k1';
 
 const PASSWORD = 'correct-horse-battery-staple-9';
-const ACCOUNT = 'kentest2';
 
+// Two distinct, valid secp256k1 scalars for the fixtures. Generated randomly —
+// this test exercises the posting-only → posting-active UPGRADE, so it only
+// needs a valid posting scalar and a valid active scalar; how they were
+// obtained is irrelevant.
 let postingScalar: Uint8Array;
 let activeScalar: Uint8Array;
 let activePub: Uint8Array;
 
 beforeAll(async () => {
 	await ensureSodium();
-	postingScalar = (await masterPasswordScalar(ACCOUNT, 'posting', 'pw'))!;
-	activeScalar = (await masterPasswordScalar(ACCOUNT, 'active', 'pw'))!;
+	postingScalar = secp256k1.utils.randomPrivateKey();
+	activeScalar = secp256k1.utils.randomPrivateKey();
 	activePub = secp256k1.getPublicKey(activeScalar, true);
 });
 

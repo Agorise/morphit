@@ -15,7 +15,8 @@ import { z } from 'zod';
 import type { Database } from '$db/pool';
 import type { AssetTicker } from '@morphit/asset-registry';
 import { decodeCursor, encodeCursor, errorBody, isAccountName } from '$api/shared';
-import { tradeCountJoin } from '$api/reputationJoin';
+import { tradeCountJoin, feedbackAggregateJoin } from '$api/reputationJoin';
+import { computeReputationScore } from '$indexer/reputation/score';
 
 const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 50;
@@ -75,10 +76,25 @@ interface OrderRow {
 	 *  unproven completions stay NULL). */
 	completed_counterparty: string | null;
 	/** v1.5.5: the owner's COMPLETED-TRADE count (both sides credited,
-	 *  sock-puppet-pair filtered). This endpoint is the owner's own view and
-	 *  deliberately carries no rating aggregate — ratings are a card/profile
-	 *  concern, served by /v1/orderbook and /v1/accounts/:account/feedback. */
+	 *  sock-puppet-pair filtered). v1.8.15 (Ken, t.txt #5) — this endpoint
+	 *  now ALSO carries the rating aggregate + reciprocity flag so the order
+	 *  DETAIL page's "POSTED BY" card can render the ⭐ reputation pill and the
+	 *  "No mutual-review flags" pill without a second round-trip, matching the
+	 *  orderbook cards. (The old "owner's own view, deliberately no rating"
+	 *  contract predated the public detail page reusing this endpoint.) */
 	trade_count: number;
+	/** v1.8.15 — RATINGS backing the star average (DIFFERENT from trade_count:
+	 *  a completed trade nobody reviewed counts as a trade, not a rating). */
+	feedback_count: number;
+	/** v1.8.15 — time-decayed weighted average rating as a numeric string, or
+	 *  NULL when feedback_count is zero. */
+	weighted_rating: string | null;
+	/** v1.8.15 — MAX(created_at) of included feedback; drives the composite
+	 *  score's recency factor. NULL when there is no included feedback. */
+	last_feedback_at: Date | null;
+	/** v1.8.15 — true iff this account appears in a suspicious_reciprocity
+	 *  pair (Signal B). Drives the profile-style trust pill on the card. */
+	reciprocity_flagged: boolean;
 	/** v1.5.5: now `trade_count < 4` — reviews are optional, completions are
 	 *  the real experience signal (was: feedback count < 4). */
 	is_new_trader: boolean;
@@ -106,6 +122,17 @@ function rowToWire(r: OrderRow) {
 		fee_method: r.fee_method,
 		completed_counterparty: r.completed_counterparty,
 		trade_count: r.trade_count,
+		// v1.8.15 (t.txt #5) — rating aggregate + composite score, computed
+		// with the SAME helper the orderbook uses so the detail-page card and
+		// an orderbook card show the identical ⭐ number for the same account.
+		feedback_count: r.feedback_count,
+		weighted_rating: r.weighted_rating === null ? null : Number(r.weighted_rating),
+		reputation_score: computeReputationScore({
+			count: r.feedback_count,
+			weightedAvg: r.weighted_rating === null ? null : Number(r.weighted_rating),
+			lastFeedbackAtMs: r.last_feedback_at === null ? null : r.last_feedback_at.getTime()
+		}),
+		reciprocity_flagged: r.reciprocity_flagged,
 		is_new_trader: r.is_new_trader,
 		created_at: r.created_at.toISOString(),
 		updated_at: r.updated_at.toISOString(),
@@ -163,8 +190,20 @@ export function ordersByAccountRoute(db: Database, operatorAccount: string): Hon
 			        -- stars — reviews are optional, trades are the real signal.
 			        COALESCE(tc.c, 0) AS trade_count,
 			        (COALESCE(tc.c, 0) < 4) AS is_new_trader,
+			        -- v1.8.15 (t.txt #5) — rating aggregate (same CTE the orderbook
+			        -- + feedback summary use) so the detail page's POSTED BY card
+			        -- shows the ⭐ reputation pill, plus the suspicious-reciprocity
+			        -- flag for the "No mutual-review flags" trust pill.
+			        COALESCE(f.c, 0)::int AS feedback_count,
+			        CASE WHEN f.r IS NOT NULL THEN f.r::text ELSE NULL END AS weighted_rating,
+			        f.last_feedback_at,
+			        EXISTS (
+			          SELECT 1 FROM suspicious_reciprocity sr
+			           WHERE sr.account_a = o.account OR sr.account_b = o.account
+			        ) AS reciprocity_flagged,
 			        o.created_at, o.updated_at, o.expires_at
 			 FROM orders o
+			 ${feedbackAggregateJoin('o')}
 ${tradeCountJoin('o')}
 			 WHERE o.account = $1${cursorClause}
 			   AND NOT EXISTS (SELECT 1 FROM operator_blocks ob WHERE ob.operator = ${opParam} AND ob.blocked = o.account AND ob.state = 'blocked')

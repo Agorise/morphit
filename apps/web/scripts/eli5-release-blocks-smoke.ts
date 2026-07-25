@@ -99,6 +99,36 @@ check('the manifest is derived from the VPS\u2019s SERVED verify.json', /curl -f
 check('no laptop build feeds the manifest (cross-machine hashes differ)', !/npm run build/.test(out) && !/build-manifest\.mjs/.test(out));
 check('the on-chain payload pins no blurt_rpc endpoints', !/ENDPOINTS_FILE/.test(out) && !/blurt_rpc/.test(out));
 
+// ─── decentralized-distribution: the anchor comes from CI, not a laptop sign ───
+// release.yml builds + hashes + signs the canonical tarball and attaches a
+// distribution-anchor.env; the ceremony FETCHES that and sources it. It must
+// NOT run release-sign.sh (its git-archive bytes differ from the published
+// tarball → a mismatched on-chain hash — the footgun removed at the cp560 cut).
+check('the ceremony does NOT run release-sign.sh (CI builds the canonical tarball)', !/release-sign\.sh/.test(out));
+check('the ceremony fetches the anchor from the published release', /releases\/download\/[^\s]*distribution-anchor\.env/.test(out));
+check('the payload build sources the fetched distribution anchor', /source \/tmp\/morphit-anchor\.env/.test(out));
+check('the blocks note that mirroring to GitHub + Codeberg is automatic', /GitHub \+ Codeberg/.test(out));
+// IPFS is OPTIONAL + off by default: the ceremony must NOT force an ipfs add
+// or a manual mirror push (Ken's Forgejo auto-mirrors those refs already).
+check('the ceremony does not force an ipfs add step', !/ipfs add/.test(out));
+check('the ceremony does not do a manual codeberg push (auto-mirrored)', !/git push codeberg/.test(out));
+// The mirror list is now a FIXED default baked into the payload builder, so the
+// operator never supplies it (Forgejo auto-pushes to these hosts anyway).
+check('the payload builder bakes the Codeberg + GitHub mirror default', /codeberg\.org\/agorise\/morphit/.test(builder) && /github\.com\/agorise\/morphit/.test(builder));
+for (const v of ['MORPHIT_BUILD_SOURCE_SHA256', 'MORPHIT_BUILD_GPG_FINGERPRINT', 'MORPHIT_BUILD_IPFS_CID', 'MORPHIT_BUILD_MIRRORS']) {
+	check(`${v} is read by release-build-payload.ts`, builder.includes(`process.env.${v}`));
+}
+
+// ─── release.yml must publish + attach the anchor, and NEVER broadcast ───
+// The ceremony now depends on CI doing the build/publish/attach; guard it so a
+// future edit that drops the anchor write, the auto-publish, or (critically)
+// leaks the chain broadcast into CI is caught here.
+const releaseYml = readFileSync(join(REPO, '.forgejo', 'workflows', 'release.yml'), 'utf8');
+check('release.yml writes the anchor from the PUBLISHED tarball sha256', /distribution-anchor\.env/.test(releaseYml) && /\$TARBALL\.sha256/.test(releaseYml));
+check('release.yml auto-creates the release + attaches assets', /\/releases\b/.test(releaseYml) && /attachment=@/.test(releaseYml));
+check('release.yml grants the auto-token release-write (contents: write)', /permissions:\s*\n\s*contents:\s*write/.test(releaseYml));
+check('release.yml NEVER broadcasts to the chain (no spending key in CI)', !/release-broadcast/.test(releaseYml));
+
 // ─── all six blocks, in order ───
 const order = ['BLOCK 1', 'BLOCK 2', 'BLOCK 3', 'BLOCK 4', 'BLOCK 5', 'BLOCK 6'];
 let last = -1;
@@ -109,6 +139,7 @@ for (const b of order) {
 	last = i;
 }
 check('all six blocks are present, in order', ordered);
+check('there is no stray BLOCK 7 (ceremony is 6 blocks)', !/BLOCK 7/.test(out));
 
 console.log('');
 if (fail === 0) console.log(`\u2713 all ${pass} eli5-release-blocks scenarios passed`);

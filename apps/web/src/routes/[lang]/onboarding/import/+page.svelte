@@ -117,10 +117,10 @@
 	// Live structural check for the posting-key (WIF) field: a Blurt private
 	// key is an uncompressed Bitcoin-style WIF — 51 base58 chars beginning
 	// with '5'. This flags obviously-wrong input (too short/long, wrong
-	// prefix, non-base58 chars, or a pasted master password) with a red
-	// border as the user types. The full checksum + secp256k1 validation
-	// still runs at submit (wifToRawPrivateKey) and sets wifKeyInvalid for a
-	// structurally-valid but cryptographically-bad key.
+	// prefix, non-base58 chars, or an account-wide secret pasted by mistake)
+	// with a red border as the user types. The full checksum + secp256k1
+	// validation still runs at submit (wifToRawPrivateKey) and sets
+	// wifKeyInvalid for a structurally-valid but cryptographically-bad key.
 	const BASE58_ALPHABET_RE = /^[1-9A-HJ-NP-Za-km-z]+$/;
 	function looksLikeBlurtWif(s: string): boolean {
 		const t = s.trim();

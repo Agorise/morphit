@@ -713,6 +713,122 @@ scenario('cp372: all three assets pinned together → ok', () => {
 	if (r.value.treasury?.btc?.satoshis !== 416) throw new Error('btc lost');
 });
 
+// ─── cp556 — decentralized-distribution anchor ──────────────────────
+const D_SHA = 'a'.repeat(64);
+const D_FPR = 'DEADBEEF'.repeat(5); // 40-hex v4 fingerprint
+const D_CID0 = 'Qm' + 'a'.repeat(44); // CIDv0 base58btc
+const D_CID1 = 'b' + 'a'.repeat(58); // CIDv1 base32
+function withDistribution(distribution: unknown): unknown {
+	return makePayload({ distribution });
+}
+
+scenario('distribution undefined → ok (back-compat)', () => {
+	const r = validateReleasePayload(makePayload());
+	if (!r.ok) throw new Error(`got ${r.reason}`);
+	if ('distribution' in r.value) throw new Error('phantom distribution key');
+});
+
+scenario('distribution=null → ok, omitted from value', () => {
+	const r = validateReleasePayload(withDistribution(null));
+	if (!r.ok) throw new Error(`got ${r.reason}`);
+	if ('distribution' in r.value) throw new Error('null distribution should be omitted');
+});
+
+scenario('distribution minimal (sha + fpr) → ok', () => {
+	const r = validateReleasePayload(withDistribution({ source_sha256: D_SHA, gpg_fingerprint: D_FPR }));
+	if (!r.ok) throw new Error(`got ${r.reason}`);
+	if (r.value.distribution?.source_sha256 !== D_SHA) throw new Error('sha lost');
+	if (r.value.distribution?.gpg_fingerprint !== D_FPR) throw new Error('fpr lost');
+	if ('ipfs_cid' in (r.value.distribution ?? {})) throw new Error('phantom ipfs_cid');
+});
+
+scenario('distribution full (cid v0 + mirrors) → ok', () => {
+	const r = validateReleasePayload(
+		withDistribution({
+			source_sha256: D_SHA,
+			gpg_fingerprint: D_FPR,
+			ipfs_cid: D_CID0,
+			mirrors: ['https://codeberg.org/agorise/morphit', 'https://ipfs.io/ipfs/' + D_CID0]
+		})
+	);
+	if (!r.ok) throw new Error(`got ${r.reason}`);
+	if (r.value.distribution?.ipfs_cid !== D_CID0) throw new Error('cid lost');
+	if (r.value.distribution?.mirrors?.length !== 2) throw new Error('mirrors lost');
+});
+
+scenario('distribution CIDv1 base32 → ok', () => {
+	const r = validateReleasePayload(
+		withDistribution({ source_sha256: D_SHA, gpg_fingerprint: D_FPR, ipfs_cid: D_CID1 })
+	);
+	if (!r.ok) throw new Error(`got ${r.reason}`);
+});
+
+scenario('distribution 64-hex (v5) fingerprint → ok', () => {
+	const r = validateReleasePayload(
+		withDistribution({ source_sha256: D_SHA, gpg_fingerprint: 'abcdef01'.repeat(8) })
+	);
+	if (!r.ok) throw new Error(`got ${r.reason}`);
+});
+
+scenario('distribution as array → distribution_not_object', () => {
+	const r = validateReleasePayload(withDistribution([]));
+	if (r.ok || r.reason !== 'distribution_not_object') throw new Error(`got ${r.ok ? 'ok' : r.reason}`);
+});
+
+scenario('distribution missing sha → distribution_source_sha256_invalid', () => {
+	const r = validateReleasePayload(withDistribution({ gpg_fingerprint: D_FPR }));
+	if (r.ok || r.reason !== 'distribution_source_sha256_invalid')
+		throw new Error(`got ${r.ok ? 'ok' : r.reason}`);
+});
+
+scenario('distribution UPPERCASE sha → distribution_source_sha256_invalid', () => {
+	const r = validateReleasePayload(withDistribution({ source_sha256: 'A'.repeat(64), gpg_fingerprint: D_FPR }));
+	if (r.ok || r.reason !== 'distribution_source_sha256_invalid')
+		throw new Error(`got ${r.ok ? 'ok' : r.reason}`);
+});
+
+scenario('distribution short fingerprint → distribution_gpg_fingerprint_invalid', () => {
+	const r = validateReleasePayload(withDistribution({ source_sha256: D_SHA, gpg_fingerprint: 'a'.repeat(39) }));
+	if (r.ok || r.reason !== 'distribution_gpg_fingerprint_invalid')
+		throw new Error(`got ${r.ok ? 'ok' : r.reason}`);
+});
+
+scenario('distribution bad cid → distribution_ipfs_cid_invalid', () => {
+	const r = validateReleasePayload(
+		withDistribution({ source_sha256: D_SHA, gpg_fingerprint: D_FPR, ipfs_cid: 'nope' })
+	);
+	if (r.ok || r.reason !== 'distribution_ipfs_cid_invalid')
+		throw new Error(`got ${r.ok ? 'ok' : r.reason}`);
+});
+
+scenario('distribution mirrors not array → distribution_mirrors_not_array', () => {
+	const r = validateReleasePayload(
+		withDistribution({ source_sha256: D_SHA, gpg_fingerprint: D_FPR, mirrors: 'https://x.example.org' })
+	);
+	if (r.ok || r.reason !== 'distribution_mirrors_not_array')
+		throw new Error(`got ${r.ok ? 'ok' : r.reason}`);
+});
+
+scenario('distribution non-https mirror → distribution_mirror_invalid', () => {
+	const r = validateReleasePayload(
+		withDistribution({ source_sha256: D_SHA, gpg_fingerprint: D_FPR, mirrors: ['http://x.example.org'] })
+	);
+	if (r.ok || r.reason !== 'distribution_mirror_invalid')
+		throw new Error(`got ${r.ok ? 'ok' : r.reason}`);
+});
+
+scenario('distribution 9 mirrors → distribution_mirror_invalid', () => {
+	const r = validateReleasePayload(
+		withDistribution({
+			source_sha256: D_SHA,
+			gpg_fingerprint: D_FPR,
+			mirrors: Array.from({ length: 9 }, (_, i) => `https://m${i}.example.org/x`)
+		})
+	);
+	if (r.ok || r.reason !== 'distribution_mirror_invalid')
+		throw new Error(`got ${r.ok ? 'ok' : r.reason}`);
+});
+
 console.log(`\n${'─'.repeat(54)}`);
 if (failures === 0) {
 	console.log(`✓ all ${scenarios} scenarios passed`);

@@ -201,6 +201,6 @@
 	</div>
 
 	<p class="mt-3 text-xs text-ink-500 dark:text-ink-400">
-		{$_('backup_keys_panel.no_master_password')}
+		{$_('backup_keys_panel.no_account_wide_password')}
 	</p>
 </section>

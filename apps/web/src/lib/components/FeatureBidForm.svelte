@@ -24,8 +24,10 @@
 	import { get } from 'svelte/store';
 	import { _ } from 'svelte-i18n';
 	import BusyButton from '$components/BusyButton.svelte';
-	import { identity } from '$stores/identity';
+	import { identity, liveIdentity } from '$stores/identity';
 	import { runWithActiveKey } from '$crypto/runWithActiveKey';
+	import UnlockActiveKeyModal from '$components/UnlockActiveKeyModal.svelte';
+	import sodium from 'libsodium-wrappers-sumo';
 	import { broadcastFeatureBid } from '$blurt/ops/featureBid';
 	import { ChainRejectedError, BroadcastUnavailableError } from '$blurt/broadcastTransport';
 	import { getInstanceSnapshot } from '$stores/instance';
@@ -60,6 +62,12 @@
 	}
 
 	let { orderPermlink, feeBlurtPerHour = 50, onSuccess, onCancel }: Props = $props();
+
+	/** v1.8.15 (t.txt #3) — posting-only sessions hold no active key, so the
+	 *  Morphit-password path below dead-ends. When false we render the SAME
+	 *  <UnlockActiveKeyModal> the "Pay now" flow uses, so the user pastes their
+	 *  Active key (WIF) — and their Morphit password if they keep it — right here. */
+	const hasActiveKey = $derived(($liveIdentity?.activePublicKey ?? null) !== null);
 
 	// The indexer enforces MIN_HOURS=6 (featureBid handler): a bid below 6h is
 	// rejected on-chain, so offering 1h here just produced a confusing
@@ -140,38 +148,21 @@
 		});
 	}
 
-	async function submit(): Promise<void> {
-		if (submitting) return;
+	/** Broadcast the feature bid with whatever produces the signed tx, then
+	 *  finish. Shared by the password path (active-key envelope unlocked via
+	 *  runWithActiveKey) and the posting-only path (Active-key WIF from
+	 *  UnlockActiveKeyModal). Classifies signing + chain errors into the fields. */
+	async function runBid(
+		signCallback: (
+			unsigned: import('@beblurt/dblurt').Transaction
+		) => Promise<import('@beblurt/dblurt').SignedTransaction>
+	): Promise<void> {
 		const state = get(identity);
 		if (state.state !== 'unlocked') {
 			errorMessage = $_('feature_bid.error_locked');
 			return;
 		}
-		if (password.length === 0) {
-			passwordError = $_('feature_bid.error_password_required');
-			flashPasswordBorder();
-			return;
-		}
-		submitting = true;
-		errorMessage = '';
-		passwordError = '';
-
-		// Phase F.5 audit fix (F-18) — sign-callback pattern.
 		try {
-			const signCallback = async (
-				unsigned: import('@beblurt/dblurt').Transaction
-			): Promise<import('@beblurt/dblurt').SignedTransaction> => {
-				const r = await runWithActiveKey(password, async (activePriv) => {
-					const { signOrderWithFeeWithKey } = await import('$blurt/sign');
-					return signOrderWithFeeWithKey(unsigned, activePriv);
-				});
-				if (!r.ok) {
-					const err = new Error(`runWithActiveKey:${r.kind}`);
-					(err as Error & { kind?: string }).kind = r.kind;
-					throw err;
-				}
-				return r.value;
-			};
 			const result = await broadcastFeatureBid(
 				state.live,
 				signCallback,
@@ -182,13 +173,8 @@
 				},
 				resolveFeeRecipient(getInstanceSnapshot().fee_recipient)
 			);
-			password = '';
-			onSuccess?.({
-				trx_id: result.trx_id,
-				blurtPaid: result.blurtPaid
-			});
+			onSuccess?.({ trx_id: result.trx_id, blurtPaid: result.blurtPaid });
 		} catch (err) {
-			password = '';
 			const kind = (err as Error & { kind?: string }).kind;
 			if (kind === 'bad_password') {
 				passwordError = $_('feature_bid.error_bad_password');
@@ -215,7 +201,70 @@
 				errorMessage = $_('feature_bid.error_generic');
 			}
 		}
+	}
+
+	// Password path (session ALREADY holds an active key). The Morphit password
+	// JIT-unlocks the active-key envelope; the plaintext key exists only inside
+	// the useActiveKey callback. (Phase F.5 audit fix F-18.)
+	async function submit(): Promise<void> {
+		if (submitting) return;
+		if (get(identity).state !== 'unlocked') {
+			errorMessage = $_('feature_bid.error_locked');
+			return;
+		}
+		if (password.length === 0) {
+			passwordError = $_('feature_bid.error_password_required');
+			flashPasswordBorder();
+			return;
+		}
+		submitting = true;
+		errorMessage = '';
+		passwordError = '';
+		const signCallback = async (
+			unsigned: import('@beblurt/dblurt').Transaction
+		): Promise<import('@beblurt/dblurt').SignedTransaction> => {
+			const r = await runWithActiveKey(password, async (activePriv) => {
+				const { signOrderWithFeeWithKey } = await import('$blurt/sign');
+				return signOrderWithFeeWithKey(unsigned, activePriv);
+			});
+			password = ''; // consumed — clear the moment runWithActiveKey returns
+			if (!r.ok) {
+				const err = new Error(`runWithActiveKey:${r.kind}`);
+				(err as Error & { kind?: string }).kind = r.kind;
+				throw err;
+			}
+			return r.value;
+		};
+		await runBid(signCallback);
+		password = ''; // belt-and-suspenders: also cleared if signing never ran
 		submitting = false;
+	}
+
+	// v1.8.15 (t.txt #3) — POSTING-ONLY path. UnlockActiveKeyModal has verified
+	// the pasted Active-key WIF against this account's on-chain authorities and
+	// hands us the raw scalar. We sign directly (no envelope to unlock) and wipe
+	// it the moment signing is done — the same ephemeral pattern PayBlurtModal
+	// uses. This is what lets a posting-only user place a feature bid at all.
+	async function bidWithEphemeralActiveKey(activeScalar: Uint8Array): Promise<void> {
+		if (submitting) {
+			sodium.memzero(activeScalar);
+			return;
+		}
+		submitting = true;
+		errorMessage = '';
+		passwordError = '';
+		try {
+			const signCallback = async (
+				unsigned: import('@beblurt/dblurt').Transaction
+			): Promise<import('@beblurt/dblurt').SignedTransaction> => {
+				const { signOrderWithFeeWithKey } = await import('$blurt/sign');
+				return signOrderWithFeeWithKey(unsigned, activeScalar);
+			};
+			await runBid(signCallback);
+		} finally {
+			sodium.memzero(activeScalar);
+			submitting = false;
+		}
 	}
 </script>
 
@@ -285,30 +334,46 @@
 		</p>
 	</div>
 
-	<!-- Password prompt. Required because this op uses the
-	     active key (pays BLURT). Same JIT pattern as /post:
-	     never persisted, cleared after submit, and the plaintext
-	     active key only exists inside the useActiveKey callback. -->
-	<label class="mb-3 block">
-		<span class="mb-1 block text-xs font-semibold text-ink-700 dark:text-ink-200">
-			{passwordLabel}
-		</span>
-		<input
-			type="password"
-			maxlength="64"
-			bind:value={password}
-			autocomplete="current-password"
-			disabled={submitting}
-			class="w-full rounded-lg border bg-white px-3 py-2 text-sm focus:border-morphit-emerald focus:outline-none focus:ring-1 focus:ring-morphit-emerald dark:bg-ink-900 {passwordError
-				? 'border-red-500 dark:border-red-500'
-				: 'border-ink-300 dark:border-ink-700'}"
-			class:password-flash={flashPassword}
-		/>
-	</label>
-	{#if passwordError}
-		<p class="-mt-2 mb-3 text-sm font-medium text-red-600 dark:text-red-400" role="alert">
-			{passwordError}
-		</p>
+	{#if hasActiveKey}
+		<!-- Password prompt (session already holds an active key). Same JIT
+		     pattern as /post: never persisted, cleared after submit, and the
+		     plaintext active key only exists inside the useActiveKey callback. -->
+		<label class="mb-3 block">
+			<span class="mb-1 block text-xs font-semibold text-ink-700 dark:text-ink-200">
+				{passwordLabel}
+			</span>
+			<input
+				type="password"
+				maxlength="64"
+				bind:value={password}
+				autocomplete="current-password"
+				disabled={submitting}
+				class="w-full rounded-lg border bg-white px-3 py-2 text-sm focus:border-morphit-emerald focus:outline-none focus:ring-1 focus:ring-morphit-emerald dark:bg-ink-900 {passwordError
+					? 'border-red-500 dark:border-red-500'
+					: 'border-ink-300 dark:border-ink-700'}"
+				class:password-flash={flashPassword}
+			/>
+		</label>
+		{#if passwordError}
+			<p class="-mt-2 mb-3 text-sm font-medium text-red-600 dark:text-red-400" role="alert">
+				{passwordError}
+			</p>
+		{/if}
+	{:else}
+		<!-- v1.8.15 (t.txt #3) — POSTING-ONLY. No active-key envelope to unlock,
+		     so instead of a password field that cannot work we render the SAME
+		     unlock modal the "Pay now" flow uses (inline here): the user pastes
+		     their Active key (WIF), plus their Morphit password if they keep it.
+		     Its own CTA/Cancel replace the buttons below; it hands us the raw
+		     scalar and we wipe it after signing. -->
+		<div class="mb-3">
+			<UnlockActiveKeyModal
+				account={signingAccount ?? ''}
+				canProceed={!submitting}
+				onUnlocked={bidWithEphemeralActiveKey}
+				onCancel={() => onCancel?.()}
+			/>
+		</div>
 	{/if}
 	{#if errorMessage}
 		<p class="-mt-2 mb-3 text-sm font-medium text-red-600 dark:text-red-400" role="alert">
@@ -316,21 +381,23 @@
 		</p>
 	{/if}
 
-	<div class="flex flex-col gap-2">
-		<BusyButton
-			variant="primary"
-			busy={submitting}
-			busyLabel={$_('common.broadcasting')}
-			onclick={submit}
-		>
-			{$_('feature_bid.submit_button')}
-		</BusyButton>
-		{#if onCancel}
-			<BusyButton variant="ghost" onclick={() => onCancel?.()}>
-				{$_('feature_bid.cancel_button')}
+	{#if hasActiveKey}
+		<div class="flex flex-col gap-2">
+			<BusyButton
+				variant="primary"
+				busy={submitting}
+				busyLabel={$_('common.broadcasting')}
+				onclick={submit}
+			>
+				{$_('feature_bid.submit_button')}
 			</BusyButton>
-		{/if}
-	</div>
+			{#if onCancel}
+				<BusyButton variant="ghost" onclick={() => onCancel?.()}>
+					{$_('feature_bid.cancel_button')}
+				</BusyButton>
+			{/if}
+		</div>
+	{/if}
 </div>
 
 <style>

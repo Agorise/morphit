@@ -1395,7 +1395,7 @@
 			},
 			"morphit_mirrors": {
 				"q": "¿Por qué el código de Morphit está replicado en tantos servidores de código?",
-				"a": "Descentralización — es la prioridad n.º 2 del diseño de Morphit, justo detrás de la privacidad. Un proyecto que vive en un solo lugar puede ser eliminado en un solo lugar: una plataforma puede suspender la cuenta, un gobierno puede ordenar su retirada, un servidor puede simplemente desaparecer. Por eso el código fuente de Morphit (AGPL-3.0) está replicado en muchos servidores de código independientes — nuestro propio servidor Forgejo en git.agorise.net es la copia canónica, GitHub ya está activo y se están añadiendo más (Codeberg, GitLab, Bitbucket, SourceForge, Gitee, Launchpad, GitFlic, SourceHut, Radicle), más una copia direccionada por contenido en IPFS que ningún servidor controla. Si alguno de ellos bloquea o elimina Morphit, todas las demás copias siguen ahí — y como es AGPL, cualquiera puede rehospedarlo, auditarlo o bifurcarlo. La lista completa y actual está en la página Descargar.\n\n(No hay nada que instalar desde una tienda de apps — Morphit funciona como una Progressive Web App (PWA) que añades directamente desde tu navegador. Las réplicas son del código fuente, para que el proyecto no pueda silenciarse retirando un único repositorio.)\n\nPuedes confirmar que cualquier instancia en marcha sirve código no manipulado: los hashes SHA-256 de cada versión se publican en la blockchain — consulta /about-this-instance."
+				"a": "Descentralización — es la prioridad n.º 2 del diseño de Morphit, justo detrás de la privacidad. Un proyecto que vive en un solo lugar puede ser eliminado en un solo lugar: una plataforma puede suspender la cuenta, un gobierno puede ordenar su retirada, un servidor puede simplemente desaparecer. Por eso el código fuente de Morphit (AGPL-3.0) está replicado en muchos servidores de código independientes — nuestro propio servidor Forgejo en git.agorise.net es la copia canónica, GitHub y Codeberg ya están activos y se están añadiendo más (GitLab, Bitbucket, SourceForge, Gitee, Launchpad, GitFlic, SourceHut, Radicle), más una copia direccionada por contenido en IPFS que ningún servidor controla. Si alguno de ellos bloquea o elimina Morphit, todas las demás copias siguen ahí — y como es AGPL, cualquiera puede rehospedarlo, auditarlo o bifurcarlo. La lista completa y actual está en la página Descargar.\n\n(No hay nada que instalar desde una tienda de apps — Morphit funciona como una Progressive Web App (PWA) que añades directamente desde tu navegador. Las réplicas son del código fuente, para que el proyecto no pueda silenciarse retirando un único repositorio.)\n\nPuedes confirmar que cualquier instancia en marcha sirve código no manipulado: los hashes SHA-256 de cada versión se publican en la blockchain — consulta /about-this-instance."
 			},
 			"android_sideload": {
 				"q": "¿Cómo instalo Morphit en Android?",
@@ -2643,6 +2643,8 @@
 		"posted_by": "Publicada por",
 		"details_heading": "Detalles",
 		"payment_methods": "Métodos de pago",
+		"i_can_pay_with": "Puedo pagar con",
+		"i_accept": "Acepto",
 		"location": "Ubicación",
 		"terms": "Condiciones",
 		"posted_on": "Publicada el",
@@ -4636,9 +4638,9 @@
 		"private_label": "Clave privada (WIF)",
 		"download": "Descargar como archivo de texto",
 		"downloaded": "Guardado",
-		"no_master_password": "No hay contraseña maestra. Morphit nunca crea ni usa una — tus 12 palabras y estas claves son todo lo que necesitas.",
+		"no_account_wide_password": "Morphit no tiene una única contraseña para toda la cuenta — tus 12 palabras y estas claves son todo lo que necesitas.",
 		"txt_warning": "MANTÉN ESTO EN PRIVADO. Cualquiera que tenga una clave privada de abajo puede tomar el control total de tu cuenta y tus fondos. No la compartas con nadie, no la escribas en un sitio web en el que no confíes y no la envíes en un mensaje ni correo.",
-		"txt_footer": "Tu frase semilla de 12 palabras es tu copia de seguridad de Morphit. Estas cuatro claves te permiten usar esta cuenta en otras herramientas de Blurt. No hay contraseña maestra."
+		"txt_footer": "Tu frase semilla de 12 palabras es tu copia de seguridad de Morphit. Estas cuatro claves te permiten usar esta cuenta en otras herramientas de Blurt. Morphit no tiene una única contraseña para toda la cuenta."
 	},
 	"needs_account_name": {
 		"heading": "Casi listo",

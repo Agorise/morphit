@@ -76,13 +76,18 @@
 	<button
 		type="button"
 		onclick={(e) => {
-			// The chip often sits inside a card-wide link; opening the explainer
-			// must not also navigate to the trader's profile.
+			// The chip often sits inside a card-wide STRETCHED link (OrderCard's
+			// `<a class="absolute inset-0 z-0">`). Opening the explainer there needs
+			// BOTH: `relative z-10` on this button (class below) to lift it above
+			// that overlay so the click reaches the button at all (v1.8.15, t.txt
+			// #1 — Ken: clickable on review cards but not order cards, because the
+			// overlay swallowed it), AND stopPropagation so it doesn't also
+			// navigate to the order/profile.
 			e.preventDefault();
 			e.stopPropagation();
 			explainerOpen = true;
 		}}
-		class="rating-chip inline-flex items-center gap-1 rounded-full bg-morphit-emerald/10 px-2 py-0.5 text-xs font-medium text-morphit-emerald ring-1 ring-morphit-emerald/30 hover:bg-morphit-emerald/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
+		class="rating-chip relative z-10 inline-flex items-center gap-1 rounded-full bg-morphit-emerald/10 px-2 py-0.5 text-xs font-medium text-morphit-emerald ring-1 ring-morphit-emerald/30 hover:bg-morphit-emerald/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
 		aria-label={$t('orderbook.order.rating_aria', {
 			values: { rating: ratingStr, count }
 		})}

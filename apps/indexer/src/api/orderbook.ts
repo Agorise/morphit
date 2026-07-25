@@ -5,7 +5,7 @@
  *   - asset:            AssetTicker (optional)
  *   - side:             'buy' | 'sell' (optional)
  *   - fiat_currency:    comma-separated ISO codes, order matches any of (optional)
- *   - location_region:  string up to 128, prefix-matched (optional)
+ *   - location_region:  string up to 128, case-insensitive substring match (optional)
  *   - payment_methods:  comma-separated list, order matches any of (optional)
  *   - min_trades:       integer ≥0, filter to traders with ≥N COMPLETED TRADES (optional).
  *                       v1.5.5: real completions (both parties credited), not
@@ -309,7 +309,26 @@ export function orderbookRoute(db: Database, poller: Poller, operatorAccount: st
 			`NOT EXISTS (SELECT 1 FROM operator_blocks ob WHERE ob.operator = ${p(operatorAccount)} AND ob.blocked = o.account AND ob.state = 'blocked')`
 		);
 
-		if (q.asset) where.push(`o.asset = ${p(q.asset)}`);
+		if (q.asset) {
+			// v1.8.15 — the Asset filter surfaces every order INVOLVING the
+			// selected crypto, not only ones whose TRADED asset is it: match the
+			// traded asset, OR the canonical crypto payment method for it
+			// (pay_<ticker>, e.g. an order that PAYS in USDT), OR a barter order
+			// that ACCEPTS it (accepted_assets).  Ken: selecting "Tether" must
+			// also find a "pays with Tether" order.  pay_<ticker> keys are
+			// canonical (see apps/web/src/lib/payments/registry.ts) so this is an
+			// exact structured match, not a fuzzy string one.  BARTER has no
+			// pay_ key and never appears in accepted_assets, so it degrades to
+			// the plain o.asset match.  accepted_assets is NULL-safe: X = ANY(NULL)
+			// is NULL, i.e. no match.
+			const assetParam = p(q.asset);
+			const payKey = p(`pay_${q.asset.toLowerCase()}`);
+			where.push(
+				`(o.asset = ${assetParam} ` +
+					`OR EXISTS (SELECT 1 FROM unnest(o.payment_methods) pm WHERE lower(pm) = ${payKey}) ` +
+					`OR ${assetParam} = ANY(o.accepted_assets))`
+			);
+		}
 		if (q.side) where.push(`o.side = ${p(q.side)}`);
 		if (q.fiat_currency) {
 			// One or more ISO codes — match orders in ANY of them.
@@ -323,9 +342,13 @@ export function orderbookRoute(db: Database, poller: Poller, operatorAccount: st
 			// decomposed-form input doesn't match their own
 			// NFC-stored orders.
 			const normalizedRegion = q.location_region.normalize('NFC');
-			// Case-insensitive prefix match with LIKE metacharacters
-			// escaped so "100%" stays literal.
-			where.push(`o.location_region ILIKE ${p(escapeLike(normalizedRegion) + '%')} ESCAPE '\\'`);
+			// v1.8.15 — case-insensitive SUBSTRING (contains) match, LIKE
+			// metacharacters escaped so "100%" stays literal.  Was a prefix
+			// match (region%), which couldn't find "mzt" inside
+			// "Mazatlán Mazatlan MZT México Mexico" (that string starts "Maz").
+			where.push(
+				`o.location_region ILIKE ${p('%' + escapeLike(normalizedRegion) + '%')} ESCAPE '\\'`
+			);
 		}
 		if (q.payment_methods) {
 			// Split the comma-separated token list, trim, validate each

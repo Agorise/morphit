@@ -56,8 +56,12 @@
 import * as readline from 'node:readline';
 import * as fs from 'node:fs';
 import { stdin as input, stdout as output } from 'node:process';
-import { validateReleasePayload, validateTreasury } from '@morphit/release-schema';
-import type { ReleasePayloadV1, ReleaseTreasuryBlock } from '@morphit/release-schema';
+import { validateReleasePayload, validateTreasury, validateDistribution } from '@morphit/release-schema';
+import type {
+	ReleasePayloadV1,
+	ReleaseTreasuryBlock,
+	ReleaseDistributionBlock
+} from '@morphit/release-schema';
 import { CANONICAL_TREASURY } from '../src/config/canonicalTreasury.ts';
 
 function fail(reason: string): never {
@@ -121,6 +125,14 @@ interface Inputs {
 	xmrPiconero: string;
 	/** cp372 — chain-pinned BLURT fee base (tier-1).  Empty = omit. */
 	blurtBase: string;
+	/** cp556 — decentralized-distribution anchor.  All empty = omit the
+	 *  whole block.  source_sha256 + gpg_fingerprint are required TOGETHER
+	 *  when either is set; ipfs_cid + mirrors are independently optional. */
+	sourceSha256: string;
+	gpgFingerprint: string;
+	ipfsCid: string;
+	/** Comma- or whitespace-separated list of https:// mirror URLs. */
+	mirrors: string;
 }
 
 async function gatherInputs(): Promise<Inputs> {
@@ -189,6 +201,36 @@ async function gatherInputs(): Promise<Inputs> {
 		process.env.MORPHIT_BUILD_BLURT_BASE ?? ''
 	);
 
+	// cp556 — decentralized-distribution anchor.  In the normal (CI) flow
+	// these come from the `distribution-anchor.env` that release.yml wrote and
+	// attached to the release: source_sha256 is the PUBLISHED tarball's hash and
+	// gpg_fingerprint is the release-signer key.  The ELI5 ceremony fetches that
+	// file and `source`s it, so these env vars are already set here; the mirror
+	// list is a fixed default baked into buildDistribution().  Leave all empty
+	// to omit the block (a release cut before the anchor was available).
+	process.stderr.write('\n── Distribution anchor (cp556) ───────────────────────────\n');
+	process.stderr.write('Verifiable pointer to the published source tarball\n');
+	process.stderr.write('(auto-mirrored to Codeberg / GitHub).  Leave ALL empty to omit.\n');
+	process.stderr.write('source_sha256 + gpg_fingerprint go together; both come from\n');
+	process.stderr.write('the release-attached distribution-anchor.env.\n\n');
+
+	const sourceSha256 = await ask(
+		'Source tarball SHA-256 (64 hex; empty to omit distribution)',
+		process.env.MORPHIT_BUILD_SOURCE_SHA256 ?? ''
+	);
+	const gpgFingerprint = await ask(
+		'GPG signing-key fingerprint (40 or 64 hex, spaces ok)',
+		process.env.MORPHIT_BUILD_GPG_FINGERPRINT ?? ''
+	);
+	const ipfsCid = await ask(
+		'IPFS CID of the signed tarball (optional)',
+		process.env.MORPHIT_BUILD_IPFS_CID ?? ''
+	);
+	const mirrors = await ask(
+		'Mirror URLs (https://…, comma-separated; optional)',
+		process.env.MORPHIT_BUILD_MIRRORS ?? ''
+	);
+
 	return {
 		version,
 		hashManifest,
@@ -197,8 +239,50 @@ async function gatherInputs(): Promise<Inputs> {
 		btcSatoshis,
 		xmrAddress,
 		xmrPiconero,
-		blurtBase
+		blurtBase,
+		sourceSha256,
+		gpgFingerprint,
+		ipfsCid,
+		mirrors
 	};
+}
+
+/** cp556 — build the optional distribution anchor from the operator's
+ *  inputs.  Returns null when the whole block is omitted.  GPG prints
+ *  fingerprints with spaces; we strip them so the validator (which
+ *  forbids spaces) accepts a copy-pasted fingerprint. */
+function buildDistribution(i: Inputs): ReleaseDistributionBlock | null {
+	const sha = i.sourceSha256.trim().toLowerCase();
+	const fpr = i.gpgFingerprint.replace(/\s+/g, '').toUpperCase();
+	const cid = i.ipfsCid.trim();
+	let mirrorList = i.mirrors
+		.split(/[,\s]+/)
+		.map((m) => m.trim())
+		.filter((m) => m.length > 0);
+
+	// The whole block is omitted only when NOTHING was supplied.
+	if (sha === '' && fpr === '' && cid === '' && mirrorList.length === 0) return null;
+
+	if (sha === '' || fpr === '') {
+		fail('distribution needs BOTH source_sha256 and gpg_fingerprint (or leave all fields empty to omit)');
+	}
+
+	// The mirrors are a FIXED decentralization breadcrumb: Forgejo auto-pushes
+	// commits + the signed tag to these hosts, so an operator never has to
+	// supply them. Default to the canonical pair when the block IS being
+	// emitted (sha + fpr present) and no explicit list was given. NB: this
+	// default is applied HERE, not at the prompt — applying it at the prompt
+	// would make mirrorList always non-empty, so an anchor-less build could no
+	// longer omit the whole block by leaving sha + fpr empty (it would trip the
+	// "needs BOTH" failure above). Emitted only alongside a real anchor.
+	if (mirrorList.length === 0) {
+		mirrorList = ['https://codeberg.org/agorise/morphit', 'https://github.com/agorise/morphit'];
+	}
+
+	const value: Record<string, unknown> = { source_sha256: sha, gpg_fingerprint: fpr };
+	if (cid !== '') value.ipfs_cid = cid;
+	if (mirrorList.length > 0) value.mirrors = mirrorList;
+	return value as unknown as ReleaseDistributionBlock;
 }
 
 function buildTreasury(i: Inputs): ReleaseTreasuryBlock | null {
@@ -255,6 +339,15 @@ async function main(): Promise<void> {
 		}
 	}
 
+	// cp556 — build + validate the distribution anchor independently too.
+	const distribution = buildDistribution(inputs);
+	if (distribution !== null) {
+		const dResult = validateDistribution(distribution);
+		if (!dResult.ok) {
+			fail(`distribution validation failed: ${dResult.reason}`);
+		}
+	}
+
 	const payload: ReleasePayloadV1 = {
 		version: inputs.version,
 		hash_manifest: inputs.hashManifest as ReleasePayloadV1['hash_manifest'],
@@ -262,7 +355,8 @@ async function main(): Promise<void> {
 		...(inputs.endpoints !== undefined
 			? { endpoints: inputs.endpoints as ReleasePayloadV1['endpoints'] }
 			: {}),
-		...(treasury !== null ? { treasury } : {})
+		...(treasury !== null ? { treasury } : {}),
+		...(distribution !== null ? { distribution } : {})
 	};
 
 	// Final whole-payload validation — same checks the on-chain
@@ -273,12 +367,20 @@ async function main(): Promise<void> {
 		fail(`payload validation failed: ${result.reason}`);
 	}
 
-	// Sanity gate (Part 107) — defense-in-depth: scan the
-	// serialized payload for anything that looks like a 64-hex
-	// view key.  If something looks like one, refuse to emit
-	// (the operator may have hand-crafted a payload that re-
-	// introduces the viewkey field).
-	const serialized = JSON.stringify(payload);
+	// Sanity gate (Part 107) — defense-in-depth: scan the serialized
+	// payload for anything that looks like a 64-hex view key.  If
+	// something looks like one, refuse to emit (the operator may have
+	// hand-crafted a payload that re-introduces the viewkey field).
+	//
+	// cp556: the distribution anchor LEGITIMATELY contains 64-hex fields
+	// (source_sha256 is always 64 lowercase hex; gpg_fingerprint may be
+	// the 64-hex v5 form) — those are the tarball hash + signing key
+	// fingerprint, NOT a view key, and are strictly validated by
+	// validateDistribution above.  Exclude the distribution block from
+	// this scan so it can't false-positive; a re-introduced view key
+	// would live in the TREASURY block, which is still scanned.
+	const { distribution: _dist, ...payloadWithoutDistribution } = payload;
+	const serialized = JSON.stringify(payloadWithoutDistribution);
 	const VIEWKEY_LOOKING_RE = /\b[0-9a-f]{64}\b/;
 	if (VIEWKEY_LOOKING_RE.test(serialized)) {
 		fail(

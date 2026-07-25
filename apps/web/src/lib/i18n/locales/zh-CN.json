@@ -435,7 +435,7 @@
 			"pill_locked_hint": "解锁会话以支付并发送。",
 			"error": {
 				"quote_failed": "无法获取当前网络费用。请检查你的连接并重试。",
-				"no_active_envelope": "此设备上未找到已保存的活跃密钥。请先在\"设置\"中保存密钥,然后重试。",
+				"no_active_envelope": "此设备上未找到已保存的活动密钥。请先在设置中保存您的密钥，然后重试。",
 				"broadcast_failed": "付款无法广播。你的费用未被支出。请重试。",
 				"bad_password": "此密码未能解锁活跃密钥。",
 				"password_required": "请输入你的 Morphit 密码。"
@@ -1395,7 +1395,7 @@
 			},
 			"morphit_mirrors": {
 				"q": "为什么 Morphit 的源代码要镜像到这么多代码托管站点？",
-				"a": "去中心化——这是 Morphit 设计中的第 2 优先项，仅次于隐私。一个只存在于一处的项目，可以在一处被扼杀：平台可以封禁账号，政府可以下令下架，主机可能干脆消失。所以 Morphit 的源代码（AGPL-3.0）镜像在许多独立的代码托管站点——我们自己的 Forgejo 服务器 git.agorise.net 是规范副本，GitHub 已上线，还有更多正在添加（Codeberg、GitLab、Bitbucket、SourceForge、Gitee、Launchpad、GitFlic、SourceHut、Radicle），外加一份没有任何主机能控制的、基于内容寻址的 IPFS 副本。如果其中任何一个封锁或删除 Morphit，其余每一份副本都还在——而且因为它是 AGPL，任何人都可以重新托管、审计或分叉它。完整的最新列表在「下载」页面。\n\n（没有任何东西需要从应用商店安装——Morphit 作为 Progressive Web App (PWA) 运行，你直接从浏览器添加。这些镜像针对的是源代码，这样项目就无法靠删除单个仓库来被噤声。）\n\n你可以确认任何正在运行的实例提供的是未被篡改的代码：每个版本的 SHA-256 哈希都会发布到区块链上——见 /about-this-instance。"
+				"a": "去中心化——这是 Morphit 设计中的第 2 优先项，仅次于隐私。一个只存在于一处的项目，可以在一处被扼杀：平台可以封禁账号，政府可以下令下架，主机可能干脆消失。所以 Morphit 的源代码（AGPL-3.0）镜像在许多独立的代码托管站点——我们自己的 Forgejo 服务器 git.agorise.net 是规范副本，GitHub 和 Codeberg 已上线，还有更多正在添加（GitLab、Bitbucket、SourceForge、Gitee、Launchpad、GitFlic、SourceHut、Radicle），外加一份没有任何主机能控制的、基于内容寻址的 IPFS 副本。如果其中任何一个封锁或删除 Morphit，其余每一份副本都还在——而且因为它是 AGPL，任何人都可以重新托管、审计或分叉它。完整的最新列表在「下载」页面。\n\n（没有任何东西需要从应用商店安装——Morphit 作为 Progressive Web App (PWA) 运行，你直接从浏览器添加。这些镜像针对的是源代码，这样项目就无法靠删除单个仓库来被噤声。）\n\n你可以确认任何正在运行的实例提供的是未被篡改的代码：每个版本的 SHA-256 哈希都会发布到区块链上——见 /about-this-instance。"
 			},
 			"android_sideload": {
 				"q": "我如何在 Android 上安装 Morphit？",
@@ -2643,6 +2643,8 @@
 		"posted_by": "发布者",
 		"details_heading": "详情",
 		"payment_methods": "支付方式",
+		"i_can_pay_with": "我可以用",
+		"i_accept": "我接受",
 		"location": "位置",
 		"terms": "条款",
 		"posted_on": "发布于",
@@ -4636,9 +4638,9 @@
 		"private_label": "私钥（WIF）",
 		"download": "下载为文本文件",
 		"downloaded": "已保存",
-		"no_master_password": "没有主密码。Morphit 从不创建或使用主密码——你的 12 个单词和这些密钥就是全部。",
+		"no_account_wide_password": "Morphit 没有统管整个账户的单一密码——你的 12 个单词和这些密钥就是全部。",
 		"txt_warning": "请保密。任何拥有下方私钥的人都能完全控制你的账户和资金。绝不要分享给任何人，绝不要输入到你不信任的网站，也绝不要通过消息或电子邮件发送。",
-		"txt_footer": "你的 12 个单词助记词是你的 Morphit 备份。这四个密钥让你能在其他 Blurt 工具中使用此账户。没有主密码。"
+		"txt_footer": "你的 12 个单词助记词是你的 Morphit 备份。这四个密钥让你能在其他 Blurt 工具中使用此账户。Morphit 没有统管整个账户的单一密码。"
 	},
 	"needs_account_name": {
 		"heading": "就快完成了",

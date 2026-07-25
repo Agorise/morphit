@@ -67,7 +67,7 @@ check('canPay requires an active key', /canPay = \$derived\([\s\S]{0,220}hasActi
 check('a posting-only session never sees the password field', /\{:else if !hasActiveKey\}/.test(pay));
 // tt.txt #11 — the dead-end panel became an in-place unlock that RESUMES the
 // payment: an existing Blurt user has no seed and no Keyfile, only an Active key
-// (WIF) or a pre-fork master password.
+// (WIF), which they paste here and we sign with once.
 check('…and is offered an in-place unlock instead of a dead end', /<UnlockActiveKeyModal/.test(pay));
 check('the unlock CTA stays disabled while the amount is invalid', /canProceed=\{amountValid\}/.test(pay));
 check('the unlocked key signs and is WIPED, never stored', /sodium\.memzero\(activeScalar\)/.test(pay) && !/persistentKeystore/.test(pay));

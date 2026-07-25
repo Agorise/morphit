@@ -178,7 +178,20 @@ export function buildWhereClauses(
 	// v1.7.0 — exact-match, parameterised like every other predicate here.
 	if (q.account) where.push(`o.account = ${p(q.account)}`);
 	if (q.permlink) where.push(`o.permlink = ${p(q.permlink)}`);
-	if (q.asset) where.push(`o.asset = ${p(q.asset)}`);
+	if (q.asset) {
+		// v1.8.15 — parity with the REST orderbook.ts asset filter: surface
+		// every order INVOLVING the crypto (traded asset OR pays in it via the
+		// canonical pay_<ticker> key OR barter-accepts it), so selecting
+		// "Tether" also finds a "pays with Tether" order.  BARTER degrades to
+		// the plain o.asset match; accepted_assets is NULL-safe.
+		const assetParam = p(q.asset);
+		const payKey = p(`pay_${q.asset.toLowerCase()}`);
+		where.push(
+			`(o.asset = ${assetParam} ` +
+				`OR EXISTS (SELECT 1 FROM unnest(o.payment_methods) pm WHERE lower(pm) = ${payKey}) ` +
+				`OR ${assetParam} = ANY(o.accepted_assets))`
+		);
+	}
 	if (q.side) where.push(`o.side = ${p(q.side)}`);
 	if (q.fiat_currency) {
 		const fiats = q.fiat_currency.split(',').map((s) => s.toUpperCase());
@@ -186,7 +199,11 @@ export function buildWhereClauses(
 	}
 	if (q.location_region) {
 		const normalizedRegion = q.location_region.normalize('NFC');
-		where.push(`o.location_region ILIKE ${p(escapeLike(normalizedRegion) + '%')} ESCAPE '\\'`);
+		// v1.8.15 — case-insensitive SUBSTRING (contains) match (was prefix
+		// region%), so "mzt" finds "Mazatlán Mazatlan MZT México Mexico".
+		where.push(
+			`o.location_region ILIKE ${p('%' + escapeLike(normalizedRegion) + '%')} ESCAPE '\\'`
+		);
 	}
 	if (q.payment_methods) {
 		const methods = q.payment_methods

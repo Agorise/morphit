@@ -30,6 +30,9 @@
 
 	import { _ } from 'svelte-i18n';
 	import { runWithActiveKey } from '$crypto/runWithActiveKey';
+	import { liveIdentity } from '$stores/identity';
+	import UnlockActiveKeyModal from '$components/UnlockActiveKeyModal.svelte';
+	import sodium from 'libsodium-wrappers-sumo';
 	import { broadcastStrangerFee } from '$blurt/ops/strangerFee';
 	import { getInstanceSnapshot } from '$stores/instance';
 	import { resolveFeeRecipient } from '$lib/orders/fee';
@@ -49,6 +52,15 @@
 	}
 
 	let { live, peer, onPaid, onCancel }: Props = $props();
+
+	/** v1.8.15 (t.txt #3) — does this session already hold an Active key?
+	 *  A 'morphit-seed' or 'posting-active' session does; a POSTING-ONLY login
+	 *  does not, and for it the Morphit-password path below is a dead end (there
+	 *  is no active-key envelope to unlock). Mirrors PayBlurtModal exactly: when
+	 *  false we render <UnlockActiveKeyModal> so the user pastes their Active key
+	 *  (WIF) — and their Morphit password if they choose to keep it — in this
+	 *  same modal, instead of being asked for a password that cannot work. */
+	const hasActiveKey = $derived(($liveIdentity?.activePublicKey ?? null) !== null);
 
 	/** UI phase. Drives which subtree renders in the card body.
 	 *  Carries the indexer's BLURT-denominated quote — no client-
@@ -130,6 +142,54 @@
 		void loadQuote();
 	});
 
+	/** Broadcast the stranger-fee op + sibling transfer using whatever produces
+	 *  the signed transaction, then resolve. Shared by BOTH the password path
+	 *  (active-key envelope unlocked via runWithActiveKey) and the posting-only
+	 *  path (Active-key WIF handed in by UnlockActiveKeyModal). On success emits
+	 *  onPaid(); on failure classifies into the phase. */
+	async function broadcastWithSigner(
+		priceQuote: StrangerFeeQuoteResponse,
+		signCallback: (
+			unsigned: import('@beblurt/dblurt').Transaction
+		) => Promise<import('@beblurt/dblurt').SignedTransaction>
+	): Promise<void> {
+		try {
+			await broadcastStrangerFee(
+				live,
+				signCallback,
+				peer,
+				priceQuote.price_blurt,
+				resolveFeeRecipient(getInstanceSnapshot().fee_recipient)
+			);
+			onPaid();
+		} catch (err) {
+			const kind = (err as Error & { kind?: string }).kind;
+			if (kind === 'bad_password') {
+				phase = { kind: 'ready', priceQuote };
+				passwordError = $_('chat.stranger_fee.error.bad_password') as string;
+				return;
+			}
+			if (kind === 'identity_mismatch') {
+				phase = { kind: 'error', messageKey: 'crypto.error.identity_mismatch' };
+				return;
+			}
+			if (kind === 'locked') {
+				phase = { kind: 'error', messageKey: 'chat.stranger_fee.error.no_active_envelope' };
+				return;
+			}
+			if (kind === 'password_empty') {
+				phase = { kind: 'ready', priceQuote };
+				return;
+			}
+			// Sign-time crypto failure or broadcast network error.
+			phase = { kind: 'error', messageKey: 'chat.stranger_fee.error.broadcast_failed' };
+		}
+	}
+
+	// Password path (session ALREADY holds an active key: morphit-seed /
+	// posting-active). The Morphit password JIT-unlocks the active-key envelope
+	// via runWithActiveKey; the key lives only inside the synchronous
+	// signOrderWithFeeWithKey call. (Phase F.5 audit fix F-18.)
 	async function onConfirm(): Promise<void> {
 		if (phase.kind !== 'ready') return;
 		if (passwordInput.length === 0) {
@@ -140,66 +200,52 @@
 		const { priceQuote } = phase;
 		phase = { kind: 'paying', priceQuote };
 
-		// Phase F.5 audit fix (F-18) — sign-callback pattern.
-		// The active key only lives inside the synchronous
-		// signOrderWithFeeWithKey call.
+		const signCallback = async (
+			unsigned: import('@beblurt/dblurt').Transaction
+		): Promise<import('@beblurt/dblurt').SignedTransaction> => {
+			const r = await runWithActiveKey(passwordInput, async (activePriv) => {
+				const { signOrderWithFeeWithKey } = await import('$blurt/sign');
+				return signOrderWithFeeWithKey(unsigned, activePriv);
+			});
+			passwordInput = ''; // consumed — clear the moment runWithActiveKey returns
+			if (!r.ok) {
+				// Surface as throw so broadcastWithSigner classifies.
+				const err = new Error(`runWithActiveKey:${r.kind}`);
+				(err as Error & { kind?: string }).kind = r.kind;
+				throw err;
+			}
+			return r.value;
+		};
+		await broadcastWithSigner(priceQuote, signCallback);
+		passwordInput = ''; // belt-and-suspenders: also cleared if signing never ran
+	}
+
+	// v1.8.15 (t.txt #3) — POSTING-ONLY path. UnlockActiveKeyModal has already
+	// verified the pasted Active-key WIF against this account's on-chain
+	// authorities and hands us the raw scalar. We sign the stranger-fee tx with
+	// it DIRECTLY (no envelope to unlock) and wipe it the moment signing is done
+	// — the standard ephemeral pattern PayBlurtModal uses. This is what lets a
+	// posting-only user actually pay: the old flow only offered the Morphit
+	// password, which for them has no active-key envelope and dead-ended at
+	// "Payment could not be broadcast."
+	async function payWithEphemeralActiveKey(activeScalar: Uint8Array): Promise<void> {
+		if (phase.kind !== 'ready') {
+			sodium.memzero(activeScalar);
+			return;
+		}
+		const { priceQuote } = phase;
+		phase = { kind: 'paying', priceQuote };
 		try {
 			const signCallback = async (
 				unsigned: import('@beblurt/dblurt').Transaction
 			): Promise<import('@beblurt/dblurt').SignedTransaction> => {
-				const r = await runWithActiveKey(passwordInput, async (activePriv) => {
-					const { signOrderWithFeeWithKey } = await import('$blurt/sign');
-					return signOrderWithFeeWithKey(unsigned, activePriv);
-				});
-				if (!r.ok) {
-					// Surface as throw so the outer catch classifies.
-					const err = new Error(`runWithActiveKey:${r.kind}`);
-					(err as Error & { kind?: string }).kind = r.kind;
-					throw err;
-				}
-				return r.value;
+				const { signOrderWithFeeWithKey } = await import('$blurt/sign');
+				return signOrderWithFeeWithKey(unsigned, activeScalar);
 			};
-			await broadcastStrangerFee(
-				live,
-				signCallback,
-				peer,
-				priceQuote.price_blurt,
-				resolveFeeRecipient(getInstanceSnapshot().fee_recipient)
-			);
-			passwordInput = '';
-			onPaid();
-			return;
-		} catch (err) {
-			passwordInput = '';
-			const kind = (err as Error & { kind?: string }).kind;
-			if (kind === 'bad_password') {
-				phase = { kind: 'ready', priceQuote };
-				passwordError = $_('chat.stranger_fee.error.bad_password') as string;
-				return;
-			}
-			if (kind === 'identity_mismatch') {
-				phase = {
-					kind: 'error',
-					messageKey: 'crypto.error.identity_mismatch'
-				};
-				return;
-			}
-			if (kind === 'locked') {
-				phase = {
-					kind: 'error',
-					messageKey: 'chat.stranger_fee.error.no_active_envelope'
-				};
-				return;
-			}
-			if (kind === 'password_empty') {
-				phase = { kind: 'ready', priceQuote };
-				return;
-			}
-			// Sign-time crypto failure or broadcast network error.
-			phase = {
-				kind: 'error',
-				messageKey: 'chat.stranger_fee.error.broadcast_failed'
-			};
+			await broadcastWithSigner(priceQuote, signCallback);
+		} finally {
+			// Used once, then gone — never written to the keystore here.
+			sodium.memzero(activeScalar);
 		}
 	}
 
@@ -326,55 +372,75 @@
 				{$_('chat.stranger_fee.one_time_note', { values: { peer } })}
 			</p>
 
-			<!-- Password prompt for active-key unlock. -->
-			<label class="mt-4 block">
-				<span class="mb-1 block text-sm font-semibold">
-					{$_('chat.stranger_fee.password_label')}
-				</span>
-				<input
-					type="password"
-					maxlength="64"
-					bind:value={passwordInput}
-					disabled={phase.kind === 'paying'}
-					autocomplete="current-password"
-					onkeydown={(e) => {
-						if (e.key === 'Enter' && phase.kind === 'ready') {
-							e.preventDefault();
-							void onConfirm();
-						}
-					}}
-					class="w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none disabled:opacity-50 dark:border-ink-700 dark:bg-ink-900"
-					placeholder={$_('chat.stranger_fee.password_placeholder') as string}
-				/>
-				{#if passwordError}
-					<p class="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">
-						{passwordError}
-					</p>
-				{/if}
-			</label>
-
-			<div class="mt-6 flex flex-col gap-3 sm:flex-row-reverse sm:justify-between">
-				<button
-					type="button"
-					onclick={onConfirm}
-					disabled={phase.kind === 'paying'}
-					class="rounded-xl border-2 border-morphit-btn bg-morphit-btn px-4 py-2 font-semibold text-white hover:brightness-110 disabled:cursor-wait disabled:opacity-60"
-				>
-					{#if phase.kind === 'paying'}
-						{$_('chat.stranger_fee.paying')}
-					{:else}
-						{$_('chat.stranger_fee.confirm')}
+			{#if hasActiveKey}
+				<!-- Password prompt: this session already holds an active key
+				     (morphit-seed / posting-active). The Morphit password unlocks
+				     the active-key envelope to sign. -->
+				<label class="mt-4 block">
+					<span class="mb-1 block text-sm font-semibold">
+						{$_('chat.stranger_fee.password_label')}
+					</span>
+					<input
+						type="password"
+						maxlength="64"
+						bind:value={passwordInput}
+						disabled={phase.kind === 'paying'}
+						autocomplete="current-password"
+						onkeydown={(e) => {
+							if (e.key === 'Enter' && phase.kind === 'ready') {
+								e.preventDefault();
+								void onConfirm();
+							}
+						}}
+						class="w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none disabled:opacity-50 dark:border-ink-700 dark:bg-ink-900"
+						placeholder={$_('chat.stranger_fee.password_placeholder') as string}
+					/>
+					{#if passwordError}
+						<p class="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">
+							{passwordError}
+						</p>
 					{/if}
-				</button>
-				<button
-					type="button"
-					onclick={onCancel}
-					disabled={phase.kind === 'paying'}
-					class="rounded-xl border-2 border-ink-300 bg-white px-4 py-2 font-semibold hover:bg-ink-100 disabled:opacity-50 dark:border-ink-600 dark:bg-ink-900 dark:hover:bg-ink-800"
-				>
-					{$_('common.cancel')}
-				</button>
-			</div>
+				</label>
+
+				<div class="mt-6 flex flex-col gap-3 sm:flex-row-reverse sm:justify-between">
+					<button
+						type="button"
+						onclick={onConfirm}
+						disabled={phase.kind === 'paying'}
+						class="rounded-xl border-2 border-morphit-btn bg-morphit-btn px-4 py-2 font-semibold text-white hover:brightness-110 disabled:cursor-wait disabled:opacity-60"
+					>
+						{#if phase.kind === 'paying'}
+							{$_('chat.stranger_fee.paying')}
+						{:else}
+							{$_('chat.stranger_fee.confirm')}
+						{/if}
+					</button>
+					<button
+						type="button"
+						onclick={onCancel}
+						disabled={phase.kind === 'paying'}
+						class="rounded-xl border-2 border-ink-300 bg-white px-4 py-2 font-semibold hover:bg-ink-100 disabled:opacity-50 dark:border-ink-600 dark:bg-ink-900 dark:hover:bg-ink-800"
+					>
+						{$_('common.cancel')}
+					</button>
+				</div>
+			{:else}
+				<!-- v1.8.15 (t.txt #3) — POSTING-ONLY. No active-key envelope to
+				     unlock, so instead of a password field that cannot work we
+				     render the SAME unlock modal the "Pay now" flow uses: the user
+				     pastes their Active key (WIF) here, plus their Morphit password
+				     if they choose to keep it — one modal, no second screen. Its
+				     own CTA/Cancel replace the buttons above; it hands us the raw
+				     scalar via onUnlocked and we wipe it after signing. -->
+				<div class="mt-4">
+					<UnlockActiveKeyModal
+						account={getUserBlurtAccount() ?? ''}
+						canProceed={phase.kind === 'ready'}
+						onUnlocked={payWithEphemeralActiveKey}
+						onCancel={onCancel}
+					/>
+				</div>
+			{/if}
 		{/if}
 	</div>
 </div>

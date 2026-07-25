@@ -133,6 +133,57 @@ export interface ReleaseTreasuryBlock {
 }
 
 /**
+ * Decentralized-distribution anchor (cp556).
+ *
+ * The project's source is public on Forgejo (git.agorise.net), but a
+ * single git host is a single point of failure and censorship. This
+ * block lets `@morphit` anchor, ON CHAIN, a verifiable pointer to the
+ * SAME GPG-signed source tarball mirrored to independent hosts —
+ * Codeberg, IPFS, etc. — so anyone can obtain the code from whatever
+ * host is reachable and PROVE it is the unmodified release.
+ *
+ * The tarball + signatures are produced by `scripts/release-sign.sh`
+ * (`git archive` from the tagged commit → `morphit-vX.Y.Z-source.tar.gz`
+ * + `.sha256` + `.asc`). The verifier `scripts/verify-download.mjs`
+ * reads THIS block from the chain (via RPC, never the indexer — same
+ * anti-circularity rule as the rest of the release op) and checks a
+ * downloaded tarball against it. See docs/VERIFY-YOUR-DOWNLOAD.md.
+ *
+ * Every field is public + verification-only. Nothing secret is ever
+ * placed here (same invariant as the treasury block: the XMR view key
+ * and any signing WIF are NEVER chain-pinned).
+ *
+ * The whole block is OPTIONAL + omittable — releases cut before the
+ * mirror/pin steps ran carry no distribution block, and clients simply
+ * have nothing extra to cross-check (the hash_manifest still guards the
+ * running bundle regardless).
+ */
+export interface ReleaseDistributionBlock {
+	/** Lowercase-hex SHA-256 of the signed source tarball
+	 *  (`morphit-vX.Y.Z-source.tar.gz`), exactly as `sha256sum` prints
+	 *  it. 64 hex chars. A downloader runs `sha256sum` on their copy
+	 *  and compares — a mirror that served altered bytes fails here. */
+	readonly source_sha256: string;
+	/** Fingerprint of the GPG public key that signed the release, so a
+	 *  downloader knows WHICH key's signature to trust — and, because
+	 *  the fingerprint is itself anchored on-chain by @morphit, a
+	 *  hostile mirror can't swap in its own key + re-sign. 40 hex
+	 *  chars (v4 SHA-1 fingerprint) or 64 (v5 SHA-256), case-insensitive,
+	 *  spaces allowed and normalized out. */
+	readonly gpg_fingerprint: string;
+	/** OPTIONAL IPFS CID of the same signed tarball (or a directory
+	 *  holding it + its `.asc`). Content-addressed: the CID IS the
+	 *  hash, so no gateway can serve altered bytes under it. CIDv0
+	 *  (`Qm…`, base58) or CIDv1 (`baf…`, base32). Omitted until the
+	 *  bytes are actually pinned. */
+	readonly ipfs_cid?: string;
+	/** OPTIONAL independent download mirrors (`https://…`) carrying the
+	 *  SAME signed bytes — a Codeberg release asset, an IPFS gateway,
+	 *  etc. Bounded list; recommendations, not mandates. */
+	readonly mirrors?: readonly string[];
+}
+
+/**
  * The full `morphit_release_v1` op body.  Serialized as JSON into
  * the `json` field of a Blurt `custom_json` operation authored by
  * `@morphit` and signed with its posting key.
@@ -164,4 +215,8 @@ export interface ReleasePayloadV1 {
 	 *  order page; every federated indexer uses these addresses
 	 *  for fee verification.  See ReleaseTreasuryBlock. */
 	readonly treasury?: ReleaseTreasuryBlock;
+	/** cp556 — OPTIONAL decentralized-distribution anchor: a
+	 *  verifiable pointer to the GPG-signed source tarball mirrored
+	 *  to Codeberg / IPFS / etc.  See ReleaseDistributionBlock. */
+	readonly distribution?: ReleaseDistributionBlock;
 }

@@ -282,7 +282,23 @@ MORPHIT_INDEXER_FASTPATH_INTERVAL_MS=2000
 
 then restart the indexer. (`OPERATIONS.md` §19 has the full details, including the `/v1/health` status field.)
 
-### 11.7 Everything else
+### 11.7 Verify what you downloaded (optional but wise)
+
+Before you deploy code you fetched, you can prove it's the genuine, unmodified release. Every release is a GPG-signed git tag, mirrored automatically to GitHub + Codeberg, and its hash + signing-key fingerprint are anchored on the Blurt chain by `@morphit` — so verification doesn't rest on trusting any single host. If you cloned the repo, the quickest check is the signed tag:
+
+```
+git verify-tag v1.8.15
+```
+
+Or, for a downloaded release tarball, cross-check it against the on-chain anchor:
+
+```
+node scripts/verify-download.mjs morphit-v1.8.15.tar.gz
+```
+
+That computes the tarball's SHA-256, fetches the on-chain anchor straight from a Blurt RPC node, and tells you whether they match — then prints the fingerprint to check the signature against. The full step-by-step (both paths, plus optional IPFS) is in **`docs/VERIFY-YOUR-DOWNLOAD.md`**.
+
+### 11.8 Everything else
 
 The full operator reference — every configuration setting, the complete nginx server block, the background-service details, the Ansible internals, federation-cost mechanics, and deeper hardening (SSH lockdown, fail2ban tuning, firewall rules) — lives in **`OPERATIONS.md`**. This guide covers the happy path; `OPERATIONS.md` is the encyclopedia.
 

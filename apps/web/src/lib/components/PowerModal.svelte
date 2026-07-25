@@ -34,6 +34,9 @@
 
 	import { _, locale } from 'svelte-i18n';
 	import { runWithActiveKey } from '$crypto/runWithActiveKey';
+	import { liveIdentity } from '$stores/identity';
+	import UnlockActiveKeyModal from '$components/UnlockActiveKeyModal.svelte';
+	import sodium from 'libsodium-wrappers-sumo';
 	import {
 		prepareUnsignedTransferToVesting,
 		prepareUnsignedWithdrawVesting,
@@ -109,6 +112,12 @@
 
 	const available = $derived(mode === 'up' ? blurtBalance : bpBalance);
 
+	/** v1.8.15 (t.txt #3) — posting-only sessions hold no active key, so the
+	 *  Morphit-password path below dead-ends. When false we render the SAME
+	 *  <UnlockActiveKeyModal> the "Pay now" flow uses, so the user pastes their
+	 *  Active key (WIF) — and their Morphit password if they keep it — right here. */
+	const hasActiveKey = $derived(($liveIdentity?.activePublicKey ?? null) !== null);
+
 	/** The available balance FLOORED to chain display precision (3 dp). cp453 —
 	 *  `toFixed(3)` ROUNDS, so a raw balance like 74.8176 became "74.818", a hair
 	 *  ABOVE the real ceiling; "Use full balance" then failed the `<= available`
@@ -159,6 +168,63 @@
 		usingFullBalance = false;
 	}
 
+	/** Prepare the mode-appropriate unsigned op (network fetch for ref_block; no
+	 *  key in scope). Amounts are formatted to exact chain precision here — the
+	 *  formatters throw on a bad number, so nothing malformed can be signed.
+	 *  Returns null (and sets the error phase) on failure. */
+	async function prepareUnsigned(): Promise<import('@beblurt/dblurt').Transaction | null> {
+		try {
+			if (mode === 'up') {
+				return await prepareUnsignedTransferToVesting(account, account, formatBlurtAmount(amountNum));
+			}
+			const vestsStr = usingFullBalance
+				? vestingSharesRaw
+				: formatVestsAmount(blurtPowerToVests(amountNum, vestingFund, totalVests));
+			return await prepareUnsignedWithdrawVesting(account, vestsStr);
+		} catch (err) {
+			console.warn('[power] prepare failed:', err);
+			phase =
+				err instanceof BroadcastUnavailableError
+					? { kind: 'error', messageKey: 'profile.wallet.error_unreachable' }
+					: { kind: 'error', messageKey: 'profile.wallet.error_broadcast' };
+			return null;
+		}
+	}
+
+	/** Sign the mode-appropriate op with a raw active private key. */
+	const signWith = (
+		unsignedTx: import('@beblurt/dblurt').Transaction,
+		activePriv: Uint8Array
+	): import('@beblurt/dblurt').SignedTransaction =>
+		mode === 'up'
+			? signTransferWithKey(unsignedTx, activePriv)
+			: signWithdrawVestingWithKey(unsignedTx, activePriv);
+
+	/** Broadcast a signed tx and finish, classifying chain errors. NOTE: powering
+	 *  up does NOT require mana/RC — on Blurt an op costs a small fee from LIQUID
+	 *  BLURT (flat + bandwidth, set by witnesses); mana is only voting power. So
+	 *  whatever the chain reports is shown verbatim rather than guessed at. */
+	async function broadcastSigned(
+		signed: import('@beblurt/dblurt').SignedTransaction
+	): Promise<void> {
+		try {
+			await broadcastSignedTransaction(signed);
+			onDone();
+		} catch (err) {
+			console.warn('[power] broadcast rejected:', err);
+			if (err instanceof ChainRejectedError) {
+				phase = { kind: 'error', messageKey: 'profile.wallet.error_chain_rejected', reason: err.message };
+			} else if (err instanceof BroadcastUnavailableError) {
+				phase = { kind: 'error', messageKey: 'profile.wallet.error_unreachable' };
+			} else {
+				phase = { kind: 'error', messageKey: 'profile.wallet.error_broadcast' };
+			}
+		}
+	}
+
+	// Password path (session ALREADY holds an active key). The Morphit password
+	// JIT-unlocks the active-key envelope; the key lives only for the synchronous
+	// sign call, then is wiped (runWithActiveKey).
 	async function confirm(): Promise<void> {
 		if (!canConfirm) return;
 		if (passwordInput.length === 0) {
@@ -168,70 +234,20 @@
 		passwordError = '';
 		phase = { kind: 'working' };
 
-		// Build the unsigned op (network fetch for ref_block; no key in
-		// scope). The amount is formatted to exact chain precision here —
-		// the formatters throw on a bad number, so nothing malformed can be
-		// signed.
-		let unsignedTx;
-		try {
-			if (mode === 'up') {
-				unsignedTx = await prepareUnsignedTransferToVesting(
-					account,
-					account,
-					formatBlurtAmount(amountNum)
-				);
-			} else {
-				const vestsStr = usingFullBalance
-					? vestingSharesRaw
-					: formatVestsAmount(blurtPowerToVests(amountNum, vestingFund, totalVests));
-				unsignedTx = await prepareUnsignedWithdrawVesting(account, vestsStr);
-			}
-		} catch (err) {
+		const unsignedTx = await prepareUnsigned();
+		if (unsignedTx === null) {
 			passwordInput = '';
-			console.warn('[power] prepare failed:', err);
-			phase =
-				err instanceof BroadcastUnavailableError
-					? { kind: 'error', messageKey: 'profile.wallet.error_unreachable' }
-					: { kind: 'error', messageKey: 'profile.wallet.error_broadcast' };
 			return;
 		}
 
-		// Sign inside runWithActiveKey — activePriv lives only for the
-		// synchronous sign call, then is wiped.
-		const r = await runWithActiveKey(passwordInput, async (activePriv) => {
-			return mode === 'up'
-				? signTransferWithKey(unsignedTx, activePriv)
-				: signWithdrawVestingWithKey(unsignedTx, activePriv);
-		});
+		const r = await runWithActiveKey(passwordInput, async (activePriv) =>
+			signWith(unsignedTx, activePriv)
+		);
 		passwordInput = '';
 
 		if (r.ok) {
-			try {
-				await broadcastSignedTransaction(r.value);
-				onDone();
-				return;
-			} catch (err) {
-				// Surface the chain's actual reason. NOTE: powering up does NOT
-				// require mana/RC — that's the Hive/Steem model. On Blurt an op
-				// costs a small fee paid from LIQUID BLURT (operation flat fee +
-				// bandwidth fee, set by witnesses); mana on Blurt is only voting
-				// power. With ample liquid BLURT the fee is trivially covered, so
-				// whatever the chain reports here is shown verbatim rather than
-				// guessed at.
-				console.warn('[power] broadcast rejected:', err);
-				if (err instanceof ChainRejectedError) {
-					phase = {
-						kind: 'error',
-						messageKey: 'profile.wallet.error_chain_rejected',
-						reason: err.message
-					};
-				} else if (err instanceof BroadcastUnavailableError) {
-					phase = { kind: 'error', messageKey: 'profile.wallet.error_unreachable' };
-				} else {
-					phase = { kind: 'error', messageKey: 'profile.wallet.error_broadcast' };
-				}
-				return;
-			}
+			await broadcastSigned(r.value);
+			return;
 		}
 		if (r.kind === 'bad_password') {
 			phase = { kind: 'ready' };
@@ -244,6 +260,30 @@
 			phase = { kind: 'ready' };
 		} else {
 			phase = { kind: 'error', messageKey: 'profile.wallet.error_broadcast' };
+		}
+	}
+
+	// v1.8.15 (t.txt #3) — POSTING-ONLY path. UnlockActiveKeyModal has verified
+	// the pasted Active-key WIF against this account's on-chain authorities and
+	// hands us the raw scalar. We sign directly (no envelope to unlock) and wipe
+	// it the moment signing is done — the same ephemeral pattern PayBlurtModal
+	// uses. This is what lets a posting-only user power up/down at all.
+	async function powerWithEphemeralActiveKey(activeScalar: Uint8Array): Promise<void> {
+		if (!canConfirm) {
+			sodium.memzero(activeScalar);
+			return;
+		}
+		phase = { kind: 'working' };
+		try {
+			const unsignedTx = await prepareUnsigned();
+			if (unsignedTx === null) return;
+			const signed = await signWith(unsignedTx, activeScalar);
+			await broadcastSigned(signed);
+		} catch (err) {
+			console.warn('[power] ephemeral sign/broadcast failed:', err);
+			phase = { kind: 'error', messageKey: 'profile.wallet.error_broadcast' };
+		} finally {
+			sodium.memzero(activeScalar);
 		}
 	}
 
@@ -363,48 +403,66 @@
 				</p>
 			{/if}
 
-			<!-- Password (active key) -->
-			<label class="mt-5 block">
-				<span class="text-sm font-semibold">
-					{$_('profile.wallet.password_label', { values: { account } })}
-				</span>
-				<input
-					type="password"
-					maxlength="64"
-					bind:value={passwordInput}
-					autocomplete="current-password"
-					disabled={phase.kind === 'working'}
-					class="mt-1 w-full rounded-lg border border-ink-300 bg-white px-3 py-2 text-sm dark:border-ink-700 dark:bg-ink-900"
-				/>
-				{#if passwordError}
-					<p class="mt-1 text-xs text-red-600 dark:text-red-400">{passwordError}</p>
-				{/if}
-			</label>
-
-			<div class="mt-5 flex justify-end gap-2">
-				<button
-					type="button"
-					class="rounded-lg border border-ink-300 px-4 py-2 text-sm font-semibold transition-colors hover:border-ink-400 hover:bg-ink-50 disabled:opacity-50 dark:border-ink-700 dark:hover:bg-ink-800"
-					onclick={onCancel}
-					disabled={phase.kind === 'working'}
-				>
-					{$_('common.cancel')}
-				</button>
-				<button
-					type="button"
-					class="rounded-lg bg-morphit-btn px-4 py-2 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-50"
-					onclick={confirm}
-					disabled={!canConfirm}
-				>
-					{#if phase.kind === 'working'}
-						{$_('common.broadcasting')}
-					{:else if mode === 'up'}
-						{$_('profile.wallet.power_up_action')}
-					{:else}
-						{$_('profile.wallet.power_down_action')}
+			{#if hasActiveKey}
+				<!-- Password prompt: this session already holds an active key.
+				     The Morphit password unlocks the active-key envelope to sign. -->
+				<label class="mt-5 block">
+					<span class="text-sm font-semibold">
+						{$_('profile.wallet.password_label', { values: { account } })}
+					</span>
+					<input
+						type="password"
+						maxlength="64"
+						bind:value={passwordInput}
+						autocomplete="current-password"
+						disabled={phase.kind === 'working'}
+						class="mt-1 w-full rounded-lg border border-ink-300 bg-white px-3 py-2 text-sm dark:border-ink-700 dark:bg-ink-900"
+					/>
+					{#if passwordError}
+						<p class="mt-1 text-xs text-red-600 dark:text-red-400">{passwordError}</p>
 					{/if}
-				</button>
-			</div>
+				</label>
+
+				<div class="mt-5 flex justify-end gap-2">
+					<button
+						type="button"
+						class="rounded-lg border border-ink-300 px-4 py-2 text-sm font-semibold transition-colors hover:border-ink-400 hover:bg-ink-50 disabled:opacity-50 dark:border-ink-700 dark:hover:bg-ink-800"
+						onclick={onCancel}
+						disabled={phase.kind === 'working'}
+					>
+						{$_('common.cancel')}
+					</button>
+					<button
+						type="button"
+						class="rounded-lg bg-morphit-btn px-4 py-2 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-50"
+						onclick={confirm}
+						disabled={!canConfirm}
+					>
+						{#if phase.kind === 'working'}
+							{$_('common.broadcasting')}
+						{:else if mode === 'up'}
+							{$_('profile.wallet.power_up_action')}
+						{:else}
+							{$_('profile.wallet.power_down_action')}
+						{/if}
+					</button>
+				</div>
+			{:else}
+				<!-- v1.8.15 (t.txt #3) — POSTING-ONLY. No active-key envelope to
+				     unlock, so instead of a password field that cannot work we
+				     render the SAME unlock modal the "Pay now" flow uses: the user
+				     pastes their Active key (WIF), plus their Morphit password if
+				     they choose to keep it. Its own CTA/Cancel replace the buttons
+				     above; it hands us the raw scalar and we wipe it after signing. -->
+				<div class="mt-5">
+					<UnlockActiveKeyModal
+						account={account}
+						canProceed={amountValid}
+						onUnlocked={powerWithEphemeralActiveKey}
+						onCancel={onCancel}
+					/>
+				</div>
+			{/if}
 		{/if}
 	</div>
 </div>

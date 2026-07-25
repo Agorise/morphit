@@ -35,6 +35,7 @@
 	import { markConversationRead, readAckTimestamp } from '$lib/chat/readState';
 	import { chatFolders, isStarred, toggleStar } from '$lib/chat/chatFolders';
 	import { pinToBottom } from '$lib/ui/pinToBottom';
+	import { advanceMessageWindow } from '$lib/chat/messageWindow';
 	import { truncatePublicKey } from '$lib/crypto/publicKeyDisplay';
 	import { get } from 'svelte/store';
 	import { _ } from 'svelte-i18n';
@@ -150,27 +151,30 @@
 	// px of the top of what's currently rendered.
 	const OLDER_REVEAL_THRESHOLD_PX = 400;
 	let visibleCount = $state(INITIAL_WINDOW);
-	let windowPrevPeer = peer;
+	// Windowing trackers for advanceMessageWindow(). `windowPrevPeer` starts
+	// null (NOT the initial `peer`) so the FIRST populated snapshot is treated
+	// as an initial load — the newest INITIAL_WINDOW slice — rather than as a
+	// giant append that would render the whole history at once on first open.
+	let windowPrevPeer: string | null = null;
 	let windowPrevLen = 0;
 	let revealingOlder = false;
 
 	$effect(() => {
 		const len = messages.length;
 		const p = peer;
-		// untrack: we mutate visibleCount from here but must not depend on it,
-		// or the write would re-trigger this effect. Dependencies stay just
+		// untrack: we read+write visibleCount from here but must not depend on
+		// it, or the write would re-trigger this effect. Dependencies stay just
 		// `messages` (length) and `peer`.
 		untrack(() => {
-			if (p !== windowPrevPeer) {
-				windowPrevPeer = p;
-				visibleCount = INITIAL_WINDOW;
-			} else if (len > windowPrevLen) {
-				// Appended (new/sent) → grow the window by the delta so the
-				// older messages already revealed stay put (windowStart is
-				// unchanged) and the new ones show too.
-				visibleCount += len - windowPrevLen;
-			}
-			windowPrevLen = len;
+			const next = advanceMessageWindow(
+				{ prevPeer: windowPrevPeer, prevLen: windowPrevLen, visibleCount },
+				len,
+				p,
+				INITIAL_WINDOW
+			);
+			windowPrevPeer = next.prevPeer;
+			windowPrevLen = next.prevLen;
+			visibleCount = next.visibleCount;
 		});
 	});
 

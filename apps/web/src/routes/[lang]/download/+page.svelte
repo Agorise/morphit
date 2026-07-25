@@ -31,7 +31,12 @@
 			status: 'primary'
 		},
 		{ id: 'github', name: 'GitHub', url: 'https://github.com/Agorise/morphit', status: 'live' },
-		{ id: 'codeberg', name: 'Codeberg', url: 'https://codeberg.org/', status: 'pending' },
+		{
+			id: 'codeberg',
+			name: 'Codeberg',
+			url: 'https://codeberg.org/agorise/morphit',
+			status: 'live'
+		},
 		{ id: 'gitlab', name: 'GitLab', url: 'https://gitlab.com/', status: 'pending' },
 		{ id: 'bitbucket', name: 'Bitbucket', url: 'https://bitbucket.org/', status: 'pending' },
 		{ id: 'sourceforge', name: 'SourceForge', url: 'https://sourceforge.net/', status: 'pending' },

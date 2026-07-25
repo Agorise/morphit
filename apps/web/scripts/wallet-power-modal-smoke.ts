@@ -69,8 +69,8 @@ check(
 	/runWithActiveKey\(passwordInput,\s*async \(activePriv\)/.test(modal)
 );
 check(
-	'broadcasts via broadcastSignedTransaction after signing',
-	/broadcastSignedTransaction\(r\.value\)/.test(modal)
+	'broadcasts via broadcastSignedTransaction after signing (r.value → broadcastSigned → broadcastSignedTransaction)',
+	/broadcastSigned\(r\.value\)/.test(modal) && /broadcastSignedTransaction\(/.test(modal)
 );
 check('wipes the password after the active-key call', /passwordInput = '';/.test(modal));
 

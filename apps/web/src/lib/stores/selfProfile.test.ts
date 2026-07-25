@@ -16,7 +16,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { get } from 'svelte/store';
 
-import { selfProfile, refreshSelfProfile, clearSelfProfile, setSelfAvatar } from './selfProfile';
+import {
+	selfProfile,
+	refreshSelfProfile,
+	clearSelfProfile,
+	setSelfAvatar,
+	setSelfDisplayName
+} from './selfProfile';
 import { clearProfileCache } from '$lib/indexer/profileCache';
 
 const AVATAR_URI =
@@ -152,7 +158,12 @@ describe('refreshSelfProfile', () => {
 	it('clears on sign-out (null account)', async () => {
 		setSelfAvatar('alice', null, AVATAR_URI);
 		await refreshSelfProfile(null);
-		expect(get(selfProfile)).toEqual({ account: null, avatarSvg: null, avatarDataUri: null });
+		expect(get(selfProfile)).toEqual({
+			account: null,
+			displayName: null,
+			avatarSvg: null,
+			avatarDataUri: null
+		});
 	});
 
 	it('bustCache bypasses the browser HTTP cache (cache: reload)', async () => {
@@ -169,5 +180,49 @@ describe('refreshSelfProfile', () => {
 		await refreshSelfProfile('alice');
 		const init = fetchMock.mock.calls[0]![1] as RequestInit;
 		expect(init.cache).toBeUndefined();
+	});
+});
+
+// v1.8.15 (t.txt #2) — the store now carries the user's own DISPLAY NAME, not
+// just their avatar, so every IdentityLabel of self can show the custom name
+// consistently + instantly (the same treatment the avatar already had).
+describe('display name in the self store (t.txt #2)', () => {
+	it('refreshSelfProfile publishes the display name from the profile', async () => {
+		fetchMock.mockResolvedValueOnce(mockBatchResponse({ alice: mockProfileWithAvatar('alice') }));
+		await refreshSelfProfile('alice');
+		expect(get(selfProfile).displayName).toBe('alice display');
+	});
+
+	it('setSelfDisplayName publishes the name and PRESERVES the avatar (same account)', async () => {
+		setSelfAvatar('alice', null, AVATAR_URI);
+		setSelfDisplayName('alice', 'Alice B.');
+		const v = get(selfProfile);
+		expect(v.account).toBe('alice');
+		expect(v.displayName).toBe('Alice B.');
+		// A NAME change must not wipe the avatar.
+		expect(v.avatarDataUri).toBe(AVATAR_URI);
+	});
+
+	it('setSelfAvatar PRESERVES the display name (same account)', () => {
+		setSelfDisplayName('alice', 'Alice B.');
+		setSelfAvatar('alice', null, AVATAR_URI);
+		const v = get(selfProfile);
+		expect(v.displayName).toBe('Alice B.');
+		expect(v.avatarDataUri).toBe(AVATAR_URI);
+	});
+
+	it('setSelfDisplayName resets the avatar on an ACCOUNT SWITCH (no cross-account bleed)', () => {
+		setSelfAvatar('alice', null, AVATAR_URI);
+		setSelfDisplayName('bob', 'Bob');
+		const v = get(selfProfile);
+		expect(v.account).toBe('bob');
+		expect(v.displayName).toBe('Bob');
+		// alice's avatar must NOT bleed onto bob.
+		expect(v.avatarDataUri).toBeNull();
+	});
+
+	it('setSelfDisplayName normalizes empty / whitespace to null (no display name)', () => {
+		setSelfDisplayName('alice', '   ');
+		expect(get(selfProfile).displayName).toBeNull();
 	});
 });
