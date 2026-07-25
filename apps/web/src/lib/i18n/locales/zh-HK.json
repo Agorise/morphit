@@ -435,7 +435,7 @@
 			"pill_locked_hint": "解鎖工作階段以付款並傳送。",
 			"error": {
 				"quote_failed": "無法獲取當前網絡費用。請檢查你嘅連接並重試。",
-				"no_active_envelope": "此裝置上未找到已儲存的活躍金鑰。請先在「設定」中儲存金鑰,然後重試。",
+				"no_active_envelope": "此裝置上未找到已儲存的活動密鑰。請先在設定中儲存你的密鑰，然後重試。",
 				"broadcast_failed": "付款無法廣播。你嘅費用未被支出。請重試。",
 				"bad_password": "此密碼未能解鎖活躍金鑰。",
 				"password_required": "請輸入你的 Morphit 密碼。"
@@ -1395,7 +1395,7 @@
 			},
 			"morphit_mirrors": {
 				"q": "點解 Morphit 嘅原始碼要鏡像到咁多個代碼託管網站？",
-				"a": "去中心化——呢個係 Morphit 設計入面嘅第 2 優先項，僅次於私隱。一個淨係存在於一處嘅項目，可以喺一處被扼殺：平台可以封禁帳號，政府可以下令落架，主機可能索性消失。所以 Morphit 嘅原始碼（AGPL-3.0）鏡像喺好多獨立嘅代碼託管網站——我哋自己嘅 Forgejo 伺服器 git.agorise.net 係規範副本，GitHub 已上線，仲有更多正在加入（Codeberg、GitLab、Bitbucket、SourceForge、Gitee、Launchpad、GitFlic、SourceHut、Radicle），再加一份冇任何主機可以控制、基於內容尋址嘅 IPFS 副本。如果其中任何一個封鎖或刪除 Morphit，其餘每一份副本都仲喺度——而且因為佢係 AGPL，任何人都可以重新託管、審計或分叉佢。完整嘅最新清單喺「下載」頁面。\n\n（冇任何嘢需要由應用程式商店安裝——Morphit 作為 Progressive Web App (PWA) 運行，你直接由瀏覽器加入。呢啲鏡像針對嘅係原始碼，咁項目就冇辦法靠刪除單一個倉庫嚟被噤聲。）\n\n你可以確認任何正在運行嘅實例提供嘅係未被竄改嘅代碼：每個版本嘅 SHA-256 雜湊都會發佈到區塊鏈上——見 /about-this-instance。"
+				"a": "去中心化——呢個係 Morphit 設計入面嘅第 2 優先項，僅次於私隱。一個淨係存在於一處嘅項目，可以喺一處被扼殺：平台可以封禁帳號，政府可以下令落架，主機可能索性消失。所以 Morphit 嘅原始碼（AGPL-3.0）鏡像喺好多獨立嘅代碼託管網站——我哋自己嘅 Forgejo 伺服器 git.agorise.net 係規範副本，GitHub 同 Codeberg 已上線，仲有更多正在加入（GitLab、Bitbucket、SourceForge、Gitee、Launchpad、GitFlic、SourceHut、Radicle），再加一份冇任何主機可以控制、基於內容尋址嘅 IPFS 副本。如果其中任何一個封鎖或刪除 Morphit，其餘每一份副本都仲喺度——而且因為佢係 AGPL，任何人都可以重新託管、審計或分叉佢。完整嘅最新清單喺「下載」頁面。\n\n（冇任何嘢需要由應用程式商店安裝——Morphit 作為 Progressive Web App (PWA) 運行，你直接由瀏覽器加入。呢啲鏡像針對嘅係原始碼，咁項目就冇辦法靠刪除單一個倉庫嚟被噤聲。）\n\n你可以確認任何正在運行嘅實例提供嘅係未被竄改嘅代碼：每個版本嘅 SHA-256 雜湊都會發佈到區塊鏈上——見 /about-this-instance。"
 			},
 			"android_sideload": {
 				"q": "我點樣喺 Android 上面安裝 Morphit？",
@@ -2643,6 +2643,8 @@
 		"posted_by": "發佈者",
 		"details_heading": "詳情",
 		"payment_methods": "支付方式",
+		"i_can_pay_with": "我可以用",
+		"i_accept": "我接受",
 		"location": "位置",
 		"terms": "條款",
 		"posted_on": "發佈於",
@@ -4636,9 +4638,9 @@
 		"private_label": "私鑰（WIF）",
 		"download": "下載為文字檔",
 		"downloaded": "已儲存",
-		"no_master_password": "沒有主密碼。Morphit 從不建立或使用主密碼——你的 12 個單詞和這些密鑰就是全部。",
+		"no_account_wide_password": "Morphit 沒有統管整個帳戶的單一密碼——你的 12 個單詞和這些密鑰就是全部。",
 		"txt_warning": "請保密。任何擁有下方私鑰的人都能完全控制你的帳戶和資金。切勿分享給任何人，切勿輸入到你不信任的網站，也切勿透過訊息或電郵傳送。",
-		"txt_footer": "你的 12 個單詞助記詞是你的 Morphit 備份。這四個密鑰讓你能在其他 Blurt 工具中使用此帳戶。沒有主密碼。"
+		"txt_footer": "你的 12 個單詞助記詞是你的 Morphit 備份。這四個密鑰讓你能在其他 Blurt 工具中使用此帳戶。Morphit 沒有統管整個帳戶的單一密碼。"
 	},
 	"needs_account_name": {
 		"heading": "就快搞掂",

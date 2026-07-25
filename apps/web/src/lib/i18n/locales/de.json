@@ -1395,7 +1395,7 @@
 			},
 			"morphit_mirrors": {
 				"q": "Warum ist Morphits Quellcode auf so vielen Code-Hosts gespiegelt?",
-				"a": "Dezentralisierung — sie ist Priorität Nr. 2 in Morphits Design, direkt nach dem Datenschutz. Ein Projekt, das an einem Ort lebt, kann an einem Ort getötet werden: eine Plattform kann das Konto sperren, eine Regierung kann eine Entfernung anordnen, ein Host kann einfach verschwinden. Deshalb ist Morphits Quellcode (AGPL-3.0) über viele unabhängige Code-Hosts gespiegelt — unser eigener Forgejo-Server unter git.agorise.net ist die kanonische Kopie, GitHub ist online, und weitere kommen hinzu (Codeberg, GitLab, Bitbucket, SourceForge, Gitee, Launchpad, GitFlic, SourceHut, Radicle), dazu eine inhaltsadressierte Kopie auf IPFS, die kein einzelner Host kontrolliert. Wenn einer von ihnen Morphit blockiert oder entfernt, sind alle anderen Kopien immer noch da — und weil es AGPL ist, kann jeder es neu hosten, prüfen oder forken. Die vollständige, aktuelle Liste steht auf der Seite „Herunterladen“.\n\n(Es gibt nichts aus einem App-Store zu installieren — Morphit läuft als Progressive Web App (PWA), die du direkt aus deinem Browser hinzufügst. Die Spiegel sind für den Quellcode, damit das Projekt nicht durch das Entfernen eines einzelnen Repositorys zum Schweigen gebracht werden kann.)\n\nDu kannst bestätigen, dass jede laufende Instanz unmanipulierten Code ausliefert: die SHA-256-Hashes jeder Version werden auf der Blockchain veröffentlicht — siehe /about-this-instance."
+				"a": "Dezentralisierung — sie ist Priorität Nr. 2 in Morphits Design, direkt nach dem Datenschutz. Ein Projekt, das an einem Ort lebt, kann an einem Ort getötet werden: eine Plattform kann das Konto sperren, eine Regierung kann eine Entfernung anordnen, ein Host kann einfach verschwinden. Deshalb ist Morphits Quellcode (AGPL-3.0) über viele unabhängige Code-Hosts gespiegelt — unser eigener Forgejo-Server unter git.agorise.net ist die kanonische Kopie, GitHub und Codeberg sind online, und weitere kommen hinzu (GitLab, Bitbucket, SourceForge, Gitee, Launchpad, GitFlic, SourceHut, Radicle), dazu eine inhaltsadressierte Kopie auf IPFS, die kein einzelner Host kontrolliert. Wenn einer von ihnen Morphit blockiert oder entfernt, sind alle anderen Kopien immer noch da — und weil es AGPL ist, kann jeder es neu hosten, prüfen oder forken. Die vollständige, aktuelle Liste steht auf der Seite „Herunterladen“.\n\n(Es gibt nichts aus einem App-Store zu installieren — Morphit läuft als Progressive Web App (PWA), die du direkt aus deinem Browser hinzufügst. Die Spiegel sind für den Quellcode, damit das Projekt nicht durch das Entfernen eines einzelnen Repositorys zum Schweigen gebracht werden kann.)\n\nDu kannst bestätigen, dass jede laufende Instanz unmanipulierten Code ausliefert: die SHA-256-Hashes jeder Version werden auf der Blockchain veröffentlicht — siehe /about-this-instance."
 			},
 			"android_sideload": {
 				"q": "Wie installiere ich Morphit auf Android?",
@@ -2643,6 +2643,8 @@
 		"posted_by": "Erstellt von",
 		"details_heading": "Details",
 		"payment_methods": "Zahlungsmethoden",
+		"i_can_pay_with": "Ich kann zahlen mit",
+		"i_accept": "Ich akzeptiere",
 		"location": "Standort",
 		"terms": "Bedingungen",
 		"posted_on": "Veröffentlicht am",
@@ -4636,9 +4638,9 @@
 		"private_label": "Privater Schlüssel (WIF)",
 		"download": "Als Textdatei herunterladen",
 		"downloaded": "Gespeichert",
-		"no_master_password": "Es gibt kein Master-Passwort. Morphit erstellt und nutzt keines — deine 12 Wörter und diese Schlüssel sind alles.",
+		"no_account_wide_password": "Morphit hat kein einziges kontoweites Passwort — deine 12 Wörter und diese Schlüssel sind alles.",
 		"txt_warning": "HALTE DIES GEHEIM. Wer einen der privaten Schlüssel unten besitzt, kann die volle Kontrolle über dein Konto und Guthaben übernehmen. Teile ihn mit niemandem, gib ihn auf keiner Website ein, der du nicht vertraust, und sende ihn nie per Nachricht oder E-Mail.",
-		"txt_footer": "Deine 12-Wörter-Seed-Phrase ist deine Morphit-Sicherung. Mit diesen vier Schlüsseln kannst du dieses Konto in anderen Blurt-Tools nutzen. Es gibt kein Master-Passwort."
+		"txt_footer": "Deine 12-Wörter-Seed-Phrase ist deine Morphit-Sicherung. Mit diesen vier Schlüsseln kannst du dieses Konto in anderen Blurt-Tools nutzen. Morphit hat kein einziges kontoweites Passwort."
 	},
 	"needs_account_name": {
 		"heading": "Fast fertig",

@@ -1395,7 +1395,7 @@
 			},
 			"morphit_mirrors": {
 				"q": "Pourquoi le code source de Morphit est-il mis en miroir sur autant d'hébergeurs ?",
-				"a": "Décentralisation — c'est la priorité n°2 de la conception de Morphit, juste après la confidentialité. Un projet qui vit à un seul endroit peut être tué à un seul endroit : une plateforme peut suspendre le compte, un gouvernement peut ordonner un retrait, un hébergeur peut tout simplement disparaître. C'est pourquoi le code source de Morphit (AGPL-3.0) est mis en miroir sur de nombreux hébergeurs de code indépendants — notre propre serveur Forgejo sur git.agorise.net est la copie canonique, GitHub est en ligne, et d'autres s'ajoutent (Codeberg, GitLab, Bitbucket, SourceForge, Gitee, Launchpad, GitFlic, SourceHut, Radicle), plus une copie adressée par contenu sur IPFS qu'aucun hébergeur ne contrôle. Si l'un d'eux bloque ou supprime Morphit, toutes les autres copies sont toujours là — et comme c'est de l'AGPL, n'importe qui peut le ré-héberger, l'auditer ou le forker. La liste complète et à jour est sur la page Télécharger.\n\n(Il n'y a rien à installer depuis un magasin d'applications — Morphit fonctionne comme une Progressive Web App (PWA) que vous ajoutez directement depuis votre navigateur. Les miroirs concernent le code source, afin que le projet ne puisse pas être réduit au silence en retirant un seul dépôt.)\n\nVous pouvez confirmer que n'importe quelle instance en cours sert du code non altéré : les empreintes SHA-256 de chaque version sont publiées sur la blockchain — voir /about-this-instance."
+				"a": "Décentralisation — c'est la priorité n°2 de la conception de Morphit, juste après la confidentialité. Un projet qui vit à un seul endroit peut être tué à un seul endroit : une plateforme peut suspendre le compte, un gouvernement peut ordonner un retrait, un hébergeur peut tout simplement disparaître. C'est pourquoi le code source de Morphit (AGPL-3.0) est mis en miroir sur de nombreux hébergeurs de code indépendants — notre propre serveur Forgejo sur git.agorise.net est la copie canonique, GitHub et Codeberg sont en ligne, et d'autres s'ajoutent (GitLab, Bitbucket, SourceForge, Gitee, Launchpad, GitFlic, SourceHut, Radicle), plus une copie adressée par contenu sur IPFS qu'aucun hébergeur ne contrôle. Si l'un d'eux bloque ou supprime Morphit, toutes les autres copies sont toujours là — et comme c'est de l'AGPL, n'importe qui peut le ré-héberger, l'auditer ou le forker. La liste complète et à jour est sur la page Télécharger.\n\n(Il n'y a rien à installer depuis un magasin d'applications — Morphit fonctionne comme une Progressive Web App (PWA) que vous ajoutez directement depuis votre navigateur. Les miroirs concernent le code source, afin que le projet ne puisse pas être réduit au silence en retirant un seul dépôt.)\n\nVous pouvez confirmer que n'importe quelle instance en cours sert du code non altéré : les empreintes SHA-256 de chaque version sont publiées sur la blockchain — voir /about-this-instance."
 			},
 			"android_sideload": {
 				"q": "Comment installer Morphit sur Android ?",
@@ -2643,6 +2643,8 @@
 		"posted_by": "Publié par",
 		"details_heading": "Détails",
 		"payment_methods": "Moyens de paiement",
+		"i_can_pay_with": "Je peux payer avec",
+		"i_accept": "J'accepte",
 		"location": "Localisation",
 		"terms": "Conditions",
 		"posted_on": "Publié le",
@@ -4636,9 +4638,9 @@
 		"private_label": "Clé privée (WIF)",
 		"download": "Télécharger en fichier texte",
 		"downloaded": "Enregistré",
-		"no_master_password": "Il n'y a pas de mot de passe maître. Morphit n'en crée ni n'en utilise jamais — tes 12 mots et ces clés sont tout ce qu'il faut.",
+		"no_account_wide_password": "Morphit n'a pas de mot de passe unique pour tout le compte — tes 12 mots et ces clés sont tout ce qu'il faut.",
 		"txt_warning": "GARDE CECI PRIVÉ. Quiconque possède une clé privée ci-dessous peut prendre le contrôle total de ton compte et de tes fonds. Ne la partage avec personne, ne la saisis sur aucun site web auquel tu ne fais pas confiance, et ne l'envoie jamais par message ou e-mail.",
-		"txt_footer": "Ta phrase de récupération de 12 mots est ta sauvegarde Morphit. Ces quatre clés te permettent d'utiliser ce compte dans d'autres outils Blurt. Il n'y a pas de mot de passe maître."
+		"txt_footer": "Ta phrase de récupération de 12 mots est ta sauvegarde Morphit. Ces quatre clés te permettent d'utiliser ce compte dans d'autres outils Blurt. Morphit n'a pas de mot de passe unique pour tout le compte."
 	},
 	"needs_account_name": {
 		"heading": "Presque prêt",

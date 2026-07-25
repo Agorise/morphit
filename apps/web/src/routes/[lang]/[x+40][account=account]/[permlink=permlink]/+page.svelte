@@ -52,6 +52,7 @@
 	import ConfirmModal from '$components/ConfirmModal.svelte';
 	import MessageIcon from '$components/MessageIcon.svelte';
 	import OrderPosterIdentity from '$components/OrderPosterIdentity.svelte';
+	import ReciprocityPill from '$components/ReciprocityPill.svelte';
 	import WriteBlockedReadOnly from '$components/WriteBlockedReadOnly.svelte';
 	import { identity, isUnlocked, isPairedReadOnly } from '$stores/identity';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
@@ -715,6 +716,12 @@
 					</a>
 				</div>
 			{/if}
+			<!-- v1.8.15 (t.txt #5) — the same suspicious-reciprocity trust pill as
+			     the profile Reputation card, pinned bottom-right. order carries
+			     reciprocity_flagged from /v1/orders/:account (v1.8.15). -->
+			<div class="mt-4 flex justify-end">
+				<ReciprocityPill flagged={order.reciprocity_flagged ?? false} />
+			</div>
 		</section>
 
 		<!-- ─── Details ──────────────────────────────────────────── -->
@@ -730,7 +737,11 @@
 				<div class="space-y-3">
 					{#if order.payment_methods.length > 0}
 						<div>
-							<dt class="text-xs text-ink-500">{$_('order_detail.payment_methods')}</dt>
+							<dt class="text-xs text-ink-500">
+							{order.side === 'buy'
+								? $_('order_detail.i_can_pay_with')
+								: $_('order_detail.i_accept')}
+						</dt>
 							<dd class="mt-1 flex flex-wrap gap-1.5">
 								{#each displayNamesForMethods(order.payment_methods, instLookup) as pm}
 									<span

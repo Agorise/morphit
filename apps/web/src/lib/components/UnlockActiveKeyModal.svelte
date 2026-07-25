@@ -13,10 +13,11 @@
 	 * ─── What we ask for, and why ─────────────────────────────────────────
 	 *
 	 * Morphit's 12-word seed and Keyfile are OUR inventions. A user who has been
-	 * on Blurt for years has neither. They have an Active key in WIF form, or a
-	 * master password from the pre-fork era. So this asks for one of those two,
-	 * tells them apart itself, and verifies the result against the account's
-	 * on-chain authorities before anything is signed.
+	 * on Blurt for years has neither. They have an Active key in WIF form — and
+	 * that is the ONLY thing this asks for. It verifies the pasted WIF against
+	 * the account's on-chain authorities before anything is signed. Morphit
+	 * never accepts an account-wide secret that could derive every role's key
+	 * (owner included); that would violate the security model.
 	 *
 	 * If they paste the wrong thing we say precisely which wrong thing it was.
 	 * An Owner key is REFUSED outright — it can steal the account, it has no

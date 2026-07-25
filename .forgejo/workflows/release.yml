@@ -28,6 +28,13 @@ jobs:
   release:
     name: Build + publish release tarball
     runs-on: ubuntu-24.04
+    # The Publish step creates the release + uploads assets with the
+    # runner's AUTOMATIC Actions token (secrets.GITHUB_TOKEN — reserved,
+    # injected by Forgejo, NOT a secret you create). Declaring the scope
+    # explicitly grants that token release/content write and nothing more,
+    # so the auto-publish works without any hand-configured secret.
+    permissions:
+      contents: write
     # cp145 — release does the smokes-job's work (~18 min) plus
     # tag verification, tarball build, checksum, upload.  Observed
     # runtime ~25 min.  60-minute ceiling = 2.4× headroom.
@@ -307,6 +314,39 @@ jobs:
           echo "Signed $TARBALL with key $KEYID."
           rm -rf "$SIGN_HOME"
 
+      - name: Write distribution anchor (source_sha256 + gpg_fingerprint)
+        # The on-chain morphit_release_v1 `distribution` block anchors the
+        # SHA-256 of THIS canonical tarball (the one published below) plus the
+        # release-signer key fingerprint, so a downloader can prove a copy is
+        # genuine against the chain. The hash MUST be the published tarball's —
+        # this job built it; a laptop `git archive` would produce different
+        # bytes and a mismatched anchor (the old release-sign.sh footgun). The
+        # fingerprint is derived from the committed release-signer PUBLIC key
+        # (no secret): it is the key that signed this tag (verified above), i.e.
+        # exactly what `git verify-tag` checks. The mirror list is a fixed
+        # default baked into the payload builder, so it is NOT written here. The
+        # ELI5 ceremony fetches this file back from the release and `source`s it
+        # before building the on-chain payload.
+        env:
+          TARBALL: ${{ steps.ver.outputs.tarball }}
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          set -eu
+          SHA256=$(awk '{print $1}' "$TARBALL.sha256")
+          FPR=$(gpg --show-keys --with-colons .forgejo/release-signers/agorise.asc \
+                | awk -F: '$1=="fpr"{print $10; exit}')
+          if [ -z "${SHA256:-}" ] || [ -z "${FPR:-}" ]; then
+            echo "ERROR: could not derive the anchor (sha256='${SHA256:-}' fpr='${FPR:-}')" >&2
+            exit 1
+          fi
+          {
+            echo "# Morphit distribution anchor for ${TAG} — source this before building the on-chain payload."
+            echo "export MORPHIT_BUILD_SOURCE_SHA256=${SHA256}"
+            echo "export MORPHIT_BUILD_GPG_FINGERPRINT=${FPR}"
+          } > distribution-anchor.env
+          echo "── distribution-anchor.env ──"
+          cat distribution-anchor.env
+
       - name: Upload release artifact
         # AUDIT-CI-2 — Forgejo Actions does not implement the
         # `@actions/artifact` v2 backend that upload-artifact@v4+
@@ -328,5 +368,72 @@ jobs:
             ${{ steps.ver.outputs.tarball }}
             ${{ steps.ver.outputs.tarball }}.sha256
             ${{ steps.ver.outputs.tarball }}.asc
+            distribution-anchor.env
           retention-days: 90
           if-no-files-found: warn
+
+      - name: Publish Forgejo release + attach assets
+        # Auto-create the release for this tag and attach the artifacts, so the
+        # operator downloads + uploads NOTHING (this replaces the old manual
+        # "download the zip, make a release, upload files" dance). Uses the
+        # Forgejo API with the runner's automatic Actions token. If that token
+        # lacks release-write permission the step FAILS LOUDLY with remediation
+        # — and the artifacts are still retained by the upload-artifact step
+        # above as a manual fallback, so a first-run permission miss loses
+        # nothing. Broadcasting to the chain is deliberately NOT here: a
+        # spending key must never live in CI. That stays a laptop step in the
+        # ELI5 ceremony.
+        #
+        # Tag value flows via env (not ${{ }} interpolation into the shell),
+        # matching AUDIT-CI-7; the tag is already format-validated in `ver`.
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
+          TARBALL: ${{ steps.ver.outputs.tarball }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          if [ -z "${TOKEN:-}" ]; then
+            echo "ERROR: no Actions token (secrets.GITHUB_TOKEN is empty). Enable the automatic Actions token for this repo, or add a PAT with write:repository as an Actions secret and map it to TOKEN here." >&2
+            exit 1
+          fi
+          API="${GITHUB_API_URL:-${GITHUB_SERVER_URL}/api/v1}"
+          REPO="${GITHUB_REPOSITORY}"
+          AUTH="Authorization: token ${TOKEN}"
+          # 1. Create the release for this tag (or reuse it on a re-run).
+          BODY="{\"tag_name\":\"${TAG}\",\"name\":\"Morphit ${TAG}\",\"draft\":false,\"prerelease\":false}"
+          CODE=$(curl -sS -o /tmp/rel.json -w '%{http_code}' -X POST \
+            -H "$AUTH" -H 'Content-Type: application/json' \
+            -d "$BODY" "${API}/repos/${REPO}/releases" || true)
+          if [ "$CODE" = "201" ]; then
+            echo "Created release ${TAG}."
+          elif [ "$CODE" = "409" ]; then
+            echo "Release ${TAG} already exists; fetching it to attach assets."
+            curl -sS -H "$AUTH" -o /tmp/rel.json "${API}/repos/${REPO}/releases/tags/${TAG}"
+          else
+            echo "ERROR: creating the release failed (HTTP ${CODE})." >&2
+            if [ "$CODE" = "403" ]; then
+              echo "  The Actions token lacks release-write permission." >&2
+              echo "  Fix (4 clicks): your avatar → Settings → Applications → Generate New Token (tick 'write:repository')," >&2
+              echo "  then repo → Settings → Actions → Secrets → add it, and map that secret to TOKEN above." >&2
+            fi
+            cat /tmp/rel.json >&2 || true
+            exit 1
+          fi
+          REL_ID=$(node -e 'const o=JSON.parse(require("fs").readFileSync("/tmp/rel.json","utf8"));if(!o.id){console.error("no release id in API response");process.exit(1)}process.stdout.write(String(o.id))')
+          echo "Release id: ${REL_ID}"
+          # 2. Attach each asset that exists (.asc is absent when unsigned).
+          for f in "$TARBALL" "$TARBALL.sha256" "$TARBALL.asc" distribution-anchor.env; do
+            if [ ! -f "$f" ]; then echo "skip (absent): $f"; continue; fi
+            NAME=$(basename "$f")
+            CODE=$(curl -sS -o /tmp/asset.json -w '%{http_code}' -X POST \
+              -H "$AUTH" -F "attachment=@${f}" \
+              "${API}/repos/${REPO}/releases/${REL_ID}/assets?name=${NAME}" || true)
+            if [ "$CODE" = "201" ]; then
+              echo "attached ${NAME}"
+            else
+              echo "ERROR: attaching ${NAME} failed (HTTP ${CODE})." >&2
+              cat /tmp/asset.json >&2 || true
+              exit 1
+            fi
+          done
+          echo "✓ release ${TAG} published with all assets attached."

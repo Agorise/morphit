@@ -19,13 +19,25 @@ import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
 export interface SelfProfileAvatar {
 	/** The account this avatar belongs to, or null when signed out. */
 	readonly account: string | null;
+	/** v1.8.15 (t.txt #2) — the user's own chosen display name, or null when
+	 *  they have none. Stored here for the SAME reason the avatar is: so every
+	 *  IdentityLabel of self can show the custom name (not just @account),
+	 *  consistently and instantly (optimistically after a broadcast), exactly
+	 *  as the avatar already does. Without it the self avatar showed everywhere
+	 *  but the self NAME fell back to @account off the profile page. */
+	readonly displayName: string | null;
 	/** Sanitized inline SVG, or null. Takes precedence over the data URI. */
 	readonly avatarSvg: string | null;
 	/** image/webp data URI, or null. */
 	readonly avatarDataUri: string | null;
 }
 
-const EMPTY: SelfProfileAvatar = { account: null, avatarSvg: null, avatarDataUri: null };
+const EMPTY: SelfProfileAvatar = {
+	account: null,
+	displayName: null,
+	avatarSvg: null,
+	avatarDataUri: null
+};
 
 export const selfProfile = writable<SelfProfileAvatar>(EMPTY);
 
@@ -82,7 +94,7 @@ export async function refreshSelfProfile(
 			// account's avatar would be wrong.
 			if (failed) {
 				selfProfile.update((cur) =>
-					cur.account === account ? cur : { account, avatarSvg: null, avatarDataUri: null }
+					cur.account === account ? cur : { account, displayName: null, avatarSvg: null, avatarDataUri: null }
 				);
 				if (attempt < SELF_PROFILE_RETRIES) {
 					await new Promise((r) => setTimeout(r, SELF_PROFILE_RETRY_DELAY_MS));
@@ -139,7 +151,7 @@ export async function refreshSelfProfile(
 				// THIS account (a transient blip must not clear a good avatar),
 				// blank on an account SWITCH.
 				selfProfile.update((cur) =>
-					cur.account === account ? cur : { account, avatarSvg: null, avatarDataUri: null }
+					cur.account === account ? cur : { account, displayName: null, avatarSvg: null, avatarDataUri: null }
 				);
 				await new Promise((r) => setTimeout(r, SELF_PROFILE_RETRY_DELAY_MS));
 				if (token !== latest) return;
@@ -148,6 +160,7 @@ export async function refreshSelfProfile(
 			}
 			selfProfile.set({
 				account,
+				displayName: props.displayName,
 				avatarSvg: props.avatarSvg,
 				avatarDataUri: props.avatarDataUri
 			});
@@ -187,5 +200,32 @@ export function setSelfAvatar(
 	avatarDataUri: string | null
 ): void {
 	latest++;
-	selfProfile.set({ account, avatarSvg, avatarDataUri });
+	// v1.8.15 — PRESERVE the display name for the same account (an avatar
+	// change doesn't touch the name). Reset it only on an account switch, where
+	// the previous account's name would be wrong.
+	selfProfile.update((cur) => ({
+		account,
+		displayName: cur.account === account ? cur.displayName : null,
+		avatarSvg,
+		avatarDataUri
+	}));
+}
+
+/**
+ * v1.8.15 (t.txt #2) — the display-name twin of setSelfAvatar. Publish the
+ * user's own chosen name to the shared store the instant a profile broadcast
+ * is confirmed, so every IdentityLabel of self updates immediately rather than
+ * waiting ~45-63s for the indexer. Preserves the current avatar for the same
+ * account (a name change doesn't touch the avatar); resets it only on an
+ * account switch. Pass '' / null for "no display name" (falls back to @account).
+ */
+export function setSelfDisplayName(account: string, displayName: string | null): void {
+	latest++;
+	const clean = displayName != null && displayName.trim().length > 0 ? displayName.trim() : null;
+	selfProfile.update((cur) => ({
+		account,
+		displayName: clean,
+		avatarSvg: cur.account === account ? cur.avatarSvg : null,
+		avatarDataUri: cur.account === account ? cur.avatarDataUri : null
+	}));
 }

@@ -181,6 +181,14 @@
 	const isSelf = $derived(!!account && $selfProfile.account === account);
 	const effAvatarSvg = $derived(avatarSvg ?? (isSelf ? $selfProfile.avatarSvg : null));
 	const effAvatarDataUri = $derived(avatarDataUri ?? (isSelf ? $selfProfile.avatarDataUri : null));
+	// v1.8.15 (t.txt #2) — the display-name twin of the avatar fallback above.
+	// When this label's subject is the logged-in user and the caller passed no
+	// explicit display name, fall back to the shared self-profile name so the
+	// user's CUSTOM name renders everywhere their identicon would (chat header,
+	// avatar menu, feedback forms, …) and updates instantly after they change
+	// it — not just on their own profile page. Same prop-first precedence as
+	// the avatar, so a surface that DOES pass a name (order cards) is unchanged.
+	const effDisplayName = $derived(displayName ?? (isSelf ? $selfProfile.displayName : null));
 
 	/**
 	 * Validate + normalize a user-supplied Nostr URL. We accept two
@@ -224,7 +232,7 @@
 	// string (broadcast display_name: ''), not just null — normalize so that
 	// "no display name" always renders as @username, never blank or key-only.
 	const cleanDisplayName = $derived(
-		displayName != null && displayName.trim().length > 0 ? displayName.trim() : null
+		effDisplayName != null && effDisplayName.trim().length > 0 ? effDisplayName.trim() : null
 	);
 	const identity = $derived.by(() => {
 		if (publicKey && publicKey.length > 0) {

@@ -258,6 +258,14 @@ function payloadWithTreasury(treasury: unknown) {
 	return { ...validPayload(), treasury };
 }
 
+// cp556 — distribution-anchor fixtures.
+const VALID_SOURCE_SHA256 = 'a'.repeat(64); // lowercase hex
+const VALID_GPG_FPR = 'DEADBEEF'.repeat(5); // 40 hex (v4 fingerprint)
+const VALID_IPFS_CID_V0 = 'Qm' + 'a'.repeat(44); // base58btc, 46 chars
+function payloadWithDistribution(distribution: unknown) {
+	return { ...validPayload(), distribution };
+}
+
 describe('release handler — Part 106 + 107 treasury validation', () => {
 	const validTreasury = {
 		btc: { address: VALID_BTC_ADDR, satoshis: 416 },
@@ -620,6 +628,96 @@ describe('release validator parity — frontend ↔ indexer', () => {
 			name: 'treasury as string → treasury_not_object',
 			payload: payloadWithTreasury('treasury'),
 			expect: 'treasury_not_object'
+		},
+		// cp556 — decentralized-distribution anchor parity.
+		{ name: 'distribution=null → ok', payload: payloadWithDistribution(null), expect: 'ok' },
+		{
+			name: 'distribution minimal (sha + fpr) → ok',
+			payload: payloadWithDistribution({
+				source_sha256: VALID_SOURCE_SHA256,
+				gpg_fingerprint: VALID_GPG_FPR
+			}),
+			expect: 'ok'
+		},
+		{
+			name: 'distribution full (sha + fpr + cid + mirrors) → ok',
+			payload: payloadWithDistribution({
+				source_sha256: VALID_SOURCE_SHA256,
+				gpg_fingerprint: VALID_GPG_FPR,
+				ipfs_cid: VALID_IPFS_CID_V0,
+				mirrors: ['https://codeberg.org/agorise/morphit', 'https://ipfs.io/ipfs/' + VALID_IPFS_CID_V0]
+			}),
+			expect: 'ok'
+		},
+		{
+			name: 'distribution 64-hex (v5) fingerprint → ok',
+			payload: payloadWithDistribution({
+				source_sha256: VALID_SOURCE_SHA256,
+				gpg_fingerprint: 'abcdef01'.repeat(8) // 64 hex
+			}),
+			expect: 'ok'
+		},
+		{
+			name: 'distribution as array → distribution_not_object',
+			payload: payloadWithDistribution([]),
+			expect: 'distribution_not_object'
+		},
+		{
+			name: 'distribution missing source_sha256 → distribution_source_sha256_invalid',
+			payload: payloadWithDistribution({ gpg_fingerprint: VALID_GPG_FPR }),
+			expect: 'distribution_source_sha256_invalid'
+		},
+		{
+			name: 'distribution UPPERCASE sha256 → distribution_source_sha256_invalid',
+			payload: payloadWithDistribution({
+				source_sha256: 'A'.repeat(64),
+				gpg_fingerprint: VALID_GPG_FPR
+			}),
+			expect: 'distribution_source_sha256_invalid'
+		},
+		{
+			name: 'distribution short fingerprint (39) → distribution_gpg_fingerprint_invalid',
+			payload: payloadWithDistribution({
+				source_sha256: VALID_SOURCE_SHA256,
+				gpg_fingerprint: 'a'.repeat(39)
+			}),
+			expect: 'distribution_gpg_fingerprint_invalid'
+		},
+		{
+			name: 'distribution bad ipfs_cid → distribution_ipfs_cid_invalid',
+			payload: payloadWithDistribution({
+				source_sha256: VALID_SOURCE_SHA256,
+				gpg_fingerprint: VALID_GPG_FPR,
+				ipfs_cid: 'not-a-cid'
+			}),
+			expect: 'distribution_ipfs_cid_invalid'
+		},
+		{
+			name: 'distribution mirrors not array → distribution_mirrors_not_array',
+			payload: payloadWithDistribution({
+				source_sha256: VALID_SOURCE_SHA256,
+				gpg_fingerprint: VALID_GPG_FPR,
+				mirrors: 'https://codeberg.org/agorise/morphit'
+			}),
+			expect: 'distribution_mirrors_not_array'
+		},
+		{
+			name: 'distribution non-https mirror → distribution_mirror_invalid',
+			payload: payloadWithDistribution({
+				source_sha256: VALID_SOURCE_SHA256,
+				gpg_fingerprint: VALID_GPG_FPR,
+				mirrors: ['http://codeberg.org/agorise/morphit']
+			}),
+			expect: 'distribution_mirror_invalid'
+		},
+		{
+			name: 'distribution too many mirrors (9) → distribution_mirror_invalid',
+			payload: payloadWithDistribution({
+				source_sha256: VALID_SOURCE_SHA256,
+				gpg_fingerprint: VALID_GPG_FPR,
+				mirrors: Array.from({ length: 9 }, (_, i) => `https://m${i}.example.org/x`)
+			}),
+			expect: 'distribution_mirror_invalid'
 		}
 	];
 

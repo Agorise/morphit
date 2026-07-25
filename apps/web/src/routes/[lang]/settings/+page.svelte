@@ -59,7 +59,7 @@
 	import { ChainRejectedError } from '$blurt/broadcastTransport';
 	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 	import { checkWaiverEligibility } from '$lib/orders/listingFee';
-	import { setSelfAvatar } from '$lib/stores/selfProfile';
+	import { setSelfAvatar, setSelfDisplayName } from '$lib/stores/selfProfile';
 	import { primeProfile } from '$lib/indexer/profileCache';
 	import { broadcastUnblock } from '$blurt/ops/block';
 	import { blockedAccounts, refreshBlocks, markUnblocked } from '$lib/chat/blocks';
@@ -726,6 +726,12 @@
 				short_bio: bioSaved
 			});
 			broadcastOk = true;
+			// v1.8.15 (t.txt #2) — confirmed on-chain: publish the new name to the
+			// shared self-profile store so the avatar menu + every IdentityLabel of
+			// self show it INSTANTLY (the avatar-save path already does this via
+			// setSelfAvatar; the name path didn't, so a new name only appeared once
+			// the indexer caught up ~45-63s later).
+			setSelfDisplayName(getUserBlurtAccount() ?? '', saved);
 			primeSelfProfile();
 			setTimeout(() => (broadcastOk = false), 3000);
 		} catch (err) {

@@ -29,12 +29,14 @@ export type {
 	ReleaseHashManifest,
 	ReleaseEndpoints,
 	ReleaseTreasuryBlock,
+	ReleaseDistributionBlock,
 	ReleasePayloadV1
 } from './release.js';
 
 export {
 	validateReleasePayload,
-	validateTreasury
+	validateTreasury,
+	validateDistribution
 } from './releaseValidate.js';
 
 export type {

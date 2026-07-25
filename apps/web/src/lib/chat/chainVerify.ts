@@ -67,10 +67,14 @@
  *     once we hit the chain.
  */
 
+import type { AuthorityType, SignedTransaction } from '@beblurt/dblurt';
 import { getBlurtClient } from '$blurt/client';
 import { chainRelay } from '$net/chainRelay';
 import { OP_IDS } from '$net/config';
-import { verifyChainOpSignature } from './chainOpVerify';
+import { verifyChainOpSignature, verifyTransactionSignatures } from './chainOpVerify';
+
+/** 40-char lowercase-hex Blurt transaction id. */
+const TRX_ID_RE = /^[a-f0-9]{40}$/;
 
 /** What the chain says is the current chat-identity for an
  *  account.  Returned by verifyAndFetchLatestPub on success. */
@@ -278,4 +282,153 @@ export async function fetchLatestChatIdentityFromChainQuorum(
 		}
 	}
 	return triple;
+}
+
+/**
+ * Verify the indexer's CLAIMED chat-identity op directly, by transaction id.
+ *
+ * cp554/v1.8.15 — the witness-history fix.  fetchLatestChatIdentityFromChain*
+ * (above) find a peer's chat-identity op by WALKING account history.  For a
+ * Blurt block producer that op is buried under hundreds of thousands of
+ * `producer_reward` virtual ops — far beyond the 10000-entry per-call cap
+ * (Blurt's max), which for an active witness covers barely a week.  The walk
+ * then finds nothing and returns null → pubPin throws `chain_reports_none` →
+ * the chat UI shows a false "tamper detected" and blocks the send.  Field
+ * report: nobody could open a chat with the witness @khrom, while ordinary
+ * (non-producing) peers worked fine.
+ *
+ * This path is O(1) and immune to account activity.  The indexer already tells
+ * us the (block_num, trx_id) of the op it indexed — and it stores the REAL
+ * on-chain trx_id of the peer's latest identity op (see
+ * apps/indexer/.../handlers/chatIdentity.ts).  We fetch THAT transaction,
+ * confirm it carries a `morphit_chat_identity_v1` custom_json authored by
+ * `peer`'s posting authority, verify the transaction's signature locally
+ * against peer's on-chain posting key (S14), and return the CHAIN's chat_pub.
+ *
+ * Security is preserved, not weakened.  A hostile indexer still cannot
+ * substitute a pub: any real on-chain op authored by peer carries peer's real
+ * chat_pub (the operator lacks peer's posting key to forge one); a fabricated
+ * trx_id fails `get_transaction`; a real transaction that isn't a
+ * chat-identity by peer fails the op/author checks.  The returned pub is the
+ * chain's, never the indexer's — the indexer's claimed pub is only a hint used
+ * upstream (comparePin) to choose the state-machine branch.
+ *
+ * Returns the chain-authoritative triple, or null if the claimed transaction
+ * isn't a valid chat-identity op authored by peer.  Throws on an RPC-layer
+ * failure (the caller MUST treat a throw as verification-failed; falling back
+ * to the indexer's word would defeat the defense).
+ */
+export async function verifyClaimedChatIdentityOnChain(
+	peer: string,
+	claimed: { readonly blockNum: number; readonly trxId: string }
+): Promise<ChainChatIdentity | null> {
+	if (typeof claimed.trxId !== 'string' || !TRX_ID_RE.test(claimed.trxId)) return null;
+
+	// 1. Fetch the full annotated signed transaction (carries block_num).
+	//    chainRelay throws on a relay/chain transport failure → propagates.
+	const tx = await chainRelay<SignedTransaction | null>('get_transaction', [claimed.trxId]);
+	if (tx === null || typeof tx !== 'object') return null;
+	const ops = (tx as { operations?: unknown }).operations;
+	if (!Array.isArray(ops)) return null;
+
+	// 2. Find the chat-identity op authored by `peer`.  Defensive narrowing
+	//    mirrors blurtVerify.ts — condenser get_transaction returns operations
+	//    as [opName, opBody] tuples.
+	let chatPubB64: string | null = null;
+	for (const opEntry of ops) {
+		if (!Array.isArray(opEntry) || opEntry.length !== 2) continue;
+		const opName = opEntry[0];
+		const opBody = opEntry[1];
+		if (opName !== 'custom_json') continue;
+		if (typeof opBody !== 'object' || opBody === null) continue;
+		const body = opBody as {
+			id?: unknown;
+			required_auths?: unknown;
+			required_posting_auths?: unknown;
+			json?: unknown;
+		};
+		if (body.id !== OP_IDS.chatIdentity) continue;
+		const authed = [
+			...(Array.isArray(body.required_auths) ? (body.required_auths as unknown[]) : []),
+			...(Array.isArray(body.required_posting_auths)
+				? (body.required_posting_auths as unknown[])
+				: [])
+		];
+		if (!authed.includes(peer)) continue;
+		if (typeof body.json !== 'string') continue;
+		let payload: unknown;
+		try {
+			payload = JSON.parse(body.json);
+		} catch {
+			continue;
+		}
+		if (!isChatIdentityPayload(payload)) continue;
+		chatPubB64 = payload.chat_pub;
+		break;
+	}
+	if (chatPubB64 === null) return null;
+
+	// 3. Fetch peer's posting authority and verify the transaction signature
+	//    locally (S14 anti-fabrication).  Reuses the same pure core as the
+	//    history-walk path's verifySignature leg; costs one get_accounts RPC.
+	const accounts = await chainRelay<Array<{ posting?: AuthorityType }>>('get_accounts', [[peer]]);
+	if (!Array.isArray(accounts) || accounts.length === 0 || !accounts[0]?.posting) {
+		// eslint-disable-next-line no-console
+		console.warn(
+			`[chainVerify] claimed chat-identity: account ${peer} not found or missing posting authority`
+		);
+		return null;
+	}
+	let verdict;
+	try {
+		verdict = await verifyTransactionSignatures(tx, accounts[0].posting);
+	} catch (err) {
+		// eslint-disable-next-line no-console
+		console.warn(
+			`[chainVerify] claimed chat-identity signature verify threw for ${peer} (trx ${claimed.trxId}): ${err instanceof Error ? err.message : String(err)}`
+		);
+		return null;
+	}
+	if (!verdict.ok) {
+		// eslint-disable-next-line no-console
+		console.warn(
+			`[chainVerify] claimed chat-identity signature verify failed for ${peer} (trx ${claimed.trxId}): ${verdict.code}`
+		);
+		return null;
+	}
+
+	// 4. Chain-authoritative block_num from the annotated tx; if a
+	//    non-conformant node omits it, fall back to the claimed block for the
+	//    (already chain-verified) trx so pin monotonicity still has a value.
+	const chainBlock = (tx as { block_num?: unknown }).block_num;
+	const blockNum =
+		typeof chainBlock === 'number' && Number.isFinite(chainBlock) && chainBlock > 0
+			? chainBlock
+			: claimed.blockNum;
+
+	return { chatPubB64, blockNum, trxId: claimed.trxId };
+}
+
+/**
+ * Peer chat-identity chain verification used by the chat send + fingerprint
+ * paths (chatService, peerPubFetch).  Prefers the O(1) claimed-op check
+ * (verifyClaimedChatIdentityOnChain) so high-activity accounts like witnesses
+ * verify correctly; if the claimed op can't be validated (e.g. an older
+ * indexer that didn't serve a usable trx_id, or a transient miss), falls back
+ * to the account-history walk with local signature verification.  Both legs go
+ * only through the operator's chain relay (privacy #1).
+ *
+ * `claimed` is what the indexer returned for this peer; passing it lets the
+ * primary path chase the exact op rather than re-deriving "the latest" from a
+ * bounded, witness-defeating history window.  Works identically whether or not
+ * the surrounding chat is bound to an order — chat-identity is per-peer, never
+ * per-thread.
+ */
+export async function verifyPeerChatIdentityOnChain(
+	peer: string,
+	claimed: { readonly blockNum: number; readonly trxId: string }
+): Promise<ChainChatIdentity | null> {
+	const direct = await verifyClaimedChatIdentityOnChain(peer, claimed);
+	if (direct !== null) return direct;
+	return fetchLatestChatIdentityFromChainQuorum(peer, 3, 2, true);
 }

@@ -248,7 +248,7 @@ for (const [doc, body] of text) {
 		if (!p.includes('/')) continue;
 		// Resolve from the repo root, relative to the doc, OR as a SUFFIX of a real
 		// file. The suffix case matters: docs legitimately shorten
-		// `apps/web/src/lib/crypto/masterPassword.ts` to `crypto/masterPassword.ts`,
+		// `apps/web/src/lib/crypto/activeKeyUnlock.ts` to `crypto/activeKeyUnlock.ts`,
 		// and that is a real reference to a real file. What suffix matching still
 		// catches is a WRONG path — `apps/indexer/src/api/feeAttest.ts` matches no
 		// file's tail, because the handler lives under src/indexer/handlers/.

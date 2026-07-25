@@ -94,6 +94,7 @@ export const STORAGE_KEYS: readonly StorageKeySpec[] = [
 	{ key: 'morphit.autoLock.timeoutMinutes', tier: 'device', note: 'Idle-lock timing is a property of the machine you are sitting at, not of you. Syncing a laptop value onto a phone would be wrong.' },
 	{ key: 'morphit.rpcEndpoints', tier: 'device', note: 'Which nodes THIS browser can reach; network-dependent.' },
 	{ key: 'morphit.updateDismissed', tier: 'device', note: 'Which build version this browser was told about.' },
+	{ key: 'morphit.updateAcceptedRunning', tier: 'session', note: 'Transient sessionStorage handoff flag (cp555): this tab already accepted a running service-worker update, so the "Load it now" prompt is not offered twice before the reload lands. Removed once applied — belongs to the in-flight update handoff, not to the person or durably to the device.' },
 	{ key: 'morphit.notifications.declineState', tier: 'device', note: 'Browser-level permission bookkeeping. Re-prompting someone who declined at the OS level is noise, and the decision is per-browser anyway.' },
 
 	// ─── ACCOUNT — mirrored to chain ──────────────────────────────────

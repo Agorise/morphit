@@ -1395,7 +1395,7 @@
 			},
 			"morphit_mirrors": {
 				"q": "Dlaczego kod źródłowy Morphit jest powielony na tylu hostach kodu?",
-				"a": "Decentralizacja — to priorytet nr 2 w projekcie Morphit, zaraz po prywatności. Projekt, który żyje w jednym miejscu, można zabić w jednym miejscu: platforma może zawiesić konto, rząd może nakazać usunięcie, host może po prostu zniknąć. Dlatego kod źródłowy Morphit (AGPL-3.0) jest powielony na wielu niezależnych hostach kodu — nasz własny serwer Forgejo pod git.agorise.net jest kopią kanoniczną, GitHub działa, a kolejne są dodawane (Codeberg, GitLab, Bitbucket, SourceForge, Gitee, Launchpad, GitFlic, SourceHut, Radicle), plus adresowana treścią kopia w IPFS, której nie kontroluje żaden pojedynczy host. Jeśli którykolwiek z nich zablokuje lub usunie Morphit, wszystkie pozostałe kopie nadal tam są — a ponieważ to AGPL, każdy może go ponownie hostować, audytować lub rozwidlić. Pełna, aktualna lista jest na stronie Pobierz.\n\n(Nie ma nic do zainstalowania ze sklepu z aplikacjami — Morphit działa jako Progressive Web App (PWA), którą dodajesz prosto z przeglądarki. Kopie lustrzane dotyczą kodu źródłowego, więc projektu nie da się uciszyć przez usunięcie jednego repozytorium.)\n\nMożesz potwierdzić, że dowolna działająca instancja serwuje niezmanipulowany kod: skróty SHA-256 każdego wydania są publikowane w blockchainie — zobacz /about-this-instance."
+				"a": "Decentralizacja — to priorytet nr 2 w projekcie Morphit, zaraz po prywatności. Projekt, który żyje w jednym miejscu, można zabić w jednym miejscu: platforma może zawiesić konto, rząd może nakazać usunięcie, host może po prostu zniknąć. Dlatego kod źródłowy Morphit (AGPL-3.0) jest powielony na wielu niezależnych hostach kodu — nasz własny serwer Forgejo pod git.agorise.net jest kopią kanoniczną, GitHub i Codeberg działają, a kolejne są dodawane (GitLab, Bitbucket, SourceForge, Gitee, Launchpad, GitFlic, SourceHut, Radicle), plus adresowana treścią kopia w IPFS, której nie kontroluje żaden pojedynczy host. Jeśli którykolwiek z nich zablokuje lub usunie Morphit, wszystkie pozostałe kopie nadal tam są — a ponieważ to AGPL, każdy może go ponownie hostować, audytować lub rozwidlić. Pełna, aktualna lista jest na stronie Pobierz.\n\n(Nie ma nic do zainstalowania ze sklepu z aplikacjami — Morphit działa jako Progressive Web App (PWA), którą dodajesz prosto z przeglądarki. Kopie lustrzane dotyczą kodu źródłowego, więc projektu nie da się uciszyć przez usunięcie jednego repozytorium.)\n\nMożesz potwierdzić, że dowolna działająca instancja serwuje niezmanipulowany kod: skróty SHA-256 każdego wydania są publikowane w blockchainie — zobacz /about-this-instance."
 			},
 			"android_sideload": {
 				"q": "Jak zainstalować Morphit na Androidzie?",
@@ -2643,6 +2643,8 @@
 		"posted_by": "Opublikowane przez",
 		"details_heading": "Szczegóły",
 		"payment_methods": "Metody płatności",
+		"i_can_pay_with": "Mogę zapłacić za pomocą",
+		"i_accept": "Akceptuję",
 		"location": "Lokalizacja",
 		"terms": "Warunki",
 		"posted_on": "Opublikowane",
@@ -4636,9 +4638,9 @@
 		"private_label": "Klucz prywatny (WIF)",
 		"download": "Pobierz jako plik tekstowy",
 		"downloaded": "Zapisano",
-		"no_master_password": "Nie ma hasła głównego. Morphit nigdy go nie tworzy ani nie używa — Twoje 12 słów i te klucze to wszystko.",
+		"no_account_wide_password": "Morphit nie ma jednego hasła do całego konta — Twoje 12 słów i te klucze to wszystko.",
 		"txt_warning": "ZACHOWAJ TO W TAJEMNICY. Każdy, kto ma poniższy klucz prywatny, może przejąć pełną kontrolę nad Twoim kontem i środkami. Nie udostępniaj go nikomu, nie wpisuj na stronie, której nie ufasz, i nigdy nie wysyłaj w wiadomości ani e-mailu.",
-		"txt_footer": "Twoja 12-słowna fraza seed to kopia zapasowa Morphit. Te cztery klucze pozwalają używać tego konta w innych narzędziach Blurt. Nie ma hasła głównego."
+		"txt_footer": "Twoja 12-słowna fraza seed to kopia zapasowa Morphit. Te cztery klucze pozwalają używać tego konta w innych narzędziach Blurt. Morphit nie ma jednego hasła do całego konta."
 	},
 	"needs_account_name": {
 		"heading": "Prawie gotowe",

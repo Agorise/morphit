@@ -155,11 +155,13 @@ no network calls (verified — the panel and crypto have zero
 mnemonic/JSON one above: the rendered WIF strings and the `.txt`
 body are non-zeroable JS strings that live on the heap until GC;
 the in-memory `backupKeys` array is cleared when the user leaves
-the review stage. There is **no master password** — Morphit never
-derives keys via the legacy `account+role+password` formula, so
-none exists to show (a pasted master password in the posting-key
-login field is *detected* for a precise error, never used to sign
-in; `crypto/masterPassword.ts`).
+the review stage. There is **no account-wide password** — Morphit
+never derives keys via the legacy `account+role+password` formula,
+so none exists to show. Where an existing Blurt user pastes a key,
+Morphit accepts only a standard Active-key WIF and verifies it
+against the account's on-chain authorities before signing anything
+(`crypto/activeKeyUnlock.ts`); a non-WIF string is rejected outright
+as invalid, never used to derive or sign with a key.
 
 **Password-change flow is shipped but UI not yet wired** for the
 end user (`useActiveKeyForPasswordChange` exists, `changePassword`

@@ -206,6 +206,80 @@ function validateTreasury(
 	return { value };
 }
 
+/**
+ * Structurally validate the optional `distribution` anchor (cp556).
+ * MIRRORS packages/release-schema/src/releaseValidate.ts
+ * `validateDistribution()` — same regexes, same ceilings, same reason
+ * names.  The frontend re-validates independently; release.test.ts
+ * proves byte-for-byte parity.
+ *
+ * Shape validation ONLY — we do NOT fetch the tarball, resolve the
+ * IPFS CID, or verify the GPG signature (that's the downloader's job
+ * in scripts/verify-download.mjs).  We guarantee only that every field
+ * is well-formed, so a hostile signer can't stuff junk into the anchor.
+ *
+ * NOTE: the anchor is validated to gate the release's `valid` verdict,
+ * but it is NOT stored in a column — a downloader reads it from the
+ * CHAIN (via RPC, never this indexer; same anti-circularity rule as
+ * the rest of the op), so no `releases`-table column and no migration
+ * is needed for it.
+ */
+function validateDistribution(
+	d: unknown
+): { value: Record<string, unknown> | null } | { reason: string } {
+	if (d === undefined || d === null) return { value: null };
+	if (!isPlainObject(d)) return { reason: 'distribution_not_object' };
+
+	const sha = d.source_sha256;
+	if (typeof sha !== 'string' || !/^[0-9a-f]{64}$/.test(sha)) {
+		return { reason: 'distribution_source_sha256_invalid' };
+	}
+	const fpr = d.gpg_fingerprint;
+	if (typeof fpr !== 'string' || !/^(?:[0-9A-Fa-f]{40}|[0-9A-Fa-f]{64})$/.test(fpr)) {
+		return { reason: 'distribution_gpg_fingerprint_invalid' };
+	}
+
+	let ipfs_cid: string | undefined;
+	if (d.ipfs_cid !== undefined && d.ipfs_cid !== null) {
+		const cid = d.ipfs_cid;
+		if (
+			typeof cid !== 'string' ||
+			cid.length > 128 ||
+			!/^(?:Qm[1-9A-HJ-NP-Za-km-z]{44}|b[a-z2-7]{58,110})$/.test(cid)
+		) {
+			return { reason: 'distribution_ipfs_cid_invalid' };
+		}
+		ipfs_cid = cid;
+	}
+
+	let mirrors: string[] | undefined;
+	if (d.mirrors !== undefined && d.mirrors !== null) {
+		if (!Array.isArray(d.mirrors)) return { reason: 'distribution_mirrors_not_array' };
+		if (d.mirrors.length > 8) return { reason: 'distribution_mirror_invalid' };
+		for (const m of d.mirrors) {
+			if (
+				typeof m !== 'string' ||
+				m.length === 0 ||
+				m.length > 256 ||
+				!/^https:\/\/[a-zA-Z0-9.-]+(?::\d+)?(?:\/[A-Za-z0-9._~/-]*)?$/.test(m)
+			) {
+				return { reason: 'distribution_mirror_invalid' };
+			}
+		}
+		mirrors = d.mirrors as string[];
+	}
+
+	const value: Record<string, unknown> = {
+		source_sha256: sha,
+		gpg_fingerprint: fpr,
+		...(ipfs_cid !== undefined ? { ipfs_cid } : {}),
+		...(mirrors !== undefined ? { mirrors } : {})
+	};
+	const sizeCheck = checkJsonbSize(value);
+	if (!sizeCheck.ok) return { reason: 'distribution_too_large' };
+	return { value };
+}
+
 function validate(payload: unknown): ValidatedRelease | { reason: string } {
 	if (!isPlainObject(payload)) return { reason: 'payload_not_object' };
 
@@ -255,6 +329,13 @@ function validate(payload: unknown): ValidatedRelease | { reason: string } {
 	if ('reason' in treasuryResult) return { reason: treasuryResult.reason };
 	const treasury_serialized =
 		treasuryResult.value === null ? null : JSON.stringify(treasuryResult.value);
+
+	// cp556 — validate the optional distribution anchor to gate the
+	// release's `valid` verdict (parity with the frontend validator).
+	// Not stored: downloaders read it from the chain, so no column /
+	// migration is needed — we only need it to be well-formed.
+	const distributionResult = validateDistribution(payload.distribution);
+	if ('reason' in distributionResult) return { reason: distributionResult.reason };
 
 	return {
 		version,

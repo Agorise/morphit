@@ -88,6 +88,38 @@ if (allOffenders.length === 0) {
 	for (const o of allOffenders) console.error(`      - ${o}`);
 }
 
+// ── Targeted guard for the download page's source-mirror cards. ──
+// They render one anchor per mirror via a DYNAMIC href ({m.url}), which
+// the literal-href scan above intentionally skips — but they ARE the
+// off-site link surface (every source-code mirror: GitHub, Codeberg, …),
+// and privacy is priority #1, so they must carry the same target + rel.
+// Assert it directly so a future edit that drops the rel is caught here
+// rather than silently leaking a Referer from the download page.
+{
+	const dlPath = join(WEB_SRC, 'routes', '[lang]', 'download', '+page.svelte');
+	let dl = '';
+	try {
+		dl = readFileSync(dlPath, 'utf8');
+	} catch {
+		bad(`download page not found at ${relative(WEB_SRC, dlPath)} — did the route move?`);
+	}
+	const anchor = /<a\b[^>]*href=\{m\.url\}[^>]*>/s.exec(dl);
+	if (!anchor) {
+		bad('download source-mirror anchor (href={m.url}) not found — did the {#each MIRRORS} loop change?');
+	} else {
+		const tag = anchor[0];
+		const good =
+			(tag.includes('target="_blank"') || tag.includes("target='_blank'")) &&
+			tag.includes('noopener') &&
+			tag.includes('noreferrer');
+		if (good) {
+			ok('download source-mirror cards (dynamic href={m.url}) carry target=_blank + noopener+noreferrer');
+		} else {
+			bad(`download source-mirror cards missing privacy rel: ${tag.replace(/\s+/g, ' ').slice(0, 140)}`);
+		}
+	}
+}
+
 // ── Tamper test: a synthetic offender must be caught. ──
 {
 	const offending = '<a href="https://tracker.evil-cdn.net/pixel.gif" class="x">leak</a>';

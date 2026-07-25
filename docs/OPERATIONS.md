@@ -5284,6 +5284,18 @@ post-launch smoke testing is in `SWITCHING-NETWORKS.md`.
 
 ## 26. Release signing (SHA-256 + GPG)
 
+> **The canonical release is built by CI, not by hand.** When you push a
+> signed tag, `.forgejo/workflows/release.yml` builds the tarball, hashes
+> it (SHA-256), signs it if a signing secret is set, **publishes the
+> Forgejo release, attaches the assets, and writes the on-chain
+> `distribution-anchor.env`** — the bytes people download come from that
+> job, and the ELI5 release ceremony fetches the anchor it wrote. You
+> normally never run `release-sign.sh`. It builds the tarball a different
+> way (`git archive`), so its SHA-256 does **not** match the CI-published
+> file; keep it only as an offline / air-gapped fallback, and never anchor
+> its hash on-chain for a CI release. The rest of this section documents
+> that fallback tool.
+
 When you publish a Morphit release tarball, sign it.  Users
 verifying their downloads against tampering need an
 authoritative source-of-truth, and your signing key
@@ -5293,7 +5305,7 @@ fingerprint is that source-of-truth.
 
 The script `scripts/release-sign.sh` produces:
 
-- `morphit-v$VERSION-source.tar.gz` — the source release
+- `morphit-v$VERSION.tar.gz` — the source release
 - `*.sha256` and `*.sha512` files — independent hash records
 - `*.asc` — detached ASCII-armored GPG signature on the tarball
 - `CHECKSUMS` — one-file manifest combining the SHAs
@@ -5302,7 +5314,7 @@ The script `scripts/release-sign.sh` produces:
 A user can verify with:
 
 ```sh
-sha256sum -c morphit-v1.2.3-source.tar.gz.sha256
+sha256sum -c morphit-v1.2.3.tar.gz.sha256
 gpg --verify CHECKSUMS.asc CHECKSUMS
 ```
 
@@ -5318,9 +5330,9 @@ gpg --verify CHECKSUMS.asc CHECKSUMS
 3. **Verify the artifact yourself before publishing.**
    ```sh
    cd release
-   sha256sum -c morphit-v1.2.3-source.tar.gz.sha256
-   gpg --verify morphit-v1.2.3-source.tar.gz.asc \
-                morphit-v1.2.3-source.tar.gz
+   sha256sum -c morphit-v1.2.3.tar.gz.sha256
+   gpg --verify morphit-v1.2.3.tar.gz.asc \
+                morphit-v1.2.3.tar.gz
    ```
 4. **Upload to forgejo's releases page.**  Drop all six
    files (tarball + .sha256 + .sha512 + .asc + CHECKSUMS +
@@ -5382,6 +5394,57 @@ This means there are TWO independent verification paths:
 2. **Frontend bundle**: chain-published manifest hash
 
 Both should match.  If they don't, something's off — escalate.
+
+### Decentralized distribution (the source, on many hosts + anchored on-chain)
+
+The source is public on Forgejo, but a single git host is a
+single point of failure and censorship.  Decentralized
+distribution keeps the **same signed code** on independent
+hosts and anchors a verifiable pointer to it on the Blurt
+chain, so anyone can obtain the code from whatever host is
+reachable and PROVE it is the unmodified release.
+
+Three moving parts:
+
+1. **Sign** — `scripts/release-sign.sh <version>` (above).  It
+   also writes `release/distribution-anchor.env` with the
+   tarball's `source_sha256`, your key's `gpg_fingerprint`, and
+   the `mirrors` list.
+2. **Mirror** — this is AUTOMATIC.  Forgejo push-mirrors every
+   commit and the signed tag to GitHub + Codeberg, so the code
+   is already on three independent hosts with nothing to do by
+   hand.  Those two hosts are the default anchor mirrors
+   (override with `MORPHIT_RELEASE_MIRRORS`).  Optionally,
+   `ipfs add` the signed tarball and set `MORPHIT_BUILD_IPFS_CID`
+   before the payload build to add a content-addressed copy —
+   off by default, since availability then needs a pinned,
+   reachable node or a pinning service.
+3. **Anchor** — broadcast `morphit_release_v1` with a
+   `distribution` block carrying `source_sha256`,
+   `gpg_fingerprint`, the `mirrors` list, and optionally
+   `ipfs_cid`.  The block is public + verification-only — no
+   secret is ever placed in it (same invariant as the treasury
+   block).  Shape: `packages/release-schema/src/release.ts`
+   (`ReleaseDistributionBlock`).
+
+The ELI5 ceremony (`scripts/eli5-release.sh <version>`) now
+prints these as Blocks 4–6, filled in and in order, so the
+anchor values flow from the sign step into the payload build
+without hand-copying.
+
+Anyone can then verify what they got — **not** against any
+Morphit server, so a compromised host can't fake a match.  Two
+paths, depending on how they obtained the code:
+
+```sh
+git verify-tag v1.2.3                                  # a clone, from any mirror
+node scripts/verify-download.mjs morphit-v1.2.3.tar.gz   # the release tarball
+```
+
+See `docs/VERIFY-YOUR-DOWNLOAD.md` for the full user-facing
+guide.  Both trace back to the one key fingerprint you
+published — which is now also anchored on-chain, so a hostile
+mirror can't swap in its own key.
 
 ## 27. Fees and rewards reference
 

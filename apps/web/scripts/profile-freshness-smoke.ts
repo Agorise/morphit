@@ -73,7 +73,7 @@ check('reload is threaded batch → fetchBatch', /fetchBatch\(chunkOfAccounts, s
 // ─── 3. selfProfile store: never clobber a good avatar on a blip ─────
 check('store uses the detailed fetch (not the null-collapsing one)', /getProfileCachedDetailed/.test(store) && !/\bgetProfileCached\b(?!Detailed)/.test(store));
 check('on failure the store keeps the current account\u2019s value', /if \(failed\) \{[\s\S]{0,260}cur\.account === account \? cur :/.test(store));
-check('on failure during an account SWITCH the store blanks (no leaking the old avatar)', /cur\.account === account \? cur : \{ account, avatarSvg: null, avatarDataUri: null \}/.test(store));
+check('on failure during an account SWITCH the store blanks (no leaking the old avatar)', /cur\.account === account \? cur : \{ account, displayName: null, avatarSvg: null, avatarDataUri: null \}/.test(store));
 check('a failed fetch is retried (a blip must not blank the session)', /SELF_PROFILE_RETRIES = 2/.test(store) && /SELF_PROFILE_RETRY_DELAY_MS = 6_000/.test(store));
 check('the retry delay outlives the 5s soft-null TTL', /6_000/.test(store));
 check('bustCache also force-reloads the browser HTTP cache', /reload: opts\?\.bustCache === true/.test(store));

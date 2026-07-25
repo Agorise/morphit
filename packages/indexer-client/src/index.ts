@@ -236,6 +236,13 @@ export interface OrderRecord {
 	/** v1.5.5: now `trade_count < 4` (was: fewer than 4 reviews). Consistent
 	 *  across all four card surfaces since cp473. */
 	readonly is_new_trader?: boolean;
+	/** v1.8.15 (t.txt #5) — true iff this order's owner appears in a
+	 *  suspicious_reciprocity pair (Signal B). Populated by
+	 *  /v1/orders/:account so the order DETAIL page's "POSTED BY" card can
+	 *  render the same trust pill as the profile Reputation card. Optional:
+	 *  omitted by the orderbook/featured endpoints and by older indexers,
+	 *  which the frontend treats as "not flagged". */
+	readonly reciprocity_flagged?: boolean;
 	/** Number of distinct accounts who have messaged this order's
 	 *  owner about THIS order in the last 24h.  Drives a "💬 N
 	 *  talking now" chip on order rows.  Optional for backward

@@ -91,7 +91,7 @@ import { decodePayload } from '$lib/chat/payload';
 import { recordAddressShared, recordFundsSent } from '$lib/trades/tradeStatus';
 import { triggerBlurtVerification } from '$lib/trades/tradeVerify';
 import { resolveChatPubFromIndexer, PubPinError, type ChatPubPin } from '$lib/chat/pubPin';
-import { fetchLatestChatIdentityFromChainQuorum } from '$lib/chat/chainVerify';
+import { verifyPeerChatIdentityOnChain } from '$lib/chat/chainVerify';
 import { readChatSecurityMode, shouldAttachSelfCopy, type ChatSecurityMode } from '$stores/chatSecurity';
 import {
 	deriveChatIdentity,
@@ -1439,12 +1439,14 @@ export function runtimeDeps(
 			const trustedPubB64 = await resolveChatPubFromIndexer(
 				peerAccount,
 				indexerPin,
-				// S14: opt in to local secp256k1 signature verify on
-				// the pin-mismatch hot path.  This adds two RPC
-				// roundtrips, but only fires when the indexer-reported
-				// pub doesn't match the locally pinned one — a rare
-				// path that already costs RPC for chain consultation.
-				(peer) => fetchLatestChatIdentityFromChainQuorum(peer, 3, 2, true)
+				// Verify the indexer's CLAIMED op directly (O(1)
+				// get_transaction) so witnesses / other high-activity
+				// accounts don't false-trip `chain_reports_none` when
+				// their identity op is buried beyond the history window;
+				// falls back to the history walk otherwise.  Includes
+				// the S14 local secp256k1 signature verify.  Only fires
+				// on the pin-mismatch / first-contact path.
+				(peer, claimed) => verifyPeerChatIdentityOnChain(peer, claimed)
 			);
 			return decodeChatPub(trustedPubB64);
 		},
