@@ -10,7 +10,22 @@
 	import { getInstances } from '$indexer/client';
 	import { safeContactUrl, safeInstanceOrigin } from '$lib/utils/safeContactUrl';
 	import { formatDayMonth, formatDayMonthTime } from '$i18n/formatters';
+	import { localePath } from '$i18n/path';
+	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	import type { InstanceDirectoryEntry, InstanceProbeStatus } from '@morphit/indexer-client';
+
+	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
+	const lp = $derived((path: string) => localePath(path, currentLang));
+	// t.txt #4 — the intro links the word "Operators" to the operators page. Fill
+	// the {link} placeholder with a sentinel, split the localized string on it,
+	// and render an <a> between the parts (word order varies per locale).
+	const INTRO_LINK_SLOT = '\u0000OL\u0000';
+	const introParts = $derived.by(() => {
+		const full = $_('instances.intro', { values: { link: INTRO_LINK_SLOT } }) as string;
+		const i = full.indexOf(INTRO_LINK_SLOT);
+		if (i < 0) return { before: full, after: '' };
+		return { before: full.slice(0, i), after: full.slice(i + INTRO_LINK_SLOT.length) };
+	});
 
 	/** Normalize an origin for identity comparison: parse it and take the
 	 *  canonical `scheme://host[:port]` (lowercased host, no path / trailing
@@ -293,7 +308,11 @@
 			<span class="brand-gradient-text">{$_('instances.title')}</span>
 		</h1>
 		<p class="mt-4 max-w-prose text-ink-700 dark:text-ink-200">
-			{$_('instances.intro')}
+			{introParts.before}<a
+				href={lp('/operators')}
+				class="text-morphit-teal hover:underline dark:text-morphit-emerald"
+				>{$_('instances.intro_operators_link')}</a
+			>{introParts.after}
 		</p>
 		<div
 			class="mt-5 max-w-prose rounded-xl border border-morphit-emerald/30 bg-morphit-emerald/5 p-4 text-sm text-ink-700 dark:border-morphit-emerald/40 dark:bg-morphit-emerald/10 dark:text-ink-200"

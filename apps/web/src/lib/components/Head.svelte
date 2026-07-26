@@ -138,19 +138,18 @@
 		return v && v !== keywordsKey ? v : '';
 	});
 
-	/** OG image (cp112; cp213: PNG-only).
+	/** OG image (cp112; cp213: PNG-only; cp567: PNG is the source of truth).
 	 *
-	 *  `og:image` and `twitter:image` are the PNG. SVG is deliberately
-	 *  NOT advertised as an og:image: no major link-preview consumer
+	 *  `og:image` and `twitter:image` are the PNG. It is a hand-authored
+	 *  1200×630 asset committed at `static/og-image.png` (no longer
+	 *  rasterized from an SVG — the SVG source + its build script and
+	 *  freshness smoke were retired in cp567). SVG is deliberately NOT
+	 *  advertised as an og:image: no major link-preview consumer
 	 *  (Facebook, X/Twitter, LinkedIn, Slack, Discord, iMessage,
-	 *  WhatsApp) renders SVG OG images, and emitting a second SVG
-	 *  og:image risks a scraper picking the entry it can't render — a
-	 *  broken preview. The SVG lives on as the SOURCE that og-image.png
-	 *  is rasterized from (scripts/build-og-image-png.sh +
-	 *  og-image-freshness-smoke), not as a crawler-facing asset.
+	 *  WhatsApp) renders SVG OG images, so a single PNG is the whole story.
 	 *
 	 *  Specs followed: 1200×630 (Twitter `summary_large_image` + Facebook
-	 *  OG recommended size).  ~61 KB — well under Twitter's 5 MB cap. */
+	 *  OG recommended size), well under Twitter's 5 MB cap. */
 	const ogImagePng = `${CANONICAL_ORIGIN}/og-image.png`;
 	const ogImageAlt = $derived($_('seo.og_image_alt'));
 

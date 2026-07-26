@@ -6,11 +6,12 @@
  * fill-in-the-blank: the user types WHAT they're offering (e.g. "bananas") and it
  * flows into the order title + the on-chain Blurt announcement. This pins the whole
  * chain so no layer can silently drop it:
- *   - sanitizeBarterTitle: letters-only, ≤24 code points (accented/non-Latin kept)
- *   - buildOrderPayload: includes specific_barter_title only when it survives
- *   - all 10 locales: the 4 barter summary templates carry a {goods} slot (not the
- *     literal goods phrase), and order_title.goods_services still exists (the input
- *     placeholder reuses it)
+ *   - sanitizeBarterTitle: letters + single internal spaces, ≤24 code points
+ *     (accented/non-Latin kept); whitespace runs collapsed, leading dropped
+ *   - buildOrderPayload: includes specific_barter_title only when it survives, trimmed
+ *   - all 10 locales: order_title.{buy,sell}_barter_novalue carry {asset}+{cryptos}
+ *     slots (the value-free barter title), order_title.goods_services still exists
+ *     (the input placeholder), and the retired barter_sentence_* keys are gone
  *   - indexer order.ts / orderReplace.ts: STRICT validation (reject, don't truncate)
  *   - OrderRecord + the API read paths + the DB migration carry the column
  *   - every order-title caller passes the label so barter reads "…of bananas"
@@ -67,8 +68,23 @@ const LOCS = SUPPORTED_LOCALES.map((l) => l.code);
 	if (sanitizeBarterTitle('bananas') === 'bananas') ok('plain letters pass through');
 	else bad('plain letters pass through');
 
-	if (sanitizeBarterTitle('ban4n2s!! 99') === 'banns') ok('digits/punctuation/space stripped');
-	else bad('digits/punctuation/space stripped', sanitizeBarterTitle('ban4n2s!! 99'));
+	// t.txt #5 — spaces between words are now KEPT (multi-word wares)
+	if (sanitizeBarterTitle('banana trees') === 'banana trees') ok('internal space kept (banana trees)');
+	else bad('internal space kept', JSON.stringify(sanitizeBarterTitle('banana trees')));
+
+	if (sanitizeBarterTitle('banana   trees') === 'banana trees') ok('whitespace runs collapsed to one');
+	else bad('whitespace runs collapsed', JSON.stringify(sanitizeBarterTitle('banana   trees')));
+
+	if (sanitizeBarterTitle('   banana') === 'banana') ok('leading space dropped');
+	else bad('leading space dropped', JSON.stringify(sanitizeBarterTitle('   banana')));
+
+	// a trailing space is kept WHILE TYPING (so "banana " can become "banana trees");
+	// buildOrderPayload trims it before broadcast (section 2).
+	if (sanitizeBarterTitle('banana ') === 'banana ') ok('trailing space kept while typing');
+	else bad('trailing space kept while typing', JSON.stringify(sanitizeBarterTitle('banana ')));
+
+	if (sanitizeBarterTitle('ban4n2s!!') === 'banns') ok('digits/punctuation stripped');
+	else bad('digits/punctuation stripped', sanitizeBarterTitle('ban4n2s!!'));
 
 	if (sanitizeBarterTitle('goods/services') === 'goodsservices') ok('slash stripped (not a letter)');
 	else bad('slash stripped', sanitizeBarterTitle('goods/services'));
@@ -119,40 +135,56 @@ const LOCS = SUPPORTED_LOCALES.map((l) => l.code);
 	const none = buildOrderPayload('order-x', base);
 	if (!('specific_barter_title' in none)) ok('no title → field omitted');
 	else bad('no title → omitted');
+
+	// t.txt #5 — multi-word wares carry through; a trailing space the live field
+	// kept while typing is trimmed before broadcast (single spaces internal).
+	const spaced = buildOrderPayload('order-x', { ...base, specificBarterTitle: 'banana trees' });
+	if (spaced.specific_barter_title === 'banana trees') ok('payload carries multi-word title');
+	else bad('payload carries multi-word title', String(spaced.specific_barter_title));
+
+	const trailing = buildOrderPayload('order-x', { ...base, specificBarterTitle: 'banana trees  ' });
+	if (trailing.specific_barter_title === 'banana trees') ok('payload trims trailing space');
+	else bad('payload trims trailing space', JSON.stringify(trailing.specific_barter_title));
 }
 
-// ── 3. locale templates: {goods} slot in all 10 ─────────────────────
+// ── 3. locale keys: barter-novalue title + placeholder, retired keys gone ──
 {
-	const KEYS = [
+	const NOVALUE = ['buy_barter_novalue', 'sell_barter_novalue'];
+	const RETIRED = [
 		'barter_sentence_sell',
 		'barter_sentence_buy',
 		'barter_sentence_sell_novalue',
 		'barter_sentence_buy_novalue'
 	];
-	let allGoods = true;
+	let novalueOk = true;
 	let placeholderOk = true;
+	let retiredGone = true;
 	for (const loc of LOCS) {
 		const d = JSON.parse(read(resolve(LOCALES, `${loc}.json`)));
+		const ot = d.order_title ?? {};
 		const s = d.post_order?.summary ?? {};
-		const gs = d.order_title?.goods_services;
+		const gs = ot.goods_services;
 		if (typeof gs !== 'string' || gs.length === 0) placeholderOk = false;
-		for (const k of KEYS) {
-			const v = s[k];
-			if (typeof v !== 'string' || !v.includes('{goods}')) {
-				allGoods = false;
-				bad(`${loc}.${k} has {goods} slot`, JSON.stringify(v));
+		for (const k of NOVALUE) {
+			const v = ot[k];
+			// t.txt #5 — the value-free barter title carries the goods {asset} + the
+			// accepted {cryptos}: "I want to sell {asset} for {cryptos}".
+			if (typeof v !== 'string' || !v.includes('{asset}') || !v.includes('{cryptos}')) {
+				novalueOk = false;
+				bad(`${loc}.order_title.${k} has {asset}+{cryptos} slots`, JSON.stringify(v));
 			}
-			// the generic phrase must no longer be baked into the template (it's the
-			// input's placeholder now); only the slot remains.
-			if (typeof v === 'string' && typeof gs === 'string' && v.includes(gs)) {
-				allGoods = false;
-				bad(`${loc}.${k} no longer bakes the literal goods phrase`, JSON.stringify(v));
+		}
+		for (const k of RETIRED) {
+			if (k in s) {
+				retiredGone = false;
+				bad(`${loc}.post_order.summary.${k} retired`, 'still present');
 			}
 		}
 	}
-	if (allGoods) ok('all 10 locales: 4 barter templates carry the {goods} slot, phrase removed');
+	if (novalueOk) ok('all 10: order_title.{buy,sell}_barter_novalue carry {asset}+{cryptos}');
 	if (placeholderOk) ok('order_title.goods_services present in all 10 (input placeholder)');
 	else bad('order_title.goods_services present in all 10');
+	if (retiredGone) ok('all 10: retired barter_sentence_* keys removed');
 }
 
 // ── 4. indexer STRICT validation (order.ts + orderReplace.ts) ────────
@@ -168,8 +200,8 @@ for (const rel of [
 		['forbidden_char reason', src.includes('specific_barter_title_forbidden_char')],
 		// STRICT: counts code points, rejects >24 (never truncates)
 		['code-point length guard', /Array\.from\(normalized\)\.length > 24/.test(src)],
-		// letters-only reject
-		['letters-only guard', /\[\^\\p\{L\}\]/.test(src)]
+		// t.txt #5 — letters + single internal spaces (no leading/trailing/double)
+		['letters+spaces guard', /\\p\{L\}\+\(\?: \\p\{L\}\+\)\*/.test(src)]
 	];
 	for (const [n, okp] of checks) okp ? ok(`${tag}: ${n}`) : bad(`${tag}: ${n}`);
 }

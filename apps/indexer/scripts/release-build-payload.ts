@@ -131,6 +131,8 @@ interface Inputs {
 	sourceSha256: string;
 	gpgFingerprint: string;
 	ipfsCid: string;
+	/** v1.9.x — stable IPNS name (`k51…`), the "always latest" pointer. Empty = omit. */
+	ipnsName: string;
 	/** Comma- or whitespace-separated list of https:// mirror URLs. */
 	mirrors: string;
 }
@@ -226,6 +228,10 @@ async function gatherInputs(): Promise<Inputs> {
 		'IPFS CID of the signed tarball (optional)',
 		process.env.MORPHIT_BUILD_IPFS_CID ?? ''
 	);
+	const ipnsName = await ask(
+		'Stable IPNS name k51… (optional; the "always latest" pointer)',
+		process.env.MORPHIT_BUILD_IPNS_NAME ?? ''
+	);
 	const mirrors = await ask(
 		'Mirror URLs (https://…, comma-separated; optional)',
 		process.env.MORPHIT_BUILD_MIRRORS ?? ''
@@ -243,6 +249,7 @@ async function gatherInputs(): Promise<Inputs> {
 		sourceSha256,
 		gpgFingerprint,
 		ipfsCid,
+		ipnsName,
 		mirrors
 	};
 }
@@ -255,13 +262,14 @@ function buildDistribution(i: Inputs): ReleaseDistributionBlock | null {
 	const sha = i.sourceSha256.trim().toLowerCase();
 	const fpr = i.gpgFingerprint.replace(/\s+/g, '').toUpperCase();
 	const cid = i.ipfsCid.trim();
+	const ipns = i.ipnsName.trim();
 	let mirrorList = i.mirrors
 		.split(/[,\s]+/)
 		.map((m) => m.trim())
 		.filter((m) => m.length > 0);
 
 	// The whole block is omitted only when NOTHING was supplied.
-	if (sha === '' && fpr === '' && cid === '' && mirrorList.length === 0) return null;
+	if (sha === '' && fpr === '' && cid === '' && ipns === '' && mirrorList.length === 0) return null;
 
 	if (sha === '' || fpr === '') {
 		fail('distribution needs BOTH source_sha256 and gpg_fingerprint (or leave all fields empty to omit)');
@@ -296,6 +304,7 @@ function buildDistribution(i: Inputs): ReleaseDistributionBlock | null {
 
 	const value: Record<string, unknown> = { source_sha256: sha, gpg_fingerprint: fpr };
 	if (cid !== '') value.ipfs_cid = cid;
+	if (ipns !== '') value.ipns_name = ipns;
 	if (mirrorList.length > 0) value.mirrors = mirrorList;
 	return value as unknown as ReleaseDistributionBlock;
 }

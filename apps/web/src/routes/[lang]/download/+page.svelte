@@ -5,6 +5,7 @@
 	import { _ } from 'svelte-i18n';
 	import Head from '$components/Head.svelte';
 	import { MIRROR_LOGO_PATHS, MIRROR_LOGO_VIEWBOX } from '$lib/mirrorLogos';
+	import { MORPHIT_IPNS_NAME, ipnsLatestTarballUrl } from '$lib/ipns';
 
 	// Source mirrors.  Morphit's canonical repository is our own Forgejo
 	// server; it's mirrored across the web so the code stays reachable
@@ -59,7 +60,13 @@
 			url: 'https://git.launchpad.net/~agorise/+git/morphit',
 			status: 'live'
 		},
-		{ id: 'ipfs', name: 'IPFS', url: 'https://ipfs.tech/', status: 'pending' }
+		// IPFS: once Morphit's stable IPNS name is configured (scripts/ipns-keygen.mjs
+		// → paste into $lib/ipns.ts), this card goes live and always resolves to the
+		// LATEST release via IPNS; until then it stays a "coming soon" card. The
+		// per-release immutable CID is separately anchored on-chain (distribution.ipfs_cid).
+		MORPHIT_IPNS_NAME
+			? { id: 'ipfs', name: 'IPFS (always latest)', url: ipnsLatestTarballUrl(), status: 'live' }
+			: { id: 'ipfs', name: 'IPFS', url: 'https://ipfs.tech/', status: 'pending' }
 	] as const;
 
 	// Part 121 cp7 — per-locale internal-link wrapper.  See

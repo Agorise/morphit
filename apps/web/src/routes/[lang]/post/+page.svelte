@@ -108,6 +108,7 @@
 	import { MORPHIT_INDEXER_ORIGIN, resolveOrigin } from '$net/config';
 	import type { OrderFormInput } from '$lib/orders/payload';
 	import { makeExpiryFlooredUtcDay } from '$lib/orders/payload';
+	import { orderTitleParts } from '$lib/utils/orderTitle';
 	import { sanitizeBarterTitle, SPECIFIC_BARTER_TITLE_MAX } from '$lib/orders/payload';
 	import { termsHasForbiddenChar } from '$lib/orders/termsForbiddenChars';
 	import { publishOrderPost } from '$lib/syndication/publish';
@@ -2398,7 +2399,11 @@
 			terms: terms.trim().length > 0 ? redactPrivateKeys(terms) : '',
 			// v1.9.0 (Ken) — the barter goods label so the announcement headline reads
 			// "…of bananas" like the order card/detail; null for crypto listings.
-			specificBarterTitle: isBarter ? sanitizeBarterTitle(specificBarterTitle) : null
+			specificBarterTitle: isBarter ? sanitizeBarterTitle(specificBarterTitle) : null,
+			// t.txt #5 — the accepted crypto set, so a value-free barter blog title
+			// reads "I want to sell {goods} for {cryptos}" — the SAME title the order
+			// card and create-flow summary render. Null for crypto listings.
+			acceptedAssets: isBarter && acceptedAssets.length > 0 ? [...acceptedAssets] : null
 		});
 		if (result.ok) {
 			syndicationStatus = 'ok';
@@ -2455,49 +2460,41 @@
 	 *  method is picked yet the list shows a neutral "…" placeholder
 	 *  that fills in as the user selects.  Empty until an asset exists
 	 *  (the card only renders in step 3, where asset is already set). */
-	// v1.9.0 (Ken) — build the localized BARTER summary sentence for a GIVEN goods
-	// value. Shared by the static summarySentence (goods = the resolved title/label)
-	// and the editable step-3 preview (goods = a sentinel we split on to slot in a
-	// live inline input). Reads the reactive amount/fiat/accepted state directly, so
-	// callers inside $derived stay reactive to those. Assumes an asset is set.
-	function barterSentenceFor(goods: string): string {
-		const fiatCode = fiat.trim().toUpperCase();
-		const hasMin = amountMin.trim() !== '';
-		const hasMax = amountMax.trim() !== '';
-		let cryptosClause: string;
-		if (acceptedAssets.length > 0) {
-			try {
-				cryptosClause = new Intl.ListFormat(currentLang, { type: 'conjunction' }).format([
-					...acceptedAssets
-				]);
-			} catch {
-				cryptosClause = acceptedAssets.join(', ');
-			}
-		} else {
-			cryptosClause = '…';
-		}
-		// cp428 — no min AND no max → a value-free sentence (a "worth {value}" clause
-		// would read "…worth MXN," with a bare currency and no number).
-		if (!hasMin && !hasMax) {
-			const key =
-				side === 'sell'
-					? 'post_order.summary.barter_sentence_sell_novalue'
-					: 'post_order.summary.barter_sentence_buy_novalue';
-			return $_(key, { values: { goods, cryptos: cryptosClause } }) as string;
-		}
-		let valueClause: string;
-		if (hasMin && hasMax) valueClause = `${amountMin.trim()}–${amountMax.trim()} ${fiatCode}`;
-		else if (hasMax) valueClause = `${amountMax.trim()} ${fiatCode}`;
-		else valueClause = `${amountMin.trim()} ${fiatCode}`;
-		const key =
-			side === 'sell'
-				? 'post_order.summary.barter_sentence_sell'
-				: 'post_order.summary.barter_sentence_buy';
-		return $_(key, { values: { goods, value: valueClause, cryptos: cryptosClause } }) as string;
+	// t.txt #5 (Ken) — build the BARTER summary sentence for a GIVEN goods label
+	// via the SHARED orderTitleParts builder, so the create-flow summary is
+	// word-for-word the order title (and the Blurt blog title, which just appends
+	// "Want to trade?"). A valued barter reads "I want to sell 30–50 MXN of
+	// {goods}"; a value-free one reads "I want to sell {goods} for {cryptos}" (the
+	// accepted crypto set). Shared by the static summarySentence (goods = the
+	// resolved title/label) and the editable step-3 preview (goods = a sentinel we
+	// split on to slot in a live inline input). Reads the reactive
+	// side/amount/fiat/accepted state directly. Assumes an asset is set.
+	function barterTitleFor(goods: string): string {
+		const minRaw = amountMin.trim();
+		const maxRaw = amountMax.trim();
+		const parts = orderTitleParts(
+			{
+				side: side ?? 'buy',
+				asset: asset ?? '',
+				fiat_currency: fiat.trim().toUpperCase(),
+				amount_min: minRaw !== '' && Number.isFinite(Number(minRaw)) ? Number(minRaw) : null,
+				amount_max: maxRaw !== '' && Number.isFinite(Number(maxRaw)) ? Number(maxRaw) : null,
+				// value-free barter → "…for {cryptos}"; the '…' placeholder keeps the
+				// sentence readable before any crypto is ticked.
+				accepted_assets: acceptedAssets.length > 0 ? [...acceptedAssets] : ['…']
+			},
+			// show the amount as the user typed it (the orderbook applies its own
+			// grouping formatter to the stored number; the WORDING is what must match)
+			(n) => String(n),
+			goods
+		);
+		return $_(parts.key, { values: parts.values }) as string;
+
 	}
 
-	// A sentinel no user text can contain (letters-only input; NUL can't be typed)
-	// marks where the inline goods input goes. We render the sentence around it.
+	// A sentinel no user text can contain (letters + single spaces only; NUL can't
+	// be typed) marks where the inline goods input goes. We render the title
+	// sentence around it (see barterTitleFor).
 	const BARTER_GOODS_SLOT = '\u0000BG\u0000';
 	/** The editable BARTER sentence split into the text BEFORE and AFTER the inline
 	 *  goods input. Null for non-barter (the plain summarySentence renders instead).
@@ -2506,7 +2503,7 @@
 	 *  grammatically-right spot in every language. */
 	const barterSentenceParts = $derived.by((): { before: string; after: string } | null => {
 		if (!isBarter || !asset) return null;
-		const full = barterSentenceFor(BARTER_GOODS_SLOT);
+		const full = barterTitleFor(BARTER_GOODS_SLOT);
 		const idx = full.indexOf(BARTER_GOODS_SLOT);
 		if (idx < 0) return null;
 		return { before: full.slice(0, idx), after: full.slice(idx + BARTER_GOODS_SLOT.length) };
@@ -2529,7 +2526,7 @@
 			// barterSentenceParts below.
 			const goodsText =
 				specificBarterTitle.trim() || ($_('order_title.goods_services') as string);
-			return barterSentenceFor(goodsText);
+			return barterTitleFor(goodsText);
 		}
 
 		let amountClause: string;
@@ -4196,16 +4193,16 @@
 		padding: 0 0.15em;
 		margin: 0;
 		border: 0;
-		border-bottom: 1.5px solid;
+		border-bottom: 1px solid;
 		/* faint when never touched */
 		border-color: color-mix(in srgb, currentColor 22%, transparent);
 		background: transparent;
 		color: inherit;
 		font: inherit;
 		text-align: center;
-		/* sit a little lower so typed text baseline-aligns with the sentence */
+		/* baseline-align the field's text with the surrounding sentence (no
+		   vertical nudge — a transform pushed it visibly too low, t.txt #5) */
 		vertical-align: baseline;
-		transform: translateY(0.12em);
 		cursor: text;
 		transition: border-color 120ms ease;
 	}
@@ -4221,9 +4218,12 @@
 	.barter-goods-field.filled {
 		border-color: color-mix(in srgb, currentColor 50%, transparent);
 	}
+	/* t.txt #5 — focus does NOT turn the border green; it stays a 1px underline
+	   the exact colour of the resting border-bottom (just made visible), so the
+	   field reads as a fill-in-the-blank, not a boxed input. */
 	.barter-goods-field:focus {
 		outline: none;
-		border-color: var(--color-morphit-emerald, #10b981);
+		border-color: color-mix(in srgb, currentColor 50%, transparent);
 	}
 	/* WebKit/Firefox strip the browser's default inner spacing so the caret and
 	   text hug the underline exactly. */

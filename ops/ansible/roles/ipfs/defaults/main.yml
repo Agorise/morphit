@@ -1,0 +1,47 @@
+---
+# ipfs role — every Morphit instance runs a small IPFS (Kubo) node that pins
+# THIS instance's current signed release, so Morphit's releases stay available
+# even if every commercial pinning service (Pinata/Storacha/…) drops them.
+#
+# ON by default (decentralization is priority #2, and operators keep 90% of the
+# BLURT listing fees — hosting the signed release is the quid pro quo). To opt a
+# specific host out, set `enable_ipfs: false` in inventory for that host.
+#
+# The node is configured for LOW footprint (priority #4): the `lowpower` Kubo
+# profile, a small connection ceiling, and reclaimed storage via periodic GC.
+# The only content it's asked to keep is the ~12 MB signed release directory.
+
+# Kubo (go-ipfs) release to install. Operator-tunable; bump as Kubo updates.
+morphit_kubo_version: "v0.42.0"
+morphit_kubo_arch: "linux-amd64"
+# OPTIONAL strong pin: the tarball's SHA-512 (hex). When set, the role verifies
+# the download against THIS value. When empty, it verifies against the official
+# .sha512 published next to the tarball on dist.ipfs.tech (TLS-fetched).
+morphit_kubo_sha512: "054c38a0cf66f7d738e25085ad62cb3a42d03d4bac329b7dd25c1d71cf18e1ce87d55b1d1b705b04c65210dca9109973579e0eb1cd72f6341ecb3311d840d156"
+morphit_kubo_dist_base: "https://dist.ipfs.tech/kubo"
+
+# Unprivileged service account + repo location for the daemon.
+morphit_ipfs_user: ipfs
+morphit_ipfs_group: ipfs
+morphit_ipfs_home: /var/lib/ipfs
+morphit_ipfs_repo: /var/lib/ipfs/.ipfs
+
+# Kubo config knobs (kept small — this is a release-pinning node, not a public
+# gateway or a heavy DHT server).
+morphit_ipfs_profile: lowpower
+morphit_ipfs_connmgr_high: 80
+morphit_ipfs_connmgr_low: 20
+# Bind the API + gateway to loopback only (the pin script talks to the API;
+# nothing here needs to be publicly reachable — content is served over the
+# swarm/DHT). The swarm ports stay public so peers can fetch what we pin.
+morphit_ipfs_api_addr: "/ip4/127.0.0.1/tcp/5001"
+morphit_ipfs_gateway_addr: "/ip4/127.0.0.1/tcp/8081"
+
+# How the pin script reaches THIS instance's /v1/release (the CID source). The
+# default hits the local indexer directly; override to the public URL if the
+# indexer isn't on this port. MUST resolve to this instance's own release.
+morphit_ipfs_release_url: "http://127.0.0.1:{{ morphit_indexer_bind_port | default(8088) }}/v1/release"
+# How often the pin service re-checks for a new release to pin.
+morphit_ipfs_pin_on_calendar: "hourly"
+# Seconds allowed for a single pin fetch.
+morphit_ipfs_pin_timeout: 900

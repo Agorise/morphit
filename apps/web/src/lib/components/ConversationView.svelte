@@ -1416,7 +1416,8 @@
 				asset: orderRecord.asset,
 				fiat_currency: orderRecord.fiat_currency,
 				amount_min: orderRecord.amount_min,
-				amount_max: orderRecord.amount_max
+				amount_max: orderRecord.amount_max,
+				accepted_assets: orderRecord.accepted_assets
 			},
 			undefined,
 			orderRecord.specific_barter_title || ($_('order_title.goods_services') as string)

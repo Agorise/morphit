@@ -308,6 +308,26 @@ morphit_i2pd_local_port: 8080
 morphit_i2pd_key_src: ""
 
 
+# ─── IPFS release hosting ────────────────────────────────────────
+# Every Morphit instance runs a small Kubo node that pins THIS instance's
+# current signed release, so Morphit's releases stay available even if every
+# commercial pinning service (Pinata/Storacha/…) drops them.  ON by default:
+# decentralization is priority #2, and operators keep 90% of the BLURT listing
+# fees — hosting the signed release is the quid pro quo.  Low-footprint by
+# design (lowpower Kubo profile, capped connections, ~12 MB pinned).  To opt a
+# host out, set enable_ipfs: false for that host in inventory.
+enable_ipfs: true
+morphit_kubo_version: "v0.42.0"
+# Kubo tarball SHA-512 (hex) — HARD PIN, verified by default. Baked to the
+# SHA-512 of the official kubo v0.42.0 linux-amd64 release asset (computed from
+# github.com/ipfs/kubo/releases; dist.ipfs.tech publishes the byte-identical
+# artifact, so the dist download is verified against exactly this). Bump this
+# in lockstep with morphit_kubo_version. Set to "" to fall back to verifying
+# against Kubo's published .sha512 instead.
+morphit_kubo_sha512: "054c38a0cf66f7d738e25085ad62cb3a42d03d4bac329b7dd25c1d71cf18e1ce87d55b1d1b705b04c65210dca9109973579e0eb1cd72f6341ecb3311d840d156"
+morphit_ipfs_pin_on_calendar: hourly
+
+
 # ─── BunkerWeb (§32) ─────────────────────────────────────────────
 
 enable_bunkerweb: true

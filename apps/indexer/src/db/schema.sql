@@ -2866,15 +2866,31 @@ COMMENT ON TABLE trade_concentration IS
 
 -- ─── v52: orders.specific_barter_title (v1.9.0 inline barter label) ───
 -- A BARTER (goods/services) listing lets the seller type WHAT they're
--- offering (e.g. "bananas") inline where the summary would otherwise
--- read the generic "goods/services".  That short letters-only (<=24)
--- label is pinned here so the orderbook, the order detail page, and the
--- on-chain Blurt announcement can render "…of bananas" instead of the
--- generic phrase.  NULL for every crypto order (they have no goods to
--- name) and for a blank barter title.  No index — it's a display label,
--- never a filter/containment key.
+-- offering (e.g. "banana trees") inline where the summary would otherwise
+-- read the generic "goods/services".  That short label — letters + single
+-- internal spaces, <=24 code points (t.txt #5 relaxed the original
+-- letters-only rule to allow multi-word wares) — is pinned here so the
+-- orderbook, the order detail page, and the on-chain Blurt announcement can
+-- render "…of banana trees" instead of the generic phrase.  NULL for every
+-- crypto order (they have no goods to name) and for a blank barter title.
+-- No index — it's a display label, never a filter/containment key.
 ALTER TABLE orders
     ADD COLUMN IF NOT EXISTS specific_barter_title TEXT;
 
 COMMENT ON COLUMN orders.specific_barter_title IS
-    'v1.9.0: for a BARTER order, the seller''s short letters-only (<=24 chars) label for what is on offer (e.g. bananas), shown inline in place of the generic goods/services text and folded into the order title + on-chain announcement. NULL for crypto orders.';
+    'v1.9.0: for a BARTER order, the seller''s short label (letters + single internal spaces, <=24 code points) for what is on offer (e.g. banana trees), shown inline in place of the generic goods/services text and folded into the order title + on-chain announcement. NULL for crypto orders.';
+
+-- ─── v53: releases.distribution (v1.9.x decentralized-distribution anchor) ───
+-- The optional distribution anchor from morphit_release_v1 (source_sha256,
+-- gpg_fingerprint, ipfs_cid, ipns_name, mirrors) was validated on ingest
+-- since cp556 but not stored.  It is now persisted so /v1/release can
+-- surface ipfs_cid/ipns_name AND every instance's built-in IPFS
+-- release-pinning service can read the current release's ipfs_cid from its
+-- OWN indexer and `ipfs pin add` it — decentralizing release availability
+-- off any single pinning provider.  NULL when the release op carried no
+-- distribution block.  No index — read one-row-latest via releases_valid_idx.
+ALTER TABLE releases
+    ADD COLUMN IF NOT EXISTS distribution JSONB;
+
+COMMENT ON COLUMN releases.distribution IS
+    'v1.9.x: optional decentralized-distribution anchor from morphit_release_v1 (source_sha256, gpg_fingerprint, ipfs_cid, ipns_name, mirrors). Surfaced via /v1/release; read by each instance''s IPFS release-pinning service to pin ipfs_cid. NULL when the release op carried no distribution block.';

@@ -53,6 +53,7 @@ interface ReleaseRow {
 	source_block_num: string;
 	created_at: Date;
 	treasury: unknown;
+	distribution: unknown;
 }
 
 export function releaseRoute(db: Database): Hono {
@@ -62,7 +63,7 @@ export function releaseRoute(db: Database): Hono {
 		const result = await db.query<ReleaseRow>(
 			`SELECT version, hash_manifest, endpoints, signer,
 			        source_trx_id, source_block_num::text, created_at,
-			        treasury
+			        treasury, distribution
 			 FROM releases
 			 WHERE valid = true
 			 ORDER BY created_at DESC
@@ -95,7 +96,12 @@ export function releaseRoute(db: Database): Hono {
 			// handler validator, (c) any future feature that touches
 			// this column.  The privacy invariant — viewkey never
 			// surfaces via API — is enforced at multiple layers.
-			treasury: stripViewkey(r.treasury) ?? null
+			treasury: stripViewkey(r.treasury) ?? null,
+			// cp564 — decentralized-distribution anchor (source_sha256,
+			// gpg_fingerprint, ipfs_cid, ipns_name, mirrors) or null. Public +
+			// verification-only (no secret, same as treasury). The built-in IPFS
+			// release-pinning service reads ipfs_cid from here to pin the release.
+			distribution: r.distribution ?? null
 		});
 	});
 

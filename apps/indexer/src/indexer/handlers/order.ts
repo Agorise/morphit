@@ -517,10 +517,10 @@ function validate(payload: unknown): ValidatedOrder | { reason: string } {
 
 	// v1.9.0 (Ken) — specific_barter_title: a BARTER order's own short label for
 	// what's on offer, typed inline where the summary reads "goods/services". It
-	// flows into the order title + the on-chain announcement. Letters-only, ≤24
-	// chars — validated STRICTLY here (reject, don't silently truncate) so the
-	// on-chain value matches what the client's sanitizer produced. Optional for
-	// barter; must be absent for a crypto asset (which has no goods to name).
+	// flows into the order title + the on-chain announcement. Letters + single
+	// internal spaces (t.txt #5), ≤24 chars — validated STRICTLY here (reject,
+	// don't silently truncate) so the on-chain value matches what the client's
+	// sanitizer produced. Optional for barter; must be absent for a crypto asset.
 	let specific_barter_title: string | null = null;
 	const barterTitleRaw = (payload as Record<string, unknown>).specific_barter_title;
 	if (barterTitleRaw !== undefined && barterTitleRaw !== null) {
@@ -536,9 +536,12 @@ function validate(payload: unknown): ValidatedOrder | { reason: string } {
 		if (Array.from(normalized).length > 24) {
 			return { reason: 'specific_barter_title_too_long' };
 		}
-		// Letters only — \p{L} covers accented + non-Latin scripts; anything else
-		// (digits, punctuation, whitespace, control chars) is rejected.
-		if (normalized.length > 0 && /[^\p{L}]/u.test(normalized)) {
+		// t.txt #5 — letters PLUS single internal spaces (multi-word wares like
+		// "banana trees"). \p{L} covers accented + non-Latin scripts; leading /
+		// trailing / double spaces, digits, punctuation, control chars → rejected.
+		// The client trims + collapses before broadcast, so a valid on-chain value
+		// is one-or-more letter-words joined by single spaces.
+		if (normalized.length > 0 && !/^\p{L}+(?: \p{L}+)*$/u.test(normalized)) {
 			return { reason: 'specific_barter_title_forbidden_char' };
 		}
 		specific_barter_title = normalized.length > 0 ? normalized : null;

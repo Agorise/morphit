@@ -20,9 +20,11 @@
  * guard caught it — so the AI-crawler corpus served stale answers
  * (the exact failure cp213's accuracy audit was meant to prevent).
  *
- * og-image.png and the media-kit zip already have freshness guards
- * for the same class of bug (source edited, derived artifact not
- * regenerated, stale bytes ship). This is the third such guard.
+ * The media-kit zip already has a freshness guard for the same class
+ * of bug (source edited, derived artifact not regenerated, stale bytes
+ * ship). This is a sibling guard. (og-image.png used to have one too,
+ * but as of cp567 the PNG is hand-authored, not derived, so it needs
+ * no source-drift guard.)
  *
  * Robust to git checkout: it does NOT use mtime. It re-derives the
  * expected bytes from the current en.json via the generator's pure

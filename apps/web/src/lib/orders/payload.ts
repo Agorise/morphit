@@ -215,14 +215,26 @@ export interface OrderFormInput {
 }
 
 /** v1.9.0 (Ken) — the inline BARTER "what am I offering" label is capped and
- *  letters-only (no digits, punctuation, or whitespace). Shared by the form
- *  input handler, the payload builder backstop, and the smoke so all three agree
- *  on the exact rule. `\p{L}` keeps accented + non-Latin letters (bananas,
+ *  restricted to letters + single internal spaces (no digits, punctuation, or
+ *  leading/trailing/double spaces). t.txt #5 relaxed the original letters-only
+ *  rule to allow multi-word wares ("banana trees"). Shared by the form input
+ *  handler, the payload builder backstop, and the smoke so all three agree on
+ *  the exact rule. `\p{L}` keeps accented + non-Latin letters (bananas,
  *  plátanos, бананы, 香蕉) while dropping everything else. */
 export const SPECIFIC_BARTER_TITLE_MAX = 24;
 export function sanitizeBarterTitle(raw: string | null | undefined): string {
 	if (!raw) return '';
-	return Array.from(raw.replace(/[^\p{L}]/gu, '')).slice(0, SPECIFIC_BARTER_TITLE_MAX).join('');
+	// t.txt #5 — letters (any script) PLUS single internal spaces, so multi-word
+	// wares like "banana trees" are allowed. Strip everything else (digits,
+	// punctuation, control chars), collapse whitespace runs to a single space,
+	// and drop a leading space. A single TRAILING space is intentionally kept
+	// while typing (so "banana " can become "banana trees"); buildOrderPayload
+	// .trim()s before broadcast, so the on-chain value has no trailing space.
+	const cleaned = raw
+		.replace(/[^\p{L}\s]/gu, '')
+		.replace(/\s+/gu, ' ')
+		.replace(/^ /u, '');
+	return Array.from(cleaned).slice(0, SPECIFIC_BARTER_TITLE_MAX).join('');
 }
 
 /**
@@ -304,12 +316,14 @@ export function buildOrderPayload(permlink: string, input: OrderFormInput): Orde
 		...(input.acceptedAssets !== undefined && input.acceptedAssets.length > 0
 			? { accepted_assets: [...new Set(input.acceptedAssets)].sort() as AssetTicker[] }
 			: {}),
-		// v1.9.0 (Ken) — the inline BARTER title, re-sanitized here (letters-only,
-		// ≤24) as the security/consistency backstop and included only when it
-		// survives non-empty. Omitted for crypto listings and blank barter titles,
-		// keeping the on-chain payload minimal and backward-compatible.
+		// v1.9.0 (Ken) — the inline BARTER title, re-sanitized here (letters +
+		// single internal spaces, ≤24) as the security/consistency backstop and
+		// included only when it survives non-empty. .trim() drops any trailing
+		// space the live field kept while typing, so the on-chain value is clean.
+		// Omitted for crypto listings and blank barter titles, keeping the
+		// on-chain payload minimal and backward-compatible.
 		...((): { specific_barter_title?: string } => {
-			const t = sanitizeBarterTitle(input.specificBarterTitle);
+			const t = sanitizeBarterTitle(input.specificBarterTitle).trim();
 			return t.length > 0 ? { specific_barter_title: t } : {};
 		})()
 	};

@@ -76,6 +76,10 @@ interface ValidatedRelease {
 	 *  it as null), serialized JSON when it did.  Either way,
 	 *  the column write is unambiguous. */
 	readonly treasury_serialized: string | null;
+	/** cp564 — optional distribution anchor (source_sha256, gpg_fingerprint,
+	 *  ipfs_cid, ipns_name, mirrors) as a JSON string, or null. Persisted so
+	 *  instances can pin the release's ipfs_cid and the API can surface it. */
+	readonly distribution_serialized: string | null;
 }
 
 /**
@@ -252,6 +256,18 @@ function validateDistribution(
 		ipfs_cid = cid;
 	}
 
+	// v1.9.x — optional stable IPNS name (w3name Ed25519 `k51…`, ~62 chars),
+	// the mutable "always latest" pointer. Same shape check as the schema
+	// package's validateDistribution so a stored-valid release re-validates.
+	let ipns_name: string | undefined;
+	if (d.ipns_name !== undefined && d.ipns_name !== null) {
+		const nm = d.ipns_name;
+		if (typeof nm !== 'string' || nm.length > 80 || !/^k51[a-z0-9]{50,70}$/.test(nm)) {
+			return { reason: 'distribution_ipns_name_invalid' };
+		}
+		ipns_name = nm;
+	}
+
 	let mirrors: string[] | undefined;
 	if (d.mirrors !== undefined && d.mirrors !== null) {
 		if (!Array.isArray(d.mirrors)) return { reason: 'distribution_mirrors_not_array' };
@@ -282,6 +298,7 @@ function validateDistribution(
 		source_sha256: sha,
 		gpg_fingerprint: fpr,
 		...(ipfs_cid !== undefined ? { ipfs_cid } : {}),
+		...(ipns_name !== undefined ? { ipns_name } : {}),
 		...(mirrors !== undefined ? { mirrors } : {})
 	};
 	const sizeCheck = checkJsonbSize(value);
@@ -339,12 +356,15 @@ function validate(payload: unknown): ValidatedRelease | { reason: string } {
 	const treasury_serialized =
 		treasuryResult.value === null ? null : JSON.stringify(treasuryResult.value);
 
-	// cp556 — validate the optional distribution anchor to gate the
-	// release's `valid` verdict (parity with the frontend validator).
-	// Not stored: downloaders read it from the chain, so no column /
-	// migration is needed — we only need it to be well-formed.
+	// cp564 — validate the optional distribution anchor (parity with the
+	// frontend validator) AND persist it: instances pin the release's
+	// ipfs_cid to their own IPFS node (decentralized availability), and the
+	// download page / pinning service read it from /v1/release, so the block
+	// now lives in a `distribution` JSONB column (migration v53).
 	const distributionResult = validateDistribution(payload.distribution);
 	if ('reason' in distributionResult) return { reason: distributionResult.reason };
+	const distribution_serialized =
+		distributionResult.value === null ? null : JSON.stringify(distributionResult.value);
 
 	return {
 		version,
@@ -353,7 +373,8 @@ function validate(payload: unknown): ValidatedRelease | { reason: string } {
 		signature,
 		hash_manifest_serialized: hashManifestSize.serialized,
 		endpoints_serialized,
-		treasury_serialized
+		treasury_serialized,
+		distribution_serialized
 	};
 }
 
@@ -410,9 +431,10 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		`INSERT INTO releases (
 			version, hash_manifest, endpoints, signature,
 			source_block_num, source_trx_id, signer, valid,
-			invalid_reason, created_at, treasury
+			invalid_reason, created_at, treasury, distribution
 		) VALUES ($1, $2::jsonb, $3::jsonb, $4, $5, $6, $7, $8, $9, $10,
-		          CASE WHEN $11::text IS NULL THEN NULL ELSE $11::jsonb END)
+		          CASE WHEN $11::text IS NULL THEN NULL ELSE $11::jsonb END,
+		          CASE WHEN $12::text IS NULL THEN NULL ELSE $12::jsonb END)
 		ON CONFLICT (source_trx_id) DO NOTHING`,
 		[
 			v.version,
@@ -425,7 +447,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			valid,
 			invalidReason,
 			ctx.blockTime,
-			v.treasury_serialized
+			v.treasury_serialized,
+			v.distribution_serialized
 		]
 	);
 

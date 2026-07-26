@@ -317,9 +317,10 @@ function validate(payload: unknown): Validated | { reason: string } {
 	}
 
 	// v1.9.0 (Ken) — specific_barter_title on edit. Mirror of order.ts: a BARTER
-	// order's inline goods label, letters-only, ≤24 chars, validated strictly so
-	// the edited on-chain value matches the client sanitizer. Optional for barter;
-	// must be absent for a crypto asset. Editing to blank clears it (→ null).
+	// order's inline goods label, letters + single internal spaces (t.txt #5),
+	// ≤24 chars, validated strictly so the edited on-chain value matches the
+	// client sanitizer. Optional for barter; must be absent for a crypto asset.
+	// Editing to blank clears it (→ null).
 	let specific_barter_title_validated: string | null = null;
 	const barterTitleRaw = (payload as Record<string, unknown>).specific_barter_title;
 	if (barterTitleRaw !== undefined && barterTitleRaw !== null) {
@@ -333,7 +334,7 @@ function validate(payload: unknown): Validated | { reason: string } {
 		if (Array.from(normalized).length > 24) {
 			return { reason: 'specific_barter_title_too_long' };
 		}
-		if (normalized.length > 0 && /[^\p{L}]/u.test(normalized)) {
+		if (normalized.length > 0 && !/^\p{L}+(?: \p{L}+)*$/u.test(normalized)) {
 			return { reason: 'specific_barter_title_forbidden_char' };
 		}
 		specific_barter_title_validated = normalized.length > 0 ? normalized : null;

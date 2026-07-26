@@ -107,6 +107,18 @@
 	// [lang]/+layout.svelte for design rationale.
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
 	const lp = $derived((path: string) => localePath(path, currentLang));
+
+	// t.txt #3 — the subtitle links the word "instances" to the instances page.
+	// Fill the {link} placeholder with a sentinel, split the localized string on
+	// it, and render an <a> between the parts, so the link sits at the
+	// grammatically-correct spot in every locale (word order varies).
+	const SUBTITLE_LINK_SLOT = '\u0000IL\u0000';
+	const subtitleParts = $derived.by(() => {
+		const full = $_('operators.subtitle', { values: { link: SUBTITLE_LINK_SLOT } }) as string;
+		const i = full.indexOf(SUBTITLE_LINK_SLOT);
+		if (i < 0) return { before: full, after: '' };
+		return { before: full.slice(0, i), after: full.slice(i + SUBTITLE_LINK_SLOT.length) };
+	});
 </script>
 
 <Head routeKey="operators" />
@@ -117,7 +129,11 @@
 			<span class="brand-gradient-text">{$_('operators.title')}</span>
 		</h1>
 		<p class="mx-auto mt-4 max-w-2xl text-ink-700 dark:text-ink-300">
-			{$_('operators.subtitle')}
+			{subtitleParts.before}<a
+				href={lp('/instances')}
+				class="text-morphit-teal hover:underline dark:text-morphit-emerald"
+				>{$_('operators.subtitle_instances_link')}</a
+			>{subtitleParts.after}
 		</p>
 	</header>
 

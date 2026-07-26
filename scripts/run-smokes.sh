@@ -401,7 +401,6 @@ SMOKES=(
 	"packages/asset-registry:usdt-network-picker-required-smoke"
 	".:brag-list-claim-parity-smoke"
 	".:seo-url-consistency-smoke"
-	"apps/web:og-image-freshness-smoke"
 	"apps/web:og-fallback-meta-smoke"
 	"apps/web:release-tamper-deploy-skew-smoke"
 	"apps/web:balance-locale-sign-colors-smoke"
@@ -582,6 +581,8 @@ SMOKES=(
 	"apps/web:import-eager-self-avatar-smoke"
 	"apps/web:order-blog-post-mirror-smoke"
 	"apps/web:barter-specific-title-smoke"
+	".:ipns-release-wiring-smoke"
+	".:ipfs-release-hosting-smoke"
 )
 
 total=0

@@ -436,6 +436,22 @@ COMMENT ON COLUMN orders.specific_barter_title IS
     'shown inline in place of the generic goods/services text and folded '
     'into the order title + on-chain announcement. NULL for crypto orders.';
 `
+	}	,
+	{
+		version: 53,
+		description:
+			"v1.9.x (Ken): add releases.distribution (JSONB, nullable). The optional decentralized-distribution anchor from morphit_release_v1 (source_sha256, gpg_fingerprint, ipfs_cid, ipns_name, mirrors) was validated on ingest since cp556 but NOT stored (\"downloaders read it from the chain\"). It is now persisted so (a) /v1/release can surface ipfs_cid/ipns_name, and (b) every instance's built-in IPFS release-pinning service can read the current release's ipfs_cid from its OWN indexer and `ipfs pin add` it — decentralizing release availability off any single pinning provider. Additive + backward-compatible: pre-existing rows get NULL (back-filled naturally as new releases are indexed / after a reindex); older indexers ignore the column. No index — read one-row-latest alongside the existing valid/created_at path.",
+		sql: `
+ALTER TABLE releases
+    ADD COLUMN IF NOT EXISTS distribution JSONB;
+
+COMMENT ON COLUMN releases.distribution IS
+    'v1.9.x: optional decentralized-distribution anchor from '
+    'morphit_release_v1 (source_sha256, gpg_fingerprint, ipfs_cid, '
+    'ipns_name, mirrors). Surfaced via /v1/release; read by each '
+    'instance''s IPFS release-pinning service to pin ipfs_cid. NULL when '
+    'the release op carried no distribution block.';
+`
 	}
 
 	// Future migrations land here.  The v1 collapsed schema is the

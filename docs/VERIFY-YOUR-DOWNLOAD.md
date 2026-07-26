@@ -153,13 +153,38 @@ git clone https://codeberg.org/agorise/morphit.git   # or the GitHub / Forgejo U
 cd morphit && git verify-tag vX.Y.Z
 ```
 
-If the release was also pinned to IPFS, the verifier prints its CID; you
-can fetch the exact signed tarball by content address and re-run the
-Option B checks on it:
+If the release was also pinned to IPFS, the verifier prints its CID. That
+CID names a small **release directory** — the signed tarball plus its
+`.sha256`/`.asc`, the release notes, and a `metadata.json` — so you can
+browse it, read the notes, or pull the exact bytes and re-run the Option B
+checks:
 
 ```sh
-ipfs get <CID> -o morphit-vX.Y.Z.tar.gz
+# list what's in the release directory
+ipfs ls <CID>
+# fetch the signed tarball out of it (its bytes are content-addressed, so
+# this is the same file the on-chain SHA-256 covers)
+ipfs get <CID>/morphit-vX.Y.Z.tar.gz -o morphit-vX.Y.Z.tar.gz
 ```
+
+That CID is immutable — it only ever names *that* release. To always fetch
+the **latest** release over IPFS, Morphit also publishes a stable **IPNS
+name** (a `k51…` string, shown on the on-chain anchor as `ipns_name` and on
+the download page). It resolves through any IPFS gateway to the newest
+release directory, which always contains a stable-named `morphit-latest.tar.gz`:
+
+```sh
+# always the latest signed tarball, by name instead of by CID
+curl -fsSLo morphit-latest.tar.gz https://dweb.link/ipns/<name>/morphit-latest.tar.gz
+# ...then run the same Option B checks on it (the on-chain SHA-256 tells you
+# which version you actually got). Browse https://dweb.link/ipns/<name>/ for
+# the versioned filename, release notes, and metadata.json.
+```
+
+IPNS is a convenience for *discovery* only — it is a mutable pointer, so a
+copy fetched this way is still only trustworthy once it passes the
+`source_sha256` + GPG checks above. The immutable `ipfs_cid` and the signed
+tag remain the verification anchors.
 
 Because the signed tag, the GPG signature, and the on-chain hash are all
 host-independent, code that passes verification is the genuine release

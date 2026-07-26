@@ -187,6 +187,10 @@ export interface OrderPostContext {
 	/** v1.9.0 (Ken) — the BARTER inline goods label; when set, the headline reads
 	 *  "…of bananas" instead of the generic "goods/services". Ignored for crypto. */
 	readonly specificBarterTitle?: string | null;
+	/** t.txt #5 — the BARTER accepted crypto ticker(s), so a value-free barter
+	 *  headline reads "I want to sell {goods} for {cryptos}" (the same title the
+	 *  order card and create-flow summary render). Ignored for crypto/valued barter. */
+	readonly acceptedAssets?: readonly string[] | null;
 }
 
 /** Fire Post B. Returns an explicit Result so the order-success
@@ -214,7 +218,8 @@ export async function publishOrderPost(
 				asset: ctx.asset,
 				fiat_currency: ctx.counterAsset,
 				amount_min: ctx.amountMin ?? null,
-				amount_max: ctx.amountMax ?? null
+				amount_max: ctx.amountMax ?? null,
+				accepted_assets: ctx.acceptedAssets ?? null
 			},
 			(n) => String(n),
 			ctx.specificBarterTitle || (t('order_title.goods_services') as string)
