@@ -52,6 +52,8 @@ interface OrderRow {
 	payment_methods: string[];
 	/** cp425 — accepted crypto set for a BARTER order; null for crypto assets. */
 	accepted_assets: string[] | null;
+	/** v1.9.0 — a BARTER order's inline goods label; null for crypto orders. */
+	specific_barter_title: string | null;
 	terms: string | null;
 	status: 'live' | 'cancelled' | 'expired' | 'completed';
 	fee_status:
@@ -116,6 +118,7 @@ function rowToWire(r: OrderRow) {
 		location_region: r.location_region,
 		payment_methods: r.payment_methods,
 		accepted_assets: r.accepted_assets ?? null,
+		specific_barter_title: r.specific_barter_title ?? null,
 		terms: r.terms,
 		status: r.status,
 		fee_status: r.fee_status,
@@ -181,7 +184,8 @@ export function ordersByAccountRoute(db: Database, operatorAccount: string): Hon
 
 		const sql = `SELECT o.account, o.permlink, o.side, o.asset, o.fiat_currency,
 			        o.amount_min::text, o.amount_max::text, o.price_model,
-			        o.location_region, o.payment_methods, o.accepted_assets, o.terms,
+			        o.location_region, o.payment_methods, o.accepted_assets,
+			        o.specific_barter_title, o.terms,
 			        o.status, o.fee_status, o.fee_method,
 			        o.completed_counterparty,
 			        -- v1.5.5 (Ken): the 🌱 new-trader chip now keys off COMPLETED

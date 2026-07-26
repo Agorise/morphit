@@ -41,8 +41,15 @@ function row(overrides: Partial<FeaturedRow> = {}): FeaturedRow {
 		location_region: null,
 		payment_methods: ['cash_in_person'],
 		accepted_assets: null,
+		specific_barter_title: null,
 		terms: 'terms',
 		status: 'live',
+		// v1.8.16 — inline poster identity columns (profileJoin), now emitted in
+		// the wire mapping. The LEFT JOIN always returns them (null when no
+		// profile row), so they are required on FeaturedRow; a mock without them
+		// no longer typechecks.
+		display_name: 'Alice',
+		profile_json_metadata: { profile: { name: 'Alice' } },
 		engagement_24h: 2,
 		created_at: new Date('2026-07-07T00:00:00Z'),
 		updated_at: new Date('2026-07-08T00:00:00Z'),
@@ -103,6 +110,12 @@ describe('GET /v1/featured — order-card trust signals', () => {
 		expect(order.is_new_trader).toBe(false);
 		expect(order.first_trade_at).toBe('2026-01-15T00:00:00.000Z');
 		expect(order.posting_pubkey).toBe('BLT5vw111111111111111111111111111111111117Bjw');
+		// v1.8.16 (Ken) — the featured payload must carry inline poster identity so
+		// the homepage card is correct on FIRST paint (no @account+identicon swap).
+		// These were SELECTed since v1.8.13 but silently dropped from the wire
+		// mapping until now; assert both so a regression turns this test red.
+		expect(order.display_name).toBe('Alice');
+		expect(order.profile_json_metadata).toEqual({ profile: { name: 'Alice' } });
 	});
 
 	it('flags a new trader (the 🌱 sprout) and reports a null score with no feedback', async () => {

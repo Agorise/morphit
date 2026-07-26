@@ -421,6 +421,21 @@ ALTER TABLE moderation_flag_clearances
     ADD CONSTRAINT moderation_flag_clearances_signal_check
     CHECK (signal IN ('reciprocity', 'related', 'pile_on', 'concentration'));
 `
+	}	,
+	{
+		version: 52,
+		description:
+			"v1.9.0 (Ken): add orders.specific_barter_title. For a BARTER (goods/services) listing, the seller's own short label for WHAT they're offering (e.g. 'bananas'), typed inline where the order summary would otherwise read the generic 'goods/services'. It flows into the order title ('…of bananas') and the on-chain Blurt announcement. Letters-only, ≤24 chars, validated on ingest (order.ts / orderReplace.ts); NULL for every crypto order and for a blank barter title. Additive + backward-compatible: older payloads omit it, older indexers ignore it. No index — it's a display label, never a filter key.",
+		sql: `
+ALTER TABLE orders
+    ADD COLUMN IF NOT EXISTS specific_barter_title TEXT;
+
+COMMENT ON COLUMN orders.specific_barter_title IS
+    'v1.9.0: for a BARTER (goods/services) order, the seller''s short '
+    'letters-only (<=24 chars) label for what is on offer (e.g. bananas), '
+    'shown inline in place of the generic goods/services text and folded '
+    'into the order title + on-chain announcement. NULL for crypto orders.';
+`
 	}
 
 	// Future migrations land here.  The v1 collapsed schema is the

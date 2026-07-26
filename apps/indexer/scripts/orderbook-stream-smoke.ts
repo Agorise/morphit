@@ -92,6 +92,7 @@ function makeRow(overrides: Partial<OrderbookStreamRow> = {}): OrderbookStreamRo
 		// payload silently dropped the key. null here = a crypto (non-barter)
 		// order, which is what this BTC row is.
 		accepted_assets: null,
+		specific_barter_title: null,
 		engagement_24h: 3,
 		terms: 'meet at café',
 		fee_method: 'blurt',
@@ -161,10 +162,18 @@ scenario('buildWhereClauses: asset filter matches traded OR pays-with OR accepte
 	assertEqual(params, ['BTC', 'pay_btc'], 'asset + pay_<ticker> params');
 });
 
-scenario('buildWhereClauses: side filter binds correctly', () => {
+scenario('buildWhereClauses: side filter binds correctly (barter-aware)', () => {
 	const { where, params } = buildWhereClauses({ side: 'sell' });
-	assertEqual(where[3], 'o.side = $1', 'side clause');
-	assertEqual(params, ['sell'], 'params');
+	// v1.8.16 (Ken) — barter orders store o.side as the GOODS direction, the
+	// inverse of the crypto direction, so the crypto-facing side filter emits a
+	// two-branch clause (shared cryptoFacingSideWhere) binding the requested side
+	// AND its opposite: "sell crypto" matches crypto SELL or barter BUY.
+	assertEqual(
+		where[3],
+		"((o.asset <> 'BARTER' AND o.side = $1) OR (o.asset = 'BARTER' AND o.side = $2))",
+		'side clause (barter-aware)'
+	);
+	assertEqual(params, ['sell', 'buy'], 'params (requested side + opposite)');
 });
 
 scenario('buildWhereClauses: fiat_currency filter binds correctly', () => {
@@ -236,17 +245,23 @@ scenario('buildWhereClauses: combined filter binds in order', () => {
 		fiat_currency: 'EUR',
 		min_trades: 2
 	});
-	// v1.8.15 — the asset clause now binds TWO params (asset + pay_<ticker>),
-	// so every subsequent placeholder shifts up by one.
+	// v1.8.15 — the asset clause binds TWO params (asset + pay_<ticker>).
+	// v1.8.16 — the side clause now ALSO binds two (requested side + opposite,
+	// for the barter-inverse match), so every placeholder after side shifts up by
+	// one more: fiat $4→$5, min_trades $5→$6.
 	assertEqual(
 		where[3],
 		'(o.asset = $1 OR EXISTS (SELECT 1 FROM unnest(o.payment_methods) pm WHERE lower(pm) = $2) OR $1 = ANY(o.accepted_assets))',
 		'asset clause (broadened)'
 	);
-	assertEqual(where[4], 'o.side = $3', 'side $3');
-	assertEqual(where[5], 'o.fiat_currency = ANY($4::text[])', 'fiat $4');
-	assertEqual(where[6], 'COALESCE(tc.c, 0) >= $5', 'min_trades $5');
-	assertEqual(params, ['BTC', 'pay_btc', 'sell', ['EUR'], 2], 'params in order');
+	assertEqual(
+		where[4],
+		"((o.asset <> 'BARTER' AND o.side = $3) OR (o.asset = 'BARTER' AND o.side = $4))",
+		'side clause (barter-aware, $3/$4)'
+	);
+	assertEqual(where[5], 'o.fiat_currency = ANY($5::text[])', 'fiat $5');
+	assertEqual(where[6], 'COALESCE(tc.c, 0) >= $6', 'min_trades $6');
+	assertEqual(params, ['BTC', 'pay_btc', 'sell', 'buy', ['EUR'], 2], 'params in order');
 });
 
 scenario('buildWhereClauses: startIndex offsets parameter numbering', () => {
@@ -308,16 +323,26 @@ scenario('buildWhereClauses: account alone is legal (all of a trader\'s live ord
 scenario('buildWhereClauses: the watch filter composes with the others', () => {
 	const { where, params } = buildWhereClauses({ account: 'kentest3', asset: 'BTC', side: 'sell' });
 	assertTrue(where.includes('o.account = $1'), 'account');
-	// v1.8.15 — asset clause broadened + binds two params ($2 asset, $3 pay_btc),
-	// so side shifts to $4.
+	// v1.8.15 — asset clause broadened + binds two params ($2 asset, $3 pay_btc).
+	// v1.8.16 — side is the barter-aware two-branch clause binding $4 (requested)
+	// and $5 (opposite), so params gain the opposite side after 'sell'.
 	assertTrue(
 		where.includes(
 			'(o.asset = $2 OR EXISTS (SELECT 1 FROM unnest(o.payment_methods) pm WHERE lower(pm) = $3) OR $2 = ANY(o.accepted_assets))'
 		),
 		'asset (broadened)'
 	);
-	assertTrue(where.includes('o.side = $4'), 'side');
-	assertEqual(params, ['kentest3', 'BTC', 'pay_btc', 'sell'], 'param order matches placeholder order');
+	assertTrue(
+		where.includes(
+			"((o.asset <> 'BARTER' AND o.side = $4) OR (o.asset = 'BARTER' AND o.side = $5))"
+		),
+		'side (barter-aware)'
+	);
+	assertEqual(
+		params,
+		['kentest3', 'BTC', 'pay_btc', 'sell', 'buy'],
+		'param order matches placeholder order'
+	);
 });
 
 scenario('buildWhereClauses: watch filter respects startIndex (per-row lookup path)', () => {

@@ -94,6 +94,7 @@ interface Validated {
 	 *  amount/terms; the asset itself stays locked to BARTER). Null for
 	 *  crypto assets. */
 	readonly accepted_assets: readonly string[] | null;
+	readonly specific_barter_title: string | null;
 }
 
 function validate(payload: unknown): Validated | { reason: string } {
@@ -315,6 +316,29 @@ function validate(payload: unknown): Validated | { reason: string } {
 		accepted_assets_validated = null;
 	}
 
+	// v1.9.0 (Ken) — specific_barter_title on edit. Mirror of order.ts: a BARTER
+	// order's inline goods label, letters-only, ≤24 chars, validated strictly so
+	// the edited on-chain value matches the client sanitizer. Optional for barter;
+	// must be absent for a crypto asset. Editing to blank clears it (→ null).
+	let specific_barter_title_validated: string | null = null;
+	const barterTitleRaw = (payload as Record<string, unknown>).specific_barter_title;
+	if (barterTitleRaw !== undefined && barterTitleRaw !== null) {
+		if (!isGoodsAsset(asset as AssetTicker)) {
+			return { reason: 'specific_barter_title_not_permitted_for_asset' };
+		}
+		if (typeof barterTitleRaw !== 'string') {
+			return { reason: 'specific_barter_title_not_string' };
+		}
+		const normalized = barterTitleRaw.normalize('NFC');
+		if (Array.from(normalized).length > 24) {
+			return { reason: 'specific_barter_title_too_long' };
+		}
+		if (normalized.length > 0 && /[^\p{L}]/u.test(normalized)) {
+			return { reason: 'specific_barter_title_forbidden_char' };
+		}
+		specific_barter_title_validated = normalized.length > 0 ? normalized : null;
+	}
+
 	return {
 		permlink,
 		side: side as 'buy' | 'sell',
@@ -336,7 +360,8 @@ function validate(payload: unknown): Validated | { reason: string } {
 		// (see handle() body for the target.asset_network check) —
 		// network is substance per ADR-0023/0028, not detail.
 		asset_network: asset_network_validated,
-		accepted_assets: accepted_assets_validated
+		accepted_assets: accepted_assets_validated,
+		specific_barter_title: specific_barter_title_validated
 	};
 }
 
@@ -494,7 +519,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			terms = $11,
 			updated_at = $12,
 			expires_at = $13,
-			accepted_assets = $14
+			accepted_assets = $14,
+			specific_barter_title = $15
 		 WHERE account = $1 AND permlink = $2 AND status = 'live'`,
 		[
 			ctx.signer,
@@ -510,7 +536,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			v.terms,
 			ctx.blockTime,
 			v.expires_at,
-			v.accepted_assets
+			v.accepted_assets,
+			v.specific_barter_title
 		]
 	);
 

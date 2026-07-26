@@ -289,6 +289,13 @@
 	let myFeedbackForPeer = $state<FeedbackRecord | null>(null);
 	let feedbackChecked = $state(false);
 	let justSubmittedFeedback = $state(false);
+	// v1.9.0 (Ken) — the "Mark this trade complete" card's Cancel button did
+	// nothing because ConversationView never passed an onCancel. This flag hides
+	// the card when the user dismisses it. The view is keyed on peer+orderPermlink
+	// (see [peer]/+page.svelte), so switching conversations remounts and resets
+	// this to false — a dismissal is per-conversation, and the user can still
+	// review later from /my/orders.
+	let feedbackDismissed = $state(false);
 	let feedbackFetchStarted = false;
 	$effect(() => {
 		if (feedbackFetchStarted || orderPermlink === undefined || !me || !peer) return;
@@ -1412,7 +1419,7 @@
 				amount_max: orderRecord.amount_max
 			},
 			undefined,
-			$_('order_title.goods_services')
+			orderRecord.specific_barter_title || ($_('order_title.goods_services') as string)
 		);
 		return $_(parts.key, { values: parts.values }) as string;
 	});
@@ -2063,7 +2070,7 @@
 	     Receipt landed), either party can review the other right from the
 	     chat. Sits directly below the last message, above the composer. -->
 	{#if orderPermlink}
-		{#if canLeaveFeedback}
+		{#if canLeaveFeedback && !feedbackDismissed}
 			<!-- cp508 (tt.txt #9) — no green border/tint on the "Mark this trade
 			     complete" card; the LeaveFeedbackForm inside carries its own subtle
 			     card styling, so this is just spacing now. -->
@@ -2082,6 +2089,7 @@
 					lockSubject={true}
 					completeOwnedOrder={orderIsMine}
 					onSuccess={onChatFeedbackSuccess}
+					onCancel={() => (feedbackDismissed = true)}
 				/>
 			</div>
 		{/if}

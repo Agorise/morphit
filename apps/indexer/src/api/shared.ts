@@ -62,3 +62,36 @@ export interface ErrorBody {
 export function errorBody(code: ErrorBody['code'], message: string): ErrorBody {
 	return { status: 'error', code, message };
 }
+
+/**
+ * WHERE-clause fragment for the orderbook's crypto-facing "I want to see" side
+ * filter, binding the side value(s) via `p`.
+ *
+ * The filter's options are phrased in CRYPTO terms — "posts wanting to buy
+ * crypto" / "…sell crypto". For an ordinary crypto/fiat order, `o.side` already
+ * IS that crypto direction. But for a BARTER (goods/services) order, `o.side` is
+ * the GOODS direction, which is the INVERSE of the crypto one: selling goods
+ * (e.g. bananas) means the poster is ACQUIRING crypto — i.e. BUYING crypto — and
+ * buying goods means the poster is SPENDING crypto — i.e. SELLING crypto (Ken,
+ * t.txt v1.8.16 #3). The filter used to splice `o.side = <side>` for every
+ * order, so a banana-seller wrongly showed under "wanting to sell crypto". Barter
+ * rows therefore match the OPPOSITE side.
+ *
+ * Emitted as two equality branches rather than a per-row CASE so `o.side` stays
+ * index-usable; `o.asset` is NOT NULL, so `<> 'BARTER'` is exhaustive. The
+ * 'BARTER' literal is the sole goods ticker — `isGoodsAsset` in
+ * @morphit/asset-registry is `t === 'BARTER'` (pinned by
+ * orderbook-side-barter-flip-smoke). All three orderbook surfaces — snapshot
+ * (orderbook.ts), live SSE stream (orderbookStreamHelpers.ts) and RSS
+ * (rssOrderbookHandlers.ts) — call this, so they filter identically by
+ * construction.
+ *
+ * `p` is the caller's positional-parameter registrar (returns e.g. "$3").
+ */
+export function cryptoFacingSideWhere(side: 'buy' | 'sell', p: (v: unknown) => string): string {
+	const opposite: 'buy' | 'sell' = side === 'buy' ? 'sell' : 'buy';
+	return (
+		`((o.asset <> 'BARTER' AND o.side = ${p(side)}) ` +
+		`OR (o.asset = 'BARTER' AND o.side = ${p(opposite)}))`
+	);
+}

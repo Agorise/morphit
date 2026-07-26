@@ -130,6 +130,10 @@ interface ValidatedOrder {
 	 *  ASSET_TICKERS, never BARTER or any goods asset.  Null for every crypto
 	 *  asset — those settle in themselves and carry no accepted-set. */
 	readonly accepted_assets: readonly string[] | null;
+	/** v1.9.0 (Ken) — a BARTER order's inline "what am I offering" label (e.g.
+	 *  "bananas"). Letters-only, ≤24 chars. Null for crypto orders and blank
+	 *  barter titles. Optional/backward-compatible: absent on older payloads. */
+	readonly specific_barter_title: string | null;
 }
 
 function validate(payload: unknown): ValidatedOrder | { reason: string } {
@@ -511,6 +515,35 @@ function validate(payload: unknown): ValidatedOrder | { reason: string } {
 		accepted_assets = null;
 	}
 
+	// v1.9.0 (Ken) — specific_barter_title: a BARTER order's own short label for
+	// what's on offer, typed inline where the summary reads "goods/services". It
+	// flows into the order title + the on-chain announcement. Letters-only, ≤24
+	// chars — validated STRICTLY here (reject, don't silently truncate) so the
+	// on-chain value matches what the client's sanitizer produced. Optional for
+	// barter; must be absent for a crypto asset (which has no goods to name).
+	let specific_barter_title: string | null = null;
+	const barterTitleRaw = (payload as Record<string, unknown>).specific_barter_title;
+	if (barterTitleRaw !== undefined && barterTitleRaw !== null) {
+		if (!isGoodsAsset(asset as AssetTicker)) {
+			return { reason: 'specific_barter_title_not_permitted_for_asset' };
+		}
+		if (typeof barterTitleRaw !== 'string') {
+			return { reason: 'specific_barter_title_not_string' };
+		}
+		const normalized = barterTitleRaw.normalize('NFC');
+		// Count by code points (Array.from), not UTF-16 units, so an accented or
+		// astral letter counts as one — same rule the client enforces.
+		if (Array.from(normalized).length > 24) {
+			return { reason: 'specific_barter_title_too_long' };
+		}
+		// Letters only — \p{L} covers accented + non-Latin scripts; anything else
+		// (digits, punctuation, whitespace, control chars) is rejected.
+		if (normalized.length > 0 && /[^\p{L}]/u.test(normalized)) {
+			return { reason: 'specific_barter_title_forbidden_char' };
+		}
+		specific_barter_title = normalized.length > 0 ? normalized : null;
+	}
+
 	return {
 		permlink,
 		side: side as 'buy' | 'sell',
@@ -528,7 +561,8 @@ function validate(payload: unknown): ValidatedOrder | { reason: string } {
 		external_tx_id,
 		tx_proof,
 		asset_network,
-		accepted_assets
+		accepted_assets,
+		specific_barter_title
 	};
 }
 
@@ -720,9 +754,10 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 				account, permlink, side, asset, asset_network, fiat_currency,
 				amount_min, amount_max, price_model, location_region,
 				payment_methods, terms, status, created_at, updated_at,
-				expires_at, fee_status, fee_method, operator_tag, accepted_assets
+				expires_at, fee_status, fee_method, operator_tag, accepted_assets,
+				specific_barter_title
 			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12,
-			          'live', $13, $13, $14, 'verified', 'waived_first_buy', $15, $16)
+			          'live', $13, $13, $14, 'verified', 'waived_first_buy', $15, $16, $17)
 			ON CONFLICT (account, permlink) DO NOTHING`,
 			[
 				ctx.signer,
@@ -740,7 +775,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 				ctx.blockTime,
 				v.expires_at,
 				operatorTagForRow,
-				v.accepted_assets
+				v.accepted_assets,
+				v.specific_barter_title
 			]
 		);
 		if ((waiverRes.rowCount ?? 0) > 0) {
@@ -811,9 +847,9 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 					amount_min, amount_max, price_model, location_region,
 					payment_methods, terms, status, created_at, updated_at,
 					expires_at, fee_status, fee_method, external_tx_id, tx_proof,
-					operator_tag, accepted_assets
+					operator_tag, accepted_assets, specific_barter_title
 				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12,
-				          'live', $13, $13, $14, 'reused', $15, $16, $17, $18, $19)
+				          'live', $13, $13, $14, 'reused', $15, $16, $17, $18, $19, $20)
 				ON CONFLICT (account, permlink) DO NOTHING`,
 				[
 					ctx.signer,
@@ -834,7 +870,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 					v.external_tx_id,
 					v.tx_proof,
 					operatorTagForRow,
-					v.accepted_assets
+					v.accepted_assets,
+					v.specific_barter_title
 				]
 			);
 			// Reused-fee orders have fee_status='reused' so they
@@ -888,9 +925,9 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 				amount_min, amount_max, price_model, location_region,
 				payment_methods, terms, status, created_at, updated_at,
 				expires_at, fee_status, fee_method, external_tx_id, tx_proof,
-				operator_tag, accepted_assets
+				operator_tag, accepted_assets, specific_barter_title
 			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12,
-			          'live', $13, $13, $14, $15, $16, $17, $18, $19, $20)
+			          'live', $13, $13, $14, $15, $16, $17, $18, $19, $20, $21)
 			ON CONFLICT (account, permlink) DO NOTHING`,
 			[
 				ctx.signer,
@@ -912,7 +949,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 				v.external_tx_id,
 				v.tx_proof,
 				operatorTagForRow,
-				v.accepted_assets
+				v.accepted_assets,
+				v.specific_barter_title
 			]
 		);
 		if ((externalRes.rowCount ?? 0) > 0) {
@@ -988,9 +1026,10 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			account, permlink, side, asset, asset_network, fiat_currency,
 			amount_min, amount_max, price_model, location_region,
 			payment_methods, terms, status, created_at, updated_at,
-			expires_at, fee_status, fee_method, operator_tag, accepted_assets
+			expires_at, fee_status, fee_method, operator_tag, accepted_assets,
+			specific_barter_title
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12,
-		          'live', $13, $13, $14, $15, 'blurt', $16, $17)
+		          'live', $13, $13, $14, $15, 'blurt', $16, $17, $18)
 		ON CONFLICT (account, permlink) DO NOTHING`,
 		[
 			ctx.signer,
@@ -1009,7 +1048,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			v.expires_at,
 			feeStatus,
 			operatorTagForRow,
-			v.accepted_assets
+			v.accepted_assets,
+			v.specific_barter_title
 		]
 	);
 

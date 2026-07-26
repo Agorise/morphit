@@ -210,7 +210,7 @@ async function gatherInputs(): Promise<Inputs> {
 	// to omit the block (a release cut before the anchor was available).
 	process.stderr.write('\n── Distribution anchor (cp556) ───────────────────────────\n');
 	process.stderr.write('Verifiable pointer to the published source tarball\n');
-	process.stderr.write('(auto-mirrored to Codeberg / GitHub).  Leave ALL empty to omit.\n');
+	process.stderr.write('(auto-mirrored to Codeberg / GitHub / SourceForge / SourceHut).  Leave ALL empty to omit.\n');
 	process.stderr.write('source_sha256 + gpg_fingerprint go together; both come from\n');
 	process.stderr.write('the release-attached distribution-anchor.env.\n\n');
 
@@ -269,14 +269,29 @@ function buildDistribution(i: Inputs): ReleaseDistributionBlock | null {
 
 	// The mirrors are a FIXED decentralization breadcrumb: Forgejo auto-pushes
 	// commits + the signed tag to these hosts, so an operator never has to
-	// supply them. Default to the canonical pair when the block IS being
+	// supply them. Default to the canonical set when the block IS being
 	// emitted (sha + fpr present) and no explicit list was given. NB: this
 	// default is applied HERE, not at the prompt — applying it at the prompt
 	// would make mirrorList always non-empty, so an anchor-less build could no
 	// longer omit the whole block by leaving sha + fpr empty (it would trip the
 	// "needs BOTH" failure above). Emitted only alongside a real anchor.
+	// v1.8.16 (Ken) — SourceForge + SourceHut added; both mirror the same signed
+	// bytes and appear as live cards on the download page. GitLab, Bitbucket and
+	// Launchpad added once their Forgejo push-mirrors were confirmed live. Seven
+	// total — still ≤8 (the on-chain cap in handlers/release.ts). Launchpad's URL
+	// carries a `+` (`/+git/`), which needs v1.8.16's relaxed mirror regex, so
+	// this list must only be broadcast from a v1.8.16+ instance (the release
+	// ceremony upgrades the canonical instance before it broadcasts).
 	if (mirrorList.length === 0) {
-		mirrorList = ['https://codeberg.org/agorise/morphit', 'https://github.com/agorise/morphit'];
+		mirrorList = [
+			'https://codeberg.org/agorise/morphit',
+			'https://github.com/agorise/morphit',
+			'https://sourceforge.net/projects/agorise-morphit/',
+			'https://git.sr.ht/~agorise/morphit',
+			'https://gitlab.com/Agorise/morphit',
+			'https://bitbucket.org/agorise/morphit',
+			'https://git.launchpad.net/~agorise/+git/morphit'
+		];
 	}
 
 	const value: Record<string, unknown> = { source_sha256: sha, gpg_fingerprint: fpr };

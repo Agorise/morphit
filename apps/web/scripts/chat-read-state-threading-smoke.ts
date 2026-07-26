@@ -148,7 +148,11 @@ const unreadMod = strip(readFileSync(join(WEB, 'src', 'lib', 'notifications', 'c
 
 check(
 	'the inbox card judges unread via the SHARED threadIsUnread predicate',
-	/unread: threadIsUnread\(/.test(page),
+	// v1.9.0 — the card now gates the flag on the folder first
+	// (`unread: folder !== 'archived' && threadIsUnread(...)`), so allow that
+	// clause between `unread:` and the predicate; the point is the card DELEGATES
+	// to threadIsUnread rather than re-implementing the rule.
+	/unread:[\s\S]{0,90}?threadIsUnread\(/.test(page),
 	'the card must not re-implement the rule against the durable last_message_at'
 );
 check(

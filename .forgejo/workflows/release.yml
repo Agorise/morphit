@@ -28,13 +28,10 @@ jobs:
   release:
     name: Build + publish release tarball
     runs-on: ubuntu-24.04
-    # The Publish step creates the release + uploads assets with the
-    # runner's AUTOMATIC Actions token (secrets.GITHUB_TOKEN — reserved,
-    # injected by Forgejo, NOT a secret you create). Declaring the scope
-    # explicitly grants that token release/content write and nothing more,
-    # so the auto-publish works without any hand-configured secret.
-    permissions:
-      contents: write
+    # NB: Forgejo does NOT implement GitHub's `permissions:` key (it warns
+    # and ignores it), so we don't set one. The Publish step's token scope
+    # comes from Forgejo's default Actions token (repo-scoped) or, if that
+    # is capped, an operator-supplied MORPHIT_RELEASE_TOKEN secret.
     # cp145 — release does the smokes-job's work (~18 min) plus
     # tag verification, tarball build, checksum, upload.  Observed
     # runtime ~25 min.  60-minute ceiling = 2.4× headroom.
@@ -314,6 +311,44 @@ jobs:
           echo "Signed $TARBALL with key $KEYID."
           rm -rf "$SIGN_HOME"
 
+      - name: Pin release tarball to IPFS (optional — Pinata)
+        # OPTIONAL decentralized mirror. If a PINATA_JWT secret is set, pin the
+        # PUBLISHED tarball to IPFS and record its CID; the anchor step below
+        # then carries it into the on-chain morphit_release_v1 `distribution`
+        # block's optional `ipfs_cid` field, so anyone can fetch + verify the
+        # exact bytes from ANY IPFS gateway, controlled by no one. This is fully
+        # automated — no per-release action once the secret exists. NO secret →
+        # skipped, and the release proceeds byte-identically to today (ipfs_cid
+        # stays absent, which the schema allows). A Pinata outage NEVER fails a
+        # release: IPFS is ADDITIVE to the git mirrors + the on-chain SHA-256.
+        # To swap providers, replace only the curl below (write the CID to
+        # ipfs-cid.txt); the anchor step needs no change.
+        env:
+          TARBALL: ${{ steps.ver.outputs.tarball }}
+          PINATA_JWT: ${{ secrets.PINATA_JWT }}
+        run: |
+          set -u
+          if [ -z "${PINATA_JWT:-}" ]; then
+            echo "No PINATA_JWT secret — skipping IPFS pin (release proceeds without ipfs_cid)."
+            exit 0
+          fi
+          echo "Pinning ${TARBALL} to IPFS via Pinata…"
+          RESPONSE=$(curl -sS -X POST https://api.pinata.cloud/pinning/pinFileToIPFS \
+            -H "Authorization: Bearer ${PINATA_JWT}" \
+            -F "file=@${TARBALL}" \
+            -F "pinataMetadata={\"name\":\"${TARBALL}\"}") || {
+              echo "WARNING: Pinata request failed — continuing without ipfs_cid." >&2
+              exit 0
+            }
+          CID=$(printf '%s' "$RESPONSE" | sed -n 's/.*"IpfsHash"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+          if [ -z "${CID:-}" ]; then
+            echo "WARNING: no CID in Pinata response — continuing without ipfs_cid." >&2
+            echo "  response: ${RESPONSE}" >&2
+            exit 0
+          fi
+          printf '%s' "${CID}" > ipfs-cid.txt
+          echo "Pinned: ${CID}  (ipfs://${CID})"
+
       - name: Write distribution anchor (source_sha256 + gpg_fingerprint)
         # The on-chain morphit_release_v1 `distribution` block anchors the
         # SHA-256 of THIS canonical tarball (the one published below) plus the
@@ -343,6 +378,14 @@ jobs:
             echo "# Morphit distribution anchor for ${TAG} — source this before building the on-chain payload."
             echo "export MORPHIT_BUILD_SOURCE_SHA256=${SHA256}"
             echo "export MORPHIT_BUILD_GPG_FINGERPRINT=${FPR}"
+            # Optional IPFS CID from the pin step above (present only if a
+            # PINATA_JWT secret is set and the pin succeeded). Sourced by the
+            # ELI5 Block 4, it flows into the payload builder's `ipfs_cid` and
+            # is anchored on-chain alongside the mirrors. Absent → the block
+            # simply omits ipfs_cid (schema-optional), exactly as before.
+            if [ -s ipfs-cid.txt ]; then
+              echo "export MORPHIT_BUILD_IPFS_CID=$(cat ipfs-cid.txt)"
+            fi
           } > distribution-anchor.env
           echo "── distribution-anchor.env ──"
           cat distribution-anchor.env
@@ -389,39 +432,71 @@ jobs:
         env:
           TAG: ${{ steps.ver.outputs.tag }}
           TARBALL: ${{ steps.ver.outputs.tarball }}
-          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Prefer an operator-supplied token (only needed if the default
+          # Forgejo Actions token can't write releases); otherwise fall back
+          # to the automatic token. Forgejo's `permissions:` key is ignored,
+          # so token scope is set by the instance / this optional secret.
+          RELEASE_TOKEN: ${{ secrets.MORPHIT_RELEASE_TOKEN }}
+          AUTO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -eu
+          TOKEN="${RELEASE_TOKEN:-$AUTO_TOKEN}"
           if [ -z "${TOKEN:-}" ]; then
-            echo "ERROR: no Actions token (secrets.GITHUB_TOKEN is empty). Enable the automatic Actions token for this repo, or add a PAT with write:repository as an Actions secret and map it to TOKEN here." >&2
+            echo "ERROR: no token available. Add a token with repository (write) scope as an Actions secret named MORPHIT_RELEASE_TOKEN." >&2
             exit 1
           fi
           API="${GITHUB_API_URL:-${GITHUB_SERVER_URL}/api/v1}"
           REPO="${GITHUB_REPOSITORY}"
           AUTH="Authorization: token ${TOKEN}"
-          # 1. Create the release for this tag (or reuse it on a re-run).
-          BODY="{\"tag_name\":\"${TAG}\",\"name\":\"Morphit ${TAG}\",\"draft\":false,\"prerelease\":false}"
+          # 1. Build the release JSON. The body is the matching RELEASE-NOTES
+          # file, JSON-encoded by node so any quotes / newlines / backticks in
+          # the notes can't break the payload. Missing file => empty body (never
+          # fails the release). The PATCH variant omits tag_name so a re-run can
+          # NEVER re-point or re-create the signed tag.
+          NOTES_FILE="RELEASE-NOTES-${TAG}.md"
+          NOTES_FILE="$NOTES_FILE" node -e '
+            const fs = require("fs");
+            const tag = process.env.TAG;
+            let body = "";
+            try { body = fs.readFileSync(process.env.NOTES_FILE, "utf8"); } catch (e) {}
+            const name = "Morphit " + tag;
+            fs.writeFileSync("/tmp/rel-create.json", JSON.stringify({ tag_name: tag, name, body, draft: false, prerelease: false }));
+            fs.writeFileSync("/tmp/rel-patch.json", JSON.stringify({ name, body, draft: false, prerelease: false }));
+          '
+          if [ -s "$NOTES_FILE" ]; then echo "release body := ${NOTES_FILE}"; else echo "no ${NOTES_FILE}; publishing with an empty body"; fi
+          # 2. Create the release for this tag (or reuse it on a re-run).
+          REUSED=0
           CODE=$(curl -sS -o /tmp/rel.json -w '%{http_code}' -X POST \
             -H "$AUTH" -H 'Content-Type: application/json' \
-            -d "$BODY" "${API}/repos/${REPO}/releases" || true)
+            --data-binary @/tmp/rel-create.json "${API}/repos/${REPO}/releases" || true)
           if [ "$CODE" = "201" ]; then
             echo "Created release ${TAG}."
           elif [ "$CODE" = "409" ]; then
-            echo "Release ${TAG} already exists; fetching it to attach assets."
+            echo "Release ${TAG} already exists; will attach assets + refresh the notes."
+            REUSED=1
             curl -sS -H "$AUTH" -o /tmp/rel.json "${API}/repos/${REPO}/releases/tags/${TAG}"
           else
             echo "ERROR: creating the release failed (HTTP ${CODE})." >&2
             if [ "$CODE" = "403" ]; then
-              echo "  The Actions token lacks release-write permission." >&2
-              echo "  Fix (4 clicks): your avatar → Settings → Applications → Generate New Token (tick 'write:repository')," >&2
-              echo "  then repo → Settings → Actions → Secrets → add it, and map that secret to TOKEN above." >&2
+              echo "  The token lacks release-write permission." >&2
+              echo "  Fix (4 clicks): your avatar -> Settings -> Applications -> Generate New Token (repository: write)," >&2
+              echo "  then repo -> Settings -> Actions -> Secrets -> add it as MORPHIT_RELEASE_TOKEN. It is picked up automatically." >&2
             fi
             cat /tmp/rel.json >&2 || true
             exit 1
           fi
           REL_ID=$(node -e 'const o=JSON.parse(require("fs").readFileSync("/tmp/rel.json","utf8"));if(!o.id){console.error("no release id in API response");process.exit(1)}process.stdout.write(String(o.id))')
           echo "Release id: ${REL_ID}"
-          # 2. Attach each asset that exists (.asc is absent when unsigned).
+          # 3. On a re-run the release already existed, so the create call above
+          # did not set the notes. PATCH the body now (tag_name omitted, so the
+          # signed tag is never touched).
+          if [ "$REUSED" = "1" ]; then
+            curl -sS -o /dev/null -X PATCH \
+              -H "$AUTH" -H 'Content-Type: application/json' \
+              --data-binary @/tmp/rel-patch.json "${API}/repos/${REPO}/releases/${REL_ID}" || true
+            echo "refreshed release body from ${NOTES_FILE}"
+          fi
+          # 4. Attach each asset that exists (.asc is absent when unsigned).
           for f in "$TARBALL" "$TARBALL.sha256" "$TARBALL.asc" distribution-anchor.env; do
             if [ ! -f "$f" ]; then echo "skip (absent): $f"; continue; fi
             NAME=$(basename "$f")

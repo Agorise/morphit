@@ -126,8 +126,37 @@ for (const v of ['MORPHIT_BUILD_SOURCE_SHA256', 'MORPHIT_BUILD_GPG_FINGERPRINT',
 const releaseYml = readFileSync(join(REPO, '.forgejo', 'workflows', 'release.yml'), 'utf8');
 check('release.yml writes the anchor from the PUBLISHED tarball sha256', /distribution-anchor\.env/.test(releaseYml) && /\$TARBALL\.sha256/.test(releaseYml));
 check('release.yml auto-creates the release + attaches assets', /\/releases\b/.test(releaseYml) && /attachment=@/.test(releaseYml));
-check('release.yml grants the auto-token release-write (contents: write)', /permissions:\s*\n\s*contents:\s*write/.test(releaseYml));
+check('release.yml sets the release body from RELEASE-NOTES-${TAG}.md (node-encoded JSON)', /RELEASE-NOTES-\$\{TAG\}\.md/.test(releaseYml) && /rel-create\.json/.test(releaseYml));
+check('the re-run body refresh uses a tag_name-free PATCH (never touches the signed tag)', /-X PATCH/.test(releaseYml) && /rel-patch\.json/.test(releaseYml));
+check('release.yml declares NO `permissions:` key (Forgejo ignores it, warns)', !/^\s*permissions:/m.test(releaseYml));
+check('release.yml publishes with an operator token, falling back to the auto-token', /RELEASE_TOKEN:-\$AUTO_TOKEN/.test(releaseYml));
 check('release.yml NEVER broadcasts to the chain (no spending key in CI)', !/release-broadcast/.test(releaseYml));
+
+// ─── optional IPFS pin (Pinata) — additive, guarded, never fails a release ───
+// v1.8.16 (Ken): a PINATA_JWT secret makes release.yml pin the PUBLISHED tarball
+// to IPFS and carry the CID on-chain via the anchor's optional ipfs_cid. Without
+// the secret the release is byte-identical to before. Pin the wiring so a future
+// edit can't silently drop the automation or make a Pinata outage fatal.
+check(
+	'release.yml pins the tarball to IPFS gated on a PINATA_JWT secret',
+	/secrets\.PINATA_JWT/.test(releaseYml) && /pinFileToIPFS/.test(releaseYml)
+);
+check(
+	'the IPFS pin is optional + never fails a release (soft-exit without the secret)',
+	/if \[ -z "\$\{PINATA_JWT:-\}" \]/.test(releaseYml) && /skipping IPFS pin/.test(releaseYml)
+);
+check(
+	'the anchor carries the CID only when one was pinned (ipfs-cid.txt)',
+	/if \[ -s ipfs-cid\.txt \]/.test(releaseYml) && /MORPHIT_BUILD_IPFS_CID=/.test(releaseYml)
+);
+const payloadBuilder = readFileSync(
+	join(REPO, 'apps', 'indexer', 'scripts', 'release-build-payload.ts'),
+	'utf8'
+);
+check(
+	'the payload builder reads MORPHIT_BUILD_IPFS_CID → on-chain ipfs_cid',
+	/MORPHIT_BUILD_IPFS_CID/.test(payloadBuilder) && /value\.ipfs_cid = cid/.test(payloadBuilder)
+);
 
 // ─── all six blocks, in order ───
 const order = ['BLOCK 1', 'BLOCK 2', 'BLOCK 3', 'BLOCK 4', 'BLOCK 5', 'BLOCK 6'];

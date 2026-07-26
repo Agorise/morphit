@@ -220,29 +220,43 @@
 		// changed — i.e. on the ~60s durable poll — which is the very lag the fast
 		// path exists to avoid.
 		void $fastPendingTick;
-		const withFlags = visible.map((c) => ({
-			...c,
-			// v1.7.5 (t.txt #2) — identical rule to the badge channel's, so the cards
-			// and the count stay in lockstep (the cp452 property).
-			//
-			// v1.7.7 — and now literally the same FUNCTION, not the same rule
-			// re-typed. This called `isUnread` against the durable
-			// `last_message_at`, which is stale for ~60s after a push (the fast
-			// path never writes chat_messages), so Ken's message landed, the
-			// thread resurrected into his Inbox, and the card still showed it
-			// READ — no green border. `threadIsUnread` folds in the pending push.
-			unread: threadIsUnread(
-				c.peer,
-				c.order?.permlink ?? '',
-				c.last_message_at,
-				c.last_message_is_mine === true
-			),
-			folder: folderOf(c.peer, c.order?.permlink ?? ''),
-			// cp508 (tt.txt #7) — durable rows are never "pending"; the flag marks
-			// the optimistic placeholder cards below so the template can render a
-			// neutral subline until the full order details land.
-			pending: false
-		}));
+		const withFlags = visible.map((c) => {
+			const order = c.order?.permlink ?? '';
+			const folder = folderOf(c.peer, order);
+			return {
+				...c,
+				// v1.7.5 (t.txt #2) — identical rule to the badge channel's, so the cards
+				// and the count stay in lockstep (the cp452 property).
+				//
+				// v1.7.7 — and now literally the same FUNCTION, not the same rule
+				// re-typed. This called `isUnread` against the durable
+				// `last_message_at`, which is stale for ~60s after a push (the fast
+				// path never writes chat_messages), so Ken's message landed, the
+				// thread resurrected into his Inbox, and the card still showed it
+				// READ — no green border. `threadIsUnread` folds in the pending push.
+				//
+				// v1.9.0 (Ken, kentest3) — an ARCHIVED thread is never "unread". Archiving
+				// is a deliberate "I'm done with this" that outranks the per-device read
+				// cursor: folder state syncs on-chain across devices, but the read cursor
+				// is per-device localStorage, so a thread archived+read on ANOTHER device
+				// arrives here archived-but-cursorless and `threadIsUnread` returns true —
+				// lighting an emerald border on a read card in the Archived tab (and, before
+				// the on-chain folder list finished loading, briefly nudging the badge). A
+				// thread with genuinely NEW activity is un-archived by
+				// resurrectArchivedOnNewActivity BEFORE this runs, so gating on the folder
+				// here can't hide a real new message. This keeps the card, the per-tab
+				// counts, and unreadTotal all in lockstep with the badge (which already
+				// excludes archived via badgeEligible).
+				unread:
+					folder !== 'archived' &&
+					threadIsUnread(c.peer, order, c.last_message_at, c.last_message_is_mine === true),
+				folder,
+				// cp508 (tt.txt #7) — durable rows are never "pending"; the flag marks
+				// the optimistic placeholder cards below so the template can render a
+				// neutral subline until the full order details land.
+				pending: false
+			};
+		});
 
 		// cp508 (tt.txt #7) — inject an optimistic card for any fast-push thread
 		// the durable list doesn't carry yet, so a BRAND-NEW conversation appears

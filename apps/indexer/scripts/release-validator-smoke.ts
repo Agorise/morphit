@@ -829,6 +829,35 @@ scenario('distribution 9 mirrors → distribution_mirror_invalid', () => {
 		throw new Error(`got ${r.ok ? 'ok' : r.reason}`);
 });
 
+// v1.8.16 (Ken) — Launchpad personal-repo git URLs carry a `+` (`/+git/`); the
+// mirror charset was relaxed to allow it. Pin BOTH directions: the `+` URL is
+// accepted, and a genuinely-bad char (space) is STILL rejected, so the relaxation
+// didn't open the charset wide.
+scenario('distribution mirror with + in path (Launchpad) → ok', () => {
+	const r = validateReleasePayload(
+		withDistribution({
+			source_sha256: D_SHA,
+			gpg_fingerprint: D_FPR,
+			mirrors: ['https://git.launchpad.net/~agorise/+git/morphit']
+		})
+	);
+	if (!r.ok) throw new Error(`got ${r.reason}`);
+	if (r.value.distribution?.mirrors?.[0] !== 'https://git.launchpad.net/~agorise/+git/morphit')
+		throw new Error('launchpad mirror lost');
+});
+
+scenario('distribution mirror with a space → distribution_mirror_invalid', () => {
+	const r = validateReleasePayload(
+		withDistribution({
+			source_sha256: D_SHA,
+			gpg_fingerprint: D_FPR,
+			mirrors: ['https://x.example.org/a b']
+		})
+	);
+	if (r.ok || r.reason !== 'distribution_mirror_invalid')
+		throw new Error(`got ${r.ok ? 'ok' : r.reason}`);
+});
+
 console.log(`\n${'─'.repeat(54)}`);
 if (failures === 0) {
 	console.log(`✓ all ${scenarios} scenarios passed`);

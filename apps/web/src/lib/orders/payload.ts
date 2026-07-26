@@ -151,6 +151,13 @@ export interface OrderPayload {
 	 *  never 'BARTER' or any goods asset. The indexer dedupes + sorts to a
 	 *  canonical set; the builder ships whatever the form provides. */
 	readonly accepted_assets?: readonly AssetTicker[];
+	/** v1.9.0 (Ken) — for a BARTER listing, the user's own short label for WHAT
+	 *  they're offering (e.g. "bananas"), typed inline where the summary would
+	 *  otherwise read "goods/services". Letters-only, ≤24 chars. OPTIONAL and
+	 *  backward-compatible: omitted when blank or non-barter, and an older indexer
+	 *  simply ignores it. It flows into the order title ("…of bananas") and the
+	 *  Blurt announcement in place of the generic "goods/services" label. */
+	readonly specific_barter_title?: string;
 }
 
 /** Input to buildOrderPayload — the fields a user fills in, in
@@ -201,6 +208,21 @@ export interface OrderFormInput {
 	 *  for crypto assets. The form layer validates each is a real crypto
 	 *  ticker (never BARTER/goods) before calling buildOrderPayload. */
 	readonly acceptedAssets?: readonly AssetTicker[];
+	/** v1.9.0 (Ken) — the BARTER "what am I offering" label typed inline in the
+	 *  summary sentence. Letters-only, ≤24 chars (the form enforces this; the
+	 *  builder re-sanitizes as a backstop). Omitted/blank for crypto listings. */
+	readonly specificBarterTitle?: string;
+}
+
+/** v1.9.0 (Ken) — the inline BARTER "what am I offering" label is capped and
+ *  letters-only (no digits, punctuation, or whitespace). Shared by the form
+ *  input handler, the payload builder backstop, and the smoke so all three agree
+ *  on the exact rule. `\p{L}` keeps accented + non-Latin letters (bananas,
+ *  plátanos, бананы, 香蕉) while dropping everything else. */
+export const SPECIFIC_BARTER_TITLE_MAX = 24;
+export function sanitizeBarterTitle(raw: string | null | undefined): string {
+	if (!raw) return '';
+	return Array.from(raw.replace(/[^\p{L}]/gu, '')).slice(0, SPECIFIC_BARTER_TITLE_MAX).join('');
 }
 
 /**
@@ -281,7 +303,15 @@ export function buildOrderPayload(permlink: string, input: OrderFormInput): Orde
 		// (BARTER); omitted for crypto assets, which settle in themselves.
 		...(input.acceptedAssets !== undefined && input.acceptedAssets.length > 0
 			? { accepted_assets: [...new Set(input.acceptedAssets)].sort() as AssetTicker[] }
-			: {})
+			: {}),
+		// v1.9.0 (Ken) — the inline BARTER title, re-sanitized here (letters-only,
+		// ≤24) as the security/consistency backstop and included only when it
+		// survives non-empty. Omitted for crypto listings and blank barter titles,
+		// keeping the on-chain payload minimal and backward-compatible.
+		...((): { specific_barter_title?: string } => {
+			const t = sanitizeBarterTitle(input.specificBarterTitle);
+			return t.length > 0 ? { specific_barter_title: t } : {};
+		})()
 	};
 }
 

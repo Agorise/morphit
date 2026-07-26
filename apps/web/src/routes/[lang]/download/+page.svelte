@@ -37,14 +37,28 @@
 			url: 'https://codeberg.org/agorise/morphit',
 			status: 'live'
 		},
-		{ id: 'gitlab', name: 'GitLab', url: 'https://gitlab.com/', status: 'pending' },
-		{ id: 'bitbucket', name: 'Bitbucket', url: 'https://bitbucket.org/', status: 'pending' },
-		{ id: 'sourceforge', name: 'SourceForge', url: 'https://sourceforge.net/', status: 'pending' },
-		{ id: 'gitee', name: 'Gitee', url: 'https://gitee.com/', status: 'pending' },
-		{ id: 'launchpad', name: 'Launchpad', url: 'https://launchpad.net/', status: 'pending' },
-		{ id: 'gitflic', name: 'GitFlic', url: 'https://gitflic.ru/', status: 'pending' },
-		{ id: 'sourcehut', name: 'SourceHut', url: 'https://sr.ht/', status: 'pending' },
-		{ id: 'radicle', name: 'Radicle', url: 'https://radicle.xyz/', status: 'pending' },
+		// v1.8.16 (Ken) — SourceForge + SourceHut mirrors are live and anchored
+		// on-chain (buildDistribution baked list). They link straight to the repo.
+		{
+			id: 'sourceforge',
+			name: 'SourceForge',
+			url: 'https://sourceforge.net/projects/agorise-morphit/',
+			status: 'live'
+		},
+		{ id: 'sourcehut', name: 'SourceHut', url: 'https://git.sr.ht/~agorise/morphit', status: 'live' },
+		{ id: 'gitlab', name: 'GitLab', url: 'https://gitlab.com/Agorise/morphit', status: 'live' },
+		// v1.8.16 (Ken) — Bitbucket + Launchpad push-mirrors confirmed live. Every
+		// git mirror is now live; only IPFS remains pending (per-release
+		// content-addressed copy, auto-pinned once a release runs with PINATA_JWT).
+		// Removed earlier: Gitee (site down), GitFlic (no signup confirmation
+		// email), Radicle (requires installing their app).
+		{ id: 'bitbucket', name: 'Bitbucket', url: 'https://bitbucket.org/agorise/morphit', status: 'live' },
+		{
+			id: 'launchpad',
+			name: 'Launchpad',
+			url: 'https://git.launchpad.net/~agorise/+git/morphit',
+			status: 'live'
+		},
 		{ id: 'ipfs', name: 'IPFS', url: 'https://ipfs.tech/', status: 'pending' }
 	] as const;
 
@@ -108,7 +122,9 @@
 				href={lp('/faq#morphit_mirrors')}
 				class="text-morphit-emerald underline decoration-dotted underline-offset-2 hover:no-underline"
 			>
-				{$_('download.why_mirrors', { values: { count: MIRRORS.length } })}
+				{$_('download.why_mirrors', {
+					values: { count: MIRRORS.filter((m) => m.status !== 'primary').length }
+				})}
 			</a>
 		</p>
 		<ul class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

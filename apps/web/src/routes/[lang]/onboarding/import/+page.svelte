@@ -450,6 +450,21 @@
 			pendingNeedsAccountName = true;
 			pendingDestination = '/settings#account-name-heading';
 			importStage = 'remember_me_choice';
+			// v1.9.0 (Ken) — resolve the account name in the BACKGROUND so the user's
+			// custom avatar replaces the heart identicon ON the remember-me screen,
+			// not only after they click "Remember me and continue". AvatarMenu only
+			// fetches selfProfile once blurtAccountName is set; deferring the reverse
+			// lookup to the commit step meant a user with a custom avatar stared at the
+			// identicon on the choice screen and saw their real avatar only after
+			// committing ("if I have a custom avatar set, I do not EVER want to see that
+			// identicon again"). A UNIQUE on-chain match for this posting key is
+			// authoritative, so we can set the name now and the avatar appears reactively
+			// — no navigation needed. Fire-and-forget so it never blocks the choice
+			// screen; ambiguous / rotated-key / RPC failures leave the identicon and the
+			// existing /settings capture covers the name. If the user commits before this
+			// finishes, the commit handler resolves it there (guarded by
+			// pendingNeedsAccountName so neither does redundant work).
+			void resolveSelfAccountEagerly();
 			return;
 		} catch (err) {
 			// Map known error messages to localized keys.  The
@@ -506,6 +521,34 @@
 	 *  unlock form.  The re-decrypt path is the cleanest way to
 	 *  do this: it avoids exposing the FullIdentity outside of
 	 *  this scoped block. */
+	/** v1.9.0 (Ken) — best-effort, background reverse-resolve of the account name
+	 *  from the just-booted posting key, run WHILE the remember-me choice screen is
+	 *  up, so the user's on-chain custom avatar replaces the heart identicon there
+	 *  instead of only after they commit. A UNIQUE match is authoritative (the key
+	 *  is in that account's authorities), so setUserBlurtAccount is safe now —
+	 *  AvatarMenu reacts to blurtAccountName and fetches selfProfile. Fire-and-forget:
+	 *  it never blocks the screen, and an ambiguous / no-match / RPC-error result
+	 *  leaves the identicon for the existing /settings capture. Guarded on
+	 *  pendingNeedsAccountName so it no-ops if the commit handler already resolved. */
+	async function resolveSelfAccountEagerly(): Promise<void> {
+		if (!pendingNeedsAccountName || pendingPubKeysBLT.length === 0) return;
+		try {
+			const accounts = await resolveAccountsByPublicKeys(pendingPubKeysBLT);
+			const resolved = accounts.length === 1 ? accounts[0] : undefined;
+			// Re-check the guard: the user may have clicked "Remember me and continue"
+			// while this was in flight, in which case the commit handler already set
+			// the name and chose the destination. Don't clobber that.
+			if (resolved && pendingNeedsAccountName) {
+				setUserBlurtAccount(resolved);
+				pendingNeedsAccountName = false;
+				pendingDestination = '/';
+			}
+		} catch {
+			// Reverse lookup unavailable (offline / RPC down) — the identicon stays and
+			// the /settings account-name capture on continue covers it.
+		}
+	}
+
 	async function finalizeImportChoice(): Promise<void> {
 		if (working) return;
 		errorMsg = '';

@@ -1215,7 +1215,7 @@
 			},
 			"activity_level": {
 				"q": "How much activity is there on Morphit right now?",
-				"a": "Live site-wide activity statistics aren't wired up yet. When they ship, this entry will show total successful trades, current active users, and rolled-up activity across every Morphit frontend (morphit.io plus community mirrors). Because the orderbook lives on the underlying blockchain, those numbers will be verifiable by anyone running their own indexer against the same data.\n\nIf you're curious about raw activity right now, you can search the blockchain directly for `custom_json` operations with id `morphit_order_v1` — every Morphit order is a signed on-chain op, so anyone can count them without needing our permission or our servers."
+				"a": "Morphit has a live [stats page](/stats) — it shows the number of active orders, the total number of orders ever placed, completed trades (all-time and in the last 30 days), and how many crypto assets and fiat currencies currently have active orders. Those figures come straight from this instance's indexer reading the underlying blockchain, so they reflect real on-chain activity rather than a number anyone could quietly inflate.\n\nAnd because every Morphit order is a signed `custom_json` operation (id `morphit_order_v1`) on the public chain, anyone can reproduce or double-check these counts by searching the blockchain directly or running their own indexer against the same data — no permission and no reliance on our servers required."
 			},
 			"sybil_protection": {
 				"q": "How does Morphit stop fake reviews?",
@@ -1395,7 +1395,7 @@
 			},
 			"morphit_mirrors": {
 				"q": "Why is Morphit's source mirrored to so many code hosts?",
-				"a": "Decentralization — it's priority #2 in Morphit's design, right behind privacy. A project that lives in one place can be killed in one place: a platform can suspend the account, a government can order a takedown, a host can simply disappear. So Morphit's source code (AGPL-3.0) is mirrored across many independent code hosts — our own Forgejo server at git.agorise.net is the canonical copy, GitHub and Codeberg are live, and more are being added (GitLab, Bitbucket, SourceForge, Gitee, Launchpad, GitFlic, SourceHut, Radicle), plus a content-addressed copy on IPFS that no single host controls. If any one of them blocks or drops Morphit, every other copy is still there — and because it's AGPL, anyone can re-host, audit, or fork it. The full, current list is on the Download page.\n\n(There's nothing to install from an app store — Morphit runs as a Progressive Web App (PWA) you add straight from your browser. The mirrors are for the source code, so the project can't be silenced by taking down a single repository.)\n\nYou can confirm any running instance serves untampered code: each release's SHA-256 hashes are published on the blockchain — see /about-this-instance."
+				"a": "Decentralization — it's priority #2 in Morphit's design, right behind privacy. A project that lives in one place can be killed in one place: a platform can suspend the account, a government can order a takedown, a host can simply disappear. So Morphit's source code (AGPL-3.0) is mirrored across many independent code hosts — our own Forgejo server at git.agorise.net is the canonical copy, GitHub, Codeberg, SourceForge, SourceHut, GitLab, Bitbucket, and Launchpad are live, plus a content-addressed copy on IPFS that no single host controls. If any one of them blocks or drops Morphit, every other copy is still there — and because it's AGPL, anyone can re-host, audit, or fork it. The full, current list is on the Download page.\n\n(There's nothing to install from an app store — Morphit runs as a Progressive Web App (PWA) you add straight from your browser. The mirrors are for the source code, so the project can't be silenced by taking down a single repository.)\n\nYou can confirm any running instance serves untampered code: each release's SHA-256 hashes are published on the blockchain — see /about-this-instance."
 			},
 			"android_sideload": {
 				"q": "How do I install Morphit on Android?",
@@ -3259,10 +3259,10 @@
 			"amount_any": "any amount of {asset}",
 			"price_market": "at market price",
 			"price_fixed": "at a fixed price of {price} {fiat} per {asset}",
-			"barter_sentence_sell": "You're offering goods/services worth {value}, accepting {cryptos}.",
-			"barter_sentence_buy": "You're looking for goods/services worth {value}, paying in {cryptos}.",
-			"barter_sentence_sell_novalue": "You're offering goods/services and accepting {cryptos}.",
-			"barter_sentence_buy_novalue": "You're looking for goods/services and paying in {cryptos}."
+			"barter_sentence_sell": "You're offering {goods} worth {value}, accepting {cryptos}.",
+			"barter_sentence_buy": "You're looking for {goods} worth {value}, paying in {cryptos}.",
+			"barter_sentence_sell_novalue": "You're offering {goods} and accepting {cryptos}.",
+			"barter_sentence_buy_novalue": "You're looking for {goods} and paying in {cryptos}."
 		},
 		"terms_md_guide": {
 			"tooltip_title": "Markdown Guide",
@@ -4564,8 +4564,11 @@
 		"order_post": {
 			"title_buy": "{subject}. Want to trade?",
 			"title_sell": "{subject}. Want to trade?",
-			"body_buy": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\n{subject}. Want to trade?\n\nThere is no safer, faster, more secure place to trade cryptos and fiats than on Morphit.\n\nCheck out my offer on Morphit!\nhttps://morphit.io/{lang}/@{username}/{permlink}",
-			"body_sell": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\n{subject}. Want to trade?\n\nThere is no safer, faster, more secure place to trade cryptos and fiats than on Morphit.\n\nCheck out my offer on Morphit!\nhttps://morphit.io/{lang}/@{username}/{permlink}"
+			"details": "DETAILS",
+			"i_will_accept": "I will accept",
+			"terms_heading": "Terms",
+			"tagline": "Morphit is the most private, secure, user-friendly place in the world to trade cryptos, fiats and more.",
+			"check_out": "Check out my offer on Morphit!"
 		},
 		"opt_in_label": "Syndicate my order to the Blurt blog",
 		"review_on_title": "Syndication",

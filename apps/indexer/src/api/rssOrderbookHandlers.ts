@@ -16,7 +16,7 @@
 
 import type { Database } from '$db/pool';
 import type { Config } from '$config/index';
-import { isAccountName, escapeLike } from '$api/shared';
+import { cryptoFacingSideWhere, isAccountName, escapeLike } from '$api/shared';
 
 import { ASSET_TICKERS, type AssetTicker } from '@morphit/asset-registry';
 import { FEEDBACK_EXCLUSIONS_SQL } from '$api/reputationJoin';
@@ -476,9 +476,15 @@ function hasAnyFilter(f: FeedFilters): boolean {
 /** Append the filter WHERE-clause fragments, binding params via `p`.
  *  Clause shapes are kept byte-identical to orderbook.ts so the feed
  *  matches the orderbook exactly; rss-orderbook-filters-smoke pins
- *  the parity. */
+ *  the parity. The side clause comes from the SHARED
+ *  `cryptoFacingSideWhere` (which flips BARTER's goods-direction to
+ *  the crypto direction), so the feed and orderbook agree on barter by
+ *  construction — pinned by orderbook-side-barter-flip-smoke. */
 function appendFilterClauses(f: FeedFilters, where: string[], p: (v: unknown) => string): void {
-	if (f.side) where.push(`o.side = ${p(f.side)}`);
+	// Crypto-facing side filter — BARTER's o.side is the goods direction and
+	// flips (see cryptoFacingSideWhere). Shared with the orderbook so the feed
+	// matches it exactly. t.txt v1.8.16 #3.
+	if (f.side) where.push(cryptoFacingSideWhere(f.side, p));
 	if (f.fiatCurrencies) where.push(`o.fiat_currency = ANY(${p(f.fiatCurrencies)}::text[])`);
 	if (f.locationRegion) {
 		where.push(`o.location_region ILIKE ${p(escapeLike(f.locationRegion) + '%')} ESCAPE '\\'`);

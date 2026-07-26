@@ -27,7 +27,6 @@
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
 	import {
 		isPushSupported,
-		currentSubscription,
 		subscribe as subscribeToPush,
 		type PushPrivacyMode,
 		type SubscribeError
@@ -118,20 +117,22 @@
 
 	onMount(() => {
 		if (!browser) return;
-		void (async () => {
-			const supported = isPushSupported();
-			const loggedIn = getUserBlurtAccount() !== null;
-			const dismissed = readDismissed();
-			let chatPingsActive = false;
-			try {
-				const sub = await currentSubscription();
-				const prefs = get(notificationPrefs);
-				chatPingsActive = sub !== null && prefs.channels.push && prefs.categories.chat;
-			} catch {
-				chatPingsActive = false;
-			}
-			visible = shouldShowChatNudge({ supported, loggedIn, dismissed, chatPingsActive });
-		})();
+		const supported = isPushSupported();
+		const loggedIn = getUserBlurtAccount() !== null;
+		const dismissed = readDismissed();
+		// v1.9.0 (Ken) — a user who had already enabled "Push notifications
+		// (tab closed)" in Settings kept getting nudged in the chatroom. The old
+		// gate ALSO hard-required a live currentSubscription() probe, which returns
+		// null on a service worker that isn't ready yet (and threw → false in the
+		// catch), so a cold page load re-nagged someone who'd already opted in.
+		// Gate purely on the DURABLE intent the Settings page itself shows —
+		// channels.push && categories.chat — so "I turned it on" is respected
+		// without depending on probe timing. (categories.chat defaults on now, with
+		// a one-time migration for anyone who persisted the old false default; see
+		// notifications/preferences.ts migrateEnableChatByDefault.)
+		const prefs = get(notificationPrefs);
+		const chatPingsActive = prefs.channels.push && prefs.categories.chat;
+		visible = shouldShowChatNudge({ supported, loggedIn, dismissed, chatPingsActive });
 	});
 </script>
 

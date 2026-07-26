@@ -170,7 +170,8 @@ ${tradeCountJoin('o')}
 const ROW_SELECT = `
 	SELECT o.account, o.permlink, o.side, o.asset, o.fiat_currency,
 	       o.amount_min::text, o.amount_max::text, o.price_model,
-	       o.location_region, o.payment_methods, o.accepted_assets, o.terms,
+	       o.location_region, o.payment_methods, o.accepted_assets,
+	       o.specific_barter_title, o.terms,
 	       o.fee_method,
 	       COALESCE(f.c, 0)::int AS feedback_count,
 	       CASE WHEN f.r IS NOT NULL THEN f.r::text ELSE NULL END AS weighted_rating,

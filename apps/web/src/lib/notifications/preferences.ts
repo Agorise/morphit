@@ -12,9 +12,11 @@
  *
  * All toggles default to sensible values:
  *   - order category: on (highest signal)
- *   - chat category: off (high noise; per-thread mute is a deferred
- *     feature — currently the only way to disable chat notifications
- *     is the global category toggle)
+ *   - chat category: on (cp450/cp453 — chat pings are the primary reason for
+ *     notifications in a chat app; native alerts are still gated on the push
+ *     channel + OS permission, so an on-by-default category never fires for a
+ *     user who hasn't opted into push. migrateEnableChatByDefault carries the
+ *     new default to anyone who persisted the old `false`)
  *   - feedback category: on
  *   - ambient channels: always on (no toggle — they're free)
  *   - native API: off until user opts in

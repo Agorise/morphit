@@ -41,6 +41,7 @@
  */
 
 import { orderTitleParts } from '$lib/utils/orderTitle';
+import { formatDayMonth } from '$lib/i18n/formatters';
 import { get } from 'svelte/store';
 import { _, locale } from 'svelte-i18n';
 
@@ -67,8 +68,10 @@ const MORPHIT_TAG = 'morphit';
  *  images we'd thread these through config. */
 const IMAGE_FIRST_TRADE =
 	'https://img.blurt.blog/blurtimage/morphit/e3d56ddc849685c391dcdb03526463b8264f3e09.png';
-const IMAGE_ORDER_POST =
-	'https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png';
+// v1.9.0 (Ken) — the per-order announcement now leads with Morphit's own
+// og-image (served from the site), matching the order detail page's header, and
+// is reused as the post's social-card thumbnail.
+const IMAGE_ORDER_POST = 'https://morphit.io/og-image.png';
 
 // ─── Result types ──────────────────────────────────────────────────
 
@@ -172,6 +175,18 @@ export interface OrderPostContext {
 	 *  instead of its own vaguer sentence. */
 	readonly amountMin?: number | null;
 	readonly amountMax?: number | null;
+	/** v1.9.0 — the fields the redesigned post body mirrors from the order detail
+	 *  page. Resolved payment-method display names (e.g. "Monero (XMR)"), the
+	 *  order's created/expiry timestamps (ISO), the optional location/region, and
+	 *  the terms text. All caller-redacted where user-supplied. */
+	readonly paymentMethodNames?: readonly string[];
+	readonly createdAtIso?: string;
+	readonly expiresAtIso?: string | null;
+	readonly locationRegion?: string | null;
+	readonly terms?: string;
+	/** v1.9.0 (Ken) — the BARTER inline goods label; when set, the headline reads
+	 *  "…of bananas" instead of the generic "goods/services". Ignored for crypto. */
+	readonly specificBarterTitle?: string | null;
 }
 
 /** Fire Post B. Returns an explicit Result so the order-success
@@ -188,8 +203,6 @@ export async function publishOrderPost(
 	const t = get(_);
 	const titleKey =
 		ctx.side === 'buy' ? 'syndicate.order_post.title_buy' : 'syndicate.order_post.title_sell';
-	const bodyKey =
-		ctx.side === 'buy' ? 'syndicate.order_post.body_buy' : 'syndicate.order_post.body_sell';
 	// v1.8.9 — derive the headline from the SAME builder the order card uses, so
 	// the two can never drift. The blog used to say "I'm buying BLURT with MXN"
 	// while the card said "I'm buying BLURT": two sentences for one order, each
@@ -204,7 +217,7 @@ export async function publishOrderPost(
 				amount_max: ctx.amountMax ?? null
 			},
 			(n) => String(n),
-			t('order_title.goods_services') as string
+			ctx.specificBarterTitle || (t('order_title.goods_services') as string)
 		);
 		return t(parts.key, { values: parts.values }) as string;
 	})();
@@ -216,16 +229,51 @@ export async function publishOrderPost(
 		}
 	}) as string;
 	const lang = (get(locale) ?? DEFAULT_LOCALE) as string;
-	const body = t(bodyKey, {
-		values: {
-			subject,
-			asset1: ctx.asset,
-			asset2: ctx.counterAsset,
-			username: account,
-			permlink: ctx.orderPermlink,
-			lang
-		}
-	}) as string;
+
+	// v1.9.0 (Ken) — the announcement body now MIRRORS the order detail page:
+	// og-image header, an H1 headline (the same "…Want to trade?" title), a
+	// DETAILS block of bullets (pay/accept + methods, posted/expires dates,
+	// optional location, listing fee), the full order Terms rendered WITH the
+	// user's markdown (Blurt renders it), a bold tagline, and the shareable link.
+	// Built programmatically (not one flat i18n template) because the bullet set
+	// is conditional (location is omitted when blank) and the terms carry markdown.
+	// Field labels are reused from order_detail.* so the two surfaces can't drift;
+	// the ": " separator + heading colons are added here so those labels stay
+	// colon-free for their own dt/dd use on the detail page.
+	const colon = (labelKey: string): string => `${t(labelKey) as string}: `;
+	const payAcceptLabel =
+		ctx.side === 'buy'
+			? (t('order_detail.i_can_pay_with') as string)
+			: (t('syndicate.order_post.i_will_accept') as string);
+	const methods = (ctx.paymentMethodNames ?? []).join(', ');
+
+	const bullets: string[] = [];
+	if (methods.length > 0) bullets.push(`- ${payAcceptLabel}: ${methods}`);
+	if (ctx.createdAtIso) bullets.push(`- ${colon('order_detail.posted_on')}${formatDayMonth(ctx.createdAtIso)}`);
+	if (ctx.expiresAtIso)
+		bullets.push(`- ${colon('order_detail.expires_on')}${formatDayMonth(ctx.expiresAtIso)}`);
+	if (ctx.locationRegion && ctx.locationRegion.trim().length > 0)
+		bullets.push(`- ${colon('order_detail.location')}${ctx.locationRegion.trim()}`);
+	bullets.push(
+		`- ${colon('order_detail.listing_fee')}✓ ${t('order_detail.fee_verified') as string}`
+	);
+
+	const orderUrl = `https://morphit.io/${lang}/@${account}/${ctx.orderPermlink}`;
+	const termsText = (ctx.terms ?? '').trim();
+
+	const sections: string[] = [
+		`![Morphit](${IMAGE_ORDER_POST})`,
+		`# ${title}`,
+		`**${t('syndicate.order_post.details') as string}**`,
+		bullets.join('\n')
+	];
+	if (termsText.length > 0) {
+		sections.push(`## ${t('syndicate.order_post.terms_heading') as string}:`);
+		sections.push(termsText);
+	}
+	sections.push(`**${t('syndicate.order_post.tagline') as string}**`);
+	sections.push(`${t('syndicate.order_post.check_out') as string}\n${orderUrl}`);
+	const body = sections.join('\n\n');
 
 	const permlink = orderPostPermlink(ctx.orderPermlink);
 

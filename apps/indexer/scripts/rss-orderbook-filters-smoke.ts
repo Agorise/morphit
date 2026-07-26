@@ -357,7 +357,12 @@ await scenario('global bare feed → no filter clauses, no asset clause, no quer
 	assertEqual(r.status, 200, 'status');
 	const q = mock.queries[0]!;
 	assertNotContains(q.text, 'o.side =', 'no side clause when bare');
-	assertNotContains(q.text, 'o.asset =', 'global feed has NO asset clause');
+	// The asset FILTER binds the ticker as a param → `o.asset = $N`. We check
+	// that exact shape rather than the bare `o.asset =` substring, because the
+	// crypto-facing side clause now legitimately contains the LITERAL
+	// `o.asset = 'BARTER'` (the barter-flip branch), which is not an asset filter
+	// (t.txt v1.8.16 #3 / cryptoFacingSideWhere).
+	assertNotContains(q.text, 'o.asset = $', 'global feed has NO asset filter clause');
 	assertNotContains(r.body, 'orderbook.xml?', 'no query in self URL');
 	assertNotContains(r.body, 'matching your selected filters', 'no filter phrase');
 	assertContains(r.body, 'Blurt is a public chain', 'global privacy note');
@@ -369,7 +374,9 @@ await scenario('global side filter → o.side clause + bound param, still no ass
 	assertEqual(r.status, 200, 'status');
 	const q = mock.queries[0]!;
 	assertContains(q.text, 'o.side =', 'side clause present');
-	assertNotContains(q.text, 'o.asset =', 'no asset clause');
+	// `o.asset = $N` = asset FILTER; the literal `o.asset = 'BARTER'` inside the
+	// side clause is the barter-flip branch, not an asset filter (see above).
+	assertNotContains(q.text, 'o.asset = $', 'no asset filter clause');
 	assertContains(JSON.stringify(q.params), '"buy"', 'side param bound');
 });
 

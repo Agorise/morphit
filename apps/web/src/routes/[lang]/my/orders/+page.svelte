@@ -541,7 +541,8 @@
 	}
 
 	function cardTitle(o: OrderRecord): string {
-		const tp = orderTitleParts(o, formatAmount, $_('order_title.goods_services'));
+		const goodsLabel = o.specific_barter_title || ($_('order_title.goods_services') as string);
+		const tp = orderTitleParts(o, formatAmount, goodsLabel);
 		return $_(tp.key, { values: tp.values }) as string;
 	}
 

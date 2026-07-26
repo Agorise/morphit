@@ -45,16 +45,21 @@ export interface ReleaseCustomJsonOp {
 	readonly json: string;
 }
 
-/** Mirror of the builder's view-key guard (release-build-payload.ts):
- *  lowercase 64-hex, word-bounded.  Identical regex on purpose, so
- *  the broadcaster never refuses a payload the builder happily
- *  emitted, while still catching a hand-edited secret. */
+/** Lowercase 64-hex, word-bounded — the shape of a Monero view key or
+ *  other private key.  Identical regex to the builder's guard in
+ *  release-build-payload.ts.  NOTE: the CALLER
+ *  (buildReleaseCustomJsonOp) scans the payload with the strictly
+ *  validated `distribution` block removed, because its source_sha256 /
+ *  gpg_fingerprint are legitimately 64-hex — so this guard never
+ *  refuses a payload the builder happily emitted. */
 const SECRET_HEX_RE = /\b[0-9a-f]{64}\b/;
 
 /** Throws if `payloadJson` contains a 64-hex run — the Part 107/109
  *  invariant enforced again at the broadcast boundary so a Monero
  *  view key (or any private key) can NEVER reach the chain through a
- *  hand-edited release.json. */
+ *  hand-edited release.json.  Pass the payload with the distribution
+ *  block excluded (see buildReleaseCustomJsonOp); the treasury block —
+ *  where a re-introduced view key would live — is always scanned. */
 export function assertNoSecretHex(payloadJson: string): void {
 	if (SECRET_HEX_RE.test(payloadJson)) {
 		throw new Error(
@@ -95,7 +100,17 @@ export function buildReleaseCustomJsonOp(
 	if (!result.ok) {
 		throw new Error(`release payload failed validation: ${result.reason}`);
 	}
-	assertNoSecretHex(trimmed);
+	// Part 107/109 secret-hex guard — but EXCLUDE the distribution block,
+	// whose source_sha256 (and the 64-hex form of gpg_fingerprint) are
+	// LEGITIMATELY 64 lowercase hex and are strictly validated by
+	// validateReleasePayload above (cp556).  This mirrors the identical
+	// exclusion in the builder (release-build-payload.ts), so the
+	// broadcaster never refuses a payload the builder happily emitted.  A
+	// re-introduced XMR view key would live in the TREASURY block, which is
+	// still scanned here.
+	const { distribution: _distribution, ...withoutDistribution } =
+		parsed as Record<string, unknown>;
+	assertNoSecretHex(JSON.stringify(withoutDistribution));
 	if (!ACCOUNT_RE.test(signer)) {
 		throw new Error(`invalid signer account name: "${signer}"`);
 	}

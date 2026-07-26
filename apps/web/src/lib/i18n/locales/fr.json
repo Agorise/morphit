@@ -1215,7 +1215,7 @@
 			},
 			"activity_level": {
 				"q": "Combien d'activité y a-t-il sur Morphit en ce moment ?",
-				"a": "Les statistiques d'activité globales du site ne sont pas encore câblées. Lorsqu'elles seront livrées, cette entrée affichera le total des opérations réussies, les utilisateurs actifs en ce moment et l'activité agrégée sur tous les frontends Morphit (morphit.io plus les mirrors communautaires). Comme l'orderbook vit sur la blockchain, ces chiffres seront vérifiables par quiconque exécute son propre indexer sur les mêmes données.\n\nSi l'activité brute actuelle te rend curieux, tu peux chercher directement dans la blockchain les opérations `custom_json` avec l'id `morphit_order_v1` — chaque ordre Morphit est une op signée on-chain, donc n'importe qui peut les compter sans avoir besoin de notre autorisation ni de nos serveurs."
+				"a": "Morphit dispose d'une [page de statistiques](/stats) en direct : elle affiche le nombre d'ordres actifs, le total des ordres publiés, les transactions finalisées (depuis le début et sur les 30 derniers jours), ainsi que le nombre de cryptoactifs et de devises fiat ayant des ordres actifs en ce moment. Ces chiffres proviennent directement de l'indexeur de cette instance qui lit la blockchain sous-jacente : ils reflètent donc une activité réelle sur la chaîne, et non un nombre que quiconque pourrait gonfler discrètement.\n\nEt comme chaque ordre Morphit est une opération `custom_json` signée (id `morphit_order_v1`) sur la chaîne publique, n'importe qui peut reproduire ou vérifier ces décomptes en cherchant directement dans la blockchain ou en faisant tourner son propre indexeur sur les mêmes données — sans permission et sans dépendre de nos serveurs."
 			},
 			"sybil_protection": {
 				"q": "Comment Morphit empêche-t-il les faux avis ?",
@@ -1395,7 +1395,7 @@
 			},
 			"morphit_mirrors": {
 				"q": "Pourquoi le code source de Morphit est-il mis en miroir sur autant d'hébergeurs ?",
-				"a": "Décentralisation — c'est la priorité n°2 de la conception de Morphit, juste après la confidentialité. Un projet qui vit à un seul endroit peut être tué à un seul endroit : une plateforme peut suspendre le compte, un gouvernement peut ordonner un retrait, un hébergeur peut tout simplement disparaître. C'est pourquoi le code source de Morphit (AGPL-3.0) est mis en miroir sur de nombreux hébergeurs de code indépendants — notre propre serveur Forgejo sur git.agorise.net est la copie canonique, GitHub et Codeberg sont en ligne, et d'autres s'ajoutent (GitLab, Bitbucket, SourceForge, Gitee, Launchpad, GitFlic, SourceHut, Radicle), plus une copie adressée par contenu sur IPFS qu'aucun hébergeur ne contrôle. Si l'un d'eux bloque ou supprime Morphit, toutes les autres copies sont toujours là — et comme c'est de l'AGPL, n'importe qui peut le ré-héberger, l'auditer ou le forker. La liste complète et à jour est sur la page Télécharger.\n\n(Il n'y a rien à installer depuis un magasin d'applications — Morphit fonctionne comme une Progressive Web App (PWA) que vous ajoutez directement depuis votre navigateur. Les miroirs concernent le code source, afin que le projet ne puisse pas être réduit au silence en retirant un seul dépôt.)\n\nVous pouvez confirmer que n'importe quelle instance en cours sert du code non altéré : les empreintes SHA-256 de chaque version sont publiées sur la blockchain — voir /about-this-instance."
+				"a": "Décentralisation — c'est la priorité n°2 de la conception de Morphit, juste après la confidentialité. Un projet qui vit à un seul endroit peut être tué à un seul endroit : une plateforme peut suspendre le compte, un gouvernement peut ordonner un retrait, un hébergeur peut tout simplement disparaître. C'est pourquoi le code source de Morphit (AGPL-3.0) est mis en miroir sur de nombreux hébergeurs de code indépendants — notre propre serveur Forgejo sur git.agorise.net est la copie canonique, GitHub, Codeberg, SourceForge, SourceHut, GitLab, Bitbucket et Launchpad sont en ligne, plus une copie adressée par contenu sur IPFS qu'aucun hébergeur ne contrôle. Si l'un d'eux bloque ou supprime Morphit, toutes les autres copies sont toujours là — et comme c'est de l'AGPL, n'importe qui peut le ré-héberger, l'auditer ou le forker. La liste complète et à jour est sur la page Télécharger.\n\n(Il n'y a rien à installer depuis un magasin d'applications — Morphit fonctionne comme une Progressive Web App (PWA) que vous ajoutez directement depuis votre navigateur. Les miroirs concernent le code source, afin que le projet ne puisse pas être réduit au silence en retirant un seul dépôt.)\n\nVous pouvez confirmer que n'importe quelle instance en cours sert du code non altéré : les empreintes SHA-256 de chaque version sont publiées sur la blockchain — voir /about-this-instance."
 			},
 			"android_sideload": {
 				"q": "Comment installer Morphit sur Android ?",
@@ -3259,10 +3259,10 @@
 			"amount_any": "n'importe quelle quantité de {asset}",
 			"price_market": "au prix du marché",
 			"price_fixed": "à un prix fixe de {price} {fiat} par {asset}",
-			"barter_sentence_sell": "Vous proposez des biens/services d'une valeur de {value}, en acceptant {cryptos}.",
-			"barter_sentence_buy": "Vous recherchez des biens/services d'une valeur de {value}, en payant en {cryptos}.",
-			"barter_sentence_sell_novalue": "Vous proposez des biens/services en acceptant {cryptos}.",
-			"barter_sentence_buy_novalue": "Vous recherchez des biens/services en payant en {cryptos}."
+			"barter_sentence_sell": "Vous proposez des {goods} d'une valeur de {value}, en acceptant {cryptos}.",
+			"barter_sentence_buy": "Vous recherchez des {goods} d'une valeur de {value}, en payant en {cryptos}.",
+			"barter_sentence_sell_novalue": "Vous proposez des {goods} en acceptant {cryptos}.",
+			"barter_sentence_buy_novalue": "Vous recherchez des {goods} en payant en {cryptos}."
 		},
 		"terms_md_guide": {
 			"tooltip_title": "Guide Markdown",
@@ -4564,8 +4564,11 @@
 		"order_post": {
 			"title_buy": "{subject}. Envie d’échanger ?",
 			"title_sell": "{subject}. Envie d’échanger ?",
-			"body_buy": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\n{subject}. Envie d’échanger ?\n\nIl n'existe pas d'endroit plus sûr, plus rapide, ni plus fiable pour trader cryptos et devises que Morphit.\n\nJette un œil à mon offre sur Morphit !\nhttps://morphit.io/{lang}/@{username}/{permlink}",
-			"body_sell": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\n{subject}. Envie d’échanger ?\n\nIl n'existe pas d'endroit plus sûr, plus rapide, ni plus fiable pour trader cryptos et devises que Morphit.\n\nJette un œil à mon offre sur Morphit !\nhttps://morphit.io/{lang}/@{username}/{permlink}"
+			"details": "DÉTAILS",
+			"i_will_accept": "J'accepterai",
+			"terms_heading": "Conditions",
+			"tagline": "Morphit est l'endroit le plus privé, sûr et convivial au monde pour échanger des cryptos, des devises fiat et bien plus.",
+			"check_out": "Découvrez mon offre sur Morphit !"
 		},
 		"opt_in_label": "Diffuser mon ordre sur le blog Blurt",
 		"review_on_title": "Diffusion",

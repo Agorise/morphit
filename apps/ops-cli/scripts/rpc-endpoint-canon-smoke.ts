@@ -205,6 +205,31 @@ function yamlScalarList(path: string, key: string): Set<string> | null {
 	}
 }
 
+// ── verify-download.mjs (cp560: this copy rotted — it still pinned the
+//    dead rpc.blurt.world and a downloader hit "could not reach the
+//    chain" during the v1.8.15 ceremony). It's a standalone Node script
+//    (no browser CORS), so its DEFAULT_RPCS must equal the WHOLE 6-node
+//    canonical pool, and must never contain the decommissioned node. ──
+{
+	const src = readFileSync(join(REPO, 'scripts', 'verify-download.mjs'), 'utf8');
+	const m = /DEFAULT_RPCS\s*=\s*\[([\s\S]*?)\]/.exec(src);
+	if (!m) {
+		bad('could not find DEFAULT_RPCS in scripts/verify-download.mjs');
+	} else {
+		const urls = new Set(Array.from(m[1]!.matchAll(/'(https:\/\/[^']+)'/g)).map((x) => x[1]!));
+		if (setEq(urls, canon))
+			ok('verify-download.mjs DEFAULT_RPCS === the full canonical pool');
+		else
+			bad(
+				'verify-download.mjs DEFAULT_RPCS differs from the canonical pool',
+				`script=[${show(urls)}] canon=[${show(canon)}]`
+			);
+	}
+	if (!/rpc\.blurt\.world/.test(src))
+		ok('verify-download.mjs is free of the dead rpc.blurt.world node (list + usage + error suggestion)');
+	else bad('rpc.blurt.world reappeared in scripts/verify-download.mjs — decommissioned node');
+}
+
 console.log('');
 console.log(`${pass} passed, ${fail} failed`);
 if (fail > 0) {

@@ -149,6 +149,25 @@
 		if (missing.length > 0) void hydrateProfiles(missing);
 	});
 
+	/** v1.8.16 (Ken) — build a ProfileResponse from the identity fields the
+	 *  featured endpoint now serves inline, or null when absent (an older
+	 *  instance, or an optimistic pending order from the client store — the
+	 *  latter is the user's OWN order, so IdentityLabel's isSelf → selfProfile
+	 *  fallback covers it). Mirrors the orderbook page's inlineProfileOf so a
+	 *  featured card shows the real name + avatar on FIRST paint instead of
+	 *  swapping @account + identicon for it a beat later (kentest3's "delayed"
+	 *  avatar). The async profileMap still WINS when present — it is fresher
+	 *  (a profile edited after this page loaded). */
+	function inlineProfileOf(o: FeaturedSlot['order']): ProfileResponse | null {
+		if (o.display_name === undefined && o.profile_json_metadata === undefined) return null;
+		if (o.display_name === null && o.profile_json_metadata == null) return null;
+		return {
+			account: o.account,
+			display_name: o.display_name ?? null,
+			json_metadata: (o.profile_json_metadata ?? {}) as Record<string, unknown>
+		} as ProfileResponse;
+	}
+
 	async function refresh(): Promise<void> {
 		abortController?.abort();
 		abortController = new AbortController();
@@ -188,7 +207,10 @@
 		return n % 1 === 0 ? String(n) : n.toFixed(2);
 	}
 	function cardTitle(o: FeaturedSlot['order']): string {
-		const tp = orderTitleParts(o, formatAmount, $_('order_title.goods_services') as string);
+		// v1.9.0 (Ken) — a barter order with an inline title reads "…of bananas";
+		// fall back to the generic "goods/services" label when none was set.
+		const goodsLabel = o.specific_barter_title || ($_('order_title.goods_services') as string);
+		const tp = orderTitleParts(o, formatAmount, goodsLabel);
 		return $_(tp.key, { values: tp.values }) as string;
 	}
 </script>
@@ -201,7 +223,15 @@
 	>
 		{#each visibleSlots as slot (slot.order.account + '/' + slot.order.permlink)}
 			{@const o = slot.order}
-			{@const labelProps = extractLabelPropsFromProfile(profileMap[o.account])}
+			<!-- v1.8.16 (Ken) — prefer the INLINE profile the featured endpoint now
+			     returns (like the orderbook), so the card is correct on FIRST paint.
+			     The hydrated map still wins when present (fresher). `pending` is kept
+			     but is harmless when inline identity is present: IdentityLabel renders
+			     a supplied avatar/name regardless of pending, and only shows the
+			     neutral placeholder when NEITHER inline nor async has an answer yet. -->
+			{@const labelProps = extractLabelPropsFromProfile(
+				profileMap[o.account] ?? inlineProfileOf(o)
+			)}
 			<!-- Ken — featured cards must name the network for multi-network assets
 			     (USDT/USDC/DAI). Sending TRC20 to an ERC20 address loses the money;
 			     the chip is not decoration. Same helper the orderbook rows use. -->

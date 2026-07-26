@@ -77,8 +77,17 @@ export interface FeaturedRow extends ReputationRow {
 	payment_methods: string[];
 	/** cp425 — accepted crypto set for a BARTER order; null for crypto assets. */
 	accepted_assets: string[] | null;
+	specific_barter_title: string | null;
 	terms: string | null;
 	status: string;
+	// v1.8.16 (Ken) — inline poster identity, SELECTed via profileJoin. These
+	// were joined + selected in v1.8.13 but never declared here nor emitted in
+	// the wire mapping, so the featured payload carried NO inline identity and
+	// FeaturedOrders.svelte fell back to an async fetch — the homepage cards
+	// showed a placeholder/identicon and swapped in the real name/avatar a beat
+	// later (kentest3's "delayed" avatar). Same shape orderbook.ts emits.
+	display_name: string | null;
+	profile_json_metadata: unknown;
 	updated_at: Date;
 	expires_at_order: Date;
 	fee_status: string;
@@ -134,6 +143,7 @@ export function featuredRoute(db: Database, operatorAccount: string): Hono {
 				o.amount_min::text AS amount_min,
 				o.amount_max::text AS amount_max,
 				o.price_model, o.location_region, o.payment_methods, o.accepted_assets,
+				o.specific_barter_title,
 				o.terms, o.status, o.created_at, o.updated_at,
 				o.expires_at AS expires_at_order,
 				o.fee_status, o.fee_method,
@@ -177,6 +187,7 @@ export function featuredRoute(db: Database, operatorAccount: string): Hono {
 				location_region: r.location_region,
 				payment_methods: r.payment_methods,
 				accepted_assets: r.accepted_assets ?? null,
+				specific_barter_title: r.specific_barter_title ?? null,
 				terms: r.terms,
 				status: r.status,
 				engagement_24h: r.engagement_24h,
@@ -190,7 +201,16 @@ export function featuredRoute(db: Database, operatorAccount: string): Hono {
 				// 🌱 sprout, the ⭐ score, the trade count and the truncated posting
 				// key silently vanished on exactly the cards a stranger is most
 				// likely to click. Same join, same score function as /v1/orderbook.
-				...reputationFieldsFromRow(r)
+				...reputationFieldsFromRow(r),
+				// v1.8.16 (Ken) — inline poster identity so the featured card shows
+				// the real display name + avatar on FIRST paint, exactly like the
+				// orderbook (profileJoin → rowToWire). Without these two the homepage
+				// featured cards did a second round-trip and swapped @account +
+				// identicon for the real identity a beat later — kentest3's "delayed"
+				// avatar. reputationFieldsFromRow is reputation-only by design, so
+				// these live here alongside the other order columns.
+				display_name: r.display_name ?? null,
+				profile_json_metadata: r.profile_json_metadata ?? null
 			},
 			bid: {
 				hours_requested: r.hours_requested,

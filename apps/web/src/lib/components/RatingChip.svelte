@@ -121,10 +121,15 @@
 		<span aria-hidden="true">({count})</span>
 	</button>
 
-	<!-- Rendered next to the chip rather than in a layout-level portal: the
-	     backdrop is `fixed inset-0` so stacking context is not an issue, and
-	     keeping it here means every surface that shows a chip gets the
-	     explanation without wiring anything. -->
+	<!-- Mounted next to the chip so every surface that shows a chip gets the
+	     explanation without wiring anything. The modal SELF-PORTALS its backdrop
+	     to <body> (see TrustScoreModal.svelte): earlier this comment claimed
+	     "the backdrop is `fixed inset-0` so stacking context is not an issue" —
+	     that was wrong. The chip lives inside TradeRepCluster's `whitespace-nowrap`
+	     span and, on some pages, inside a `transform`/`backdrop-filter` ancestor,
+	     which both broke the modal (text ran off the side; scrim didn't cover the
+	     viewport so click-outside failed). The portal fixes it at the source, so
+	     this mount point stays a one-liner. -->
 	<TrustScoreModal
 		score={rating}
 		open={explainerOpen}

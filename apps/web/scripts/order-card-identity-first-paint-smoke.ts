@@ -136,6 +136,48 @@ check(
 	'an instance that omits the fields must fall back, not render blanks'
 );
 
+// v1.8.16 (Ken) — the SELECT-vs-EMIT gap, now closed for the FEATURED path too.
+// The block above checks all three endpoints SELECT the identity columns, but it
+// only checked that orderbook.ts EMITS them. featuredOrderbook.ts has its OWN
+// wire mapping (a literal spreading reputationFieldsFromRow, NOT rowToWire) and
+// SELECTed the columns while dropping them from the payload — so the homepage
+// featured cards carried no inline identity and swapped @account+identicon for
+// the real name/avatar a beat later (kentest3's "delayed" avatar). "Selected but
+// not returned is the same as not selected" applies PER MAPPING, not once.
+const featuredApi = read('apps/indexer/src/api/featuredOrderbook.ts');
+const featuredCard = read('apps/web/src/lib/components/FeaturedOrders.svelte');
+const streamApi = read('apps/indexer/src/api/orderbookStream.ts');
+
+check(
+	'featuredOrderbook TYPES the identity fields on its row',
+	/display_name: string \| null;/.test(featuredApi) &&
+		/profile_json_metadata: unknown;/.test(featuredApi),
+	'an untyped SELECTed column is silently dropped by the mapping'
+);
+check(
+	'featuredOrderbook RETURNS the identity fields in its wire mapping',
+	/display_name: r\.display_name \?\? null/.test(featuredApi) &&
+		/profile_json_metadata: r\.profile_json_metadata \?\? null/.test(featuredApi),
+	'featured selected them but dropped them from the payload — the homepage card swapped'
+);
+check(
+	'orderbookStream reuses rowToWire, so its emission tracks orderbook.ts',
+	/rowToWire/.test(streamApi),
+	'a divergent stream mapping could drop the fields the snapshot emits'
+);
+check(
+	'the featured card renders from the inline profile when the hydrated map is empty',
+	/profileMap\[o\.account\] \?\? inlineProfileOf\(o\)/.test(featuredCard),
+	'without this the homepage first paint is still @account + identicon'
+);
+check(
+	'the featured card has the same safe inline adapter',
+	/if \(o\.display_name === undefined && o\.profile_json_metadata === undefined\) return null;/.test(
+		featuredCard
+	),
+	'an instance that omits the fields must fall back, not render blanks'
+);
+
 console.log(
 	`\n${passed} passed, ${failed} failed\n${failed === 0 ? `✓ all ${passed} order-card-identity-first-paint checks passed` : '✗ order-card-identity-first-paint FAILED'}`
 );

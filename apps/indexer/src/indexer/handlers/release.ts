@@ -261,7 +261,16 @@ function validateDistribution(
 				typeof m !== 'string' ||
 				m.length === 0 ||
 				m.length > 256 ||
-				!/^https:\/\/[a-zA-Z0-9.-]+(?::\d+)?(?:\/[A-Za-z0-9._~/-]*)?$/.test(m)
+				// v1.8.16 (Ken) — `+` added to the allowed path charset for
+				// Launchpad, whose personal-repo git URLs are literally
+				// `git.launchpad.net/~agorise/+git/morphit`. `+` is a valid RFC-3986
+				// path sub-delimiter (no injection risk — the value is only ever a
+				// clone URL / displayed link) and this only ACCEPTS MORE: every
+				// prior payload had no `+`, so all remain valid. NB forward-compat:
+				// a `+` URL is rejected by pre-v1.8.16 validators, so a release
+				// carrying the Launchpad mirror must be broadcast AFTER the canonical
+				// instance is on v1.8.16 (the ceremony upgrades it before broadcast).
+				!/^https:\/\/[a-zA-Z0-9.-]+(?::\d+)?(?:\/[A-Za-z0-9._~+/-]*)?$/.test(m)
 			) {
 				return { reason: 'distribution_mirror_invalid' };
 			}

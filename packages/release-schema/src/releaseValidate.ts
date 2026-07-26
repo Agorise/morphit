@@ -136,8 +136,13 @@ const BLURT_BASE_MAX = 10_000_000;
 /** Cheap-and-conservative URL shape validator.  We don't run new
  *  URL() because that's expensive and accepts a much wider grammar
  *  than we want here.  Endpoints must be `https://...` strings,
- *  no whitespace, reasonable length. */
-const ORIGIN_RE = /^https:\/\/[a-zA-Z0-9.-]+(?::\d+)?(?:\/[A-Za-z0-9._~/-]*)?$/;
+ *  no whitespace, reasonable length.
+ *  v1.8.16 (Ken) — `+` allowed in the path (kept in sync with the
+ *  indexer's handlers/release.ts): Launchpad personal-repo git URLs are
+ *  `git.launchpad.net/~agorise/+git/morphit`. `+` is a valid RFC-3986
+ *  path sub-delimiter and the charset is otherwise unchanged, so no
+ *  whitespace/control chars slip through. */
+const ORIGIN_RE = /^https:\/\/[a-zA-Z0-9.-]+(?::\d+)?(?:\/[A-Za-z0-9._~+/-]*)?$/;
 const MAX_ORIGIN_LEN = 256;
 
 /** cp556 — distribution-anchor shape checks. Deliberately strict +

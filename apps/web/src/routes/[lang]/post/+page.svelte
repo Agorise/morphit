@@ -108,6 +108,7 @@
 	import { MORPHIT_INDEXER_ORIGIN, resolveOrigin } from '$net/config';
 	import type { OrderFormInput } from '$lib/orders/payload';
 	import { makeExpiryFlooredUtcDay } from '$lib/orders/payload';
+	import { sanitizeBarterTitle, SPECIFIC_BARTER_TITLE_MAX } from '$lib/orders/payload';
 	import { termsHasForbiddenChar } from '$lib/orders/termsForbiddenChars';
 	import { publishOrderPost } from '$lib/syndication/publish';
 	import {
@@ -213,6 +214,11 @@
 	let acceptedAssets: AssetTicker[] = $state([]);
 	let region = $state('');
 	let terms = $state('');
+	// v1.9.0 (Ken) — for a BARTER listing, the user's inline "what am I offering"
+	// label typed where the summary reads "goods/services" (e.g. "bananas"). It
+	// flows into the order title + Blurt announcement. Letters-only, ≤24 chars —
+	// enforced on input via sanitizeBarterTitle; the builder + indexer re-check.
+	let specificBarterTitle = $state('');
 	// t.txt (v1.4.9 #2) — the markdown-guide modal for the Terms field.
 	let mdGuideOpen = $state(false);
 
@@ -439,6 +445,7 @@
 		pmDraft: string;
 		region: string;
 		terms: string;
+		specificBarterTitle?: string;
 		expiresDays: number;
 		syndicateToBlog: boolean;
 		feeMethodChoice: 'blurt' | 'waived_first_buy' | 'btc' | 'xmr';
@@ -481,6 +488,7 @@
 			pmDraft,
 			region: region.length > 0 ? redactPrivateKeys(region) : region,
 			terms: terms.length > 0 ? redactPrivateKeys(terms) : terms,
+			specificBarterTitle: sanitizeBarterTitle(specificBarterTitle),
 			expiresDays,
 			syndicateToBlog,
 			feeMethodChoice,
@@ -529,6 +537,7 @@
 		pmDraft = str(d.pmDraft);
 		region = str(d.region);
 		terms = str(d.terms);
+		specificBarterTitle = sanitizeBarterTitle(str(d.specificBarterTitle));
 		expiresDays =
 			typeof d.expiresDays === 'number' && Number.isFinite(d.expiresDays)
 				? Math.max(1, Math.min(90, Math.floor(d.expiresDays)))
@@ -596,6 +605,7 @@
 		pmDraft = '';
 		region = '';
 		terms = '';
+		specificBarterTitle = '';
 		expiresDays = 90;
 		syndicateToBlog = isOrderBlogDefaultEnabled();
 		feeMethodChoice = 'blurt';
@@ -1264,6 +1274,7 @@
 					paymentMethods: string[];
 					region: string;
 					terms: string;
+					specificBarterTitle: string;
 					expiresDays: number;
 					reason: string;
 					topupUsdMin: number;
@@ -1316,6 +1327,8 @@
 				}
 				if (typeof p.region === 'string') region = p.region;
 				if (typeof p.terms === 'string') terms = p.terms;
+				if (typeof p.specificBarterTitle === 'string')
+					specificBarterTitle = sanitizeBarterTitle(p.specificBarterTitle);
 				if (typeof p.expiresDays === 'number' && Number.isFinite(p.expiresDays)) {
 					// Clamp to the schema-allowed range; the UI
 					// validates on submit anyway, but a hostile
@@ -2051,6 +2064,10 @@
 				? acceptedAssets.map((a) => `pay_${a.toLowerCase()}`)
 				: paymentMethods.map((pm) => redactPrivateKeys(pm)),
 			acceptedAssets: isBarter && acceptedAssets.length > 0 ? acceptedAssets : undefined,
+			// v1.9.0 (Ken) — the inline BARTER goods label. Only meaningful for a
+			// barter listing; the builder + indexer re-sanitize (letters-only, ≤24)
+			// and omit it when blank, so a crypto listing never carries it.
+			specificBarterTitle: isBarter ? specificBarterTitle : undefined,
 			terms: terms.trim() || null,
 			expiresAt: makeExpiryFlooredUtcDay(expiresDays),
 			feeMethod: feeMethodChoice,
@@ -2368,7 +2385,20 @@
 			// Blank stays blank: '' must become null (an "any amount" listing),
 			// never 0, which would read as a real bound of zero.
 			amountMin: amountMin.trim() === '' ? null : Number(amountMin),
-			amountMax: amountMax.trim() === '' ? null : Number(amountMax)
+			amountMax: amountMax.trim() === '' ? null : Number(amountMax),
+			// v1.9.0 (Ken) — the fields the redesigned announcement body mirrors from
+			// the order detail page. Canonical method display names (no instance
+			// lookup needed for the blog), the just-broadcast created time + derived
+			// expiry, and the location/terms redacted with the SAME hook the on-chain
+			// order uses so a stray WIF never lands in the public post either.
+			paymentMethodNames: displayNamesForMethods([...paymentMethods]),
+			createdAtIso: new Date().toISOString(),
+			expiresAtIso: makeExpiryFlooredUtcDay(expiresDays).toISOString(),
+			locationRegion: region.trim() ? redactPrivateKeys(region.trim()) : null,
+			terms: terms.trim().length > 0 ? redactPrivateKeys(terms) : '',
+			// v1.9.0 (Ken) — the barter goods label so the announcement headline reads
+			// "…of bananas" like the order card/detail; null for crypto listings.
+			specificBarterTitle: isBarter ? sanitizeBarterTitle(specificBarterTitle) : null
 		});
 		if (result.ok) {
 			syndicationStatus = 'ok';
@@ -2394,6 +2424,7 @@
 		pmDraft = '';
 		region = '';
 		terms = '';
+		specificBarterTitle = '';
 		expiresDays = 90;
 		syndicateToBlog = isOrderBlogDefaultEnabled();
 		syndicationStatus = null;
@@ -2424,6 +2455,63 @@
 	 *  method is picked yet the list shows a neutral "…" placeholder
 	 *  that fills in as the user selects.  Empty until an asset exists
 	 *  (the card only renders in step 3, where asset is already set). */
+	// v1.9.0 (Ken) — build the localized BARTER summary sentence for a GIVEN goods
+	// value. Shared by the static summarySentence (goods = the resolved title/label)
+	// and the editable step-3 preview (goods = a sentinel we split on to slot in a
+	// live inline input). Reads the reactive amount/fiat/accepted state directly, so
+	// callers inside $derived stay reactive to those. Assumes an asset is set.
+	function barterSentenceFor(goods: string): string {
+		const fiatCode = fiat.trim().toUpperCase();
+		const hasMin = amountMin.trim() !== '';
+		const hasMax = amountMax.trim() !== '';
+		let cryptosClause: string;
+		if (acceptedAssets.length > 0) {
+			try {
+				cryptosClause = new Intl.ListFormat(currentLang, { type: 'conjunction' }).format([
+					...acceptedAssets
+				]);
+			} catch {
+				cryptosClause = acceptedAssets.join(', ');
+			}
+		} else {
+			cryptosClause = '…';
+		}
+		// cp428 — no min AND no max → a value-free sentence (a "worth {value}" clause
+		// would read "…worth MXN," with a bare currency and no number).
+		if (!hasMin && !hasMax) {
+			const key =
+				side === 'sell'
+					? 'post_order.summary.barter_sentence_sell_novalue'
+					: 'post_order.summary.barter_sentence_buy_novalue';
+			return $_(key, { values: { goods, cryptos: cryptosClause } }) as string;
+		}
+		let valueClause: string;
+		if (hasMin && hasMax) valueClause = `${amountMin.trim()}–${amountMax.trim()} ${fiatCode}`;
+		else if (hasMax) valueClause = `${amountMax.trim()} ${fiatCode}`;
+		else valueClause = `${amountMin.trim()} ${fiatCode}`;
+		const key =
+			side === 'sell'
+				? 'post_order.summary.barter_sentence_sell'
+				: 'post_order.summary.barter_sentence_buy';
+		return $_(key, { values: { goods, value: valueClause, cryptos: cryptosClause } }) as string;
+	}
+
+	// A sentinel no user text can contain (letters-only input; NUL can't be typed)
+	// marks where the inline goods input goes. We render the sentence around it.
+	const BARTER_GOODS_SLOT = '\u0000BG\u0000';
+	/** The editable BARTER sentence split into the text BEFORE and AFTER the inline
+	 *  goods input. Null for non-barter (the plain summarySentence renders instead).
+	 *  The template controls slot order per locale (e.g. zh puts {goods} after
+	 *  {value}), so splitting the localized string is what keeps the input in the
+	 *  grammatically-right spot in every language. */
+	const barterSentenceParts = $derived.by((): { before: string; after: string } | null => {
+		if (!isBarter || !asset) return null;
+		const full = barterSentenceFor(BARTER_GOODS_SLOT);
+		const idx = full.indexOf(BARTER_GOODS_SLOT);
+		if (idx < 0) return null;
+		return { before: full.slice(0, idx), after: full.slice(idx + BARTER_GOODS_SLOT.length) };
+	});
+
 	const summarySentence = $derived.by((): string => {
 		if (!asset) return '';
 		const fiatCode = fiat.trim().toUpperCase();
@@ -2434,43 +2522,14 @@
 		// currency, settled in the accepted cryptos. No price-model or
 		// payment-method language (both are crypto-trade concepts).
 		if (isBarter) {
-			let cryptosClause: string;
-			if (acceptedAssets.length > 0) {
-				try {
-					cryptosClause = new Intl.ListFormat(currentLang, { type: 'conjunction' }).format(
-						[...acceptedAssets]
-					);
-				} catch {
-					cryptosClause = acceptedAssets.join(', ');
-				}
-			} else {
-				cryptosClause = '…';
-			}
-			// cp428 — no min AND no max → a "worth {value}" clause would read as
-			// "…worth MXN," (bare currency, no number). Use a value-free sentence
-			// instead: "You're offering goods/services and accepting BLURT and XMR."
-			if (!hasMin && !hasMax) {
-				const barterKeyNoValue =
-					side === 'sell'
-						? 'post_order.summary.barter_sentence_sell_novalue'
-						: 'post_order.summary.barter_sentence_buy_novalue';
-				return $_(barterKeyNoValue, { values: { cryptos: cryptosClause } }) as string;
-			}
-			let valueClause: string;
-			if (hasMin && hasMax) {
-				valueClause = `${amountMin.trim()}–${amountMax.trim()} ${fiatCode}`;
-			} else if (hasMax) {
-				valueClause = `${amountMax.trim()} ${fiatCode}`;
-			} else {
-				valueClause = `${amountMin.trim()} ${fiatCode}`;
-			}
-			const barterKey =
-				side === 'sell'
-					? 'post_order.summary.barter_sentence_sell'
-					: 'post_order.summary.barter_sentence_buy';
-			return $_(barterKey, {
-				values: { value: valueClause, cryptos: cryptosClause }
-			}) as string;
+			// v1.9.0 (Ken) — the {goods} slot: the user's inline barter title if
+			// they typed one, else the generic "goods/services" label. This STATIC
+			// render (review + broadcast confirmation) uses the resolved text; the
+			// editable step-3 preview swaps in a live inline input at this slot via
+			// barterSentenceParts below.
+			const goodsText =
+				specificBarterTitle.trim() || ($_('order_title.goods_services') as string);
+			return barterSentenceFor(goodsText);
 		}
 
 		let amountClause: string;
@@ -3177,7 +3236,44 @@
 					<p class="mt-1 text-xs text-ink-500">{$_('post_order.form.region_hint')}</p>
 				</label>
 
-				{#if summarySentence}
+				{#if isBarter && barterSentenceParts}
+					<!-- v1.9.0 (Ken) — the editable BARTER preview: "goods/services" is a
+					     live inline fill-in-the-blank. The user types WHAT they're offering
+					     (letters-only, ≤24) and it flows into the order title + the Blurt
+					     announcement. `size` (in ch) grows the field with its content so the
+					     sentence tail is pushed right and, on a narrow phone, wraps to the
+					     next line instead of overflowing — the whole <p> flows and wraps. -->
+					<div
+						class="mb-4 rounded-xl border-2 border-morphit-emerald/40 bg-morphit-emerald/5 p-3"
+						role="status"
+						aria-live="polite"
+					>
+						<p class="text-sm leading-relaxed text-ink-800 dark:text-ink-100">
+							<span aria-hidden="true">📝</span>
+							{barterSentenceParts.before}<input
+								type="text"
+								inputmode="text"
+								autocomplete="off"
+								autocapitalize="none"
+								spellcheck="false"
+								class="barter-goods-field"
+								class:filled={specificBarterTitle.length > 0}
+								maxlength={SPECIFIC_BARTER_TITLE_MAX}
+								size={Math.max(
+									specificBarterTitle.length,
+									($_('order_title.goods_services') as string).length
+								)}
+								placeholder={$_('order_title.goods_services') as string}
+								aria-label={$_('order_title.goods_services') as string}
+								bind:value={specificBarterTitle}
+								oninput={(e) =>
+									(specificBarterTitle = sanitizeBarterTitle(
+										(e.currentTarget as HTMLInputElement).value
+									))}
+							/>{barterSentenceParts.after}
+						</p>
+					</div>
+				{:else if summarySentence}
 					<div
 						class="mb-4 rounded-xl border-2 border-morphit-emerald/40 bg-morphit-emerald/5 p-3"
 						role="status"
@@ -4085,3 +4181,54 @@
 
 <!-- t.txt (v1.4.9 #2) — markdown reference for the order Terms field. -->
 <MarkdownGuideModal open={mdGuideOpen} onClose={() => (mdGuideOpen = false)} />
+
+<style>
+	/* v1.9.0 (Ken) — the inline BARTER "goods/services" fill-in-the-blank.
+	   Underline-ONLY (no box), same colour as the sentence text via currentColor,
+	   at reduced opacity; very faint until the user touches it, ~50% once they do.
+	   `size` (set inline, in ch) grows the field with its content so the sentence
+	   tail is pushed right and wraps on narrow phones instead of overflowing. */
+	.barter-goods-field {
+		display: inline;
+		box-sizing: content-box;
+		min-width: 2ch;
+		max-width: 100%;
+		padding: 0 0.15em;
+		margin: 0;
+		border: 0;
+		border-bottom: 1.5px solid;
+		/* faint when never touched */
+		border-color: color-mix(in srgb, currentColor 22%, transparent);
+		background: transparent;
+		color: inherit;
+		font: inherit;
+		text-align: center;
+		/* sit a little lower so typed text baseline-aligns with the sentence */
+		vertical-align: baseline;
+		transform: translateY(0.12em);
+		cursor: text;
+		transition: border-color 120ms ease;
+	}
+	/* placeholder ("goods/services") — the sentence colour at 50% */
+	.barter-goods-field::placeholder {
+		color: color-mix(in srgb, currentColor 50%, transparent);
+		opacity: 1;
+	}
+	.barter-goods-field:hover {
+		border-color: color-mix(in srgb, currentColor 50%, transparent);
+	}
+	/* once it has content, keep the underline at a clear ~50% even when blurred */
+	.barter-goods-field.filled {
+		border-color: color-mix(in srgb, currentColor 50%, transparent);
+	}
+	.barter-goods-field:focus {
+		outline: none;
+		border-color: var(--color-morphit-emerald, #10b981);
+	}
+	/* WebKit/Firefox strip the browser's default inner spacing so the caret and
+	   text hug the underline exactly. */
+	.barter-goods-field::-webkit-search-decoration,
+	.barter-goods-field::-webkit-search-cancel-button {
+		display: none;
+	}
+</style>

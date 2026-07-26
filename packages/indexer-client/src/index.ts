@@ -147,6 +147,11 @@ export interface OrderRecord {
 	 *  seller accepts as settlement (e.g. ['BTC','XMR']). Null/absent for
 	 *  every crypto asset (they settle in themselves) and on pre-cp425 rows. */
 	readonly accepted_assets?: readonly string[] | null;
+	/** v1.9.0 (Ken) — a BARTER order's inline "what am I offering" label (e.g.
+	 *  "bananas"), rendered in the order title + on-chain announcement in place of
+	 *  the generic "goods/services". Letters-only, ≤24 chars. Absent/null for
+	 *  crypto orders and blank barter titles; optional for backward-compat. */
+	readonly specific_barter_title?: string | null;
 	readonly terms: string | null;
 	readonly status?: 'live' | 'cancelled' | 'expired' | 'completed';
 	readonly fee_status?:

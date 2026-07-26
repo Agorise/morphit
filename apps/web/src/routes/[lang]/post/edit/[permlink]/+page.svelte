@@ -111,6 +111,9 @@
 	let acceptedAssets: AssetTicker[] = $state([]);
 	let region = $state('');
 	let terms = $state('');
+	// v1.9.0 (Ken) — preserve (and allow editing of) a barter order's inline goods
+	// label through an edit; without this, saving an edit would wipe the title.
+	let specificBarterTitle = $state('');
 	let expiresDays = $state(14);
 	// Price model — split state mirroring /post's picker.  On load
 	// we derive these from the on-chain `price_model` record
@@ -246,6 +249,7 @@
 			: [];
 		region = order.location_region ?? '';
 		terms = order.terms ?? '';
+		specificBarterTitle = order.specific_barter_title ?? '';
 		// Expiry: derive days from expires_at - created_at, rounded
 		// to the nearest supported value. If no expires_at, keep
 		// the default.
@@ -559,6 +563,9 @@
 				? acceptedAssets.map((a) => `pay_${a.toLowerCase()}`)
 				: paymentMethods,
 			acceptedAssets: isBarter && acceptedAssets.length > 0 ? acceptedAssets : undefined,
+			// v1.9.0 (Ken) — carry the barter goods label through the edit (builder +
+			// indexer re-sanitize; omitted/blank for crypto).
+			specificBarterTitle: isBarter ? specificBarterTitle : undefined,
 			terms: terms.trim() || null,
 			// Expires_at is an absolute ISO string in the payload;
 			// we re-anchor it off NOW so the user's "make it last 14d
