@@ -2075,7 +2075,8 @@
 	},
 	"instances": {
 		"title": "Известные инстансы Morphit",
-		"intro": "Morphit федеративен. Любой может запустить инстанс, а ваш индексер автоматически обнаруживает другие инстансы, читая цепочку. Этот список показывает их текущее состояние из последней проверки.",
+		"intro": "Morphit федеративен. Независимые {link} запускают инстансы Morphit, а ваш индексер автоматически обнаруживает другие инстансы, читая цепочку. Этот список показывает их текущее состояние из последней проверки.",
+		"intro_operators_link": "операторы",
 		"loading": "Загрузка каталога…",
 		"bookmark_tip": "💡 Совет: добавьте несколько этих узлов — и их адреса в Tor, I2P или Lokinet — в закладки браузера. Книга заявок находится в публичном блокчейне, поэтому, если какой-либо сайт когда-нибудь заблокируют или он окажется недоступен, вы сможете получить доступ к тем же самым заявкам и сделкам через любой другой узел.",
 		"fetch_error": "Не удалось загрузить каталог.",
@@ -2617,7 +2618,8 @@
 	},
 	"operators": {
 		"title": "Операторы Morphit",
-		"subtitle": "Каждая публичная инстанция Morphit, управляемая независимыми операторами. Выберите одну или запустите свою.",
+		"subtitle": "Все публичные {link} Morphit управляются независимыми операторами. Выберите одну или запустите свою.",
+		"subtitle_instances_link": "инстансы",
 		"run_cta": "Запустить узел Morphit",
 		"learn_cta": "Как зарабатывают операторы?",
 		"empty_heading": "Пока нет операторов.",
@@ -2729,7 +2731,7 @@
 			"engagement_aria": "{count} других людей пишут этому продавцу об этом ордере за последние 24 часа",
 			"engagement_tooltip": "{count} других людей общаются сейчас с этим продавцом об этом ордере. Связывайтесь скорее — популярные ордера закрываются быстро.",
 			"expired": "Истёк",
-			"expires_in_days_hours": "Истекает через {days}д {hours}ч",
+			"expires_in_days_only": "Истекает через {days}д",
 			"expires_in_hours_minutes": "Истекает через {hours}ч {minutes}м",
 			"expires_in_minutes": "Истекает через {minutes}м",
 			"expires_in_minutes_seconds": "Истекает через {minutes}м {seconds}с",
@@ -3251,18 +3253,14 @@
 			"tier_100": "{amount} — для активных трейдеров, опытных пользователей DarkFi и большего пассивного дохода"
 		},
 		"summary": {
-			"sentence_buy": "Я куплю {amount} {price} и заплачу через {methods}.",
-			"sentence_sell": "Я продам {amount} {price} и приму оплату через {methods}.",
+			"sentence_buy": "Я хочу купить {amount} {price} и заплатить через {methods}.",
+			"sentence_sell": "Я хочу продать {amount} {price} и принять оплату через {methods}.",
 			"amount_up_to": "до {max} {fiat} в {asset}",
 			"amount_min_max": "от {min} до {max} {fiat} в {asset}",
 			"amount_min_plus": "{min} {fiat} или больше в {asset}",
 			"amount_any": "любое количество {asset}",
 			"price_market": "по рыночной цене",
-			"price_fixed": "по фиксированной цене {price} {fiat} за {asset}",
-			"barter_sentence_sell": "Вы предлагаете {goods} на сумму {value}, принимая {cryptos}.",
-			"barter_sentence_buy": "Вы ищете {goods} на сумму {value}, оплачивая в {cryptos}.",
-			"barter_sentence_sell_novalue": "Вы предлагаете {goods}, принимая {cryptos}.",
-			"barter_sentence_buy_novalue": "Вы ищете {goods}, оплачивая в {cryptos}."
+			"price_fixed": "по фиксированной цене {price} {fiat} за {asset}"
 		},
 		"terms_md_guide": {
 			"tooltip_title": "Руководство по Markdown",
@@ -4651,17 +4649,19 @@
 		"cta": "Завершить настройку"
 	},
 	"order_title": {
-		"buy_min": "Покупаю минимум на {amount} {fiat} {asset}",
-		"sell_min": "Продаю минимум на {amount} {fiat} {asset}",
-		"buy_max": "Покупаю {asset} на сумму до {amount} {fiat}",
-		"sell_max": "Продаю {asset} на сумму до {amount} {fiat}",
-		"buy_range": "Покупаю {asset} на {min}–{max} {fiat}",
-		"sell_range": "Продаю {asset} на {min}–{max} {fiat}",
-		"buy_any": "Покупаю любое количество {asset} за {fiat}",
-		"sell_any": "Продаю любое количество {asset} за {fiat}",
+		"buy_min": "Хочу купить минимум на {amount} {fiat} {asset}",
+		"sell_min": "Хочу продать минимум на {amount} {fiat} {asset}",
+		"buy_max": "Хочу купить {asset} на сумму до {amount} {fiat}",
+		"sell_max": "Хочу продать {asset} на сумму до {amount} {fiat}",
+		"buy_range": "Хочу купить {asset} на {min}–{max} {fiat}",
+		"sell_range": "Хочу продать {asset} на {min}–{max} {fiat}",
+		"buy_any": "Хочу купить любое количество {asset} за {fiat}",
+		"sell_any": "Хочу продать любое количество {asset} за {fiat}",
 		"goods_services": "товары/услуги",
-		"buy_exact": "Покупаю {asset} ровно на {amount} {fiat}",
-		"sell_exact": "Продаю {asset} ровно на {amount} {fiat}"
+		"buy_exact": "Хочу купить {asset} ровно на {amount} {fiat}",
+		"sell_exact": "Хочу продать {asset} ровно на {amount} {fiat}",
+		"buy_barter_novalue": "Хочу купить {asset} за {cryptos}",
+		"sell_barter_novalue": "Хочу продать {asset} за {cryptos}"
 	},
 	"stats": {
 		"page_title": "Статистика сети",

@@ -311,20 +311,30 @@ jobs:
           echo "Signed $TARBALL with key $KEYID."
           rm -rf "$SIGN_HOME"
 
-      - name: Pin release tarball to IPFS (optional — Pinata)
-        # OPTIONAL decentralized mirror. If a PINATA_JWT secret is set, pin the
-        # PUBLISHED tarball to IPFS and record its CID; the anchor step below
-        # then carries it into the on-chain morphit_release_v1 `distribution`
-        # block's optional `ipfs_cid` field, so anyone can fetch + verify the
-        # exact bytes from ANY IPFS gateway, controlled by no one. This is fully
-        # automated — no per-release action once the secret exists. NO secret →
-        # skipped, and the release proceeds byte-identically to today (ipfs_cid
-        # stays absent, which the schema allows). A Pinata outage NEVER fails a
-        # release: IPFS is ADDITIVE to the git mirrors + the on-chain SHA-256.
-        # To swap providers, replace only the curl below (write the CID to
-        # ipfs-cid.txt); the anchor step needs no change.
+      - name: Pin release directory (tarball + notes + metadata) to IPFS (optional — Pinata)
+        # OPTIONAL decentralized mirror. If a PINATA_JWT secret is set, pin a
+        # DIRECTORY (not just the bare tarball) so anyone searching/browsing IPFS
+        # or IPNS sees the VERSION, the RELEASE NOTES, and machine-readable
+        # metadata right next to the signed bytes. The directory root holds:
+        #   morphit-v<ver>.tar.gz         the signed tarball (version in the name)
+        #   morphit-latest.tar.gz         SAME bytes at a STABLE name, so
+        #                                 ipns://<name>/morphit-latest.tar.gz is
+        #                                 always the newest release (one link)
+        #   morphit-v<ver>.tar.gz.sha256  + .asc when present (checksum / signature)
+        #   RELEASE-NOTES.md              latest notes (stable name) + versioned copy
+        #   metadata.json                 {version, tag, sha256, released_utc, repo…}
+        # Files carry BARE names (no folder prefix) so Pinata returns the CID of a
+        # directory with them at its ROOT — `ipns://<name>/<file>` resolves directly.
+        # The DIRECTORY CID is anchored on-chain as ipfs_cid (the schema already
+        # allows "a directory holding it"); the IPNS name is repointed at it below.
+        # Content-addressed: the tarball's bytes hash to the same block whether
+        # fetched as morphit-v<ver>.tar.gz, morphit-latest.tar.gz, or by CID, so the
+        # duplicate name costs no extra storage. NO secret → skipped; ANY failure is
+        # non-fatal (git mirrors + on-chain SHA-256 are the real anchors). To swap
+        # providers, replace only the curl (write the dir CID to ipfs-cid.txt).
         env:
           TARBALL: ${{ steps.ver.outputs.tarball }}
+          TAG: ${{ steps.ver.outputs.tag }}
           PINATA_JWT: ${{ secrets.PINATA_JWT }}
         run: |
           set -u
@@ -332,11 +342,44 @@ jobs:
             echo "No PINATA_JWT secret — skipping IPFS pin (release proceeds without ipfs_cid)."
             exit 0
           fi
-          echo "Pinning ${TARBALL} to IPFS via Pinata…"
+          VERSION="${TAG#v}"
+          STAGE="$(mktemp -d)"
+          cp "$TARBALL" "$STAGE/${TARBALL}"
+          cp "$TARBALL" "$STAGE/morphit-latest.tar.gz"
+          [ -s "${TARBALL}.sha256" ] && cp "${TARBALL}.sha256" "$STAGE/${TARBALL}.sha256"
+          [ -s "${TARBALL}.asc" ] && cp "${TARBALL}.asc" "$STAGE/${TARBALL}.asc"
+          NOTES="RELEASE-NOTES-${TAG}.md"
+          if [ -s "$NOTES" ]; then
+            cp "$NOTES" "$STAGE/${NOTES}"
+            cp "$NOTES" "$STAGE/RELEASE-NOTES.md"
+          fi
+          SHA=$(awk '{print $1}' "${TARBALL}.sha256" 2>/dev/null || echo "")
+          {
+            printf '{\n'
+            printf '  "name": "Morphit",\n'
+            printf '  "description": "Morphit — non-custodial, no-KYC P2P fiat<->crypto/barter marketplace on Blurt. Signed release; verify per RELEASE-NOTES.md.",\n'
+            printf '  "version": "%s",\n' "$VERSION"
+            printf '  "tag": "%s",\n' "$TAG"
+            printf '  "tarball": "%s",\n' "$TARBALL"
+            printf '  "sha256": "%s",\n' "$SHA"
+            printf '  "released_utc": "%s",\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            printf '  "repository": "https://git.agorise.net/agorise/morphit",\n'
+            printf '  "release_url": "https://git.agorise.net/agorise/morphit/releases/tag/%s",\n' "$TAG"
+            printf '  "verify_guide": "https://morphit.io/en/download"\n'
+            printf '}\n'
+          } > "$STAGE/metadata.json"
+          echo "Pinning release directory to IPFS via Pinata (files: $(ls -m "$STAGE"))…"
+          # One -F per file, BARE filename → Pinata assembles a directory with the
+          # files at its root and returns that directory's CID.
+          set --
+          for f in "$STAGE"/*; do
+            set -- "$@" -F "file=@${f};filename=$(basename "$f")"
+          done
           RESPONSE=$(curl -sS -X POST https://api.pinata.cloud/pinning/pinFileToIPFS \
             -H "Authorization: Bearer ${PINATA_JWT}" \
-            -F "file=@${TARBALL}" \
-            -F "pinataMetadata={\"name\":\"${TARBALL}\"}") || {
+            "$@" \
+            -F "pinataOptions={\"cidVersion\":1}" \
+            -F "pinataMetadata={\"name\":\"morphit-${TAG}\",\"keyvalues\":{\"version\":\"${VERSION}\",\"tag\":\"${TAG}\"}}") || {
               echo "WARNING: Pinata request failed — continuing without ipfs_cid." >&2
               exit 0
             }
@@ -347,7 +390,51 @@ jobs:
             exit 0
           fi
           printf '%s' "${CID}" > ipfs-cid.txt
-          echo "Pinned: ${CID}  (ipfs://${CID})"
+          echo "Pinned release directory: ${CID}"
+          echo "  ipfs://${CID}/${TARBALL}"
+          echo "  ipfs://${CID}/morphit-latest.tar.gz"
+          echo "  ipfs://${CID}/RELEASE-NOTES.md   ipfs://${CID}/metadata.json"
+
+      - name: Publish stable IPNS name (optional — w3name)
+        # OPTIONAL "always find the latest" pointer. If a MORPHIT_IPNS_KEY secret
+        # is set, repoint Morphit's STABLE IPNS name at THIS release's CID, so
+        # ipns://<name> (and https://dweb.link/ipns/<name>) always resolve to the
+        # newest release. The record is signed LOCALLY by scripts/ipns-publish.mjs
+        # (the w3name service never sees the key — same trust model as the WIF and
+        # the GPG signer); records live ~1 year, refreshed every release. The
+        # resulting k51… name is written to ipns-name.txt and carried into the
+        # on-chain anchor's optional `ipns_name` below. NO key → skipped; ANY
+        # failure is NON-FATAL (IPNS is additive to the immutable ipfs_cid + the
+        # git mirrors + the on-chain SHA-256). w3name is installed into a scratch
+        # dir so the monorepo's deps/lockfile stay untouched.
+        env:
+          MORPHIT_IPNS_KEY: ${{ secrets.MORPHIT_IPNS_KEY }}
+        run: |
+          set -u
+          if [ -z "${MORPHIT_IPNS_KEY:-}" ]; then
+            echo "No MORPHIT_IPNS_KEY secret — skipping IPNS publish (release proceeds without ipns_name)."
+            exit 0
+          fi
+          if [ ! -s ipfs-cid.txt ]; then
+            echo "No ipfs-cid.txt (IPFS pin skipped/failed) — nothing to point the name at; skipping."
+            exit 0
+          fi
+          RELEASE_CID=$(cat ipfs-cid.txt)
+          echo "Publishing IPNS name → /ipfs/${RELEASE_CID} via w3name…"
+          WORK=$(mktemp -d)
+          cp scripts/ipns-publish.mjs "$WORK/ipns-publish.mjs"
+          ( cd "$WORK" && npm init -y >/dev/null 2>&1 && npm i w3name >/dev/null 2>&1 ) || {
+            echo "WARNING: could not install w3name — skipping IPNS (no ipns_name)." >&2
+            exit 0
+          }
+          if RELEASE_CID="${RELEASE_CID}" node "$WORK/ipns-publish.mjs" > ipns-name.txt 2> ipns-publish.log; then
+            echo "IPNS name published: $(cat ipns-name.txt)"
+            sed 's/^/  /' ipns-publish.log >&2 || true
+          else
+            echo "WARNING: IPNS publish did not complete — continuing without ipns_name." >&2
+            sed 's/^/  /' ipns-publish.log >&2 || true
+            rm -f ipns-name.txt
+          fi
 
       - name: Write distribution anchor (source_sha256 + gpg_fingerprint)
         # The on-chain morphit_release_v1 `distribution` block anchors the
@@ -385,6 +472,14 @@ jobs:
             # simply omits ipfs_cid (schema-optional), exactly as before.
             if [ -s ipfs-cid.txt ]; then
               echo "export MORPHIT_BUILD_IPFS_CID=$(cat ipfs-cid.txt)"
+            fi
+            # Optional stable IPNS name from the publish step above (present only
+            # if a MORPHIT_IPNS_KEY secret is set and the publish succeeded).
+            # Sourced by ELI5 Block 4, it flows into the payload builder's
+            # `ipns_name` and is anchored on-chain as the canonical "always
+            # latest" pointer. Absent → the block omits ipns_name (schema-optional).
+            if [ -s ipns-name.txt ]; then
+              echo "export MORPHIT_BUILD_IPNS_NAME=$(cat ipns-name.txt)"
             fi
           } > distribution-anchor.env
           echo "── distribution-anchor.env ──"

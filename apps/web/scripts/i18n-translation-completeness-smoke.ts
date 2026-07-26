@@ -1121,7 +1121,12 @@ const ALLOW_LIST: AllowEntry[] = [
 	// "Diffusion" rather than allow-listed. The sibling strings (private,
 	// device, and all three detail sentences) ARE translated, so this is a
 	// single-word coincidence and not an untranslated section.
-	{ key: 'settings.visibility.public', locale: 'fr', reason: '(b) coincidental same spelling — "Public" is the correct French word' }
+	{ key: 'settings.visibility.public', locale: 'fr', reason: '(b) coincidental same spelling — "Public" is the correct French word' },
+	// t.txt #3 — the operators-subtitle linked word. "instances" is the same word
+	// in French and English (coincidental same spelling / loanword); the sibling
+	// subtitle text is fully translated, so this is a single-word coincidence, not
+	// an untranslated miss.
+	{ key: 'operators.subtitle_instances_link', locale: 'fr', reason: '(b) "instances" is the same word in French and English — coincidental same spelling; the linked word in the operators subtitle' }
 ];
 
 const allowSet = new Set(ALLOW_LIST.map((e) => `${e.key}::${e.locale}`));

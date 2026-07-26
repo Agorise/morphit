@@ -117,6 +117,7 @@ export async function runHarden(ctx: HardenCtx): Promise<number> {
 			'Walk through the full host checklist on screen (Ubuntu, SSH, UFW, fail2ban, updates, TLS)',
 			'Set up BunkerWeb (reverse-proxy WAF in front of the stack)',
 			'Set up automatic daily database backups',
+			'Set up IPFS release hosting (help keep Morphit releases alive)',
 			'Show the fully-automated path (Ansible playbook)',
 			'Done'
 		]);
@@ -201,6 +202,33 @@ export async function runHarden(ctx: HardenCtx): Promise<number> {
 				console.log('');
 			}
 		} else if (choice === 4) {
+			// IPFS release hosting — every instance pins the signed release so
+			// availability doesn't depend on any single pinning service. ON by
+			// default on Ansible installs (the `ipfs` role); this sets it up on a
+			// hand-managed box by running the shipped setup script.
+			const setup = join(repoRoot, 'ops', 'ipfs', 'morphit-ipfs-setup.sh');
+			console.log('');
+			console.log('  Every Morphit instance runs a small IPFS (Kubo) node that pins THIS');
+			console.log('  instance\'s current signed release, so Morphit\'s releases survive even');
+			console.log('  if every commercial pinning service drops them. The release CID comes');
+			console.log('  from your own /v1/release (learned from the chain) — no middleman.');
+			console.log('  Low-footprint: the lowpower Kubo profile, capped connections, ~12 MB.');
+			console.log('');
+			console.log('  Ansible installs already get this (the `ipfs` role, on by default).');
+			console.log('  On this hand-managed box, run the shipped setup (installs Kubo + the');
+			console.log('  pinning service + timer, idempotent):');
+			console.log('');
+			console.log(`    sudo sh ${sanitizeForTerm(setup)}`);
+			console.log('');
+			console.log('  Then confirm + pin immediately:');
+			console.log('');
+			console.log('    systemctl status ipfs morphit-ipfs-pin.timer');
+			console.log('    sudo systemctl start morphit-ipfs-pin.service');
+			console.log('    journalctl -u morphit-ipfs-pin -e --no-pager');
+			console.log('');
+			console.log('  Full reference: docs/RUN-A-MORPHIT-NODE.md, OPERATIONS.md §48.');
+			console.log('');
+		} else if (choice === 5) {
 			printAnsiblePath();
 		} else {
 			// Done

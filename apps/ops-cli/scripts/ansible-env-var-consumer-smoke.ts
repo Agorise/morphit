@@ -31,6 +31,7 @@
  *   - ops/scripts/*.sh (sidecar scripts)
  *   - ops/scripts/lib/*.sh (shared sidecar helpers)
  *   - ops/backup/*.sh (backup script)
+ *   - ops/ipfs/*.sh (IPFS release-hosting pin + setup scripts, v1.9.0)
  *
  * Template lines where the var NAME itself is Jinja-templated
  * (e.g. `MORPHIT_FAIL2BAN_{{ var_jail }}_CRITICAL=...`) are
@@ -165,7 +166,12 @@ function collectConsumerSurface(): { names: Set<string>; fileCount: number } {
 		...walkFiles(OPS_SCRIPTS_DIR, shPred),
 		// ops/backup/ — backup script (cp131 added; previously
 		// skipped, which let AGE_RECIPIENT et al. slip past).
-		...walkFiles(join(REPO_ROOT, 'ops', 'backup'), shPred)
+		...walkFiles(join(REPO_ROOT, 'ops', 'backup'), shPred),
+		// ops/ipfs/ — IPFS release-hosting scripts (v1.9.0). The pin +
+		// setup scripts are real consumers of the release-hosting env vars
+		// that the ipfs Ansible role's env templates declare; before this
+		// directory was scanned those vars had no discoverable consumer.
+		...walkFiles(join(REPO_ROOT, 'ops', 'ipfs'), shPred)
 	];
 	// Match uppercase env-var tokens.  Require at least 3 chars
 	// total so we don't false-positive on every accidental
@@ -218,16 +224,16 @@ for (const varName of sortedVars) {
 	}
 	const hasConsumer = consumerNames.has(varName);
 	results.push({
-		name: `${varName} has a consumer in apps/, ops/scripts/, or ops/backup/`,
+		name: `${varName} has a consumer in apps/, ops/scripts/, ops/backup/, or ops/ipfs/`,
 		ok: hasConsumer,
 		detail: hasConsumer
 			? undefined
 			: `${varName} is declared in template(s) ` +
 			  `[${templates.join(', ')}] but no file under apps/, ` +
-			  `ops/scripts/, or ops/backup/ references it.  Either ` +
+			  `ops/scripts/, ops/backup/, or ops/ipfs/ references it.  Either ` +
 			  `remove the dead template line, or add a consumer (e.g. ` +
 			  `zod schema in apps/<workspace>/src/config/index.ts, ` +
-			  `bash variable in ops/scripts/morphit-*.sh or ops/backup/*.sh).  ` +
+			  `bash variable in ops/scripts/morphit-*.sh, ops/backup/*.sh, or ops/ipfs/*.sh).  ` +
 			  `Dead template lines are a security trap: operators ` +
 			  `may fill in real secrets expecting them to be used ` +
 			  `(cp5 F13, cp131 HIGH-001 / HIGH-002).`
@@ -250,7 +256,7 @@ results.push({
 	ok: consumerFileCount > 0,
 	detail:
 		consumerFileCount === 0
-			? `no consumer files found under apps/ or ops/scripts/ (did the repo layout change?)`
+			? `no consumer files found under apps/, ops/scripts/, ops/backup/, or ops/ipfs/ (did the repo layout change?)`
 			: undefined
 });
 

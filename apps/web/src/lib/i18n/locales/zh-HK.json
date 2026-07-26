@@ -2075,7 +2075,8 @@
 	},
 	"instances": {
 		"title": "已知的 Morphit 實例",
-		"intro": "Morphit 是聯邦化的。任何人都可以運行一個實例,您的索引器透過讀取鏈自動發現其他實例。下面是來自最近一次探測的它們當前的健康狀況。",
+		"intro": "Morphit 是聯邦化的。獨立{link}運行 Morphit 實例,您的索引器透過讀取鏈自動發現其他實例。下面是來自最近一次探測的它們當前的健康狀況。",
+		"intro_operators_link": "運營者",
 		"loading": "正在載入目錄…",
 		"bookmark_tip": "💡 提示：在瀏覽器中將其中幾個實例——以及它們的 Tor、I2P 或 Lokinet 位址——加入書籤。訂單簿存在於公開的區塊鏈上，因此即使某個網站被封鎖或離線，你也能透過任何其他實例存取完全相同的訂單和交易。",
 		"fetch_error": "無法載入目錄。",
@@ -2617,7 +2618,8 @@
 	},
 	"operators": {
 		"title": "Morphit 運營者",
-		"subtitle": "每一個公共 Morphit 實例,由獨立運營者運行。揀一個,或運行你自己嘅。",
+		"subtitle": "所有公共 Morphit {link}都由獨立運營者運行。揀一個,或運行你自己嘅。",
+		"subtitle_instances_link": "實例",
 		"run_cta": "運行 Morphit 節點",
 		"learn_cta": "運營者點樣賺錢？",
 		"empty_heading": "目前尚無運營者。",
@@ -2729,7 +2731,7 @@
 			"engagement_aria": "過去 24 小時內有 {count} 位其他人就此訂單同呢個賣家聯絡",
 			"engagement_tooltip": "而家仲有 {count} 位其他人就此訂單同呢個賣家傾緊。快啲聯絡——熱門訂單成交得快。",
 			"expired": "已過期",
-			"expires_in_days_hours": "{days}日 {hours}小時後過期",
+			"expires_in_days_only": "{days}日後過期",
 			"expires_in_hours_minutes": "{hours}小時 {minutes}分鐘後過期",
 			"expires_in_minutes": "{minutes}分鐘後過期",
 			"expires_in_minutes_seconds": "{minutes}分 {seconds}秒後過期",
@@ -3251,18 +3253,14 @@
 			"tier_100": "{amount} — 適合活躍交易者、DarkFi 高級用戶，並帶來更多被動收入"
 		},
 		"summary": {
-			"sentence_buy": "我將{price}購買{amount}，並使用 {methods} 付款。",
-			"sentence_sell": "我將{price}出售{amount}，並接受 {methods}。",
+			"sentence_buy": "我想{price}購買{amount}，並使用 {methods} 付款。",
+			"sentence_sell": "我想{price}出售{amount}，並接受 {methods}。",
 			"amount_up_to": "價值最多 {max} {fiat} 的 {asset}",
 			"amount_min_max": "價值 {min} 至 {max} {fiat} 的 {asset}",
 			"amount_min_plus": "價值 {min} {fiat} 或以上的 {asset}",
 			"amount_any": "任意數量的 {asset}",
 			"price_market": "以市場價格",
-			"price_fixed": "以 {price} {fiat}/{asset} 的固定價格",
-			"barter_sentence_sell": "你提供價值 {value} {goods},接受 {cryptos}。",
-			"barter_sentence_buy": "你想要價值 {value} {goods},用 {cryptos} 畀錢。",
-			"barter_sentence_sell_novalue": "{goods},接受 {cryptos}。",
-			"barter_sentence_buy_novalue": "{goods},用 {cryptos} 畀錢。"
+			"price_fixed": "以 {price} {fiat}/{asset} 的固定價格"
 		},
 		"terms_md_guide": {
 			"tooltip_title": "Markdown 指南",
@@ -4651,17 +4649,19 @@
 		"cta": "完成設定"
 	},
 	"order_title": {
-		"buy_min": "我至少收購 {amount} {fiat} 嘅 {asset}",
-		"sell_min": "我至少出售 {amount} {fiat} 嘅 {asset}",
-		"buy_max": "我想買價值最多 {amount} {fiat} 嘅 {asset}",
-		"sell_max": "我想賣價值最多 {amount} {fiat} 嘅 {asset}",
-		"buy_range": "我想買價值 {min}–{max} {fiat} 嘅 {asset}",
-		"sell_range": "我想賣價值 {min}–{max} {fiat} 嘅 {asset}",
-		"buy_any": "我用 {fiat} 收購任意數量嘅 {asset}",
-		"sell_any": "我出售任意數量嘅 {asset} 換 {fiat}",
+		"buy_min": "我想買至少 {amount} {fiat} 嘅 {asset}",
+		"sell_min": "我想賣至少 {amount} {fiat} 嘅 {asset}",
+		"buy_max": "我想買最多 {amount} {fiat} 嘅 {asset}",
+		"sell_max": "我想賣最多 {amount} {fiat} 嘅 {asset}",
+		"buy_range": "我想買 {min}–{max} {fiat} 嘅 {asset}",
+		"sell_range": "我想賣 {min}–{max} {fiat} 嘅 {asset}",
+		"buy_any": "我想用 {fiat} 買任意數量嘅 {asset}",
+		"sell_any": "我想賣任意數量嘅 {asset} 換 {fiat}",
 		"goods_services": "商品/服務",
-		"buy_exact": "我想買價值正好 {amount} {fiat} 嘅 {asset}",
-		"sell_exact": "我想賣價值正好 {amount} {fiat} 嘅 {asset}"
+		"buy_exact": "我想買正好 {amount} {fiat} 嘅 {asset}",
+		"sell_exact": "我想賣正好 {amount} {fiat} 嘅 {asset}",
+		"buy_barter_novalue": "我想用 {cryptos} 買 {asset}",
+		"sell_barter_novalue": "我想賣 {asset} 換 {cryptos}"
 	},
 	"stats": {
 		"page_title": "網絡統計",

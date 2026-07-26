@@ -304,6 +304,16 @@ The full operator reference — every configuration setting, the complete nginx 
 
 ---
 
+## 11.5 Your node helps host Morphit (automatic)
+
+Your instance also runs a small **IPFS node** that keeps a copy of Morphit's current signed release available to everyone. Think of it as every operator chipping in to host the app itself, so a signed copy is always reachable even if the big pinning services ever go away. You keep 90% of the listing fees — hosting the release you run is a fair trade.
+
+You don't have to do anything: on an Ansible install it's **on by default**. It's deliberately light (a low-power profile, a small connection cap, about 12 MB kept), and if it ever hiccups it never affects your site.
+
+On a hand-installed box, turn it on once with `morphit-ops` → **Harden this server** → **Set up IPFS release hosting** (or `sudo sh ops/ipfs/morphit-ipfs-setup.sh`). To check it: `systemctl status ipfs morphit-ipfs-pin.timer`. Details are in `OPERATIONS.md` §48. If your box is very small on memory, you can opt out there.
+
+---
+
 ## 12. When something breaks
 
 **"morphit-ops: command not found."** You're running it from the wrong place, or `npm install` hasn't finished. `cd` **inside the Morphit directory** (`cd ~/morphit`), confirm `npm install` completed, and retry.

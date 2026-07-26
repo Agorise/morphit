@@ -177,6 +177,15 @@ export interface ReleaseDistributionBlock {
 	 *  (`Qm…`, base58) or CIDv1 (`baf…`, base32). Omitted until the
 	 *  bytes are actually pinned. */
 	readonly ipfs_cid?: string;
+	/** OPTIONAL stable IPNS name (`k51…`, an IPNS-over-libp2p public key)
+	 *  that always resolves to the LATEST release's tarball. Unlike
+	 *  `ipfs_cid` (which is immutable and per-release), this is the
+	 *  mutable "always find the newest" pointer, repointed every release
+	 *  via w3name. It's a DISCOVERY aid, NOT the verification anchor —
+	 *  a resolved copy is still checked against `source_sha256` +
+	 *  `gpg_fingerprint`. Resolve at `https://dweb.link/ipns/<name>` or
+	 *  `ipns://<name>`. Omitted until a publishing key is configured. */
+	readonly ipns_name?: string;
 	/** OPTIONAL independent download mirrors (`https://…`) carrying the
 	 *  SAME signed bytes — a Codeberg release asset, an IPFS gateway,
 	 *  etc. Bounded list; recommendations, not mandates. */

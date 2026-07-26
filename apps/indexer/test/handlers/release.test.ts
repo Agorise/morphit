@@ -650,6 +650,26 @@ describe('release validator parity — frontend ↔ indexer', () => {
 			expect: 'ok'
 		},
 		{
+			// v1.9.x — stable IPNS "always latest" pointer.
+			name: 'distribution with ipns_name (k51…) → ok',
+			payload: payloadWithDistribution({
+				source_sha256: VALID_SOURCE_SHA256,
+				gpg_fingerprint: VALID_GPG_FPR,
+				ipfs_cid: VALID_IPFS_CID_V0,
+				ipns_name: 'k51qzi5uqu5dja8jme7xnwh50160jsfsvuoifc1ehfip3ybv0vkpxy9caigzj4'
+			}),
+			expect: 'ok'
+		},
+		{
+			name: 'distribution bad ipns_name → distribution_ipns_name_invalid',
+			payload: payloadWithDistribution({
+				source_sha256: VALID_SOURCE_SHA256,
+				gpg_fingerprint: VALID_GPG_FPR,
+				ipns_name: 'not-a-valid-ipns-name'
+			}),
+			expect: 'distribution_ipns_name_invalid'
+		},
+		{
 			name: 'distribution 64-hex (v5) fingerprint → ok',
 			payload: payloadWithDistribution({
 				source_sha256: VALID_SOURCE_SHA256,

@@ -90,6 +90,7 @@ Payment-method configuration — enabling/disabling canonical payment methods in
 45. [MCP server — AI agent surface](#45-mcp-server--ai-agent-surface)
 46. [Resetting the indexer database (schema drift after an upgrade)](#46-resetting-the-indexer-database-schema-drift-after-an-upgrade)
 47. [Keeping the relay funded — low-BLURT notifications](#47-keeping-the-relay-funded--low-blurt-notifications)
+48. [IPFS release hosting — every instance pins the signed release](#48-ipfs-release-hosting--every-instance-pins-the-signed-release)
 
 ---
 
@@ -5445,6 +5446,44 @@ See `docs/VERIFY-YOUR-DOWNLOAD.md` for the full user-facing
 guide.  Both trace back to the one key fingerprint you
 published — which is now also anchored on-chain, so a hostile
 mirror can't swap in its own key.
+
+#### IPFS pin + a stable "always latest" IPNS name (optional, CI-automated)
+
+The release workflow can additionally pin each tarball to IPFS
+and repoint a **stable IPNS name** at it, so `ipns://<name>`
+always resolves to the newest release.  Both are additive to the
+git mirrors + the on-chain SHA-256, both are OFF until you set a
+secret, and neither can ever fail a release (the steps are
+non-fatal).
+
+- **IPFS pin** — set a `PINATA_JWT` Actions secret (Pinata → API
+  Keys → a JWT with `pinFileToIPFS`).  `release.yml` then pins a
+  small **release directory** — the signed tarball (versioned +
+  a stable `morphit-latest.tar.gz`), its `.sha256`/`.asc`, the
+  release notes, and a `metadata.json` (version, tag, sha256,
+  date, repo) — so anyone browsing or searching IPFS sees the
+  version and notes next to the bytes.  The DIRECTORY CID is
+  anchored on-chain as `ipfs_cid` (the schema allows "a directory
+  holding it").
+- **IPNS "always latest"** — run `npm i --no-save w3name && node
+  scripts/ipns-keygen.mjs` **once** on your release laptop.  It
+  prints a PUBLIC `k51…` name and a SECRET base64 key.  Store the
+  key as the `MORPHIT_IPNS_KEY` Actions secret (never commit it —
+  same trust model as the @morphit WIF), paste the `k51…` name
+  into `apps/web/src/lib/ipns.ts` (`MORPHIT_IPNS_NAME`) so the
+  download page's IPFS card goes live, and — if you like — add a
+  DNSLink `TXT` at `_dnslink.morphit.io` = `dnslink=/ipns/<name>`
+  once, for a pretty `ipns://morphit.io`.  From then on every
+  tagged release signs a fresh IPNS record **locally**
+  (`scripts/ipns-publish.mjs`; w3name never sees the key), points
+  the name at the new CID, and anchors it on-chain as
+  `distribution.ipns_name`.  Records live ~1 year and are
+  refreshed every release, so the name never goes stale.
+
+The `ipfs_cid` is the immutable per-release verification anchor;
+`ipns_name` is the mutable discovery pointer.  A copy fetched via
+either is still only trusted once it passes the `source_sha256` +
+GPG checks.
 
 ## 27. Fees and rewards reference
 
@@ -11419,3 +11458,64 @@ matrix-bot (which reads the indexer/relay JSON journal). Set
 
 To top up: transfer liquid BLURT to `@morphit-relay`. Signups recover on
 their own within ~30 seconds — no command to run.
+
+## 48. IPFS release hosting — every instance pins the signed release
+
+Every Morphit instance runs a small **IPFS (Kubo) node** that pins THIS
+instance's current signed release. The point is decentralization
+(priority #2): if the code lived only on a handful of pinning services
+(Pinata, Storacha, …) and they all dropped it, the IPFS copy would
+vanish. With every operator pinning, the signed release is served from as
+many independent nodes as there are instances — and operators keep 90% of
+the BLURT listing fees, so hosting the release they run is the quid pro
+quo. **This is ON by default.** (The code never disappears regardless —
+it is also on seven git mirrors and anchored on-chain — but this keeps the
+*IPFS* copy alive without depending on any single provider.)
+
+### How it works
+
+1. The instance's own indexer already reads `morphit_release_v1` from the
+   chain, so `/v1/release` now carries the release's `distribution` block,
+   including its `ipfs_cid` (a **directory CID** — the tarball, notes, and
+   `metadata.json`). No third party is trusted for the CID.
+2. `morphit-ipfs-pin.sh` (on a timer + at boot) reads `ipfs_cid` from
+   `/v1/release` and runs `ipfs pin add` **by CID** — it fetches and keeps
+   the exact bytes the chain anchors, so the node serves the same CID
+   everyone else does. Only the release maintainer ever *publishes* the
+   IPNS name; instances just *provide* the content it resolves to.
+3. The node is deliberately light (priority #4): the Kubo **`lowpower`
+   profile**, a small connection cap, loopback-only API/gateway, and
+   periodic GC. The only content it keeps is the ~12 MB release directory.
+
+### Setup
+
+**Ansible installs get it automatically** — the `ipfs` role runs by
+default (`enable_ipfs: true` in `group_vars/all.yml`). It installs Kubo
+(pinned `morphit_kubo_version`, checksum-verified), initialises the repo,
+and enables the daemon + the `morphit-ipfs-pin.timer`. To pin Kubo's exact
+bytes, set `morphit_kubo_sha512`. To opt a host out, set `enable_ipfs:
+false` for it in inventory.
+
+**Hand-managed installs** (no Ansible): run the shipped setup once, or pick
+it from `morphit-ops harden` → "Set up IPFS release hosting":
+
+```sh
+sudo sh ops/ipfs/morphit-ipfs-setup.sh
+```
+
+It installs Kubo + the pinning service/timer idempotently. Then:
+
+```sh
+systemctl status ipfs morphit-ipfs-pin.timer
+sudo systemctl start morphit-ipfs-pin.service    # pin right now
+journalctl -u morphit-ipfs-pin -e --no-pager
+```
+
+### Verifying + footprint
+
+`ipfs pin ls --type=recursive` on the box lists the pinned release CID; it
+should match `distribution.ipfs_cid` from `/v1/release` (and the on-chain
+anchor). Resource use is modest — a low-power DHT participant plus a few MB
+of pinned content — but it is a running daemon; a memory- or bandwidth-
+constrained box can opt out as above. The pinning service is non-fatal by
+design: a Kubo outage or a slow fetch never affects the site.

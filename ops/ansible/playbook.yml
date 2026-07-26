@@ -128,6 +128,15 @@
       tags: [i2pd]
       when: enable_i2pd | default(true)
 
+    # Every instance runs a small Kubo node that pins this instance's current
+    # signed release, so releases survive even if every commercial pinning
+    # service drops them (decentralization priority #2). ON by default; the
+    # CID comes from this instance's own /v1/release. Low-footprint (lowpower
+    # profile, capped connections, ~12 MB pinned).
+    - role: ipfs
+      tags: [ipfs]
+      when: enable_ipfs | default(true)
+
     # ─── Optional sidecar monitors ────────────────────────────
     # All disabled by default — set enable_<name>: true in
     # group_vars/all.yml (or per-host in inventory) to opt in.

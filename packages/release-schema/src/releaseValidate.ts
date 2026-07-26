@@ -92,6 +92,7 @@ export type ReleaseValidateError =
 	| 'distribution_source_sha256_invalid'
 	| 'distribution_gpg_fingerprint_invalid'
 	| 'distribution_ipfs_cid_invalid'
+	| 'distribution_ipns_name_invalid'
 	| 'distribution_mirrors_not_array'
 	| 'distribution_mirror_invalid';
 
@@ -158,6 +159,12 @@ const GPG_FINGERPRINT_RE = /^(?:[0-9A-Fa-f]{40}|[0-9A-Fa-f]{64})$/;
 const IPFS_CID_RE = /^(?:Qm[1-9A-HJ-NP-Za-km-z]{44}|b[a-z2-7]{58,110})$/;
 /** Belt-and-suspenders ceiling; a CID never approaches this. */
 const IPFS_CID_MAX_LEN = 128;
+/** IPNS name: a base36 CIDv1 libp2p-key (what w3name emits for the
+ *  Ed25519 key we generate) — always `k51…`, ~62 chars. Content is the
+ *  public key, so the value is self-describing; this bounds it and rejects
+ *  garbage. */
+const IPNS_NAME_RE = /^k51[a-z0-9]{50,70}$/;
+const IPNS_NAME_MAX_LEN = 80;
 /** No release needs more than a handful of mirrors. */
 const MIRRORS_MAX = 8;
 const DISTRIBUTION_MAX_SERIALIZED_BYTES = 4096;
@@ -316,6 +323,15 @@ export function validateDistribution(d: unknown):
 		ipfs_cid = cid;
 	}
 
+	let ipns_name: string | undefined;
+	if (d.ipns_name !== undefined && d.ipns_name !== null) {
+		const nm = d.ipns_name;
+		if (typeof nm !== 'string' || nm.length > IPNS_NAME_MAX_LEN || !IPNS_NAME_RE.test(nm)) {
+			return { ok: false, reason: 'distribution_ipns_name_invalid' };
+		}
+		ipns_name = nm;
+	}
+
 	let mirrors: string[] | undefined;
 	if (d.mirrors !== undefined && d.mirrors !== null) {
 		if (!Array.isArray(d.mirrors)) {
@@ -339,6 +355,7 @@ export function validateDistribution(d: unknown):
 		source_sha256: sha,
 		gpg_fingerprint: fpr,
 		...(ipfs_cid !== undefined ? { ipfs_cid } : {}),
+		...(ipns_name !== undefined ? { ipns_name } : {}),
 		...(mirrors !== undefined ? { mirrors } : {})
 	};
 	if (byteLengthOfJson(value) > DISTRIBUTION_MAX_SERIALIZED_BYTES) {

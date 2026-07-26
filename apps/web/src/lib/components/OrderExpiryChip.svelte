@@ -9,7 +9,10 @@
 	 * tiers below now differ ONLY in tick cadence, not colour:
 	 *
 	 *   far    (> 1 hour):  emerald, ticks every 60s.  Format:
-	 *                       "Expires in 5d 3h" or "Expires in 4h 12m".
+	 *                       "Expires in 5d" (day-granular — the on-chain
+	 *                       expiry is floored to UTC midnight, so no
+	 *                       time-of-day is shown) or "Expires in 4h 12m"
+	 *                       in the final day.
 	 *   near   (1 min..1 hour): emerald, ticks every 60s.  Format:
 	 *                       "Expires in 42m".
 	 *   urgent (< 15 min):  emerald, ticks every SECOND so the
@@ -151,8 +154,15 @@
 		const minutes = Math.floor((totalSec % 3_600) / 60);
 		const seconds = totalSec % 60;
 		if (days >= 1) {
-			return $_('orderbook.order.expires_in_days_hours', {
-				values: { days, hours }
+			// t.txt #2 — the on-chain expiry is day-floored to UTC midnight (cp175
+			// privacy), so it carries NO meaningful time-of-day. The old "Nd Mh"
+			// tacked a spurious hours count onto a day-granular deadline — the "Mh"
+			// was really just "now → next UTC midnight", so it was IDENTICAL on every
+			// card at a given moment and read as a bug (all cards "87d 7h"). Show day
+			// granularity only, matching the detail page's formatTimeUntil and the
+			// date-only hover tooltip.
+			return $_('orderbook.order.expires_in_days_only', {
+				values: { days }
 			});
 		}
 		if (hours >= 1) {

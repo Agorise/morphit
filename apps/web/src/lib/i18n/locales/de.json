@@ -2075,7 +2075,8 @@
 	},
 	"instances": {
 		"title": "Bekannte Morphit-Instanzen",
-		"intro": "Morphit ist föderiert. Jeder kann eine Instanz betreiben, und Ihr Indexer entdeckt andere Instanzen automatisch durch Lesen der Chain. Diese Liste zeigt deren aktuellen Zustand aus der letzten Prüfung.",
+		"intro": "Morphit ist föderiert. Unabhängige {link} betreiben Morphit-Instanzen, und Ihr Indexer entdeckt andere Instanzen automatisch durch Lesen der Chain. Diese Liste zeigt deren aktuellen Zustand aus der letzten Prüfung.",
+		"intro_operators_link": "Betreiber",
 		"loading": "Verzeichnis wird geladen …",
 		"bookmark_tip": "💡 Tipp: Setzen Sie einige dieser Instanzen – samt ihrer Tor-, I2P- oder Lokinet-Adressen – als Lesezeichen in Ihrem Browser. Das Orderbuch liegt auf der öffentlichen Blockchain. Sollte also eine Seite jemals blockiert werden oder offline gehen, erreichen Sie dieselben Aufträge und Trades über jede andere Instanz.",
 		"fetch_error": "Verzeichnis konnte nicht geladen werden.",
@@ -2617,7 +2618,8 @@
 	},
 	"operators": {
 		"title": "Morphit-Betreiber",
-		"subtitle": "Jede öffentliche Morphit-Instanz, betrieben von unabhängigen Betreibern. Wähle eine oder betreibe deine eigene.",
+		"subtitle": "Alle öffentlichen Morphit-{link} werden von unabhängigen Betreibern betrieben. Wähle eine oder betreibe deine eigene.",
+		"subtitle_instances_link": "Instanzen",
 		"run_cta": "Morphit-Knoten betreiben",
 		"learn_cta": "Wie verdienen Betreiber?",
 		"empty_heading": "Noch keine Betreiber.",
@@ -2729,7 +2731,7 @@
 			"engagement_aria": "{count} andere Personen schreiben diesem Verkäufer in den letzten 24 Stunden über diese Order",
 			"engagement_tooltip": "{count} andere Personen sprechen gerade mit diesem Verkäufer über diese Order. Schnell melden — beliebte Orders schließen schnell.",
 			"expired": "Abgelaufen",
-			"expires_in_days_hours": "Läuft ab in {days}T {hours}Std",
+			"expires_in_days_only": "Läuft ab in {days}T",
 			"expires_in_hours_minutes": "Läuft ab in {hours}Std {minutes}min",
 			"expires_in_minutes": "Läuft ab in {minutes}min",
 			"expires_in_minutes_seconds": "Läuft ab in {minutes}min {seconds}s",
@@ -3251,18 +3253,14 @@
 			"tier_100": "{amount} — für aktive Trader, DarkFi-Power-User und mehr passives Einkommen"
 		},
 		"summary": {
-			"sentence_buy": "Ich kaufe {amount} {price} und zahle mit {methods}.",
-			"sentence_sell": "Ich verkaufe {amount} {price} und akzeptiere {methods}.",
+			"sentence_buy": "Ich möchte {amount} {price} kaufen und mit {methods} zahlen.",
+			"sentence_sell": "Ich möchte {amount} {price} verkaufen und {methods} akzeptieren.",
 			"amount_up_to": "bis zu {max} {fiat} in {asset}",
 			"amount_min_max": "{min} bis {max} {fiat} in {asset}",
 			"amount_min_plus": "{min} {fiat} oder mehr in {asset}",
 			"amount_any": "eine beliebige Menge {asset}",
 			"price_market": "zum Marktpreis",
-			"price_fixed": "zu einem Festpreis von {price} {fiat} pro {asset}",
-			"barter_sentence_sell": "Du bietest {goods} im Wert von {value} an und akzeptierst {cryptos}.",
-			"barter_sentence_buy": "Du suchst {goods} im Wert von {value} und zahlst in {cryptos}.",
-			"barter_sentence_sell_novalue": "Du bietest {goods} an und akzeptierst {cryptos}.",
-			"barter_sentence_buy_novalue": "Du suchst {goods} und zahlst in {cryptos}."
+			"price_fixed": "zu einem Festpreis von {price} {fiat} pro {asset}"
 		},
 		"terms_md_guide": {
 			"tooltip_title": "Markdown-Anleitung",
@@ -4651,17 +4649,19 @@
 		"cta": "Einrichtung abschließen"
 	},
 	"order_title": {
-		"buy_min": "Ich kaufe mindestens {amount} {fiat} von {asset}",
-		"sell_min": "Ich verkaufe mindestens {amount} {fiat} von {asset}",
-		"buy_max": "Ich kaufe {asset} im Wert von bis zu {amount} {fiat}",
-		"sell_max": "Ich verkaufe {asset} im Wert von bis zu {amount} {fiat}",
-		"buy_range": "Ich kaufe {asset} im Wert von {min}–{max} {fiat}",
-		"sell_range": "Ich verkaufe {asset} im Wert von {min}–{max} {fiat}",
-		"buy_any": "Ich kaufe eine beliebige Menge {asset} mit {fiat}",
-		"sell_any": "Ich verkaufe eine beliebige Menge {asset} für {fiat}",
+		"buy_min": "Ich möchte {asset} im Wert von mindestens {amount} {fiat} kaufen",
+		"sell_min": "Ich möchte {asset} im Wert von mindestens {amount} {fiat} verkaufen",
+		"buy_max": "Ich möchte {asset} im Wert von bis zu {amount} {fiat} kaufen",
+		"sell_max": "Ich möchte {asset} im Wert von bis zu {amount} {fiat} verkaufen",
+		"buy_range": "Ich möchte {asset} im Wert von {min}–{max} {fiat} kaufen",
+		"sell_range": "Ich möchte {asset} im Wert von {min}–{max} {fiat} verkaufen",
+		"buy_any": "Ich möchte eine beliebige Menge {asset} mit {fiat} kaufen",
+		"sell_any": "Ich möchte eine beliebige Menge {asset} für {fiat} verkaufen",
 		"goods_services": "Waren/Dienstleistungen",
-		"buy_exact": "Ich kaufe {asset} im Wert von genau {amount} {fiat}",
-		"sell_exact": "Ich verkaufe {asset} im Wert von genau {amount} {fiat}"
+		"buy_exact": "Ich möchte {asset} im Wert von genau {amount} {fiat} kaufen",
+		"sell_exact": "Ich möchte {asset} im Wert von genau {amount} {fiat} verkaufen",
+		"buy_barter_novalue": "Ich möchte {asset} für {cryptos} kaufen",
+		"sell_barter_novalue": "Ich möchte {asset} für {cryptos} verkaufen"
 	},
 	"stats": {
 		"page_title": "Netzwerkstatistiken",
