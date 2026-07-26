@@ -15,7 +15,7 @@
  * Mirror of the instancesStream / instancesStreamHelpers split.
  */
 
-import { escapeLike } from '$api/shared';
+import { cryptoFacingSideWhere, escapeLike } from '$api/shared';
 import { computeReputationScore } from '$indexer/reputation/score';
 import type { AssetTicker } from '@morphit/asset-registry';
 
@@ -56,6 +56,7 @@ export interface OrderbookStreamRow {
 	payment_methods: string[];
 	/** cp425 — accepted crypto set for a BARTER order; null for crypto assets. */
 	accepted_assets: string[] | null;
+	specific_barter_title: string | null;
 	terms: string | null;
 	fee_method: 'blurt' | 'waived_first_buy' | 'btc' | 'xmr' | null;
 	feedback_count: number;
@@ -109,6 +110,7 @@ export function rowToWire(r: OrderbookStreamRow): Record<string, unknown> {
 		location_region: r.location_region,
 		payment_methods: r.payment_methods,
 		accepted_assets: r.accepted_assets ?? null,
+		specific_barter_title: r.specific_barter_title ?? null,
 		terms: r.terms,
 		fee_method: r.fee_method,
 		feedback_count: r.feedback_count,
@@ -192,7 +194,10 @@ export function buildWhereClauses(
 				`OR ${assetParam} = ANY(o.accepted_assets))`
 		);
 	}
-	if (q.side) where.push(`o.side = ${p(q.side)}`);
+	// Crypto-facing side filter — BARTER's o.side is the goods direction and
+	// flips (see cryptoFacingSideWhere). Must match the snapshot query, or a
+	// live-streamed barter order would filter differently. t.txt v1.8.16 #3.
+	if (q.side) where.push(cryptoFacingSideWhere(q.side, p));
 	if (q.fiat_currency) {
 		const fiats = q.fiat_currency.split(',').map((s) => s.toUpperCase());
 		where.push(`o.fiat_currency = ANY(${p(fiats)}::text[])`);

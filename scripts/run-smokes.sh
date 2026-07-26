@@ -60,6 +60,7 @@ SMOKES=(
 	"apps/indexer:rss-orderbook-smoke"
 	"apps/indexer:rss-orderbook-xml-validate"
 	"apps/indexer:rss-orderbook-filters-smoke"
+	"apps/indexer:orderbook-side-barter-flip-smoke"
 	"apps/indexer:operator-register-handler-smoke"
 	"apps/indexer:operator-payment-method-handler-smoke"
 	"apps/indexer:reserved-keys-parity-smoke"
@@ -504,6 +505,7 @@ SMOKES=(
 	"apps/web:account-binding-smoke"
 	"apps/web:eli5-release-blocks-smoke"
 	"apps/web:avatar-menu-portal-smoke"
+	"apps/web:trust-score-modal-portal-smoke"
 	"apps/web:chat-inbox-threading-smoke"
 	"apps/web:explorer-download-polish-smoke"
 	"apps/web:chat-read-state-threading-smoke"
@@ -574,6 +576,12 @@ SMOKES=(
 	".:blurt-noble-signer-recovery-proof"
 	".:blurt-noble-tx-signature-proof"
 	".:signer-backend-consistency-smoke"
+	"apps/web:chat-feedback-cancel-smoke"
+	"apps/web:chat-notif-nudge-gate-smoke"
+	"apps/web:archived-thread-not-unread-smoke"
+	"apps/web:import-eager-self-avatar-smoke"
+	"apps/web:order-blog-post-mirror-smoke"
+	"apps/web:barter-specific-title-smoke"
 )
 
 total=0

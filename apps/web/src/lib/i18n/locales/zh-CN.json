@@ -1215,7 +1215,7 @@
 			},
 			"activity_level": {
 				"q": "Morphit 现在的活跃度怎么样?",
-				"a": "全站实时活动统计尚未接通。上线后,这个条目将显示成功交易总数、当前活跃用户数,以及所有 Morphit 前端(morphit.io 加上社区镜像)的汇总活动。因为订单簿存在于区块链上,这些数字可以由任何人用自己的 indexer 针对同样的数据进行验证。\n\n如果你对当前的原始活动感到好奇,你可以直接在区块链上搜索 id 为 `morphit_order_v1` 的 `custom_json` 操作 — 每个 Morphit 订单都是一个链上签名 op,所以任何人都可以计数,不需要我们的许可也不需要我们的服务器。"
+				"a": "Morphit 有一个实时的[统计页面](/stats)——它显示当前活跃订单数、历史累计订单总数、已完成交易（累计以及最近 30 天）、以及当前有多少种加密资产和法币拥有活跃订单。这些数字直接来自本实例的索引器对底层区块链的读取，因此反映的是链上真实活动，而不是任何人可以悄悄注水的数字。\n\n而且，由于每一笔 Morphit 订单都是公链上一个签名的 `custom_json` 操作（id 为 `morphit_order_v1`），任何人都可以通过直接搜索区块链、或对相同数据运行自己的索引器来复现或核对这些数字——无需许可，也不依赖我们的服务器。"
 			},
 			"sybil_protection": {
 				"q": "Morphit 怎么阻止假评?",
@@ -1395,7 +1395,7 @@
 			},
 			"morphit_mirrors": {
 				"q": "为什么 Morphit 的源代码要镜像到这么多代码托管站点？",
-				"a": "去中心化——这是 Morphit 设计中的第 2 优先项，仅次于隐私。一个只存在于一处的项目，可以在一处被扼杀：平台可以封禁账号，政府可以下令下架，主机可能干脆消失。所以 Morphit 的源代码（AGPL-3.0）镜像在许多独立的代码托管站点——我们自己的 Forgejo 服务器 git.agorise.net 是规范副本，GitHub 和 Codeberg 已上线，还有更多正在添加（GitLab、Bitbucket、SourceForge、Gitee、Launchpad、GitFlic、SourceHut、Radicle），外加一份没有任何主机能控制的、基于内容寻址的 IPFS 副本。如果其中任何一个封锁或删除 Morphit，其余每一份副本都还在——而且因为它是 AGPL，任何人都可以重新托管、审计或分叉它。完整的最新列表在「下载」页面。\n\n（没有任何东西需要从应用商店安装——Morphit 作为 Progressive Web App (PWA) 运行，你直接从浏览器添加。这些镜像针对的是源代码，这样项目就无法靠删除单个仓库来被噤声。）\n\n你可以确认任何正在运行的实例提供的是未被篡改的代码：每个版本的 SHA-256 哈希都会发布到区块链上——见 /about-this-instance。"
+				"a": "去中心化——这是 Morphit 设计中的第 2 优先项，仅次于隐私。一个只存在于一处的项目，可以在一处被扼杀：平台可以封禁账号，政府可以下令下架，主机可能干脆消失。所以 Morphit 的源代码（AGPL-3.0）镜像在许多独立的代码托管站点——我们自己的 Forgejo 服务器 git.agorise.net 是规范副本，GitHub、Codeberg、SourceForge、SourceHut、GitLab、Bitbucket 和 Launchpad 已上线，外加一份没有任何主机能控制的、基于内容寻址的 IPFS 副本。如果其中任何一个封锁或删除 Morphit，其余每一份副本都还在——而且因为它是 AGPL，任何人都可以重新托管、审计或分叉它。完整的最新列表在「下载」页面。\n\n（没有任何东西需要从应用商店安装——Morphit 作为 Progressive Web App (PWA) 运行，你直接从浏览器添加。这些镜像针对的是源代码，这样项目就无法靠删除单个仓库来被噤声。）\n\n你可以确认任何正在运行的实例提供的是未被篡改的代码：每个版本的 SHA-256 哈希都会发布到区块链上——见 /about-this-instance。"
 			},
 			"android_sideload": {
 				"q": "我如何在 Android 上安装 Morphit？",
@@ -3259,10 +3259,10 @@
 			"amount_any": "任意数量的 {asset}",
 			"price_market": "以市场价格",
 			"price_fixed": "以 {price} {fiat}/{asset} 的固定价格",
-			"barter_sentence_sell": "你提供价值 {value} 的商品/服务,接受 {cryptos}。",
-			"barter_sentence_buy": "你想要价值 {value} 的商品/服务,用 {cryptos} 付款。",
-			"barter_sentence_sell_novalue": "你提供商品/服务,接受 {cryptos}。",
-			"barter_sentence_buy_novalue": "你想要商品/服务,用 {cryptos} 付款。"
+			"barter_sentence_sell": "你提供价值 {value} {goods},接受 {cryptos}。",
+			"barter_sentence_buy": "你想要价值 {value} {goods},用 {cryptos} 付款。",
+			"barter_sentence_sell_novalue": "{goods},接受 {cryptos}。",
+			"barter_sentence_buy_novalue": "{goods},用 {cryptos} 付款。"
 		},
 		"terms_md_guide": {
 			"tooltip_title": "Markdown 指南",
@@ -4564,8 +4564,11 @@
 		"order_post": {
 			"title_buy": "{subject}。想交易吗？",
 			"title_sell": "{subject}。想交易吗？",
-			"body_buy": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\n{subject}。想交易吗？\n\n没有比 Morphit 更安全、更快、更可靠的地方来交易加密货币和法币。\n\n看看我在 Morphit 上的报价！\nhttps://morphit.io/{lang}/@{username}/{permlink}",
-			"body_sell": "![](https://img.blurt.blog/blurtimage/morphit/ed05997f374e75ed59746588f09c0771f136df26.png)\n\n{subject}。想交易吗？\n\n没有比 Morphit 更安全、更快、更可靠的地方来交易加密货币和法币。\n\n看看我在 Morphit 上的报价！\nhttps://morphit.io/{lang}/@{username}/{permlink}"
+			"details": "详情",
+			"i_will_accept": "我将接受",
+			"terms_heading": "条款",
+			"tagline": "Morphit 是全世界最注重隐私、最安全、最易用的加密货币、法币及更多资产的交易之地。",
+			"check_out": "来看看我在 Morphit 上的报价！"
 		},
 		"opt_in_label": "将我的订单同步发布到 Blurt 博客",
 		"review_on_title": "同步发布",

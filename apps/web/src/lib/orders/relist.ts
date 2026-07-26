@@ -35,6 +35,8 @@ export interface RelistPrefill {
 	paymentMethods: string[];
 	region: string;
 	terms: string;
+	/** v1.9.0 — carry a barter order's inline goods label through a re-list. */
+	specificBarterTitle: string;
 	expiresDays: number;
 	reason: 'relist';
 }
@@ -80,6 +82,7 @@ export function buildRelistPrefill(o: OrderRecord): RelistPrefill {
 		paymentMethods: [...o.payment_methods],
 		region: o.location_region ?? '',
 		terms: o.terms ?? '',
+		specificBarterTitle: o.specific_barter_title ?? '',
 		// Default new expiry to 30 days — the OLD expiresDays already passed,
 		// so make the user pick fresh rather than carrying a stale value.
 		expiresDays: 30,

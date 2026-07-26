@@ -610,7 +610,11 @@
 			<p class="mt-1 text-xs text-red-700 dark:text-red-300">{errorMessage}</p>
 		</section>
 	{:else if order}
-		{@const orderTitle = orderTitleParts(order)}
+		{@const orderTitle = orderTitleParts(
+			order,
+			undefined,
+			order.specific_barter_title || ($_('order_title.goods_services') as string)
+		)}
 		<!-- ─── Order headline ──────────────────────────────────── -->
 		<section class="mb-6">
 			<h1 class="mb-2 font-display text-3xl font-extrabold">

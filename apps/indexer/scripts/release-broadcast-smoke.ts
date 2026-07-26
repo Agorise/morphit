@@ -69,7 +69,39 @@ if (buildReleaseCustomJsonOp(VALID, 'example-op').required_posting_auths[0] === 
 	ok('custom --signer is honored');
 else bad('custom signer not honored', '');
 
-// ── cp436 — payload with NO endpoints → still a valid op ──────────
+// ── cp560 — a distribution block's source_sha256 is LEGITIMATELY 64-hex
+//    and must NOT trip the secret-hex guard.  Before the fix, the
+//    broadcaster scanned the whole payload and REFUSED every release that
+//    carried a distribution anchor (caught live during the v1.8.15
+//    ceremony). The guard now excludes the strictly-validated distribution
+//    block, mirroring the builder. ──
+const WITH_DISTRIBUTION = JSON.stringify({
+	version: '1.8.15',
+	hash_manifest: { 'app.js': 'sha256-' + 'A'.repeat(43) + '=' },
+	treasury: { btc: { address: BTC, satoshis: 416 }, xmr: { address: XMR, piconero: '781250000' } },
+	distribution: {
+		source_sha256: 'a'.repeat(64),
+		gpg_fingerprint: '7B4C1D189DBB610C473B59ED53524E1F1017EB9C',
+		mirrors: ['https://codeberg.org/agorise/morphit', 'https://github.com/agorise/morphit']
+	}
+});
+try {
+	const opDist = buildReleaseCustomJsonOp(WITH_DISTRIBUTION);
+	if (opDist.id === RELEASE_OP_ID && opDist.json === WITH_DISTRIBUTION.trim())
+		ok('cp560 — distribution source_sha256 (64-hex) does NOT trip the secret guard');
+	else bad('cp560 — distribution payload produced wrong op', JSON.stringify(opDist));
+} catch (e) {
+	bad('cp560 — distribution block wrongly rejected by the secret guard', e instanceof Error ? e.message : String(e));
+}
+// …but a 64-hex OUTSIDE the distribution block is STILL caught — the strip
+// is surgical, the treasury/other blocks stay scanned.
+throws(
+	'cp560 — a 64-hex outside distribution is still refused',
+	() => assertNoSecretHex(JSON.stringify({ treasury: { note: 'f'.repeat(64) } })),
+	'secret key'
+);
+
+
 const NO_ENDPOINTS = JSON.stringify({
 	version: '1.1.0',
 	hash_manifest: { 'app.js': 'sha256-' + 'A'.repeat(43) + '=' },

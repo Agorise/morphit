@@ -44,7 +44,13 @@ import { z } from 'zod';
 
 import type { Database } from '$db/pool';
 import type { Poller } from '$indexer/poller';
-import { decodeCursor, encodeCursor, errorBody, escapeLike } from '$api/shared';
+import {
+	cryptoFacingSideWhere,
+	decodeCursor,
+	encodeCursor,
+	errorBody,
+	escapeLike
+} from '$api/shared';
 import { ASSET_TICKERS, type AssetTicker } from '@morphit/asset-registry';
 
 const MAX_LIMIT = 100;
@@ -153,6 +159,8 @@ interface OrderRow {
 	 *  seller accepts as settlement (e.g. ['BTC','XMR']). Null for every
 	 *  crypto asset (they settle in themselves). */
 	accepted_assets: string[] | null;
+	/** v1.9.0 — a BARTER order's inline goods label; null for crypto orders. */
+	specific_barter_title: string | null;
 	terms: string | null;
 	/** ADR-0011 §10 — how this order's fee was paid. */
 	fee_method: 'blurt' | 'waived_first_buy' | 'btc' | 'xmr';
@@ -230,6 +238,7 @@ function rowToWire(r: OrderRow) {
 		location_region: r.location_region,
 		payment_methods: r.payment_methods,
 		accepted_assets: r.accepted_assets ?? null,
+		specific_barter_title: r.specific_barter_title ?? null,
 		terms: r.terms,
 		fee_method: r.fee_method,
 		feedback_count: r.feedback_count,
@@ -329,7 +338,9 @@ export function orderbookRoute(db: Database, poller: Poller, operatorAccount: st
 					`OR ${assetParam} = ANY(o.accepted_assets))`
 			);
 		}
-		if (q.side) where.push(`o.side = ${p(q.side)}`);
+		// Crypto-facing side filter — BARTER's o.side is the goods direction and
+		// flips (see cryptoFacingSideWhere). t.txt v1.8.16 #3.
+		if (q.side) where.push(cryptoFacingSideWhere(q.side, p));
 		if (q.fiat_currency) {
 			// One or more ISO codes — match orders in ANY of them.
 			const fiats = q.fiat_currency.split(',').map((s) => s.toUpperCase());
@@ -493,7 +504,8 @@ export function orderbookRoute(db: Database, poller: Poller, operatorAccount: st
 
 		const sql = `SELECT o.account, o.permlink, o.side, o.asset, o.asset_network, o.fiat_currency,
 			        o.amount_min::text, o.amount_max::text, o.price_model,
-			        o.location_region, o.payment_methods, o.accepted_assets, o.terms,
+			        o.location_region, o.payment_methods, o.accepted_assets,
+			        o.specific_barter_title, o.terms,
 			        o.fee_method,
 			        COALESCE(f.c, 0)::int AS feedback_count,
 			        CASE WHEN f.r IS NOT NULL THEN f.r::text ELSE NULL END AS weighted_rating,

@@ -131,10 +131,10 @@ export function notify(event: NotificationEvent): void {
  *  NOT gated on the per-category opt-in: the ambient count/badge is
  *  "always-on" (it just shows how many things are waiting) — the opt-in
  *  gates the ALERTS (native notification / chime), not the peripheral
- *  badge. (categories.chat even DEFAULTS to false, so gating here would
- *  keep the chat badge at 0 for everyone who hasn't turned on chat
- *  alerts — the exact bug we're fixing.) No-ops when unchanged so
- *  subscribers don't churn. */
+ *  badge. (The badge stays always-on regardless of the opt-in; only the
+ *  ALERTS are gated. Chat's category defaults ON now — see preferences.ts —
+ *  but this must be always-on independent of that either way.) No-ops when
+ *  unchanged so subscribers don't churn. */
 export function setCategoryCount(category: NotificationCategory, n: number): void {
 	if (typeof window === 'undefined') return;
 	const value = Math.max(0, Math.floor(n));

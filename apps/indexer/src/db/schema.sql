@@ -2863,3 +2863,18 @@ CREATE INDEX IF NOT EXISTS trade_concentration_peer_idx
 
 COMMENT ON TABLE trade_concentration IS
     'v1.5.5 Signal E: accounts whose COMPLETED-TRADE credits are concentrated (>=80%) on a single peer over the detection window. The trade analogue of review_concentration — v1.5.5 credits the counterparty an order owner names, so without this a pair with one verified conversation could mint unlimited trade credit at a listing fee each. Excluded from the trade count by TRADE_COUNT_SQL.';
+
+-- ─── v52: orders.specific_barter_title (v1.9.0 inline barter label) ───
+-- A BARTER (goods/services) listing lets the seller type WHAT they're
+-- offering (e.g. "bananas") inline where the summary would otherwise
+-- read the generic "goods/services".  That short letters-only (<=24)
+-- label is pinned here so the orderbook, the order detail page, and the
+-- on-chain Blurt announcement can render "…of bananas" instead of the
+-- generic phrase.  NULL for every crypto order (they have no goods to
+-- name) and for a blank barter title.  No index — it's a display label,
+-- never a filter/containment key.
+ALTER TABLE orders
+    ADD COLUMN IF NOT EXISTS specific_barter_title TEXT;
+
+COMMENT ON COLUMN orders.specific_barter_title IS
+    'v1.9.0: for a BARTER order, the seller''s short letters-only (<=24 chars) label for what is on offer (e.g. bananas), shown inline in place of the generic goods/services text and folded into the order title + on-chain announcement. NULL for crypto orders.';

@@ -137,7 +137,7 @@ what Morphit published.
 By default it tries a few public nodes. To choose your own:
 
 ```sh
-MORPHIT_RPC=https://rpc.blurt.world node scripts/verify-download.mjs morphit-vX.Y.Z.tar.gz
+MORPHIT_RPC=https://rpc.beblurt.com node scripts/verify-download.mjs morphit-vX.Y.Z.tar.gz
 ```
 
 ---

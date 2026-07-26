@@ -8,7 +8,7 @@
  *
  *   node scripts/verify-download.mjs morphit-v1.8.15.tar.gz
  *   node scripts/verify-download.mjs <tarball> --version 1.8.15
- *   MORPHIT_RPC=https://rpc.blurt.world node scripts/verify-download.mjs <tarball>
+ *   MORPHIT_RPC=https://rpc.beblurt.com node scripts/verify-download.mjs <tarball>
  *
  * What it does:
  *   1. Computes the SHA-256 of YOUR downloaded tarball.
@@ -34,7 +34,19 @@ import { readFileSync, existsSync } from 'node:fs';
 
 const SIGNER = 'morphit';
 const OP_ID = 'morphit_release_v1';
-const DEFAULT_RPCS = ['https://rpc.blurt.world', 'https://rpc.blurt.blog', 'https://blurtblock.actifit.io'];
+// The 6-node canonical Blurt RPC pool — kept in lockstep with
+// DEFAULT_BLURT_RPC_ENDPOINTS (@morphit/operator-config) by the
+// rpc-endpoint-canon smoke. This is a Node script (no browser CORS), so
+// it can use ALL of them, including the CORS-omitted node the browser
+// build can't reach. Override with MORPHIT_RPC=<url> for a single node.
+const DEFAULT_RPCS = [
+	'https://rpc.drakernoise.com',
+	'https://blurtrpc.dagobert.uk',
+	'https://rpc.blurt.blog',
+	'https://rpc.beblurt.com',
+	'https://rpc.blurt.one',
+	'https://blurt-rpc.saboin.com'
+];
 const HISTORY_WALK_LIMIT = 10_000;
 const BATCH = 1000;
 
@@ -176,7 +188,7 @@ async function main() {
 		result = await fetchLatestReleasePayload(rpcs);
 	} catch (err) {
 		process.stderr.write(`\n✗ could not reach the Blurt chain: ${err instanceof Error ? err.message : err}\n`);
-		process.stderr.write('  Try another node: MORPHIT_RPC=https://rpc.blurt.world node scripts/verify-download.mjs <tarball>\n');
+		process.stderr.write('  Try another node: MORPHIT_RPC=https://rpc.beblurt.com node scripts/verify-download.mjs <tarball>\n');
 		process.exit(3);
 	}
 
