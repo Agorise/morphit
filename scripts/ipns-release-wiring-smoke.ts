@@ -8,8 +8,8 @@
  *   - scripts/ipns-keygen.mjs (Ken's one-time key gen) + scripts/ipns-publish.mjs
  *     (CI republish) exist and sign LOCALLY (key never leaves as anything but the
  *     MORPHIT_IPNS_KEY secret); the publish script prints ONLY the name on stdout
- *   - release.yml republishes after the IPFS pin (gated on MORPHIT_IPNS_KEY,
- *     non-fatal) and carries the name into the distribution anchor env
+ *   - release.yml republishes after computing the canonical CID (gated on
+ *     MORPHIT_IPNS_KEY, non-fatal) and carries the name into the distribution anchor env
  *   - the release schema + the indexer handler BOTH validate an optional
  *     `ipns_name` with the SAME regex + reason (parity), and the payload builder
  *     reads MORPHIT_BUILD_IPNS_NAME and emits `ipns_name`
@@ -33,6 +33,14 @@ const strip = (s: string) =>
 		.replace(/(^|[^:])\/\/[^\n]*/g, '$1');
 const read = (p: string) => readFileSync(resolve(ROOT, p), 'utf8');
 const readS = (p: string) => strip(read(p));
+// Shell-comment stripper: drop full-line `#` comments so anti-pattern greps on
+// shell scripts don't match a comment that (necessarily) names the thing it
+// replaced — e.g. stage-release-dir.sh's own note about the old `released_utc`.
+const stripHash = (s: string) =>
+	s
+		.split('\n')
+		.filter((l) => !/^\s*#/.test(l))
+		.join('\n');
 
 // ── 1. the two scripts ───────────────────────────────────────────────
 {
@@ -74,19 +82,25 @@ const readS = (p: string) => strip(read(p));
 		: bad('anchor carries the IPNS name');
 }
 
-// ── 2b. IPFS DIRECTORY pin (version + notes + metadata) ──────────────
+// ── 2b. Canonical IPFS CID compute (self-hosted seed; NO pinning service) ──
+// v1.9.3: CI computes a DETERMINISTIC directory CID with the pinned Kubo over the
+// SHARED staging script — it does not upload to any pinner. The seed box hosts the
+// same CID; instances pin it. (stager greps strip shell comments first.)
 {
 	const yml = read('.forgejo/workflows/release.yml');
+	const stage = stripHash(read('ops/ipfs/stage-release-dir.sh'));
 	const checks: Array<[string, boolean]> = [
-		['stages a stable morphit-latest.tar.gz', /morphit-latest\.tar\.gz/.test(yml)],
-		['stages RELEASE-NOTES.md', /RELEASE-NOTES\.md/.test(yml) && /RELEASE-NOTES-\$\{TAG\}\.md/.test(yml)],
-		['writes metadata.json', /metadata\.json/.test(yml) && /"version":/.test(yml) && /"sha256":/.test(yml)],
-		// BARE filenames → files land at the directory root (ipns://<name>/<file>)
-		['pins with bare filenames (dir at root)', /filename=\$\(basename "\$f"\)/.test(yml)],
-		['cidVersion 1', /cidVersion\\?":\s*1/.test(yml)],
-		['records the dir CID to ipfs-cid.txt', /ipfs-cid\.txt/.test(yml)]
+		['NO commercial pinner referenced', !/pinata|pinFileToIPFS|PINATA_JWT|lighthouse|storacha/i.test(yml)],
+		['installs pinned Kubo (version + SHA-512 + verify)', /KUBO_VERSION/.test(yml) && /KUBO_SHA512/.test(yml) && /sha512sum/.test(yml)],
+		['stages via the shared stage-release-dir.sh', /ops\/ipfs\/stage-release-dir\.sh/.test(yml)],
+		['computes the dir CID with ipfs add --only-hash (cidv1)', /add -rQ --cid-version 1 --only-hash/.test(yml)],
+		['records the CID to ipfs-cid.txt', /ipfs-cid\.txt/.test(yml)],
+		['stager: stable morphit-latest.tar.gz', /morphit-latest\.tar\.gz/.test(stage)],
+		['stager: RELEASE-NOTES.md + versioned copy', /RELEASE-NOTES\.md/.test(stage) && /RELEASE-NOTES-\$TAG\.md/.test(stage)],
+		['stager: metadata.json has version + sha256', /"version":/.test(stage) && /"sha256":/.test(stage)],
+		['stager: metadata.json DETERMINISTIC (no released_utc timestamp)', !/released_utc/.test(stage)]
 	];
-	for (const [n, okp] of checks) okp ? ok(`release.yml pin: ${n}`) : bad(`release.yml pin: ${n}`);
+	for (const [n, okp] of checks) okp ? ok(`ipfs-cid: ${n}`) : bad(`ipfs-cid: ${n}`);
 }
 
 // ── 3. schema + indexer parity ───────────────────────────────────────

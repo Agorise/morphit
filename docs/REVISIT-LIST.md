@@ -1,5 +1,117 @@
 # Morphit pre-launch revisit list
 
+> > > > # 📍 CURRENT STATE — read this first (updated end of cp579 — v1.9.3 build-complete; deep-deep FULL BATTERY GREEN (564, 1 regression fixed); remaining = 5 personas + A-L audit, then ship; 2026-07-27)
+>
+> ## cp582 — v1.9.3: seed folded into Block 3 (upgrade auto-seeds); 6-block ceremony preserved
+> (1) FIXED morphit-ipfs-seed.sh: expected CID now from the TAG's distribution-anchor.env, not /v1/release (which was wrong pre-broadcast / on future upgrades). (2) upgrade.ts step 12: auto-seeds latestTag if IPFS hosting up (ipfs + service active), non-fatal, typechecks. (3) eli5-release.sh: Block 3 auto-seed note + Block 4 guard line + ipfs_cid/ipns_name; eli5 smoke 56/56 (STILL 6 blocks). (4) ipfs-selfseed-smoke +4 → 36/36. Delta re-verify: selfseed 36/36, eli5 56/56, ops-cli tsc clean. **v1.9.3 SHIP-READY.**
+> SHIP: `bash scripts/eli5-release.sh 1.9.3 "<msg>"` → relay 6 blocks. Block 3 auto-seeds; Block 4 guard gates the broadcast. Ken's action.
+>
+> > ## cp581 — v1.9.3 DEEP-DEEP COMPLETE (delta, all 15 dims)
+> Framework = `docs/DEEP-DEEP-AUDIT.md` D1-D15. Delta pass for v1.9.3's narrow surface (grep-substantiated: no handler/validation/migration/UI touched, only version consts + release-ops + docs). EXECUTED green: D2 personas, D7 battery+regression-fix, D8 typecheck, D9 wiring, D10 docs, D13 fail-safe, D14 staleness, D15 diff-security-review. NO-DELTA (substantiated): D1 D3 D4 D5 D6 D11 D12. **v1.9.3 READY TO SHIP.**
+> **ONLY LEFT: SHIP** via 6 ELI5 blocks; between VPS upgrade (Block 3) & broadcast (Block 5): seed (`morphit-ops harden`→"Seed this release to IPFS") + `verify-cid-public.sh <cid> 1.9.3` guard, proceed only if guard passes. ipfs_cid + ipns_name flow automatically now.
+>
+> > ## cp580 — v1.9.3 deep-deep: 5 personas → PASS
+> Bob/Sally-user untouched (no user-facing change in v1.9.3); Sally-operator upgrade + opt-in seed action clean; Josie privacy — no new egress (CID public hash, no key on box, guard reads public gateways); Charlie — can't anchor a bad CID (guard + seed assert), content-addressing + on-chain SHA-256 + GPG intact, Pinata-drop reduces surface, guard fail-safe. Analysis only.
+> **DEEP-DEEP: battery GREEN ✅ · personas PASS ✅ · A-L audit (94 tasks) REMAINS** (one thorough pass), then ship.
+>
+> > ## cp579 — v1.9.3 deep-deep: full 564 battery → GREEN (regression caught + fixed)
+> Ran all 564 in small ~40-runner chunks. Two known false timeouts re-verified standalone (#204 vitest 4/4, #335 workspace-typecheck 26/26 — validates all TS edits). **REAL regression fixed:** `#483 eli5-release-blocks-smoke` asserted the OLD Pinata pin → updated 2 checks to the self-seed model (`ipfs add --only-hash` + no-pinner + non-fatal) → 56/56. Full green ⇒ no other smoke referenced the old Pinata shape.
+> **REMAINING DEEP-DEEP:** 5 personas (Bob, Sally-user, Sally-operator, Josie, Charlie) + static audit A-L/94 tasks. THEN ship (6 ELI5 blocks; seed + `verify-cid-public.sh <cid> 1.9.3` guard between upgrade & broadcast).
+> **v1.9.3:** build complete + battery green; smokes ipns-release-wiring 30/30, ipfs-release-hosting 27/27, ipfs-selfseed 32/32, eli5-release-blocks 56/56, version-consistency 19/19. PINATA_JWT deleted; MORPHIT_IPNS_KEY kept.
+>
+> ---
+> **[cp578 and earlier — historical, below.]**
+> > > > # 📍 CURRENT STATE — read this first (updated end of cp578 — v1.9.2 LIVE; v1.9.3 BUILD-COMPLETE (code+docs+version bump+notes, incremental checks green); sole remaining gate = FULL DEEP-DEEP, then ship; 2026-07-27)
+>
+> ## cp578 — v1.9.3: version bump (19 touchpoints) + release notes
+> Bumped 1.9.2→1.9.3 (14 package.json + relay/indexer health.ts + MCP_VERSION main.ts + docs/API.md + apps/indexer/README.md), lockfile via `npm install --package-lock-only` (NO audit fix), wrote RELEASE-NOTES-v1.9.3.md. `version-consistency-smoke` GREEN (19/19 + notes). Tree now 1.9.3.
+> **SOLE REMAINING PRE-SHIP GATE: FULL DEEP-DEEP (one comprehensive pass)** — 5 personas + full 564 battery in ~30-45 chunks (re-verify #204 + #335 standalone; new ipfs-selfseed = #564) + audit A-L. Directly-affected smokes already green (30/30, 27/27, 32/32, 19/19); full battery needed for cross-cutting.
+> **THEN SHIP** (6 ELI5 blocks; between VPS upgrade & broadcast: seed via morphit-ops harden→"Seed this release to IPFS" then `verify-cid-public.sh <cid> 1.9.3` guard; broadcast only if guard passes).
+> **v1.9.3 build arc COMPLETE:** all scripts + release.yml + 3 smokes + morphit-ops seed + docs + bump. PINATA_JWT deleted; MORPHIT_IPNS_KEY kept.
+>
+> ---
+> **[cp577 and earlier — historical, below.]**
+> > > > # 📍 CURRENT STATE — read this first (updated end of cp577 — v1.9.2 SHIPPED + LIVE; v1.9.3 — code + docs done; remaining = version bump + full deep-deep + ship; 2026-07-27)
+>
+> ## cp577 — v1.9.3: operator/user docs updated for self-seed
+> `docs/VERIFY-YOUR-DOWNLOAD.md`: IPNS resolves via w3name-aware gateways (dweb.link/w3s.link) NOT native ipfs.io/ipns; added no-CLI gateway CID fetch + self-seed note. `docs/OPERATIONS.md` §26: rewrote IPFS section (removed dead PINATA_JWT instruction → pinned-Kubo `--only-hash` compute + seed + guard). PINATA_JWT gone from all docs. §48 + RUN-A-MORPHIT-NODE §309 accurate as-is.
+> **REMAINING (code+docs done):** (a) version bump 1.9.2→1.9.3 (19 touchpoints + lockfile via `npm install --package-lock-only`) + RELEASE-NOTES-v1.9.3.md — ONE sweep. (b) FULL DEEP-DEEP (5 personas + full 564 battery in ~30-45 chunks, re-verify #204 + #335 standalone, new selfseed=#564 + audit A-L) — one comprehensive pass. (c) ship (6 ELI5 blocks; seed + `verify-cid-public.sh <cid> 1.9.3` guard before broadcast).
+> **v1.9.3 ARC:** stage-release-dir.sh · morphit-ipfs-seed.sh · verify-cid-public.sh · release.yml · 3 smokes · morphit-ops seed · docs. PINATA_JWT deleted; MORPHIT_IPNS_KEY kept.
+>
+> ---
+> **[cp576 and earlier — historical, below.]**
+> > > > # 📍 CURRENT STATE — read this first (updated end of cp576 — v1.9.2 SHIPPED + LIVE; v1.9.3 — ALL CODE + smoke wiring done (morphit-ops seed action wired); remaining = operator docs, version bump, deep-deep, ship; 2026-07-27)
+>
+> ## cp576 — v1.9.3: morphit-ops "Seed this release to IPFS" action wired
+> Added to `apps/ops-cli/src/commands/harden.ts` (menu index 5, after "Set up IPFS release hosting"; Ansible branch 5→6). Prints the seed command + CID-equality/reachability notes. ops-cli typechecks clean. `ipfs-selfseed-smoke` +wiring assertion → 32/32.
+> **v1.9.3 CODE COMPLETE:** stage-release-dir.sh · morphit-ipfs-seed.sh · verify-cid-public.sh · release.yml · 3 smokes (30/30, 27/27, 32/32; battery 564) · morphit-ops seed action.
+> **REMAINING:** operator docs (VERIFY-YOUR-DOWNLOAD.md add IPFS/IPNS fetch; OPERATIONS.md §48+seed; RUN-A-MORPHIT-NODE.md; ops/ipfs), version bump 1.9.2→1.9.3 (19 touchpoints + lockfile) + RELEASE-NOTES-v1.9.3.md, FULL DEEP-DEEP (5 personas + 564 battery in chunks + audit A-L), ship (6 ELI5 blocks + seed + guard before broadcast).
+>
+> ---
+> **[cp575 and earlier — historical, below.]**
+> > > > # 📍 CURRENT STATE — read this first (updated end of cp575 — v1.9.2 SHIPPED + LIVE; v1.9.3 BUILD — self-seed smoke written + wired (battery now 564); Kubo version-drift locked by test; 2026-07-27)
+>
+> ## cp575 — v1.9.3: `ipfs-selfseed-smoke` (31 scenarios) written + registered (563→564)
+> Asserts the self-seed chain end to end: no commercial pinner anywhere; release.yml pinned-Kubo `--only-hash` over the shared stager; **Kubo version+SHA-512 in release.yml MATCH ops/ipfs/morphit-ipfs-setup.sh** (drift-lock); deterministic stager (no released_utc, verifies sha256, local+download); seed asserts CID==expected (fail-loud) + provide; guard passes-on-first + fails-loud. Registered in `scripts/run-smokes.sh`; verified via chunk runner index 564 → 31/31.
+> **NEXT:** morphit-ops seed wiring, operator docs (OPERATIONS.md+RUN-A-MORPHIT-NODE.md, VERIFY-YOUR-DOWNLOAD.md, ops/ipfs), version bump 1.9.2→1.9.3 + notes, FULL DEEP-DEEP (5 personas + 564 battery in chunks + audit A-L), ship.
+> **Arc done:** design+spikes · stage-release-dir.sh · morphit-ipfs-seed.sh · verify-cid-public.sh · release.yml · 3 smokes (30/30, 27/27, 31/31). PINATA_JWT deleted; MORPHIT_IPNS_KEY kept.
+>
+> ---
+> **[cp574 and earlier — historical, below.]**
+> > > > # 📍 CURRENT STATE — read this first (updated end of cp574 — v1.9.2 SHIPPED + LIVE; v1.9.3 BUILD — release.yml rewritten (no Pinata), staging determinism proven, both IPFS/IPNS smokes green; 2026-07-27)
+>
+> ## cp574 — v1.9.3: release.yml rewritten to self-hosted seed; determinism proven; smokes green
+> **release.yml:** Pinata directory-upload step → self-hosted CID compute (pinned Kubo v0.42.0 SHA-512-verified → shared `stage-release-dir.sh` → `ipfs add -rQ --cid-version 1 --only-hash` → ipfs-cid.txt; non-fatal). Zero Pinata refs, YAML valid. IPNS + anchor unchanged.
+> **stage-release-dir.sh:** refactored to ONE staging path, pluggable acquisition — LOCAL (CI, MORPHIT_STAGE_TARBALL etc.) vs DOWNLOAD (seed). **Determinism PROVEN by execution** (2 runs byte-identical, no timestamp in metadata.json).
+> **Smokes:** `ipns-release-wiring-smoke` updated (Pinata asserts → no-pinner + Kubo --only-hash + shared-stager + deterministic-metadata; added `stripHash`) → 30/30. `ipfs-release-hosting-smoke` (instance-side) unchanged → 27/27.
+> **NEXT:** NEW `ipfs-selfseed-smoke` (seed/guard asserts + **Kubo version/SHA sync between release.yml and morphit-ipfs-setup.sh**), morphit-ops seed wiring, operator docs, version bump 1.9.2→1.9.3 + notes, full deep-deep, ship.
+> **Arc done:** design+spikes · stage-release-dir.sh · morphit-ipfs-seed.sh · verify-cid-public.sh · release.yml · 2 smokes. PINATA_JWT deleted; MORPHIT_IPNS_KEY kept.
+>
+> ---
+> **[cp573 and earlier — historical, below.]**
+> > > > # 📍 CURRENT STATE — read this first (updated end of cp573 — v1.9.2 SHIPPED + LIVE; v1.9.3 BUILD continuing — both halves PROVEN by spike; seed script + guard written; IPNS stays on w3name; 2026-07-27)
+>
+> ## cp573 — v1.9.3: spikes proved self-seed + w3name IPNS; seed + guard scripts written
+> **PROVEN (zero paid services):** VPS `ipfs add` test dir → resolves on ipfs.io + dweb.link (self-hosted seed IS publicly retrievable); `ipns-publish.mjs` → `k51qzi5…nra4c8` resolves to the CID via w3name (`name.web3.storage/name/<k51>` → `"value":"/ipfs/bafybei…"`, validity 2027-07-27). Model de-risked.
+> **DECISION:** IPNS on w3name (soft dep — only the "latest" pointer; content resolves by CID regardless). NOT native `ipfs.io/ipns/` (DHT-only). NOT self-hosted DHT IPNS (records live hours, flaky).
+> **WRITTEN (sh -n clean):** `ops/ipfs/morphit-ipfs-seed.sh` (origin host: stage→add→assert CID==expected→provide) + `scripts/verify-cid-public.sh` (guard: poll ipfs.io+dweb.link, pass on FIRST success, fail-loud→no broadcast). Both wrap the exact mechanics the spikes proved.
+> **NEXT CODE:** release.yml rewrite (drop Pinata; pinned-Kubo `--only-hash` via shared stager; decouple IPNS), smokes (update 2 + new `ipfs-selfseed-smoke`), morphit-ops seed wiring, operator docs, version bump 1.9.2→1.9.3 + notes, deep-deep, ship. (Order: doc §10.)
+> **SECRETS:** DELETE `PINATA_JWT`; KEEP `MORPHIT_IPNS_KEY`.
+>
+> ---
+> **[cp572 and earlier — historical, below.]**
+> > > > # 📍 CURRENT STATE — read this first (updated end of cp572 — v1.9.2 SHIPPED + LIVE; v1.9.3 BUILD STARTED — shared deterministic staging script written, metadata-timestamp determinism trap designed out; 2026-07-27)
+>
+> ## cp572 — v1.9.3 build step 1: `ops/ipfs/stage-release-dir.sh` + determinism trap fixed
+> First code of the self-seed v1.9.3. Wrote **`ops/ipfs/stage-release-dir.sh <tag> <out-dir>`** — the single source of truth for the IPFS release dir, called by BOTH CI (--only-hash → anchor CID) and the seed box (add → host), so their CIDs can't drift. POSIX/`sh -n` clean; verifies the tarball's `.sha256`; deterministic `metadata.json`.
+> **Trap found + fixed:** old `metadata.json` had a live `released_utc` → CI vs seed timestamps differ → CID mismatch → guard rejects every release. Now metadata is tag-derived only, fixed key order, no timestamp, one shared script.
+> **NEXT CODE:** release.yml rewrite (drop Pinata; pinned-Kubo `--only-hash` via the shared script; decouple IPNS), `morphit-ipfs-seed.sh` + morphit-ops wiring, guard script, smokes (update 2 + new `ipfs-selfseed-smoke`), operator docs, version bump 1.9.2→1.9.3 + notes, deep-deep, ship. (Full order: doc §10.)
+> **KEN'S GATE SPIKE (parallel, his VPS):** Kubo on /opt/morphit → `ipfs add` a test dir → confirm it resolves on dweb.link+ipfs.io (proves self-hosted seed is publicly retrievable). Blocks nothing I build.
+> **SECRETS:** DELETE `PINATA_JWT`; KEEP `MORPHIT_IPNS_KEY`.
+>
+> ---
+> **[cp571 and earlier — historical, below.]**
+> > > > # 📍 CURRENT STATE — read this first (updated end of cp571 — v1.9.2 SHIPPED + LIVE; v1.9.3 design REWORKED to self-hosted-seed (no commercial pinners) in `docs/IPFS-DISTRIBUTION-v1.9.3.md`; no code changed, 2026-07-27)
+>
+> ## cp571 — v1.9.3 doc reworked: self-hosted seed (Kubo), all commercial pinners dropped
+> Spikes proved free tiers unusable: **Pinata** free = no pin-by-CID (`PAID_FEATURE_ONLY`) + only-free-path is the broken directory upload; **Lighthouse** = 14-day trial; **Storacha/fil.one** = `up.storacha.network` won't resolve (rebrand). Ken: no paid services ever. **New model:** deterministic CID — **Kubo v0.42.0 `ipfs add -rQ --cid-version 1 --only-hash` in CI** (for the anchor) + **Ken's VPS `ipfs add`s the same staged dir to host it** (origin; identical CID asserted). **w3name IPNS** kept (`MORPHIT_IPNS_KEY`, permanent `k51…`). **Instances pin-by-fetch** (unchanged). **Guard:** no broadcast unless the CID resolves on `dweb.link`+`ipfs.io`. Zero cost, no accounts.
+> **SECRETS:** DELETE `PINATA_JWT` (safe now); KEEP `MORPHIT_IPNS_KEY`.
+> **Tradeoff documented:** seed Kubo must be publicly dialable (port 4001); `lowpower` profile may need tuning; single-seed cold-start mitigated by instance pinning. **New go/no-go spike:** confirm the VPS's Kubo content resolves on public gateways (replaces the pinner spikes).
+> **No schema/builder/Block-4/instance change.** Changes: release.yml (Pinata→Kubo --only-hash + decoupled IPNS), new `morphit-ipfs-seed.sh`+morphit-ops, guard, 2 smokes updated +1 new, docs. Full order in doc §10.
+>
+> ---
+> **[cp570 and earlier — historical, below.]**
+> > > > # 📍 CURRENT STATE — read this first (updated end of cp570 — v1.9.2 SHIPPED + LIVE; v1.9.3 IPFS/IPNS redesign written as `docs/IPFS-DISTRIBUTION-v1.9.3.md`; no code changed this checkpoint, 2026-07-27)
+>
+> ## cp570 — v1.9.3 design doc (research complete; implementation is the next phase)
+> `docs/IPFS-DISTRIBUTION-v1.9.3.md` is the authoritative plan. **Architecture:** one canonical CID (origin = **Storacha**, which announces to public IPFS + is the w3name ecosystem + has an official CI Action), replicated by **pin-by-hash** on Pinata (`pinByHash`) + Lighthouse (`Pin CID`) + every instance's Kubo — so all serve ONE hash (real redundancy; uploading to N providers would give N different CIDs). Plus a **fail-loud guard**: never anchor a CID until a public gateway serves it.
+> **Why v1.9.2 shipped without IPFS/IPNS (root causes):** Pinata's legacy directory-multipart upload returns an empty 0-byte `bafkrei…` on our newer account; `PINATA_JWT` had a non-JWT `aNh…` value (FIXED — real `eyJ…` JWT now stored); Pinata/Lighthouse gateways are dedicated-gateway-gated (not publicly retrievable → breaks instance pinning). `MORPHIT_IPNS_KEY` validated GOOD.
+> **No schema/builder/Block-4/instance change needed** — CIDv1 + ipns_name already valid; changes contained to release.yml + 2 smokes (+1 new) + operator docs. **Secrets to add:** STORACHA_KEY, STORACHA_PROOF, LIGHTHOUSE_API_KEY (PINATA_JWT + MORPHIT_IPNS_KEY already good).
+> **DO FIRST when building v1.9.3:** the throwaway provider spikes in doc §7/§8 — confirm Storacha serves on a public gateway, and that Pinata/Lighthouse pin-by-hash actually HOLD the canonical CID (if a provider can't pin-by-hash, it's demoted to best-effort-own-CID and the design updated BEFORE coding). Don't assume the provider APIs.
+> **Kubo-in-CI + CAR** is the documented alternative origin (more self-controlled, more custom surface) — not chosen for v1.9.3; can migrate later without changing the on-chain contract.
+>
+> ---
+> **[cp569 and earlier — historical, below.]**
 > > > > # 📍 CURRENT STATE — read this first (updated end of cp569 — v1.9.2 CUT to supersede un-released v1.9.1 [CI-server outage hung its ci.yml; runner deleted; no workflow_dispatch]. v1.9.2 = v1.9.1 + version bump. Runner must be re-registered before the CI release, 2026-07-26)
 >
 > ## cp569 — v1.9.2 (version bump over v1.9.1, no functional change)

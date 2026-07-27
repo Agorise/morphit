@@ -167,11 +167,24 @@ ipfs ls <CID>
 ipfs get <CID>/morphit-vX.Y.Z.tar.gz -o morphit-vX.Y.Z.tar.gz
 ```
 
+No `ipfs` installed? A raw CID resolves on **any** public gateway (the CID is
+the hash, so the gateway cannot serve altered bytes):
+
+```sh
+curl -fsSLo morphit-vX.Y.Z.tar.gz https://ipfs.io/ipfs/<CID>/morphit-vX.Y.Z.tar.gz
+curl -fsSL https://ipfs.io/ipfs/<CID>/metadata.json   # version + sha256 + notes
+```
+
+Every Morphit instance re-hosts the current release over its own IPFS (Kubo)
+node, so this content stays reachable without depending on any commercial
+pinning service.
+
 That CID is immutable — it only ever names *that* release. To always fetch
 the **latest** release over IPFS, Morphit also publishes a stable **IPNS
 name** (a `k51…` string, shown on the on-chain anchor as `ipns_name` and on
-the download page). It resolves through any IPFS gateway to the newest
-release directory, which always contains a stable-named `morphit-latest.tar.gz`:
+the download page). It resolves through a **w3name-aware** gateway —
+`dweb.link` or `w3s.link` — to the newest release directory, which always
+contains a stable-named `morphit-latest.tar.gz`:
 
 ```sh
 # always the latest signed tarball, by name instead of by CID
@@ -180,6 +193,11 @@ curl -fsSLo morphit-latest.tar.gz https://dweb.link/ipns/<name>/morphit-latest.t
 # which version you actually got). Browse https://dweb.link/ipns/<name>/ for
 # the versioned filename, release notes, and metadata.json.
 ```
+
+Use `dweb.link` or `w3s.link` for the **IPNS name** — not `ipfs.io/ipns/…`. The
+name is published via w3name, which those gateways resolve; the DHT-only
+`ipfs.io/ipns` path does not (a raw `ipfs.io/ipfs/<CID>` fetch works fine — this
+caveat is only for the `k51…` name).
 
 IPNS is a convenience for *discovery* only — it is a mutable pointer, so a
 copy fetched this way is still only trustworthy once it passes the

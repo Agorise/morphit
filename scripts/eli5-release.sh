@@ -92,7 +92,7 @@ git push origin v${VERSION}
 \`\`\`
 sudo morphit-ops
 \`\`\`
-Then choose **option 2**.
+Then choose **option 2**. (The upgrade also self-seeds this release to IPFS if this box runs IPFS hosting — it becomes an origin host automatically; a box without hosting skips it.)
 
 ---
 
@@ -104,8 +104,9 @@ curl -fsSL https://morphit.io/verify.json -o ~/verify.json
 node apps/web/scripts/verify-json-to-release-manifest.mjs ~/verify.json > apps/web/build-manifest.release.json
 MORPHIT_BUILD_VERSION=${VERSION} MORPHIT_BUILD_BLURT_BASE=125 MORPHIT_BUILD_HASH_MANIFEST_FILE=apps/web/build-manifest.release.json npx tsx apps/indexer/scripts/release-build-payload.ts < /dev/null > release.json
 npx tsx apps/indexer/scripts/release-broadcast.ts release.json --dry-run
+[ -n "\$MORPHIT_BUILD_IPFS_CID" ] && sh scripts/verify-cid-public.sh "\$MORPHIT_BUILD_IPFS_CID" ${VERSION}
 \`\`\`
-The dry-run's printed payload should carry a \`distribution\` block (source_sha256 + gpg_fingerprint + the auto-baked GitHub + Codeberg mirror list). If it does not, the anchor env was not sourced.
+The dry-run's printed payload should carry a \`distribution\` block (source_sha256 + gpg_fingerprint + \`ipfs_cid\` + \`ipns_name\` + the auto-baked GitHub + Codeberg mirror list). If it does not, the anchor env was not sourced. The final line is the **guard**: it confirms the \`ipfs_cid\` your VPS just seeded in Block 3 is reachable on a public gateway. If it fails, DO NOT run Block 5 — either the seed hasn't propagated yet (wait a minute and re-run the guard) or this box isn't hosting IPFS.
 
 ---
 

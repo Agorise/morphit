@@ -132,18 +132,21 @@ check('release.yml declares NO `permissions:` key (Forgejo ignores it, warns)', 
 check('release.yml publishes with an operator token, falling back to the auto-token', /RELEASE_TOKEN:-\$AUTO_TOKEN/.test(releaseYml));
 check('release.yml NEVER broadcasts to the chain (no spending key in CI)', !/release-broadcast/.test(releaseYml));
 
-// ─── optional IPFS pin (Pinata) — additive, guarded, never fails a release ───
-// v1.8.16 (Ken): a PINATA_JWT secret makes release.yml pin the PUBLISHED tarball
-// to IPFS and carry the CID on-chain via the anchor's optional ipfs_cid. Without
-// the secret the release is byte-identical to before. Pin the wiring so a future
-// edit can't silently drop the automation or make a Pinata outage fatal.
+// ─── canonical IPFS CID (self-hosted seed; NO pinning service) — additive, never fails a release ───
+// v1.9.3 (Ken): release.yml computes a DETERMINISTIC directory CID with the pinned
+// Kubo (`ipfs add --only-hash`) over the shared staging script — no upload, no
+// secret, no account — and carries it on-chain via the anchor's optional ipfs_cid.
+// Our own nodes host it (the seed box + every instance's Kubo). Pin the wiring so a
+// future edit can't silently drop the automation or re-introduce a paid pinner.
 check(
-	'release.yml pins the tarball to IPFS gated on a PINATA_JWT secret',
-	/secrets\.PINATA_JWT/.test(releaseYml) && /pinFileToIPFS/.test(releaseYml)
+	'release.yml computes the CID with the pinned Kubo, no pinning service',
+	/add -rQ --cid-version 1 --only-hash/.test(releaseYml) &&
+		/ops\/ipfs\/stage-release-dir\.sh/.test(releaseYml) &&
+		!/pinata|pinFileToIPFS|PINATA_JWT/i.test(releaseYml)
 );
 check(
-	'the IPFS pin is optional + never fails a release (soft-exit without the secret)',
-	/if \[ -z "\$\{PINATA_JWT:-\}" \]/.test(releaseYml) && /skipping IPFS pin/.test(releaseYml)
+	'the CID compute is non-fatal (release proceeds without ipfs_cid on failure)',
+	/no ipfs_cid this run/.test(releaseYml)
 );
 check(
 	'the anchor carries the CID only when one was pinned (ipfs-cid.txt)',

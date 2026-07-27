@@ -583,6 +583,7 @@ SMOKES=(
 	"apps/web:barter-specific-title-smoke"
 	".:ipns-release-wiring-smoke"
 	".:ipfs-release-hosting-smoke"
+	".:ipfs-selfseed-smoke"
 )
 
 total=0

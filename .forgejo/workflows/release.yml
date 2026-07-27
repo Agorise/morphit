@@ -311,89 +311,66 @@ jobs:
           echo "Signed $TARBALL with key $KEYID."
           rm -rf "$SIGN_HOME"
 
-      - name: Pin release directory (tarball + notes + metadata) to IPFS (optional — Pinata)
-        # OPTIONAL decentralized mirror. If a PINATA_JWT secret is set, pin a
-        # DIRECTORY (not just the bare tarball) so anyone searching/browsing IPFS
-        # or IPNS sees the VERSION, the RELEASE NOTES, and machine-readable
-        # metadata right next to the signed bytes. The directory root holds:
-        #   morphit-v<ver>.tar.gz         the signed tarball (version in the name)
-        #   morphit-latest.tar.gz         SAME bytes at a STABLE name, so
-        #                                 ipns://<name>/morphit-latest.tar.gz is
-        #                                 always the newest release (one link)
-        #   morphit-v<ver>.tar.gz.sha256  + .asc when present (checksum / signature)
-        #   RELEASE-NOTES.md              latest notes (stable name) + versioned copy
-        #   metadata.json                 {version, tag, sha256, released_utc, repo…}
-        # Files carry BARE names (no folder prefix) so Pinata returns the CID of a
-        # directory with them at its ROOT — `ipns://<name>/<file>` resolves directly.
-        # The DIRECTORY CID is anchored on-chain as ipfs_cid (the schema already
-        # allows "a directory holding it"); the IPNS name is repointed at it below.
-        # Content-addressed: the tarball's bytes hash to the same block whether
-        # fetched as morphit-v<ver>.tar.gz, morphit-latest.tar.gz, or by CID, so the
-        # duplicate name costs no extra storage. NO secret → skipped; ANY failure is
-        # non-fatal (git mirrors + on-chain SHA-256 are the real anchors). To swap
-        # providers, replace only the curl (write the dir CID to ipfs-cid.txt).
+      - name: Compute canonical IPFS CID (self-hosted seed model — Kubo, no pinning service)
+        # v1.9.3: releases are hosted on our OWN nodes (Ken's release box seeds via
+        # ops/ipfs/morphit-ipfs-seed.sh; every instance's Kubo pins), so CI does NOT
+        # upload anywhere. It only COMPUTES the DETERMINISTIC directory CID with the
+        # SAME pinned Kubo the seed uses, over the SAME shared staging script
+        # (ops/ipfs/stage-release-dir.sh) — so CI's --only-hash CID EQUALS the CID the
+        # seed box produces + hosts (the seed asserts equality when it hosts). That
+        # directory CID is anchored on-chain as ipfs_cid; ipns://<name> is repointed
+        # at it below. No secret, no account, no cost. ANY failure here is NON-FATAL
+        # (git mirrors + on-chain SHA-256 are the real anchors) — it just means no
+        # ipfs_cid this run, which the Block-4 dry-run makes visible.
+        #
+        # KUBO_VERSION + KUBO_SHA512 MUST stay in sync with
+        # ops/ipfs/morphit-ipfs-setup.sh (asserted by ipfs-selfseed-smoke). The binary
+        # is pinned + checksum-verified — never an unverified binary in the release path.
         env:
           TARBALL: ${{ steps.ver.outputs.tarball }}
           TAG: ${{ steps.ver.outputs.tag }}
-          PINATA_JWT: ${{ secrets.PINATA_JWT }}
+          KUBO_VERSION: v0.42.0
+          KUBO_SHA512: 054c38a0cf66f7d738e25085ad62cb3a42d03d4bac329b7dd25c1d71cf18e1ce87d55b1d1b705b04c65210dca9109973579e0eb1cd72f6341ecb3311d840d156
         run: |
           set -u
-          if [ -z "${PINATA_JWT:-}" ]; then
-            echo "No PINATA_JWT secret — skipping IPFS pin (release proceeds without ipfs_cid)."
+          # 1. Install the pinned Kubo (checksum-verified) into a scratch dir.
+          KUBO_DIR="$(mktemp -d)"
+          KTAR="kubo_${KUBO_VERSION}_linux-amd64.tar.gz"
+          if ! curl -fsSL "https://dist.ipfs.tech/kubo/${KUBO_VERSION}/${KTAR}" -o "${KUBO_DIR}/${KTAR}"; then
+            echo "WARNING: could not download Kubo ${KUBO_VERSION} — no ipfs_cid this run (release proceeds)." >&2
             exit 0
           fi
-          VERSION="${TAG#v}"
-          STAGE="$(mktemp -d)"
-          cp "$TARBALL" "$STAGE/${TARBALL}"
-          cp "$TARBALL" "$STAGE/morphit-latest.tar.gz"
-          [ -s "${TARBALL}.sha256" ] && cp "${TARBALL}.sha256" "$STAGE/${TARBALL}.sha256"
-          [ -s "${TARBALL}.asc" ] && cp "${TARBALL}.asc" "$STAGE/${TARBALL}.asc"
-          NOTES="RELEASE-NOTES-${TAG}.md"
-          if [ -s "$NOTES" ]; then
-            cp "$NOTES" "$STAGE/${NOTES}"
-            cp "$NOTES" "$STAGE/RELEASE-NOTES.md"
+          GOT=$(sha512sum "${KUBO_DIR}/${KTAR}" | awk '{print $1}')
+          if [ "$(echo "$GOT" | tr 'A-Z' 'a-z')" != "$(echo "$KUBO_SHA512" | tr 'A-Z' 'a-z')" ]; then
+            echo "WARNING: Kubo SHA-512 mismatch vs pin — refusing the binary; no ipfs_cid this run." >&2
+            exit 0
           fi
-          SHA=$(awk '{print $1}' "${TARBALL}.sha256" 2>/dev/null || echo "")
-          {
-            printf '{\n'
-            printf '  "name": "Morphit",\n'
-            printf '  "description": "Morphit — non-custodial, no-KYC P2P fiat<->crypto/barter marketplace on Blurt. Signed release; verify per RELEASE-NOTES.md.",\n'
-            printf '  "version": "%s",\n' "$VERSION"
-            printf '  "tag": "%s",\n' "$TAG"
-            printf '  "tarball": "%s",\n' "$TARBALL"
-            printf '  "sha256": "%s",\n' "$SHA"
-            printf '  "released_utc": "%s",\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            printf '  "repository": "https://git.agorise.net/agorise/morphit",\n'
-            printf '  "release_url": "https://git.agorise.net/agorise/morphit/releases/tag/%s",\n' "$TAG"
-            printf '  "verify_guide": "https://morphit.io/en/download"\n'
-            printf '}\n'
-          } > "$STAGE/metadata.json"
-          echo "Pinning release directory to IPFS via Pinata (files: $(ls -m "$STAGE"))…"
-          # One -F per file, BARE filename → Pinata assembles a directory with the
-          # files at its root and returns that directory's CID.
-          set --
-          for f in "$STAGE"/*; do
-            set -- "$@" -F "file=@${f};filename=$(basename "$f")"
-          done
-          RESPONSE=$(curl -sS -X POST https://api.pinata.cloud/pinning/pinFileToIPFS \
-            -H "Authorization: Bearer ${PINATA_JWT}" \
-            "$@" \
-            -F "pinataOptions={\"cidVersion\":1}" \
-            -F "pinataMetadata={\"name\":\"morphit-${TAG}\",\"keyvalues\":{\"version\":\"${VERSION}\",\"tag\":\"${TAG}\"}}") || {
-              echo "WARNING: Pinata request failed — continuing without ipfs_cid." >&2
-              exit 0
-            }
-          CID=$(printf '%s' "$RESPONSE" | sed -n 's/.*"IpfsHash"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+          tar -xzf "${KUBO_DIR}/${KTAR}" -C "${KUBO_DIR}"
+          IPFS_BIN="${KUBO_DIR}/kubo/ipfs"
+          chmod +x "$IPFS_BIN" 2>/dev/null || true
+          export IPFS_PATH="$(mktemp -d)"
+          "$IPFS_BIN" init --profile lowpower >/dev/null 2>&1 || true
+          # 2. Stage the canonical directory from the LOCAL just-built tarball via the
+          #    SHARED script (identical to what the seed box stages → identical CID).
+          STAGE="$(mktemp -d)/morphit"
+          mkdir -p "$STAGE"
+          if ! MORPHIT_STAGE_TARBALL="$TARBALL" \
+               MORPHIT_STAGE_SHA256="${TARBALL}.sha256" \
+               MORPHIT_STAGE_NOTES="RELEASE-NOTES-${TAG}.md" \
+               MORPHIT_STAGE_ASC="${TARBALL}.asc" \
+               sh ops/ipfs/stage-release-dir.sh "$TAG" "$STAGE"; then
+            echo "WARNING: staging failed — no ipfs_cid this run." >&2
+            exit 0
+          fi
+          # 3. Compute the DETERMINISTIC directory CID (offline: no upload, no daemon).
+          CID="$("$IPFS_BIN" add -rQ --cid-version 1 --only-hash "$STAGE" 2>/dev/null || true)"
           if [ -z "${CID:-}" ]; then
-            echo "WARNING: no CID in Pinata response — continuing without ipfs_cid." >&2
-            echo "  response: ${RESPONSE}" >&2
+            echo "WARNING: ipfs add --only-hash produced no CID — no ipfs_cid this run." >&2
             exit 0
           fi
-          printf '%s' "${CID}" > ipfs-cid.txt
-          echo "Pinned release directory: ${CID}"
-          echo "  ipfs://${CID}/${TARBALL}"
-          echo "  ipfs://${CID}/morphit-latest.tar.gz"
-          echo "  ipfs://${CID}/RELEASE-NOTES.md   ipfs://${CID}/metadata.json"
+          printf '%s' "$CID" > ipfs-cid.txt
+          echo "Canonical IPFS CID (seeded by the release box + anchored on-chain): $CID"
+          echo "  the seed hosts THIS exact CID; instances pin it; ipns://<name> repoints to it below."
 
       - name: Publish stable IPNS name (optional — w3name)
         # OPTIONAL "always find the latest" pointer. If a MORPHIT_IPNS_KEY secret
@@ -416,7 +393,7 @@ jobs:
             exit 0
           fi
           if [ ! -s ipfs-cid.txt ]; then
-            echo "No ipfs-cid.txt (IPFS pin skipped/failed) — nothing to point the name at; skipping."
+            echo "No ipfs-cid.txt (CID computation skipped/failed) — nothing to point the name at; skipping."
             exit 0
           fi
           RELEASE_CID=$(cat ipfs-cid.txt)
@@ -465,11 +442,12 @@ jobs:
             echo "# Morphit distribution anchor for ${TAG} — source this before building the on-chain payload."
             echo "export MORPHIT_BUILD_SOURCE_SHA256=${SHA256}"
             echo "export MORPHIT_BUILD_GPG_FINGERPRINT=${FPR}"
-            # Optional IPFS CID from the pin step above (present only if a
-            # PINATA_JWT secret is set and the pin succeeded). Sourced by the
-            # ELI5 Block 4, it flows into the payload builder's `ipfs_cid` and
-            # is anchored on-chain alongside the mirrors. Absent → the block
-            # simply omits ipfs_cid (schema-optional), exactly as before.
+            # Optional canonical IPFS CID from the compute step above (present
+            # unless Kubo download/staging failed). Sourced by the ELI5 Block 4,
+            # it flows into the payload builder's `ipfs_cid` and is anchored
+            # on-chain alongside the mirrors; the release box seeds THIS exact CID
+            # and instances pin it. Absent → the block simply omits ipfs_cid
+            # (schema-optional), exactly as before.
             if [ -s ipfs-cid.txt ]; then
               echo "export MORPHIT_BUILD_IPFS_CID=$(cat ipfs-cid.txt)"
             fi

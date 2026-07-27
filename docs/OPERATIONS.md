@@ -5449,22 +5449,28 @@ mirror can't swap in its own key.
 
 #### IPFS pin + a stable "always latest" IPNS name (optional, CI-automated)
 
-The release workflow can additionally pin each tarball to IPFS
-and repoint a **stable IPNS name** at it, so `ipns://<name>`
-always resolves to the newest release.  Both are additive to the
-git mirrors + the on-chain SHA-256, both are OFF until you set a
-secret, and neither can ever fail a release (the steps are
-non-fatal).
+The release workflow computes a content-addressed **IPFS CID** for
+each release directory and repoints a **stable IPNS name** at it, so
+`ipns://<name>` always resolves to the newest release.  Both are
+additive to the git mirrors + the on-chain SHA-256, and neither can
+ever fail a release (the steps are non-fatal).  The IPFS CID needs no
+secret or account; the IPNS pointer is published only when you've set
+the `MORPHIT_IPNS_KEY` secret.
 
-- **IPFS pin** — set a `PINATA_JWT` Actions secret (Pinata → API
-  Keys → a JWT with `pinFileToIPFS`).  `release.yml` then pins a
-  small **release directory** — the signed tarball (versioned +
-  a stable `morphit-latest.tar.gz`), its `.sha256`/`.asc`, the
-  release notes, and a `metadata.json` (version, tag, sha256,
-  date, repo) — so anyone browsing or searching IPFS sees the
-  version and notes next to the bytes.  The DIRECTORY CID is
-  anchored on-chain as `ipfs_cid` (the schema allows "a directory
-  holding it").
+- **IPFS CID (self-hosted — no pinning service)** — `release.yml`
+  installs the pinned Kubo (v0.42.0, checksum-verified) and computes the
+  DETERMINISTIC CID of a small **release directory** — the signed tarball
+  (versioned + a stable `morphit-latest.tar.gz`), its `.sha256`/`.asc`, the
+  release notes, and a deterministic `metadata.json` — with `ipfs add
+  --only-hash` (offline; no upload, no account, no secret).  That DIRECTORY
+  CID is anchored on-chain as `ipfs_cid`.  The bytes are HOSTED by our own
+  nodes: your release box seeds it once per release (`morphit-ops harden` →
+  "Seed this release to IPFS", or `ops/ipfs/morphit-ipfs-seed.sh <tag>`), and
+  every Morphit instance's Kubo pins it from the network.  Because the CID is
+  deterministic, the seed box's `ipfs add` reproduces exactly the CID CI
+  anchored (the seed asserts equality).  Before broadcasting,
+  `scripts/verify-cid-public.sh <cid> <version>` confirms the CID resolves on
+  a public gateway — a release never anchors a CID the world can't fetch.
 - **IPNS "always latest"** — run `npm i --no-save w3name && node
   scripts/ipns-keygen.mjs` **once** on your release laptop.  It
   prints a PUBLIC `k51…` name and a SECRET base64 key.  Store the

@@ -1655,6 +1655,52 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		/* best-effort reminder; never fail an upgrade over a missing dir */
 	}
 
+	// ─── 12. Self-seed this release to IPFS (become an origin host) ──
+	// v1.9.3: if this box runs IPFS release hosting (Kubo installed + the ipfs
+	// service active — the opt-in `morphit-ops harden` → "Set up IPFS release
+	// hosting", ON by default on Ansible installs), make it an ORIGIN host of the
+	// release just installed: re-stage the canonical directory, `ipfs add` it, and
+	// assert the CID matches the tag's published anchor. Other instances then pin
+	// it from the network. Best-effort + NON-FATAL — a box without IPFS hosting
+	// skips quietly, and any seed failure never fails the upgrade (git mirrors +
+	// the on-chain SHA-256 are the real anchors). Runs the shipped seed script as
+	// the ipfs service user.
+	try {
+		const seedScript = join(installDir, 'ops', 'ipfs', 'morphit-ipfs-seed.sh');
+		const ipfsHostingUp =
+			spawnSync(
+				'sh',
+				['-c', 'command -v ipfs >/dev/null 2>&1 && systemctl is-active --quiet ipfs'],
+				{ stdio: 'ignore', timeout: 8000 }
+			).status === 0;
+		if (!existsSync(seedScript)) {
+			/* older tree without the seed script — skip silently */
+		} else if (!ipfsHostingUp) {
+			info('');
+			info('IPFS release hosting is not set up on this box — skipping the self-seed.');
+			info('  (Optional: `morphit-ops harden` → "Set up IPFS release hosting".)');
+		} else {
+			info('');
+			info(`Seeding ${latestTag} to IPFS so this box becomes an origin host …`);
+			const seedRes = spawnSync(
+				'sudo',
+				['-u', 'ipfs', 'env', 'IPFS_PATH=/var/lib/ipfs/.ipfs', 'sh', seedScript, latestTag],
+				{ stdio: 'inherit', timeout: 1_200_000 }
+			);
+			if (seedRes.status === 0) {
+				info(`✓ Seeded ${latestTag} to IPFS.`);
+			} else {
+				warn(
+					'IPFS self-seed did not complete (non-fatal). Retry any time with ' +
+						'`morphit-ops harden` → "Seed this release to IPFS". The release is ' +
+						'unaffected — git mirrors + the on-chain SHA-256 are the anchors.'
+				);
+			}
+		}
+	} catch {
+		/* best-effort; never fail an upgrade over IPFS seeding */
+	}
+
 	return 0;
 }
 
