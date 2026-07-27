@@ -103,7 +103,8 @@ const guard = stripHash(read('scripts/verify-cid-public.sh'));
 		['verifies the tarball sha256 (integrity)', /sha256sum/.test(stager) && /mismatch/i.test(stager)],
 		['stages a stable morphit-latest.tar.gz', /morphit-latest\.tar\.gz/.test(stager)],
 		['writes metadata.json with version + sha256', /"version":/.test(stager) && /"sha256":/.test(stager)],
-		['metadata is DETERMINISTIC (no released_utc timestamp)', !/released_utc/.test(stager)]
+		['metadata is DETERMINISTIC (no released_utc timestamp)', !/released_utc/.test(stager)],
+		['self-contained dir — no notes/asc fetch-dependency (v1.9.3 CID-divergence guard)', !/RELEASE-NOTES/.test(stager) && !/\.asc/.test(stager)]
 	];
 	for (const [n, okp] of checks) okp ? ok(`stager: ${n}`) : bad(`stager: ${n}`);
 }

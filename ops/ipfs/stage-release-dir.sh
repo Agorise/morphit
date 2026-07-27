@@ -22,14 +22,18 @@
 # Usage:  stage-release-dir.sh <tag> <out-dir>
 # Acquisition (pick one; env vars win when set):
 #   LOCAL (CI):  set MORPHIT_STAGE_TARBALL=/path/morphit-<tag>.tar.gz (must exist).
-#                Optional: MORPHIT_STAGE_SHA256, MORPHIT_STAGE_NOTES, MORPHIT_STAGE_ASC.
+#                Optional: MORPHIT_STAGE_SHA256.
 #   DOWNLOAD (seed): leave MORPHIT_STAGE_TARBALL unset → fetch the published assets
 #                from MORPHIT_RELEASE_DOWNLOAD_BASE (default: the Forgejo repo).
 # Other env:
 #   MORPHIT_VERIFY_GUIDE_URL   verify-guide URL baked into metadata.json
 # Output (bare names at root so ipns://<name>/<file> resolves directly):
-#   morphit-<tag>.tar.gz  morphit-latest.tar.gz  morphit-<tag>.tar.gz.sha256
-#   [morphit-<tag>.tar.gz.asc]  [RELEASE-NOTES.md  RELEASE-NOTES-<tag>.md]  metadata.json
+#   morphit-<tag>.tar.gz  morphit-latest.tar.gz  morphit-<tag>.tar.gz.sha256  metadata.json
+# The directory is SELF-CONTAINED — ONLY files derivable from the tarball itself.
+# Signatures + release notes live on the release page/mirrors, NOT here. Staging a
+# file CI has locally but the seed cannot fetch by download would diverge the CID
+# (the v1.9.3 notes-in-dir bug). Anything added here MUST be reproducible by BOTH
+# the local (CI) and download (seed) paths, or the determinism assertion fails.
 # POSIX sh. Deterministic. No secrets.
 set -eu
 
@@ -57,10 +61,6 @@ if [ -n "${MORPHIT_STAGE_TARBALL:-}" ]; then
 	[ -s "$MORPHIT_STAGE_TARBALL" ] || { echo "stage-release-dir: MORPHIT_STAGE_TARBALL '$MORPHIT_STAGE_TARBALL' missing/empty" >&2; exit 1; }
 	cp "$MORPHIT_STAGE_TARBALL" "$OUT/$TARBALL"
 	[ -n "${MORPHIT_STAGE_SHA256:-}" ] && [ -s "$MORPHIT_STAGE_SHA256" ] && cp "$MORPHIT_STAGE_SHA256" "$OUT/$TARBALL.sha256"
-	[ -n "${MORPHIT_STAGE_ASC:-}" ] && [ -s "$MORPHIT_STAGE_ASC" ] && cp "$MORPHIT_STAGE_ASC" "$OUT/$TARBALL.asc"
-	if [ -n "${MORPHIT_STAGE_NOTES:-}" ] && [ -s "$MORPHIT_STAGE_NOTES" ]; then
-		cp "$MORPHIT_STAGE_NOTES" "$OUT/RELEASE-NOTES-$TAG.md"
-	fi
 else
 	# DOWNLOAD mode (seed): fetch the PUBLISHED release assets over https.
 	command -v curl >/dev/null 2>&1 || { echo "stage-release-dir: curl not found (needed for download mode)" >&2; exit 1; }
@@ -69,8 +69,6 @@ else
 	echo "stage-release-dir: fetching $TARBALL + checksum…" >&2
 	curl -fsSL "$REL_BASE/$TARBALL" -o "$OUT/$TARBALL"
 	curl -fsSL "$REL_BASE/$TARBALL.sha256" -o "$OUT/$TARBALL.sha256"
-	curl -fsSL "$REL_BASE/$TARBALL.asc" -o "$OUT/$TARBALL.asc" 2>/dev/null || rm -f "$OUT/$TARBALL.asc"
-	curl -fsSL "$REL_BASE/RELEASE-NOTES-$TAG.md" -o "$OUT/RELEASE-NOTES-$TAG.md" 2>/dev/null || rm -f "$OUT/RELEASE-NOTES-$TAG.md"
 fi
 
 # 2. Compute the tarball's actual SHA-256 (authoritative for metadata).
@@ -91,16 +89,11 @@ fi
 # 3. Stable-named copy of the SAME bytes (ipns://<name>/morphit-latest.tar.gz).
 cp "$OUT/$TARBALL" "$OUT/morphit-latest.tar.gz"
 
-# 4. Release notes: stable name alongside the versioned one (same bytes) if present.
-if [ -s "$OUT/RELEASE-NOTES-$TAG.md" ]; then
-	cp "$OUT/RELEASE-NOTES-$TAG.md" "$OUT/RELEASE-NOTES.md"
-fi
-
 # 5. metadata.json — DETERMINISTIC ONLY. Fixed key order. No timestamp/host/random.
 {
 	printf '{\n'
 	printf '  "name": "Morphit",\n'
-	printf '  "description": "Morphit — non-custodial, no-KYC P2P fiat<->crypto/barter marketplace on Blurt. Signed release; verify per RELEASE-NOTES.md.",\n'
+	printf '  "description": "Morphit — non-custodial, no-KYC P2P fiat<->crypto/barter marketplace on Blurt. Signed release; verify against the on-chain SHA-256 + GPG signature.",\n'
 	printf '  "version": "%s",\n' "$VERSION"
 	printf '  "tag": "%s",\n' "$TAG"
 	printf '  "tarball": "%s",\n' "$TARBALL"
