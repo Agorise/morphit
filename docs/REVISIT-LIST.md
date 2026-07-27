@@ -1,5 +1,14 @@
 # Morphit pre-launch revisit list
 
+> > > > # 📍 CURRENT STATE — read this first (updated end of cp569 — v1.9.2 CUT to supersede un-released v1.9.1 [CI-server outage hung its ci.yml; runner deleted; no workflow_dispatch]. v1.9.2 = v1.9.1 + version bump. Runner must be re-registered before the CI release, 2026-07-26)
+>
+> ## cp569 — v1.9.2 (version bump over v1.9.1, no functional change)
+> v1.9.1's release stalled: `ci.yml` for `5b6b1653` hung on `git fetch` (git.agorise.net unresponsive), runner was deleted, and `ci.yml` has no `workflow_dispatch` — so a fresh commit (v1.9.2) is the clean re-trigger. Bumped all 19 touchpoints 1.9.1→1.9.2 (incl. MCP_VERSION, clean); lockfile synced (`node_modules/ipaddr.js` legitimately stays at its own 1.9.1 — third-party). RELEASE-NOTES-v1.9.2.md created (v1.9.1 body retitled). version-consistency 19/19, notes parity 3/3, mcp+indexer tsc 0. Battery NOT re-run (functionally identical to battery-green v1.9.1; ci.yml re-runs it).
+> **RUNNER:** log confirms the host executor + `ubuntu-24.04` label were correct (the runbook's `morphit-build` is STALE). Re-register with `--labels ubuntu-24.04:host` + docker; confirm Idle BEFORE pushing v1.9.2, else ci.yml queues/hangs. Offline path (release-sign.sh + manual publish) remains the no-runner fallback.
+> **DOC FIX STILL OFFERED:** patch `FORGEJO-RUNNER-STANDUP.md` Step 3 `--labels "morphit-build,linux,docker"` → `ubuntu-24.04:host` (stale; caused the wrong-label confusion).
+>
+> ---
+> **[cp568 and earlier — historical, below.]**
 > > > > # 📍 CURRENT STATE — read this first (updated end of cp568 — v1.9.1 CUT: full battery GREEN, 4 real issues fixed, version bumped to 1.9.1, RELEASE-NOTES-v1.9.1.md written; READY FOR THE ELI5 RELEASE, 2026-07-26)
 >
 > ## cp568 — deep-deep (full battery green + 4 fixes) + v1.9.1 version bump

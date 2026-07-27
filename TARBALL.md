@@ -1,5 +1,16 @@
 # TARBALL
 
+> # 📍 SESSION HANDOFF — START HERE (written 2026-07-26, end of cp569 — v1.9.2 CUT to supersede the un-released v1.9.1. v1.9.1 was committed (5b6b1653) but a git.agorise.net outage hung its ci.yml mid-fetch; the runner was deleted; ci.yml has NO workflow_dispatch so a fresh commit is the only clean re-trigger. v1.9.2 = v1.9.1 content + version bump.)
+> **Tarball: `morphit-v1.9.2.tar.gz`. Unpack to `/home/claude/morphit/` so the tree lives at `/home/claude/morphit/morphit/`. Tree is at package.json 1.9.2.**
+>
+> ## cp569 — v1.9.2 (version bump over v1.9.1; NO functional change)
+> v1.9.1 (cp567–cp568) shipped 5 t.txt fixes + full-battery-green + 4 battery fixes, but its release stalled: pushing `5b6b1653` to main fired `ci.yml`, whose `ansible-lint` job hung 5 min on `git fetch` from git.agorise.net (server unresponsive at 22:55) and was killed (`context deadline exceeded`); Ken deleted the runner + the ci.yml run. Since `ci.yml` triggers only on `push`/`pull_request` (**no `workflow_dispatch`** — verified) and there's nothing new to push, the clean fix is a fresh commit → **v1.9.2**.
+> **v1.9.2 = v1.9.1 tree + a version-string bump ONLY (zero functional change).** Bumped all 19 version-consistency touchpoints 1.9.1 → 1.9.2 (14 package.json, relay VERSION, indexer INDEXER_VERSION, mcp MCP_VERSION [clean Python replace — no sed footgun], docs/API.md + apps/indexer/README.md); `package-lock.json` synced via `npm install --package-lock-only` (15 Morphit workspace entries → 1.9.2; **`node_modules/ipaddr.js` correctly LEFT at its own 1.9.1** — third-party dep, coincidental version; NEVER `npm audit fix`). Created **`RELEASE-NOTES-v1.9.2.md`** (v1.9.1's body, retitled; v1.9.1's notes file kept, harmless). VERIFIED: version-consistency **19/19 @ 1.9.2**, release-notes-asset-count-parity 3/3, mcp-server tsc 0, indexer tsc 0.
+> **Full battery NOT re-run for v1.9.2** — it's functionally identical to the battery-green v1.9.1 tree, and `ci.yml` re-runs the whole battery on Ken's runner as the gate.
+> **⏭️ TO SHIP (Ken wants the CI flow, not offline): (1) RE-REGISTER A RUNNER FIRST** — label `ubuntu-24.04:host` (the log's `hostexecutor` confirms that's right; the runbook's `morphit-build` is STALE), docker on host + runner user in `docker` group; confirm **Idle** in Forgejo. Then **(2) the 6 CI ELI5 blocks** (`scripts/eli5-release.sh 1.9.2 "…"`). If git.agorise.net hangs mid-CI again, the **offline path** (release-sign.sh + manual publish, cp-this-session) ships with no runner at all.
+>
+> ---
+> **[cp568 and earlier — historical, below.]**
 > # 📍 SESSION HANDOFF — START HERE (written 2026-07-26, end of cp568 — v1.9.1 CUT: full battery GREEN, 4 real issues fixed, version bumped 1.9.0 → 1.9.1, RELEASE-NOTES-v1.9.1.md written. READY FOR THE ELI5 RELEASE.)
 > **Tarball: `morphit-v1.9.1.tar.gz`. Unpack to `/home/claude/morphit/` so the tree lives at `/home/claude/morphit/morphit/`. FULL tarball. Tree is at package.json 1.9.1.**
 >
