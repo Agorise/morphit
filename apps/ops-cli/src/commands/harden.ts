@@ -118,6 +118,7 @@ export async function runHarden(ctx: HardenCtx): Promise<number> {
 			'Set up BunkerWeb (reverse-proxy WAF in front of the stack)',
 			'Set up automatic daily database backups',
 			'Set up IPFS release hosting (help keep Morphit releases alive)',
+			'Seed this release to IPFS now (make this box an origin host after an upgrade)',
 			'Show the fully-automated path (Ansible playbook)',
 			'Done'
 		]);
@@ -229,6 +230,34 @@ export async function runHarden(ctx: HardenCtx): Promise<number> {
 			console.log('  Full reference: docs/RUN-A-MORPHIT-NODE.md, OPERATIONS.md §48.');
 			console.log('');
 		} else if (choice === 5) {
+			// Seed THIS release to IPFS from this box — makes this node an ORIGIN
+			// host of the current signed release (others pin from it). Run after an
+			// upgrade, once /v1/release shows the new version, and after Kubo is set
+			// up (the option above). The script re-stages the canonical directory,
+			// `ipfs add`s it, and ASSERTS the CID equals the one /v1/release anchors
+			// (fail-loud on a divergent CID), then announces it.
+			const seed = join(repoRoot, 'ops', 'ipfs', 'morphit-ipfs-seed.sh');
+			console.log('');
+			console.log('  Seed THIS release from this box so it becomes an ORIGIN host — other');
+			console.log('  instances then pin the release from you. Run this AFTER an upgrade,');
+			console.log('  once /v1/release shows the new version, and after Kubo is set up (the');
+			console.log('  option above). Pass the release tag:');
+			console.log('');
+			console.log(
+				`    sudo -u ipfs env IPFS_PATH=/var/lib/ipfs/.ipfs sh ${sanitizeForTerm(seed)} vX.Y.Z`
+			);
+			console.log('');
+			console.log('  It re-stages the exact release directory, adds it to IPFS, and ASSERTS');
+			console.log('  the resulting CID matches the one your /v1/release anchors — refusing to');
+			console.log('  seed a divergent CID — then announces it to the network.');
+			console.log('');
+			console.log('  Confirm it is publicly reachable (from anywhere, using the anchored CID):');
+			console.log('');
+			console.log('    curl -fsSL https://ipfs.io/ipfs/<cid>/metadata.json');
+			console.log('');
+			console.log('  Full reference: docs/RUN-A-MORPHIT-NODE.md, OPERATIONS.md §48.');
+			console.log('');
+		} else if (choice === 6) {
 			printAnsiblePath();
 		} else {
 			// Done
