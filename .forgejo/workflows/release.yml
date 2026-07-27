@@ -356,8 +356,6 @@ jobs:
           mkdir -p "$STAGE"
           if ! MORPHIT_STAGE_TARBALL="$TARBALL" \
                MORPHIT_STAGE_SHA256="${TARBALL}.sha256" \
-               MORPHIT_STAGE_NOTES="RELEASE-NOTES-${TAG}.md" \
-               MORPHIT_STAGE_ASC="${TARBALL}.asc" \
                sh ops/ipfs/stage-release-dir.sh "$TAG" "$STAGE"; then
             echo "WARNING: staging failed — no ipfs_cid this run." >&2
             exit 0

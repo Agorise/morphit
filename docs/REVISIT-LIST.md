@@ -2,7 +2,11 @@
 
 > > > > # 📍 CURRENT STATE — read this first (updated end of cp579 — v1.9.3 build-complete; deep-deep FULL BATTERY GREEN (564, 1 regression fixed); remaining = 5 personas + A-L audit, then ship; 2026-07-27)
 >
-> ## cp582 — v1.9.3: seed folded into Block 3 (upgrade auto-seeds); 6-block ceremony preserved
+> ## cp583 — guard CAUGHT a real bug (notes-in-dir CID divergence) → FIXED + bumped to v1.9.4
+> Live v1.9.3 ship: guard looped + seed hit CID MISMATCH (safety WORKED, nothing broadcast). Cause (mine): stage-release-dir.sh staged NOTES into the IPFS dir in CI-local mode but the seed's download can't fetch them → 6-file (CI) vs 4-file (seed) → divergent CID. FIX: IPFS dir now SELF-CONTAINED (notes + .asc removed from both modes; release.yml drops the env). Determinism re-verified byte-identical. Smokes: selfseed 37/37, ipns-wiring 30/30, eli5 56/56. v1.9.3 can't re-cut in place (upgrade skips same version, upgrade.ts:981) → BUMPED to v1.9.4 (19 touchpoints + lockfile + notes), version-consistency 19/19. IPNS name confirmed (ipns.ts matches; other k51 is a test fixture).
+> **SHIP v1.9.4:** delete dead v1.9.3 (`git push origin :refs/tags/v1.9.3`, `git tag -d v1.9.3`, delete release in Forgejo UI), then 6-block v1.9.4 ceremony. Block 3 redeploys (v1.9.4≠v1.9.3) → auto-seeds fixed dir → guard resolves → broadcast.
+>
+> > ## cp582 — v1.9.3: seed folded into Block 3 (upgrade auto-seeds); 6-block ceremony preserved
 > (1) FIXED morphit-ipfs-seed.sh: expected CID now from the TAG's distribution-anchor.env, not /v1/release (which was wrong pre-broadcast / on future upgrades). (2) upgrade.ts step 12: auto-seeds latestTag if IPFS hosting up (ipfs + service active), non-fatal, typechecks. (3) eli5-release.sh: Block 3 auto-seed note + Block 4 guard line + ipfs_cid/ipns_name; eli5 smoke 56/56 (STILL 6 blocks). (4) ipfs-selfseed-smoke +4 → 36/36. Delta re-verify: selfseed 36/36, eli5 56/56, ops-cli tsc clean. **v1.9.3 SHIP-READY.**
 > SHIP: `bash scripts/eli5-release.sh 1.9.3 "<msg>"` → relay 6 blocks. Block 3 auto-seeds; Block 4 guard gates the broadcast. Ken's action.
 >

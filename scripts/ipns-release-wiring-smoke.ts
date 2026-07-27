@@ -96,7 +96,7 @@ const stripHash = (s: string) =>
 		['computes the dir CID with ipfs add --only-hash (cidv1)', /add -rQ --cid-version 1 --only-hash/.test(yml)],
 		['records the CID to ipfs-cid.txt', /ipfs-cid\.txt/.test(yml)],
 		['stager: stable morphit-latest.tar.gz', /morphit-latest\.tar\.gz/.test(stage)],
-		['stager: RELEASE-NOTES.md + versioned copy', /RELEASE-NOTES\.md/.test(stage) && /RELEASE-NOTES-\$TAG\.md/.test(stage)],
+		['stager: self-contained dir (no notes/asc fetch-dependency)', !/RELEASE-NOTES/.test(stage) && !/\.asc/.test(stage)],
 		['stager: metadata.json has version + sha256', /"version":/.test(stage) && /"sha256":/.test(stage)],
 		['stager: metadata.json DETERMINISTIC (no released_utc timestamp)', !/released_utc/.test(stage)]
 	];
