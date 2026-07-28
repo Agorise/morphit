@@ -89,6 +89,11 @@ const nonEn = locales.filter((l) => l !== 'en');
 
 interface AllowEntry { key: string; locale: string; reason: string }
 const ALLOW_LIST: AllowEntry[] = [
+	// ─── v1.9.5 (Ken) blog "## Details:" heading — German uses "Details" (the
+	//     standard loanword; native "Einzelheiten" is rarer in tech UIs), so it is
+	//     byte-identical to EN. It only tripped the heuristic after the heading was
+	//     changed from all-caps bold "DETAILS" to title-case "Details:".
+	{ key: 'syndicate.order_post.details', locale: 'de', reason: '(b) "Details" is the standard German loanword; byte-identical to EN only after the all-caps→title-case change' },
 	// ─── post-order amount hint: the value "{amount} {fiat} (≈ {usd})" is
 	//     ENTIRELY interpolation placeholders + a math symbol (≈) + ASCII
 	//     parens — there is no translatable word, so byte-identity with EN

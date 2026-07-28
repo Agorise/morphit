@@ -63,6 +63,8 @@ interface BidRow {
 	order_fiat_currency: string | null;
 	order_amount_min: string | null;
 	order_amount_max: string | null;
+	order_accepted_assets: string[] | null;
+	order_payment_methods: string[] | null;
 	extension_count: number;
 	last_extended_at: Date | null;
 }
@@ -128,6 +130,11 @@ export function featuredBidsRoute(db: Database): Hono {
 				o.fiat_currency AS order_fiat_currency,
 				o.amount_min::text AS order_amount_min,
 				o.amount_max::text AS order_amount_max,
+				-- v1.9.5 (Ken) — the order's settlement so the modal line names it
+				-- ("…for BTC or XMR" / "…with Bank transfer"). accepted for barter,
+				-- payment_methods for crypto; NULL on a LEFT JOIN miss (pruned order).
+				o.accepted_assets AS order_accepted_assets,
+				o.payment_methods AS order_payment_methods,
 				b.extension_count,
 				b.last_extended_at
 			FROM featured_slot_bids b
@@ -155,6 +162,8 @@ export function featuredBidsRoute(db: Database): Hono {
 			order_fiat_currency: r.order_fiat_currency,
 			order_amount_min: r.order_amount_min === null ? null : Number(r.order_amount_min),
 			order_amount_max: r.order_amount_max === null ? null : Number(r.order_amount_max),
+			order_accepted_assets: r.order_accepted_assets ?? null,
+			order_payment_methods: r.order_payment_methods ?? null,
 			extension_count: r.extension_count,
 			last_extended_at: r.last_extended_at ? r.last_extended_at.toISOString() : null
 		}));

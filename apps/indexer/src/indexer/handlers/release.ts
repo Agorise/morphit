@@ -268,10 +268,29 @@ function validateDistribution(
 		ipns_name = nm;
 	}
 
+	// v1.9.6 (Ken) — optional signed IPNS record (base64): the DHT-rebroadcast
+	// pointer every instance re-announces. Same syntax + size gate as the schema
+	// package's validateDistribution so a stored-valid release re-validates; the
+	// cryptographic validity is re-checked where the record is USED (instance
+	// rebroadcast + resolvers), not here.
+	let ipns_record: string | undefined;
+	if (d.ipns_record !== undefined && d.ipns_record !== null) {
+		const rec = d.ipns_record;
+		if (
+			typeof rec !== 'string' ||
+			rec.length < 64 ||
+			rec.length > 1200 ||
+			!/^[A-Za-z0-9+/]+={0,2}$/.test(rec)
+		) {
+			return { reason: 'distribution_ipns_record_invalid' };
+		}
+		ipns_record = rec;
+	}
+
 	let mirrors: string[] | undefined;
 	if (d.mirrors !== undefined && d.mirrors !== null) {
 		if (!Array.isArray(d.mirrors)) return { reason: 'distribution_mirrors_not_array' };
-		if (d.mirrors.length > 8) return { reason: 'distribution_mirror_invalid' };
+		if (d.mirrors.length > 10) return { reason: 'distribution_mirror_invalid' };
 		for (const m of d.mirrors) {
 			if (
 				typeof m !== 'string' ||
@@ -299,6 +318,7 @@ function validateDistribution(
 		gpg_fingerprint: fpr,
 		...(ipfs_cid !== undefined ? { ipfs_cid } : {}),
 		...(ipns_name !== undefined ? { ipns_name } : {}),
+		...(ipns_record !== undefined ? { ipns_record } : {}),
 		...(mirrors !== undefined ? { mirrors } : {})
 	};
 	const sizeCheck = checkJsonbSize(value);

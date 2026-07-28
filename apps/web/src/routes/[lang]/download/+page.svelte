@@ -4,8 +4,9 @@
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	import { _ } from 'svelte-i18n';
 	import Head from '$components/Head.svelte';
-	import { MIRROR_LOGO_PATHS, MIRROR_LOGO_VIEWBOX } from '$lib/mirrorLogos';
-	import { MORPHIT_IPNS_NAME, ipnsLatestTarballUrl } from '$lib/ipns';
+	import { MIRROR_LOGO_PATHS, MIRROR_LOGO_VIEWBOX, MIRROR_LOGO_INNER } from '$lib/mirrorLogos';
+	import { ipfsCidTarballUrl, ipnsNativeTarballUrl, ipnsNativeDirUrl } from '$lib/ipns';
+	import { release } from '$lib/stores/release';
 
 	// Source mirrors.  Morphit's canonical repository is our own Forgejo
 	// server; it's mirrored across the web so the code stays reachable
@@ -24,7 +25,7 @@
 	// Sally finding DL1: there is NO /morphit.apk direct-download link
 	// anymore (PWA-only, per the note above) — the old broken APK link
 	// that 404'd on instances without a manually-dropped APK is gone.
-	const MIRRORS = [
+	const GIT_MIRRORS = [
 		{
 			id: 'forgejo',
 			name: 'git.agorise.net',
@@ -60,14 +61,35 @@
 			url: 'https://git.launchpad.net/~agorise/+git/morphit',
 			status: 'live'
 		},
-		// IPFS: once Morphit's stable IPNS name is configured (scripts/ipns-keygen.mjs
-		// → paste into $lib/ipns.ts), this card goes live and always resolves to the
-		// LATEST release via IPNS; until then it stays a "coming soon" card. The
-		// per-release immutable CID is separately anchored on-chain (distribution.ipfs_cid).
-		MORPHIT_IPNS_NAME
-			? { id: 'ipfs', name: 'IPFS (always latest)', url: ipnsLatestTarballUrl(), status: 'live' }
-			: { id: 'ipfs', name: 'IPFS', url: 'https://ipfs.tech/', status: 'pending' }
+		// v1.9.6 (Ken) — gitea.com + framagit.org push-mirrors confirmed live; both are
+		// anchored on-chain too (buildDistribution baked list; the mirror cap was
+		// bumped 8 -> 10 to fit them).
+		{ id: 'gitea', name: 'Gitea', url: 'https://gitea.com/agorise/morphit', status: 'live' },
+		{ id: 'framagit', name: 'Framagit', url: 'https://framagit.org/agorise/morphit', status: 'live' }
 	] as const;
+
+	// v1.9.6 (Ken) — TWO decentralized "latest release" surfaces:
+	//   • IPNS (always latest): native ipns://<name>/… — resolves over the public DHT
+	//     with no DNS + no third party (every instance rebroadcasts the signed record;
+	//     see $lib/ipns.ts + ops/ipfs/morphit-ipns-rebroadcast.sh). Needs an IPFS-capable
+	//     browser; always shown (the URL is static). The privacy/decentralization pick.
+	//   • IPFS (always latest): the current release's immutable DIRECTORY CID (from
+	//     /v1/release → distribution.ipfs_cid) via ipfs.io — resolves in ANY browser
+	//     (grandma), at the cost of one DNS lookup + one gateway. Live once a release
+	//     carrying a CID is on-chain; a "coming soon" card until then.
+	// (w3name is gone — it stored records off the DHT, so gateways never resolved them.)
+	const ipfsCid = $derived(
+		$release.kind === 'ok' ? ($release.release.payload.distribution?.ipfs_cid ?? null) : null
+	);
+	const MIRRORS = $derived([
+		...GIT_MIRRORS,
+		// The pure pointer first: native ipns:// over the DHT, no DNS, no third party.
+		// Always "live" — the URL is static (needs no CID). See the note under the grid.
+		{ id: 'ipns', name: 'IPNS (always latest)', url: ipnsNativeTarballUrl(), status: 'live' },
+		ipfsCid
+			? { id: 'ipfs', name: 'IPFS (always latest)', url: ipfsCidTarballUrl(ipfsCid), status: 'live' }
+			: { id: 'ipfs', name: 'IPFS', url: 'https://ipfs.tech/', status: 'pending' }
+	]);
 
 	// Part 121 cp7 — per-locale internal-link wrapper.  See
 	// $i18n/path.localePath() for design rationale.
@@ -155,7 +177,14 @@
 								aria-hidden="true"
 								class="flex-none text-ink-500 dark:text-ink-400"
 							>
-								<path d={MIRROR_LOGO_PATHS[m.id]} />
+								<!-- v1.9.6 — the gitea.com + framagit.org mirrors carry real multi-element brand art
+								     (fills stripped → currentColor in mirrorLogos.ts); everything
+								     else is a single monochrome path. Content is static. -->
+								{#if MIRROR_LOGO_INNER[m.id]}
+									{@html MIRROR_LOGO_INNER[m.id]}
+								{:else}
+									<path d={MIRROR_LOGO_PATHS[m.id]} />
+								{/if}
 							</svg>
 							<span class="min-w-0">
 								<span class="block font-display font-bold">{m.name}</span>
@@ -188,6 +217,18 @@
 				</li>
 			{/each}
 		</ul>
+		<!-- v1.9.6 (Ken) — IPNS note: the native ipns:// card needs an IPFS-capable
+		     browser; the IPFS card works anywhere. The permanent address is shown as
+		     copyable text (select-all) so anyone can paste it into their own node. -->
+		<p class="mt-4 text-sm text-ink-600 dark:text-ink-400">
+			{$_('download.ipns_note')}
+		</p>
+		<p class="mt-2">
+			<code
+				class="select-all break-all rounded bg-ink-100 px-2 py-1 font-mono text-xs text-ink-700 dark:bg-ink-800 dark:text-ink-200"
+				>{ipnsNativeDirUrl()}</code
+			>
+		</p>
 	</section>
 
 	<!-- Visual divider — everything above is for END USERS who want to

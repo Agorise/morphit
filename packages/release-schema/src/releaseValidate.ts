@@ -93,6 +93,7 @@ export type ReleaseValidateError =
 	| 'distribution_gpg_fingerprint_invalid'
 	| 'distribution_ipfs_cid_invalid'
 	| 'distribution_ipns_name_invalid'
+	| 'distribution_ipns_record_invalid'
 	| 'distribution_mirrors_not_array'
 	| 'distribution_mirror_invalid';
 
@@ -165,8 +166,16 @@ const IPFS_CID_MAX_LEN = 128;
  *  garbage. */
 const IPNS_NAME_RE = /^k51[a-z0-9]{50,70}$/;
 const IPNS_NAME_MAX_LEN = 80;
+// v1.9.6 — base64 of the signed IPNS record (marshaled). Ed25519 V1+V2 records are
+// ~400 bytes → ~532 base64 chars; the cap gives headroom without inviting bloat. The
+// signature/validity are re-checked where the record is actually USED (instance
+// rebroadcast + resolvers); here we only gate syntax + size so the on-chain op stays
+// well-formed and bounded.
+const IPNS_RECORD_RE = /^[A-Za-z0-9+/]+={0,2}$/;
+const IPNS_RECORD_MIN_LEN = 64;
+const IPNS_RECORD_MAX_LEN = 1200;
 /** No release needs more than a handful of mirrors. */
-const MIRRORS_MAX = 8;
+const MIRRORS_MAX = 10;
 const DISTRIBUTION_MAX_SERIALIZED_BYTES = 4096;
 
 /** Validate a parsed payload.  Returns `{ ok: true, value }` or
@@ -332,6 +341,20 @@ export function validateDistribution(d: unknown):
 		ipns_name = nm;
 	}
 
+	let ipns_record: string | undefined;
+	if (d.ipns_record !== undefined && d.ipns_record !== null) {
+		const rec = d.ipns_record;
+		if (
+			typeof rec !== 'string' ||
+			rec.length < IPNS_RECORD_MIN_LEN ||
+			rec.length > IPNS_RECORD_MAX_LEN ||
+			!IPNS_RECORD_RE.test(rec)
+		) {
+			return { ok: false, reason: 'distribution_ipns_record_invalid' };
+		}
+		ipns_record = rec;
+	}
+
 	let mirrors: string[] | undefined;
 	if (d.mirrors !== undefined && d.mirrors !== null) {
 		if (!Array.isArray(d.mirrors)) {
@@ -356,6 +379,7 @@ export function validateDistribution(d: unknown):
 		gpg_fingerprint: fpr,
 		...(ipfs_cid !== undefined ? { ipfs_cid } : {}),
 		...(ipns_name !== undefined ? { ipns_name } : {}),
+		...(ipns_record !== undefined ? { ipns_record } : {}),
 		...(mirrors !== undefined ? { mirrors } : {})
 	};
 	if (byteLengthOfJson(value) > DISTRIBUTION_MAX_SERIALIZED_BYTES) {

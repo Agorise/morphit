@@ -133,6 +133,9 @@ interface Inputs {
 	ipfsCid: string;
 	/** v1.9.x — stable IPNS name (`k51…`), the "always latest" pointer. Empty = omit. */
 	ipnsName: string;
+	/** v1.9.6 — base64 signed IPNS record for ipnsName → this release's CID, the
+	 *  DHT-rebroadcast pointer every instance re-announces. Empty = omit. */
+	ipnsRecord: string;
 	/** Comma- or whitespace-separated list of https:// mirror URLs. */
 	mirrors: string;
 }
@@ -232,6 +235,10 @@ async function gatherInputs(): Promise<Inputs> {
 		'Stable IPNS name k51… (optional; the "always latest" pointer)',
 		process.env.MORPHIT_BUILD_IPNS_NAME ?? ''
 	);
+	const ipnsRecord = await ask(
+		'Signed IPNS record base64 (optional; the DHT-rebroadcast pointer)',
+		process.env.MORPHIT_BUILD_IPNS_RECORD ?? ''
+	);
 	const mirrors = await ask(
 		'Mirror URLs (https://…, comma-separated; optional)',
 		process.env.MORPHIT_BUILD_MIRRORS ?? ''
@@ -250,6 +257,7 @@ async function gatherInputs(): Promise<Inputs> {
 		gpgFingerprint,
 		ipfsCid,
 		ipnsName,
+		ipnsRecord,
 		mirrors
 	};
 }
@@ -263,13 +271,14 @@ function buildDistribution(i: Inputs): ReleaseDistributionBlock | null {
 	const fpr = i.gpgFingerprint.replace(/\s+/g, '').toUpperCase();
 	const cid = i.ipfsCid.trim();
 	const ipns = i.ipnsName.trim();
+	const ipnsRec = i.ipnsRecord.trim();
 	let mirrorList = i.mirrors
 		.split(/[,\s]+/)
 		.map((m) => m.trim())
 		.filter((m) => m.length > 0);
 
 	// The whole block is omitted only when NOTHING was supplied.
-	if (sha === '' && fpr === '' && cid === '' && ipns === '' && mirrorList.length === 0) return null;
+	if (sha === '' && fpr === '' && cid === '' && ipns === '' && ipnsRec === '' && mirrorList.length === 0) return null;
 
 	if (sha === '' || fpr === '') {
 		fail('distribution needs BOTH source_sha256 and gpg_fingerprint (or leave all fields empty to omit)');
@@ -285,11 +294,14 @@ function buildDistribution(i: Inputs): ReleaseDistributionBlock | null {
 	// "needs BOTH" failure above). Emitted only alongside a real anchor.
 	// v1.8.16 (Ken) — SourceForge + SourceHut added; both mirror the same signed
 	// bytes and appear as live cards on the download page. GitLab, Bitbucket and
-	// Launchpad added once their Forgejo push-mirrors were confirmed live. Seven
-	// total — still ≤8 (the on-chain cap in handlers/release.ts). Launchpad's URL
-	// carries a `+` (`/+git/`), which needs v1.8.16's relaxed mirror regex, so
-	// this list must only be broadcast from a v1.8.16+ instance (the release
-	// ceremony upgrades the canonical instance before it broadcasts).
+	// Launchpad added once their Forgejo push-mirrors were confirmed live.
+	// v1.9.6 (Ken) — gitea.com + framagit.org push-mirrors confirmed live; NINE total.
+	// on-chain cap was bumped 8 -> 10 (handlers/release.ts + release-schema) to fit
+	// them, so — exactly like Launchpad's `+` regex — a release carrying this list
+	// only validates on a v1.9.6+ instance; the ceremony upgrades the canonical
+	// instance before it broadcasts (older instances reject the op until they
+	// upgrade, keeping the prior release until then). Launchpad's URL still carries
+	// a `+` (`/+git/`) needing the relaxed mirror regex.
 	if (mirrorList.length === 0) {
 		mirrorList = [
 			'https://codeberg.org/agorise/morphit',
@@ -298,13 +310,16 @@ function buildDistribution(i: Inputs): ReleaseDistributionBlock | null {
 			'https://git.sr.ht/~agorise/morphit',
 			'https://gitlab.com/Agorise/morphit',
 			'https://bitbucket.org/agorise/morphit',
-			'https://git.launchpad.net/~agorise/+git/morphit'
+			'https://git.launchpad.net/~agorise/+git/morphit',
+			'https://gitea.com/agorise/morphit',
+			'https://framagit.org/agorise/morphit'
 		];
 	}
 
 	const value: Record<string, unknown> = { source_sha256: sha, gpg_fingerprint: fpr };
 	if (cid !== '') value.ipfs_cid = cid;
 	if (ipns !== '') value.ipns_name = ipns;
+	if (ipnsRec !== '') value.ipns_record = ipnsRec;
 	if (mirrorList.length > 0) value.mirrors = mirrorList;
 	return value as unknown as ReleaseDistributionBlock;
 }

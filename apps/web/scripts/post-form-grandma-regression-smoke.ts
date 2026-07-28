@@ -55,6 +55,13 @@ const STARTER_PACK = join(
 );
 const starterSrc = readFileSync(STARTER_PACK, 'utf8');
 
+// v1.9.5 (Ken) — the order-summary sentence was refactored to the SHARED
+// orderTitleParts builder, which now owns the locale-aware payment-method
+// disjunction join (Intl.ListFormat). The form delegates to it, so the
+// "live summary card" assertion below reads the builder, not the form.
+const ORDER_TITLE = join(__dirname, '..', 'src', 'lib', 'utils', 'orderTitle.ts');
+const orderTitleSrc = readFileSync(ORDER_TITLE, 'utf8');
+
 // cp368: also read the en locale so we can assert the waiver-benefit
 // `_with_fiat` keys actually exist — when they were missing, svelte-i18n
 // rendered the raw key path ("post_order.waiver_benefits.tier_1")
@@ -144,15 +151,16 @@ const SCENARIOS: Scenario[] = [
 	{
 		name: 'live summary card joins payment methods with a locale-aware disjunction list',
 		check: () => {
-			if (!/Intl\.ListFormat\(currentLang/.test(src))
-				return 'summary does not use Intl.ListFormat(currentLang, …)';
-			if (!/type: 'disjunction'/.test(src)) return "ListFormat is not type 'disjunction' (Oxford-or)";
-			if (!/displayNamesForMethods/.test(src))
-				return 'summary does not resolve names via displayNamesForMethods (picker parity)';
-			if (!/post_order\.summary\.sentence_buy/.test(src))
-				return 'summary buy template key not referenced';
-			if (!/post_order\.summary\.sentence_sell/.test(src))
-				return 'summary sell template key not referenced';
+			// v1.9.5 refactor (Ken): the summary sentence is built by the SHARED
+			// orderTitleParts builder, which owns the locale-aware payment-method
+			// disjunction join. The form delegates to it — so verify the delegation
+			// (form → orderTitleParts) and that the builder does the Oxford-or join.
+			if (!/orderTitleParts/.test(src))
+				return 'form no longer builds the summary via the shared orderTitleParts builder';
+			if (!/Intl\.ListFormat\(/.test(orderTitleSrc) || !/type: 'disjunction'/.test(orderTitleSrc))
+				return "orderTitle builder does not join methods with Intl.ListFormat (type 'disjunction')";
+			if (!/displayNamesForMethods/.test(orderTitleSrc))
+				return 'orderTitle builder does not resolve names via displayNamesForMethods (picker parity)';
 			return null;
 		}
 	},

@@ -178,14 +178,25 @@ export interface ReleaseDistributionBlock {
 	 *  bytes are actually pinned. */
 	readonly ipfs_cid?: string;
 	/** OPTIONAL stable IPNS name (`k51…`, an IPNS-over-libp2p public key)
-	 *  that always resolves to the LATEST release's tarball. Unlike
+	 *  that always resolves to the LATEST release's directory. Unlike
 	 *  `ipfs_cid` (which is immutable and per-release), this is the
-	 *  mutable "always find the newest" pointer, repointed every release
-	 *  via w3name. It's a DISCOVERY aid, NOT the verification anchor —
-	 *  a resolved copy is still checked against `source_sha256` +
-	 *  `gpg_fingerprint`. Resolve at `https://dweb.link/ipns/<name>` or
-	 *  `ipns://<name>`. Omitted until a publishing key is configured. */
+	 *  mutable "always find the newest" pointer. It's a DISCOVERY aid,
+	 *  NOT the verification anchor — a resolved copy is still checked
+	 *  against `source_sha256` + `gpg_fingerprint`. Resolve natively at
+	 *  `ipns://<name>` or via any public gateway's `/ipns/<name>`.
+	 *  Omitted until a publishing key is configured. */
 	readonly ipns_name?: string;
+	/** OPTIONAL base64 of the SIGNED IPNS record for `ipns_name`, pointing
+	 *  at THIS release's CID (v1.9.6). This is what makes the name resolvable
+	 *  on the PUBLIC DHT with NO third-party service — w3name stored records
+	 *  off-DHT, so public gateways never found them. Every instance reads this
+	 *  record and rebroadcasts it to the DHT WITHOUT the private key, so any
+	 *  single live instance keeps `ipns://<name>` alive — and no instance can
+	 *  repoint it, because minting or bumping a record requires the key (the
+	 *  sequence number is signed). ~500 base64 chars. Omitted when no signing
+	 *  key is configured. Each instance re-verifies it (signature, validity,
+	 *  size) before rebroadcast, as does every resolver. */
+	readonly ipns_record?: string;
 	/** OPTIONAL independent download mirrors (`https://…`) carrying the
 	 *  SAME signed bytes — a Codeberg release asset, an IPFS gateway,
 	 *  etc. Bounded list; recommendations, not mandates. */

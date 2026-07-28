@@ -2486,7 +2486,8 @@
 			// show the amount as the user typed it (the orderbook applies its own
 			// grouping formatter to the stored number; the WORDING is what must match)
 			(n) => String(n),
-			goods
+			goods,
+			{ locale: currentLang }
 		);
 		return $_(parts.key, { values: parts.values }) as string;
 
@@ -2512,8 +2513,6 @@
 	const summarySentence = $derived.by((): string => {
 		if (!asset) return '';
 		const fiatCode = fiat.trim().toUpperCase();
-		const hasMin = amountMin.trim() !== '';
-		const hasMax = amountMax.trim() !== '';
 
 		// cp425 — barter gets its own summary: goods/services valued in local
 		// currency, settled in the accepted cryptos. No price-model or
@@ -2529,52 +2528,32 @@
 			return barterTitleFor(goodsText);
 		}
 
-		let amountClause: string;
-		if (hasMin && hasMax) {
-			amountClause = $_('post_order.summary.amount_min_max', {
-				values: { min: amountMin.trim(), max: amountMax.trim(), fiat: fiatCode, asset }
-			}) as string;
-		} else if (!hasMin && hasMax) {
-			amountClause = $_('post_order.summary.amount_up_to', {
-				values: { max: amountMax.trim(), fiat: fiatCode, asset }
-			}) as string;
-		} else if (hasMin && !hasMax) {
-			amountClause = $_('post_order.summary.amount_min_plus', {
-				values: { min: amountMin.trim(), fiat: fiatCode, asset }
-			}) as string;
-		} else {
-			amountClause = $_('post_order.summary.amount_any', { values: { asset } }) as string;
-		}
-
-		let priceClause: string;
-		if (priceModelKind === 'fixed') {
-			priceClause = $_('post_order.summary.price_fixed', {
-				values: { price: fixedPrice.trim() || '—', fiat: fiatCode, asset }
-			}) as string;
-		} else {
-			priceClause = $_('post_order.summary.price_market') as string;
-		}
-
-		const names = displayNamesForMethods(
-			paymentMethods,
-			(key) => $instanceAdditions.find((e) => e.key === key)?.name
-		);
-		let methodsClause: string;
-		if (names.length > 0) {
-			try {
-				methodsClause = new Intl.ListFormat(currentLang, { type: 'disjunction' }).format(names);
-			} catch {
-				methodsClause = names.join(', ');
+		// v1.9.5 (Ken) — non-barter now uses the SAME sentence as the order title
+		// and the Blurt blog (order_title.*): "I'm buying at least 50 MXN of ARRR
+		// with BTC". Settlement is the accepted payment methods (resolved labels).
+		// The price model (fixed/market) lives in its own form control, not this
+		// one-line summary, so the summary reads verbatim like the title and blog.
+		const minRaw = amountMin.trim();
+		const maxRaw = amountMax.trim();
+		const parts = orderTitleParts(
+			{
+				side: side ?? 'buy',
+				asset: asset ?? '',
+				fiat_currency: fiatCode,
+				amount_min: minRaw !== '' && Number.isFinite(Number(minRaw)) ? Number(minRaw) : null,
+				amount_max: maxRaw !== '' && Number.isFinite(Number(maxRaw)) ? Number(maxRaw) : null,
+				// '…' placeholder keeps the sentence readable before any method is ticked
+				payment_methods: paymentMethods.length > 0 ? [...paymentMethods] : ['…']
+			},
+			(n) => String(n),
+			undefined,
+			{
+				methodDisplay: (m) =>
+					displayNamesForMethods(m, (key) => $instanceAdditions.find((e) => e.key === key)?.name),
+				locale: currentLang
 			}
-		} else {
-			methodsClause = '…';
-		}
-
-		const tmplKey =
-			side === 'sell' ? 'post_order.summary.sentence_sell' : 'post_order.summary.sentence_buy';
-		return $_(tmplKey, {
-			values: { amount: amountClause, price: priceClause, methods: methodsClause }
-		}) as string;
+		);
+		return $_(parts.key, { values: parts.values }) as string;
 	});
 </script>
 

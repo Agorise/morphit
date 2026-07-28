@@ -1013,7 +1013,8 @@
 											{@const parts = orderTitleParts(
 												convo.order,
 												undefined,
-												$_('order_title.goods_services')
+												$_('order_title.goods_services'),
+												{ locale: currentLang }
 											)}
 											{@const orderTitle = $_(parts.key, { values: parts.values }) as string}
 											<span class="min-w-0 truncate">{orderTitle}</span>

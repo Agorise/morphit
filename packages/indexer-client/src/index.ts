@@ -418,6 +418,11 @@ export interface FeaturedBidHistoryEntry {
 	readonly order_fiat_currency: string | null;
 	readonly order_amount_min: number | null;
 	readonly order_amount_max: number | null;
+	/** v1.9.5 (Ken) — the promoted order's settlement, so the bid-history line
+	 *  names it ("…for BTC or XMR" / "…with Bank transfer"). accepted_assets for
+	 *  barter, payment_methods for crypto; both null when the order was pruned. */
+	readonly order_accepted_assets: readonly string[] | null;
+	readonly order_payment_methods: readonly string[] | null;
 	/** Part 122 cp18 — number of anti-snipe extensions applied
 	 *  to this bid.  Zero on a normally-elapsed bid; non-zero
 	 *  if a later bidder triggered the soft-close extension

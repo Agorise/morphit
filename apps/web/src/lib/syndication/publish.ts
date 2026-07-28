@@ -219,10 +219,15 @@ export async function publishOrderPost(
 				fiat_currency: ctx.counterAsset,
 				amount_min: ctx.amountMin ?? null,
 				amount_max: ctx.amountMax ?? null,
-				accepted_assets: ctx.acceptedAssets ?? null
+				accepted_assets: ctx.acceptedAssets ?? null,
+				// v1.9.5 (Ken) — crypto settlement for the headline. `paymentMethodNames`
+				// are ALREADY resolved display labels, so the methodDisplay below is the
+				// identity. Ignored for barter (which settles in accepted_assets).
+				payment_methods: ctx.paymentMethodNames ?? null
 			},
 			(n) => String(n),
-			ctx.specificBarterTitle || (t('order_title.goods_services') as string)
+			ctx.specificBarterTitle || (t('order_title.goods_services') as string),
+			{ methodDisplay: (m) => m, locale: (get(locale) ?? DEFAULT_LOCALE) as string }
 		);
 		return t(parts.key, { values: parts.values }) as string;
 	})();
@@ -269,7 +274,7 @@ export async function publishOrderPost(
 	const sections: string[] = [
 		`![Morphit](${IMAGE_ORDER_POST})`,
 		`# ${title}`,
-		`**${t('syndicate.order_post.details') as string}**`,
+		`## ${t('syndicate.order_post.details') as string}`,
 		bullets.join('\n')
 	];
 	if (termsText.length > 0) {

@@ -53,10 +53,23 @@ const REPO_ROOT = join(__dirname, '..', '..', '..');
 // is public-facing marketing and must use "Forgejo" cleanly,
 // even when describing past fixes.  If a "Gitea" mention
 // appears there, it's a real bug to fix.
+//
+// v1.9.6 (Ken) — gitea.com is now a legitimate THIRD-PARTY release
+// MIRROR (like GitHub / GitLab / Codeberg).  Naming that mirror is
+// NOT a policy violation — the policy is about never mis-naming OUR
+// host (git.agorise.net = Forgejo).  Two allowances encode this:
+//   1. Any line containing `gitea.com` (the mirror URL) is allowed —
+//      a "name: 'Gitea'" applied to our Forgejo host would NOT carry
+//      the mirror domain, so it is still caught.
+//   2. `apps/web/src/lib/mirrorLogos.ts` is allow-listed: it is pure
+//      brand-glyph DATA keyed by mirror id, so its `gitea:` map key +
+//      the glyph comments are the Gitea *mirror's* mark, never a claim
+//      about our host (the Forgejo glyph there is keyed `forgejo:`).
 const ALLOW_LIST: ReadonlySet<string> = new Set([
 	'scripts/run-smokes.sh',
 	'TARBALL.md',
-	'docs/REVISIT-LIST.md'
+	'docs/REVISIT-LIST.md',
+	'apps/web/src/lib/mirrorLogos.ts'
 ]);
 
 const SCAN_EXTENSIONS = new Set([
@@ -133,6 +146,10 @@ function walk(dir: string, hits: Hit[]): void {
 			for (let i = 0; i < lines.length; i++) {
 				const line = lines[i]!;
 				if (/gitea/i.test(line)) {
+					// v1.9.6 — the gitea.com release mirror is legitimate; allow any line
+					// carrying its domain. A "Gitea" mis-applied to OUR Forgejo host
+					// (git.agorise.net) would not carry the mirror domain — still caught.
+					if (/gitea\.com/i.test(line)) continue;
 					hits.push({
 						file: rel,
 						line: i + 1,
@@ -157,11 +174,12 @@ const scenarios = [
 		ok: hits.length === 0
 	},
 	{
-		name: 'allow-list contains the documented self-references and meta-docs',
-		ok: ALLOW_LIST.size === 3 &&
+		name: 'allow-list contains the documented self-references, meta-docs, and mirror-glyph data',
+		ok: ALLOW_LIST.size === 4 &&
 			ALLOW_LIST.has('scripts/run-smokes.sh') &&
 			ALLOW_LIST.has('TARBALL.md') &&
-			ALLOW_LIST.has('docs/REVISIT-LIST.md')
+			ALLOW_LIST.has('docs/REVISIT-LIST.md') &&
+			ALLOW_LIST.has('apps/web/src/lib/mirrorLogos.ts')
 	},
 	{
 		name: 'this smoke file scans the right extensions',

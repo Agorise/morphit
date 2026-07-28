@@ -210,7 +210,7 @@
 		// v1.9.0 (Ken) — a barter order with an inline title reads "…of bananas";
 		// fall back to the generic "goods/services" label when none was set.
 		const goodsLabel = o.specific_barter_title || ($_('order_title.goods_services') as string);
-		const tp = orderTitleParts(o, formatAmount, goodsLabel);
+		const tp = orderTitleParts(o, formatAmount, goodsLabel, { locale: currentLang });
 		return $_(tp.key, { values: tp.values }) as string;
 	}
 </script>

@@ -1417,10 +1417,12 @@
 				fiat_currency: orderRecord.fiat_currency,
 				amount_min: orderRecord.amount_min,
 				amount_max: orderRecord.amount_max,
-				accepted_assets: orderRecord.accepted_assets
+				accepted_assets: orderRecord.accepted_assets,
+				payment_methods: orderRecord.payment_methods
 			},
 			undefined,
-			orderRecord.specific_barter_title || ($_('order_title.goods_services') as string)
+			orderRecord.specific_barter_title || ($_('order_title.goods_services') as string),
+			{ locale: currentLang }
 		);
 		return $_(parts.key, { values: parts.values }) as string;
 	});

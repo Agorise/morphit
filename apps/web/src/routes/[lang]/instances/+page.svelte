@@ -400,11 +400,11 @@
 						<div class="flex flex-col gap-3">
 							<div class="flex items-start justify-between gap-3">
 								<div>
-									<div class="flex items-center gap-2">
+									<div class="flex flex-wrap items-center gap-x-2 gap-y-1">
 										{#if safeOrigin}
 											<a
 												href={safeOrigin}
-												class="font-display text-xl font-bold text-morphit-emerald hover:underline"
+												class="font-display text-xl font-bold leading-none text-morphit-emerald hover:underline"
 												rel="noopener"
 											>
 												{effectiveName(inst)}
@@ -415,7 +415,7 @@
 											     clickable link.  This indicates a malformed
 											     federation entry; an operator monitoring will
 											     see it and investigate. -->
-											<span class="font-display text-xl font-bold text-ink-700 dark:text-ink-200">
+											<span class="font-display text-xl font-bold leading-none text-ink-700 dark:text-ink-200">
 												{effectiveName(inst)}
 											</span>
 										{/if}

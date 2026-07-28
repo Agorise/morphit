@@ -168,10 +168,10 @@ const LOCS = SUPPORTED_LOCALES.map((l) => l.code);
 		for (const k of NOVALUE) {
 			const v = ot[k];
 			// t.txt #5 — the value-free barter title carries the goods {asset} + the
-			// accepted {cryptos}: "I want to sell {asset} for {cryptos}".
-			if (typeof v !== 'string' || !v.includes('{asset}') || !v.includes('{cryptos}')) {
+			// accepted {settlement}: "I'm selling {asset} for {settlement}" (v1.9.5).
+			if (typeof v !== 'string' || !v.includes('{asset}') || !v.includes('{settlement}')) {
 				novalueOk = false;
-				bad(`${loc}.order_title.${k} has {asset}+{cryptos} slots`, JSON.stringify(v));
+				bad(`${loc}.order_title.${k} has {asset}+{settlement} slots`, JSON.stringify(v));
 			}
 		}
 		for (const k of RETIRED) {
@@ -181,7 +181,7 @@ const LOCS = SUPPORTED_LOCALES.map((l) => l.code);
 			}
 		}
 	}
-	if (novalueOk) ok('all 10: order_title.{buy,sell}_barter_novalue carry {asset}+{cryptos}');
+	if (novalueOk) ok('all 10: order_title.{buy,sell}_barter_novalue carry {asset}+{settlement}');
 	if (placeholderOk) ok('order_title.goods_services present in all 10 (input placeholder)');
 	else bad('order_title.goods_services present in all 10');
 	if (retiredGone) ok('all 10: retired barter_sentence_* keys removed');

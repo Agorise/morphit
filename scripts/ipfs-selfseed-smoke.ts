@@ -104,7 +104,8 @@ const guard = stripHash(read('scripts/verify-cid-public.sh'));
 		['stages a stable morphit-latest.tar.gz', /morphit-latest\.tar\.gz/.test(stager)],
 		['writes metadata.json with version + sha256', /"version":/.test(stager) && /"sha256":/.test(stager)],
 		['metadata is DETERMINISTIC (no released_utc timestamp)', !/released_utc/.test(stager)],
-		['self-contained dir — no notes/asc fetch-dependency (v1.9.3 CID-divergence guard)', !/RELEASE-NOTES/.test(stager) && !/\.asc/.test(stager)]
+		['notes come from the tarball via tar -O, not an external fetch (no curl of notes/.asc — v1.9.3 CID-divergence guard)', !/curl[^\n]*RELEASE-NOTES/i.test(stager) && !/curl[^\n]*\.asc/i.test(stager) && /tar -xzf[^\n]*-O/.test(stager)],
+		['discoverable dir — README.md + keyword-tagged metadata.json (v1.9.5)', /README\.md/.test(stager) && /"keywords":/.test(stager)]
 	];
 	for (const [n, okp] of checks) okp ? ok(`stager: ${n}`) : bad(`stager: ${n}`);
 }

@@ -45,6 +45,10 @@ export const MIRROR_LOGO_PATHS: Record<string, string> = {
 	ipfs: 'M12 0L1.608 6v12L12 24l10.392-6V6zm-1.073 1.445h.001a1.8 1.8 0 002.138 0l7.534 4.35a1.794 1.794 0 000 .403l-7.535 4.35a1.8 1.8 0 00-2.137 0l-7.536-4.35a1.795 1.795 0 000-.402zM21.324 7.4c.109.08.226.147.349.201v8.7a1.8 1.8 0 00-1.069 1.852l-7.535 4.35a1.8 1.8 0 00-.349-.2l-.009-8.653a1.8 1.8 0 001.07-1.851zm-18.648.048l7.535 4.35a1.8 1.8 0 001.069 1.852v8.7c-.124.054-.24.122-.349.202l-7.535-4.35a1.8 1.8 0 00-1.069-1.852v-8.7c.124-.054.24-.122.35-.202z'
 };
 
+// v1.9.6 (Ken) — the IPNS "always latest" card shares the IPFS cube mark (same
+// ecosystem). Assigned here rather than duplicating the long path in the literal.
+MIRROR_LOGO_PATHS.ipns = MIRROR_LOGO_PATHS.ipfs ?? '';
+
 /**
  * Per-mirror viewBox override for glyphs whose native art isn't the
  * simple-icons 24×24 box. The download page reads this and falls back
@@ -56,4 +60,26 @@ export const MIRROR_LOGO_PATHS: Record<string, string> = {
  * remaining logo is a simple-icons 24×24 glyph. Kept as an exported map
  * (rather than deleted) so a future non-square logo has an obvious home.
  */
-export const MIRROR_LOGO_VIEWBOX: Record<string, string> = {};
+export const MIRROR_LOGO_VIEWBOX: Record<string, string> = {
+	// v1.9.6 (Ken) — Gitea + Framagit ship as their real multi-element brand art
+	// (see MIRROR_LOGO_INNER), so they carry their native viewBoxes.
+	gitea: '0 0 640 640',
+	framagit: '0 0 14.29 14.29'
+};
+
+/**
+ * v1.9.6 (Ken) — Multi-element brand marks that can't reduce to one monochrome path.
+ * Gitea (official green teacup) and Framagit (Framasoft's dot-cascade + mascot) were
+ * supplied as real brand SVGs; their FILLS are stripped here so every shape inherits
+ * the download page's fill="currentColor" — monochrome + legible in both light and
+ * dark mode, exactly like the single-path glyphs above, while preserving the real logo
+ * geometry. The download page renders this inner markup (via {@html}) when a mirror id
+ * has an entry here, else falls back to <path d={MIRROR_LOGO_PATHS[id]}/>. Content is
+ * STATIC (hard-coded here), never user input.
+ */
+export const MIRROR_LOGO_INNER: Record<string, string> = {
+	gitea:
+		'<path d="m395.9 484.2-126.9-61c-12.5-6-17.9-21.2-11.8-33.8l61-126.9c6-12.5 21.2-17.9 33.8-11.8 17.2 8.3 27.1 13 27.1 13l-.1-109.2 16.7-.1.1 117.1s57.4 24.2 83.1 40.1c3.7 2.3 10.2 6.8 12.9 14.4 2.1 6.1 2 13.1-1 19.3l-61 126.9c-6.2 12.7-21.4 18.1-33.9 12"/><path d="M622.7 149.8c-4.1-4.1-9.6-4-9.6-4s-117.2 6.6-177.9 8c-13.3.3-26.5.6-39.6.7v117.2c-5.5-2.6-11.1-5.3-16.6-7.9 0-36.4-.1-109.2-.1-109.2-29 .4-89.2-2.2-89.2-2.2s-141.4-7.1-156.8-8.5c-9.8-.6-22.5-2.1-39 1.5-8.7 1.8-33.5 7.4-53.8 26.9C-4.9 212.4 6.6 276.2 8 285.8c1.7 11.7 6.9 44.2 31.7 72.5 45.8 56.1 144.4 54.8 144.4 54.8s12.1 28.9 30.6 55.5c25 33.1 50.7 58.9 75.7 62 63 0 188.9-.1 188.9-.1s12 .1 28.3-10.3c14-8.5 26.5-23.4 26.5-23.4S547 483 565 451.5c5.5-9.7 10.1-19.1 14.1-28 0 0 55.2-117.1 55.2-231.1-1.1-34.5-9.6-40.6-11.6-42.6M125.6 353.9c-25.9-8.5-36.9-18.7-36.9-18.7S69.6 321.8 60 295.4c-16.5-44.2-1.4-71.2-1.4-71.2s8.4-22.5 38.5-30c13.8-3.7 31-3.1 31-3.1s7.1 59.4 15.7 94.2c7.2 29.2 24.8 77.7 24.8 77.7s-26.1-3.1-43-9.1m300.3 107.6s-6.1 14.5-19.6 15.4c-5.8.4-10.3-1.2-10.3-1.2s-.3-.1-5.3-2.1l-112.9-55s-10.9-5.7-12.8-15.6c-2.2-8.1 2.7-18.1 2.7-18.1L322 273s4.8-9.7 12.2-13c.6-.3 2.3-1 4.5-1.5 8.1-2.1 18 2.8 18 2.8L467.4 315s12.6 5.7 15.3 16.2c1.9 7.4-.5 14-1.8 17.2-6.3 15.4-55 113.1-55 113.1"/><path d="M326.8 380.1c-8.2.1-15.4 5.8-17.3 13.8s2 16.3 9.1 20c7.7 4 17.5 1.8 22.7-5.4 5.1-7.1 4.3-16.9-1.8-23.1l24-49.1c1.5.1 3.7.2 6.2-.5 4.1-.9 7.1-3.6 7.1-3.6 4.2 1.8 8.6 3.8 13.2 6.1 4.8 2.4 9.3 4.9 13.4 7.3.9.5 1.8 1.1 2.8 1.9 1.6 1.3 3.4 3.1 4.7 5.5 1.9 5.5-1.9 14.9-1.9 14.9-2.3 7.6-18.4 40.6-18.4 40.6-8.1-.2-15.3 5-17.7 12.5-2.6 8.1 1.1 17.3 8.9 21.3s17.4 1.7 22.5-5.3c5-6.8 4.6-16.3-1.1-22.6 1.9-3.7 3.7-7.4 5.6-11.3 5-10.4 13.5-30.4 13.5-30.4.9-1.7 5.7-10.3 2.7-21.3-2.5-11.4-12.6-16.7-12.6-16.7-12.2-7.9-29.2-15.2-29.2-15.2s0-4.1-1.1-7.1c-1.1-3.1-2.8-5.1-3.9-6.3 4.7-9.7 9.4-19.3 14.1-29-4.1-2-8.1-4-12.2-6.1-4.8 9.8-9.7 19.7-14.5 29.5-6.7-.1-12.9 3.5-16.1 9.4-3.4 6.3-2.7 14.1 1.9 19.8z"/>',
+	framagit:
+		'<g transform="matrix(.02569 0 0 .02569 -.25 -.08)"><circle cx="74.91" cy="180.35" r="55"/><circle cx="137.6" cy="317.44" r="42.5"/><circle cx="189.82" cy="434.27" r="31"/></g><g transform="matrix(.02569 0 0 .02569 -.25 -.08)"><circle cx="515.92" cy="412.86" r="26"/><circle cx="499.71" cy="484.31" r="21"/></g><path d="M12.24 3.93c-.15.05-.64-.02-.64-.02.14.09.23.33.22.5-.48-.06-.67-.22-1.11-.45 0 0 .3.36.6.57.54.41 1.03.9 1.33 1.37.15.23.19.26.2.16a3.3 3.3 0 00-.52-1.87c-.06-.09-.07-.19-.08-.26z"/><path d="M.68.2C.53.2.45.33.56.43 5.51 2.78 4.78 5 5.42 7.55c.17.69 1.32 6.06 7.37 6.58.23.02.3-.25.06-.31-4.94-1.32-6.13-9.95-2.68-10.27.48-.04.63.16 1 .28.36.12.93.16 1.1.13.32-.6-.25-1.28-.73-1.78.52-.34 2.2-.71 2.4-.8.13-.05.07-.25-.04-.27-.77.05-2.6.2-3.43.52-1.45-.88-3.34-.2-4.3 1.3C5.19 1.5 3.81 1.08.67.2zM8.8 1.54c.74 0 .72.31-.24.64a3.76 3.76 0 00-2.38 2.2c-.11-.17.43-2.56 2.62-2.84z"/>'
+};
