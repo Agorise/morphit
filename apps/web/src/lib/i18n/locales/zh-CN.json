@@ -945,7 +945,8 @@
 		"mirror_primary": "主代码库",
 		"mirror_open": "打开代码库",
 		"mirror_pending": "即将上线",
-		"why_mirrors": "为什么有 {count} 个镜像？"
+		"why_mirrors": "为什么有 {count} 个镜像？",
+		"ipns_note": "IPNS 链接以点对点方式解析最新版本，无需 DNS、也无需第三方——它需要支持 IPFS 的浏览器（如 Brave）或本地 IPFS 节点。在其他任何浏览器中，IPFS 链接都能正常使用。你也可以将此永久地址复制到自己的节点中："
 	},
 	"edit_order": {
 		"heading": "编辑订单",
@@ -3252,16 +3253,6 @@
 			"tier_20": "{amount} — 接近你的首个 10 BP 忠诚里程碑，可获被动收入",
 			"tier_100": "{amount} — 适合活跃交易者、DarkFi 高级用户，并带来更多被动收入"
 		},
-		"summary": {
-			"sentence_buy": "我想{price}购买{amount}，并使用 {methods} 付款。",
-			"sentence_sell": "我想{price}出售{amount}，并接受 {methods}。",
-			"amount_up_to": "价值最多 {max} {fiat} 的 {asset}",
-			"amount_min_max": "价值 {min} 至 {max} {fiat} 的 {asset}",
-			"amount_min_plus": "价值 {min} {fiat} 或以上的 {asset}",
-			"amount_any": "任意数量的 {asset}",
-			"price_market": "以市场价格",
-			"price_fixed": "以 {price} {fiat}/{asset} 的固定价格"
-		},
 		"terms_md_guide": {
 			"tooltip_title": "Markdown 指南",
 			"tooltip_body": "使用基本格式让你的订单更美观！",
@@ -4562,7 +4553,7 @@
 		"order_post": {
 			"title_buy": "{subject}。想交易吗？",
 			"title_sell": "{subject}。想交易吗？",
-			"details": "详情",
+			"details": "详情：",
 			"i_will_accept": "我将接受",
 			"terms_heading": "条款",
 			"tagline": "Morphit 是全世界最注重隐私、最安全、最易用的加密货币、法币及更多资产的交易之地。",
@@ -4649,19 +4640,19 @@
 		"cta": "完成设置"
 	},
 	"order_title": {
-		"buy_min": "我想买至少 {amount} {fiat} 的 {asset}",
-		"sell_min": "我想卖至少 {amount} {fiat} 的 {asset}",
-		"buy_max": "我想买最多 {amount} {fiat} 的 {asset}",
-		"sell_max": "我想卖最多 {amount} {fiat} 的 {asset}",
-		"buy_range": "我想买 {min}–{max} {fiat} 的 {asset}",
-		"sell_range": "我想卖 {min}–{max} {fiat} 的 {asset}",
-		"buy_any": "我想用 {fiat} 买任意数量的 {asset}",
-		"sell_any": "我想卖任意数量的 {asset} 换 {fiat}",
+		"buy_min": "我用 {settlement} 买至少 {amount} {fiat} 的 {asset}",
+		"sell_min": "我卖至少 {amount} {fiat} 的 {asset} 换 {settlement}",
+		"buy_max": "我用 {settlement} 买最多 {amount} {fiat} 的 {asset}",
+		"sell_max": "我卖最多 {amount} {fiat} 的 {asset} 换 {settlement}",
+		"buy_range": "我用 {settlement} 买 {min}–{max} {fiat} 的 {asset}",
+		"sell_range": "我卖 {min}–{max} {fiat} 的 {asset} 换 {settlement}",
+		"buy_any": "我用 {settlement} 买任意数量的 {asset}",
+		"sell_any": "我卖任意数量的 {asset} 换 {settlement}",
 		"goods_services": "商品/服务",
-		"buy_exact": "我想买正好 {amount} {fiat} 的 {asset}",
-		"sell_exact": "我想卖正好 {amount} {fiat} 的 {asset}",
-		"buy_barter_novalue": "我想用 {cryptos} 买 {asset}",
-		"sell_barter_novalue": "我想卖 {asset} 换 {cryptos}"
+		"buy_exact": "我用 {settlement} 买正好 {amount} {fiat} 的 {asset}",
+		"sell_exact": "我卖正好 {amount} {fiat} 的 {asset} 换 {settlement}",
+		"buy_barter_novalue": "我用 {settlement} 买 {asset}",
+		"sell_barter_novalue": "我卖 {asset} 换 {settlement}"
 	},
 	"stats": {
 		"page_title": "网络统计",

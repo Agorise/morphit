@@ -945,7 +945,8 @@
 		"mirror_primary": "مخزن اصلی",
 		"mirror_open": "باز کردن مخزن",
 		"mirror_pending": "به‌زودی",
-		"why_mirrors": "چرا {count} آینه؟"
+		"why_mirrors": "چرا {count} آینه؟",
+		"ipns_note": "پیوند IPNS آخرین نسخه را به‌صورت همتا به همتا و بدون DNS و بدون واسطهٔ ثالث پیدا می‌کند — به مرورگری با پشتیبانی از IPFS (مانند Brave) یا یک گرهٔ محلی IPFS نیاز دارد. در هر مرورگر دیگری، پیوند IPFS همه‌جا کار می‌کند. می‌توانید نشانی دائمی را نیز در گرهٔ خود کپی کنید:"
 	},
 	"edit_order": {
 		"heading": "ویرایش سفارش",
@@ -3252,16 +3253,6 @@
 			"tier_20": "{amount} — نزدیک به نخستین نقطهٔ عطف وفاداری ۱۰ BP برای درآمد غیرفعال",
 			"tier_100": "{amount} — برای معامله‌گران فعال، کاربران حرفه‌ای DarkFi و درآمد غیرفعال بیشتر"
 		},
-		"summary": {
-			"sentence_buy": "می‌خواهم {amount} را {price} بخرم و با {methods} پرداخت کنم.",
-			"sentence_sell": "می‌خواهم {amount} را {price} بفروشم و {methods} را بپذیرم.",
-			"amount_up_to": "تا {max} {fiat} از {asset}",
-			"amount_min_max": "از {min} تا {max} {fiat} از {asset}",
-			"amount_min_plus": "{min} {fiat} یا بیشتر از {asset}",
-			"amount_any": "هر مقدار از {asset}",
-			"price_market": "به قیمت بازار",
-			"price_fixed": "به قیمت ثابت {price} {fiat} برای هر {asset}"
-		},
 		"terms_md_guide": {
 			"tooltip_title": "راهنمای Markdown",
 			"tooltip_body": "از قالب‌بندی ساده استفاده کنید تا سفارش شما زیباتر به نظر برسد!",
@@ -4562,7 +4553,7 @@
 		"order_post": {
 			"title_buy": "{subject}. مایل به معامله‌اید؟",
 			"title_sell": "{subject}. مایل به معامله‌اید؟",
-			"details": "جزئیات",
+			"details": "جزئیات:",
 			"i_will_accept": "می‌پذیرم",
 			"terms_heading": "شرایط",
 			"tagline": "Morphit خصوصی‌ترین، امن‌ترین و کاربرپسندترین مکان در جهان برای معامله‌ی کریپتو، ارز فیات و بیشتر است.",
@@ -4649,19 +4640,19 @@
 		"cta": "تکمیل راه‌اندازی"
 	},
 	"order_title": {
-		"buy_min": "می‌خواهم دست‌کم {amount} {fiat} از {asset} بخرم",
-		"sell_min": "می‌خواهم دست‌کم {amount} {fiat} از {asset} بفروشم",
-		"buy_max": "می‌خواهم {asset} به ارزش حداکثر {amount} {fiat} بخرم",
-		"sell_max": "می‌خواهم {asset} به ارزش حداکثر {amount} {fiat} بفروشم",
-		"buy_range": "می‌خواهم {asset} به ارزش {min} تا {max} {fiat} بخرم",
-		"sell_range": "می‌خواهم {asset} به ارزش {min} تا {max} {fiat} بفروشم",
-		"buy_any": "می‌خواهم هر مقدار {asset} با {fiat} بخرم",
-		"sell_any": "می‌خواهم هر مقدار {asset} در برابر {fiat} بفروشم",
+		"buy_min": "دست‌کم {amount} {fiat} از {asset} را با {settlement} می‌خرم",
+		"sell_min": "دست‌کم {amount} {fiat} از {asset} را در برابر {settlement} می‌فروشم",
+		"buy_max": "{asset} به ارزش حداکثر {amount} {fiat} را با {settlement} می‌خرم",
+		"sell_max": "{asset} به ارزش حداکثر {amount} {fiat} را در برابر {settlement} می‌فروشم",
+		"buy_range": "{asset} به ارزش {min} تا {max} {fiat} را با {settlement} می‌خرم",
+		"sell_range": "{asset} به ارزش {min} تا {max} {fiat} را در برابر {settlement} می‌فروشم",
+		"buy_any": "هر مقدار {asset} را با {settlement} می‌خرم",
+		"sell_any": "هر مقدار {asset} را در برابر {settlement} می‌فروشم",
 		"goods_services": "کالا/خدمات",
-		"buy_exact": "می‌خواهم {asset} به ارزش دقیقاً {amount} {fiat} بخرم",
-		"sell_exact": "می‌خواهم {asset} به ارزش دقیقاً {amount} {fiat} بفروشم",
-		"buy_barter_novalue": "می‌خواهم {asset} را در برابر {cryptos} بخرم",
-		"sell_barter_novalue": "می‌خواهم {asset} را در برابر {cryptos} بفروشم"
+		"buy_exact": "{asset} به ارزش دقیقاً {amount} {fiat} را با {settlement} می‌خرم",
+		"sell_exact": "{asset} به ارزش دقیقاً {amount} {fiat} را در برابر {settlement} می‌فروشم",
+		"buy_barter_novalue": "{asset} را در برابر {settlement} می‌خرم",
+		"sell_barter_novalue": "{asset} را در برابر {settlement} می‌فروشم"
 	},
 	"stats": {
 		"page_title": "آمار شبکه",

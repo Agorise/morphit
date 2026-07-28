@@ -945,7 +945,8 @@
 		"mirror_primary": "Primary repository",
 		"mirror_open": "Open repository",
 		"mirror_pending": "Coming soon",
-		"why_mirrors": "Why {count} mirrors?"
+		"why_mirrors": "Why {count} mirrors?",
+		"ipns_note": "The IPNS link resolves the latest release peer-to-peer, with no DNS and no third party — it needs an IPFS-capable browser (like Brave) or a local IPFS node. In any other browser, the IPFS link works everywhere. You can also copy the permanent address into your own node:"
 	},
 	"edit_order": {
 		"heading": "Edit your order",
@@ -3252,16 +3253,6 @@
 			"tier_20": "{amount} — near your first 10 BP loyalty milestone for passive income",
 			"tier_100": "{amount} — for active traders, DarkFi power users and increased passive income"
 		},
-		"summary": {
-			"sentence_buy": "I want to buy {amount} {price}, and pay with {methods}.",
-			"sentence_sell": "I want to sell {amount} {price}, and accept {methods}.",
-			"amount_up_to": "up to {max} {fiat} worth of {asset}",
-			"amount_min_max": "{min} to {max} {fiat} worth of {asset}",
-			"amount_min_plus": "{min} {fiat} or more worth of {asset}",
-			"amount_any": "any amount of {asset}",
-			"price_market": "at market price",
-			"price_fixed": "at a fixed price of {price} {fiat} per {asset}"
-		},
 		"terms_md_guide": {
 			"tooltip_title": "Markdown Guide",
 			"tooltip_body": "Use basic formatting to make your order look nice!",
@@ -4562,7 +4553,7 @@
 		"order_post": {
 			"title_buy": "{subject}. Want to trade?",
 			"title_sell": "{subject}. Want to trade?",
-			"details": "DETAILS",
+			"details": "Details:",
 			"i_will_accept": "I will accept",
 			"terms_heading": "Terms",
 			"tagline": "Morphit is the most private, secure, user-friendly place in the world to trade cryptos, fiats and more.",
@@ -4649,19 +4640,19 @@
 		"cta": "Finish setup"
 	},
 	"order_title": {
-		"buy_min": "I want to buy at least {amount} {fiat} of {asset}",
-		"sell_min": "I want to sell at least {amount} {fiat} of {asset}",
-		"buy_max": "I want to buy up to {amount} {fiat} of {asset}",
-		"sell_max": "I want to sell up to {amount} {fiat} of {asset}",
-		"buy_range": "I want to buy {min}–{max} {fiat} of {asset}",
-		"sell_range": "I want to sell {min}–{max} {fiat} of {asset}",
-		"buy_any": "I want to buy any amount of {asset} with {fiat}",
-		"sell_any": "I want to sell any amount of {asset} for {fiat}",
+		"buy_min": "I'm buying at least {amount} {fiat} of {asset} with {settlement}",
+		"sell_min": "I'm selling at least {amount} {fiat} of {asset} for {settlement}",
+		"buy_max": "I'm buying up to {amount} {fiat} of {asset} with {settlement}",
+		"sell_max": "I'm selling up to {amount} {fiat} of {asset} for {settlement}",
+		"buy_range": "I'm buying {min}–{max} {fiat} of {asset} with {settlement}",
+		"sell_range": "I'm selling {min}–{max} {fiat} of {asset} for {settlement}",
+		"buy_any": "I'm buying any amount of {asset} with {settlement}",
+		"sell_any": "I'm selling any amount of {asset} for {settlement}",
 		"goods_services": "goods/services",
-		"buy_exact": "I want to buy exactly {amount} {fiat} of {asset}",
-		"sell_exact": "I want to sell exactly {amount} {fiat} of {asset}",
-		"buy_barter_novalue": "I want to buy {asset} for {cryptos}",
-		"sell_barter_novalue": "I want to sell {asset} for {cryptos}"
+		"buy_exact": "I'm buying exactly {amount} {fiat} of {asset} with {settlement}",
+		"sell_exact": "I'm selling exactly {amount} {fiat} of {asset} for {settlement}",
+		"buy_barter_novalue": "I'm buying {asset} for {settlement}",
+		"sell_barter_novalue": "I'm selling {asset} for {settlement}"
 	},
 	"stats": {
 		"page_title": "Network statistics",

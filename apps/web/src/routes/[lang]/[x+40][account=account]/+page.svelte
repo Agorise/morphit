@@ -615,7 +615,7 @@
 	 *  old per-card formatting that mislabelled the fiat trade-size
 	 *  band with the asset ticker. */
 	function cardTitle(o: OrderRecord): string {
-		const tp = orderTitleParts(o, formatAmount);
+		const tp = orderTitleParts(o, formatAmount, undefined, { locale: currentLang });
 		return $_(tp.key, { values: tp.values }) as string;
 	}
 

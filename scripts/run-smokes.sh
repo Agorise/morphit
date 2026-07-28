@@ -582,6 +582,7 @@ SMOKES=(
 	"apps/web:order-blog-post-mirror-smoke"
 	"apps/web:barter-specific-title-smoke"
 	".:ipns-release-wiring-smoke"
+	".:ipns-dht-rebroadcast-smoke"
 	".:ipfs-release-hosting-smoke"
 	".:ipfs-selfseed-smoke"
 )

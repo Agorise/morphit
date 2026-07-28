@@ -370,24 +370,32 @@ jobs:
           echo "Canonical IPFS CID (seeded by the release box + anchored on-chain): $CID"
           echo "  the seed hosts THIS exact CID; instances pin it; ipns://<name> repoints to it below."
 
-      - name: Publish stable IPNS name (optional — w3name)
-        # OPTIONAL "always find the latest" pointer. If a MORPHIT_IPNS_KEY secret
-        # is set, repoint Morphit's STABLE IPNS name at THIS release's CID, so
-        # ipns://<name> (and https://dweb.link/ipns/<name>) always resolve to the
-        # newest release. The record is signed LOCALLY by scripts/ipns-publish.mjs
-        # (the w3name service never sees the key — same trust model as the WIF and
-        # the GPG signer); records live ~1 year, refreshed every release. The
-        # resulting k51… name is written to ipns-name.txt and carried into the
-        # on-chain anchor's optional `ipns_name` below. NO key → skipped; ANY
-        # failure is NON-FATAL (IPNS is additive to the immutable ipfs_cid + the
-        # git mirrors + the on-chain SHA-256). w3name is installed into a scratch
-        # dir so the monorepo's deps/lockfile stay untouched.
+      - name: Sign stable IPNS record (optional — DHT-native, sign-once/rebroadcast-only)
+        # OPTIONAL "always find the latest" pointer, resolvable on the PUBLIC DHT
+        # (v1.9.6). If a MORPHIT_IPNS_KEY secret is set, sign an IPNS record pointing
+        # Morphit's STABLE name at THIS release's CID — LOCALLY (scripts/ipns-sign.mjs;
+        # the key never leaves this process) with a 1-year lifetime. The signed record
+        # (base64) is written to ipns-record.txt and the k51… name to ipns-name.txt;
+        # both are carried into the on-chain anchor below. Every instance then reads the
+        # record (via /v1/release) and rebroadcasts it to the DHT WITHOUT the key, so
+        # ipns://<name> resolves on any gateway for as long as one instance lives — and
+        # no instance can repoint it (minting/bumping requires the key; the sequence is
+        # signed). This REPLACES the old w3name publish: w3name stored records in its
+        # own service, OFF the DHT, so public gateways never resolved them.
+        #
+        # The sequence is the build's unix timestamp: strictly monotonic across releases
+        # (newest wins on resolve) with no fragile chain read, and comfortably above any
+        # legacy w3name sequence so the DHT record supersedes anything cached. NO key →
+        # skipped; ANY failure is NON-FATAL (IPNS is additive to the immutable ipfs_cid
+        # + git mirrors + on-chain SHA-256). Deps go in a scratch dir so the monorepo's
+        # lockfile stays untouched. Broadcast (Block 5) is laptop-only; signing the IPNS
+        # record is safe in CI — the key only repoints a name, never touches funds.
         env:
           MORPHIT_IPNS_KEY: ${{ secrets.MORPHIT_IPNS_KEY }}
         run: |
           set -u
           if [ -z "${MORPHIT_IPNS_KEY:-}" ]; then
-            echo "No MORPHIT_IPNS_KEY secret — skipping IPNS publish (release proceeds without ipns_name)."
+            echo "No MORPHIT_IPNS_KEY secret — skipping IPNS sign (release proceeds without ipns_record)."
             exit 0
           fi
           if [ ! -s ipfs-cid.txt ]; then
@@ -395,20 +403,22 @@ jobs:
             exit 0
           fi
           RELEASE_CID=$(cat ipfs-cid.txt)
-          echo "Publishing IPNS name → /ipfs/${RELEASE_CID} via w3name…"
+          SEQ=$(date -u +%s)
+          echo "Signing IPNS record → /ipfs/${RELEASE_CID} (seq ${SEQ}) for DHT rebroadcast…"
           WORK=$(mktemp -d)
-          cp scripts/ipns-publish.mjs "$WORK/ipns-publish.mjs"
-          ( cd "$WORK" && npm init -y >/dev/null 2>&1 && npm i w3name >/dev/null 2>&1 ) || {
-            echo "WARNING: could not install w3name — skipping IPNS (no ipns_name)." >&2
+          cp scripts/ipns-sign.mjs "$WORK/ipns-sign.mjs"
+          ( cd "$WORK" && npm init -y >/dev/null 2>&1 && npm i ipns w3name @libp2p/peer-id >/dev/null 2>&1 ) || {
+            echo "WARNING: could not install ipns deps — skipping IPNS (no ipns_record)." >&2
             exit 0
           }
-          if RELEASE_CID="${RELEASE_CID}" node "$WORK/ipns-publish.mjs" > ipns-name.txt 2> ipns-publish.log; then
-            echo "IPNS name published: $(cat ipns-name.txt)"
-            sed 's/^/  /' ipns-publish.log >&2 || true
+          if RELEASE_CID="${RELEASE_CID}" MORPHIT_IPNS_SEQUENCE="${SEQ}" node "$WORK/ipns-sign.mjs" > ipns-sign.json 2> ipns-sign.log; then
+            sed 's/^/  /' ipns-sign.log >&2 || true
+            node -e 'const fs=require("fs");const j=JSON.parse(fs.readFileSync("ipns-sign.json","utf8"));fs.writeFileSync("ipns-name.txt",j.name);fs.writeFileSync("ipns-record.txt",j.record)'
+            echo "IPNS record signed: name=$(cat ipns-name.txt), record=$(wc -c < ipns-record.txt) b64 chars."
           else
-            echo "WARNING: IPNS publish did not complete — continuing without ipns_name." >&2
-            sed 's/^/  /' ipns-publish.log >&2 || true
-            rm -f ipns-name.txt
+            echo "WARNING: IPNS sign did not complete — continuing without ipns_record." >&2
+            sed 's/^/  /' ipns-sign.log >&2 || true
+            rm -f ipns-name.txt ipns-record.txt ipns-sign.json
           fi
 
       - name: Write distribution anchor (source_sha256 + gpg_fingerprint)
@@ -456,6 +466,14 @@ jobs:
             # latest" pointer. Absent → the block omits ipns_name (schema-optional).
             if [ -s ipns-name.txt ]; then
               echo "export MORPHIT_BUILD_IPNS_NAME=$(cat ipns-name.txt)"
+            fi
+            # Optional signed IPNS record (base64) from the sign step above (v1.9.6):
+            # the DHT-rebroadcast pointer. Sourced by ELI5 Block 4 into the payload
+            # builder's `ipns_record` and anchored on-chain, where every instance reads
+            # it (via /v1/release) and rebroadcasts it to the DHT. Absent → omitted
+            # (schema-optional), exactly as before.
+            if [ -s ipns-record.txt ]; then
+              echo "export MORPHIT_BUILD_IPNS_RECORD=$(cat ipns-record.txt)"
             fi
           } > distribution-anchor.env
           echo "── distribution-anchor.env ──"

@@ -11,7 +11,7 @@
 	 * Renders nothing on empty (first-time bidder) — just yields space to the form.
 	 */
 	import { onMount, onDestroy } from 'svelte';
-	import { _ } from 'svelte-i18n';
+	import { _, locale } from 'svelte-i18n';
 	import { getFeaturedBidHistory } from '$lib/indexer/client';
 	import type { FeaturedBidHistoryEntry } from '@morphit/indexer-client';
 	import { orderTitleParts } from '$lib/utils/orderTitle';
@@ -93,13 +93,20 @@
 		if (b.order_side === null || b.order_asset === null || b.order_fiat_currency === null) {
 			return null;
 		}
-		return orderTitleParts({
-			side: b.order_side,
-			asset: b.order_asset,
-			fiat_currency: b.order_fiat_currency,
-			amount_min: b.order_amount_min,
-			amount_max: b.order_amount_max
-		});
+		return orderTitleParts(
+			{
+				side: b.order_side,
+				asset: b.order_asset,
+				fiat_currency: b.order_fiat_currency,
+				amount_min: b.order_amount_min,
+				amount_max: b.order_amount_max,
+				accepted_assets: b.order_accepted_assets,
+				payment_methods: b.order_payment_methods
+			},
+			undefined,
+			undefined,
+			{ locale: $locale ?? undefined }
+		);
 	}
 </script>
 

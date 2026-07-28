@@ -73,6 +73,7 @@ sudo -u "$IPFS_USER" env IPFS_PATH="$IPFS_REPO" sh -c '
 # 4. Pin script + env.
 mkdir -p /usr/local/lib/morphit /etc/morphit
 install -m 0755 "$HERE/morphit-ipfs-pin.sh" /usr/local/lib/morphit/morphit-ipfs-pin.sh
+install -m 0755 "$HERE/morphit-ipns-rebroadcast.sh" /usr/local/lib/morphit/morphit-ipns-rebroadcast.sh
 cat > /etc/morphit/ipfs-pin.env <<EOF
 MORPHIT_RELEASE_URL=$RELEASE_URL
 IPFS_PATH=$IPFS_REPO
@@ -131,12 +132,46 @@ RandomizedDelaySec=90
 WantedBy=timers.target
 EOF
 
+# v1.9.6 — IPNS rebroadcast: re-announce the on-chain signed IPNS record to the
+# public DHT so ipns://<name> stays resolvable (records expire in ~48h; re-PUT every
+# ~4h). No key on this box — it only re-broadcasts what @morphit signed (read from
+# the local indexer), so it cannot repoint the name. Shares the pin env file.
+cat > /etc/systemd/system/morphit-ipns-rebroadcast.service <<EOF
+[Unit]
+Description=Rebroadcast Morphit's signed IPNS record to the public DHT
+After=ipfs.service morphit-indexer.service
+Wants=ipfs.service
+[Service]
+Type=oneshot
+User=$IPFS_USER
+Group=$IPFS_USER
+EnvironmentFile=-/etc/morphit/ipfs-pin.env
+Environment=IPFS_PATH=$IPFS_REPO
+ExecStart=/usr/local/lib/morphit/morphit-ipns-rebroadcast.sh
+SuccessExitStatus=0 1
+EOF
+
+cat > /etc/systemd/system/morphit-ipns-rebroadcast.timer <<EOF
+[Unit]
+Description=Periodically rebroadcast Morphit's IPNS record to the DHT (keeps ipns://<name> alive)
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=4h
+Persistent=true
+RandomizedDelaySec=300
+[Install]
+WantedBy=timers.target
+EOF
+
 # 6. Enable + start.
 systemctl daemon-reload
 systemctl enable --now ipfs.service
 systemctl enable --now morphit-ipfs-pin.timer
+systemctl enable --now morphit-ipns-rebroadcast.timer
 
-echo "  ✓ Kubo daemon + release-pinning timer are up."
-echo "    Check:   systemctl status ipfs morphit-ipfs-pin.timer"
-echo "    Pin now: sudo systemctl start morphit-ipfs-pin.service && journalctl -u morphit-ipfs-pin -e"
+echo "  ✓ Kubo daemon + release-pinning + IPNS-rebroadcast timers are up."
+echo "    Check:   systemctl status ipfs morphit-ipfs-pin.timer morphit-ipns-rebroadcast.timer"
+echo "    Pin now:         sudo systemctl start morphit-ipfs-pin.service && journalctl -u morphit-ipfs-pin -e"
+echo "    Rebroadcast now: sudo systemctl start morphit-ipns-rebroadcast.service && journalctl -u morphit-ipns-rebroadcast -e"
+echo "    IPNS dry-run:    sudo MORPHIT_IPNS_DRYRUN=1 /usr/local/lib/morphit/morphit-ipns-rebroadcast.sh"
 echo "    Your node will pin release $(curl -fsS --max-time 5 "$RELEASE_URL" 2>/dev/null | grep -o '\"version\"[^,]*' | head -n1 || echo '(fetch /v1/release to see)')."

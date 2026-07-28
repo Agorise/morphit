@@ -134,7 +134,7 @@ interface ToolRegistration<I extends z.ZodTypeAny> {
  *  repo version-consistency smoke (Category B) so it can't drift from the
  *  root package.json on a release bump — mirrors the relay/indexer
  *  health.ts VERSION constants. */
-const MCP_VERSION = '1.9.4';
+const MCP_VERSION = '1.9.6';
 
 const TOOLS: ToolRegistration<z.ZodTypeAny>[] = [
 	{

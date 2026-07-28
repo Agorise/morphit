@@ -613,7 +613,8 @@
 		{@const orderTitle = orderTitleParts(
 			order,
 			undefined,
-			order.specific_barter_title || ($_('order_title.goods_services') as string)
+			order.specific_barter_title || ($_('order_title.goods_services') as string),
+			{ locale: currentLang }
 		)}
 		<!-- ─── Order headline ──────────────────────────────────── -->
 		<section class="mb-6">

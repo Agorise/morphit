@@ -5471,25 +5471,36 @@ the `MORPHIT_IPNS_KEY` secret.
   anchored (the seed asserts equality).  Before broadcasting,
   `scripts/verify-cid-public.sh <cid> <version>` confirms the CID resolves on
   a public gateway — a release never anchors a CID the world can't fetch.
-- **IPNS "always latest"** — run `npm i --no-save w3name && node
-  scripts/ipns-keygen.mjs` **once** on your release laptop.  It
-  prints a PUBLIC `k51…` name and a SECRET base64 key.  Store the
-  key as the `MORPHIT_IPNS_KEY` Actions secret (never commit it —
-  same trust model as the @morphit WIF), paste the `k51…` name
-  into `apps/web/src/lib/ipns.ts` (`MORPHIT_IPNS_NAME`) so the
-  download page's IPFS card goes live, and — if you like — add a
-  DNSLink `TXT` at `_dnslink.morphit.io` = `dnslink=/ipns/<name>`
-  once, for a pretty `ipns://morphit.io`.  From then on every
-  tagged release signs a fresh IPNS record **locally**
-  (`scripts/ipns-publish.mjs`; w3name never sees the key), points
-  the name at the new CID, and anchors it on-chain as
-  `distribution.ipns_name`.  Records live ~1 year and are
-  refreshed every release, so the name never goes stale.
+- **IPNS "always latest" (DHT-native — no DNS, no third party)** — run
+  `npm i --no-save w3name ipns @libp2p/peer-id && node
+  scripts/ipns-keygen.mjs` **once** on your release laptop.  It prints a
+  PUBLIC `k51…` name and a SECRET base64 key.  Store the key as the
+  `MORPHIT_IPNS_KEY` Actions secret (never commit it — same trust model as
+  the @morphit WIF) and paste the `k51…` name into
+  `apps/web/src/lib/ipns.ts` (`MORPHIT_IPNS_NAME`).  From then on every
+  tagged release **signs** a fresh IPNS record *locally*
+  (`scripts/ipns-sign.mjs`; the key is used only to sign and stays a CI
+  secret), points the name at the new CID, and anchors the **signed
+  record** on-chain as `distribution.ipns_record` (alongside `ipns_name`).
+  Every Morphit instance then **rebroadcasts** that record to the public
+  DHT on a ~4h timer — installed by the same `morphit-ops harden` → "Set up
+  IPFS release hosting" step, so there is NO extra operator action, and the
+  instance NEVER holds the key (it only relays what @morphit signed).  So
+  `ipns://<name>` resolves over the public DHT for as long as one instance
+  is alive — no DNS, no gateway, no third party — and no instance can
+  repoint it.  Records live ~1 year and are re-signed every release, so the
+  name never goes stale.  (There is **no DNSLink**: the native `ipns://`
+  name IS the pointer.  On the download page this is the "IPNS (always
+  latest)" card — which needs an IPFS-capable browser like Brave — beside
+  an "IPFS (always latest)" gateway card that works in any browser.  w3name
+  is gone: it stored records off the DHT, so public gateways never resolved
+  them; it is now used only to parse the existing key.)
 
 The `ipfs_cid` is the immutable per-release verification anchor;
-`ipns_name` is the mutable discovery pointer.  A copy fetched via
-either is still only trusted once it passes the `source_sha256` +
-GPG checks.
+`ipns_name` + `ipns_record` are the mutable discovery pointer (the
+signed `ipns_record` is what every instance rebroadcasts to the DHT).
+A copy fetched via any of them is still only trusted once it passes
+the `source_sha256` + GPG checks.
 
 ## 27. Fees and rewards reference
 
@@ -11475,7 +11486,7 @@ vanish. With every operator pinning, the signed release is served from as
 many independent nodes as there are instances — and operators keep 90% of
 the BLURT listing fees, so hosting the release they run is the quid pro
 quo. **This is ON by default.** (The code never disappears regardless —
-it is also on seven git mirrors and anchored on-chain — but this keeps the
+it is also on nine git mirrors and anchored on-chain — but this keeps the
 *IPFS* copy alive without depending on any single provider.)
 
 ### How it works

@@ -42,15 +42,32 @@ Either way the install is the same once the machine is reachable from the intern
 
 ## 3. If you host at home (the networking bits)
 
-Skip this whole section if you went with a VPS.
+Skip this whole section if you rented a server (a VPS) — it's only for running Morphit on a computer in your house, like a spare laptop or a little Raspberry Pi.
 
-Three things to sort out, once:
+Picture it like this: your home has one front door to the internet (your router), and right now nobody outside knows how to knock on it or which room to visit. There are three one-time things to set up so they can. Take them slowly — you only ever do them once.
 
-1. **Check your internet can be reached.** Some home connections sit behind "CGNAT," which blocks incoming visitors. Ask your provider, or compare the address on [whatismyip.com](https://www.whatismyip.com) with the "WAN IP" shown in your router — if they differ, you're behind CGNAT and should use a VPS instead.
-2. **Get a free hostname.** Sign up at [duckdns.org](https://www.duckdns.org), pick a subdomain (e.g. `myinstance.duckdns.org`), and keep a small script updating it so the name always points at your home's current IP. DuckDNS gives you a ready-made update line; run it from cron every few minutes. (A normal paid domain works too — see §4.)
-3. **Forward the ports.** In your router, forward incoming **port 80** and **port 443** to your home machine's local IP. Give the machine a fixed local IP first (your router's DHCP settings) so the forwarding doesn't break on reboot.
+**1. Make sure outside visitors can reach your house at all.**
 
-Test from your phone on mobile data (not home Wi-Fi): your hostname should reach the machine on ports 80 and 443. The blow-by-blow for power-blip survival, fixed IPs and DDNS automation is in `OPERATIONS.md`.
+Some home internet plans put you behind a shared front door with lots of other homes, so a visitor can't be sent to *your* door specifically. (It has a technical name — "CGNAT" — but you don't need to remember it.) Here's a 30-second check:
+
+- On the computer at home, open [whatismyip.com](https://www.whatismyip.com) and note the number it shows.
+- Log into your router — usually by typing `192.168.0.1` or `192.168.1.1` into a web browser; your router's sticker often lists the exact address and password — and find the number it calls your "internet" or "WAN" address.
+- If those two numbers are the **same**, you're good. If they're **different**, your provider has you behind the shared door. Either phone them and ask for a "public IP address" (sometimes free, sometimes a small fee), or just rent a cheap server instead (§2), which sidesteps all of this.
+
+**2. Give your home a web address that keeps up with you.**
+
+Home internet addresses tend to change every so often, so you want a nickname that automatically follows the change. Go to [duckdns.org](https://www.duckdns.org), sign in, and pick a free name like `mymorphit.duckdns.org`. DuckDNS then gives you one line to copy onto your computer — it quietly checks in every few minutes so the nickname always points at your home, even after your address changes or the power blips. (Prefer a "real" paid web address like `mymorphit.com`? That works too — see §4. And the setup wizard later can keep a DuckDNS name updated for you automatically.)
+
+**3. Tell your router to send Morphit's visitors to the right computer.**
+
+Two small router settings, both one-time:
+
+- **Give your home computer a permanent parking spot.** In your router, find the list of connected devices (often labelled "DHCP" or "LAN") and set your Morphit computer to *always* get the same local number, like `192.168.1.50`. This stops the next step from breaking every time the computer restarts.
+- **Point website knocks at that computer.** Find your router's "port forwarding" page and add two rules that send visitors arriving at **door 80** and **door 443** (the two standard doors websites use) to that permanent number. Every router words this slightly differently — searching "port forwarding" together with your router's brand usually turns up a step-by-step with pictures.
+
+**Now test it.** Turn Wi-Fi *off* on your phone (so it uses the mobile network, like a real outside visitor would) and open your new address. If your computer answers, the front door is open and you're ready. If not, re-check the two router settings above.
+
+The fiddly extras — surviving power cuts, locking that local number in place, automating the address updates — are all covered in `OPERATIONS.md`, and the wizard and installer handle most of them for you.
 
 ---
 
@@ -86,7 +103,7 @@ ansible-vault encrypt group_vars/vault.yml
 ansible-playbook -i inventory/hosts.yml playbook.yml --ask-vault-pass
 ```
 
-When it finishes, your services are installed and running. Jump to §8 (HTTPS).
+When it finishes, **everything is installed and running** — the app and background services, HTTPS with automatic renewal, the BunkerWeb firewall, your Tor `.onion` and I2P addresses, and full server hardening. There's nothing more to switch on; skip straight to **§9 (register as an operator)**. (§8 and §11.4 below are only for the hands-on path.)
 
 ### 5b. The hands-on way (guided installer)
 
@@ -154,11 +171,13 @@ One of those questions is your **fees account** — the Blurt account your BLURT
 
 It also **remembers your answers as you go**, so if you ever get interrupted partway through, just run `npx morphit-ops init` again and it offers to pick up where you left off — re-asking only the two things it never writes to disk: your database connection and your relay account's active key.
 
-Two things the wizard does **for you, by default**: it **generates privacy-network addresses** in the background — a **Tor `.onion`** (instant) and, when **i2pd** is installed on the host, a **`.b32.i2p`** too — so your site is reachable over Tor and I2P and shows those footer pills automatically (no waiting, no vanity grinding; any address you'd already set is kept), and it **hand-holds you through server hardening** — a short run of "yes" confirmations (SSH lockdown, firewall + fail2ban, automatic updates, kernel hardening, intrusion detection). The Ansible playbook (§5a) applies all of that for you; to *serve* the generated addresses, point the `tor` role at the `tor-hidden-service/` directory and the `i2pd` role at the `i2p-tunnel/` directory the wizard wrote (see `OPERATIONS.md`).
+Two things the wizard does **for you, by default**: it **generates privacy-network addresses** in the background — a **Tor `.onion`** (instant) and, when **i2pd** is installed on the host, a **`.b32.i2p`** too — so your site is reachable over Tor and I2P and shows those footer pills automatically (no waiting, no vanity grinding; any address you'd already set is kept), and it **hand-holds you through server hardening** — a short run of "yes" confirmations (SSH lockdown, firewall + fail2ban, the BunkerWeb web-application firewall, automatic updates, kernel hardening, intrusion detection). The Ansible playbook (§5a) applies all of that for you; to *serve* the generated addresses, point the `tor` role at the `tor-hidden-service/` directory and the `i2pd` role at the `i2p-tunnel/` directory the wizard wrote (see `OPERATIONS.md`).
 
 ---
 
 ## 8. Turn on HTTPS
+
+**On the automated path (§5a) this is already done for you** — the playbook obtains a free Let's Encrypt certificate *and* installs automatic renewal, so skip straight to §9. This section is only for the hands-on path.
 
 Once your domain points at the machine and nginx is serving it, get a free Let's Encrypt certificate. The easiest way is to let `morphit-ops` print the exact command for your domain:
 
@@ -166,7 +185,7 @@ Once your domain points at the machine and nginx is serving it, get a free Let's
 npx morphit-ops ssl setup
 ```
 
-It checks the prerequisites and shows you the precise `certbot` line for *your* domain (under the hood it's `sudo certbot --nginx -d yourdomain.com -d www.yourdomain.com`). Afterwards, `npx morphit-ops ssl` tells you at a glance whether the certificate is valid, when it expires, and — the part people forget — whether automatic renewal is switched on.
+It checks the prerequisites and shows you the precise `certbot` line for *your* domain (under the hood it's `sudo certbot --nginx -d yourdomain.com -d www.yourdomain.com`), and certbot installs the renewal timer automatically. Afterwards, `npx morphit-ops ssl` tells you at a glance whether the certificate is valid, when it expires, and — the part people forget — whether automatic renewal is switched on.
 
 ---
 
@@ -250,15 +269,15 @@ add_header Permissions-Policy "camera=(self), microphone=(), geolocation=(), int
 add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://rpc.drakernoise.com https://blurtrpc.dagobert.uk https://rpc.blurt.blog https://rpc.beblurt.com https://rpc.blurt.one https://blurt-rpc.saboin.com; media-src 'none'; object-src 'none'; child-src 'none'; frame-src 'none'; worker-src 'self' blob:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'" always;
 ```
 
-### 11.4 Optional: a web application firewall (BunkerWeb)
+### 11.4 Web application firewall (BunkerWeb)
 
-For extra protection you can put Morphit behind BunkerWeb. The guided installer sets it up:
+Morphit runs behind BunkerWeb, a web-application firewall that filters hostile traffic before it ever reaches your site. **On the automated path (§5a) it's installed and switched on for you** — nothing to do. On the hands-on path, the setup wizard offers it as a plain "yes" during hardening, or you can add it on its own later:
 
 ```sh
 npx morphit-ops bunkerweb
 ```
 
-It runs as a small Docker stack on its own private network (`172.20.0.0/16`); use that range if you ever reference the WAF network in your own config.
+It runs as a small Docker stack on its own private network (`172.20.0.0/16`); use that range if you ever reference the WAF network in your own config. (Turning BunkerWeb on also means your relay should trust its proxy address — the wizard sets that up for you; `OPERATIONS.md` has the one manual key to add if you're bolting BunkerWeb onto an already-running instance.)
 
 ### 11.5 Optional: an encrypted-memory host (advanced)
 

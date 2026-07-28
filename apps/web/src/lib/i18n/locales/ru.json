@@ -945,7 +945,8 @@
 		"mirror_primary": "Основной репозиторий",
 		"mirror_open": "Открыть репозиторий",
 		"mirror_pending": "Скоро",
-		"why_mirrors": "Почему {count} зеркал?"
+		"why_mirrors": "Почему {count} зеркал?",
+		"ipns_note": "Ссылка IPNS находит последний выпуск в одноранговой сети, без DNS и без посредников — для неё нужен браузер с поддержкой IPFS (например, Brave) или локальный узел IPFS. В любом другом браузере ссылка IPFS работает везде. Вы также можете скопировать постоянный адрес в свой узел:"
 	},
 	"edit_order": {
 		"heading": "Редактировать заявку",
@@ -3252,16 +3253,6 @@
 			"tier_20": "{amount} — близко к вашему первому рубежу лояльности 10 BP для пассивного дохода",
 			"tier_100": "{amount} — для активных трейдеров, опытных пользователей DarkFi и большего пассивного дохода"
 		},
-		"summary": {
-			"sentence_buy": "Я хочу купить {amount} {price} и заплатить через {methods}.",
-			"sentence_sell": "Я хочу продать {amount} {price} и принять оплату через {methods}.",
-			"amount_up_to": "до {max} {fiat} в {asset}",
-			"amount_min_max": "от {min} до {max} {fiat} в {asset}",
-			"amount_min_plus": "{min} {fiat} или больше в {asset}",
-			"amount_any": "любое количество {asset}",
-			"price_market": "по рыночной цене",
-			"price_fixed": "по фиксированной цене {price} {fiat} за {asset}"
-		},
 		"terms_md_guide": {
 			"tooltip_title": "Руководство по Markdown",
 			"tooltip_body": "Используйте простое форматирование, чтобы ваша заявка выглядела аккуратно!",
@@ -4562,7 +4553,7 @@
 		"order_post": {
 			"title_buy": "{subject}. Хотите обменять?",
 			"title_sell": "{subject}. Хотите обменять?",
-			"details": "ПОДРОБНОСТИ",
+			"details": "Подробности:",
 			"i_will_accept": "Я приму",
 			"terms_heading": "Условия",
 			"tagline": "Morphit — самое приватное, безопасное и удобное место в мире для обмена криптовалютами, фиатом и не только.",
@@ -4649,19 +4640,19 @@
 		"cta": "Завершить настройку"
 	},
 	"order_title": {
-		"buy_min": "Хочу купить минимум на {amount} {fiat} {asset}",
-		"sell_min": "Хочу продать минимум на {amount} {fiat} {asset}",
-		"buy_max": "Хочу купить {asset} на сумму до {amount} {fiat}",
-		"sell_max": "Хочу продать {asset} на сумму до {amount} {fiat}",
-		"buy_range": "Хочу купить {asset} на {min}–{max} {fiat}",
-		"sell_range": "Хочу продать {asset} на {min}–{max} {fiat}",
-		"buy_any": "Хочу купить любое количество {asset} за {fiat}",
-		"sell_any": "Хочу продать любое количество {asset} за {fiat}",
+		"buy_min": "Покупаю минимум на {amount} {fiat} {asset} за {settlement}",
+		"sell_min": "Продаю минимум на {amount} {fiat} {asset} за {settlement}",
+		"buy_max": "Покупаю {asset} на сумму до {amount} {fiat} за {settlement}",
+		"sell_max": "Продаю {asset} на сумму до {amount} {fiat} за {settlement}",
+		"buy_range": "Покупаю {asset} на {min}–{max} {fiat} за {settlement}",
+		"sell_range": "Продаю {asset} на {min}–{max} {fiat} за {settlement}",
+		"buy_any": "Покупаю любое количество {asset} за {settlement}",
+		"sell_any": "Продаю любое количество {asset} за {settlement}",
 		"goods_services": "товары/услуги",
-		"buy_exact": "Хочу купить {asset} ровно на {amount} {fiat}",
-		"sell_exact": "Хочу продать {asset} ровно на {amount} {fiat}",
-		"buy_barter_novalue": "Хочу купить {asset} за {cryptos}",
-		"sell_barter_novalue": "Хочу продать {asset} за {cryptos}"
+		"buy_exact": "Покупаю {asset} ровно на {amount} {fiat} за {settlement}",
+		"sell_exact": "Продаю {asset} ровно на {amount} {fiat} за {settlement}",
+		"buy_barter_novalue": "Покупаю {asset} за {settlement}",
+		"sell_barter_novalue": "Продаю {asset} за {settlement}"
 	},
 	"stats": {
 		"page_title": "Статистика сети",
