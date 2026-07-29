@@ -300,6 +300,7 @@ SMOKES=(
 	"apps/web:change-password-layered-rewrap-smoke"
 	"apps/web:yubikey-enroll-unlock-smoke"
 	"apps/web:yubikey-enroll-verify-smoke"
+	"apps/web:yubikey-transport-mock-smoke"
 	"apps/web:totp-2fa-enroll-verify-smoke"
 	"apps/web:seed-normalize-smoke"
 	"apps/web:key-backup-derivation-smoke"

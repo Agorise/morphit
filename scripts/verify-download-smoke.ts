@@ -76,7 +76,7 @@ check(
 // ─── compareRelease ─────────────────────────────────────────────────
 const match = compareRelease(GOOD_SHA, fullPayload, null);
 check('compareRelease → match when the hash equals the anchor', match.status === 'match');
-check('  …and it surfaces the fingerprint for gpg --verify', match.dist?.gpg_fingerprint === GOOD_FPR);
+check('  …and it surfaces the fingerprint for git verify-tag (tarball unsigned by default)', match.dist?.gpg_fingerprint === GOOD_FPR);
 
 const mismatch = compareRelease('b'.repeat(64), fullPayload, null);
 check('compareRelease → mismatch when the hash differs', mismatch.status === 'mismatch');

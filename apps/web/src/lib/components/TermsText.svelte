@@ -106,13 +106,20 @@
 			<p class="mt-2 text-sm font-bold first:mt-0">{@render inline(block.runs)}</p>
 		{/if}
 	{:else if block.type === 'hr'}
-		<hr class="my-3 border-ink-200 dark:border-ink-700" />
+		<!-- cp595 (t.txt) — Ken: use the SAME green as the order-terms blockquote
+		     (border-morphit-emerald/40) on the horizontal rule and the list
+		     markers below, so a user's markdown `---`, `- ` and `1.` all render
+		     in the brand emerald they like. `/40` matches the blockquote border
+		     exactly; #00DA69 is bright enough that /40 reads clearly even on the
+		     small ::marker glyphs. Logical `border` (not border-t) + no dark
+		     variant, mirroring the blockquote token. -->
+		<hr class="my-3 border-morphit-emerald/40" />
 	{:else if block.type === 'ul'}
-		<ul class="mt-1 list-disc space-y-0.5 ps-5">
+		<ul class="mt-1 list-disc space-y-0.5 ps-5 marker:text-morphit-emerald/40">
 			{#each block.items as item}<li>{@render inline(item)}</li>{/each}
 		</ul>
 	{:else if block.type === 'ol'}
-		<ol class="mt-1 list-decimal space-y-0.5 ps-5">
+		<ol class="mt-1 list-decimal space-y-0.5 ps-5 marker:text-morphit-emerald/40">
 			{#each block.items as item}<li>{@render inline(item)}</li>{/each}
 		</ol>
 	{:else if block.type === 'blockquote'}

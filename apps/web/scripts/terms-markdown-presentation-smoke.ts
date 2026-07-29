@@ -125,6 +125,23 @@ check(
 		(terms.match(/list-(disc|decimal) space-y-0\.5 ps-\d/g) ?? []).length === 2
 );
 
+// ─── cp595 (t.txt) — hr + list markers use the SAME emerald as the blockquote ─
+// Ken: "use that same green [as the order-terms blockquote] on the horizontal
+// rules and on the bullets/numbers of lists." Guard against a silent revert to
+// the old grey hr (border-ink-*) or the default (text-coloured) list markers.
+const hr = /<hr\s+class="([^"]*)"/.exec(terms)?.[1] ?? '';
+check('#green the hr was found', hr.length > 0);
+check(
+	'#green the hr uses the blockquote emerald, not the old grey border-ink',
+	/border-morphit-emerald/.test(hr) && !/border-ink/.test(hr),
+	`hr class was: ${hr}`
+);
+check(
+	'#green both lists tint their ::markers with the blockquote emerald',
+	(terms.match(/marker:text-morphit-emerald/g) ?? []).length === 2,
+	'ul + ol markers must both be morphit-emerald so a user\u2019s `- ` and `1.` render green'
+);
+
 // ─── the premise the RTL reasoning rests on ─────────────────────────
 const appHtml = read('apps/web/src/app.html');
 check(

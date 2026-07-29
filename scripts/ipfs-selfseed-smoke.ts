@@ -129,6 +129,11 @@ const guard = stripHash(read('scripts/verify-cid-public.sh'));
 		['polls independent public gateways', /MORPHIT_GUARD_GATEWAYS/.test(guard) && /ipfs\.io/.test(guard) && /dweb\.link/.test(guard)],
 		['fetches the CID metadata.json', /metadata\.json/.test(guard)],
 		['confirms the expected version (not just any 200)', /WANT_VER/.test(guard) && /grep -q/.test(guard)],
+		// cp591 — metadata.json (one tiny block) resolving is NOT proof the ~12MB
+		// tarball downloads; the guard must fetch morphit-latest.tar.gz IN FULL
+		// (curl -f → a truncated/partial transfer is rejected) before anchoring the
+		// CID, which also warms the gateway for the first visitors.
+		['also verifies the FULL tarball downloads (morphit-latest.tar.gz via curl -f)', /TARURL="[^"]*morphit-latest\.tar\.gz"/.test(guard) && /curl -fsSL[^\n]*\$TARURL/.test(guard)],
 		['passes on the FIRST gateway that serves (exit 0 in the loop)', /exit 0/.test(guard)],
 		['fails loud → no broadcast (exit 1)', /DO NOT BROADCAST[\s\S]*exit 1/i.test(guard)],
 		['backs off across rounds (retry cold content)', /ATTEMPTS/.test(guard) && /sleep/.test(guard)]

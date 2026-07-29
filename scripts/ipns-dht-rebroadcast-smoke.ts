@@ -49,6 +49,11 @@ const stripHash = (s: string) =>
 		['refuses to PUT an invalid/empty record', /refusing to PUT/.test(raw)],
 		['PUTs under the /ipns/<name> routing key', /KEY="\/ipns\/\$NAME"/.test(code) && /routing put "\$KEY"/.test(code)],
 		['supports a dry-run (validate without PUT)', /MORPHIT_IPNS_DRYRUN/.test(code)],
+		// cp591 — a hand-run must match the timer: the script sources the operator's
+		// persisted config itself (systemd's EnvironmentFile isn't loaded for a manual
+		// `sudo …rebroadcast.sh`, so without this it fell to the wrong 127.0.0.1 default
+		// on non-localhost/BunkerWeb boxes).
+		['sources /etc/morphit/ipfs-pin.env so a hand-run matches the timer', /\.\s+\/etc\/morphit\/ipfs-pin\.env/.test(code)],
 		['skips cleanly when the release carries no record (older release / no key)', /nothing to rebroadcast/.test(raw)],
 		['documents the Routing V1 HTTP PUT fallback', /routing\/v1\/ipns/.test(raw)],
 		// THE security property: the instance never holds the signing key

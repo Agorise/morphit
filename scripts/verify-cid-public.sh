@@ -46,9 +46,20 @@ while [ "$round" -le "$ATTEMPTS" ]; do
 		if [ -n "$BODY" ]; then
 			# Confirm it's the RIGHT release's directory, not just any 200.
 			if printf '%s' "$BODY" | grep -q "\"version\"[[:space:]]*:[[:space:]]*\"$WANT_VER\""; then
-				echo "verify-cid-public: ✓ served by $gw (round $round) — version $WANT_VER confirmed." >&2
-				echo "  $URL" >&2
-				exit 0
+				# metadata.json (a few hundred bytes, one block) resolving is NECESSARY but
+				# NOT SUFFICIENT — the thing users actually click is the ~12MB tarball, which
+				# the gateway must pull IN FULL from the (possibly single) origin node. Fetch
+				# it to /dev/null with `-f` so a TRUNCATED/partial transfer (content-length
+				# not satisfied → curl exit != 0) is rejected, not mistaken for success. This
+				# (a) PROVES the real download works before we anchor the CID on-chain, and
+				# (b) warms the gateway so the first visitors don't hit a stalling cold fetch.
+				TARURL="$gw/$CID/morphit-latest.tar.gz"
+				if SZ="$(curl -fsSL --max-time 150 -o /dev/null -w '%{size_download}' "$TARURL" 2>/dev/null)"; then
+					echo "verify-cid-public: ✓ served by $gw (round $round) — version $WANT_VER confirmed AND the full tarball downloads (${SZ} bytes; gateway warmed)." >&2
+					echo "  $TARURL" >&2
+					exit 0
+				fi
+				echo "verify-cid-public: $gw resolved metadata but the full tarball isn't servable yet (cold/partial) — will retry." >&2
 			else
 				echo "verify-cid-public: $gw served metadata but version != $WANT_VER — wrong CID? Not accepting." >&2
 			fi
