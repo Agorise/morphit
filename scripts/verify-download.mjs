@@ -16,8 +16,9 @@
  *      Blurt RPC node (NOT from any Morphit server — a compromised
  *      download host therefore cannot fake a match).
  *   3. Compares your SHA-256 to the on-chain `source_sha256`.
- *   4. Prints the anchor's GPG fingerprint + IPFS CID + mirror list so
- *      you can `gpg --verify` the `.asc` and/or re-fetch from IPFS.
+ *   4. Prints the anchor's GPG fingerprint + IPFS CID + mirror list so you
+ *      can `git verify-tag` the signed tag (the tarball is unsigned by
+ *      default — integrity is the on-chain SHA-256) and/or re-fetch from IPFS.
  *
  * This file is deliberately self-contained (only Node built-ins, no
  * Morphit imports) so you can read every line and run it anywhere,
@@ -217,10 +218,14 @@ async function main() {
 
 	if (cmp.status === 'match') {
 		process.stdout.write('✓ SHA-256 MATCHES the on-chain anchor. Your bytes are the published release.\n\n');
-		process.stdout.write('Next, confirm the GPG signature came from the right key:\n');
-		process.stdout.write(`  gpg --verify ${tarball}.asc ${tarball}\n`);
-		process.stdout.write(`  → the signature's key fingerprint MUST equal:\n`);
+		process.stdout.write('Next, confirm the GPG signature. The tarball is unsigned by default —\n');
+		process.stdout.write('its integrity comes from the on-chain SHA-256 you just matched. The\n');
+		process.stdout.write("project's GPG signature is on the signed git TAG, so verify that (clone\n");
+		process.stdout.write('any mirror below, then run this inside the clone):\n');
+		process.stdout.write(`  git verify-tag v${cmp.chainVersion}\n`);
+		process.stdout.write("  → the tag's signing-key fingerprint MUST equal:\n");
 		process.stdout.write(`      ${d.gpg_fingerprint}\n`);
+		process.stdout.write(`  (Only if the release attached a detached signature: gpg --verify ${tarball}.asc ${tarball})\n`);
 		if (d.ipfs_cid) process.stdout.write(`\nIPFS (content-addressed, tamper-proof by CID): ${d.ipfs_cid}\n  ipfs get ${d.ipfs_cid}\n`);
 		if (Array.isArray(d.mirrors) && d.mirrors.length) {
 			process.stdout.write('\nMirror repos carrying the same code (clone one and `git verify-tag`):\n');

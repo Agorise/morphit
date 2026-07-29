@@ -15,8 +15,8 @@
  *
  * WebHID, on the other hand, gives us a raw byte channel to the
  * YubiKey's OTP applet.  We use the HMAC-SHA1 challenge-response
- * mode (factory-programmable into slot 2 via Yubico Authenticator;
- * KeePassXC and age-yubikey use the same pattern).
+ * mode (factory-programmable into slot 2 via YubiKey Manager /
+ * ykman; KeePassXC and age-yubikey use the same pattern).
  *
  * --- Browser support ---
  *
@@ -24,78 +24,61 @@
  * users can't use this feature; we surface a clear "not supported"
  * UI and let them keep using the passphrase wrap.
  *
- * --- STATUS: this transport is NOT correct yet (do not trust it) ---
+ * --- STATUS: implemented per the Yubico OTP HID protocol; validate on hardware ---
  *
- * The HID frame protocol for HMAC-SHA1 is documented in Yubico's
- * yubikey-personalization library (C): ykcore/ykcore.c
- * (`yk_write_to_key`, `yk_read_response_from_key`,
- * `yk_wait_for_key_status`) and ykcore/ykdef.h (flag bytes).  A
- * close read against that source shows this TypeScript port has
- * SEVERAL defects, not the single "frame layout" nit an earlier
- * comment here claimed.  None can be fixed blind — they need a
- * physical YubiKey on the bench — so they are documented here in
- * full to set up that session, and a fail-closed enrollment gate
- * (below) prevents the dangerous outcomes in the meantime.
+ * The HID frame protocol for HMAC-SHA1 challenge-response is
+ * documented in Yubico's yubikey-personalization library (C):
+ * ykcore/ykcore.c (`yk_write_to_key`, `yk_read_response_from_key`,
+ * `yk_wait_for_key_status`) and ykcore/ykdef.h (flag bytes).  This
+ * transport implements that protocol faithfully:
  *
- * SEND-path defects:
- *   1. No 70-byte YK_FRAME.  Yubico wraps the (≤64-byte) challenge
- *      in a 70-byte frame: payload[0..63] zero-padded challenge,
- *      payload[64] = slot command (0x30/0x38), payload[65..66] =
- *      CRC16 of payload[0..63] (little-endian), payload[67..69] =
- *      filler.  This code sends raw challenge chunks with the
- *      command byte misplaced and NO CRC16, so the key's frame-CRC
- *      check rejects the write.
- *   2. Wrong per-report sequence/flag byte.  Every 8-byte report is
- *      [7 frame bytes][SLOT_WRITE_FLAG(0x80) | seq(0..9)].  This
- *      code writes the frame index on non-final reports and
- *      (command | 0x80) on the last — neither matches Yubico's
- *      framing.
+ *   SEND — the 64-byte challenge is wrapped in a 70-byte YK_FRAME:
+ *     [0..63] challenge, [64] slot command (0x30 slot 1 / 0x38 slot
+ *     2), [65..66] CRC-16 of [0..63] little-endian, [67..69] filler.
+ *     The frame is sent as ten 8-byte feature reports, each
+ *     [7 frame bytes][SLOT_WRITE_FLAG(0x80) | seq(0..9)]; all-zero
+ *     intermediate chunks are skipped (the applet zero-fills and the
+ *     seq identifies the slot), and between non-final chunks we wait
+ *     for the applet to clear SLOT_WRITE_FLAG in its status byte.
  *
- * READ-path defects:
- *   3. RESP_PENDING_FLAG (0x40) polarity is INVERTED.  Per
- *      `yk_read_response_from_key` → `yk_wait_for_key_status(...,
- *      mask=RESP_PENDING_FLAG, logic=0/AND-zero)`, the key SETS 0x40
- *      when response bytes are ready to read and the host CLEARS it
- *      as it drains them.  This code waits WHILE 0x40 is set and
- *      reads once it CLEARS — exactly backwards — so it reads device
- *      status instead of the HMAC.  (This is the defect most likely
- *      to yield challenge-INDEPENDENT output, which is precisely what
- *      the enrollment gate below is designed to catch.)
- *   4. No sequence de-duplication.  Response reports carry a seq in
- *      the low bits; a repeated/duplicate report must be skipped or
- *      the assembled 20-byte HMAC is corrupted.
- *   5. No device reset after read.  Yubico writes a dummy report
- *      (flag byte 0x8f) to return the key to a clean state; omitting
- *      it can leave the applet mid-transaction for the next op.
+ *   READ — the applet SETS RESP_PENDING (0x40) once a response chunk
+ *     is ready, the low bits carrying that chunk's sequence number.
+ *     We accept a chunk only when its seq equals the one we expect
+ *     next (dropping duplicate/stale reads), assembling the 20-byte
+ *     HMAC-SHA1 across three chunks (7+7+6).  RESP_TIMEOUT_WAIT (0x20)
+ *     means the applet is waiting for a touch.  Before the frame and
+ *     after the read we write a dummy report (0x8f) to return the
+ *     applet to a clean idle state.
  *
- * Wrap/unwrap math (wrap.ts) is independently smoke-tested with a
- * deterministic stub HMAC and is sound; the failures above live
- * ENTIRELY in this byte channel and only manifest against real
- * hardware.
+ * The wrap/unwrap math (wrap.ts) is independently smoke-tested with a
+ * deterministic stub HMAC.  This byte channel, however, cannot run in
+ * CI — WebHID has no sandbox — so it is a hardware-INFORMED
+ * implementation that has NOT yet been proven end-to-end against a
+ * physical YubiKey in this tree.  Before relying on it, prove a full
+ * enroll -> reload -> unlock round-trip in a real Chromium browser
+ * with a real key.  The dev probe page (/dev/yubikey-probe) wires a
+ * byte-level TransportLogger for exactly this: it records every
+ * send/recv/status-poll so a failing transaction can be diagnosed
+ * without a USB analyzer.
  *
- * --- Interim safety: fail-closed enrollment gate ---
+ * --- Safety: fail-closed enrollment gate ---
  *
- * Because defect #3 most likely produces challenge-INDEPENDENT
- * output, a naive single-tap enroll could silently commit a wrap
- * around a CONSTANT (e.g. all-zero) response — a "2FA factor"
- * unlockable by a known constant, i.e. security theatre.  To prevent
- * that until this transport is fixed on hardware, enrollment goes
- * through `buildVerifiedYubikeyWrap` (wrap.ts), which sends two
- * DISTINCT challenges and refuses to enroll unless the responses
- * DIFFER (`verifyYubikeyChallengeResponse`).  That rejects constant /
+ * Even with the protocol implemented, enrollment does NOT trust a
+ * single tap.  A subtly-wrong transport could yield challenge-
+ * INDEPENDENT output; committing a wrap around a CONSTANT (e.g.
+ * all-zero) response would be a "2FA factor" unlockable by a known
+ * constant — security theatre.  So enrollment goes through
+ * `buildVerifiedYubikeyWrap` (wrap.ts), which sends two DISTINCT
+ * challenges and refuses to enroll unless the responses DIFFER
+ * (`verifyYubikeyChallengeResponse`).  That rejects constant /
  * zero-entropy / dead transports up front, fail-closed.  The
- * passphrase wrap remains as an escape hatch, so a user can never be
- * locked out by a bad YubiKey.
- *
- * Remaining human-gated work (cannot be done in-sandbox): fix the
- * five defects above with a physical key, then prove a full
- * enroll → reload → unlock round-trip in a real Chromium browser.
- * Until then, treat HardwareKeyCard enrollment as unverified.
+ * passphrase wrap remains as an escape hatch, so a bad or
+ * misconfigured YubiKey can never lock a user out.
  *
  * --- Touch UX ---
  *
  * YubiKey HMAC-SHA1 mode can be configured to require a touch
- * before the response is computed (Yubico Authenticator's "require
+ * before the response is computed (YubiKey Manager's "require
  * touch" toggle).  We don't enforce or detect this — the YubiKey
  * itself will simply hold the response until the user taps; our
  * read loop blocks until the response is delivered.  The UI shows
@@ -108,20 +91,55 @@ import type { YubikeyHmacFn } from './wrap';
 /** Yubico USB vendor ID. */
 const YUBICO_VENDOR_ID = 0x1050;
 
-/** OTP-applet HID command bytes for slot 1 / slot 2 HMAC-SHA1. */
+/** OTP-applet HID command bytes for slot 1 / slot 2 HMAC-SHA1
+ *  (ykdef.h SLOT_CHAL_HMAC1 / SLOT_CHAL_HMAC2). */
 const CMD_HMAC_SLOT_1 = 0x30;
 const CMD_HMAC_SLOT_2 = 0x38;
 
-/** Status bits in the feature-report byte. */
+/** Flag/status bits in the feature-report status byte (ykdef.h).
+ *   - SLOT_WRITE_FLAG: host sets on each write chunk; the applet
+ *     clears it in its status once it has consumed the chunk.
+ *   - RESP_PENDING_FLAG: the applet sets it when a response chunk is
+ *     ready to read; the low bits (SEQ_MASK) carry that chunk's seq.
+ *   - RESP_TIMEOUT_WAIT_FLAG: the applet is waiting for a user touch
+ *     (low 5 bits = seconds remaining).
+ *   - DUMMY_REPORT_WRITE: a write with this flag resets/aborts the
+ *     applet to a clean idle state. */
+const SLOT_WRITE_FLAG = 0x80;
 const RESP_PENDING_FLAG = 0x40;
 const RESP_TIMEOUT_WAIT_FLAG = 0x20;
+const DUMMY_REPORT_WRITE = 0x8f;
+const SEQ_MASK = 0x1f;
 
-/** Each HID feature report is 8 bytes total (1 report ID + 7 payload). */
+/** The 70-byte challenge frame: 64 payload + 1 slot + 2 CRC (LE) + 3 filler. */
+const YK_FRAME_SIZE = 70;
+
+/** Each HID feature report is 8 bytes.  Report ID 0 is numberless, so
+ *  all 8 bytes are data: [0..6] frame/response bytes, [7] flag/status. */
 const FEATURE_REPORT_SIZE = 8;
 const FEATURE_PAYLOAD_SIZE = 7;
 
 /** Feature report ID 0 is the OTP applet's report. */
 const REPORT_ID = 0;
+
+/** Yubico CRC-16 (reflected CCITT: poly 0x8408, init 0xffff, no final
+ *  xor).  ykcore stores crc16(payload[0..63]) little-endian in the
+ *  frame; the applet recomputes over payload+crc and checks the
+ *  0xf0b8 residual, silently rejecting the frame (→ no response → our
+ *  read times out) if the CRC is wrong.  Byte-for-byte port of
+ *  `yubikey_crc16` from Yubico's yubikey-c / ykcore. */
+function yubicoCrc16(data: Uint8Array): number {
+	let crc = 0xffff;
+	for (let i = 0; i < data.length; i++) {
+		crc ^= data[i]! & 0xff;
+		for (let bit = 0; bit < 8; bit++) {
+			const lsb = crc & 1;
+			crc >>= 1;
+			if (lsb) crc ^= 0x8408;
+		}
+	}
+	return crc & 0xffff;
+}
 
 /**
  * Returns true if this browser supports WebHID at all.  Used by
@@ -218,6 +236,43 @@ export async function requestYubikey(
 	};
 }
 
+/** Poll the applet's status byte until SLOT_WRITE_FLAG has cleared —
+ *  i.e. the applet has consumed the chunk we just wrote and is ready
+ *  for the next.  Only ever called during the write phase (before any
+ *  response exists), so these reads never consume response chunks.
+ *  Throws the classifiable short-report / timeout errors on failure. */
+async function waitForWriteFlagClear(device: HIDDevice, timeoutMs: number): Promise<void> {
+	const start = Date.now();
+	while (Date.now() - start < timeoutMs) {
+		const dv = await device.receiveFeatureReport(REPORT_ID);
+		const view = new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength);
+		if (view.byteLength < FEATURE_REPORT_SIZE) {
+			throw new Error(
+				`yubikey: short feature report (got ${view.byteLength} bytes, expected ${FEATURE_REPORT_SIZE})`
+			);
+		}
+		if ((view[FEATURE_PAYLOAD_SIZE]! & SLOT_WRITE_FLAG) === 0) return;
+		await sleep(2);
+	}
+	throw new Error('YubiKey HMAC timed out — write handshake did not settle');
+}
+
+/** Best-effort reset of the applet to a clean idle state: write a
+ *  dummy report (flag 0x8f).  Sent before a transaction (to flush any
+ *  leftover response from an aborted op) and after reading the
+ *  response (ykcore's post-read reset).  Non-fatal on error — a reset
+ *  failure doesn't corrupt the transaction itself. */
+async function resetApplet(device: HIDDevice, logger?: TransportLogger): Promise<void> {
+	const report = new Uint8Array(FEATURE_REPORT_SIZE);
+	report[FEATURE_PAYLOAD_SIZE] = DUMMY_REPORT_WRITE;
+	try {
+		await device.sendFeatureReport(REPORT_ID, report);
+		logger?.({ direction: 'note', note: 'reset applet (dummy 0x8f)', timestamp: Date.now() });
+	} catch {
+		/* non-fatal */
+	}
+}
+
 /** Bind an HID device + slot to a single-shot HMAC function.
  *
  *  The returned function performs one challenge-response transaction
@@ -244,98 +299,147 @@ function makeHmacFn(device: HIDDevice, slot: YubikeySlot, logger?: TransportLogg
 				`hmac: challenge must be ${YUBIKEY_CHALLENGE_BYTES} bytes, got ${challenge.length}`
 			);
 		}
-		// Pad/copy challenge to a multiple of FEATURE_PAYLOAD_SIZE
-		// (64 / 7 → ceil 10 payload-bytes-aligned blocks of 7 bytes
-		// each, with the last block carrying a frame-end bit).
-		const FRAMES_NEEDED = Math.ceil(YUBIKEY_CHALLENGE_BYTES / FEATURE_PAYLOAD_SIZE);
-		// Send each frame as a feature report.  Frame index goes in
-		// the first byte's low 4 bits; the high nibble signals the
-		// command on the LAST frame.
-		for (let frame = 0; frame < FRAMES_NEEDED; frame++) {
-			const payload = new Uint8Array(FEATURE_REPORT_SIZE);
-			payload[0] = REPORT_ID;
-			const offset = frame * FEATURE_PAYLOAD_SIZE;
-			const remaining = Math.min(FEATURE_PAYLOAD_SIZE, YUBIKEY_CHALLENGE_BYTES - offset);
-			for (let i = 0; i < remaining; i++) {
-				payload[1 + i] = challenge[offset + i] ?? 0;
+
+		// ── Build the 70-byte YK_FRAME ────────────────────────────────
+		//   [0..63]  challenge (YUBIKEY_CHALLENGE_BYTES === 64)
+		//   [64]     slot command (0x30 / 0x38)
+		//   [65..66] CRC-16 of [0..63], little-endian
+		//   [67..69] filler (zero)
+		const frame = new Uint8Array(YK_FRAME_SIZE);
+		frame.set(challenge, 0);
+		frame[YUBIKEY_CHALLENGE_BYTES] = cmd;
+		const crc = yubicoCrc16(frame.subarray(0, YUBIKEY_CHALLENGE_BYTES));
+		frame[YUBIKEY_CHALLENGE_BYTES + 1] = crc & 0xff;
+		frame[YUBIKEY_CHALLENGE_BYTES + 2] = (crc >> 8) & 0xff;
+
+		const WRITE_SETTLE_MS = 1_000;
+		const RESPONSE_TIMEOUT_MS = 30_000; // generous — lets users find + tap their key
+		const POLL_INTERVAL_MS = 20;
+
+		// Flush any leftover applet state from a prior (aborted) op, then
+		// wait for the applet to be idle before we start writing.
+		await resetApplet(device, logger);
+		await waitForWriteFlagClear(device, WRITE_SETTLE_MS);
+
+		// ── Send the frame as ten 7-byte reports ──────────────────────
+		//   report = [7 frame bytes][SLOT_WRITE_FLAG | seq(0..9)].
+		//   All-zero intermediate chunks are skipped (the applet
+		//   zero-fills the frame and the seq identifies each chunk's
+		//   slot), but seq 0 and the final seq are always sent.  Between
+		//   non-final chunks we wait for SLOT_WRITE_FLAG to clear so the
+		//   applet has consumed the previous chunk.  We do NOT wait after
+		//   the final chunk — the read loop below picks up the transition
+		//   to the response, so no read is wasted before response seq 0.
+		const FRAMES = YK_FRAME_SIZE / FEATURE_PAYLOAD_SIZE; // 70 / 7 = 10
+		for (let seq = 0; seq < FRAMES; seq++) {
+			const offset = seq * FEATURE_PAYLOAD_SIZE;
+			const chunk = frame.subarray(offset, offset + FEATURE_PAYLOAD_SIZE);
+			const isLast = seq === FRAMES - 1;
+			let allZero = true;
+			for (let i = 0; i < chunk.length; i++) {
+				if (chunk[i] !== 0) {
+					allZero = false;
+					break;
+				}
 			}
-			// Frame index in the trailing byte (Yubico's framing
-			// convention).  Last frame carries the command; intermediate
-			// frames just carry the index.
-			const isLast = frame === FRAMES_NEEDED - 1;
-			payload[FEATURE_REPORT_SIZE - 1] = isLast ? cmd | 0x80 : frame;
+			if (seq !== 0 && !isLast && allZero) continue;
+
+			const report = new Uint8Array(FEATURE_REPORT_SIZE);
+			report.set(chunk, 0);
+			report[FEATURE_PAYLOAD_SIZE] = SLOT_WRITE_FLAG | seq;
+
+			await device.sendFeatureReport(REPORT_ID, report);
 			logger?.({
 				direction: 'send',
-				bytes: payload.subarray(1).slice(),
-				note: `frame ${frame + 1}/${FRAMES_NEEDED}${isLast ? ' (final, slot cmd)' : ''}`,
+				bytes: chunk.slice(),
+				status: SLOT_WRITE_FLAG | seq,
+				note: `frame seq ${seq}/${FRAMES - 1}${isLast ? ' (final, slot cmd)' : ''}`,
 				timestamp: Date.now()
 			});
-			await device.sendFeatureReport(REPORT_ID, payload.subarray(1));
+
+			if (!isLast) await waitForWriteFlagClear(device, WRITE_SETTLE_MS);
 		}
 
-		// Poll for the response.  The OTP applet sets RESP_PENDING_FLAG
-		// while computing; once cleared, the 20-byte HMAC output is
-		// available across consecutive feature reports.  If the slot
-		// requires touch, this loop also waits for the user to tap.
-		const POLL_INTERVAL_MS = 100;
-		const TIMEOUT_MS = 30_000; // 30s — generous, lets users find their key
+		// ── Read the 20-byte HMAC-SHA1 response ───────────────────────
+		//   The applet SETS RESP_PENDING (0x40) when a response chunk is
+		//   ready; the low bits carry its sequence number.  We accept a
+		//   chunk only when its seq equals the one we expect next
+		//   (dropping duplicate/stale reads), assembling 20 bytes across
+		//   three chunks (7+7+6).  RESP_TIMEOUT_WAIT (0x20) means the
+		//   applet is waiting for a touch; SLOT_WRITE_FLAG still set
+		//   means the last write is still settling; idle (0x00) after we
+		//   already have bytes means the response is complete.
+		const out = new Uint8Array(YUBIKEY_HMAC_OUTPUT_BYTES);
+		let outLen = 0;
+		let expectedSeq = 0;
 		const start = Date.now();
-		const collected = new Uint8Array(YUBIKEY_HMAC_OUTPUT_BYTES);
-		let collectedLen = 0;
-		while (Date.now() - start < TIMEOUT_MS) {
-			const data = await device.receiveFeatureReport(REPORT_ID);
-			const view = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
-			// Audit 2026-05 finding 6-7 hardening: a malformed device
-			// (or a hostile USB device with Yubico vendor ID, which is
-			// the threat class here) could deliver a short feature
-			// report. Without this check, view[FEATURE_PAYLOAD_SIZE]
-			// reads `undefined` and the `?? 0` fallback would
-			// interpret as "response ready, all zeros" — yielding a
-			// partial-zero HMAC output that would silently fail
-			// closed but could confuse a caller.
-			//
-			// The Yubico OTP feature report is exactly 8 bytes
-			// (FEATURE_REPORT_SIZE): 7 payload + 1 status. A short
-			// frame is a protocol violation and we refuse to interpret.
+		while (Date.now() - start < RESPONSE_TIMEOUT_MS) {
+			const dv = await device.receiveFeatureReport(REPORT_ID);
+			const view = new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength);
 			if (view.byteLength < FEATURE_REPORT_SIZE) {
 				throw new Error(
 					`yubikey: short feature report (got ${view.byteLength} bytes, expected ${FEATURE_REPORT_SIZE})`
 				);
 			}
 			const status = view[FEATURE_PAYLOAD_SIZE]!;
+
+			if (status & RESP_PENDING_FLAG) {
+				const seq = status & SEQ_MASK;
+				const isNext = seq === expectedSeq;
+				logger?.({
+					direction: 'recv',
+					bytes: view.slice(0, FEATURE_PAYLOAD_SIZE),
+					status,
+					note: `RESP_PENDING seq ${seq}${isNext ? '' : ' (duplicate/stale, ignored)'}`,
+					timestamp: Date.now()
+				});
+				if (isNext) {
+					const take = Math.min(FEATURE_PAYLOAD_SIZE, YUBIKEY_HMAC_OUTPUT_BYTES - outLen);
+					for (let i = 0; i < take; i++) out[outLen + i] = view[i]!;
+					outLen += take;
+					expectedSeq++;
+					if (outLen >= YUBIKEY_HMAC_OUTPUT_BYTES) break;
+				}
+				continue; // read the next chunk immediately
+			}
+
+			if (status & RESP_TIMEOUT_WAIT_FLAG) {
+				logger?.({
+					direction: 'recv',
+					status,
+					note: 'RESP_TIMEOUT_WAIT (tap your YubiKey)',
+					timestamp: Date.now()
+				});
+				await sleep(POLL_INTERVAL_MS);
+				continue;
+			}
+
+			if (status & SLOT_WRITE_FLAG) {
+				// The final write is still being consumed; keep polling.
+				await sleep(POLL_INTERVAL_MS);
+				continue;
+			}
+
+			// Idle status (0x00).  If we've already drained chunks the
+			// response is complete; otherwise the applet is still
+			// computing the HMAC — keep polling.
 			logger?.({
 				direction: 'recv',
-				bytes: view.slice(0, FEATURE_PAYLOAD_SIZE),
 				status,
-				note:
-					status & RESP_PENDING_FLAG
-						? 'RESP_PENDING (computing)'
-						: status & RESP_TIMEOUT_WAIT_FLAG
-							? 'RESP_TIMEOUT_WAIT (touch needed)'
-							: 'response data',
+				note: outLen > 0 ? 'idle (response complete)' : 'idle (computing HMAC)',
 				timestamp: Date.now()
 			});
-			if (status & RESP_PENDING_FLAG) {
-				await sleep(POLL_INTERVAL_MS);
-				continue;
-			}
-			if (status & RESP_TIMEOUT_WAIT_FLAG) {
-				await sleep(POLL_INTERVAL_MS);
-				continue;
-			}
-			// Response ready: read the 7-byte payload from this frame.
-			// Multiple frames may be needed to cover the 20-byte HMAC.
-			const remaining = YUBIKEY_HMAC_OUTPUT_BYTES - collectedLen;
-			const take = Math.min(FEATURE_PAYLOAD_SIZE, remaining);
-			for (let i = 0; i < take; i++) {
-				collected[collectedLen + i] = view[i] ?? 0;
-			}
-			collectedLen += take;
-			if (collectedLen >= YUBIKEY_HMAC_OUTPUT_BYTES) {
-				return collected;
-			}
+			if (outLen > 0) break;
+			await sleep(POLL_INTERVAL_MS);
 		}
-		throw new Error('YubiKey HMAC timed out — touch your key or check the connection');
+
+		// Return the applet to a clean idle state for the next op.
+		await resetApplet(device, logger);
+
+		if (outLen < YUBIKEY_HMAC_OUTPUT_BYTES) {
+			throw new Error('YubiKey HMAC timed out — touch your key or check the connection');
+		}
+		return out;
 	};
 }
 

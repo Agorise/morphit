@@ -34,6 +34,12 @@ set -u
 
 log() { echo "morphit-ipns-rebroadcast: $*" >&2; }
 
+# Manual runs (not via systemd) don't get the unit's EnvironmentFile, so load the
+# operator's persisted config here too — keeps `sudo …morphit-ipns-rebroadcast.sh`
+# in sync with the timer (both then read MORPHIT_RELEASE_URL from the same file).
+# Root-written (0640) trusted config; simple KEY=value lines, safe under `set -u`.
+[ -r /etc/morphit/ipfs-pin.env ] && . /etc/morphit/ipfs-pin.env
+
 RELEASE_URL="${MORPHIT_RELEASE_URL:-http://127.0.0.1:${MORPHIT_INDEXER_PORT:-8088}/v1/release}"
 PUT_TIMEOUT="${MORPHIT_IPNS_PUT_TIMEOUT:-120}"
 DRYRUN="${MORPHIT_IPNS_DRYRUN:-0}"
