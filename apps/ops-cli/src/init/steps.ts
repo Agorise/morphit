@@ -137,7 +137,11 @@ export async function stepTagline(): Promise<string> {
 	// the env and then surfaced as a meaningless placeholder in the
 	// federated directory + SEO for every operator who pressed Enter.)
 	const v = await ask('Tagline (optional)');
-	return v.length > 200 ? v.slice(0, 200) : v;
+	if (v.length > 200) {
+		console.log('  (Shortened to 200 characters so it fits link previews and the directory.)\n');
+		return v.slice(0, 200);
+	}
+	return v;
 }
 
 // ─── Step 3: Database connection ─────────────────────────────────
@@ -192,29 +196,52 @@ export interface RelayAccountResult {
 	readonly chainLookupSucceeded: boolean;
 }
 
-export async function stepRelayAccount(): Promise<RelayAccountResult> {
+/** Derive a short, Blurt-name-safe base from the operator's instance name (or
+ *  domain) for SUGGESTING relay/fees account names — e.g. "Morphit NL" ->
+ *  "morphitnl", "morphit.io" -> "morphitio". Capped at 10 chars so both
+ *  `<base>-relay` and `<base>-fees` fit Blurt's 16-char account-name limit.
+ *  Returns '' when nothing usable (the caller shows a generic
+ *  @your-instance-relay placeholder instead). PURE. */
+export function suggestAccountBase(instanceNameOrDomain: string): string {
+	const slug = instanceNameOrDomain.toLowerCase().replace(/[^a-z0-9]/g, '');
+	if (slug.length < 2 || !/^[a-z]/.test(slug)) return '';
+	return slug.slice(0, 10);
+}
+
+export async function stepRelayAccount(instanceName?: string): Promise<RelayAccountResult> {
 	step(4, TOTAL_STEPS, "Your relay's Blurt account");
+	const base = instanceName ? suggestAccountBase(instanceName) : '';
+	const relaySuggestion = base ? `@${base}-relay` : '@your-instance-relay';
 	explain(
-		'Morphit uses the Blurt blockchain.  Your relay is the account\n' +
-			'that pays the chain fee when a NEW user signs up to your\n' +
-			'instance — currently 100 BLURT per signup.  This account\n' +
-			'needs to be funded with enough BLURT to cover the signups\n' +
-			'you expect to handle.\n' +
+		'Morphit uses the Blurt blockchain.  Your RELAY account is the\n' +
+			'account that PAYS the chain fee when a NEW user signs up to\n' +
+			'your instance — currently about 100 BLURT per signup — and it\n' +
+			'signs those signups, so its active key lives on this server.\n' +
 			'\n' +
-			'For example, with the default daily ceiling of 50 signups,\n' +
-			'your relay could spend up to 5,000 BLURT in a single day.\n' +
-			'Most operators start with a smaller ceiling (10-20) and\n' +
-			"raise it once they're confident in their setup.\n" +
+			'FUND IT before you open for signups.  Put in enough BLURT for\n' +
+			'AT LEAST 20 signups to start (ideally more) — that is about\n' +
+			'2,000 BLURT at the current fee.  Each Morphit instance pays\n' +
+			'for its OWN signups from its OWN relay; the main morphit.io\n' +
+			'account never covers yours.\n' +
 			'\n' +
-			'You probably want to use the Blurt account you signed up\n' +
-			"Morphit with.  If you don't have a Blurt account yet,\n" +
-			'register one at:\n' +
+			'Your daily signup ceiling (step 7) caps the most it can spend\n' +
+			'in one day — with the default 50/day it could spend up to\n' +
+			'5,000 BLURT, so most operators start with a ceiling of 10-20\n' +
+			"and raise it once they're confident.\n" +
+			'\n' +
+			'TIP: keep this SEPARATE from your fees account (next step) —\n' +
+			`name it something like ${relaySuggestion}.  Then the key that\n` +
+			'sits on this server can only spend signup BLURT, while your\n' +
+			'earnings pile up safely in a different account whose keys\n' +
+			'never touch the server.\n' +
+			'\n' +
+			"If you don't have a Blurt account yet, register one at:\n" +
 			'\n' +
 			'  https://blurtplugin.online/account/\n' +
 			'\n' +
 			'Then come back here.'
 	);
-	examples(['alice', 'my-morphit-relay', 'bob123']);
+	examples(base ? [`${base}-relay`] : ['your-instance-relay', 'my-morphit-relay']);
 
 	while (true) {
 		const name = await ask('Blurt account name (required)');
@@ -242,14 +269,18 @@ export async function stepRelayAccount(): Promise<RelayAccountResult> {
 				continue;
 			}
 			console.log(`  ✓ @${name} exists on Blurt.  Current balance: ${sanitizeForTerm(account.balance)}`);
-			// Estimate runway at 100 BLURT/signup.
+			// Estimate runway at ~100 BLURT/signup.
 			const runway = Math.floor(account.balanceBlurt / 100);
-			if (runway < 50) {
+			if (runway < 20) {
 				console.log(
-					`  Heads up: with a 50/day ceiling, you'd run out after ~${runway} signup${runway === 1 ? '' : 's'}.`
+					`  ⚠ That funds only ~${runway} signup${runway === 1 ? '' : 's'} — below the recommended 20-signup minimum.`
 				);
 				console.log(
-					"  You'll set the ceiling in step 7 — pick a smaller value, or top up your account first."
+					'  Top up your relay before you open for signups (about 2,000 BLURT covers 20).'
+				);
+			} else if (runway < 50) {
+				console.log(
+					`  That funds ~${runway} signups — fine to start; top up before you raise the daily ceiling.`
 				);
 			}
 			console.log('');
@@ -410,18 +441,28 @@ export async function stepActiveKey(relayAccountName: string): Promise<ActiveKey
 
 // ─── Step 6: Fees account ────────────────────────────────────────
 
-export async function stepFeesAccount(relayAccountName: string): Promise<string> {
+export async function stepFeesAccount(relayAccountName: string, instanceName?: string): Promise<string> {
 	step(6, TOTAL_STEPS, 'Fees account');
+	const base = instanceName ? suggestAccountBase(instanceName) : '';
+	const feesSuggestion = base ? `@${base}-fees` : '@your-instance-fees';
+	const relaySuggestion = base ? `@${base}-relay` : '@your-instance-relay';
 	explain(
 		'Morphit charges a small listing fee per order (paid by the\n' +
 			'person posting the order, not by users browsing).  Those\n' +
-			'fees land in your fees account.  You earn revenue here.\n' +
+			'fees land in your FEES account — this is where you EARN.\n' +
 			'\n' +
-			'You can use the same account as your relay (simpler), or\n' +
-			'use a separate account (cleaner accounting, easier to\n' +
-			'redirect).'
+			'We recommend a SEPARATE account from your relay: a second\n' +
+			`Blurt account, e.g. ${feesSuggestion} alongside your\n` +
+			`${relaySuggestion}.  Why keep two?  Your relay\u2019s key sits on\n` +
+			'this server to sign signups, but your fees account\u2019s keys\n' +
+			'never need to — so your earnings stay safe even if the\n' +
+			'server is ever compromised.\n' +
+			'\n' +
+			'(You CAN reuse the relay account to keep things simple —\n' +
+			'just press Enter — but a separate fees account is safer.)'
 	);
-	console.log(`Default: same as your relay account (${relayAccountName})`);
+	examples(base ? [`${base}-fees`] : ['your-instance-fees', 'my-morphit-fees']);
+	console.log(`Default (press Enter): same as your relay account (${relayAccountName})`);
 	console.log('');
 
 	while (true) {
@@ -546,8 +587,8 @@ export async function stepOrigin(): Promise<string | null> {
 			'  If your domain is   morphit.berlin\n' +
 			'  you enter           https://morphit.berlin\n' +
 			'\n' +
-			'(Hosting at home on a DuckDNS-style hostname? Use that:\n' +
-			'e.g. https://myinstance.duckdns.org.)\n' +
+			'(Hosting at home? Use the same domain you registered \u2014 the\n' +
+			'guided install keeps it pointed at your home automatically.)\n' +
 			'\n' +
 			'Why this matters: this exact URL is what gets published\n' +
 			'on-chain when you register your operator account.  Other\n' +
@@ -600,6 +641,44 @@ export async function stepOrigin(): Promise<string | null> {
 
 // ─── Step 10: Alt-network addresses ──────────────────────────────
 
+/** Light format check for the OPTIONAL privacy/name addresses the operator
+ *  PASTES (Lokinet/I2P/Nostr/ENS). Catches wrong-network or missing-suffix
+ *  paste mistakes without over-strict full-encoding rules (a valid address
+ *  always matches; the exact base32/bech32 body varies). PURE. */
+export function looksLikeAddress(
+	kind: 'loki' | 'i2p-b32' | 'i2p-name' | 'npub' | 'ens',
+	value: string
+): boolean {
+	const s = value.trim().toLowerCase();
+	switch (kind) {
+		case 'loki':
+			return /^[a-z0-9]{40,60}\.loki$/.test(s);
+		case 'i2p-b32':
+			return /^[a-z2-7]{52}\.b32\.i2p$/.test(s);
+		case 'i2p-name':
+			return /^[a-z0-9][a-z0-9-]*\.i2p$/.test(s) && !s.endsWith('.b32.i2p');
+		case 'npub':
+			return /^npub1[a-z0-9]{20,}$/.test(s);
+		case 'ens':
+			return /^[a-z0-9][a-z0-9-]*\.eth$/.test(s);
+	}
+}
+
+/** Ask for an OPTIONAL pasted address, re-prompting on a bad format; empty
+ *  answer skips. */
+async function askOptionalAddress(
+	question: string,
+	kind: Parameters<typeof looksLikeAddress>[0],
+	label: string
+): Promise<string | null> {
+	while (true) {
+		const v = (await ask(question, '')).trim();
+		if (v.length === 0) return null;
+		if (looksLikeAddress(kind, v)) return v;
+		console.log(`  ⚠ That doesn't look like a ${label}.  Paste it again, or press Enter to skip.\n`);
+	}
+}
+
 export async function stepAltNetworks(): Promise<AltNetworkResult> {
 	step(10, TOTAL_STEPS, 'Extra privacy-network addresses (optional)');
 	explain(
@@ -629,15 +708,13 @@ export async function stepAltNetworks(): Promise<AltNetworkResult> {
 	const wantsLokinet = await askYesNo('Add a Lokinet (.loki) address?', false);
 	let lokinet: string | null = null;
 	if (wantsLokinet) {
-		const v = await ask('Lokinet .loki address (paste, or Enter to skip)', '');
-		lokinet = v.length > 0 ? v : null;
+		lokinet = await askOptionalAddress('Lokinet .loki address (paste, or Enter to skip)', 'loki', 'Lokinet .loki address');
 	}
 
 	const wantsI2p = await askYesNo('Add an I2P (.b32.i2p) address?', false);
 	let i2pB32: string | null = null;
 	if (wantsI2p) {
-		const v = await ask('I2P .b32.i2p address (paste, or Enter to skip)', '');
-		i2pB32 = v.length > 0 ? v : null;
+		i2pB32 = await askOptionalAddress('I2P .b32.i2p address (paste, or Enter to skip)', 'i2p-b32', 'I2P .b32.i2p address');
 	}
 
 	// Optional human-readable vanity name (DOMAIN.i2p), independent of the
@@ -645,15 +722,13 @@ export async function stepAltNetworks(): Promise<AltNetworkResult> {
 	const wantsI2pName = await askYesNo('Add an I2P vanity name (DOMAIN.i2p)?', false);
 	let i2pName: string | null = null;
 	if (wantsI2pName) {
-		const v = await ask('I2P vanity name, e.g. morphit.i2p (paste, or Enter to skip)', '');
-		i2pName = v.length > 0 ? v : null;
+		i2pName = await askOptionalAddress('I2P vanity name, e.g. morphit.i2p (paste, or Enter to skip)', 'i2p-name', 'DOMAIN.i2p name');
 	}
 
 	const wantsNostr = await askYesNo('Add a Nostr pubkey?', false);
 	let nostr: string | null = null;
 	if (wantsNostr) {
-		const v = await ask('Nostr npub (paste, or Enter to skip)', '');
-		nostr = v.length > 0 ? v : null;
+		nostr = await askOptionalAddress('Nostr npub (paste, or Enter to skip)', 'npub', 'Nostr npub (npub1...)');
 	}
 
 	// Optional ENS .eth name (DOMAIN.eth) — a registered Ethereum name
@@ -663,8 +738,7 @@ export async function stepAltNetworks(): Promise<AltNetworkResult> {
 	const wantsEns = await askYesNo('Add an ENS .eth name?', false);
 	let ens: string | null = null;
 	if (wantsEns) {
-		const v = await ask('ENS name, e.g. morphit.eth (paste, or Enter to skip)', '');
-		ens = v.length > 0 ? v : null;
+		ens = await askOptionalAddress('ENS name, e.g. morphit.eth (paste, or Enter to skip)', 'ens', 'ENS .eth name');
 	}
 
 	return { tor, lokinet, i2pB32, i2pName, nostr, ens };
@@ -804,7 +878,12 @@ export async function stepBackup(databaseUrl: string): Promise<BackupResult> {
 		};
 	}
 
-	const backupDir = await ask('Backup directory', '/home/morphit/backups');
+	let backupDir = '';
+	while (true) {
+		backupDir = (await ask('Backup directory', '/home/morphit/backups')).trim();
+		if (backupDir.startsWith('/')) break;
+		console.log('  ✗ Use an absolute path (starting with /), e.g. /home/morphit/backups.  Try again.\n');
+	}
 	const retainDays = await askInt('Days of backups to keep', {
 		min: 1,
 		max: 3650,

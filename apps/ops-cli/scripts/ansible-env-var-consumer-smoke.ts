@@ -32,6 +32,7 @@
  *   - ops/scripts/lib/*.sh (shared sidecar helpers)
  *   - ops/backup/*.sh (backup script)
  *   - ops/ipfs/*.sh (IPFS release-hosting pin + setup scripts, v1.9.0)
+ *   - ops/ddns/*.sh (dynamic-DNS update + setup scripts, cp596)
  *
  * Template lines where the var NAME itself is Jinja-templated
  * (e.g. `MORPHIT_FAIL2BAN_{{ var_jail }}_CRITICAL=...`) are
@@ -171,7 +172,12 @@ function collectConsumerSurface(): { names: Set<string>; fileCount: number } {
 		// setup scripts are real consumers of the release-hosting env vars
 		// that the ipfs Ansible role's env templates declare; before this
 		// directory was scanned those vars had no discoverable consumer.
-		...walkFiles(join(REPO_ROOT, 'ops', 'ipfs'), shPred)
+		...walkFiles(join(REPO_ROOT, 'ops', 'ipfs'), shPred),
+		// ops/ddns/ — dynamic-DNS scripts (cp596). morphit-ddns-update.sh
+		// consumes MORPHIT_DDNS_UPDATE_URL / _IP_URL / _STATE_FILE, which the
+		// ddns Ansible role's env template declares; scanned here so those
+		// vars have a discoverable consumer.
+		...walkFiles(join(REPO_ROOT, 'ops', 'ddns'), shPred)
 	];
 	// Match uppercase env-var tokens.  Require at least 3 chars
 	// total so we don't false-positive on every accidental
@@ -224,13 +230,13 @@ for (const varName of sortedVars) {
 	}
 	const hasConsumer = consumerNames.has(varName);
 	results.push({
-		name: `${varName} has a consumer in apps/, ops/scripts/, ops/backup/, or ops/ipfs/`,
+		name: `${varName} has a consumer in apps/, ops/scripts/, ops/backup/, ops/ipfs/, or ops/ddns/`,
 		ok: hasConsumer,
 		detail: hasConsumer
 			? undefined
 			: `${varName} is declared in template(s) ` +
 			  `[${templates.join(', ')}] but no file under apps/, ` +
-			  `ops/scripts/, ops/backup/, or ops/ipfs/ references it.  Either ` +
+			  `ops/scripts/, ops/backup/, ops/ipfs/, or ops/ddns/ references it.  Either ` +
 			  `remove the dead template line, or add a consumer (e.g. ` +
 			  `zod schema in apps/<workspace>/src/config/index.ts, ` +
 			  `bash variable in ops/scripts/morphit-*.sh, ops/backup/*.sh, or ops/ipfs/*.sh).  ` +

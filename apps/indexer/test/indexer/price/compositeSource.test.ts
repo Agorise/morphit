@@ -30,6 +30,7 @@ function mkFetch(impl: () => Promise<number | null>): PriceFetch {
  *  for determinism. */
 function mkSource(opts: {
 	upstreams: Array<{ name: string; fetch: PriceFetch }>;
+	primaryUpstreams?: Array<{ name: string; fetch: PriceFetch }>;
 	fallbackUpstreams?: Array<{ name: string; fetch: PriceFetch }>;
 	floor?: number;
 	now?: () => number;
@@ -40,6 +41,7 @@ function mkSource(opts: {
 }) {
 	return new CompositeCachedPriceSource({
 		upstreams: opts.upstreams,
+		primaryUpstreams: opts.primaryUpstreams,
 		fallbackUpstreams: opts.fallbackUpstreams,
 		outlierTolerance: opts.outlierTolerance,
 		plausibleMin: opts.plausibleMin,
@@ -361,5 +363,100 @@ describe('CompositeCachedPriceSource — lifecycle', () => {
 		await Promise.resolve();
 		expect(fetchMock).toHaveBeenCalled();
 		s.stop();
+	});
+});
+
+
+describe('CompositeCachedPriceSource — primary tier (source of truth)', () => {
+	const ok = (v: number): PriceFetch => mkFetch(() => Promise.resolve(v));
+	const down = (): PriceFetch => mkFetch(() => Promise.resolve(null));
+	const boom = (): PriceFetch => mkFetch(() => Promise.reject(new Error('x')));
+
+	it('commits the primary reading and skips the external average when the primary is plausible', async () => {
+		let extCalled = 0;
+		const s = mkSource({
+			primaryUpstreams: [{ name: 'blurt_price_feed', fetch: ok(0.003) }],
+			upstreams: [
+				{
+					name: 'cg',
+					fetch: mkFetch(() => {
+						extCalled++;
+						return Promise.resolve(0.009);
+					})
+				}
+			]
+		});
+		await s.refreshOnce();
+		expect(s.current()).toBe(0.003);
+		expect(s.currentDetailed().source).toBe('blurt_price_feed');
+		expect(extCalled).toBe(0); // aggregators NOT queried when the primary wins
+	});
+
+	it('falls back to the external average when the primary returns null', async () => {
+		const s = mkSource({
+			primaryUpstreams: [{ name: 'blurt_price_feed', fetch: down() }],
+			upstreams: [{ name: 'cg', fetch: ok(0.006) }]
+		});
+		await s.refreshOnce();
+		expect(s.current()).toBe(0.006);
+		expect(s.currentDetailed().source).toBe('external_avg');
+	});
+
+	it('falls back to the external average when the primary is implausible (out of band)', async () => {
+		const s = mkSource({
+			primaryUpstreams: [{ name: 'blurt_price_feed', fetch: ok(5) }], // > plausibleMax
+			upstreams: [{ name: 'cg', fetch: ok(0.006) }],
+			plausibleMin: 0.0001,
+			plausibleMax: 0.1
+		});
+		await s.refreshOnce();
+		expect(s.currentDetailed().source).toBe('external_avg');
+		expect(s.current()).toBe(0.006);
+	});
+
+	it('falls back to native when the primary AND every external are down', async () => {
+		const s = mkSource({
+			primaryUpstreams: [{ name: 'blurt_price_feed', fetch: down() }],
+			upstreams: [{ name: 'cg', fetch: down() }],
+			fallbackUpstreams: [{ name: 'morphit_native', fetch: ok(0.004) }]
+		});
+		await s.refreshOnce();
+		expect(s.currentDetailed().source).toBe('morphit_native');
+		expect(s.current()).toBe(0.004);
+	});
+
+	it('serves the static floor when primary, externals, and native are all down', async () => {
+		const s = mkSource({
+			primaryUpstreams: [{ name: 'blurt_price_feed', fetch: down() }],
+			upstreams: [{ name: 'cg', fetch: down() }],
+			fallbackUpstreams: [{ name: 'morphit_native', fetch: down() }],
+			floor: 0.002
+		});
+		await s.refreshOnce();
+		expect(s.current()).toBe(0.002);
+		expect(s.currentDetailed().source).toBe('static_floor');
+	});
+
+	it('treats a throwing primary like a miss and falls through to the average', async () => {
+		const s = mkSource({
+			primaryUpstreams: [{ name: 'blurt_price_feed', fetch: boom() }],
+			upstreams: [{ name: 'cg', fetch: ok(0.006) }]
+		});
+		await s.refreshOnce();
+		expect(s.currentDetailed().source).toBe('external_avg');
+		expect(s.current()).toBe(0.006);
+	});
+
+	it('reports the primary source in sourceStatus()', async () => {
+		const s = mkSource({
+			primaryUpstreams: [{ name: 'blurt_price_feed', fetch: ok(0.003) }],
+			upstreams: [{ name: 'cg', fetch: ok(0.009) }]
+		});
+		await s.refreshOnce();
+		const statuses = s.sourceStatus();
+		const primary = statuses.find((x) => x.name === 'blurt_price_feed');
+		expect(primary).toBeDefined();
+		expect(primary!.ok).toBe(true);
+		expect(primary!.lastValue).toBe(0.003);
 	});
 });

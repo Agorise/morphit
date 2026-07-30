@@ -15,6 +15,19 @@
 # in the frontend's <link rel="canonical">.
 morphit_domain: morphit.example.com
 
+# ─── Dynamic DNS (HOME nodes only) ───────────────────────────────
+# A home box behind a router usually has a public IP that CHANGES.  Turn this
+# on to keep your domain pointed at it automatically (the `ddns` role installs
+# a small updater + timer).  A VPS has a STATIC IP — leave this false.
+enable_ddns: false
+# DUMMY-VALUE: your DNS provider's dynamic-DNS UPDATE URL, with `{ip}` where the
+# current IP goes.  Get a domain from ANY registrar; this URL comes from that
+# registrar's dynamic-DNS docs.  Required only when enable_ddns is true.
+# Examples:
+#   Njalla:    https://njal.la/update/?h=yourdomain&k=YOURKEY&a={ip}
+#   Namecheap: https://dynamicdns.park-your-domain.com/update?host=@&domain=yourdomain.com&password=YOURPW&ip={ip}
+morphit_ddns_update_url: ""
+
 # DUMMY-VALUE: the operator's BLURT account name (lowercase, 3-16
 # chars, a-z 0-9 -).  This is the account that signs operator-
 # registration ops, posts releases, collects stranger fees, and
@@ -25,6 +38,12 @@ morphit_operator_account: my-operator
 # operator_attribution_events.  Often the same as
 # morphit_operator_account, but can be shorter / branded.
 morphit_operator_tag: myoperator
+
+# The BLURT account that RECEIVES your listing fees.  For a federation instance
+# YOU earn these (your 90% share; the treasury's 10% is taken separately), so
+# this defaults to your own operator account.  Set it to the shared
+# @morphit-fees treasury only if you are running the canonical morphit.io.
+morphit_fee_recipient: "{{ morphit_operator_account }}"
 
 
 # ─── Server users ────────────────────────────────────────────────
@@ -71,6 +90,14 @@ morphit_repo_ref: main
 
 # Local clone destination on the target host.
 morphit_repo_path: /opt/morphit
+
+# LOCAL install (set automatically by `morphit-ops install` on the box itself):
+# when morphit_local_install is true the playbook allows running as root (no SSH
+# session to lock out), and when morphit_local_source_path is set the morphit
+# role deploys THAT extracted release instead of cloning git. Remote installs
+# leave both at their defaults.
+morphit_local_install: false
+morphit_local_source_path: ""
 
 
 # ─── Node.js ─────────────────────────────────────────────────────

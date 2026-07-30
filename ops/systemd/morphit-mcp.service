@@ -3,6 +3,10 @@ Description=Morphit MCP server (Model Context Protocol — read-only orderbook s
 Documentation=https://git.agorise.net/agorise/morphit/src/branch/main/docs/OPERATIONS.md
 After=network-online.target morphit-indexer.service
 Wants=network-online.target
+# Reboot recovery (cp597): disable the start-rate-limit so this never latches
+# into a permanent 'failed' state if the indexer is still starting after a
+# power-cut reboot — it keeps retrying every RestartSec until the indexer is up.
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple

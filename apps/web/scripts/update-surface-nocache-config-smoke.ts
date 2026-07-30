@@ -32,8 +32,7 @@ const REPO_ROOT = join(__dirname, '..', '..', '..');
 /** Files that serve the frontend and so must mark the update surface no-cache. */
 const TARGETS = [
 	{ path: 'ops/nginx/web.conf', label: 'bare-metal web.conf' },
-	{ path: 'ops/bunkerweb/frontend/nginx.conf', label: 'BunkerWeb frontend nginx.conf' },
-	{ path: 'docs/RUN-A-MORPHIT-NODE.md', label: 'RUN-A inline nginx example' }
+	{ path: 'ops/bunkerweb/frontend/nginx.conf', label: 'BunkerWeb frontend nginx.conf' }
 ];
 
 /** The two paths whose responses must never be cached. */

@@ -82,14 +82,17 @@
           Target is {{ ansible_distribution }} {{ ansible_distribution_version }}
           on the Ubuntu 24.04 "noble" base — supported.
 
-    - name: Verify there is a sudo-capable non-root user with SSH key
+    - name: Verify the connection is safe (non-root over SSH, OR a local install)
       ansible.builtin.assert:
         that:
-          - ansible_user != "root"
+          - ansible_user != "root" or (morphit_local_install | default(false) | bool)
         fail_msg: >
-          Connect with a non-root sudo-capable user.  The hardening
-          role disables root SSH; if you're connected as root,
-          you'll lock yourself out partway through.
+          For a REMOTE install, connect with a non-root sudo-capable user — the
+          hardening role disables root SSH, so connected as root you'd lock
+          yourself out partway through.  For a LOCAL install on the machine
+          itself (set morphit_local_install=true, which `morphit-ops install`
+          does automatically) running as root is fine: there is no SSH session
+          to lock out.
 
   roles:
     - role: base
@@ -97,6 +100,13 @@
 
     - role: hardening
       tags: [hardening]
+
+    # HOME nodes only (enable_ddns): keep the domain pointed at a changing
+    # public IP.  Runs BEFORE tls so certbot can validate the domain once DNS
+    # is current.  A VPS has a static IP and leaves enable_ddns off.
+    - role: ddns
+      tags: [ddns]
+      when: enable_ddns | default(false)
 
     - role: tls
       tags: [tls]

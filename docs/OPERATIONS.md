@@ -91,6 +91,8 @@ Payment-method configuration — enabling/disabling canonical payment methods in
 46. [Resetting the indexer database (schema drift after an upgrade)](#46-resetting-the-indexer-database-schema-drift-after-an-upgrade)
 47. [Keeping the relay funded — low-BLURT notifications](#47-keeping-the-relay-funded--low-blurt-notifications)
 48. [IPFS release hosting — every instance pins the signed release](#48-ipfs-release-hosting--every-instance-pins-the-signed-release)
+49. [Advanced install paths — Ansible playbook or build-from-source](#49-advanced-install-paths--ansible-playbook-or-build-from-source)
+50. [How your indexer treats the public Blurt RPC nodes (User-Agent + rate limits)](#50-how-your-indexer-treats-the-public-blurt-rpc-nodes-user-agent--rate-limits)
 
 ---
 
@@ -9222,7 +9224,7 @@ A misconfigured Postgres on WiFi exposes it to every guest device on your networ
 Many residential ISPs are IPv6-by-default now. Two quick checks:
 
 - **Does your home have a public IPv6 prefix?** Run `ip -6 addr show` on the Morphit machine; look for an address in `2000::/3` range (i.e., starts with a 2 or 3). If yes, you have IPv6.
-- **Does your DDNS provider support IPv6?** DuckDNS does — pass `&ipv6=$(curl -s6 ifconfig.co)` to the update URL. Dynu does. No-IP charges extra for it.
+- **Does your registrar's dynamic-DNS update URL support IPv6?** Many do — append the provider's IPv6 field to the update URL (often something like `&ipv6=$(curl -s6 ifconfig.co)` alongside the `{ip}` IPv4 field). Check your registrar's dynamic-DNS documentation for the exact parameter.
 
 If you have IPv6 and want to publish AAAA records alongside your CNAME, add an `AAAA` record at `@` and `www` pointing at your machine's GUA address. Modern browsers prefer IPv6 when available, which can improve user experience for IPv6-enabled visitors and reduce the load on your IPv4 NAT.
 
@@ -11536,3 +11538,91 @@ anchor). Resource use is modest — a low-power DHT participant plus a few MB
 of pinned content — but it is a running daemon; a memory- or bandwidth-
 constrained box can opt out as above. The pinning service is non-fatal by
 design: a Kubo outage or a slow fetch never affects the site.
+
+## 49. Advanced install paths — Ansible playbook or build-from-source
+
+The friendly one-command install (`sudo bash morphit-setup.sh` → "Full guided install") is the recommended path for everyone and is documented in `RUN-A-MORPHIT-NODE.md`. This section is for operators who would rather drive the install by hand: run the Ansible playbook themselves, or build from source and install the prerequisites manually. Both reach the same hardened end state; neither is a "lighter" install.
+
+### 49a. Run the Ansible playbook yourself
+
+Morphit ships an **Ansible playbook** that does the whole operating-system setup on a fresh Ubuntu box — it installs Node.js and PostgreSQL, builds the app, lays down the background services, and deploys the website and the read-only helper. You fill in a couple of small config files and run one command:
+
+```sh
+cd ops/ansible
+# 1. Tell it which machine(s) to set up.
+cp inventory/hosts.yml.example inventory/hosts.yml
+$EDITOR inventory/hosts.yml
+
+# 2. Fill in the non-secret settings (your domain, your Blurt account, etc.).
+$EDITOR group_vars/all.yml
+
+# 3. Put your secrets in an encrypted vault.
+cp group_vars/vault.yml.example group_vars/vault.yml
+$EDITOR group_vars/vault.yml
+ansible-vault encrypt group_vars/vault.yml
+
+# 4. Run it.
+ansible-playbook -i inventory/hosts.yml playbook.yml --ask-vault-pass
+```
+
+When it finishes, **everything is installed and running** — the app and background services, HTTPS with automatic renewal, the BunkerWeb firewall, your Tor `.onion` and I2P addresses, and full server hardening. There is nothing more to switch on; go straight to registering as an operator (`RUN-A-MORPHIT-NODE.md` §9). TLS is already obtained + auto-renewing (§35) and BunkerWeb is already on (§32).
+
+### 49b. Configure only — you install the prerequisites (build from source)
+
+If you would rather install the prerequisites yourself and just have `morphit-ops` write your configuration, this is the path. (It is the **"Configure only"** choice in the installer.)
+
+Install **Node.js 22**, **PostgreSQL 15.x or higher**, and **nginx** from your system's package manager (`psql --version` should read 15.x or higher). Then get Morphit and build it from source:
+
+```sh
+cd ~
+git clone https://git.agorise.net/agorise/morphit.git
+cd morphit
+npm install
+npm run build --workspaces --if-present
+```
+
+`npm install` pulls in the libraries (a few hundred MB — normal) and creates the `morphit-ops` command you use for everything else. It also wires up Morphit's internal **workspace symlinks** (`@morphit/asset-registry` and friends). If you ever run the test suite before `npm install` finishes and see `ERR_MODULE_NOT_FOUND` complaining about `@morphit/asset-registry`, that just means the symlinks are not in place yet — run `npm install` and it clears up. **Re-run `npm install` after every `git pull`.**
+
+Now run the installer and choose **"Configure only"** when it asks:
+
+```sh
+npx morphit-ops install
+```
+
+It checks your prerequisites (Node 22, PostgreSQL, git), runs the **setup wizard**, and offers to harden the server. On this path it deliberately does **not** install Node/PostgreSQL or the background services for you — that is what the guided install (or the playbook in §49a) is for — so set up the database and services next.
+
+**Database.** Pick a strong password (`openssl rand -base64 32`), save it, then create the role and database:
+
+```sh
+MORPHIT_INDEXER_DB_PASSWORD='<your-strong-password>' \
+    sudo -E -u postgres psql -f ops/postgres/init.sql
+cd apps/indexer && npm run migrate && cd ../..
+```
+
+The init script refuses to run with a placeholder like `__SET_BEFORE_DEPLOY__` or `CHANGEME` — that is on purpose, so nobody ships with an example password. (Full sentinel details: §30.)
+
+**Background services.** The shipped unit files assume the default `/opt/morphit` path, so instead of editing them by hand, run the **path-aware installer** — it detects where you actually cloned the repo and writes the services with the correct paths:
+
+```sh
+sudo bash ops/scripts/install-systemd-units.sh
+sudo chown morphit-relay:morphit-relay /etc/morphit/relay.env
+sudo systemctl enable --now morphit-indexer morphit-relay
+```
+
+**nginx.** Serve the built website over HTTPS and proxy the API to the local services. The shipped `ops/nginx/web.conf` is a complete, ready-to-adapt server block — copy it and change `yourdomain.com` to your domain. Keep its security headers and no-cache rules byte-for-byte (§15 for the headers; "Caching the update surface" / §14 for the no-cache blocks and the header-inheritance caveat). One thing worth setting while you are in there: the live-chat endpoints (`/v1/chat/…/stream` and `/v1/chat-activity`) are held-open "streaming" connections, so instead of the usual per-minute request limit they want a **per-visitor cap on how many streams one address can hold open at once** (a generous number — a few dozen). The exact `limit_conn` snippet is in the BunkerWeb / reverse-proxy section (§32).
+
+Then turn on HTTPS with a free Let's Encrypt certificate — `npx morphit-ops ssl setup` prints the exact `certbot` line for your domain (§35) — and register as an operator (`RUN-A-MORPHIT-NODE.md` §9).
+
+## 50. How your indexer treats the public Blurt RPC nodes (User-Agent + rate limits)
+
+The public Blurt RPC nodes are run by volunteers, for free, and Morphit leans on them. Your indexer is built not to abuse that: it caps its own request rate, backs off exponentially when a node pushes back, jitters its retries so every Morphit instance in the federation does not stampede the same node at the same second, and fetches blocks in batches of 20 rather than one request at a time when it is catching up after downtime. If a node's firewall refuses those batches (some public nodes return an HTTP 406/403 to a batched request while serving single ones fine), your indexer notices and quietly switches to one-at-a-time for that node — so a single strict node cannot stall your catch-up, and you never have to hand-pick endpoints (since v1.8.1). (Endpoint selection itself: §22.)
+
+It also **says who it is**. Every request your indexer makes to a Blurt RPC node carries:
+
+```
+User-Agent: Morphit/<your indexer version> (+https://git.agorise.net/agorise/morphit)
+```
+
+(`<your indexer version>` is the same version `/v1/health` reports — so an operator can tell an old instance from a current one.) Node's built-in `fetch` sends `user-agent: node` by default — the same string as every anonymous script on the internet, exactly what bot-detection rules are written to catch — and it gives an RPC operator nobody to contact if your traffic misbehaves. Naming ourselves means an operator who wants us to back off can find us instead of just blocking us. Two of Morphit's own background jobs identify themselves more precisely still — `morphit-indexer/federation-probe` and `morphit-indexer/signup-anomaly-probe` — because a node operator reading logs is better served by "which job" than by "which app".
+
+**Be aware of what this means for your server.** The header goes on *every* outbound request your indexer makes — the Blurt RPC nodes, the BLURT price feed, and the federation probe that checks other instances. So any host your indexer contacts learns that the IP calling it is running Morphit, and which version. Your server's IP is visible to those hosts either way, and the public instances list already names the instances that want naming; but if you are running an instance you would rather nobody enumerate, know that this header is one of the ways they could. It says nothing whatsoever about your *users* — their browsers are not touched by this; their requests go to your indexer, not through it. You do not configure any of this and there is nothing to tune.

@@ -18,7 +18,6 @@
  * example in EACH of the 3 scoped operator docs:
  *   - docs/PRE-LAUNCH-CHECKLIST.md
  *   - docs/OPERATIONS.md
- *   - docs/RUN-A-MORPHIT-NODE.md
  *
  * Why DISABLED_ASSETS specifically: it's the most concrete operator-
  * facing config knob.  Every Category-B asset must have an example
@@ -76,8 +75,7 @@ const CATEGORY_B = (ASSET_TICKERS as readonly string[]).filter(
 
 const SCOPED_DOCS = [
 	'docs/PRE-LAUNCH-CHECKLIST.md',
-	'docs/OPERATIONS.md',
-	'docs/RUN-A-MORPHIT-NODE.md'
+	'docs/OPERATIONS.md'
 ];
 
 console.log(`Category-B tickers (${CATEGORY_B.length}): ${CATEGORY_B.join(', ')}\n`);

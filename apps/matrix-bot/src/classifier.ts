@@ -184,7 +184,15 @@ const WARN_MATCHERS: ReadonlyArray<(a: StructuredAlert) => boolean> = [
 
 	// cp15 — smartctl SCT thermal-log trend analysis.
 	(a) => a.module === 'smartctl' && a.event === 'temperature_sustained_high',
-	(a) => a.module === 'smartctl' && a.event === 'temperature_overlimit_count'
+	(a) => a.module === 'smartctl' && a.event === 'temperature_overlimit_count',
+
+	// cp600 — a NEW Morphit release is available (from morphit-release-monitor).
+	// WARN so the operator/grandma gets a prompt individual DM (deduped 1/hour)
+	// rather than it being buried in the once-a-day INFO digest — this is the
+	// Matrix twin of the desktop upgrade-notify toast, gated on her having set a
+	// Matrix alert MXID in the wizard.  Observation-only (rule #29): the DM tells
+	// her to run `sudo morphit-ops`; nothing auto-upgrades.
+	(a) => a.module === 'release' && a.event === 'release_available'
 ];
 
 export function classify(alert: StructuredAlert): ClassifiedAlert {
@@ -248,6 +256,17 @@ const ALERT_COPY: Record<string, AlertCopyEntry> = {
 			'inline per signup) — and is REFUSING new signups right now. Send liquid ' +
 			'BLURT to @{account}; signups resume automatically on the next health ' +
 			'poll (within ~30s).'
+	},
+
+	// ─── cp600 — a new Morphit release is available (Matrix twin of the
+	// desktop upgrade-notify toast; observation-only per rule #29) ───
+	'release:release_available': {
+		title: 'New Morphit release available: {latest}',
+		advice:
+			'A newer Morphit release is out — your node is on {current}, latest is ' +
+			'{latest}. To update, open a terminal and run `sudo morphit-ops`, then ' +
+			'choose Upgrade. It takes a few minutes and your node keeps running. ' +
+			'Details: {release_url}'
 	},
 
 	// ─── WIRED IN CODE TODAY (signup-ceiling) ─────────────────
