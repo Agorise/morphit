@@ -1,0 +1,114 @@
+# ─────────────────────────────────────────────────────────────────────
+# Morphit — daily DB backup service.
+#
+# Runs once when triggered by morphit-backup.timer (next directory
+# over).  See ops/backup/morphit-backup.sh for what the script
+# actually does.
+#
+# Why oneshot:
+#   - The script runs to completion in a few seconds (small DB)
+#     to a few minutes (large DB), then exits.  oneshot is the
+#     correct service type for a finite-duration job triggered
+#     by a timer.
+#
+# Why User=morphit:
+#   - The script needs to read pg credentials.  Two common
+#     patterns:
+#       (a) peer auth: postgres trusts the local UNIX user
+#           when their name matches the DB user.  Operator
+#           creates the morphit system user with `useradd
+#           --system morphit`; postgres role `morphit_indexer`
+#           grants USAGE to the morphit user via
+#           `host morphit_indexer morphit ::1/128 peer`.
+#       (b) ~/.pgpass: the morphit system user keeps a
+#           password file at /home/morphit/.pgpass with
+#           600 perms.
+#     Either way, running as `morphit` is right.
+#
+# Hardening directives:
+#   - PrivateTmp=true → the dump never touches /tmp shared
+#     space.
+#   - ProtectSystem=strict → script can only write to
+#     ReadWritePaths (the backup dir + /var/log).
+#   - NoNewPrivileges=true → can't escalate via setuid bins.
+#   - ProtectHome=read-only → can read ~/.pgpass but can't
+#     write home dirs of other users.
+# ─────────────────────────────────────────────────────────────────────
+
+[Unit]
+Description=Morphit indexer daily DB backup
+Documentation=file:///home/morphit/morphit/docs/RUN-A-MORPHIT-NODE.md
+# Backups should run AFTER the indexer has had a chance to
+# settle from any maintenance restart, so the DB isn't being
+# heavily written during the dump.  postgres reaching ready
+# state is the strict prerequisite.
+After=postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=oneshot
+User=morphit
+Group=morphit
+
+# The wizard writes BACKUP_ENV to /etc/morphit/backup.env.
+# Manual installs that put it elsewhere can override here.
+Environment=BACKUP_ENV=/etc/morphit/backup.env
+
+# The script lives at a stable system path AFTER `sudo install`.
+# The repo copy at ops/backup/morphit-backup.sh is the source;
+# the install command in the operator post-setup checklist
+# copies it to /usr/local/lib/morphit/.  This decoupling means
+# the systemd unit doesn't need to know where the operator
+# checked out the repo (could be /home/morphit/morphit, could
+# be /opt/morphit, could be /srv/morphit-deploy).
+ExecStart=/usr/local/lib/morphit/morphit-backup.sh
+
+# ─── Hardening ───
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+
+# Where the script is allowed to write.  The default matches the
+# wizard's default BACKUP_DIR.
+#
+# IF YOU CHANGED BACKUP_DIR in /etc/morphit/backup.env to a
+# different path, this directive needs to match — otherwise the
+# script will be killed by ProtectSystem=strict the first time
+# it tries to mkdir that path.  Override without editing this
+# shipped unit:
+#
+#   sudo systemctl edit morphit-backup.service
+#
+# and add:
+#
+#   [Service]
+#   ReadWritePaths=
+#   ReadWritePaths=/your/actual/backup/dir
+#
+# (The empty `ReadWritePaths=` resets the default before adding
+# your override; without it, both paths end up writable, which
+# is also fine but slightly less tidy.)
+ReadWritePaths=/home/morphit/backups
+
+# Don't restart on failure.  A failed backup should be visible
+# in `journalctl -u morphit-backup.service`; the next timer
+# tick will retry.  Auto-restart of a dump that's failing
+# (auth issue, disk full) just spams logs without making
+# anything better.
+Restart=no
+
+# Log identification — shows up as `morphit-backup` in
+# journalctl rather than the script's PID.
+SyslogIdentifier=morphit-backup
+
+[Install]
+# The timer triggers this — no separate Install wanted by the
+# service itself.  The timer's [Install] section is what gets
+# enabled.

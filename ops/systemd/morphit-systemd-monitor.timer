@@ -1,0 +1,13 @@
+[Unit]
+Description=Morphit systemd unit-health monitor timer — every 5 minutes
+Documentation=https://git.agorise.net/agorise/morphit
+Requires=morphit-systemd-monitor.service
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=5min
+AccuracySec=10s
+Unit=morphit-systemd-monitor.service
+
+[Install]
+WantedBy=timers.target

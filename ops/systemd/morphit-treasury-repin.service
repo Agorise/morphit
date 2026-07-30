@@ -1,0 +1,48 @@
+[Unit]
+Description=Morphit treasury auto-re-pin — keep the chain-pinned listing-fee amounts on their canonical USD targets (MAINTAINER-ONLY)
+Documentation=https://git.agorise.net/agorise/morphit
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# MAINTAINER-ONLY sidecar.  Only the @morphit maintainer (who pins
+# the treasury) enables this; community operators inherit the pin and
+# run nothing.  In the DEFAULT detect-only mode it is read-only +
+# keyless, so the privilege envelope matches the other observation
+# sidecars (reuse the host-monitor user).
+#
+# ⚠ AUTO-BROADCAST mode (MORPHIT_REPIN_ENABLE_AUTO_BROADCAST=1) reads
+# the @morphit posting key from MORPHIT_REPIN_POSTING_KEY_FILE.  Run
+# THAT mode ONLY on a trusted signing box, NEVER on the public
+# production server, and grant the key file 0600 to this user.
+User=morphit-host-monitor
+Group=morphit-host-monitor
+
+EnvironmentFile=-/etc/morphit/treasury-repin.env
+ExecStart=/opt/morphit/ops/scripts/morphit-treasury-repin.sh
+
+# ─── Hardening ─────────────────────────────────────────────────
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+LimitCORE=0
+
+# Outbound HTTPS to the indexer + Coingecko + (auto-broadcast only)
+# the Blurt RPC nodes, plus DNS.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+
+[Install]
+WantedBy=multi-user.target

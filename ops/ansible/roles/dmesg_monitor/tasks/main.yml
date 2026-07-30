@@ -1,0 +1,42 @@
+# roles/dmesg_monitor/tasks/main.yml
+#
+# Deploy the morphit-dmesg-monitor sidecar (kernel-log scan
+# for OOM kills, oopses, hardware errors, segfaults).
+#
+# References: docs/OPERATIONS.md §16 "Extended monitoring sidecars".
+
+---
+- name: Create dmesg-monitor state directory
+  ansible.builtin.file:
+    path: /var/lib/morphit-dmesg-monitor
+    state: directory
+    owner: root
+    group: root
+    mode: '0750'
+
+- name: Install dmesg-monitor systemd service unit
+  ansible.builtin.copy:
+    src: /opt/morphit/ops/systemd/morphit-dmesg-monitor.service
+    dest: /etc/systemd/system/morphit-dmesg-monitor.service
+    owner: root
+    group: root
+    mode: '0644'
+    remote_src: true
+  notify: Reload systemd
+
+- name: Install dmesg-monitor systemd timer
+  ansible.builtin.copy:
+    src: /opt/morphit/ops/systemd/morphit-dmesg-monitor.timer
+    dest: /etc/systemd/system/morphit-dmesg-monitor.timer
+    owner: root
+    group: root
+    mode: '0644'
+    remote_src: true
+  notify: Reload systemd
+
+- name: Enable + start morphit-dmesg-monitor.timer
+  ansible.builtin.systemd:
+    name: morphit-dmesg-monitor.timer
+    enabled: true
+    state: started
+    daemon_reload: true

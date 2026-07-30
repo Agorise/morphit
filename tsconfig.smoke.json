@@ -1,0 +1,39 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable", "WebWorker"],
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "strict": false,
+    "noImplicitAny": false,
+    "baseUrl": ".",
+    "paths": {
+      "$lib": ["apps/web/src/lib"],
+      "$lib/*": ["apps/web/src/lib/*"],
+      "$components": ["apps/web/src/lib/components"],
+      "$components/*": ["apps/web/src/lib/components/*"],
+      "$crypto": ["apps/web/src/lib/crypto"],
+      "$crypto/*": ["apps/web/src/lib/crypto/*"],
+      "$i18n": ["apps/web/src/lib/i18n"],
+      "$i18n/*": ["apps/web/src/lib/i18n/*"],
+      "$stores": ["apps/web/src/lib/stores"],
+      "$stores/*": ["apps/web/src/lib/stores/*"],
+      "$utils": ["apps/web/src/lib/utils"],
+      "$utils/*": ["apps/web/src/lib/utils/*"],
+      "$net": ["apps/web/src/lib/net"],
+      "$net/*": ["apps/web/src/lib/net/*"],
+      "$config": ["apps/indexer/src/config/index.ts"],
+      "$config/*": ["apps/indexer/src/config/*"],
+      "$db/*": ["apps/indexer/src/db/*"],
+      "$blurt/*": ["apps/indexer/src/blurt/*"],
+      "$indexer/*": ["apps/indexer/src/indexer/*"],
+      "$api/*": ["apps/indexer/src/api/*"],
+      "$log": ["apps/indexer/src/log/index.ts"]
+    }
+  }
+}

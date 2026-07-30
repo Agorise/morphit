@@ -1,0 +1,24 @@
+---
+# ddns role — keep a HOME node's DNS pointed at its changing public IP, using
+# the provider-agnostic updater from ops/ddns/ (cp596).  Enabled only when
+# `enable_ddns` is true; a VPS has a static IP and leaves it off.
+#
+# The full hardened stack (hardening, TLS, BunkerWeb, …) is identical to a VPS —
+# this role is the ONE home-specific *addition*, nothing is lightened.
+
+morphit_ddns_lib: /usr/local/lib/morphit
+morphit_ddns_env_file: /etc/morphit/ddns.env
+
+# State cache: the updater only calls the provider when the IP actually changed.
+morphit_ddns_state_file: /var/lib/morphit/ddns.last
+
+# REQUIRED when enable_ddns is true (the role asserts it): the DNS provider's
+# update URL with `{ip}` where the current IP goes.  Set in group_vars/all.yml.
+morphit_ddns_update_url: ""
+
+# Where to read this box's public IPv4 (must echo the bare IP).  Empty ->
+# the updater's own built-in default list applies (kept in sync with cp596).
+morphit_ddns_ip_url: ""
+
+# How often the timer checks (systemd OnCalendar).  Every 5 minutes by default.
+morphit_ddns_on_calendar: "*:0/5"

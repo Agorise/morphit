@@ -1,0 +1,27 @@
+# §37.16 — GRUB / boot hardening.
+#
+# Setting a GRUB password requires manual entry of grub-mkpasswd-pbkdf2
+# output — Ansible can place the file but can't generate the hash
+# without prompting for the operator's chosen password.  This task
+# emits guidance rather than auto-applying.
+---
+- name: Emit GRUB password guidance
+  ansible.builtin.debug:
+    msg: |
+      §37.16 GRUB password hardening — manual:
+
+      1. Run:  grub-mkpasswd-pbkdf2
+      2. Enter a strong password (NOT the operator sudo password).
+      3. Copy the "grub.pbkdf2.sha512..." string from the output.
+      4. Edit /etc/grub.d/40_custom and add:
+
+           set superusers="root"
+           password_pbkdf2 root <paste-the-hash-here>
+
+      5. Run:  update-grub
+      6. Reboot to test.  At GRUB menu, attempt to edit a boot
+         entry (press 'e').  You should be prompted for username
+         + password.
+
+      This protects against console / KVM access by data-center
+      staff or anyone with physical access to the box.
