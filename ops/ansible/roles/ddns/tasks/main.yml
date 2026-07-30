@@ -1,0 +1,62 @@
+---
+# Wire the cp596 dynamic-DNS mechanism into the install for a HOME node.
+# Guarded by `enable_ddns` at the playbook level, so a VPS never runs this.
+
+- name: Require a DNS provider update URL when DDNS is enabled
+  ansible.builtin.assert:
+    that:
+      - morphit_ddns_update_url | length > 0
+    fail_msg: >-
+      enable_ddns is true but morphit_ddns_update_url is empty.  Set it to your
+      DNS provider's dynamic-DNS update URL (with {ip} where the IP goes) in
+      group_vars/all.yml, or set enable_ddns: false for a static-IP (VPS) host.
+    success_msg: "DDNS update URL is set."
+
+- name: Ensure the DDNS state directory exists
+  ansible.builtin.file:
+    path: "{{ morphit_ddns_state_file | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the DDNS updater script (single source — ops/ddns/)
+  ansible.builtin.copy:
+    src: /opt/morphit/ops/ddns/morphit-ddns-update.sh
+    dest: "{{ morphit_ddns_lib }}/morphit-ddns-update.sh"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Write the DDNS env file (0600 — provider secret lives in the URL)
+  ansible.builtin.template:
+    src: ddns.env.j2
+    dest: "{{ morphit_ddns_env_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Install the morphit-ddns systemd service
+  ansible.builtin.template:
+    src: morphit-ddns.service.j2
+    dest: /etc/systemd/system/morphit-ddns.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd
+
+- name: Install the morphit-ddns systemd timer
+  ansible.builtin.template:
+    src: morphit-ddns.timer.j2
+    dest: /etc/systemd/system/morphit-ddns.timer
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd
+
+- name: Enable + start the morphit-ddns timer
+  ansible.builtin.systemd:
+    name: morphit-ddns.timer
+    enabled: true
+    state: started
+    daemon_reload: true

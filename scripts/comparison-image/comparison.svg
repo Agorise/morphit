@@ -1,0 +1,1176 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="9731" viewBox="0 0 2400 9731">
+<defs><linearGradient
+       id="id0"
+       gradientUnits="userSpaceOnUse"
+       x1="0"
+       y1="369.47"
+       x2="1089.5"
+       y2="369.47">
+   <stop
+   offset="0"
+   style="stop-opacity:1; stop-color:#8EEF26"
+   id="stop1" />
+
+   <stop
+   offset="0.501961"
+   style="stop-opacity:1; stop-color:#00DA69"
+   id="stop2" />
+
+   <stop
+   offset="1"
+   style="stop-opacity:1; stop-color:#02A6B2"
+   id="stop3" />
+
+  </linearGradient></defs>
+<rect width="2400" height="9731" fill="#0a0d12"/>
+<rect x="870" y="248" width="290" height="9358" fill="#0f1f15"/>
+<text x="1200" y="120" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="60" font-weight="700" fill="#f0f6fc">P2P Cryptocurrency Marketplaces — feature-by-feature</text>
+<text x="1200" y="175" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="28" font-weight="400" fill="#8b949e">Every project here is doing important work for cryptocurrency freedom. This table just shows where each one shines.</text>
+<rect x="80" y="248" width="2240" height="110" fill="#161b22"/>
+<rect x="870" y="248" width="290" height="110" fill="#143d28"/>
+<text x="110" y="313" font-family="DejaVu Sans, sans-serif" font-size="30" font-weight="700" fill="#8b949e">Feature</text>
+<g
+     id="_1197533152"
+     style="clip-rule:evenodd;fill-rule:evenodd;image-rendering:optimizeQuality;shape-rendering:geometricPrecision;text-rendering:geometricPrecision"
+     transform="matrix(0.05576732,0,0,0.05576732,894.76928,282.47195)">
+   <path
+   class="fil0"
+   d="m 545,74 c 25,-16 52,-29 81,-39 35,-12 72,-18 111,-18 97,0 185,39 249,103 64,64 103,152 103,249 0,98 -39,186 -103,250 -64,63 -152,103 -249,103 -39,0 -76,-6 -111,-18 -29,-10 -56,-23 -81,-39 -25,16 -52,29 -81,39 -35,12 -73,18 -112,18 C 255,722 167,682 103,619 39,555 0,467 0,369 0,272 39,184 103,120 167,56 255,17 352,17 c 39,0 77,6 112,18 29,10 56,23 81,39 z m 101,22 c -18,5 -34,13 -50,22 9,11 18,24 25,38 12,25 20,55 20,85 0,31 -8,61 -21,87 -14,27 -33,50 -57,68 -16,12 -28,27 -37,45 -9,17 -13,36 -13,57 0,20 5,40 13,57 9,18 22,33 38,45 v 0 c 0,0 0,0 0,0 24,19 52,33 82,43 28,10 59,15 91,15 80,0 152,-32 204,-85 52,-52 84,-124 84,-204 0,-79 -32,-151 -84,-203 -52,-53 -124,-85 -204,-85 -32,0 -63,5 -91,15 z m -101,17 v 0 l -14,18 z m 0,513 1,-2 z m -101,17 c 17,-6 34,-13 50,-22 -10,-11 -18,-24 -25,-37 -13,-26 -20,-55 -20,-86 0,-31 7,-59 19,-85 14,-27 33,-50 56,-68 v 0 c 17,-12 30,-28 39,-46 9,-17 14,-37 14,-58 0,-20 -5,-40 -14,-57 -9,-18 -22,-33 -38,-45 h 1 C 501,120 473,106 444,96 415,86 385,81 352,81 273,81 201,113 149,166 96,218 64,290 64,369 c 0,80 32,152 85,204 52,53 124,85 203,85 33,0 63,-5 92,-15 z M 352,124 c 18,0 33,15 33,33 0,17 -15,32 -33,32 -15,0 -29,1 -43,5 -14,3 -28,8 -41,15 -5,3 -10,6 -14,9 -5,3 -9,6 -14,10 -5,4 -9,7 -13,11 -3,3 -7,7 -11,12 -8,9 -15,18 -20,28 -6,10 -11,20 -15,31 -5,17 -24,26 -40,20 -17,-6 -26,-24 -20,-41 5,-15 12,-29 19,-42 8,-14 18,-27 28,-38 4,-5 9,-10 15,-16 6,-6 12,-11 17,-15 6,-5 12,-9 19,-14 6,-4 13,-8 20,-11 17,-9 35,-17 55,-21 19,-5 38,-8 58,-8 z M 110,405 c -2,-18 10,-34 27,-36 18,-3 34,9 36,27 2,11 5,22 8,33 4,10 9,20 14,30 9,16 4,35 -11,44 -16,9 -35,4 -44,-12 -7,-13 -14,-27 -19,-42 -5,-14 -9,-29 -11,-44 z"
+   id="path3"
+   style="fill:url(#id0)" />
+
+   <path
+   class="fil1"
+   d="m 1491,540 c 0,12 -4,23 -13,32 -9,9 -20,13 -32,13 h -1 c -12,0 -23,-4 -32,-13 -9,-9 -13,-20 -13,-32 V 334 c 0,-50 17,-92 52,-128 36,-35 78,-52 128,-52 59,0 104,19 134,59 30,-40 75,-59 134,-59 50,0 92,17 128,52 35,36 52,78 52,128 v 206 c 0,12 -4,23 -13,32 -9,9 -19,13 -32,13 h -1 c -12,0 -23,-4 -31,-13 -9,-9 -14,-20 -14,-32 V 334 c 0,-25 -8,-46 -26,-63 -17,-17 -38,-26 -63,-26 -24,0 -45,9 -62,26 -17,17 -26,38 -26,63 v 206 c 0,12 -5,23 -14,32 -8,9 -19,13 -31,13 h -1 c -13,0 -23,-4 -32,-13 -9,-9 -14,-20 -14,-32 V 334 c 0,-25 -8,-46 -26,-63 -17,-17 -38,-26 -62,-26 -25,0 -45,9 -63,26 -17,17 -26,38 -26,63 z m 817,-294 c -35,0 -64,12 -88,36 -24,25 -36,54 -36,88 0,35 12,64 36,88 24,24 53,36 88,36 34,0 63,-12 88,-36 24,-24 36,-53 36,-88 0,-34 -12,-63 -36,-88 -25,-24 -54,-36 -88,-36 z m 0,-92 c 59,0 110,21 152,63 43,42 64,93 64,152 0,60 -21,111 -64,153 -42,42 -93,63 -152,63 -59,0 -110,-21 -153,-63 -42,-42 -63,-93 -63,-153 0,-59 21,-110 63,-152 43,-42 94,-63 153,-63 z m 466,0 c 12,0 23,4 32,13 9,9 13,20 13,32 v 1 c 0,12 -4,23 -13,32 -9,9 -20,13 -32,13 h -22 c -20,0 -37,7 -52,22 -14,14 -21,31 -21,52 v 221 c 0,12 -4,23 -13,32 -9,9 -20,13 -32,13 h -1 c -13,0 -23,-4 -32,-13 -9,-9 -14,-20 -14,-32 V 319 c 1,-46 17,-85 49,-117 32,-32 71,-48 116,-48 z m 271,338 c 35,0 64,-12 88,-36 24,-24 36,-53 36,-87 0,-35 -12,-64 -36,-89 -24,-23 -53,-35 -88,-35 -34,0 -63,12 -88,35 -24,25 -36,54 -36,89 0,34 12,63 36,87 25,24 54,36 88,36 z m -170,247 c -12,0 -23,-5 -32,-13 -9,-10 -13,-20 -13,-32 V 369 c 0,-60 21,-111 63,-153 42,-41 93,-62 152,-62 60,0 111,21 153,63 42,42 63,93 63,152 0,60 -21,111 -63,153 -42,42 -93,63 -153,63 -54,0 -95,-13 -124,-37 v 146 c 0,12 -4,22 -13,32 -9,8 -20,13 -32,13 z M 3371,0 c 13,0 23,4 32,13 9,9 14,20 14,32 v 131 c 19,-15 49,-22 89,-22 50,0 92,17 128,53 35,35 53,78 53,128 v 205 c 0,12 -4,23 -13,32 -9,9 -20,13 -32,13 h -1 c -13,0 -23,-4 -32,-13 -9,-9 -14,-20 -14,-32 V 335 c 0,-25 -8,-46 -26,-63 -17,-18 -38,-27 -63,-27 -25,0 -46,9 -64,27 -17,17 -25,38 -25,63 v 205 c 0,12 -5,23 -14,32 -9,9 -19,13 -32,13 h -1 c -12,0 -23,-4 -32,-13 -9,-9 -13,-20 -13,-32 V 45 c 0,-12 4,-23 13,-32 9,-9 20,-13 32,-13 z"
+   id="path4"
+   style="fill:#fefefe;fill-rule:nonzero" />
+
+   <path
+   class="fil2"
+   d="m 3821,154 c 13,0 23,4 32,13 9,9 13,20 13,32 v 341 c 0,12 -4,23 -13,32 -9,9 -19,13 -32,13 h -1 c -12,0 -23,-4 -32,-13 -9,-9 -14,-20 -14,-32 V 199 c 0,-12 5,-23 14,-32 9,-9 20,-13 32,-13 z m 0,-49 c -15,0 -27,-5 -37,-16 -11,-10 -16,-22 -16,-37 0,-14 5,-26 16,-36 10,-11 22,-16 37,-16 14,0 26,5 36,16 11,10 16,22 16,36 0,15 -5,28 -16,37 -10,11 -22,16 -36,16 z M 4002,0 c 12,0 23,4 32,13 9,9 13,20 13,32 v 109 h 56 c 13,0 23,4 32,13 9,9 14,20 14,32 v 1 c 0,13 -5,23 -14,32 -9,9 -19,13 -32,13 h -56 v 222 c 0,8 3,14 8,19 5,5 11,7 18,7 h 30 c 13,0 23,5 32,14 9,9 14,19 14,32 v 1 c 0,12 -5,23 -14,32 -9,9 -19,13 -32,13 h -30 c -32,0 -60,-11 -83,-35 -23,-23 -35,-50 -35,-83 V 45 c 0,-12 5,-23 14,-32 9,-9 19,-13 32,-13 z m 297,267 -13,170 h -65 L 4207,267 V 45 c 0,-12 5,-23 14,-32 9,-9 20,-13 32,-13 h 1 c 12,0 23,4 32,13 9,9 13,20 13,32 z m -45,318 c -15,0 -27,-5 -38,-15 -10,-11 -15,-23 -15,-37 0,-15 5,-27 15,-37 11,-10 23,-15 38,-15 14,0 26,5 36,15 11,10 16,22 16,37 0,14 -5,27 -16,37 -10,10 -22,15 -36,15 z"
+   id="path5"
+   style="fill:#7fed2d;fill-rule:nonzero" />
+
+  </g>
+<text x="1305" y="313" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="30" font-weight="600" fill="#f0f6fc">Bisq</text>
+<text x="1595" y="299" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="30" font-weight="600" fill="#f0f6fc">Haveno  /</text>
+<text x="1595" y="335" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="30" font-weight="600" fill="#f0f6fc">RetoSwap</text>
+<text x="1885" y="313" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="30" font-weight="600" fill="#f0f6fc">OpenMonero</text>
+<text x="2175" y="313" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="30" font-weight="600" fill="#f0f6fc">BasicSwap</text>
+<rect x="80" y="358" width="2240" height="60" fill="#1a212c"/>
+<text x="110" y="397" font-family="DejaVu Sans, sans-serif" font-size="28" font-weight="700" fill="#79c0ff">Privacy &amp; anonymity</text>
+<rect x="80" y="418" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="418" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="458" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">No KYC, no email, no ID required</text>
+<text x="1015" y="464.0740740740741" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="464.0740740740741" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1595" y="464.0740740740741" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1885" y="464.0740740740741" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="2175" y="464.0740740740741" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<rect x="80" y="482" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="482" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="522" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Anonymous signup — free, no deposit</text>
+<text x="1015" y="528.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="528.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1595" y="528.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1885" y="528.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="2175" y="526" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="546" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="546" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="586" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Tor (.onion) accessible</text>
+<text x="1015" y="592.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="592.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1595" y="592.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1885" y="592.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="2175" y="592.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<rect x="80" y="610" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="610" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="650" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">I2P accessible</text>
+<text x="1015" y="656.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="654" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="654" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="656.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="2175" y="654" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="674" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="674" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="714" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Lokinet accessible</text>
+<text x="1015" y="720.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="718" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="718" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="718" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="718" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="738" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="738" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="778" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Reachable at a .eth name (ENS, no DNS)</text>
+<text x="1015" y="784.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="782" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="782" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="782" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="782" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="802" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="802" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="842" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">End-to-end encrypted in-app chat</text>
+<text x="1015" y="848.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="848.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1595" y="848.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1885" y="846" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="846" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="866" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="866" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="906" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Real-time streaming chat (no polling)</text>
+<text x="1015" y="912.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="910" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="910" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="910" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="910" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="930" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="930" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="970" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Immutable on-chain chat history (operator cannot delete)</text>
+<text x="1015" y="976.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="974" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="974" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="974" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="974" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="994" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="994" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="1034" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Chain-analysis defenses (amount jitter, address-reuse warnings)</text>
+<text x="1015" y="1040.0740740740741" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="1038" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="1038" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="1038" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="1038" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="1058" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="1058" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="1098" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Privacy coins first-class (XMR/ZEC/ARRR/DASH/DCR; TxIDs off-chain)</text>
+<text x="1015" y="1104.0740740740741" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="1102" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="1102" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="1102" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="1104.0740740740741" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<rect x="80" y="1122" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="1122" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="1162" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Opaque order IDs — asset name never on the coordination chain</text>
+<text x="1015" y="1168.0740740740741" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="1166" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="1166" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="1166" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="1166" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="1186" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="1186" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="1226" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Solicitor / spammer-message protection (proof-of-work + caps)</text>
+<text x="1015" y="1232.0740740740741" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="1230" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="1230" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="1230" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="1230" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="1250" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="1250" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="1290" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Per-message ephemeral key (X25519 + ChaCha20-Poly1305)</text>
+<text x="1015" y="1296.0740740740741" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="1294" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="1294" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="1294" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="1294" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="1314" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="1314" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="1354" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Block explorer built in (no third-party tracking)</text>
+<text x="1015" y="1360.0740740740741" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="1358" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="1358" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="1358" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="1358" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="1378" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="1378" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="1418" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">No cookies, no cookie banner, nothing to consent to</text>
+<text x="1015" y="1424.0740740740741" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="1422" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="1422" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="1422" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="1422" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="1442" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="1442" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="1482" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">No third-party analytics or trackers</text>
+<text x="1015" y="1488.0740740740741" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="1486" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="1486" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="1486" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="1488.0740740740741" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<rect x="80" y="1506" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="1506" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="1546" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">No CDN — every asset served from the operator</text>
+<text x="1015" y="1552.0740740740741" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="1550" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="1550" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="1550" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="1550" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="1570" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="1570" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="1610" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">No Google Fonts, no third-party font network</text>
+<text x="1015" y="1616.0740740740741" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="1614" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="1614" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="1614" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="1614" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="1634" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="1634" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="1674" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">No reCAPTCHA — proof-of-work instead</text>
+<text x="1015" y="1680.0740740740741" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="1678" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="1678" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="1678" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="1678" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="1698" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="1698" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="1738" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">IPs never logged at any layer</text>
+<text x="1015" y="1744.0740740740741" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="1742" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="1742" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="1742" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="1742" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="1762" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="1762" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="1802" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">No fingerprinting via canvas / WebGL / fonts</text>
+<text x="1015" y="1808.0740740740741" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="1806" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="1806" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="1806" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="1806" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="1826" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="1826" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="1866" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">All env vars marked secret are validated and redacted in logs</text>
+<text x="1015" y="1872.0740740740741" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="1870" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="1870" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="1870" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="1870" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="1890" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="1890" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="1930" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Encrypted nightly backups (age + rsync)</text>
+<text x="1015" y="1936.0740740740741" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="1934" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="1934" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="1934" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="1934" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="1954" width="2240" height="60" fill="#1a212c"/>
+<text x="110" y="1993" font-family="DejaVu Sans, sans-serif" font-size="28" font-weight="700" fill="#79c0ff">Custody &amp; trade safety</text>
+<rect x="80" y="2014" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="2014" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="2054" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Fully non-custodial (no platform holdings)</text>
+<text x="1015" y="2060.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="2060.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1595" y="2060.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1885" y="2058" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="2060.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<rect x="80" y="2078" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="2078" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="2118" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Never been hacked — platform holds no funds to drain</text>
+<text x="1015" y="2124.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="2122" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="2122" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="2122" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="2122" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="2142" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="2142" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="2182" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Multi-signature escrow deposit required</text>
+<text x="1015" y="2186" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1305" y="2188.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1595" y="2188.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1885" y="2186" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="2186" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="2206" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="2206" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="2246" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Trustless cryptographic atomic swaps</text>
+<text x="1015" y="2250" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1305" y="2250" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="2250" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="2250" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="2252.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<rect x="80" y="2270" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="2270" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="2310" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Third-party arbitrators for dispute resolution</text>
+<text x="1015" y="2314" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1305" y="2316.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1595" y="2316.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1885" y="2316.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="2175" y="2314" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="2334" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="2334" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="2374" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">On-chain immutable reputation that survives operator shutdown</text>
+<text x="1015" y="2380.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="2378" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="2378" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="2378" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="2378" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="2398" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="2398" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="2438" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Immutable feedback (no operator can edit or remove)</text>
+<text x="1015" y="2444.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="2442" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="2442" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="2442" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="2442" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="2462" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="2462" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<g stroke="#79c0ff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M 115.32 2491.9 L 115.32 2487.994 A 8.68 8.68 0 0 1 132.68 2487.994 L 132.68 2491.9"/><rect x="110.0" y="2491.9" width="28.0" height="20.3" rx="3.5" ry="3.5" fill="#79c0ff" fill-opacity="0.18"/><circle cx="124" cy="2501.0350000000003" r="2.5" fill="#79c0ff" stroke="none"/><line x1="124" y1="2503.065" x2="124" y2="2509.155"/></g>
+<text x="152" y="2502" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Optional TOTP-based 2FA at login</text>
+<text x="1015" y="2508.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="2506" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="2506" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="2508.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="2175" y="2506" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="2526" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="2526" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<g stroke="#79c0ff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="116.65" y="2544.0" width="14.700000000000001" height="9.799999999999999" rx="1.5" fill="#79c0ff" fill-opacity="0.20"/><rect x="114.65" y="2553.8" width="18.700000000000003" height="21.7" rx="3" fill="#79c0ff" fill-opacity="0.10"/><line x1="119.65" y1="2548.9" x2="128.35" y2="2548.9"/><circle cx="124" cy="2569.5" r="2" fill="#79c0ff" stroke="none"/></g>
+<text x="152" y="2566" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Optional YubiKey / FIDO2 hardware-key unlock</text>
+<text x="1015" y="2572.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="2570" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="2570" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="2570" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="2570" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="2590" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="2590" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="2630" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Warrant canary (cryptographically signed weekly)</text>
+<text x="1015" y="2636.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="2634" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="2634" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="2634" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="2634" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="2654" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="2654" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="2694" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Operator kill-switch (instance-wide compromise response)</text>
+<text x="1015" y="2700.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="2698" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="2698" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="2698" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="2698" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="2718" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="2718" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="2758" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Reproducible builds with on-chain release attestation</text>
+<text x="1015" y="2764.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="2762" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="2762" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="2762" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="2762" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="2782" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="2782" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="2822" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Per-IP rate limiting at API edge</text>
+<text x="1015" y="2828.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="2826" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="2826" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="2826" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="2826" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="2846" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="2846" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="2886" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Argon2id key derivation for keystore unlock</text>
+<text x="1015" y="2892.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="2890" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="2890" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="2890" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="2890" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="2910" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="2910" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="2950" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">BIP-39 12-word seed phrase backup</text>
+<text x="1015" y="2956.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="2956.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1595" y="2954" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="2954" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="2956.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<rect x="80" y="2974" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="2974" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="3014" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Constant-time HMAC comparison (no timing oracles)</text>
+<text x="1015" y="3020.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="3018" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="3018" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="3018" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="3018" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="3038" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="3038" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="3078" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Strict CSP (Content Security Policy) headers</text>
+<text x="1015" y="3084.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="3082" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="3082" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="3082" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="3082" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="3102" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="3102" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="3142" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Subresource Integrity (SRI) on every script tag</text>
+<text x="1015" y="3148.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="3146" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="3146" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="3146" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="3146" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="3166" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="3166" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="3206" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Public report of every fixed security finding</text>
+<text x="1015" y="3212.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="3210" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="3210" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="3210" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="3210" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="3230" width="2240" height="60" fill="#1a212c"/>
+<text x="110" y="3269" font-family="DejaVu Sans, sans-serif" font-size="28" font-weight="700" fill="#79c0ff">Audits &amp; engineering rigor</text>
+<rect x="80" y="3290" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="3290" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="3330" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Public audit log — every finding, every fix, every accepted risk</text>
+<text x="1015" y="3336.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="3334" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="3334" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="3334" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="3334" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="3354" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="3354" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="3394" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">94-task static security audit campaign</text>
+<text x="1015" y="3400.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="3398" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="3398" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="3398" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="3398" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="3418" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="3418" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="3458" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Adversarial red-team narratives + STRIDE threat modeling</text>
+<text x="1015" y="3464.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="3462" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="3462" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="3462" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="3462" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="3482" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="3482" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="3522" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Thousands of self-checking smoke tests in the source tree</text>
+<text x="1015" y="3528.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="3526" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="3526" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="3526" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="3526" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="3546" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="3546" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="3586" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">AGPL-3.0 — modified instances must publish source</text>
+<text x="1015" y="3592.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="3590" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="3590" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="3590" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="3590" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="3610" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="3610" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="3650" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Open source under any OSI-approved license</text>
+<text x="1015" y="3656.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="3656.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1595" y="3656.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1885" y="3656.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="2175" y="3656.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<rect x="80" y="3674" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="3674" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="3714" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Zero code obfuscation — every shipped byte is auditable</text>
+<text x="1015" y="3720.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="3720.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1595" y="3720.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1885" y="3718" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="3720.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<rect x="80" y="3738" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="3738" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="3778" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">42+ public Architecture Decision Records (ADRs)</text>
+<text x="1015" y="3784.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="3782" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="3782" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="3782" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="3782" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="3802" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="3802" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="3842" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">No PHP / WordPress / XML-RPC / OAuth attack surface</text>
+<text x="1015" y="3848.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="3848.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1595" y="3848.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1885" y="3846" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="3848.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<rect x="80" y="3866" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="3866" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="3906" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Zero known unpatched CVEs in shipped dependencies</text>
+<text x="1015" y="3912.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="3910" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="3910" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="3910" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="3910" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="3930" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="3930" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="3970" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Dependency hygiene audit documented per release</text>
+<text x="1015" y="3976.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="3974" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="3974" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="3974" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="3974" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="3994" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="3994" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="4034" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Public post-incident retrospectives</text>
+<text x="1015" y="4040.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="4038" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="4038" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="4038" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="4038" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="4058" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="4058" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="4098" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">No eval(), no Function(), no dynamic code paths anywhere</text>
+<text x="1015" y="4104.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="4102" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="4102" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="4102" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="4102" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="4122" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="4122" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="4162" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Zod-validated request bodies with bounded field lengths</text>
+<text x="1015" y="4168.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="4166" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="4166" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="4166" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="4166" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="4186" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="4186" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="4226" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Parameterized SQL — no string concatenation queries</text>
+<text x="1015" y="4232.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="4230" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="4230" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="4230" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="4230" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="4250" width="2240" height="60" fill="#1a212c"/>
+<text x="110" y="4289" font-family="DejaVu Sans, sans-serif" font-size="28" font-weight="700" fill="#79c0ff">Speed &amp; UX</text>
+<rect x="80" y="4310" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="4310" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="4350" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">~3-second trade-listing confirmation (Blurt block time)</text>
+<text x="1015" y="4356.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="4354" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="4354" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="4354" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="4354" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="4374" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="4374" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="4414" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Featured-trade auction system (eBay-style)</text>
+<text x="1015" y="4420.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="4418" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="4418" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="4418" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="4418" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="4438" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="4438" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="4478" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Anti-sniping protection on featured-trade auctions</text>
+<text x="1015" y="4484.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="4482" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="4482" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="4482" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="4482" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="4502" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="4502" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="4542" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">One-click trade relist when an order expires</text>
+<text x="1015" y="4548.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="4546" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="4546" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="4546" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="4546" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="4566" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="4566" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="4606" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Push notifications with in-app inbox</text>
+<text x="1015" y="4612.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="4610" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="4610" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="4610" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="4610" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="4630" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="4630" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="4670" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">100+ interactive tooltips and inline help</text>
+<text x="1015" y="4676.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="4674" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="4674" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="4674" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="4674" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="4694" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="4694" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="4734" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">130+ FAQ entries in 10 languages</text>
+<text x="1015" y="4740.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="4738" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="4738" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="4738" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="4738" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="4758" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="4758" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="4798" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">In-app payment QR codes</text>
+<text x="1015" y="4804.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="4804.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1595" y="4804.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1885" y="4804.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="2175" y="4802" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="4822" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="4822" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="4862" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">All users earn financial rewards on trading milestones</text>
+<text x="1015" y="4868.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="4866" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="4866" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="4866" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="4866" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="4886" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="4886" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="4926" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Instance operators earn 90% of Blurt-paid listing fees</text>
+<text x="1015" y="4932.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="4930" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="4930" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="4930" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="4930" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="4950" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="4950" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="4990" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">No maker or taker trading fee — flat listing fee only</text>
+<text x="1015" y="4996.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="4994" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="4994" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="4994" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="4996.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<rect x="80" y="5014" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="5014" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="5054" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">All users earn ~2% interest on staked Blurt</text>
+<text x="1015" y="5060.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="5058" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="5058" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="5058" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="5058" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="5078" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="5078" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="5118" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Saved searches and per-asset alerts</text>
+<text x="1015" y="5124.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="5122" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="5122" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="5122" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="5122" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="5142" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="5142" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="5182" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Orderbook filters by network, payment method, country</text>
+<text x="1015" y="5188.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="5186" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="5186" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="5186" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="5186" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="5206" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="5206" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="5246" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Custom amount-range alerts (notify when a $X trade appears)</text>
+<text x="1015" y="5252.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="5250" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="5250" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="5250" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="5250" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="5270" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="5270" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="5310" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Dark mode</text>
+<text x="1015" y="5316.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="5316.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1595" y="5316.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1885" y="5314" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="5316.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<rect x="80" y="5334" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="5334" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="5374" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Offline-first UI (orderbook viewable without network)</text>
+<text x="1015" y="5380.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="5378" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="5378" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="5378" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="5378" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="5398" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="5398" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="5438" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Multi-device pairing via signed QR session</text>
+<text x="1015" y="5444.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="5442" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="5442" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="5442" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="5442" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="5462" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="5462" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="5502" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Per-trade encrypted note field</text>
+<text x="1015" y="5508.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="5506" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="5506" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="5506" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="5506" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="5526" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="5526" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="5566" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Pre-trade calculator (fees, slippage, totals)</text>
+<text x="1015" y="5572.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="5570" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="5570" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="5570" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="5570" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="5590" width="2240" height="60" fill="#1a212c"/>
+<text x="110" y="5629" font-family="DejaVu Sans, sans-serif" font-size="28" font-weight="700" fill="#79c0ff">Access</text>
+<rect x="80" y="5650" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="5650" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="5690" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Works in any modern browser (Firefox / Chromium / Safari / Edge)</text>
+<text x="1015" y="5696.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="5694" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="5694" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="5696.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="2175" y="5694" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="5714" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="5714" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="5754" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">No-JavaScript fallback path</text>
+<text x="1015" y="5760.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="5758" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="5758" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="5760.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="2175" y="5758" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="5778" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="5778" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="5818" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Progressive Web App (installable on iPhone &amp; Android)</text>
+<text x="1015" y="5824.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="5822" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="5822" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="5822" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="5822" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="5842" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="5842" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="5882" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Desktop application (Windows / Mac / Linux)</text>
+<text x="1015" y="5886" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1305" y="5888.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1595" y="5888.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1885" y="5886" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="5888.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<rect x="80" y="5906" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="5906" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="5946" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Public read-only orderbook (no signup to browse)</text>
+<text x="1015" y="5952.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="5950" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="5950" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="5952.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="2175" y="5950" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="5970" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="5970" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="6010" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Free signup — zero deposit required</text>
+<text x="1015" y="6016.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="6016.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1595" y="6016.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1885" y="6016.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="2175" y="6014" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="6034" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="6034" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="6074" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Self-host on a $5/month VPS or Raspberry Pi</text>
+<text x="1015" y="6080.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="6078" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="6078" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="6078" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="6078" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="6098" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="6098" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="6138" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Requires user to run a full node (Bitcoin / Monero / per-coin)</text>
+<text x="1015" y="6142" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1305" y="6144.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1595" y="6144.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1885" y="6142" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="6144.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<rect x="80" y="6162" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="6162" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="6202" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">10 fully localized languages (incl. RTL Persian)</text>
+<text x="1015" y="6208.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="6206" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="6206" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="6206" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="6206" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="6226" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="6226" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="6266" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Public API for wallet developers and third-party tools</text>
+<text x="1015" y="6272.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="6270" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="6270" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="6270" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="6270" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="6290" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="6290" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="6330" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Model Context Protocol for orderbook discovery/interactivity</text>
+<text x="1015" y="6336.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="6334" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="6334" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="6334" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="6334" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="6354" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="6354" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="6394" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">RSS feed of the orderbook</text>
+<text x="1015" y="6400.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="6398" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="6398" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="6398" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="6398" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="6418" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="6418" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="6458" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Orders postable by a bot as plain on-chain ops (no API key)</text>
+<text x="1015" y="6464.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="6462" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="6462" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="6462" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="6462" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="6482" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="6482" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="6522" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Works in Tor Browser at default security settings</text>
+<text x="1015" y="6528.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="6526" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="6526" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="6528.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="2175" y="6526" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="6546" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="6546" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="6586" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Works on a Raspberry Pi Zero / 4G phone</text>
+<text x="1015" y="6592.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="6590" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="6590" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="6592.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="2175" y="6590" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="6610" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="6610" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="6650" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Works on old hardware (iPhone 5 / Android 6 era)</text>
+<text x="1015" y="6656.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="6654" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="6654" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="6656.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="2175" y="6654" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="6674" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="6674" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="6714" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Bundle weight under 200 KB on first paint</text>
+<text x="1015" y="6720.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="6718" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="6718" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="6720.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="2175" y="6718" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="6738" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="6738" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="6778" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Lazy-loaded images and deferred non-critical CSS</text>
+<text x="1015" y="6784.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="6782" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="6782" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="6782" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="6782" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="6802" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="6802" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="6842" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Server-side rendering for the orderbook</text>
+<text x="1015" y="6848.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="6846" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="6846" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="6848.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="2175" y="6846" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="6866" width="2240" height="60" fill="#1a212c"/>
+<text x="110" y="6905" font-family="DejaVu Sans, sans-serif" font-size="28" font-weight="700" fill="#79c0ff">Assets &amp; fiat</text>
+<rect x="80" y="6926" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="6926" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="6966" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Bitcoin (BTC)</text>
+<text x="1015" y="6972.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="6972.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1595" y="6972.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1885" y="6970" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="6972.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<rect x="80" y="6990" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="6990" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="7030" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Monero (XMR)</text>
+<text x="1015" y="7036.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="7036.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1595" y="7036.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1885" y="7036.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="2175" y="7036.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<rect x="80" y="7054" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="7054" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="7094" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Blurt — the chain Morphit federates over</text>
+<text x="1015" y="7100.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="7098" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="7098" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="7098" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="7098" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="7118" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="7118" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="7158" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Ethereum (ETH)</text>
+<text x="1015" y="7164.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="7162" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="7164.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1885" y="7162" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="7162" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="7182" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="7182" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="7222" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Litecoin (LTC)</text>
+<text x="1015" y="7228.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="7226" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="7228.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1885" y="7226" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="7228.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<rect x="80" y="7246" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="7246" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="7286" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Bitcoin Cash (BCH)</text>
+<text x="1015" y="7292.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="7290" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="7292.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1885" y="7290" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="7292.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<rect x="80" y="7310" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="7310" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="7350" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">USD-pegged stablecoin support (USDT, USDC, or DAI)</text>
+<text x="1015" y="7356.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="7354" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="7356.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1885" y="7354" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="7354" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="7374" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="7374" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="7414" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Subs (ERC-20 / TRC-20 / BEP-20 / Polygon / Solana / Arbitrum / Base)</text>
+<text x="1015" y="7420.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="7418" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="7418" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="7418" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="7418" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="7438" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="7438" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="7478" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Zcash (ZEC)</text>
+<text x="1015" y="7484.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="7482" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="7482" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="7482" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="7482" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="7502" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="7502" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="7542" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Pirate Chain (ARRR)</text>
+<text x="1015" y="7548.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="7546" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="7546" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="7546" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="7546" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="7566" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="7566" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="7606" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Decred (DCR)</text>
+<text x="1015" y="7612.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="7610" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="7610" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="7610" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="7612.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<rect x="80" y="7630" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="7630" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="7670" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Dogecoin (DOGE)</text>
+<text x="1015" y="7676.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="7674" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="7674" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="7674" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="7676.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<rect x="80" y="7694" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="7694" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="7734" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Dash (DASH)</text>
+<text x="1015" y="7740.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="7738" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="7738" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="7738" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="7740.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<rect x="80" y="7758" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="7758" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="7798" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Solana (SOL)</text>
+<text x="1015" y="7804.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="7802" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="7802" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="7802" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="7802" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="7822" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="7822" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="7862" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">XRP (XRP)</text>
+<text x="1015" y="7868.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="7866" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="7866" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="7866" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="7866" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="7886" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="7886" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="7926" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Fiat (cash, bank transfer, etc.)</text>
+<text x="1015" y="7932.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="7932.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1595" y="7932.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1885" y="7932.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="2175" y="7930" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="7950" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="7950" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="7990" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Barter for goods and services</text>
+<text x="1015" y="7996.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="7994" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="7994" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="7994" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="7994" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="8014" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="8014" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="8054" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Cash by mail with carrier-tracking workflow</text>
+<text x="1015" y="8060.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="8058" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="8058" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="8058" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="8058" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="8078" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="8078" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="8118" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Precious metals (gold, silver, etc.)</text>
+<text x="1015" y="8124.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="8122" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="8122" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="8122" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="8122" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="8142" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="8142" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="8182" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Gift cards as trade payment</text>
+<text x="1015" y="8188.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="8186" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="8186" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="8186" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="8186" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="8206" width="2240" height="60" fill="#1a212c"/>
+<text x="110" y="8245" font-family="DejaVu Sans, sans-serif" font-size="28" font-weight="700" fill="#79c0ff">Decentralization &amp; federation</text>
+<rect x="80" y="8266" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="8266" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="8306" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Federated multi-operator network with shared orderbook</text>
+<text x="1015" y="8312.074074074075" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="8310" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="8310" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="8310" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="8310" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="8330" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="8330" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="8370" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Anyone can run an instance without permission</text>
+<text x="1015" y="8376.074074074075" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="8374" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="8374" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="8374" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="8376.074074074075" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<rect x="80" y="8394" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="8394" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="8434" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">No single point of failure — survives any operator shutdown</text>
+<text x="1015" y="8440.074074074075" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="8438" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="8438" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="8438" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="8440.074074074075" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<rect x="80" y="8458" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="8458" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="8498" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Operator can earn revenue from their instance</text>
+<text x="1015" y="8504.074074074075" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="8502" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="8502" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="8502" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="8502" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="8522" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="8522" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="8562" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Listing fee &lt; $1 USD-equivalent</text>
+<text x="1015" y="8568.074074074075" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="8566" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="8566" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="8566" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="8568.074074074075" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<rect x="80" y="8586" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="8586" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="8626" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Cross-instance federation probe (auto-discovery)</text>
+<text x="1015" y="8632.074074074075" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="8630" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="8630" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="8630" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="8630" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="8650" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="8650" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="8690" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">AGPL guarantees source availability of modifications</text>
+<text x="1015" y="8696.074074074075" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="8694" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="8694" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="8694" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="8694" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="8714" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="8714" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="8754" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">No central database — chain-replicated state</text>
+<text x="1015" y="8760.074074074075" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="8758" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="8758" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="8758" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="8760.074074074075" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<rect x="80" y="8778" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="8778" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="8818" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">No central API — every endpoint is operator-owned</text>
+<text x="1015" y="8824.074074074075" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="8822" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="8822" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="8822" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="8824.074074074075" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<rect x="80" y="8842" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="8842" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="8882" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Multiple instances visible on .onion, .i2p, .loki AND clearnet</text>
+<text x="1015" y="8888.074074074075" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="8886" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="8886" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="8886" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="8886" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="8906" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="8906" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="8946" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Cross-instance peer-disagreement detection</text>
+<text x="1015" y="8952.074074074075" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="8950" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="8950" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="8950" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="8950" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="8970" width="2240" height="60" fill="#1a212c"/>
+<text x="110" y="9009" font-family="DejaVu Sans, sans-serif" font-size="28" font-weight="700" fill="#79c0ff">Community &amp; transparency</text>
+<rect x="80" y="9030" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="9030" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="9070" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Public roadmap and ADR backlog</text>
+<text x="1015" y="9076.074074074075" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="9074" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="9074" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="9074" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="9074" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="9094" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="9094" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="9134" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Public Matrix room — operators and users hang out together</text>
+<text x="1015" y="9140.074074074075" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="9138" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="9138" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="9138" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="9138" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="9158" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="9158" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="9198" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">No NDA required to report bugs</text>
+<text x="1015" y="9204.074074074075" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="9204.074074074075" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1595" y="9204.074074074075" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1885" y="9204.074074074075" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="2175" y="9204.074074074075" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<rect x="80" y="9222" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="9222" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="9262" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">No CLA — copyright stays with contributors</text>
+<text x="1015" y="9268.074074074075" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="9266" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="9266" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="9266" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="9266" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="9286" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="9286" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="9326" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">All commits in a public Forgejo instance (no GitHub dependency)</text>
+<text x="1015" y="9332.074074074075" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="9330" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="9330" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="9330" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="9330" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="9350" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="9350" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="9390" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Public release-signing key with a verifiable provenance trail</text>
+<text x="1015" y="9396.074074074075" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="9394" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="9394" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="9394" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="9394" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="9414" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="9414" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="9454" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">GPG-signed release tarballs + on-chain bundle hash manifest</text>
+<text x="1015" y="9460.074074074075" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="9458" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="9458" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="9458" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="9458" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="9478" width="2240" height="64" fill="#161c25"/>
+<rect x="870" y="9478" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="9518" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Self-auditing brag list (CI verifies every claim)</text>
+<text x="1015" y="9524.074074074075" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="9522" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="9522" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="9522" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="9522" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<rect x="80" y="9542" width="2240" height="64" fill="#0d1119"/>
+<rect x="870" y="9542" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
+<text x="110" y="9582" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Documentation kept in lockstep with code (paired-update rule)</text>
+<text x="1015" y="9588.074074074075" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1305" y="9586" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1595" y="9586" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1885" y="9586" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="2175" y="9586" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="1200" y="9641" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="20" font-weight="600" fill="#8b949e">Morphit: 132/137 · Bisq: 20/137 · Haveno: 23/137 · OpenMonero: 20/137 · BasicSwap: 27/137</text>
+<text x="1200" y="9663" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" fill="#8b949e">As of 2 July, 2026. Information about other platforms gathered from their public docs and recent independent reviews; corrections welcome via Matrix #agorise:matrix.org.</text>
+</svg>

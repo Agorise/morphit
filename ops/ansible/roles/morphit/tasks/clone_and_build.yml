@@ -1,0 +1,102 @@
+# Clone the repo + npm install + build.
+---
+# Source the code two ways:
+#   • REMOTE install (no local source given): git clone at the pinned ref.
+#   • LOCAL install (morphit_local_source_path set — the release the operator
+#     downloaded + extracted): copy THAT into place, so the node runs exactly
+#     the bytes they downloaded, not whatever is on git. `morphit-ops install`
+#     sets morphit_local_source_path to the extracted release directory.
+- name: Clone morphit repo (remote install — no local source given)
+  ansible.builtin.git:
+    repo: "{{ morphit_repo_url }}"
+    dest: "{{ morphit_repo_path }}"
+    version: "{{ morphit_repo_ref }}"
+    update: true
+    force: false
+  become: true
+  become_user: "{{ morphit_service_user }}"
+  when: (morphit_local_source_path | default('')) | length == 0
+  # The repo is owned by the service user so npm runs as it.
+
+- name: Ensure the repo dir exists (local install — copying the downloaded release)
+  ansible.builtin.file:
+    path: "{{ morphit_repo_path }}"
+    state: directory
+    owner: "{{ morphit_service_user }}"
+    group: "{{ morphit_service_group }}"
+    mode: "0755"
+  when:
+    - (morphit_local_source_path | default('')) | length > 0
+    - morphit_local_source_path != morphit_repo_path
+
+- name: Copy the downloaded release into place (local install)
+  # tar-pipe rather than `cp -a`: by the time this runs, `morphit-setup.sh` has
+  # done an `npm install` in the extract, so it carries a large node_modules we
+  # do NOT want to duplicate (the build below runs its own install in place).
+  # Exclude exactly what the release tarball excludes; tar is always present, no
+  # rsync dependency. Runs as root; the ownership task below fixes owner.
+  ansible.builtin.shell:
+    cmd: >-
+      tar -C {{ morphit_local_source_path | quote }}
+      --exclude=node_modules --exclude=.svelte-kit --exclude=build
+      --exclude=dist --exclude=translator-output --exclude=.git
+      -cf - . | tar -C {{ morphit_repo_path | quote }} -xf -
+  when:
+    - (morphit_local_source_path | default('')) | length > 0
+    - morphit_local_source_path != morphit_repo_path
+  changed_when: true
+
+- name: Ensure repo ownership is correct
+  ansible.builtin.file:
+    path: "{{ morphit_repo_path }}"
+    state: directory
+    owner: "{{ morphit_service_user }}"
+    group: "{{ morphit_service_group }}"
+    recurse: true
+
+- name: npm install (workspace root)
+  ansible.builtin.command:
+    cmd: npm install --workspaces --include-workspace-root
+    chdir: "{{ morphit_repo_path }}"
+  become: true
+  become_user: "{{ morphit_service_user }}"
+  register: morphit_npm_install_result
+  changed_when: "'changed' in morphit_npm_install_result.stdout or 'added' in morphit_npm_install_result.stdout"
+
+- name: Build workspaces (relay + indexer + ops-cli + indexer-client + asset-registry)
+  ansible.builtin.command:
+    cmd: npm run build --workspaces --if-present
+    chdir: "{{ morphit_repo_path }}"
+  become: true
+  become_user: "{{ morphit_service_user }}"
+  register: npm_build_result
+  changed_when: true
+  # cp162: ops-cli now HAS a `build` script (esbuild bundle →
+  # dist/main.js), so `--if-present` builds it here.  The
+  # published bin is a launcher shim that runs the compiled
+  # dist/main.js under plain `node` when present (no tsx), and
+  # falls back to the tsx source only if dist is absent.  Because
+  # this task runs AFTER the full `npm install` above (dev deps
+  # present, incl. esbuild), the bundle builds cleanly.  The next
+  # task verifies the result is runnable.
+
+- name: Verify morphit-ops CLI is runnable (catches missing bin symlink / missing tsx)
+  ansible.builtin.command:
+    cmd: npm exec --offline --workspace apps/ops-cli morphit-ops -- --help
+    chdir: "{{ morphit_repo_path }}"
+  become: true
+  become_user: "{{ morphit_service_user }}"
+  register: morphit_ops_smoke
+  changed_when: false
+  # `npm exec --offline --workspace` resolves the ops-cli bin
+  # purely from the local workspace and forbids any registry
+  # access — if `npm install` didn't wire up the tool, or tsx
+  # (a production dep since cp161) is absent, this fails the play
+  # with a clear error instead of letting the operator hit
+  # "command not found" at their first `morphit-ops init`.
+  # NOTE: we use `npm exec --offline`, NOT `npx --no-install` —
+  # the latter still performs a registry lookup before erroring,
+  # so it is not a reliable offline guarantee on hardened/air-
+  # gapped hosts.  `--offline` forbids network access outright.
+  # The ops-cli bin runs from TS source via tsx, so this exercises
+  # the full resolve→tsx→execute path the operator will use.

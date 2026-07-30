@@ -1,0 +1,64 @@
+{
+  // ── Web-scoped smoke tsconfig ──────────────────────────────────────────
+  //
+  // `scripts/run-smokes.sh` runs every smoke under `../../tsconfig.smoke.json`
+  // (the repo-root unified config) EXCEPT smokes whose workspace ships its own
+  // `tsconfig.smoke.json` — those get the local one.  apps/web ships this one.
+  //
+  // WHY web needs its own: the SvelteKit `$`-aliases are per-app.  `$blurt` and
+  // `$indexer` mean DIFFERENT directories in web vs. the indexer:
+  //     web     → apps/web/src/lib/blurt      (getBlurtClient, sign, apr, …)
+  //     indexer → apps/indexer/src/blurt      (BlurtClient type, verify, …)
+  // A single flat `paths` map can't express both, so the root config maps them
+  // to the INDEXER (correct for indexer smokes).  Under that map, any web smoke
+  // that `import()`s a web module using `$blurt/*` silently binds the indexer's
+  // module — e.g. `$blurt/client` resolves to the indexer's client.ts, which has
+  // no `getBlurtClient` export, and the smoke dies with a confusing "no such
+  // export" error.  Web source has always used relative imports as a workaround;
+  // this config removes the need for the workaround by resolving the web aliases
+  // to WEB, exactly matching svelte.config.js (Vite's runtime resolution).
+  //
+  // `svelte.config.js` is the source of truth for these aliases;
+  // `smoke-tsconfig-alias-parity-smoke.ts` fails if this file drifts from it.
+  //
+  // Self-contained (does NOT extend `.svelte-kit/tsconfig.json`, which only
+  // exists after `svelte-kit sync`); compilerOptions mirror the root config.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable", "WebWorker"],
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "strict": false,
+    "noImplicitAny": false,
+    "baseUrl": ".",
+    "paths": {
+      "$lib": ["src/lib"],
+      "$lib/*": ["src/lib/*"],
+      "$components": ["src/lib/components"],
+      "$components/*": ["src/lib/components/*"],
+      "$crypto": ["src/lib/crypto"],
+      "$crypto/*": ["src/lib/crypto/*"],
+      "$i18n": ["src/lib/i18n"],
+      "$i18n/*": ["src/lib/i18n/*"],
+      "$stores": ["src/lib/stores"],
+      "$stores/*": ["src/lib/stores/*"],
+      "$utils": ["src/lib/utils"],
+      "$utils/*": ["src/lib/utils/*"],
+      "$net": ["src/lib/net"],
+      "$net/*": ["src/lib/net/*"],
+      "$blurt": ["src/lib/blurt"],
+      "$blurt/*": ["src/lib/blurt/*"],
+      "$indexer": ["src/lib/indexer"],
+      "$indexer/*": ["src/lib/indexer/*"],
+      "$seo": ["src/lib/seo"],
+      "$seo/*": ["src/lib/seo/*"],
+      "$prices": ["src/lib/prices"],
+      "$prices/*": ["src/lib/prices/*"]
+    }
+  }
+}

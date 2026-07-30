@@ -1,0 +1,40 @@
+# §34 — fail2ban for SSH.
+---
+- name: Configure fail2ban jail.local
+  ansible.builtin.copy:
+    dest: /etc/fail2ban/jail.local
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      # Managed by Ansible — see OPERATIONS.md §34.
+      [DEFAULT]
+      bantime  = {{ fail2ban_bantime }}
+      bantime.increment = true
+      bantime.factor = 2
+      bantime.maxtime = {{ fail2ban_bantime_max }}
+      findtime = {{ fail2ban_findtime }}
+      maxretry = {{ fail2ban_maxretry }}
+      backend  = systemd
+      destemail = {{ morphit_alert_email_to }}
+      sender   = fail2ban@{{ morphit_domain }}
+      mta      = mail
+      action   = %(action_mwl)s
+
+      [sshd]
+      enabled = true
+      port    = ssh
+      logpath = %(sshd_log)s
+      backend = %(sshd_backend)s
+
+      [postfix-sasl]
+      enabled = true
+      port    = smtp,465,submission
+      backend = systemd
+  notify: Restart fail2ban
+
+- name: Enable + start fail2ban
+  ansible.builtin.systemd:
+    name: fail2ban
+    enabled: true
+    state: started

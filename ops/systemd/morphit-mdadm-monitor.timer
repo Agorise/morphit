@@ -1,0 +1,16 @@
+[Unit]
+Description=Morphit mdadm monitor timer — fires the .service every 15 minutes
+Documentation=https://git.agorise.net/agorise/morphit
+Requires=morphit-mdadm-monitor.service
+
+[Timer]
+# 30s after boot, then every 15 minutes.  RAID state changes
+# are infrequent except during rebuild, but during a rebuild
+# you want progress visibility.
+OnBootSec=30s
+OnUnitActiveSec=15min
+AccuracySec=30s
+Unit=morphit-mdadm-monitor.service
+
+[Install]
+WantedBy=timers.target
