@@ -176,6 +176,17 @@ const scenarios: Scenario[] = [
 		expectedTier: 'WARN'
 	},
 
+	// ─── WARN — cp600 new release available (Matrix twin of the desktop toast) ───
+	{
+		name: 'release release_available → WARN (prompt DM, not buried in the daily digest)',
+		alert: a('release', 'release_available', {
+			current: '1.9.7',
+			latest: '1.9.8',
+			release_url: 'https://git.agorise.net/agorise/morphit/releases/tag/v1.9.8'
+		}),
+		expectedTier: 'WARN'
+	},
+
 	// ─── WARN — aspirational ──────────────────────────────────
 	{
 		name: 'witness-fee changed → WARN',

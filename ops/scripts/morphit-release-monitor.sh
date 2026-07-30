@@ -52,12 +52,21 @@ fi
 # HTTPS to an external host; a slow network must not block the
 # system-timer slot indefinitely.
 #
+# Capture the exit code CORRECTLY. The obvious `VAR=$(cmd) || true; rc=$?`
+# is a trap under `set -e`: `|| true` swallows the failure but also
+# clobbers `$?` to 0, so a "newer release" (exit 1) reads as 0 (up-to-date)
+# and we'd NEVER alert. The if/else form keeps set -e happy AND preserves
+# the real exit code.
+#
 # Exit codes from morphit-ops upgrade --check-only:
 #   0 — up-to-date
 #   1 — newer release available (this is what we care about)
 #   5 — preflight error (network, missing release-info.json, ...)
-JSON_OUT=$(timeout 30 npx tsx "$OPS_CLI" upgrade --check-only --json 2>/dev/null) || true
-EXIT_CODE=$?
+if JSON_OUT=$(timeout 30 npx tsx "$OPS_CLI" upgrade --check-only --json 2>/dev/null); then
+    EXIT_CODE=0
+else
+    EXIT_CODE=$?
+fi
 
 case "$EXIT_CODE" in
     0)

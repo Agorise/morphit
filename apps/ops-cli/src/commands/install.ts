@@ -27,9 +27,10 @@ import { existsSync, symlinkSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { defaultRepoRoot, safeCwd } from '../lib/repoRoot.ts';
 
-import { ask, askYesNo } from '../init/prompt.ts';
+import { ask, askYesNo, askChoice } from '../init/prompt.ts';
 import { runInit } from './init.ts';
 import { runHarden } from './harden.ts';
+import { runAnsibleInstall } from '../init/runAnsibleInstall.ts';
 
 export interface InstallCtx {
 	readonly flags: Readonly<Record<string, string>>;
@@ -92,6 +93,21 @@ export async function runInstall(ctx: InstallCtx): Promise<number> {
 	console.log('━'.repeat(60));
 	console.log('  Morphit — guided install');
 	console.log('━'.repeat(60));
+	console.log('');
+
+	// ─── Mode: full guided install (Ansible) vs configure-only ──
+	// The full path installs EVERYTHING on this box (the same hardened stack a
+	// VPS gets); configure-only is the older path for operators who already
+	// installed Node/PostgreSQL/nginx themselves. Default to full for grandma.
+	const modeIdx = await askChoice('How would you like to install Morphit?', [
+		'Full guided install \u2014 set EVERYTHING up on this computer for me (recommended)',
+		'Configure only \u2014 I already installed Node, PostgreSQL, and nginx myself'
+	]);
+	if (modeIdx === 0) {
+		const repoRoot = safeCwd() ?? defaultRepoRoot();
+		return runAnsibleInstall({ repoRoot });
+	}
+
 	console.log('');
 	console.log('  This walks you through standing up a Morphit node. Here is');
 	console.log('  the whole arc, so nothing is a surprise:');

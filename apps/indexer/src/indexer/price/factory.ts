@@ -8,21 +8,26 @@
  * surfaces (listing-fee USD echo for BLURT, future orderbook
  * USD-equivalent display for BTC/XMR/etc.).
  *
- * Only invoked when `config.priceFeedEnabled === true` (operator
- * opt-in).  Default operator deployments leave it off; the
- * indexer makes ZERO outbound HTTP calls for pricing.
+ * Only built when `config.priceFeedEnabled === true`.  This is ON by
+ * default (MORPHIT_INDEXER_PRICE_FEED_ENABLED defaults to 'true'), so a
+ * default instance DOES fetch USD prices for the display echoes; an
+ * operator who wants zero outbound pricing calls sets it to 'false'.
  *
  * Per-asset composition
  * ─────────────────────
- * EXTERNAL tier (queried together, then median-anchored + averaged
- * with outlier rejection so no single off/stale provider can swing
- * the committed price), then a FALLBACK tier (morphit_native, kept
- * OUT of the average so the external-vs-native cross-check stays
- * meaningful), then the static floor:
+ * An optional PRIMARY source (a single authoritative feed, tried first
+ * and committed whenever it is plausible), then the EXTERNAL tier
+ * (queried together, then median-anchored + averaged with outlier
+ * rejection so no single off/stale provider can swing the committed
+ * price), then a FALLBACK tier (morphit_native, kept OUT of the average
+ * so the external-vs-native cross-check stays meaningful), then the
+ * static floor:
  *
- *   BLURT/USD:  Coingecko + CoinPaprika + CryptoCompare
- *               (+ CoinCap/Messari when keyed, + CoinLore when id set)
- *               → morphit_native → static floor
+ *   BLURT/USD:  api.blurt.blog/price_info (PRIMARY — the source of
+ *               truth, tried first) → then, only if it is down or
+ *               implausible, the Coingecko + CoinPaprika + CryptoCompare
+ *               average (+ CoinCap/Messari when keyed, + CoinLore when
+ *               id set) → morphit_native → static floor
  *   BTC/USD:    Coingecko + CoinPaprika + Kraken + Binance + Coinbase
  *               + OKX + Bybit + CryptoCompare
  *               (+ CoinCap/CoinLore/Messari when configured)
@@ -151,7 +156,9 @@ export interface AssetPriceSourceOptions {
 	 *  these via env vars. */
 	readonly staticFloor: number;
 	/** cp425 — true only for BLURT: pull the Blurt-native price feed
-	 *  (api.blurt.blog/price_info) as one more external-average source. */
+	 *  (api.blurt.blog/price_info).  cp604 — this feed is the PRIMARY
+	 *  source of truth for BLURT/USD: tried first, committed whenever
+	 *  plausible; the aggregator-average is the fallback. */
 	readonly blurtPriceFeed?: boolean;
 }
 
@@ -174,11 +181,12 @@ export const CP130_ASSET_DEFAULTS: Record<string, AssetPriceSourceOptions> = {
 		coingeckoCoinId: 'blurt',
 		coinpaprikaId: 'blurt-blurt',
 		// CEXes (Kraken/Binance/Coinbase/OKX/Bybit) don't list BLURT —
-		// it averages across the aggregators (Coingecko + CoinPaprika +
-		// CryptoCompare, plus CoinCap/Messari when keyed), with
-		// morphit_native as the fallback tier + cross-check.  These ids
-		// are best-effort and must be verified against each live API on
-		// deploy; a wrong id returns null and is harmlessly excluded.
+		// Blurt's own api.blurt.blog/price_info feed is the PRIMARY source
+		// of truth (blurtPriceFeed below); it falls back to the aggregators
+		// (Coingecko + CoinPaprika + CryptoCompare, plus CoinCap/Messari
+		// when keyed) averaged, then morphit_native.  These ids are
+		// best-effort and must be verified against each live API on deploy;
+		// a wrong id returns null and is harmlessly excluded.
 		cryptocompareSymbol: 'BLURT',
 		coincapId: 'blurt',
 		messariSlug: 'blurt',
@@ -365,13 +373,17 @@ export function createAssetPriceSource(
 			})
 		});
 	}
-	// cp425 — Blurt-native price feed (api.blurt.blog/price_info). BLURT
-	// only, USD only (the feed quotes USD), and only when a URL is set
-	// (an operator can blank MORPHIT_INDEXER_BLURT_PRICE_FEED_URL to opt
-	// out). One more independent reading in the robust average — and a
-	// self-sovereign, non-CEX source, which suits Morphit's priorities.
+	// cp425/cp604 — Blurt-native price feed (api.blurt.blog/price_info).
+	// BLURT only, USD only (the feed quotes USD), and only when a URL is
+	// set (an operator can blank MORPHIT_INDEXER_BLURT_PRICE_FEED_URL to
+	// opt out). This is the PRIMARY source of truth for BLURT/USD: it is
+	// tried FIRST and committed whenever it returns a plausible value; the
+	// CEX-aggregator average (built above) serves only as a fallback when
+	// the feed is down or implausible. A self-sovereign, non-CEX source of
+	// truth suits Morphit's decentralization priority.
+	const primaryUpstreams: Array<{ name: string; fetch: PriceFetch }> = [];
 	if (isUsd && options.blurtPriceFeed && config.blurtPriceFeedUrl) {
-		upstreams.push({
+		primaryUpstreams.push({
 			name: 'blurt_price_feed',
 			fetch: createBlurtBlogFetcher({
 				url: config.blurtPriceFeedUrl,
@@ -393,6 +405,7 @@ export function createAssetPriceSource(
 
 	return new CompositeCachedPriceSource({
 		upstreams,
+		primaryUpstreams,
 		fallbackUpstreams,
 		outlierTolerance: config.priceOutlierTolerance,
 		plausibleMin: options.plausibleMin,

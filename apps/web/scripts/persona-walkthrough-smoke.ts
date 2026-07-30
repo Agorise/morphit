@@ -404,8 +404,8 @@ const SCENARIOS: readonly Scenario[] = [
 
 	// ─── Sally (operator) ────────────────────────────────────────────────
 	{
-		name: 'So-1 — vps-bootstrap.sh fast-path callout in RUN-A-MORPHIT-NODE.md',
-		file: 'docs/RUN-A-MORPHIT-NODE.md',
+		name: 'So-1 — vps-bootstrap.sh fast-path callout documented (OPERATIONS.md)',
+		file: 'docs/OPERATIONS.md',
 		rootRelative: true,
 		mustHave: ['scripts/vps-bootstrap.sh', 'fast-path']
 	},
@@ -458,8 +458,8 @@ const SCENARIOS: readonly Scenario[] = [
 		mustNotHave: ['Nine ELI5-style configuration prompts']
 	},
 	{
-		name: 'So-6 — RUN-A-MORPHIT-NODE.md systemd install uses the path-aware installer',
-		file: 'docs/RUN-A-MORPHIT-NODE.md',
+		name: 'So-6 — OPERATIONS.md systemd install uses the path-aware installer',
+		file: 'docs/OPERATIONS.md',
 		rootRelative: true,
 		// beta14: the shipped units target /opt/morphit; this manual guide
 		// clones to ~/morphit. The installer detects the real checkout and
@@ -715,8 +715,8 @@ const SCENARIOS: readonly Scenario[] = [
 		// "Permission denied" at relay boot.  Sentinel pins the
 		// fixed chown line and the absence of the buggy combined-
 		// chown.
-		name: 'P122-CP5-F11 — RUN-A-MORPHIT-NODE chowns relay.env to morphit-relay (matching shipped systemd unit User=)',
-		file: 'docs/RUN-A-MORPHIT-NODE.md',
+		name: 'P122-CP5-F11 — OPERATIONS.md chowns relay.env to morphit-relay (matching shipped systemd unit User=)',
+		file: 'docs/OPERATIONS.md',
 		rootRelative: true,
 		mustHave: [
 			'sudo chown morphit-relay:morphit-relay /etc/morphit/relay.env'
@@ -908,8 +908,8 @@ const SCENARIOS: readonly Scenario[] = [
 		mustNotHave: ['covers all 14 steps']
 	},
 	{
-		name: 'D-10 — RUN-A-NODE Postgres version accepts 15+',
-		file: 'docs/RUN-A-MORPHIT-NODE.md',
+		name: 'D-10 — OPERATIONS.md Postgres version accepts 15+',
+		file: 'docs/OPERATIONS.md',
 		rootRelative: true,
 		// Pre-fix said "should show 15.x or 16.x" which rejects PG 17.
 		mustHave: ['15.x or higher'],
@@ -928,7 +928,7 @@ const SCENARIOS: readonly Scenario[] = [
 		]
 	},
 	{
-		name: 'D-12 — RUN-A-NODE §12 troubleshooting curl uses nginx path /v1/ (indexer)',
+		name: 'D-12 — RUN-A-NODE §11 troubleshooting curl uses nginx path /v1/ (indexer)',
 		file: 'docs/RUN-A-MORPHIT-NODE.md',
 		rootRelative: true,
 		mustHave: ['curl https://yourdomain.com/v1/health'],
@@ -990,8 +990,8 @@ const SCENARIOS: readonly Scenario[] = [
 	// drift so an operator hitting the symptom finds the right
 	// troubleshooting in three places.
 	{
-		name: 'P121-DOC-1 — RUN-A-NODE mentions workspace symlinks + ERR_MODULE_NOT_FOUND',
-		file: 'docs/RUN-A-MORPHIT-NODE.md',
+		name: 'P121-DOC-1 — OPERATIONS.md mentions workspace symlinks + ERR_MODULE_NOT_FOUND',
+		file: 'docs/OPERATIONS.md',
 		rootRelative: true,
 		mustHave: ['workspace symlinks', 'ERR_MODULE_NOT_FOUND', '@morphit/asset-registry']
 	},

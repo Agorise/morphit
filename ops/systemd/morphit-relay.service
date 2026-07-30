@@ -20,6 +20,11 @@ Description=Morphit relay (broadcasts user-signed chain ops; REST API)
 Documentation=https://git.agorise.net/agorise/morphit/src/branch/main/docs/OPERATIONS.md
 After=network-online.target docker.service
 Wants=network-online.target
+# Reboot recovery (cp597): disable the start-rate-limit so a power-cut restart
+# never latches this unit into a permanent 'failed' state while Postgres (a
+# Docker container here) is still coming up — it keeps retrying every RestartSec
+# until the DB is reachable, with no ceiling on attempts.
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple

@@ -26,7 +26,6 @@
  * Scope of operator docs walked:
  *   - docs/PRE-LAUNCH-CHECKLIST.md
  *   - docs/OPERATIONS.md
- *   - docs/RUN-A-MORPHIT-NODE.md
  *
  * NOT walked (intentionally — these are for a different audience):
  *   - SECURITY.md (threat model — asset-agnostic by design)
@@ -85,8 +84,7 @@ console.log(`Category-B tickers (${CATEGORY_B.length}): ${CATEGORY_B.join(', ')}
 
 const SCOPED_DOCS = [
 	'docs/PRE-LAUNCH-CHECKLIST.md',
-	'docs/OPERATIONS.md',
-	'docs/RUN-A-MORPHIT-NODE.md'
+	'docs/OPERATIONS.md'
 ];
 
 for (const docPath of SCOPED_DOCS) {

@@ -75,7 +75,7 @@ const SCHEMA = z.object({
 	MORPHIT_MATRIX_BOT_JOURNALCTL_UNITS: z
 		.string()
 		.default(
-			'morphit-indexer.service,morphit-relay.service,morphit-host-monitor.service,morphit-smartctl-monitor.service,morphit-fail2ban-monitor.service,morphit-mdadm-monitor.service,morphit-dmesg-monitor.service,morphit-trivy-monitor.service,morphit-postfix-monitor.service,morphit-certbot-monitor.service,morphit-apt-monitor.service,morphit-compose-monitor.service,morphit-systemd-monitor.service,morphit-journald-monitor.service'
+			'morphit-indexer.service,morphit-relay.service,morphit-host-monitor.service,morphit-smartctl-monitor.service,morphit-fail2ban-monitor.service,morphit-mdadm-monitor.service,morphit-dmesg-monitor.service,morphit-trivy-monitor.service,morphit-postfix-monitor.service,morphit-certbot-monitor.service,morphit-apt-monitor.service,morphit-compose-monitor.service,morphit-systemd-monitor.service,morphit-journald-monitor.service,morphit-release-monitor.service'
 		),
 
 	MORPHIT_MATRIX_BOT_STATE_DB: z

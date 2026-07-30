@@ -6,18 +6,20 @@
  * shipped — Content-Security-Policy and Permissions-Policy — against
  * SURFACE DRIFT.  Both headers live, by deliberate design (no build-time
  * templating across an nginx config + Markdown docs + a BunkerWeb env
- * file), as hand-maintained COPIES on four surfaces:
+ * file), as hand-maintained COPIES on three surfaces:
  *
  *   1. ops/nginx/web.conf                  (the shipped reverse-proxy)
- *   2. docs/RUN-A-MORPHIT-NODE.md §11      (the operator copies this)
- *   3. docs/OPERATIONS.md §15              (the reference copy)
- *   4. ops/bunkerweb/bunkerweb.env.example (the WAF deploy path)
+ *   2. docs/OPERATIONS.md §15              (the reference copy)
+ *   3. ops/bunkerweb/bunkerweb.env.example (the WAF deploy path)
+ *
+ * (RUN-A-MORPHIT-NODE.md is now grandma-only — the verbatim security
+ * headers live in OPERATIONS.md §15, not in the friendly quick-start.)
  *
  * Why this exists.  cp233 verified all four BYTE-IDENTICAL by hand but
  * left no guard.  The most likely regression: an operator-facing tweak
  * lands in web.conf (the live config) and the three doc/WAF copies are
- * forgotten — so an operator who pastes the RUN-A snippet, or deploys via
- * BunkerWeb, ends up with a DIFFERENT policy than the shipped nginx.  For
+ * forgotten — so an operator who pastes the OPERATIONS.md snippet, or deploys
+ * via BunkerWeb, ends up with a DIFFERENT policy than the shipped nginx.  For
  * the CSP that breakage is not cosmetic: drop `'wasm-unsafe-eval'` and the
  * in-browser argon2 KDF dies; drop a Blurt RPC origin from connect-src and
  * sign-in/price fetches fail; drop `frame-ancestors 'none'` and the site is
@@ -54,7 +56,6 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, '..');
 
 const WEB_CONF = 'ops/nginx/web.conf';
-const RUN_A = 'docs/RUN-A-MORPHIT-NODE.md';
 const OPERATIONS = 'docs/OPERATIONS.md';
 const BUNKERWEB = 'ops/bunkerweb/bunkerweb.env.example';
 
@@ -96,26 +97,22 @@ function envValue(text: string, key: string): string | null {
 console.log('\n── csp-header-consistency smoke ────────────────────────\n');
 
 const webConf = read(WEB_CONF);
-const runA = read(RUN_A);
 const operations = read(OPERATIONS);
 const bunkerweb = read(BUNKERWEB);
 
 // ─── Collect CSP values from every surface ───────────────────────────
 const cspWeb = nginxHeaderValues(webConf, 'Content-Security-Policy');
-const cspRunA = nginxHeaderValues(runA, 'Content-Security-Policy');
 const cspOps = nginxHeaderValues(operations, 'Content-Security-Policy');
 const cspBw = envValue(bunkerweb, 'CONTENT_SECURITY_POLICY');
 
 // ─── Collect Permissions-Policy values from every surface ────────────
 const ppWeb = nginxHeaderValues(webConf, 'Permissions-Policy');
-const ppRunA = nginxHeaderValues(runA, 'Permissions-Policy');
 const ppOps = nginxHeaderValues(operations, 'Permissions-Policy');
 const ppBw = envValue(bunkerweb, 'PERMISSIONS_POLICY');
 
 // ── A. every surface defines each header ─────────────────────────────
 const cspSurfaces: Array<[string, string[]]> = [
 	[WEB_CONF, cspWeb],
-	[RUN_A, cspRunA],
 	[OPERATIONS, cspOps],
 	[BUNKERWEB, cspBw === null ? [] : [cspBw]]
 ];
@@ -125,7 +122,6 @@ for (const [name, vals] of cspSurfaces) {
 }
 const ppSurfaces: Array<[string, string[]]> = [
 	[WEB_CONF, ppWeb],
-	[RUN_A, ppRunA],
 	[OPERATIONS, ppOps],
 	[BUNKERWEB, ppBw === null ? [] : [ppBw]]
 ];
@@ -135,7 +131,7 @@ for (const [name, vals] of ppSurfaces) {
 }
 
 // ── B. all CSP occurrences byte-identical; all Permissions-Policy too ─
-const allCsp = [...cspWeb, ...cspRunA, ...cspOps, ...(cspBw === null ? [] : [cspBw])];
+const allCsp = [...cspWeb, ...cspOps, ...(cspBw === null ? [] : [cspBw])];
 const distinctCsp = [...new Set(allCsp)];
 if (allCsp.length > 0 && distinctCsp.length === 1) {
 	ok(`all ${allCsp.length} CSP occurrences are byte-identical across all 4 surfaces`);
@@ -146,7 +142,7 @@ if (allCsp.length > 0 && distinctCsp.length === 1) {
 	);
 }
 
-const allPp = [...ppWeb, ...ppRunA, ...ppOps, ...(ppBw === null ? [] : [ppBw])];
+const allPp = [...ppWeb, ...ppOps, ...(ppBw === null ? [] : [ppBw])];
 const distinctPp = [...new Set(allPp)];
 if (allPp.length > 0 && distinctPp.length === 1) {
 	ok(`all ${allPp.length} Permissions-Policy occurrences are byte-identical across all 4 surfaces`);

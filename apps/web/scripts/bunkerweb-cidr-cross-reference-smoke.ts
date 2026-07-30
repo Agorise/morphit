@@ -153,7 +153,6 @@ const CROSS_REFERENCE_FILES = [
 	'ops/bunkerweb/bunkerweb.env.example',
 	'ops/ansible/roles/bunkerweb/templates/bunkerweb.env.j2',
 	'docs/OPERATIONS.md',
-	'docs/RUN-A-MORPHIT-NODE.md',
 	'docs/PRE-LAUNCH-CHECKLIST.md',
 	'MORPHIT-BRAG-LIST.md'
 ];
