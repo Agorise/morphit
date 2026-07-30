@@ -1,5 +1,0 @@
-{
-  "extends": "./tsconfig.smoke.json",
-  "compilerOptions": { "allowImportingTsExtensions": true, "noEmit": true },
-  "include": ["scripts/**/*.ts"]
-}
