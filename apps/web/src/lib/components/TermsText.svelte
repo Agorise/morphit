@@ -96,7 +96,13 @@
 				class="break-all font-semibold text-morphit-emerald underline underline-offset-2 hover:no-underline">{r.v}</a
 			>{:else}{r.v}{/if}{/each}{/snippet}
 
-{#each blocks as block}
+<!-- dir="auto": the terms are user-authored and may be in a different
+     direction than the viewer's locale (a Farsi order read on an English UI,
+     or vice versa). Detecting per-content direction here means an RTL terms
+     block renders right-to-left and an LTR one left-to-right, independent of
+     the surrounding page. The blocks keep their own margins inside the wrapper. -->
+<div dir="auto">
+	{#each blocks as block}
 	{#if block.type === 'heading'}
 		{#if block.level === 1}
 			<p class="mt-3 font-display text-base font-extrabold first:mt-0">{@render inline(block.runs)}</p>
@@ -143,6 +149,7 @@
 		<p class="mt-2 whitespace-pre-line first:mt-0">{@render inline(block.runs)}</p>
 	{/if}
 {/each}
+</div>
 
 <ConfirmModal
 	open={pendingUrl !== null}

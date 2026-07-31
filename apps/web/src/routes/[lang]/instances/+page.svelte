@@ -404,7 +404,8 @@
 										{#if safeOrigin}
 											<a
 												href={safeOrigin}
-												class="font-display text-xl font-bold leading-none text-morphit-emerald hover:underline"
+												dir="auto"
+							class="font-display text-xl font-bold leading-none text-morphit-emerald hover:underline"
 												rel="noopener"
 											>
 												{effectiveName(inst)}
@@ -415,7 +416,7 @@
 											     clickable link.  This indicates a malformed
 											     federation entry; an operator monitoring will
 											     see it and investigate. -->
-											<span class="font-display text-xl font-bold leading-none text-ink-700 dark:text-ink-200">
+											<span dir="auto" class="font-display text-xl font-bold leading-none text-ink-700 dark:text-ink-200">
 												{effectiveName(inst)}
 											</span>
 										{/if}
@@ -440,7 +441,7 @@
 							</div>
 
 							{#if inst.tagline}
-								<p class="text-sm italic text-ink-600 dark:text-ink-300">{inst.tagline}</p>
+								<p dir="auto" class="text-sm italic text-ink-600 dark:text-ink-300">{inst.tagline}</p>
 							{/if}
 
 							<dl class="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-ink-500">

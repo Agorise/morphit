@@ -1647,9 +1647,11 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		if (existsSync(join(backupDir, 'apps', 'web', 'build', 'canary.txt'))) {
 			info('');
 			info('⚠ Your warrant canary was in the rebuilt build/ dir and is now gone.');
-			info('  Re-upload your freshly-signed canary.txt (+ pgp_keys.asc) into');
-			info('  apps/web/build/, or it goes stale and users see a false tamper');
-			info('  warning after 14 days — see OPERATIONS.md (warrant canary).');
+			info('  Re-run your canary refresh to restore it (and pgp_keys.asc):');
+			info('    bash ~/.morphit/update-canary.sh');
+			info('  (Not set up yet? Run scripts/canary/setup.sh — it walks you through');
+			info('  it.) Otherwise the canary goes stale and users see a false tamper');
+			info('  warning after 14 days — see OPERATIONS.md §36 (warrant canary).');
 		}
 	} catch {
 		/* best-effort reminder; never fail an upgrade over a missing dir */

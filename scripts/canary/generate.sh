@@ -25,6 +25,14 @@
 #                                    canonical DEFAULT_BLURT_RPC_ENDPOINTS
 #                                    rotator list, so a single dead node cannot
 #                                    stall the canary.
+#   $MORPHIT_CANARY_BTC_EXPLORER   — OPTIONAL. Pin ONE Bitcoin Esplora API base
+#                                    (e.g. your own bitcoind/Esplora) for the
+#                                    BTC freshness proof. Left unset, the fetch
+#                                    fails over across the canonical
+#                                    DEFAULT_BTC_EXPLORER_APIS list; if EVERY
+#                                    explorer is unreachable the BTC head
+#                                    degrades gracefully (the Blurt head is the
+#                                    primary proof) rather than aborting.
 #   $MORPHIT_CANARY_NEWS_RSS       — RSS feed URL for news entropy
 #                                    (default: https://cointelegraph.com/rss,
 #                                    operator should pick a
@@ -108,22 +116,28 @@ if [ -z "$BLURT_HEAD_HEIGHT" ] || [ "$BLURT_HEAD_HEIGHT" = "null" ]; then
 	exit 1
 fi
 
-# ─── Freshness proof: Bitcoin chain head ─────────────────────────
-
-echo "canary: fetching Bitcoin chain head..." >&2
-# blockstream.info is a publicly-readable Bitcoin endpoint; operators
-# concerned about it can swap to their own bitcoind via env var
-# (not currently parameterized — file an issue if you need it).
-BTC_HEAD_HEIGHT="$(curl -fsSL --max-time 15 "https://blockstream.info/api/blocks/tip/height")"
-BTC_HEAD_HASH="$(curl -fsSL --max-time 15 "https://blockstream.info/api/blocks/tip/hash")"
-
-if [ -z "$BTC_HEAD_HEIGHT" ] || ! [[ "$BTC_HEAD_HEIGHT" =~ ^[0-9]+$ ]]; then
-	echo "canary: blockstream returned bad height: $BTC_HEAD_HEIGHT" >&2
-	exit 1
-fi
-if [ -z "$BTC_HEAD_HASH" ] || [ "${#BTC_HEAD_HASH}" -ne 64 ]; then
-	echo "canary: blockstream returned bad hash: $BTC_HEAD_HASH" >&2
-	exit 1
+# ─── Freshness proof: Bitcoin chain head (SECONDARY) ─────────────
+# Fetched through the shared explorer rotator (scripts/canary/fetch-btc-head.ts):
+# it hops across the canonical DEFAULT_BTC_EXPLORER_APIS list (Esplora bases)
+# until one answers, so a single dead or region-blocked explorer no longer
+# stalls the canary — the same fix the Blurt head got in cp451. Pin one base
+# with MORPHIT_CANARY_BTC_EXPLORER (e.g. your own bitcoind/Esplora).
+#
+# The BTC head is a SECONDARY freshness proof — the Blurt head above already
+# proves the canary is fresh — so if EVERY explorer is unreachable we DEGRADE
+# (record it as unavailable) instead of aborting. The trailing `|| true` keeps
+# a total explorer outage from tripping `set -e`. On success the helper prints
+# ONE tab-separated line: <height>\t<hash>.
+# cp613: before this, the canary pinned blockstream.info alone with a fatal
+# abort, and a single timeout there killed the whole weekly refresh.
+BTC_HEAD_LINE="$("$RUN_TSX" "$REPO_ROOT/scripts/canary/fetch-btc-head.ts" || true)"
+if [ -n "$BTC_HEAD_LINE" ]; then
+	BTC_HEAD_HEIGHT="$(printf '%s' "$BTC_HEAD_LINE" | cut -f1)"
+	BTC_HEAD_HASH="$(printf '%s' "$BTC_HEAD_LINE" | cut -f2)"
+else
+	echo "canary: all Bitcoin explorers unreachable — degrading the BTC head (the Blurt chain head above is the primary freshness proof)" >&2
+	BTC_HEAD_HEIGHT="(unavailable at signing time — every configured Bitcoin explorer was unreachable; the Blurt chain head above is the primary freshness proof)"
+	BTC_HEAD_HASH="(unavailable)"
 fi
 
 # ─── Freshness proof: news entropy ───────────────────────────────
@@ -138,8 +152,15 @@ fi
 NEWS_UA='Mozilla/5.0 (X11; Linux x86_64) Morphit-Canary'
 NEWS_HEADLINE=''
 NEWS_WON_SRC=''
+# The operator's configured feed first, then five independent, high-frequency
+# public feeds across different organisations and countries (cp614): BBC, The
+# Guardian, NPR, Al Jazeera, and the New York Times. Spread this wide so a
+# single provider outage or a Cloudflare 403 cannot drop the news line.
 for feed in "$NEWS_RSS" \
 	"https://feeds.bbci.co.uk/news/rss.xml" \
+	"https://www.theguardian.com/world/rss" \
+	"https://feeds.npr.org/1001/rss.xml" \
+	"https://www.aljazeera.com/xml/rss/all.xml" \
 	"https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml"; do
 	echo "canary: fetching news headline from $feed..." >&2
 	# `|| true` keeps a failed/blocked fetch from tripping `set -e`.

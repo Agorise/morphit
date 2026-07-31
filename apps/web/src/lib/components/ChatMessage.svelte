@@ -1460,7 +1460,7 @@
 					{$_('chat.unknown_version')}
 				</span>
 			{:else}
-				<span class="whitespace-pre-wrap"
+				<span dir="auto" class="whitespace-pre-wrap"
 					>{#each textSegments as seg}{#if seg.link}<a
 								href={safeContactUrl(seg.value)}
 								target="_blank"

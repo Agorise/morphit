@@ -753,6 +753,18 @@ function printNextSteps(
 		stepNum++;
 	}
 
+	console.log(`  ${stepNum}. Set up your warrant canary — a signed "no secret orders"`);
+	console.log('     file your users can verify. This is a guided one-time setup');
+	console.log('     that also arms a weekly auto-refresh (with wide third-party');
+	console.log('     failover so it never silently dies). Run it from the machine');
+	console.log('     you want to sign from — your laptop for a VPS, or this box if');
+	console.log('     you host at home; it asks which:');
+	console.log('       bash scripts/canary/setup.sh');
+	console.log('     See docs/RUN-A-MORPHIT-NODE.md (warrant canary) for why it');
+	console.log('     matters and docs/OPERATIONS.md §36 for the security model.');
+	console.log('');
+	stepNum++;
+
 	console.log(
 		'For systemd unit files and reverse-proxy configs, see\n' +
 			'docs/RUN-A-MORPHIT-NODE.md §6 (web server) and docs/OPERATIONS.md.'
