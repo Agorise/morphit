@@ -369,7 +369,7 @@
      so the handle was the redundant one of the three, and it was the one pushing
      the name off the edge. -->
 {#snippet nameText()}
-	<span class={weightCls}>{name}</span>
+	<span dir="auto" class={weightCls}>{name}</span>
 {/snippet}
 
 {#snippet label()}

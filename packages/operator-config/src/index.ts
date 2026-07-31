@@ -105,6 +105,66 @@ export const DEFAULT_BLURT_RPC_ENDPOINTS: readonly string[] = [
 	'https://blurt-rpc.saboin.com'
 ] as const;
 
+/**
+ * Public Bitcoin block-explorer Esplora API bases. These speak the Esplora
+ * HTTP API (`/blocks/tip/height` → tip height as text, `/blocks/tip/hash` →
+ * 64-hex hash; `/tx/{txid}` for the fee verifier's quorum). Kept as its own
+ * list because the indexer's BTC fee verifier needs the Esplora `/tx/` shape
+ * specifically — the canary's broader freshness-proof list below reuses these
+ * and adds heterogeneous providers that only need the tip.
+ */
+export const DEFAULT_BTC_EXPLORER_APIS: readonly string[] = [
+	'https://blockstream.info/api',
+	'https://mempool.space/api'
+] as const;
+
+/**
+ * Which HTTP shape a Bitcoin tip source speaks. The canary's fetch adapter
+ * (scripts/canary/fetch-btc-head.ts) dispatches on this; the pure parser
+ * (scripts/canary/btcHeadFailover.ts → parseBtcSourceBody) extracts a
+ * (height, hash) pair from each shape:
+ *   - esplora         → two plain-text GETs: /blocks/tip/height + /blocks/tip/hash
+ *   - blockchain_info → one JSON GET: { height, hash }
+ *   - blockchair      → one JSON GET: { data: { best_block_height, best_block_hash } }
+ *   - blockcypher     → one JSON GET: { height, hash }
+ */
+export type CanaryBtcSourceKind = 'esplora' | 'blockchain_info' | 'blockchair' | 'blockcypher';
+
+export interface CanaryBtcSource {
+	readonly kind: CanaryBtcSourceKind;
+	readonly url: string;
+	/** Short human label for the canary's stderr progress log. */
+	readonly label: string;
+}
+
+/**
+ * ORDERED list of Bitcoin tip sources the warrant canary tries, in order,
+ * until one answers (scripts/canary/generate.sh via fetch-btc-head.ts). The
+ * Bitcoin head is a SECONDARY freshness proof — the Blurt head is primary — so
+ * if EVERY source here is unreachable the canary degrades gracefully rather
+ * than failing.
+ *
+ * Deliberately spread across INDEPENDENT providers (Blockstream, mempool.space,
+ * Blockchain.com, Blockchair, BlockCypher) on different infrastructure, so a
+ * single provider outage, a region block, or a Cloudflare 403 cannot stall the
+ * refresh. `MORPHIT_CANARY_BTC_EXPLORER` pins one Esplora base (e.g. your own
+ * bitcoind/Esplora) and skips the rest. To change the set, edit THIS list —
+ * add any additional reliable public source with its shape.
+ *
+ * cp613 — before this, the canary hit blockstream.info alone with a fatal
+ * abort; a single timeout there stalled the whole weekly refresh. cp614 —
+ * widened from 2 Esplora bases to 5 independent providers (Ken: "the internet
+ * is under attack — 4 or 5 fallbacks").
+ */
+export const DEFAULT_CANARY_BTC_SOURCES: readonly CanaryBtcSource[] = [
+	...DEFAULT_BTC_EXPLORER_APIS.map(
+		(url): CanaryBtcSource => ({ kind: 'esplora', url, label: new URL(url).host })
+	),
+	{ kind: 'blockchain_info', url: 'https://blockchain.info/latestblock', label: 'blockchain.info' },
+	{ kind: 'blockchair', url: 'https://api.blockchair.com/bitcoin/stats', label: 'blockchair.com' },
+	{ kind: 'blockcypher', url: 'https://api.blockcypher.com/v1/btc/main', label: 'blockcypher.com' }
+];
+
 /** Inline sanitize for any string this package prints to the
  *  operator's terminal at boot time.  Strips C0/C1/DEL + all
  *  non-SGR ESC sequences.  Mirror of

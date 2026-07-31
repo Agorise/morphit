@@ -424,6 +424,50 @@ happens to you, or if the box is seized without your key.
 The canary does NOT consume `@morphit` BLURT; it lives
 off-chain and uses a PGP keypair, not the Blurt posting key.
 
+**Setting it up (guided).**  `scripts/canary/setup.sh`
+walks you through the whole thing once and then keeps the
+canary fresh on a weekly timer, so it is not an ongoing
+chore.  Run it from the machine you want to sign on; it
+asks which of two deployments you have:
+
+- **Home hosting (local)** — Morphit runs on this same
+  machine.  The canary is signed here and copied straight
+  into the served `build/` dir.  Understand the trade-off:
+  signing on the served box means a seizure of that box
+  could forge future canaries.  For the strongest canary,
+  sign from a separate machine (the remote mode below).
+- **Remote server (VPS)** — Morphit runs elsewhere.  You
+  sign on your admin machine (key OFF the server) and the
+  script uploads the signed file to the server's
+  `apps/web/build/`.  This is the recommended arrangement.
+
+If you have no PGP key yet the script offers to create one
+and publishes the matching public key to
+`apps/web/static/pgp_keys.asc` (served at `/pgp_keys.asc`,
+which readers verify the signature against).  After setup,
+the weekly refresh lives at `~/.morphit/update-canary.sh`.
+
+**After every `morphit-ops upgrade`** the rebuild wipes the
+served `build/` dir, so re-run the refresh once to restore
+the canary — the upgrade prints this reminder:
+
+```
+bash ~/.morphit/update-canary.sh
+```
+
+**Third-party resilience.**  The freshness proofs embedded
+in every canary — the Blurt and Bitcoin chain heads and a
+news headline — are fetched with wide failover so a single
+provider outage can't stall the weekly refresh.  The Blurt
+head rotates across the canonical RPC list; the Bitcoin
+head hops across five independent explorers (Blockstream,
+mempool.space, Blockchain.com, Blockchair, BlockCypher);
+the news line falls through six independent feeds.  The
+Bitcoin head and news line are SECONDARY to the Blurt head,
+so even if every one of their providers is unreachable the
+canary still signs (recording them as unavailable) instead
+of dying.
+
 Pre-fund `@morphit` with **~10 BLURT** before launch.
 This is a small fixed cost, not signup-rate-dependent:
 

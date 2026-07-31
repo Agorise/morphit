@@ -244,13 +244,16 @@
 		</p>
 	{/if}
 
-	<!-- Title. On desktop the right pad clears the top-right cluster
-	     (sm:pr-28). On phones that cluster is hidden, so we pad only when the
-	     stablecoin subline is present (pr-20) — otherwise a hair (pr-2), so the
-	     title uses nearly the full width and stops wrapping early (v1.1.5).
-	     Still clamped to 3 lines as a runaway guard (cp440). -->
+	<!-- Title (cp615). DESKTOP: one line, ellipsised (sm:line-clamp-1), with a
+	     right pad wide enough to clear the top-right cluster — the Message
+	     button's username is max-w-[10rem], so the cluster runs ~11.5rem and the
+	     old sm:pr-28 (7rem) let a long title bleed right up to the button.
+	     sm:pr-[13rem] keeps a clear gap. MOBILE: at most two lines
+	     (line-clamp-2); that cluster is hidden there, so we pad only when the
+	     stablecoin subline is present (pr-20), otherwise a hair (pr-2) so the
+	     title uses nearly the full width. -->
 	<h3
-		class="font-display line-clamp-3 text-lg font-bold sm:line-clamp-none sm:pr-28 {hasMobileTopRight
+		class="font-display line-clamp-2 text-lg font-bold sm:line-clamp-1 sm:pr-[13rem] {hasMobileTopRight
 			? 'pr-20'
 			: 'pr-2'}"
 	>
@@ -288,7 +291,7 @@
 			{#if order.location_region}
 				<span>
 					<span class="font-semibold">{$_('orderbook.card.location_label')}:</span>
-					{order.location_region}
+					<bdi>{order.location_region}</bdi>
 				</span>
 			{/if}
 		</p>
@@ -304,9 +307,9 @@
 			{#if termsPreviewHtml !== null}
 				<!-- eslint-disable-next-line svelte/no-at-html-tags -- highlightMatches
 				     escapes the text and only injects <mark class> (see its doc). -->
-				<span class="truncate">{@html termsPreviewHtml}</span>
+				<span dir="auto" class="truncate">{@html termsPreviewHtml}</span>
 			{:else}
-				<span class="truncate">{termsPreview}</span>
+				<span dir="auto" class="truncate">{termsPreview}</span>
 			{/if}
 		</p>
 	{/if}

@@ -37,6 +37,22 @@
 
 import { isGoodsAsset, type AssetTicker } from '@morphit/asset-registry';
 import { displayNamesForMethods } from '$lib/payments/display';
+import { findPaymentMethod, isInstanceKey } from '$lib/payments/registry';
+import { resolveLegacy } from '$lib/payments/match';
+import { isRtlLocale } from '$i18n/locales';
+
+// Unicode bidi isolates — FIRST STRONG ISOLATE … POP DIRECTIONAL ISOLATE.
+// Wrapping an embedded token makes the bidirectional algorithm resolve that
+// token's direction on its own (from its first strong character) and keep it
+// as one unit, so an LTR amount/ticker sitting inside an RTL (Farsi) sentence
+// renders in the correct order instead of being reshuffled at the boundaries
+// (the "10 تا 100" range flipping, "(XMR)" parens jumping, etc.). It is a
+// no-op inside an LTR sentence, so isolation is applied ONLY for RTL locales —
+// LTR output stays byte-for-byte identical (and the exact-match title smokes
+// keep passing).
+const FSI = '\u2068';
+const PDI = '\u2069';
+const isolateToken = (s: string | number): string => FSI + String(s) + PDI;
 
 export interface OrderTitleInput {
 	/** 'buy' | 'sell' — anything other than 'sell' is treated as buy. */
@@ -92,18 +108,40 @@ export function formatDisjunction(items: readonly string[], locale?: string): st
 	}
 }
 
+/** For a stored payment-method value, the crypto TICKER if it resolves to a
+ *  crypto-category rail (BTC, LTC, DOGE, …), else null. Used ONLY by the order
+ *  TITLE, which lists what a seller accepts and stays compact by naming
+ *  cryptos by their ticker — matching the barter path (which shows accepted
+ *  tickers verbatim). The fuller "I accept:" line still spells them out via
+ *  `displayNamesForMethods`, so nothing else changes. */
+function cryptoMethodTicker(value: string): string | null {
+	if (typeof value !== 'string' || value.length === 0) return null;
+	if (isInstanceKey(value)) return null; // instance rails have no ticker concept
+	const entry = findPaymentMethod(value) ?? findPaymentMethod(resolveLegacy(value));
+	if (!entry || entry.category !== 'crypto') return null;
+	// Every crypto entry carries its ticker in `assetExclusion`; fall back to the
+	// parenthesised ticker in the name ("Litecoin (LTC)" → "LTC"), then the name
+	// itself (BLURT is already bare).
+	return entry.assetExclusion ?? entry.name.match(/\(([^)]+)\)\s*$/)?.[1] ?? entry.name;
+}
+
 /** Resolve an order's settlement labels: barter → accepted crypto tickers
- *  (verbatim); crypto → payment-method labels via `methodDisplay`. */
+ *  (verbatim); crypto → its payment rails, with crypto rails rendered as their
+ *  TICKER (compact, like the barter path) and fiat/instance rails as their
+ *  resolved display name via `methodDisplay`. */
 function settlementLabels(
 	o: OrderTitleInput,
 	methodDisplay?: (m: readonly string[]) => readonly string[]
 ): readonly string[] {
 	if (isGoodsAsset(o.asset as AssetTicker)) return o.accepted_assets ?? [];
 	const methods = o.payment_methods ?? [];
-	// Default to the shared (pure) payment-method label resolver, so crypto
-	// settlements render proper names even from a caller that hasn't been
-	// updated to pass one — only the disjunction locale still comes from opts.
-	return (methodDisplay ?? displayNamesForMethods)(methods);
+	// Default to the shared (pure) payment-method label resolver, so fiat/instance
+	// rails render proper names even from a caller that hasn't been updated to
+	// pass one — only the disjunction locale still comes from opts.
+	const resolveFull = methodDisplay ?? displayNamesForMethods;
+	return methods
+		.map((value) => cryptoMethodTicker(value) ?? resolveFull([value])[0] ?? '')
+		.filter((s) => typeof s === 'string' && s.length > 0);
 }
 
 /**
@@ -131,10 +169,25 @@ export function orderTitleParts(
 	const hasMin = o.amount_min !== null && o.amount_min !== undefined;
 	const hasMax = o.amount_max !== null && o.amount_max !== undefined;
 
+	// RTL bidi (Ken) — in a right-to-left locale, wrap each embedded LTR token
+	// (the fiat amount(s), the currency/asset ticker, and every settlement rail)
+	// in a bidi isolate so the Farsi sentence renders cleanly instead of
+	// reshuffling numbers/tickers at the boundaries. `iso` is the identity in
+	// LTR locales, so their output — and the exact-match title smokes — are
+	// byte-for-byte unchanged.
+	const rtl = isRtlLocale(opts?.locale);
+	const iso = (s: string): string => (rtl ? isolateToken(s) : s);
+
 	// v1.9.5 (Ken) — the settlement string every branch appends: the accepted
 	// cryptos (barter) or the payment-method labels (crypto), as a localized
 	// disjunction. Empty only for a malformed order (validation requires ≥1).
-	const settlement = formatDisjunction(settlementLabels(o, opts?.methodDisplay), opts?.locale);
+	// Each rail is isolated BEFORE the disjunction join (RTL only) so the
+	// localized connector ("یا") stays in the sentence's RTL flow.
+	const settlementRails = settlementLabels(o, opts?.methodDisplay);
+	const settlement = formatDisjunction(
+		rtl ? settlementRails.map(isolateToken) : settlementRails,
+		opts?.locale
+	);
 
 	// v1.8.9 — a range whose ends are equal is not a range. Pinning both bounds
 	// to the same figure is a legitimate way to say "this exact amount", and the
@@ -142,17 +195,17 @@ export function orderTitleParts(
 	if (hasMin && hasMax && o.amount_min === o.amount_max) {
 		return {
 			key: `order_title.${side}_exact`,
-			values: { amount: fmt(o.amount_min as number), fiat, asset, settlement }
+			values: { amount: iso(fmt(o.amount_min as number)), fiat: iso(fiat), asset: iso(asset), settlement }
 		};
 	}
 	if (hasMin && hasMax) {
 		return {
 			key: `order_title.${side}_range`,
 			values: {
-				min: fmt(o.amount_min as number),
-				max: fmt(o.amount_max as number),
-				fiat,
-				asset,
+				min: iso(fmt(o.amount_min as number)),
+				max: iso(fmt(o.amount_max as number)),
+				fiat: iso(fiat),
+				asset: iso(asset),
 				settlement
 			}
 		};
@@ -160,13 +213,13 @@ export function orderTitleParts(
 	if (hasMin) {
 		return {
 			key: `order_title.${side}_min`,
-			values: { amount: fmt(o.amount_min as number), fiat, asset, settlement }
+			values: { amount: iso(fmt(o.amount_min as number)), fiat: iso(fiat), asset: iso(asset), settlement }
 		};
 	}
 	if (hasMax) {
 		return {
 			key: `order_title.${side}_max`,
-			values: { amount: fmt(o.amount_max as number), fiat, asset, settlement }
+			values: { amount: iso(fmt(o.amount_max as number)), fiat: iso(fiat), asset: iso(asset), settlement }
 		};
 	}
 	// tt.txt #5 — a BARTER listing with no fiat value reads "I'm buying {asset}
@@ -177,12 +230,12 @@ export function orderTitleParts(
 	if (isGoods && o.accepted_assets && o.accepted_assets.length > 0) {
 		return {
 			key: `order_title.${side}_barter_novalue`,
-			values: { asset, settlement }
+			values: { asset: iso(asset), settlement }
 		};
 	}
 	// v1.8.9 — the no-amounts case used to render just "I'm buying BLURT",
 	// dropping everything else: the least specific listing produced the least
 	// informative title, exactly when a reader most needs to know what settles
 	// it. It now names the settlement like every other branch.
-	return { key: `order_title.${side}_any`, values: { asset, fiat, settlement } };
+	return { key: `order_title.${side}_any`, values: { asset: iso(asset), fiat: iso(fiat), settlement } };
 }

@@ -114,3 +114,18 @@ export function matchSupported(tag: string): LocaleCode | null {
 	const familyMatch = SUPPORTED_LOCALES.find((l) => l.code.split('-')[0] === base);
 	return familyMatch?.code ?? null;
 }
+
+/**
+ * True when a locale renders right-to-left. Currently only Persian (fa);
+ * Arabic (ar) when it ships from PLANNED_LOCALES. This is the single source
+ * of truth for text direction — it drives `<html dir>` (hooks) and the bidi
+ * isolation of LTR tokens embedded in an RTL sentence (the order title).
+ * Tolerates a region/script subtag (fa-IR, ar-EG) by matching the base.
+ */
+export function isRtlLocale(code: string | null | undefined): boolean {
+	if (!code) return false;
+	const base = code.split('-')[0];
+	return [...SUPPORTED_LOCALES, ...PLANNED_LOCALES].some(
+		(l) => l.rtl && (l.code === code || l.code === base || l.code.split('-')[0] === base)
+	);
+}
