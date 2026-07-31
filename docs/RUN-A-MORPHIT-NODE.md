@@ -19,7 +19,7 @@ This guide is the short, friendly path. A mostly copy-and-paste 15-minute proced
 
 ## 1. What you'll need
 
-- **A computer that stays on.** A cheap VPS, or an old desktop/laptop. Aim for **2 GB of RAM or more** and a recent **Ubuntu** (22.04 or 24.04). An old PC from a closet is genuinely fine.
+- **A computer that stays on.** A cheap VPS, or an old desktop/laptop. Aim for **4 GB of RAM or more** and a recent **Ubuntu** (22.04 or 24.04). An old PC from a closet is genuinely fine.
 - **A web address.** A domain name (about US$10/year) from any registrar. If you host at home, §3 covers the small bit of extra networking.
 - **A Blurt account** for your instance. Free to make; you'll create it in §5.
 - **A password manager** to save a few secrets.
@@ -30,7 +30,7 @@ That's it. The wizard and the installer handle the fiddly parts.
 
 ## 2. Pick where it runs
 
-**A cheap VPS — easiest.** A small virtual server from any provider gives you a public address with no home-network fuss. Best first choice. ~2 GB RAM is plenty to start.
+**A cheap VPS — easiest.** A small virtual server from any provider gives you a public address with no home-network fuss. Best first choice. ~4 GB RAM is plenty to start.
 
 **An old PC or laptop at home — cheapest.** Free if you already own the machine. The only extra work is a couple of router settings (§3). Leave it plugged in somewhere with airflow.
 
@@ -49,8 +49,16 @@ Picture it like this: your home has one front door to the internet (your router)
 Some home internet plans put you behind a shared front door with lots of other homes, so a visitor can't be sent to *your* door specifically. (It has a technical name — "CGNAT" — but you don't need to remember it.) Here's a 30-second check:
 
 - On the computer at home, open [whatismyip.com](https://www.whatismyip.com) and note the number it shows.
-- Log into your router — usually by typing `192.168.0.1` or `192.168.1.1` into a web browser; your router's sticker often lists the exact address and password — and find the number it calls your "internet" or "WAN" address.
-- If those two numbers are the **same**, you're good. If they're **different**, your provider has you behind the shared door. Either phone them and ask for a "public IP address" (sometimes free, sometimes a small fee), or just rent a cheap server instead (§2), which sidesteps all of this.
+- Log into your router — usually by typing `http://192.168.0.1` or `http://192.168.1.1` into a web browser; your router's sticker often lists the exact address and password — and find the number it calls your "internet" or "WAN" address.
+- If those two numbers (from 192.168.n.n and whatismyip) are the **same**, you're good. If they're **different**, your provider has you behind the shared door. Either phone them and ask for a "public IP address" (sometimes free, sometimes a small fee), or just rent a cheap server instead (§2), which sidesteps all of this.
+
+If neither `http://192.168.0.1` nor `http://192.168.1.1` opens your router's login page, find its real address by running this in a terminal on the home computer:
+
+```sh
+ip route | grep default
+```
+
+The address right after `default via` (for example `192.168.1.1`) is your router — type that into the browser instead.
 
 **2. Give your home a web address that keeps up with you.**
 
@@ -60,8 +68,20 @@ Home internet addresses tend to change every so often, so your web address needs
 
 Two small router settings, both one-time:
 
-- **Give your home computer a permanent parking spot.** In your router, find the list of connected devices (often labelled "DHCP" or "LAN") and set your Morphit computer to *always* get the same local number, like `192.168.1.50`. This stops the next step from breaking every time the computer restarts.
+- **Give your home computer a permanent parking spot.** In your router, find the list of connected devices (often labelled "DHCP" or "LAN") and set your Morphit computer to *always* get the same local number, like `192.168.1.121`. This stops the next step from breaking every time the computer restarts.
 - **Point website knocks at that computer.** Find your router's "port forwarding" page and add two rules that send visitors arriving at **door 80** and **door 443** (the two standard doors websites use) to that permanent number. Every router words this slightly differently — searching "port forwarding" together with your router's brand usually turns up a step-by-step with pictures.
+
+**Put up a quick test page first.** Before you test from your phone, give your Morphit computer something to answer with, so the test below actually shows something. On the home computer, open a terminal and run:
+
+```sh
+mkdir /tmp/porttest && cd /tmp/porttest && echo "it works" > index.html
+sudo python3 -m http.server 80
+```
+
+Leave that running. Now on your phone (mobile data only!), visit **`http://YOUR-PUBLIC-IP`** in your browser — the public number from whatismyip.com in step 1, *not* the `192.168…` one (that only works inside your house).
+- If you see the words "it works" → the door is open and forwarding is correct. 🎉
+- If it times out → forwarding isn't reaching the PC yet; re-check the port rules you set, and confirm the static address is really set to `192.168.1.121` — that's the inside address the front door (port 80) forwards to.
+- type Ctrl+C to end the porttest above
 
 **Now test it.** Turn Wi-Fi *off* on your phone (so it uses the mobile network, like a real outside visitor would) and open your new address. If your computer answers, the front door is open and you're ready. If not, re-check the two router settings above.
 
@@ -157,7 +177,7 @@ Once registered, orders posted on your instance carry your tag, and your share o
 
 **Upkeep — how often will I touch this?** Rarely. To update Morphit, `git pull`, then `sudo morphit-ops upgrade` — it rebuilds and redeploys the website (and the read-only helper) and restarts the services for you, then double-checks that the read-only helper answered back on the address it's set to listen on (if it doesn't, you get a plain warning pointing at `journalctl -u morphit-mcp` — the website itself is unaffected). Check on things any time with `morphit-ops status`, or the live health endpoint at `https://yourdomain.com/v1/health`.
 
-**Is the USD price healthy?** Run `morphit-ops health` and look at the price-feed lines. Morphit reads the BLURT price from several public providers at once — including Blurt's own feed (`api.blurt.blog/price_info`) — and uses the middle value, so one provider being off doesn't move your price. The health view lists each provider, whether it answered, and the price it gave — so if one (say, a particular API) is down, you'll see a `down` next to its name and can ignore it unless several go dark at once. (If you firewall your server's outbound traffic, allow `api.blurt.blog` along with the other price sites.) This detail shows only in your own `morphit-ops health` on the server, never on the public `https://yourdomain.com/v1/health` page.
+**Is the USD price healthy?** Run `morphit-ops health` and look at the price-feed lines. Morphit takes the BLURT price from Blurt's own feed (`api.blurt.blog/price_info`) as its **primary** source, and falls back to several public aggregators (taking their middle value) only if that primary is unavailable — so one provider being off doesn't move your price. The health view lists each provider, whether it answered, and the price it gave — so if one (say, a particular API) is down, you'll see a `down` next to its name and can ignore it unless the primary and several aggregators go dark at once. (If you firewall your server's outbound traffic, allow `api.blurt.blog` along with the other price sites.) This detail shows only in your own `morphit-ops health` on the server, never on the public `https://yourdomain.com/v1/health` page.
 
 **Is the server itself OK?** The same `morphit-ops health` view has a **System** section showing your box's CPU, memory, and disk usage (the disk numbers match `df -h /`). It's a quick gut-check: if the disk is nearly full or the CPU is pegged at 100%, that's usually why things feel slow or the indexer falls behind. These numbers are read right off your own machine and are never exposed on the public health page.
 

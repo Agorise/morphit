@@ -89,8 +89,39 @@ function rowToProfile(r: ProfileRow) {
 	};
 }
 
+/** In-process positive-profile cache (t.txt avatar-latency batch).
+ *
+ *  Ken: profiles "STILL taking up to 7 seconds to appear for some accounts …
+ *  the server itself can cache the user avatars and display name text". This
+ *  query is PK-indexed and touches only THIS indexer's own DB (never the
+ *  chain), so the latency is round-trip + Postgres contention while the poller
+ *  hammers the DB applying blocks — not a slow plan. A tiny in-memory cache in
+ *  front of the query lets a warm avatar/name return WITHOUT touching the DB at
+ *  all, so profile reads stop queueing behind block-processing writes.
+ *
+ *  ONLY positive rows (an account that actually HAS a profile) are cached, for
+ *  {@link PROFILE_MEM_TTL_MS}. A "no profile yet" negative is never cached — it
+ *  is usually just indexer lag (the account signed up / broadcast a block or
+ *  two ago), and caching it would hide a brand-new profile, the same trap the
+ *  `no-store`-on-partial header avoids. Positives are the big, slow rows anyway
+ *  (they carry the inline ~8 KB avatar); negatives are cheap to re-read.
+ *  TTL-only, no explicit invalidation: 60s of staleness for a profile EDIT is
+ *  within the 90s the Cache-Control header already promises, and the editor's
+ *  own view is covered client-side by primeProfile. Per-route-instance (see
+ *  {@link profilesRoute}) so tests get a fresh cache and an in-process second
+ *  indexer can't share state. */
+const PROFILE_MEM_TTL_MS = 60_000;
+
+interface CachedProfileEntry {
+	readonly value: ReturnType<typeof rowToProfile>;
+	readonly at: number;
+}
+
 export function profilesRoute(db: Database): Hono {
 	const app = new Hono();
+
+	/** Per-instance warm-positive cache (see {@link PROFILE_MEM_TTL_MS}). */
+	const memCache = new Map<string, CachedProfileEntry>();
 
 	// Batch lookup — MUST be registered before the /:account route
 	// so Hono resolves `/` (batch) before treating the empty segment
@@ -136,54 +167,66 @@ export function profilesRoute(db: Database): Hono {
 			}
 		}
 
-		// Parameterized ANY($1::text[]) is the idiomatic PG pattern
-		// for "where X is in this list." Single placeholder regardless
-		// of list size; Postgres plans it as a hash lookup for larger
-		// arrays. Safe against SQL injection — the array is a bound
-		// parameter, not interpolated into the query string.
-		// v1.5.5 (t155) — anchored on ACCOUNTS, not profiles.
+		// Parameterized ANY($1::text[]) is the idiomatic PG pattern for "where X
+		// is in this list." Single placeholder regardless of list size; safe
+		// against SQL injection — the array is a bound parameter, not
+		// interpolated. v1.5.5 (t155) — anchored on ACCOUNTS, not profiles, so a
+		// key-only account (no display name / avatar) still returns a row with
+		// the profile columns NULL and its posting key present; an account we've
+		// never indexed still returns nothing, which is correct.
 		//
-		// Ken: the truncated posting key was missing under @kentest2 on the
-		// profile's review cards. The key lives on `accounts`, but this query
-		// STARTED at `profiles` — so an account that never set a display name or
-		// avatar has no profiles row and the batch returned NOTHING for them,
-		// key included. Every account WITH a profile showed its key, which is
-		// why it looked like a per-card bug and wasn't.
-		//
-		// Flipping the anchor returns a row for any account we've indexed, with
-		// the profile columns NULL when there's no profile op. An account we've
-		// never seen at all still returns nothing, which is correct.
-		const result = await db.query<ProfileRow>(
-			`SELECT a.name AS account, p.display_name, p.json_metadata,
-			        p.source_block_num::text, p.updated_at, a.posting_pubkey,
-			        (p.account IS NOT NULL) AS has_profile
-			 FROM accounts a
-			 LEFT JOIN profiles p ON p.account = a.name
-			 WHERE a.name = ANY($1::text[])`,
-			[accounts]
-		);
-
-		// Build the response map. Missing accounts (no row returned)
-		// are silently absent — design decision to degrade gracefully
-		// when a batch contains some accounts that haven't set a
-		// profile yet.
+		// Warm avatars/names come from the in-memory cache and skip the DB
+		// entirely (the fix for Ken's "up to 7 seconds"): serve cached positives,
+		// then query ONLY the accounts that missed. Every cache hit is a positive
+		// (only positives are cached), so `accounts.length - toQuery.length` is
+		// exactly the number served warm.
+		const now = Date.now();
 		const profiles: Record<string, ReturnType<typeof rowToProfile>> = {};
-		for (const row of result.rows) {
-			profiles[row.account] = rowToProfile(row);
+		const toQuery: string[] = [];
+		for (const a of accounts) {
+			const hit = memCache.get(a);
+			if (hit && now - hit.at < PROFILE_MEM_TTL_MS) {
+				profiles[a] = hit.value;
+			} else {
+				toQuery.push(a);
+			}
 		}
 
-		// #2 — only a COMPLETE batch (every requested account actually HAS a
-		// profile) is safe to cache. A partial result carries negative entries
-		// that are usually just indexer lag, and pinning them in the browser's
-		// HTTP cache makes a fresh profile invisible across refreshes.
-		//
-		// v1.5.5 — this MUST key off `has_profile`, not `rows.length`. The query
-		// is now accounts-anchored, so a profile-less account returns a row like
-		// any other; the old length test would call such a batch "complete" and
-		// pin it for the full 90s, meaning someone who sets their first profile
-		// stays invisible for a minute and a half. Row presence stopped meaning
-		// "has a profile" the moment the anchor moved.
-		const complete = result.rows.filter((r) => r.has_profile).length === accounts.length;
+		let queriedWithProfile = 0;
+		if (toQuery.length > 0) {
+			const result = await db.query<ProfileRow>(
+				`SELECT a.name AS account, p.display_name, p.json_metadata,
+				        p.source_block_num::text, p.updated_at, a.posting_pubkey,
+				        (p.account IS NOT NULL) AS has_profile
+				 FROM accounts a
+				 LEFT JOIN profiles p ON p.account = a.name
+				 WHERE a.name = ANY($1::text[])`,
+				[toQuery]
+			);
+			// Missing accounts (no row) are silently absent — graceful degrade
+			// when a batch contains accounts that haven't set a profile yet.
+			for (const row of result.rows) {
+				const p = rowToProfile(row);
+				profiles[row.account] = p;
+				// Cache POSITIVES only (a real profile row). A key-only/no-profile
+				// negative is never cached — it is usually indexer lag, and caching
+				// it would hide a fresh profile (see PROFILE_MEM_TTL_MS).
+				if (row.has_profile) {
+					memCache.set(row.account, { value: p, at: now });
+					queriedWithProfile++;
+				}
+			}
+		}
+
+		// #2 / v1.5.5 — a batch is COMPLETE (safe to pin in the browser HTTP
+		// cache for the full 90s) only when EVERY requested account actually has
+		// a profile: those served warm from cache (all positive) plus those the
+		// query found with has_profile. This MUST key off has_profile, not row
+		// presence — an accounts-anchored query returns a row for a profile-less
+		// account too, and pinning that negative would keep a fresh profile
+		// invisible across refreshes for 90s. Partial → no-store.
+		const servedFromCache = accounts.length - toQuery.length;
+		const complete = servedFromCache + queriedWithProfile === accounts.length;
 		c.header('Cache-Control', complete ? BATCH_CACHE_CONTROL : BATCH_CACHE_CONTROL_PARTIAL);
 		return c.json({ profiles });
 	});

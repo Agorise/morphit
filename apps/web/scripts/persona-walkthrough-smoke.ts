@@ -705,25 +705,31 @@ const SCENARIOS: readonly Scenario[] = [
 		]
 	},
 	{
-		// Part 122 cp5 — F11 (MEDIUM) — operator-doc chown
-		// guidance must route /etc/morphit/relay.env to
-		// `morphit-relay:morphit-relay`, not the dual-target
-		// `morphit:morphit` that pre-cp5 had.  The shipped
-		// morphit-relay.service runs as User=morphit-relay; an
-		// operator following the pre-cp5 doc literally would chown
-		// relay.env to a user the daemon doesn't run as, causing
-		// "Permission denied" at relay boot.  Sentinel pins the
-		// fixed chown line and the absence of the buggy combined-
-		// chown.
-		name: 'P122-CP5-F11 — OPERATIONS.md chowns relay.env to morphit-relay (matching shipped systemd unit User=)',
+		// Part 122 cp5 — F11 (MEDIUM), corrected in the v1.9.9 doc
+		// accuracy audit. The shipped morphit-relay.service (and
+		// morphit-indexer.service) run as `User=root` — NOT
+		// `User=morphit-relay`, which no install path ever creates
+		// (verified: ops/systemd/morphit-relay.service). So the env
+		// files must be chowned `root:morphit` mode 0640 (root owns
+		// them; the `morphit` service group reads them), exactly as
+		// the Ansible role (roles/morphit/tasks/main.yml) and the
+		// init.ts wizard do for the other /etc/morphit/*.env files.
+		// The earlier `morphit-relay:morphit-relay` guidance chowned
+		// to a nonexistent user and would fail the command outright.
+		// Sentinel pins the corrected chown and forbids both the
+		// pre-cp5 `morphit:morphit` combined-chown and the
+		// nonexistent-user `morphit-relay:morphit-relay` form.
+		name: 'P122-CP5-F11 — OPERATIONS.md chowns /etc/morphit env files root:morphit 0640 (units run User=root; matches Ansible + init.ts)',
 		file: 'docs/OPERATIONS.md',
 		rootRelative: true,
 		mustHave: [
-			'sudo chown morphit-relay:morphit-relay /etc/morphit/relay.env'
+			'sudo chown root:morphit /etc/morphit/indexer.env /etc/morphit/relay.env'
 		],
 		mustNotHave: [
-			// The pre-cp5 buggy combined-chown MUST NOT reappear.
-			'sudo chown morphit:morphit /etc/morphit/indexer.env /etc/morphit/relay.env'
+			// The pre-cp5 buggy combined morphit:morphit chown MUST NOT reappear.
+			'sudo chown morphit:morphit /etc/morphit/indexer.env /etc/morphit/relay.env',
+			// The nonexistent-user form (units run as root, not morphit-relay) MUST NOT reappear.
+			'chown morphit-relay:morphit-relay /etc/morphit/relay.env'
 		]
 	},
 	{

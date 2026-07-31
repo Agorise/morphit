@@ -1368,7 +1368,7 @@
 			},
 			"node_hosting_costs": {
 				"q": "托管一个 Morphit 节点花多少钱?",
-				"a": "非常少。一台小 VPS(1GB 内存、20GB 硬盘)足够舒适地运行 Morphit,在 Hetzner、OVH、Vultr 或 DigitalOcean 等服务商那里大约每月 5-8 美元。磁盘存储增长缓慢 — indexer 存储链上事件,缓存不会膨胀。小实例带宽极少(每月每百名活跃用户几 GB)。如果你已经运行个人服务器或 homelab,Morphit 增加的负载可忽略。从订单收取的运营者费用正好足以覆盖这个并留出你时间的利润空间(分成计算见运营者收入 FAQ)。"
+				"a": "非常少。一台小 VPS(4GB 内存、20GB 硬盘)足够舒适地运行 Morphit,在 Hetzner、OVH、Vultr 或 DigitalOcean 等服务商那里大约每月 5-8 美元。磁盘存储增长缓慢 — indexer 存储链上事件,缓存不会膨胀。小实例带宽极少(每月每百名活跃用户几 GB)。如果你已经运行个人服务器或 homelab,Morphit 增加的负载可忽略。从订单收取的运营者费用正好足以覆盖这个并留出你时间的利润空间(分成计算见运营者收入 FAQ)。"
 			},
 			"switching_instances": {
 				"q": "如果一个 Morphit 实例下线,我会失去订单和声誉吗?",
@@ -1540,7 +1540,7 @@
 			},
 			"node_minimum_requirements": {
 				"q": "运行 Morphit 节点的最低硬件要求是什么？",
-				"a": "出人意料地不高。Morphit 的设计是在大多数人已经拥有的硬件上运行。人们正在使用的三类配置：\n\n**爱好者级——Raspberry Pi 4 / 5（4 GB）。**可以舒适地同时运行 indexer、relay 和前端。请用 USB-3 SSD 而不是 SD 卡；SD 卡会在数据库写入负载下损坏。功耗约为 5–7 W，所以一个小型 UPS 或太阳能装置就能供电数小时。适合服务由几十名活跃用户组成的个人社区。\n\n**认真级——小型迷你 PC（Beelink、Intel NUC、通用二手）。**搭载 8 GB RAM 和任意现代 SSD 的 Intel N100 / Ryzen 3xxx 对 indexer 而言绰绰有余，并能同时运行每一项 Morphit 服务而无需多想。空闲功耗 6–10 W，负载下 15–20 W。二手 $150–250。对服务数百名活跃用户的实例来说很从容。\n\n**闲置笔记本级——任何仍能启动 Linux 的设备。**一台旧 ThinkPad 或过去十年内任何配备至少 4 GB RAM 和可用 SSD 的笔记本电脑就足够了。额外好处：内置 UPS（笔记本电池）。有些运营商把一台合上的笔记本放在架子上，用有线以太网连接运行 Morphit——效果很好。\n\n**具体最低要求（任意架构：x86-64、ARM64，或 Asahi 下的 Apple silicon）：**\n\n• **CPU：**2 核 1 GHz 或更快。indexer 主要受 I/O 限制；relay 大部分时间空闲。永远不需要 GPU。\n\n• **RAM：**最低 2 GB，4 GB 舒适。Postgres 以默认配置即可装进去；在 2 GB 系统上把 Postgres 的 `shared_buffers` 调到 256 MB 可避免换页。\n\n• **磁盘：**20 GB 可用空间，在 SSD 上。HDD 技术上可用，但 Postgres 会很慢，而 SD 卡会因写入放大而损坏。indexer 的数据库增长缓慢——对典型活动而言每月以个位数 MB 计——所以 20 GB 能用上数年。不过要为备份做好计划。\n\n• **网络：**上下行各 1 Mbit/s 就够了。一次平均的页面加载约 100 KB。一个服务少量用户的小型实例每月使用几 GB 带宽，远在任何家庭互联网上限之内。静态 IP 很好但非必需——动态 DNS 即可。\n\n• **操作系统：**任何现代 Linux（Debian 12、Ubuntu 24.04 LTS、Arch、Alpine、NixOS——我们在 Debian 上测试）。FreeBSD 经少量调整即可使用。macOS 适合开发，但不建议用于公开实例。\n\n• **可用性预期：**95% 是合理的目标。Morphit 在设计上是联邦式的——当你的实例宕机时，用户会回退到其他运营商的实例，并在你回来时回到你这里。链保存数据；你的实例只是通往它的众多窗口之一。\n\n**你不需要的东西：**\n\n• 一个区块链节点。Morphit 通过 HTTPS 与公共 RPC 端点通信。\n\n• 一个静态 IP。使用 Caddy 或 Cloudflare Tunnel（或者，出于本项目的隐私价值观，反向代理加 DDNS）来暴露 443 端口。非 Cloudflare 选项请见运营商手册。\n\n• 一个域名。你可以在 `https://morphit.local` 上为你的朋友运行一个私有实例，或者只暴露一个 `.onion` / `.loki` / `.b32.i2p` 地址。\n\n• 一个数据中心 VPS。在住宅连接上运行的运营商工作得很好，尤其是配合替代网络可达性，这样用户就不需要你的家庭 IP。\n\n运营商收益分成的设定使得即便是 Pi 级的实例，在适度活动水平下也能覆盖其托管成本和你的时间。运行一个，是因为你想要一个存在于你社区中的 Morphit，而不是因为它报酬丰厚——但这笔账不会亏钱。"
+				"a": "出人意料地不高。Morphit 的设计是在大多数人已经拥有的硬件上运行。人们正在使用的三类配置：\n\n**爱好者级——Raspberry Pi 4 / 5（4 GB）。**可以舒适地同时运行 indexer、relay 和前端。请用 USB-3 SSD 而不是 SD 卡；SD 卡会在数据库写入负载下损坏。功耗约为 5–7 W，所以一个小型 UPS 或太阳能装置就能供电数小时。适合服务由几十名活跃用户组成的个人社区。\n\n**认真级——小型迷你 PC（Beelink、Intel NUC、通用二手）。**搭载 8 GB RAM 和任意现代 SSD 的 Intel N100 / Ryzen 3xxx 对 indexer 而言绰绰有余，并能同时运行每一项 Morphit 服务而无需多想。空闲功耗 6–10 W，负载下 15–20 W。二手 $150–250。对服务数百名活跃用户的实例来说很从容。\n\n**闲置笔记本级——任何仍能启动 Linux 的设备。**一台旧 ThinkPad 或过去十年内任何配备至少 4 GB RAM 和可用 SSD 的笔记本电脑就足够了。额外好处：内置 UPS（笔记本电池）。有些运营商把一台合上的笔记本放在架子上，用有线以太网连接运行 Morphit——效果很好。\n\n**具体最低要求（任意架构：x86-64、ARM64，或 Asahi 下的 Apple silicon）：**\n\n• **CPU：**2 核 1 GHz 或更快。indexer 主要受 I/O 限制；relay 大部分时间空闲。永远不需要 GPU。\n\n• **RAM：**最低 2 GB，4 GB 舒适。Postgres 以默认配置即可装进去；在 2 GB 系统上把 Postgres 的 `shared_buffers` 调到 256 MB 可避免换页。\n\n• **磁盘：**20 GB 可用空间，在 SSD 上。HDD 技术上可用，但 Postgres 会很慢，而 SD 卡会因写入放大而损坏。indexer 的数据库增长缓慢——对典型活动而言每月以个位数 MB 计——所以 20 GB 能用上数年。不过要为备份做好计划。\n\n• **网络：**上下行各 1 Mbit/s 就够了。一次平均的页面加载约 100 KB。一个服务少量用户的小型实例每月使用几 GB 带宽，远在任何家庭互联网上限之内。静态 IP 很好但非必需——动态 DNS 即可。\n\n• **操作系统：**任何现代 Linux（Debian 12、Ubuntu 24.04 LTS、Arch、Alpine、NixOS——我们在 Debian 上测试）。FreeBSD 经少量调整即可使用。macOS 适合开发，但不建议用于公开实例。\n\n• **可用性预期：**95% 是合理的目标。Morphit 在设计上是联邦式的——当你的实例宕机时，用户会回退到其他运营商的实例，并在你回来时回到你这里。链保存数据；你的实例只是通往它的众多窗口之一。\n\n**你不需要的东西：**\n\n• 一个区块链节点。Morphit 通过 HTTPS 与公共 RPC 端点通信。\n\n• 一个静态 IP。一条命令的安装向导会为你配置动态 DNS，因此 IP 会变化的家庭宽带也能直接使用——无需静态 IP，也无需第三方隧道。详情请见运营者手册。\n\n• 一个域名。你可以在 `https://morphit.local` 上为你的朋友运行一个私有实例，或者只暴露一个 `.onion` / `.loki` / `.b32.i2p` 地址。\n\n• 一个数据中心 VPS。在住宅连接上运行的运营商工作得很好，尤其是配合替代网络可达性，这样用户就不需要你的家庭 IP。\n\n运营商收益分成的设定使得即便是 Pi 级的实例，在适度活动水平下也能覆盖其托管成本和你的时间。运行一个，是因为你想要一个存在于你社区中的 Morphit，而不是因为它报酬丰厚——但这笔账不会亏钱。"
 			},
 			"iphone_install": {
 				"q": "我可以在 iPhone 或 iPad 上使用 Morphit 吗？",
@@ -3654,14 +3654,12 @@
 		"why_earn_title": "由智能合约(SC)自动支付",
 		"why_earn_body": "你实例吸引的每一笔以 BLURT 支付的发布费向你支付 90% — 仅 10% 进入 Morphit 财库,用于资助 Morphit 软件本身的持续开发和维护。以 BTC 和 XMR 支付的费用 100% 流向财库,用于同样的项目义务(链上分配机制仅适用于 BLURT,但我们使 BLURT 分配积极慷慨以弥补 — 90/10 对你有利)。\n\n运行在区块链上的 Smart Contract 强制执行分配 — 不是某个人、某个公司、某个可以改变主意的人。100% 自动化。你可证明地帮助,你可证明地获得报酬。在代码中保证。\n\n支付以 BLURT 计价,所以如果 BLURT 升值,你的收入也升值 — 无需额外工作。",
 		"how_heading": "如何开始",
-		"step1_title": "准备一个 VPS",
-		"step1_body": "Linux(Debian 12、Ubuntu 24.04 LTS、Arch、NixOS — 我们在 Debian 上测试)。2 核 CPU @ 1 GHz+,最低 2 GB RAM(4 GB 舒适),20 GB SSD。Raspberry Pi 4、旧笔记本电脑或 5 美元/月的 VPS 都可以。不需要静态 IP — DDNS 工作得很好。请参阅 FAQ 中关于最低硬件要求的条目以获取爱好者、认真和旧笔记本电脑层级的完整细分。",
-		"step2_title": "克隆仓库并配置",
-		"step2_body": "派生或克隆 git.agorise.net/agorise/morphit。从 ops/env/ 复制 env 示例,设置你的域名,设置 indexer 的 RPC 端点（公共 Blurt 节点开箱即用）。",
-		"step3_title": "安装服务",
-		"step3_body": "indexer 和 relay 的 systemd 单元在 ops/systemd/。带 TLS 的 nginx 配置在 ops/nginx/。运行迁移工具一次来初始化数据库架构。",
-		"step4_title": "注册你的运营商身份",
-		"step4_body": "使用你选择的标签(1-64 个字符,字母数字 + 破折号/下划线/点)运行 register-operator CLI 工具。标签是先到先得 — 一旦你广播一次性 `morphit_register_operator` 操作,该标签就是你的。你的实例出现在 /operators 中,立即开始归属订单(并赚取你以 BLURT 支付的发布费的 90% 份额)。请参阅运营商收入 FAQ 了解完整经济学。",
+		"step1_title": "准备一台机器和一个网址",
+		"step1_body": "一台便宜的 VPS，或一台装有 Ubuntu 的旧电脑/笔记本——争取 2 GB 或更多内存（4 GB 更宽裕）和 20 GB 磁盘。树莓派 4 也可以。从任意注册商购买一个域名（每年约 10 美元）并指向这台机器。在家托管？无需静态 IP——安装向导会为你启用动态 DNS。完整的硬件要求明细请见常见问题解答中的最低硬件条目。",
+		"step2_title": "运行一条命令",
+		"step2_body": "下载最新版本，解压到 /morphit/ 文件夹，在其中打开终端并运行 sudo bash morphit-setup.sh——然后选择「Full guided install」。一个简短的向导会用通俗语言问你几个问题（你的域名、你的 Blurt 账户、用于 HTTPS 的邮箱），并为你配置好一切：Node.js、PostgreSQL、应用及其服务、自动续期的 HTTPS、防火墙，以及你的 Tor 和 I2P 地址。无需编辑任何文件。",
+		"step3_title": "注册为运营者",
+		"step3_body": "运行 npx morphit-ops register，以先到先得的方式在链上认领你的标签。你的实例会出现在 /operators 目录中，并开始自动赚取你那 90% 的以 Blurt 支付的挂单费，直接在链上发放。经济细节请见常见问题解答中的运营者收益条目。",
 		"runbook_pointer": "完整运行手册：",
 		"asset_policy_heading": "你的实例,你的资产政策",
 		"asset_policy_body": "Morphit 的联邦让每个运营方选择其实例为哪些可交易资产接受新订单。新资产默认在实例范围内开启交付——运营方通过 `MORPHIT_INDEXER_DISABLED_ASSETS` 环境变量按资产逐个禁用。这样一个实例联邦可以服务不同的用户偏好,而无需任何人 fork 代码。",
@@ -3679,7 +3677,7 @@
 		"req_network_label": "网络",
 		"req_network_value": "家庭互联网就可以 — DDNS 处理动态 IP,不需要静态 IP",
 		"req_time_label": "你的时间",
-		"req_time_value": "每月不到一小时维护",
+		"req_time_value": "每月不到 15 分钟，用于查看你的中继余额、领取收入等",
 		"cta_heading": "准备好开始了吗？",
 		"cta_body": "克隆仓库,设置硬件(Pi 4 或任何旧笔记本电脑都可以),按照 runbook 操作。一旦你广播 register-operator 操作,你的实例就上线并赚钱。",
 		"cta_repo": "查看仓库",

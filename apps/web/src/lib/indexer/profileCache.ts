@@ -37,10 +37,23 @@
 
 import { MORPHIT_INDEXER_ORIGIN, resolveOrigin } from '$net/config';
 import { PENDING_TTL_MS } from '$lib/stores/pendingEcho';
+import { idbGetProfiles, idbPutProfiles, idbDeleteProfile } from '$lib/indexer/profilePersist';
+import type { PersistedProfile } from '$lib/indexer/profilePersist';
 import type { BatchProfilesResponse, ProfileResponse } from '@morphit/indexer-client';
 
 /** Cache TTL, matching server Cache-Control max-age. */
 const CACHE_TTL_MS = 90_000;
+
+/** Persistent (IndexedDB) TTL — how long a profile written to disk stays
+ *  servable WITHOUT a network round-trip. Far longer than the 90s memory TTL:
+ *  the whole point of the disk layer is that revisiting an account tomorrow is
+ *  instant (Ken: "cache all avatars … the moment they need to be loaded", "it
+ *  needs to be instantaneous"), so a resolved avatar/name renders from disk for
+ *  up to a week. It never goes STALE-invisible in the process — a disk hit
+ *  older than CACHE_TTL_MS is served immediately AND revalidated against the
+ *  indexer in the background (stale-while-revalidate), so a changed avatar
+ *  catches up within one more view while the user waits for nothing. */
+const PERSIST_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** cp428 — negative-cache TTL for a null that came from a FETCH FAILURE
  *  (network error / non-200 / timeout / abort), NOT from a genuine
@@ -257,7 +270,7 @@ export async function getProfilesBatch(
 	if (deduped.length === 0) return new Map();
 
 	const result = new Map<string, ProfileResponse | null>();
-	const needsFetch: string[] = [];
+	let needsFetch: string[] = [];
 	const awaitingInFlight: Array<{ account: string; promise: Promise<ProfileResponse | null> }> = [];
 
 	for (const account of deduped) {
@@ -283,61 +296,128 @@ export async function getProfilesBatch(
 		needsFetch.push(account);
 	}
 
-	// Kick off new fetches for `needsFetch`. Split into MAX_BATCH_SIZE
-	// chunks so a huge request becomes several parallel HTTP calls.
-	// For each chunk, we build a single batch fetch, and ALSO register
-	// per-account in-flight promises so concurrent calls for any
-	// account in this chunk can share the result.
+	// Resolve everything the memory cache missed. To preserve the in-flight
+	// dedup guarantee (a concurrent call for the same account must SHARE this
+	// work rather than fire its own fetch), the per-account in-flight promises
+	// are registered SYNCHRONOUSLY below — so the disk read AND the network
+	// fetch both live inside a single shared `resolution` promise created
+	// without an intervening await.
+	//
+	// `resolution` reads the persistent (IndexedDB) cache FIRST (unless reload),
+	// then hits the network only for what disk missed. A disk hit renders the
+	// avatar/name in a few ms — no skeleton, no ~7s wait — which is the whole
+	// point of persisting across reloads; idbGetProfiles never throws and
+	// returns empty when persistence is unavailable, so this degrades cleanly to
+	// the old memory+network path.
+	//   • fresh disk hit (< PERSIST_TTL_MS) → served, no network.
+	//   • disk hit older than the 90s memory TTL → served NOW, and queued for a
+	//     background revalidation so a changed profile catches up next view.
+	//   • miss → fetched from the network, chunked at MAX_BATCH_SIZE.
+	const staleRevalidate: string[] = [];
 	const fetchPromises: Promise<void>[] = [];
-	for (const chunkOfAccounts of chunk(needsFetch, MAX_BATCH_SIZE)) {
-		// One batch HTTP promise. Resolves to the full record at once.
-		const batchPromise = fetchBatch(chunkOfAccounts, signal, opts?.reload === true);
+	if (needsFetch.length > 0) {
+		const toResolve = needsFetch;
 
-		// Per-account promises derived from the batch promise.
-		// Each one extracts its own entry from the batch response.
-		// Wrapped in try/finally so the in-flight map is cleaned up
-		// even if the batch rejects.
-		for (const account of chunkOfAccounts) {
-			const perAccountPromise: Promise<ProfileResponse | null> = batchPromise.then((batch) =>
-				batch ? (batch[account] ?? null) : null
+		interface Resolved {
+			readonly value: ProfileResponse | null;
+			/** disk hit → already on disk, don't re-persist it. */
+			readonly fromDisk: boolean;
+			/** null came from a fetch FAILURE, not an authoritative "no profile". */
+			readonly failed: boolean;
+		}
+
+		// Created synchronously (the first await is INSIDE the IIFE), so the
+		// in-flight registration loop just below runs before any suspension.
+		const resolution: Promise<Map<string, Resolved>> = (async () => {
+			const resolved = new Map<string, Resolved>();
+			let networkNeeded = toResolve;
+
+			if (!opts?.reload) {
+				const persisted = await idbGetProfiles(toResolve);
+				if (persisted.size > 0) {
+					const miss: string[] = [];
+					const now = Date.now();
+					for (const account of toResolve) {
+						const rec = persisted.get(account);
+						// A prime may have landed while we awaited disk — never let a
+						// disk value clobber the user's own just-broadcast profile.
+						if (rec && !isPrimeHeld(account) && now - rec.fetchedAt < PERSIST_TTL_MS) {
+							resolved.set(account, { value: rec.profile, fromDisk: true, failed: false });
+							if (now - rec.fetchedAt >= CACHE_TTL_MS) staleRevalidate.push(account);
+						} else {
+							miss.push(account);
+						}
+					}
+					networkNeeded = miss;
+				}
+			}
+
+			// Network for whatever disk didn't answer, chunked so a huge request
+			// becomes several parallel HTTP calls.
+			await Promise.all(
+				chunk(networkNeeded, MAX_BATCH_SIZE).map(async (chunkOfAccounts) => {
+					const batch = await fetchBatch(chunkOfAccounts, signal, opts?.reload === true);
+					const failed = batch === null;
+					for (const account of chunkOfAccounts) {
+						const value = batch ? (batch[account] ?? null) : null;
+						resolved.set(account, { value, fromDisk: false, failed });
+					}
+				})
+			);
+			return resolved;
+		})();
+
+		// Register per-account in-flight promises derived from the shared
+		// resolution — SYNCHRONOUSLY, before it suspends — so a concurrent call
+		// for any of these accounts shares this work instead of duplicating it.
+		for (const account of toResolve) {
+			const perAccountPromise: Promise<ProfileResponse | null> = resolution.then(
+				(m) => m.get(account)?.value ?? null
 			);
 			inFlight.set(account, perAccountPromise);
 		}
 
+		// Apply results to the memory cache + this call's result map, persist
+		// network positives, and clean up the in-flight map. A prime-held account
+		// keeps its own just-broadcast value (cp452).
 		fetchPromises.push(
-			batchPromise.then(
-				(batch) => {
-					// Populate cache + result for every account in this chunk.
-					// cp428 — distinguish the two null causes:
-					//   • batch is a RECORD (HTTP 200): an account absent from it
-					//     is an authoritative "no profile" → cache null for the
-					//     full TTL.
-					//   • batch is NULL (fetch failed — network/non-200/timeout):
-					//     a transient blip, NOT an answer → cache null SOFT so it
-					//     expires in seconds and the next render re-fetches,
-					//     instead of hiding a real display name for 90s.
-					const failed = batch === null;
-					for (const account of chunkOfAccounts) {
-						const value = batch ? (batch[account] ?? null) : null;
-						// cp452 — if the user just primed this account from their OWN
-						// confirmed broadcast, don't let a possibly-stale server read
-						// (indexer not caught up yet) overwrite it; serve the prime.
+			resolution.then(
+				(resolved) => {
+					const toPersist: PersistedProfile[] = [];
+					const now = Date.now();
+					for (const account of toResolve) {
+						const entry = resolved.get(account);
+						const value = entry ? entry.value : null;
+						const failed = entry ? entry.failed : true;
+						const fromDisk = entry ? entry.fromDisk : false;
 						if (isPrimeHeld(account)) {
 							result.set(account, cache.get(account)?.value ?? value);
 						} else {
-							cache.set(account, { value, fetchedAt: Date.now(), soft: failed });
+							// A disk hit is treated as fresh in memory (fetchedAt now) so
+							// the session doesn't re-read disk every call; its background
+							// revalidation, if it was stale, refreshes the real data.
+							// cp428 — a failure-null is SOFT (short TTL); a real "no
+							// profile" and a real profile are hard.
+							cache.set(account, { value, fetchedAt: now, soft: failed });
 							result.set(account, value);
+							// Write-through to disk — ONLY a POSITIVE, authoritative
+							// profile fetched from the NETWORK (disk hits are already on
+							// disk). Never persist a failure-null or a "no profile yet"
+							// negative: pinning an absence would hide a just-created
+							// profile across reloads, the trap the endpoint's
+							// no-store-on-partial and the soft-null policy both avoid.
+							if (!failed && value !== null && !fromDisk) {
+								toPersist.push({ account, profile: value, fetchedAt: now });
+							}
 						}
 						inFlight.delete(account);
 					}
+					if (toPersist.length > 0) void idbPutProfiles(toPersist);
 				},
 				() => {
-					// fetchBatch returns null on error rather than
-					// throwing, so this branch is defensive — but if
-					// something upstream throws we still want to clean
-					// up in-flight entries and fall back to null. cp428 —
-					// this is a failure, so the null is SOFT (short TTL).
-					for (const account of chunkOfAccounts) {
+					// fetchBatch resolves null on error rather than throwing, so this
+					// is defensive — clean up in-flight and fall back to soft null.
+					for (const account of toResolve) {
 						if (isPrimeHeld(account)) {
 							result.set(account, cache.get(account)?.value ?? null);
 						} else {
@@ -359,6 +439,17 @@ export async function getProfilesBatch(
 			result.set(account, value);
 		})
 	]);
+
+	// Stale-while-revalidate: any disk hit that was older than the 90s memory
+	// TTL was already served above (instantly); now refresh it against the
+	// indexer in the background so a changed avatar/name catches up by the next
+	// view. `reload: true` forces a network read that SKIPS the disk
+	// read-through (so this can't recurse) and, on success, rewrites both the
+	// memory cache and disk via the write-through. Deduped by the in-flight map;
+	// fire-and-forget — the caller already has its answer.
+	if (staleRevalidate.length > 0) {
+		void getProfilesBatch(staleRevalidate, undefined, { reload: true });
+	}
 
 	return result;
 }
@@ -454,6 +545,9 @@ export function clearProfileCache(account?: string): void {
 	}
 	cache.delete(account);
 	primedAt.delete(account);
+	// Targeted clear is used to invalidate after the user updates their own
+	// profile — evict the on-disk copy too so it isn't served stale next view.
+	void idbDeleteProfile(account);
 }
 
 /**
@@ -509,6 +603,11 @@ export function primeProfile(
 	// Drop any in-flight fetch so a NEW caller re-reads the primed cache entry
 	// rather than sharing a pending pre-broadcast fetch's result.
 	inFlight.delete(account);
+	// Invalidate the on-disk copy: it still holds the PRE-edit profile, and once
+	// the prime's memory entry ages out a disk read would serve the old avatar
+	// again. Deleting forces the next miss to re-fetch the freshly-indexed row
+	// (and re-persist it). Best-effort; never throws.
+	void idbDeleteProfile(account);
 }
 
 /**

@@ -1368,7 +1368,7 @@
 			},
 			"node_hosting_costs": {
 				"q": "託管一個 Morphit 節點花多少錢?",
-				"a": "非常少。一台小 VPS(1GB 記憶體、20GB 硬碟)足夠舒適地運行 Morphit,在 Hetzner、OVH、Vultr 或 DigitalOcean 等服務商那裡大約每月 5-8 美元。磁碟儲存增長緩慢 — indexer 儲存鏈上事件,緩存不會膨脹。小實例頻寬極少(每月每百名活躍用戶幾 GB)。如果你已經運行個人伺服器或 homelab,Morphit 增加的負載可忽略。從訂單收取的運營者費用正好足以覆蓋這個並留出你時間的利潤空間(分成計算見運營者收入 FAQ)。"
+				"a": "非常少。一台小 VPS(4GB 記憶體、20GB 硬碟)足夠舒適地運行 Morphit,在 Hetzner、OVH、Vultr 或 DigitalOcean 等服務商那裡大約每月 5-8 美元。磁碟儲存增長緩慢 — indexer 儲存鏈上事件,緩存不會膨脹。小實例頻寬極少(每月每百名活躍用戶幾 GB)。如果你已經運行個人伺服器或 homelab,Morphit 增加的負載可忽略。從訂單收取的運營者費用正好足以覆蓋這個並留出你時間的利潤空間(分成計算見運營者收入 FAQ)。"
 			},
 			"switching_instances": {
 				"q": "如果一個 Morphit 實例下線,我會失去訂單和聲譽嗎?",
@@ -1540,7 +1540,7 @@
 			},
 			"node_minimum_requirements": {
 				"q": "運行 Morphit 節點的最低硬件要求是甚麼？",
-				"a": "出乎意料咁低。Morphit 嘅設計係喺大多數人已經有嘅硬件上面運行。大家而家用緊嘅三類配置：\n\n**愛好者級——Raspberry Pi 4 / 5（4 GB）。**可以好舒服咁同時運行 indexer、relay 同前端。請用 USB-3 SSD 而唔係 SD 卡；SD 卡會喺數據庫寫入負載下面壞。功耗大約係 5–7 W，所以一個細嘅 UPS 或者太陽能裝置就可以供電幾個鐘。適合服務由幾十個活躍用戶組成嘅個人社群。\n\n**認真級——細型迷你 PC（Beelink、Intel NUC、通用二手）。**配備 8 GB RAM 同任何現代 SSD 嘅 Intel N100 / Ryzen 3xxx 對 indexer 嚟講綽綽有餘，仲可以同時運行每一項 Morphit 服務而唔使諗咁多。閒置功耗 6–10 W，負載下面 15–20 W。二手 $150–250。對服務數百個活躍用戶嘅實例嚟講好從容。\n\n**閒置手提電腦級——任何仲可以開機到 Linux 嘅裝置。**一部舊 ThinkPad 或者過去十年內任何配備至少 4 GB RAM 同可用 SSD 嘅手提電腦就夠晒。額外好處：內置 UPS（手提電腦電池）。有啲營運者將一部閂咗蓋嘅手提電腦放喺架上面，用有線以太網連接運行 Morphit——效果好好。\n\n**具體最低要求（任何架構：x86-64、ARM64，或者 Asahi 下面嘅 Apple silicon）：**\n\n• **CPU：**2 核 1 GHz 或者更快。indexer 主要受 I/O 限制；relay 大部分時間都係閒置。永遠唔使 GPU。\n\n• **RAM：**最低 2 GB，4 GB 舒服。Postgres 用預設配置就裝得入；喺 2 GB 系統上面將 Postgres 嘅 `shared_buffers` 調到 256 MB 可以避免換頁。\n\n• **磁碟：**20 GB 可用空間，喺 SSD 上面。HDD 技術上可用，但 Postgres 會好慢，而 SD 卡會因為寫入放大而壞。indexer 嘅數據庫增長得好慢——對典型活動嚟講每個月以個位數 MB 計——所以 20 GB 用得上幾年。不過要為備份做好計劃。\n\n• **網絡：**上下行各 1 Mbit/s 就夠。一次平均嘅頁面載入大約 100 KB。一個服務少量用戶嘅細型實例每個月用幾 GB 頻寬，遠喺任何家庭互聯網上限之內。靜態 IP 好但唔係必需——動態 DNS 就得。\n\n• **操作系統：**任何現代 Linux（Debian 12、Ubuntu 24.04 LTS、Arch、Alpine、NixOS——我哋喺 Debian 上面測試）。FreeBSD 經少量調整就用得。macOS 適合開發，但唔建議用喺公開實例。\n\n• **可用性預期：**95% 係合理嘅目標。Morphit 喺設計上係聯邦式嘅——當你嘅實例當機嗰陣，用戶會回退到其他營運者嘅實例，喺你返嚟嗰陣再回到你呢度。鏈保存數據；你嘅實例只係通往佢嘅眾多窗口之一。\n\n**你唔需要嘅嘢：**\n\n• 一個區塊鏈節點。Morphit 透過 HTTPS 同公共 RPC 端點通信。\n\n• 一個靜態 IP。用 Caddy 或者 Cloudflare Tunnel（或者，出於本項目嘅私隱價值觀，反向代理加 DDNS）嚟暴露 443 端口。非 Cloudflare 選項請睇營運者手冊。\n\n• 一個域名。你可以喺 `https://morphit.local` 上面為你嘅朋友運行一個私有實例，或者只暴露一個 `.onion` / `.loki` / `.b32.i2p` 地址。\n\n• 一個數據中心 VPS。喺住宅連接上面運行嘅營運者做得好好，尤其係配合替代網絡可達性，噉樣用戶就唔需要你嘅家庭 IP。\n\n營運者收益分成嘅設定令到即使係 Pi 級嘅實例，喺適度活動水平下面都可以覆蓋佢嘅託管成本同你嘅時間。運行一個，係因為你想要一個存在喺你社群入面嘅 Morphit，而唔係因為佢報酬豐厚——但呢盤數唔會蝕本。"
+				"a": "出乎意料咁低。Morphit 嘅設計係喺大多數人已經有嘅硬件上面運行。大家而家用緊嘅三類配置：\n\n**愛好者級——Raspberry Pi 4 / 5（4 GB）。**可以好舒服咁同時運行 indexer、relay 同前端。請用 USB-3 SSD 而唔係 SD 卡；SD 卡會喺數據庫寫入負載下面壞。功耗大約係 5–7 W，所以一個細嘅 UPS 或者太陽能裝置就可以供電幾個鐘。適合服務由幾十個活躍用戶組成嘅個人社群。\n\n**認真級——細型迷你 PC（Beelink、Intel NUC、通用二手）。**配備 8 GB RAM 同任何現代 SSD 嘅 Intel N100 / Ryzen 3xxx 對 indexer 嚟講綽綽有餘，仲可以同時運行每一項 Morphit 服務而唔使諗咁多。閒置功耗 6–10 W，負載下面 15–20 W。二手 $150–250。對服務數百個活躍用戶嘅實例嚟講好從容。\n\n**閒置手提電腦級——任何仲可以開機到 Linux 嘅裝置。**一部舊 ThinkPad 或者過去十年內任何配備至少 4 GB RAM 同可用 SSD 嘅手提電腦就夠晒。額外好處：內置 UPS（手提電腦電池）。有啲營運者將一部閂咗蓋嘅手提電腦放喺架上面，用有線以太網連接運行 Morphit——效果好好。\n\n**具體最低要求（任何架構：x86-64、ARM64，或者 Asahi 下面嘅 Apple silicon）：**\n\n• **CPU：**2 核 1 GHz 或者更快。indexer 主要受 I/O 限制；relay 大部分時間都係閒置。永遠唔使 GPU。\n\n• **RAM：**最低 2 GB，4 GB 舒服。Postgres 用預設配置就裝得入；喺 2 GB 系統上面將 Postgres 嘅 `shared_buffers` 調到 256 MB 可以避免換頁。\n\n• **磁碟：**20 GB 可用空間，喺 SSD 上面。HDD 技術上可用，但 Postgres 會好慢，而 SD 卡會因為寫入放大而壞。indexer 嘅數據庫增長得好慢——對典型活動嚟講每個月以個位數 MB 計——所以 20 GB 用得上幾年。不過要為備份做好計劃。\n\n• **網絡：**上下行各 1 Mbit/s 就夠。一次平均嘅頁面載入大約 100 KB。一個服務少量用戶嘅細型實例每個月用幾 GB 頻寬，遠喺任何家庭互聯網上限之內。靜態 IP 好但唔係必需——動態 DNS 就得。\n\n• **操作系統：**任何現代 Linux（Debian 12、Ubuntu 24.04 LTS、Arch、Alpine、NixOS——我哋喺 Debian 上面測試）。FreeBSD 經少量調整就用得。macOS 適合開發，但唔建議用喺公開實例。\n\n• **可用性預期：**95% 係合理嘅目標。Morphit 喺設計上係聯邦式嘅——當你嘅實例當機嗰陣，用戶會回退到其他營運者嘅實例，喺你返嚟嗰陣再回到你呢度。鏈保存數據；你嘅實例只係通往佢嘅眾多窗口之一。\n\n**你唔需要嘅嘢：**\n\n• 一個區塊鏈節點。Morphit 透過 HTTPS 同公共 RPC 端點通信。\n\n• 一個靜態 IP。一條指令的安裝精靈會為你設定動態 DNS，因此 IP 會變化的家庭寬頻都可以直接使用——無需靜態 IP，亦無需第三方隧道。詳情請見營運者手冊。\n\n• 一個域名。你可以喺 `https://morphit.local` 上面為你嘅朋友運行一個私有實例，或者只暴露一個 `.onion` / `.loki` / `.b32.i2p` 地址。\n\n• 一個數據中心 VPS。喺住宅連接上面運行嘅營運者做得好好，尤其係配合替代網絡可達性，噉樣用戶就唔需要你嘅家庭 IP。\n\n營運者收益分成嘅設定令到即使係 Pi 級嘅實例，喺適度活動水平下面都可以覆蓋佢嘅託管成本同你嘅時間。運行一個，係因為你想要一個存在喺你社群入面嘅 Morphit，而唔係因為佢報酬豐厚——但呢盤數唔會蝕本。"
 			},
 			"iphone_install": {
 				"q": "我可唔可以喺 iPhone 或 iPad 上面用 Morphit？",
@@ -3654,14 +3654,12 @@
 		"why_earn_title": "由智能合約(SC)自動支付",
 		"why_earn_body": "你實例吸引的每一筆以 BLURT 支付的發布費向你支付 90% — 僅 10% 進入 Morphit 財庫,用於資助 Morphit 軟件本身的持續開發和維護。以 BTC 和 XMR 支付的費用 100% 流向財庫,用於同樣的項目義務(鏈上分配機制僅適用於 BLURT,但我們使 BLURT 分配積極慷慨以彌補 — 90/10 對你有利)。\n\n運行在區塊鏈上的 Smart Contract 強制執行分配 — 不是某個人、某個公司、某個可以改變主意的人。100% 自動化。你可證明地幫助,你可證明地獲得報酬。在代碼中保證。\n\n支付以 BLURT 計價,所以如果 BLURT 升值,你的收入也升值 — 無需額外工作。",
 		"how_heading": "點樣開始",
-		"step1_title": "準備一個 VPS",
-		"step1_body": "Linux(Debian 12、Ubuntu 24.04 LTS、Arch、NixOS — 我哋喺 Debian 上測試)。2 核 CPU @ 1 GHz+,最低 2 GB RAM(4 GB 舒適),20 GB SSD。Raspberry Pi 4、舊筆記型電腦或 5 美元/月嘅 VPS 都可以。唔需要靜態 IP — DDNS 工作得好好。請參閱 FAQ 中關於最低硬件要求嘅條目以獲取愛好者、認真和舊筆記型電腦層級嘅完整細分。",
-		"step2_title": "克隆倉庫並配置",
-		"step2_body": "派生或克隆 git.agorise.net/agorise/morphit。從 ops/env/ 複製 env 範例,設置你嘅域名,設置 indexer 嘅 RPC 端點（公共 Blurt 節點開箱即用）。",
-		"step3_title": "安裝服務",
-		"step3_body": "indexer 同 relay 嘅 systemd 單元喺 ops/systemd/。帶 TLS 嘅 nginx 配置喺 ops/nginx/。運行一次遷移工具嚟初始化數據庫架構。",
-		"step4_title": "註冊你嘅運營商身份",
-		"step4_body": "使用你揀嘅標籤(1-64 個字符,字母數字 + 破折號/下劃線/點)運行 register-operator CLI 工具。標籤係先到先得 — 一旦你廣播一次性 `morphit_register_operator` 操作,該標籤就係你嘅。你嘅實例出現喺 /operators 中,立即開始歸屬訂單(並賺取你以 BLURT 支付嘅發布費嘅 90% 份額)。請參閱運營商收入 FAQ 了解完整經濟學。",
+		"step1_title": "準備一台機器和一個網址",
+		"step1_body": "一台便宜的 VPS，或一台裝有 Ubuntu 的舊電腦／手提電腦——爭取 2 GB 或以上記憶體（4 GB 更寬裕）和 20 GB 磁碟。樹莓派 4 也可以。從任何註冊商購買一個網域名稱（每年約 10 美元）並指向這台機器。在家寄存？無需靜態 IP——安裝精靈會為你啟用動態 DNS。完整的硬件要求明細請見常見問題中的最低硬件條目。",
+		"step2_title": "執行一條指令",
+		"step2_body": "下載最新版本，解壓到 /morphit/ 資料夾，在其中開啟終端機並執行 sudo bash morphit-setup.sh——然後選擇「Full guided install」。一個簡短的精靈會用淺白語言問你幾個問題（你的網域、你的 Blurt 帳戶、用於 HTTPS 的電郵），並為你設定好一切：Node.js、PostgreSQL、應用程式及其服務、自動續期的 HTTPS、防火牆，以及你的 Tor 和 I2P 位址。無需編輯任何檔案。",
+		"step3_title": "註冊為營運者",
+		"step3_body": "執行 npx morphit-ops register，以先到先得的方式在鏈上認領你的標籤。你的實例會出現在 /operators 目錄中，並開始自動賺取你那 90% 以 Blurt 支付的掛單費，直接在鏈上發放。經濟細節請見常見問題中的營運者收益條目。",
 		"runbook_pointer": "完整運行手冊：",
 		"asset_policy_heading": "你嘅實例,你嘅資產政策",
 		"asset_policy_body": "Morphit 嘅聯邦讓每個運營方揀其實例為邊啲可交易資產接受新訂單。新資產預設喺實例範圍內開啟交付——運營方透過 `MORPHIT_INDEXER_DISABLED_ASSETS` 環境變數逐個資產停用。咁樣一個實例聯邦可以服務唔同嘅用戶偏好,而唔需要任何人 fork 代碼。",
@@ -3679,7 +3677,7 @@
 		"req_network_label": "網絡",
 		"req_network_value": "家庭互聯網就可以 — DDNS 處理動態 IP,唔需要靜態 IP",
 		"req_time_label": "你嘅時間",
-		"req_time_value": "每月不到一小時維護",
+		"req_time_value": "每月不到 15 分鐘，用於查看你的中繼餘額、領取收入等",
 		"cta_heading": "準備好開始？",
 		"cta_body": "克隆儲存庫,設置硬件(Pi 4 或任何舊筆記型電腦都可以),按照 runbook 操作。一旦你廣播 register-operator 操作,你嘅實例就上線並賺錢。",
 		"cta_repo": "睇倉庫",

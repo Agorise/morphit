@@ -2,7 +2,7 @@
 
 **Status:** ✅ SHIPPED.  Persistent keystore + Lock Session
 landed via `apps/web/src/lib/crypto/persistentKeystore.ts`
-and `lockSession()` at `apps/web/src/lib/stores/identity.ts:225`.
+and `lockSession()` at `apps/web/src/lib/stores/identity.ts`.
 Onboarding-time keystore-mode choice ("Password (fast)" vs
 "Seed every time (most private)") is wired through
 `keystoreMode` state in the onboarding form, with the password

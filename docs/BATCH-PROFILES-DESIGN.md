@@ -4,7 +4,7 @@
 session 1 (indexer-side `GET /v1/profiles?accounts=...`)
 landed at `apps/indexer/src/api/profiles.ts`; session 2
 (frontend integration via `getProfilesBatch()`) at
-`apps/web/src/lib/indexer/profileCache.ts:186`.  Wired into
+`apps/web/src/lib/indexer/profileCache.ts`.  Wired into
 orderbook, feedback list, profile cross-reference panes.
 This file is preserved as the design rationale; the
 endpoint is documented under "Public endpoints" in

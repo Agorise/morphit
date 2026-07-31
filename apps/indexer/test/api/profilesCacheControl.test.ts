@@ -171,3 +171,65 @@ describe('GET /v1/profiles/:account — single lookup', () => {
 		expect(body.account).toBe('alice');
 	});
 });
+
+/**
+ * Server-side warm-positive cache (t.txt avatar latency). Ken: profiles "STILL
+ * taking up to 7 seconds … the server itself can cache the user avatars and
+ * display name text". The endpoint now serves warm POSITIVES from an in-memory
+ * cache and DB-queries only the misses, so a hot avatar/name returns without
+ * touching Postgres (and stops queueing behind the poller's block writes).
+ * Negatives are never cached — a fresh profile must not be hidden.
+ */
+describe('GET /v1/profiles — server-side warm-positive cache', () => {
+	/** Mount with a db stub that RECORDS the accounts of every query. */
+	function mountCounting(rowsFor: (accounts: string[]) => Row[]): {
+		app: Hono;
+		calls: string[][];
+	} {
+		const calls: string[][] = [];
+		const db = {
+			query: async (_sql: string, params: unknown[]) => {
+				const accounts = (Array.isArray(params) ? (params[0] as string[]) : []) ?? [];
+				calls.push(accounts);
+				const rows = rowsFor(accounts);
+				return { rows, rowCount: rows.length };
+			}
+		} as unknown as Database;
+		const app = new Hono();
+		app.route('/v1/profiles', profilesRoute(db));
+		return { app, calls };
+	}
+
+	it('serves a warm positive from cache WITHOUT re-querying the DB', async () => {
+		const { app, calls } = mountCounting((accts) => accts.map(row)); // all positive
+		await app.request('/v1/profiles?accounts=alice,bob');
+		await app.request('/v1/profiles?accounts=alice,bob');
+		// Second request is fully served from cache — no second DB query.
+		expect(calls.length).toBe(1);
+	});
+
+	it('never caches a profile-less account — re-queries only it next time', async () => {
+		const { app, calls } = mountCounting((accts) =>
+			accts.map((a) => (a === 'bob' ? profileLessRow(a) : row(a)))
+		);
+		await app.request('/v1/profiles?accounts=alice,bob');
+		await app.request('/v1/profiles?accounts=alice,bob');
+		// alice cached after call 1; bob (a negative) is never cached, so call 2
+		// must re-query — and for bob ONLY, since alice came from cache.
+		expect(calls.length).toBe(2);
+		expect(calls[1]).toEqual(['bob']);
+	});
+
+	it('a fully cache-served batch is still marked COMPLETE (cacheable)', async () => {
+		const { app } = mountCounting((accts) => accts.map(row));
+		await app.request('/v1/profiles?accounts=alice,bob'); // warms the cache
+		const res = await app.request('/v1/profiles?accounts=alice,bob'); // all from cache
+		expect(res.status).toBe(200);
+		// Completeness must count the cache-served positives, not just queried rows.
+		expect(res.headers.get('Cache-Control')).toBe(
+			'public, max-age=90, stale-while-revalidate=60'
+		);
+		const body = (await res.json()) as { profiles: Record<string, unknown> };
+		expect(Object.keys(body.profiles).sort()).toEqual(['alice', 'bob']);
+	});
+});
