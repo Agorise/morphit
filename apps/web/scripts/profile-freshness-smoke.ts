@@ -59,7 +59,7 @@ check('server keeps the 90s header for complete batches', /BATCH_CACHE_CONTROL =
 // would call such a batch complete and pin "no profile" for the full 90s —
 // exactly the negative-caching failure cp428 exists to prevent. Row presence
 // stopped meaning "has a profile"; only has_profile does.
-check('server picks the header by batch completeness', /const complete = result\.rows\.filter\(\(r\) => r\.has_profile\)\.length === accounts\.length;/.test(serverProfiles) && /complete \? BATCH_CACHE_CONTROL : BATCH_CACHE_CONTROL_PARTIAL/.test(serverProfiles));
+check('server picks the header by batch completeness (cache-served + queried positives, never a row count)', /const complete = servedFromCache \+ queriedWithProfile === accounts\.length;/.test(serverProfiles) && /if \(row\.has_profile\)\s*\{[\s\S]{0,120}queriedWithProfile\+\+;/.test(serverProfiles) && /complete \? BATCH_CACHE_CONTROL : BATCH_CACHE_CONTROL_PARTIAL/.test(serverProfiles));
 check('completeness cannot regress to a row count (a profile-less row is not a profile)', !/const complete = result\.rows\.length === accounts\.length;/.test(serverProfiles));
 check('the single-profile 404 is no-store too (404s are heuristically cacheable)', /c\.header\('Cache-Control', BATCH_CACHE_CONTROL_PARTIAL\);[\s\S]{0,160}errorBody\('not_found'/.test(serverProfiles));
 

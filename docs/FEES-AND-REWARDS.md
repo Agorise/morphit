@@ -114,7 +114,7 @@ fee-recipient account.
 ### 2. Cold-message fee — paid by strangers DMing for the first time
 
 - **Default: 5 BLURT (~$0.01)**, escalates if abused
-- Source: `apps/indexer/src/indexer/strangerFeePricing.ts` line 37
+- Source: `apps/indexer/src/indexer/strangerFeePricing.ts`
   (`STRANGER_FEE_BASE_BLURT = 5`)
 - Multiplier rises with `n` recent strangers contacted by the same
   sender; see `strangerFeePricing.computePrice(n)` for the curve.
@@ -125,7 +125,7 @@ fee-recipient account.
 - **Default: 50 BLURT/hour**, minimum 6 hours = 300 BLURT floor per bid
 - Source: `apps/indexer/src/config/index.ts`
   (`MORPHIT_INDEXER_FEATURE_FEE_BLURT_PER_HOUR.default(50)`)
-- Source: `apps/indexer/src/indexer/handlers/featureBid.ts` line 61
+- Source: `apps/indexer/src/indexer/handlers/featureBid.ts`
   (`MIN_HOURS = 6` — the authoritative enforcement)
 - The web side at `apps/web/src/lib/blurt/ops/featureBid.ts` does
   defensive input checks against the same values via comment-pinned
@@ -263,7 +263,7 @@ registration after first config.
 - **Cost: ~100 BLURT (~$0.20) per new user**, set by Blurt
   witness consensus (subject to change without notice on the
   chain side).
-- Source: `apps/relay/src/config/index.ts` line 296
+- Source: `apps/relay/src/config/index.ts`
   (operator-tunable mirror of chain `account_creation_fee`)
 - Source: `apps/relay/src/blurt/client.ts`
   `broadcastAccountCreate()` — the relay's active key signs and
@@ -277,7 +277,7 @@ registration after first config.
 ### 2. Welcome bonus — paid to new users on their first completed trade
 
 - **20 BLURT total: 10 BLURT liquid + 10 BLURT vesting**
-- Source: `apps/indexer/src/indexer/handlers/feedback.ts` lines 435–436
+- Source: `apps/indexer/src/indexer/handlers/feedback.ts`
   ```
   ($1, 'liquid',  10, 'welcome_bonus_liquid',  $2),
   ($1, 'vesting', 10, 'welcome_bonus_vesting', $2)
@@ -306,7 +306,7 @@ registration after first config.
 - **1 BP delegated** on the user's first verified BLURT listing fee
 - Source: `apps/indexer/src/indexer/loyalty.ts` line ~60
   (`FIRST_FEE_WELCOME_BP = 1`)
-- Rationale documented at `loyalty.ts` lines 41–55: "real fee paid
+- Rationale documented at `loyalty.ts`: "real fee paid
   → not a Sybil farm" + baseline ecosystem stake.
 - Independent from the 20-BLURT welcome bonus above; both can fire
   on the same account.
@@ -321,7 +321,7 @@ registration after first config.
 | 10,000 BLURT | 1,000 BP |
 | **Total at top tier** | **1,260 BP** |
 
-- Source: `apps/indexer/src/indexer/loyalty.ts` lines 28–36
+- Source: `apps/indexer/src/indexer/loyalty.ts`
   (`LOYALTY_MILESTONES` constant array)
 - Tracked by **cumulative BLURT-denominated fees paid**, NOT trade
   count.  A user paying high fees crosses milestones faster.
@@ -424,7 +424,7 @@ The set of assets that may pay listing fees is permanently
 fixed at **BLURT, BTC, XMR**.  This is a wire-format-frozen
 invariant, NOT a configuration knob.  The indexer's
 `fee_method` enum at
-`apps/indexer/src/indexer/handlers/order.ts:94` is exactly the
+`apps/indexer/src/indexer/handlers/order.ts` is exactly the
 4-member set `'blurt' | 'waived_first_buy' | 'btc' | 'xmr'`,
 and the asset registry enforces the rule that
 `canPayListingFee: true → ticker ∈ {BLURT, BTC, XMR}`.

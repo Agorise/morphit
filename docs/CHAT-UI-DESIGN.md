@@ -334,11 +334,11 @@ orderbook surfaces; chat surfaces honor BOTH stores
 The core chat infrastructure is implemented.  The remaining
 wiring described below has all shipped:
 
-1. ✅ `/chat` is in the main nav (`apps/web/src/routes/+layout.svelte:178`).
+1. ✅ `/chat` is in the main nav (`apps/web/src/routes/+layout.svelte`).
 2. ✅ "Message" CTA on profile pages
-   (`apps/web/src/routes/[lang]/[x+40][account=account]/+page.svelte:450`).
+   (`apps/web/src/routes/[lang]/[x+40][account=account]/+page.svelte`).
 3. ✅ "Message seller" CTA on orderbook rows
-   (`apps/web/src/routes/[lang]/orderbook/+page.svelte:956`).
+   (`apps/web/src/routes/[lang]/orderbook/+page.svelte`).
 4. i18n key coverage across all 10 locales is verified
    continuously by the locale-parity smoke
    (`apps/web/scripts/i18n-locale-parity-smoke.ts`).

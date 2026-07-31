@@ -440,7 +440,7 @@ The project is open-source; the indexer, posting relay, and support bot can all 
 
 Yes, and please do — Morphit only stays unstoppable if lots of people run pieces of it. Here's what you can host:
 
-• A front-end mirror — clone the repo, run one command, and you have a full Morphit at your own domain (or .onion, or .loki). Same code, same orders, your rules about who can reach it. Great for communities that want a curated presence.
+• A front-end mirror — clone the repo, run one command, and you have a full Morphit at your own domain (or a .onion, .b32.i2p, or .loki address — or an ENS .eth name). Same code, same orders, your rules about who can reach it. Great for communities that want a curated presence.
 
 • An indexer — watches the chain, serves the orderbook as REST + RSS, gossips with other indexers. Your indexer's RSS feeds become another path for everyone; your REST API becomes a fallback when others are slow.
 
@@ -973,7 +973,7 @@ You need basic Linux comfort: SSH into a server, run a shell command, edit a con
 
 **FAQ key:** `node_hosting_costs`
 
-Very little. A small VPS (1GB RAM, 20GB disk) runs Morphit comfortably and costs about $5-8/month from providers like Hetzner, OVH, Vultr, or DigitalOcean. Disk storage grows slowly — the indexer stores on-chain events and the cache doesn't balloon. Bandwidth is minimal for a small instance (a few GB per month per hundred active users). If you already run a personal server or homelab, Morphit adds negligible load. Operator fees collected from orders are specifically sized to cover this and leave margin for your time (see the operator-earnings FAQ for the split math).
+Very little. A small VPS (4GB RAM, 20GB disk) runs Morphit comfortably and costs about $5-8/month from providers like Hetzner, OVH, Vultr, or DigitalOcean. Disk storage grows slowly — the indexer stores on-chain events and the cache doesn't balloon. Bandwidth is minimal for a small instance (a few GB per month per hundred active users). If you already run a personal server or homelab, Morphit adds negligible load. Operator fees collected from orders are specifically sized to cover this and leave margin for your time (see the operator-earnings FAQ for the split math).
 
 ---
 
@@ -1820,9 +1820,9 @@ Surprisingly modest. Morphit is built to run on hardware most people already own
 
 • A blockchain node. Morphit talks to public blockchain endpoints over HTTPS.
 
-• A static IP. Use Caddy or Cloudflare Tunnel (or, for this project's privacy values, a reverse proxy plus DDNS) to expose port 443. See the operator handbook for non-Cloudflare options.
+• A static IP. The one-command setup wizard configures dynamic-DNS for you, so a home connection with a changing IP just works — no static IP, and no third-party tunnel, required. See the operator handbook for the details.
 
-• A domain name. You can run a private instance on `https://morphit.local` for your friends, or expose a `.onion` / `.loki` / `.b32.i2p` address only.
+• A domain name. You can run a private instance on `https://morphit.local` for your friends, or expose a `.onion` / `.loki` / `.b32.i2p` address (or an ENS `.eth` name) only.
 
 • A datacenter VPS. Operators running on residential connections work fine, especially with alt-network reachability so users don't need your home IP.
 

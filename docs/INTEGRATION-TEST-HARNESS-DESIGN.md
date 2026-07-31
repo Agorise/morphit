@@ -1,7 +1,9 @@
 # Integration test harness — design
 
-**Status:** Design accepted 2026-04-23. Implementation pending
-its own session.
+**Status:** Design accepted 2026-04-23. ✅ **Implemented since** —
+the integration suite lives at `apps/indexer/test/integration/`
+(signals, feedback-suppression, loyalty, migrations, and more).
+The decisions + sketch below are the design record for it.
 
 This document records the four operator decisions made during
 the REVISIT §A walkthrough on 2026-04-23 and sketches the

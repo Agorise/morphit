@@ -61,6 +61,7 @@ before relying on any of it.**
 18. [Signup-drain prevention — the full defense stack](#18-signup-drain-prevention--the-full-defense-stack)
 19. [Chat anti-spam (Finding H) — operational reference](#19-chat-anti-spam-finding-h--operational-reference)
 20. [Attestation phase transition (Finding I)](#20-attestation-phase-transition-finding-i)
+20b. [Schema v39 upgrade note — chat read-state is re-keyed, and the indexer cannot be rolled back over it](#20b-schema-v39-upgrade-note--chat-read-state-is-re-keyed-and-the-indexer-cannot-be-rolled-back-over-it)
 21. [Schema v17 upgrade note — brief orderbook sequential-scan window](#21-schema-v17-upgrade-note--brief-orderbook-sequential-scan-window)
 22. [Choosing Blurt RPC endpoints](#22-choosing-blurt-rpc-endpoints)
 23. [The morphit.config.env file — operator-tunable knobs in one place](#23-the-morphitconfigenv-file--operator-tunable-knobs-in-one-place)
@@ -115,7 +116,7 @@ all of them.
 | Role | Env var (indexer / relay) | What it does |
 |---|---|---|
 | **Operator** | `MORPHIT_INDEXER_OFFICIAL_ACCOUNT_NAME` | Signs release-discovery ops. Posting-key pubkey is pinned on each instance's frontend build. |
-| **Relay** | (relay's own Blurt keypair loaded at boot) | Spends Mana (Blurt's transaction fuel; "Resource Credits"/"RC" in older docs) to broadcast user-signed ops on the user's behalf. Hot wallet. |
+| **Relay** | (relay's own Blurt keypair loaded at boot) | Pays the small per-op BLURT fee (from its LIQUID balance — Blurt does NOT gate on mana/RC like Hive/Steem; see docs/BLURT-CHAIN-MODEL.md) to broadcast user-signed ops on the user's behalf. Hot wallet. |
 | **Fees** | `MORPHIT_INDEXER_FEE_RECIPIENT` | Receives listing-fee BLURT transfers. Cold wallet in practice — operator sweeps periodically. |
 
 **Why the canonical operator chose three separate accounts:**
@@ -148,7 +149,7 @@ beyond you personally: less keys to track, one account to
 fund, one to secure. The "relay + fees separate from
 operator" middle variant is a common compromise — hot
 wallet isolated from release-signing, but fee accumulation
-in the same account that spends Mana.
+in the same account that pays the per-op BLURT fee.
 
 Pick the separation level that matches your threat model
 and operational overhead tolerance. **You can always
@@ -267,8 +268,8 @@ level:
    posting, and memo keys for each in an offline backup
    (paper + encrypted digital copy).
 2. Fund the operator and relay accounts with enough
-   BLURT to cover initial Mana needs (Mana, formerly called
-   Resource Credits) — the relay especially will be
+   BLURT to cover initial per-op fees (Blurt charges a small
+   liquid-BLURT fee per operation, not mana/RC) — the relay especially will be
    broadcasting on users' behalf.
 3. Publish the operator's posting pubkey as
    `MORPHIT_OFFICIAL_POSTING_PUBKEY` in your frontend
@@ -1094,7 +1095,7 @@ something is stuck.
 SELECT id, recipient, kind, amount_blurt, reason,
        error_count, last_error, last_error_at, created_at
   FROM relay_pending_transfers
- WHERE broadcast_at IS NULL AND error_count > 3
+ WHERE broadcast_at IS NULL AND error_count >= 3  -- a stuck row sits at exactly queueMaxRetries (default 3)
  ORDER BY error_count DESC, created_at ASC;
 ```
 
@@ -1541,7 +1542,12 @@ static floor. Values refresh every 5 minutes in the background. When
 every upstream fails, the indexer keeps serving the last good
 value with `stale=true`. If no upstream has ever succeeded
 since boot, it falls back to the static floor
-(`MORPHIT_INDEXER_PRICE_FEED_STATIC_FLOOR`).
+(`MORPHIT_INDEXER_PRICE_FEED_STATIC_FLOOR`). For BLURT
+specifically, Blurt's own `api.blurt.blog/price_info` feed is an
+authoritative PRIMARY tier tried *before* this median — when it
+answers plausibly it sets the BLURT price directly, and the median
+and lower tiers are only its fallback (see the cp425 / cp604 note
+below).
 
 **cp128 update — denomination is operator-configurable**: by
 default the BLURT price echo on `/v1/listing-fee` is expressed
@@ -1597,24 +1603,28 @@ Receipt endpoint `/v1/price/morphit-native/receipt?asset=BTC`
 returns a real BTC/USD derivation operators can inspect.
 See ADR-0042.
 
-**cp425 update — Blurt-native price feed added to the BLURT
-average**: BLURT now also reads `api.blurt.blog/price_info`
-(configurable via `MORPHIT_INDEXER_BLURT_PRICE_FEED_URL`, default
-`https://api.blurt.blog/price_info`; set it empty to opt out) as
-one more independent reading in the same outlier-rejected median.
-It's a self-sovereign, non-CEX source that fits Morphit's
-decentralization priority, and — like every other feed — a
-provider that's down or returns a bad number is simply dropped
-from the median, so it can never move the published price on its
-own. It applies to BLURT only (BTC/XMR are unaffected) and only
-when the instance prices in USD (the feed quotes USD). If you
-firewall the indexer's outbound traffic, allow `api.blurt.blog`
-alongside the other price hosts. The provider appears as
-`blurt_price_feed` in the `morphit-ops health` per-source list.
-Note the effective fallback: when live feeds are temporarily
-down the indexer keeps serving the last committed **average**
-(`stale=true`), not the static floor — the static floor only
-applies at cold-start before any feed has ever answered.
+**cp425 / cp604 update — `api.blurt.blog/price_info` is the PRIMARY
+BLURT/USD source of truth**: for BLURT, the indexer reads Blurt's own
+`api.blurt.blog/price_info` feed (configurable via
+`MORPHIT_INDEXER_BLURT_PRICE_FEED_URL`, default
+`https://api.blurt.blog/price_info`; set it empty to opt out) **first,
+every cycle** — and whenever it returns a plausible value, that value IS
+the published BLURT price, and the external CEX aggregators are not
+queried that cycle. It's a self-sovereign, non-CEX source that fits
+Morphit's decentralization priority. Only when the Blurt feed is down or
+returns an implausible number does the indexer fall back, in order, to
+the outlier-rejected median across the external aggregators (Coingecko /
+CoinPaprika / CryptoCompare, plus the listed CEXes), then
+`morphit_native`, then the static floor. This primary-first behavior is
+BLURT-only and USD-only (the feed quotes BLURT/USD); BTC and XMR still
+take the aggregator median as their primary tier. If you firewall the
+indexer's outbound traffic, allow `api.blurt.blog` alongside the other
+price hosts. The feed appears as `blurt_price_feed` in the `morphit-ops
+health` per-source list — normally the committed-source row. Effective
+fallback for staleness is unchanged: when the primary and the aggregators
+are all temporarily down, the indexer keeps serving the last committed
+value (`stale=true`), not the static floor — the static floor only
+applies at cold-start before any source has ever answered.
 
 ### Responding to a peer-price-disagreement alert
 
@@ -1697,8 +1707,9 @@ doesn't try to derive from empty data.
 - `/v1/health?verbose=1` reports `diagnostics.price.stale=true`
 - `/v1/health?verbose=1` reports `diagnostics.price.source` as
   `static_floor` while `MORPHIT_INDEXER_PRICE_FEED_ENABLED=true`
-  (means the upstream — coingecko — hasn't succeeded
-  since boot, so the indexer is falling back to
+  (means no price source — the primary Blurt feed, the aggregator
+  median, or `morphit_native` — has succeeded since boot, so the
+  indexer is falling back to
   `MORPHIT_INDEXER_PRICE_FEED_STATIC_FLOOR`)
 - Log aggregator shows repeated `[price] all_upstreams_failed_serving_cache`
   or `all_upstreams_failed_no_cache_serving_floor` events from
@@ -1719,7 +1730,7 @@ Example healthy output:
 ```json
 {
   "blurt_usd": 0.00423,
-  "source": "coingecko",
+  "source": "blurt_price_feed",
   "updated_at": "2026-04-20T12:35:00.000Z",
   "stale": false
 }
@@ -2342,8 +2353,9 @@ Verify the relay's data dir and config aren't world-readable:
 
 ```bash
 chmod 700 /var/lib/morphit /var/lib/morphit/relay
-chmod 600 /etc/morphit/relay.env  # if you use an env file
-chown -R morphit:morphit /var/lib/morphit /etc/morphit
+chown -R morphit:morphit /var/lib/morphit
+chmod 0640 /etc/morphit/relay.env          # if you use an env file
+chown root:morphit /etc/morphit/relay.env  # 0640 root:morphit, per §37.10/§37.19
 ```
 
 The relay's encrypted-keystore file is itself encrypted, but
@@ -2520,7 +2532,7 @@ add_header Permissions-Policy "camera=(self), microphone=(), geolocation=(), int
 
 # Content Security Policy — the single source of truth for the
 # frontend (the build emits no meta CSP). connect-src lists the
-# FOUR default Blurt RPC nodes from apps/web/src/lib/net/config.ts;
+# six default Blurt RPC nodes from apps/web/src/lib/net/config.ts;
 # if you run a different RPC set, edit it to match or the browser
 # blocks your nodes (including failover). It lists NO price API on
 # purpose: price fetching is server-side (the indexer), the browser
@@ -3829,9 +3841,10 @@ Set the allowed origins in your relay systemd unit:
 Environment="MORPHIT_RELAY_ALLOWED_ORIGINS=https://morphit.example.com,https://mirror.example.com"
 ```
 
-The relay already validates at startup that this env var is
-non-empty — starting with an empty allowlist rejects all
-signups by default, which is the safe behavior.
+The relay validates this at startup: an empty allowlist makes it
+**refuse to start** (it throws `MORPHIT_RELAY_ALLOWED_ORIGINS must
+list at least one origin`) rather than run wide open — a fail-closed
+default.
 
 Reload + restart:
 
@@ -4508,15 +4521,17 @@ env var.
 
 **Default is `'launch'` (OR gate).** An attestor qualifies
 by meeting **either** loyalty OR age. This is the
-ecosystem-bootstrap mode: lower bar for early adopters
-while still blocking same-day-farmed sock accounts (they
-would need to pay $20+ in fees OR wait a month).
+ecosystem-bootstrap mode: a lower bar for early adopters
+that still blocks same-day-farmed sock accounts — each
+would need to accumulate ≥100 BLURT in paid fees OR wait a
+month.
 
 **Transition to `'steady'` (AND gate).** Attestor must
 meet **both** loyalty AND age. Makes sustained sybil
-abuse negative-ROI — attacker must wait 30 days AND pay
-$20+ per sock puppet to bypass a $0.125-per-order
-listing fee.
+abuse negative-ROI — an attacker must wait 30 days AND
+accumulate ≥100 BLURT of paid fees for every sock puppet,
+a real time-and-capital cost per identity that makes a
+self-attestation farm uneconomic.
 
 ### When to flip
 
@@ -4665,7 +4680,7 @@ places:
 | Component | Purpose | Config |
 |---|---|---|
 | Frontend | User signs + queries from their browser | `DEFAULT_RPC_ENDPOINTS` in `apps/web/src/lib/net/config.ts`, overridable in Settings per-user |
-| Relay | Broadcasts user-signed ops, spends Mana | `MORPHIT_RELAY_BLURT_RPC` env var (comma-separated) |
+| Relay | Broadcasts user-signed ops, pays per-op BLURT fees | `MORPHIT_RELAY_BLURT_RPC` env var (comma-separated) |
 | Indexer | Follows the block stream | (indexer's own env, see ADR-0010 deployment notes) |
 
 Each component has its own rotation logic (latency-based
@@ -5177,7 +5192,7 @@ requirement.
 From a browser DevTools network tab on your deployment:
 
 1. Load `/orderbook` or `/my/orders` while logged in
-2. Inspect any SSE request (`/v1/chat/.../events/stream`)
+2. Inspect any SSE request (`/v1/chat/.../stream`)
 3. **Protocol** column should show `h2` or `h3`, not `http/1.1`
 
 From the command line:
@@ -7453,11 +7468,18 @@ mount | grep -E '/tmp|/dev/shm|/var/tmp'
 
 ### 37.5 Process / capability hardening for the Morphit services
 
-Morphit ships systemd units in `ops/systemd/`.  These run as
-non-root users (`morphit` for the indexer, `morphit-relay` for
-the relay) which is good, but defense-in-depth means tightening
-the systemd-level isolation too.  Edit each service file (or
-create a drop-in at `/etc/systemd/system/morphit-indexer.service.d/hardening.conf`,
+Morphit ships systemd units in `ops/systemd/`.  As shipped they
+run as **`User=root`**, matching the root-owned `/opt/morphit`
+install tree and operator config (the canonical `morphit-ops` and
+Ansible deployments both copy these units verbatim, so this is the
+default everywhere).  Two hardening moves apply.  **First, and
+highest-value: de-privilege them** — chown `/opt/morphit`'s config
++ data to a dedicated service user and set `User=`/`Group=` in
+each unit (the unit's own header comment spells out exactly this).
+**Second: add the systemd-level isolation below**, which tightens
+the blast radius whether the service runs as root or as a
+dedicated user.  Edit each service file (or create a drop-in at
+`/etc/systemd/system/morphit-indexer.service.d/hardening.conf`,
 similar for `morphit-relay.service`):
 
 > **The web frontend has no systemd unit.**  The frontend is
@@ -7479,6 +7501,15 @@ similar for `morphit-relay.service`):
 #                                           Morphit services log to
 #                                           journald, in which case
 #                                           the log path can be omitted)
+#
+# NOTE: the canonical morphit-ops / Ansible install runs from
+# /opt/morphit with DATA in Postgres (a Docker container reached
+# over TCP) and logs in journald — so it writes almost nothing to
+# the local filesystem. The /var/lib paths above are illustrative
+# and apply only if you have deliberately relocated per-service
+# state there; set ReadWritePaths to whatever YOUR install writes
+# to (test with `ProtectSystem=strict`, then add paths for any
+# "read-only file system" errors in the journal).
 #
 # Each service unit gets ONLY the paths it owns.  An indexer
 # unit shouldn't list /var/lib/morphit-relay; a relay unit
@@ -7687,7 +7718,7 @@ sudo -u postgres psql -c "ALTER SYSTEM SET password_encryption = 'scram-sha-256'
 sudo systemctl reload postgresql
 # Now CHANGE every password (just-flipping the setting doesn't
 # rehash existing passwords; they stay MD5 until reset):
-sudo -u postgres psql -c "ALTER USER morphit WITH PASSWORD '<new password>';"
+sudo -u postgres psql -c "ALTER USER morphit_indexer WITH PASSWORD '<new password>';"
 ```
 
 **b. pg_hba.conf — peer auth for local, scram for everything else.**
@@ -7697,8 +7728,8 @@ Edit `/etc/postgresql/*/main/pg_hba.conf`:
 # TYPE   DATABASE    USER       ADDRESS         METHOD
 local    all         postgres                   peer
 local    all         all                        peer
-host     morphit     morphit    127.0.0.1/32    scram-sha-256
-host     morphit     morphit    ::1/128         scram-sha-256
+host     morphit_indexer  morphit_indexer  127.0.0.1/32  scram-sha-256
+host     morphit_indexer  morphit_indexer  ::1/128       scram-sha-256
 # DENY EVERYTHING ELSE (implicit; anything not matched above rejects)
 ```
 
@@ -7706,28 +7737,28 @@ host     morphit     morphit    ::1/128         scram-sha-256
 of the connecting process, no password needed — that's how the
 backup script and DB shell login work.  `scram-sha-256` for the
 TCP loopback is what Morphit's indexer + relay use, and the
-password is in the `.env` file (which has `chmod 600` per
+password is in the `.env` file (which is `0640 root:morphit` per
 §37.10).
 
 Apply:
 
 ```sh
 sudo systemctl reload postgresql
-# Test that morphit user from localhost still works:
-psql -h 127.0.0.1 -U morphit -d morphit -c 'SELECT 1;'
+# Test that the morphit_indexer user from localhost still works:
+psql -h 127.0.0.1 -U morphit_indexer -d morphit_indexer -c 'SELECT 1;'
 # Test that postgres user via socket still works:
 sudo -u postgres psql -c 'SELECT 1;'
 ```
 
 **c. Database-level CONNECT permission.**  Drop ambient
-CONNECT for the morphit role on databases it doesn't need:
+CONNECT for the morphit_indexer role on databases it doesn't need:
 
 ```sh
 sudo -u postgres psql <<'PSQL'
-REVOKE ALL ON DATABASE postgres FROM morphit;
-REVOKE ALL ON DATABASE template0 FROM morphit;
-REVOKE ALL ON DATABASE template1 FROM morphit;
-GRANT  CONNECT ON DATABASE morphit TO morphit;
+REVOKE ALL ON DATABASE postgres FROM morphit_indexer;
+REVOKE ALL ON DATABASE template0 FROM morphit_indexer;
+REVOKE ALL ON DATABASE template1 FROM morphit_indexer;
+GRANT  CONNECT ON DATABASE morphit_indexer TO morphit_indexer;
 PSQL
 ```
 
@@ -7882,22 +7913,29 @@ Less comprehensive than AIDE but zero-config.
 The Morphit services read `MORPHIT_RELAY_ACTIVE_KEY_FILE`,
 Postgres credentials, etc., from environment files (typically
 `/etc/morphit/relay.env`, `/etc/morphit/indexer.env`).  These
-files MUST be 0600-permissioned and owned by the runtime user:
+files MUST be `0640`, owned `root:morphit` — root owns them, the
+`morphit` service group reads them (what the canonical `morphit-ops` /
+Ansible install lays down, and what §37.19 verifies):
 
 ```sh
-sudo chown morphit:morphit /etc/morphit/indexer.env
-sudo chmod 0600 /etc/morphit/indexer.env
-sudo chown morphit-relay:morphit-relay /etc/morphit/relay.env
-sudo chmod 0600 /etc/morphit/relay.env
+sudo chown root:morphit /etc/morphit/indexer.env
+sudo chmod 0640 /etc/morphit/indexer.env
+sudo chown root:morphit /etc/morphit/relay.env
+sudo chmod 0640 /etc/morphit/relay.env
 
 # Verify:
 ls -l /etc/morphit/*.env
-# Expected: -rw------- 1 owner owner ... (octal 600)
+# Expected: -rw-r----- 1 root morphit ... (octal 640)
 ```
 
-The systemd unit then loads via `EnvironmentFile=/etc/morphit/indexer.env`
-which respects the 0600 perm (systemd reads it as root before
-dropping to the service user).
+The shipped systemd unit sources this file from its `ExecStart`
+wrapper (`set -a; . /etc/morphit/indexer.env; set +a` — a shell
+wrapper is used deliberately so both `KEY=value` and `export
+KEY=value` forms load), which respects the 0640 perm. (If you
+switch to an `EnvironmentFile=/etc/morphit/indexer.env` directive
+instead, systemd reads it as root before dropping to the service
+user — either way the 0640 file is only ever read by a privileged
+reader.)
 
 **Don't:**
 
@@ -7992,9 +8030,10 @@ keys are user problems, not operator problems.
    followed §37 in order.  The relevant directives that
    protect process memory of the running relay are:
 
-   - `MemoryDenyWriteExecute=true` (no JIT-via-mmap exploit
-     surface; Node V8 needs `false` for the web app but the
-     relay is a non-V8-JIT path that handles this)
+   - (`MemoryDenyWriteExecute` stays **off** — the relay runs on
+     Node/V8 via `tsx`, whose JIT needs writable+executable pages,
+     exactly as §37.5 explains; the shipped `morphit-relay.service`
+     ships `MemoryDenyWriteExecute=no`)
    - `RestrictNamespaces=yes`, `LockPersonality=yes`,
      `NoNewPrivileges=yes`
    - `ProtectSystem=strict`, `ProtectHome=yes`,
@@ -8038,7 +8077,8 @@ keys are user problems, not operator problems.
 
 **What the audit tells you when something goes wrong:**
 
-If a structured-log line `key_loaded` is emitted at boot but
+If a structured-log line `envelope_unlock_via_credential_file`
+(or `envelope_unlock_via_env_plaintext`) is emitted at boot but
 the relay subsequently fails to broadcast a transfer with an
 "invalid signature" error, the in-memory active key may have
 been corrupted by an attacker who has root.  Stop the relay
@@ -8363,7 +8403,7 @@ yourself to rotate within 30 days of applying this.
 | AppArmor escape | (limited applicability — we run unconfined Node) | 37.7 |
 | Postgres password sniff via MD5 | scram-sha-256 | 37.8 |
 | File tampering after compromise | AIDE nightly diff + offsite baseline | 37.9 |
-| Secret leak from world-readable .env | chmod 600 + age encryption | 37.10 |
+| Secret leak from world-readable .env | 0640 root:morphit + age encryption | 37.10 |
 | Disk theft | LUKS full-disk encryption | 37.11 |
 | Backup theft → offline crack | age-encrypted backups | 37.12 |
 | Reverse-shell exfiltration | UFW egress allowlist (relay host only) | 37.13 |
@@ -8469,7 +8509,7 @@ to bypass rate limiting.
 ```sh
 ssh host 'ls -l /etc/morphit/'
 # Expect: env files 0640, owned by root:morphit
-#         keystore 0600, owned by morphit:morphit
+#         keystore 0400, owned by the relay's service user
 #         directory itself 0750 root:morphit
 ```
 
@@ -8726,8 +8766,9 @@ filtered to anomalies only).
 **When it makes sense.**  Days 0–42 of beta.  Disable (or
 filter heavily) after that, once you trust the patterns.
 
-**Source.**  `apps/relay/src/broadcast/` is the natural site;
-add an `alertSink` next to the existing logging sinks.
+**Source.**  `apps/relay/src/blurt/client.ts` (the relay's broadcast
+methods — `broadcastTransfer`, `broadcastAccountCreate`, etc.) is the
+natural site; add an `alertSink` next to the existing logging sinks.
 
 #### 37.20.4 — In-app signer-policy fence
 
@@ -9257,7 +9298,6 @@ Whatever you pick: **test the restore at least once a quarter.** Untested backup
 A home-hosted Morphit instance leaks **your home's public IP address to every user who connects**. Most users don't care, but for an operator with a public-facing role under their real name, this can be a low-grade privacy concern. Mitigations:
 
 - **Front the instance with a Tor onion service** (covered in OPERATIONS.md §11). Users who care can connect via the onion address; the home IP is only revealed to clearnet users. The Tor onion address itself reveals nothing about your home IP.
-- **Front the instance with Cloudflare Tunnel.** Cloudflare's IP is what users see; your home IP is only known to Cloudflare. The tradeoff is that you're trusting Cloudflare to relay traffic without logging it long-term — which is a privacy regression for some operators and an improvement for others. Read Cloudflare's data-retention policies before adopting.
 - **Move to a VPS.** The VPS provider sees your home IP (because that's where you SSH in from), but users see only the VPS IP. This is the path most operators take when home-hosting visibility becomes a concern.
 
 Whichever you pick, it doesn't have to be permanent. The ability to migrate without disrupting users is the whole point of the federated, no-user-data model.
@@ -9416,11 +9456,17 @@ over HTTPS to one or more Monero block explorers'
 per-payment proof.  You choose how many explorers to
 ask, and which.
 
-**The default ships with five.**  Multi-explorer
-cross-check means the verifier accepts a result only
-when all responding explorers agree on the proven
-amount.  A single compromised or coerced explorer
-cannot lie about a verification.
+**The default ships with five.**  How strong the cross-check
+actually is depends on `MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES`
+— the number of explorers that must AGREE on the proven amount
+before a result is accepted.  **Its default is `1`**, which means
+any single responding explorer's amount is trusted (the verifier
+takes the largest agreeing group, and a group of one qualifies).
+**For real cross-check — so that a single compromised or coerced
+explorer cannot decide a verification — raise it to `2` or more**
+(`3` is a strong setting against the five-explorer default).  At
+the default of 1 you get availability, not agreement-based
+defense.
 
 ```bash
 MORPHIT_INDEXER_XMR_EXPLORER_URLS=https://xmrchain.net,https://localmonero.co/blocks,https://monerohash.com/explorer,https://exploremonero.com,https://moneroexplorer.org
@@ -9561,17 +9607,22 @@ you have evidence.
 MORPHIT_INDEXER_XMR_EXPLORER_URLS=https://localhost:8081,https://xmrchain.net,https://localmonero.co/blocks
 ```
 
-**How disagreement is handled.**  The verifier requires
-all RESPONDING explorers to agree on the proven amount.
-Non-responding explorers (timeout, network error,
-circuit-breaker open) are skipped — they don't block
-the verification, and the breaker handles per-explorer
-flakiness.  If responding explorers disagree, the
-verifier returns `rejected` with reason
-`explorer disagreement on proven amounts: A vs B`.
-This is conservative: a mismatch could indicate a
-compromised explorer, a chain reorg, or simply a stale
-view at one of the explorers.
+**How disagreement is handled.**  The verifier groups the
+responding explorers by the amount each one proves and takes the
+**largest agreeing group** ("bucket").  It accepts that bucket's
+amount once the bucket has at least
+`MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES` members (default
+`1`); a minority reporting a different amount is simply outvoted,
+not treated as a hard error.  Non-responding explorers (timeout,
+network error, circuit-breaker open) are skipped — they don't
+block the verification, and the breaker handles per-explorer
+flakiness.  If no amount gathers enough agreeing explorers, the
+verifier returns `rejected` with reason `quorum not met: best
+group had < N agreeing explorers (…)` (or `all N explorers in
+cooldown` when every explorer is circuit-broken).  Raising the
+quorum above 1 is what turns a minority outlier into a rejection
+worth investigating — a compromised explorer, a chain reorg, or a
+stale view at one explorer.
 
 **Failure modes by config size.**
 
@@ -9586,6 +9637,13 @@ view at one of the explorers.
 - 5 explorers including self-hosted: as above PLUS
   the self-hosted result is authoritative-to-you;
   divergence is evidence rather than a coin-flip.
+
+**These detection properties assume you have raised
+`MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES` to ≥2.** At the
+default of `1`, the largest single response is trusted and a lie
+from a lone responding explorer is NOT detected — more explorers
+only add availability, not cross-check, until the quorum is
+raised.
 
 ### 40.5 Generating the keys (one-time, before first broadcast)
 
@@ -9771,8 +9829,10 @@ Default behavior:
    (xmrchain.net, localmonero.co/blocks,
    monerohash.com/explorer, exploremonero.com,
    moneroexplorer.org) running the same reference codebase
-   but operated by independent parties.  Multi-explorer
-   cross-check rejects single-source manipulation.
+   but operated by independent parties.  With
+   `MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES` raised to ≥2 this
+   cross-check rejects single-source manipulation (§40.4; the
+   default of 1 trusts a single responding explorer).
    Self-host a `monero-block-explorer` Docker container
    against your own `monerod` for maximum independence.
 
@@ -11394,12 +11454,12 @@ separately and are **not** touched by any of this.
 
 2. **Drop and recreate its database.** Use the database name + owner from
    your `MORPHIT_INDEXER_DATABASE_URL` (in `morphit.env`). If your URL is
-   `postgresql://morphit:…@localhost/morphit`, the database is `morphit` and
-   the owner is `morphit`:
+   `postgresql://morphit_indexer:…@localhost/morphit_indexer`, the database is
+   `morphit_indexer` and the owner is `morphit_indexer`:
 
    ```
-   sudo -u postgres psql -c "DROP DATABASE morphit;" \
-                         -c "CREATE DATABASE morphit OWNER morphit;"
+   sudo -u postgres psql -c "DROP DATABASE morphit_indexer;" \
+                         -c "CREATE DATABASE morphit_indexer OWNER morphit_indexer;"
    ```
 
    (Substitute your own names. This is the same drop-and-recreate you'd do to
@@ -11605,7 +11665,10 @@ The init script refuses to run with a placeholder like `__SET_BEFORE_DEPLOY__` o
 
 ```sh
 sudo bash ops/scripts/install-systemd-units.sh
-sudo chown morphit-relay:morphit-relay /etc/morphit/relay.env
+# The units run as root and source these env files; keep them
+# root-owned, group-readable by the morphit service group (0640):
+sudo chown root:morphit /etc/morphit/indexer.env /etc/morphit/relay.env
+sudo chmod 0640 /etc/morphit/indexer.env /etc/morphit/relay.env
 sudo systemctl enable --now morphit-indexer morphit-relay
 ```
 

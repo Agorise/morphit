@@ -302,7 +302,7 @@
 	<section class="mt-14">
 		<h2 class="font-display text-2xl font-bold">{$_('run_a_node.how_heading')}</h2>
 		<ol class="mt-6 space-y-4">
-			{#each [1, 2, 3, 4] as n (n)}
+			{#each [1, 2, 3] as n (n)}
 				<li
 					class="flex gap-4 rounded-2xl border border-ink-200 bg-white p-5 dark:border-ink-800 dark:bg-ink-900"
 				>

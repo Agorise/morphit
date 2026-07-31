@@ -602,6 +602,7 @@ SMOKES=(
 	".:relay-keystore-content-smoke"
 	".:local-install-smoke"
 	".:smoke-runner-count-extraction-smoke"
+	"apps/web:profile-persistent-cache-smoke"
 )
 
 total=0

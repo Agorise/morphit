@@ -90,11 +90,11 @@ check(
 
 // ── 3. TRAP TWO: negative caching ───────────────────────────────────
 check(
-	'batch completeness keys off has_profile, not row count',
-	/const complete = result\.rows\.filter\(\(r\) => r\.has_profile\)\.length === accounts\.length/.test(
+	'batch completeness keys off has_profile (cp606 cache-aware: servedFromCache + queriedWithProfile), not row count',
+	/const complete = servedFromCache \+ queriedWithProfile === accounts\.length/.test(
 		flat
 	),
-	'row presence stopped meaning "has a profile" the moment the anchor moved; a row-count test would call a profile-less batch complete and pin it for 90s, hiding a freshly-created profile (cp428 soft-null policy)'
+	'row presence stopped meaning "has a profile" the moment the anchor moved; completeness must count positives (cached positives + freshly-queried has_profile rows), never a raw row count, or a profile-less batch is called complete and pinned for 90s, hiding a freshly-created profile (cp428 soft-null policy; cp606 made completeness cache-aware)'
 );
 check(
 	'the query actually selects has_profile',
