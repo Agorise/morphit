@@ -260,7 +260,7 @@ export async function runMatrix(ctx: MatrixCtx, deps: MatrixDeps = {}): Promise<
 					'      sudo install -m 600 ops/env/matrix-bot.env.example \\\n' +
 					'        /etc/morphit/matrix-bot.env\n' +
 					'  Then set MORPHIT_MATRIX_BOT_ACCESS_TOKEN in it and re-run this command.\n' +
-					'  Reference: docs/RUN-A-MORPHIT-NODE.md §11 (Matrix sidecar).'
+					'  Reference: docs/RUN-A-MORPHIT-NODE.md §10 (Matrix sidecar).'
 			);
 			return 2;
 		}
@@ -361,7 +361,7 @@ export async function runMatrix(ctx: MatrixCtx, deps: MatrixDeps = {}): Promise<
 				'  nothing to start or stop yet.  Stand it up with the installer (the\n' +
 				'  Ansible role deploys the user + state dir + unit + env file), then\n' +
 				'  run `morphit-ops matrix set @you:matrix.org`.\n' +
-				'  Reference: docs/OPERATIONS.md §16 and docs/RUN-A-MORPHIT-NODE.md §11.'
+				'  Reference: docs/OPERATIONS.md §16 and docs/RUN-A-MORPHIT-NODE.md §10.'
 		);
 		return 0;
 	}

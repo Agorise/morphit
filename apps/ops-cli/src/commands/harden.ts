@@ -199,7 +199,7 @@ export async function runHarden(ctx: HardenCtx): Promise<number> {
 				console.log('');
 				console.log(`    sudo chown -R morphit:morphit ${sanitizeForTerm(backupDir)}`);
 				console.log('');
-				console.log('  Full reference: docs/RUN-A-MORPHIT-NODE.md §10, OPERATIONS.md.');
+				console.log('  Full reference: docs/RUN-A-MORPHIT-NODE.md §9, OPERATIONS.md.');
 				console.log('');
 			}
 		} else if (choice === 4) {

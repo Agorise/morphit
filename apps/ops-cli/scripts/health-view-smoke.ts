@@ -417,11 +417,11 @@ expect('HV-1e an unparseable string passes through', ensureHealthPath('not a url
 	const now = new Date('2026-06-11T00:00:00Z');
 	try {
 		const fresh = join(dir, 'fresh.txt');
-		writeFileSync(fresh, 'Generated: 2026-06-08T03:14:00Z\nValid through: 2026-06-15T03:14:00Z\n');
+		writeFileSync(fresh, 'Generated: 2026-06-13T03:14:00Z\nValid through: 2026-06-20T03:14:00Z\n');
 		const f = checkCanary(fresh, now);
 		expect(
-			'HV-8a checkCanary: future "Valid through" → fresh',
-			f.state === 'fresh' && f.validThrough === '2026-06-15T03:14:00Z'
+			'HV-8a checkCanary: comfortable future "Valid through" → fresh',
+			f.state === 'fresh' && f.validThrough === '2026-06-20T03:14:00Z'
 		);
 
 		const stale = join(dir, 'stale.txt');
@@ -442,10 +442,10 @@ expect('HV-1e an unparseable string passes through', ensureHealthPath('not a url
 		const humanFresh = join(dir, 'human-fresh.txt');
 		writeFileSync(
 			humanFresh,
-			'Generated: 8 June, 2026 @ 03:14:00 UTC\nValid through: 15 June, 2026 @ 03:14:00 UTC\n'
+			'Generated: 8 June, 2026 @ 03:14:00 UTC\nValid through: 20 June, 2026 @ 03:14:00 UTC\n'
 		);
 		expect(
-			'HV-8e checkCanary: human stamp, future deadline → fresh',
+			'HV-8e checkCanary: human stamp, comfortable deadline → fresh',
 			checkCanary(humanFresh, now).state === 'fresh'
 		);
 
@@ -473,6 +473,36 @@ expect('HV-1e an unparseable string passes through', ensureHealthPath('not a url
 		expect(
 			'HV-8h checkCanary: bogus month → unparsable, not treated as fresh',
 			checkCanary(badMonth, now).state === 'unparsable'
+		);
+
+		// cp622 — still valid but LOW on remaining validity → stale (aging): the
+		// weekly refresh has likely stalled, so warn WHILE it's still valid rather
+		// than waiting for it to expire and readers to see a false tamper signal.
+		const staleAging = join(dir, 'stale-aging.txt');
+		writeFileSync(staleAging, 'Generated: 2026-05-31T00:00:00Z\nValid through: 2026-06-14T00:00:00Z\n');
+		const sa = checkCanary(staleAging, now);
+		expect(
+			'HV-8i checkCanary: valid but < 5 days left → stale (aging)',
+			sa.state === 'stale' && /expires in 3 days/.test(sa.detail) && /update-canary/.test(sa.detail)
+		);
+
+		const humanStaleAging = join(dir, 'human-stale-aging.txt');
+		writeFileSync(
+			humanStaleAging,
+			'Generated: 31 May, 2026 @ 00:00:00 UTC\nValid through: 14 June, 2026 @ 00:00:00 UTC\n'
+		);
+		expect(
+			'HV-8j checkCanary: human stamp, low validity → stale',
+			checkCanary(humanStaleAging, now).state === 'stale'
+		);
+
+		// Just OUTSIDE the window (6 days left) stays fresh — the warning must not
+		// over-fire during normal weekly operation.
+		const barelyFresh = join(dir, 'barely-fresh.txt');
+		writeFileSync(barelyFresh, 'Generated: 2026-06-10T00:00:00Z\nValid through: 2026-06-17T00:00:00Z\n');
+		expect(
+			'HV-8k checkCanary: 6 days left (> 5-day window) → still fresh',
+			checkCanary(barelyFresh, now).state === 'fresh'
 		);
 	} finally {
 		rmSync(dir, { recursive: true, force: true });

@@ -7137,13 +7137,24 @@ in step 5, to upload the finished files.
      stale `Generated:` date is the signal users (or a watchdog) act
      on (there is no automatic banner; see the note below).
    - **Re-upload after every `morphit-ops upgrade`.** An upgrade
-     rebuilds `build/`, which wipes the canary; the upgrade prints a
-     reminder, and `morphit-ops health` will show it "missing" until
-     you re-run step 5.
+     rebuilds `build/`, which wipes the canary. If you sign on the
+     **same box** you serve from, the upgrade re-runs your refresh
+     (`~/.morphit/update-canary.sh`) and restores it for you. If you
+     sign on a **separate machine** (the recommended posture), the
+     upgrade prints a reminder and `morphit-ops health` shows the
+     canary "missing" (red) until you re-run step 5. Either way the
+     upgrade keeps `build/` and `static/` writable for your upload, and
+     `scripts/canary/setup.sh` (remote mode) hands the served folder to
+     your SSH login when it can — so you should not hit `Permission
+     denied`.
 
    A freshness alarm for yourself (so you find out before your users
    do — catches an expired PGP key, a bad upload, a forgotten
-   re-upload after a deploy). Run it from your OWN machine; it checks
+   re-upload after a deploy). On the server, `morphit-ops health` also
+   watches the served canary — red if it's missing or past its date,
+   amber while it's still valid but low on remaining time (the sign a
+   weekly refresh has stalled). For an independent check from OUTSIDE
+   the server, run the verifier from your OWN machine; it checks
    the live URL exactly as a user's browser would:
 
    ```sh
