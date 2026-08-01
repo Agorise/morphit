@@ -24,6 +24,8 @@
  * and the chown().
  */
 
+import { join } from 'node:path';
+
 export interface DirOwner {
 	uid: number;
 	gid: number;
@@ -36,4 +38,31 @@ export function chooseCanaryDirOwner(
 	if (buildOwner && buildOwner.uid !== 0) return buildOwner;
 	if (installOwner && installOwner.uid !== 0) return installOwner;
 	return null;
+}
+
+/**
+ * cp622 (Ken — canary smoothness) — parse a `getent passwd <uid>` line into the
+ * canary owner's username + the path to their weekly refresh script. After an
+ * upgrade rebuild wipes the served canary, the caller uses this to tell a
+ * SAME-BOX operator — one who signs the canary HERE, so their
+ * `~/.morphit/update-canary.sh` exists — whose canary can be restored
+ * automatically by running that script AS them, apart from a REMOTE operator
+ * who signs on a separate laptop (no such script here → manual reminder). Pure;
+ * the caller does the getent, the existsSync, and the sudo.
+ *
+ * passwd format: name:passwd:uid:gid:gecos:home:shell. Returns null if the line
+ * is malformed or lacks a username or home directory.
+ */
+export interface CanaryRefreshTarget {
+	user: string;
+	home: string;
+	refreshScript: string;
+}
+
+export function parsePasswdRefreshTarget(passwdLine: string): CanaryRefreshTarget | null {
+	const fields = (passwdLine.split('\n')[0] ?? '').split(':');
+	const user = (fields[0] ?? '').trim();
+	const home = (fields[5] ?? '').trim();
+	if (user === '' || home === '') return null;
+	return { user, home, refreshScript: join(home, '.morphit', 'update-canary.sh') };
 }

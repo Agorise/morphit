@@ -101,7 +101,7 @@ import { tmpdir } from 'node:os';
 import { error as printError, info, warn, sanitizeForTerm } from '../render/term.ts';
 import { refreshManagedUnits } from '../lib/refreshUnits.ts';
 import { daemonReload } from '../lib/restartServices.ts';
-import { chooseCanaryDirOwner } from '../lib/canaryDirOwner.ts';
+import { chooseCanaryDirOwner, parsePasswdRefreshTarget } from '../lib/canaryDirOwner.ts';
 import {
 	detectDbContainer,
 	parseBackupDbContainer,
@@ -1322,19 +1322,36 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		return rollback(installDir, backupDir, tmpDir, err);
 	}
 
-	// ─── 9b1. Restore served-dir ownership for canary uploads (cp619) ──
+	// ─── 9b1. Restore served-dir ownership + auto-restore the canary (cp619/cp622) ──
 	//
-	// Mirror the web-root chown in step 9c, but for apps/web/build itself — the
-	// dir a bind-mount frontend serves directly and the warrant-canary refresh
-	// uploads canary.txt + pgp_keys.asc into. See the owner-capture above. This
-	// is what makes the canary survive `morphit-ops upgrade`. Best-effort: the
-	// build already succeeded, so a chown hiccup must NOT roll it back.
+	// The rebuild re-rooted apps/web/build (and static/) and WIPED build/canary.txt
+	// (it's written in AFTER the vite build, so a rebuild always drops it). Two
+	// moves, both best-effort — the build already succeeded, so nothing here rolls
+	// it back:
+	//   1. Hand build/ AND static/ back to the non-root canary owner. The refresh
+	//      writes static/canary.txt (generate.sh) then copies it into build/, so it
+	//      needs BOTH writable; without this every upgrade re-roots them and the
+	//      next canary upload/refresh fails with EACCES ("Permission denied").
+	//   2. cp622: if this is a SAME-BOX operator (they sign HERE — their
+	//      ~/.morphit/update-canary.sh exists), run that refresh AS them right now to
+	//      put the canary straight back, no manual step. Placed BEFORE step 9c so the
+	//      restored canary.txt is included when 9c copies build/ into a web root.
+	//      REMOTE operators sign on a separate laptop → no refresh script here → this
+	//      skips and the reminder near the end fires instead. Guarded: non-interactive
+	//      + 90s timeout + no controlling tty, so a passphrase-protected key can never
+	//      hang the upgrade; any failure falls through to the reminder.
+	let canaryAutoRefreshed = false;
 	if (canaryDirUid >= 0) {
 		const webBuild = join(installDir, 'apps', 'web', 'build');
-		const chownResult = spawnSync('chown', ['-R', `${canaryDirUid}:${canaryDirGid}`, webBuild], {
-			stdio: 'ignore'
-		});
-		if (chownResult.status === 0) {
+		const webStatic = join(installDir, 'apps', 'web', 'static');
+		// Run BOTH chowns (no short-circuit) so static/ is fixed even if build/ fails.
+		let chownOk = true;
+		for (const dir of [webBuild, webStatic]) {
+			if (spawnSync('chown', ['-R', `${canaryDirUid}:${canaryDirGid}`, dir], { stdio: 'ignore' }).status !== 0) {
+				chownOk = false;
+			}
+		}
+		if (chownOk) {
 			info(
 				`\u2713 Restored ${webBuild} ownership so your warrant-canary upload keeps ` +
 					`working across upgrades.`
@@ -1345,6 +1362,31 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 					`upload later fails with "Permission denied", run once on this box: ` +
 					`sudo chown -R <your-ssh-user> ${webBuild}`
 			);
+		}
+
+		// cp622 — same-box auto-restore (see note above).
+		const hadCanary = existsSync(join(backupDir, 'apps', 'web', 'build', 'canary.txt'));
+		if (hadCanary) {
+			const pw = spawnSync('getent', ['passwd', String(canaryDirUid)], { encoding: 'utf8' });
+			const target =
+				pw.status === 0 && typeof pw.stdout === 'string' ? parsePasswdRefreshTarget(pw.stdout) : null;
+			if (target && existsSync(target.refreshScript)) {
+				info('');
+				info(
+					`Restoring your warrant canary automatically (running your refresh as ${target.user})...`
+				);
+				const refresh = spawnSync('sudo', ['-n', '-u', target.user, '-H', 'bash', target.refreshScript], {
+					stdio: 'ignore',
+					timeout: 90_000,
+					env: { ...process.env, GPG_TTY: '' }
+				});
+				if (refresh.status === 0) {
+					canaryAutoRefreshed = true;
+					info('\u2713 Warrant canary restored automatically — nothing to do.');
+				} else {
+					info("(Couldn't refresh the canary automatically; restore it manually — see below.)");
+				}
+			}
 		}
 	}
 
@@ -1701,7 +1743,8 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	// to re-upload it — otherwise it silently goes stale and users get a FALSE
 	// tamper warning after 14 days, through no fault of the operator.
 	try {
-		if (existsSync(join(backupDir, 'apps', 'web', 'build', 'canary.txt'))) {
+		// cp622: skip the reminder when we already restored it automatically above.
+		if (!canaryAutoRefreshed && existsSync(join(backupDir, 'apps', 'web', 'build', 'canary.txt'))) {
 			info('');
 			info('⚠ Your warrant canary was in the rebuilt build/ dir and is now gone.');
 			info('  Re-run your canary refresh to restore it (and pgp_keys.asc):');

@@ -122,7 +122,7 @@ sudo bash morphit-setup.sh
 
 When it asks, choose **"Full guided install."** That's the whole job: Morphit sets up *everything* on this computer for you — Node.js, PostgreSQL, the app and its background services, HTTPS with automatic renewal, the BunkerWeb firewall, your Tor `.onion` and I2P addresses, and full server hardening. A home computer gets the **exact same** hardened setup a rented server does — nothing is treated as "less". Along the way it asks a few plain-language questions — your domain, your Blurt account and its signing key, an email for your free HTTPS certificate, and, **only if you're at home**, your registrar's dynamic-DNS update URL — and it shows you the passwords it generated so you can save them somewhere safe first. If you're at home it also reminds you to forward ports 80 and 443 to this computer in your router before it turns on HTTPS.
 
-When it finishes, your node is installed and running — HTTPS, firewall, Tor/I2P and all. There's nothing more to switch on; skip straight to **§9 (register as an operator)**.
+When it finishes, your node is installed and running — HTTPS, firewall, Tor/I2P and all. There's nothing more to switch on; skip straight to **§8 (register as an operator)**.
 
 You only need the release you downloaded: the guided installer deploys exactly those files, so "just the tarball" really is enough.
 
@@ -142,19 +142,11 @@ Two things the wizard does **for you, by default**: it **generates privacy-netwo
 
 ---
 
-## 8. Turn on HTTPS
-
-**The guided install already turned on HTTPS for you.** It obtained a free Let's Encrypt certificate and switched on automatic renewal, so there is nothing to do here — your site is already secure. (If you're at home, this is the point where the installer needed your router's ports 80 and 443 forwarded to this computer; if HTTPS didn't come up, that forward is the first thing to check — see §3.)
-
-To check on it any time, `npx morphit-ops ssl` tells you at a glance whether the certificate is valid, when it expires, and — the part people forget — whether automatic renewal is switched on. (Setting up HTTPS by hand, on the advanced paths, is covered in `OPERATIONS.md` §35.)
-
----
-
-## 9. Register as an operator
+## 8. Register as an operator
 
 This is the step that puts your instance on the map and starts attributing fees to you.
 
-### 9.1 Broadcast the registration
+### 8.1 Broadcast the registration
 
 ```sh
 cd ~/morphit
@@ -163,13 +155,13 @@ npx morphit-ops register
 
 It reads the account, tag, display name and contact URL the wizard saved, shows you exactly what it will broadcast, and asks you to confirm before posting it on-chain.
 
-> If this says **command not found**, you're almost certainly outside the repo, or `npm install` hasn't finished. `cd` back **inside the Morphit directory** (`cd ~/morphit`), make sure `npm install` is done, and try again (see §11).
+> If this says **command not found**, you're almost certainly outside the repo, or `npm install` hasn't finished. `cd` back **inside the Morphit directory** (`cd ~/morphit`), make sure `npm install` is done, and try again (see §10).
 
 Once registered, orders posted on your instance carry your tag, and your share of the listing fees flows to you automatically. There's nothing to invoice and nobody to ask.
 
 ---
 
-## 10. Keeping it running
+## 9. Keeping it running
 
 **If someone gets flagged unfairly.** Morphit watches for self-dealing — accounts reviewing each other to inflate a rating. The detectors are heuristics, so honest people can trip them (two accounts set up on the same machine reviewing each other looks identical to the real thing). A flagged account loses its reputation card and its reviews are shown subdued. You can undo this: `sudo morphit-ops` → Moderation → **Clear a flag**, name the two accounts, and they are restored immediately and permanently. It is instance-local and reversible. Clearing the related-accounts flag is permanent (it rests on how the accounts were created, which cannot change); clearing the mutual-review flag forgives the reviews so far but keeps watching, so the pair is flagged again if they build up a fresh pattern. OPERATIONS.md explains what each flag meant before you decide.
 
@@ -177,7 +169,7 @@ Once registered, orders posted on your instance carry your tag, and your share o
 
 **Upkeep — how often will I touch this?** Rarely. To update Morphit, `git pull`, then `sudo morphit-ops upgrade` — it rebuilds and redeploys the website (and the read-only helper) and restarts the services for you, then double-checks that the read-only helper answered back on the address it's set to listen on (if it doesn't, you get a plain warning pointing at `journalctl -u morphit-mcp` — the website itself is unaffected). Check on things any time with `morphit-ops status`, or the live health endpoint at `https://yourdomain.com/v1/health`.
 
-**Your warrant canary.** A warrant canary is a short signed note on your site (at `/canary.txt`) that quietly says "I haven't been handed a secret order." If you ever stop refreshing it — because you've been gagged, or your box was seized, or something happened to you — it goes stale on its own, and readers take the hint. Setting it up is one guided command: `bash scripts/canary/setup.sh`. It asks whether Morphit runs on this same machine (home hosting) or on a separate server, offers to make you a signing key if you don't have one, and then refreshes the canary for you every week — pulling its freshness proof from a wide spread of chain explorers and news sites so one of them being down never breaks it. Two things to know: run it from the machine you want to sign on (for a home box that's this one; for a VPS, your own laptop, so the signing key never sits on the server) — and after each `sudo morphit-ops upgrade`, run `bash ~/.morphit/update-canary.sh` once to put the canary back (the upgrade reminds you). Upgrades now keep that served folder writable for your upload, so the re-run just works — the only time you might see a `Permission denied` is the very first setup on a brand-new server, and if that happens, run `sudo chown -R <your-ssh-user> /opt/morphit/apps/web/build` once and it stays fixed across future upgrades. The full security reasoning is in `OPERATIONS.md` §36.
+**Your warrant canary.** A warrant canary is a short signed note on your site (at `/canary.txt`) that quietly says "I haven't been handed a secret order." If you ever stop refreshing it — because you've been gagged, or your box was seized, or something happened to you — it goes stale on its own, and readers take the hint. Setting it up is one guided command: `bash scripts/canary/setup.sh`. It asks whether Morphit runs on this same machine (home hosting) or on a separate server, offers to make you a signing key if you don't have one, and then refreshes the canary for you every week — pulling its freshness proof from a wide spread of chain explorers and news sites so one of them being down never breaks it. Two things to know: run it from the machine you want to sign on (for a home box that's this one; for a VPS, your own laptop, so the signing key never sits on the server). A `sudo morphit-ops upgrade` rebuilds the served folder and clears the canary, so it needs putting back — if you sign on the **same box** you serve from, the upgrade now does that for you automatically; if you sign on a **separate laptop**, run `bash ~/.morphit/update-canary.sh` once afterward (the upgrade reminds you). Setup and upgrades both keep the served folder writable for you, so uploads just work; on a brand-new server, in the rare case the very first upload reports `Permission denied`, run `sudo chown -R <your-ssh-user> /opt/morphit/apps/web/build` once and it stays fixed. The full security reasoning is in `OPERATIONS.md` §36.
 
 **Is the USD price healthy?** Run `morphit-ops health` and look at the price-feed lines. Morphit takes the BLURT price from Blurt's own feed (`api.blurt.blog/price_info`) as its **primary** source, and falls back to several public aggregators (taking their middle value) only if that primary is unavailable — so one provider being off doesn't move your price. The health view lists each provider, whether it answered, and the price it gave — so if one (say, a particular API) is down, you'll see a `down` next to its name and can ignore it unless the primary and several aggregators go dark at once. (If you firewall your server's outbound traffic, allow `api.blurt.blog` along with the other price sites.) This detail shows only in your own `morphit-ops health` on the server, never on the public `https://yourdomain.com/v1/health` page.
 
@@ -185,7 +177,7 @@ Once registered, orders posted on your instance carry your tag, and your share o
 
 ---
 
-## 11. When something breaks
+## 10. When something breaks
 
 **"morphit-ops: command not found."** You're running it from the wrong place, or `npm install` hasn't finished. `cd` **inside the Morphit directory** (`cd ~/morphit`), confirm `npm install` completed, and retry.
 
@@ -203,4 +195,4 @@ A healthy response is JSON with a recent block number and a small lag, like `{"c
 
 ---
 
-That's the whole job. Get a machine, point a name at it, run the installer, let the wizard configure it, turn on HTTPS, register — and you're an operator in the federation. Welcome aboard.
+That's the whole job. Get a machine, point a name at it, run the installer, let the wizard configure it, register — and you're an operator in the federation. Welcome aboard.

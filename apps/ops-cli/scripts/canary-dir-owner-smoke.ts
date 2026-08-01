@@ -17,7 +17,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chooseCanaryDirOwner } from '../src/lib/canaryDirOwner.ts';
+import { chooseCanaryDirOwner, parsePasswdRefreshTarget } from '../src/lib/canaryDirOwner.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OPS = resolve(HERE, '..');
@@ -79,7 +79,7 @@ const ROOT = { uid: 0, gid: 0 };
 	const raw = readFileSync(resolve(OPS, 'src/commands/upgrade.ts'), 'utf8');
 	const src = raw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
 
-	if (/import\s*\{\s*chooseCanaryDirOwner\s*\}/.test(src)) ok('upgrade.ts imports chooseCanaryDirOwner');
+	if (/import\s*\{[^}]*chooseCanaryDirOwner[^}]*\}/.test(src)) ok('upgrade.ts imports chooseCanaryDirOwner');
 	else bad('upgrade.ts should import chooseCanaryDirOwner');
 
 	const iCapture = src.indexOf('chooseCanaryDirOwner(readOwner');
@@ -99,9 +99,83 @@ const ROOT = { uid: 0, gid: 0 };
 	else bad('the restore should target apps/web/build');
 
 	// Non-fatal: a chown failure must warn, not roll back a good build.
-	if (/chownResult\.status === 0[\s\S]{0,400}warn\(/.test(src))
+	if (/chownOk[\s\S]{0,400}warn\(/.test(src))
 		ok('a failed chown warns (non-fatal) rather than rolling back the successful build');
 	else bad('a failed chown should warn, not roll back');
+
+	// cp622 — the restore now also hands static/ back (the refresh writes
+	// static/canary.txt before copying it into build/, so it needs both writable).
+	if (/'apps', 'web', 'static'/.test(src))
+		ok('the restore also chowns apps/web/static (generate.sh writes the signed canary there)');
+	else bad('the restore should also chown apps/web/static');
+}
+
+// ── C. parsePasswdRefreshTarget (cp622 — same-box refresh target) ─────
+{
+	const good = parsePasswdRefreshTarget('morphit:x:1001:1001::/home/morphit:/bin/bash');
+	if (
+		good &&
+		good.user === 'morphit' &&
+		good.home === '/home/morphit' &&
+		good.refreshScript === '/home/morphit/.morphit/update-canary.sh'
+	)
+		ok('parses a normal passwd line into user + home + refresh-script path');
+	else bad('should parse a normal passwd line', JSON.stringify(good));
+
+	// getent output can carry a trailing newline — take the first line only.
+	const trailingNl = parsePasswdRefreshTarget('kc:x:1000:1000:Ken:/home/kc:/bin/bash\n');
+	if (trailingNl && trailingNl.user === 'kc' && trailingNl.refreshScript === '/home/kc/.morphit/update-canary.sh')
+		ok('tolerates a trailing newline from getent');
+	else bad('should tolerate a trailing newline', JSON.stringify(trailingNl));
+
+	// A GECOS field with spaces/commas must not confuse the colon split.
+	const gecos = parsePasswdRefreshTarget('op:x:1005:1005:Op Erator,,,:/srv/op:/bin/sh');
+	if (gecos && gecos.user === 'op' && gecos.home === '/srv/op')
+		ok('reads home from field 6 even with a populated GECOS field');
+	else bad('should read home past the GECOS field', JSON.stringify(gecos));
+
+	// Malformed / empty → null (caller then falls back to the manual reminder).
+	if (parsePasswdRefreshTarget('') === null) ok('empty line → null');
+	else bad('empty line should be null');
+	if (parsePasswdRefreshTarget('nobody') === null) ok('no home field → null');
+	else bad('a line with no home field should be null');
+	if (parsePasswdRefreshTarget(':x:0:0:::') === null) ok('blank username → null');
+	else bad('a blank username should be null');
+}
+
+// ── D. upgrade.ts cp622 wiring: same-box auto-restore, guarded ────────
+{
+	const raw = readFileSync(resolve(OPS, 'src/commands/upgrade.ts'), 'utf8');
+	const src = raw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+
+	if (/import\s*\{[^}]*parsePasswdRefreshTarget[^}]*\}/.test(src)) ok('upgrade.ts imports parsePasswdRefreshTarget');
+	else bad('upgrade.ts should import parsePasswdRefreshTarget');
+
+	// Only for operators who had a canary before the upgrade.
+	if (/existsSync\(join\(backupDir, 'apps', 'web', 'build', 'canary\.txt'\)\)/.test(src))
+		ok('auto-restore only fires when the previous install actually had a canary');
+	else bad('auto-restore should gate on a pre-upgrade canary');
+
+	// Runs the refresh AS the owner, non-interactively, with a timeout (no hang).
+	if (/sudo'[\s\S]{0,80}'-n'[\s\S]{0,80}'-u'[\s\S]{0,120}'bash'/.test(src) && /timeout: 90_000/.test(src))
+		ok('runs the refresh via sudo -n -u <user> bash with a 90s timeout (can never hang)');
+	else bad('the auto-refresh must be sudo -n -u <user> bash + timeout-guarded');
+
+	// No controlling tty → a passphrase-protected key fails fast, not a pinentry hang.
+	if (/GPG_TTY: ''/.test(src)) ok("clears GPG_TTY so a passphrased key can't hang on a tty pinentry");
+	else bad('should clear GPG_TTY for the non-interactive refresh');
+
+	// The manual reminder must NOT also fire when the auto-restore succeeded.
+	if (/!canaryAutoRefreshed && existsSync\(join\(backupDir/.test(src))
+		ok('the manual re-run reminder is suppressed once the canary is auto-restored');
+	else bad('the reminder should be gated on !canaryAutoRefreshed');
+
+	// Placement: auto-restore runs BEFORE step 9c so a web-root copy includes it.
+	const iRefresh = src.indexOf('parsePasswdRefreshTarget(pw.stdout)');
+	const iPublish = src.indexOf('const plan = planFrontendDeploy(');
+	if (iRefresh > 0 && iPublish > 0 && iRefresh < iPublish)
+		ok('auto-restore runs BEFORE the frontend publish (9c), so a web-root copy picks up the canary');
+	else bad('auto-restore must run before step 9c', `refresh=${iRefresh} publish=${iPublish}`);
 }
 
 console.log('');

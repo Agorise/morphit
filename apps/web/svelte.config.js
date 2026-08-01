@@ -44,7 +44,7 @@ const config = {
 		//      and operators had to `sed` the meta out of the build by hand.
 		//
 		// The canonical CSP is therefore a single nginx `add_header
-		// Content-Security-Policy` (see docs/RUN-A-MORPHIT-NODE.md §11 and
+		// Content-Security-Policy` (see docs/RUN-A-MORPHIT-NODE.md §10 and
 		// docs/OPERATIONS.md §15).  One source of truth, no meta tag, no
 		// manual stripping.  If you change the client's Blurt RPC list
 		// (src/lib/net/config.ts) update that header's connect-src to match.

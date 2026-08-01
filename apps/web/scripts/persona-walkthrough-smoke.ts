@@ -2643,7 +2643,7 @@ const SCENARIOS: readonly Scenario[] = [
 		name: 'cp182 Josie Jo-1 — wizard next-steps cite real docs + the morphit-ops binary (no dead refs, no dev preview)',
 		file: 'apps/ops-cli/src/commands/init.ts',
 		rootRelative: true,
-		mustHave: ['morphit-ops status', 'morphit-ops register', 'RUN-A-MORPHIT-NODE.md §11'],
+		mustHave: ['morphit-ops status', 'morphit-ops register', 'RUN-A-MORPHIT-NODE.md §10'],
 		mustNotHave: ['OPERATOR-RUN-BOOK', 'npm run preview', '9 questions', '§10c', 'npx tsx apps/ops-cli/src/main.ts']
 	},
 	{

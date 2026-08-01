@@ -100,6 +100,20 @@ if [ "$MODE" = remote ]; then
 	ssh -o BatchMode=yes -o ConnectTimeout=10 "$REMOTE_SSH" 'true' 2>/dev/null \
 		|| die "couldn't connect to $REMOTE_SSH without a password. Set up an SSH key first (ssh-copy-id $REMOTE_SSH), then re-run."
 	info "SSH OK."
+	# cp622 — a fresh root install leaves the served build/ dir root-owned, so the
+	# very FIRST canary upload from this (non-root) SSH login would hit "Permission
+	# denied." If this login has passwordless sudo on the server, hand build/ to it
+	# now so uploads just work — no manual chown. Best-effort: if sudo isn't
+	# available we skip quietly (the one-time chown is in RUN-A-MORPHIT-NODE.md §9).
+	_build_remote="$REMOTE_PATH/apps/web/build"
+	if ssh -o BatchMode=yes -o ConnectTimeout=10 "$REMOTE_SSH" 'sudo -n true' 2>/dev/null; then
+		if ssh -o BatchMode=yes "$REMOTE_SSH" "sudo -n mkdir -p '$_build_remote' && sudo -n chown -R \"\$(id -un):\$(id -gn)\" '$_build_remote'" 2>/dev/null; then
+			info "Made the served build/ dir writable for your canary uploads (via sudo)."
+		else
+			info "(Couldn't auto-adjust the served dir; if your first upload hits"
+			info " 'Permission denied', see the one-time chown in RUN-A-MORPHIT-NODE.md §9.)"
+		fi
+	fi
 	say ""
 fi
 

@@ -831,7 +831,7 @@ function printNextSteps(
 	console.log('Fastest fully-automated path either way: the Ansible playbook at');
 	console.log('ops/ansible/ applies all of the above idempotently (set the');
 	console.log('enable_* flags in ops/ansible/group_vars/all.yml).  Overview in');
-	console.log('docs/RUN-A-MORPHIT-NODE.md §11.');
+	console.log('docs/RUN-A-MORPHIT-NODE.md §10.');
 	console.log('');
 
 	// ─── Tor onion ──────────────────────────────────────────────

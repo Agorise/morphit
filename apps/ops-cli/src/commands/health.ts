@@ -203,11 +203,17 @@ export function checkService(unit: string): ServiceState {
 }
 
 export interface CanaryStatus {
-	readonly state: 'fresh' | 'overdue' | 'missing' | 'unparsable';
+	readonly state: 'fresh' | 'stale' | 'overdue' | 'missing' | 'unparsable';
 	readonly generatedAt: string | null;
 	readonly validThrough: string | null;
 	readonly detail: string;
 }
+
+/** Warn when a served canary has less than this much validity left. Normal
+ *  weekly refresh keeps a far wider margin, so a low margin means the refresh
+ *  has stalled — flag it while there's still time to re-run, BEFORE it expires
+ *  and readers see a false tamper signal. */
+const CANARY_STALE_WINDOW_MS = 5 * 24 * 60 * 60 * 1000;
 
 /** Freshness of the operator warrant-canary served at `/canary.txt`
  *  (the file in `apps/web/build/`, the nginx web root).  Parses the
@@ -264,6 +270,22 @@ export function checkCanary(filePath: string, now: Date): CanaryStatus {
 			generatedAt,
 			validThrough,
 			detail: 'past its "valid through" date — regenerate it'
+		};
+	}
+	// cp622 — still valid but running LOW on validity: the weekly refresh has
+	// likely stalled (an upgrade wiped the canary and it wasn't re-run, or the
+	// timer died). Normal operation keeps a wide margin, so warn now — while
+	// there's still time — instead of waiting for it to expire.
+	const msLeft = deadline.getTime() - now.getTime();
+	if (msLeft < CANARY_STALE_WINDOW_MS) {
+		const daysLeft = Math.max(0, Math.floor(msLeft / 86_400_000));
+		return {
+			state: 'stale',
+			generatedAt,
+			validThrough,
+			detail:
+				`expires in ${daysLeft} day${daysLeft === 1 ? '' : 's'} — your weekly ` +
+				'refresh may have stalled; re-run it (bash ~/.morphit/update-canary.sh)'
 		};
 	}
 	return { state: 'fresh', generatedAt, validThrough, detail: 'current' };
@@ -1446,7 +1468,11 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 	// ── Canary block ──
 	console.log('');
 	const canaryTag =
-		canary.state === 'fresh' ? c.green('✓') : canary.state === 'overdue' ? c.red('✗') : c.yellow('⚠');
+		canary.state === 'fresh'
+			? c.green('✓')
+			: canary.state === 'overdue' || canary.state === 'missing'
+				? c.red('✗')
+				: c.yellow('⚠');
 	console.log(`  ${c.bold('Canary')}    ${canaryTag} ${canary.state}`);
 	if (canary.validThrough !== null) console.log(`      Valid through: ${safe(canary.validThrough)}`);
 	console.log(`      ${c.dim(canary.detail)}`);

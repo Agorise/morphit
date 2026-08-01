@@ -866,7 +866,7 @@ export async function stepBackup(databaseUrl: string): Promise<BackupResult> {
 		console.log(
 			'  ⚠  Backups disabled.  You can enable later by running\n' +
 				'     `morphit-ops init` again, or follow the manual recipe\n' +
-				'     in docs/RUN-A-MORPHIT-NODE.md §10.\n'
+				'     in docs/RUN-A-MORPHIT-NODE.md §9.\n'
 		);
 		return {
 			enabled: false,
@@ -2513,7 +2513,7 @@ export async function stepMatrixSurfaces(): Promise<MatrixSurfacesResult> {
 				'       `morphit-ops matrix` shows status.  Every `morphit-ops\n' +
 				'       upgrade` re-checks this username and starts/stops to match.\n' +
 				'\n' +
-				'  Full reference: docs/RUN-A-MORPHIT-NODE.md §11 (Matrix sidecar).\n'
+				'  Full reference: docs/RUN-A-MORPHIT-NODE.md §10 (Matrix sidecar).\n'
 		);
 	}
 
