@@ -80,6 +80,24 @@ check(
 		setup.includes('pgp_keys.asc')
 );
 
+// ─── the refresh SELF-HEALS a re-rooted build/ before delivering (cp627) ─
+// An in-place upgrade re-roots the served build/ dir; the weekly refresh must
+// take it back (best-effort, passwordless sudo) so the canary upload can never
+// break on an upgrade, on any version.
+check(
+	'REMOTE refresh self-heals build/ ownership (sudo -n chown) before the upload',
+	/sudo -n true/.test(setup) &&
+		/sudo -n chown -R[\s\S]{0,80}apps\/web\/build/.test(setup)
+);
+check(
+	'LOCAL refresh takes back a re-rooted build/ (chown) before the local install',
+	/\[ ! -w "\$DEST" \][\s\S]{0,120}chown -R/.test(setup)
+);
+check(
+	'the self-heal is best-effort — it never aborts the refresh on a sudo/ssh failure',
+	/2>\/dev\/null \|\| true/.test(setup)
+);
+
 // ─── automation: a weekly timer, with a cron fallback ────────────
 check('installs a weekly systemd timer', /systemctl\s+--user/.test(setup) && /OnCalendar=Sun/.test(setup));
 check('falls back to a weekly cron line when systemd is unavailable', /14 3 \* \* 0/.test(setup));

@@ -204,6 +204,8 @@ mkdir -p "$MORPHIT_HOME"
 		printf '# Home hosting: place the freshly-signed canary where nginx serves it.\n'
 		printf 'DEST="$REPO/apps/web/build"\n'
 		printf 'mkdir -p "$DEST"\n'
+		printf '# Self-heal: an upgrade may re-root build/; take it back (best-effort sudo) before writing.\n'
+		printf 'if [ ! -w "$DEST" ] && command -v sudo >/dev/null 2>&1; then sudo -n chown -R "$(id -un):$(id -gn)" "$DEST" 2>/dev/null || true; fi\n'
 		printf 'install -m 0644 "$SIGNED" "$DEST/canary.txt"\n'
 		printf 'install -m 0644 "$PUBKEY" "$DEST/pgp_keys.asc"\n'
 		printf 'echo "canary: placed in $DEST/ (served at /canary.txt)"\n'
@@ -211,7 +213,19 @@ mkdir -p "$MORPHIT_HOME"
 		printf '# Remote server: upload the freshly-signed canary to the served build/ dir.\n'
 		printf "REMOTE_SSH='%s'\n" "$REMOTE_SSH"
 		printf "REMOTE_PATH='%s'\n" "$REMOTE_PATH"
-		printf 'ssh "$REMOTE_SSH" "mkdir -p $REMOTE_PATH/apps/web/build"\n'
+		# Emit the self-heal (below) into the refresh script instead of a bare mkdir,
+		# so an upgrade re-rooting build/ can never break the canary upload.
+		cat <<'SELFHEAL'
+# Self-heal: an in-place `morphit-ops upgrade` re-roots the served build/ dir, so
+# make it ours (best-effort, via passwordless sudo) before uploading — a re-rooted
+# dir can then never break the canary, on any version. No passwordless sudo → just
+# ensure the dir exists and let the scp below surface any real permission problem.
+if ssh -o BatchMode=yes "$REMOTE_SSH" 'sudo -n true' 2>/dev/null; then
+	ssh -o BatchMode=yes "$REMOTE_SSH" "sudo -n mkdir -p '$REMOTE_PATH/apps/web/build' && sudo -n chown -R \"\$(id -un):\$(id -gn)\" '$REMOTE_PATH/apps/web/build'" 2>/dev/null || true
+else
+	ssh "$REMOTE_SSH" "mkdir -p '$REMOTE_PATH/apps/web/build'"
+fi
+SELFHEAL
 		printf 'scp -q "$SIGNED" "$REMOTE_SSH:$REMOTE_PATH/apps/web/build/canary.txt"\n'
 		printf 'scp -q "$PUBKEY" "$REMOTE_SSH:$REMOTE_PATH/apps/web/build/pgp_keys.asc"\n'
 		printf 'echo "canary: uploaded to $REMOTE_SSH:$REMOTE_PATH/apps/web/build/"\n'
