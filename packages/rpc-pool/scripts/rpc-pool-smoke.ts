@@ -1026,11 +1026,15 @@ if (DEFAULT_HEDGE_THRESHOLD_MS === 500) {
 		);
 	}
 
-	// Deterministic ladders: generic 50 ms floor, rate-limit 600 ms floor.
+	// Deterministic ladders + jitter OFF (this checks ladder SELECTION, not the
+	// jitter spread — that's covered by its own scenario): generic 50 ms floor,
+	// rate-limit 600 ms floor. Without jitter=0 the 600 ms step lands anywhere in
+	// [450, 750) and a draw of exactly 450 fails the strict `> 450` bound (flaky).
 	const rlPool = new EndpointPool({
 		endpoints: ['a'],
 		cooldownLadderMs: [50, 100],
-		rateLimitCooldownLadderMs: [600, 2_000]
+		rateLimitCooldownLadderMs: [600, 2_000],
+		cooldownJitterFraction: 0
 	});
 	try {
 		await rlPool.call(async () => {
@@ -1052,7 +1056,8 @@ if (DEFAULT_HEDGE_THRESHOLD_MS === 500) {
 	const genPool = new EndpointPool({
 		endpoints: ['b'],
 		cooldownLadderMs: [50, 100],
-		rateLimitCooldownLadderMs: [600, 2_000]
+		rateLimitCooldownLadderMs: [600, 2_000],
+		cooldownJitterFraction: 0
 	});
 	try {
 		await genPool.call(async () => {
