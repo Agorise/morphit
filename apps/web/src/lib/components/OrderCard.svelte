@@ -195,7 +195,7 @@
 	     line, the stablecoin peg subline, then the (optional) Message button.
 	     On phones the pill, price-model line, and message button are hidden —
 	     they fold into the full-width button at the foot of the card. -->
-	<div class="absolute right-3 top-3 z-10 flex flex-col items-end gap-1.5 sm:right-4 sm:top-4">
+	<div class="absolute top-3 z-10 flex flex-col items-end gap-1.5 ltr:right-3 rtl:left-3 sm:top-4 sm:ltr:right-4 sm:rtl:left-4">
 		{#if order.expires_at}
 			<div class="hidden sm:block">
 				<!-- v1.7.5 (t.txt #5) — `created_at`, NOT `updated_at`. The tooltip says
@@ -244,18 +244,21 @@
 		</p>
 	{/if}
 
-	<!-- Title (cp615). DESKTOP: one line, ellipsised (sm:line-clamp-1), with a
-	     right pad wide enough to clear the top-right cluster — the Message
-	     button's username is max-w-[10rem], so the cluster runs ~11.5rem and the
-	     old sm:pr-28 (7rem) let a long title bleed right up to the button.
-	     sm:pr-[13rem] keeps a clear gap. MOBILE: at most two lines
-	     (line-clamp-2); that cluster is hidden there, so we pad only when the
-	     stablecoin subline is present (pr-20), otherwise a hair (pr-2) so the
-	     title uses nearly the full width. -->
+	<!-- Title. DESKTOP: one line, ellipsised (sm:line-clamp-1), padded on the
+	     inline-END side to clear the top-right cluster. The single title line
+	     sits at the EXPIRY-CHIP row (the Message button is lower, over the
+	     identity), so it only needs to clear that chip — which is compact in
+	     LTR ("Expires in 82d") but a whole phrase in RTL ("…روز دیگر منقضی
+	     می‌شود"), so the two directions get different pads (cp620: the old
+	     symmetric sm:pr-[13rem] was sized for the Message button and left dead
+	     space after short LTR titles). RTL mirrors to the LEFT because the
+	     cluster does too. MOBILE: at most two lines (line-clamp-2); the cluster
+	     is hidden there, so we pad only when the stablecoin subline is present
+	     (pr-20), otherwise a hair (pr-2). -->
 	<h3
-		class="font-display line-clamp-2 text-lg font-bold sm:line-clamp-1 sm:pr-[13rem] {hasMobileTopRight
-			? 'pr-20'
-			: 'pr-2'}"
+		class="font-display line-clamp-2 text-lg font-bold sm:line-clamp-1 sm:ltr:pr-36 sm:rtl:pl-[13.5rem] {hasMobileTopRight
+			? 'ltr:pr-20 rtl:pl-20'
+			: 'ltr:pr-2 rtl:pl-2'}"
 	>
 		{title}
 	</h3>
@@ -301,7 +304,7 @@
 	     markdown) lives on the order page. -->
 	{#if termsPreview}
 		<p
-			class="mt-1.5 flex min-w-0 items-baseline gap-1 text-sm text-ink-700 sm:pr-8 dark:text-ink-200"
+			class="mt-1.5 flex min-w-0 items-baseline gap-1 text-sm text-ink-700 sm:ltr:pr-8 sm:rtl:pl-8 dark:text-ink-200"
 		>
 			<span class="shrink-0 font-semibold">{$_('orderbook.card.terms_label')}:</span>
 			{#if termsPreviewHtml !== null}
@@ -335,7 +338,7 @@
 	     taken) or when no toggle is wired; the marker still shows. The
 	     eyeball is also hidden on phones (cp420); the marker still shows. -->
 	{#if blocked || hidden || onToggleHide}
-		<div class="absolute bottom-3 right-3 z-10 flex items-center gap-2">
+		<div class="absolute bottom-3 z-10 flex items-center gap-2 ltr:right-3 rtl:left-3">
 			{#if blocked}
 				<span
 					class="rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-rose-700 dark:bg-rose-900/40 dark:text-rose-300"

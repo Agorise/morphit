@@ -101,6 +101,7 @@ import { tmpdir } from 'node:os';
 import { error as printError, info, warn, sanitizeForTerm } from '../render/term.ts';
 import { refreshManagedUnits } from '../lib/refreshUnits.ts';
 import { daemonReload } from '../lib/restartServices.ts';
+import { chooseCanaryDirOwner } from '../lib/canaryDirOwner.ts';
 import {
 	detectDbContainer,
 	parseBackupDbContainer,
@@ -1280,6 +1281,36 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	// rebuild, reported success, and the container kept serving the OLD
 	// build. That regression is what this unconditional build + the
 	// publish plan below fix.)
+	//
+	// cp619 (Ken — canary) — capture who should own apps/web/build BEFORE the
+	// rebuild. `npm run build` runs as root (sudo morphit-ops) and vite RECREATES
+	// this dir root-owned — but it is ALSO the dir the operator's (non-root)
+	// warrant-canary refresh uploads canary.txt + pgp_keys.asc into over SSH, and
+	// the bind-mount frontend model serves straight from it. Without restoring
+	// the owner afterward, every upgrade re-roots the served dir and the next
+	// weekly canary upload fails with EACCES ("Permission denied"). Prefer the
+	// non-root owner the operator already set on build/, else fall back to the
+	// install-dir owner (the app user a standard install runs as). -1 => no
+	// non-root owner found → leave it root (the operator uploads as root, or sets
+	// ownership themselves once).
+	let canaryDirUid = -1;
+	let canaryDirGid = -1;
+	{
+		const webBuild = join(installDir, 'apps', 'web', 'build');
+		const readOwner = (p: string): { uid: number; gid: number } | null => {
+			try {
+				const s = statSync(p);
+				return { uid: s.uid, gid: s.gid };
+			} catch {
+				return null;
+			}
+		};
+		const owner = chooseCanaryDirOwner(readOwner(webBuild), readOwner(installDir));
+		if (owner) {
+			canaryDirUid = owner.uid;
+			canaryDirGid = owner.gid;
+		}
+	}
 	try {
 		info('Building the web frontend (apps/web)...');
 		runOrThrow('npm', ['run', 'build'], { cwd: join(installDir, 'apps', 'web') });
@@ -1289,6 +1320,32 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		// cleanly.
 		warn('Frontend build failed; rolling back.');
 		return rollback(installDir, backupDir, tmpDir, err);
+	}
+
+	// ─── 9b1. Restore served-dir ownership for canary uploads (cp619) ──
+	//
+	// Mirror the web-root chown in step 9c, but for apps/web/build itself — the
+	// dir a bind-mount frontend serves directly and the warrant-canary refresh
+	// uploads canary.txt + pgp_keys.asc into. See the owner-capture above. This
+	// is what makes the canary survive `morphit-ops upgrade`. Best-effort: the
+	// build already succeeded, so a chown hiccup must NOT roll it back.
+	if (canaryDirUid >= 0) {
+		const webBuild = join(installDir, 'apps', 'web', 'build');
+		const chownResult = spawnSync('chown', ['-R', `${canaryDirUid}:${canaryDirGid}`, webBuild], {
+			stdio: 'ignore'
+		});
+		if (chownResult.status === 0) {
+			info(
+				`\u2713 Restored ${webBuild} ownership so your warrant-canary upload keeps ` +
+					`working across upgrades.`
+			);
+		} else {
+			warn(
+				`Could not restore ownership of ${webBuild}. If your weekly warrant-canary ` +
+					`upload later fails with "Permission denied", run once on this box: ` +
+					`sudo chown -R <your-ssh-user> ${webBuild}`
+			);
+		}
 	}
 
 	// ─── 9b2. Rebuild the dist-shipping workspaces (cp296) ─────

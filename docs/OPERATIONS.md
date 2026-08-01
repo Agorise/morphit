@@ -455,6 +455,21 @@ the canary — the upgrade prints this reminder:
 bash ~/.morphit/update-canary.sh
 ```
 
+That rebuild runs as root (`sudo morphit-ops`), so vite
+recreates `apps/web/build` **root-owned** — but a remote
+(VPS) canary uploads `canary.txt` + `pgp_keys.asc` into that
+dir over SSH as your non-root app user.  To keep the refresh
+from failing with `Permission denied` after each upgrade,
+`morphit-ops upgrade` now restores the dir's ownership once
+the build finishes: it re-applies whatever non-root owner the
+dir already had (falling back to the install-dir owner), so
+the served dir stays writable for the upload.  If your very
+first setup on a fresh box hits `Permission denied` (the
+initial build left `build/` root-owned before any upgrade ran
+the restore), fix it once with
+`sudo chown -R <your-ssh-user> /opt/morphit/apps/web/build`
+and it persists across future upgrades from then on.
+
 **Third-party resilience.**  The freshness proofs embedded
 in every canary — the Blurt and Bitcoin chain heads and a
 news headline — are fetched with wide failover so a single

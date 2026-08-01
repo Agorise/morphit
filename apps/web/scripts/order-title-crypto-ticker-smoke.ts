@@ -170,16 +170,32 @@ const settlementOf = (o: OrderTitleInput, goodsLabel?: string, locale = 'en'): s
 			ok('old unclamped-desktop / 3-line-mobile classes are gone');
 		else bad('old sm:line-clamp-none / line-clamp-3 still present', cls);
 
-		// Desktop right-pad must clear the ~11.5rem top-right cluster (the Message
-		// button's username is max-w-[10rem]). Accept an arbitrary rem value ≥12
-		// or a scale step ≥ pr-48 (=12rem); reject the old sm:pr-28 (7rem).
-		const arb = cls.match(/sm:pr-\[(\d+(?:\.\d+)?)rem\]/);
-		const step = cls.match(/sm:pr-(\d+)\b/);
-		const remOk = arb ? parseFloat(arb[1]) >= 12 : false;
-		const stepOk = step ? parseInt(step[1], 10) >= 48 : false;
-		if ((remOk || stepOk) && !/\bsm:pr-28\b/.test(cls))
-			ok(`title reserves enough desktop right-pad to clear the button (${arb ? arb[0] : step?.[0]})`);
-		else bad('title desktop right-pad must clear the top-right cluster (≥12rem), not the old sm:pr-28', cls);
+		// Desktop pad clears the top-right EXPIRY CHIP — the single title line
+		// sits at the chip row; the Message button is lower, over the identity,
+		// so the title need only clear the chip. The chip is COMPACT in LTR
+		// ("Expires in 82d") but a whole phrase in RTL ("…روز دیگر منقضی می‌شود"),
+		// so the two directions carry different pads, each mirrored to the
+		// correct side (cp620). LTR pads the RIGHT; a sane window [8rem,11rem]
+		// clears the compact chip without the old dead space (the retired
+		// sm:pr-[13rem] was sized for the button, not the chip). RTL pads the
+		// LEFT and must be wide enough (≥12rem) for the verbose phrase.
+		const ltrStep = cls.match(/sm:ltr:pr-(\d+)\b/);
+		const ltrRem = ltrStep ? parseInt(ltrStep[1], 10) / 4 : NaN;
+		if (ltrStep && ltrRem >= 8 && ltrRem <= 11)
+			ok(`LTR title pads the right just enough to clear the compact chip (sm:ltr:pr-${ltrStep[1]} = ${ltrRem}rem)`);
+		else bad('LTR title should pad the RIGHT in [8rem,11rem] — clears the compact chip without dead space', cls);
+
+		const rtlArb = cls.match(/sm:rtl:pl-\[(\d+(?:\.\d+)?)rem\]/);
+		const rtlStep = cls.match(/sm:rtl:pl-(\d+)\b/);
+		const rtlRem = rtlArb ? parseFloat(rtlArb[1]) : rtlStep ? parseInt(rtlStep[1], 10) / 4 : NaN;
+		if (rtlRem >= 12)
+			ok(`RTL title mirrors the pad to the LEFT, wide enough for the verbose phrase (${rtlArb ? rtlArb[0] : rtlStep?.[0]} = ${rtlRem}rem)`);
+		else bad('RTL title should pad the LEFT ≥12rem for the verbose expiry phrase', cls);
+
+		// The old symmetric physical pad must be gone (it did not mirror for RTL).
+		if (!/\bsm:pr-\[13rem\]\b/.test(cls) && !/\bsm:pr-28\b/.test(cls))
+			ok('retired symmetric sm:pr-[13rem] / sm:pr-28 physical pad is gone');
+		else bad('old physical sm:pr-[13rem] / sm:pr-28 still present (should be ltr:/rtl: mirrored)', cls);
 	}
 }
 

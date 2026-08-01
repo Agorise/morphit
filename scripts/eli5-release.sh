@@ -120,6 +120,6 @@ Afterwards anyone can verify a download against the chain by re-fetching the can
 
 **BLOCK 6** — canary repair (the upgrade wipes \`build/canary.txt\` every time):
 \`\`\`
-bash ~/Documents/Agorise/Morphit/morphit-canary-setup.sh
+bash ~/.morphit/update-canary.sh
 \`\`\`
 EOF

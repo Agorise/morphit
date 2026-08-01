@@ -179,6 +179,40 @@ const hasIsolate = (s: unknown) => typeof s === 'string' && (s.includes(FSI) || 
 	else bad('TermsText should wrap its blocks in a dir="auto" container');
 }
 
+// ── E. RTL layout mirroring on OrderCard (cp620) ─────────────────────
+// Farsi goes <html dir="rtl">, which mirrors the flow content — the poster
+// identity flips (avatar to the right). The card's own absolutely-positioned
+// clusters and the title pad use PHYSICAL sides, which do NOT auto-flip, so
+// they must carry ltr:/rtl: variants. Without them the top-right Message-
+// button cluster stays physically-right and collides with the now-right-
+// aligned identity — the original "Farsi is a mess" bug. Guards follow the
+// app's documented ltr:/rtl: convention (app.css §"Logical direction helpers").
+{
+	const card = live('src/lib/components/OrderCard.svelte');
+
+	// Top-right cluster (expiry chip / price model / Message button) must sit on
+	// the inline-END side: right in LTR, LEFT in RTL.
+	const clusterCls = card.match(/class="(absolute[^"]*top-3[^"]*)"/)?.[1] ?? '';
+	if (/ltr:right-\d/.test(clusterCls) && /rtl:left-\d/.test(clusterCls))
+		ok('OrderCard top-right cluster mirrors to the left in RTL (ltr:right-*/rtl:left-*)');
+	else
+		bad(
+			'OrderCard top-right cluster must mirror (ltr:right-*/rtl:left-*), else it collides with the RTL-mirrored identity',
+			clusterCls
+		);
+
+	// Title pad reserved on the END side: RIGHT in LTR, LEFT in RTL.
+	if (/sm:ltr:pr-/.test(card) && /sm:rtl:pl-/.test(card))
+		ok('OrderCard title pad mirrors to the left in RTL (sm:ltr:pr-*/sm:rtl:pl-*)');
+	else bad('OrderCard title pad must mirror for RTL (sm:ltr:pr-*/sm:rtl:pl-*)', card.match(/<h3[\s\S]*?"/)?.[0] ?? '');
+
+	// The bottom hide/blocked cluster is also absolute + physical — mirror it too.
+	const hideCls = card.match(/class="(absolute[^"]*bottom-3[^"]*)"/)?.[1] ?? '';
+	if (/ltr:right-\d/.test(hideCls) && /rtl:left-\d/.test(hideCls))
+		ok('OrderCard bottom hide/blocked cluster mirrors for RTL (ltr:right-*/rtl:left-*)');
+	else bad('OrderCard bottom hide/blocked cluster must mirror (ltr:right-*/rtl:left-*)', hideCls);
+}
+
 console.log('');
 console.log('\u2500'.repeat(56));
 if (fail === 0) {

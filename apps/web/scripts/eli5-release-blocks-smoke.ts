@@ -92,7 +92,7 @@ check('BLOCK 2 waits for CI to go green', /GATE: wait for CI to go green/.test(o
 check('the tag is SIGNED with a message (Ken\u2019s git config rejects bare tags)', /git tag -s /.test(out) && !/git tag v/.test(out));
 check('`< /dev/null` is present (the payload builder prompts, and would hang)', /release-build-payload\.ts < \/dev\/null/.test(out));
 check('a dry-run precedes the real broadcast', out.indexOf('--dry-run') < out.lastIndexOf('release-broadcast.ts release.json'));
-check('BLOCK 6 repairs the canary (upgrade wipes build/canary.txt)', /morphit-canary-setup\.sh/.test(out));
+check('BLOCK 6 repairs the canary via the migrated refresh ~/.morphit/update-canary.sh (upgrade wipes build/canary.txt)', /\.morphit\/update-canary\.sh/.test(out) && !/morphit-canary-setup\.sh/.test(out));
 
 // ─── the manifest must come from the VPS, not a laptop build ───
 check('the manifest is derived from the VPS\u2019s SERVED verify.json', /curl -fsSL https:\/\/morphit\.io\/verify\.json/.test(out));
