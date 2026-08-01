@@ -127,6 +127,7 @@ SMOKES=(
 	"apps/ops-cli:account-suggestion-smoke"
 	"apps/ops-cli:altnet-address-format-smoke"
 	"apps/ops-cli:doctor-smoke"
+	"apps/ops-cli:canary-dir-owner-smoke"
 	"apps/ops-cli:status-backups-smoke"
 	"apps/ops-cli:db-container-detect-smoke"
 	"apps/ops-cli:indexer-state-columns-smoke"

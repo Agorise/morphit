@@ -166,10 +166,10 @@ check(
 	})()
 );
 check(
-	'12 blocked/hidden markers present, in the bottom-right cluster beside the eyeball',
+	'12 blocked/hidden markers present, in the bottom inline-end cluster beside the eyeball (mirrors for RTL)',
 	/orderbook\.blocked_marker/.test(card) &&
 		/orderbook\.hidden_marker/.test(card) &&
-		/absolute bottom-3 right-3 z-10 flex items-center gap-2/.test(card)
+		/absolute bottom-3 z-10 flex items-center gap-2 ltr:right-3 rtl:left-3/.test(card)
 );
 check(
 	'13 reuses IdentityLabel for the avatar (hideHandle)',
