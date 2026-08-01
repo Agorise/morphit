@@ -136,7 +136,6 @@ export const STORAGE_KEYS: readonly StorageKeySpec[] = [
 	{ key: 'morphit.tradeNotifications.enabled', tier: 'account', protection: 'sweep-only', note: 'Legacy key, migrated into notifications.prefs.v1; kept classified so the sweep still clears an old browser.' },
 	{ key: 'morphit.feedbackReminders.firedThisSession', tier: 'account', protection: 'sweep-only', note: 'Session-scoped by name; classified so the sweep covers it.' },
 	{ key: 'morphit.firstTradeHelper.dismissedThisSession', tier: 'account', protection: 'sweep-only', note: 'As above.' },
-	{ key: 'morphit.debug.chat', tier: 'account', protection: 'sweep-only', note: 'Debug toggle. Not user content, but its NAME reads as chat state, so it is swept rather than sitting in the device allow-list — see signOutSweep.ts.' },
 	// ── Found by the classification smoke on its first run (v1.8.11). All four
 	//    were GLOBAL keys holding account state, i.e. the same shape as the
 	//    userPreferences leak, just never reported.

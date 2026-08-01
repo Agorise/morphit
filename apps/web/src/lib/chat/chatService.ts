@@ -84,7 +84,6 @@ import { getChatHistory, getChatIdentity } from '$lib/indexer/client';
 import { broadcastCustomJson } from '$blurt/sign';
 import { OP_IDS } from '$net/config';
 import { createChatStream } from '$lib/chat/stream';
-import { chatDebug, tagPreview } from '$lib/chat/debug';
 import type { LiveIdentity } from '$crypto/keygen';
 import type { ChatMessageRecord } from '@morphit/indexer-client';
 import { decodePayload } from '$lib/chat/payload';
@@ -640,14 +639,6 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 	 *  it's 50 records × small-payload every 3s — small enough
 	 *  that the wasted bandwidth isn't worth a server change. */
 	async function mergePollResponse(items: readonly ChatMessageRecord[]): Promise<void> {
-		chatDebug('merge.enter', {
-			me: deps.me,
-			peer: deps.peer,
-			depsOrder: deps.orderPermlink ?? null,
-			count: items.length,
-			senders: items.map((i) => i.sender),
-			currentMessageCount: messages.length
-		});
 		if (items.length === 0) return;
 
 		// Build a set of ids already in local state as 'confirmed'.
@@ -675,13 +666,6 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 			// `?? null` on both sides: an older instance omits the field entirely,
 			// and an order-less thread is a real thread whose key is null.
 			if ((rec.order_permlink ?? null) !== (deps.orderPermlink ?? null)) {
-				chatDebug('merge.skip.orderFilter', {
-					sender: rec.sender,
-					recipient: rec.recipient,
-					recOrder: rec.order_permlink ?? null,
-					depsOrder: deps.orderPermlink ?? null,
-					tag: tagPreview(clientTagFromHeader(rec.header))
-				});
 				continue;
 			}
 			// Is this a confirmation of a local outgoing message?
@@ -747,12 +731,6 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 							twin.createdAt = new Date(rec.created_at);
 							twin.trxId = rec.source_trx_id || null;
 						}
-						chatDebug('merge.incoming.reconciledTwin', {
-							sender: rec.sender,
-							id: rec.id,
-							isDurable,
-							tag: tagPreview(incomingTag)
-						});
 						added = true;
 						continue;
 					}
@@ -761,19 +739,9 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 				// No twin yet. Durable copies dedup by id; a provisional
 				// (id 0) is stored with a null id and never enters seenIds.
 				if (isDurable && seenIds.has(rec.id)) {
-					chatDebug('merge.skip.seenId', { sender: rec.sender, id: rec.id });
 					continue;
 				}
 				const d = await decryptOrPlaceholder(rec);
-				chatDebug('merge.incoming.ADD', {
-					sender: rec.sender,
-					recipient: rec.recipient,
-					id: isDurable ? rec.id : null,
-					provisional: !isDurable,
-					decryptFailed: d.decryptFailed,
-					order: rec.order_permlink ?? null,
-					tag: tagPreview(incomingTag)
-				});
 				messages.push({
 					id: isDurable ? rec.id : null,
 					orderPermlink: rec.order_permlink ?? null,
@@ -881,13 +849,6 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 			limit: HISTORY_PAGE_SIZE
 		});
 		if (signal.aborted || destroyed) return;
-		chatDebug('rest.fetchHistory', {
-			me: deps.me,
-			peer: deps.peer,
-			ok: !!(r && r.ok),
-			count: r && r.ok ? r.items.length : 0,
-			senders: r && r.ok ? r.items.map((i) => i.sender) : []
-		});
 		// Defensive: a misbehaving fetcher (test mock without
 		// mockResolvedValue, custom client returning undefined on
 		// transport error) returns nothing.  Treat as transient
@@ -1095,17 +1056,6 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		if (deps.orderPermlink !== null) {
 			payload.order_permlink = deps.orderPermlink;
 		}
-		chatDebug('send.outgoing', {
-			me: deps.me,
-			peer: deps.peer,
-			// The exact thread tag this message will carry on-chain. If this is
-			// null while the URL has ?order=…, the (peer,order) deps snapshot went
-			// stale — the message will land in the null thread and spawn a second
-			// inbox card (t.txt #4 second-thread bug).
-			order_permlink: (payload.order_permlink as string | undefined) ?? null,
-			tag: tagPreview(clientTag)
-		});
-
 		try {
 			await deps.broadcast(live, payload, deps.me);
 			// Flip the local state to 'broadcast' only if the message
