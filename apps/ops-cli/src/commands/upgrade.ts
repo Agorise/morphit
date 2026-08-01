@@ -1282,21 +1282,26 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	// build. That regression is what this unconditional build + the
 	// publish plan below fix.)
 	//
-	// cp619 (Ken — canary) — capture who should own apps/web/build BEFORE the
-	// rebuild. `npm run build` runs as root (sudo morphit-ops) and vite RECREATES
-	// this dir root-owned — but it is ALSO the dir the operator's (non-root)
-	// warrant-canary refresh uploads canary.txt + pgp_keys.asc into over SSH, and
-	// the bind-mount frontend model serves straight from it. Without restoring
-	// the owner afterward, every upgrade re-roots the served dir and the next
-	// weekly canary upload fails with EACCES ("Permission denied"). Prefer the
-	// non-root owner the operator already set on build/, else fall back to the
-	// install-dir owner (the app user a standard install runs as). -1 => no
-	// non-root owner found → leave it root (the operator uploads as root, or sets
-	// ownership themselves once).
+	// cp619 (Ken — canary) / cp624 fix — capture who should own apps/web/build so
+	// we can restore it AFTER the rebuild. `npm run build` runs as root (sudo
+	// morphit-ops) and vite RECREATES this dir root-owned — but it is ALSO the dir
+	// the operator's (non-root) warrant-canary refresh uploads canary.txt +
+	// pgp_keys.asc into over SSH, and the bind-mount frontend model serves straight
+	// from it. Without restoring the owner afterward, every upgrade re-roots the
+	// served dir and the next weekly canary upload fails with EACCES.
+	//
+	// cp624: read the owner from the OLD install (backupDir), NOT the fresh tree.
+	// Step 7 renamed the operator's install — with their chowned, non-root build/ —
+	// to backupDir, and step 8 extracted a FRESH root-owned tree that has NO build/
+	// yet. Reading installDir here therefore always saw root (or an absent build/)
+	// and preserved NOTHING, so a root-owned /opt/morphit install still hit EACCES.
+	// The operator's real ownership lives in backupDir. Prefer the non-root owner on
+	// the OLD build/, else the OLD install-dir owner. -1 => none found → leave it
+	// root (the operator sets ownership themselves once).
 	let canaryDirUid = -1;
 	let canaryDirGid = -1;
 	{
-		const webBuild = join(installDir, 'apps', 'web', 'build');
+		const oldBuild = join(backupDir, 'apps', 'web', 'build');
 		const readOwner = (p: string): { uid: number; gid: number } | null => {
 			try {
 				const s = statSync(p);
@@ -1305,7 +1310,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 				return null;
 			}
 		};
-		const owner = chooseCanaryDirOwner(readOwner(webBuild), readOwner(installDir));
+		const owner = chooseCanaryDirOwner(readOwner(oldBuild), readOwner(backupDir));
 		if (owner) {
 			canaryDirUid = owner.uid;
 			canaryDirGid = owner.gid;

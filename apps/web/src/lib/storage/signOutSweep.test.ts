@@ -38,10 +38,7 @@ const ACCOUNT_KEYS = {
 	'morphit.chat.recent_peers': '["kentest2","surfgrrl"]',
 	'morphit.chat.pub_pins': '{"kentest2":{"blockNum":61471533}}',
 	'morphit.draft.feedback.order-9pcvngg7segc': '{"subject":"kentest2"}',
-	'morphit.userPreferences.v1': '{"fiat":"MXN","region":"Your place or mine, whatever."}',
-	// Not user content, but its NAME reads as chat state, so it is swept —
-	// see the note on DEVICE_KEYS about tightening rather than loosening.
-	'morphit.debug.chat': '1'
+	'morphit.userPreferences.v1': '{"fiat":"MXN","region":"Your place or mine, whatever."}'
 };
 
 const DEVICE_SEED = {

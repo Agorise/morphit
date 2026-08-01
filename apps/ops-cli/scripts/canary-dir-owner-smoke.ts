@@ -90,6 +90,26 @@ const ROOT = { uid: 0, gid: 0 };
 		ok('captures the served-dir owner BEFORE the web rebuild (vite recreates it root-owned)');
 	else bad('owner capture must run before the web rebuild', `capture=${iCapture} build=${iBuild}`);
 
+	// cp624 — the owner MUST be read from the OLD install (backupDir), NOT the fresh
+	// post-extract tree. Step 7 renamed the operator's install (with their chowned,
+	// non-root build/) to backupDir, and step 8 extracted a root-owned installDir
+	// with NO build/ yet — so reading installDir preserved NOTHING and a root-owned
+	// /opt/morphit install still hit EACCES. This is the assertion the original
+	// wiring test lacked (it checked "capture before build" but not WHERE from).
+	if (/const oldBuild = join\(backupDir, 'apps', 'web', 'build'\)/.test(src))
+		ok('cp624: oldBuild resolves to backupDir/apps/web/build (the pre-upgrade install)');
+	else bad('cp624: oldBuild should be backupDir/apps/web/build');
+
+	if (/chooseCanaryDirOwner\(readOwner\(oldBuild\), readOwner\(backupDir\)\)/.test(src))
+		ok('cp624: reads the canary-dir owner from the OLD install (backupDir), not the fresh tree');
+	else bad('cp624: owner capture must read from backupDir, not the freshly-extracted installDir');
+
+	// Guard against regressing to the buggy source: the capture must NOT read the
+	// owner from the fresh installDir tree.
+	if (!/chooseCanaryDirOwner\(readOwner\(webBuild\), readOwner\(installDir\)\)/.test(src))
+		ok('cp624: capture no longer reads the owner from the fresh installDir tree');
+	else bad('cp624: capture still reads the owner from installDir (the fresh tree) — the cp619 bug');
+
 	if (iRestore > 0 && iBuild > 0 && iRestore > iBuild)
 		ok('restores ownership (chown -R) AFTER the rebuild');
 	else bad('ownership restore must run after the rebuild', `restore=${iRestore} build=${iBuild}`);
