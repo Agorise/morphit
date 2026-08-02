@@ -525,7 +525,7 @@
 				/>
 			{/if}
 			<div>
-				<h1 class="font-display text-2xl font-bold">@{account}</h1>
+				<h1 class="font-display text-2xl font-bold"><bdi class="ltr-in-rtl">@{account}</bdi></h1>
 				<a
 					href={lp(`/@${account}`)}
 					class="text-sm text-ink-500 hover:text-morphit-emerald dark:text-ink-400"

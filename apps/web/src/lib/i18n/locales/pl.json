@@ -1821,11 +1821,9 @@
 		"dismiss_aria": "Zamknij ten przewodnik"
 	},
 	"footer": {
-		"tagline": "Bezpośrednia wymiana P2P, Prywatność, Własność",
 		"plan": "Plan",
 		"source": "Kod",
 		"security": "Bezpieczeństwo",
-		"reachable_via": "Dostępne też przez",
 		"tor": "Tor",
 		"lokinet": "Lokinet",
 		"nostr": "Nostr",
@@ -1858,7 +1856,12 @@
 		"stats_title": "Zbiorcze statystyki sieci na żywo",
 		"contact": "Kontakt",
 		"globe": "Strona",
-		"play": "Streaming"
+		"play": "Streaming",
+		"col_federation": "Federacja",
+		"col_resources": "Zasoby",
+		"col_security": "Bezpieczeństwo",
+		"col_media": "Media",
+		"col_support": "Wsparcie"
 	},
 	"glossary": {
 		"active_key": {

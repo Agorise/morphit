@@ -1821,11 +1821,9 @@
 		"dismiss_aria": "关闭此指南"
 	},
 	"footer": {
-		"tagline": "点对点。私密。属于你。",
 		"plan": "计划",
 		"source": "源码",
 		"security": "安全",
-		"reachable_via": "也可通过以下方式访问",
 		"tor": "Tor",
 		"lokinet": "Lokinet",
 		"nostr": "Nostr",
@@ -1858,7 +1856,12 @@
 		"stats_title": "实时聚合网络统计",
 		"contact": "联系",
 		"globe": "网站",
-		"play": "视频/直播"
+		"play": "视频/直播",
+		"col_federation": "联邦",
+		"col_resources": "资源",
+		"col_security": "安全",
+		"col_media": "媒体",
+		"col_support": "支持"
 	},
 	"glossary": {
 		"active_key": {

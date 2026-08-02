@@ -61,6 +61,14 @@
 	// render, so $currentLocale already equals the route locale.
 	const currentLang = $derived($currentLocale);
 	const lp = $derived((path: string) => localePath(path, currentLang));
+	// Footer link + column-header styling, shared across the footer's 5 columns
+	// (t.txt — Ken). `ltr:tracking-widest` keeps the wide letter-spacing to LTR
+	// only, so Arabic-script (Farsi) column headers don't get their connected
+	// letters broken apart by letter-spacing.
+	const footLink =
+		'text-ink-600 hover:text-morphit-emerald dark:text-ink-300 dark:hover:text-morphit-emerald';
+	const footHead =
+		'mb-2.5 text-xs font-semibold uppercase ltr:tracking-widest text-ink-500 dark:text-ink-400';
 
 	/** cp402 [9] — the chat CONVERSATION route (/[lang]/chat/[peer]) is an
 	 *  immersive, full-viewport view: ConversationView fills the space
@@ -394,10 +402,8 @@
 				<MorphitLogoBling heightPx={40} shine />
 			</a>
 
-			<p class="text-sm text-ink-600 dark:text-ink-400">{$_('footer.tagline')}</p>
 
 			<div class="flex flex-col items-center gap-3">
-				<p class="text-xs uppercase tracking-widest text-ink-500">{$_('footer.reachable_via')}</p>
 				<ul class="flex flex-wrap justify-center gap-2">
 					{#if $instance.alt_networks.tor}
 						<li>
@@ -583,86 +589,54 @@
 				</ul>
 			</div>
 
-			<nav aria-label="Footer" class="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm">
-				<a href={lp('/glossary')} class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300 dark:hover:text-morphit-emerald"
-					>{$_('nav.glossary')}</a
-				>
-				<a href={lp('/cheat-sheet')} class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300 dark:hover:text-morphit-emerald"
-					>{$_('nav.cheat_sheet')}</a
-				>
-				<a href={lp('/explorer')} class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300 dark:hover:text-morphit-emerald"
-					>{$_('footer.explorer')}</a
-				>
-				<a href={lp('/download')} class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300 dark:hover:text-morphit-emerald"
-					>{$_('footer.download')}</a
-				>
-				<a
-					href="/morphit-comparison.png"
-					data-sveltekit-reload
-					class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300 dark:hover:text-morphit-emerald"
-					title={$_('footer.compare_title')}
-					target="_blank"
-					rel="noopener noreferrer">{$_('footer.compare')}</a
-				>
-				<a
-					href={lp('/stats')}
-					class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300 dark:hover:text-morphit-emerald"
-					title={$_('footer.stats_title')}>{$_('footer.stats')}</a
-				>
-				<a
-					href="{lp('/faq')}?q=wallet_developer_api&lang={currentLang}"
-					class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300 dark:hover:text-morphit-emerald"
-					title={$_('footer.api_title')}>{$_('footer.api')}</a
-				>
-				<a
-					href="https://git.agorise.net/agorise/morphit"
-					class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300 dark:hover:text-morphit-emerald"
-					target="_blank" rel="noopener noreferrer">{$_('footer.source')}</a
-				>
-				<a
-					href="/morphit-mediakit.zip" data-sveltekit-reload
-					class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300 dark:hover:text-morphit-emerald"
-					title={$_('footer.mediakit_title')}
-					rel="noopener">{$_('footer.mediakit')}</a
-				>
-				<a href={lp('/operators')} class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300 dark:hover:text-morphit-emerald"
-					>{$_('footer.operators')}</a
-				>
-				<a href={lp('/instances')} class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300 dark:hover:text-morphit-emerald"
-					>{$_('footer.instances')}</a
-				>
-				<a href={lp('/security')} class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300 dark:hover:text-morphit-emerald"
-					>{$_('footer.security')}</a
-				>
-				<a href={lp('/plan')} class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300 dark:hover:text-morphit-emerald"
-					>{$_('footer.plan')}</a
-				>
-				<a href={lp('/privacy-terms')} class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300 dark:hover:text-morphit-emerald"
-					>{$_('nav.privacy_terms')}</a
-				>
-				<a
-					href="/canary.txt" data-sveltekit-reload
-					class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300 dark:hover:text-morphit-emerald"
-					title={$_('footer.canary_title')}
-					rel="noopener">{$_('footer.canary')}</a
-				>
-				<a
-					href="/pgp_keys.asc" data-sveltekit-reload
-					class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300 dark:hover:text-morphit-emerald"
-					title={$_('footer.pgp_keys_title')}
-					rel="noopener">{$_('footer.pgp_keys')}</a
-				>
-				<a href={lp('/security#bounty')} class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300 dark:hover:text-morphit-emerald"
-					>{$_('footer.bounty')}</a
-				>
-				<a href={lp('/faq')} class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300 dark:hover:text-morphit-emerald"
-					>{$_('nav.faq')}</a
-				>
-				<a
-					href="{lp('/instances')}?highlight=current"
-					class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300 dark:hover:text-morphit-emerald"
-					title={$_('footer.contact_operator')}>{$_('footer.contact')}</a
-				>
+			<nav aria-label="Footer" class="grid w-full max-w-4xl grid-cols-2 gap-x-6 gap-y-8 text-sm sm:grid-cols-3 lg:grid-cols-5">
+				<div>
+					<h3 class={footHead}>{$_('footer.col_federation')}</h3>
+					<ul class="space-y-1.5">
+						<li><a href={lp('/operators')} class={footLink}>{$_('footer.operators')}</a></li>
+						<li><a href={lp('/instances')} class={footLink}>{$_('footer.instances')}</a></li>
+					</ul>
+				</div>
+				<div>
+					<h3 class={footHead}>{$_('footer.col_resources')}</h3>
+					<ul class="space-y-1.5">
+						<li><a href={lp('/download')} class={footLink}>{$_('footer.download')}</a></li>
+						<li><a href={lp('/stats')} class={footLink} title={$_('footer.stats_title')}>{$_('footer.stats')}</a></li>
+						<li><a href="{lp('/faq')}?q=wallet_developer_api&lang={currentLang}" class={footLink} title={$_('footer.api_title')}>{$_('footer.api')}</a></li>
+						<li><a href="https://git.agorise.net/agorise/morphit" class={footLink} target="_blank" rel="noopener noreferrer">{$_('footer.source')}</a></li>
+					</ul>
+				</div>
+				<div>
+					<h3 class={footHead}>{$_('footer.col_security')}</h3>
+					<ul class="space-y-1.5">
+						<li><a href={lp('/security')} class={footLink}>{$_('footer.security')}</a></li>
+						<li><a href={lp('/privacy-terms')} class={footLink}>{$_('nav.privacy_terms')}</a></li>
+						<li>
+							<a href="/canary.txt" data-sveltekit-reload class={footLink} title={$_('footer.canary_title')} rel="noopener">{$_('footer.canary')}</a>
+							<span class="text-ink-400 dark:text-ink-600" aria-hidden="true">·</span>
+							<a href="/pgp_keys.asc" data-sveltekit-reload class={footLink} title={$_('footer.pgp_keys_title')} rel="noopener">{$_('footer.pgp_keys')}</a>
+						</li>
+						<li><a href={lp('/security#bounty')} class={footLink}>{$_('footer.bounty')}</a></li>
+					</ul>
+				</div>
+				<div>
+					<h3 class={footHead}>{$_('footer.col_media')}</h3>
+					<ul class="space-y-1.5">
+						<li><a href="/morphit-mediakit.zip" data-sveltekit-reload class={footLink} title={$_('footer.mediakit_title')} rel="noopener">{$_('footer.mediakit')}</a></li>
+						<li><a href="/morphit-comparison.png" data-sveltekit-reload class={footLink} title={$_('footer.compare_title')} target="_blank" rel="noopener noreferrer">{$_('footer.compare')}</a></li>
+						<li><a href={lp('/plan')} class={footLink}>{$_('footer.plan')}</a></li>
+					</ul>
+				</div>
+				<div>
+					<h3 class={footHead}>{$_('footer.col_support')}</h3>
+					<ul class="space-y-1.5">
+						<li><a href={lp('/faq')} class={footLink}>{$_('nav.faq')}</a></li>
+						<li><a href={lp('/glossary')} class={footLink}>{$_('nav.glossary')}</a></li>
+						<li><a href={lp('/cheat-sheet')} class={footLink}>{$_('nav.cheat_sheet')}</a></li>
+						<li><a href={lp('/explorer')} class={footLink}>{$_('footer.explorer')}</a></li>
+						<li><a href="{lp('/instances')}?highlight=current" class={footLink} title={$_('footer.contact_operator')}>{$_('footer.contact')}</a></li>
+					</ul>
+				</div>
 			</nav>
 
 			<div class="flex w-full items-end justify-between gap-3">

@@ -1821,11 +1821,9 @@
 		"dismiss_aria": "Chiudi questa guida"
 	},
 	"footer": {
-		"tagline": "Peer-to-peer. Privata. Tua.",
 		"plan": "Piano",
 		"source": "Sorgente",
 		"security": "Sicurezza",
-		"reachable_via": "Raggiungibile anche tramite",
 		"tor": "Tor",
 		"lokinet": "Lokinet",
 		"nostr": "Nostr",
@@ -1858,7 +1856,12 @@
 		"stats_title": "Statistiche di rete aggregate in tempo reale",
 		"contact": "Contatti",
 		"globe": "Sito web",
-		"play": "Streaming"
+		"play": "Streaming",
+		"col_federation": "Federazione",
+		"col_resources": "Risorse",
+		"col_security": "Sicurezza",
+		"col_media": "Media",
+		"col_support": "Supporto"
 	},
 	"glossary": {
 		"active_key": {

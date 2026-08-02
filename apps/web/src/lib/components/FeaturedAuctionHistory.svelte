@@ -123,10 +123,22 @@
 		if (n >= 10) return n.toFixed(1);
 		return n.toFixed(2);
 	}
+
+	// t.txt (Ken) — hide the whole "🎉 Featured" card when there's nothing to
+	// show: no live featured orders AND no settled clearing-price history. The
+	// <section> is display:none'd (not {#if}-removed) so the embedded
+	// <FeaturedOrders> below stays mounted and keeps reporting liveFeaturedCount
+	// — otherwise the very signal that decides visibility would never arrive.
+	// Net: no empty "be the first" card sitting on a fresh orderbook.
+	const showCard = $derived(hasAnyClearing || liveFeaturedCount > 0);
 </script>
 
 {#if loaded}
-	<section class="card mb-4" aria-labelledby="clearing-price-heading">
+	<section
+		class="card mb-4 mt-6"
+		class:hidden={!showCard}
+		aria-labelledby="clearing-price-heading"
+	>
 		<div class="mb-3 flex items-center justify-between gap-2">
 			<h2 id="clearing-price-heading" class="font-display text-base font-bold">
 				{$_('clearing_price.heading')}

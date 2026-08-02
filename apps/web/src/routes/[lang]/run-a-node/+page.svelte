@@ -446,7 +446,7 @@
 			</h2>
 			<p class="mt-3 text-ink-700 dark:text-ink-300">{$_('run_a_node.cta_body')}</p>
 		</div>
-		<a href="https://git.agorise.net/agorise/morphit" target="_blank" rel="noopener noreferrer" class="btn-primary btn-shine">
+		<a href={lp('/download')} class="btn-primary btn-shine">
 			{$_('run_a_node.cta_repo')}
 		</a>
 		<a

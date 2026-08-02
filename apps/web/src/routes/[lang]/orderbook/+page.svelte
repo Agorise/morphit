@@ -1370,9 +1370,7 @@
 	     history + window selector, instead of a separate section here (which
 	     read as a jumbled second featured block). Self-hides when empty. -->
 	{#await loadFeaturedAuctionHistory() then FeaturedAuctionHistory}
-		<div class="mt-6">
-			<FeaturedAuctionHistory />
-		</div>
+		<FeaturedAuctionHistory />
 	{/await}
 
 	<!-- Loading status -->

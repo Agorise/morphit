@@ -89,6 +89,11 @@ const nonEn = locales.filter((l) => l !== 'en');
 
 interface AllowEntry { key: string; locale: string; reason: string }
 const ALLOW_LIST: AllowEntry[] = [
+	// ─── v1.9.15 (t.txt, Ken) footer column header "SUPPORT" → German "Support"
+	//     is the standard loanword for a help/support section in tech UIs (native
+	//     "Unterstützung"/"Hilfe" read oddly as a footer nav label), so it is
+	//     byte-identical to EN.
+	{ key: 'footer.col_support', locale: 'de', reason: '(b) "Support" is the standard German loanword for a help/support nav section; byte-identical to EN' },
 	// ─── v1.9.5 (Ken) blog "## Details:" heading — German uses "Details" (the
 	//     standard loanword; native "Einzelheiten" is rarer in tech UIs), so it is
 	//     byte-identical to EN. It only tripped the heuristic after the heading was

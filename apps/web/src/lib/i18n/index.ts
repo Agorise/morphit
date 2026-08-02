@@ -1,5 +1,6 @@
 import { browser } from '$app/environment';
 import { init, register, locale, _ } from 'svelte-i18n';
+import { isolateAtHandles } from './rtlHandle';
 import { derived, get, writable } from 'svelte/store';
 
 // Pure constants + matchSupported() are SSoT in ./locales.  This
@@ -36,7 +37,13 @@ import { SUPPORTED_LOCALES, DEFAULT_LOCALE, matchSupported, type LocaleCode } fr
 // `for...of`, is fine — vite recognizes the pattern as long as
 // the directory and extension are literal strings.
 for (const { code } of SUPPORTED_LOCALES) {
-	register(code, () => import(`./locales/${code}.json`));
+	// t.txt (Ken) — isolate @{handle} slots (LTR) at load time so usernames
+	// render "@alice", never "alice@", in RTL locales. See rtlHandle.ts.
+	register(code, () =>
+		import(`./locales/${code}.json`).then((m) =>
+			isolateAtHandles((m as { default?: unknown }).default ?? m)
+		)
+	);
 }
 
 /**
