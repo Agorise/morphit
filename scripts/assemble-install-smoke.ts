@@ -26,6 +26,7 @@ function check(name: string, cond: boolean): void {
 const inputs: AnsibleInstallInputs = {
 	mode: 'home',
 	domain: 'trade.example.com',
+	instanceName: 'Morphit Test',
 	operatorAccount: 'my-operator',
 	operatorTag: 'myoperator',
 	feesAccount: 'my-operator',
@@ -59,7 +60,7 @@ interface Trace {
 	ensuredDir?: string;
 	printed: string[];
 }
-function mockDeps(opts: { ensureOk?: boolean; exitCode?: number; postInstallExit?: number; trace: Trace }): AssembleDeps {
+function mockDeps(opts: { ensureOk?: boolean; exitCode?: number; postInstallExit?: number; hostCount?: number; trace: Trace }): AssembleDeps {
 	const { trace } = opts;
 	let spawnCount = 0;
 	return {
@@ -88,7 +89,11 @@ function mockDeps(opts: { ensureOk?: boolean; exitCode?: number; postInstallExit
 		},
 		print: (s: string) => {
 			trace.printed.push(s);
-		}
+		},
+		// The pre-flight `--list-hosts` guard: default to "1 host found" so the
+		// happy path proceeds. A dedicated check below drives this to 0 to prove
+		// the guard aborts before any spawn (the host-pattern bug's backstop).
+		probeHostCount: () => opts.hostCount ?? 1
 	};
 }
 function newTrace(): Trace {
@@ -157,6 +162,18 @@ async function main(): Promise<void> {
 			threw = true;
 		}
 		check('interrupted-save: propagates + STILL removed the vars file (finally)', threw && trace.events.includes('remove') && !trace.events.includes('spawn'));
+	}
+
+	// Pre-flight host guard: if the play would match 0 hosts, abort BEFORE the
+	// playbook spawn with a clear reason. This is the backstop for the
+	// host-pattern bug that once let the play no-op silently and still report
+	// success. (The probe needs Ansible present, so it runs after ensureAnsible.)
+	{
+		const trace = newTrace();
+		const res = await assembleInstall(basePlan, mockDeps({ hostCount: 0, trace }));
+		check('0-host guard: returns failure mentioning 0 hosts / installer bug', res.ok === false && /0 hosts|no machine|host/i.test((res as { reason: string }).reason));
+		check('0-host guard: did NOT spawn the playbook', !trace.events.includes('spawn'));
+		check('0-host guard: STILL removed the vars file (cleanup in finally)', trace.removed === '/run/morphit-install-vars.json');
 	}
 }
 

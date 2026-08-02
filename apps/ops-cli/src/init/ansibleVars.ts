@@ -28,6 +28,17 @@ export interface AnsibleInstallInputs {
 	readonly mode: InstallMode;
 	/** Bare public domain, e.g. "trade.example.com" (NOT a URL). */
 	readonly domain: string;
+	/** Friendly instance title (MORPHIT_INSTANCE_NAME) — the site header + the
+	 *  name on the shared /instances directory.  REQUIRED (register needs it). */
+	readonly instanceName: string;
+	/** One-line description (MORPHIT_INSTANCE_TAGLINE) — shown under the title on
+	 *  the /instances directory + as the SEO/link-preview blurb.  Optional. */
+	readonly instanceTagline?: string;
+	/** Operator contact link (MORPHIT_INSTANCE_CONTACT_URL) — drives the "Contact
+	 *  this operator" link on the /instances card.  The wizard collects an
+	 *  optional Matrix account (@you:matrix.org) and stores it as a matrix.to URL;
+	 *  undefined means the operator has none yet (the card omits the link). */
+	readonly contactUrl?: string;
 	/** Operator's BLURT account (signs registration/releases, collects fees). */
 	readonly operatorAccount: string;
 	/** Short attribution tag (often == operatorAccount). */
@@ -78,12 +89,47 @@ export function validateAcmeEmail(email: string): true | string {
 }
 export function validateDdnsUrl(url: string): true | string {
 	const u = url.trim();
-	if (!/^https?:\/\//i.test(u)) return 'must start with https:// (your DNS provider\u2019s dynamic-DNS update URL)';
-	if (!u.includes('{ip}')) return 'must contain {ip} where your provider wants the current IP address';
+	if (!/^https:\/\//i.test(u)) return 'must start with https:// (your DNS provider\u2019s dynamic-DNS update URL)';
+	// {ip} is OPTIONAL. If present, the updater replaces it with the detected
+	// public IP; if absent, it pushes the URL as-is and the provider detects the
+	// caller's IP itself (Namecheap, for one, documents `ip=` as optional). So we
+	// require only a well-formed https URL, not the {ip} token.
 	return true;
 }
 export function validateOperatorAccount(name: string): true | string {
 	return /^[a-z0-9.-]{3,16}$/.test(name.trim()) ? true : 'is not a valid BLURT account name (3\u201316 chars, a\u2013z 0\u20139 . -)';
+}
+/** The instance title (MORPHIT_INSTANCE_NAME).  Required + capped at 64 to match
+ *  the indexer's Zod `z.string().max(64)`. */
+export function validateInstanceTitle(title: string): true | string {
+	const t = title.trim();
+	if (t.length === 0) return 'is required (it names your marketplace on the shared directory)';
+	if (t.length > 64) return 'must be 64 characters or fewer';
+	return true;
+}
+
+/** Validate an optional Matrix account (an MXID, e.g. @you:matrix.org).  An EMPTY
+ *  value is VALID — the operator may not have one yet.  A non-empty value must
+ *  look like a real MXID (@localpart:domain.tld) so a typo can't produce a dead
+ *  "Contact this operator" link.  PURE. */
+export function validateMatrixAddress(raw: string): true | string {
+	const v = raw.trim();
+	if (v.length === 0) return true; // optional — Enter to skip
+	// @localpart:server, where server is a domain (dot + TLD). Deliberately lenient
+	// on the localpart (Matrix allows ._=-/+ etc.), strict on the overall shape.
+	if (!/^@[^\s:@/]+:[a-z0-9.-]+\.[a-z]{2,}$/i.test(v)) {
+		return 'is not a Matrix account \u2014 it should look like @you:matrix.org';
+	}
+	return true;
+}
+
+/** Turn a Matrix MXID into a universally-clickable contact URL.  matrix.to is the
+ *  form Matrix itself recommends for sharing — it opens in any browser and lets
+ *  the visitor pick their client, so the "Contact this operator" link works even
+ *  where no matrix: handler is registered.  `safeContactUrl` accepts the https
+ *  result.  Caller guarantees `mxid` already passed validateMatrixAddress.  PURE. */
+export function matrixToContactUrl(mxid: string): string {
+	return `https://matrix.to/#/${mxid.trim()}`;
 }
 
 /** Validate the whole input set; returns human-readable problems (empty = ok).
@@ -95,6 +141,15 @@ export function validateInstallInputs(inputs: AnsibleInstallInputs): string[] {
 	if (d !== true) problems.push(`domain "${inputs.domain}" ${d}.`);
 	const acct = validateOperatorAccount(inputs.operatorAccount);
 	if (acct !== true) problems.push(`operatorAccount "${inputs.operatorAccount}" ${acct}.`);
+	const title = validateInstanceTitle(inputs.instanceName);
+	if (title !== true) problems.push(`instance title ${title}.`);
+	// Optional contact link — when present it must pass the same scheme guard the
+	// frontend re-applies before rendering (matrix:/https:/mailto:/xmpp:/nostr:).
+	if (inputs.contactUrl !== undefined && inputs.contactUrl.length > 0) {
+		if (!/^(https?|matrix|mailto|xmpp|nostr):/i.test(inputs.contactUrl.trim())) {
+			problems.push('contactUrl must be a matrix:/https:/mailto:/xmpp:/nostr: link.');
+		}
+	}
 	const fa = validateOperatorAccount(inputs.feesAccount);
 	if (fa !== true) problems.push(`feesAccount "${inputs.feesAccount}" ${fa}.`);
 	if (!inputs.keystorePath.startsWith('/')) {
@@ -122,10 +177,22 @@ export function buildAnsibleVars(inputs: AnsibleInstallInputs): Record<string, u
 		morphit_domain: inputs.domain,
 		morphit_operator_account: inputs.operatorAccount,
 		morphit_operator_tag: inputs.operatorTag,
+		// The playbook's `hosts:` is `{{ morphit_target_hosts | default('morphit_servers') }}`.
+		// A LOCAL grandma install runs against the inline `localhost,` inventory, where
+		// localhost lands in the implicit `all` group — NOT `morphit_servers` — so without
+		// this the play matched 0 hosts and silently no-op'd (exit 0, nothing installed).
+		// Pinning it to `localhost` here makes the SAME playbook serve both this local
+		// install and the documented remote `[morphit_servers]` inventory (which just
+		// omits this var and gets the default).
+		morphit_target_hosts: 'localhost',
 		// The relay account IS the operator account (see relay.env.j2); the
 		// wizard-written keystore path + the operator's fees account:
 		morphit_relay_keystore_path: inputs.keystorePath,
 		morphit_fee_recipient: inputs.feesAccount,
+		// Instance identity shown on the shared /instances directory (indexer
+		// reads these from indexer.env → its /instance API → the federated list).
+		morphit_instance_name: inputs.instanceName,
+		morphit_instance_tagline: inputs.instanceTagline ?? '',
 		tls_acme_email: inputs.acmeEmail,
 		// Secrets Ansible provisions the DB with (referenced as vault_* with
 		// defaults in group_vars/all.yml).
@@ -141,6 +208,11 @@ export function buildAnsibleVars(inputs: AnsibleInstallInputs): Record<string, u
 	if (inputs.mode === 'home' && inputs.ddnsUpdateUrl) {
 		vars.morphit_ddns_update_url = inputs.ddnsUpdateUrl;
 	}
+	// Optional operator contact link (the /instances "Contact this operator"
+	// link); omitted entirely when the operator gave no Matrix account.
+	if (inputs.contactUrl) {
+		vars.morphit_instance_contact_url = inputs.contactUrl;
+	}
 	return vars;
 }
 
@@ -153,11 +225,15 @@ export function renderVarsFile(vars: Record<string, unknown>): string {
 
 /** Build the argv for a LOCAL playbook run.  The inline `localhost,` inventory
  *  + `-c local` means no inventory file and no SSH — Ansible configures THIS
- *  box.  PURE. */
+ *  box.  `hosts:` is pinned to localhost via the morphit_target_hosts extra-var
+ *  (in the vars file).  Pass `listHosts` to RESOLVE the target hosts without
+ *  running anything — used as a pre-flight guard so a 0-host play can never
+ *  again masquerade as a successful install.  PURE. */
 export function buildAnsiblePlaybookArgv(opts: {
 	playbookPath: string;
 	varsFilePath: string;
 	check?: boolean;
+	listHosts?: boolean;
 }): string[] {
 	const argv = [
 		'ansible-playbook',
@@ -170,5 +246,6 @@ export function buildAnsiblePlaybookArgv(opts: {
 		`@${opts.varsFilePath}`
 	];
 	if (opts.check) argv.push('--check');
+	if (opts.listHosts) argv.push('--list-hosts');
 	return argv;
 }

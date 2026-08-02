@@ -398,46 +398,42 @@
 							: ''}"
 					>
 						<div class="flex flex-col gap-3">
-							<div class="flex items-start justify-between gap-3">
-								<div>
-									<div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-										{#if safeOrigin}
-											<a
-												href={safeOrigin}
-												dir="auto"
-							class="font-display text-xl font-bold leading-none text-morphit-emerald hover:underline"
-												rel="noopener"
-											>
-												{effectiveName(inst)}
-											</a>
-										{:else}
-											<!-- Origin failed scheme allowlist (XSS guard).
-											     Render the name as plain text rather than a
-											     clickable link.  This indicates a malformed
-											     federation entry; an operator monitoring will
-											     see it and investigate. -->
-											<span dir="auto" class="font-display text-xl font-bold leading-none text-ink-700 dark:text-ink-200">
-												{effectiveName(inst)}
-											</span>
-										{/if}
-										{#if isCurrentInstance(inst)}
-											<span
-												class="inline-flex items-center rounded-full bg-morphit-emerald/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-morphit-emerald ring-1 ring-morphit-emerald/30"
-											>
-												{$_('instances.this_instance')}
-											</span>
-										{/if}
-									</div>
-									<p class="text-xs text-ink-500">{inst.origin}</p>
+							<div>
+								<div class="flex items-center justify-between gap-3">
+									{#if safeOrigin}
+										<a
+											href={safeOrigin}
+											dir="auto"
+											class="min-w-0 font-display text-xl font-bold leading-none text-morphit-emerald hover:underline"
+											rel="noopener"
+										>
+											{effectiveName(inst)}
+										</a>
+									{:else}
+										<!-- Origin failed the scheme allowlist (XSS guard): render the name as
+										     plain text, not a clickable link.  A malformed federation entry an
+										     operator monitoring the directory can spot + investigate. -->
+										<span dir="auto" class="min-w-0 font-display text-xl font-bold leading-none text-ink-700 dark:text-ink-200">
+											{effectiveName(inst)}
+										</span>
+									{/if}
+									{#if isCurrentInstance(inst)}
+										<!-- "You are here" pill — centered between the title and the condition
+										     pill via justify-between on this row (equal gap on each side). -->
+										<span
+											class="inline-flex shrink-0 items-center rounded-full bg-morphit-emerald/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-morphit-emerald ring-1 ring-morphit-emerald/30"
+										>
+											{$_('instances.this_instance')}
+										</span>
+									{/if}
+									<span
+										class="inline-flex shrink-0 cursor-help items-center rounded-full px-2.5 py-1 text-xs font-medium {statusClass(inst.status)}"
+										title={statusDescription(inst.status)}
+									>
+										{statusLabel(inst.status)}
+									</span>
 								</div>
-								<span
-									class="inline-flex cursor-help items-center rounded-full px-2.5 py-1 text-xs font-medium {statusClass(
-										inst.status
-									)}"
-									title={statusDescription(inst.status)}
-								>
-									{statusLabel(inst.status)}
-								</span>
+								<p class="text-xs text-ink-500">{inst.origin}</p>
 							</div>
 
 							{#if inst.tagline}
@@ -446,7 +442,7 @@
 
 							<dl class="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-ink-500">
 								<dt>{$_('instances.operator_label')}</dt>
-								<dd class="font-mono text-ink-700 dark:text-ink-200">@{inst.operator_account}</dd>
+								<dd class="font-mono text-ink-700 dark:text-ink-200"><bdi class="ltr-in-rtl">@{inst.operator_account}</bdi></dd>
 								<dt>{$_('instances.registered_label')}</dt>
 								<dd>{formatDayMonth(inst.registered_at)}</dd>
 								<dt>{$_('instances.last_probed_label')}</dt>

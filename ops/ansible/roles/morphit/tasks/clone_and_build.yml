@@ -100,3 +100,15 @@
   # gapped hosts.  `--offline` forbids network access outright.
   # The ops-cli bin runs from TS source via tsx, so this exercises
   # the full resolve→tsx→execute path the operator will use.
+
+- name: Install the global `morphit-ops` launcher on PATH
+  ansible.builtin.template:
+    src: morphit-ops.j2
+    dest: /usr/local/bin/morphit-ops
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  # Without this, `morphit-ops` was only reachable as `npx morphit-ops` from
+  # inside the checkout — so the wizard's `sudo morphit-ops register` (and every
+  # other doc that says `morphit-ops <cmd>`) died with "command not found".

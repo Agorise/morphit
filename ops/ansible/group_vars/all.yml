@@ -39,6 +39,13 @@ morphit_operator_account: my-operator
 # morphit_operator_account, but can be shorter / branded.
 morphit_operator_tag: myoperator
 
+# Friendly title + one-line description for your instance, shown on the shared
+# /instances directory (the wizard collects these; a remote/manual inventory can
+# set them here).  Empty title omits MORPHIT_INSTANCE_NAME so the indexer falls
+# back to the operator account; empty tagline omits MORPHIT_INSTANCE_TAGLINE.
+morphit_instance_name: ""
+morphit_instance_tagline: ""
+
 # The BLURT account that RECEIVES your listing fees.  For a federation instance
 # YOU earn these (your 90% share; the treasury's 10% is taken separately), so
 # this defaults to your own operator account.  Set it to the shared

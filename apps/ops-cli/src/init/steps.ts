@@ -441,7 +441,7 @@ export async function stepActiveKey(relayAccountName: string): Promise<ActiveKey
 
 // ─── Step 6: Fees account ────────────────────────────────────────
 
-export async function stepFeesAccount(relayAccountName: string, instanceName?: string): Promise<string> {
+export async function stepFeesAccount(defaultAccount: string | undefined, instanceName?: string): Promise<string> {
 	step(6, TOTAL_STEPS, 'Fees account');
 	const base = instanceName ? suggestAccountBase(instanceName) : '';
 	const feesSuggestion = base ? `@${base}-fees` : '@your-instance-fees';
@@ -456,18 +456,21 @@ export async function stepFeesAccount(relayAccountName: string, instanceName?: s
 			`${relaySuggestion}.  Why keep two?  Your relay\u2019s key sits on\n` +
 			'this server to sign signups, but your fees account\u2019s keys\n' +
 			'never need to — so your earnings stay safe even if the\n' +
-			'server is ever compromised.\n' +
-			'\n' +
-			'(You CAN reuse the relay account to keep things simple —\n' +
-			'just press Enter — but a separate fees account is safer.)'
+			'server is ever compromised.'
 	);
 	examples(base ? [`${base}-fees`] : ['your-instance-fees', 'my-morphit-fees']);
-	console.log(`Default (press Enter): same as your relay account (${relayAccountName})`);
+	if (defaultAccount !== undefined) {
+		console.log(`Default (press Enter): keep ${defaultAccount}`);
+	}
 	console.log('');
 
 	while (true) {
-		const v = await ask('Fees account name', relayAccountName);
-		if (v.length === 0) return relayAccountName;
+		const v = await ask('Fees account name', defaultAccount);
+		if (v.length === 0) {
+			if (defaultAccount !== undefined) return defaultAccount;
+			console.log('  ✗ Please enter the account where your fees should land.\n');
+			continue;
+		}
 		const validation = validateBlurtAccountName(v);
 		if (!validation.ok) {
 			console.log(`  ✗ ${validation.message}  Try again.\n`);

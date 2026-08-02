@@ -18,6 +18,9 @@ import {
 	validateDomain,
 	validateAcmeEmail,
 	validateDdnsUrl,
+	validateInstanceTitle,
+	validateMatrixAddress,
+	matrixToContactUrl,
 	type AnsibleInstallInputs,
 	type InstallMode
 } from './ansibleVars.ts';
@@ -77,6 +80,47 @@ export async function collectInstallInputs(
 		req
 	);
 
+	// Instance identity — shown on the shared /instances directory (and as the
+	// site title). Asked next to the domain, per the operator who noted these
+	// were never collected. The title is REQUIRED (register needs it too).
+	print(
+		'\n  Give your marketplace a name. It appears as the title at the top of your\n' +
+			'  site, and \u2014 once you register \u2014 as your instance\u2019s name on the shared\n' +
+			'  /instances directory that traders on other nodes browse.\n'
+	);
+	const instanceName = await askValidated(
+		'Instance title',
+		['Morphit Polska', 'Berlin Freimarkt', 'Morphit UK'],
+		validateInstanceTitle,
+		req
+	);
+
+	print(
+		'\n  Optionally add a one-line description. It shows right under your title on\n' +
+			'  the shared /instances directory (and as your site\u2019s search-result blurb).\n' +
+			'  Press Enter to skip.\n'
+	);
+	examples([
+		'Nasza instancja, kt\u00f3ra s\u0142u\u017cy wszystkim osobom m\u00f3wi\u0105cym po polsku na ca\u0142ym \u015bwiecie.',
+		'P2P Bitcoin & Monero trading, no KYC.'
+	]);
+	let instanceTagline = (await ask('Instance description (optional)')).trim();
+	if (instanceTagline.length > 200) instanceTagline = instanceTagline.slice(0, 200);
+
+	print(
+		'\n  Optionally, your Matrix account \u2014 it powers the "Contact this operator"\n' +
+			'  link on your /instances card, so traders can reach you. Enter it as\n' +
+			'  @you:server (e.g. @you:matrix.org). Press Enter to skip if you don\u2019t have\n' +
+			'  one yet \u2014 the link is simply omitted until you add one.\n'
+	);
+	const matrixAddress = await askValidated(
+		'Your Matrix account (optional \u2014 @you:matrix.org)',
+		['@you:matrix.org', '@sally:example.org'],
+		validateMatrixAddress,
+		req
+	);
+	const contactUrl = matrixAddress.length > 0 ? matrixToContactUrl(matrixAddress) : undefined;
+
 	const acmeEmail = await askValidated(
 		'Your email address (only used to get + renew your free HTTPS certificate)',
 		['you@example.com'],
@@ -89,13 +133,14 @@ export async function collectInstallInputs(
 		print(
 			'\n  Because a home connection\u2019s address can change, Morphit will keep your\n' +
 				'  domain pointed at it automatically. Paste the "dynamic DNS update URL"\n' +
-				'  from wherever you bought your domain, with {ip} where it wants the address.\n'
+				'  from wherever you bought your domain. Put {ip} where it wants the address\n' +
+				'  \u2014 or leave it out if your provider fills in the IP itself (Namecheap does).\n'
 		);
 		ddnsUpdateUrl = await askValidated(
-			'Your domain provider\u2019s dynamic-DNS update URL (must contain {ip})',
+			'Your domain provider\u2019s dynamic-DNS update URL ({ip} optional \u2014 omit it if the provider auto-detects)',
 			[
 				'https://njal.la/update/?h=trade.example.com&k=YOURKEY&a={ip}',
-				'https://dynamicdns.park-your-domain.com/update?host=@&domain=mydomain.org&password=YOURPW&ip={ip}'
+				'https://dynamicdns.park-your-domain.com/update?host=@&domain=mydomain.org&password=YOURPW  (Namecheap auto-detects the IP)'
 			],
 			validateDdnsUrl,
 			req
@@ -112,6 +157,9 @@ export async function collectInstallInputs(
 	return {
 		mode,
 		domain,
+		instanceName,
+		instanceTagline: instanceTagline.length > 0 ? instanceTagline : undefined,
+		contactUrl,
 		operatorAccount: known.operatorAccount,
 		operatorTag: known.operatorTag,
 		feesAccount: known.feesAccount,
