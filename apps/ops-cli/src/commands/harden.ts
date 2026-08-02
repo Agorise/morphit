@@ -119,6 +119,7 @@ export async function runHarden(ctx: HardenCtx): Promise<number> {
 			'Set up automatic daily database backups',
 			'Set up IPFS release hosting (help keep Morphit releases alive)',
 			'Seed this release to IPFS now (make this box an origin host after an upgrade)',
+			'Set up warrant canary + PGP contact key (transparency signals for your users)',
 			'Show the fully-automated path (Ansible playbook)',
 			'Done'
 		]);
@@ -258,6 +259,44 @@ export async function runHarden(ctx: HardenCtx): Promise<number> {
 			console.log('  Full reference: docs/RUN-A-MORPHIT-NODE.md, OPERATIONS.md §48.');
 			console.log('');
 		} else if (choice === 6) {
+			// Warrant canary + PGP contact key — the two transparency surfaces
+			// served straight from the front-end build dir (/canary.txt and
+			// /pgp_keys.asc; BunkerWeb mounts apps/web/build as the site root). The
+			// canary already has a complete guided script (home vs VPS, off-box
+			// signing + a weekly refresh); the PGP key is a one-line export of the
+			// operator's OWN key over the canonical placeholder shipped in the build.
+			const canarySetup = join(repoRoot, 'scripts', 'canary', 'setup.sh');
+			const pgpDest = join(repoRoot, 'apps', 'web', 'build', 'pgp_keys.asc');
+			const origin = existing.origin || 'https://YOUR-DOMAIN';
+			console.log('');
+			console.log('  Two transparency signals your instance can serve, both straight from');
+			console.log('  the site root:');
+			console.log('');
+			console.log('    • /canary.txt      a SIGNED warrant canary — it goes stale if you are');
+			console.log('                       ever compelled + gagged, so silence means something');
+			console.log('    • /pgp_keys.asc    YOUR PGP public key, so users can verify + reach you');
+			console.log('');
+			console.log('  1) Warrant canary — run the shipped guided setup on the machine that');
+			console.log('     holds your signing key. It asks home-vs-VPS and, for a VPS, signs OFF');
+			console.log('     the served box then uploads (so a seizure can\'t keep stamping');
+			console.log('     "all-clear"), and it arms a weekly refresh:');
+			console.log('');
+			console.log(`    bash ${sanitizeForTerm(canarySetup)}`);
+			console.log('');
+			console.log('  2) PGP contact key — the build ships Morphit\'s canonical key as a');
+			console.log('     placeholder. Replace it with YOUR OWN public key (ideally the same');
+			console.log('     key you sign the canary with) so /pgp_keys.asc is actually yours:');
+			console.log('');
+			console.log(`    gpg --armor --export YOUR_KEY_ID | sudo tee ${sanitizeForTerm(pgpDest)} >/dev/null`);
+			console.log('');
+			console.log('  Confirm both are live (from anywhere):');
+			console.log('');
+			console.log(`    curl -fsS ${sanitizeForTerm(origin)}/canary.txt | head`);
+			console.log(`    curl -fsS ${sanitizeForTerm(origin)}/pgp_keys.asc | head`);
+			console.log('');
+			console.log('  Full reference: OPERATIONS.md §36 (warrant canary).');
+			console.log('');
+		} else if (choice === 7) {
 			printAnsiblePath();
 		} else {
 			// Done

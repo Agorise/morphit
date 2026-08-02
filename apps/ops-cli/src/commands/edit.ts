@@ -317,16 +317,16 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 	}
 	if (choice === 'fees-account' || choice === 'all') {
 		// cp407 — redirect where BLURT listing fees land (the operator earns
-		// 90% of them). Default to the account currently configured, falling
-		// back to the relay account (init's default) if unset. stepFeesAccount
-		// validates the Blurt account name; the indexer independently falls
-		// back to @morphit-fees if this is ever left empty or malformed.
+		// 90% of them). Default to the account currently configured; if none is
+		// set yet, require an explicit entry (stepFeesAccount no longer defaults
+		// to the relay account). stepFeesAccount validates the Blurt account name;
+		// the indexer independently falls back to @morphit-fees if left empty.
 		const cfgKv = parseKvLines(existing.text);
 		const currentFees =
 			cfgKv.get('MORPHIT_INDEXER_FEE_RECIPIENT') ??
 			cfgKv.get('MORPHIT_INDEXER_RELAY_ACCOUNT') ??
 			'';
-		const feesAccount = await stepFeesAccount(currentFees);
+		const feesAccount = await stepFeesAccount(currentFees || undefined);
 		configUpdates.set('MORPHIT_INDEXER_FEE_RECIPIENT', feesAccount);
 	}
 	if (choice === 'operator-tag' || choice === 'all') {

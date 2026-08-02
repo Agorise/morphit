@@ -37,6 +37,29 @@
     group: "{{ morphit_service_group }}"
     mode: '0640'
 
+# cp631 — register-by-hand env layout.  `sudo morphit-ops register` (plus edit /
+# doctor) read {{ morphit_repo_path }}/morphit.config.env + morphit.env through
+# loadInstanceEnv — NOT the per-service /etc/morphit/*.env the systemd units use.
+# Without these two files a manual register after a grandma install could not
+# find its identity vars (instance name / public origin / operator tag, and the
+# relay account + active-key path).  Writing them here makes `register` work the
+# same for VPS-over-SSH, a local raspi / old laptop, and register-by-hand.
+- name: Deploy operator-config env for register-by-hand (allowlisted identity vars)
+  ansible.builtin.template:
+    src: morphit.config.env.j2
+    dest: "{{ morphit_repo_path }}/morphit.config.env"
+    owner: root
+    group: "{{ morphit_service_group }}"
+    mode: '0640'
+
+- name: Deploy infra env for register-by-hand (relay account + active-key path)
+  ansible.builtin.template:
+    src: morphit.env.j2
+    dest: "{{ morphit_repo_path }}/morphit.env"
+    owner: root
+    group: "{{ morphit_service_group }}"
+    mode: '0640'
+
 # cp514 — the shipped unit's ExecStart is a HARDCODED
 # /usr/local/lib/morphit/morphit-backup.sh (deliberately decoupled from
 # wherever the operator checked out the repo).  This role used to drop the

@@ -605,7 +605,7 @@
 						     sees the truth when they pull down the menu. -->
 						<div class="border-b border-ink-100 px-4 py-3 dark:border-ink-800">
 							<p class="text-xs text-ink-500 dark:text-ink-400">
-								@{$pairedReadOnly.account}
+								<bdi class="ltr-in-rtl">@{$pairedReadOnly.account}</bdi>
 							</p>
 							<p class="mt-0.5 text-xs font-semibold text-morphit-emerald">
 								{$_('paired_readonly.avatar_menu_pill')}

@@ -31,6 +31,7 @@ console.log('\u2500\u2500 ansible-vars smoke (cp600) \u2500\u2500\u2500\u2500\u2
 const home: AnsibleInstallInputs = {
 	mode: 'home',
 	domain: 'trade.example.com',
+	instanceName: 'Morphit Test',
 	operatorAccount: 'my-operator',
 	operatorTag: 'myoperator',
 	feesAccount: 'my-operator',
@@ -43,6 +44,7 @@ const home: AnsibleInstallInputs = {
 const vps: AnsibleInstallInputs = {
 	mode: 'vps',
 	domain: 'trade.example.com',
+	instanceName: 'Morphit Test',
 	operatorAccount: 'my-operator',
 	operatorTag: 'myoperator',
 	feesAccount: 'my-operator',
@@ -60,7 +62,8 @@ check('randomSecret is unique per call', randomSecret() !== randomSecret());
 // ── validateInstallInputs ─────────────────────────────────────────
 check('valid home inputs → no problems', validateInstallInputs(home).length === 0);
 check('valid vps inputs → no problems', validateInstallInputs(vps).length === 0);
-check('home WITHOUT a {ip} DDNS url → flagged', validateInstallInputs({ ...home, ddnsUpdateUrl: 'https://njal.la/update?a=1.2.3.4' }).length > 0);
+check('home WITHOUT {ip} in the DDNS url → OK (provider may auto-detect, e.g. Namecheap)', validateInstallInputs({ ...home, ddnsUpdateUrl: 'https://njal.la/update?a=1.2.3.4' }).length === 0);
+check('home with a NON-https DDNS url → flagged', validateInstallInputs({ ...home, ddnsUpdateUrl: 'http://njal.la/update?a={ip}' }).some((p) => /DDNS/i.test(p)));
 check('a URL passed as domain → flagged (bare domain required)', validateInstallInputs({ ...home, domain: 'https://trade.example.com' }).some((p) => /domain/.test(p)));
 check('bad operator account → flagged', validateInstallInputs({ ...home, operatorAccount: 'Bad_Name!' }).some((p) => /operatorAccount/.test(p)));
 check('missing email → flagged', validateInstallInputs({ ...home, acmeEmail: 'nope' }).some((p) => /email/i.test(p)));
@@ -68,6 +71,8 @@ check('short DB password → flagged', validateInstallInputs({ ...home, indexerD
 check('SAME password for both DBs → flagged (must be unique)', validateInstallInputs({ ...home, relayDbPassword: home.indexerDbPassword }).some((p) => /DIFFERENT/i.test(p)));
 check('relative keystore path → flagged (must be absolute)', validateInstallInputs({ ...home, keystorePath: 'relay.keystore' }).some((p) => /absolute/i.test(p)));
 check('bad fees account → flagged', validateInstallInputs({ ...home, feesAccount: 'Bad_Fees!' }).some((p) => /feesAccount/.test(p)));
+check('empty instance title → flagged (register needs it + it names the directory entry)', validateInstallInputs({ ...home, instanceName: '   ' }).some((p) => /instance title/i.test(p)));
+check('over-long instance title (>64) → flagged', validateInstallInputs({ ...home, instanceName: 'x'.repeat(65) }).some((p) => /instance title/i.test(p)));
 
 // ── buildAnsibleVars: the home/VPS difference ─────────────────────
 const hv = buildAnsibleVars(home);
@@ -78,7 +83,16 @@ check('BOTH get the full stack (enable_tls + enable_bunkerweb true)', hv.enable_
 check('maps domain/operator/tag/acme correctly', hv.morphit_domain === 'trade.example.com' && hv.morphit_operator_account === 'my-operator' && hv.morphit_operator_tag === 'myoperator' && hv.tls_acme_email === 'me@example.com');
 check('maps fees account -> morphit_fee_recipient', hv.morphit_fee_recipient === 'my-operator');
 check('maps keystore path -> morphit_relay_keystore_path', hv.morphit_relay_keystore_path === '/etc/morphit/relay.keystore');
+check('maps instance title -> morphit_instance_name; empty tagline -> ""', hv.morphit_instance_name === 'Morphit Test' && hv.morphit_instance_tagline === '');
+check('carries a provided tagline through to morphit_instance_tagline', (buildAnsibleVars({ ...home, instanceTagline: 'P2P, no KYC' }).morphit_instance_tagline) === 'P2P, no KYC');
+check('contactUrl -> morphit_instance_contact_url when set', buildAnsibleVars({ ...home, contactUrl: 'https://matrix.to/#/@op:matrix.org' }).morphit_instance_contact_url === 'https://matrix.to/#/@op:matrix.org');
+check('no morphit_instance_contact_url key when contactUrl is unset (link omitted)', !('morphit_instance_contact_url' in buildAnsibleVars(home)));
 check('passes DB secrets as vault_ vars', typeof hv.vault_postgres_indexer_password === 'string' && typeof hv.vault_postgres_relay_password === 'string');
+// The host-pattern fix: the LOCAL install pins the play's target to localhost via
+// this extra-var (playbook `hosts:` is `{{ morphit_target_hosts | default('morphit_servers') }}`).
+// Without it, the inline `localhost,` inventory left localhost in `all`, NOT
+// `morphit_servers`, so the play matched 0 hosts and silently installed nothing.
+check('BOTH pin morphit_target_hosts=localhost (else the play matches 0 hosts)', hv.morphit_target_hosts === 'localhost' && vv.morphit_target_hosts === 'localhost');
 check('defaults repo ref to main; honors an override (morphit_repo_ref — matches the playbook)', (buildAnsibleVars(home).morphit_repo_ref === 'main') && (buildAnsibleVars({ ...home, gitRef: 'v1.9.7' }).morphit_repo_ref === 'v1.9.7'));
 check('BunkerWeb can be turned off explicitly', buildAnsibleVars({ ...vps, enableBunkerweb: false }).enable_bunkerweb === false);
 

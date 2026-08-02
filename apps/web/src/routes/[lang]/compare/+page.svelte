@@ -295,7 +295,7 @@
 									href={lp(`/@${o.account}/${o.permlink}`)}
 									class="block break-all font-mono text-xs text-morphit-emerald hover:underline"
 								>
-									@{o.account}/{o.permlink}
+									<bdi class="ltr-in-rtl">@{o.account}/{o.permlink}</bdi>
 								</a>
 							</li>
 						{/each}
@@ -361,11 +361,11 @@
 										rel="noopener noreferrer external"
 										class="block break-all font-mono text-xs text-morphit-emerald hover:underline"
 									>
-										@{o.account}/{o.permlink} ↗
+										<bdi class="ltr-in-rtl">@{o.account}/{o.permlink}</bdi> ↗
 									</a>
 								{:else}
 									<span class="block break-all font-mono text-xs text-ink-500">
-										@{o.account}/{o.permlink}
+										<bdi class="ltr-in-rtl">@{o.account}/{o.permlink}</bdi>
 									</span>
 								{/if}
 							</li>

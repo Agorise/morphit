@@ -134,7 +134,7 @@
 						href={lp(`/explorer/account/${block.witness}`)}
 						class="text-morphit-emerald underline-offset-2 hover:underline"
 					>
-						@{block.witness}
+						<bdi class="ltr-in-rtl">@{block.witness}</bdi>
 					</a>
 				</dd>
 			</div>

@@ -338,7 +338,7 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 	const relayAccount = await recall('relayAccount', () => stepRelayAccount(instanceName));
 	secretResumeNote("relay account\u2019s active key");
 	const activeKey = await stepActiveKey(relayAccount.name); // SECRET — always asked, never saved
-	const feesAccount = await recall('feesAccount', () => stepFeesAccount(relayAccount.name, instanceName));
+	const feesAccount = await recall('feesAccount', () => stepFeesAccount(undefined, instanceName));
 	const dailyCeiling = await recall('dailyCeiling', () => stepDailyCeiling(relayAccount.account));
 	const contactUrl = await recall('contactUrl', () => stepContactUrl());
 	const origin = await recall('origin', () => stepOrigin());

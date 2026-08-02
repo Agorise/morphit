@@ -39,7 +39,7 @@
 
 ---
 - name: Morphit relay + indexer + BunkerWeb deployment
-  hosts: morphit_servers
+  hosts: "{{ morphit_target_hosts | default('morphit_servers') }}"
   become: true
   gather_facts: true
 

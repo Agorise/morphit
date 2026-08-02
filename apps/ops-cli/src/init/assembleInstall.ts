@@ -52,6 +52,8 @@ export interface AssembleDeps {
 	readonly ensureAnsible?: (ansibleDir: string) => Promise<boolean>;
 	/** Run argv, streaming output; resolve with the process exit code. */
 	readonly spawn?: (argv: readonly string[]) => Promise<number>;
+	/** Resolve how many hosts the playbook targets (pre-flight guard). */
+	readonly probeHostCount?: (argv: readonly string[]) => number;
 	readonly print?: (s: string) => void;
 }
 
@@ -93,6 +95,19 @@ async function realSpawn(argv: readonly string[]): Promise<number> {
 	const r = spawnSync(cmd, args, { stdio: 'inherit' });
 	return r.status ?? 1;
 }
+/** Resolve how many hosts the playbook's pattern matches WITHOUT running it
+ *  (`--list-hosts`).  Ansible prints "hosts (N):" per play; take the max.
+ *  Returns 0 when the pattern matches nothing — the exact pre-flight that would
+ *  have caught the inline-inventory `morphit_servers` mismatch. */
+function realProbeHostCount(argv: readonly string[]): number {
+	const [cmd, ...args] = argv;
+	if (cmd === undefined) return 0;
+	const r = spawnSync(cmd, args, { encoding: 'utf8' });
+	const out = `${r.stdout ?? ''}\n${r.stderr ?? ''}`;
+	let max = 0;
+	for (const m of out.matchAll(/hosts \((\d+)\):/g)) max = Math.max(max, Number(m[1]));
+	return max;
+}
 
 /** Drive the plan.  Order + cleanup are the whole point — see the header. */
 export async function assembleInstall(plan: InstallPlan, deps: AssembleDeps = {}): Promise<AssembleResult> {
@@ -102,6 +117,7 @@ export async function assembleInstall(plan: InstallPlan, deps: AssembleDeps = {}
 	const promptSave = deps.promptSave ?? promptSaveSecrets;
 	const ensureAnsible = deps.ensureAnsible ?? realEnsureAnsible;
 	const spawn = deps.spawn ?? realSpawn;
+	const probeHostCount = deps.probeHostCount ?? realProbeHostCount;
 
 	// 1. Write the vars file FIRST (0600 — it carries the DB secrets).
 	writeVarsFile(plan.varsFilePath, renderVarsFile(plan.vars));
@@ -116,6 +132,22 @@ export async function assembleInstall(plan: InstallPlan, deps: AssembleDeps = {}
 			return {
 				ok: false,
 				reason: 'Ansible could not be installed automatically. Install it with `sudo apt-get install -y ansible`, then run this again.'
+			};
+		}
+
+		// 3b. PRE-FLIGHT: confirm the playbook's host pattern actually matches a
+		//     machine before we run — and before we ever tell the operator it
+		//     "worked". Ansible exits 0 on a 0-host play, so without this a
+		//     host-pattern mismatch silently installs NOTHING (the bug this fixes).
+		const probeArgv = buildAnsiblePlaybookArgv({
+			playbookPath: plan.playbookPath,
+			varsFilePath: plan.varsFilePath,
+			listHosts: true
+		});
+		if (probeHostCount(probeArgv) < 1) {
+			return {
+				ok: false,
+				reason: 'The installer found no machine to configure (Ansible matched 0 hosts). This is a bug in the installer itself, not something you did \u2014 please report it; a re-run won\u2019t help until it\u2019s patched.'
 			};
 		}
 

@@ -9,6 +9,8 @@ import {
 	validateDomain,
 	validateAcmeEmail,
 	validateDdnsUrl,
+	validateMatrixAddress,
+	matrixToContactUrl,
 	validateInstallInputs
 } from '../apps/ops-cli/src/init/ansibleVars.ts';
 import { collectInstallInputs, type CollectDeps } from '../apps/ops-cli/src/init/collectInstallInputs.ts';
@@ -59,37 +61,49 @@ async function main(): Promise<void> {
 	check('email: accepts a normal address', validateAcmeEmail('you@example.com') === true);
 	check('email: rejects nonsense', validateAcmeEmail('nope') !== true);
 	check('ddns: accepts https + {ip}', validateDdnsUrl('https://njal.la/update/?a={ip}') === true);
-	check('ddns: rejects missing {ip}', validateDdnsUrl('https://njal.la/update/?a=1.2.3.4') !== true);
-	check('ddns: rejects non-https', validateDdnsUrl('ftp://x/{ip}') !== true);
+	check('ddns: ACCEPTS missing {ip} (provider auto-detects, e.g. Namecheap)', validateDdnsUrl('https://njal.la/update/?a=1.2.3.4') === true);
+	check('ddns: rejects non-https', validateDdnsUrl('http://njal.la/update/?a={ip}') !== true);
+
+	// Matrix account (optional contact link on the /instances card).
+	check('matrix: empty is OK (optional \u2014 operator may have none yet)', validateMatrixAddress('') === true);
+	check('matrix: accepts @you:matrix.org', validateMatrixAddress('@you:matrix.org') === true);
+	check('matrix: rejects a bare handle (no @)', validateMatrixAddress('you:matrix.org') !== true);
+	check('matrix: rejects @you (no server)', validateMatrixAddress('@you') !== true);
+	check('matrix: rejects a server with no TLD', validateMatrixAddress('@you:localhost') !== true);
+	check('matrix: converts to a matrix.to URL', matrixToContactUrl('@you:matrix.org') === 'https://matrix.to/#/@you:matrix.org');
 
 	const known = { operatorAccount: 'my-operator', operatorTag: 'myoperator', feesAccount: 'my-operator', keystorePath: '/etc/morphit/relay.keystore' };
 
-	// HOME path: choice 0 → asks domain, email, ddns.
+	// HOME path: choice 0 → asks domain, title, description, email, ddns.
 	{
-		const d = driver({ choice: 0, answers: ['trade.example.com', 'me@example.com', 'https://njal.la/update/?h=trade.example.com&k=K&a={ip}'] });
+		const d = driver({ choice: 0, answers: ['trade.example.com', 'Morphit Berlin', 'Berlin node, no KYC.', '@berlin:matrix.org', 'me@example.com', 'https://njal.la/update/?h=trade.example.com&k=K&a={ip}'] });
 		const out = await collectInstallInputs(known, d.deps);
 		check('home: mode is home', out.mode === 'home');
 		check('home: carries the DDNS url', out.ddnsUpdateUrl === 'https://njal.la/update/?h=trade.example.com&k=K&a={ip}');
 		check('home: domain + email captured', out.domain === 'trade.example.com' && out.acmeEmail === 'me@example.com');
+		check('home: instance title + description captured', out.instanceName === 'Morphit Berlin' && out.instanceTagline === 'Berlin node, no KYC.');
+		check('home: Matrix account \u2192 matrix.to contactUrl', out.contactUrl === 'https://matrix.to/#/@berlin:matrix.org');
 		check('home: two DIFFERENT strong DB passwords generated', out.indexerDbPassword !== out.relayDbPassword && out.indexerDbPassword.length >= 43);
-		check('home: an example shown for every free-form prompt (domain, email, ddns = 3)', d.state.exampleSets === 3);
+		check('home: an example shown for every free-form prompt (domain, title, description, matrix, email, ddns = 6)', d.state.exampleSets === 6);
 		check('home: the whole result passes validateInstallInputs', validateInstallInputs(out).length === 0);
 		check('home: carries operator account/tag from the wizard', out.operatorAccount === 'my-operator' && out.operatorTag === 'myoperator');
 	}
 
-	// VPS path: choice 1 → asks domain, email; NO ddns.
+	// VPS path: choice 1 → asks domain, title, description, email; NO ddns.
 	{
-		const d = driver({ choice: 1, answers: ['trade.example.com', 'me@example.com'] });
+		const d = driver({ choice: 1, answers: ['trade.example.com', 'Morphit Test', '', '', 'me@example.com'] });
 		const out = await collectInstallInputs(known, d.deps);
 		check('vps: mode is vps', out.mode === 'vps');
 		check('vps: NO DDNS url', out.ddnsUpdateUrl === undefined);
-		check('vps: only 2 example sets (domain, email — no ddns)', d.state.exampleSets === 2);
+		check('vps: empty description → undefined tagline (title still captured)', out.instanceTagline === undefined && out.instanceName === 'Morphit Test');
+		check('vps: empty Matrix → undefined contactUrl (link omitted, no failure)', out.contactUrl === undefined);
+		check('vps: 5 example sets (domain, title, description, matrix, email — no ddns)', d.state.exampleSets === 5);
 		check('vps: passes validateInstallInputs', validateInstallInputs(out).length === 0);
 	}
 
 	// RE-PROMPT: a bad domain then a good one → domain asked twice, printed an error.
 	{
-		const d = driver({ choice: 1, answers: ['not a domain', 'trade.example.com', 'me@example.com'] });
+		const d = driver({ choice: 1, answers: ['not a domain', 'trade.example.com', 'Morphit Test', '', '', 'me@example.com'] });
 		const out = await collectInstallInputs(known, d.deps);
 		const domainPrompts = d.state.prompts.filter((p) => /domain/i.test(p)).length;
 		check('re-prompt: a bad domain makes the domain question repeat', domainPrompts >= 2);
