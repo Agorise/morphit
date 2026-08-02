@@ -161,7 +161,7 @@
 	<dl class="seed-print-meta">
 		<dt>{$_('onboarding.backup.print_card.account_label')}</dt>
 		<dd>
-			{#if accountName}@{accountName}{:else}<em>{$_('onboarding.backup.print_card.no_account_yet')}</em
+			{#if accountName}<bdi class="ltr-in-rtl">@{accountName}</bdi>{:else}<em>{$_('onboarding.backup.print_card.no_account_yet')}</em
 				>{/if}
 		</dd>
 		<dt>{$_('onboarding.backup.print_card.generated_label')}</dt>

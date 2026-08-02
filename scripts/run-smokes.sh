@@ -241,6 +241,7 @@ SMOKES=(
 	"apps/web:dev-routes-prod-gated-smoke"
 	"apps/web:i18n-locale-parity-smoke"
 	"apps/web:i18n-locale-registry-smoke"
+	"apps/web:rtl-handle-and-footer-tasks-smoke"
 	"apps/web:explorer-link-lang-prefix-smoke"
 	"apps/web:locale-source-of-truth-smoke"
 	"apps/web:onboarding-locale-swap-smoke"

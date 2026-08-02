@@ -1821,11 +1821,9 @@
 		"dismiss_aria": "بستن این راهنما"
 	},
 	"footer": {
-		"tagline": "نفر‌به‌نفر. خصوصی. مال تو.",
 		"plan": "برنامه",
 		"source": "سورس",
 		"security": "امنیت",
-		"reachable_via": "همچنین از طریق",
 		"tor": "Tor",
 		"lokinet": "Lokinet",
 		"nostr": "Nostr",
@@ -1858,7 +1856,12 @@
 		"stats_title": "آمار تجمیعی زندهٔ شبکه",
 		"contact": "تماس",
 		"globe": "وب‌سایت",
-		"play": "پخش"
+		"play": "پخش",
+		"col_federation": "فدراسیون",
+		"col_resources": "منابع",
+		"col_security": "امنیت",
+		"col_media": "رسانه",
+		"col_support": "پشتیبانی"
 	},
 	"glossary": {
 		"active_key": {

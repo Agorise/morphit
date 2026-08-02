@@ -1821,11 +1821,9 @@
 		"dismiss_aria": "Dismiss this helper"
 	},
 	"footer": {
-		"tagline": "Peer-to-peer. Private. Yours.",
 		"plan": "Plan",
 		"source": "Source",
 		"security": "Security",
-		"reachable_via": "Also reachable via",
 		"tor": "Tor",
 		"lokinet": "Lokinet",
 		"nostr": "Nostr",
@@ -1858,7 +1856,12 @@
 		"stats_title": "Live aggregate network statistics",
 		"contact": "Contact",
 		"globe": "Website",
-		"play": "Streaming"
+		"play": "Streaming",
+		"col_federation": "Federation",
+		"col_resources": "Resources",
+		"col_security": "Security",
+		"col_media": "Media",
+		"col_support": "Support"
 	},
 	"glossary": {
 		"active_key": {

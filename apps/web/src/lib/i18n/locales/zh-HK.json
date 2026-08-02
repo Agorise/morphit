@@ -1821,11 +1821,9 @@
 		"dismiss_aria": "關閉此指南"
 	},
 	"footer": {
-		"tagline": "點對點。私密。屬於你。",
 		"plan": "計劃",
 		"source": "原始碼",
 		"security": "安全",
-		"reachable_via": "亦可以經以下方式上到",
 		"tor": "Tor",
 		"lokinet": "Lokinet",
 		"nostr": "Nostr",
@@ -1858,7 +1856,12 @@
 		"stats_title": "即時聚合網絡統計",
 		"contact": "聯絡",
 		"globe": "網站",
-		"play": "串流"
+		"play": "串流",
+		"col_federation": "聯邦",
+		"col_resources": "資源",
+		"col_security": "安全",
+		"col_media": "媒體",
+		"col_support": "支援"
 	},
 	"glossary": {
 		"active_key": {

@@ -1821,11 +1821,9 @@
 		"dismiss_aria": "Закрыть это руководство"
 	},
 	"footer": {
-		"tagline": "Peer-to-peer. Приватно. Ваше.",
 		"plan": "План",
 		"source": "Исходники",
 		"security": "Безопасность",
-		"reachable_via": "Также доступен через",
 		"tor": "Tor",
 		"lokinet": "Lokinet",
 		"nostr": "Nostr",
@@ -1858,7 +1856,12 @@
 		"stats_title": "Агрегированная статистика сети в реальном времени",
 		"contact": "Контакты",
 		"globe": "Сайт",
-		"play": "Стриминг"
+		"play": "Стриминг",
+		"col_federation": "Федерация",
+		"col_resources": "Ресурсы",
+		"col_security": "Безопасность",
+		"col_media": "Медиа",
+		"col_support": "Поддержка"
 	},
 	"glossary": {
 		"active_key": {

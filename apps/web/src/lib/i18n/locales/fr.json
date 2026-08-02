@@ -1821,11 +1821,9 @@
 		"dismiss_aria": "Fermer ce guide"
 	},
 	"footer": {
-		"tagline": "De pair à pair. Privé. À vous.",
 		"plan": "Plan",
 		"source": "Source",
 		"security": "Sécurité",
-		"reachable_via": "Accessible aussi via",
 		"tor": "Tor",
 		"lokinet": "Lokinet",
 		"nostr": "Nostr",
@@ -1858,7 +1856,12 @@
 		"stats_title": "Statistiques agrégées du réseau en direct",
 		"contact": "Contact",
 		"globe": "Site web",
-		"play": "Streaming"
+		"play": "Streaming",
+		"col_federation": "Fédération",
+		"col_resources": "Ressources",
+		"col_security": "Sécurité",
+		"col_media": "Médias",
+		"col_support": "Assistance"
 	},
 	"glossary": {
 		"active_key": {

@@ -1821,11 +1821,9 @@
 		"dismiss_aria": "Diese Anleitung schließen"
 	},
 	"footer": {
-		"tagline": "Von Mensch zu Mensch. Privat. Deins.",
 		"plan": "Plan",
 		"source": "Quellcode",
 		"security": "Sicherheit",
-		"reachable_via": "Auch erreichbar über",
 		"tor": "Tor",
 		"lokinet": "Lokinet",
 		"nostr": "Nostr",
@@ -1858,7 +1856,12 @@
 		"stats_title": "Aggregierte Netzwerkstatistiken in Echtzeit",
 		"contact": "Kontakt",
 		"globe": "Website",
-		"play": "Streaming"
+		"play": "Streaming",
+		"col_federation": "Föderation",
+		"col_resources": "Ressourcen",
+		"col_security": "Sicherheit",
+		"col_media": "Medien",
+		"col_support": "Support"
 	},
 	"glossary": {
 		"active_key": {

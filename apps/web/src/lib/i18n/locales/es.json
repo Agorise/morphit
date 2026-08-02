@@ -1821,11 +1821,9 @@
 		"dismiss_aria": "Cerrar esta guía"
 	},
 	"footer": {
-		"tagline": "De persona a persona. Privado. Tuyo.",
 		"plan": "Plan",
 		"source": "Código",
 		"security": "Seguridad",
-		"reachable_via": "También accesible vía",
 		"tor": "Tor",
 		"lokinet": "Lokinet",
 		"nostr": "Nostr",
@@ -1858,7 +1856,12 @@
 		"stats_title": "Estadísticas agregadas de la red en vivo",
 		"contact": "Contacto",
 		"globe": "Sitio web",
-		"play": "Streaming"
+		"play": "Streaming",
+		"col_federation": "Federación",
+		"col_resources": "Recursos",
+		"col_security": "Seguridad",
+		"col_media": "Medios",
+		"col_support": "Soporte"
 	},
 	"glossary": {
 		"active_key": {
