@@ -93,6 +93,11 @@ check('passes DB secrets as vault_ vars', typeof hv.vault_postgres_indexer_passw
 // Without it, the inline `localhost,` inventory left localhost in `all`, NOT
 // `morphit_servers`, so the play matched 0 hosts and silently installed nothing.
 check('BOTH pin morphit_target_hosts=localhost (else the play matches 0 hosts)', hv.morphit_target_hosts === 'localhost' && vv.morphit_target_hosts === 'localhost');
+// The connection-safety companion: a grandma install runs locally as root (sudo),
+// where `ansible_user` is UNDEFINED. Without morphit_local_install=true the
+// playbook's safety assert evaluates `ansible_user != "root"` and RAISES on the
+// undefined var (output2.txt: "'ansible_user' is undefined"). Both modes are local.
+check('BOTH set morphit_local_install=true (so the connection-safety assert passes without an ansible_user)', hv.morphit_local_install === true && vv.morphit_local_install === true);
 check('defaults repo ref to main; honors an override (morphit_repo_ref — matches the playbook)', (buildAnsibleVars(home).morphit_repo_ref === 'main') && (buildAnsibleVars({ ...home, gitRef: 'v1.9.7' }).morphit_repo_ref === 'v1.9.7'));
 check('BunkerWeb can be turned off explicitly', buildAnsibleVars({ ...vps, enableBunkerweb: false }).enable_bunkerweb === false);
 

@@ -89,10 +89,19 @@ async function realEnsureAnsible(ansibleDir: string): Promise<boolean> {
 	}
 	return true;
 }
+// The LOCAL grandma run inherits the parent env plus one addition: silence
+// Ansible's "discovered Python interpreter at /usr/bin/pythonX.Y ... future
+// installation could change the meaning" notice.  `auto_silent` still
+// auto-discovers the interpreter — it just doesn't print a scary WARNING on a
+// home operator's screen (there is exactly one Python here, and it isn't moving).
+function localAnsibleEnv(): NodeJS.ProcessEnv {
+	return { ...process.env, ANSIBLE_PYTHON_INTERPRETER: 'auto_silent' };
+}
+
 async function realSpawn(argv: readonly string[]): Promise<number> {
 	const [cmd, ...args] = argv;
 	if (cmd === undefined) return 1;
-	const r = spawnSync(cmd, args, { stdio: 'inherit' });
+	const r = spawnSync(cmd, args, { stdio: 'inherit', env: localAnsibleEnv() });
 	return r.status ?? 1;
 }
 /** Resolve how many hosts the playbook's pattern matches WITHOUT running it
@@ -102,7 +111,7 @@ async function realSpawn(argv: readonly string[]): Promise<number> {
 function realProbeHostCount(argv: readonly string[]): number {
 	const [cmd, ...args] = argv;
 	if (cmd === undefined) return 0;
-	const r = spawnSync(cmd, args, { encoding: 'utf8' });
+	const r = spawnSync(cmd, args, { encoding: 'utf8', env: localAnsibleEnv() });
 	const out = `${r.stdout ?? ''}\n${r.stderr ?? ''}`;
 	let max = 0;
 	for (const m of out.matchAll(/hosts \((\d+)\):/g)) max = Math.max(max, Number(m[1]));

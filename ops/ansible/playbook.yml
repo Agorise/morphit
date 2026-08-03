@@ -85,7 +85,13 @@
     - name: Verify the connection is safe (non-root over SSH, OR a local install)
       ansible.builtin.assert:
         that:
-          - ansible_user != "root" or (morphit_local_install | default(false) | bool)
+          # Order matters: check the local-install flag FIRST so a local install
+          # short-circuits before `ansible_user` is ever evaluated.  On a local
+          # connection `ansible_user` is undefined, and `undefined != "root"`
+          # RAISES (Ansible undefined-var error) rather than returning true — so
+          # it must never be the left operand, and it is `default("")`-guarded as
+          # belt-and-suspenders for any remote path that leaves it unset.
+          - (morphit_local_install | default(false) | bool) or (ansible_user | default("") != "root")
         fail_msg: >
           For a REMOTE install, connect with a non-root sudo-capable user — the
           hardening role disables root SSH, so connected as root you'd lock

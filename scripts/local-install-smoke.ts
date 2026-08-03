@@ -45,9 +45,25 @@ const noComments = (s: string): string =>
 const pb = noComments(playbook);
 const cb = noComments(cloneBuild);
 
-// 1. root allowed for a local install.
-check('pre-flight allows root when morphit_local_install is set', /ansible_user\s*!=\s*"root"\s*or\s*\(?\s*morphit_local_install/.test(pb));
-check('pre-flight still requires non-root in general (remote SSH safety kept)', /ansible_user\s*!=\s*"root"/.test(pb));
+// 1. Connection-safety pre-flight, checked by INTENT (not by a fixed operand
+//    order — the old regex here REQUIRED `ansible_user != "root" or (...)`, i.e.
+//    it enforced the very ordering that made a local install crash with
+//    "'ansible_user' is undefined", because `ansible_user != "root"` was
+//    evaluated first and RAISES on the undefined var before the `or` could
+//    rescue it — output2.txt).
+const safetyAssert =
+	pb.match(/Verify the connection is safe[\s\S]*?that:\s*\n\s*-\s*([^\n]+)/)?.[1] ?? '';
+// (a) still recognises a local install as safe...
+check('pre-flight has a morphit_local_install escape (local install allowed)', /morphit_local_install/.test(safetyAssert));
+// (b) ...and still blocks root over remote SSH.
+check('pre-flight still blocks root over SSH (ansible_user compared to "root")', /ansible_user[\s\S]*!=\s*"root"/.test(safetyAssert));
+// (c) THE REGRESSION GUARD: the assert must not be able to raise on an undefined
+//     `ansible_user`. Either the local-install flag is the FIRST operand (so a
+//     local install short-circuits before ansible_user is touched) OR
+//     ansible_user is `default(...)`-guarded. Require at least one.
+const localFirst = /^\s*\(?\s*morphit_local_install/.test(safetyAssert);
+const ansibleUserGuarded = /ansible_user\s*\|\s*default\(/.test(safetyAssert);
+check('pre-flight cannot raise on an undefined ansible_user (local-first OR default-guarded)', localFirst || ansibleUserGuarded);
 
 // 2. local-source deploy (the tarball is enough).
 check('git clone is GATED to the no-local-source case', /morphit_local_source_path[^\n]*length\s*==\s*0/.test(cb));
