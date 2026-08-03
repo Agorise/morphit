@@ -209,6 +209,37 @@ results.push({
 			: `orphan role dirs: ${orphans.join(', ')}`
 });
 
+// ─── Scenario 7: every system user's LITERAL primary group is created ──
+// A `ansible.builtin.user` task with `group: <literal>` fails at RUNTIME with
+// "Group <name> does not exist" unless a `ansible.builtin.group` task creates
+// it first.  cp634: morphit-mcp had the user but not the group — the sandbox
+// can't catch this class of bug because it never creates real system accounts,
+// so this static pairing check stands in for it.
+const baseTasksSrc = readFileSync(join(ROLES_DIR, 'base', 'tasks', 'main.yml'), 'utf-8');
+const baseBlocks = baseTasksSrc.split(/\n- /);
+const strip = (s: string): string => s.trim().replace(/^["']|["']$/g, '');
+const createdGroups = new Set<string>();
+for (const b of baseBlocks) {
+	if (!/ansible\.builtin\.group:/.test(b)) continue;
+	const m = b.match(/\n\s*name:\s*(.+)/);
+	if (m) createdGroups.add(strip(m[1]));
+}
+const literalUserGroups: string[] = [];
+for (const b of baseBlocks) {
+	if (!/ansible\.builtin\.user:/.test(b)) continue;
+	const m = b.match(/\n\s*group:\s*(.+)/); // primary group (not the plural `groups:`)
+	if (m) {
+		const g = strip(m[1]);
+		if (!g.includes('{')) literalUserGroups.push(g); // skip {{ var }} groups
+	}
+}
+const uncreatedGroups = literalUserGroups.filter((g) => !createdGroups.has(g));
+results.push({
+	name: 'every system user\'s literal primary group is created by a group task (no runtime "Group X does not exist")',
+	ok: uncreatedGroups.length === 0,
+	detail: uncreatedGroups.length === 0 ? undefined : `user primary group(s) never created: ${uncreatedGroups.join(', ')}`
+});
+
 // ─── Report ──
 console.log(`ansible structural smoke: ${results.length} scenarios\n`);
 let failed = 0;
