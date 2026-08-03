@@ -185,6 +185,13 @@ export function buildAnsibleVars(inputs: AnsibleInstallInputs): Record<string, u
 		// install and the documented remote `[morphit_servers]` inventory (which just
 		// omits this var and gets the default).
 		morphit_target_hosts: 'localhost',
+		// A grandma install ALWAYS runs against localhost over connection=local
+		// (`morphit-ops install` configures the very box it runs on), so tell the
+		// playbook's connection-safety assert this is a local install — running as
+		// root via sudo is fine here (there is no SSH session to lock out). The
+		// documented remote `[morphit_servers]` inventory omits this var and gets
+		// the group_vars default (false), so the root-over-SSH guard still bites.
+		morphit_local_install: true,
 		// The relay account IS the operator account (see relay.env.j2); the
 		// wizard-written keystore path + the operator's fees account:
 		morphit_relay_keystore_path: inputs.keystorePath,
