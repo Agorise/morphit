@@ -124,7 +124,7 @@ When it asks, choose **"Full guided install."** That's the whole job: Morphit se
 
 When it finishes, your node is installed and running — HTTPS, firewall, Tor/I2P and all. There's nothing more to switch on; skip straight to **§8 (register as an operator)**.
 
-You only need the release you downloaded: the guided installer deploys exactly those files, so "just the tarball" really is enough.
+You only need the release you downloaded — the guided installer deploys exactly those files, so "just the tarball" really is enough. What you download is Morphit's **source** (the code itself — a few tens of megabytes); it deliberately does **not** bundle the software libraries. The very first thing `morphit-setup.sh` does is fetch those with `npm install` — a few hundred megabytes. That step is normal (you'll see "Installing Morphit's libraries…") and can take a few minutes on a slow connection, so let it finish before the wizard appears.
 
 > **Prefer to do it by hand?** Two advanced install paths — running the Ansible playbook yourself, and building from source with "Configure only" (you install Node.js, PostgreSQL and nginx) — live in `OPERATIONS.md` (§49). This guide stays on the one-command path.
 

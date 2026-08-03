@@ -115,11 +115,20 @@
     state: present
 
 # cp167 — MCP server (ops/systemd/morphit-mcp.service).  Same shape
-# as morphit-relay: dedicated system user, no shell, no home, member
-# of morphit_service_group so it can read /etc/morphit/*.env.  The
-# MCP server holds no keys (it's read-only over the indexer's
+# as morphit-relay: dedicated system group + user, no shell, no home,
+# member of morphit_service_group so it can read /etc/morphit/*.env.
+# The MCP server holds no keys (it's read-only over the indexer's
 # orderbook) so the user needs no privileged group memberships
 # beyond config-file read access.
+# cp634 — the group MUST be created before the user: the user task sets
+# `group: morphit-mcp` as its PRIMARY group, and Ansible's user module
+# fails ("Group morphit-mcp does not exist") if it isn't there yet — the
+# morphit-relay pair above has both halves; this one was missing the group.
+- name: Create morphit-mcp system group
+  ansible.builtin.group:
+    name: morphit-mcp
+    system: true
+
 - name: Create morphit-mcp system user
   ansible.builtin.user:
     name: morphit-mcp
