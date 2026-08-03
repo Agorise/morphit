@@ -240,6 +240,31 @@ results.push({
 	detail: uncreatedGroups.length === 0 ? undefined : `user primary group(s) never created: ${uncreatedGroups.join(', ')}`
 });
 
+// ─── Scenario 8: no BARE connection-var interpolation in any role file ──
+// `{{ ansible_user }}` (and other connection vars) are UNDEFINED on a local
+// install and crash the render — even inside a `#`-commented line, because
+// Jinja still evaluates `{{ }}` regardless of config-comment syntax.  cp633
+// hit this in the connection-safety assert; cp635 hit it in the hardening sshd
+// template (a scan of only when:/assert: missed it).  Every interpolation of a
+// connection var in a role's tasks/templates/handlers/vars must be
+// `| default(...)`-guarded.
+const connVarRe = /\{\{[^}]*\b(ansible_user|ansible_host|ansible_port|ansible_ssh_host|ansible_ssh_user|ansible_ssh_port)\b[^}]*\}\}/g;
+const allRoleFiles = readdirSync(ROLES_DIR, { recursive: true })
+	.filter((f): f is string => typeof f === 'string' && (f.endsWith('.yml') || f.endsWith('.j2')))
+	.map((f) => join(ROLES_DIR, f));
+const bareConnVars: string[] = [];
+for (const f of allRoleFiles) {
+	const fsrc = readFileSync(f, 'utf-8');
+	for (const m of fsrc.matchAll(connVarRe)) {
+		if (!/\|\s*default/.test(m[0])) bareConnVars.push(`${f.replace(REPO_ROOT + '/', '')} → ${m[0]}`);
+	}
+}
+results.push({
+	name: 'no bare (unguarded) connection-var interpolation in roles — templates included (undefined on local install)',
+	ok: bareConnVars.length === 0,
+	detail: bareConnVars.length === 0 ? undefined : `bare: ${bareConnVars.join(' | ')}`
+});
+
 // ─── Report ──
 console.log(`ansible structural smoke: ${results.length} scenarios\n`);
 let failed = 0;

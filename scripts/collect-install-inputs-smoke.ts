@@ -64,13 +64,16 @@ async function main(): Promise<void> {
 	check('ddns: ACCEPTS missing {ip} (provider auto-detects, e.g. Namecheap)', validateDdnsUrl('https://njal.la/update/?a=1.2.3.4') === true);
 	check('ddns: rejects non-https', validateDdnsUrl('http://njal.la/update/?a={ip}') !== true);
 
-	// Matrix account (optional contact link on the /instances card).
-	check('matrix: empty is OK (optional \u2014 operator may have none yet)', validateMatrixAddress('') === true);
-	check('matrix: accepts @you:matrix.org', validateMatrixAddress('@you:matrix.org') === true);
-	check('matrix: rejects a bare handle (no @)', validateMatrixAddress('you:matrix.org') !== true);
+	// Matrix contact (optional link on the /instances card) — account OR room.
+	check('matrix: empty is OK (optional \u2014 operator may want none)', validateMatrixAddress('') === true);
+	check('matrix: accepts @you:matrix.org (account)', validateMatrixAddress('@you:matrix.org') === true);
+	check('matrix: accepts #room:matrix.org (room)', validateMatrixAddress('#support:matrix.org') === true);
+	check('matrix: rejects a bare handle (no @ or #)', validateMatrixAddress('you:matrix.org') !== true);
 	check('matrix: rejects @you (no server)', validateMatrixAddress('@you') !== true);
+	check('matrix: rejects #room (no server)', validateMatrixAddress('#support') !== true);
 	check('matrix: rejects a server with no TLD', validateMatrixAddress('@you:localhost') !== true);
-	check('matrix: converts to a matrix.to URL', matrixToContactUrl('@you:matrix.org') === 'https://matrix.to/#/@you:matrix.org');
+	check('matrix: account \u2192 matrix.to URL', matrixToContactUrl('@you:matrix.org') === 'https://matrix.to/#/@you:matrix.org');
+	check('matrix: room \u2192 matrix.to URL (keeps the #)', matrixToContactUrl('#support:matrix.org') === 'https://matrix.to/#/#support:matrix.org');
 
 	const known = { operatorAccount: 'my-operator', operatorTag: 'myoperator', feesAccount: 'my-operator', keystorePath: '/etc/morphit/relay.keystore' };
 

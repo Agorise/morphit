@@ -108,14 +108,16 @@ export async function collectInstallInputs(
 	if (instanceTagline.length > 200) instanceTagline = instanceTagline.slice(0, 200);
 
 	print(
-		'\n  Optionally, your Matrix account \u2014 it powers the "Contact this operator"\n' +
-			'  link on your /instances card, so traders can reach you. Enter it as\n' +
-			'  @you:server (e.g. @you:matrix.org). Press Enter to skip if you don\u2019t have\n' +
-			'  one yet \u2014 the link is simply omitted until you add one.\n'
+		'\n  Optionally, a Matrix contact \u2014 it powers the "Contact this operator"\n' +
+			'  link on your /instances card, so traders can reach you. Use EITHER your\n' +
+			'  account  @you:server  (e.g. @you:matrix.org) OR a room  #room:server\n' +
+			'  (e.g. #support:matrix.org) if you\u2019d rather send people to a channel than\n' +
+			'  a personal account. Press Enter to skip \u2014 the link is simply omitted\n' +
+			'  until you add one.\n'
 	);
 	const matrixAddress = await askValidated(
-		'Your Matrix account (optional \u2014 @you:matrix.org)',
-		['@you:matrix.org', '@sally:example.org'],
+		'Your Matrix account or room (optional \u2014 @you:matrix.org or #room:matrix.org)',
+		['@you:matrix.org', '#support:example.org'],
 		validateMatrixAddress,
 		req
 	);

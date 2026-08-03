@@ -113,16 +113,20 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 		return 1;
 	}
 
-	// A glance-able confirmation of what actually came up — asked for by a live
-	// operator who (reasonably) didn't want to trust a bare "installed" line.
-	const summaryRows = collectInstallSummary({
+	// A glance-able confirmation of what actually came up + is healthy — asked for
+	// by a live operator who (reasonably) didn't want to trust a bare "installed"
+	// line. Async: several rows are LIVE (indexer/relay /v1/health, on-chain balance).
+	const summaryRows = await collectInstallSummary({
 		domain: inputs.domain,
 		mode: inputs.mode,
 		enableBunkerweb: inputs.enableBunkerweb ?? true,
 		// The playbook deploys to morphit_repo_path (group_vars default
 		// /opt/morphit); the front-end build/ dir under it is what BunkerWeb
-		// serves, so canary.txt + pgp_keys.asc are probed there.
+		// serves, so canary.txt + pgp_keys.asc + SEO surfaces are probed there.
 		repoPath: '/opt/morphit',
+		// The relay account IS the operator account — used for the on-chain
+		// funding check (relay pays ~100 BLURT per signup).
+		relayAccount: relay.name,
 		// Show a ✓ for the "Contact this operator" link when a Matrix address
 		// was given (the wizard stored it as contactUrl).
 		contactConfigured: !!inputs.contactUrl
