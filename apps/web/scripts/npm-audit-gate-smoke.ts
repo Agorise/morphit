@@ -165,9 +165,10 @@ const ALLOWLIST: readonly AllowlistEntry[] = [
 		maxSeverity: 'high',
 		acceptedTitles: [
 			'brace-expansion: DoS via exponential-time expansion of consecutive non-expanding {} groups',
-			'brace-expansion: DoS via unbounded expansion length causing an out-of-memory process crash'
+			'brace-expansion: DoS via unbounded expansion length causing an out-of-memory process crash',
+			'brace-expansion: DoS via unbounded intermediate arrays, bypassing the CVE-2026-14257 mitigation'
 		],
-		lastReviewed: '2026-07-24',
+		lastReviewed: '2026-08-03',
 		rationale:
 			'Build/dev-only transitive dependency (reached via minimatch/glob under vite, ' +
 			'rollup, eslint, tailwind, and the test tooling — never shipped to operators; ' +
@@ -183,15 +184,19 @@ const ALLOWLIST: readonly AllowlistEntry[] = [
 			'source of truth (no `npm audit fix`). Revisit if a patched brace-expansion ' +
 			'lands non-breakingly in range for all consumers, or if any runtime code ever ' +
 			'brace-expands user-supplied input. First reviewed cp509 (2026-07-20); ' +
-			'GHSA-mh99 added + re-reviewed at the v1.8.15 cut (2026-07-24).'
+			'GHSA-mh99 added + re-reviewed at the v1.8.15 cut (2026-07-24). Third advisory ' +
+			'(unbounded intermediate arrays bypassing the earlier CVE-2026-14257 length cap) ' +
+			're-reviewed at the v1.9.20 cut (2026-08-03): same build-time-only DoS class, ' +
+			'conclusion unchanged.'
 	},
 	{
 		package: 'postcss',
 		maxSeverity: 'high',
 		acceptedTitles: [
-			'PostCSS: Path Traversal in Previous Source Map Auto-Loading (sourceMappingURL) leads to Arbitrary .map File Disclosure'
+			'PostCSS: Path Traversal in Previous Source Map Auto-Loading (sourceMappingURL) leads to Arbitrary .map File Disclosure',
+			'PostCSS: incomplete fix of GHSA-6g55-p6wh-862q — attacker-controlled sourceMappingURL reads arbitrary .map files when `from` is unset'
 		],
-		lastReviewed: '2026-07-24',
+		lastReviewed: '2026-08-03',
 		rationale:
 			'postcss@8.5.14 is reached two ways, neither of which reaches the vulnerable ' +
 			'path. (1) Web BUILD tooling — autoprefixer, tailwindcss, eslint-plugin-svelte, ' +
@@ -209,7 +214,10 @@ const ALLOWLIST: readonly AllowlistEntry[] = [
 			'every consumer without churning the lockfile (the tested source of truth — no ' +
 			'`npm audit fix`). Revisit when a fixed postcss lands non-breakingly across all ' +
 			'consumers, or if any runtime code processes untrusted CSS with previous-source-map ' +
-			'loading enabled. Reviewed at the v1.8.15 cut (2026-07-24).'
+			'loading enabled. Second advisory (the earlier sourceMappingURL fix was incomplete — ' +
+			'still reads arbitrary .map files when `from` is unset) re-reviewed at the v1.9.20 ' +
+			'cut (2026-08-03): same map-disclosure class, same two non-reaching consumers, ' +
+			'conclusion unchanged.'
 	},
 	{
 		package: 'js-yaml',
@@ -233,6 +241,95 @@ const ALLOWLIST: readonly AllowlistEntry[] = [
 			'tested source of truth (no `npm audit fix`). Revisit if a patched js-yaml ' +
 			'(>=4.3.0) lands non-breakingly in range under eslint, or if any runtime code ' +
 			'ever parses user-supplied YAML. Reviewed cp511 (2026-07-20).'
+	},
+	{
+		package: 'fast-uri',
+		maxSeverity: 'high',
+		acceptedTitles: [
+			'fast-uri vulnerable to host confusion via backslash authority introducer'
+		],
+		lastReviewed: '2026-08-03',
+		rationale:
+			'Transitive dependency of ajv (a JSON Schema validator), already override- ' +
+			'pinned to ^3.1.4. ajv uses fast-uri to parse the $id/$ref/$schema URIs that ' +
+			'appear IN a schema. The advisory (host confusion via a backslash authority ' +
+			'introducer) matters only when fast-uri parses an ATTACKER-controlled URI. ' +
+			'Every schema Morphit compiles is developer-authored with fixed, compile-time ' +
+			'$id/$ref values, and ajv resolves those refs WITHIN the schema document, ' +
+			'never over the network or against a host derived from user input — so no ' +
+			'attacker-controlled URI reaches fast-uri and the host-confusion parse has no ' +
+			'security-relevant effect here. The request DATA being validated never flows ' +
+			'into fast-uri (it parses schema URIs, not the instance). Already at the ' +
+			'latest 3.x via the override; the lockfile is the tested source of truth (no ' +
+			'npm audit fix). Revisit if any runtime code parses untrusted URIs through ' +
+			'fast-uri or a patched fast-uri lands in range. Reviewed at the v1.9.20 cut ' +
+			'(2026-08-03).'
+	},
+	{
+		package: 'ip-address',
+		maxSeverity: 'high',
+		acceptedTitles: [
+			'ip-address: Address4 decodes leading-zero octets as decimal while resolvers decode them as octal, allowing SSRF and trust-boundary bypass',
+			'ip-address: a CIDR suffix on the parsed address suppresses special-use classification and can bypass SSRF and trust-boundary checks',
+			'ip-address: misclassification of IPv4-mapped/NAT64 IPv6 addresses can bypass SSRF and trust-boundary checks'
+		],
+		lastReviewed: '2026-08-03',
+		rationale:
+			'Transitive dependency reached ONLY by the read-only MCP server (morphit-mcp ' +
+			'→ @modelcontextprotocol/sdk → express-rate-limit → ip-address). express- ' +
+			'rate-limit uses ip-address to normalize the CLIENT IP into a rate-limit ' +
+			'bucket key. All three advisories are IP-misclassification issues the text ' +
+			'frames as SSRF and trust-boundary bypass, but that framing does not apply to ' +
+			'THIS consumer: express-rate-limit makes no outbound request from the parsed ' +
+			'IP and takes no trust decision from it — it only buckets requests for rate ' +
+			'limiting. The residual risk is therefore narrower than SSRF: a client ' +
+			'crafting an ambiguous representation (a leading-zero octet decoded as ' +
+			'decimal, a CIDR suffix suppressing special-use classification, or an ' +
+			'IPv4-mapped/NAT64 address) could land in a different rate-limit bucket than ' +
+			'intended — i.e. potential rate-limit EVASION. The MCP surface is a read-only ' +
+			'orderbook API (no writes, no funds, no personal data), so evasion there is ' +
+			'low-impact and further bounded by the operator\'s own reverse proxy. Morphit ' +
+			'does NOT use ip-address for any SSRF or trust-boundary decision of its own — ' +
+			'its outbound-request SSRF defense is the DNS-pinned undici Agent in ' +
+			'federationProbe.ts, which does not involve ip-address. Revisit if a patched ' +
+			'ip-address lands under express-rate-limit or ip-address is ever used for an ' +
+			'outbound/trust decision. Reviewed at the v1.9.20 cut (2026-08-03).'
+	},
+	{
+		package: 'undici',
+		maxSeverity: 'high',
+		acceptedTitles: [
+			'undici vulnerable to downstream response desynchronization via retry interceptor',
+			'undici vulnerable to cross-user information disclosure and parse-time crash via degenerate private cache directives',
+			'undici vulnerable to CRLF Injection via blob-like body \'type\' property',
+			'undici vulnerable to cross-user information disclosure via whitespace around equals in Cache-Control directives',
+			'undici vulnerable to cookie attribute injection via unsanitized domain and unparsed setCookie fields'
+		],
+		lastReviewed: '2026-08-03',
+		rationale:
+			'Runtime dependency (override-pinned to ^7.28.0), used by the indexer and ' +
+			'relay for OUTBOUND HTTP only — Blurt RPC, FX/price feeds, and federation ' +
+			'peer probes via Node\'s built-in fetch. Morphit imports from undici ONLY the ' +
+			'Agent class (federationProbe.ts), used to build a dispatcher that PINS the ' +
+			'connect-time DNS lookup to a pre-resolved IP — a TOCTOU/SSRF DEFENSE, not a ' +
+			'vulnerable feature — plus a custom User-Agent header (userAgent.ts). Each of ' +
+			'the five advisories requires an undici feature Morphit does not use: (1) ' +
+			'downstream response desynchronization needs the RETRY interceptor / ' +
+			'RetryAgent — not used (no RetryAgent or interceptors.retry anywhere in ' +
+			'source); (2) and (4) cross-user disclosure via degenerate / whitespace ' +
+			'Cache-Control directives need undici\'s CACHE interceptor — not used; (3) ' +
+			'CRLF injection via a blob-like body type needs sending a Blob-like request ' +
+			'body — Morphit sends only JSON/string bodies to RPC and read endpoints, ' +
+			'never a Blob; (5) cookie attribute injection needs undici\'s cookie handling ' +
+			'(setCookie/getSetCookies) — these RPC/explorer/peer calls are cookieless, ' +
+			'sending and reading none. So none of the five vulnerable code paths is ' +
+			'reachable from Morphit\'s fetch-with-DNS-pinning usage. A newer 7.29.0 ' +
+			'exists but is not yet confirmed to carry all five fixes, and bumping the ' +
+			'runtime HTTP client is deferred to a dedicated review rather than folded ' +
+			'into this release; the lockfile is the tested source of truth (no npm audit ' +
+			'fix). Revisit if Morphit adopts undici\'s retry, cache, or cookie features ' +
+			'or Blob request bodies, or when a patched undici covering all five lands in ' +
+			'range. Reviewed at the v1.9.20 cut (2026-08-03).'
 	}
 ];
 
