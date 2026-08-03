@@ -9,15 +9,21 @@
 # user creation in idempotent Ansible form.
 
 ---
+# On a LOCAL install inventory_hostname is 'localhost' (the inline `-i localhost,`
+# inventory), so these would rename the operator's own machine to "localhost" —
+# skip them locally and leave the box's existing hostname alone.  On a REMOTE
+# install inventory_hostname is the real host name from the inventory, so they run.
 - name: Set hostname
   ansible.builtin.hostname:
     name: "{{ inventory_hostname }}"
+  when: not (morphit_local_install | default(false) | bool)
 
 - name: Ensure /etc/hosts has the hostname
   ansible.builtin.lineinfile:
     path: /etc/hosts
     regexp: '^127\.0\.1\.1\s'
     line: "127.0.1.1 {{ inventory_hostname }}"
+  when: not (morphit_local_install | default(false) | bool)
 
 - name: Set timezone to UTC
   community.general.timezone:

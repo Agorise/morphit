@@ -108,28 +108,36 @@ export function validateInstanceTitle(title: string): true | string {
 	return true;
 }
 
-/** Validate an optional Matrix account (an MXID, e.g. @you:matrix.org).  An EMPTY
- *  value is VALID — the operator may not have one yet.  A non-empty value must
- *  look like a real MXID (@localpart:domain.tld) so a typo can't produce a dead
- *  "Contact this operator" link.  PURE. */
+/** Validate an optional Matrix contact — EITHER an account (an MXID, e.g.
+ *  @you:matrix.org) OR a room (an alias, e.g. #room:matrix.org).  An EMPTY value
+ *  is VALID — the operator may not want one.  A non-empty value must look like a
+ *  real account or room (@localpart:domain.tld / #alias:domain.tld) so a typo
+ *  can't produce a dead "Contact this operator" link.  Letting operators point at
+ *  a ROOM means the link can open a shared support channel rather than a personal
+ *  account, if that is what they prefer.  PURE. */
 export function validateMatrixAddress(raw: string): true | string {
 	const v = raw.trim();
 	if (v.length === 0) return true; // optional — Enter to skip
-	// @localpart:server, where server is a domain (dot + TLD). Deliberately lenient
-	// on the localpart (Matrix allows ._=-/+ etc.), strict on the overall shape.
-	if (!/^@[^\s:@/]+:[a-z0-9.-]+\.[a-z]{2,}$/i.test(v)) {
-		return 'is not a Matrix account \u2014 it should look like @you:matrix.org';
+	// @localpart:server (account) OR #alias:server (room), where server is a domain
+	// (dot + TLD). Deliberately lenient on the localpart/alias (Matrix allows
+	// ._=-/+ etc.), strict on the overall shape. The leading sigil picks which:
+	// '@' = a person to DM, '#' = a room to join.
+	if (!/^[@#][^\s:@/]+:[a-z0-9.-]+\.[a-z]{2,}$/i.test(v)) {
+		return 'is not a Matrix account or room \u2014 it should look like @you:matrix.org or #room:matrix.org';
 	}
 	return true;
 }
 
-/** Turn a Matrix MXID into a universally-clickable contact URL.  matrix.to is the
- *  form Matrix itself recommends for sharing — it opens in any browser and lets
- *  the visitor pick their client, so the "Contact this operator" link works even
- *  where no matrix: handler is registered.  `safeContactUrl` accepts the https
- *  result.  Caller guarantees `mxid` already passed validateMatrixAddress.  PURE. */
-export function matrixToContactUrl(mxid: string): string {
-	return `https://matrix.to/#/${mxid.trim()}`;
+/** Turn a validated Matrix contact into a universally-clickable URL.  matrix.to is
+ *  the form Matrix itself recommends for sharing — it opens in any browser and
+ *  lets the visitor pick their client, so the "Contact this operator" link works
+ *  even where no matrix: handler is registered.  Works for BOTH an account
+ *  (@you:server → matrix.to/#/@you:server) and a room alias (#room:server →
+ *  matrix.to/#/#room:server); both are valid matrix.to targets.  `safeContactUrl`
+ *  accepts the https result.  Caller guarantees `address` already passed
+ *  validateMatrixAddress.  PURE. */
+export function matrixToContactUrl(address: string): string {
+	return `https://matrix.to/#/${address.trim()}`;
 }
 
 /** Validate the whole input set; returns human-readable problems (empty = ok).

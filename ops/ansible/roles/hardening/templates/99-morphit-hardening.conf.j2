@@ -39,5 +39,8 @@ IgnoreRhosts yes
 HostbasedAuthentication no
 
 # Restrict to the ansible-managed user(s) — operator sets this
-# explicitly to prevent surprises.
-# AllowUsers {{ ansible_user }}
+# explicitly to prevent surprises.  ansible_user is undefined on a
+# LOCAL install (no SSH session), so it's default-guarded to a
+# placeholder here — this line is commented out anyway, a hint for
+# the operator to uncomment + set to their real login user.
+# AllowUsers {{ ansible_user | default('your-login-user') }}

@@ -17,6 +17,17 @@
     state: present
     update_cache: true
 
+# The version-dir expressions below read `ansible_facts.packages` to find the
+# Ubuntu-shipped /etc/postgresql/<major>/main directory.  Normal fact-gathering
+# does NOT populate `ansible_facts.packages` — only package_facts does — so
+# WITHOUT this task every one of those expressions (including its own
+# `'postgresql' in ansible_facts.packages` guard) raised
+# "object of type 'dict' has no attribute 'packages'" and the install died the
+# moment it reached postgres.  cp635.
+- name: Gather installed-package facts (populates ansible_facts.packages)
+  ansible.builtin.package_facts:
+    manager: auto
+
 - name: Ensure postgresql listens on loopback only
   ansible.builtin.lineinfile:
     path: /etc/postgresql/{{ postgres_version_dir }}/main/postgresql.conf
