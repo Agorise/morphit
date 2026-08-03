@@ -5,3 +5,10 @@ build/
 build-manifest.sha256
 #   - on-chain morphit_release_v1 SRI hash manifest
 build-manifest.release.json
+# Vite/esbuild write these temp files next to vite.config.* whenever the config
+# is loaded (svelte-check, dev, build).  They bake in an ABSOLUTE path to the
+# config file — on a sandbox / CI box that can be a /home/<user> path, which the
+# no-sandbox-path-smoke (correctly) rejects as a leaked sandbox path.  Ephemeral;
+# never commit them.
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
