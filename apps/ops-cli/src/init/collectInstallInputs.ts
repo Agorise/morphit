@@ -149,6 +149,19 @@ export async function collectInstallInputs(
 		);
 	}
 
+	print(
+		'\n  Listing your instance on-chain adds it to the public federated directory,\n' +
+			'  so other people can find it and trade here. It is a one-time, permanent\n' +
+			'  on-chain action signed by your relay account. Morphit can do it for you\n' +
+			'  automatically the first time this box has a working internet connection\n' +
+			'  \u2014 handy if you are setting up somewhere with patchy service right now.\n'
+	);
+	const autoRegisterIdx = await askChoice('List this instance on-chain automatically once it is online?', [
+		'Yes \u2014 register automatically when the box first sees the internet',
+		'No \u2014 I\u2019ll run `morphit-ops register` myself later'
+	]);
+	const autoRegister = autoRegisterIdx === 0;
+
 	// Ansible provisions the DB → generate two INDEPENDENT strong passwords.
 	// crypto RNG makes a collision astronomically impossible, but loop to be
 	// certain they differ (validateInstallInputs also enforces it).
@@ -167,6 +180,7 @@ export async function collectInstallInputs(
 		feesAccount: known.feesAccount,
 		keystorePath: known.keystorePath,
 		acmeEmail,
+		autoRegister,
 		indexerDbPassword,
 		relayDbPassword,
 		ddnsUpdateUrl

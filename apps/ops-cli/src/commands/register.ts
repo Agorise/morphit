@@ -42,7 +42,13 @@ export interface RegisterCtx {
 	readonly positional: readonly string[];
 }
 
-export async function runRegister(_ctx: RegisterCtx): Promise<number> {
+export async function runRegister(ctx: RegisterCtx): Promise<number> {
+	// --non-interactive (alias --yes) runs unattended: it skips the confirm and
+	// unlocks an encrypted relay key from the relay's passphrase file the same way
+	// the relay service does — so morphit-first-online can auto-register with no
+	// human present the moment the box comes online.
+	const nonInteractive =
+		ctx.flags['non-interactive'] !== undefined || ctx.flags['yes'] !== undefined;
 	// Load the instance env so MORPHIT_RELAY_ACCOUNT / posting-key file are
 	// available on a systemd deploy (the unit sources morphit.env, the
 	// operator's interactive shell does not). OS env wins; best-effort.
@@ -116,13 +122,15 @@ export async function runRegister(_ctx: RegisterCtx): Promise<number> {
 	}
 
 	// ─── 2. Confirm ────
-	const ok = await askYesNo(
-		'Publish this registration on-chain now? This is permanent — register ops cannot be reversed (only superseded by an update op when that ships)',
-		false
-	);
-	if (!ok) {
-		console.log('Aborted.  Re-run when ready.');
-		return 0;
+	if (!nonInteractive) {
+		const ok = await askYesNo(
+			'Publish this registration on-chain now? This is permanent — register ops cannot be reversed (only superseded by an update op when that ships)',
+			false
+		);
+		if (!ok) {
+			console.log('Aborted.  Re-run when ready.');
+			return 0;
+		}
 	}
 
 	// ─── 3-5. Load key → preview → broadcast, with a fee-aware retry
@@ -145,7 +153,7 @@ export async function runRegister(_ctx: RegisterCtx): Promise<number> {
 		// Load the key for THIS attempt.
 		let wif: string;
 		try {
-			wif = await loadKeyWif(keyFile);
+			wif = await loadKeyWif(keyFile, nonInteractive);
 		} catch (err) {
 			console.log(`✗ Failed to load relay account key: ${sanitizeForTerm(errMsg(err))}`);
 			return 1;
@@ -348,7 +356,7 @@ function readEnv(): ValidEnv | { error: string } {
 	};
 }
 
-async function loadKeyWif(keyFile: string): Promise<string> {
+async function loadKeyWif(keyFile: string, nonInteractive = false): Promise<string> {
 	const raw = readFileSync(keyFile, 'utf8').trim();
 	// Heuristic: encrypted envelopes are JSON.  Plaintext WIFs start
 	// with '5'.  This matches the relay's looksLikeEnvelope check.
@@ -357,9 +365,30 @@ async function loadKeyWif(keyFile: string): Promise<string> {
 		return raw;
 	}
 	const envelope = JSON.parse(raw);
-	const passphrase = await askPassword('Unlock passphrase');
-	if (passphrase.length === 0) {
-		throw new Error('passphrase required to unlock encrypted keystore');
+	let passphrase: string;
+	if (nonInteractive) {
+		// Unattended unlock — read the passphrase from the SAME credential file the
+		// relay service uses to unlock this key at startup (MORPHIT_RELAY_ACTIVE_KEY_-
+		// PASSPHRASE_FILE).  Reading a file (not an env var) keeps the secret out of
+		// /proc/<pid>/environ, exactly as the relay does.  If it isn't set, the key
+		// can't be unlocked with no human — say so clearly and stop.
+		const passFile = process.env.MORPHIT_RELAY_ACTIVE_KEY_PASSPHRASE_FILE;
+		if (!passFile) {
+			throw new Error(
+				'encrypted relay key, but MORPHIT_RELAY_ACTIVE_KEY_PASSPHRASE_FILE is not set — ' +
+					'cannot unlock unattended.  Register by hand with `morphit-ops register`, or point that ' +
+					'variable at the passphrase file the relay uses.'
+			);
+		}
+		passphrase = readFileSync(passFile, 'utf8').replace(/\r?\n$/, '');
+		if (passphrase.length === 0) {
+			throw new Error(`passphrase file ${JSON.stringify(passFile)} is empty`);
+		}
+	} else {
+		passphrase = await askPassword('Unlock passphrase');
+		if (passphrase.length === 0) {
+			throw new Error('passphrase required to unlock encrypted keystore');
+		}
 	}
 	// Lazy import — relay's keyEnvelope module decrypts.
 	const { decryptEnvelope } = await import('../../../relay/src/crypto/keyEnvelope.ts');

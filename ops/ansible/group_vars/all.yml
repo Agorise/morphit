@@ -313,6 +313,12 @@ tls_acme_email: "operator@example.com"
 # deploy to verify the cert flow without burning prod rate limits.
 tls_use_staging: false
 
+# Auto-register this instance on-chain the first time the box sees the
+# internet (morphit-first-online).  Opt-in via the installer wizard; the
+# operator can always register by hand with `morphit-ops register` instead.
+# Default OFF — registering is a deliberate, permanent on-chain act.
+morphit_auto_register: false
+
 
 # ─── Tor onion (privacy by default) ──────────────────────────────
 # Every instance gets a basic v3 .onion (the wizard generates one and

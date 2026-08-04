@@ -32,6 +32,7 @@ const COLLECTIONS_REQ = join(ANSIBLE_ROOT, 'collections', 'requirements.yml');
 const ROLES_DIR = join(ANSIBLE_ROOT, 'roles');
 
 const REQUIRED_BASE_ROLES = [
+	'vendor',
 	'base',
 	'hardening',
 	'tls',
@@ -340,6 +341,79 @@ results.push({
 		name: 'every drop-in write into an /etc/**/*.d dir has a state=directory ensure (no "directory does not exist" on install)',
 		ok: unEnsuredDropins.length === 0,
 		detail: unEnsuredDropins.length === 0 ? undefined : unEnsuredDropins.join(' | ')
+	});
+}
+
+// ─── Scenario 11: first-online deferred-completion subsystem is fully wired ──
+// The offline appliance depends on this: the install finishes offline, then the
+// network-dependent tail (real TLS cert, Blurt RPC connect, opt-in on-chain
+// registration) is completed by morphit-first-online the moment the box first
+// sees the internet.  Verify the script + units exist AND are actually deployed
+// + enabled by the morphit role (a shipped-but-unwired unit would silently never
+// run — exactly the class of gap that has bitten this install before).
+{
+	const fo: string[] = [];
+	const script = join(REPO_ROOT, 'ops', 'first-online', 'morphit-first-online.sh');
+	const svc = join(REPO_ROOT, 'ops', 'systemd', 'morphit-first-online.service');
+	const tmr = join(REPO_ROOT, 'ops', 'systemd', 'morphit-first-online.timer');
+	if (!existsSync(script)) fo.push('ops/first-online/morphit-first-online.sh missing');
+	if (!existsSync(svc)) fo.push('morphit-first-online.service missing');
+	if (!existsSync(tmr)) fo.push('morphit-first-online.timer missing');
+	const morphitTasks = existsSync(join(ROLES_DIR, 'morphit', 'tasks', 'main.yml'))
+		? readFileSync(join(ROLES_DIR, 'morphit', 'tasks', 'main.yml'), 'utf-8')
+		: '';
+	if (!/morphit-first-online\.service/.test(morphitTasks) || !/morphit-first-online\.timer/.test(morphitTasks))
+		fo.push('first-online units not in the morphit role systemd install loop');
+	if (!/morphit-first-online\.sh/.test(morphitTasks)) fo.push('first-online script not deployed by the morphit role');
+	if (!/first-online\.env/.test(morphitTasks)) fo.push('first-online.env not deployed by the morphit role');
+	if (!/morphit-first-online\.timer/.test(morphitTasks) || !/state:\s*started/.test(morphitTasks))
+		fo.push('first-online timer not enabled+started');
+	const envTmpl = join(ROLES_DIR, 'morphit', 'templates', 'first-online.env.j2');
+	if (!existsSync(envTmpl)) fo.push('first-online.env.j2 template missing');
+	else if (!/MORPHIT_AUTO_REGISTER/.test(readFileSync(envTmpl, 'utf-8'))) fo.push('first-online.env.j2 missing MORPHIT_AUTO_REGISTER');
+	// The service must be triggered by the network coming up.
+	if (existsSync(svc) && !/WantedBy=network-online\.target/.test(readFileSync(svc, 'utf-8')))
+		fo.push('first-online.service not WantedBy=network-online.target');
+	results.push({
+		name: 'first-online deferred-completion subsystem is wired (script + units deployed + enabled by the morphit role)',
+		ok: fo.length === 0,
+		detail: fo.length === 0 ? undefined : fo.join(' | ')
+	});
+}
+
+// ─── Scenario 12: offline-appliance bundle wiring (dormant online, offline when bundled) ──
+// Everything that makes apt / Docker / Kubo / Node install with NO internet when a
+// self-contained bundle is present — each gated on the bundle so an ordinary
+// online install is untouched.  A gap here means "install completely offline"
+// silently doesn't, or (worse) the online path breaks.
+{
+	const ob: string[] = [];
+	const R = (p: string): string => join(ROLES_DIR, p);
+	const readIf = (p: string): string => (existsSync(p) ? readFileSync(p, 'utf-8') : '');
+	const vendor = readIf(R('vendor/tasks/main.yml'));
+	if (!vendor) ob.push('vendor role missing');
+	else {
+		if (!/vendor\/apt\/Packages\.gz/.test(vendor)) ob.push('vendor role does not detect vendor/apt');
+		if (!/apt\.conf\.d\/99-morphit-offline\.conf/.test(vendor)) ob.push('vendor role does not write the reversible apt override');
+		if (!/when:\s*morphit_vendor_apt\.stat\.exists/.test(vendor)) ob.push('vendor role apt override not gated on the bundle');
+	}
+	const pb = existsSync(PLAYBOOK) ? readFileSync(PLAYBOOK, 'utf-8') : '';
+	if (!/role:\s*vendor/.test(pb)) ob.push('vendor role not wired into the playbook');
+	else if (pb.indexOf('role: vendor') > pb.indexOf('role: base')) ob.push('vendor role must run BEFORE base (apt redirected before any install)');
+	const bw = readIf(R('bunkerweb/tasks/main.yml'));
+	if (!/vendor\/docker/.test(bw) || !/docker load/.test(bw)) ob.push('bunkerweb role does not load bundled Docker images');
+	const ipfs = readIf(R('ipfs/tasks/main.yml'));
+	if (!/vendor\/kubo/.test(ipfs)) ob.push('ipfs role does not use a bundled Kubo when present');
+	const nodejs = readIf(R('morphit/tasks/nodejs.yml'));
+	if (!/morphit_node_have/.test(nodejs)) ob.push('nodejs role does not skip NodeSource when Node is already present');
+	const foPath = join(REPO_ROOT, 'ops', 'first-online', 'morphit-first-online.sh');
+	const fo = existsSync(foPath) ? readFileSync(foPath, 'utf-8') : '';
+	if (!/99-morphit-offline\.conf/.test(fo)) ob.push('first-online does not restore normal apt (remove the offline override) when online');
+	if (!existsSync(join(REPO_ROOT, 'scripts', 'build-offline-bundle.sh'))) ob.push('scripts/build-offline-bundle.sh (the bundle recipe) missing');
+	results.push({
+		name: 'offline-appliance bundle wiring (apt/docker/kubo/node install offline when bundled; dormant online; apt restored when online)',
+		ok: ob.length === 0,
+		detail: ob.length === 0 ? undefined : ob.join(' | ')
 	});
 }
 

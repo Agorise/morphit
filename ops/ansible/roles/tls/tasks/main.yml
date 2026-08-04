@@ -26,6 +26,30 @@
   ansible.builtin.set_fact:
     tls_certbot_server: "{{ 'https://acme-staging-v02.api.letsencrypt.org/directory' if tls_use_staging else 'https://acme-v02.api.letsencrypt.org/directory' }}"
 
+- name: Probe whether Let's Encrypt is reachable (defer issuance to first-online if not)
+  # Any HTTP response from the ACME directory = we can reach it now.  A connection
+  # failure (offline / censored) leaves .status undefined → we skip issuance and let
+  # morphit-first-online obtain the cert automatically once the box has internet.
+  ansible.builtin.uri:
+    url: "{{ tls_certbot_server }}"
+    method: GET
+    timeout: 8
+  register: tls_acme_probe
+  failed_when: false
+  changed_when: false
+  when: not tls_cert_stat.stat.exists
+
+- name: Note that TLS issuance is deferred to first-online (Let's Encrypt unreachable now)
+  ansible.builtin.debug:
+    msg: >-
+      Let's Encrypt is not reachable right now, so the real certificate is DEFERRED.
+      BunkerWeb serves its self-signed fallback on the LAN, and morphit-first-online
+      obtains the Let's Encrypt certificate automatically the moment this box has
+      internet.  Nothing to do — this is expected for an offline install.
+  when:
+    - not tls_cert_stat.stat.exists
+    - tls_acme_probe.status is not defined
+
 - name: Request initial cert (standalone)
   ansible.builtin.command:
     cmd: >-
@@ -33,8 +57,14 @@
       --email {{ tls_acme_email }}
       --server {{ tls_certbot_server }}
       -d {{ morphit_domain }}
-  when: not tls_cert_stat.stat.exists
-  changed_when: true
+  register: tls_certbot_result
+  # Non-fatal: if the domain does not resolve to this box yet, the install still
+  # completes and morphit-first-online retries issuance until it succeeds.
+  failed_when: false
+  changed_when: tls_certbot_result.rc == 0
+  when:
+    - not tls_cert_stat.stat.exists
+    - tls_acme_probe.status is defined
 
 - name: Ensure certbot renewal timer is enabled
   ansible.builtin.systemd:
@@ -73,3 +103,4 @@
       Renewal timer active.  Verify with:
         systemctl status certbot.timer
         certbot renew --dry-run
+  when: tls_cert_stat.stat.exists or (tls_certbot_result is defined and tls_certbot_result.rc | default(1) == 0)

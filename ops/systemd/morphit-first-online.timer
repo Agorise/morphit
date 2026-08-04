@@ -1,0 +1,28 @@
+# ─────────────────────────────────────────────────────────────────────
+# Morphit — first-online retry timer.
+#
+# Retries morphit-first-online.service every few minutes so that a node
+# installed offline finishes itself whenever connectivity appears — even
+# if that is hours after boot, or the link keeps flapping.  The service's
+# script disables THIS timer once every deferred step has completed, so it
+# stops costing anything the moment the node is fully online-provisioned.
+#
+# OnBootSec gives the box a moment to settle after boot before the first
+# attempt; OnUnitActiveSec is the steady retry cadence.  Persistent=true
+# means a retry missed while the box was powered off fires as soon as the
+# timer is next active.
+# ─────────────────────────────────────────────────────────────────────
+
+[Unit]
+Description=Retry timer for morphit-first-online.service (finish install when the internet appears)
+Documentation=file:///opt/morphit/docs/RUN-A-MORPHIT-NODE.md
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Persistent=true
+Unit=morphit-first-online.service
+
+[Install]
+WantedBy=timers.target

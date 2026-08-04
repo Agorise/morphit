@@ -1,0 +1,45 @@
+# ─────────────────────────────────────────────────────────────────────
+# Morphit — first-online deferred-completion service.
+#
+# Runs the network-dependent tail of the install (real TLS certificate,
+# Blurt RPC connect, opt-in on-chain registration) the FIRST time this
+# box sees a real internet connection, then the script retires its own
+# timer.  This is what lets Morphit be installed completely offline and
+# still finish itself, unattended, whenever connectivity finally appears.
+#
+# Driven two ways for resilience:
+#   - WantedBy=network-online.target here → fires immediately at boot /
+#     when the network comes up.
+#   - morphit-first-online.timer (next file over) → retries every few
+#     minutes forever, covering connectivity that arrives late or flaps.
+# The script is idempotent and gated on a REAL reachability probe, so
+# firing from both sources (or repeatedly) is harmless.
+#
+# Why root:
+#   - It runs certbot (writes /etc/letsencrypt), restarts the indexer /
+#     relay units, reloads BunkerWeb via the docker socket, and disables
+#     its own timer.  Those need root; this is a trusted, package-shipped
+#     completion script, not attacker-reachable input.
+# ─────────────────────────────────────────────────────────────────────
+
+[Unit]
+Description=Morphit first-online deferred install completion (TLS + RPC + register)
+Documentation=file:///opt/morphit/docs/RUN-A-MORPHIT-NODE.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/morphit/morphit-first-online.sh
+# Broad access is required (certbot, systemctl, docker); keep only the
+# hardening that does not break those.
+NoNewPrivileges=true
+LockPersonality=true
+RestrictRealtime=true
+ProtectKernelModules=true
+Restart=no
+TimeoutStartSec=600
+SyslogIdentifier=morphit-first-online
+
+[Install]
+WantedBy=network-online.target

@@ -60,6 +60,29 @@
     enabled: true
     state: started
 
+# ── Offline appliance: load bundled Docker images so compose doesn't pull. ──
+# When the self-contained bundle ships saved images under vendor/docker, load
+# them now (Docker is up, before compose) so "Bring BunkerWeb up" finds them
+# locally and needs no Docker Hub.  Gated on the bundle → a no-op online.
+- name: Detect bundled Docker images
+  ansible.builtin.find:
+    paths: "{{ morphit_repo_path }}/vendor/docker"
+    patterns: "*.tar.gz"
+  register: morphit_vendor_docker
+  failed_when: false
+  changed_when: false
+
+- name: Load bundled Docker images (offline)
+  ansible.builtin.shell:
+    cmd: "set -o pipefail; gzip -dc {{ item.path | quote }} | docker load"
+  args:
+    executable: /bin/bash
+  loop: "{{ morphit_vendor_docker.files | default([]) }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  when: (morphit_vendor_docker.files | default([]) | length) > 0
+  changed_when: true
+
 - name: Create BunkerWeb config directory
   ansible.builtin.file:
     path: /etc/bunkerweb

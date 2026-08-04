@@ -60,6 +60,14 @@ node_ok() {
 
 if node_ok; then
 	log "Node.js $(node -v) is already installed — good."
+elif [ -x vendor/node/bin/node ]; then
+	# Self-contained (offline) tarball: install the bundled Node.js runtime into
+	# /usr/local so node + npm are on PATH, with no NodeSource and no network.
+	log "Installing the bundled Node.js runtime (offline)\xE2\x80\xA6"
+	cp -a vendor/node/. /usr/local/
+	hash -r 2>/dev/null || true
+	node_ok || die "the bundled Node.js runtime did not install cleanly — see docs/RUN-A-MORPHIT-NODE.md."
+	log "Node.js $(node -v) installed from the bundle."
 else
 	log "Installing Node.js ${NODE_MAJOR_MIN} LTS (from NodeSource)\xE2\x80\xA6"
 	apt-get update -qq
@@ -71,14 +79,23 @@ else
 	log "Node.js $(node -v) installed."
 fi
 
-# git is handy for updates later; install it if absent (cheap, non-fatal shape).
+# git is handy for updates later; install it if absent (cheap, non-fatal).  On an
+# offline box with no apt reachable this simply no-ops — git is NOT required to
+# run Morphit, so we never let its absence abort the install.
 if ! command -v git >/dev/null 2>&1; then
 	log "Installing git\xE2\x80\xA6"
-	apt-get install -y git
+	apt-get install -y git 2>/dev/null || warn "git not installed (offline?) — Morphit runs fine without it; git-based updates just won't be available."
 fi
 
-log "Installing Morphit's libraries (npm install \xE2\x80\x94 a few hundred MB, this is normal)\xE2\x80\xA6"
-npm install
+# Libraries: a self-contained (offline) tarball ships a complete, prebuilt
+# node_modules with a marker file — use it as-is, with no network.  Otherwise
+# install normally (this reaches the npm registry, so it needs internet).
+if [ -f node_modules/.morphit-bundle-complete ]; then
+	log "Using the bundled libraries (offline — skipping npm install)."
+else
+	log "Installing Morphit's libraries (npm install \xE2\x80\x94 a few hundred MB, this is normal)\xE2\x80\xA6"
+	npm install
+fi
 
 log "Handing off to the guided installer\xE2\x80\xA6"
 echo ""
