@@ -1,5 +1,8 @@
 # Morphit pre-launch revisit list
 
+> ## cp647 — offline bundle BUILT; my cp646 completeness guard false-failed it (pipefail + `tar | grep -q` SIGPIPE) (2026-08-04)
+> Run got through container apt (238 debs/191MB) + docker save of both images + packaging, then died on the guard claiming vendor/docker/*.tar.gz missing. Bundle was FINE; the guard was buggy: `tar -tzf | grep -q` under pipefail — grep -q closes the pipe early → tar SIGPIPE (141) → pipefail reports failure even though grep found it (order/size-dependent; huge node_modules triggers it). FIX: list once into a var, grep a here-string (no pipe). Sandbox-verified present=0/missing=1. Hardened step 5 with `[ -s f ]` empty-save assertion + size log; fixed the buggy awk "Total added" (was printing node_modules only = the misleading 294M). Re-push (no tag) + re-run.
+
 > ## cp646 — offline bundle was silently INCOMPLETE (316MB): packaging `--exclude=*.tar.gz` dropped the docker images + kubo (2026-08-04)
 > Step 6 tar carried `--exclude=*.tar.gz` to drop a leftover output bundle, but the saved docker images (vendor/docker/*.tar.gz — incl. the big BunkerWeb image) + Kubo (vendor/kubo/*.tar.gz) are ALSO .tar.gz → silently excluded. 316MB = node_modules + vendor/node + .deb closure only → would fail air-gapped install. Verified in-sandbox. FIX: anchored `--exclude=./morphit-*.tar.gz*` (only root-level bundle, never vendor payload) + a LOUD post-package guard asserting the tarball contains vendor/docker/*.tar.gz, vendor/kubo/*.tar.gz, vendor/apt/*.deb, vendor/node/bin/node, node_modules/ (die if missing). Expect corrected bundle ~700MB-1GB (BunkerWeb dominates); BUNDLE-MANIFEST.txt lists real sizes. Re-push (no tag) + re-run.
 
