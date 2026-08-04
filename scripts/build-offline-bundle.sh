@@ -153,10 +153,19 @@ if [ "${1:-}" != "--no-tar" ]; then
 	# the tarball's top-level is the repo, same shape as the source tarball.
 	tar --exclude='./.git' --exclude='./out' --exclude='./dist' \
 		--exclude='./apps/*/dist' --exclude='./apps/*/build' \
-		--exclude='./packages/*/dist' --exclude='*.log' --exclude='*.tar.gz' \
+		--exclude='./packages/*/dist' --exclude='*.log' \
+		--exclude='./morphit-*.tar.gz*' \
 		-czf "${STAGE}/${OUT}" .
 	mv "${STAGE}/${OUT}" "./${OUT}"
 	rmdir "${STAGE}"
+	# Fail LOUD if packaging dropped a critical piece.  The docker images and kubo
+	# are saved as .tar.gz, and a stray `--exclude='*.tar.gz'` once silently dropped
+	# them — the bundle looked fine (~316MB) but could not install offline (cp646).
+	for _need in 'vendor/docker/.*[.]tar[.]gz' 'vendor/kubo/.*[.]tar[.]gz' \
+		'vendor/apt/.*[.]deb' 'vendor/node/bin/node' 'node_modules/'; do
+		tar -tzf "./${OUT}" | grep -qE "${_need}" \
+			|| die "offline bundle is INCOMPLETE — missing ${_need} (packaging bug); NOT shipping this."
+	done
 	sha256sum "${OUT}" > "${OUT}.sha256"
 	log "Wrote ./${OUT} ($(du -sh "${OUT}" | cut -f1)) + ${OUT}.sha256"
 	log "Attach both to the release, or distribute via any of the mirrors."
