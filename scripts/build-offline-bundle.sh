@@ -78,46 +78,43 @@ printf '%s  %s\n' "${KUBO_SHA512%% *}" "${_ktar}" | sha512sum -c - \
 mv "${_ktar}" "${VENDOR}/kubo/${_ktar}"
 
 # ── 4. apt closure → vendor/apt (local repo) ──
-# Download every package the playbook installs, PLUS its full recursive
-# dependency set, then build a Packages.gz so apt can install from file://.
+# Download every package the playbook installs PLUS its full recursive dependency
+# set, then build a Packages.gz so apt can install from file:// with no network.
 #
-# COMPLETENESS: `apt-get install --download-only` downloads a package + the deps
-# NOT already present on THIS box.  So run this on a FRESH Ubuntu 24.04 (a clean
-# container is ideal) that matches the target's baseline — otherwise the closure
-# may miss deps the build box happened to already have.  The install side ignores
-# the online sources entirely (apt.conf.d override), so anything missing from this
-# repo will fail the offline install — thoroughness here is what makes it work.
-log "4/6  Downloading the apt dependency closure (this is the big one)…"
-# docker-ce lives in Docker's own repo, not Ubuntu's — add it so the closure
-# resolves.  (Node is NOT here: the bundled vendor/node runtime covers it, and the
-# nodejs.yml role skips NodeSource when a suitable Node is already present.)
-sudo # docker-ce lives in Docker's own repo, not Ubuntu's — add it to the MAIN
-# sources.list (NOT sources.list.d) so a repo-scoped update still sees it while
-# ignoring any flaky third-party repo in the build image.  (Node is NOT here: the
-# bundled vendor/node runtime covers it, and the nodejs.yml role skips NodeSource.)
-sudo install -m 0755 -d /etc/apt/keyrings
-sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-sudo chmod a+r /etc/apt/keyrings/docker.asc
-. /etc/os-release
-echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu ${VERSION_CODENAME} stable" \
-	| sudo tee -a /etc/apt/sources.list >/dev/null
-# The union of packages the roles apt-install (Ubuntu + Docker).  KEEP IN SYNC
-# with the roles when a package is added/removed (base, hardening, tls, postgres,
-# i2pd, bunkerweb).  A CI check that diffs this list against `name:` entries under
-# the roles' apt: tasks is a good future guard.
+# We do this inside a FRESH ubuntu:24.04 container (the build host has Docker), so
+# the closure is COMPLETE — nothing is skipped as "already installed" — and it
+# matches a fresh 24.04 target exactly, regardless of what the build host has.
+# No sudo: the container is root (which also sidesteps host sudo quirks).
+log "4/6  Downloading the apt dependency closure in a clean ubuntu:24.04 container…"
+# The union of packages the roles apt-install (Ubuntu + Docker).  KEEP IN SYNC with
+# the roles when a package is added/removed (base, hardening, tls, postgres, i2pd,
+# bunkerweb).  Node is NOT here: vendor/node covers it and nodejs.yml skips NodeSource.
 PKGS="ca-certificates curl gnupg git ufw fail2ban auditd aide apparmor rkhunter \
 unattended-upgrades postfix libpam-pwquality cron certbot postgresql-client tor i2pd \
 docker-ce docker-ce-cli containerd.io docker-compose-plugin"
-# Scope to base + the docker repo we just added (Dir::Etc::sourceparts=- ignores
-# sources.list.d); retry rides out a brief mirror hiccup.
-for i in 1 2 3; do
-	sudo apt-get update -qq -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0 && break
-	echo "apt-get update attempt $i failed; retrying in 5s..."; sleep 5
-done
-# download-only into the archive cache, resolving deps, without installing
-sudo apt-get install --download-only --reinstall -y -o Dir::Etc::sourceparts=- ${PKGS} \
-	|| die "apt could not resolve the package set — check the repos are configured."
-cp -n /var/cache/apt/archives/*.deb "${VENDOR}/apt/" 2>/dev/null || true
+# Fetch Docker's repo key on the host (which has curl) so the container stays clean.
+APTSTAGE="$(mktemp -d)"
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o "${APTSTAGE}/docker.asc"
+chmod a+r "${APTSTAGE}/docker.asc"
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu noble stable" \
+	> "${APTSTAGE}/docker.list"
+docker run --rm -e PKGS="${PKGS}" -v "${APTSTAGE}:/mnt:ro" -v "${VENDOR}/apt:/out" \
+	ubuntu:24.04 bash -c '
+		set -eu
+		export DEBIAN_FRONTEND=noninteractive
+		apt-get update -qq
+		# ca-certificates only, to enable the https Docker repo (present on every real
+		# target); everything else in the list is downloaded, not installed.
+		apt-get install -y --no-install-recommends ca-certificates
+		install -m 0755 -d /etc/apt/keyrings
+		cp /mnt/docker.asc /etc/apt/keyrings/docker.asc
+		cp /mnt/docker.list /etc/apt/sources.list.d/docker.list
+		apt-get update -qq
+		apt-get install --download-only -y ${PKGS}
+		cp /var/cache/apt/archives/*.deb /out/
+		chmod a+r /out/*.deb
+	' || die "apt closure download (in the ubuntu:24.04 container) failed — see the log above."
+rm -rf "${APTSTAGE}"
 ( cd "${VENDOR}/apt" && dpkg-scanpackages -m . /dev/null | gzip -9c > Packages.gz )
 log "     $(ls "${VENDOR}/apt"/*.deb 2>/dev/null | wc -l) .deb files harvested."
 

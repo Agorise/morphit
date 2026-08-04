@@ -1,5 +1,8 @@
 # Morphit pre-launch revisit list
 
+> ## cp645 — offline-bundle first run died at step 4 (orphaned `sudo`); rewrote apt closure to run in a fresh ubuntu:24.04 container (2026-08-04)
+> First real run: steps 1-3 (npm ci/Node/Kubo) passed; step 4 died on `usage: sudo` — a copy-paste mangle left a bare `sudo` before a comment (`sudo # ...`) = sudo with no command. Runner is the hostexecutor (non-root, working passwordless sudo). Removed the orphan. THEN rewrote step 4 to download the apt closure inside a FRESH ubuntu:24.04 container (runner has Docker): a clean container has nothing pre-installed → COMPLETE closure matching a fresh target, and root-in-container means ZERO sudo (kills the whole bug class). Key fetched on host → mktemp → mounted; docker.list codename `noble` hardcoded; ca-certificates installed only to enable the https docker repo; everything else download-only. Also removed a sourceparts=- I had briefly put in the .sh (would exclude deb822 base). Verified bash -n + ansible-structural 81/81 + ci-workflow-hardening 7/7. Re-push (no tag) + re-run the workflow.
+
 > ## cp644 — CI FIX: new offline-bundle.yml tripped ci-workflow-hardening-smoke (unscoped apt-get update) (2026-08-04)
 > Push of v1.10.0 failed one CI runner (16500 passed, 1 failed): ci-workflow-hardening-smoke requires every workflow with `apt-get update` to carry `Dir::Etc::sourceparts=-` (base-repos-only, so a flaky third-party runner repo cannot fail it). offline-bundle.yml had a bare `apt-get update` → rewrote it to the ci.yml retry+scoped pattern (7/7 now). Also hardened build-offline-bundle.sh the same way (docker repo → main sources.list via tee -a; closure update/install scoped with sourceparts=- + retry). Re-push v1.10.0 → suite green → the Run-workflow button is live.
 
