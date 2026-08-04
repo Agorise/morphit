@@ -300,6 +300,49 @@ results.push({
 	});
 }
 
+// ─── Scenario 10: every drop-in write into a package .d/ dir ensures the dir ──
+// TWO separate releases were lost to this exact class — a hardening drop-in
+// written into a package-owned .d/ directory the package did NOT create
+// (openssh-server's /etc/ssh/sshd_config.d; libpam-pwquality's
+// /etc/security/pwquality.conf.d).  We do NOT trust a package to have made its
+// own drop-in dir: every write into an `/etc/**/*.d/` directory must have a
+// matching `file: state=directory` ensure somewhere in the role set, or be one
+// of a tiny allowlist of always-present OS drop-in dirs.  Sandbox playbook runs
+// can't catch this (they stub the dirs) — only this static guard can.
+{
+	// Every dir any role explicitly ensures (literal /etc paths only).
+	const ensuredDirs = new Set<string>();
+	for (const f of allRoleFiles) {
+		if (f.endsWith('.j2')) continue;
+		const src = readFileSync(f, 'utf-8');
+		for (const blk of src.split(/\n(?=\s*- )/)) {
+			if (!/state:\s*directory/.test(blk)) continue;
+			const m = /\bpath:\s*['"]?(\/etc\/[^\s'"]+)/.exec(blk);
+			if (m) ensuredDirs.add(m[1].replace(/\/$/, ''));
+		}
+	}
+	// Always-present OS drop-in dirs no package/role needs to create.
+	const alwaysPresent = new Set(['/etc/apt/apt.conf.d', '/etc/sysctl.d', '/etc/systemd/system']);
+	const unEnsuredDropins: string[] = [];
+	for (const f of allRoleFiles) {
+		if (f.endsWith('.j2')) continue;
+		const src = readFileSync(f, 'utf-8');
+		for (const m of src.matchAll(/\b(?:dest|path):\s*['"]?(\/etc\/[^\s'"]+)/g)) {
+			const dest = m[1].replace(/['"]$/, '');
+			if (dest.includes('{{')) continue; // templated — skip
+			const parent = dest.replace(/\/[^/]+$/, '');
+			if (!/\.d$/.test(parent)) continue; // only *.d drop-in dirs
+			if (alwaysPresent.has(parent) || ensuredDirs.has(parent)) continue;
+			unEnsuredDropins.push(`${f.replace(REPO_ROOT + '/', '')} → ${dest} (dir ${parent} not ensured)`);
+		}
+	}
+	results.push({
+		name: 'every drop-in write into an /etc/**/*.d dir has a state=directory ensure (no "directory does not exist" on install)',
+		ok: unEnsuredDropins.length === 0,
+		detail: unEnsuredDropins.length === 0 ? undefined : unEnsuredDropins.join(' | ')
+	});
+}
+
 // ─── Report ──
 console.log(`ansible structural smoke: ${results.length} scenarios\n`);
 let failed = 0;

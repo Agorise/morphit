@@ -19,6 +19,17 @@
       - lsb-release
     state: present
 
+- name: Ensure /etc/apt/keyrings exists
+  # /etc/apt/keyrings is not present by default on Ubuntu 24.04; the morphit
+  # role's nodejs task also makes it, but ensuring it here removes the ordering
+  # dependency so bunkerweb is self-contained.
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
 - name: Add Docker GPG key
   ansible.builtin.get_url:
     url: https://download.docker.com/linux/ubuntu/gpg
