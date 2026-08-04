@@ -1,5 +1,8 @@
 # Morphit pre-launch revisit list
 
+> ## cp644 — CI FIX: new offline-bundle.yml tripped ci-workflow-hardening-smoke (unscoped apt-get update) (2026-08-04)
+> Push of v1.10.0 failed one CI runner (16500 passed, 1 failed): ci-workflow-hardening-smoke requires every workflow with `apt-get update` to carry `Dir::Etc::sourceparts=-` (base-repos-only, so a flaky third-party runner repo cannot fail it). offline-bundle.yml had a bare `apt-get update` → rewrote it to the ci.yml retry+scoped pattern (7/7 now). Also hardened build-offline-bundle.sh the same way (docker repo → main sources.list via tee -a; closure update/install scoped with sourceparts=- + retry). Re-push v1.10.0 → suite green → the Run-workflow button is live.
+
 > ## cp643 — no spare box → the Forgejo CI builds the offline bundle (it has Docker); added a manual build button (2026-08-04)
 > Ken has no spare PC/VPS and no Docker on his laptop — only Forgejo runners, the production VPS, and morphitlat (the not-yet-installed test box). `ci.yml` runs `docker run`, so the runner HAS Docker → build the bundle in CI, not on his boxes. Added `.forgejo/workflows/offline-bundle.yml` (manual `workflow_dispatch`) that runs build-offline-bundle.sh and uploads `morphit-<ver>-offline.tar.gz` as an artifact — so Ken builds + tests offline BEFORE any release. Fixed sudo in the build script's Docker-repo-setup (root-writes into /etc/apt now use sudo/tee). Plan: push v1.10.0 to main (no tag → no release, button appears) → click Run workflow → download the tarball → copy to morphitlat, unplug its net, install offline → reconnect, first-online finishes → then real release. Missing apt deps surface on morphitlat → add to PKGS + rebuild.
 

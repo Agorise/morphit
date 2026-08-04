@@ -40,7 +40,16 @@ jobs:
       - name: Install build tools (for native modules during npm ci)
         run: |
           set -eu
-          sudo apt-get update -qq
+          # Scope to base repos so a flaky third-party repo in the runner image
+          # can't fail this (Dir::Etc::sourceparts=- ignores sources.list.d); the
+          # retry rides out a brief base-mirror hiccup.  Matches ci.yml/release.yml.
+          for i in 1 2 3; do
+            sudo apt-get update -qq \
+              -o Dir::Etc::sourceparts=- \
+              -o APT::Get::List-Cleanup=0 && break
+            echo "apt-get update attempt $i failed; retrying in 5s..."
+            sleep 5
+          done
           sudo apt-get install -y --no-install-recommends build-essential python3 || true
 
       - name: Build the offline bundle
