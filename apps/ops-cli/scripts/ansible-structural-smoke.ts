@@ -265,6 +265,41 @@ results.push({
 	detail: bareConnVars.length === 0 ? undefined : `bare: ${bareConnVars.join(' | ')}`
 });
 
+// ─── Scenario 9: SSH hardening is gated on an SSH server being present ──
+// openssh-server owns /etc/ssh/sshd_config.d + /etc/ssh/sshd_config + the `sshd`
+// validate binary.  A home desktop node the operator runs and administers
+// locally often has NO SSH server, so writing the hardening there crashed
+// ("Destination directory /etc/ssh/sshd_config.d does not exist").  Fixed by
+// probing /etc/ssh/sshd_config (which exists iff openssh-server is installed)
+// and gating every SSH task on it — we deliberately do NOT force-install an SSH
+// server.  Guard: the probe must exist AND every task in ssh.yml that writes
+// under /etc/ssh must be `when: <probe>.stat.exists`-gated so this cannot regress.
+{
+	const sshSrc = readFileSync(join(ROLES_DIR, 'hardening', 'tasks', 'ssh.yml'), 'utf-8');
+	const hasProbe =
+		/ansible\.builtin\.stat:[\s\S]{0,160}?path:\s*\/etc\/ssh\/sshd_config\b[\s\S]{0,160}?register:\s*\w+/.test(sshSrc);
+	const ungated: string[] = [];
+	for (const blk of sshSrc.split(/\n(?=- name:)/)) {
+		// The presence probe itself READS /etc/ssh/sshd_config (via stat) — it is
+		// the thing the gate depends on, so it must not be treated as a write.
+		const isProbe = /ansible\.builtin\.stat:/.test(blk);
+		const writesToSsh = !isProbe && /(dest|path):\s*\/etc\/ssh\/sshd_config/.test(blk);
+		if (writesToSsh && !/when:[^\n]*stat\.exists/.test(blk)) {
+			const nameM = /- name:\s*(.+)/.exec(blk);
+			ungated.push(nameM ? nameM[1].trim() : '(unnamed task)');
+		}
+	}
+	results.push({
+		name: 'hardening SSH tasks are gated on openssh-server presence (no crash on a node without SSH)',
+		ok: hasProbe && ungated.length === 0,
+		detail: !hasProbe
+			? 'ssh.yml is missing the /etc/ssh/sshd_config stat presence-probe'
+			: ungated.length > 0
+				? `ungated /etc/ssh write task(s): ${ungated.join(', ')}`
+				: undefined
+	});
+}
+
 // ─── Report ──
 console.log(`ansible structural smoke: ${results.length} scenarios\n`);
 let failed = 0;
