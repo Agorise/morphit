@@ -42,6 +42,17 @@
     enabled: true
     state: started
 
+- name: Ensure the certbot deploy-hook directory exists
+  # The Ubuntu certbot package creates /etc/letsencrypt/renewal-hooks/{deploy,pre,post}
+  # on install, and certbot certonly (above) has already run — but ensuring it
+  # is a cheap guard so writing the hook can never fail on a missing dir.
+  ansible.builtin.file:
+    path: /etc/letsencrypt/renewal-hooks/deploy
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
 - name: Configure certbot renewal hooks for BunkerWeb
   ansible.builtin.copy:
     dest: /etc/letsencrypt/renewal-hooks/deploy/morphit-bunkerweb-reload.sh

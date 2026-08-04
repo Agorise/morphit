@@ -46,6 +46,11 @@
       - gnupg
       - lsb-release
       - jq
+      # Cron — the aide + rkhunter scheduled scans (hardening role) install
+      # into /etc/cron.daily and /etc/cron.weekly, which the `cron` package
+      # owns.  Near-universal, but pinned here so those dirs are guaranteed to
+      # exist even on a minimal box that shipped without cron.
+      - cron
       # Time sync (auditd timestamps + chain-time skew depend on it)
       - chrony
       # Hardening packages (referenced by hardening role)
