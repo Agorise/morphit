@@ -13,32 +13,46 @@
 # Matches the pattern used in roles/bunkerweb (docker) and
 # roles/trivy_monitor.
 ---
-- name: Ensure /etc/apt/keyrings exists
-  ansible.builtin.file:
-    path: /etc/apt/keyrings
-    state: directory
-    mode: '0755'
+- name: Check for an already-present Node.js (morphit-setup.sh installs it from the bundle offline)
+  ansible.builtin.command:
+    cmd: node -p "process.versions.node.split('.')[0]"
+  register: morphit_node_have
+  changed_when: false
+  failed_when: false
 
-- name: Add NodeSource apt signing key
-  ansible.builtin.get_url:
-    url: https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key
-    dest: /etc/apt/keyrings/nodesource.asc
-    owner: root
-    group: root
-    mode: '0644'
+- name: Install Node.js from NodeSource (only when a suitable Node isn't already present)
+  # Offline appliance: morphit-setup.sh has already installed Node from vendor/node,
+  # so this whole NodeSource block is skipped (and never reaches deb.nodesource.com).
+  when: >-
+    (morphit_node_have.rc | default(1)) != 0
+    or ((morphit_node_have.stdout | default('0') | trim | int) < (morphit_node_version | int))
+  block:
+    - name: Ensure /etc/apt/keyrings exists
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
 
-- name: Add NodeSource apt repo
-  # The repo path uses `nodistro` because NodeSource publishes a
-  # single multi-distro repo (the same packages work on Debian
-  # bullseye/bookworm and Ubuntu 22.04/24.04).  `node_{{ X }}.x`
-  # is the major-version selector.
-  ansible.builtin.apt_repository:
-    repo: "deb [signed-by=/etc/apt/keyrings/nodesource.asc] https://deb.nodesource.com/node_{{ morphit_node_version }}.x nodistro main"
-    filename: nodesource
-    state: present
-    update_cache: true
+    - name: Add NodeSource apt signing key
+      ansible.builtin.get_url:
+        url: https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key
+        dest: /etc/apt/keyrings/nodesource.asc
+        owner: root
+        group: root
+        mode: '0644'
 
-- name: Install Node.js
-  ansible.builtin.apt:
-    name: nodejs
-    state: present
+    - name: Add NodeSource apt repo
+      # The repo path uses `nodistro` because NodeSource publishes a
+      # single multi-distro repo (the same packages work on Debian
+      # bullseye/bookworm and Ubuntu 22.04/24.04).  `node_{{ X }}.x`
+      # is the major-version selector.
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/etc/apt/keyrings/nodesource.asc] https://deb.nodesource.com/node_{{ morphit_node_version }}.x nodistro main"
+        filename: nodesource
+        state: present
+        update_cache: true
+
+    - name: Install Node.js
+      ansible.builtin.apt:
+        name: nodejs
+        state: present

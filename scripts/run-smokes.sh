@@ -375,6 +375,7 @@ SMOKES=(
 	"apps/ops-cli:disabled-assets-wizard-smoke"
 	"apps/ops-cli:category-b-descriptions-parity-smoke"
 	"apps/ops-cli:ansible-structural-smoke"
+	"apps/ops-cli:first-online-smoke"
 	"apps/ops-cli:ansible-systemd-user-consistency-smoke"
 	"apps/ops-cli:repo-root-bak-recovery-smoke"
 	"apps/ops-cli:instance-env-loader-smoke"

@@ -101,6 +101,9 @@
           to lock out.
 
   roles:
+    - role: vendor
+      tags: [vendor, always]
+
     - role: base
       tags: [base]
 

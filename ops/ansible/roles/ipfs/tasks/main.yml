@@ -30,11 +30,25 @@
         suffix: kubo
       register: morphit_kubo_tmp
 
+    - name: Detect a bundled Kubo tarball (offline appliance)
+      ansible.builtin.stat:
+        path: "{{ morphit_repo_path }}/vendor/kubo/kubo_{{ morphit_kubo_version }}_{{ morphit_kubo_arch }}.tar.gz"
+      register: morphit_kubo_vendor
+
+    - name: Use the bundled Kubo tarball (offline — still SHA-512 verified below)
+      ansible.builtin.copy:
+        src: "{{ morphit_repo_path }}/vendor/kubo/kubo_{{ morphit_kubo_version }}_{{ morphit_kubo_arch }}.tar.gz"
+        dest: "{{ morphit_kubo_tmp.path }}/kubo.tar.gz"
+        remote_src: true
+        mode: "0644"
+      when: morphit_kubo_vendor.stat.exists
+
     - name: Download the Kubo tarball
       ansible.builtin.get_url:
         url: "{{ morphit_kubo_dist_base }}/{{ morphit_kubo_version }}/kubo_{{ morphit_kubo_version }}_{{ morphit_kubo_arch }}.tar.gz"
         dest: "{{ morphit_kubo_tmp.path }}/kubo.tar.gz"
         mode: "0644"
+      when: not morphit_kubo_vendor.stat.exists
 
     - name: Download the official Kubo checksum (used when no explicit pin is set)
       ansible.builtin.get_url:

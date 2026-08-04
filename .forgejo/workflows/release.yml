@@ -504,6 +504,21 @@ jobs:
           retention-days: 90
           if-no-files-found: warn
 
+      - name: Build self-contained offline tarball (best-effort)
+        # The offline appliance: bundles node_modules PLUS the OS packages, Docker
+        # images, Node runtime and Kubo, so Morphit installs with NO internet.
+        # BEST-EFFORT (continue-on-error) so a runner without Docker — or without
+        # reach to Docker Hub / nodejs.org / dist.ipfs.tech / download.docker.com —
+        # can NEVER block the release: the slim source tarball still publishes, and
+        # this tarball can be built separately on any Ubuntu 24.04 + Docker box with
+        # `bash scripts/build-offline-bundle.sh`.  The attach loop below skips it
+        # when absent, so nothing downstream depends on this step succeeding.
+        continue-on-error: true
+        run: |
+          set -eu
+          bash scripts/build-offline-bundle.sh
+          ls -lh morphit-*-offline.tar.gz* || true
+
       - name: Publish Forgejo release + attach assets
         # Auto-create the release for this tag and attach the artifacts, so the
         # operator downloads + uploads NOTHING (this replaces the old manual
@@ -585,8 +600,11 @@ jobs:
               --data-binary @/tmp/rel-patch.json "${API}/repos/${REPO}/releases/${REL_ID}" || true
             echo "refreshed release body from ${NOTES_FILE}"
           fi
-          # 4. Attach each asset that exists (.asc is absent when unsigned).
-          for f in "$TARBALL" "$TARBALL.sha256" "$TARBALL.asc" distribution-anchor.env; do
+          # 4. Attach each asset that exists (.asc is absent when unsigned; the
+          # -offline tarball is absent if the best-effort build step was skipped
+          # or the runner lacked Docker — either way the loop just skips it).
+          for f in "$TARBALL" "$TARBALL.sha256" "$TARBALL.asc" distribution-anchor.env \
+                   "morphit-${TAG}-offline.tar.gz" "morphit-${TAG}-offline.tar.gz.sha256"; do
             if [ ! -f "$f" ]; then echo "skip (absent): $f"; continue; fi
             NAME=$(basename "$f")
             CODE=$(curl -sS -o /tmp/asset.json -w '%{http_code}' -X POST \

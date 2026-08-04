@@ -45,6 +45,9 @@ export interface AnsibleInstallInputs {
 	readonly operatorTag: string;
 	/** Email for Let's Encrypt / certbot (expiry notices). */
 	readonly acmeEmail: string;
+	/** Auto-publish the on-chain operator registration the first time the box
+	 *  sees the internet (morphit-first-online). Opt-in; false = register by hand. */
+	readonly autoRegister: boolean;
 	/** Random password Ansible provisions the indexer DB with. */
 	readonly indexerDbPassword: string;
 	/** Random password Ansible provisions the relay DB with. */
@@ -209,6 +212,7 @@ export function buildAnsibleVars(inputs: AnsibleInstallInputs): Record<string, u
 		morphit_instance_name: inputs.instanceName,
 		morphit_instance_tagline: inputs.instanceTagline ?? '',
 		tls_acme_email: inputs.acmeEmail,
+		morphit_auto_register: inputs.autoRegister,
 		// Secrets Ansible provisions the DB with (referenced as vault_* with
 		// defaults in group_vars/all.yml).
 		vault_postgres_indexer_password: inputs.indexerDbPassword,

@@ -54,6 +54,15 @@
     group: "{{ morphit_service_group }}"
     recurse: true
 
+- name: Detect a bundled (complete) node_modules
+  # A self-contained offline tarball ships a prebuilt node_modules carrying this
+  # marker; the local-install rsync above copies it into place.  When present we
+  # skip the workspace `npm install` entirely — it is the one step here that would
+  # otherwise reach the npm registry.
+  ansible.builtin.stat:
+    path: "{{ morphit_repo_path }}/node_modules/.morphit-bundle-complete"
+  register: morphit_bundle_marker
+
 - name: npm install (workspace root)
   ansible.builtin.command:
     cmd: npm install --workspaces --include-workspace-root
@@ -62,6 +71,7 @@
   become_user: "{{ morphit_service_user }}"
   register: morphit_npm_install_result
   changed_when: "'changed' in morphit_npm_install_result.stdout or 'added' in morphit_npm_install_result.stdout"
+  when: not morphit_bundle_marker.stat.exists
 
 - name: Build workspaces (relay + indexer + ops-cli + indexer-client + asset-registry)
   ansible.builtin.command:

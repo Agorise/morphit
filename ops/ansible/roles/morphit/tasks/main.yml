@@ -84,6 +84,36 @@
     group: root
     mode: '0755'
 
+# ── first-online: the deferred-completion subsystem ──
+# Finishes the network-dependent tail of the install (real TLS cert, Blurt RPC
+# connect, opt-in on-chain registration) the moment this box first sees the
+# internet — so a node installed offline, in a bad-connectivity area, still
+# provisions itself unattended when a link appears.
+- name: Deploy morphit-first-online.sh
+  ansible.builtin.copy:
+    src: "{{ morphit_repo_path }}/ops/first-online/morphit-first-online.sh"
+    dest: /usr/local/lib/morphit/morphit-first-online.sh
+    remote_src: true
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Deploy first-online env (domain + acme email + auto-register opt-in)
+  ansible.builtin.template:
+    src: first-online.env.j2
+    dest: /etc/morphit/first-online.env
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Ensure the first-online state directory exists
+  ansible.builtin.file:
+    path: /var/lib/morphit/first-online
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
 # cp514 — on a containerized Postgres the backup dumps THROUGH
 # `docker exec <container> pg_dump`, and the unit runs as
 # {{ morphit_service_user }}.  Without docker-group membership the script
@@ -110,6 +140,8 @@
     - morphit-relay.service
     - morphit-backup.service
     - morphit-backup.timer
+    - morphit-first-online.service
+    - morphit-first-online.timer
   notify: Reload systemd
 
 - name: Ensure morphit-backup.timer drop-in directory exists
@@ -156,6 +188,24 @@
 - name: Enable morphit-backup.timer (daily backup per §31)
   ansible.builtin.systemd:
     name: morphit-backup.timer
+    enabled: true
+    state: started
+
+# first-online: enable the service so it fires the moment the box next reaches
+# network-online.target, and start the timer so it also retries on a cadence
+# (and takes a first shot right away — if the installer HAS internet, the box
+# finishes its TLS/RPC/registration immediately; if not, it keeps trying).  We
+# enable-but-don't-start the service so the install itself never blocks on
+# certbot/registration.
+- name: Enable morphit-first-online.service (fires when the box next sees the network)
+  ansible.builtin.systemd:
+    name: morphit-first-online.service
+    enabled: true
+    daemon_reload: true
+
+- name: Enable + start morphit-first-online.timer (retries until deferred steps finish)
+  ansible.builtin.systemd:
+    name: morphit-first-online.timer
     enabled: true
     state: started
 
