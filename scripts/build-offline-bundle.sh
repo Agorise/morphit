@@ -124,6 +124,9 @@ for img in bunkerity/bunkerweb:latest postgres:16-alpine; do
 	docker pull "${img}"
 	_safe="$(printf '%s' "${img}" | tr '/:' '__')"
 	docker save "${img}" | gzip -9c > "${VENDOR}/docker/${_safe}.tar.gz"
+	[ -s "${VENDOR}/docker/${_safe}.tar.gz" ] \
+		|| die "docker save produced an empty file for ${img} — image not present / save failed."
+	log "     saved ${img} → $(du -h "${VENDOR}/docker/${_safe}.tar.gz" | cut -f1)"
 done
 
 # ── Manifest ──
@@ -138,7 +141,7 @@ done
 } > "${VENDOR}/BUNDLE-MANIFEST.txt"
 
 log "Done.  vendor/ + node_modules/ are ready to include in the self-contained tarball."
-log "Total added: $(du -sh "${VENDOR}" node_modules 2>/dev/null | awk '{s=$1} END{print s}') (see vendor/BUNDLE-MANIFEST.txt)."
+log "Total added: $(du -shc "${VENDOR}" node_modules 2>/dev/null | tail -1 | cut -f1) (see vendor/BUNDLE-MANIFEST.txt)."
 
 # ── 6. Package the self-contained tarball (unless --no-tar) ──
 # The result installs completely offline: extract it, `sudo bash morphit-setup.sh`,
@@ -161,9 +164,12 @@ if [ "${1:-}" != "--no-tar" ]; then
 	# Fail LOUD if packaging dropped a critical piece.  The docker images and kubo
 	# are saved as .tar.gz, and a stray `--exclude='*.tar.gz'` once silently dropped
 	# them — the bundle looked fine (~316MB) but could not install offline (cp646).
+	# List the tarball ONCE, then grep a here-string: `tar … | grep -q` would let
+	# grep close the pipe early, SIGPIPE tar, and (under pipefail) report a false miss.
+	_manifest="$(tar -tzf "./${OUT}")"
 	for _need in 'vendor/docker/.*[.]tar[.]gz' 'vendor/kubo/.*[.]tar[.]gz' \
 		'vendor/apt/.*[.]deb' 'vendor/node/bin/node' 'node_modules/'; do
-		tar -tzf "./${OUT}" | grep -qE "${_need}" \
+		grep -qE "${_need}" <<< "${_manifest}" \
 			|| die "offline bundle is INCOMPLETE — missing ${_need} (packaging bug); NOT shipping this."
 	done
 	sha256sum "${OUT}" > "${OUT}.sha256"
