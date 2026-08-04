@@ -1,5 +1,15 @@
 # §37.6 — auditd.
 ---
+- name: Ensure the auditd rules.d directory exists
+  # auditd creates /etc/audit/rules.d on Ubuntu 24.04, but ensuring it keeps
+  # the rules write safe on any box/version that doesn't.
+  ansible.builtin.file:
+    path: /etc/audit/rules.d
+    state: directory
+    owner: root
+    group: root
+    mode: '0750'
+
 - name: Deploy audit.rules
   ansible.builtin.copy:
     dest: /etc/audit/rules.d/morphit.rules

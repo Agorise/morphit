@@ -1,5 +1,15 @@
 # §37.9 — AIDE filesystem integrity baseline.
 ---
+- name: Ensure the AIDE drop-in directory exists
+  # aide-common creates /etc/aide/aide.conf.d on Ubuntu 24.04, but ensuring it
+  # keeps the drop-in write safe on any box/version that doesn't.
+  ansible.builtin.file:
+    path: /etc/aide/aide.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
 - name: Configure AIDE
   ansible.builtin.copy:
     dest: /etc/aide/aide.conf.d/99-morphit
