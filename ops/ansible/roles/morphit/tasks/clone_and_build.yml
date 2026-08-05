@@ -45,12 +45,24 @@
   # place — avoids duplicating the extract's dev-install), but INCLUDED for a
   # self-contained offline bundle: there is no registry to rebuild from, so the
   # prebuilt node_modules must come along.  Runs as root; ownership fixed below.
+  #
+  # CRITICAL: --no-wildcards-match-slash + ANCHORED (./…) excludes.  Without the
+  # flag GNU tar lets `*` cross `/`, so `./apps/*/dist` (and a bare `--exclude=dist`)
+  # also match node_modules/vite/dist, node_modules/@beblurt/*/dist, esbuild,
+  # @modelcontextprotocol/sdk, AND nested apps/web/node_modules/jspdf|dompurify/dist
+  # — stripping the prebuilt package output and making the offline build fail with
+  # "Cannot find module …/dist/…".  With the flag the excludes hit ONLY the project's
+  # own build dirs (which the source tree doesn't even carry — build-offline-bundle.sh
+  # never builds before packaging), and every package's dist/ survives intact.
+  # `--exclude=node_modules` (online only) has no wildcard, so it still drops every
+  # node_modules (root + nested) for the npm rebuild.
   ansible.builtin.shell:
     cmd: >-
-      tar -C {{ morphit_local_source_path | quote }}
+      tar --no-wildcards-match-slash -C {{ morphit_local_source_path | quote }}
       {{ '' if (morphit_source_bundle_marker.stat.exists | default(false)) else '--exclude=node_modules' }}
-      --exclude=.svelte-kit --exclude=build
-      --exclude=dist --exclude=translator-output --exclude=.git
+      --exclude=./.git --exclude=./translator-output
+      --exclude=./apps/*/.svelte-kit --exclude=./apps/*/build
+      --exclude=./apps/*/dist --exclude=./packages/*/dist
       -cf - . | tar -C {{ morphit_repo_path | quote }} -xf -
   when:
     - (morphit_local_source_path | default('')) | length > 0
