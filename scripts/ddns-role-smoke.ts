@@ -58,7 +58,7 @@ check('timer fires on boot + on OnCalendar, persistently, WantedBy timers.target
 
 // ── tasks ─────────────────────────────────────────────────────────
 check('tasks ASSERT the update URL is set when enabled', /ansible\.builtin\.assert[\s\S]{0,200}morphit_ddns_update_url \| length > 0/.test(tasks));
-check('tasks install the cp596 updater (single source: ops/ddns/)', /src: \/opt\/morphit\/ops\/ddns\/morphit-ddns-update\.sh/.test(tasks));
+check('tasks install the cp596 updater (single source: ops/ddns/)', /src:\s*"?\{\{ morphit_source_dir \}\}\/ops\/ddns\/morphit-ddns-update\.sh/.test(tasks));
 check('tasks write the env file 0600 (secret in the URL)', /template:[\s\S]{0,120}ddns\.env\.j2[\s\S]{0,120}mode: "0600"/.test(tasks));
 check('tasks install both units + enable the timer', /morphit-ddns\.service\.j2/.test(tasks) && /morphit-ddns\.timer\.j2/.test(tasks) && /name: morphit-ddns\.timer[\s\S]{0,80}enabled: true[\s\S]{0,40}state: started/.test(tasks));
 
