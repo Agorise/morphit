@@ -19,7 +19,7 @@ import { collectInstallInputs, askInstallMode } from './collectInstallInputs.ts'
 import { buildAnsibleVars, validateInstallInputs } from './ansibleVars.ts';
 import { assembleInstall } from './assembleInstall.ts';
 import { collectInstallSummary, printInstallSummary, allComponentsUp } from './installSummary.ts';
-import type { SecretToSave } from './saveSecrets.ts';
+import { promptSaveSecrets, type SecretToSave } from './saveSecrets.ts';
 import { step, beginSteps, endSteps, currentStepNum, ask } from './prompt.ts';
 
 /** Ansible's `morphit_relay_keystore_path` default; we write the keystore here
@@ -78,10 +78,11 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 	// question, a router step, and desktop notifications), so ask it FIRST — before
 	// the numbered steps — so the running "Step N of {total}" is accurate from step 1.
 	const mode = await askInstallMode();
-	// 3 account steps + 5 core questions + the post-install summary + the register
-	// opt-in, plus 3 more on a home box (DDNS, the router port-forward, desktop
-	// notifications).  Keep in sync with the step() calls below + in collectInstallInputs.
-	const totalSteps = 3 + 5 + 2 + (mode === 'home' ? 3 : 0);
+	// 3 account steps + 5 core questions + saving the DB passwords + the post-install
+	// summary + the register opt-in, plus 3 more on a home box (DDNS, the router
+	// port-forward, desktop notifications).  Keep in sync with the step() calls below
+	// + in collectInstallInputs.
+	const totalSteps = 3 + 5 + 3 + (mode === 'home' ? 3 : 0);
 	beginSteps(totalSteps);
 
 	const relay = await stepRelayAccount();
@@ -124,15 +125,21 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 	// Only now (inputs valid, operator ready) write the keystore Ansible reads.
 	writeRelayKeystore(activeKey, keystorePath);
 
+	// Saving the two generated DB passwords is its OWN step — and it happens BEFORE
+	// the install banner, while the wizard is still interactive, so the operator
+	// records them and types SAVED before the automatic part starts.
+	const secretsToSave: SecretToSave[] = [
+		{ label: 'Database password (marketplace data)', value: inputs.indexerDbPassword },
+		{ label: 'Database password (account signups)', value: inputs.relayDbPassword }
+	];
+	step(0, 0, 'Save your two database passwords');
+	await promptSaveSecrets(secretsToSave);
+
 	// The install itself isn't a numbered step — it's the machine working, not a
 	// question — so it gets a plain banner rather than a "Step N of N" header.
 	console.log('\n══════════════════════════════════════════════════════════');
 	console.log('Installing your node — this part is automatic, sit tight…');
 	console.log('══════════════════════════════════════════════════════════\n');
-	const secretsToSave: SecretToSave[] = [
-		{ label: 'Database password (marketplace data)', value: inputs.indexerDbPassword },
-		{ label: 'Database password (account signups)', value: inputs.relayDbPassword }
-	];
 	const res = await assembleInstall({
 		vars: {
 			...buildAnsibleVars(inputs),
@@ -144,6 +151,9 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 		secretsToSave,
 		playbookPath: join(opts.repoRoot, 'ops', 'ansible', 'playbook.yml'),
 		varsFilePath: VARS_FILE_PATH
+	}, {
+		// Already saved as its own numbered step above — don't prompt for them again.
+		promptSave: async (): Promise<void> => {}
 	});
 	if (!res.ok) {
 		console.log(`\n  ${res.reason}\n`);

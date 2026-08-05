@@ -145,26 +145,14 @@
 # The MCP server holds no keys (it's read-only over the indexer's
 # orderbook) so the user needs no privileged group memberships
 # beyond config-file read access.
-# cp634 — the group MUST be created before the user: the user task sets
-# `group: morphit-mcp` as its PRIMARY group, and Ansible's user module
-# fails ("Group morphit-mcp does not exist") if it isn't there yet — the
-# morphit-relay pair above has both halves; this one was missing the group.
-- name: Create morphit-mcp system group
-  ansible.builtin.group:
-    name: morphit-mcp
-    system: true
-
-- name: Create morphit-mcp system user
-  ansible.builtin.user:
-    name: morphit-mcp
-    group: morphit-mcp
-    groups: "{{ morphit_service_group }}"
-    append: true
-    home: /var/lib/morphit-mcp
-    create_home: false
-    shell: /usr/sbin/nologin
-    system: true
-    state: present
+# NOTE: the morphit-mcp user/group is created by the `morphit` role (gated on
+# morphit_mcp_enabled, home /opt/morphit-mcp, isolated — NOT in the service group),
+# not here.  base used to create it too, with a DIFFERENT home (/var/lib/morphit-mcp)
+# and — wrongly — membership in morphit_service_group, which (a) forced a `usermod`
+# on every converge as the two definitions fought, failing on a re-run/upgrade with
+# "user morphit-mcp is currently used by process …" once morphit-mcp.service is up,
+# and (b) broke the MCP's isolation (the whole point is morphit-mcp CANNOT read the
+# main install's secrets).  Single-owner now: the morphit role.
 
 - name: Create /etc/morphit directory for env files + keystore
   ansible.builtin.file:
