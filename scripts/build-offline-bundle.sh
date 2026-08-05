@@ -64,6 +64,23 @@ log "1/6  Installing app dependencies (npm ci) + priming the offline npm cache�
 npm ci --cache "${VENDOR}/npm-cache"
 touch node_modules/.morphit-bundle-complete
 
+# ── 1b. Warm the cache for the offline MCP deploy ──
+# deploy-mcp.sh builds a lean runtime tree with `npm install` against a REWRITTEN
+# package.json — that needs npm's PACKUMENT metadata (the version listing) to
+# RESOLVE tsx + the MCP SDK, which `npm ci` (lockfile-exact, integrity-keyed
+# tarballs only) does NOT cache.  So run the real deploy once here, ONLINE, into a
+# throwaway dir with the cache pointed at vendor/npm-cache: npm resolves + fetches
+# exactly what the runtime `npm install --offline` will need, and it lands in the
+# shipped cache.  MORPHIT_MCP_CACHE_WARM=1 forces deploy-mcp's online branch even
+# though vendor/npm-cache already exists; a non-existent service user makes it skip
+# the chown.  set -e means a warm failure fails the build (better than a bundle
+# that can't deploy the MCP offline).
+log "     …warming the npm cache for the offline MCP deploy"
+_mcpwarm="$(mktemp -d)"
+env MORPHIT_MCP_CACHE_WARM=1 npm_config_cache="${VENDOR}/npm-cache" \
+	bash "${REPO_ROOT}/ops/scripts/deploy-mcp.sh" "${REPO_ROOT}" "${_mcpwarm}" morphit-mcp-cache-warm-nouser
+rm -rf "${_mcpwarm}"
+
 # ── 2. Node.js runtime → vendor/node ──
 log "2/6  Fetching the Node.js ${NODE_VERSION} runtime…"
 _ntar="node-${NODE_VERSION}-linux-x64.tar.xz"

@@ -450,6 +450,12 @@ results.push({
 	if (/--exclude='?\.\/apps\/\*\/dist'?/.test(bobCmd) && !/--no-wildcards-match-slash/.test(bobCmd)) ob.push('build-offline-bundle.sh packaging tar lacks --no-wildcards-match-slash — its ./apps/*/dist exclude also strips nested apps/*/node_modules/*/dist from the bundle');
 	const dmSh = existsSync(join(REPO_ROOT, 'ops', 'scripts', 'deploy-mcp.sh')) ? readFileSync(join(REPO_ROOT, 'ops', 'scripts', 'deploy-mcp.sh'), 'utf-8') : '';
 	if (/npm install/.test(dmSh) && !/--offline --cache "\$REPO_DIR\/vendor\/npm-cache"/.test(dmSh)) ob.push('deploy-mcp.sh npm install is not offline-safe against the bundled npm cache');
+	// npm ci caches tarballs but NOT the packuments a fresh `npm install` needs to
+	// resolve the MCP deploy's rewritten package.json — so the build must WARM the
+	// cache by running deploy-mcp online once (MORPHIT_MCP_CACHE_WARM=1), and
+	// deploy-mcp must honour that override to force its online branch.
+	if (!/MORPHIT_MCP_CACHE_WARM=1[\s\S]{0,200}deploy-mcp\.sh/.test(bobCmd)) ob.push('build-offline-bundle.sh does not warm the npm cache for the offline MCP deploy (offline npm install would fail ENOTCACHED on the SDK packument)');
+	if (/vendor\/npm-cache/.test(dmSh) && !/MORPHIT_MCP_CACHE_WARM:-/.test(dmSh)) ob.push('deploy-mcp.sh does not honour MORPHIT_MCP_CACHE_WARM — the build cannot warm the cache online');
 	results.push({
 		name: 'offline-appliance bundle wiring (apt/docker/kubo/node install offline when bundled; dormant online; apt restored when online)',
 		ok: ob.length === 0,
