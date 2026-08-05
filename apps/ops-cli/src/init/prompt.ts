@@ -210,43 +210,41 @@ export async function askPassword(prompt: string): Promise<string> {
 }
 
 /** Auto-numbering for the guided install.  The sub-steps it reuses (from the
- *  23-step `init` wizard) each carry a hardcoded "Step N of 23"; when beginSteps()
- *  is active, step() ignores those numbers and emits a single running "Step N"
- *  instead, so the guided install reads as one clean, non-jumping sequence.  `init`
- *  never calls beginSteps(), so it keeps its classic "Step N of 23". */
+ *  23-step `init` wizard) each carry a hardcoded "Step N of 23"; when
+ *  beginSteps(total) is active, step() ignores those numbers and emits a single
+ *  running "Step N of {total}" instead, so the guided install reads as one clean,
+ *  non-jumping sequence with an accurate end-count.  `init` never calls
+ *  beginSteps(), so it keeps its classic "Step N of 23". */
 let _autoStepOn = false;
 let _autoStepNum = 0;
+let _autoStepTotal = 0;
 
-export function beginSteps(): void {
+export function beginSteps(total: number): void {
 	_autoStepOn = true;
 	_autoStepNum = 0;
+	_autoStepTotal = total;
 }
 export function endSteps(): void {
 	_autoStepOn = false;
 }
 
-/** Print a section header with rule lines.  Used to delimit
- *  wizard steps so the output is scannable. */
+/** The running step number so far (for a post-run self-check that the declared
+ *  total matched the number of steps actually shown). */
+export function currentStepNum(): number {
+	return _autoStepNum;
+}
+
+/** Print a step header with rule lines.  Under the guided install's running
+ *  counter this shows "Step N of {total}: title"; otherwise "Step N of M: title"
+ *  from the caller's own numbers. */
 export function step(stepNum: number, totalSteps: number, title: string): void {
 	const rule = '━'.repeat(58);
 	const label = _autoStepOn
-		? `Step ${++_autoStepNum}: ${title}`
+		? `Step ${++_autoStepNum} of ${_autoStepTotal}: ${title}`
 		: `Step ${stepNum} of ${totalSteps}: ${title}`;
 	console.log('');
 	console.log(rule);
 	console.log(label);
-	console.log(rule);
-	console.log('');
-}
-
-/** A numbered SECTION divider (a group of steps), e.g. "Section 2 of 3".  Distinct
- *  from step(): the guided install shows high-level progress across its phases with
- *  section(), while step() numbers the individual questions inside them. */
-export function section(sectionNum: number, totalSections: number, title: string): void {
-	const rule = '═'.repeat(58);
-	console.log('');
-	console.log(rule);
-	console.log(`Section ${sectionNum} of ${totalSections}: ${title}`);
 	console.log(rule);
 	console.log('');
 }

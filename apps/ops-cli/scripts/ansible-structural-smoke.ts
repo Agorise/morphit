@@ -408,6 +408,17 @@ results.push({
 	else if (pb.indexOf('role: vendor') > pb.indexOf('role: base')) ob.push('vendor role must run BEFORE base (apt redirected before any install)');
 	const bw = readIf(R('bunkerweb/tasks/main.yml'));
 	if (!/vendor\/docker/.test(bw) || !/docker load/.test(bw)) ob.push('bunkerweb role does not load bundled Docker images');
+	const bobSh = existsSync(join(REPO_ROOT, 'scripts', 'build-offline-bundle.sh')) ? readFileSync(join(REPO_ROOT, 'scripts', 'build-offline-bundle.sh'), 'utf-8') : '';
+	const bobCmd = bobSh.split('\n').filter((l) => !l.trim().startsWith('#')).join('\n');
+	// The bundle must save EXACTLY the docker images a guided install needs offline:
+	// every `image:` the bunkerweb compose pins (via group_vars) AND the frontend
+	// Dockerfile's FROM base (compose builds it with --build).  A wrong tag or a
+	// missing image makes `docker compose up` pull from Docker Hub and die offline.
+	const compose = readIf(R('bunkerweb/templates/docker-compose.yml.j2'));
+	for (const mm of compose.matchAll(/image:\s*\{\{\s*(\w+)\s*\}\}/g))
+		if (!new RegExp(`\\^${mm[1]}:`).test(bobCmd)) ob.push(`build-offline-bundle.sh does not read the compose image ${mm[1]} from group_vars to save it — offline docker compose up would pull it`);
+	if (/image:\s*\{\{/.test(compose) && /bunkerity\/bunkerweb:latest/.test(bobCmd)) ob.push('build-offline-bundle.sh saves bunkerity/bunkerweb:latest but compose pins a version — tag mismatch forces an offline pull');
+	if (existsSync(join(REPO_ROOT, 'ops', 'bunkerweb', 'frontend', 'Dockerfile')) && !/frontend\/Dockerfile/.test(bobCmd)) ob.push('build-offline-bundle.sh does not bundle the frontend Dockerfile FROM base image — docker compose up --build would pull it offline');
 	// Offline install must NOT fetch Docker's repo key from the internet — docker-ce
 	// and friends are in the bundled apt closure.  The vendor role sets the fact.
 	const vend = readIf(R('vendor/tasks/main.yml'));
@@ -444,9 +455,7 @@ results.push({
 	if (!existsSync(join(REPO_ROOT, 'scripts', 'build-offline-bundle.sh'))) ob.push('scripts/build-offline-bundle.sh (the bundle recipe) missing');
 	// The MCP deploy (on by default) runs `npm install` in a separate tree; offline
 	// that must use the bundled npm cache, which the build ships via `npm ci --cache`.
-	const bobSh = existsSync(join(REPO_ROOT, 'scripts', 'build-offline-bundle.sh')) ? readFileSync(join(REPO_ROOT, 'scripts', 'build-offline-bundle.sh'), 'utf-8') : '';
 	if (!/npm ci --cache "\$\{VENDOR\}\/npm-cache"/.test(bobSh)) ob.push('build-offline-bundle.sh does not ship an npm cache (npm ci --cache vendor/npm-cache) for the offline MCP deploy');
-	const bobCmd = bobSh.split('\n').filter((l) => !l.trim().startsWith('#')).join('\n');
 	if (/--exclude='?\.\/apps\/\*\/dist'?/.test(bobCmd) && !/--no-wildcards-match-slash/.test(bobCmd)) ob.push('build-offline-bundle.sh packaging tar lacks --no-wildcards-match-slash — its ./apps/*/dist exclude also strips nested apps/*/node_modules/*/dist from the bundle');
 	const dmSh = existsSync(join(REPO_ROOT, 'ops', 'scripts', 'deploy-mcp.sh')) ? readFileSync(join(REPO_ROOT, 'ops', 'scripts', 'deploy-mcp.sh'), 'utf-8') : '';
 	if (/npm install/.test(dmSh) && !/--offline --cache "\$REPO_DIR\/vendor\/npm-cache"/.test(dmSh)) ob.push('deploy-mcp.sh npm install is not offline-safe against the bundled npm cache');

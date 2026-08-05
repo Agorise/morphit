@@ -49,10 +49,24 @@ async function askValidated(
 	}
 }
 
+/** Ask WHERE the node will run — the ONE answer that changes the step count
+ *  (home adds DDNS + a router step + desktop notifications).  Asked on its own,
+ *  BEFORE the numbered steps begin, so the wizard can show an accurate "Step N of
+ *  {total}" from step 1 onward. */
+export async function askInstallMode(deps: CollectDeps = {}): Promise<InstallMode> {
+	const askChoice = deps.askChoice ?? realAskChoice;
+	const modeIdx = await askChoice('Where will this node run?', [
+		'This computer, on my home internet (address can change)',
+		'A rented server / VPS (has a fixed public address)'
+	]);
+	return modeIdx === 0 ? 'home' : 'vps';
+}
+
 /** Collect the install-specific answers.  `known` carries what the wizard has
- *  already gathered (the operator's account + tag). */
+ *  already gathered (the operator's account + tag, and the deployment mode). */
 export async function collectInstallInputs(
 	known: {
+		readonly mode: InstallMode;
 		readonly operatorAccount: string;
 		readonly operatorTag: string;
 		readonly feesAccount: string;
@@ -61,20 +75,13 @@ export async function collectInstallInputs(
 	deps: CollectDeps = {}
 ): Promise<AnsibleInstallInputs> {
 	const ask = deps.ask ?? realAsk;
-	const askChoice = deps.askChoice ?? realAskChoice;
 	const examples = deps.examples ?? realExamples;
 	const print = deps.print ?? ((s: string): void => console.log(s));
 	const req = { ask, examples, print };
 
-	// Where will it run?  This drives the ONE difference (DDNS on home).
-	// step() numbers are ignored under the guided install's running counter (the
-	// 0,0 is a placeholder); `init` never reaches this file.
-	step(0, 0, 'Where this node will run');
-	const modeIdx = await askChoice('Where will this node run?', [
-		'This computer, on my home internet (address can change)',
-		'A rented server / VPS (has a fixed public address)'
-	]);
-	const mode: InstallMode = modeIdx === 0 ? 'home' : 'vps';
+	// Mode was chosen before the numbered steps began (askInstallMode), so the
+	// running "Step N of {total}" counter is accurate from the very first step.
+	const mode = known.mode;
 
 	step(0, 0, 'Your web address (domain)');
 	const domain = await askValidated(

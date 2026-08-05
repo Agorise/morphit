@@ -145,8 +145,25 @@ rm -rf "${APTSTAGE}"
 log "     $(ls "${VENDOR}/apt"/*.deb 2>/dev/null | wc -l) .deb files harvested."
 
 # ── 5. Docker images → vendor/docker (docker save) ──
-log "5/6  Pulling + saving docker images…"
-for img in bunkerity/bunkerweb:latest postgres:16-alpine; do
+# The bunkerweb compose (roles/bunkerweb/templates/docker-compose.yml.j2) is the
+# ONLY consumer of docker images in a guided install, and it pins exactly two:
+# bunkerweb_image + bunkerweb_scheduler_image.  Read them straight from group_vars
+# so the saved tags ALWAYS match the tags compose requests offline — a mismatch (or
+# a missing scheduler image, the cp653 bug) makes `docker compose up` try to pull
+# from Docker Hub and die with no network.  The guided install uses HOST postgres,
+# so NO postgres image is bundled (Ken's manual dockerized VPS doesn't use bundles).
+_gv="${REPO_ROOT}/ops/ansible/group_vars/all.yml"
+BW_IMAGE="$(awk '/^bunkerweb_image:/{print $2; exit}' "${_gv}")"
+BW_SCHED_IMAGE="$(awk '/^bunkerweb_scheduler_image:/{print $2; exit}' "${_gv}")"
+# The frontend service is BUILT (docker compose up --build) from ops/bunkerweb/
+# frontend/Dockerfile; its FROM base image must be present locally too or the build
+# pulls it from Docker Hub and dies offline.  Read it from the Dockerfile so it can't
+# drift from what the build actually needs.
+FE_BASE="$(awk '/^FROM /{print $2; exit}' "${REPO_ROOT}/ops/bunkerweb/frontend/Dockerfile")"
+[ -n "${BW_IMAGE}" ] && [ -n "${BW_SCHED_IMAGE}" ] && [ -n "${FE_BASE}" ] \
+	|| die "could not read bunkerweb_image / bunkerweb_scheduler_image / frontend FROM base image"
+log "5/6  Pulling + saving docker images (${BW_IMAGE} + ${BW_SCHED_IMAGE} + ${FE_BASE})…"
+for img in "${BW_IMAGE}" "${BW_SCHED_IMAGE}" "${FE_BASE}"; do
 	docker pull "${img}"
 	_safe="$(printf '%s' "${img}" | tr '/:' '__')"
 	docker save "${img}" | gzip -9c > "${VENDOR}/docker/${_safe}.tar.gz"
