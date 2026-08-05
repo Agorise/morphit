@@ -106,6 +106,22 @@ morphit_repo_path: /opt/morphit
 morphit_local_install: false
 morphit_local_source_path: ""
 
+# Where the repo's SOURCE files live *right now*, during the play.  Roles that run
+# BEFORE the morphit role reads a file out of the tree (e.g. ddns's updater
+# script, postgres's init.sql) must use THIS, not morphit_repo_path: on a guided
+# LOCAL install /opt/morphit is still empty until the morphit role copies the
+# extracted release into it, so the source is the extraction dir
+# (morphit_local_source_path).  On a manual/remote install the repo already lives
+# at morphit_repo_path from the start, so this falls back to it.
+morphit_source_dir: "{{ morphit_local_source_path if ((morphit_local_source_path | default('')) | length > 0) else morphit_repo_path }}"
+
+# True only during a self-contained OFFLINE (bundled) install — the vendor role
+# flips this on when it finds the bundled apt repo.  Roles that would otherwise
+# fetch a third-party apt-repo key from the internet (e.g. bunkerweb's Docker
+# repo) skip that step when this is set, installing from the bundled closure
+# instead.  Stays false on an ordinary online install.
+morphit_offline_install: false
+
 
 # ─── Node.js ─────────────────────────────────────────────────────
 

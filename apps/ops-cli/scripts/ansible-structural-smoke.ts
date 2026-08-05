@@ -408,16 +408,122 @@ results.push({
 	else if (pb.indexOf('role: vendor') > pb.indexOf('role: base')) ob.push('vendor role must run BEFORE base (apt redirected before any install)');
 	const bw = readIf(R('bunkerweb/tasks/main.yml'));
 	if (!/vendor\/docker/.test(bw) || !/docker load/.test(bw)) ob.push('bunkerweb role does not load bundled Docker images');
+	// Offline install must NOT fetch Docker's repo key from the internet — docker-ce
+	// and friends are in the bundled apt closure.  The vendor role sets the fact.
+	const vend = readIf(R('vendor/tasks/main.yml'));
+	if (!/morphit_offline_install:\s*true/.test(vend)) ob.push('vendor role does not set morphit_offline_install when a bundle is present');
+	if (/download\.docker\.com/.test(bw) && !/not morphit_offline_install/.test(bw)) ob.push('bunkerweb fetches the Docker repo key unconditionally — must skip on an offline install (docker-ce is bundled)');
 	const ipfs = readIf(R('ipfs/tasks/main.yml'));
 	if (!/vendor\/kubo/.test(ipfs)) ob.push('ipfs role does not use a bundled Kubo when present');
 	const nodejs = readIf(R('morphit/tasks/nodejs.yml'));
 	if (!/morphit_node_have/.test(nodejs)) ob.push('nodejs role does not skip NodeSource when Node is already present');
+	// Offline install would die at `npm install` unless the prebuilt node_modules
+	// is COPIED into place: the tar-pipe excludes node_modules for online installs
+	// but must INCLUDE it when the source carries the bundle marker.
+	const cb = readIf(R('morphit/tasks/clone_and_build.yml'));
+	if (!/morphit_source_bundle_marker/.test(cb)) ob.push('clone_and_build does not detect a bundled node_modules in the SOURCE (offline install would run npm install → hit the registry)');
+	if (!/morphit_source_bundle_marker\.stat\.exists[\s\S]*?--exclude=node_modules/.test(cb)) ob.push('clone_and_build unconditionally excludes node_modules — must keep it for an offline bundle');
 	const foPath = join(REPO_ROOT, 'ops', 'first-online', 'morphit-first-online.sh');
 	const fo = existsSync(foPath) ? readFileSync(foPath, 'utf-8') : '';
 	if (!/99-morphit-offline\.conf/.test(fo)) ob.push('first-online does not restore normal apt (remove the offline override) when online');
 	if (!existsSync(join(REPO_ROOT, 'scripts', 'build-offline-bundle.sh'))) ob.push('scripts/build-offline-bundle.sh (the bundle recipe) missing');
+	// The MCP deploy (on by default) runs `npm install` in a separate tree; offline
+	// that must use the bundled npm cache, which the build ships via `npm ci --cache`.
+	const bobSh = existsSync(join(REPO_ROOT, 'scripts', 'build-offline-bundle.sh')) ? readFileSync(join(REPO_ROOT, 'scripts', 'build-offline-bundle.sh'), 'utf-8') : '';
+	if (!/npm ci --cache "\$\{VENDOR\}\/npm-cache"/.test(bobSh)) ob.push('build-offline-bundle.sh does not ship an npm cache (npm ci --cache vendor/npm-cache) for the offline MCP deploy');
+	const dmSh = existsSync(join(REPO_ROOT, 'ops', 'scripts', 'deploy-mcp.sh')) ? readFileSync(join(REPO_ROOT, 'ops', 'scripts', 'deploy-mcp.sh'), 'utf-8') : '';
+	if (/npm install/.test(dmSh) && !/--offline --cache "\$REPO_DIR\/vendor\/npm-cache"/.test(dmSh)) ob.push('deploy-mcp.sh npm install is not offline-safe against the bundled npm cache');
 	results.push({
 		name: 'offline-appliance bundle wiring (apt/docker/kubo/node install offline when bundled; dormant online; apt restored when online)',
+		ok: ob.length === 0,
+		detail: ob.length === 0 ? undefined : ob.join(' | ')
+	});
+}
+
+// ─── Scenario 13: roles that run BEFORE the morphit copy must read repo files
+// from the SOURCE dir, not the not-yet-populated /opt/morphit ──
+// Regression: a guided home install died at `ddns: Install the DDNS updater
+// script` — it copied from a HARDCODED /opt/morphit/ops/ddns/... that is empty
+// until the morphit role (which runs LATER) copies the extracted tree there.
+// Same class as the vendor apt bug.  morphit_source_dir resolves to the
+// extraction dir on a guided install and /opt/morphit on a manual one, so a
+// pre-copy role reads real files either way.
+{
+	const ob: string[] = [];
+	const R = (p: string): string => join(ROLES_DIR, p);
+	const readIf = (p: string): string => (existsSync(p) ? readFileSync(p, 'utf-8') : '');
+	const gv = readIf(join(ANSIBLE_ROOT, 'group_vars', 'all.yml'));
+	if (!/morphit_source_dir\s*:/.test(gv)) ob.push('morphit_source_dir not defined in group_vars/all.yml');
+	const pb = existsSync(PLAYBOOK) ? readFileSync(PLAYBOOK, 'utf-8') : '';
+	const idxMorphit = pb.indexOf('role: morphit');
+	const before = (role: string): boolean => {
+		const i = pb.indexOf(`role: ${role}`);
+		return i >= 0 && idxMorphit >= 0 && i < idxMorphit;
+	};
+	// ddns updater script — no hardcoded /opt/morphit src; must use the source var.
+	const ddns = readIf(R('ddns/tasks/main.yml'));
+	if (before('ddns') && /src:\s*\/opt\/morphit\//.test(ddns)) ob.push('ddns copies from a HARDCODED /opt/morphit source (empty until the morphit copy) — use morphit_source_dir');
+	if (before('ddns') && /morphit-ddns-update\.sh/.test(ddns) && !/morphit_source_dir|morphit_local_source_path/.test(ddns)) ob.push('ddns updater-script src must use morphit_source_dir');
+	// postgres init.sql — must read from the source dir, not morphit_repo_path.
+	const pg = readIf(R('postgres/tasks/main.yml'));
+	if (before('postgres') && /-f \{\{\s*morphit_repo_path\s*\}\}\/ops\/postgres\/init\.sql/.test(pg)) ob.push('postgres reads init.sql from morphit_repo_path (/opt/morphit, empty until the copy) — use morphit_source_dir');
+	results.push({
+		name: 'pre-copy roles read repo files from the source dir, not the empty /opt/morphit (ddns + postgres)',
+		ok: ob.length === 0,
+		detail: ob.length === 0 ? undefined : ob.join(' | ')
+	});
+}
+
+// ─── Scenario 14: the offline bundle's apt closure covers every package the
+// default-enabled roles install ──
+// Regression: the hand-maintained PKGS list in build-offline-bundle.sh silently
+// drifted from the roles (missing postgresql, build-essential, chrony, docker-
+// buildx-plugin + 13 more).  On a used test box those happen to be pre-installed
+// so the gap hides; a fresh minimal appliance dies at the first apt install with
+// no network.  This diffs PKGS against what the roles actually apt-install so the
+// list can never silently fall behind again.
+{
+	const ob: string[] = [];
+	const R = (p: string): string => join(ROLES_DIR, p);
+	const bundleSh = join(REPO_ROOT, 'scripts', 'build-offline-bundle.sh');
+	const shTxt = existsSync(bundleSh) ? readFileSync(bundleSh, 'utf-8') : '';
+	const m = shTxt.match(/PKGS="([\s\S]*?)"/);
+	const pkgs = new Set(
+		(m ? m[1] : '').replace(/\\/g, ' ').split(/\s+/).map((s) => s.trim()).filter(Boolean)
+	);
+	if (pkgs.size === 0) ob.push('could not parse PKGS from build-offline-bundle.sh');
+	// Default-enabled roles for a home appliance (monitors/matrix_bot/trivy are off).
+	const enabledRoles = ['base', 'hardening', 'ddns', 'tls', 'postgres', 'bunkerweb', 'tor', 'i2pd'];
+	// nodejs comes from vendor/node (nodejs.yml skips NodeSource offline) — intentionally unbundled.
+	const notBundled = new Set(['nodejs']);
+	const walk = (dir: string): string[] =>
+		existsSync(dir)
+			? readdirSync(dir, { withFileTypes: true }).flatMap((d) =>
+					d.isDirectory() ? walk(join(dir, d.name)) : d.name.endsWith('.yml') ? [join(dir, d.name)] : []
+			  )
+			: [];
+	const aptPkgsInRole = (role: string): string[] => {
+		const out = new Set<string>();
+		for (const f of walk(R(role))) {
+			let inApt = false;
+			for (const raw of readFileSync(f, 'utf-8').split('\n')) {
+				const s = raw.trim();
+				if (/ansible\.builtin\.(apt|package)\s*:/.test(s) || /^(apt|package):/.test(s)) { inApt = true; continue; }
+				if (!inApt) continue;
+				const single = s.match(/^name:\s*["']?([a-z][a-zA-Z0-9.+_-]+)["']?\s*$/);
+				if (single) out.add(single[1]);
+				const item = s.match(/^-\s+["']?([a-z][a-zA-Z0-9.+_-]+)["']?\s*$/);
+				if (item) out.add(item[1]);
+				if (/^- name:/.test(s) || (/\S/.test(s) && !s.startsWith('-') && s.includes(':') && !/^(name|state|update_cache|cache_valid_time|install_recommends|autoremove|allow_unauth|force_apt_get|purge|deb):/.test(s) && !s.startsWith('#'))) inApt = false;
+			}
+		}
+		return [...out].filter((p) => !['present', 'latest', 'true', 'false', 'yes', 'no'].includes(p));
+	};
+	for (const role of enabledRoles)
+		for (const p of aptPkgsInRole(role))
+			if (!notBundled.has(p) && !pkgs.has(p)) ob.push(`${role} apt-installs "${p}" but it is NOT in the offline bundle PKGS`);
+	results.push({
+		name: 'offline bundle PKGS covers every enabled-role apt install (fresh minimal box installs with zero network)',
 		ok: ob.length === 0,
 		detail: ob.length === 0 ? undefined : ob.join(' | ')
 	});

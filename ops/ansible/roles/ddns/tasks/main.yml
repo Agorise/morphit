@@ -22,7 +22,7 @@
 
 - name: Install the DDNS updater script (single source — ops/ddns/)
   ansible.builtin.copy:
-    src: /opt/morphit/ops/ddns/morphit-ddns-update.sh
+    src: "{{ morphit_source_dir }}/ops/ddns/morphit-ddns-update.sh"
     dest: "{{ morphit_ddns_lib }}/morphit-ddns-update.sh"
     owner: root
     group: root

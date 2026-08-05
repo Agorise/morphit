@@ -31,17 +31,23 @@
     mode: '0755'
 
 - name: Add Docker GPG key
+  # Skipped on a self-contained offline install: docker-ce/cli/containerd/buildx/
+  # compose all come from the bundled apt closure, so there is no need (and no way)
+  # to fetch Docker's repo key from the internet.  The offline apt override ignores
+  # sources.list.d anyway, so the repo add below is moot offline too.
   ansible.builtin.get_url:
     url: https://download.docker.com/linux/ubuntu/gpg
     dest: /etc/apt/keyrings/docker.asc
     mode: '0644'
     force: false
+  when: not morphit_offline_install
 
 - name: Add Docker apt repo
   ansible.builtin.apt_repository:
     repo: "deb [arch={{ ansible_architecture | replace('x86_64', 'amd64') | replace('aarch64', 'arm64') }} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ morphit_ubuntu_codename | default(ansible_distribution_release) }} stable"
     filename: docker
     state: present
+  when: not morphit_offline_install
 
 - name: Install Docker Engine + compose plugin
   ansible.builtin.apt:

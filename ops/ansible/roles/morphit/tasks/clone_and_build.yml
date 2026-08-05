@@ -29,16 +29,27 @@
     - (morphit_local_source_path | default('')) | length > 0
     - morphit_local_source_path != morphit_repo_path
 
+- name: Detect a bundled node_modules in the downloaded release (offline install)
+  # A self-contained offline tarball ships a prebuilt node_modules carrying this
+  # marker in the SOURCE.  When present we COPY node_modules into place (next task)
+  # and skip the workspace npm install — the one step that would otherwise reach
+  # the npm registry.  When absent (an ordinary online install) node_modules is
+  # excluded from the copy and rebuilt in place by npm install.
+  ansible.builtin.stat:
+    path: "{{ morphit_local_source_path }}/node_modules/.morphit-bundle-complete"
+  register: morphit_source_bundle_marker
+
 - name: Copy the downloaded release into place (local install)
-  # tar-pipe rather than `cp -a`: by the time this runs, `morphit-setup.sh` has
-  # done an `npm install` in the extract, so it carries a large node_modules we
-  # do NOT want to duplicate (the build below runs its own install in place).
-  # Exclude exactly what the release tarball excludes; tar is always present, no
-  # rsync dependency. Runs as root; the ownership task below fixes owner.
+  # tar-pipe rather than `cp -a`: tar is always present, no rsync dependency.
+  # node_modules is EXCLUDED for an online install (npm install rebuilds it in
+  # place — avoids duplicating the extract's dev-install), but INCLUDED for a
+  # self-contained offline bundle: there is no registry to rebuild from, so the
+  # prebuilt node_modules must come along.  Runs as root; ownership fixed below.
   ansible.builtin.shell:
     cmd: >-
       tar -C {{ morphit_local_source_path | quote }}
-      --exclude=node_modules --exclude=.svelte-kit --exclude=build
+      {{ '' if (morphit_source_bundle_marker.stat.exists | default(false)) else '--exclude=node_modules' }}
+      --exclude=.svelte-kit --exclude=build
       --exclude=dist --exclude=translator-output --exclude=.git
       -cf - . | tar -C {{ morphit_repo_path | quote }} -xf -
   when:
@@ -56,9 +67,9 @@
 
 - name: Detect a bundled (complete) node_modules
   # A self-contained offline tarball ships a prebuilt node_modules carrying this
-  # marker; the local-install rsync above copies it into place.  When present we
-  # skip the workspace `npm install` entirely — it is the one step here that would
-  # otherwise reach the npm registry.
+  # marker; the copy task above brings it into place for an offline bundle.  When
+  # present we skip the workspace `npm install` entirely — it is the one step here
+  # that would otherwise reach the npm registry.
   ansible.builtin.stat:
     path: "{{ morphit_repo_path }}/node_modules/.morphit-bundle-complete"
   register: morphit_bundle_marker

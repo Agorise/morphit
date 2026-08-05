@@ -53,11 +53,15 @@ command -v docker >/dev/null 2>&1 || die "docker is required (to save the bunker
 rm -rf "${VENDOR}"
 mkdir -p "${VENDOR}/node" "${VENDOR}/kubo" "${VENDOR}/apt" "${VENDOR}/docker"
 
-# ── 1. App dependencies → node_modules (+ marker) ──
+# ── 1. App dependencies → node_modules (+ marker) + a shippable npm cache ──
 # `npm ci` gives a deterministic, lockfile-exact tree.  The marker tells
 # morphit-setup.sh + the morphit role to use it as-is and never touch the registry.
-log "1/6  Installing app dependencies (npm ci)…"
-npm ci
+# --cache points the download cache at vendor/npm-cache so it ships in the bundle:
+# the offline MCP deploy (ops/scripts/deploy-mcp.sh) installs its lean runtime tree
+# with `npm install --offline` against THIS cache — the one registry read left in
+# the whole offline install.
+log "1/6  Installing app dependencies (npm ci) + priming the offline npm cache…"
+npm ci --cache "${VENDOR}/npm-cache"
 touch node_modules/.morphit-bundle-complete
 
 # ── 2. Node.js runtime → vendor/node ──
@@ -86,12 +90,17 @@ mv "${_ktar}" "${VENDOR}/kubo/${_ktar}"
 # matches a fresh 24.04 target exactly, regardless of what the build host has.
 # No sudo: the container is root (which also sidesteps host sudo quirks).
 log "4/6  Downloading the apt dependency closure in a clean ubuntu:24.04 container…"
-# The union of packages the roles apt-install (Ubuntu + Docker).  KEEP IN SYNC with
-# the roles when a package is added/removed (base, hardening, tls, postgres, i2pd,
-# bunkerweb).  Node is NOT here: vendor/node covers it and nodejs.yml skips NodeSource.
-PKGS="ca-certificates curl gnupg git ufw fail2ban auditd aide apparmor rkhunter \
-unattended-upgrades postfix libpam-pwquality cron certbot postgresql-client tor i2pd \
-docker-ce docker-ce-cli containerd.io docker-compose-plugin"
+# The union of packages the default-ENABLED roles apt-install (base, hardening,
+# ddns, tls, postgres, bunkerweb, tor, i2pd).  A smoke (ansible-structural,
+# "offline bundle PKGS covers every enabled-role apt install") diffs this against
+# the roles and FAILS on drift — so a fresh, minimal target installs with zero
+# network.  Node is NOT here: vendor/node covers it and nodejs.yml skips
+# NodeSource.  Monitors / matrix_bot / trivy are default-off and not bundled.
+PKGS="ca-certificates curl wget gnupg git lsb-release jq age rsync build-essential \
+chrony cron ufw fail2ban auditd audispd-plugins aide aide-common apparmor apparmor-utils \
+rkhunter libpam-pwquality unattended-upgrades apt-listchanges postfix libsasl2-modules \
+certbot postgresql postgresql-client postgresql-contrib python3-psycopg2 tor i2pd \
+apt-transport-https docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin"
 # Fetch Docker's repo key on the host (which has curl) so the container stays clean.
 APTSTAGE="$(mktemp -d)"
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o "${APTSTAGE}/docker.asc"
@@ -168,7 +177,7 @@ if [ "${1:-}" != "--no-tar" ]; then
 	# grep close the pipe early, SIGPIPE tar, and (under pipefail) report a false miss.
 	_manifest="$(tar -tzf "./${OUT}")"
 	for _need in 'vendor/docker/.*[.]tar[.]gz' 'vendor/kubo/.*[.]tar[.]gz' \
-		'vendor/apt/.*[.]deb' 'vendor/node/bin/node' 'node_modules/'; do
+		'vendor/apt/.*[.]deb' 'vendor/node/bin/node' 'vendor/npm-cache/' 'node_modules/'; do
 		grep -qE "${_need}" <<< "${_manifest}" \
 			|| die "offline bundle is INCOMPLETE — missing ${_need} (packaging bug); NOT shipping this."
 	done

@@ -21,6 +21,15 @@
 - name: Offline apt — redirect to the bundled local repo (only when a bundle is present)
   when: morphit_vendor_apt.stat.exists
   block:
+    - name: Mark this run as an offline (bundled) install
+      # Later roles gate third-party apt-repo setup (e.g. bunkerweb's Docker repo,
+      # which downloads a GPG key from download.docker.com) on this fact.  Offline
+      # those packages come from the bundled closure, so reaching the internet for
+      # a repo key must be skipped.  Set only when a bundle exists; the default
+      # (false, in group_vars/all.yml) covers the ordinary online path.
+      ansible.builtin.set_fact:
+        morphit_offline_install: true
+
     - name: Ensure an empty sources.list.d dir for the offline override
       ansible.builtin.file:
         path: "{{ morphit_local_source_path }}/vendor/apt/empty-parts"

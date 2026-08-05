@@ -106,8 +106,8 @@
 
 - name: Apply repo's init.sql to indexer DB if present
   ansible.builtin.shell:
-    cmd: psql -d {{ postgres_indexer_db }} -f {{ morphit_repo_path }}/ops/postgres/init.sql
-    creates: "{{ morphit_repo_path }}/ops/postgres/.init.applied"
+    cmd: psql -d {{ postgres_indexer_db }} -f {{ morphit_source_dir }}/ops/postgres/init.sql
+    creates: "{{ morphit_source_dir }}/ops/postgres/.init.applied"
   become: true
   become_user: postgres
   failed_when: false
