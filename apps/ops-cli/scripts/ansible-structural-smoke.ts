@@ -423,6 +423,13 @@ results.push({
 	const cb = readIf(R('morphit/tasks/clone_and_build.yml'));
 	if (!/morphit_source_bundle_marker/.test(cb)) ob.push('clone_and_build does not detect a bundled node_modules in the SOURCE (offline install would run npm install → hit the registry)');
 	if (!/morphit_source_bundle_marker\.stat\.exists[\s\S]*?--exclude=node_modules/.test(cb)) ob.push('clone_and_build unconditionally excludes node_modules — must keep it for an offline bundle');
+	// The copy MUST NOT strip node_modules/*/dist (root or nested): GNU tar lets `*`
+	// cross `/`, so anchored excludes need --no-wildcards-match-slash and there must
+	// be NO bare dist/build exclude (which would match node_modules/vite/dist etc.).
+	// Check the COMMAND only — comments here mention the bad pattern as a warning.
+	const cbCmd = cb.split('\n').filter((l) => !l.trim().startsWith('#')).join('\n');
+	if (!/--no-wildcards-match-slash/.test(cbCmd)) ob.push('clone_and_build tar lacks --no-wildcards-match-slash — its ./apps/*/dist excludes will also strip node_modules/*/dist (offline build breaks with "Cannot find module …/dist/…")');
+	if (/--exclude=dist\b/.test(cbCmd) || /--exclude=build\b/.test(cbCmd)) ob.push('clone_and_build has an UNANCHORED --exclude=dist/build — strips every package dist in node_modules; anchor to ./apps/*/dist + add --no-wildcards-match-slash');
 	const foPath = join(REPO_ROOT, 'ops', 'first-online', 'morphit-first-online.sh');
 	const fo = existsSync(foPath) ? readFileSync(foPath, 'utf-8') : '';
 	if (!/99-morphit-offline\.conf/.test(fo)) ob.push('first-online does not restore normal apt (remove the offline override) when online');
@@ -431,6 +438,8 @@ results.push({
 	// that must use the bundled npm cache, which the build ships via `npm ci --cache`.
 	const bobSh = existsSync(join(REPO_ROOT, 'scripts', 'build-offline-bundle.sh')) ? readFileSync(join(REPO_ROOT, 'scripts', 'build-offline-bundle.sh'), 'utf-8') : '';
 	if (!/npm ci --cache "\$\{VENDOR\}\/npm-cache"/.test(bobSh)) ob.push('build-offline-bundle.sh does not ship an npm cache (npm ci --cache vendor/npm-cache) for the offline MCP deploy');
+	const bobCmd = bobSh.split('\n').filter((l) => !l.trim().startsWith('#')).join('\n');
+	if (/--exclude='?\.\/apps\/\*\/dist'?/.test(bobCmd) && !/--no-wildcards-match-slash/.test(bobCmd)) ob.push('build-offline-bundle.sh packaging tar lacks --no-wildcards-match-slash — its ./apps/*/dist exclude also strips nested apps/*/node_modules/*/dist from the bundle');
 	const dmSh = existsSync(join(REPO_ROOT, 'ops', 'scripts', 'deploy-mcp.sh')) ? readFileSync(join(REPO_ROOT, 'ops', 'scripts', 'deploy-mcp.sh'), 'utf-8') : '';
 	if (/npm install/.test(dmSh) && !/--offline --cache "\$REPO_DIR\/vendor\/npm-cache"/.test(dmSh)) ob.push('deploy-mcp.sh npm install is not offline-safe against the bundled npm cache');
 	results.push({

@@ -163,7 +163,13 @@ if [ "${1:-}" != "--no-tar" ]; then
 	STAGE="$(mktemp -d)"
 	# Include node_modules + vendor; exclude only VCS/build junk.  --strip nothing:
 	# the tarball's top-level is the repo, same shape as the source tarball.
-	tar --exclude='./.git' --exclude='./out' --exclude='./dist' \
+	# --no-wildcards-match-slash is CRITICAL: without it GNU tar lets `*` cross `/`,
+	# so `./apps/*/dist` also matches nested apps/web/node_modules/<pkg>/dist (jspdf,
+	# dompurify, …) and silently strips those packages' prebuilt output from the
+	# bundle → the offline build later fails with "Cannot find module …/dist/…".
+	# The flag keeps the excludes anchored to the project's OWN build dirs only.
+	tar --no-wildcards-match-slash \
+		--exclude='./.git' --exclude='./out' --exclude='./dist' \
 		--exclude='./apps/*/dist' --exclude='./apps/*/build' \
 		--exclude='./packages/*/dist' --exclude='*.log' \
 		--exclude='./morphit-*.tar.gz*' \
