@@ -119,7 +119,16 @@ fs.writeFileSync(p, JSON.stringify(pkg, null, 2) + "\n");
 ' "$DEST/package.json"
 
 # ── 4. Install the runtime dependency tree ─────────────────────────
-( cd "$DEST" && npm install --omit=dev --no-audit --no-fund )
+# A self-contained offline bundle ships an npm cache at <repo>/vendor/npm-cache
+# (populated by the bundle's `npm ci`).  When it exists, install from it with
+# --offline so nothing reaches the registry — the two @morphit/* deps are already
+# file: (vendored above), and tsx (+esbuild) resolve from the cache.  Otherwise a
+# normal online install.
+if [ -d "$REPO_DIR/vendor/npm-cache" ]; then
+	( cd "$DEST" && npm install --omit=dev --no-audit --no-fund --offline --cache "$REPO_DIR/vendor/npm-cache" )
+else
+	( cd "$DEST" && npm install --omit=dev --no-audit --no-fund )
+fi
 
 # ── 5. Lock down ownership + perms (the isolation boundary) ────────
 if id "$SVC_USER" >/dev/null 2>&1; then
