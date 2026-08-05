@@ -396,6 +396,12 @@ results.push({
 		if (!/vendor\/apt\/Packages\.gz/.test(vendor)) ob.push('vendor role does not detect vendor/apt');
 		if (!/apt\.conf\.d\/99-morphit-offline\.conf/.test(vendor)) ob.push('vendor role does not write the reversible apt override');
 		if (!/when:\s*morphit_vendor_apt\.stat\.exists/.test(vendor)) ob.push('vendor role apt override not gated on the bundle');
+		// Regression (air-gapped install died at `base: apt update`): the vendor
+		// role runs FIRST, before the morphit role copies the tree to
+		// morphit_repo_path (/opt/morphit), so it MUST look for the bundle in the
+		// extraction dir (morphit_local_source_path) — /opt/morphit is empty then.
+		if (!/morphit_local_source_path\s*\}\}\/vendor\/apt/.test(vendor)) ob.push('vendor role must reference the bundle via morphit_local_source_path (the extraction dir, present when vendor runs first)');
+		if (/morphit_repo_path\s*\}\}\/vendor\/apt/.test(vendor)) ob.push('vendor role must NOT use morphit_repo_path for the bundle (/opt/morphit is empty until the morphit role copies later)');
 	}
 	const pb = existsSync(PLAYBOOK) ? readFileSync(PLAYBOOK, 'utf-8') : '';
 	if (!/role:\s*vendor/.test(pb)) ob.push('vendor role not wired into the playbook');
