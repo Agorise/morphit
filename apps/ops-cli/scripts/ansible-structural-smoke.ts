@@ -449,6 +449,12 @@ results.push({
 	// re-chown a pre-existing dir), or $HOME/.npm + Ansible become-temp are unwritable.
 	const baseMain = readIf(R('base/tasks/main.yml'));
 	if (!(/path:\s*"\{\{ morphit_service_home \}\}"[\s\S]{0,240}recurse:\s*true/.test(baseMain) && /morphit_service_home[\s\S]{0,240}owner:\s*"\{\{ morphit_service_user \}\}"/.test(baseMain))) ob.push('base does not recursively chown the service home to the service user — a root-owned/re-used home fails the offline install (npm exec EACCES)');
+	// morphit-mcp is created ONLY by the morphit role (gated on mcp_enabled, isolated —
+	// NOT in the service group).  base must NOT also define it: two definitions with
+	// different homes force a `usermod` every converge that fails once the service is
+	// running ("user morphit-mcp is currently used by process …"), and base's variant
+	// wrongly put it in the service group, breaking the MCP's isolation.
+	if (/name:\s*morphit-mcp\b/.test(baseMain)) ob.push('base role defines a morphit-mcp user/group — it must be the morphit role ONLY (conflicting homes force a usermod that fails on re-run; service-group membership breaks MCP isolation)');
 	const foPath = join(REPO_ROOT, 'ops', 'first-online', 'morphit-first-online.sh');
 	const fo = existsSync(foPath) ? readFileSync(foPath, 'utf-8') : '';
 	if (!/99-morphit-offline\.conf/.test(fo)) ob.push('first-online does not restore normal apt (remove the offline override) when online');
