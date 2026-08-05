@@ -119,12 +119,18 @@ fs.writeFileSync(p, JSON.stringify(pkg, null, 2) + "\n");
 ' "$DEST/package.json"
 
 # ── 4. Install the runtime dependency tree ─────────────────────────
-# A self-contained offline bundle ships an npm cache at <repo>/vendor/npm-cache
-# (populated by the bundle's `npm ci`).  When it exists, install from it with
-# --offline so nothing reaches the registry — the two @morphit/* deps are already
-# file: (vendored above), and tsx (+esbuild) resolve from the cache.  Otherwise a
-# normal online install.
-if [ -d "$REPO_DIR/vendor/npm-cache" ]; then
+# A self-contained offline bundle ships an npm cache at <repo>/vendor/npm-cache.
+# When it exists we install with --offline so nothing reaches the registry — the
+# two @morphit/* deps are already file: (vendored above), and tsx (+esbuild) + the
+# MCP SDK resolve from the cache.  Otherwise a normal online install.
+#
+# The cache is populated at BUILD time by running THIS script online once (see
+# build-offline-bundle.sh) so npm caches the packuments a fresh package.json needs
+# to RESOLVE (which `npm ci` alone does not).  That warm run sets
+# MORPHIT_MCP_CACHE_WARM=1 to force the online branch even though the cache dir
+# already exists, and points npm_config_cache at vendor/npm-cache so what it
+# fetches lands there.
+if [ -d "$REPO_DIR/vendor/npm-cache" ] && [ -z "${MORPHIT_MCP_CACHE_WARM:-}" ]; then
 	( cd "$DEST" && npm install --omit=dev --no-audit --no-fund --offline --cache "$REPO_DIR/vendor/npm-cache" )
 else
 	( cd "$DEST" && npm install --omit=dev --no-audit --no-fund )
