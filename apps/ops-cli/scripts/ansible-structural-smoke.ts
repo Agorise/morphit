@@ -430,6 +430,14 @@ results.push({
 	const cbCmd = cb.split('\n').filter((l) => !l.trim().startsWith('#')).join('\n');
 	if (!/--no-wildcards-match-slash/.test(cbCmd)) ob.push('clone_and_build tar lacks --no-wildcards-match-slash — its ./apps/*/dist excludes will also strip node_modules/*/dist (offline build breaks with "Cannot find module …/dist/…")');
 	if (/--exclude=dist\b/.test(cbCmd) || /--exclude=build\b/.test(cbCmd)) ob.push('clone_and_build has an UNANCHORED --exclude=dist/build — strips every package dist in node_modules; anchor to ./apps/*/dist + add --no-wildcards-match-slash');
+	// The npm build + verify run as the nologin service user; their npm cache must
+	// live in the repo (writable, re-created each run), not the service user's
+	// $HOME/.npm — that home is not guaranteed writable and broke `npm exec` EACCES.
+	if ((cbCmd.match(/npm_config_cache:\s*"\{\{ morphit_repo_path \}\}\/\.npm-cache"/g) || []).length < 2) ob.push('clone_and_build npm build/verify do not pin npm_config_cache into the repo — npm falls back to $HOME/.npm (offline install fails EACCES)');
+	// And base must make the service user actually own its home (create_home does not
+	// re-chown a pre-existing dir), or $HOME/.npm + Ansible become-temp are unwritable.
+	const baseMain = readIf(R('base/tasks/main.yml'));
+	if (!(/path:\s*"\{\{ morphit_service_home \}\}"[\s\S]{0,240}recurse:\s*true/.test(baseMain) && /morphit_service_home[\s\S]{0,240}owner:\s*"\{\{ morphit_service_user \}\}"/.test(baseMain))) ob.push('base does not recursively chown the service home to the service user — a root-owned/re-used home fails the offline install (npm exec EACCES)');
 	const foPath = join(REPO_ROOT, 'ops', 'first-online', 'morphit-first-online.sh');
 	const fo = existsSync(foPath) ? readFileSync(foPath, 'utf-8') : '';
 	if (!/99-morphit-offline\.conf/.test(fo)) ob.push('first-online does not restore normal apt (remove the offline override) when online');
