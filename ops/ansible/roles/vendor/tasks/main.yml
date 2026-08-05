@@ -1,7 +1,7 @@
 # Role: vendor
 #
 # Offline-appliance preflight.  When the self-contained bundle ships a local apt
-# repo under {{ morphit_repo_path }}/vendor/apt, redirect apt to install ONLY
+# repo under {{ morphit_local_source_path }}/vendor/apt, redirect apt to install ONLY
 # from it — so every apt step in every later role works with no internet.
 #
 # HOW (and why it is safe): a reversible /etc/apt/apt.conf.d override points apt
@@ -15,7 +15,7 @@
 ---
 - name: Detect the bundled apt repo
   ansible.builtin.stat:
-    path: "{{ morphit_repo_path }}/vendor/apt/Packages.gz"
+    path: "{{ morphit_local_source_path }}/vendor/apt/Packages.gz"
   register: morphit_vendor_apt
 
 - name: Offline apt — redirect to the bundled local repo (only when a bundle is present)
@@ -23,7 +23,7 @@
   block:
     - name: Ensure an empty sources.list.d dir for the offline override
       ansible.builtin.file:
-        path: "{{ morphit_repo_path }}/vendor/apt/empty-parts"
+        path: "{{ morphit_local_source_path }}/vendor/apt/empty-parts"
         state: directory
         owner: root
         group: root
@@ -31,8 +31,8 @@
 
     - name: Write the local-repo one-line apt source
       ansible.builtin.copy:
-        dest: "{{ morphit_repo_path }}/vendor/apt/morphit-offline.list"
-        content: "deb [trusted=yes] file://{{ morphit_repo_path }}/vendor/apt ./\n"
+        dest: "{{ morphit_local_source_path }}/vendor/apt/morphit-offline.list"
+        content: "deb [trusted=yes] file://{{ morphit_local_source_path }}/vendor/apt ./\n"
         owner: root
         group: root
         mode: '0644'
@@ -48,8 +48,8 @@
           // bundled local repo so apt works with no internet. morphit-first-online
           // deletes this file and refreshes apt once the box is online, restoring
           // normal package updates. Removing this file by hand also restores normal apt.
-          Dir::Etc::SourceList "{{ morphit_repo_path }}/vendor/apt/morphit-offline.list";
-          Dir::Etc::SourceParts "{{ morphit_repo_path }}/vendor/apt/empty-parts";
+          Dir::Etc::SourceList "{{ morphit_local_source_path }}/vendor/apt/morphit-offline.list";
+          Dir::Etc::SourceParts "{{ morphit_local_source_path }}/vendor/apt/empty-parts";
           APT::Sandbox::User "root";
           Acquire::Languages "none";
 
@@ -62,5 +62,5 @@
       ansible.builtin.debug:
         msg: >-
           Offline install: apt is using the bundled local repo at
-          {{ morphit_repo_path }}/vendor/apt. Nothing reaches the network for packages.
+          {{ morphit_local_source_path }}/vendor/apt. Nothing reaches the network for packages.
           morphit-first-online restores normal apt when this box is online.

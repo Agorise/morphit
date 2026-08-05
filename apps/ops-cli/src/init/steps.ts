@@ -224,7 +224,7 @@ export async function stepRelayAccount(instanceName?: string): Promise<RelayAcco
 			'for its OWN signups from its OWN relay; the main morphit.io\n' +
 			'account never covers yours.\n' +
 			'\n' +
-			'Your daily signup ceiling (step 7) caps the most it can spend\n' +
+			'Your daily signup ceiling caps the most it can spend\n' +
 			'in one day — with the default 50/day it could spend up to\n' +
 			'5,000 BLURT, so most operators start with a ceiling of 10-20\n' +
 			"and raise it once they're confident.\n" +
@@ -313,10 +313,10 @@ export interface ActiveKeyResult {
 }
 
 export async function stepActiveKey(relayAccountName: string): Promise<ActiveKeyResult> {
-	step(5, TOTAL_STEPS, `The ACTIVE key for @${relayAccountName} (the relay account from step 4)`);
+	step(5, TOTAL_STEPS, `The ACTIVE key for @${relayAccountName} (the relay account you just entered)`);
 	explain(
 		`This is the ACTIVE key for the @${relayAccountName} account you\n` +
-			'named in step 4 — NOT the posting key.  Blurt has four key\n' +
+			'just named — NOT the posting key.  Blurt has four key\n' +
 			'types per account; the relay needs the active key because\n' +
 			'every operation it broadcasts on chain is an active-authority\n' +
 			'operation:\n' +

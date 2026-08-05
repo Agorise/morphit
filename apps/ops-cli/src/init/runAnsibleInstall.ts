@@ -11,7 +11,7 @@
  * other piece it calls (collectInstallInputs, buildAnsibleVars, assembleInstall,
  * the save-secrets prompt) is already verified on its own.
  */
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { stepRelayAccount, stepActiveKey, stepFeesAccount, type ActiveKeyResult } from './steps.ts';
@@ -20,12 +20,35 @@ import { buildAnsibleVars, validateInstallInputs } from './ansibleVars.ts';
 import { assembleInstall } from './assembleInstall.ts';
 import { collectInstallSummary, printInstallSummary, allComponentsUp } from './installSummary.ts';
 import type { SecretToSave } from './saveSecrets.ts';
-import { step, ask } from './prompt.ts';
+import { section, beginSteps, endSteps, ask } from './prompt.ts';
 
 /** Ansible's `morphit_relay_keystore_path` default; we write the keystore here
  *  and pass the same path in the vars, so the two match by construction. */
 const DEFAULT_KEYSTORE_PATH = '/etc/morphit/relay.keystore';
 const VARS_FILE_PATH = '/run/morphit-install-vars.json';
+
+/** morphit-first-online reads this env; MORPHIT_AUTO_REGISTER=yes tells it to
+ *  publish the on-chain operator registration the moment the box is online. */
+const FIRST_ONLINE_ENV_PATH = '/etc/morphit/first-online.env';
+
+/** Arm the deferred on-chain registration by flipping MORPHIT_AUTO_REGISTER to
+ *  yes in the first-online env.  This is what makes "list my instance" work on an
+ *  OFFLINE appliance install: morphit-first-online publishes the registration the
+ *  first time the box has internet + a healthy stack.  It's also a safety net when
+ *  an immediate (online) registration attempt fails.  Best-effort — a missing env
+ *  file just means the operator runs `morphit-ops register` by hand later. */
+function armDeferredRegister(): void {
+	try {
+		if (!existsSync(FIRST_ONLINE_ENV_PATH)) return;
+		const cur = readFileSync(FIRST_ONLINE_ENV_PATH, 'utf8');
+		const next = /^MORPHIT_AUTO_REGISTER=/m.test(cur)
+			? cur.replace(/^MORPHIT_AUTO_REGISTER=.*$/m, 'MORPHIT_AUTO_REGISTER=yes')
+			: cur + (cur.endsWith('\n') ? '' : '\n') + 'MORPHIT_AUTO_REGISTER=yes\n';
+		if (next !== cur) writeFileSync(FIRST_ONLINE_ENV_PATH, next, { mode: 0o644 });
+	} catch {
+		/* best-effort — the operator can always run `morphit-ops register` by hand */
+	}
+}
 
 /** The bytes to write for the relay keystore, from the wizard's active-key
  *  result: the encrypted envelope (JSON) or the plaintext WIF.  PURE — mirrors
@@ -51,18 +74,24 @@ async function askYesNo(question: string, defaultYes: boolean): Promise<boolean>
 export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?: string }): Promise<number> {
 	const keystorePath = opts.keystorePath ?? DEFAULT_KEYSTORE_PATH;
 
-	step(1, 3, 'Your Blurt account and signing key');
+	// Three numbered sections, with a single running "Step N" counter inside them
+	// (beginSteps()), so the whole wizard reads as one clean sequence instead of
+	// the sub-steps' old "Step 4 of 23" bleeding through.
+	beginSteps();
+
+	section(1, 3, 'Your Blurt account and signing key');
 	const relay = await stepRelayAccount();
 	const activeKey = await stepActiveKey(relay.name); // held; written only once inputs validate
 	const feesAccount = await stepFeesAccount(undefined);
 
-	step(2, 3, 'Your address and network');
+	section(2, 3, 'Your address and network');
 	const inputs = await collectInstallInputs({
 		operatorAccount: relay.name,
 		operatorTag: relay.name, // default the tag to the account (avoids a domain-derived circular order)
 		feesAccount,
 		keystorePath
 	});
+	endSteps(); // all numbered questions are done; the install itself isn't a "step"
 
 	const problems = validateInstallInputs(inputs);
 	if (problems.length > 0) {
@@ -91,7 +120,7 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 	// Only now (inputs valid, operator ready) write the keystore Ansible reads.
 	writeRelayKeystore(activeKey, keystorePath);
 
-	step(3, 3, 'Installing your node');
+	section(3, 3, 'Installing your node');
 	const secretsToSave: SecretToSave[] = [
 		{ label: 'Database password (marketplace data)', value: inputs.indexerDbPassword },
 		{ label: 'Database password (account signups)', value: inputs.relayDbPassword }
@@ -150,40 +179,45 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 		}
 	}
 
-	// Announcing on chain only makes sense once the stack is actually up. If any
-	// component is still down (a catching-up indexer is fine — it's still
-	// running), don't even offer it: point the operator at status + register.
-	if (!everythingUp) {
-		console.log('\n  A few pieces above aren\u2019t up yet, so we won\u2019t announce your instance');
-		console.log('  on the shared map just yet. Once everything shows \u2713 (check with');
-		console.log('  `sudo morphit-ops status`), put it on the map + start earning fees:');
-		console.log('        sudo morphit-ops register\n');
-		return 0;
-	}
-
-	// Everything's green → offer to announce now. `register` runs its OWN
-	// confirmation before it broadcasts, so a "yes" here just starts it. We pass
-	// the instance identity through the environment because a by-hand `register`
-	// otherwise reads it from files this Ansible layout doesn't populate (OS env
-	// wins in its loader), so the wizard has what it needs right here.
-	if (await askYesNo('\n  Announce your instance on the shared map now (start earning fees)?', true)) {
-		const rc = spawnSync('/usr/local/bin/morphit-ops', ['register'], {
-			stdio: 'inherit',
-			env: {
-				...process.env,
-				MORPHIT_RELAY_ACCOUNT: relay.name,
-				MORPHIT_RELAY_ACTIVE_KEY_FILE: keystorePath,
-				MORPHIT_INSTANCE_NAME: inputs.instanceName,
-				MORPHIT_INSTANCE_ORIGIN: `https://${inputs.domain}`,
-				MORPHIT_INSTANCE_OPERATOR_TAG: inputs.operatorTag
+	// Now — AFTER the summary — offer to list this instance on the shared federated
+	// directory (moved here from the questions up front, per the operator who
+	// wanted to see the node actually come up before deciding).
+	//
+	// This works whether or not the box has internet right now.  Opting in ARMS
+	// morphit-first-online to publish the registration the moment the box is online
+	// and the stack is healthy — that's the whole offline-appliance path.  If
+	// everything is already up we ALSO try right now, so an online operator sees it
+	// published immediately; `register --non-interactive` is idempotent, so a
+	// successful now-registration just makes the armed one a no-op.  We pass the
+	// instance identity through the environment because a by-hand `register`
+	// otherwise reads it from files this Ansible layout doesn't populate.
+	if (await askYesNo('\n  List this instance on the public federated directory (start earning fees)?', true)) {
+		armDeferredRegister();
+		if (everythingUp) {
+			const rc = spawnSync('/usr/local/bin/morphit-ops', ['register'], {
+				stdio: 'inherit',
+				env: {
+					...process.env,
+					MORPHIT_RELAY_ACCOUNT: relay.name,
+					MORPHIT_RELAY_ACTIVE_KEY_FILE: keystorePath,
+					MORPHIT_INSTANCE_NAME: inputs.instanceName,
+					MORPHIT_INSTANCE_ORIGIN: `https://${inputs.domain}`,
+					MORPHIT_INSTANCE_OPERATOR_TAG: inputs.operatorTag
+				}
+			});
+			if ((rc.status ?? 1) !== 0) {
+				console.log('\n  Couldn\u2019t reach the chain just now \u2014 no problem: it\u2019s armed to list');
+				console.log('  itself automatically the moment this box is online. Or do it by hand');
+				console.log('  any time with:');
+				console.log('        sudo morphit-ops register\n');
 			}
-		});
-		if ((rc.status ?? 1) !== 0) {
-			console.log('\n  Registration didn\u2019t finish \u2014 you can run it again any time with:');
-			console.log('        sudo morphit-ops register\n');
+		} else {
+			console.log('\n  A few pieces above aren\u2019t up yet, so we won\u2019t list it this second \u2014 but');
+			console.log('  it\u2019s armed to list itself automatically once everything is \u2713 and this box');
+			console.log('  is online. Check any time with `sudo morphit-ops status`.\n');
 		}
 	} else {
-		console.log('\n  No problem \u2014 announce it whenever you\u2019re ready with:');
+		console.log('\n  No problem \u2014 list it whenever you\u2019re ready with:');
 		console.log('        sudo morphit-ops register\n');
 	}
 	return 0;

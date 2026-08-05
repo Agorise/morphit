@@ -209,13 +209,44 @@ export async function askPassword(prompt: string): Promise<string> {
 	});
 }
 
+/** Auto-numbering for the guided install.  The sub-steps it reuses (from the
+ *  23-step `init` wizard) each carry a hardcoded "Step N of 23"; when beginSteps()
+ *  is active, step() ignores those numbers and emits a single running "Step N"
+ *  instead, so the guided install reads as one clean, non-jumping sequence.  `init`
+ *  never calls beginSteps(), so it keeps its classic "Step N of 23". */
+let _autoStepOn = false;
+let _autoStepNum = 0;
+
+export function beginSteps(): void {
+	_autoStepOn = true;
+	_autoStepNum = 0;
+}
+export function endSteps(): void {
+	_autoStepOn = false;
+}
+
 /** Print a section header with rule lines.  Used to delimit
  *  wizard steps so the output is scannable. */
 export function step(stepNum: number, totalSteps: number, title: string): void {
 	const rule = '━'.repeat(58);
+	const label = _autoStepOn
+		? `Step ${++_autoStepNum}: ${title}`
+		: `Step ${stepNum} of ${totalSteps}: ${title}`;
 	console.log('');
 	console.log(rule);
-	console.log(`Step ${stepNum} of ${totalSteps}: ${title}`);
+	console.log(label);
+	console.log(rule);
+	console.log('');
+}
+
+/** A numbered SECTION divider (a group of steps), e.g. "Section 2 of 3".  Distinct
+ *  from step(): the guided install shows high-level progress across its phases with
+ *  section(), while step() numbers the individual questions inside them. */
+export function section(sectionNum: number, totalSections: number, title: string): void {
+	const rule = '═'.repeat(58);
+	console.log('');
+	console.log(rule);
+	console.log(`Section ${sectionNum} of ${totalSections}: ${title}`);
 	console.log(rule);
 	console.log('');
 }

@@ -12,7 +12,7 @@
  * one).  Interactive, but every dependency is injectable so the flow is
  * unit-tested with scripted answers.
  */
-import { ask as realAsk, askChoice as realAskChoice, examples as realExamples } from './prompt.ts';
+import { ask as realAsk, askChoice as realAskChoice, examples as realExamples, step } from './prompt.ts';
 import {
 	randomSecret,
 	validateDomain,
@@ -67,12 +67,16 @@ export async function collectInstallInputs(
 	const req = { ask, examples, print };
 
 	// Where will it run?  This drives the ONE difference (DDNS on home).
+	// step() numbers are ignored under the guided install's running counter (the
+	// 0,0 is a placeholder); `init` never reaches this file.
+	step(0, 0, 'Where this node will run');
 	const modeIdx = await askChoice('Where will this node run?', [
 		'This computer, on my home internet (address can change)',
 		'A rented server / VPS (has a fixed public address)'
 	]);
 	const mode: InstallMode = modeIdx === 0 ? 'home' : 'vps';
 
+	step(0, 0, 'Your web address (domain)');
 	const domain = await askValidated(
 		'What web address (domain) will people use to reach your marketplace?',
 		['trade.example.com', 'morphit.mydomain.org'],
@@ -83,6 +87,7 @@ export async function collectInstallInputs(
 	// Instance identity — shown on the shared /instances directory (and as the
 	// site title). Asked next to the domain, per the operator who noted these
 	// were never collected. The title is REQUIRED (register needs it too).
+	step(0, 0, 'Your marketplace name');
 	print(
 		'\n  Give your marketplace a name. It appears as the title at the top of your\n' +
 			'  site, and \u2014 once you register \u2014 as your instance\u2019s name on the shared\n' +
@@ -95,6 +100,7 @@ export async function collectInstallInputs(
 		req
 	);
 
+	step(0, 0, 'A one-line description (optional)');
 	print(
 		'\n  Optionally add a one-line description. It shows right under your title on\n' +
 			'  the shared /instances directory (and as your site\u2019s search-result blurb).\n' +
@@ -107,6 +113,7 @@ export async function collectInstallInputs(
 	let instanceTagline = (await ask('Instance description (optional)')).trim();
 	if (instanceTagline.length > 200) instanceTagline = instanceTagline.slice(0, 200);
 
+	step(0, 0, 'A Matrix contact (optional)');
 	print(
 		'\n  Optionally, a Matrix contact \u2014 it powers the "Contact this operator"\n' +
 			'  link on your /instances card, so traders can reach you. Use EITHER your\n' +
@@ -123,6 +130,7 @@ export async function collectInstallInputs(
 	);
 	const contactUrl = matrixAddress.length > 0 ? matrixToContactUrl(matrixAddress) : undefined;
 
+	step(0, 0, 'Email for your free HTTPS certificate');
 	const acmeEmail = await askValidated(
 		'Your email address (only used to get + renew your free HTTPS certificate)',
 		['you@example.com'],
@@ -132,6 +140,7 @@ export async function collectInstallInputs(
 
 	let ddnsUpdateUrl: string | undefined;
 	if (mode === 'home') {
+		step(0, 0, 'Keeping your home address up to date');
 		print(
 			'\n  Because a home connection\u2019s address can change, Morphit will keep your\n' +
 				'  domain pointed at it automatically. Paste the "dynamic DNS update URL"\n' +
@@ -149,18 +158,11 @@ export async function collectInstallInputs(
 		);
 	}
 
-	print(
-		'\n  Listing your instance on-chain adds it to the public federated directory,\n' +
-			'  so other people can find it and trade here. It is a one-time, permanent\n' +
-			'  on-chain action signed by your relay account. Morphit can do it for you\n' +
-			'  automatically the first time this box has a working internet connection\n' +
-			'  \u2014 handy if you are setting up somewhere with patchy service right now.\n'
-	);
-	const autoRegisterIdx = await askChoice('List this instance on-chain automatically once it is online?', [
-		'Yes \u2014 register automatically when the box first sees the internet',
-		'No \u2014 I\u2019ll run `morphit-ops register` myself later'
-	]);
-	const autoRegister = autoRegisterIdx === 0;
+	// Whether to list this instance on-chain is NOT asked here — it's offered
+	// AFTER the install summary (in runAnsibleInstall), so the operator decides
+	// once they can see the node actually came up.  We bake auto-register OFF; the
+	// post-summary step arms morphit-first-online if they opt in.
+	const autoRegister = false;
 
 	// Ansible provisions the DB → generate two INDEPENDENT strong passwords.
 	// crypto RNG makes a collision astronomically impossible, but loop to be
