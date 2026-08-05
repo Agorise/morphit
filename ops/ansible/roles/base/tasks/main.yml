@@ -96,6 +96,20 @@
     create_home: true
     state: present
 
+- name: Ensure the morphit service user owns its home (recursively)
+  # `create_home: true` only chowns the home when useradd CREATES it; if the dir
+  # pre-existed (a partial/earlier run, or a re-run on the same box) it is left
+  # root-owned, and then `npm exec`/`npm run` (which write $HOME/.npm) fail EACCES
+  # and Ansible's become-user temp dir (/var/lib/morphit/.ansible) is unwritable.
+  # This makes the home — and any stale root-owned dotfiles under it — the service
+  # user's, so those writes succeed on a fresh AND a re-used box.
+  ansible.builtin.file:
+    path: "{{ morphit_service_home }}"
+    state: directory
+    owner: "{{ morphit_service_user }}"
+    group: "{{ morphit_service_group }}"
+    recurse: true
+
 # Part 122 cp5 F12 — the shipped morphit-relay.service specifies
 # `User=morphit-relay / Group=morphit-relay`.  Without this task,
 # `systemctl start morphit-relay` fails with "user morphit-relay

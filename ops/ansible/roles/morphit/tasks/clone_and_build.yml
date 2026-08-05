@@ -90,6 +90,11 @@
   ansible.builtin.command:
     cmd: npm install --workspaces --include-workspace-root
     chdir: "{{ morphit_repo_path }}"
+  environment:
+    # Keep npm's cache in the repo (owned by the service user, re-created every
+    # run) instead of $HOME/.npm — the nologin service user's home is not a place
+    # npm should need to write, and depending on it is fragile (see base role).
+    npm_config_cache: "{{ morphit_repo_path }}/.npm-cache"
   become: true
   become_user: "{{ morphit_service_user }}"
   register: morphit_npm_install_result
@@ -100,6 +105,8 @@
   ansible.builtin.command:
     cmd: npm run build --workspaces --if-present
     chdir: "{{ morphit_repo_path }}"
+  environment:
+    npm_config_cache: "{{ morphit_repo_path }}/.npm-cache"
   become: true
   become_user: "{{ morphit_service_user }}"
   register: npm_build_result
@@ -117,6 +124,8 @@
   ansible.builtin.command:
     cmd: npm exec --offline --workspace apps/ops-cli morphit-ops -- --help
     chdir: "{{ morphit_repo_path }}"
+  environment:
+    npm_config_cache: "{{ morphit_repo_path }}/.npm-cache"
   become: true
   become_user: "{{ morphit_service_user }}"
   register: morphit_ops_smoke
