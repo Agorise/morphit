@@ -13,7 +13,7 @@ import {
 	matrixToContactUrl,
 	validateInstallInputs
 } from '../apps/ops-cli/src/init/ansibleVars.ts';
-import { collectInstallInputs, type CollectDeps } from '../apps/ops-cli/src/init/collectInstallInputs.ts';
+import { collectInstallInputs, askInstallMode, type CollectDeps } from '../apps/ops-cli/src/init/collectInstallInputs.ts';
 
 let passed = 0;
 let failed = 0;
@@ -75,12 +75,17 @@ async function main(): Promise<void> {
 	check('matrix: account \u2192 matrix.to URL', matrixToContactUrl('@you:matrix.org') === 'https://matrix.to/#/@you:matrix.org');
 	check('matrix: room \u2192 matrix.to URL (keeps the #)', matrixToContactUrl('#support:matrix.org') === 'https://matrix.to/#/#support:matrix.org');
 
+	// askInstallMode is now asked on its own, BEFORE the numbered steps, so the
+	// wizard can show an accurate "Step N of {total}" from step 1 (home + vps differ).
+	check('askInstallMode: choice 0 → home', (await askInstallMode({ askChoice: (async () => 0) as unknown as CollectDeps['askChoice'] })) === 'home');
+	check('askInstallMode: choice 1 → vps', (await askInstallMode({ askChoice: (async () => 1) as unknown as CollectDeps['askChoice'] })) === 'vps');
+
 	const known = { operatorAccount: 'my-operator', operatorTag: 'myoperator', feesAccount: 'my-operator', keystorePath: '/etc/morphit/relay.keystore' };
 
 	// HOME path: choice 0 → asks domain, title, description, email, ddns.
 	{
 		const d = driver({ choice: 0, answers: ['trade.example.com', 'Morphit Berlin', 'Berlin node, no KYC.', '@berlin:matrix.org', 'me@example.com', 'https://njal.la/update/?h=trade.example.com&k=K&a={ip}'] });
-		const out = await collectInstallInputs(known, d.deps);
+		const out = await collectInstallInputs({ ...known, mode: 'home' }, d.deps);
 		check('home: mode is home', out.mode === 'home');
 		check('home: carries the DDNS url', out.ddnsUpdateUrl === 'https://njal.la/update/?h=trade.example.com&k=K&a={ip}');
 		check('home: domain + email captured', out.domain === 'trade.example.com' && out.acmeEmail === 'me@example.com');
@@ -95,7 +100,7 @@ async function main(): Promise<void> {
 	// VPS path: choice 1 → asks domain, title, description, email; NO ddns.
 	{
 		const d = driver({ choice: 1, answers: ['trade.example.com', 'Morphit Test', '', '', 'me@example.com'] });
-		const out = await collectInstallInputs(known, d.deps);
+		const out = await collectInstallInputs({ ...known, mode: 'vps' }, d.deps);
 		check('vps: mode is vps', out.mode === 'vps');
 		check('vps: NO DDNS url', out.ddnsUpdateUrl === undefined);
 		check('vps: empty description → undefined tagline (title still captured)', out.instanceTagline === undefined && out.instanceName === 'Morphit Test');
@@ -107,7 +112,7 @@ async function main(): Promise<void> {
 	// RE-PROMPT: a bad domain then a good one → domain asked twice, printed an error.
 	{
 		const d = driver({ choice: 1, answers: ['not a domain', 'trade.example.com', 'Morphit Test', '', '', 'me@example.com'] });
-		const out = await collectInstallInputs(known, d.deps);
+		const out = await collectInstallInputs({ ...known, mode: 'vps' }, d.deps);
 		const domainPrompts = d.state.prompts.filter((p) => /domain/i.test(p)).length;
 		check('re-prompt: a bad domain makes the domain question repeat', domainPrompts >= 2);
 		check('re-prompt: an error line was printed', d.state.printed.some((s) => /Try again/.test(s)));

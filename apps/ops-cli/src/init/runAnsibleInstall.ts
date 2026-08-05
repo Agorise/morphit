@@ -15,12 +15,12 @@ import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { stepRelayAccount, stepActiveKey, stepFeesAccount, type ActiveKeyResult } from './steps.ts';
-import { collectInstallInputs } from './collectInstallInputs.ts';
+import { collectInstallInputs, askInstallMode } from './collectInstallInputs.ts';
 import { buildAnsibleVars, validateInstallInputs } from './ansibleVars.ts';
 import { assembleInstall } from './assembleInstall.ts';
 import { collectInstallSummary, printInstallSummary, allComponentsUp } from './installSummary.ts';
 import type { SecretToSave } from './saveSecrets.ts';
-import { section, beginSteps, endSteps, ask } from './prompt.ts';
+import { step, beginSteps, endSteps, currentStepNum, ask } from './prompt.ts';
 
 /** Ansible's `morphit_relay_keystore_path` default; we write the keystore here
  *  and pass the same path in the vars, so the two match by construction. */
@@ -74,24 +74,27 @@ async function askYesNo(question: string, defaultYes: boolean): Promise<boolean>
 export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?: string }): Promise<number> {
 	const keystorePath = opts.keystorePath ?? DEFAULT_KEYSTORE_PATH;
 
-	// Three numbered sections, with a single running "Step N" counter inside them
-	// (beginSteps()), so the whole wizard reads as one clean sequence instead of
-	// the sub-steps' old "Step 4 of 23" bleeding through.
-	beginSteps();
+	// WHERE it runs is the one answer that changes the step count (home adds a DDNS
+	// question, a router step, and desktop notifications), so ask it FIRST — before
+	// the numbered steps — so the running "Step N of {total}" is accurate from step 1.
+	const mode = await askInstallMode();
+	// 3 account steps + 5 core questions + the post-install summary + the register
+	// opt-in, plus 3 more on a home box (DDNS, the router port-forward, desktop
+	// notifications).  Keep in sync with the step() calls below + in collectInstallInputs.
+	const totalSteps = 3 + 5 + 2 + (mode === 'home' ? 3 : 0);
+	beginSteps(totalSteps);
 
-	section(1, 3, 'Your Blurt account and signing key');
 	const relay = await stepRelayAccount();
 	const activeKey = await stepActiveKey(relay.name); // held; written only once inputs validate
 	const feesAccount = await stepFeesAccount(undefined);
 
-	section(2, 3, 'Your address and network');
 	const inputs = await collectInstallInputs({
+		mode,
 		operatorAccount: relay.name,
 		operatorTag: relay.name, // default the tag to the account (avoids a domain-derived circular order)
 		feesAccount,
 		keystorePath
 	});
-	endSteps(); // all numbered questions are done; the install itself isn't a "step"
 
 	const problems = validateInstallInputs(inputs);
 	if (problems.length > 0) {
@@ -104,8 +107,9 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 	// Home boxes need the router pointed at this machine before certbot (in the
 	// TLS role) can validate the domain — the one thing we can't do for them.
 	if (inputs.mode === 'home') {
+		step(0, 0, 'Point your home router at this computer');
 		console.log(
-			'\n  One manual step before we install (home connections only):\n' +
+			'  Before we install (home connections only):\n' +
 				'    In your router, forward ports 80 and 443 to THIS computer, and make\n' +
 				'    sure your domain is pointed here. Morphit keeps the address updated\n' +
 				'    after that; the port-forward is a one-time router setting.\n'
@@ -120,7 +124,11 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 	// Only now (inputs valid, operator ready) write the keystore Ansible reads.
 	writeRelayKeystore(activeKey, keystorePath);
 
-	section(3, 3, 'Installing your node');
+	// The install itself isn't a numbered step — it's the machine working, not a
+	// question — so it gets a plain banner rather than a "Step N of N" header.
+	console.log('\n══════════════════════════════════════════════════════════');
+	console.log('Installing your node — this part is automatic, sit tight…');
+	console.log('══════════════════════════════════════════════════════════\n');
 	const secretsToSave: SecretToSave[] = [
 		{ label: 'Database password (marketplace data)', value: inputs.indexerDbPassword },
 		{ label: 'Database password (account signups)', value: inputs.relayDbPassword }
@@ -145,6 +153,7 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 	// A glance-able confirmation of what actually came up + is healthy — asked for
 	// by a live operator who (reasonably) didn't want to trust a bare "installed"
 	// line. Async: several rows are LIVE (indexer/relay /v1/health, on-chain balance).
+	step(0, 0, 'Review your node');
 	const summaryRows = await collectInstallSummary({
 		domain: inputs.domain,
 		mode: inputs.mode,
@@ -169,6 +178,7 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 	// Home boxes have a screen → offer desktop upgrade notifications (a toast
 	// when a new version ships). Headless VPS installs have no desktop, so skip.
 	if (inputs.mode === 'home') {
+		step(0, 0, 'Desktop notification when a new version ships');
 		const notifyScript = join(opts.repoRoot, 'ops', 'desktop', 'morphit-upgrade-notify-setup.sh');
 		if (await askYesNo('\n  Get a desktop notification when a new Morphit version is released?', true)) {
 			const rc = spawnSync('bash', [notifyScript], { stdio: 'inherit' });
@@ -191,6 +201,7 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 	// successful now-registration just makes the armed one a no-op.  We pass the
 	// instance identity through the environment because a by-hand `register`
 	// otherwise reads it from files this Ansible layout doesn't populate.
+	step(0, 0, 'List your instance on the public federated directory');
 	if (await askYesNo('\n  List this instance on the public federated directory (start earning fees)?', true)) {
 		armDeferredRegister();
 		if (everythingUp) {
@@ -219,6 +230,17 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 	} else {
 		console.log('\n  No problem \u2014 list it whenever you\u2019re ready with:');
 		console.log('        sudo morphit-ops register\n');
+	}
+	endSteps();
+	// Safety net: the number of steps actually shown MUST equal the total we
+	// promised in every "Step N of {total}" header.  If they differ, the numbering
+	// misled the operator (someone added/removed a step without updating totalSteps).
+	// Loud but non-fatal — the install already succeeded.
+	if (currentStepNum() !== totalSteps) {
+		console.error(
+			`\n  [morphit] internal: wizard showed ${currentStepNum()} steps but announced ${totalSteps}.` +
+				'\n  The install is fine; please report this numbering bug.\n'
+		);
 	}
 	return 0;
 }
