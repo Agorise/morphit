@@ -1,0 +1,46 @@
+[Unit]
+Description=Morphit dmesg monitor — kernel-log observability (OOM, oops, MCE)
+Documentation=https://git.agorise.net/agorise/morphit
+After=network-online.target
+
+[Service]
+Type=oneshot
+# Must run as root because kernel.dmesg_restrict=1 (default
+# since Debian 12) blocks unprivileged dmesg reads.  Mitigations:
+# very narrow capabilities + no network + read-only filesystem.
+User=root
+Group=root
+
+# CAP_SYSLOG specifically allows dmesg read.  Everything else
+# stripped from the bounding set.
+CapabilityBoundingSet=CAP_SYSLOG
+AmbientCapabilities=CAP_SYSLOG
+
+ReadWritePaths=/var/lib/morphit-dmesg-monitor
+EnvironmentFile=-/etc/morphit/dmesg-monitor.env
+ExecStart=/opt/morphit/ops/scripts/morphit-dmesg-monitor.sh
+
+# ─── Hardening ─────────────────────────────────────────────────
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+# Note: ProtectKernelLogs=true would block dmesg read.  Leave
+# unset (kernel log reading is the whole point of this service).
+ProtectControlGroups=true
+ProtectClock=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+LimitCORE=0
+PrivateNetwork=true
+RestrictAddressFamilies=AF_UNIX
+
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,32 @@
+---
+# i2pd role — a basic I2P server tunnel + destination for this instance.
+#
+# Serves the SAME .b32.i2p the wizard generated and the site advertises
+# (MORPHIT_INSTANCE_I2P_B32_ADDRESS → footer pill).  It installs the wizard's
+# generated keyfile so i2pd serves that exact address; without it, i2pd
+# invents a DIFFERENT address on first start.  An operable keyfile already on
+# the server is PRESERVED (never overwritten) — Ken's rule: a saved, operable
+# b32 is kept.  Vanity addresses are out of scope — generate one separately
+# and paste it via `morphit-ops alt-address`.
+
+# i2pd's data directory + the tunnels config it reads.
+morphit_i2pd_datadir: /var/lib/i2pd
+morphit_i2pd_tunnels_conf: /etc/i2pd/tunnels.conf
+
+# The keyfile name inside the datadir (matches the wizard + tunnel stanza).
+morphit_i2pd_keyfile: morphit-web.dat
+
+# The local service i2pd's server tunnel forwards to (the public web edge:
+# BunkerWeb/nginx in front of the relay, or the relay).
+morphit_i2pd_local_host: 127.0.0.1
+morphit_i2pd_local_port: 8080
+
+# Path ON THE CONTROL NODE to the wizard-generated i2p-tunnel/ directory
+# (holding morphit-web.dat).  When set and present, the role installs that
+# keyfile so i2pd serves the advertised address.  Leave empty to let i2pd
+# self-generate (a DIFFERENT address — then update
+# MORPHIT_INSTANCE_I2P_B32_ADDRESS to match what i2pd produced).
+morphit_i2pd_key_src: ""
+
+# The unprivileged i2pd user on Debian/Ubuntu.
+morphit_i2pd_user: i2pd

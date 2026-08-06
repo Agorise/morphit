@@ -1,0 +1,77 @@
+---
+- name: Install i2pd
+  ansible.builtin.apt:
+    name: i2pd
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  notify: Restart i2pd
+
+- name: Check whether the server already has an operable keyfile (to preserve it)
+  ansible.builtin.stat:
+    path: "{{ morphit_i2pd_datadir }}/{{ morphit_i2pd_keyfile }}"
+  register: morphit_i2pd_dest_key_stat
+
+- name: Check for a wizard-generated keyfile on the control node
+  ansible.builtin.stat:
+    path: "{{ morphit_i2pd_key_src }}/{{ morphit_i2pd_keyfile }}"
+  delegate_to: localhost
+  become: false
+  register: morphit_i2pd_key_stat
+  when: morphit_i2pd_key_src | length > 0
+
+# Install the wizard keyfile ONLY when the server has none — Ken's rule: an
+# existing operable b32 is preserved, never regenerated/overwritten.
+- name: Install the wizard-generated keyfile (serve the advertised address)
+  ansible.builtin.copy:
+    src: "{{ morphit_i2pd_key_src }}/{{ morphit_i2pd_keyfile }}"
+    dest: "{{ morphit_i2pd_datadir }}/{{ morphit_i2pd_keyfile }}"
+    owner: "{{ morphit_i2pd_user }}"
+    group: "{{ morphit_i2pd_user }}"
+    mode: "0600"
+  when:
+    - morphit_i2pd_key_src | length > 0
+    - morphit_i2pd_key_stat.stat.exists | default(false)
+    - not (morphit_i2pd_dest_key_stat.stat.exists | default(false))
+  notify: Restart i2pd
+
+- name: Warn when neither a server keyfile nor wizard keys are present
+  ansible.builtin.debug:
+    msg: >-
+      No keyfile at {{ morphit_i2pd_datadir }}/{{ morphit_i2pd_keyfile }} and
+      morphit_i2pd_key_src is unset/missing, so i2pd will generate its OWN
+      .b32.i2p on first start.  That address will NOT match
+      MORPHIT_INSTANCE_I2P_B32_ADDRESS unless you update it.  Derive the served
+      address once i2pd has created the keyfile with:
+        head -c 391 {{ morphit_i2pd_datadir }}/{{ morphit_i2pd_keyfile }} |
+        sha256sum | cut -d' ' -f1 | xxd -r -p | base32 | tr 'A-Z' 'a-z' |
+        tr -d '=' ; echo .b32.i2p
+      Or set morphit_i2pd_key_src to the wizard's i2p-tunnel/ directory to
+      serve the address the site already advertises.
+  when: >-
+    not (morphit_i2pd_dest_key_stat.stat.exists | default(false))
+    and (morphit_i2pd_key_src | length == 0
+         or not (morphit_i2pd_key_stat.stat.exists | default(false)))
+
+- name: Configure the morphit server tunnel in i2pd tunnels.conf
+  ansible.builtin.blockinfile:
+    path: "{{ morphit_i2pd_tunnels_conf }}"
+    marker: "# {mark} MORPHIT SERVER TUNNEL (managed by Ansible)"
+    block: |
+      [morphit-web]
+      type = http
+      host = {{ morphit_i2pd_local_host }}
+      port = {{ morphit_i2pd_local_port }}
+      signaturetype = 7
+      keys = {{ morphit_i2pd_keyfile }}
+    create: true
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart i2pd
+
+- name: Ensure i2pd is enabled and running
+  ansible.builtin.systemd:
+    name: i2pd
+    state: started
+    enabled: true

@@ -1,0 +1,15 @@
+---
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: Restart ipfs
+  ansible.builtin.systemd:
+    name: ipfs
+    state: restarted
+    enabled: true
+  # Best-effort: IPFS is release-hosting — a network job, like certbot + on-chain
+  # register, which this appliance also defers.  On an offline Phase-1 box the
+  # daemon may not come up yet; it stays ENABLED with Restart=on-failure, so it
+  # starts once the box is online (or on next boot).  Don't fail the install on it.
+  failed_when: false

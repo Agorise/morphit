@@ -1,0 +1,32 @@
+# {{ ansible_managed }}
+# Kubo (IPFS) daemon — hosts Morphit's signed releases for decentralized
+# availability. Low-footprint: loopback API/gateway, capped connections.
+[Unit]
+Description=IPFS (Kubo) daemon — Morphit release hosting
+# network.target (stack configured), NOT network-online.target: this must come up
+# on an air-gapped Phase-1 box (cable out) and connect to peers whenever the
+# network later appears — waiting for network-online would stall it offline.
+After=network.target
+
+[Service]
+Type=notify
+User={{ morphit_ipfs_user }}
+Group={{ morphit_ipfs_group }}
+Environment=IPFS_PATH={{ morphit_ipfs_repo }}
+# --migrate=false: the bundle pins ONE Kubo version and the repo is created by it,
+# so a migration is never needed — and it could only be fetched over the network,
+# which an offline box doesn't have.
+ExecStart=/usr/local/bin/ipfs daemon --migrate=false --enable-gc
+Restart=on-failure
+RestartSec=10
+# Reclaim memory pressure headroom; a release-pinning node is light.
+LimitNOFILE=8192
+# Hardening.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths={{ morphit_ipfs_home }}
+
+[Install]
+WantedBy=multi-user.target

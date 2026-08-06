@@ -1,0 +1,73 @@
+# §37.1 — SSH hardening.
+#
+# We harden the SSH server ONLY when one is actually installed.  A rented VPS
+# always has openssh-server (it is how you reach the box), so the hardening
+# applies there.  A home desktop node the operator runs and administers
+# locally often has NO SSH server at all — on such a box the drop-in dir
+# /etc/ssh/sshd_config.d, the main /etc/ssh/sshd_config, and the `sshd` binary
+# the validate step needs are ALL absent, and there is simply nothing to
+# harden.  We deliberately do NOT install openssh-server to "fix" that:
+# opening an SSH server the operator never asked for is an attack-surface and
+# footprint decision that belongs to them, not to the marketplace installer.
+# (/etc/ssh/sshd_config exists iff openssh-server is installed — openssh-client
+# ships ssh_config, not sshd_config — so it is our presence probe.)
+#
+# WARNING: before this role's handler restarts sshd, ensure your SSH
+# key-based login works in a separate, currently-open session.  A
+# reload-on-handler can lock you out if anything goes wrong.
+
+---
+- name: Detect whether an SSH server is installed (harden it only if so)
+  ansible.builtin.stat:
+    path: /etc/ssh/sshd_config
+  register: morphit_sshd_config
+
+- name: Note when there is no SSH server to harden
+  ansible.builtin.debug:
+    msg: >-
+      No SSH server (openssh-server) is installed on this box, so there is
+      nothing to harden — skipping SSH hardening.  This is normal for a home
+      node you administer locally.  If you later install an SSH server for
+      remote access, re-run the installer and it will harden it.
+  when: not morphit_sshd_config.stat.exists
+
+# openssh-server on Ubuntu 24.04 creates this drop-in dir plus a matching
+# `Include /etc/ssh/sshd_config.d/*.conf` line in the main config; ensuring it
+# here is a cheap guard against an unusually old sshd that predates drop-in
+# support.  Gated so it never runs on a box with no SSH server.
+- name: Ensure the sshd_config drop-in directory exists
+  ansible.builtin.file:
+    path: /etc/ssh/sshd_config.d
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  when: morphit_sshd_config.stat.exists
+
+- name: Deploy hardened sshd_config drop-in
+  ansible.builtin.template:
+    src: 99-morphit-hardening.conf.j2
+    dest: /etc/ssh/sshd_config.d/99-morphit-hardening.conf
+    owner: root
+    group: root
+    mode: '0644'
+  when: morphit_sshd_config.stat.exists
+  notify: Restart sshd
+
+- name: Ensure root login is disabled in main sshd_config
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?PermitRootLogin'
+    line: 'PermitRootLogin no'
+    validate: '/usr/sbin/sshd -t -f %s'
+  when: morphit_sshd_config.stat.exists
+  notify: Restart sshd
+
+- name: Ensure password auth is disabled in main sshd_config
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?PasswordAuthentication'
+    line: 'PasswordAuthentication no'
+    validate: '/usr/sbin/sshd -t -f %s'
+  when: morphit_sshd_config.stat.exists
+  notify: Restart sshd

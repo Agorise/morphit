@@ -1,0 +1,106 @@
+# Role: tls
+#
+# Certbot-managed Let's Encrypt cert with automatic renewal per
+# OPERATIONS.md §35.  The cert is requested via standalone mode
+# on port 80 — BunkerWeb hands off port 80 to certbot during
+# renewal via certbot's pre/post hooks (configured in the
+# bunkerweb role).
+#
+# For first issuance, no service yet binds port 80, so standalone
+# works cleanly.
+
+---
+- name: Install certbot
+  ansible.builtin.apt:
+    name:
+      - certbot
+    state: present
+    update_cache: true
+
+- name: Check if cert already exists
+  ansible.builtin.stat:
+    path: "/etc/letsencrypt/live/{{ morphit_domain }}/fullchain.pem"
+  register: tls_cert_stat
+
+- name: Determine certbot server
+  ansible.builtin.set_fact:
+    tls_certbot_server: "{{ 'https://acme-staging-v02.api.letsencrypt.org/directory' if tls_use_staging else 'https://acme-v02.api.letsencrypt.org/directory' }}"
+
+- name: Probe whether Let's Encrypt is reachable (defer issuance to first-online if not)
+  # Any HTTP response from the ACME directory = we can reach it now.  A connection
+  # failure (offline / censored) leaves .status undefined → we skip issuance and let
+  # morphit-first-online obtain the cert automatically once the box has internet.
+  ansible.builtin.uri:
+    url: "{{ tls_certbot_server }}"
+    method: GET
+    timeout: 8
+  register: tls_acme_probe
+  failed_when: false
+  changed_when: false
+  when: not tls_cert_stat.stat.exists
+
+- name: Note that TLS issuance is deferred to first-online (Let's Encrypt unreachable now)
+  ansible.builtin.debug:
+    msg: >-
+      Let's Encrypt is not reachable right now, so the real certificate is DEFERRED.
+      BunkerWeb serves its self-signed fallback on the LAN, and morphit-first-online
+      obtains the Let's Encrypt certificate automatically the moment this box has
+      internet.  Nothing to do — this is expected for an offline install.
+  when:
+    - not tls_cert_stat.stat.exists
+    - tls_acme_probe.status is not defined
+
+- name: Request initial cert (standalone)
+  ansible.builtin.command:
+    cmd: >-
+      certbot certonly --standalone --non-interactive --agree-tos
+      --email {{ tls_acme_email }}
+      --server {{ tls_certbot_server }}
+      -d {{ morphit_domain }}
+  register: tls_certbot_result
+  # Non-fatal: if the domain does not resolve to this box yet, the install still
+  # completes and morphit-first-online retries issuance until it succeeds.
+  failed_when: false
+  changed_when: tls_certbot_result.rc == 0
+  when:
+    - not tls_cert_stat.stat.exists
+    - tls_acme_probe.status is defined
+
+- name: Ensure certbot renewal timer is enabled
+  ansible.builtin.systemd:
+    name: certbot.timer
+    enabled: true
+    state: started
+
+- name: Ensure the certbot deploy-hook directory exists
+  # The Ubuntu certbot package creates /etc/letsencrypt/renewal-hooks/{deploy,pre,post}
+  # on install, and certbot certonly (above) has already run — but ensuring it
+  # is a cheap guard so writing the hook can never fail on a missing dir.
+  ansible.builtin.file:
+    path: /etc/letsencrypt/renewal-hooks/deploy
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Configure certbot renewal hooks for BunkerWeb
+  ansible.builtin.copy:
+    dest: /etc/letsencrypt/renewal-hooks/deploy/morphit-bunkerweb-reload.sh
+    owner: root
+    group: root
+    mode: '0755'
+    content: |
+      #!/bin/sh
+      # Reload BunkerWeb after certbot renews.  BunkerWeb watches
+      # the cert files via the scheduler; explicit reload is a
+      # belt-and-braces redundancy.
+      docker exec bunkerweb sh -c 'kill -HUP 1' 2>/dev/null || true
+
+- name: Print TLS verification reminder
+  ansible.builtin.debug:
+    msg: |
+      TLS cert in place at /etc/letsencrypt/live/{{ morphit_domain }}/.
+      Renewal timer active.  Verify with:
+        systemctl status certbot.timer
+        certbot renew --dry-run
+  when: tls_cert_stat.stat.exists or (tls_certbot_result is defined and tls_certbot_result.rc | default(1) == 0)

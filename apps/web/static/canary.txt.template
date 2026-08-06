@@ -1,0 +1,111 @@
+=== MORPHIT CANARY ===
+
+Morphit operator canary - {{OPERATOR_NAME}}
+Instance: {{INSTANCE_ORIGIN}}
+Generated: {{GENERATED_AT_ISO}}
+Valid through: {{VALID_THROUGH_ISO}}
+
+This canary is regenerated weekly.  If the date above is more than
+14 days old at the time you read this, treat it as silent: the
+operator may have been served with a legal demand that prohibits
+explicit acknowledgment.
+
+==== DECLARATION ====
+
+As of the generated-at date above, the operator of this Morphit
+instance ({{OPERATOR_ACCOUNT}} on the Blurt chain) has NOT been
+served with any of the following:
+
+  1. A National Security Letter
+  2. A FISA court order
+  3. A gag order from any government agency
+  4. A demand to deploy a backdoor or weaken any cryptographic
+     primitive in Morphit
+  5. A demand to log user IPs, sessions, or chat content beyond
+     what the published privacy policy describes
+  6. A demand to add a hidden user-monitoring capability
+  7. A demand to share user keys (the operator does not have user
+     keys; this is structurally impossible, but the demand would
+     itself be a coercive signal)
+
+The operator further declares:
+
+  * Morphit's source remains unmodified relative to the public
+    AGPL-3.0 release at git.agorise.net/agorise/morphit, except
+    for branding and operator-config files documented in the
+    repository.
+  * No third-party trust anchor has been added (no Cloudflare, no
+    analytics, no CDN that wasn't in the published config).
+  * The operator's release-discovery key has not changed since
+    the last canary, OR if it has, the previous canary lists the
+    rotation reason.
+
+==== FRESHNESS PROOFS ====
+
+These prove the canary was generated AFTER the dates/heights
+shown - they cannot be pre-generated.
+
+Blurt chain head at signing time:
+  Block height: {{BLURT_HEAD_HEIGHT}}
+  Block hash:   {{BLURT_HEAD_HASH}}
+  Timestamp:    {{BLURT_HEAD_TIMESTAMP}}
+
+Bitcoin chain head at signing time:
+  Block height: {{BTC_HEAD_HEIGHT}}
+  Block hash:   {{BTC_HEAD_HASH}}
+
+Recent news entropy (a current headline that didn't exist when
+this canary was written previously - proof the canary wasn't
+just rebroadcast from an old signed copy):
+
+  {{NEWS_HEADLINE}}
+  Source: {{NEWS_SOURCE}}
+  Fetched: {{NEWS_FETCHED_AT}}
+
+==== HOW TO VERIFY ====
+
+1. Verify the PGP signature below using the operator's release
+   public key, published at /pgp_keys.asc on the same instance.
+   The fingerprint shown there is the operator's identity - note
+   it on your first visit and check it hasn't silently changed on
+   later visits (a legitimate key rotation is explained in the
+   canary's declaration above).
+
+2. Confirm the freshness proofs:
+   - The Blurt block hash matches the actual chain at that
+     height (any Blurt RPC node can confirm).
+   - The Bitcoin block hash matches the actual chain at that
+     height (blockstream.info, mempool.space, your own node).
+   - The news headline matches a real story published on or
+     near the fetched timestamp.
+
+3. Compare the generated-at date.  Older than 14 days =
+   treat as silent.
+
+==== IF THIS CANARY DOESN'T UPDATE ====
+
+This is the warrant canary's whole point.  An operator who has
+been served with a gag order CAN be compelled to lie about
+specific facts, but cannot generally be compelled to ACTIVELY
+LIE on a routine schedule (the legal precedents are murky, but
+the chilling effect of compelling an affirmative lie is broadly
+recognized).  So: instead of declaring all is well, the
+operator is permitted to STOP UPDATING the canary.
+
+If you see this canary frozen for more than 14 days:
+  * Assume the operator is under coercive pressure.
+  * Switch to a different Morphit operator.  The federation
+    exists for exactly this case.  See morphit.io/instances or
+    the canonical directory at any working operator's
+    /v1/instances endpoint.
+  * The Blurt chain itself is untouched - your orders, feedback,
+    chat ciphertext are all on chain and any other operator's
+    indexer reconstructs the same view from chain history.
+
+====
+
+-----BEGIN PGP SIGNATURE-----
+
+{{PGP_SIGNATURE}}
+
+-----END PGP SIGNATURE-----

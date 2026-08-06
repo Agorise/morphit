@@ -1,0 +1,20 @@
+# §37.7 — AppArmor.  Ubuntu 24.04 ships with AppArmor in enforce
+# mode by default; we just verify and enable the per-service
+# profile (Morphit doesn't ship one yet, but the framework is
+# active).
+---
+- name: Verify AppArmor is enabled
+  ansible.builtin.command: aa-status --enabled
+  register: hardening_aa_status
+  changed_when: false
+  failed_when: hardening_aa_status.rc != 0
+
+- name: Recommend writing Morphit AppArmor profile (manual)
+  ansible.builtin.debug:
+    msg: |
+      AppArmor is active.  Morphit doesn't yet ship a per-service
+      profile.  For maximum hardening (§37.7), write profiles for
+      morphit-relay and morphit-indexer that restrict file access
+      to {{ morphit_repo_path }}, /etc/morphit/, /var/log/morphit/,
+      and the Postgres unix socket only.  Reference:
+      https://gitlab.com/apparmor/apparmor/-/wikis/Documentation

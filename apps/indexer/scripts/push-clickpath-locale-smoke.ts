@@ -1,0 +1,153 @@
+/**
+ * push-clickpath-locale-smoke — every Web-Push `click_path` a handler
+ * enqueues into push_pending MUST carry the [lang] segment, and account /
+ * order / profile pages MUST carry the `@`.  There is no reroute hook
+ * (apps/web/src/routes/[lang]/+layout.ts redirects only once a route has
+ * matched), so a locale-less or @-less path resolves to no route and the
+ * notification click lands on a 404.
+ *
+ * cp470 — kentest3 tapped an order notification and landed on
+ * /kentest3/order-… → 404; the correct target is /en/@kentest3/order-….
+ * Three enqueue sites shared the defect (chat.ts, featureBid.ts,
+ * feedback.ts).  This guard keeps every click_path locale-prefixed and
+ * @-correct, and fails if a new enqueue site forgets either.
+ */
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..'); // apps/indexer
+
+let failures = 0;
+let scenarios = 0;
+function scenario(name: string, fn: () => void): void {
+	scenarios++;
+	try {
+		fn();
+		console.log(`  ✓ ${name}`);
+	} catch (err) {
+		failures++;
+		console.log(`  ✗ ${name}`);
+		console.log(`      ${String((err as Error)?.message ?? err)}`);
+	}
+}
+function assert(cond: boolean, msg: string): void {
+	if (!cond) throw new Error(msg);
+}
+
+// Strip // line comments and block comments so a comment quoting an old
+// (broken) path can't satisfy or trip an assertion.
+function stripComments(s: string): string {
+	return s
+		.replace(/\/\*[\s\S]*?\*\//g, '')
+		.replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+}
+
+function read(rel: string): string {
+	return stripComments(readFileSync(join(ROOT, rel), 'utf8'));
+}
+
+const chat = read('src/indexer/handlers/chat.ts');
+const feature = read('src/indexer/handlers/featureBid.ts');
+const feedback = read('src/indexer/handlers/feedback.ts');
+// v1.5.5 — the feedback push enqueue (locale lookup, title/body, click path,
+// trx dedup key) moved OUT of the handler into this shared module so the FAST
+// head-block path notifies with the identical shape. The click-path invariant
+// this smoke exists for is unchanged; only its address moved.
+const feedbackEnqueue = read('src/indexer/feedbackPushEnqueue.ts');
+// cp471 — chat click-paths now live in the shared enqueue module.
+const enqueue = read('src/indexer/chatPushEnqueue.ts');
+
+// ── Positive: the correct locale-prefixed shapes are present ──────────
+scenario('chatPushEnqueue.ts order click_path is /${locale}/chat/${sender}?order=${permlink}', () => {
+	assert(
+		enqueue.includes('`/${locale}/chat/${params.sender}?order=${params.orderPermlink}`'),
+		'chatPushEnqueue.ts order click_path is not the localized /chat/{sender}?order= deep-link'
+	);
+});
+// v1.7.5 (t.txt #1) — this used to assert the LITERAL `/${locale}/chat`, and in
+// doing so it pinned the bug it was written near. A plain-chat push whose click
+// path had no peer landed the user on the inbox with nothing selected, the page
+// dropped the notification (`if (data.peer)`), and the badge waited ~60s for the
+// durable poll — the exact "slow badges" symptom. The fix was to add the sender,
+// which made this literal vanish and this check fail.
+//
+// So pin the REQUIREMENT, not the string: BOTH click paths must be
+// locale-prefixed AND must name the peer, because a click path without a peer is
+// the defect. This now fails if either property is lost, and does not fail merely
+// because the shape improved.
+scenario('chatPushEnqueue.ts plain-chat click_path is locale-prefixed AND names the peer', () => {
+	assert(
+		enqueue.includes('`/${locale}/chat/${params.sender}`'),
+		'chatPushEnqueue.ts plain-chat click_path must be `/${locale}/chat/${params.sender}` — ' +
+			'locale-prefixed and carrying the peer, or the service worker cannot light the badge'
+	);
+});
+scenario('featureBid.ts outbid click_path is /${locale}/my/orders#…', () => {
+	assert(
+		/`\/\$\{locale\}\/my\/orders#order-\$\{/.test(feature),
+		'featureBid.ts outbid click_path missing locale prefix'
+	);
+});
+scenario('feedback click_path is /${locale}/@${subject}#reviews-heading', () => {
+	assert(
+		feedbackEnqueue.includes('`/${locale}/@${params.subject}#reviews-heading`'),
+		'the feedback click_path is not the localized /@account#reviews-heading shape (cp82-B2 + cp470: BOTH the [lang] segment and the @ are required or the notification lands on a 404)'
+	);
+});
+scenario('the durable feedback handler delegates to the shared enqueue', () => {
+	// One enqueue impl, so the fast + durable notifications can never drift in
+	// wording, click path, or — critically — the source_trx_id dedup key.
+	assert(
+		feedback.includes('enqueueFeedbackPush(client'),
+		'handlers/feedback.ts no longer delegates to enqueueFeedbackPush'
+	);
+	assert(
+		/sourceTrxId: ctx\.trxId/.test(feedback),
+		'the durable feedback enqueue does not pass the trx dedup key — with a fast path also enqueuing, the subject would get the SAME review notification twice'
+	);
+});
+
+// ── Negative: the old locale-less / @-less shapes must be gone ────────
+scenario('chat.ts: no locale-less /${recipient}/${permlink} path', () => {
+	assert(
+		!chat.includes('`/${recipient}/${claimedPermlink}`'),
+		'chat.ts still contains the locale-less order path'
+	);
+});
+scenario('featureBid.ts: no locale-less /my/orders path', () => {
+	assert(!/`\/my\/orders#order-\$\{/.test(feature), 'featureBid.ts still contains a locale-less /my/orders path');
+});
+scenario('feedback.ts: no locale-less /${subject} path', () => {
+	assert(
+		!feedback.includes('`/${subject}#reviews-heading`'),
+		'feedback.ts still contains the locale-less /${subject} path'
+	);
+});
+
+// ── Sweep: any template literal that looks like a notification click
+//    target (has `@${`, `/my/orders`, `#reviews-heading`, or `?order=`) must
+//    be locale-prefixed.  Catches a NEW enqueue site that forgets. ──────────
+for (const [name, src] of [
+	['chat.ts', chat],
+	['chatPushEnqueue.ts', enqueue],
+	['featureBid.ts', feature],
+	['feedback.ts', feedback]
+] as const) {
+	const literals = src.match(/`\/[^`]*`/g) ?? [];
+	for (const lit of literals) {
+		if (/@\$\{|\/my\/orders|#reviews-heading|\?order=/.test(lit)) {
+			scenario(`${name}: click-target literal ${lit} is locale-prefixed`, () => {
+				assert(lit.startsWith('`/${locale}/'), `${lit} is missing the /${'${locale}'}/ prefix`);
+			});
+		}
+	}
+}
+
+if (failures === 0) {
+	console.log(`✓ all ${scenarios} scenarios passed`);
+	process.exit(0);
+} else {
+	console.log(`✗ ${failures} of ${scenarios} push-clickpath-locale checks FAILED`);
+	process.exit(1);
+}
