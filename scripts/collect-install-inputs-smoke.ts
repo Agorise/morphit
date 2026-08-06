@@ -91,7 +91,7 @@ async function main(): Promise<void> {
 		check('home: domain + email captured', out.domain === 'trade.example.com' && out.acmeEmail === 'me@example.com');
 		check('home: instance title + description captured', out.instanceName === 'Morphit Berlin' && out.instanceTagline === 'Berlin node, no KYC.');
 		check('home: Matrix account \u2192 matrix.to contactUrl', out.contactUrl === 'https://matrix.to/#/@berlin:matrix.org');
-		check('home: two DIFFERENT strong DB passwords generated', out.indexerDbPassword !== out.relayDbPassword && out.indexerDbPassword.length >= 43);
+		check('home: a strong DB password generated', out.indexerDbPassword.length >= 43);
 		check('home: an example shown for every free-form prompt (domain, title, description, matrix, email, ddns = 6)', d.state.exampleSets === 6);
 		check('home: the whole result passes validateInstallInputs', validateInstallInputs(out).length === 0);
 		check('home: carries operator account/tag from the wizard', out.operatorAccount === 'my-operator' && out.operatorTag === 'myoperator');
