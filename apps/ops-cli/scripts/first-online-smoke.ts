@@ -83,7 +83,10 @@ if (src.length > 0) {
 				'\n'
 		);
 		// A single endpoint at an unresolvable TLD → curl fails fast → offline.
-		writeFileSync(idxEnv, 'MORPHIT_INDEXER_BLURT_RPC_ENDPOINTS=https://rpc.nonexistent.invalid\n');
+		// MUST be the SAME var the code reads (MORPHIT_INDEXER_RPC_ENDPOINTS) — a
+		// mismatch here silently let first-online use its reachable fallback instead,
+		// which both hid the real behaviour AND made this check flaky (online in CI).
+		writeFileSync(idxEnv, 'MORPHIT_INDEXER_RPC_ENDPOINTS=https://rpc.nonexistent.invalid\n');
 		let out = '';
 		let exit = 0;
 		try {
@@ -111,6 +114,58 @@ if (src.length > 0) {
 		rmSync(dir, { recursive: true, force: true });
 	}
 }
+
+// ── RPC-endpoint var name must MATCH what the install writes (cp660) ──
+// first-online silently ignored the operator's configured endpoints because it read
+// MORPHIT_INDEXER_BLURT_RPC_ENDPOINTS while indexer.env.j2 (and the indexer itself)
+// write/read MORPHIT_INDEXER_RPC_ENDPOINTS. This is a STATIC check (network-
+// independent) so it catches the typo even in a sandbox where the fallback RPCs are
+// unreachable and a behavioural test can't tell the difference.
+const idxTemplate = existsSync(join(REPO_ROOT, 'ops', 'ansible', 'roles', 'morphit', 'templates', 'indexer.env.j2'))
+	? readFileSync(join(REPO_ROOT, 'ops', 'ansible', 'roles', 'morphit', 'templates', 'indexer.env.j2'), 'utf-8')
+	: '';
+check(
+	'first-online reads the SAME RPC-endpoint var the install writes (MORPHIT_INDEXER_RPC_ENDPOINTS, never \u2026BLURT_RPC\u2026)',
+	/MORPHIT_INDEXER_RPC_ENDPOINTS\b/.test(src) &&
+		!/MORPHIT_INDEXER_BLURT_RPC_ENDPOINTS/.test(src) &&
+		/^MORPHIT_INDEXER_RPC_ENDPOINTS=/m.test(idxTemplate)
+);
+// cp661: first-online must NOT SOURCE indexer.env with `.` — sourcing RUNS it as a
+// shell script, so an unquoted value with spaces (valid for systemd's EnvironmentFile,
+// e.g. a marketplace name) returns non-zero and, under this script's `set -e`, aborts
+// $(rpc_endpoints) before the fallback → check_online got ZERO endpoints and reported
+// "no internet" forever even when fully online. It must read the value INERTLY (sed).
+check(
+	'first-online does NOT source indexer.env with `.` (set -e abort risk); reads the endpoint value inertly with sed',
+	!/\.[ \t]+["']?\$\{INDEXER_ENV\}/.test(src) &&
+		/sed -n [^\n]*MORPHIT_INDEXER_RPC_ENDPOINTS=/.test(src)
+);
+// cp661: the two env files first-online DOES need loaded whole (its own config +
+// relay.env for the register step) must be sourced with errexit OFF — a single
+// unquoted spaced value would otherwise EXECUTE under `.` and, with `set -e`, abort
+// (killing the script at the config read, or silently skipping registration). Assert
+// every `. "${…}"` source line carries a `set +e` on the same line.
+{
+	const srcLines = src
+		.split('\n')
+		.filter((l) => /(^|[^a-zA-Z0-9._])\.[ \t]+["']?\$\{[A-Z_]+\}/.test(l));
+	check(
+		`every env-file source in first-online is set +e-guarded (${srcLines.length} found; none may run under active errexit)`,
+		srcLines.length >= 1 && srcLines.every((l) => /set \+e/.test(l))
+	);
+}
+// cp661: the auto-register step must feed register the vars it reads from the
+// ENVIRONMENT — including MORPHIT_INSTANCE_ORIGIN, which lives ONLY in
+// morphit.config.env (relay.env doesn't carry it; the old code sourced relay.env and
+// register failed on the missing var no matter the relay balance). Assert it reads the
+// instance vars inertly from morphit.config.env and exports them.
+check(
+	'first-online auto-register reads MORPHIT_INSTANCE_ORIGIN inertly from morphit.config.env and exports the register inputs',
+	/_conf_env="[^"\n]*morphit\.config\.env/.test(src) &&
+		/MORPHIT_INSTANCE_ORIGIN="\$\(_get_env MORPHIT_INSTANCE_ORIGIN/.test(src) &&
+		/export MORPHIT_RELAY_ACCOUNT MORPHIT_RELAY_ACTIVE_KEY_FILE/.test(src) &&
+		!/\.[ \t]+["']?\$\{RELAY_ENV\}/.test(src)
+);
 
 // ── Wizard-side offline resilience (a connection dropping MID-WIZARD must never
 //    hang or block — bounded + non-fatal, then first-online recovers on reconnect) ──

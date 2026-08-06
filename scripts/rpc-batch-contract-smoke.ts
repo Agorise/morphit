@@ -43,8 +43,8 @@ const check = (name: string, ok: boolean, detail = ''): void => {
 // ── 1. the poller no longer spends one request per block ────────────
 check(
 	'1 poller prefetches a WINDOW of blocks per request',
-	/getBlocks\(\s*window\s*\)/.test(poller),
-	'catch-up must call getBlocks(window), not getBlock(n) per block'
+	/getBlocks\(\s*window\s*,/.test(poller),
+	'catch-up must call getBlocks(window, …), not getBlock(n) per block'
 );
 check(
 	'2 poller no longer calls getBlock() one-per-block in catch-up',
@@ -53,7 +53,7 @@ check(
 check('3 a batch size is defined', /const BLOCK_FETCH_BATCH = \d+/.test(poller));
 const size = Number(/const BLOCK_FETCH_BATCH = (\d+)/.exec(poller)?.[1] ?? '0');
 check('4 batch size is a sane window (2..100)', size >= 2 && size <= 100, String(size));
-check('5 the cursor advances past the fetched window', /cursor = hi \+ 1/.test(poller));
+check('5 the cursor advances past the fetched window', /nextLo = hi \+ 1/.test(poller));
 
 // ── 2. the DB invariant the batching must NOT trample ───────────────
 // The poller documents WHY it never batches DB writes: a long catch-up would
@@ -62,12 +62,12 @@ check('5 the cursor advances past the fetched window', /cursor = hi \+ 1/.test(p
 // one withTx, this check is the thing that notices.
 check(
 	'6 one-block-per-transaction survives (withTx is INSIDE the per-block loop)',
-	/for \(let i = 0; i < fetched\.length[\s\S]{0,1200}?this\.db\.withTx/.test(poller),
+	/for \(let i = 0; i < blocks\.length[\s\S]{0,1200}?this\.db\.withTx/.test(poller),
 	'the DB tx must stay per-block; batching the fetch must not batch the write'
 );
 check(
 	'7 …and the reason is still written down',
-	/don't batch multiple blocks per tx/.test(poller)
+	/bloating WAL/.test(poller)
 );
 
 // ── 3. batch support is discovered, never assumed ───────────────────
@@ -100,7 +100,7 @@ check(
 // notices the "redundant" endpoint re-selection and optimises it away.
 check(
 	'12 the non-batch fallback is PACED (one pool.call per block, not a burst inside one callback)',
-	/if \(!\(err instanceof BatchUnsupportedError\)\) throw err;[\s\S]{0,1400}?for \(const n of nums\) out\.push\(await this\.getBlock\(n\)\);/.test(
+	/if \(!\(err instanceof BatchUnsupportedError\)\) throw err;[\s\S]{0,1400}?for \(const n of nums\) out\.push\(await this\.getBlock\(n, startOffset\)\);/.test(
 		client
 	),
 	'the fallback must loop over this.getBlock(n) OUTSIDE the pool callback, or every request after the first skips pace()'

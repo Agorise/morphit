@@ -71,19 +71,16 @@ morphit_service_home: /var/lib/morphit
 postgres_listen_addresses: "127.0.0.1"
 postgres_port: 5432
 
-# DBs + users provisioned by the `postgres` role.
+# DB + user provisioned by the `postgres` role. There is ONE database: the
+# relay uses the indexer DB (there is no separate relay database or user).
 postgres_indexer_db: morphit_indexer
 postgres_indexer_user: morphit_indexer
-
-postgres_relay_db: morphit_relay
-postgres_relay_user: morphit_relay
 
 # DUMMY-VALUE: real passwords belong in group_vars/vault.yml
 # (ansible-vault encrypted).  Reference them here.  For first-time
 # scaffolding, replace these strings and re-run after creating the
 # vault.  See README §"Quick start" step 3.
 postgres_indexer_password: "{{ vault_postgres_indexer_password | default('CHANGE-ME-INDEXER') }}"
-postgres_relay_password: "{{ vault_postgres_relay_password | default('CHANGE-ME-RELAY') }}"
 
 
 # ─── Morphit source + build ──────────────────────────────────────

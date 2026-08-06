@@ -310,6 +310,12 @@ export interface ActiveKeyResult {
 	readonly plaintextWif: string | undefined;
 	readonly envelope: KeyEnvelope | undefined;
 	readonly passphraseHint: string | undefined;
+	/** cp663 #3 — the unlock passphrase (encrypted mode only).  Held only
+	 *  long enough for the installer to seal it into the systemd encrypted
+	 *  credential (/etc/morphit/relay_passphrase.cred) that the relay unit's
+	 *  LoadCredentialEncrypted= consumes.  NEVER written anywhere in the
+	 *  clear; NEVER logged. */
+	readonly passphrase?: string;
 }
 
 export async function stepActiveKey(relayAccountName: string): Promise<ActiveKeyResult> {
@@ -435,7 +441,9 @@ export async function stepActiveKey(relayAccountName: string): Promise<ActiveKey
 		mode: 'encrypted',
 		plaintextWif: undefined,
 		envelope,
-		passphraseHint: undefined
+		passphraseHint: undefined,
+		// cp663 #3 — carried to the installer to seal into the .cred, then dropped.
+		passphrase
 	};
 }
 

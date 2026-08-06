@@ -1075,6 +1075,92 @@ if (DEFAULT_HEDGE_THRESHOLD_MS === 500) {
 	}
 }
 
+/* ---------------- cp664: startOffset spreads concurrent callers across nodes ---------------- */
+{
+	// The indexer's concurrent backfill fires N windows at once, each with a
+	// different startOffset, so they START on different endpoints instead of all
+	// dogpiling the single fastest. Pacing off (0) so the test is fast + purely
+	// about ordering.
+	const pool = new EndpointPool({ endpoints: ['a', 'b', 'c'], maxRequestsPerSecond: 0 });
+	const lat: Record<string, number> = { a: 20, b: 60, c: 120 };
+	// Warm up so the fastest-first EWMA order is a < b < c.
+	for (const u of ['c', 'b', 'a']) {
+		await pool.call(async (x) => {
+			await sleep(lat[x]!);
+			return x;
+		});
+	}
+
+	const firstTouched = async (offset: number): Promise<string> => {
+		let first = '';
+		await pool.call(
+			async (u) => {
+				if (!first) first = u;
+				await sleep(lat[u]!);
+				return u;
+			},
+			{ startOffset: offset }
+		);
+		return first;
+	};
+	const o0 = await firstTouched(0);
+	const o1 = await firstTouched(1);
+	const o2 = await firstTouched(2);
+	const o3 = await firstTouched(3); // wraps: 3 % 3 === 0 → back to fastest
+	if (o0 === 'a' && o1 === 'b' && o2 === 'c' && o3 === 'a') {
+		pass('startOffset rotates the primary endpoint (spreads concurrent backfill windows across nodes)');
+	} else {
+		fail(
+			'startOffset rotation',
+			`offsets 0..3 touched [${o0},${o1},${o2},${o3}] (expected a,b,c,a)`
+		);
+	}
+}
+
+/* ---------------- cp664: a rotated call still falls back + records health ---------------- */
+{
+	const pool = new EndpointPool({
+		endpoints: ['a', 'b', 'c'],
+		maxRequestsPerSecond: 0,
+		cooldownLadderMs: [50, 100, 200]
+	});
+	const lat: Record<string, number> = { a: 20, b: 60, c: 120 };
+	for (const u of ['c', 'b', 'a']) {
+		await pool.call(async (x) => {
+			await sleep(lat[x]!);
+			return x;
+		});
+	}
+
+	// startOffset:1 makes 'b' the primary. 'b' fails with a transport error → the
+	// call must fall back through the REST of the rotated order ('c') AND cool 'b'
+	// down. This is the resilience half: spread, but a stalled node's window still
+	// transparently retries elsewhere and the node is penalised.
+	const touched: string[] = [];
+	const res = await pool.call(
+		async (u) => {
+			touched.push(u);
+			if (u === 'b') throw new Error('fetch failed'); // transport error
+			await sleep(lat[u]!);
+			return u;
+		},
+		{ startOffset: 1 }
+	);
+	const bState = pool.snapshot().find((e) => e.url === 'b');
+	// Assert on consecutiveFailures (durable: incremented on transport failure,
+	// reset only on success) rather than cooldownUntil, whose short first-ladder
+	// step can expire during the fallback call to the slower 'c'.
+	const bPenalised = bState !== undefined && bState.consecutiveFailures > 0;
+	if (res === 'c' && touched[0] === 'b' && bPenalised) {
+		pass('a rotated call still falls back through remaining endpoints on failure + records health');
+	} else {
+		fail(
+			'startOffset resilience',
+			`result=${res}, touched=[${touched.join(',')}], b failures=${bState?.consecutiveFailures ?? 'n/a'}`
+		);
+	}
+}
+
 /* ---------------- report ---------------- */
 
 let failed = 0;

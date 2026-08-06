@@ -80,12 +80,22 @@ check(
 // 4 — reverse proxy + dockerised DB survive a power cut.
 for (const rel of ['ops/bunkerweb/docker-compose.yml', 'ops/ansible/roles/bunkerweb/templates/docker-compose.yml.j2']) {
 	const text = readFileSync(join(ROOT, rel), 'utf8');
-	const restarts = [...text.matchAll(/^\s*restart:\s*(\S+)/gm)].map((m) => m[1]);
+	const restarts = [...text.matchAll(/^\s*restart:\s*(\S+)/gm)].map((m) => m[1].replace(/^["']|["']$/g, ''));
+	// A one-shot init container (chowns a volume, fixes cert perms, then exits)
+	// legitimately uses `restart: "no"` — restarting it would crash-loop. We
+	// allow `no` ONLY up to the number of services another service waits on with
+	// `condition: service_completed_successfully`, so a long-running service can't
+	// quietly ship `no` and skip reboot recovery.
+	const oneShotBudget = [...text.matchAll(/condition:\s*service_completed_successfully/g)].length;
+	const noCount = restarts.filter((r) => r === 'no').length;
+	const longRunning = restarts.filter((r) => r !== 'no');
 	check(`#proxy-restart ${rel} sets a restart policy on every service (≥3)`, restarts.length >= 3, `found ${restarts.length}`);
 	check(
-		`#proxy-restart ${rel} every restart policy is always/unless-stopped`,
-		restarts.length > 0 && restarts.every((r) => r === 'unless-stopped' || r === 'always'),
-		`saw: ${restarts.join(', ') || '(none)'}`
+		`#proxy-restart ${rel} every long-running service restarts always/unless-stopped (one-shot inits may use "no")`,
+		longRunning.length > 0 &&
+			longRunning.every((r) => r === 'unless-stopped' || r === 'always') &&
+			noCount <= oneShotBudget,
+		`saw: ${restarts.join(', ') || '(none)'} · oneShotBudget=${oneShotBudget}`
 	);
 }
 

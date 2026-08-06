@@ -66,6 +66,19 @@
     enabled: true
     state: started
 
+# cp663 #10 — the scheduler needs the Docker socket (root:docker 660);
+# resolve the host's docker-group GID so the compose can group_add it to
+# the scheduler container.  The GID varies per host, so it must not be
+# hard-coded.
+- name: Resolve the host docker-group GID (for the scheduler's socket access)
+  ansible.builtin.getent:
+    database: group
+    key: docker
+
+- name: Set bunkerweb_docker_gid
+  ansible.builtin.set_fact:
+    bunkerweb_docker_gid: "{{ getent_group['docker'][1] }}"
+
 # ── Offline appliance: load bundled Docker images so compose doesn't pull. ──
 # When the self-contained bundle ships saved images under vendor/docker, load
 # them now (Docker is up, before compose) so "Bring BunkerWeb up" finds them
