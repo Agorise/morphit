@@ -1,0 +1,156 @@
+# Clone the repo + npm install + build.
+---
+# Source the code two ways:
+#   • REMOTE install (no local source given): git clone at the pinned ref.
+#   • LOCAL install (morphit_local_source_path set — the release the operator
+#     downloaded + extracted): copy THAT into place, so the node runs exactly
+#     the bytes they downloaded, not whatever is on git. `morphit-ops install`
+#     sets morphit_local_source_path to the extracted release directory.
+- name: Clone morphit repo (remote install — no local source given)
+  ansible.builtin.git:
+    repo: "{{ morphit_repo_url }}"
+    dest: "{{ morphit_repo_path }}"
+    version: "{{ morphit_repo_ref }}"
+    update: true
+    force: false
+  become: true
+  become_user: "{{ morphit_service_user }}"
+  when: (morphit_local_source_path | default('')) | length == 0
+  # The repo is owned by the service user so npm runs as it.
+
+- name: Ensure the repo dir exists (local install — copying the downloaded release)
+  ansible.builtin.file:
+    path: "{{ morphit_repo_path }}"
+    state: directory
+    owner: "{{ morphit_service_user }}"
+    group: "{{ morphit_service_group }}"
+    mode: "0755"
+  when:
+    - (morphit_local_source_path | default('')) | length > 0
+    - morphit_local_source_path != morphit_repo_path
+
+- name: Detect a bundled node_modules in the downloaded release (offline install)
+  # A self-contained offline tarball ships a prebuilt node_modules carrying this
+  # marker in the SOURCE.  When present we COPY node_modules into place (next task)
+  # and skip the workspace npm install — the one step that would otherwise reach
+  # the npm registry.  When absent (an ordinary online install) node_modules is
+  # excluded from the copy and rebuilt in place by npm install.
+  ansible.builtin.stat:
+    path: "{{ morphit_local_source_path }}/node_modules/.morphit-bundle-complete"
+  register: morphit_source_bundle_marker
+
+- name: Copy the downloaded release into place (local install)
+  # tar-pipe rather than `cp -a`: tar is always present, no rsync dependency.
+  # node_modules is EXCLUDED for an online install (npm install rebuilds it in
+  # place — avoids duplicating the extract's dev-install), but INCLUDED for a
+  # self-contained offline bundle: there is no registry to rebuild from, so the
+  # prebuilt node_modules must come along.  Runs as root; ownership fixed below.
+  #
+  # CRITICAL: --no-wildcards-match-slash + ANCHORED (./…) excludes.  Without the
+  # flag GNU tar lets `*` cross `/`, so `./apps/*/dist` (and a bare `--exclude=dist`)
+  # also match node_modules/vite/dist, node_modules/@beblurt/*/dist, esbuild,
+  # @modelcontextprotocol/sdk, AND nested apps/web/node_modules/jspdf|dompurify/dist
+  # — stripping the prebuilt package output and making the offline build fail with
+  # "Cannot find module …/dist/…".  With the flag the excludes hit ONLY the project's
+  # own build dirs (which the source tree doesn't even carry — build-offline-bundle.sh
+  # never builds before packaging), and every package's dist/ survives intact.
+  # `--exclude=node_modules` (online only) has no wildcard, so it still drops every
+  # node_modules (root + nested) for the npm rebuild.
+  ansible.builtin.shell:
+    cmd: >-
+      tar --no-wildcards-match-slash -C {{ morphit_local_source_path | quote }}
+      {{ '' if (morphit_source_bundle_marker.stat.exists | default(false)) else '--exclude=node_modules' }}
+      --exclude=./.git --exclude=./translator-output
+      --exclude=./apps/*/.svelte-kit --exclude=./apps/*/build
+      --exclude=./apps/*/dist --exclude=./packages/*/dist
+      -cf - . | tar -C {{ morphit_repo_path | quote }} -xf -
+  when:
+    - (morphit_local_source_path | default('')) | length > 0
+    - morphit_local_source_path != morphit_repo_path
+  changed_when: true
+
+- name: Ensure repo ownership is correct
+  ansible.builtin.file:
+    path: "{{ morphit_repo_path }}"
+    state: directory
+    owner: "{{ morphit_service_user }}"
+    group: "{{ morphit_service_group }}"
+    recurse: true
+
+- name: Detect a bundled (complete) node_modules
+  # A self-contained offline tarball ships a prebuilt node_modules carrying this
+  # marker; the copy task above brings it into place for an offline bundle.  When
+  # present we skip the workspace `npm install` entirely — it is the one step here
+  # that would otherwise reach the npm registry.
+  ansible.builtin.stat:
+    path: "{{ morphit_repo_path }}/node_modules/.morphit-bundle-complete"
+  register: morphit_bundle_marker
+
+- name: npm install (workspace root)
+  ansible.builtin.command:
+    cmd: npm install --workspaces --include-workspace-root
+    chdir: "{{ morphit_repo_path }}"
+  environment:
+    # Keep npm's cache in the repo (owned by the service user, re-created every
+    # run) instead of $HOME/.npm — the nologin service user's home is not a place
+    # npm should need to write, and depending on it is fragile (see base role).
+    npm_config_cache: "{{ morphit_repo_path }}/.npm-cache"
+  become: true
+  become_user: "{{ morphit_service_user }}"
+  register: morphit_npm_install_result
+  changed_when: "'changed' in morphit_npm_install_result.stdout or 'added' in morphit_npm_install_result.stdout"
+  when: not morphit_bundle_marker.stat.exists
+
+- name: Build workspaces (relay + indexer + ops-cli + indexer-client + asset-registry)
+  ansible.builtin.command:
+    cmd: npm run build --workspaces --if-present
+    chdir: "{{ morphit_repo_path }}"
+  environment:
+    npm_config_cache: "{{ morphit_repo_path }}/.npm-cache"
+  become: true
+  become_user: "{{ morphit_service_user }}"
+  register: npm_build_result
+  changed_when: true
+  # cp162: ops-cli now HAS a `build` script (esbuild bundle →
+  # dist/main.js), so `--if-present` builds it here.  The
+  # published bin is a launcher shim that runs the compiled
+  # dist/main.js under plain `node` when present (no tsx), and
+  # falls back to the tsx source only if dist is absent.  Because
+  # this task runs AFTER the full `npm install` above (dev deps
+  # present, incl. esbuild), the bundle builds cleanly.  The next
+  # task verifies the result is runnable.
+
+- name: Verify morphit-ops CLI is runnable (catches missing bin symlink / missing tsx)
+  ansible.builtin.command:
+    cmd: npm exec --offline --workspace apps/ops-cli morphit-ops -- --help
+    chdir: "{{ morphit_repo_path }}"
+  environment:
+    npm_config_cache: "{{ morphit_repo_path }}/.npm-cache"
+  become: true
+  become_user: "{{ morphit_service_user }}"
+  register: morphit_ops_smoke
+  changed_when: false
+  # `npm exec --offline --workspace` resolves the ops-cli bin
+  # purely from the local workspace and forbids any registry
+  # access — if `npm install` didn't wire up the tool, or tsx
+  # (a production dep since cp161) is absent, this fails the play
+  # with a clear error instead of letting the operator hit
+  # "command not found" at their first `morphit-ops init`.
+  # NOTE: we use `npm exec --offline`, NOT `npx --no-install` —
+  # the latter still performs a registry lookup before erroring,
+  # so it is not a reliable offline guarantee on hardened/air-
+  # gapped hosts.  `--offline` forbids network access outright.
+  # The ops-cli bin runs from TS source via tsx, so this exercises
+  # the full resolve→tsx→execute path the operator will use.
+
+- name: Install the global `morphit-ops` launcher on PATH
+  ansible.builtin.template:
+    src: morphit-ops.j2
+    dest: /usr/local/bin/morphit-ops
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  # Without this, `morphit-ops` was only reachable as `npx morphit-ops` from
+  # inside the checkout — so the wizard's `sudo morphit-ops register` (and every
+  # other doc that says `morphit-ops <cmd>`) died with "command not found".

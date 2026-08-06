@@ -1,0 +1,36 @@
+{
+  "name": "morphit",
+  "version": "1.10.0",
+  "private": true,
+  "description": "Morphit — non-custodial, no-KYC P2P fiat↔BTC/XMR/BLURT marketplace",
+  "license": "AGPL-3.0-only",
+  "workspaces": [
+    "apps/web",
+    "apps/relay",
+    "apps/indexer",
+    "apps/ops-cli",
+    "apps/matrix-bot",
+    "apps/mcp-server",
+    "packages/indexer-client",
+    "packages/relay-client",
+    "packages/operator-config",
+    "packages/asset-registry",
+    "packages/release-schema",
+    "packages/net-defense",
+    "packages/rpc-pool"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
+  },
+  "dependencies": {
+    "jsdom": "^29.1.1"
+  },
+  "overrides": {
+    "undici": "^7.28.0",
+    "fast-uri": "^3.1.4"
+  }
+}

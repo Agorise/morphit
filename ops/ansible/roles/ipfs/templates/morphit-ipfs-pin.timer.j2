@@ -1,0 +1,13 @@
+# {{ ansible_managed }}
+# Re-pin on boot + on a schedule, so a new release is picked up automatically.
+[Unit]
+Description=Periodically pin Morphit's current signed release to IPFS
+
+[Timer]
+OnBootSec=3min
+OnCalendar={{ morphit_ipfs_pin_on_calendar }}
+Persistent=true
+RandomizedDelaySec=90
+
+[Install]
+WantedBy=timers.target

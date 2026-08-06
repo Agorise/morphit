@@ -1,0 +1,107 @@
+# Morphit — canonical BunkerWeb docker-compose.
+# See ops/bunkerweb/README.md for usage.
+#
+# Three services:
+#   bunkerweb            — public entry: TLS termination + WAF, proxies
+#                          EVERY path to `frontend` (REVERSE_PROXY_HOST)
+#   bunkerweb-scheduler  — config management agent
+#   frontend             — plain nginx that serves the SvelteKit static
+#                          build AND reverse-proxies /v1/, /relay/,
+#                          /rss/ + SSE to the relay + indexer on the
+#                          host (see frontend/nginx.conf)
+#
+# Topology:  client ──TLS──> bunkerweb ──> frontend ──> host relay/indexer
+#
+# Morphit relay + indexer run on the HOST (not in this compose),
+# reachable from the `frontend` container via host.docker.internal
+# (Linux: resolved by host-gateway).  The relay/indexer must listen on
+# an address the Docker bridge can reach (NOT 127.0.0.1 only) — see
+# frontend/nginx.conf and OPERATIONS.md §32.
+
+services:
+  bunkerweb:
+    image: bunkerity/bunkerweb:1.5.10
+    container_name: bunkerweb
+    restart: unless-stopped
+    ports:
+      - "80:8080"
+      - "443:8443"
+    env_file:
+      - ./bunkerweb.env
+    volumes:
+      - bw-data:/data
+      # Let's Encrypt certs from the host (per OPERATIONS.md §35).
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    extra_hosts:
+      # So BunkerWeb can reach the host-resident relay + indexer.
+      # Linux: host-gateway resolves to the host's docker-internal IP.
+      - "host.docker.internal:host-gateway"
+    networks:
+      - bunkerweb_net
+    depends_on:
+      - bunkerweb-scheduler
+
+  bunkerweb-scheduler:
+    image: bunkerity/bunkerweb-scheduler:1.5.10
+    container_name: bunkerweb-scheduler
+    restart: unless-stopped
+    env_file:
+      - ./bunkerweb.env
+    volumes:
+      - bw-data:/data
+    networks:
+      - bunkerweb_net
+
+  # Serves the built SvelteKit site + reverse-proxies the API paths to
+  # the relay + indexer on the host.  BunkerWeb proxies everything here
+  # (REVERSE_PROXY_HOST=http://frontend:80).  See frontend/nginx.conf.
+  frontend:
+    build:
+      context: ./frontend
+    container_name: morphit-frontend
+    restart: unless-stopped
+    volumes:
+      # The SvelteKit production build from the host, read-only.  Ship
+      # new frontend bytes by rebuilding the web app (`npm run build`
+      # in apps/web) — no need to rebuild this image.  Adjust the path
+      # if you cloned morphit somewhere other than /opt/morphit.
+      - /opt/morphit/apps/web/build:/usr/share/nginx/html:ro
+      # nginx.conf from the host repo, read-only.  Bind-mounting it (in
+      # addition to the COPY in the Dockerfile, which stays as a baked
+      # fallback) means a shipped config change — e.g. the no-cache
+      # blocks for /service-worker.js + /verify.json that drive the
+      # update snackbar — deploys the SAME way a build change does: pull
+      # the new source, then RESTART the container (which re-reads this
+      # mount).  `morphit-ops upgrade` already `docker restart`s this
+      # container, so config changes now ride along on a normal upgrade
+      # with NO image rebuild.  Adjust the path if you cloned morphit
+      # somewhere other than /opt/morphit.
+      - /opt/morphit/ops/bunkerweb/frontend/nginx.conf:/etc/nginx/conf.d/morphit.conf:ro
+    extra_hosts:
+      # So the frontend nginx can reach the relay + indexer on the
+      # host.  Linux: host-gateway resolves to the host's
+      # docker-internal IP.
+      - "host.docker.internal:host-gateway"
+    networks:
+      - bunkerweb_net
+    healthcheck:
+      # nginx:alpine ships busybox wget (no curl), so use wget.
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  bw-data:
+
+networks:
+  bunkerweb_net:
+    name: bunkerweb_net
+    driver: bridge
+    ipam:
+      config:
+        # Pin the CIDR so the operator hard-codes it in
+        # MORPHIT_RELAY_TRUSTED_PROXY_IPS without re-inspecting
+        # after rebuilds.  See OPERATIONS.md §32 + the README in
+        # this directory for the trusted-proxy CIDR rationale.
+        - subnet: 172.20.0.0/16

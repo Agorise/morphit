@@ -1,0 +1,519 @@
+/**
+ * Morphit indexer — Blurt RPC client.
+ *
+ * Read-only view of the Blurt chain.  Wraps @beblurt/dblurt with
+ * latency-aware endpoint selection via `@morphit/rpc-pool`:
+ *   - EWMA latency tracking; the fastest known endpoint is tried first
+ *   - Exponential cooldown ladder on transport failure (2s → 10s → 60s → 5min)
+ *   - Optional adaptive hedging on user-facing calls (off by default for
+ *     background poller / drainer to avoid double-loading public RPCs)
+ *   - Per-call timeout via AbortSignal — slow nodes can't pin a request
+ *     beyond the budget even when the underlying dblurt call hangs
+ *   - No private keys, no broadcasting — the indexer never signs
+ *
+ * cp165: migrated from the bespoke rotation logic (round-robin + raw
+ * cooldown) to the shared `@morphit/rpc-pool` package.  The relay's
+ * BlurtClient now uses the same primitives, so a future audit only
+ * needs to verify one rotation/hedging implementation instead of two.
+ *
+ * API exposed to the rest of the indexer:
+ *   - getDynamicGlobalProperties() — head + irreversible block
+ *   - getBlock(n)                  — block being applied
+ *   - getAccount(name)             — public-key verification
+ *   - getAccounts(names)           — batch lookup
+ *   - callCondenser(method, ...)   — escape hatch for new RPCs
+ *
+ * Hedging policy on this client:
+ *   - getAccount: USER-FACING (called during availability check, signup
+ *     verification, on-the-wire sig verify) — hedge on
+ *   - getAccounts (batch): MIXED — used by the poller for batch sig
+ *     verification AND by user-facing handlers; we expose two methods,
+ *     one user-facing and one background, to let callers signal intent
+ *   - getDynamicGlobalProperties, getBlock: BACKGROUND (poller loop) —
+ *     hedge off (don't double-load Blurt public RPCs)
+ *   - callCondenser: BACKGROUND by default (safer for new callers);
+ *     opt-in to hedging via the `userFacing` option
+ */
+
+import { Client } from '@beblurt/dblurt';
+import { morphitUserAgent } from './userAgent';
+import { INDEXER_VERSION } from '$api/health';
+import { EndpointPool, isTransportError } from '@morphit/rpc-pool';
+import type { Config } from '$config';
+
+/** What the chain reports on every tick. Only the fields we actually
+ *  consume are typed; other fields dblurt returns pass through. */
+export interface DynamicGlobalProperties {
+	readonly head_block_number: number;
+	readonly last_irreversible_block_num: number;
+	readonly time: string;
+	/** Vesting-fund + total-VESTS + supply figures.  Needed to
+	 *  convert a VESTS balance to BLURT POWER and to compute the
+	 *  vesting APR for the user-facing balance proxy.  Optional
+	 *  because the poller's minimal use of DGP (block heights only)
+	 *  doesn't require them; the balance endpoint validates their
+	 *  presence before relying on them. */
+	readonly total_vesting_fund_blurt?: string;
+	readonly total_vesting_shares?: string;
+	readonly current_supply?: string;
+}
+
+/** Minimal shape of a block as returned by `condenser_api.get_block`.
+ *  Only the fields the dispatcher touches are typed here. */
+export interface BlockHeader {
+	readonly timestamp: string;
+	readonly transactions: readonly BlockTransaction[];
+	readonly transaction_ids: readonly string[];
+}
+
+export interface BlockTransaction {
+	readonly ref_block_num: number;
+	readonly ref_block_prefix: number;
+	readonly expiration: string;
+	readonly operations: readonly ChainOperation[];
+	readonly signatures: readonly string[];
+}
+
+/** Blurt ops are heterogeneous — `[op_name, payload]` tuples.  For
+ *  the indexer we care about `custom_json` ops with `id` matching
+ *  one of OP_IDS.  The dispatcher narrows the shape; here we keep it
+ *  permissive. */
+export type ChainOperation = readonly [string, Record<string, unknown>];
+
+/** What `get_account` returns — only the fields we use for signature
+ *  verification. */
+export interface ChainAccount {
+	readonly name: string;
+	readonly posting: {
+		readonly weight_threshold: number;
+		readonly account_auths: readonly (readonly [string, number])[];
+		readonly key_auths: readonly (readonly [string, number])[];
+	};
+	readonly active: ChainAccount['posting'];
+	readonly owner: ChainAccount['posting'];
+	readonly memo_key: string;
+	/** Liquid BLURT balance as a Graphene asset string like
+	 *  "42.500 BLURT".  Present in the RPC response; exposed here
+	 *  for callers doing balance-sensitive logic (ADR-0010 §3
+	 *  low-balance auto-refill).  Parse with parseBlurtAmount. */
+	readonly balance?: string;
+	/** Powered-up stake as a VESTS asset string like
+	 *  "1000000.000000 VESTS".  Present in the RPC response;
+	 *  exposed here for the user-facing balance proxy
+	 *  (apps/indexer/src/api/accountBalance.ts), which converts it
+	 *  to BLURT POWER via the frontend's vestsToBlurtPower using the
+	 *  DGP vesting totals below. */
+	readonly vesting_shares?: string;
+	/** VESTS delegated TO / OUT FROM this account. Present in the RPC
+	 *  response; the balance proxy passes them through so the frontend can
+	 *  compute EFFECTIVE vesting (own + received − delegated) — the real
+	 *  voting-manabar ceiling. Without these, an account that delegates BP
+	 *  out (loyalty grants) has its voting power % understated. */
+	readonly received_vesting_shares?: string;
+	readonly delegated_vesting_shares?: string;
+	/** Voting-mana regen bar.  Present in the RPC response; the
+	 *  balance proxy passes it through so the frontend can render a
+	 *  mana percentage without the browser ever touching an RPC
+	 *  node directly (privacy: third-party nodes never see the
+	 *  user's IP or which account they're viewing). */
+	readonly voting_manabar?: {
+		readonly current_mana: string;
+		readonly last_update_time: number;
+	};
+	/** Legacy voting-power counter (0–10000) + last-vote timestamp.
+	 *  The balance proxy passes them through so the frontend can show the
+	 *  same "Voting" % as classic Blurt explorers (blocks.blurtwallet.com). */
+	readonly voting_power?: number;
+	readonly last_vote_time?: string;
+	/** cp396 — unclaimed author/curation rewards (claim_reward_balance).
+	 *  `reward_blurt_balance` is liquid BLURT ("0.000 BLURT");
+	 *  `reward_vesting_balance` is the VESTS the claim op consumes
+	 *  ("0.000000 VESTS"); `reward_vesting_blurt` is the chain-provided
+	 *  BLURT value of that vesting reward (shown to the user as BP). */
+	readonly reward_blurt_balance?: string;
+	readonly reward_vesting_balance?: string;
+	readonly reward_vesting_blurt?: string;
+	/** cp439 — power-down (withdraw_vesting) progress. `vesting_withdraw_rate`
+	 *  is the per-week VESTS payout ("0.000000 VESTS" when idle);
+	 *  `next_vesting_withdrawal` is the ISO timestamp of the next weekly payout
+	 *  (a 1969/1970 epoch sentinel when idle); `to_withdraw` / `withdrawn` are
+	 *  raw VESTS×1e6 integers (total scheduled / already paid — string OR number
+	 *  depending on the node). The balance proxy forwards them so the wallet can
+	 *  show an in-progress power-down (amount left + finish date). */
+	readonly vesting_withdraw_rate?: string;
+	readonly next_vesting_withdrawal?: string;
+	readonly to_withdraw?: string | number;
+	readonly withdrawn?: string | number;
+}
+
+/** Bridge a dblurt call (no native cancellation) to an AbortSignal.
+ *  The dblurt call still runs to completion in the background if the
+ *  signal aborts mid-flight; we just stop awaiting it.  Cost: one
+ *  abandoned RPC per hedge — same tradeoff hedging already makes
+ *  intentionally (the hedge double-fires the request anyway). */
+function withSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+	if (signal.aborted) {
+		return Promise.reject(new Error('aborted'));
+	}
+	return new Promise<T>((resolve, reject) => {
+		const onAbort = (): void => {
+			reject(new Error('aborted'));
+		};
+		signal.addEventListener('abort', onAbort, { once: true });
+		promise.then(
+			(v) => {
+				signal.removeEventListener('abort', onAbort);
+				resolve(v);
+			},
+			(err) => {
+				signal.removeEventListener('abort', onAbort);
+				reject(err);
+			}
+		);
+	});
+}
+
+/** Per-endpoint dblurt Client instance cache.  Building a new Client
+ *  per call is cheap but allocates; cache them by URL so the same
+ *  Client instance is reused across calls. */
+const clientCache = new Map<string, Client>();
+/** v1.7.5 (t.txt #4) — a node told us it does not speak JSON-RPC batch.
+ *
+ *  A distinct class, not a string match, because this must NOT look like a
+ *  transport failure: `isTransportError` matches on message TEXT ('fetch
+ *  failed', 'timeout', 'network', 'aborted', …), and a match would rotate the
+ *  endpoint and start its cooldown ladder — punishing a perfectly healthy node
+ *  for the crime of being an older build. The message below is deliberately
+ *  free of every word on that list. */
+class BatchUnsupportedError extends Error {
+	constructor(url: string) {
+		super(`endpoint does not support JSON-RPC batch: ${url}`);
+		this.name = 'BatchUnsupportedError';
+	}
+}
+
+/** v1.7.5 (t.txt #4) — URLs that answered a JSON-RPC batch with something other
+ *  than an array, i.e. nodes that don't speak batch. Process-lifetime memo: a
+ *  node's batch support doesn't flip while we're running, and re-probing it on
+ *  every catch-up would spend exactly the requests batching exists to save.
+ *  Deliberately NOT persisted — a restart re-probes once, which is the cheapest
+ *  possible way to notice a node that has since upgraded. */
+const batchUnsupported = new Set<string>();
+
+function clientFor(url: string): Client {
+	let c = clientCache.get(url);
+	if (c === undefined) {
+		// dblurt 0.17.0 (v1.8.0 upgrade) added a native `userAgent` ClientOptions
+		// field — the reason the old global-fetch wrapper existed. Pass it here so
+		// dblurt's own RPC traffic identifies Morphit natively. The startup
+		// `installMorphitUserAgent` global wrapper has been RETIRED now that the
+		// native UA is confirmed in production node logs and every other call site
+		// names itself (rpcHealth got its own header too); `rpc-user-agent-smoke`
+		// guards that no raw fetch is left anonymous.
+		c = new Client(url, { timeout: 10_000, userAgent: morphitUserAgent(INDEXER_VERSION) });
+		clientCache.set(url, c);
+	}
+	return c;
+}
+
+/** Options shared by the generic RPC caller. `userFacing` opts a READ into
+ *  latency hedging (parallel-fire the fastest known nodes, take the winner);
+ *  `hedge` is an explicit override that wins over the userFacing default. */
+export interface RpcCallOptions {
+	userFacing?: boolean;
+	hedge?: boolean;
+}
+
+/** Resolve the effective hedge flag for an rpc-pool call.
+ *
+ *  Explicit `hedge` wins; otherwise a user-facing READ hedges and everything
+ *  else — background reads, and EVERY write — does not.
+ *
+ *  WHY THIS IS ITS OWN EXPORTED FUNCTION (cp452): hedging a WRITE parallel-
+ *  fires the same signed transaction to a second node, whose
+ *  `broadcast_transaction_synchronous` then blocks on the duplicate until the
+ *  tx expires (~60s), stalling the send. The broadcast route MUST pass
+ *  `hedge:false`, and this mapping MUST honour it over any `userFacing`. Both
+ *  are pinned by the broadcast-hedge-off smoke so neither can silently
+ *  regress back to a hedged write. */
+export function resolveHedge(options: RpcCallOptions): boolean {
+	return options.hedge ?? options.userFacing === true;
+}
+
+export class BlurtClient {
+	private readonly pool: EndpointPool;
+
+	constructor(config: Config) {
+		if (config.blurtRpcEndpoints.length === 0) {
+			throw new Error('BlurtClient: at least one endpoint required');
+		}
+		this.pool = new EndpointPool({
+			endpoints: [...config.blurtRpcEndpoints]
+		});
+	}
+
+	/** Expose pool snapshot for /v1/health diagnostics (latency,
+	 *  cooldown state, last-success timestamps). */
+	endpointSnapshot(): ReturnType<EndpointPool['snapshot']> {
+		return this.pool.snapshot();
+	}
+
+	/** Current dynamic global properties.  Background call (poller). */
+	async getDynamicGlobalProperties(): Promise<DynamicGlobalProperties> {
+		return this.pool.call(async (url, signal) => {
+			const client = clientFor(url);
+			const dgp = (await withSignal(
+				client.condenser.getDynamicGlobalProperties(),
+				signal
+			)) as unknown as DynamicGlobalProperties;
+			if (
+				typeof dgp.head_block_number !== 'number' ||
+				typeof dgp.last_irreversible_block_num !== 'number'
+			) {
+				throw new Error('getDynamicGlobalProperties returned unexpected shape');
+			}
+			return dgp;
+		});
+	}
+
+	/** v1.7.5 (t.txt #4) — fetch a RANGE of blocks in ONE HTTP request, using a
+	 *  JSON-RPC 2.0 batch (an array request → an array response).
+	 *
+	 *  WHY THIS EXISTS: "batch" is the last of the four things the rpc.blurt.blog
+	 *  operator asked us for — lower RPS, batch, exponential backoff, add jitter.
+	 *  The other three shipped in v1.7.0 (DEFAULT_MAX_REQUESTS_PER_SECOND,
+	 *  DEFAULT_*_COOLDOWN_LADDER_MS, DEFAULT_COOLDOWN_JITTER_FRACTION).
+	 *
+	 *  WHAT IT FIXES: the poller's catch-up walked blocks one HTTP request at a
+	 *  time. At the head that's ~1 request per 3 s and nobody notices. After any
+	 *  downtime it is thousands of requests fired as fast as pacing allows, from
+	 *  every federated instance, at a handful of volunteer-run nodes — which is
+	 *  exactly the HTTP 429 the operator complained about. One batch of N blocks
+	 *  is 1 request instead of N.
+	 *
+	 *  NOT ALL NODES SUPPORT IT. Blurt nodes vary, and this repo cannot reach one
+	 *  to check (no network in the sandbox), so batch support is DISCOVERED, never
+	 *  assumed: the first batch to a URL either works or it doesn't, the answer is
+	 *  cached per URL, and a node that can't batch silently gets the old
+	 *  one-at-a-time path forever. A node that has never been asked is not
+	 *  penalised, and a node that says no is not asked twice.
+	 *
+	 *  Errors are phrased so the pool's own classifiers see them: `isRateLimitError`
+	 *  matches /\bhttp 429\b/ on the message, so a batch that gets rate-limited
+	 *  rotates and cools down exactly like a single call would.
+	 *
+	 *  Returns results POSITIONALLY (result[i] ↔ nums[i]). JSON-RPC does not
+	 *  promise response order, so responses are matched by `id`, never by index.
+	 */
+	async getBlocks(nums: readonly number[]): Promise<ReadonlyArray<BlockHeader | null>> {
+		if (nums.length === 0) return [];
+		// One block is not a batch; skip the array framing entirely.
+		if (nums.length === 1) return [await this.getBlock(nums[0]!)];
+
+		try {
+			return await this.pool.call(async (url, signal) => {
+				if (batchUnsupported.has(url)) throw new BatchUnsupportedError(url);
+
+				const body = nums.map((n, i) => ({
+					jsonrpc: '2.0' as const,
+					id: i,
+					method: 'condenser_api.get_block',
+					params: [n]
+				}));
+
+				let res: Response;
+				try {
+					res = await fetch(url, {
+						method: 'POST',
+						// v1.7.7 — name ourselves explicitly rather than lean on the
+						// global wrapper in `blurt/userAgent.ts`. The wrapper exists to
+						// reach dblurt, which gives us no other way in; this call site is
+						// ours, and a request that states its own identity keeps working
+						// if the wrapper is ever moved, reordered, or dropped. The
+						// wrapper only fills a MISSING user-agent, so this wins here.
+						headers: {
+							'content-type': 'application/json',
+							'user-agent': morphitUserAgent(INDEXER_VERSION)
+						},
+						body: JSON.stringify(body),
+						signal
+					});
+				} catch (err) {
+					// Network-level failure — let the pool rotate + cool down.
+					throw new Error(`batch get_block transport failure: ${String(err)}`);
+				}
+
+				if (res.status === 429) throw new Error('HTTP 429 (batch get_block)');
+				if (!res.ok) {
+					// A 4xx here means this node's edge (a WAF/proxy) rejects the
+					// JSON-RPC ARRAY framing specifically. Many Blurt nodes return
+					// 406 (or 403) to a batch `[...]` POST while serving single calls
+					// fine — proven in production: a single get_block returns 200 on
+					// every node that 406s the batch. That is a batch-CAPABILITY
+					// answer, not a transport failure, so treat it exactly like a node
+					// that can't batch: remember it and fall back to the paced
+					// one-at-a-time path (which works everywhere), instead of dying on
+					// a non-rotatable 4xx. This is the fix for the v1.8.1 firefight:
+					// four of the six default nodes 406'd the batch, and because a 4xx
+					// is not in the pool's rotate list, one such node leading the pool
+					// froze the whole poller (indexed_block stuck, lag climbing).
+					// 5xx / 52x stay transport errors so the pool rotates + cools down.
+					if (res.status >= 400 && res.status < 500) {
+						batchUnsupported.add(url);
+						throw new BatchUnsupportedError(url);
+					}
+					throw new Error(`HTTP ${res.status} (batch get_block)`);
+				}
+
+				const json: unknown = await res.json();
+
+				// A node that doesn't do batch answers a single object (often a
+				// parse error), not an array. That is a CAPABILITY answer, not a
+				// transport failure: remember it, and bail out to the paced
+				// fallback WITHOUT cooling the endpoint down for being honest.
+				if (!Array.isArray(json)) {
+					batchUnsupported.add(url);
+					throw new BatchUnsupportedError(url);
+				}
+				if (json.length !== nums.length) {
+					throw new Error(
+						`batch get_block returned ${json.length} responses for ${nums.length} requests`
+					);
+				}
+
+				// Match by id — JSON-RPC explicitly permits any response order.
+				const byId = new Map<number, unknown>();
+				for (const entry of json as ReadonlyArray<Record<string, unknown>>) {
+					const id = entry['id'];
+					if (typeof id !== 'number') throw new Error('batch get_block response missing id');
+					const error = entry['error'];
+					if (error !== undefined && error !== null) {
+						throw new Error(`batch get_block rpc error: ${JSON.stringify(error)}`);
+					}
+					byId.set(id, entry['result']);
+				}
+
+				return nums.map((_n, i) => {
+					if (!byId.has(i)) throw new Error(`batch get_block missing response for id ${i}`);
+					return (byId.get(i) as BlockHeader | null | undefined) ?? null;
+				});
+			});
+		} catch (err) {
+			if (!(err instanceof BatchUnsupportedError)) throw err;
+
+			// ─── PACED fallback (v1.7.5 deep-deep) ────────────────────────────
+			// This walk MUST go back through this.getBlock(), i.e. one
+			// pool.call() per block. The obvious shortcut — looping inside the
+			// callback above — is a trap that makes this whole task backwards:
+			// EndpointPool.attemptSingle awaits pace(ep) ONCE and then invokes
+			// the callback, so N requests fired inside a single callback are N
+			// requests with NO pacing between them. A node that cannot batch
+			// would receive a 20-request BURST where it used to receive 20 paced
+			// requests — worse than the behaviour this task exists to fix, and
+			// aimed at exactly the older, smaller nodes least able to absorb it.
+			//
+			// Going through getBlock() costs an endpoint re-selection per block
+			// and that is fine: correctness of the request RATE is the entire
+			// point, and this path only runs on nodes that already can't batch.
+			const out: Array<BlockHeader | null> = [];
+			for (const n of nums) out.push(await this.getBlock(n));
+			return out;
+		}
+	}
+
+	/** Fetch a specific block.  Background call (poller). */
+	async getBlock(num: number): Promise<BlockHeader | null> {
+		return this.pool.call(async (url, signal) => {
+			const client = clientFor(url);
+			const block = (await withSignal(client.condenser.getBlock(num), signal)) as unknown as
+				| BlockHeader
+				| null
+				| undefined;
+			return block ?? null;
+		});
+	}
+
+	/** Fetch a single account.  Defaults to USER-FACING (hedge on) —
+	 *  callers in background paths (chain dispatch, periodic
+	 *  scanners) should pass `{userFacing: false}` to avoid double-
+	 *  loading public RPCs. */
+	async getAccount(
+		name: string,
+		options: { userFacing?: boolean } = {}
+	): Promise<ChainAccount | null> {
+		const userFacing = options.userFacing !== false;
+		return this.pool.call(
+			async (url, signal) => {
+				const client = clientFor(url);
+				const accounts = (await withSignal(
+					client.condenser.getAccounts([name]),
+					signal
+				)) as readonly ChainAccount[] | null | undefined;
+				if (!accounts || accounts.length === 0) return null;
+				return accounts[0] ?? null;
+			},
+			{ hedge: userFacing }
+		);
+	}
+
+	/** Batch account fetch.  Defaults to USER-FACING; pass
+	 *  `{userFacing: false}` for poller / scanner paths. */
+	async getAccounts(
+		names: readonly string[],
+		options: { userFacing?: boolean } = {}
+	): Promise<ReadonlyMap<string, ChainAccount>> {
+		if (names.length === 0) return new Map();
+		const unique = Array.from(new Set(names));
+		const userFacing = options.userFacing !== false;
+		return this.pool.call(
+			async (url, signal) => {
+				const client = clientFor(url);
+				const list = (await withSignal(
+					client.condenser.getAccounts(unique),
+					signal
+				)) as readonly ChainAccount[] | null | undefined;
+				const map = new Map<string, ChainAccount>();
+				for (const acc of list ?? []) {
+					map.set(acc.name, acc);
+				}
+				return map;
+			},
+			{ hedge: userFacing }
+		);
+	}
+
+	/** Generic condenser-API escape hatch.  Background by default;
+	 *  callers can opt into hedging for user-facing READS via `userFacing`.
+	 *  WRITES (broadcast) must pass `hedge: false` explicitly: hedging a
+	 *  broadcast parallel-fires the SAME signed tx to multiple nodes, and a
+	 *  losing node's `broadcast_transaction_synchronous` then blocks on the
+	 *  duplicate until the tx expires (~60s) — the exact hang the relay's
+	 *  broadcast path forbids with its own `hedge:false`. The explicit
+	 *  `hedge` option wins over the `userFacing`-derived default. */
+	async callCondenser<T = unknown>(
+		method: string,
+		params: readonly unknown[] = [],
+		options: RpcCallOptions = {}
+	): Promise<T> {
+		const hedge = resolveHedge(options);
+		return this.pool.call(
+			async (url, signal) => {
+				const client = clientFor(url);
+				// dblurt's Client exposes a `call` method for arbitrary
+				// RPC invocations.  Argument order: api namespace, method
+				// name, params array.
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				const result = await withSignal(
+					(client as any).call('condenser_api', method, params),
+					signal
+				);
+				return result as T;
+			},
+			{ hedge }
+		);
+	}
+}
+
+/** Re-export for consumers that want to inspect transport errors
+ *  without pulling rpc-pool directly. */
+export { isTransportError };

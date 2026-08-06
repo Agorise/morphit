@@ -1,0 +1,17 @@
+# {{ ansible_managed }}
+# Pins THIS instance's current signed release to the local Kubo node.
+[Unit]
+Description=Pin Morphit's current signed release to IPFS
+After=ipfs.service morphit-indexer.service
+Wants=ipfs.service
+
+[Service]
+Type=oneshot
+User={{ morphit_ipfs_user }}
+Group={{ morphit_ipfs_group }}
+EnvironmentFile=-/etc/morphit/ipfs-pin.env
+Environment=IPFS_PATH={{ morphit_ipfs_repo }}
+ExecStart=/usr/local/lib/morphit/morphit-ipfs-pin.sh
+# The script is non-fatal by design; a slow fetch exits non-zero so the timer
+# simply retries, but that must not mark the unit failed forever.
+SuccessExitStatus=0 1

@@ -1,0 +1,16 @@
+[Unit]
+Description=Morphit host-resource monitor timer — fires the .service every 5 minutes
+Documentation=https://git.agorise.net/agorise/morphit
+Requires=morphit-host-monitor.service
+
+[Timer]
+# 30s after boot, then every 5 minutes.  Operators on tighter
+# hardware may bump the interval (e.g. OnUnitActiveSec=1min) for
+# faster swap-thrashing detection.
+OnBootSec=30s
+OnUnitActiveSec=5min
+AccuracySec=10s
+Unit=morphit-host-monitor.service
+
+[Install]
+WantedBy=timers.target

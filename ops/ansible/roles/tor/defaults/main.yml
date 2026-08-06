@@ -1,0 +1,27 @@
+---
+# tor role — a basic v3 onion hidden service for this instance.
+#
+# Serves the SAME .onion the wizard generated and the site advertises
+# (MORPHIT_INSTANCE_TOR_ADDRESS → footer pill + Onion-Location).  To do
+# that it installs the wizard's generated key files; without them Tor
+# would invent a different address.  Vanity addresses are out of scope —
+# generate one separately and paste it via `morphit-ops alt-address`.
+
+# Where Tor keeps the hidden-service keys + hostname on the server.
+morphit_tor_hs_dir: /var/lib/tor/morphit
+
+# The local service Tor forwards the onion's virtual port 80 to (the
+# public web edge: BunkerWeb/nginx in front of the relay, or the relay).
+morphit_tor_local_host: 127.0.0.1
+morphit_tor_local_port: 8080
+
+# Path ON THE CONTROL NODE to the wizard-generated key directory
+# (`tor-hidden-service/`, holding hs_ed25519_secret_key,
+# hs_ed25519_public_key, hostname).  When set and present, the role
+# installs those keys so Tor serves the advertised address.  Leave empty
+# to let Tor self-generate (a DIFFERENT address — then you must update
+# MORPHIT_INSTANCE_TOR_ADDRESS to match what Tor produces).
+morphit_tor_key_src: ""
+
+# The unprivileged Tor user on Debian/Ubuntu.
+morphit_tor_user: debian-tor
