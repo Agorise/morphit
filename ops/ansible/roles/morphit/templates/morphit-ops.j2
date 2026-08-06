@@ -17,4 +17,18 @@ cd "{{ morphit_repo_path }}" || {
 	echo "morphit-ops: Morphit is not installed at {{ morphit_repo_path }}." >&2
 	exit 1
 }
+
+# status/doctor need the indexer DB URL, which lives in /etc/morphit/indexer.env
+# (the systemd unit's EnvironmentFile).  Read it INERTLY with sed and export it —
+# NEVER `.`-source that file: an unquoted value with spaces (a marketplace name /
+# tagline is valid there for systemd) would execute under `set -e` and abort the
+# launcher (cp661).  OS env already set wins; we only fill a missing value.
+_indexer_env="/etc/morphit/indexer.env"
+if [ -z "${MORPHIT_INDEXER_DATABASE_URL:-}" ] && [ -r "$_indexer_env" ]; then
+	_dburl=$(sed -n 's/^MORPHIT_INDEXER_DATABASE_URL=//p' "$_indexer_env" | tail -1) || _dburl=""
+	# Strip optional surrounding quotes (systemd EnvironmentFile allows them).
+	_dburl=$(printf '%s' "$_dburl" | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/")
+	if [ -n "$_dburl" ]; then export MORPHIT_INDEXER_DATABASE_URL="$_dburl"; fi
+fi
+
 exec npm exec --offline --workspace apps/ops-cli morphit-ops -- "$@"

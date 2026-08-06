@@ -100,8 +100,8 @@ fi
 # then PUTs to the DHT), refreshing it before the ~48h DHT expiry.
 # NB — verify on the box: if a Kubo build won't accept a foreign record via
 # `routing put`, the HTTP Routing V1 endpoint PUTs the same signed bytes:
-#   curl -fsS -X PUT --data-binary @"$TMP" "http://127.0.0.1:8081/routing/v1/ipns/$NAME"
-# (the gateway port is 8081 per morphit-ipfs-setup.sh). The CLI path is preferred
+#   curl -fsS -X PUT --data-binary @"$TMP" "http://127.0.0.1:8082/routing/v1/ipns/$NAME"
+# (the gateway port is 8082 per morphit-ipfs-setup.sh — :8081 is the indexer). The CLI path is preferred
 # where it works; both put an identical record.
 log "rebroadcasting IPNS record for release ${VER:-?} -> $KEY (timeout ${PUT_TIMEOUT}s)…"
 if ipfs --timeout="${PUT_TIMEOUT}s" routing put "$KEY" "$TMP" >/dev/null 2>&1; then

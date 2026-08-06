@@ -48,10 +48,8 @@ export interface AnsibleInstallInputs {
 	/** Auto-publish the on-chain operator registration the first time the box
 	 *  sees the internet (morphit-first-online). Opt-in; false = register by hand. */
 	readonly autoRegister: boolean;
-	/** Random password Ansible provisions the indexer DB with. */
+	/** Random password Ansible provisions the (single, shared) DB with. */
 	readonly indexerDbPassword: string;
-	/** Random password Ansible provisions the relay DB with. */
-	readonly relayDbPassword: string;
 	/** BLURT account that RECEIVES BLURT listing fees (the operator earns
 	 *  these); defaults to the operator's own account in the wizard. */
 	readonly feesAccount: string;
@@ -168,11 +166,8 @@ export function validateInstallInputs(inputs: AnsibleInstallInputs): string[] {
 	}
 	const e = validateAcmeEmail(inputs.acmeEmail);
 	if (e !== true) problems.push(`acmeEmail ${e}.`);
-	if (inputs.indexerDbPassword.length < 24 || inputs.relayDbPassword.length < 24) {
-		problems.push('DB passwords must be strong (>= 24 characters \u2014 use randomSecret()).');
-	}
-	if (inputs.indexerDbPassword === inputs.relayDbPassword) {
-		problems.push('the indexer and relay DB passwords must be DIFFERENT (generate each with its own randomSecret() call).');
+	if (inputs.indexerDbPassword.length < 24) {
+		problems.push('the DB password must be strong (>= 24 characters \u2014 use randomSecret()).');
 	}
 	if (inputs.mode === 'home') {
 		const dd = validateDdnsUrl(inputs.ddnsUpdateUrl ?? '');
@@ -213,10 +208,9 @@ export function buildAnsibleVars(inputs: AnsibleInstallInputs): Record<string, u
 		morphit_instance_tagline: inputs.instanceTagline ?? '',
 		tls_acme_email: inputs.acmeEmail,
 		morphit_auto_register: inputs.autoRegister,
-		// Secrets Ansible provisions the DB with (referenced as vault_* with
-		// defaults in group_vars/all.yml).
+		// Secret Ansible provisions the (single, shared) DB with (referenced as
+		// vault_postgres_indexer_password with a default in group_vars/all.yml).
 		vault_postgres_indexer_password: inputs.indexerDbPassword,
-		vault_postgres_relay_password: inputs.relayDbPassword,
 		// Same full stack either way.
 		enable_tls: true,
 		enable_bunkerweb: inputs.enableBunkerweb ?? true,

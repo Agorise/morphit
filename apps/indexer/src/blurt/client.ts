@@ -258,6 +258,13 @@ export class BlurtClient {
 		return this.pool.snapshot();
 	}
 
+	/** Number of configured RPC endpoints — the catch-up backfill uses this to
+	 *  size its concurrent prefetch (one window per endpoint by default) and to
+	 *  rotate each window's starting endpoint. */
+	endpointCount(): number {
+		return this.pool.snapshot().length;
+	}
+
 	/** Current dynamic global properties.  Background call (poller). */
 	async getDynamicGlobalProperties(): Promise<DynamicGlobalProperties> {
 		return this.pool.call(async (url, signal) => {
@@ -305,10 +312,10 @@ export class BlurtClient {
 	 *  Returns results POSITIONALLY (result[i] ↔ nums[i]). JSON-RPC does not
 	 *  promise response order, so responses are matched by `id`, never by index.
 	 */
-	async getBlocks(nums: readonly number[]): Promise<ReadonlyArray<BlockHeader | null>> {
+	async getBlocks(nums: readonly number[], startOffset = 0): Promise<ReadonlyArray<BlockHeader | null>> {
 		if (nums.length === 0) return [];
 		// One block is not a batch; skip the array framing entirely.
-		if (nums.length === 1) return [await this.getBlock(nums[0]!)];
+		if (nums.length === 1) return [await this.getBlock(nums[0]!, startOffset)];
 
 		try {
 			return await this.pool.call(async (url, signal) => {
@@ -397,7 +404,7 @@ export class BlurtClient {
 					if (!byId.has(i)) throw new Error(`batch get_block missing response for id ${i}`);
 					return (byId.get(i) as BlockHeader | null | undefined) ?? null;
 				});
-			});
+			}, { startOffset });
 		} catch (err) {
 			if (!(err instanceof BatchUnsupportedError)) throw err;
 
@@ -416,13 +423,15 @@ export class BlurtClient {
 			// and that is fine: correctness of the request RATE is the entire
 			// point, and this path only runs on nodes that already can't batch.
 			const out: Array<BlockHeader | null> = [];
-			for (const n of nums) out.push(await this.getBlock(n));
+			for (const n of nums) out.push(await this.getBlock(n, startOffset));
 			return out;
 		}
 	}
 
-	/** Fetch a specific block.  Background call (poller). */
-	async getBlock(num: number): Promise<BlockHeader | null> {
+	/** Fetch a specific block.  Background call (poller).  `startOffset` rotates
+	 *  the pool's primary endpoint order (concurrent backfill spread); 0 = the
+	 *  normal fastest-first behaviour. */
+	async getBlock(num: number, startOffset = 0): Promise<BlockHeader | null> {
 		return this.pool.call(async (url, signal) => {
 			const client = clientFor(url);
 			const block = (await withSignal(client.condenser.getBlock(num), signal)) as unknown as
@@ -430,7 +439,7 @@ export class BlurtClient {
 				| null
 				| undefined;
 			return block ?? null;
-		});
+		}, { startOffset });
 	}
 
 	/** Fetch a single account.  Defaults to USER-FACING (hedge on) —

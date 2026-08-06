@@ -11,7 +11,7 @@
  * other piece it calls (collectInstallInputs, buildAnsibleVars, assembleInstall,
  * the save-secrets prompt) is already verified on its own.
  */
-import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, existsSync, chownSync, chmodSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { stepRelayAccount, stepActiveKey, stepFeesAccount, type ActiveKeyResult } from './steps.ts';
@@ -59,9 +59,59 @@ export function relayKeystoreContent(activeKey: ActiveKeyResult): string {
 		: (activeKey.plaintextWif ?? '');
 }
 
+const RELAY_CRED_PATH = '/etc/morphit/relay_passphrase.cred';
+
 function writeRelayKeystore(activeKey: ActiveKeyResult, keystorePath: string): void {
 	mkdirSync(dirname(keystorePath), { recursive: true });
 	writeFileSync(keystorePath, relayKeystoreContent(activeKey), { mode: 0o600 });
+	// cp663 #4 — the relay unit runs User=root with an EMPTY CapabilityBoundingSet
+	// (no DAC_OVERRIDE), so root reads the keystore ONLY via the owner bit.  The
+	// wizard may run as a non-root service user, which would leave the keystore
+	// unreadable by the relay (EACCES).  Force root:root (the Ansible run also
+	// re-asserts it — belt and braces).
+	try {
+		chownSync(keystorePath, 0, 0);
+	} catch {
+		/* not root / unsupported — the Ansible "Lock down keystore" task fixes it */
+	}
+	// cp663 #3 — for an encrypted key, seal the passphrase into the systemd
+	// host-bound encrypted credential the relay unit consumes
+	// (LoadCredentialEncrypted=relay_passphrase).  Without it the relay cannot
+	// unlock unattended and the unit fails to start.
+	if (activeKey.mode === 'encrypted' && activeKey.passphrase) {
+		sealRelayPassphraseCred(activeKey.passphrase);
+	}
+}
+
+/** Seal the relay unlock passphrase into the systemd host-bound encrypted
+ *  credential (/etc/morphit/relay_passphrase.cred) that the relay unit loads.
+ *  Best-effort: if systemd-creds is missing or fails, tell the operator the
+ *  exact command (also in the unit file comments). */
+function sealRelayPassphraseCred(passphrase: string): void {
+	try {
+		const r = spawnSync(
+			'systemd-creds',
+			['encrypt', '--name=relay_passphrase', '--with-key=host', '-', RELAY_CRED_PATH],
+			{ input: passphrase, stdio: ['pipe', 'ignore', 'pipe'] }
+		);
+		if (r.status === 0) {
+			try { chmodSync(RELAY_CRED_PATH, 0o600); } catch { /* systemd-creds writes 0600 already */ }
+			console.log('  ✓ Sealed the relay unlock passphrase into /etc/morphit/relay_passphrase.cred');
+			return;
+		}
+		warnCredManual((r.stderr?.toString() ?? '').trim());
+	} catch (e) {
+		warnCredManual(String(e));
+	}
+}
+
+function warnCredManual(detail: string): void {
+	const first = detail ? ` (${detail.split('\n')[0]})` : '';
+	console.log(
+		`  ⚠ Could not auto-create ${RELAY_CRED_PATH}${first}.\n` +
+			"    The relay can't unlock its encrypted key until this exists.  Create it with:\n" +
+			`      echo -n '<your passphrase>' | sudo systemd-creds encrypt --name=relay_passphrase --with-key=host - ${RELAY_CRED_PATH}`
+	);
 }
 
 /** A default-answered yes/no prompt.  Empty input takes the default. */
@@ -125,14 +175,14 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 	// Only now (inputs valid, operator ready) write the keystore Ansible reads.
 	writeRelayKeystore(activeKey, keystorePath);
 
-	// Saving the two generated DB passwords is its OWN step — and it happens BEFORE
+	// Saving the generated DB password is its OWN step — and it happens BEFORE
 	// the install banner, while the wizard is still interactive, so the operator
-	// records them and types SAVED before the automatic part starts.
+	// records it and types SAVED before the automatic part starts. There is ONE
+	// shared database (indexer + relay both use it), hence one password.
 	const secretsToSave: SecretToSave[] = [
-		{ label: 'Database password (marketplace data)', value: inputs.indexerDbPassword },
-		{ label: 'Database password (account signups)', value: inputs.relayDbPassword }
+		{ label: 'Database password', value: inputs.indexerDbPassword }
 	];
-	step(0, 0, 'Save your two database passwords');
+	step(0, 0, 'Save your database password');
 	await promptSaveSecrets(secretsToSave);
 
 	// The install itself isn't a numbered step — it's the machine working, not a

@@ -272,6 +272,14 @@ export interface CallOptions {
 	 *  primary's EWMA is above the pool's degradation threshold.
 	 *  Background callers should leave this false. */
 	readonly hedge?: boolean;
+	/** Rotate the fastest-first PRIMARY order by this many positions before
+	 *  trying endpoints.  Default 0 = unchanged (fastest-first).  Used by the
+	 *  indexer's concurrent backfill so that N windows fired at once each START
+	 *  on a DIFFERENT endpoint (spreading load across all nodes instead of
+	 *  dogpiling the single fastest), while STILL falling back through every
+	 *  endpoint on failure + recording health exactly as a normal call does.
+	 *  Ignored (no-op) for single- or zero-endpoint pools. */
+	readonly startOffset?: number;
 }
 
 /**
@@ -376,7 +384,18 @@ export class EndpointPool {
 			(hedge ? DEFAULT_USER_FACING_TIMEOUT_MS : DEFAULT_BACKGROUND_TIMEOUT_MS);
 
 		// First-pass order: healthy endpoints, fastest EWMA first.
-		const primaryOrder = this.eligibleOrder();
+		const eligible = this.eligibleOrder();
+		// Rotate the primary order by startOffset so concurrent backfill windows
+		// each start on a different endpoint (spread, no dogpile).  0 = unchanged.
+		// The rotation touches ONLY the primary pass order; the last-ditch pass,
+		// health recording, and hedge logic are all identical.
+		const primaryOrder =
+			eligible.length > 1 && (options.startOffset ?? 0) % eligible.length !== 0
+				? (() => {
+						const off = ((options.startOffset ?? 0) % eligible.length + eligible.length) % eligible.length;
+						return [...eligible.slice(off), ...eligible.slice(0, off)];
+					})()
+				: eligible;
 		// Track which endpoints we've TRIED in this call so the
 		// last-ditch pass doesn't re-attempt them (which would re-
 		// fail, double-record the failure on the cooldown ladder,

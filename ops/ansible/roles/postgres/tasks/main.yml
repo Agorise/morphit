@@ -71,31 +71,18 @@
   become: true
   become_user: postgres
 
-- name: Create morphit_relay user
-  community.postgresql.postgresql_user:
-    name: "{{ postgres_relay_user }}"
-    password: "{{ postgres_relay_password }}"
-    role_attr_flags: NOSUPERUSER,NOCREATEROLE,NOCREATEDB
-    state: present
-  become: true
-  become_user: postgres
+# cp663 #5 — the relay + indexer SHARE the indexer DB (the relay's tables
+# are part of the indexer's single unified migration set, applied only to
+# the indexer DB).  A separate morphit_relay DB/user was created here but
+# never got the schema, so the relay hit "relation does not exist".  It's
+# no longer created; relay.env.j2 points the relay at the indexer DB.
+# (cp664 deep-deep: the vestigial postgres_relay_* / vault_postgres_relay_password
+# vars and the ops-cli relayDbPassword input have now been removed too.)
 
 - name: Create morphit_indexer database
   community.postgresql.postgresql_db:
     name: "{{ postgres_indexer_db }}"
     owner: "{{ postgres_indexer_user }}"
-    encoding: UTF8
-    lc_collate: en_US.UTF-8
-    lc_ctype: en_US.UTF-8
-    template: template0
-    state: present
-  become: true
-  become_user: postgres
-
-- name: Create morphit_relay database
-  community.postgresql.postgresql_db:
-    name: "{{ postgres_relay_db }}"
-    owner: "{{ postgres_relay_user }}"
     encoding: UTF8
     lc_collate: en_US.UTF-8
     lc_ctype: en_US.UTF-8

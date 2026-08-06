@@ -23,6 +23,36 @@
 # allow) keeps the public out.
 
 services:
+  # cp663 #8 — the bw-data named volume is created root-owned, but the
+  # scheduler + instance run as UID 101 and must write their config DB
+  # there ("Database is not initialized" otherwise).  This one-shot init
+  # (root) fixes ownership before anything else starts; scheduler
+  # depends_on it completing.
+  bw-init:
+    image: {{ bunkerweb_scheduler_image }}
+    container_name: bunkerweb-init
+    user: "0:0"
+    entrypoint: ["sh", "-c"]
+    # (a) cp663 #8 — make the config volume writable by UID 101.
+    # (b) cp663 #7 — make the Let's Encrypt cert readable by GID 101
+    #     (certbot writes it root-only in a 0700 archive dir; the
+    #     scheduler + instance run as 101 and otherwise serve a
+    #     self-signed fallback).  Runs on every `compose up`, so it also
+    #     re-asserts perms after a re-create.  For RENEWAL and for a
+    #     DEFERRED (first-online) cert, the same fix lives in the certbot
+    #     deploy-hook and morphit-first-online respectively.
+    command:
+      - >-
+        chown -R 101:101 /data && chmod -R u+rwX /data;
+        chgrp -R 101 /etc/letsencrypt/live /etc/letsencrypt/archive 2>/dev/null || true;
+        chmod -R g+rX /etc/letsencrypt/live /etc/letsencrypt/archive 2>/dev/null || true
+    restart: "no"
+    volumes:
+      - bw-data:/data
+      - /etc/letsencrypt:/etc/letsencrypt
+    networks:
+      - bunkerweb_net
+
   bunkerweb:
     image: {{ bunkerweb_image }}
     container_name: bunkerweb
@@ -54,8 +84,27 @@ services:
       - ./bunkerweb.env
     volumes:
       - bw-data:/data
+      # cp663 #13 — the scheduler (not just the instance) reads
+      # CUSTOM_SSL_CERT to validate + ship the cert; without this mount
+      # its customcert job logs "not a valid file" and the instance
+      # falls back to a self-signed cert.
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      # cp663 #10 — BunkerWeb's scheduler manages the instance via the
+      # Docker API, so it needs the socket.  SECURITY: this is a raw
+      # read-only socket bind; the recommended hardening is a read-only
+      # docker-socket-proxy (BunkerWeb's `bw-docker` pattern) so a
+      # scheduler compromise can't drive the host's Docker — deferred
+      # because it needs real-host validation + a bundled proxy image.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    # The socket is root:docker mode 660; the scheduler user (101) needs
+    # the host's docker group to read it.  GID resolved by tasks/main.yml.
+    group_add:
+      - "{{ bunkerweb_docker_gid }}"
     networks:
       - bunkerweb_net
+    depends_on:
+      bw-init:
+        condition: service_completed_successfully
 
   # Serves the built SvelteKit site + reverse-proxies the API paths to
   # the relay + indexer on the host.  BunkerWeb proxies everything here

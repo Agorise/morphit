@@ -12,10 +12,10 @@
 # Referenced from group_vars/all.yml as {{ vault_<name> }}.
 
 ---
-# Postgres passwords.  Generate with:
+# Postgres password.  Generate with:
 #   openssl rand -base64 32 | tr -d /+= | head -c 32
+# (One shared database — indexer + relay both use it — so one password.)
 vault_postgres_indexer_password: REPLACE-ME-WITH-RANDOM-32-CHAR-STRING
-vault_postgres_relay_password: REPLACE-ME-WITH-RANDOM-32-CHAR-STRING
 
 # Relay keystore passphrase.  This decrypts the BLURT active key
 # file on disk.  Strong passphrase recommended (24+ chars random).

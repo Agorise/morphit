@@ -91,9 +91,14 @@
     mode: '0755'
     content: |
       #!/bin/sh
-      # Reload BunkerWeb after certbot renews.  BunkerWeb watches
-      # the cert files via the scheduler; explicit reload is a
-      # belt-and-braces redundancy.
+      # Runs after certbot renews the cert.
+      # cp663 #7 — certbot RESETS the cert to root-only (0700 archive)
+      # on every renewal, which would silently break BunkerWeb's TLS
+      # (it runs as GID 101) ~60 days out.  Re-assert group-readability
+      # so it self-heals.  GID 101 is BunkerWeb's in-image user.
+      chgrp -R 101 /etc/letsencrypt/live /etc/letsencrypt/archive 2>/dev/null || true
+      chmod -R g+rX /etc/letsencrypt/live /etc/letsencrypt/archive 2>/dev/null || true
+      # Reload BunkerWeb (belt-and-braces; the scheduler also watches).
       docker exec bunkerweb sh -c 'kill -HUP 1' 2>/dev/null || true
 
 - name: Print TLS verification reminder

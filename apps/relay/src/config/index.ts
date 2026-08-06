@@ -110,7 +110,12 @@ const envSchema = z.object({
 	// Optional (have defaults).
 	MORPHIT_RELAY_LISTEN_HOST: z.string().default('127.0.0.1'),
 	MORPHIT_RELAY_LISTEN_PORT: z.coerce.number().int().positive().default(8080),
-	MORPHIT_RELAY_PUBLIC_ORIGIN: z.string().url().default('https://relay.morphit.io'),
+	// cp663 #6 — MUST be set to this instance's public origin (the
+	// deploy template does).  The default is a RESERVED, never-resolving
+	// `.invalid` placeholder (RFC 6761) so a missing value fails loudly
+	// and visibly instead of silently pointing at a plausible-looking
+	// host that does not exist (the old 'https://relay.morphit.io').
+	MORPHIT_RELAY_PUBLIC_ORIGIN: z.string().url().default('https://relay.invalid'),
 
 	// Comma-separated lists — parsed below.
 	// beta5 item D: default is the shared canonical set (single source

@@ -44,6 +44,31 @@
 # find its identity vars (instance name / public origin / operator tag, and the
 # relay account + active-key path).  Writing them here makes `register` work the
 # same for VPS-over-SSH, a local raspi / old laptop, and register-by-hand.
+# cp663 #14 — Tor + i2pd run AFTER this role (playbook order), so the
+# post_tasks capture writes the .onion + .b32.i2p into morphit.config.env only
+# AFTER this template first renders them empty.  On a re-converge this template
+# would clobber them, so read the current values back first and feed them to
+# the template (it emits the lines only when non-empty).  First install: no
+# file yet -> both stay empty and the capture step fills them.
+- name: Read existing onion address from morphit.config.env (preserve on re-converge)
+  ansible.builtin.shell:
+    cmd: "grep -E '^MORPHIT_INSTANCE_TOR_ADDRESS=' {{ morphit_repo_path }}/morphit.config.env 2>/dev/null | tail -1 | cut -d= -f2-"
+  register: morphit_existing_onion
+  changed_when: false
+  failed_when: false
+
+- name: Read existing i2p b32 address from morphit.config.env (preserve on re-converge)
+  ansible.builtin.shell:
+    cmd: "grep -E '^MORPHIT_INSTANCE_I2P_B32_ADDRESS=' {{ morphit_repo_path }}/morphit.config.env 2>/dev/null | tail -1 | cut -d= -f2-"
+  register: morphit_existing_i2p
+  changed_when: false
+  failed_when: false
+
+- name: Preserve current tor/i2p addresses (default empty on first install)
+  ansible.builtin.set_fact:
+    morphit_instance_tor_address: "{{ morphit_existing_onion.stdout | trim if (morphit_existing_onion.stdout | default('') | trim | length > 0) else (morphit_instance_tor_address | default('')) }}"
+    morphit_instance_i2p_b32_address: "{{ morphit_existing_i2p.stdout | trim if (morphit_existing_i2p.stdout | default('') | trim | length > 0) else (morphit_instance_i2p_b32_address | default('')) }}"
+
 - name: Deploy operator-config env for register-by-hand (allowlisted identity vars)
   ansible.builtin.template:
     src: morphit.config.env.j2
@@ -239,6 +264,27 @@
     group: "{{ morphit_service_group }}"
     mode: '0640'
   when: morphit_enable_web_push | bool
+
+# cp663 #4 — the relay unit runs User=root with an EMPTY CapabilityBoundingSet
+# (no DAC_OVERRIDE), so root can read the keystore ONLY via the owner bit.  The
+# wizard writes the keystore before this run; if it ran as a non-root service
+# user the file is unreadable by the relay (EACCES).  Force root:root here as
+# the guarantee (the wizard also attempts it).
+- name: Check the relay keystore exists
+  ansible.builtin.stat:
+    path: "{{ morphit_relay_keystore_path }}"
+  register: morphit_keystore_stat
+  when: morphit_relay_keystore_path is defined
+
+- name: Lock down the relay keystore (root-only — the relay unit drops DAC_OVERRIDE)
+  ansible.builtin.file:
+    path: "{{ morphit_relay_keystore_path }}"
+    owner: root
+    group: root
+    mode: '0600'
+  when:
+    - morphit_relay_keystore_path is defined
+    - morphit_keystore_stat.stat.exists | default(false)
 
 # ─── MCP server — isolated deploy + enable (§45) ────────────────
 # MCP runs ISOLATED on purpose: its own low-privilege user from its

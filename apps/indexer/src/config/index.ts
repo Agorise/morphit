@@ -95,6 +95,13 @@ export interface Config {
 	/** How long to sleep between polling the chain head. Blurt blocks
 	 *  are ~3 seconds; this is the ceiling on indexer freshness. */
 	readonly blockIntervalMs: number;
+	/** cp664 — how many block-fetch WINDOWS the catch-up backfill prefetches
+	 *  CONCURRENTLY, each starting on a different RPC endpoint (spread load
+	 *  across all nodes, no single-endpoint SPOF; a stalled node's window
+	 *  transparently falls back through the pool to another).  0 = auto = one
+	 *  window per configured endpoint.  The DB write stays strictly in-order and
+	 *  one-block-per-tx — only the network FETCH is parallelised. */
+	readonly backfillConcurrency: number;
 	/** Backoff on transient chain errors (network failure, RPC
 	 *  500). Does not apply to structural errors in op payloads —
 	 *  those are rejected and logged without retry. */
@@ -783,6 +790,8 @@ const envSchema = z.object({
 		),
 	MORPHIT_INDEXER_START_BLOCK: z.coerce.number().int().nonnegative().default(MORPHIT_GENESIS_BLOCK),
 	MORPHIT_INDEXER_BLOCK_INTERVAL_MS: z.coerce.number().int().positive().default(3000),
+	// cp664 — concurrent prefetch windows during catch-up.  0 = auto (one per endpoint).
+	MORPHIT_INDEXER_BACKFILL_CONCURRENCY: z.coerce.number().int().min(0).max(64).default(0),
 	MORPHIT_INDEXER_ERROR_BACKOFF_MS: z.coerce.number().int().positive().default(5000),
 	// v1.7.0 — the head-block fast path has NO on/off switch (ADR-0051,
 	// superseding ADR-0048's opt-out). It never writes to the DB, so the
@@ -1605,6 +1614,7 @@ export function loadConfig(): Config {
 		blurtRpcEndpoints: e.MORPHIT_INDEXER_RPC_ENDPOINTS,
 		startBlock: e.MORPHIT_INDEXER_START_BLOCK,
 		blockIntervalMs: e.MORPHIT_INDEXER_BLOCK_INTERVAL_MS,
+		backfillConcurrency: e.MORPHIT_INDEXER_BACKFILL_CONCURRENCY,
 		errorBackoffMs: e.MORPHIT_INDEXER_ERROR_BACKOFF_MS,
 		fastPathIntervalMs: e.MORPHIT_INDEXER_FASTPATH_INTERVAL_MS,
 		staleLagThreshold: e.MORPHIT_INDEXER_STALE_LAG_THRESHOLD,

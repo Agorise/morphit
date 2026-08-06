@@ -171,12 +171,10 @@ export async function collectInstallInputs(
 	// post-summary step arms morphit-first-online if they opt in.
 	const autoRegister = false;
 
-	// Ansible provisions the DB → generate two INDEPENDENT strong passwords.
-	// crypto RNG makes a collision astronomically impossible, but loop to be
-	// certain they differ (validateInstallInputs also enforces it).
+	// Ansible provisions the ONE shared DB → generate a strong password for it.
+	// (The relay no longer has its own database — it uses the indexer DB — so
+	// there is no second DB password to generate.)
 	const indexerDbPassword = randomSecret();
-	let relayDbPassword = randomSecret();
-	while (relayDbPassword === indexerDbPassword) relayDbPassword = randomSecret();
 
 	return {
 		mode,
@@ -191,7 +189,6 @@ export async function collectInstallInputs(
 		acmeEmail,
 		autoRegister,
 		indexerDbPassword,
-		relayDbPassword,
 		ddnsUpdateUrl
 	};
 }

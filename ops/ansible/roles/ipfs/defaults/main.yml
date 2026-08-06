@@ -35,7 +35,7 @@ morphit_ipfs_connmgr_low: 20
 # nothing here needs to be publicly reachable — content is served over the
 # swarm/DHT). The swarm ports stay public so peers can fetch what we pin.
 morphit_ipfs_api_addr: "/ip4/127.0.0.1/tcp/5001"
-morphit_ipfs_gateway_addr: "/ip4/127.0.0.1/tcp/8081"
+morphit_ipfs_gateway_addr: "/ip4/127.0.0.1/tcp/8082"
 
 # How the pin script reaches THIS instance's /v1/release (the CID source). The
 # default hits the local indexer directly; override to the public URL if the

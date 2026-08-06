@@ -42,9 +42,14 @@ mkdir -p "${STATE_DIR}"
 
 log() { logger -t "${LOG_TAG}" -- "$*" 2>/dev/null || true; printf '[%s] %s\n' "${LOG_TAG}" "$*"; }
 
-# ── Config (best-effort; a missing var must never abort the script) ──
+# ── Config (best-effort; a missing var — or a malformed one — must never abort the
+# script) ──
 # shellcheck disable=SC1090
-[ -f "${ENV_FILE}" ] && . "${ENV_FILE}"
+# `set +e` around the source: an EnvironmentFile may legitimately hold an unquoted
+# value with spaces (systemd parses it literally), which EXECUTES under `.` and, with
+# errexit on, would abort the whole script right here — the same class of bug as the
+# reachability probe (cp661).  Disable errexit only for the read, then restore it.
+if [ -f "${ENV_FILE}" ]; then set +e; . "${ENV_FILE}"; set -e; fi
 MORPHIT_DOMAIN="${MORPHIT_DOMAIN:-}"
 MORPHIT_ACME_EMAIL="${MORPHIT_ACME_EMAIL:-}"
 MORPHIT_AUTO_REGISTER="${MORPHIT_AUTO_REGISTER:-no}"
@@ -54,16 +59,25 @@ MORPHIT_OPS_DIR="${MORPHIT_OPS_DIR:-/opt/morphit}"
 # RPC endpoints for the reachability probe: prefer the operator's configured
 # list, fall back to the baked defaults.
 rpc_endpoints() {
+	# We EXTRACT the one value we need rather than sourcing indexer.env with `.`:
+	# sourcing RUNS the file as a shell script, so any unquoted value containing spaces
+	# (valid for systemd's EnvironmentFile — e.g. a marketplace name/tagline) returns
+	# non-zero, and under this script's `set -e` that aborts the whole `$(rpc_endpoints)`
+	# sub-run BEFORE it reaches the fallback below.  That left check_online with ZERO
+	# endpoints, so it never probed and reported "no internet" forever even when fully
+	# online (cp661).  sed is inert — it can't execute anything in the file.  The var is
+	# MORPHIT_INDEXER_RPC_ENDPOINTS (no "BLURT" — matches apps/indexer + indexer.env.j2).
 	eps=''
 	if [ -f "${INDEXER_ENV}" ]; then
-		# read the var in a subshell so we don't pollute our own env
-		eps="$( (. "${INDEXER_ENV}" 2>/dev/null; printf '%s' "${MORPHIT_INDEXER_BLURT_RPC_ENDPOINTS:-}") )"
+		eps="$(sed -n 's/^[[:space:]]*MORPHIT_INDEXER_RPC_ENDPOINTS=//p' "${INDEXER_ENV}" 2>/dev/null | tail -n1 | tr -d "\"'" | tr ',' ' ')"
 	fi
-	if [ -n "${eps}" ]; then
-		printf '%s' "${eps}" | tr ',' ' '
-	else
-		printf '%s' "${FALLBACK_RPC}"
-	fi
+	# ALWAYS emit a non-empty list: if the config yielded nothing usable (unset, empty,
+	# or whitespace-only), use the baked defaults.  check_online must never get zero
+	# endpoints again.
+	case "$(printf '%s' "${eps}" | tr -d ' \t\n\r')" in
+		'') printf '%s' "${FALLBACK_RPC}" ;;
+		*)  printf '%s' "${eps}" ;;
+	esac
 }
 
 # The internet GATE — real reachability, not link state.  Succeeds the moment
@@ -134,7 +148,14 @@ if [ -n "${MORPHIT_DOMAIN}" ] && [ ! -f "/etc/letsencrypt/live/${MORPHIT_DOMAIN}
 	if certbot certonly --standalone --non-interactive --agree-tos \
 		--email "${MORPHIT_ACME_EMAIL}" --server "${_server}" -d "${MORPHIT_DOMAIN}" >/dev/null 2>&1 \
 		&& [ -f "/etc/letsencrypt/live/${MORPHIT_DOMAIN}/fullchain.pem" ]; then
-		log 'certificate obtained — reloading BunkerWeb'
+		log 'certificate obtained — fixing perms + reloading BunkerWeb'
+		# cp663 #7 — certbot writes the cert root-only (0700 archive), but
+		# BunkerWeb runs as GID 101 and would keep serving its self-signed
+		# fallback.  Make it group-readable before the reload.  (`certbot
+		# certonly` does NOT run the renewal deploy-hook, so do it here;
+		# renewals are covered by the deploy-hook, fresh installs by bw-init.)
+		chgrp -R 101 "/etc/letsencrypt/live" "/etc/letsencrypt/archive" >/dev/null 2>&1 || true
+		chmod -R g+rX "/etc/letsencrypt/live" "/etc/letsencrypt/archive" >/dev/null 2>&1 || true
 		docker exec bunkerweb sh -c 'kill -HUP 1' >/dev/null 2>&1 || true
 		touch "${DONE_TLS}"
 	else
@@ -153,17 +174,34 @@ if [ ! -f "${DONE_RPC}" ]; then
 fi
 
 # ── Step 3: on-chain registration (opt-in only). ──
-# Idempotent: `register --non-interactive` no-ops if the account is already
-# registered, and reads the relay key + passphrase exactly the way the relay
-# service does (so no human need be present).  If the relay is underfunded or the
-# key/passphrase isn't available unattended, it fails softly and we retry.
+# Idempotent: `register --non-interactive` no-ops if already registered.  register reads
+# its inputs from the ENVIRONMENT (apps/ops-cli/src/commands/register.ts readEnv()):
+# MORPHIT_RELAY_ACCOUNT + MORPHIT_RELAY_ACTIVE_KEY_FILE (morphit.env) and
+# MORPHIT_INSTANCE_NAME/ORIGIN/OPERATOR_TAG (morphit.config.env).  We EXTRACT each value
+# inertly with sed rather than sourcing those files: morphit.config.env carries the
+# marketplace NAME in systemd-EnvironmentFile form (unquoted, may contain spaces), so a
+# `.`-source would truncate a multi-word name or, under set -e, abort (cp661).  (The old
+# code sourced relay.env, which doesn't even carry MORPHIT_INSTANCE_ORIGIN — so register
+# failed on a missing var regardless of the relay's balance.)  An encrypted relay key
+# additionally needs MORPHIT_RELAY_ACTIVE_KEY_PASSPHRASE_FILE; if that isn't set here,
+# unattended unlock is impossible by design and the operator registers by hand.
 if [ "${MORPHIT_AUTO_REGISTER}" = "yes" ] && [ ! -f "${DONE_REGISTER}" ]; then
 	log 'auto-registering this instance on chain (operator opted in)'
-	# Source the relay env so MORPHIT_RELAY_* (key file + passphrase file) are set
-	# the same as the relay unit sees them.
-	# shellcheck disable=SC1090
+	_get_env() { sed -n "s/^[[:space:]]*$1=//p" "$2" 2>/dev/null | tail -n1 | sed 's/^"//; s/"$//'; }
+	_main_env="${MORPHIT_OPS_DIR}/morphit.env"
+	_conf_env="${MORPHIT_OPS_DIR}/morphit.config.env"
 	_reg_ok=no
-	if ( [ -f "${RELAY_ENV}" ] && . "${RELAY_ENV}"; \
+	if ( set +e
+		MORPHIT_RELAY_ACCOUNT="$(_get_env MORPHIT_RELAY_ACCOUNT "${_main_env}")"
+		MORPHIT_RELAY_ACTIVE_KEY_FILE="$(_get_env MORPHIT_RELAY_ACTIVE_KEY_FILE "${_main_env}")"
+		MORPHIT_INSTANCE_NAME="$(_get_env MORPHIT_INSTANCE_NAME "${_conf_env}")"
+		MORPHIT_INSTANCE_ORIGIN="$(_get_env MORPHIT_INSTANCE_ORIGIN "${_conf_env}")"
+		MORPHIT_INSTANCE_OPERATOR_TAG="$(_get_env MORPHIT_INSTANCE_OPERATOR_TAG "${_conf_env}")"
+		MORPHIT_INSTANCE_CONTACT_URL="$(_get_env MORPHIT_INSTANCE_CONTACT_URL "${INDEXER_ENV}")"
+		MORPHIT_RELAY_ACTIVE_KEY_PASSPHRASE_FILE="$(_get_env MORPHIT_RELAY_ACTIVE_KEY_PASSPHRASE_FILE "${RELAY_ENV}")"
+		export MORPHIT_RELAY_ACCOUNT MORPHIT_RELAY_ACTIVE_KEY_FILE \
+			MORPHIT_INSTANCE_NAME MORPHIT_INSTANCE_ORIGIN MORPHIT_INSTANCE_OPERATOR_TAG \
+			MORPHIT_INSTANCE_CONTACT_URL MORPHIT_RELAY_ACTIVE_KEY_PASSPHRASE_FILE
 		cd "${MORPHIT_OPS_DIR}" && \
 		npm exec --offline --workspace apps/ops-cli morphit-ops -- register --non-interactive ) >/dev/null 2>&1; then
 		_reg_ok=yes
@@ -172,7 +210,7 @@ if [ "${MORPHIT_AUTO_REGISTER}" = "yes" ] && [ ! -f "${DONE_REGISTER}" ]; then
 		log 'on-chain registration complete'
 		touch "${DONE_REGISTER}"
 	else
-		log 'registration not complete yet (relay underfunded, or key/passphrase not available unattended) — will retry'
+		log 'registration not complete yet (relay underfunded, key encrypted with no passphrase file, or a required value unset) — will retry; you can also register by hand with `morphit-ops register`'
 	fi
 fi
 

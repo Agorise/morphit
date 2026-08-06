@@ -65,7 +65,8 @@ if [ ! -f "$IPFS_REPO/config" ]; then
 fi
 sudo -u "$IPFS_USER" env IPFS_PATH="$IPFS_REPO" sh -c '
 	ipfs config Addresses.API "/ip4/127.0.0.1/tcp/5001" >/dev/null 2>&1 || true
-	ipfs config Addresses.Gateway "/ip4/127.0.0.1/tcp/8081" >/dev/null 2>&1 || true
+	# Gateway on :8082 — the indexer owns :8081, so the gateway must not collide.
+	ipfs config Addresses.Gateway "/ip4/127.0.0.1/tcp/8082" >/dev/null 2>&1 || true
 	ipfs config --json Swarm.ConnMgr.HighWater 80 >/dev/null 2>&1 || true
 	ipfs config --json Swarm.ConnMgr.LowWater 20 >/dev/null 2>&1 || true
 '

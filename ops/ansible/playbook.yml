@@ -215,7 +215,76 @@
       when: enable_journald_monitor | default(false)
 
   post_tasks:
-    # v1.7.5 (t.txt #12) — an operator must not be able to finish an install
+    # cp663 #14 — Tor + i2pd run AFTER the morphit role, so they generate the
+    # .onion + .b32.i2p addresses only now.  Capture them into
+    # morphit.config.env (which `morphit-ops register` + the indexer read) and
+    # restart the indexer so the footer pills + on-chain identity carry them.
+    # Best-effort: a node with tor/i2pd disabled, or a slow onion publish, just
+    # leaves the pills off — it never fails the run.  On re-converge the morphit
+    # role slurp-preserves these, so lineinfile is a no-op (no restart churn).
+    - name: "cp663 #14 — capture Tor/i2p addresses into morphit.config.env"
+      when: (enable_tor | default(true)) or (enable_i2pd | default(true))
+      block:
+        - name: Wait for Tor to publish its onion hostname
+          ansible.builtin.wait_for:
+            path: "{{ morphit_tor_hs_dir | default('/var/lib/tor/morphit') }}/hostname"
+            timeout: 120
+          register: morphit_onion_wait
+          failed_when: false
+          when: enable_tor | default(true)
+
+        - name: Read the generated .onion address
+          ansible.builtin.slurp:
+            src: "{{ morphit_tor_hs_dir | default('/var/lib/tor/morphit') }}/hostname"
+          register: morphit_onion_slurp
+          failed_when: false
+          changed_when: false
+          when: enable_tor | default(true)
+
+        - name: Derive the .b32.i2p address from the i2pd keyfile
+          ansible.builtin.shell:
+            cmd: >-
+              set -o pipefail;
+              head -c 391 {{ ((morphit_i2pd_datadir | default('/var/lib/i2pd')) ~ '/' ~ (morphit_i2pd_keyfile | default('morphit-web.dat'))) | quote }}
+              | sha256sum | cut -d' ' -f1 | xxd -r -p | base32 | tr 'A-Z' 'a-z' | tr -d '=';
+              echo .b32.i2p
+          args:
+            executable: /bin/bash
+          register: morphit_i2p_b32
+          changed_when: false
+          failed_when: false
+          when: enable_i2pd | default(true)
+
+        - name: Write the .onion address into morphit.config.env
+          ansible.builtin.lineinfile:
+            path: "{{ morphit_repo_path }}/morphit.config.env"
+            regexp: '^MORPHIT_INSTANCE_TOR_ADDRESS='
+            line: "MORPHIT_INSTANCE_TOR_ADDRESS={{ (morphit_onion_slurp.content | b64decode).strip() }}"
+            owner: root
+            group: "{{ morphit_service_group }}"
+            mode: '0640'
+          when:
+            - enable_tor | default(true)
+            - morphit_onion_slurp.content is defined
+            - (morphit_onion_slurp.content | b64decode).strip() is search('\.onion$')
+          notify: Restart morphit-indexer
+
+        - name: Write the .b32.i2p address into morphit.config.env
+          ansible.builtin.lineinfile:
+            path: "{{ morphit_repo_path }}/morphit.config.env"
+            regexp: '^MORPHIT_INSTANCE_I2P_B32_ADDRESS='
+            line: "MORPHIT_INSTANCE_I2P_B32_ADDRESS={{ morphit_i2p_b32.stdout | trim }}"
+            owner: root
+            group: "{{ morphit_service_group }}"
+            mode: '0640'
+          when:
+            - enable_i2pd | default(true)
+            - morphit_i2p_b32.stdout is defined
+            - (morphit_i2p_b32.stdout | trim) is search('\.b32\.i2p$')
+            - (morphit_i2p_b32.stdout | trim | length) >= 60
+          notify: Restart morphit-indexer
+
+
     # believing they are monitored when they are not.
     #
     # `enable_matrix_bot` CANNOT default to true: the role asserts on

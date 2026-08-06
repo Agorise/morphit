@@ -23,6 +23,7 @@ import type { Config } from '$config';
 import type { BlurtClient } from '$blurt/client';
 import type { Database } from '$db/pool';
 import { applyBlock } from '$indexer/dispatcher';
+import { consumeInOrderWithPrefetch } from '$indexer/prefetch';
 import { orderbookEventBus } from '$indexer/orderbookEventBus';
 import { chatEventBus } from '$indexer/chatEventBus';
 import { detectSuspiciousReciprocity, detectRelatedAccounts, detectOneWayPileOn, detectReviewConcentration, detectTradeConcentration } from '$indexer/signals';
@@ -652,97 +653,133 @@ export class Poller {
 			return;
 		}
 
-		// Catch up block by block. Each block is its own transaction.
-		// Note: we explicitly don't batch multiple blocks per tx —
-		// a long catch-up could otherwise leave the transaction open
-		// for minutes, holding locks and bloating WAL. One-block-per-tx
-		// keeps pressure on the DB predictable.
-		//
-		// v1.7.5 (t.txt #4): the RPC FETCH is now batched even though the DB write
-		// is not. These are different pressures and they want opposite answers —
-		// the DB wants small transactions, the volunteer-run RPC nodes want few
-		// requests. Prefetching a window with ONE JSON-RPC batch and then applying
-		// it one-block-per-tx satisfies both: the paragraph above still holds
-		// exactly as written, and a 5,000-block catch-up stops being 5,000 HTTP
-		// requests aimed at rpc.blurt.blog.
-		for (let cursor = from; cursor <= irreversible && !this.abort.signal.aborted; ) {
-			const hi = Math.min(cursor + BLOCK_FETCH_BATCH - 1, irreversible);
+		// ─── Concurrent prefetch, strictly in-order apply (cp664) ────────────
+		// The DB write and the volunteer-run RPC nodes want opposite things: the
+		// DB wants small, in-order transactions; the nodes want few, spread-out
+		// requests. We satisfy both. The FETCH is parallelised — up to
+		// `concurrency` windows are in flight AT ONCE, each fired at a DIFFERENT
+		// endpoint (pool startOffset rotation) so no single node is dogpiled and a
+		// stalled node's window transparently falls back through the pool to
+		// another. The APPLY is unchanged: strictly ascending block order, one-
+		// block-per-tx (so a long catch-up never holds a tx open for minutes,
+		// holding locks + bloating WAL). The FIFO/in-order guarantee lives in the
+		// `consumeInOrderWithPrefetch` helper (covered by prefetch-in-order-smoke);
+		// this method supplies only the window fetch + the block apply.
+		type FetchedBlocks = Awaited<ReturnType<BlurtClient['getBlocks']>>;
+		const endpointCount = Math.max(1, this.blurt.endpointCount());
+		const concurrency =
+			this.config.backfillConcurrency > 0 ? this.config.backfillConcurrency : endpointCount;
+
+		let nextLo = from;
+		let windowSeq = 0;
+
+		// Start the next window's fetch, rotating its STARTING endpoint so
+		// concurrent windows spread across nodes. Returns null when the backlog to
+		// `irreversible` is exhausted. Tagged with `lo` so the consumer knows each
+		// block's number without re-deriving it.
+		const startNextWindow = (): Promise<{ lo: number; blocks: FetchedBlocks }> | null => {
+			if (nextLo > irreversible) return null;
+			const lo = nextLo;
+			const hi = Math.min(lo + BLOCK_FETCH_BATCH - 1, irreversible);
 			const window: number[] = [];
-			for (let b = cursor; b <= hi; b++) window.push(b);
+			for (let b = lo; b <= hi; b++) window.push(b);
+			const offset = windowSeq % endpointCount;
+			windowSeq++;
+			nextLo = hi + 1;
+			return this.blurt.getBlocks(window, offset).then((blocks) => ({ lo, blocks }));
+		};
 
-			// ONE request for the whole window (or a transparent per-node fallback).
-			const fetched = await this.blurt.getBlocks(window);
+		// Apply one fetched window's blocks in strict ascending order, one-block-
+		// per-tx. Returns false to STOP the pipeline (abort requested, or a node
+		// returned a hole we must re-fetch next tick).
+		const applyWindow = async ({
+			lo,
+			blocks
+		}: {
+			lo: number;
+			blocks: FetchedBlocks;
+		}): Promise<boolean> => {
+			for (let i = 0; i < blocks.length; i++) {
+				if (this.abort.signal.aborted) return false;
+				const n = lo + i;
+				const block = blocks[i]!;
+				if (!block) {
+					// Chain said it was irreversible but node hasn't served it yet —
+					// endpoint inconsistency. Stop; the outer loop re-fetches from
+					// indexedBlock next tick. Nothing past `n` has been applied.
+					log.warn('block_not_returned', { block: n });
+					await sleep(this.config.errorBackoffMs, this.abort.signal);
+					return false;
+				}
 
-			for (let i = 0; i < fetched.length && !this.abort.signal.aborted; i++) {
-				const n = window[i]!;
-				const block = fetched[i]!;
-			if (!block) {
-				// Chain said it was irreversible but node hasn't served
-				// it yet — endpoint inconsistency. Stop this tick; the
-				// outer loop will retry.
-				log.warn('block_not_returned', { block: n });
-				await sleep(this.config.errorBackoffMs, this.abort.signal);
-				return;
-			}
-
-			const counts = await this.db.withTx(async (client) => {
-				const result = await applyBlock(
-					client,
-					n,
-					block,
-					this.blurt,
-					this.config,
-					this.feeVerifiers,
-					this.feeAmounts,
-					// FX-aware first-order floor converter.  When the FX
-					// feed is live (default) this routes through the
-					// composite FX source (which itself falls back to a
-					// static rate table during an outage).  When the
-					// operator has disabled the feed, it degrades to a
-					// USD-only identity: USD converts 1:1, any other
-					// currency returns null and the order handler falls
-					// back to the documented direct comparison.
-					(amount: number, fiat: string): number | null => {
-						if (this.fxSource) return this.fxSource.fiatToUsd(amount, fiat);
-						if (fiat.trim().toUpperCase() === 'USD') {
-							return Number.isFinite(amount) ? amount : null;
+				const counts = await this.db.withTx(async (client) => {
+					const result = await applyBlock(
+						client,
+						n,
+						block,
+						this.blurt,
+						this.config,
+						this.feeVerifiers,
+						this.feeAmounts,
+						// FX-aware first-order floor converter.  When the FX
+						// feed is live (default) this routes through the
+						// composite FX source (which itself falls back to a
+						// static rate table during an outage).  When the
+						// operator has disabled the feed, it degrades to a
+						// USD-only identity: USD converts 1:1, any other
+						// currency returns null and the order handler falls
+						// back to the documented direct comparison.
+						(amount: number, fiat: string): number | null => {
+							if (this.fxSource) return this.fxSource.fiatToUsd(amount, fiat);
+							if (fiat.trim().toUpperCase() === 'USD') {
+								return Number.isFinite(amount) ? amount : null;
+							}
+							return null;
 						}
-						return null;
-					}
-				);
-				await markApplied(client, n);
-				return result;
-			});
-
-			this.status = { ...this.status, indexedBlock: n, lastError: null };
-
-			// Phase E — fire orderbook-change events on the in-process
-			// bus.  Emission happens AFTER withTx resolves (commit
-			// successful), so SSE subscribers don't see phantom events
-			// from a rolled-back block.  Subscribers' listener
-			// callbacks should be fast (just enqueue into per-
-			// connection state); the bus catches their throws.
-			for (const orderId of counts.orderbookChanges) {
-				orderbookEventBus.emit(orderId);
-			}
-
-			// Phase E.5 — same pattern for chat-message events.
-			for (const ev of counts.chatChanges) {
-				chatEventBus.emit(ev);
-			}
-
-			// Only log non-trivial blocks to avoid spam; most blocks
-			// have zero morphit ops.
-			if (counts.applied + counts.rejected > 0) {
-				log.info('block_applied', {
-					block: n,
-					applied: counts.applied,
-					rejected: counts.rejected
+					);
+					await markApplied(client, n);
+					return result;
 				});
-			}
-			}
 
-			cursor = hi + 1;
+				this.status = { ...this.status, indexedBlock: n, lastError: null };
+
+				// Phase E — fire orderbook-change events on the in-process
+				// bus.  Emission happens AFTER withTx resolves (commit
+				// successful), so SSE subscribers don't see phantom events
+				// from a rolled-back block.  Subscribers' listener
+				// callbacks should be fast (just enqueue into per-
+				// connection state); the bus catches their throws.
+				for (const orderId of counts.orderbookChanges) {
+					orderbookEventBus.emit(orderId);
+				}
+
+				// Phase E.5 — same pattern for chat-message events.
+				for (const ev of counts.chatChanges) {
+					chatEventBus.emit(ev);
+				}
+
+				// Only log non-trivial blocks to avoid spam; most blocks
+				// have zero morphit ops.
+				if (counts.applied + counts.rejected > 0) {
+					log.info('block_applied', {
+						block: n,
+						applied: counts.applied,
+						rejected: counts.rejected
+					});
+				}
+			}
+			return true;
+		};
+
+		try {
+			await consumeInOrderWithPrefetch(concurrency, startNextWindow, applyWindow);
+		} catch (err) {
+			// A window's fetch rejected — the pool exhausted every endpoint for it.
+			// Blocks already applied this tick are committed; stop + back off and the
+			// outer loop retries from indexedBlock next tick. No block is skipped.
+			log.warn('backfill_window_unavailable', { error: String(err) });
+			await sleep(this.config.errorBackoffMs, this.abort.signal);
+			return;
 		}
 	}
 
