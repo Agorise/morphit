@@ -34,12 +34,10 @@ const inputs: AnsibleInstallInputs = {
 	keystorePath: '/etc/morphit/relay.keystore',
 	acmeEmail: 'me@example.com',
 	indexerDbPassword: 'x'.repeat(43),
-	relayDbPassword: 'y'.repeat(43),
 	ddnsUpdateUrl: 'https://njal.la/update/?a={ip}'
 };
 const secrets: SecretToSave[] = [
-	{ label: 'Database password (indexer)', value: inputs.indexerDbPassword },
-	{ label: 'Database password (relay)', value: inputs.relayDbPassword }
+	{ label: 'Database password', value: inputs.indexerDbPassword }
 ];
 const basePlan: InstallPlan = {
 	vars: buildAnsibleVars(inputs),

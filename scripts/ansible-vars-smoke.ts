@@ -39,7 +39,6 @@ const home: AnsibleInstallInputs = {
 	keystorePath: '/etc/morphit/relay.keystore',
 	acmeEmail: 'me@example.com',
 	indexerDbPassword: randomSecret(),
-	relayDbPassword: randomSecret(),
 	ddnsUpdateUrl: 'https://njal.la/update/?h=trade.example.com&k=KEY&a={ip}'
 };
 const vps: AnsibleInstallInputs = {
@@ -52,8 +51,7 @@ const vps: AnsibleInstallInputs = {
 	feesAccount: 'my-operator',
 	keystorePath: '/etc/morphit/relay.keystore',
 	acmeEmail: 'me@example.com',
-	indexerDbPassword: randomSecret(),
-	relayDbPassword: randomSecret()
+	indexerDbPassword: randomSecret()
 };
 
 // ── randomSecret ──────────────────────────────────────────────────
@@ -70,7 +68,6 @@ check('a URL passed as domain → flagged (bare domain required)', validateInsta
 check('bad operator account → flagged', validateInstallInputs({ ...home, operatorAccount: 'Bad_Name!' }).some((p) => /operatorAccount/.test(p)));
 check('missing email → flagged', validateInstallInputs({ ...home, acmeEmail: 'nope' }).some((p) => /email/i.test(p)));
 check('short DB password → flagged', validateInstallInputs({ ...home, indexerDbPassword: 'short' }).some((p) => /DB password/.test(p)));
-check('SAME password for both DBs → flagged (must be unique)', validateInstallInputs({ ...home, relayDbPassword: home.indexerDbPassword }).some((p) => /DIFFERENT/i.test(p)));
 check('relative keystore path → flagged (must be absolute)', validateInstallInputs({ ...home, keystorePath: 'relay.keystore' }).some((p) => /absolute/i.test(p)));
 check('bad fees account → flagged', validateInstallInputs({ ...home, feesAccount: 'Bad_Fees!' }).some((p) => /feesAccount/.test(p)));
 check('empty instance title → flagged (register needs it + it names the directory entry)', validateInstallInputs({ ...home, instanceName: '   ' }).some((p) => /instance title/i.test(p)));
@@ -89,7 +86,7 @@ check('maps instance title -> morphit_instance_name; empty tagline -> ""', hv.mo
 check('carries a provided tagline through to morphit_instance_tagline', (buildAnsibleVars({ ...home, instanceTagline: 'P2P, no KYC' }).morphit_instance_tagline) === 'P2P, no KYC');
 check('contactUrl -> morphit_instance_contact_url when set', buildAnsibleVars({ ...home, contactUrl: 'https://matrix.to/#/@op:matrix.org' }).morphit_instance_contact_url === 'https://matrix.to/#/@op:matrix.org');
 check('no morphit_instance_contact_url key when contactUrl is unset (link omitted)', !('morphit_instance_contact_url' in buildAnsibleVars(home)));
-check('passes DB secrets as vault_ vars', typeof hv.vault_postgres_indexer_password === 'string' && typeof hv.vault_postgres_relay_password === 'string');
+check('passes the DB secret as a vault_ var', typeof hv.vault_postgres_indexer_password === 'string');
 // The host-pattern fix: the LOCAL install pins the play's target to localhost via
 // this extra-var (playbook `hosts:` is `{{ morphit_target_hosts | default('morphit_servers') }}`).
 // Without it, the inline `localhost,` inventory left localhost in `all`, NOT
