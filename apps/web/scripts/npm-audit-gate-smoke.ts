@@ -220,29 +220,6 @@ const ALLOWLIST: readonly AllowlistEntry[] = [
 			'conclusion unchanged.'
 	},
 	{
-		package: 'js-yaml',
-		maxSeverity: 'high',
-		acceptedTitles: [
-			'JS-YAML: Quadratic-complexity DoS in merge key handling via repeated aliases',
-			'js-yaml: YAML merge-key chains can force quadratic CPU consumption'
-		],
-		lastReviewed: '2026-07-20',
-		rationale:
-			'Build/dev-only transitive dependency (reached via eslint -> @eslint/eslintrc ' +
-			'-> js-yaml; never shipped to operators — production serves prebuilt static ' +
-			'assets). Both advisories (GHSA-h67p-54hq-rp68, GHSA-52cp-r559-cp3m) are ' +
-			'quadratic-complexity DoS: a crafted YAML document with merge-key chains / ' +
-			'repeated aliases forces quadratic CPU in js-yaml\'s parser. Exploiting either ' +
-			'requires an attacker to control the YAML fed to js-yaml.load, but js-yaml is ' +
-			'reached ONLY by ESLint at lint-time, parsing the project\'s own ' +
-			'developer-authored ESLint config — no runtime path lets untrusted user input ' +
-			'reach a js-yaml parse call, and Morphit source imports js-yaml nowhere. So the ' +
-			'DoS is not reachable in production or in the served app. The lockfile is the ' +
-			'tested source of truth (no `npm audit fix`). Revisit if a patched js-yaml ' +
-			'(>=4.3.0) lands non-breakingly in range under eslint, or if any runtime code ' +
-			'ever parses user-supplied YAML. Reviewed cp511 (2026-07-20).'
-	},
-	{
 		package: 'fast-uri',
 		maxSeverity: 'high',
 		acceptedTitles: [
