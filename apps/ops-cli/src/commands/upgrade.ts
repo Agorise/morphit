@@ -400,12 +400,28 @@ function synthOfflineRelease(
 export function selectReleaseAssets(
 	assets: readonly ForgejoReleaseAsset[]
 ): SelectedAssets | null {
-	const tarball = assets.find(
+	const tarballs = assets.filter(
 		(a) => a.name.endsWith('.tar.gz') && !a.name.endsWith('.sha256.tar.gz')
 	);
-	const sha = assets.find((a) => a.name.endsWith('.tar.gz.sha256'));
-	const sig = assets.find((a) => a.name.endsWith('.tar.gz.asc')) ?? null;
-	if (!tarball || !sha) return null;
+	// Prefer the SLIM canonical tarball (morphit-<ver>.tar.gz) for ONLINE upgrades:
+	// it's the artifact the SHA-256 anchor + verify-download are built around, and
+	// it's small (deps are restored by `npm ci`). The self-contained
+	// morphit-<ver>-offline.tar.gz is a SEPARATE, far larger artifact with its OWN
+	// hash, meant only for --from-file / drop-dir installs. cp669: this function
+	// used to grab the FIRST `.tar.gz` and the FIRST `.tar.gz.sha256` — so once
+	// 1.10.1 added the -offline asset a release had TWO of each, and an online
+	// upgrade could download the huge -offline bundle (timing out on a home
+	// connection), fall back to a mirror serving the SLIM tarball, and then compare
+	// the slim bytes against the -offline hash → a false "SHA-256 mismatch". Fall
+	// back to an -offline tarball ONLY when it's the sole tarball (the synthetic
+	// release the --from-file path builds).
+	const tarball = tarballs.find((a) => !a.name.endsWith('-offline.tar.gz')) ?? tarballs[0];
+	if (!tarball) return null;
+	// The .sha256 (and .asc) MUST belong to the SELECTED tarball — a release ships
+	// BOTH variants' .sha256, so match by EXACT name, never "the first one".
+	const sha = assets.find((a) => a.name === `${tarball.name}.sha256`);
+	const sig = assets.find((a) => a.name === `${tarball.name}.asc`) ?? null;
+	if (!sha) return null;
 	return { tarball, sha, sig };
 }
 

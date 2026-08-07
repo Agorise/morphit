@@ -599,6 +599,7 @@
 					id="pm-name"
 					type="text"
 					bind:value={pmName}
+					dir="auto"
 					maxlength="80"
 					class="mt-1 w-full rounded-lg border border-ink-200 bg-white p-2 text-sm dark:border-ink-700 dark:bg-ink-950"
 					placeholder="My Local Method"
@@ -611,6 +612,7 @@
 				</label>
 				<p class="text-xs text-ink-500">{$_('admin.setup_wizard.payment.description_help')}</p>
 				<textarea
+					dir="auto"
 					id="pm-description"
 					bind:value={pmDescription}
 					maxlength="280"
@@ -626,6 +628,7 @@
 				<select
 					id="pm-category"
 					bind:value={pmCategory}
+					dir="auto"
 					class="mt-1 w-full rounded-lg border border-ink-200 bg-white p-2 text-sm dark:border-ink-700 dark:bg-ink-950"
 				>
 					<option value="online">{$_('admin.setup_wizard.payment.category_online')}</option>

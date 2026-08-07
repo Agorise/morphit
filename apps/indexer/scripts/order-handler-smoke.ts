@@ -833,12 +833,14 @@ await scenario('cp422: STILL rejects a bidi override in terms (RLO)', async () =
 	assertEqual(r, { ok: false, reason: 'terms_forbidden_char' }, 'result');
 });
 
-await scenario('O3.4: rejects payment_method item with zero-width joiner', async () => {
+await scenario('O3.4: rejects payment_method item with zero-width space (ZWSP)', async () => {
+	// cp671: ZWNJ/ZWJ are now allowed (Persian/Indic cursive joiners); the
+	// zero-width SPACE (U+200B) stays blocked as a forbidden char.
 	const mock = makeMockClient();
 	const r = await handler(
 		makeCtx({
 			signer: 'alice',
-			payload: makePayload({ payment_methods: ['sep\u200Da'] }),
+			payload: makePayload({ payment_methods: ['sep\u200Ba'] }),
 			siblingOps: feeTransfer('alice', 'order-2026-04-25-aaa', 60)
 		}),
 		mock.client

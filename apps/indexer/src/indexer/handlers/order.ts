@@ -63,7 +63,7 @@ const MAX_EXPIRES_AT_DAYS = 365;
  *  payment_methods items. The terms field is multi-line markdown and
  *  uses FORBIDDEN_MULTILINE_TEXT_CHARS below instead. */
 const FORBIDDEN_TEXT_CHARS =
-	/[\u0000-\u001F\u007F-\u009F\u200B-\u200D\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/;
+	/[\u0000-\u001F\u007F-\u009F\u200B\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/;
 /** Multi-line variant for the terms field ONLY. Identical to
  *  FORBIDDEN_TEXT_CHARS except it PERMITS the three whitespace control
  *  chars TAB (U+0009), LF (U+000A), and CR (U+000D). The terms field
@@ -76,7 +76,7 @@ const FORBIDDEN_TEXT_CHARS =
  *  separators, bidi overrides, and zero-width characters stay
  *  blocked. */
 const FORBIDDEN_MULTILINE_TEXT_CHARS =
-	/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u200B-\u200D\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/;
+	/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u200B\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/;
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
 	return typeof v === 'object' && v !== null && !Array.isArray(v);

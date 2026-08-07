@@ -220,6 +220,7 @@
 								{$_('shipment_modal.custom_carrier_name_label')}
 							</label>
 							<input
+								dir="auto"
 								id="sh-custom-name"
 								type="text"
 								bind:value={customCarrierName}
@@ -238,6 +239,7 @@
 								>
 							</label>
 							<input
+								dir="auto"
 								id="sh-custom-url"
 								type="url"
 								placeholder="https://..."
@@ -259,6 +261,7 @@
 					{$_('shipment_modal.tracking_label')}
 				</label>
 				<input
+					dir="auto"
 					id="sh-tracking"
 					type="text"
 					bind:value={tracking}
@@ -279,6 +282,7 @@
 					<span class="ml-1 font-normal text-ink-400">{$_('shipment_modal.optional_marker')}</span>
 				</label>
 				<textarea
+					dir="auto"
 					id="sh-note"
 					bind:value={note}
 					maxlength={SHIPMENT_LIMITS.noteMax}

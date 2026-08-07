@@ -108,7 +108,7 @@ check(
 );
 check(
 	'14 the comment still truncates',
-	/<span class="min-w-0 truncate text-ink-500 dark:text-ink-400"\s*>\{fb\.record\.comment\}<\/span/.test(page)
+	/<span[^>]*\bclass="min-w-0 truncate text-ink-500 dark:text-ink-400"[^>]*>\{fb\.record\.comment\}<\/span/.test(page)
 );
 
 

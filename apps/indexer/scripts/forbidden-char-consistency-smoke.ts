@@ -32,7 +32,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const handlersDir = join(here, '..', 'src', 'indexer', 'handlers');
 
 /** The canonical regex literal every reject/strip policy must use. */
-const CANONICAL_LITERAL = String.raw`/[\u0000-\u001F\u007F-\u009F\u200B-\u200D\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/`;
+const CANONICAL_LITERAL = String.raw`/[\u0000-\u001F\u007F-\u009F\u200B\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/`;
 
 /** Handlers whose policy is a REJECT regex (no flags), `= CANONICAL;`. */
 const REJECT_FILES = [
@@ -104,7 +104,7 @@ for (const f of REJECT_FILES) {
 
 	// 4a. MUST block every dangerous representative codepoint.
 	const mustBlock = [
-		0x0000, 0x001f, 0x007f, 0x009f, 0x200b, 0x200d, 0x2028, 0x2029, 0x2060, 0x2064, 0x202a,
+		0x0000, 0x001f, 0x007f, 0x009f, 0x200b, 0x2028, 0x2029, 0x2060, 0x2064, 0x202a,
 		0x202e, 0x2066, 0x2069, 0xfeff
 	];
 	for (const cp of mustBlock) {
@@ -114,6 +114,8 @@ for (const f of REJECT_FILES) {
 
 	// 4b. MUST NOT block legitimate RTL bidi marks (Farsi/Arabic/Hebrew) or ordinary text.
 	const mustAllow: Record<string, string> = {
+		'U+200C ZWNJ': '\u200c',
+		'U+200D ZWJ': '\u200d',
 		'U+200E LRM': '\u200e',
 		'U+200F RLM': '\u200f',
 		'U+061C ALM': '\u061c',

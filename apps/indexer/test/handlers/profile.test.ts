@@ -316,10 +316,20 @@ describe('profile handler', () => {
 		expect(r).toEqual({ ok: false, reason: 'display_name_forbidden_char' });
 	});
 
-	it('rejects display_name with zero-width joiner', async () => {
+	it('rejects display_name with zero-width space (ZWSP still blocked)', async () => {
 		const mock = makeMockClient();
-		const r = await handler(makeCtx({ payload: { display_name: 'Al\u200Dice' } }), mock.client);
+		const r = await handler(makeCtx({ payload: { display_name: 'Al\u200Bice' } }), mock.client);
 		expect(r).toEqual({ ok: false, reason: 'display_name_forbidden_char' });
+	});
+
+	// cp671 — ZWNJ (U+200C) / ZWJ (U+200D) are cursive joiners for Persian/Indic
+	// scripts and must NOT be rejected as forbidden characters.
+	it('accepts display_name with ZWNJ (Persian half-space)', async () => {
+		const mock = makeMockClient();
+		const r = await handler(makeCtx({ payload: { display_name: 'A\u200Cli\u200Cce' } }), mock.client);
+		const rejectedForbidden =
+			typeof r === 'object' && r !== null && 'reason' in r && r.reason === 'display_name_forbidden_char';
+		expect(rejectedForbidden).toBe(false);
 	});
 
 	it('legitimate exact-match reserved name from the operator does NOT impersonate (byte-equal)', async () => {

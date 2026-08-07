@@ -33,7 +33,7 @@ const MAX_COMMENT_CODEPOINTS = 256;
 /** Same injection-resistant character class as the feedback
  *  handler + profile display-name validation. */
 const FORBIDDEN_COMMENT_CHARS =
-	/[\u0000-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069\u200B-\u200D\uFEFF]/;
+	/[\u0000-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069\u200B\uFEFF]/;
 
 /** Blurt trx_id is a 40-char hex string. The handler accepts
  *  1..64 to be generous about format (testnets sometimes use

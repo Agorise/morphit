@@ -3135,7 +3135,7 @@
 										: 'text-ink-500 dark:text-ink-400'}"
 								>
 									<span aria-hidden="true">{row.unlocked ? '✓' : '○'}</span>
-									<span>{row.text}</span>
+									<span dir="auto">{row.text}</span>
 								</li>
 							{/each}
 						</ul>
@@ -3204,6 +3204,7 @@
 						id="post-region"
 						name="region"
 						bind:value={region}
+						dir="auto"
 						maxlength="128"
 						autocomplete="off"
 						class="w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
@@ -3786,6 +3787,7 @@
 				</details>
 
 				<textarea
+					dir="auto"
 					id="tx-proof"
 					rows="4"
 					autocomplete="off"
