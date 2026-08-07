@@ -217,6 +217,9 @@ export function itemSuffix(subcommand: string, ann?: MenuAnnotations): string {
 			// "update available" marker stays vivid on pale terminal
 			// themes where the standard yellow looked near-white.
 			s += '  ' + fmt.boldBrightYellow('\u25cf update available');
+			// cp667 — a signed tarball is sitting in the offline drop-dir, so the
+			// upgrade can run cable-unplugged; tell the operator it's ready offline.
+			if (ann.latestIsOffline) s += ' ' + fmt.dim('(offline tarball ready)');
 		}
 		return s;
 	}

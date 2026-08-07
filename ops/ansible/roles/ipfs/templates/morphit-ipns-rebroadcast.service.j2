@@ -1,0 +1,21 @@
+# {{ ansible_managed }}
+# Rebroadcasts @morphit's on-chain SIGNED IPNS record to the public DHT from THIS
+# instance — WITHOUT the private key (the key is a CI secret; Kubo validates the
+# signature on PUT, so this box can only re-announce what @morphit already signed,
+# never repoint the name). Keeps ipns://<name> resolvable as long as ANY instance
+# is alive — no central publisher (Decentralization #2).
+[Unit]
+Description=Rebroadcast Morphit's signed IPNS record to the public DHT
+After=ipfs.service morphit-indexer.service
+Wants=ipfs.service
+
+[Service]
+Type=oneshot
+User={{ morphit_ipfs_user }}
+Group={{ morphit_ipfs_group }}
+EnvironmentFile=-/etc/morphit/ipfs-pin.env
+Environment=IPFS_PATH={{ morphit_ipfs_repo }}
+ExecStart=/usr/local/lib/morphit/morphit-ipns-rebroadcast.sh
+# Non-fatal by design: a slow DHT put exits non-zero so the timer simply retries,
+# but that must not mark the unit failed forever.
+SuccessExitStatus=0 1

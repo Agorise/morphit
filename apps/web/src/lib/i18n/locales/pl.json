@@ -2097,6 +2097,15 @@
 			"mismatch": "Niezgodność",
 			"never": "Oczekuje sprawdzenia"
 		},
+		"status_menu": {
+			"good": "Sprawny, ostatnio aktywny",
+			"quiet": "Sprawny, brak ostatnich transakcji",
+			"syncing": "Osiągalny, wciąż synchronizuje",
+			"stale": "Opóźniony i bez postępu",
+			"unreachable": "Offline, nieosiągalny",
+			"mismatch": "Niezgodna tożsamość lub konfiguracja",
+			"never": "W kolejce, jeszcze niesprawdzony"
+		},
 		"status_desc": {
 			"good": "Osiągalna, sprawna i zsynchronizowana w granicach progu opóźnienia.",
 			"quiet": "Sprawna, ale brak aktywności w księdze zleceń przez ostatnie 7 dni.",

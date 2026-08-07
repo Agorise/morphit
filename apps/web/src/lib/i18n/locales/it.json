@@ -2097,6 +2097,15 @@
 			"mismatch": "Discordante",
 			"never": "Controllo in attesa"
 		},
+		"status_menu": {
+			"good": "Integro, attivo di recente",
+			"quiet": "Integro, nessuno scambio recente",
+			"syncing": "Raggiungibile, in sincronizzazione",
+			"stale": "Indietro e senza avanzare",
+			"unreachable": "Offline, non raggiungibile",
+			"mismatch": "Identità o configurazione errata",
+			"never": "In coda, non ancora sondato"
+		},
 		"status_desc": {
 			"good": "Raggiungibile, integra e sincronizzata entro la soglia di ritardo.",
 			"quiet": "Integra, ma nessuna attività nel libro ordini negli ultimi 7 giorni.",

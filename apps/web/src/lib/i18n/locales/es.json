@@ -2097,6 +2097,15 @@
 			"mismatch": "Discrepancia",
 			"never": "Prueba pendiente"
 		},
+		"status_menu": {
+			"good": "Sano, activo recientemente",
+			"quiet": "Sano, sin operaciones recientes",
+			"syncing": "Accesible, aún sincronizando",
+			"stale": "Atrasado y sin avanzar",
+			"unreachable": "Sin conexión, inaccesible",
+			"mismatch": "Identidad o configuración incorrecta",
+			"never": "En cola, sin sondear aún"
+		},
 		"status_desc": {
 			"good": "Accesible, en buen estado y sincronizado dentro del umbral de retraso.",
 			"quiet": "En buen estado, pero sin actividad en el libro de órdenes en los últimos 7 días.",

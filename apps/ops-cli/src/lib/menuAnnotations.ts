@@ -23,10 +23,15 @@ import { join } from 'node:path';
 import { loadConfig, applyThreshold } from '../config.ts';
 import { createDatabase } from '../db.ts';
 import { lookupBlurtAccount } from '../init/chainCheck.ts';
+import { findLocalOfflineRelease, compareTags } from '../commands/upgrade.ts';
 
 export interface MenuAnnotations {
 	readonly currentVersion: string | null;
 	readonly latestVersion: string | null;
+	/** True when `latestVersion` came from a signed tarball dropped in the
+	 *  offline release dir rather than the network — so the menu can say so and
+	 *  the operator knows an offline upgrade is ready to go. */
+	readonly latestIsOffline: boolean;
 	readonly unresolvedFlags: number | null;
 	readonly relayBalanceStatus: 'ok' | 'warn' | 'error' | null;
 }
@@ -173,14 +178,32 @@ export async function relayBalanceStatus(timeoutMs = 2500): Promise<'ok' | 'warn
 
 /** Gather all menu annotations in parallel, best-effort. Never throws. */
 export async function gatherMenuAnnotations(): Promise<MenuAnnotations> {
-	const [latestVersion, unresolvedFlags, relayBalance] = await Promise.all([
+	const [onlineLatest, unresolvedFlags, relayBalance] = await Promise.all([
 		fetchLatestVersion().catch(() => null),
 		unresolvedFlagCount().catch(() => null),
 		relayBalanceStatus().catch(() => null)
 	]);
+
+	// A signed offline tarball dropped by the operator counts as an available
+	// release too — so the "update available" marker shows even with no network,
+	// and the operator knows a cable-unplugged upgrade is ready. Newest wins.
+	let latestVersion = onlineLatest;
+	let latestIsOffline = false;
+	try {
+		const installDir = process.env.MORPHIT_INSTALL_DIR ?? DEFAULT_INSTALL_DIR;
+		const local = findLocalOfflineRelease(installDir);
+		if (local !== null && (latestVersion === null || compareTags(local.tag, latestVersion) > 0)) {
+			latestVersion = local.tag;
+			latestIsOffline = true;
+		}
+	} catch {
+		// best-effort; ignore
+	}
+
 	return {
 		currentVersion: readCurrentVersion(),
 		latestVersion,
+		latestIsOffline,
 		unresolvedFlags,
 		relayBalanceStatus: relayBalance
 	};

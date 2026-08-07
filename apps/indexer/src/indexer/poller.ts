@@ -689,9 +689,20 @@ export class Poller {
 			return this.blurt.getBlocks(window, offset).then((blocks) => ({ lo, blocks }));
 		};
 
-		// Apply one fetched window's blocks in strict ascending order, one-block-
-		// per-tx. Returns false to STOP the pipeline (abort requested, or a node
-		// returned a hole we must re-fetch next tick).
+		// Apply one fetched window's blocks in strict ascending order, in a SINGLE
+		// bounded transaction per window (cp666 — the fetch batch is also the apply
+		// batch). Wrapping the ≤BLOCK_FETCH_BATCH-block window in one withTx
+		// amortises the per-commit fsync ~BLOCK_FETCH_BATCH× — the change that
+		// turns a multi-hour backfill on a home-server disk into minutes. The tx
+		// stays SHORT (one window, never the whole catch-up): a single tx spanning
+		// the entire sync would hold locks for hours and keep bloating WAL, which
+		// is exactly what we still refuse to do — so we cap the tx at one window.
+		// Postgres makes this crash-safe for free: the window commits atomically or
+		// not at all, so a crash mid-window rolls back cleanly and the outer loop
+		// resumes from the persisted markApplied cursor — no partial or corrupt
+		// state is possible. Returns false to STOP the pipeline (abort, or a node
+		// returned a hole we must re-fetch next tick); the valid PREFIX applied
+		// before the stop is COMMITTED, never discarded.
 		const applyWindow = async ({
 			lo,
 			blocks
@@ -699,20 +710,45 @@ export class Poller {
 			lo: number;
 			blocks: FetchedBlocks;
 		}): Promise<boolean> => {
-			for (let i = 0; i < blocks.length; i++) {
-				if (this.abort.signal.aborted) return false;
-				const n = lo + i;
-				const block = blocks[i]!;
-				if (!block) {
-					// Chain said it was irreversible but node hasn't served it yet —
-					// endpoint inconsistency. Stop; the outer loop re-fetches from
-					// indexedBlock next tick. Nothing past `n` has been applied.
-					log.warn('block_not_returned', { block: n });
-					await sleep(this.config.errorBackoffMs, this.abort.signal);
-					return false;
-				}
+			// Per-block side-effects (status advance + bus emissions + logs) are
+			// COLLECTED here and flushed ONLY AFTER the window tx commits, so an SSE
+			// subscriber never sees an event from a block that later rolled back and
+			// indexedBlock never advances past a block that didn't commit.
+			type Committed = {
+				n: number;
+				orderbookChanges: readonly string[];
+				chatChanges: readonly { lo: string; hi: string; messageId: number }[];
+				applied: number;
+				rejected: number;
+			};
+			const committed: Committed[] = [];
+			let stop = false; // hole or abort → commit the prefix, then stop the pipeline
+			let holeBackoff = false;
+			let lastAppliedN = -1;
 
-				const counts = await this.db.withTx(async (client) => {
+			await this.db.withTx(async (client) => {
+				for (let i = 0; i < blocks.length; i++) {
+					// Abort mid-window: break so the tx COMMITS the prefix applied so
+					// far (progress is saved), then stop the pipeline below. A throw
+					// here would roll the whole window back — also safe, just wasteful
+					// — so we prefer the clean commit-prefix.
+					if (this.abort.signal.aborted) {
+						stop = true;
+						break;
+					}
+					const n = lo + i;
+					const block = blocks[i]!;
+					if (!block) {
+						// Chain said it was irreversible but the node hasn't served it
+						// yet — endpoint inconsistency. Commit the prefix (lo..n-1), back
+						// off, and stop; the outer loop re-fetches from indexedBlock next
+						// tick. Nothing at/after `n` is applied.
+						log.warn('block_not_returned', { block: n });
+						stop = true;
+						holeBackoff = true;
+						break;
+					}
+
 					const result = await applyBlock(
 						client,
 						n,
@@ -737,38 +773,51 @@ export class Poller {
 							return null;
 						}
 					);
-					await markApplied(client, n);
-					return result;
-				});
+					committed.push({
+						n,
+						orderbookChanges: result.orderbookChanges,
+						chatChanges: result.chatChanges,
+						applied: result.applied,
+						rejected: result.rejected
+					});
+					lastAppliedN = n;
+				}
+				// Advance the persisted cursor ONCE, inside the same tx, so the
+				// committed block range and the cursor move atomically. (No block
+				// applied — e.g. the first block was a hole — leaves the cursor
+				// untouched and the tx a no-op.)
+				if (lastAppliedN >= 0) {
+					await markApplied(client, lastAppliedN);
+				}
+			});
 
-				this.status = { ...this.status, indexedBlock: n, lastError: null };
-
-				// Phase E — fire orderbook-change events on the in-process
-				// bus.  Emission happens AFTER withTx resolves (commit
-				// successful), so SSE subscribers don't see phantom events
-				// from a rolled-back block.  Subscribers' listener
-				// callbacks should be fast (just enqueue into per-
-				// connection state); the bus catches their throws.
-				for (const orderId of counts.orderbookChanges) {
+			// ── Post-commit (the withTx above COMMITTED the prefix) ──
+			// Flush the collected side-effects for every block that actually
+			// committed, in order. If withTx had THROWN (e.g. an applyBlock error),
+			// execution would have propagated out of applyWindow before reaching
+			// here — so nothing below runs for a rolled-back window, and no phantom
+			// event or cursor advance escapes.
+			for (const c of committed) {
+				this.status = { ...this.status, indexedBlock: c.n, lastError: null };
+				// Phase E — orderbook-change events on the in-process bus.
+				for (const orderId of c.orderbookChanges) {
 					orderbookEventBus.emit(orderId);
 				}
-
 				// Phase E.5 — same pattern for chat-message events.
-				for (const ev of counts.chatChanges) {
+				for (const ev of c.chatChanges) {
 					chatEventBus.emit(ev);
 				}
-
 				// Only log non-trivial blocks to avoid spam; most blocks
 				// have zero morphit ops.
-				if (counts.applied + counts.rejected > 0) {
-					log.info('block_applied', {
-						block: n,
-						applied: counts.applied,
-						rejected: counts.rejected
-					});
+				if (c.applied + c.rejected > 0) {
+					log.info('block_applied', { block: c.n, applied: c.applied, rejected: c.rejected });
 				}
 			}
-			return true;
+
+			if (holeBackoff) {
+				await sleep(this.config.errorBackoffMs, this.abort.signal);
+			}
+			return !stop;
 		};
 
 		try {

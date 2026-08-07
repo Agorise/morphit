@@ -1003,6 +1003,108 @@ export function formatBackupSize(bytes: number): string {
 	return `${(bytes / (1024 * 1024)).toFixed(1)}M`;
 }
 
+// ─── IPFS / IPNS release seeding (cp667) ───────────────────────────
+//
+// Every instance runs a small Kubo node that PINS the signed release to IPFS and
+// REBROADCASTS the on-chain IPNS record to the DHT, so releases stay hosted and
+// ipns://<name> stays resolvable as long as ANY instance is alive (Decentraliz-
+// ation #2). Nothing tells the operator whether their box is actually doing its
+// share — this check does, read-only, from systemd state + the last run result.
+
+/** Read-only last-run result of a (oneshot) unit via `systemctl show`.  The
+ *  pin/rebroadcast services carry SuccessExitStatus=0 1, so a transient exit-1
+ *  is still Result=success; only a real failure (exit-code/signal/timeout) trips
+ *  `failed`. `ranMs` is the age of the last completed run, or null if never run
+ *  / unreadable. */
+export function readServiceResult(unit: string): { failed: boolean; ranMs: number | null } {
+	try {
+		const out = execFileSync(
+			'systemctl',
+			['show', unit, '--property=Result,ExecMainExitTimestamp', '--no-pager'],
+			{ stdio: ['ignore', 'pipe', 'ignore'], timeout: 3000, encoding: 'utf8' }
+		);
+		const result = /Result=(\S+)/.exec(out)?.[1] ?? 'success';
+		const tsStr = (/ExecMainExitTimestamp=(.*)/.exec(out)?.[1] ?? '').trim();
+		let ranMs: number | null = null;
+		if (tsStr !== '' && tsStr !== 'n/a') {
+			const d = Date.parse(tsStr);
+			if (!Number.isNaN(d)) ranMs = Date.now() - d;
+		}
+		return { failed: result !== 'success', ranMs };
+	} catch {
+		return { failed: false, ranMs: null };
+	}
+}
+
+export type IpfsSeedingState = 'ok' | 'degraded' | 'down' | 'not-configured' | 'unknown';
+
+export interface IpfsSeedingFacts {
+	daemon: ServiceState;
+	pinTimer: ServiceState;
+	rebroadcastTimer: ServiceState;
+	pinFailed: boolean;
+	pinRanMs: number | null;
+	rebroadcastFailed: boolean;
+	rebroadcastRanMs: number | null;
+}
+
+export interface IpfsSeedingStatus {
+	readonly state: IpfsSeedingState;
+	readonly detail: string;
+}
+
+/** Gather the read-only systemd facts for the IPFS pin + IPNS rebroadcast. */
+export function readIpfsSeedingFacts(): IpfsSeedingFacts {
+	const pin = readServiceResult('morphit-ipfs-pin.service');
+	const reb = readServiceResult('morphit-ipns-rebroadcast.service');
+	return {
+		daemon: checkService('ipfs'),
+		pinTimer: checkService('morphit-ipfs-pin.timer'),
+		rebroadcastTimer: checkService('morphit-ipns-rebroadcast.timer'),
+		pinFailed: pin.failed,
+		pinRanMs: pin.ranMs,
+		rebroadcastFailed: reb.failed,
+		rebroadcastRanMs: reb.ranMs
+	};
+}
+
+/** Decide whether this node is successfully seeding releases to IPFS/IPNS. PURE. */
+export function checkIpfsSeeding(f: IpfsSeedingFacts): IpfsSeedingStatus {
+	const notInstalled = (s: ServiceState): boolean => s === 'not-installed';
+	// Nothing set up at all → optional feature, not a fault.
+	if (notInstalled(f.daemon) && notInstalled(f.pinTimer) && notInstalled(f.rebroadcastTimer)) {
+		return {
+			state: 'not-configured',
+			detail: 'not set up — optional; enable with morphit-ops harden \u2192 \u201cSet up IPFS release hosting\u201d'
+		};
+	}
+	// systemctl unreadable everywhere → don't alarm.
+	if (f.daemon === 'unknown' && f.pinTimer === 'unknown' && f.rebroadcastTimer === 'unknown') {
+		return { state: 'unknown', detail: 'could not read systemd state (no systemctl?)' };
+	}
+	// Daemon down while configured → nothing is being seeded.
+	if (f.daemon !== 'active') {
+		return {
+			state: 'down',
+			detail: `Kubo (ipfs) daemon is ${f.daemon}; releases are NOT being seeded. Check: sudo systemctl status ipfs`
+		};
+	}
+	const problems: string[] = [];
+	if (f.pinTimer !== 'active') problems.push(`release-pin timer ${f.pinTimer}`);
+	if (f.rebroadcastTimer !== 'active') problems.push(`IPNS-rebroadcast timer ${f.rebroadcastTimer}`);
+	if (f.pinFailed) problems.push('last pin FAILED (journalctl -u morphit-ipfs-pin)');
+	if (f.rebroadcastFailed) problems.push('last IPNS rebroadcast FAILED (journalctl -u morphit-ipns-rebroadcast)');
+	if (problems.length > 0) {
+		return { state: 'degraded', detail: problems.join('; ') };
+	}
+	const pinAge = f.pinRanMs !== null ? formatBackupAge(f.pinRanMs) : 'pending first run';
+	const rebAge = f.rebroadcastRanMs !== null ? formatBackupAge(f.rebroadcastRanMs) : 'pending first run';
+	return {
+		state: 'ok',
+		detail: `pinning the signed release to IPFS (last ${pinAge}) + rebroadcasting the IPNS record to the DHT (last ${rebAge})`
+	};
+}
+
 // ─── System resources (local host, read-only, non-privileged) ──────
 //
 // CPU / memory / disk for the box the node runs on, so the operator
@@ -1191,6 +1293,7 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 	];
 	const canary = checkCanary(canaryFilePath(), now);
 	const backups = checkBackups(readBackupFacts(), now);
+	const ipfsSeeding = checkIpfsSeeding(readIpfsSeedingFacts());
 
 	// Local host CPU / memory / disk (read-only, non-privileged).
 	const sys = await readSystemResources();
@@ -1220,7 +1323,20 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 						disk_total_gb: sys.diskTotalGB
 					},
 					services: Object.fromEntries(services.map((s) => [s.unit, s.state])),
-					canary
+					canary,
+					backups: {
+						state: backups.state,
+						newest_name: backups.newestName ?? null,
+						bytes: backups.bytes ?? null,
+						age_ms: backups.ageMs ?? null,
+						detail: backups.detail
+					},
+					// cp667 — is this node doing its share of hosting the release +
+					// keeping IPNS alive? Zabbix can alert on state !== 'ok'/'not-configured'.
+					ipfs_seeding: {
+						state: ipfsSeeding.state,
+						detail: ipfsSeeding.detail
+					}
 				},
 				null,
 				2
@@ -1476,6 +1592,23 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 	console.log(`  ${c.bold('Canary')}    ${canaryTag} ${canary.state}`);
 	if (canary.validThrough !== null) console.log(`      Valid through: ${safe(canary.validThrough)}`);
 	console.log(`      ${c.dim(canary.detail)}`);
+
+	// ── IPFS / IPNS release seeding block ──
+	// Is this node doing its share of hosting the release + keeping the IPNS
+	// name alive? (Decentralization #2 — the network survives on it.)
+	console.log('');
+	const seedTag =
+		ipfsSeeding.state === 'ok'
+			? c.green('✓')
+			: ipfsSeeding.state === 'down'
+				? c.red('✗')
+				: ipfsSeeding.state === 'not-configured'
+					? c.dim('○')
+					: ipfsSeeding.state === 'unknown'
+						? c.dim('?')
+						: c.yellow('⚠');
+	console.log(`  ${c.bold('IPFS/IPNS release seeding')}  ${seedTag} ${ipfsSeeding.state}`);
+	console.log(`      ${c.dim(ipfsSeeding.detail)}`);
 
 	console.log('');
 	console.log('━'.repeat(60));

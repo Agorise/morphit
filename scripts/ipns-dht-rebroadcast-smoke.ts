@@ -77,6 +77,28 @@ const stripHash = (s: string) =>
 	for (const [n, okp] of checks) okp ? ok(`setup.sh: ${n}`) : bad(`setup.sh: ${n}`);
 }
 
+// ── 2b. the ANSIBLE ipfs role wires the SAME rebroadcast (wizard installs) ──
+// The wizard runs the ansible playbook, so the ipfs role must arm rebroadcast
+// exactly like the hand-managed setup.sh — otherwise a wizard-installed peer
+// pins the release but never re-announces IPNS, and ipns://<name> silently
+// depends on a hand-managed box or the primary staying up.
+{
+	const tasks = read('ops/ansible/roles/ipfs/tasks/main.yml');
+	const svc = stripHash(read('ops/ansible/roles/ipfs/templates/morphit-ipns-rebroadcast.service.j2'));
+	const timer = stripHash(read('ops/ansible/roles/ipfs/templates/morphit-ipns-rebroadcast.timer.j2'));
+	const checks: Array<[string, boolean]> = [
+		['role installs the rebroadcast script into /usr/local/lib/morphit', /morphit-ipns-rebroadcast\.sh/.test(tasks) && /\/usr\/local\/lib\/morphit\/morphit-ipns-rebroadcast\.sh/.test(tasks)],
+		['role templates the rebroadcast service + timer', /morphit-ipns-rebroadcast\.service\.j2/.test(tasks) && /morphit-ipns-rebroadcast\.timer\.j2/.test(tasks)],
+		['role enables the rebroadcast timer', /morphit-ipns-rebroadcast\.timer/.test(tasks) && /Enable \+ start the IPNS-rebroadcast timer/.test(tasks)],
+		['service is a oneshot that runs the rebroadcast script', /Type=oneshot/.test(svc) && /ExecStart=.*morphit-ipns-rebroadcast\.sh/.test(svc)],
+		['service shares the pin EnvironmentFile (no new operator config)', /EnvironmentFile=-?\/etc\/morphit\/ipfs-pin\.env/.test(svc)],
+		['timer re-announces every ~4h', /OnUnitActiveSec=4h/.test(timer)],
+		// key hygiene extends to the template: the unit must never carry the key
+		['service template NEVER references MORPHIT_IPNS_KEY', !/MORPHIT_IPNS_KEY/.test(svc)]
+	];
+	for (const [n, okp] of checks) okp ? ok(`ansible ipfs role: ${n}`) : bad(`ansible ipfs role: ${n}`);
+}
+
 // ── 3. key hygiene across the whole ops surface ──────────────────────
 {
 	const reb = stripHash(read('ops/ipfs/morphit-ipns-rebroadcast.sh'));

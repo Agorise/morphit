@@ -151,6 +151,18 @@
     group: root
     mode: "0755"
 
+- name: Install the IPNS-rebroadcast script
+  # Re-announces @morphit's on-chain signed IPNS record to the public DHT from
+  # this box (no key required), so ipns://<name> stays resolvable as long as ANY
+  # instance is alive. The hand-managed path (morphit-ipfs-setup.sh) installs the
+  # same script + timer; this wires it for Ansible/wizard installs too.
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../ipfs/morphit-ipns-rebroadcast.sh"
+    dest: /usr/local/lib/morphit/morphit-ipns-rebroadcast.sh
+    owner: root
+    group: root
+    mode: "0755"
+
 - name: Install the pin service env file
   ansible.builtin.template:
     src: ipfs-pin.env.j2
@@ -170,7 +182,7 @@
     - Reload systemd
     - Restart ipfs
 
-- name: Install the release-pinning service + timer
+- name: Install the release-pinning + IPNS-rebroadcast services + timers
   ansible.builtin.template:
     src: "{{ item.src }}"
     dest: "/etc/systemd/system/{{ item.dest }}"
@@ -180,6 +192,8 @@
   loop:
     - { src: "morphit-ipfs-pin.service.j2", dest: "morphit-ipfs-pin.service" }
     - { src: "morphit-ipfs-pin.timer.j2", dest: "morphit-ipfs-pin.timer" }
+    - { src: "morphit-ipns-rebroadcast.service.j2", dest: "morphit-ipns-rebroadcast.service" }
+    - { src: "morphit-ipns-rebroadcast.timer.j2", dest: "morphit-ipns-rebroadcast.timer" }
   notify: Reload systemd
 
 - name: Flush handlers so the daemon is running before we enable the timer
@@ -209,3 +223,13 @@
     name: morphit-ipfs-pin.timer
     state: started
     enabled: true
+
+- name: Enable + start the IPNS-rebroadcast timer
+  # Same best-effort posture as the daemon: a fresh offline box may not have the
+  # DHT reachable yet, but the timer stays enabled and fires once it's online, so
+  # ipns://<name> gets re-announced from this instance without operator action.
+  ansible.builtin.systemd:
+    name: morphit-ipns-rebroadcast.timer
+    state: started
+    enabled: true
+  failed_when: false

@@ -331,13 +331,13 @@
 				class="rounded-md border border-ink-200 bg-white px-3 py-1.5 text-sm dark:border-ink-700 dark:bg-ink-900"
 			>
 				<option value="">{$_('instances.filter_all')}</option>
-				<option value="good">{$_('instances.status.good')}</option>
-				<option value="quiet">{$_('instances.status.quiet')}</option>
-				<option value="syncing">{$_('instances.status.syncing')}</option>
-				<option value="stale">{$_('instances.status.stale')}</option>
-				<option value="mismatch">{$_('instances.status.mismatch')}</option>
-				<option value="unreachable">{$_('instances.status.unreachable')}</option>
-				<option value="never">{$_('instances.status.never')}</option>
+				<option value="good">{$_('instances.status_menu.good')}</option>
+				<option value="quiet">{$_('instances.status_menu.quiet')}</option>
+				<option value="syncing">{$_('instances.status_menu.syncing')}</option>
+				<option value="stale">{$_('instances.status_menu.stale')}</option>
+				<option value="mismatch">{$_('instances.status_menu.mismatch')}</option>
+				<option value="unreachable">{$_('instances.status_menu.unreachable')}</option>
+				<option value="never">{$_('instances.status_menu.never')}</option>
 			</select>
 		</label>
 	</div>
