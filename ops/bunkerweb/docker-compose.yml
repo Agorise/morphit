@@ -19,6 +19,42 @@
 # frontend/nginx.conf and OPERATIONS.md §32.
 
 services:
+  # One-shot permission init.  BunkerWeb's images do NOT set `user:`
+  # here, so the instance + scheduler run as the image-default UID
+  # (101).  Two things they must reach are created root-owned:
+  #   (a) the `bw-data` named volume — the scheduler writes its config
+  #       SQLite DB there; if it can't, it loops on "Database is not
+  #       initialized" and never ships a config.
+  #   (b) the Let's Encrypt cert — certbot writes it root-only inside a
+  #       0700 archive dir, so a UID-101 process can't read the privkey
+  #       and BunkerWeb silently serves a self-signed fallback.
+  # This root one-shot fixes both, then exits, before anything else
+  # starts (the scheduler depends_on it completing).  It runs on every
+  # `compose up`, so it also re-asserts perms after a container
+  # re-create.  It is idempotent and harmless on an already-correct
+  # install (chowning to 101 is a no-op when the target is already 101,
+  # and a no-op for a root-run process).  For cert RENEWAL the same fix
+  # lives in the certbot deploy-hook (OPERATIONS.md §35); this covers
+  # the first `up` and every re-create.
+  bw-init:
+    image: bunkerity/bunkerweb-scheduler:1.5.10
+    container_name: bunkerweb-init
+    user: "0:0"
+    entrypoint: ["sh", "-c"]
+    command:
+      - >-
+        chown -R 101:101 /data && chmod -R u+rwX /data;
+        chgrp -R 101 /etc/letsencrypt/live /etc/letsencrypt/archive 2>/dev/null || true;
+        chmod -R g+rX /etc/letsencrypt/live /etc/letsencrypt/archive 2>/dev/null || true
+    restart: "no"
+    volumes:
+      - bw-data:/data
+      # Mounted read-WRITE (not :ro) so this init can chgrp/chmod the
+      # cert dirs; the long-running services below mount it :ro.
+      - /etc/letsencrypt:/etc/letsencrypt
+    networks:
+      - bunkerweb_net
+
   bunkerweb:
     image: bunkerity/bunkerweb:1.5.10
     container_name: bunkerweb
@@ -51,6 +87,13 @@ services:
       - bw-data:/data
     networks:
       - bunkerweb_net
+    depends_on:
+      # Wait for bw-init to fix bw-data + cert perms before the
+      # scheduler tries to write its config DB / read the cert.  The
+      # instance (bunkerweb) depends_on the scheduler, so it waits
+      # transitively.
+      bw-init:
+        condition: service_completed_successfully
 
   # Serves the built SvelteKit site + reverse-proxies the API paths to
   # the relay + indexer on the host.  BunkerWeb proxies everything here

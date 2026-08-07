@@ -19,15 +19,20 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
 	parseReleaseSources,
 	selectReleaseAssets,
 	decideTrust,
-	verifyDetachedSignature
+	verifyDetachedSignature,
+	resolveOfflineTarball,
+	parseTagFromTarballName,
+	findLocalOfflineRelease,
+	compareTags
 } from '../src/commands/upgrade.ts';
 
 let pass = 0;
@@ -156,6 +161,111 @@ if (!haveGpg) {
 	} finally {
 		rmSync(work, { recursive: true, force: true });
 	}
+}
+
+// ── offline upgrade (--from-file / MORPHIT_UPGRADE_TARBALL, cable unplugged) ──
+// The offline path bypasses ALL network discovery + download and reuses the SAME
+// trust matrix above: with no reachable primary there's no anchored hash, so
+// decideTrust falls to the "sig or bust" cases already asserted — an UNSIGNED
+// offline tarball is the "all false → refused" case, a SIGNED one is the
+// "sigVerified → allowed" case. These checks pin the offline PLUMBING.
+{
+	// the offline-unsigned refusal is exactly the all-false decideTrust case
+	expect(
+		'offline unsigned tarball is refused (no primary hash, no signature)',
+		decideTrust({ bytesFromPrimary: false, sigVerified: false, hashMatched: false, hashFromPrimary: false }).allowed === false
+	);
+	// a signed offline tarball is trusted regardless of byte source (local file)
+	expect(
+		'offline SIGNED tarball is trusted (gpg proof, any source)',
+		decideTrust({ bytesFromPrimary: false, sigVerified: true, hashMatched: false, hashFromPrimary: false }).proof === 'gpg-signature'
+	);
+
+	// parseTagFromTarballName — version parsed from the filename
+	expect('parses vX.Y.Z from an -offline tarball name', parseTagFromTarballName('morphit-v1.10.0-offline.tar.gz') === 'v1.10.0');
+	expect('parses vX.Y.Z from a plain release tarball name', parseTagFromTarballName('morphit-v1.9.6.tar.gz') === 'v1.9.6');
+	expect('returns null when no version is present', parseTagFromTarballName('morphit-latest.tar.gz') === null);
+
+	// resolveOfflineTarball — null when neither flag nor env is set (online path)
+	const savedEnv = process.env.MORPHIT_UPGRADE_TARBALL;
+	delete process.env.MORPHIT_UPGRADE_TARBALL;
+	expect('resolveOfflineTarball is null on the normal (online) path', resolveOfflineTarball({}) === null);
+
+	// resolveOfflineTarball — resolves a real local tarball + sibling .asc + tag
+	const off = mkdtempSync(join(tmpdir(), 'morphit-offline-'));
+	try {
+		const tb = join(off, 'morphit-v1.10.0-offline.tar.gz');
+		writeFileSync(tb, Buffer.from('pretend tarball'));
+		let r = resolveOfflineTarball({ 'from-file': tb });
+		expect('resolveOfflineTarball resolves path + tag', r !== null && r.tag === 'v1.10.0' && r.tarballPath === tb);
+		expect('resolveOfflineTarball reports no sig when .asc absent', r !== null && r.sigPath === null);
+		writeFileSync(`${tb}.asc`, Buffer.from('pretend sig'));
+		r = resolveOfflineTarball({ 'from-file': tb });
+		expect('resolveOfflineTarball finds a sibling .asc', r !== null && r.sigPath === `${tb}.asc`);
+
+		// env var is honoured too
+		process.env.MORPHIT_UPGRADE_TARBALL = tb;
+		expect('MORPHIT_UPGRADE_TARBALL env is honoured', resolveOfflineTarball({}) !== null);
+		delete process.env.MORPHIT_UPGRADE_TARBALL;
+
+		// bad inputs throw (missing file / wrong ext / no version)
+		let threw = false;
+		try { resolveOfflineTarball({ 'from-file': join(off, 'nope.tar.gz') }); } catch { threw = true; }
+		expect('throws on a missing file', threw);
+		threw = false;
+		try { resolveOfflineTarball({ 'from-file': tb.replace('.tar.gz', '.zip') }); } catch { threw = true; }
+		expect('throws on a non-.tar.gz path', threw);
+		const noVer = join(off, 'morphit-latest.tar.gz');
+		writeFileSync(noVer, Buffer.from('x'));
+		threw = false;
+		try { resolveOfflineTarball({ 'from-file': noVer }); } catch { threw = true; }
+		expect('throws when the filename has no version', threw);
+	} finally {
+		rmSync(off, { recursive: true, force: true });
+		if (savedEnv !== undefined) process.env.MORPHIT_UPGRADE_TARBALL = savedEnv;
+	}
+
+	// static: the offline branch must not download, and the rebuild must skip
+	// npm ci on the prebuilt-bundle marker (so it is genuinely cable-unplugged)
+	const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../src/commands/upgrade.ts'), 'utf8');
+	expect('rebuild skips npm ci when .morphit-bundle-complete is present', /\.morphit-bundle-complete[\s\S]{0,400}?skipping npm ci/.test(src));
+	expect('offline branch copies the local tarball instead of downloading', /offline !== null[\s\S]{0,600}?copyFileSync\(offline\.tarballPath/.test(src));
+
+	// ── drop-dir detection + online→offline fallback (cp667) ──
+	// compareTags: newest wins, release beats prerelease of the same X.Y.Z
+	expect('compareTags: v1.10.1 newer than v1.10.0', compareTags('v1.10.1', 'v1.10.0') > 0);
+	expect('compareTags: release beats its prerelease', compareTags('v1.10.0', 'v1.10.0-beta.1') > 0);
+	expect('compareTags: equal tags compare 0', compareTags('v1.10.0', 'v1.10.0') === 0);
+
+	// findLocalOfflineRelease scans MORPHIT_OFFLINE_RELEASE_DIR, needs a sibling .asc
+	const drop = mkdtempSync(join(tmpdir(), 'morphit-drop-'));
+	const savedDir = process.env.MORPHIT_OFFLINE_RELEASE_DIR;
+	try {
+		process.env.MORPHIT_OFFLINE_RELEASE_DIR = drop;
+		expect('findLocalOfflineRelease: empty dir → null', findLocalOfflineRelease('/opt/morphit') === null);
+		// an UNSIGNED tarball is ignored (no .asc → not trustable offline)
+		writeFileSync(join(drop, 'morphit-v1.10.0-offline.tar.gz'), Buffer.from('x'));
+		expect('findLocalOfflineRelease: unsigned tarball ignored', findLocalOfflineRelease('/opt/morphit') === null);
+		// sign it → now found
+		writeFileSync(join(drop, 'morphit-v1.10.0-offline.tar.gz.asc'), Buffer.from('sig'));
+		let f = findLocalOfflineRelease('/opt/morphit');
+		expect('findLocalOfflineRelease: signed tarball found', f !== null && f.tag === 'v1.10.0');
+		// a NEWER signed tarball wins
+		writeFileSync(join(drop, 'morphit-v1.10.1-offline.tar.gz'), Buffer.from('x'));
+		writeFileSync(join(drop, 'morphit-v1.10.1-offline.tar.gz.asc'), Buffer.from('sig'));
+		f = findLocalOfflineRelease('/opt/morphit');
+		expect('findLocalOfflineRelease: newest signed tarball wins', f !== null && f.tag === 'v1.10.1');
+	} finally {
+		rmSync(drop, { recursive: true, force: true });
+		if (savedDir !== undefined) process.env.MORPHIT_OFFLINE_RELEASE_DIR = savedDir;
+		else delete process.env.MORPHIT_OFFLINE_RELEASE_DIR;
+	}
+
+	// static: runUpgrade falls back to the drop-dir tarball when all sources fail
+	expect(
+		'runUpgrade falls back to a dropped offline tarball when the network is down',
+		/latest === null[\s\S]{0,400}?findLocalOfflineRelease\(installDir\)/.test(src)
+	);
 }
 
 console.log('');

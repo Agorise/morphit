@@ -280,6 +280,7 @@ SMOKES=(
 	".:backup-install-parity-smoke"
 	".:chat-inbox-instant-subject-smoke"
 	".:health-backup-freshness-smoke"
+	".:indexer-public-health-operational-smoke"
 	".:moderation-flag-clearance-smoke"
 	".:profile-link-glyphs-single-home-smoke"
 	".:reserved-name-owner-parity-smoke"

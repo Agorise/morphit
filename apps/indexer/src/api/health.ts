@@ -22,6 +22,7 @@ import type { Poller } from '$indexer/poller';
 import type { BlurtPriceSource } from '$indexer/price/source';
 import type { FxRateSource } from '$indexer/fx/source';
 import { buildPriceFeedsHealth } from '$api/priceFeedsHealth';
+import { getOperationalSnapshot, primeOperationalSnapshot } from '$api/operationalHealth';
 import type { DisagreementMonitor } from '$indexer/price/disagreementMonitor';
 import type { PeerSampleCycleResult } from '$indexer/price/peerPriceMonitor';
 import { orderbookEventBus } from '$indexer/orderbookEventBus';
@@ -39,7 +40,7 @@ import type { HeadTailer } from '$indexer/headTailer';
 // endpoint reports. It stays hardcoded here on purpose: it is one of the 19
 // version touchpoints the version-consistency smoke pins, and reading it from
 // package.json at runtime would take it out of that net.
-export const INDEXER_VERSION = '1.10.0';
+export const INDEXER_VERSION = '1.10.1';
 
 // Blurt produces one block every 3 seconds. Used to translate the
 // block-lag count into a human "seconds behind" figure in the
@@ -79,6 +80,9 @@ export function healthRoute(
 ): Hono {
 	const app = new Hono();
 	const bootTime = Date.now();
+	// Prime one operational sample so the first /v1/health probe already has
+	// resource/seeding/relay data instead of nulls.
+	primeOperationalSnapshot(config.relayHealthUrl);
 
 	app.get('/', (c) => {
 		const status = poller.getStatus();
@@ -117,6 +121,18 @@ export function healthRoute(
 			rpc_endpoints_healthy: rpcEndpointsHealthy,
 			rpc_endpoints_total: rpcSnap.length
 		};
+
+		// cp667 — three operator-facing facts on the PUBLIC body, from a cached
+		// snapshot (stale-while-revalidate; see operationalHealth.ts). Kept public
+		// deliberately (Ken's call): whether this node is doing its share of
+		// seeding the release (a decentralization signal peers benefit from),
+		// coarse host resource use, and whether the optional relay is reachable.
+		// Backups/canary stay OUT of the public body — more sensitive, and the
+		// full picture is available locally via `morphit-ops health --json`.
+		const op = getOperationalSnapshot(config.relayHealthUrl);
+		body.ipfs_seeding = op.ipfs_seeding;
+		body.system = op.system;
+		body.relay = op.relay;
 
 		// Compact price-feed state on the PUBLIC (non-verbose) body so
 		// `morphit-ops health` can show whether the BLURT/USD feed is on

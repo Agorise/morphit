@@ -17,6 +17,16 @@
 #   x86_64 installs on 24.04 x86_64 (and its derivatives, e.g. Linux Mint 22).
 #   Do NOT run it on your workstation expecting a portable result.
 #
+#   SIDE-EFFECT-FREE on the build box's SYSTEM state: it does NOT modify the
+#   build box's apt sources/keyrings and installs NOTHING on the host — the whole
+#   apt closure (incl. adding the Docker repo) happens inside an ephemeral
+#   `--rm ubuntu:24.04` container.  The host contributions are only: writing the
+#   build OUTPUTS (node_modules/, vendor/, the tarball) into the repo tree, host
+#   `curl` for the Node + Kubo runtimes (step 2/3), and `docker pull`/`docker save`
+#   which leaves the three compose images in the host's Docker image CACHE (benign;
+#   left in place so repeat builds don't re-pull).  Nothing else on the host is
+#   touched.
+#
 # WHAT IT PRODUCES (all under ./vendor, plus ./node_modules)
 #   node_modules/                    prebuilt app deps  (+ .morphit-bundle-complete marker)
 #   vendor/node/                     Node.js runtime    (bin/ lib/ …)
@@ -106,6 +116,12 @@ mv "${_ktar}" "${VENDOR}/kubo/${_ktar}"
 # the closure is COMPLETE — nothing is skipped as "already installed" — and it
 # matches a fresh 24.04 target exactly, regardless of what the build host has.
 # No sudo: the container is root (which also sidesteps host sudo quirks).
+#
+# SIDE-EFFECT-FREE: the container is FULLY self-contained — it fetches the Docker
+# repo key and adds the Docker apt source ENTIRELY inside itself (an ephemeral
+# --rm container), so the BUILD BOX's apt config, keyrings, and installed packages
+# are never touched.  The host does nothing here but `docker run`; there is no
+# host-side curl, no staging dir, no mount of host files.
 log "4/6  Downloading the apt dependency closure in a clean ubuntu:24.04 container…"
 # The union of packages the default-ENABLED roles apt-install (base, hardening,
 # ddns, tls, postgres, bunkerweb, tor, i2pd).  A smoke (ansible-structural,
@@ -118,29 +134,28 @@ chrony cron ufw fail2ban auditd audispd-plugins aide aide-common apparmor apparm
 rkhunter libpam-pwquality unattended-upgrades apt-listchanges postfix libsasl2-modules \
 certbot postgresql postgresql-client postgresql-contrib python3-psycopg2 tor i2pd \
 apt-transport-https docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin"
-# Fetch Docker's repo key on the host (which has curl) so the container stays clean.
-APTSTAGE="$(mktemp -d)"
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o "${APTSTAGE}/docker.asc"
-chmod a+r "${APTSTAGE}/docker.asc"
-echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu noble stable" \
-	> "${APTSTAGE}/docker.list"
-docker run --rm -e PKGS="${PKGS}" -v "${APTSTAGE}:/mnt:ro" -v "${VENDOR}/apt:/out" \
+docker run --rm -e PKGS="${PKGS}" -v "${VENDOR}/apt:/out" \
 	ubuntu:24.04 bash -c '
 		set -eu
 		export DEBIAN_FRONTEND=noninteractive
 		apt-get update -qq
-		# ca-certificates only, to enable the https Docker repo (present on every real
-		# target); everything else in the list is downloaded, not installed.
-		apt-get install -y --no-install-recommends ca-certificates
+		# ca-certificates + curl to fetch/trust the Docker repo key (neither is
+		# in the base image); both come from the base repos, before the Docker
+		# repo is added.  Everything in $PKGS is downloaded, not installed.
+		apt-get install -y --no-install-recommends ca-certificates curl
 		install -m 0755 -d /etc/apt/keyrings
-		cp /mnt/docker.asc /etc/apt/keyrings/docker.asc
-		cp /mnt/docker.list /etc/apt/sources.list.d/docker.list
+		curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+		chmod a+r /etc/apt/keyrings/docker.asc
+		# Derive the codename from the container itself so it can never drift from
+		# the base image tag (24.04 = noble).
+		. /etc/os-release
+		printf "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu %s stable\n" \
+			"${VERSION_CODENAME}" > /etc/apt/sources.list.d/docker.list
 		apt-get update -qq
 		apt-get install --download-only -y ${PKGS}
 		cp /var/cache/apt/archives/*.deb /out/
 		chmod a+r /out/*.deb
 	' || die "apt closure download (in the ubuntu:24.04 container) failed — see the log above."
-rm -rf "${APTSTAGE}"
 ( cd "${VENDOR}/apt" && dpkg-scanpackages -m . /dev/null | gzip -9c > Packages.gz )
 log "     $(ls "${VENDOR}/apt"/*.deb 2>/dev/null | wc -l) .deb files harvested."
 

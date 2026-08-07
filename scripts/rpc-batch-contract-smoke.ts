@@ -14,8 +14,12 @@
  *
  * These checks pin the OUTCOMES, not the phrasing:
  *   1. the poller prefetches a window per request instead of one block per request
- *   2. the one-block-per-DB-transaction rule SURVIVES the change (it protects a
- *      different resource and wants the opposite answer — small txs, few requests)
+ *   2. the DB transaction stays BOUNDED to one window (cp666) — never the whole
+ *      catch-up. One withTx per window amortises fsync ~BLOCK_FETCH_BATCH× (fast
+ *      backfill) while a crash still rolls the window back atomically and the
+ *      cursor advances inside that same tx, so no partial/corrupt state survives.
+ *      What we still forbid is a single tx spanning the entire sync (locks held
+ *      for hours, WAL bloat).
  *   3. batch support is discovered per URL and cached, never assumed — this repo
  *      cannot reach a Blurt node to verify support, so the code must not require it
  *   4. batch errors stay legible to the pool's OWN classifiers, so a rate-limited
@@ -55,18 +59,40 @@ const size = Number(/const BLOCK_FETCH_BATCH = (\d+)/.exec(poller)?.[1] ?? '0');
 check('4 batch size is a sane window (2..100)', size >= 2 && size <= 100, String(size));
 check('5 the cursor advances past the fetched window', /nextLo = hi \+ 1/.test(poller));
 
-// ── 2. the DB invariant the batching must NOT trample ───────────────
-// The poller documents WHY it never batches DB writes: a long catch-up would
-// hold a transaction open for minutes. Batching the FETCH is only correct
-// because it leaves that alone. If a later change starts wrapping the window in
-// one withTx, this check is the thing that notices.
+// ── 2. the DB invariant the batching must respect (cp666) ───────────
+// The apply is now ONE transaction per WINDOW (fetch batch == apply batch), for
+// ~BLOCK_FETCH_BATCH× fewer fsyncs. Two things must hold or the change is unsafe:
+// (a) the tx is BOUNDED to a window — it must NOT wrap the whole catch-up
+//     (consumeInOrderWithPrefetch), or a single tx spans the entire sync (locks
+//     held for hours, WAL bloat — the original hazard);
+// (b) the cursor (markApplied) advances INSIDE that same tx, so the committed
+//     block range and the resume cursor move atomically — a crash can only ever
+//     lose an uncommitted window, never leave the cursor ahead of the data;
+// (c) a hole/abort COMMITS the prefix and stops (break, not a mid-tx return),
+//     and per-block side-effects (bus emits / status advance) fire only AFTER the
+//     commit, so a rolled-back window emits nothing and advances nothing.
 check(
-	'6 one-block-per-transaction survives (withTx is INSIDE the per-block loop)',
-	/for \(let i = 0; i < blocks\.length[\s\S]{0,1200}?this\.db\.withTx/.test(poller),
-	'the DB tx must stay per-block; batching the fetch must not batch the write'
+	'6 one transaction per WINDOW (withTx WRAPS the per-block loop)',
+	/this\.db\.withTx\(async[\s\S]{0,600}?for \(let i = 0; i < blocks\.length/.test(poller),
+	'the window apply must run inside a single withTx, not one withTx per block'
 );
 check(
-	'7 …and the reason is still written down',
+	'6b the window tx is BOUNDED — withTx must NOT wrap consumeInOrderWithPrefetch (that would span the whole catch-up)',
+	!/withTx\([\s\S]{0,120}consumeInOrderWithPrefetch/.test(poller),
+	'a withTx around the whole catch-up loop holds one tx open for the entire sync'
+);
+check(
+	'6c the cursor advances INSIDE the window tx (atomic with the blocks)',
+	/this\.db\.withTx\(async[\s\S]*?markApplied\(client,[\s\S]*?Post-commit/.test(poller),
+	'markApplied must be inside the withTx callback so cursor + data commit together'
+);
+check(
+	'6d a hole/abort COMMITS the prefix + stops (break, not mid-tx return); stop decided after commit',
+	/stop = true;[\s\S]{0,160}break;/.test(poller) && /return !stop/.test(poller),
+	'hole/abort must break to commit the valid prefix, then stop the pipeline'
+);
+check(
+	'7 …and the reason (no whole-catch-up tx) is still written down',
 	/bloating WAL/.test(poller)
 );
 

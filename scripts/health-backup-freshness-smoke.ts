@@ -23,6 +23,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { checkIpfsSeeding, type IpfsSeedingFacts } from '../apps/ops-cli/src/commands/health.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, '..');
@@ -148,6 +149,81 @@ check(
 check(
 	'RUN-A-MORPHIT-NODE.md points operators at the Backups line',
 	/\*\*Backups\*\* line/.test(runNode)
+);
+
+// ─── IPFS / IPNS release seeding (cp667) ─────────────────────────
+// Same blind-spot class as backups: the node silently stops doing its share of
+// hosting the release / keeping IPNS alive and nothing tells the operator.
+check(
+	'health exposes a pure checkIpfsSeeding(facts)',
+	/export function checkIpfsSeeding\(f: IpfsSeedingFacts\): IpfsSeedingStatus/.test(health)
+);
+check('health gathers the seeding facts read-only', /export function readIpfsSeedingFacts\(/.test(health));
+check(
+	'the health command CALLS it',
+	/const ipfsSeeding = checkIpfsSeeding\(readIpfsSeedingFacts\(\)\);/.test(health),
+	'exported-but-uncalled logic reports nothing'
+);
+check(
+	"and RENDERS an 'IPFS/IPNS release seeding' block",
+	/console\.log\(`  \$\{c\.bold\('IPFS\/IPNS release seeding'\)\}/.test(health)
+);
+check(
+	'the detail line is always printed',
+	/console\.log\(`      \$\{c\.dim\(ipfsSeeding\.detail\)\}`\);/.test(health)
+);
+check(
+	'a down daemon renders red, a not-configured node stays neutral',
+	/ipfsSeeding\.state === 'down'\s*\n?\s*\?\s*c\.red/.test(health) &&
+		/ipfsSeeding\.state === 'not-configured'\s*\n?\s*\?\s*c\.dim/.test(health)
+);
+check(
+	'it reads the pin + rebroadcast timers AND the daemon',
+	/checkService\('ipfs'\)/.test(health) &&
+		/checkService\('morphit-ipfs-pin\.timer'\)/.test(health) &&
+		/checkService\('morphit-ipns-rebroadcast\.timer'\)/.test(health)
+);
+
+// decision logic (pure)
+const mkFacts = (o: Partial<IpfsSeedingFacts>): IpfsSeedingFacts => ({
+	daemon: 'active',
+	pinTimer: 'active',
+	rebroadcastTimer: 'active',
+	pinFailed: false,
+	pinRanMs: 60_000,
+	rebroadcastFailed: false,
+	rebroadcastRanMs: 60_000,
+	...o
+});
+check(
+	'nothing installed → not-configured (optional, never alarms)',
+	checkIpfsSeeding(mkFacts({ daemon: 'not-installed', pinTimer: 'not-installed', rebroadcastTimer: 'not-installed' })).state === 'not-configured'
+);
+check(
+	'daemon down while configured → down (releases NOT seeded)',
+	checkIpfsSeeding(mkFacts({ daemon: 'inactive' })).state === 'down'
+);
+check(
+	'daemon up but a timer inactive → degraded',
+	checkIpfsSeeding(mkFacts({ pinTimer: 'inactive' })).state === 'degraded'
+);
+check(
+	'daemon up but last rebroadcast FAILED → degraded',
+	checkIpfsSeeding(mkFacts({ rebroadcastFailed: true })).state === 'degraded'
+);
+check(
+	'daemon + both timers active + no failures → ok',
+	checkIpfsSeeding(mkFacts({})).state === 'ok'
+);
+
+// the --json output (Zabbix reads this) must carry backups + ipfs_seeding
+check(
+	'health --json includes a backups block',
+	/backups: \{[\s\S]{0,200}?state: backups\.state/.test(health)
+);
+check(
+	'health --json includes an ipfs_seeding block',
+	/ipfs_seeding: \{[\s\S]{0,200}?state: ipfsSeeding\.state/.test(health)
 );
 
 console.log(

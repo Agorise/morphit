@@ -108,6 +108,7 @@ function makeRow(opts: {
 	origin?: string;
 	operator_account?: string;
 	registered_at_time?: Date;
+	cached_indexed_block?: number | null;
 }): KnownInstanceRow {
 	return {
 		origin: opts.origin ?? 'https://test.example',
@@ -115,7 +116,8 @@ function makeRow(opts: {
 		registered_at_time: opts.registered_at_time ?? new Date(0),
 		last_probed_at: null,
 		last_probe_status: 'never',
-		consecutive_failures: 0
+		consecutive_failures: 0,
+		cached_indexed_block: opts.cached_indexed_block ?? null
 	};
 }
 
@@ -252,15 +254,64 @@ await scenario('/v1/health fetch throws → unreachable', async () => {
 
 // ─── Stale ───────────────────────────────────────────────────────
 
-await scenario('health=degraded → stale', async () => {
+// A reachable peer whose health is well-formed but 'degraded' is BEHIND, not
+// broken. The health endpoint sets 'degraded' purely from chain lag, so a
+// brand-new peer mid-initial-sync reports 'degraded' — it must show as
+// 'syncing' (advertise itself the moment it registers), not 'stale'.
+await scenario('health=degraded, first probe (no prior block) → syncing', async () => {
 	stubRoutes({
 		'https://test.example/v1/instance': { json: goodInstance() },
 		'https://test.example/v1/health': {
-			json: { ...(goodHealth() as Record<string, unknown>), status: 'degraded' }
+			json: {
+				...(goodHealth() as Record<string, unknown>),
+				status: 'degraded',
+				indexed_block: 40_000,
+				lag_blocks: 60_000
+			}
 		}
 	});
-	const out = await probeOne(makeRow({}));
+	// cached_indexed_block null = never probed before (a freshly-registered peer).
+	const out = await probeOne(makeRow({ cached_indexed_block: null }));
+	assertEqual(out.status, 'syncing' as ProbeStatus, 'status');
+	assertEqual(out.cachedIndexedBlock, 40_000, 'indexed_block cached for next probe');
+});
+
+await scenario('health=degraded, indexed_block ADVANCING since last probe → syncing', async () => {
+	stubRoutes({
+		'https://test.example/v1/instance': { json: goodInstance() },
+		'https://test.example/v1/health': {
+			json: {
+				...(goodHealth() as Record<string, unknown>),
+				status: 'degraded',
+				indexed_block: 50_000,
+				lag_blocks: 50_000
+			}
+		}
+	});
+	// Prior probe saw 45_000; now 50_000 → advancing → still syncing.
+	const out = await probeOne(makeRow({ cached_indexed_block: 45_000 }));
+	assertEqual(out.status, 'syncing' as ProbeStatus, 'status');
+	assertEqual(out.cachedIndexedBlock, 50_000, 'indexed_block');
+});
+
+await scenario('health=degraded, indexed_block FROZEN (not advancing) → stale', async () => {
+	stubRoutes({
+		'https://test.example/v1/instance': { json: goodInstance() },
+		'https://test.example/v1/health': {
+			json: {
+				...(goodHealth() as Record<string, unknown>),
+				status: 'degraded',
+				indexed_block: 50_000,
+				lag_blocks: 50_000
+			}
+		}
+	});
+	// Prior probe ALSO saw 50_000 → not advancing → stuck → stale, but the
+	// snapshot is KEPT (frozen block cached) so it doesn't oscillate.
+	const out = await probeOne(makeRow({ cached_indexed_block: 50_000 }));
 	assertEqual(out.status, 'stale' as ProbeStatus, 'status');
+	assertEqual(out.cachedIndexedBlock, 50_000, 'frozen block kept (no oscillation)');
+	assertEqual(out.cachedName, 'test-instance', 'name kept while stale-behind');
 });
 
 await scenario('/v1/health malformed → stale', async () => {

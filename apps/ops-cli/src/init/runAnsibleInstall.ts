@@ -247,6 +247,22 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 				console.log(`        bash ${notifyScript}\n`);
 			}
 		}
+
+		// A home box signs its warrant canary locally (a VPS signs on the laptop,
+		// so we only auto-offer here — a VPS operator gets the printed next-step to
+		// run it on their laptop instead). The guided setup arms a weekly
+		// auto-refresh with wide third-party failover, so the signed "no secret
+		// orders" file never silently goes stale. Declining just leaves the printed
+		// next-step; setup.sh is idempotent + re-runnable.
+		step(0, 0, 'Warrant canary (signed here, auto-refreshed weekly)');
+		const canaryScript = join(opts.repoRoot, 'scripts', 'canary', 'setup.sh');
+		if (await askYesNo('\n  Set up your warrant canary now (signed on this box, refreshed weekly)?', true)) {
+			const rc = spawnSync('bash', [canaryScript], { stdio: 'inherit' });
+			if ((rc.status ?? 1) !== 0) {
+				console.log('\n  Note: couldn\u2019t set that up automatically (not essential). Do it later with:');
+				console.log(`        bash ${canaryScript}\n`);
+			}
+		}
 	}
 
 	// Now — AFTER the summary — offer to list this instance on the shared federated

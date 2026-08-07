@@ -114,6 +114,26 @@ check(
 	'morphit-ops upgrade reminder points at the refresh script',
 	upgradeTs.includes('update-canary.sh')
 );
+// cp666 — the guided install (home mode) OFFERS to run the canary setup as a
+// final step, not just print it: a home box signs locally, so the wizard can arm
+// the weekly-refreshing canary right there. (A VPS signs on the laptop → keeps
+// the printed next-step; the offer is gated on inputs.mode === 'home'.)
+{
+	const runInstall = readFileSync(
+		join(REPO, 'apps/ops-cli/src/init/runAnsibleInstall.ts'),
+		'utf8'
+	);
+	const offersCanary =
+		/scripts['"),\s]+canary['"),\s]+setup\.sh/.test(runInstall) &&
+		/askYesNo\([^)]*canary/i.test(runInstall) &&
+		/spawnSync\('bash', \[canaryScript\]/.test(runInstall);
+	check('morphit-ops guided install (home) OFFERS to run the canary setup', offersCanary);
+	// the offer must sit inside the home-mode branch (a VPS signs on the laptop)
+	check(
+		'the canary offer is gated to home mode',
+		/inputs\.mode === 'home'[\s\S]*canaryScript/.test(runInstall)
+	);
+}
 
 // ─── verdict ─────────────────────────────────────────────────────
 const total = pass + fails.length;

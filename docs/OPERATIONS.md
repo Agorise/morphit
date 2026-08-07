@@ -470,6 +470,51 @@ the restore), fix it once with
 `sudo chown -R <your-ssh-user> /opt/morphit/apps/web/build`
 and it persists across future upgrades from then on.
 
+**Offline upgrade (cable unplugged).**  A node must never be
+forced online to upgrade.  On a box with no internet, download
+the self-contained `morphit-<ver>-offline.tar.gz` **and its
+`.asc` signature** on another machine, copy both over, and run
+`sudo morphit-ops upgrade --from-file=/path/to/morphit-<ver>-offline.tar.gz`
+(or set `MORPHIT_UPGRADE_TARBALL` to that path — handy for a
+scripted/cron offline upgrade).  This skips all network
+discovery and download: the tarball's signature is verified
+against the release-signer keys shipped in the install
+(`.forgejo/release-signers/*.asc`), and an **unsigned** tarball
+is **refused** — with no reachable primary there is no anchored
+hash to fall back on, so a GPG signature is mandatory (the same
+"standalone-mirror-safe" trust rule the online path uses when
+the primary is unreachable).  The bundle's prebuilt
+`node_modules` (marked `.morphit-bundle-complete`) means the
+rebuild skips `npm ci`, so it reaches no registry either — the
+entire upgrade completes with the network cable unplugged, just
+like the offline first install.
+
+**Offline drop-dir + auto-fallback.**  Instead of passing
+`--from-file` each time, drop the signed tarball (+ its `.asc`)
+into the offline release dir — `<installDir>-offline` (e.g.
+`/opt/morphit-offline`) by default, overridable with
+`MORPHIT_OFFLINE_RELEASE_DIR`.  The main menu then shows
+**● update available (offline tarball ready)** on its own (the
+version is read from the filename), and a normal `morphit-ops
+upgrade` FALLS BACK to that signed tarball automatically whenever
+every network source is unreachable — so an upgrade begun online
+still finishes offline if the link drops mid-run.  An unsigned
+tarball in the dir is ignored (offline installs require a
+signature).
+
+**Machine-readable health (`morphit-ops health --json`).**  The
+health view is also emitted as JSON for monitoring:
+`morphit-ops health --json` prints one object with `indexer`,
+`relay`, `system` (cpu/mem/disk), `services`, `backups`,
+`canary`, and `ipfs_seeding` (the IPFS pin + IPNS-rebroadcast
+state — `ok`/`degraded`/`down`/`not-configured`).  Point Zabbix
+at it — run it on a timer into a file, or via an agent — and
+alert on any section leaving its healthy state.  Host-level
+operational detail is deliberately kept OUT of the public
+`/v1/health` (a public federation probe should not learn your
+backups are failing or your disk is full); use `--json` locally
+(or over SSH) for the full picture.
+
 **Third-party resilience.**  The freshness proofs embedded
 in every canary — the Blurt and Bitcoin chain heads and a
 news headline — are fetched with wide failover so a single

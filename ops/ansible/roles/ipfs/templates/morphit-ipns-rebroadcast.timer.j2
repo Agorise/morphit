@@ -1,0 +1,15 @@
+# {{ ansible_managed }}
+# Re-announce on boot + every ~4h. DHT IPNS records expire in ~48h, so a periodic
+# re-PUT from every instance keeps the stable ipns://<name> alive with no central
+# publisher. RandomizedDelaySec spreads the fleet's puts so they don't stampede.
+[Unit]
+Description=Periodically rebroadcast Morphit's IPNS record to the DHT (keeps ipns://<name> alive)
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=4h
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

@@ -150,7 +150,7 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
 
 /** Long-form names of flags that consume the next arg as their
  *  value.  Bare flags (--json, --help) are not in this set. */
-const VALUE_FLAGS = new Set(['since', 'age', 'type', 'out', 'url', 'port', 'host']);
+const VALUE_FLAGS = new Set(['since', 'age', 'type', 'out', 'url', 'port', 'host', 'from-file']);
 
 const SHORT_FLAGS: Record<string, string> = {
 	h: 'help',
@@ -199,9 +199,11 @@ function printHelp(): void {
 		'  payment-method [add|remove|list]',
 		'                                  Manage instance-specific payment-method additions (ADR-0021;',
 		'                                  no subcommand opens an interactive list/add/remove menu)',
-		'  upgrade [--check-only] [--yes] [--json]',
+		'  upgrade [--check-only] [--yes] [--json] [--from-file=PATH]',
 		'                                  Check for and apply a newer Morphit release (manual-only',
-		'                                  by default; set MORPHIT_AUTO_UPGRADE=1 to skip the prompt)',
+		'                                  by default; set MORPHIT_AUTO_UPGRADE=1 to skip the prompt).',
+		'                                  --from-file=PATH upgrades OFFLINE from a local, signed',
+		'                                  morphit-<ver>-offline.tar.gz (cable unplugged; no network).',
 		'  harden                          Server-hardening wizard: generate a personalized checklist and',
 		'                                  walk Ubuntu/SSH/UFW/fail2ban/TLS + BunkerWeb + backups setup',
 		'  ssl [status|setup] [domain]     SSL/TLS certificate (HTTPS): check cert expiry + auto-renewal,',

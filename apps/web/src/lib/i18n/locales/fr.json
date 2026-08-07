@@ -2097,6 +2097,15 @@
 			"mismatch": "Incohérence",
 			"never": "En attente de vérification"
 		},
+		"status_menu": {
+			"good": "Sain, récemment actif",
+			"quiet": "Sain, aucune transaction récente",
+			"syncing": "Accessible, synchronisation en cours",
+			"stale": "En retard et sans progresser",
+			"unreachable": "Hors ligne, injoignable",
+			"mismatch": "Identité ou configuration incohérente",
+			"never": "En file, pas encore sondé"
+		},
 		"status_desc": {
 			"good": "Accessible, en bonne santé et synchronisée dans la limite de retard.",
 			"quiet": "En bonne santé, mais aucune activité du carnet d'ordres depuis 7 jours.",

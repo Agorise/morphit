@@ -149,6 +149,10 @@ export interface KnownInstanceRow {
 	last_probed_at: Date | null;
 	last_probe_status: string | null;
 	consecutive_failures: number;
+	/** indexed_block from the PREVIOUS probe (null on the first probe / after a
+	 *  block-less outcome). Used to tell a 'degraded' peer that is advancing
+	 *  (syncing) from one that is frozen (stale). */
+	cached_indexed_block: number | null;
 }
 
 export interface ProbeOutcome {
@@ -237,7 +241,8 @@ export class FederationProbeScheduler {
 		const failMs = PROBE_INTERVAL_MS.unreachable;
 		const result = await this.db.query<KnownInstanceRow>(
 			`SELECT origin, operator_account, registered_at_time,
-			        last_probed_at, last_probe_status, consecutive_failures
+			        last_probed_at, last_probe_status, consecutive_failures,
+			        cached_indexed_block
 			 FROM known_instances
 			 WHERE last_probe_status = 'never'
 			    OR last_probed_at IS NULL
@@ -458,17 +463,35 @@ export async function probeOne(
 	if (!isHealthShape(healthData)) {
 		return mkStale('health_response_malformed');
 	}
-	if (healthData.status !== 'ok') {
-		return mkStale(`health_status: ${healthData.status}`);
-	}
 
 	// Compute chain_lag_sec.  /v1/health doesn't return this directly;
 	// we approximate from lag_blocks (3s per block on Blurt).
 	const chainLagSec = healthData.lag_blocks * 3;
+
+	if (healthData.status !== 'ok') {
+		// The health endpoint sets status='degraded' PURELY from chain lag
+		// (health.ts: degraded ⟺ lag_blocks > staleLagThreshold — there is no
+		// other trigger).  So a reachable peer whose health is WELL-FORMED but
+		// 'degraded' is simply BEHIND — an initial sync or a fall-behind — not a
+		// broken node.  Show it as 'syncing' while it is making progress, and only
+		// call it 'stale' if its indexed_block has NOT advanced since the previous
+		// probe (a frozen/stuck indexer — the genuine "degraded and not
+		// recovering" case).  A first probe with no prior block is assumed
+		// syncing: a brand-new peer that just registered on-chain is almost always
+		// mid-initial-sync, and this is exactly what lets it advertise itself as
+		// 'Syncing' the moment it appears — no full sync required.
+		const prior = inst.cached_indexed_block;
+		const advancing = prior === null || healthData.indexed_block > prior;
+		return advancing
+			? mkSyncing(instanceData, healthData, chainLagSec)
+			: mkStaleBehind(instanceData, healthData, chainLagSec);
+	}
+
 	if (chainLagSec > MAX_CHAIN_LAG_SEC) {
 		// Reachable and /v1/health is 'ok' — it's just behind, i.e. catching
 		// up (initial sync or a brief fall-behind), not broken.  'stale' is
-		// reserved for degraded/malformed health (an actual problem).
+		// reserved for a frozen/stuck indexer or malformed health (an actual
+		// problem).
 		return mkSyncing(instanceData, healthData, chainLagSec);
 	}
 
@@ -928,15 +951,37 @@ function mkQuiet(inst: InstanceShape, health: HealthShape, chainLagSec: number):
 	};
 }
 
-/** Reachable, valid, and /v1/health is 'ok' — but the chain lag exceeds
- *  the freshness threshold.  The instance is up and serving; it's just
- *  catching up.  Distinct from 'stale' (degraded health / a real
- *  problem) and 'unreachable' (HTTP failed).  Caches the snapshot like a
- *  healthy probe since the instance data is valid. */
+/** Reachable + valid, and either /v1/health is 'ok' with the chain lag over
+ *  the freshness threshold, OR health is 'degraded' (behind) but its
+ *  indexed_block is ADVANCING — both mean the instance is up, serving, and
+ *  catching up.  Distinct from 'stale' (frozen/stuck or malformed health — a
+ *  real problem) and 'unreachable' (HTTP failed).  Caches the snapshot like a
+ *  healthy probe since the instance data is valid — this also records the
+ *  indexed_block the NEXT probe compares against to detect a freeze. */
 function mkSyncing(inst: InstanceShape, health: HealthShape, chainLagSec: number): ProbeOutcome {
 	return {
 		status: 'syncing',
 		error: null,
+		cachedName: inst.name,
+		cachedTagline: inst.tagline,
+		cachedContactUrl: inst.contact_url,
+		cachedAltNetworks: normalizeAltNetworksForCache(inst.alt_networks),
+		cachedIndexedBlock: health.indexed_block,
+		cachedChainLagSec: chainLagSec
+	};
+}
+
+/** Reachable + well-formed health but 'degraded' (behind) AND the indexed_block
+ *  has NOT advanced since the previous probe — a frozen/stuck indexer, the
+ *  genuine "degraded and not recovering" problem.  Unlike mkStale (malformed /
+ *  unknown), this KEEPS the cached snapshot (name/tagline/… + the frozen
+ *  indexed_block) so the instance stays listed with its info AND the next probe
+ *  compares against the SAME frozen block — without this, mkStale would null the
+ *  block and the peer would oscillate stale⇄syncing on every probe. */
+function mkStaleBehind(inst: InstanceShape, health: HealthShape, chainLagSec: number): ProbeOutcome {
+	return {
+		status: 'stale',
+		error: 'health_degraded_not_advancing',
 		cachedName: inst.name,
 		cachedTagline: inst.tagline,
 		cachedContactUrl: inst.contact_url,

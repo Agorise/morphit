@@ -18,7 +18,9 @@ Same shipping pattern as `ops/nginx/` (canonical nginx vhosts),
 `ops/systemd/` (systemd unit files), `ops/postgres/init.sql`
 (canonical DB provisioning), `ops/backup/` (backup script + env
 template).  Operators are encouraged to use these as their
-starting points; the Ansible playbook deploys them verbatim.
+starting points.  The Ansible playbook deploys a **templated**
+version of this BunkerWeb config (see "What the Ansible playbook
+does" below for the small, deliberate differences).
 
 ## License
 
@@ -32,7 +34,10 @@ BunkerWeb source code.
   `frontend` nginx service, on a dedicated `bunkerweb_net` Docker
   network whose CIDR is fixed at `172.20.0.0/16` so the relay's
   `MORPHIT_RELAY_TRUSTED_PROXY_IPS` can be hard-coded without
-  re-inspecting after rebuilds.
+  re-inspecting after rebuilds.  A `bw-init` one-shot container runs
+  first (as root) to fix `bw-data` + Let's Encrypt cert ownership for
+  the image-default UID, then exits — see the compose comments and the
+  troubleshooting note in Quick Start step 6.
 - `frontend/` — the build context for the `frontend` nginx container:
   a `Dockerfile` (stock `nginx:alpine`) and `nginx.conf`.  This
   container serves the built SvelteKit static site AND reverse-proxies
@@ -116,6 +121,22 @@ sudo systemctl restart morphit-relay
 #    run.  After editing frontend/nginx.conf, rebuild it explicitly:
 cd /etc/bunkerweb && sudo docker compose up -d
 #   (after an nginx.conf change:)  sudo docker compose up -d --build
+#
+#   The `bw-init` container runs first (as root) and fixes bw-data +
+#   Let's Encrypt cert ownership for the image-default UID, then exits
+#   — this is why `docker compose ps` shows it "Exited (0)".  That is
+#   expected, not a failure.
+#
+#   TROUBLESHOOTING — if the site serves a self-signed cert, or the
+#   scheduler logs "Database is not initialized" in a loop, the perm
+#   init didn't take (e.g. you brought the stack up with an older copy
+#   of this compose that had no bw-init).  Fix the perms by hand and
+#   re-up:
+#     sudo docker run --rm --entrypoint sh \
+#       -v bunkerweb_bw-data:/data -v /etc/letsencrypt:/etc/letsencrypt \
+#       bunkerity/bunkerweb-scheduler:1.5.10 -c \
+#       'chown -R 101:101 /data; chgrp -R 101 /etc/letsencrypt/live /etc/letsencrypt/archive; chmod -R g+rX /etc/letsencrypt/live /etc/letsencrypt/archive'
+#     cd /etc/bunkerweb && sudo docker compose up -d
 
 # 7. Verify — the easy way: a single health check.
 npx morphit-ops bunkerweb
@@ -213,8 +234,31 @@ testing in staging.
 
 ## What the Ansible playbook does
 
-The `morphit-ansible` playbook's `bunkerweb` role deploys this
-directory verbatim to the target host and brings the compose up.
-If you're using the playbook, you don't `cp` this directory
-manually; the playbook handles it.  If you're not using the
-playbook, follow the Quick Start above.
+The `morphit-ansible` playbook's `bunkerweb` role ships a
+**templated** version of this configuration (`docker-compose.yml.j2`
++ `bunkerweb.env.j2` under `ops/ansible/roles/bunkerweb/templates/`),
+brings the compose up, and enables it.  If you're using the playbook,
+you don't `cp` this directory manually; the playbook handles it.  If
+you're not using the playbook, follow the Quick Start above.
+
+**The two are NOT byte-identical** (they were originally, but the
+Ansible path gained fresh-install hardening the first real automated
+install surfaced):
+
+- **Shared** — both now include the `bw-init` one-shot that fixes
+  `bw-data` + Let's Encrypt cert ownership for the image-default UID
+  (see the compose comments), the same WAF/CRS/rate-limit/bad-behavior
+  posture, and the same security headers.
+- **Ansible-only** — the templated env additionally sets
+  `BUNKERWEB_INSTANCES=bunkerweb` + `API_WHITELIST_IP` and its compose
+  mounts the Docker socket (read-only) into the scheduler with a
+  `group_add` for the socket's GID.  That wires BunkerWeb's explicit
+  **scheduler↔instance API mode**.  This manual config omits those:
+  it relies on the simpler shared-`bw-data`-volume coordination, which
+  is what the reference `morphit.io` manual install runs on.  If a
+  **fresh** manual install shows the scheduler falling back to Docker
+  discovery or failing to push config (check
+  `docker compose logs bunkerweb-scheduler` for "Sending nginx
+  configs failed" / discovery errors), set `BUNKERWEB_INSTANCES=bunkerweb`
+  and `API_WHITELIST_IP=127.0.0.0/8 172.20.0.0/16` in your
+  `bunkerweb.env` — mirroring the Ansible template — and re-`up`.

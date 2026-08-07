@@ -28,6 +28,17 @@
  *   MORPHIT_AUTO_UPGRADE          (default unset) — set to '1'
  *                                  to skip the y/N confirmation
  *                                  prompt.  Required for cron use.
+ *   MORPHIT_UPGRADE_TARBALL       (default unset) — absolute path to a
+ *                                  local, self-contained signed
+ *                                  morphit-<ver>-offline.tar.gz. When set
+ *                                  (or --from-file=PATH), the upgrade runs
+ *                                  FULLY OFFLINE: no network discovery, no
+ *                                  download; the tarball's sibling `.asc` is
+ *                                  verified against the local signer keys and
+ *                                  an UNSIGNED tarball is refused. Its prebuilt
+ *                                  node_modules (the .morphit-bundle-complete
+ *                                  marker) skips npm ci, so the rebuild needs
+ *                                  no registry either — cable-unplugged upgrade.
  *   MORPHIT_RELEASE_HOST          (default: git.agorise.net)
  *   MORPHIT_RELEASE_REPO          (default: agorise/morphit)
  *   MORPHIT_RELEASE_MIRRORS       (default unset) — comma-separated
@@ -93,7 +104,7 @@
  */
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, readdirSync, statSync, copyFileSync, cpSync, readlinkSync } from 'node:fs';
-import { join, dirname, basename } from 'node:path';
+import { join, dirname, basename, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
@@ -250,6 +261,137 @@ interface SelectedAssets {
 	readonly tarball: ForgejoReleaseAsset;
 	readonly sha: ForgejoReleaseAsset;
 	readonly sig: ForgejoReleaseAsset | null;
+}
+
+/** Parse a vX.Y.Z tag from a release tarball filename, e.g.
+ *  'morphit-v1.10.0-offline.tar.gz' or 'morphit-v1.10.0.tar.gz' → 'v1.10.0'. PURE. */
+export function parseTagFromTarballName(name: string): string | null {
+	// Optional prerelease (-beta.49, -rc.1, …) is captured, but the -offline
+	// BUNDLE suffix is not part of the version, so a negative lookahead skips it.
+	const m = /v(\d+\.\d+\.\d+(?:-(?!offline)[0-9A-Za-z.]+)?)/.exec(name);
+	return m ? `v${m[1]}` : null;
+}
+
+/** Resolve the operator-supplied LOCAL release tarball for a fully OFFLINE
+ *  upgrade (cable unplugged). Point at a downloaded self-contained
+ *  morphit-<ver>-offline.tar.gz with `--from-file=<path>` (or the
+ *  MORPHIT_UPGRADE_TARBALL env). Returns the tarball + sibling `.asc` (if any)
+ *  + the version parsed from the filename, or null when no offline source was
+ *  requested (the normal network path). Throws on a bad/missing path.
+ *
+ *  Trust is unchanged: with no reachable primary there is no anchored hash, so
+ *  decideTrust() will REQUIRE a valid GPG signature (verified against the local
+ *  code-reviewed signer keys) — an UNSIGNED offline tarball is refused, exactly
+ *  as an unsigned release is refused online when the trusted primary is down. */
+export function resolveOfflineTarball(
+	flags: UpgradeFlags
+): { tarballPath: string; sigPath: string | null; tag: string } | null {
+	const raw = (flags['from-file'] ?? process.env.MORPHIT_UPGRADE_TARBALL ?? '').trim();
+	if (raw === '') return null;
+	const tarballPath = resolve(raw);
+	if (!existsSync(tarballPath)) {
+		throw new Error(`--from-file: no such file: ${tarballPath}`);
+	}
+	if (!tarballPath.endsWith('.tar.gz')) {
+		throw new Error(`--from-file: expected a .tar.gz release tarball, got ${basename(tarballPath)}`);
+	}
+	const sib = `${tarballPath}.asc`;
+	const sigPath = existsSync(sib) ? sib : null;
+	const tag = parseTagFromTarballName(basename(tarballPath));
+	if (tag === null) {
+		throw new Error(
+			`--from-file: could not read a version (vX.Y.Z) from ${basename(tarballPath)}. ` +
+				`Expected a name like morphit-v1.10.0-offline.tar.gz.`
+		);
+	}
+	return { tarballPath, sigPath, tag };
+}
+
+/** The conventional drop-dir where an operator leaves offline release tarballs
+ *  (copied from a USB stick / another machine). Default `<installDir>-offline`
+ *  — a SIBLING of the install dir, so it survives the upgrade's rename-swap.
+ *  Override with MORPHIT_OFFLINE_RELEASE_DIR. */
+export function offlineReleaseDir(installDir: string): string {
+	return process.env.MORPHIT_OFFLINE_RELEASE_DIR ?? `${installDir}-offline`;
+}
+
+/** Compare two vX.Y.Z[-pre] tags. Returns >0 if a is newer, <0 if older, 0 if
+ *  equal/uncomparable. Release (no prerelease) beats a prerelease of the same
+ *  X.Y.Z. PURE. */
+export function compareTags(a: string, b: string): number {
+	const parse = (t: string): { nums: number[]; pre: string | null } | null => {
+		const m = /^v?(\d+)\.(\d+)\.(\d+)(?:-(.+))?$/.exec(t.trim());
+		if (!m) return null;
+		return { nums: [Number(m[1]), Number(m[2]), Number(m[3])], pre: m[4] ?? null };
+	};
+	const pa = parse(a);
+	const pb = parse(b);
+	if (pa === null || pb === null) return 0;
+	for (let i = 0; i < 3; i++) {
+		if (pa.nums[i]! !== pb.nums[i]!) return pa.nums[i]! - pb.nums[i]!;
+	}
+	// same X.Y.Z: a release (pre null) is newer than a prerelease
+	if (pa.pre === null && pb.pre !== null) return 1;
+	if (pa.pre !== null && pb.pre === null) return -1;
+	if (pa.pre === null && pb.pre === null) return 0;
+	return pa.pre! < pb.pre! ? -1 : pa.pre! > pb.pre! ? 1 : 0;
+}
+
+/** Scan the offline drop-dir for the newest signed release tarball an operator
+ *  has left there. A tarball with NO sibling `.asc` is ignored — offline installs
+ *  require a signature (an unsigned tarball can't be trusted with no primary to
+ *  anchor a hash). Returns the newest {tarballPath, sigPath, tag} or null. Never
+ *  throws. */
+export function findLocalOfflineRelease(installDir: string): { tarballPath: string; sigPath: string; tag: string } | null {
+	const dir = offlineReleaseDir(installDir);
+	let names: string[];
+	try {
+		names = readdirSync(dir);
+	} catch {
+		return null; // dir absent / unreadable — nothing dropped
+	}
+	let best: { tarballPath: string; sigPath: string; tag: string } | null = null;
+	for (const name of names) {
+		if (!name.endsWith('.tar.gz') || name.endsWith('.sha256.tar.gz')) continue;
+		const tag = parseTagFromTarballName(name);
+		if (tag === null) continue;
+		const tarballPath = join(dir, name);
+		const sigPath = `${tarballPath}.asc`;
+		if (!existsSync(sigPath)) continue; // unsigned → not trustable offline
+		if (best === null || compareTags(tag, best.tag) > 0) {
+			best = { tarballPath, sigPath, tag };
+		}
+	}
+	return best;
+}
+
+/** Build a minimal ForgejoRelease describing a LOCAL offline tarball so the
+ *  offline path reuses the SAME downstream flow (version compare, trust,
+ *  extract, rebuild) as the online one. The asset "URLs" are local paths and are
+ *  never fetched — the offline branch copies from disk. PURE. */
+function synthOfflineRelease(
+	tag: string,
+	tarballPath: string,
+	sigPath: string | null
+): ForgejoRelease {
+	const name = basename(tarballPath);
+	const assets: ForgejoReleaseAsset[] = [
+		{ name, browser_download_url: tarballPath, size: 0 },
+		// A synthetic .sha256 asset keeps selectReleaseAssets() happy; it is never
+		// downloaded or trusted offline (expectedHash stays null → GPG-sig required).
+		{ name: `${name}.sha256`, browser_download_url: `${tarballPath}.sha256`, size: 0 }
+	];
+	if (sigPath !== null) {
+		assets.push({ name: `${name}.asc`, browser_download_url: sigPath, size: 0 });
+	}
+	return {
+		tag_name: tag,
+		name: tag,
+		body: '',
+		html_url: `file://${tarballPath}`,
+		published_at: new Date(0).toISOString(),
+		assets
+	};
 }
 
 /** Pick the tarball + sha256 + (optional) detached GPG signature out of a
@@ -956,31 +1098,66 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	}
 
 	// ─── 2. Discover the latest release across sources ──────────
+	// OFFLINE: an operator-supplied local tarball (--from-file / MORPHIT_UPGRADE_
+	// TARBALL) bypasses all network discovery + download — the whole point of the
+	// offline-first guarantee (install AND upgrade must work cable-unplugged).
+	let offline: { tarballPath: string; sigPath: string | null; tag: string } | null;
+	try {
+		offline = resolveOfflineTarball(opts.flags);
+	} catch (err) {
+		printError(err instanceof Error ? err.message : String(err));
+		return 5;
+	}
+
 	// The PRIMARY is the trusted hash anchor. We fetch each source's
 	// release listing; `primaryRelease` (if reachable) anchors the
 	// SHA-256, while a mirror release lets us still SEE + (if signed)
 	// install when the primary is down. Discovery order = source order.
 	let primaryRelease: ForgejoRelease | null = null;
 	const releasesBySource: Array<{ src: ReleaseSource; rel: ForgejoRelease }> = [];
-	const fetchErrors: string[] = [];
-	for (const src of sources) {
-		try {
-			const rel = await fetchLatestRelease(src.host, src.repo);
-			releasesBySource.push({ src, rel });
-			if (src.isPrimary) primaryRelease = rel;
-		} catch (err) {
-			fetchErrors.push(`${src.host}/${src.repo}: ${err instanceof Error ? err.message : String(err)}`);
+	let latest: ForgejoRelease | null;
+	if (offline !== null) {
+		latest = synthOfflineRelease(offline.tag, offline.tarballPath, offline.sigPath);
+		info(`Offline upgrade — using local tarball: ${offline.tarballPath}`);
+		if (offline.sigPath === null) {
+			warn(
+				'No sibling .asc signature next to the tarball. An offline upgrade REQUIRES a ' +
+					'GPG-signed release (verified against the local signer keys); an unsigned tarball will be refused.'
+			);
 		}
-	}
-	const latest = primaryRelease ?? releasesBySource[0]?.rel ?? null;
-	if (latest === null) {
-		printError(
-			`Could not reach any release source.\n  ` + fetchErrors.join('\n  ')
-		);
-		return 5;
-	}
-	if (primaryRelease === null) {
-		warn(`Primary (${host}/${repo}) unreachable; using mirror for discovery. A valid release signature will be REQUIRED to install.`);
+	} else {
+		const fetchErrors: string[] = [];
+		for (const src of sources) {
+			try {
+				const rel = await fetchLatestRelease(src.host, src.repo);
+				releasesBySource.push({ src, rel });
+				if (src.isPrimary) primaryRelease = rel;
+			} catch (err) {
+				fetchErrors.push(`${src.host}/${src.repo}: ${err instanceof Error ? err.message : String(err)}`);
+			}
+		}
+		latest = primaryRelease ?? releasesBySource[0]?.rel ?? null;
+		if (latest === null) {
+			// All network sources unreachable. Before giving up, fall back to a
+			// signed tarball the operator has dropped in the offline dir — this is
+			// what lets an upgrade begun online CONTINUE (or a fully offline box
+			// upgrade) with the cable unplugged, exactly like the first install.
+			const dropped = findLocalOfflineRelease(installDir);
+			if (dropped !== null) {
+				offline = dropped;
+				latest = synthOfflineRelease(dropped.tag, dropped.tarballPath, dropped.sigPath);
+				info(`No network — falling back to the local offline release: ${dropped.tarballPath}`);
+			} else {
+				printError(
+					`Could not reach any release source, and no signed offline tarball was found in ` +
+						`${offlineReleaseDir(installDir)} (drop a morphit-<ver>-offline.tar.gz + its .asc there, ` +
+						`or use --from-file=PATH).\n  ` + fetchErrors.join('\n  ')
+				);
+				return 5;
+			}
+		} else if (primaryRelease === null) {
+			warn(`Primary (${host}/${repo}) unreachable; using mirror for discovery. A valid release signature will be REQUIRED to install.`);
+		}
 	}
 
 	const currentTag = localInfo?.tag ?? '(unknown)';
@@ -1053,56 +1230,79 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		}
 	}
 
-	// ─── 5. Download + verify (mirror-aware, integrity-anchored) ─
+	// ─── 5. Obtain the tarball + verify (mirror-aware, integrity-anchored) ─
 	const tmpDir = mkTempDir();
-
-	// 5a. Trust anchor: the SHA-256 always comes from the PRIMARY.
 	let expectedHash: string | null = null;
-	if (primaryRelease) {
-		const primaryAssets = selectReleaseAssets(primaryRelease.assets);
-		if (primaryAssets) {
-			const primaryShaPath = join(tmpDir, 'primary.tar.gz.sha256');
-			try {
-				await downloadTo(primaryAssets.sha.browser_download_url, primaryShaPath);
-				expectedHash = parseShaFile(primaryShaPath);
-			} catch (err) {
-				warn(`Could not fetch the SHA-256 from the primary: ${err instanceof Error ? err.message : String(err)}`);
-			}
-		}
-	}
-
-	// 5b. Download the tarball BYTES — primary first, then mirrors.
 	const tarballPath = join(tmpDir, chosenAssets.tarball.name);
 	let bytesFromPrimary = false;
 	let bytesSource: ReleaseSource | null = null;
 	let sigPath: string | null = null;
-	const dlErrors: string[] = [];
-	for (const { src, rel } of releasesBySource) {
-		const a = selectReleaseAssets(rel.assets);
-		if (!a) continue;
+
+	if (offline !== null) {
+		// OFFLINE: copy the local tarball (+ its sibling .asc, if present) into the
+		// scratch dir so verify/extract/cleanup are byte-identical to the online
+		// path. No network is touched: expectedHash stays null, so decideTrust()
+		// below REQUIRES a verified GPG signature — an unsigned offline tarball is
+		// refused, exactly like an unsigned release when the primary is unreachable.
 		try {
-			info(`Downloading ${a.tarball.name} from ${src.host}${src.isPrimary ? ' (primary)' : ' (mirror)'}...`);
-			await downloadTo(a.tarball.browser_download_url, tarballPath);
-			bytesFromPrimary = src.isPrimary;
-			bytesSource = src;
-			// Pull the detached signature from the SAME source, if present.
-			if (a.sig) {
-				sigPath = join(tmpDir, a.sig.name);
+			copyFileSync(offline.tarballPath, tarballPath);
+			if (offline.sigPath !== null) {
+				sigPath = `${tarballPath}.asc`;
+				copyFileSync(offline.sigPath, sigPath);
+			}
+		} catch (err) {
+			printError(`Could not read the local tarball: ${err instanceof Error ? err.message : String(err)}`);
+			cleanupTmp(tmpDir);
+			return 5;
+		}
+		// A non-null bytesSource just satisfies the "did we get bytes?" guard below;
+		// it is never used as a network source offline.
+		bytesSource = { host: 'local-file', repo: offline.tarballPath, isPrimary: false };
+		info(`Using local offline tarball (${chosenAssets.tarball.name}); no network required.`);
+	} else {
+		// 5a. Trust anchor: the SHA-256 always comes from the PRIMARY.
+		if (primaryRelease) {
+			const primaryAssets = selectReleaseAssets(primaryRelease.assets);
+			if (primaryAssets) {
+				const primaryShaPath = join(tmpDir, 'primary.tar.gz.sha256');
 				try {
-					await downloadTo(a.sig.browser_download_url, sigPath);
-				} catch {
-					sigPath = null; // signature optional; trust logic handles absence
+					await downloadTo(primaryAssets.sha.browser_download_url, primaryShaPath);
+					expectedHash = parseShaFile(primaryShaPath);
+				} catch (err) {
+					warn(`Could not fetch the SHA-256 from the primary: ${err instanceof Error ? err.message : String(err)}`);
 				}
 			}
-			break;
-		} catch (err) {
-			dlErrors.push(`${src.host}: ${err instanceof Error ? err.message : String(err)}`);
 		}
-	}
-	if (bytesSource === null) {
-		printError(`Could not download the release tarball from any source.\n  ${dlErrors.join('\n  ')}`);
-		cleanupTmp(tmpDir);
-		return 5;
+
+		// 5b. Download the tarball BYTES — primary first, then mirrors.
+		const dlErrors: string[] = [];
+		for (const { src, rel } of releasesBySource) {
+			const a = selectReleaseAssets(rel.assets);
+			if (!a) continue;
+			try {
+				info(`Downloading ${a.tarball.name} from ${src.host}${src.isPrimary ? ' (primary)' : ' (mirror)'}...`);
+				await downloadTo(a.tarball.browser_download_url, tarballPath);
+				bytesFromPrimary = src.isPrimary;
+				bytesSource = src;
+				// Pull the detached signature from the SAME source, if present.
+				if (a.sig) {
+					sigPath = join(tmpDir, a.sig.name);
+					try {
+						await downloadTo(a.sig.browser_download_url, sigPath);
+					} catch {
+						sigPath = null; // signature optional; trust logic handles absence
+					}
+				}
+				break;
+			} catch (err) {
+				dlErrors.push(`${src.host}: ${err instanceof Error ? err.message : String(err)}`);
+			}
+		}
+		if (bytesSource === null) {
+			printError(`Could not download the release tarball from any source.\n  ${dlErrors.join('\n  ')}`);
+			cleanupTmp(tmpDir);
+			return 5;
+		}
 	}
 
 	// ─── 6. Verify integrity + decide trust ─────────────────────
@@ -1281,8 +1481,18 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 
 	// ─── 9. Install workspace dependencies ─────────────────────
 	try {
-		info('Running npm ci in installed dir (this can take a minute)...');
-		runOrThrow('npm', ['ci', '--no-audit', '--no-fund'], { cwd: installDir });
+		// A self-contained OFFLINE tarball ships a prebuilt node_modules carrying
+		// the .morphit-bundle-complete marker — the same marker the Ansible install
+		// checks. When present, npm ci (the one step that would reach the registry)
+		// is SKIPPED so an offline `morphit-ops upgrade` completes cable-unplugged.
+		// An ordinary online tarball has no marker → npm ci runs as before.
+		const bundleMarker = join(installDir, 'node_modules', '.morphit-bundle-complete');
+		if (existsSync(bundleMarker)) {
+			info('Offline bundle detected (prebuilt node_modules) — skipping npm ci; no registry needed.');
+		} else {
+			info('Running npm ci in installed dir (this can take a minute)...');
+			runOrThrow('npm', ['ci', '--no-audit', '--no-fund'], { cwd: installDir });
+		}
 	} catch (err) {
 		warn('npm ci failed; rolling back.');
 		return rollback(installDir, backupDir, tmpDir, err);

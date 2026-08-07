@@ -2097,6 +2097,15 @@
 			"mismatch": "Nicht übereinstimmend",
 			"never": "Prüfung ausstehend"
 		},
+		"status_menu": {
+			"good": "Gesund, kürzlich aktiv",
+			"quiet": "Gesund, keine aktuellen Trades",
+			"syncing": "Erreichbar, synchronisiert noch",
+			"stale": "Zurück und ohne Fortschritt",
+			"unreachable": "Offline, nicht erreichbar",
+			"mismatch": "Identität oder Konfiguration abweichend",
+			"never": "In Warteschlange, noch ungeprüft"
+		},
 		"status_desc": {
 			"good": "Erreichbar, gesund und innerhalb der Verzögerungsschwelle synchronisiert.",
 			"quiet": "Gesund, aber seit 7 Tagen keine Orderbuch-Aktivität.",

@@ -2097,6 +2097,15 @@
 			"mismatch": "不匹配",
 			"never": "等待探測"
 		},
+		"status_menu": {
+			"good": "正常，近期活躍",
+			"quiet": "正常，近期無交易",
+			"syncing": "可連線，仍在同步",
+			"stale": "落後且未推進",
+			"unreachable": "離線，無法連線",
+			"mismatch": "身分或設定不符",
+			"never": "排隊中，尚未探測"
+		},
 		"status_desc": {
 			"good": "可連線、健康，並已在延遲門檻內完成同步。",
 			"quiet": "健康，但過去 7 天訂單簿沒有活動。",

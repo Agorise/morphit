@@ -2097,6 +2097,15 @@
 			"mismatch": "Mismatch",
 			"never": "Pending Probe"
 		},
+		"status_menu": {
+			"good": "Healthy, recently active",
+			"quiet": "Healthy, no recent trades",
+			"syncing": "Reachable, still catching up",
+			"stale": "Behind and not recovering",
+			"unreachable": "Offline, could not connect",
+			"mismatch": "Identity or config mismatch",
+			"never": "Queued, not yet probed"
+		},
 		"status_desc": {
 			"good": "Reachable, healthy, and synced within the lag threshold.",
 			"quiet": "Healthy, but no orderbook activity in the last 7 days.",
