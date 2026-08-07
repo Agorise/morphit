@@ -47,11 +47,34 @@
     postgres_version_dir: "{{ ansible_facts.packages['postgresql'][0].version.split('+')[0].split('.')[0] if 'postgresql' in ansible_facts.packages else '16' }}"
   notify: Restart postgresql
 
-- name: Ensure pg_hba.conf restricts host connections to local only
+- name: Remove the permissive host-all-all loopback rule (hardening)
+  # We do NOT want a blanket "any user, any DB over 127.0.0.1" rule. But we MUST
+  # still let the ONE user the indexer + relay use in (both connect via
+  # localhost:PORT = loopback TCP, sharing the morphit_indexer DB/user) — the
+  # scoped rule below does exactly that. cp668: previously this task removed the
+  # blanket rule and added NOTHING, so the indexer's TCP login had no matching
+  # pg_hba entry and died with 'no pg_hba.conf entry for host "127.0.0.1"' the
+  # first time Postgres reloaded pg_hba.conf (i.e. the next restart/reboot).
   ansible.builtin.lineinfile:
     path: /etc/postgresql/{{ postgres_version_dir }}/main/pg_hba.conf
     regexp: '^host\s+all\s+all\s+'
     state: absent
+  vars:
+    postgres_version_dir: "{{ ansible_facts.packages['postgresql'][0].version.split('+')[0].split('.')[0] if 'postgresql' in ansible_facts.packages else '16' }}"
+  notify: Restart postgresql
+
+- name: Allow ONLY the morphit_indexer user in over loopback TCP (indexer + relay)
+  # scram-sha-256 matches the password encoding the postgresql_user task writes on
+  # PG 14+ (Ubuntu 24 ships PG 16). Both IPv4 and IPv6 loopback are covered because
+  # `localhost` in the DATABASE_URL can resolve to either 127.0.0.1 or ::1.
+  ansible.builtin.lineinfile:
+    path: /etc/postgresql/{{ postgres_version_dir }}/main/pg_hba.conf
+    line: "{{ item }}"
+    insertafter: EOF
+    state: present
+  loop:
+    - "host    {{ postgres_indexer_db }}    {{ postgres_indexer_user }}    127.0.0.1/32    scram-sha-256"
+    - "host    {{ postgres_indexer_db }}    {{ postgres_indexer_user }}    ::1/128    scram-sha-256"
   vars:
     postgres_version_dir: "{{ ansible_facts.packages['postgresql'][0].version.split('+')[0].split('.')[0] if 'postgresql' in ansible_facts.packages else '16' }}"
   notify: Restart postgresql

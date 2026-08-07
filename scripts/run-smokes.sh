@@ -281,6 +281,7 @@ SMOKES=(
 	".:chat-inbox-instant-subject-smoke"
 	".:health-backup-freshness-smoke"
 	".:indexer-public-health-operational-smoke"
+	".:postgres-pg-hba-loopback-smoke"
 	".:moderation-flag-clearance-smoke"
 	".:profile-link-glyphs-single-home-smoke"
 	".:reserved-name-owner-parity-smoke"

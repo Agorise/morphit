@@ -633,14 +633,15 @@ jobs:
         # and moves on — the primary (published above) is the SHA-256 anchor, so a
         # release NEVER fails because of a mirror. Enable each mirror by adding a
         # repository-write PAT as an Actions secret (CODEBERG_TOKEN for codeberg.org /
-        # GITEA_COM_TOKEN for gitea.com); until then the step just skips that mirror.
+        # GITEACOM_TOKEN for gitea.com — note: Forgejo reserves the GITEA_ prefix, so the
+        # gitea.com secret must be named GITEACOM_TOKEN); until then the step just skips that mirror.
         #
         # Tag flows via env (AUDIT-CI-7), already format-validated in `ver`.
         env:
           TAG: ${{ steps.ver.outputs.tag }}
           TARBALL: ${{ steps.ver.outputs.tarball }}
           CODEBERG_TOKEN: ${{ secrets.CODEBERG_TOKEN }}
-          GITEA_COM_TOKEN: ${{ secrets.GITEA_COM_TOKEN }}  # token for the gitea.com mirror
+          GITEA_COM_TOKEN: ${{ secrets.GITEACOM_TOKEN }}  # gitea.com token — secret is GITEACOM_TOKEN (Forgejo RESERVES the GITEA_ prefix, so GITEA_COM_TOKEN cannot be created)
         run: |
           set -u
           # Reuse the SAME release JSON shape as the primary step (node-encoded body,
