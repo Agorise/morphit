@@ -89,6 +89,31 @@ const asset = (name: string) => ({ name, browser_download_url: `https://h/${name
 
 	const noSha = selectReleaseAssets([asset('morphit-v1.tar.gz')]);
 	expect('assets: null when sha missing', noSha === null);
+
+	// cp669 — a 1.10.1+ release ships BOTH the slim tarball AND the -offline
+	// bundle (each with its own .sha256/.asc). An online upgrade must pick the
+	// SLIM tarball and the SLIM tarball's .sha256 — NOT cross them (that caused a
+	// false "SHA-256 mismatch" on a mirror fallback). Order the -offline assets
+	// FIRST to prove selection isn't just "first .tar.gz".
+	const both = selectReleaseAssets([
+		asset('morphit-v1.10.2-offline.tar.gz'),
+		asset('morphit-v1.10.2-offline.tar.gz.sha256'),
+		asset('morphit-v1.10.2-offline.tar.gz.asc'),
+		asset('morphit-v1.10.2.tar.gz'),
+		asset('morphit-v1.10.2.tar.gz.sha256'),
+		asset('morphit-v1.10.2.tar.gz.asc')
+	]);
+	expect('assets: prefers the SLIM tarball when -offline is also present', both?.tarball.name === 'morphit-v1.10.2.tar.gz');
+	expect('assets: pairs the SLIM tarball with its OWN .sha256 (not the offline one)', both?.sha.name === 'morphit-v1.10.2.tar.gz.sha256');
+	expect('assets: pairs the SLIM tarball with its OWN .asc', both?.sig?.name === 'morphit-v1.10.2.tar.gz.asc');
+
+	// the synthetic --from-file release has ONLY the -offline tarball → must still
+	// select it (fallback), paired with ITS matching .sha256.
+	const offlineOnly = selectReleaseAssets([
+		asset('morphit-v1.10.2-offline.tar.gz'),
+		asset('morphit-v1.10.2-offline.tar.gz.sha256')
+	]);
+	expect('assets: falls back to -offline when it is the only tarball', offlineOnly?.tarball.name === 'morphit-v1.10.2-offline.tar.gz' && offlineOnly?.sha.name === 'morphit-v1.10.2-offline.tar.gz.sha256');
 }
 
 // ── decideTrust (security matrix) ───────────────────────────────────

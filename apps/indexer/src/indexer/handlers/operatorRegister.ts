@@ -33,7 +33,7 @@
 
 import type pg from 'pg';
 import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contract';
-import { impersonatesReservedName, isReservedTag } from '$indexer/confusables';
+import { impersonatesReservedOperatorName, ownsReservedName, isReservedTag } from '$indexer/confusables';
 
 const TAG_MIN = 1;
 const TAG_MAX = 64;
@@ -51,9 +51,15 @@ const ORIGIN_MAX = 2048;
 const TAG_PATTERN = /^[a-z0-9._-]+$/;
 
 /** Same forbidden-char class as profile display names — block
- *  control chars, bidi overrides, zero-width joiners. */
+ *  control chars, bidi overrides, zero-width joiners.
+ *  cp671: U+200C (ZWNJ) and U+200D (ZWJ) are intentionally NOT blocked — the
+ *  zero-width non-joiner is essential to correct Farsi / Arabic-script and Indic
+ *  orthography (Persian's "half-space" / nim-fasele). Only the zero-width SPACE
+ *  (U+200B) and the explicit bidi override/isolate controls stay blocked; normal
+ *  RTL text needs none of those (direction comes from the letters; the frontend
+ *  renders names with dir="auto"). */
 const FORBIDDEN_DISPLAY_NAME_CHARS =
-	/[\u0000-\u001F\u007F-\u009F\u200B-\u200D\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/;
+	/[\u0000-\u001F\u007F-\u009F\u200B\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/;
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
 	return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -120,16 +126,11 @@ function validate(payload: unknown): ValidatedPayload | { reason: string } {
 	if (firstCodePoint === 0x40 /* @ */ || firstCodePoint === 0xff20 /* ＠ */) {
 		return { reason: 'display_name_leading_at' };
 	}
-	// Homograph impersonation of reserved operator handles —
-	// Cyrillic/Greek/fullwidth substitutions for Latin produce
-	// display_names that look identical to "@morphit-fees" etc.
-	// but are different byte-sequences.  The skeleton function
-	// maps them to a canonical form; we reject when the skeleton
-	// matches a reserved name.  Mirrors the user-profile rule.
-	// (O1.1)
-	if (impersonatesReservedName(dnTrimmed)) {
-		return { reason: 'display_name_impersonates_reserved' };
-	}
+	// Homograph impersonation of reserved operator handles is checked in the
+	// handler (cp670), where the chain-authenticated signer is available for the
+	// owner-exemption and the operator-specific policy (brand allowed inside a
+	// longer distinct name — "Morphit Latino"; infra/personal handles + bare-brand
+	// and homographs still blocked).
 
 	// contact_url — optional. If provided, must be a well-formed
 	// http(s) URL under the length cap. We don't verify it resolves;
@@ -298,6 +299,16 @@ function validate(payload: unknown): ValidatedPayload | { reason: string } {
 const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<HandlerResult> => {
 	const v = validate(ctx.payload);
 	if ('reason' in v) return { ok: false, reason: v.reason };
+
+	// cp670 — display-name impersonation, signer-aware. The project brand
+	// ("Morphit", "Agorise") is allowed inside a longer, distinct instance name
+	// so first-party regional instances can brand themselves ("Morphit Latino");
+	// bare-brand/homograph impersonation and any infra/personal handle stay
+	// blocked. The rightful owner of a reserved name is exempt for THAT name
+	// (matches profile.ts, which operatorRegister previously did not apply).
+	if (!ownsReservedName(ctx.signer, v.display_name) && impersonatesReservedOperatorName(v.display_name)) {
+		return { ok: false, reason: 'display_name_impersonates_reserved' };
+	}
 
 	// First, check that this account hasn't already registered. Per
 	// Q1.1 ratification, the register op is one-time per account.

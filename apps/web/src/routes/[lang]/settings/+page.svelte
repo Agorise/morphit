@@ -1807,6 +1807,7 @@
 			<span class="mb-2 block font-semibold">{$_('settings.short_bio.input_label')}</span>
 			<textarea
 				bind:value={bioInput}
+				dir="auto"
 				rows="2"
 				maxlength={SHORT_BIO_MAX_LENGTH * 4}
 				autocomplete="off"

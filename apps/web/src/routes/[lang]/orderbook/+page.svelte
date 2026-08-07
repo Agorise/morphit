@@ -1229,6 +1229,7 @@
 						<input
 							type="text"
 							bind:value={region}
+							dir="auto"
 							maxlength="128"
 							autocomplete="off"
 							class="w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"

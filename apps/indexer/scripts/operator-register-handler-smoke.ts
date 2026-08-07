@@ -303,6 +303,73 @@ await scenario('O1.1: rejects display_name impersonating reserved name', async (
 	assertEqual(r, { ok: false, reason: 'display_name_impersonates_reserved' }, 'result');
 });
 
+// ─── cp670 — brand allowed in a longer distinct name; bare/infra blocked ───
+
+await scenario('cp670: accepts "Morphit Latino" (brand in a distinct name)', async () => {
+	const mock = makeMockClient([
+		{ match: 'SELECT account FROM operators', rows: [] },
+		{ match: 'INSERT INTO operators', rows: [{ account: 'morphitlat-relay' }], rowCount: 1 },
+		{ match: 'INSERT INTO known_instances', rowCount: 1 },
+		{ match: 'INSERT INTO operator_registration_events', rowCount: 1 }
+	]);
+	const r = await handler(
+		makeCtx({
+			signer: 'morphitlat-relay',
+			payload: { tag: 'morphitlat-relay', display_name: 'Morphit Latino', origin: 'https://morphit.lat' }
+		}),
+		mock.client
+	);
+	assertEqual(r, { ok: true }, 'result');
+});
+
+await scenario('cp670: rejects bare "morphit" display_name', async () => {
+	const mock = makeMockClient();
+	const r = await handler(makeCtx({ signer: 'alice', payload: { tag: 'acme', display_name: 'morphit' } }), mock.client);
+	assertEqual(r, { ok: false, reason: 'display_name_impersonates_reserved' }, 'result');
+});
+
+await scenario('cp670: rejects capitalized bare "Morphit" display_name', async () => {
+	const mock = makeMockClient();
+	const r = await handler(makeCtx({ signer: 'alice', payload: { tag: 'acme', display_name: 'Morphit' } }), mock.client);
+	assertEqual(r, { ok: false, reason: 'display_name_impersonates_reserved' }, 'result');
+});
+
+await scenario('cp670: rejects infra handle "morphit-fees" as display_name', async () => {
+	const mock = makeMockClient();
+	const r = await handler(makeCtx({ signer: 'alice', payload: { tag: 'acme', display_name: 'morphit-fees' } }), mock.client);
+	assertEqual(r, { ok: false, reason: 'display_name_impersonates_reserved' }, 'result');
+});
+
+await scenario('cp670: owner exemption — signer "morphit" may set "Morphit"', async () => {
+	const mock = makeMockClient([
+		{ match: 'SELECT account FROM operators', rows: [] },
+		{ match: 'INSERT INTO operators', rows: [{ account: 'morphit' }], rowCount: 1 },
+		{ match: 'INSERT INTO operator_registration_events', rowCount: 1 }
+	]);
+	const r = await handler(makeCtx({ signer: 'morphit', payload: { tag: 'official', display_name: 'Morphit' } }), mock.client);
+	assertEqual(r, { ok: true }, 'result');
+});
+
+// ─── cp671 — RTL: Persian display name with ZWNJ is accepted ───
+
+await scenario('cp671: accepts Persian display_name with ZWNJ (half-space)', async () => {
+	const mock = makeMockClient([
+		{ match: 'SELECT account FROM operators', rows: [] },
+		{ match: 'INSERT INTO operators', rows: [{ account: 'parsi-relay' }], rowCount: 1 },
+		{ match: 'INSERT INTO known_instances', rowCount: 1 },
+		{ match: 'INSERT INTO operator_registration_events', rowCount: 1 }
+	]);
+	// \u06A9\u062A\u0627\u0628\u200C\u0647\u0627 = "ketab-ha" (books) with ZWNJ before the plural suffix
+	const r = await handler(
+		makeCtx({
+			signer: 'parsi-relay',
+			payload: { tag: 'parsi-relay', display_name: '\u06A9\u062A\u0627\u0628\u200C\u0647\u0627', origin: 'https://parsi.example' }
+		}),
+		mock.client
+	);
+	assertEqual(r, { ok: true }, 'result');
+});
+
 // O1.1 — NFC normalization happens (codepoint-count is post-NFC)
 await scenario('O1.1: NFC-normalizes display_name before length check', async () => {
 	const mock = makeMockClient([

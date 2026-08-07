@@ -211,6 +211,7 @@
 				</select>
 				{#if country === '__other__'}
 					<input
+						dir="auto"
 						type="text"
 						placeholder={$_('mailing_address_modal.country_iso_placeholder')}
 						maxlength="2"
@@ -235,6 +236,7 @@
 					>
 				</label>
 				<input
+					dir="auto"
 					id="ma-recipient"
 					type="text"
 					bind:value={recipientName}
@@ -252,6 +254,7 @@
 					{$_('mailing_address_modal.street_label')}
 				</label>
 				<input
+					dir="auto"
 					id="ma-street"
 					type="text"
 					bind:value={street}
@@ -270,6 +273,7 @@
 					>
 				</label>
 				<input
+					dir="auto"
 					id="ma-street2"
 					type="text"
 					bind:value={street2}
@@ -285,6 +289,7 @@
 						{$_('mailing_address_modal.city_label')}
 					</label>
 					<input
+						dir="auto"
 						id="ma-city"
 						type="text"
 						bind:value={city}
@@ -301,6 +306,7 @@
 						>
 					</label>
 					<input
+						dir="auto"
 						id="ma-state"
 						type="text"
 						bind:value={state_}
@@ -313,6 +319,7 @@
 						{$_('mailing_address_modal.postal_label')}
 					</label>
 					<input
+						dir="auto"
 						id="ma-postal"
 						type="text"
 						bind:value={postalCode}
@@ -332,6 +339,7 @@
 					>
 				</label>
 				<textarea
+					dir="auto"
 					id="ma-note"
 					bind:value={note}
 					maxlength={MAILING_ADDRESS_LIMITS.noteMax}

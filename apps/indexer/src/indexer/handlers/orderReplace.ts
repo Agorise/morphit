@@ -32,12 +32,12 @@ const MAX_EXPIRES_AT_DAYS = 365;
  *  Mirror of order.ts.  See that file for full rationale.
  *  Applied to the single-line location_region + payment_methods. */
 const FORBIDDEN_TEXT_CHARS =
-	/[\u0000-\u001F\u007F-\u009F\u200B-\u200D\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/;
+	/[\u0000-\u001F\u007F-\u009F\u200B\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/;
 /** Multi-line variant for the terms field ONLY — permits TAB/LF/CR so
  *  multi-line markdown terms aren't silently rejected on-chain. Mirror
  *  of order.ts FORBIDDEN_MULTILINE_TEXT_CHARS; keep the two in sync. */
 const FORBIDDEN_MULTILINE_TEXT_CHARS =
-	/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u200B-\u200D\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/;
+	/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u200B\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/;
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
 	return typeof v === 'object' && v !== null && !Array.isArray(v);

@@ -726,11 +726,11 @@
 				</div>
 			{/if}
 		</div>
-		<h1 class="font-display text-3xl font-extrabold">
+		<h1 dir="auto" class="font-display text-3xl font-extrabold">
 			{effectiveDisplayName}
 		</h1>
 		{#if shortBio}
-			<p class="mt-3 max-w-prose text-pretty text-ink-600 dark:text-ink-300">
+			<p dir="auto" class="mt-3 max-w-prose text-pretty text-ink-600 dark:text-ink-300">
 				{shortBio}
 			</p>
 		{/if}
@@ -1153,7 +1153,7 @@
 						{#if fb.comment}
 							<!-- cp512 [PR6] — the "@X said:" prefix was removed; the reviewer
 							     is already named by the IdentityLabel above the rating. -->
-							<p class="whitespace-pre-wrap text-sm text-ink-700 dark:text-ink-200">
+							<p dir="auto" class="whitespace-pre-wrap text-sm text-ink-700 dark:text-ink-200">
 								{fb.comment}
 							</p>
 						{/if}
@@ -1195,7 +1195,7 @@
 									</span>
 								</div>
 								{#if resp.comment}
-									<p class="whitespace-pre-wrap text-sm text-ink-600 dark:text-ink-300">
+									<p dir="auto" class="whitespace-pre-wrap text-sm text-ink-600 dark:text-ink-300">
 										{resp.comment}
 									</p>
 								{/if}
@@ -1380,7 +1380,7 @@
 							     there the comment is what someone else said about you. -->
 							<p class="whitespace-pre-wrap text-sm text-ink-700 dark:text-ink-200">
 								<span class="text-ink-500 dark:text-ink-400">{$_('profile.given_said')}</span>
-								{fb.comment}
+								<bdi>{fb.comment}</bdi>
 							</p>
 						{/if}
 						{#if fb.order_permlink}

@@ -292,6 +292,46 @@ export function impersonatesReservedName(input: string): boolean {
  *
  *  Tag charset is ASCII `[a-z0-9._-]+`, so a lowercase comparison is the whole
  *  check on the signer side. */
+/** Brand names an instance may legitimately incorporate into a longer, DISTINCT
+ *  display name (e.g. "Morphit Latino", "Agorise Brasil"). Blocked only when the
+ *  WHOLE name is the bare brand or a homograph of it; allowed as part of a longer
+ *  name. cp670 — first-party regional instances brand themselves off the project
+ *  name, so the strict substring guard used for user profiles is wrong here. */
+const BRAND_RESERVED_NAMES: readonly string[] = ['morphit', 'agorise'];
+
+/** Whole-string (anchored) confusable regexes for the bare brand names. */
+const BRAND_ANCHORED_REGEXES: readonly RegExp[] = BRAND_RESERVED_NAMES.map((n) => {
+	const unanchored = compileReservedRegex(n);
+	return new RegExp('^' + unanchored.source + '$', 'i');
+});
+
+/** Handles that must NEVER appear anywhere in an instance display name — the
+ *  fee / ops / admin / support / relay infrastructure accounts and the personal
+ *  handle. Substring, confusable-aware (unchanged strictness). */
+const PROTECTED_HANDLE_REGEXES: readonly RegExp[] = RESERVED_NAMES_RAW.filter(
+	(n) => !BRAND_RESERVED_NAMES.includes(n)
+).map(compileReservedRegex);
+
+/** Impersonation check for OPERATOR instance display names (cp670).
+ *
+ *  Unlike `impersonatesReservedName` (strict substring; used for user profiles),
+ *  this ALLOWS the project brand as part of a longer, distinct name so regional
+ *  first-party instances can brand themselves — while still blocking:
+ *    (a) any infra/personal handle appearing ANYWHERE ("morphit-fees", "kencode"), and
+ *    (b) a BARE brand or its homograph as the WHOLE name ("morphit", "Мorphit", "agorise").
+ *  So "Morphit Latino" passes, "morphit" / "@morphit" (also caught by the
+ *  leading-@ rule) / "morphit-fees" / "kencode" do not. */
+export function impersonatesReservedOperatorName(input: string): boolean {
+	const trimmed = input.trim();
+	for (const re of BRAND_ANCHORED_REGEXES) {
+		if (re.test(trimmed)) return true;
+	}
+	for (const re of PROTECTED_HANDLE_REGEXES) {
+		if (re.test(trimmed)) return true;
+	}
+	return false;
+}
+
 export function ownsReservedName(signer: string, input: string): boolean {
 	const lower = signer.toLowerCase();
 	for (const raw of RESERVED_NAMES_RAW) {

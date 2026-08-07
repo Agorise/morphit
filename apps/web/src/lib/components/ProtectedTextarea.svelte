@@ -284,6 +284,7 @@
 	<textarea
 		bind:this={textareaEl}
 		bind:value
+		dir="auto"
 		oninput={onInput}
 		onblur={onBlur}
 		onscroll={onScroll}

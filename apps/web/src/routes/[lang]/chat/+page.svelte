@@ -1061,7 +1061,7 @@
 												{fb.record.rating}/5</span
 											>
 											{#if fb.record.comment}
-												<span class="min-w-0 truncate text-ink-500 dark:text-ink-400"
+												<span dir="auto" class="min-w-0 truncate text-ink-500 dark:text-ink-400"
 													>{fb.record.comment}</span
 												>
 											{/if}

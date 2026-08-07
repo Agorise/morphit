@@ -164,10 +164,20 @@ await scenario('rejects bidi override', async () => {
 	assertEqual(r, { ok: false, reason: 'display_name_forbidden_char' }, 'result');
 });
 
-await scenario('rejects zero-width joiner', async () => {
+await scenario('rejects zero-width space (ZWSP still blocked)', async () => {
 	const mock = makeMockClient();
-	const r = await handler(makeCtx({ payload: { display_name: 'Al\u200Dice' } }), mock.client);
+	const r = await handler(makeCtx({ payload: { display_name: 'Al\u200Bice' } }), mock.client);
 	assertEqual(r, { ok: false, reason: 'display_name_forbidden_char' }, 'result');
+});
+
+// cp671 — ZWNJ (U+200C) and ZWJ (U+200D) are NO LONGER forbidden: essential
+// cursive joiners for Persian/Arabic-script + Indic text. A ZWNJ name must not
+// be rejected as a forbidden char.
+await scenario('accepts ZWNJ (Persian half-space) - not a forbidden char', async () => {
+	const mock = makeMockClient();
+	const r = await handler(makeCtx({ payload: { display_name: 'A\u200Cli\u200Cce' } }), mock.client);
+	const isForbidden = typeof r === 'object' && r !== null && 'reason' in r && (r as { reason?: string }).reason === 'display_name_forbidden_char';
+	assertEqual(isForbidden, false, 'ZWNJ name not rejected as forbidden_char');
 });
 
 // ─── json_metadata ───────────────────────────────────────────────

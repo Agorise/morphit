@@ -288,7 +288,7 @@
 			{#if paymentLabels.length > 0}
 				<span>
 					<span class="font-semibold">{$_(paymentLabelKey)}:</span>
-					{paymentLabels.join(', ')}
+					<bdi>{paymentLabels.join(', ')}</bdi>
 				</span>
 			{/if}
 			{#if order.location_region}

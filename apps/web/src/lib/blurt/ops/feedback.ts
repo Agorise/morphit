@@ -51,7 +51,7 @@ const MAX_COMMENT_CODEPOINTS = 256;
  *  zero-width joiners/spaces, and BOM. Centralizing would be nicer
  *  but since each handler stands alone we accept the duplication. */
 const FORBIDDEN_COMMENT_CHARS =
-	/[\u0000-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069\u200B-\u200D\uFEFF]/;
+	/[\u0000-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069\u200B\uFEFF]/;
 
 export interface FeedbackPayload {
 	/** The Blurt account name being reviewed. Must differ from

@@ -30,9 +30,13 @@ const DISPLAY_NAME_MAX = 64;
  *  This is permissive by default: emoji, scripts of any
  *  language, and punctuation are all allowed. Only the handful
  *  of character classes with no legitimate display use are
- *  rejected. */
+ *  rejected.
+ *  cp671: U+200C (ZWNJ) and U+200D (ZWJ) are intentionally NOT blocked — the
+ *  zero-width non-joiner is essential to correct Farsi / Arabic-script and Indic
+ *  orthography (Persian's "half-space" / nim-fasele). Only the zero-width SPACE
+ *  (U+200B) and the explicit bidi override/isolate controls stay blocked. */
 const FORBIDDEN_DISPLAY_NAME_CHARS =
-	/[\u0000-\u001F\u007F-\u009F\u200B-\u200D\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/;
+	/[\u0000-\u001F\u007F-\u009F\u200B\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/;
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
 	return typeof v === 'object' && v !== null && !Array.isArray(v);
