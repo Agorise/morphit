@@ -1,4 +1,8 @@
 # Morphit pre-launch revisit list
+> ## cp673 — v1.10.5: ansible install sets the indexer relay account. Deep-deep DONE, battery GREEN (596). NOT committed (2026-08-08)
+> **[RESOLVED]** ansible `indexer.env.j2` never set `MORPHIT_INDEXER_RELAY_ACCOUNT` → defaulted to `morphit-relay` → every ansible instance advertised the wrong relay account in /v1/instance → peers rejected the probe with `relay_account mismatch`. FIXED: template now sets it to `{{ morphit_operator_account }}`; guard `indexer-relay-account-smoke` (4) added. morphitlat hand-fixed the same env var → card is live ("Syncing", pills + tagline + contact all showing).
+> **[STILL OPEN — Ken]** morphitlat one-time manual bootstrap to v1.10.5 (its old upgrader still has the cp669 bug; do this in ONE pass now that cp669+cp672+cp673 are all shipped — I'll walk Ken through it). morphitlat is otherwise fully functional + correctly listed in the directory.
+>
 > ## cp672 — v1.10.4: peer-probe pinned-agent lookup fix. Deep-deep DONE, battery GREEN (595). NOT committed (2026-08-08)
 > **[RESOLVED — HIGH, latent since forever]** federation peer probing was 100% broken on undici 7: `buildPinnedAgent`'s `connect.lookup` used the old single-address callback; undici 6/7 calls it with `{all:true}` expecting `[{address,family}]` → `ERR_INVALID_IP_ADDRESS` → every peer "Unreachable". Self rows populate locally so it hid until the first peer (morphitlat). FIXED via `makePinnedLookup` (all-aware). SSRF/rebinding defense unchanged. Guard: federation-probe-smoke +3.
 > **[NOTE]** the earlier "morphitlat unreachable" diagnostics (restart timing, WAF/UA, TLS, IPv6) were all red herrings — the real cause was this undici callback-shape bug. The probe's 5s timeout / redirect:manual / UA are all fine.

@@ -282,6 +282,7 @@ SMOKES=(
 	".:health-backup-freshness-smoke"
 	".:indexer-public-health-operational-smoke"
 	".:postgres-pg-hba-loopback-smoke"
+	".:indexer-relay-account-smoke"
 	".:moderation-flag-clearance-smoke"
 	".:profile-link-glyphs-single-home-smoke"
 	".:reserved-name-owner-parity-smoke"
