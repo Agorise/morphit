@@ -723,6 +723,55 @@ export function _setDnsResolverForTesting(
  *
  * Cp3 of Part 122 — DNS-rebinding closure.
  */
+/**
+ * The pinned connect-time `lookup` for {@link buildPinnedAgent}, extracted so it
+ * can be unit-tested without a live socket. Returns `pinnedIp` for
+ * `expectedHostname` and refuses any other hostname (DNS-rebinding closure).
+ *
+ * cp672 — undici 6/7 calls `connect.lookup` with `{ all: true }` and expects the
+ * callback to receive an ARRAY of `{ address, family }`. The previous
+ * single-address form (`cb(null, ip, family)`) made undici read `undefined` for
+ * the address → `ERR_INVALID_IP_ADDRESS`, which silently broke EVERY peer probe
+ * (the self directory row is populated locally and never reaches this path, so
+ * the failure hid until the first real peer registered). We now honour the
+ * `all` option and fall back to the single-address shape otherwise.
+ */
+export function makePinnedLookup(
+	expectedHostname: string,
+	pinnedIp: string,
+	pinnedFamily: 4 | 6
+): (
+	hostname: string,
+	opts: { all?: boolean } | undefined,
+	cb: (
+		err: Error | null,
+		address: string | ReadonlyArray<{ address: string; family: number }>,
+		family?: number
+	) => void
+) => void {
+	const expected = expectedHostname.toLowerCase();
+	return (hostname, opts, cb): void => {
+		// Defensive: if undici ever calls lookup with a different hostname than
+		// the one we pre-validated (e.g. via a redirect or a future API change),
+		// fail closed. redirect:'manual' should already prevent this.
+		if (hostname.toLowerCase() !== expected) {
+			cb(
+				new Error(
+					`pinned agent: refusing unexpected hostname ${hostname} (pinned to ${expectedHostname})`
+				),
+				'',
+				0
+			);
+			return;
+		}
+		if (opts?.all) {
+			cb(null, [{ address: pinnedIp, family: pinnedFamily }]);
+		} else {
+			cb(null, pinnedIp, pinnedFamily);
+		}
+	};
+}
+
 function buildPinnedAgent(
 	expectedHostname: string,
 	pinnedIp: string,
@@ -730,28 +779,9 @@ function buildPinnedAgent(
 ): Agent {
 	return new Agent({
 		connect: {
-			lookup: (
-				hostname: string,
-				_opts: unknown,
-				cb: (err: Error | null, address: string, family: number) => void
-			): void => {
-				// Defensive: if undici ever calls lookup with a
-				// different hostname than the one we pre-validated
-				// (e.g. due to a redirect or a future API change),
-				// fail closed.  redirect:'manual' should already
-				// prevent this, but defense-in-depth.
-				if (hostname.toLowerCase() !== expectedHostname.toLowerCase()) {
-					cb(
-						new Error(
-							`pinned agent: refusing unexpected hostname ${hostname} (pinned to ${expectedHostname})`
-						),
-						'',
-						0
-					);
-					return;
-				}
-				cb(null, pinnedIp, pinnedFamily);
-			}
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- undici's
+			// LookupFunction type doesn't model the { all: true } array overload.
+			lookup: makePinnedLookup(expectedHostname, pinnedIp, pinnedFamily) as any
 		}
 	});
 }

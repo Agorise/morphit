@@ -17,6 +17,7 @@
 import {
 	probeOne,
 	selfReachableStatus,
+	makePinnedLookup,
 	_setDnsResolverForTesting,
 	type KnownInstanceRow,
 	type ProbeStatus
@@ -393,6 +394,38 @@ await scenario('self-reachable: huge lag (initial sync) → syncing', async () =
 // ─── Cleanup ─────────────────────────────────────────────────────
 
 unstub();
+
+// ─── cp672 — pinned-agent lookup must speak undici's { all: true } array shape ───
+// Regression for ERR_INVALID_IP_ADDRESS: undici 6/7 calls connect.lookup with
+// { all: true } and expects [{ address, family }]. The old single-address
+// callback returned undefined for the address, silently breaking EVERY peer
+// probe. These tests exercise the exact callback contract.
+await scenario('cp672: lookup returns an ARRAY when undici passes { all: true }', () => {
+	const lookup = makePinnedLookup('peer.example', '203.0.113.7', 4);
+	let got: unknown;
+	lookup('peer.example', { all: true }, (err, addr) => {
+		if (err) throw err;
+		got = addr;
+	});
+	assertEqual(got, [{ address: '203.0.113.7', family: 4 }], 'all:true → array of {address,family}');
+});
+
+await scenario('cp672: lookup returns single (address, family) when all is falsy', () => {
+	const lookup = makePinnedLookup('peer.example', '203.0.113.7', 4);
+	let addr: unknown, fam: unknown;
+	lookup('peer.example', {}, (err, a, f) => {
+		if (err) throw err;
+		addr = a; fam = f;
+	});
+	assertEqual([addr, fam], ['203.0.113.7', 4], 'no-all → (address, family)');
+});
+
+await scenario('cp672: lookup refuses an unexpected hostname (DNS-rebinding closure)', () => {
+	const lookup = makePinnedLookup('peer.example', '203.0.113.7', 4);
+	let err: unknown;
+	lookup('evil.example', { all: true }, (e) => { err = e; });
+	assertEqual(err instanceof Error, true, 'mismatched hostname → Error');
+});
 
 console.log(`\n${'─'.repeat(54)}`);
 if (failures === 0) {
