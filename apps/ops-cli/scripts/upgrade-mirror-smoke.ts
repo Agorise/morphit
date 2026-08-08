@@ -32,7 +32,8 @@ import {
 	resolveOfflineTarball,
 	parseTagFromTarballName,
 	findLocalOfflineRelease,
-	compareTags
+	compareTags,
+	stripInheritedNpmOffline
 } from '../src/commands/upgrade.ts';
 
 let pass = 0;
@@ -294,6 +295,40 @@ if (!haveGpg) {
 }
 
 console.log('');
+// ── cp674 — strip an inherited npm offline flag before spawning child npm ──
+// Regression for the morphitlat ENOTCACHED failure: the ansible launcher runs
+// the CLI via `npm exec --offline`, exporting npm_config_offline=true, which
+// forced the upgrade's `npm ci` cache-only and broke every online upgrade that
+// pulled a dependency not already cached. runUpgrade now strips it.
+{
+	const env: Record<string, string | undefined> = {
+		npm_config_offline: 'true',
+		npm_config_prefer_offline: 'true',
+		NPM_CONFIG_OFFLINE: 'true',
+		NPM_CONFIG_PREFER_OFFLINE: 'true',
+		PATH: '/usr/bin',
+		npm_config_cache: '/var/cache/npm'
+	};
+	const cleared = stripInheritedNpmOffline(env as NodeJS.ProcessEnv);
+	expect(
+		'cp674: all four offline flag variants are stripped',
+		env.npm_config_offline === undefined &&
+			env.npm_config_prefer_offline === undefined &&
+			env.NPM_CONFIG_OFFLINE === undefined &&
+			env.NPM_CONFIG_PREFER_OFFLINE === undefined
+	);
+	expect('cp674: it reports the keys it cleared', cleared.length === 4);
+	expect(
+		'cp674: unrelated env (PATH, npm cache) is preserved',
+		env.PATH === '/usr/bin' && env.npm_config_cache === '/var/cache/npm'
+	);
+}
+{
+	const clean: Record<string, string | undefined> = { PATH: '/usr/bin' };
+	const cleared = stripInheritedNpmOffline(clean as NodeJS.ProcessEnv);
+	expect('cp674: no-op when no offline flag is present', cleared.length === 0 && clean.PATH === '/usr/bin');
+}
+
 console.log(`${pass} passed, ${fail} failed`);
 if (fail > 0) {
 	console.log('\u2717 upgrade-mirror smoke FAILED');
