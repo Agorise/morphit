@@ -1096,6 +1096,19 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	const forceYes = opts.flags['yes'] === 'true' || process.env.MORPHIT_AUTO_UPGRADE === '1';
 	const jsonOutput = opts.flags['json'] === 'true';
 
+	// cp674 — before we spawn any child npm, strip an inherited offline flag.
+	// The ansible launcher runs us via `npm exec --offline`; that flag would
+	// otherwise force the upgrade's `npm ci` (and the MCP redeploy's
+	// `npm install`) cache-only and fail on any dependency not already cached.
+	// Safe for air-gapped upgrades too — those skip npm ci / pass --offline
+	// explicitly themselves (see stripInheritedNpmOffline docs).
+	const clearedOfflineFlags = stripInheritedNpmOffline(process.env);
+	if (clearedOfflineFlags.length > 0 && !checkOnly) {
+		info(
+			`Cleared inherited npm offline flag(s) so dependency install can reach the registry when needed: ${clearedOfflineFlags.join(', ')}.`
+		);
+	}
+
 	const host = process.env.MORPHIT_RELEASE_HOST ?? DEFAULT_HOST;
 	const repo = process.env.MORPHIT_RELEASE_REPO ?? DEFAULT_REPO;
 	const installDir = process.env.MORPHIT_INSTALL_DIR ?? DEFAULT_INSTALL_DIR;
@@ -2221,6 +2234,44 @@ function cleanupTmp(dir: string): void {
 	} catch {
 		// best-effort
 	}
+}
+
+/**
+ * cp674 — remove an inherited npm "offline" flag from an environment.
+ *
+ * The Ansible `morphit-ops` launcher runs the CLI via `npm exec --offline`,
+ * which exports `npm_config_offline=true` into our process environment. That
+ * flag is inherited by EVERY child npm we spawn during an upgrade — the
+ * workspace `npm ci` and the MCP redeploy's `npm install` — and forces them
+ * cache-only. Any dependency not already in the local npm cache (after a big
+ * version jump, or a newly-added dep) then fails with `ENOTCACHED` and the whole
+ * upgrade rolls back. The manual install's launcher is a plain symlink with no
+ * `--offline`, which is why it was never hit there.
+ *
+ * The online upgrade REQUIRES the registry. The genuinely air-gapped paths never
+ * rely on this inherited flag: the prebuilt-bundle path skips `npm ci` entirely,
+ * and `deploy-mcp.sh` passes `--offline` explicitly on its own npm invocation
+ * against a vendored cache. So stripping the inherited flag here is safe for both
+ * online and offline upgrades.
+ *
+ * Mutates `env` in place; returns the names of the keys it cleared (for logging
+ * and tests).
+ */
+export function stripInheritedNpmOffline(env: NodeJS.ProcessEnv): string[] {
+	const keys = [
+		'npm_config_offline',
+		'npm_config_prefer_offline',
+		'NPM_CONFIG_OFFLINE',
+		'NPM_CONFIG_PREFER_OFFLINE'
+	];
+	const cleared: string[] = [];
+	for (const k of keys) {
+		if (env[k] !== undefined) {
+			delete env[k];
+			cleared.push(k);
+		}
+	}
+	return cleared;
 }
 
 function runOrThrow(cmd: string, args: readonly string[], opts: { cwd?: string } = {}): void {

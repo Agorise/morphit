@@ -519,6 +519,33 @@ jobs:
           bash scripts/build-offline-bundle.sh
           ls -lh morphit-*-offline.tar.gz* || true
 
+      - name: Verify offline bundle was produced (loud, non-blocking)
+        # cp675 — the build step above is best-effort (continue-on-error), so a
+        # runner without Docker / registry reach silently ships a release with NO
+        # -offline tarball, and offline operators can't install/upgrade to that
+        # version. This step never BLOCKS the release (the online path must always
+        # publish), but it makes a missing bundle IMPOSSIBLE to miss: a workflow
+        # ::warning:: annotation plus a banner in the log. If it fires, build the
+        # bundle on any Ubuntu 24.04 + Docker box (`bash scripts/build-offline-bundle.sh`)
+        # and attach it to the release before announcing the version.
+        run: |
+          set -eu
+          if ls morphit-*-offline.tar.gz >/dev/null 2>&1 \
+             && ls morphit-*-offline.tar.gz.sha256 >/dev/null 2>&1; then
+            echo "✓ offline bundle present: $(ls morphit-*-offline.tar.gz) (+ .sha256)"
+          else
+            echo "::warning title=Offline bundle MISSING::No self-contained -offline tarball was produced for this release. Offline operators cannot install or upgrade to this version. Build it on a Docker box (bash scripts/build-offline-bundle.sh) and attach it before announcing the release."
+            echo ""
+            echo "##########################################################################"
+            echo "#  WARNING: NO -offline TARBALL FOR THIS RELEASE                          #"
+            echo "#  Offline / air-gapped operators are NOT covered for this version.       #"
+            echo "#  Online installs + upgrades are unaffected and still publish.           #"
+            echo "#  To fix: on an Ubuntu 24.04 + Docker box, run                           #"
+            echo "#      bash scripts/build-offline-bundle.sh                               #"
+            echo "#  then attach morphit-<ver>-offline.tar.gz(+.sha256) to the release.     #"
+            echo "##########################################################################"
+          fi
+
       - name: Publish Forgejo release + attach assets
         # Auto-create the release for this tag and attach the artifacts, so the
         # operator downloads + uploads NOTHING (this replaces the old manual
