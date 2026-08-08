@@ -40,7 +40,7 @@ import type { HeadTailer } from '$indexer/headTailer';
 // endpoint reports. It stays hardcoded here on purpose: it is one of the 19
 // version touchpoints the version-consistency smoke pins, and reading it from
 // package.json at runtime would take it out of that net.
-export const INDEXER_VERSION = '1.10.4';
+export const INDEXER_VERSION = '1.10.5';
 
 // Blurt produces one block every 3 seconds. Used to translate the
 // block-lag count into a human "seconds behind" figure in the
