@@ -1,4 +1,9 @@
 # Morphit pre-launch revisit list
+> ## cp672 — v1.10.4: peer-probe pinned-agent lookup fix. Deep-deep DONE, battery GREEN (595). NOT committed (2026-08-08)
+> **[RESOLVED — HIGH, latent since forever]** federation peer probing was 100% broken on undici 7: `buildPinnedAgent`'s `connect.lookup` used the old single-address callback; undici 6/7 calls it with `{all:true}` expecting `[{address,family}]` → `ERR_INVALID_IP_ADDRESS` → every peer "Unreachable". Self rows populate locally so it hid until the first peer (morphitlat). FIXED via `makePinnedLookup` (all-aware). SSRF/rebinding defense unchanged. Guard: federation-probe-smoke +3.
+> **[NOTE]** the earlier "morphitlat unreachable" diagnostics (restart timing, WAF/UA, TLS, IPv6) were all red herrings — the real cause was this undici callback-shape bug. The probe's 5s timeout / redirect:manual / UA are all fine.
+> **[STILL OPEN — Ken]** after v1.10.4 on morphit.io: force-reprobe morphitlat → card populates. morphitlat one-time manual bootstrap to v1.10.3+ still pending (its old upgrader can't self-reach the cp669 fix).
+>
 > ## cp669+cp670+cp671 — v1.10.3: upgrader fix + brand-name guard + full RTL. Deep-deep DONE, battery GREEN (595). NOT committed (2026-08-07)
 > **[RESOLVED]** cp669 upgrader `selectReleaseAssets` crossed the slim/-offline tarball+sha variants on a mirror fallback → false SHA-256 mismatch (blocked morphitlat's upgrade). Now prefers the SLIM tarball + pins sha/sig to it.
 > **[RESOLVED]** cp670 operator display-name substring impersonation guard rejected ALL "Morphit ⟨X⟩" names → morphitlat's valid on-chain registration was rejected by every indexer (zero operators everywhere). Now `impersonatesReservedOperatorName` allows the brand in a longer distinct name; infra/personal handles + bare-brand/homograph still blocked; owner-exemption added (was missing vs profile.ts).
