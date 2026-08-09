@@ -162,6 +162,19 @@
     group: "{{ morphit_service_group }}"
     mode: '0750'
 
+# cp676 — shared helper-script dir used by several roles (ddns, backup, mcp,
+# ipfs). It was previously created only inside the ipfs role (which runs LATE),
+# so an earlier consumer — e.g. the ddns role when DDNS is enabled — failed with
+# "Destination directory /usr/local/lib/morphit does not exist". Create it here
+# in base (runs before every consumer) so the install never depends on ipfs.
+- name: Create /usr/local/lib/morphit shared script directory
+  ansible.builtin.file:
+    path: /usr/local/lib/morphit
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
 - name: Create /opt/morphit parent directory for the repo clone
   ansible.builtin.file:
     path: "{{ morphit_repo_path | dirname }}"

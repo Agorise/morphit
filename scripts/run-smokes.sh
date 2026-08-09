@@ -283,6 +283,7 @@ SMOKES=(
 	".:indexer-public-health-operational-smoke"
 	".:postgres-pg-hba-loopback-smoke"
 	".:indexer-relay-account-smoke"
+	".:ansible-shared-script-dir-smoke"
 	".:moderation-flag-clearance-smoke"
 	".:profile-link-glyphs-single-home-smoke"
 	".:reserved-name-owner-parity-smoke"

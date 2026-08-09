@@ -30,10 +30,46 @@
     path: /var/lib/aide/aide.db
   register: hardening_aide_db_stat
 
-- name: Initialize AIDE database (first run only — can take 5-15 minutes)
+# cp678 — AIDE hashes the WHOLE filesystem, so on a low-power CPU (e.g. an Intel
+# N-series mini-PC) it can run far past the old "5-15 min" estimate and LOOK
+# frozen (no output while `aideinit` grinds). We now (1) set expectations up
+# front, (2) run it async, and (3) poll with a visible heartbeat so the operator
+# can see it's alive. AIDE emits no percentage, so the heartbeat is elapsed-time
+# based, not a true progress bar.
+- name: Explain the AIDE step before it runs (it hashes the whole disk)
+  ansible.builtin.debug:
+    msg: >-
+      Building the AIDE filesystem-integrity baseline now. This fingerprints your
+      ENTIRE disk, so on a low-power CPU it can take 15-40 minutes (longer than
+      the old estimate) — it is NOT frozen. Below you will see a
+      "RETRYING ... (N retries left)" heartbeat: that is normal progress, one
+      line roughly every 15 seconds. Leave it running.
+  when: not hardening_aide_db_stat.stat.exists
+
+- name: Initialize AIDE database (first run only — runs in the background)
   ansible.builtin.command: aideinit -y -f
+  async: 3600
+  poll: 0
+  register: hardening_aide_job
   when: not hardening_aide_db_stat.stat.exists
   changed_when: true
+
+# The "RETRYING (N retries left)" lines Ansible prints for this task ARE the
+# heartbeat: one per poll (~15s), counting down from the 60-minute budget. It
+# finishes as soon as aideinit exits — usually well before the countdown ends.
+- name: "Building AIDE database — the RETRYING heartbeat below is normal (≈15s/line, NOT an error)"
+  ansible.builtin.async_status:
+    jid: "{{ hardening_aide_job.ansible_job_id }}"
+  register: hardening_aide_poll
+  until: hardening_aide_poll.finished
+  retries: 240
+  delay: 15
+  when: not hardening_aide_db_stat.stat.exists
+
+- name: Confirm the AIDE baseline finished
+  ansible.builtin.debug:
+    msg: "AIDE database built successfully — continuing."
+  when: not hardening_aide_db_stat.stat.exists
 
 - name: Move AIDE init db into place
   ansible.builtin.command: mv /var/lib/aide/aide.db.new /var/lib/aide/aide.db
