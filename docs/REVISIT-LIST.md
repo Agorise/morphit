@@ -1,4 +1,11 @@
 # Morphit pre-launch revisit list
+> ## cp685–cp688 — v1.10.9: clean upgrade output. Deep-deep DONE, battery GREEN (600). NOT committed (2026-08-09)
+> **[RESOLVED]** cp685: getcwd errors ×3 during upgrade (stale cwd after backup rename). Now process.chdir('/') before the rename. Guard: upgrade-mirror-smoke.
+> **[RESOLVED]** cp686: npm deprecation noise ×5 (matrix-bot-sdk@0.7.1 old `request` + prebuild-install). Now npm_config_loglevel=error for upgrades (root fix = risky matrix-bot-sdk bump, DEFERRED).
+> **[RESOLVED]** cp687: vite 500kB chunk hint noise mid-upgrade. Now raised only under MORPHIT_QUIET_BUILD (dev/CI keep the signal).
+> **[RESOLVED]** cp688: false "could not auto-verify served frontend" (checked before container up). Now retries ~10s.
+> **[OPEN — someday]** matrix-bot-sdk@0.7.1 uses the deprecated `request` lib; a future maintained-fork/upgrade removes the deprecations at root (breaking-change risk — verify matrix-bot still works).
+>
 > ## cp679–cp684 — v1.10.8: smooth+honest install. Deep-deep DONE, battery GREEN (600). NOT committed (2026-08-09)
 > **[RESOLVED]** cp679: online guided install no longer redirects apt → no false Mint "APT corrupt". Gated on mirrors-unreachable. Guard: ansible-offline-apt-gate-smoke.
 > **[RESOLVED — install-blocker]** cp680/681/682: AIDE blocking+timeout FAILED the install. Now deferred (idle bg oneshot, post_tasks start from settled state), reboot-safe (atomic rename), self-removing, FAILURE-VISIBLE (logger daemon.err + marker + stays-failed → systemd-monitor → Matrix). Guard: ansible-aide-deferred-smoke (18).

@@ -329,6 +329,35 @@ console.log('');
 	expect('cp674: no-op when no offline flag is present', cleared.length === 0 && clean.PATH === '/usr/bin');
 }
 
+// ── cp685 — chdir to a stable dir before the rename-swap ──
+// The launcher runs us with cwd inside the install dir; renaming it to the
+// backup leaves a stale cwd, and every shell spawned afterward prints
+// "getcwd: cannot access parent directories" — harmless but trust-eroding.
+// runUpgrade must chdir('/') BEFORE renameSync(installDir, backupDir).
+{
+	const src = readFileSync(new URL('../src/commands/upgrade.ts', import.meta.url), 'utf8');
+	const chdirIdx = src.indexOf("process.chdir('/')");
+	const renameIdx = src.indexOf('renameSync(installDir, backupDir)');
+	expect('cp685: upgrade chdirs to a stable dir before the rename-swap', chdirIdx !== -1 && renameIdx !== -1 && chdirIdx < renameIdx);
+}
+
+// ── cp686/cp687 — a clean, trust-preserving upgrade output ──
+// cp686: quiet npm's unactionable "deprecated" warnings during the upgrade.
+// cp687: raise the frontend build's chunk-size warning limit for upgrades.
+{
+	const src = readFileSync(new URL('../src/commands/upgrade.ts', import.meta.url), 'utf8');
+	expect('cp686: upgrade quiets npm to error loglevel', /npm_config_loglevel = 'error'/.test(src));
+	expect('cp687: upgrade sets MORPHIT_QUIET_BUILD for the frontend build', /MORPHIT_QUIET_BUILD = '1'/.test(src));
+	const vite = readFileSync(new URL('../../web/vite.config.js', import.meta.url), 'utf8');
+	expect('cp687: vite raises chunkSizeWarningLimit only under MORPHIT_QUIET_BUILD', /MORPHIT_QUIET_BUILD === '1'\s*\?\s*\d+\s*:\s*500/.test(vite));
+}
+
+// ── cp688 — retry served-frontend verify (container just restarted) ──
+{
+	const src = readFileSync(new URL('../src/commands/upgrade.ts', import.meta.url), 'utf8');
+	expect('cp688: served-frontend verify retries before giving up', /servedVersion === null && attempt < \d+/.test(src) && /resolveServedVersion\(plan, webRoot\)/.test(src));
+}
+
 console.log(`${pass} passed, ${fail} failed`);
 if (fail > 0) {
 	console.log('\u2717 upgrade-mirror smoke FAILED');
