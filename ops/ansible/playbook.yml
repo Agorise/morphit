@@ -215,7 +215,27 @@
       when: enable_journald_monitor | default(false)
 
   post_tasks:
-    # cp663 #14 — Tor + i2pd run AFTER the morphit role, so they generate the
+    # cp681 — start the deferred AIDE baseline build now, in post_tasks, AFTER
+    # every role has written its files (the morphit code under
+    # {{ morphit_repo_path }}, /etc/morphit/*.env, and the morphit-*.service/
+    # .timer units are all in place). Building the baseline from this settled
+    # state avoids hashing files mid-write and the spurious "file changed" alerts
+    # that would follow. The build itself runs in the background at idle priority
+    # (fire-and-forget, --no-block), so this does not slow the wizard; the
+    # one-shot service self-removes when the baseline is complete. Gated on the
+    # unit still being present, so it's a no-op when intrusion detection is off or
+    # the baseline already built and the service removed itself.
+    - name: Check for a pending AIDE baseline build
+      ansible.builtin.stat:
+        path: /etc/systemd/system/morphit-aide-init.service
+      register: post_aide_service
+
+    - name: Start the deferred AIDE baseline build in the background (after all install writes)
+      ansible.builtin.command: systemctl start --no-block morphit-aide-init.service
+      when: post_aide_service.stat.exists
+      changed_when: true
+
+
     # .onion + .b32.i2p addresses only now.  Capture them into
     # morphit.config.env (which `morphit-ops register` + the indexer read) and
     # restart the indexer so the footer pills + on-chain identity carry them.
@@ -339,8 +359,19 @@
         msg: |
           ─────────────────────────────────────────────────────────
           Ansible reported success.  This does NOT mean Morphit is
-          working or that the host is secure.  Run the verification
-          checklist in morphit-sysadmin-handoff.txt:
+          working or that the host is secure.
+
+          FIRST, the one-command check — it actively verifies the
+          indexer is syncing (in parallel across your RPC nodes), the
+          relay is up, the matrix-bot is alerting the address you
+          entered, backups are scheduled, HTTPS/TLS is valid, and the
+          AIDE baseline built:
+
+            sudo morphit-ops        →  option 13 (Node health)
+
+          Everything green there means the live services came up.
+          THEN run the security/host verification checklist in
+          morphit-sysadmin-handoff.txt:
 
             - ssh root@host fails
             - ssh user@host with password fails
@@ -354,7 +385,9 @@
               /etc/morphit/relay.env
             - Daily backup timer is scheduled (systemctl list-
               timers | grep morphit-backup)
-            - AIDE database initialized
+            - AIDE database building in the background, then self-removes
+              (systemctl status morphit-aide-init — absent once the baseline
+              at /var/lib/aide/aide.db is built)
             - auditd is logging
 
           If you enabled the matrix-bot / monitor sidecars:

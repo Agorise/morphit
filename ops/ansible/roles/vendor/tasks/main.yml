@@ -18,8 +18,44 @@
     path: "{{ morphit_local_source_path }}/vendor/apt/Packages.gz"
   register: morphit_vendor_apt
 
-- name: Offline apt — redirect to the bundled local repo (only when a bundle is present)
+# cp679 — the offline redirect below points apt at ONLY the bundled local repo,
+# which makes Linux Mint's Update Manager report "Please switch to another Linux
+# Mint mirror / Your APT configuration is corrupt" for the duration of the
+# install. That is fine for a genuinely air-gapped box (there are no mirrors to
+# reach anyway, and morphit-first-online restores apt once online), but an
+# ONLINE operator installing from the bundle got the scary warning for no reason.
+# So we only redirect when the box actually cannot reach its apt mirrors. Online,
+# apt keeps its normal mirrors (Update Manager stays happy) and the bundle is
+# still used for its node_modules (npm ci is skipped) and .deb closure fallback.
+- name: Probe whether the OS apt mirrors are reachable (online vs air-gapped)
+  ansible.builtin.uri:
+    url: "http://archive.ubuntu.com/ubuntu/dists/{{ morphit_ubuntu_codename | default('noble') }}/Release"
+    method: HEAD
+    timeout: 8
+    status_code: [200, 301, 302, 304]
+  register: morphit_apt_mirror_probe
+  failed_when: false
+  changed_when: false
   when: morphit_vendor_apt.stat.exists
+
+- name: Decide whether to use the bundled apt repo (bundle present AND mirrors unreachable)
+  ansible.builtin.set_fact:
+    morphit_use_bundled_apt: >-
+      {{ morphit_vendor_apt.stat.exists
+         and (morphit_apt_mirror_probe.status | default(0) | int) not in [200, 301, 302, 304] }}
+
+- name: Online box with a bundle — keep normal apt mirrors (no redirect)
+  ansible.builtin.debug:
+    msg: >-
+      A bundle is present but this box can reach its apt mirrors, so apt keeps using
+      them — no redirect, and your Update Manager stays normal. The bundled
+      node_modules are still used, so npm ci is skipped.
+  when:
+    - morphit_vendor_apt.stat.exists
+    - not (morphit_use_bundled_apt | bool)
+
+- name: Offline apt — redirect to the bundled local repo (only when genuinely air-gapped)
+  when: morphit_use_bundled_apt | bool
   block:
     - name: Mark this run as an offline (bundled) install
       # Later roles gate third-party apt-repo setup (e.g. bunkerweb's Docker repo,
