@@ -114,7 +114,7 @@ It's **one command**.
 
 ### The easy way (recommended for everyone)
 
-With your two Blurt accounts ready (§5), download the latest release from [morphit.io/en/download](https://morphit.io/en/download#source-code), create and extract it into a `/morphit/` folder, open a terminal **in that folder**, and run:
+With your two Blurt accounts ready (§5), download the latest release (~700MB) from [morphit.io/en/download](https://morphit.io/en/download#source-code), create and extract it into a `/morphit/` folder, open a terminal **in that folder**, and run:
 
 ```sh
 sudo bash morphit-setup.sh

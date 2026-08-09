@@ -156,7 +156,16 @@ docker run --rm -e PKGS="${PKGS}" -v "${VENDOR}/apt:/out" \
 		cp /var/cache/apt/archives/*.deb /out/
 		chmod a+r /out/*.deb
 	' || die "apt closure download (in the ubuntu:24.04 container) failed — see the log above."
-( cd "${VENDOR}/apt" && dpkg-scanpackages -m . /dev/null | gzip -9c > Packages.gz )
+# cp677 — write the Packages index in the formats apt probes, uncompressed
+# FIRST plus .xz and .gz. apt tries the compressed variants before the plain
+# file; if none of the ones it probes exist it logs `Err:` lines (harmless — it
+# falls back to the plain Packages), but Linux Mint's Update Manager treats
+# those Err lines as "APT configuration is corrupt". Shipping .xz (which modern
+# apt prefers) makes the first probe succeed, so there are no Err lines at all.
+( cd "${VENDOR}/apt" \
+	&& dpkg-scanpackages -m . /dev/null > Packages \
+	&& xz -9ec Packages > Packages.xz \
+	&& gzip -9c Packages > Packages.gz )
 log "     $(ls "${VENDOR}/apt"/*.deb 2>/dev/null | wc -l) .deb files harvested."
 
 # ── 5. Docker images → vendor/docker (docker save) ──

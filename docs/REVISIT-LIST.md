@@ -1,4 +1,12 @@
 # Morphit pre-launch revisit list
+> ## cp676+cp677+cp678 — v1.10.7: fresh-install fixes + AIDE UX. Deep-deep DONE, battery GREEN (597). NOT committed (2026-08-08)
+> **[RESOLVED — install-blocker]** cp676: /usr/local/lib/morphit created only in ipfs role (late) → ddns role (early) failed on fresh install with DDNS enabled. Now created in base role. Guard: ansible-shared-script-dir-smoke.
+> **[RESOLVED]** cp677: offline vendor/apt lacked Packages.xz → apt Err lines → Mint "APT corrupt" (cosmetic). Build now ships Packages + .xz + .gz.
+> **[RESOLVED]** cp678: AIDE init looked frozen (no progress, 20min+ on N150). Now async with expectation message + RETRYING heartbeat.
+> **[VERIFIED — no action]** 1 DB password correct (DB unification); wizard sets up canary+pgp, home signs canary locally.
+> **[DECLINED — offered migration]** renaming release assets (breaks deployed upgraders' -offline detection).
+> **[OPEN — Ken]** wipe morphitlat + re-test the clean install on v1.10.7; back up Tor (/var/lib/tor/morphit) + I2P (/var/lib/i2pd/morphit-web.dat) keys first + restore via morphit_tor_key_src/morphit_i2pd_key_src to keep same .onion/.b32.
+>
 > ## cp674+cp675 — v1.10.6: ansible online-upgrade --offline leak fix + CI offline-bundle warning. Deep-deep DONE, battery GREEN (596). NOT committed (2026-08-08)
 > **[RESOLVED — HIGH]** ansible `morphit-ops` launcher's `npm exec --offline` leaked npm_config_offline into the upgrade's `npm ci` + MCP `npm install` → ENOTCACHED on any uncached dep → rollback. Broke EVERY ansible online upgrade that added a dep (bit morphitlat). FIXED: runUpgrade strips inherited offline flags (`stripInheritedNpmOffline`) before spawning child npm; air-gapped paths unaffected (skip npm ci / explicit --offline). Guard: upgrade-mirror-smoke +4.
 > **[RESOLVED]** cp675 release.yml now loudly warns (non-blocking) if the best-effort -offline tarball wasn't produced, so a silent gap can't recur. (v1.10.3/4/5 all have theirs.)
