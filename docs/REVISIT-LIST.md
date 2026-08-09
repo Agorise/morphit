@@ -1,4 +1,11 @@
 # Morphit pre-launch revisit list
+> ## cp679–cp684 — v1.10.8: smooth+honest install. Deep-deep DONE, battery GREEN (600). NOT committed (2026-08-09)
+> **[RESOLVED]** cp679: online guided install no longer redirects apt → no false Mint "APT corrupt". Gated on mirrors-unreachable. Guard: ansible-offline-apt-gate-smoke.
+> **[RESOLVED — install-blocker]** cp680/681/682: AIDE blocking+timeout FAILED the install. Now deferred (idle bg oneshot, post_tasks start from settled state), reboot-safe (atomic rename), self-removing, FAILURE-VISIBLE (logger daemon.err + marker + stays-failed → systemd-monitor → Matrix). Guard: ansible-aide-deferred-smoke (18).
+> **[RESOLVED]** cp683: /v1/health cpu_pct always null (ProcSubset=pid hid /proc/stat). Now ProcSubset=all. mem/disk reflect the box (verify free -h/df -h /). Guard: indexer-health-metrics-smoke.
+> **[RESOLVED]** cp684: Node health (opt 13) now verifies indexer parallel-sync + relay + matrix ADDRESS + backups + TLS cert + AIDE baseline; summary leads with it.
+> **[OPEN — Ken]** wipe morphitlat + re-test the clean install on v1.10.8 (should be smooth end-to-end). Back up Tor (/var/lib/tor/morphit) + I2P (/var/lib/i2pd/morphit-web.dat) keys first; restore via morphit_tor_key_src/morphit_i2pd_key_src. Verify box RAM (free -h) + disk (df -h /) — 7.6GB/74.8GB may be hardware/partitioning.
+>
 > ## cp676+cp677+cp678 — v1.10.7: fresh-install fixes + AIDE UX. Deep-deep DONE, battery GREEN (597). NOT committed (2026-08-08)
 > **[RESOLVED — install-blocker]** cp676: /usr/local/lib/morphit created only in ipfs role (late) → ddns role (early) failed on fresh install with DDNS enabled. Now created in base role. Guard: ansible-shared-script-dir-smoke.
 > **[RESOLVED]** cp677: offline vendor/apt lacked Packages.xz → apt Err lines → Mint "APT corrupt" (cosmetic). Build now ships Packages + .xz + .gz.

@@ -235,9 +235,11 @@ export async function stepRelayAccount(instanceName?: string): Promise<RelayAcco
 			'earnings pile up safely in a different account whose keys\n' +
 			'never touch the server.\n' +
 			'\n' +
-			"If you don't have a Blurt account yet, register one at:\n" +
+			"If you don't have a Blurt account yet, register one at one of these url's:\n" +
 			'\n' +
+			'  https://join.blurt-blockchain.com/?r=agorise\n' +
 			'  https://blurtplugin.online/account/\n' +
+			'  https://morphit.io/en/onboarding\n' +
 			'\n' +
 			'Then come back here.'
 	);

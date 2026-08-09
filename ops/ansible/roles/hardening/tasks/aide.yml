@@ -30,51 +30,113 @@
     path: /var/lib/aide/aide.db
   register: hardening_aide_db_stat
 
-# cp678 — AIDE hashes the WHOLE filesystem, so on a low-power CPU (e.g. an Intel
-# N-series mini-PC) it can run far past the old "5-15 min" estimate and LOOK
-# frozen (no output while `aideinit` grinds). We now (1) set expectations up
-# front, (2) run it async, and (3) poll with a visible heartbeat so the operator
-# can see it's alive. AIDE emits no percentage, so the heartbeat is elapsed-time
-# based, not a true progress bar.
-- name: Explain the AIDE step before it runs (it hashes the whole disk)
+# cp680 — the AIDE baseline hashes the WHOLE filesystem, which on a low-power CPU
+# takes 20-45+ min and used to BLOCK the wizard (blowing the 15-min target).
+# It doesn't need to: the baseline is built from the freshly-installed files, and
+# whether it finishes during the wizard or shortly after makes no security
+# difference. So we DEFER it to a low-priority background oneshot that runs after
+# the install and yields to the indexer's initial chain sync. The wizard no
+# longer waits on it. (Supersedes the cp678 in-wizard heartbeat.)
+- name: Install the deferred AIDE-baseline builder script
+  ansible.builtin.copy:
+    dest: /usr/local/lib/morphit/morphit-aide-init.sh
+    owner: root
+    group: root
+    mode: '0755'
+    content: |
+      #!/bin/sh
+      # Build the AIDE filesystem-integrity baseline (deferred, idle-priority),
+      # then REMOVE this one-shot service so nothing lingers.
+      #
+      # Reboot-safe: the real database /var/lib/aide/aide.db is only ever created
+      # by the ATOMIC rename at the end, so a reboot mid-build leaves it ABSENT
+      # (never a half-written/corrupt file). Any partial aide.db.new from an
+      # interrupted run is discarded and rebuilt. The service stays enabled until
+      # the baseline exists, so an interrupted build simply retries on next boot.
+      #
+      # Failure-visible (cp682): if the build FAILS, this exits non-zero WITHOUT
+      # self-removing, so the unit stays in systemd's "failed" state — which
+      # morphit-systemd-monitor (it auto-watches every morphit-*.service) reports
+      # to the operator's Matrix DM. It also logs a high-priority error and drops
+      # a marker file, so a background failure is never silent even without the
+      # monitor/matrix-bot. The build retries on the next boot regardless.
+      set -eu
+      on_exit() {
+        rc=$?
+        if [ "$rc" -ne 0 ] && [ ! -f /var/lib/aide/aide.db ]; then
+          logger -p daemon.err -t morphit-aide-init "AIDE baseline build FAILED (exit $rc) — filesystem-integrity monitoring is NOT yet active. It retries on next boot. See: journalctl -u morphit-aide-init.service" 2>/dev/null || true
+          mkdir -p /var/lib/morphit 2>/dev/null || true
+          printf 'AIDE baseline build failed at %s (exit %s). Retries on boot. See: journalctl -u morphit-aide-init.service\n' "$(date -u +%FT%TZ 2>/dev/null || echo unknown)" "$rc" > /var/lib/morphit/aide-init-failed 2>/dev/null || true
+        fi
+      }
+      trap on_exit EXIT
+      if [ ! -f /var/lib/aide/aide.db ]; then
+        rm -f /var/lib/aide/aide.db.new
+        aideinit -y -f
+        mv -f /var/lib/aide/aide.db.new /var/lib/aide/aide.db
+        logger -t morphit-aide-init "AIDE integrity baseline built"
+      fi
+      # Success: clear any prior failure marker, then self-remove. The baseline
+      # now exists, so this one-shot has done its job. Disable + delete the unit
+      # and this script, then reload so nothing lingers. Guarded with || true so a
+      # cleanup hiccup never fails the build (the baseline is already in place).
+      rm -f /var/lib/morphit/aide-init-failed 2>/dev/null || true
+      systemctl disable morphit-aide-init.service 2>/dev/null || true
+      rm -f /etc/systemd/system/morphit-aide-init.service
+      rm -f /usr/local/lib/morphit/morphit-aide-init.sh
+      systemctl daemon-reload 2>/dev/null || true
+
+- name: Install the deferred AIDE-baseline systemd service (idle priority)
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/morphit-aide-init.service
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      [Unit]
+      Description=Morphit — build AIDE filesystem-integrity baseline (deferred, idle-priority, self-removing)
+      # No ConditionPathExists: the script itself checks whether the baseline
+      # already exists (and skips the build if so), then ALWAYS self-removes — so
+      # this one-shot cleans itself up on the run after the baseline is in place,
+      # even if a reboot landed between building the db and cleaning up.
+      After=multi-user.target
+
+      [Service]
+      Type=oneshot
+      # Idle scheduling so this NEVER competes with the indexer's initial chain
+      # sync — the node stays responsive and the baseline builds in spare capacity.
+      Nice=19
+      CPUSchedulingPolicy=idle
+      IOSchedulingClass=idle
+      ExecStart=/usr/local/lib/morphit/morphit-aide-init.sh
+      TimeoutStartSec=0
+
+      [Install]
+      WantedBy=multi-user.target
+
+- name: Enable the deferred AIDE-baseline service (also builds on a fresh boot if needed)
+  ansible.builtin.systemd:
+    name: morphit-aide-init.service
+    enabled: true
+    daemon_reload: true
+
+# cp681 — the START of the baseline build is deferred to the play's post_tasks,
+# NOT fired here. AIDE watches {{ morphit_repo_path }}/apps/* + /etc/morphit +
+# the morphit-*.service/.timer units, and those are written by the LATER morphit
+# role. Starting the build here (in the hardening role, before the morphit role
+# runs) would hash those paths before / while they're being written, producing an
+# inaccurate baseline and spurious "file changed" alerts. post_tasks runs after
+# every role, so the baseline is captured from the final, settled install.
+
+- name: Note that the AIDE baseline will build in the background after the install
   ansible.builtin.debug:
     msg: >-
-      Building the AIDE filesystem-integrity baseline now. This fingerprints your
-      ENTIRE disk, so on a low-power CPU it can take 15-40 minutes (longer than
-      the old estimate) — it is NOT frozen. Below you will see a
-      "RETRYING ... (N retries left)" heartbeat: that is normal progress, one
-      line roughly every 15 seconds. Leave it running.
+      The AIDE filesystem-integrity baseline will build in the BACKGROUND at idle
+      priority once the install finishes writing files. It does NOT block this
+      wizard and will not slow your chain sync — it finishes on its own (typically
+      15-45 min on slow hardware), the daily integrity check begins once it's done,
+      and the one-shot service removes itself afterward.
   when: not hardening_aide_db_stat.stat.exists
-
-- name: Initialize AIDE database (first run only — runs in the background)
-  ansible.builtin.command: aideinit -y -f
-  async: 3600
-  poll: 0
-  register: hardening_aide_job
-  when: not hardening_aide_db_stat.stat.exists
-  changed_when: true
-
-# The "RETRYING (N retries left)" lines Ansible prints for this task ARE the
-# heartbeat: one per poll (~15s), counting down from the 60-minute budget. It
-# finishes as soon as aideinit exits — usually well before the countdown ends.
-- name: "Building AIDE database — the RETRYING heartbeat below is normal (≈15s/line, NOT an error)"
-  ansible.builtin.async_status:
-    jid: "{{ hardening_aide_job.ansible_job_id }}"
-  register: hardening_aide_poll
-  until: hardening_aide_poll.finished
-  retries: 240
-  delay: 15
-  when: not hardening_aide_db_stat.stat.exists
-
-- name: Confirm the AIDE baseline finished
-  ansible.builtin.debug:
-    msg: "AIDE database built successfully — continuing."
-  when: not hardening_aide_db_stat.stat.exists
-
-- name: Move AIDE init db into place
-  ansible.builtin.command: mv /var/lib/aide/aide.db.new /var/lib/aide/aide.db
-  when: not hardening_aide_db_stat.stat.exists
-  changed_when: true
 
 - name: Schedule daily AIDE integrity check
   ansible.builtin.copy:
@@ -85,4 +147,7 @@
     content: |
       #!/bin/sh
       # Daily AIDE integrity check.  Output goes to operator email.
+      # cp680 — skip quietly until the deferred baseline has finished building,
+      # so we don't email a "no database" error while it's still building.
+      [ -f /var/lib/aide/aide.db ] || exit 0
       aide --check 2>&1 | mail -s "[morphit] AIDE check $(date +%F)" {{ morphit_alert_email_to }}

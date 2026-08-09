@@ -209,6 +209,118 @@ export interface CanaryStatus {
 	readonly detail: string;
 }
 
+export interface AideBaselineStatus {
+	readonly state: 'built' | 'building' | 'failed' | 'not-configured';
+	readonly detail: string;
+}
+
+/** AIDE filesystem-integrity baseline state (cp680–cp682). The baseline builds
+ *  in a deferred background one-shot that SELF-REMOVES on success, so the raw
+ *  service state is misleading (absent = done, not missing). Combine on-disk
+ *  facts instead, so a background failure is visible here even without Matrix:
+ *   - /var/lib/aide/aide.db present            → built
+ *   - /var/lib/morphit/aide-init-failed marker → failed
+ *   - morphit-aide-init.service active         → building
+ *   - service failed                           → failed
+ *   - none of the above                        → not-configured
+ *  Read-only. */
+export function checkAideBaseline(): AideBaselineStatus {
+	if (existsSync('/var/lib/aide/aide.db')) {
+		return { state: 'built', detail: 'integrity baseline built; daily check active' };
+	}
+	const failed = {
+		state: 'failed' as const,
+		detail:
+			'baseline build FAILED — see `sudo journalctl -u morphit-aide-init.service`; it retries on next boot'
+	};
+	if (existsSync('/var/lib/morphit/aide-init-failed')) return failed;
+	const svc = checkService('morphit-aide-init');
+	if (svc === 'active' || svc === 'activating') {
+		return {
+			state: 'building',
+			detail: 'baseline building in the background (idle priority) — no action needed'
+		};
+	}
+	if (svc === 'failed') return failed;
+	return { state: 'not-configured', detail: 'intrusion detection (AIDE) not enabled on this node' };
+}
+
+export interface TlsCertStatus {
+	readonly state: 'valid' | 'expiring' | 'expired' | 'not-found';
+	readonly daysLeft: number | null;
+	readonly detail: string;
+}
+
+/** TLS certificate status from Let's Encrypt (read-only). Reports the soonest
+ *  expiry among live certs via openssl. 'not-found' = no cert yet, i.e. HTTPS
+ *  isn't set up or is still in progress (first-online/certbot). cp684. */
+export function checkTlsCert(liveDir = '/etc/letsencrypt/live'): TlsCertStatus {
+	let domains: string[];
+	try {
+		domains = readdirSync(liveDir, { withFileTypes: true })
+			.filter((d) => d.isDirectory())
+			.map((d) => d.name);
+	} catch {
+		return {
+			state: 'not-found',
+			daysLeft: null,
+			detail: 'no HTTPS certificate yet — TLS not set up, or still in progress (certbot)'
+		};
+	}
+	let soonest: number | null = null;
+	for (const dom of domains) {
+		const certPath = join(liveDir, dom, 'cert.pem');
+		if (!existsSync(certPath)) continue;
+		try {
+			const out = execFileSync('openssl', ['x509', '-enddate', '-noout', '-in', certPath], {
+				encoding: 'utf8',
+				timeout: 3000
+			});
+			const m = /notAfter=(.+)/.exec(out);
+			const notAfter = m?.[1]?.trim();
+			if (notAfter === undefined || notAfter.length === 0) continue;
+			const exp = new Date(notAfter).getTime();
+			if (Number.isNaN(exp)) continue;
+			const days = Math.floor((exp - Date.now()) / 86_400_000);
+			if (soonest === null || days < soonest) soonest = days;
+		} catch {
+			/* openssl missing or cert unreadable — skip this one */
+		}
+	}
+	if (soonest === null) {
+		return {
+			state: 'not-found',
+			daysLeft: null,
+			detail: 'no readable cert in /etc/letsencrypt/live — TLS not set up, or in progress'
+		};
+	}
+	if (soonest < 0) {
+		return { state: 'expired', daysLeft: soonest, detail: `certificate EXPIRED ${-soonest} day(s) ago — renew now` };
+	}
+	if (soonest < 30) {
+		return {
+			state: 'expiring',
+			daysLeft: soonest,
+			detail: `expires in ${soonest} day(s) — auto-renewal should run; verify certbot.timer`
+		};
+	}
+	return { state: 'valid', daysLeft: soonest, detail: `valid, ${soonest} day(s) to expiry (auto-renews)` };
+}
+
+/** The alert MXID(s) the matrix-bot is configured to DM, from its env file.
+ *  Read-only; null when unset/unreadable. Lets health confirm the bot targets
+ *  the address the operator entered, not just that the service is up. cp684. */
+export function readMatrixMxid(envPath = '/etc/morphit/matrix-bot.env'): string | null {
+	try {
+		const txt = readFileSync(envPath, 'utf8');
+		const m = /^MORPHIT_MATRIX_BOT_ALERT_MXID=(.*)$/m.exec(txt);
+		const v = m?.[1]?.trim();
+		return v !== undefined && v.length > 0 ? v : null;
+	} catch {
+		return null;
+	}
+}
+
 /** Warn when a served canary has less than this much validity left. Normal
  *  weekly refresh keeps a far wider margin, so a low margin means the refresh
  *  has stalled — flag it while there's still time to re-run, BEFORE it expires
@@ -1293,6 +1405,9 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 	];
 	const canary = checkCanary(canaryFilePath(), now);
 	const backups = checkBackups(readBackupFacts(), now);
+	const aide = checkAideBaseline();
+	const tls = checkTlsCert();
+	const matrixMxid = readMatrixMxid();
 	const ipfsSeeding = checkIpfsSeeding(readIpfsSeedingFacts());
 
 	// Local host CPU / memory / disk (read-only, non-privileged).
@@ -1323,6 +1438,9 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 						disk_total_gb: sys.diskTotalGB
 					},
 					services: Object.fromEntries(services.map((s) => [s.unit, s.state])),
+					aide_baseline: { state: aide.state, detail: aide.detail },
+					tls_cert: { state: tls.state, days_left: tls.daysLeft, detail: tls.detail },
+					matrix_alert_mxid: matrixMxid,
 					canary,
 					backups: {
 						state: backups.state,
@@ -1371,6 +1489,13 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 				? `${s.rpcHealthy}/${s.rpcTotal} reachable`
 				: 'unknown';
 		console.log(`      Blurt RPC:     ${s.rpcAllDown ? c.red(rpcStr) : rpcStr}`);
+		// cp684 — make the FAST catch-up explicit: a behind node fetches blocks
+		// from all reachable endpoints at once (one prefetch window per endpoint).
+		if (!s.synced && s.rpcHealthy !== null && s.rpcHealthy > 0) {
+			console.log(
+				`                     ${c.dim(`catching up in parallel from ${s.rpcHealthy} node${s.rpcHealthy === 1 ? '' : 's'} at once`)}`
+			);
+		}
 		console.log(`      Uptime:        ${fmtUptime(s.uptimeSec)}`);
 		if (s.version !== null) console.log(`      Version:       ${safe(s.version)}`);
 		if (s.priceFeed !== null) {
@@ -1559,6 +1684,44 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 	console.log('');
 	console.log(`  ${c.bold('Services')}  ${c.dim('(systemd, read-only)')}`);
 	for (const svc of services) console.log(serviceLine(c, svc.unit, svc.state));
+	// matrix-bot: confirm it's DMing the address the operator entered, not just
+	// that the service is up (cp684).
+	{
+		const mb = services.find((s) => s.unit === 'morphit-matrix-bot');
+		if (mb !== undefined && (mb.state === 'active' || mb.state === 'activating')) {
+			console.log(
+				matrixMxid !== null
+					? `                     ${c.dim(`alerts → ${matrixMxid}`)}`
+					: `                     ${c.yellow('alert address NOT set — set MORPHIT_MATRIX_BOT_ALERT_MXID')}`
+			);
+		}
+	}
+	// HTTPS / TLS certificate (cp684).
+	{
+		const tlsTag =
+			tls.state === 'valid'
+				? c.green('✓')
+				: tls.state === 'expiring'
+					? c.yellow('⚠')
+					: tls.state === 'expired'
+						? c.red('✗')
+						: c.dim('–');
+		console.log(`  ${tlsTag} ${'HTTPS / TLS cert'.padEnd(22)} ${c.dim(tls.detail)}`);
+	}
+	// AIDE baseline: a deferred background one-shot that self-removes on success,
+	// so it needs its own line (raw service state would read "not installed" once
+	// done). A background FAILURE surfaces here even without Matrix alerts.
+	{
+		const aideTag =
+			aide.state === 'built'
+				? c.green('✓')
+				: aide.state === 'failed'
+					? c.red('✗')
+					: aide.state === 'building'
+						? c.yellow('⋯')
+						: c.dim('–');
+		console.log(`  ${aideTag} ${'AIDE baseline'.padEnd(22)} ${c.dim(aide.detail)}`);
+	}
 
 	// ── Backups block ──
 	// Deliberately sits next to Services and Canary: all three answer "is the

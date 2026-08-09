@@ -55,7 +55,13 @@ ProtectKernelLogs=yes
 ProtectControlGroups=yes
 ProtectClock=yes
 ProtectProc=invisible
-ProcSubset=pid
+# cp683 — ProcSubset MUST be 'all', not 'pid'. The indexer computes the
+# /v1/health system block (cpu_pct, mem) from /proc/stat + /proc/meminfo; with
+# ProcSubset=pid the kernel hides those non-process files, so os.cpus() can't
+# read CPU counters (cpu_pct stays permanently null) and /proc/meminfo reads
+# fail. These are non-sensitive system-wide stats; ProtectProc=invisible above
+# still hides other processes' details, which is the meaningful protection.
+ProcSubset=all
 RestrictRealtime=yes
 RestrictSUIDSGID=yes
 LockPersonality=yes
