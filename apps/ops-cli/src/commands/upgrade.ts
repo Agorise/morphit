@@ -1109,6 +1109,18 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		);
 	}
 
+	// cp686 — quiet npm's warn-level chatter for the child installs we run during
+	// an upgrade. `npm ci` prints "npm warn deprecated …" for transitive packages
+	// we don't control (matrix-bot-sdk still pulls the old `request` library,
+	// better-sqlite3 pulls prebuild-install), which is noise an operator can't act
+	// on and — mid-upgrade — reads like something is wrong. Errors still surface.
+	// Only set for upgrades; a developer's own build keeps full output.
+	if (!checkOnly) process.env.npm_config_loglevel = 'error';
+	// cp687 — raise the frontend build's chunk-size warning limit for upgrades so
+	// operators don't see a "(!) some chunks are larger than 500 kB" hint they
+	// can't act on. Dev/CI builds keep the warning (they don't set this).
+	if (!checkOnly) process.env.MORPHIT_QUIET_BUILD = '1';
+
 	const host = process.env.MORPHIT_RELEASE_HOST ?? DEFAULT_HOST;
 	const repo = process.env.MORPHIT_RELEASE_REPO ?? DEFAULT_REPO;
 	const installDir = process.env.MORPHIT_INSTALL_DIR ?? DEFAULT_INSTALL_DIR;
@@ -1363,6 +1375,20 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 
 
 	// ─── 7. Backup current install ──────────────────────────────
+	// cp685 — before we rename installDir out from under ourselves, move THIS
+	// process to a stable directory. The morphit-ops launcher runs us with the
+	// cwd inside the install dir; once we rename it to the backup, that cwd path
+	// no longer exists, and every shell we spawn afterward (npm lifecycle
+	// scripts, the MCP deploy) prints alarming "getcwd: cannot access parent
+	// directories" / "getcwd() failed" errors — harmless, but they read like a
+	// broken install to a new operator. Chdir to '/' (always present) so every
+	// child inherits a valid cwd. The build/extract/npm steps all pass an
+	// explicit cwd, so this doesn't change their behaviour.
+	try {
+		process.chdir('/');
+	} catch {
+		/* '/' is always accessible; ignore the impossible failure */
+	}
 	const backupDir = `${installDir}.bak-${Date.now()}`;
 	info(`Backing up ${installDir} → ${backupDir}`);
 	try {
@@ -1755,7 +1781,16 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	if (plan.copyToWebRoot || plan.restartContainer) {
 		try {
 			const builtVersion = readBuiltVersion(buildDir);
-			const servedVersion = await resolveServedVersion(plan, webRoot);
+			// cp688 — the container was JUST restarted; give it a moment to come
+			// back up before deciding we can't verify. Without this, the check
+			// almost always runs before the web server is serving again and prints
+			// "Could not auto-verify the served frontend", which looks like a
+			// failure on an upgrade that actually worked. Retry a few times.
+			let servedVersion = await resolveServedVersion(plan, webRoot);
+			for (let attempt = 0; servedVersion === null && attempt < 5; attempt++) {
+				await new Promise((r) => setTimeout(r, 2000));
+				servedVersion = await resolveServedVersion(plan, webRoot);
+			}
 			const verdict = classifyFrontendVerify(builtVersion, servedVersion);
 			if (verdict === 'fresh') {
 				info(

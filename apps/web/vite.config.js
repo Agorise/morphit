@@ -24,6 +24,12 @@ export default defineConfig({
 		cssMinify: 'lightningcss',
 		sourcemap: false,
 		reportCompressedSize: true,
+		// cp687 — the chunk-size hint is a useful footprint signal in dev + CI, but
+		// mid-upgrade it's noise an operator can't act on and reads like a problem.
+		// morphit-ops sets MORPHIT_QUIET_BUILD=1 for the upgrade's frontend build to
+		// raise the limit out of the way; a normal `npm run build` keeps the 500 kB
+		// warning so we still watch chunk growth.
+		chunkSizeWarningLimit: process.env.MORPHIT_QUIET_BUILD === '1' ? 100000 : 500,
 		rollupOptions: {
 			output: {
 				// Stable chunk names for SRI hash generation
