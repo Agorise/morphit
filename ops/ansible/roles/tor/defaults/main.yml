@@ -13,7 +13,7 @@ morphit_tor_hs_dir: /var/lib/tor/morphit
 # The local service Tor forwards the onion's virtual port 80 to (the
 # public web edge: BunkerWeb/nginx in front of the relay, or the relay).
 morphit_tor_local_host: 127.0.0.1
-morphit_tor_local_port: 8080
+morphit_tor_local_port: 8090
 
 # Path ON THE CONTROL NODE to the wizard-generated key directory
 # (`tor-hidden-service/`, holding hs_ed25519_secret_key,

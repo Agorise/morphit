@@ -53,7 +53,10 @@ check('re-verifies Node after install (fails loudly if still too old)', /node_ok
 // ── Deps + hand-off ───────────────────────────────────────────────
 check('installs project libraries (npm install)', /\bnpm install\b/.test(code));
 check('hands off to the guided installer (morphit-ops install)', /exec npx --no-install morphit-ops install/.test(code));
-check('installs git only if absent (guarded)', /command -v git[\s\S]{0,80}apt-get install -y git/.test(code));
+check(
+	'installs git only if absent (guarded), from the offline bundle or apt',
+	/if ! command -v git\b/.test(code) && /(apt-get[\s\S]{0,40}install -y git|vendor\/apt\/git)/.test(code)
+);
 
 // ── Real shell syntax check ───────────────────────────────────────
 const bn = spawnSync('bash', ['-n', SETUP], { encoding: 'utf-8' });

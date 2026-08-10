@@ -129,10 +129,12 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 	// the numbered steps — so the running "Step N of {total}" is accurate from step 1.
 	const mode = await askInstallMode();
 	// 3 account steps + 5 core questions + saving the DB passwords + the post-install
-	// summary + the register opt-in, plus 3 more on a home box (DDNS, the router
-	// port-forward, desktop notifications).  Keep in sync with the step() calls below
-	// + in collectInstallInputs.
-	const totalSteps = 3 + 5 + 3 + (mode === 'home' ? 3 : 0);
+	// summary + the register opt-in, plus 4 more on a home box: the DDNS question
+	// (asked inside collectInstallInputs), the router port-forward, desktop
+	// notifications, and the locally-signed warrant canary.  Keep in sync with the
+	// step() calls below + in collectInstallInputs (a mismatch trips the assert at
+	// the end of this function).
+	const totalSteps = 3 + 5 + 3 + (mode === 'home' ? 4 : 0);
 	beginSteps(totalSteps);
 
 	const relay = await stepRelayAccount();
@@ -257,7 +259,14 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 		step(0, 0, 'Warrant canary (signed here, auto-refreshed weekly)');
 		const canaryScript = join(opts.repoRoot, 'scripts', 'canary', 'setup.sh');
 		if (await askYesNo('\n  Set up your warrant canary now (signed on this box, refreshed weekly)?', true)) {
-			const rc = spawnSync('bash', [canaryScript], { stdio: 'inherit' });
+			// cp693 — the wizard runs from the SOURCE tarball, but the frontend
+			// container serves the DEPLOYED build (/opt/morphit/apps/web/build).
+			// Point the canary at the served dir so /canary.txt actually loads,
+			// instead of landing in the source tree where nothing reads it.
+			const rc = spawnSync('bash', [canaryScript], {
+				stdio: 'inherit',
+				env: { ...process.env, MORPHIT_CANARY_SERVE_DIR: '/opt/morphit/apps/web/build' }
+			});
 			if ((rc.status ?? 1) !== 0) {
 				console.log('\n  Note: couldn\u2019t set that up automatically (not essential). Do it later with:');
 				console.log(`        bash ${canaryScript}\n`);
@@ -317,6 +326,19 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 			`\n  [morphit] internal: wizard showed ${currentStepNum()} steps but announced ${totalSteps}.` +
 				'\n  The install is fine; please report this numbering bug.\n'
 		);
+	}
+	// cp694 — public-reachability self-check. A home box behind a router can't
+	// tell it's unreachable by curling its own domain (NAT hairpin), so operators
+	// used to discover an ISP 80/443 block only via a stale "Unreachable"
+	// federation pill hours later. Probe from an external Tor exit (the node
+	// already runs Tor) and say plainly, right now, whether the internet can
+	// reach this box — and point at the .onion, which works regardless. Home
+	// only: a VPS has a static public IP and no home-router/ISP block to hit.
+	if (inputs.mode === 'home') {
+		const reachScript = join(opts.repoRoot, 'ops', 'scripts', 'morphit-reachability-check.sh');
+		if (existsSync(reachScript)) {
+			spawnSync('bash', [reachScript, inputs.domain], { stdio: 'inherit' });
+		}
 	}
 	return 0;
 }

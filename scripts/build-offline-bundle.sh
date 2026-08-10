@@ -133,7 +133,7 @@ PKGS="ca-certificates curl wget gnupg git lsb-release jq age rsync build-essenti
 chrony cron ufw fail2ban auditd audispd-plugins aide aide-common apparmor apparmor-utils \
 rkhunter libpam-pwquality unattended-upgrades apt-listchanges postfix libsasl2-modules \
 certbot postgresql postgresql-client postgresql-contrib python3-psycopg2 tor i2pd \
-apt-transport-https docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin"
+apt-transport-https docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin ansible"
 docker run --rm -e PKGS="${PKGS}" -v "${VENDOR}/apt:/out" \
 	ubuntu:24.04 bash -c '
 		set -eu
@@ -167,6 +167,27 @@ docker run --rm -e PKGS="${PKGS}" -v "${VENDOR}/apt:/out" \
 	&& xz -9ec Packages > Packages.xz \
 	&& gzip -9c Packages > Packages.gz )
 log "     $(ls "${VENDOR}/apt"/*.deb 2>/dev/null | wc -l) .deb files harvested."
+
+# cp690 — download the ansible galaxy collections the playbook needs into the
+# bundle, so a truly offline install installs them from here, never Ansible
+# Galaxy. `ansible-galaxy collection download` writes the collection tarballs
+# plus a requirements.yml (referencing those local tarballs) into the output
+# dir; the installer then does `collection install -r <that>/requirements.yml`
+# with no network. Run in the same ubuntu:24.04 container (ansible-galaxy needs
+# ansible present) so the build box needs nothing but Docker.
+log "  downloading ansible galaxy collections (community.general/postgresql/docker)…"
+mkdir -p "${VENDOR}/ansible-collections"
+docker run --rm \
+	-v "${VENDOR}/ansible-collections:/out" \
+	-v "${REPO_ROOT}/ops/ansible/collections:/reqs:ro" \
+	ubuntu:24.04 bash -c '
+		set -eu
+		export DEBIAN_FRONTEND=noninteractive
+		apt-get update -qq
+		apt-get install -y --no-install-recommends ansible
+		ansible-galaxy collection download -r /reqs/requirements.yml -p /out
+	' || die "ansible galaxy collection download (in the ubuntu:24.04 container) failed — see the log above."
+log "     ansible collections staged into vendor/ansible-collections."
 
 # ── 5. Docker images → vendor/docker (docker save) ──
 # The bunkerweb compose (roles/bunkerweb/templates/docker-compose.yml.j2) is the

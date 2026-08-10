@@ -19,7 +19,7 @@ morphit_i2pd_keyfile: morphit-web.dat
 # The local service i2pd's server tunnel forwards to (the public web edge:
 # BunkerWeb/nginx in front of the relay, or the relay).
 morphit_i2pd_local_host: 127.0.0.1
-morphit_i2pd_local_port: 8080
+morphit_i2pd_local_port: 8090
 
 # Path ON THE CONTROL NODE to the wizard-generated i2p-tunnel/ directory
 # (holding morphit-web.dat).  When set and present, the role installs that

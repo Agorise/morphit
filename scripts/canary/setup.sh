@@ -56,6 +56,14 @@ REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 GENERATE="$REPO_ROOT/scripts/canary/generate.sh"
 STATIC_DIR="$REPO_ROOT/apps/web/static"
 BUILD_DIR="$REPO_ROOT/apps/web/build"
+# cp693 — the SERVED build dir. On a manual/source install the source tree IS
+# what nginx serves, so this defaults to $REPO_ROOT/apps/web/build. But on an
+# ansible/home install the wizard runs this script from the SOURCE tarball
+# (~/Downloads/morphit) while the frontend container serves the DEPLOYED tree
+# (/opt/morphit/apps/web/build). The wizard passes MORPHIT_CANARY_SERVE_DIR so
+# the signed canary + weekly refresh land where it's actually served, not in the
+# source tree where nothing reads it.
+SERVE_DIR="${MORPHIT_CANARY_SERVE_DIR:-$REPO_ROOT/apps/web/build}"
 
 say ""
 say "── Morphit warrant-canary setup ───────────────────────────────"
@@ -196,13 +204,14 @@ mkdir -p "$MORPHIT_HOME"
 	printf "export MORPHIT_CANARY_INSTANCE_ORIGIN='%s'\n" "$INSTANCE_ORIGIN"
 	printf "export MORPHIT_CANARY_OPERATOR_ACCOUNT='%s'\n" "$OPERATOR_ACCOUNT"
 	printf "REPO='%s'\n" "$REPO_ROOT"
+	printf "SERVE='%s'\n" "$SERVE_DIR"
 	printf 'cd "$REPO"\n'
 	printf 'bash scripts/canary/generate.sh\n'
 	printf 'SIGNED="$REPO/apps/web/static/canary.txt"\n'
 	printf 'PUBKEY="$REPO/apps/web/static/pgp_keys.asc"\n'
 	if [ "$MODE" = local ]; then
 		printf '# Home hosting: place the freshly-signed canary where nginx serves it.\n'
-		printf 'DEST="$REPO/apps/web/build"\n'
+		printf 'DEST="$SERVE"\n'
 		printf 'mkdir -p "$DEST"\n'
 		printf '# Self-heal: an upgrade may re-root build/; take it back (best-effort sudo) before writing.\n'
 		printf 'if [ ! -w "$DEST" ] && command -v sudo >/dev/null 2>&1; then sudo -n chown -R "$(id -un):$(id -gn)" "$DEST" 2>/dev/null || true; fi\n'
@@ -296,7 +305,7 @@ info "Refreshes weekly via:    $REFRESH"
 if [ "$MODE" = remote ]; then
 	info "Uploads to:              $REMOTE_SSH:$REMOTE_PATH/apps/web/build/"
 else
-	info "Served from:             $BUILD_DIR/"
+	info "Served from:             $SERVE_DIR/"
 fi
 say ""
 say "IMPORTANT — after every 'morphit-ops' UPGRADE, the rebuild wipes the served"
