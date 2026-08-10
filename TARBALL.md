@@ -1,4 +1,25 @@
 # TARBALL
+> ## cp689–cp695 — v1.10.10: TRUE-offline install + honest home-node bring-up + Tor/I2P serve the marketplace. From morphitlat (2nd node) fresh-install shakeout. DEEP-DEEP DONE, battery GREEN (604). NOT committed (2026-08-09).
+>
+> **Context:** Ken bootstrapped a 2nd node (morphitlat, home Beelink N150, Telmex/Mexico). Fresh v1.10.9 install surfaced 7 issues; all fixed here. Telmex blocks ALL inbound (proven: 0 packets on 80/443/8443 via tcpdump from cellular) — NOT a Morphit bug; morphitlat serves the world via its .onion instead.
+>
+> **cp689 — git fetched ONLINE during install.** morphit-setup.sh ran plain `apt-get install -y git`. FIX: installs git from the bundled apt repo (temp `[trusted=yes] file://vendor/apt` list, Dir::Etc::SourceList override, dpkg -i fallback on git+git-man+liberror-perl .debs, online apt only when NO bundle). git already in build-offline-bundle.sh PKGS. Guard: offline-bundle-git-smoke + setup-bootstrap-smoke (re-pointed to intent: `command -v git` guard + install-from-bundle-or-apt, NOT the old 80-char apt proximity).
+>
+> **cp690 — ansible + galaxy collections fetched ONLINE.** assembleInstall realEnsureAnsible ran `apt-get install -y ansible` + `ansible-galaxy collection install`. FIX: build-offline-bundle.sh PKGS += ansible; new bundle step downloads collections in a ubuntu:24.04 container → vendor/ansible-collections; realEnsureAnsible installs ansible from vendorApt + collections from vendorCollections/requirements.yml, online only if no bundle. Swept ALL roles (Kubo/Node/Docker-key/Trivy already offline-correct). Guard: offline-bundle-git-smoke (extended). NOTE: an ONLINE box uses online apt/docker-key BY DESIGN (cp679 keeps Mint Update Manager happy); TRUE offline test = unplug cable.
+>
+> **cp691 — backups "⚠ unreadable" on a fresh node.** readBackupFacts treated ENOENT (backup dir `{{morphit_service_home}}/backups` not created until first 04:00 run) as a perms failure. FIX: ENOENT → readable:true, newest:null → checkBackups reports "no dump yet, start one now with `sudo systemctl start morphit-backup.service`" (state 'missing'), NOT 'unreadable'. A real EACCES/EPERM still reads unreadable. Test: backupHealth.test.ts (16, incl. the ENOENT case).
+>
+> **cp692 — "Step 15 of 14" off-by-one.** collectInstallInputs adds a 6th home step (DDNS, line 150) the counter didn't include. FIX: runAnsibleInstall totalSteps `(mode==='home' ? 3 : 0)` → `4` (DDNS+router+desktop+canary). VPS=11, HOME=15. (Runtime self-check at end already asserts currentStepNum()===totalSteps.)
+>
+> **cp693 — warrant canary signed into the SOURCE tree, served from the DEPLOYED tree.** Wizard runs setup.sh from opts.repoRoot (~/Downloads/morphit); setup.sh wrote canary to $REPO_ROOT/apps/web/build, but the frontend container mounts /opt/morphit/apps/web/build:ro (confirmed via docker inspect). FIX: setup.sh `SERVE_DIR="${MORPHIT_CANARY_SERVE_DIR:-$REPO_ROOT/apps/web/build}"` used for the initial place + the weekly-refresh DEST; wizard passes MORPHIT_CANARY_SERVE_DIR=/opt/morphit/apps/web/build. Guard: canary-serve-dir-smoke. IMMEDIATE FIX Ken ran: `sudo install -m 0644 ~/Downloads/morphit/apps/web/build/canary.txt /opt/morphit/apps/web/build/canary.txt`.
+>
+> **cp694 — post-install public-reachability self-check (NEW).** ops/scripts/morphit-reachability-check.sh probes inbound 80/443 from an EXTERNAL Tor exit (`curl --socks5-hostname 127.0.0.1:9050`, since NAT hairpin blocks the box testing its own public IP); names ISP/router 80/443 block as cause; points at the .onion. runAnsibleInstall runs it after endSteps for home installs. Guard: reachability-check-smoke.
+>
+> **cp695 — Tor .onion AND I2P .b32.i2p both pointed at 127.0.0.1:8080 (the RELAY, which 404s the site + /v1/instance) instead of the frontend fan-out.** Can't route via BunkerWeb (AUTO_REDIRECT_HTTP_TO_HTTPS=yes → 301 to clearnet HTTPS Tor can't follow); frontend wasn't host-published. FIX: docker-compose.yml.j2 frontend publishes `127.0.0.1:{{ morphit_onion_frontend_port|default(8090) }}:80` (LOOPBACK-only); group_vars + tor/i2pd defaults morphit_tor_local_port + morphit_i2pd_local_port 8080→8090; new var morphit_onion_frontend_port: 8090. Guard: onion-frontend-target-smoke. PROVEN on morphitlat via temp torrc hand-edit (HiddenServicePort → 172.20.0.2:80 → full site + /v1/health JSON loaded in Tor Browser). Ken to restore /etc/tor/torrc.bak after testing; permanent fix lands on upgrade to v1.10.10.
+>
+> **Battery 604** (added offline-bundle-git, canary-serve-dir, reachability-check, onion-frontend-target). No frontend user-facing strings → NO locale work. Bump 19/19 touchpoints. RELEASE-NOTES-v1.10.10.md written.
+>
+# TARBALL
 > ## cp685–cp688 — v1.10.9: a CLEAN, trustworthy upgrade output (getcwd, npm-deprecation noise, vite chunk hint, false "could not verify"). DEEP-DEEP DONE, battery GREEN (600). NOT committed (2026-08-09).
 >
 > **Context:** Ken's v1.10.7→v1.10.8 upgrade on morphit.io succeeded (✓ Upgrade complete) but the OUTPUT printed several alarming-but-harmless lines; a NEW operator seeing them would lose trust. Full t.txt (674 lines) scanned — these 4 were the only concerning items.

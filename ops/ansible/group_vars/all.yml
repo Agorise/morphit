@@ -343,7 +343,11 @@ morphit_auto_register: false
 enable_tor: true
 morphit_tor_hs_dir: /var/lib/tor/morphit
 morphit_tor_local_host: 127.0.0.1
-morphit_tor_local_port: 8080
+# cp695 — host loopback port the frontend container publishes so Tor + I2P
+# hidden services reach the site fan-out (not the bare relay). Must match the
+# port tor/i2pd target below + the docker-compose frontend ports mapping.
+morphit_onion_frontend_port: 8090
+morphit_tor_local_port: 8090   # cp695: the frontend fan-out (was 8080=relay-only, which 404d the site)
 morphit_tor_key_src: ""
 
 # Every instance also gets a basic .b32.i2p (the wizard generates one and
@@ -357,7 +361,7 @@ morphit_i2pd_datadir: /var/lib/i2pd
 morphit_i2pd_tunnels_conf: /etc/i2pd/tunnels.conf
 morphit_i2pd_keyfile: morphit-web.dat
 morphit_i2pd_local_host: 127.0.0.1
-morphit_i2pd_local_port: 8080
+morphit_i2pd_local_port: 8090  # cp695: the frontend fan-out (was 8080=relay-only)
 morphit_i2pd_key_src: ""
 
 

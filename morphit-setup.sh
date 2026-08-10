@@ -79,12 +79,28 @@ else
 	log "Node.js $(node -v) installed."
 fi
 
-# git is handy for updates later; install it if absent (cheap, non-fatal).  On an
-# offline box with no apt reachable this simply no-ops — git is NOT required to
-# run Morphit, so we never let its absence abort the install.
+# git is handy for updates later; install it if absent (cheap, non-fatal).  A
+# self-contained (offline) tarball ships git + its dependencies in the bundled
+# apt closure (vendor/apt), so we install it FROM THERE with no network — a
+# truly air-gapped box gets git too, and an online box doesn't waste a download.
+# Only when there's no bundle (source-tarball install) do we reach the registry.
 if ! command -v git >/dev/null 2>&1; then
 	log "Installing git\xE2\x80\xA6"
-	apt-get install -y git 2>/dev/null || warn "git not installed (offline?) — Morphit runs fine without it; git-based updates just won't be available."
+	if [ -f vendor/apt/Packages ]; then
+		# Offline-first: resolve git (+ its deps) from ONLY the bundled repo, so
+		# apt never touches the network even on a box that has connectivity.
+		_bl="/etc/apt/sources.list.d/morphit-bundle-git.list"
+		printf 'deb [trusted=yes] file://%s ./\n' "$HERE/vendor/apt" >"$_bl"
+		apt-get -o Dir::Etc::SourceList="$_bl" -o Dir::Etc::SourceParts=/dev/null \
+			-o APT::Get::List-Cleanup=0 update >/dev/null 2>&1 || true
+		apt-get -o Dir::Etc::SourceList="$_bl" -o Dir::Etc::SourceParts=/dev/null \
+			install -y git 2>/dev/null \
+			|| dpkg -i vendor/apt/git_*.deb vendor/apt/git-man_*.deb vendor/apt/liberror-perl_*.deb 2>/dev/null \
+			|| warn "git not installed from the bundle — Morphit runs fine without it; git-based updates just won't be available."
+		rm -f "$_bl"
+	else
+		apt-get install -y git 2>/dev/null || warn "git not installed (offline?) — Morphit runs fine without it; git-based updates just won't be available."
+	fi
 fi
 
 # Libraries: a self-contained (offline) tarball ships a complete, prebuilt

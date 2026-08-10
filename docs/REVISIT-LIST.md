@@ -1,4 +1,15 @@
 # Morphit pre-launch revisit list
+> ## cp689–cp695 — v1.10.10: true-offline install, honest home bring-up, Tor/I2P serve the marketplace. Deep-deep DONE, battery GREEN (604). NOT committed (2026-08-09)
+> **[RESOLVED]** cp689: git fetched online → now installed from vendor/apt bundle (dpkg fallback), online only w/o bundle. Guard: offline-bundle-git-smoke + setup-bootstrap (re-pinned to intent).
+> **[RESOLVED]** cp690: ansible + galaxy collections fetched online → now from vendor/apt + vendor/ansible-collections. All roles swept.
+> **[RESOLVED]** cp691: backups "unreadable" on fresh node (ENOENT dir) → now "no dump yet, start one now". Test in backupHealth.test.ts.
+> **[RESOLVED]** cp692: "Step 15 of 14" off-by-one (uncounted home DDNS step) → home term 3→4. VPS=11 HOME=15.
+> **[RESOLVED]** cp693: canary signed into source tree, served from deployed → now MORPHIT_CANARY_SERVE_DIR=/opt/morphit/apps/web/build. Guard: canary-serve-dir-smoke.
+> **[RESOLVED]** cp694: NEW post-install reachability self-check (external Tor-exit probe) → names ISP 80/443 block, points at .onion. Guard: reachability-check-smoke.
+> **[RESOLVED]** cp695: Tor/I2P hidden services pointed at the relay (8080, 404s the site) → now the frontend fan-out (127.0.0.1:8090 loopback publish). Guard: onion-frontend-target-smoke.
+>
+> **[OPEN — v1.11.0, Ken asked to be REMINDED] HIDDEN-SERVICE-ONLY NODE.** Support a node with NO clearnet domain (Tor .onion and/or I2P .b32.i2p and/or Lokinet .loki only), + the add-clearnet-domain-LATER upgrade path. Ken's note: **.eth/ENS is PUBLIC on-chain, NOT private — private naming = .onion/.b32.i2p/.loki, NOT ENS.** SCOPE (investigated 2026-08-09): (a) on-chain operatorRegister origin validator REQUIRES `https:` (`origin_bad_scheme`) + rejects .local/.localhost/.internal (but NOT .onion) — a Tor onion is http:// → advertising it needs a backward-compat on-chain change (accept http-onion, OR a separate onion/i2p field); origin is already nullable. (b) wizard hard-requires domain (collectInstallInputs askValidated). (c) TLS + BunkerWeb wired to morphit_domain (cert, health curls) → gate/skip when no domain; frontend must run WITHOUT BunkerWeb (it won't start without a cert). (d) directory/instances page must show onion-only nodes with their .onion + NO "unreachable" clearnet pill (frontend + indexer). (e) design the add-clearnet-later transition in from the start. RECOMMENDED as a dedicated v1.11.0 feature release (careful, backward-compat, own testing), NOT a hotfix add. Ken AGREED: ship v1.10.10 now, build hidden-service-only as v1.11.0.
+>
 > ## cp685–cp688 — v1.10.9: clean upgrade output. Deep-deep DONE, battery GREEN (600). NOT committed (2026-08-09)
 > **[RESOLVED]** cp685: getcwd errors ×3 during upgrade (stale cwd after backup rename). Now process.chdir('/') before the rename. Guard: upgrade-mirror-smoke.
 > **[RESOLVED]** cp686: npm deprecation noise ×5 (matrix-bot-sdk@0.7.1 old `request` + prebuild-install). Now npm_config_loglevel=error for upgrades (root fix = risky matrix-bot-sdk bump, DEFERRED).

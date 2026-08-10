@@ -1090,8 +1090,17 @@ export function readBackupFacts(envPath = '/etc/morphit/backup.env'): BackupFact
 				newest = { name, atMs: st.mtimeMs, bytes: st.size };
 			}
 		}
-	} catch {
-		// The dir is 700 morphit:morphit; another user can't list it.
+	} catch (err) {
+		// A backup dir that doesn't exist yet (ENOENT) is NOT a permission
+		// problem — it's a fresh node whose first scheduled dump hasn't run
+		// (the backup script creates the dir on first run). Report it as
+		// readable-but-empty so checkBackups gives the helpful "no dump yet,
+		// start one now" message instead of a scary "unreadable". A genuine
+		// permission error (EACCES/EPERM — dir is 700 morphit:morphit and we're
+		// some other non-root user) stays unreadable.
+		if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+			return { configured: true, readable: true, dir, newest: null, lastTriggerMs, serviceFailed };
+		}
 		return { configured: true, readable: false, dir, newest: null, lastTriggerMs, serviceFailed };
 	}
 	return { configured: true, readable: true, dir, newest, lastTriggerMs, serviceFailed };

@@ -20,6 +20,7 @@
 import { describe, it, expect } from 'vitest';
 import {
 	checkBackups,
+	readBackupFacts,
 	formatBackupAge,
 	formatBackupSize,
 	BACKUP_STALE_AFTER_MS,
@@ -27,6 +28,9 @@ import {
 	BACKUP_MIN_PLAUSIBLE_BYTES,
 	type BackupFacts
 } from '../src/commands/health.ts';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const NOW = new Date('2026-07-22T18:00:00.000Z');
 const HOUR = 60 * 60 * 1000;
@@ -181,6 +185,31 @@ describe('checkBackups', () => {
 		);
 		expect(s.state).toBe('fresh');
 		expect(BACKUP_STALE_AFTER_MS).toBeGreaterThan(24.5 * HOUR);
+	});
+});
+
+describe('readBackupFacts — a fresh node whose first dump has not run (cp691)', () => {
+	it('a not-yet-created backup dir (ENOENT) is configured+readable with no dump, NOT unreadable', () => {
+		// A brand-new node: backup.env exists (deployed at install), but the
+		// BACKUP_DIR is only created by the first scheduled run. Listing a
+		// non-existent dir throws ENOENT — which must read as "no dump yet"
+		// (helpful, actionable), never "unreadable" (a scary perms problem that
+		// sudo can't fix and would send an operator chasing ghosts).
+		const d = mkdtempSync(join(tmpdir(), 'morphit-bk-'));
+		const env = join(d, 'backup.env');
+		writeFileSync(env, `BACKUP_DIR=${join(d, 'backups-not-created-yet')}\n`);
+		try {
+			const f = readBackupFacts(env);
+			expect(f.configured).toBe(true);
+			expect(f.readable).toBe(true);
+			expect(f.newest).toBe(null);
+			// downstream, the operator gets "no dump yet, start one now" — not "unreadable"
+			const status = checkBackups(f, NOW);
+			expect(status.state).not.toBe('unreadable');
+			expect(status.state).toBe('missing');
+		} finally {
+			rmSync(d, { recursive: true, force: true });
+		}
 	});
 });
 

@@ -115,6 +115,13 @@ services:
       context: ./frontend
     container_name: morphit-frontend
     restart: unless-stopped
+    # cp695 — publish the frontend (the nginx that serves the site AND fans out
+    # /v1 -> indexer, /relay -> relay) on a HOST LOOPBACK port so the Tor + I2P
+    # hidden services can reach it. They can't go through BunkerWeb (it force-
+    # redirects http->https, which Tor/I2P can't follow) and the container isn't
+    # otherwise host-published. Loopback-only: never exposed to the LAN/internet.
+    ports:
+      - "127.0.0.1:{{ morphit_onion_frontend_port | default(8090) }}:80"
     volumes:
       # The SvelteKit production build from the cloned repo, read-only.
       - {{ morphit_repo_path }}/apps/web/build:/usr/share/nginx/html:ro

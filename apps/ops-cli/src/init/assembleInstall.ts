@@ -72,18 +72,53 @@ function realRemove(path: string): void {
 }
 async function realEnsureAnsible(ansibleDir: string): Promise<boolean> {
 	const have = spawnSync('ansible-playbook', ['--version'], { stdio: 'ignore' });
+	// cp690 — a self-contained (offline) bundle ships ansible in its apt closure
+	// (vendor/apt) and the galaxy collections it needs (vendor/ansible-collections).
+	// ansibleDir is <bundleRoot>/ops/ansible, so the bundle's vendor/ dir is two
+	// levels up. Install FROM the bundle with no network; reach apt/Galaxy only
+	// when there's no bundle (a source-tarball install on an online box).
+	const vendorApt = join(ansibleDir, '..', '..', 'vendor', 'apt');
+	const vendorCollections = join(ansibleDir, '..', '..', 'vendor', 'ansible-collections');
 	if (have.status !== 0) {
-		// Not present — install it (needs root; the bootstrap + install run as root).
-		spawnSync('apt-get', ['update', '-qq'], { stdio: 'inherit' });
-		spawnSync('apt-get', ['install', '-y', 'ansible'], { stdio: 'inherit' });
+		if (existsSync(join(vendorApt, 'Packages'))) {
+			// Offline: resolve ansible (+ its deps) from ONLY the bundled repo.
+			const bl = '/etc/apt/sources.list.d/morphit-bundle-ansible.list';
+			try {
+				writeFileSync(bl, `deb [trusted=yes] file://${vendorApt} ./\n`, { mode: 0o644 });
+				const aptBundleOpts = [
+					'-o',
+					`Dir::Etc::SourceList=${bl}`,
+					'-o',
+					'Dir::Etc::SourceParts=/dev/null'
+				];
+				spawnSync('apt-get', [...aptBundleOpts, '-o', 'APT::Get::List-Cleanup=0', 'update'], {
+					stdio: 'inherit'
+				});
+				spawnSync('apt-get', [...aptBundleOpts, 'install', '-y', 'ansible'], { stdio: 'inherit' });
+			} finally {
+				try {
+					unlinkSync(bl);
+				} catch {
+					/* already gone */
+				}
+			}
+		} else {
+			// No bundle — online install (source-tarball path on a connected box).
+			spawnSync('apt-get', ['update', '-qq'], { stdio: 'inherit' });
+			spawnSync('apt-get', ['install', '-y', 'ansible'], { stdio: 'inherit' });
+		}
 	}
 	if (spawnSync('ansible-playbook', ['--version'], { stdio: 'ignore' }).status !== 0) return false;
 	// The playbook uses community.general / community.postgresql / community.docker;
-	// apt's `ansible` may not bundle them (and `ansible-core` bundles none), so
-	// install them explicitly.  Best-effort: if this can't reach Galaxy, the
-	// playbook itself will fail with a clear "couldn't resolve module" pointing
-	// at the exact missing collection.
-	const reqs = join(ansibleDir, 'collections', 'requirements.yml');
+	// apt's `ansible` may not bundle them (and `ansible-core` bundles none). Prefer
+	// the collections downloaded into the bundle (their requirements.yml points at
+	// local tarballs → no Galaxy); fall back to the repo's requirements.yml (online
+	// Galaxy) only when there's no bundle. Best-effort either way: if it can't
+	// resolve them, the playbook fails with a clear "couldn't resolve module".
+	const bundledReqs = join(vendorCollections, 'requirements.yml');
+	const reqs = existsSync(bundledReqs)
+		? bundledReqs
+		: join(ansibleDir, 'collections', 'requirements.yml');
 	if (existsSync(reqs)) {
 		spawnSync('ansible-galaxy', ['collection', 'install', '-r', reqs], { stdio: 'inherit' });
 	}
