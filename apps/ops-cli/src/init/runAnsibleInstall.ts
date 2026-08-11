@@ -15,7 +15,7 @@ import { mkdirSync, writeFileSync, readFileSync, existsSync, chownSync, chmodSyn
 import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { stepRelayAccount, stepActiveKey, stepFeesAccount, type ActiveKeyResult } from './steps.ts';
-import { collectInstallInputs, askInstallMode } from './collectInstallInputs.ts';
+import { collectInstallInputs, askInstallMode, askTorOnly } from './collectInstallInputs.ts';
 import { buildAnsibleVars, validateInstallInputs } from './ansibleVars.ts';
 import { assembleInstall } from './assembleInstall.ts';
 import { collectInstallSummary, printInstallSummary, allComponentsUp } from './installSummary.ts';
@@ -121,6 +121,25 @@ async function askYesNo(question: string, defaultYes: boolean): Promise<boolean>
 	return a === 'y' || a === 'yes';
 }
 
+/** The origin this instance advertises on-chain + on its warrant canary. For a
+ *  Tor-only node it's the auto-generated onion (read back from the deployed
+ *  morphit.config.env, which the tor role's post-tasks populate); for a clearnet
+ *  node it's https://<domain>. Returns null only if a Tor-only install somehow
+ *  produced no onion — the caller then arms the deferred register instead of
+ *  advertising a bogus origin. */
+function deriveInstanceOrigin(torOnly: boolean, domain: string, repoPath: string): string | null {
+	if (!torOnly) return `https://${domain}`;
+	try {
+		const env = readFileSync(join(repoPath, 'morphit.config.env'), 'utf8');
+		const m = env.match(/^MORPHIT_INSTANCE_TOR_ADDRESS=(.+)$/m);
+		const onion = m?.[1]?.trim();
+		if (onion && onion.endsWith('.onion')) return `http://${onion}`;
+	} catch {
+		/* not readable yet — fall through */
+	}
+	return null;
+}
+
 export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?: string }): Promise<number> {
 	const keystorePath = opts.keystorePath ?? DEFAULT_KEYSTORE_PATH;
 
@@ -128,13 +147,18 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 	// question, a router step, and desktop notifications), so ask it FIRST — before
 	// the numbered steps — so the running "Step N of {total}" is accurate from step 1.
 	const mode = await askInstallMode();
-	// 3 account steps + 5 core questions + saving the DB passwords + the post-install
-	// summary + the register opt-in, plus 4 more on a home box: the DDNS question
-	// (asked inside collectInstallInputs), the router port-forward, desktop
-	// notifications, and the locally-signed warrant canary.  Keep in sync with the
-	// step() calls below + in collectInstallInputs (a mismatch trips the assert at
-	// the end of this function).
-	const totalSteps = 3 + 5 + 3 + (mode === 'home' ? 4 : 0);
+	const torOnly = await askTorOnly();
+	// Step budget:
+	//   3 account steps
+	// + core questions: 5 clearnet (domain, name, desc, matrix, cert-email) OR
+	//   3 Tor-only (name, desc, matrix — no domain, no cert-email)
+	// + 3 (save DB password, register opt-in, post-install summary)
+	// + home extras: clearnet home = 4 (DDNS, router port-forward, desktop,
+	//   canary); Tor-only home = 2 (desktop, canary — no DDNS, no port-forward).
+	// Keep in sync with the step() calls below + in collectInstallInputs (a
+	// mismatch trips the assert at the end of this function).
+	const totalSteps =
+		3 + (torOnly ? 3 : 5) + 3 + (mode === 'home' ? (torOnly ? 2 : 4) : 0);
 	beginSteps(totalSteps);
 
 	const relay = await stepRelayAccount();
@@ -143,6 +167,7 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 
 	const inputs = await collectInstallInputs({
 		mode,
+		torOnly,
 		operatorAccount: relay.name,
 		operatorTag: relay.name, // default the tag to the account (avoids a domain-derived circular order)
 		feesAccount,
@@ -159,7 +184,9 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 
 	// Home boxes need the router pointed at this machine before certbot (in the
 	// TLS role) can validate the domain — the one thing we can't do for them.
-	if (inputs.mode === 'home') {
+	// A Tor-only home node needs NO port-forward (the onion is reachable via Tor
+	// with no inbound ports), so this step is skipped.
+	if (inputs.mode === 'home' && !inputs.torOnly) {
 		step(0, 0, 'Point your home router at this computer');
 		console.log(
 			'  Before we install (home connections only):\n' +
@@ -215,27 +242,9 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 	// A glance-able confirmation of what actually came up + is healthy — asked for
 	// by a live operator who (reasonably) didn't want to trust a bare "installed"
 	// line. Async: several rows are LIVE (indexer/relay /v1/health, on-chain balance).
-	step(0, 0, 'Review your node');
-	const summaryRows = await collectInstallSummary({
-		domain: inputs.domain,
-		mode: inputs.mode,
-		enableBunkerweb: inputs.enableBunkerweb ?? true,
-		// The playbook deploys to morphit_repo_path (group_vars default
-		// /opt/morphit); the front-end build/ dir under it is what BunkerWeb
-		// serves, so canary.txt + pgp_keys.asc + SEO surfaces are probed there.
-		repoPath: '/opt/morphit',
-		// The relay account IS the operator account — used for the on-chain
-		// funding check (relay pays ~100 BLURT per signup).
-		relayAccount: relay.name,
-		// Show a ✓ for the "Contact this operator" link when a Matrix address
-		// was given (the wizard stored it as contactUrl).
-		contactConfigured: !!inputs.contactUrl
-	});
-	printInstallSummary(summaryRows);
-	const everythingUp = allComponentsUp(summaryRows);
-
-	console.log('\n  \u2713 Your Morphit node is installed and running.');
-	console.log('    It got (or will shortly get) its free HTTPS certificate automatically.');
+	// cp698 — the review is COMPUTED after the canary (below) so it reflects the
+	// final state, and DISPLAYED as the very last step — not here, where the canary
+	// would still read "✗ missing" two steps before it's signed.
 
 	// Home boxes have a screen → offer desktop upgrade notifications (a toast
 	// when a new version ships). Headless VPS installs have no desktop, so skip.
@@ -265,7 +274,17 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 			// instead of landing in the source tree where nothing reads it.
 			const rc = spawnSync('bash', [canaryScript], {
 				stdio: 'inherit',
-				env: { ...process.env, MORPHIT_CANARY_SERVE_DIR: '/opt/morphit/apps/web/build' }
+				env: {
+					...process.env,
+					MORPHIT_CANARY_SERVE_DIR: '/opt/morphit/apps/web/build',
+					// cp699 — the wizard already collected the domain; pre-fill the
+					// canary's "Your instance URL" prompt so the operator confirms
+					// with Enter instead of re-typing it (and mistyping it). For a
+					// future Tor-only node this becomes the http-onion origin.
+					MORPHIT_CANARY_INSTANCE_ORIGIN:
+						deriveInstanceOrigin(inputs.torOnly, inputs.domain, '/opt/morphit') ??
+						`https://${inputs.domain}`
+				}
 			});
 			if ((rc.status ?? 1) !== 0) {
 				console.log('\n  Note: couldn\u2019t set that up automatically (not essential). Do it later with:');
@@ -286,6 +305,19 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 	// successful now-registration just makes the armed one a no-op.  We pass the
 	// instance identity through the environment because a by-hand `register`
 	// otherwise reads it from files this Ansible layout doesn't populate.
+	// cp698 — compute the review now (after desktop + canary) so canary.txt etc.
+	// are ✓; everythingUp gates the listing step next. The DISPLAY happens as the
+	// final step, after listing.
+	const summaryRows = await collectInstallSummary({
+		domain: inputs.domain,
+		torOnly: inputs.torOnly,
+		mode: inputs.mode,
+		enableBunkerweb: inputs.enableBunkerweb ?? true,
+		repoPath: '/opt/morphit',
+		relayAccount: relay.name,
+		contactConfigured: !!inputs.contactUrl
+	});
+	const everythingUp = allComponentsUp(summaryRows);
 	step(0, 0, 'List your instance on the public federated directory');
 	if (await askYesNo('\n  List this instance on the public federated directory (start earning fees)?', true)) {
 		armDeferredRegister();
@@ -297,7 +329,9 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 					MORPHIT_RELAY_ACCOUNT: relay.name,
 					MORPHIT_RELAY_ACTIVE_KEY_FILE: keystorePath,
 					MORPHIT_INSTANCE_NAME: inputs.instanceName,
-					MORPHIT_INSTANCE_ORIGIN: `https://${inputs.domain}`,
+					MORPHIT_INSTANCE_ORIGIN:
+						deriveInstanceOrigin(inputs.torOnly, inputs.domain, '/opt/morphit') ??
+						`https://${inputs.domain}`,
 					MORPHIT_INSTANCE_OPERATOR_TAG: inputs.operatorTag
 				}
 			});
@@ -316,6 +350,12 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 		console.log('\n  No problem \u2014 list it whenever you\u2019re ready with:');
 		console.log('        sudo morphit-ops register\n');
 	}
+	// cp698 — FINAL step: show the review last, so it reflects everything the
+	// operator just set up (canary signed, listing armed).
+	step(0, 0, 'Review your node');
+	printInstallSummary(summaryRows);
+	console.log('\n  \u2713 Your Morphit node is installed and running.');
+	console.log('    It got (or will shortly get) its free HTTPS certificate automatically.');
 	endSteps();
 	// Safety net: the number of steps actually shown MUST equal the total we
 	// promised in every "Step N of {total}" header.  If they differ, the numbering
@@ -334,7 +374,7 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 	// already runs Tor) and say plainly, right now, whether the internet can
 	// reach this box — and point at the .onion, which works regardless. Home
 	// only: a VPS has a static public IP and no home-router/ISP block to hit.
-	if (inputs.mode === 'home') {
+	if (inputs.mode === 'home' && !inputs.torOnly) {
 		const reachScript = join(opts.repoRoot, 'ops', 'scripts', 'morphit-reachability-check.sh');
 		if (existsSync(reachScript)) {
 			spawnSync('bash', [reachScript, inputs.domain], { stdio: 'inherit' });

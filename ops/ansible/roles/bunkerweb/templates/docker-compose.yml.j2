@@ -23,6 +23,10 @@
 # allow) keeps the public out.
 
 services:
+{% if not (morphit_tor_only | default(false)) %}
+  # ── Clearnet TLS edge (BunkerWeb WAF). Omitted for a Tor-only node,
+  # which serves its onion straight from the frontend below (no cert, no
+  # public 80/443). ─────────────────────────────────────────────────────
   # cp663 #8 — the bw-data named volume is created root-owned, but the
   # scheduler + instance run as UID 101 and must write their config DB
   # there ("Database is not initialized" otherwise).  This one-shot init
@@ -106,6 +110,7 @@ services:
       bw-init:
         condition: service_completed_successfully
 
+{% endif %}
   # Serves the built SvelteKit site + reverse-proxies the API paths to
   # the relay + indexer on the host.  BunkerWeb proxies everything here
   # (REVERSE_PROXY_HOST=http://frontend:80).  The build context is

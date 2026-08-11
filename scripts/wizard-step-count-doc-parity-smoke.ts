@@ -140,12 +140,14 @@ const DOC_CLAIMS: DocClaim[] = [
 		expect: (n) => `roughly ${n} prompts`,
 		anyNumber: /roughly \d+ prompts/
 	},
-	{
-		path: 'docs/RUN-A-MORPHIT-NODE.md',
-		where: 'RUN-A-MORPHIT-NODE wizard intro',
-		expect: (n) => `${n} steps`,
-		anyNumber: /walks you through \d+ steps/
-	},
+	// NOTE: docs/RUN-A-MORPHIT-NODE.md is deliberately NOT pinned to TOTAL_STEPS.
+	// It documents the ANSIBLE install wizard (`morphit-setup.sh` → `morphit-ops
+	// install` → runAnsibleInstall), NOT the `morphit-ops init` wizard that
+	// steps.ts/TOTAL_STEPS counts. The install wizard's step count is VARIABLE
+	// (home 15 / vps 11 clearnet, home 11 / vps 9 Tor-only) and self-guarded by
+	// runAnsibleInstall's runtime `currentStepNum() === totalSteps` assert, so a
+	// single canonical number can't and shouldn't be quoted there. A dedicated
+	// regression check below keeps that doc from re-hardcoding a stale count.
 	{
 		path: 'apps/ops-cli/src/commands/init.ts',
 		where: 'init.ts orchestrator JSDoc',
@@ -180,6 +182,30 @@ if (TOTAL_STEPS > 0) {
 				);
 			}
 		}
+	}
+}
+
+/* ---------------- install-wizard doc must NOT hardcode a count ----------------
+ * The ansible install wizard (RUN-A-MORPHIT-NODE.md) has a VARIABLE step count
+ * — it depends on home/vps and clearnet/Tor-only — so any fixed "walks you
+ * through N steps" claim there is necessarily wrong for some node. Guard against
+ * a well-meaning edit re-introducing one (this is the bug that quoted init's 23
+ * on the install-wizard doc). */
+{
+	let runNode: string;
+	try {
+		runNode = read('docs/RUN-A-MORPHIT-NODE.md');
+		const stale = runNode.match(/walks you through \d+ steps/);
+		if (stale) {
+			fail(
+				'RUN-A-MORPHIT-NODE does not hardcode a wizard step count',
+				`found "${stale[0]}" — the install wizard's count is variable (home/vps × clearnet/Tor-only, 9–15); describe it qualitatively instead of pinning a number.`
+			);
+		} else {
+			pass('RUN-A-MORPHIT-NODE does not hardcode a wizard step count (install wizard count is variable)');
+		}
+	} catch {
+		fail('RUN-A-MORPHIT-NODE.md is readable', 'file not found');
 	}
 }
 

@@ -289,7 +289,43 @@
             - (morphit_onion_slurp.content | b64decode).strip() is search('\.onion$')
           notify: Restart morphit-indexer
 
-        - name: Write the .b32.i2p address into morphit.config.env
+        # Tor-only nodes have no clearnet domain, so their instance + relay
+        # origins were left empty at template time (the onion wasn't generated
+        # yet). Now that it exists, point all three at http://<onion> so the
+        # /v1/instance advertisement, invite links, web-push, and CORS all use
+        # the address the node is actually reachable at.
+        - name: "Tor-only — point instance + relay origins at the onion"
+          when:
+            - morphit_tor_only | default(false)
+            - morphit_onion_slurp.content is defined
+            - (morphit_onion_slurp.content | b64decode).strip() is search('\.onion$')
+          vars:
+            morphit_onion_origin: "http://{{ (morphit_onion_slurp.content | b64decode).strip() }}"
+          block:
+            - name: "Tor-only — MORPHIT_INSTANCE_ORIGIN = onion"
+              ansible.builtin.lineinfile:
+                path: "{{ morphit_repo_path }}/morphit.config.env"
+                regexp: '^MORPHIT_INSTANCE_ORIGIN='
+                line: "MORPHIT_INSTANCE_ORIGIN={{ morphit_onion_origin }}"
+                owner: root
+                group: "{{ morphit_service_group }}"
+                mode: '0640'
+              notify: Restart morphit-indexer
+
+            - name: "Tor-only — relay public origin + CORS allowlist = onion"
+              ansible.builtin.lineinfile:
+                path: /etc/morphit/relay.env
+                regexp: "{{ item.re }}"
+                line: "{{ item.line }}"
+                owner: root
+                group: "{{ morphit_service_group }}"
+                mode: '0640'
+              loop:
+                - re: '^MORPHIT_RELAY_PUBLIC_ORIGIN='
+                  line: "MORPHIT_RELAY_PUBLIC_ORIGIN={{ morphit_onion_origin }}"
+                - re: '^MORPHIT_RELAY_ALLOWED_ORIGINS='
+                  line: "MORPHIT_RELAY_ALLOWED_ORIGINS={{ morphit_onion_origin }}"
+              notify: Restart morphit-relay
           ansible.builtin.lineinfile:
             path: "{{ morphit_repo_path }}/morphit.config.env"
             regexp: '^MORPHIT_INSTANCE_I2P_B32_ADDRESS='

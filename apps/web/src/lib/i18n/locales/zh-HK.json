@@ -2077,7 +2077,18 @@
 		"website_link_aria": "瀏覽呢位用戶嘅網站（喺新分頁開啟）",
 		"website_link_tooltip": "網站"
 	},
+	"install": {
+		"banner": {
+			"heading": "安裝 Morphit",
+			"blurb": "將它加入裝置，享受更快的全螢幕體驗。",
+			"cta": "安裝",
+			"ios_cta": "如何安裝",
+			"ios_help": "在 Safari 中，輕按「分享」按鈕，然後選擇「加至主畫面」。",
+			"dismiss": "暫時不要"
+		}
+	},
 	"instances": {
+		"no_clearnet": "無明網依賴",
 		"title": "已知的 Morphit 實例",
 		"intro": "Morphit 是聯邦化的。獨立{link}運行 Morphit 實例,您的索引器透過讀取鏈自動發現其他實例。下面是來自最近一次探測的它們當前的健康狀況。",
 		"intro_operators_link": "運營者",
@@ -2125,7 +2136,6 @@
 		"operator_label": "營運者",
 		"registered_label": "註冊時間",
 		"last_probed_label": "上次探測",
-		"indexed_block_label": "已索引區塊",
 		"this_instance": "當前所在",
 		"live": "即時"
 	},

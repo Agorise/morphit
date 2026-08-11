@@ -2077,7 +2077,18 @@
 		"website_link_aria": "访问该用户的网站（在新标签页中打开）",
 		"website_link_tooltip": "网站"
 	},
+	"install": {
+		"banner": {
+			"heading": "安装 Morphit",
+			"blurb": "将其添加到设备，获得更快的全屏体验。",
+			"cta": "安装",
+			"ios_cta": "如何安装",
+			"ios_help": "在 Safari 中，点按“分享”按钮，然后选择“添加到主屏幕”。",
+			"dismiss": "以后再说"
+		}
+	},
 	"instances": {
+		"no_clearnet": "无明网依赖",
 		"title": "已知的 Morphit 实例",
 		"intro": "Morphit 是联邦化的。独立{link}运行 Morphit 实例,你的索引器通过读取链自动发现其他实例。下面是来自最近一次探测的它们当前的健康状况。",
 		"intro_operators_link": "运营者",
@@ -2125,7 +2136,6 @@
 		"operator_label": "运营者",
 		"registered_label": "注册时间",
 		"last_probed_label": "上次探测",
-		"indexed_block_label": "已索引区块",
 		"this_instance": "当前所在",
 		"live": "实时"
 	},

@@ -20,11 +20,13 @@ This guide is the short, friendly path. A mostly copy-and-paste 15-minute proced
 ## 1. What you'll need
 
 - **A computer that stays on.** A cheap VPS, or an old desktop/laptop. Aim for **4 GB of RAM or more** and a recent **Ubuntu** (22.04 or 24.04). An old PC from a closet is genuinely fine.
-- **A web address.** A domain name (about US$10/year) from any registrar. If you host at home, §3 covers the small bit of extra networking.
+- **A web address — or not.** A domain name (about US$10/year) from any registrar gives you a normal `https://` clearnet site. If you host at home, §3 covers the small bit of extra networking. **Or skip the domain entirely and run Tor-only** — the wizard offers this — and your marketplace is reachable at an auto-generated `.onion` address with no domain, no certificate, and no router port-forward (see the callout below).
 - **A Blurt account** for your instance. Free to make; you'll create it in §5.
 - **A password manager** to save a few secrets.
 
 That's it. The wizard and the installer handle the fiddly parts.
+
+> **Tor-only nodes (maximum privacy, zero paperwork).** When the wizard asks how people will reach your marketplace, you can choose **Tor-only** instead of a clearnet domain. The node then has **no clearnet reliance**: it's reachable over its auto-generated Tor `.onion` (and, when i2pd is installed, its `.i2p`/`.b32.i2p`), it appears in the federated `/instances` directory by that onion, and it skips the domain, the HTTPS certificate, the home port-forward, and dynamic DNS — so the wizard is a few questions shorter. It advertises the onion as its on-chain origin automatically. You can add a clearnet domain later (see `OPERATIONS.md`).
 
 ---
 
@@ -132,7 +134,7 @@ You only need the release you downloaded — the guided installer deploys exactl
 
 ## 7. Configure it (the wizard)
 
-As part of the one command, the guided install runs a short **setup wizard** — you don't start it yourself. It **walks you through 23 steps** — your Blurt account, your domain, your operator tag, your fee preferences, optional alerts — asking one plain-language question at a time and writing the configuration files for you. No hand-editing required. (If you *want* to hand-edit later, the full list of settings is documented in `OPERATIONS.md`.)
+As part of the one command, the guided install runs a short **setup wizard** — you don't start it yourself. It **walks you through the setup one plain-language question at a time** — your Blurt account, whether you're using a clearnet domain or running Tor-only, your operator tag, your fee preferences, optional alerts — writing the configuration files for you as you go. It's about a dozen questions for a clearnet node, and a few fewer for a Tor-only one (no domain, certificate email, port-forward, or dynamic DNS). The wizard numbers each step so you always know how far along you are. No hand-editing required. (If you *want* to hand-edit later, the full list of settings is documented in `OPERATIONS.md`.)
 
 One of those questions is your **fees account** — the Blurt account your BLURT listing fees are paid into. You earn 90% of those fees, so make it an account you control. If you skip it or mistype it, nothing breaks: fees fall back to the shared `@morphit-fees` treasury and your node keeps running. You can change it later any time with `npx morphit-ops edit` → **Fees account**.
 

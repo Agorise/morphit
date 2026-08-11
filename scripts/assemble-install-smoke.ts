@@ -25,6 +25,7 @@ function check(name: string, cond: boolean): void {
 
 const inputs: AnsibleInstallInputs = {
 	mode: 'home',
+	torOnly: false,
 	autoRegister: true,
 	domain: 'trade.example.com',
 	instanceName: 'Morphit Test',

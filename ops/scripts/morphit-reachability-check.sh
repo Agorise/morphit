@@ -45,7 +45,34 @@ if ! ss -tlnH 2>/dev/null | grep -qE ':443\b'; then
 fi
 say "  ✓ This box is listening on 80/443."
 
-# 2. can we probe from OUTSIDE via Tor?
+# 2. is this box even online? A home box installed air-gapped (cable unplugged)
+# has no network, so probing reachability is meaningless — and must NEVER report
+# "reachable". Check connectivity against Morphit's own federation hub first.
+if ! timeout 8 curl -fsS -o /dev/null https://morphit.io/verify.json 2>/dev/null; then
+	say ""
+	say "  This box has no internet connection right now (an offline / air-gapped"
+	say "  install won't have one yet). Reachability can't be checked without a"
+	say "  network — re-run this once you're online:"
+	say "      bash ops/scripts/morphit-reachability-check.sh"
+	if [ -n "$ONION" ]; then
+		say ""
+		say "  (Your Tor address needs no port-forwarding and will reach the world"
+		say "  once Tor finishes connecting:  http://$ONION)"
+	fi
+	say "────────────────────────────────────────────────────────"
+	exit 0
+fi
+
+# Capture an HTTP status WITHOUT the classic `|| echo 000` double-append bug:
+# curl's -w already prints 000 on a failed connection, so appending another 000
+# yields "000000", which is != "000" and then falsely reads as a success.
+probe() { # $1 = url
+	local c
+	c="$(curl --socks5-hostname "$SOCKS" -sk --max-time 30 -o /dev/null -w '%{http_code}' "$1" 2>/dev/null)"
+	case "$c" in ''|000) printf '000' ;; *) printf '%s' "$c" ;; esac
+}
+
+# 3. can we probe from OUTSIDE via Tor?
 tor_ok=no
 if systemctl is-active --quiet tor 2>/dev/null && ss -tlnH 2>/dev/null | grep -qE '127\.0\.0\.1:9050\b'; then
 	tor_ok=yes
@@ -54,10 +81,8 @@ fi
 if [ "$tor_ok" = yes ]; then
 	say ""
 	say "  Probing from an external Tor exit (what an outside visitor sees)…"
-	code443="$(curl --socks5-hostname "$SOCKS" -sk --max-time 30 -o /dev/null \
-		-w '%{http_code}' "https://$DOMAIN/v1/health" 2>/dev/null || echo 000)"
-	code80="$(curl --socks5-hostname "$SOCKS" -s --max-time 30 -o /dev/null \
-		-w '%{http_code}' "http://$DOMAIN/" 2>/dev/null || echo 000)"
+	code443="$(probe "https://$DOMAIN/v1/health")"
+	code80="$(probe "http://$DOMAIN/")"
 	say "    inbound 443 (https): $( [ "$code443" != 000 ] && echo "OK (HTTP $code443)" || echo "no answer" )"
 	say "    inbound 80  (http):  $( [ "$code80"  != 000 ] && echo "OK (HTTP $code80)"  || echo "no answer" )"
 

@@ -1285,7 +1285,7 @@ const envSchema = z.object({
 	 *  alert if a drain looks likely. Typical colocated
 	 *  deployment has this as http://127.0.0.1:8080/v1/health?verbose=1.
 	 *  Leave empty to disable the anomaly probe entirely. */
-	MORPHIT_INDEXER_RELAY_HEALTH_URL: z.string().default(''),
+	MORPHIT_INDEXER_RELAY_HEALTH_URL: z.string().default('http://127.0.0.1:8080/v1/health'),
 
 	MORPHIT_INDEXER_VERBOSE_HEALTH: z
 		.enum(['true', 'false', '1', '0'])

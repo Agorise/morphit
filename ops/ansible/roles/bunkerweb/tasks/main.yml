@@ -190,7 +190,11 @@
   retries: 10
   delay: 6
   until: morphit_nocache_check.rc == 0
-  when: bunkerweb_compose.changed or bunkerweb_env.changed or bunkerweb_frontend.changed
+  # Tor-only: no clearnet https://<domain> to curl — the same no-cache frontend
+  # config is served via the onion; skip the clearnet verification.
+  when: >-
+    (bunkerweb_compose.changed or bunkerweb_env.changed or bunkerweb_frontend.changed)
+    and not (morphit_tor_only | default(false))
 
 - name: Report update-surface no-cache result
   ansible.builtin.debug:
@@ -203,7 +207,9 @@
                /service-worker.js and /verify.json, then re-check with:
                curl -sI https://' ~ morphit_domain ~ '/verify.json | grep -i cache-control
                — see docs/OPERATIONS.md §"Caching the update surface".' }}
-  when: bunkerweb_compose.changed or bunkerweb_env.changed or bunkerweb_frontend.changed
+  when: >-
+    (bunkerweb_compose.changed or bunkerweb_env.changed or bunkerweb_frontend.changed)
+    and not (morphit_tor_only | default(false))
 
 - name: Print BunkerWeb verification reminder
   ansible.builtin.debug:
