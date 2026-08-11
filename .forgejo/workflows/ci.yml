@@ -173,15 +173,23 @@ jobs:
           # Wait until it accepts connections (pg_isready INSIDE the container,
           # so the host needs no psql client). Fail loudly if it never comes up
           # rather than letting the tests fail later with a vague error.
+          #
+          # `-h 127.0.0.1` forces a TCP check. During its first boot the
+          # postgres image runs a TEMPORARY socket-only server (listen_addresses='')
+          # to execute initdb, then stops it and starts the real server. A
+          # socket pg_isready (no -h) gives a false "ready" against that temp
+          # server, and the very next check lands in the stop/restart window
+          # with "no response" (task 1505). TCP is only ever answered by the
+          # real server, so it can't false-positive on the initdb phase.
           for i in $(seq 1 30); do
-            if docker exec morphit-ci-pg pg_isready -U morphit_test -d morphit_test >/dev/null 2>&1; then
+            if docker exec morphit-ci-pg pg_isready -h 127.0.0.1 -p 5432 -U morphit_test -d morphit_test >/dev/null 2>&1; then
               echo "postgres ready after ${i}s"
               break
             fi
             echo "waiting for postgres (${i}/30)..."
             sleep 1
           done
-          docker exec morphit-ci-pg pg_isready -U morphit_test -d morphit_test
+          docker exec morphit-ci-pg pg_isready -h 127.0.0.1 -p 5432 -U morphit_test -d morphit_test
 
       - name: Install workspace dependencies
         # --ignore-scripts is SAFE here: the indexer integration tests use

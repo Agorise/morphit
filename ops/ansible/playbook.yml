@@ -326,6 +326,8 @@
                 - re: '^MORPHIT_RELAY_ALLOWED_ORIGINS='
                   line: "MORPHIT_RELAY_ALLOWED_ORIGINS={{ morphit_onion_origin }}"
               notify: Restart morphit-relay
+
+        - name: Write the .b32.i2p address into morphit.config.env
           ansible.builtin.lineinfile:
             path: "{{ morphit_repo_path }}/morphit.config.env"
             regexp: '^MORPHIT_INSTANCE_I2P_B32_ADDRESS='
