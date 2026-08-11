@@ -54,7 +54,7 @@ function allUpProbe(): SummaryProbe {
 	};
 }
 
-const vpsInputs: SummaryInputs = { domain: 'trade.example.com', mode: 'vps', enableBunkerweb: true, repoPath: '/opt/morphit', relayAccount: 'ex-relay' };
+const vpsInputs: SummaryInputs = { domain: 'trade.example.com', mode: 'vps', torOnly: false, enableBunkerweb: true, repoPath: '/opt/morphit', relayAccount: 'ex-relay' };
 const homeInputs: SummaryInputs = { ...vpsInputs, mode: 'home' };
 const find = (rows: readonly ComponentStatus[], re: RegExp): ComponentStatus | undefined => rows.find((r) => re.test(r.label));
 

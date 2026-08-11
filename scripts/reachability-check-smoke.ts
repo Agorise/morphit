@@ -43,5 +43,20 @@ check(
 	'the install runs the self-check on home boxes',
 	/morphit-reachability-check\.sh/.test(wiz) && /inputs\.mode === 'home'/.test(wiz)
 );
+check(
+	'cp697 — gates the probe behind an online check (never verdicts when offline)',
+	/timeout \d+ curl -fsS[^\n]*morphit\.io\/verify\.json/.test(sh) && /no internet connection right now/.test(sh)
+);
+check(
+	'cp697 — captures the HTTP code via a probe() helper (no ||echo-000 double-append → no false REACHABLE)',
+	/probe\(\) \{/.test(sh) && /code443="\$\(probe /.test(sh) && /case "\$c" in ''\|000\)/.test(sh)
+);
+{
+	const w = readFileSync(join(REPO, 'apps/ops-cli/src/init/runAnsibleInstall.ts'), 'utf8');
+	const li = w.indexOf('List your instance on the public federated directory');
+	const rv = w.lastIndexOf("step(0, 0, 'Review your node')");
+	check('cp698 — the install review is the FINAL step (after the listing), so it reflects the canary', li > 0 && rv > li);
+	check('cp699/cp705 — the wizard pre-fills the canary instance origin (deriveInstanceOrigin: onion for Tor-only, else https://domain — no re-typing)', /MORPHIT_CANARY_INSTANCE_ORIGIN:\s*\n?\s*deriveInstanceOrigin\(inputs\.torOnly, inputs\.domain, '\/opt\/morphit'\) \?\?\s*\n?\s*`https:\/\/\$\{inputs\.domain\}`/.test(w));
+}
 console.log(`\n${pass} passed, ${fail} failed\n${fail === 0 ? `✓ all ${pass} reachability-check checks passed` : '✗ FAILED'}`);
 process.exit(fail === 0 ? 0 : 1);

@@ -30,6 +30,7 @@ console.log('\u2500\u2500 ansible-vars smoke (cp600) \u2500\u2500\u2500\u2500\u2
 
 const home: AnsibleInstallInputs = {
 	mode: 'home',
+	torOnly: false,
 	autoRegister: true,
 	domain: 'trade.example.com',
 	instanceName: 'Morphit Test',
@@ -43,6 +44,7 @@ const home: AnsibleInstallInputs = {
 };
 const vps: AnsibleInstallInputs = {
 	mode: 'vps',
+	torOnly: false,
 	autoRegister: false,
 	domain: 'trade.example.com',
 	instanceName: 'Morphit Test',

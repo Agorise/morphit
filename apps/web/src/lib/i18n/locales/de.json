@@ -2077,7 +2077,18 @@
 		"website_link_aria": "Website dieses Nutzers besuchen (öffnet einen neuen Tab)",
 		"website_link_tooltip": "Website"
 	},
+	"install": {
+		"banner": {
+			"heading": "Morphit installieren",
+			"blurb": "Füge es deinem Gerät hinzu für ein schnelleres Vollbild-Erlebnis.",
+			"cta": "Installieren",
+			"ios_cta": "So installierst du",
+			"ios_help": "Tippe in Safari auf „Teilen“ und dann auf „Zum Home-Bildschirm“.",
+			"dismiss": "Nicht jetzt"
+		}
+	},
 	"instances": {
+		"no_clearnet": "Keine Clearnet-Abhängigkeit",
 		"title": "Bekannte Morphit-Instanzen",
 		"intro": "Morphit ist föderiert. Unabhängige {link} betreiben Morphit-Instanzen, und Ihr Indexer entdeckt andere Instanzen automatisch durch Lesen der Chain. Diese Liste zeigt deren aktuellen Zustand aus der letzten Prüfung.",
 		"intro_operators_link": "Betreiber",
@@ -2125,7 +2136,6 @@
 		"operator_label": "Betreiber",
 		"registered_label": "Registriert",
 		"last_probed_label": "Zuletzt geprüft",
-		"indexed_block_label": "Indizierter Block",
 		"this_instance": "Sie sind hier",
 		"live": "Live"
 	},

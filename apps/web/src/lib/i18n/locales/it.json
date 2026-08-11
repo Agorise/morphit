@@ -2077,7 +2077,18 @@
 		"website_link_aria": "Visita il sito web di questo utente (si apre in una nuova scheda)",
 		"website_link_tooltip": "Sito web"
 	},
+	"install": {
+		"banner": {
+			"heading": "Installa Morphit",
+			"blurb": "Aggiungilo al tuo dispositivo per un’esperienza più veloce e a schermo intero.",
+			"cta": "Installa",
+			"ios_cta": "Come installare",
+			"ios_help": "In Safari, tocca il pulsante Condividi, poi \"Aggiungi a Home\".",
+			"dismiss": "Non ora"
+		}
+	},
 	"instances": {
+		"no_clearnet": "Nessuna dipendenza da clearnet",
 		"title": "Istanze Morphit conosciute",
 		"intro": "Morphit è federato. {link} indipendenti gestiscono istanze Morphit, e il tuo indexer scopre automaticamente altre istanze leggendo la blockchain. Questo elenco mostra il loro stato attuale dall'ultimo controllo.",
 		"intro_operators_link": "Operatori",
@@ -2125,7 +2136,6 @@
 		"operator_label": "Operatore",
 		"registered_label": "Registrato",
 		"last_probed_label": "Ultimo controllo",
-		"indexed_block_label": "Blocco indicizzato",
 		"this_instance": "Sei qui",
 		"live": "Live"
 	},

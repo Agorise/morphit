@@ -72,7 +72,7 @@ interface ValidatedPayload {
 	readonly origin: string | null;
 }
 
-function validate(payload: unknown): ValidatedPayload | { reason: string } {
+export function validate(payload: unknown): ValidatedPayload | { reason: string } {
 	if (!isPlainObject(payload)) return { reason: 'payload_not_object' };
 
 	// tag
@@ -195,7 +195,29 @@ function validate(payload: unknown): ValidatedPayload | { reason: string } {
 			} catch {
 				return { reason: 'origin_not_url' };
 			}
-			if (parsed.protocol !== 'https:') {
+			// Clearnet origins must be https (TLS). Hidden-service networks —
+			// Tor (.onion), I2P (.b32.i2p), Lokinet (.loki) — carry their own
+			// end-to-end encryption + cryptographic host authentication at the
+			// network layer, so http:// is the correct (and only) scheme there:
+			// a clearnet CA certificate is neither obtainable nor meaningful for
+			// a .onion. This is what lets a node with NO clearnet domain still
+			// advertise itself to the federated directory by its onion.
+			//
+			// Additive + backward-compatible: existing https origins are wholly
+			// unchanged, and an indexer that predates this change simply declines
+			// the new onion-only registrations rather than breaking on them (the
+			// on-chain op stays valid; upgraded indexers record it). http:// on a
+			// clearnet host stays rejected, as does https on a bogus host below.
+			const oHost = parsed.hostname.toLowerCase();
+			const isHiddenServiceHost =
+				/^[a-z2-7]{56}\.onion$/.test(oHost) || // Tor v3 onion (56 base32 chars)
+				oHost.endsWith('.i2p') || // I2P — both the named .i2p and the .b32.i2p hash end in .i2p
+				oHost.endsWith('.loki'); // Lokinet / Session name
+			if (parsed.protocol === 'https:') {
+				/* clearnet (or a rare TLS-fronted onion) — allowed */
+			} else if (parsed.protocol === 'http:' && isHiddenServiceHost) {
+				/* hidden service — transport encryption is at the network layer */
+			} else {
 				return { reason: 'origin_bad_scheme' };
 			}
 			if (parsed.username !== '' || parsed.password !== '') {

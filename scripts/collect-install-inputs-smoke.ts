@@ -80,7 +80,7 @@ async function main(): Promise<void> {
 	check('askInstallMode: choice 0 → home', (await askInstallMode({ askChoice: (async () => 0) as unknown as CollectDeps['askChoice'] })) === 'home');
 	check('askInstallMode: choice 1 → vps', (await askInstallMode({ askChoice: (async () => 1) as unknown as CollectDeps['askChoice'] })) === 'vps');
 
-	const known = { operatorAccount: 'my-operator', operatorTag: 'myoperator', feesAccount: 'my-operator', keystorePath: '/etc/morphit/relay.keystore' };
+	const known = { torOnly: false, operatorAccount: 'my-operator', operatorTag: 'myoperator', feesAccount: 'my-operator', keystorePath: '/etc/morphit/relay.keystore' };
 
 	// HOME path: choice 0 → asks domain, title, description, email, ddns.
 	{

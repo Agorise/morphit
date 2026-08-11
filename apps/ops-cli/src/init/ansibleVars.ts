@@ -26,7 +26,12 @@ export type InstallMode = 'home' | 'vps';
 export interface AnsibleInstallInputs {
 	/** 'home' → dynamic IP behind a router (enables DDNS); 'vps' → static IP. */
 	readonly mode: InstallMode;
-	/** Bare public domain, e.g. "trade.example.com" (NOT a URL). */
+	/** true → NO clearnet domain: reachable only via the auto-generated Tor
+	 *  .onion (+ optional I2P/Lokinet). No TLS cert, no BunkerWeb, no DDNS, no
+	 *  router port-forward. The origin advertised on-chain is the onion. */
+	readonly torOnly: boolean;
+	/** Bare public domain, e.g. "trade.example.com" (NOT a URL). Empty when
+	 *  torOnly. */
 	readonly domain: string;
 	/** Friendly instance title (MORPHIT_INSTANCE_NAME) — the site header + the
 	 *  name on the shared /instances directory.  REQUIRED (register needs it). */
@@ -146,8 +151,19 @@ export function matrixToContactUrl(address: string): string {
  *  vars file that would make the playbook fail deep into a run.  PURE. */
 export function validateInstallInputs(inputs: AnsibleInstallInputs): string[] {
 	const problems: string[] = [];
-	const d = validateDomain(inputs.domain);
-	if (d !== true) problems.push(`domain "${inputs.domain}" ${d}.`);
+	// Clearnet-only requirements: a domain, an ACME email (for the cert), and a
+	// home DDNS URL. A Tor-only node has none of these — its onion is generated
+	// by the tor role and needs no DNS, cert, or port-forward.
+	if (!inputs.torOnly) {
+		const d = validateDomain(inputs.domain);
+		if (d !== true) problems.push(`domain "${inputs.domain}" ${d}.`);
+		const e = validateAcmeEmail(inputs.acmeEmail);
+		if (e !== true) problems.push(`acmeEmail ${e}.`);
+		if (inputs.mode === 'home') {
+			const dd = validateDdnsUrl(inputs.ddnsUpdateUrl ?? '');
+			if (dd !== true) problems.push(`home mode needs a DDNS update URL that ${dd}.`);
+		}
+	}
 	const acct = validateOperatorAccount(inputs.operatorAccount);
 	if (acct !== true) problems.push(`operatorAccount "${inputs.operatorAccount}" ${acct}.`);
 	const title = validateInstanceTitle(inputs.instanceName);
@@ -164,14 +180,8 @@ export function validateInstallInputs(inputs: AnsibleInstallInputs): string[] {
 	if (!inputs.keystorePath.startsWith('/')) {
 		problems.push(`keystorePath "${inputs.keystorePath}" must be an absolute path (the wizard writes the keystore there).`);
 	}
-	const e = validateAcmeEmail(inputs.acmeEmail);
-	if (e !== true) problems.push(`acmeEmail ${e}.`);
 	if (inputs.indexerDbPassword.length < 24) {
 		problems.push('the DB password must be strong (>= 24 characters \u2014 use randomSecret()).');
-	}
-	if (inputs.mode === 'home') {
-		const dd = validateDdnsUrl(inputs.ddnsUpdateUrl ?? '');
-		if (dd !== true) problems.push(`home mode needs a DDNS update URL that ${dd}.`);
 	}
 	return problems;
 }
@@ -180,7 +190,12 @@ export function validateInstallInputs(inputs: AnsibleInstallInputs): string[] {
  *  overrides passed via -e).  PURE. */
 export function buildAnsibleVars(inputs: AnsibleInstallInputs): Record<string, unknown> {
 	const vars: Record<string, unknown> = {
-		morphit_domain: inputs.domain,
+		morphit_domain: inputs.torOnly ? '' : inputs.domain,
+		// Tor-only: reachable via the auto-generated onion (+ optional I2P/Lokinet)
+		// with NO clearnet domain. The tor role still generates + serves the onion;
+		// the tls role and BunkerWeb's clearnet TLS front are skipped, and the
+		// frontend serves the onion standalone (Tor → frontend:8090, cp695).
+		morphit_tor_only: inputs.torOnly,
 		morphit_operator_account: inputs.operatorAccount,
 		morphit_operator_tag: inputs.operatorTag,
 		// The playbook's `hosts:` is `{{ morphit_target_hosts | default('morphit_servers') }}`.
@@ -206,19 +221,23 @@ export function buildAnsibleVars(inputs: AnsibleInstallInputs): Record<string, u
 		// reads these from indexer.env → its /instance API → the federated list).
 		morphit_instance_name: inputs.instanceName,
 		morphit_instance_tagline: inputs.instanceTagline ?? '',
-		tls_acme_email: inputs.acmeEmail,
+		tls_acme_email: inputs.torOnly ? '' : inputs.acmeEmail,
 		morphit_auto_register: inputs.autoRegister,
 		// Secret Ansible provisions the (single, shared) DB with (referenced as
 		// vault_postgres_indexer_password with a default in group_vars/all.yml).
 		vault_postgres_indexer_password: inputs.indexerDbPassword,
-		// Same full stack either way.
-		enable_tls: true,
+		// Tor-only skips the cert (no clearnet host to certify). BunkerWeb's role
+		// still runs so the FRONTEND container deploys — morphit_tor_only makes its
+		// compose drop the clearnet TLS services and keep only the frontend, which
+		// Tor fans out to on :8090.
+		enable_tls: !inputs.torOnly,
 		enable_bunkerweb: inputs.enableBunkerweb ?? true,
 		morphit_repo_ref: inputs.gitRef ?? 'main',
-		// The ONE home/VPS difference.
-		enable_ddns: inputs.mode === 'home'
+		// Home DDNS keeps a clearnet domain pointed at a changing home IP — moot
+		// when there's no clearnet domain.
+		enable_ddns: inputs.mode === 'home' && !inputs.torOnly
 	};
-	if (inputs.mode === 'home' && inputs.ddnsUpdateUrl) {
+	if (inputs.mode === 'home' && !inputs.torOnly && inputs.ddnsUpdateUrl) {
 		vars.morphit_ddns_update_url = inputs.ddnsUpdateUrl;
 	}
 	// Optional operator contact link (the /instances "Contact this operator"

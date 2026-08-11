@@ -82,6 +82,9 @@ export interface SummaryProbe {
 export interface SummaryInputs {
 	readonly domain: string;
 	readonly mode: 'home' | 'vps';
+	/** No clearnet domain — skip the HTTPS-cert + BunkerWeb-firewall rows (a
+	 *  Tor-only node has neither). */
+	readonly torOnly: boolean;
 	readonly enableBunkerweb: boolean;
 	/** Repo root on the server (morphit_repo_path, e.g. /opt/morphit). The
 	 *  front-end build/ dir beneath it is what BunkerWeb serves, so the canary,
@@ -193,15 +196,19 @@ export async function collectInstallSummary(
 	}
 
 	// ── Web edge ─────────────────────────────────────────────────────
-	if (inputs.enableBunkerweb) {
+	if (inputs.enableBunkerweb && !inputs.torOnly) {
 		rows.push({ label: 'Web firewall (BunkerWeb)', ok: probe.containerRunning('bunkerweb') });
+	}
+	if (inputs.enableBunkerweb) {
 		rows.push({ label: 'Website (front end)', ok: probe.containerRunning('morphit-frontend') });
 	}
-	rows.push({
-		label: 'HTTPS certificate',
-		ok: probe.pathExists(`/etc/letsencrypt/live/${inputs.domain}/fullchain.pem`),
-		detail: 'issued automatically — can take a minute on the first run'
-	});
+	if (!inputs.torOnly) {
+		rows.push({
+			label: 'HTTPS certificate',
+			ok: probe.pathExists(`/etc/letsencrypt/live/${inputs.domain}/fullchain.pem`),
+			detail: 'issued automatically — can take a minute on the first run'
+		});
+	}
 
 	// ── Host hardening (split so each is independently visible) ───────
 	rows.push({ label: 'Firewall (UFW)', ok: probe.firewallActive() });

@@ -287,6 +287,40 @@
 		);
 	}
 
+	/** True when the on-chain origin is a hidden-service address (or absent) —
+	 *  i.e. this instance has no clearnet reliance. Drives the "No clearnet
+	 *  reliance" subtitle in place of showing a bare onion/i2p origin string. */
+	function isHiddenServiceOrigin(origin: string | null | undefined): boolean {
+		if (!origin) return true;
+		let host: string;
+		try {
+			host = new URL(origin).hostname.toLowerCase();
+		} catch {
+			return false;
+		}
+		return host.endsWith('.onion') || host.endsWith('.i2p') || host.endsWith('.loki');
+	}
+
+	/** The address the card title links to. Prefers the on-chain origin
+	 *  (safeInstanceOrigin already permits http:// for hidden services, so an
+	 *  onion-only node's origin links directly). If the origin is absent/unsafe,
+	 *  falls through the operator's advertised hidden services in preference
+	 *  order — Tor (.onion) → named I2P (.i2p) → I2P b32 (.b32.i2p) → Lokinet
+	 *  (.loki) — so the title ALWAYS links to something reachable. */
+	function titleHref(inst: InstanceDirectoryEntry): string | null {
+		const primary = safeInstanceOrigin(inst.origin);
+		if (primary) return primary;
+		const a = inst.alt_networks;
+		if (!a) return null;
+		for (const host of [a.tor, a.i2p_name, a.i2p_b32, a.lokinet]) {
+			if (host) {
+				const safe = safeInstanceOrigin(`http://${host}`);
+				if (safe) return safe;
+			}
+		}
+		return null;
+	}
+
 	/** Whether `entry` describes the same instance the user is currently
 	 *  viewing. Matched by ORIGIN (see `currentOrigin` above): the browser is
 	 *  literally on this instance, so its origin identifies it unambiguously —
@@ -387,7 +421,7 @@
 		{:else}
 			<ul class="grid gap-5 md:grid-cols-2">
 				{#each filtered as inst (inst.origin)}
-					{@const safeOrigin = safeInstanceOrigin(inst.origin)}
+					{@const safeOrigin = titleHref(inst)}
 					{@const safeContact = safeContactUrl(inst.contact_url)}
 					<li
 						class="card border {isCurrentInstance(inst)
@@ -433,7 +467,13 @@
 										{statusLabel(inst.status)}
 									</span>
 								</div>
-								<p class="text-xs text-ink-500">{inst.origin}</p>
+								<p class="text-xs text-ink-500">
+								{#if isHiddenServiceOrigin(inst.origin)}
+									{$_('instances.no_clearnet')}
+								{:else}
+									{inst.origin}
+								{/if}
+							</p>
 							</div>
 
 							{#if inst.tagline}
@@ -453,10 +493,6 @@
 										{$_('instances.never_probed')}
 									{/if}
 								</dd>
-								{#if inst.indexed_block !== null}
-									<dt>{$_('instances.indexed_block_label')}</dt>
-									<dd class="font-mono">{inst.indexed_block}</dd>
-								{/if}
 							</dl>
 
 							{#if inst.alt_networks}

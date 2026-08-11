@@ -14,6 +14,7 @@
 	import MorphitLogoBling from '$components/MorphitLogoBling.svelte';
 	import PermissionBanner from '$components/PermissionBanner.svelte';
 	import SeedBackupNudge from '$components/SeedBackupNudge.svelte';
+	import InstallBanner from '$components/InstallBanner.svelte';
 	import PairedReadOnlyBanner from '$components/PairedReadOnlyBanner.svelte';
 	import NeedsAccountNameBanner from '$components/NeedsAccountNameBanner.svelte';
 	import ToastRegion from '$components/ToastRegion.svelte';
@@ -370,6 +371,7 @@
 	     user has had a persisted keystore for 7+ days without
 	     dismissing.  See $lib/crypto/persistentKeystore for the
 	     localStorage anchors. -->
+	<InstallBanner />
 	<SeedBackupNudge />
 
 	<main

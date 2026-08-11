@@ -34,6 +34,13 @@ import type pg from 'pg';
 import { lookup as dnsLookup } from 'node:dns/promises';
 import { Agent } from 'undici';
 
+import {
+	fetchJsonViaHiddenService,
+	hiddenServiceProxyConfigFromEnv,
+	ProxyUnavailableError,
+	type HiddenServiceProxyConfig
+} from '$indexer/hiddenServiceFetch';
+
 import type { Database } from '$db/pool';
 import { logger } from '$log';
 
@@ -133,6 +140,11 @@ export interface FederationProbeConfig {
 	 *  flagged.  null entries here mean THIS instance has that method
 	 *  disabled, so the corresponding peer comparison is skipped. */
 	readonly canonicalTreasury?: () => { btc: string | null; xmr: string | null };
+	/** Tor/I2P proxy endpoints for probing hidden-service peers (Layer 6). When
+	 *  omitted, defaults to the co-located Tor(9050)+i2pd(4444) from the env. A
+	 *  proxy that's down or unset just falls the peer back to listed-not-probed —
+	 *  it never marks an onion peer 'unreachable' for OUR daemon being offline. */
+	readonly hiddenServiceProxies?: HiddenServiceProxyConfig;
 }
 
 /** Normalize an origin for self-comparison: trim, drop any trailing
@@ -140,6 +152,23 @@ export interface FederationProbeConfig {
  *  must compare equal. */
 function normalizeOrigin(origin: string): string {
 	return origin.trim().replace(/\/+$/, '').toLowerCase();
+}
+
+/** True when an origin is a Tor/I2P/Lokinet hidden-service address rather than
+ *  a clearnet host.  A clearnet indexer can't reach these over plain HTTP (they
+ *  need a Tor/I2P router), so the scheduler lists them on the strength of their
+ *  signed on-chain advertisement instead of firing a network probe that would
+ *  always time out and spuriously mark an otherwise-healthy onion-only node
+ *  'unreachable'.  Real cross-network verification is the Phase-F+ Tor-routed
+ *  probe (see the module header). */
+function isHiddenServiceOrigin(origin: string): boolean {
+	let host: string;
+	try {
+		host = new URL(origin).hostname.toLowerCase();
+	} catch {
+		return false;
+	}
+	return /^[a-z2-7]{56}\.onion$/.test(host) || host.endsWith('.i2p') || host.endsWith('.loki');
 }
 
 export interface KnownInstanceRow {
@@ -287,6 +316,46 @@ export class FederationProbeScheduler {
 					}
 					continue;
 				}
+				// Hidden-service origin (.onion / .b32.i2p / .i2p / .loki): probe
+				// it THROUGH the co-located Tor/I2P proxy so its status is real.
+				// If OUR proxy is down (ProxyUnavailableError), fall back to
+				// listing it — never penalise a healthy peer for our Tor being
+				// offline. Any other failure is the peer's, and is recorded.
+				if (isHiddenServiceOrigin(inst.origin)) {
+					const proxies =
+						this.config.hiddenServiceProxies ?? hiddenServiceProxyConfigFromEnv();
+					const hiddenFetch = <T>(url: string): Promise<T> =>
+						fetchJsonViaHiddenService<T>(url, proxies);
+					try {
+						const outcome = await probeOne(
+							inst,
+							this.config.canonicalTreasury?.() ?? null,
+							hiddenFetch
+						);
+						await this.persistOutcome(inst, outcome);
+					} catch (err) {
+						if (err instanceof ProxyUnavailableError) {
+							try {
+								await this.persistHiddenServiceListed(inst);
+							} catch (perr) {
+								log.error('hidden_service_persist_threw', { origin: inst.origin }, perr);
+							}
+						} else {
+							log.error('hidden_service_probe_threw', { origin: inst.origin }, err);
+							await this.persistOutcome(inst, {
+								status: 'unreachable',
+								error: err instanceof Error ? err.message : String(err),
+								cachedName: null,
+								cachedTagline: null,
+								cachedContactUrl: null,
+								cachedAltNetworks: null,
+								cachedIndexedBlock: null,
+								cachedChainLagSec: null
+							});
+						}
+					}
+					continue;
+				}
 				try {
 					const outcome = await probeOne(inst, this.config.canonicalTreasury?.() ?? null);
 					await this.persistOutcome(inst, outcome);
@@ -416,6 +485,24 @@ export class FederationProbeScheduler {
 			[inst.origin, selfStatus]
 		);
 	}
+
+	/** Persist a hidden-service peer (.onion/.b32.i2p/.loki) as listed WITHOUT a
+	 *  network probe.  A clearnet indexer can't reach it, so 'unreachable' would
+	 *  be wrong; we list it on the strength of its signed on-chain registration.
+	 *  Status 'good' keeps it in the directory; last_probe_error records that it
+	 *  wasn't network-verified so the reason is auditable. A future Tor-routed
+	 *  probe (Phase F+) will verify it for real and can downgrade a dead onion. */
+	private async persistHiddenServiceListed(inst: KnownInstanceRow): Promise<void> {
+		await this.db.query(
+			`UPDATE known_instances SET
+				last_probed_at = NOW(),
+				last_probe_status = 'good',
+				last_probe_error = 'hidden_service_not_network_probed',
+				consecutive_failures = 0
+			 WHERE origin = $1`,
+			[inst.origin]
+		);
+	}
 }
 
 // ─── Single-instance probe ───────────────────────────────────────
@@ -424,15 +511,20 @@ export class FederationProbeScheduler {
  *  throws (errors caught and converted to status='unreachable'). */
 export async function probeOne(
 	inst: KnownInstanceRow,
-	canonicalTreasury: { btc: string | null; xmr: string | null } | null = null
+	canonicalTreasury: { btc: string | null; xmr: string | null } | null = null,
+	// The JSON fetcher. Defaults to the clearnet SSRF-hardened path; the scheduler
+	// injects a Tor/I2P-routed fetcher for hidden-service origins so they get a
+	// REAL status instead of a blanket listing.
+	fetchFn: <T>(url: string) => Promise<T> = fetchJson
 ): Promise<ProbeOutcome> {
 	const { origin, operator_account, registered_at_time } = inst;
 
 	// Fetch /v1/instance.
 	let instanceData: InstanceShape;
 	try {
-		instanceData = await fetchJson<InstanceShape>(`${origin}/v1/instance`);
+		instanceData = await fetchFn<InstanceShape>(`${origin}/v1/instance`);
 	} catch (err) {
+		if (err instanceof ProxyUnavailableError) throw err;
 		return mkUnreachable(`instance_fetch: ${errMsg(err)}`);
 	}
 	if (!isInstanceShape(instanceData)) {
@@ -456,8 +548,9 @@ export async function probeOne(
 	// Fetch /v1/health.
 	let healthData: HealthShape;
 	try {
-		healthData = await fetchJson<HealthShape>(`${origin}/v1/health`);
+		healthData = await fetchFn<HealthShape>(`${origin}/v1/health`);
 	} catch (err) {
+		if (err instanceof ProxyUnavailableError) throw err;
 		return mkUnreachable(`health_fetch: ${errMsg(err)}`);
 	}
 	if (!isHealthShape(healthData)) {
@@ -498,7 +591,7 @@ export async function probeOne(
 	// Fetch /v1/orderbook?limit=1 — recent-activity check.
 	let orderbookData: OrderbookShape;
 	try {
-		orderbookData = await fetchJson<OrderbookShape>(`${origin}/v1/orderbook?limit=1`);
+		orderbookData = await fetchFn<OrderbookShape>(`${origin}/v1/orderbook?limit=1`);
 	} catch (err) {
 		// Non-fatal — if the orderbook endpoint is missing or errors,
 		// the instance is still usable for messaging.  Treat as quiet.

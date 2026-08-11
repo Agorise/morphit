@@ -2077,7 +2077,18 @@
 		"website_link_aria": "Visit this user's website (opens in new tab)",
 		"website_link_tooltip": "Website"
 	},
+	"install": {
+		"banner": {
+			"heading": "Install Morphit",
+			"blurb": "Add it to your device for a faster, full-screen experience.",
+			"cta": "Install",
+			"ios_cta": "How to install",
+			"ios_help": "In Safari, tap the Share button, then \"Add to Home Screen\".",
+			"dismiss": "Not now"
+		}
+	},
 	"instances": {
+		"no_clearnet": "No clearnet reliance",
 		"title": "Known Morphit instances",
 		"intro": "Morphit is federated. Independent {link} run Morphit instances, and your indexer discovers other instances automatically by reading the chain. This list shows their current health from the most recent probe.",
 		"intro_operators_link": "Operators",
@@ -2125,7 +2136,6 @@
 		"operator_label": "Operator",
 		"registered_label": "Registered",
 		"last_probed_label": "Last probed",
-		"indexed_block_label": "Indexed block",
 		"this_instance": "You are here",
 		"live": "Live"
 	},

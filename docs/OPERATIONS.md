@@ -2586,6 +2586,51 @@ key envelope (user keys are encrypted in the browser and never reach
 the server in the clear). SEV/TDX is a nice extra for the paranoid,
 not a gap in the baseline.
 
+### Tor-only nodes (no clearnet domain)
+
+The guided installer (`morphit-ops install`) offers a **Tor-only** node:
+choose it at the "How will people reach your marketplace?" question and
+the node runs with **no clearnet domain** — reachable only over its
+auto-generated Tor `.onion` (plus `.i2p`/`.b32.i2p` when i2pd is present).
+This is the strongest posture for priority #1 (privacy) and #2
+(unstoppability): there is no domain to seize, no certificate authority in
+the trust path, no public 80/443 to firewall, and no home port-forward.
+
+What changes under the hood (all automatic):
+
+- The wizard skips the domain, HTTPS-certificate email, dynamic-DNS and
+  router-port-forward questions (so it's a few steps shorter — the "Step N
+  of {total}" counter reflects this).
+- Ansible sets `morphit_tor_only: true`, which makes `enable_tls` false (no
+  certbot / Let's Encrypt) and drops BunkerWeb's clearnet TLS services from
+  the compose. The **frontend still runs** and Tor fans the onion straight
+  into it on `127.0.0.1:8090` (the same path a clearnet node's onion uses).
+- The advertised origin — `MORPHIT_INSTANCE_ORIGIN`, the relay's
+  `MORPHIT_RELAY_PUBLIC_ORIGIN` and its CORS allowlist — is set to
+  `http://<onion>` once the tor role has generated it (the tor role runs
+  after the templates render, so a post-task fills these in and restarts the
+  indexer + relay). `http://` is correct here: Tor encrypts and authenticates
+  the connection at the network layer, so a clearnet TLS certificate is
+  neither obtainable nor meaningful for a `.onion`.
+- The node registers on-chain by its onion and appears in the federated
+  `/instances` directory with a **"No clearnet reliance"** label; other
+  indexers that run Tor probe it over Tor for a real status (a clearnet-only
+  indexer simply lists it on its signed registration).
+
+**Adding a clearnet domain later.** A Tor-only node isn't a dead end. When
+you're ready to also serve `https://`:
+
+1. Buy a domain and point an **A record** at the box's public IP (home
+   nodes: forward ports 80 + 443 to the box, and set up dynamic DNS —
+   §"Dynamic DNS").
+2. Obtain the certificate and bring up the clearnet edge with
+   `morphit-ops ssl setup <domain>` (this runs the TLS role + BunkerWeb for
+   the domain; the onion keeps working alongside it).
+3. Update your advertised origin: `morphit-ops register` (or, if already
+   registered, the operator-update flow) with `MORPHIT_INSTANCE_ORIGIN=https://<domain>`.
+   The onion stays advertised as an alt-network address, so nothing you've
+   published breaks — you're adding clearnet, not replacing Tor.
+
 ---
 
 ## 15. Frontend CSP + security headers for operators
