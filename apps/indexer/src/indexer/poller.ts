@@ -23,6 +23,7 @@ import type { Config } from '$config';
 import type { BlurtClient } from '$blurt/client';
 import type { Database } from '$db/pool';
 import { applyBlock } from '$indexer/dispatcher';
+import { reconcileOperatorRegistrations } from '$indexer/reconcileRegistrations';
 import { consumeInOrderWithPrefetch } from '$indexer/prefetch';
 import { orderbookEventBus } from '$indexer/orderbookEventBus';
 import { chatEventBus } from '$indexer/chatEventBus';
@@ -586,6 +587,32 @@ export class Poller {
 			chain_id_prefix: chainId.slice(0, 8),
 			last_applied_block: lastApplied
 		});
+
+		// cp710 — one-shot reconciliation of operator registrations this
+		// indexer previously recorded as REJECTED.  Self-heals the case
+		// where a validator bug (e.g. cp670 regional-brand names, cp671
+		// Persian ZWNJ) wrongly rejected a valid registration: once the
+		// fixed indexer boots, the already-rejected op is replayed through
+		// the idempotent handler and materialised.  Safe no-op when there's
+		// nothing to heal; never touches non-idempotent (order/fee) ops.
+		// Best-effort: a failure here must not stop the poller from serving.
+		try {
+			await reconcileOperatorRegistrations({
+				db: this.db,
+				blurt: this.blurt,
+				config: this.config,
+				feeVerifiers: this.feeVerifiers,
+				feeAmounts: this.feeAmounts,
+				fiatToUsd: (amount: number, fiat: string): number | null => {
+					if (this.fxSource) return this.fxSource.fiatToUsd(amount, fiat);
+					if (fiat.trim().toUpperCase() === 'USD') return Number.isFinite(amount) ? amount : null;
+					return null;
+				},
+				log: (msg, meta) => log.info(msg, meta ?? {})
+			});
+		} catch (err) {
+			log.error('reconcile_registrations_failed', {}, err instanceof Error ? err : undefined);
+		}
 
 		while (!this.abort.signal.aborted) {
 			try {

@@ -39,7 +39,16 @@ import { readFileSync } from 'node:fs';
 import { statfs } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 
-export type SeedingState = 'ok' | 'degraded' | 'down' | 'not-configured' | 'unknown';
+import {
+	classifySeeding,
+	resolveHealthDiskPath,
+	type SeedingState as SharedSeedingState,
+	type SeedingProblem
+} from '@morphit/node-health';
+
+// Re-export the shared type under the local name so the rest of the
+// indexer keeps importing `SeedingState` from here unchanged (cp707).
+export type SeedingState = SharedSeedingState;
 
 export interface SystemBlock {
 	cpu_pct: number | null;
@@ -83,27 +92,39 @@ const DEFAULT_SNAPSHOT: OperationalSnapshot = {
 	relay: { up: false }
 };
 
+/** Render one degraded-problem kind into the indexer's terse public-endpoint
+ *  wording, using this node's facts for the timer states. */
+function idxProblemText(p: SeedingProblem, f: SeedingFacts): string {
+	switch (p) {
+		case 'pin-timer':
+			return `pin timer ${f.pinTimer}`;
+		case 'rebroadcast-timer':
+			return `rebroadcast timer ${f.rebroadcastTimer}`;
+		case 'pin-failed':
+			return 'last pin failed';
+		case 'rebroadcast-failed':
+			return 'last rebroadcast failed';
+	}
+}
+
 /** Decide whether this node is successfully seeding releases to IPFS/IPNS. PURE.
- *  Mirrors ops-cli checkIpfsSeeding so the CLI health view and the public
- *  endpoint agree. */
+ *  The STATE decision is the shared classifier (@morphit/node-health) so the
+ *  CLI health view and the public endpoint can never drift (cp707); only the
+ *  terse public-endpoint DETAIL wording lives here. */
 export function decideSeeding(f: SeedingFacts): { state: SeedingState; detail: string } {
-	const notInstalled = (s: ServiceState): boolean => s === 'not-installed';
-	if (notInstalled(f.daemon) && notInstalled(f.pinTimer) && notInstalled(f.rebroadcastTimer)) {
-		return { state: 'not-configured', detail: 'IPFS release seeding not enabled on this node' };
+	const cls = classifySeeding(f);
+	switch (cls.reason) {
+		case 'not-configured':
+			return { state: 'not-configured', detail: 'IPFS release seeding not enabled on this node' };
+		case 'unreadable':
+			return { state: 'unknown', detail: 'could not read service state' };
+		case 'daemon-down':
+			return { state: 'down', detail: `ipfs daemon is ${f.daemon}; releases not being seeded` };
+		case 'degraded':
+			return { state: 'degraded', detail: cls.problems.map((p) => idxProblemText(p, f)).join('; ') };
+		case 'ok':
+			return { state: 'ok', detail: 'pinning the release + rebroadcasting the IPNS record' };
 	}
-	if (f.daemon === 'unknown' && f.pinTimer === 'unknown' && f.rebroadcastTimer === 'unknown') {
-		return { state: 'unknown', detail: 'could not read service state' };
-	}
-	if (f.daemon !== 'active') {
-		return { state: 'down', detail: `ipfs daemon is ${f.daemon}; releases not being seeded` };
-	}
-	const problems: string[] = [];
-	if (f.pinTimer !== 'active') problems.push(`pin timer ${f.pinTimer}`);
-	if (f.rebroadcastTimer !== 'active') problems.push(`rebroadcast timer ${f.rebroadcastTimer}`);
-	if (f.pinFailed) problems.push('last pin failed');
-	if (f.rebroadcastFailed) problems.push('last rebroadcast failed');
-	if (problems.length > 0) return { state: 'degraded', detail: problems.join('; ') };
-	return { state: 'ok', detail: 'pinning the release + rebroadcasting the IPNS record' };
 }
 
 // ── gather helpers (defensive: never throw) ──────────────────────
@@ -176,6 +197,19 @@ function sampleMem(): { pct: number | null; usedGB: number | null; totalGB: numb
 	}
 }
 
+/** statfs the configured health disk path, falling back to `/` if that
+ *  path can't be stat'd — a stray MORPHIT_HEALTH_DISK_PATH must never
+ *  blank the disk figure (cp708). */
+async function statfsHealthPath(): Promise<Awaited<ReturnType<typeof statfs>>> {
+	const path = resolveHealthDiskPath(process.env);
+	try {
+		return await statfs(path);
+	} catch {
+		if (path === '/') throw new Error('statfs / failed');
+		return await statfs('/');
+	}
+}
+
 async function sampleDisk(): Promise<{
 	pct: number | null;
 	usedGB: number | null;
@@ -183,7 +217,7 @@ async function sampleDisk(): Promise<{
 	availGB: number | null;
 }> {
 	try {
-		const st = await statfs('/');
+		const st = await statfsHealthPath();
 		const bsize = Number(st.bsize);
 		const totalBytes = Number(st.blocks) * bsize;
 		const availBytes = Number(st.bavail) * bsize;

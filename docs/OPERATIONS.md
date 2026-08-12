@@ -515,6 +515,24 @@ operational detail is deliberately kept OUT of the public
 backups are failing or your disk is full); use `--json` locally
 (or over SSH) for the full picture.
 
+**Which disk the `system.disk_*` figure measures.**  It reports
+the filesystem holding your node's DATA — the unbounded grower
+(Postgres / the chain index) — not always `/`.  The guided
+install sets `MORPHIT_HEALTH_DISK_PATH` to the Postgres data
+directory's parent, so `statfs` resolves it to whichever mount
+holds the DB.  On a single-volume box that's the same as `/`; on
+a **split-volume** node (a dedicated data mount) it tracks the
+volume that actually fills, instead of cheerfully reporting a
+comfortable `/`.  If your data lives elsewhere, set an absolute
+path:
+
+```
+# /etc/morphit/indexer.env
+MORPHIT_HEALTH_DISK_PATH=/mnt/morphit-data
+```
+
+A bad value safely falls back to `/`, so the figure never blanks.
+
 **Third-party resilience.**  The freshness proofs embedded
 in every canary — the Blurt and Bitcoin chain heads and a
 news headline — are fetched with wide failover so a single

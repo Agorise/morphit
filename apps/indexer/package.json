@@ -1,6 +1,6 @@
 {
   "name": "morphit-indexer",
-  "version": "1.11.0",
+  "version": "1.11.1",
   "private": true,
   "type": "module",
   "description": "Morphit chain indexer — reads morphit_* ops from Blurt, maintains queryable state in Postgres",
@@ -25,6 +25,7 @@
     "@hono/node-server": "^1.13.0",
     "@morphit/asset-registry": "*",
     "@morphit/net-defense": "*",
+    "@morphit/node-health": "*",
     "@morphit/operator-config": "*",
     "@morphit/release-schema": "*",
     "@morphit/rpc-pool": "*",

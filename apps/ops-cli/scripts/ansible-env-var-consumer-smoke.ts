@@ -57,6 +57,7 @@ import { join } from 'node:path';
 const REPO_ROOT = join(import.meta.dirname, '..', '..', '..');
 const ANSIBLE_ROLES_DIR = join(REPO_ROOT, 'ops', 'ansible', 'roles');
 const APPS_DIR = join(REPO_ROOT, 'apps');
+const PACKAGES_DIR = join(REPO_ROOT, 'packages');
 const OPS_SCRIPTS_DIR = join(REPO_ROOT, 'ops', 'scripts');
 
 interface ScenarioResult {
@@ -163,6 +164,11 @@ function collectConsumerSurface(): { names: Set<string>; fileCount: number } {
 	const shPred = (p: string): boolean => p.endsWith('.sh');
 	const consumerFiles = [
 		...walkFiles(APPS_DIR, tsPred),
+		// packages/ — shared workspace libraries are real consumers too.
+		// cp708: @morphit/node-health reads MORPHIT_HEALTH_DISK_PATH (via
+		// resolveHealthDiskPath) on behalf of both the indexer and ops-cli,
+		// so the literal lives in packages/, not apps/.
+		...walkFiles(PACKAGES_DIR, tsPred),
 		// ops/scripts/ — sidecar shell scripts.
 		...walkFiles(OPS_SCRIPTS_DIR, shPred),
 		// ops/backup/ — backup script (cp131 added; previously
