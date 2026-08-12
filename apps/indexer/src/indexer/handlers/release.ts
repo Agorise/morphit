@@ -290,7 +290,10 @@ function validateDistribution(
 	let mirrors: string[] | undefined;
 	if (d.mirrors !== undefined && d.mirrors !== null) {
 		if (!Array.isArray(d.mirrors)) return { reason: 'distribution_mirrors_not_array' };
-		if (d.mirrors.length > 10) return { reason: 'distribution_mirror_invalid' };
+		// Cap raised 8→10 (v1.9.6) → 32 (v1.11.1, Ken's 9 new mirrors; ~20-mirror
+		// goal + headroom). Kept in lockstep with release-schema MIRRORS_MAX; the
+		// 4096-byte serialized cap below is the real bloat guard.
+		if (d.mirrors.length > 32) return { reason: 'distribution_mirror_invalid' };
 		for (const m of d.mirrors) {
 			if (
 				typeof m !== 'string' ||

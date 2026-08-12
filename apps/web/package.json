@@ -1,10 +1,10 @@
 {
   "name": "morphit-web",
-  "version": "1.11.1",
+  "version": "1.11.2",
   "private": true,
   "type": "module",
   "description": "Morphit web frontend — SvelteKit SSG, PWA, No-JS read-only paths",
-  "license": "AGPL-3.0-only",
+  "license": "AGPL-3.0-or-later",
   "scripts": {
     "dev": "vite dev --host",
     "prebuild": "npm run build:sitemap && npm run build:llms-full",

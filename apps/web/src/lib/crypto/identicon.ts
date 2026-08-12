@@ -39,7 +39,7 @@
  * Visual design inspired by Guillaume Schlipak's `IdentiHeart` library
  * (https://github.com/Schlipak/IdentiHeart, Apache-2.0). This file is
  * an original SVG reimplementation — no code was copied from that
- * project. Licensed AGPL-3.0-only as part of the Morphit frontend.
+ * project. Licensed AGPL-3.0-or-later as part of the Morphit frontend.
  *
  * ── Why bytes, not a string hash ────────────────────────────────────────
  *

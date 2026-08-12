@@ -1,6 +1,6 @@
 # Third-party licenses
 
-Morphit itself is licensed **AGPL-3.0-only** (see [`LICENSE`](LICENSE)). It is
+Morphit itself is licensed **AGPL-3.0-or-later** (see [`LICENSE`](LICENSE)). It is
 built on open-source dependencies obtained via npm, each under its own license;
 Morphit does not relicense them. This file discloses the licensing of those
 dependencies, with particular attention to anything that is **not** a standard

@@ -302,6 +302,12 @@ function buildDistribution(i: Inputs): ReleaseDistributionBlock | null {
 	// instance before it broadcasts (older instances reject the op until they
 	// upgrade, keeping the prior release until then). Launchpad's URL still carries
 	// a `+` (`/+git/`) needing the relaxed mirror regex.
+	// v1.11.1 (Ken) — NINE new push-mirrors confirmed live (gitgud.io,
+	// forge.chapril.org, git.disroot.org, git.kaki87.net, codefloe.com, git.gay,
+	// bolha.dev, opencommit.eu, sij.ai) → EIGHTEEN total. The on-chain cap was
+	// bumped 10 -> 32 (same forward-compat pattern: v1.11.1+ only; ceremony
+	// upgrades the canonical instance first) with headroom for the pending
+	// Savannah + 0xacab mirrors (→20, the goal) plus room beyond.
 	if (mirrorList.length === 0) {
 		mirrorList = [
 			'https://codeberg.org/agorise/morphit',
@@ -312,7 +318,16 @@ function buildDistribution(i: Inputs): ReleaseDistributionBlock | null {
 			'https://bitbucket.org/agorise/morphit',
 			'https://git.launchpad.net/~agorise/+git/morphit',
 			'https://gitea.com/agorise/morphit',
-			'https://framagit.org/agorise/morphit'
+			'https://framagit.org/agorise/morphit',
+			'https://gitgud.io/agorise/morphit',
+			'https://forge.chapril.org/agorise/morphit',
+			'https://git.disroot.org/agorise/morphit',
+			'https://git.kaki87.net/agorise/morphit',
+			'https://codefloe.com/agorise/morphit',
+			'https://git.gay/agorise/morphit',
+			'https://bolha.dev/agorise/morphit',
+			'https://opencommit.eu/agorise/morphit',
+			'https://sij.ai/agorise/morphit'
 		];
 	}
 

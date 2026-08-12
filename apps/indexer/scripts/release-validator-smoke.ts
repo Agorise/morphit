@@ -817,27 +817,28 @@ scenario('distribution non-https mirror → distribution_mirror_invalid', () => 
 		throw new Error(`got ${r.ok ? 'ok' : r.reason}`);
 });
 
-// v1.9.6 (Ken) — the mirror cap was bumped 8 → 10 (to fit the gitea.com +
-// framagit.org additions). Pin the NEW boundary: 10 is accepted (at the cap),
-// 11 is rejected (over it). A forward-compat note lives on MIRRORS_MAX.
-scenario('distribution 10 mirrors (at the cap) → ok', () => {
+// Mirror cap bumped 8 → 10 (v1.9.6, gitea.com + framagit.org) → 32 (v1.11.1,
+// Ken's 9 new push-mirrors; ~20-mirror goal + headroom). Pin the NEW boundary:
+// 32 is accepted (at the cap), 33 is rejected (over it). A forward-compat note
+// lives on MIRRORS_MAX.
+scenario('distribution 32 mirrors (at the cap) → ok', () => {
 	const r = validateReleasePayload(
 		withDistribution({
 			source_sha256: D_SHA,
 			gpg_fingerprint: D_FPR,
-			mirrors: Array.from({ length: 10 }, (_, i) => `https://m${i}.example.org/x`)
+			mirrors: Array.from({ length: 32 }, (_, i) => `https://m${i}.example.org/x`)
 		})
 	);
 	if (!r.ok) throw new Error(`got ${r.reason}`);
-	if (r.value.distribution?.mirrors?.length !== 10) throw new Error('mirrors lost');
+	if (r.value.distribution?.mirrors?.length !== 32) throw new Error('mirrors lost');
 });
 
-scenario('distribution 11 mirrors (over the cap) → distribution_mirror_invalid', () => {
+scenario('distribution 33 mirrors (over the cap) → distribution_mirror_invalid', () => {
 	const r = validateReleasePayload(
 		withDistribution({
 			source_sha256: D_SHA,
 			gpg_fingerprint: D_FPR,
-			mirrors: Array.from({ length: 11 }, (_, i) => `https://m${i}.example.org/x`)
+			mirrors: Array.from({ length: 33 }, (_, i) => `https://m${i}.example.org/x`)
 		})
 	);
 	if (r.ok || r.reason !== 'distribution_mirror_invalid')

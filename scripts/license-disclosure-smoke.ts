@@ -5,7 +5,7 @@
  * Two jobs:
  *  1. THIRD-PARTY-LICENSES.md exists and still discloses the one known
  *     non-permissive runtime dependency (`@beblurt/dblurt`, its no-military
- *     clause) + Morphit's own AGPL-3.0-only license.
+ *     clause) + Morphit's own AGPL-3.0-or-later license.
  *  2. DRIFT GUARD: walk the installed dependency tree and flag any package
  *     whose license matches a "needs disclosure / review" pattern — non-free
  *     field-of-use clauses, source-available licenses (SSPL/BUSL/Commons
@@ -121,7 +121,7 @@ function main(): void {
 	const doc = existsSync(DISCLOSURE) ? readFileSync(DISCLOSURE, 'utf8') : '';
 	check('discloses @beblurt/dblurt', doc.includes('@beblurt/dblurt'));
 	check('names the no-military license', /No-Military/i.test(doc));
-	check('states Morphit is AGPL-3.0-only', /AGPL-3\.0-only/.test(doc));
+	check('states Morphit is AGPL-3.0-or-later', /AGPL-3\.0-or-later/.test(doc));
 	check(
 		'notes dblurt is a runtime dep of indexer/relay/web',
 		/runtime/i.test(doc) && /indexer/.test(doc) && /relay/.test(doc) && /web/.test(doc)

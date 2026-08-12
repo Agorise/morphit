@@ -731,21 +731,21 @@ describe('release validator parity — frontend ↔ indexer', () => {
 			expect: 'distribution_mirror_invalid'
 		},
 		{
-			// v1.9.6 (Ken) — mirror cap bumped 8 → 10 (gitea.com + framagit.org).
-			name: 'distribution 10 mirrors (at the cap) → ok',
+			// Mirror cap bumped 8 → 10 (v1.9.6) → 32 (v1.11.1, Ken's 9 new mirrors).
+			name: 'distribution 32 mirrors (at the cap) → ok',
 			payload: payloadWithDistribution({
 				source_sha256: VALID_SOURCE_SHA256,
 				gpg_fingerprint: VALID_GPG_FPR,
-				mirrors: Array.from({ length: 10 }, (_, i) => `https://m${i}.example.org/x`)
+				mirrors: Array.from({ length: 32 }, (_, i) => `https://m${i}.example.org/x`)
 			}),
 			expect: 'ok'
 		},
 		{
-			name: 'distribution too many mirrors (11 > cap 10) → distribution_mirror_invalid',
+			name: 'distribution too many mirrors (33 > cap 32) → distribution_mirror_invalid',
 			payload: payloadWithDistribution({
 				source_sha256: VALID_SOURCE_SHA256,
 				gpg_fingerprint: VALID_GPG_FPR,
-				mirrors: Array.from({ length: 11 }, (_, i) => `https://m${i}.example.org/x`)
+				mirrors: Array.from({ length: 33 }, (_, i) => `https://m${i}.example.org/x`)
 			}),
 			expect: 'distribution_mirror_invalid'
 		}

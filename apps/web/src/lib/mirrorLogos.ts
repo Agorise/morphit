@@ -83,3 +83,18 @@ export const MIRROR_LOGO_INNER: Record<string, string> = {
 	framagit:
 		'<g transform="matrix(.02569 0 0 .02569 -.25 -.08)"><circle cx="74.91" cy="180.35" r="55"/><circle cx="137.6" cy="317.44" r="42.5"/><circle cx="189.82" cy="434.27" r="31"/></g><g transform="matrix(.02569 0 0 .02569 -.25 -.08)"><circle cx="515.92" cy="412.86" r="26"/><circle cx="499.71" cy="484.31" r="21"/></g><path d="M12.24 3.93c-.15.05-.64-.02-.64-.02.14.09.23.33.22.5-.48-.06-.67-.22-1.11-.45 0 0 .3.36.6.57.54.41 1.03.9 1.33 1.37.15.23.19.26.2.16a3.3 3.3 0 00-.52-1.87c-.06-.09-.07-.19-.08-.26z"/><path d="M.68.2C.53.2.45.33.56.43 5.51 2.78 4.78 5 5.42 7.55c.17.69 1.32 6.06 7.37 6.58.23.02.3-.25.06-.31-4.94-1.32-6.13-9.95-2.68-10.27.48-.04.63.16 1 .28.36.12.93.16 1.1.13.32-.6-.25-1.28-.73-1.78.52-.34 2.2-.71 2.4-.8.13-.05.07-.25-.04-.27-.77.05-2.6.2-3.43.52-1.45-.88-3.34-.2-4.3 1.3C5.19 1.5 3.81 1.08.67.2zM8.8 1.54c.74 0 .72.31-.24.64a3.76 3.76 0 00-2.38 2.2c-.11-.17.43-2.56 2.62-2.84z"/>'
 };
+
+/**
+ * v1.11.1 (Ken) — nine new push-mirrors on indie git hosts (gitgud.io,
+ * forge.chapril.org, git.disroot.org, git.kaki87.net, codefloe.com, git.gay,
+ * bolha.dev, opencommit.eu, sij.ai). None has a simple-icons brand glyph, and
+ * fabricating a brand mark for a small community host would be guesswork, so
+ * they share ONE honest, generic mark: the official Git logo (simple-icons,
+ * CC0), reduced to a single monochrome path so it joins the currentColor
+ * system like every glyph above. It's the correct semantic — each is a plain
+ * git repository — and the mirror's real name is shown beside it. The download
+ * page uses this whenever a mirror id has no entry in MIRROR_LOGO_PATHS /
+ * MIRROR_LOGO_INNER. Content is STATIC, never user input.
+ */
+export const MIRROR_LOGO_FALLBACK =
+	'M23.546 10.93 13.067.452c-.604-.603-1.582-.603-2.188 0L8.708 2.627l2.76 2.76c.645-.215 1.379-.07 1.889.441.516.515.658 1.258.438 1.9l2.658 2.66c.645-.223 1.387-.078 1.9.435.721.72.721 1.884 0 2.604-.719.719-1.881.719-2.6 0-.539-.541-.674-1.337-.404-1.996L12.86 8.955v6.525c.176.086.342.203.488.348.713.721.713 1.883 0 2.6-.719.721-1.889.721-2.609 0-.719-.719-.719-1.879 0-2.598.182-.18.387-.316.605-.406V8.835c-.217-.091-.424-.222-.6-.401-.545-.545-.676-1.342-.396-2.009L7.636 3.7.45 10.881c-.6.605-.6 1.584 0 2.189l10.48 10.477c.604.604 1.582.604 2.186 0l10.43-10.43c.605-.603.605-1.582 0-2.187';

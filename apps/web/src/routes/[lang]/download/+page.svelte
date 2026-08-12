@@ -4,7 +4,12 @@
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	import { _ } from 'svelte-i18n';
 	import Head from '$components/Head.svelte';
-	import { MIRROR_LOGO_PATHS, MIRROR_LOGO_VIEWBOX, MIRROR_LOGO_INNER } from '$lib/mirrorLogos';
+	import {
+		MIRROR_LOGO_PATHS,
+		MIRROR_LOGO_VIEWBOX,
+		MIRROR_LOGO_INNER,
+		MIRROR_LOGO_FALLBACK
+	} from '$lib/mirrorLogos';
 	import { ipfsCidTarballUrl, ipnsNativeTarballUrl, ipnsNativeDirUrl } from '$lib/ipns';
 	import { release } from '$lib/stores/release';
 
@@ -65,7 +70,21 @@
 		// anchored on-chain too (buildDistribution baked list; the mirror cap was
 		// bumped 8 -> 10 to fit them).
 		{ id: 'gitea', name: 'Gitea', url: 'https://gitea.com/agorise/morphit', status: 'live' },
-		{ id: 'framagit', name: 'Framagit', url: 'https://framagit.org/agorise/morphit', status: 'live' }
+		{ id: 'framagit', name: 'Framagit', url: 'https://framagit.org/agorise/morphit', status: 'live' },
+		// v1.11.1 (Ken) — NINE new push-mirrors on indie git hosts, all confirmed
+		// live and anchored on-chain (buildDistribution baked list; the mirror cap
+		// was bumped 10 -> 32 to fit them + leave headroom for the pending Savannah
+		// + 0xacab mirrors). None has a simple-icons brand glyph, so each renders
+		// the shared generic Git mark (MIRROR_LOGO_FALLBACK) beside its real name.
+		{ id: 'gitgud', name: 'GitGud', url: 'https://gitgud.io/agorise/morphit', status: 'live' },
+		{ id: 'chapril', name: 'Chapril', url: 'https://forge.chapril.org/agorise/morphit', status: 'live' },
+		{ id: 'disroot', name: 'Disroot', url: 'https://git.disroot.org/agorise/morphit', status: 'live' },
+		{ id: 'kaki87', name: 'KaKi87', url: 'https://git.kaki87.net/agorise/morphit', status: 'live' },
+		{ id: 'codefloe', name: 'Codefloe', url: 'https://codefloe.com/agorise/morphit', status: 'live' },
+		{ id: 'gitgay', name: 'git.gay', url: 'https://git.gay/agorise/morphit', status: 'live' },
+		{ id: 'bolha', name: 'Bolha.dev', url: 'https://bolha.dev/agorise/morphit', status: 'live' },
+		{ id: 'opencommit', name: 'OpenCommit', url: 'https://opencommit.eu/agorise/morphit', status: 'live' },
+		{ id: 'sijai', name: 'sij.ai', url: 'https://sij.ai/agorise/morphit', status: 'live' }
 	] as const;
 
 	// v1.9.6 (Ken) — TWO decentralized "latest release" surfaces:
@@ -183,7 +202,7 @@
 								{#if MIRROR_LOGO_INNER[m.id]}
 									{@html MIRROR_LOGO_INNER[m.id]}
 								{:else}
-									<path d={MIRROR_LOGO_PATHS[m.id]} />
+									<path d={MIRROR_LOGO_PATHS[m.id] ?? MIRROR_LOGO_FALLBACK} />
 								{/if}
 							</svg>
 							<span class="min-w-0">

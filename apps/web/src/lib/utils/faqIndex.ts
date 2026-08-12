@@ -181,6 +181,7 @@ export const FAQ_KEYS = [
 	'run_your_own',
 	'why_agpl',
 	'how_to_run_node',
+	'customize_your_instance',
 	'node_technical_skills',
 	'node_hosting_costs',
 	'node_minimum_requirements',
@@ -465,10 +466,12 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 	why_agpl: ['run_your_own', 'help_make_unstoppable', 'how_to_spread_morphit', 'data_collection'],
 	how_to_run_node: [
 		'run_your_own',
+		'customize_your_instance',
 		'how_operators_earn',
 		'node_technical_skills',
 		'node_minimum_requirements'
 	],
+	customize_your_instance: ['how_to_run_node', 'why_agpl', 'node_technical_skills'],
 	node_minimum_requirements: ['node_hosting_costs', 'how_to_run_node', 'node_technical_skills'],
 	how_operators_earn: ['operator_registration', 'operator_payouts_timing'],
 	operator_registration: ['how_operators_earn', 'how_to_find_good_operator'],

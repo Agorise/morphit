@@ -174,8 +174,17 @@ const IPNS_NAME_MAX_LEN = 80;
 const IPNS_RECORD_RE = /^[A-Za-z0-9+/]+={0,2}$/;
 const IPNS_RECORD_MIN_LEN = 64;
 const IPNS_RECORD_MAX_LEN = 1200;
-/** No release needs more than a handful of mirrors. */
-const MIRRORS_MAX = 10;
+/** Count cap on the on-chain mirror breadcrumb. Raised 8→10 at v1.9.6 and
+ *  10→32 at v1.11.1 (Ken added 9 new push-mirrors — gitgud.io, forge.chapril.org,
+ *  git.disroot.org, git.kaki87.net, codefloe.com, git.gay, bolha.dev,
+ *  opencommit.eu, sij.ai — bringing the live set to 18, with Savannah + 0xacab
+ *  still pending). 32 leaves durable headroom past the ~20-mirror goal so
+ *  future additions don't need another cap-raise. The real bloat guard is the
+ *  4096-byte serialized cap below, not this count (18 mirrors ≈ 1.1 KB, 32 ≈
+ *  1.6 KB). FORWARD-COMPAT: a payload carrying >10 mirrors is rejected by
+ *  pre-v1.11.1 validators, so the ceremony upgrades the canonical instance
+ *  before broadcasting (same pattern as the 8→10 and Launchpad-`+` bumps). */
+const MIRRORS_MAX = 32;
 const DISTRIBUTION_MAX_SERIALIZED_BYTES = 4096;
 
 /** Validate a parsed payload.  Returns `{ ok: true, value }` or

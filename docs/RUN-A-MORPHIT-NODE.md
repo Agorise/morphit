@@ -195,6 +195,30 @@ curl https://yourdomain.com/v1/health
 
 A healthy response is JSON with a recent block number and a small lag, like `{"chain_head_block": 12345678, "lag_blocks": 15}`. If that works but the site doesn't, the problem is in the website/nginx layer, not the services.
 
+## 11. Make it your own (optional — logo, colours, wording)
+
+You're free to rebrand your instance completely — new name, logo, colours, even rewrite every word on the screen. Many operators do, to make their instance feel local to their community. Here's the honest breakdown of how hard each part is, because it depends on what you're changing.
+
+**The easy 90% — no programming needed.** Logo, colours, name, fonts, and wording are the changes most people actually want, and none of them require JavaScript:
+
+- **Logo and brand images** — drop your own SVG/PNG files into `apps/web/static/brand/` (replacing the Morphit marks). If you know how to save a file, you can do this.
+- **Colours and fonts** — Morphit's palette is a handful of named colour tokens (the brand emerald is `#00DA69`, the teal `#027c86`) defined in the Tailwind/CSS config. Change the values, and the whole site follows. This is plain CSS knowledge.
+- **Text and wording** — every visible string lives in the translation files under `apps/web/src/lib/i18n/locales/` (`en.json` for English, and one file per language). They're simple `"key": "value"` pairs — edit the values, keep the keys, and your words appear. No code involved.
+
+**The other 10% — layout and structure.** If you want to move things around, add or remove whole sections, or change how a page is built, that's where Morphit's frontend framework — **SvelteKit** — comes in. The page files (ending in `.svelte`) are HTML-like markup with a bit of framework syntax mixed in. If you're comfortable with HTML and CSS, most of what you already know transfers directly; the Svelte-specific parts (the `{#if}`/`{#each}` blocks, the `$`-prefixed reactive bits) have a short learning curve, but they're well-documented.
+
+**What to install to make the changes comfortably.** You don't need much:
+
+- **[Visual Studio Code](https://code.visualstudio.com/)** — a free code editor.
+- **The "Svelte for VS Code" extension** — search for it in VS Code's Extensions panel (publisher: *Svelte*) and install it. This is the single most useful thing: it gives you syntax highlighting, auto-completion, and inline error hints for `.svelte` files, so mistakes are caught as you type instead of at build time. Editing Svelte without it is much harder than it needs to be.
+- **[Node.js](https://nodejs.org/) (LTS version)** — so you can preview your changes.
+
+**See your changes live as you edit.** From the `apps/web/` folder, run `npm install` once, then `npm run dev`. This starts a local preview at `http://localhost:5173` that reloads instantly every time you save a file — so you can tweak a colour or a logo and watch it update in your browser in real time, without rebuilding or redeploying. When you're happy, `npm run build` produces the final static site, and a `sudo morphit-ops upgrade` (or your normal deploy) serves it.
+
+**If you've never touched Svelte** — the official interactive tutorial at [svelte.dev/tutorial](https://svelte.dev/tutorial) is genuinely a couple of hours and covers everything you'd hit for a rebrand. And the Agorise Matrix room (`#agorise:matrix.org`) has people who've done this and are happy to help.
+
+**One rule (the licence).** Morphit is AGPL-3.0-or-later. Cosmetic rebrands — logo, colours, name, wording — are completely fine and encouraged. The only requirement: if you run your *modified* frontend as a public instance, you have to make your changed source available to your users (a link in the footer to your fork is enough). You can't run a secret, closed-source modified version. That's the whole deal — see the "Why does Morphit use the AGPL licence?" FAQ for the reasoning.
+
 ---
 
 That's the whole job. Get a machine, point a name at it, run the installer, let the wizard configure it, register — and you're an operator in the federation. Welcome aboard.

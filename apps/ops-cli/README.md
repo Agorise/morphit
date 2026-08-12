@@ -243,4 +243,4 @@ test/
 
 ## License
 
-AGPL-3.0-only — same as the rest of Morphit.
+AGPL-3.0-or-later — same as the rest of Morphit.

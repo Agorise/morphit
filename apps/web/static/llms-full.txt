@@ -741,6 +741,22 @@ Running a node lets you register as an operator and earn a generous share of the
 
 ---
 
+## Can I customize the look of my own Morphit instance (logo, colours, name)?
+
+**FAQ key:** `customize_your_instance`
+
+Yes — and it's encouraged. You can change the logo, colours, name, fonts, and every word on the screen, and many operators do, to make their instance feel local to their community.
+
+The easy parts need no programming at all. Brand images live in `apps/web/static/brand/` — drop in your own SVG or PNG. Colours are a handful of named tokens in the CSS config (the brand emerald is `#00DA69`). Every visible word lives in plain `"key": "value"` translation files under `apps/web/src/lib/i18n/locales/`. If you can edit a file, you can do all of this — no JavaScript involved.
+
+Changing the layout or structure is the deeper part: Morphit's frontend is built with **SvelteKit**, so the page files end in `.svelte` — HTML-like markup with a little framework syntax mixed in. Your HTML and CSS knowledge transfers directly; the Svelte-specific bits have a short learning curve.
+
+To work comfortably, install the free **Visual Studio Code** editor and its **"Svelte for VS Code"** extension (search the Extensions panel, publisher *Svelte*). It gives you syntax highlighting and inline error hints for `.svelte` files, which makes editing far easier than going without it. Running `npm run dev` in `apps/web/` then gives you a live preview that reloads every time you save. If you've never used Svelte, the official tutorial at svelte.dev/tutorial is a couple of hours and covers everything a rebrand needs.
+
+One rule, from the AGPL licence: cosmetic rebrands are completely fine, but if you run a **modified** instance publicly you must offer your changed source to your users — a footer link to your fork is enough. The full step-by-step is in the run-a-node guide (see /run-a-node).
+
+---
+
 ## How do operators earn?
 
 **FAQ key:** `how_operators_earn`
@@ -2375,7 +2391,7 @@ Your orders, chat, balances and the block explorer all go through your operator'
 
 ## Metadata
 
-Total FAQ entries: 143
+Total FAQ entries: 144
 Canonical URL: https://morphit.io/faq
 License: AGPL-3.0 (content may be quoted/redistributed)
 Source of truth: https://git.agorise.net/agorise/morphit
