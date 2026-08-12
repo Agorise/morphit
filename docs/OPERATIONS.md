@@ -11726,7 +11726,7 @@ vanish. With every operator pinning, the signed release is served from as
 many independent nodes as there are instances — and operators keep 90% of
 the BLURT listing fees, so hosting the release they run is the quid pro
 quo. **This is ON by default.** (The code never disappears regardless —
-it is also on nine git mirrors and anchored on-chain — but this keeps the
+it is also on eighteen git mirrors and anchored on-chain — but this keeps the
 *IPFS* copy alive without depending on any single provider.)
 
 ### How it works

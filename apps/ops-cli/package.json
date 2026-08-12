@@ -1,10 +1,10 @@
 {
   "name": "morphit-ops",
-  "version": "1.11.1",
+  "version": "1.11.2",
   "description": "Morphit operator CLI — status, drain queue, signups, abuse alerts. Read-mostly view into the indexer + relay shared database.",
   "type": "module",
   "private": true,
-  "license": "AGPL-3.0-only",
+  "license": "AGPL-3.0-or-later",
   "engines": {
     "node": ">=22.0.0"
   },

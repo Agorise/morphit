@@ -1813,13 +1813,13 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 							: `Check that ${webRoot} received the new build and that your ` +
 								`web server is not caching /verify.json or /service-worker.js.`)
 				);
-			} else {
-				info(
-					`(Could not auto-verify the served frontend. Check it with: ` +
-						`curl -s <your-site>/verify.json — its "morphit_version" should ` +
-						`match this build.)`
-				);
 			}
+			// verdict === 'unknown': the box couldn't read its own served
+			// /verify.json (e.g. a Tor-only node, or a home box whose NAT won't
+			// hairpin its own public URL). The upgrade itself already reported
+			// success, and "unknown" is not evidence of a problem — so stay
+			// SILENT rather than printing a "Could not auto-verify …" line that
+			// reads like a failure on an upgrade that worked (v1.11.1).
 		} catch {
 			// verification is best-effort; never fail the upgrade over it
 		}

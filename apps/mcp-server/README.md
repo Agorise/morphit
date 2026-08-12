@@ -184,7 +184,7 @@ step.
 
 ## License
 
-AGPL-3.0-only, same as Morphit itself.
+AGPL-3.0-or-later, same as Morphit itself.
 
 ## Bugs + feature requests
 

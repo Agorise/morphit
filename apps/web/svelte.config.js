@@ -1,6 +1,27 @@
 import adapter from '@sveltejs/adapter-static';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 
+// v1.11.1 — quiet ONE benign SvelteKit adapter-static warning during the
+// `morphit-ops upgrade` frontend build. adapter-static prerenders the root `/`
+// (the detection-redirect shell, ADR-0024) AND writes the SPA fallback to that
+// same `index.html`, so SvelteKit core prints (via console.log):
+//   "Overwriting …/build/index.html with fallback page. Consider using a
+//    different name for the fallback."
+// The overwrite is INTENTIONAL here — the fallback shell is exactly what every
+// unmatched route (including `/`) should boot — so the line is noise an
+// operator can't act on and, mid-upgrade, reads like something went wrong. Same
+// gate + rationale as the chunk-size (cp687) and npm-deprecation (cp686)
+// quieting: suppressed ONLY when morphit-ops sets MORPHIT_QUIET_BUILD=1. A
+// developer's or CI build (no MORPHIT_QUIET_BUILD) still sees it in full.
+if (process.env.MORPHIT_QUIET_BUILD === '1') {
+	const FALLBACK_WARNING = 'Consider using a different name for the fallback';
+	const origLog = console.log.bind(console);
+	console.log = (...args) => {
+		if (args.some((a) => typeof a === 'string' && a.includes(FALLBACK_WARNING))) return;
+		origLog(...args);
+	};
+}
+
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
 	preprocess: vitePreprocess(),
