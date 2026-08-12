@@ -35,6 +35,7 @@ import {
 	type AccountInfo
 } from './chainCheck.ts';
 import { isReservedTag, impersonatesReservedName } from '../../../indexer/src/indexer/confusables.ts';
+import { classifyChainError } from '../commands/chainErrors.ts';
 import { encryptEnvelope, checkPassphraseStrength, type KeyEnvelope } from './encrypt.ts';
 import { sanitizeForTerm } from '../render/term.ts';
 import {
@@ -196,6 +197,33 @@ export interface RelayAccountResult {
 	readonly chainLookupSucceeded: boolean;
 }
 
+/** Given a raw account-lookup failure message, decide how the wizard
+ *  should present it.  PURE — unit-testable.  cp709: a connectivity
+ *  failure during a deliberately-offline / air-gapped install is
+ *  EXPECTED (the wizard needs no internet; the node self-verifies when
+ *  it first comes online), so it gets a calm ℹ message rather than an
+ *  alarming ⚠ "Could not reach any Blurt RPC".  Any other error keeps
+ *  the specific ⚠ line so a real misconfiguration stays visible. */
+export function describeAccountLookupFailure(
+	name: string,
+	rawMsg: string
+): { readonly offline: boolean; readonly lines: readonly string[] } {
+	if (classifyChainError(rawMsg) === 'rpc_unreachable') {
+		return {
+			offline: true,
+			lines: [
+				`  \u2139 No internet reachable right now, so @${name} can't be checked on Blurt yet.`,
+				'    That is normal for an offline / air-gapped install — nothing is wrong.',
+				`    Your node will verify @${name} automatically the first time it comes online.`
+			]
+		};
+	}
+	return {
+		offline: false,
+		lines: [`  \u26a0 Could not check @${name} on Blurt: ${sanitizeForTerm(rawMsg)}`]
+	};
+}
+
 /** Derive a short, Blurt-name-safe base from the operator's instance name (or
  *  domain) for SUGGESTING relay/fees account names — e.g. "Morphit NL" ->
  *  "morphitnl", "morphit.io" -> "morphitio". Capped at 10 chars so both
@@ -290,10 +318,13 @@ export async function stepRelayAccount(instanceName?: string): Promise<RelayAcco
 		} catch (err) {
 			// cp139-C-12: err.message can carry chain-RPC response
 			// text (HTTP server's error body) which is attacker-
-			// influenceable.  Strip terminal escapes before display.
-			console.log(
-				`  ⚠ Could not check @${name} on Blurt: ${sanitizeForTerm(err instanceof Error ? err.message : 'unknown error')}`
-			);
+			// influenceable.  describeAccountLookupFailure sanitizes it
+			// and (cp709) softens the message for the expected
+			// no-connectivity / air-gapped case.
+			const rawMsg = err instanceof Error ? err.message : 'unknown error';
+			for (const line of describeAccountLookupFailure(name, rawMsg).lines) {
+				console.log(line);
+			}
 			const useAnyway = await askYesNo(
 				'Use this name anyway? (will validate later when relay starts)',
 				true

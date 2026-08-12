@@ -556,6 +556,18 @@ morphit_enable_web_push: true
 morphit_vapid_subject: "https://{{ morphit_domain }}"
 
 
+# ─── Health disk figure (cp708) ─────────────────────────────────
+#
+# The /v1/health `system.disk_*` figure (and the `morphit-ops` health
+# view) measures the filesystem that holds the node's DATA — the
+# unbounded grower (Postgres / the chain index) — not always `/`. The
+# indexer.env template defaults this to the Postgres data directory's
+# parent, so statfs resolves it to whichever mount holds the DB. On a
+# single-volume box that's the same as `/`; on a split-volume node it
+# tracks the data mount. Override only if your data lives elsewhere.
+# Must be an ABSOLUTE path; a bad value safely falls back to `/`.
+# morphit_health_disk_path: "/var/lib/postgresql"
+
 # ─── Host-resource monitor sidecar (cp10, §16) ──────────────────
 #
 # Disk / memory / swap / CPU thresholds.  All optional — the

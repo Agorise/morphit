@@ -38,6 +38,8 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { statfs } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import { classifySeeding, resolveHealthDiskPath, type SeedingProblem } from '@morphit/node-health';
+
 import { defaultRepoRoot } from '../lib/repoRoot.ts';
 import { parseCanaryTimestamp } from '../canaryTime.ts';
 
@@ -1189,41 +1191,52 @@ export function readIpfsSeedingFacts(): IpfsSeedingFacts {
 	};
 }
 
-/** Decide whether this node is successfully seeding releases to IPFS/IPNS. PURE. */
+/** Render one degraded-problem kind into the CLI's operator-facing wording
+ *  (with the journalctl remediation hint), using this node's facts. */
+function opsProblemText(p: SeedingProblem, f: IpfsSeedingFacts): string {
+	switch (p) {
+		case 'pin-timer':
+			return `release-pin timer ${f.pinTimer}`;
+		case 'rebroadcast-timer':
+			return `IPNS-rebroadcast timer ${f.rebroadcastTimer}`;
+		case 'pin-failed':
+			return 'last pin FAILED (journalctl -u morphit-ipfs-pin)';
+		case 'rebroadcast-failed':
+			return 'last IPNS rebroadcast FAILED (journalctl -u morphit-ipns-rebroadcast)';
+	}
+}
+
+/** Decide whether this node is successfully seeding releases to IPFS/IPNS. PURE.
+ *  The STATE decision is the shared classifier (@morphit/node-health) so this
+ *  CLI view and the public /v1/health endpoint can never drift (cp707); only
+ *  the CLI's richer DETAIL wording (remediation hints + last-run ages) lives
+ *  here. */
 export function checkIpfsSeeding(f: IpfsSeedingFacts): IpfsSeedingStatus {
-	const notInstalled = (s: ServiceState): boolean => s === 'not-installed';
-	// Nothing set up at all → optional feature, not a fault.
-	if (notInstalled(f.daemon) && notInstalled(f.pinTimer) && notInstalled(f.rebroadcastTimer)) {
-		return {
-			state: 'not-configured',
-			detail: 'not set up — optional; enable with morphit-ops harden \u2192 \u201cSet up IPFS release hosting\u201d'
-		};
+	const cls = classifySeeding(f);
+	switch (cls.reason) {
+		case 'not-configured':
+			return {
+				state: 'not-configured',
+				detail: 'not set up — optional; enable with morphit-ops harden \u2192 \u201cSet up IPFS release hosting\u201d'
+			};
+		case 'unreadable':
+			return { state: 'unknown', detail: 'could not read systemd state (no systemctl?)' };
+		case 'daemon-down':
+			return {
+				state: 'down',
+				detail: `Kubo (ipfs) daemon is ${f.daemon}; releases are NOT being seeded. Check: sudo systemctl status ipfs`
+			};
+		case 'degraded':
+			return { state: 'degraded', detail: cls.problems.map((p) => opsProblemText(p, f)).join('; ') };
+		case 'ok': {
+			const pinAge = f.pinRanMs !== null ? formatBackupAge(f.pinRanMs) : 'pending first run';
+			const rebAge = f.rebroadcastRanMs !== null ? formatBackupAge(f.rebroadcastRanMs) : 'pending first run';
+			return {
+				state: 'ok',
+				detail: `pinning the signed release to IPFS (last ${pinAge}) + rebroadcasting the IPNS record to the DHT (last ${rebAge})`
+			};
+		}
 	}
-	// systemctl unreadable everywhere → don't alarm.
-	if (f.daemon === 'unknown' && f.pinTimer === 'unknown' && f.rebroadcastTimer === 'unknown') {
-		return { state: 'unknown', detail: 'could not read systemd state (no systemctl?)' };
-	}
-	// Daemon down while configured → nothing is being seeded.
-	if (f.daemon !== 'active') {
-		return {
-			state: 'down',
-			detail: `Kubo (ipfs) daemon is ${f.daemon}; releases are NOT being seeded. Check: sudo systemctl status ipfs`
-		};
-	}
-	const problems: string[] = [];
-	if (f.pinTimer !== 'active') problems.push(`release-pin timer ${f.pinTimer}`);
-	if (f.rebroadcastTimer !== 'active') problems.push(`IPNS-rebroadcast timer ${f.rebroadcastTimer}`);
-	if (f.pinFailed) problems.push('last pin FAILED (journalctl -u morphit-ipfs-pin)');
-	if (f.rebroadcastFailed) problems.push('last IPNS rebroadcast FAILED (journalctl -u morphit-ipns-rebroadcast)');
-	if (problems.length > 0) {
-		return { state: 'degraded', detail: problems.join('; ') };
-	}
-	const pinAge = f.pinRanMs !== null ? formatBackupAge(f.pinRanMs) : 'pending first run';
-	const rebAge = f.rebroadcastRanMs !== null ? formatBackupAge(f.rebroadcastRanMs) : 'pending first run';
-	return {
-		state: 'ok',
-		detail: `pinning the signed release to IPFS (last ${pinAge}) + rebroadcasting the IPNS record to the DHT (last ${rebAge})`
-	};
 }
 
 // ─── System resources (local host, read-only, non-privileged) ──────
@@ -1231,7 +1244,8 @@ export function checkIpfsSeeding(f: IpfsSeedingFacts): IpfsSeedingStatus {
 // CPU / memory / disk for the box the node runs on, so the operator
 // can spot a saturated CPU, a memory squeeze, or a filling disk at a
 // glance — often the real reason an indexer starts lagging.  All reads
-// are unprivileged: os.cpus()/totalmem(), /proc/meminfo, and statfs('/')
+// are unprivileged: os.cpus()/totalmem(), /proc/meminfo, and statfs
+// of the health disk path (MORPHIT_HEALTH_DISK_PATH, default '/')
 // never EACCES for a normal user, so this preserves the view's
 // "works regardless of file permissions" property.
 
@@ -1339,10 +1353,22 @@ export async function readSystemResources(): Promise<SystemResources> {
 		/* leave null */
 	}
 
-	// Disk: the root filesystem (the VPS's drive on a single-disk box;
-	// Docker volumes / the DB live under it).  statfs is Node 18.15+.
+	// Disk: the filesystem holding the node's DATA (cp708).  Defaults to
+	// `/` (the VPS's drive on a single-disk box; Docker volumes / the DB
+	// live under it), but a split-volume node points
+	// MORPHIT_HEALTH_DISK_PATH at its data mount so this figure tracks the
+	// volume that actually fills.  Falls back to `/` if that path can't be
+	// stat'd, so a stray env value never blanks the figure.  statfs is
+	// Node 18.15+.
 	try {
-		const st = await statfs('/');
+		const diskPath = resolveHealthDiskPath(process.env);
+		let st;
+		try {
+			st = await statfs(diskPath);
+		} catch (e) {
+			if (diskPath === '/') throw e;
+			st = await statfs('/');
+		}
 		const bsize = Number(st.bsize);
 		const totalBytes = Number(st.blocks) * bsize;
 		const availBytes = Number(st.bavail) * bsize; // usable by non-root
