@@ -3,6 +3,13 @@ Description=Morphit matrix-bot — tails journalctl, classifies operator alerts 
 Documentation=https://git.agorise.net/agorise/morphit
 After=network-online.target morphit-indexer.service morphit-relay.service
 Wants=network-online.target
+# If the bot crashes repeatedly on startup (e.g. a missing E2EE crypto native
+# binary), stop retrying after 5 failures in 5 minutes and enter `failed`, so
+# `morphit-ops health` shows it as a clear problem instead of an endless,
+# silent restart loop. `morphit-ops matrix` / a re-run of the installer clears
+# the limit when the cause is fixed.
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 [Service]
 Type=simple

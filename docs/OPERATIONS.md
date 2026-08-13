@@ -3030,6 +3030,16 @@ give it an alert username, so there is nothing to run (or watch) on an
 instance that doesn't use Matrix.  Manage it with one command instead of
 a raw `systemctl`:
 
+> **Set up at install time, too.** The guided install wizard (§7 of
+> `RUN-A-MORPHIT-NODE.md`) offers alerts right after the Matrix-contact
+> step: paste the bot account's access token + a personal `@user:server`
+> recipient, and the installer sets `enable_matrix_bot: true`, writes
+> `/etc/morphit/matrix-bot.env`, and turns on the host / SMART / apt /
+> systemd monitors (plus certbot-expiry on a clearnet node) — i.e. a valid
+> entry means alerting is ON by default. Skipping it at install is
+> identical to a fresh instance: use `morphit-ops matrix` below to enable
+> it later.
+
 - `morphit-ops matrix set @you:matrix.org` — writes the alert MXID to
   `/etc/morphit/matrix-bot.env` **and** enables + (re)starts the bot. The
   MXID must be a personal `@user:server` — a `#room:server` alias is

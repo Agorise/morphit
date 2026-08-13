@@ -31,7 +31,7 @@
 			"operator_matrix": "Matrix 群組"
 		},
 		"integrity": {
-			"explain": "此實例提供 {count} 個檔案。每個都已被雜湊,並在下面的完整清單中列出。將上面的聚合雜湊與區塊鏈上最新簽名發布中公布的雜湊進行比較(@morphit 在每次建置後發布一個 morphit_release_v1 op)。如果匹配,則套件與官方發布逐位元組相同。",
+			"explain": "此實例提供 {count} 個檔案。每個都已被雜湊,並在下面的完整清單中列出。將下面的聚合雜湊與區塊鏈上最新簽名發布中公布的雜湊進行比較(@morphit 在每次建置後發布一個 morphit_release_v1 op)。如果匹配,則套件與官方發布逐位元組相同。",
 			"raw_link": "查看完整清單 (verify.json)"
 		},
 		"worried": {
@@ -1856,6 +1856,8 @@
 		"ens": "ENS",
 		"compare": "比較",
 		"compare_title": "睇吓 Morphit 同其他選擇嘅比較",
+		"about": "關於",
+		"about_title": "關於此實例",
 		"stats": "統計",
 		"stats_title": "即時聚合網絡統計",
 		"contact": "聯絡",

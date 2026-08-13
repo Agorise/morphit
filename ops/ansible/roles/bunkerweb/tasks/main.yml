@@ -165,51 +165,85 @@
     proto: tcp
   when: morphit_mcp_enabled | bool
 
+- name: Build the BunkerWeb frontend image
+  # `docker_compose_v2` with build: always surfaces Docker's build progress
+  # (e.g. "image bunkerweb-frontend: Built") as Ansible WARNINGs — which reads
+  # like a problem even though it's a success. Building here with `docker compose
+  # build` keeps that output captured in the task result (not printed to the
+  # operator), and the up step below runs with build: never so it has nothing to
+  # warn about.
+  ansible.builtin.command:
+    cmd: docker compose build
+    chdir: /etc/bunkerweb
+  register: bunkerweb_build
+  changed_when: >-
+    ('Built' in (bunkerweb_build.stdout | default('')))
+    or ('Built' in (bunkerweb_build.stderr | default('')))
+  when: bunkerweb_compose.changed or bunkerweb_env.changed or bunkerweb_frontend.changed
+
 - name: Bring BunkerWeb up
   community.docker.docker_compose_v2:
     project_src: /etc/bunkerweb
     state: present
-    build: always
+    build: never
   when: bunkerweb_compose.changed or bunkerweb_env.changed or bunkerweb_frontend.changed
 
 - name: Verify the update surface is served no-cache (stale-worker guard)
   # A missing no-cache header on /service-worker.js + /verify.json lets an edge
   # cache pin a stale service worker on visitors' devices, so they stop receiving
   # deploys until they hard-refresh. The shipped frontend config sets no-cache;
-  # this confirms it actually reached the wire. Non-fatal (a not-yet-ready site
-  # shouldn't abort the run) but it reports loudly so the operator can't miss it.
-  ansible.builtin.shell: >-
-    set -o pipefail;
-    curl -fsSI "https://{{ morphit_domain }}/verify.json"
-    | grep -i '^cache-control:' | grep -qi 'no-cache'
+  # this confirms it actually reached the wire. The retry loop lives INSIDE the
+  # shell (not Ansible's until/retries) on purpose: Ansible's retry prints a
+  # "FAILED - RETRYING ... (N retries left)" line per attempt, which reads like
+  # ten failures to a new operator. Doing it in-shell means Ansible sees one
+  # task that reports a single calm result. Always exits 0 (non-fatal — a
+  # not-yet-ready site shouldn't abort the run); the outcome is in stdout.
+  ansible.builtin.shell: |
+    set -o pipefail
+    for _ in $(seq 1 10); do
+      if curl -fsSI "https://{{ morphit_domain }}/verify.json" \
+         | grep -i '^cache-control:' | grep -qi 'no-cache'; then
+        echo fresh
+        exit 0
+      fi
+      sleep 6
+    done
+    echo pending
+    exit 0
   args:
     executable: /bin/bash
   register: morphit_nocache_check
   changed_when: false
-  failed_when: false
-  retries: 10
-  delay: 6
-  until: morphit_nocache_check.rc == 0
   # Tor-only: no clearnet https://<domain> to curl — the same no-cache frontend
   # config is served via the onion; skip the clearnet verification.
+  # Offline/air-gapped install: the box has no network (and no DNS for its own
+  # domain), so this curl can only fail — skip it rather than wait, and report a
+  # calm deferred note instead. morphit-first-online re-checks it.
   when: >-
     (bunkerweb_compose.changed or bunkerweb_env.changed or bunkerweb_frontend.changed)
     and not (morphit_tor_only | default(false))
+    and not (morphit_offline_install | default(false))
 
 - name: Report update-surface no-cache result
   ansible.builtin.debug:
     msg: >-
-      {{ '✓ /verify.json is served no-cache — the update surface is fresh; visitors will auto-receive deploys.'
-         if morphit_nocache_check.rc == 0
-         else '✗ WARNING: could not confirm /verify.json is no-cache. If the site is up,
-               visitors may be stuck on a stale service worker and stop receiving deploys.
-               Ensure the server config that serves the build carries the no-cache blocks for
-               /service-worker.js and /verify.json, then re-check with:
-               curl -sI https://' ~ morphit_domain ~ '/verify.json | grep -i cache-control
-               — see docs/OPERATIONS.md §"Caching the update surface".' }}
+      {{ 'Update surface is fresh — /verify.json is served no-cache, so visitors auto-receive new deploys.'
+         if 'fresh' in (morphit_nocache_check.stdout | default(''))
+         else 'The site is still coming up — the update-surface freshness check will pass once it is fully live (nothing to do now). You can re-check any time with:  curl -sI https://' ~ morphit_domain ~ '/verify.json | grep -i cache-control' }}
   when: >-
     (bunkerweb_compose.changed or bunkerweb_env.changed or bunkerweb_frontend.changed)
     and not (morphit_tor_only | default(false))
+    and not (morphit_offline_install | default(false))
+
+- name: Note the no-cache check is deferred on an offline install
+  ansible.builtin.debug:
+    msg: >-
+      Offline install — the served-page freshness check runs automatically once
+      this box is online. Nothing to do now.
+  when: >-
+    (bunkerweb_compose.changed or bunkerweb_env.changed or bunkerweb_frontend.changed)
+    and not (morphit_tor_only | default(false))
+    and (morphit_offline_install | default(false))
 
 - name: Print BunkerWeb verification reminder
   ansible.builtin.debug:

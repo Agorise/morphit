@@ -12,7 +12,7 @@
  * one).  Interactive, but every dependency is injectable so the flow is
  * unit-tested with scripted answers.
  */
-import { ask as realAsk, askChoice as realAskChoice, examples as realExamples, step } from './prompt.ts';
+import { ask as realAsk, askChoice as realAskChoice, examples as realExamples, askPassword as realAskPassword, step } from './prompt.ts';
 import {
 	randomSecret,
 	validateDomain,
@@ -20,6 +20,7 @@ import {
 	validateDdnsUrl,
 	validateInstanceTitle,
 	validateMatrixAddress,
+	validateAlertMxid,
 	matrixToContactUrl,
 	type AnsibleInstallInputs,
 	type InstallMode
@@ -28,6 +29,7 @@ import {
 export interface CollectDeps {
 	readonly ask?: typeof realAsk;
 	readonly askChoice?: typeof realAskChoice;
+	readonly askSecret?: typeof realAskPassword;
 	readonly examples?: typeof realExamples;
 	readonly print?: (s: string) => void;
 }
@@ -89,6 +91,7 @@ export async function collectInstallInputs(
 ): Promise<AnsibleInstallInputs> {
 	const ask = deps.ask ?? realAsk;
 	const examples = deps.examples ?? realExamples;
+	const askSecret = deps.askSecret ?? realAskPassword;
 	const print = deps.print ?? ((s: string): void => console.log(s));
 	const req = { ask, examples, print };
 
@@ -156,6 +159,50 @@ export async function collectInstallInputs(
 	);
 	const contactUrl = matrixAddress.length > 0 ? matrixToContactUrl(matrixAddress) : undefined;
 
+	// Operator alerts (optional). Asked right after the contact step: if the
+	// operator gives a bot token + a private recipient MXID, alerting turns ON by
+	// default (buildAnsibleVars flips enable_matrix_bot + the monitor sidecars),
+	// so the "this node has no alerting" note never appears. Skipping (Enter on
+	// the token) leaves alerting off — addable later via `morphit-ops matrix`.
+	step(0, 0, 'Alerts (optional, recommended for an always-on node)');
+	print(
+		'\n  Morphit can message you on Matrix the moment something needs\n' +
+			'  attention \u2014 low disk, a backup that didn\u2019t run, a service down, a\n' +
+			'  TLS cert nearing expiry. It uses a small \u201cbot\u201d Matrix account\n' +
+			'  (separate from your personal one); you paste its access token here,\n' +
+			'  and alerts are DM\u2019d PRIVATELY to your own Matrix account.\n' +
+			'\n' +
+			'  No bot token yet? Just press Enter to skip \u2014 you can switch alerts\n' +
+			'  on any time later with  sudo morphit-ops \u2192 \u201cMatrix alerts\u201d.\n'
+	);
+	let matrixAlertHomeserver: string | undefined;
+	let matrixAlertToken: string | undefined;
+	let matrixAlertMxid: string | undefined;
+	const alertToken = (
+		await askSecret('Alert bot access token (paste \u2014 not shown; Enter to skip alerts)')
+	).trim();
+	if (alertToken.length > 0) {
+		matrixAlertToken = alertToken;
+		const hs = (await ask('Alert bot homeserver', 'https://matrix.org')).trim();
+		matrixAlertHomeserver = hs.length > 0 ? hs : 'https://matrix.org';
+		// Default the recipient to the operator's own contact account, but ONLY
+		// if that contact was a personal @user (a #room would leak private alerts,
+		// and validateAlertMxid rejects it anyway).
+		const defaultMxid = matrixAddress.startsWith('@') ? matrixAddress : undefined;
+		examples(['@you:matrix.org']);
+		while (true) {
+			const raw = (
+				await ask('Send alerts to your Matrix account (@you:server)', defaultMxid)
+			).trim();
+			const verdict = validateAlertMxid(raw);
+			if (verdict === true) {
+				matrixAlertMxid = raw;
+				break;
+			}
+			print(`  \u2717 That ${verdict}.  Try again.\n`);
+		}
+	}
+
 	// A Tor-only node gets no clearnet TLS certificate, so no ACME email.
 	let acmeEmail = '';
 	if (!torOnly) {
@@ -213,6 +260,9 @@ export async function collectInstallInputs(
 		acmeEmail,
 		autoRegister,
 		indexerDbPassword,
-		ddnsUpdateUrl
+		ddnsUpdateUrl,
+		matrixAlertHomeserver,
+		matrixAlertToken,
+		matrixAlertMxid
 	};
 }

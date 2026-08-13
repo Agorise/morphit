@@ -68,6 +68,13 @@ export interface AnsibleInstallInputs {
 	readonly gitRef?: string;
 	/** Install the BunkerWeb WAF (default true — same as a VPS). */
 	readonly enableBunkerweb?: boolean;
+	/** Operator alerts (optional). When all three are present, the install turns
+	 *  ON the Matrix alert bot AND the monitor sidecars that report through it,
+	 *  so a valid entry means alerting is enabled by default. Empty = alerting
+	 *  off (the operator can add it later via `morphit-ops matrix`). */
+	readonly matrixAlertHomeserver?: string;
+	readonly matrixAlertToken?: string;
+	readonly matrixAlertMxid?: string;
 }
 
 /** A cryptographically-random secret, as strong as is meaningful: 48 bytes =
@@ -104,6 +111,20 @@ export function validateDdnsUrl(url: string): true | string {
 }
 export function validateOperatorAccount(name: string): true | string {
 	return /^[a-z0-9.-]{3,16}$/.test(name.trim()) ? true : 'is not a valid BLURT account name (3\u201316 chars, a\u2013z 0\u20139 . -)';
+}
+/** The alert recipient MUST be a PRIVATE personal MXID (@user:server), never a
+ *  #room alias — operator alerts (low balance, service down, security events)
+ *  are sensitive and a room would broadcast them. The matrix-bot config
+ *  validator enforces the same rule server-side; this is the wizard-side gate
+ *  so the operator fixes it before we ever write it. */
+export function validateAlertMxid(mxid: string): true | string {
+	const m = mxid.trim();
+	if (m.startsWith('#')) {
+		return 'must be your PERSONAL account (@you:server) — not a #room, which would leak private alerts publicly';
+	}
+	return /^@[^:\s]+:[^:\s]+\.[^:\s]+$/.test(m)
+		? true
+		: 'should look like @you:matrix.org';
 }
 /** The instance title (MORPHIT_INSTANCE_NAME).  Required + capped at 64 to match
  *  the indexer's Zod `z.string().max(64)`. */
@@ -183,6 +204,21 @@ export function validateInstallInputs(inputs: AnsibleInstallInputs): string[] {
 	if (inputs.indexerDbPassword.length < 24) {
 		problems.push('the DB password must be strong (>= 24 characters \u2014 use randomSecret()).');
 	}
+	// Operator alerts: all-or-nothing, and the recipient must be a private MXID.
+	const alertParts = [
+		inputs.matrixAlertHomeserver,
+		inputs.matrixAlertToken,
+		inputs.matrixAlertMxid
+	].filter((v) => v !== undefined && v.length > 0);
+	if (alertParts.length > 0 && alertParts.length < 3) {
+		problems.push(
+			'Matrix alerts need all of homeserver + access token + recipient MXID, or none.'
+		);
+	}
+	if (inputs.matrixAlertMxid !== undefined && inputs.matrixAlertMxid.length > 0) {
+		const am = validateAlertMxid(inputs.matrixAlertMxid);
+		if (am !== true) problems.push(`the alert recipient ${am}.`);
+	}
 	return problems;
 }
 
@@ -244,6 +280,29 @@ export function buildAnsibleVars(inputs: AnsibleInstallInputs): Record<string, u
 	// link); omitted entirely when the operator gave no Matrix account.
 	if (inputs.contactUrl) {
 		vars.morphit_instance_contact_url = inputs.contactUrl;
+	}
+	// Operator alerts (optional). When the wizard collected a bot access token,
+	// a homeserver, and a PRIVATE @user:server recipient, turn on the Matrix
+	// alert bot AND the monitor sidecars that report through it — so providing a
+	// valid alert account means alerting is ON by default (and the "this node has
+	// no alerting" note doesn't appear). The token is a secret: it rides the
+	// temp vars file (0600, deleted after the run) into the matrix_bot role,
+	// which writes /etc/morphit/matrix-bot.env at 0600 — the same file the
+	// deployed bot reads and `morphit-ops matrix` manages. All-or-nothing:
+	// missing any one of the three leaves alerting off rather than half-wired.
+	if (inputs.matrixAlertHomeserver && inputs.matrixAlertToken && inputs.matrixAlertMxid) {
+		vars.enable_matrix_bot = true;
+		vars.matrix_bot_homeserver = inputs.matrixAlertHomeserver;
+		vars.matrix_bot_access_token = inputs.matrixAlertToken;
+		vars.matrix_bot_alert_mxid = inputs.matrixAlertMxid;
+		// The monitor sidecars alert THROUGH the bot, so only switch them on once
+		// the bot exists. certbot-expiry monitoring only applies where there's a
+		// clearnet TLS cert to watch (a Tor-only node has none).
+		vars.enable_host_monitor = true;
+		vars.enable_smartctl_monitor = true;
+		vars.enable_apt_monitor = true;
+		vars.enable_systemd_monitor = true;
+		vars.enable_certbot_monitor = !inputs.torOnly;
 	}
 	return vars;
 }

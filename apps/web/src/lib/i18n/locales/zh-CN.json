@@ -31,7 +31,7 @@
 			"operator_matrix": "Matrix 群聊"
 		},
 		"integrity": {
-			"explain": "此实例提供 {count} 个文件。每个都已被哈希,并在下面的完整清单中列出。将上面的聚合哈希与区块链上最新签名发布中公布的哈希进行比较(@morphit 在每次构建后发布一个 morphit_release_v1 op)。如果匹配,则包与官方发布逐字节相同。",
+			"explain": "此实例提供 {count} 个文件。每个都已被哈希,并在下面的完整清单中列出。将下面的聚合哈希与区块链上最新签名发布中公布的哈希进行比较(@morphit 在每次构建后发布一个 morphit_release_v1 op)。如果匹配,则包与官方发布逐字节相同。",
 			"raw_link": "查看完整清单 (verify.json)"
 		},
 		"worried": {
@@ -1856,6 +1856,8 @@
 		"ens": "ENS",
 		"compare": "对比",
 		"compare_title": "看看 Morphit 与其他选择的对比",
+		"about": "关于",
+		"about_title": "关于此实例",
 		"stats": "统计",
 		"stats_title": "实时聚合网络统计",
 		"contact": "联系",

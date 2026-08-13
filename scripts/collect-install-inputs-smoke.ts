@@ -32,7 +32,7 @@ interface DriverState {
 	printed: string[];
 	exampleSets: number;
 }
-function driver(opts: { choice: number; answers: string[] }): { deps: CollectDeps; state: DriverState } {
+function driver(opts: { choice: number; answers: string[]; alertToken?: string }): { deps: CollectDeps; state: DriverState } {
 	const answers = [...opts.answers];
 	const state: DriverState = { prompts: [], printed: [], exampleSets: 0 };
 	const deps: CollectDeps = {
@@ -41,6 +41,11 @@ function driver(opts: { choice: number; answers: string[] }): { deps: CollectDep
 			state.prompts.push(q);
 			return answers.shift() ?? '';
 		}) as unknown as CollectDeps['ask'],
+		// Hidden-input token prompt (Matrix alerts step). Return empty → the
+		// operator skips alerts, so the step calls no further ask() and the
+		// scripted answers stay aligned. Tests that exercise alerts pass a token
+		// via opts if needed.
+		askSecret: (async () => opts.alertToken ?? '') as unknown as CollectDeps['askSecret'],
 		examples: ((_items: readonly string[]) => {
 			state.exampleSets += 1;
 		}) as unknown as CollectDeps['examples'],

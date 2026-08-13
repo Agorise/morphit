@@ -29,7 +29,7 @@ check('wizard skips domain + cert-email steps for torOnly', /if \(!torOnly\) \{/
 check('DDNS step gated on home && !torOnly', /mode === 'home' && !torOnly/.test(ci));
 const ra = read('apps/ops-cli/src/init/runAnsibleInstall.ts');
 check('totalSteps formula accounts for torOnly',
-	/3 \+ \(torOnly \? 3 : 5\) \+ 3 \+ \(mode === 'home' \? \(torOnly \? 2 : 4\) : 0\)/.test(ra));
+	/3 \+ \(torOnly \? 4 : 6\) \+ 3 \+ \(mode === 'home' \? \(torOnly \? 2 : 4\) : 0\)/.test(ra));
 check('router step skipped for torOnly', /inputs\.mode === 'home' && !inputs\.torOnly/.test(ra));
 check('register + canary origins use the onion for torOnly (deriveInstanceOrigin)',
 	/function deriveInstanceOrigin/.test(ra) && /\.onion/.test(ra) &&

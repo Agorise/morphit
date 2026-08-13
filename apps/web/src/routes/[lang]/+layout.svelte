@@ -597,6 +597,7 @@
 					<ul class="space-y-1.5">
 						<li><a href={lp('/operators')} class={footLink}>{$_('footer.operators')}</a></li>
 						<li><a href={lp('/instances')} class={footLink}>{$_('footer.instances')}</a></li>
+						<li><a href={lp('/compare')} class={footLink} title={$_('footer.compare_title')}>{$_('footer.compare')}</a></li>
 					</ul>
 				</div>
 				<div>
@@ -625,7 +626,7 @@
 					<h3 class={footHead}>{$_('footer.col_media')}</h3>
 					<ul class="space-y-1.5">
 						<li><a href="/morphit-mediakit.zip" data-sveltekit-reload class={footLink} title={$_('footer.mediakit_title')} rel="noopener">{$_('footer.mediakit')}</a></li>
-						<li><a href="/morphit-comparison.png" data-sveltekit-reload class={footLink} title={$_('footer.compare_title')} target="_blank" rel="noopener noreferrer">{$_('footer.compare')}</a></li>
+						<li><a href={lp('/about-this-instance')} class={footLink} title={$_('footer.about_title')}>{$_('footer.about')}</a></li>
 						<li><a href={lp('/plan')} class={footLink}>{$_('footer.plan')}</a></li>
 					</ul>
 				</div>

@@ -92,9 +92,9 @@ if ! command -v git >/dev/null 2>&1; then
 		_bl="/etc/apt/sources.list.d/morphit-bundle-git.list"
 		printf 'deb [trusted=yes] file://%s ./\n' "$HERE/vendor/apt" >"$_bl"
 		apt-get -o Dir::Etc::SourceList="$_bl" -o Dir::Etc::SourceParts=/dev/null \
-			-o APT::Get::List-Cleanup=0 update >/dev/null 2>&1 || true
+			-o APT::Sandbox::User=root -o APT::Get::List-Cleanup=0 update >/dev/null 2>&1 || true
 		apt-get -o Dir::Etc::SourceList="$_bl" -o Dir::Etc::SourceParts=/dev/null \
-			install -y git 2>/dev/null \
+			-o APT::Sandbox::User=root install -y git 2>/dev/null \
 			|| dpkg -i vendor/apt/git_*.deb vendor/apt/git-man_*.deb vendor/apt/liberror-perl_*.deb 2>/dev/null \
 			|| warn "git not installed from the bundle — Morphit runs fine without it; git-based updates just won't be available."
 		rm -f "$_bl"

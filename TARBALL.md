@@ -1,4 +1,16 @@
 # TARBALL
+> ## cp716–cp718 — v1.11.3: de-scarify the setup wizard + install-time Matrix alerts + Tor↔clearnet switch docs. ★ RELEASE CUT as v1.11.3 (follows v1.11.2).
+>
+> **Context:** driven by Ken's morphitlat clearnet field-test (network unplugged). The install SUCCEEDED (PLAY RECAP failed=0) but the output was full of offline-expected failures + benign tooling noise. This release makes the wizard read like a smooth success, adds install-time alerting, and documents mode-switching. No DB migration, no breaking changes.
+>
+> **cp716/cp717 — de-scarify (two passes):** no-cache verify retry-storm → in-shell retry + one calm line; spurious community-postgresql galaxy ERROR → skip when already present; canary offline → calm self-heal deferral (MORPHIT_CANARY_DEFER_FIRST_REFRESH); Tor/i2pd auto-address warnings → calm info; NO ALERTING → calm optional one-liner; "Ansible reported success…" → "Installed. Here's how to confirm…"; ansible temp-dir "Permission denied"/"mode 0700" → ANSIBLE_REMOTE_TEMP=/tmp/.ansible-morphit (pre-created 1777) + world-readable tmpfiles + warnings off; apt "unsandboxed…Permission denied" → APT::Sandbox::User=root; docker "Built" WARNING → build via command then compose up build:never; "fails" wording softened.
+>
+> **cp718 — install-time Matrix alerts:** new wizard step after Matrix-contact (hidden-input token) → bot token + homeserver + private @user:server MXID → buildAnsibleVars sets enable_matrix_bot + matrix_bot_* + enable_{host,smartctl,apt,systemd}_monitor (+ certbot when not tor-only) → alerting ON by default. validateAlertMxid rejects #room; all-or-nothing. Step budget (torOnly?3:5)→(torOnly?4:6).
+>
+> **Tor↔clearnet switch:** VERIFIED non-destructive both directions via re-running guided install (DB state:present not dropped; postgres state:absent is a pg_hba line; relay keys kept; tor preserves onion key; BunkerWeb clearnet edge gated on morphit_tor_only; on-chain re-register on origin change). Documented RUN-A-MORPHIT-NODE.md §12 + alerts in §7 + OPERATIONS.md §16.
+>
+> **★ RELEASE CUT v1.11.3:** all 20 touchpoints + lockfile 1.11.2→1.11.3 (version-consistency 20/20, lockfile-sync 4/4); RELEASE-NOTES-v1.11.3.md written; ops-cli typecheck 0, ansible-lint 0/0, FULL 614 battery GREEN; doc smokes green. Handed to Ken for the 6-block ceremony; then morphitlat re-tests the smooth wizard on a fresh v1.11.3 bundle.
+>
 > ## cp711–cp715 — v1.11.2: mirror expansion + AGPL-or-later + upgrade-noise polish + workflow cleanup + rebrand docs. DEEP-DEEP DONE. ★ RELEASE CUT as v1.11.2 (follows v1.11.1, which SHIPPED — Forgejo Stable + signed, morphit.io + all frontends live).
 >
 > **Context:** the batch Ken added after v1.11.1 SHIPPED. v1.11.2 carries ONLY the work here; the cp707–cp710 durability work (block below) already shipped in v1.11.1. No DB migration.

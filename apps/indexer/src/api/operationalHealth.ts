@@ -34,7 +34,7 @@
  * should be unified into a shared package (see docs/REVISIT-LIST.md).
  */
 
-import { cpus, totalmem, freemem } from 'node:os';
+import { cpus, totalmem, freemem, networkInterfaces } from 'node:os';
 import { readFileSync } from 'node:fs';
 import { statfs } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
@@ -308,6 +308,41 @@ async function probeRelay(url: string, timeoutMs: number): Promise<boolean> {
 	}
 }
 
+/** Candidate relay-health URLs to try: the configured one first, then the same
+ *  path on each of the host's own (non-loopback) IPv4 addresses. On a
+ *  CONTAINERIZED deploy the relay binds to the Docker bridge gateway (e.g.
+ *  172.18.0.1) so the frontend container can reach it — NOT to 127.0.0.1 — so a
+ *  loopback-only probe reports the relay down even though it's up. This is the
+ *  same fallback `morphit-ops health` uses (candidateHealthUrls /
+ *  bridgeGatewayHosts); mirroring it here keeps /v1/health's relay.up in
+ *  agreement with the CLI instead of falsely reading down. */
+function relayProbeCandidates(configured: string): string[] {
+	const urls = [configured];
+	try {
+		const u = new URL(configured);
+		for (const addrs of Object.values(networkInterfaces())) {
+			for (const a of addrs ?? []) {
+				if (a.family === 'IPv4' && !a.internal) {
+					urls.push(`${u.protocol}//${a.address}:${u.port || '8080'}${u.pathname}${u.search}`);
+				}
+			}
+		}
+	} catch {
+		// configured isn't a parseable URL — just probe it as-is.
+	}
+	return [...new Set(urls)];
+}
+
+/** True if the relay answers on ANY candidate address. Probes run in parallel;
+ *  the first success wins. Kept off the hot request path (background refresh). */
+async function probeRelayAny(configured: string, timeoutMs: number): Promise<boolean> {
+	if (configured.length === 0) return false;
+	const results = await Promise.all(
+		relayProbeCandidates(configured).map((u) => probeRelay(u, timeoutMs))
+	);
+	return results.some(Boolean);
+}
+
 // ── cached snapshot, stale-while-revalidate ──────────────────────
 
 let cached: OperationalSnapshot = DEFAULT_SNAPSHOT;
@@ -322,7 +357,7 @@ async function refresh(relayHealthUrl: string): Promise<void> {
 		serviceFailed('morphit-ipfs-pin.service'),
 		serviceFailed('morphit-ipns-rebroadcast.service'),
 		sampleDisk(),
-		probeRelay(relayHealthUrl, 1500)
+		probeRelayAny(relayHealthUrl, 1500)
 	]);
 	const cpu = sampleCpuPct();
 	const mem = sampleMem();
