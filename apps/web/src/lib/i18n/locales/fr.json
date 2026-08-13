@@ -31,7 +31,7 @@
 			"operator_matrix": "Salon Matrix"
 		},
 		"integrity": {
-			"explain": "Cette instance sert {count} fichiers. Chacun est haché et listé dans le manifeste complet ci-dessous. Comparez le hash agrégé ci-dessus à celui publié dans la dernière release signée sur la blockchain (@morphit publie une op morphit_release_v1 après chaque build). S'ils correspondent, le bundle est octet par octet identique à la release officielle.",
+			"explain": "Cette instance sert {count} fichiers. Chacun est haché et listé dans le manifeste complet ci-dessous. Comparez le hash agrégé ci-dessous à celui publié dans la dernière release signée sur la blockchain (@morphit publie une op morphit_release_v1 après chaque build). S'ils correspondent, le bundle est octet par octet identique à la release officielle.",
 			"raw_link": "Voir le manifeste complet (verify.json)"
 		},
 		"worried": {
@@ -1856,6 +1856,8 @@
 		"ens": "ENS",
 		"compare": "Comparer",
 		"compare_title": "Voyez comment Morphit se compare aux autres options",
+		"about": "À propos",
+		"about_title": "À propos de cette instance",
 		"stats": "Statistiques",
 		"stats_title": "Statistiques agrégées du réseau en direct",
 		"contact": "Contact",

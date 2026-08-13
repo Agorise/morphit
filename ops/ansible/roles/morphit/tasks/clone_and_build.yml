@@ -101,6 +101,55 @@
   changed_when: "'changed' in morphit_npm_install_result.stdout or 'added' in morphit_npm_install_result.stdout"
   when: not morphit_bundle_marker.stat.exists
 
+- name: Ensure the matrix-bot E2EE crypto native binary is present
+  # matrix-bot-sdk eager-loads its E2EE CryptoClient on import, which needs the
+  # native @matrix-org/matrix-sdk-crypto-nodejs binary. That binary is fetched by
+  # a NETWORK postinstall (download-lib.js → GitHub releases) that can silently
+  # not run (e.g. an --ignore-scripts install) or fail to reach GitHub, leaving
+  # the bot to crash-loop with a cryptic MODULE_NOT_FOUND. Only matters when the
+  # operator actually uses Matrix alerts. We verify it, run the fetch explicitly
+  # if it's missing, and fail LOUDLY rather than let the alert bot crash-loop.
+  when: enable_matrix_bot | default(false)
+  vars:
+    morphit_matrix_crypto_dir: "{{ morphit_repo_path }}/node_modules/@matrix-org/matrix-sdk-crypto-nodejs"
+    morphit_matrix_crypto_bin_path: "{{ morphit_repo_path }}/node_modules/@matrix-org/matrix-sdk-crypto-nodejs/matrix-sdk-crypto.linux-x64-gnu.node"
+  block:
+    - name: Check for the matrix crypto native binary
+      ansible.builtin.stat:
+        path: "{{ morphit_matrix_crypto_bin_path }}"
+      register: morphit_matrix_crypto_bin
+
+    - name: Fetch the matrix crypto native binary (runs its download step explicitly)
+      ansible.builtin.command:
+        cmd: node download-lib.js
+        chdir: "{{ morphit_matrix_crypto_dir }}"
+      environment:
+        npm_config_cache: "{{ morphit_repo_path }}/.npm-cache"
+      become: true
+      become_user: "{{ morphit_service_user }}"
+      changed_when: true
+      failed_when: false
+      when: not morphit_matrix_crypto_bin.stat.exists
+
+    - name: Re-check the matrix crypto native binary
+      ansible.builtin.stat:
+        path: "{{ morphit_matrix_crypto_bin_path }}"
+      register: morphit_matrix_crypto_bin2
+      when: not morphit_matrix_crypto_bin.stat.exists
+
+    - name: Fail clearly if the matrix crypto binary is still missing
+      ansible.builtin.fail:
+        msg: >-
+          The Matrix alert bot needs the E2EE crypto native binary
+          (@matrix-org/matrix-sdk-crypto-nodejs), which is fetched from GitHub and
+          isn't present on this box. On an OFFLINE install, rebuild the offline
+          bundle on a machine with internet so it vendors the binary. ONLINE,
+          make sure this box can reach github.com and re-run. The rest of the
+          node runs fine without it — alerts just stay off until it's in place.
+      when:
+        - not morphit_matrix_crypto_bin.stat.exists
+        - not (morphit_matrix_crypto_bin2.stat.exists | default(false))
+
 - name: Build workspaces (relay + indexer + ops-cli + indexer-client + asset-registry)
   ansible.builtin.command:
     cmd: npm run build --workspaces --if-present

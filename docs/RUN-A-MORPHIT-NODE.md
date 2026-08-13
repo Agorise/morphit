@@ -138,6 +138,8 @@ As part of the one command, the guided install runs a short **setup wizard** —
 
 One of those questions is your **fees account** — the Blurt account your BLURT listing fees are paid into. You earn 90% of those fees, so make it an account you control. If you skip it or mistype it, nothing breaks: fees fall back to the shared `@morphit-fees` treasury and your node keeps running. You can change it later any time with `npx morphit-ops edit` → **Fees account**.
 
+Another is **alerts** (optional, but worth it for an always-on node). If you'd like your node to message you on Matrix when something needs attention — low disk, a backup that didn't run, a service down, a TLS certificate nearing expiry — the wizard asks for a small "bot" Matrix account's access token (separate from your personal account) and the personal `@you:server` address the alerts should be DM'd to. **Enter a valid bot token and alerting switches on by default** — the Matrix bot plus the disk/backup/cert/service monitors all come up together. Don't have a bot token handy? Press Enter to skip; you can turn alerts on any time later with `npx morphit-ops matrix`. (Alerts always go to a private `@user:server` — never a `#room`, which would broadcast them.)
+
 It also **remembers your answers as you go**, so if you ever get interrupted partway through, just start the installer again and it offers to pick up where you left off — re-asking only the two things it never writes to disk: your database connection and your relay account's active key.
 
 Two things the wizard does **for you, by default**: it **generates privacy-network addresses** in the background — a **Tor `.onion`** (instant) and, when **i2pd** is installed on the host, a **`.b32.i2p`** too — so your site is reachable over Tor and I2P and shows those footer pills automatically (no waiting, no vanity grinding; any address you'd already set is kept), and it **hand-holds you through server hardening** — a short run of "yes" confirmations (SSH lockdown, firewall + fail2ban, the BunkerWeb web-application firewall, automatic updates, kernel hardening, intrusion detection). The guided install applies all of that for you automatically.
@@ -222,3 +224,57 @@ You're free to rebrand your instance completely — new name, logo, colours, eve
 ---
 
 That's the whole job. Get a machine, point a name at it, run the installer, let the wizard configure it, register — and you're an operator in the federation. Welcome aboard.
+
+## 12. Switching between Tor-only and clearnet (either direction)
+
+You are not locked into the choice you made at install time. A node that started **Tor-only** can gain a clearnet domain later, and a **clearnet** node can drop back to Tor-only — as many times as you like.
+
+**How:** re-run the guided install and pick the other mode.
+
+```
+sudo morphit-ops        →   "Install / set up a new node (guided)"
+```
+
+The wizard runs again and asks the same questions; choose clearnet (and give a domain + certificate email) or Tor-only (which skips them). When it finishes, your node is serving in the new mode.
+
+**It's non-destructive — you keep everything that matters:**
+
+- **Your database and all its data** (orders, reputation, chain index) are left in place — the installer never drops them.
+- **Your relay account and keys** stay as they are.
+- **Your `.onion` address does not change.** Tor keeps the key it already generated, so the same onion works before and after — and a clearnet node keeps serving over Tor as a bonus, so switching *to* Tor-only just makes the address you already had the primary one.
+
+**What changes automatically:**
+
+- Going **to clearnet:** the installer obtains your HTTPS certificate and brings up the clearnet web front (BunkerWeb). Point your domain (and, at home, your router's ports 80/443) at the box first, exactly as for a fresh clearnet install.
+- Going **to Tor-only:** the clearnet web front and certificate are dropped; the onion becomes your advertised address. An unused domain does no harm if you leave it pointed at the box.
+- **Your on-chain registration re-publishes** with the new address, so the federation directory and your visitors follow you to it. (If you'd turned auto-register off, run `sudo morphit-ops` → **Re-publish my registration on-chain** once afterward.)
+
+You'll re-enter the two things the installer never stores — your database connection and your relay account's active key — just like any install. Everything else it remembers.
+
+If you only want to *add* a Tor/I2P/Lokinet address to a clearnet node (without changing your primary mode), you don't need to switch at all — use `sudo morphit-ops` → **Set up a Tor / Lokinet / I2P address** instead.
+
+## 13. Rebuilding or relocating your node (including a canonical instance)
+
+You should be able to wipe a node and reinstall it — or move it to a completely different hosting company — and come back to the same instance. That's a feature, not a risk: a node you can't reproduce is a single point of failure, which is the opposite of what Morphit is for. This is just as true for a canonical instance (the one whose domain the on-chain records point at) — the difference is only that you'll want to *verify* the procedure before you do it to the box everyone relies on.
+
+**Back up three things first.** A reinstall rebuilds almost everything for you; these three are the parts it can't regenerate:
+
+1. **Your account keys.** Your relay account's active key, and — for a canonical instance — the release-signing account's key (the one the release ceremony asks for). These *are* your on-chain identity; a reinstall does not recreate them. Keep them somewhere safe and off the box (a password manager, an encrypted USB stick). As long as you have them, the account survives any wipe.
+2. **Your domain.** The web address is what other instances and the on-chain record point at. Moving hosts just means re-pointing your DNS at the new server afterward; the address itself doesn't change, so the federation follows you automatically once DNS propagates. Nothing on-chain needs to change if the domain stays the same.
+3. **Your database.** Orders, reputation, moderation decisions, and per-instance settings live in Postgres. The chain index rebuilds itself automatically after a reinstall (it re-reads the blockchain — slow but hands-off), but anything *local* is only in that database. Your node already takes a daily dump; trigger a fresh one right before you wipe, then copy the newest dump off the box:
+
+```
+sudo systemctl start morphit-backup.service
+```
+
+The dumps live in the backup directory shown by `sudo morphit-ops` → **Node health** (look for "Newest dump"). Copy that `.sql.gz` somewhere off the server before wiping.
+
+**Rehearse it on a throwaway box first (strongly recommended for a canonical).** You don't have to wipe the real instance to prove the procedure works. Stand up a cheap, separate server, run the guided install against a staging Blurt account, and confirm it comes up clean. The staging → go-live walkthrough in `docs/SWITCHING-NETWORKS.md` is exactly this. If a from-scratch install works there, it works on your real box — and now it's a known-good procedure instead of a leap of faith.
+
+**Then wipe and reinstall the same way as a fresh node** — reinstall the OS, run `sudo morphit-ops` → **Install / set up a new node (guided)**, enter the same account and (for a canonical) the same domain. Restore your database dump if you took one. Re-point DNS if you moved hosts.
+
+**What to expect afterward:**
+
+- **The chain index rebuilds from scratch**, which takes a while. The node serves what it has and catches up in the background; it isn't broken, just still reading history. Do the wipe during a quiet window.
+- **A reinstall makes the box consistent with every other node** — service-user-owned files, the standard hardening, the same install-time checks. If your instance was hand-built as a one-off, reinstalling through the guided installer is the cleanest way to bring it back into line (and to pick up fixes shipped since you first set it up).
+- **One caveat for air-gapped rebuilds:** a couple of components (currently the Matrix-alert bot's encryption library) are fetched from the internet during install. An online reinstall handles that automatically; a fully offline one relies on those being vendored into the offline bundle, so test an offline rebuild before depending on it.

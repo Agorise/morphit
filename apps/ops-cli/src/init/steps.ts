@@ -366,9 +366,9 @@ export async function stepActiveKey(relayAccountName: string): Promise<ActiveKey
 			'  • delegate_vesting_shares    (delegating BP for posting)\n' +
 			'\n' +
 			'The posting key CANNOT sign any of these — the chain will\n' +
-			'reject every relay op with "missing required active authority".\n' +
-			'So your relay will fail to start (the unlock step checks the\n' +
-			'public key against the chain).\n' +
+			'reject a relay op signed with it.  So the relay checks this\n' +
+			'key against the chain when it starts: the ACTIVE key is what\n' +
+			'lets your relay come up and sign signups.\n' +
 			'\n' +
 			`You can find the active key in your Blurt wallet under\n` +
 			'"Permissions" or "Keys" — make sure you copy the ACTIVE one,\n' +
@@ -1354,7 +1354,7 @@ async function renderHealthChecks(
 	for (let i = 0; i < urls.length; i++) {
 		const r = results[i];
 		const status =
-			r === null || r === undefined ? '✗ probe failed' : renderProbeStatus(r);
+			r === null || r === undefined ? '✗ couldn\u2019t reach it' : renderProbeStatus(r);
 		// cp139-C-13: defense-in-depth — operator-typed URLs are
 		// sanitized at display.  renderProbeStatus already
 		// sanitizes the reason inside the status string.
@@ -2076,7 +2076,7 @@ export async function stepListingFee(): Promise<ListingFeeResult> {
 			'     pulls live BLURT/USD prices from an outlier-rejected\n' +
 			'     median of several external feeds (Coingecko,\n' +
 			'     CoinPaprika, CryptoCompare, …), with\n' +
-			'     on-platform data behind it.  When those fail AND nothing\n' +
+			'     on-platform data behind it.  When those are unreachable AND nothing\n' +
 			'     has cached, the indexer falls back to this number.\n' +
 			'     Display-only — fee verification is BLURT-native\n' +
 			'     and does not consult USD prices.  Default $0.002.\n' +
@@ -2158,7 +2158,7 @@ export async function stepListingFee(): Promise<ListingFeeResult> {
 	// ─── Fallback BLURT/USD price ──
 	console.log('\n  ── Fallback BLURT/USD price ──\n');
 	const fallbackBlurtPriceUsd = await askFloat(
-		'  Fallback BLURT/USD price (used only when live upstreams fail)',
+		'  Fallback BLURT/USD price (used only when live upstreams are unreachable)',
 		{
 			min: 0.000001,
 			max: 1,

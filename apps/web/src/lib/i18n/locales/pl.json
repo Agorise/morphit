@@ -31,7 +31,7 @@
 			"operator_matrix": "Czat grupowy Matrix"
 		},
 		"integrity": {
-			"explain": "Ta instancja serwuje {count} plików. Każdy jest zahaszowany i wylistowany w pełnym manifeście poniżej. Porównaj zagregowany hash powyżej z tym opublikowanym w najnowszym podpisanym release na blockchainie (@morphit publikuje op morphit_release_v1 po każdym buildzie). Jeśli się zgadzają, pakiet jest bajt po bajcie identyczny z oficjalnym release.",
+			"explain": "Ta instancja serwuje {count} plików. Każdy jest zahaszowany i wylistowany w pełnym manifeście poniżej. Porównaj zagregowany hash poniżej z tym opublikowanym w najnowszym podpisanym release na blockchainie (@morphit publikuje op morphit_release_v1 po każdym buildzie). Jeśli się zgadzają, pakiet jest bajt po bajcie identyczny z oficjalnym release.",
 			"raw_link": "Zobacz pełny manifest (verify.json)"
 		},
 		"worried": {
@@ -1856,6 +1856,8 @@
 		"ens": "ENS",
 		"compare": "Porównaj",
 		"compare_title": "Zobacz, jak Morphit wypada na tle innych opcji",
+		"about": "O instancji",
+		"about_title": "O tej instancji",
 		"stats": "Statystyki",
 		"stats_title": "Zbiorcze statystyki sieci na żywo",
 		"contact": "Kontakt",

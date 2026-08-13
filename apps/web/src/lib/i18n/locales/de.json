@@ -31,7 +31,7 @@
 			"operator_matrix": "Matrix-Gruppenchat"
 		},
 		"integrity": {
-			"explain": "Diese Instanz liefert {count} Dateien. Jede ist gehasht und im vollständigen Manifest unten aufgeführt. Vergleiche den aggregierten Hash oben mit dem in der neuesten signierten Release auf der Blockchain veröffentlichten (@morphit postet nach jedem Build eine morphit_release_v1-Op). Stimmen sie überein, ist das Bundle byte-identisch zur offiziellen Release.",
+			"explain": "Diese Instanz liefert {count} Dateien. Jede ist gehasht und im vollständigen Manifest unten aufgeführt. Vergleiche den aggregierten Hash unten mit dem in der neuesten signierten Release auf der Blockchain veröffentlichten (@morphit postet nach jedem Build eine morphit_release_v1-Op). Stimmen sie überein, ist das Bundle byte-identisch zur offiziellen Release.",
 			"raw_link": "Vollständiges Manifest ansehen (verify.json)"
 		},
 		"asset_stance": {
@@ -1856,6 +1856,8 @@
 		"ens": "ENS",
 		"compare": "Vergleich",
 		"compare_title": "So schneidet Morphit im Vergleich zu anderen ab",
+		"about": "Über",
+		"about_title": "Über diese Instanz",
 		"stats": "Statistiken",
 		"stats_title": "Aggregierte Netzwerkstatistiken in Echtzeit",
 		"contact": "Kontakt",

@@ -179,7 +179,7 @@ export function checkService(unit: string): ServiceState {
 	try {
 		out = execFileSync(
 			'systemctl',
-			['show', unit, '--property=ActiveState,LoadState', '--no-pager'],
+			['show', unit, '--property=ActiveState,LoadState,SubState', '--no-pager'],
 			{ stdio: ['ignore', 'pipe', 'ignore'], timeout: 3000, encoding: 'utf8' }
 		);
 	} catch {
@@ -188,6 +188,7 @@ export function checkService(unit: string): ServiceState {
 	const load = /LoadState=(\S+)/.exec(out)?.[1];
 	if (load === 'not-found' || load === 'masked') return 'not-installed';
 	const active = /ActiveState=(\S+)/.exec(out)?.[1];
+	const sub = /SubState=(\S+)/.exec(out)?.[1];
 	switch (active) {
 		case 'active':
 			return 'active';
@@ -195,7 +196,14 @@ export function checkService(unit: string): ServiceState {
 			return 'failed';
 		case 'activating':
 		case 'reloading':
-			return 'activating';
+			// SubState=auto-restart means the unit already FAILED and systemd is
+			// restarting it (Restart=on-failure) — i.e. it's crash-looping, not
+			// starting for the first time. Reporting that as "starting" hides a
+			// real problem (a matrix-bot with a bad token or a homeserver it can't
+			// reach can sit here forever). Surface it as failed so the operator
+			// knows to check `journalctl -u <unit>`. A genuine first start is
+			// SubState=start / start-pre / start-post — still "starting".
+			return sub === 'auto-restart' ? 'failed' : 'activating';
 		case 'inactive':
 		case 'deactivating':
 			return 'inactive';

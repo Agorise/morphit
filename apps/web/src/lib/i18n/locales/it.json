@@ -31,7 +31,7 @@
 			"operator_matrix": "Chat di gruppo Matrix"
 		},
 		"integrity": {
-			"explain": "Questa istanza serve {count} file. Ognuno è hashato ed elencato nel manifest completo sotto. Confronta l'hash aggregato sopra con quello pubblicato nell'ultima release firmata sulla blockchain (@morphit pubblica un'op morphit_release_v1 dopo ogni build). Se corrispondono, il bundle è byte per byte identico alla release ufficiale.",
+			"explain": "Questa istanza serve {count} file. Ognuno è hashato ed elencato nel manifest completo sotto. Confronta l'hash aggregato sotto con quello pubblicato nell'ultima release firmata sulla blockchain (@morphit pubblica un'op morphit_release_v1 dopo ogni build). Se corrispondono, il bundle è byte per byte identico alla release ufficiale.",
 			"raw_link": "Vedi il manifest completo (verify.json)"
 		},
 		"worried": {
@@ -1856,6 +1856,8 @@
 		"ens": "ENS",
 		"compare": "Confronta",
 		"compare_title": "Scopri come Morphit si confronta con le altre opzioni",
+		"about": "Informazioni",
+		"about_title": "Informazioni su questa istanza",
 		"stats": "Statistiche",
 		"stats_title": "Statistiche di rete aggregate in tempo reale",
 		"contact": "Contatti",

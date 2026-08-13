@@ -150,15 +150,16 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 	const torOnly = await askTorOnly();
 	// Step budget:
 	//   3 account steps
-	// + core questions: 5 clearnet (domain, name, desc, matrix, cert-email) OR
-	//   3 Tor-only (name, desc, matrix — no domain, no cert-email)
+	// + core questions: 6 clearnet (domain, name, desc, matrix, alerts,
+	//   cert-email) OR 4 Tor-only (name, desc, matrix, alerts — no domain, no
+	//   cert-email)
 	// + 3 (save DB password, register opt-in, post-install summary)
 	// + home extras: clearnet home = 4 (DDNS, router port-forward, desktop,
 	//   canary); Tor-only home = 2 (desktop, canary — no DDNS, no port-forward).
 	// Keep in sync with the step() calls below + in collectInstallInputs (a
 	// mismatch trips the assert at the end of this function).
 	const totalSteps =
-		3 + (torOnly ? 3 : 5) + 3 + (mode === 'home' ? (torOnly ? 2 : 4) : 0);
+		3 + (torOnly ? 4 : 6) + 3 + (mode === 'home' ? (torOnly ? 2 : 4) : 0);
 	beginSteps(totalSteps);
 
 	const relay = await stepRelayAccount();
@@ -283,7 +284,17 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 					// future Tor-only node this becomes the http-onion origin.
 					MORPHIT_CANARY_INSTANCE_ORIGIN:
 						deriveInstanceOrigin(inputs.torOnly, inputs.domain, '/opt/morphit') ??
-						`https://${inputs.domain}`
+						`https://${inputs.domain}`,
+					// An offline / air-gapped install has no network, so the canary's
+					// first publish (which fetches a Blurt chain head as its freshness
+					// proof) can't complete now. Tell setup.sh to DEFER it calmly rather
+					// than treat it as a failure — the weekly timer publishes it once the
+					// box is online. Detected by the presence of the offline apt bundle.
+					MORPHIT_CANARY_DEFER_FIRST_REFRESH: existsSync(
+						join(opts.repoRoot, 'vendor', 'apt', 'Packages')
+					)
+						? '1'
+						: ''
 				}
 			});
 			if ((rc.status ?? 1) !== 0) {

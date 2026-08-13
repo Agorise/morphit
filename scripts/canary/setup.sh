@@ -289,11 +289,24 @@ say ""
 
 # ─── 7. First run (sign + place/upload now) ──────────────────────
 
-say "Signing and publishing your first canary now..."
-if bash "$REFRESH"; then
-	info "First canary published. Check ${INSTANCE_ORIGIN%/}/canary.txt in a browser."
+if [ "${MORPHIT_CANARY_DEFER_FIRST_REFRESH:-}" = "1" ]; then
+	# Offline / air-gapped install: the first publish needs a Blurt chain head
+	# (the freshness proof stamps the canary with the current block), which needs
+	# network. Nothing is wrong — the weekly auto-refresh publishes it the first
+	# time this box is online. Deferring calmly here keeps an offline install from
+	# ending on a scary "refresh failed".
+	say "Your warrant canary stamps itself with the current Blurt block, so"
+	say "publishing it needs the internet. This box is offline right now, so"
+	say "that first publish is skipped for now — nothing is wrong. It publishes"
+	say "automatically the first time the box is online, and every week after."
+	info "To publish it by hand once you're online: bash $REFRESH"
 else
-	die "the first refresh failed — see the messages above. Fix, then re-run: bash $REFRESH"
+	say "Signing and publishing your first canary now..."
+	if bash "$REFRESH"; then
+		info "First canary published. Check ${INSTANCE_ORIGIN%/}/canary.txt in a browser."
+	else
+		die "the first refresh failed — see the messages above. Fix, then re-run: bash $REFRESH"
+	fi
 fi
 say ""
 

@@ -7,11 +7,14 @@
  *
  *   - schema_version  — integer, bumps on breaking shape changes
  *   - morphit_version — semver from package.json
- *   - git_commit      — full sha from `git rev-parse HEAD` (or
- *                       null if not in a git checkout, e.g. a
- *                       tarball deployment)
- *   - operator_tag    — from MORPHIT_OPERATOR_TAG env var; null
- *                       for unregistered instances
+ *   - git_commit      — full sha from `git rev-parse HEAD`; on a tarball
+ *                       deployment (no .git) falls back to MORPHIT_GIT_COMMIT
+ *                       then to the commit baked into the tarball's
+ *                       release-info.json; null only if none is available
+ *   - operator_tag    — MORPHIT_INSTANCE_OPERATOR_TAG (env, or read from
+ *                       morphit.config.env at the install root), or the legacy
+ *                       MORPHIT_OPERATOR_TAG; null for instances that declare
+ *                       no operator tag
  *   - built_at        — ISO-8601 timestamp of this build
  *   - hash_manifest   — map of build-relative path → sha256 hex
  *                       for every file in build/ (excluding
@@ -85,6 +88,22 @@ function readMorphitVersion() {
 	}
 }
 
+/** The release pipeline bakes release-info.json (tag + full source commit +
+ *  build time) into every release tarball, at the install root. On a tarball
+ *  deployment there is no .git, so this is where the real source commit lives —
+ *  read it as the authoritative fallback so verify.json's git_commit is
+ *  populated on a normally-deployed instance instead of showing blank. */
+function readReleaseInfoCommit() {
+	try {
+		const info = JSON.parse(readFileSync(resolve(REPO_ROOT, 'release-info.json'), 'utf8'));
+		const c = typeof info.commit === 'string' ? info.commit.trim() : '';
+		if (/^[0-9a-fA-F]{7,64}$/.test(c)) return c;
+	} catch {
+		// No release-info.json (dev checkout, or a non-release tarball).
+	}
+	return null;
+}
+
 function readGitCommit() {
 	try {
 		return execSync('git rev-parse HEAD', {
@@ -95,19 +114,52 @@ function readGitCommit() {
 			.trim();
 	} catch {
 		// Not a git checkout (e.g. running in a release tarball).
-		// Fall back to MORPHIT_GIT_COMMIT if the release pipeline (or
-		// the operator) injected the source commit; otherwise null —
-		// acceptable, verify.json still has meaningful content.
+		// Prefer an explicitly-injected MORPHIT_GIT_COMMIT, else the
+		// commit baked into the tarball's release-info.json, else null.
 		const raw = process.env.MORPHIT_GIT_COMMIT;
 		if (raw && /^[0-9a-fA-F]{7,64}$/.test(raw.trim())) {
 			return raw.trim();
 		}
-		return null;
+		return readReleaseInfoCommit();
 	}
 }
 
+/** Read a KEY=value from morphit.config.env at the install root. This file is
+ *  the operator's own config, carried across upgrades and present on any
+ *  deployed instance (absent in a dev checkout). Strips surrounding quotes. */
+function readConfigEnvValue(key) {
+	try {
+		const txt = readFileSync(resolve(REPO_ROOT, 'morphit.config.env'), 'utf8');
+		for (const line of txt.split('\n')) {
+			const m = line.match(/^\s*([A-Za-z0-9_]+)\s*=\s*(.*)$/);
+			if (m && m[1] === key) {
+				let v = m[2].trim();
+				if (
+					(v.startsWith('"') && v.endsWith('"')) ||
+					(v.startsWith("'") && v.endsWith("'"))
+				) {
+					v = v.slice(1, -1);
+				}
+				return v.length > 0 ? v : null;
+			}
+		}
+	} catch {
+		// No morphit.config.env (dev checkout).
+	}
+	return null;
+}
+
 function readOperatorTag() {
-	const raw = process.env.MORPHIT_OPERATOR_TAG;
+	// The canonical config variable is MORPHIT_INSTANCE_OPERATOR_TAG (set in
+	// morphit.config.env / indexer.env). The frontend build run by
+	// `morphit-ops upgrade` does not source that env, so also read it straight
+	// from morphit.config.env at the install root. MORPHIT_OPERATOR_TAG is
+	// accepted as a legacy/explicit override. null → an instance that hasn't
+	// declared an operator tag.
+	const raw =
+		process.env.MORPHIT_INSTANCE_OPERATOR_TAG ??
+		process.env.MORPHIT_OPERATOR_TAG ??
+		readConfigEnvValue('MORPHIT_INSTANCE_OPERATOR_TAG');
 	if (!raw) return null;
 	const trimmed = raw.trim();
 	if (trimmed.length === 0) return null;
@@ -117,7 +169,7 @@ function readOperatorTag() {
 	// vector into the JSON.
 	if (!/^[a-zA-Z0-9.\-_]{1,64}$/.test(trimmed)) {
 		console.warn(
-			`[verify-json] MORPHIT_OPERATOR_TAG='${trimmed}' fails shape check; emitting null`
+			`[verify-json] operator tag '${trimmed}' fails shape check; emitting null`
 		);
 		return null;
 	}

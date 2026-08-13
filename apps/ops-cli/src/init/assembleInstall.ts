@@ -15,7 +15,7 @@
  *     failure (finally), so DB passwords never linger in a temp file;
  *   - a non-zero exit turns into a plain, reassuring message (a re-run is safe).
  */
-import { writeFileSync, unlinkSync, existsSync } from 'node:fs';
+import { writeFileSync, unlinkSync, existsSync, mkdirSync, chmodSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { buildAnsiblePlaybookArgv, renderVarsFile } from './ansibleVars.ts';
@@ -71,6 +71,22 @@ function realRemove(path: string): void {
 	}
 }
 async function realEnsureAnsible(ansibleDir: string): Promise<boolean> {
+	// Pre-create the shared Ansible temp base (matching ANSIBLE_REMOTE_TEMP in
+	// localAnsibleEnv) with sticky, world-writable perms like /tmp itself. If
+	// Ansible had to create it, it would make the parent 0700 and warn "created
+	// with a mode of 0700, this may cause issues when running as another user".
+	// Creating it 1777 up front means every become-user (postgres, morphit, ipfs)
+	// can write its own subdir and Ansible stays quiet.
+	try {
+		for (const d of ['/tmp/.ansible-morphit/tmp', '/tmp/.ansible-morphit/local']) {
+			mkdirSync(d, { recursive: true });
+			chmodSync(d, 0o1777);
+		}
+		chmodSync('/tmp/.ansible-morphit', 0o1777);
+	} catch {
+		// Best-effort — Ansible still falls back to a system temp dir if this
+		// can't be created for some reason.
+	}
 	const have = spawnSync('ansible-playbook', ['--version'], { stdio: 'ignore' });
 	// cp690 — a self-contained (offline) bundle ships ansible in its apt closure
 	// (vendor/apt) and the galaxy collections it needs (vendor/ansible-collections).
@@ -89,7 +105,16 @@ async function realEnsureAnsible(ansibleDir: string): Promise<boolean> {
 					'-o',
 					`Dir::Etc::SourceList=${bl}`,
 					'-o',
-					'Dir::Etc::SourceParts=/dev/null'
+					'Dir::Etc::SourceParts=/dev/null',
+					// The bundle lives under the operator's home (e.g.
+					// /home/<user>/Downloads/morphit/vendor/apt), which the unprivileged
+					// `_apt` sandbox user can't traverse — so apt prints a scary
+					// "Download is performed unsandboxed as root ... Permission denied".
+					// We already trust these local files (this is the operator's own
+					// download), so tell apt to run as root from the start: it does the
+					// exact same thing, minus the alarming notice.
+					'-o',
+					'APT::Sandbox::User=root'
 				];
 				spawnSync('apt-get', [...aptBundleOpts, '-o', 'APT::Get::List-Cleanup=0', 'update'], {
 					stdio: 'inherit'
@@ -109,18 +134,39 @@ async function realEnsureAnsible(ansibleDir: string): Promise<boolean> {
 		}
 	}
 	if (spawnSync('ansible-playbook', ['--version'], { stdio: 'ignore' }).status !== 0) return false;
-	// The playbook uses community.general / community.postgresql / community.docker;
-	// apt's `ansible` may not bundle them (and `ansible-core` bundles none). Prefer
-	// the collections downloaded into the bundle (their requirements.yml points at
-	// local tarballs → no Galaxy); fall back to the repo's requirements.yml (online
-	// Galaxy) only when there's no bundle. Best-effort either way: if it can't
-	// resolve them, the playbook fails with a clear "couldn't resolve module".
-	const bundledReqs = join(vendorCollections, 'requirements.yml');
-	const reqs = existsSync(bundledReqs)
-		? bundledReqs
-		: join(ansibleDir, 'collections', 'requirements.yml');
-	if (existsSync(reqs)) {
-		spawnSync('ansible-galaxy', ['collection', 'install', '-r', reqs], { stdio: 'inherit' });
+	// The playbook uses community.general / community.postgresql / community.docker.
+	// The apt `ansible` metapackage (9.x) already BUNDLES all three, so on the
+	// common path they're present the moment ansible installs. Running
+	// `ansible-galaxy collection install` anyway would try to resolve them from
+	// the bundle's local tarballs and, when a tarball name/version doesn't line
+	// up, print a scary "ERROR! ... Could not find <collection>.tar.gz" — even
+	// though the collections are already usable and the play then succeeds
+	// (failed=0). So: only install what's actually MISSING, and stay silent when
+	// everything the playbook needs is already there.
+	const NEEDED = ['community.general', 'community.postgresql', 'community.docker'];
+	let installedList = '';
+	{
+		const r = spawnSync('ansible-galaxy', ['collection', 'list'], {
+			stdio: ['ignore', 'pipe', 'ignore']
+		});
+		installedList = r.status === 0 ? String(r.stdout ?? '') : '';
+	}
+	const isPresent = (fqcn: string) =>
+		new RegExp(`^${fqcn.replace('.', '\\.')}\\s+\\d`, 'm').test(installedList);
+	const missing = NEEDED.filter((c) => !isPresent(c));
+	if (missing.length > 0) {
+		// At least one collection isn't available — resolve from the bundle
+		// (local tarballs, no Galaxy/network) if present, else the repo's
+		// requirements.yml (online Galaxy). Best-effort: if it still can't
+		// resolve them, the playbook fails later with a clear "couldn't resolve
+		// module", which is the actionable error — not this noise.
+		const bundledReqs = join(vendorCollections, 'requirements.yml');
+		const reqs = existsSync(bundledReqs)
+			? bundledReqs
+			: join(ansibleDir, 'collections', 'requirements.yml');
+		if (existsSync(reqs)) {
+			spawnSync('ansible-galaxy', ['collection', 'install', '-r', reqs], { stdio: 'inherit' });
+		}
 	}
 	return true;
 }
@@ -130,7 +176,28 @@ async function realEnsureAnsible(ansibleDir: string): Promise<boolean> {
 // auto-discovers the interpreter — it just doesn't print a scary WARNING on a
 // home operator's screen (there is exactly one Python here, and it isn't moving).
 function localAnsibleEnv(): NodeJS.ProcessEnv {
-	return { ...process.env, ANSIBLE_PYTHON_INTERPRETER: 'auto_silent' };
+	return {
+		...process.env,
+		ANSIBLE_PYTHON_INTERPRETER: 'auto_silent',
+		// Keep Ansible's temp files OUT of each service user's home dir. By
+		// default Ansible uses `~/.ansible/tmp` for the become-user (postgres,
+		// morphit, ipfs). Those homes (/var/lib/postgresql, /var/lib/morphit, …)
+		// either can't be created or get made 0700, and Ansible prints scary
+		// "[Errno 13] Permission denied: '/var/lib/morphit/.ansible'" and
+		// "created with a mode of 0700, this may cause issues" warnings — even
+		// though the run succeeds. A shared base under /tmp, plus world-readable
+		// tmpfiles so a become-user can read what root staged, produces neither
+		// warning. The dir is cleaned up per run; nothing sensitive lingers.
+		ANSIBLE_REMOTE_TEMP: '/tmp/.ansible-morphit/tmp',
+		ANSIBLE_LOCAL_TEMP: '/tmp/.ansible-morphit/local',
+		ANSIBLE_ALLOW_WORLD_READABLE_TMPFILES: 'True',
+		// A single-admin appliance install shouldn't dump Ansible's deprecation /
+		// system-config chatter on the operator's screen — it reads like errors
+		// to someone who isn't an Ansible user. Real task failures are unaffected.
+		ANSIBLE_DEPRECATION_WARNINGS: 'False',
+		ANSIBLE_SYSTEM_WARNINGS: 'False',
+		ANSIBLE_LOCALHOST_WARNING: 'False'
+	};
 }
 
 async function realSpawn(argv: readonly string[]): Promise<number> {

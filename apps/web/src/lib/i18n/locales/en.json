@@ -31,7 +31,7 @@
 			"operator_matrix": "Matrix group chat"
 		},
 		"integrity": {
-			"explain": "This instance serves {count} files. Each one is hashed and listed in the full manifest below. Compare the aggregate hash above to the one published in the latest signed release on the chain (@morphit posts a morphit_release_v1 op after every build). If they match, the bundle is byte-identical to the official release.",
+			"explain": "This instance serves {count} files. Each one is hashed and listed in the full manifest below. Compare the aggregate hash below to the one published in the latest signed release on the chain (@morphit posts a morphit_release_v1 op after every build). If they match, the bundle is byte-identical to the official release.",
 			"raw_link": "See the full manifest (verify.json)"
 		},
 		"asset_stance": {
@@ -1856,6 +1856,8 @@
 		"ens": "ENS",
 		"compare": "Compare",
 		"compare_title": "See how Morphit compares to other options",
+		"about": "About",
+		"about_title": "About this instance",
 		"stats": "Stats",
 		"stats_title": "Live aggregate network statistics",
 		"contact": "Contact",

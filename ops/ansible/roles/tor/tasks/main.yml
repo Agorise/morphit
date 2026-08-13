@@ -41,14 +41,13 @@
     - morphit_tor_key_stat.stat.exists | default(false)
   notify: Restart tor
 
-- name: Warn when no wizard keys were provided
+- name: Note that Tor will create its own onion address (fresh install, no pre-seeded key)
   ansible.builtin.debug:
     msg: >-
-      morphit_tor_key_src is unset or its key files are missing, so Tor will
-      generate its OWN onion address on first start.  That address will NOT
-      match MORPHIT_INSTANCE_TOR_ADDRESS unless you update it.  Place the
-      wizard's tor-hidden-service/ directory and set morphit_tor_key_src to
-      serve the address the site advertises.
+      Tor will create its own .onion address the first time it starts — that's
+      expected on a fresh install. Once Tor is up (about a minute), your onion
+      address is shown by  sudo morphit-ops  and stored at
+      /var/lib/tor/morphit/hostname.
   when: >-
     morphit_tor_key_src | length == 0
     or not (morphit_tor_key_stat.stat.exists | default(false))

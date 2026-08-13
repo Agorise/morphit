@@ -35,19 +35,13 @@
     - not (morphit_i2pd_dest_key_stat.stat.exists | default(false))
   notify: Restart i2pd
 
-- name: Warn when neither a server keyfile nor wizard keys are present
+- name: Note that i2pd will create its own .b32.i2p address (fresh install, no pre-seeded key)
   ansible.builtin.debug:
     msg: >-
-      No keyfile at {{ morphit_i2pd_datadir }}/{{ morphit_i2pd_keyfile }} and
-      morphit_i2pd_key_src is unset/missing, so i2pd will generate its OWN
-      .b32.i2p on first start.  That address will NOT match
-      MORPHIT_INSTANCE_I2P_B32_ADDRESS unless you update it.  Derive the served
-      address once i2pd has created the keyfile with:
-        head -c 391 {{ morphit_i2pd_datadir }}/{{ morphit_i2pd_keyfile }} |
-        sha256sum | cut -d' ' -f1 | xxd -r -p | base32 | tr 'A-Z' 'a-z' |
-        tr -d '=' ; echo .b32.i2p
-      Or set morphit_i2pd_key_src to the wizard's i2p-tunnel/ directory to
-      serve the address the site already advertises.
+      i2pd will create its own .b32.i2p address the first time it starts —
+      that's expected on a fresh install. It appears once i2pd has finished
+      building its tunnels (give it a few minutes), and  sudo morphit-ops
+      shows it.
   when: >-
     not (morphit_i2pd_dest_key_stat.stat.exists | default(false))
     and (morphit_i2pd_key_src | length == 0

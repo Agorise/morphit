@@ -355,40 +355,21 @@
     # told a new operator that their node is silent. Ansible printing green
     # is exactly when someone stops reading. This block is the last thing
     # they see.
-    - name: Warn when the node has no alerting
+    - name: Offer optional alerting (calm, non-alarming)
       ansible.builtin.debug:
         msg: |
           ─────────────────────────────────────────────────────────
-          ⚠  THIS NODE HAS NO ALERTING.
+          Optional — turn on alerts (nice for an always-on node)
 
-          enable_matrix_bot is false, so nothing will tell you when
-          this node runs out of disk, fails a backup, gets its TLS
-          cert expired, or falls over at 3am.  You will find out
-          from your users.
+          Your node runs fine as-is. If you'd like it to message you
+          on Matrix when something wants attention (low disk, a
+          backup that didn't run, a TLS cert getting close to
+          expiry), you can switch that on any time:
 
-          It is off by default because it needs a secret we cannot
-          generate for you — a Matrix access token.  Ten minutes of
-          setup, once:
+            sudo morphit-ops   →   "Matrix alerts"
 
-            1. Make a Matrix account for the bot (any homeserver).
-            2. Get its access token.
-            3. Put it in group_vars/vault.yml (encrypted):
-                 vault_matrix_bot_access_token: "syt_..."
-            4. In group_vars/all.yml set:
-                 enable_matrix_bot: true
-                 matrix_bot_homeserver: "https://matrix.org"
-                 matrix_bot_alert_mxid: "@you:matrix.org"
-            5. Turn the monitors on — they report THROUGH the bot,
-               so they stay quiet until it exists:
-                 enable_host_monitor: true
-                 enable_smartctl_monitor: true
-                 enable_certbot_monitor: true
-                 enable_apt_monitor: true
-                 enable_systemd_monitor: true
-            6. Re-run this playbook with --tags monitors.
-
-          Running a Morphit node unmonitored is a choice.  Make it
-          on purpose, not by not reading.
+          It'll walk you through it. Nothing else depends on it, so
+          it's completely fine to do later.
           ─────────────────────────────────────────────────────────
       when: not (enable_matrix_bot | default(false))
 
@@ -396,20 +377,19 @@
       ansible.builtin.debug:
         msg: |
           ─────────────────────────────────────────────────────────
-          Ansible reported success.  This does NOT mean Morphit is
-          working or that the host is secure.
+          Installed. Here's how to confirm everything's healthy.
 
-          FIRST, the one-command check — it actively verifies the
-          indexer is syncing (in parallel across your RPC nodes), the
-          relay is up, the matrix-bot is alerting the address you
-          entered, backups are scheduled, HTTPS/TLS is valid, and the
-          AIDE baseline built:
+          The one-command check actively verifies the live services:
+          the indexer syncing (in parallel across your RPC nodes),
+          the relay up, the matrix-bot alerting the address you
+          entered, backups scheduled, HTTPS/TLS valid, and the AIDE
+          baseline built:
 
             sudo morphit-ops        →  option 13 (Node health)
 
-          Everything green there means the live services came up.
-          THEN run the security/host verification checklist in
-          morphit-sysadmin-handoff.txt:
+          All green there means your services came up. When you have
+          a moment, the security/host checklist in
+          morphit-sysadmin-handoff.txt walks through the rest:
 
             - ssh root@host fails
             - ssh user@host with password fails
