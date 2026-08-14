@@ -89,7 +89,7 @@ async function main(): Promise<void> {
 
 	// HOME path: choice 0 → asks domain, title, description, email, ddns.
 	{
-		const d = driver({ choice: 0, answers: ['trade.example.com', 'Morphit Berlin', 'Berlin node, no KYC.', '@berlin:matrix.org', 'me@example.com', 'https://njal.la/update/?h=trade.example.com&k=K&a={ip}'] });
+		const d = driver({ choice: 0, answers: ['trade.example.com', 'Morphit Berlin', 'Berlin node, no KYC.', '@berlin:matrix.org', 'N', 'me@example.com', 'https://njal.la/update/?h=trade.example.com&k=K&a={ip}'] });
 		const out = await collectInstallInputs({ ...known, mode: 'home' }, d.deps);
 		check('home: mode is home', out.mode === 'home');
 		check('home: carries the DDNS url', out.ddnsUpdateUrl === 'https://njal.la/update/?h=trade.example.com&k=K&a={ip}');
@@ -104,7 +104,7 @@ async function main(): Promise<void> {
 
 	// VPS path: choice 1 → asks domain, title, description, email; NO ddns.
 	{
-		const d = driver({ choice: 1, answers: ['trade.example.com', 'Morphit Test', '', '', 'me@example.com'] });
+		const d = driver({ choice: 1, answers: ['trade.example.com', 'Morphit Test', '', '', 'N', 'me@example.com'] });
 		const out = await collectInstallInputs({ ...known, mode: 'vps' }, d.deps);
 		check('vps: mode is vps', out.mode === 'vps');
 		check('vps: NO DDNS url', out.ddnsUpdateUrl === undefined);
@@ -116,7 +116,7 @@ async function main(): Promise<void> {
 
 	// RE-PROMPT: a bad domain then a good one → domain asked twice, printed an error.
 	{
-		const d = driver({ choice: 1, answers: ['not a domain', 'trade.example.com', 'Morphit Test', '', '', 'me@example.com'] });
+		const d = driver({ choice: 1, answers: ['not a domain', 'trade.example.com', 'Morphit Test', '', '', 'N', 'me@example.com'] });
 		const out = await collectInstallInputs({ ...known, mode: 'vps' }, d.deps);
 		const domainPrompts = d.state.prompts.filter((p) => /domain/i.test(p)).length;
 		check('re-prompt: a bad domain makes the domain question repeat', domainPrompts >= 2);

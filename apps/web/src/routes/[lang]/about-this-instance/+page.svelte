@@ -79,9 +79,19 @@
 
 	const manifestFileCount = $derived(verify ? Object.keys(verify.hash_manifest).length : 0);
 
-	/** Short commit hash for visual compactness. Full hash is
-	 *  still below for copy/paste. */
-	const shortCommit = $derived(verify?.git_commit ? verify.git_commit.slice(0, 7) : null);
+	/** Build a `matrix:` URI (RFC/MSC2312 scheme) for a room alias or user id,
+	 *  so the link opens the visitor's OWN Matrix client directly instead of
+	 *  bouncing through matrix.to — which would leak the click (and the room they
+	 *  clicked) to a third-party matrix.org web service. Also avoids the ugly
+	 *  %23/%3A percent-encoding matrix.to needs.
+	 *    #room:server  → matrix:r/room:server
+	 *    @user:server  → matrix:u/user:server                                */
+	function matrixUri(addr: string): string {
+		const a = addr.trim();
+		if (a.startsWith('#')) return `matrix:r/${a.slice(1)}`;
+		if (a.startsWith('@')) return `matrix:u/${a.slice(1)}`;
+		return `matrix:r/${a}`;
+	}
 
 	/** Human-readable built-at. */
 	const builtAtHuman = $derived.by(() => {
@@ -159,38 +169,37 @@
 			</h2>
 			<dl class="mt-4 space-y-3 text-sm">
 				<div class="flex flex-col sm:flex-row sm:items-baseline sm:gap-4">
-					<dt class="font-semibold text-ink-700 dark:text-ink-200 sm:w-40">
+					<dt class="font-semibold text-ink-700 dark:text-ink-200 sm:w-48 sm:shrink-0">
 						{$_('about_this_instance.field.origin')}
 					</dt>
 					<dd class="font-mono">{origin || '—'}</dd>
 				</div>
 				<div class="flex flex-col sm:flex-row sm:items-baseline sm:gap-4">
-					<dt class="font-semibold text-ink-700 dark:text-ink-200 sm:w-40">
+					<dt class="font-semibold text-ink-700 dark:text-ink-200 sm:w-48 sm:shrink-0">
 						{$_('about_this_instance.field.version')}
 					</dt>
 					<dd class="font-mono">{verify.morphit_version}</dd>
 				</div>
 				<div class="flex flex-col sm:flex-row sm:items-baseline sm:gap-4">
-					<dt class="font-semibold text-ink-700 dark:text-ink-200 sm:w-40">
+					<dt class="font-semibold text-ink-700 dark:text-ink-200 sm:w-48 sm:shrink-0">
 						{$_('about_this_instance.field.built_at')}
 					</dt>
 					<dd>{builtAtHuman}</dd>
 				</div>
 				<div class="flex flex-col sm:flex-row sm:items-baseline sm:gap-4">
-					<dt class="font-semibold text-ink-700 dark:text-ink-200 sm:w-40">
+					<dt class="font-semibold text-ink-700 dark:text-ink-200 sm:w-48 sm:shrink-0">
 						{$_('about_this_instance.field.commit')}
 					</dt>
-					<dd class="font-mono">
-						{#if shortCommit}
-							{shortCommit}
-							<span class="ml-2 break-all text-ink-500">({verify.git_commit})</span>
+					<dd class="font-mono break-all">
+						{#if verify.git_commit}
+							{verify.git_commit}
 						{:else}
 							<span class="text-ink-500">—</span>
 						{/if}
 					</dd>
 				</div>
 				<div class="flex flex-col sm:flex-row sm:items-baseline sm:gap-4">
-					<dt class="font-semibold text-ink-700 dark:text-ink-200 sm:w-40">
+					<dt class="font-semibold text-ink-700 dark:text-ink-200 sm:w-48 sm:shrink-0">
 						{$_('about_this_instance.field.operator_tag')}
 					</dt>
 					<dd class="font-mono">
@@ -205,15 +214,14 @@
 				</div>
 				{#if $instance.operator_matrix_room}
 					<div class="flex flex-col sm:flex-row sm:items-baseline sm:gap-4">
-						<dt class="font-semibold text-ink-700 dark:text-ink-200 sm:w-40">
+						<dt class="font-semibold text-ink-700 dark:text-ink-200 sm:w-48 sm:shrink-0">
 							{$_('about_this_instance.field.operator_matrix')}
 						</dt>
 						<dd>
 							<a
 								class="font-mono text-morphit-emerald hover:underline"
-								href="https://matrix.to/#/{encodeURIComponent($instance.operator_matrix_room)}"
+								href={matrixUri($instance.operator_matrix_room)}
 								rel="noopener noreferrer"
-								target="_blank"
 							>
 								{$instance.operator_matrix_room}
 							</a>
@@ -244,7 +252,7 @@
 			</p>
 			<dl class="mt-4 space-y-3 text-sm">
 				<div class="flex flex-col sm:flex-row sm:items-baseline sm:gap-4">
-					<dt class="font-semibold text-ink-700 dark:text-ink-200 sm:w-40">
+					<dt class="font-semibold text-ink-700 dark:text-ink-200 sm:w-48 sm:shrink-0">
 						{$_('about_this_instance.asset_stance.disabled_label')}
 					</dt>
 					<dd>
@@ -279,7 +287,7 @@
 			</p>
 			<dl class="mt-4 space-y-3 text-sm">
 				<div class="flex flex-col sm:flex-row sm:items-baseline sm:gap-4">
-					<dt class="font-semibold text-ink-700 dark:text-ink-200 sm:w-40">
+					<dt class="font-semibold text-ink-700 dark:text-ink-200 sm:w-48 sm:shrink-0">
 						{$_('about_this_instance.payment_stance.disabled_label')}
 					</dt>
 					<dd>
@@ -316,13 +324,13 @@
 			</p>
 			<dl class="mt-4 space-y-3 text-sm">
 				<div class="flex flex-col sm:flex-row sm:items-baseline sm:gap-4">
-					<dt class="font-semibold text-ink-700 dark:text-ink-200 sm:w-40">
+					<dt class="font-semibold text-ink-700 dark:text-ink-200 sm:w-48 sm:shrink-0">
 						{$_('about_this_instance.field.file_count')}
 					</dt>
 					<dd class="font-mono">{manifestFileCount}</dd>
 				</div>
 				<div class="flex flex-col sm:flex-row sm:items-baseline sm:gap-4">
-					<dt class="font-semibold text-ink-700 dark:text-ink-200 sm:w-40">
+					<dt class="font-semibold text-ink-700 dark:text-ink-200 sm:w-48 sm:shrink-0">
 						{$_('about_this_instance.field.aggregate_hash')}
 					</dt>
 					<dd class="break-all font-mono">

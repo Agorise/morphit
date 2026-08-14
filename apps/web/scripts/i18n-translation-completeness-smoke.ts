@@ -1136,7 +1136,25 @@ const ALLOW_LIST: AllowEntry[] = [
 	// in French and English (coincidental same spelling / loanword); the sibling
 	// subtitle text is fully translated, so this is a single-word coincidence, not
 	// an untranslated miss.
-	{ key: 'operators.subtitle_instances_link', locale: 'fr', reason: '(b) "instances" is the same word in French and English — coincidental same spelling; the linked word in the operators subtitle' }
+	{ key: 'operators.subtitle_instances_link', locale: 'fr', reason: '(b) "instances" is the same word in French and English — coincidental same spelling; the linked word in the operators subtitle' },
+	{ key: 'settings.endpoints.transport_tor', locale: 'es', reason: '(c) "Tor" is a network name (proper noun); identical in every locale' },
+	{ key: 'settings.endpoints.transport_i2p', locale: 'es', reason: '(c) "I2P" is a network name (proper noun); identical in every locale' },
+	{ key: 'settings.endpoints.transport_tor', locale: 'fr', reason: '(c) "Tor" is a network name (proper noun); identical in every locale' },
+	{ key: 'settings.endpoints.transport_i2p', locale: 'fr', reason: '(c) "I2P" is a network name (proper noun); identical in every locale' },
+	{ key: 'settings.endpoints.transport_tor', locale: 'de', reason: '(c) "Tor" is a network name (proper noun); identical in every locale' },
+	{ key: 'settings.endpoints.transport_i2p', locale: 'de', reason: '(c) "I2P" is a network name (proper noun); identical in every locale' },
+	{ key: 'settings.endpoints.transport_tor', locale: 'it', reason: '(c) "Tor" is a network name (proper noun); identical in every locale' },
+	{ key: 'settings.endpoints.transport_i2p', locale: 'it', reason: '(c) "I2P" is a network name (proper noun); identical in every locale' },
+	{ key: 'settings.endpoints.transport_tor', locale: 'pl', reason: '(c) "Tor" is a network name (proper noun); identical in every locale' },
+	{ key: 'settings.endpoints.transport_i2p', locale: 'pl', reason: '(c) "I2P" is a network name (proper noun); identical in every locale' },
+	{ key: 'settings.endpoints.transport_tor', locale: 'ru', reason: '(c) "Tor" is a network name (proper noun); identical in every locale' },
+	{ key: 'settings.endpoints.transport_i2p', locale: 'ru', reason: '(c) "I2P" is a network name (proper noun); identical in every locale' },
+	{ key: 'settings.endpoints.transport_tor', locale: 'fa', reason: '(c) "Tor" is a network name (proper noun); identical in every locale' },
+	{ key: 'settings.endpoints.transport_i2p', locale: 'fa', reason: '(c) "I2P" is a network name (proper noun); identical in every locale' },
+	{ key: 'settings.endpoints.transport_tor', locale: 'zh-CN', reason: '(c) "Tor" is a network name (proper noun); identical in every locale' },
+	{ key: 'settings.endpoints.transport_i2p', locale: 'zh-CN', reason: '(c) "I2P" is a network name (proper noun); identical in every locale' },
+	{ key: 'settings.endpoints.transport_tor', locale: 'zh-HK', reason: '(c) "Tor" is a network name (proper noun); identical in every locale' },
+	{ key: 'settings.endpoints.transport_i2p', locale: 'zh-HK', reason: '(c) "I2P" is a network name (proper noun); identical in every locale' },
 ];
 
 const allowSet = new Set(ALLOW_LIST.map((e) => `${e.key}::${e.locale}`));

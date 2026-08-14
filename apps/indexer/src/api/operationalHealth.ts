@@ -357,7 +357,12 @@ async function refresh(relayHealthUrl: string): Promise<void> {
 		serviceFailed('morphit-ipfs-pin.service'),
 		serviceFailed('morphit-ipns-rebroadcast.service'),
 		sampleDisk(),
-		probeRelayAny(relayHealthUrl, 1500)
+		// 5000ms to match `morphit-ops health`'s fetchHealth timeout. A shorter
+		// window (was 1500ms) times out on a bridge-routed or momentarily busy
+		// relay that the CLI still sees up — making /v1/health disagree with the
+		// CLI. This is the background refresh, not the request path, so a longer
+		// wait costs nothing; candidates are probed in parallel.
+		probeRelayAny(relayHealthUrl, 5000)
 	]);
 	const cpu = sampleCpuPct();
 	const mem = sampleMem();

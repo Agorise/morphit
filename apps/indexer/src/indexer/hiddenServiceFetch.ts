@@ -125,7 +125,7 @@ export class ProxyUnavailableError extends Error {}
 
 // ─── SOCKS5 undici connector ─────────────────────────────────────
 
-function parseHostPort(hp: string, fallbackPort: number): { host: string; port: number } {
+export function parseHostPort(hp: string, fallbackPort: number): { host: string; port: number } {
 	const i = hp.lastIndexOf(':');
 	if (i === -1) return { host: hp, port: fallbackPort };
 	return { host: hp.slice(0, i), port: Number(hp.slice(i + 1)) || fallbackPort };
@@ -134,7 +134,7 @@ function parseHostPort(hp: string, fallbackPort: number): { host: string; port: 
 /** Build an undici `connect` function that tunnels to the requested origin via a
  *  SOCKS5 proxy. undici calls this with the TARGET host/port (the onion); we
  *  hand back a socket already tunneled to it. */
-function makeSocks5Connector(socksHost: string, socksPort: number) {
+export function makeSocks5Connector(socksHost: string, socksPort: number) {
 	return (
 		opts: { hostname: string; port: number | string },
 		cb: (err: Error | null, socket: net.Socket | null) => void

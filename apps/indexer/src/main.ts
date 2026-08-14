@@ -26,6 +26,8 @@ import { checkSchemaDrift, formatDriftReport } from '$db/schemaDrift';
 import { runMigrations } from '$db/migrations';
 import { backfillPostingKeys, ensurePostingPubkeyColumn } from '$indexer/postingKeyBackfill';
 import { seedFederationDirectory } from '$indexer/federationSeed';
+import { installHiddenServiceDispatcher } from '$indexer/hiddenServiceDispatcher';
+import { hiddenServiceProxyConfigFromEnv } from '$indexer/hiddenServiceFetch';
 import { BlurtClient } from '$blurt/client';
 import { Poller } from '$indexer/poller';
 import { HeadTailer } from '$indexer/headTailer';
@@ -223,6 +225,15 @@ async function main(): Promise<void> {
 	await seedFederationDirectory(db);
 
 	// ─── 4. Blurt client ───────────────────────────────────────
+	// Before constructing the client: if any hidden-service RPC endpoints are
+	// configured, install the global routing dispatcher so dblurt's fetch reaches
+	// .onion (via Tor SOCKS) and .b32.i2p (via i2pd). GATED — a clearnet-only node
+	// never touches the global dispatcher, so its behaviour is unchanged. Hidden
+	// endpoints that can't be reached (proxy down) just fail and the pool uses
+	// clearnet; the node never blocks on them.
+	if (config.hiddenRpcEndpoints.length > 0) {
+		installHiddenServiceDispatcher(hiddenServiceProxyConfigFromEnv(process.env));
+	}
 	const blurt = new BlurtClient(config);
 
 	// ─── 4a. Posting-key backfill (cp404, option A) ────────────
@@ -675,7 +686,15 @@ async function main(): Promise<void> {
 	rpcEndpointsApp.use('*', rateLimit('resource', config.resourceRatePerMin));
 	rpcEndpointsApp.route(
 		'/',
-		rpcEndpointsRoute(() => poller.rpcEndpointSnapshot, DEFAULT_BLURT_RPC_ENDPOINTS)
+		// Allow-list = the clearnet canon PLUS this instance's configured
+		// hidden-service endpoints (operator-set + published, so legitimately
+		// canonical here). This is what lets the Settings card show the Tor/I2P
+		// nodes with their transport badges; without it the privacy filter would
+		// drop them.
+		rpcEndpointsRoute(() => poller.rpcEndpointSnapshot, [
+			...DEFAULT_BLURT_RPC_ENDPOINTS,
+			...config.hiddenRpcEndpoints
+		])
 	);
 	app.route('/v1/rpc-endpoints', rpcEndpointsApp);
 

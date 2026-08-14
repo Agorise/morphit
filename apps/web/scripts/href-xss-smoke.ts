@@ -86,6 +86,15 @@ const SAFE_BUILDER_NAMES = [
  *  given <expr> to a value an attacker controls. */
 const ALLOWLIST_HREF_EXPR: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 	[
+		'apps/web/src/routes/[lang]/about-this-instance/+page.svelte',
+		// cp721 — matrixUri() is a SAFE constructor: it strips the leading #/@ and
+		// hard-prefixes a fixed `matrix:r/` or `matrix:u/` scheme, so its output
+		// can never be a javascript:/data: URL regardless of operator_matrix_room
+		// (which is itself validated to an @user:server / #room:server address).
+		// Opens the visitor's own Matrix client; no third-party redirect.
+		new Set(['matrixUri($instance.operator_matrix_room)'])
+	],
+	[
 		'apps/web/src/routes/[lang]/chat/+page.svelte',
 		// cp446 — the inbox threads by (peer, order), so a card's href needs a
 		// `?order=` query string and can no longer be a bare `lp()` template the

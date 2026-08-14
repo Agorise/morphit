@@ -124,12 +124,26 @@ function readGitCommit() {
 	}
 }
 
-/** Read a KEY=value from morphit.config.env at the install root. This file is
- *  the operator's own config, carried across upgrades and present on any
- *  deployed instance (absent in a dev checkout). Strips surrounding quotes. */
+/** Read a KEY=value from the SAME set of env files the running services source
+ *  (see morphit-indexer.service ExecStart), in the same order, so verify.json's
+ *  operator_tag matches what /v1/instance reports. Later files override earlier
+ *  ones (shell `. file` semantics). All are present on a deployed instance and
+ *  absent in a dev checkout; a manual /opt/morphit layout may keep the operator
+ *  tag in any of them. Strips surrounding quotes. */
 function readConfigEnvValue(key) {
-	try {
-		const txt = readFileSync(resolve(REPO_ROOT, 'morphit.config.env'), 'utf8');
+	const files = [
+		resolve(REPO_ROOT, 'morphit.env'),
+		resolve(REPO_ROOT, 'morphit.config.env'),
+		'/etc/morphit/indexer.env'
+	];
+	let found = null;
+	for (const file of files) {
+		let txt;
+		try {
+			txt = readFileSync(file, 'utf8');
+		} catch {
+			continue; // file absent (dev checkout, or this layout doesn't use it)
+		}
 		for (const line of txt.split('\n')) {
 			const m = line.match(/^\s*([A-Za-z0-9_]+)\s*=\s*(.*)$/);
 			if (m && m[1] === key) {
@@ -140,13 +154,11 @@ function readConfigEnvValue(key) {
 				) {
 					v = v.slice(1, -1);
 				}
-				return v.length > 0 ? v : null;
+				if (v.length > 0) found = v; // last non-empty wins (override order)
 			}
 		}
-	} catch {
-		// No morphit.config.env (dev checkout).
 	}
-	return null;
+	return found;
 }
 
 function readOperatorTag() {

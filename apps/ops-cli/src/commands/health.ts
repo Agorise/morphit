@@ -261,21 +261,77 @@ export interface TlsCertStatus {
 	readonly detail: string;
 }
 
-/** TLS certificate status from Let's Encrypt (read-only). Reports the soonest
- *  expiry among live certs via openssl. 'not-found' = no cert yet, i.e. HTTPS
- *  isn't set up or is still in progress (first-online/certbot). cp684. */
-export function checkTlsCert(liveDir = '/etc/letsencrypt/live'): TlsCertStatus {
+/** Days until the cert actually SERVED on the live HTTPS port expires, or null
+ *  if nothing valid is served / openssl is unavailable. Unlike the file check,
+ *  this sees the cert regardless of who manages it — host certbot OR BunkerWeb's
+ *  own auto-SSL living inside its data volume — so a BunkerWeb-managed cert no
+ *  longer reads as "no cert". */
+export function probeServedCertDaysLeft(hostPort = '127.0.0.1:443'): number | null {
+	try {
+		const out = execFileSync(
+			'bash',
+			[
+				'-c',
+				`echo | openssl s_client -connect ${hostPort} 2>/dev/null | openssl x509 -enddate -noout 2>/dev/null`
+			],
+			{ encoding: 'utf8', timeout: 4000 }
+		);
+		const notAfter = /notAfter=(.+)/.exec(out)?.[1]?.trim();
+		if (notAfter === undefined || notAfter.length === 0) return null;
+		const exp = new Date(notAfter).getTime();
+		if (Number.isNaN(exp)) return null;
+		return Math.floor((exp - Date.now()) / 86_400_000);
+	} catch {
+		return null;
+	}
+}
+
+/** Map a days-to-expiry number to a TlsCertStatus. `served` tailors the detail
+ *  wording for a cert seen on the wire (vs read from a file). */
+function tlsStatusFromDays(days: number, served: boolean): TlsCertStatus {
+	if (days < 0)
+		return { state: 'expired', daysLeft: days, detail: `certificate EXPIRED ${-days} day(s) ago — renew now` };
+	if (days < 30)
+		return {
+			state: 'expiring',
+			daysLeft: days,
+			detail: `expires in ${days} day(s) — auto-renewal should run`
+		};
+	const how = served ? 'served by the web front, ' : '';
+	return { state: 'valid', daysLeft: days, detail: `valid, ${how}${days} day(s) to expiry (auto-renews)` };
+}
+
+/** TLS certificate status. Prefers host certbot certs in `liveDir`; when none is
+ *  found there, falls back to `servedProbe` (the cert actually served on 443) so
+ *  a BunkerWeb-managed cert — which lives in BunkerWeb's own volume, not
+ *  /etc/letsencrypt — is recognised instead of reported as "not set up". cp684. */
+export function checkTlsCert(
+	liveDir = '/etc/letsencrypt/live',
+	servedProbe?: () => number | null
+): TlsCertStatus {
+	const servedFallback = (): TlsCertStatus => {
+		const days = servedProbe ? servedProbe() : null;
+		return days === null
+			? {
+					state: 'not-found',
+					daysLeft: null,
+					detail:
+						'no HTTPS certificate. A clearnet node must be reachable from the ' +
+						'internet on ports 80/443 for the Let\u2019s Encrypt challenge \u2014 a ' +
+						'home/CGNAT connection (no inbound) can never get one, so use tor-only ' +
+						'mode there. A tor-only node needs no certificate (.onion/.i2p are ' +
+						'self-authenticating). If this is a reachable clearnet host, certbot ' +
+						'may still be in progress \u2014 re-check shortly.'
+				}
+			: tlsStatusFromDays(days, true);
+	};
 	let domains: string[];
 	try {
 		domains = readdirSync(liveDir, { withFileTypes: true })
 			.filter((d) => d.isDirectory())
 			.map((d) => d.name);
 	} catch {
-		return {
-			state: 'not-found',
-			daysLeft: null,
-			detail: 'no HTTPS certificate yet — TLS not set up, or still in progress (certbot)'
-		};
+		return servedFallback();
 	}
 	let soonest: number | null = null;
 	for (const dom of domains) {
@@ -297,24 +353,8 @@ export function checkTlsCert(liveDir = '/etc/letsencrypt/live'): TlsCertStatus {
 			/* openssl missing or cert unreadable — skip this one */
 		}
 	}
-	if (soonest === null) {
-		return {
-			state: 'not-found',
-			daysLeft: null,
-			detail: 'no readable cert in /etc/letsencrypt/live — TLS not set up, or in progress'
-		};
-	}
-	if (soonest < 0) {
-		return { state: 'expired', daysLeft: soonest, detail: `certificate EXPIRED ${-soonest} day(s) ago — renew now` };
-	}
-	if (soonest < 30) {
-		return {
-			state: 'expiring',
-			daysLeft: soonest,
-			detail: `expires in ${soonest} day(s) — auto-renewal should run; verify certbot.timer`
-		};
-	}
-	return { state: 'valid', daysLeft: soonest, detail: `valid, ${soonest} day(s) to expiry (auto-renews)` };
+	if (soonest === null) return servedFallback();
+	return tlsStatusFromDays(soonest, false);
 }
 
 /** The alert MXID(s) the matrix-bot is configured to DM, from its env file.
@@ -328,6 +368,24 @@ export function readMatrixMxid(envPath = '/etc/morphit/matrix-bot.env'): string 
 		return v !== undefined && v.length > 0 ? v : null;
 	} catch {
 		return null;
+	}
+}
+
+/** Whether the matrix-bot is installed and whether it has a token yet, from its
+ *  env file. Lets health distinguish "not installed" (no env — the bot was never
+ *  set up) from "token needed" (env present but the access token is empty — the
+ *  unit is staged and stopped, waiting for a token via `morphit-ops matrix`). */
+export function readMatrixBotSetup(envPath = '/etc/morphit/matrix-bot.env'): {
+	installed: boolean;
+	hasToken: boolean;
+} {
+	try {
+		const txt = readFileSync(envPath, 'utf8');
+		const m = /^MORPHIT_MATRIX_BOT_ACCESS_TOKEN=(.*)$/m.exec(txt);
+		const tok = m?.[1]?.trim();
+		return { installed: true, hasToken: tok !== undefined && tok.length > 0 };
+	} catch {
+		return { installed: false, hasToken: false };
 	}
 }
 
@@ -1449,7 +1507,7 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 	const canary = checkCanary(canaryFilePath(), now);
 	const backups = checkBackups(readBackupFacts(), now);
 	const aide = checkAideBaseline();
-	const tls = checkTlsCert();
+	const tls = checkTlsCert('/etc/letsencrypt/live', () => probeServedCertDaysLeft());
 	const matrixMxid = readMatrixMxid();
 	const ipfsSeeding = checkIpfsSeeding(readIpfsSeedingFacts());
 
@@ -1726,7 +1784,21 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 	// ── Services block ──
 	console.log('');
 	console.log(`  ${c.bold('Services')}  ${c.dim('(systemd, read-only)')}`);
-	for (const svc of services) console.log(serviceLine(c, svc.unit, svc.state));
+	for (const svc of services) {
+		// matrix-bot: an installed-but-tokenless bot is STAGED, not broken — the
+		// unit + deps are in place and it just needs a token. Show that plainly
+		// instead of the raw "stopped"/"not installed" systemd state.
+		if (svc.unit === 'morphit-matrix-bot') {
+			const mb = readMatrixBotSetup();
+			if (mb.installed && !mb.hasToken) {
+				console.log(
+					`      ${svc.unit} ${c.yellow('\u26a0 token needed')} ${c.dim('\u2014 add it with  sudo morphit-ops \u2192 Matrix alerts')}`
+				);
+				continue;
+			}
+		}
+		console.log(serviceLine(c, svc.unit, svc.state));
+	}
 	// matrix-bot: confirm it's DMing the address the operator entered, not just
 	// that the service is up (cp684).
 	{

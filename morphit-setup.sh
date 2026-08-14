@@ -110,7 +110,9 @@ if [ -f node_modules/.morphit-bundle-complete ]; then
 	log "Using the bundled libraries (offline — skipping npm install)."
 else
 	log "Installing Morphit's libraries (npm install \xE2\x80\x94 a few hundred MB, this is normal)\xE2\x80\xA6"
-	npm install
+	# update_notifier off: keeps npm's "New major version available" banner off
+	# the operator's screen at the end of the wizard.
+	npm_config_update_notifier=false npm install
 fi
 
 log "Handing off to the guided installer\xE2\x80\xA6"

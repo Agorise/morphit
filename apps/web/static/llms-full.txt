@@ -2387,6 +2387,8 @@ Your orders, chat, balances and the block explorer all go through your operator'
 
 **Use Tor or a VPN and this is closed.** If you are here for Monero you almost certainly already do — so it is already closed for you. It hides your IP from every network node, every endpoint, and your ISP at once. Same advice we give for broadcasting XMR, and better than anything we could build into the app, because it protects you from us too.
 
+**Now Morphit tries the hidden network first.** When hidden-service RPC nodes (.onion / .b32.i2p) are online, your browser reaches for one of those BEFORE any clearnet node for this one check — so on Tor Browser (or with an I2P proxy) even this single request rides the hidden network and no clearnet node ever sees your IP. A normal browser can't route those, fails fast, and falls back to a clearnet node, exactly as before.
+
 ---
 
 ## Metadata

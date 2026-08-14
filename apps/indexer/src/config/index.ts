@@ -88,6 +88,10 @@ export interface Config {
 	readonly chainId: string;
 	/** Array of Blurt RPC endpoints we'll rotate between. */
 	readonly blurtRpcEndpoints: readonly string[];
+	/** Hidden-service (.onion / .b32.i2p) RPC endpoints, reached via the
+	 *  indexer's Tor/i2pd proxies. Merged into the pool alongside the clearnet
+	 *  endpoints; empty = clearnet-only. */
+	readonly hiddenRpcEndpoints: readonly string[];
 	/** Block number at which to start indexing if the database is
 	 *  empty. Used once per deployment; subsequent restarts resume
 	 *  from `indexer_state.last_applied_block`. */
@@ -787,6 +791,34 @@ const envSchema = z.object({
 		.refine(
 			(arr) => arr.length > 0 && arr.every((u) => u.startsWith('https://')),
 			'all RPC endpoints must be https:// URLs'
+		),
+	// Hidden-service RPC endpoints (.onion / .b32.i2p), reached SERVER-SIDE via
+	// the indexer's Tor SOCKS + i2pd proxies (see hiddenServiceDispatcher). These
+	// are http:// (self-authenticating transports need no TLS), so they live in a
+	// separate knob from the https-only clearnet pool above. The host refine is a
+	// SECURITY GUARD: only genuine .onion/.i2p hosts are accepted here, so a
+	// clearnet http:// URL can never sneak past the https requirement via this
+	// knob. Empty by default → clearnet-only, dispatcher not installed.
+	MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS: z
+		.string()
+		.default('')
+		.transform((s) =>
+			s
+				.split(',')
+				.map((u) => u.trim())
+				.filter(Boolean)
+		)
+		.refine(
+			(arr) =>
+				arr.every((u) => {
+					try {
+						const h = new URL(u).hostname.toLowerCase();
+						return h.endsWith('.onion') || h.endsWith('.i2p');
+					} catch {
+						return false;
+					}
+				}),
+			'hidden RPC endpoints must be .onion or .b32.i2p URLs'
 		),
 	MORPHIT_INDEXER_START_BLOCK: z.coerce.number().int().nonnegative().default(MORPHIT_GENESIS_BLOCK),
 	MORPHIT_INDEXER_BLOCK_INTERVAL_MS: z.coerce.number().int().positive().default(3000),
@@ -1612,6 +1644,7 @@ export function loadConfig(): Config {
 		databasePoolMax: e.MORPHIT_INDEXER_DB_POOL_MAX,
 		chainId: e.MORPHIT_INDEXER_CHAIN_ID,
 		blurtRpcEndpoints: e.MORPHIT_INDEXER_RPC_ENDPOINTS,
+		hiddenRpcEndpoints: e.MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS,
 		startBlock: e.MORPHIT_INDEXER_START_BLOCK,
 		blockIntervalMs: e.MORPHIT_INDEXER_BLOCK_INTERVAL_MS,
 		backfillConcurrency: e.MORPHIT_INDEXER_BACKFILL_CONCURRENCY,

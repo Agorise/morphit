@@ -39,6 +39,11 @@ import { Client } from '@beblurt/dblurt';
 import { morphitUserAgent } from './userAgent';
 import { INDEXER_VERSION } from '$api/health';
 import { EndpointPool, isTransportError } from '@morphit/rpc-pool';
+import {
+	blockConsistencyKey,
+	interpretChainConsistency,
+	type ChainConsistencyResult
+} from './chainConsistency';
 import type { Config } from '$config';
 
 /** What the chain reports on every tick. Only the fields we actually
@@ -59,11 +64,22 @@ export interface DynamicGlobalProperties {
 }
 
 /** Minimal shape of a block as returned by `condenser_api.get_block`.
- *  Only the fields the dispatcher touches are typed here. */
+ *  Only the fields the dispatcher touches are typed here — plus the block
+ *  IDENTITY fields (always returned by get_block; the dispatcher ignores them)
+ *  the quorum chain-consistency cross-check keys on. */
 export interface BlockHeader {
 	readonly timestamp: string;
 	readonly transactions: readonly BlockTransaction[];
 	readonly transaction_ids: readonly string[];
+	/** Canonical block hash for this height. Honest nodes on the same chain
+	 *  return the SAME value for a given height; a forked/lying node differs. */
+	readonly block_id?: string;
+	/** Hash of the previous block. Secondary identity signal. */
+	readonly previous?: string;
+	/** Witness that produced the block. */
+	readonly witness?: string;
+	/** Merkle root of the block's transactions. */
+	readonly transaction_merkle_root?: string;
 }
 
 export interface BlockTransaction {
@@ -247,8 +263,13 @@ export class BlurtClient {
 		if (config.blurtRpcEndpoints.length === 0) {
 			throw new Error('BlurtClient: at least one endpoint required');
 		}
+		// Clearnet endpoints + hidden-service endpoints (.onion / .b32.i2p) in one
+		// pool. Hidden endpoints are reached via the global routing dispatcher
+		// (installed in main.ts when any are configured); to the pool they are
+		// just more URLs. The quorum trust layer (crossCheckChainConsistency) and
+		// the Settings card's transport badges then span both automatically.
 		this.pool = new EndpointPool({
-			endpoints: [...config.blurtRpcEndpoints]
+			endpoints: [...config.blurtRpcEndpoints, ...(config.hiddenRpcEndpoints ?? [])]
 		});
 	}
 
@@ -440,6 +461,40 @@ export class BlurtClient {
 				| undefined;
 			return block ?? null;
 		}, { startOffset });
+	}
+
+	/** RPC TRUST LAYER — cross-check one block height across a quorum of
+	 *  independent endpoints. Ask several nodes for the SAME block and require
+	 *  `minAgree` of them to return the SAME canonical identity (block_id) before
+	 *  we trust it. This is what makes a pool that includes nodes we don't
+	 *  control (hidden-service RPC, community endpoints) safe: a node that serves
+	 *  a forged or forked block at this height returns a different id and simply
+	 *  fails to join the quorum. Racing hid WHERE we read; this proves WHAT we
+	 *  read. Background call. Returns a verdict, never throws on disagreement —
+	 *  the caller decides (log, alert, distrust that node). */
+	async crossCheckChainConsistency(
+		height: number,
+		opts: { minAgree?: number; timeoutMs?: number } = {}
+	): Promise<ChainConsistencyResult> {
+		const minAgree = Math.max(1, opts.minAgree ?? 2);
+		const result = await this.pool.quorumCall<BlockHeader>(
+			async (url, signal) => {
+				const client = clientFor(url);
+				const block = (await withSignal(client.condenser.getBlock(height), signal)) as unknown as
+					| BlockHeader
+					| null
+					| undefined;
+				// A node that doesn't have the block yet returns null → the pool
+				// treats it as a non-answer (not a transport failure, no cooldown).
+				return block ?? null;
+			},
+			{
+				equivalenceKey: blockConsistencyKey,
+				minAgree,
+				...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {})
+			}
+		);
+		return interpretChainConsistency(result, minAgree);
 	}
 
 	/** Fetch a single account.  Defaults to USER-FACING (hedge on) —

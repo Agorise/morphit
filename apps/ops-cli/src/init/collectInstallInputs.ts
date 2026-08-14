@@ -172,12 +172,22 @@ export async function collectInstallInputs(
 			'  (separate from your personal one); you paste its access token here,\n' +
 			'  and alerts are DM\u2019d PRIVATELY to your own Matrix account.\n' +
 			'\n' +
-			'  No bot token yet? Just press Enter to skip \u2014 you can switch alerts\n' +
-			'  on any time later with  sudo morphit-ops \u2192 \u201cMatrix alerts\u201d.\n'
+			'  How to get a bot token (~2 min):\n' +
+			'    1. Register a NEW Matrix account for the bot (e.g. at app.element.io\n' +
+			'       or any homeserver) \u2014 keep it separate from your personal one.\n' +
+			'    2. Log in as that bot account in Element, then open:\n' +
+			'       Settings \u2192 Help & About \u2192 Advanced \u2192 \u201cAccess Token\u201d (click to\n' +
+			'       reveal) and copy it. (It looks like  syt_\u2026  and is secret.)\n' +
+			'    3. Paste it below. The bot only needs to send you DMs.\n' +
+			'\n' +
+			'  No bot token yet? Press Enter to skip \u2014 you can install the bot now\n' +
+			'  (ready for a token) or switch alerts on later with\n' +
+			'  sudo morphit-ops \u2192 \u201cMatrix alerts\u201d.\n'
 	);
 	let matrixAlertHomeserver: string | undefined;
 	let matrixAlertToken: string | undefined;
 	let matrixAlertMxid: string | undefined;
+	let installMatrixBotDeferred = false;
 	const alertToken = (
 		await askSecret('Alert bot access token (paste \u2014 not shown; Enter to skip alerts)')
 	).trim();
@@ -201,6 +211,19 @@ export async function collectInstallInputs(
 			}
 			print(`  \u2717 That ${verdict}.  Try again.\n`);
 		}
+	} else {
+		// No token pasted. Offer to install the bot NOW anyway, so it's fully
+		// staged (unit + crypto/sqlite deps) and the operator only has to drop in
+		// a token later via `morphit-ops matrix` — no reinstall, no rebuild.
+		const installAnyway = (
+			await ask(
+				'Install the alert bot now anyway, ready for a token later? [y/N]',
+				'N'
+			)
+		)
+			.trim()
+			.toLowerCase();
+		installMatrixBotDeferred = installAnyway === 'y' || installAnyway === 'yes';
 	}
 
 	// A Tor-only node gets no clearnet TLS certificate, so no ACME email.
@@ -263,6 +286,7 @@ export async function collectInstallInputs(
 		ddnsUpdateUrl,
 		matrixAlertHomeserver,
 		matrixAlertToken,
-		matrixAlertMxid
+		matrixAlertMxid,
+		installMatrixBotDeferred
 	};
 }

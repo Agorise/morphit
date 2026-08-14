@@ -51,13 +51,17 @@ __resetProbeCacheForTests();
 const c = await cachedProbeEndpoints(urls);
 check('after the cache is cleared, a fresh probe is produced', c !== a);
 
-// PRIVACY: main.ts must wire the CANONICAL public list to the route, not the raw
-// config endpoints (which may include the operator's private upstream URLs).
+// PRIVACY: main.ts must wire the CANONICAL public list to the route, never the
+// raw clearnet config (`config.blurtRpcEndpoints`, which may include the
+// operator's private upstream URLs). The published hidden-service endpoints
+// (`config.hiddenRpcEndpoints`) ARE allowed — they're validated to be .onion /
+// .b32.i2p (self-authenticating, public, can't be a private IP), so showing them
+// with a transport badge leaks nothing.
 const repo = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const main = readFileSync(join(repo, 'apps/indexer/src/main.ts'), 'utf8');
 check(
-	'PRIVACY: the rpc-endpoints route is wired with DEFAULT_BLURT_RPC_ENDPOINTS (canonical/public only)',
-	/rpcEndpointsRoute\([\s\S]*?DEFAULT_BLURT_RPC_ENDPOINTS\)/.test(main) &&
+	'PRIVACY: rpc-endpoints route wires DEFAULT_BLURT_RPC_ENDPOINTS + hidden, never the raw clearnet config',
+	/rpcEndpointsRoute\([\s\S]*?DEFAULT_BLURT_RPC_ENDPOINTS/.test(main) &&
 		!/rpcEndpointsRoute\([\s\S]*?config\.blurtRpcEndpoints/.test(main)
 );
 

@@ -23,6 +23,15 @@ import { Hono } from 'hono';
 import type { EndpointState } from '@morphit/rpc-pool';
 import { morphitUserAgent } from '$blurt/userAgent';
 import { INDEXER_VERSION } from './health';
+import { hiddenNetworkOf } from '$indexer/hiddenServiceFetch';
+
+/** Classify a pool URL into the card's transport buckets. `.onion` → tor,
+ *  `.b32.i2p`/`.i2p` → i2p, everything else (incl. `.loki`, which Morphit's RPC
+ *  tier doesn't use) → clearnet. */
+export function rpcTransportOf(url: string): 'clearnet' | 'tor' | 'i2p' {
+	const net = hiddenNetworkOf(url);
+	return net === 'tor' ? 'tor' : net === 'i2p' ? 'i2p' : 'clearnet';
+}
 
 /**
  * cp471 (tt.txt C) — WHY an active probe failed.
@@ -64,6 +73,13 @@ export type RpcProbeFailure =
 /** Health of one canonical RPC node, as the indexer currently sees it. */
 export interface RpcEndpointHealth {
 	readonly url: string;
+	/** Transport the indexer reaches this node over. `clearnet` = ordinary
+	 *  HTTP(S); `tor` = a `.onion` (probed via the Tor SOCKS proxy); `i2p` = a
+	 *  `.b32.i2p` (probed via the i2pd HTTP proxy). Lets the Settings card badge
+	 *  hidden-service nodes so the operator can see the pool spans clearnet AND
+	 *  censorship-resistant transports — the browser never reaches these itself;
+	 *  the indexer probes them server-side and reports what it sees. */
+	readonly transport: 'clearnet' | 'tor' | 'i2p';
 	/** Currently usable: no consecutive failures AND not parked in cooldown. */
 	readonly healthy: boolean;
 	/** Smoothed successful-call latency in ms, or null if never observed. */
@@ -109,6 +125,7 @@ export function buildRpcEndpointsResponse(
 		const cooldownMs = Math.max(0, s.cooldownUntil - now);
 		endpoints.push({
 			url,
+			transport: rpcTransportOf(url),
 			healthy: s.consecutiveFailures === 0 && cooldownMs === 0,
 			latency_ms: s.ewmaLatencyMs,
 			consecutive_failures: s.consecutiveFailures,
@@ -249,6 +266,7 @@ export async function probeEndpoints(
 			const { latencyMs, ok, reason, httpStatus } = await probeOne(url);
 			return {
 				url,
+				transport: rpcTransportOf(url),
 				healthy: ok,
 				latency_ms: latencyMs,
 				consecutive_failures: ok ? 0 : 1,

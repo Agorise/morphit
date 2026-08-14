@@ -876,7 +876,7 @@
 		},
 		"error": {
 			"same_instance": "That's the same instance you are on. Pick a different one to compare against.",
-			"local_failed": "Could not fetch this instance's orderbook: {reason}",
+			"local_failed": "Could not fetch that instance's orderbook: {reason}",
 			"remote_failed": "Could not fetch {host}'s orderbook: {reason}. The remote instance may be offline, unreachable, or blocking this request.",
 			"fetch_threw": "Couldn't reach {host}. Network error or the instance is offline."
 		},
@@ -1692,7 +1692,7 @@
 			},
 			"ip_address_and_rpc_nodes": {
 				"q": "Does anything see or leak my IP address when I use Morphit?",
-				"a": "Privacy is Morphit's #1 priority and never sees or logs your IP address. No cookies, no analytics, no trackers, no telemetry. Rate limiting holds a counter in memory for a few seconds and drops it — nothing is written down, so there is nothing to subpoena, sell, or leak later.\n\nYour orders, chat, balances and the block explorer all go through your operator's indexer. Morphit's indexers proxy those reads so your browser never touches third-party endpoints.\n\n**The one exception.** Once per session your browser asks a network node — a privately-run RPC endpoint — directly for the signed release record that says which version of Morphit is current. That node sees the IP that asked. You can watch it in the Network tab: one request out, everything else to Morphit.\n\n**Why.** That record is how your browser knows the code it just ran is really ours. Rogue nodes can't forge it, and none of your data rides along with the request. Route it through your operator and a dishonest one could pair an old, genuinely-signed record with an old, backdoored build — and your browser would say all clear, forever. A replayed record carries a real signature, so checking signatures misses it. We would rather one node learn that an IP loaded a page than let an operator quietly pin you to a backdoor.\n\n**What that node learns.** An IP, and that someone asked for @morphit's release history. Not your username, orders, chat or balances. None of that leaves your operator's indexer.\n\n**Use Tor or a VPN and this is closed.** If you are here for Monero you almost certainly already do — so it is already closed for you. It hides your IP from every network node, every endpoint, and your ISP at once. Same advice we give for broadcasting XMR, and better than anything we could build into the app, because it protects you from us too."
+				"a": "Privacy is Morphit's #1 priority and never sees or logs your IP address. No cookies, no analytics, no trackers, no telemetry. Rate limiting holds a counter in memory for a few seconds and drops it — nothing is written down, so there is nothing to subpoena, sell, or leak later.\n\nYour orders, chat, balances and the block explorer all go through your operator's indexer. Morphit's indexers proxy those reads so your browser never touches third-party endpoints.\n\n**The one exception.** Once per session your browser asks a network node — a privately-run RPC endpoint — directly for the signed release record that says which version of Morphit is current. That node sees the IP that asked. You can watch it in the Network tab: one request out, everything else to Morphit.\n\n**Why.** That record is how your browser knows the code it just ran is really ours. Rogue nodes can't forge it, and none of your data rides along with the request. Route it through your operator and a dishonest one could pair an old, genuinely-signed record with an old, backdoored build — and your browser would say all clear, forever. A replayed record carries a real signature, so checking signatures misses it. We would rather one node learn that an IP loaded a page than let an operator quietly pin you to a backdoor.\n\n**What that node learns.** An IP, and that someone asked for @morphit's release history. Not your username, orders, chat or balances. None of that leaves your operator's indexer.\n\n**Use Tor or a VPN and this is closed.** If you are here for Monero you almost certainly already do — so it is already closed for you. It hides your IP from every network node, every endpoint, and your ISP at once. Same advice we give for broadcasting XMR, and better than anything we could build into the app, because it protects you from us too.\n\n**Now Morphit tries the hidden network first.** When hidden-service RPC nodes (.onion / .b32.i2p) are online, your browser reaches for one of those BEFORE any clearnet node for this one check — so on Tor Browser (or with an I2P proxy) even this single request rides the hidden network and no clearnet node ever sees your IP. A normal browser can't route those, fails fast, and falls back to a clearnet node, exactly as before."
 			}
 		},
 		"share_link": "Share",
@@ -4048,7 +4048,9 @@
 			"err_body": "Answered with an unreadable response",
 			"err_http": "Node answered HTTP {status}",
 			"err_http_blocked": "Blocked by a security policy (HTTP {status})",
-			"err_http_rate": "Rate-limited by the node (HTTP 429)"
+			"err_http_rate": "Rate-limited by the node (HTTP 429)",
+			"transport_tor": "Tor",
+			"transport_i2p": "I2P"
 		},
 		"session": {
 			"autolock_changed": "Changed to {label}",
