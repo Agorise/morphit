@@ -139,9 +139,13 @@ export async function fetchVerifiedRelease(): Promise<ReleaseFetchResult> {
 	// is the product — that trade currently favours keeping it. It is Ken's call,
 	// and it is recorded in docs/REVISIT-LIST.md rather than buried here.
 	//
-	// NOTE: `faq.entries.data_collection.a` currently tells users "No third-party
-	// services on any Morphit page." That is not accurate while this call exists.
-	// Whichever way the tradeoff is settled, the copy and the code must agree.
+	// PRIVACY-FIRST ROUTING (#1): getDirectChainClient's rotator is
+	// privacyFirst, so it tries hidden-service RPC nodes (.onion / .b32.i2p)
+	// BEFORE any clearnet node. On Tor Browser (or with an I2P proxy) this one
+	// call rides the hidden network and NO clearnet node sees the user's IP; a
+	// normal browser can't route them, fails fast, and falls back to clearnet.
+	// The `faq.entries.ip_address_and_rpc_nodes` answer states this exception AND
+	// the hidden-first behaviour — the copy and the code agree.
 	const client = getDirectChainClient();
 
 	// ─── 1. Find the latest release op in @morphit's history.  ──

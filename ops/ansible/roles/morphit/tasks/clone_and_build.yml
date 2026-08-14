@@ -95,6 +95,10 @@
     # run) instead of $HOME/.npm — the nologin service user's home is not a place
     # npm should need to write, and depending on it is fragile (see base role).
     npm_config_cache: "{{ morphit_repo_path }}/.npm-cache"
+    # Silence npm's "New major version of npm available!" update-notifier
+    # banner — it prints at the end of the run and looks like scary noise to
+    # a new operator finishing the wizard. Nothing here should ever act on it.
+    npm_config_update_notifier: "false"
   become: true
   become_user: "{{ morphit_service_user }}"
   register: morphit_npm_install_result
@@ -156,6 +160,10 @@
     chdir: "{{ morphit_repo_path }}"
   environment:
     npm_config_cache: "{{ morphit_repo_path }}/.npm-cache"
+    # Silence npm's "New major version of npm available!" update-notifier
+    # banner — it prints at the end of the run and looks like scary noise to
+    # a new operator finishing the wizard. Nothing here should ever act on it.
+    npm_config_update_notifier: "false"
   become: true
   become_user: "{{ morphit_service_user }}"
   register: npm_build_result
@@ -175,6 +183,10 @@
     chdir: "{{ morphit_repo_path }}"
   environment:
     npm_config_cache: "{{ morphit_repo_path }}/.npm-cache"
+    # Silence npm's "New major version of npm available!" update-notifier
+    # banner — it prints at the end of the run and looks like scary noise to
+    # a new operator finishing the wizard. Nothing here should ever act on it.
+    npm_config_update_notifier: "false"
   become: true
   become_user: "{{ morphit_service_user }}"
   register: morphit_ops_smoke

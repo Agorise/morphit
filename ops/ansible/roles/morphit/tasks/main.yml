@@ -216,6 +216,18 @@
     enabled: true
     state: started
 
+- name: Fire the FIRST backup now (health otherwise shows "missing" until the next daily run)
+  # A oneshot dump. The DB + indexer are already up by this point, so this
+  # writes the first dump right at install — the operator sees a real byte count
+  # in `morphit-ops health` instead of a scary "no dump has ever been written".
+  # Non-fatal: if the DB is still warming, the daily timer (and the
+  # first-online retry below) will produce one shortly.
+  ansible.builtin.systemd:
+    name: morphit-backup.service
+    state: started
+  failed_when: false
+  changed_when: true
+
 # first-online: enable the service so it fires the moment the box next reaches
 # network-online.target, and start the timer so it also retries on a cadence
 # (and takes a first shot right away — if the installer HAS internet, the box

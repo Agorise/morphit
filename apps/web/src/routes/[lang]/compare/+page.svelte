@@ -110,8 +110,8 @@
 			// other. We report partial success with a clear indication
 			// of which side failed.
 			const [localRes, remoteRes] = await Promise.all([
-				getOrderbook({ limit: 200 }),
-				getOrderbookFromOrigin(v.origin, { limit: 200 })
+				getOrderbook({ limit: 100 }),
+				getOrderbookFromOrigin(v.origin, { limit: 100 })
 			]);
 
 			if (!localRes.ok) {

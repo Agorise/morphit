@@ -20,6 +20,7 @@
 
 import {
 	DEFAULT_RPC_ENDPOINTS,
+	DEFAULT_HIDDEN_RPC_ENDPOINTS,
 	RPC_TIMEOUT_MS,
 	RPC_MAX_CONSECUTIVE_FAILURES,
 	RPC_MAX_RETRIES_PER_CALL
@@ -108,16 +109,33 @@ export type JsonRpcResponse<T = unknown> = JsonRpcSuccess<T> | JsonRpcError;
 // Rotator
 // ────────────────────────────────────────────────────────────────────────────
 
+/** True if a URL's host is a hidden-service address (.onion / .i2p / .b32.i2p).
+ *  Used by the privacy-first rotator to try these before any clearnet node. */
+export function isHiddenEndpoint(url: string): boolean {
+	try {
+		const h = new URL(url).hostname.toLowerCase();
+		return h.endsWith('.onion') || h.endsWith('.i2p');
+	} catch {
+		return false;
+	}
+}
+
 export class EndpointRotator {
 	private readonly stats: Map<string, EndpointStat>;
 	private order: string[];
 	/** Incrementing JSON-RPC id counter, per rotator instance. */
 	private nextRpcId = 1;
+	/** When true, hidden-service endpoints (.onion / .b32.i2p) are always tried
+	 *  BEFORE any clearnet endpoint, regardless of latency — so a visitor on Tor
+	 *  Browser / with an I2P proxy reaches the chain without their IP ever
+	 *  touching the clear net. Latency still orders WITHIN each tier. */
+	private readonly privacyFirst: boolean;
 
-	constructor(endpoints: readonly string[]) {
+	constructor(endpoints: readonly string[], opts: { privacyFirst?: boolean } = {}) {
 		if (endpoints.length === 0) {
 			throw new Error('EndpointRotator requires at least one endpoint URL');
 		}
+		this.privacyFirst = opts.privacyFirst ?? false;
 		this.stats = new Map();
 		// Randomize the initial order so the default pool doesn't
 		// centralize load on whichever URL appears first.
@@ -154,9 +172,16 @@ export class EndpointRotator {
 			}
 		}
 		// Sort healthy endpoints by:
+		//   0. (privacyFirst only) hidden-service endpoints before clearnet —
+		//      privacy beats latency for the one-time direct-to-chain check.
 		//   1. Fewer consecutive failures first
 		//   2. Then by last latency (unknown = treat as infinity, so known-fast wins)
 		healthy.sort((a, b) => {
+			if (this.privacyFirst) {
+				const at = isHiddenEndpoint(a.url) ? 0 : 1;
+				const bt = isHiddenEndpoint(b.url) ? 0 : 1;
+				if (at !== bt) return at - bt;
+			}
 			if (a.consecutiveFailures !== b.consecutiveFailures) {
 				return a.consecutiveFailures - b.consecutiveFailures;
 			}
@@ -164,9 +189,17 @@ export class EndpointRotator {
 			const bLat = b.lastLatencyMs ?? Number.POSITIVE_INFINITY;
 			return aLat - bLat;
 		});
-		// If nothing is healthy, try the coolest (expired-soonest) cooldowns.
+		// If nothing is healthy, try the coolest (expired-soonest) cooldowns —
+		// still hidden-first under privacyFirst.
 		if (healthy.length === 0) {
-			cooling.sort((a, b) => a.cooldownUntil - b.cooldownUntil);
+			cooling.sort((a, b) => {
+				if (this.privacyFirst) {
+					const at = isHiddenEndpoint(a.url) ? 0 : 1;
+					const bt = isHiddenEndpoint(b.url) ? 0 : 1;
+					if (at !== bt) return at - bt;
+				}
+				return a.cooldownUntil - b.cooldownUntil;
+			});
 			return cooling;
 		}
 		return healthy;
@@ -459,8 +492,14 @@ export function getRotator(): EndpointRotator {
 	// nodes — so it uses DEFAULT_RPC_ENDPOINTS, not any user-supplied list (the
 	// custom-endpoint feature was removed with the settings card's simplification;
 	// there's nothing left in the app that would honor a custom node).
-	const urls = [...DEFAULT_RPC_ENDPOINTS];
-	singleton = new EndpointRotator(urls);
+	// Hidden-service RPC nodes (.onion / .b32.i2p) FIRST, then the clearnet
+	// canonical pool. privacyFirst makes the rotator exhaust the hidden tier
+	// before touching clearnet, so a Tor-Browser / I2P visitor verifies the
+	// release without their IP ever reaching the clear net. A normal browser
+	// can't route the hidden ones, fails fast, and falls through to clearnet —
+	// the unchanged behaviour when DEFAULT_HIDDEN_RPC_ENDPOINTS is empty.
+	const urls = [...DEFAULT_HIDDEN_RPC_ENDPOINTS, ...DEFAULT_RPC_ENDPOINTS];
+	singleton = new EndpointRotator(urls, { privacyFirst: true });
 	// cp268/cp408 privacy (#1): the browser NEVER probe-pings Blurt RPC nodes.
 	// getRotator() runs on ordinary pages (the layout's per-session
 	// release-integrity check reaches it); an eager probe would POST

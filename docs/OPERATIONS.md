@@ -11877,3 +11877,31 @@ User-Agent: Morphit/<your indexer version> (+https://git.agorise.net/agorise/mor
 (`<your indexer version>` is the same version `/v1/health` reports — so an operator can tell an old instance from a current one.) Node's built-in `fetch` sends `user-agent: node` by default — the same string as every anonymous script on the internet, exactly what bot-detection rules are written to catch — and it gives an RPC operator nobody to contact if your traffic misbehaves. Naming ourselves means an operator who wants us to back off can find us instead of just blocking us. Two of Morphit's own background jobs identify themselves more precisely still — `morphit-indexer/federation-probe` and `morphit-indexer/signup-anomaly-probe` — because a node operator reading logs is better served by "which job" than by "which app".
 
 **Be aware of what this means for your server.** The header goes on *every* outbound request your indexer makes — the Blurt RPC nodes, the BLURT price feed, and the federation probe that checks other instances. So any host your indexer contacts learns that the IP calling it is running Morphit, and which version. Your server's IP is visible to those hosts either way, and the public instances list already names the instances that want naming; but if you are running an instance you would rather nobody enumerate, know that this header is one of the ways they could. It says nothing whatsoever about your *users* — their browsers are not touched by this; their requests go to your indexer, not through it. You do not configure any of this and there is nothing to tune.
+
+## 51. Optional: censorship-resistant chain reads over hidden-service RPC
+
+By default your indexer reads the Blurt chain from the canonical clearnet RPC pool over HTTPS. If you'd rather your node reach the chain over **Tor and/or I2P** — so that no clearnet RPC operator, and no network observer, sees which chain data your instance fetches — you can add hidden-service RPC endpoints (`.onion` / `.b32.i2p`) to the pool. This is **opt-in** and requires a Tor daemon and/or `i2pd` running on the indexer host.
+
+### What it does
+
+The indexer probes and reads from hidden endpoints server-side (the browser never touches them). A `.onion` endpoint is routed through your local **Tor SOCKS proxy** (default `127.0.0.1:9050`); a `.b32.i2p` endpoint through your local **i2pd HTTP proxy** (default `127.0.0.1:4444`). Clearnet endpoints are completely unaffected — they keep going out directly, exactly as before. Hidden endpoints join the same pool: the quorum chain-consistency cross-check runs across them, and they appear on the Settings → RPC endpoints card with a **Tor** / **I2P** badge. If a hidden node (or the local proxy) is unreachable, the pool simply uses a clearnet node — reads never block on the hidden tier.
+
+### Enabling it
+
+1. Install and run Tor and/or `i2pd` on the indexer host (a hidden-service RPC node package such as [`hidden-rpc`](https://git.agorise.net/agorise/hidden-rpc) publishes suitable nodes and their addresses).
+2. Set the endpoints (comma-separated, `http://` — these transports are self-authenticating and need no TLS):
+
+```
+MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS=http://<onion-or-b32.i2p-host>:8091,http://<...>:8091
+```
+
+3. Optionally override the proxy locations if yours differ from the defaults:
+
+```
+MORPHIT_INDEXER_TOR_SOCKS=127.0.0.1:9050
+MORPHIT_INDEXER_I2P_HTTP_PROXY=127.0.0.1:4444
+```
+
+Only genuine `.onion` / `.b32.i2p` hosts are accepted in `MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS` — a clearnet URL is rejected, so this knob can never be used to point the pool at a private internal address. Leaving it empty keeps the node clearnet-only with no behavioural change.
+
+> **Trust reminder:** reaching a node over Tor/I2P hides *where* you read, not *whether* the data is true. That's exactly why hidden endpoints go through the same quorum cross-check as clearnet ones — a node that serves a forged block is caught regardless of transport.

@@ -17,17 +17,23 @@
 # References: docs/OPERATIONS.md §16 "Canonical Matrix routing".
 
 ---
-- name: Assert required matrix-bot vars are set
+# A token means the operator wants the bot RUNNING now; without one we still
+# install the unit + its deps so it's ready the moment they add a token via
+# `morphit-ops matrix` (health then reads "token needed", not "not installed").
+- name: Determine whether a bot token was provided
+  ansible.builtin.set_fact:
+    matrix_bot_has_token: "{{ (matrix_bot_access_token | default('') | length) > 0 }}"
+
+- name: Assert the other matrix-bot vars are set when a token is provided
   ansible.builtin.assert:
     that:
       - matrix_bot_homeserver is defined
-      - matrix_bot_access_token is defined
       - matrix_bot_alert_mxid is defined
     fail_msg: >
-      enable_matrix_bot is true but one or more of
-      matrix_bot_homeserver / matrix_bot_access_token /
-      matrix_bot_alert_mxid is missing.  Set them in
-      group_vars/vault.yml.
+      A matrix-bot access token was provided but
+      matrix_bot_homeserver / matrix_bot_alert_mxid is missing.
+      Set them in group_vars/vault.yml.
+  when: matrix_bot_has_token
 
 - name: Create morphit-matrix-bot system user
   ansible.builtin.user:
@@ -96,9 +102,23 @@
       See docs/OPERATIONS.md §16 "matrix-bot setup" for details.
   when: not matrix_bot_bs3_build.stat.exists
 
-- name: Enable + start morphit-matrix-bot
+- name: Register the matrix-bot unit (daemon-reload) — always, so it's ready
+  ansible.builtin.systemd:
+    name: morphit-matrix-bot
+    daemon_reload: true
+
+- name: Start + enable morphit-matrix-bot (a token is configured)
   ansible.builtin.systemd:
     name: morphit-matrix-bot
     enabled: true
     state: started
-    daemon_reload: true
+  when: matrix_bot_has_token
+
+- name: Leave matrix-bot installed-but-stopped (no token yet — add it via morphit-ops)
+  # The unit + crypto/sqlite deps are in place; it just needs a token. Health
+  # reports "token needed", and `morphit-ops matrix` starts it once one is set.
+  ansible.builtin.systemd:
+    name: morphit-matrix-bot
+    enabled: false
+    state: stopped
+  when: not matrix_bot_has_token

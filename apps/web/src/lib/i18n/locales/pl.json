@@ -876,7 +876,7 @@
 		},
 		"error": {
 			"same_instance": "To ta sama instancja, na której jesteś. Wybierz inną do porównania.",
-			"local_failed": "Nie udało się pobrać orderbooka tej instancji: {reason}",
+			"local_failed": "Nie udało się pobrać orderbooka tamtej instancji: {reason}",
 			"remote_failed": "Nie udało się pobrać orderbooka {host}: {reason}. Zdalna instancja może być offline, nieosiągalna lub blokować tę prośbę.",
 			"fetch_threw": "Nie udało się połączyć z {host}. Błąd sieci lub instancja jest offline."
 		},
@@ -1692,7 +1692,7 @@
 			},
 			"ip_address_and_rpc_nodes": {
 				"q": "Czy ktokolwiek widzi lub ujawnia mój adres IP, gdy korzystam z Morphit?",
-				"a": "Prywatność jest priorytetem #1 Morphit. Morphit nigdy nie widzi ani nie zapisuje Twojego adresu IP — żadnych ciasteczek, żadnej analityki, żadnych trackerów, żadnej telemetrii. Ograniczanie liczby żądań trzyma licznik w pamięci przez kilka sekund i go wyrzuca; nic nie jest zapisywane, więc nie ma czego zająć nakazem, sprzedać ani później wyciec.\n\nTwoje zlecenia, czat, salda i eksplorator bloków idą przez indekser Twojego operatora. Indeksery Morphit pośredniczą w tych odczytach, żeby Twoja przeglądarka nigdy nie dotykała cudzych endpointów.\n\n**Jeden wyjątek.** Raz na sesję Twoja przeglądarka pyta węzeł sieci — endpoint RPC prowadzony prywatnie — bezpośrednio o podpisany wpis wydania mówiący, która wersja Morphit jest aktualna. Ten węzeł widzi IP, które zapytało. Możesz to zobaczyć w zakładce Sieć: jedno żądanie na zewnątrz, cała reszta do Morphit.\n\n**Dlaczego.** Ten wpis to sposób, w jaki przeglądarka wie, że kod, który właśnie uruchomiła, jest naprawdę nasz. Wrogie węzły nie podrobią go, a żadne Twoje dane nie jadą razem z żądaniem. Przepuść go przez operatora, a nieuczciwy mógłby połączyć stary, autentycznie podpisany wpis ze starą kompilacją z tylnymi drzwiami — a przeglądarka powiedziałaby, że wszystko gra. Na zawsze. Odtworzony stary wpis niesie prawdziwy podpis, więc sprawdzanie podpisów tego nie wychwyci. Wolimy, żeby jeden węzeł wiedział, że jakieś IP wczytało stronę, niż pozwolić operatorowi po cichu przypiąć Cię do tylnych drzwi.\n\n**Czego dowiaduje się ten węzeł.** IP i to, że ktoś zapytał o historię wydań @morphit. Nie Twoją nazwę użytkownika, zlecenia, czat ani salda. Nic z tego nie opuszcza indeksera Twojego operatora.\n\n**Używaj Tora lub VPN, i sprawa zamknięta.** Jeśli jesteś tu dla Monero, prawie na pewno już to robisz — więc dla Ciebie jest już zamknięta. Ukrywa Twój IP przed wszystkimi węzłami sieci, wszystkimi endpointami i Twoim dostawcą internetu naraz. Ta sama rada, którą dajemy przy rozgłaszaniu XMR, i lepsza niż cokolwiek, co moglibyśmy wbudować w aplikację, bo chroni Cię także przed nami."
+				"a": "Prywatność jest priorytetem #1 Morphit. Morphit nigdy nie widzi ani nie zapisuje Twojego adresu IP — żadnych ciasteczek, żadnej analityki, żadnych trackerów, żadnej telemetrii. Ograniczanie liczby żądań trzyma licznik w pamięci przez kilka sekund i go wyrzuca; nic nie jest zapisywane, więc nie ma czego zająć nakazem, sprzedać ani później wyciec.\n\nTwoje zlecenia, czat, salda i eksplorator bloków idą przez indekser Twojego operatora. Indeksery Morphit pośredniczą w tych odczytach, żeby Twoja przeglądarka nigdy nie dotykała cudzych endpointów.\n\n**Jeden wyjątek.** Raz na sesję Twoja przeglądarka pyta węzeł sieci — endpoint RPC prowadzony prywatnie — bezpośrednio o podpisany wpis wydania mówiący, która wersja Morphit jest aktualna. Ten węzeł widzi IP, które zapytało. Możesz to zobaczyć w zakładce Sieć: jedno żądanie na zewnątrz, cała reszta do Morphit.\n\n**Dlaczego.** Ten wpis to sposób, w jaki przeglądarka wie, że kod, który właśnie uruchomiła, jest naprawdę nasz. Wrogie węzły nie podrobią go, a żadne Twoje dane nie jadą razem z żądaniem. Przepuść go przez operatora, a nieuczciwy mógłby połączyć stary, autentycznie podpisany wpis ze starą kompilacją z tylnymi drzwiami — a przeglądarka powiedziałaby, że wszystko gra. Na zawsze. Odtworzony stary wpis niesie prawdziwy podpis, więc sprawdzanie podpisów tego nie wychwyci. Wolimy, żeby jeden węzeł wiedział, że jakieś IP wczytało stronę, niż pozwolić operatorowi po cichu przypiąć Cię do tylnych drzwi.\n\n**Czego dowiaduje się ten węzeł.** IP i to, że ktoś zapytał o historię wydań @morphit. Nie Twoją nazwę użytkownika, zlecenia, czat ani salda. Nic z tego nie opuszcza indeksera Twojego operatora.\n\n**Używaj Tora lub VPN, i sprawa zamknięta.** Jeśli jesteś tu dla Monero, prawie na pewno już to robisz — więc dla Ciebie jest już zamknięta. Ukrywa Twój IP przed wszystkimi węzłami sieci, wszystkimi endpointami i Twoim dostawcą internetu naraz. Ta sama rada, którą dajemy przy rozgłaszaniu XMR, i lepsza niż cokolwiek, co moglibyśmy wbudować w aplikację, bo chroni Cię także przed nami.\n\n**Morphit najpierw próbuje sieci ukrytej.** Gdy węzły RPC usług ukrytych (.onion / .b32.i2p) są online, Twoja przeglądarka sięga po jeden z nich PRZED jakimkolwiek węzłem w sieci jawnej dla tego jednego sprawdzenia — więc w Tor Browser (lub z proxy I2P) nawet to żądanie przechodzi przez sieć ukrytą i żaden węzeł w sieci jawnej nie widzi Twojego IP. Zwykła przeglądarka nie może ich osiągnąć, szybko zawodzi i wraca do węzła w sieci jawnej, dokładnie jak wcześniej."
 			}
 		},
 		"share_link": "Udostępnij",
@@ -4048,7 +4048,9 @@
 			"err_body": "Odpowiedział nieczytelną odpowiedzią",
 			"err_http": "Węzeł odpowiedział HTTP {status}",
 			"err_http_blocked": "Zablokowane przez politykę bezpieczeństwa (HTTP {status})",
-			"err_http_rate": "Ograniczone przez węzeł (HTTP 429)"
+			"err_http_rate": "Ograniczone przez węzeł (HTTP 429)",
+			"transport_tor": "Tor",
+			"transport_i2p": "I2P"
 		},
 		"session": {
 			"autolock_changed": "Zmieniono na {label}",

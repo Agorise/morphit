@@ -864,6 +864,13 @@ export type RpcProbeFailure =
 
 export interface RpcEndpointHealth {
 	readonly url: string;
+	/** Transport the indexer reaches this node over: `clearnet` (ordinary
+	 *  HTTP(S)), `tor` (a `.onion`, via the Tor SOCKS proxy), or `i2p` (a
+	 *  `.b32.i2p`, via the i2pd HTTP proxy). The Settings card badges the hidden
+	 *  ones; the browser never reaches them itself — the indexer probes them
+	 *  server-side and reports what it sees. Older indexers omit this; treat a
+	 *  missing value as `clearnet`. */
+	readonly transport?: 'clearnet' | 'tor' | 'i2p';
 	readonly healthy: boolean;
 	readonly latency_ms: number | null;
 	readonly consecutive_failures: number;

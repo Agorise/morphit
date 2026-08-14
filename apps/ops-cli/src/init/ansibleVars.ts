@@ -75,6 +75,10 @@ export interface AnsibleInstallInputs {
 	readonly matrixAlertHomeserver?: string;
 	readonly matrixAlertToken?: string;
 	readonly matrixAlertMxid?: string;
+	/** Operator wants the alert bot INSTALLED (unit + deps) even though they
+	 *  haven't got a token yet — it's left stopped, ready, and health shows
+	 *  "token needed" until they add one via `morphit-ops matrix`. */
+	readonly installMatrixBotDeferred?: boolean;
 }
 
 /** A cryptographically-random secret, as strong as is meaningful: 48 bytes =
@@ -303,6 +307,12 @@ export function buildAnsibleVars(inputs: AnsibleInstallInputs): Record<string, u
 		vars.enable_apt_monitor = true;
 		vars.enable_systemd_monitor = true;
 		vars.enable_certbot_monitor = !inputs.torOnly;
+	} else if (inputs.installMatrixBotDeferred) {
+		// Operator wants the bot installed now but has no token yet: install the
+		// unit + deps (enable_matrix_bot drives the role), leave the token empty so
+		// the role installs it STOPPED. The monitor sidecars stay OFF — they alert
+		// THROUGH the bot, which isn't running until a token is added.
+		vars.enable_matrix_bot = true;
 	}
 	return vars;
 }

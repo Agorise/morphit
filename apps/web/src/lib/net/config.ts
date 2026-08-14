@@ -199,6 +199,28 @@ export const DEFAULT_RPC_ENDPOINTS: readonly string[] = [
 	'https://rpc.blurt.blog'
 ] as const;
 
+/** Hidden-service Blurt RPC endpoints (`.onion` / `.b32.i2p`), tried BEFORE any
+ *  clearnet node for the one-time direct-to-chain release check. On Tor Browser
+ *  (or a browser with an I2P proxy) this means the release is verified without
+ *  the visitor's IP ever touching the clear net — privacy priority #1. A normal
+ *  browser can't route these, fails fast (a `.onion`/`.i2p` host is not a real
+ *  DNS name, so it errors instantly), and falls back to the clearnet pool above.
+ *
+ *  BROWSER SCOPE: only `.onion` lives here. Tor Browser can reach `.onion`
+ *  directly; NO ordinary browser (Tor Browser included) can route `.b32.i2p`
+ *  without a dedicated I2P proxy — those endpoints are reached server-side by
+ *  the indexer (via its i2pd) and belong to the indexer pool, not this seed.
+ *
+ *  Live seed pool: the Star + Jade hidden-rpc nodes
+ *  (git.agorise.net/agorise/hidden-rpc). Same self-authenticating addresses the
+ *  indexer pool and the on-chain `morphit_rpc_v1` directory will carry. */
+export const DEFAULT_HIDDEN_RPC_ENDPOINTS: readonly string[] = [
+	// Star
+	'http://f6cijlm7vn32tc4kxr3vxve5pkbysoq2etlihvx25spwtkpqsa25siad.onion:8091',
+	// Jade
+	'http://axj4qkjwk3bwh2lrn4bud5rrgsyrvuamd6jxdlmks6flsrju7q5rb5yd.onion:8091'
+] as const;
+
 /** The canonical Blurt RPC node(s) the indexer + relay use SERVER-side but a
  *  browser cannot reach (no valid CORS — see the omission note on
  *  DEFAULT_RPC_ENDPOINTS above). Listed here ONLY so the endpoint-settings

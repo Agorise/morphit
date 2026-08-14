@@ -216,7 +216,17 @@
 				class="flex items-center gap-3 rounded-xl border border-ink-200 bg-white p-3 dark:border-ink-700 dark:bg-ink-900"
 			>
 				<div class="min-w-0 flex-1">
-					<p class="break-all font-mono text-sm">{h.url}</p>
+					<p class="break-all font-mono text-sm">
+						{#if h.transport === 'tor' || h.transport === 'i2p'}
+							<span
+								class="mr-1.5 inline-block rounded bg-morphit-emerald/10 px-1.5 py-0.5 align-middle text-[10px] font-semibold uppercase tracking-wide text-morphit-emerald"
+							>
+								{h.transport === 'tor'
+									? $_('settings.endpoints.transport_tor')
+									: $_('settings.endpoints.transport_i2p')}
+							</span>
+						{/if}{h.url}
+					</p>
 					<p class="mt-0.5 text-xs {status.cls}">{status.text}</p>
 				</div>
 			</li>

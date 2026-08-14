@@ -140,6 +140,8 @@ export class Poller {
 	private readonly abort = new AbortController();
 	/** Last time the signal-detection pass ran (or 0 if never). */
 	private lastSignalsAt = 0;
+	/** Throttle for the RPC-trust chain-consistency cross-check. */
+	private lastConsistencyCheckAt = 0;
 	/** Witness-fee poller — hourly cadence baked in. Separate
 	 *  tracker so it can evolve independently of the signal
 	 *  cadence. */
@@ -673,6 +675,12 @@ export class Poller {
 		};
 
 		const irreversible = dgp.last_irreversible_block_num;
+		// RPC trust layer — periodically cross-check that a quorum of endpoints
+		// agree on an IRREVERSIBLE block (which, by definition of irreversibility,
+		// every honest node MUST). Self-throttling; a no-op between intervals.
+		// Cheap insurance that becomes essential once the pool includes nodes we
+		// don't control (hidden-service / community RPC).
+		await this.maybeCheckChainConsistency(irreversible);
 		const from = this.status.indexedBlock + 1;
 		if (from > irreversible) {
 			// Caught up — sleep and come back.
@@ -856,6 +864,54 @@ export class Poller {
 			log.warn('backfill_window_unavailable', { error: String(err) });
 			await sleep(this.config.errorBackoffMs, this.abort.signal);
 			return;
+		}
+	}
+
+	/** RPC trust layer — periodically confirm a quorum of RPC endpoints agree on
+	 *  an irreversible block. Runs at most once per CONSISTENCY_INTERVAL_MS.
+	 *  Advisory: a `disagreement` verdict means an endpoint served a DIFFERENT
+	 *  chain for a block that consensus has already finalised — a node that is
+	 *  lying, forked, or badly broken — so it's logged loudly (and surfaced to
+	 *  the alert sink) but never halts indexing. `insufficient_responses` /
+	 *  `no_endpoints` are unproven, not disproven, so they stay quiet at debug.
+	 *  With a single-endpoint pool this simply never fires a false alarm. */
+	private async maybeCheckChainConsistency(irreversible: number): Promise<void> {
+		const CONSISTENCY_INTERVAL_MS = 5 * 60 * 1000; // 5 min
+		const now = Date.now();
+		if (now - this.lastConsistencyCheckAt < CONSISTENCY_INTERVAL_MS) return;
+		this.lastConsistencyCheckAt = now;
+		if (irreversible <= 0) return;
+		try {
+			// Check a block comfortably inside the irreversible zone.
+			const target = Math.max(1, irreversible - 1);
+			const verdict = await this.blurt.crossCheckChainConsistency(target, { minAgree: 2 });
+			if (verdict.reason === 'disagreement') {
+				log.error(
+					'chain_consistency_disagreement',
+					{
+						height: target,
+						agreeing: verdict.agreeing,
+						contacted: verdict.contacted,
+						required: verdict.required
+					},
+					new Error(
+						`RPC endpoints disagree on irreversible block ${target}: ` +
+							`only ${verdict.agreeing}/${verdict.contacted} agree — an endpoint may be ` +
+							`serving a forged or forked chain`
+					)
+				);
+			} else {
+				log.debug('chain_consistency', {
+					height: target,
+					consistent: verdict.consistent,
+					reason: verdict.reason,
+					agreeing: verdict.agreeing,
+					contacted: verdict.contacted
+				});
+			}
+		} catch (err) {
+			// Never let an advisory cross-check disrupt indexing.
+			log.warn('chain_consistency_check_failed', {}, err);
 		}
 	}
 

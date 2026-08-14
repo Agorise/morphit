@@ -264,6 +264,12 @@ Description=Weekly Morphit warrant-canary refresh
 
 [Timer]
 OnCalendar=Sun *-*-* 03:14:00 UTC
+# Also refresh a few minutes after every boot. This is what actually delivers a
+# deferred (offline-install) first publish "the first time the box is online" —
+# without it the canary would sit missing until the next Sunday. The short delay
+# lets the network come up first; a failed early attempt is retried next boot and
+# by the weekly run. Re-publishing on later boots just keeps the canary fresh.
+OnBootSec=3min
 Persistent=true
 
 [Install]
