@@ -79,7 +79,14 @@ say ""
 for tool in gpg curl node; do
 	command -v "$tool" >/dev/null 2>&1 || die "required tool '$tool' is not installed."
 done
-[ -x "$REPO_ROOT/node_modules/.bin/tsx" ] || die "tsx not found — run 'npm ci' in $REPO_ROOT first (the canary's chain-head fetchers need it)."
+# The chain-head fetchers in generate.sh need tsx — but ONLY to actually publish.
+# In defer mode (the offline-appliance path) we just arm the refresh script + the
+# weekly timer now and publish later, once the box is online and node_modules are
+# in place. Requiring tsx here would abort the whole setup on an air-gapped box
+# and leave it with no canary at all, so skip the check when deferring.
+if [ "${MORPHIT_CANARY_DEFER_FIRST_REFRESH:-}" != "1" ]; then
+	[ -x "$REPO_ROOT/node_modules/.bin/tsx" ] || die "tsx not found — run 'npm ci' in $REPO_ROOT first (the canary's chain-head fetchers need it)."
+fi
 
 # ─── 2. Which deployment? ────────────────────────────────────────
 

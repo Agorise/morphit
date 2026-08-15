@@ -297,8 +297,8 @@ expect('HV-1e an unparseable string passes through', ensureHealthPath('not a url
 		body: { stale: true, rpc_endpoints_healthy: 0, rpc_endpoints_total: 4 }
 	});
 	expect(
-		'HV-4g behind + all RPC down → behind exit 1, message blames RPC',
-		behindRpc.kind === 'behind' &&
+		'HV-4g all RPC down → unknown sync state, exit 1, message notes RPC unreachable',
+		behindRpc.kind === 'unknown' &&
 			behindRpc.exitCode === 1 &&
 			/RPC/.test(behindRpc.message) &&
 			behindRpc.summary !== null &&

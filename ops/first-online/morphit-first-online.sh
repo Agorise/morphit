@@ -29,6 +29,7 @@ STATE_DIR="${MORPHIT_FIRST_ONLINE_STATE_DIR:-/var/lib/morphit/first-online}"
 DONE_TLS="${STATE_DIR}/tls.done"
 DONE_REGISTER="${STATE_DIR}/register.done"
 DONE_RPC="${STATE_DIR}/rpc.done"
+DONE_CANARY="${STATE_DIR}/canary.done"
 ENV_FILE="${MORPHIT_FIRST_ONLINE_ENV:-/etc/morphit/first-online.env}"
 RELAY_ENV="${MORPHIT_FIRST_ONLINE_RELAY_ENV:-/etc/morphit/relay.env}"
 INDEXER_ENV="${MORPHIT_FIRST_ONLINE_INDEXER_ENV:-/etc/morphit/indexer.env}"
@@ -55,6 +56,8 @@ MORPHIT_ACME_EMAIL="${MORPHIT_ACME_EMAIL:-}"
 MORPHIT_AUTO_REGISTER="${MORPHIT_AUTO_REGISTER:-no}"
 MORPHIT_TLS_STAGING="${MORPHIT_TLS_STAGING:-no}"
 MORPHIT_OPS_DIR="${MORPHIT_OPS_DIR:-/opt/morphit}"
+MORPHIT_CANARY_SERVE_DIR="${MORPHIT_CANARY_SERVE_DIR:-${MORPHIT_OPS_DIR}/apps/web/build}"
+MORPHIT_CANARY_REFRESH="${MORPHIT_CANARY_REFRESH:-}"
 
 # RPC endpoints for the reachability probe: prefer the operator's configured
 # list, fall back to the baked defaults.
@@ -104,7 +107,9 @@ all_done() {
 	if [ "${MORPHIT_AUTO_REGISTER}" != "yes" ] || [ -f "${DONE_REGISTER}" ]; then _reg=yes; fi
 	_rpc=no
 	if [ -f "${DONE_RPC}" ]; then _rpc=yes; fi
-	[ "${_tls}" = yes ] && [ "${_reg}" = yes ] && [ "${_rpc}" = yes ]
+	_canary=no
+	if [ -f "${DONE_CANARY}" ]; then _canary=yes; fi
+	[ "${_tls}" = yes ] && [ "${_reg}" = yes ] && [ "${_rpc}" = yes ] && [ "${_canary}" = yes ]
 }
 
 retire_if_complete() {
@@ -163,13 +168,20 @@ if [ -n "${MORPHIT_DOMAIN}" ] && [ ! -f "/etc/letsencrypt/live/${MORPHIT_DOMAIN}
 	fi
 fi
 
-# ── Step 2: RPC — nudge the indexer + relay to connect promptly. ──
+# ── Step 2: RPC + hidden transports — nudge everything to connect promptly. ──
 # They retry on their own, but a restart the first time we are online makes them
-# pick up the new link immediately instead of waiting out a backoff.
+# pick up the new link immediately instead of waiting out a backoff. i2pd + tor
+# especially: they were started OFFLINE at install and couldn't reseed/bootstrap
+# then, and i2pd in particular can sit forever with an empty netDb (Routers: 1,
+# 0 bytes) rather than retry — a restart against a live network reseeds it. tor
+# keys persist across a restart, so the .onion is unchanged. Best-effort: units
+# absent on this box are simply skipped.
 if [ ! -f "${DONE_RPC}" ]; then
 	systemctl restart morphit-indexer.service >/dev/null 2>&1 || true
 	systemctl restart morphit-relay.service   >/dev/null 2>&1 || true
-	log 'nudged indexer + relay to connect to Blurt RPC'
+	systemctl restart i2pd.service            >/dev/null 2>&1 || true
+	systemctl restart tor.service             >/dev/null 2>&1 || true
+	log 'nudged indexer + relay + i2pd + tor to connect on first online'
 	touch "${DONE_RPC}"
 fi
 
@@ -211,6 +223,41 @@ if [ "${MORPHIT_AUTO_REGISTER}" = "yes" ] && [ ! -f "${DONE_REGISTER}" ]; then
 		touch "${DONE_REGISTER}"
 	else
 		log 'registration not complete yet (relay underfunded, key encrypted with no passphrase file, or a required value unset) — will retry; you can also register by hand with `morphit-ops register`'
+	fi
+fi
+
+# ── Step 4: warrant canary — publish it now that freshness proofs can be fetched. ──
+# The canary embeds a live Blurt chain-head + BTC price + news headline, so it
+# CANNOT be signed on an offline box. setup.sh armed the refresh script + the
+# weekly timer at install; run that refresh the first time we are online so the
+# canary is served promptly instead of waiting out the weekly timer. Best-effort
+# + idempotent: a canary already on disk is a no-op, and a failed publish just
+# leaves the marker unset to retry next tick.
+if [ ! -f "${DONE_CANARY}" ]; then
+	_canary_served="${MORPHIT_CANARY_SERVE_DIR}/canary.txt"
+	if [ -f "${_canary_served}" ]; then
+		touch "${DONE_CANARY}"
+	else
+		# Prefer the explicit armed path; else discover the refresh script setup.sh
+		# writes under an operator/root home (~/.morphit/update-canary.sh).
+		_refresh="${MORPHIT_CANARY_REFRESH}"
+		if [ -z "${_refresh}" ] || [ ! -f "${_refresh}" ]; then
+			_refresh="$(ls /root/.morphit/update-canary.sh /home/*/.morphit/update-canary.sh 2>/dev/null | head -n1)"
+		fi
+		if [ -n "${_refresh}" ] && [ -f "${_refresh}" ]; then
+			log "publishing the warrant canary now that we are online (${_refresh})"
+			if ( set +e; sh "${_refresh}" ) >/dev/null 2>&1 && [ -f "${_canary_served}" ]; then
+				log 'warrant canary published'
+				touch "${DONE_CANARY}"
+			else
+				log 'canary publish did not complete yet — will retry'
+			fi
+		else
+			# Nothing armed to publish — don't spin forever; the operator can set one
+			# up any time with `sudo morphit-ops harden`.
+			log 'no armed canary refresh script found — skipping'
+			touch "${DONE_CANARY}"
+		fi
 	fi
 fi
 
