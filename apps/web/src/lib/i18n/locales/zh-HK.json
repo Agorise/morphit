@@ -4050,7 +4050,8 @@
 			"err_http_blocked": "被安全政策攔截（HTTP {status}）",
 			"err_http_rate": "被節點限速（HTTP 429）",
 			"transport_tor": "Tor",
-			"transport_i2p": "I2P"
+			"transport_i2p": "I2P",
+			"transport_local": "本地"
 		},
 		"session": {
 			"autolock_changed": "已改為 {label}",

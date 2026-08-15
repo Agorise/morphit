@@ -452,6 +452,34 @@ COMMENT ON COLUMN releases.distribution IS
     'instance''s IPFS release-pinning service to pin ipfs_cid. NULL when '
     'the release op carried no distribution block.';
 `
+	},
+	{
+		version: 54,
+		description:
+			'v1.12.0: rpc_directory — persist the latest trusted on-chain RPC-node directory (morphit_rpc_v1) so hidden nodes it added survive an indexer restart. Single row (id=1); the handler upserts on each trusted op, the indexer merges it into the pool at startup.',
+		// The morphit_rpc_v1 handler merges directory nodes into the live pool, but
+		// a restart re-indexes FORWARD from the last block, so it wouldn't re-see an
+		// older directory op → directory-only nodes were lost until re-broadcast.
+		// This table persists the latest trusted directory (a single row, latest-
+		// wins by block) so startup can reload + re-merge it. The baked
+		// DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS already cover Star/Jade regardless;
+		// this closes the gap for any node added ONLY via the directory.
+		sql: `
+CREATE TABLE IF NOT EXISTS rpc_directory (
+    id            SMALLINT     PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+    endpoints     TEXT[]       NOT NULL,
+    node_count    INT          NOT NULL,
+    published_ts  TIMESTAMPTZ  NOT NULL,
+    block_num     BIGINT       NOT NULL,
+    updated_at    TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+
+COMMENT ON TABLE rpc_directory IS
+    'v1.12.0: the latest TRUSTED on-chain RPC-node directory (morphit_rpc_v1 from '
+    '@morphit). Single row (id=1), latest-wins by block_num. endpoints = the '
+    'flattened .onion/.b32.i2p URLs; the indexer merges them into its hidden RPC '
+    'pool at startup so directory-only nodes survive a restart.';
+`
 	}
 
 	// Future migrations land here.  The v1 collapsed schema is the

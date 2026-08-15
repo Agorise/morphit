@@ -283,10 +283,43 @@ UEOF
 	[ "$TIMER_OK" = 1 ] && info "Weekly systemd timer armed (Sundays, 03:14 UTC)."
 fi
 
+# When the user-session timer isn't available but we're root (the usual case for
+# `sudo bash morphit-setup.sh`), install a SYSTEM timer instead of dropping to a
+# cron line the operator has to add by hand. This is what makes the canary
+# actually auto-refresh (and auto-publish after boot) on a root install.
+if [ "$TIMER_OK" != 1 ] && [ "$(id -u)" = 0 ] && command -v systemctl >/dev/null 2>&1; then
+	cat > /etc/systemd/system/morphit-canary.service <<UEOF
+[Unit]
+Description=Refresh the Morphit warrant canary
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=$REFRESH
+UEOF
+	cat > /etc/systemd/system/morphit-canary.timer <<'UEOF'
+[Unit]
+Description=Weekly Morphit warrant-canary refresh
+
+[Timer]
+OnCalendar=Sun *-*-* 03:14:00 UTC
+# Also a few minutes after boot, so a deferred (offline) first publish lands the
+# first time the box is online instead of waiting for Sunday.
+OnBootSec=3min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+UEOF
+	systemctl daemon-reload
+	systemctl enable --now morphit-canary.timer >/dev/null 2>&1 && TIMER_OK=1
+	[ "$TIMER_OK" = 1 ] && info "Weekly system timer armed (Sundays 03:14 UTC + a few minutes after boot)."
+fi
+
 if [ "$TIMER_OK" != 1 ]; then
-	# Fall back to a cron line the operator can paste.
+	# Fall back to a cron line the operator can paste (last resort).
 	CRON_LINE="14 3 * * 0 $REFRESH >> $MORPHIT_HOME/canary.log 2>&1"
-	warn "no systemd user timer available. Add this weekly cron line yourself:"
+	warn "no systemd timer available. Add this weekly cron line yourself:"
 	printf '\n    %s\n\n' "$CRON_LINE" >&2
 	printf '%s\n' "$CRON_LINE" > "$MORPHIT_HOME/canary.cron"
 	info "(also saved to $MORPHIT_HOME/canary.cron)"

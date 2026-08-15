@@ -217,13 +217,15 @@
 			>
 				<div class="min-w-0 flex-1">
 					<p class="break-all font-mono text-sm">
-						{#if h.transport === 'tor' || h.transport === 'i2p'}
+						{#if h.transport === 'tor' || h.transport === 'i2p' || h.transport === 'local'}
 							<span
 								class="mr-1.5 inline-block rounded bg-morphit-emerald/10 px-1.5 py-0.5 align-middle text-[10px] font-semibold uppercase tracking-wide text-morphit-emerald"
 							>
 								{h.transport === 'tor'
 									? $_('settings.endpoints.transport_tor')
-									: $_('settings.endpoints.transport_i2p')}
+									: h.transport === 'i2p'
+										? $_('settings.endpoints.transport_i2p')
+										: $_('settings.endpoints.transport_local')}
 							</span>
 						{/if}{h.url}
 					</p>

@@ -1155,6 +1155,8 @@ const ALLOW_LIST: AllowEntry[] = [
 	{ key: 'settings.endpoints.transport_i2p', locale: 'zh-CN', reason: '(c) "I2P" is a network name (proper noun); identical in every locale' },
 	{ key: 'settings.endpoints.transport_tor', locale: 'zh-HK', reason: '(c) "Tor" is a network name (proper noun); identical in every locale' },
 	{ key: 'settings.endpoints.transport_i2p', locale: 'zh-HK', reason: '(c) "I2P" is a network name (proper noun); identical in every locale' },
+	{ key: 'settings.endpoints.transport_local', locale: 'es', reason: '(b) "Local" is the same word in Spanish and English — coincidental same spelling' },
+	{ key: 'settings.endpoints.transport_local', locale: 'fr', reason: '(b) "Local" is the same word in French and English — coincidental same spelling' },
 ];
 
 const allowSet = new Set(ALLOW_LIST.map((e) => `${e.key}::${e.locale}`));

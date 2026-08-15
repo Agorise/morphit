@@ -9,7 +9,7 @@
  */
 
 import { z } from 'zod';
-import { parseRoomAlias, MORPHIT_GENESIS_BLOCK, DEFAULT_BLURT_RPC_ENDPOINTS } from '@morphit/operator-config';
+import { parseRoomAlias, MORPHIT_GENESIS_BLOCK, DEFAULT_BLURT_RPC_ENDPOINTS, DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS } from '@morphit/operator-config';
 import { CANONICAL_TREASURY } from '$config/canonicalTreasury';
 
 /** Blurt account-name shape — the project-canonical regex (cp175 F-007):
@@ -92,6 +92,9 @@ export interface Config {
 	 *  indexer's Tor/i2pd proxies. Merged into the pool alongside the clearnet
 	 *  endpoints; empty = clearnet-only. */
 	readonly hiddenRpcEndpoints: readonly string[];
+	/** Local (loopback) RPC endpoints — a co-located blurtd over http://127.0.0.1.
+	 *  Preferred ahead of everything else (instant, never leaves the box). */
+	readonly localRpcEndpoints: readonly string[];
 	/** Block number at which to start indexing if the database is
 	 *  empty. Used once per deployment; subsequent restarts resume
 	 *  from `indexer_state.last_applied_block`. */
@@ -801,7 +804,10 @@ const envSchema = z.object({
 	// knob. Empty by default → clearnet-only, dispatcher not installed.
 	MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS: z
 		.string()
-		.default('')
+		// Baked default = the public hidden nodes (Star/Jade), so EVERY instance —
+		// manual or Ansible — carries them in its pool and shows them on the
+		// Settings card. Override or empty via the env var.
+		.default([...DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS].join(','))
 		.transform((s) =>
 			s
 				.split(',')
@@ -819,6 +825,37 @@ const envSchema = z.object({
 					}
 				}),
 			'hidden RPC endpoints must be .onion or .b32.i2p URLs'
+		),
+	// Local (loopback) Blurt RPC endpoints — a CO-LOCATED blurtd reached over
+	// http://127.0.0.1:PORT. This is the fastest and most private chain source:
+	// the read never leaves the box (no network hop, no IP exposure, ~0 latency),
+	// so it's preferred ahead of clearnet and hidden. SECURITY GUARD: only
+	// loopback hosts are accepted, so this knob can never be turned into an SSRF
+	// vector pointed at an arbitrary internal/external host. Empty by default.
+	MORPHIT_INDEXER_LOCAL_RPC_ENDPOINTS: z
+		.string()
+		.default('')
+		.transform((s) =>
+			s
+				.split(',')
+				.map((u) => u.trim())
+				.filter(Boolean)
+		)
+		.refine(
+			(arr) =>
+				arr.every((u) => {
+					try {
+						const url = new URL(u);
+						const h = url.hostname.toLowerCase();
+						return (
+							(url.protocol === 'http:' || url.protocol === 'https:') &&
+							(h === '127.0.0.1' || h === 'localhost' || h === '::1' || h === '[::1]')
+						);
+					} catch {
+						return false;
+					}
+				}),
+			'local RPC endpoints must be loopback (e.g. http://127.0.0.1:8091)'
 		),
 	MORPHIT_INDEXER_START_BLOCK: z.coerce.number().int().nonnegative().default(MORPHIT_GENESIS_BLOCK),
 	MORPHIT_INDEXER_BLOCK_INTERVAL_MS: z.coerce.number().int().positive().default(3000),
@@ -1645,6 +1682,7 @@ export function loadConfig(): Config {
 		chainId: e.MORPHIT_INDEXER_CHAIN_ID,
 		blurtRpcEndpoints: e.MORPHIT_INDEXER_RPC_ENDPOINTS,
 		hiddenRpcEndpoints: e.MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS,
+		localRpcEndpoints: e.MORPHIT_INDEXER_LOCAL_RPC_ENDPOINTS,
 		startBlock: e.MORPHIT_INDEXER_START_BLOCK,
 		blockIntervalMs: e.MORPHIT_INDEXER_BLOCK_INTERVAL_MS,
 		backfillConcurrency: e.MORPHIT_INDEXER_BACKFILL_CONCURRENCY,

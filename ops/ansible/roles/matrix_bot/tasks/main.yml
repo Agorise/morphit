@@ -83,7 +83,7 @@
     path: /opt/morphit/node_modules/better-sqlite3/build/Release/better_sqlite3.node
   register: matrix_bot_bs3_build
 
-- name: Fail with clear hint if better-sqlite3 binding missing
+- name: Verify the better-sqlite3 native binding is present
   ansible.builtin.fail:
     msg: |
       better-sqlite3 native bindings are not built at

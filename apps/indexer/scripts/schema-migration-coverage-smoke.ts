@@ -75,7 +75,7 @@ const MIGRATIONS_TS = join(REPO_ROOT, 'apps', 'indexer', 'src', 'db', 'migration
 // AND migrations.ts before bumping — this pin attests to that, it is not a
 // rubber stamp. The guard caught these: v44/v45 were added in earlier v1.5.0
 // turns without the same-turn bump it exists to force.
-const SCHEMA_HEAD_VERSION = 53;
+const SCHEMA_HEAD_VERSION = 54;
 /** Highest version covered by MIGRATIONS[] (max of `version` or any
  *  `subsumesVersions[]` entry).  Bump only when a new MIGRATIONS
  *  entry lands.  cp131 DEEP-002 — bumped 27 → 35 when
@@ -84,7 +84,7 @@ const SCHEMA_HEAD_VERSION = 53;
  *  accepted_assets migration (v37) landed.  cp466 — bumped 41 → 42
  *  when the chat_folders migration (v42, t.txt #5) landed. */
 // v1.5.0 (cp471): 43 → 45, in lockstep with SCHEMA_HEAD_VERSION above.
-const MIGRATIONS_COVERAGE_HIGH = 53;
+const MIGRATIONS_COVERAGE_HIGH = 54;
 
 interface ScenarioResult {
 	readonly name: string;

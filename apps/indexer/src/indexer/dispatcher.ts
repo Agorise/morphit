@@ -47,6 +47,7 @@ import chatReadHandler from '$indexer/handlers/chatRead';
 import chatFoldersHandler from '$indexer/handlers/chatFolders';
 import settingsHandler from '$indexer/handlers/settings';
 import releaseHandler from '$indexer/handlers/release';
+import rpcDirectoryHandler from '$indexer/handlers/rpcDirectory';
 import feeAttestHandler from '$indexer/handlers/feeAttest';
 import featureBidHandler from '$indexer/handlers/featureBid';
 import operatorRegisterHandler from '$indexer/handlers/operatorRegister';
@@ -73,6 +74,7 @@ export const OP_IDS = {
 	chatFolders: 'morphit_chat_folders_v1',
 	settings: 'morphit_settings_v1',
 	releaseDiscovery: 'morphit_release_v1',
+	rpcDirectory: 'morphit_rpc_v1',
 	feeAttest: 'morphit_fee_attest_v1',
 	featureBid: 'morphit_feature_bid_v1',
 	operatorRegister: 'morphit_operator_register_v1',
@@ -110,6 +112,7 @@ const HANDLERS: Readonly<Record<string, Handler>> = {
 	[OP_IDS.chatFolders]: chatFoldersHandler,
 	[OP_IDS.settings]: settingsHandler,
 	[OP_IDS.releaseDiscovery]: releaseHandler,
+	[OP_IDS.rpcDirectory]: rpcDirectoryHandler,
 	[OP_IDS.feeAttest]: feeAttestHandler,
 	[OP_IDS.featureBid]: featureBidHandler,
 	[OP_IDS.operatorRegister]: operatorRegisterHandler,

@@ -28,6 +28,14 @@ Documentation=file:///home/morphit/morphit/docs/RUN-A-MORPHIT-NODE.md
 # possible.
 OnCalendar=*-*-* 04:00:00
 
+# Fire the FIRST backup a couple of minutes after the timer is
+# enabled (i.e. shortly after install), so a fresh node has a real
+# dump on disk without waiting for the next 04:00 — but AFTER
+# Postgres has settled, so we don't race DB readiness at install
+# time (which would leave the service in a failed state). Subsequent
+# runs use the daily OnCalendar above.
+OnActiveSec=2min
+
 # AccuracySec=1m means systemd may delay the trigger up to a
 # minute to coalesce timer wakeups.  For a daily backup this is
 # fine; if the operator wants exact 04:00 they can set

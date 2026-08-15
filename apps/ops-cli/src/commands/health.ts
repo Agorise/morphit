@@ -804,6 +804,94 @@ interface FetchedHealth {
 	body: unknown;
 }
 
+/** One RPC endpoint's per-node health, as returned by /v1/rpc-endpoints. */
+export interface RpcEndpointRow {
+	readonly url: string;
+	readonly transport: 'clearnet' | 'tor' | 'i2p' | 'local';
+	readonly healthy: boolean;
+	readonly latencyMs: number | null;
+}
+
+/** Parse a /v1/rpc-endpoints body into rows. PURE + tolerant of shape drift. */
+export function parseRpcEndpointRows(body: unknown): RpcEndpointRow[] {
+	if (body === null || typeof body !== 'object') return [];
+	const arr = (body as { endpoints?: unknown }).endpoints;
+	if (!Array.isArray(arr)) return [];
+	const rows: RpcEndpointRow[] = [];
+	for (const e of arr) {
+		if (e === null || typeof e !== 'object') continue;
+		const o = e as Record<string, unknown>;
+		if (typeof o.url !== 'string') continue;
+		const t = o.transport;
+		const transport =
+			t === 'tor' || t === 'i2p' || t === 'local' ? t : 'clearnet';
+		rows.push({
+			url: o.url,
+			transport,
+			healthy: o.healthy === true,
+			latencyMs: typeof o.latencyMs === 'number' ? o.latencyMs : null
+		});
+	}
+	return rows;
+}
+
+/** Fetch the indexer's per-endpoint RPC health. Derives /v1/rpc-endpoints?probe=1
+ *  from the health URL. Best-effort: returns null on any failure (the summary
+ *  count from /v1/health still renders). */
+async function fetchRpcEndpoints(healthUrl: string, timeoutMs = 22000): Promise<RpcEndpointRow[] | null> {
+	let url: string;
+	try {
+		const u = new URL(healthUrl);
+		u.pathname = u.pathname.replace(/\/v1\/health$/, '/v1/rpc-endpoints');
+		if (!u.pathname.endsWith('/v1/rpc-endpoints')) u.pathname = '/v1/rpc-endpoints';
+		u.search = '?probe=1';
+		url = u.toString();
+	} catch {
+		return null;
+	}
+	const controller = new AbortController();
+	const t = setTimeout(() => controller.abort(), timeoutMs);
+	try {
+		const res = await fetch(url, {
+			method: 'GET',
+			signal: controller.signal,
+			headers: { accept: 'application/json', 'x-morphit-local-health': '1' },
+			redirect: 'manual'
+		});
+		if (res.status < 200 || res.status >= 300) return null;
+		return parseRpcEndpointRows(JSON.parse(await res.text()));
+	} catch {
+		return null;
+	} finally {
+		clearTimeout(t);
+	}
+}
+
+/** Short label for a transport (badge column). PURE. */
+export function transportLabel(t: RpcEndpointRow['transport']): string {
+	return t === 'tor' ? 'Tor' : t === 'i2p' ? 'I2P' : t === 'local' ? 'local' : 'clearnet';
+}
+
+/** Compact an endpoint URL for the per-node list: drop the scheme, and elide the
+ *  long middle of a 56-char .onion/.b32.i2p host so the line stays readable.
+ *  PURE. */
+export function shortEndpoint(url: string): string {
+	let host = url;
+	try {
+		const u = new URL(url);
+		host = u.port ? `${u.hostname}:${u.port}` : u.hostname;
+	} catch {
+		host = url.replace(/^https?:\/\//, '');
+	}
+	// Elide a long opaque label (onion/i2p) but keep any :port suffix.
+	const m = host.match(/^([a-z2-7]{20,})(\.[a-z0-9.]+)(:\d+)?$/i);
+	const label = m?.[1];
+	if (m && label && label.length > 16) {
+		return `${label.slice(0, 6)}\u2026${label.slice(-6)}${m[2] ?? ''}${m[3] ?? ''}`;
+	}
+	return host;
+}
+
 async function fetchHealth(url: string, timeoutMs = 5000): Promise<FetchedHealth> {
 	const controller = new AbortController();
 	const t = setTimeout(() => controller.abort(), timeoutMs);
@@ -1513,6 +1601,12 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 
 	// Local host CPU / memory / disk (read-only, non-privileged).
 	const sys = await readSystemResources();
+	// Per-endpoint RPC health (transport + latency), best-effort — only when the
+	// indexer is reachable. Falls back to the summary count on any failure.
+	const rpcEndpointRows =
+		indexer.kind === 'synced' || indexer.kind === 'behind'
+			? await fetchRpcEndpoints(indexerProbe.url)
+			: null;
 
 	if (json) {
 		console.log(
@@ -1590,6 +1684,19 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 				? `${s.rpcHealthy}/${s.rpcTotal} reachable`
 				: 'unknown';
 		console.log(`      Blurt RPC:     ${s.rpcAllDown ? c.red(rpcStr) : rpcStr}`);
+		// Per-endpoint breakdown (transport · host · latency · reachable) so the
+		// operator sees WHICH nodes are up — including the Tor/I2P/local ones, not
+		// just a clearnet count. Rendered only when the indexer served the list.
+		if (rpcEndpointRows !== null && rpcEndpointRows.length > 0) {
+			for (const r of rpcEndpointRows) {
+				const badge = transportLabel(r.transport).padEnd(8);
+				const host = shortEndpoint(r.url).padEnd(30);
+				const lat = r.healthy && r.latencyMs !== null ? `${r.latencyMs} ms`.padStart(7) : '   —   ';
+				const mark = r.healthy ? c.green('\u2713') : c.dim('\u2717 warming up / unreachable');
+				const line = `${c.dim(badge)} ${host} ${r.healthy ? lat : c.dim(lat)}  ${mark}`;
+				console.log(`                     ${line}`);
+			}
+		}
 		// cp684 — make the FAST catch-up explicit: a behind node fetches blocks
 		// from all reachable endpoints at once (one prefetch window per endpoint).
 		if (!s.synced && s.rpcHealthy !== null && s.rpcHealthy > 0) {

@@ -236,6 +236,25 @@ async function main(): Promise<void> {
 	}
 	const blurt = new BlurtClient(config);
 
+	// ─── 4-bis. Reload the persisted on-chain RPC directory (v1.12.0) ──
+	// The morphit_rpc_v1 handler merges directory nodes into the live pool, but a
+	// restart re-indexes FORWARD past an older op — so re-hydrate the last trusted
+	// directory from the DB and merge it back into the pool now. Best-effort: a
+	// missing table (pre-migration) or empty row just leaves the baked
+	// DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS in place.
+	try {
+		const dir = await db.query<{ endpoints: string[] }>(
+			`SELECT endpoints FROM rpc_directory WHERE id = 1`
+		);
+		const dirEndpoints = dir.rows[0]?.endpoints ?? [];
+		if (dirEndpoints.length > 0) {
+			const added = blurt.mergeRpcEndpoints(dirEndpoints);
+			if (added.length > 0) bootLog.info('rpc_directory_reloaded', { added: added.length });
+		}
+	} catch (e) {
+		bootLog.warn('rpc_directory_reload_skipped', { err: e instanceof Error ? e.message : String(e) });
+	}
+
 	// ─── 4a. Posting-key backfill (cp404, option A) ────────────
 	// The column itself is already guaranteed (awaited ensurePostingPubkeyColumn
 	// in step 3-bis). This step only POPULATES it: fills posting_pubkey for
@@ -693,7 +712,8 @@ async function main(): Promise<void> {
 		// drop them.
 		rpcEndpointsRoute(() => poller.rpcEndpointSnapshot, [
 			...DEFAULT_BLURT_RPC_ENDPOINTS,
-			...config.hiddenRpcEndpoints
+			...config.hiddenRpcEndpoints,
+			...config.localRpcEndpoints
 		])
 	);
 	app.route('/v1/rpc-endpoints', rpcEndpointsApp);
