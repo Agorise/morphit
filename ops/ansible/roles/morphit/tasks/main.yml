@@ -266,6 +266,26 @@
   # cleanly; the OnActiveSec first run then produces the real dump.
   ansible.builtin.command: systemctl reset-failed morphit-backup.service
   changed_when: false
+
+- name: Wait for the indexer HTTP port (schema is migrated by the time it listens)
+  # The first backup should capture a real schema, not race DB readiness. Once the
+  # indexer is listening it has already run its migrations, so a dump now is
+  # meaningful. Best-effort: a slow indexer must not fail the whole install — the
+  # timer's OnActiveSec=2min is the safety net.
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ morphit_indexer_port | default(8081) }}"
+    timeout: 120
+  failed_when: false
+
+- name: Take the first DB backup now (prompt first dump; the timer handles daily runs)
+  # Without this, a fresh node's first dump waits on the timer's OnActiveSec +
+  # RandomizedDelaySec (up to ~32 min), so the operator sees "no backup yet" long
+  # after install. Trigger it explicitly here for an immediate dump. Idempotent
+  # + best-effort (the timer still covers it if this races).
+  ansible.builtin.command: systemctl start morphit-backup.service
+  changed_when: true
+  failed_when: false
   failed_when: false
 
 # first-online: enable the service so it fires the moment the box next reaches

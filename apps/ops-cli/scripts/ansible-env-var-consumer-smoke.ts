@@ -183,7 +183,13 @@ function collectConsumerSurface(): { names: Set<string>; fileCount: number } {
 		// consumes MORPHIT_DDNS_UPDATE_URL / _IP_URL / _STATE_FILE, which the
 		// ddns Ansible role's env template declares; scanned here so those
 		// vars have a discoverable consumer.
-		...walkFiles(join(REPO_ROOT, 'ops', 'ddns'), shPred)
+		...walkFiles(join(REPO_ROOT, 'ops', 'ddns'), shPred),
+		// ops/first-online/ — the offline-appliance completion script
+		// (morphit-first-online.sh) consumes the first-online.env vars the
+		// morphit role's first-online.env template declares (MORPHIT_CANARY_REFRESH,
+		// MORPHIT_CANARY_SERVE_DIR, etc.); scanned here so those vars have a
+		// discoverable consumer.
+		...walkFiles(join(REPO_ROOT, 'ops', 'first-online'), shPred)
 	];
 	// Match uppercase env-var tokens.  Require at least 3 chars
 	// total so we don't false-positive on every accidental

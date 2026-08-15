@@ -406,8 +406,10 @@ export function checkCanary(filePath: string, now: Date): CanaryStatus {
 			generatedAt: null,
 			validThrough: null,
 			detail:
-				'no served canary — sign it on your operator machine ' +
-				'(scripts/canary/generate.sh) and place it at apps/web/build/canary.txt'
+				'not published yet — the canary embeds live freshness proofs (a recent ' +
+				'Blurt chain-head, a BTC price, a news headline), so it needs network and ' +
+				'publishes on its own once this box is online. To sign one now, run ' +
+				'sudo morphit-ops harden (or scripts/canary/setup.sh on your operator machine).'
 		};
 	}
 	let txt: string;
@@ -719,6 +721,7 @@ export function parsePriceFeed(v: unknown): PriceFeedSummary | null {
 export type HealthOutcomeKind =
 	| 'synced'
 	| 'behind'
+	| 'unknown'
 	| 'unreachable'
 	| 'not-indexer'
 	| 'http-error';
@@ -774,6 +777,21 @@ export function classifyHealthResult(args: {
 		};
 	}
 	const summary = summarizeHealth(body);
+	// If the indexer can't reach ANY Blurt RPC, it cannot see the chain head — so
+	// its sync state is UNVERIFIABLE. Report "unknown" rather than trusting a
+	// stale `synced` flag (an offline / just-started node otherwise looks synced
+	// with a bogus 0-block lag).
+	if (summary.rpcAllDown) {
+		return {
+			kind: 'unknown',
+			summary,
+			exitCode: 1,
+			message:
+				"The indexer is running, but it can't reach any Blurt RPC right now — so its " +
+				"sync state is unknown (it has no chain head to compare against). It resyncs " +
+				'automatically once an RPC endpoint becomes reachable.'
+		};
+	}
 	if (summary.synced) {
 		return {
 			kind: 'synced',
@@ -1604,7 +1622,7 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 	// Per-endpoint RPC health (transport + latency), best-effort — only when the
 	// indexer is reachable. Falls back to the summary count on any failure.
 	const rpcEndpointRows =
-		indexer.kind === 'synced' || indexer.kind === 'behind'
+		indexer.kind === 'synced' || indexer.kind === 'behind' || indexer.kind === 'unknown'
 			? await fetchRpcEndpoints(indexerProbe.url)
 			: null;
 
@@ -1665,25 +1683,43 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 
 	// ── Indexer block ──
 	const iTag =
-		indexer.kind === 'synced' ? c.green('✓') : indexer.kind === 'behind' ? c.yellow('⚠') : c.red('✗');
+		indexer.kind === 'synced'
+			? c.green('✓')
+			: indexer.kind === 'behind' || indexer.kind === 'unknown'
+				? c.yellow('⚠')
+				: c.red('✗');
 	console.log('');
 	console.log(`  ${c.bold('Indexer')}   ${c.dim(safe(indexerProbe.url))}`);
 	console.log(`  ${iTag} ${indexer.message}`);
 	const s = indexer.summary;
 	if (s !== null) {
-		const syncLabel = s.synced ? c.green('synced') : c.yellow('behind');
+		// When no RPC is reachable the indexer can't see the chain, so sync state,
+		// chain head, and lag are all UNKNOWN — don't render a misleading
+		// "synced / 0 blocks" from stale fields.
+		const syncLabel = s.rpcAllDown
+			? c.yellow('unknown')
+			: s.synced
+				? c.green('synced')
+				: c.yellow('behind');
 		console.log(`      Sync state:    ${syncLabel}`);
 		console.log(`      Last block:    ${s.indexedBlock ?? 'unknown'}`);
-		console.log(`      Chain head:    ${s.chainHeadBlock ?? 'unknown'}`);
+		console.log(`      Chain head:    ${s.rpcAllDown ? 'unknown' : (s.chainHeadBlock ?? 'unknown')}`);
 		const lag = s.lagBlocks;
-		const lagStr = lag === null ? 'unknown' : `${lag} block${lag === 1 ? '' : 's'}`;
-		console.log(`      Lag:           ${lag !== null && lag > 0 ? c.yellow(lagStr) : lagStr}`);
-		if (s.lagNote !== null) console.log(`                     ${c.dim(s.lagNote)}`);
+		const lagStr = s.rpcAllDown || lag === null ? 'unknown' : `${lag} block${lag === 1 ? '' : 's'}`;
+		console.log(`      Lag:           ${!s.rpcAllDown && lag !== null && lag > 0 ? c.yellow(lagStr) : lagStr}`);
+		if (s.lagNote !== null && !s.rpcAllDown) console.log(`                     ${c.dim(s.lagNote)}`);
+		// Count reachable from the per-endpoint rows the operator actually sees (a
+		// fresh active probe), not the pool's passive health count — otherwise the
+		// header ("7/10") can disagree with the ✓/✗ rows below it ("8 green").
+		const rowsHealthy =
+			rpcEndpointRows !== null && rpcEndpointRows.length > 0
+				? { healthy: rpcEndpointRows.filter((r) => r.healthy).length, total: rpcEndpointRows.length }
+				: null;
+		const rpcHealthy = rowsHealthy?.healthy ?? s.rpcHealthy;
+		const rpcTotal = rowsHealthy?.total ?? s.rpcTotal;
 		const rpcStr =
-			s.rpcHealthy !== null && s.rpcTotal !== null
-				? `${s.rpcHealthy}/${s.rpcTotal} reachable`
-				: 'unknown';
-		console.log(`      Blurt RPC:     ${s.rpcAllDown ? c.red(rpcStr) : rpcStr}`);
+			rpcHealthy !== null && rpcTotal !== null ? `${rpcHealthy}/${rpcTotal} reachable` : 'unknown';
+		console.log(`      Blurt RPC:     ${rpcHealthy === 0 ? c.red(rpcStr) : rpcStr}`);
 		// Per-endpoint breakdown (transport · host · latency · reachable) so the
 		// operator sees WHICH nodes are up — including the Tor/I2P/local ones, not
 		// just a clearnet count. Rendered only when the indexer served the list.
@@ -1928,7 +1964,7 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 					: tls.state === 'expired'
 						? c.red('✗')
 						: c.dim('–');
-		console.log(`  ${tlsTag} ${'HTTPS / TLS cert'.padEnd(22)} ${c.dim(tls.detail)}`);
+		console.log(`      ${tlsTag} ${'HTTPS / TLS cert'.padEnd(22)} ${c.dim(tls.detail)}`);
 	}
 	// AIDE baseline: a deferred background one-shot that self-removes on success,
 	// so it needs its own line (raw service state would read "not installed" once
@@ -1942,7 +1978,7 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 					: aide.state === 'building'
 						? c.yellow('⋯')
 						: c.dim('–');
-		console.log(`  ${aideTag} ${'AIDE baseline'.padEnd(22)} ${c.dim(aide.detail)}`);
+		console.log(`      ${aideTag} ${'AIDE baseline'.padEnd(22)} ${c.dim(aide.detail)}`);
 	}
 
 	// ── Backups block ──
