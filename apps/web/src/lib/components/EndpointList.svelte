@@ -35,28 +35,37 @@
 
 	$effect(() => {
 		if (!browser) return;
-		void loadHealth(false);
+		// Passive snapshot first (instant render), then ONE quiet active probe so
+		// per-node latency — including the Tor/I2P hidden nodes, which the pool
+		// rarely calls on its own — fills in without the operator clicking refresh.
+		void (async () => {
+			await loadHealth(false);
+			await loadHealth(true, true);
+		})();
 	});
 
 	/** Fetch per-node health. `probe=false` → the indexer's cheap passive pool
 	 *  snapshot (used on mount). `probe=true` → ask the indexer to actively ping
 	 *  every node NOW for fresh latency (the refresh button; server-side that's
-	 *  rate-limited to once per 5s). Best-effort: on failure the list stays. */
-	async function loadHealth(probe: boolean): Promise<void> {
+	 *  rate-limited to once per 5s). `quiet` suppresses the spinner/ack (used for
+	 *  the background mount probe). Best-effort: on failure the list stays. */
+	async function loadHealth(probe: boolean, quiet = false): Promise<void> {
 		if (!browser) return;
-		loading = true;
+		if (!quiet) loading = true;
 		lastFetchAt = Date.now();
 		const started = Date.now();
 		try {
 			const res = await getRpcEndpoints({ probe });
 			if (res.ok) endpoints = [...res.data.endpoints];
 		} finally {
-			const wait = MIN_SPIN_MS - (Date.now() - started);
-			if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-			loading = false;
-			justRefreshed = true;
-			if (refreshedTimer) clearTimeout(refreshedTimer);
-			refreshedTimer = setTimeout(() => (justRefreshed = false), 1200);
+			if (!quiet) {
+				const wait = MIN_SPIN_MS - (Date.now() - started);
+				if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+				loading = false;
+				justRefreshed = true;
+				if (refreshedTimer) clearTimeout(refreshedTimer);
+				refreshedTimer = setTimeout(() => (justRefreshed = false), 1200);
+			}
 		}
 	}
 
@@ -99,6 +108,8 @@
 				return $_('settings.endpoints.err_rpc');
 			case 'bad_body':
 				return $_('settings.endpoints.err_body');
+			case 'transport_off':
+				return $_('settings.endpoints.err_transport_off');
 			case 'http': {
 				const status = h.http_status ?? 0;
 				// 401/403/451 = something in FRONT of the node refused us (WAF,
@@ -119,6 +130,15 @@
 	 *  snapshot: latency when healthy, a cooling-down / unreachable reason
 	 *  otherwise, or "probing" before the first measurement lands. */
 	function healthStatus(h: RpcEndpointHealth): { text: string; cls: string } {
+		// A hidden node this instance can't reach because it has no Tor/I2P
+		// running is NOT a failure — show a calm, muted "requires Tor/I2P" note
+		// (takes precedence over the cooldown / red-failure rendering below).
+		if (h.failure_reason === 'transport_off') {
+			return {
+				text: $_('settings.endpoints.err_transport_off'),
+				cls: 'text-ink-500 dark:text-ink-400'
+			};
+		}
 		if (h.cooldown_ms > 0) {
 			return { text: $_('settings.endpoints.cooling_down'), cls: 'text-ink-700 dark:text-ink-400' };
 		}

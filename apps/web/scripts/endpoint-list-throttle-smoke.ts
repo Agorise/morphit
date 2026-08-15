@@ -59,12 +59,17 @@ check(
 check('a rate-limited click still gets a quick ack (justThrottled pulse)', /justThrottled = true/.test(src));
 
 // cp453 (t.txt #1) — the refresh button asks the indexer for a FRESH active
-// probe; the initial mount uses the cheap passive snapshot.
+// probe. The initial mount does the cheap passive snapshot FIRST (instant
+// render), then ONE quiet active probe (v1.12.1) so per-node latency — incl. the
+// Tor/I2P hidden nodes the pool rarely calls — fills in without a refresh click.
 check(
 	'the refresh button triggers an ACTIVE probe (loadHealth(true) → getRpcEndpoints probe)',
 	/void loadHealth\(true\)/.test(src) && /getRpcEndpoints\(\{ probe \}\)/.test(src)
 );
-check('the initial mount uses the passive snapshot (loadHealth(false))', /void loadHealth\(false\)/.test(src));
+check(
+	'the initial mount does the passive snapshot first, then a quiet active probe (loadHealth(false) then loadHealth(true, true))',
+	/await loadHealth\(false\)/.test(src) && /await loadHealth\(true, true\)/.test(src)
+);
 
 // PRIVACY #1 — the whole point of this card: the BROWSER never contacts a Blurt
 // node directly; the indexer does all node contact so a node operator never

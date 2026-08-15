@@ -4035,7 +4035,7 @@
 		},
 		"endpoints": {
 			"heading": "RPC-Endpunkte",
-			"explain": "Die Netzwerk-Knoten, mit denen die Morphit-Indexer sprechen, um Daten zu lesen und zu schreiben. Die App probiert sie in der Reihenfolge der schnellsten Antwort.",
+			"explain": "Die Knoten, mit denen diese Morphit-Site zum Synchronisieren der Blockchain-Daten kommuniziert – in der Reihenfolge von Privatsphäre und schnellster Antwort.",
 			"cooling_down": "pausiert",
 			"recheck": "Node-Geschwindigkeiten erneut prüfen",
 			"probing": "prüfe…",
@@ -4046,6 +4046,7 @@
 			"err_refused": "Verbindung abgelehnt",
 			"err_rpc": "Hat geantwortet, aber der RPC-Aufruf schlug fehl",
 			"err_body": "Hat mit einer unlesbaren Antwort geantwortet",
+			"err_transport_off": "Benötigt Tor/I2P (auf dieser Instanz nicht aktiviert)",
 			"err_http": "Node antwortete mit HTTP {status}",
 			"err_http_blocked": "Durch eine Sicherheitsrichtlinie blockiert (HTTP {status})",
 			"err_http_rate": "Vom Node ratenbegrenzt (HTTP 429)",

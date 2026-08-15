@@ -62,8 +62,35 @@
     create: false
   notify: Restart tor
 
+- name: Ensure the Tor systemd drop-in directory exists
+  ansible.builtin.file:
+    path: /etc/systemd/system/tor.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install a restart-policy drop-in for Tor (self-heal transient crashes)
+  # Tor is the .onion transport for hidden RPC (and serves this node's own
+  # onion). A crash must not silently take the hidden layer down.
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/tor.service.d/restart.conf
+    content: |
+      # Managed by Morphit Ansible — do not edit by hand.
+      [Unit]
+      StartLimitIntervalSec=300
+      StartLimitBurst=10
+      [Service]
+      Restart=on-failure
+      RestartSec=10
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart tor
+
 - name: Ensure Tor is enabled and running
   ansible.builtin.systemd:
     name: tor
     state: started
     enabled: true
+    daemon_reload: true

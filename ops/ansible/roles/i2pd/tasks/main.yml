@@ -1,8 +1,32 @@
 ---
-- name: Install i2pd
-  ansible.builtin.apt:
+- name: Add the purplei2p PPA for a current i2pd (online installs)
+  # The Ubuntu distro i2pd (2.49.0) crash-loops on startup (corrupt-netDb SIGABRT
+  # loop — see REVISIT); the maintained purplei2p build (2.61.0+) is stable. An
+  # OFFLINE install skips this and gets the current i2pd from the vendored bundle
+  # instead (build-offline-bundle.sh downloads it from this same PPA).
+  when: not morphit_offline_install | default(false)
+  block:
+    - name: Ensure add-apt-repository is available (for the PPA)
+      ansible.builtin.apt:
+        name: software-properties-common
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Add ppa:purplei2p/i2pd
+      ansible.builtin.apt_repository:
+        repo: ppa:purplei2p/i2pd
+        filename: purplei2p-i2pd
+        state: present
+        update_cache: true
+
+- name: Install i2pd (current build — from the PPA online, or the bundle offline)
+  # state=latest is deliberate here: it UPGRADES a pre-existing broken distro
+  # 2.49.0 to the maintained build. i2pd is the I2P transport for hidden RPC and
+  # a stale one crash-loops, so "newest available" is exactly what we want.
+  ansible.builtin.apt:  # noqa: package-latest
     name: i2pd
-    state: present
+    state: latest
     update_cache: true
     cache_valid_time: 3600
   notify: Restart i2pd
@@ -64,8 +88,38 @@
     mode: "0644"
   notify: Restart i2pd
 
+- name: Ensure the i2pd systemd drop-in directory exists
+  ansible.builtin.file:
+    path: /etc/systemd/system/i2pd.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install a restart-policy drop-in for i2pd (self-heal transient crashes)
+  # i2pd is the I2P transport for hidden RPC. A crash (e.g. a first-run reseed
+  # abort) must not silently take the hidden layer down — restart it, with a
+  # bounded retry budget so a PERSISTENT failure slow-retries rather than
+  # busy-loops. When it's down, the RPC card shows a calm "requires Tor/I2P"
+  # rather than a red error (transport_off).
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/i2pd.service.d/restart.conf
+    content: |
+      # Managed by Morphit Ansible — do not edit by hand.
+      [Unit]
+      StartLimitIntervalSec=300
+      StartLimitBurst=10
+      [Service]
+      Restart=on-failure
+      RestartSec=10
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart i2pd
+
 - name: Ensure i2pd is enabled and running
   ansible.builtin.systemd:
     name: i2pd
     state: started
     enabled: true
+    daemon_reload: true

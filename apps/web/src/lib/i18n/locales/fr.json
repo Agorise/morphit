@@ -4035,7 +4035,7 @@
 		},
 		"endpoints": {
 			"heading": "Points de terminaison RPC",
-			"explain": "Les nœuds du réseau avec lesquels les indexeurs de Morphit communiquent pour lire et écrire des données. L'application les essaie par ordre de rapidité de réponse.",
+			"explain": "Les nœuds avec lesquels ce site Morphit communique pour synchroniser les données de la blockchain, en les essayant par ordre de confidentialité et de rapidité de réponse.",
 			"cooling_down": "en pause",
 			"recheck": "Revérifier la vitesse des nœuds",
 			"probing": "test…",
@@ -4046,6 +4046,7 @@
 			"err_refused": "Connexion refusée",
 			"err_rpc": "A répondu, mais l'appel RPC a échoué",
 			"err_body": "A répondu avec une réponse illisible",
+			"err_transport_off": "Nécessite Tor/I2P (non activé sur cette instance)",
 			"err_http": "Le nœud a répondu HTTP {status}",
 			"err_http_blocked": "Bloqué par une politique de sécurité (HTTP {status})",
 			"err_http_rate": "Limité en débit par le nœud (HTTP 429)",

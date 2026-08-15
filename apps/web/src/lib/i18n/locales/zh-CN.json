@@ -4035,7 +4035,7 @@
 		},
 		"endpoints": {
 			"heading": "RPC 节点",
-			"explain": "Morphit 索引器用于读写数据所连接的网络节点。应用会按响应最快的顺序依次尝试。",
+			"explain": "此 Morphit 站点为同步区块链数据而连接的节点，按隐私性和最快响应的顺序尝试。",
 			"cooling_down": "冷却中",
 			"recheck": "重新检测节点速度",
 			"probing": "探测中…",
@@ -4046,6 +4046,7 @@
 			"err_refused": "连接被拒绝",
 			"err_rpc": "有响应，但 RPC 调用失败",
 			"err_body": "响应内容无法解析",
+			"err_transport_off": "需要 Tor/I2P（此实例未启用）",
 			"err_http": "节点返回 HTTP {status}",
 			"err_http_blocked": "被安全策略拦截（HTTP {status}）",
 			"err_http_rate": "被节点限流（HTTP 429）",

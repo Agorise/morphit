@@ -32,12 +32,12 @@ export const BLURT_CUSTOM_JSON_MAX_BYTES = 8192;
 
 /** Caps — keep the directory small (it's chain-bloat) and bounded. */
 export const RPC_DIRECTORY_MAX_NODES = 32;
-const NODE_NAME_MAX = 32;
 
-/** One node in the directory: a human label plus at least one hidden-service
- *  address. Both address forms are optional but at least one is required. */
+/** One node in the directory: at least one hidden-service address. Both forms
+ *  are optional but at least one is required. Deliberately NO label/name field —
+ *  a human name would leak identifying metadata onto the public chain and is
+ *  never used functionally (nodes are keyed purely by their opaque address). */
 export interface RpcDirectoryNode {
-	readonly name: string;
 	readonly onion?: string;
 	readonly i2p?: string;
 }
@@ -94,8 +94,6 @@ export function validateRpcDirectoryPayload(input: unknown): ValidateResult {
 	for (const raw of p.nodes) {
 		if (raw === null || typeof raw !== 'object') return { ok: false, reason: 'node_not_an_object' };
 		const n = raw as Record<string, unknown>;
-		if (typeof n.name !== 'string' || n.name.length === 0 || n.name.length > NODE_NAME_MAX)
-			return { ok: false, reason: 'bad_node_name' };
 		const onion = n.onion;
 		const i2p = n.i2p;
 		if (onion !== undefined && (typeof onion !== 'string' || !isHiddenRpcUrl(onion, 'onion')))
@@ -104,7 +102,6 @@ export function validateRpcDirectoryPayload(input: unknown): ValidateResult {
 			return { ok: false, reason: 'bad_i2p_url' };
 		if (onion === undefined && i2p === undefined) return { ok: false, reason: 'node_has_no_address' };
 		nodes.push({
-			name: n.name,
 			...(typeof onion === 'string' ? { onion } : {}),
 			...(typeof i2p === 'string' ? { i2p } : {})
 		});
