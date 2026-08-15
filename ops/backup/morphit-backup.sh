@@ -234,6 +234,16 @@ PG_ARGS="-U $DB_USER"
 [ -n "$DB_HOST" ] && PG_ARGS="$PG_ARGS -h $DB_HOST"
 [ -n "$DB_PORT" ] && PG_ARGS="$PG_ARGS -p $DB_PORT"
 
+# When a DB_PASSWORD is configured, hand it to pg_dump via PGPASSWORD. Ansible
+# installs authenticate as the indexer DB ROLE (e.g. morphit_indexer) over TCP
+# with a password — because the service's OS user (morphit) doesn't match that
+# role, so Unix-socket PEER auth would fail. Leaving DB_PASSWORD unset keeps the
+# original local peer/trust behaviour (correct when the OS user matches the role,
+# e.g. some manual installs / the in-container docker-exec path).
+if [ -n "${DB_PASSWORD:-}" ]; then
+	export PGPASSWORD="$DB_PASSWORD"
+fi
+
 # Choose HOST vs CONTAINER dump. For a containerized Postgres the pg_dump runs
 # INSIDE the container via `docker exec`, connecting to the container's own
 # local socket (trust/peer auth — no password, no host/port). DB_HOST/DB_PORT

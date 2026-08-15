@@ -2894,3 +2894,23 @@ ALTER TABLE releases
 
 COMMENT ON COLUMN releases.distribution IS
     'v1.9.x: optional decentralized-distribution anchor from morphit_release_v1 (source_sha256, gpg_fingerprint, ipfs_cid, ipns_name, mirrors). Surfaced via /v1/release; read by each instance''s IPFS release-pinning service to pin ipfs_cid. NULL when the release op carried no distribution block.';
+
+-- ─── v54: rpc_directory (v1.12.0 on-chain RPC-node directory persistence) ───
+-- @morphit publishes the canonical list of public hidden-service RPC nodes as
+-- morphit_rpc_v1.  The handler merges those nodes into the live pool, but a
+-- restart re-indexes FORWARD past an older op, so directory-only nodes would be
+-- lost until re-broadcast.  This single-row table (id=1, latest-wins by
+-- block_num) persists the latest TRUSTED directory so the indexer re-merges it
+-- at startup.  The baked DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS still cover Star/Jade
+-- regardless; this closes the gap for any node added ONLY via the directory.
+CREATE TABLE IF NOT EXISTS rpc_directory (
+    id            SMALLINT     PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+    endpoints     TEXT[]       NOT NULL,
+    node_count    INT          NOT NULL,
+    published_ts  TIMESTAMPTZ  NOT NULL,
+    block_num     BIGINT       NOT NULL,
+    updated_at    TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+
+COMMENT ON TABLE rpc_directory IS
+    'v1.12.0: the latest TRUSTED on-chain RPC-node directory (morphit_rpc_v1 from @morphit). Single row (id=1), latest-wins by block_num. endpoints = the flattened .onion/.b32.i2p URLs; the indexer merges them into its hidden RPC pool at startup so directory-only nodes survive a restart.';

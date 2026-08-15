@@ -164,8 +164,12 @@ export async function collectInstallSummary(
 	});
 	rows.push({
 		label: 'Blurt RPC connectivity',
-		ok: indexer.reachable ? indexer.rpcOk : null,
-		detail: 'no upstream Blurt RPC reachable yet — re-check in a minute'
+		// Not-yet-reachable is PENDING, not failed: on a fresh node the indexer is
+		// still opening connections, and on an offline/air-gapped install there's
+		// no upstream to reach until the box is online. Show '?' (still starting),
+		// never a scary '✗'.
+		ok: indexer.reachable && indexer.rpcOk ? true : null,
+		detail: 'still connecting to the Blurt network — completes once this box is online'
 	});
 	rows.push({ label: 'MCP server (read-only orderbook API)', ok: probe.serviceActive('morphit-mcp.service') });
 
@@ -205,8 +209,12 @@ export async function collectInstallSummary(
 	if (!inputs.torOnly) {
 		rows.push({
 			label: 'HTTPS certificate',
-			ok: probe.pathExists(`/etc/letsencrypt/live/${inputs.domain}/fullchain.pem`),
-			detail: 'issued automatically — can take a minute on the first run'
+			// No cert yet is PENDING, not failed: certbot needs the box reachable
+			// from the internet and a minute to run. Show '?', never '✗'.
+			ok: probe.pathExists(`/etc/letsencrypt/live/${inputs.domain}/fullchain.pem`) ? true : null,
+			detail:
+				'issued automatically once this box is reachable from the internet (a minute on first run; ' +
+				'a home/CGNAT connection can\u2019t get one \u2014 use tor-only mode there)'
 		});
 	}
 
@@ -245,8 +253,11 @@ export async function collectInstallSummary(
 	// ── Transparency ─────────────────────────────────────────────────
 	rows.push({
 		label: 'Warrant canary (/canary.txt)',
-		ok: canaryFresh(probe.readText(`${build}/canary.txt`)),
-		detail: 'sign + post it with  sudo morphit-ops harden'
+		// A not-yet-published canary is PENDING, not failed: on an offline install
+		// it publishes automatically once the box is online; otherwise it's a
+		// one-time sign step. Show '?', never '✗'.
+		ok: canaryFresh(probe.readText(`${build}/canary.txt`)) ? true : null,
+		detail: 'publishes automatically once this box is online (or sign it now with  sudo morphit-ops harden)'
 	});
 	rows.push({
 		label: 'PGP contact key (/pgp_keys.asc)',

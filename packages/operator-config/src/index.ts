@@ -106,6 +106,28 @@ export const DEFAULT_BLURT_RPC_ENDPOINTS: readonly string[] = [
 ] as const;
 
 /**
+ * Default HIDDEN-service Blurt RPC endpoints (.onion v3 / .b32.i2p) — the public
+ * censorship-resistant nodes from the hidden-rpc project (git.agorise.net/
+ * agorise/hidden-rpc). Baked in like the clearnet list so EVERY instance's pool
+ * carries them and the Settings RPC-endpoints card shows them with Tor/I2P
+ * badges — the privacy feature is visible on every node, not just Ansible ones.
+ *
+ * They're reached SERVER-SIDE via the indexer's Tor SOCKS + i2pd proxies (the
+ * global routing dispatcher). An instance without Tor/i2pd simply can't reach
+ * them and they show unreachable — clearnet still carries all traffic. An
+ * operator can override or empty this via MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS.
+ *
+ *   - Star  (.onion + .b32.i2p)
+ *   - Jade  (.onion + .b32.i2p)
+ */
+export const DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS: readonly string[] = [
+	'http://f6cijlm7vn32tc4kxr3vxve5pkbysoq2etlihvx25spwtkpqsa25siad.onion:8091',
+	'http://axj4qkjwk3bwh2lrn4bud5rrgsyrvuamd6jxdlmks6flsrju7q5rb5yd.onion:8091',
+	'http://zgkfadmkqx75enpfhfrlfbwqk7c53uwmr55yplk3colaznepusxa.b32.i2p:8091',
+	'http://7tea4n3co3q2ozke2ovgqn7j5zirkauxipfttudbhthkat6fzlcq.b32.i2p:8091'
+] as const;
+
+/**
  * Public Bitcoin block-explorer Esplora API bases. These speak the Esplora
  * HTTP API (`/blocks/tip/height` → tip height as text, `/blocks/tip/hash` →
  * 64-hex hash; `/tx/{txid}` for the fee verifier's quorum). Kept as its own

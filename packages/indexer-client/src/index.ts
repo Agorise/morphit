@@ -870,7 +870,7 @@ export interface RpcEndpointHealth {
 	 *  ones; the browser never reaches them itself — the indexer probes them
 	 *  server-side and reports what it sees. Older indexers omit this; treat a
 	 *  missing value as `clearnet`. */
-	readonly transport?: 'clearnet' | 'tor' | 'i2p';
+	readonly transport?: 'clearnet' | 'tor' | 'i2p' | 'local';
 	readonly healthy: boolean;
 	readonly latency_ms: number | null;
 	readonly consecutive_failures: number;

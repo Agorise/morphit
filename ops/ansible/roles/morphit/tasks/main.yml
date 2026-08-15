@@ -109,6 +109,19 @@
     group: root
     mode: '0755'
 
+# The backup DATA dir must EXIST before morphit-backup.service runs: the unit's
+# ProtectSystem=strict + ReadWritePaths=<dir> builds a mount namespace BEFORE
+# ExecStart, and a missing path fails that setup with 226/NAMESPACE — the script
+# (which would mkdir it) never even runs. Create it here, owned by the service
+# user, so the very first backup succeeds on a fresh node.
+- name: Ensure the backup directory exists (systemd ReadWritePaths needs it)
+  ansible.builtin.file:
+    path: "{{ morphit_service_home }}/backups"
+    state: directory
+    owner: "{{ morphit_service_user }}"
+    group: "{{ morphit_service_group }}"
+    mode: '0700'
+
 # ── first-online: the deferred-completion subsystem ──
 # Finishes the network-dependent tail of the install (real TLS cert, Blurt RPC
 # connect, opt-in on-chain registration) the moment this box first sees the
@@ -196,6 +209,33 @@
       OnCalendar={{ morphit_backup_schedule }}
   notify: Reload systemd
 
+- name: Ensure morphit-backup.service drop-in directory exists
+  ansible.builtin.file:
+    path: /etc/systemd/system/morphit-backup.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Point the backup service's writable path at the ACTUAL backup dir
+  # The shipped unit hardcodes ReadWritePaths=/home/morphit/backups (the
+  # manual-install home). This Ansible install uses morphit_service_home
+  # (/var/lib/morphit), so without this drop-in the service's mount namespace
+  # binds a path that doesn't exist → 226/NAMESPACE and the backup never runs.
+  # The empty ReadWritePaths= first RESETS the shipped default (so the missing
+  # /home/morphit/backups is no longer required), then we add the real one.
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/morphit-backup.service.d/paths.conf
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      # Managed by Ansible — aligns ReadWritePaths with BACKUP_DIR.
+      [Service]
+      ReadWritePaths=
+      ReadWritePaths={{ morphit_service_home }}/backups
+  notify: Reload systemd
+
 - name: Enable + start morphit-indexer
   ansible.builtin.systemd:
     name: morphit-indexer
@@ -211,22 +251,22 @@
     daemon_reload: true
 
 - name: Enable morphit-backup.timer (daily backup per §31)
+  # daemon_reload ensures the ReadWritePaths drop-in above is loaded before the
+  # timer's OnActiveSec first run. That run then produces a real dump a couple of
+  # minutes after this enable — once Postgres has settled — instead of racing DB
+  # readiness at install time.
   ansible.builtin.systemd:
     name: morphit-backup.timer
     enabled: true
     state: started
+    daemon_reload: true
 
-- name: Fire the FIRST backup now (health otherwise shows "missing" until the next daily run)
-  # A oneshot dump. The DB + indexer are already up by this point, so this
-  # writes the first dump right at install — the operator sees a real byte count
-  # in `morphit-ops health` instead of a scary "no dump has ever been written".
-  # Non-fatal: if the DB is still warming, the daily timer (and the
-  # first-online retry below) will produce one shortly.
-  ansible.builtin.systemd:
-    name: morphit-backup.service
-    state: started
+- name: Clear any stale failed state on morphit-backup.service (idempotent)
+  # If a previous run/attempt left the service failed, clear it so health reads
+  # cleanly; the OnActiveSec first run then produces the real dump.
+  ansible.builtin.command: systemctl reset-failed morphit-backup.service
+  changed_when: false
   failed_when: false
-  changed_when: true
 
 # first-online: enable the service so it fires the moment the box next reaches
 # network-online.target, and start the timer so it also retries on a cadence

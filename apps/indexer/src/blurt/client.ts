@@ -263,13 +263,17 @@ export class BlurtClient {
 		if (config.blurtRpcEndpoints.length === 0) {
 			throw new Error('BlurtClient: at least one endpoint required');
 		}
-		// Clearnet endpoints + hidden-service endpoints (.onion / .b32.i2p) in one
-		// pool. Hidden endpoints are reached via the global routing dispatcher
-		// (installed in main.ts when any are configured); to the pool they are
-		// just more URLs. The quorum trust layer (crossCheckChainConsistency) and
-		// the Settings card's transport badges then span both automatically.
+		// Local (loopback co-located blurtd) FIRST — it's instant and the read
+		// never leaves the box — then clearnet, then hidden-service endpoints
+		// (.onion / .b32.i2p) reached via the global routing dispatcher. To the
+		// pool they're all just URLs; the quorum trust layer and the Settings
+		// card's transport badges span every tier automatically.
 		this.pool = new EndpointPool({
-			endpoints: [...config.blurtRpcEndpoints, ...(config.hiddenRpcEndpoints ?? [])]
+			endpoints: [
+				...(config.localRpcEndpoints ?? []),
+				...config.blurtRpcEndpoints,
+				...(config.hiddenRpcEndpoints ?? [])
+			]
 		});
 	}
 
@@ -277,6 +281,13 @@ export class BlurtClient {
 	 *  cooldown state, last-success timestamps). */
 	endpointSnapshot(): ReturnType<EndpointPool['snapshot']> {
 		return this.pool.snapshot();
+	}
+
+	/** Add RPC endpoints to the pool at runtime (idempotent). Used by the
+	 *  on-chain RPC-directory consumer to self-populate hidden nodes published by
+	 *  @morphit without a restart. Returns the newly-added URLs. */
+	mergeRpcEndpoints(urls: readonly string[]): string[] {
+		return this.pool.mergeEndpoints(urls);
 	}
 
 	/** Number of configured RPC endpoints — the catch-up backfill uses this to

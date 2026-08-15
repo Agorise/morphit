@@ -248,21 +248,20 @@
 - name: Print BunkerWeb verification reminder
   ansible.builtin.debug:
     msg: |
-      BunkerWeb container started.  Verify:
+      BunkerWeb is up and fronting your site.
+
+      If you'd like to confirm everything's wired up:
 
         docker ps | grep -E 'bunkerweb|morphit-frontend'
-        docker logs bunkerweb --tail 50
-        docker logs morphit-frontend --tail 50
         curl -v https://{{ morphit_domain }}/             # SvelteKit app
         curl -v https://{{ morphit_domain }}/v1/instance  # indexer JSON
 
-      If the relay sees every user as the BunkerWeb Docker IP
-      (rate limits look weird), the trusted-proxy IPs setting
-      in /etc/morphit/relay.env is wrong.  Verify it matches
-      the Docker network CIDR:
+      One thing worth a glance later: the relay identifies real
+      visitors by trusting BunkerWeb's forwarded IP.  If rate
+      limits ever look off (every visitor appearing as the
+      BunkerWeb Docker IP), make sure MORPHIT_RELAY_TRUSTED_PROXY_IPS
+      in /etc/morphit/relay.env includes the Docker network CIDR:
 
         docker network inspect bunkerweb_net --format \
           '{% raw %}{{ range .IPAM.Config }}{{ .Subnet }}{{ end }}{% endraw %}'
 
-      Whatever that prints MUST appear in
-      MORPHIT_RELAY_TRUSTED_PROXY_IPS.

@@ -4050,7 +4050,8 @@
 			"err_http_blocked": "Bloqueado por una politica de seguridad (HTTP {status})",
 			"err_http_rate": "Limitado por tasa en el nodo (HTTP 429)",
 			"transport_tor": "Tor",
-			"transport_i2p": "I2P"
+			"transport_i2p": "I2P",
+			"transport_local": "Local"
 		},
 		"session": {
 			"autolock_changed": "Cambiado a {label}",

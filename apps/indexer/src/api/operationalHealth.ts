@@ -308,29 +308,82 @@ async function probeRelay(url: string, timeoutMs: number): Promise<boolean> {
 	}
 }
 
-/** Candidate relay-health URLs to try: the configured one first, then the same
- *  path on each of the host's own (non-loopback) IPv4 addresses. On a
- *  CONTAINERIZED deploy the relay binds to the Docker bridge gateway (e.g.
- *  172.18.0.1) so the frontend container can reach it — NOT to 127.0.0.1 — so a
- *  loopback-only probe reports the relay down even though it's up. This is the
- *  same fallback `morphit-ops health` uses (candidateHealthUrls /
- *  bridgeGatewayHosts); mirroring it here keeps /v1/health's relay.up in
- *  agreement with the CLI instead of falsely reading down. */
-function relayProbeCandidates(configured: string): string[] {
+/** Parse the IPv4 default gateway out of /proc/net/route text (or null). Pure —
+ *  the file-reading wrapper is `defaultGatewayV4`. Exported for the regression
+ *  smoke. */
+export function parseDefaultGatewayV4(routeText: string): string | null {
+	const lines = routeText.split('\n').slice(1);
+	for (const line of lines) {
+		const f = line.trim().split(/\s+/);
+		// Destination 00000000 = the default route; Gateway (field 2) is a
+		// little-endian hex IPv4. Skip a 0.0.0.0 gateway (no real next hop).
+		if (f[1] === '00000000' && f[2] && f[2] !== '00000000' && /^[0-9A-Fa-f]{8}$/.test(f[2])) {
+			const h = f[2];
+			const octets = [h.slice(6, 8), h.slice(4, 6), h.slice(2, 4), h.slice(0, 2)].map((o) =>
+				parseInt(o, 16)
+			);
+			return octets.join('.');
+		}
+	}
+	return null;
+}
+
+/** The IPv4 default gateway from /proc/net/route (or null). When the indexer
+ *  runs INSIDE a container, its default gateway IS the Docker bridge gateway —
+ *  the very address the relay binds to (e.g. 172.18.0.1) so bridge peers can
+ *  reach it. `networkInterfaces()` only yields the container's OWN addresses,
+ *  never the gateway, so without this the containerized indexer never probes
+ *  where the relay actually is and reports it falsely down — even though
+ *  `morphit-ops health`, running on the HOST (where the gateway IS a local
+ *  interface), sees it up. This closes that gap. */
+function defaultGatewayV4(): string | null {
+	try {
+		return parseDefaultGatewayV4(readFileSync('/proc/net/route', 'utf8'));
+	} catch {
+		return null;
+	}
+}
+
+/** Build the candidate relay-health URLs: the configured one, the same path on
+ *  each given host IPv4 address, and the default gateway (the bridge gateway /
+ *  relay bind address when the indexer runs in a container). Pure — exported for
+ *  the regression smoke. */
+export function buildRelayCandidates(
+	configured: string,
+	ipv4Addrs: readonly string[],
+	gateway: string | null
+): string[] {
 	const urls = [configured];
 	try {
 		const u = new URL(configured);
-		for (const addrs of Object.values(networkInterfaces())) {
-			for (const a of addrs ?? []) {
-				if (a.family === 'IPv4' && !a.internal) {
-					urls.push(`${u.protocol}//${a.address}:${u.port || '8080'}${u.pathname}${u.search}`);
-				}
-			}
+		const port = u.port || '8080';
+		for (const a of ipv4Addrs) {
+			urls.push(`${u.protocol}//${a}:${port}${u.pathname}${u.search}`);
+		}
+		if (gateway) {
+			urls.push(`${u.protocol}//${gateway}:${port}${u.pathname}${u.search}`);
 		}
 	} catch {
 		// configured isn't a parseable URL — just probe it as-is.
 	}
 	return [...new Set(urls)];
+}
+
+/** Candidate relay-health URLs to try: the configured one first, then the same
+ *  path on each of the host's own (non-loopback) IPv4 addresses, then the default
+ *  gateway. On a CONTAINERIZED deploy the relay binds to the Docker bridge
+ *  gateway (e.g. 172.18.0.1) so peers can reach it — NOT to 127.0.0.1 — so a
+ *  loopback-only probe reports the relay down even though it's up. This mirrors
+ *  the fallback `morphit-ops health` uses so /v1/health's relay.up agrees with
+ *  the CLI instead of falsely reading down. */
+function relayProbeCandidates(configured: string): string[] {
+	const addrs: string[] = [];
+	for (const list of Object.values(networkInterfaces())) {
+		for (const a of list ?? []) {
+			if (a.family === 'IPv4' && !a.internal) addrs.push(a.address);
+		}
+	}
+	return buildRelayCandidates(configured, addrs, defaultGatewayV4());
 }
 
 /** True if the relay answers on ANY candidate address. Probes run in parallel;

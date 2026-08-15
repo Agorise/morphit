@@ -347,6 +347,29 @@ export class EndpointPool {
 			options.hedgeStaggerFloorMs ?? DEFAULT_HEDGE_STAGGER_FLOOR_MS;
 	}
 
+	/** Add endpoints to the pool at runtime (idempotent — a URL already present
+	 *  is skipped, so existing health/latency state is preserved). Returns the
+	 *  URLs that were newly added. Used to self-populate from the on-chain RPC
+	 *  directory (`morphit_rpc_v1`) without a restart. */
+	mergeEndpoints(urls: readonly string[]): string[] {
+		const have = new Set(this.endpoints.map((ep) => ep.url));
+		const added: string[] = [];
+		for (const url of urls) {
+			if (have.has(url)) continue;
+			have.add(url);
+			added.push(url);
+			this.endpoints.push({
+				url,
+				ewmaLatencyMs: null,
+				consecutiveFailures: 0,
+				cooldownUntil: 0,
+				lastSuccessAt: 0,
+				nextAllowedAt: 0
+			});
+		}
+		return added;
+	}
+
 	/** Read-only snapshot of every endpoint's health.  Returned by
 	 *  value (callers can serialize for diagnostics; mutations don't
 	 *  affect the pool). */

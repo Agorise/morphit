@@ -25,10 +25,16 @@ import { morphitUserAgent } from '$blurt/userAgent';
 import { INDEXER_VERSION } from './health';
 import { hiddenNetworkOf } from '$indexer/hiddenServiceFetch';
 
-/** Classify a pool URL into the card's transport buckets. `.onion` → tor,
- *  `.b32.i2p`/`.i2p` → i2p, everything else (incl. `.loki`, which Morphit's RPC
- *  tier doesn't use) → clearnet. */
-export function rpcTransportOf(url: string): 'clearnet' | 'tor' | 'i2p' {
+/** Classify a pool URL into the card's transport buckets. Loopback → local (a
+ *  co-located node), `.onion` → tor, `.b32.i2p`/`.i2p` → i2p, everything else
+ *  (incl. `.loki`, which Morphit's RPC tier doesn't use) → clearnet. */
+export function rpcTransportOf(url: string): 'clearnet' | 'tor' | 'i2p' | 'local' {
+	try {
+		const h = new URL(url).hostname.toLowerCase();
+		if (h === '127.0.0.1' || h === 'localhost' || h === '::1' || h === '[::1]') return 'local';
+	} catch {
+		// fall through to hidden/clearnet classification
+	}
 	const net = hiddenNetworkOf(url);
 	return net === 'tor' ? 'tor' : net === 'i2p' ? 'i2p' : 'clearnet';
 }
@@ -79,7 +85,7 @@ export interface RpcEndpointHealth {
 	 *  hidden-service nodes so the operator can see the pool spans clearnet AND
 	 *  censorship-resistant transports — the browser never reaches these itself;
 	 *  the indexer probes them server-side and reports what it sees. */
-	readonly transport: 'clearnet' | 'tor' | 'i2p';
+	readonly transport: 'clearnet' | 'tor' | 'i2p' | 'local';
 	/** Currently usable: no consecutive failures AND not parked in cooldown. */
 	readonly healthy: boolean;
 	/** Smoothed successful-call latency in ms, or null if never observed. */
@@ -154,6 +160,19 @@ export function buildRpcEndpointsResponse(
 const PROBE_MIN_INTERVAL_MS = 5_000;
 const PROBE_TIMEOUT_MS = 6_000;
 
+/** Per-transport probe timeout. Clearnet is fast; a `.onion` over Tor pays
+ *  circuit-build latency (tens of seconds on the FIRST hit, then a few), and a
+ *  `.b32.i2p` over i2p is slower still (fresh i2pd spends minutes building
+ *  tunnels, then requests run ~10-20s). A single 6s budget marks slow-but-HEALTHY
+ *  hidden nodes as unreachable and undercounts the pool — so hidden transports
+ *  get a wider window. Probes run in parallel, so this lengthens the check only
+ *  when a hidden node is actually slow, and never blocks the request path. */
+function probeTimeoutMs(url: string): number {
+	const t = rpcTransportOf(url);
+	// local = loopback (instant); clearnet 6s; tor/i2p need the wide window.
+	return t === 'i2p' ? 20_000 : t === 'tor' ? 12_000 : PROBE_TIMEOUT_MS;
+}
+
 /**
  * cp471 (tt.txt C) — map a thrown fetch error to a stable {@link RpcProbeFailure}.
  *
@@ -211,7 +230,7 @@ interface ProbeResult {
  *  on success, or the classified reason on failure. Never throws. */
 async function probeOne(url: string): Promise<ProbeResult> {
 	const controller = new AbortController();
-	const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
+	const timer = setTimeout(() => controller.abort(), probeTimeoutMs(url));
 	const started = Date.now();
 	try {
 		const res = await fetch(url, {

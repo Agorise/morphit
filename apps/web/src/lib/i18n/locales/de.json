@@ -4050,7 +4050,8 @@
 			"err_http_blocked": "Durch eine Sicherheitsrichtlinie blockiert (HTTP {status})",
 			"err_http_rate": "Vom Node ratenbegrenzt (HTTP 429)",
 			"transport_tor": "Tor",
-			"transport_i2p": "I2P"
+			"transport_i2p": "I2P",
+			"transport_local": "Lokal"
 		},
 		"session": {
 			"autolock_changed": "Geändert auf {label}",

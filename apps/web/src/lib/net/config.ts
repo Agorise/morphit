@@ -256,6 +256,7 @@ export const OP_IDS = {
 	chatFolders: 'morphit_chat_folders_v1',
 	settings: 'morphit_settings_v1',
 	releaseDiscovery: 'morphit_release_v1',
+	rpcDirectory: 'morphit_rpc_v1',
 	feeAttest: 'morphit_fee_attest_v1',
 	featureBid: 'morphit_feature_bid_v1',
 	operatorRegister: 'morphit_operator_register_v1',

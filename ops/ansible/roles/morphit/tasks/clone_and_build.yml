@@ -141,7 +141,7 @@
       register: morphit_matrix_crypto_bin2
       when: not morphit_matrix_crypto_bin.stat.exists
 
-    - name: Fail clearly if the matrix crypto binary is still missing
+    - name: Verify the matrix E2EE crypto binary is present
       ansible.builtin.fail:
         msg: >-
           The Matrix alert bot needs the E2EE crypto native binary

@@ -4050,7 +4050,8 @@
 			"err_http_blocked": "Zablokowane przez politykę bezpieczeństwa (HTTP {status})",
 			"err_http_rate": "Ograniczone przez węzeł (HTTP 429)",
 			"transport_tor": "Tor",
-			"transport_i2p": "I2P"
+			"transport_i2p": "I2P",
+			"transport_local": "Lokalny"
 		},
 		"session": {
 			"autolock_changed": "Zmieniono na {label}",
