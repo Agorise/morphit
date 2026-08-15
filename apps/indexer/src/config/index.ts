@@ -95,6 +95,8 @@ export interface Config {
 	/** Local (loopback) RPC endpoints — a co-located blurtd over http://127.0.0.1.
 	 *  Preferred ahead of everything else (instant, never leaves the box). */
 	readonly localRpcEndpoints: readonly string[];
+	/** Auto-detect a co-located blurtd on the loopback RPC port at startup. */
+	readonly localRpcAutodetect: boolean;
 	/** Block number at which to start indexing if the database is
 	 *  empty. Used once per deployment; subsequent restarts resume
 	 *  from `indexer_state.last_applied_block`. */
@@ -857,6 +859,13 @@ const envSchema = z.object({
 				}),
 			'local RPC endpoints must be loopback (e.g. http://127.0.0.1:8091)'
 		),
+	// Auto-detect a co-located blurtd on the standard loopback RPC port at
+	// startup and read from it directly (instant + private, zero config).
+	// Default on; 'false' disables the probe.
+	MORPHIT_INDEXER_LOCAL_RPC_AUTODETECT: z
+		.string()
+		.default('true')
+		.transform((s) => s.trim().toLowerCase() !== 'false'),
 	MORPHIT_INDEXER_START_BLOCK: z.coerce.number().int().nonnegative().default(MORPHIT_GENESIS_BLOCK),
 	MORPHIT_INDEXER_BLOCK_INTERVAL_MS: z.coerce.number().int().positive().default(3000),
 	// cp664 — concurrent prefetch windows during catch-up.  0 = auto (one per endpoint).
@@ -1683,6 +1692,7 @@ export function loadConfig(): Config {
 		blurtRpcEndpoints: e.MORPHIT_INDEXER_RPC_ENDPOINTS,
 		hiddenRpcEndpoints: e.MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS,
 		localRpcEndpoints: e.MORPHIT_INDEXER_LOCAL_RPC_ENDPOINTS,
+		localRpcAutodetect: e.MORPHIT_INDEXER_LOCAL_RPC_AUTODETECT,
 		startBlock: e.MORPHIT_INDEXER_START_BLOCK,
 		blockIntervalMs: e.MORPHIT_INDEXER_BLOCK_INTERVAL_MS,
 		backfillConcurrency: e.MORPHIT_INDEXER_BACKFILL_CONCURRENCY,

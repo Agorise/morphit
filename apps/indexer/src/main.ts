@@ -46,7 +46,8 @@ import { security } from '$api/middleware/security';
 import { cors } from '$api/middleware/cors';
 import { rateLimit } from '$api/middleware/ratelimit';
 
-import { healthRoute } from '$api/health';
+import { healthRoute, INDEXER_VERSION } from '$api/health';
+import { morphitUserAgent } from '$blurt/userAgent';
 import { instanceRoute } from '$api/instance';
 import { chainFeeRoute } from '$api/chainFee';
 import { instancesRoute } from '$api/instances';
@@ -253,6 +254,51 @@ async function main(): Promise<void> {
 		}
 	} catch (e) {
 		bootLog.warn('rpc_directory_reload_skipped', { err: e instanceof Error ? e.message : String(e) });
+	}
+
+	// ─── 4-ter. Auto-detect a CO-LOCATED Blurt RPC node (v1.12.1) ──
+	// If a blurtd (e.g. the hidden-rpc package) is running on the standard
+	// loopback RPC port on THIS box, read the chain from it directly — instant,
+	// private, and the read never leaves the machine — with ZERO config, on any
+	// install (manual or Ansible). Opt out with
+	// MORPHIT_INDEXER_LOCAL_RPC_AUTODETECT=false.
+	const autoLocalEndpoints: string[] = [];
+	if (config.localRpcAutodetect) {
+		const candidate = 'http://127.0.0.1:8091';
+		if (!config.localRpcEndpoints.includes(candidate)) {
+			const ac = new AbortController();
+			const t = setTimeout(() => ac.abort(), 2500);
+			let looksLikeBlurtd = false;
+			try {
+				const res = await fetch(candidate, {
+					method: 'POST',
+					signal: ac.signal,
+					headers: {
+						'content-type': 'application/json',
+						'user-agent': morphitUserAgent(INDEXER_VERSION)
+					},
+					body: JSON.stringify({
+						jsonrpc: '2.0',
+						id: 1,
+						method: 'condenser_api.get_dynamic_global_properties',
+						params: []
+					})
+				});
+				if (res.ok) {
+					const j = (await res.json()) as { result?: { head_block_number?: number } };
+					looksLikeBlurtd = typeof j?.result?.head_block_number === 'number';
+				}
+			} catch {
+				// nothing (valid) on 8091 — no co-located node, leave it be.
+			} finally {
+				clearTimeout(t);
+			}
+			if (looksLikeBlurtd) {
+				autoLocalEndpoints.push(candidate);
+				blurt.mergeRpcEndpoints([candidate]);
+				bootLog.info('local_blurtd_autodetected', { url: candidate });
+			}
+		}
 	}
 
 	// ─── 4a. Posting-key backfill (cp404, option A) ────────────
@@ -713,7 +759,8 @@ async function main(): Promise<void> {
 		rpcEndpointsRoute(() => poller.rpcEndpointSnapshot, [
 			...DEFAULT_BLURT_RPC_ENDPOINTS,
 			...config.hiddenRpcEndpoints,
-			...config.localRpcEndpoints
+			...config.localRpcEndpoints,
+			...autoLocalEndpoints
 		])
 	);
 	app.route('/v1/rpc-endpoints', rpcEndpointsApp);

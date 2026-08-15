@@ -4035,7 +4035,7 @@
 		},
 		"endpoints": {
 			"heading": "RPC endpoints",
-			"explain": "The network nodes that Morphit indexers talk to for reading and writing data. The app tries them in order of fastest response.",
+			"explain": "The nodes that this Morphit site talks to for syncing blockchain data, trying them in order of privacy and fastest response.",
 			"cooling_down": "cooling down",
 			"recheck": "Re-check node speeds",
 			"probing": "probing…",
@@ -4046,6 +4046,7 @@
 			"err_refused": "Connection refused",
 			"err_rpc": "Answered, but the RPC call failed",
 			"err_body": "Answered with an unreadable response",
+			"err_transport_off": "Requires Tor/I2P (not enabled on this instance)",
 			"err_http": "Node answered HTTP {status}",
 			"err_http_blocked": "Blocked by a security policy (HTTP {status})",
 			"err_http_rate": "Rate-limited by the node (HTTP 429)",

@@ -4035,7 +4035,7 @@
 		},
 		"endpoints": {
 			"heading": "Endpoints RPC",
-			"explain": "Los nodos de red con los que hablan los indexadores de Morphit para leer y escribir datos. La app los prueba en orden de respuesta más rápida.",
+			"explain": "Los nodos con los que este sitio Morphit se comunica para sincronizar los datos de la blockchain, probándolos en orden de privacidad y rapidez de respuesta.",
 			"cooling_down": "enfriándose",
 			"recheck": "Volver a comprobar la velocidad de los nodos",
 			"probing": "comprobando…",
@@ -4046,6 +4046,7 @@
 			"err_refused": "Conexion rechazada",
 			"err_rpc": "Respondio, pero la llamada RPC fallo",
 			"err_body": "Respondio con datos ilegibles",
+			"err_transport_off": "Requiere Tor/I2P (no habilitado en esta instancia)",
 			"err_http": "El nodo respondio HTTP {status}",
 			"err_http_blocked": "Bloqueado por una politica de seguridad (HTTP {status})",
 			"err_http_rate": "Limitado por tasa en el nodo (HTTP 429)",

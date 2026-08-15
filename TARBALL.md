@@ -1,5 +1,17 @@
 # TARBALL
-> ## cp730–cp736 — v1.12.0: local-blurtd loopback reads + on-chain RPC directory (self-populating, persisted) + baked hidden default + morphit-ops per-endpoint view + privacy brag/comparison + the morphitlat install-flow round. ★ RELEASE CUT as v1.12.0 (follows v1.11.4).
+> ## cp737 — v1.12.1: hidden-RPC robustness — stable i2pd (purplei2p PPA, role + offline bundle) + self-heal restart drop-ins + transport_off calm card + auto-detect co-located blurtd + auto-latency-probe + card copy reword. ★ RELEASE CUT as v1.12.1 (follows v1.12.0). NO migration.
+>
+> **Context:** born from a live morphit.io field debug — the baked hidden nodes showed red because morphit.io (manual install) had no Tor/i2pd, and once installed the Ubuntu distro i2pd 2.49.0 crash-looped (corrupt-netDb SIGABRT). Root-caused to the distro build; the maintained purplei2p 2.61.0 is stable. This release makes the whole hidden-RPC layer install correctly, self-heal, and read honestly.
+>
+> **transport_off calm card:** new `RpcProbeFailure` reason in `apps/indexer/src/api/rpcHealth.ts` — cached `transportProxyReachable(tor|i2p)` (TCP connect to the Tor SOCKS / i2pd proxy) + `unreachableTransports()`; `probeOne` (active) + `buildRpcEndpointsResponse` (passive, via the route) mark a failing hidden node `transport_off` when its transport isn't running here. Card `EndpointList.svelte` renders it as a muted "Requires Tor/I2P (not enabled on this instance)" taking precedence over red/cooldown. i18n `err_transport_off` + reworded `explain` (10 locales). `packages/indexer-client` type widened.
+> **Auto-latency-probe:** card fires one quiet active probe after the passive mount (`quiet` param on `loadHealth`) so Tor/I2P latency fills in without a refresh click. Throttle smoke assertion updated.
+> **Auto-detect co-located blurtd:** `main.ts` step 4-ter probes `http://127.0.0.1:8091` at startup (UA-tagged, loopback-only), merges a live node into the pool + card as a LOCAL endpoint (~0.005s), zero config. Config `MORPHIT_INDEXER_LOCAL_RPC_AUTODETECT` (default true).
+> **Stable i2pd everywhere:** `roles/i2pd/tasks/main.yml` adds `ppa:purplei2p/i2pd` (online, `when: not morphit_offline_install`) + `state: latest` (upgrades a broken 2.49.0); `scripts/build-offline-bundle.sh` adds the PPA in the download container so the vendored .deb is 2.61.0+; `ansible-structural-smoke` notBundled += software-properties-common.
+> **Self-heal:** `roles/{i2pd,tor}` install `Restart=on-failure` drop-ins (bounded retry) + `daemon_reload`.
+>
+> **★ RELEASE CUT v1.12.1:** version 1.12.0→1.12.1 (all touchpoints + lockfile; version-consistency 20/20, lockfile-sync, release-notes-parity green); RELEASE-NOTES-v1.12.1.md; FULL 531-runner battery GREEN from scratch post-bump (~90 chunks); ansible-lint 0/0; vitest-must-pass + workspace-typecheck 27/27 + doctor-smoke standalone green. Battery-surfaced fixes: auto-detect fetch UA header (rpc-user-agent guard) + endpoint-list-throttle assertion (auto-probe). Deep review: all new fetch/connect are loopback-only + UA-tagged (no SSRF/anon regression). Slim tarball. Handed to Ken for the 6-block ceremony.
+>
+
 >
 > **Context:** the privacy-RPC-layer release. Reads the chain from a co-located node over loopback; the censorship-resistant node network publishes itself on-chain so every instance auto-adopts; `morphit-ops` shows per-endpoint RPC health. Plus every fix from Ken's fresh from-scratch morphitlat install. One DB migration (v54), no breaking changes.
 >

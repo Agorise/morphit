@@ -547,7 +547,10 @@ results.push({
 	// Default-enabled roles for a home appliance (monitors/matrix_bot/trivy are off).
 	const enabledRoles = ['base', 'hardening', 'ddns', 'tls', 'postgres', 'bunkerweb', 'tor', 'i2pd'];
 	// nodejs comes from vendor/node (nodejs.yml skips NodeSource offline) — intentionally unbundled.
-	const notBundled = new Set(['nodejs']);
+	// software-properties-common is installed ONLY online (to add the purplei2p
+	// PPA for a current i2pd); an offline install skips the PPA and uses the
+	// vendored i2pd .deb, so it never needs it — intentionally unbundled.
+	const notBundled = new Set(['nodejs', 'software-properties-common']);
 	const walk = (dir: string): string[] =>
 		existsSync(dir)
 			? readdirSync(dir, { withFileTypes: true }).flatMap((d) =>

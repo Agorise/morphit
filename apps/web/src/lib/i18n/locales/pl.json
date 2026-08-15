@@ -4035,7 +4035,7 @@
 		},
 		"endpoints": {
 			"heading": "Punkty końcowe RPC",
-			"explain": "Węzły sieci, z którymi indeksery Morphit rozmawiają, aby odczytywać i zapisywać dane. Aplikacja próbuje ich w kolejności najszybszej odpowiedzi.",
+			"explain": "Węzły, z którymi ta witryna Morphit łączy się w celu synchronizacji danych blockchain, próbując je w kolejności prywatności i najszybszej odpowiedzi.",
 			"cooling_down": "przerwa",
 			"recheck": "Sprawdź ponownie szybkość węzłów",
 			"probing": "sprawdzam…",
@@ -4046,6 +4046,7 @@
 			"err_refused": "Połączenie odrzucone",
 			"err_rpc": "Odpowiedział, ale wywołanie RPC nie powiodło się",
 			"err_body": "Odpowiedział nieczytelną odpowiedzią",
+			"err_transport_off": "Wymaga Tor/I2P (niewłączone na tej instancji)",
 			"err_http": "Węzeł odpowiedział HTTP {status}",
 			"err_http_blocked": "Zablokowane przez politykę bezpieczeństwa (HTTP {status})",
 			"err_http_rate": "Ograniczone przez węzeł (HTTP 429)",

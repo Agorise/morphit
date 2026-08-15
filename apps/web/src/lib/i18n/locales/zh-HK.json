@@ -4035,7 +4035,7 @@
 		},
 		"endpoints": {
 			"heading": "RPC 節點",
-			"explain": "Morphit 索引器用嚟讀寫資料所連接嘅網絡節點。應用會按回應最快嘅次序逐一嘗試。",
+			"explain": "此 Morphit 網站為同步區塊鏈數據而連接的節點，按私隱和最快回應的順序嘗試。",
 			"cooling_down": "冷卻中",
 			"recheck": "重新檢測節點速度",
 			"probing": "測試中…",
@@ -4046,6 +4046,7 @@
 			"err_refused": "連線被拒絕",
 			"err_rpc": "有回應，但 RPC 呼叫失敗",
 			"err_body": "回應內容無法解析",
+			"err_transport_off": "需要 Tor/I2P（此實例未啟用）",
 			"err_http": "節點回應 HTTP {status}",
 			"err_http_blocked": "被安全政策攔截（HTTP {status}）",
 			"err_http_rate": "被節點限速（HTTP 429）",

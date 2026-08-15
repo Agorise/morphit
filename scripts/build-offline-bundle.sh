@@ -151,6 +151,11 @@ docker run --rm -e PKGS="${PKGS}" -v "${VENDOR}/apt:/out" \
 		. /etc/os-release
 		printf "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu %s stable\n" \
 			"${VERSION_CODENAME}" > /etc/apt/sources.list.d/docker.list
+		# The Ubuntu distro i2pd (2.49.0) crash-loops on startup; vendor the
+		# maintained purplei2p build (2.61.0+) instead so offline installs get a
+		# stable i2pd. add-apt-repository fetches the PPA signing key itself.
+		apt-get install -y --no-install-recommends software-properties-common
+		add-apt-repository -y ppa:purplei2p/i2pd
 		apt-get update -qq
 		apt-get install --download-only -y ${PKGS}
 		cp /var/cache/apt/archives/*.deb /out/

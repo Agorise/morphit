@@ -858,6 +858,7 @@ export type RpcProbeFailure =
 	| 'dns'
 	| 'refused'
 	| 'network'
+	| 'transport_off'
 	| 'http'
 	| 'rpc_error'
 	| 'bad_body';

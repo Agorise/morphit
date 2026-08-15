@@ -19,11 +19,12 @@
  */
 
 import { Hono } from 'hono';
+import net from 'node:net';
 
 import type { EndpointState } from '@morphit/rpc-pool';
 import { morphitUserAgent } from '$blurt/userAgent';
 import { INDEXER_VERSION } from './health';
-import { hiddenNetworkOf } from '$indexer/hiddenServiceFetch';
+import { hiddenNetworkOf, hiddenServiceProxyConfigFromEnv } from '$indexer/hiddenServiceFetch';
 
 /** Classify a pool URL into the card's transport buckets. Loopback → local (a
  *  co-located node), `.onion` → tor, `.b32.i2p`/`.i2p` → i2p, everything else
@@ -68,6 +69,12 @@ export type RpcProbeFailure =
 	/** Any other transport-level failure (reset, unroutable). Truly "not
 	 *  pingable" — Ken: plain "Unreachable" is fine for this one. */
 	| 'network'
+	/** A hidden node (.onion / .b32.i2p) that this instance can't reach because
+	 *  its OWN Tor/i2pd proxy isn't running — i.e. "this instance has no Tor/I2P",
+	 *  NOT "the node is down". The card shows a calm "requires Tor/I2P" note
+	 *  rather than a red error, so the baked hidden nodes read as intentional on a
+	 *  node that hasn't enabled the transport. */
+	| 'transport_off'
 	/** The node ANSWERED with a non-2xx (see `http_status`) — e.g. a WAF /
 	 *  security policy returning 403, or a bad gateway. */
 	| 'http'
@@ -121,7 +128,8 @@ export interface RpcEndpointsResponse {
 export function buildRpcEndpointsResponse(
 	snapshot: readonly EndpointState[],
 	canonicalUrls: readonly string[],
-	now: number = Date.now()
+	now: number = Date.now(),
+	transportsOff: ReadonlySet<'tor' | 'i2p'> = new Set()
 ): RpcEndpointsResponse {
 	const byUrl = new Map(snapshot.map((s) => [s.url, s]));
 	const endpoints: RpcEndpointHealth[] = [];
@@ -129,13 +137,20 @@ export function buildRpcEndpointsResponse(
 		const s = byUrl.get(url);
 		if (!s) continue; // canonical node not in THIS indexer's pool → omit
 		const cooldownMs = Math.max(0, s.cooldownUntil - now);
+		const transport = rpcTransportOf(url);
+		const healthy = s.consecutiveFailures === 0 && cooldownMs === 0;
+		// A hidden node that's failing while THIS instance's transport proxy is
+		// down → calm "requires Tor/I2P", not a red error.
+		const transportOff =
+			!healthy && (transport === 'tor' || transport === 'i2p') && transportsOff.has(transport);
 		endpoints.push({
 			url,
-			transport: rpcTransportOf(url),
-			healthy: s.consecutiveFailures === 0 && cooldownMs === 0,
+			transport,
+			healthy,
 			latency_ms: s.ewmaLatencyMs,
 			consecutive_failures: s.consecutiveFailures,
-			cooldown_ms: cooldownMs
+			cooldown_ms: cooldownMs,
+			...(transportOff ? { failure_reason: 'transport_off' as const } : {})
 		});
 	}
 	return {
@@ -143,6 +158,20 @@ export function buildRpcEndpointsResponse(
 		generated_at: new Date(now).toISOString(),
 		endpoints
 	};
+}
+
+/** Which hidden transports are UNREACHABLE from this instance right now (their
+ *  Tor SOCKS / i2pd HTTP proxy isn't listening). Used to render hidden nodes as
+ *  a calm "requires Tor/I2P" instead of a red error. */
+export async function unreachableTransports(): Promise<Set<'tor' | 'i2p'>> {
+	const off = new Set<'tor' | 'i2p'>();
+	const [tor, i2p] = await Promise.all([
+		transportProxyReachable('tor'),
+		transportProxyReachable('i2p')
+	]);
+	if (!tor) off.add('tor');
+	if (!i2p) off.add('i2p');
+	return off;
 }
 
 /**
@@ -228,6 +257,47 @@ interface ProbeResult {
 
 /** Ping one node with a lightweight, universal Blurt read; return round-trip ms
  *  on success, or the classified reason on failure. Never throws. */
+/** Cheap TCP-connect check (is anything listening?). Never throws. */
+function tcpConnectable(host: string, port: number, timeoutMs: number): Promise<boolean> {
+	return new Promise((resolve) => {
+		const sock = net.connect({ host, port });
+		let settled = false;
+		const done = (up: boolean): void => {
+			if (settled) return;
+			settled = true;
+			sock.destroy();
+			resolve(up);
+		};
+		sock.setTimeout(timeoutMs, () => done(false));
+		sock.once('connect', () => done(true));
+		sock.once('error', () => done(false));
+	});
+}
+
+// Cache per-transport proxy reachability so a probe cycle doesn't re-check it for
+// every hidden node.
+const proxyUpCache = new Map<'tor' | 'i2p', { up: boolean; at: number }>();
+const PROXY_CHECK_TTL_MS = 20_000;
+
+/** True when THIS instance can reach its own Tor SOCKS / i2pd HTTP proxy — i.e.
+ *  the transport is actually enabled here. When it's false, a hidden node's
+ *  failure means "this instance has no Tor/I2P", not "the node is down". */
+async function transportProxyReachable(transport: 'tor' | 'i2p'): Promise<boolean> {
+	const cached = proxyUpCache.get(transport);
+	if (cached && Date.now() - cached.at < PROXY_CHECK_TTL_MS) return cached.up;
+	const cfg = hiddenServiceProxyConfigFromEnv(process.env);
+	const addr = transport === 'tor' ? cfg.torSocks : cfg.i2pHttpProxy;
+	let up = false;
+	if (addr && addr.length > 0) {
+		const lastColon = addr.lastIndexOf(':');
+		const host = lastColon > 0 ? addr.slice(0, lastColon) : addr;
+		const port = lastColon > 0 ? Number(addr.slice(lastColon + 1)) : NaN;
+		up = await tcpConnectable(host || '127.0.0.1', Number.isFinite(port) ? port : transport === 'tor' ? 9050 : 4444, 1200);
+	}
+	proxyUpCache.set(transport, { up, at: Date.now() });
+	return up;
+}
+
 async function probeOne(url: string): Promise<ProbeResult> {
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), probeTimeoutMs(url));
@@ -268,6 +338,12 @@ async function probeOne(url: string): Promise<ProbeResult> {
 		}
 		return { latencyMs: Date.now() - started, ok: true, reason: null, httpStatus: null };
 	} catch (err) {
+		// A hidden node that failed AND whose transport proxy isn't reachable on
+		// this instance → "no Tor/I2P here", not "node down". Surface it calmly.
+		const t = rpcTransportOf(url);
+		if ((t === 'tor' || t === 'i2p') && !(await transportProxyReachable(t))) {
+			return { latencyMs: null, ok: false, reason: 'transport_off', httpStatus: null };
+		}
 		return { latencyMs: null, ok: false, reason: classifyProbeError(err), httpStatus: null };
 	} finally {
 		clearTimeout(timer);
@@ -339,7 +415,11 @@ export function rpcEndpointsRoute(
 		if (c.req.query('probe') === '1') {
 			return c.json(await cachedProbeEndpoints(canonicalUrls));
 		}
-		return c.json(buildRpcEndpointsResponse(snapshotFn(), canonicalUrls));
+		// Passive snapshot: also fold in "which hidden transports can't be reached
+		// from here" so a node whose Tor/i2pd isn't running reads as a calm
+		// "requires Tor/I2P" rather than a red error on page load.
+		const transportsOff = await unreachableTransports();
+		return c.json(buildRpcEndpointsResponse(snapshotFn(), canonicalUrls, Date.now(), transportsOff));
 	});
 	return app;
 }

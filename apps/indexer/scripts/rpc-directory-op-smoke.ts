@@ -33,8 +33,8 @@ const GOOD = {
 	v: 1,
 	ts: '2026-08-14T22:00:00Z',
 	nodes: [
-		{ name: 'Star', onion: STAR_ONION, i2p: STAR_I2P },
-		{ name: 'Jade', onion: JADE_ONION }
+		{ onion: STAR_ONION, i2p: STAR_I2P },
+		{ onion: JADE_ONION }
 	]
 };
 
@@ -63,18 +63,16 @@ reject('missing ts', { v: 1, nodes: GOOD.nodes }, 'bad_or_missing_ts');
 reject('bad ts', { ...GOOD, ts: 'not-a-date' }, 'bad_or_missing_ts');
 reject('nodes not array', { ...GOOD, nodes: {} }, 'nodes_not_an_array');
 reject('empty nodes', { ...GOOD, nodes: [] }, 'nodes_empty');
-reject('too many nodes', { ...GOOD, nodes: Array.from({ length: RPC_DIRECTORY_MAX_NODES + 1 }, () => ({ name: 'n', onion: STAR_ONION })) }, 'too_many_nodes');
-reject('blank name', { ...GOOD, nodes: [{ name: '', onion: STAR_ONION }] }, 'bad_node_name');
-reject('node with no address', { ...GOOD, nodes: [{ name: 'X' }] }, 'node_has_no_address');
-reject('bad onion', { ...GOOD, nodes: [{ name: 'X', onion: 'http://rpc.example.com' }] }, 'bad_onion_url');
-reject('bad i2p', { ...GOOD, nodes: [{ name: 'X', i2p: 'http://x.onion:8091' }] }, 'bad_i2p_url');
+reject('too many nodes', { ...GOOD, nodes: Array.from({ length: RPC_DIRECTORY_MAX_NODES + 1 }, () => ({ onion: STAR_ONION })) }, 'too_many_nodes');
+reject('node with no address', { ...GOOD, nodes: [{}] }, 'node_has_no_address');
+reject('bad onion', { ...GOOD, nodes: [{ onion: 'http://rpc.example.com' }] }, 'bad_onion_url');
+reject('bad i2p', { ...GOOD, nodes: [{ i2p: 'http://x.onion:8091' }] }, 'bad_i2p_url');
 {
 	// Oversized payload → payload_too_large (many nodes with long labels).
 	const big = {
 		v: 1,
 		ts: '2026-08-14T22:00:00Z',
-		nodes: Array.from({ length: RPC_DIRECTORY_MAX_NODES }, (_, i) => ({
-			name: `node-${i}-`.padEnd(32, 'x'),
+		nodes: Array.from({ length: RPC_DIRECTORY_MAX_NODES }, () => ({
 			onion: STAR_ONION,
 			i2p: STAR_I2P
 		}))
@@ -90,7 +88,7 @@ reject('bad i2p', { ...GOOD, nodes: [{ name: 'X', i2p: 'http://x.onion:8091' }] 
 	if (r.ok) {
 		const urls = directoryEndpointUrls(r.payload);
 		check('flattens onion-first then i2p', urls[0] === STAR_ONION && urls[1] === JADE_ONION && urls[2] === STAR_I2P);
-		check('de-duplicates', directoryEndpointUrls({ v: 1, ts: GOOD.ts, nodes: [{ name: 'a', onion: STAR_ONION }, { name: 'b', onion: STAR_ONION }] }).length === 1);
+		check('de-duplicates', directoryEndpointUrls({ v: 1, ts: GOOD.ts, nodes: [{ onion: STAR_ONION }, { onion: STAR_ONION }] }).length === 1);
 	}
 }
 

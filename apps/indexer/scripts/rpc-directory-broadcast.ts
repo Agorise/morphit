@@ -10,7 +10,7 @@
  * └─────────────────────────────────────────────────────────────┘
  *
  * Usage:
- *   1) Inspect the built-in starter directory (Star + Jade) without a key:
+ *   1) Inspect the built-in starter directory (the two public nodes) without a key:
  *        npx tsx apps/indexer/scripts/rpc-directory-broadcast.ts --dry-run
  *   2) Publish a custom directory from a JSON file:
  *        npx tsx apps/indexer/scripts/rpc-directory-broadcast.ts dir.json --dry-run
@@ -20,8 +20,7 @@
  *        --node <rpc-url> (override the broadcast node).
  *
  * The JSON file (when given) is the payload: { "v": 1, "ts": "<ISO>",
- * "nodes": [ { "name": "Star", "onion": "http://…onion:8091",
- * "i2p": "http://…b32.i2p:8091" }, … ] }.
+ * "nodes": [ { "onion": "http://…onion:8091", "i2p": "http://…b32.i2p:8091" }, … ] }.
  */
 import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
@@ -44,7 +43,7 @@ function die(msg: string): never {
 	process.exit(1);
 }
 
-/** The built-in starter directory: the two public nodes shipped as the baked
+/** The built-in starter directory: the address pairs of the two public nodes
  *  default. Used when no JSON file is passed, so the first publish is one
  *  command. Edit here (or pass a file) to add nodes. */
 function starterDirectory(): RpcDirectoryPayload {
@@ -53,12 +52,10 @@ function starterDirectory(): RpcDirectoryPayload {
 		ts: new Date().toISOString(),
 		nodes: [
 			{
-				name: 'Star',
 				onion: 'http://f6cijlm7vn32tc4kxr3vxve5pkbysoq2etlihvx25spwtkpqsa25siad.onion:8091',
 				i2p: 'http://zgkfadmkqx75enpfhfrlfbwqk7c53uwmr55yplk3colaznepusxa.b32.i2p:8091'
 			},
 			{
-				name: 'Jade',
 				onion: 'http://axj4qkjwk3bwh2lrn4bud5rrgsyrvuamd6jxdlmks6flsrju7q5rb5yd.onion:8091',
 				i2p: 'http://7tea4n3co3q2ozke2ovgqn7j5zirkauxipfttudbhthkat6fzlcq.b32.i2p:8091'
 			}
@@ -96,7 +93,7 @@ if (fileArg) {
 	}
 } else {
 	payloadInput = starterDirectory();
-	process.stderr.write('(no file given — using the built-in starter directory: Star + Jade)\n');
+	process.stderr.write('(no file given — using the built-in starter directory (2 nodes))\n');
 }
 
 const pre = validateRpcDirectoryPayload(payloadInput);
