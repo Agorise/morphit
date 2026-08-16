@@ -202,6 +202,23 @@ if [ "${MORPHIT_AUTO_REGISTER}" = "yes" ] && [ ! -f "${DONE_REGISTER}" ]; then
 	_get_env() { sed -n "s/^[[:space:]]*$1=//p" "$2" 2>/dev/null | tail -n1 | sed 's/^"//; s/"$//'; }
 	_main_env="${MORPHIT_OPS_DIR}/morphit.env"
 	_conf_env="${MORPHIT_OPS_DIR}/morphit.config.env"
+	# An ENCRYPTED active key is unlocked unattended via the SAME host-bound sealed
+	# credential the relay unit loads (/etc/morphit/relay_passphrase.cred). Decrypt
+	# it to a private tmpfs file (/run — RAM, never persistent disk) just for this
+	# register call, then remove it. host-bound: a stolen disk can't decrypt it, so
+	# this adds NO plaintext-passphrase-on-disk exposure beyond what the relay
+	# already requires. A plaintext-WIF install has no .cred and skips this.
+	_passfile=""
+	_cred="/etc/morphit/relay_passphrase.cred"
+	if [ -f "${_cred}" ] && command -v systemd-creds >/dev/null 2>&1; then
+		_passfile="$(mktemp -p /run morphit-relaypass.XXXXXX 2>/dev/null || true)"
+		if [ -n "${_passfile}" ] && systemd-creds decrypt --name=relay_passphrase "${_cred}" "${_passfile}" 2>/dev/null; then
+			chmod 600 "${_passfile}" 2>/dev/null || true
+		else
+			[ -n "${_passfile}" ] && rm -f "${_passfile}"
+			_passfile=""
+		fi
+	fi
 	_reg_ok=no
 	if ( set +e
 		MORPHIT_RELAY_ACCOUNT="$(_get_env MORPHIT_RELAY_ACCOUNT "${_main_env}")"
@@ -210,7 +227,13 @@ if [ "${MORPHIT_AUTO_REGISTER}" = "yes" ] && [ ! -f "${DONE_REGISTER}" ]; then
 		MORPHIT_INSTANCE_ORIGIN="$(_get_env MORPHIT_INSTANCE_ORIGIN "${_conf_env}")"
 		MORPHIT_INSTANCE_OPERATOR_TAG="$(_get_env MORPHIT_INSTANCE_OPERATOR_TAG "${_conf_env}")"
 		MORPHIT_INSTANCE_CONTACT_URL="$(_get_env MORPHIT_INSTANCE_CONTACT_URL "${INDEXER_ENV}")"
-		MORPHIT_RELAY_ACTIVE_KEY_PASSPHRASE_FILE="$(_get_env MORPHIT_RELAY_ACTIVE_KEY_PASSPHRASE_FILE "${RELAY_ENV}")"
+		# Prefer the decrypted sealed credential; fall back to any plaintext file the
+		# env layout declares (older/plaintext setups).
+		if [ -n "${_passfile}" ]; then
+			MORPHIT_RELAY_ACTIVE_KEY_PASSPHRASE_FILE="${_passfile}"
+		else
+			MORPHIT_RELAY_ACTIVE_KEY_PASSPHRASE_FILE="$(_get_env MORPHIT_RELAY_ACTIVE_KEY_PASSPHRASE_FILE "${RELAY_ENV}")"
+		fi
 		export MORPHIT_RELAY_ACCOUNT MORPHIT_RELAY_ACTIVE_KEY_FILE \
 			MORPHIT_INSTANCE_NAME MORPHIT_INSTANCE_ORIGIN MORPHIT_INSTANCE_OPERATOR_TAG \
 			MORPHIT_INSTANCE_CONTACT_URL MORPHIT_RELAY_ACTIVE_KEY_PASSPHRASE_FILE
@@ -218,6 +241,8 @@ if [ "${MORPHIT_AUTO_REGISTER}" = "yes" ] && [ ! -f "${DONE_REGISTER}" ]; then
 		npm exec --offline --workspace apps/ops-cli morphit-ops -- register --non-interactive ) >/dev/null 2>&1; then
 		_reg_ok=yes
 	fi
+	# Scrub the decrypted passphrase from RAM immediately, whatever the outcome.
+	[ -n "${_passfile}" ] && rm -f "${_passfile}"
 	if [ "${_reg_ok}" = yes ]; then
 		log 'on-chain registration complete'
 		touch "${DONE_REGISTER}"
@@ -246,7 +271,9 @@ if [ ! -f "${DONE_CANARY}" ]; then
 		fi
 		if [ -n "${_refresh}" ] && [ -f "${_refresh}" ]; then
 			log "publishing the warrant canary now that we are online (${_refresh})"
-			if ( set +e; sh "${_refresh}" ) >/dev/null 2>&1 && [ -f "${_canary_served}" ]; then
+			# The refresh script is bash (set -euo pipefail) — run it with bash, not
+			# sh (dash), or it dies on `set -o pipefail` before publishing anything.
+			if ( set +e; bash "${_refresh}" ) >/dev/null 2>&1 && [ -f "${_canary_served}" ]; then
 				log 'warrant canary published'
 				touch "${DONE_CANARY}"
 			else

@@ -1735,9 +1735,10 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 		}
 		// cp684 — make the FAST catch-up explicit: a behind node fetches blocks
 		// from all reachable endpoints at once (one prefetch window per endpoint).
-		if (!s.synced && s.rpcHealthy !== null && s.rpcHealthy > 0) {
+		// Use the same rows-derived count as the header so the two never disagree.
+		if (!s.synced && rpcHealthy !== null && rpcHealthy > 0) {
 			console.log(
-				`                     ${c.dim(`catching up in parallel from ${s.rpcHealthy} node${s.rpcHealthy === 1 ? '' : 's'} at once`)}`
+				`                     ${c.dim(`catching up in parallel from ${rpcHealthy} node${rpcHealthy === 1 ? '' : 's'} at once`)}`
 			);
 		}
 		console.log(`      Uptime:        ${fmtUptime(s.uptimeSec)}`);

@@ -235,7 +235,7 @@ export async function collectInstallSummary(
 	rows.push({
 		label: 'I2P address (.b32.i2p)',
 		ok: probe.serviceActive('i2pd') && probe.pathExists('/var/lib/i2pd/morphit-web.dat'),
-		detail: 'i2pd is still building its tunnels — give it a minute'
+		detail: 'i2pd is still building its tunnels — give it ~10 minutes'
 	});
 
 	// ── Distribution (IPFS / IPNS) ───────────────────────────────────

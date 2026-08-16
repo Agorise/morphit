@@ -1176,8 +1176,8 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	lines.push(`MORPHIT_RELAY_ACTIVE_KEY_FILE=${quote(keystorePath)}`);
 	if (answers.activeKey.mode === 'encrypted') {
 		lines.push('# Active key is in the file above as an encrypted v1 envelope');
-		lines.push('# (scrypt + AES-256-GCM).  Relay prompts for the unlock passphrase');
-		lines.push('# at startup.');
+		lines.push('# (scrypt + AES-256-GCM).  The relay unlocks it automatically at');
+		lines.push('# startup from a host-bound sealed credential — no startup prompt.');
 	} else {
 		lines.push('# Active key is in the file above as a plaintext WIF.  Anyone');
 		lines.push('# reading the file can spend BLURT and create accounts as your');
