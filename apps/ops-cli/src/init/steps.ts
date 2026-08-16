@@ -388,18 +388,16 @@ export async function stepActiveKey(relayAccountName: string): Promise<ActiveKey
 			"server only ever sees an active key for the relay account."
 	);
 
-	const choiceIdx = await askChoice(
-		'Two storage options:',
-		[
-			'Encrypted (recommended).  Prompt for an unlock passphrase, encrypt the key, ' +
-				'relay prompts for the passphrase at startup.',
-			'Plaintext.  Key sits in morphit.config.env in plain text.  Easier (no ' +
-				'passphrase) but if someone reads the file they can spend BLURT as you.'
-		],
-		0
+	// The active key is ALWAYS stored encrypted.  At runtime it costs nothing — the
+	// relay unlocks it automatically from a host-bound sealed credential (no boot
+	// prompt to hang on, and a stolen disk can't decrypt it) — whereas a plaintext
+	// key on disk lets anyone who reads the file spend your BLURT.  There is
+	// deliberately no plaintext option.
+	console.log(
+		'Your active key will be stored ENCRYPTED at rest.  The relay unlocks it\n' +
+			'automatically at startup from a host-bound sealed credential — no boot\n' +
+			'prompt to get stuck on, and a stolen disk cannot decrypt it.\n'
 	);
-	const mode: 'encrypted' | 'plaintext' = choiceIdx === 0 ? 'encrypted' : 'plaintext';
-	console.log('');
 
 	let wif: string;
 	while (true) {
@@ -425,16 +423,8 @@ export async function stepActiveKey(relayAccountName: string): Promise<ActiveKey
 	// would couple ops-cli to dblurt.  The relay's startup unlock
 	// performs the pubkey-on-chain match check instead.
 
-	if (mode === 'plaintext') {
-		return {
-			mode: 'plaintext',
-			plaintextWif: wif,
-			envelope: undefined,
-			passphraseHint: undefined
-		};
-	}
-
-	// Encrypted mode — ask for passphrase.
+	// Choose the unlock passphrase — it encrypts the key at rest and is sealed into
+	// the host-bound credential the relay (and auto-register) use to unlock it.
 	console.log(
 		"Now choose an unlock passphrase.  This is what you'll type\n" +
 			'when starting your relay; it never leaves this machine.\n' +

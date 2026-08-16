@@ -55,7 +55,7 @@ import {
 } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { defaultRepoRoot, safeCwd } from '../lib/repoRoot.ts';
-import { askPassword, askYesNo, askChoice, step, explain } from '../init/prompt.ts';
+import { askPassword, askYesNo, step, explain } from '../init/prompt.ts';
 import { sanitizeForTerm } from '../render/term.ts';
 import { encryptEnvelope, checkPassphraseStrength, type KeyEnvelope } from '../init/encrypt.ts';
 
@@ -239,20 +239,19 @@ async function promptNewActiveKey(relayAccount: string): Promise<string> {
 
 async function askStorageMode(current: CurrentKeystore): Promise<'encrypted' | 'plaintext'> {
 	step(2, 3, 'Storage mode for the new key');
-	console.log(
-		`Your current keystore at ${current.path} is ${current.mode === 'encrypted' ? 'ENCRYPTED' : 'PLAINTEXT'}.\n`
-	);
-	const choiceIdx = await askChoice(
-		'How should the new key be stored?',
-		[
-			'Encrypted (recommended).  Prompt for an unlock passphrase, encrypt the key, ' +
-				'relay prompts for the passphrase at startup.',
-			'Plaintext.  Key sits in a file in plain text.  Easier (no passphrase) but ' +
-				'if someone reads the file they can spend BLURT as you.'
-		],
-		current.mode === 'encrypted' ? 0 : 1
-	);
-	return choiceIdx === 0 ? 'encrypted' : 'plaintext';
+	// Plaintext is no longer offered: the active key is always stored encrypted, and
+	// the relay unlocks it unattended from a host-bound sealed credential (no boot
+	// prompt; a stolen disk can't decrypt it).  A plaintext key on disk lets anyone
+	// who reads the file spend your BLURT.
+	if (current.mode === 'plaintext') {
+		console.log(
+			`Your current keystore at ${current.path} is PLAINTEXT — the replacement\n` +
+				'will be stored ENCRYPTED (the relay unlocks it automatically at startup).\n'
+		);
+	} else {
+		console.log('The replacement key will be stored ENCRYPTED (relay unlocks it automatically).\n');
+	}
+	return 'encrypted';
 }
 
 async function askPassphraseForNew(): Promise<string> {

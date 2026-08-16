@@ -124,7 +124,7 @@ export async function runRegister(ctx: RegisterCtx): Promise<number> {
 	// ─── 2. Confirm ────
 	if (!nonInteractive) {
 		const ok = await askYesNo(
-			'Publish this registration on-chain now? This is permanent — register ops cannot be reversed (only superseded by an update op when that ships)',
+			'Publish this registration on-chain now? This is permanent — register ops cannot be reversed (only superseded by a fresh register op)',
 			false
 		);
 		if (!ok) {
