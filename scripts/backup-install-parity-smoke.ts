@@ -139,6 +139,16 @@ check(
 	/usermod -aG docker/.test(ops)
 );
 
+// v1.12.7 — the first backup on a fresh node must RETRY until the schema has
+// migrated (the script skips a schemaless DB, so a single early trigger writes
+// nothing and the operator sees "no backup yet" until the 4 AM timer).
+check(
+	'install first-backup retries until a real dump lands',
+	/Take the first DB backup now, retrying until the schema has migrated/.test(ansible) &&
+		/until:\s*morphit_first_backup\.rc == 0/.test(ansible) &&
+		/backups\/\*\.sql\.gz/.test(ansible)
+);
+
 console.log(
 	`\n${passed} passed, ${failed} failed\n${failed === 0 ? `✓ all ${passed} backup-install-parity checks passed` : '✗ backup-install-parity FAILED'}`
 );

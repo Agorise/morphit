@@ -225,6 +225,17 @@ jobs:
           EOF
           cat release-info.json
 
+      - name: Build the canonical web frontend (shipped prebuilt, not rebuilt per-operator)
+        # Federated operators must serve BYTE-IDENTICAL frontend assets to pass the
+        # on-chain build-integrity check — a local `npm run build` is not
+        # byte-reproducible across machines, so an honest operator's rebuild
+        # mismatches @morphit's published hashes and trips the scary red banner.
+        # Build the frontend ONCE here and ship apps/web/build in the tarball; the
+        # install + upgrade DEPLOY these exact files (falling back to a rebuild only
+        # if the prebuilt is somehow absent). The frontend is generic — instance
+        # identity loads at runtime from /v1/instance — so one build serves everyone.
+        run: npm run build -w apps/web
+
       - name: Build release tarball
         # Stage the output in /tmp so tar never sees its own
         # output land inside the directory it's reading.  Writing
@@ -248,7 +259,7 @@ jobs:
               --exclude='./dist' \
               --exclude='./apps/*/node_modules' \
               --exclude='./apps/*/dist' \
-              --exclude='./apps/*/build' \
+              --exclude='./apps/*/.svelte-kit' \
               --exclude='./packages/*/node_modules' \
               --exclude='./packages/*/dist' \
               --exclude='*.log' \

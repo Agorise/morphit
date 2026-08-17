@@ -302,6 +302,7 @@ SMOKES=(
 	".:directory-card-hidden-service-smoke"
 	".:tor-routed-probe-smoke"
 	".:tor-only-install-smoke"
+	".:prebuilt-frontend-ship-smoke"
 	".:ansible-aide-deferred-smoke"
 	".:moderation-flag-clearance-smoke"
 	".:profile-link-glyphs-single-home-smoke"

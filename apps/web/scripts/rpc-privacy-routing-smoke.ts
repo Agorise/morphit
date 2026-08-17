@@ -196,6 +196,19 @@ check(
 );
 
 console.log('');
+// A page served from a .onion/.i2p origin must use a HIDDEN-ONLY RPC pool — the
+// visitor is on Tor/I2P and their browser must never open a clearnet connection,
+// not even as a fallback. getRotator() drops DEFAULT_RPC_ENDPOINTS in that case.
+{
+	const endpointsSrc = read('src/lib/net/endpoints.ts');
+	check(
+		'served-from-hidden origin → hidden-only RPC pool (no clearnet fall-through)',
+		/servedFromHidden/.test(endpointsSrc) &&
+			/\.endsWith\('\.onion'\)\s*\|\|\s*h\.endsWith\('\.i2p'\)/.test(endpointsSrc) &&
+			/servedFromHidden\s*\?\s*\[\.\.\.DEFAULT_HIDDEN_RPC_ENDPOINTS\]/.test(endpointsSrc)
+	);
+}
+
 if (failed === 0) {
 	console.log(`\u2713 all ${passed} rpc-privacy-routing scenarios passed`);
 } else {

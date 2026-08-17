@@ -217,19 +217,19 @@ export async function runRegister(ctx: RegisterCtx): Promise<number> {
 				}),
 				// Offline / air-gapped: the broadcast's RPC calls have no upstream to
 				// answer and would otherwise BLOCK FOREVER (the operator had to Ctrl-C).
-				// Fail after 30s with a clear message instead — the caller then arms the
+				// Fail after 15s with a clear message instead — the caller then arms the
 				// deferred first-online register, or the operator retries when online.
 				new Promise<never>((_, reject) =>
 					setTimeout(
 						() =>
 							reject(
 								new Error(
-									'Timed out reaching a Blurt RPC after 30s — this box may not be online yet. ' +
+									'Timed out reaching a Blurt RPC after 15s — this box may not be online yet. ' +
 										'Your registration is unchanged; re-run `sudo morphit-ops register` once you are online ' +
 										'(a fresh install also lists itself automatically on first connection).'
 								)
 							),
-						30_000
+						15_000
 					)
 				)
 			]);
