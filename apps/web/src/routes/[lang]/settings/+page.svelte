@@ -15,7 +15,6 @@
 	import { validateNostrUrl } from '$utils/nostrUrl';
 	import { validateWebUrl } from '$utils/webUrl';
 	import IdentityLabel from '$components/IdentityLabel.svelte';
-	import EndpointList from '$components/EndpointList.svelte';
 	import Head from '$components/Head.svelte';
 	import BusyButton from '$components/BusyButton.svelte';
 	import ConfirmModal from '$components/ConfirmModal.svelte';
@@ -2277,21 +2276,6 @@
 			{/if}
 		</section>
 	{/if}
-
-	<!-- ─── RPC endpoints ─── -->
-	<section class="card mt-6" aria-labelledby="endpoints-heading">
-		<h2 id="endpoints-heading" class="font-display text-xl font-bold">
-			{$_('settings.endpoints.heading')}
-		</h2>
-		<div class="mt-1"><VisibilityBadge scope="device" /></div>
-		<p class="mt-2 text-ink-600 dark:text-ink-300">
-			{$_('settings.endpoints.explain')}
-		</p>
-
-		<div class="mt-4">
-			<EndpointList />
-		</div>
-	</section>
 
 	<!-- ─── Syndication preferences ─────────────────────────── -->
 	<section class="card mt-6" id="syndication" aria-labelledby="syndication-heading">

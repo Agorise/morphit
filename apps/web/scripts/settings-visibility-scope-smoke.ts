@@ -71,7 +71,6 @@ const EXPECTED: ReadonlyArray<readonly [string, 'public' | 'private' | 'device']
 	['preferences-heading', 'private'],
 	// Never leaves the browser.
 	['account-name-heading', 'device'],
-	['endpoints-heading', 'device'],
 	['session-heading', 'device'] // auto-lock + TOTP enrolment are bound to THIS browser
 ];
 

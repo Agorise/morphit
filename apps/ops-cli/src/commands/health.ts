@@ -777,19 +777,21 @@ export function classifyHealthResult(args: {
 		};
 	}
 	const summary = summarizeHealth(body);
-	// If the indexer can't reach ANY Blurt RPC, it cannot see the chain head — so
-	// its sync state is UNVERIFIABLE. Report "unknown" rather than trusting a
-	// stale `synced` flag (an offline / just-started node otherwise looks synced
-	// with a bogus 0-block lag).
-	if (summary.rpcAllDown) {
+	// If the indexer can't reach any RPC (rpcAllDown) OR hasn't established a chain
+	// head yet (chainHeadBlock null/≤0 — a just-restarted or offline node), its sync
+	// state is UNVERIFIABLE. A 0 chain head makes lag clamp to 0 (max(0, 0 − indexed)),
+	// which would otherwise masquerade as a "synced" node with a bogus 0-block lag.
+	const headEstablished = summary.chainHeadBlock !== null && summary.chainHeadBlock > 0;
+	if (summary.rpcAllDown || !headEstablished) {
 		return {
 			kind: 'unknown',
 			summary,
 			exitCode: 1,
 			message:
-				"The indexer is running, but it can't reach any Blurt RPC right now — so its " +
-				"sync state is unknown (it has no chain head to compare against). It resyncs " +
-				'automatically once an RPC endpoint becomes reachable.'
+				"The indexer is running, but it hasn't established a chain head yet (it just " +
+				"started, or it currently can't reach any Blurt RPC) — so its sync state is " +
+				'unknown, with no chain head to compare against. It resolves automatically once ' +
+				'an RPC endpoint is reachable and the chain head is seen.'
 		};
 	}
 	if (summary.synced) {

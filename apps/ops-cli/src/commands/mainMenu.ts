@@ -82,7 +82,7 @@ export const MENU_GROUPS: readonly MenuGroup[] = [
 				label: 'Edit settings',
 				blurb: 'Change RPC and other URLs, description/SEO, origin, fees, or your operator tag.',
 				subcommand: 'edit',
-				tip: 'Safe to revisit anytime. After changing your origin or tag, re-run the on-chain registration below.'
+				tip: 'Safe to revisit anytime. After changing your origin or display name, re-run the on-chain registration below (your tag is permanent).'
 			},
 			{
 				label: 'Set up a Tor / Lokinet / I2P address',
@@ -110,9 +110,9 @@ export const MENU_GROUPS: readonly MenuGroup[] = [
 			},
 			{
 				label: 'Re-publish my registration on-chain',
-				blurb: 'Push your current origin/tag to the federation directory (run after changing either).',
+				blurb: 'Update your origin or display name in the federation directory (your tag is permanent).',
 				subcommand: 'register',
-				tip: 'Run this after an origin/tag change so other instances and users discover you correctly.'
+				tip: 'Run this after an origin or display-name change so other instances and users discover you correctly. Re-registering updates those fields; the tag cannot change.'
 			}
 		]
 	},

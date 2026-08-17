@@ -332,51 +332,62 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		return { ok: false, reason: 'display_name_impersonates_reserved' };
 	}
 
-	// First, check that this account hasn't already registered. Per
-	// Q1.1 ratification, the register op is one-time per account.
-	// A future `morphit_operator_update_v1` op can change display_name
-	// or contact_url, but the tag is immutable once registered (this
-	// is a strict reading of first-come-first-served; the alternative
-	// — letting operators change tags — creates squatting races).
-	const existing = await client.query<{ account: string }>(
-		'SELECT account FROM operators WHERE account = $1',
+	// The register op is an UPSERT keyed on the signing ACCOUNT (the true, permanent
+	// identity — it signs every op). A re-registration UPDATES the mutable fields
+	// (origin, display_name, contact_url): this is how an operator moves between
+	// clearnet and tor-only, renames their instance, or changes contact details.
+	// The TAG is immutable once claimed — first-come-first-served squatting
+	// protection — so a re-registration that tries to change it is rejected.
+	const existing = await client.query<{ tag: string }>(
+		'SELECT tag FROM operators WHERE account = $1',
 		[ctx.signer]
 	);
-	if (existing.rows.length > 0) {
-		return { ok: false, reason: 'account_already_registered' };
+	const existingRow = existing.rows[0];
+	if (existingRow !== undefined) {
+		if (existingRow.tag !== v.tag) {
+			// Account is registered under a different tag; the tag can't change.
+			return { ok: false, reason: 'tag_immutable' };
+		}
+		// Same account, same tag → update the mutable fields. registered_in_block
+		// is deliberately left untouched (it records the FIRST registration).
+		await client.query(
+			`UPDATE operators
+			 SET display_name = $2, contact_url = $3, origin = $4
+			 WHERE account = $1`,
+			[ctx.signer, v.display_name, v.contact_url, v.origin]
+		);
+	} else {
+		// First-time registration. UNIQUE(tag) enforces first-come-first-served;
+		// ON CONFLICT DO NOTHING + the rowCount check distinguishes "tag already
+		// claimed by another account" from a successful insert.
+		const insertRes = await client.query<{ account: string }>(
+			`INSERT INTO operators (
+				account, tag, display_name, contact_url, origin, registered_in_block
+			) VALUES ($1, $2, $3, $4, $5, $6)
+			ON CONFLICT (tag) DO NOTHING
+			RETURNING account`,
+			[ctx.signer, v.tag, v.display_name, v.contact_url, v.origin, ctx.blockNum]
+		);
+		if (insertRes.rowCount === 0) {
+			// Tag was already claimed by another account.
+			return { ok: false, reason: 'tag_already_claimed' };
+		}
 	}
 
-	// Attempt the insert. UNIQUE(tag) enforces first-come-first-served.
-	// We use `ON CONFLICT DO NOTHING` combined with a follow-up check
-	// so we can distinguish "tag already claimed" from "insert failed
-	// for unexpected reason."
-	const insertRes = await client.query<{ account: string }>(
-		`INSERT INTO operators (
-			account, tag, display_name, contact_url, origin, registered_in_block
-		) VALUES ($1, $2, $3, $4, $5, $6)
-		ON CONFLICT (tag) DO NOTHING
-		RETURNING account`,
-		[ctx.signer, v.tag, v.display_name, v.contact_url, v.origin, ctx.blockNum]
-	);
-	if (insertRes.rowCount === 0) {
-		// Tag was already claimed by another account. The UNIQUE
-		// constraint fired without inserting. This is expected
-		// behaviour under tag races; not an error.
-		return { ok: false, reason: 'tag_already_claimed' };
-	}
-
-	// Phase D.5 — populate known_instances when the operator
-	// registered with an origin.  Other indexers running this
-	// same handler against the same op will populate their own
-	// known_instances tables identically; the chain is the
-	// federation source of truth.
-	//
-	// ON CONFLICT DO NOTHING handles the unlikely case where two
-	// operators registered with the same origin (e.g. one of them
-	// typo'd the URL during registration).  First-write wins; the
-	// later registration's origin lives on the operators row but
-	// won't get probed until/unless the first operator deregisters.
+	// Sync known_instances to the operator's CURRENT origin — this works for both a
+	// first-time insert and an origin change on update. Drop any prior origin row
+	// this operator held that is no longer current (so a clearnet→tor move does not
+	// leave the old clearnet origin lingering in the directory), then upsert the
+	// current origin.  ON CONFLICT (origin) DO NOTHING preserves first-write-wins if
+	// two operators ever claim the same origin string, and leaves an UNCHANGED
+	// origin's existing probe status/history intact (the DELETE skips it and the
+	// INSERT no-ops).  Other indexers running this same handler against the same op
+	// converge identically; the chain is the federation source of truth.
 	if (v.origin !== null) {
+		await client.query(
+			`DELETE FROM known_instances WHERE operator_account = $1 AND origin <> $2`,
+			[ctx.signer, v.origin]
+		);
 		await client.query(
 			`INSERT INTO known_instances (
 				origin, operator_account,

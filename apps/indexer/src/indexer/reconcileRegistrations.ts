@@ -165,11 +165,21 @@ export async function reconcileOperatorRegistrations(
 
 	// Uses the existing ops_op_id_idx (op_id, block_num DESC).  Only
 	// rejected operator_register rows — never any other handler's ops.
+	//
+	// EXCLUDE historical `account_already_registered` rejections: since register
+	// is now an account-keyed UPSERT (a re-registration updates the origin), those
+	// old rows would re-apply as updates on reboot. In block-ASC order that would
+	// usually converge correctly, but a rejected op OLDER than a later APPLIED
+	// update would overwrite the newer origin — a revert. They were correct
+	// rejections under the prior one-time semantics, not validator bugs, so they
+	// must not be healed. New re-registrations apply live during indexing; an
+	// operator whose origin is stale simply re-registers once.
 	const { rows } = await deps.db.query<RejectedRow>(
 		`SELECT block_num, trx_in_block, op_in_trx, block_time, trx_id,
 		        signer, payload, reject_reason
 		 FROM ops
 		 WHERE op_id = $1 AND status = 'rejected'
+		   AND reject_reason IS DISTINCT FROM 'account_already_registered'
 		 ORDER BY block_num ASC
 		 LIMIT $2`,
 		[OP_IDS.operatorRegister, maxRows]

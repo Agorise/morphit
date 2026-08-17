@@ -170,7 +170,7 @@ await scenario('P6-3: rejects reserved tag "agorise"', async () => {
 
 await scenario('P6-3: accepts non-reserved tag containing "morphit"', async () => {
 	const mock = makeMockClient([
-		{ match: 'SELECT account FROM operators', rows: [] },
+		{ match: 'SELECT tag FROM operators', rows: [] },
 		{ match: 'INSERT INTO operators', rows: [{ account: 'alice' }], rowCount: 1 },
 		{ match: 'INSERT INTO operator_registration_events', rowCount: 1 }
 	]);
@@ -186,7 +186,7 @@ await scenario('P6-3: accepts non-reserved tag containing "morphit"', async () =
 
 await scenario('accepts tag with allowed characters', async () => {
 	const mock = makeMockClient([
-		{ match: 'SELECT account FROM operators', rows: [] },
+		{ match: 'SELECT tag FROM operators', rows: [] },
 		{ match: 'INSERT INTO operators', rows: [{ account: 'alice' }], rowCount: 1 },
 		{ match: 'INSERT INTO operator_registration_events', rowCount: 1 }
 	]);
@@ -307,8 +307,9 @@ await scenario('O1.1: rejects display_name impersonating reserved name', async (
 
 await scenario('cp670: accepts "Morphit Latino" (brand in a distinct name)', async () => {
 	const mock = makeMockClient([
-		{ match: 'SELECT account FROM operators', rows: [] },
+		{ match: 'SELECT tag FROM operators', rows: [] },
 		{ match: 'INSERT INTO operators', rows: [{ account: 'morphitlat-relay' }], rowCount: 1 },
+		{ match: 'DELETE FROM known_instances', rowCount: 0 },
 		{ match: 'INSERT INTO known_instances', rowCount: 1 },
 		{ match: 'INSERT INTO operator_registration_events', rowCount: 1 }
 	]);
@@ -342,7 +343,7 @@ await scenario('cp670: rejects infra handle "morphit-fees" as display_name', asy
 
 await scenario('cp670: owner exemption — signer "morphit" may set "Morphit"', async () => {
 	const mock = makeMockClient([
-		{ match: 'SELECT account FROM operators', rows: [] },
+		{ match: 'SELECT tag FROM operators', rows: [] },
 		{ match: 'INSERT INTO operators', rows: [{ account: 'morphit' }], rowCount: 1 },
 		{ match: 'INSERT INTO operator_registration_events', rowCount: 1 }
 	]);
@@ -354,8 +355,9 @@ await scenario('cp670: owner exemption — signer "morphit" may set "Morphit"', 
 
 await scenario('cp671: accepts Persian display_name with ZWNJ (half-space)', async () => {
 	const mock = makeMockClient([
-		{ match: 'SELECT account FROM operators', rows: [] },
+		{ match: 'SELECT tag FROM operators', rows: [] },
 		{ match: 'INSERT INTO operators', rows: [{ account: 'parsi-relay' }], rowCount: 1 },
+		{ match: 'DELETE FROM known_instances', rowCount: 0 },
 		{ match: 'INSERT INTO known_instances', rowCount: 1 },
 		{ match: 'INSERT INTO operator_registration_events', rowCount: 1 }
 	]);
@@ -373,7 +375,7 @@ await scenario('cp671: accepts Persian display_name with ZWNJ (half-space)', asy
 // O1.1 — NFC normalization happens (codepoint-count is post-NFC)
 await scenario('O1.1: NFC-normalizes display_name before length check', async () => {
 	const mock = makeMockClient([
-		{ match: 'SELECT account FROM operators', rows: [] },
+		{ match: 'SELECT tag FROM operators', rows: [] },
 		{ match: 'INSERT INTO operators', rows: [{ account: 'alice' }], rowCount: 1 },
 		{ match: 'INSERT INTO operator_registration_events', rowCount: 1 }
 	]);
@@ -395,7 +397,7 @@ await scenario('O1.1: NFC-normalizes display_name before length check', async ()
 
 await scenario('contact_url is optional (omitted is OK)', async () => {
 	const mock = makeMockClient([
-		{ match: 'SELECT account FROM operators', rows: [] },
+		{ match: 'SELECT tag FROM operators', rows: [] },
 		{ match: 'INSERT INTO operators', rows: [{ account: 'alice' }], rowCount: 1 },
 		{ match: 'INSERT INTO operator_registration_events', rowCount: 1 }
 	]);
@@ -489,7 +491,7 @@ await scenario('O1.2: rejects contact_url with userinfo', async () => {
 
 await scenario('accepts well-formed https contact_url', async () => {
 	const mock = makeMockClient([
-		{ match: 'SELECT account FROM operators', rows: [] },
+		{ match: 'SELECT tag FROM operators', rows: [] },
 		{ match: 'INSERT INTO operators', rows: [{ account: 'alice' }], rowCount: 1 },
 		{ match: 'INSERT INTO operator_registration_events', rowCount: 1 }
 	]);
@@ -509,7 +511,7 @@ await scenario('accepts well-formed https contact_url', async () => {
 
 await scenario('treats empty contact_url as omitted', async () => {
 	const mock = makeMockClient([
-		{ match: 'SELECT account FROM operators', rows: [] },
+		{ match: 'SELECT tag FROM operators', rows: [] },
 		{ match: 'INSERT INTO operators', rows: [{ account: 'alice' }], rowCount: 1 },
 		{ match: 'INSERT INTO operator_registration_events', rowCount: 1 }
 	]);
@@ -525,29 +527,75 @@ await scenario('treats empty contact_url as omitted', async () => {
 
 // ─── Idempotency / race conditions ───────────────────────────────
 
-await scenario('rejects when account is already registered', async () => {
+await scenario('re-register by same account UPDATES mutable fields (origin/display_name)', async () => {
 	const mock = makeMockClient([
-		// Existing-account check returns a row.
-		{
-			match: 'SELECT account FROM operators',
-			rows: [{ account: 'alice' }],
-			rowCount: 1
-		}
+		// Existing-account check returns the current tag.
+		{ match: 'SELECT tag FROM operators', rows: [{ tag: 'acme' }], rowCount: 1 },
+		// Same tag → UPDATE the mutable fields (never a fresh INSERT).
+		{ match: 'UPDATE operators', rowCount: 1 },
+		// Origin present → re-sync known_instances (drop stale, upsert current).
+		{ match: 'DELETE FROM known_instances', rowCount: 0 },
+		{ match: 'INSERT INTO known_instances', rowCount: 1 },
+		{ match: 'INSERT INTO operator_registration_events', rowCount: 1 }
 	]);
 	const r = await handler(
 		makeCtx({
 			signer: 'alice',
-			payload: { tag: 'acme', display_name: 'Alice' }
+			payload: { tag: 'acme', display_name: 'Alice', origin: 'https://acme.example' }
 		}),
 		mock.client
 	);
-	assertEqual(r, { ok: false, reason: 'account_already_registered' }, 'result');
+	assertEqual(r, { ok: true }, 'result');
+});
+
+await scenario('re-register CANNOT change the tag (tag is immutable)', async () => {
+	const mock = makeMockClient([
+		{ match: 'SELECT tag FROM operators', rows: [{ tag: 'acme' }], rowCount: 1 }
+	]);
+	const r = await handler(
+		makeCtx({
+			signer: 'alice',
+			payload: { tag: 'acme-renamed', display_name: 'Alice' }
+		}),
+		mock.client
+	);
+	assertEqual(r, { ok: false, reason: 'tag_immutable' }, 'result');
+});
+
+await scenario('re-register clearnet→tor: drops old origin, lists the onion', async () => {
+	const queries: string[] = [];
+	const mock = makeMockClient([
+		{ match: 'SELECT tag FROM operators', rows: [{ tag: 'latino' }], rowCount: 1 },
+		{ match: 'UPDATE operators', rowCount: 1 },
+		{ match: 'DELETE FROM known_instances', rowCount: 1 }, // drops the old clearnet origin
+		{ match: 'INSERT INTO known_instances', rowCount: 1 },
+		{ match: 'INSERT INTO operator_registration_events', rowCount: 1 }
+	]);
+	const origMock = mock.client.query;
+	mock.client.query = (async (text: string, params?: unknown[]) => {
+		queries.push(typeof text === 'string' ? text : '');
+		return origMock(text as never, params as never);
+	}) as typeof mock.client.query;
+	const r = await handler(
+		makeCtx({
+			signer: 'morphitlat-relay',
+			payload: {
+				tag: 'latino',
+				display_name: 'Morphit Latino',
+				origin: 'http://hijsjgywjy7src2hvhll2kvfbo3xme6kcr3c2tkpvhp33f6oehg5bpyd.onion'
+			}
+		}),
+		mock.client
+	);
+	assertEqual(r, { ok: true }, 'result');
+	const delQ = queries.find((q) => q.includes('DELETE FROM known_instances')) ?? '';
+	assertEqual(/operator_account = \$1 AND origin <> \$2/.test(delQ), true, 'delete scopes to this operator, non-current origin');
 });
 
 await scenario('rejects when tag is already claimed by another account', async () => {
 	const mock = makeMockClient([
 		// This account hasn't registered yet.
-		{ match: 'SELECT account FROM operators', rows: [] },
+		{ match: 'SELECT tag FROM operators', rows: [] },
 		// But the tag UNIQUE constraint fires (rowCount=0 from
 		// ON CONFLICT DO NOTHING).
 		{ match: 'INSERT INTO operators', rows: [], rowCount: 0 }
@@ -566,8 +614,9 @@ await scenario('rejects when tag is already claimed by another account', async (
 
 await scenario('Phase D.5: happy path with origin populates known_instances', async () => {
 	const mock = makeMockClient([
-		{ match: 'SELECT account FROM operators', rows: [] },
+		{ match: 'SELECT tag FROM operators', rows: [] },
 		{ match: 'INSERT INTO operators', rows: [{ account: 'alice' }], rowCount: 1 },
+		{ match: 'DELETE FROM known_instances', rowCount: 0 },
 		{ match: 'INSERT INTO known_instances', rowCount: 1 },
 		{ match: 'INSERT INTO operator_registration_events', rowCount: 1 }
 	]);
@@ -590,7 +639,7 @@ await scenario('Phase D.5: happy path WITHOUT origin skips known_instances inser
 	// present.  If the test is correctly NOT inserting, the mock
 	// only needs to expect operators + events (no known_instances).
 	const mock = makeMockClient([
-		{ match: 'SELECT account FROM operators', rows: [] },
+		{ match: 'SELECT tag FROM operators', rows: [] },
 		{ match: 'INSERT INTO operators', rows: [{ account: 'alice' }], rowCount: 1 },
 		{ match: 'INSERT INTO operator_registration_events', rowCount: 1 }
 	]);
@@ -608,7 +657,7 @@ await scenario('Phase D.5: empty-string origin treated as omitted', async () => 
 	// No known_instances insert expected — empty string means
 	// "operator is not federation-publishing yet."
 	const mock = makeMockClient([
-		{ match: 'SELECT account FROM operators', rows: [] },
+		{ match: 'SELECT tag FROM operators', rows: [] },
 		{ match: 'INSERT INTO operators', rows: [{ account: 'alice' }], rowCount: 1 },
 		{ match: 'INSERT INTO operator_registration_events', rowCount: 1 }
 	]);
@@ -764,8 +813,9 @@ await scenario('Phase D.5: rejects origin with fragment', async () => {
 
 await scenario('Phase D.5: accepts origin with custom port', async () => {
 	const mock = makeMockClient([
-		{ match: 'SELECT account FROM operators', rows: [] },
+		{ match: 'SELECT tag FROM operators', rows: [] },
 		{ match: 'INSERT INTO operators', rows: [{ account: 'alice' }], rowCount: 1 },
+		{ match: 'DELETE FROM known_instances', rowCount: 0 },
 		{ match: 'INSERT INTO known_instances', rowCount: 1 },
 		{ match: 'INSERT INTO operator_registration_events', rowCount: 1 }
 	]);
@@ -787,8 +837,9 @@ await scenario('Phase D.5: accepts origin with trailing slash (normalized)', asy
 	// URL parser sees "https://alice.example/" — pathname='/'.
 	// Our validator allows pathname='' or '/' (no further path).
 	const mock = makeMockClient([
-		{ match: 'SELECT account FROM operators', rows: [] },
+		{ match: 'SELECT tag FROM operators', rows: [] },
 		{ match: 'INSERT INTO operators', rows: [{ account: 'alice' }], rowCount: 1 },
+		{ match: 'DELETE FROM known_instances', rowCount: 0 },
 		{ match: 'INSERT INTO known_instances', rowCount: 1 },
 		{ match: 'INSERT INTO operator_registration_events', rowCount: 1 }
 	]);

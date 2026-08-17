@@ -15,6 +15,7 @@
 import { mkdtempSync, rmSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
 
 import { validateBlurtAccountName } from '../src/init/chainCheck.ts';
@@ -1173,6 +1174,29 @@ scenario('writeWizardOutput: hardening opted-out → no checklist file written',
 });
 
 // ─── Summary ─────────────────────────────────────────────────────
+
+// v1.12.3 — the active key is ALWAYS stored encrypted. Guard that neither the
+// setup wizard nor the key-rotation command offers a plaintext storage choice
+// (a plaintext active key on disk lets anyone reading the file spend BLURT; the
+// relay unlocks the encrypted key unattended from a host-bound sealed credential,
+// so there is no reason to offer plaintext). The keystore *reader* still handles
+// a plaintext file defensively — that is separate and intentional.
+scenario('active-key storage is ALWAYS encrypted — no plaintext choice in the wizard or edit-key', () => {
+	const opsCliRoot = join(fileURLToPath(new URL('.', import.meta.url)), '..');
+	const stepsSrc = readFileSync(join(opsCliRoot, 'src', 'init', 'steps.ts'), 'utf-8');
+	const editSrc = readFileSync(join(opsCliRoot, 'src', 'commands', 'editActiveKey.ts'), 'utf-8');
+	assertTrue(!/Two storage options/.test(stepsSrc), 'wizard still offers a plaintext storage choice');
+	assertTrue(/mode: 'encrypted'/.test(stepsSrc), 'wizard no longer produces an encrypted keystore');
+	assertTrue(
+		!/return\s*\{\s*mode: 'plaintext'/.test(stepsSrc.replace(/\s+/g, ' ')),
+		'wizard still returns a plaintext keystore'
+	);
+	assertTrue(/return 'encrypted';/.test(editSrc), 'editActiveKey no longer forces encrypted storage');
+	assertTrue(
+		!/How should the new key be stored\?/.test(editSrc),
+		'editActiveKey still offers a plaintext storage choice'
+	);
+});
 
 console.log(`\n${'─'.repeat(54)}`);
 if (failures === 0) {
