@@ -115,7 +115,12 @@
     # is current.  A VPS has a static IP and leaves enable_ddns off.
     - role: ddns
       tags: [ddns]
-      when: enable_ddns | default(false)
+      when:
+        - enable_ddns | default(false)
+        # A tor-only node has no clearnet domain, so there is nothing for dynamic
+        # DNS to update — skip the role entirely even if enable_ddns was left on
+        # from a home-node profile.
+        - not (morphit_tor_only | default(false))
 
     - role: tls
       tags: [tls]

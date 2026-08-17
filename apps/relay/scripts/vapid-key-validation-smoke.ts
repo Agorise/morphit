@@ -18,7 +18,7 @@
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { isValidVapidPublicKey } from '../src/config/index.ts';
+import { isValidVapidPublicKey, isValidVapidSubject } from '../src/config/index.ts';
 
 let scenarios = 0;
 let failures = 0;
@@ -54,13 +54,38 @@ check(
 	'9 pushEnabled gates on isValidVapidPublicKey (not merely a set key)',
 	/pushEnabled:\s*Boolean\(\s*isValidVapidPublicKey\(/.test(cfgSrc)
 );
+// v1.12.5 — a tor-only node has no clearnet domain, so its VAPID subject renders
+// as a domain-less `https://`. web-push rejects that and the relay used to
+// crash-loop on it. pushEnabled must gate on a VALID subject so an unusable one
+// DISABLES push instead of taking the whole relay down.
+check(
+	'9a isValidVapidSubject: domain-less https:// is invalid (would crash web-push)',
+	isValidVapidSubject('https://') === false
+);
+check(
+	'9b isValidVapidSubject: a real https:// host and a mailto: with an address are valid',
+	isValidVapidSubject('https://morphit.io') === true && isValidVapidSubject('mailto:op@example.com') === true
+);
+check(
+	'9c isValidVapidSubject: http:// (incl. .onion) and empty are invalid',
+	isValidVapidSubject('http://x.onion') === false &&
+		isValidVapidSubject('mailto:') === false &&
+		isValidVapidSubject('') === false &&
+		isValidVapidSubject(undefined) === false
+);
+check(
+	'9d pushEnabled gates on isValidVapidSubject (invalid subject → push disabled, no crash)',
+	/isValidVapidSubject\(env\.MORPHIT_RELAY_VAPID_SUBJECT\)/.test(cfgSrc)
+);
 check(
 	'10 VAPID public key env var is trimmed',
 	/MORPHIT_RELAY_VAPID_PUBLIC_KEY:\s*z\.string\(\)\.trim\(\)/.test(cfgSrc)
 );
 check(
-	'11 main.ts warns the operator on a set-but-invalid VAPID key',
-	mainSrc.includes('vapid_public_key_invalid')
+	'11 main.ts warns the operator when a set-but-invalid VAPID key OR subject disables push',
+	mainSrc.includes('push_disabled_invalid_vapid') &&
+		/isValidVapidSubject\(cfg\.vapidSubject\)/.test(mainSrc) &&
+		/tor-only/.test(mainSrc)
 );
 
 console.log(`\n${'\u2500'.repeat(56)}`);

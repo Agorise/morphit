@@ -316,6 +316,26 @@ run_dump() {
 	echo "$dump_rc" > "$DUMP_STATUS"
 }
 
+# ─── Guard: never write a backup of an UNMIGRATED (schemaless) database ───
+# A dump taken before the indexer has run its migrations contains only
+# pg_dump's header/SET boilerplate and NO `CREATE TABLE` — ~396 bytes gzipped,
+# which sits ABOVE the empty-stream baseline, so the size check below would
+# happily keep it and `morphit-ops health` would then report a bogus "failing"
+# backup (a 396-byte "restore point" that restores nothing).  This happens on a
+# fresh node when the very first run races schema readiness (e.g. a slow tor-only
+# indexer that outran the install's port-wait).  SKIP only when the schema probe
+# SUCCEEDS but finds no tables (genuinely unmigrated): exit 0 (nothing to back up
+# yet, not a failure) so no fragment is written; the timer retries and captures a
+# real dump once the schema exists.  If the probe itself FAILS (connection error,
+# etc.) we do NOT skip — we fall through so the real dump runs and the DUMP_STATUS
+# check below reports the failure honestly rather than masking it as "no schema".
+# shellcheck disable=SC2086  # DUMP_CMD deliberately word-split
+schema_probe=$($DUMP_CMD --schema-only "$DB_NAME" 2>/dev/null) && schema_probe_ok=1 || schema_probe_ok=0
+if [ "$schema_probe_ok" = "1" ] && [ -n "$schema_probe" ] && ! printf '%s\n' "$schema_probe" | grep -qi 'CREATE TABLE'; then
+	echo "morphit-backup: indexer schema not migrated yet (no tables) — skipping this run; the timer will capture a real backup once the schema exists." >&2
+	exit 0
+fi
+
 if [ -n "$AGE_RECIPIENT" ]; then
 	run_dump | gzip | age -r "$AGE_RECIPIENT" > "$TMPFILE"
 	EMPTY_SIZE=$(printf '' | gzip | age -r "$AGE_RECIPIENT" | wc -c | tr -d ' ')

@@ -278,6 +278,23 @@ check(
 	'a bare `-s` cannot see a 20-byte gzip of a failed dump'
 );
 
+// v1.12.5 — a dump taken before the indexer migrated has NO tables (~396 bytes
+// gzipped), which is ABOVE the empty-stream baseline, so the size guard keeps it
+// and health flags a bogus "failing" backup. The script must skip a schemaless DB.
+check(
+	'skips a schemaless (unmigrated) DB via a CREATE TABLE probe before dumping',
+	/--schema-only "\$DB_NAME"/.test(code) && /grep -qi 'CREATE TABLE'/.test(code)
+);
+check(
+	'the schemaless skip exits 0 (nothing to back up yet) — not a failure state',
+	/schema not migrated yet[\s\S]*?exit 0/.test(code)
+);
+check(
+	'a FAILED schema probe does NOT skip (falls through so a real dump failure is still reported)',
+	/schema_probe_ok=1[\s\S]*?\|\| schema_probe_ok=0/.test(code) &&
+		/\[ "\$schema_probe_ok" = "1" \]/.test(code)
+);
+
 console.log(
 	`\n${passed} passed, ${failed} failed\n${failed === 0 ? `✓ all ${passed} backup-script-posix-safety checks passed` : '✗ backup-script-posix-safety FAILED'}`
 );

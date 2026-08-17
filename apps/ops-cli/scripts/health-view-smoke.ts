@@ -335,6 +335,21 @@ expect('HV-1e an unparseable string passes through', ensureHealthPath('not a url
 		'HV-4i chain head 0 (not established) → unknown, not a bogus synced',
 		noHead.kind === 'unknown' && noHead.exitCode === 1
 	);
+
+	// A RELAY /v1/health body has NO chain_head_block (it is not an indexer). The
+	// head-unestablished check must NOT fire for an ABSENT field — a healthy relay
+	// must classify as reachable, never "unknown" (which the health display renders
+	// as "answered, but not as the relay"). Regression guard for that exact bug.
+	const relayBody = classifyHealthResult({
+		fetchError: null,
+		httpStatus: 200,
+		jsonOk: true,
+		body: { stale: false, relay_balance: '2019.714 BLURT', web_push: false }
+	});
+	expect(
+		'HV-4j relay body (no chain_head_block) classifies as reachable, NOT unknown',
+		relayBody.kind !== 'unknown' && relayBody.summary !== null
+	);
 }
 
 // ─── HV-5: structural wiring in main.ts ─────────────────────────────

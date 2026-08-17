@@ -56,6 +56,10 @@ function allUpProbe(): SummaryProbe {
 
 const vpsInputs: SummaryInputs = { domain: 'trade.example.com', mode: 'vps', torOnly: false, enableBunkerweb: true, repoPath: '/opt/morphit', relayAccount: 'ex-relay' };
 const homeInputs: SummaryInputs = { ...vpsInputs, mode: 'home' };
+// A HOME node in TOR-ONLY mode has no clearnet domain, so DDNS is moot — it must
+// NOT appear as a row and must NOT be a required unit (else health/summary show a
+// bogus red ✗ for a timer that was never installed).
+const homeTorOnlyInputs: SummaryInputs = { ...vpsInputs, mode: 'home', torOnly: true, domain: '' };
 const find = (rows: readonly ComponentStatus[], re: RegExp): ComponentStatus | undefined => rows.find((r) => re.test(r.label));
 
 async function main(): Promise<void> {
@@ -68,6 +72,13 @@ async function main(): Promise<void> {
 	// ── which components appear ─────────────────────────────────────
 	check('vps: no dynamic-DNS row (home-only)', !find(vpsRows, /dynamic DNS/i));
 	check('home: HAS a dynamic-DNS row', !!find(homeRows, /dynamic DNS/i));
+	// tor-only home: DDNS must be GONE from the summary entirely (no red ✗ ever).
+	const homeTorOnlyRows = await collectInstallSummary(homeTorOnlyInputs, allUpProbe());
+	check('tor-only home: NO dynamic-DNS row (no clearnet domain)', !find(homeTorOnlyRows, /dynamic DNS/i));
+	check(
+		'tor-only home: ddns.timer NOT a required unit (so the all-units roll-up never flags it)',
+		!expectedUnits(homeTorOnlyInputs).includes('morphit-ddns.timer')
+	);
 	check('bunkerweb on: HAS Web firewall + Website rows', !!find(vpsRows, /BunkerWeb/i) && !!find(vpsRows, /Website/i));
 	check('bunkerweb off: NO BunkerWeb/Website rows', !find(noBwRows, /BunkerWeb|Website/i));
 	check(
