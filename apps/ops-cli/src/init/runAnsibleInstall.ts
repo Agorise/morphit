@@ -329,10 +329,19 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 		contactConfigured: !!inputs.contactUrl
 	});
 	const everythingUp = allComponentsUp(summaryRows);
+	// Is the box actually ONLINE? The summary's "Blurt RPC connectivity" row is ✓
+	// only when the indexer can reach a Blurt RPC. If it isn't reachable, a
+	// synchronous `register` would BLOCK forever on its broadcast RPC calls (no
+	// upstream to answer) — the operator would have to Ctrl-C out. So offline we do
+	// NOT attempt it: the deferred first-online registration is already armed and
+	// publishes the moment the box is online.
+	const rpcReachable = summaryRows.some(
+		(r) => r.label === 'Blurt RPC connectivity' && r.ok === true
+	);
 	step(0, 0, 'List your instance on the public federated directory');
 	if (await askYesNo('\n  List this instance on the public federated directory (start earning fees)?', true)) {
 		armDeferredRegister();
-		if (everythingUp) {
+		if (everythingUp && rpcReachable) {
 			const rc = spawnSync('/usr/local/bin/morphit-ops', ['register'], {
 				stdio: 'inherit',
 				env: {
@@ -352,6 +361,12 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 				console.log('  any time with:');
 				console.log('        sudo morphit-ops register\n');
 			}
+		} else if (!rpcReachable) {
+			// OFFLINE / air-gapped install — attempting the broadcast now would hang.
+			console.log('\n  This box isn\u2019t online yet, so we won\u2019t try the on-chain listing this');
+			console.log('  second \u2014 it\u2019s armed to publish automatically the moment this box is');
+			console.log('  online. Or do it by hand any time with:');
+			console.log('        sudo morphit-ops register\n');
 		} else {
 			console.log('\n  A few pieces above aren\u2019t up yet, so we won\u2019t list it this second \u2014 but');
 			console.log('  it\u2019s armed to list itself automatically once everything is \u2713 and this box');
