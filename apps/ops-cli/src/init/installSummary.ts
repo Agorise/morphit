@@ -116,7 +116,7 @@ export function expectedUnits(inputs: SummaryInputs): string[] {
 		'ipfs.service',
 		'morphit-ipfs-pin.timer'
 	];
-	if (inputs.mode === 'home') units.push('morphit-ddns.timer');
+	if (inputs.mode === 'home' && !inputs.torOnly) units.push('morphit-ddns.timer');
 	return units;
 }
 
@@ -285,7 +285,7 @@ export async function collectInstallSummary(
 
 	// ── Operations ───────────────────────────────────────────────────
 	rows.push({ label: 'Automatic nightly backups (timer)', ok: probe.serviceActive('morphit-backup.timer') });
-	if (inputs.mode === 'home') {
+	if (inputs.mode === 'home' && !inputs.torOnly) {
 		rows.push({
 			label: 'Automatic address updates (dynamic DNS)',
 			ok: probe.serviceActive('morphit-ddns.timer')

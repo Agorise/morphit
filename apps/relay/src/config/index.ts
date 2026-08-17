@@ -41,6 +41,25 @@ export function isValidVapidPublicKey(key: string | undefined | null): boolean {
 }
 
 /**
+ * A usable VAPID subject is a `mailto:` with an address, or an `https://` URL
+ * with a real host.  A domain-less `https://` (which a tor-only node produces
+ * when it has no clearnet domain) is NOT usable — web-push rejects it — so it
+ * must DISABLE push, never crash the relay.  http:// (incl. .onion) is not a
+ * valid VAPID subject: browser push services are clearnet-https/mailto only.
+ */
+export function isValidVapidSubject(subject: string | undefined | null): boolean {
+	if (!subject) return false;
+	const s = subject.trim();
+	if (s.startsWith('mailto:')) return s.length > 'mailto:'.length;
+	try {
+		const u = new URL(s);
+		return u.protocol === 'https:' && u.hostname.length > 0;
+	} catch {
+		return false;
+	}
+}
+
+/**
  * Sentinels that have appeared in this repo's example .env files.
  * Boot is refused if MORPHIT_RELAY_DATABASE_URL still contains
  * any of them as the password component, which catches the
@@ -338,14 +357,12 @@ const envSchema = z.object({
 	// Identifies the operator to the push service.  MUST be a
 	// mailto: or https:// URL.  Push services use this to contact
 	// the operator if their pushes misbehave (per RFC 8292).
-	MORPHIT_RELAY_VAPID_SUBJECT: z
-		.string()
-		.trim()
-		.refine(
-			(s) => s.startsWith('mailto:') || s.startsWith('https://'),
-			'VAPID subject must be a mailto: or https:// URL'
-		)
-		.optional(),
+	// The VAPID subject is accepted as any optional string and NEVER fails config
+	// load — an unusable value (empty, domain-less `https://` from a tor-only node,
+	// or a typo) must DISABLE web push, not crash-loop the relay over an optional
+	// feature. `pushEnabled` gates on isValidVapidSubject(); main.ts warns the
+	// operator when a subject is set-but-invalid.
+	MORPHIT_RELAY_VAPID_SUBJECT: z.string().trim().optional(),
 	// Push-sender worker polling interval (ms).  Default 2s.
 	// cp450 — notifications must feel immediate: the end-to-end
 	// budget is <6s (a ~3s Blurt block + indexer enqueue + this
@@ -667,7 +684,7 @@ export function loadConfig(): Config {
 		pushEnabled: Boolean(
 			isValidVapidPublicKey(env.MORPHIT_RELAY_VAPID_PUBLIC_KEY) &&
 				env.MORPHIT_RELAY_VAPID_PRIVATE_KEY &&
-				env.MORPHIT_RELAY_VAPID_SUBJECT
+				isValidVapidSubject(env.MORPHIT_RELAY_VAPID_SUBJECT)
 		),
 		pushPollIntervalMs: env.MORPHIT_RELAY_PUSH_POLL_INTERVAL_MS,
 		pushBatchSize: env.MORPHIT_RELAY_PUSH_BATCH_SIZE,

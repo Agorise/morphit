@@ -13,7 +13,7 @@
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 
-import { loadConfig, type Config, type UnlockedConfig } from './config/index.ts';
+import { loadConfig, isValidVapidPublicKey, isValidVapidSubject, type Config, type UnlockedConfig } from './config/index.ts';
 import { loadOperatorConfig } from '@morphit/operator-config';
 import { unlockActiveKey } from './config/unlock.ts';
 import { BlurtClient } from './blurt/client.ts';
@@ -285,8 +285,13 @@ async function main(): Promise<void> {
 		cfg.vapidSubject &&
 		!cfg.pushEnabled
 	) {
-		cfgLog.warn('vapid_public_key_invalid', {
-			hint: 'MORPHIT_RELAY_VAPID_PUBLIC_KEY is set but is not a valid VAPID public key (must be a base64url-encoded 65-byte uncompressed P-256 point). Push is DISABLED until corrected. Check for a trailing newline/whitespace, or regenerate the pair with: npx web-push generate-vapid-keys'
+		const badSubject = !isValidVapidSubject(cfg.vapidSubject);
+		const badKey = !isValidVapidPublicKey(cfg.vapidPublicKey);
+		cfgLog.warn('push_disabled_invalid_vapid', {
+			hint:
+				badSubject && !badKey
+					? `MORPHIT_RELAY_VAPID_SUBJECT is set to ${JSON.stringify(cfg.vapidSubject)} but is not a usable VAPID subject (needs mailto:<address> or https://<host>; a domain-less "https://", which a tor-only node produces, does not count). Push is DISABLED until corrected — this is expected and harmless on a tor-only node, where browser push (clearnet-only) does not apply.`
+					: 'MORPHIT_RELAY_VAPID_PUBLIC_KEY is set but is not a valid VAPID public key (must be a base64url-encoded 65-byte uncompressed P-256 point). Push is DISABLED until corrected. Check for a trailing newline/whitespace, or regenerate the pair with: npx web-push generate-vapid-keys'
 		});
 	}
 	const pushSubscriptionStore = new PushSubscriptionStore(db);

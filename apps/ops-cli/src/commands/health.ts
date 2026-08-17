@@ -781,8 +781,14 @@ export function classifyHealthResult(args: {
 	// head yet (chainHeadBlock null/≤0 — a just-restarted or offline node), its sync
 	// state is UNVERIFIABLE. A 0 chain head makes lag clamp to 0 (max(0, 0 − indexed)),
 	// which would otherwise masquerade as a "synced" node with a bogus 0-block lag.
-	const headEstablished = summary.chainHeadBlock !== null && summary.chainHeadBlock > 0;
-	if (summary.rpcAllDown || !headEstablished) {
+	// A chain head of 0/negative means an INDEXER that hasn't established the head
+	// yet (just started, or can't reach any RPC) — unknown, since lag would clamp to
+	// 0 and masquerade as synced. But a body with NO chain_head_block at all
+	// (chainHeadBlock === null) is NOT an indexer response — e.g. the RELAY's
+	// /v1/health, which has no sync fields — so the head check must NOT fire for it,
+	// or a perfectly healthy relay gets mislabeled "answered, but not as the relay".
+	const headUnestablished = summary.chainHeadBlock !== null && summary.chainHeadBlock <= 0;
+	if (summary.rpcAllDown || headUnestablished) {
 		return {
 			kind: 'unknown',
 			summary,

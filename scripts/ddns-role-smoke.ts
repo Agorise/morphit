@@ -36,7 +36,13 @@ function check(name: string, cond: boolean): void {
 console.log('\u2500\u2500 ddns-role smoke (cp600) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500');
 
 // ── Playbook wiring ───────────────────────────────────────────────
-check('playbook applies the ddns role, gated by enable_ddns', /- role: ddns[\s\S]{0,80}when: enable_ddns \| default\(false\)/.test(playbook));
+check('playbook applies the ddns role, gated by enable_ddns', /- role: ddns[\s\S]{0,240}enable_ddns \| default\(false\)/.test(playbook));
+// v1.12.5 — a tor-only node has no clearnet domain, so the ddns role must ALSO be
+// gated off for tor-only (even if enable_ddns were left on from a home profile).
+check(
+	'ddns role is ALSO gated off in tor-only mode',
+	/- role: ddns[\s\S]{0,400}not \(morphit_tor_only \| default\(false\)\)/.test(playbook)
+);
 check('ddns runs BEFORE tls (so certbot can validate once DNS is current)', playbook.indexOf('- role: ddns') < playbook.indexOf('- role: tls') && playbook.indexOf('- role: ddns') > playbook.indexOf('- role: hardening'));
 
 // ── group_vars contract ───────────────────────────────────────────
