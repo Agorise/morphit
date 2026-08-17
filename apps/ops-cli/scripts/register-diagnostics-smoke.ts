@@ -278,6 +278,20 @@ scenarios.push({
 });
 
 scenarios.push({
+	name: 'register broadcast is timeout-guarded (offline fails in 30s, never hangs)',
+	run() {
+		const reg = _read('register.ts');
+		if (!/Promise\.race\(/.test(reg))
+			return 'register.ts must wrap the broadcast in Promise.race for a timeout';
+		if (!/setTimeout\(/.test(reg) || !/30_000/.test(reg))
+			return 'register.ts broadcast timeout must be a 30_000ms setTimeout';
+		if (!/Timed out reaching a Blurt RPC/.test(reg))
+			return 'register.ts must give a clear offline timeout message';
+		return null;
+	}
+});
+
+scenarios.push({
 	name: 'cp182: no command prints a block number (async broadcast returns none)',
 	run() {
 		for (const f of ['register.ts', 'paymentMethod.ts']) {

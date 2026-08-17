@@ -53,5 +53,18 @@ check('post-tor fixup points instance + relay origins at the onion for torOnly',
 	/Tor-only — point instance \+ relay origins at the onion/.test(pb) &&
 	/MORPHIT_INSTANCE_ORIGIN=\{\{ morphit_onion_origin \}\}/.test(pb));
 
+// The synchronous on-chain register during install must be gated on Blurt RPC
+// being REACHABLE. Offline, attempting it hangs forever on the broadcast (operator
+// had to Ctrl-C); the deferred first-online register is armed instead.
+check(
+	'install register step is gated on RPC reachability (no offline hang)',
+	/const rpcReachable = summaryRows\.some\([\s\S]{0,140}Blurt RPC connectivity[\s\S]{0,60}r\.ok === true/.test(ra) &&
+		/if \(everythingUp && rpcReachable\)/.test(ra)
+);
+check(
+	'install ARMS the deferred first-online register + has an explicit offline path',
+	/armDeferredRegister\(\)/.test(ra) && /isn\\u2019t online yet, so we won\\u2019t try the on-chain listing/.test(ra)
+);
+
 console.log(`\n${pass} passed, ${fail} failed\n${fail === 0 ? `✓ all ${pass} tor-only-install checks passed` : '✗ FAILED'}`);
 process.exit(fail === 0 ? 0 : 1);
