@@ -22,6 +22,8 @@
  *   tsx scripts/api-response-shape-smoke.ts
  */
 
+import { readFileSync as _readFileSync } from 'node:fs';
+import { fileURLToPath as _fileURLToPath } from 'node:url';
 import { buildListingFeeBody } from '../src/api/listingFeeBody.ts';
 import { buildStrangerFeeQuoteBody } from '../src/api/strangerFeeQuoteBody.ts';
 import { buildStatsResponse } from '../src/api/stats.ts';
@@ -103,6 +105,23 @@ function mockClientWithCount(count: number): Queryable {
 }
 
 // ─── /v1/listing-fee body ───────────────────────────────────────
+
+await scenario('rpc_endpoints_healthy counts only endpoints with a real success (not just out of cooldown)', () => {
+	const src = _readFileSync(
+		_fileURLToPath(new URL('../src/api/health.ts', import.meta.url)),
+		'utf8'
+	);
+	// Honesty guard: a freshly-started / offline pool has no endpoint in cooldown
+	// yet, so counting merely "not in cooldown" falsely reports RPC connectivity.
+	// The count must ALSO require lastSuccessAt > 0.
+	const ok =
+		/rpcEndpointsHealthy\s*=\s*rpcSnap\.filter\(/.test(src) &&
+		/cooldownUntil <= nowMs/.test(src) &&
+		/lastSuccessAt > 0/.test(src);
+	if (!ok) {
+		throw new Error('rpcEndpointsHealthy must filter on cooldownUntil <= nowMs && lastSuccessAt > 0');
+	}
+});
 
 await scenario('listing-fee body: returns base + feature-fee + ttl', () => {
 	const cfg = fakeConfig({ feeBaseBlurt: 60, featureFeeBlurtPerHour: 50 });

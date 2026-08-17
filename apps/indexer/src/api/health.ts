@@ -40,7 +40,7 @@ import type { HeadTailer } from '$indexer/headTailer';
 // endpoint reports. It stays hardcoded here on purpose: it is one of the 19
 // version touchpoints the version-consistency smoke pins, and reading it from
 // package.json at runtime would take it out of that net.
-export const INDEXER_VERSION = '1.12.6';
+export const INDEXER_VERSION = '1.12.7';
 
 // Blurt produces one block every 3 seconds. Used to translate the
 // block-lag count into a human "seconds behind" figure in the
@@ -103,7 +103,17 @@ export function healthRoute(
 		// in the gated verbose block below.
 		const rpcSnap = poller.rpcEndpointSnapshot;
 		const nowMs = Date.now();
-		const rpcEndpointsHealthy = rpcSnap.filter((e) => e.cooldownUntil <= nowMs).length;
+		// An endpoint is "healthy" only if it is BOTH out of cooldown AND has
+		// actually succeeded at least once (lastSuccessAt > 0). Counting merely
+		// "not in cooldown" was optimistic at startup: a freshly-started pool has
+		// no endpoint in cooldown yet, so every one looked healthy for the first
+		// probe cycle — which made the install summary report "Blurt RPC
+		// connectivity ✓" on an offline box (contradicting the relay-balance line
+		// that couldn't reach an RPC). Requiring a real success makes a
+		// never-yet-connected (offline / just-booted) node honestly report 0.
+		const rpcEndpointsHealthy = rpcSnap.filter(
+			(e) => e.cooldownUntil <= nowMs && e.lastSuccessAt > 0
+		).length;
 
 		const body: Record<string, unknown> = {
 			status: stale ? ('degraded' as const) : ('ok' as const),

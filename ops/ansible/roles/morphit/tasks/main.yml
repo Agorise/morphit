@@ -278,14 +278,25 @@
     timeout: 120
   failed_when: false
 
-- name: Take the first DB backup now (prompt first dump; the timer handles daily runs)
+- name: Take the first DB backup now, retrying until the schema has migrated
   # Without this, a fresh node's first dump waits on the timer's OnActiveSec +
   # RandomizedDelaySec (up to ~32 min), so the operator sees "no backup yet" long
-  # after install. Trigger it explicitly here for an immediate dump. Idempotent
-  # + best-effort (the timer still covers it if this races).
-  ansible.builtin.command: systemctl start morphit-backup.service
+  # after install. We trigger it explicitly — but on a fresh node the indexer can
+  # take a couple of minutes to finish migrations (slow first PG connection; no
+  # network to help an offline install settle). The backup script correctly SKIPS
+  # a not-yet-migrated (schemaless) DB rather than banking a useless fragment, so
+  # a single early trigger writes nothing. Loop until a REAL dump lands (or give
+  # up after ~5min — the daily timer is the final safety net). Idempotent.
+  ansible.builtin.shell: |
+    systemctl start morphit-backup.service
+    ls {{ morphit_service_home }}/backups/*.sql.gz >/dev/null 2>&1
+  args:
+    executable: /bin/bash
+  register: morphit_first_backup
+  until: morphit_first_backup.rc == 0
+  retries: 20
+  delay: 15
   changed_when: true
-  failed_when: false
   failed_when: false
 
 # first-online: enable the service so it fires the moment the box next reaches

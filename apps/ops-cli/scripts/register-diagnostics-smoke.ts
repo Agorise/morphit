@@ -283,8 +283,8 @@ scenarios.push({
 		const reg = _read('register.ts');
 		if (!/Promise\.race\(/.test(reg))
 			return 'register.ts must wrap the broadcast in Promise.race for a timeout';
-		if (!/setTimeout\(/.test(reg) || !/30_000/.test(reg))
-			return 'register.ts broadcast timeout must be a 30_000ms setTimeout';
+		if (!/setTimeout\(/.test(reg) || !/15_000/.test(reg))
+			return 'register.ts broadcast timeout must be a 15_000ms setTimeout';
 		if (!/Timed out reaching a Blurt RPC/.test(reg))
 			return 'register.ts must give a clear offline timeout message';
 		return null;

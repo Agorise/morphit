@@ -498,7 +498,22 @@ export function getRotator(): EndpointRotator {
 	// release without their IP ever reaching the clear net. A normal browser
 	// can't route the hidden ones, fails fast, and falls through to clearnet —
 	// the unchanged behaviour when DEFAULT_HIDDEN_RPC_ENDPOINTS is empty.
-	const urls = [...DEFAULT_HIDDEN_RPC_ENDPOINTS, ...DEFAULT_RPC_ENDPOINTS];
+	// PRIVACY (tor-only sites): if this page is itself being served from a
+	// hidden-service origin (.onion / .i2p), the visitor is on Tor/I2P and their
+	// browser must NEVER open a clearnet connection — not even as a fallback. So
+	// the pool is hidden-service endpoints ONLY, with no clearnet tier to fall
+	// through to. On a clearnet origin we keep the prior behaviour: hidden nodes
+	// first (privacy for Tor-Browser visitors of a clearnet site), then the
+	// clearnet canonical pool as a fallback.
+	const servedFromHidden =
+		typeof location !== 'undefined' &&
+		(() => {
+			const h = location.hostname.toLowerCase();
+			return h.endsWith('.onion') || h.endsWith('.i2p');
+		})();
+	const urls = servedFromHidden
+		? [...DEFAULT_HIDDEN_RPC_ENDPOINTS]
+		: [...DEFAULT_HIDDEN_RPC_ENDPOINTS, ...DEFAULT_RPC_ENDPOINTS];
 	singleton = new EndpointRotator(urls, { privacyFirst: true });
 	// cp268/cp408 privacy (#1): the browser NEVER probe-pings Blurt RPC nodes.
 	// getRotator() runs on ordinary pages (the layout's per-session

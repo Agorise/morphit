@@ -1606,8 +1606,18 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		}
 	}
 	try {
-		info('Building the web frontend (apps/web)...');
-		runOrThrow('npm', ['run', 'build'], { cwd: join(installDir, 'apps', 'web') });
+		// Prefer the CANONICAL prebuilt frontend shipped in the release tarball:
+		// deploying @morphit's exact bytes is what lets a federated operator pass
+		// the on-chain build-integrity check (a local rebuild isn't byte-reproducible
+		// and trips the tamper banner). Only rebuild if the prebuilt is absent — an
+		// older tarball, or a source checkout — so nothing regresses.
+		const shippedBuild = join(installDir, 'apps', 'web', 'build', 'index.html');
+		if (existsSync(shippedBuild)) {
+			info('Using the prebuilt web frontend shipped in the release (no rebuild).');
+		} else {
+			info('No prebuilt frontend in this release — building the web frontend (apps/web)...');
+			runOrThrow('npm', ['run', 'build'], { cwd: join(installDir, 'apps', 'web') });
+		}
 	} catch (err) {
 		// Nothing served has been touched yet (the build writes to
 		// apps/web/build inside the install), so a build failure rolls back

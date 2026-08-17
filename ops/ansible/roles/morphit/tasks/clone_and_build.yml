@@ -61,7 +61,7 @@
       tar --no-wildcards-match-slash -C {{ morphit_local_source_path | quote }}
       {{ '' if (morphit_source_bundle_marker.stat.exists | default(false)) else '--exclude=node_modules' }}
       --exclude=./.git --exclude=./translator-output
-      --exclude=./apps/*/.svelte-kit --exclude=./apps/*/build
+      --exclude=./apps/*/.svelte-kit
       --exclude=./apps/*/dist --exclude=./packages/*/dist
       -cf - . | tar -C {{ morphit_repo_path | quote }} -xf -
   when:
@@ -154,6 +154,26 @@
         - not morphit_matrix_crypto_bin.stat.exists
         - not (morphit_matrix_crypto_bin2.stat.exists | default(false))
 
+- name: Preserve the CANONICAL prebuilt web frontend (shipped in the release tarball)
+  # A federated operator must serve @morphit's EXACT frontend bytes to pass the
+  # on-chain build-integrity check — a local rebuild isn't byte-reproducible and
+  # trips the tamper banner. The tarball ships apps/web/build; the workspace build
+  # below would overwrite it with a local rebuild, so stash it first and restore it
+  # after. If nothing was shipped (older tarball / source checkout), there's nothing
+  # to stash and the local rebuild stands — no regression.
+  ansible.builtin.shell: |
+    set -eu
+    if [ -f apps/web/build/index.html ]; then
+      rm -rf apps/web/.build-shipped
+      cp -a apps/web/build apps/web/.build-shipped
+    fi
+  args:
+    chdir: "{{ morphit_repo_path }}"
+    executable: /bin/bash
+  become: true
+  become_user: "{{ morphit_service_user }}"
+  changed_when: false
+
 - name: Build workspaces (relay + indexer + ops-cli + indexer-client + asset-registry)
   ansible.builtin.command:
     cmd: npm run build --workspaces --if-present
@@ -176,6 +196,22 @@
   # this task runs AFTER the full `npm install` above (dev deps
   # present, incl. esbuild), the bundle builds cleanly.  The next
   # task verifies the result is runnable.
+
+- name: Restore the canonical prebuilt web frontend over the local rebuild
+  # Put @morphit's exact shipped bytes back (the workspace build above rebuilt
+  # apps/web locally). If nothing was stashed, the local rebuild stands — fallback.
+  ansible.builtin.shell: |
+    set -eu
+    if [ -d apps/web/.build-shipped ]; then
+      rm -rf apps/web/build
+      mv apps/web/.build-shipped apps/web/build
+    fi
+  args:
+    chdir: "{{ morphit_repo_path }}"
+    executable: /bin/bash
+  become: true
+  become_user: "{{ morphit_service_user }}"
+  changed_when: false
 
 - name: Verify morphit-ops CLI is runnable (catches missing bin symlink / missing tsx)
   ansible.builtin.command:
