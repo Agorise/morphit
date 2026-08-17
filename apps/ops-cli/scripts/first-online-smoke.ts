@@ -45,8 +45,8 @@ check(
 	/check_online\(\)/.test(src) && /for ep in \$\(rpc_endpoints\)/.test(src) && /FALLBACK_RPC=/.test(src)
 );
 check(
-	'has per-step done-markers (tls / register / rpc) for idempotency',
-	/tls\.done/.test(src) && /register\.done/.test(src) && /rpc\.done/.test(src)
+	'has per-step done-markers (tls / register / rpc / canary) for idempotency',
+	/tls\.done/.test(src) && /register\.done/.test(src) && /rpc\.done/.test(src) && /canary\.done/.test(src)
 );
 check(
 	'TLS step runs certbot only when there is no Let\u2019s Encrypt cert yet',
@@ -55,6 +55,33 @@ check(
 check(
 	'RPC step restarts the indexer + relay to connect promptly',
 	/systemctl restart morphit-indexer\.service/.test(src) && /systemctl restart morphit-relay\.service/.test(src)
+);
+// v1.12.3 — an OFFLINE-installed box starts i2pd + tor with no network; they must
+// be restarted on first-online or i2pd sits with an empty netDb forever.
+check(
+	'RPC step ALSO restarts i2pd + tor so the hidden transports reseed/bootstrap on first online',
+	/systemctl restart i2pd\.service/.test(src) && /systemctl restart tor\.service/.test(src)
+);
+// v1.12.3 — the canary refresh script is bash (set -o pipefail); invoking it with
+// sh (dash) aborts before publishing. This regressed once — lock it out for good.
+check(
+	'canary step invokes the refresh script with BASH, never sh (dash would abort on set -o pipefail)',
+	/bash "\$\{_refresh\}"/.test(src) && !/[^a-z]sh "\$\{_refresh\}"/.test(src)
+);
+check(
+	'canary step is idempotent (marks canary.done, keyed on a served canary.txt)',
+	/DONE_CANARY/.test(src) && /canary\.txt/.test(src)
+);
+// v1.12.3 SECURITY — auto-register unlocks the ENCRYPTED key via the SAME host-bound
+// sealed credential the relay uses.  The decrypted passphrase must live ONLY in a
+// /run (tmpfs/RAM) file and be scrubbed — never a plaintext file on persistent disk.
+check(
+	'auto-register decrypts the sealed relay credential via systemd-creds (host-bound, not a plaintext passphrase file)',
+	/systemd-creds decrypt/.test(src) && /relay_passphrase\.cred/.test(src)
+);
+check(
+	'the decrypted passphrase lands in /run (tmpfs) only and is scrubbed with rm -f after the register call',
+	/mktemp -p \/run/.test(src) && /rm -f "\$\{_passfile\}"/.test(src)
 );
 check(
 	'registration is OPT-IN (gated on MORPHIT_AUTO_REGISTER=yes) and non-interactive',

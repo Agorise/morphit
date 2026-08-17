@@ -1,6 +1,6 @@
 {
   "name": "@morphit/node-health",
-  "version": "1.12.3",
+  "version": "1.12.4",
   "private": true,
   "type": "module",
   "description": "Pure, process-agnostic node-health decisions shared by the ops-cli health view and the indexer's public /v1/health endpoint (IPFS/IPNS seeding classification, health disk-path resolution). Facts gathering stays per-process; only the decision logic lives here so the CLI and the endpoint can never drift.",

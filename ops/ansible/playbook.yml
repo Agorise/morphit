@@ -265,9 +265,9 @@
           ansible.builtin.shell:
             cmd: >-
               set -o pipefail;
-              head -c 391 {{ ((morphit_i2pd_datadir | default('/var/lib/i2pd')) ~ '/' ~ (morphit_i2pd_keyfile | default('morphit-web.dat'))) | quote }}
-              | sha256sum | cut -d' ' -f1 | xxd -r -p | base32 | tr 'A-Z' 'a-z' | tr -d '=';
-              echo .b32.i2p
+              addr=$(head -c 391 {{ ((morphit_i2pd_datadir | default('/var/lib/i2pd')) ~ '/' ~ (morphit_i2pd_keyfile | default('morphit-web.dat'))) | quote }}
+              | sha256sum | cut -d' ' -f1 | xxd -r -p | base32 | tr 'A-Z' 'a-z' | tr -d '=');
+              printf '%s.b32.i2p\n' "$addr"
           args:
             executable: /bin/bash
           register: morphit_i2p_b32
@@ -326,6 +326,20 @@
                 - re: '^MORPHIT_RELAY_ALLOWED_ORIGINS='
                   line: "MORPHIT_RELAY_ALLOWED_ORIGINS={{ morphit_onion_origin }}"
               notify: Restart morphit-relay
+
+            # The indexer's public origin is templated https://<domain>; a tor-only
+            # node has no domain, so that renders an invalid `https://` and the
+            # indexer refuses to boot. Point it at the onion (http:// is correct —
+            # .onion is self-authenticating; the indexer's URL validator accepts it).
+            - name: "Tor-only — MORPHIT_INDEXER_PUBLIC_ORIGIN = onion"
+              ansible.builtin.lineinfile:
+                path: /etc/morphit/indexer.env
+                regexp: '^MORPHIT_INDEXER_PUBLIC_ORIGIN='
+                line: "MORPHIT_INDEXER_PUBLIC_ORIGIN={{ morphit_onion_origin }}"
+                owner: root
+                group: "{{ morphit_service_group }}"
+                mode: '0640'
+              notify: Restart morphit-indexer
 
         - name: Write the .b32.i2p address into morphit.config.env
           ansible.builtin.lineinfile:

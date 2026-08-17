@@ -11,6 +11,7 @@
 	import { _ } from 'svelte-i18n';
 	import Head from '$components/Head.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
+	import EndpointList from '$components/EndpointList.svelte';
 	import { getStats } from '$lib/indexer/client';
 	import type { StatsResponse } from '@morphit/indexer-client';
 
@@ -85,18 +86,35 @@
 			</div>
 		</section>
 
-		<p class="mt-6 text-sm text-ink-500">
-			{$_('stats.updated', { values: { time: formatDayMonthTime(stats.generated_at) } })}
-		</p>
-		<p class="mt-2 text-sm text-ink-600 dark:text-ink-300">
-			{$_('stats.json_note')}
-			<a
-				href="/v1/stats"
-				data-sveltekit-reload
-				target="_blank"
-				rel="noopener noreferrer"
-				class="text-morphit-teal hover:underline dark:text-morphit-emerald">{$_('stats.json_link')}</a
-			>
-		</p>
+		<!-- The "updated" + aggregator/JSON note, on their own card. -->
+		<section class="card mt-6">
+			<p class="text-sm text-ink-500">
+				{$_('stats.updated', { values: { time: formatDayMonthTime(stats.generated_at) } })}
+			</p>
+			<p class="mt-2 text-sm text-ink-600 dark:text-ink-300">
+				{$_('stats.json_note')}
+				<a
+					href="/v1/stats"
+					data-sveltekit-reload
+					target="_blank"
+					rel="noopener noreferrer"
+					class="text-morphit-teal hover:underline dark:text-morphit-emerald">{$_('stats.json_link')}</a
+				>
+			</p>
+		</section>
+
+		<!-- RPC endpoints — the nodes this site syncs from (moved here from settings). -->
+		<section class="card mt-6" aria-labelledby="endpoints-heading">
+			<h2 id="endpoints-heading" class="font-display text-xl font-bold">
+				{$_('settings.endpoints.heading')}
+			</h2>
+			<p class="mt-2 text-ink-600 dark:text-ink-300">
+				{$_('settings.endpoints.explain')}
+			</p>
+
+			<div class="mt-4">
+				<EndpointList />
+			</div>
+		</section>
 	{/if}
 </div>

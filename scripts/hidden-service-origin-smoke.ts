@@ -40,5 +40,27 @@ check('federation probe LISTS hidden-service origins instead of probing them',
 check('hidden-service listing records it was not network-probed (auditable, not a false "good")',
 	/hidden_service_not_network_probed/.test(probe));
 
+// v1.12.4 — the RELAY'S OWN startup config must also boot with a tor-only http://
+// origin. This is the LOCAL config validation (distinct from the on-chain register
+// path above); a too-strict https-only check here crash-looped a tor-only relay.
+const relayCfg = read('apps/relay/src/config/index.ts');
+check('relay config recognises self-authenticating http:// .onion/.i2p origins',
+	/function isHiddenServiceOrigin\(/.test(relayCfg) &&
+	/\.endsWith\('\.onion'\)/.test(relayCfg) && /\.endsWith\('\.i2p'\)/.test(relayCfg));
+check('relay ALLOWED_ORIGINS accepts http:// hidden-service origins (tor-only CORS boot)',
+	/!o\.startsWith\('https:\/\/'\) && !o\.startsWith\('http:\/\/localhost'\) && !isHiddenServiceOrigin\(o\)/.test(relayCfg));
+check('relay BLURT_RPC accepts http:// hidden-service endpoints (tor-only broadcast)',
+	/!ep\.startsWith\('https:\/\/'\) && !isHiddenServiceOrigin\(ep\)/.test(relayCfg));
+
+// v1.12.4 — a tor-only node has no clearnet domain, so the Ansible tor-only block
+// must point the INDEXER's public origin at the onion too; the template renders
+// https://<empty-domain> otherwise and the indexer refuses to boot on an invalid URL.
+const playbook = read('ops/ansible/playbook.yml');
+check('Ansible tor-only block sets MORPHIT_INDEXER_PUBLIC_ORIGIN to the onion',
+	/MORPHIT_INDEXER_PUBLIC_ORIGIN = onion/.test(playbook) &&
+	/MORPHIT_INDEXER_PUBLIC_ORIGIN=\{\{ morphit_onion_origin \}\}/.test(playbook));
+check('i2p .b32 derivation emits a SINGLE line (no bare ".b32.i2p" line that the shell would execute)',
+	/printf '%s\.b32\.i2p/.test(playbook) && !/echo \.b32\.i2p/.test(playbook));
+
 console.log(`\n${pass} passed, ${fail} failed\n${fail === 0 ? `✓ all ${pass} hidden-service-origin checks passed` : '✗ FAILED'}`);
 process.exit(fail === 0 ? 0 : 1);

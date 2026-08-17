@@ -40,7 +40,7 @@ import type { HeadTailer } from '$indexer/headTailer';
 // endpoint reports. It stays hardcoded here on purpose: it is one of the 19
 // version touchpoints the version-consistency smoke pins, and reading it from
 // package.json at runtime would take it out of that net.
-export const INDEXER_VERSION = '1.12.3';
+export const INDEXER_VERSION = '1.12.4';
 
 // Blurt produces one block every 3 seconds. Used to translate the
 // block-lag count into a human "seconds behind" figure in the
@@ -88,7 +88,12 @@ export function healthRoute(
 		const status = poller.getStatus();
 		const uptimeSec = Math.floor((Date.now() - bootTime) / 1000);
 		const lagBlocks = Math.max(0, status.chainHeadBlock - status.indexedBlock);
-		const stale = lagBlocks > config.staleLagThreshold;
+		// A node that hasn't established a chain head yet (0 — just started, or can't
+		// currently reach any RPC) is NOT synced: chainHead 0 would clamp lagBlocks to
+		// 0 and otherwise report a misleading "synced / 0 behind". Treat it as stale so
+		// no consumer (health CLI, web footer, MCP) trusts a bogus 0-lag.
+		const headEstablished = status.chainHeadBlock > 0;
+		const stale = !headEstablished || lagBlocks > config.staleLagThreshold;
 
 		// Compact RPC-pool health for at-a-glance triage on the PUBLIC
 		// body: how many of the configured Blurt RPC endpoints are

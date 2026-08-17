@@ -591,9 +591,10 @@ export function loadConfig(): Config {
 		throw new Error('MORPHIT_RELAY_BLURT_RPC must list at least one endpoint');
 	}
 	for (const ep of blurtRpcEndpoints) {
-		if (!ep.startsWith('https://')) {
+		if (!ep.startsWith('https://') && !isHiddenServiceOrigin(ep)) {
 			throw new Error(
-				`MORPHIT_RELAY_BLURT_RPC entry ${JSON.stringify(ep)} must start with https://`
+				`MORPHIT_RELAY_BLURT_RPC entry ${JSON.stringify(ep)} must start with https:// ` +
+					`(or http:// for a .onion/.i2p hidden service)`
 			);
 		}
 	}
@@ -603,9 +604,10 @@ export function loadConfig(): Config {
 		throw new Error('MORPHIT_RELAY_ALLOWED_ORIGINS must list at least one origin');
 	}
 	for (const o of allowedOrigins) {
-		if (!o.startsWith('https://') && !o.startsWith('http://localhost')) {
+		if (!o.startsWith('https://') && !o.startsWith('http://localhost') && !isHiddenServiceOrigin(o)) {
 			throw new Error(
-				`MORPHIT_RELAY_ALLOWED_ORIGINS entry ${JSON.stringify(o)} must be https:// (or http://localhost for dev)`
+				`MORPHIT_RELAY_ALLOWED_ORIGINS entry ${JSON.stringify(o)} must be https:// ` +
+					`(or http:// for a .onion/.i2p hidden service, or http://localhost for dev)`
 			);
 		}
 	}
@@ -680,4 +682,18 @@ function splitTrim(s: string): string[] {
 		.split(',')
 		.map((x) => x.trim())
 		.filter(Boolean);
+}
+
+/** A .onion / .i2p host is SELF-AUTHENTICATING — the network layer provides the
+ *  encryption and the address IS the public key, so the service is served over
+ *  plain `http://` with no TLS (a cert would be both pointless and impossible).
+ *  Accept `http://` ONLY for those hosts; everything else must still be https. */
+function isHiddenServiceOrigin(o: string): boolean {
+	if (!o.startsWith('http://')) return false;
+	try {
+		const h = new URL(o).hostname.toLowerCase();
+		return h.endsWith('.onion') || h.endsWith('.i2p');
+	} catch {
+		return false;
+	}
 }

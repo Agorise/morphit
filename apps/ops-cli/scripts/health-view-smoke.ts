@@ -306,14 +306,35 @@ expect('HV-1e an unparseable string passes through', ensureHealthPath('not a url
 	);
 
 	// A 2xx other than 200 (e.g. 204) with JSON should still classify as
-	// synced/behind, not http-error — the guard is <200 || >=300.
+	// synced/behind, not http-error — the guard is <200 || >=300. Use a genuinely
+	// synced body (chain head established, zero lag, RPC reachable).
 	const http204 = classifyHealthResult({
 		fetchError: null,
 		httpStatus: 299,
 		jsonOk: true,
-		body: { stale: false }
+		body: {
+			stale: false,
+			chain_head_block: 59441297,
+			indexed_block: 59441297,
+			rpc_endpoints_healthy: 6,
+			rpc_endpoints_total: 10
+		}
 	});
 	expect('HV-4h 2xx boundary (299) with JSON is not an http-error', http204.kind === 'synced');
+
+	// A node that hasn't established a chain head yet (0 / missing) must report
+	// UNKNOWN, never a false "synced" — chainHead 0 clamps lag to 0 and would
+	// otherwise masquerade as caught-up (fresh-restart / offline tor-only node).
+	const noHead = classifyHealthResult({
+		fetchError: null,
+		httpStatus: 200,
+		jsonOk: true,
+		body: { stale: false, chain_head_block: 0, indexed_block: 59441297, rpc_endpoints_healthy: 3, rpc_endpoints_total: 10 }
+	});
+	expect(
+		'HV-4i chain head 0 (not established) → unknown, not a bogus synced',
+		noHead.kind === 'unknown' && noHead.exitCode === 1
+	);
 }
 
 // ─── HV-5: structural wiring in main.ts ─────────────────────────────
