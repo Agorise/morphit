@@ -6,6 +6,7 @@
  * http URL can never enter via the local knob (SSRF guard).
  */
 import { rpcTransportOf } from '../src/api/rpcHealth.ts';
+import { BlurtClient } from '../src/blurt/client.ts';
 
 let pass = 0;
 let fail = 0;
@@ -48,6 +49,29 @@ check('guard REJECTS a public host (SSRF)', !acceptsLocal('http://evil.example.c
 check('guard REJECTS a private-LAN host (SSRF)', !acceptsLocal('http://192.168.1.50:8091'));
 check('guard REJECTS a 127.x-lookalike hostname', !acceptsLocal('http://127.0.0.1.evil.com:8091'));
 check('guard REJECTS a .onion (belongs in the hidden knob)', !acceptsLocal('http://abc.onion:8091'));
+
+// ── cp755: tor-only reads the chain over an EMPTY clearnet pool ──────
+// A tor-only node empties MORPHIT_INDEXER_RPC_ENDPOINTS so chain reads never
+// touch clearnet (no IP leak). BlurtClient must construct on hidden-only, and
+// must still reject a node with NO source at all.
+const HIDDEN = ['http://f6cijlm7vn32tc4kxr3vxve5pkbysoq2etlihvx25spwtkpqsa25siad.onion:8091'];
+type Cfg = ConstructorParameters<typeof BlurtClient>[0];
+let hiddenOnlyOk = false;
+try {
+	new BlurtClient({ localRpcEndpoints: [], blurtRpcEndpoints: [], hiddenRpcEndpoints: HIDDEN } as unknown as Cfg);
+	hiddenOnlyOk = true;
+} catch {
+	hiddenOnlyOk = false;
+}
+check('tor-only: empty clearnet + hidden pool constructs (hidden-only)', hiddenOnlyOk);
+
+let allEmptyThrew = false;
+try {
+	new BlurtClient({ localRpcEndpoints: [], blurtRpcEndpoints: [], hiddenRpcEndpoints: [] } as unknown as Cfg);
+} catch {
+	allEmptyThrew = true;
+}
+check('no source at all (every pool empty) still throws', allEmptyThrew);
 
 console.log(
 	fail === 0

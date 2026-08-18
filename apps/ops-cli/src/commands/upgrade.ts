@@ -1668,27 +1668,65 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 			);
 		}
 
-		// cp622 — same-box auto-restore (see note above).
+		// cp622 / cp754 — same-box auto-restore. Two mechanisms, tried in order:
+		//   1. Trigger the canary's OWN systemd service (morphit-canary.service) —
+		//      the exact unit the weekly morphit-canary.timer fires. Path-agnostic:
+		//      it re-lays the canary via whatever refresh the install configured,
+		//      wherever that script lives, so it covers Ansible / appliance installs
+		//      (a system morphit-canary.service, MORPHIT_CANARY_REFRESH empty, and no
+		//      ~/.morphit/update-canary.sh — the shape a real morphitlat box showed)
+		//      that mechanism #2 could never find. The upgrade runs as root so a
+		//      system-scope start works; the unit is oneshot, so start BLOCKS until
+		//      the refresh finishes (or the 180s timeout trips — the refresh fetches
+		//      chain-head + a price + a headline, possibly over Tor, then signs).
+		//   2. Fall back to the interactive-setup home-dir refresh script, run AS the
+		//      non-root owner (the original cp622 path — an operator who ran
+		//      scripts/canary/setup.sh by hand as themselves, so their refresh lives
+		//      in their own ~/.morphit and no system unit exists).
+		// Either restores the canary immediately with no manual step; if BOTH miss,
+		// the reminder near the end fires (and the weekly timer republishes on its
+		// own regardless, well before the 14-day staleness window).
 		const hadCanary = existsSync(join(backupDir, 'apps', 'web', 'build', 'canary.txt'));
 		if (hadCanary) {
-			const pw = spawnSync('getent', ['passwd', String(canaryDirUid)], { encoding: 'utf8' });
-			const target =
-				pw.status === 0 && typeof pw.stdout === 'string' ? parsePasswdRefreshTarget(pw.stdout) : null;
-			if (target && existsSync(target.refreshScript)) {
-				info('');
-				info(
-					`Restoring your warrant canary automatically (running your refresh as ${target.user})...`
-				);
-				const refresh = spawnSync('sudo', ['-n', '-u', target.user, '-H', 'bash', target.refreshScript], {
+			const haveCanaryUnit =
+				spawnSync('systemctl', ['cat', 'morphit-canary.service'], {
 					stdio: 'ignore',
-					timeout: 90_000,
-					env: { ...process.env, GPG_TTY: '' }
+					timeout: 10_000
+				}).status === 0;
+			if (haveCanaryUnit) {
+				info('');
+				info('Restoring your warrant canary automatically (running its scheduled refresh now)...');
+				const start = spawnSync('systemctl', ['start', 'morphit-canary.service'], {
+					stdio: 'ignore',
+					timeout: 180_000
 				});
-				if (refresh.status === 0) {
+				if (start.status === 0) {
 					canaryAutoRefreshed = true;
 					info('\u2713 Warrant canary restored automatically — nothing to do.');
 				} else {
-					info("(Couldn't refresh the canary automatically; restore it manually — see below.)");
+					info("(Couldn't trigger the canary service automatically; see the note below.)");
+				}
+			}
+			if (!canaryAutoRefreshed) {
+				const pw = spawnSync('getent', ['passwd', String(canaryDirUid)], { encoding: 'utf8' });
+				const target =
+					pw.status === 0 && typeof pw.stdout === 'string' ? parsePasswdRefreshTarget(pw.stdout) : null;
+				if (target && existsSync(target.refreshScript)) {
+					info('');
+					info(
+						`Restoring your warrant canary automatically (running your refresh as ${target.user})...`
+					);
+					const refresh = spawnSync('sudo', ['-n', '-u', target.user, '-H', 'bash', target.refreshScript], {
+						stdio: 'ignore',
+						timeout: 90_000,
+						env: { ...process.env, GPG_TTY: '' }
+					});
+					if (refresh.status === 0) {
+						canaryAutoRefreshed = true;
+						info('\u2713 Warrant canary restored automatically — nothing to do.');
+					} else {
+						info("(Couldn't refresh the canary automatically; restore it manually — see below.)");
+					}
 				}
 			}
 		}
@@ -2059,12 +2097,21 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		// cp622: skip the reminder when we already restored it automatically above.
 		if (!canaryAutoRefreshed && existsSync(join(backupDir, 'apps', 'web', 'build', 'canary.txt'))) {
 			info('');
-			info('⚠ Your warrant canary was in the rebuilt build/ dir and is now gone.');
-			info('  Re-run your canary refresh to restore it (and pgp_keys.asc):');
-			info('    bash ~/.morphit/update-canary.sh');
-			info('  (Not set up yet? Run scripts/canary/setup.sh — it walks you through');
-			info('  it.) Otherwise the canary goes stale and users see a false tamper');
-			info('  warning after 14 days — see OPERATIONS.md §36 (warrant canary).');
+			info('\u2139 Your warrant canary needs re-signing after this upgrade.');
+			info('  Redeploying the frontend clears the signed file — this is normal, and');
+			info('  NOT urgent: it republishes on its own at the next scheduled (weekly)');
+			info('  refresh, well before the 14-day staleness window. To restore it right');
+			info('  now, use whichever matches your setup:');
+			info('');
+			info('    \u2022 Appliance / guided install (the usual case) — re-run its refresh:');
+			info('          sudo systemctl start morphit-canary.service');
+			info('      or  sudo morphit-ops  \u2192  Harden this server  (it re-lays the canary)');
+			info('    \u2022 Signing on a SEPARATE computer (a public server whose key is kept');
+			info('      off-box) — run your refresh there:');
+			info('          bash ~/.morphit/update-canary.sh');
+			info('');
+			info('  Never set one up? Run  sudo morphit-ops  \u2192  Harden this server.');
+			info('  More detail: OPERATIONS.md \u00a736 (warrant canary).');
 		}
 	} catch {
 		/* best-effort reminder; never fail an upgrade over a missing dir */

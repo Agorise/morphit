@@ -22,6 +22,7 @@
  *            aborting the whole refresh.
  */
 import { DEFAULT_CANARY_BTC_SOURCES, type CanaryBtcSource } from '@morphit/operator-config';
+import { installTorDispatcherIfTorOnly } from './torSocksDispatcher.js';
 import {
 	type BtcHead,
 	fetchBtcHeadWithFailover,
@@ -70,6 +71,12 @@ async function fetchOneLive(source: CanaryBtcSource): Promise<BtcHead | null> {
 }
 
 async function main(): Promise<void> {
+	// cp761 — route the BTC explorer fetch over Tor SOCKS on a tor-only node
+	// (no-op on clearnet). The BTC head is a SECONDARY proof: if Tor is down the
+	// fetch fails and the caller degrades it to "unavailable" — it never falls
+	// back to a direct clearnet connection.
+	const route = installTorDispatcherIfTorOnly();
+	process.stderr.write(`canary: btc-head fetch route = ${route}\n`);
 	const sources = resolveCanaryBtcSources(
 		process.env.MORPHIT_CANARY_BTC_EXPLORER,
 		DEFAULT_CANARY_BTC_SOURCES

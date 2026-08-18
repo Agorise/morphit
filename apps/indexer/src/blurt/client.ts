@@ -260,8 +260,20 @@ export class BlurtClient {
 	private readonly pool: EndpointPool;
 
 	constructor(config: Config) {
-		if (config.blurtRpcEndpoints.length === 0) {
-			throw new Error('BlurtClient: at least one endpoint required');
+		// cp755: the "at least one chain source" invariant is over the COMBINED
+		// pool, not clearnet alone. A tor-only node runs with an EMPTY clearnet
+		// pool (blurtRpcEndpoints=[]) and reads the chain purely over hidden/local
+		// endpoints — checking blurtRpcEndpoints.length here would wrongly reject
+		// that valid configuration. Only a node with NO source at all (all three
+		// pools empty) is a real misconfiguration.
+		const totalEndpoints =
+			(config.localRpcEndpoints?.length ?? 0) +
+			config.blurtRpcEndpoints.length +
+			(config.hiddenRpcEndpoints?.length ?? 0);
+		if (totalEndpoints === 0) {
+			throw new Error(
+				'BlurtClient: at least one RPC endpoint required (clearnet, hidden, or local)'
+			);
 		}
 		// Local (loopback co-located blurtd) FIRST — it's instant and the read
 		// never leaves the box — then clearnet, then hidden-service endpoints

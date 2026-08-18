@@ -27,6 +27,8 @@ This guide is the short, friendly path. A mostly copy-and-paste 15-minute proced
 That's it. The wizard and the installer handle the fiddly parts.
 
 > **Tor-only nodes (maximum privacy, zero paperwork).** When the wizard asks how people will reach your marketplace, you can choose **Tor-only** instead of a clearnet domain. The node then has **no clearnet reliance**: it's reachable over its auto-generated Tor `.onion` (and, when i2pd is installed, its `.i2p`/`.b32.i2p`), it appears in the federated `/instances` directory by that onion, and it skips the domain, the HTTPS certificate, the home port-forward, and dynamic DNS — so the wizard is a few questions shorter. It advertises the onion as its on-chain origin automatically. You can add a clearnet domain later (see `OPERATIONS.md`).
+>
+> *Notifications on a Tor-only node:* live chat and the in-tab "you have new messages" badge (the number in the browser tab and on the icon) work exactly as they do on a clearnet node — fast and fully anonymous, no setup. The only thing that does not work is browser *push* notifications when the tab is fully closed: those rely on Google/Mozilla push servers your users would never want an anonymous session touching, and browsers block them on `.onion`/`.i2p` anyway. So you lose nothing a privacy-first node would want. (Details: `OPERATIONS.md` §42.)
 
 ---
 
@@ -167,17 +169,40 @@ Once registered, orders posted on your instance carry your tag, and your share o
 
 ## 9. Keeping it running
 
-**If someone gets flagged unfairly.** Morphit watches for self-dealing — accounts reviewing each other to inflate a rating. The detectors are heuristics, so honest people can trip them (two accounts set up on the same machine reviewing each other looks identical to the real thing). A flagged account loses its reputation card and its reviews are shown subdued. You can undo this: `sudo morphit-ops` → Moderation → **Clear a flag**, name the two accounts, and they are restored immediately and permanently. It is instance-local and reversible. Clearing the related-accounts flag is permanent (it rests on how the accounts were created, which cannot change); clearing the mutual-review flag forgives the reviews so far but keeps watching, so the pair is flagged again if they build up a fresh pattern. OPERATIONS.md explains what each flag meant before you decide.
+Day to day there's almost nothing to do. One command shows you everything:
 
-**Backups.** Your data lives in PostgreSQL. The automated playbook sets up a daily database backup on a timer for you. The wizard writes your backup config and then prints a short list of `sudo install …` commands to run — the timer is live only once you have run them, so do not assume backups exist until you have seen one. **Prove the first dump:** `sudo systemctl start morphit-backup.service`, then `sudo journalctl -u morphit-backup.service -e --no-pager` should report a real byte count, and the file should be there in your backup directory at a plausible size. Check again after the first unattended run — a backup you have never watched succeed is not a backup. After that, `morphit-ops health` keeps an eye on it for you: its **Backups** line shows the newest dump with its size and age, and turns red if the timer has been firing without producing anything. That last case is the one that bites silently, so glance at it whenever you run a health check. If your Postgres runs in a Docker container (a BunkerWeb / `docker-compose` setup), that's handled automatically — the wizard, and every `sudo morphit-ops upgrade`, detect the container and dump it via `docker exec` (you never look up the container name). The full backup recipe, the Docker-aware `DB_CONTAINER` field, off-site options, and the quarterly restore drill are in `OPERATIONS.md`. Back up before any upgrade.
+```sh
+sudo morphit-ops health
+```
 
-**Upkeep — how often will I touch this?** Rarely. To update Morphit, `git pull`, then `sudo morphit-ops upgrade` — it rebuilds and redeploys the website (and the read-only helper) and restarts the services for you, then double-checks that the read-only helper answered back on the address it's set to listen on (if it doesn't, you get a plain warning pointing at `journalctl -u morphit-mcp` — the website itself is unaffected). Check on things any time with `morphit-ops status`, or the live health endpoint at `https://yourdomain.com/v1/health`. **No internet on the box?** Upgrade fully offline: download the self-contained `morphit-<ver>-offline.tar.gz` (and its `.asc` signature) on another machine, copy both over, and run `sudo morphit-ops upgrade --from-file=/path/to/morphit-<ver>-offline.tar.gz` (or set `MORPHIT_UPGRADE_TARBALL` to that path). It verifies the signature against the signer keys shipped in your install — an **unsigned** tarball is refused — and the bundle's prebuilt dependencies mean the rebuild reaches no registry, so the whole upgrade runs with the network cable unplugged, exactly like the offline first install. If you drop the signed tarball (+ its `.asc`) into the offline release folder — `/opt/morphit-offline` by default, or set `MORPHIT_OFFLINE_RELEASE_DIR` — the main menu shows **● update available (offline tarball ready)** on its own, and a normal `sudo morphit-ops upgrade` uses it automatically whenever the network is unreachable (so an upgrade that starts online still finishes if the connection drops mid-way). **Monitoring:** `morphit-ops health --json` prints the whole node-health view (indexer, relay, system, services, backups, warrant canary, and **IPFS/IPNS release seeding**) as machine-readable JSON — handy for a quick remote check over SSH, or point Zabbix at it (run it on a timer into a file, or via an agent) to alert on any section going unhealthy. The interactive health view shows the same **IPFS/IPNS release seeding** line so you can see at a glance whether your node is doing its share of hosting the release and keeping the `ipns://` name alive.
+It reports sync state, your last backups, the BLURT price feed, and the box's CPU / memory / disk — glance at it now and then; anything unhealthy turns red. (For remote monitoring, `morphit-ops health --json` prints the same thing machine-readably — see `OPERATIONS.md`.)
 
-**Your warrant canary.** A warrant canary is a short signed note on your site (at `/canary.txt`) that quietly says "I haven't been handed a secret order." If you ever stop refreshing it — because you've been gagged, or your box was seized, or something happened to you — it goes stale on its own, and readers take the hint. Setting it up is one guided command: `bash scripts/canary/setup.sh`. It asks whether Morphit runs on this same machine (home hosting) or on a separate server, offers to make you a signing key if you don't have one, and then refreshes the canary for you every week — pulling its freshness proof from a wide spread of chain explorers and news sites so one of them being down never breaks it. Two things to know: run it from the machine you want to sign on (for a home box that's this one; for a VPS, your own laptop, so the signing key never sits on the server). A `sudo morphit-ops upgrade` rebuilds the served folder and clears the canary, so it needs putting back — if you sign on the **same box** you serve from, the upgrade now does that for you automatically; if you sign on a **separate laptop**, run `bash ~/.morphit/update-canary.sh` once afterward (the upgrade reminds you). Setup and upgrades both keep the served folder writable for you, so uploads just work; on a brand-new server, in the rare case the very first upload reports `Permission denied`, run `sudo chown -R <your-ssh-user> /opt/morphit/apps/web/build` once and it stays fixed. The full security reasoning is in `OPERATIONS.md` §36.
+**Backups (automatic).** The installer sets up a daily database backup. The wizard prints a few `sudo install …` commands — run them to switch the timer on, then prove the first dump actually worked:
 
-**Is the USD price healthy?** Run `morphit-ops health` and look at the price-feed lines. Morphit takes the BLURT price from Blurt's own feed (`api.blurt.blog/price_info`) as its **primary** source, and falls back to several public aggregators (taking their middle value) only if that primary is unavailable — so one provider being off doesn't move your price. The health view lists each provider, whether it answered, and the price it gave — so if one (say, a particular API) is down, you'll see a `down` next to its name and can ignore it unless the primary and several aggregators go dark at once. (If you firewall your server's outbound traffic, allow `api.blurt.blog` along with the other price sites.) This detail shows only in your own `morphit-ops health` on the server, never on the public `https://yourdomain.com/v1/health` page.
+```sh
+sudo systemctl start morphit-backup.service
+```
 
-**Is the server itself OK?** The same `morphit-ops health` view has a **System** section showing your box's CPU, memory, and disk usage. The disk figure tracks the filesystem holding your **data** (Postgres / the chain index — the thing that actually grows), which on a normal single-drive box is the same as `df -h /`; if you put your data on a separate mount, point `MORPHIT_HEALTH_DISK_PATH` at it (see `OPERATIONS.md`) so the number reflects the volume that fills. It's a quick gut-check: if the disk is nearly full or the CPU is pegged at 100%, that's usually why things feel slow or the indexer falls behind. These numbers are read right off your own machine and are never exposed on the public health page.
+Afterward the **Backups** line in `morphit-ops health` should show a real file. A backup you've never watched succeed isn't a backup. Back up before any upgrade. (Docker Postgres, off-site copies, and the restore drill are in `OPERATIONS.md`.)
+
+**Updating.** Rarely needed, and easy:
+
+```sh
+git pull
+sudo morphit-ops upgrade
+```
+
+It backs up first, rebuilds and redeploys the site, restarts everything, and rolls back if anything fails. (Fully-offline upgrades from a signed tarball are supported too — see `OPERATIONS.md`.)
+
+**Your warrant canary.** A short signed note on your site (`/canary.txt`) that quietly says "I haven't been handed a secret order." If you ever stop refreshing it — gagged, seized, or worse — it goes stale on its own and readers take the hint. Set it up once:
+
+```sh
+bash scripts/canary/setup.sh
+```
+
+It offers to make you a signing key and then re-signs the canary weekly on its own. An upgrade clears the served folder, so the canary needs re-laying afterward — if you sign on the **same box**, the upgrade now does that for you; if you sign on a **separate laptop** (recommended for a VPS, so the key never sits on the server), it reminds you to run `bash ~/.morphit/update-canary.sh` once. Full reasoning: `OPERATIONS.md` §36.
+
+**If an honest user gets flagged.** Morphit auto-flags accounts that review each other to inflate ratings, and honest people can occasionally trip it. To undo: `sudo morphit-ops` → **Moderation** → **Clear a flag**, name the accounts — instant, reversible, and instance-local. Details in `OPERATIONS.md`.
 
 ---
 
@@ -199,82 +224,34 @@ A healthy response is JSON with a recent block number and a small lag, like `{"c
 
 ## 11. Make it your own (optional — logo, colours, wording)
 
-You're free to rebrand your instance completely — new name, logo, colours, even rewrite every word on the screen. Many operators do, to make their instance feel local to their community. Here's the honest breakdown of how hard each part is, because it depends on what you're changing.
+You're free to rebrand completely — name, logo, colours, even every word on screen. Many operators do, to make their instance feel local to their community.
 
-**The easy 90% — no programming needed.** Logo, colours, name, fonts, and wording are the changes most people actually want, and none of them require JavaScript:
+**The easy 90% — no programming.**
 
-- **Logo and brand images** — drop your own SVG/PNG files into `apps/web/static/brand/` (replacing the Morphit marks). If you know how to save a file, you can do this.
-- **Colours and fonts** — Morphit's palette is a handful of named colour tokens (the brand emerald is `#00DA69`, the teal `#027c86`) defined in the Tailwind/CSS config. Change the values, and the whole site follows. This is plain CSS knowledge.
-- **Text and wording** — every visible string lives in the translation files under `apps/web/src/lib/i18n/locales/` (`en.json` for English, and one file per language). They're simple `"key": "value"` pairs — edit the values, keep the keys, and your words appear. No code involved.
+- **Logo / brand images** — drop your own SVG/PNG files into `apps/web/static/brand/`. If you can save a file, you can do this.
+- **Colours / fonts** — a handful of named colour tokens in the Tailwind/CSS config (brand emerald `#00DA69`, teal `#027c86`). Change the values and the whole site follows. Plain CSS.
+- **Text / wording** — every visible string lives in `apps/web/src/lib/i18n/locales/` (`en.json`, one file per language) as simple `"key": "value"` pairs. Edit the values, keep the keys.
 
-**The other 10% — layout and structure.** If you want to move things around, add or remove whole sections, or change how a page is built, that's where Morphit's frontend framework — **SvelteKit** — comes in. The page files (ending in `.svelte`) are HTML-like markup with a bit of framework syntax mixed in. If you're comfortable with HTML and CSS, most of what you already know transfers directly; the Svelte-specific parts (the `{#if}`/`{#each}` blocks, the `$`-prefixed reactive bits) have a short learning curve, but they're well-documented.
+**The other 10% — layout.** Moving things around means editing the page files (`.svelte`) — HTML-like markup with a little framework syntax (SvelteKit). If you know HTML and CSS most of it transfers; the [svelte.dev/tutorial](https://svelte.dev/tutorial) is a couple of hours and covers what you'd hit. Install [VS Code](https://code.visualstudio.com/) + its "Svelte" extension + [Node.js](https://nodejs.org/) LTS, then from `apps/web/` run `npm install` once and `npm run dev` to preview live at `http://localhost:5173` (it reloads as you save). `npm run build` then `sudo morphit-ops upgrade` ships it. Stuck? The Agorise Matrix room `#agorise:matrix.org` has people who've done it.
 
-**What to install to make the changes comfortably.** You don't need much:
+**One rule (the licence).** Morphit is AGPL-3.0-or-later. Cosmetic rebrands are fine and encouraged — the only requirement is that if you run a *modified* frontend as a public instance, you make your changed source available to your users (a footer link to your fork is enough). No secret closed-source forks. See the "Why does Morphit use the AGPL licence?" FAQ.
 
-- **[Visual Studio Code](https://code.visualstudio.com/)** — a free code editor.
-- **The "Svelte for VS Code" extension** — search for it in VS Code's Extensions panel (publisher: *Svelte*) and install it. This is the single most useful thing: it gives you syntax highlighting, auto-completion, and inline error hints for `.svelte` files, so mistakes are caught as you type instead of at build time. Editing Svelte without it is much harder than it needs to be.
-- **[Node.js](https://nodejs.org/) (LTS version)** — so you can preview your changes.
+---
 
-**See your changes live as you edit.** From the `apps/web/` folder, run `npm install` once, then `npm run dev`. This starts a local preview at `http://localhost:5173` that reloads instantly every time you save a file — so you can tweak a colour or a logo and watch it update in your browser in real time, without rebuilding or redeploying. When you're happy, `npm run build` produces the final static site, and a `sudo morphit-ops upgrade` (or your normal deploy) serves it.
+## 12. Going further (optional)
 
-**If you've never touched Svelte** — the official interactive tutorial at [svelte.dev/tutorial](https://svelte.dev/tutorial) is genuinely a couple of hours and covers everything you'd hit for a rebrand. And the Agorise Matrix room (`#agorise:matrix.org`) has people who've done this and are happy to help.
+Two things you might do later. Both have full walkthroughs elsewhere, so here's just the gist:
 
-**One rule (the licence).** Morphit is AGPL-3.0-or-later. Cosmetic rebrands — logo, colours, name, wording — are completely fine and encouraged. The only requirement: if you run your *modified* frontend as a public instance, you have to make your changed source available to your users (a link in the footer to your fork is enough). You can't run a secret, closed-source modified version. That's the whole deal — see the "Why does Morphit use the AGPL licence?" FAQ for the reasoning.
+**Switch between Tor-only and clearnet** (either direction, any time). Re-run the guided install — `sudo morphit-ops` → **Install / set up a new node** — and pick the other mode. It's non-destructive: your database, your keys, and your existing `.onion` are all kept, and your on-chain registration re-publishes with the new address for you. Full details: `docs/SWITCHING-NETWORKS.md`. (Just want to *add* a Tor/I2P/Lokinet address without switching your main mode? Use `sudo morphit-ops` → **Set up a Tor / Lokinet / I2P address**.)
+
+**Wipe and reinstall, or move to a new host.** You can rebuild a node from scratch — or move it to a different provider — and come back to the same instance. Back up the three things a reinstall can't regenerate: your **account keys** (kept off the box), your **domain**, and a fresh **database dump** —
+
+```sh
+sudo systemctl start morphit-backup.service
+```
+
+— then copy the newest `.sql.gz` off the server. Reinstall like a fresh node, restore the dump, and the chain index rebuilds itself. For a canonical instance, rehearse on a throwaway box first. Full procedure: `OPERATIONS.md` and `docs/SWITCHING-NETWORKS.md`.
 
 ---
 
 That's the whole job. Get a machine, point a name at it, run the installer, let the wizard configure it, register — and you're an operator in the federation. Welcome aboard.
-
-## 12. Switching between Tor-only and clearnet (either direction)
-
-You are not locked into the choice you made at install time. A node that started **Tor-only** can gain a clearnet domain later, and a **clearnet** node can drop back to Tor-only — as many times as you like.
-
-**How:** re-run the guided install and pick the other mode.
-
-```
-sudo morphit-ops        →   "Install / set up a new node (guided)"
-```
-
-The wizard runs again and asks the same questions; choose clearnet (and give a domain + certificate email) or Tor-only (which skips them). When it finishes, your node is serving in the new mode.
-
-**It's non-destructive — you keep everything that matters:**
-
-- **Your database and all its data** (orders, reputation, chain index) are left in place — the installer never drops them.
-- **Your relay account and keys** stay as they are.
-- **Your `.onion` address does not change.** Tor keeps the key it already generated, so the same onion works before and after — and a clearnet node keeps serving over Tor as a bonus, so switching *to* Tor-only just makes the address you already had the primary one.
-
-**What changes automatically:**
-
-- Going **to clearnet:** the installer obtains your HTTPS certificate and brings up the clearnet web front (BunkerWeb). Point your domain (and, at home, your router's ports 80/443) at the box first, exactly as for a fresh clearnet install.
-- Going **to Tor-only:** the clearnet web front and certificate are dropped; the onion becomes your advertised address. An unused domain does no harm if you leave it pointed at the box.
-- **Your on-chain registration re-publishes** with the new address, so the federation directory and your visitors follow you to it. (If you'd turned auto-register off, run `sudo morphit-ops` → **Re-publish my registration on-chain** once afterward.)
-
-You'll re-enter the two things the installer never stores — your database connection and your relay account's active key — just like any install. Everything else it remembers.
-
-If you only want to *add* a Tor/I2P/Lokinet address to a clearnet node (without changing your primary mode), you don't need to switch at all — use `sudo morphit-ops` → **Set up a Tor / Lokinet / I2P address** instead.
-
-## 13. Rebuilding or relocating your node (including a canonical instance)
-
-You should be able to wipe a node and reinstall it — or move it to a completely different hosting company — and come back to the same instance. That's a feature, not a risk: a node you can't reproduce is a single point of failure, which is the opposite of what Morphit is for. This is just as true for a canonical instance (the one whose domain the on-chain records point at) — the difference is only that you'll want to *verify* the procedure before you do it to the box everyone relies on.
-
-**Back up three things first.** A reinstall rebuilds almost everything for you; these three are the parts it can't regenerate:
-
-1. **Your account keys.** Your relay account's active key, and — for a canonical instance — the release-signing account's key (the one the release ceremony asks for). These *are* your on-chain identity; a reinstall does not recreate them. Keep them somewhere safe and off the box (a password manager, an encrypted USB stick). As long as you have them, the account survives any wipe.
-2. **Your domain.** The web address is what other instances and the on-chain record point at. Moving hosts just means re-pointing your DNS at the new server afterward; the address itself doesn't change, so the federation follows you automatically once DNS propagates. Nothing on-chain needs to change if the domain stays the same.
-3. **Your database.** Orders, reputation, moderation decisions, and per-instance settings live in Postgres. The chain index rebuilds itself automatically after a reinstall (it re-reads the blockchain — slow but hands-off), but anything *local* is only in that database. Your node already takes a daily dump; trigger a fresh one right before you wipe, then copy the newest dump off the box:
-
-```
-sudo systemctl start morphit-backup.service
-```
-
-The dumps live in the backup directory shown by `sudo morphit-ops` → **Node health** (look for "Newest dump"). Copy that `.sql.gz` somewhere off the server before wiping.
-
-**Rehearse it on a throwaway box first (strongly recommended for a canonical).** You don't have to wipe the real instance to prove the procedure works. Stand up a cheap, separate server, run the guided install against a staging Blurt account, and confirm it comes up clean. The staging → go-live walkthrough in `docs/SWITCHING-NETWORKS.md` is exactly this. If a from-scratch install works there, it works on your real box — and now it's a known-good procedure instead of a leap of faith.
-
-**Then wipe and reinstall the same way as a fresh node** — reinstall the OS, run `sudo morphit-ops` → **Install / set up a new node (guided)**, enter the same account and (for a canonical) the same domain. Restore your database dump if you took one. Re-point DNS if you moved hosts.
-
-**What to expect afterward:**
-
-- **The chain index rebuilds from scratch**, which takes a while. The node serves what it has and catches up in the background; it isn't broken, just still reading history. Do the wipe during a quiet window.
-- **A reinstall makes the box consistent with every other node** — service-user-owned files, the standard hardening, the same install-time checks. If your instance was hand-built as a one-off, reinstalling through the guided installer is the cleanest way to bring it back into line (and to pick up fixes shipped since you first set it up).
-- **One caveat for air-gapped rebuilds:** a couple of components (currently the Matrix-alert bot's encryption library) are fetched from the internet during install. An online reinstall handles that automatically; a fully offline one relies on those being vendored into the offline bundle, so test an offline rebuild before depending on it.

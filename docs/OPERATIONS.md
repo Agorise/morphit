@@ -10951,6 +10951,42 @@ VAPID keypair, plugging it into your config, what the
 push-sender worker does and how to monitor it, and the
 privacy/security trade-offs you should be aware of.
 
+### 42.0 Web Push on Tor-only / hidden-service instances (read first)
+
+Web Push does **not** work on a plain hidden-service origin — and on a
+maximum-privacy instance you would not want it to. Two independent reasons:
+
+- **Browser secure-context rules.** Push needs a service worker, which browsers
+  only register in a *secure context*. `http://<onion>` is a secure context only
+  in Tor Browser (and Firefox behind a pref) — and Tor Browser *disables service
+  workers* for fingerprinting resistance. `http://<b32>.i2p` is **not** treated
+  as a secure context by any mainstream browser (there is no `.i2p` allowlist,
+  unlike the one browsers added for `.onion`). So service-worker registration —
+  and therefore Web Push — fails on both transports by default.
+- **Web Push routes through clearnet push services.** A subscription registers
+  the user's browser with Google FCM / Mozilla autopush, and the relay delivers
+  through those third parties. That is antithetical to an anonymous `.onion` /
+  `.i2p` session — you do not want your users' devices contacting FCM/Mozilla
+  from a hidden-service visit.
+
+**What you lose: nothing a privacy-first instance wants.** Web Push is only the
+*tab-closed* tier. The always-on **ambient channels** — the title-bar unread
+prefix and the favicon badge, driven by the same-origin chat-activity SSE
+stream — deliver sub-second in-tab notifications over `.onion` and `.b32.i2p`
+with no service worker, no secure context, and no third-party dependency. Live
+chat (also SSE) is equally transport-agnostic. So Tor-only users get fast,
+fully-anonymous chat and in-tab notification; only the tab-closed push tier is
+absent, by design.
+
+**VAPID subject on Tor-only.** The install still generates a VAPID keypair, but a
+Tor-only node has no clearnet `https://` origin to use as the VAPID *subject*
+(push services reject `http://.onion`). The Ansible default derives a `mailto:`
+subject from your contact URL when that is a `mailto:`, else leaves it empty
+(push cleanly disabled — never a domain-less `https://`). To enable push for the
+edge cases where a browser *does* allow it (an HTTPS-fronted onion, or a browser
+you have specifically configured), set
+`MORPHIT_RELAY_VAPID_SUBJECT=mailto:you@example.com`.
+
 ### 42.1 What ships
 
 | Component | Location | Purpose |
