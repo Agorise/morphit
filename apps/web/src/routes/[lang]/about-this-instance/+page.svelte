@@ -172,7 +172,7 @@
 					<dt class="font-semibold text-ink-700 dark:text-ink-200 sm:w-48 sm:shrink-0">
 						{$_('about_this_instance.field.origin')}
 					</dt>
-					<dd class="font-mono">{origin || '—'}</dd>
+					<dd class="break-all font-mono">{origin || '—'}</dd>
 				</div>
 				<div class="flex flex-col sm:flex-row sm:items-baseline sm:gap-4">
 					<dt class="font-semibold text-ink-700 dark:text-ink-200 sm:w-48 sm:shrink-0">

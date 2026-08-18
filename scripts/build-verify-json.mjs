@@ -203,8 +203,12 @@ function buildHashManifest() {
 	const manifest = {};
 	for (const abs of walkFiles(BUILD_DIR)) {
 		const rel = relative(BUILD_DIR, abs).split('\\').join('/');
-		// Skip verify.json itself — it can't hash its own content.
-		if (rel === 'verify.json') continue;
+		// Skip verify.json itself (it can't hash its own content) and the .shipped
+		// build marker — the marker is a build-system signal, not a served asset, and
+		// hashing it would make an instance's manifest differ by deploy path (a box
+		// that re-ran the manifest step would list it; one that kept the shipped
+		// manifest wouldn't). Excluding it keeps every instance's manifest identical.
+		if (rel === 'verify.json' || rel === '.shipped') continue;
 		const buf = readFileSync(abs);
 		manifest[rel] = sha256Hex(buf);
 	}

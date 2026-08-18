@@ -97,6 +97,42 @@ if [ ! -x "$RUN_TSX" ]; then
 	exit 1
 fi
 
+# ─── Tor-only privacy: route freshness-proof fetches over Tor (cp761) ─────
+# On a tor-only node the outbound freshness-proof fetches (Blurt head, BTC head,
+# news) MUST go through the co-located Tor SOCKS proxy — a direct clearnet fetch
+# would reveal the node's real IP to those endpoints, the exact exposure tor-only
+# exists to avoid (cp755 closed the equivalent leak for the indexer). We reach the
+# SAME clearnet freshness sources via a Tor exit, so the IP is hidden and proof
+# diversity is preserved. Detection: explicit MORPHIT_CANARY_TOR_ONLY wins, else
+# auto-derive from a hidden-service instance origin (.onion / .b32.i2p). The Node
+# helpers read MORPHIT_CANARY_TOR_ONLY + MORPHIT_CANARY_TOR_SOCKS (exported below)
+# and pin undici's global dispatcher to the proxy; the news curl gets --proxy.
+# FAIL-SAFE: on tor-only every fetch is pinned to the proxy with NO clearnet
+# fallback — a down proxy degrades/blocks the canary, it can never leak.
+_origin_host="$(printf '%s' "$MORPHIT_CANARY_INSTANCE_ORIGIN" \
+	| sed -e 's#^[a-zA-Z][a-zA-Z0-9+.-]*://##' -e 's#[:/].*$##' | tr 'A-Z' 'a-z')"
+case "${MORPHIT_CANARY_TOR_ONLY:-auto}" in
+	1 | true | yes | on) CANARY_TOR_ONLY=1 ;;
+	0 | false | no | off) CANARY_TOR_ONLY=0 ;;
+	*)
+		case "$_origin_host" in
+			*.onion | *.i2p) CANARY_TOR_ONLY=1 ;;
+			*) CANARY_TOR_ONLY=0 ;;
+		esac
+		;;
+esac
+CANARY_TOR_SOCKS="${MORPHIT_CANARY_TOR_SOCKS:-127.0.0.1:9050}"
+export MORPHIT_CANARY_TOR_ONLY="$CANARY_TOR_ONLY"
+export MORPHIT_CANARY_TOR_SOCKS="$CANARY_TOR_SOCKS"
+# curl proxy args — empty on clearnet so behavior is byte-identical there. On
+# tor-only we use socks5h:// so DNS is resolved proxy-side (a plain socks5://
+# would leak the DNS lookup of the news host off the box).
+CURL_PROXY_ARGS=()
+if [ "$CANARY_TOR_ONLY" = 1 ]; then
+	CURL_PROXY_ARGS=(--proxy "socks5h://$CANARY_TOR_SOCKS")
+	echo "canary: tor-only — routing freshness-proof fetches over Tor SOCKS $CANARY_TOR_SOCKS" >&2
+fi
+
 # ─── Freshness proof: Blurt chain head ───────────────────────────
 # Fetched through the shared RPC rotator (scripts/canary/fetch-blurt-head.ts):
 # it hops across the canonical DEFAULT_BLURT_RPC_ENDPOINTS list until a node
@@ -163,8 +199,10 @@ for feed in "$NEWS_RSS" \
 	"https://www.aljazeera.com/xml/rss/all.xml" \
 	"https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml"; do
 	echo "canary: fetching news headline from $feed..." >&2
-	# `|| true` keeps a failed/blocked fetch from tripping `set -e`.
-	NEWS_XML="$(curl -fsSL --max-time 15 -A "$NEWS_UA" "$feed" || true)"
+	# `|| true` keeps a failed/blocked fetch from tripping `set -e`. On tor-only
+	# CURL_PROXY_ARGS pins the fetch to Tor SOCKS (socks5h → proxy-side DNS); on
+	# clearnet it is empty, so this line is byte-identical to before.
+	NEWS_XML="$(curl -fsSL "${CURL_PROXY_ARGS[@]}" --max-time 15 -A "$NEWS_UA" "$feed" || true)"
 	[ -n "$NEWS_XML" ] || continue
 	# Extract the first <title> after <item> - robust against varying RSS
 	# layouts. Strip CDATA wrappers and HTML entities. Trailing `|| true`

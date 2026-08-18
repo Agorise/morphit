@@ -794,8 +794,16 @@ const envSchema = z.object({
 				.filter(Boolean)
 		)
 		.refine(
-			(arr) => arr.length > 0 && arr.every((u) => u.startsWith('https://')),
-			'all RPC endpoints must be https:// URLs'
+			// cp755: NO `arr.length > 0` here. A tor-only node deliberately empties
+			// the clearnet pool (MORPHIT_INDEXER_RPC_ENDPOINTS=) so chain reads go
+			// ONLY over the hidden-service pool — reaching a clearnet RPC over the
+			// box's real connection would leak its clearnet IP, the exposure tor-only
+			// exists to avoid. The "at least one chain source overall" invariant lives
+			// in BlurtClient's constructor, which checks the COMBINED local + clearnet
+			// + hidden pool. Here we only enforce: any clearnet endpoint present must
+			// be https://.
+			(arr) => arr.every((u) => u.startsWith('https://')),
+			'all clearnet RPC endpoints must be https:// URLs'
 		),
 	// Hidden-service RPC endpoints (.onion / .b32.i2p), reached SERVER-SIDE via
 	// the indexer's Tor SOCKS + i2pd proxies (see hiddenServiceDispatcher). These

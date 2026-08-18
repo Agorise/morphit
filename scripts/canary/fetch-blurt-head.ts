@@ -21,6 +21,7 @@
  *   exit   — 0 on success, 1 if EVERY endpoint failed
  */
 import { DEFAULT_BLURT_RPC_ENDPOINTS } from '@morphit/operator-config';
+import { installTorDispatcherIfTorOnly } from './torSocksDispatcher.js';
 import {
 	type BlurtHead,
 	fetchBlurtHeadWithFailover,
@@ -69,6 +70,13 @@ async function fetchOneLive(url: string): Promise<BlurtHead | null> {
 }
 
 async function main(): Promise<void> {
+	// cp761 — on a tor-only node, pin every fetch to the Tor SOCKS proxy so the
+	// clearnet RPC read reaches its endpoint through a Tor exit (hiding the
+	// node's real IP) instead of leaking it. No-op on clearnet. Fail-closed: if
+	// Tor is down the fetch errors and the failover exits 1 (a stale canary must
+	// not publish) — it never falls back to a direct clearnet connection.
+	const route = installTorDispatcherIfTorOnly();
+	process.stderr.write(`canary: chain-head fetch route = ${route}\n`);
 	const nodes = resolveCanaryNodes(
 		process.env.MORPHIT_CANARY_BLURT_RPC,
 		DEFAULT_BLURT_RPC_ENDPOINTS

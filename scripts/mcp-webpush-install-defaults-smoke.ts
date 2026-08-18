@@ -72,9 +72,20 @@ check(
 	'group_vars: morphit_enable_web_push defaults true',
 	/^morphit_enable_web_push:\s*true\s*$/m.test(groupVars)
 );
+// cp756: morphit_vapid_subject is no longer a single-line quoted origin
+// string.  It is now a tor-only-aware `>-` block scalar: the clearnet
+// branch still derives `https://{{ morphit_domain }}` (origin), while a
+// tor-only node gets a mailto: from its contact URL or an empty subject
+// (push cleanly disabled) instead of the old domain-less `https://`.
+// The assertion captures that block and verifies BOTH invariants:
+// (a) the clearnet branch is still origin-derived from morphit_domain,
+// (b) the tor-only conditional is present.
+const vapidSubjectBlock =
+	groupVars.match(/^morphit_vapid_subject:\s*>-\n[\s\S]*?endif -%\}/m)?.[0] ?? '';
 check(
-	'group_vars: morphit_vapid_subject defined (origin-derived)',
-	/^morphit_vapid_subject:\s*".*morphit_domain.*"\s*$/m.test(groupVars)
+	'group_vars: morphit_vapid_subject defined (cp756: tor-only-aware, clearnet origin-derived)',
+	vapidSubjectBlock.includes('morphit_tor_only') &&
+		/https:\/\/\{\{\s*morphit_domain\s*\}\}/.test(vapidSubjectBlock)
 );
 
 // ── MCP role wiring ───────────────────────────────────────────────

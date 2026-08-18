@@ -472,6 +472,36 @@ function tmp(prefix: string): string {
 	if (classifyFrontendVerify(null, 'x') === 'unknown' && classifyFrontendVerify('x', null) === 'unknown')
 		ok('FD-22c either version unknown → unknown (best-effort note)');
 	else bad('FD-22c');
+
+	// cp752: the .shipped build marker must be EXCLUDED from verify.json hashing —
+	// it's a build-system signal, not a served asset, and hashing it makes an
+	// instance's manifest differ by deploy path.
+	if (/rel === 'verify\.json' \|\| rel === '\.shipped'/.test(genSrc))
+		ok('cp752 verify.json hashing skips the .shipped build marker');
+	else bad('cp752', 'build-verify-json must skip the .shipped marker');
+
+	// cp622/cp754: same-box operators get their canary restored automatically on
+	// upgrade — PREFERRING the canary's own systemd service (the path-agnostic
+	// mechanism that covers Ansible/appliance boxes), with the home-dir refresh
+	// script as fallback.
+	if (
+		/systemctl['"\],\s]+.*morphit-canary\.service/.test(parserSrc) &&
+		/canaryAutoRefreshed = true/.test(parserSrc) &&
+		/running your refresh as/.test(parserSrc)
+	)
+		ok('cp754 upgrade auto-restores the canary via its systemd service (+ home-script fallback)');
+	else bad('cp754', 'upgrade must trigger morphit-canary.service, then fall back to the home script');
+
+	// cp753: the fall-through reminder is accurate (nothing is "rebuilt"), names
+	// the real appliance command, and no longer sends every operator to a home
+	// script that does not exist on an Ansible box.
+	if (
+		/needs re-signing after this upgrade/.test(parserSrc) &&
+		/systemctl start morphit-canary\.service/.test(parserSrc) &&
+		!/was in the rebuilt build/.test(parserSrc)
+	)
+		ok('cp753 canary reminder is accurate + names the systemd/harden path');
+	else bad('cp753', 'canary reminder wording is stale/cryptic');
 }
 
 console.log('');

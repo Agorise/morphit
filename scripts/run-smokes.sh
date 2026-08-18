@@ -319,6 +319,7 @@ SMOKES=(
 	".:canary-rpc-failover-smoke"
 	".:canary-btc-failover-smoke"
 	".:canary-setup-smoke"
+	".:canary-tor-only-routing-smoke"
 	".:now-in-handler-sql-smoke"
 	"apps/web:i18n-hardcoded-english-smoke"
 	"apps/web:i18n-raw-exception-smoke"

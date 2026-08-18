@@ -548,12 +548,33 @@ morphit_mcp_advertise: true
 # invalidate every existing subscription), and the relay unit sources
 # that file if present.
 #
-# The VAPID subject MUST be a mailto: or https:// URL identifying the
-# operator to the push services (they use it to contact you if your
-# pushes misbehave).  Defaults to this instance's public origin.
-# Override with e.g. "mailto:ops@example.com".
+# The VAPID subject MUST be a mailto: or clearnet https:// URL identifying the
+# operator to the push services (they use it to contact you if your pushes
+# misbehave).  http://.onion / .b32.i2p is NOT accepted by push services, so a
+# tor-only node (which has no clearnet domain) cannot use its own origin here.
+#
+# cp756 — subject derivation:
+#   • clearnet node  → https://<your domain> (as before).
+#   • tor-only node  → a mailto: taken from your contact URL when that IS a
+#                      mailto:, otherwise EMPTY. Empty means push is cleanly
+#                      DISABLED (isValidVapidSubject rejects it) rather than the
+#                      old domain-less `https://` that silently produced an
+#                      invalid subject. To enable push on a tor-only node (for
+#                      the browsers/transports that allow it — Tor Browser
+#                      blocks service workers, so this mainly helps .b32.i2p /
+#                      https-fronted onions), set this explicitly to
+#                      "mailto:ops@example.com". Note the always-on ambient
+#                      channels (tab-title + favicon unread badge, SSE-driven)
+#                      already deliver sub-second in-tab notifications on tor-only
+#                      regardless of this setting — push is only the extra
+#                      tab-closed layer.
 morphit_enable_web_push: true
-morphit_vapid_subject: "https://{{ morphit_domain }}"
+morphit_vapid_subject: >-
+  {%- if morphit_tor_only | default(false) -%}
+  {{ morphit_instance_contact_url if (morphit_instance_contact_url | default('') | regex_search('^(?i)mailto:.+')) else '' }}
+  {%- else -%}
+  https://{{ morphit_domain }}
+  {%- endif -%}
 
 
 # ─── Health disk figure (cp708) ─────────────────────────────────
