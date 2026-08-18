@@ -1,6 +1,6 @@
 {
   "name": "morphit-web",
-  "version": "1.12.7",
+  "version": "1.12.8",
   "private": true,
   "type": "module",
   "description": "Morphit web frontend — SvelteKit SSG, PWA, No-JS read-only paths",
@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "vite dev --host",
     "prebuild": "npm run build:sitemap && npm run build:llms-full",
-    "build": "vite build",
+    "build": "node scripts/build-shipped-guard.mjs",
     "postbuild": "npm run build:verify-json",
     "preview": "vite preview --host",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
@@ -20,7 +20,8 @@
     "build:manifest": "node scripts/build-manifest.mjs",
     "build:sitemap": "node ../../scripts/build-sitemap.mjs",
     "build:llms-full": "node ../../scripts/build-llms-full.mjs",
-    "build:verify-json": "node ../../scripts/build-verify-json.mjs"
+    "build:verify-json": "node ../../scripts/build-verify-json.mjs",
+    "build:vite": "vite build"
   },
   "devDependencies": {
     "@eslint/js": "^9.14.0",
