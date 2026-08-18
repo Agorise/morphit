@@ -67,6 +67,15 @@ check(
 	/No prebuilt frontend in this release[\s\S]{0,120}runOrThrow\('npm', \['run', 'build'\]/.test(upgrade)
 );
 
+// ─── 4. build guard: `npm run build` deploys the shipped build if marked ───
+const webPkg = JSON.parse(read('apps/web/package.json')) as { scripts: Record<string, string> };
+check('apps/web build script routes through the shipped-build guard', /build-shipped-guard\.mjs/.test(webPkg.scripts.build ?? ''));
+check('apps/web keeps the real vite build as build:vite', (webPkg.scripts['build:vite'] ?? '') === 'vite build');
+const guard = read('apps/web/scripts/build-shipped-guard.mjs');
+check('guard skips vite build when the .shipped marker is present', /build.*\.shipped/.test(guard) && /existsSync\(marker\)/.test(guard));
+check('guard falls back to build:vite when unmarked (CI / source checkout)', /build:vite/.test(guard));
+check('release drops the .shipped marker after building the canonical frontend', /touch apps\/web\/build\/\.shipped/.test(release));
+
 console.log(`\n${passed} passed, ${failed} failed`);
 console.log(
 	failed === 0

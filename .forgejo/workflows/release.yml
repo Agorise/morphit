@@ -234,7 +234,13 @@ jobs:
         # install + upgrade DEPLOY these exact files (falling back to a rebuild only
         # if the prebuilt is somehow absent). The frontend is generic — instance
         # identity loads at runtime from /v1/instance — so one build serves everyone.
-        run: npm run build -w apps/web
+        run: |
+          npm run build -w apps/web
+          # Mark the freshly-built frontend as the SHIPPED canonical build. On an
+          # operator's box, apps/web's build script sees this marker and deploys
+          # these exact bytes instead of rebuilding — so every instance's assets
+          # match the on-chain hashes and the build-integrity banner stays quiet.
+          touch apps/web/build/.shipped
 
       - name: Build release tarball
         # Stage the output in /tmp so tar never sees its own
