@@ -291,6 +291,17 @@ export class FederationProbeScheduler {
 	}
 
 	private async probePool(instances: readonly KnownInstanceRow[]): Promise<void> {
+		// cp768 — while OUR OWN indexer is still catching up, its canonical-treasury
+		// baseline (chain-pin > env > default) may be INCOMPLETE (the on-chain
+		// treasury pin not yet indexed), so comparing a synced peer's advertised
+		// fee addresses against it can FALSE-flag a legitimate instance as
+		// fee-redirection 'mismatch' (observed on a fresh tor-only box mid-sync).
+		// Withhold the treasury opinion (null → treasuryMismatchReason returns "no
+		// mismatch") until we're synced. The relay-account + response-shape mismatch
+		// checks still run — they don't depend on our own chain lag.
+		const selfSynced = selfReachableStatus(this.config.localLagBlocks?.() ?? null) === 'good';
+		const treasuryForProbe = selfSynced ? (this.config.canonicalTreasury?.() ?? null) : null;
+
 		// Simple promise-pool: walks an index, each worker pulls the
 		// next index until exhausted.  No external dep; fits the
 		// "few hundred instances" scale.
@@ -329,7 +340,7 @@ export class FederationProbeScheduler {
 					try {
 						const outcome = await probeOne(
 							inst,
-							this.config.canonicalTreasury?.() ?? null,
+							treasuryForProbe,
 							hiddenFetch
 						);
 						await this.persistOutcome(inst, outcome);
@@ -357,7 +368,7 @@ export class FederationProbeScheduler {
 					continue;
 				}
 				try {
-					const outcome = await probeOne(inst, this.config.canonicalTreasury?.() ?? null);
+					const outcome = await probeOne(inst, treasuryForProbe);
 					await this.persistOutcome(inst, outcome);
 				} catch (err) {
 					// Defensive: probeOne should never throw, but if it

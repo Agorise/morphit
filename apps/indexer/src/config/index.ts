@@ -108,8 +108,10 @@ export interface Config {
 	 *  CONCURRENTLY, each starting on a different RPC endpoint (spread load
 	 *  across all nodes, no single-endpoint SPOF; a stalled node's window
 	 *  transparently falls back through the pool to another).  0 = auto = one
-	 *  window per configured endpoint.  The DB write stays strictly in-order and
-	 *  one-block-per-tx — only the network FETCH is parallelised. */
+	 *  window per configured endpoint.  The DB write stays strictly in-order;
+	 *  cp666 commits ONE transaction per fetch window (≤BLOCK_FETCH_BATCH blocks)
+	 *  rather than one per block, so the per-commit fsync is amortised across the
+	 *  window while the network FETCH is parallelised across endpoints. */
 	readonly backfillConcurrency: number;
 	/** Backoff on transient chain errors (network failure, RPC
 	 *  500). Does not apply to structural errors in op payloads —

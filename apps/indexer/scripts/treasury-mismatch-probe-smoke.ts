@@ -85,9 +85,21 @@ const probeSrc = readFileSync(join(REPO, 'apps/indexer/src/indexer/federationPro
 if (probeSrc.includes('treasuryMismatchReason(canonicalTreasury, instanceData.treasury)') && probeSrc.includes('return mkMismatch(treasuryReason)'))
 	ok('probeOne calls treasuryMismatchReason and returns mkMismatch on divergence');
 else bad('probeOne no longer wires the treasury mismatch check', 'redirection would go unflagged');
-if (probeSrc.includes('probeOne(inst, this.config.canonicalTreasury?.()'))
-	ok('probePool threads the canonical treasury into probeOne');
-else bad('probePool no longer passes canonicalTreasury to probeOne', 'probe would compare against nothing');
+// cp768 — probePool now WITHHOLDS the treasury opinion (passes null) until our
+// own indexer is synced, so a mid-sync incomplete baseline can't false-flag a
+// legit peer as fee-redirection. The relay-account/shape checks are unaffected.
+if (probeSrc.includes('probeOne(inst, treasuryForProbe)'))
+	ok('cp768: probePool threads treasuryForProbe (gated) into probeOne');
+else bad('probePool no longer passes the gated treasury to probeOne', 'either regressed the gate or dropped the check');
+if (
+	/const selfSynced = selfReachableStatus\(this\.config\.localLagBlocks\?\.\(\) \?\? null\) === 'good'/.test(probeSrc) &&
+	/const treasuryForProbe = selfSynced \? \(this\.config\.canonicalTreasury\?\.\(\) \?\? null\) : null/.test(probeSrc)
+)
+	ok('cp768: treasury opinion is withheld (null) while the local indexer is not synced');
+else bad('cp768 gate missing', 'a still-syncing node could false-flag a peer as mismatch');
+// The pure mechanism the gate relies on: a null canonical → NO mismatch even
+// against an evil peer (already covered above, re-assert intent here).
+expectNull('cp768: withheld (null) treasury never flags, even vs a redirecting peer', treasuryMismatchReason(null, { btc: EVIL_BTC, xmr: EVIL_XMR }));
 
 // 9 — /v1/instance exposure
 const instSrc = readFileSync(join(REPO, 'apps/indexer/src/api/instance.ts'), 'utf-8');

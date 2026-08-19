@@ -28,9 +28,11 @@ import {
 	decideSeeding,
 	getOperationalSnapshot,
 	primeOperationalSnapshot,
+	mergeOperationalSnapshot,
 	__resetOperationalForTest,
 	OPERATIONAL_TTL_MS,
-	type SeedingFacts
+	type SeedingFacts,
+	type OperationalSnapshot
 } from '../apps/indexer/src/api/operationalHealth.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -66,6 +68,34 @@ check('daemon down → down', decideSeeding(mk({ daemon: 'inactive' })).state ==
 check('a timer inactive → degraded', decideSeeding(mk({ pinTimer: 'inactive' })).state === 'degraded');
 check('last rebroadcast failed → degraded', decideSeeding(mk({ rebroadcastFailed: true })).state === 'degraded');
 check('all active, no failures → ok', decideSeeding(mk({})).state === 'ok');
+
+// ── cp766: one failing block must NOT blank the others (merge resilience) ──
+const populated: OperationalSnapshot = {
+	ipfs_seeding: { state: 'ok', detail: 'seeding' },
+	system: { cpu_pct: 12, mem_pct: 40, mem_used_gb: 6, mem_total_gb: 15, disk_pct: 20, disk_used_gb: 90, disk_total_gb: 460, disk_avail_gb: 360 },
+	relay: { up: true }
+};
+{
+	// relay probe failed this pass (null) → relay keeps prev true, others update.
+	const merged = mergeOperationalSnapshot(populated, {
+		ipfs_seeding: { state: 'degraded', detail: 'x' },
+		system: { cpu_pct: 5, mem_pct: 41, mem_used_gb: 6, mem_total_gb: 15, disk_pct: 21, disk_used_gb: 91, disk_total_gb: 460, disk_avail_gb: 359 },
+		relay: null
+	});
+	check('a failed relay block keeps its previous value', merged.relay.up === true);
+	check('the other blocks still update when relay fails', merged.ipfs_seeding.state === 'degraded' && merged.system.cpu_pct === 5);
+}
+{
+	// systemctl block failed → ipfs keeps prev; system + relay still refresh.
+	const merged = mergeOperationalSnapshot(populated, { ipfs_seeding: null, system: { cpu_pct: 9, mem_pct: 42, mem_used_gb: 6, mem_total_gb: 15, disk_pct: 22, disk_used_gb: 92, disk_total_gb: 460, disk_avail_gb: 358 }, relay: { up: false } });
+	check('a failed seeding block keeps its previous value', merged.ipfs_seeding.state === 'ok');
+	check('system + relay still refresh when seeding fails', merged.system.cpu_pct === 9 && merged.relay.up === false);
+}
+{
+	// ALL blocks failed → whole snapshot unchanged (never blanks to defaults).
+	const merged = mergeOperationalSnapshot(populated, { ipfs_seeding: null, system: null, relay: null });
+	check('all-fail keeps the entire previous snapshot (never blanks to null/false)', merged.relay.up === true && merged.system.cpu_pct === 12 && merged.ipfs_seeding.state === 'ok');
+}
 
 // ── snapshot SHAPE (public JSON contract) ────────────────────────
 __resetOperationalForTest();

@@ -72,7 +72,14 @@ NEWS_RSS="${MORPHIT_CANARY_NEWS_RSS:-https://cointelegraph.com/rss}"
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 TEMPLATE="$REPO_ROOT/apps/web/static/canary.txt.template"
-OUT="$REPO_ROOT/apps/web/static/canary.txt"
+# cp763 — the signed canary is written to MORPHIT_CANARY_OUT when set, else the
+# legacy in-tree static/ path.  setup.sh points this at a USER-WRITABLE staging
+# dir (~/.morphit/canary) so the refresh never needs to write the root-owned
+# source tree; the template above is only READ (readable even when root-owned).
+# The default is unchanged, so an existing generated refresh script that doesn't
+# set MORPHIT_CANARY_OUT keeps its old behaviour.
+OUT="${MORPHIT_CANARY_OUT:-$REPO_ROOT/apps/web/static/canary.txt}"
+mkdir -p "$(dirname "$OUT")" 2>/dev/null || true
 
 if [ ! -f "$TEMPLATE" ]; then
 	echo "canary: template missing at $TEMPLATE" >&2
