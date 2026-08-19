@@ -64,6 +64,28 @@ check(
 		(/gpg --armor --export/.test(setup) && /pgp_keys\.asc/.test(setup))
 );
 
+// ─── cp763: stage in a USER-WRITABLE dir, never the root-owned source tree ─
+// A root-installed /opt/morphit makes apps/web/static/ root-owned; a non-root
+// operator running setup.sh used to die there at "pgp_keys.asc: Permission
+// denied" (set -e) before the refresh script or timer were ever written. The
+// signed canary + public key now stage under ~/.morphit, and only the SERVED
+// build/ dir (self-healed) is written for real.
+check(
+	'defines a user-writable staging dir under ~/.morphit (not the root-owned tree)',
+	/STAGE_DIR="\$HOME\/\.morphit\/canary"/.test(setup) && /mkdir -p "\$STAGE_DIR"/.test(setup)
+);
+check(
+	'exports the public key to the staging dir, NOT the root-owned static/',
+	/gpg --armor --export[^\n]*"\$STAGE_DIR\/pgp_keys\.asc"/.test(setup) &&
+		!/gpg --armor --export[^\n]*STATIC_DIR\/pgp_keys\.asc/.test(setup)
+);
+check(
+	'the refresh signs into the staging dir via MORPHIT_CANARY_OUT (generate.sh honors it)',
+	/export MORPHIT_CANARY_OUT="\$STAGE\/canary\.txt"/.test(setup) &&
+		/SIGNED="\$STAGE\/canary\.txt"/.test(setup) &&
+		/PUBKEY="\$STAGE\/pgp_keys\.asc"/.test(setup)
+);
+
 // ─── the weekly refresh delivers to the SERVED build/ dir (cp431) ─
 check('the refresh runs generate.sh to sign a fresh canary', /scripts\/canary\/generate\.sh/.test(setup));
 check(

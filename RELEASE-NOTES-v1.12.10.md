@@ -1,0 +1,27 @@
+# Morphit v1.12.10
+
+**Theme: closing the last tor-only leaks and false alarms. This release stops a tor-only node from probing clearnet Blurt RPC endpoints in its stats page (which would reveal the node's real IP), fixes the `/v1/health` operational block so it stops reporting a healthy relay and host as down, stops a still-syncing node from falsely flagging a healthy peer as a fee-redirection "mismatch", and fixes the warrant-canary setup so it completes on a root-installed node instead of aborting. It also adds operator tooling: an indexer-database snapshot bootstrap (sync a new box in minutes from your own synced box) and the on-chain `chain_snapshot_v1` anchor for publishing a canonical block_log snapshot.**
+
+## Fixed
+
+**A tor-only node no longer probes clearnet RPC endpoints in the stats page.** The "RPC endpoints" card refreshes by actively probing every node in its list — but that list always included the six clearnet Blurt RPCs, even on a tor-only node whose clearnet pool is empty. On a tor-only box that meant the indexer was still reaching those six operators over clearnet, revealing the node's real IP — the same class of exposure v1.12.9 closed for chain syncing. The probe list now includes the clearnet nodes only when the instance actually syncs over clearnet; a tor-only node probes and displays only its hidden (Tor/I2P) endpoints, matching what `/v1/health` already reports. Clearnet nodes are unchanged.
+
+**`/v1/health` no longer reports a healthy relay and host as down.** The operational block (relay reachability, host CPU/memory/disk, IPFS seeding) sampled all of its inputs in a single all-or-nothing pass, so one probe failing — or a single sample never completing — left the entire block frozen at its "unknown / down / not sampled" defaults, disagreeing with what `morphit-ops health` showed. Each input is now sampled independently: a failing probe keeps its previous value and never blanks the others, and a stalled refresh can no longer wedge the block permanently.
+
+**A still-syncing node no longer falsely flags a healthy peer as "mismatch".** The federation directory flags a peer whose advertised fee-treasury addresses differ from the canonical ones (a fee-redirection defense). But a node that is still catching up has an incomplete view of the chain, so its canonical-treasury baseline can be wrong — causing it to falsely accuse a healthy, fully-synced instance. The treasury check is now withheld while the local node is still syncing (it re-engages the moment the node is caught up). The relay-account and response-shape checks are unaffected, so a synced node's fee-redirection defense is unchanged.
+
+**The warrant-canary setup completes on a root-installed node instead of aborting.** On a root-installed `/opt/morphit`, canary setup run as a non-root operator died at a "permission denied" writing the public key into the root-owned source tree — before it ever wrote the refresh script or armed the weekly timer, leaving the node with no canary. Setup now stages the signed canary and public key in the operator-writable `~/.morphit/canary/`, only reading the source tree for the template, and still publishes the artifacts into the served build directory. Say yes once and the canary signs, publishes, and arms its weekly refresh with no permission wall.
+
+## Added
+
+**Indexer-database snapshot bootstrap.** A new node can sync in minutes instead of days by restoring an already-synced indexer's Postgres database and catching up only the small gap — which matters most for a tor-only node that can only sync over hidden RPC. `snapshot-export.ts` produces a portable snapshot (database dump plus a manifest); `snapshot-bootstrap.ts` verifies compatibility (exact chain-id match, schema not newer than this build, Postgres not newer than the host — all fail closed), requires an explicit trust acknowledgement, refuses to clobber a populated database, restores, and confirms. This is safe **only between an operator's own boxes** — you are trusting your own derived state. A public, signed snapshot is a separate decision and is not included here.
+
+**On-chain `chain_snapshot_v1` anchor.** The publish side for a canonical Blurt block_log snapshot: `@morphit` posts a `custom_json` op pointing at the snapshot (IPFS CID, SHA-256, height, size, blurtd version, optional IPNS name and mirror URL), exactly the way releases are anchored. The block_log is the raw, self-verifying chain, so a node that fetches it re-checks every block on import — making it a zero-trust public artifact. Includes the op format + validator and a laptop broadcaster (dry-run by default).
+
+**A sync profiler and a tor-only node doctor.** `apps/indexer/scripts/sync-profile.ts` measures where initial sync time actually goes (fetch vs. commit vs. apply), so slow syncs can be diagnosed rather than guessed at. `ops/morphit-node-doctor.sh` checks a node end-to-end — clearnet-leak status, stray processes, hidden transports, canary, sync — and safely auto-fixes the clearnet pool on a tor-only box.
+
+## Notes
+
+- No database migration in this release.
+- The snapshot bootstrap, the `chain_snapshot_v1` broadcaster, and the tor-only routing added here are shape- and smoke-validated; the database dump/restore and the on-chain publish need a live run on real infrastructure to validate end-to-end (there is no synced database or signing key in CI).
+- Everything from v1.12.9 (tor-only hidden-only RPC, the canary routing over Tor, and web-push configuration on tor-only nodes) is included.

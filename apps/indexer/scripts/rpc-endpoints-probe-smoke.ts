@@ -19,6 +19,7 @@ import { fileURLToPath } from 'node:url';
 import {
 	probeEndpoints,
 	cachedProbeEndpoints,
+	canonicalProbeUrls,
 	__resetProbeCacheForTests
 } from '../src/api/rpcHealth.ts';
 
@@ -60,9 +61,10 @@ check('after the cache is cleared, a fresh probe is produced', c !== a);
 const repo = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const main = readFileSync(join(repo, 'apps/indexer/src/main.ts'), 'utf8');
 check(
-	'PRIVACY: rpc-endpoints route wires DEFAULT_BLURT_RPC_ENDPOINTS + hidden, never the raw clearnet config',
-	/rpcEndpointsRoute\([\s\S]*?DEFAULT_BLURT_RPC_ENDPOINTS/.test(main) &&
-		!/rpcEndpointsRoute\([\s\S]*?config\.blurtRpcEndpoints/.test(main)
+	'PRIVACY+cp767: route wires the CANONICAL clearnet list via canonicalProbeUrls, gated on usesClearnet, and never SPREADS raw private upstreams',
+	/canonicalProbeUrls\([\s\S]*?clearnetCanon:\s*DEFAULT_BLURT_RPC_ENDPOINTS/.test(main) &&
+		/usesClearnet:\s*config\.blurtRpcEndpoints\.length\s*>\s*0/.test(main) &&
+		!/\.\.\.config\.blurtRpcEndpoints/.test(main)
 );
 
 // The route rate-limits probes AND keeps the passive default cheap.
@@ -72,9 +74,27 @@ check(
 	/query\('probe'\) === '1'/.test(health) && /PROBE_MIN_INTERVAL_MS = 5_000/.test(health)
 );
 
+// ── cp767: a tor-only node's probe allow-list must EXCLUDE the clearnet canon ──
+// so the active ?probe=1 never fetches a clearnet RPC (IP leak) and the widget
+// matches the real hidden-only pool instead of listing phantom clearnet nodes.
+const clearnetCanon = ['https://rpc.a.example', 'https://rpc.b.example'];
+const hidden = ['http://aaa.onion:8091', 'http://bbb.b32.i2p:8091'];
+{
+	// tor-only: clearnet pool empty → usesClearnet=false → clearnet excluded.
+	const list = canonicalProbeUrls({ usesClearnet: false, clearnetCanon, hidden, local: [], autoLocal: [] });
+	check('tor-only allow-list drops the clearnet canon entirely', !list.some((u) => clearnetCanon.includes(u)));
+	check('tor-only allow-list keeps the hidden endpoints', hidden.every((h) => list.includes(h)));
+	check('tor-only allow-list would probe ONLY hidden (no clearnet fetch → no IP leak)', list.length === hidden.length);
+}
+{
+	// clearnet node: usesClearnet=true → clearnet canon included as before.
+	const list = canonicalProbeUrls({ usesClearnet: true, clearnetCanon, hidden, local: ['http://127.0.0.1:8091'], autoLocal: [] });
+	check('clearnet node keeps the clearnet canon + hidden + local', clearnetCanon.every((c) => list.includes(c)) && hidden.every((h) => list.includes(h)) && list.includes('http://127.0.0.1:8091'));
+}
+
 if (failures === 0) {
-	console.log('✓ all 6 rpc-endpoints-probe scenarios passed');
+	console.log('✓ all 10 rpc-endpoints-probe scenarios passed');
 } else {
-	console.log(`\n✗ ${failures}/6 rpc-endpoints-probe scenarios failed`);
+	console.log(`\n✗ ${failures}/10 rpc-endpoints-probe scenarios failed`);
 	process.exit(1);
 }

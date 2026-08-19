@@ -600,6 +600,16 @@ async function appliedVersions(db: Database): Promise<Set<number>> {
 	return new Set(res.rows.map((r) => r.version));
 }
 
+/** The highest schema version this build knows how to run — the declared
+ *  version of the last migration (versions are strictly increasing and
+ *  gap-free by the contract validated above; subsumed versions are lower).
+ *  Used by the snapshot bootstrap to REFUSE a snapshot whose schema is newer
+ *  than this code could run, and to confirm a restored DB matches this build. */
+export function latestSchemaVersion(): number {
+	const last = MIGRATIONS[MIGRATIONS.length - 1];
+	return last ? last.version : 0;
+}
+
 /** Apply every migration not yet recorded. Each migration runs in its
  *  own transaction — one failing migration doesn't partially commit
  *  subsequent ones. */

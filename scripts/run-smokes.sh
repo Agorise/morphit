@@ -598,6 +598,8 @@ SMOKES=(
 	"apps/indexer:price-feeds-health-smoke"
 	"apps/indexer:relay-probe-gateway-smoke"
 	"apps/indexer:local-rpc-endpoint-smoke"
+	"apps/indexer:snapshot-manifest-smoke"
+	"apps/indexer:chain-snapshot-op-smoke"
 	"apps/indexer:rpc-directory-op-smoke"
 	"apps/indexer:fx-source-smoke"
 	"apps/indexer:multi-asset-factory-smoke"

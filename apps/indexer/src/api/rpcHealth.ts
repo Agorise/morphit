@@ -404,6 +404,31 @@ export function __resetProbeCacheForTests(): void {
 	probeCache = null;
 }
 
+/**
+ * cp767 — the public-node allow-list for the /v1/rpc-endpoints route. On a
+ * tor-only instance (cp755 emptied its clearnet pool) the clearnet canon is
+ * EXCLUDED: the active `?probe=1` path fetches each URL directly, so probing a
+ * clearnet RPC from a tor-only box would leak the box's real IP to those
+ * operators — the exact exposure tor-only exists to prevent — and would list
+ * phantom clearnet endpoints the node never actually syncs from. Pure + total,
+ * unit-tested. `usesClearnet` is simply "does this instance have a clearnet
+ * sync pool" (config.blurtRpcEndpoints.length > 0).
+ */
+export function canonicalProbeUrls(opts: {
+	usesClearnet: boolean;
+	clearnetCanon: readonly string[];
+	hidden: readonly string[];
+	local: readonly string[];
+	autoLocal: readonly string[];
+}): string[] {
+	return [
+		...(opts.usesClearnet ? opts.clearnetCanon : []),
+		...opts.hidden,
+		...opts.local,
+		...opts.autoLocal
+	];
+}
+
 export function rpcEndpointsRoute(
 	snapshotFn: () => readonly EndpointState[],
 	canonicalUrls: readonly string[]

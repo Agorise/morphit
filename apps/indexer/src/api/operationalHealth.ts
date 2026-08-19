@@ -401,38 +401,96 @@ async function probeRelayAny(configured: string, timeoutMs: number): Promise<boo
 let cached: OperationalSnapshot = DEFAULT_SNAPSHOT;
 let lastRefreshMs = 0;
 let refreshing = false;
+// cp766 — a wedge guard: if a refresh somehow never settles (e.g. a probe hangs
+// past its own timeout), don't let `refreshing` block every future refresh
+// forever — which would freeze /v1/health at its initial null/false/"not sampled
+// yet" defaults. After this long an in-flight refresh is treated as abandoned.
+let refreshStartedMs = 0;
+const REFRESH_MAX_INFLIGHT_MS = 30_000;
 
-async function refresh(relayHealthUrl: string): Promise<void> {
-	const [daemon, pinTimer, rebroadcastTimer, pinFailed, rebroadcastFailed, disk, relayUp] = await Promise.all([
+function kickRefresh(relayHealthUrl: string, now: number): void {
+	const inflightStuck = refreshing && now - refreshStartedMs > REFRESH_MAX_INFLIGHT_MS;
+	if (refreshing && !inflightStuck) return;
+	refreshing = true;
+	refreshStartedMs = now;
+	refresh(relayHealthUrl)
+		.catch(() => {
+			/* leave the previous snapshot in place */
+		})
+		.finally(() => {
+			refreshing = false;
+		});
+}
+
+/** Group the ipfs-seeding probes (systemctl reads) into one independently-
+ *  failable block. */
+async function sampleSeeding(): Promise<{ state: SeedingState; detail: string }> {
+	const [daemon, pinTimer, rebroadcastTimer, pinFailed, rebroadcastFailed] = await Promise.all([
 		serviceState('ipfs'),
 		serviceState('morphit-ipfs-pin.timer'),
 		serviceState('morphit-ipns-rebroadcast.timer'),
 		serviceFailed('morphit-ipfs-pin.service'),
-		serviceFailed('morphit-ipns-rebroadcast.service'),
-		sampleDisk(),
-		// 5000ms to match `morphit-ops health`'s fetchHealth timeout. A shorter
-		// window (was 1500ms) times out on a bridge-routed or momentarily busy
-		// relay that the CLI still sees up — making /v1/health disagree with the
-		// CLI. This is the background refresh, not the request path, so a longer
-		// wait costs nothing; candidates are probed in parallel.
-		probeRelayAny(relayHealthUrl, 5000)
+		serviceFailed('morphit-ipns-rebroadcast.service')
 	]);
+	return decideSeeding({ daemon, pinTimer, rebroadcastTimer, pinFailed, rebroadcastFailed });
+}
+
+/** Group the host-resource probes (disk + cpu + mem) into one block. */
+async function sampleSystem(): Promise<SystemBlock> {
+	const disk = await sampleDisk();
 	const cpu = sampleCpuPct();
 	const mem = sampleMem();
-	cached = {
-		ipfs_seeding: decideSeeding({ daemon, pinTimer, rebroadcastTimer, pinFailed, rebroadcastFailed }),
-		system: {
-			cpu_pct: cpu,
-			mem_pct: mem.pct,
-			mem_used_gb: mem.usedGB,
-			mem_total_gb: mem.totalGB,
-			disk_pct: disk.pct,
-			disk_used_gb: disk.usedGB,
-			disk_total_gb: disk.totalGB,
-			disk_avail_gb: disk.availGB
-		},
-		relay: { up: relayUp }
+	return {
+		cpu_pct: cpu,
+		mem_pct: mem.pct,
+		mem_used_gb: mem.usedGB,
+		mem_total_gb: mem.totalGB,
+		disk_pct: disk.pct,
+		disk_used_gb: disk.usedGB,
+		disk_total_gb: disk.totalGB,
+		disk_avail_gb: disk.availGB
 	};
+}
+
+/**
+ * cp766 — merge a fresh (possibly PARTIAL) sample over the previous snapshot.
+ * A block that failed this pass (null) keeps its PREVIOUS value rather than
+ * reverting to the null/false default: one timed-out systemctl or relay probe
+ * must never blank a health card that was populated a moment ago, and it must
+ * never blank the OTHER cards. Pure — unit-tested by operational-health-smoke.
+ */
+export function mergeOperationalSnapshot(
+	prev: OperationalSnapshot,
+	next: {
+		ipfs_seeding: { state: SeedingState; detail: string } | null;
+		system: SystemBlock | null;
+		relay: { up: boolean } | null;
+	}
+): OperationalSnapshot {
+	return {
+		ipfs_seeding: next.ipfs_seeding ?? prev.ipfs_seeding,
+		system: next.system ?? prev.system,
+		relay: next.relay ?? prev.relay
+	};
+}
+
+async function refresh(relayHealthUrl: string): Promise<void> {
+	// Each block is sampled INDEPENDENTLY (allSettled) so one failing probe can't
+	// blank the others — the bug behind an all-null /v1/health that disagreed with
+	// `morphit-ops health` (relay up + resources populated + IPFS seeding). The
+	// 5000ms relay timeout matches the CLI's fetchHealth so a bridge-routed /
+	// momentarily busy relay the CLI still sees up isn't read down here. This is
+	// the background refresh, not the request path — a longer wait is free.
+	const [ipfsRes, sysRes, relayRes] = await Promise.allSettled([
+		sampleSeeding(),
+		sampleSystem(),
+		probeRelayAny(relayHealthUrl, 5000)
+	]);
+	cached = mergeOperationalSnapshot(cached, {
+		ipfs_seeding: ipfsRes.status === 'fulfilled' ? ipfsRes.value : null,
+		system: sysRes.status === 'fulfilled' ? sysRes.value : null,
+		relay: relayRes.status === 'fulfilled' ? { up: relayRes.value } : null
+	});
 	lastRefreshMs = Date.now();
 }
 
@@ -445,29 +503,14 @@ export const OPERATIONAL_TTL_MS = 15_000;
  *  TTL, kick off ONE background refresh (stale-while-revalidate) and serve the
  *  current value meanwhile. Never throws, never awaits. */
 export function getOperationalSnapshot(relayHealthUrl: string, now = Date.now()): OperationalSnapshot {
-	if (now - lastRefreshMs > OPERATIONAL_TTL_MS && !refreshing) {
-		refreshing = true;
-		refresh(relayHealthUrl)
-			.catch(() => {
-				/* leave the previous snapshot in place */
-			})
-			.finally(() => {
-				refreshing = false;
-			});
-	}
+	if (now - lastRefreshMs > OPERATIONAL_TTL_MS) kickRefresh(relayHealthUrl, now);
 	return cached;
 }
 
 /** Prime one refresh (call at route setup) so the first probe has data sooner.
  *  Best-effort; failures are swallowed. */
 export function primeOperationalSnapshot(relayHealthUrl: string): void {
-	if (refreshing) return;
-	refreshing = true;
-	refresh(relayHealthUrl)
-		.catch(() => {})
-		.finally(() => {
-			refreshing = false;
-		});
+	kickRefresh(relayHealthUrl, Date.now());
 }
 
 /** Test seam: reset the module cache + cpu baseline. */
@@ -475,5 +518,6 @@ export function __resetOperationalForTest(): void {
 	cached = DEFAULT_SNAPSHOT;
 	lastRefreshMs = 0;
 	refreshing = false;
+	refreshStartedMs = 0;
 	prevCpu = null;
 }

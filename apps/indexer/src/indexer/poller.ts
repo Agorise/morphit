@@ -688,18 +688,21 @@ export class Poller {
 			return;
 		}
 
-		// ─── Concurrent prefetch, strictly in-order apply (cp664) ────────────
+		// ─── Concurrent prefetch, strictly in-order apply (cp664/cp666) ─────
 		// The DB write and the volunteer-run RPC nodes want opposite things: the
-		// DB wants small, in-order transactions; the nodes want few, spread-out
+		// DB wants bounded, in-order transactions; the nodes want few, spread-out
 		// requests. We satisfy both. The FETCH is parallelised — up to
 		// `concurrency` windows are in flight AT ONCE, each fired at a DIFFERENT
 		// endpoint (pool startOffset rotation) so no single node is dogpiled and a
 		// stalled node's window transparently falls back through the pool to
-		// another. The APPLY is unchanged: strictly ascending block order, one-
-		// block-per-tx (so a long catch-up never holds a tx open for minutes,
-		// holding locks + bloating WAL). The FIFO/in-order guarantee lives in the
-		// `consumeInOrderWithPrefetch` helper (covered by prefetch-in-order-smoke);
-		// this method supplies only the window fetch + the block apply.
+		// another. The APPLY is strictly ascending block order, ONE TRANSACTION
+		// PER WINDOW (cp666 — the ≤BLOCK_FETCH_BATCH blocks of a fetch window
+		// share a single tx, amortising the per-commit fsync ~BLOCK_FETCH_BATCH×).
+		// The tx is still SHORT — one window, never the whole catch-up — so a long
+		// backfill never holds a tx open for minutes, holding locks + bloating
+		// WAL. The FIFO/in-order guarantee lives in the `consumeInOrderWithPrefetch`
+		// helper (covered by prefetch-in-order-smoke); this method supplies only
+		// the window fetch + the window apply.
 		type FetchedBlocks = Awaited<ReturnType<BlurtClient['getBlocks']>>;
 		const endpointCount = Math.max(1, this.blurt.endpointCount());
 		const concurrency =

@@ -64,6 +64,16 @@ BUILD_DIR="$REPO_ROOT/apps/web/build"
 # the signed canary + weekly refresh land where it's actually served, not in the
 # source tree where nothing reads it.
 SERVE_DIR="${MORPHIT_CANARY_SERVE_DIR:-$REPO_ROOT/apps/web/build}"
+# cp763 — USER-WRITABLE staging dir for the signed canary + public key. The old
+# flow staged both in the in-tree apps/web/static/, which is root-owned on a
+# root-installed /opt/morphit — so a first-time setup run as a non-root operator
+# died at "pgp_keys.asc: Permission denied" (set -e) before it ever wrote the
+# refresh script or armed the timer, leaving the box with no canary. Staging
+# under ~/.morphit (always ours) removes that chicken-and-egg: the source tree is
+# only READ (the template), and the final artifacts still land in the SERVED
+# build/ dir (self-healed) exactly as before.
+STAGE_DIR="$HOME/.morphit/canary"
+mkdir -p "$STAGE_DIR"
 
 say ""
 say "── Morphit warrant-canary setup ───────────────────────────────"
@@ -180,8 +190,11 @@ if ! printf 'canary-selftest' | gpg --batch --yes --local-user "$KEY_ID" --clear
 fi
 
 # Publish the PUBLIC key so readers can verify the canary (served at /pgp_keys.asc).
-gpg --armor --export "$KEY_ID" > "$STATIC_DIR/pgp_keys.asc"
-info "Exported your public key to apps/web/static/pgp_keys.asc (served at /pgp_keys.asc)."
+# cp763 — stage it in the user-writable STAGE_DIR (the refresh copies it into the
+# served build/ dir); writing the root-owned static/ here is what used to abort
+# a non-root first-time setup with "Permission denied".
+gpg --armor --export "$KEY_ID" > "$STAGE_DIR/pgp_keys.asc"
+info "Staged your public key at $STAGE_DIR/pgp_keys.asc (served at /pgp_keys.asc after the refresh)."
 say ""
 
 # ─── 4. Instance identity (what the canary declares) ─────────────
@@ -212,10 +225,14 @@ mkdir -p "$MORPHIT_HOME"
 	printf "export MORPHIT_CANARY_OPERATOR_ACCOUNT='%s'\n" "$OPERATOR_ACCOUNT"
 	printf "REPO='%s'\n" "$REPO_ROOT"
 	printf "SERVE='%s'\n" "$SERVE_DIR"
+	printf "STAGE='%s'\n" "$STAGE_DIR"
 	printf 'cd "$REPO"\n'
+	# cp763 — sign into the user-writable staging dir, not the root-owned source
+	# tree, so the weekly refresh never hits a permission wall on a root install.
+	printf 'export MORPHIT_CANARY_OUT="$STAGE/canary.txt"\n'
 	printf 'bash scripts/canary/generate.sh\n'
-	printf 'SIGNED="$REPO/apps/web/static/canary.txt"\n'
-	printf 'PUBKEY="$REPO/apps/web/static/pgp_keys.asc"\n'
+	printf 'SIGNED="$STAGE/canary.txt"\n'
+	printf 'PUBKEY="$STAGE/pgp_keys.asc"\n'
 	if [ "$MODE" = local ]; then
 		printf '# Home hosting: place the freshly-signed canary where nginx serves it.\n'
 		printf 'DEST="$SERVE"\n'

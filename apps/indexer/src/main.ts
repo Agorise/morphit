@@ -89,7 +89,7 @@ import { rssOrderbookRoute } from '$api/rssOrderbook';
 import { operatorsRoute } from '$api/operators';
 import { activityRoute } from '$api/activity';
 import { statsRoute } from '$api/stats';
-import { rpcEndpointsRoute } from '$api/rpcHealth';
+import { rpcEndpointsRoute, canonicalProbeUrls } from '$api/rpcHealth';
 import { instancePaymentMethodsRoute } from '$api/instancePaymentMethods';
 import { operatorBlocksRoute } from '$api/operatorBlocks';
 import { logger } from '$log';
@@ -756,12 +756,21 @@ async function main(): Promise<void> {
 		// canonical here). This is what lets the Settings card show the Tor/I2P
 		// nodes with their transport badges; without it the privacy filter would
 		// drop them.
-		rpcEndpointsRoute(() => poller.rpcEndpointSnapshot, [
-			...DEFAULT_BLURT_RPC_ENDPOINTS,
-			...config.hiddenRpcEndpoints,
-			...config.localRpcEndpoints,
-			...autoLocalEndpoints
-		])
+		// cp767 — but the clearnet canon is included ONLY if this instance
+		// actually uses clearnet. On a tor-only node (cp755: clearnet pool
+		// emptied) it's excluded, so the active ?probe=1 never fetches a clearnet
+		// RPC (which would leak the box's IP) and the widget matches the real
+		// hidden-only pool instead of listing 10 phantom endpoints.
+		rpcEndpointsRoute(
+			() => poller.rpcEndpointSnapshot,
+			canonicalProbeUrls({
+				usesClearnet: config.blurtRpcEndpoints.length > 0,
+				clearnetCanon: DEFAULT_BLURT_RPC_ENDPOINTS,
+				hidden: config.hiddenRpcEndpoints,
+				local: config.localRpcEndpoints,
+				autoLocal: autoLocalEndpoints
+			})
+		)
 	);
 	app.route('/v1/rpc-endpoints', rpcEndpointsApp);
 
