@@ -344,38 +344,43 @@ function defaultGatewayV4(): string | null {
 	}
 }
 
-/** Build the candidate relay-health URLs: the configured one, the same path on
- *  each given host IPv4 address, and the default gateway (the bridge gateway /
- *  relay bind address when the indexer runs in a container). Pure — exported for
- *  the regression smoke. */
+/** Build the candidate relay-health URLs. The relay's up/down is measured with
+ *  ZERO configuration: we always auto-probe the relay across every local address
+ *  it could bind — loopback, each host IPv4 (which INCLUDES the docker bridge
+ *  address like 172.18.0.1 that a container-fronted relay listens on), and the
+ *  default gateway — at the relay's canonical health path. A configured
+ *  MORPHIT_INDEXER_RELAY_HEALTH_URL is honoured verbatim in addition, but is not
+ *  required. Pure — exported for the regression smoke. cp771. */
 export function buildRelayCandidates(
 	configured: string,
 	ipv4Addrs: readonly string[],
 	gateway: string | null
 ): string[] {
-	const urls = [configured];
-	// cp769 — port/path for the ALWAYS-included loopback candidate (below).
-	let loopPort = '8080';
-	let loopPath = '/v1/health';
-	try {
-		const u = new URL(configured);
-		const port = u.port || '8080';
-		loopPort = port;
-		loopPath = `${u.pathname}${u.search}`;
-		for (const a of ipv4Addrs) {
-			urls.push(`${u.protocol}//${a}:${port}${u.pathname}${u.search}`);
+	const urls: string[] = [];
+	// The relay itself always serves /v1/health on its own listen port (8080 by
+	// default). We probe THAT locally, not whatever public path/port a reverse
+	// proxy might expose — so a configured public URL never misdirects the local
+	// probe.
+	let localPort = '8080';
+	if (configured) {
+		urls.push(configured); // honour an explicit URL verbatim, first
+		try {
+			const u = new URL(configured);
+			// Reuse the configured port for local probes ONLY if it's a real relay
+			// port — a public 80/443 in front of a proxy is never where the relay
+			// itself listens.
+			if (u.port && u.port !== '80' && u.port !== '443') localPort = u.port;
+		} catch {
+			/* configured isn't a URL (e.g. empty) — auto-probe below still runs */
 		}
-		if (gateway) {
-			urls.push(`${u.protocol}//${gateway}:${port}${u.pathname}${u.search}`);
-		}
-	} catch {
-		// configured isn't a parseable URL — just probe it as-is, plus loopback.
 	}
-	// cp769 — ALWAYS probe loopback. A bare-metal relay binds 127.0.0.1:8080; if
-	// the configured URL is empty or points elsewhere, loopback would be missed and
-	// a healthy relay reads down (/v1/health disagreeing with `morphit-ops health`
-	// + a direct curl).
-	urls.push(`http://127.0.0.1:${loopPort}${loopPath}`);
+	// cp771 — ALWAYS auto-probe every local address, regardless of `configured`.
+	// This is what makes relay up/down "just work": on a container-fronted host the
+	// relay binds the docker bridge (172.18.0.1), which appears in ipv4Addrs; on a
+	// bare-metal host it binds loopback. Both are covered with no config.
+	for (const a of ipv4Addrs) urls.push(`http://${a}:${localPort}/v1/health`);
+	if (gateway) urls.push(`http://${gateway}:${localPort}/v1/health`);
+	urls.push(`http://127.0.0.1:${localPort}/v1/health`);
 	return [...new Set(urls)];
 }
 

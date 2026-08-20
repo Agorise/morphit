@@ -62,26 +62,34 @@ check('garbage → null (no throw)', parseDefaultGatewayV4('not a route table') 
 	check('gateway == interface addr is de-duplicated', cands.filter((u) => u.includes('172.18.0.1')).length === 1);
 }
 {
-	// Port + path preserved from the configured URL.
-	const cands = buildRelayCandidates('http://127.0.0.1:9999/health', [], '10.0.0.1');
-	check('preserves the configured port + path on the gateway candidate', cands.includes('http://10.0.0.1:9999/health'));
+	// cp771 — local probes use the relay's canonical /v1/health at the configured
+	// port, NOT the configured path (a proxy path like /relay/... isn't what the
+	// relay serves locally).
+	const cands = buildRelayCandidates('http://127.0.0.1:9999/relay/v1/health', [], '10.0.0.1');
+	check('reuses the configured port but canonicalises the path on the gateway candidate', cands.includes('http://10.0.0.1:9999/v1/health'));
 }
-// ── cp769: loopback is ALWAYS a candidate (empty/misconfigured RELAY_HEALTH_URL
-//     must not make a healthy bare-metal relay read down) ──────────────────
+// ── cp771: relay up/down is measured with ZERO config — every local address
+//     (loopback, host IPs incl. the docker bridge, gateway) is auto-probed at
+//     the relay's canonical /v1/health, even when RELAY_HEALTH_URL is empty ──
 {
-	// Empty configured URL → still probes loopback on the default port/path.
-	const cands = buildRelayCandidates('', [], null);
-	check('empty configured URL still yields a loopback candidate', cands.includes('http://127.0.0.1:8080/v1/health'));
+	// Empty configured URL → still auto-probes loopback + host IPs + gateway at 8080.
+	const cands = buildRelayCandidates('', ['172.18.0.1'], '172.17.0.1');
+	check('empty URL still probes loopback', cands.includes('http://127.0.0.1:8080/v1/health'));
+	check('empty URL still probes the docker-bridge host IP (the real morphit.io case)', cands.includes('http://172.18.0.1:8080/v1/health'));
+	check('empty URL still probes the gateway', cands.includes('http://172.17.0.1:8080/v1/health'));
 }
 {
-	// A non-loopback configured URL → loopback is added alongside it, port/path preserved.
-	const cands = buildRelayCandidates('http://relay.example:9000/v1/health', [], null);
-	check('non-loopback configured URL still adds a loopback candidate (port/path preserved)', cands.includes('http://127.0.0.1:9000/v1/health'));
+	// A public https URL must NOT drag the local probes onto :443 — the relay
+	// listens on 8080 locally, never on the public proxy port.
+	const cands = buildRelayCandidates('https://morphit.io/relay/v1/health', ['172.18.0.1'], null);
+	check('public URL honoured verbatim', cands.includes('https://morphit.io/relay/v1/health'));
+	check('public URL does NOT misdirect the local host-IP probe to :443 (uses 8080 + /v1/health)', cands.includes('http://172.18.0.1:8080/v1/health'));
+	check('public URL does NOT inherit the /relay/ proxy path locally', !cands.some((u) => u.includes('127.0.0.1') && u.includes('/relay/')));
 }
 {
-	// Garbage configured URL → loopback default still present, no throw.
-	const cands = buildRelayCandidates('not a url', [], null);
-	check('unparseable configured URL still yields the default loopback candidate', cands.includes('http://127.0.0.1:8080/v1/health'));
+	// An explicit non-standard relay port is reused for the local probes.
+	const cands = buildRelayCandidates('http://127.0.0.1:9000/v1/health', ['10.0.0.5'], null);
+	check('explicit relay port is reused on host-IP probes', cands.includes('http://10.0.0.5:9000/v1/health'));
 }
 
 console.log(
