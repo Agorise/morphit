@@ -1,6 +1,6 @@
 {
   "name": "morphit-matrix-bot",
-  "version": "1.12.12",
+  "version": "1.12.13",
   "description": "Morphit matrix-bot sidecar — tails journalctl, classifies operator alerts by tier (CRITICAL/WARN/INFO), forwards to Matrix DM. Per OPERATIONS.md §16 'Routing alerts elsewhere'.",
   "type": "module",
   "private": true,

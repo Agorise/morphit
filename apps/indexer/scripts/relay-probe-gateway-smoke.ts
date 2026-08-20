@@ -10,6 +10,7 @@ import {
 	parseDefaultGatewayV4,
 	buildRelayCandidates
 } from '../src/api/operationalHealth.ts';
+import { readFileSync } from 'node:fs';
 
 let pass = 0;
 let fail = 0;
@@ -90,6 +91,16 @@ check('garbage → null (no throw)', parseDefaultGatewayV4('not a route table') 
 	// An explicit non-standard relay port is reused for the local probes.
 	const cands = buildRelayCandidates('http://127.0.0.1:9000/v1/health', ['10.0.0.5'], null);
 	check('explicit relay port is reused on host-IP probes', cands.includes('http://10.0.0.5:9000/v1/health'));
+}
+{
+	// cp772 — the LOCAL relay probe must bypass the global hidden-service router
+	// (Tor/I2P) the indexer installs; going through it breaks the local fetch and
+	// reads a healthy relay as down. Proven in the field + a bypass test.
+	const oh = readFileSync(new URL('../src/api/operationalHealth.ts', import.meta.url), 'utf8');
+	check('cp772: a dedicated direct dispatcher exists (new Agent from undici)',
+		/import\s*\{[^}]*\bAgent\b[^}]*\}\s*from\s*'undici'/.test(oh) && /directRelayDispatcher\s*=\s*new Agent\(\)/.test(oh));
+	check('cp772: probeRelay passes dispatcher: directRelayDispatcher (bypasses the global router)',
+		/dispatcher:\s*directRelayDispatcher/.test(oh));
 }
 
 console.log(

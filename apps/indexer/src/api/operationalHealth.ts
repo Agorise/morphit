@@ -38,6 +38,13 @@ import { cpus, totalmem, freemem, networkInterfaces } from 'node:os';
 import { readFileSync } from 'node:fs';
 import { statfs } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
+import { Agent } from 'undici';
+
+// cp772 — a dedicated DIRECT dispatcher used ONLY for the local relay health
+// probe, so it bypasses the global hidden-service routing dispatcher the indexer
+// installs (Tor/I2P for chain reads). The relay is always a local service; its
+// probe must connect directly, never through the routing layer.
+const directRelayDispatcher = new Agent();
 
 import {
 	classifySeeding,
@@ -298,8 +305,16 @@ async function probeRelay(url: string, timeoutMs: number): Promise<boolean> {
 	try {
 		const res = await fetch(url, {
 			signal: ctrl.signal,
-			headers: { accept: 'application/json', 'user-agent': 'morphit-indexer/operational-health-relay-probe' }
-		});
+			headers: { accept: 'application/json', 'user-agent': 'morphit-indexer/operational-health-relay-probe' },
+			// cp772 — the relay is a LOCAL service (loopback / host / docker bridge).
+			// Its probe MUST go direct, never through the global hidden-service
+			// routing dispatcher the indexer installs for chain reads over Tor/I2P:
+			// that router breaks the local connection (proven in the field — a plain
+			// fetch to the relay returns 200, the same fetch through the router
+			// fails, which is why /v1/health read relay:up:false on a healthy relay).
+			// A dedicated direct undici Agent bypasses the global dispatcher.
+			dispatcher: directRelayDispatcher
+		} as unknown as Parameters<typeof fetch>[1]);
 		return res.ok;
 	} catch {
 		return false;
