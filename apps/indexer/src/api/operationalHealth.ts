@@ -38,13 +38,8 @@ import { cpus, totalmem, freemem, networkInterfaces } from 'node:os';
 import { readFileSync } from 'node:fs';
 import { statfs } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
-import { Agent } from 'undici';
-
-// cp772 — a dedicated DIRECT dispatcher used ONLY for the local relay health
-// probe, so it bypasses the global hidden-service routing dispatcher the indexer
-// installs (Tor/I2P for chain reads). The relay is always a local service; its
-// probe must connect directly, never through the routing layer.
-const directRelayDispatcher = new Agent();
+import { get as httpGet, type IncomingMessage } from 'node:http';
+import { get as httpsGet } from 'node:https';
 
 import {
 	classifySeeding,
@@ -298,29 +293,49 @@ function serviceFailed(unit: string): Promise<boolean> {
 	});
 }
 
-async function probeRelay(url: string, timeoutMs: number): Promise<boolean> {
-	if (url.length === 0) return false;
-	const ctrl = new AbortController();
-	const t = setTimeout(() => ctrl.abort(), timeoutMs);
-	try {
-		const res = await fetch(url, {
-			signal: ctrl.signal,
-			headers: { accept: 'application/json', 'user-agent': 'morphit-indexer/operational-health-relay-probe' },
-			// cp772 — the relay is a LOCAL service (loopback / host / docker bridge).
-			// Its probe MUST go direct, never through the global hidden-service
-			// routing dispatcher the indexer installs for chain reads over Tor/I2P:
-			// that router breaks the local connection (proven in the field — a plain
-			// fetch to the relay returns 200, the same fetch through the router
-			// fails, which is why /v1/health read relay:up:false on a healthy relay).
-			// A dedicated direct undici Agent bypasses the global dispatcher.
-			dispatcher: directRelayDispatcher
-		} as unknown as Parameters<typeof fetch>[1]);
-		return res.ok;
-	} catch {
-		return false;
-	} finally {
-		clearTimeout(t);
-	}
+/** Probe the LOCAL relay's health endpoint using node:http(s) DIRECTLY — NOT
+ *  fetch/undici. The indexer installs a global undici dispatcher to route chain
+ *  reads over Tor/I2P (setGlobalDispatcher), and in Node's runtime that global
+ *  also governs the built-in `fetch` — so a fetch-based relay probe was being
+ *  routed through the Tor/I2P layer and failed to reach the LOCAL relay, reading
+ *  a healthy relay as down. (cp772's per-request undici dispatcher didn't help: a
+ *  built-in fetch silently ignores a dispatcher from the standalone undici
+ *  package.) node:http bypasses undici entirely, so the probe always connects
+ *  directly to the local relay regardless of the global dispatcher. PROVEN with a
+ *  broken-global-dispatcher test: built-in fetch fails, node:http succeeds. cp773. */
+function probeRelay(url: string, timeoutMs: number): Promise<boolean> {
+	if (url.length === 0) return Promise.resolve(false);
+	return new Promise((resolve) => {
+		let settled = false;
+		const finish = (v: boolean): void => {
+			if (!settled) {
+				settled = true;
+				resolve(v);
+			}
+		};
+		try {
+			const getter = url.startsWith('https:') ? httpsGet : httpGet;
+			const req = getter(
+				url,
+				{
+					headers: { accept: 'application/json', 'user-agent': 'morphit-indexer/operational-health-relay-probe' },
+					timeout: timeoutMs
+				},
+				(res: IncomingMessage) => {
+					const code = res.statusCode ?? 0;
+					res.resume(); // drain the body so the socket is released
+					finish(code >= 200 && code < 300);
+				}
+			);
+			req.on('error', () => finish(false));
+			req.on('timeout', () => {
+				req.destroy();
+				finish(false);
+			});
+		} catch {
+			finish(false);
+		}
+	});
 }
 
 /** Parse the IPv4 default gateway out of /proc/net/route text (or null). Pure —
@@ -408,10 +423,21 @@ export function buildRelayCandidates(
  *  the CLI instead of falsely reading down. */
 function relayProbeCandidates(configured: string): string[] {
 	const addrs: string[] = [];
-	for (const list of Object.values(networkInterfaces())) {
-		for (const a of list ?? []) {
-			if (a.family === 'IPv4' && !a.internal) addrs.push(a.address);
+	// cp774 — os.networkInterfaces() (libuv uv_interface_addresses) can THROW
+	// EAFNOSUPPORT ("Unknown system error 97") under a systemd sandbox whose
+	// RestrictAddressFamilies omits AF_NETLINK. If this throws inside probeRelayAny
+	// it rejects, refresh() keeps the previous relay value, and /v1/health is stuck
+	// at the default up:false forever — a healthy relay reading down with no fetch
+	// ever attempted. Never let interface enumeration blank the probe: on failure
+	// we simply fall back to the configured URL + loopback candidates below.
+	try {
+		for (const list of Object.values(networkInterfaces())) {
+			for (const a of list ?? []) {
+				if (a.family === 'IPv4' && !a.internal) addrs.push(a.address);
+			}
 		}
+	} catch {
+		/* interface enumeration blocked by the sandbox — configured URL + loopback still probed */
 	}
 	return buildRelayCandidates(configured, addrs, defaultGatewayV4());
 }
