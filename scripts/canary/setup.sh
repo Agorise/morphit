@@ -201,7 +201,19 @@ say ""
 
 say "A few details that appear in the signed canary:"
 OPERATOR_NAME="$(ask 'Operator name (e.g. morphit.io)' "${MORPHIT_CANARY_OPERATOR_NAME:-}")"
-INSTANCE_ORIGIN="$(ask 'Your instance URL (e.g. https://morphit.io)' "${MORPHIT_CANARY_INSTANCE_ORIGIN:-}")"
+# Default the instance URL to THIS node's configured public origin. On a tor-only
+# node that origin is the .onion, so the canary's tor-only auto-detection fires
+# correctly — a free-text answer that isn't the real origin silently disables
+# tor-only routing and leaks freshness fetches over clearnet.
+_origin_default="${MORPHIT_CANARY_INSTANCE_ORIGIN:-}"
+if [ -z "$_origin_default" ]; then
+	for _f in /opt/morphit/morphit.config.env /opt/morphit/morphit.env /etc/morphit/indexer.env; do
+		[ -r "$_f" ] || continue
+		_v="$(grep -E '^(export +)?MORPHIT_INDEXER_PUBLIC_ORIGIN=' "$_f" | tail -1 | sed -E "s/^(export +)?MORPHIT_INDEXER_PUBLIC_ORIGIN=//; s/^[\"']//; s/[\"']$//")"
+		[ -n "$_v" ] && { _origin_default="$_v"; break; }
+	done
+fi
+INSTANCE_ORIGIN="$(ask 'Your instance URL (e.g. https://morphit.io)' "$_origin_default")"
 OPERATOR_ACCOUNT="$(ask 'Your Blurt operator account, no @ (e.g. morphit)' "${MORPHIT_CANARY_OPERATOR_ACCOUNT:-}")"
 [ -n "$OPERATOR_NAME" ] && [ -n "$INSTANCE_ORIGIN" ] && [ -n "$OPERATOR_ACCOUNT" ] \
 	|| die "operator name, instance URL, and Blurt account are all required."

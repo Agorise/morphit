@@ -354,9 +354,14 @@ export function buildRelayCandidates(
 	gateway: string | null
 ): string[] {
 	const urls = [configured];
+	// cp769 — port/path for the ALWAYS-included loopback candidate (below).
+	let loopPort = '8080';
+	let loopPath = '/v1/health';
 	try {
 		const u = new URL(configured);
 		const port = u.port || '8080';
+		loopPort = port;
+		loopPath = `${u.pathname}${u.search}`;
 		for (const a of ipv4Addrs) {
 			urls.push(`${u.protocol}//${a}:${port}${u.pathname}${u.search}`);
 		}
@@ -364,8 +369,13 @@ export function buildRelayCandidates(
 			urls.push(`${u.protocol}//${gateway}:${port}${u.pathname}${u.search}`);
 		}
 	} catch {
-		// configured isn't a parseable URL — just probe it as-is.
+		// configured isn't a parseable URL — just probe it as-is, plus loopback.
 	}
+	// cp769 — ALWAYS probe loopback. A bare-metal relay binds 127.0.0.1:8080; if
+	// the configured URL is empty or points elsewhere, loopback would be missed and
+	// a healthy relay reads down (/v1/health disagreeing with `morphit-ops health`
+	// + a direct curl).
+	urls.push(`http://127.0.0.1:${loopPort}${loopPath}`);
 	return [...new Set(urls)];
 }
 
@@ -387,9 +397,11 @@ function relayProbeCandidates(configured: string): string[] {
 }
 
 /** True if the relay answers on ANY candidate address. Probes run in parallel;
- *  the first success wins. Kept off the hot request path (background refresh). */
+ *  the first success wins. Kept off the hot request path (background refresh).
+ *  cp769 — no longer bails on an empty configured URL: loopback is always probed
+ *  (relayProbeCandidates guarantees it), so an unset/empty RELAY_HEALTH_URL can't
+ *  make a healthy local relay read down. */
 async function probeRelayAny(configured: string, timeoutMs: number): Promise<boolean> {
-	if (configured.length === 0) return false;
 	const results = await Promise.all(
 		relayProbeCandidates(configured).map((u) => probeRelay(u, timeoutMs))
 	);
