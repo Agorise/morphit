@@ -79,18 +79,18 @@
 
 	const manifestFileCount = $derived(verify ? Object.keys(verify.hash_manifest).length : 0);
 
-	/** Build a `matrix:` URI (RFC/MSC2312 scheme) for a room alias or user id,
-	 *  so the link opens the visitor's OWN Matrix client directly instead of
-	 *  bouncing through matrix.to — which would leak the click (and the room they
-	 *  clicked) to a third-party matrix.org web service. Also avoids the ugly
-	 *  %23/%3A percent-encoding matrix.to needs.
-	 *    #room:server  → matrix:r/room:server
-	 *    @user:server  → matrix:u/user:server                                */
-	function matrixUri(addr: string): string {
-		const a = addr.trim();
-		if (a.startsWith('#')) return `matrix:r/${a.slice(1)}`;
-		if (a.startsWith('@')) return `matrix:u/${a.slice(1)}`;
-		return `matrix:r/${a}`;
+	/** Build a link to a Matrix room alias (#…) or user id (@…). We use the
+	 *  universal matrix.to redirect (the same link the rest of the app uses)
+	 *  rather than the bare `matrix:` URI scheme: most browsers have NO `matrix:`
+	 *  protocol handler registered, so a `matrix:` link silently does nothing when
+	 *  clicked — which is exactly the "invalid link" users hit here. The alias/id
+	 *  lives in the URL *fragment* (after `#`), which browsers never send to the
+	 *  matrix.to server, and the room advertised here is public, so there is no
+	 *  meaningful click leak.
+	 *    #room:server  → https://matrix.to/#/#room:server
+	 *    @user:server  → https://matrix.to/#/@user:server                       */
+	function matrixUri(alias: string): string {
+		return `https://matrix.to/#/${alias}`;
 	}
 
 	/** Human-readable built-at. */
@@ -203,8 +203,8 @@
 						{$_('about_this_instance.field.operator_tag')}
 					</dt>
 					<dd class="font-mono">
-						{#if verify.operator_tag}
-							{verify.operator_tag}
+						{#if $instance.operator_tag ?? verify.operator_tag}
+							{$instance.operator_tag ?? verify.operator_tag}
 						{:else}
 							<span class="text-ink-500">
 								{$_('about_this_instance.field.operator_tag_none')}

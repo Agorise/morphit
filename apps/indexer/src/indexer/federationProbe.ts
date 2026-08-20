@@ -539,7 +539,15 @@ export async function probeOne(
 		return mkUnreachable(`instance_fetch: ${errMsg(err)}`);
 	}
 	if (!isInstanceShape(instanceData)) {
-		return mkMismatch('instance_response_malformed');
+		// cp770 — an UNPARSEABLE /v1/instance (a WAF/Cloudflare challenge page, an
+		// HTML error, garbage) means we couldn't validly READ the peer — a
+		// reachability/transport failure, NOT a fee-redirection identity mismatch.
+		// This is the common case when a tor-only node probes a clearnet peer over
+		// a Tor exit that the peer's firewall blocks. 'mismatch' is a security
+		// ACCUSATION and must be reserved for a VALID response whose CONTENT
+		// (relay_account / treasury, below) conflicts — those checks still run on
+		// well-formed responses, so no fee-redirection can slip through here.
+		return mkUnreachable('instance_response_unparseable');
 	}
 	if (instanceData.relay_account !== operator_account) {
 		return mkMismatch(

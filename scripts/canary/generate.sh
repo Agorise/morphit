@@ -138,6 +138,22 @@ CURL_PROXY_ARGS=()
 if [ "$CANARY_TOR_ONLY" = 1 ]; then
 	CURL_PROXY_ARGS=(--proxy "socks5h://$CANARY_TOR_SOCKS")
 	echo "canary: tor-only — routing freshness-proof fetches over Tor SOCKS $CANARY_TOR_SOCKS" >&2
+	# On a tor-only node the DEFAULT clearnet Blurt RPCs fail when pushed through a
+	# Tor exit (their WAFs answer HTTP 400/403). If the operator hasn't pinned a
+	# node, auto-pick ONE of THIS node's own hidden .onion Blurt RPCs so the head
+	# fetch goes over Tor natively. (MORPHIT_CANARY_BLURT_RPC is a single URL.)
+	if [ -z "${MORPHIT_CANARY_BLURT_RPC:-}" ]; then
+		_hidden="${MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS:-}"
+		[ -z "$_hidden" ] && [ -r /etc/morphit/indexer.env ] && \
+			_hidden="$(grep -E '^MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS=' /etc/morphit/indexer.env | head -1 | cut -d= -f2- | tr -d '"')"
+		_onion="$(printf '%s' "$_hidden" | tr ',' '\n' | grep -i '\.onion' | head -1 | tr -d '[:space:]')"
+		if [ -n "$_onion" ]; then
+			export MORPHIT_CANARY_BLURT_RPC="$_onion"
+			echo "canary: tor-only — auto-selected hidden Blurt RPC $_onion for the chain-head fetch" >&2
+		else
+			echo "canary: tor-only but no hidden .onion Blurt RPC found — the head fetch may fail over Tor. Set MORPHIT_CANARY_BLURT_RPC to a hidden node." >&2
+		fi
+	fi
 fi
 
 # ─── Freshness proof: Blurt chain head ───────────────────────────

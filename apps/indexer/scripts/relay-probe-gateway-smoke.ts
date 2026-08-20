@@ -66,6 +66,23 @@ check('garbage → null (no throw)', parseDefaultGatewayV4('not a route table') 
 	const cands = buildRelayCandidates('http://127.0.0.1:9999/health', [], '10.0.0.1');
 	check('preserves the configured port + path on the gateway candidate', cands.includes('http://10.0.0.1:9999/health'));
 }
+// ── cp769: loopback is ALWAYS a candidate (empty/misconfigured RELAY_HEALTH_URL
+//     must not make a healthy bare-metal relay read down) ──────────────────
+{
+	// Empty configured URL → still probes loopback on the default port/path.
+	const cands = buildRelayCandidates('', [], null);
+	check('empty configured URL still yields a loopback candidate', cands.includes('http://127.0.0.1:8080/v1/health'));
+}
+{
+	// A non-loopback configured URL → loopback is added alongside it, port/path preserved.
+	const cands = buildRelayCandidates('http://relay.example:9000/v1/health', [], null);
+	check('non-loopback configured URL still adds a loopback candidate (port/path preserved)', cands.includes('http://127.0.0.1:9000/v1/health'));
+}
+{
+	// Garbage configured URL → loopback default still present, no throw.
+	const cands = buildRelayCandidates('not a url', [], null);
+	check('unparseable configured URL still yields the default loopback candidate', cands.includes('http://127.0.0.1:8080/v1/health'));
+}
 
 console.log(
 	fail === 0

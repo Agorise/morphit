@@ -218,12 +218,12 @@ await scenario('relay_account mismatch → mismatch', async () => {
 	assertEqual(out.status, 'mismatch' as ProbeStatus, 'status');
 });
 
-await scenario('/v1/instance malformed → mismatch', async () => {
+await scenario('/v1/instance unparseable → unreachable (cp770, not a fee-redirection accusation)', async () => {
 	stubRoutes({
 		'https://test.example/v1/instance': { json: { not: 'an instance shape' } }
 	});
 	const out = await probeOne(makeRow({}));
-	assertEqual(out.status, 'mismatch' as ProbeStatus, 'status');
+	assertEqual(out.status, 'unreachable' as ProbeStatus, 'status');
 });
 
 // ─── Unreachable ─────────────────────────────────────────────────
