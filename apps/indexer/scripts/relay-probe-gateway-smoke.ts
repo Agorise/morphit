@@ -93,14 +93,29 @@ check('garbage → null (no throw)', parseDefaultGatewayV4('not a route table') 
 	check('explicit relay port is reused on host-IP probes', cands.includes('http://10.0.0.5:9000/v1/health'));
 }
 {
-	// cp772 — the LOCAL relay probe must bypass the global hidden-service router
-	// (Tor/I2P) the indexer installs; going through it breaks the local fetch and
-	// reads a healthy relay as down. Proven in the field + a bypass test.
+	// cp773 — the LOCAL relay probe must use node:http(s), NOT fetch: the indexer's
+	// global undici dispatcher (Tor/I2P chain routing) also governs built-in fetch,
+	// so a fetch probe gets routed away from the local relay and reads it down.
+	// node:http bypasses undici entirely. Proven with a broken-global-dispatcher test.
 	const oh = readFileSync(new URL('../src/api/operationalHealth.ts', import.meta.url), 'utf8');
-	check('cp772: a dedicated direct dispatcher exists (new Agent from undici)',
-		/import\s*\{[^}]*\bAgent\b[^}]*\}\s*from\s*'undici'/.test(oh) && /directRelayDispatcher\s*=\s*new Agent\(\)/.test(oh));
-	check('cp772: probeRelay passes dispatcher: directRelayDispatcher (bypasses the global router)',
-		/dispatcher:\s*directRelayDispatcher/.test(oh));
+	check('cp773: relay probe imports node:http (get) — bypasses undici',
+		/from\s*'node:http'/.test(oh) && /\bhttpGet\b/.test(oh));
+	check('cp773: probeRelay does NOT use fetch (which is governed by the global undici dispatcher)',
+		!/\bfetch\(/.test(oh.slice(oh.indexOf('function probeRelay'), oh.indexOf('function probeRelay') + 900)));
+}
+{
+	// cp774 — THE fix. relayProbeCandidates calls os.networkInterfaces(), which
+	// THROWS EAFNOSUPPORT under a systemd sandbox missing AF_NETLINK. Unguarded,
+	// probeRelayAny rejects and /v1/health is frozen at up:false with no fetch ever
+	// tried (proven live on morphit.io). It must catch that throw.
+	const oh = readFileSync(new URL('../src/api/operationalHealth.ts', import.meta.url), 'utf8');
+	const fn = oh.slice(oh.indexOf('function relayProbeCandidates'), oh.indexOf('return buildRelayCandidates'));
+	check('cp774: relayProbeCandidates wraps networkInterfaces() in try/catch (cannot throw out of the probe)',
+		/try\s*\{/.test(fn) && /networkInterfaces\(\)/.test(fn) && /catch/.test(fn));
+	// and the unit must allow AF_NETLINK so networkInterfaces() actually works (auto-detect).
+	const unit = readFileSync(new URL('../../../ops/systemd/morphit-indexer.service', import.meta.url), 'utf8');
+	check('cp774: indexer unit RestrictAddressFamilies includes AF_NETLINK (networkInterfaces works)',
+		/RestrictAddressFamilies=[^\n]*AF_NETLINK/.test(unit));
 }
 
 console.log(

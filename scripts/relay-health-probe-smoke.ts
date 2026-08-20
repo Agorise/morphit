@@ -29,6 +29,6 @@ const env = read('ops/ansible/roles/morphit/templates/indexer.env.j2');
 check('the ansible indexer env sets the relay health URL (with the relay port var)', /MORPHIT_INDEXER_RELAY_HEALTH_URL=http:\/\/127\.0\.0\.1:\{\{ morphit_relay_bind_port[^}]*\}\}\/v1\/health/.test(env));
 // guard the short-circuit intent: an empty url still yields false (correct), a real one gets probed
 const oh = read('apps/indexer/src/api/operationalHealth.ts');
-check('probeRelay still treats an empty url as down (no false-positive when truly unconfigured)', /if \(url\.length === 0\) return false/.test(oh));
+check('probeRelay still treats an empty url as down (no false-positive when truly unconfigured)', /if \(url\.length === 0\) return (false|Promise\.resolve\(false\))/.test(oh));
 console.log(`\n${pass} passed, ${fail} failed\n${fail === 0 ? `✓ all ${pass} relay-health-probe checks passed` : '✗ FAILED'}`);
 process.exit(fail === 0 ? 0 : 1);

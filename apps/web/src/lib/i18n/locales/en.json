@@ -2099,7 +2099,7 @@
 		"intro": "Morphit is federated. Independent {link} run Morphit instances, and your indexer discovers other instances automatically by reading the chain. This list shows their current health from the most recent probe.",
 		"intro_operators_link": "Operators",
 		"loading": "Loading directory…",
-		"bookmark_tip": "💡 Tip: bookmark a few of these instances — and their Tor, I2P, or Lokinet addresses — in your browser. The orderbook lives on the public blockchain, so if any one site is ever blocked or goes offline, you can reach the very same orders and trades through any other instance.",
+		"bookmark_tip": "💡 Tip: bookmark a few of these instances — and their Tor, I2P, Lokinet or ENS addresses. The orderbook lives on the public blockchain. So if any one site is ever inaccessible, you can reach the very same orders and trades in many other places.",
 		"fetch_error": "Could not load the directory.",
 		"last_updated": "Directory last updated: {date}",
 		"contact": "Contact this operator",

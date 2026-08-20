@@ -67,7 +67,10 @@ RestrictSUIDSGID=yes
 LockPersonality=yes
 RestrictNamespaces=yes
 SystemCallArchitectures=native
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# AF_NETLINK is required for os.networkInterfaces() (libuv uv_interface_addresses);
+# without it the relay-health probe's interface enumeration throws EAFNOSUPPORT
+# ("Unknown system error 97") and /v1/health reports a healthy relay as down. cp774.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
 # A core dump could contain secrets read from env at boot.
 LimitCORE=0
 # Node's V8 JIT writes+executes in memory, so W^X must stay off.
