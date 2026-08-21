@@ -1102,6 +1102,9 @@
 				"morphit_block": "Nutzersperre",
 				"morphit_operator_block": "Operator-Sperre",
 				"morphit_stranger_fee": "Fremde-Gebühr",
+				"blockchain_snapshot": "Blockchain-Snapshot",
+				"hidden_rpc_nodes": "Versteckte RPC-Knoten",
+				"notification": "Benachrichtigung",
 				"custom_json_unknown": "Andere App",
 				"native_unknown": "Andere Chain-Operation"
 			}

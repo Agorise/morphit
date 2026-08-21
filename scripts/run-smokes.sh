@@ -72,6 +72,7 @@ SMOKES=(
 	"apps/indexer:forbidden-char-consistency-smoke"
 	"apps/indexer:frontend-chatlink-env-doc-parity-smoke"
 	"apps/indexer:federation-probe-smoke"
+	"apps/indexer:shared-relay-account-guard-smoke"
 	"apps/indexer:dns-rebinding-defense-smoke"
 	"apps/indexer:instances-stream-smoke"
 	"apps/indexer:orderbook-stream-smoke"
@@ -121,6 +122,7 @@ SMOKES=(
 	"apps/relay:push-tag-dedup-smoke"
 	"apps/relay:notification-latency-budget-smoke"
 	"apps/relay:fee-divergence-smoke"
+	"apps/relay:invite-claim-toctou-smoke"
 	"apps/relay:ip-bucketing-canonicalization-smoke"
 	"apps/relay:trusted-proxy-smoke"
 	"apps/relay:squatter-defense-smoke"
@@ -644,6 +646,7 @@ SMOKES=(
 	".:local-install-smoke"
 	".:install-summary-smoke"
 	".:smoke-runner-count-extraction-smoke"
+	".:audit-allowlist-smoke"
 	"apps/web:profile-persistent-cache-smoke"
 )
 

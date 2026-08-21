@@ -82,6 +82,10 @@ export class InviteTokenService {
 	 *  We use a Map<nonce, exp> rather than Set<nonce> so the
 	 *  janitor can drop expired entries deterministically. */
 	private readonly consumedNonces = new Map<string, number>();
+	/** F3 — nonces claimed by an in-flight create (tryClaim), value is
+	 *  claim time. Cleared by consume()/releaseClaim(); swept after
+	 *  CLAIM_TTL_MS so a crashed request never permanently locks an invite. */
+	private readonly claimedNonces = new Map<string, number>();
 	private janitor: NodeJS.Timeout | null = null;
 
 	constructor(options: { secret?: Buffer | null; ttlMs?: number; clock?: Clock } = {}) {
@@ -180,8 +184,43 @@ export class InviteTokenService {
 		if (this.consumedNonces.has(payload.nonce)) {
 			return { ok: false, code: 'invite_already_used' };
 		}
+		// F3 — reject a nonce that is CLAIMED (verified by a concurrent
+		// request that is mid-broadcast). Without this, two requests
+		// presenting the same still-valid invite both pass verify() before
+		// either consumes, yielding two accounts — and two ~102 BLURT spends
+		// — from one invite. The authoritative gate is tryClaim() just before
+		// broadcast; this early check simply rejects the loser sooner.
+		if (this.claimedNonces.has(payload.nonce)) {
+			return { ok: false, code: 'invite_already_used' };
+		}
 
 		return { ok: true, payload };
+	}
+
+	/**
+	 * F3 — atomically claim a verified nonce for the duration of a
+	 * broadcast. Synchronous (no await), so between a request's claim
+	 * and its next `await` no other request can run: a concurrent
+	 * request presenting the same nonce sees it claimed and is rejected.
+	 * Returns false if the nonce is already consumed or claimed.
+	 *
+	 * Sequence: verify() → tryClaim() → broadcast →
+	 *   success: consume()  (claim → consumed, permanent)
+	 *   failure: releaseClaim()  (claim freed, invite retryable)
+	 * A crashed request that neither consumes nor releases is swept
+	 * after CLAIM_TTL_MS so an invite is never permanently locked.
+	 */
+	tryClaim(payload: InvitePayload): boolean {
+		if (this.consumedNonces.has(payload.nonce)) return false;
+		if (this.claimedNonces.has(payload.nonce)) return false;
+		this.claimedNonces.set(payload.nonce, this.clock.now());
+		return true;
+	}
+
+	/** F3 — release a claim taken by tryClaim() (broadcast failed;
+	 *  the invite stays usable for an immediate retry). */
+	releaseClaim(payload: InvitePayload): void {
+		this.claimedNonces.delete(payload.nonce);
 	}
 
 	/**
@@ -194,6 +233,7 @@ export class InviteTokenService {
 	 * `invite_already_used`.
 	 */
 	consume(payload: InvitePayload): void {
+		this.claimedNonces.delete(payload.nonce);
 		this.consumedNonces.set(payload.nonce, payload.exp);
 	}
 
@@ -209,6 +249,12 @@ export class InviteTokenService {
 		const now = this.clock.now();
 		for (const [nonce, exp] of this.consumedNonces) {
 			if (exp <= now) this.consumedNonces.delete(nonce);
+		}
+		// F3 — free claims from requests that crashed without consuming or
+		// releasing. CLAIM_TTL_MS (2 min) comfortably exceeds any broadcast.
+		const CLAIM_TTL_MS = 120_000;
+		for (const [nonce, claimedAt] of this.claimedNonces) {
+			if (claimedAt + CLAIM_TTL_MS <= now) this.claimedNonces.delete(nonce);
 		}
 	}
 

@@ -1102,6 +1102,9 @@
 				"morphit_block": "Blocco utente",
 				"morphit_operator_block": "Blocco dell'operatore",
 				"morphit_stranger_fee": "Commissione estraneo",
+				"blockchain_snapshot": "Snapshot della blockchain",
+				"hidden_rpc_nodes": "Nodi RPC nascosti",
+				"notification": "Notifica",
 				"custom_json_unknown": "Altra app",
 				"native_unknown": "Altra operazione chain"
 			}

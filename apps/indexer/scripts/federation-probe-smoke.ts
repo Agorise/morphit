@@ -218,6 +218,30 @@ await scenario('relay_account mismatch → mismatch', async () => {
 	assertEqual(out.status, 'mismatch' as ProbeStatus, 'status');
 });
 
+// cp775 — a split brand↔relay identity is allowed when BOTH accounts are reserved
+// brand names (provably same owner, since reserved names can't be squatted).
+await scenario('cp775: both reserved (morphit operator / morphit-relay relay) → NOT mismatch', async () => {
+	stubRoutes({
+		'https://test.example/v1/instance': {
+			json: { ...(goodInstance() as Record<string, unknown>), relay_account: 'morphit-relay' }
+		}
+	});
+	const out = await probeOne(makeRow({ operator_account: 'morphit' }));
+	assertEqual(out.status !== ('mismatch' as ProbeStatus), true, 'both-reserved pairing is not flagged');
+});
+
+// cp775 — the exception is strictly both-reserved: a reserved operator advertising
+// a NON-reserved relay account is still a mismatch (no spoofing loophole).
+await scenario('cp775: reserved operator + non-reserved relay → still mismatch', async () => {
+	stubRoutes({
+		'https://test.example/v1/instance': {
+			json: { ...(goodInstance() as Record<string, unknown>), relay_account: 'bob' }
+		}
+	});
+	const out = await probeOne(makeRow({ operator_account: 'morphit' }));
+	assertEqual(out.status, 'mismatch' as ProbeStatus, 'reserved operator cannot bless an arbitrary relay');
+});
+
 await scenario('/v1/instance unparseable → unreachable (cp770, not a fee-redirection accusation)', async () => {
 	stubRoutes({
 		'https://test.example/v1/instance': { json: { not: 'an instance shape' } }

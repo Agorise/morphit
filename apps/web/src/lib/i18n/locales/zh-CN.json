@@ -1102,6 +1102,9 @@
 				"morphit_block": "用户屏蔽",
 				"morphit_operator_block": "运营者屏蔽",
 				"morphit_stranger_fee": "陌生人费用",
+				"blockchain_snapshot": "区块链快照",
+				"hidden_rpc_nodes": "隐藏的 RPC 节点",
+				"notification": "通知",
 				"custom_json_unknown": "其他应用",
 				"native_unknown": "其他链操作"
 			}

@@ -1102,6 +1102,9 @@
 				"morphit_block": "Blocage utilisateur",
 				"morphit_operator_block": "Blocage par l'opérateur",
 				"morphit_stranger_fee": "Frais d'inconnu",
+				"blockchain_snapshot": "Instantané de la blockchain",
+				"hidden_rpc_nodes": "Nœuds RPC cachés",
+				"notification": "Notification",
 				"custom_json_unknown": "Autre application",
 				"native_unknown": "Autre opération de chaîne"
 			}

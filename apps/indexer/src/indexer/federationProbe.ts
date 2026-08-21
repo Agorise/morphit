@@ -43,6 +43,7 @@ import {
 
 import type { Database } from '$db/pool';
 import { logger } from '$log';
+import { isReservedTag } from '$indexer/confusables';
 
 const log = logger('federation-probe');
 
@@ -100,6 +101,14 @@ export interface FederationProbeConfig {
 	 *  so a self-probe spuriously reports 'unreachable'. When set, the
 	 *  matching directory row is marked reachable locally instead. */
 	readonly selfOrigin?: string;
+	/** F4 — our own relay account (MORPHIT_INDEXER_RELAY_ACCOUNT). When set
+	 *  together with onSharedRelayAccount, the probe flags any OTHER instance
+	 *  that advertises this same relay account (welcome-bonus double-spend
+	 *  risk — see OPERATIONS.md §29). */
+	readonly selfRelayAccount?: string;
+	/** F4 — invoked (per offending peer) when another instance is found
+	 *  advertising our relay account. Wired to an operator alert. */
+	readonly onSharedRelayAccount?: (peerOrigin: string) => void;
 	/** Our own chain lag in blocks, read directly from the local poller
 	 *  (not over HTTP).  Lets the self-reachable path report 'syncing'
 	 *  while we're still catching up, instead of a misleading 'good'.
@@ -301,6 +310,15 @@ export class FederationProbeScheduler {
 		// checks still run — they don't depend on our own chain lag.
 		const selfSynced = selfReachableStatus(this.config.localLagBlocks?.() ?? null) === 'good';
 		const treasuryForProbe = selfSynced ? (this.config.canonicalTreasury?.() ?? null) : null;
+		// F4 — build the shared-relay-account collision check once per scan.
+		const selfCheck: SelfRelayCollisionCheck | null =
+			this.config.selfRelayAccount && this.config.selfOrigin && this.config.onSharedRelayAccount
+				? {
+						selfRelayAccount: this.config.selfRelayAccount,
+						selfOrigin: this.config.selfOrigin,
+						onCollision: this.config.onSharedRelayAccount
+				  }
+				: null;
 
 		// Simple promise-pool: walks an index, each worker pulls the
 		// next index until exhausted.  No external dep; fits the
@@ -341,7 +359,8 @@ export class FederationProbeScheduler {
 						const outcome = await probeOne(
 							inst,
 							treasuryForProbe,
-							hiddenFetch
+							hiddenFetch,
+							selfCheck
 						);
 						await this.persistOutcome(inst, outcome);
 					} catch (err) {
@@ -368,7 +387,7 @@ export class FederationProbeScheduler {
 					continue;
 				}
 				try {
-					const outcome = await probeOne(inst, treasuryForProbe);
+					const outcome = await probeOne(inst, treasuryForProbe, fetchJson, selfCheck);
 					await this.persistOutcome(inst, outcome);
 				} catch (err) {
 					// Defensive: probeOne should never throw, but if it
@@ -520,13 +539,28 @@ export class FederationProbeScheduler {
 
 /** Probe one instance.  Always resolves with a ProbeOutcome; never
  *  throws (errors caught and converted to status='unreachable'). */
+/**
+ * F4 — welcome-bonus double-spend guard. When two instances are configured
+ * with the SAME relay account, both indexers observe that account's signup
+ * events and each credits the welcome bonus from its own independent Postgres
+ * DB (documented in OPERATIONS.md §29). This lets the probe detect the
+ * condition: if a DIFFERENT instance advertises OUR relay account, invoke
+ * onCollision. Purely a side-effect — it never changes probe classification.
+ */
+export interface SelfRelayCollisionCheck {
+	readonly selfRelayAccount: string;
+	readonly selfOrigin: string;
+	readonly onCollision: (peerOrigin: string) => void;
+}
+
 export async function probeOne(
 	inst: KnownInstanceRow,
 	canonicalTreasury: { btc: string | null; xmr: string | null } | null = null,
 	// The JSON fetcher. Defaults to the clearnet SSRF-hardened path; the scheduler
 	// injects a Tor/I2P-routed fetcher for hidden-service origins so they get a
 	// REAL status instead of a blanket listing.
-	fetchFn: <T>(url: string) => Promise<T> = fetchJson
+	fetchFn: <T>(url: string) => Promise<T> = fetchJson,
+	selfCheck: SelfRelayCollisionCheck | null = null
 ): Promise<ProbeOutcome> {
 	const { origin, operator_account, registered_at_time } = inst;
 
@@ -549,7 +583,30 @@ export async function probeOne(
 		// well-formed responses, so no fee-redirection can slip through here.
 		return mkUnreachable('instance_response_unparseable');
 	}
-	if (instanceData.relay_account !== operator_account) {
+	// F4 — welcome-bonus double-spend guard (side-effect only; does NOT alter
+	// classification). If a DIFFERENT instance advertises OUR relay account,
+	// both indexers will credit the same signup's welcome bonus. Flag it so the
+	// operator is alerted; the relay-account uniqueness they need is otherwise
+	// only enforced by documentation (OPERATIONS.md §29).
+	if (
+		selfCheck &&
+		instanceData.relay_account === selfCheck.selfRelayAccount &&
+		normalizeOrigin(origin) !== normalizeOrigin(selfCheck.selfOrigin)
+	) {
+		selfCheck.onCollision(origin);
+	}
+	// cp775 — a split brand↔relay identity is legitimate when BOTH accounts are
+	// reserved brand names: reserved names can only ever be registered by their
+	// rightful owner (the reserved-name defense blocks everyone else), so an
+	// operator account and a relay account that are BOTH reserved are provably
+	// controlled by the same owner — e.g. the canonical instance registering under
+	// @morphit while relaying as @morphit-relay. This does NOT weaken spoof
+	// protection: an attacker cannot register a reserved name in the first place,
+	// so they can never satisfy both-reserved. A non-reserved relay account that
+	// differs from the operator is still a mismatch.
+	const bothReservedBrandAccounts =
+		isReservedTag(operator_account) && isReservedTag(instanceData.relay_account);
+	if (instanceData.relay_account !== operator_account && !bothReservedBrandAccounts) {
 		return mkMismatch(
 			`relay_account mismatch: chain=${operator_account} instance=${instanceData.relay_account}`
 		);

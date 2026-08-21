@@ -149,6 +149,10 @@ export class Poller {
 	private readonly lowBalanceScanner: LowBalanceScanner;
 	private readonly operatorBalanceScanner: OperatorAccountBalanceScanner;
 	private readonly federationProbe: FederationProbeScheduler;
+	/** F4 — origins already alerted for sharing our relay account, so we
+	 *  don't re-log every probe cycle. Per-process (a restart re-alerts,
+	 *  which is fine — the operator wants to know on every boot). */
+	private readonly alertedSharedRelayOrigins = new Set<string>();
 	/** Fee verifiers for BTC/XMR orders. Built initially from
 	 *  env-var fallbacks in the constructor; subsequently
 	 *  rebuilt by `refreshFeeVerifiersFromTreasury()` whenever
@@ -306,6 +310,20 @@ export class Poller {
 			// self-URL builder uses), so this matches the directory row for
 			// both same-origin and indexer-subdomain deploys.
 			selfOrigin: config.instanceOrigin ?? config.publicOrigin.replace(/\/\/indexer\./, '//'),
+			// F4 — flag any OTHER instance advertising our relay account: both
+			// indexers would credit the same signup's welcome bonus from their
+			// separate DBs (OPERATIONS.md §29). Alert once per offending origin.
+			selfRelayAccount: config.relayAccount,
+			onSharedRelayAccount: (peerOrigin: string): void => {
+				if (this.alertedSharedRelayOrigins.has(peerOrigin)) return;
+				this.alertedSharedRelayOrigins.add(peerOrigin);
+				log.error('shared_relay_account_detected', {
+					relay_account: config.relayAccount,
+					peer_origin: peerOrigin,
+					impact: 'welcome_bonus_double_spend_risk',
+					remedy: 'each Morphit instance MUST use its own relay/fees accounts (OPERATIONS.md §29)'
+				});
+			},
 			// Our own chain lag, read straight from the poller state (no HTTP),
 			// so the self-reachable row can show 'syncing' while catching up.
 			localLagBlocks: () => {

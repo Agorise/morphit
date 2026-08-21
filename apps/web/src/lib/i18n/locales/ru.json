@@ -1102,6 +1102,9 @@
 				"morphit_block": "Блокировка пользователем",
 				"morphit_operator_block": "Блокировка оператором",
 				"morphit_stranger_fee": "Комиссия незнакомца",
+				"blockchain_snapshot": "Снимок блокчейна",
+				"hidden_rpc_nodes": "Скрытые RPC-узлы",
+				"notification": "Уведомление",
 				"custom_json_unknown": "Другое приложение",
 				"native_unknown": "Другая операция в чейне"
 			}

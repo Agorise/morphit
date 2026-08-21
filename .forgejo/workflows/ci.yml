@@ -52,6 +52,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  supply-chain-audit:
+    name: Supply-chain audit gate (fail on new high/critical)
+    runs-on: ubuntu-24.04
+    # Fails only on a HIGH/CRITICAL advisory that is NOT in the triaged baseline
+    # (.audit-allowlist.json). The baseline is documented in
+    # SECURITY-AUDIT-dependencies.md; the gate catches a NEW vulnerable
+    # dependency entering the tree. Needs network (npm audit); the gate SKIPS
+    # gracefully if the registry is unreachable rather than failing the build.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install Node.js 22 LTS
+        uses: actions/setup-node@1e60f620b9541d16bece96c5465dc8ee9832be0b # v4.0.3
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install workspace dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Run supply-chain audit gate
+        run: node scripts/audit-gate.mjs
+
   typecheck:
     name: TypeScript typecheck (sweep all workspaces)
     runs-on: ubuntu-24.04
