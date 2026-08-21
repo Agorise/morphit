@@ -1102,6 +1102,9 @@
 				"morphit_block": "مسدودسازی کاربر",
 				"morphit_operator_block": "مسدودسازی توسط اپراتور",
 				"morphit_stranger_fee": "کارمزد غریبه",
+				"blockchain_snapshot": "عکس فوری بلاک‌چین",
+				"hidden_rpc_nodes": "گره‌های RPC مخفی",
+				"notification": "اعلان",
 				"custom_json_unknown": "برنامه دیگر",
 				"native_unknown": "عملیات دیگر در چین"
 			}

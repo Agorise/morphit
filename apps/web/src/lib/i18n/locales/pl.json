@@ -1102,6 +1102,9 @@
 				"morphit_block": "Blokada użytkownika",
 				"morphit_operator_block": "Blokada operatora",
 				"morphit_stranger_fee": "Opłata obcego",
+				"blockchain_snapshot": "Migawka blockchaina",
+				"hidden_rpc_nodes": "Ukryte węzły RPC",
+				"notification": "Powiadomienie",
 				"custom_json_unknown": "Inna aplikacja",
 				"native_unknown": "Inna operacja chaina"
 			}

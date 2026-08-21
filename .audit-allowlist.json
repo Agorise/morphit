@@ -1,0 +1,275 @@
+{
+  "_comment": "Baseline supply-chain advisory allowlist. Each entry is an npm-audit advisory ACCEPTED after the triage in docs/audits (SECURITY-AUDIT-dependencies.md). The audit gate (scripts/audit-gate.mjs) fails CI on any high/critical advisory NOT listed here \u2014 i.e. a NEW vulnerable dependency entering the tree. Re-triage and update this file when bumping deps.",
+  "_categories": {
+    "dev-build-only": "Dev/build/test tooling only; never shipped in the deployed relay, indexer, or browser bundle.",
+    "not-reachable": "Present transitively but not reachable in Morphit usage (see SECURITY-AUDIT-dependencies.md triage): SSRF validator does not use ip-address; dompurify/sanitize-html unused by Morphit code; @hono/node-server bug is Windows-only; the request-family transport is only used by the matrix-bot against a FIXED operator-configured homeserver (no attacker input).",
+    "runtime-accepted": "Runtime dependency with low real exposure; no directly-exploitable path in the deployed key-handling/core logic. Patch when convenient; not release-blocking."
+  },
+  "_generated_baseline": "2026-08 audit set",
+  "allow": {
+    "GHSA-22jq-vg5j-6vgg": {
+      "package": "ip-address",
+      "severity": "moderate",
+      "category": "not-reachable",
+      "title": "ip-address: misclassification of IPv4-mapped/NAT64 IPv6 addresses can bypass SSRF and trust-boundary"
+    },
+    "GHSA-29g2-3rmr-qm68": {
+      "package": "@sveltejs/kit",
+      "severity": "moderate",
+      "category": "runtime-accepted",
+      "title": "SvelteKit: ReDoS (O(n^2)) in content negotiation \u2014 unauthenticated DoS via the Accept header"
+    },
+    "GHSA-3jxr-9vmj-r5cp": {
+      "package": "brace-expansion",
+      "severity": "high",
+      "category": "dev-build-only",
+      "title": "brace-expansion: DoS via exponential-time expansion of consecutive non-expanding {} groups"
+    },
+    "GHSA-4cwx-7wf7-3272": {
+      "package": "undici",
+      "severity": "high",
+      "category": "runtime-accepted",
+      "title": "undici vulnerable to cross-user information disclosure and parse-time crash via degenerate private c"
+    },
+    "GHSA-4vj7-5mj6-jm8m": {
+      "package": "morgan",
+      "severity": "moderate",
+      "category": "runtime-accepted",
+      "title": "morgan vulnerable to Log Forging via unneutralized control characters in :remote-user"
+    },
+    "GHSA-4w7w-66w2-5vf9": {
+      "package": "vite",
+      "severity": "moderate",
+      "category": "dev-build-only",
+      "title": "Vite Vulnerable to Path Traversal in Optimized Deps `.map` Handling"
+    },
+    "GHSA-4xrf-jv44-h6hh": {
+      "package": "ip-address",
+      "severity": "moderate",
+      "category": "not-reachable",
+      "title": "ip-address: a CIDR suffix on the parsed address suppresses special-use classification and can bypass"
+    },
+    "GHSA-54fx-42gc-7vw4": {
+      "package": "hono",
+      "severity": "moderate",
+      "category": "runtime-accepted",
+      "title": "Hono: Algorithmic Complexity DoS in Language Middleware"
+    },
+    "GHSA-55q2-fjhq-7xh7": {
+      "package": "dompurify",
+      "severity": "moderate",
+      "category": "not-reachable",
+      "title": "DOMPurify: IN_PLACE hook removal leaves a detached subtree executable, causing XSS"
+    },
+    "GHSA-5xrq-8626-4rwp": {
+      "package": "vitest",
+      "severity": "critical",
+      "category": "dev-build-only",
+      "title": "When Vitest UI server is listening, arbitrary file can be read and executed"
+    },
+    "GHSA-67mh-4wv8-2f99": {
+      "package": "esbuild",
+      "severity": "moderate",
+      "category": "dev-build-only",
+      "title": "esbuild enables any website to send any requests to the development server and read the response"
+    },
+    "GHSA-6rw7-vpxm-498p": {
+      "package": "qs",
+      "severity": "moderate",
+      "category": "runtime-accepted",
+      "title": "qs's arrayLimit bypass in its bracket notation allows DoS via memory exhaustion"
+    },
+    "GHSA-72xf-g2v4-qvf3": {
+      "package": "tough-cookie",
+      "severity": "moderate",
+      "category": "not-reachable",
+      "title": "tough-cookie Prototype Pollution vulnerability"
+    },
+    "GHSA-79qm-7rj5-m7r9": {
+      "package": "hono",
+      "severity": "low",
+      "category": "runtime-accepted",
+      "title": "Hono: Proxy Helper does not remove response headers listed in the `Connection` header"
+    },
+    "GHSA-7p8r-x3mc-p8w7": {
+      "package": "fast-uri",
+      "severity": "high",
+      "category": "runtime-accepted",
+      "title": "fast-uri vulnerable to host confusion via backslash authority introducer"
+    },
+    "GHSA-866w-xmhq-wj7x": {
+      "package": "@sveltejs/kit",
+      "severity": "moderate",
+      "category": "runtime-accepted",
+      "title": "SvelteKit: Prototype pollution in file input deletion path in remote-function forms"
+    },
+    "GHSA-8j4g-w8fx-2239": {
+      "package": "hono",
+      "severity": "moderate",
+      "category": "runtime-accepted",
+      "title": "Hono: ReDoS in CORS middleware via Access-Control-Request-Headers"
+    },
+    "GHSA-8xcm-r25x-g524": {
+      "package": "undici",
+      "severity": "moderate",
+      "category": "runtime-accepted",
+      "title": "undici vulnerable to downstream response desynchronization via retry interceptor"
+    },
+    "GHSA-c2j3-45gr-mqc4": {
+      "package": "dompurify",
+      "severity": "low",
+      "category": "not-reachable",
+      "title": "DOMPurify: `CUSTOM_ELEMENT_HANDLING` bypasses `afterSanitizeElements` for allowed custom elements."
+    },
+    "GHSA-f23p-vx2j-j53r": {
+      "package": "hono",
+      "severity": "moderate",
+      "category": "runtime-accepted",
+      "title": "Hono: `memo()` retains SSR output across requests, leading to cross-user data disclosure"
+    },
+    "GHSA-fjxv-7rqg-78g4": {
+      "package": "form-data",
+      "severity": "critical",
+      "category": "not-reachable",
+      "title": "form-data uses unsafe random function in form-data for choosing boundary"
+    },
+    "GHSA-frvp-7c67-39w9": {
+      "package": "@hono/node-server",
+      "severity": "moderate",
+      "category": "not-reachable",
+      "title": "Node.js Adapter for Hono: Path traversal in `serve-static` on Windows via encoded backslash (`%5C`)"
+    },
+    "GHSA-fx2h-pf6j-xcff": {
+      "package": "vite",
+      "severity": "high",
+      "category": "dev-build-only",
+      "title": "vite: `server.fs.deny` bypass on Windows alternate paths"
+    },
+    "GHSA-fxqj-rqcc-2cmp": {
+      "package": "postcss",
+      "severity": "moderate",
+      "category": "dev-build-only",
+      "title": "PostCSS: incomplete fix of GHSA-6g55-p6wh-862q \u2014 attacker-controlled sourceMappingURL reads arbitrar"
+    },
+    "GHSA-g7r4-m6w7-qqqr": {
+      "package": "esbuild",
+      "severity": "low",
+      "category": "dev-build-only",
+      "title": "esbuild allows arbitrary file read when running the development server on Windows"
+    },
+    "GHSA-hmw2-7cc7-3qxx": {
+      "package": "form-data",
+      "severity": "high",
+      "category": "not-reachable",
+      "title": "form-data: CRLF injection in form-data via unescaped multipart field names and filenames"
+    },
+    "GHSA-hvrm-45r6-mjfj": {
+      "package": "hono",
+      "severity": "moderate",
+      "category": "runtime-accepted",
+      "title": "hono/jsx does not isolate context per request, leading to cross-request data disclosure"
+    },
+    "GHSA-jr45-8vmc-qm54": {
+      "package": "undici",
+      "severity": "moderate",
+      "category": "runtime-accepted",
+      "title": "undici vulnerable to cross-user information disclosure via whitespace around equals in Cache-Control"
+    },
+    "GHSA-m8rv-5g2x-5cg5": {
+      "package": "undici",
+      "severity": "moderate",
+      "category": "runtime-accepted",
+      "title": "undici vulnerable to CRLF Injection via blob-like body 'type' property"
+    },
+    "GHSA-mh99-v99m-4gvg": {
+      "package": "brace-expansion",
+      "severity": "high",
+      "category": "dev-build-only",
+      "title": "brace-expansion: DoS via unbounded expansion length causing an out-of-memory process crash"
+    },
+    "GHSA-mwp4-54f8-5fhr": {
+      "package": "ip-address",
+      "severity": "high",
+      "category": "not-reachable",
+      "title": "ip-address: Address4 decodes leading-zero octets as decimal while resolvers decode them as octal, al"
+    },
+    "GHSA-p8p7-x288-28g6": {
+      "package": "request",
+      "severity": "moderate",
+      "category": "not-reachable",
+      "title": "Server-Side Request Forgery in Request"
+    },
+    "GHSA-pxg6-pf52-xh8x": {
+      "package": "cookie",
+      "severity": "low",
+      "category": "runtime-accepted",
+      "title": "cookie accepts cookie name, path, and domain with out of bounds characters"
+    },
+    "GHSA-q8mj-m7cp-5q26": {
+      "package": "qs",
+      "severity": "moderate",
+      "category": "runtime-accepted",
+      "title": "qs has a remotely triggerable DoS: qs.stringify crashes with TypeError on null/undefined entries in "
+    },
+    "GHSA-r28c-9q8g-f849": {
+      "package": "postcss",
+      "severity": "high",
+      "category": "dev-build-only",
+      "title": "PostCSS: Path Traversal in Previous Source Map Auto-Loading (sourceMappingURL) leads to Arbitrary .m"
+    },
+    "GHSA-rgw5-rvv9-x895": {
+      "package": "brace-expansion",
+      "severity": "high",
+      "category": "dev-build-only",
+      "title": "brace-expansion: DoS via unbounded intermediate arrays, bypassing the CVE-2026-14257 mitigation"
+    },
+    "GHSA-v3r7-h72x-cjcm": {
+      "package": "undici",
+      "severity": "moderate",
+      "category": "runtime-accepted",
+      "title": "undici vulnerable to cookie attribute injection via unsanitized domain and unparsed setCookie fields"
+    },
+    "GHSA-v422-hmwv-36x6": {
+      "package": "body-parser",
+      "severity": "low",
+      "category": "runtime-accepted",
+      "title": "body-parser vulnerable to denial of service when invalid limit value silently disables size enforcem"
+    },
+    "GHSA-v6wh-96g9-6wx3": {
+      "package": "vite",
+      "severity": "moderate",
+      "category": "dev-build-only",
+      "title": "launch-editor: NTLMv2 hash disclosure via UNC path handling on Windows"
+    },
+    "GHSA-vccv-cmxp-4j9h": {
+      "package": "sanitize-html",
+      "severity": "moderate",
+      "category": "not-reachable",
+      "title": "sanitize-html has incomplete URI scheme validation in that allows javascript: URIs through action, f"
+    },
+    "GHSA-w5hq-g745-h8pq": {
+      "package": "uuid",
+      "severity": "moderate",
+      "category": "runtime-accepted",
+      "title": "uuid: Missing buffer bounds check in v3/v5/v6 when buf is provided"
+    },
+    "GHSA-w62v-xxxg-mg59": {
+      "package": "hono",
+      "severity": "moderate",
+      "category": "runtime-accepted",
+      "title": "Hono: Server-Side XSS via JSX Escaping Bypass in cx() Utility"
+    },
+    "GHSA-wqjv-9729-c5q2": {
+      "package": "@sveltejs/kit",
+      "severity": "moderate",
+      "category": "runtime-accepted",
+      "title": "SvelteKit: Big remote form function payloads can cause Node process to crash"
+    },
+    "GHSA-xgm2-5f3f-mvvc": {
+      "package": "hono",
+      "severity": "moderate",
+      "category": "runtime-accepted",
+      "title": "Hono: API Gateway v1 adapter can drop a distinct repeated request header value during de-duplication"
+    }
+  }
+}

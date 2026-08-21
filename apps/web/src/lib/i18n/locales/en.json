@@ -1102,6 +1102,9 @@
 				"morphit_block": "User block",
 				"morphit_operator_block": "Operator block",
 				"morphit_stranger_fee": "Stranger fee",
+				"blockchain_snapshot": "Blockchain snapshot",
+				"hidden_rpc_nodes": "Hidden RPC nodes",
+				"notification": "Notification",
 				"custom_json_unknown": "Other app",
 				"native_unknown": "Other chain op"
 			}

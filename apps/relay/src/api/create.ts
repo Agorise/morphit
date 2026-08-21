@@ -4,11 +4,16 @@
  * Second half of the two-step signup protocol. Accepts an
  * invite token (see policy/inviteToken.ts) and an unsigned
  * account-creation op body, validates, wraps in a transaction
- * signed with the relay's own active key, and broadcasts as a
- * fee-free `create_claimed_account` consuming one pre-minted ACT
- * from the relay's pool (the chain's BLURT fee was paid earlier
- * at ACT-minting time via the weekly `claim_account` ceremony —
- * see ADR-0010 §4 and docs/OPERATIONS.md §2).  Returns the chain's
+ * signed with the relay's own active key, and broadcasts a direct
+ * `account_create` op that pays the live `account_creation_fee`
+ * (100 BLURT, unchanged for years) INLINE from the relay account's
+ * liquid balance, followed by a 2 BLURT signup-dust transfer — so
+ * each successful signup spends ~102 liquid BLURT from the relay.
+ * (Blurt DISABLED the Account-Creation-Token model — claim_account /
+ * create_claimed_account — at HF2, so there are no pre-minted ACTs
+ * and creation is NOT fee-free. See ADR-0010 and docs/OPERATIONS.md;
+ * the real broadcast is broadcastAccountCreate() below.)  Returns the
+ * chain's
  * confirmation.
  *
  * Anti-abuse checks, in order:
@@ -65,11 +70,11 @@ const log = logger('relay-create');
 
 /** Request body schema.  `op` carries the account-creation field
  *  set (new_account_name + owner/active/posting/memo pubkeys +
- *  json_metadata) that the relay will broadcast as a fee-free
- *  `create_claimed_account` (NOT classical `account_create` — the
- *  ACT-pool model means the relay consumes a pre-minted token at
- *  this point, not BLURT).  `invite_token` is the signed invite
- *  obtained from the /v1/account/invite endpoint. */
+ *  json_metadata) that the relay will broadcast as a direct
+ *  `account_create` op, paying the live account_creation_fee in
+ *  BLURT from the relay account (ACTs were removed at HF2).
+ *  `invite_token` is the signed invite obtained from the
+ *  /v1/account/invite endpoint. */
 const requestSchema = z
 	.object({
 		invite_token: z.string().min(1).max(4096),
@@ -570,6 +575,23 @@ export class CreateEndpoint {
 		// account_creation_fee inline from its liquid BLURT. The create
 		// endpoint already gated on sufficient relay balance up front
 		// (canAcceptCreation, above), so this should not fail for funds.
+		//
+		// F3 — atomically claim the invite for the duration of this
+		// broadcast. tryClaim() is synchronous, so between it and the
+		// `await` below no other request runs: a concurrent request
+		// presenting the SAME still-valid invite is rejected here rather
+		// than also creating an account (each account is a ~102 BLURT spend
+		// from the relay wallet). Consumed on success, released on failure.
+		if (!this.inviteTokens.tryClaim(invitePayload)) {
+			return c.json(
+				{
+					status: 'rejected',
+					code: 'invite_already_used',
+					message: inviteMessageFor('invite_already_used')
+				},
+				410
+			);
+		}
 		try {
 			const confirmation = await this.blurt.broadcastAccountCreate({
 				creator: this.cfg.relayAccount,
@@ -675,6 +697,10 @@ export class CreateEndpoint {
 				trx_id: confirmation.id
 			});
 		} catch (err) {
+			// F3 — the broadcast attempt failed; release the invite claim so
+			// a legitimate retry can proceed. The ours-landed sub-path below
+			// re-consumes it when the account turns out to actually exist.
+			this.inviteTokens.releaseClaim(invitePayload);
 			const rawMsg = err instanceof Error ? err.message : String(err);
 			const lower = rawMsg.toLowerCase();
 
@@ -716,6 +742,15 @@ export class CreateEndpoint {
 							this.dailyLimiter.commit(bucketKey);
 						} catch (limErr) {
 							log.error('limiter_commit_failed_dup_retry', { account: name }, limErr);
+						}
+						// F3 — our broadcast actually landed (the account exists),
+						// so the invite IS used: consume it (we released the claim
+						// at catch entry). Prevents replaying an invite whose
+						// account was created via a lost-response retry.
+						try {
+							this.inviteTokens.consume(invitePayload);
+						} catch (consumeErr) {
+							log.error('invite_consume_failed_dup_retry', { account: name }, consumeErr);
 						}
 						return c.json({
 							status: 'broadcast',

@@ -43,6 +43,13 @@ export type OpDecorationKind =
 	| 'morphit_block'
 	| 'morphit_operator_block'
 	| 'morphit_stranger_fee'
+	/** Morphit custom_json ops that surface in the explorer but aren't part of
+	 *  the user-action set above (broadcast by the Morphit relay/indexer). */
+	| 'blockchain_snapshot'
+	| 'hidden_rpc_nodes'
+	/** Known non-Morphit custom_json ids: labeled specifically but NOT
+	 *  Morphit-branded (isMorphitOp stays false). */
+	| 'notification'
 	/** Some other custom_json id. */
 	| 'custom_json_unknown'
 	/** Anything else (witness ops, vesting ops, escrow, etc.). */
@@ -82,7 +89,19 @@ const OP_ID_TO_KIND: ReadonlyMap<string, OpDecorationKind> = new Map<string, OpD
 	[OP_IDS.operatorRegister, 'morphit_operator_register'],
 	[OP_IDS.block, 'morphit_block'],
 	[OP_IDS.operatorBlock, 'morphit_operator_block'],
-	[OP_IDS.strangerFee, 'morphit_stranger_fee']
+	[OP_IDS.strangerFee, 'morphit_stranger_fee'],
+	// Morphit relay/indexer-broadcast ops that show in the explorer.
+	// chain_snapshot_v1 isn't in OP_IDS (it's an indexer-side op id), so it's a
+	// raw literal here; morphit_rpc_v1 is OP_IDS.rpcDirectory.
+	['chain_snapshot_v1', 'blockchain_snapshot'],
+	[OP_IDS.rpcDirectory, 'hidden_rpc_nodes']
+]);
+
+/** Known NON-Morphit custom_json ids we still label specifically (rather than
+ *  the generic "Other app"). These are NOT Morphit ops, so they render with the
+ *  neutral pill (isMorphitOp: false) — only the label is specialised. */
+const GENERIC_OP_ID_TO_KIND: ReadonlyMap<string, OpDecorationKind> = new Map([
+	['notify', 'notification']
 ]);
 
 /** Account-creation native ops — all surface as "account created". */
@@ -191,6 +210,11 @@ export function decorateOp(opName: string, opBody: unknown): OpDecoration {
 					}
 				}
 				return { kind, labelKey: kind, isMorphitOp: true };
+			}
+			// Known non-Morphit custom_json ids: specific label, neutral pill.
+			const genericKind = GENERIC_OP_ID_TO_KIND.get(id);
+			if (genericKind) {
+				return { kind: genericKind, labelKey: genericKind, isMorphitOp: false };
 			}
 		}
 		return {

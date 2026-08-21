@@ -79,6 +79,10 @@ CapabilityBoundingSet=
 AmbientCapabilities=
 # A core dump would contain the decrypted WIF in memory.
 LimitCORE=0
+# F2 — the decrypted active-key WIF lives in process memory. Core dumps
+# are already off (above); MemorySwapMax=0 stops the kernel paging that
+# memory (and the key) out to disk, closing the swap-exfil vector.
+MemorySwapMax=0
 # Node's V8 JIT writes+executes in memory, so W^X must stay off.
 MemoryDenyWriteExecute=no
 MemoryMax=512M

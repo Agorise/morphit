@@ -88,7 +88,9 @@ else bad('probeOne no longer wires the treasury mismatch check', 'redirection wo
 // cp768 — probePool now WITHHOLDS the treasury opinion (passes null) until our
 // own indexer is synced, so a mid-sync incomplete baseline can't false-flag a
 // legit peer as fee-redirection. The relay-account/shape checks are unaffected.
-if (probeSrc.includes('probeOne(inst, treasuryForProbe)'))
+// (F4 added a trailing selfCheck arg to the clearnet call, so match the treasury
+// as the 2nd positional arg regardless of any args that follow it.)
+if (/probeOne\(\s*inst,\s*treasuryForProbe\b/.test(probeSrc))
 	ok('cp768: probePool threads treasuryForProbe (gated) into probeOne');
 else bad('probePool no longer passes the gated treasury to probeOne', 'either regressed the gate or dropped the check');
 if (

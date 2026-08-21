@@ -1102,6 +1102,9 @@
 				"morphit_block": "用戶封鎖",
 				"morphit_operator_block": "營運者封鎖",
 				"morphit_stranger_fee": "陌生人費用",
+				"blockchain_snapshot": "區塊鏈快照",
+				"hidden_rpc_nodes": "隱藏的 RPC 節點",
+				"notification": "通知",
 				"custom_json_unknown": "其他應用",
 				"native_unknown": "其他鏈操作"
 			}
