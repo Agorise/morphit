@@ -1127,7 +1127,7 @@
 			},
 			"what_is_morphit": {
 				"q": "Czym jest Morphit?",
-				"a": "Morphit to rynek P2P, na którym ludzie wymieniają gotówkę na kryptowaluty (Bitcoin, Monero, Blurt, USDT, USD Coin (USDC), Dai, Bitcoin Cash, Litecoin, Dash, Dogecoin, Zcash, Pirate Chain, Decred, Solana, Ethereum i XRP) bezpośrednio między sobą. Możesz też barterować towary/usługi. Morphit nigdy nie dotyka Twoich aktywów i nigdy nie pyta o nic na Twój temat. To tablica ogłoszeń (BBS), nie bank."
+				"a": "Morphit to rynek P2P, na którym ludzie wymieniają gotówkę na kryptowaluty (Bitcoin, Monero, Blurt, USDT, USD Coin (USDC), Dai, Bitcoin Cash, Litecoin, Dash, Dogecoin, Zcash, Pirate Chain, Decred, Solana, Ethereum i XRP) bezpośrednio między sobą. Możesz też barterować towary/usługi. Morphit nigdy nie dotyka Twoich aktywów i nigdy nie pyta o nic na Twój temat. To zdecentralizowana/rozproszona tablica ogłoszeń (DBBS), nie bank."
 			},
 			"is_it_safe": {
 				"q": "Czy to bezpieczne?",

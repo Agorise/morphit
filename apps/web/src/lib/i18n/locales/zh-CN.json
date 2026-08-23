@@ -1127,7 +1127,7 @@
 			},
 			"what_is_morphit": {
 				"q": "Morphit 是什么?",
-				"a": "Morphit 是一个 P2P 市场,人们直接用现金换取加密货币(比特币、门罗币、Blurt、USDT、美元币 (USDC)、Dai、比特币现金、莱特币、达世币、狗狗币、Zcash、Pirate Chain、Decred、Solana、以太坊和 XRP)。也可以以物易物交易商品/服务。Morphit 从不碰你的资产,也不打听任何关于你的信息。它是电子公告板（BBS）,不是银行。"
+				"a": "Morphit 是一个 P2P 市场,人们直接用现金换取加密货币(比特币、门罗币、Blurt、USDT、美元币 (USDC)、Dai、比特币现金、莱特币、达世币、狗狗币、Zcash、Pirate Chain、Decred、Solana、以太坊和 XRP)。也可以以物易物交易商品/服务。Morphit 从不碰你的资产,也不打听任何关于你的信息。它是去中心化/分布式电子公告板（DBBS）,不是银行。"
 			},
 			"is_it_safe": {
 				"q": "它安全吗?",

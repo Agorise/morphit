@@ -29,7 +29,7 @@ So that no one — not a corporation, not a government, not even us — can take
 
 **FAQ key:** `what_is_morphit`
 
-Morphit is a P2P marketplace where people trade cash for cryptocurrency (Bitcoin, Monero, Blurt, USDT, USD Coin (USDC), Dai, Bitcoin Cash, Litecoin, Dash, Dogecoin, Zcash, Pirate Chain, Decred, Solana, Ethereum, and XRP) directly with each other. Barter goods/services too. Morphit never touches your assets and never asks anything about you. It's a bulletin board service (BBS), not a bank.
+Morphit is a P2P marketplace where people trade cash for cryptocurrency (Bitcoin, Monero, Blurt, USDT, USD Coin (USDC), Dai, Bitcoin Cash, Litecoin, Dash, Dogecoin, Zcash, Pirate Chain, Decred, Solana, Ethereum, and XRP) directly with each other. Barter goods/services too. Morphit never touches your assets and never asks anything about you. It's a decentralised/distributed bulletin board service (DBBS), not a bank.
 
 ---
 

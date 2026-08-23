@@ -1,0 +1,7 @@
+Morphit offline bundle — built 2026-08-21 21:17:58 UTC
+host: Ubuntu 24.04.4 LTS amd64
+node: v22.14.0   kubo: v0.42.0
+
+node_modules: 294M
+vendor/apt:   277 debs, 292M
+vendor/docker:3 images, 158M

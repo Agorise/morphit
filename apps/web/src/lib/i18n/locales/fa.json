@@ -1131,7 +1131,7 @@
 			},
 			"what_is_morphit": {
 				"q": "Morphit چیست؟",
-				"a": "Morphit یک بازار P2P است که آدم‌ها مستقیم با هم پول نقد را با ارزهای دیجیتال (Bitcoin، Monero، Blurt، USDT، USD Coin (USDC)، Dai، Bitcoin Cash، Litecoin، Dash، Dogecoin، Zcash، Pirate Chain، Decred، Solana، Ethereum و XRP) معامله می‌کنند. می‌توانید کالا/خدمات را هم تهاتر کنید. Morphit هرگز به دارایی‌های تو دست نمی‌زند و هرگز چیزی دربارهٔ تو نمی‌پرسد. این یک تختهٔ اعلانات (BBS) است، نه یک بانک."
+				"a": "Morphit یک بازار P2P است که آدم‌ها مستقیم با هم پول نقد را با ارزهای دیجیتال (Bitcoin، Monero، Blurt، USDT، USD Coin (USDC)، Dai، Bitcoin Cash، Litecoin، Dash، Dogecoin، Zcash، Pirate Chain، Decred، Solana، Ethereum و XRP) معامله می‌کنند. می‌توانید کالا/خدمات را هم تهاتر کنید. Morphit هرگز به دارایی‌های تو دست نمی‌زند و هرگز چیزی دربارهٔ تو نمی‌پرسد. این یک تختهٔ اعلانات غیرمتمرکز/توزیع‌شده (DBBS) است، نه یک بانک."
 			},
 			"is_it_safe": {
 				"q": "آیا امن است؟",
