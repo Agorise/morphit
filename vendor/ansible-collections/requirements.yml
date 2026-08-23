@@ -1,9 +1,0 @@
-collections:
-- name: community-postgresql-4.2.0.tar.gz
-  version: 4.2.0
-- name: community-docker-5.2.2.tar.gz
-  version: 5.2.2
-- name: community-library_inventory_filtering_v1-1.1.5.tar.gz
-  version: 1.1.5
-- name: community-general-13.3.0.tar.gz
-  version: 13.3.0
