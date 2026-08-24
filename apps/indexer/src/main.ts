@@ -89,7 +89,12 @@ import { rssOrderbookRoute } from '$api/rssOrderbook';
 import { operatorsRoute } from '$api/operators';
 import { activityRoute } from '$api/activity';
 import { statsRoute } from '$api/stats';
-import { rpcEndpointsRoute, canonicalProbeUrls } from '$api/rpcHealth';
+import {
+	rpcEndpointsRoute,
+	canonicalProbeUrls,
+	directoryHiddenEndpoints,
+	unionHidden
+} from '$api/rpcHealth';
 import { instancePaymentMethodsRoute } from '$api/instancePaymentMethods';
 import { operatorBlocksRoute } from '$api/operatorBlocks';
 import { logger } from '$log';
@@ -763,13 +768,23 @@ async function main(): Promise<void> {
 		// hidden-only pool instead of listing 10 phantom endpoints.
 		rpcEndpointsRoute(
 			() => poller.rpcEndpointSnapshot,
-			canonicalProbeUrls({
-				usesClearnet: config.blurtRpcEndpoints.length > 0,
-				clearnetCanon: DEFAULT_BLURT_RPC_ENDPOINTS,
-				hidden: config.hiddenRpcEndpoints,
-				local: config.localRpcEndpoints,
-				autoLocal: autoLocalEndpoints
-			})
+			// Live getter (re-derived per request, ~60s dir cache): the canonical
+			// hidden list is the operator's configured seed UNION the on-chain
+			// rpc_directory. So a newly-pinned hidden node shows on the stats card
+			// network-wide without an indexer restart or a Morphit release; a
+			// removed one drops off (rpc_directory is latest-wins). Clearnet stays
+			// hardcoded + excluded on tor-only boxes exactly as before.
+			async () =>
+				canonicalProbeUrls({
+					usesClearnet: config.blurtRpcEndpoints.length > 0,
+					clearnetCanon: DEFAULT_BLURT_RPC_ENDPOINTS,
+					hidden: unionHidden(
+						config.hiddenRpcEndpoints,
+						await directoryHiddenEndpoints(db)
+					),
+					local: config.localRpcEndpoints,
+					autoLocal: autoLocalEndpoints
+				})
 		)
 	);
 	app.route('/v1/rpc-endpoints', rpcEndpointsApp);

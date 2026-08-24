@@ -25,6 +25,7 @@ import type { EndpointState } from '@morphit/rpc-pool';
 import { morphitUserAgent } from '$blurt/userAgent';
 import { INDEXER_VERSION } from './health';
 import { hiddenNetworkOf, hiddenServiceProxyConfigFromEnv } from '$indexer/hiddenServiceFetch';
+import { isHiddenRpcUrl } from '$blurt/rpcDirectoryOp';
 
 /** Classify a pool URL into the card's transport buckets. Loopback → local (a
  *  co-located node), `.onion` → tor, `.b32.i2p`/`.i2p` → i2p, everything else
@@ -429,12 +430,58 @@ export function canonicalProbeUrls(opts: {
 	];
 }
 
+/** Live hidden-RPC endpoints from the on-chain directory (persisted in
+ *  rpc_directory id=1, latest-wins → reflects add/update/remove). Cached ~60s so
+ *  the /v1/rpc-endpoints route re-derives its canonical list per request cheaply.
+ *  This is what makes a newly-pinned hidden node appear on the stats card
+ *  network-wide WITHOUT an indexer restart or a Morphit release. */
+let _dirHiddenCache: { at: number; urls: readonly string[] } | null = null;
+const DIRECTORY_HIDDEN_TTL_MS = 60_000;
+export async function directoryHiddenEndpoints(
+	db: { query(sql: string): Promise<{ rows: Array<{ endpoints: string[] }> }> },
+	now: number = Date.now()
+): Promise<readonly string[]> {
+	if (_dirHiddenCache && now - _dirHiddenCache.at < DIRECTORY_HIDDEN_TTL_MS) {
+		return _dirHiddenCache.urls;
+	}
+	try {
+		const r = await db.query('SELECT endpoints FROM rpc_directory WHERE id = 1');
+		const urls = (r.rows[0]?.endpoints ?? []).filter(
+			(u) => isHiddenRpcUrl(u, 'onion') || isHiddenRpcUrl(u, 'i2p')
+		);
+		_dirHiddenCache = { at: now, urls };
+		return urls;
+	} catch {
+		// Never throw into the route on a DB hiccup; serve the last good cache.
+		return _dirHiddenCache?.urls ?? [];
+	}
+}
+
+/** Dedupe-preserving union of the operator's configured hidden endpoints and
+ *  the on-chain directory's. PURE — configured first so the operator's own seed
+ *  keeps priority ordering. */
+export function unionHidden(
+	configured: readonly string[],
+	directory: readonly string[]
+): string[] {
+	return [...new Set([...configured, ...directory])];
+}
+
+/** Test seam: reset the directory cache so a unit test sees a fresh read. */
+export function __resetDirectoryHiddenCacheForTest(): void {
+	_dirHiddenCache = null;
+}
+
 export function rpcEndpointsRoute(
 	snapshotFn: () => readonly EndpointState[],
-	canonicalUrls: readonly string[]
+	// A getter (not a fixed array) so the canonical list re-derives per request:
+	// newly-pinned on-chain hidden-RPC nodes appear WITHOUT an indexer restart or
+	// a Morphit release. May be async (it can read the persisted rpc_directory).
+	canonicalUrlsFn: () => readonly string[] | Promise<readonly string[]>
 ): Hono {
 	const app = new Hono();
 	app.get('/', async (c) => {
+		const canonicalUrls = await canonicalUrlsFn();
 		// `?probe=1` → fresh active ping of every node (5s-rate-limited server-side,
 		// t.txt #1). Anything else → the cheap passive pool snapshot.
 		if (c.req.query('probe') === '1') {

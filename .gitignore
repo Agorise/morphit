@@ -2,3 +2,8 @@ node_modules/
 .svelte-kit/
 dist/
 *.tsbuildinfo
+
+# Offline-appliance build output (scripts/build-offline-bundle.sh dumps a
+# bundled Node runtime + apt/docker/kubo blobs here into the repo tree).
+# Root-anchored so it never matches ops/ansible/roles/vendor (real source).
+/vendor/

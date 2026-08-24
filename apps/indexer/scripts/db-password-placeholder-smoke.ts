@@ -21,7 +21,7 @@
  *   bash scripts/run-smokes.sh
  */
 
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, lstatSync } from 'node:fs';
 import path from 'node:path';
 
 let scenarios = 0;
@@ -187,7 +187,19 @@ function* walkRepo(dir: string): Generator<string> {
 		)
 			continue;
 		if (SKIP_DIRS.has(entry)) continue;
-		const st = statSync(full);
+		// lstat (not stat) so a broken symlink returns the LINK's stat instead
+		// of throwing ENOENT on its missing target — a CI runner may leave a
+		// vendored node/corepack symlink inside the workspace. Guard the call
+		// too, in case an entry vanishes between readdir and lstat.
+		let st;
+		try {
+			st = lstatSync(full);
+		} catch {
+			continue;
+		}
+		// Symlinks aren't source content to scan (following them can hit a
+		// broken target or escape the repo), so skip them entirely.
+		if (st.isSymbolicLink()) continue;
 		if (st.isDirectory()) {
 			yield* walkRepo(full);
 		} else if (st.isFile() && shouldScan(full)) {

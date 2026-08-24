@@ -23,6 +23,7 @@ SMOKES=(
 	"apps/indexer:block-handler-smoke"
 	"apps/indexer:login-pairing-sse-keepalive-smoke"
 	"apps/indexer:rpc-endpoints-probe-smoke"
+	"apps/indexer:rpc-directory-live-endpoints-smoke"
 	"apps/indexer:chain-consistency-smoke"
 	"apps/indexer:hidden-service-dispatcher-smoke"
 	"apps/indexer:rpc-probe-failure-reason-smoke"
