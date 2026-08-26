@@ -64,7 +64,7 @@ check('a rate-limited click still gets a quick ack (justThrottled pulse)', /just
 // Tor/I2P hidden nodes the pool rarely calls — fills in without a refresh click.
 check(
 	'the refresh button triggers an ACTIVE probe (loadHealth(true) → getRpcEndpoints probe)',
-	/void loadHealth\(true\)/.test(src) && /getRpcEndpoints\(\{ probe \}\)/.test(src)
+	/\bloadHealth\(true\)/.test(src) && /getRpcEndpoints\(\{ probe \}\)/.test(src)
 );
 check(
 	'the initial mount does the passive snapshot first, then a quiet active probe (loadHealth(false) then loadHealth(true, true))',

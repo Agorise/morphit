@@ -21,6 +21,8 @@ import {
 	directoryHiddenEndpoints,
 	unionHidden,
 	canonicalProbeUrls,
+	directoryNodeNames,
+	withNamesSorted,
 	__resetDirectoryHiddenCacheForTest
 } from '../src/api/rpcHealth.ts';
 
@@ -134,6 +136,38 @@ async function run(): Promise<void> {
 		});
 		assert(list.includes(NEW_ONION), 'directory hidden node must appear on a tor-only box');
 		assert(!list.includes(CLEARNET), 'clearnet must NOT be probed/listed on a tor-only box');
+	});
+
+	// ── optional operator names + latency sort on /v1/rpc-endpoints ──────────
+	await check('directoryNodeNames reads the url→name map (cached)', async () => {
+		__resetDirectoryHiddenCacheForTest();
+		const nameDb = {
+			query: async (_sql: string): Promise<{ rows: Array<{ node_names: Record<string, unknown> }> }> => ({
+				rows: [{ node_names: { [NEW_ONION]: 'kc', [NEW_I2P]: 'kc', bad: 42 } }]
+			})
+		};
+		const names = await directoryNodeNames(nameDb, 1000);
+		assert(names.get(NEW_ONION) === 'kc' && names.get(NEW_I2P) === 'kc', 'names must map by url');
+		assert(!names.has('bad'), 'non-string name values must be dropped');
+	});
+
+	await check('withNamesSorted attaches names and sorts by latency ascending (nulls last)', async () => {
+		const resp = {
+			network: 'morphit' as const,
+			generated_at: new Date(0).toISOString(),
+			endpoints: [
+				{ url: NEW_I2P, transport: 'i2p' as const, healthy: true, latency_ms: 1400, consecutive_failures: 0, cooldown_ms: 0 },
+				{ url: CLEARNET, transport: 'clearnet' as const, healthy: true, latency_ms: 20, consecutive_failures: 0, cooldown_ms: 0 },
+				{ url: NEW_ONION, transport: 'tor' as const, healthy: false, latency_ms: null, consecutive_failures: 1, cooldown_ms: 0 }
+			]
+		};
+		const names = new Map([[NEW_I2P, 'kc']]);
+		const out = withNamesSorted(resp, names);
+		assert(out.endpoints[0]?.url === CLEARNET, 'fastest (20ms) must come first');
+		assert(out.endpoints[1]?.url === NEW_I2P, 'next fastest (1400ms) second');
+		assert(out.endpoints[2]?.url === NEW_ONION, 'null latency sorts last');
+		assert(out.endpoints[1]?.name === 'kc', 'name attached to the matching url');
+		assert(out.endpoints[0]?.name === undefined, 'unnamed url has no name field');
 	});
 
 	console.log(

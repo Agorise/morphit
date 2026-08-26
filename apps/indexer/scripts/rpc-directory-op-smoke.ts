@@ -6,6 +6,7 @@
 import {
 	validateRpcDirectoryPayload,
 	directoryEndpointUrls,
+	directoryNodeNameMap,
 	buildRpcDirectoryCustomJsonOp,
 	isHiddenRpcUrl,
 	RPC_DIRECTORY_OP_ID,
@@ -67,6 +68,28 @@ reject('too many nodes', { ...GOOD, nodes: Array.from({ length: RPC_DIRECTORY_MA
 reject('node with no address', { ...GOOD, nodes: [{}] }, 'node_has_no_address');
 reject('bad onion', { ...GOOD, nodes: [{ onion: 'http://rpc.example.com' }] }, 'bad_onion_url');
 reject('bad i2p', { ...GOOD, nodes: [{ i2p: 'http://x.onion:8091' }] }, 'bad_i2p_url');
+
+// ── optional operator name (opt-in, cosmetic, safe charset) ─────────────
+{
+	const named = { ...GOOD, nodes: [{ onion: STAR_ONION, i2p: STAR_I2P, name: 'star' }, { onion: JADE_ONION }] };
+	const r = validateRpcDirectoryPayload(named);
+	check('node name preserved', r.ok === true && r.payload.nodes[0]?.name === 'star');
+	check('node without a name still valid', r.ok === true && r.payload.nodes[1]?.name === undefined);
+}
+{
+	const r = validateRpcDirectoryPayload({ ...GOOD, nodes: [{ onion: STAR_ONION, name: '@morphit' }] });
+	check('a Blurt @handle is an accepted name', r.ok === true && r.payload.nodes[0]?.name === '@morphit');
+}
+reject('name with a space', { ...GOOD, nodes: [{ onion: STAR_ONION, name: 'old pc' }] }, 'bad_name');
+reject('name with angle bracket', { ...GOOD, nodes: [{ onion: STAR_ONION, name: 'a<b' }] }, 'bad_name');
+reject('name over 32 chars', { ...GOOD, nodes: [{ onion: STAR_ONION, name: 'x'.repeat(33) }] }, 'bad_name');
+{
+	// directoryNodeNameMap: both of a node's addresses share its name; unnamed contribute nothing.
+	const r = validateRpcDirectoryPayload({ ...GOOD, nodes: [{ onion: STAR_ONION, i2p: STAR_I2P, name: 'star' }, { onion: JADE_ONION }] });
+	const map = r.ok ? directoryNodeNameMap(r.payload) : {};
+	check('name map covers both addresses of a named node', map[STAR_ONION] === 'star' && map[STAR_I2P] === 'star');
+	check('name map omits unnamed nodes', map[JADE_ONION] === undefined);
+}
 {
 	// Oversized payload → payload_too_large (many nodes with long labels).
 	const big = {

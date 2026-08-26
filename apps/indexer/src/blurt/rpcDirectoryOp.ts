@@ -33,13 +33,22 @@ export const BLURT_CUSTOM_JSON_MAX_BYTES = 8192;
 /** Caps — keep the directory small (it's chain-bloat) and bounded. */
 export const RPC_DIRECTORY_MAX_NODES = 32;
 
-/** One node in the directory: at least one hidden-service address. Both forms
- *  are optional but at least one is required. Deliberately NO label/name field —
- *  a human name would leak identifying metadata onto the public chain and is
- *  never used functionally (nodes are keyed purely by their opaque address). */
+/** Max length + charset for a node's optional operator handle. Safe for the
+ *  chain (custom_json byte budget), JSON, the DOM, and a shell: letters, digits,
+ *  and `. _ - @` (the last so a Blurt `@handle` works). No spaces, no `<>&"'`. */
+export const RPC_DIRECTORY_NAME_MAX = 32;
+export const RPC_DIRECTORY_NAME_RE = /^[A-Za-z0-9._@-]{1,32}$/;
+
+/** One node in the directory: at least one hidden-service address, plus an
+ *  OPTIONAL, opt-in operator handle (`name`). The name is cosmetic and untrusted
+ *  — nodes are still keyed purely by their opaque address; the name is never used
+ *  to route, dedupe, or make a trust decision. Anonymity-preferring operators
+ *  simply omit it and leak nothing onto the public chain. It exists only so a
+ *  misbehaving node can be identified and its operator pinged (the maintainer). */
 export interface RpcDirectoryNode {
 	readonly onion?: string;
 	readonly i2p?: string;
+	readonly name?: string;
 }
 
 /** The `json` payload of a `morphit_rpc_v1` op. */
@@ -101,9 +110,13 @@ export function validateRpcDirectoryPayload(input: unknown): ValidateResult {
 		if (i2p !== undefined && (typeof i2p !== 'string' || !isHiddenRpcUrl(i2p, 'i2p')))
 			return { ok: false, reason: 'bad_i2p_url' };
 		if (onion === undefined && i2p === undefined) return { ok: false, reason: 'node_has_no_address' };
+		const name = n.name;
+		if (name !== undefined && (typeof name !== 'string' || !RPC_DIRECTORY_NAME_RE.test(name)))
+			return { ok: false, reason: 'bad_name' };
 		nodes.push({
 			...(typeof onion === 'string' ? { onion } : {}),
-			...(typeof i2p === 'string' ? { i2p } : {})
+			...(typeof i2p === 'string' ? { i2p } : {}),
+			...(typeof name === 'string' ? { name } : {})
 		});
 	}
 
@@ -120,6 +133,20 @@ export function directoryEndpointUrls(payload: RpcDirectoryPayload): string[] {
 	for (const n of payload.nodes) if (n.onion) urls.push(n.onion);
 	for (const n of payload.nodes) if (n.i2p) urls.push(n.i2p);
 	return [...new Set(urls)];
+}
+
+/** Map every address a node exposes to that node's optional `name`. Nodes with
+ *  no name contribute nothing (the map stays sparse). Both of a node's addresses
+ *  (onion + i2p) get the same name. Used to persist + display the handle without
+ *  changing how nodes are keyed (still by address). PURE. */
+export function directoryNodeNameMap(payload: RpcDirectoryPayload): Record<string, string> {
+	const out: Record<string, string> = {};
+	for (const n of payload.nodes) {
+		if (!n.name) continue;
+		if (n.onion) out[n.onion] = n.name;
+		if (n.i2p) out[n.i2p] = n.name;
+	}
+	return out;
 }
 
 /** Build the exact `custom_json` op to sign with the @morphit posting WIF.

@@ -20,7 +20,7 @@
  *        --node <rpc-url> (override the broadcast node).
  *
  * The JSON file (when given) is the payload: { "v": 1, "ts": "<ISO>",
- * "nodes": [ { "onion": "http://…onion:8091", "i2p": "http://…b32.i2p:8091" }, … ] }.
+ * "nodes": [ { "onion": "http://…onion:8091", "i2p": "http://…b32.i2p:8091", "name": "oldpc" }  // name is OPTIONAL, … ] }.
  */
 import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';

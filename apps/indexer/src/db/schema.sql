@@ -2909,8 +2909,16 @@ CREATE TABLE IF NOT EXISTS rpc_directory (
     node_count    INT          NOT NULL,
     published_ts  TIMESTAMPTZ  NOT NULL,
     block_num     BIGINT       NOT NULL,
+    node_names    JSONB        NOT NULL DEFAULT '{}'::jsonb,
     updated_at    TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 
 COMMENT ON TABLE rpc_directory IS
     'v1.12.0: the latest TRUSTED on-chain RPC-node directory (morphit_rpc_v1 from @morphit). Single row (id=1), latest-wins by block_num. endpoints = the flattened .onion/.b32.i2p URLs; the indexer merges them into its hidden RPC pool at startup so directory-only nodes survive a restart.';
+
+-- ─── v55: rpc_directory.node_names (optional per-node operator handles) ───
+-- Adds a sparse url→name JSONB map so a misbehaving hidden node can be
+-- identified on /v1/rpc-endpoints and its operator pinged. Opt-in + cosmetic +
+-- untrusted (never used to route/dedupe/trust); {} when no node set a name.
+-- The column is declared inline on the CREATE TABLE above (fully-migrated head
+-- schema); migration v55 adds it to already-provisioned databases.

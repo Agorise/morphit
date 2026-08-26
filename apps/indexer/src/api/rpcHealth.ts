@@ -109,6 +109,9 @@ export interface RpcEndpointHealth {
 	readonly failure_reason?: RpcProbeFailure | null;
 	/** HTTP status when `failure_reason === 'http'`, else null/absent. */
 	readonly http_status?: number | null;
+	/** Optional operator handle from the on-chain directory (morphit_rpc_v1 name).
+	 *  Cosmetic + untrusted; absent when the node's operator published no name. */
+	readonly name?: string;
 }
 
 export interface RpcEndpointsResponse {
@@ -467,9 +470,61 @@ export function unionHidden(
 	return [...new Set([...configured, ...directory])];
 }
 
-/** Test seam: reset the directory cache so a unit test sees a fresh read. */
+/** Live per-node operator handles from the on-chain directory (rpc_directory
+ *  node_names jsonb, url→name). Cached like {@link directoryHiddenEndpoints}, so
+ *  a newly-pinned/renamed node surfaces on /v1/rpc-endpoints within the TTL and
+ *  a restart isn't needed. Cosmetic + untrusted. */
+let _dirNamesCache: { at: number; names: ReadonlyMap<string, string> } | null = null;
+export async function directoryNodeNames(
+	db: { query(sql: string): Promise<{ rows: Array<{ node_names: Record<string, unknown> }> }> },
+	now: number = Date.now()
+): Promise<ReadonlyMap<string, string>> {
+	if (_dirNamesCache && now - _dirNamesCache.at < DIRECTORY_HIDDEN_TTL_MS) {
+		return _dirNamesCache.names;
+	}
+	try {
+		const r = await db.query('SELECT node_names FROM rpc_directory WHERE id = 1');
+		const raw = r.rows[0]?.node_names ?? {};
+		const names = new Map<string, string>();
+		for (const [url, name] of Object.entries(raw)) {
+			if (typeof name === 'string') names.set(url, name);
+		}
+		_dirNamesCache = { at: now, names };
+		return names;
+	} catch {
+		return _dirNamesCache?.names ?? new Map();
+	}
+}
+
+/** Ascending-latency comparator; unmeasured (null) latency sorts LAST. */
+function byLatencyAsc(a: number | null, b: number | null): number {
+	if (a === null && b === null) return 0;
+	if (a === null) return 1;
+	if (b === null) return -1;
+	return a - b;
+}
+
+/** Decorate an endpoints response with optional operator names (by URL) and sort
+ *  it by smoothed latency ascending — clearnet + hidden together, fastest first,
+ *  unmeasured last. Applied to BOTH the passive and ?probe=1 responses so the
+ *  public JSON always carries names and a stable latency order. PURE. */
+export function withNamesSorted(
+	resp: RpcEndpointsResponse,
+	names: ReadonlyMap<string, string>
+): RpcEndpointsResponse {
+	const endpoints = resp.endpoints
+		.map((e) => {
+			const name = names.get(e.url);
+			return name ? { ...e, name } : e;
+		})
+		.sort((a, b) => byLatencyAsc(a.latency_ms, b.latency_ms));
+	return { ...resp, endpoints };
+}
+
+/** Test seam: reset the directory caches so a unit test sees a fresh read. */
 export function __resetDirectoryHiddenCacheForTest(): void {
 	_dirHiddenCache = null;
+	_dirNamesCache = null;
 }
 
 export function rpcEndpointsRoute(
@@ -477,21 +532,33 @@ export function rpcEndpointsRoute(
 	// A getter (not a fixed array) so the canonical list re-derives per request:
 	// newly-pinned on-chain hidden-RPC nodes appear WITHOUT an indexer restart or
 	// a Morphit release. May be async (it can read the persisted rpc_directory).
-	canonicalUrlsFn: () => readonly string[] | Promise<readonly string[]>
+	canonicalUrlsFn: () => readonly string[] | Promise<readonly string[]>,
+	// Optional per-node operator handles (url→name) from the on-chain directory,
+	// attached to each row; also drives nothing else (cosmetic). Defaults to none.
+	namesFn: () =>
+		| ReadonlyMap<string, string>
+		| Promise<ReadonlyMap<string, string>> = () => new Map()
 ): Hono {
 	const app = new Hono();
 	app.get('/', async (c) => {
 		const canonicalUrls = await canonicalUrlsFn();
+		const names = await namesFn();
 		// `?probe=1` → fresh active ping of every node (5s-rate-limited server-side,
-		// t.txt #1). Anything else → the cheap passive pool snapshot.
+		// t.txt #1). Anything else → the cheap passive pool snapshot. Both get names
+		// attached and are sorted by latency ascending.
 		if (c.req.query('probe') === '1') {
-			return c.json(await cachedProbeEndpoints(canonicalUrls));
+			return c.json(withNamesSorted(await cachedProbeEndpoints(canonicalUrls), names));
 		}
 		// Passive snapshot: also fold in "which hidden transports can't be reached
 		// from here" so a node whose Tor/i2pd isn't running reads as a calm
 		// "requires Tor/I2P" rather than a red error on page load.
 		const transportsOff = await unreachableTransports();
-		return c.json(buildRpcEndpointsResponse(snapshotFn(), canonicalUrls, Date.now(), transportsOff));
+		return c.json(
+			withNamesSorted(
+				buildRpcEndpointsResponse(snapshotFn(), canonicalUrls, Date.now(), transportsOff),
+				names
+			)
+		);
 	});
 	return app;
 }

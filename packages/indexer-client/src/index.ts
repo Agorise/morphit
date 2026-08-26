@@ -883,6 +883,9 @@ export interface RpcEndpointHealth {
 	/** HTTP status when `failure_reason === 'http'` (e.g. 403 = blocked by a
 	 *  security policy in front of the node), else absent/null. */
 	readonly http_status?: number | null;
+	/** Optional operator handle from the on-chain RPC directory (morphit_rpc_v1
+	 *  `name`). Cosmetic + untrusted; absent when the operator published no name. */
+	readonly name?: string;
 }
 export interface RpcEndpointsResponse {
 	readonly network: 'morphit';

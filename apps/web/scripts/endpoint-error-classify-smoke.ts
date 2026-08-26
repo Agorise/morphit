@@ -78,7 +78,7 @@ check(
 );
 check(
 	'the refresh button re-fetches the indexer via an active probe (not a browser probe)',
-	/onclick=\{onRefreshClick\}/.test(list) && /void loadHealth\(true\)/.test(list)
+	/onclick=\{onRefreshClick\}/.test(list) && /\bloadHealth\(true\)/.test(list)
 );
 
 // ─── 2. The rotator still classifies REAL-call failures ─────────────────────

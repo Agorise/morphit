@@ -2,6 +2,7 @@
 	import { _ } from 'svelte-i18n';
 	import { browser } from '$app/environment';
 	import { getRpcEndpoints } from '$lib/indexer/client';
+	import { mergeFreshOverPassive, passiveIndex } from '$lib/net/rpcHealthMerge';
 	import type { RpcEndpointHealth } from '@morphit/indexer-client';
 
 	/** The canonical Blurt RPC pool + per-node health, fetched from the operator's
@@ -27,6 +28,10 @@
 	 *  silently doing nothing). */
 	let justThrottled = $state(false);
 	let refreshedTimer: ReturnType<typeof setTimeout> | null = null;
+
+	/** Last PASSIVE (smoothed pool) health, keyed by URL — the up/down authority.
+	 *  A single ?probe=1 miss is one sample; we don't let it override this. */
+	let passiveByUrl = new Map<string, RpcEndpointHealth>();
 
 	/** Never re-ping the indexer faster than this (t.txt #1). */
 	const THROTTLE_MS = 5000;
@@ -56,7 +61,18 @@
 		const started = Date.now();
 		try {
 			const res = await getRpcEndpoints({ probe });
-			if (res.ok) endpoints = [...res.data.endpoints];
+			if (res.ok) {
+				if (probe) {
+					// Fresh active probe: reconcile with the passive baseline so a
+					// lone transient miss (flaky WiFi / jittery i2p) doesn't flip a
+					// smoothed-healthy node to a false "unreachable".
+					endpoints = mergeFreshOverPassive(res.data.endpoints, passiveByUrl);
+				} else {
+					// Passive smoothed snapshot: the up/down authority.
+					endpoints = [...res.data.endpoints];
+					passiveByUrl = passiveIndex(res.data.endpoints);
+				}
+			}
 		} finally {
 			if (!quiet) {
 				const wait = MIN_SPIN_MS - (Date.now() - started);
@@ -79,7 +95,10 @@
 			setTimeout(() => (justThrottled = false), 320);
 			return;
 		}
-		void loadHealth(true);
+		void (async () => {
+			await loadHealth(false, true); // refresh the up/down baseline (quiet)
+			await loadHealth(true); // then the visible fresh probe + merge
+		})();
 	}
 
 	/** cp471 (tt.txt C) — a ONE-LINE reason a node is red, instead of a flat

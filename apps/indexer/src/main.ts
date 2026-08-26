@@ -93,6 +93,7 @@ import {
 	rpcEndpointsRoute,
 	canonicalProbeUrls,
 	directoryHiddenEndpoints,
+	directoryNodeNames,
 	unionHidden
 } from '$api/rpcHealth';
 import { instancePaymentMethodsRoute } from '$api/instancePaymentMethods';
@@ -784,7 +785,9 @@ async function main(): Promise<void> {
 					),
 					local: config.localRpcEndpoints,
 					autoLocal: autoLocalEndpoints
-				})
+				}),
+			// Optional per-node operator handles from the on-chain directory.
+			async () => directoryNodeNames(db)
 		)
 	);
 	app.route('/v1/rpc-endpoints', rpcEndpointsApp);

@@ -480,6 +480,21 @@ COMMENT ON TABLE rpc_directory IS
     'flattened .onion/.b32.i2p URLs; the indexer merges them into its hidden RPC '
     'pool at startup so directory-only nodes survive a restart.';
 `
+	},
+
+	{
+		version: 55,
+		description:
+			'rpc_directory.node_names — persist each directory node\'s OPTIONAL operator handle (url→name), so a misbehaving node can be identified on the /v1/rpc-endpoints JSON. Cosmetic + untrusted; empty {} when no node set a name. Idempotent additive column.',
+		sql: `
+ALTER TABLE rpc_directory
+    ADD COLUMN IF NOT EXISTS node_names JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+COMMENT ON COLUMN rpc_directory.node_names IS
+    'Optional per-node operator handles from the morphit_rpc_v1 op: a sparse '
+    'url→name map (both of a node''s addresses share its name). Cosmetic + '
+    'untrusted; never used to route/dedupe/trust. {} when no node published a name.';
+`
 	}
 
 	// Future migrations land here.  The v1 collapsed schema is the

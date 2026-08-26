@@ -25,7 +25,11 @@
 import type pg from 'pg';
 import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contract';
 import { resolveSignerPostingPubkey } from '$blurt/verify';
-import { validateRpcDirectoryPayload, directoryEndpointUrls } from '$blurt/rpcDirectoryOp';
+import {
+	validateRpcDirectoryPayload,
+	directoryEndpointUrls,
+	directoryNodeNameMap
+} from '$blurt/rpcDirectoryOp';
 import { logger } from '$log';
 
 const log = logger('rpc-directory');
@@ -49,6 +53,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 
 	// Trusted → self-populate the hidden RPC pool with the directory's nodes.
 	const endpoints = directoryEndpointUrls(v.payload);
+	const nodeNames = directoryNodeNameMap(v.payload);
 	const added = ctx.blurt.mergeRpcEndpoints(endpoints);
 	if (added.length > 0) {
 		log.info('rpc_directory_merged', { added: added.length, nodes: v.payload.nodes.length });
@@ -57,18 +62,20 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	// Persist the latest trusted directory so directory-only nodes survive an
 	// indexer restart (the pool merge above is in-memory only, and a restart
 	// re-indexes FORWARD past an older op). Single row (id=1); latest-wins by
-	// block, so a re-processed older op can't clobber a newer directory.
+	// block, so a re-processed older op can't clobber a newer directory. The
+	// optional per-node names ride in node_names (latest-wins with the rest).
 	await client.query(
-		`INSERT INTO rpc_directory (id, endpoints, node_count, published_ts, block_num)
-		 VALUES (1, $1, $2, $3, $4)
+		`INSERT INTO rpc_directory (id, endpoints, node_count, published_ts, block_num, node_names)
+		 VALUES (1, $1, $2, $3, $4, $5)
 		 ON CONFLICT (id) DO UPDATE
 		   SET endpoints = EXCLUDED.endpoints,
 		       node_count = EXCLUDED.node_count,
 		       published_ts = EXCLUDED.published_ts,
 		       block_num = EXCLUDED.block_num,
+		       node_names = EXCLUDED.node_names,
 		       updated_at = now()
 		   WHERE EXCLUDED.block_num >= rpc_directory.block_num`,
-		[endpoints, v.payload.nodes.length, v.payload.ts, ctx.blockNum]
+		[endpoints, v.payload.nodes.length, v.payload.ts, ctx.blockNum, JSON.stringify(nodeNames)]
 	);
 	return { ok: true };
 };
