@@ -208,6 +208,40 @@ for (const sub of SUBSYSTEMS) {
 	}
 }
 
+// ── Regression guard (shadow bug): operator-editable keys must live ONLY in
+// morphit.config.env — NEVER in /etc/morphit/indexer.env. An Ansible install
+// deploys BOTH, and the indexer unit sources indexer.env LAST, so if these keys
+// were in indexer.env its install-time copy would silently shadow an operator's
+// `morphit-ops edit` (this is exactly why a title change didn't take effect).
+try {
+	const ROLE = join(__dirname, '..', '..', '..', 'ops', 'ansible', 'roles', 'morphit', 'templates');
+	const indexerEnv = readFileSync(join(ROLE, 'indexer.env.j2'), 'utf-8');
+	const configEnv = readFileSync(join(ROLE, 'morphit.config.env.j2'), 'utf-8');
+	const EDITABLE = [
+		'MORPHIT_INSTANCE_NAME',
+		'MORPHIT_INSTANCE_TAGLINE',
+		'MORPHIT_INSTANCE_CONTACT_URL',
+		'MORPHIT_INDEXER_FEE_RECIPIENT'
+	];
+	// Matches a real assignment at line start OR right after a Jinja conditional
+	// (`{% if ... %}KEY="..."`, as morphit.config.env.j2 writes optional keys).
+	const assign = (src: string, k: string): boolean =>
+		new RegExp('(?:^|%\\}\\s*)' + k + '=', 'm').test(src);
+	for (const k of EDITABLE) {
+		if (assign(indexerEnv, k)) {
+			fail(`shadow guard: ${k} must NOT be assigned in indexer.env.j2`,
+				'It would shadow morphit.config.env (sourced first); operator edits via morphit-ops would silently not take effect.');
+		} else if (!assign(configEnv, k)) {
+			fail(`shadow guard: ${k} must be assigned in morphit.config.env.j2`,
+				'The operator-editable source of truth must carry it, or the value is lost when it is not in indexer.env.');
+		} else {
+			pass(`shadow guard: ${k} lives only in morphit.config.env.j2 (operator edits win)`);
+		}
+	}
+} catch (e) {
+	fail('shadow guard: read env templates', String(e));
+}
+
 const total = passed + failed;
 console.log(`\n${passed} passed, ${failed} failed (${total} total)`);
 if (failed > 0) {

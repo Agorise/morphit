@@ -180,6 +180,7 @@ SMOKES=(
 	"apps/indexer:blurt-client-rpc-pool-smoke"
 	"apps/indexer:prefetch-in-order-smoke"
 	"apps/indexer:btc-quorum-call-integration-smoke"
+	"apps/web:autofill-css-smoke"
 	"apps/web:balance-bus-smoke"
 	"apps/web:chain-op-verify-smoke"
 	"apps/web:order-fee-active-auth-smoke"

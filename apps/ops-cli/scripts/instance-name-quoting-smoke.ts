@@ -27,7 +27,6 @@ import { parseEnv } from 'node:util';
 const REPO_ROOT = join(import.meta.dirname, '..', '..', '..');
 const TPL_DIR = join(REPO_ROOT, 'ops', 'ansible', 'roles', 'morphit', 'templates');
 const CONFIG_TPL = join(TPL_DIR, 'morphit.config.env.j2');
-const INDEXER_TPL = join(TPL_DIR, 'indexer.env.j2');
 
 const ANSI_GREEN = '\x1b[32m';
 const ANSI_RED = '\x1b[31m';
@@ -47,8 +46,11 @@ const SAMPLE = "Morphit Latino & Bob's Market";
 
 /* ---- STATIC: templates double-quote the free-text fields ---- */
 for (const [label, path, keys] of [
-	['morphit.config.env.j2', CONFIG_TPL, ['MORPHIT_INSTANCE_NAME', 'MORPHIT_INSTANCE_TAGLINE', 'MORPHIT_INSTANCE_CONTACT_URL']],
-	['indexer.env.j2', INDEXER_TPL, ['MORPHIT_INSTANCE_NAME', 'MORPHIT_INSTANCE_TAGLINE', 'MORPHIT_INSTANCE_CONTACT_URL']]
+	['morphit.config.env.j2', CONFIG_TPL, ['MORPHIT_INSTANCE_NAME', 'MORPHIT_INSTANCE_TAGLINE', 'MORPHIT_INSTANCE_CONTACT_URL']]
+	// indexer.env.j2 intentionally NO LONGER carries these operator-editable
+	// branding keys (moved to morphit.config.env only, so indexer.env can't
+	// shadow a morphit-ops edit). Their absence there is enforced by
+	// ansible-env-template-required-vars-smoke's shadow guard.
 ] as const) {
 	const text = readFileSync(path, 'utf-8');
 	for (const key of keys) {
