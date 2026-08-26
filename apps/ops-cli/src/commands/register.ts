@@ -361,8 +361,12 @@ function readEnv(): ValidEnv | { error: string } {
 		return {
 			error:
 				`Missing required environment variables: ${missing.join(', ')}.\n` +
-				'  Source your morphit.env and morphit.config.env first:\n' +
-				'    set -a; . ./morphit.env; . ./morphit.config.env; set +a'
+				'  These live in your instance env files. On a DEFAULT install they are in\n' +
+				'  /opt/morphit and owned by root, so source them and register in ONE root\n' +
+				'  shell (a plain `. ./morphit.env` fails there — wrong dir / no permission):\n' +
+				"    sudo bash -c 'set -a; . /opt/morphit/morphit.env; . /opt/morphit/morphit.config.env; set +a; cd /opt/morphit && morphit-ops register'\n" +
+				'  (Running from your OWN checkout instead? cd there first, then:\n' +
+				'    set -a; . ./morphit.env; . ./morphit.config.env; set +a )'
 		};
 	}
 	return {

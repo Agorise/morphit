@@ -41,6 +41,7 @@ import {
 	closeSync
 } from 'node:fs';
 import { ask, askYesNo, askChoice, step, explain } from '../init/prompt.ts';
+import { runRegister } from './register.ts';
 import { sanitizeForTerm } from '../render/term.ts';
 import { offerRestart } from '../lib/restartServices.ts';
 import {
@@ -182,6 +183,10 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 	// conditional re-register reminder at the end.
 	let originChanged = false;
 	let tagChanged = false;
+	// The instance display name (title) also rides in the on-chain
+	// operator-register record (as display_name), so a title change needs the
+	// same "re-publish to the federation" step as origin/tag.
+	let nameChanged = false;
 
 	if (choice === 'origin' || choice === 'all') {
 		const origin = await stepOrigin();
@@ -262,7 +267,10 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 			'The bold name on your directory card, browser title bar, and footer.',
 			existing.name
 		);
-		if (nameR.changed) configUpdates.set('MORPHIT_INSTANCE_NAME', nameR.value);
+		if (nameR.changed) {
+			configUpdates.set('MORPHIT_INSTANCE_NAME', nameR.value);
+			nameChanged = true;
+		}
 
 		const taglineR = await editField(
 			'Tagline',
@@ -419,18 +427,21 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 	if (originChanged) unitsToRestart.push('morphit-relay');
 	const restarted = await offerRestart(unitsToRestart);
 
-	// cp186 — the one easy-to-miss second step.  origin + operator tag
-	// are part of the ON-CHAIN operator-register record; editing the
-	// local config does NOT update what other Morphit instances show in
-	// their /instances directory.  Make the re-register step impossible
-	// to overlook when (and only when) it actually applies.
-	if (originChanged || tagChanged) {
+	// cp186 — the one easy-to-miss second step.  origin, operator tag, AND the
+	// instance display name (title) are part of the ON-CHAIN operator-register
+	// record; editing the local config does NOT update what other Morphit
+	// instances show in their /instances directory.  Make the re-register step
+	// impossible to overlook — and offer to do it right here — when (and only
+	// when) it actually applies.
+	if (originChanged || tagChanged || nameChanged) {
+		const parts: string[] = [];
+		if (originChanged) parts.push('origin');
+		if (tagChanged) parts.push('operator tag');
+		if (nameChanged) parts.push('display name');
 		const whatChanged =
-			originChanged && tagChanged
-				? 'origin and operator tag'
-				: originChanged
-					? 'origin'
-					: 'operator tag';
+			parts.length === 1
+				? parts[0]
+				: `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
 		console.log('');
 		console.log('━'.repeat(58));
 		console.log('  IMPORTANT — one more step to reach the federation');
@@ -441,17 +452,42 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 		console.log('  instances read to list you in their /instances directory.');
 		console.log('');
 		console.log('  The local edit above does NOT update that on-chain record.');
-		console.log('  Re-publish it so the rest of the federation sees the change:');
 		console.log('');
-		console.log('      morphit-ops register');
-		console.log('');
-		console.log('  (Until you do, other instances will keep showing your old');
-		if (restarted) {
-			console.log(`  ${originChanged ? 'origin' : 'tag'}.  Your own instance is already using the new value —`);
-			console.log('  the service restart above applied it locally.)');
+
+		// Offer to re-publish right now — the env + Active key are already
+		// resolvable in this context (runRegister loads the same instance env
+		// this edit just read), so the operator never has to know the command.
+		const broadcastNow = await askYesNo(
+			'Broadcast this change to the chain now so the federation sees it?',
+			true
+		);
+		if (broadcastNow) {
+			console.log('');
+			const rc = await runRegister({ flags: {}, positional: [] });
+			if (rc === 0) {
+				console.log('');
+				console.log('  ✓ Registration re-published. Other instances will show the');
+				console.log('    new value once their indexers pick it up (usually minutes).');
+			} else {
+				console.log('');
+				console.log('  The broadcast did not complete. You can retry any time with:');
+				console.log('');
+				console.log('      morphit-ops register');
+			}
 		} else {
-			console.log(`  ${originChanged ? 'origin' : 'tag'}.  Your own instance picks up the new value once the`);
-			console.log('  service restart above runs.)');
+			console.log('');
+			console.log('  No problem — re-publish it whenever you like with:');
+			console.log('');
+			console.log('      morphit-ops register');
+			console.log('');
+			console.log('  (Until you do, other instances keep showing your old value.');
+			if (restarted) {
+				console.log('  Your own instance already uses the new value — the service');
+				console.log('  restart above applied it locally.)');
+			} else {
+				console.log('  Your own instance picks up the new value once the service');
+				console.log('  restart above runs.)');
+			}
 		}
 	}
 	console.log('');

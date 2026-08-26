@@ -254,12 +254,15 @@ import { dirname as _dn, join as _jn } from 'node:path';
 const _cmd = _jn(_dn(_fu(import.meta.url)), '..', 'src', 'commands');
 const _src = (f: string): string => _rf(_jn(_cmd, f), 'utf-8');
 
-scenario('cp186: edit reminds operator to re-register after an origin/tag change', () => {
+scenario('cp186: edit reminds operator to re-register after an origin/tag/name change', () => {
 	const e = _src('edit.ts');
 	assertEqual(e.includes('originChanged = true'), true, 'edit tracks origin change');
 	assertEqual(e.includes('tagChanged = true'), true, 'edit tracks tag change');
-	assertEqual(/if \(originChanged \|\| tagChanged\)/.test(e), true, 'edit gates reminder on origin/tag change');
-	assertEqual(e.includes('morphit-ops register'), true, 'edit names the re-register command');
+	assertEqual(e.includes('nameChanged = true'), true, 'edit tracks display-name (title) change');
+	assertEqual(/if \(originChanged \|\| tagChanged \|\| nameChanged\)/.test(e), true, 'edit gates reminder on origin/tag/name change');
+	assertEqual(e.includes('runRegister('), true, 'edit can broadcast the re-registration inline');
+	assertEqual(e.includes('Broadcast this change to the chain now'), true, 'edit offers to broadcast right there');
+	assertEqual(e.includes('morphit-ops register'), true, 'edit still names the command for the decline / retry path');
 	assertEqual(
 		e.includes('record other Morphit') || e.includes('reach the federation'),
 		true,
