@@ -103,7 +103,7 @@
  *   5 — preflight check failed (network, permissions, ...)
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, readdirSync, statSync, copyFileSync, cpSync, readlinkSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, readdirSync, statSync, copyFileSync, cpSync, readlinkSync, chmodSync } from 'node:fs';
 import { join, dirname, basename, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -2046,19 +2046,47 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	}
 
 	// ─── 10d. Confirm the chat fast-path (sub-6s delivery) state ──
-	// Safeguard: a manually-run indexer/relay (not the systemd units handled
-	// above) is now orphaned on the OLD code — the dir swap moved its source
-	// out from under it, and we can't restart a service we don't manage. Say
-	// so loudly so morphit.io doesn't silently keep serving stale code.
+	// Safeguard: a process still running with its cwd inside the OLD install
+	// (now the .bak dir) is orphaned on stale code — the dir swap moved its
+	// source out from under it. The new systemd units already run the new code,
+	// so these are superseded duplicates (worst case: an old indexer double-
+	// writing the DB). Stop them automatically — SIGTERM, a grace pause, then
+	// SIGKILL any straggler — so the box is never left running a mix of old and
+	// new. Only PIDs whose cwd is under backupDir are ever touched.
 	const orphaned = pidsWithCwdUnder(backupDir);
 	if (orphaned.length > 0) {
-		warn(
-			`${orphaned.length} process(es) are still running from the previous ` +
-				`install at ${backupDir} (PIDs ${orphaned.join(', ')}) — they are now ` +
-				`on the OLD code and are not systemd-managed, so this upgrade could not ` +
-				`restart them. Restart them from ${installDir}, or install the systemd ` +
-				`units in ops/systemd/ so future upgrades restart them automatically.`
+		info('');
+		info(
+			`Stopping ${orphaned.length} leftover process(es) from the previous ` +
+				`install (PIDs ${orphaned.join(', ')}) — they're on the OLD code at ` +
+				`${backupDir} and not systemd-managed, so the new services have ` +
+				`superseded them.`
 		);
+		for (const pid of orphaned) {
+			try {
+				process.kill(pid, 'SIGTERM');
+			} catch {
+				/* already exited */
+			}
+		}
+		// Grace period for a clean shutdown, then force any straggler.
+		spawnSync('sleep', ['3'], { stdio: 'ignore' });
+		for (const pid of pidsWithCwdUnder(backupDir)) {
+			try {
+				process.kill(pid, 'SIGKILL');
+			} catch {
+				/* gone */
+			}
+		}
+		const stillThere = pidsWithCwdUnder(backupDir);
+		if (stillThere.length === 0) {
+			info('✓ Stopped the leftover process(es); only the new systemd-managed services remain.');
+		} else {
+			warn(
+				`Could not stop ${stillThere.length} leftover process(es) (PIDs ` +
+					`${stillThere.join(', ')}). Stop them by hand: sudo kill -9 ${stillThere.join(' ')}`
+			);
+		}
 	}
 
 	// ─── 10e. Keep the DB backup Docker-aware (cp509 / v1.8.4 B) ──
@@ -2068,8 +2096,8 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	// a host Postgres or an already-Docker-aware config.
 	ensureBackupDockerAware(installDir);
 
-	// ─── 11. Cleanup + prune old backups ───────────────────────
-	cleanupTmp(tmpDir);
+	// ─── 11. Prune old backups (tmp is cleaned AFTER the seed below, so
+	//         the seed can reuse the tarball we already downloaded) ──
 	pruneOldBackups(installDir);
 
 	info('');
@@ -2144,9 +2172,25 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		} else {
 			info('');
 			info(`Seeding ${latestTag} to IPFS so this box becomes an origin host …`);
+			// Reuse the tarball we ALREADY downloaded for this upgrade instead of
+			// making the seed re-fetch the same ~13 MB over the network (painfully
+			// slow on a Tor-only box). The stager's LOCAL mode (MORPHIT_STAGE_TARBALL)
+			// copies it instead of curling. The tarball is a public release artifact,
+			// so make it + its dir readable by the `ipfs` service user that runs the
+			// seed. Falls back to download mode if the tarball isn't present.
+			const seedEnv = ['env', 'IPFS_PATH=/var/lib/ipfs/.ipfs'];
+			if (existsSync(tarballPath)) {
+				try {
+					chmodSync(tmpDir, 0o755);
+					chmodSync(tarballPath, 0o644);
+					seedEnv.push(`MORPHIT_STAGE_TARBALL=${tarballPath}`);
+				} catch {
+					/* couldn't relax perms — let the seed download mode handle it */
+				}
+			}
 			const seedRes = spawnSync(
 				'sudo',
-				['-u', 'ipfs', 'env', 'IPFS_PATH=/var/lib/ipfs/.ipfs', 'sh', seedScript, latestTag],
+				['-u', 'ipfs', ...seedEnv, 'sh', seedScript, latestTag],
 				{ stdio: 'inherit', timeout: 1_200_000 }
 			);
 			if (seedRes.status === 0) {
@@ -2162,6 +2206,12 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	} catch {
 		/* best-effort; never fail an upgrade over IPFS seeding */
 	}
+
+	// ─── 13. Cleanup — remove the download scratch (incl. the ~13 MB
+	//         tarball) now that both the install AND the seed are done. No
+	//         junk left behind on disk. Deferred to here (not step 11) so
+	//         the seed above could reuse the tarball we already had.
+	cleanupTmp(tmpDir);
 
 	return 0;
 }

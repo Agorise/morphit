@@ -158,11 +158,17 @@
 				cls: 'text-ink-500 dark:text-ink-400'
 			};
 		}
-		if (h.cooldown_ms > 0) {
-			return { text: $_('settings.endpoints.cooling_down'), cls: 'text-ink-700 dark:text-ink-400' };
-		}
+		// A failing node shows WHY it's failing (timed out / TLS / refused …) —
+		// the reason is the actionable signal (cp471). This takes precedence over
+		// the cooldown label: "cooling down" is an internal backoff detail, and a
+		// node in cooldown is always there BECAUSE it failed, so surfacing the
+		// reason instead avoids the passive-snapshot ("cooling down") → live-probe
+		// ("unreachable") flip that made one node read two contradictory ways.
 		if (h.consecutive_failures > 0) {
 			return { text: failureText(h), cls: 'text-red-600 dark:text-red-400' };
+		}
+		if (h.cooldown_ms > 0) {
+			return { text: $_('settings.endpoints.cooling_down'), cls: 'text-ink-700 dark:text-ink-400' };
 		}
 		if (h.latency_ms != null) {
 			return {

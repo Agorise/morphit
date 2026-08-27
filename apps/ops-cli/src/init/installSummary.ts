@@ -114,7 +114,8 @@ export function expectedUnits(inputs: SummaryInputs): string[] {
 		'tor',
 		'i2pd',
 		'ipfs.service',
-		'morphit-ipfs-pin.timer'
+		'morphit-ipfs-pin.timer',
+		'morphit-ipns-rebroadcast.timer'
 	];
 	if (inputs.mode === 'home' && !inputs.torOnly) units.push('morphit-ddns.timer');
 	return units;
@@ -248,6 +249,11 @@ export async function collectInstallSummary(
 		label: 'IPFS/IPNS release pinning (hourly timer)',
 		ok: probe.serviceActive('morphit-ipfs-pin.timer'),
 		detail: 'pins the canonical IPNS-published release CID each hour'
+	});
+	rows.push({
+		label: 'IPNS record keep-alive (4-hourly timer)',
+		ok: probe.serviceActive('morphit-ipns-rebroadcast.timer'),
+		detail: 're-PUTs the signed IPNS record to the DHT so ipns://<name> stays resolvable (records expire ~48h)'
 	});
 
 	// ── Transparency ─────────────────────────────────────────────────

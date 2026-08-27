@@ -32,6 +32,23 @@
 # POSIX sh. Deterministic. No secrets.
 set -eu
 
+# Braille spinner on stderr while a background PID runs, so a slow download never
+# looks frozen (a Tor-routed box can take minutes on ~13 MB). TTY-guarded so
+# piped/logged runs stay clean. POSIX sh — frames iterated as space-split words.
+_spin() {
+	_sp_pid="$1"
+	_sp_msg="$2"
+	[ -t 2 ] || return 0
+	while kill -0 "$_sp_pid" 2>/dev/null; do
+		for _sp_f in ⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏; do
+			kill -0 "$_sp_pid" 2>/dev/null || break
+			printf '\r  %s %s' "$_sp_f" "$_sp_msg" >&2
+			sleep 0.1
+		done
+	done
+	printf '\r\033[K' >&2
+}
+
 TAG="${1:-}"
 OUT="${2:-}"
 if [ -z "$TAG" ] || [ -z "$OUT" ]; then
@@ -62,7 +79,9 @@ else
 	BASE="${MORPHIT_RELEASE_DOWNLOAD_BASE:-$REPO_URL/releases/download}"
 	REL_BASE="$BASE/$TAG"
 	echo "stage-release-dir: fetching $TARBALL + checksum…" >&2
-	curl -fsSL "$REL_BASE/$TARBALL" -o "$OUT/$TARBALL"
+	curl -fsSL "$REL_BASE/$TARBALL" -o "$OUT/$TARBALL" &
+	_spin "$!" "downloading $TARBALL (slow over Tor)…"
+	wait "$!" || { echo "stage-release-dir: download of $TARBALL failed" >&2; exit 1; }
 	curl -fsSL "$REL_BASE/$TARBALL.sha256" -o "$OUT/$TARBALL.sha256"
 fi
 

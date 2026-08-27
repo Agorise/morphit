@@ -71,6 +71,11 @@ check(
 		/latency_ms/.test(list)
 );
 check(
+	'failure reason is shown BEFORE the cooling-down label (no passive→live flip: a failing node reads coherently, not "cooling down" then "unreachable")',
+	/function healthStatus/.test(list) &&
+		list.indexOf('consecutive_failures > 0') < list.indexOf('cooldown_ms > 0')
+);
+check(
 	'the pool list renders indexer-derived status per node, informational-only (cp410 — no custom-endpoint management)',
 	/healthStatus\(h\)/.test(list) &&
 		/sortedEndpoints/.test(list) &&

@@ -37,6 +37,25 @@ set -eu
 
 log() { echo "morphit-ipfs-seed: $*" >&2; }
 
+# Braille spinner shown on stderr while a background PID runs, so the operator
+# is never left staring at a frozen terminal during a slow step. TTY-guarded
+# (`[ -t 2 ]`) so piped/logged runs stay clean. POSIX sh: frames are iterated as
+# space-separated words (each braille glyph is one word), no bash substrings.
+# Usage:  <slow-cmd> &  _spin "$!" "message";  wait "$!"
+_spin() {
+	_sp_pid="$1"
+	_sp_msg="$2"
+	[ -t 2 ] || return 0
+	while kill -0 "$_sp_pid" 2>/dev/null; do
+		for _sp_f in ⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏; do
+			kill -0 "$_sp_pid" 2>/dev/null || break
+			printf '\r  %s %s' "$_sp_f" "$_sp_msg" >&2
+			sleep 0.1
+		done
+	done
+	printf '\r\033[K' >&2
+}
+
 TAG="${1:-}"
 EXPECTED="${2:-}"
 if [ -z "$TAG" ]; then
@@ -84,7 +103,14 @@ log "staging $TAG…"
 sh "$STAGER" "$TAG" "$STAGE"
 
 log "ipfs add (timeout ${ADD_TIMEOUT}s)…"
-CID="$(ipfs --timeout="${ADD_TIMEOUT}s" add -rQ --cid-version 1 "$STAGE")"
+# Run in the background with a spinner so a slow add (large tree, busy daemon,
+# or a Tor-routed box) never looks frozen. CID is captured via a temp file.
+_cidfile="$(mktemp)"
+ipfs --timeout="${ADD_TIMEOUT}s" add -rQ --cid-version 1 "$STAGE" >"$_cidfile" 2>/dev/null &
+_spin "$!" "hashing + storing $TAG into IPFS…"
+wait "$!" 2>/dev/null || true
+CID="$(cat "$_cidfile" 2>/dev/null | tr -d '[:space:]')"
+rm -f "$_cidfile"
 rm -rf "$(dirname "$STAGE")" 2>/dev/null || true
 [ -n "$CID" ] || { log "ipfs add produced no CID"; exit 1; }
 log "hosted $TAG → $CID"
@@ -100,7 +126,10 @@ if [ -n "$EXPECTED" ]; then
 fi
 
 # 5. Announce it promptly so gateways + other instances can find it (best-effort).
-if ipfs --timeout=60s routing provide "$CID" >/dev/null 2>&1; then
+log "announcing to the network…"
+ipfs --timeout=60s routing provide "$CID" >/dev/null 2>&1 &
+_spin "$!" "announcing $CID to the DHT…"
+if wait "$!" 2>/dev/null; then
 	log "announced $CID to the network."
 else
 	log "routing provide did not complete (non-fatal) — the daemon reprovides on its own schedule."

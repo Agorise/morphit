@@ -105,7 +105,8 @@ const guard = stripHash(read('scripts/verify-cid-public.sh'));
 		['writes metadata.json with version + sha256', /"version":/.test(stager) && /"sha256":/.test(stager)],
 		['metadata is DETERMINISTIC (no released_utc timestamp)', !/released_utc/.test(stager)],
 		['notes come from the tarball via tar -O, not an external fetch (no curl of notes/.asc — v1.9.3 CID-divergence guard)', !/curl[^\n]*RELEASE-NOTES/i.test(stager) && !/curl[^\n]*\.asc/i.test(stager) && /tar -xzf[^\n]*-O/.test(stager)],
-		['discoverable dir — README.md + keyword-tagged metadata.json (v1.9.5)', /README\.md/.test(stager) && /"keywords":/.test(stager)]
+		['discoverable dir — README.md + keyword-tagged metadata.json (v1.9.5)', /README\.md/.test(stager) && /"keywords":/.test(stager)],
+		['shows a braille spinner during the slow download (no frozen terminal)', /_spin\b/.test(stager) && /⠋/.test(stager)]
 	];
 	for (const [n, okp] of checks) okp ? ok(`stager: ${n}`) : bad(`stager: ${n}`);
 }
@@ -118,7 +119,8 @@ const guard = stripHash(read('scripts/verify-cid-public.sh'));
 		['ASSERTS the CID equals the expected/anchored one', /"\$CID" != "\$EXPECTED"/.test(seed) && /MISMATCH/i.test(seed)],
 		['fails loud (exit 1) on CID mismatch', /MISMATCH[\s\S]*exit 1/i.test(seed)],
 		['announces it (ipfs routing provide)', /routing provide/.test(seed)],
-		['rejects a non-vX.Y.Z tag', /v\[0-9\]/.test(seed)]
+		['rejects a non-vX.Y.Z tag', /v\[0-9\]/.test(seed)],
+		['shows a braille spinner during ipfs add + announce (no frozen terminal)', /_spin\b/.test(seed) && /⠋/.test(seed)]
 	];
 	for (const [n, okp] of checks) okp ? ok(`seed: ${n}`) : bad(`seed: ${n}`);
 }
@@ -156,7 +158,9 @@ const guard = stripHash(read('scripts/verify-cid-public.sh'));
 		['upgrade seeds via morphit-ipfs-seed.sh', /morphit-ipfs-seed\.sh/.test(upgrade)],
 		['gated on IPFS hosting up (ipfs present + service active)', /is-active --quiet ipfs/.test(upgrade) && /command -v ipfs/.test(upgrade)],
 		['seeds the just-installed tag (latestTag)', /seedScript, latestTag/.test(upgrade)],
-		['non-fatal — never fails the upgrade over seeding', /never fail an upgrade over IPFS/.test(upgrade)]
+		['non-fatal — never fails the upgrade over seeding', /never fail an upgrade over IPFS/.test(upgrade)],
+		['reuses the just-downloaded tarball (LOCAL mode) — no second download', /MORPHIT_STAGE_TARBALL=\$\{tarballPath\}/.test(upgrade)],
+		['auto-stops orphaned old-code processes (SIGTERM→SIGKILL), not just warns', /SIGTERM/.test(upgrade) && /SIGKILL/.test(upgrade) && /pidsWithCwdUnder/.test(upgrade)]
 	];
 	for (const [n, okp] of checks) okp ? ok(`upgrade: ${n}`) : bad(`upgrade: ${n}`);
 }
