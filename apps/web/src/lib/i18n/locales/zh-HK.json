@@ -2099,8 +2099,7 @@
 	"instances": {
 		"no_clearnet": "無明網依賴",
 		"title": "已知的 Morphit 實例",
-		"intro": "Morphit 是聯邦化的。獨立{link}運行 Morphit 實例,您的索引器透過讀取鏈自動發現其他實例。下面是來自最近一次探測的它們當前的健康狀況。",
-		"intro_operators_link": "運營者",
+		"intro": "Morphit 係聯邦式嘅。獨立運營者運行 Morphit 實例，並從其站點上所有以 BLURT 支付嘅掛單費用中獲得 90%。使用其站點嘅人越多，佢哋賺得越多。喺 [常見問題] 中了解更多，或立即將 Morphit [下載] 到你嘅伺服器以 [運行你自己嘅節點]。",
 		"loading": "正在載入目錄…",
 		"bookmark_tip": "💡 提示：在瀏覽器中將其中幾個實例——以及它們的 Tor、I2P 或 Lokinet 位址——加入書籤。訂單簿存在於公開的區塊鏈上，因此即使某個網站被封鎖或離線，你也能透過任何其他實例存取完全相同的訂單和交易。",
 		"fetch_error": "無法載入目錄。",
@@ -3674,7 +3673,9 @@
 	},
 	"run_a_node": {
 		"title": "運行 Morphit 節點",
-		"subtitle": "運營你自己嘅實例。賺取掛單費用分成。幫助令 Morphit 不可審查。",
+		"subtitle_pre": "運營",
+		"subtitle_link": "你自己嘅實例",
+		"subtitle_post": "。賺取以 BLURT 支付嘅掛單費用嘅 90%。幫助令 Morphit 不可阻擋。",
 		"why_heading": "點解運行節點？",
 		"why_uncensor_title": "喺重要嘅地方運行 Morphit",
 		"why_uncensor_body": "每增加一個節點都會令網絡更難被審查。如果你嘅國家封鎖 morphit.io,你嘅實例仍然可達。你喺服務嗰啲否則冇辦法交易嘅用戶。",
@@ -3682,6 +3683,7 @@
 		"why_community_body": "為你嘅地區、你嘅語言、你嘅本地支付方式定制介面。用戶信任講佢哋語言、令佢哋覺得熟悉嘅前端 —— 你嘅前端就係咁。",
 		"why_privacy_title": "最小化元數據洩露",
 		"why_privacy_body": "通過你嘅實例交易嘅用戶只同你分享元數據。冇其他運營者,甚至 Agorise 都睇唔到佢哋嘅活動模式。",
+		"why_privacy_body_2": "鼓勵用戶使用 VPN 以及你（內置）嘅 Tor 和/或 I2P 地址。你嘅備用隱藏地址讓用戶可以喺明網訪問被封鎖嘅司法管轄區訪問你嘅實例。亦唔需要 SSL/https 證書，對於身處受審查網絡同國家嘅用戶，影響係巨大嘅。",
 		"why_earn_title": "由智能合約(SC)自動支付",
 		"why_earn_body": "你實例吸引的每一筆以 BLURT 支付的發布費向你支付 90% — 僅 10% 進入 Morphit 財庫,用於資助 Morphit 軟件本身的持續開發和維護。以 BTC 和 XMR 支付的費用 100% 流向財庫,用於同樣的項目義務(鏈上分配機制僅適用於 BLURT,但我們使 BLURT 分配積極慷慨以彌補 — 90/10 對你有利)。\n\n運行在區塊鏈上的 Smart Contract 強制執行分配 — 不是某個人、某個公司、某個可以改變主意的人。100% 自動化。你可證明地幫助,你可證明地獲得報酬。在代碼中保證。\n\n支付以 BLURT 計價,所以如果 BLURT 升值,你的收入也升值 — 無需額外工作。",
 		"how_heading": "點樣開始",
@@ -3691,7 +3693,6 @@
 		"step2_body": "下載最新版本，解壓到 /morphit/ 資料夾，在其中開啟終端機並執行 sudo bash morphit-setup.sh——然後選擇「Full guided install」。一個簡短的精靈會用淺白語言問你幾個問題（你的網域、你的 Blurt 帳戶、用於 HTTPS 的電郵），並為你設定好一切：Node.js、PostgreSQL、應用程式及其服務、自動續期的 HTTPS、防火牆，以及你的 Tor 和 I2P 位址。無需編輯任何檔案。",
 		"step3_title": "註冊為營運者",
 		"step3_body": "執行 npx morphit-ops register，以先到先得的方式在鏈上認領你的標籤。你的實例會出現在 /operators 目錄中，並開始自動賺取你那 90% 以 Blurt 支付的掛單費，直接在鏈上發放。經濟細節請見常見問題中的營運者收益條目。",
-		"runbook_pointer": "完整運行手冊：",
 		"asset_policy_heading": "你嘅實例,你嘅資產政策",
 		"asset_policy_body": "Morphit 嘅聯邦讓每個運營方揀其實例為邊啲可交易資產接受新訂單。新資產預設喺實例範圍內開啟交付——運營方透過 `MORPHIT_INDEXER_DISABLED_ASSETS` 環境變數逐個資產停用。咁樣一個實例聯邦可以服務唔同嘅用戶偏好,而唔需要任何人 fork 代碼。",
 		"asset_policy_default_label": "新資產預設開啟。",
@@ -3700,11 +3701,9 @@
 		"asset_policy_opt_out_body": "希望其實例專注於隱私優先或去中心化優先資產嘅運營方,可透過 `MORPHIT_INDEXER_DISABLED_ASSETS=\"USDT\"`(或逗號分隔嘅列表表示多個)停用任何僅交易資產。透過呢個運營方前端發佈嘅用戶無法揀已停用嘅資產。",
 		"asset_policy_federation_label": "聯邦保持完整。",
 		"asset_policy_federation_body": "喺你嘅實例上停用某資產唔會向你嘅用戶隱藏對等實例嘅訂單——鏈歷史係共享嘅,所以 orderbook 仍以只讀方式顯示佢哋。停用只適用於從你嘅實例發佈嘅新訂單。",
-		"asset_policy_doc_pointer": "完整嘅環境變數參考同多資產示例見",
-		"asset_policy_doc_pointer_suffix": "嘅 Trade-only asset configuration 章節。",
 		"requirements_heading": "資源需求",
 		"req_hw_label": "硬件",
-		"req_hw_value": "2 核 CPU,2-4 GB RAM,20 GB SSD",
+		"req_hw_value": "2+ 核 CPU，4+ GB RAM，60+ GB 磁碟空間",
 		"req_network_label": "網絡",
 		"req_network_value": "家庭互聯網就可以 — DDNS 處理動態 IP,唔需要靜態 IP",
 		"req_time_label": "你嘅時間",
@@ -3899,7 +3898,7 @@
 		},
 		"run_a_node": {
 			"title": "運行一個 Morphit 節點 — 成為營運者",
-			"description": "營運一個 Morphit 實例。賺取以 BLURT 結算的掛單費分成。幫助 Morphit 抵禦審查。"
+			"description": "營運一個 Morphit 實例。賺取以 BLURT 支付嘅掛單費用嘅 90%。幫助令 Morphit 不可阻擋。"
 		},
 		"about_this_instance": {
 			"title": "關於此實例 — Morphit",

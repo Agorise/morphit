@@ -1,0 +1,45 @@
+---
+# Included by base/tasks/main.yml from BOTH the first attempt and the self-heal
+# rescue, so the package list lives in exactly ONE place (no drift between two
+# copies).  The ansible-structural "offline bundle PKGS covers every apt install"
+# smoke walks every .yml in the role, so keeping the names inline here preserves
+# that guard.
+- name: Install base packages
+  ansible.builtin.apt:
+    name:
+      # Core
+      - build-essential
+      - git
+      - curl
+      - wget
+      - ca-certificates
+      - gnupg
+      - lsb-release
+      - jq
+      # Cron — the aide + rkhunter scheduled scans (hardening role) install
+      # into /etc/cron.daily and /etc/cron.weekly, which the `cron` package
+      # owns.  Near-universal, but pinned here so those dirs are guaranteed to
+      # exist even on a minimal box that shipped without cron.
+      - cron
+      # Time sync (auditd timestamps + chain-time skew depend on it)
+      - chrony
+      # Hardening packages (referenced by hardening role)
+      - ufw
+      - fail2ban
+      - auditd
+      - audispd-plugins
+      - aide
+      - aide-common
+      - apparmor
+      - apparmor-utils
+      - unattended-upgrades
+      - apt-listchanges
+      - rkhunter
+      - libpam-pwquality
+      # Backup tooling
+      - age
+      - rsync
+      # Postfix for outbound alerts (configured by morphit role)
+      - postfix
+      - libsasl2-modules
+    state: present

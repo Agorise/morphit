@@ -189,7 +189,7 @@ SECTIONS = [
         ('Public read-only orderbook (no signup to browse)',                 ['Y','-','-','Y','-'], None),
         ('Free signup — zero deposit required',                              ['Y','Y','Y','Y','-'], None),
         ('Self-host on a $5/month VPS or Raspberry Pi',                      ['Y','-','-','-','-'], None),
-        ('Requires user to run a full node (Bitcoin / Monero / per-coin)',   ['-','Y','Y','-','Y'], None),
+        ('No full node required — runs on light / remote nodes',             ['Y','Y','Y','Y','-'], None),
         ('10 fully localized languages (incl. RTL Persian)',                 ['Y','-','-','-','-'], None),
         ('Public API for wallet developers and third-party tools',           ['Y','-','-','-','-'], None),
         ('Model Context Protocol for orderbook discovery/interactivity',     ['Y','-','-','-','-'], None),
@@ -428,7 +428,7 @@ for i, name in enumerate(PLATFORMS):
             line1, line2 = parts[0], parts[1]
             out.append(f'<text x="{cx}" y="{header_y - 14}" text-anchor="middle" '
                        f'font-family="DejaVu Sans, sans-serif" font-size="{HEADER_FONT}" '
-                       f'font-weight="600" fill="{TEXT_HEADER}">{escape(line1)}  /</text>')
+                       f'font-weight="600" fill="{TEXT_HEADER}">{escape(line1)} /</text>')
             out.append(f'<text x="{cx}" y="{header_y + 22}" text-anchor="middle" '
                        f'font-family="DejaVu Sans, sans-serif" font-size="{HEADER_FONT}" '
                        f'font-weight="600" fill="{TEXT_HEADER}">{escape(line2)}</text>')
@@ -495,7 +495,7 @@ for sect_title, rows in SECTIONS:
 y_footer = H - PAD_BOTTOM - FOOTER_FONT
 counts_str = ' · '.join(
     f'{name}: {counts[i]}/{total_features}'
-    for i, name in enumerate(['Morphit', 'Bisq', 'Haveno', 'OpenMonero', 'BasicSwap'])
+    for i, name in enumerate(['Morphit', 'Bisq', 'Haveno/RetoSwap', 'OpenMonero', 'BasicSwap'])
 )
 out.append(f'<text x="{W//2}" y="{y_footer - 22}" text-anchor="middle" '
            f'font-family="DejaVu Sans, sans-serif" font-size="20" '

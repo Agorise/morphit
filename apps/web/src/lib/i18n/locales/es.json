@@ -2099,8 +2099,7 @@
 	"instances": {
 		"no_clearnet": "Sin dependencia de clearnet",
 		"title": "Instancias Morphit conocidas",
-		"intro": "Morphit es federado. {link} independientes ejecutan instancias de Morphit, y tu indexador descubre otras instancias automáticamente leyendo la cadena. Esta lista muestra su estado actual desde la última verificación.",
-		"intro_operators_link": "Operadores",
+		"intro": "Morphit es federado. Operadores independientes ejecutan instancias de Morphit, y reciben el 90% de todas las tarifas de listado en BLURT de sus sitios. Cuantas más personas usen su sitio, más ganan. Aprende más al respecto en las [preguntas frecuentes], o [descarga] Morphit en tu servidor ahora para [ejecutar tu propio nodo].",
 		"loading": "Cargando directorio…",
 		"bookmark_tip": "💡 Consejo: guarda en marcadores algunas de estas instancias —y sus direcciones de Tor, I2P o Lokinet— en tu navegador. El libro de órdenes vive en la cadena de bloques pública, así que si alguna vez se bloquea un sitio o queda fuera de servicio, podrás acceder exactamente a las mismas órdenes y operaciones a través de cualquier otra instancia.",
 		"fetch_error": "No se pudo cargar el directorio.",
@@ -3674,7 +3673,9 @@
 	},
 	"run_a_node": {
 		"title": "Ejecutar un nodo Morphit",
-		"subtitle": "Opera tu propia instancia. Gana una parte de las tarifas de publicación. Ayuda a hacer a Morphit resistente a la censura.",
+		"subtitle_pre": "Opera ",
+		"subtitle_link": "tu propia instancia",
+		"subtitle_post": ". Gana el 90% de las tarifas de publicación pagadas en BLURT. Ayuda a hacer a Morphit imparable.",
 		"why_heading": "¿Por qué ejecutar un nodo?",
 		"why_uncensor_title": "Morphit donde importa",
 		"why_uncensor_body": "Cada nodo adicional hace que la red sea más difícil de censurar. Si tu país bloquea morphit.io, tu instancia sigue siendo accesible. Sirves a usuarios que de otro modo no tendrían forma de operar.",
@@ -3682,6 +3683,7 @@
 		"why_community_body": "Marca la interfaz para tu región, tu idioma, tus métodos de pago locales. Los usuarios confían en frontends que hablan su idioma y se sienten familiares — el tuyo lo hará.",
 		"why_privacy_title": "Minimiza la filtración de metadatos",
 		"why_privacy_body": "Los usuarios operando a través de tu instancia comparten metadatos contigo y solo contigo. Ningún otro operador, ni siquiera Agorise, ve sus patrones de actividad.",
+		"why_privacy_body_2": "Anima a los usuarios a usar una VPN y tus direcciones Tor y/o I2P (incluidas). Tus direcciones alternativas y ocultas permiten a los usuarios acceder a tu instancia desde jurisdicciones donde el acceso a la red abierta (clearnet) está bloqueado. Tampoco se necesitan certificados SSL/https, y el impacto es enorme para los usuarios en redes y países censurados.",
 		"why_earn_title": "Pagado automáticamente por Smart Contract",
 		"why_earn_body": "Cada comisión de anuncio pagada en BLURT que tu instancia atrae te paga el 90% — solo el 10% va al tesoro de Morphit para financiar el desarrollo continuo y el mantenimiento del propio software de Morphit. Las comisiones pagadas en BTC y XMR fluyen 100% al tesoro para las mismas obligaciones del proyecto (el mecanismo de división on-chain solo funciona para BLURT, pero hicimos la división BLURT agresivamente generosa para compensar — 90/10 a tu favor).\n\nUn Smart Contract en la blockchain aplica la división — no una persona, ni una empresa, ni nadie que pueda cambiar de idea. 100% automatizado. Tú ayudas demostrablemente, tú cobras demostrablemente. Garantizado en código.\n\nLos pagos están denominados en BLURT, así que si BLURT se aprecia, también lo hacen tus ganancias — sin trabajo adicional.",
 		"how_heading": "Cómo empezar",
@@ -3691,7 +3693,6 @@
 		"step2_body": "Descarga la última versión, extráela en una carpeta /morphit/, abre una terminal allí y ejecuta sudo bash morphit-setup.sh — luego elige «Full guided install». Un breve asistente te hace unas pocas preguntas en lenguaje sencillo (tu dominio, tu cuenta de Blurt, un correo para HTTPS) y configura todo por ti: Node.js, PostgreSQL, la aplicación y sus servicios, HTTPS con renovación automática, el cortafuegos y tus direcciones Tor e I2P. Sin editar archivos.",
 		"step3_title": "Regístrate como operador",
 		"step3_body": "Ejecuta npx morphit-ops register para reclamar tu etiqueta en la cadena, por orden de llegada. Tu instancia aparece en el directorio /operators y empieza a ganar automáticamente tu 90 % de las comisiones de listado pagadas en Blurt, entregadas en la cadena. Consulta las preguntas frecuentes sobre ganancias de operador para la economía.",
-		"runbook_pointer": "Manual completo:",
 		"asset_policy_heading": "Tu instancia, tu política de activos",
 		"asset_policy_body": "La federación de Morphit permite a cada operador elegir para qué activos negociables su instancia acepta nuevas órdenes. Los nuevos activos se entregan ACTIVADOS por defecto a nivel de instancia — los operadores los deshabilitan por activo mediante la variable de entorno `MORPHIT_INDEXER_DISABLED_ASSETS`. Así una federación de instancias puede servir a diferentes preferencias de usuario sin que nadie tenga que bifurcar el código.",
 		"asset_policy_default_label": "Activado por defecto para nuevos activos.",
@@ -3700,11 +3701,9 @@
 		"asset_policy_opt_out_body": "Los operadores que prefieren que su instancia se especialice en activos privacy-first o decentralization-first pueden deshabilitar cualquier activo solo-de-comercio con `MORPHIT_INDEXER_DISABLED_ASSETS=\"USDT\"` (o una lista separada por comas para varios). Los usuarios que publican a través del frontend de este operador no pueden elegir un activo deshabilitado.",
 		"asset_policy_federation_label": "La federación permanece intacta.",
 		"asset_policy_federation_body": "Deshabilitar un activo en tu instancia no oculta las órdenes de las instancias pares de tus usuarios — el historial de cadena es compartido, así que el orderbook todavía las muestra como solo lectura. El bloqueo solo aplica a NUEVAS órdenes publicadas DESDE tu instancia.",
-		"asset_policy_doc_pointer": "Referencia completa de variables de entorno y ejemplos multi-activo en",
-		"asset_policy_doc_pointer_suffix": "bajo Trade-only asset configuration.",
 		"requirements_heading": "Requisitos de recursos",
 		"req_hw_label": "Hardware",
-		"req_hw_value": "2 núcleos de CPU, 2-4 GB RAM, 20 GB SSD",
+		"req_hw_value": "2+ núcleos de CPU, 4+ GB RAM, 60+ GB de espacio en disco",
 		"req_network_label": "Red",
 		"req_network_value": "Internet doméstico funciona bien — DDNS maneja IPs dinámicas, no se requiere IP estática",
 		"req_time_label": "Tu tiempo",
@@ -3899,7 +3898,7 @@
 		},
 		"run_a_node": {
 			"title": "Ejecuta un nodo Morphit — sé operador",
-			"description": "Opera una instancia de Morphit. Gana una parte de las tarifas de listado en BLURT. Ayuda a hacer Morphit incensurable."
+			"description": "Opera una instancia de Morphit. Gana el 90% de las tarifas de listado pagadas en BLURT. Ayuda a hacer a Morphit imparable."
 		},
 		"about_this_instance": {
 			"title": "Sobre esta instancia — Morphit",

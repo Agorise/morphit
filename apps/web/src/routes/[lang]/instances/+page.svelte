@@ -16,15 +16,28 @@
 
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
 	const lp = $derived((path: string) => localePath(path, currentLang));
-	// t.txt #4 — the intro links the word "Operators" to the operators page. Fill
-	// the {link} placeholder with a sentinel, split the localized string on it,
-	// and render an <a> between the parts (word order varies per locale).
-	const INTRO_LINK_SLOT = '\u0000OL\u0000';
-	const introParts = $derived.by(() => {
-		const full = $_('instances.intro', { values: { link: INTRO_LINK_SLOT } }) as string;
-		const i = full.indexOf(INTRO_LINK_SLOT);
-		if (i < 0) return { before: full, after: '' };
-		return { before: full.slice(0, i), after: full.slice(i + INTRO_LINK_SLOT.length) };
+	// The intro embeds three links as [bracketed] spans, in order:
+	// FAQ, download, run-a-node.  We split the localized string on the
+	// bracket spans and render each as an <a> to the matching page — so
+	// translators keep the three [...] spans in order and translate the
+	// text (including the linked phrase) naturally.  The Operators-page
+	// link was removed; "Operators" is now plain text in the sentence.
+	const introSegments = $derived.by(() => {
+		const full = $_('instances.intro') as string;
+		const hrefs = [lp('/faq'), lp('/download'), lp('/run-a-node')];
+		const segs: Array<{ text: string; href?: string }> = [];
+		const re = /\[([^\]]+)\]/g;
+		let last = 0;
+		let li = 0;
+		let m: RegExpExecArray | null;
+		while ((m = re.exec(full)) !== null) {
+			if (m.index > last) segs.push({ text: full.slice(last, m.index) });
+			segs.push({ text: m[1] ?? '', href: hrefs[li] });
+			li += 1;
+			last = m.index + m[0].length;
+		}
+		if (last < full.length) segs.push({ text: full.slice(last) });
+		return segs;
 	});
 
 	/** Normalize an origin for identity comparison: parse it and take the
@@ -341,21 +354,20 @@
 		<h1 class="font-display text-3xl font-extrabold md:text-4xl">
 			<span class="brand-gradient-text">{$_('instances.title')}</span>
 		</h1>
-		<p class="mt-4 max-w-prose text-ink-700 dark:text-ink-200">
-			{introParts.before}<a
-				href={lp('/operators')}
-				class="text-morphit-teal hover:underline dark:text-morphit-emerald"
-				>{$_('instances.intro_operators_link')}</a
-			>{introParts.after}
+		<p class="mt-4 text-ink-700 dark:text-ink-200">
+			{#each introSegments as seg, i (i)}{#if seg.href}<a
+					href={seg.href}
+					class="text-morphit-teal hover:underline dark:text-morphit-emerald">{seg.text}</a
+				>{:else}{seg.text}{/if}{/each}
 		</p>
 		<div
-			class="mt-5 max-w-prose rounded-xl border border-morphit-emerald/30 bg-morphit-emerald/5 p-4 text-sm text-ink-700 dark:border-morphit-emerald/40 dark:bg-morphit-emerald/10 dark:text-ink-200"
+			class="mt-5 rounded-xl border border-morphit-emerald/30 bg-morphit-emerald/5 p-4 text-sm text-ink-700 dark:border-morphit-emerald/40 dark:bg-morphit-emerald/10 dark:text-ink-200"
 		>
 			{$_('instances.bookmark_tip')}
 		</div>
 	</header>
 
-	<div class="mb-6 flex flex-wrap items-end gap-3">
+	<div class="mb-6 flex flex-wrap items-end justify-between gap-3">
 		<label class="flex flex-col gap-1 text-sm">
 			<span class="text-xs uppercase tracking-widest text-ink-500">
 				{$_('instances.filter_label')}
@@ -374,6 +386,17 @@
 				<option value="never">{$_('instances.status_menu.never')}</option>
 			</select>
 		</label>
+		{#if streaming}
+			<span class="inline-flex items-center gap-1.5 text-xs text-ink-500">
+				<span class="relative inline-flex h-2 w-2">
+					<span
+						class="absolute inline-flex h-full w-full animate-ping rounded-full bg-morphit-emerald opacity-60"
+					></span>
+					<span class="relative inline-flex h-2 w-2 rounded-full bg-morphit-emerald"></span>
+				</span>
+				<span class="uppercase tracking-widest">{$_('instances.live')}</span>
+			</span>
+		{/if}
 	</div>
 
 	{#if error && !snapshotReceived}
@@ -386,23 +409,6 @@
 	{:else if !snapshotReceived}
 		<p class="text-sm text-ink-500">{$_('instances.loading')}</p>
 	{:else}
-		<div class="mb-6 flex flex-wrap items-center justify-between gap-3 text-xs text-ink-500">
-			<p>
-				{$_('instances.last_updated', { values: { date: formatDayMonthTime(directoryUpdatedAt) } })}
-			</p>
-			{#if streaming}
-				<span class="inline-flex items-center gap-1.5">
-					<span class="relative inline-flex h-2 w-2">
-						<span
-							class="absolute inline-flex h-full w-full animate-ping rounded-full bg-morphit-emerald opacity-60"
-						></span>
-						<span class="relative inline-flex h-2 w-2 rounded-full bg-morphit-emerald"></span>
-					</span>
-					<span class="uppercase tracking-widest">{$_('instances.live')}</span>
-				</span>
-			{/if}
-		</div>
-
 		{#if filtered.length === 0}
 			<div
 				class="rounded-lg border border-ink-100 bg-ink-50 p-8 text-center dark:border-ink-800 dark:bg-ink-950"
@@ -599,6 +605,10 @@
 				{/each}
 			</ul>
 		{/if}
+
+		<p class="mt-6 text-xs text-ink-500">
+			{$_('instances.last_updated', { values: { date: formatDayMonthTime(directoryUpdatedAt) } })}
+		</p>
 
 		<aside
 			class="mt-12 rounded-lg border border-ink-100 bg-ink-50 p-5 text-sm dark:border-ink-800 dark:bg-ink-950"

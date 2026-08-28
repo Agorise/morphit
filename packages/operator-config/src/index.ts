@@ -273,6 +273,14 @@ const ALLOWLIST: ReadonlySet<string> = new Set([
 	// USD conversion at verification time — so this number is
 	// what the indexer actually checks against.
 	'MORPHIT_INDEXER_FEE_BASE_BLURT',
+	// ─── Listing fee — recipient account ──────────────────────
+	// The Blurt account that receives listing fees on THIS
+	// instance (the operator's own account).  Written by the
+	// setup wizard + the ansible config template; the indexer
+	// reads it and defaults to the canonical treasury if unset.
+	// MUST be allowlisted here or loadOperatorConfig aborts the
+	// boot on every install that sets a fee recipient (cp-fix).
+	'MORPHIT_INDEXER_FEE_RECIPIENT',
 
 	// ─── Listing fee — BTC ────────────────────────────────────
 	// Operator-set satoshi amount targeting roughly the same

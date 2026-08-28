@@ -117,9 +117,9 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 ## 3. Security and audits — receipts, not slogans
 
-41. **Several thousand self-checking smoke scenarios across ~280 runners** ship with the source code. Run them yourself: `bash scripts/run-smokes.sh` (and triple-pulse it for flake filtering). They cover the indexer, relay, ops CLI, frontend bus, payments, federation probe, fee verification, chat encryption, and more.
+41. **Over 19,800 self-checking smoke scenarios across ~630 runners** ship with the source code. Run them yourself: `bash scripts/run-smokes.sh` (and triple-pulse it for flake filtering). They cover the indexer, relay, ops CLI, frontend bus, payments, federation probe, fee verification, chat encryption, and more.
 
-42. **A running audit document** (`docs/AUDIT-2026-05.md`) — currently 20,000+ lines across 60+ numbered parts, organized by date and subsystem, listing every security review pass, every finding, every severity rating, every fix or accepted-risk rationale. Public, in the repo, anyone can read it. Plus per-batch audit files in `docs/audit/` (Batch I YubiKey unlock, Batch J release trust anchor, Batch K block explorer, Batch L payment methods).
+42. **A running audit document** (`docs/AUDIT-2026-05.md`) — currently 25,000+ lines across 78 numbered parts, organized by date and subsystem, listing every security review pass, every finding, every severity rating, every fix or accepted-risk rationale. Public, in the repo, anyone can read it. Plus per-batch audit files in `docs/audit/` (Batch I YubiKey unlock, Batch J release trust anchor, Batch K block explorer, Batch L payment methods).
 
 43. **STRIDE threat-model methodology** applied per audit pass: Spoofing, Tampering, Repudiation, Information Disclosure, Denial of Service, Elevation of Privilege — a matrix run over every changed subsystem, with attack trees built from the most attractive entry points.
 
@@ -485,7 +485,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 213. **Hodl Hodl uses on-chain Bitcoin escrow.** That's better than CEX custody but still escrow. Morphit is fully no-escrow.
 
-214. **Bisq has been hacked twice, user funds stolen. They require you to run their desktop app, a Tor node, and provide them with collateral.** Morphit runs in any browser, requires no collateral, and let's the user choose options like Tor, i2p, Lokinet, etc.
+214. **Bisq has been hacked twice, user funds stolen. They require you to run their desktop app, a Tor node, and provide them with collateral.** Morphit runs in any browser, requires no collateral, and lets the user choose options like Tor, i2p, Lokinet, etc.
 
 215. **Haveno/RetoSwap is Monero-only, non-PWA, not Grandma-friendly.** Morphit handles 16 tradable assets, ships as a PWA (no install on iOS, two taps on Android), and is built so non-crypto-native users can trade without reading 40 pages of docs. The Haveno/RetoSwap project does important work for Monero-only; Morphit complements it by being broader and easier.
 
@@ -631,7 +631,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 281. **Ansible playbook idempotency is enforced by CI.** The README promises "re-running the playbook is a no-op when the system is in the desired state." Tasks using `command:`, `shell:`, or `raw:` execute arbitrary processes — Ansible can't tell whether they changed state, so they need an explicit guard (`creates:`, `removes:`, `changed_when:`, `when:`, `check_mode:`). The cp69 smoke walks every ansible task; an unguarded action surfaces in CI so the playbook stays trustworthy.
 
-282. **Unit-test pass count is locked by CI.** The cp71 vitest-must-pass smoke runs `vitest --run` per workspace (indexer, relay, web — 1,344 tests across 3 workspaces) and asserts the pass count meets a baseline. Test-rot — handlers evolving without their tests being updated — used to go undetected for months. Now a drift incident surfaces immediately as a smoke failure, so handlers and their tests stay in lock-step.
+282. **Unit-test pass count is locked by CI.** The cp71 vitest-must-pass smoke runs `vitest --run` per workspace (indexer, relay, web, ops-cli — 2,131 tests across 4 workspaces) and asserts the pass count meets a baseline. Test-rot — handlers evolving without their tests being updated — used to go undetected for months. Now a drift incident surfaces immediately as a smoke failure, so handlers and their tests stay in lock-step.
 
 283. **Untrusted-input parseInt is forbidden without a strict pre-check.** `parseInt('999000abc', 10) = 999000` silently accepts trailing garbage. When the input is operator-controlled or user-controlled (HTTP headers, query params, env vars), the partial parse can let malformed values past the validity check. The cp71 smoke greps the codebase for `parseInt`/`parseFloat` on plausibly-untrusted inputs and requires each to be preceded by `/^\d+$/.test(s)` or document-able as trusted in the allow-list.
 
@@ -769,7 +769,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 Every claim in this document is verifiable. The repository is at **git.agorise.net/agorise/morphit**. Specific anchors:
 
-- **Smoke suite**: `bash scripts/run-smokes.sh` — runs several thousand self-checks across ~280 runners, triple-pulse stable
+- **Smoke suite**: `bash scripts/run-smokes.sh` — runs several thousand self-checks across ~630 runners, triple-pulse stable
 - **Audit log**: `docs/AUDIT-2026-05.md`
 - **Architecture decisions**: `docs/adr/0001-*.md` through `docs/adr/0051-*.md` (50 ADRs; 0016 was retracted and the number isn't reused)
 - **Fees and rewards**: `docs/FEES-AND-REWARDS.md` (line-cited to source)
@@ -783,4 +783,4 @@ Don't trust this list. Verify it. That's the whole point.
 
 ---
 
-*348 specific selling points. None of them invented. All of them shipped, documented, or honestly disclosed as backlog. If you find one that isn't accurate, open an issue at git.agorise.net/agorise/morphit and we'll either fix the claim or fix the code. Last updated: 24 July, 2026.*
+*348 specific selling points. None of them invented. All of them shipped, documented, or honestly disclosed as backlog. If you find one that isn't accurate, open an issue at git.agorise.net/agorise/morphit and we'll either fix the claim or fix the code. Last updated: 27 August, 2026.*

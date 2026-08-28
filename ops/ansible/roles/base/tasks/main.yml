@@ -29,50 +29,47 @@
   community.general.timezone:
     name: Etc/UTC
 
-- name: Update apt cache
-  ansible.builtin.apt:
-    update_cache: true
-    cache_valid_time: 3600
+- name: Install base packages (self-healing on a stale or partial apt cache)
+  # Why block/rescue: on a fresh server image — or a slow / filtered / censored
+  # connection — the apt index can be stale or half-fetched, so apt tries to
+  # download point-release .debs that the mirror has already superseded and
+  # removed from the pool → "404 Not Found" on a dozen packages, and the whole
+  # install stops with a wall of red.  The fix an operator would otherwise run by
+  # hand is `rm -rf /var/lib/apt/lists/* && apt clean && apt update`; we do
+  # exactly that automatically and retry once, so a first-time operator never
+  # sees a scary failure or has to touch apt.  On an air-gapped box the vendor
+  # role has already redirected apt at the bundled repo, so this works offline too.
+  block:
+    - name: Refresh apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
 
-- name: Install base packages
-  ansible.builtin.apt:
-    name:
-      # Core
-      - build-essential
-      - git
-      - curl
-      - wget
-      - ca-certificates
-      - gnupg
-      - lsb-release
-      - jq
-      # Cron — the aide + rkhunter scheduled scans (hardening role) install
-      # into /etc/cron.daily and /etc/cron.weekly, which the `cron` package
-      # owns.  Near-universal, but pinned here so those dirs are guaranteed to
-      # exist even on a minimal box that shipped without cron.
-      - cron
-      # Time sync (auditd timestamps + chain-time skew depend on it)
-      - chrony
-      # Hardening packages (referenced by hardening role)
-      - ufw
-      - fail2ban
-      - auditd
-      - audispd-plugins
-      - aide
-      - aide-common
-      - apparmor
-      - apparmor-utils
-      - unattended-upgrades
-      - apt-listchanges
-      - rkhunter
-      - libpam-pwquality
-      # Backup tooling
-      - age
-      - rsync
-      # Postfix for outbound alerts (configured by morphit role)
-      - postfix
-      - libsasl2-modules
-    state: present
+    - name: Install base packages
+      ansible.builtin.include_tasks: install-base-packages.yml
+  rescue:
+    - name: Base packages didn't install on the first try — refreshing apt and retrying
+      ansible.builtin.debug:
+        msg: >-
+          The first package install didn't finish — almost always a stale or
+          partial apt index (common right after a fresh server image, or on a
+          slow or filtered connection). Clearing the apt cache and trying once
+          more. This is expected; nothing is wrong and nothing needs your input.
+
+    - name: Clear the stale or partial apt lists and cached archives
+      ansible.builtin.shell: 'rm -rf /var/lib/apt/lists/* && apt-get clean'
+      changed_when: true
+
+    - name: Rebuild the apt index (retry a few times for slow or filtered networks)
+      ansible.builtin.apt:
+        update_cache: true
+      register: morphit_base_apt_refresh
+      until: morphit_base_apt_refresh is succeeded
+      retries: 3
+      delay: 5
+
+    - name: Install base packages (retry, now with a fresh index)
+      ansible.builtin.include_tasks: install-base-packages.yml
 
 - name: Enable chrony for NTP
   ansible.builtin.systemd:

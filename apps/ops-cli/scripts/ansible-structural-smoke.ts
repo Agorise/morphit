@@ -477,6 +477,17 @@ results.push({
 	// that must use the bundled npm cache, which the build ships via `npm ci --cache`.
 	if (!/npm ci --cache "\$\{VENDOR\}\/npm-cache"/.test(bobSh)) ob.push('build-offline-bundle.sh does not ship an npm cache (npm ci --cache vendor/npm-cache) for the offline MCP deploy');
 	if (/--exclude='?\.\/apps\/\*\/dist'?/.test(bobCmd) && !/--no-wildcards-match-slash/.test(bobCmd)) ob.push('build-offline-bundle.sh packaging tar lacks --no-wildcards-match-slash — its ./apps/*/dist exclude also strips nested apps/*/node_modules/*/dist from the bundle');
+	// The completeness gate must ALSO assert the runtime-critical SOURCE survived
+	// the packaging excludes: the services run from src via tsx (no dist is
+	// shipped) and every workspace package is a src-entry import, so a stripped
+	// entrypoint / package source would ship a bundle that INSTALLS but then
+	// crash-loops "Cannot find module …" on a fresh node.
+	if (!/apps\/indexer\/src\/main\[\.\]ts/.test(bobSh) || !/apps\/relay\/src\/main\[\.\]ts/.test(bobSh))
+		ob.push('build-offline-bundle.sh completeness gate does not assert the indexer/relay src entrypoints survived packaging (a stripped entrypoint ships a crash-looping bundle)');
+	if (!/node_modules\/\[\.\]bin\/tsx/.test(bobSh))
+		ob.push('build-offline-bundle.sh completeness gate does not assert node_modules/.bin/tsx survived packaging (the services exec tsx)');
+	if (!/packages\/\*\/src\/index\.ts/.test(bobSh))
+		ob.push('build-offline-bundle.sh completeness gate does not assert every workspace package src/ survived packaging (src-entry imports)');
 	const dmSh = existsSync(join(REPO_ROOT, 'ops', 'scripts', 'deploy-mcp.sh')) ? readFileSync(join(REPO_ROOT, 'ops', 'scripts', 'deploy-mcp.sh'), 'utf-8') : '';
 	if (/npm install/.test(dmSh) && !/--offline --cache "\$REPO_DIR\/vendor\/npm-cache"/.test(dmSh)) ob.push('deploy-mcp.sh npm install is not offline-safe against the bundled npm cache');
 	// npm ci caches tarballs but NOT the packuments a fresh `npm install` needs to

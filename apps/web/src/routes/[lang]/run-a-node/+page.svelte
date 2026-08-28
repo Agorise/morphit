@@ -93,7 +93,10 @@
 			<span class="brand-gradient-text">{$_('run_a_node.title')}</span>
 		</h1>
 		<p class="mx-auto mt-4 max-w-2xl text-ink-700 dark:text-ink-300">
-			{$_('run_a_node.subtitle')}
+			{$_('run_a_node.subtitle_pre')}<a
+				href={lp('/instances')}
+				class="text-morphit-emerald hover:underline">{$_('run_a_node.subtitle_link')}</a
+			>{$_('run_a_node.subtitle_post')}
 		</p>
 	</header>
 
@@ -286,6 +289,7 @@
 					{$_('run_a_node.why_privacy_title')}
 				</h3>
 				<p class="mt-2 text-ink-700 dark:text-ink-300">{$_('run_a_node.why_privacy_body')}</p>
+				<p class="mt-2 text-ink-700 dark:text-ink-300">{$_('run_a_node.why_privacy_body_2')}</p>
 			</li>
 			<li class="card border border-ink-200 dark:border-ink-800">
 				<h3 class="font-display text-lg font-bold">
@@ -338,17 +342,6 @@
 				RUN-A-MORPHIT-NODE.md
 			</a>.
 		</p>
-
-		<p class="mt-3 text-sm text-ink-600 dark:text-ink-400">
-			{$_('run_a_node.runbook_pointer')}
-			<a
-				href="https://git.agorise.net/agorise/morphit/src/branch/main/docs/OPERATIONS.md"
-				target="_blank" rel="noopener noreferrer"
-				class="text-morphit-emerald hover:underline"
-			>
-				OPERATIONS.md
-			</a>.
-		</p>
 	</section>
 
 	<!-- Item 3 / Part 121 cp6 — operator-stance surfacing.
@@ -389,17 +382,6 @@
 				</span>
 			</li>
 		</ul>
-		<p class="mt-4 text-sm text-ink-600 dark:text-ink-400">
-			{$_('run_a_node.asset_policy_doc_pointer')}
-			<a
-				href="https://git.agorise.net/agorise/morphit/src/branch/main/docs/OPERATIONS.md"
-				target="_blank" rel="noopener noreferrer"
-				class="text-morphit-emerald hover:underline"
-			>
-				OPERATIONS.md
-			</a>
-			{$_('run_a_node.asset_policy_doc_pointer_suffix')}
-		</p>
 	</section>
 
 	<!-- Requirements: hardware floor + networking. Written to be

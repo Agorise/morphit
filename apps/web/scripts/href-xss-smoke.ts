@@ -144,6 +144,16 @@ const ALLOWLIST_HREF_EXPR: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 		new Set(['r.href'])
 	],
 	[
+		'apps/web/src/routes/[lang]/instances/+page.svelte',
+		// The instances-page intro renders a small run of text/link segments from
+		// the localized `instances.intro_*` strings. A segment's href (seg.href)
+		// is NEVER operator/peer data — it is assigned only from the hardcoded,
+		// site-controlled list `[lp('/faq'), lp('/download'), lp('/run-a-node')]`
+		// (three internal routes, lang-prefixed by lp()). There is no {@html} and
+		// no external URL source, so this binding is confirmed safe.
+		new Set(['seg.href'])
+	],
+	[
 		'apps/web/src/routes/[lang]/explorer/account/[name=account]/+page.svelte',
 		// `txUrl ? lp(txUrl) : '#'` and `blockUrl ? lp(blockUrl) : '#'` —
 		// txUrl/blockUrl are `{@const}`s from morphitExplorerTxUrl(op.trxId) /

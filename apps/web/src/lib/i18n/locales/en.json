@@ -2099,8 +2099,7 @@
 	"instances": {
 		"no_clearnet": "No clearnet reliance",
 		"title": "Known Morphit instances",
-		"intro": "Morphit is federated. Independent {link} run Morphit instances, and your indexer discovers other instances automatically by reading the chain. This list shows their current health from the most recent probe.",
-		"intro_operators_link": "Operators",
+		"intro": "Morphit is federated. Independent Operators run Morphit instances, and they get paid 90% of all of the BLURT listing fees on their sites. The more people that use their site, the more they get paid. Learn more about it in the [FAQ], or [download] Morphit to your server now to [run your own node].",
 		"loading": "Loading directory…",
 		"bookmark_tip": "💡 Tip: bookmark a few of these instances — and their Tor, I2P, Lokinet or ENS addresses. The orderbook lives on the public blockchain. So if any one site is ever inaccessible, you can reach the very same orders and trades in many other places.",
 		"fetch_error": "Could not load the directory.",
@@ -3674,7 +3673,9 @@
 	},
 	"run_a_node": {
 		"title": "Run a Morphit node",
-		"subtitle": "Operate your own instance. Earn a share of listing fees. Help make Morphit uncensorable.",
+		"subtitle_pre": "Operate ",
+		"subtitle_link": "your own instance",
+		"subtitle_post": ". Earn 90% of the BLURT paid listing fees. Help make Morphit unstoppable.",
 		"why_heading": "Why run a node?",
 		"why_uncensor_title": "Morphit where it matters",
 		"why_uncensor_body": "Every additional node makes the network harder to censor. If your country blocks morphit.io, your instance stays reachable. You serve users who'd otherwise have no way to trade.",
@@ -3682,6 +3683,7 @@
 		"why_community_body": "Brand the interface for your region, your language, your local payment methods. Users trust frontends that speak their language and feel familiar — yours will.",
 		"why_privacy_title": "Minimize metadata leakage",
 		"why_privacy_body": "Users trading through your instance share metadata with you and only you. No other operator, not even Agorise, sees their activity patterns.",
+		"why_privacy_body_2": "Encourage users to use a VPN and your (included) Tor and/or I2P addresses. Your alternate, hidden addresses let users reach your instance from jurisdictions where clearnet access is blocked. No SSL/https certificates are needed either and the impact is enormous for users in censored networks and countries.",
 		"why_earn_title": "Paid automatically by Smart Contract",
 		"why_earn_body": "Every BLURT-paid listing fee your instance attracts pays you 90% — only 10% goes to the Morphit treasury to fund the furthering development and maintenance of the Morphit software itself. BTC- and XMR-paid fees flow 100% to the treasury for the same project obligations (the on-chain split mechanism only works for BLURT, but we made the BLURT split aggressively generous to compensate — 90/10 in your favor).\n\nA Smart Contract running on the blockchain enforces the split — not a person, not a company, not anyone who can change their mind. 100% automated. You provably assist, you provably get paid. Guaranteed in code.\n\nPayouts are denominated in BLURT, so if BLURT appreciates, so do your earnings — without any additional work on your part.",
 		"how_heading": "How to get started",
@@ -3691,7 +3693,6 @@
 		"step2_body": "Download the latest release, extract it into a /morphit/ folder, open a terminal there, and run sudo bash morphit-setup.sh — then choose \"Full guided install.\" A short wizard asks a few plain-language questions (your domain, your Blurt account, an email for HTTPS) and sets up everything for you: Node.js, PostgreSQL, the app and its services, auto-renewing HTTPS, the firewall, and your Tor and I2P addresses. No files to edit.",
 		"step3_title": "Register as an operator",
 		"step3_body": "Run npx morphit-ops register to claim your tag on-chain, first-come first-served. Your instance appears in the /operators directory and starts earning your 90% share of Blurt-paid listing fees automatically, delivered on-chain. See the operator-earnings FAQ for the economics.",
-		"runbook_pointer": "Full runbook:",
 		"asset_policy_heading": "Your instance, your asset policy",
 		"asset_policy_body": "Morphit's federation lets each operator pick which tradable assets their instance accepts new orders for. New assets ship default-ON instance-wide — operators opt out per-asset via the `MORPHIT_INDEXER_DISABLED_ASSETS` environment variable. This is how a federation of instances can serve different user preferences without anyone needing to fork the code.",
 		"asset_policy_default_label": "Default-on for new assets.",
@@ -3700,11 +3701,9 @@
 		"asset_policy_opt_out_body": "Operators who prefer their instance specializes in privacy-first or decentralization-first assets can disable any trade-only asset with `MORPHIT_INDEXER_DISABLED_ASSETS=\"USDT\"` (or a comma-separated list for multiple). Users posting through this operator's frontend then can't pick a disabled asset.",
 		"asset_policy_federation_label": "Federation stays intact.",
 		"asset_policy_federation_body": "Disabling an asset on your instance doesn't hide peer instances' orders from your users — chain history is shared, so the orderbook still surfaces them as read-only. The gate is only on NEW orders posted FROM your instance.",
-		"asset_policy_doc_pointer": "Full env-var reference and multi-asset examples in",
-		"asset_policy_doc_pointer_suffix": "under Trade-only asset configuration.",
 		"requirements_heading": "Resource requirements",
 		"req_hw_label": "Hardware",
-		"req_hw_value": "2 CPU cores, 2-4 GB RAM, 20 GB SSD",
+		"req_hw_value": "2+ CPU cores, 4+ GB RAM, 60+ GB drive space",
 		"req_network_label": "Network",
 		"req_network_value": "Home internet works fine — DDNS handles dynamic IPs, no static IP required",
 		"req_time_label": "Your time",
@@ -3899,7 +3898,7 @@
 		},
 		"run_a_node": {
 			"title": "Run a Morphit node — be an operator",
-			"description": "Operate a Morphit instance. Earn a share of listing fees denominated in BLURT. Help make Morphit uncensorable."
+			"description": "Operate a Morphit instance. Earn 90% of the BLURT paid listing fees. Help make Morphit unstoppable."
 		},
 		"about_this_instance": {
 			"title": "About this instance — Morphit",

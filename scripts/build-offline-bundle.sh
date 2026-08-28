@@ -271,6 +271,26 @@ if [ "${1:-}" != "--no-tar" ]; then
 		grep -qE "${_need}" <<< "${_manifest}" \
 			|| die "offline bundle is INCOMPLETE — missing ${_need} (packaging bug); NOT shipping this."
 	done
+	# The runtime-critical SOURCE must survive the packaging excludes too.  The
+	# long-running services run straight from TypeScript source via tsx (no
+	# compiled dist is shipped), and every @morphit/* workspace package is a
+	# src-entry import — so a future --exclude edit that stripped any of these
+	# would ship a bundle that INSTALLS but then crash-loops with "Cannot find
+	# module …", exactly the failure class we chase on a fresh node.  Assert the
+	# entrypoints, the tsx launcher, the offline marker, the web source (rebuilt
+	# on the target), and EVERY workspace package's source are present.  The
+	# package list is derived from disk so a newly-added package is covered with
+	# no edit here.
+	for _need in 'apps/indexer/src/main[.]ts' 'apps/relay/src/main[.]ts' \
+		'apps/web/src/' 'node_modules/[.]bin/tsx' 'node_modules/[.]morphit-bundle-complete'; do
+		grep -qE "${_need}" <<< "${_manifest}" \
+			|| die "offline bundle is INCOMPLETE — missing ${_need} (packaging stripped runtime-critical source); NOT shipping this."
+	done
+	for _pkgsrc in packages/*/src/index.ts; do
+		[ -e "${_pkgsrc}" ] || continue
+		grep -qE "${_pkgsrc//./[.]}" <<< "${_manifest}" \
+			|| die "offline bundle is INCOMPLETE — missing ${_pkgsrc} (a workspace package's source was stripped); NOT shipping this."
+	done
 	sha256sum "${OUT}" > "${OUT}.sha256"
 	log "Wrote ./${OUT} ($(du -sh "${OUT}" | cut -f1)) + ${OUT}.sha256"
 	log "Attach both to the release, or distribute via any of the mirrors."

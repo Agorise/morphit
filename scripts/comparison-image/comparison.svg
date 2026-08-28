@@ -53,7 +53,7 @@
 
   </g>
 <text x="1305" y="313" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="30" font-weight="600" fill="#f0f6fc">Bisq</text>
-<text x="1595" y="299" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="30" font-weight="600" fill="#f0f6fc">Haveno  /</text>
+<text x="1595" y="299" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="30" font-weight="600" fill="#f0f6fc">Haveno /</text>
 <text x="1595" y="335" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="30" font-weight="600" fill="#f0f6fc">RetoSwap</text>
 <text x="1885" y="313" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="30" font-weight="600" fill="#f0f6fc">OpenMonero</text>
 <text x="2175" y="313" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="30" font-weight="600" fill="#f0f6fc">BasicSwap</text>
@@ -775,12 +775,12 @@
 <text x="2175" y="6270" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
 <rect x="80" y="6290" width="2240" height="64" fill="#161c25"/>
 <rect x="870" y="6290" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
-<text x="110" y="6330" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">Requires user to run a full node (Bitcoin / Monero / per-coin)</text>
-<text x="1015" y="6334" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
+<text x="110" y="6330" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">No full node required — runs on light / remote nodes</text>
+<text x="1015" y="6336.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
 <text x="1305" y="6336.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
 <text x="1595" y="6336.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
-<text x="1885" y="6334" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
-<text x="2175" y="6336.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="1885" y="6336.074074074074" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans" font-size="38">💚</text>
+<text x="2175" y="6334" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
 <rect x="80" y="6354" width="2240" height="64" fill="#0d1119"/>
 <rect x="870" y="6354" width="290" height="64" fill="#0f1f15" fill-opacity="0.4"/>
 <text x="110" y="6394" font-family="DejaVu Sans, sans-serif" font-size="24" fill="#e6edf3">10 fully localized languages (incl. RTL Persian)</text>
@@ -1195,6 +1195,6 @@
 <text x="1595" y="9778" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
 <text x="1885" y="9778" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
 <text x="2175" y="9778" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#484f58">—</text>
-<text x="1200" y="9833" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="20" font-weight="600" fill="#8b949e">Morphit: 135/140 · Bisq: 20/140 · Haveno: 23/140 · OpenMonero: 20/140 · BasicSwap: 27/140</text>
-<text x="1200" y="9855" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" fill="#8b949e">As of 24 July, 2026. Information about other platforms gathered from their public docs and recent independent reviews; corrections welcome via Matrix #agorise:matrix.org.</text>
+<text x="1200" y="9833" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="20" font-weight="600" fill="#8b949e">Morphit: 136/140 · Bisq: 20/140 · Haveno/RetoSwap: 23/140 · OpenMonero: 21/140 · BasicSwap: 26/140</text>
+<text x="1200" y="9855" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" fill="#8b949e">As of 27 August, 2026. Information about other platforms gathered from their public docs and recent independent reviews; corrections welcome via Matrix #agorise:matrix.org.</text>
 </svg>

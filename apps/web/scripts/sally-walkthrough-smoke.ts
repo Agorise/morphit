@@ -184,10 +184,12 @@ const SCENARIOS: readonly Scenario[] = [
 	{
 		name: 'RAN2 — /run-a-node uses Forgejo URL syntax (not GitLab /-/blob/)',
 		file: 'src/routes/[lang]/run-a-node/+page.svelte',
+		// OPERATIONS.md doc-pointers were intentionally removed from this page
+		// (marketing onramp, not the ops manual); the RUN-A-MORPHIT-NODE.md link
+		// plus the mustNotHave GitLab-pattern check still enforce Forgejo syntax.
 		mustHave: [
 			'Sally finding RAN2',
-			'git.agorise.net/agorise/morphit/src/branch/main/docs/RUN-A-MORPHIT-NODE.md',
-			'git.agorise.net/agorise/morphit/src/branch/main/docs/OPERATIONS.md'
+			'git.agorise.net/agorise/morphit/src/branch/main/docs/RUN-A-MORPHIT-NODE.md'
 		],
 		mustNotHave: ['git.agorise.net/agorise/morphit/-/blob/']
 	},

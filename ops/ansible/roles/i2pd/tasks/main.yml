@@ -1,10 +1,39 @@
 ---
-- name: Add the purplei2p PPA for a current i2pd (online installs)
-  # The Ubuntu distro i2pd (2.49.0) crash-loops on startup (corrupt-netDb SIGABRT
-  # loop — see REVISIT); the maintained purplei2p build (2.61.0+) is stable. An
-  # OFFLINE install skips this and gets the current i2pd from the vendored bundle
-  # instead (build-offline-bundle.sh downloads it from this same PPA).
-  when: not morphit_offline_install | default(false)
+# i2pd is the I2P transport for hidden-service RPC and for reaching this instance
+# from censored networks — so it has to install reliably exactly where the
+# network is most hostile.  Order of preference, most robust first:
+#
+#   1. the bundled purplei2p .deb (an offline appliance, OR any box that carries
+#      the offline bundle) — no PPA, no keyserver, no Launchpad.  This is the
+#      censored-network path: keyserver.ubuntu.com and launchpad.net are commonly
+#      blocked, and the deprecated `apt-key --recv-keys` the PPA add uses fails
+#      outright there, so we never go near them when the .deb is already on disk.
+#   2. the purplei2p PPA (online, no bundle).  The distro i2pd 2.49.0 crash-loops
+#      on startup (see REVISIT), so the maintained PPA build is preferred.  This
+#      path is non-fatal: if the PPA or its signing key can't be reached, we fall
+#      back to the distribution's own i2pd rather than stopping the whole install
+#      with a wall of red.
+
+- name: Detect a bundled purplei2p i2pd .deb (offline appliance / bundle-carrying box)
+  ansible.builtin.find:
+    paths: "{{ morphit_local_source_path }}/vendor/apt"
+    patterns: "i2pd_*.deb"
+  register: morphit_i2pd_bundled_deb
+  failed_when: false
+
+- name: Install i2pd from the bundled .deb (no PPA, no keyserver — censored-network safe)
+  # apt resolves the .deb's own dependencies from whatever sources are active
+  # (the online mirrors when online, or the vendor-redirected bundle when
+  # air-gapped), so this one path covers both.  This is the path the operator (and any
+  # operator on a filtered connection who downloaded the offline tarball) takes.
+  ansible.builtin.apt:
+    deb: "{{ morphit_i2pd_bundled_deb.files | map(attribute='path') | list | sort | first }}"
+    state: present
+  when: (morphit_i2pd_bundled_deb.files | default([]) | length) > 0
+  notify: Restart i2pd
+
+- name: Install a current i2pd from the purplei2p PPA (online, no bundle present)
+  when: (morphit_i2pd_bundled_deb.files | default([]) | length) == 0
   block:
     - name: Ensure add-apt-repository is available (for the PPA)
       ansible.builtin.apt:
@@ -14,22 +43,47 @@
         cache_valid_time: 3600
 
     - name: Add ppa:purplei2p/i2pd
+      # Retry the PPA add: it fetches the repo signing key from a keyserver, which
+      # is often slow or intermittently blocked on filtered networks. A few
+      # retries clears the transient case before we fall through to the distro
+      # i2pd in the rescue below.
       ansible.builtin.apt_repository:
         repo: ppa:purplei2p/i2pd
         filename: purplei2p-i2pd
         state: present
         update_cache: true
+      register: morphit_i2pd_ppa_add
+      until: morphit_i2pd_ppa_add is success
+      retries: 3
+      delay: 5
 
-- name: Install i2pd (current build — from the PPA online, or the bundle offline)
-  # state=latest is deliberate here: it UPGRADES a pre-existing broken distro
-  # 2.49.0 to the maintained build. i2pd is the I2P transport for hidden RPC and
-  # a stale one crash-loops, so "newest available" is exactly what we want.
-  ansible.builtin.apt:  # noqa: package-latest
-    name: i2pd
-    state: latest
-    update_cache: true
-    cache_valid_time: 3600
-  notify: Restart i2pd
+    - name: Install i2pd (maintained build from the PPA)
+      # state=latest is deliberate: it UPGRADES a pre-existing broken distro
+      # 2.49.0 to the maintained build.
+      ansible.builtin.apt:  # noqa: package-latest
+        name: i2pd
+        state: latest
+        update_cache: true
+        cache_valid_time: 3600
+      notify: Restart i2pd
+  rescue:
+    - name: Couldn't reach the purplei2p PPA — falling back to the distribution's i2pd
+      ansible.builtin.debug:
+        msg: >-
+          Couldn't reach the purplei2p PPA or its signing key. This is normal on a
+          filtered or censored network that blocks launchpad.net or
+          keyserver.ubuntu.com — nothing is wrong with your server. Installing the
+          i2pd that ships in the distribution instead. (For the newest, most
+          stable i2pd on a network like this, install from the offline bundle,
+          which carries it — see docs/RUN-A-MORPHIT-NODE.md.)
+
+    - name: Install i2pd from the distribution (Ubuntu universe — reachable where the PPA isn't)
+      ansible.builtin.apt:
+        name: i2pd
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+      notify: Restart i2pd
 
 - name: Check whether the server already has an operable keyfile (to preserve it)
   ansible.builtin.stat:

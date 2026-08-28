@@ -2099,8 +2099,7 @@
 	"instances": {
 		"no_clearnet": "Aucune dépendance au clearnet",
 		"title": "Instances Morphit connues",
-		"intro": "Morphit est fédéré. Des {link} indépendants exécutent des instances Morphit, et votre indexeur découvre automatiquement les autres instances en lisant la chaîne. Cette liste montre leur état actuel depuis la dernière vérification.",
-		"intro_operators_link": "opérateurs",
+		"intro": "Morphit est fédéré. Des opérateurs indépendants exploitent des instances Morphit, et ils reçoivent 90% de tous les frais de listing en BLURT sur leurs sites. Plus les gens utilisent leur site, plus ils gagnent. Apprenez-en plus dans la [FAQ], ou [téléchargez] Morphit sur votre serveur dès maintenant pour [exécuter votre propre nœud].",
 		"loading": "Chargement du répertoire…",
 		"bookmark_tip": "💡 Astuce : ajoutez à vos favoris quelques-unes de ces instances — ainsi que leurs adresses Tor, I2P ou Lokinet — dans votre navigateur. Le carnet d'ordres se trouve sur la blockchain publique : si un site venait à être bloqué ou hors ligne, vous retrouverez exactement les mêmes ordres et transactions via n'importe quelle autre instance.",
 		"fetch_error": "Impossible de charger le répertoire.",
@@ -3674,7 +3673,9 @@
 	},
 	"run_a_node": {
 		"title": "Exécuter un nœud Morphit",
-		"subtitle": "Exploitez votre propre instance. Gagnez une part des frais de publication. Aidez à rendre Morphit incensurable.",
+		"subtitle_pre": "Exploitez ",
+		"subtitle_link": "votre propre instance",
+		"subtitle_post": ". Gagnez 90% des frais de publication payés en BLURT. Aidez à rendre Morphit inarrêtable.",
 		"why_heading": "Pourquoi exécuter un nœud ?",
 		"why_uncensor_title": "Morphit là où ça compte",
 		"why_uncensor_body": "Chaque nœud supplémentaire rend le réseau plus difficile à censurer. Si votre pays bloque morphit.io, votre instance reste accessible. Vous servez des utilisateurs qui n'auraient autrement aucun moyen de trader.",
@@ -3682,6 +3683,7 @@
 		"why_community_body": "Marquez l'interface pour votre région, votre langue, vos méthodes de paiement locales. Les utilisateurs font confiance aux frontends qui parlent leur langue et leur sont familiers — le vôtre le sera.",
 		"why_privacy_title": "Minimisez les fuites de métadonnées",
 		"why_privacy_body": "Les utilisateurs qui tradent via votre instance partagent les métadonnées avec vous et seulement vous. Aucun autre opérateur, pas même Agorise, ne voit leurs schémas d'activité.",
+		"why_privacy_body_2": "Encouragez les utilisateurs à utiliser un VPN et vos adresses Tor et/ou I2P (incluses). Vos adresses alternatives et cachées permettent aux utilisateurs d'atteindre votre instance depuis des juridictions où l'accès au clearnet est bloqué. Aucun certificat SSL/https n'est requis non plus, et l'impact est énorme pour les utilisateurs des réseaux et pays censurés.",
 		"why_earn_title": "Payé automatiquement par Smart Contract",
 		"why_earn_body": "Chaque commission d'annonce payée en BLURT que ton instance attire te paie 90 % — seulement 10 % va à la trésorerie Morphit pour financer le développement continu et la maintenance du logiciel Morphit lui-même. Les commissions payées en BTC et XMR vont à 100 % à la trésorerie pour les mêmes obligations projet (le mécanisme de répartition on-chain ne fonctionne que pour BLURT, mais nous avons rendu la répartition BLURT agressivement généreuse pour compenser — 90/10 en ta faveur).\n\nUn Smart Contract tournant sur la blockchain applique la répartition — pas une personne, pas une entreprise, personne qui puisse changer d'avis. 100 % automatisé. Tu aides prouvablement, tu es payé prouvablement. Garanti dans le code.\n\nLes paiements sont libellés en BLURT, donc si BLURT s'apprécie, tes revenus aussi — sans travail supplémentaire.",
 		"how_heading": "Comment commencer",
@@ -3691,7 +3693,6 @@
 		"step2_body": "Téléchargez la dernière version, extrayez-la dans un dossier /morphit/, ouvrez-y un terminal et lancez sudo bash morphit-setup.sh — puis choisissez « Full guided install ». Un court assistant vous pose quelques questions en langage clair (votre domaine, votre compte Blurt, un e-mail pour HTTPS) et configure tout pour vous : Node.js, PostgreSQL, l'application et ses services, HTTPS à renouvellement automatique, le pare-feu et vos adresses Tor et I2P. Aucun fichier à modifier.",
 		"step3_title": "Inscrivez-vous comme opérateur",
 		"step3_body": "Lancez npx morphit-ops register pour revendiquer votre tag sur la chaîne, premier arrivé premier servi. Votre instance apparaît dans l'annuaire /operators et commence à gagner automatiquement votre part de 90 % des frais de dépôt payés en Blurt, versés sur la chaîne. Consultez la FAQ sur les revenus des opérateurs pour les détails économiques.",
-		"runbook_pointer": "Manuel complet :",
 		"asset_policy_heading": "Votre instance, votre politique d'actifs",
 		"asset_policy_body": "La fédération de Morphit permet à chaque opérateur de choisir pour quels actifs négociables son instance accepte de nouveaux ordres. Les nouveaux actifs sont livrés ACTIVÉS par défaut à l'échelle de l'instance — les opérateurs les désactivent par actif via la variable d'environnement `MORPHIT_INDEXER_DISABLED_ASSETS`. Ainsi une fédération d'instances peut servir des préférences utilisateur différentes sans que personne n'ait à bifurquer le code.",
 		"asset_policy_default_label": "Activé par défaut pour les nouveaux actifs.",
@@ -3700,11 +3701,9 @@
 		"asset_policy_opt_out_body": "Les opérateurs qui préfèrent que leur instance se spécialise dans des actifs privacy-first ou decentralization-first peuvent désactiver tout actif uniquement-échangeable avec `MORPHIT_INDEXER_DISABLED_ASSETS=\"USDT\"` (ou une liste séparée par des virgules pour plusieurs). Les utilisateurs qui postent via le frontend de cet opérateur ne peuvent alors pas choisir un actif désactivé.",
 		"asset_policy_federation_label": "La fédération reste intacte.",
 		"asset_policy_federation_body": "Désactiver un actif sur votre instance ne cache pas les ordres des instances pairs à vos utilisateurs — l'historique de chaîne est partagé, donc l'orderbook les affiche toujours en lecture seule. Le blocage ne s'applique qu'aux NOUVEAUX ordres postés DEPUIS votre instance.",
-		"asset_policy_doc_pointer": "Référence complète des variables d'environnement et exemples multi-actifs dans",
-		"asset_policy_doc_pointer_suffix": "sous Trade-only asset configuration.",
 		"requirements_heading": "Exigences en ressources",
 		"req_hw_label": "Matériel",
-		"req_hw_value": "2 cœurs CPU, 2-4 Go RAM, 20 Go SSD",
+		"req_hw_value": "2+ cœurs CPU, 4+ Go RAM, 60+ Go d'espace disque",
 		"req_network_label": "Réseau",
 		"req_network_value": "Internet domestique convient — DDNS gère les IP dynamiques, pas d'IP statique requise",
 		"req_time_label": "Votre temps",
@@ -3899,7 +3898,7 @@
 		},
 		"run_a_node": {
 			"title": "Faire tourner un nœud Morphit — devenir opérateur",
-			"description": "Exploitez une instance Morphit. Gagnez une part des frais de listing en BLURT. Aidez à rendre Morphit incensurable."
+			"description": "Exploitez une instance Morphit. Gagnez 90% des frais de listing payés en BLURT. Aidez à rendre Morphit inarrêtable."
 		},
 		"about_this_instance": {
 			"title": "À propos de cette instance — Morphit",

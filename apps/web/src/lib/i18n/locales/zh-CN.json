@@ -2099,8 +2099,7 @@
 	"instances": {
 		"no_clearnet": "无明网依赖",
 		"title": "已知的 Morphit 实例",
-		"intro": "Morphit 是联邦化的。独立{link}运行 Morphit 实例,你的索引器通过读取链自动发现其他实例。下面是来自最近一次探测的它们当前的健康状况。",
-		"intro_operators_link": "运营者",
+		"intro": "Morphit 是联邦式的。独立运营者运行 Morphit 实例，并从其站点上所有以 BLURT 支付的挂单费用中获得 90%。使用其站点的人越多，他们赚得越多。在 [常见问题] 中了解更多，或立即将 Morphit [下载] 到你的服务器以 [运行你自己的节点]。",
 		"loading": "正在加载目录…",
 		"bookmark_tip": "💡 提示：在浏览器中收藏其中几个实例——以及它们的 Tor、I2P 或 Lokinet 地址。订单簿存在于公开的区块链上，因此即使某个站点被封锁或下线，你也能通过任何其他实例访问完全相同的订单和交易。",
 		"fetch_error": "无法加载目录。",
@@ -3674,7 +3673,9 @@
 	},
 	"run_a_node": {
 		"title": "运行 Morphit 节点",
-		"subtitle": "运营你自己的实例。赚取挂单费用分成。帮助让 Morphit 不可审查。",
+		"subtitle_pre": "运营",
+		"subtitle_link": "你自己的实例",
+		"subtitle_post": "。赚取以 BLURT 支付的挂单费用的 90%。帮助让 Morphit 不可阻挡。",
 		"why_heading": "为什么运行节点？",
 		"why_uncensor_title": "在重要的地方运行 Morphit",
 		"why_uncensor_body": "每增加一个节点都会让网络更难被审查。如果你的国家屏蔽 morphit.io,你的实例仍可达。你在服务那些否则无法交易的用户。",
@@ -3682,6 +3683,7 @@
 		"why_community_body": "为你的地区、你的语言、你的本地支付方式定制界面。用户信任说他们语言、让他们觉得熟悉的前端 —— 你的前端将是这样。",
 		"why_privacy_title": "最小化元数据泄露",
 		"why_privacy_body": "通过你的实例交易的用户只与你分享元数据。没有其他运营者,甚至 Agorise 也看不到他们的活动模式。",
+		"why_privacy_body_2": "鼓励用户使用 VPN 以及你（内置）的 Tor 和/或 I2P 地址。你的备用隐藏地址让用户能够从明网访问被封锁的司法管辖区访问你的实例。也不需要 SSL/https 证书，对于身处受审查网络和国家的用户，影响是巨大的。",
 		"why_earn_title": "由智能合约(SC)自动支付",
 		"why_earn_body": "你实例吸引的每一笔以 BLURT 支付的发布费向你支付 90% — 仅 10% 进入 Morphit 财库,用于资助 Morphit 软件本身的持续开发和维护。以 BTC 和 XMR 支付的费用 100% 流向财库,用于同样的项目义务(链上分配机制仅适用于 BLURT,但我们使 BLURT 分配积极慷慨以弥补 — 90/10 对你有利)。\n\n运行在区块链上的 Smart Contract 强制执行分配 — 不是某个人、某个公司、某个可以改变主意的人。100% 自动化。你可证明地帮助,你可证明地获得报酬。在代码中保证。\n\n支付以 BLURT 计价,所以如果 BLURT 升值,你的收入也升值 — 无需额外工作。",
 		"how_heading": "如何开始",
@@ -3691,7 +3693,6 @@
 		"step2_body": "下载最新版本，解压到 /morphit/ 文件夹，在其中打开终端并运行 sudo bash morphit-setup.sh——然后选择「Full guided install」。一个简短的向导会用通俗语言问你几个问题（你的域名、你的 Blurt 账户、用于 HTTPS 的邮箱），并为你配置好一切：Node.js、PostgreSQL、应用及其服务、自动续期的 HTTPS、防火墙，以及你的 Tor 和 I2P 地址。无需编辑任何文件。",
 		"step3_title": "注册为运营者",
 		"step3_body": "运行 npx morphit-ops register，以先到先得的方式在链上认领你的标签。你的实例会出现在 /operators 目录中，并开始自动赚取你那 90% 的以 Blurt 支付的挂单费，直接在链上发放。经济细节请见常见问题解答中的运营者收益条目。",
-		"runbook_pointer": "完整运行手册：",
 		"asset_policy_heading": "你的实例,你的资产政策",
 		"asset_policy_body": "Morphit 的联邦让每个运营方选择其实例为哪些可交易资产接受新订单。新资产默认在实例范围内开启交付——运营方通过 `MORPHIT_INDEXER_DISABLED_ASSETS` 环境变量按资产逐个禁用。这样一个实例联邦可以服务不同的用户偏好,而无需任何人 fork 代码。",
 		"asset_policy_default_label": "新资产默认开启。",
@@ -3700,11 +3701,9 @@
 		"asset_policy_opt_out_body": "希望其实例专注于隐私优先或去中心化优先资产的运营方,可通过 `MORPHIT_INDEXER_DISABLED_ASSETS=\"USDT\"`(或逗号分隔的列表表示多个)禁用任何仅交易资产。通过此运营方前端发布的用户无法选择已禁用的资产。",
 		"asset_policy_federation_label": "联邦保持完整。",
 		"asset_policy_federation_body": "在你的实例上禁用某资产不会向你的用户隐藏对等实例的订单——链历史是共享的,所以 orderbook 仍以只读方式显示它们。禁用仅适用于从你的实例发布的新订单。",
-		"asset_policy_doc_pointer": "完整的环境变量参考和多资产示例见",
-		"asset_policy_doc_pointer_suffix": "的 Trade-only asset configuration 章节。",
 		"requirements_heading": "资源需求",
 		"req_hw_label": "硬件",
-		"req_hw_value": "2 核 CPU,2-4 GB RAM,20 GB SSD",
+		"req_hw_value": "2+ 核 CPU，4+ GB RAM，60+ GB 磁盘空间",
 		"req_network_label": "网络",
 		"req_network_value": "家庭互联网就可以 — DDNS 处理动态 IP,不需要静态 IP",
 		"req_time_label": "你的时间",
@@ -3899,7 +3898,7 @@
 		},
 		"run_a_node": {
 			"title": "运行一个 Morphit 节点 — 成为运营者",
-			"description": "运营一个 Morphit 实例。赚取以 BLURT 结算的挂单费分成。帮助 Morphit 抵御审查。"
+			"description": "运营一个 Morphit 实例。赚取以 BLURT 支付的挂单费用的 90%。帮助让 Morphit 不可阻挡。"
 		},
 		"about_this_instance": {
 			"title": "关于此实例 — Morphit",

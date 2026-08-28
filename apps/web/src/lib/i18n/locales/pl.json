@@ -2099,8 +2099,7 @@
 	"instances": {
 		"no_clearnet": "Bez zależności od clearnetu",
 		"title": "Znane instancje Morphit",
-		"intro": "Morphit jest sfederowany. Niezależni {link} prowadzą instancje Morphit, a Twój indexer automatycznie odkrywa inne instancje czytając łańcuch. Ta lista pokazuje ich aktualny stan z ostatniego sprawdzenia.",
-		"intro_operators_link": "operatorzy",
+		"intro": "Morphit jest federacyjny. Niezależni operatorzy prowadzą instancje Morphit i otrzymują 90% wszystkich opłat za listingi w BLURT na swoich stronach. Im więcej osób korzysta z ich strony, tym więcej zarabiają. Dowiedz się więcej w [FAQ] lub [pobierz] Morphit na swój serwer już teraz, aby [uruchomić własny węzeł].",
 		"loading": "Wczytywanie katalogu…",
 		"bookmark_tip": "💡 Wskazówka: dodaj do zakładek kilka z tych instancji — wraz z ich adresami Tor, I2P lub Lokinet — w swojej przeglądarce. Księga zleceń znajduje się na publicznym blockchainie, więc jeśli któraś witryna zostanie zablokowana lub przestanie działać, te same zlecenia i transakcje znajdziesz przez dowolną inną instancję.",
 		"fetch_error": "Nie można załadować katalogu.",
@@ -3674,7 +3673,9 @@
 	},
 	"run_a_node": {
 		"title": "Uruchom węzeł Morphit",
-		"subtitle": "Obsługuj własną instancję. Zarabiaj udział w opłatach aukcyjnych. Pomóż uczynić Morphit nieocenzurowalnym.",
+		"subtitle_pre": "Obsługuj ",
+		"subtitle_link": "własną instancję",
+		"subtitle_post": ". Zarabiaj 90% opłat aukcyjnych płaconych w BLURT. Pomóż uczynić Morphit niepowstrzymanym.",
 		"why_heading": "Dlaczego warto uruchomić węzeł?",
 		"why_uncensor_title": "Morphit tam, gdzie to się liczy",
 		"why_uncensor_body": "Każdy dodatkowy węzeł utrudnia cenzurowanie sieci. Jeśli twój kraj blokuje morphit.io, twoja instancja pozostaje osiągalna. Obsługujesz użytkowników, którzy inaczej nie mieliby jak handlować.",
@@ -3682,6 +3683,7 @@
 		"why_community_body": "Dostosuj branding twojego interfejsu dla swojego regionu, języka i swoich lokalnych metod płatności. Użytkownicy ufają frontendom, które mówią ich językiem i są im znajome — twój taki będzie.",
 		"why_privacy_title": "Minimalizuj wyciek metadanych",
 		"why_privacy_body": "Użytkownicy handlujący przez twoją instancję dzielą metadane tylko z tobą. Żaden inny operator, nawet Agorise, nie widzi wzorców ich aktywności.",
+		"why_privacy_body_2": "Zachęcaj użytkowników do korzystania z VPN oraz twoich (dołączonych) adresów Tor i/lub I2P. Twoje alternatywne, ukryte adresy pozwalają użytkownikom dotrzeć do twojej instancji z jurysdykcji, w których dostęp do clearnetu jest zablokowany. Nie są też potrzebne certyfikaty SSL/https, a wpływ jest ogromny dla użytkowników w ocenzurowanych sieciach i krajach.",
 		"why_earn_title": "Płatność automatyczna przez Smart Contract",
 		"why_earn_body": "Każda opłata w BLURT za listing ogłoszenia, którą przyciągnie twoja instancja, płaci ci 90% — tylko 10% trafia do skarbca Morphit. Środki te są niezbędne na finansowanie dalszego rozwoju i utrzymania samego oprogramowania Morphit. Opłaty płatne w BTC i XMR trafiają w 100% do skarbca na te same zobowiązania projektowe (mechanizm podziału on-chain działa tylko dla BLURT, ale uczyniliśmy podział BLURT agresywnie hojnym dla kompensacji — 90/10 na twoją korzyść).\n\nSmart Contract działający na blockchainie jest jedynym mechanizmem odpowiedzialnym za ten podział — nie osoba, nie firma, nikt kto może zmienić zdanie. Proces jest w 100% zautomatyzowany. Skutecznie pomagasz, hojnie ci płacą. Gwarancja w kodzie.\n\nWypłaty są denominowane w BLURT, więc jeśli BLURT się umacnia, twoje zarobki też — bez dodatkowej pracy.",
 		"how_heading": "Jak zacząć",
@@ -3691,7 +3693,6 @@
 		"step2_body": "Pobierz najnowsze wydanie, rozpakuj je do folderu /morphit/, otwórz tam terminal i uruchom sudo bash morphit-setup.sh — następnie wybierz „Full guided install”. Krótki kreator zadaje kilka pytań prostym językiem (twoja domena, twoje konto Blurt, e-mail do HTTPS) i konfiguruje wszystko za ciebie: Node.js, PostgreSQL, aplikację i jej usługi, HTTPS z automatycznym odnawianiem, zaporę oraz twoje adresy Tor i I2P. Bez edytowania plików.",
 		"step3_title": "Zarejestruj się jako operator",
 		"step3_body": "Uruchom npx morphit-ops register, aby zająć swój tag w łańcuchu — kto pierwszy, ten lepszy. Twoja instancja pojawia się w katalogu /operators i zaczyna automatycznie zarabiać twoje 90% opłat za wystawienie płaconych w Blurt, wypłacanych w łańcuchu. Zobacz FAQ o zarobkach operatora, aby poznać ekonomię.",
-		"runbook_pointer": "Pełna instrukcja uruchomienia:",
 		"asset_policy_heading": "Twoja instancja, twoja polityka aktywów",
 		"asset_policy_body": "Federacja Morphit pozwala każdemu operatorowi wybrać, dla których aktywów handlowych jego instancja przyjmuje nowe zlecenia. Nowe aktywa są dostarczane WŁĄCZONE domyślnie na poziomie instancji — operatorzy wyłączają je per-aktyw poprzez zmienną środowiskową `MORPHIT_INDEXER_DISABLED_ASSETS`. Tak federacja instancji może obsługiwać różne preferencje użytkowników bez potrzeby forkowania kodu przez kogokolwiek.",
 		"asset_policy_default_label": "Domyślnie włączone dla nowych aktywów.",
@@ -3700,11 +3701,9 @@
 		"asset_policy_opt_out_body": "Operatorzy preferujący, by ich instancja specjalizowała się w aktywach privacy-first lub decentralization-first, mogą wyłączyć dowolne aktywo trade-only poprzez `MORPHIT_INDEXER_DISABLED_ASSETS=\"USDT\"` (lub listę oddzieloną przecinkami dla wielu). Użytkownicy publikujący przez frontend tego operatora nie mogą wybrać wyłączonego aktywa.",
 		"asset_policy_federation_label": "Federacja pozostaje niezmienna.",
 		"asset_policy_federation_body": "Wyłączenie aktywa na twojej instancji nie ukrywa zleceń z instancji partnerskich przed twoimi użytkownikami — historia łańcucha jest współdzielona, więc orderbook nadal pokazuje je w trybie tylko-do-odczytu. Blokada dotyczy tylko NOWYCH zleceń publikowanych Z twojej instancji.",
-		"asset_policy_doc_pointer": "Pełną listę zmiennych środowiskowych oraz przykłady dla wielu aktywów znajdziesz w",
-		"asset_policy_doc_pointer_suffix": "pod Trade-only asset configuration.",
 		"requirements_heading": "Wymagania sprzętowe",
 		"req_hw_label": "Sprzęt",
-		"req_hw_value": "2 rdzenie CPU, 2-4 GB RAM, 20 GB SSD",
+		"req_hw_value": "2+ rdzenie CPU, 4+ GB RAM, 60+ GB miejsca na dysku",
 		"req_network_label": "Sieć",
 		"req_network_value": "Domowy internet wystarczy — DDNS obsługuje dynamiczne IP, statyczny IP nie jest wymagany",
 		"req_time_label": "Twój czas",
@@ -3899,7 +3898,7 @@
 		},
 		"run_a_node": {
 			"title": "Uruchom węzeł Morphit — zostań operatorem",
-			"description": "Prowadź instancję Morphit. Zarabiaj udział w opłatach za listingi w BLURT. Pomóż uczynić Morphit nieocenzurowanym."
+			"description": "Prowadź instancję Morphit. Zarabiaj 90% opłat za listingi płaconych w BLURT. Pomóż uczynić Morphit niepowstrzymanym."
 		},
 		"about_this_instance": {
 			"title": "O tej instancji — Morphit",

@@ -143,10 +143,14 @@ await scenario('allowlist deliberately excludes spam-economic constants', () => 
 		'MORPHIT_INDEXER_DATABASE_URL',
 		'MORPHIT_INDEXER_CHAIN_ID',
 		'MORPHIT_INDEXER_OFFICIAL_POSTING_PUBKEY',
-		// Phase D — fees account is critical infra (typo →
-		// fees flow to wrong account).  Set via OS env, not
-		// the allowlist.
-		'MORPHIT_INDEXER_FEE_RECIPIENT',
+		// NOTE: MORPHIT_INDEXER_FEE_RECIPIENT is intentionally NOT excluded.
+		// cp407 moved it INTO morphit.config.env (see the template comment) so
+		// `morphit-ops edit` (fees-account) can change the operator's 90%-fee
+		// account without the ansible-rendered indexer.env shadowing it; the edit
+		// path validates the Blurt account name, and the indexer falls back to
+		// @morphit-fees when unset. It must therefore be allowlisted — leaving it
+		// out crash-loops the indexer + relay on every install that sets fees.
+		// The relay account below stays OS-env-only (it is NOT written to config.env).
 		// Same for relay account name — typo here misroutes
 		// signup chain ops.
 		'MORPHIT_INDEXER_RELAY_ACCOUNT',
