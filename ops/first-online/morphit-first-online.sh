@@ -226,7 +226,7 @@ if [ "${MORPHIT_AUTO_REGISTER}" = "yes" ] && [ ! -f "${DONE_REGISTER}" ]; then
 		MORPHIT_INSTANCE_NAME="$(_get_env MORPHIT_INSTANCE_NAME "${_conf_env}")"
 		MORPHIT_INSTANCE_ORIGIN="$(_get_env MORPHIT_INSTANCE_ORIGIN "${_conf_env}")"
 		MORPHIT_INSTANCE_OPERATOR_TAG="$(_get_env MORPHIT_INSTANCE_OPERATOR_TAG "${_conf_env}")"
-		MORPHIT_INSTANCE_CONTACT_URL="$(_get_env MORPHIT_INSTANCE_CONTACT_URL "${INDEXER_ENV}")"
+		MORPHIT_INSTANCE_CONTACT_URL="$(_get_env MORPHIT_INSTANCE_CONTACT_URL "${_conf_env}")"
 		# Prefer the decrypted sealed credential; fall back to any plaintext file the
 		# env layout declares (older/plaintext setups).
 		if [ -n "${_passfile}" ]; then

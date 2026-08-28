@@ -194,6 +194,23 @@ check(
 		!/\.[ \t]+["']?\$\{RELAY_ENV\}/.test(src)
 );
 
+// The FOUR operator-editable instance-branding vars (name / origin / operator-tag
+// / contact-url) live ONLY in morphit.config.env — indexer.env.j2 documents this
+// and the indexer + `morphit-ops edit` both treat config.env as their home. A
+// regression that reads ANY of them from indexer.env (which doesn't carry them)
+// makes the register broadcast an EMPTY value: this is exactly how a real
+// operator's contact_url silently never reached the chain (register op showed an
+// empty contact_url even though it was set). Assert all four read from _conf_env,
+// and that contact_url specifically is NOT read from INDEXER_ENV.
+check(
+	'first-online reads every instance-branding var (name/origin/tag/contact) from morphit.config.env — not indexer.env (a wrong-file read broadcasts EMPTY)',
+	/_get_env MORPHIT_INSTANCE_NAME "\$\{_conf_env\}/.test(src) &&
+		/_get_env MORPHIT_INSTANCE_ORIGIN "\$\{_conf_env\}/.test(src) &&
+		/_get_env MORPHIT_INSTANCE_OPERATOR_TAG "\$\{_conf_env\}/.test(src) &&
+		/_get_env MORPHIT_INSTANCE_CONTACT_URL "\$\{_conf_env\}/.test(src) &&
+		!/_get_env MORPHIT_INSTANCE_CONTACT_URL "\$\{INDEXER_ENV\}/.test(src)
+);
+
 // ── Wizard-side offline resilience (a connection dropping MID-WIZARD must never
 //    hang or block — bounded + non-fatal, then first-online recovers on reconnect) ──
 // The install already defers network work to first-online (checks above); the ONLY

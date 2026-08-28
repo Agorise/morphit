@@ -62,6 +62,16 @@ export function selfReachableStatus(lagBlocks: number | null): ProbeStatus {
 }
 const ORDERBOOK_ACTIVITY_GRACE_DAYS = 7; // newer instances exempt
 const FAILURE_DROP_DAYS = 7; // drop row after 7d of consecutive failures
+/** Hidden-service (.onion/.i2p) peers are probed over Tor/I2P, whose circuits
+ *  fail transiently far more often than they signal a dead peer (a slow or
+ *  congested circuit, or our own daemon momentarily flaky — e.g. right after an
+ *  upstream outage). So we do NOT flip a hidden-service peer that was reachable
+ *  straight to 'unreachable' on a single miss; we hold its last status until it
+ *  has missed this many probes IN A ROW. Clearnet peers keep the immediate
+ *  behaviour (a clearnet timeout is a reliable signal). Mirrors the
+ *  benefit-of-the-doubt the proxy-down path (persistHiddenServiceListed) already
+ *  gives when OUR proxy is down. */
+const HIDDEN_SERVICE_UNREACHABLE_AFTER = 3;
 /** Probe schedule, by current status.  Picks the longest interval
  *  applicable; "never" gets 0 to probe ASAP. */
 const PROBE_INTERVAL_MS = {
@@ -445,14 +455,24 @@ export class FederationProbeScheduler {
 				]
 			);
 		} else {
+			// Hidden-service peers get hysteresis before 'unreachable' (see
+			// HIDDEN_SERVICE_UNREACHABLE_AFTER): hold the prior status until they've
+			// missed several probes in a row, so one flaky Tor/I2P circuit can't
+			// red-flag a healthy onion-only node. Clearnet peers, and any non-
+			// 'unreachable' failure status, are written immediately as before.
+			const softenHidden =
+				isHiddenServiceOrigin(inst.origin) && outcome.status === 'unreachable';
 			await this.db.query(
 				`UPDATE known_instances SET
 					last_probed_at = NOW(),
-					last_probe_status = $2,
-					last_probe_error = $3,
-					consecutive_failures = consecutive_failures + 1
+					consecutive_failures = consecutive_failures + 1,
+					last_probe_status = CASE
+						WHEN $4::boolean AND consecutive_failures + 1 < $5 THEN last_probe_status
+						ELSE $2
+					END,
+					last_probe_error = $3
 				 WHERE origin = $1`,
-				[inst.origin, outcome.status, outcome.error]
+				[inst.origin, outcome.status, outcome.error, softenHidden, HIDDEN_SERVICE_UNREACHABLE_AFTER]
 			);
 		}
 	}
