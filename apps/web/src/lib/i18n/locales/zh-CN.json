@@ -4054,7 +4054,8 @@
 			"err_http_rate": "被节点限流（HTTP 429）",
 			"transport_tor": "Tor",
 			"transport_i2p": "I2P",
-			"transport_local": "本地"
+			"transport_local": "本地",
+			"reestablishing": "重新建立中…"
 		},
 		"session": {
 			"autolock_changed": "已改为 {label}",

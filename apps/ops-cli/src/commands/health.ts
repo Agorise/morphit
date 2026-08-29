@@ -836,6 +836,10 @@ export interface RpcEndpointRow {
 	readonly transport: 'clearnet' | 'tor' | 'i2p' | 'local';
 	readonly healthy: boolean;
 	readonly latencyMs: number | null;
+	/** Operator-published node name (hidden-RPC nodes only); lets us tell a
+	 *  re-establishing transport apart from a dead node — a down transport whose
+	 *  same-named sibling answers means the box is up, not gone. */
+	readonly name: string | null;
 }
 
 /** Parse a /v1/rpc-endpoints body into rows. PURE + tolerant of shape drift. */
@@ -855,7 +859,8 @@ export function parseRpcEndpointRows(body: unknown): RpcEndpointRow[] {
 			url: o.url,
 			transport,
 			healthy: o.healthy === true,
-			latencyMs: typeof o.latencyMs === 'number' ? o.latencyMs : null
+			latencyMs: typeof o.latencyMs === 'number' ? o.latencyMs : null,
+			name: typeof o.name === 'string' ? o.name : null
 		});
 	}
 	return rows;
@@ -1732,12 +1737,33 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 		// operator sees WHICH nodes are up — including the Tor/I2P/local ones, not
 		// just a clearnet count. Rendered only when the indexer served the list.
 		if (rpcEndpointRows !== null && rpcEndpointRows.length > 0) {
+			// Named nodes healthy on ANY transport — a down transport whose same-named
+			// sibling answers is re-establishing (Tor descriptor re-publishing, i2p
+			// tunnel rebuilding), not dead.
+			const healthyRpcNames = new Set(
+				rpcEndpointRows.filter((r) => r.healthy && r.name != null).map((r) => r.name)
+			);
 			for (const r of rpcEndpointRows) {
 				const badge = transportLabel(r.transport).padEnd(8);
 				const host = shortEndpoint(r.url).padEnd(30);
 				const lat = r.healthy && r.latencyMs !== null ? `${r.latencyMs} ms`.padStart(7) : '   —   ';
-				const mark = r.healthy ? c.green('\u2713') : c.dim('\u2717 warming up / unreachable');
-				const line = `${c.dim(badge)} ${host} ${r.healthy ? lat : c.dim(lat)}  ${mark}`;
+				// Latency colour by threshold (matches the web card): under 5 s green,
+				// 5–10 s yellow, 10 s+ red. Tor/I2P run a few seconds legitimately.
+				const latOut =
+					r.healthy && r.latencyMs !== null
+						? r.latencyMs >= 10_000
+							? c.red(lat)
+							: r.latencyMs >= 5_000
+								? c.yellow(lat)
+								: c.green(lat)
+						: c.dim(lat);
+				const reestablishing = !r.healthy && r.name != null && healthyRpcNames.has(r.name);
+				const mark = r.healthy
+					? c.green('\u2713')
+					: reestablishing
+						? c.yellow('\u21BB re-establishing (node up on another transport)')
+						: c.dim('\u2717 warming up / unreachable');
+				const line = `${c.dim(badge)} ${host} ${latOut}  ${mark}`;
 				console.log(`                     ${line}`);
 			}
 		}

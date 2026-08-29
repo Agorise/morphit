@@ -145,6 +145,16 @@
 		}
 	}
 
+	/** Names of nodes that are healthy on AT LEAST ONE transport. A named node
+	 *  (e.g. an operator's "oldpc" published on both Tor and I2P) that answers on
+	 *  one transport proves the box is UP — so a sibling transport that's down is
+	 *  merely re-establishing (a Tor onion re-publishing its descriptor, an i2p
+	 *  tunnel rebuilding), not a dead node. Drives the amber "re-establishing"
+	 *  label below instead of a red "unreachable". */
+	const healthyNames = $derived(
+		new Set(endpoints.filter((e) => e.healthy && e.name != null).map((e) => e.name))
+	);
+
 	/** Status line for a node, derived ENTIRELY from the indexer's health
 	 *  snapshot: latency when healthy, a cooling-down / unreachable reason
 	 *  otherwise, or "probing" before the first measurement lands. */
@@ -165,16 +175,34 @@
 		// reason instead avoids the passive-snapshot ("cooling down") → live-probe
 		// ("unreachable") flip that made one node read two contradictory ways.
 		if (h.consecutive_failures > 0) {
+			// If this node answers on ANOTHER transport (same name), the box is UP
+			// and this transport is merely re-establishing — a Tor onion re-
+			// publishing its descriptor, an i2p tunnel rebuilding — not dead. Say
+			// so in amber, instead of a red failure that reads as "node gone".
+			if (h.name != null && healthyNames.has(h.name)) {
+				return {
+					text: $_('settings.endpoints.reestablishing'),
+					cls: 'text-amber-600 dark:text-amber-400'
+				};
+			}
 			return { text: failureText(h), cls: 'text-red-600 dark:text-red-400' };
 		}
 		if (h.cooldown_ms > 0) {
 			return { text: $_('settings.endpoints.cooling_down'), cls: 'text-ink-700 dark:text-ink-400' };
 		}
 		if (h.latency_ms != null) {
-			return {
-				text: formatLatency(h.latency_ms),
-				cls: h.latency_ms > 1000 ? 'text-ink-700 dark:text-ink-400' : 'text-morphit-emerald'
-			};
+			// Latency colour thresholds: under 5 s is healthy (emerald); 5–10 s is
+			// slow (amber); 10 s+ is painfully slow (red). Tor/I2P legitimately run
+			// a few seconds, so onion-routed nodes aren't red-flagged for latency
+			// they can't avoid.
+			const ms = h.latency_ms;
+			const cls =
+				ms >= 10_000
+					? 'text-red-600 dark:text-red-400'
+					: ms >= 5_000
+						? 'text-amber-600 dark:text-amber-400'
+						: 'text-morphit-emerald';
+			return { text: formatLatency(ms), cls };
 		}
 		return { text: $_('settings.endpoints.probing'), cls: 'text-ink-500 dark:text-ink-400' };
 	}

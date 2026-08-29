@@ -4054,7 +4054,8 @@
 			"err_http_rate": "گره نرخ درخواست را محدود کرد (HTTP 429)",
 			"transport_tor": "Tor",
 			"transport_i2p": "I2P",
-			"transport_local": "محلی"
+			"transport_local": "محلی",
+			"reestablishing": "در حال برقراری مجدد…"
 		},
 		"session": {
 			"autolock_changed": "به {label} تغییر کرد",
