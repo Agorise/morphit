@@ -274,6 +274,7 @@ SMOKES=(
 	"apps/mcp-server:agent-field-allowlist-smoke"
 	"apps/web:canary-template-smoke"
 	"packages/asset-registry:asset-registry-smoke"
+	".:frontend-entrypoint-guard-smoke"
 	".:operations-hardening-smoke"
 	".:systemd-unit-install-smoke"
 	".:mcp-webpush-install-defaults-smoke"

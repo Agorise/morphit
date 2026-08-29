@@ -76,6 +76,19 @@ check('guard skips vite build when the .shipped marker is present', /build.*\.sh
 check('guard falls back to build:vite when unmarked (CI / source checkout)', /build:vite/.test(guard));
 check('release drops the .shipped marker after building the canonical frontend', /touch apps\/web\/build\/\.shipped/.test(release));
 
+// ─── 5. build-offline-bundle.sh ships the prebuilt frontend (USB / air-gapped) ───
+// The online tarball shipping the frontend is not enough: an air-gapped node
+// installed from a USB bundle can't build it on-target either (memory-heavy,
+// non-byte-reproducible, and an incomplete build 500-loops the site). The offline
+// bundle MUST carry the prebuilt, .shipped frontend too — a gap that once let an
+// offline node ship with no servable site.
+const bundle = read('scripts/build-offline-bundle.sh');
+check('offline bundle builds the canonical web frontend before packaging', /npm run build -w apps\/web/.test(bundle));
+check('offline bundle marks the prebuilt frontend .shipped', /touch apps\/web\/build\/\.shipped/.test(bundle));
+check('offline bundle no longer EXCLUDES apps/*/build (ships apps/web/build on the USB image)', !/--exclude='\.\/apps\/\*\/build'/.test(bundle));
+check('offline bundle still excludes the .svelte-kit intermediate', /--exclude='\.\/apps\/\*\/\.svelte-kit'/.test(bundle));
+check('offline bundle gate asserts the shipped frontend (index.html + .shipped) survived packaging', /apps\/web\/build\/index\[\.\]html/.test(bundle) && /apps\/web\/build\/\[\.\]shipped/.test(bundle));
+
 console.log(`\n${passed} passed, ${failed} failed`);
 console.log(
 	failed === 0

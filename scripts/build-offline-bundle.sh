@@ -74,6 +74,26 @@ log "1/6  Installing app dependencies (npm ci) + priming the offline npm cache�
 npm ci --cache "${VENDOR}/npm-cache"
 touch node_modules/.morphit-bundle-complete
 
+# ── Prebuild + ship the web frontend (CRITICAL for air-gapped/USB installs) ──
+# An offline node (USB-stick delivery, NO internet ever) cannot build the
+# SvelteKit frontend on-target: the build is memory-heavy, and — more to the
+# point — a local rebuild is not byte-reproducible, so it would fail the on-chain
+# build-integrity check. Worse, an incomplete on-target build (missing
+# index.html) 500-loops the whole site (this took a real operator's node dark).
+# So we build the canonical frontend HERE, ONCE, and ship it inside the bundle
+# marked `.shipped`; the on-target build guard then serves these exact bytes and
+# skips the vite build entirely. This mirrors what release.yml does for the
+# online tarball, so online and offline nodes are byte-for-byte identical.
+log "     Building the canonical web frontend to ship in the bundle…"
+npm run build -w apps/web
+if [ ! -f apps/web/build/index.html ]; then
+	echo "FATAL: web frontend build did not produce apps/web/build/index.html — refusing to ship a bundle that would 500-loop on the target." >&2
+	exit 1
+fi
+touch apps/web/build/.shipped
+log "     Frontend prebuilt + marked .shipped (target will serve these exact bytes, no on-box build)."
+
+
 # ── 1b. Warm the cache for the offline MCP deploy ──
 # deploy-mcp.sh builds a lean runtime tree with `npm install` against a REWRITTEN
 # package.json — that needs npm's PACKUMENT metadata (the version listing) to
@@ -252,9 +272,13 @@ if [ "${1:-}" != "--no-tar" ]; then
 	# dompurify, …) and silently strips those packages' prebuilt output from the
 	# bundle → the offline build later fails with "Cannot find module …/dist/…".
 	# The flag keeps the excludes anchored to the project's OWN build dirs only.
+	# NOTE: apps/web/build is DELIBERATELY NOT excluded — it is the prebuilt
+	# canonical frontend (marked .shipped above) that an air-gapped/USB node serves
+	# without building. We only drop the .svelte-kit build cache that producing it
+	# leaves behind.
 	tar --no-wildcards-match-slash \
 		--exclude='./.git' --exclude='./out' --exclude='./dist' \
-		--exclude='./apps/*/dist' --exclude='./apps/*/build' \
+		--exclude='./apps/*/dist' --exclude='./apps/*/.svelte-kit' \
 		--exclude='./packages/*/dist' --exclude='*.log' \
 		--exclude='./morphit-*.tar.gz*' \
 		-czf "${STAGE}/${OUT}" .
@@ -290,6 +314,16 @@ if [ "${1:-}" != "--no-tar" ]; then
 		[ -e "${_pkgsrc}" ] || continue
 		grep -qE "${_pkgsrc//./[.]}" <<< "${_manifest}" \
 			|| die "offline bundle is INCOMPLETE — missing ${_pkgsrc} (a workspace package's source was stripped); NOT shipping this."
+	done
+	# The PREBUILT frontend must ship: an air-gapped/USB node serves these exact
+	# bytes and must NOT build on-target. Assert the root entry point (index.html —
+	# without it the site 500-loops) AND the .shipped marker (without it the target
+	# guard would try to rebuild, which an offline box can't do) both survived the
+	# packaging excludes. This is the guard against a future --exclude edit
+	# silently dropping apps/web/build again.
+	for _need in 'apps/web/build/index[.]html' 'apps/web/build/[.]shipped'; do
+		grep -qE "${_need}" <<< "${_manifest}" \
+			|| die "offline bundle is INCOMPLETE — missing ${_need} (the prebuilt frontend was not shipped); an offline node would have no servable site. NOT shipping this."
 	done
 	sha256sum "${OUT}" > "${OUT}.sha256"
 	log "Wrote ./${OUT} ($(du -sh "${OUT}" | cut -f1)) + ${OUT}.sha256"

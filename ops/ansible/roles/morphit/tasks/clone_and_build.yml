@@ -213,6 +213,31 @@
   become_user: "{{ morphit_service_user }}"
   changed_when: false
 
+- name: Verify the web frontend has a root entry point (index.html)
+  # Final guard against a silently-incomplete frontend, checked on the FINAL
+  # build (after the shipped-bytes restore). A build/ with every per-locale page
+  # but no index.html deploys a site that 500-loops on every request (nginx
+  # try_files rewrites /index.html → /index.html forever). The build guard should
+  # make this impossible, but assert it here too so ANY cause (a corrupt shipped
+  # build, an OOM mid-build, a later step removing the file) STOPS the install
+  # loudly instead of handing the operator a dark site.
+  ansible.builtin.stat:
+    path: "{{ morphit_repo_path }}/apps/web/build/index.html"
+  register: morphit_web_index
+  become: true
+  become_user: "{{ morphit_service_user }}"
+
+- name: Fail loudly if the web frontend is missing its root entry point
+  ansible.builtin.fail:
+    msg: >-
+      apps/web/build/index.html is missing after the frontend build. The site
+      would return HTTP 500 on every request (nginx SPA fallback loop). This
+      usually means the frontend build was incomplete (out-of-memory mid-build,
+      a prerender error on the root route, or a corrupt shipped build). Re-run
+      `sudo morphit-ops` and choose upgrade; if it persists, check `free -h` and
+      the build output for errors.
+  when: not morphit_web_index.stat.exists
+
 - name: Verify morphit-ops CLI is runnable (catches missing bin symlink / missing tsx)
   ansible.builtin.command:
     cmd: npm exec --offline --workspace apps/ops-cli morphit-ops -- --help
