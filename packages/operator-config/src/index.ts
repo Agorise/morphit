@@ -119,12 +119,34 @@ export const DEFAULT_BLURT_RPC_ENDPOINTS: readonly string[] = [
  *
  *   - Star  (.onion + .b32.i2p)
  *   - Jade  (.onion + .b32.i2p)
+ *   - kc    (.onion + .b32.i2p)
+ *   - oldpc (.onion + .b32.i2p)
+ *   - mama  (.onion + .b32.i2p)
+ *   - j2    (.onion + .b32.i2p)
+ *   - s2    (.onion + .b32.i2p)
  */
 export const DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS: readonly string[] = [
+	// Star
 	'http://f6cijlm7vn32tc4kxr3vxve5pkbysoq2etlihvx25spwtkpqsa25siad.onion:8091',
-	'http://axj4qkjwk3bwh2lrn4bud5rrgsyrvuamd6jxdlmks6flsrju7q5rb5yd.onion:8091',
 	'http://zgkfadmkqx75enpfhfrlfbwqk7c53uwmr55yplk3colaznepusxa.b32.i2p:8091',
-	'http://7tea4n3co3q2ozke2ovgqn7j5zirkauxipfttudbhthkat6fzlcq.b32.i2p:8091'
+	// Jade
+	'http://axj4qkjwk3bwh2lrn4bud5rrgsyrvuamd6jxdlmks6flsrju7q5rb5yd.onion:8091',
+	'http://7tea4n3co3q2ozke2ovgqn7j5zirkauxipfttudbhthkat6fzlcq.b32.i2p:8091',
+	// kc
+	'http://xpqyoeap42iwmi6c6ew6svvtv2qwnkrbxpcshqitwmb3z2jqcvjb2nid.onion:8091',
+	'http://xenmlfwajcaiavtt24a3lwzzjiv4pgvfjaps4etlpvgmvupvvcea.b32.i2p:8091',
+	// oldpc
+	'http://iarstejtiqofqs7hamflujy3fjwitxfoyysj6cngwpzdzermwm6hteid.onion:8091',
+	'http://5cfk2jmub7gnte536sxezapgkykirje6v6omouhpymfo52eh473a.b32.i2p:8091',
+	// mama
+	'http://lr444djiignckmq3y2mhl2zplcy7lwxfxamv2irc2lt5jpmfybshhzid.onion:8091',
+	'http://jtkaeepcpj2gfgv7swwnplffpu4zpf37bojtpigyrii5glwmrd6q.b32.i2p:8091',
+	// j2
+	'http://ukbumluqrinql6dw7l2mbtdioygodnrloob22cqfa4tvl3pspn5qzhid.onion:8091',
+	'http://ogmildopmgbdyy2kc724ezhrnmvhnf2x52qw7lqgo2jna5juc3kq.b32.i2p:8091',
+	// s2
+	'http://qci6a2fsuljqk2q3coeyqiipmzv3yqykvgibbktt6fcojysl2yw3gaad.onion:8091',
+	'http://5jsepybvuw66r4e7xejv26r67ewoimtmx3iwedpflh7a2t5y66sa.b32.i2p:8091'
 ] as const;
 
 /**

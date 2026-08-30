@@ -2816,7 +2816,13 @@
 		"search_clear": "Wyczyść wyszukiwanie",
 		"hide_confirm_title": "Ukryć @{account}?",
 		"hide_confirm_body": "Nie będziesz widzieć zleceń użytkownika {account} w księdze zleceń, a Twoje czaty z tą osobą również zostaną ukryte. Możesz je w każdej chwili ponownie pokazać w Ustawieniach.",
-		"hide_confirm_yes": "Ukryj"
+		"hide_confirm_yes": "Ukryj",
+		"catching_up": {
+			"title": "Ta instancja wciąż się synchronizuje",
+			"progress": "Odtwarzanie łańcucha — ukończono {pct}%.",
+			"eta": "Oferty powinny być dostępne około {eta}.",
+			"estimating": "Szacowanie czasu do dostępności…"
+		}
 	},
 	"paired_readonly": {
 		"banner_heading": "Zalogowany jako @{account} — klucze są na telefonie.",
@@ -4041,7 +4047,7 @@
 			"cooling_down": "przerwa",
 			"recheck": "Sprawdź ponownie szybkość węzłów",
 			"probing": "sprawdzam…",
-			"unreachable": "nieosiągalny",
+			"unreachable": "chwilowo offline",
 			"err_timeout": "Brak odpowiedzi na czas (przekroczono limit)",
 			"err_tls": "Problem z certyfikatem TLS",
 			"err_dns": "Wyszukiwanie DNS nie powiodło się",

@@ -25,10 +25,26 @@
  * run — so every rule fails CLOSED.
  */
 
-/** Bump when the on-disk snapshot layout changes incompatibly. */
-export const SNAPSHOT_FORMAT_VERSION = 1;
+/** Bump when the on-disk snapshot layout changes incompatibly. Emitted by
+ *  buildManifest(). v2 adds the fields a STRANGER needs to trust a federated
+ *  snapshot (dumpSha256, indexerVersion, opCoverage); v1 (own-box) omitted them. */
+export const SNAPSHOT_FORMAT_VERSION = 2;
+/** Every format version this BUILD can still read + restore. We keep reading v1
+ *  (legacy own-box snapshots) so an upgrade never orphans an operator's existing
+ *  snapshot; only unknown/newer versions are refused. Fail-closed: not in the set
+ *  → refuse. */
+export const SUPPORTED_SNAPSHOT_FORMAT_VERSIONS: ReadonlySet<number> = new Set([1, 2]);
 export const MANIFEST_FILENAME = 'manifest.json';
 export const DUMP_FILENAME = 'indexer.sql.gz';
+
+/** Lowercase 64-hex SHA-256, shared with the on-chain snapshot op validators. */
+const SHA256_RE = /^[0-9a-f]{64}$/;
+
+/** How much of the indexed history a snapshot carries. 'full' = the whole DB
+ *  (cumulative reputation/loyalty/earnings need it); 'orderbook-only' reserved
+ *  for a future recent-window variant. v1 manifests are implicitly 'full'. */
+export type SnapshotOpCoverage = 'full' | 'orderbook-only';
+const OP_COVERAGE_VALUES: ReadonlySet<string> = new Set(['full', 'orderbook-only']);
 
 /** What an exported snapshot records about the SOURCE DB it was taken from. */
 export interface SnapshotManifest {
@@ -46,6 +62,18 @@ export interface SnapshotManifest {
 	readonly createdAt: string;
 	/** Human label for provenance (e.g. the source instance origin). Advisory only. */
 	readonly sourceLabel: string;
+	// ── v2 fields (federated snapshots). Optional so a legacy v1 manifest still
+	//    parses + restores via the own-box path; the FEDERATED path requires them
+	//    (see manifestFederationReadiness). ────────────────────────────────────
+	/** The indexer BUILD version that produced the dump. Advisory (schemaVersion
+	 *  remains the compat gate); surfaced so an operator sees what they're taking. */
+	readonly indexerVersion?: string;
+	/** Lowercase 64-hex SHA-256 of indexer.sql.gz. Lets the manifest be
+	 *  self-describing and lets the importer prove file == on-chain sha256 ==
+	 *  manifest, all three, before trusting any of it. */
+	readonly dumpSha256?: string;
+	/** History coverage. Absent (v1) ⇒ treated as 'full'. */
+	readonly opCoverage?: SnapshotOpCoverage;
 }
 
 /** Facts about the TARGET box, read from its config + code at bootstrap time. */
@@ -96,6 +124,18 @@ export function parseManifest(raw: string): SnapshotManifest | null {
 	) {
 		return null;
 	}
+	// v2 optional fields: if PRESENT they must be well-formed (fail closed on a
+	// malformed value); if ABSENT it's a legacy v1 manifest and that's fine.
+	if (m.indexerVersion !== undefined && typeof m.indexerVersion !== 'string') return null;
+	if (
+		m.dumpSha256 !== undefined &&
+		(typeof m.dumpSha256 !== 'string' || !SHA256_RE.test(m.dumpSha256))
+	) {
+		return null;
+	}
+	if (m.opCoverage !== undefined && !OP_COVERAGE_VALUES.has(m.opCoverage as string)) {
+		return null;
+	}
 	return {
 		snapshotFormatVersion: m.snapshotFormatVersion,
 		chainId: m.chainId,
@@ -103,7 +143,10 @@ export function parseManifest(raw: string): SnapshotManifest | null {
 		lastAppliedBlock: m.lastAppliedBlock,
 		pgMajor: m.pgMajor,
 		createdAt: m.createdAt,
-		sourceLabel: m.sourceLabel
+		sourceLabel: m.sourceLabel,
+		...(m.indexerVersion !== undefined ? { indexerVersion: m.indexerVersion } : {}),
+		...(m.dumpSha256 !== undefined ? { dumpSha256: m.dumpSha256 } : {}),
+		...(m.opCoverage !== undefined ? { opCoverage: m.opCoverage as SnapshotOpCoverage } : {})
 	};
 }
 
@@ -113,8 +156,14 @@ export function buildManifest(facts: {
 	lastAppliedBlock: number;
 	pgMajor: number;
 	sourceLabel: string;
+	indexerVersion: string;
+	dumpSha256: string;
+	opCoverage?: SnapshotOpCoverage;
 	now?: Date;
 }): SnapshotManifest {
+	if (!SHA256_RE.test(facts.dumpSha256)) {
+		throw new Error(`buildManifest: dumpSha256 must be 64 lowercase hex, got "${facts.dumpSha256}"`);
+	}
 	return {
 		snapshotFormatVersion: SNAPSHOT_FORMAT_VERSION,
 		chainId: facts.chainId,
@@ -122,8 +171,48 @@ export function buildManifest(facts: {
 		lastAppliedBlock: facts.lastAppliedBlock,
 		pgMajor: facts.pgMajor,
 		createdAt: (facts.now ?? new Date()).toISOString(),
-		sourceLabel: facts.sourceLabel
+		sourceLabel: facts.sourceLabel,
+		indexerVersion: facts.indexerVersion,
+		dumpSha256: facts.dumpSha256,
+		opCoverage: facts.opCoverage ?? 'full'
 	};
+}
+
+/**
+ * Gate for the FEDERATED path only: a snapshot fetched from a STRANGER (via the
+ * on-chain anchor) must be v2 AND carry the fields that make it verifiable —
+ * dumpSha256 (to prove the download) and indexerVersion (provenance). The own-box
+ * path deliberately does NOT require this (a v1 manifest is fine there). Pure +
+ * fail-closed. `expectedSha256`, when given (the on-chain sha256), must match the
+ * manifest's dumpSha256 — the manifest and the anchor must agree.
+ */
+export function manifestFederationReadiness(
+	manifest: SnapshotManifest,
+	expectedSha256?: string
+): VerifyResult {
+	const reasons: string[] = [];
+	const warnings: string[] = [];
+	if (manifest.snapshotFormatVersion < 2) {
+		reasons.push(
+			`federated restore requires snapshot format v2+, got v${manifest.snapshotFormatVersion} (a legacy own-box snapshot cannot be trusted from a third party).`
+		);
+	}
+	if (!manifest.dumpSha256 || !SHA256_RE.test(manifest.dumpSha256)) {
+		reasons.push('manifest is missing a valid dumpSha256 — cannot prove the download.');
+	}
+	if (!manifest.indexerVersion) {
+		warnings.push('manifest has no indexerVersion (provenance advisory only).');
+	}
+	if (
+		expectedSha256 !== undefined &&
+		manifest.dumpSha256 !== undefined &&
+		manifest.dumpSha256 !== expectedSha256.toLowerCase()
+	) {
+		reasons.push(
+			`sha256 disagreement: manifest says ${manifest.dumpSha256}, on-chain anchor says ${expectedSha256.toLowerCase()}.`
+		);
+	}
+	return { ok: reasons.length === 0, reasons, warnings };
 }
 
 /**
@@ -145,9 +234,11 @@ export function verifyManifestCompatible(
 	const reasons: string[] = [];
 	const warnings: string[] = [];
 
-	if (manifest.snapshotFormatVersion !== SNAPSHOT_FORMAT_VERSION) {
+	if (!SUPPORTED_SNAPSHOT_FORMAT_VERSIONS.has(manifest.snapshotFormatVersion)) {
 		reasons.push(
-			`snapshot format v${manifest.snapshotFormatVersion} — this build only reads v${SNAPSHOT_FORMAT_VERSION}.`
+			`snapshot format v${manifest.snapshotFormatVersion} — this build reads only v${[
+				...SUPPORTED_SNAPSHOT_FORMAT_VERSIONS
+			].join('/')}.`
 		);
 	}
 	if (manifest.chainId !== target.chainId) {

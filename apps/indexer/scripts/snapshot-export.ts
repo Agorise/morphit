@@ -21,12 +21,14 @@
  * result in as indexer.sql.gz next to a manifest.json — the format is stable.
  */
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync, renameSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync, renameSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadConfig } from '../src/config/index.ts';
 import { createDatabase } from '../src/db/pool.ts';
 import { buildManifest, MANIFEST_FILENAME, DUMP_FILENAME } from '../src/db/snapshotManifest.ts';
+import { INDEXER_VERSION } from '../src/api/health.ts';
 
 function flag(name: string): string | undefined {
 	const i = process.argv.indexOf(`--${name}`);
@@ -59,19 +61,9 @@ async function main(): Promise<void> {
 			);
 		}
 
-		const manifest = buildManifest({
-			chainId,
-			schemaVersion,
-			lastAppliedBlock,
-			pgMajor,
-			sourceLabel: config.publicOrigin ?? 'unknown'
-		});
-
 		// Stage in a temp dir, then atomically move the finished tarball into place.
 		const work = mkdtempSync(join(tmpdir(), 'morphit-snap-'));
 		try {
-			writeFileSync(join(work, MANIFEST_FILENAME), JSON.stringify(manifest, null, 2) + '\n');
-
 			process.stderr.write(`snapshot: pg_dump (--clean --if-exists) → ${DUMP_FILENAME} …\n`);
 			// pg_dump "$url" | gzip > work/indexer.sql.gz  (via a shell for the pipe).
 			const dump = spawnSync(
@@ -83,6 +75,25 @@ async function main(): Promise<void> {
 				{ env: { ...process.env, DBURL: config.databaseUrl }, stdio: ['ignore', 'inherit', 'inherit'] }
 			);
 			if (dump.status !== 0) throw new Error(`pg_dump failed (exit ${dump.status ?? 'signal'})`);
+
+			// Hash the finished dump: the manifest becomes self-describing, and the
+			// importer can later prove file == manifest == on-chain sha256 (all three)
+			// before trusting a federated snapshot.
+			const dumpSha256 = createHash('sha256')
+				.update(readFileSync(join(work, DUMP_FILENAME)))
+				.digest('hex');
+
+			// Build the manifest AFTER the dump exists (v2 embeds the dump's sha256).
+			const manifest = buildManifest({
+				chainId,
+				schemaVersion,
+				lastAppliedBlock,
+				pgMajor,
+				sourceLabel: config.publicOrigin ?? 'unknown',
+				indexerVersion: INDEXER_VERSION,
+				dumpSha256
+			});
+			writeFileSync(join(work, MANIFEST_FILENAME), JSON.stringify(manifest, null, 2) + '\n');
 
 			mkdirSync(outDir, { recursive: true });
 			const short = String(lastAppliedBlock);

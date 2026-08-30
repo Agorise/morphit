@@ -49,7 +49,7 @@
 	import FiatCurrencySelect from '$components/FiatCurrencySelect.svelte';
 	import PaymentFilterSelect from '$components/PaymentFilterSelect.svelte';
 
-	import { getOrderbook } from '$lib/indexer/client';
+	import { getOrderbook, getHealth } from '$lib/indexer/client';
 	import { displayNamesForMethods } from '$lib/payments/display';
 	import { ASSETS } from '$lib/assets/registry';
 	import { instanceAdditions, instanceNameLookup } from '$lib/stores/instanceAdditions';
@@ -70,7 +70,7 @@
 	import { nowMs } from '$lib/stores/now';
 	import { SvelteSet } from 'svelte/reactivity';
 	import type { AssetTicker } from '@morphit/asset-registry';
-	import type { OrderbookQuery, OrderRecord, ProfileResponse } from '@morphit/indexer-client';
+	import type { OrderbookQuery, OrderRecord, ProfileResponse, HealthResponse } from '@morphit/indexer-client';
 
 	import { hiddenAccounts, hideAccount, unhideAccount } from '$lib/utils/hiddenAccounts';
 	import { orderTitleParts } from '$lib/utils/orderTitle';
@@ -407,6 +407,46 @@
 	// ─── Paging state ────────────────────────────────────────────────
 	type Phase = 'loading' | 'ready' | 'error';
 	let phase = $state<Phase>('loading');
+
+	// ─── Catch-up banner (cp-catchup) ───────────────────────────────────
+	// A fresh instance's frontend loads immediately (it's static), but the
+	// indexer may still be replaying the chain — so the orderbook has no orders
+	// to show yet, not because it's broken but because it isn't caught up. Poll
+	// /v1/health and, while the indexer reports `behind`, show a friendly banner
+	// with progress and an ETA instead of a bare empty orderbook.
+	let syncInfo = $state<HealthResponse['sync'] | null>(null);
+	let syncPollTimer: ReturnType<typeof setInterval> | null = null;
+
+	async function refreshSync(): Promise<void> {
+		const r = await getHealth();
+		if (r.ok) {
+			syncInfo = r.data.sync ?? null;
+			// Once caught up, stop polling — the banner is gone for good this session.
+			if (syncInfo && !syncInfo.behind && syncPollTimer) {
+				clearInterval(syncPollTimer);
+				syncPollTimer = null;
+			}
+		}
+	}
+
+	/** Format an ISO ETA as a readable UTC day + time, e.g. "Mon, Sep 1, 14:30 UTC". */
+	function formatEtaUtc(iso: string): string {
+		try {
+			return (
+				new Date(iso).toLocaleString(undefined, {
+					weekday: 'short',
+					month: 'short',
+					day: 'numeric',
+					hour: '2-digit',
+					minute: '2-digit',
+					hour12: false,
+					timeZone: 'UTC'
+				}) + ' UTC'
+			);
+		} catch {
+			return iso;
+		}
+	}
 	let items = $state<OrderRecord[]>([]);
 	let cursor: string | null = $state(null);
 	let errorMessage = $state('');
@@ -984,6 +1024,9 @@
 
 	onMount(() => {
 		fetchFirstPage();
+		// Catch-up banner: check sync state now, then poll every 30s while behind.
+		void refreshSync();
+		syncPollTimer = setInterval(() => void refreshSync(), 30_000);
 		// Open the SSE stream alongside.  Snapshot will replace
 		// items with the live-paged view shortly; diffs keep it
 		// fresh.  See restartStream() above for the reconnect path
@@ -1013,6 +1056,10 @@
 	});
 
 	onDestroy(() => {
+		if (syncPollTimer) {
+			clearInterval(syncPollTimer);
+			syncPollTimer = null;
+		}
 		if (streamHandle !== null) {
 			streamHandle.stop();
 			streamHandle = null;
@@ -1377,6 +1424,32 @@
 	<!-- Loading status -->
 	{#if phase === 'loading'}
 		<StatusLine kind="loading">{$_('orderbook.loading')}</StatusLine>
+	{/if}
+
+	<!-- Catch-up banner (cp-catchup): the frontend is up but the indexer is
+	     still replaying the chain, so there are no orders to show YET — not a
+	     fault. Show progress + an ETA so a fresh instance's admin sees exactly
+	     what's happening instead of a bare empty orderbook. -->
+	{#if syncInfo?.behind}
+		<section
+			class="card mt-4 border-morphit-teal/40 bg-morphit-teal/5 dark:border-morphit-teal/30"
+			role="status"
+			aria-live="polite"
+		>
+			<h2 class="font-display text-lg font-bold text-morphit-btn dark:text-morphit-teal">
+				{$_('orderbook.catching_up.title')}
+			</h2>
+			<p class="mt-2 text-sm text-ink-700 dark:text-ink-300">
+				{$_('orderbook.catching_up.progress', { values: { pct: syncInfo.pct_complete ?? 0 } })}
+			</p>
+			<p class="mt-1 text-sm text-ink-600 dark:text-ink-400">
+				{#if syncInfo.eta_utc}
+					{$_('orderbook.catching_up.eta', { values: { eta: formatEtaUtc(syncInfo.eta_utc) } })}
+				{:else}
+					{$_('orderbook.catching_up.estimating')}
+				{/if}
+			</p>
+		</section>
 	{/if}
 
 	<!-- Error (cp411: 2s-delayed reveal + dimmed so a transient load blip

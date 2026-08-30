@@ -18,7 +18,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { healthRoute } from '$api/health';
+import { healthRoute, computeSyncEstimate } from '$api/health';
 import type { EndpointState } from '@morphit/rpc-pool';
 import type { Config } from '$config';
 import type { Poller } from '$indexer/poller';
@@ -54,6 +54,7 @@ function fakePoller(
 	opts: {
 		chainHeadBlock?: number;
 		indexedBlock?: number;
+		bootIndexedBlock?: number;
 		lastError?: string | null;
 		lastErrorAt?: Date | null;
 		startedAt?: Date;
@@ -69,6 +70,7 @@ function fakePoller(
 				running: true,
 				chainHeadBlock: opts.chainHeadBlock ?? 1_000_000,
 				indexedBlock: opts.indexedBlock ?? 1_000_000,
+				bootIndexedBlock: opts.bootIndexedBlock ?? opts.indexedBlock ?? 1_000_000,
 				startedAt: opts.startedAt ?? new Date('2026-04-20T12:00:00Z'),
 				lastError: opts.lastError ?? null,
 				lastErrorAt: opts.lastErrorAt ?? null
@@ -706,5 +708,89 @@ describe('healthRoute — operator-only price_feeds (cp381)', () => {
 		);
 		expect(body.price_feeds).toBeDefined();
 		expect(body.diagnostics).toBeDefined();
+	});
+});
+
+describe('computeSyncEstimate — catch-up ETA math', () => {
+	const base = {
+		startBlock: 59_441_298,
+		blockSeconds: 3,
+		nowMs: Date.parse('2026-08-29T00:00:00Z')
+	};
+
+	it('caught up → not behind, no ETA, ~100%', () => {
+		const s = computeSyncEstimate({
+			...base,
+			indexedBlock: 63_188_071,
+			bootIndexedBlock: 63_188_071,
+			chainHeadBlock: 63_188_071,
+			uptimeSec: 3600,
+			lagBlocks: 0,
+			stale: false
+		});
+		expect(s.behind).toBe(false);
+		expect(s.eta_utc).toBeNull();
+		expect(s.pct_complete).toBe(100);
+	});
+
+	it('behind with a real rate → behind, pct computed, ETA in the future', () => {
+		// booted at genesis, processed 1,436,479 blocks in 14400s (~99.8 blk/s),
+		// lag 2,310,294; net rate closes the gap in a finite, positive time.
+		const s = computeSyncEstimate({
+			...base,
+			indexedBlock: 60_877_777,
+			bootIndexedBlock: 59_441_298,
+			chainHeadBlock: 63_188_071,
+			uptimeSec: 14_400,
+			lagBlocks: 2_310_294,
+			stale: true
+		});
+		expect(s.behind).toBe(true);
+		expect(s.pct_complete).toBeGreaterThan(30);
+		expect(s.pct_complete).toBeLessThan(45);
+		expect(s.eta_seconds).toBeGreaterThan(0);
+		expect(s.eta_utc).not.toBeNull();
+		expect(Date.parse(s.eta_utc as string)).toBeGreaterThan(base.nowMs);
+	});
+
+	it('behind but < 60s uptime → estimating (no ETA yet)', () => {
+		const s = computeSyncEstimate({
+			...base,
+			indexedBlock: 59_450_000,
+			bootIndexedBlock: 59_441_298,
+			chainHeadBlock: 63_188_071,
+			uptimeSec: 20,
+			lagBlocks: 3_738_071,
+			stale: true
+		});
+		expect(s.behind).toBe(true);
+		expect(s.eta_utc).toBeNull();
+	});
+
+	it('behind but not actually advancing → no ETA (rate cannot close the gap)', () => {
+		const s = computeSyncEstimate({
+			...base,
+			indexedBlock: 59_441_298,
+			bootIndexedBlock: 59_441_298,
+			chainHeadBlock: 63_188_071,
+			uptimeSec: 600,
+			lagBlocks: 3_746_773,
+			stale: true
+		});
+		expect(s.behind).toBe(true);
+		expect(s.eta_utc).toBeNull();
+	});
+
+	it('pct clamps to 0–100', () => {
+		const s = computeSyncEstimate({
+			...base,
+			indexedBlock: 59_441_298,
+			bootIndexedBlock: 59_441_298,
+			chainHeadBlock: 60_000_000,
+			uptimeSec: 100,
+			lagBlocks: 558_702,
+			stale: true
+		});
+		expect(s.pct_complete).toBe(0);
 	});
 });

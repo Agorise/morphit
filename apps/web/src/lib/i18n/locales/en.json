@@ -2816,7 +2816,13 @@
 		"search_clear": "Clear search",
 		"hide_confirm_title": "Hide @{account}?",
 		"hide_confirm_body": "You won't see {account}'s orders in the orderbook, and your chats with them will be hidden too. You can unhide anytime from Settings.",
-		"hide_confirm_yes": "Hide"
+		"hide_confirm_yes": "Hide",
+		"catching_up": {
+			"title": "This instance is still catching up",
+			"progress": "Replaying the chain — {pct}% complete.",
+			"eta": "Orders should be available around {eta}.",
+			"estimating": "Estimating when orders will be available…"
+		}
 	},
 	"paired_readonly": {
 		"banner_heading": "Signed in as @{account} — phone holds the keys.",
@@ -4041,7 +4047,7 @@
 			"cooling_down": "cooling down",
 			"recheck": "Re-check node speeds",
 			"probing": "probing…",
-			"unreachable": "unreachable",
+			"unreachable": "offline at the moment",
 			"err_timeout": "No answer in time (timeout)",
 			"err_tls": "TLS certificate problem",
 			"err_dns": "DNS lookup failed",

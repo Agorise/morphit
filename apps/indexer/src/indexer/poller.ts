@@ -52,6 +52,10 @@ export interface PollerStatus {
 	readonly running: boolean;
 	readonly chainHeadBlock: number;
 	readonly indexedBlock: number;
+	/** The indexedBlock captured when the poller started, so /v1/health can
+	 *  derive a catch-up rate ((indexedBlock − bootIndexedBlock) / uptime) and
+	 *  from it an ETA to caught-up while a fresh node replays the chain. */
+	readonly bootIndexedBlock: number;
 	readonly startedAt: Date;
 	readonly lastError: string | null;
 	readonly lastErrorAt: Date | null;
@@ -395,6 +399,7 @@ export class Poller {
 			running: false,
 			chainHeadBlock: 0,
 			indexedBlock: 0,
+			bootIndexedBlock: 0,
 			startedAt: this.startedAt,
 			lastError: null,
 			lastErrorAt: null
@@ -602,7 +607,14 @@ export class Poller {
 			);
 		}
 
-		this.status = { ...this.status, indexedBlock: lastApplied, running: true };
+		// Capture bootIndexedBlock ONCE here (start): later status updates spread
+		// ...this.status so it is preserved, giving /v1/health a stable rate baseline.
+		this.status = {
+			...this.status,
+			indexedBlock: lastApplied,
+			bootIndexedBlock: lastApplied,
+			running: true
+		};
 		log.info('starting', {
 			chain_id_prefix: chainId.slice(0, 8),
 			last_applied_block: lastApplied

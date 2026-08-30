@@ -25,6 +25,16 @@ export interface HealthResponse {
 	 *  older than v1.0.0-beta.14 don't send it. */
 	readonly lag_blocks_note?: string;
 	readonly stale: boolean;
+	/** Catch-up progress for the UI while a fresh node replays the chain.
+	 *  Optional: indexers older than v1.13.3 don't send it. `behind` is false
+	 *  once synced; `eta_utc` is null until there's enough signal to estimate. */
+	readonly sync?: {
+		readonly behind: boolean;
+		readonly pct_complete: number | null;
+		readonly blocks_per_sec: number;
+		readonly eta_seconds: number | null;
+		readonly eta_utc: string | null;
+	};
 }
 
 // ─── Listing fee ───────────────────────────────────────────────────

@@ -2816,7 +2816,13 @@
 		"search_clear": "Cancella ricerca",
 		"hide_confirm_title": "Nascondere @{account}?",
 		"hide_confirm_body": "Non vedrai più gli ordini di {account} nel book degli ordini e anche le tue chat con questa persona verranno nascoste. Puoi mostrarle di nuovo in qualsiasi momento dalle Impostazioni.",
-		"hide_confirm_yes": "Nascondi"
+		"hide_confirm_yes": "Nascondi",
+		"catching_up": {
+			"title": "Questa istanza si sta ancora sincronizzando",
+			"progress": "Rielaborazione della catena — {pct}% completato.",
+			"eta": "Gli ordini dovrebbero essere disponibili intorno alle {eta}.",
+			"estimating": "Stima del tempo rimanente…"
+		}
 	},
 	"paired_readonly": {
 		"banner_heading": "Connesso come @{account} — il telefono ha le chiavi.",
@@ -4041,7 +4047,7 @@
 			"cooling_down": "in pausa",
 			"recheck": "Ricontrolla la velocità dei nodi",
 			"probing": "test in corso…",
-			"unreachable": "irraggiungibile",
+			"unreachable": "offline al momento",
 			"err_timeout": "Nessuna risposta in tempo (timeout)",
 			"err_tls": "Problema con il certificato TLS",
 			"err_dns": "Ricerca DNS non riuscita",

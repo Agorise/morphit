@@ -9,9 +9,11 @@
  */
 import {
 	SNAPSHOT_FORMAT_VERSION,
+	SUPPORTED_SNAPSHOT_FORMAT_VERSIONS,
 	buildManifest,
 	parseManifest,
 	verifyManifestCompatible,
+	manifestFederationReadiness,
 	type SnapshotManifest,
 	type TargetFacts
 } from '../src/db/snapshotManifest.ts';
@@ -30,6 +32,8 @@ function check(desc: string, ok: boolean): void {
 
 console.log('\n── snapshot manifest safety smoke (cp764) ─────────────\n');
 
+const SHA_A = 'a'.repeat(64);
+const SHA_B = 'b'.repeat(64);
 const TARGET: TargetFacts = { chainId: 'BLURT-MAINNET', codeSchemaVersion: 40, pgMajor: 16 };
 const base = buildManifest({
 	chainId: 'BLURT-MAINNET',
@@ -37,6 +41,8 @@ const base = buildManifest({
 	lastAppliedBlock: 62_000_000,
 	pgMajor: 16,
 	sourceLabel: 'https://morphit.io',
+	indexerVersion: '1.14.0',
+	dumpSha256: SHA_A,
 	now: new Date('2026-08-18T00:00:00Z')
 });
 
@@ -75,7 +81,74 @@ const base = buildManifest({
 // ── snapshot format version guard ─────────────────────────────────
 {
 	const r = verifyManifestCompatible({ ...base, snapshotFormatVersion: SNAPSHOT_FORMAT_VERSION + 1 }, TARGET);
-	check('unknown snapshot format version is REFUSED', !r.ok && r.reasons.some((x) => /snapshot format/i.test(x)));
+	check('unknown (newer) snapshot format version is REFUSED', !r.ok && r.reasons.some((x) => /snapshot format/i.test(x)));
+}
+{
+	// A legacy v1 manifest (no v2 fields) must STILL restore via the own-box path —
+	// an upgrade never orphans an operator's existing snapshot.
+	const v1: SnapshotManifest = {
+		snapshotFormatVersion: 1,
+		chainId: 'BLURT-MAINNET',
+		schemaVersion: 40,
+		lastAppliedBlock: 62_000_000,
+		pgMajor: 16,
+		createdAt: '2026-08-18T00:00:00Z',
+		sourceLabel: 'own-box'
+	};
+	const r = verifyManifestCompatible(v1, TARGET);
+	check('legacy v1 manifest is STILL accepted (backward compatible)', r.ok);
+	check('v1 is in the supported set', SUPPORTED_SNAPSHOT_FORMAT_VERSIONS.has(1));
+}
+
+// ── federation readiness gate (public/third-party path only) ──────
+{
+	const r = manifestFederationReadiness(base, SHA_A);
+	check('v2 manifest with sha256 + matching anchor is federation-ready', r.ok);
+}
+{
+	const v1: SnapshotManifest = { ...base, snapshotFormatVersion: 1, dumpSha256: undefined, indexerVersion: undefined };
+	const r = manifestFederationReadiness(v1);
+	check('v1 manifest is REFUSED for the federated path (needs v2)', !r.ok && r.reasons.some((x) => /v2/i.test(x)));
+}
+{
+	const noHash: SnapshotManifest = { ...base, dumpSha256: undefined };
+	const r = manifestFederationReadiness(noHash);
+	check('federated path REFUSES a manifest with no dumpSha256', !r.ok && r.reasons.some((x) => /dumpSha256/i.test(x)));
+}
+{
+	const r = manifestFederationReadiness(base, SHA_B);
+	check('federated path REFUSES a manifest whose sha256 disagrees with the anchor', !r.ok && r.reasons.some((x) => /disagreement/i.test(x)));
+}
+
+// ── v2 field validation in parseManifest ──────────────────────────
+check('parseManifest rejects a malformed dumpSha256', parseManifest(JSON.stringify({ ...base, dumpSha256: 'nothex' })) === null);
+check('parseManifest rejects an unknown opCoverage', parseManifest(JSON.stringify({ ...base, opCoverage: 'bogus' })) === null);
+{
+	const round = parseManifest(JSON.stringify(base));
+	check('parseManifest round-trips v2 fields', round !== null && round.dumpSha256 === SHA_A && round.opCoverage === 'full');
+}
+{
+	// v1 JSON without the v2 fields must still parse (own-box legacy on disk).
+	const v1json = JSON.stringify({
+		snapshotFormatVersion: 1,
+		chainId: 'BLURT-MAINNET',
+		schemaVersion: 40,
+		lastAppliedBlock: 62_000_000,
+		pgMajor: 16,
+		createdAt: '2026-08-18T00:00:00Z',
+		sourceLabel: 'own-box'
+	});
+	const round = parseManifest(v1json);
+	check('parseManifest still parses a legacy v1 manifest (no v2 fields)', round !== null && round.dumpSha256 === undefined);
+}
+{
+	let threw = false;
+	try {
+		buildManifest({ chainId: 'x', schemaVersion: 1, lastAppliedBlock: 1, pgMajor: 16, sourceLabel: 's', indexerVersion: '1', dumpSha256: 'bad' });
+	} catch {
+		threw = true;
+	}
+	check('buildManifest THROWS on a bad dumpSha256 (fail closed at creation)', threw);
 }
 
 // ── several problems at once → all reported, still refused ────────

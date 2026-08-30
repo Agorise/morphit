@@ -607,6 +607,8 @@ SMOKES=(
 	"apps/indexer:local-rpc-endpoint-smoke"
 	"apps/indexer:snapshot-manifest-smoke"
 	"apps/indexer:chain-snapshot-op-smoke"
+	"apps/indexer:indexer-snapshot-op-smoke"
+	"apps/indexer:snapshot-oplog-verify-smoke"
 	"apps/indexer:rpc-directory-op-smoke"
 	"apps/indexer:fx-source-smoke"
 	"apps/indexer:multi-asset-factory-smoke"

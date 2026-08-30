@@ -2816,7 +2816,13 @@
 		"search_clear": "Effacer la recherche",
 		"hide_confirm_title": "Masquer @{account} ?",
 		"hide_confirm_body": "Vous ne verrez plus les ordres de {account} dans le carnet d'ordres, et vos conversations avec cette personne seront également masquées. Vous pouvez les réafficher à tout moment depuis les Paramètres.",
-		"hide_confirm_yes": "Masquer"
+		"hide_confirm_yes": "Masquer",
+		"catching_up": {
+			"title": "Cette instance se synchronise encore",
+			"progress": "Relecture de la chaîne — {pct}% terminé.",
+			"eta": "Les ordres devraient être disponibles vers {eta}.",
+			"estimating": "Estimation du temps restant…"
+		}
 	},
 	"paired_readonly": {
 		"banner_heading": "Connecté en tant que @{account} — votre téléphone détient les clés.",
@@ -4041,7 +4047,7 @@
 			"cooling_down": "en pause",
 			"recheck": "Revérifier la vitesse des nœuds",
 			"probing": "test…",
-			"unreachable": "injoignable",
+			"unreachable": "hors ligne pour le moment",
 			"err_timeout": "Pas de réponse à temps (délai dépassé)",
 			"err_tls": "Problème de certificat TLS",
 			"err_dns": "Échec de la résolution DNS",

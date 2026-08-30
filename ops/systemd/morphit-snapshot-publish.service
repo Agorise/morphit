@@ -1,0 +1,32 @@
+[Unit]
+Description=Morphit indexer-snapshot auto-publish — export, pin (IPFS), optionally anchor
+Documentation=https://git.agorise.net/agorise/morphit
+After=network-online.target morphit-indexer.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Needs the indexer DB (pg_dump) + kubo (ipfs add, via sudo -u inside the
+# script). Runs as root because pin-indexer-snapshot.sh drops to the kubo user
+# itself and must read the docker/pg + IPFS repo. The script is guarded: it does
+# nothing unless the indexer is caught up and healthy.
+User=root
+Group=root
+
+EnvironmentFile=-/etc/morphit/snapshot-publish.env
+ExecStart=/opt/morphit/ops/snapshot-autopublish.sh
+
+# ─── Hardening ─────────────────────────────────────────────────
+# Deliberately lighter than the observation-only sidecars: this job legitimately
+# reads the DB, writes the snapshot dir, and drives kubo. Still no new privileges
+# and a private tmp.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectControlGroups=true
+ProtectKernelTunables=true
+RestrictSUIDSGID=true
+# A single run can take a while on a large DB; don't let it wedge a timer slot.
+TimeoutStartSec=3600
+
+[Install]
+WantedBy=multi-user.target

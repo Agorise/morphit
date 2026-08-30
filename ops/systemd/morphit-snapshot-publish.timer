@@ -1,0 +1,18 @@
+[Unit]
+Description=Morphit indexer-snapshot auto-publish timer — daily
+Documentation=https://git.agorise.net/agorise/morphit
+Requires=morphit-snapshot-publish.service
+
+[Timer]
+# Daily. A ~1-day-old snapshot leaves a fresh node only ~28,800 blocks of tail
+# to catch up (minutes). More frequent buys little; less frequent lengthens the
+# newcomer's wait. Runs ~30 min after boot so a just-restarted node settles +
+# catches up first (the job self-skips while behind anyway).
+OnBootSec=30min
+OnCalendar=daily
+RandomizedDelaySec=30min
+Persistent=true
+Unit=morphit-snapshot-publish.service
+
+[Install]
+WantedBy=timers.target

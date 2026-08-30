@@ -2816,7 +2816,13 @@
 		"search_clear": "清除搜索",
 		"hide_confirm_title": "隐藏 @{account}？",
 		"hide_confirm_body": "您将不会在订单簿中看到 {account} 的订单，并且您与该用户的聊天也会被隐藏。您可以随时在设置中重新显示。",
-		"hide_confirm_yes": "隐藏"
+		"hide_confirm_yes": "隐藏",
+		"catching_up": {
+			"title": "此实例仍在追赶区块",
+			"progress": "正在回放链数据 — 已完成 {pct}%。",
+			"eta": "订单预计将在 {eta} 左右可用。",
+			"estimating": "正在估算订单可用时间…"
+		}
 	},
 	"paired_readonly": {
 		"banner_heading": "以 @{account} 登录 — 密钥在手机上。",
@@ -4041,7 +4047,7 @@
 			"cooling_down": "冷却中",
 			"recheck": "重新检测节点速度",
 			"probing": "探测中…",
-			"unreachable": "无法连接",
+			"unreachable": "暂时离线",
 			"err_timeout": "未在规定时间内响应（超时）",
 			"err_tls": "TLS 证书问题",
 			"err_dns": "DNS 解析失败",

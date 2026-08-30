@@ -2816,7 +2816,13 @@
 		"search_clear": "Borrar búsqueda",
 		"hide_confirm_title": "¿Ocultar a @{account}?",
 		"hide_confirm_body": "No verás las órdenes de {account} en el libro de órdenes, y tus chats con esta persona también se ocultarán. Puedes volver a mostrarlos en cualquier momento desde Ajustes.",
-		"hide_confirm_yes": "Ocultar"
+		"hide_confirm_yes": "Ocultar",
+		"catching_up": {
+			"title": "Esta instancia aún se está poniendo al día",
+			"progress": "Reproduciendo la cadena — {pct}% completado.",
+			"eta": "Los pedidos deberían estar disponibles alrededor de {eta}.",
+			"estimating": "Estimando cuándo estarán disponibles los pedidos…"
+		}
 	},
 	"paired_readonly": {
 		"banner_heading": "Conectado como @{account} — las claves están en el teléfono.",
@@ -4041,7 +4047,7 @@
 			"cooling_down": "enfriándose",
 			"recheck": "Volver a comprobar la velocidad de los nodos",
 			"probing": "comprobando…",
-			"unreachable": "inaccesible",
+			"unreachable": "sin conexión por el momento",
 			"err_timeout": "Sin respuesta a tiempo (tiempo agotado)",
 			"err_tls": "Problema con el certificado TLS",
 			"err_dns": "Fallo la búsqueda DNS",

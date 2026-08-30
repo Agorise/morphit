@@ -2816,7 +2816,13 @@
 		"search_clear": "清除搜尋",
 		"hide_confirm_title": "隱藏 @{account}？",
 		"hide_confirm_body": "你將不會在訂單簿中看到 {account} 的訂單，而且你與該用戶的聊天也會被隱藏。你可以隨時在設定中重新顯示。",
-		"hide_confirm_yes": "隱藏"
+		"hide_confirm_yes": "隱藏",
+		"catching_up": {
+			"title": "此實例仍在追趕區塊",
+			"progress": "正在回放鏈數據 — 已完成 {pct}%。",
+			"eta": "訂單預計將於 {eta} 左右可用。",
+			"estimating": "正在估算訂單可用時間…"
+		}
 	},
 	"paired_readonly": {
 		"banner_heading": "以 @{account} 登入 — 鎖匙喺電話度。",
@@ -4041,7 +4047,7 @@
 			"cooling_down": "冷卻中",
 			"recheck": "重新檢測節點速度",
 			"probing": "測試中…",
-			"unreachable": "無法連線",
+			"unreachable": "暫時離線",
 			"err_timeout": "未喺時限內回應（逾時）",
 			"err_tls": "TLS 憑證問題",
 			"err_dns": "DNS 解析失敗",

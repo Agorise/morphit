@@ -43,21 +43,50 @@ function die(msg: string): never {
 	process.exit(1);
 }
 
-/** The built-in starter directory: the address pairs of the two public nodes
- *  default. Used when no JSON file is passed, so the first publish is one
- *  command. Edit here (or pass a file) to add nodes. */
+/** The built-in starter directory: the address pairs of the public nodes,
+ *  named. Used when no JSON file is passed, so publishing the canonical set is
+ *  one command. Edit here (or pass a file) to add/remove nodes. NOTE: the latest
+ *  morphit_rpc_v1 op REPLACES the on-chain directory, so this list should be the
+ *  COMPLETE set you want published (dead nodes like oldpc are simply omitted). */
 function starterDirectory(): RpcDirectoryPayload {
 	return {
 		v: 1,
 		ts: new Date().toISOString(),
 		nodes: [
 			{
+				name: 'star',
 				onion: 'http://f6cijlm7vn32tc4kxr3vxve5pkbysoq2etlihvx25spwtkpqsa25siad.onion:8091',
 				i2p: 'http://zgkfadmkqx75enpfhfrlfbwqk7c53uwmr55yplk3colaznepusxa.b32.i2p:8091'
 			},
 			{
+				name: 'jade',
 				onion: 'http://axj4qkjwk3bwh2lrn4bud5rrgsyrvuamd6jxdlmks6flsrju7q5rb5yd.onion:8091',
 				i2p: 'http://7tea4n3co3q2ozke2ovgqn7j5zirkauxipfttudbhthkat6fzlcq.b32.i2p:8091'
+			},
+			{
+				name: 'kc',
+				onion: 'http://xpqyoeap42iwmi6c6ew6svvtv2qwnkrbxpcshqitwmb3z2jqcvjb2nid.onion:8091',
+				i2p: 'http://xenmlfwajcaiavtt24a3lwzzjiv4pgvfjaps4etlpvgmvupvvcea.b32.i2p:8091'
+			},
+			{
+				name: 'oldpc',
+				onion: 'http://iarstejtiqofqs7hamflujy3fjwitxfoyysj6cngwpzdzermwm6hteid.onion:8091',
+				i2p: 'http://5cfk2jmub7gnte536sxezapgkykirje6v6omouhpymfo52eh473a.b32.i2p:8091'
+			},
+			{
+				name: 'mama',
+				onion: 'http://lr444djiignckmq3y2mhl2zplcy7lwxfxamv2irc2lt5jpmfybshhzid.onion:8091',
+				i2p: 'http://jtkaeepcpj2gfgv7swwnplffpu4zpf37bojtpigyrii5glwmrd6q.b32.i2p:8091'
+			},
+			{
+				name: 'j2',
+				onion: 'http://ukbumluqrinql6dw7l2mbtdioygodnrloob22cqfa4tvl3pspn5qzhid.onion:8091',
+				i2p: 'http://ogmildopmgbdyy2kc724ezhrnmvhnf2x52qw7lqgo2jna5juc3kq.b32.i2p:8091'
+			},
+			{
+				name: 's2',
+				onion: 'http://qci6a2fsuljqk2q3coeyqiipmzv3yqykvgibbktt6fcojysl2yw3gaad.onion:8091',
+				i2p: 'http://5jsepybvuw66r4e7xejv26r67ewoimtmx3iwedpflh7a2t5y66sa.b32.i2p:8091'
 			}
 		]
 	};
@@ -93,7 +122,7 @@ if (fileArg) {
 	}
 } else {
 	payloadInput = starterDirectory();
-	process.stderr.write('(no file given — using the built-in starter directory (2 nodes))\n');
+	process.stderr.write('(no file given — using the built-in starter directory (7 nodes))\n');
 }
 
 const pre = validateRpcDirectoryPayload(payloadInput);

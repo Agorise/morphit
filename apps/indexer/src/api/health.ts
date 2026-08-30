@@ -40,7 +40,7 @@ import type { HeadTailer } from '$indexer/headTailer';
 // endpoint reports. It stays hardcoded here on purpose: it is one of the 19
 // version touchpoints the version-consistency smoke pins, and reading it from
 // package.json at runtime would take it out of that net.
-export const INDEXER_VERSION = '1.13.2';
+export const INDEXER_VERSION = '1.14.0';
 
 // Blurt produces one block every 3 seconds. Used to translate the
 // block-lag count into a human "seconds behind" figure in the
@@ -49,6 +49,59 @@ export const INDEXER_VERSION = '1.13.2';
 // (a healthy indexer trails head by only a handful of blocks —
 // network + write latency) without having to do the arithmetic.
 const BLURT_BLOCK_SECONDS = 3;
+
+/** Catch-up estimate for /v1/health `sync`. Pure + exported for unit tests. */
+export interface SyncEstimate {
+	readonly behind: boolean;
+	readonly pct_complete: number | null;
+	readonly blocks_per_sec: number;
+	readonly eta_seconds: number | null;
+	readonly eta_utc: string | null;
+}
+
+/**
+ * Derive catch-up progress + an ETA to caught-up from block positions and
+ * uptime. Pure (no clock/IO except the injectable `nowMs`) so it unit-tests
+ * cleanly. The lag only closes at (our indexing rate − the head's advance rate,
+ * one block every `blockSeconds`); we quote an ETA only once there's real signal
+ * (≥60s uptime, actual progress, a net rate that closes the gap) so a
+ * just-booted node shows "estimating…" instead of a wild number.
+ */
+export function computeSyncEstimate(args: {
+	indexedBlock: number;
+	bootIndexedBlock: number;
+	chainHeadBlock: number;
+	startBlock: number;
+	uptimeSec: number;
+	lagBlocks: number;
+	stale: boolean;
+	blockSeconds: number;
+	nowMs?: number;
+}): SyncEstimate {
+	const nowMs = args.nowMs ?? Date.now();
+	const blocksProcessed = Math.max(0, args.indexedBlock - args.bootIndexedBlock);
+	const blocksPerSec = args.uptimeSec > 0 ? blocksProcessed / args.uptimeSec : 0;
+	const netBlocksPerSec = blocksPerSec - 1 / args.blockSeconds;
+	const behind = args.stale && args.lagBlocks > 0;
+	const canEstimate =
+		behind && args.uptimeSec >= 60 && blocksProcessed > 0 && netBlocksPerSec > 0;
+	const etaSeconds = canEstimate ? Math.round(args.lagBlocks / netBlocksPerSec) : null;
+	const etaUtc = etaSeconds != null ? new Date(nowMs + etaSeconds * 1000).toISOString() : null;
+	const span = args.chainHeadBlock - args.startBlock;
+	const pctComplete =
+		span > 0
+			? Math.round(
+					Math.min(100, Math.max(0, ((args.indexedBlock - args.startBlock) / span) * 100)) * 10
+				) / 10
+			: null;
+	return {
+		behind,
+		pct_complete: pctComplete,
+		blocks_per_sec: Math.round(blocksPerSec * 100) / 100,
+		eta_seconds: etaSeconds,
+		eta_utc: etaUtc
+	};
+}
 
 export function healthRoute(
 	config: Config,
@@ -95,6 +148,22 @@ export function healthRoute(
 		const headEstablished = status.chainHeadBlock > 0;
 		const stale = !headEstablished || lagBlocks > config.staleLagThreshold;
 
+		// ─── Catch-up ETA (cp-catchup) ───────────────────────────────────
+		// A fresh node replays from config.startBlock to the chain head, and the
+		// orderbook can't show orders until it's caught up. computeSyncEstimate
+		// (pure, unit-tested) derives a rate + ETA so the UI can say "orders
+		// available around <time>" instead of looking broken.
+		const sync = computeSyncEstimate({
+			indexedBlock: status.indexedBlock,
+			bootIndexedBlock: status.bootIndexedBlock,
+			chainHeadBlock: status.chainHeadBlock,
+			startBlock: config.startBlock,
+			uptimeSec,
+			lagBlocks,
+			stale,
+			blockSeconds: BLURT_BLOCK_SECONDS
+		});
+
 		// Compact RPC-pool health for at-a-glance triage on the PUBLIC
 		// body: how many of the configured Blurt RPC endpoints are
 		// currently reachable (out of cooldown). If this reads 0 while
@@ -133,6 +202,9 @@ export function healthRoute(
 				config.staleLagThreshold * BLURT_BLOCK_SECONDS
 			}s behind; Blurt makes a block every ${BLURT_BLOCK_SECONDS}s)`,
 			stale,
+			// Catch-up progress for the UI (orderbook "still catching up" banner).
+			// behind=false once synced; eta_utc null until there's enough signal.
+			sync,
 			rpc_endpoints_healthy: rpcEndpointsHealthy,
 			rpc_endpoints_total: rpcSnap.length
 		};

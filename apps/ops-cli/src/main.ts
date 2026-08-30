@@ -68,6 +68,7 @@ import { runLoyalty } from './commands/loyalty.ts';
 import { runAttestations } from './commands/attestations.ts';
 import { runFlags } from './commands/flags.ts';
 import { runFastForward } from './commands/fastForward.ts';
+import { runFastSync } from './commands/fastSync.ts';
 import { runBlock, runUnblock } from './commands/block.ts';
 import { runModeration } from './commands/moderation.ts';
 import { runInit } from './commands/init.ts';
@@ -229,6 +230,7 @@ function printHelp(): void {
 		'  flags [--type=reciprocity|related]  Moderation flags raised',
 		'  block <account> [reason]        Hide an account\u2019s listings on THIS instance (local; no posting key)',
 		'  unblock <account>               Un-hide an account\u2019s listings on this instance',
+		'  fast-sync                       Restore the newest federation snapshot (minutes, not days) — recommended for a fresh node',
 		'  fast-forward [BLOCK]            Advance the indexer cursor to a recent block (skip a long sync)',
 		'',
 		'Global flags:',
@@ -676,6 +678,8 @@ async function main(): Promise<number> {
 				return await runFlags(ctx);
 			case 'fast-forward':
 				return await runFastForward(ctx);
+			case 'fast-sync':
+				return await runFastSync(ctx);
 			case 'block':
 				return await runBlock(ctx);
 			case 'unblock':

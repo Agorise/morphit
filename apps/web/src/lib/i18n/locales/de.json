@@ -2816,7 +2816,13 @@
 		"search_clear": "Suche löschen",
 		"hide_confirm_title": "@{account} ausblenden?",
 		"hide_confirm_body": "Du siehst die Angebote von {account} nicht mehr im Orderbuch, und auch deine Chats mit dieser Person werden ausgeblendet. Du kannst sie jederzeit in den Einstellungen wieder einblenden.",
-		"hide_confirm_yes": "Ausblenden"
+		"hide_confirm_yes": "Ausblenden",
+		"catching_up": {
+			"title": "Diese Instanz holt noch auf",
+			"progress": "Kette wird nachgespielt — {pct}% abgeschlossen.",
+			"eta": "Angebote sollten etwa um {eta} verfügbar sein.",
+			"estimating": "Zeit bis zur Verfügbarkeit wird geschätzt…"
+		}
 	},
 	"paired_readonly": {
 		"banner_heading": "Angemeldet als @{account} — das Telefon hat die Schlüssel.",
@@ -4041,7 +4047,7 @@
 			"cooling_down": "pausiert",
 			"recheck": "Node-Geschwindigkeiten erneut prüfen",
 			"probing": "prüfe…",
-			"unreachable": "nicht erreichbar",
+			"unreachable": "momentan offline",
 			"err_timeout": "Keine Antwort rechtzeitig (Zeitüberschreitung)",
 			"err_tls": "TLS-Zertifikatsproblem",
 			"err_dns": "DNS-Auflösung fehlgeschlagen",
