@@ -80,7 +80,27 @@ export async function runFastSync(ctx: CommandCtx): Promise<number> {
 
 	// Run the bootstrap from the deployed repo. Inherit stdio so its progress,
 	// verification output, and any prompts reach the operator directly.
-	const repo = defaultRepoRoot();
+	blank();
+	return fastSyncFromChain({
+		repoRoot: defaultRepoRoot(),
+		signer: ctx.flags.signer,
+		force,
+		skipVerify: ctx.flags['skip-verify'] === 'true'
+	});
+}
+
+/**
+ * Shared bootstrap driver: spawn snapshot-bootstrap.ts --from-chain and report.
+ * Used by both the standalone `fast-sync` command (after its guards) and the
+ * install wizard (fresh box, no guards needed). Returns the child's exit code.
+ */
+export function fastSyncFromChain(opts: {
+	repoRoot: string;
+	signer?: string;
+	force?: boolean;
+	skipVerify?: boolean;
+}): number {
+	const repo = opts.repoRoot;
 	const tsx = join(repo, 'node_modules', '.bin', 'tsx');
 	const bootstrapArgs = [
 		'--tsconfig',
@@ -89,11 +109,10 @@ export async function runFastSync(ctx: CommandCtx): Promise<number> {
 		'--from-chain',
 		'--i-trust-signer'
 	];
-	if (ctx.flags.signer) bootstrapArgs.push('--signer', ctx.flags.signer);
-	if (force) bootstrapArgs.push('--force');
-	if (ctx.flags['skip-verify'] === 'true') bootstrapArgs.push('--skip-verify');
+	if (opts.signer) bootstrapArgs.push('--signer', opts.signer);
+	if (opts.force) bootstrapArgs.push('--force');
+	if (opts.skipVerify) bootstrapArgs.push('--skip-verify');
 
-	blank();
 	const run = spawnSync(tsx, bootstrapArgs, { cwd: repo, stdio: 'inherit' });
 	if (run.status !== 0) {
 		blank();

@@ -15,6 +15,10 @@
       bantime.maxtime = {{ fail2ban_bantime_max }}
       findtime = {{ fail2ban_findtime }}
       maxretry = {{ fail2ban_maxretry }}
+      # Never ban the admin's own IP(s): a fumbled SSH passphrase or a noisy
+      # release ceremony must not lock the operator out. Set fail2ban_ignoreip
+      # in group_vars (space-separated; CIDR ok). Loopback is always included.
+      ignoreip = 127.0.0.1/8 ::1{{ (' ' + fail2ban_ignoreip) if fail2ban_ignoreip | default('') | length > 0 else '' }}
       backend  = systemd
       destemail = {{ morphit_alert_email_to }}
       sender   = fail2ban@{{ morphit_domain }}

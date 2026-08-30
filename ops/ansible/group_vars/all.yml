@@ -434,6 +434,11 @@ fail2ban_bantime: 3600
 fail2ban_bantime_max: 604800     # 7 days
 fail2ban_findtime: 600           # 10 min window
 fail2ban_maxretry: 4
+# Space-separated admin IP(s)/CIDRs to NEVER ban (loopback is added automatically
+# in the jail). Set this to your workstation's public IP (or VPN egress / ISP
+# range if dynamic) so a passphrase fumble or release ceremony can't lock you out.
+# Leave empty to whitelist loopback only.
+fail2ban_ignoreip: ''
 
 
 # ─── auditd (§37.6) ──────────────────────────────────────────────

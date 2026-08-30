@@ -79,6 +79,15 @@ const passive = passiveIndex([
 	check('sustained failure shows through (not suppressed)', merged[0].healthy === false);
 }
 
+// 4b. The exact value the server now emits for a genuine double-miss (cf === 2):
+//     a node the operator just shut down must show DOWN on refresh, not keep its
+//     stale healthy latency. This is the boundary of the <=1 transient rule.
+{
+	const fresh = [ep(URL_WIFI, { healthy: false, latency_ms: null, failure_reason: 'timeout', consecutive_failures: 2 })];
+	const merged = mergeFreshOverPassive(fresh, passive);
+	check('double-miss (cf=2) shows through even when passive still reads healthy', merged[0].healthy === false);
+}
+
 // 5. non-transient reason (rpc_error / http) is NOT suppressed even if 1 failure
 {
 	const fresh = [ep(URL_DOWN, { transport: 'tor', healthy: false, latency_ms: null, failure_reason: 'http', http_status: 503, consecutive_failures: 1 })];

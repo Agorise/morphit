@@ -362,16 +362,30 @@ export async function probeEndpoints(
 ): Promise<RpcEndpointsResponse> {
 	const endpoints = await Promise.all(
 		canonicalUrls.map(async (url): Promise<RpcEndpointHealth> => {
-			const { latencyMs, ok, reason, httpStatus } = await probeOne(url);
+			// Probe once. On a MISS, retry ONCE before believing it's down: a single
+			// jittery Tor/I2P miss on a node that's actually up shouldn't read as an
+			// outage. But TWO fresh misses in a row is a real signal, not a blip — so
+			// we report consecutive_failures: 2, which lifts it past the card's
+			// transient-miss suppression (<=1). That's what lets an explicit refresh
+			// show a node the operator just shut down as DOWN, instead of keeping its
+			// stale last-known latency. (the maintainer: "what good is a refresh if it doesn't
+			// show the real status of that address?")
+			let r = await probeOne(url);
+			let consecutiveFailures = 0;
+			if (!r.ok) {
+				const retry = await probeOne(url);
+				r = retry; // report the most recent attempt's latency/reason/status
+				consecutiveFailures = retry.ok ? 0 : 2;
+			}
 			return {
 				url,
 				transport: rpcTransportOf(url),
-				healthy: ok,
-				latency_ms: latencyMs,
-				consecutive_failures: ok ? 0 : 1,
+				healthy: r.ok,
+				latency_ms: r.latencyMs,
+				consecutive_failures: consecutiveFailures,
 				cooldown_ms: 0,
-				failure_reason: reason,
-				http_status: httpStatus
+				failure_reason: r.reason,
+				http_status: r.httpStatus
 			};
 		})
 	);

@@ -2449,6 +2449,11 @@ cat > /etc/fail2ban/jail.local << 'EOF'
 bantime  = 1h
 findtime = 10m
 maxretry = 5
+# ALWAYS whitelist your own admin IP(s) so a fumbled SSH passphrase or a noisy
+# release ceremony can never lock YOU out. Space-separated; CIDR ranges allowed.
+# Replace 203.0.113.10 with your workstation's public IP (or your ISP range /
+# VPN egress if it's dynamic). Keep the loopback entries.
+ignoreip = 127.0.0.1/8 ::1 203.0.113.10
 
 [sshd]
 enabled = true
@@ -2462,6 +2467,17 @@ EOF
 systemctl enable --now fail2ban
 fail2ban-client status
 ```
+
+> **Why `ignoreip` matters (learned the hard way).** The release ceremony makes
+> several SSH connections to the node (the upgrade session, the canary push). If
+> your SSH key isn't cached in an agent, each one re-prompts for the passphrase,
+> and every fumble is a failed auth from your IP — enough of them and **fail2ban
+> bans your own admin box**, which shows up as `ssh: connect ... Connection
+> refused` mid-ceremony. Whitelisting your admin IP here makes that impossible.
+> If you're already locked out, get in via the provider's out-of-band console and
+> run `fail2ban-client set sshd unbanip <YOUR_IP>` (check first with
+> `fail2ban-client status sshd`). Also cache your key so you stop generating the
+> failed auths in the first place — see the SSH-key note in §33.
 
 The `nginx-limit-req` jail catches IPs that hit nginx's
 `limit_req_zone` (your application-level rate-limit) repeatedly.

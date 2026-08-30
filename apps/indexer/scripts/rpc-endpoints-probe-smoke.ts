@@ -41,6 +41,10 @@ check(
 	'a failed/unreachable probe is unhealthy + null latency, never throws',
 	r.endpoints.every((e) => e.healthy === false && e.latency_ms === null)
 );
+check(
+	'a genuine double-miss reports consecutive_failures: 2 (so the card can show it DOWN, not a suppressed blip)',
+	r.endpoints.every((e) => e.consecutive_failures === 2)
+);
 
 // 5s server-side cache (DDoS guard): two calls within 5s share ONE probe.
 __resetProbeCacheForTests();

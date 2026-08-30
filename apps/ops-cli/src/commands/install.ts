@@ -30,6 +30,7 @@ import { defaultRepoRoot, safeCwd } from '../lib/repoRoot.ts';
 import { ask, askYesNo, askChoice } from '../init/prompt.ts';
 import { runInit } from './init.ts';
 import { runHarden } from './harden.ts';
+import { fastSyncFromChain } from './fastSync.ts';
 import { runAnsibleInstall } from '../init/runAnsibleInstall.ts';
 
 export interface InstallCtx {
@@ -172,9 +173,26 @@ export async function runInstall(ctx: InstallCtx): Promise<number> {
 		return initCode;
 	}
 
-	// ─── 3. Offer hardening ─────────────────────────────────────
+	// ─── 3. Fast-sync (recommended, default yes) ────────────────
 	console.log('');
-	console.log('Step 3 — server hardening (recommended before going public).');
+	console.log('Step 3 — get the orderbook live fast.');
+	console.log('  A fresh node can restore the newest signed federation snapshot and be');
+	console.log('  live in MINUTES, instead of replaying the whole chain for days. You trust');
+	console.log('  the publisher (@morphit) for the settled state; the recent tail is');
+	console.log('  re-verified from chain and a spot-check confirms it before serving.');
+	console.log('  Prefer zero trust? Decline and the node will full-replay from genesis.');
+	console.log('');
+	const wantFastSync = await askYesNo('Fast-sync this node from a federation snapshot now?', true);
+	if (wantFastSync) {
+		fastSyncFromChain({ repoRoot: safeCwd() ?? defaultRepoRoot() });
+	} else {
+		console.log('  Skipped — the indexer will full-replay from genesis when you start it.');
+		console.log('  You can fast-sync any time with `morphit-ops fast-sync`.');
+	}
+
+	// ─── 4. Offer hardening ─────────────────────────────────────
+	console.log('');
+	console.log('Step 4 — server hardening (recommended before going public).');
 	const wantHarden = await askYesNo('Walk through server hardening now?', true);
 	if (wantHarden) {
 		await runHarden({
@@ -186,9 +204,9 @@ export async function runInstall(ctx: InstallCtx): Promise<number> {
 		console.log('  Skipped. Run `npx morphit-ops harden` any time.');
 	}
 
-	// ─── 4. Offer the PATH symlink (kill the npx friction) ──────
+	// ─── 5. Offer the PATH symlink (kill the npx friction) ──────
 	console.log('');
-	console.log('Step 4 — convenience.');
+	console.log('Step 5 — convenience.');
 	await offerPathSymlink();
 
 	console.log('');
