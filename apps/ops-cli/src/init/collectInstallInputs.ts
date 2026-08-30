@@ -107,7 +107,7 @@ export async function collectInstallInputs(
 		step(0, 0, 'Your web address (domain)');
 		domain = await askValidated(
 			'What web address (domain) will people use to reach your marketplace?',
-			['trade.example.com', 'morphit.mydomain.org'],
+			['trade.example.com', 'barter.yourbrand.org'],
 			validateDomain,
 			req
 		);

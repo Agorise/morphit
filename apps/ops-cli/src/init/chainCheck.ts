@@ -242,10 +242,10 @@ export function validateBlurtAccountName(name: string): {
 			message: 'Must start with a lowercase letter.'
 		};
 	}
-	if (!/^[a-z0-9-]+$/.test(name)) {
+	if (!/^[a-z0-9.-]+$/.test(name)) {
 		return {
 			ok: false,
-			message: 'Only lowercase letters, numbers, and dashes are allowed.'
+			message: 'Only lowercase letters, numbers, dashes, and dots are allowed.'
 		};
 	}
 	if (name.includes('--')) {
@@ -254,10 +254,24 @@ export function validateBlurtAccountName(name: string): {
 			message: 'No consecutive dashes.'
 		};
 	}
-	if (name.endsWith('-')) {
+	if (name.includes('..')) {
 		return {
 			ok: false,
-			message: 'Cannot end with a dash.'
+			message: 'No consecutive dots.'
+		};
+	}
+	if (name.endsWith('-') || name.endsWith('.')) {
+		return {
+			ok: false,
+			message: 'Cannot end with a dash or dot.'
+		};
+	}
+	// Each dot-separated segment must start with a letter (Blurt rule), so a name
+	// like "my.relay" is fine but ".relay" or "my.9relay" is not.
+	if (!name.split('.').every((seg) => /^[a-z]/.test(seg))) {
+		return {
+			ok: false,
+			message: 'Each part (between dots) must start with a lowercase letter.'
 		};
 	}
 	return { ok: true };

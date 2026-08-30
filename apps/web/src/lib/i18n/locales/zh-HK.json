@@ -1255,7 +1255,7 @@
 			},
 			"help_make_unstoppable": {
 				"q": "我如何幫助讓 Morphit 勢不可擋?",
-				"a": "Morphit 的韌性隨著每個獨立營運者而增長。你可以通過以下方式幫助:\n\n• 運行你自己的節點。在自己的伺服器上部署 indexer + relay + frontend,並從你自己的 URL 提供 Morphit。\n\n• 在 Tor、Lokinet 或 I2P 上託管。.onion、.loki 或 .b32.i2p 鏡像讓受審查網絡中的用戶也能存取。\n\n• 將一個 ENS .eth 名稱指向它。在 ENS（Ethereum Name Service，以太坊名稱服務）註冊一個 `.eth` 名稱並指向你的執行個體——通常透過 ENS 的 contenthash 指向你網站的 IPFS 副本——這樣人們就可以透過像 `morphit.eth` 這樣易讀的去中心化名稱（使用支援 ENS 的瀏覽器或閘道）存取你。它會作為頁尾中額外的一個標籤，與 Tor/Lokinet/I2P 並排顯示。\n\n• 託管 Morphit 的依賴項。\n\n• 資助社區節點。向活躍營運者的 @morphit-relay 帳戶貢獻 Blurt。\n\n• 廣而告之。\n\n• 撰寫教學和翻譯。項目採用 AGPL-3.0 許可。\n\nMorphit 設計為不可關閉,因為沒有中心角色可被施壓。"
+				"a": "Morphit 的韌性隨著每個獨立營運者而增長。你可以通過以下方式幫助:\n\n• 運行你自己的節點。在自己的伺服器上部署 indexer + relay + frontend,並從你自己的 URL 提供 Morphit。\n\n• 在 Tor、Lokinet 或 I2P 上託管。.onion、.loki 或 .b32.i2p 鏡像讓受審查網絡中的用戶也能存取。\n\n• 將一個 ENS .eth 名稱指向它。在 ENS（Ethereum Name Service，以太坊名稱服務）註冊一個 `.eth` 名稱並指向你的執行個體——通常透過 ENS 的 contenthash 指向你網站的 IPFS 副本——這樣人們就可以透過像 `yourbrand.eth` 這樣易讀的去中心化名稱（使用支援 ENS 的瀏覽器或閘道）存取你。它會作為頁尾中額外的一個標籤，與 Tor/Lokinet/I2P 並排顯示。\n\n• 託管 Morphit 的依賴項。\n\n• 資助社區節點。向活躍營運者的 @morphit-relay 帳戶貢獻 Blurt。\n\n• 廣而告之。\n\n• 撰寫教學和翻譯。項目採用 AGPL-3.0 許可。\n\nMorphit 設計為不可關閉,因為沒有中心角色可被施壓。"
 			},
 			"why_self_trading_fails": {
 				"q": "為什麼自己跟自己交易不能提升我的信譽?",
@@ -1989,7 +1989,7 @@
 		},
 		"ens": {
 			"title": "ENS",
-			"body": "Ethereum Name Service(以太坊域名服務):將 morphit.eth 呢類可讀名字對應去中心化嘅網站內容。"
+			"body": "Ethereum Name Service(以太坊域名服務):將 yourbrand.eth 呢類可讀名字對應去中心化嘅網站內容。"
 		},
 		"ipfs": {
 			"title": "IPFS",

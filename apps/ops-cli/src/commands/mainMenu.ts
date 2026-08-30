@@ -68,16 +68,16 @@ export const MENU_GROUPS: readonly MenuGroup[] = [
 				tip: 'Start here on a fresh server. It can also set up firewall hardening and HTTPS for you.'
 			},
 			{
-				label: 'Fast-sync from a federation snapshot (recommended for a fresh node)',
-				blurb: 'Restore the newest on-chain-anchored snapshot so the orderbook is live in minutes, not days.',
-				subcommand: 'fast-sync',
-				tip: 'Downloads + verifies (sha256 three ways + a chain spot-check) the newest snapshot published by @morphit, then catches up the short tail. Prefer zero trust? Skip this and full-replay from genesis.'
-			},
-			{
 				label: 'Upgrade to the latest version',
 				blurb: 'Check for a newer Morphit release and apply it (with backup + rollback).',
 				subcommand: 'upgrade',
 				tip: 'Always backs up first and rolls back on failure. A \u201c\u25cf update available\u201d marker shows here when a newer release exists.'
+			},
+			{
+				label: 'Fast-sync from a federation snapshot (recommended for a fresh node)',
+				blurb: 'Restore the newest on-chain-anchored snapshot so the orderbook is live in minutes, not days.',
+				subcommand: 'fast-sync',
+				tip: 'Downloads + verifies (sha256 three ways + a chain spot-check) the newest snapshot published by @morphit, then catches up the short tail. Prefer zero trust? Skip this and full-replay from genesis.'
 			}
 		]
 	},

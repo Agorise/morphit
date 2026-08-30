@@ -211,7 +211,7 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 
 		const lokinetR = await editField(
 			'Lokinet .loki address',
-			'Full .loki address or your ONS name (e.g. "morphit.loki").',
+			'Full .loki address or your ONS name (e.g. "yourbrand.loki").',
 			existing.altNetworks.lokinet
 		);
 		if (lokinetR.changed)
@@ -233,7 +233,7 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 
 		const i2pNameR = await editField(
 			'I2P vanity name (DOMAIN.i2p)',
-			'Optional pretty alias like "morphit.i2p" (needs an i2p address-book entry).',
+			'Optional pretty alias like "yourbrand.i2p" (needs an i2p address-book entry).',
 			existing.altNetworks.i2pName
 		);
 		if (i2pNameR.changed) {

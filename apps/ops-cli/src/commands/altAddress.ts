@@ -107,7 +107,7 @@ async function collectAddress(net: AltNet): Promise<string | null> {
 		console.log("       sudo journalctl -u lokinet | grep -i '.loki' | tail");
 		console.log(`(The ./${script} helper prints these same steps.)`);
 		console.log('');
-		console.log('Want a short name like "morphit.loki"? That is ONS — you buy it');
+		console.log('Want a short name like "yourbrand.loki"? That is ONS — you buy it');
 		console.log('with OXEN coin in the Oxen wallet (optional, costs money).');
 	}
 
@@ -221,7 +221,7 @@ async function collectNostr(): Promise<string | null> {
  *  optional pretty alias for the always-resolvable .b32.i2p address. */
 async function collectI2pName(): Promise<string | null> {
 	console.log('');
-	console.log('I2P vanity name — a human-readable alias like "morphit.i2p".');
+	console.log('I2P vanity name — a human-readable alias like "yourbrand.i2p".');
 	console.log('');
 	console.log('This is OPTIONAL and separate from your .b32.i2p address: the b32');
 	console.log('always resolves; the vanity name only resolves for visitors whose');
@@ -244,12 +244,12 @@ async function collectI2pName(): Promise<string | null> {
  *  Advertised as a footer pill; Morphit does not resolve it. */
 async function collectEns(): Promise<string | null> {
 	console.log('');
-	console.log('ENS name — a decentralized .eth name like "morphit.eth".');
+	console.log('ENS name — a decentralized .eth name like "yourbrand.eth".');
 	console.log('');
 	console.log('This is OPTIONAL. Register the name on Ethereum (ENS) and point it');
 	console.log('at your instance — usually by setting its contenthash to an IPFS');
 	console.log('copy of your site. Visitors open it with an ENS-aware browser or an');
-	console.log('ENS gateway. Paste just the name (e.g. morphit.eth), not a URL.');
+	console.log('ENS gateway. Paste just the name (e.g. yourbrand.eth), not a URL.');
 	console.log('');
 	for (;;) {
 		const pasted = (await ask('Paste your DOMAIN.eth name (or press Enter to go back)', '')).trim();

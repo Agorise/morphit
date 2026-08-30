@@ -73,7 +73,7 @@ Type-check without running:
 
 ### 1. DNS record
 
-Add an **A record** (or AAAA for IPv6) pointing `relay.morphit.io`
+Add an **A record** (or AAAA for IPv6) pointing `relay.example.com`
 at the VPS's public IP. Most registrars have a web UI; the exact
 steps depend on your DNS provider, but the record is typically:
 
@@ -85,7 +85,7 @@ steps depend on your DNS provider, but the record is typically:
 | TTL       | 3600 (default is fine) |
 
 Propagation is usually under 5 minutes; occasionally up to an hour.
-Check with `dig relay.morphit.io` from any shell.
+Check with `dig relay.example.com` from any shell.
 
 ### 2. Install Node.js 24 on the VPS
 
@@ -165,8 +165,8 @@ owned by the service user.
 
     scp ops/nginx/relay.conf your-vps:/tmp/
     ssh your-vps '
-        sudo mv /tmp/relay.conf /etc/nginx/sites-available/relay.morphit.io.conf
-        sudo ln -s /etc/nginx/sites-available/relay.morphit.io.conf /etc/nginx/sites-enabled/
+        sudo mv /tmp/relay.conf /etc/nginx/sites-available/relay.example.com.conf
+        sudo ln -s /etc/nginx/sites-available/relay.example.com.conf /etc/nginx/sites-enabled/
         sudo nginx -t && sudo systemctl reload nginx
     '
 
@@ -175,18 +175,18 @@ owned by the service user.
 Once DNS has propagated (step 1) and nginx is reloaded with the
 HTTP-only stub, certbot can fetch a Let's Encrypt cert:
 
-    ssh your-vps 'sudo certbot --nginx -d relay.morphit.io'
+    ssh your-vps 'sudo certbot --nginx -d relay.example.com'
 
 Verify:
 
-    curl -v https://relay.morphit.io/v1/health
+    curl -v https://relay.example.com/v1/health
 
 ### 10. Smoke test from the frontend
 
 Point a dev build of `apps/web` at the staging relay origin:
 
     # apps/web/.env.local (or similar)
-    PUBLIC_MORPHIT_RELAY_ORIGIN=https://relay.morphit.io
+    PUBLIC_MORPHIT_RELAY_ORIGIN=https://relay.example.com
 
 Then run `npm run dev` in `apps/web` and open the registration
 flow — the browser's dev-tools network tab shows the relay calls

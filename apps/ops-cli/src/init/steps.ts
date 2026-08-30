@@ -74,7 +74,7 @@ export async function stepInstanceName(): Promise<string> {
 			'location, or a short brand. There is no central registry; it\n' +
 			'need not be globally unique, and you can change it later.'
 	);
-	examples(['alice-morphit', 'Morphit Berlin', 'Free Morphit Canada']);
+	examples(['Acme Barter', 'Berlin Free Market', 'Freedom Trade Canada']);
 
 	while (true) {
 		const name = await ask('Instance name (required)');
@@ -225,7 +225,7 @@ export function describeAccountLookupFailure(
 }
 
 /** Derive a short, Blurt-name-safe base from the operator's instance name (or
- *  domain) for SUGGESTING relay/fees account names — e.g. "Morphit NL" ->
+ *  domain) for SUGGESTING relay/fees account names — e.g. "Acme Barter" ->
  *  "morphitnl", "morphit.io" -> "morphitio". Capped at 10 chars so both
  *  `<base>-relay` and `<base>-fees` fit Blurt's 16-char account-name limit.
  *  Returns '' when nothing usable (the caller shows a generic
@@ -271,7 +271,7 @@ export async function stepRelayAccount(instanceName?: string): Promise<RelayAcco
 			'\n' +
 			'Then come back here.'
 	);
-	examples(base ? [`${base}-relay`] : ['your-instance-relay', 'my-morphit-relay']);
+	examples(base ? [`${base}-relay`] : ['yourbrand-relay', 'acme-relay']);
 
 	while (true) {
 		const name = await ask('Blurt account name (required)');
@@ -489,7 +489,7 @@ export async function stepFeesAccount(defaultAccount: string | undefined, instan
 			'never need to — so your earnings stay safe even if the\n' +
 			'server is ever compromised.'
 	);
-	examples(base ? [`${base}-fees`] : ['your-instance-fees', 'my-morphit-fees']);
+	examples(base ? [`${base}-fees`] : ['yourbrand-fees', 'acme-fees']);
 	if (defaultAccount !== undefined) {
 		console.log(`Default (press Enter): keep ${defaultAccount}`);
 	}
@@ -756,7 +756,7 @@ export async function stepAltNetworks(): Promise<AltNetworkResult> {
 	const wantsI2pName = await askYesNo('Add an I2P vanity name (DOMAIN.i2p)?', false);
 	let i2pName: string | null = null;
 	if (wantsI2pName) {
-		i2pName = await askOptionalAddress('I2P vanity name, e.g. morphit.i2p (paste, or Enter to skip)', 'i2p-name', 'DOMAIN.i2p name');
+		i2pName = await askOptionalAddress('I2P vanity name, e.g. yourbrand.i2p (paste, or Enter to skip)', 'i2p-name', 'DOMAIN.i2p name');
 	}
 
 	const wantsNostr = await askYesNo('Add a Nostr pubkey?', false);
@@ -772,7 +772,7 @@ export async function stepAltNetworks(): Promise<AltNetworkResult> {
 	const wantsEns = await askYesNo('Add an ENS .eth name?', false);
 	let ens: string | null = null;
 	if (wantsEns) {
-		ens = await askOptionalAddress('ENS name, e.g. morphit.eth (paste, or Enter to skip)', 'ens', 'ENS .eth name');
+		ens = await askOptionalAddress('ENS name, e.g. yourbrand.eth (paste, or Enter to skip)', 'ens', 'ENS .eth name');
 	}
 
 	return { tor, lokinet, i2pB32, i2pName, nostr, ens };
@@ -2245,7 +2245,7 @@ export interface OperatorTagResult {
 // on-chain handler rejects it as tag_reserved).  When a public
 // origin is set we default to its domain; otherwise this neutral
 // placeholder, which the operator is prompted to change.
-const DEFAULT_FALLBACK_TAG = 'my-morphit-node';
+const DEFAULT_FALLBACK_TAG = 'independent-node';
 const OPERATOR_TAG_PATTERN = /^[a-z0-9._-]+$/;
 const OPERATOR_TAG_MAX = 64;
 

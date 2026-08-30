@@ -40,7 +40,7 @@
  *
  * Usage:
  *   # detect-only (safe, no key; for a timer that alerts):
- *   tsx treasury-repin-broadcast.ts --node https://indexer.morphit.io
+ *   tsx treasury-repin-broadcast.ts --node https://indexer.example.com
  *
  *   # opt-in unattended auto-broadcast (trusted signing box ONLY):
  *   MORPHIT_REPIN_POSTING_KEY_FILE=/etc/morphit/repin.key \

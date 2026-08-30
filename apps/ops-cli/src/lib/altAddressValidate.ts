@@ -6,7 +6,7 @@
  * Address shapes (all lowercase, canonical):
  *   - Tor v3 onion:  56 base32 chars + ".onion"
  *   - Lokinet:       the full 52-char base32z address, OR a short ONS name
- *                    (e.g. "morphit.loki") — both end in ".loki"
+ *                    (e.g. "yourbrand.loki") — both end in ".loki"
  *   - I2P b32:       52+ base32 chars + ".b32.i2p" (52 traditional, 56+ for
  *                    encrypted leasesets)
  */
@@ -19,10 +19,10 @@ const ONION_RE = /^[a-z2-7]{56}\.onion$/;
 const LOKI_RE = /^[a-z0-9][a-z0-9-]{1,62}\.loki$/;
 const I2P_B32_RE = /^[a-z2-7]{52,}\.b32\.i2p$/;
 // I2P vanity host-name: ordinary hostname labels ending in ".i2p" (NOT the
-// ".b32.i2p" hash form — that's the b32 slot).  e.g. "morphit.i2p".
+// ".b32.i2p" hash form — that's the b32 slot).  e.g. "yourbrand.i2p".
 const I2P_NAME_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*\.i2p$/;
 // ENS name: one or more ASCII hostname labels ending in ".eth".  e.g.
-// "morphit.eth" or a subdomain "node.morphit.eth".  This is a FORMAT check on
+// "yourbrand.eth" or a subdomain "node.yourbrand.eth".  This is a FORMAT check on
 // the common ASCII case (no on-chain resolution, no UTS-46/emoji normalization
 // — consistent with how the onion/i2p addresses are validated by shape, not
 // resolved, and with the "tiny footprint, no extra deps" posture). ENS is a
@@ -88,7 +88,7 @@ export function validateI2pName(raw: string): ValidateResult {
 		return { ok: false, reason: 'that is a .b32.i2p hash address — set it under the I2P b32 option, not the vanity name' };
 	return isValidI2pName(v)
 		? { ok: true, value: v }
-		: { ok: false, reason: 'that is not an I2P vanity name (expected something like "morphit.i2p")' };
+		: { ok: false, reason: 'that is not an I2P vanity name (expected something like "yourbrand.i2p")' };
 }
 
 /** Validate (and normalize) a pasted ENS .eth name.  Nothing to "generate":
@@ -101,7 +101,7 @@ export function validateEnsName(raw: string): ValidateResult {
 	if (v.length === 0) return { ok: false, reason: 'empty' };
 	return isValidEnsName(v)
 		? { ok: true, value: v }
-		: { ok: false, reason: 'that is not an ENS .eth name (expected something like "morphit.eth")' };
+		: { ok: false, reason: 'that is not an ENS .eth name (expected something like "yourbrand.eth")' };
 }
 
 /** morphit.config.env key for the optional ENS .eth name. Standalone (not in

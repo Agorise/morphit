@@ -499,16 +499,17 @@ export function renderHardeningChecklist(input: HardeningChecklistInput): string
 		L.push('      so the relay honours the real client IP BunkerWeb forwards.');
 		L.push('      (Reference: `ops/bunkerweb/README.md`, OPERATIONS.md §32)');
 	} else {
-		L.push('- [ ] **Place the shipped nginx server blocks** and reload:');
+		L.push('- [ ] **Place the shipped nginx server block** and reload:');
 		L.push('      ```');
-		L.push('      sudo cp ops/nginx/web.conf     /etc/nginx/sites-available/morphit-web.conf');
-		L.push('      sudo cp ops/nginx/relay.conf   /etc/nginx/sites-available/morphit-relay.conf');
-		L.push('      sudo cp ops/nginx/indexer.conf /etc/nginx/sites-available/morphit-indexer.conf');
+		L.push('      sudo cp ops/nginx/web.conf /etc/nginx/sites-available/morphit-web.conf');
 		L.push('      ```');
-		L.push(`      Edit each to set \`server_name ${domain};\`, symlink into`);
-		L.push('      `sites-enabled/`, then `sudo nginx -t && sudo systemctl reload nginx`.');
-		L.push('      They serve `apps/web/build` and reverse-proxy `/v1/*` to the relay +');
-		L.push('      indexer.  (Reference: RUN-A-MORPHIT-NODE.md §6)');
+		L.push(`      Edit it to set \`server_name ${domain};\` — ONE domain. It serves`);
+		L.push('      `apps/web/build` and reverse-proxies `/relay/`, `/v1/`, `/rss/`, `/mcp`');
+		L.push('      to the local services, so you do NOT need a separate host per service.');
+		L.push('      Symlink into `sites-enabled/`, then `sudo nginx -t && sudo systemctl reload nginx`.');
+		L.push('      (Advanced: only if you deliberately split the relay/indexer onto their');
+		L.push('      own subdomains, see the OPTIONAL `ops/nginx/relay.conf` + `indexer.conf`.');
+		L.push('      Reference: RUN-A-MORPHIT-NODE.md §6)');
 	}
 	L.push('');
 	L.push('## 4. Ongoing monitoring (optional sidecars)');

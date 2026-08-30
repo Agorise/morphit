@@ -106,7 +106,7 @@ Your instance uses the Blurt blockchain, and it's best to make **two** free Blur
 - a **relay account** — it signs new-user signups and pays the small chain fee for each, so **fund it with enough BLURT for at least 20 signups** (about 2,000 BLURT to start) and have its *active key* ready (it lives on the server); and
 - a **fees account** — where your listing-fee earnings land. Keep its keys **off the server** (don't enter them anywhere), so your earnings stay safe even if the machine is ever compromised.
 
-Name them after your instance or domain so they're easy to recognise. For example, if your instance is **Morphit NL** at `morphit.io`, you might use **@morphitnl-relay** and **@morphitnl-fees**, or **@morphitio-relay** and **@morphitio-fees**. Any Blurt signup works (for example [morphit.io/en/onboarding](https://morphit.io/en/onboarding)); keep all the keys in your password manager.
+Name them after **your own** instance or domain so they're easy to recognise — use your branding, not the word "morphit" (that's our reserved namespace). For example, if your instance is **Acme Barter** at `acme-barter.com`, you might use **@acmebarter-relay** and **@acmebarter-fees**, or **@acme-relay** and **@acme-fees**. Any Blurt signup works (for example your own onboarding page, or another Blurt wallet); keep all the keys in your password manager.
 
 (You *can* use one account for both to keep things simple, but two is safer. The wizard asks for these — make them before or during setup. Every instance you pay for is **yours**: your relay pays only your signups, and morphit.io never pays for other instances.)
 

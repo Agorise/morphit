@@ -11,7 +11,7 @@
  * Intended use (the "set once, never touch" automation):
  *
  *   # systemd timer, daily — detect + alert (no key, no broadcast):
- *   tsx treasury-repin-check.ts --node https://indexer.morphit.io
+ *   tsx treasury-repin-check.ts --node https://indexer.example.com
  *
  *   # when it reports a re-pin is due, emit the fresh treasury and
  *   # fold it into a release payload, then broadcast (Plan-B manual,

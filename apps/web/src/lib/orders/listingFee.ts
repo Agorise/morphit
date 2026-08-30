@@ -24,7 +24,7 @@ export type ListingFeeFetchResult =
 /** Fetch the current listing-fee constants from the indexer.
  *
  *  `indexerOrigin` is the base URL of the indexer (e.g.
- *  'https://indexer.morphit.io'). Typically comes from
+ *  'https://indexer.example.com'). Typically comes from
  *  $lib/config or a runtime env; we take it as an argument so
  *  this function stays pure-ish and testable. */
 export async function fetchListingFee(
