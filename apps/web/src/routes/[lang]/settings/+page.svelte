@@ -46,7 +46,7 @@
 	import LanguageFilterSelect from '$components/LanguageFilterSelect.svelte';
 	import { getProfile } from '$lib/indexer/client';
 	import { readLocalPreferredLangs, writeLocalPreferredLangs, preferredLangsFromProfile } from '$lib/stores/preferredLangs';
-	import { isOrderLang } from '@morphit/operator-config';
+	import { isOrderLang } from '$i18n/locales';
 	import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
 	import {
 		broadcastProfile,

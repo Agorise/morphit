@@ -17,7 +17,7 @@
  * effect) and validate every code against the 10 supported locales.
  */
 import { browser } from '$app/environment';
-import { isOrderLang, ORDER_LANG_CODES } from '@morphit/operator-config';
+import { isOrderLang, ORDER_LANG_CODES } from '$i18n/locales';
 
 const KEY_PREFS = 'morphit.preferredLangs.v1'; // ordered array, primary = [0]
 const KEY_LAST = 'morphit.lastPostLang.v1'; // single code (next-post default)

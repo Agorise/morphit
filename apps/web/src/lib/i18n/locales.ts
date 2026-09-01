@@ -129,3 +129,17 @@ export function isRtlLocale(code: string | null | undefined): boolean {
 		(l) => l.rtl && (l.code === code || l.code === base || l.code.split('-')[0] === base)
 	);
 }
+
+/**
+ * v1.15.0 — the language codes an order may be tagged with + the guard for them.
+ * Derived from SUPPORTED_LOCALES so the web never pulls the Node-only
+ * @morphit/operator-config module into the browser bundle. The order-lang-parity
+ * smoke asserts these stay identical to operator-config's ORDER_LANG_CODES (the
+ * indexer's validation set), so the two sides can never drift.
+ */
+export const ORDER_LANG_CODES = SUPPORTED_LOCALES.map((l) => l.code);
+const ORDER_LANG_SET: ReadonlySet<string> = new Set(ORDER_LANG_CODES);
+/** True if `v` is one of the supported order-language codes. */
+export function isOrderLang(v: unknown): v is LocaleCode {
+	return typeof v === 'string' && ORDER_LANG_SET.has(v);
+}

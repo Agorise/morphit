@@ -24,7 +24,7 @@
 
 import { redactPrivateKeys } from '$lib/security/privateKeyDetector';
 import type { AssetTicker } from '@morphit/asset-registry';
-import { isOrderLang } from '@morphit/operator-config';
+import { isOrderLang } from '$i18n/locales';
 import type { OrderRecord } from '@morphit/indexer-client';
 
 const PERMLINK_CHARSET = 'abcdefghjkmnpqrstuvwxyz23456789'; // no i/l/o/1 → ambiguity

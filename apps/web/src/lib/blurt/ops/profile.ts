@@ -33,7 +33,7 @@ import { get, writable } from 'svelte/store';
 import { OP_IDS } from '$net/config';
 import type { LiveIdentity } from '$crypto/keygen';
 import { redactPrivateKeys } from '$lib/security/privateKeyDetector';
-import { isOrderLang } from '@morphit/operator-config';
+import { isOrderLang } from '$i18n/locales';
 import { clearProfileCache } from '$lib/indexer/profileCache';
 
 /** Legacy, origin-wide. Read for migration; never written for a keyed session. */
