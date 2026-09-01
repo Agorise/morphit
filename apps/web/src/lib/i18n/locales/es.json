@@ -2746,7 +2746,12 @@
 			"rss_title_prefix": "{site} Libro de órdenes - Filtrado por:",
 			"rss_asset_title": "Recibe notificaciones por RSS cuando se publique una nueva orden de {asset}.",
 			"side_help": "Consejo: si quieres comprar cripto, busca publicaciones que quieren vender. Si quieres vender cripto, busca publicaciones que quieren comprar.",
-			"order_details_label": "Términos / Detalles / Notas del pedido"
+			"order_details_label": "Términos / Detalles / Notas del pedido",
+			"language_label": "Idioma",
+			"language_hint": "Mostrar solo pedidos escritos en estos idiomas. Déjalo vacío para ver todos.",
+			"language_placeholder": "Buscar idiomas…",
+			"language_remove": "Quitar",
+			"language_no_matches": "No hay idiomas coincidentes"
 		},
 		"loading": "Cargando órdenes…",
 		"empty_title": "Ninguna orden coincide con tus filtros",
@@ -3155,7 +3160,9 @@
 			"amount_entered_usd_hint": "{amount} {fiat} (≈ {usd})",
 			"returning_min_hint": "Al menos {amount} {fiat} (≈ {usd})",
 			"barter_accept_label": "¿Qué criptos aceptarás?",
-			"barter_accept_hint": "Selecciona las criptos con las que los compradores pueden pagarte — elige las que prefieras."
+			"barter_accept_hint": "Selecciona las criptos con las que los compradores pueden pagarte — elige las que prefieras.",
+			"language_label": "Esta publicación está en",
+			"language_hint": "El idioma en que está escrito tu pedido: solo se usa para filtrar el libro de órdenes. Tu texto nunca se traduce."
 		},
 		"errors": {
 			"fiat_empty": "Elige una moneda fiat (como USD o EUR).",
@@ -4530,6 +4537,12 @@
 			"public_detail": "Se guarda abiertamente en la cadena de bloques: cualquiera puede leerlo, de forma permanente.",
 			"private_detail": "Se cifra antes de salir de tu dispositivo. Ni siquiera el operador puede leerlo.",
 			"device_detail": "Permanece en este navegador. Nunca se envía a ninguna parte."
+		},
+		"preferred_language": {
+			"title": "Idiomas preferidos",
+			"help": "Elige los idiomas en los que quieres ver los pedidos. Tu idioma principal también es el predeterminado para los pedidos que publiques.",
+			"primary_label": "Principal (predeterminado para tus publicaciones)",
+			"additional_label": "Mostrar también pedidos en"
 		}
 	},
 	"shipment_modal": {

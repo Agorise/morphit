@@ -19,6 +19,7 @@ import { collectInstallInputs, askInstallMode, askTorOnly } from './collectInsta
 import { buildAnsibleVars, validateInstallInputs } from './ansibleVars.ts';
 import { assembleInstall } from './assembleInstall.ts';
 import { collectInstallSummary, printInstallSummary, allComponentsUp } from './installSummary.ts';
+import { renderRemediationReport, getRemediationJournal } from './remediation.ts';
 import { promptSaveSecrets, type SecretToSave } from './saveSecrets.ts';
 import { step, beginSteps, endSteps, currentStepNum, ask } from './prompt.ts';
 
@@ -380,6 +381,13 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 	// operator just set up (canary signed, listing armed).
 	step(0, 0, 'Review your node');
 	printInstallSummary(summaryRows);
+	// Everything the wizard fixed / the admin approved / skipped — so the operator
+	// (and we) can see exactly what happened on this machine, in one place.
+	const remReport = renderRemediationReport(getRemediationJournal());
+	if (remReport) {
+		console.log('');
+		console.log(remReport);
+	}
 	console.log('\n  \u2713 Your Morphit node is installed and running.');
 	console.log('    It got (or will shortly get) its free HTTPS certificate automatically.');
 	endSteps();

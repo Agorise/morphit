@@ -48,6 +48,8 @@
 	import AssetFilterSelect from '$components/AssetFilterSelect.svelte';
 	import FiatCurrencySelect from '$components/FiatCurrencySelect.svelte';
 	import PaymentFilterSelect from '$components/PaymentFilterSelect.svelte';
+	import LanguageFilterSelect from '$components/LanguageFilterSelect.svelte';
+	import { resolvePreferredLangs } from '$lib/stores/preferredLangs';
 
 	import { getOrderbook, getHealth } from '$lib/indexer/client';
 	import { displayNamesForMethods } from '$lib/payments/display';
@@ -203,6 +205,10 @@
 	 *  lowercases both sides, so "paypal" here finds orders posted
 	 *  with "PayPal". */
 	let paymentMethods = $state<string[]>([]);
+	// v1.15.0 — orderbook language filter (empty = all languages). Seeded once in
+	// onMount from the user's preferred set (local mirror) → current UI locale.
+	let langFilter = $state<string[]>([]);
+	let langFilterSeeded = false;
 
 	/** Discrete minimum-trades filter: show only orders from
 	 *  accounts that have received at least this many feedback
@@ -635,6 +641,10 @@
 		// filter, so payment_methods carries only the user's typed picks.
 		const uniquePayment = [...new Set(paymentMethods)];
 		if (uniquePayment.length) q.payment_methods = uniquePayment.join(',');
+		// v1.15.0 — language filter. Empty ⇒ omit (= all languages). The indexer
+		// always shows untagged orders regardless of this filter.
+		const uniqueLangs = [...new Set(langFilter)];
+		if (uniqueLangs.length) q.langs = uniqueLangs.join(',');
 		if (minTrades > 0) q.min_trades = minTrades;
 		if (sortMode !== 'recent') q.sort = sortMode;
 		return q;
@@ -712,6 +722,7 @@
 		if (q.fiat_currency) params.set('fiat_currency', q.fiat_currency);
 		if (q.location_region) params.set('location_region', q.location_region);
 		if (q.payment_methods) params.set('payment_methods', q.payment_methods);
+		if (q.langs) params.set('langs', q.langs);
 		if (q.min_trades) params.set('min_trades', String(q.min_trades));
 		// Cosmetic only: drives the served feed <title>, built from the form's
 		// own labels (single source of truth).  Functional filtering uses only
@@ -1023,6 +1034,12 @@
 	}
 
 	onMount(() => {
+		// Seed the language filter default once: preferred set (local mirror) →
+		// current UI locale. Empty selection = all languages.
+		if (!langFilterSeeded) {
+			langFilter = resolvePreferredLangs(null, currentLang);
+			langFilterSeeded = true;
+		}
 		fetchFirstPage();
 		// Catch-up banner: check sync state now, then poll every 30s while behind.
 		void refreshSync();
@@ -1285,19 +1302,31 @@
 					</label>
 				</div>
 
-				<div class="mt-4 block">
-					<span class="mb-1 block text-sm font-semibold">
-						{$_('orderbook.filters.payment_methods_label')}
-					</span>
-					<PaymentFilterSelect
-						bind:value={paymentMethods}
-						additions={$instanceAdditions}
-						disabled={$instance.disabled_payment_methods}
-						placeholder={paymentPlaceholder}
-					/>
-					<p class="mt-1 text-xs text-ink-500">
-						{$_('orderbook.filters.payment_methods_hint')}
-					</p>
+				<div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+					<div class="block">
+						<span class="mb-1 block text-sm font-semibold">
+							{$_('orderbook.filters.payment_methods_label')}
+						</span>
+						<PaymentFilterSelect
+							bind:value={paymentMethods}
+							additions={$instanceAdditions}
+							disabled={$instance.disabled_payment_methods}
+							placeholder={paymentPlaceholder}
+						/>
+						<p class="mt-1 text-xs text-ink-500">
+							{$_('orderbook.filters.payment_methods_hint')}
+						</p>
+					</div>
+
+					<div class="block">
+						<span class="mb-1 block text-sm font-semibold">
+							{$_('orderbook.filters.language_label')}
+						</span>
+						<LanguageFilterSelect bind:value={langFilter} />
+						<p class="mt-1 text-xs text-ink-500">
+							{$_('orderbook.filters.language_hint')}
+						</p>
+					</div>
 				</div>
 
 				<!-- cp411 — free-text search over each order's terms/details.

@@ -2746,7 +2746,12 @@
 			"rss_title_prefix": "{site} 訂單簿 - 篩選條件：",
 			"rss_asset_title": "當有新嘅 {asset} 訂單發布時透過 RSS 收到通知。",
 			"side_help": "提示：如果你想買加密貨幣，搵想賣嘅訂單。如果你想賣，搵想買嘅訂單。",
-			"order_details_label": "訂單條款 / 詳情 / 備註"
+			"order_details_label": "訂單條款 / 詳情 / 備註",
+			"language_label": "語言",
+			"language_hint": "只顯示以這些語言撰寫的訂單。留空則顯示全部。",
+			"language_placeholder": "搜尋語言…",
+			"language_remove": "移除",
+			"language_no_matches": "沒有符合的語言"
 		},
 		"loading": "正在載入訂單…",
 		"empty_title": "沒有訂單符合您的篩選",
@@ -3155,7 +3160,9 @@
 			"amount_entered_usd_hint": "{amount} {fiat}（≈ {usd}）",
 			"returning_min_hint": "至少 {amount} {fiat}（≈ {usd}）",
 			"barter_accept_label": "你接受邊啲加密貨幣?",
-			"barter_accept_hint": "揀選買家可以用嚟俾錢你嘅加密貨幣——揀你偏好嗰啲。"
+			"barter_accept_hint": "揀選買家可以用嚟俾錢你嘅加密貨幣——揀你偏好嗰啲。",
+			"language_label": "本帖使用的語言",
+			"language_hint": "你的訂單所用的語言——僅用於篩選訂單簿。你的文字絕不會被翻譯。"
 		},
 		"errors": {
 			"fiat_empty": "請選擇一種法幣(如 USD 或 EUR)。",
@@ -4530,6 +4537,12 @@
 			"public_detail": "以明文儲存在區塊鏈上——任何人都能永久讀取。",
 			"private_detail": "在離開你的裝置前已加密。連營運者也無法讀取。",
 			"device_detail": "保留在此瀏覽器中，絕不會傳送到任何地方。"
+		},
+		"preferred_language": {
+			"title": "偏好語言",
+			"help": "選擇你希望看到訂單的語言。你的主要語言亦是你發佈新訂單的預設語言。",
+			"primary_label": "主要（發帖預設）",
+			"additional_label": "同時顯示以下語言的訂單"
 		}
 	},
 	"shipment_modal": {

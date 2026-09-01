@@ -495,6 +495,24 @@ COMMENT ON COLUMN rpc_directory.node_names IS
     'url→name map (both of a node''s addresses share its name). Cosmetic + '
     'untrusted; never used to route/dedupe/trust. {} when no node published a name.';
 `
+	},
+	{
+		version: 56,
+		description:
+			'orders.lang — the language an order is written in (one of the 10 supported locale codes), for the orderbook language filter. Optional/additive: NULL on every order created before this feature, and those untagged orders are always shown (never hidden by the filter).',
+		sql: `
+ALTER TABLE orders
+    ADD COLUMN IF NOT EXISTS lang TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_orders_lang
+    ON orders (lang)
+    WHERE lang IS NOT NULL;
+
+COMMENT ON COLUMN orders.lang IS
+    'Language the order text is written in (a SUPPORTED_LOCALES code: en/es/de/'
+    'pl/fr/it/ru/fa/zh-CN/zh-HK). NULL = untagged (created before the feature, '
+    'or unspecified); untagged orders are NEVER hidden by the language filter.';
+`
 	}
 
 	// Future migrations land here.  The v1 collapsed schema is the

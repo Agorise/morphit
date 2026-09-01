@@ -90,10 +90,11 @@ function mockDeps(opts: { ensureOk?: boolean; exitCode?: number; postInstallExit
 		print: (s: string) => {
 			trace.printed.push(s);
 		},
-		// The pre-flight `--list-hosts` guard: default to "1 host found" so the
-		// happy path proceeds. A dedicated check below drives this to 0 to prove
-		// the guard aborts before any spawn (the host-pattern bug's backstop).
-		probeHostCount: () => opts.hostCount ?? 1
+		// The pre-flight `--list-hosts` guard now captures exit code + output; the
+		// installer interprets that (a failed list-hosts is no longer misread as
+		// "0 hosts"). Default to a clean "1 host" so the happy path proceeds; a
+		// dedicated check below drives hostCount to 0 to prove the guard aborts.
+		probeHosts: () => ({ exitCode: 0, output: `hosts (${opts.hostCount ?? 1}):\n      localhost` })
 	};
 }
 function newTrace(): Trace {

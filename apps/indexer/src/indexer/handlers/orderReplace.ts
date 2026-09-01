@@ -20,6 +20,7 @@ import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contrac
 import { checkJsonbSize } from '$indexer/payloadSize';
 import { validateOrderPermlink } from '$indexer/permlink';
 import { ASSET_TICKERS_SET, FIRST_ORDER_MIN_USD, isGoodsAsset, type AssetTicker } from '@morphit/asset-registry';
+import { isOrderLang } from '@morphit/operator-config';
 
 const SIDES = new Set(['buy', 'sell']);
 
@@ -95,6 +96,7 @@ interface Validated {
 	 *  crypto assets. */
 	readonly accepted_assets: readonly string[] | null;
 	readonly specific_barter_title: string | null;
+	readonly lang: string | null;
 }
 
 function validate(payload: unknown): Validated | { reason: string } {
@@ -340,6 +342,17 @@ function validate(payload: unknown): Validated | { reason: string } {
 		specific_barter_title_validated = normalized.length > 0 ? normalized : null;
 	}
 
+	// v1.15.0 — lang tag on edit (mirror of order.ts). Optional; a present value
+	// must be one of the 10 supported codes, else NULL (untagged, never filtered).
+	let lang_validated: string | null = null;
+	{
+		const raw = (payload as Record<string, unknown>).lang;
+		if (raw !== undefined && raw !== null) {
+			if (!isOrderLang(raw)) return { reason: 'lang_unsupported' };
+			lang_validated = raw;
+		}
+	}
+
 	return {
 		permlink,
 		side: side as 'buy' | 'sell',
@@ -362,7 +375,8 @@ function validate(payload: unknown): Validated | { reason: string } {
 		// network is substance per ADR-0023/0028, not detail.
 		asset_network: asset_network_validated,
 		accepted_assets: accepted_assets_validated,
-		specific_barter_title: specific_barter_title_validated
+		specific_barter_title: specific_barter_title_validated,
+		lang: lang_validated
 	};
 }
 
@@ -521,7 +535,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			updated_at = $12,
 			expires_at = $13,
 			accepted_assets = $14,
-			specific_barter_title = $15
+			specific_barter_title = $15,
+			lang = $16
 		 WHERE account = $1 AND permlink = $2 AND status = 'live'`,
 		[
 			ctx.signer,
@@ -538,7 +553,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			ctx.blockTime,
 			v.expires_at,
 			v.accepted_assets,
-			v.specific_barter_title
+			v.specific_barter_title,
+			v.lang
 		]
 	);
 

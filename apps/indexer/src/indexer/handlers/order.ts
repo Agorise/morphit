@@ -31,6 +31,7 @@ import { checkJsonbSize } from '$indexer/payloadSize';
 import { validateOrderPermlink } from '$indexer/permlink';
 import { logger } from '$log';
 import { ASSET_TICKERS_SET, FIRST_ORDER_MIN_USD, FEE_PRICE_TOLERANCE, isGoodsAsset, type AssetTicker } from '@morphit/asset-registry';
+import { isOrderLang } from '@morphit/operator-config';
 
 const log = logger('order-handler');
 
@@ -134,6 +135,11 @@ interface ValidatedOrder {
 	 *  "bananas"). Letters-only, ≤24 chars. Null for crypto orders and blank
 	 *  barter titles. Optional/backward-compatible: absent on older payloads. */
 	readonly specific_barter_title: string | null;
+	/** v1.15.0 — the language the order text is written in (one of the 10
+	 *  SUPPORTED_LOCALES codes), used by the orderbook language filter. Optional:
+	 *  null on legacy orders and payloads that omit it; untagged orders are never
+	 *  hidden by the filter. */
+	readonly lang: string | null;
 }
 
 function validate(payload: unknown): ValidatedOrder | { reason: string } {
@@ -547,6 +553,15 @@ function validate(payload: unknown): ValidatedOrder | { reason: string } {
 		specific_barter_title = normalized.length > 0 ? normalized : null;
 	}
 
+	// lang — OPTIONAL language tag (one of the 10 supported locale codes). Absent
+	// or null on legacy/omitting payloads → stored NULL (untagged; never filtered
+	// out). A present-but-unsupported value is rejected rather than silently kept.
+	let lang: string | null = null;
+	if (payload.lang !== undefined && payload.lang !== null) {
+		if (!isOrderLang(payload.lang)) return { reason: 'lang_unsupported' };
+		lang = payload.lang;
+	}
+
 	return {
 		permlink,
 		side: side as 'buy' | 'sell',
@@ -565,7 +580,8 @@ function validate(payload: unknown): ValidatedOrder | { reason: string } {
 		tx_proof,
 		asset_network,
 		accepted_assets,
-		specific_barter_title
+		specific_barter_title,
+		lang
 	};
 }
 
@@ -758,9 +774,9 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 				amount_min, amount_max, price_model, location_region,
 				payment_methods, terms, status, created_at, updated_at,
 				expires_at, fee_status, fee_method, operator_tag, accepted_assets,
-				specific_barter_title
+				specific_barter_title, lang
 			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12,
-			          'live', $13, $13, $14, 'verified', 'waived_first_buy', $15, $16, $17)
+			          'live', $13, $13, $14, 'verified', 'waived_first_buy', $15, $16, $17, $18)
 			ON CONFLICT (account, permlink) DO NOTHING`,
 			[
 				ctx.signer,
@@ -779,7 +795,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 				v.expires_at,
 				operatorTagForRow,
 				v.accepted_assets,
-				v.specific_barter_title
+				v.specific_barter_title,
+				v.lang
 			]
 		);
 		if ((waiverRes.rowCount ?? 0) > 0) {
@@ -850,9 +867,9 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 					amount_min, amount_max, price_model, location_region,
 					payment_methods, terms, status, created_at, updated_at,
 					expires_at, fee_status, fee_method, external_tx_id, tx_proof,
-					operator_tag, accepted_assets, specific_barter_title
+					operator_tag, accepted_assets, specific_barter_title, lang
 				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12,
-				          'live', $13, $13, $14, 'reused', $15, $16, $17, $18, $19, $20)
+				          'live', $13, $13, $14, 'reused', $15, $16, $17, $18, $19, $20, $21)
 				ON CONFLICT (account, permlink) DO NOTHING`,
 				[
 					ctx.signer,
@@ -874,7 +891,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 					v.tx_proof,
 					operatorTagForRow,
 					v.accepted_assets,
-					v.specific_barter_title
+					v.specific_barter_title,
+					v.lang
 				]
 			);
 			// Reused-fee orders have fee_status='reused' so they
@@ -928,9 +946,9 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 				amount_min, amount_max, price_model, location_region,
 				payment_methods, terms, status, created_at, updated_at,
 				expires_at, fee_status, fee_method, external_tx_id, tx_proof,
-				operator_tag, accepted_assets, specific_barter_title
+				operator_tag, accepted_assets, specific_barter_title, lang
 			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12,
-			          'live', $13, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+			          'live', $13, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
 			ON CONFLICT (account, permlink) DO NOTHING`,
 			[
 				ctx.signer,
@@ -953,7 +971,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 				v.tx_proof,
 				operatorTagForRow,
 				v.accepted_assets,
-				v.specific_barter_title
+				v.specific_barter_title,
+				v.lang
 			]
 		);
 		if ((externalRes.rowCount ?? 0) > 0) {
@@ -1030,9 +1049,9 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			amount_min, amount_max, price_model, location_region,
 			payment_methods, terms, status, created_at, updated_at,
 			expires_at, fee_status, fee_method, operator_tag, accepted_assets,
-			specific_barter_title
+			specific_barter_title, lang
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12,
-		          'live', $13, $13, $14, $15, 'blurt', $16, $17, $18)
+		          'live', $13, $13, $14, $15, 'blurt', $16, $17, $18, $19)
 		ON CONFLICT (account, permlink) DO NOTHING`,
 		[
 			ctx.signer,
@@ -1052,7 +1071,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			feeStatus,
 			operatorTagForRow,
 			v.accepted_assets,
-			v.specific_barter_title
+			v.specific_barter_title,
+			v.lang
 		]
 	);
 

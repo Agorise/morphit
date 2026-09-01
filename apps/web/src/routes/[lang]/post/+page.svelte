@@ -2,7 +2,7 @@
 	import { page } from '$app/stores';
 	import LazyLoadError from '$components/LazyLoadError.svelte';
 	import { localePath } from '$i18n/path';
-	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
+	import { DEFAULT_LOCALE, type LocaleCode , SUPPORTED_LOCALES} from '$i18n/locales';
 	/**
 	 * Morphit — post-an-order compose page.
 	 *
@@ -107,6 +107,7 @@
 	import type { FxResponse } from '@morphit/indexer-client';
 	import { MORPHIT_INDEXER_ORIGIN, resolveOrigin } from '$net/config';
 	import type { OrderFormInput } from '$lib/orders/payload';
+	import { resolvePostDefaultLang, noteUsedPostLang, readLocalPreferredLangs } from '$lib/stores/preferredLangs';
 	import { makeExpiryFlooredUtcDay } from '$lib/orders/payload';
 	import { orderTitleParts } from '$lib/utils/orderTitle';
 	import { sanitizeBarterTitle, SPECIFIC_BARTER_TITLE_MAX } from '$lib/orders/payload';
@@ -322,6 +323,9 @@
 		return () => clearTimeout(timer);
 	});
 	let expiresDays = $state(90);
+	// v1.15.0 — the language this post is written in. Seeded (last-posted →
+	// primary → UI locale) in the seed $effect below; sent as OrderFormInput.lang.
+	let postLang = $state('');
 	/** Per-order opt-in: also post this order's announcement to the
 	 *  user's own Blurt blog. Defaults false so users actively opt
 	 *  in. When true, Post B fires immediately after the order
@@ -2071,6 +2075,7 @@
 			specificBarterTitle: isBarter ? specificBarterTitle : undefined,
 			terms: terms.trim() || null,
 			expiresAt: makeExpiryFlooredUtcDay(expiresDays),
+			lang: postLang || undefined,
 			feeMethod: feeMethodChoice,
 			externalTxId:
 				feeMethodChoice === 'btc' || feeMethodChoice === 'xmr'
@@ -2125,6 +2130,10 @@
 					BASE_FEE_BLURT // unused for non-BLURT paths; sane default if reached
 				);
 				successPermlink = result.permlink;
+				// v1.15.0 — remember this post language (next-post default) + widen the
+				// local preferred set so these orders show in the filter. Chain profile is
+				// updated on the next Settings save (no extra broadcast here).
+				noteUsedPostLang(postLang, readLocalPreferredLangs() ?? [postLang]);
 				// v1.7.0 "fastpostorder" — stage the order this browser just put on
 				// chain, from the payload that was actually broadcast. The detail page
 				// reads this, so "View my order" works instantly instead of hitting a
@@ -2237,6 +2246,10 @@
 			);
 			// useActiveKey has wiped the scalar by now.
 			successPermlink = result.permlink;
+			// v1.15.0 — remember this post language (next-post default) + widen the
+			// local preferred set so these orders show in the filter. Chain profile is
+			// updated on the next Settings save (no extra broadcast here).
+			noteUsedPostLang(postLang, readLocalPreferredLangs() ?? [postLang]);
 			// v1.7.0 "fastpostorder" — see the sibling branch above.
 			stagePostedOrder(result.payload);
 			// We're in the BLURT-paid branch; the waived/btc/xmr
@@ -2447,6 +2460,10 @@
 	// $i18n/path.localePath() + the analogous helper in
 	// [lang]/+layout.svelte for design rationale.
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
+	// v1.15.0 — seed the post language once: last-posted → primary → UI locale.
+	$effect(() => {
+		if (!postLang) postLang = resolvePostDefaultLang(null, currentLang);
+	});
 	const lp = $derived((path: string) => localePath(path, currentLang));
 
 	/** A live, plain-language recap of the order the user is composing,
@@ -3369,6 +3386,27 @@
 					{#if isFirstTrade}
 						<p class="mt-1 text-xs text-ink-500">{$_('post_order.form.first_trade_expiry_note')}</p>
 					{/if}
+				</label>
+
+				<!-- v1.15.0 — the language this post is written in. Defaults to the
+				     user's last-used post language → their primary preferred language
+				     → the current UI locale. Used only to filter the orderbook; the
+				     order text itself is never translated. -->
+				<label class="block">
+					<span class="mb-1 block text-sm font-semibold"
+						>{$_('post_order.form.language_label')}</span
+					>
+					<select
+						id="post-language"
+						name="post_language"
+						bind:value={postLang}
+						class="w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+					>
+						{#each SUPPORTED_LOCALES as l (l.code)}
+							<option value={l.code}>{l.nativeName}</option>
+						{/each}
+					</select>
+					<p class="mt-1 text-xs text-ink-500">{$_('post_order.form.language_hint')}</p>
 				</label>
 
 				<!-- New syndication model: per-order opt-in posts the

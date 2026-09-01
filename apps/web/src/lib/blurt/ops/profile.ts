@@ -33,6 +33,7 @@ import { get, writable } from 'svelte/store';
 import { OP_IDS } from '$net/config';
 import type { LiveIdentity } from '$crypto/keygen';
 import { redactPrivateKeys } from '$lib/security/privateKeyDetector';
+import { isOrderLang } from '@morphit/operator-config';
 import { clearProfileCache } from '$lib/indexer/profileCache';
 
 /** Legacy, origin-wide. Read for migration; never written for a keyed session. */
@@ -223,6 +224,11 @@ export interface ProfilePayload {
 	 *  caller via validateShortBio). Stored in json_metadata.short_bio
 	 *  on-chain; surfaces on the account profile page. Free text. */
 	short_bio?: string;
+	/** v1.15.0 — ordered preferred languages (first = primary). Array of
+	 *  SUPPORTED_LOCALES codes. Stored in json_metadata.preferred_langs on-chain;
+	 *  drives the order-language default + the orderbook language filter default.
+	 *  Empty array clears; omitted keeps the prior value. */
+	preferred_langs?: readonly string[];
 	/** Optional sanitized SVG text for a custom avatar. Stored in
 	 *  json_metadata.avatar_svg on-chain. MUST have been produced
 	 *  by `sanitizeSvg` in $lib/avatar — the broadcast path does
@@ -325,6 +331,12 @@ export function buildProfileBody(
 		// base64 payload is image bytes — but keep the redaction
 		// pass uniform for audit clarity.
 		jsonMetadata.avatar_data_uri = redactPrivateKeys(payload.avatar_data_uri);
+	}
+	// v1.15.0 — preferred languages (ordered: first = primary). An array of
+	// SUPPORTED_LOCALES codes. Present + non-empty ⇒ set (validated/deduped by the
+	// indexer merge); an explicit empty array ⇒ clear. Omitted ⇒ prior kept.
+	if (payload.preferred_langs !== undefined) {
+		jsonMetadata.preferred_langs = payload.preferred_langs.filter((c) => isOrderLang(c));
 	}
 
 	const body: ProfilePayload & { json_metadata?: Record<string, unknown> } = {

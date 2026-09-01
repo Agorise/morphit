@@ -25,6 +25,12 @@ import { resolve } from 'node:path';
 import { defaultRepoRoot } from '../lib/repoRoot.ts';
 import { existsSync, readFileSync } from 'node:fs';
 import { runSystemCheck, renderSystemCheck } from '../init/systemCheck.ts';
+import {
+	runRemediations,
+	recordRemediations,
+	resetRemediationJournal
+} from '../init/remediation.ts';
+import { execSync } from 'node:child_process';
 import { generateOnionV3, type OnionV3 } from '../init/torOnion.ts';
 import {
 	generateI2pDestination,
@@ -137,7 +143,7 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 	printGreeting();
 
 	// ─── System check ────
-	const checkResult = await runSystemCheck();
+	let checkResult = await runSystemCheck();
 	renderSystemCheck(checkResult, ctx.colorEnabled);
 
 	if (ctx.flags['check-only'] === 'true') {
@@ -145,14 +151,41 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 		return checkResult.hasErrors ? 1 : 0;
 	}
 
+	// ─── Self-heal: offer to fix what we safely can, record everything ────
+	// Runs once so the admin never has to re-run the installer for a fixable
+	// hiccup. Outcomes land in the journal that the final report prints.
+	resetRemediationJournal();
+	if (checkResult.hasErrors || checkResult.hasWarnings) {
+		const journal = await runRemediations(checkResult.checks, {
+			ask: askYesNo,
+			exec: (cmd) => {
+				try {
+					execSync(cmd, { stdio: 'inherit', timeout: 120_000 });
+					return true;
+				} catch {
+					return false;
+				}
+			},
+			print: (s) => console.log(s)
+		});
+		recordRemediations(journal);
+		// Re-run the checks so any fix we just applied clears its error before the
+		// continue-anyway gate below — a successful fix means no needless prompt.
+		if (journal.some((r) => r.outcome === 'fixed')) {
+			console.log('\n  Re-checking after fixes…');
+			checkResult = await runSystemCheck();
+			renderSystemCheck(checkResult, ctx.colorEnabled);
+		}
+	}
+
 	if (checkResult.hasErrors) {
 		console.log(
-			'Some checks failed.  You can continue anyway, but be aware\n' +
-				'Morphit may be unstable on underspecced hardware.\n'
+			'Some checks still need attention.  You can continue anyway, but be aware\n' +
+				'Morphit may be unstable until they are resolved (see the suggestions above).\n'
 		);
 		const proceed = await askYesNo('Continue with the setup anyway?', false);
 		if (!proceed) {
-			console.log('\nAborted.  Address the failures above and re-run.');
+			console.log('\nAborted.  Address the suggestions above and re-run — the installer will pick up where it left off.');
 			return 1;
 		}
 	}

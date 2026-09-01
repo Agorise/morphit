@@ -2746,7 +2746,12 @@
 			"rss_title_prefix": "{site} Orderbook - Filtered by:",
 			"rss_asset_title": "Get notified via RSS when a new {asset} order is posted.",
 			"side_help": "Tip: if you want to buy crypto, look for posts wanting to sell. If you want to sell crypto, look for posts wanting to buy.",
-			"order_details_label": "Order Terms / Details / Notes"
+			"order_details_label": "Order Terms / Details / Notes",
+			"language_label": "Language",
+			"language_hint": "Only show orders written in these languages. Leave empty to see all.",
+			"language_placeholder": "Search languages…",
+			"language_remove": "Remove",
+			"language_no_matches": "No matching languages"
 		},
 		"loading": "Loading orders…",
 		"empty_title": "No orders match your filters",
@@ -3155,7 +3160,9 @@
 			"amount_entered_usd_hint": "{amount} {fiat} (≈ {usd})",
 			"returning_min_hint": "At least {amount} {fiat} worth (≈ {usd})",
 			"barter_accept_label": "Which cryptos will you accept?",
-			"barter_accept_hint": "Select the cryptos that buyers can pay you with — pick the ones you prefer."
+			"barter_accept_hint": "Select the cryptos that buyers can pay you with — pick the ones you prefer.",
+			"language_label": "This post is in",
+			"language_hint": "The language your order is written in — used only to filter the orderbook. Your text is never translated."
 		},
 		"errors": {
 			"fiat_empty": "Pick a fiat currency (like USD or EUR).",
@@ -4530,6 +4537,12 @@
 			"public_detail": "Saved openly on the blockchain — anyone can read it, permanently.",
 			"private_detail": "Encrypted before it leaves your device. Not even the operator can read it.",
 			"device_detail": "Stays in this browser. Never sent anywhere."
+		},
+		"preferred_language": {
+			"title": "Preferred languages",
+			"help": "Choose the languages you want to see orders in. Your primary language is also the default for new orders you post.",
+			"primary_label": "Primary (default for your posts)",
+			"additional_label": "Also show orders in"
 		}
 	},
 	"shipment_modal": {

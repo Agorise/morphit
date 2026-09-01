@@ -62,6 +62,7 @@ const EXPECTED: ReadonlyArray<readonly [string, 'public' | 'private' | 'device']
 	['display-name-heading', 'public'],
 	['short-bio-heading', 'public'],
 	['website-url-heading', 'public'],
+	['preferred-language-heading', 'public'],
 	['streaming-heading', 'public'],
 	['nostr-heading', 'public'],
 	// morphit_settings_v1 — encrypted blob.

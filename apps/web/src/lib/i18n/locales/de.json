@@ -2746,7 +2746,12 @@
 			"rss_title_prefix": "{site} Orderbuch - Gefiltert nach:",
 			"rss_asset_title": "Benachrichtigungen via RSS, wenn eine neue {asset}-Order gepostet wird.",
 			"side_help": "Tipp: Wenn du Krypto kaufen willst, suche Beiträge, die verkaufen möchten. Wenn du verkaufen willst, suche Beiträge, die kaufen möchten.",
-			"order_details_label": "Bedingungen / Details / Notizen zur Order"
+			"order_details_label": "Bedingungen / Details / Notizen zur Order",
+			"language_label": "Sprache",
+			"language_hint": "Nur Angebote in diesen Sprachen anzeigen. Leer lassen, um alle zu sehen.",
+			"language_placeholder": "Sprachen suchen…",
+			"language_remove": "Entfernen",
+			"language_no_matches": "Keine passenden Sprachen"
 		},
 		"loading": "Orders werden geladen…",
 		"empty_title": "Keine Orders passen zu deinen Filtern",
@@ -3155,7 +3160,9 @@
 			"amount_entered_usd_hint": "{amount} {fiat} (≈ {usd})",
 			"returning_min_hint": "Mindestens {amount} {fiat} (≈ {usd})",
 			"barter_accept_label": "Welche Kryptos akzeptierst du?",
-			"barter_accept_hint": "Wähle die Kryptos aus, mit denen Käufer dich bezahlen können — nimm die, die du bevorzugst."
+			"barter_accept_hint": "Wähle die Kryptos aus, mit denen Käufer dich bezahlen können — nimm die, die du bevorzugst.",
+			"language_label": "Dieser Beitrag ist auf",
+			"language_hint": "Die Sprache, in der dein Angebot verfasst ist – nur zum Filtern des Orderbuchs. Dein Text wird nie übersetzt."
 		},
 		"errors": {
 			"fiat_empty": "Wähle eine Fiat-Währung (wie USD oder EUR).",
@@ -4530,6 +4537,12 @@
 			"public_detail": "Offen in der Blockchain gespeichert – für jeden dauerhaft lesbar.",
 			"private_detail": "Verschlüsselt, bevor es dein Gerät verlässt. Nicht einmal der Betreiber kann es lesen.",
 			"device_detail": "Bleibt in diesem Browser. Wird nirgendwohin gesendet."
+		},
+		"preferred_language": {
+			"title": "Bevorzugte Sprachen",
+			"help": "Wähle die Sprachen, in denen du Angebote sehen möchtest. Deine Hauptsprache ist auch die Vorgabe für neue Angebote, die du veröffentlichst.",
+			"primary_label": "Haupt (Vorgabe für deine Beiträge)",
+			"additional_label": "Auch Angebote anzeigen in"
 		}
 	},
 	"shipment_modal": {

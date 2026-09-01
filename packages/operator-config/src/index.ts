@@ -637,3 +637,28 @@ export {
 	type MatrixMxid,
 	type MatrixRoomAlias
 } from './matrixAddress.js';
+
+/**
+ * The language codes an order may be tagged with, and that the orderbook
+ * language filter offers. Kept in lockstep with the web SUPPORTED_LOCALES codes
+ * (a parity smoke asserts they match). An order with no lang (every order
+ * created before this feature) is always shown, never filtered out.
+ */
+export const ORDER_LANG_CODES = [
+	'en',
+	'es',
+	'de',
+	'pl',
+	'fr',
+	'it',
+	'ru',
+	'fa',
+	'zh-CN',
+	'zh-HK'
+] as const;
+export type OrderLangCode = (typeof ORDER_LANG_CODES)[number];
+export const ORDER_LANG_SET: ReadonlySet<string> = new Set(ORDER_LANG_CODES);
+/** True if `v` is one of the 10 supported order-language codes. */
+export function isOrderLang(v: unknown): v is OrderLangCode {
+	return typeof v === 'string' && ORDER_LANG_SET.has(v);
+}

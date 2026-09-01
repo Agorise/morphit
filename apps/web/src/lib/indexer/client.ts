@@ -224,6 +224,7 @@ export function getOrderbook(
 	if (query.fiat_currency) params.set('fiat_currency', query.fiat_currency);
 	if (query.location_region) params.set('location_region', query.location_region);
 	if (query.payment_methods) params.set('payment_methods', query.payment_methods);
+	if (query.langs) params.set('langs', query.langs);
 	if (query.min_trades !== undefined && query.min_trades > 0)
 		params.set('min_trades', String(query.min_trades));
 	if (query.sort && query.sort !== 'recent') params.set('sort', query.sort);
@@ -248,6 +249,7 @@ export function getOrderbookFromOrigin(
 	if (query.fiat_currency) params.set('fiat_currency', query.fiat_currency);
 	if (query.location_region) params.set('location_region', query.location_region);
 	if (query.payment_methods) params.set('payment_methods', query.payment_methods);
+	if (query.langs) params.set('langs', query.langs);
 	if (query.min_trades !== undefined && query.min_trades > 0)
 		params.set('min_trades', String(query.min_trades));
 	if (query.sort && query.sort !== 'recent') params.set('sort', query.sort);

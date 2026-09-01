@@ -2,7 +2,7 @@
 	import { page } from '$app/stores';
 	import LazyLoadError from '$components/LazyLoadError.svelte';
 	import { localePath } from '$i18n/path';
-	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
+	import { DEFAULT_LOCALE, type LocaleCode , SUPPORTED_LOCALES} from '$i18n/locales';
 	import { _ } from 'svelte-i18n';
 	import { browser } from '$app/environment';
 	import { installPrompt, isInstalled, promptInstall } from '$lib/pwa/installPrompt';
@@ -43,7 +43,10 @@
 		setOrderBlogDefault
 	} from '$lib/utils/syndicationPrefs';
 	import { liveIdentity, isUnlocked, isPairedReadOnly } from '$stores/identity';
+	import LanguageFilterSelect from '$components/LanguageFilterSelect.svelte';
 	import { getProfile } from '$lib/indexer/client';
+	import { readLocalPreferredLangs, writeLocalPreferredLangs, preferredLangsFromProfile } from '$lib/stores/preferredLangs';
+	import { isOrderLang } from '@morphit/operator-config';
 	import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
 	import {
 		broadcastProfile,
@@ -280,6 +283,10 @@
 	let streamingBroadcastError = $state('');
 	let streamingBroadcastOk = $state(false);
 	let websiteInput = $state('');
+	// v1.15.0 — preferred languages (primary + additional). Seeded from the local
+	// mirror → chain profile → UI locale; written to the chain profile on any save.
+	let preferredPrimary = $state('');
+	let preferredAdditional = $state<string[]>([]);
 	let websiteSaved = $state('');
 	let websiteSaving = $state(false);
 	let websiteSavedToast = $state(false);
@@ -704,6 +711,12 @@
 		}
 	}
 
+	/** v1.15.0 — the ordered [primary, ...additional] preferred set for a save,
+	 *  validated + deduped. Empty ⇒ clears preferred_langs on chain. */
+	function preferredLangsForSave(): string[] {
+		return [...new Set([preferredPrimary, ...preferredAdditional].filter((c) => isOrderLang(c)))];
+	}
+
 	async function saveAndBroadcast(): Promise<void> {
 		await saveLocal();
 		const live = $liveIdentity;
@@ -722,8 +735,10 @@
 				nostr_url: nostrCleaned || undefined,
 				streaming_url: streamingCleaned || undefined,
 				website_url: websiteCleaned || undefined,
-				short_bio: bioSaved
+				short_bio: bioSaved,
+				preferred_langs: preferredLangsForSave()
 			});
+			writeLocalPreferredLangs(preferredLangsForSave());
 			broadcastOk = true;
 			// v1.8.15 (t.txt #2) — confirmed on-chain: publish the new name to the
 			// shared self-profile store so the avatar menu + every IdentityLabel of
@@ -1307,6 +1322,10 @@
 	// $i18n/path.localePath() + the analogous helper in
 	// [lang]/+layout.svelte for design rationale.
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
+	// Seed the primary preferred language to the UI locale until the profile loads.
+	$effect(() => {
+		if (!preferredPrimary) preferredPrimary = currentLang;
+	});
 	const lp = $derived((path: string) => localePath(path, currentLang));
 </script>
 
@@ -1874,6 +1893,43 @@
 				{$_('settings.short_bio.broadcast_ok_detail')}
 			</p>
 		{/if}
+	</section>
+
+	<!-- ─── Preferred languages (v1.15.0) ─── -->
+	<!-- Between Short bio and Website URL. Your primary is the default language for
+	     new orders you post; the whole set (primary + additional) is what the
+	     orderbook language filter defaults to, so you only see orders you can read.
+	     Written to the on-chain profile on any Save; a local mirror gives instant
+	     defaults. -->
+	<section class="card mt-6" aria-labelledby="preferred-language-heading">
+		<h2 id="preferred-language-heading" class="font-display text-xl font-bold">
+			{$_('settings.preferred_language.title')}
+		</h2>
+		<div class="mt-1"><VisibilityBadge scope="public" /></div>
+		<p class="mt-2 text-ink-600 dark:text-ink-300">
+			{$_('settings.preferred_language.help')}
+		</p>
+
+		<label class="mt-5 block">
+			<span class="mb-2 block font-semibold">
+				{$_('settings.preferred_language.primary_label')}
+			</span>
+			<select
+				bind:value={preferredPrimary}
+				class="w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+			>
+				{#each SUPPORTED_LOCALES as l (l.code)}
+					<option value={l.code}>{l.nativeName}</option>
+				{/each}
+			</select>
+		</label>
+
+		<div class="mt-4 block">
+			<span class="mb-2 block font-semibold">
+				{$_('settings.preferred_language.additional_label')}
+			</span>
+			<LanguageFilterSelect bind:value={preferredAdditional} />
+		</div>
 	</section>
 
 	<!-- ─── Website / Blog URL ─── -->

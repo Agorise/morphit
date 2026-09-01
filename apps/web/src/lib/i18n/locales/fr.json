@@ -2746,7 +2746,12 @@
 			"rss_title_prefix": "{site} Carnet d'ordres - Filtré par :",
 			"rss_asset_title": "Reçois des notifications par RSS quand un nouvel ordre {asset} est publié.",
 			"side_help": "Astuce : si vous voulez acheter de la crypto, cherchez des annonces voulant vendre. Si vous voulez vendre, cherchez des annonces voulant acheter.",
-			"order_details_label": "Conditions / Détails / Notes de l’ordre"
+			"order_details_label": "Conditions / Détails / Notes de l’ordre",
+			"language_label": "Langue",
+			"language_hint": "N’afficher que les ordres rédigés dans ces langues. Laissez vide pour tout voir.",
+			"language_placeholder": "Rechercher des langues…",
+			"language_remove": "Retirer",
+			"language_no_matches": "Aucune langue correspondante"
 		},
 		"loading": "Chargement des ordres…",
 		"empty_title": "Aucun ordre ne correspond à vos filtres",
@@ -3155,7 +3160,9 @@
 			"amount_entered_usd_hint": "{amount} {fiat} (≈ {usd})",
 			"returning_min_hint": "Au moins {amount} {fiat} (≈ {usd})",
 			"barter_accept_label": "Quelles cryptos accepterez-vous ?",
-			"barter_accept_hint": "Sélectionne les cryptos avec lesquelles les acheteurs peuvent te payer — choisis celles que tu préfères."
+			"barter_accept_hint": "Sélectionne les cryptos avec lesquelles les acheteurs peuvent te payer — choisis celles que tu préfères.",
+			"language_label": "Cette annonce est en",
+			"language_hint": "La langue dans laquelle votre ordre est rédigé — sert uniquement à filtrer le carnet d’ordres. Votre texte n’est jamais traduit."
 		},
 		"errors": {
 			"fiat_empty": "Choisissez une monnaie fiat (comme USD ou EUR).",
@@ -4530,6 +4537,12 @@
 			"public_detail": "Enregistré en clair sur la blockchain : lisible par tous, de façon permanente.",
 			"private_detail": "Chiffré avant de quitter votre appareil. Même l'opérateur ne peut pas le lire.",
 			"device_detail": "Reste dans ce navigateur. N'est jamais envoyé ailleurs."
+		},
+		"preferred_language": {
+			"title": "Langues préférées",
+			"help": "Choisissez les langues dans lesquelles vous voulez voir les ordres. Votre langue principale est aussi la valeur par défaut pour vos nouvelles annonces.",
+			"primary_label": "Principale (par défaut pour vos annonces)",
+			"additional_label": "Afficher aussi les ordres en"
 		}
 	},
 	"shipment_modal": {

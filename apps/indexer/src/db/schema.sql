@@ -2922,3 +2922,20 @@ COMMENT ON TABLE rpc_directory IS
 -- untrusted (never used to route/dedupe/trust); {} when no node set a name.
 -- The column is declared inline on the CREATE TABLE above (fully-migrated head
 -- schema); migration v55 adds it to already-provisioned databases.
+
+-- ─── v56: orders.lang (orderbook language filter) ───
+-- The language an order is written in — one of the 10 supported locale codes
+-- (en/es/de/pl/fr/it/ru/fa/zh-CN/zh-HK). Optional/additive: NULL on every order
+-- created before this feature, and untagged orders are ALWAYS shown (the filter
+-- only ever hides orders that declared a DIFFERENT language).
+ALTER TABLE orders
+    ADD COLUMN IF NOT EXISTS lang TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_orders_lang
+    ON orders (lang)
+    WHERE lang IS NOT NULL;
+
+COMMENT ON COLUMN orders.lang IS
+    'Language the order text is written in (a SUPPORTED_LOCALES code). NULL = '
+    'untagged (pre-feature or unspecified); untagged orders are never hidden by '
+    'the orderbook language filter.';

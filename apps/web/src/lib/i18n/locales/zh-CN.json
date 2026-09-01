@@ -2746,7 +2746,12 @@
 			"rss_title_prefix": "{site} 订单簿 - 筛选条件：",
 			"rss_asset_title": "当有新的 {asset} 订单发布时通过 RSS 收到通知。",
 			"side_help": "提示：如果你想买加密货币，找想卖的订单。如果你想卖，找想买的订单。",
-			"order_details_label": "订单条款 / 详情 / 备注"
+			"order_details_label": "订单条款 / 详情 / 备注",
+			"language_label": "语言",
+			"language_hint": "仅显示用这些语言撰写的订单。留空则显示全部。",
+			"language_placeholder": "搜索语言…",
+			"language_remove": "移除",
+			"language_no_matches": "没有匹配的语言"
 		},
 		"loading": "正在加载订单…",
 		"empty_title": "没有订单符合您的筛选",
@@ -3155,7 +3160,9 @@
 			"amount_entered_usd_hint": "{amount} {fiat}（≈ {usd}）",
 			"returning_min_hint": "至少 {amount} {fiat}（≈ {usd}）",
 			"barter_accept_label": "你接受哪些加密货币?",
-			"barter_accept_hint": "选择买家可以用来付款给你的加密货币——挑选你偏好的那些。"
+			"barter_accept_hint": "选择买家可以用来付款给你的加密货币——挑选你偏好的那些。",
+			"language_label": "本帖使用的语言",
+			"language_hint": "你的订单所用的语言——仅用于筛选订单簿。你的文字绝不会被翻译。"
 		},
 		"errors": {
 			"fiat_empty": "请选择一种法币(如 USD 或 EUR)。",
@@ -4530,6 +4537,12 @@
 			"public_detail": "以明文保存在区块链上——任何人都能永久读取。",
 			"private_detail": "在离开你的设备前已加密。连运营者也无法读取。",
 			"device_detail": "保留在此浏览器中，绝不会发送到任何地方。"
+		},
+		"preferred_language": {
+			"title": "首选语言",
+			"help": "选择你希望看到订单的语言。你的主要语言也是你发布新订单的默认语言。",
+			"primary_label": "主要（发帖默认）",
+			"additional_label": "同时显示以下语言的订单"
 		}
 	},
 	"shipment_modal": {

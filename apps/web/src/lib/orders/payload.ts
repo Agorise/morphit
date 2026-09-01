@@ -24,6 +24,7 @@
 
 import { redactPrivateKeys } from '$lib/security/privateKeyDetector';
 import type { AssetTicker } from '@morphit/asset-registry';
+import { isOrderLang } from '@morphit/operator-config';
 import type { OrderRecord } from '@morphit/indexer-client';
 
 const PERMLINK_CHARSET = 'abcdefghjkmnpqrstuvwxyz23456789'; // no i/l/o/1 → ambiguity
@@ -158,6 +159,10 @@ export interface OrderPayload {
 	 *  simply ignores it. It flows into the order title ("…of bananas") and the
 	 *  Blurt announcement in place of the generic "goods/services" label. */
 	readonly specific_barter_title?: string;
+	/** v1.15.0 — the language the order text is written in (a SUPPORTED_LOCALES
+	 *  code). Optional; omitted → the order is untagged (never hidden by the
+	 *  orderbook language filter). */
+	readonly lang?: string;
 }
 
 /** Input to buildOrderPayload — the fields a user fills in, in
@@ -173,6 +178,9 @@ export interface OrderFormInput {
 	readonly paymentMethods: readonly string[];
 	readonly terms: string | null;
 	readonly expiresAt: Date | null;
+	/** v1.15.0 — the language this post is written in (SUPPORTED_LOCALES code).
+	 *  Optional; defaulted in the UI from the user's preferred language. */
+	readonly lang?: string | null;
 	/** Fee method. Defaults to 'blurt' when omitted. */
 	readonly feeMethod?: 'blurt' | 'waived_first_buy' | 'btc' | 'xmr';
 	/** External transaction id for btc/xmr. Required when
@@ -322,6 +330,9 @@ export function buildOrderPayload(permlink: string, input: OrderFormInput): Orde
 		// space the live field kept while typing, so the on-chain value is clean.
 		// Omitted for crypto listings and blank barter titles, keeping the
 		// on-chain payload minimal and backward-compatible.
+		...((): { lang?: string } => {
+			return isOrderLang(input.lang) ? { lang: input.lang } : {};
+		})(),
 		...((): { specific_barter_title?: string } => {
 			const t = sanitizeBarterTitle(input.specificBarterTitle).trim();
 			return t.length > 0 ? { specific_barter_title: t } : {};

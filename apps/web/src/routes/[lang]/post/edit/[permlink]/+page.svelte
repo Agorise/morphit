@@ -50,6 +50,8 @@
 	import { getOrdersByAccount } from '$lib/indexer/client';
 	import type { OrderFormInput } from '$lib/orders/payload';
 	import { makeExpiryFlooredUtcDay } from '$lib/orders/payload';
+	import { SUPPORTED_LOCALES, DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
+	import { resolvePostDefaultLang, noteUsedPostLang, readLocalPreferredLangs } from '$lib/stores/preferredLangs';
 	import { termsHasForbiddenChar } from '$lib/orders/termsForbiddenChars';
 	import type { OrderRecord } from '@morphit/indexer-client';
 	import type { PrivateKeyMatch } from '$lib/security/privateKeyDetector';
@@ -115,6 +117,11 @@
 	// label through an edit; without this, saving an edit would wipe the title.
 	let specificBarterTitle = $state('');
 	let expiresDays = $state(14);
+	// v1.15.0 — the language this post is written in. Prefilled from the existing
+	// order below; else post-default (last-used → primary → UI locale).
+	let postLang = $state('');
+	const currentLangEdit = $derived((($page.data?.lang as string | undefined) ?? DEFAULT_LOCALE) as LocaleCode);
+	$effect(() => { if (!postLang) postLang = resolvePostDefaultLang(null, currentLangEdit); });
 	// Price model — split state mirroring /post's picker.  On load
 	// we derive these from the on-chain `price_model` record
 	// (defensive about unknown shapes, falling back to the canonical
@@ -248,6 +255,7 @@
 			? order.accepted_assets.filter((t): t is AssetTicker => isAssetTicker(t))
 			: [];
 		region = order.location_region ?? '';
+		if (order.lang) postLang = order.lang; // prefill the post's existing language
 		terms = order.terms ?? '';
 		specificBarterTitle = order.specific_barter_title ?? '';
 		// Expiry: derive days from expires_at - created_at, rounded
@@ -572,6 +580,7 @@
 			// from now" intent is respected, not "14d from the original
 			// post time."
 			expiresAt: makeExpiryFlooredUtcDay(expiresDays),
+			lang: postLang || undefined,
 			// cp36 Bob-3 fix — emit the active multi-network asset's
 			// network in the replace payload. buildOrderPayload (in
 			// $lib/orders/payload.ts) reads this and writes the wire-
@@ -591,6 +600,8 @@
 
 		try {
 			await broadcastOrderReplace(state.live, permlink, input);
+			// v1.15.0 — remember this post language + widen the local preferred set.
+			noteUsedPostLang(postLang, readLocalPreferredLangs() ?? [postLang]);
 			phase = 'saved';
 		} catch (err) {
 			console.warn('[post/edit] replace broadcast failed:', err);
@@ -1063,6 +1074,21 @@
 					<option value={60}>{$_('post_order.form.expires_60d')}</option>
 					<option value={90}>{$_('post_order.form.expires_90d')}</option>
 				</select>
+			</label>
+
+			<!-- v1.15.0 — the language this post is written in (prefilled from the
+			     order). Used only to filter the orderbook; the text is not translated. -->
+			<label class="mt-4 block">
+				<span class="mb-1 block text-sm font-semibold">{$_('post_order.form.language_label')}</span>
+				<select
+					bind:value={postLang}
+					class="w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+				>
+					{#each SUPPORTED_LOCALES as l (l.code)}
+						<option value={l.code}>{l.nativeName}</option>
+					{/each}
+				</select>
+				<p class="mt-1 text-xs text-ink-500">{$_('post_order.form.language_hint')}</p>
 			</label>
 		</section>
 

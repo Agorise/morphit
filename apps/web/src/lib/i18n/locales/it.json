@@ -2746,7 +2746,12 @@
 			"rss_title_prefix": "{site} Order book - Filtrato per:",
 			"rss_asset_title": "Ricevi notifiche via RSS quando viene pubblicato un nuovo ordine {asset}.",
 			"side_help": "Suggerimento: se vuoi comprare crypto, cerca annunci che vogliono vendere. Se vuoi vendere, cerca annunci che vogliono comprare.",
-			"order_details_label": "Termini / Dettagli / Note dell’ordine"
+			"order_details_label": "Termini / Dettagli / Note dell’ordine",
+			"language_label": "Lingua",
+			"language_hint": "Mostra solo ordini scritti in queste lingue. Lascia vuoto per vederli tutti.",
+			"language_placeholder": "Cerca lingue…",
+			"language_remove": "Rimuovi",
+			"language_no_matches": "Nessuna lingua corrispondente"
 		},
 		"loading": "Caricamento ordini…",
 		"empty_title": "Nessun ordine corrisponde ai tuoi filtri",
@@ -3155,7 +3160,9 @@
 			"amount_entered_usd_hint": "{amount} {fiat} (≈ {usd})",
 			"returning_min_hint": "Almeno {amount} {fiat} (≈ {usd})",
 			"barter_accept_label": "Quali cripto accetterai?",
-			"barter_accept_hint": "Seleziona le cripto con cui gli acquirenti possono pagarti — scegli quelle che preferisci."
+			"barter_accept_hint": "Seleziona le cripto con cui gli acquirenti possono pagarti — scegli quelle che preferisci.",
+			"language_label": "Questo annuncio è in",
+			"language_hint": "La lingua in cui è scritto il tuo ordine — usata solo per filtrare il book. Il tuo testo non viene mai tradotto."
 		},
 		"errors": {
 			"fiat_empty": "Scegli una valuta fiat (come USD o EUR).",
@@ -4530,6 +4537,12 @@
 			"public_detail": "Salvato in chiaro sulla blockchain: chiunque può leggerlo, per sempre.",
 			"private_detail": "Cifrato prima di lasciare il tuo dispositivo. Nemmeno l'operatore può leggerlo.",
 			"device_detail": "Resta in questo browser. Non viene mai inviato altrove."
+		},
+		"preferred_language": {
+			"title": "Lingue preferite",
+			"help": "Scegli le lingue in cui vuoi vedere gli ordini. La tua lingua principale è anche il valore predefinito per i nuovi ordini che pubblichi.",
+			"primary_label": "Principale (predefinita per i tuoi annunci)",
+			"additional_label": "Mostra anche ordini in"
 		}
 	},
 	"shipment_modal": {

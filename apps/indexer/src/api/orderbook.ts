@@ -52,6 +52,7 @@ import {
 	escapeLike
 } from '$api/shared';
 import { ASSET_TICKERS, type AssetTicker } from '@morphit/asset-registry';
+import { isOrderLang } from '@morphit/operator-config';
 
 const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 50;
@@ -75,6 +76,11 @@ const querySchema = z.object({
 		.max(256)
 		// Comma-separated list of short tokens. Split + validate.
 		.optional(),
+	/** v1.15.0 — comma-separated language codes (SUPPORTED_LOCALES). When
+	 *  present, the orderbook returns only orders whose lang is one of these
+	 *  PLUS every untagged order (lang IS NULL is never hidden). Absent → no
+	 *  language filtering. */
+	langs: z.string().min(1).max(128).optional(),
 	/** Minimum completed-trade count (derived from received feedback
 	 *  count). Discrete values only — we deliberately restrict to
 	 *  sensible presets instead of letting the frontend pass any
@@ -162,6 +168,7 @@ interface OrderRow {
 	/** v1.9.0 — a BARTER order's inline goods label; null for crypto orders. */
 	specific_barter_title: string | null;
 	terms: string | null;
+	lang: string | null;
 	/** ADR-0011 §10 — how this order's fee was paid. */
 	fee_method: 'blurt' | 'waived_first_buy' | 'btc' | 'xmr';
 	/** Number of feedback rows received by this account — i.e. how many
@@ -240,6 +247,7 @@ function rowToWire(r: OrderRow) {
 		accepted_assets: r.accepted_assets ?? null,
 		specific_barter_title: r.specific_barter_title ?? null,
 		terms: r.terms,
+		lang: r.lang ?? null,
 		fee_method: r.fee_method,
 		feedback_count: r.feedback_count,
 		weighted_rating: r.weighted_rating === null ? null : Number(r.weighted_rating),
@@ -390,6 +398,19 @@ export function orderbookRoute(db: Database, poller: Poller, operatorAccount: st
 				`EXISTS (SELECT 1 FROM unnest(o.payment_methods) pm WHERE lower(pm) = ANY(${p(methods)}::text[]))`
 			);
 		}
+		if (q.langs) {
+			// v1.15.0 — language filter. Untagged orders (lang IS NULL) are ALWAYS
+			// shown: the filter only ever hides orders that DECLARED a DIFFERENT
+			// language, so it can never blank the pre-feature orderbook.
+			const langs = q.langs
+				.split(',')
+				.map((s) => s.trim())
+				.filter((s) => isOrderLang(s));
+			if (langs.length === 0) {
+				return c.json(errorBody('bad_request', 'langs: no valid language codes'), 400);
+			}
+			where.push(`(o.lang IS NULL OR o.lang = ANY(${p(langs)}::text[]))`);
+		}
 
 		// Minimum-trades filter. Requires the feedback aggregate
 		// subquery (joined below). We reference f.c, treating NULL
@@ -506,6 +527,7 @@ export function orderbookRoute(db: Database, poller: Poller, operatorAccount: st
 			        o.amount_min::text, o.amount_max::text, o.price_model,
 			        o.location_region, o.payment_methods, o.accepted_assets,
 			        o.specific_barter_title, o.terms,
+			        o.lang,
 			        o.fee_method,
 			        COALESCE(f.c, 0)::int AS feedback_count,
 			        CASE WHEN f.r IS NOT NULL THEN f.r::text ELSE NULL END AS weighted_rating,

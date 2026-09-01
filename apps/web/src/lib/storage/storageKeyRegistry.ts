@@ -99,6 +99,9 @@ export const STORAGE_KEYS: readonly StorageKeySpec[] = [
 
 	// ─── ACCOUNT — mirrored to chain ──────────────────────────────────
 	{ key: 'morphit.userPreferences.v1', tier: 'account', protection: 'mirrored', note: 'Fiat + region. THE ORIGINAL LEAK: a global key, so the maintainer saw his tester3 region in a fresh testowner session.' },
+	{ key: 'morphit.preferredLangs.v1', tier: 'account', protection: 'mirrored', note: 'v1.15.0 — local mirror of the on-chain profile preferred_langs (primary first). Mirrored: the chain profile is the source of truth; re-seeded from it on settings load.' },
+	{ key: 'morphit.lastPostLang.v1', tier: 'device', note: 'v1.15.0 — the last language used to post an order on THIS browser; the default for the next post. Browser-local convenience.' },
+	
 	{ key: 'morphit.notifications.prefs.v1', tier: 'account', protection: 'mirrored', note: 'Categories, channels, quiet hours.' },
 	{ key: 'morphit.hiddenAccounts.v1', tier: 'account', protection: 'mirrored', note: 'Accounts hidden from the user\'s own views.' },
 	{ key: 'morphit.crossPageTradeEvents.enabled', tier: 'account', protection: 'mirrored', note: 'Privacy-affecting opt-in; defaults OFF on reset so it is never inherited.' },

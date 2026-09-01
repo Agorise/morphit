@@ -64,6 +64,11 @@ export async function runSystemCheck(): Promise<SystemCheckResult> {
 
 	// ─── Docker (beta11 — needed for the BunkerWeb web firewall) ─
 	checks.push(checkDocker());
+	// Pre-install hardening: catch the things that silently break a fresh install
+	// (an app on our ports, a docker subnet clash, a localhost that won't resolve).
+	checks.push(checkLocalhostResolves());
+	checks.push(checkPortConflicts());
+	checks.push(checkDockerSubnet());
 
 	// ─── Network (slow, last) ──────────────────────────────────
 	// PostgreSQL: is the server installed (binary + version), and is
@@ -401,6 +406,114 @@ function checkSystemd(): Check {
  *  (`morphit-ops bunkerweb`).  So absence is a 'warn' (with a clear
  *  "only if you'll use BunkerWeb" note), never an 'error' — a bare-
  *  nginx deploy needs no Docker at all. */
+// ── new pre-install checks (cp-installer-hardening) ──────────────────
+
+/** Parse `ss -tlnH` / `netstat -tln` output into the set of listening TCP ports.
+ *  PURE + tested. Field 3 (0-indexed) is the local address:port in both tools. */
+export function parseListeningPorts(ssOutput: string): Set<number> {
+	const ports = new Set<number>();
+	for (const line of ssOutput.split('\n')) {
+		const f = line.trim().split(/\s+/);
+		const local = f[3] ?? '';
+		const m = local.match(/:(\d{1,5})$/);
+		if (m) {
+			const p = Number(m[1]);
+			if (p > 0 && p < 65536) ports.add(p);
+		}
+	}
+	return ports;
+}
+
+/** Ports a Morphit install needs free. 80/443 = public site, 5432 = Postgres
+ *  (hard blocks). The loopback app ports are Morphit's own — a clash there means
+ *  another app grabbed them (a warn, not a block). */
+const REQUIRED_PORTS: ReadonlyArray<{ port: number; what: string; block: boolean }> = [
+	{ port: 80, what: 'public HTTP', block: true },
+	{ port: 443, what: 'public HTTPS', block: true },
+	{ port: 5432, what: 'PostgreSQL', block: true },
+	{ port: 8080, what: 'relay', block: false },
+	{ port: 8081, what: 'indexer', block: false },
+	{ port: 8090, what: 'frontend', block: false },
+	{ port: 8124, what: 'mcp', block: false }
+];
+
+/** Given the set of listening ports, decide the Check. PURE + tested. */
+export function portConflictCheck(listening: Set<number>): Check {
+	const clashes = REQUIRED_PORTS.filter((p) => listening.has(p.port));
+	if (clashes.length === 0) {
+		return { name: 'Port availability', actual: 'free', recommended: '80/443/5432 free', status: 'ok' };
+	}
+	const blocking = clashes.filter((p) => p.block);
+	const desc = clashes.map((p) => `${p.port} (${p.what})`).join(', ');
+	return {
+		name: 'Port availability',
+		actual: `in use: ${desc}`,
+		recommended: '80/443/5432 free',
+		status: blocking.length > 0 ? 'error' : 'warn',
+		note:
+			(blocking.length > 0
+				? `stop or relocate whatever holds ${blocking.map((p) => p.port).join(', ')} before installing`
+				: `another app is on ${clashes.map((p) => p.port).join(', ')} — Morphit's services need these`) +
+			' (you already run other apps here — one may hold these ports)'
+	};
+}
+
+function checkPortConflicts(): Check {
+	try {
+		const out = execSync('ss -tlnH 2>/dev/null || netstat -tln 2>/dev/null', { encoding: 'utf8', timeout: 3000 });
+		return portConflictCheck(parseListeningPorts(out));
+	} catch {
+		return { name: 'Port availability', actual: 'could not check', recommended: '80/443/5432 free', status: 'warn' };
+	}
+}
+
+/** Does any docker network overlap Morphit's compose subnet (172.20.0.0/16)?
+ *  PURE + tested — any 172.20.x.y/z overlaps the /16. */
+export function overlapsMorphitSubnet(cidrs: readonly string[]): boolean {
+	return cidrs.some((c) => /^172\.20\./.test(c.trim()));
+}
+
+function checkDockerSubnet(): Check {
+	try {
+		const out = execSync(
+			"docker network ls -q 2>/dev/null | xargs -r docker network inspect 2>/dev/null | grep -oE '[0-9]{1,3}(\\.[0-9]{1,3}){3}/[0-9]{1,2}' || true",
+			{ encoding: 'utf8', timeout: 5000 }
+		);
+		const cidrs = out.split('\n').map((s) => s.trim()).filter(Boolean);
+		if (overlapsMorphitSubnet(cidrs)) {
+			return {
+				name: 'Docker subnet',
+				actual: '172.20.0.0/16 taken',
+				recommended: '172.20.0.0/16 free',
+				status: 'error',
+				note: "an existing docker network overlaps 172.20.0.0/16, which Morphit's compose network needs — 'docker compose up' will clash. Free that network before installing"
+			};
+		}
+		return { name: 'Docker subnet', actual: '172.20.0.0/16 free', recommended: '172.20.0.0/16 free', status: 'ok' };
+	} catch {
+		return { name: 'Docker subnet', actual: 'n/a', recommended: '172.20.0.0/16 free', status: 'ok' };
+	}
+}
+
+/** localhost must resolve to 127.0.0.1 — the local Ansible inventory + the
+ *  Postgres URL both depend on it. */
+function checkLocalhostResolves(): Check {
+	try {
+		const out = execSync('getent hosts localhost 2>/dev/null', { encoding: 'utf8', timeout: 2000 }).trim();
+		const ip = out.split(/\s+/)[0] ?? '';
+		if (ip === '127.0.0.1' || ip === '::1') {
+			return { name: 'localhost resolves', actual: ip, recommended: '127.0.0.1', status: 'ok' };
+		}
+		if (ip) {
+			return { name: 'localhost resolves', actual: ip, recommended: '127.0.0.1', status: 'warn', note: 'localhost maps to an unexpected address — use 127.0.0.1 in the Postgres URL' };
+		}
+		return { name: 'localhost resolves', actual: 'no', recommended: '127.0.0.1', status: 'error', note: 'add "127.0.0.1 localhost" to /etc/hosts — the local install inventory and the DB URL both need it' };
+	} catch {
+		return { name: 'localhost resolves', actual: 'unknown', recommended: '127.0.0.1', status: 'warn' };
+	}
+}
+
+
 function checkDocker(): Check {
 	try {
 		const out = execSync('docker --version 2>/dev/null', {

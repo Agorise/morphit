@@ -15,6 +15,7 @@ import type pg from 'pg';
 import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contract';
 import { checkJsonbSize, MAX_JSONB_BYTES_PROFILE } from '$indexer/payloadSize';
 import { impersonatesReservedName, ownsReservedName } from '$indexer/confusables';
+import { isOrderLang, ORDER_LANG_CODES } from '@morphit/operator-config';
 
 const DISPLAY_NAME_MAX = 64;
 
@@ -162,7 +163,11 @@ const PROFILE_METADATA_KEYS = [
 	'streaming_url',
 	'website_url',
 	'avatar_svg',
-	'avatar_data_uri'
+	'avatar_data_uri',
+	// v1.15.0 — ordered list of the user's preferred languages (first = primary,
+	// the default for new posts; the whole set defaults the orderbook language
+	// filter). An ARRAY of SUPPORTED_LOCALES codes, not a string; empty ⇒ clear.
+	'preferred_langs'
 ] as const;
 
 const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<HandlerResult> => {
@@ -188,6 +193,15 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	for (const k of PROFILE_METADATA_KEYS) {
 		if (Object.prototype.hasOwnProperty.call(incoming, k)) {
 			const val = incoming[k];
+			if (k === 'preferred_langs') {
+				// Array of supported lang codes (first = primary). Validate + dedupe;
+				// empty/all-invalid ⇒ clear (skip so it isn't carried forward).
+				const arr = Array.isArray(val) ? val.filter((x): x is string => isOrderLang(x)) : [];
+				const deduped = [...new Set(arr)].slice(0, ORDER_LANG_CODES.length);
+				if (deduped.length === 0) continue; // explicit clear
+				merged[k] = deduped; // set
+				continue;
+			}
 			if (typeof val === 'string' && val.length === 0) continue; // explicit clear
 			merged[k] = val; // set
 		} else if (Object.prototype.hasOwnProperty.call(prior, k)) {

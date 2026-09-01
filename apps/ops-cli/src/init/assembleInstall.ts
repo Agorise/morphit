@@ -53,7 +53,7 @@ export interface AssembleDeps {
 	/** Run argv, streaming output; resolve with the process exit code. */
 	readonly spawn?: (argv: readonly string[]) => Promise<number>;
 	/** Resolve how many hosts the playbook targets (pre-flight guard). */
-	readonly probeHostCount?: (argv: readonly string[]) => number;
+	readonly probeHosts?: (argv: readonly string[]) => ProbeResult;
 	readonly print?: (s: string) => void;
 }
 
@@ -210,14 +210,73 @@ async function realSpawn(argv: readonly string[]): Promise<number> {
  *  (`--list-hosts`).  Ansible prints "hosts (N):" per play; take the max.
  *  Returns 0 when the pattern matches nothing — the exact pre-flight that would
  *  have caught the inline-inventory `morphit_servers` mismatch. */
-function realProbeHostCount(argv: readonly string[]): number {
+/** Raw result of the --list-hosts pre-flight: the exit code AND the output.
+ *  Capturing the exit code is the whole fix — a FAILED list-hosts must not be
+ *  misread as "0 hosts matched". */
+export interface ProbeResult {
+	readonly exitCode: number;
+	readonly output: string;
+}
+
+/** Pull the most useful error line out of ansible's output. PURE + tested. */
+export function extractAnsibleError(output: string): string {
+	const lines = output
+		.split('\n')
+		.map((l) => l.trim())
+		.filter(Boolean);
+	const err = lines.find((l) =>
+		/^ERROR!|^fatal:|could ?n.?t resolve|could not (?:find|open)|no such file|not find|syntax error|undefined variable|couldn.t parse|is not a valid|failed to load/i.test(
+			l
+		)
+	);
+	return err ?? lines[lines.length - 1] ?? '';
+}
+
+/** Decide the pre-flight verdict. PURE + tested. Distinguishes THREE cases that
+ *  used to collapse into one misleading "0 hosts" message:
+ *   1. the list-hosts command FAILED (missing collection, stray ansible.cfg,
+ *      undefined var, incompatible Ansible) → surface the REAL error;
+ *   2. it ran cleanly but matched 0 hosts → a genuine host-pattern/vars problem;
+ *   3. it matched ≥1 host → proceed. */
+export function interpretProbeResult(r: ProbeResult): {
+	readonly ok: boolean;
+	readonly count: number;
+	readonly reason?: string;
+} {
+	let count = 0;
+	for (const m of r.output.matchAll(/hosts \((\d+)\):/g)) count = Math.max(count, Number(m[1]));
+	if (count >= 1) return { ok: true, count };
+
+	if (r.exitCode !== 0) {
+		const err = extractAnsibleError(r.output);
+		return {
+			ok: false,
+			count,
+			reason:
+				`The installer's pre-flight check could not run (ansible-playbook --list-hosts exited ${r.exitCode}). ` +
+				`This is a fixable environment issue on this machine, not something you did.` +
+				(err ? `\n  Ansible said: ${err}` : '') +
+				`\n  Common causes: a missing Ansible collection, a stray ~/.ansible.cfg or ANSIBLE_* env var, ` +
+				`or an incompatible Ansible version. The morphit-node-doctor.sh script pinpoints and fixes most of ` +
+				`these — run it, then run the installer again.`
+		};
+	}
+	return {
+		ok: false,
+		count,
+		reason:
+			'The installer ran its pre-flight cleanly but Ansible matched 0 hosts — the generated vars file is ' +
+			'missing `morphit_target_hosts` (an old or partial build). Please report this with the ' +
+			'morphit-node-doctor.sh report.'
+	};
+}
+
+/** Run `--list-hosts` and capture BOTH the exit code and the output. */
+function realProbeHosts(argv: readonly string[]): ProbeResult {
 	const [cmd, ...args] = argv;
-	if (cmd === undefined) return 0;
+	if (cmd === undefined) return { exitCode: 1, output: '' };
 	const r = spawnSync(cmd, args, { encoding: 'utf8', env: localAnsibleEnv() });
-	const out = `${r.stdout ?? ''}\n${r.stderr ?? ''}`;
-	let max = 0;
-	for (const m of out.matchAll(/hosts \((\d+)\):/g)) max = Math.max(max, Number(m[1]));
-	return max;
+	return { exitCode: r.status ?? 1, output: `${r.stdout ?? ''}\n${r.stderr ?? ''}` };
 }
 
 /** Drive the plan.  Order + cleanup are the whole point — see the header. */
@@ -228,7 +287,7 @@ export async function assembleInstall(plan: InstallPlan, deps: AssembleDeps = {}
 	const promptSave = deps.promptSave ?? promptSaveSecrets;
 	const ensureAnsible = deps.ensureAnsible ?? realEnsureAnsible;
 	const spawn = deps.spawn ?? realSpawn;
-	const probeHostCount = deps.probeHostCount ?? realProbeHostCount;
+	const probeHosts = deps.probeHosts ?? realProbeHosts;
 
 	// 1. Write the vars file FIRST (0600 — it carries the DB secrets).
 	writeVarsFile(plan.varsFilePath, renderVarsFile(plan.vars));
@@ -255,10 +314,11 @@ export async function assembleInstall(plan: InstallPlan, deps: AssembleDeps = {}
 			varsFilePath: plan.varsFilePath,
 			listHosts: true
 		});
-		if (probeHostCount(probeArgv) < 1) {
+		const probeVerdict = interpretProbeResult(probeHosts(probeArgv));
+		if (!probeVerdict.ok) {
 			return {
 				ok: false,
-				reason: 'The installer found no machine to configure (Ansible matched 0 hosts). This is a bug in the installer itself, not something you did \u2014 please report it; a re-run won\u2019t help until it\u2019s patched.'
+				reason: probeVerdict.reason ?? 'The installer pre-flight did not pass.'
 			};
 		}
 

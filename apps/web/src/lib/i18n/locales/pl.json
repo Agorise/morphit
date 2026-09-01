@@ -2746,7 +2746,12 @@
 			"rss_title_prefix": "{site} Księga zleceń - Filtrowane według:",
 			"rss_asset_title": "Powiadomienia przez RSS, gdy zostanie opublikowane nowe zlecenie {asset}.",
 			"side_help": "Wskazówka: jeśli chcesz kupić kryptowaluty, szukaj ogłoszeń chcących sprzedać. Jeśli chcesz sprzedać, szukaj ogłoszeń chcących kupić.",
-			"order_details_label": "Warunki / Szczegóły / Notatki zlecenia"
+			"order_details_label": "Warunki / Szczegóły / Notatki zlecenia",
+			"language_label": "Język",
+			"language_hint": "Pokazuj tylko oferty napisane w tych językach. Zostaw puste, aby widzieć wszystkie.",
+			"language_placeholder": "Szukaj języków…",
+			"language_remove": "Usuń",
+			"language_no_matches": "Brak pasujących języków"
 		},
 		"loading": "Ładowanie zleceń…",
 		"empty_title": "Żadne zlecenie nie pasuje do twoich filtrów",
@@ -3155,7 +3160,9 @@
 			"amount_entered_usd_hint": "{amount} {fiat} (≈ {usd})",
 			"returning_min_hint": "Co najmniej {amount} {fiat} (≈ {usd})",
 			"barter_accept_label": "Które krypto zaakceptujesz?",
-			"barter_accept_hint": "Zaznacz krypto, którymi kupujący mogą Ci zapłacić — wybierz te, których naprawdę używasz."
+			"barter_accept_hint": "Zaznacz krypto, którymi kupujący mogą Ci zapłacić — wybierz te, których naprawdę używasz.",
+			"language_label": "Ten wpis jest w",
+			"language_hint": "Język, w którym napisana jest oferta — służy tylko do filtrowania księgi ofert. Twój tekst nigdy nie jest tłumaczony."
 		},
 		"errors": {
 			"fiat_empty": "Wybierz walutę fiat (np. USD lub EUR).",
@@ -4530,6 +4537,12 @@
 			"public_detail": "Zapisywane jawnie w blockchainie — każdy może to odczytać, na zawsze.",
 			"private_detail": "Szyfrowane, zanim opuści Twoje urządzenie. Nawet operator nie może tego odczytać.",
 			"device_detail": "Pozostaje w tej przeglądarce. Nigdy nigdzie nie jest wysyłane."
+		},
+		"preferred_language": {
+			"title": "Preferowane języki",
+			"help": "Wybierz języki, w których chcesz widzieć oferty. Twój główny język jest też domyślny dla nowych ofert.",
+			"primary_label": "Główny (domyślny dla Twoich wpisów)",
+			"additional_label": "Pokazuj też oferty w"
 		}
 	},
 	"shipment_modal": {
