@@ -18,8 +18,11 @@ import {
 import {
 	parseListeningPorts,
 	portConflictCheck,
-	overlapsMorphitSubnet
+	overlapsMorphitSubnet,
+	parseAnsibleVersion,
+	ansibleMeetsFloor
 } from '../src/init/systemCheck.ts';
+import { normalizeDbHostToIpv4 } from '../src/init/steps.ts';
 
 let pass = 0;
 const fails: string[] = [];
@@ -92,6 +95,24 @@ check('a docker net inside 172.20.x overlaps (172.20.5.0/24)', overlapsMorphitSu
 check('the exact 172.20.0.0/16 overlaps', overlapsMorphitSubnet(['172.20.0.0/16']));
 check('other 172.x nets do NOT overlap', !overlapsMorphitSubnet(['172.17.0.0/16', '172.19.0.0/16', '10.0.0.0/8']));
 check('empty → no overlap', !overlapsMorphitSubnet([]));
+
+// ── Ansible version (v1.15.1 — the Ubuntu-22.04 "0 hosts" root cause) ──
+check('parses modern "[core 2.16.3]"', (() => { const v = parseAnsibleVersion('ansible-playbook [core 2.16.3]'); return !!v && v.isCore && v.major === 2 && v.minor === 16; })());
+check('parses legacy "ansible-playbook 2.10.8"', (() => { const v = parseAnsibleVersion('ansible-playbook 2.10.8'); return !!v && !v.isCore && v.major === 2 && v.minor === 10; })());
+check('unparseable version → null', parseAnsibleVersion('not a version') === null);
+check('the admin\'s legacy 2.10.8 FAILS the floor (this was the "0 hosts" trap)', !ansibleMeetsFloor(parseAnsibleVersion('ansible-playbook 2.10.8')!));
+check('ancient 2.9 legacy fails the floor', !ansibleMeetsFloor(parseAnsibleVersion('ansible-playbook 2.9.27')!));
+check('core 2.14 fails the floor (below 2.15)', !ansibleMeetsFloor(parseAnsibleVersion('ansible-playbook [core 2.14.9]')!));
+check('core 2.15 meets the floor (boundary)', ansibleMeetsFloor(parseAnsibleVersion('ansible-playbook [core 2.15.0]')!));
+check('core 2.16 meets the floor', ansibleMeetsFloor(parseAnsibleVersion('ansible-playbook [core 2.16.3]')!));
+check('a future major (core 3.x) meets the floor', ansibleMeetsFloor(parseAnsibleVersion('ansible-playbook [core 3.0.1]')!));
+
+// ── DB host auto-normalize (v1.15.1 — the localhost→::1 trap) ──
+check('a localhost DB URL is rewritten to 127.0.0.1', (() => { const r = normalizeDbHostToIpv4('postgres://morphit:secret@localhost:5432/morphit'); return r.changed && r.url === 'postgres://morphit:secret@127.0.0.1:5432/morphit'; })());
+check('localhost rewrite preserves user, password, port, db', (() => { const r = normalizeDbHostToIpv4('postgresql://u:p%40x@localhost/db'); return r.changed && r.url.includes('127.0.0.1') && r.url.includes('u:p%40x') && r.url.endsWith('/db'); })());
+check('an explicit 127.0.0.1 is left unchanged', !normalizeDbHostToIpv4('postgres://morphit@127.0.0.1:5432/morphit').changed);
+check('a remote DB host is left unchanged', !normalizeDbHostToIpv4('postgres://u:p@db.example.com:5432/db').changed);
+check('an unparseable value is left as-is (validation handles it)', !normalizeDbHostToIpv4('not-a-url').changed);
 
 const total = pass + fails.length;
 console.log('\n──────────────────────────────────────────────────────');

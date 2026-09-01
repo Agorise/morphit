@@ -147,6 +147,27 @@ export async function stepTagline(): Promise<string> {
 
 // ─── Step 3: Database connection ─────────────────────────────────
 
+/**
+ * Postgres over `localhost` silently breaks on IPv6-first hosts: `localhost`
+ * resolves to `::1`, but the local/containerised Postgres listens on 127.0.0.1
+ * (IPv4), so the connect is refused. Rewrite a `localhost` host to `127.0.0.1`
+ * so it connects no matter how the box resolves localhost — the operator never
+ * has to know. PURE + tested. Leaves every other host (real IPs, remote hosts,
+ * peer-auth 127.0.0.1) untouched.
+ */
+export function normalizeDbHostToIpv4(url: string): { readonly url: string; readonly changed: boolean } {
+	try {
+		const u = new URL(url);
+		if (u.hostname === 'localhost') {
+			u.hostname = '127.0.0.1';
+			return { url: u.toString(), changed: true };
+		}
+	} catch {
+		/* unparseable — leave as-is; the shape check already rejected it */
+	}
+	return { url, changed: false };
+}
+
 export async function stepDatabase(): Promise<string> {
 	step(3, TOTAL_STEPS, 'Database connection');
 	explain(
@@ -163,27 +184,36 @@ export async function stepDatabase(): Promise<string> {
 			'  postgres://USER:PASSWORD@HOST:PORT/DATABASE'
 	);
 	examples([
-		'postgres://morphit:secret@localhost:5432/morphit       (typical)',
-		'postgres://morphit@127.0.0.1/morphit                   (peer auth)'
+		'postgres://morphit:secret@127.0.0.1:5432/morphit      (typical)',
+		'postgres://morphit@127.0.0.1/morphit                  (peer auth)'
 	]);
 
 	while (true) {
-		const url = await ask('Database URL (required)');
-		if (url.length === 0) {
+		const raw = await ask('Database URL (required)');
+		if (raw.length === 0) {
 			console.log('  ✗ Required.  Try again.\n');
 			continue;
 		}
-		if (!/^postgres(?:ql)?:\/\//.test(url)) {
+		if (!/^postgres(?:ql)?:\/\//.test(raw)) {
 			console.log('  ✗ Must start with postgres:// or postgresql://.  Try again.\n');
 			continue;
 		}
 		// Lightweight URL-shape probe; full connection test happens in
 		// the post-install health check.
 		try {
-			new URL(url);
+			new URL(raw);
 		} catch {
 			console.log('  ✗ Could not parse as a URL.  Try again.\n');
 			continue;
+		}
+		// Auto-fix the localhost→::1 trap so the admin never has to. Silent unless
+		// we actually changed something, then say why in one line.
+		const { url, changed } = normalizeDbHostToIpv4(raw);
+		if (changed) {
+			console.log(
+				'  → Using 127.0.0.1 instead of localhost so Postgres connects reliably\n' +
+					'    (on IPv6-first systems localhost is ::1, but Postgres listens on IPv4).\n'
+			);
 		}
 		return url;
 	}

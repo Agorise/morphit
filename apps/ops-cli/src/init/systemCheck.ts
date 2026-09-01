@@ -64,6 +64,7 @@ export async function runSystemCheck(): Promise<SystemCheckResult> {
 
 	// ─── Docker (beta11 — needed for the BunkerWeb web firewall) ─
 	checks.push(checkDocker());
+	checks.push(checkAnsibleVersion());
 	// Pre-install hardening: catch the things that silently break a fresh install
 	// (an app on our ports, a docker subnet clash, a localhost that won't resolve).
 	checks.push(checkLocalhostResolves());
@@ -505,7 +506,7 @@ function checkLocalhostResolves(): Check {
 			return { name: 'localhost resolves', actual: ip, recommended: '127.0.0.1', status: 'ok' };
 		}
 		if (ip) {
-			return { name: 'localhost resolves', actual: ip, recommended: '127.0.0.1', status: 'warn', note: 'localhost maps to an unexpected address — use 127.0.0.1 in the Postgres URL' };
+			return { name: 'localhost resolves', actual: ip, recommended: '127.0.0.1', status: 'warn', note: 'localhost maps to an unexpected address; harmless — the wizard already uses 127.0.0.1 for the database automatically.' };
 		}
 		return { name: 'localhost resolves', actual: 'no', recommended: '127.0.0.1', status: 'error', note: 'add "127.0.0.1 localhost" to /etc/hosts — the local install inventory and the DB URL both need it' };
 	} catch {
@@ -513,6 +514,74 @@ function checkLocalhostResolves(): Check {
 	}
 }
 
+
+// ── Ansible version (v1.15.1) — the "0 hosts" root cause on Ubuntu 22.04 ──
+// Ubuntu 22.04's `apt install ansible` gives the EOL 2.10, which can't load the
+// modern collections the playbook needs; the old installer misreported that as
+// "matched 0 hosts". This pre-check catches it before the playbook ever runs.
+
+export interface AnsibleVersion {
+	readonly major: number;
+	readonly minor: number;
+	readonly patch: number;
+	/** true for modern "[core X.Y.Z]"; false for the legacy pre-core "X.Y.Z". */
+	readonly isCore: boolean;
+}
+
+/** The floor the Morphit playbook + its collections need. */
+export const MIN_ANSIBLE_CORE = { major: 2, minor: 15 } as const;
+
+/** Parse `ansible-playbook --version` output. Handles modern
+ *  "ansible-playbook [core 2.16.3]" and legacy "ansible-playbook 2.10.8".
+ *  PURE + tested; null when unparseable. */
+export function parseAnsibleVersion(out: string): AnsibleVersion | null {
+	const core = out.match(/\[core\s+(\d+)\.(\d+)\.(\d+)/i);
+	if (core) return { major: +core[1]!, minor: +core[2]!, patch: +core[3]!, isCore: true };
+	const legacy = out.match(/ansible-playbook\s+(\d+)\.(\d+)\.(\d+)/i);
+	if (legacy) return { major: +legacy[1]!, minor: +legacy[2]!, patch: +legacy[3]!, isCore: false };
+	return null;
+}
+
+/** Does the parsed version meet the floor? A LEGACY (pre-core) version — the old
+ *  ansible/ansible-base package (≤2.10) — is always below the floor: there is no
+ *  ansible-core ≥2.15 that reports the legacy format. PURE + tested. */
+export function ansibleMeetsFloor(v: AnsibleVersion): boolean {
+	if (!v.isCore) return false;
+	if (v.major !== MIN_ANSIBLE_CORE.major) return v.major > MIN_ANSIBLE_CORE.major;
+	return v.minor >= MIN_ANSIBLE_CORE.minor;
+}
+
+function checkAnsibleVersion(): Check {
+	let out: string;
+	try {
+		out = execSync('ansible-playbook --version 2>/dev/null', { encoding: 'utf8', timeout: 4000 });
+	} catch {
+		return {
+			name: 'Ansible version',
+			actual: 'not found',
+			recommended: `core ≥ ${MIN_ANSIBLE_CORE.major}.${MIN_ANSIBLE_CORE.minor}`,
+			status: 'warn',
+			note: 'Ansible is not on PATH yet; the install can set it up.'
+		};
+	}
+	const v = parseAnsibleVersion(out);
+	if (!v) {
+		return { name: 'Ansible version', actual: 'unknown', recommended: `core ≥ ${MIN_ANSIBLE_CORE.major}.${MIN_ANSIBLE_CORE.minor}`, status: 'warn' };
+	}
+	const label = v.isCore
+		? `core ${v.major}.${v.minor}.${v.patch}`
+		: `${v.major}.${v.minor}.${v.patch} (legacy, pre-core)`;
+	if (ansibleMeetsFloor(v)) {
+		return { name: 'Ansible version', actual: label, recommended: `core ≥ ${MIN_ANSIBLE_CORE.major}.${MIN_ANSIBLE_CORE.minor}`, status: 'ok' };
+	}
+	return {
+		name: 'Ansible version',
+		actual: label,
+		recommended: `core ≥ ${MIN_ANSIBLE_CORE.major}.${MIN_ANSIBLE_CORE.minor}`,
+		status: 'error',
+		note: `Morphit's playbook + collections need ansible-core ≥ ${MIN_ANSIBLE_CORE.major}.${MIN_ANSIBLE_CORE.minor}. Ubuntu 22.04's "apt install ansible" gives the EOL 2.10, which can't load the collections — the install then fails (previously misreported as "0 hosts"). Upgrade Ansible (pipx or the Ansible PPA), then re-run.`
+	};
+}
 
 function checkDocker(): Check {
 	try {

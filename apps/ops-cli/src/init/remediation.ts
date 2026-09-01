@@ -77,7 +77,7 @@ export function remediationFor(check: Check): Remediation | null {
 			return {
 				checkName: check.name,
 				problem: `localhost maps to ${check.actual}`,
-				suggestion: 'Use 127.0.0.1 (not "localhost") in the Postgres URL when the wizard asks.'
+				suggestion: 'Harmless — the wizard already normalises the database host to 127.0.0.1 for you, so no action is needed.'
 			};
 
 		case 'Port availability':
@@ -94,6 +94,20 @@ export function remediationFor(check: Check): Remediation | null {
 				problem: check.actual,
 				suggestion:
 					'An existing docker network overlaps Morphit\'s 172.20.0.0/16 subnet. Remove or relocate it (`docker network ls` / `docker network rm <name>`), then re-run. A compose subnet override is coming in a future release.'
+			};
+
+		case 'Ansible version':
+			return {
+				checkName: check.name,
+				problem: `Ansible is ${check.actual}`,
+				suggestion:
+					"Morphit's playbook needs ansible-core ≥ 2.15. Ubuntu 22.04's apt Ansible is the EOL 2.10 — replace it with a current one via pipx (or the Ansible PPA), then re-run the installer.",
+				autoFix: {
+					command:
+						'sudo apt-get remove -y ansible; sudo apt-get install -y pipx && pipx ensurepath && pipx install --include-deps ansible',
+					needsSudo: true,
+					defaultYes: false
+				}
 			};
 
 		case 'Docker':
