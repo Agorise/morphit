@@ -914,11 +914,12 @@ const SCENARIOS: readonly Scenario[] = [
 		mustNotHave: ['covers all 14 steps']
 	},
 	{
-		name: 'D-10 — OPERATIONS.md Postgres version accepts 15+',
+		name: 'D-10 — OPERATIONS.md Postgres version accepts 14+ (stock Ubuntu 22.04)',
 		file: 'docs/OPERATIONS.md',
 		rootRelative: true,
-		// Pre-fix said "should show 15.x or 16.x" which rejects PG 17.
-		mustHave: ['15.x or higher'],
+		// v1.15.3 — lowered the floor to 14 (the distro default the playbook itself
+		// installs; no 15-only SQL, no runtime enforcement). Must stay non-restrictive.
+		mustHave: ['14.x or higher'],
 		mustNotHave: ['should show 15.x or 16.x']
 	},
 	{
