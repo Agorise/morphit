@@ -22,6 +22,7 @@ import {
 	type KnownInstanceRow,
 	type ProbeStatus
 } from '../src/indexer/federationProbe.ts';
+import { readFileSync } from 'node:fs';
 
 // Cp3 (Part 122) — stub the DNS resolver too.  Without this the
 // new DNS-rebinding defense runs a real lookup before fetch, which
@@ -118,7 +119,9 @@ function makeRow(opts: {
 		last_probed_at: null,
 		last_probe_status: 'never',
 		consecutive_failures: 0,
-		cached_indexed_block: opts.cached_indexed_block ?? null
+		cached_indexed_block: opts.cached_indexed_block ?? null,
+		reg_alt_networks: null,
+		last_action_block_num: null
 	};
 }
 
@@ -449,6 +452,29 @@ await scenario('cp672: lookup refuses an unexpected hostname (DNS-rebinding clos
 	let err: unknown;
 	lookup('evil.example', { all: true }, (e) => { err = e; });
 	assertEqual(err instanceof Error, true, 'mismatched hostname → Error');
+});
+
+await scenario('v1.15.3: dropFailedInstances NEVER prunes a clearnet_blocked (censored-but-alive) node', () => {
+	const src = readFileSync(new URL('../src/indexer/federationProbe.ts', import.meta.url), 'utf8');
+	// The DELETE that drops dead peers must exempt clearnet_blocked, or a censored
+	// node that keeps failing OUR probe would be erased from the directory.
+	const del = src.slice(src.indexOf('DELETE FROM known_instances'));
+	assertEqual(
+		/consecutive_failures >= \$1[\s\S]*last_probe_status <> 'clearnet_blocked'/.test(del.slice(0, 900)),
+		true,
+		"drop query exempts 'clearnet_blocked'"
+	);
+});
+
+await scenario('v1.15.3: a failed clearnet probe retries over the on-chain onion (Fix A)', () => {
+	const src = readFileSync(new URL('../src/indexer/federationProbe.ts', import.meta.url), 'utf8');
+	assertEqual(
+		/reg_alt_networks\?\.tor/.test(src) &&
+			/fetchJsonViaHiddenService/.test(src) &&
+			/CLEARNET_BLOCKED_WINDOW_BLOCKS/.test(src),
+		true,
+		'Tor fallback + clearnet_blocked window present'
+	);
 });
 
 console.log(`\n${'─'.repeat(54)}`);

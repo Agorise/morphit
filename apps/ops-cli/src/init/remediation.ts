@@ -102,8 +102,8 @@ export function remediationFor(check: Check): Remediation | null {
 				problem: `PostgreSQL is ${check.actual}`,
 				suggestion:
 					check.actual === 'not found'
-						? 'Install PostgreSQL 15+ (Ubuntu 22.04\'s apt default is 14 — use the PGDG repo at apt.postgresql.org for a current one), then re-run.'
-						: 'Morphit needs PostgreSQL 15+. Install a newer server from the PGDG apt repo (apt.postgresql.org) and migrate your data to it — I won\'t auto-upgrade Postgres, since that touches your database. Then re-run.'
+						? 'Install PostgreSQL (Ubuntu 22.04\'s `apt install postgresql` = 14, which is fine), then re-run. The installer can also set it up for you.'
+						: 'Morphit needs PostgreSQL >= 14. Your server is older — install a newer one (PGDG apt repo, apt.postgresql.org) and migrate your data; I won\'t auto-upgrade Postgres since that touches your database. Then re-run.'
 			};
 
 		case 'Ansible version':
@@ -111,7 +111,7 @@ export function remediationFor(check: Check): Remediation | null {
 				checkName: check.name,
 				problem: `Ansible is ${check.actual}`,
 				suggestion:
-					"Morphit's playbook needs ansible-core ≥ 2.15. Ubuntu 22.04's apt Ansible is the EOL 2.10 — replace it with a current one via pipx (or the Ansible PPA), then re-run the installer.",
+					"Morphit needs Ansible >= 2.10 (Ubuntu 22.04's default is fine). Yours is older — upgrade it (pipx install --include-deps ansible, or your distro packages), then re-run.",
 				autoFix: {
 					command:
 						'sudo apt-get remove -y ansible; sudo apt-get install -y pipx && pipx ensurepath && pipx install --include-deps ansible',

@@ -513,6 +513,21 @@ COMMENT ON COLUMN orders.lang IS
     'pl/fr/it/ru/fa/zh-CN/zh-HK). NULL = untagged (created before the feature, '
     'or unspecified); untagged orders are NEVER hidden by the language filter.';
 `
+	},
+
+	{
+		version: 57,
+		description:
+			'operators.reg_alt_networks — hidden-service addresses (Tor/I2P/Lokinet/ENS) an operator publishes ON-CHAIN via morphit_operator_register_v1, so the federation can reach a clearnet-censored node over Tor without first completing a (blocked) clearnet probe. Optional/additive: NULL for operators that published none.',
+		sql: `
+ALTER TABLE operators
+    ADD COLUMN IF NOT EXISTS reg_alt_networks JSONB;
+
+COMMENT ON COLUMN operators.reg_alt_networks IS
+    'On-chain-published hidden-service addresses {tor,i2p_b32,i2p_name,lokinet,ens} '
+    '(host strings, no scheme). Lets the federation probe a censored node over Tor/I2P. '
+    'NULL when the operator published none.';
+`
 	}
 
 	// Future migrations land here.  The v1 collapsed schema is the

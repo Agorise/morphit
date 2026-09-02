@@ -2113,6 +2113,7 @@
 			"syncing": "Syncing",
 			"stale": "Stale",
 			"unreachable": "Unreachable",
+			"clearnet_blocked": "Clearnet blocked",
 			"mismatch": "Mismatch",
 			"never": "Pending Probe"
 		},
@@ -2122,6 +2123,7 @@
 			"syncing": "Reachable, still catching up",
 			"stale": "Behind and not recovering",
 			"unreachable": "Offline, could not connect",
+			"clearnet_blocked": "Alive, but clearnet censored",
 			"mismatch": "Identity or config mismatch",
 			"never": "Queued, not yet probed"
 		},
@@ -2131,6 +2133,7 @@
 			"syncing": "Reachable and healthy, but still catching up to the chain. Turns Good once synced.",
 			"stale": "Reachable, but its health check is degraded — a real problem on that instance.",
 			"unreachable": "Couldn't be reached over the network on the last check.",
+			"clearnet_blocked": "Alive on-chain and reachable over Tor, but its public web address is blocked from outside its country. Not down — censored.",
 			"mismatch": "Reachable, but its operator account or treasury addresses don't match the canonical chain values.",
 			"never": "Queued — the probe hasn't checked this instance yet."
 		},

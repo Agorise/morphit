@@ -1423,6 +1423,7 @@ export type InstanceProbeStatus =
 	| 'quiet'        // healthy but no orderbook activity in 7d
 	| 'syncing'      // reachable + health 'ok' but chain-lag over threshold (catching up)
 	| 'stale'        // /v1/health degraded or malformed (a real problem)
+	| 'clearnet_blocked' // clearnet unreachable but the operator is alive on-chain — censored, not down
 	| 'unreachable'  // HTTP fetch failed
 	| 'mismatch'     // origin reachable but relay_account mismatched
 	| 'never';       // queued but probe scheduler hasn't run yet

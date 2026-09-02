@@ -2113,6 +2113,7 @@
 			"syncing": "Synchronisierung",
 			"stale": "Veraltet",
 			"unreachable": "Nicht erreichbar",
+			"clearnet_blocked": "Clearnet blockiert",
 			"mismatch": "Nicht übereinstimmend",
 			"never": "Prüfung ausstehend"
 		},
@@ -2122,6 +2123,7 @@
 			"syncing": "Erreichbar, synchronisiert noch",
 			"stale": "Zurück und ohne Fortschritt",
 			"unreachable": "Offline, nicht erreichbar",
+			"clearnet_blocked": "Aktiv, aber Clearnet zensiert",
 			"mismatch": "Identität oder Konfiguration abweichend",
 			"never": "In Warteschlange, noch ungeprüft"
 		},
@@ -2131,6 +2133,7 @@
 			"syncing": "Erreichbar und gesund, holt aber noch zur Kette auf. Wechselt zu „Gut“, sobald synchronisiert.",
 			"stale": "Erreichbar, aber die Statusprüfung ist beeinträchtigt — ein echtes Problem auf dieser Instanz.",
 			"unreachable": "Bei der letzten Prüfung über das Netzwerk nicht erreichbar.",
+			"clearnet_blocked": "On-Chain aktiv und über Tor erreichbar, aber ihre öffentliche Web-Adresse ist von außerhalb des Landes blockiert. Nicht offline — zensiert.",
 			"mismatch": "Erreichbar, aber das Betreiberkonto oder die Treasury-Adressen stimmen nicht mit den kanonischen On-Chain-Werten überein.",
 			"never": "In der Warteschlange: Die Prüfung hat diese Instanz noch nicht erreicht."
 		},

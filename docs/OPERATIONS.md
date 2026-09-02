@@ -11869,7 +11869,7 @@ When it finishes, **everything is installed and running** — the app and backgr
 
 If you would rather install the prerequisites yourself and just have `morphit-ops` write your configuration, this is the path. (It is the **"Configure only"** choice in the installer.)
 
-Install **Node.js 22**, **PostgreSQL 15.x or higher**, and **nginx** from your system's package manager (`psql --version` should read 15.x or higher). Then get Morphit and build it from source:
+Install **Node.js 22**, **PostgreSQL 14.x or higher**, and **nginx** from your system's package manager (`psql --version` should read 14.x or higher). Then get Morphit and build it from source:
 
 ```sh
 cd ~

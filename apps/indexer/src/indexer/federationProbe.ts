@@ -93,12 +93,18 @@ const DEFAULT_CONCURRENCY = 10;
  *  a warning.  Won't matter for years; sized for "small federation". */
 const MAX_TRACKED_INSTANCES = 200;
 
+/** v1.15.3 — how recent an operator's last on-chain action must be for an
+ *  unreachable-over-clearnet node to count as 'clearnet_blocked' (censored, still
+ *  alive) rather than 'unreachable' (dead). ~1 day of Blurt blocks (3s each). */
+const CLEARNET_BLOCKED_WINDOW_BLOCKS = 28_800;
+
 export type ProbeStatus =
 	| 'never'
 	| 'good'
 	| 'quiet'
 	| 'syncing'
 	| 'stale'
+	| 'clearnet_blocked'
 	| 'unreachable'
 	| 'mismatch';
 
@@ -124,6 +130,11 @@ export interface FederationProbeConfig {
 	 *  while we're still catching up, instead of a misleading 'good'.
 	 *  Returns null when unknown (poller not yet running). */
 	readonly localLagBlocks?: () => number | null;
+	/** v1.15.3 — the current chain head block (from the local poller). Used to
+	 *  decide whether an operator whose clearnet endpoint is unreachable is still
+	 *  ALIVE on-chain (recent action) → 'clearnet_blocked' (censored, not dead) vs
+	 *  'unreachable'. Returns null when unknown. */
+	readonly currentBlock?: () => number | null;
 	/** This instance's own branding, read straight from local config —
 	 *  the SAME values the `/v1/instance` endpoint serves.  Because the
 	 *  scheduler never network-probes its own origin (see `selfOrigin`),
@@ -201,6 +212,13 @@ export interface KnownInstanceRow {
 	 *  block-less outcome). Used to tell a 'degraded' peer that is advancing
 	 *  (syncing) from one that is frozen (stale). */
 	cached_indexed_block: number | null;
+	/** v1.15.3 — the operator's ON-CHAIN-published hidden-service addresses
+	 *  (from operators.reg_alt_networks). Lets the probe reach a clearnet-censored
+	 *  node over Tor. JSONB → parsed object or null. */
+	reg_alt_networks: { tor?: string | null; i2p_b32?: string | null; i2p_name?: string | null; lokinet?: string | null; ens?: string | null } | null;
+	/** v1.15.3 — the block of the operator's most recent on-chain action. Lets us
+	 *  tell a clearnet-blocked-but-alive node from a dead one. pg BIGINT → string. */
+	last_action_block_num: string | number | null;
 }
 
 export interface ProbeOutcome {
@@ -269,6 +287,12 @@ export class FederationProbeScheduler {
 		const result = await this.db.query<{ origin: string }>(
 			`DELETE FROM known_instances
 			 WHERE consecutive_failures >= $1
+			   -- v1.15.3: a 'clearnet_blocked' node is alive on-chain (we just can't
+			   -- reach it over clearnet or Tor from here — e.g. state censorship). It
+			   -- keeps failing OUR probe, but it is NOT dead, so it must never be pruned
+			   -- from the directory; that would erase exactly the censored operators
+			   -- Morphit exists to keep reachable.
+			   AND last_probe_status <> 'clearnet_blocked'
 			 RETURNING origin`,
 			[failureCountThreshold]
 		);
@@ -288,21 +312,23 @@ export class FederationProbeScheduler {
 		const goodMs = PROBE_INTERVAL_MS.good;
 		const failMs = PROBE_INTERVAL_MS.unreachable;
 		const result = await this.db.query<KnownInstanceRow>(
-			`SELECT origin, operator_account, registered_at_time,
-			        last_probed_at, last_probe_status, consecutive_failures,
-			        cached_indexed_block
-			 FROM known_instances
-			 WHERE last_probe_status = 'never'
-			    OR last_probed_at IS NULL
+			`SELECT ki.origin, ki.operator_account, ki.registered_at_time,
+			        ki.last_probed_at, ki.last_probe_status, ki.consecutive_failures,
+			        ki.cached_indexed_block,
+			        o.reg_alt_networks, o.last_action_block_num
+			 FROM known_instances ki
+			 LEFT JOIN operators o ON o.account = ki.operator_account
+			 WHERE ki.last_probe_status = 'never'
+			    OR ki.last_probed_at IS NULL
 			    OR (
-			        last_probe_status IN ('good', 'quiet', 'syncing')
-			        AND last_probed_at < NOW() - INTERVAL '${Math.floor(goodMs / 1000)} seconds'
+			        ki.last_probe_status IN ('good', 'quiet', 'syncing')
+			        AND ki.last_probed_at < NOW() - INTERVAL '${Math.floor(goodMs / 1000)} seconds'
 			    )
 			    OR (
-			        last_probe_status IN ('stale', 'unreachable', 'mismatch')
-			        AND last_probed_at < NOW() - INTERVAL '${Math.floor(failMs / 1000)} seconds'
+			        ki.last_probe_status IN ('stale', 'unreachable', 'mismatch', 'clearnet_blocked')
+			        AND ki.last_probed_at < NOW() - INTERVAL '${Math.floor(failMs / 1000)} seconds'
 			    )
-			 ORDER BY last_probed_at NULLS FIRST
+			 ORDER BY ki.last_probed_at NULLS FIRST
 			 LIMIT ${MAX_TRACKED_INSTANCES}`,
 			[]
 		);
@@ -397,7 +423,52 @@ export class FederationProbeScheduler {
 					continue;
 				}
 				try {
-					const outcome = await probeOne(inst, treasuryForProbe, fetchJson, selfCheck);
+					let outcome = await probeOne(inst, treasuryForProbe, fetchJson, selfCheck);
+					// v1.15.3 Fix A — the clearnet fetch failed, but the operator may
+					// have published an .onion ON-CHAIN. Retry the probe over Tor so a
+					// clearnet-censored node (e.g. Iran) is still discovered + reachable.
+					if (outcome.status === 'unreachable') {
+						const onion = inst.reg_alt_networks?.tor ?? null;
+						if (onion && /^[a-z2-7]{56}\.onion$/.test(onion)) {
+							const proxies =
+								this.config.hiddenServiceProxies ?? hiddenServiceProxyConfigFromEnv();
+							try {
+								const torOutcome = await probeOne(
+									{ ...inst, origin: `http://${onion}` },
+									treasuryForProbe,
+									<T>(url: string): Promise<T> => fetchJsonViaHiddenService<T>(url, proxies),
+									selfCheck
+								);
+								if (
+									torOutcome.status === 'good' ||
+									torOutcome.status === 'quiet' ||
+									torOutcome.status === 'syncing'
+								) {
+									outcome = torOutcome; // reached over Tor — the censored node is alive
+								}
+							} catch {
+								/* our Tor proxy is down or the onion is unreachable — fall through */
+							}
+						}
+					}
+					// v1.15.3 Fix B — still unreachable over clearnet AND Tor, but is the
+					// operator ALIVE on-chain (recent action)? Then it's censored, not
+					// dead: label it 'clearnet_blocked' so the directory tells the truth.
+					if (outcome.status === 'unreachable') {
+						const head = this.config.currentBlock?.() ?? null;
+						const last =
+							inst.last_action_block_num === null
+								? null
+								: Number(inst.last_action_block_num);
+						if (
+							head !== null &&
+							last !== null &&
+							Number.isFinite(last) &&
+							head - last < CLEARNET_BLOCKED_WINDOW_BLOCKS
+						) {
+							outcome = { ...outcome, status: 'clearnet_blocked' };
+						}
+					}
 					await this.persistOutcome(inst, outcome);
 				} catch (err) {
 					// Defensive: probeOne should never throw, but if it

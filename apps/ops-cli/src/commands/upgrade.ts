@@ -315,6 +315,53 @@ export function offlineReleaseDir(installDir: string): string {
 	return process.env.MORPHIT_OFFLINE_RELEASE_DIR ?? `${installDir}-offline`;
 }
 
+/**
+ * Self-heal the advertised Tor onion. The onion is generated a few seconds after
+ * Tor first starts, so on some boxes the install-time config write loses the
+ * race and leaves MORPHIT_INSTANCE_TOR_ADDRESS empty — the node then advertises
+ * `tor: null` in /v1/instance and the federation can't reach it over Tor (fatal
+ * for a censored/Iran node whose clearnet is blocked). On every upgrade, if the
+ * onion now exists on disk but the config value is empty, populate it. Idempotent
+ * (a non-empty value is left alone), root-only (the onion file is 0700
+ * debian-tor). PURE core via applyOnionHeal for testing.
+ */
+export function applyOnionHeal(envText: string, onion: string): { text: string; changed: boolean } {
+	const cur = envText.match(/^MORPHIT_INSTANCE_TOR_ADDRESS=(.*)$/m)?.[1]?.trim() ?? '';
+	if (cur.endsWith('.onion')) return { text: envText, changed: false }; // already set — don't clobber
+	if (!onion.endsWith('.onion')) return { text: envText, changed: false };
+	const line = `MORPHIT_INSTANCE_TOR_ADDRESS=${onion}`;
+	if (/^MORPHIT_INSTANCE_TOR_ADDRESS=.*$/m.test(envText)) {
+		return { text: envText.replace(/^MORPHIT_INSTANCE_TOR_ADDRESS=.*$/m, line), changed: true };
+	}
+	return { text: `${envText.replace(/\s*$/, '')}\n${line}\n`, changed: true };
+}
+
+export function healTorOnionInConfig(
+	configPath: string,
+	onionPath = '/var/lib/tor/morphit/hostname'
+): { healed: boolean; onion: string | null } {
+	let env: string;
+	try {
+		env = readFileSync(configPath, 'utf8');
+	} catch {
+		return { healed: false, onion: null };
+	}
+	let onion = '';
+	try {
+		onion = readFileSync(onionPath, 'utf8').trim();
+	} catch {
+		return { healed: false, onion: null }; // no onion on disk yet
+	}
+	const { text, changed } = applyOnionHeal(env, onion);
+	if (!changed) return { healed: false, onion: onion.endsWith('.onion') ? onion : null };
+	try {
+		writeFileSync(configPath, text);
+	} catch {
+		return { healed: false, onion };
+	}
+	return { healed: true, onion };
+}
+
 /** Compare two vX.Y.Z[-pre] tags. Returns >0 if a is newer, <0 if older, 0 if
  *  equal/uncomparable. Release (no prerelease) beats a prerelease of the same
  *  X.Y.Z. PURE. */
@@ -1922,6 +1969,22 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	}
 
 	// ─── 10. Restart services ──────────────────────────────────
+	// First, self-heal the advertised Tor onion: on some boxes the onion is
+	// generated after the install-time config write, leaving the config value
+	// empty and the node advertising `tor: null` (unreachable over Tor — fatal
+	// for a censored node). Populate it now if the onion exists but the config
+	// is empty, so the indexer restart below picks it up and /v1/instance
+	// advertises it. Idempotent + safe on every upgrade.
+	try {
+		const heal = healTorOnionInConfig(join(installDir, 'morphit.config.env'));
+		if (heal.healed) {
+			info(`Captured this node's Tor onion into the config so it's advertised: ${heal.onion}`);
+			info('  (Re-broadcast it to the federation with:  sudo morphit-ops  → Alt addresses.)');
+		}
+	} catch {
+		/* non-fatal — the node still works over clearnet */
+	}
+
 	for (const svc of SERVICES_TO_RESTART) {
 		const isActive = spawnSync('systemctl', ['is-active', '--quiet', svc]).status === 0;
 		if (!isActive) {

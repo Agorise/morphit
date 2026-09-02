@@ -237,10 +237,11 @@
 		good: 1,
 		quiet: 2,
 		syncing: 3,
-		stale: 4,
-		mismatch: 5,
-		unreachable: 6,
-		never: 7
+		clearnet_blocked: 4,
+		stale: 5,
+		mismatch: 6,
+		unreachable: 7,
+		never: 8
 	};
 	const filtered = $derived.by(() => {
 		const arr = Array.from(entries.values());
@@ -285,6 +286,8 @@
 			case 'stale':
 			case 'mismatch':
 				return 'bg-orange-500/15 text-orange-800 dark:text-orange-200 ring-1 ring-orange-500/30';
+			case 'clearnet_blocked':
+				return 'bg-amber-500/15 text-amber-800 dark:text-amber-200 ring-1 ring-amber-500/30';
 			case 'unreachable':
 				return 'bg-red-500/15 text-red-800 dark:text-red-200 ring-1 ring-red-500/30';
 			case 'never':
@@ -342,8 +345,24 @@
 	 *  reaches the instance via a non-canonical mirror domain simply gets no
 	 *  highlight rather than a wrong one. */
 	function isCurrentInstance(entry: InstanceDirectoryEntry): boolean {
-		const eo = normOrigin(entry.origin);
-		return eo !== null && currentOrigin !== null && eo === currentOrigin;
+		if (currentOrigin === null) return false;
+		// Match the browser's current origin against the registered clearnet origin
+		// OR any of the instance's hidden-service addresses. A visitor who reached
+		// the node over Tor/I2P (its .onion / .b32.i2p — e.g. because clearnet is
+		// censored) is still correctly recognised as "here". Hidden-service hosts
+		// are schemeless in the directory, so we test them as http:// origins.
+		const an = entry.alt_networks;
+		const candidates: Array<string | null | undefined> = [
+			entry.origin,
+			an?.tor ? `http://${an.tor}` : null,
+			an?.i2p_b32 ? `http://${an.i2p_b32}` : null,
+			an?.i2p_name ? `http://${an.i2p_name}` : null,
+			an?.lokinet ? `http://${an.lokinet}` : null
+		];
+		return candidates.some((c) => {
+			const n = normOrigin(c);
+			return n !== null && n === currentOrigin;
+		});
 	}
 </script>
 
@@ -381,6 +400,7 @@
 				<option value="quiet">{$_('instances.status_menu.quiet')}</option>
 				<option value="syncing">{$_('instances.status_menu.syncing')}</option>
 				<option value="stale">{$_('instances.status_menu.stale')}</option>
+				<option value="clearnet_blocked">{$_('instances.status_menu.clearnet_blocked')}</option>
 				<option value="mismatch">{$_('instances.status_menu.mismatch')}</option>
 				<option value="unreachable">{$_('instances.status_menu.unreachable')}</option>
 				<option value="never">{$_('instances.status_menu.never')}</option>

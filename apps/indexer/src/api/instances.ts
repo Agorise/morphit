@@ -68,6 +68,7 @@ export function instancesRoute(db: Database): Hono {
 				ki.cached_tagline,
 				ki.cached_contact_url,
 				ki.cached_alt_networks,
+				op.reg_alt_networks,
 				ki.last_probe_status,
 				ki.registered_at_time,
 				ki.last_probed_at,
@@ -81,11 +82,13 @@ export function instancesRoute(db: Database): Hono {
 			   CASE ki.last_probe_status
 			     WHEN 'good' THEN 1
 			     WHEN 'quiet' THEN 2
-			     WHEN 'stale' THEN 3
-			     WHEN 'mismatch' THEN 4
-			     WHEN 'unreachable' THEN 5
-			     WHEN 'never' THEN 6
-			     ELSE 7
+			     WHEN 'syncing' THEN 3
+			     WHEN 'clearnet_blocked' THEN 4
+			     WHEN 'stale' THEN 5
+			     WHEN 'mismatch' THEN 6
+			     WHEN 'unreachable' THEN 7
+			     WHEN 'never' THEN 8
+			     ELSE 9
 			   END,
 			   ki.registered_at_time DESC`,
 			params

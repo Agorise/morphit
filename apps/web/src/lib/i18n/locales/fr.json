@@ -2113,6 +2113,7 @@
 			"syncing": "Synchronisation",
 			"stale": "Obsolète",
 			"unreachable": "Inaccessible",
+			"clearnet_blocked": "Clearnet bloqué",
 			"mismatch": "Incohérence",
 			"never": "En attente de vérification"
 		},
@@ -2122,6 +2123,7 @@
 			"syncing": "Accessible, synchronisation en cours",
 			"stale": "En retard et sans progresser",
 			"unreachable": "Hors ligne, injoignable",
+			"clearnet_blocked": "Actif, mais clearnet censuré",
 			"mismatch": "Identité ou configuration incohérente",
 			"never": "En file, pas encore sondé"
 		},
@@ -2131,6 +2133,7 @@
 			"syncing": "Accessible et en bonne santé, mais encore en train de rattraper la chaîne. Passera à « Bon » une fois synchronisée.",
 			"stale": "Accessible, mais son contrôle de santé est dégradé — un vrai problème sur cette instance.",
 			"unreachable": "Injoignable sur le réseau lors de la dernière vérification.",
+			"clearnet_blocked": "Actif sur la chaîne et accessible via Tor, mais son adresse web publique est bloquée depuis l’étranger. Pas hors ligne — censuré.",
 			"mismatch": "Accessible, mais son compte opérateur ou ses adresses de trésorerie ne correspondent pas aux valeurs canoniques de la chaîne.",
 			"never": "En file d'attente : la sonde n'a pas encore vérifié cette instance."
 		},

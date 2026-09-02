@@ -48,6 +48,9 @@ export interface DirectoryRow {
 	cached_tagline: string | null;
 	cached_contact_url: string | null;
 	cached_alt_networks: unknown | null;
+	/** v1.15.3 — the operator's ON-CHAIN-published addresses (operators.reg_alt_networks).
+	 *  Fallback for the pills when a censored node has never been successfully probed. */
+	reg_alt_networks?: unknown | null;
 	last_probe_status: string | null;
 	registered_at_time: Date;
 	last_probed_at: Date | null;
@@ -98,6 +101,29 @@ function normalizeAltNetworks(raw: unknown): InstanceDirectoryEntry['alt_network
 	};
 }
 
+/** v1.15.3 — merge the probe-cached alt_networks with the operator's ON-CHAIN
+ *  published ones. Cached (a live probe) wins per field; the on-chain values fill
+ *  any gap so a clearnet-censored node that's never been successfully probed
+ *  still shows its Tor/I2P pills (and is reachable) from what it published. */
+function mergeAltNetworks(
+	cached: InstanceDirectoryEntry['alt_networks'],
+	reg: InstanceDirectoryEntry['alt_networks']
+): InstanceDirectoryEntry['alt_networks'] {
+	if (cached === null && reg === null) return null;
+	const empty = { tor: null, lokinet: null, i2p_b32: null, i2p_name: null, ens: null, i2p: null, nostr: null } as const;
+	const c = cached ?? empty;
+	const g = reg ?? empty;
+	return {
+		tor: c.tor ?? g.tor,
+		lokinet: c.lokinet ?? g.lokinet,
+		i2p_b32: c.i2p_b32 ?? g.i2p_b32,
+		i2p_name: c.i2p_name ?? g.i2p_name,
+		ens: c.ens ?? g.ens,
+		i2p: null,
+		nostr: c.nostr ?? g.nostr
+	};
+}
+
 /** Render one DB row as an InstanceDirectoryEntry — same shape
  *  as the /v1/instances endpoint returns.  Kept identical here
  *  so subscribers can apply diff events directly to whatever
@@ -111,7 +137,10 @@ export function rowToEntry(r: DirectoryRow): InstanceDirectoryEntry {
 		name: r.cached_name,
 		tagline: r.cached_tagline,
 		contact_url: r.cached_contact_url,
-		alt_networks: normalizeAltNetworks(r.cached_alt_networks),
+		alt_networks: mergeAltNetworks(
+			normalizeAltNetworks(r.cached_alt_networks),
+			normalizeAltNetworks(r.reg_alt_networks ?? null)
+		),
 		status: r.last_probe_status ?? 'never',
 		registered_at: r.registered_at_time.toISOString(),
 		last_probed_at: r.last_probed_at !== null ? r.last_probed_at.toISOString() : null,

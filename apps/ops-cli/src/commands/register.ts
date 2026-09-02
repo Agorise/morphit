@@ -67,7 +67,7 @@ export async function runRegister(ctx: RegisterCtx): Promise<number> {
 		console.log(`✗ ${sanitizeForTerm(env.error)}`);
 		return 1;
 	}
-	const { account, keyFile, instanceName, origin, contactUrl, operatorTag } = env;
+	const { account, keyFile, instanceName, origin, contactUrl, operatorTag, altAddresses } = env;
 
 	console.log(`  Account:      @${sanitizeForTerm(account)}`);
 	console.log(`  Origin:       ${sanitizeForTerm(origin)}`);
@@ -208,6 +208,18 @@ export async function runRegister(ctx: RegisterCtx): Promise<number> {
 			if (contactUrl !== null) {
 				payload.contact_url = contactUrl;
 			}
+			// v1.15.3 — publish hidden-service addresses ON-CHAIN so the federation
+			// can reach a clearnet-censored node over Tor/I2P without a (blocked)
+			// clearnet probe. Only include fields that are actually set.
+			{
+				const alt: Record<string, string> = {};
+				if (altAddresses.tor) alt.tor = altAddresses.tor;
+				if (altAddresses.i2p_b32) alt.i2p_b32 = altAddresses.i2p_b32;
+				if (altAddresses.i2p_name) alt.i2p_name = altAddresses.i2p_name;
+				if (altAddresses.lokinet) alt.lokinet = altAddresses.lokinet;
+				if (altAddresses.ens) alt.ens = altAddresses.ens;
+				if (Object.keys(alt).length > 0) payload.alt_addresses = alt;
+			}
 			result = await Promise.race([
 				broadcastCustomJson({
 					account,
@@ -342,6 +354,15 @@ interface ValidEnv {
 	 *  (MORPHIT_INSTANCE_OPERATOR_TAG) — the SAME value the relay uses
 	 *  to attribute order earnings.  null if unset (older configs). */
 	readonly operatorTag: string | null;
+	/** v1.15.3 — hidden-service addresses read from config, published on-chain so
+	 *  peers can reach a clearnet-censored node over Tor/I2P. All optional. */
+	readonly altAddresses: {
+		tor: string | null;
+		i2p_b32: string | null;
+		i2p_name: string | null;
+		lokinet: string | null;
+		ens: string | null;
+	};
 }
 
 function readEnv(): ValidEnv | { error: string } {
@@ -375,7 +396,14 @@ function readEnv(): ValidEnv | { error: string } {
 		instanceName: instanceName!,
 		origin: origin!,
 		contactUrl: contactUrl ?? null,
-		operatorTag: operatorTag && operatorTag.trim().length > 0 ? operatorTag.trim() : null
+		operatorTag: operatorTag && operatorTag.trim().length > 0 ? operatorTag.trim() : null,
+		altAddresses: {
+			tor: (process.env.MORPHIT_INSTANCE_TOR_ADDRESS ?? '').trim() || null,
+			i2p_b32: (process.env.MORPHIT_INSTANCE_I2P_B32_ADDRESS ?? '').trim() || null,
+			i2p_name: (process.env.MORPHIT_INSTANCE_I2P_NAME_ADDRESS ?? '').trim() || null,
+			lokinet: (process.env.MORPHIT_INSTANCE_LOKINET_ADDRESS ?? '').trim() || null,
+			ens: (process.env.MORPHIT_INSTANCE_ENS_NAME ?? '').trim() || null
+		}
 	};
 }
 

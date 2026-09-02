@@ -182,10 +182,22 @@
   when: bunkerweb_compose.changed or bunkerweb_env.changed or bunkerweb_frontend.changed
 
 - name: Bring BunkerWeb up
-  community.docker.docker_compose_v2:
-    project_src: /etc/bunkerweb
-    state: present
-    build: never
+  # Call the `docker compose` v2 CLI plugin directly rather than
+  # community.docker.docker_compose_v2 — that module only exists in
+  # community.docker 3.x, which needs ansible-core >= 2.15, so it fails to
+  # resolve on Ubuntu 22.04's default Ansible (2.10). The compose v2 CLI is
+  # present on every box that has Docker, so this works with NO Ansible upgrade.
+  # The image was built by the previous task; `up -d` reuses the existing image
+  # (it only builds if one is missing), matching the old `build: never` intent.
+  ansible.builtin.command:
+    cmd: docker compose up -d
+    chdir: /etc/bunkerweb
+  register: bunkerweb_up
+  changed_when: >-
+    ('Started' in (bunkerweb_up.stderr | default('')))
+    or ('Recreated' in (bunkerweb_up.stderr | default('')))
+    or ('Created' in (bunkerweb_up.stderr | default('')))
+    or ('Started' in (bunkerweb_up.stdout | default('')))
   when: bunkerweb_compose.changed or bunkerweb_env.changed or bunkerweb_frontend.changed
 
 - name: Verify the update surface is served no-cache (stale-worker guard)

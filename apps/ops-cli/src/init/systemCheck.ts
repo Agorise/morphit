@@ -530,8 +530,11 @@ export interface AnsibleVersion {
 	readonly isCore: boolean;
 }
 
-/** The floor the Morphit playbook + its collections need. */
-export const MIN_ANSIBLE_CORE = { major: 2, minor: 15 } as const;
+/** The floor the Morphit playbook needs. We call the docker compose CLI directly
+ *  instead of a community.docker 3.x module, so Ubuntu 22.04's default
+ *  ansible-base 2.10 is enough — no upgrade required. Only truly ancient
+ *  (< 2.10, where the `ansible.builtin.` FQCN may not resolve) is flagged. */
+export const MIN_ANSIBLE_CORE = { major: 2, minor: 10 } as const;
 
 /** Parse `ansible-playbook --version` output. Handles modern
  *  "ansible-playbook [core 2.16.3]" and legacy "ansible-playbook 2.10.8".
@@ -544,11 +547,10 @@ export function parseAnsibleVersion(out: string): AnsibleVersion | null {
 	return null;
 }
 
-/** Does the parsed version meet the floor? A LEGACY (pre-core) version — the old
- *  ansible/ansible-base package (≤2.10) — is always below the floor: there is no
- *  ansible-core ≥2.15 that reports the legacy format. PURE + tested. */
+/** Does the parsed version meet the floor? Accepts 2.10+ whether it reports as
+ *  legacy ("2.10.x") or modern core ("[core 2.x]") — Morphit runs on both now.
+ *  PURE + tested. */
 export function ansibleMeetsFloor(v: AnsibleVersion): boolean {
-	if (!v.isCore) return false;
 	if (v.major !== MIN_ANSIBLE_CORE.major) return v.major > MIN_ANSIBLE_CORE.major;
 	return v.minor >= MIN_ANSIBLE_CORE.minor;
 }
@@ -635,27 +637,27 @@ function checkAnsibleVersion(): Check {
 		return {
 			name: 'Ansible version',
 			actual: 'not found',
-			recommended: `core ≥ ${MIN_ANSIBLE_CORE.major}.${MIN_ANSIBLE_CORE.minor}`,
+			recommended: `>= ${MIN_ANSIBLE_CORE.major}.${MIN_ANSIBLE_CORE.minor}`,
 			status: 'warn',
 			note: 'Ansible is not on PATH yet; the install can set it up.'
 		};
 	}
 	const v = parseAnsibleVersion(out);
 	if (!v) {
-		return { name: 'Ansible version', actual: 'unknown', recommended: `core ≥ ${MIN_ANSIBLE_CORE.major}.${MIN_ANSIBLE_CORE.minor}`, status: 'warn' };
+		return { name: 'Ansible version', actual: 'unknown', recommended: `>= ${MIN_ANSIBLE_CORE.major}.${MIN_ANSIBLE_CORE.minor}`, status: 'warn' };
 	}
 	const label = v.isCore
 		? `core ${v.major}.${v.minor}.${v.patch}`
 		: `${v.major}.${v.minor}.${v.patch} (legacy, pre-core)`;
 	if (ansibleMeetsFloor(v)) {
-		return { name: 'Ansible version', actual: label, recommended: `core ≥ ${MIN_ANSIBLE_CORE.major}.${MIN_ANSIBLE_CORE.minor}`, status: 'ok' };
+		return { name: 'Ansible version', actual: label, recommended: `>= ${MIN_ANSIBLE_CORE.major}.${MIN_ANSIBLE_CORE.minor}`, status: 'ok' };
 	}
 	return {
 		name: 'Ansible version',
 		actual: label,
-		recommended: `core ≥ ${MIN_ANSIBLE_CORE.major}.${MIN_ANSIBLE_CORE.minor}`,
+		recommended: `>= ${MIN_ANSIBLE_CORE.major}.${MIN_ANSIBLE_CORE.minor}`,
 		status: 'error',
-		note: `Morphit's playbook + collections need ansible-core ≥ ${MIN_ANSIBLE_CORE.major}.${MIN_ANSIBLE_CORE.minor}. Ubuntu 22.04's "apt install ansible" gives the EOL 2.10, which can't load the collections — the install then fails (previously misreported as "0 hosts"). Upgrade Ansible (pipx or the Ansible PPA), then re-run.`
+		note: `Morphit needs Ansible >= ${MIN_ANSIBLE_CORE.major}.${MIN_ANSIBLE_CORE.minor} (Ubuntu 22.04's default 2.10 is fine). This one is older — upgrade Ansible (pipx or the distro packages), then re-run.`
 	};
 }
 
@@ -694,7 +696,7 @@ function checkDocker(): Check {
 /** The minimum Postgres major the schema/migrations need. Ubuntu 22.04's apt
  *  default is 14 — below this — so an explicit gate saves a mid-migration
  *  failure. PURE-checkable via parsePgMajor. */
-export const MIN_PG_MAJOR = 15;
+export const MIN_PG_MAJOR = 14;
 
 /** Extract the Postgres major version from a `--version` line. PURE + tested.
  *  "psql (PostgreSQL) 16.3" → 16 ; "postgres (PostgreSQL) 14.11" → 14. */
@@ -732,7 +734,7 @@ function checkPostgresInstalled(): Check {
 					actual: `${p.server ? 'server' : 'client'} ${ver}`,
 					recommended: `server >= ${MIN_PG_MAJOR}`,
 					status: 'error',
-					note: `Morphit needs PostgreSQL >= ${MIN_PG_MAJOR}; this is ${ver}. Ubuntu 22.04's default apt Postgres is 14 — install a newer one from the PGDG apt repo (apt.postgresql.org) before continuing.`
+					note: `Morphit needs PostgreSQL >= ${MIN_PG_MAJOR}; this is ${ver}. Install a newer one (Ubuntu 22.04's default 14 is fine; older distros can use the PGDG apt repo at apt.postgresql.org) before continuing.`
 				};
 			}
 			return {
@@ -753,7 +755,7 @@ function checkPostgresInstalled(): Check {
 		actual: 'not found',
 		recommended: `server >= ${MIN_PG_MAJOR}`,
 		status: 'warn',
-		note: `install PostgreSQL >= ${MIN_PG_MAJOR} (the indexer stores its chain-derived cache here). Note Ubuntu 22.04's apt default is 14 — use the PGDG repo for a newer one.`
+		note: `the installer will set up PostgreSQL for you if it's absent; >= ${MIN_PG_MAJOR} is needed (Ubuntu 22.04's apt default 14 is fine).`
 	};
 }
 

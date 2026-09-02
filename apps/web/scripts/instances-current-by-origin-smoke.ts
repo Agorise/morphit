@@ -39,8 +39,11 @@ function check(name: string, cond: boolean): void {
 
 // 1. isCurrentInstance matches by normalized origin.
 check(
-	'isCurrentInstance compares normalized origins (normOrigin(entry.origin) === currentOrigin)',
-	/normOrigin\(entry\.origin\)/.test(page) && /=== currentOrigin/.test(page)
+	'isCurrentInstance matches the current origin against the registered origin OR any hidden-service address (v1.15.3 — recognises a Tor/I2P visitor)',
+	/entry\.origin/.test(page) &&
+		/an\?\.tor/.test(page) &&
+		/=== currentOrigin/.test(page) &&
+		/candidates/.test(page)
 );
 check(
 	'currentOrigin is derived from the browser location (window.location.origin)',

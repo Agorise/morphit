@@ -2113,6 +2113,7 @@
 			"syncing": "Sincronizzazione",
 			"stale": "Obsoleto",
 			"unreachable": "Irraggiungibile",
+			"clearnet_blocked": "Clearnet bloccata",
 			"mismatch": "Discordante",
 			"never": "Controllo in attesa"
 		},
@@ -2122,6 +2123,7 @@
 			"syncing": "Raggiungibile, in sincronizzazione",
 			"stale": "Indietro e senza avanzare",
 			"unreachable": "Offline, non raggiungibile",
+			"clearnet_blocked": "Attiva, ma clearnet censurata",
 			"mismatch": "Identità o configurazione errata",
 			"never": "In coda, non ancora sondato"
 		},
@@ -2131,6 +2133,7 @@
 			"syncing": "Raggiungibile e integra, ma sta ancora recuperando la catena. Diventerà «Buono» una volta sincronizzata.",
 			"stale": "Raggiungibile, ma il controllo di stato è degradato: un problema reale su quell'istanza.",
 			"unreachable": "Non raggiungibile in rete all'ultimo controllo.",
+			"clearnet_blocked": "Attiva sulla catena e raggiungibile via Tor, ma il suo indirizzo web pubblico è bloccato dall’estero. Non offline — censurata.",
 			"mismatch": "Raggiungibile, ma l'account operatore o gli indirizzi di tesoreria non corrispondono ai valori canonici on-chain.",
 			"never": "In coda: la sonda non ha ancora controllato questa istanza."
 		},

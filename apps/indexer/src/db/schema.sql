@@ -2939,3 +2939,14 @@ COMMENT ON COLUMN orders.lang IS
     'Language the order text is written in (a SUPPORTED_LOCALES code). NULL = '
     'untagged (pre-feature or unspecified); untagged orders are never hidden by '
     'the orderbook language filter.';
+
+-- ─── v57: operators.reg_alt_networks (on-chain hidden-service addresses) ───
+-- Tor/I2P/Lokinet/ENS addresses an operator publishes on-chain via
+-- morphit_operator_register_v1, so the federation can reach a clearnet-censored
+-- node over Tor without a (blocked) clearnet probe. NULL when none published.
+ALTER TABLE operators
+    ADD COLUMN IF NOT EXISTS reg_alt_networks JSONB;
+
+COMMENT ON COLUMN operators.reg_alt_networks IS
+    'On-chain-published hidden-service addresses {tor,i2p_b32,i2p_name,lokinet,ens} '
+    '(host strings, no scheme). NULL when the operator published none.';

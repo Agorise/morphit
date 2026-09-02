@@ -2113,6 +2113,7 @@
 			"syncing": "Synchronizacja",
 			"stale": "Przeterminowany",
 			"unreachable": "Nieosiągalny",
+			"clearnet_blocked": "Clearnet zablokowany",
 			"mismatch": "Niezgodność",
 			"never": "Oczekuje sprawdzenia"
 		},
@@ -2122,6 +2123,7 @@
 			"syncing": "Osiągalny, wciąż synchronizuje",
 			"stale": "Opóźniony i bez postępu",
 			"unreachable": "Offline, nieosiągalny",
+			"clearnet_blocked": "Działa, ale clearnet ocenzurowany",
 			"mismatch": "Niezgodna tożsamość lub konfiguracja",
 			"never": "W kolejce, jeszcze niesprawdzony"
 		},
@@ -2131,6 +2133,7 @@
 			"syncing": "Osiągalna i sprawna, ale wciąż nadrabia zaległości łańcucha. Zmieni się na „Dobra“ po zsynchronizowaniu.",
 			"stale": "Osiągalna, ale jej kontrola stanu jest pogorszona — realny problem na tej instancji.",
 			"unreachable": "Nieosiągalna w sieci podczas ostatniego sprawdzenia.",
+			"clearnet_blocked": "Aktywny w łańcuchu i dostępny przez Tor, ale jego publiczny adres jest zablokowany spoza kraju. Nie offline — ocenzurowany.",
 			"mismatch": "Osiągalna, ale jej konto operatora lub adresy skarbca nie zgadzają się z kanonicznymi wartościami w łańcuchu.",
 			"never": "W kolejce: sonda jeszcze nie sprawdziła tej instancji."
 		},

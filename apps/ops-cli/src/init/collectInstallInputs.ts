@@ -74,9 +74,23 @@ export async function askInstallMode(deps: CollectDeps = {}): Promise<InstallMod
  *  Tor-only node skips the domain, cert-email, DDNS and router steps). */
 export async function askTorOnly(deps: CollectDeps = {}): Promise<boolean> {
 	const askChoice = deps.askChoice ?? realAskChoice;
+	const print = deps.print ?? ((s: string): void => console.log(s));
+	// Censored-region guidance: a free HTTPS certificate (Let's Encrypt) can only
+	// be issued if the certificate authority can reach this box from the public
+	// internet on port 80. In countries that filter inbound traffic, that check
+	// fails and the clearnet site never gets a certificate. A Tor-only node needs
+	// NO certificate (the .onion is self-authenticating) and can't be censored, so
+	// it's the reliable choice under those conditions.
+	print(
+		'\n  Note: the free HTTPS certificate needs the internet to reach this box from\n' +
+			'  outside. If your country blocks incoming connections, that can fail — and\n' +
+			'  Tor-only avoids it entirely (a .onion needs no certificate and can\'t be\n' +
+			'  blocked). If you\'re unsure whether your clearnet site is reachable from\n' +
+			'  abroad, Tor-only is the safe pick; you can always add a domain later.\n'
+	);
 	const idx = await askChoice('How will people reach your marketplace?', [
 		'A normal web address (clearnet domain) — with a free HTTPS certificate',
-		'Tor-only — no domain; reachable at an auto-generated .onion address (max privacy)'
+		'Tor-only — no domain; reachable at an auto-generated .onion address (max privacy, censorship-proof)'
 	]);
 	return idx === 1;
 }

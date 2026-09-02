@@ -70,6 +70,20 @@ interface ValidatedPayload {
 	readonly display_name: string;
 	readonly contact_url: string | null;
 	readonly origin: string | null;
+	/** v1.15.3 — optional hidden-service addresses the operator publishes ON-CHAIN
+	 *  so the federation can reach a clearnet-censored node over Tor/I2P WITHOUT
+	 *  first completing a (blocked) clearnet probe. All fields optional + host-only
+	 *  (no scheme). null when the operator published none. */
+	readonly alt_networks: RegAltNetworks | null;
+}
+
+/** On-chain-published hidden-service addresses (host strings, no scheme). */
+export interface RegAltNetworks {
+	readonly tor: string | null;
+	readonly i2p_b32: string | null;
+	readonly i2p_name: string | null;
+	readonly lokinet: string | null;
+	readonly ens: string | null;
 }
 
 export function validate(payload: unknown): ValidatedPayload | { reason: string } {
@@ -310,11 +324,54 @@ export function validate(payload: unknown): ValidatedPayload | { reason: string 
 		}
 	}
 
+	// alt_addresses — OPTIONAL (v1.15.3). Hidden-service addresses published
+	// on-chain so peers can reach a clearnet-censored node over Tor/I2P. Each is
+	// a bare host (no scheme, no path); validated to its network's shape so a
+	// bogus value can't become a probe target. Absent/empty → null.
+	let alt_networks: RegAltNetworks | null = null;
+	if (payload.alt_addresses !== undefined && payload.alt_addresses !== null) {
+		if (!isPlainObject(payload.alt_addresses)) return { reason: 'alt_addresses_not_object' };
+		const a = payload.alt_addresses;
+		const host = (v: unknown, key: string): string | null | { reason: string } => {
+			if (v === undefined || v === null || v === '') return null;
+			if (typeof v !== 'string') return { reason: `alt_${key}_not_string` };
+			const h = v.trim().toLowerCase();
+			if (h.length > 80) return { reason: `alt_${key}_too_long` };
+			return h;
+		};
+		const tor = host(a.tor, 'tor');
+		if (typeof tor === 'object' && tor !== null) return tor;
+		if (tor !== null && !/^[a-z2-7]{56}\.onion$/.test(tor)) return { reason: 'alt_tor_not_onion' };
+		const i2pB32 = host(a.i2p_b32, 'i2p_b32');
+		if (typeof i2pB32 === 'object' && i2pB32 !== null) return i2pB32;
+		if (i2pB32 !== null && !/^[a-z2-7]{52}\.b32\.i2p$/.test(i2pB32)) return { reason: 'alt_i2p_b32_invalid' };
+		const i2pName = host(a.i2p_name, 'i2p_name');
+		if (typeof i2pName === 'object' && i2pName !== null) return i2pName;
+		if (i2pName !== null && (!i2pName.endsWith('.i2p') || i2pName.endsWith('.b32.i2p'))) return { reason: 'alt_i2p_name_invalid' };
+		const loki = host(a.lokinet, 'lokinet');
+		if (typeof loki === 'object' && loki !== null) return loki;
+		if (loki !== null && !loki.endsWith('.loki')) return { reason: 'alt_lokinet_invalid' };
+		const ens = host(a.ens, 'ens');
+		if (typeof ens === 'object' && ens !== null) return ens;
+		if (ens !== null && !/^[a-z0-9-]+(\.[a-z0-9-]+)*\.eth$/.test(ens)) return { reason: 'alt_ens_invalid' };
+		// Keep null only if EVERY field was absent — else store the object.
+		if (tor || i2pB32 || i2pName || loki || ens) {
+			alt_networks = {
+				tor: (tor as string | null) ?? null,
+				i2p_b32: (i2pB32 as string | null) ?? null,
+				i2p_name: (i2pName as string | null) ?? null,
+				lokinet: (loki as string | null) ?? null,
+				ens: (ens as string | null) ?? null
+			};
+		}
+	}
+
 	return {
 		tag,
 		display_name: dnTrimmed,
 		contact_url: contactUrl,
-		origin
+		origin,
+		alt_networks
 	};
 }
 
@@ -352,9 +409,9 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		// is deliberately left untouched (it records the FIRST registration).
 		await client.query(
 			`UPDATE operators
-			 SET display_name = $2, contact_url = $3, origin = $4
+			 SET display_name = $2, contact_url = $3, origin = $4, reg_alt_networks = $5
 			 WHERE account = $1`,
-			[ctx.signer, v.display_name, v.contact_url, v.origin]
+			[ctx.signer, v.display_name, v.contact_url, v.origin, v.alt_networks ? JSON.stringify(v.alt_networks) : null]
 		);
 	} else {
 		// First-time registration. UNIQUE(tag) enforces first-come-first-served;
@@ -362,11 +419,11 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		// claimed by another account" from a successful insert.
 		const insertRes = await client.query<{ account: string }>(
 			`INSERT INTO operators (
-				account, tag, display_name, contact_url, origin, registered_in_block
-			) VALUES ($1, $2, $3, $4, $5, $6)
+				account, tag, display_name, contact_url, origin, registered_in_block, reg_alt_networks
+			) VALUES ($1, $2, $3, $4, $5, $6, $7)
 			ON CONFLICT (tag) DO NOTHING
 			RETURNING account`,
-			[ctx.signer, v.tag, v.display_name, v.contact_url, v.origin, ctx.blockNum]
+			[ctx.signer, v.tag, v.display_name, v.contact_url, v.origin, ctx.blockNum, v.alt_networks ? JSON.stringify(v.alt_networks) : null]
 		);
 		if (insertRes.rowCount === 0) {
 			// Tag was already claimed by another account.

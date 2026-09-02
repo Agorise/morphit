@@ -72,6 +72,7 @@ async function fetchAllRows(db: Database): Promise<DirectoryRow[]> {
 			ki.cached_tagline,
 			ki.cached_contact_url,
 			ki.cached_alt_networks,
+			op.reg_alt_networks,
 			ki.last_probe_status,
 			ki.registered_at_time,
 			ki.last_probed_at,

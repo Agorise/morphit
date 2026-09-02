@@ -335,6 +335,13 @@ export class Poller {
 				if (!st.running || st.chainHeadBlock <= 0) return null;
 				return Math.max(0, st.chainHeadBlock - st.indexedBlock);
 			},
+			// v1.15.3 — the current chain head, so the probe can tell a
+			// clearnet-blocked-but-alive operator (recent on-chain action) from a
+			// dead one, and label it 'clearnet_blocked' instead of 'unreachable'.
+			currentBlock: () => {
+				const st = this.getStatus();
+				return st.running && st.chainHeadBlock > 0 ? st.chainHeadBlock : null;
+			},
 			// cp311: our own branding, straight from config (same values
 			// /v1/instance serves).  The self row is never network-probed,
 			// so this is the ONLY way its cached_name/tagline/contact/alt

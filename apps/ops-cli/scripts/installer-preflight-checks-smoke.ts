@@ -104,10 +104,9 @@ check('empty → no overlap', !overlapsMorphitSubnet([]));
 check('parses modern "[core 2.16.3]"', (() => { const v = parseAnsibleVersion('ansible-playbook [core 2.16.3]'); return !!v && v.isCore && v.major === 2 && v.minor === 16; })());
 check('parses legacy "ansible-playbook 2.10.8"', (() => { const v = parseAnsibleVersion('ansible-playbook 2.10.8'); return !!v && !v.isCore && v.major === 2 && v.minor === 10; })());
 check('unparseable version → null', parseAnsibleVersion('not a version') === null);
-check('the admin\'s legacy 2.10.8 FAILS the floor (this was the "0 hosts" trap)', !ansibleMeetsFloor(parseAnsibleVersion('ansible-playbook 2.10.8')!));
-check('ancient 2.9 legacy fails the floor', !ansibleMeetsFloor(parseAnsibleVersion('ansible-playbook 2.9.27')!));
-check('core 2.14 fails the floor (below 2.15)', !ansibleMeetsFloor(parseAnsibleVersion('ansible-playbook [core 2.14.9]')!));
-check('core 2.15 meets the floor (boundary)', ansibleMeetsFloor(parseAnsibleVersion('ansible-playbook [core 2.15.0]')!));
+check('the Ubuntu 22.04 default 2.10.8 now MEETS the floor (no upgrade needed)', ansibleMeetsFloor(parseAnsibleVersion('ansible-playbook 2.10.8')!));
+check('ancient 2.9 legacy still fails the floor', !ansibleMeetsFloor(parseAnsibleVersion('ansible-playbook 2.9.27')!));
+check('core 2.14 meets the floor', ansibleMeetsFloor(parseAnsibleVersion('ansible-playbook [core 2.14.9]')!));
 check('core 2.16 meets the floor', ansibleMeetsFloor(parseAnsibleVersion('ansible-playbook [core 2.16.3]')!));
 check('a future major (core 3.x) meets the floor', ansibleMeetsFloor(parseAnsibleVersion('ansible-playbook [core 3.0.1]')!));
 
@@ -147,8 +146,9 @@ check('every backstop message says a re-run is safe', /re-run|run the installer 
 
 // ── Postgres version gate (v1.15.x — Ubuntu 22.04's apt PG 14 < 15) ──
 check('parses PG major from "psql (PostgreSQL) 16.3"', parsePgMajor('psql (PostgreSQL) 16.3') === 16);
-check("Ubuntu 22.04's PG 14 is below the floor", parsePgMajor('postgres (PostgreSQL) 14.11')! < MIN_PG_MAJOR);
-check('PG 15 meets the floor (boundary)', parsePgMajor('psql (PostgreSQL) 15.6')! >= MIN_PG_MAJOR);
+check("Ubuntu 22.04's PG 14 now MEETS the floor (the distro default)", parsePgMajor('postgres (PostgreSQL) 14.11')! >= MIN_PG_MAJOR);
+check('PG 15 meets the floor', parsePgMajor('psql (PostgreSQL) 15.6')! >= MIN_PG_MAJOR);
+check('an ancient PG 13 is below the floor', parsePgMajor('psql (PostgreSQL) 13.14')! < MIN_PG_MAJOR);
 check('unparseable PG version → null', parsePgMajor('nope') === null);
 
 // ── DNS-points-here pre-check (the #1 real HTTPS-install killer) ──
