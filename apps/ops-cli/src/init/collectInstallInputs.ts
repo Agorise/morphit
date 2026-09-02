@@ -13,6 +13,8 @@
  * unit-tested with scripted answers.
  */
 import { ask as realAsk, askChoice as realAskChoice, examples as realExamples, askPassword as realAskPassword, step } from './prompt.ts';
+import { checkDomainPointsHere } from './systemCheck.ts';
+import { withSpinner } from './spinner.ts';
 import {
 	randomSecret,
 	validateDomain,
@@ -32,6 +34,9 @@ export interface CollectDeps {
 	readonly askSecret?: typeof realAskPassword;
 	readonly examples?: typeof realExamples;
 	readonly print?: (s: string) => void;
+	/** v1.15.x — the domain DNS pre-check. Injectable so tests stay hermetic
+	 *  (no network, no box-IP probe). Defaults to the real checkDomainPointsHere. */
+	readonly dnsCheck?: (domain: string) => Promise<{ ok: boolean; note: string }>;
 }
 
 /** Ask one free-form question with an example list + a validator, re-prompting
@@ -111,6 +116,22 @@ export async function collectInstallInputs(
 			validateDomain,
 			req
 		);
+		// Pre-check DNS BEFORE the install so the HTTPS cert doesn't fail at the
+		// end. Non-blocking: DNS may still be propagating, and the operator can
+		// point it during the install — but they should know now.
+		const dnsCheck = deps.dnsCheck ?? ((d: string) => checkDomainPointsHere(d));
+		const dns = await withSpinner("Checking your domain's DNS…", () => dnsCheck(domain));
+		if (!dns.ok) {
+			print(`\n  \u26a0 DNS: ${dns.note}`);
+			print('    Until this is right, the automatic HTTPS certificate will not be issued.\n');
+			const go = await ask('Continue anyway? (you can fix DNS while the install runs) [y/N]');
+			if (!/^y(es)?$/i.test(go.trim())) {
+				print('\n  Stopped so you can point DNS first. Re-run the installer when it resolves.');
+				throw new Error('DNS_NOT_POINTED');
+			}
+		} else {
+			print(`\n  \u2713 DNS ${dns.note}`);
+		}
 	}
 
 	// Instance identity — shown on the shared /instances directory (and as the

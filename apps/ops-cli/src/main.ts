@@ -72,6 +72,8 @@ import { runFastSync } from './commands/fastSync.ts';
 import { runBlock, runUnblock } from './commands/block.ts';
 import { runModeration } from './commands/moderation.ts';
 import { runInit } from './commands/init.ts';
+import { describeInstallError, INSTALL_LOG_PATH } from './init/assembleInstall.ts';
+import { existsSync } from 'node:fs';
 import { runRegister } from './commands/register.ts';
 import { runShowKey } from './commands/showKey.ts';
 import { runEdit } from './commands/edit.ts';
@@ -328,7 +330,7 @@ async function main(): Promise<number> {
 				colorEnabled
 			});
 		} catch (err) {
-			printError(err instanceof Error ? err.message : String(err));
+			printError(describeInstallError(err, existsSync(INSTALL_LOG_PATH)));
 			return 3;
 		}
 	}
@@ -345,7 +347,7 @@ async function main(): Promise<number> {
 				colorEnabled
 			});
 		} catch (err) {
-			printError(err instanceof Error ? err.message : String(err));
+			printError(describeInstallError(err, existsSync(INSTALL_LOG_PATH)));
 			return 3;
 		}
 	}
@@ -701,6 +703,23 @@ async function main(): Promise<number> {
 }
 
 // ─── Boot ────────────────────────────────────────────────────────
+
+// Ultimate safety net: a throw or promise rejection that escapes main()'s own
+// try/catch (a fire-and-forget async, a timer callback) must STILL surface as a
+// clean, sanitized line — never a raw V8 stack trace, the one thing most likely
+// to make an operator give up. Mirrors the last-resort .catch below.
+for (const evt of ['uncaughtException', 'unhandledRejection'] as const) {
+	process.on(evt, (err: unknown) => {
+		try {
+			process.stderr.write(
+				`fatal: ${sanitizeForTerm(err instanceof Error ? err.message : String(err))}\n`
+			);
+		} catch {
+			process.stderr.write('fatal: an unexpected error occurred.\n');
+		}
+		process.exit(127);
+	});
+}
 
 main()
 	.then((code) => process.exit(code))

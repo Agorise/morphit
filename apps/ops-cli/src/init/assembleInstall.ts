@@ -15,9 +15,10 @@
  *     failure (finally), so DB passwords never linger in a temp file;
  *   - a non-zero exit turns into a plain, reassuring message (a re-run is safe).
  */
-import { writeFileSync, unlinkSync, existsSync, mkdirSync, chmodSync } from 'node:fs';
+import { writeFileSync, unlinkSync, existsSync, mkdirSync, chmodSync, readFileSync} from 'node:fs';
+import { SUPPORT_EMAIL, SUPPORT_MATRIX } from './remediation.ts';
 import { join, dirname } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, spawn } from 'node:child_process';
 import { buildAnsiblePlaybookArgv, renderVarsFile } from './ansibleVars.ts';
 import { promptSaveSecrets, type SecretToSave } from './saveSecrets.ts';
 
@@ -175,6 +176,137 @@ async function realEnsureAnsible(ansibleDir: string): Promise<boolean> {
 // installation could change the meaning" notice.  `auto_silent` still
 // auto-discovers the interpreter — it just doesn't print a scary WARNING on a
 // home operator's screen (there is exactly one Python here, and it isn't moving).
+/** Where the full Ansible run is logged, so a failure can be summarised and the
+ *  operator has a single file to send us. */
+export const INSTALL_LOG_PATH = '/tmp/morphit-install-ansible.log';
+
+/** Common Ansible-task failure signatures → a plain-English cause + fix. The
+ *  point: even a failure we didn't pre-check for still yields something the
+ *  admin can act on, instead of a rage-quit at raw output. PURE. */
+const FAILURE_HINTS: ReadonlyArray<{ readonly re: RegExp; readonly hint: string }> = [
+	{
+		re: /could not connect to server|connection refused[\s\S]*5432|password authentication failed|role ".*" does not exist|database ".*" does not exist|psql:\s*error|the database system is starting up/i,
+		hint: "The Postgres database couldn't be reached or authenticated. Make sure Postgres is running and the user + database in your connection string exist (re-run and say yes when the wizard offers to create them), and that the URL uses 127.0.0.1."
+	},
+	{
+		re: /No module named|Could not import python module|libpq|python3?-apt/i,
+		hint: 'A required Python module is missing. Install it (sudo apt install -y python3 python3-apt libpq-dev) and re-run.'
+	},
+	{
+		re: /Failed to lock apt|Could not get lock \/var\/lib\/dpkg|dpkg was interrupted|E: Unable to acquire/i,
+		hint: 'Another package manager holds the apt lock (often unattended-upgrades). Wait a minute, or run `sudo dpkg --configure -a`, then re-run.'
+	},
+	{
+		re: /permission denied.*docker\.sock|permission denied while trying to connect to the Docker|docker:\s*Got permission denied/i,
+		hint: 'This user can\'t talk to Docker. Add it to the docker group (sudo usermod -aG docker "$USER"), log out and back in, then re-run.'
+	},
+	{
+		re: /Missing sudo password|a password is required|Incorrect sudo password|sudo: a terminal is required|Failed to become/i,
+		hint: "The install needs sudo. Run it as a user with sudo (you'll be prompted), or set up passwordless sudo, then re-run."
+	},
+	{ re: /No space left on device/i, hint: 'The disk filled up. Free space (or attach a larger volume) and re-run.' },
+	{
+		re: /requires ansible[- ]?core|is not compatible with the current ansible|needs ansible.*version/i,
+		hint: 'A collection needs a newer ansible-core. Upgrade Ansible (pipx install --include-deps ansible) and re-run.'
+	},
+	{
+		re: /Temporary failure in name resolution|Could not resolve host|Failed to download|Connection timed out|TLS handshake/i,
+		hint: "A network fetch failed (DNS or connectivity). Check the box's internet/DNS and re-run; on a censored/limited link, just retry."
+	},
+	{
+		re: /Address already in use|bind.*:80|bind.*:443|port is already allocated/i,
+		hint: 'Another service is already using a port Morphit needs (80/443). Stop or move it and re-run.'
+	},
+	{
+		re: /could ?n.?t resolve module\/action|couldn.t resolve module|failed to (load|resolve) collection|collection .* (was )?not found|unable to load collection/i,
+		hint: "A required Ansible collection couldn't be loaded. The release bundles them under ops/ansible/collections, so if you're on a censored or limited link that blocks Ansible Galaxy, that's fine — just re-run (the installer falls back to the bundled copies). If it persists, upgrade ansible-core to >= 2.15."
+	}
+];
+
+/** Turn a failed Ansible run's log into a clear, actionable summary. PURE +
+ *  tested. Names the failed task, quotes Ansible's message, maps it to a likely
+ *  fix when we recognise it, and — only when we DON'T recognise it (a genuine
+ *  dead-end) — points at support. */
+export function summarizePlaybookFailure(logText: string, exitCode: number, logPath: string): string {
+	const lines = logText.split('\n');
+	let failedTask = '';
+	let fatalLine = '';
+	for (let i = 0; i < lines.length; i++) {
+		if (/^fatal:|FAILED!|^failed:/.test(lines[i]!.trim())) {
+			fatalLine = lines[i]!.trim();
+			for (let j = i; j >= 0 && j > i - 60; j--) {
+				const m = lines[j]!.match(/TASK \[([^\]]+)\]/);
+				if (m) {
+					failedTask = m[1]!.trim();
+					break;
+				}
+			}
+		}
+	}
+	const hint = FAILURE_HINTS.find((h) => h.re.test(logText))?.hint;
+	const msg = fatalLine.match(/"msg":\s*"([^"]+)"/)?.[1] ?? fatalLine.match(/=>\s*(\{.*\}|.+)$/)?.[1];
+	const out: string[] = [`The install stopped (Ansible exit ${exitCode}).`];
+	if (failedTask) out.push(`Failed step: ${failedTask}`);
+	if (msg) out.push(`Ansible said: ${msg.replace(/\s+/g, ' ').slice(0, 300)}`);
+	if (hint) {
+		out.push(`\nLikely fix: ${hint}`);
+		out.push(`\nFull log: ${logPath}`);
+	} else {
+		out.push(`\nFull log: ${logPath}`);
+		out.push(
+			`This one isn't in our known list — send that log to ${SUPPORT_EMAIL} or on Matrix ${SUPPORT_MATRIX} (preferred) and we'll pinpoint it fast.`
+		);
+	}
+	return out.join('\n');
+}
+
+/** Map a Node system-error code to a plain cause + fix. */
+function errnoHint(code: string): string | undefined {
+	switch (code) {
+		case 'ENOENT':
+			return 'A required command or file was missing. Make sure git, curl, python3, and the Postgres client are installed, then re-run.';
+		case 'EACCES':
+		case 'EPERM':
+			return 'Permission denied. Run the installer with sudo (or as a user that has it), then re-run.';
+		case 'EADDRINUSE':
+			return 'A port Morphit needs (80/443/5432) is already in use. Stop or move that service and re-run.';
+		case 'ENOSPC':
+			return 'The disk is full. Free space (or attach a larger volume) and re-run.';
+		case 'ETIMEDOUT':
+		case 'ENOTFOUND':
+		case 'EAI_AGAIN':
+		case 'ECONNREFUSED':
+			return "A network connection failed (DNS or connectivity). Check the box's internet/DNS and re-run; on a censored or limited link, just retry.";
+		default:
+			return undefined;
+	}
+}
+
+/**
+ * Turn ANY caught error into an actionable message — the GLOBAL backstop so no
+ * failure anywhere in the wizard (including a bug in our own code) is ever a bare
+ * stack trace or cryptic one-liner. Maps Node system errors + known Ansible
+ * signatures to a fix, points at the run log when present, and only when nothing
+ * matches points at support. PURE + tested.
+ */
+export function describeInstallError(err: unknown, logExists = false): string {
+	const msg = err instanceof Error ? err.message : String(err);
+	const code =
+		err && typeof err === 'object' && 'code' in err ? String((err as { code: unknown }).code) : '';
+	const hint = errnoHint(code) ?? FAILURE_HINTS.find((h) => h.re.test(msg))?.hint;
+	const out: string[] = ['The install hit an unexpected problem and stopped.'];
+	out.push(`Details: ${msg.replace(/\s+/g, ' ').slice(0, 300)}`);
+	if (hint) out.push(`\nLikely fix: ${hint}`);
+	if (logExists) out.push(`\nFull run log: ${INSTALL_LOG_PATH}`);
+	if (!hint) {
+		out.push(
+			`\nSend the above${logExists ? ' and the log' : ''} to ${SUPPORT_EMAIL} or on Matrix ${SUPPORT_MATRIX} (preferred) and we'll get you online.`
+		);
+	}
+	out.push("\nNothing is left half-installed that a re-run can't recover \u2014 you can safely run the installer again.");
+	return out.join('\n');
+}
+
 function localAnsibleEnv(): NodeJS.ProcessEnv {
 	return {
 		...process.env,
@@ -190,6 +322,10 @@ function localAnsibleEnv(): NodeJS.ProcessEnv {
 		// warning. The dir is cleaned up per run; nothing sensitive lingers.
 		ANSIBLE_REMOTE_TEMP: '/tmp/.ansible-morphit/tmp',
 		ANSIBLE_LOCAL_TEMP: '/tmp/.ansible-morphit/local',
+		// Capture the whole run to a log so a failure can be summarised into a
+		// clear, actionable message (and so the operator has one file to send us)
+		// instead of leaving them to scroll a wall of raw Ansible output.
+		ANSIBLE_LOG_PATH: INSTALL_LOG_PATH,
 		ANSIBLE_ALLOW_WORLD_READABLE_TMPFILES: 'True',
 		// A single-admin appliance install shouldn't dump Ansible's deprecation /
 		// system-config chatter on the operator's screen — it reads like errors
@@ -200,11 +336,58 @@ function localAnsibleEnv(): NodeJS.ProcessEnv {
 	};
 }
 
+/** Remind the operator after this many ms of total silence from the run, so a
+ *  long download / DB migration / first cert never looks like a dead hang. */
+export const QUIET_REMIND_MS = 3 * 60 * 1000;
+
+/** PURE + tested: has the run been silent long enough to reassure the operator? */
+export function shouldRemindQuiet(now: number, lastOutput: number, softMs = QUIET_REMIND_MS): boolean {
+	return now - lastOutput >= softMs;
+}
+
 async function realSpawn(argv: readonly string[]): Promise<number> {
 	const [cmd, ...args] = argv;
 	if (cmd === undefined) return 1;
-	const r = spawnSync(cmd, args, { stdio: 'inherit', env: localAnsibleEnv() });
-	return r.status ?? 1;
+	return await new Promise<number>((resolve) => {
+		// Pipe stdout/stderr so we can (a) mirror them live to the terminal and
+		// (b) know when the run goes quiet — but keep stdin INHERITED so Ansible
+		// can still prompt for a sudo password if it ever needs one. Ansible also
+		// writes ANSIBLE_LOG_PATH independently, so the failure summary is intact.
+		const child = spawn(cmd, args, { stdio: ['inherit', 'pipe', 'pipe'], env: localAnsibleEnv() });
+		let lastOutput = Date.now();
+		const tee = (chunk: Buffer, out: NodeJS.WriteStream): void => {
+			out.write(chunk);
+			lastOutput = Date.now();
+		};
+		child.stdout?.on('data', (c: Buffer) => tee(c, process.stdout));
+		child.stderr?.on('data', (c: Buffer) => tee(c, process.stderr));
+		// No-output watchdog: if the run has been silent for a few minutes, print a
+		// calm reassurance (with the recommendation: just wait) so a slow step never
+		// looks frozen. It does NOT interrupt or kill — a long migration is normal;
+		// killing would be worse — and a re-run is always safe if the operator does
+		// choose to stop. This is the "hold her hand through a quiet moment" step.
+		const watchdog = setInterval(() => {
+			if (shouldRemindQuiet(Date.now(), lastOutput)) {
+				process.stdout.write(
+					'\n  \u23f3 Still working \u2014 this step has been quiet for a few minutes. That is normal\n' +
+						'     for a big download, a first-time database migration, or issuing your HTTPS\n' +
+						'     certificate. It will continue on its own \u2014 you do not need to do anything.\n' +
+						'     (Recommended: just wait. If you ever do want to stop, press Ctrl-C \u2014 re-running\n' +
+						'     the installer later is always safe.)\n\n'
+				);
+				lastOutput = Date.now(); // re-arm for the next quiet stretch, don't nag every tick
+			}
+		}, 30 * 1000);
+		if (typeof watchdog.unref === 'function') watchdog.unref();
+		child.on('error', () => {
+			clearInterval(watchdog);
+			resolve(1);
+		});
+		child.on('close', (code) => {
+			clearInterval(watchdog);
+			resolve(code ?? 1);
+		});
+	});
 }
 /** Resolve how many hosts the playbook's pattern matches WITHOUT running it
  *  (`--list-hosts`).  Ansible prints "hosts (N):" per play; take the max.
@@ -324,12 +507,24 @@ export async function assembleInstall(plan: InstallPlan, deps: AssembleDeps = {}
 
 		// 4. Run the playbook against THIS box.
 		print('\n  Setting up your node \u2014 this takes several minutes. Ansible\u2019s progress is below.\n');
+		// Start the run log fresh so the failure summary reflects THIS run only.
+		try {
+			writeFileSync(INSTALL_LOG_PATH, '');
+		} catch {
+			/* non-fatal — summary just falls back to the exit code */
+		}
 		const argv = buildAnsiblePlaybookArgv({ playbookPath: plan.playbookPath, varsFilePath: plan.varsFilePath });
 		const code = await spawn(argv);
 		if (code !== 0) {
+			let log = '';
+			try {
+				log = readFileSync(INSTALL_LOG_PATH, 'utf8');
+			} catch {
+				/* no log — summarizer degrades to just the exit code */
+			}
 			return {
 				ok: false,
-				reason: `The installer stopped with exit code ${code}. Nothing is left in a state a re-run can\u2019t fix \u2014 check the messages above, then run this again.`
+				reason: summarizePlaybookFailure(log, code, INSTALL_LOG_PATH)
 			};
 		}
 

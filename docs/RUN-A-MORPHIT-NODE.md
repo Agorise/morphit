@@ -252,6 +252,29 @@ sudo systemctl start morphit-backup.service
 
 — then copy the newest `.sql.gz` off the server. Reinstall like a fresh node, restore the dump, and the chain index rebuilds itself. For a canonical instance, rehearse on a throwaway box first. Full procedure: `OPERATIONS.md` and `docs/SWITCHING-NETWORKS.md`.
 
+## 13. Lock your domain against email spoofing (2 DNS records)
+
+A Morphit node **sends no email** — signup is keys only, there's no mailbox anywhere in the stack. That's a security win you should claim explicitly: publish two DNS TXT records that tell the world your domain never sends mail, so nobody can forge a convincing `you@yourdomain` phishing message that sails past spam filters and damages your reputation. Without them, a domain with no policy is treated as neutral/permissive.
+
+At your DNS provider, on the **apex** of the domain you gave the wizard, add:
+
+| Type | Name/Host | Value |
+|------|-----------|-------|
+| TXT | `@` (the apex) | `v=spf1 -all` |
+| TXT | `_dmarc` | `v=DMARC1; p=reject; aspf=s; adkim=s;` |
+
+- `v=spf1 -all` is a **null-sender SPF**: "no server is authorized to send mail as this domain — reject it all."
+- `p=reject` is a **strict DMARC** policy telling receivers to drop anything that fails.
+
+Verify after the DNS propagates (a few minutes to an hour):
+
+```sh
+dig +short TXT yourdomain.tld            # expect: "v=spf1 -all"
+dig +short TXT _dmarc.yourdomain.tld     # expect: "v=DMARC1; p=reject; ..."
+```
+
+**Only if you later add a real mailbox** on this domain (most operators won't) do you replace `v=spf1 -all` with one that lists your actual sender, e.g. `v=spf1 include:_spf.google.com -all`, and relax DMARC to `p=quarantine` while you test.
+
 ---
 
 That's the whole job. Get a machine, point a name at it, run the installer, let the wizard configure it, register — and you're an operator in the federation. Welcome aboard.

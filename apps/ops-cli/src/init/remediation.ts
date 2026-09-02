@@ -96,6 +96,16 @@ export function remediationFor(check: Check): Remediation | null {
 					'An existing docker network overlaps Morphit\'s 172.20.0.0/16 subnet. Remove or relocate it (`docker network ls` / `docker network rm <name>`), then re-run. A compose subnet override is coming in a future release.'
 			};
 
+		case 'PostgreSQL':
+			return {
+				checkName: check.name,
+				problem: `PostgreSQL is ${check.actual}`,
+				suggestion:
+					check.actual === 'not found'
+						? 'Install PostgreSQL 15+ (Ubuntu 22.04\'s apt default is 14 — use the PGDG repo at apt.postgresql.org for a current one), then re-run.'
+						: 'Morphit needs PostgreSQL 15+. Install a newer server from the PGDG apt repo (apt.postgresql.org) and migrate your data to it — I won\'t auto-upgrade Postgres, since that touches your database. Then re-run.'
+			};
+
 		case 'Ansible version':
 			return {
 				checkName: check.name,
@@ -106,7 +116,7 @@ export function remediationFor(check: Check): Remediation | null {
 					command:
 						'sudo apt-get remove -y ansible; sudo apt-get install -y pipx && pipx ensurepath && pipx install --include-deps ansible',
 					needsSudo: true,
-					defaultYes: false
+					defaultYes: true
 				}
 			};
 
@@ -118,7 +128,7 @@ export function remediationFor(check: Check): Remediation | null {
 				suggestion:
 					'Docker is only needed for the BunkerWeb web firewall. Install it (`curl -fsSL https://get.docker.com | sudo sh`) and add yourself to the docker group (`sudo usermod -aG docker $USER`, then log out/in), or choose the plain-nginx path which needs no Docker.',
 				autoFix: check.actual === 'not installed'
-					? { command: 'curl -fsSL https://get.docker.com | sudo sh && sudo usermod -aG docker "$USER"', needsSudo: true, defaultYes: false }
+					? { command: 'curl -fsSL https://get.docker.com | sudo sh && sudo usermod -aG docker "$USER"', needsSudo: true, defaultYes: true }
 					: undefined
 			};
 
@@ -132,7 +142,7 @@ export function remediationFor(check: Check): Remediation | null {
 					command:
 						'sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile && echo "/swapfile none swap sw 0 0" | sudo tee -a /etc/fstab',
 					needsSudo: true,
-					defaultYes: false
+					defaultYes: true
 				}
 			};
 
@@ -200,7 +210,10 @@ export async function runRemediations(
 
 		if (rem.autoFix) {
 			deps.print(`     Fix: ${rem.autoFix.command}`);
-			const yes = await deps.ask('     Shall I fix this for you right now?', rem.autoFix.defaultYes);
+			const yes = await deps.ask(
+				`     Shall I fix this for you right now?${rem.autoFix.defaultYes ? ' (recommended — just press Enter)' : ''}`,
+				rem.autoFix.defaultYes
+			);
 			if (yes) {
 				const okFix = deps.exec(rem.autoFix.command);
 				if (okFix) {

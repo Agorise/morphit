@@ -1096,6 +1096,13 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	const forceYes = opts.flags['yes'] === 'true' || process.env.MORPHIT_AUTO_UPGRADE === '1';
 	const jsonOutput = opts.flags['json'] === 'true';
 
+	// We vendor a pinned npm/node with the release, so npm's "New major version
+	// available!" update-notifier and the funding banner are just noise the
+	// operator can't (and shouldn't) act on. Silence them for every child npm
+	// this upgrade spawns (ci, install, the workspace builds).
+	process.env.npm_config_update_notifier = 'false';
+	process.env.npm_config_fund = 'false';
+
 	// cp674 — before we spawn any child npm, strip an inherited offline flag.
 	// The ansible launcher runs us via `npm exec --offline`; that flag would
 	// otherwise force the upgrade's `npm ci` (and the MCP redeploy's
@@ -2055,13 +2062,11 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	// new. Only PIDs whose cwd is under backupDir are ever touched.
 	const orphaned = pidsWithCwdUnder(backupDir);
 	if (orphaned.length > 0) {
-		info('');
-		info(
-			`Stopping ${orphaned.length} leftover process(es) from the previous ` +
-				`install (PIDs ${orphaned.join(', ')}) — they're on the OLD code at ` +
-				`${backupDir} and not systemd-managed, so the new services have ` +
-				`superseded them.`
-		);
+		// Calm, one line — this is routine housekeeping, not an alarm. (The old
+		// wording dumped raw PIDs + a paragraph of explanation every upgrade,
+		// which read as scary/redundant.) The detail only appears if we CAN'T
+		// stop them, which is the only case an operator needs to act on.
+		info(`Superseding ${orphaned.length} stale worker process(es) from the previous version…`);
 		for (const pid of orphaned) {
 			try {
 				process.kill(pid, 'SIGTERM');
@@ -2079,9 +2084,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 			}
 		}
 		const stillThere = pidsWithCwdUnder(backupDir);
-		if (stillThere.length === 0) {
-			info('✓ Stopped the leftover process(es); only the new systemd-managed services remain.');
-		} else {
+		if (stillThere.length > 0) {
 			warn(
 				`Could not stop ${stillThere.length} leftover process(es) (PIDs ` +
 					`${stillThere.join(', ')}). Stop them by hand: sudo kill -9 ${stillThere.join(' ')}`

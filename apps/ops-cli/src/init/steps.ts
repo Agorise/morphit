@@ -34,6 +34,7 @@ import {
 	formatRpcProbeLines,
 	type AccountInfo
 } from './chainCheck.ts';
+import { withSpinner } from './spinner.ts';
 import { isReservedTag, impersonatesReservedName } from '../../../indexer/src/indexer/confusables.ts';
 import { classifyChainError } from '../commands/chainErrors.ts';
 import { encryptEnvelope, checkPassphraseStrength, type KeyEnvelope } from './encrypt.ts';
@@ -158,7 +159,7 @@ export async function stepTagline(): Promise<string> {
 export function normalizeDbHostToIpv4(url: string): { readonly url: string; readonly changed: boolean } {
 	try {
 		const u = new URL(url);
-		if (u.hostname === 'localhost') {
+		if (u.hostname.toLowerCase() === 'localhost') {
 			u.hostname = '127.0.0.1';
 			return { url: u.toString(), changed: true };
 		}
@@ -317,7 +318,7 @@ export async function stepRelayAccount(instanceName?: string): Promise<RelayAcco
 		// Look it up on chain.
 		console.log(`  Looking up @${name} on Blurt...`);
 		try {
-			const account = await lookupBlurtAccount(name);
+			const account = await withSpinner(`Checking @${name} on the chain…`, () => lookupBlurtAccount(name));
 			if (account === null) {
 				console.log(
 					`  ⚠ @${name} doesn't exist on Blurt.  Either you typed it wrong, or you need to register it first at https://blurtplugin.online/account/.\n`

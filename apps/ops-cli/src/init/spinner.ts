@@ -68,3 +68,18 @@ export function startDotsSpinner(
 		out.write('\r\u001b[K\u001b[?25h'); // clear the line + show cursor
 	};
 }
+
+/**
+ * Run an async operation while the braille spinner turns, so a slow silent step
+ * (a network check, a chain lookup, a DNS resolve) never looks frozen. The
+ * spinner is ALWAYS stopped — success or throw — so it can't leave the cursor
+ * hidden or the line dirty. On a non-TTY it degrades to printing the label once.
+ */
+export async function withSpinner<T>(label: string, fn: () => Promise<T>): Promise<T> {
+	const stop = startDotsSpinner(label);
+	try {
+		return await fn();
+	} finally {
+		stop();
+	}
+}

@@ -20,9 +20,13 @@ import {
 	portConflictCheck,
 	overlapsMorphitSubnet,
 	parseAnsibleVersion,
-	ansibleMeetsFloor
+	ansibleMeetsFloor,
+	parsePgMajor,
+	MIN_PG_MAJOR,
+	interpretDnsResult
 } from '../src/init/systemCheck.ts';
 import { normalizeDbHostToIpv4 } from '../src/init/steps.ts';
+import { summarizePlaybookFailure, describeInstallError, shouldRemindQuiet, QUIET_REMIND_MS } from '../src/init/assembleInstall.ts';
 
 let pass = 0;
 const fails: string[] = [];
@@ -111,8 +115,53 @@ check('a future major (core 3.x) meets the floor', ansibleMeetsFloor(parseAnsibl
 check('a localhost DB URL is rewritten to 127.0.0.1', (() => { const r = normalizeDbHostToIpv4('postgres://morphit:secret@localhost:5432/morphit'); return r.changed && r.url === 'postgres://morphit:secret@127.0.0.1:5432/morphit'; })());
 check('localhost rewrite preserves user, password, port, db', (() => { const r = normalizeDbHostToIpv4('postgresql://u:p%40x@localhost/db'); return r.changed && r.url.includes('127.0.0.1') && r.url.includes('u:p%40x') && r.url.endsWith('/db'); })());
 check('an explicit 127.0.0.1 is left unchanged', !normalizeDbHostToIpv4('postgres://morphit@127.0.0.1:5432/morphit').changed);
+check('uppercase LOCALHOST is also normalized (case-insensitive)', normalizeDbHostToIpv4('postgres://u:p@LOCALHOST:5432/db').url.includes('127.0.0.1'));
 check('a remote DB host is left unchanged', !normalizeDbHostToIpv4('postgres://u:p@db.example.com:5432/db').changed);
 check('an unparseable value is left as-is (validation handles it)', !normalizeDbHostToIpv4('not-a-url').changed);
+
+// ── playbook-failure summariser (v1.15.2 — never a rage-quit at raw output) ──
+{
+	const dbLog = 'TASK [indexer : run migrations] ***\nfatal: [localhost]: FAILED! => {"msg": "could not connect to server: Connection refused ... port 5432"}';
+	const s = summarizePlaybookFailure(dbLog, 2, '/tmp/x.log');
+	check('a failed run names the failed task', /Failed step: indexer : run migrations/.test(s));
+	check('a DB-connection failure maps to the Postgres fix', /Postgres/.test(s) && /127\.0\.0\.1/.test(s));
+	check('a recognised failure does NOT show the support contact', !s.includes('@agorise:matrix.org'));
+	check('the summary always points to the full log', s.includes('/tmp/x.log'));
+}
+{
+	const unknown = 'TASK [x : y] ***\nfatal: [localhost]: FAILED! => {"msg": "a totally novel error"}';
+	const s = summarizePlaybookFailure(unknown, 2, '/tmp/x.log');
+	check('an UNRECOGNISED failure surfaces support (the true last resort)', s.includes('agorise@pm.me') && s.includes('@agorise:matrix.org'));
+}
+check('an apt-lock failure maps to the dpkg hint', /dpkg --configure/.test(summarizePlaybookFailure('fatal: FAILED! => {"msg":"Failed to lock apt"}', 2, '/l')));
+check('a docker-permission failure maps to the docker-group hint', /docker group/.test(summarizePlaybookFailure('fatal: FAILED! => {"msg":"Got permission denied while trying to connect to the Docker daemon socket"}', 2, '/l')));
+
+// ── describeInstallError: the GLOBAL backstop (any throw → actionable) ──
+check('a permission (EACCES) error → the sudo fix', /sudo/.test(describeInstallError(Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' }))));
+check('a missing-command (ENOENT) error → the install-prereqs fix', /git|curl|python3/.test(describeInstallError(Object.assign(new Error('spawn psql ENOENT'), { code: 'ENOENT' }))));
+check('a port-in-use (EADDRINUSE) error → the port fix', /80\/443/.test(describeInstallError(Object.assign(new Error('listen EADDRINUSE'), { code: 'EADDRINUSE' }))));
+check('a network (ENOTFOUND) error → the network fix', /network|DNS/i.test(describeInstallError(Object.assign(new Error('getaddrinfo ENOTFOUND galaxy.ansible.com'), { code: 'ENOTFOUND' }))));
+check('a missing-collection message → the bundled-collections fix', /bundle|collection/i.test(describeInstallError(new Error("couldn't resolve module/action 'community.docker.docker_compose_v2'"))));
+check('an UNKNOWN error → support contact (last resort)', describeInstallError(new Error('something nobody has seen')).includes('agorise@pm.me'));
+check('every backstop message says a re-run is safe', /re-run|run the installer again/i.test(describeInstallError(new Error('x'))));
+
+// ── Postgres version gate (v1.15.x — Ubuntu 22.04's apt PG 14 < 15) ──
+check('parses PG major from "psql (PostgreSQL) 16.3"', parsePgMajor('psql (PostgreSQL) 16.3') === 16);
+check("Ubuntu 22.04's PG 14 is below the floor", parsePgMajor('postgres (PostgreSQL) 14.11')! < MIN_PG_MAJOR);
+check('PG 15 meets the floor (boundary)', parsePgMajor('psql (PostgreSQL) 15.6')! >= MIN_PG_MAJOR);
+check('unparseable PG version → null', parsePgMajor('nope') === null);
+
+// ── DNS-points-here pre-check (the #1 real HTTPS-install killer) ──
+check('domain resolving to this box → ok', interpretDnsResult(['203.0.113.5'], '203.0.113.5').ok);
+check("a domain that doesn't resolve → not ok, actionable", !interpretDnsResult([], '203.0.113.5').ok && /A record/.test(interpretDnsResult([], '203.0.113.5').note));
+check('a mismatch → not ok + reminds about the cloud firewall / inbound 80+443', !interpretDnsResult(['1.2.3.4'], '203.0.113.5').ok && /firewall|INBOUND/i.test(interpretDnsResult(['1.2.3.4'], '203.0.113.5').note));
+check('a private box IP → flags behind-NAT with port-forward guidance', /NAT/.test(interpretDnsResult(['1.2.3.4'], '192.168.1.9').note));
+
+// ── no-output watchdog (v1.15.2 — a quiet run never looks frozen) ──
+check('a fresh run (no silence) does not remind', !shouldRemindQuiet(1_000, 1_000));
+check('2 minutes of silence does not remind yet', !shouldRemindQuiet(120_000, 0));
+check('3 minutes of silence triggers the reassurance', shouldRemindQuiet(QUIET_REMIND_MS, 0));
+check('a long quiet (e.g. a big migration) keeps reminding', shouldRemindQuiet(600_000, 0));
 
 const total = pass + fails.length;
 console.log('\n──────────────────────────────────────────────────────');

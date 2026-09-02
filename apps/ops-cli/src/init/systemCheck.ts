@@ -16,6 +16,7 @@
 import { cpus, totalmem, freemem, arch, platform } from 'node:os';
 import { readFileSync, existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
+import { resolve4 } from 'node:dns/promises';
 import { connect } from 'node:net';
 import { sanitizeForTerm } from '../render/term.ts';
 
@@ -65,6 +66,7 @@ export async function runSystemCheck(): Promise<SystemCheckResult> {
 	// ─── Docker (beta11 — needed for the BunkerWeb web firewall) ─
 	checks.push(checkDocker());
 	checks.push(checkAnsibleVersion());
+	checks.push(checkLocale());
 	// Pre-install hardening: catch the things that silently break a fresh install
 	// (an app on our ports, a docker subnet clash, a localhost that won't resolve).
 	checks.push(checkLocalhostResolves());
@@ -551,6 +553,80 @@ export function ansibleMeetsFloor(v: AnsibleVersion): boolean {
 	return v.minor >= MIN_ANSIBLE_CORE.minor;
 }
 
+/**
+ * Decide whether a domain's DNS points at THIS box — the single most common
+ * reason a self-hosted HTTPS install fails (the Let's Encrypt cert can't be
+ * issued if the A record isn't pointed/propagated). PURE + tested. Covers: not
+ * resolving yet, behind-NAT (private box IP), and a plain mismatch — and always
+ * reminds about the cloud-firewall inbound-80/443 gotcha on a mismatch.
+ */
+export function interpretDnsResult(
+	domainAddrs: readonly string[],
+	boxIp: string | null
+): { readonly ok: boolean; readonly note: string } {
+	if (domainAddrs.length === 0) {
+		return {
+			ok: false,
+			note: "the domain doesn't resolve yet. Add a DNS A record pointing at this server" +
+				(boxIp ? ` (${boxIp})` : '') +
+				', then wait for it to propagate (can take up to an hour) before the HTTPS cert can be issued.'
+		};
+	}
+	if (boxIp && domainAddrs.includes(boxIp)) {
+		return { ok: true, note: `resolves to this server (${boxIp}).` };
+	}
+	if (boxIp && /^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)/.test(boxIp)) {
+		return {
+			ok: false,
+			note: `the domain resolves to ${domainAddrs.join(', ')}, but this box's address (${boxIp}) is private — you're behind NAT. Point the A record at your PUBLIC IP and forward ports 80 + 443 to this box.`
+		};
+	}
+	return {
+		ok: false,
+		note: `the domain resolves to ${domainAddrs.join(', ')} but this server is ${boxIp ?? 'a different address'}. Point the A record at this server. (Also make sure a cloud firewall / security group allows INBOUND 80 + 443 — otherwise the HTTPS cert can't be issued even once DNS is right.)`
+	};
+}
+
+/** This box's primary outbound IPv4 (its public IP on a VPS). null if unknown. */
+export function boxPrimaryIp(): string | null {
+	try {
+		const out = execSync("ip route get 1.1.1.1 2>/dev/null", { encoding: 'utf8', timeout: 2000 });
+		const m = /src\s+([0-9.]+)/.exec(out);
+		return m ? m[1]! : null;
+	} catch {
+		return null;
+	}
+}
+
+/** Resolve a domain's A records + interpret against this box. Async (does a DNS
+ *  lookup); never throws. */
+export async function checkDomainPointsHere(domain: string): Promise<{ ok: boolean; note: string }> {
+	let addrs: string[] = [];
+	try {
+		addrs = await resolve4(domain);
+	} catch {
+		addrs = [];
+	}
+	return interpretDnsResult(addrs, boxPrimaryIp());
+}
+
+/** A non-UTF-8 locale (LANG=C / POSIX, common on minimal cloud images) makes
+ *  Postgres default a new DB to SQL_ASCII and can garble multilingual + RTL
+ *  content. Warn only — fixable with `sudo update-locale LANG=C.UTF-8` + re-login. */
+function checkLocale(): Check {
+	const lc = process.env.LC_ALL || process.env.LANG || '';
+	if (/utf-?8/i.test(lc)) {
+		return { name: 'Locale', actual: lc, recommended: 'UTF-8', status: 'ok' };
+	}
+	return {
+		name: 'Locale',
+		actual: lc || '(unset)',
+		recommended: 'UTF-8',
+		status: 'warn',
+		note: 'A non-UTF-8 locale can garble multilingual content and make Postgres default to SQL_ASCII. Set one: `sudo update-locale LANG=C.UTF-8`, log out and back in, then re-run.'
+	};
+}
+
 function checkAnsibleVersion(): Check {
 	let out: string;
 	try {
@@ -615,6 +691,20 @@ function checkDocker(): Check {
  *  states an operator needs to tell apart.  Best-effort, never throws;
  *  a missing binary is a 'warn' with an install hint (the wizard can
  *  still proceed and the DB URL is set in step 3). */
+/** The minimum Postgres major the schema/migrations need. Ubuntu 22.04's apt
+ *  default is 14 — below this — so an explicit gate saves a mid-migration
+ *  failure. PURE-checkable via parsePgMajor. */
+export const MIN_PG_MAJOR = 15;
+
+/** Extract the Postgres major version from a `--version` line. PURE + tested.
+ *  "psql (PostgreSQL) 16.3" → 16 ; "postgres (PostgreSQL) 14.11" → 14. */
+export function parsePgMajor(versionLine: string): number | null {
+	const m = /\(PostgreSQL\)\s+([0-9]+)|(?:^|\s)([0-9]+)(?:\.[0-9]+)/.exec(versionLine);
+	const raw = m ? (m[1] ?? m[2]) : null;
+	const n = raw ? Number(raw) : NaN;
+	return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 function checkPostgresInstalled(): Check {
 	// Try the most informative tools in order.  `postgres --version`
 	// proves the SERVER is installed; `psql`/`pg_config` only prove the
@@ -631,12 +721,24 @@ function checkPostgresInstalled(): Check {
 				timeout: 3000
 			}).trim();
 			// e.g. "psql (PostgreSQL) 16.3" / "postgres (PostgreSQL) 16.3"
+			const major = parsePgMajor(out);
 			const m = /([0-9]+(?:\.[0-9]+)*)/.exec(out);
 			const ver = m ? m[1]! : 'unknown';
+			// Version gate: below MIN_PG_MAJOR the migrations can fail. Ubuntu
+			// 22.04's apt Postgres is 14 — flag it up front with the upgrade path.
+			if (major !== null && major < MIN_PG_MAJOR) {
+				return {
+					name: 'PostgreSQL',
+					actual: `${p.server ? 'server' : 'client'} ${ver}`,
+					recommended: `server >= ${MIN_PG_MAJOR}`,
+					status: 'error',
+					note: `Morphit needs PostgreSQL >= ${MIN_PG_MAJOR}; this is ${ver}. Ubuntu 22.04's default apt Postgres is 14 — install a newer one from the PGDG apt repo (apt.postgresql.org) before continuing.`
+				};
+			}
 			return {
 				name: 'PostgreSQL',
 				actual: p.server ? `server ${ver}` : `client ${ver}`,
-				recommended: 'installed (server)',
+				recommended: `server >= ${MIN_PG_MAJOR}`,
 				status: 'ok',
 				note: p.server
 					? undefined
@@ -649,9 +751,9 @@ function checkPostgresInstalled(): Check {
 	return {
 		name: 'PostgreSQL',
 		actual: 'not found',
-		recommended: 'installed (server)',
+		recommended: `server >= ${MIN_PG_MAJOR}`,
 		status: 'warn',
-		note: 'install with: apt-get install -y postgresql  (the indexer stores its chain-derived cache here)'
+		note: `install PostgreSQL >= ${MIN_PG_MAJOR} (the indexer stores its chain-derived cache here). Note Ubuntu 22.04's apt default is 14 — use the PGDG repo for a newer one.`
 	};
 }
 

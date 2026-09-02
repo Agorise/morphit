@@ -37,7 +37,7 @@ import {
 	i2pdAvailable,
 	type I2pDestinationResult
 } from '../init/i2pGenerate.ts';
-import { startDotsSpinner } from '../init/spinner.ts';
+import { startDotsSpinner, withSpinner} from '../init/spinner.ts';
 import { validateAltAddress } from '../lib/altAddressValidate.ts';
 import { sanitizeForTerm } from '../render/term.ts';
 import {
@@ -142,8 +142,29 @@ function resolveExistingI2pAddress(existingConfigPath: string): string | null {
 export async function runInit(ctx: InitCtx): Promise<number> {
 	printGreeting();
 
+	// The wizard is interactive (prompts + y/n fixes). If stdin isn't a real
+	// terminal — piped input, or `ssh host 'morphit-ops install'` without -t —
+	// every required prompt would read EOF and loop forever. Fail fast with a
+	// clear instruction instead. (--check-only reads nothing, so it's exempt.)
+	if (ctx.flags['check-only'] !== 'true' && !process.stdin.isTTY) {
+		console.log(
+			'\nThis installer is interactive and needs a real terminal.\n' +
+				'Run it directly on the server, e.g.:  sudo morphit-ops install\n' +
+				'(not through a pipe, and if over SSH use an interactive session: ssh -t …)\n'
+		);
+		return 1;
+	}
+
 	// ─── System check ────
-	let checkResult = await runSystemCheck();
+	// One reassurance up front so a non-technical operator knows they can't get
+	// stuck on a question: every prompt has a safe default, and pressing Enter
+	// takes it. They only ever *have* to type their own domain, accounts, and key.
+	console.log(
+		'\n  Tip: at any question you can just press Enter to accept the recommended\n' +
+			'  answer (shown in the prompt). You only need to type in your own domain,\n' +
+			'  account names, and key.\n'
+	);
+	let checkResult = await withSpinner('Checking your system…', () => runSystemCheck());
 	renderSystemCheck(checkResult, ctx.colorEnabled);
 
 	if (ctx.flags['check-only'] === 'true') {

@@ -51,7 +51,10 @@ function driver(opts: { choice: number; answers: string[]; alertToken?: string }
 		}) as unknown as CollectDeps['examples'],
 		print: (str: string) => {
 			state.printed.push(str);
-		}
+		},
+		// Hermetic: no real DNS lookup / box-IP probe in tests; "points here" so the
+		// DNS confirm prompt doesn't fire and the scripted answers stay aligned.
+		dnsCheck: async () => ({ ok: true, note: 'resolves to this server (test)' })
 	};
 	return { deps, state };
 }

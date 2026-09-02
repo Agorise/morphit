@@ -147,7 +147,7 @@ async function main(): Promise<void> {
 	{
 		const trace = newTrace();
 		const res = await assembleInstall(planWithPostInstall, mockDeps({ exitCode: 2, trace }));
-		check('fail: returns failure mentioning the exit code + that a re-run is safe', res.ok === false && /exit code 2/.test((res as { reason: string }).reason) && /run this again/.test((res as { reason: string }).reason));
+		check('fail: returns an actionable failure summary (names the exit code + points to the run log)', res.ok === false && /exit 2/.test((res as { reason: string }).reason) && /log/i.test((res as { reason: string }).reason));
 		check('fail: post-install did NOT run (only the playbook spawned)', trace.spawnedArgvs.length === 1);
 		check('fail: STILL removed the vars file (cleanup in finally)', trace.removed === '/run/morphit-install-vars.json');
 	}
