@@ -17,6 +17,31 @@
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 
+/**
+ * Shared, disambiguated prompt for unlocking the relay's Blurt active key.
+ * The bare "Unlock passphrase" wording left operators guessing whether it
+ * wanted their Blurt key, their SSH key, a GPG key, or their system password
+ * (a real operator hit exactly that). Naming the key + calling out what it is
+ * NOT removes the ambiguity. Used at every relay-key decrypt site (register,
+ * show-key, payment-method). Pinned by passphrase-prompt-clarity-smoke.
+ */
+export const RELAY_KEY_UNLOCK_PROMPT =
+	"Unlock passphrase for the relay's Blurt active key (the one you set at install — not your SSH, GPG, or system password)";
+
+/**
+ * Remove terminal control (CSI) sequences from a raw-mode input chunk — most
+ * importantly the bracketed-paste markers `ESC [200~` / `ESC [201~` that a
+ * terminal wraps around pasted text. Without this, pasting a passphrase into
+ * the masked reader captured the literal `[200~…[201~` bracket bytes (the ESC
+ * alone was dropped as a control char), so the decryptor got the wrong string
+ * and rejected a correct passphrase (v1.15.6). Also strips cursor/arrow-key
+ * CSI (`ESC [A` …) so stray keypresses don't pollute the buffer. A passphrase
+ * character is never part of an ESC sequence, so this is safe. PURE. */
+export function stripTerminalControlSequences(s: string): string {
+	// eslint-disable-next-line no-control-regex
+	return s.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '');
+}
+
 /** Ask a free-form string question.  Returns the trimmed response.
  *  If `defaultValue` is provided, an empty response yields the default. */
 export async function ask(question: string, defaultValue?: string): Promise<string> {
@@ -157,10 +182,16 @@ export async function askPassword(prompt: string): Promise<string> {
 		stdin.setRawMode?.(true);
 		stdin.resume();
 		stdin.setEncoding('utf8');
+		// Turn OFF bracketed-paste while we read: otherwise a PASTED passphrase
+		// arrives wrapped in ESC[200~ … ESC[201~ and the markers pollute it
+		// (v1.15.6). Restored in cleanup. We also strip any CSI that still slips
+		// through (belt-and-suspenders / split chunks).
+		stdout.write('\x1b[?2004l');
 
 		let buf = '';
 
-		const onData = (chunk: string): void => {
+		const onData = (raw: string): void => {
+			const chunk = stripTerminalControlSequences(raw);
 			for (const ch of chunk) {
 				const code = ch.charCodeAt(0);
 				if (code === 0x03) {
@@ -200,6 +231,7 @@ export async function askPassword(prompt: string): Promise<string> {
 		};
 
 		const cleanup = (): void => {
+			stdout.write('\x1b[?2004h');
 			stdin.removeListener('data', onData);
 			stdin.setRawMode?.(wasRaw === true);
 			if (wasPaused) stdin.pause();

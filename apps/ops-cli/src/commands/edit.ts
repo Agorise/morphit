@@ -187,7 +187,11 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 	// operator-register record (as display_name), so a title change needs the
 	// same "re-publish to the federation" step as origin/tag.
 	let nameChanged = false;
-
+	// The contact URL (contact_url) ALSO rides in the on-chain operator-register
+	// record, so a contact change needs the same re-publish step. Without this
+	// flag, editing only the contact URL updated the local footer but silently
+	// left the on-chain contact stale (v1.15.5).
+	let contactChanged = false;
 	if (choice === 'origin' || choice === 'all') {
 		const origin = await stepOrigin();
 		configUpdates.set('MORPHIT_INSTANCE_ORIGIN', origin);
@@ -284,7 +288,10 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 			'Footer "contact the operator" link — Matrix room, mailto:, Mastodon, etc.',
 			existing.contactUrl
 		);
-		if (contactR.changed) configUpdates.set('MORPHIT_INSTANCE_CONTACT_URL', contactR.value);
+		if (contactR.changed) {
+			configUpdates.set('MORPHIT_INSTANCE_CONTACT_URL', contactR.value);
+			contactChanged = true;
+		}
 
 		const seoTitleR = await editField(
 			'SEO <title>',
@@ -433,11 +440,12 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 	// instances show in their /instances directory.  Make the re-register step
 	// impossible to overlook — and offer to do it right here — when (and only
 	// when) it actually applies.
-	if (originChanged || tagChanged || nameChanged) {
+	if (originChanged || tagChanged || nameChanged || contactChanged) {
 		const parts: string[] = [];
 		if (originChanged) parts.push('origin');
 		if (tagChanged) parts.push('operator tag');
 		if (nameChanged) parts.push('display name');
+		if (contactChanged) parts.push('contact URL');
 		const whatChanged =
 			parts.length === 1
 				? parts[0]

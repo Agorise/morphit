@@ -36,7 +36,7 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { askPassword } from '../init/prompt.ts';
+import { askPassword, RELAY_KEY_UNLOCK_PROMPT } from '../init/prompt.ts';
 import { sanitizeForTerm } from '../render/term.ts';
 import { defaultRepoRoot } from '../lib/repoRoot.ts';
 import { loadInstanceEnv } from '../lib/instanceEnv.ts';
@@ -162,7 +162,7 @@ async function loadKeyWif(keyFile: string): Promise<string> {
 		return raw;
 	}
 	const envelope = JSON.parse(raw);
-	const passphrase = await askPassword('Unlock passphrase');
+	const passphrase = await askPassword(RELAY_KEY_UNLOCK_PROMPT);
 	if (passphrase.length === 0) {
 		throw new Error('passphrase required to unlock encrypted keystore');
 	}

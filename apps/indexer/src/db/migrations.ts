@@ -528,6 +528,27 @@ COMMENT ON COLUMN operators.reg_alt_networks IS
     '(host strings, no scheme). Lets the federation probe a censored node over Tor/I2P. '
     'NULL when the operator published none.';
 `
+	},
+
+	{
+		version: 58,
+		description:
+			'operators.last_action_block_num — block of the most recent morphit op this operator account signed. The v1.15.3 federation probe (clearnet_blocked "Fix B") SELECTed o.last_action_block_num from operators before this column existed, which threw on EVERY probe scan (column ... does not exist) — so no instance was ever re-probed and directory cached fields went stale. This adds the column (additive/nullable) and backfills it to registered_in_block so existing operators start with a sane baseline.',
+		sql: `
+ALTER TABLE operators
+    ADD COLUMN IF NOT EXISTS last_action_block_num BIGINT;
+
+UPDATE operators
+    SET last_action_block_num = registered_in_block
+    WHERE last_action_block_num IS NULL;
+
+COMMENT ON COLUMN operators.last_action_block_num IS
+    'Block of the most recent morphit op this operator account signed (advanced '
+    'on every register; seeded to registered_in_block). The federation probe '
+    'compares it to chain head to tell a clearnet-censored-but-alive node '
+    '(clearnet_blocked) from a dead one (unreachable). v1.15.3 SELECTed this '
+    'column before it existed, crashing every probe scan; v58 adds it.';
+`
 	}
 
 	// Future migrations land here.  The v1 collapsed schema is the

@@ -23,6 +23,7 @@ import {
 } from '../src/lib/time.ts';
 import { applyThreshold } from '../src/config.ts';
 import type { Threshold } from '../src/config.ts';
+import { stripTerminalControlSequences } from '../src/init/prompt.ts';
 
 let failures = 0;
 let scenarios = 0;
@@ -254,12 +255,14 @@ import { dirname as _dn, join as _jn } from 'node:path';
 const _cmd = _jn(_dn(_fu(import.meta.url)), '..', 'src', 'commands');
 const _src = (f: string): string => _rf(_jn(_cmd, f), 'utf-8');
 
-scenario('cp186: edit reminds operator to re-register after an origin/tag/name change', () => {
+scenario('cp186: edit reminds operator to re-register after an origin/tag/name/contact change', () => {
 	const e = _src('edit.ts');
 	assertEqual(e.includes('originChanged = true'), true, 'edit tracks origin change');
 	assertEqual(e.includes('tagChanged = true'), true, 'edit tracks tag change');
 	assertEqual(e.includes('nameChanged = true'), true, 'edit tracks display-name (title) change');
-	assertEqual(/if \(originChanged \|\| tagChanged \|\| nameChanged\)/.test(e), true, 'edit gates reminder on origin/tag/name change');
+	assertEqual(e.includes('contactChanged = true'), true, 'edit tracks contact-URL change (also on-chain)');
+	assertEqual(/if \(originChanged \|\| tagChanged \|\| nameChanged \|\| contactChanged\)/.test(e), true, 'edit gates reminder on origin/tag/name/contact change');
+	assertEqual(e.includes("parts.push('contact URL')"), true, 'edit names contact URL in the re-register reminder');
 	assertEqual(e.includes('runRegister('), true, 'edit can broadcast the re-registration inline');
 	assertEqual(e.includes('Broadcast this change to the chain now'), true, 'edit offers to broadcast right there');
 	assertEqual(e.includes('morphit-ops register'), true, 'edit still names the command for the decline / retry path');
@@ -268,6 +271,46 @@ scenario('cp186: edit reminds operator to re-register after an origin/tag/name c
 		true,
 		'edit explains WHY (federation visibility)'
 	);
+});
+
+scenario('v1.15.6: askPassword strips bracketed-paste + CSI so a PASTED passphrase survives', () => {
+	// The reported bug: pasting wraps the text in ESC[200~ … ESC[201~, and the
+	// bracket bytes polluted the passphrase. These must be stripped to nothing.
+	const ESC = '\x1b';
+	assertEqual(stripTerminalControlSequences(`${ESC}[200~hunter2${ESC}[201~`), 'hunter2', 'bracketed-paste markers stripped');
+	assertEqual(stripTerminalControlSequences(`${ESC}[200~corr3ct horse$${ESC}[201~`), 'corr3ct horse$', 'paste with spaces/symbols survives');
+	assertEqual(stripTerminalControlSequences(`${ESC}[Asecret`), 'secret', 'a stray arrow-key CSI is stripped');
+	assertEqual(stripTerminalControlSequences('plain-typed-pass'), 'plain-typed-pass', 'ordinary typed input is untouched');
+	// prompt.ts must actually disable bracketed paste during the read and use the strip.
+	const p = _rf(_jn(_dn(_fu(import.meta.url)), '..', 'src', 'init', 'prompt.ts'), 'utf-8');
+	assertEqual(p.includes('[?2004l'), true, 'askPassword disables bracketed-paste mode while reading');
+	assertEqual(p.includes('[?2004h'), true, 'askPassword restores bracketed-paste mode in cleanup');
+	assertEqual(p.includes('stripTerminalControlSequences(raw)'), true, 'askPassword strips control sequences from each chunk');
+});
+
+scenario('v1.15.6: interactive register auto-unlocks from the relay sealed credential first', () => {
+	const r = _src('register.ts');
+	assertEqual(r.includes('trySealedRelayPassphrase'), true, 'register has a sealed-credential unlock path');
+	assertEqual(/relay_passphrase\.cred/.test(r), true, 'it reads the relay host-sealed credential');
+	assertEqual(/systemd-creds/.test(r) && /--name=relay_passphrase/.test(r), true, 'it decrypts via systemd-creds (host-bound)');
+	assertEqual(/\/run\/morphit-reg-/.test(r), true, 'the decrypted secret lands only in a /run (tmpfs) file');
+	assertEqual(r.includes('unlinkSync'), true, 'the /run secret file is scrubbed');
+	assertEqual(r.includes('await askPassword(RELAY_KEY_UNLOCK_PROMPT)'), true, 'it still falls back to the manual prompt when the cred is absent/mismatched');
+});
+
+scenario('v1.15.5: the relay-key unlock prompt is disambiguated at every decrypt site', () => {
+	const prompt = _rf(_jn(_dn(_fu(import.meta.url)), '..', 'src', 'init', 'prompt.ts'), 'utf-8');
+	// The shared constant must name the key AND say what it is NOT, so no
+	// operator confuses it with an SSH / GPG / system password again.
+	assertEqual(prompt.includes('RELAY_KEY_UNLOCK_PROMPT'), true, 'prompt.ts exports the shared unlock prompt');
+	assertEqual(/Blurt active key/.test(prompt), true, 'the prompt names the Blurt active key');
+	assertEqual(/SSH.*GPG.*system|SSH, GPG, or system/.test(prompt), true, 'the prompt says it is NOT the SSH/GPG/system password');
+	// Every relay-key decrypt site must use the shared constant, not a bare label.
+	for (const f of ['register.ts', 'showKey.ts', 'paymentMethod.ts']) {
+		const s = _src(f);
+		assertEqual(s.includes('askPassword(RELAY_KEY_UNLOCK_PROMPT)'), true, `${f} uses the disambiguated unlock prompt`);
+		assertEqual(s.includes("askPassword('Unlock passphrase')"), false, `${f} no longer uses the bare 'Unlock passphrase' label`);
+	}
 });
 
 scenario('cp186: init re-run guard offers Edit/Overwrite/Cancel and can hand off to edit', () => {

@@ -74,6 +74,7 @@ SMOKES=(
 	"apps/indexer:forbidden-char-consistency-smoke"
 	"apps/indexer:frontend-chatlink-env-doc-parity-smoke"
 	"apps/indexer:federation-probe-smoke"
+	"apps/indexer:operators-query-column-parity-smoke"
 	"apps/indexer:shared-relay-account-guard-smoke"
 	"apps/indexer:dns-rebinding-defense-smoke"
 	"apps/indexer:instances-stream-smoke"

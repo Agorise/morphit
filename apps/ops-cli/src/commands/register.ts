@@ -29,8 +29,10 @@
  * message.
  */
 
-import { readFileSync } from 'node:fs';
-import { ask, askPassword, askYesNo } from '../init/prompt.ts';
+import { readFileSync, existsSync, unlinkSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
+import { ask, askPassword, askYesNo, RELAY_KEY_UNLOCK_PROMPT } from '../init/prompt.ts';
 import { sanitizeForTerm } from '../render/term.ts';
 import { printChainErrorHelp, classifyChainError, SUGGESTED_LIQUID_BLURT_BUFFER, broadcastCustomJson, errMsg } from './chainErrors.ts';
 import { isReservedTag } from '../../../indexer/src/indexer/confusables.ts';
@@ -372,6 +374,10 @@ function readEnv(): ValidEnv | { error: string } {
 	const origin = process.env.MORPHIT_INSTANCE_ORIGIN;
 	const contactUrl = process.env.MORPHIT_INSTANCE_CONTACT_URL;
 	const operatorTag = process.env.MORPHIT_INSTANCE_OPERATOR_TAG;
+	// Legacy single-var i2p address (pre b32/name split). edit.ts falls back to
+	// it for display; register must too, or an operator whose b32 lives only in
+	// the legacy var silently drops it from the on-chain broadcast (v1.15.7).
+	const legacyI2p = (process.env.MORPHIT_INSTANCE_I2P_ADDRESS ?? '').trim() || null;
 
 	const missing: string[] = [];
 	if (!account) missing.push('MORPHIT_RELAY_ACCOUNT');
@@ -399,12 +405,45 @@ function readEnv(): ValidEnv | { error: string } {
 		operatorTag: operatorTag && operatorTag.trim().length > 0 ? operatorTag.trim() : null,
 		altAddresses: {
 			tor: (process.env.MORPHIT_INSTANCE_TOR_ADDRESS ?? '').trim() || null,
-			i2p_b32: (process.env.MORPHIT_INSTANCE_I2P_B32_ADDRESS ?? '').trim() || null,
-			i2p_name: (process.env.MORPHIT_INSTANCE_I2P_NAME_ADDRESS ?? '').trim() || null,
+			i2p_b32:
+				((process.env.MORPHIT_INSTANCE_I2P_B32_ADDRESS ?? '').trim() || null) ??
+				(legacyI2p && legacyI2p.endsWith('.b32.i2p') ? legacyI2p : null),
+			i2p_name:
+				((process.env.MORPHIT_INSTANCE_I2P_NAME_ADDRESS ?? '').trim() || null) ??
+				(legacyI2p && legacyI2p.endsWith('.i2p') && !legacyI2p.endsWith('.b32.i2p') ? legacyI2p : null),
 			lokinet: (process.env.MORPHIT_INSTANCE_LOKINET_ADDRESS ?? '').trim() || null,
 			ens: (process.env.MORPHIT_INSTANCE_ENS_NAME ?? '').trim() || null
 		}
 	};
+}
+
+/** Try to obtain the relay's unlock passphrase from the SAME host-bound
+ *  systemd credential the relay service auto-unlocks with at boot
+ *  (`/etc/morphit/relay_passphrase.cred`, sealed `--with-key=host`).  Returns
+ *  the passphrase, or null if the cred is absent / systemd-creds is unavailable
+ *  / decryption fails (e.g. not running as root, or a different host).  The
+ *  decrypted secret lands only in a /run (tmpfs/RAM) file that is scrubbed
+ *  immediately — never on persistent disk — exactly as first-online does. */
+function trySealedRelayPassphrase(): string | null {
+	const cred = process.env.MORPHIT_RELAY_CRED_FILE || '/etc/morphit/relay_passphrase.cred';
+	if (!existsSync(cred)) return null;
+	const tmp = `/run/morphit-reg-${process.pid}-${randomBytes(6).toString('hex')}.pass`;
+	try {
+		const r = spawnSync('systemd-creds', ['decrypt', '--name=relay_passphrase', cred, tmp], {
+			stdio: 'ignore'
+		});
+		if (r.status !== 0 || !existsSync(tmp)) return null;
+		const pass = readFileSync(tmp, 'utf8').replace(/\r?\n$/, '');
+		return pass.length > 0 ? pass : null;
+	} catch {
+		return null;
+	} finally {
+		try {
+			if (existsSync(tmp)) unlinkSync(tmp);
+		} catch {
+			/* best-effort scrub */
+		}
+	}
 }
 
 async function loadKeyWif(keyFile: string, nonInteractive = false): Promise<string> {
@@ -416,7 +455,9 @@ async function loadKeyWif(keyFile: string, nonInteractive = false): Promise<stri
 		return raw;
 	}
 	const envelope = JSON.parse(raw);
-	let passphrase: string;
+	// Lazy import — relay's keyEnvelope module decrypts.
+	const { decryptEnvelope } = await import('../../../relay/src/crypto/keyEnvelope.ts');
+
 	if (nonInteractive) {
 		// Unattended unlock — read the passphrase from the SAME credential file the
 		// relay service uses to unlock this key at startup (MORPHIT_RELAY_ACTIVE_KEY_-
@@ -431,18 +472,34 @@ async function loadKeyWif(keyFile: string, nonInteractive = false): Promise<stri
 					'variable at the passphrase file the relay uses.'
 			);
 		}
-		passphrase = readFileSync(passFile, 'utf8').replace(/\r?\n$/, '');
+		const passphrase = readFileSync(passFile, 'utf8').replace(/\r?\n$/, '');
 		if (passphrase.length === 0) {
 			throw new Error(`passphrase file ${JSON.stringify(passFile)} is empty`);
 		}
-	} else {
-		passphrase = await askPassword('Unlock passphrase');
-		if (passphrase.length === 0) {
-			throw new Error('passphrase required to unlock encrypted keystore');
+		return decryptEnvelope(envelope, passphrase);
+	}
+
+	// Interactive.  FIRST try the relay's own host-sealed credential: an operator
+	// running this ON the box should never have to re-type a passphrase the relay
+	// already holds sealed (and re-typing/​pasting it is exactly what failed —
+	// v1.15.6).  Only if that credential is absent or doesn't unlock THIS envelope
+	// do we fall back to prompting.
+	const sealed = trySealedRelayPassphrase();
+	if (sealed !== null) {
+		try {
+			const wif = decryptEnvelope(envelope, sealed);
+			console.log("  \u2713 Unlocked from the relay's sealed credential — no passphrase needed.");
+			return wif;
+		} catch {
+			// The sealed passphrase didn't match THIS keystore (unusual). Fall
+			// through to the manual prompt rather than failing outright.
 		}
 	}
-	// Lazy import — relay's keyEnvelope module decrypts.
-	const { decryptEnvelope } = await import('../../../relay/src/crypto/keyEnvelope.ts');
+
+	const passphrase = await askPassword(RELAY_KEY_UNLOCK_PROMPT);
+	if (passphrase.length === 0) {
+		throw new Error('passphrase required to unlock encrypted keystore');
+	}
 	return decryptEnvelope(envelope, passphrase);
 }
 

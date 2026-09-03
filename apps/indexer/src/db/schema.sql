@@ -2950,3 +2950,20 @@ ALTER TABLE operators
 COMMENT ON COLUMN operators.reg_alt_networks IS
     'On-chain-published hidden-service addresses {tor,i2p_b32,i2p_name,lokinet,ens} '
     '(host strings, no scheme). NULL when the operator published none.';
+
+-- ─── v58: operators.last_action_block_num (federation-probe aliveness) ───
+-- Block of the most recent morphit op this operator account signed. The
+-- clearnet_blocked "Fix B" probe SELECTs it to tell a censored-but-alive node
+-- from a dead one. v1.15.3 read this column before it existed, crashing every
+-- probe scan; added here additive/nullable and backfilled to registered_in_block.
+ALTER TABLE operators
+    ADD COLUMN IF NOT EXISTS last_action_block_num BIGINT;
+
+UPDATE operators
+    SET last_action_block_num = registered_in_block
+    WHERE last_action_block_num IS NULL;
+
+COMMENT ON COLUMN operators.last_action_block_num IS
+    'Block of the most recent morphit op this operator account signed (advanced '
+    'on every register; seeded to registered_in_block). The federation probe '
+    'compares it to chain head to classify clearnet_blocked (alive) vs unreachable.';

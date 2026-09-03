@@ -409,9 +409,9 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		// is deliberately left untouched (it records the FIRST registration).
 		await client.query(
 			`UPDATE operators
-			 SET display_name = $2, contact_url = $3, origin = $4, reg_alt_networks = $5
+			 SET display_name = $2, contact_url = $3, origin = $4, reg_alt_networks = $5, last_action_block_num = $6
 			 WHERE account = $1`,
-			[ctx.signer, v.display_name, v.contact_url, v.origin, v.alt_networks ? JSON.stringify(v.alt_networks) : null]
+			[ctx.signer, v.display_name, v.contact_url, v.origin, v.alt_networks ? JSON.stringify(v.alt_networks) : null, ctx.blockNum]
 		);
 	} else {
 		// First-time registration. UNIQUE(tag) enforces first-come-first-served;
@@ -419,11 +419,11 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		// claimed by another account" from a successful insert.
 		const insertRes = await client.query<{ account: string }>(
 			`INSERT INTO operators (
-				account, tag, display_name, contact_url, origin, registered_in_block, reg_alt_networks
-			) VALUES ($1, $2, $3, $4, $5, $6, $7)
+				account, tag, display_name, contact_url, origin, registered_in_block, reg_alt_networks, last_action_block_num
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 			ON CONFLICT (tag) DO NOTHING
 			RETURNING account`,
-			[ctx.signer, v.tag, v.display_name, v.contact_url, v.origin, ctx.blockNum, v.alt_networks ? JSON.stringify(v.alt_networks) : null]
+			[ctx.signer, v.tag, v.display_name, v.contact_url, v.origin, ctx.blockNum, v.alt_networks ? JSON.stringify(v.alt_networks) : null, ctx.blockNum]
 		);
 		if (insertRes.rowCount === 0) {
 			// Tag was already claimed by another account.
