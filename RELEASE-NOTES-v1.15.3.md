@@ -1,5 +1,12 @@
 # Morphit v1.15.3
 
+> **Superseded and never published — see RELEASE-NOTES-v1.15.4.md.** The headline
+> below was incorrect: the one-command installer targets the Ubuntu 24.04 "noble"
+> base, not 22.04. v1.15.4 corrects the installer's messaging. The two real code
+> changes described here — the `docker compose` v2 CLI call and the Tor onion
+> self-heal — are OS-agnostic and roll forward into v1.15.4. The floor-lowering
+> notes below are moot for the supported OS (24.04 ships Ansible 2.16 / PostgreSQL 16).
+
 **The fix for the failing fresh install: Morphit now installs on a stock Ubuntu 22.04 box with no Ansible or Postgres upgrade required.**
 
 ## Fixed

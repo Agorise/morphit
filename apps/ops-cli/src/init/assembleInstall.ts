@@ -22,6 +22,56 @@ import { spawnSync, spawn } from 'node:child_process';
 import { buildAnsiblePlaybookArgv, renderVarsFile } from './ansibleVars.ts';
 import { promptSaveSecrets, type SecretToSave } from './saveSecrets.ts';
 
+/**
+ * The one-command (Ansible) installer only provisions the Ubuntu 24.04 "noble"
+ * base — the playbook keys its codename-pinned apt repos (Docker, Trivy) and its
+ * package/config paths off `noble`, and asserts `morphit_ubuntu_codename ==
+ * "noble"` up front (ops/ansible/playbook.yml).  Earlier Ubuntu (22.04 "jammy"),
+ * Debian, LMDE, and non-Ubuntu bases fail that assertion.
+ *
+ * This is the SINGLE source of truth for the "you need a noble base" guidance:
+ * it is shown BOTH by the early OS pre-check below (so the install stops before
+ * writing secrets or running Ansible) AND by the playbook-failure backstop in
+ * FAILURE_HINTS (so an install that somehow reaches the assertion still gets
+ * this message instead of the support dead-end).  `os-support-parity-smoke`
+ * keeps it in lockstep with the playbook's actual gate.
+ *
+ * NOTE: this gates the ONE-COMMAND path only.  systemCheck.ts intentionally
+ * green-lights any sane Ubuntu/Debian-based OS because Morphit also supports
+ * MANUAL installs on them (Kicksecure, Debian, …); those never come through
+ * assembleInstall().
+ */
+export const NOBLE_ONLY_GUIDANCE =
+	'The one-command installer provisions only the Ubuntu 24.04 "noble" base, ' +
+	'or a noble-based derivative (Linux Mint 22, Pop!_OS 24.04, Zorin OS 17). ' +
+	'This box is on a different base, so provisioning cannot continue. ' +
+	'Install Morphit on a fresh Ubuntu 24.04 machine and re-run. ' +
+	'(Advanced: a by-hand install on other Debian/Ubuntu bases is documented in OPERATIONS.md \u00a749.)';
+
+/** Extract the Ubuntu base codename from /etc/os-release content, mirroring the
+ *  playbook's derivation EXACTLY: the value of the `UBUNTU_CODENAME=` line
+ *  (present on Ubuntu and its derivatives), lower-cased and unquoted; '' when
+ *  absent (Debian/LMDE/non-Ubuntu).  PURE. */
+export function ubuntuBaseCodename(osReleaseContent: string): string {
+	for (const line of osReleaseContent.split('\n')) {
+		const m = line.match(/^UBUNTU_CODENAME=(.*)$/);
+		if (m) {
+			let v = m[1]!.trim();
+			if (v.startsWith('"') && v.endsWith('"')) v = v.slice(1, -1);
+			return v.trim().toLowerCase();
+		}
+	}
+	return '';
+}
+
+/** The one-command installer's OS pre-flight verdict.  Supported IFF the Ubuntu
+ *  base codename is "noble" — byte-for-byte the same condition the playbook
+ *  asserts.  PURE. */
+export function checkNobleBase(osReleaseContent: string): { ok: boolean; codename: string } {
+	const codename = ubuntuBaseCodename(osReleaseContent);
+	return { ok: codename === 'noble', codename };
+}
+
 export interface PostInstallStep {
 	/** Human-readable name for the "couldn't set this up" fallback message. */
 	readonly label: string;
@@ -55,6 +105,9 @@ export interface AssembleDeps {
 	readonly spawn?: (argv: readonly string[]) => Promise<number>;
 	/** Resolve how many hosts the playbook targets (pre-flight guard). */
 	readonly probeHosts?: (argv: readonly string[]) => ProbeResult;
+	/** Read /etc/os-release (injected for the OS pre-check test). Defaults to the
+	 *  real file; returns '' if it can't be read. */
+	readonly readOsRelease?: () => string;
 	readonly print?: (s: string) => void;
 }
 
@@ -184,6 +237,15 @@ export const INSTALL_LOG_PATH = '/tmp/morphit-install-ansible.log';
  *  point: even a failure we didn't pre-check for still yields something the
  *  admin can act on, instead of a rage-quit at raw output. PURE. */
 const FAILURE_HINTS: ReadonlyArray<{ readonly re: RegExp; readonly hint: string }> = [
+	{
+		// The playbook's OS-gate assertion (ops/ansible/playbook.yml): the box is
+		// not on the Ubuntu 24.04 "noble" base.  Match the task name AND the
+		// assertion expression so a reworded fail_msg still classifies.  Without
+		// this, a jammy/Debian box hit the "not in our known list → email support"
+		// dead-end even though the fix (use 24.04) is clear (v1.15.4).
+		re: /Verify target is Ubuntu 24\.04|morphit_ubuntu_codename\s*==\s*.?noble/i,
+		hint: NOBLE_ONLY_GUIDANCE
+	},
 	{
 		re: /could not connect to server|connection refused[\s\S]*5432|password authentication failed|role ".*" does not exist|database ".*" does not exist|psql:\s*error|the database system is starting up/i,
 		hint: "The Postgres database couldn't be reached or authenticated. Make sure Postgres is running and the user + database in your connection string exist (re-run and say yes when the wizard offers to create them), and that the URL uses 127.0.0.1."
@@ -471,6 +533,36 @@ export async function assembleInstall(plan: InstallPlan, deps: AssembleDeps = {}
 	const ensureAnsible = deps.ensureAnsible ?? realEnsureAnsible;
 	const spawn = deps.spawn ?? realSpawn;
 	const probeHosts = deps.probeHosts ?? realProbeHosts;
+	const readOsRelease =
+		deps.readOsRelease ??
+		((): string => {
+			try {
+				return readFileSync('/etc/os-release', 'utf8');
+			} catch {
+				return '';
+			}
+		});
+
+	// 0. OS PRE-CHECK (honest pre-flight): the playbook only provisions the
+	//    Ubuntu 24.04 "noble" base.  Stop HERE — before writing the secret-
+	//    bearing vars file or running Ansible — when the base is anything else,
+	//    so the admin gets the "use 24.04" guidance up front instead of hitting
+	//    the playbook's fatal assertion several steps in (v1.15.4).  Only gate
+	//    when os-release is actually readable AND names a non-noble base; an
+	//    absent/unreadable file falls through to the playbook's own assertion
+	//    rather than blocking a box we couldn't classify.
+	const osRelease = readOsRelease();
+	if (osRelease.trim().length > 0) {
+		const base = checkNobleBase(osRelease);
+		if (!base.ok) {
+			return {
+				ok: false,
+				reason:
+					`${NOBLE_ONLY_GUIDANCE}` +
+					(base.codename ? ` (detected Ubuntu base: "${base.codename}")` : '')
+			};
+		}
+	}
 
 	// 1. Write the vars file FIRST (0600 — it carries the DB secrets).
 	writeVarsFile(plan.varsFilePath, renderVarsFile(plan.vars));

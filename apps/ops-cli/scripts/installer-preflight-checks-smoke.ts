@@ -27,6 +27,8 @@ import {
 } from '../src/init/systemCheck.ts';
 import { normalizeDbHostToIpv4 } from '../src/init/steps.ts';
 import { summarizePlaybookFailure, describeInstallError, shouldRemindQuiet, QUIET_REMIND_MS } from '../src/init/assembleInstall.ts';
+import { checkNobleBase, ubuntuBaseCodename, NOBLE_ONLY_GUIDANCE, assembleInstall } from '../src/init/assembleInstall.ts';
+import type { InstallPlan } from '../src/init/assembleInstall.ts';
 
 let pass = 0;
 const fails: string[] = [];
@@ -134,6 +136,91 @@ check('an unparseable value is left as-is (validation handles it)', !normalizeDb
 }
 check('an apt-lock failure maps to the dpkg hint', /dpkg --configure/.test(summarizePlaybookFailure('fatal: FAILED! => {"msg":"Failed to lock apt"}', 2, '/l')));
 check('a docker-permission failure maps to the docker-group hint', /docker group/.test(summarizePlaybookFailure('fatal: FAILED! => {"msg":"Got permission denied while trying to connect to the Docker daemon socket"}', 2, '/l')));
+
+// ── OS pre-check: the one-command installer is noble-only (v1.15.4) ──
+// The pure verdict mirrors the playbook's `morphit_ubuntu_codename == "noble"`.
+check('noble base → ok', checkNobleBase('ID=ubuntu\nUBUNTU_CODENAME=noble\n').ok);
+check('a derivative on the noble base → ok', checkNobleBase('ID=linuxmint\nID_LIKE=ubuntu\nUBUNTU_CODENAME=noble\n').ok);
+check('jammy (Ubuntu 22.04) → blocked', !checkNobleBase('ID=ubuntu\nVERSION_ID="22.04"\nUBUNTU_CODENAME=jammy\n').ok);
+check('no UBUNTU_CODENAME (Debian) → blocked', !checkNobleBase('ID=debian\nVERSION_ID="12"\n').ok);
+check('ubuntuBaseCodename unquotes + lowercases', ubuntuBaseCodename('UBUNTU_CODENAME="Noble"\n') === 'noble');
+check('ubuntuBaseCodename returns the jammy base verbatim', ubuntuBaseCodename('UBUNTU_CODENAME=jammy\n') === 'jammy');
+
+// The playbook's OS-gate assertion is now a RECOGNISED failure → the noble
+// guidance, NOT the support dead-end. This is the exact log the new admin hit.
+{
+	const osGateLog =
+		'TASK [Verify target is Ubuntu 24.04 LTS or an Ubuntu-24.04-based derivative] ***\n' +
+		'fatal: [localhost]: FAILED! => {"assertion": "morphit_ubuntu_codename == \\"noble\\"", ' +
+		'"evaluated_to": false, "msg": "This playbook targets Ubuntu 24.04 LTS ... Detected Ubuntu 22.04 ... not supported"}';
+	const s = summarizePlaybookFailure(osGateLog, 2, '/tmp/x.log');
+	check('the OS-gate failure maps to the noble guidance', /24\.04 "noble"/.test(s) && /fresh Ubuntu 24\.04/.test(s));
+	check('the OS-gate failure is RECOGNISED (no support dead-end)', !s.includes('agorise@pm.me') && !s.includes('@agorise:matrix.org'));
+	check('the OS-gate failure names the failed task', /Verify target is Ubuntu 24\.04/.test(s));
+}
+
+// assembleInstall must STOP a non-noble box up front — before writing the
+// secret-bearing vars file or spawning Ansible.
+{
+	let wroteVars = false;
+	let spawned = false;
+	const plan: InstallPlan = {
+		vars: {},
+		secretsToSave: [],
+		playbookPath: '/opt/morphit/ops/ansible/playbook.yml',
+		varsFilePath: '/tmp/morphit-vars.yml'
+	};
+	const result = await assembleInstall(plan, {
+		readOsRelease: () => 'ID=ubuntu\nVERSION_ID="22.04"\nUBUNTU_CODENAME=jammy\n',
+		writeVarsFile: () => {
+			wroteVars = true;
+		},
+		removeVarsFile: () => {},
+		promptSave: async () => {},
+		ensureAnsible: async () => true,
+		spawn: async () => {
+			spawned = true;
+			return 0;
+		},
+		probeHosts: () => ({ exitCode: 0, output: 'hosts (1):\n  localhost' }),
+		print: () => {}
+	});
+	check('assembleInstall blocks a jammy box (ok:false)', !result.ok);
+	check('the block carries the noble guidance', !result.ok && /fresh Ubuntu 24\.04/.test(result.reason));
+	check('the block names the detected base', !result.ok && /jammy/.test(result.reason));
+	check('NO secret-bearing vars file was written for the blocked box', !wroteVars);
+	check('Ansible was NEVER spawned for the blocked box', !spawned);
+}
+
+// A noble box passes the pre-check and proceeds to the (mocked) run.
+{
+	let spawned = false;
+	const plan: InstallPlan = {
+		vars: {},
+		secretsToSave: [],
+		playbookPath: '/opt/morphit/ops/ansible/playbook.yml',
+		varsFilePath: '/tmp/morphit-vars.yml'
+	};
+	const result = await assembleInstall(plan, {
+		readOsRelease: () => 'ID=ubuntu\nVERSION_ID="24.04"\nUBUNTU_CODENAME=noble\n',
+		writeVarsFile: () => {},
+		removeVarsFile: () => {},
+		promptSave: async () => {},
+		ensureAnsible: async () => true,
+		spawn: async () => {
+			spawned = true;
+			return 0;
+		},
+		probeHosts: () => ({ exitCode: 0, output: 'hosts (1):\n  localhost' }),
+		print: () => {}
+	});
+	check('assembleInstall proceeds on a noble box (ok:true)', result.ok);
+	check('the playbook actually ran on the noble box', spawned);
+}
+
+// The shared guidance string is the single source of truth used by both paths.
+check('NOBLE_ONLY_GUIDANCE names the 24.04 noble base', /24\.04 "noble"/.test(NOBLE_ONLY_GUIDANCE));
+check('NOBLE_ONLY_GUIDANCE is not a support dead-end', !NOBLE_ONLY_GUIDANCE.includes('agorise@pm.me'));
 
 // ── describeInstallError: the GLOBAL backstop (any throw → actionable) ──
 check('a permission (EACCES) error → the sudo fix', /sudo/.test(describeInstallError(Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' }))));

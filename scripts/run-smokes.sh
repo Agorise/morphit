@@ -156,6 +156,7 @@ SMOKES=(
 	"apps/ops-cli:health-view-smoke"
 	"apps/ops-cli:canary-timestamp-parity-smoke"
 	"apps/ops-cli:system-check-os-smoke"
+	"apps/ops-cli:os-support-parity-smoke"
 	"apps/ops-cli:installer-preflight-checks-smoke"
 	"apps/ops-cli:installer-remediation-smoke"
 	"apps/ops-cli:onion-heal-smoke"
