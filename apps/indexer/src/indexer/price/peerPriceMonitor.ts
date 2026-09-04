@@ -197,6 +197,11 @@ export interface PeerPriceMonitorConfig {
 	readonly alertCooldownHours?: number;
 	readonly minObservations?: number;
 	readonly fetchTimeoutMs?: number;
+	/** When true (hidden-only node), fetch each peer's receipt over its on-chain
+	 *  `.onion`/`.i2p` address (via Tor/I2P) instead of its clearnet origin —
+	 *  which stage-1's fail-closed dispatcher would refuse. Peers that publish no
+	 *  hidden address are skipped (can't be reached privately). */
+	readonly hiddenOnly?: boolean;
 }
 
 /** Result of one sample cycle — observation count + comparison
@@ -210,6 +215,33 @@ export interface PeerSampleCycleResult {
 	readonly deviation: number | null;
 	readonly aboveThreshold: boolean;
 	readonly alertFired: boolean;
+}
+
+/**
+ * Resolve the base URL to fetch a peer's price receipt from. PURE.
+ *   - clearnet node → the peer's clearnet `origin` (unchanged).
+ *   - hidden-only node → the peer's on-chain hidden address (I2P preferred, then
+ *     Tor) as `http://<host>`, so the fetch rides I2P/Tor. Preferring I2P first
+ *     hedges against a Tor-network compromise (operator's explicit concern).
+ *     Returns null when the peer publishes no hidden address — a hidden-only
+ *     node then simply skips it (never falls back to its clearnet origin).
+ * `regAltNetworks` is the peer's on-chain `{tor?, i2p_b32?, …}` (JSONB), so any
+ * newly-registered instance that published a hidden address is picked up
+ * automatically.
+ */
+export function peerReceiptBase(
+	origin: string,
+	regAltNetworks: unknown,
+	hiddenOnly: boolean
+): string | null {
+	if (!hiddenOnly) return origin;
+	if (regAltNetworks === null || typeof regAltNetworks !== 'object') return null;
+	const alt = regAltNetworks as { i2p_b32?: unknown; tor?: unknown };
+	const i2p = typeof alt.i2p_b32 === 'string' ? alt.i2p_b32.trim() : '';
+	const tor = typeof alt.tor === 'string' ? alt.tor.trim() : '';
+	if (i2p.endsWith('.b32.i2p')) return `http://${i2p}`;
+	if (tor.endsWith('.onion')) return `http://${tor}`;
+	return null;
 }
 
 /** Fetch a single peer's price-receipt endpoint.  Returns null on
@@ -371,20 +403,35 @@ export async function runPeerPriceSampleCycle(
 		sustainedHours = PEER_DISAGREEMENT_SUSTAINED_HOURS,
 		alertCooldownHours = PEER_ALERT_COOLDOWN_HOURS,
 		minObservations = PEER_MIN_OBSERVATIONS,
-		fetchTimeoutMs = PEER_FETCH_TIMEOUT_MS
+		fetchTimeoutMs = PEER_FETCH_TIMEOUT_MS,
+		hiddenOnly = false
 	} = cfg;
 
 	// Step 1: discover peers from federation directory.  Only query
 	// peers that the federation prober has vetted as good/quiet
 	// (operator chain-registration verified, recent /v1/health
-	// returned OK, etc.).
-	const peersQuery = await db.query<{ origin: string }>(
-		`SELECT origin
-		 FROM known_instances
-		 WHERE last_probe_status IN ('good', 'quiet')
-		   AND origin IS NOT NULL`
+	// returned OK, etc.).  The set is chain-driven (known_instances is
+	// populated by on-chain operator_register ops), so a NEW instance
+	// coming online — e.g. vigilante.trading — is sampled automatically
+	// the moment it registers; nothing here is a hardcoded list.  We
+	// LEFT JOIN operators for the on-chain reg_alt_networks so a
+	// hidden-only node can reach each peer over Tor/I2P.
+	const peersQuery = await db.query<{ origin: string; reg_alt_networks: unknown }>(
+		`SELECT ki.origin, op.reg_alt_networks
+		 FROM known_instances ki
+		 LEFT JOIN operators op ON op.account = ki.operator_account
+		 WHERE ki.last_probe_status IN ('good', 'quiet')
+		   AND ki.origin IS NOT NULL`
 	);
-	const peers = peersQuery.rows.map((r) => r.origin);
+	// Resolve each peer to the base URL we actually fetch from + the canonical
+	// origin we record the observation under. On a hidden-only node a peer with
+	// no on-chain hidden address is dropped (can't be reached privately).
+	const targets: Array<{ origin: string; base: string }> = [];
+	for (const row of peersQuery.rows) {
+		const base = peerReceiptBase(row.origin, row.reg_alt_networks, hiddenOnly === true);
+		if (base !== null) targets.push({ origin: row.origin, base });
+	}
+	const peers = targets.map((t) => t.origin);
 
 	// Step 2: query each peer in parallel.  Failures are silent
 	// (peer offline, denomination-mismatch, etc.) — they just
@@ -417,7 +464,7 @@ export async function runPeerPriceSampleCycle(
 	// latency budget that pool integration would help with.
 	const observations: PeerObservation[] = [];
 	const fetchResults = await Promise.allSettled(
-		peers.map((origin) => fetchPeerReceipt(origin, asset, denominationFiat, fetchTimeoutMs))
+		targets.map((t) => fetchPeerReceipt(t.base, asset, denominationFiat, fetchTimeoutMs))
 	);
 	for (let i = 0; i < peers.length; i++) {
 		const result = fetchResults[i]!;

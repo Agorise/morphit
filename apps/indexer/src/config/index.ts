@@ -113,6 +113,15 @@ export interface Config {
 	 *  rather than one per block, so the per-commit fsync is amortised across the
 	 *  window while the network FETCH is parallelised across endpoints. */
 	readonly backfillConcurrency: number;
+	/** Catch-up strategy: 'fifo' (classic await-oldest) or 'flow' (out-of-order
+	 *  reorder buffer with cursor hedge + memory governor). */
+	readonly backfillMode: 'fifo' | 'flow';
+	/** flow: hard buffer cap in MB (0 = auto). */
+	readonly backfillMaxBufferMb: number;
+	/** flow: fraction of the memory budget the buffer may use when auto-sizing. */
+	readonly backfillMemFraction: number;
+	/** flow: cursor-window hedge deadline = factor × fastest-endpoint latency (0 = off). */
+	readonly backfillHedgeFactor: number;
 	/** Backoff on transient chain errors (network failure, RPC
 	 *  500). Does not apply to structural errors in op payloads —
 	 *  those are rejected and logged without retry. */
@@ -505,6 +514,8 @@ export interface Config {
 	readonly instanceTagline: string | undefined;
 	readonly instanceContactUrl: string | undefined;
 	readonly instanceTorAddress: string | undefined;
+	/** Matrix homeserver of the alert bot, if any — checked by the clearnet gate. */
+	readonly instanceMatrixHomeserver: string | undefined;
 	readonly instanceLokinetAddress: string | undefined;
 	/** I2P long-form b32 address — `<52-char-base32>.b32.i2p`.
 	 *  This is the canonical, always-resolvable form (derived
@@ -880,6 +891,16 @@ const envSchema = z.object({
 	MORPHIT_INDEXER_BLOCK_INTERVAL_MS: z.coerce.number().int().positive().default(3000),
 	// cp664 — concurrent prefetch windows during catch-up.  0 = auto (one per endpoint).
 	MORPHIT_INDEXER_BACKFILL_CONCURRENCY: z.coerce.number().int().min(0).max(64).default(0),
+	// v1.15.x — catch-up strategy. 'fifo' = the classic await-oldest prefetch;
+	// 'flow' = the out-of-order reorder-buffer path (deep buffer, cursor hedge,
+	// memory governor). Opt-in while it's live-validated; default flips later.
+	MORPHIT_INDEXER_BACKFILL_MODE: z.enum(['fifo', 'flow']).default('fifo'),
+	// flow governor: hard buffer cap in MB (0 = auto: budget × fraction, auto-capped).
+	MORPHIT_INDEXER_BACKFILL_MAX_BUFFER_MB: z.coerce.number().int().min(0).max(65536).default(0),
+	// flow governor: fraction of the memory budget the buffer may use when auto-sizing.
+	MORPHIT_INDEXER_BACKFILL_MEM_FRACTION: z.coerce.number().min(0.01).max(0.9).default(0.25),
+	// flow hedge: cursor-window deadline = factor × fastest-endpoint latency. 0 = off.
+	MORPHIT_INDEXER_BACKFILL_HEDGE_FACTOR: z.coerce.number().min(0).max(50).default(3),
 	MORPHIT_INDEXER_ERROR_BACKOFF_MS: z.coerce.number().int().positive().default(5000),
 	// v1.7.0 — the head-block fast path has NO on/off switch (ADR-0051,
 	// superseding ADR-0048's opt-out). It never writes to the DB, so the
@@ -1388,6 +1409,10 @@ const envSchema = z.object({
 	MORPHIT_INSTANCE_TAGLINE: z.string().max(200).optional(),
 	MORPHIT_INSTANCE_CONTACT_URL: z.string().url().optional(),
 	MORPHIT_INSTANCE_TOR_ADDRESS: z.string().max(80).optional(),
+	// Optional: the Matrix homeserver the alert bot uses, IF one runs. The
+	// clearnet-elimination gate checks it — a clearnet homeserver voids the
+	// "zero clearnet" claim; unset means no bot (clean); .onion/.i2p is clean.
+	MORPHIT_INSTANCE_MATRIX_HOMESERVER: z.string().max(255).optional(),
 	MORPHIT_INSTANCE_LOKINET_ADDRESS: z.string().max(80).optional(),
 	/** I2P long-form b32 address (`<52-char-base32>.b32.i2p`).  This
 	 *  is the canonical, always-resolvable form.  Recommended for
@@ -1706,6 +1731,10 @@ export function loadConfig(): Config {
 		startBlock: e.MORPHIT_INDEXER_START_BLOCK,
 		blockIntervalMs: e.MORPHIT_INDEXER_BLOCK_INTERVAL_MS,
 		backfillConcurrency: e.MORPHIT_INDEXER_BACKFILL_CONCURRENCY,
+		backfillMode: e.MORPHIT_INDEXER_BACKFILL_MODE,
+		backfillMaxBufferMb: e.MORPHIT_INDEXER_BACKFILL_MAX_BUFFER_MB,
+		backfillMemFraction: e.MORPHIT_INDEXER_BACKFILL_MEM_FRACTION,
+		backfillHedgeFactor: e.MORPHIT_INDEXER_BACKFILL_HEDGE_FACTOR,
 		errorBackoffMs: e.MORPHIT_INDEXER_ERROR_BACKOFF_MS,
 		fastPathIntervalMs: e.MORPHIT_INDEXER_FASTPATH_INTERVAL_MS,
 		staleLagThreshold: e.MORPHIT_INDEXER_STALE_LAG_THRESHOLD,
@@ -1840,6 +1869,7 @@ export function loadConfig(): Config {
 		instanceTagline: e.MORPHIT_INSTANCE_TAGLINE,
 		instanceContactUrl: e.MORPHIT_INSTANCE_CONTACT_URL,
 		instanceTorAddress: e.MORPHIT_INSTANCE_TOR_ADDRESS,
+		instanceMatrixHomeserver: e.MORPHIT_INSTANCE_MATRIX_HOMESERVER,
 		instanceLokinetAddress: e.MORPHIT_INSTANCE_LOKINET_ADDRESS,
 		// I2P: support new (B32 + NAME) and legacy (single ADDRESS).
 		// If both new fields are set, use them as-is.  If only the

@@ -26,6 +26,7 @@
 import { Hono } from 'hono';
 
 import type { Config } from '$config';
+import { computeClearnetEliminated, clearnetEliminationMissing, FRONTEND_IS_LOCAL_ONLY, matrixHomeserverIsHidden } from '$indexer/clearnetGate';
 
 export interface InstanceResponse {
 	name: string | null;
@@ -71,6 +72,20 @@ export interface InstanceResponse {
 	 *  payout), and the treasury keeps 100%.  See
 	 *  apps/indexer/src/indexer/operatorEarnings.ts. */
 	operator_tag: string | null;
+	/**
+	 * Keystone gate for the "Zero use of clearnet internet" claim. TRUE only when
+	 * this node is provably hidden-only (Tor + I2P) AND every outbound leg is
+	 * private: chain over onion/i2p RPC, prices from the federation over hidden
+	 * networks (no clearnet price fetch), upgrades over onion/i2p mirrors, and a
+	 * local-only frontend — with clearnet fetches fail-closed (never a direct
+	 * fallback). FALSE until every leg is enforced. The frontend/brag/security
+	 * pages MUST gate the strong claim on this flag so the content can never
+	 * outrun the code. Currently false everywhere — the hidden-only enforcement
+	 * is being built (v1.15.x).
+	 */
+	clearnet_eliminated: boolean;
+	/** Legs still preventing elimination (empty ⇔ eliminated) — operator diagnostic. */
+	clearnet_eliminated_missing: string[];
 	/** cp316 — the RESOLVED treasury fee addresses this instance
 	 *  verifies fee payments against (chain-pin > env > canonical
 	 *  default).  PUBLIC receiving addresses — safe to expose.  Lets
@@ -249,6 +264,15 @@ export function instanceRoute(
 	const app = new Hono();
 
 	app.get('/', (c) => {
+		const clearnetLegs = {
+			chainHidden: config.blurtRpcEndpoints.length === 0 && config.hiddenRpcEndpoints.length > 0,
+			transportTor: Boolean(config.instanceTorAddress),
+			transportI2p: Boolean(config.instanceI2pB32Address || config.instanceI2pNameAddress),
+			priceFederated: config.blurtRpcEndpoints.length === 0,
+			frontendLocal: FRONTEND_IS_LOCAL_ONLY,
+			upgradeHidden: false, // TODO(stage 3b wiring): hidden IPFS upgrade in upgrade.ts
+			matrixClean: matrixHomeserverIsHidden(config.instanceMatrixHomeserver)
+		};
 		const body: InstanceResponse = {
 			name: config.instanceName ?? null,
 			tagline: config.instanceTagline ?? null,
@@ -273,6 +297,14 @@ export function instanceRoute(
 			fee_recipient: config.feeRecipient,
 			relay_account: config.relayAccount,
 			operator_tag: config.instanceOperatorTag ?? null,
+			// Keystone gate — an HONEST strict-AND of every private-transport leg
+			// (clearnetGate.ts). chainHidden + priceFederated + frontendLocal hold on
+			// a hidden-only node today; upgradeHidden is false until the hidden IPFS
+			// upgrade fetch is wired into upgrade.ts, and matrixClean is a placeholder
+			// until the matrix-bot homeserver is surfaced here — so this correctly
+			// stays FALSE for now and flips itself the moment the last legs land.
+			clearnet_eliminated: computeClearnetEliminated(clearnetLegs),
+			clearnet_eliminated_missing: clearnetEliminationMissing(clearnetLegs),
 			treasury: getTreasuryAddresses(),
 			seo: {
 				title: config.instanceSeoTitle ?? null,

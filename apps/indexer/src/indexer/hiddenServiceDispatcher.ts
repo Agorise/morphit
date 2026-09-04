@@ -56,6 +56,41 @@ export function hiddenRouteOf(origin: string): HiddenRoute {
 	return net === 'tor' ? 'tor' : net === 'i2p' ? 'i2p' : 'direct';
 }
 
+/**
+ * Is this origin a PUBLIC clearnet host — the thing a hidden-only node must
+ * never touch? PURE. True only for a real, routable public DNS name / IP.
+ * Returns FALSE for: `.onion`/`.i2p` (hidden), `.loki` (lokinet's own tun),
+ * localhost/loopback, and RFC1918/link-local/ULA private addresses — all of
+ * which are either private nets or local services (the DB, a local IPFS) and
+ * carry no clearnet-exit / deanonymisation risk. Used by the fail-closed
+ * hidden-only policy below to refuse (never proxy, never leak) public clearnet.
+ */
+export function isClearnetOrigin(origin: string): boolean {
+	if (hiddenRouteOf(origin) !== 'direct') return false; // tor/i2p → not clearnet
+	let host: string;
+	try {
+		host = new URL(origin).hostname.toLowerCase();
+	} catch {
+		return false;
+	}
+	host = host.replace(/^\[|\]$/g, ''); // strip IPv6 brackets
+	if (host === '' || host === 'localhost' || host === '::1') return false;
+	if (host.endsWith('.loki') || host.endsWith('.onion') || host.endsWith('.i2p')) return false;
+	// Loopback / RFC1918 / link-local / IPv6 ULA + link-local → local, not clearnet.
+	if (
+		/^127\./.test(host) ||
+		/^10\./.test(host) ||
+		/^192\.168\./.test(host) ||
+		/^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
+		/^169\.254\./.test(host) ||
+		/^(fc|fd)[0-9a-f]{2}:/.test(host) ||
+		/^fe80:/.test(host)
+	) {
+		return false;
+	}
+	return true; // a real public host → clearnet
+}
+
 /** Extract the origin string undici hands us (it may pass a string or URL). */
 function originOf(opts: { origin?: string | URL | null }): string {
 	const o = opts.origin;
@@ -98,20 +133,40 @@ export function buildHiddenSubDispatchers(config: HiddenServiceProxyConfig): Hid
  */
 export class HiddenServiceRoutingDispatcher extends Dispatcher {
 	readonly #subs: HiddenSubDispatchers;
+	readonly #clearnetPolicy: 'allow' | 'refuse';
 
-	constructor(subs: HiddenSubDispatchers) {
+	constructor(subs: HiddenSubDispatchers, clearnetPolicy: 'allow' | 'refuse' = 'allow') {
 		super();
 		this.#subs = subs;
+		this.#clearnetPolicy = clearnetPolicy;
 	}
 
 	/** Route by origin. Falls back to the direct agent when a hidden network's
 	 *  proxy wasn't configured — where a `.onion`/`.i2p` host fails to resolve
-	 *  (safe: nothing to leak to), rather than silently proxying it wrong. */
+	 *  (safe: nothing to leak to), rather than silently proxying it wrong.
+	 *  In `refuse` (hidden-only) mode a PUBLIC clearnet origin is FAIL-CLOSED:
+	 *  the request is errored, never handed to the direct agent — so a
+	 *  hidden-only node can never leak its IP even if some code path slips a
+	 *  clearnet URL through. Local/loopback/`.loki` are unaffected. */
 	override dispatch(
 		opts: Dispatcher.DispatchOptions,
 		handler: Dispatcher.DispatchHandler
 	): boolean {
-		const route = hiddenRouteOf(originOf(opts));
+		const origin = originOf(opts);
+		if (this.#clearnetPolicy === 'refuse' && isClearnetOrigin(origin)) {
+			const err = new Error(
+				`clearnet blocked (hidden-only, fail-closed): refusing to reach ${origin} over the open internet`
+			);
+			// Reject through the handler per undici's contract, never dispatch.
+			try {
+				handler.onConnect?.(() => {});
+			} catch {
+				/* older handler shape without onConnect */
+			}
+			handler.onError?.(err);
+			return false;
+		}
+		const route = hiddenRouteOf(origin);
 		const sub =
 			route === 'tor'
 				? (this.#subs.tor ?? this.#subs.direct)
@@ -144,15 +199,20 @@ export interface HiddenDispatcherHandle {
  * endpoints are configured — see the gating in main.ts.
  */
 export function installHiddenServiceDispatcher(
-	config: HiddenServiceProxyConfig
+	config: HiddenServiceProxyConfig,
+	clearnetPolicy: 'allow' | 'refuse' = 'allow'
 ): HiddenDispatcherHandle {
 	const previous = getGlobalDispatcher();
-	const router = new HiddenServiceRoutingDispatcher(buildHiddenSubDispatchers(config));
+	const router = new HiddenServiceRoutingDispatcher(buildHiddenSubDispatchers(config), clearnetPolicy);
 	setGlobalDispatcher(router);
 	log.info('hidden_dispatcher_installed', {
 		tor: config.torSocks.length > 0 ? config.torSocks : '(disabled)',
 		i2p: config.i2pHttpProxy.length > 0 ? config.i2pHttpProxy : '(disabled)',
-		note: 'clearnet unchanged; .onion→Tor, .b32.i2p→i2pd'
+		clearnet_policy: clearnetPolicy,
+		note:
+			clearnetPolicy === 'refuse'
+				? 'HIDDEN-ONLY: public clearnet fail-closed; .onion→Tor, .b32.i2p→i2pd, local/.loki allowed'
+				: 'clearnet unchanged; .onion→Tor, .b32.i2p→i2pd'
 	});
 	return {
 		async uninstall(): Promise<void> {

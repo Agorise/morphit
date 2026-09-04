@@ -25,6 +25,8 @@ import type { Database } from '$db/pool';
 import { applyBlock } from '$indexer/dispatcher';
 import { reconcileOperatorRegistrations } from '$indexer/reconcileRegistrations';
 import { consumeInOrderWithPrefetch } from '$indexer/prefetch';
+import { flowBackfill, makeGovernor } from '$indexer/flowBackfill';
+import { memoryBudgetBytes, processRssBytes } from '$indexer/memoryBudget';
 import { orderbookEventBus } from '$indexer/orderbookEventBus';
 import { chatEventBus } from '$indexer/chatEventBus';
 import { detectSuspiciousReciprocity, detectRelatedAccounts, detectOneWayPileOn, detectReviewConcentration, detectTradeConcentration } from '$indexer/signals';
@@ -896,7 +898,60 @@ export class Poller {
 		};
 
 		try {
-			await consumeInOrderWithPrefetch(concurrency, startNextWindow, applyWindow);
+			if (this.config.backfillMode === 'flow') {
+				// Out-of-order reorder buffer: keep every healthy endpoint busy and
+				// apply the contiguous prefix as it fills, so a slow Tor/i2p RPC no
+				// longer head-of-line-blocks the replay. `applyWindow` (the strict
+				// in-order, one-tx-per-window apply above) is reused verbatim.
+				let flowSeq = 0;
+				const governor = makeGovernor({
+					maxBufferBytes: this.config.backfillMaxBufferMb * 1024 * 1024,
+					memFraction: this.config.backfillMemFraction,
+					// Auto-cap so a huge-RAM box still can't be told to buffer >1 GB.
+					autoCapBytes: 1024 * 1024 * 1024,
+					maxInflight: this.config.backfillConcurrency, // 0 = auto
+					autoInflight: Math.max(endpointCount, this.blurt.healthyEndpointCount() * 2),
+					pressureFraction: 0.85,
+					budget: () => memoryBudgetBytes(),
+					rss: () => processRssBytes()
+				});
+				await flowBackfill<FetchedBlocks[number]>({
+					from,
+					target: irreversible,
+					windowBlocks: BLOCK_FETCH_BATCH,
+					fetchRange: (lo, hi, preferFastest) => {
+						const nums: number[] = [];
+						for (let b = lo; b <= hi; b++) nums.push(b);
+						// Near-cursor / hedge → fastest-first (offset 0). Speculative
+						// far-ahead → rotate so slow nodes pick up work off the cursor.
+						const offset = preferFastest ? 0 : flowSeq++ % endpointCount;
+						return this.blurt.getBlocks(nums, offset);
+					},
+					windowBytes: (blocks) => {
+						try {
+							return Buffer.byteLength(JSON.stringify(blocks));
+						} catch {
+							return blocks.length * 2048;
+						}
+					},
+					applyWindow,
+					governor,
+					now: () => Date.now(),
+					setTimer: (ms, cb) => {
+						const t = setTimeout(cb, ms);
+						if (typeof t.unref === 'function') t.unref();
+						return () => clearTimeout(t);
+					},
+					hedgeFactor: this.config.backfillHedgeFactor,
+					fastestLatencyMs: () => this.blurt.fastestLatencyMs(),
+					fastBand: Math.max(2, this.blurt.healthyEndpointCount()),
+					maxRetriesPerRange: 5,
+					backpressurePollMs: 100,
+					aborted: () => this.abort.signal.aborted
+				});
+			} else {
+				await consumeInOrderWithPrefetch(concurrency, startNextWindow, applyWindow);
+			}
 		} catch (err) {
 			// A window's fetch rejected — the pool exhausted every endpoint for it.
 			// Blocks already applied this tick are committed; stop + back off and the

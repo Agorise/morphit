@@ -2123,7 +2123,10 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	// writing the DB). Stop them automatically — SIGTERM, a grace pause, then
 	// SIGKILL any straggler — so the box is never left running a mix of old and
 	// new. Only PIDs whose cwd is under backupDir are ever touched.
-	const orphaned = pidsWithCwdUnder(backupDir);
+	// Never sweep the upgrade's OWN process chain (self, shell, sudo, launcher):
+	// they share the now-.bak cwd but killing them aborts the upgrade mid-finish.
+	const protectedPids = selfAndAncestorPids();
+	const orphaned = pidsWithCwdUnder(backupDir).filter((pid) => !protectedPids.has(pid));
 	if (orphaned.length > 0) {
 		// Calm, one line — this is routine housekeeping, not an alarm. (The old
 		// wording dumped raw PIDs + a paragraph of explanation every upgrade,
@@ -2139,14 +2142,14 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		}
 		// Grace period for a clean shutdown, then force any straggler.
 		spawnSync('sleep', ['3'], { stdio: 'ignore' });
-		for (const pid of pidsWithCwdUnder(backupDir)) {
+		for (const pid of pidsWithCwdUnder(backupDir).filter((pid) => !protectedPids.has(pid))) {
 			try {
 				process.kill(pid, 'SIGKILL');
 			} catch {
 				/* gone */
 			}
 		}
-		const stillThere = pidsWithCwdUnder(backupDir);
+		const stillThere = pidsWithCwdUnder(backupDir).filter((pid) => !protectedPids.has(pid));
 		if (stillThere.length > 0) {
 			warn(
 				`Could not stop ${stillThere.length} leftover process(es) (PIDs ` +
@@ -2167,8 +2170,14 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	pruneOldBackups(installDir);
 
 	info('');
-	info(`✓ Upgrade complete: ${currentTag} → ${latestTag}`);
-	info(`Previous install kept at: ${backupDir}`);
+	info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+	info(`  ✓ Success — your Morphit server is now running ${latestTag}`);
+	info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+	info('');
+	info(`  Congratulations! Upgraded ${currentTag} → ${latestTag}. Every service was`);
+	info('  restarted and the new frontend is live — nothing else to do.');
+	info(`  (Your previous install is kept at ${backupDir} — safe to delete once`);
+	info('   you have confirmed everything works.)');
 
 	if (schemaChanged) {
 		info('');
@@ -2553,6 +2562,35 @@ function rollback(
  *  hard guarantee that nothing is using the tree. Used to (a) warn when a
  *  manually-run indexer/relay is left orphaned on stale code after the dir
  *  swap, and (b) refuse to prune a backup a live process is still reading. */
+/** The current process plus its full ancestor chain (parent, grandparent, … up
+ *  to init), from each /proc/<pid>/stat PPID field. The upgrade runs with its
+ *  cwd inside the install dir that becomes the .bak dir, so its own process —
+ *  and its shell / sudo / launcher ancestors — all show up in the cwd-based
+ *  orphan sweep below. WITHOUT excluding them the sweep SIGTERMs the upgrade
+ *  itself: the box upgrades fine, but the process dies with a scary "Terminated"
+ *  and every remaining step (backup pruning, the success banner, the canary
+ *  refresh) is skipped. These PIDs are always excluded from the sweep. */
+export function selfAndAncestorPids(): Set<number> {
+	const out = new Set<number>([process.pid]);
+	let pid = process.pid;
+	for (let hops = 0; pid > 1 && hops < 64; hops++) {
+		let ppid = 0;
+		try {
+			// "pid (comm) state ppid …" — comm may contain spaces/parens, so parse
+			// after the LAST ')': fields are then [state, ppid, …].
+			const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+			const fields = stat.slice(stat.lastIndexOf(')') + 1).trim().split(/\s+/);
+			ppid = Number(fields[1]);
+		} catch {
+			break;
+		}
+		if (!Number.isInteger(ppid) || ppid <= 0) break;
+		out.add(ppid);
+		pid = ppid;
+	}
+	return out;
+}
+
 function pidsWithCwdUnder(dir: string): number[] {
 	const norm = (p: string): string => p.replace(/\/+$/, '') || '/';
 	const target = norm(dir);

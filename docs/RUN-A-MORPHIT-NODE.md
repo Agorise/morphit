@@ -228,9 +228,15 @@ You're free to rebrand completely — name, logo, colours, even every word on sc
 
 **The easy 90% — no programming.**
 
-- **Logo / brand images** — drop your own SVG/PNG files into `apps/web/static/brand/`. If you can save a file, you can do this.
+- **Name, tagline, SEO title/description — no file editing at all.** Run `sudo morphit-ops` → *Edit settings* → *Branding & SEO*. These are config values, so they survive upgrades and don't change the frontend build. (This is the recommended way to set your instance's name.)
+- **Logo / brand images** — replace the files in `apps/web/static/brand/`, keeping the **same filenames** so the app picks them up:
+  - `morphit-mark.svg` — the icon/mark shown in the header and used to derive the favicon. **SVG preferred** (scales crisply at any size); the stock mark's aspect ratio is ~1.55 : 1 (roughly landscape). If you must use PNG, export at ≥ 256 px on the long edge with a transparent background.
+  - `morphit-wordmark.svg` — the text logo beside the mark. Aspect ratio ~5.8 : 1 (wide). SVG preferred.
+  - `favicon.svg` (in `apps/web/static/`) — the browser-tab icon. Keep it simple and roughly square so it reads at 16 px.
+  - `app-icon-512.png` and `app-icon-maskable-512.png` (in `apps/web/static/`) — the "add to home screen" / PWA icons. **Exactly 512 × 512 PNG.** The *maskable* one needs your art inside the centre ~80% (a ~10% safe margin all round), because phones crop it to a circle/rounded-square.
+  - Formats: SVG or PNG only. If you can save a file, you can do this.
 - **Colours / fonts** — a handful of named colour tokens in the Tailwind/CSS config (brand emerald `#00DA69`, teal `#027c86`). Change the values and the whole site follows. Plain CSS.
-- **Text / wording** — every visible string lives in `apps/web/src/lib/i18n/locales/` (`en.json`, one file per language) as simple `"key": "value"` pairs. Edit the values, keep the keys.
+- **Text / wording** — every visible string lives in `apps/web/src/lib/i18n/locales/` (`en.json`, one file per language) as simple `"key": "value"` pairs. Edit the values, keep the keys. The homepage headline + subtext are `hero_title` and `hero_body`; header-menu and footer-menu labels are keys in the same file (search for the current wording to find its key). Change `en.json` for English; repeat in the other locale files (or just `en.json` if you only serve English).
 
 **The other 10% — layout.** Moving things around means editing the page files (`.svelte`) — HTML-like markup with a little framework syntax (SvelteKit). If you know HTML and CSS most of it transfers; the [svelte.dev/tutorial](https://svelte.dev/tutorial) is a couple of hours and covers what you'd hit. Install [VS Code](https://code.visualstudio.com/) + its "Svelte" extension + [Node.js](https://nodejs.org/) LTS, then from `apps/web/` run `npm install` once and `npm run dev` to preview live at `http://localhost:5173` (it reloads as you save). `npm run build` then `sudo morphit-ops upgrade` ships it. Stuck? The Agorise Matrix room `#agorise:matrix.org` has people who've done it.
 

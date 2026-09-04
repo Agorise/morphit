@@ -309,6 +309,25 @@ export class BlurtClient {
 		return this.pool.snapshot().length;
 	}
 
+	/** Endpoints currently out of cooldown (usable right now). The flow-backfill
+	 *  sizes its concurrency to this so a run adapts as nodes fail/recover. */
+	healthyEndpointCount(): number {
+		const now = Date.now();
+		return Math.max(1, this.pool.snapshot().filter((e) => e.cooldownUntil <= now).length);
+	}
+
+	/** Fastest healthy endpoint's EWMA latency (ms), or a conservative default
+	 *  when none has been measured yet. Basis for the flow-backfill hedge deadline. */
+	fastestLatencyMs(): number {
+		const now = Date.now();
+		let best = Infinity;
+		for (const e of this.pool.snapshot()) {
+			if (e.cooldownUntil > now) continue;
+			if (e.ewmaLatencyMs !== null && e.ewmaLatencyMs < best) best = e.ewmaLatencyMs;
+		}
+		return Number.isFinite(best) ? best : 300;
+	}
+
 	/** Current dynamic global properties.  Background call (poller). */
 	async getDynamicGlobalProperties(): Promise<DynamicGlobalProperties> {
 		return this.pool.call(async (url, signal) => {

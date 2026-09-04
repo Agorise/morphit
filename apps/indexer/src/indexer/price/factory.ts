@@ -95,6 +95,7 @@ import { createCoincapFetcher } from '$indexer/price/coincapFetcher';
 import { createCoinloreFetcher } from '$indexer/price/coinloreFetcher';
 import { createMessariFetcher } from '$indexer/price/messariFetcher';
 import { createMorphitNativeFetcher } from '$indexer/price/morphitNativeFetcher';
+import { createFederatedFetcher } from '$indexer/price/federatedPriceFetcher';
 import { DisagreementMonitor } from '$indexer/price/disagreementMonitor';
 
 /** Per-asset configuration for one price source.
@@ -401,6 +402,37 @@ export function createAssetPriceSource(
 	const nativeFetch = buildMorphitNativeFetch(config, options.asset, db);
 	if (nativeFetch) {
 		fallbackUpstreams.push({ name: 'morphit_native', fetch: nativeFetch });
+	}
+
+	// ── HIDDEN-ONLY (v1.15.x stage 2) ────────────────────────────────────────
+	// When the clearnet RPC pool is empty this node is hidden-only; stage-1's
+	// dispatcher would fail-close a clearnet price fetch anyway. So price from the
+	// FEDERATION over Tor/I2P: a federated median of peers' morphit_native
+	// receipts (already sampled into price_peer_observations by peerPriceMonitor)
+	// + this node's own native price becomes the PRIMARY. Clearnet CEX/aggregator
+	// upstreams are dropped entirely; the static floor is the last resort.
+	if (config.blurtRpcEndpoints.length === 0) {
+		const federated = createFederatedFetcher({
+			db,
+			asset: options.asset,
+			denominationFiat: config.priceFeedDenominationFiat,
+			ownNative: nativeFetch,
+			freshnessMinutes: 240,
+			minObservations: 3
+		});
+		return new CompositeCachedPriceSource({
+			upstreams: [],
+			primaryUpstreams: [{ name: 'federated', fetch: federated }],
+			fallbackUpstreams,
+			outlierTolerance: config.priceOutlierTolerance,
+			plausibleMin: options.plausibleMin,
+			plausibleMax: options.plausibleMax,
+			staticFloor: options.staticFloor,
+			refreshIntervalMs: config.priceRefreshIntervalMs,
+			db,
+			asset: options.asset,
+			denominationFiat: config.priceFeedDenominationFiat
+		});
 	}
 
 	return new CompositeCachedPriceSource({

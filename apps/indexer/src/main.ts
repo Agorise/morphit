@@ -239,7 +239,17 @@ async function main(): Promise<void> {
 	// endpoints that can't be reached (proxy down) just fail and the pool uses
 	// clearnet; the node never blocks on them.
 	if (config.hiddenRpcEndpoints.length > 0) {
-		installHiddenServiceDispatcher(hiddenServiceProxyConfigFromEnv(process.env));
+		// Hidden-only ⇔ the clearnet RPC pool has been deliberately emptied (cp755):
+		// the node reaches the chain purely over .onion/.i2p. In that mode the
+		// dispatcher runs FAIL-CLOSED — a public clearnet origin is refused, never
+		// leaked — so the node can't deanonymise itself even via an errant fetch.
+		// (Local/loopback/.loki stay allowed; see isClearnetOrigin.) A node that
+		// still keeps clearnet RPC endpoints keeps the classic 'allow' behaviour.
+		const hiddenOnly = config.blurtRpcEndpoints.length === 0;
+		installHiddenServiceDispatcher(
+			hiddenServiceProxyConfigFromEnv(process.env),
+			hiddenOnly ? 'refuse' : 'allow'
+		);
 	}
 	const blurt = new BlurtClient(config);
 
@@ -395,7 +405,9 @@ async function main(): Promise<void> {
 					db,
 					priceSource: source,
 					asset,
-					denominationFiat: config.priceFeedDenominationFiat
+					denominationFiat: config.priceFeedDenominationFiat,
+					// Hidden-only node → sample peers over their on-chain .onion/.i2p.
+					hiddenOnly: config.blurtRpcEndpoints.length === 0
 				},
 				config.priceFeedPeerSampleIntervalMinutes,
 				(result) => peerMonitorResults.set(asset, result)

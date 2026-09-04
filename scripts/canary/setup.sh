@@ -258,6 +258,14 @@ mkdir -p "$MORPHIT_HOME"
 		printf '# Remote server: upload the freshly-signed canary to the served build/ dir.\n'
 		printf "REMOTE_SSH='%s'\n" "$REMOTE_SSH"
 		printf "REMOTE_PATH='%s'\n" "$REMOTE_PATH"
+		# cp (the maintainer — canary triple-prompt): reuse ONE authenticated SSH connection
+		# across the mkdir + both uploads, so the operator enters their SSH key
+		# passphrase ONCE, not per operation. The master is torn down at the end.
+		printf 'CANARY_SSH_CTL="$HOME/.ssh/morphit-canary-cm-%%r@%%h:%%p"\n'
+		printf 'mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh" 2>/dev/null || true\n'
+		printf 'SSH_MUX=(-o ControlMaster=auto -o ControlPath="$CANARY_SSH_CTL" -o ControlPersist=180)\n'
+		printf '# Open the shared master now — this is the ONE ssh passphrase prompt.\n'
+		printf 'ssh "${SSH_MUX[@]}" -fN "$REMOTE_SSH" 2>/dev/null || true\n'
 		# Emit the self-heal (below) into the refresh script instead of a bare mkdir,
 		# so an upgrade re-rooting build/ can never break the canary upload.
 		cat <<'SELFHEAL'
@@ -265,14 +273,15 @@ mkdir -p "$MORPHIT_HOME"
 # make it ours (best-effort, via passwordless sudo) before uploading — a re-rooted
 # dir can then never break the canary, on any version. No passwordless sudo → just
 # ensure the dir exists and let the scp below surface any real permission problem.
-if ssh -o BatchMode=yes "$REMOTE_SSH" 'sudo -n true' 2>/dev/null; then
-	ssh -o BatchMode=yes "$REMOTE_SSH" "sudo -n mkdir -p '$REMOTE_PATH/apps/web/build' && sudo -n chown -R \"\$(id -un):\$(id -gn)\" '$REMOTE_PATH/apps/web/build'" 2>/dev/null || true
+if ssh "${SSH_MUX[@]}" -o BatchMode=yes "$REMOTE_SSH" 'sudo -n true' 2>/dev/null; then
+	ssh "${SSH_MUX[@]}" -o BatchMode=yes "$REMOTE_SSH" "sudo -n mkdir -p '$REMOTE_PATH/apps/web/build' && sudo -n chown -R \"\$(id -un):\$(id -gn)\" '$REMOTE_PATH/apps/web/build'" 2>/dev/null || true
 else
-	ssh "$REMOTE_SSH" "mkdir -p '$REMOTE_PATH/apps/web/build'"
+	ssh "${SSH_MUX[@]}" "$REMOTE_SSH" "mkdir -p '$REMOTE_PATH/apps/web/build'"
 fi
 SELFHEAL
-		printf 'scp -q "$SIGNED" "$REMOTE_SSH:$REMOTE_PATH/apps/web/build/canary.txt"\n'
-		printf 'scp -q "$PUBKEY" "$REMOTE_SSH:$REMOTE_PATH/apps/web/build/pgp_keys.asc"\n'
+		printf 'scp -q -o ControlPath="$CANARY_SSH_CTL" "$SIGNED" "$REMOTE_SSH:$REMOTE_PATH/apps/web/build/canary.txt"\n'
+		printf 'scp -q -o ControlPath="$CANARY_SSH_CTL" "$PUBKEY" "$REMOTE_SSH:$REMOTE_PATH/apps/web/build/pgp_keys.asc"\n'
+		printf 'ssh -O exit -o ControlPath="$CANARY_SSH_CTL" "$REMOTE_SSH" 2>/dev/null || true\n'
 		printf 'echo "canary: uploaded to $REMOTE_SSH:$REMOTE_PATH/apps/web/build/"\n'
 	fi
 } > "$REFRESH"
