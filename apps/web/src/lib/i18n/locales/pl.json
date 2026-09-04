@@ -931,7 +931,7 @@
 		"operator_setup_doc_security": "SECURITY.md — kanał ujawniania + model zagrożeń",
 		"operator_setup_cta": "Przeczytaj RUN-A-MORPHIT-NODE.md",
 		"operator_distros_heading": "Wspierane systemy",
-		"operator_distros_body": "Ubuntu 24.04 LTS to najlepiej przetestowany wybór, a instalator jednopoleceniowy akceptuje też jego pochodne — odczytuje bazę „noble” Ubuntu, więc edycja nie ma znaczenia: Linux Mint 22, Pop!_OS, Zorin OS 17, KDE neon i elementary OS działają. Debian 12+ oraz utwardzone bazy Debiana, takie jak Kicksecure, działają poprzez ręczne kroki instalacji — oba są doskonałymi lekkimi serwerami nastawionymi na bezpieczeństwo. Każdy nowoczesny Linux z Node.js 22+ i Postgres 15+ powinien go uruchomić (Arch, Alpine, NixOS — tam jesteś bardziej zdany na siebie); FreeBSD działa z drobnymi poprawkami. Sprzęt: dowolna dwurdzeniowa maszyna ARM64 lub x86-64 z 4 GB RAM i 20 GB SSD — większość operatorów używa Raspberry Pi 4, mini-PC Intel lub starego laptopa.",
+		"operator_distros_body": "Ubuntu 24.04 LTS to najlepiej przetestowany wybór, a instalator jednopoleceniowy akceptuje też jego pochodne — odczytuje bazę „noble” Ubuntu, więc edycja nie ma znaczenia: Linux Mint 22, Pop!_OS, Zorin OS 17, KDE neon i elementary OS działają. Debian 12+ oraz utwardzone bazy Debiana, takie jak Kicksecure, działają poprzez ręczne kroki instalacji — oba są doskonałymi lekkimi serwerami nastawionymi na bezpieczeństwo. Każdy nowoczesny Linux z Node.js 22+ i Postgres 15+ powinien go uruchomić (Arch, Alpine, NixOS — tam jesteś bardziej zdany na siebie); FreeBSD działa z drobnymi poprawkami. Sprzęt: dowolna dwurdzeniowa maszyna ARM64 lub x86-64 z 4 GB RAM i 80 GB SSD — większość operatorów używa Raspberry Pi 4, mini-PC Intel lub starego laptopa.",
 		"operator_distros_faq_cta": "Zobacz pełne wymagania sprzętowe/OS",
 		"operator_join_heading": "Dołącz do federacji",
 		"operator_join_body": "Gdy twoja instancja jest aktywna i nadaje `morphit_operator_register_v1`, pojawia się automatycznie w katalogu każdej innej instancji Morphit. Bez aplikacji, bez pozwolenia, bez centralnej listy.",
@@ -1375,7 +1375,7 @@
 			},
 			"node_hosting_costs": {
 				"q": "Ile kosztuje hostowanie węzła Morphit?",
-				"a": "Bardzo mało. Mały VPS (4GB RAM, 20GB dysk) uruchamia Morphit komfortowo i kosztuje około 5-8 USD/miesiąc u dostawców takich jak Hetzner, OVH, Vultr lub DigitalOcean. Miejsce na dysku rośnie powoli — indexer przechowuje zdarzenia on-chain, a cache się nie rozdyma. Pasmo jest minimalne dla małej instancji (kilka GB miesięcznie na stu aktywnych użytkowników). Jeśli już prowadzisz osobisty serwer lub homelab, Morphit dodaje zaniedbywalne obciążenie. Opłaty operatorskie z ofert są dokładnie dobrane, żeby to pokryć i zostawić margines na Twój czas (zobacz FAQ o zarobkach operatorów dla matematyki podziału)."
+				"a": "Bardzo mało. Mały VPS (4GB RAM, 80GB dysk) uruchamia Morphit komfortowo i kosztuje około 5-8 USD/miesiąc u dostawców takich jak Hetzner, OVH, Vultr lub DigitalOcean. Miejsce na dysku rośnie powoli — indexer przechowuje zdarzenia on-chain, a cache się nie rozdyma. Pasmo jest minimalne dla małej instancji (kilka GB miesięcznie na stu aktywnych użytkowników). Jeśli już prowadzisz osobisty serwer lub homelab, Morphit dodaje zaniedbywalne obciążenie. Opłaty operatorskie z ofert są dokładnie dobrane, żeby to pokryć i zostawić margines na Twój czas (zobacz FAQ o zarobkach operatorów dla matematyki podziału)."
 			},
 			"switching_instances": {
 				"q": "Jeśli jedna instancja Morphit padnie, czy stracę moje oferty i reputację?",
@@ -1547,7 +1547,7 @@
 			},
 			"node_minimum_requirements": {
 				"q": "Jakie są minimalne wymagania sprzętowe do uruchomienia węzła Morphit?",
-				"a": "Zaskakująco skromne. Morphit jest zbudowany tak, by działać na sprzęcie, który większość ludzi już posiada. Trzy kategorie konfiguracji, których ludzie używają:\n\n**Poziom hobbystyczny — Raspberry Pi 4 / 5 (4 GB).** Komfortowo uruchamia razem indexer, relay i frontend. Użyj SSD USB-3 zamiast karty SD; karty SD umierają pod obciążeniem zapisem bazy danych. Pobór mocy to około 5–7 W, więc mały UPS lub instalacja solarna utrzyma go przez wiele godzin. Odpowiedni do obsługi osobistej społeczności kilkudziesięciu aktywnych użytkowników.\n\n**Poziom poważny — mały mini-PC (a mini PC, Intel NUC, używany generyczny).** Intel N100 / Ryzen 3xxx z 8 GB RAM i dowolnym nowoczesnym SSD to przesada dla indexera i uruchamia każdą usługę Morphit jednocześnie bez zastanowienia. Pobór mocy 6–10 W na biegu jałowym, 15–20 W pod obciążeniem. 150–250 $ używany. Wygodny dla instancji obsługującej setki aktywnych użytkowników.\n\n**Poziom zapasowego laptopa — wszystko, co jeszcze uruchamia Linuksa.** Stary ThinkPad lub dowolny laptop z ostatniej dekady z co najmniej 4 GB RAM i działającym SSD w zupełności wystarczy. Bonus: wbudowany UPS (bateria laptopa). Niektórzy operatorzy zostawiają zamknięty laptop na półce, na którym działa Morphit na przewodowym połączeniu Ethernet — działa świetnie.\n\n**Konkretne minimum (dowolna architektura: x86-64, ARM64 lub Apple silicon pod Asahi):**\n\n• **CPU:** 2 rdzenie 1 GHz lub szybsze. Indexer jest głównie ograniczony przez I/O; relay jest przeważnie bezczynny. GPU nie jest potrzebne, nigdy.\n\n• **RAM:** 2 GB minimum, 4 GB komfortowo. Postgres mieści się w tym z domyślną konfiguracją; ustawienie `shared_buffers` Postgresa na 256 MB w systemie 2 GB unika stronicowania.\n\n• **Dysk:** 20 GB wolnego, na SSD. HDD technicznie działają, ale Postgres będzie wolny, a karty SD umrą od amplifikacji zapisu. Baza danych indexera rośnie powoli — mierzona w pojedynczych MB miesięcznie dla typowej aktywności — więc 20 GB starcza na lata. Mimo to zaplanuj kopie zapasowe.\n\n• **Sieć:** 1 Mbit/s w górę i w dół wystarczy. Przeciętne ładowanie strony to około 100 KB. Mała instancja obsługująca kilku użytkowników zużywa kilka GB pasma miesięcznie, znacznie poniżej każdego limitu internetu domowego. Statyczny IP jest miły, ale nie wymagany — dynamiczny DNS działa dobrze.\n\n• **System operacyjny:** Dowolny nowoczesny Linux (Debian 12, Ubuntu 24.04 LTS, Arch, Alpine, NixOS — testujemy na Debianie). FreeBSD działa z drobnymi korektami. macOS działa do programowania, ale nie jest zalecany dla publicznej instancji.\n\n• **Oczekiwany czas działania:** 95% to rozsądny cel. Morphit jest federacyjny z założenia — gdy twoja instancja jest niedostępna, użytkownicy przechodzą do instancji innych operatorów i wracają do ciebie, gdy wrócisz. Łańcuch przechowuje dane; twoja instancja to tylko jedno z wielu okien do nich.\n\n**Czego NIE potrzebujesz:**\n\n• Węzła blockchaina. Morphit rozmawia z publicznymi punktami końcowymi RPC przez HTTPS.\n\n• Statycznego IP. Kreator instalacji jednym poleceniem konfiguruje dynamiczny DNS za ciebie, więc domowe łącze ze zmiennym IP po prostu działa — bez stałego IP i bez tuneli od osób trzecich. Szczegóły znajdziesz w podręczniku operatora.\n\n• Nazwy domeny. Możesz uruchomić prywatną instancję na `https://morphit.local` dla swoich znajomych albo udostępnić tylko adres `.onion` / `.loki` / `.b32.i2p`.\n\n• VPS-a w centrum danych. Operatorzy działający na łączach domowych radzą sobie dobrze, zwłaszcza z osiągalnością przez sieć alternatywną, by użytkownicy nie potrzebowali twojego domowego IP.\n\nPodział zarobków operatora jest tak dobrany, że nawet instancja klasy Pi pokrywa swój koszt hostingu i twój czas przy skromnych poziomach aktywności. Uruchom ją, bo chcesz Morphit, który istnieje w twojej społeczności, a nie dlatego, że dobrze płaci — ale rachunki nie tracą pieniędzy."
+				"a": "Zaskakująco skromne. Morphit jest zbudowany tak, by działać na sprzęcie, który większość ludzi już posiada. Trzy kategorie konfiguracji, których ludzie używają:\n\n**Poziom hobbystyczny — Raspberry Pi 4 / 5 (4 GB).** Komfortowo uruchamia razem indexer, relay i frontend. Użyj SSD USB-3 zamiast karty SD; karty SD umierają pod obciążeniem zapisem bazy danych. Pobór mocy to około 5–7 W, więc mały UPS lub instalacja solarna utrzyma go przez wiele godzin. Odpowiedni do obsługi osobistej społeczności kilkudziesięciu aktywnych użytkowników.\n\n**Poziom poważny — mały mini-PC (a mini PC, Intel NUC, używany generyczny).** Intel N100 / Ryzen 3xxx z 8 GB RAM i dowolnym nowoczesnym SSD to przesada dla indexera i uruchamia każdą usługę Morphit jednocześnie bez zastanowienia. Pobór mocy 6–10 W na biegu jałowym, 15–20 W pod obciążeniem. 150–250 $ używany. Wygodny dla instancji obsługującej setki aktywnych użytkowników.\n\n**Poziom zapasowego laptopa — wszystko, co jeszcze uruchamia Linuksa.** Stary ThinkPad lub dowolny laptop z ostatniej dekady z co najmniej 4 GB RAM i działającym SSD w zupełności wystarczy. Bonus: wbudowany UPS (bateria laptopa). Niektórzy operatorzy zostawiają zamknięty laptop na półce, na którym działa Morphit na przewodowym połączeniu Ethernet — działa świetnie.\n\n**Konkretne minimum (dowolna architektura: x86-64, ARM64 lub Apple silicon pod Asahi):**\n\n• **CPU:** 2 rdzenie 1 GHz lub szybsze. Indexer jest głównie ograniczony przez I/O; relay jest przeważnie bezczynny. GPU nie jest potrzebne, nigdy.\n\n• **RAM:** 4 GB minimum, 8 GB komfortowo. Postgres mieści się w tym swobodnie z domyślną konfiguracją.\n\n• **Dysk:** 80 GB wolnego, na SSD. HDD technicznie działają, ale Postgres będzie wolny, a karty SD umrą od amplifikacji zapisu. Baza danych indexera rośnie powoli — mierzona w pojedynczych MB miesięcznie dla typowej aktywności — więc 80 GB starcza na lata. Mimo to zaplanuj kopie zapasowe.\n\n• **Sieć:** 1 Mbit/s w górę i w dół wystarczy. Przeciętne ładowanie strony to około 100 KB. Mała instancja obsługująca kilku użytkowników zużywa kilka GB pasma miesięcznie, znacznie poniżej każdego limitu internetu domowego. Statyczny IP jest miły, ale nie wymagany — dynamiczny DNS działa dobrze.\n\n• **System operacyjny:** Dowolny nowoczesny Linux (Debian 12, Ubuntu 24.04 LTS, Arch, Alpine, NixOS — testujemy na Debianie). FreeBSD działa z drobnymi korektami. macOS działa do programowania, ale nie jest zalecany dla publicznej instancji.\n\n• **Oczekiwany czas działania:** 95% to rozsądny cel. Morphit jest federacyjny z założenia — gdy twoja instancja jest niedostępna, użytkownicy przechodzą do instancji innych operatorów i wracają do ciebie, gdy wrócisz. Łańcuch przechowuje dane; twoja instancja to tylko jedno z wielu okien do nich.\n\n**Czego NIE potrzebujesz:**\n\n• Węzła blockchaina. Morphit rozmawia z publicznymi punktami końcowymi RPC przez HTTPS.\n\n• Statycznego IP. Kreator instalacji jednym poleceniem konfiguruje dynamiczny DNS za ciebie, więc domowe łącze ze zmiennym IP po prostu działa — bez stałego IP i bez tuneli od osób trzecich. Szczegóły znajdziesz w podręczniku operatora.\n\n• Nazwy domeny. Możesz uruchomić prywatną instancję na `https://morphit.local` dla swoich znajomych albo udostępnić tylko adres `.onion` / `.loki` / `.b32.i2p`.\n\n• VPS-a w centrum danych. Operatorzy działający na łączach domowych radzą sobie dobrze, zwłaszcza z osiągalnością przez sieć alternatywną, by użytkownicy nie potrzebowali twojego domowego IP.\n\nPodział zarobków operatora jest tak dobrany, że nawet instancja klasy Pi pokrywa swój koszt hostingu i twój czas przy skromnych poziomach aktywności. Uruchom ją, bo chcesz Morphit, który istnieje w twojej społeczności, a nie dlatego, że dobrze płaci — ale rachunki nie tracą pieniędzy."
 			},
 			"iphone_install": {
 				"q": "Czy mogę używać Morphit na iPhonie lub iPadzie?",
@@ -2149,7 +2149,9 @@
 		"last_probed_label": "Ostatnio sprawdzony",
 		"this_instance": "Jesteś tutaj",
 		"live": "Na żywo",
-		"clearnet_eliminated": "Zero korzystania z clearnetu"
+		"clearnet_eliminated": "Zero korzystania z clearnetu",
+		"contact_via": "Kontakt przez {app}",
+		"contact_copy": "Kopiuj adres {app}"
 	},
 	"locale": {
 		"switcher_aria": "Zmień język"
@@ -3705,7 +3707,7 @@
 		"why_earn_body": "Każda opłata w BLURT za listing ogłoszenia, którą przyciągnie twoja instancja, płaci ci 90% — tylko 10% trafia do skarbca Morphit. Środki te są niezbędne na finansowanie dalszego rozwoju i utrzymania samego oprogramowania Morphit. Opłaty płatne w BTC i XMR trafiają w 100% do skarbca na te same zobowiązania projektowe (mechanizm podziału on-chain działa tylko dla BLURT, ale uczyniliśmy podział BLURT agresywnie hojnym dla kompensacji — 90/10 na twoją korzyść).\n\nSmart Contract działający na blockchainie jest jedynym mechanizmem odpowiedzialnym za ten podział — nie osoba, nie firma, nikt kto może zmienić zdanie. Proces jest w 100% zautomatyzowany. Skutecznie pomagasz, hojnie ci płacą. Gwarancja w kodzie.\n\nWypłaty są denominowane w BLURT, więc jeśli BLURT się umacnia, twoje zarobki też — bez dodatkowej pracy.",
 		"how_heading": "Jak zacząć",
 		"step1_title": "Zdobądź maszynę i adres internetowy",
-		"step1_body": "Tani VPS albo stary PC/laptop z Ubuntu — celuj w 2 GB RAM lub więcej (4 GB jest wygodne) i 20 GB dysku. Raspberry Pi 4 też się nada. Dodaj nazwę domeny (około 10 $/rok) od dowolnego rejestratora i skieruj ją na maszynę. Hostujesz w domu? Stały IP nie jest potrzebny — kreator instalacji włącza dynamiczny DNS za ciebie. Zobacz FAQ o minimalnych wymaganiach sprzętowych, aby poznać pełne zestawienie.",
+		"step1_body": "Tani VPS albo stary PC/laptop z Ubuntu — celuj w 4 GB RAM lub więcej (8 GB jest wygodne) i 80 GB dysku. Raspberry Pi 4 też się nada. Dodaj nazwę domeny (około 10 $/rok) od dowolnego rejestratora i skieruj ją na maszynę. Hostujesz w domu? Stały IP nie jest potrzebny — kreator instalacji włącza dynamiczny DNS za ciebie. Zobacz FAQ o minimalnych wymaganiach sprzętowych, aby poznać pełne zestawienie.",
 		"step2_title": "Uruchom jedno polecenie",
 		"step2_body": "Pobierz najnowsze wydanie, rozpakuj je do folderu /morphit/, otwórz tam terminal i uruchom sudo bash morphit-setup.sh — następnie wybierz „Full guided install”. Krótki kreator zadaje kilka pytań prostym językiem (twoja domena, twoje konto Blurt, e-mail do HTTPS) i konfiguruje wszystko za ciebie: Node.js, PostgreSQL, aplikację i jej usługi, HTTPS z automatycznym odnawianiem, zaporę oraz twoje adresy Tor i I2P. Bez edytowania plików.",
 		"step3_title": "Zarejestruj się jako operator",
@@ -3720,7 +3722,7 @@
 		"asset_policy_federation_body": "Wyłączenie aktywa na twojej instancji nie ukrywa zleceń z instancji partnerskich przed twoimi użytkownikami — historia łańcucha jest współdzielona, więc orderbook nadal pokazuje je w trybie tylko-do-odczytu. Blokada dotyczy tylko NOWYCH zleceń publikowanych Z twojej instancji.",
 		"requirements_heading": "Wymagania sprzętowe",
 		"req_hw_label": "Sprzęt",
-		"req_hw_value": "2+ rdzenie CPU, 4+ GB RAM, 60+ GB miejsca na dysku",
+		"req_hw_value": "2+ CPU, 4+ GB RAM, 80+ GB miejsca na dysku (najlepiej SSD)",
 		"req_network_label": "Sieć",
 		"req_network_value": "Domowy internet wystarczy — DDNS obsługuje dynamiczne IP, statyczny IP nie jest wymagany",
 		"req_time_label": "Twój czas",
@@ -3743,7 +3745,7 @@
 			"display_name_placeholder": "np. Morphit Alicji",
 			"display_name_help": "Czytelna nazwa pokazywana w katalogu operatorów i na twojej hostowanej instancji.",
 			"contact_url_label": "URL kontaktowy (opcjonalny)",
-			"contact_url_help": "Twoja własna strona, strona kontaktowa lub usługa onion. Musi być https:// lub http://.",
+			"contact_url_help": "Strona kontaktowa (https://) lub link do komunikatora — np. Telegram, Matrix, Signal, Discord, XMPP, SimpleX, Session, Briar, Cwtch lub Jami.",
 			"submit": "Zarejestruj operatora",
 			"err_generic": "Rejestracja nie powiodła się. Spróbuj ponownie.",
 			"err_unknown": "Nieoczekiwany błąd. Spróbuj ponownie.",
@@ -4765,5 +4767,21 @@
 		"what_it_is": "{score} to wskaźnik zaufania. Nie bierze średniej wprost — każdy zaczyna blisko 3.00 i dopiero z kolejnymi transakcjami wspina się ku swojej prawdziwej średniej. Pięć idealnych ocen zabiera cię prawie na szczyt, ale nie na sam szczyt.",
 		"why": "Po co? Inaczej robię trzy fikcyjne transakcje ze znajomym, wystawiamy sobie 5 gwiazdek i od razu wyglądam na tak wiarygodnego jak ktoś z 200 prawdziwymi transakcjami po 4.9. Wskaźnik zaufania sprawia, że nieskazitelną historię trzeba zapracować, nie ogłosić.",
 		"drift": "W miarę przybywania prawdziwych transakcji {score} sam może rosnąć w stronę średniej."
+	},
+	"contact_protocol": {
+		"matrix": "Matrix",
+		"telegram": "Telegram",
+		"discord": "Discord",
+		"keybase": "Keybase",
+		"signal": "Signal",
+		"simplex": "SimpleX",
+		"xmpp": "XMPP",
+		"briar": "Briar",
+		"cwtch": "Cwtch",
+		"jami": "Jami",
+		"session": "Session",
+		"email": "E-mail",
+		"nostr": "Nostr",
+		"web": "Sieć"
 	}
 }

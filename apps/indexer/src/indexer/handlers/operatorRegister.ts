@@ -1,3 +1,4 @@
+import { CONTACT_URL_SCHEMES } from '@morphit/operator-config';
 /**
  * Handler: morphit_operator_register_v1
  *
@@ -172,7 +173,7 @@ export function validate(payload: unknown): ValidatedPayload | { reason: string 
 			// an HTTPS page, but the request still fires for
 			// fingerprinting.  Match the user-profile Nostr / Blurt-
 			// media validator policy: https-only.
-			if (parsed.protocol !== 'https:') {
+			if (!(CONTACT_URL_SCHEMES as readonly string[]).includes(parsed.protocol)) {
 				return { reason: 'contact_url_bad_scheme' };
 			}
 			// O1.2 — reject userinfo (https://user:pw@host/).

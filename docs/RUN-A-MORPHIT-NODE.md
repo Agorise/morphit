@@ -19,7 +19,7 @@ This guide is the short, friendly path. A mostly copy-and-paste 15-minute proced
 
 ## 1. What you'll need
 
-- **A computer that stays on.** A cheap VPS, or an old desktop/laptop. Aim for **4 GB of RAM or more** running **Ubuntu 24.04 LTS** (or a 24.04-based flavor — Linux Mint 22, Pop!_OS 24.04, Zorin OS 17). The one-command installer targets the 24.04 "noble" base; older Ubuntu (22.04) and other distros aren't supported on this path. An old PC from a closet is genuinely fine.
+- **A computer that stays on.** A cheap VPS, or an old desktop/laptop. Aim for **2+ CPUs, 4+ GB of RAM, and 80+ GB of drive space (SSD is best)** running **Ubuntu 24.04 LTS** (or a 24.04-based flavor — Linux Mint 22, Pop!_OS 24.04, Zorin OS 17). The one-command installer targets the 24.04 "noble" base; older Ubuntu (22.04) and other distros aren't supported on this path. An old PC from a closet is genuinely fine.
 - **A web address — or not.** A domain name (about US$10/year) from any registrar gives you a normal `https://` clearnet site. If you host at home, §3 covers the small bit of extra networking. **Or skip the domain entirely and run Tor-only** — the wizard offers this — and your marketplace is reachable at an auto-generated `.onion` address with no domain, no certificate, and no router port-forward (see the callout below).
 - **A Blurt account** for your instance. Free to make; you'll create it in §5.
 - **A password manager** to save a few secrets.

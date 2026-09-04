@@ -1,3 +1,4 @@
+import { isAllowedContactUrl } from '@morphit/operator-config';
 /**
  * Morphit — operator register op broadcaster.
  *
@@ -84,12 +85,12 @@ export function validateContactUrl(
 ): { ok: true } | { ok: false; reason: ContactUrlValidationReason } {
 	if (url.length > CONTACT_URL_MAX) return { ok: false, reason: 'contact_url_too_long' };
 	try {
-		const parsed = new URL(url);
-		if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
-			return { ok: false, reason: 'contact_url_bad_scheme' };
-		}
+		new URL(url);
 	} catch {
 		return { ok: false, reason: 'contact_url_not_url' };
+	}
+	if (!isAllowedContactUrl(url)) {
+		return { ok: false, reason: 'contact_url_bad_scheme' };
 	}
 	return { ok: true };
 }

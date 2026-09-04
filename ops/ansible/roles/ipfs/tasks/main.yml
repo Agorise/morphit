@@ -111,7 +111,7 @@
   environment:
     IPFS_PATH: "{{ morphit_ipfs_repo }}"
 
-- name: Keep the node small — bind API/gateway to loopback + cap connections
+- name: Keep the node small — bind API loopback, cap connections, serve-only-pinned
   ansible.builtin.command:
     cmd: "ipfs config --json {{ item.key }} {{ item.value }}"
   become: true
@@ -120,7 +120,17 @@
     IPFS_PATH: "{{ morphit_ipfs_repo }}"
   loop:
     - { key: "Addresses.API", value: "'\"{{ morphit_ipfs_api_addr }}\"'" }
-    - { key: "Addresses.Gateway", value: "'\"{{ morphit_ipfs_gateway_addr }}\"'" }
+    # Gateway binds loopback by default; when morphit_ipfs_gateway_expose is
+    # true it binds all-interfaces so the frontend can reach it over the Docker
+    # bridge (see defaults/main.yml). Paired with Gateway.NoFetch below.
+    - key: "Addresses.Gateway"
+      value: "'\"{{ (morphit_ipfs_gateway_expose | bool) | ternary(morphit_ipfs_gateway_expose_addr, morphit_ipfs_gateway_addr) }}\"'"
+    # Serve ONLY content this node has pinned (its own signed release) — a
+    # gateway request for any other CID 404s instead of fetching it from the
+    # wider IPFS network. This is what makes exposing the gateway over our
+    # .onion/.i2p safe (not an open proxy) AND keeps a hidden-only node from
+    # ever reaching out to clearnet IPFS peers to satisfy a gateway request.
+    - { key: "Gateway.NoFetch", value: "true" }
     - { key: "Swarm.ConnMgr.HighWater", value: "{{ morphit_ipfs_connmgr_high }}" }
     - { key: "Swarm.ConnMgr.LowWater", value: "{{ morphit_ipfs_connmgr_low }}" }
     - { key: "Routing.Type", value: "'\"auto\"'" }

@@ -37,6 +37,29 @@ morphit_ipfs_connmgr_low: 20
 morphit_ipfs_api_addr: "/ip4/127.0.0.1/tcp/5001"
 morphit_ipfs_gateway_addr: "/ip4/127.0.0.1/tcp/8082"
 
+# ── Serve the pinned release over THIS instance's .onion / .i2p ──────────────
+# A clearnet-censored node (e.g. an Iran-hosted instance) cannot pull a release
+# over the public IPFS gateways or GitHub mirrors. When THIS instance exposes
+# its Kubo gateway on the frontend, that node can fetch the signed release over
+# our hidden addresses at /ipfs/<cid> — no clearnet, no third-party pinning.
+#
+# OFF by default: the gateway stays loopback-only (the posture above) and the
+# frontend's /ipfs + /ipns locations cleanly return 404. Set true to bind the
+# gateway to all interfaces so the BunkerWeb/frontend container can reach it via
+# host.docker.internal — the SAME reachability model the relay + indexer already
+# use (public inbound stays closed by UFW default-deny; only the Docker bridge
+# reaches it). Combined with Gateway.NoFetch below, an exposed gateway can serve
+# ONLY the CIDs this node has pinned (its own ~12 MB release) — never an
+# arbitrary CID, so it is NOT an open IPFS proxy.
+#
+# UNVALIDATED IN CI — this rides live-box validation on an instance that already
+# runs IPFS hosting (morphit.io). Leave false unless you have verified it there.
+morphit_ipfs_gateway_expose: false
+# The bridge-reachable bind used when exposed (mirrors the relay/indexer
+# all-interfaces bind). Keep the port aligned with the frontend nginx /ipfs
+# upstream (host.docker.internal:8082).
+morphit_ipfs_gateway_expose_addr: "/ip4/0.0.0.0/tcp/8082"
+
 # How the pin script reaches THIS instance's /v1/release (the CID source). The
 # default hits the local indexer directly; override to the public URL if the
 # indexer isn't on this port. MUST resolve to this instance's own release.

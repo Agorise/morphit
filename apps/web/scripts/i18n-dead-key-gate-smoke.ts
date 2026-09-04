@@ -162,7 +162,25 @@ const DYNAMIC_ALLOWLIST = new Set<string>([
 	// (The other network alts — tor/nostr/ens/… — also appear as static
 	// `$_('footer.tor')` etc. in the homepage grid, so they don't need this.)
 	'footer.globe',
-	'footer.play'
+	'footer.play',
+	// v1.16.2 — the instances directory renders the operator's contact label via
+	// `$_('contact_protocol.' + cp.id)` (a detected protocol id). That's a
+	// one-level prefix with an empty suffix, which RULE 2 deliberately refuses to
+	// let whitelist a namespace, so the leaves are listed explicitly here.
+	'contact_protocol.matrix',
+	'contact_protocol.telegram',
+	'contact_protocol.discord',
+	'contact_protocol.keybase',
+	'contact_protocol.signal',
+	'contact_protocol.simplex',
+	'contact_protocol.xmpp',
+	'contact_protocol.briar',
+	'contact_protocol.cwtch',
+	'contact_protocol.jami',
+	'contact_protocol.session',
+	'contact_protocol.email',
+	'contact_protocol.nostr',
+	'contact_protocol.web'
 ]);
 function referenced(key: string): boolean {
 	if (staticLits.has(key) || DYNAMIC_ALLOWLIST.has(key)) return true;

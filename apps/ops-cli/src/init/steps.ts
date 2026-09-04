@@ -608,9 +608,12 @@ export async function stepContactUrl(): Promise<string | null> {
 		const v = await ask('Contact URL (optional)');
 		if (v.length === 0) return null;
 		try {
-			const url = new URL(v);
-			if (url.protocol !== 'https:' && url.protocol !== 'http:' && url.protocol !== 'mailto:') {
-				console.log('  ✗ Use https://, http://, or mailto: only.  Try again.\n');
+			new URL(v); // parse-check (throws → caught below)
+			if (!isAllowedContactUrl(v)) {
+				console.log(
+					'  ✗ Use https:// (Telegram/Discord/Keybase/Signal/SimpleX/Matrix …), or a messenger URI ' +
+						'(xmpp: session: simplex: briar: cwtch: jami: mailto:).  Try again.\n'
+				);
 				continue;
 			}
 			return v;
@@ -2420,8 +2423,7 @@ import {
 	parseRoomAlias,
 	MATRIX_EXAMPLE_MXID,
 	MATRIX_EXAMPLE_ROOM_ALIAS,
-	DEFAULT_BLURT_RPC_ENDPOINTS
-} from '@morphit/operator-config';
+	DEFAULT_BLURT_RPC_ENDPOINTS, isAllowedContactUrl } from '@morphit/operator-config';
 import type { MatrixSurfacesResult } from './render.ts';
 
 /** Part 121 cp9 — collect both Matrix surfaces (operator alert

@@ -989,7 +989,7 @@ You need basic Linux comfort: SSH into a server, run a shell command, edit a con
 
 **FAQ key:** `node_hosting_costs`
 
-Very little. A small VPS (4GB RAM, 20GB disk) runs Morphit comfortably and costs about $5-8/month from providers like Hetzner, OVH, Vultr, or DigitalOcean. Disk storage grows slowly — the indexer stores on-chain events and the cache doesn't balloon. Bandwidth is minimal for a small instance (a few GB per month per hundred active users). If you already run a personal server or homelab, Morphit adds negligible load. Operator fees collected from orders are specifically sized to cover this and leave margin for your time (see the operator-earnings FAQ for the split math).
+Very little. A small VPS (4GB RAM, 80GB disk) runs Morphit comfortably and costs about $5-8/month from providers like Hetzner, OVH, Vultr, or DigitalOcean. Disk storage grows slowly — the indexer stores on-chain events and the cache doesn't balloon. Bandwidth is minimal for a small instance (a few GB per month per hundred active users). If you already run a personal server or homelab, Morphit adds negligible load. Operator fees collected from orders are specifically sized to cover this and leave margin for your time (see the operator-earnings FAQ for the split math).
 
 ---
 
@@ -1822,9 +1822,9 @@ Surprisingly modest. Morphit is built to run on hardware most people already own
 
 • **CPU:** 2 cores at 1 GHz or faster. Indexer is mostly I/O-bound; relay is mostly idle. No GPU needed, ever.
 
-• **RAM:** 2 GB minimum, 4 GB comfortable. Postgres fits inside that with the default config; tuning Postgres `shared_buffers` to 256 MB on a 2 GB system avoids paging.
+• **RAM:** 4 GB minimum, 8 GB comfortable. Postgres runs comfortably within that on the default config.
 
-• **Disk:** 20 GB free, on an SSD. HDDs technically work but Postgres will be slow and SD cards will die from write amplification. The indexer's database grows slowly — measured in low-MB per month for typical activity — so 20 GB lasts years. Plan for backups, though.
+• **Disk:** 80 GB free, on an SSD. HDDs technically work but Postgres will be slow and SD cards will die from write amplification. The indexer's database grows slowly — measured in low-MB per month for typical activity — so 80 GB lasts years. Plan for backups, though.
 
 • **Network:** 1 Mbit/s up and down is enough. An average page load is around 100 KB. A small instance serving a few users uses a few GB of bandwidth a month, well within any home internet cap. Static IP is nice but not required — dynamic-DNS works fine.
 

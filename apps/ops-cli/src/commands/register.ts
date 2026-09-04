@@ -30,6 +30,7 @@
  */
 
 import { readFileSync, existsSync, unlinkSync } from 'node:fs';
+import { withSpinner } from '../init/spinner.ts';
 import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { ask, askPassword, askYesNo, RELAY_KEY_UNLOCK_PROMPT } from '../init/prompt.ts';
@@ -222,7 +223,8 @@ export async function runRegister(ctx: RegisterCtx): Promise<number> {
 				if (altAddresses.ens) alt.ens = altAddresses.ens;
 				if (Object.keys(alt).length > 0) payload.alt_addresses = alt;
 			}
-			result = await Promise.race([
+			result = await withSpinner('Broadcasting your registration to the chain…', () =>
+				Promise.race([
 				broadcastCustomJson({
 					account,
 					wif,
@@ -246,7 +248,8 @@ export async function runRegister(ctx: RegisterCtx): Promise<number> {
 						15_000
 					)
 				)
-			]);
+				])
+			);
 		} catch (err) {
 			broadcastErr = err;
 		} finally {

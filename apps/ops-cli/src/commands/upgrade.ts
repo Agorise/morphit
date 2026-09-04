@@ -104,6 +104,7 @@
  */
 
 import { tryResolveHiddenUpgrade, type HiddenUpgradeResolution } from '../init/hiddenUpgradeResolve.js';
+import { withSpinner } from '../init/spinner.ts';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, readdirSync, statSync, copyFileSync, cpSync, readlinkSync, chmodSync } from 'node:fs';
 import { join, dirname, basename, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -1127,13 +1128,18 @@ async function resolveServedVersion(
 		}
 	}
 	if (plan.restartContainer) {
-		for (let attempt = 0; attempt < 5; attempt++) {
-			for (const ip of containerBridgeIps(plan.restartContainer)) {
-				const v = await fetchServedVersion(`http://${ip}:80/verify.json`);
-				if (v !== null) return v;
+		const container = plan.restartContainer;
+		const served = await withSpinner('Waiting for the upgraded service to come up…', async () => {
+			for (let attempt = 0; attempt < 5; attempt++) {
+				for (const ip of containerBridgeIps(container)) {
+					const v = await fetchServedVersion(`http://${ip}:80/verify.json`);
+					if (v !== null) return v;
+				}
+				if (attempt < 4) await new Promise((r) => setTimeout(r, 1500));
 			}
-			if (attempt < 4) await new Promise((r) => setTimeout(r, 1500));
-		}
+			return null;
+		});
+		if (served !== null) return served;
 	}
 	return null;
 }
@@ -1250,7 +1256,10 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		const fetchErrors: string[] = [];
 		for (const src of sources) {
 			try {
-				const rel = await fetchLatestRelease(src.host, src.repo);
+				const rel = await withSpinner(
+					`Checking ${src.host} for the latest release…`,
+					() => fetchLatestRelease(src.host, src.repo)
+				);
 				releasesBySource.push({ src, rel });
 				if (src.isPrimary) primaryRelease = rel;
 			} catch (err) {
@@ -1402,7 +1411,10 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 			if (!a) continue;
 			try {
 				info(`Downloading ${a.tarball.name} from ${src.host}${src.isPrimary ? ' (primary)' : ' (mirror)'}...`);
-				await downloadTo(a.tarball.browser_download_url, tarballPath);
+				await withSpinner(
+					`Downloading the release from ${src.host}…`,
+					() => downloadTo(a.tarball.browser_download_url, tarballPath)
+				);
 				bytesFromPrimary = src.isPrimary;
 				bytesSource = src;
 				// Pull the detached signature from the SAME source, if present.

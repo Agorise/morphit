@@ -89,6 +89,50 @@ const nonEn = locales.filter((l) => l !== 'en');
 
 interface AllowEntry { key: string; locale: string; reason: string }
 const ALLOW_LIST: AllowEntry[] = [
+	// ─── v1.16.2 contact_protocol labels: messenger/protocol brand names.
+	//     These are proper nouns that stay identical in every language (you
+	//     do not translate "Signal" or "Telegram"), plus "Web" which is the
+	//     standard loanword for a web page in de/es/fr tech UIs. Only the
+	//     native-translation locales (de/es/fr) are enforced here.
+	{ key: 'contact_protocol.matrix', locale: 'de', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'contact_protocol.matrix', locale: 'es', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'contact_protocol.matrix', locale: 'fr', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'contact_protocol.telegram', locale: 'de', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'contact_protocol.telegram', locale: 'es', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'contact_protocol.telegram', locale: 'fr', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'contact_protocol.discord', locale: 'de', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'contact_protocol.discord', locale: 'es', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'contact_protocol.discord', locale: 'fr', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'contact_protocol.keybase', locale: 'de', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'contact_protocol.keybase', locale: 'es', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'contact_protocol.keybase', locale: 'fr', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'contact_protocol.signal', locale: 'de', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'contact_protocol.signal', locale: 'es', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'contact_protocol.signal', locale: 'fr', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'contact_protocol.simplex', locale: 'de', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'contact_protocol.simplex', locale: 'es', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'contact_protocol.simplex', locale: 'fr', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'contact_protocol.xmpp', locale: 'de', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'contact_protocol.xmpp', locale: 'es', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'contact_protocol.xmpp', locale: 'fr', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'contact_protocol.briar', locale: 'de', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'contact_protocol.briar', locale: 'es', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'contact_protocol.briar', locale: 'fr', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'contact_protocol.cwtch', locale: 'de', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'contact_protocol.cwtch', locale: 'es', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'contact_protocol.cwtch', locale: 'fr', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'contact_protocol.jami', locale: 'de', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'contact_protocol.jami', locale: 'es', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'contact_protocol.jami', locale: 'fr', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'contact_protocol.nostr', locale: 'de', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'contact_protocol.nostr', locale: 'es', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'contact_protocol.nostr', locale: 'fr', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'contact_protocol.session', locale: 'de', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'contact_protocol.session', locale: 'es', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'contact_protocol.session', locale: 'fr', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'contact_protocol.web', locale: 'de', reason: '(b) "Web" is the standard loanword for a web page in de tech UIs' },
+	{ key: 'contact_protocol.web', locale: 'es', reason: '(b) "Web" is the standard loanword for a web page in es tech UIs' },
+	{ key: 'contact_protocol.web', locale: 'fr', reason: '(b) "Web" is the standard loanword for a web page in fr tech UIs' },
 	// ─── v1.9.15 (t.txt, the maintainer) footer column header "SUPPORT" → German "Support"
 	//     is the standard loanword for a help/support section in tech UIs (native
 	//     "Unterstützung"/"Hilfe" read oddly as a footer nav label), so it is

@@ -1,3 +1,4 @@
+import { CONTACT_URL_SCHEMES } from '@morphit/operator-config';
 /**
  * URL-scheme allowlist for operator-supplied `contact_url`
  * values that get rendered as `<a href={...}>`.
@@ -38,7 +39,15 @@
  * hole this fix closes.
  */
 
-const SAFE_CONTACT_SCHEMES = ['https:', 'http:', 'mailto:', 'matrix:', 'xmpp:', 'nostr:'] as const;
+// v1.16.2 — the render allowlist is the canonical contact-scheme list shared
+// with the on-chain gate + entry validators (so they can't drift), PLUS `http:`.
+// http is NOT a valid contact_url scheme (the on-chain gate rejects it, so no
+// http contact_url ever reaches rendering) — it's retained here only because
+// this same validator scheme-checks inline `[text](url)` links in the terms /
+// legal markdown (termsMarkdown.ts), where a plain-HTTP onion/I2P page link is
+// legitimate. Including it is therefore zero-effect for contact_url and correct
+// for terms links.
+const SAFE_CONTACT_SCHEMES = [...CONTACT_URL_SCHEMES, 'http:'] as const;
 
 /**
  * Normalize a contact_url string and return it if its scheme is in

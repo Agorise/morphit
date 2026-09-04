@@ -9,6 +9,8 @@
 	import { MORPHIT_INDEXER_ORIGIN, resolveOrigin } from '$net/config';
 	import { getInstances } from '$indexer/client';
 	import { safeContactUrl, safeInstanceOrigin } from '$lib/utils/safeContactUrl';
+	import CopyButton from '$lib/components/CopyButton.svelte';
+	import { detectContactProtocol } from '@morphit/operator-config';
 	import { formatDayMonth, formatDayMonthTime } from '$i18n/formatters';
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
@@ -613,14 +615,29 @@
 							{/if}
 
 							{#if safeContact}
-								<a
-									href={safeContact}
-									class="group inline-flex items-center text-sm text-ink-600 transition hover:text-morphit-emerald dark:text-ink-300"
-									rel="noopener"
-								>
-									{$_('instances.contact')}
-									<span class="nav-arrow nav-arrow-right" aria-hidden="true">⇨</span>
-								</a>
+								{@const cp = detectContactProtocol(safeContact)}
+								{#if cp && !cp.clickable}
+									<CopyButton
+										value={safeContact}
+										label={$_('instances.contact_copy', {
+											values: { app: $_(`contact_protocol.${cp.id}`) }
+										})}
+										class="inline-flex items-center text-sm"
+									/>
+								{:else}
+									<a
+										href={safeContact}
+										class="group inline-flex items-center text-sm text-ink-600 transition hover:text-morphit-emerald dark:text-ink-300"
+										rel="noopener"
+									>
+										{cp && cp.id !== 'web'
+											? $_('instances.contact_via', {
+													values: { app: $_(`contact_protocol.${cp.id}`) }
+												})
+											: $_('instances.contact')}
+										<span class="nav-arrow nav-arrow-right" aria-hidden="true">⇨</span>
+									</a>
+								{/if}
 							{/if}
 						</div>
 					</li>

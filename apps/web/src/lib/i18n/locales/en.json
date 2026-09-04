@@ -931,7 +931,7 @@
 		"operator_setup_doc_security": "SECURITY.md — disclosure channel + threat model",
 		"operator_setup_cta": "Read RUN-A-MORPHIT-NODE.md",
 		"operator_distros_heading": "Supported systems",
-		"operator_distros_body": "Ubuntu 24.04 LTS is the best-tested choice, and the one-command installer also accepts its derivatives — it reads the Ubuntu 'noble' base, so the edition doesn't matter: Linux Mint 22, Pop!_OS, Zorin OS 17, KDE neon, and elementary OS all work. Debian 12+ and hardened-Debian bases like Kicksecure work via the manual setup steps — both make excellent lean, security-focused servers. Any modern Linux with Node.js 22+ and Postgres 15+ should run it (Arch, Alpine, NixOS — you're more on your own there); FreeBSD works with minor adjustments. Hardware: any 2-core ARM64 or x86-64 machine with 4 GB RAM and 20 GB SSD — most operators run on a Raspberry Pi 4, an Intel mini-PC, or a spare laptop.",
+		"operator_distros_body": "Ubuntu 24.04 LTS is the best-tested choice, and the one-command installer also accepts its derivatives — it reads the Ubuntu 'noble' base, so the edition doesn't matter: Linux Mint 22, Pop!_OS, Zorin OS 17, KDE neon, and elementary OS all work. Debian 12+ and hardened-Debian bases like Kicksecure work via the manual setup steps — both make excellent lean, security-focused servers. Any modern Linux with Node.js 22+ and Postgres 15+ should run it (Arch, Alpine, NixOS — you're more on your own there); FreeBSD works with minor adjustments. Hardware: any 2-core ARM64 or x86-64 machine with 4 GB RAM and 80 GB SSD — most operators run on a Raspberry Pi 4, an Intel mini-PC, or a spare laptop.",
 		"operator_distros_faq_cta": "See full hardware/OS requirements",
 		"operator_join_heading": "Join the federation",
 		"operator_join_body": "Once your instance is live and broadcasting `morphit_operator_register_v1`, it appears in every other Morphit instance's directory automatically. No application, no permission, no central listing.",
@@ -1375,7 +1375,7 @@
 			},
 			"node_hosting_costs": {
 				"q": "How much does it cost to host a Morphit node?",
-				"a": "Very little. A small VPS (4GB RAM, 20GB disk) runs Morphit comfortably and costs about $5-8/month from providers like Hetzner, OVH, Vultr, or DigitalOcean. Disk storage grows slowly — the indexer stores on-chain events and the cache doesn't balloon. Bandwidth is minimal for a small instance (a few GB per month per hundred active users). If you already run a personal server or homelab, Morphit adds negligible load. Operator fees collected from orders are specifically sized to cover this and leave margin for your time (see the operator-earnings FAQ for the split math)."
+				"a": "Very little. A small VPS (4GB RAM, 80GB disk) runs Morphit comfortably and costs about $5-8/month from providers like Hetzner, OVH, Vultr, or DigitalOcean. Disk storage grows slowly — the indexer stores on-chain events and the cache doesn't balloon. Bandwidth is minimal for a small instance (a few GB per month per hundred active users). If you already run a personal server or homelab, Morphit adds negligible load. Operator fees collected from orders are specifically sized to cover this and leave margin for your time (see the operator-earnings FAQ for the split math)."
 			},
 			"switching_instances": {
 				"q": "If one Morphit instance goes down, do I lose my orders and reputation?",
@@ -1547,7 +1547,7 @@
 			},
 			"node_minimum_requirements": {
 				"q": "What are the minimum hardware requirements to run a Morphit node?",
-				"a": "Surprisingly modest. Morphit is built to run on hardware most people already own. Three categories of setups people are using:\n\n**Hobbyist tier — Raspberry Pi 4 / 5 (4 GB).** Runs the indexer, relay, and frontend together comfortably. Use a USB-3 SSD instead of an SD card; SD cards die under database write load. Power draw is around 5–7 W, so a small UPS or solar setup handles it for hours. Suitable for serving a personal community of a few dozen active users.\n\n**Serious tier — small mini-PC (a mini PC, Intel NUC, generic 2nd-hand).** An Intel N100 / Ryzen 3xxx with 8 GB RAM and any modern SSD is overkill for the indexer and runs every Morphit service at the same time without thinking about it. Power draw 6–10 W idle, 15–20 W under load. $150–250 used. Comfortable for an instance serving hundreds of active users.\n\n**Spare-laptop tier — anything that still boots Linux.** An old ThinkPad or any laptop from the last decade with at least 4 GB RAM and a working SSD is plenty. Bonus: built-in UPS (the laptop battery). Some operators leave a closed laptop on a shelf running Morphit on a wired Ethernet connection — works great.\n\n**Concrete minimums (any architecture: x86-64, ARM64, or Apple silicon under Asahi):**\n\n• **CPU:** 2 cores at 1 GHz or faster. Indexer is mostly I/O-bound; relay is mostly idle. No GPU needed, ever.\n\n• **RAM:** 2 GB minimum, 4 GB comfortable. Postgres fits inside that with the default config; tuning Postgres `shared_buffers` to 256 MB on a 2 GB system avoids paging.\n\n• **Disk:** 20 GB free, on an SSD. HDDs technically work but Postgres will be slow and SD cards will die from write amplification. The indexer's database grows slowly — measured in low-MB per month for typical activity — so 20 GB lasts years. Plan for backups, though.\n\n• **Network:** 1 Mbit/s up and down is enough. An average page load is around 100 KB. A small instance serving a few users uses a few GB of bandwidth a month, well within any home internet cap. Static IP is nice but not required — dynamic-DNS works fine.\n\n• **Operating system:** Any modern Linux (Debian 12, Ubuntu 24.04 LTS, Arch, Alpine, NixOS — we test on Debian). FreeBSD works with minor adjustments. macOS works for development but isn't recommended for a public instance.\n\n• **Uptime expectation:** 95% is a reasonable target. Morphit is federated by design — when your instance is down, users fall back to other operators' instances and back to you when you return. The chain holds the data; your instance is just one of many windows into it.\n\n**What you do NOT need:**\n\n• A blockchain node. Morphit talks to public blockchain endpoints over HTTPS.\n\n• A static IP. The one-command setup wizard configures dynamic-DNS for you, so a home connection with a changing IP just works — no static IP, and no third-party tunnel, required. See the operator handbook for the details.\n\n• A domain name. You can run a private instance on `https://morphit.local` for your friends, or expose a `.onion` / `.loki` / `.b32.i2p` address (or an ENS `.eth` name) only.\n\n• A datacenter VPS. Operators running on residential connections work fine, especially with alt-network reachability so users don't need your home IP.\n\nThe operator-earnings split is sized so that even a Pi-tier instance covers its hosting cost and your time at modest activity levels. Run one because you want a Morphit that exists in your community, not because it pays well — but the math doesn't lose money."
+				"a": "Surprisingly modest. Morphit is built to run on hardware most people already own. Three categories of setups people are using:\n\n**Hobbyist tier — Raspberry Pi 4 / 5 (4 GB).** Runs the indexer, relay, and frontend together comfortably. Use a USB-3 SSD instead of an SD card; SD cards die under database write load. Power draw is around 5–7 W, so a small UPS or solar setup handles it for hours. Suitable for serving a personal community of a few dozen active users.\n\n**Serious tier — small mini-PC (a mini PC, Intel NUC, generic 2nd-hand).** An Intel N100 / Ryzen 3xxx with 8 GB RAM and any modern SSD is overkill for the indexer and runs every Morphit service at the same time without thinking about it. Power draw 6–10 W idle, 15–20 W under load. $150–250 used. Comfortable for an instance serving hundreds of active users.\n\n**Spare-laptop tier — anything that still boots Linux.** An old ThinkPad or any laptop from the last decade with at least 4 GB RAM and a working SSD is plenty. Bonus: built-in UPS (the laptop battery). Some operators leave a closed laptop on a shelf running Morphit on a wired Ethernet connection — works great.\n\n**Concrete minimums (any architecture: x86-64, ARM64, or Apple silicon under Asahi):**\n\n• **CPU:** 2 cores at 1 GHz or faster. Indexer is mostly I/O-bound; relay is mostly idle. No GPU needed, ever.\n\n• **RAM:** 4 GB minimum, 8 GB comfortable. Postgres runs comfortably within that on the default config.\n\n• **Disk:** 80 GB free, on an SSD. HDDs technically work but Postgres will be slow and SD cards will die from write amplification. The indexer's database grows slowly — measured in low-MB per month for typical activity — so 80 GB lasts years. Plan for backups, though.\n\n• **Network:** 1 Mbit/s up and down is enough. An average page load is around 100 KB. A small instance serving a few users uses a few GB of bandwidth a month, well within any home internet cap. Static IP is nice but not required — dynamic-DNS works fine.\n\n• **Operating system:** Any modern Linux (Debian 12, Ubuntu 24.04 LTS, Arch, Alpine, NixOS — we test on Debian). FreeBSD works with minor adjustments. macOS works for development but isn't recommended for a public instance.\n\n• **Uptime expectation:** 95% is a reasonable target. Morphit is federated by design — when your instance is down, users fall back to other operators' instances and back to you when you return. The chain holds the data; your instance is just one of many windows into it.\n\n**What you do NOT need:**\n\n• A blockchain node. Morphit talks to public blockchain endpoints over HTTPS.\n\n• A static IP. The one-command setup wizard configures dynamic-DNS for you, so a home connection with a changing IP just works — no static IP, and no third-party tunnel, required. See the operator handbook for the details.\n\n• A domain name. You can run a private instance on `https://morphit.local` for your friends, or expose a `.onion` / `.loki` / `.b32.i2p` address (or an ENS `.eth` name) only.\n\n• A datacenter VPS. Operators running on residential connections work fine, especially with alt-network reachability so users don't need your home IP.\n\nThe operator-earnings split is sized so that even a Pi-tier instance covers its hosting cost and your time at modest activity levels. Run one because you want a Morphit that exists in your community, not because it pays well — but the math doesn't lose money."
 			},
 			"iphone_install": {
 				"q": "Can I use Morphit on my iPhone or iPad?",
@@ -2149,7 +2149,9 @@
 		"last_probed_label": "Last probed",
 		"this_instance": "You are here",
 		"live": "Live",
-		"clearnet_eliminated": "Zero use of clearnet internet"
+		"clearnet_eliminated": "Zero use of clearnet internet",
+		"contact_via": "Contact via {app}",
+		"contact_copy": "Copy {app} address"
 	},
 	"locale": {
 		"switcher_aria": "Change language"
@@ -3705,7 +3707,7 @@
 		"why_earn_body": "Every BLURT-paid listing fee your instance attracts pays you 90% — only 10% goes to the Morphit treasury to fund the furthering development and maintenance of the Morphit software itself. BTC- and XMR-paid fees flow 100% to the treasury for the same project obligations (the on-chain split mechanism only works for BLURT, but we made the BLURT split aggressively generous to compensate — 90/10 in your favor).\n\nA Smart Contract running on the blockchain enforces the split — not a person, not a company, not anyone who can change their mind. 100% automated. You provably assist, you provably get paid. Guaranteed in code.\n\nPayouts are denominated in BLURT, so if BLURT appreciates, so do your earnings — without any additional work on your part.",
 		"how_heading": "How to get started",
 		"step1_title": "Get a machine and a web address",
-		"step1_body": "A cheap VPS or an old PC/laptop running Ubuntu — aim for 2 GB of RAM or more (4 GB is comfy) and 20 GB of disk. A Raspberry Pi 4 works too. Add a domain name (about $10/year) from any registrar and point it at the machine. Hosting from home? No static IP needed — the setup wizard turns on dynamic-DNS for you. See the FAQ on minimum hardware for the full breakdown.",
+		"step1_body": "A cheap VPS or an old PC/laptop running Ubuntu — aim for 4 GB of RAM or more (8 GB is comfy) and 80 GB of disk. A Raspberry Pi 4 works too. Add a domain name (about $10/year) from any registrar and point it at the machine. Hosting from home? No static IP needed — the setup wizard turns on dynamic-DNS for you. See the FAQ on minimum hardware for the full breakdown.",
 		"step2_title": "Run one command",
 		"step2_body": "Download the latest release, extract it into a /morphit/ folder, open a terminal there, and run sudo bash morphit-setup.sh — then choose \"Full guided install.\" A short wizard asks a few plain-language questions (your domain, your Blurt account, an email for HTTPS) and sets up everything for you: Node.js, PostgreSQL, the app and its services, auto-renewing HTTPS, the firewall, and your Tor and I2P addresses. No files to edit.",
 		"step3_title": "Register as an operator",
@@ -3720,7 +3722,7 @@
 		"asset_policy_federation_body": "Disabling an asset on your instance doesn't hide peer instances' orders from your users — chain history is shared, so the orderbook still surfaces them as read-only. The gate is only on NEW orders posted FROM your instance.",
 		"requirements_heading": "Resource requirements",
 		"req_hw_label": "Hardware",
-		"req_hw_value": "2+ CPU cores, 4+ GB RAM, 60+ GB drive space",
+		"req_hw_value": "2+ CPUs, 4+ GB RAM, 80+ GB drive space (SSD is best)",
 		"req_network_label": "Network",
 		"req_network_value": "Home internet works fine — DDNS handles dynamic IPs, no static IP required",
 		"req_time_label": "Your time",
@@ -3743,7 +3745,7 @@
 			"display_name_placeholder": "e.g. Alice's Morphit",
 			"display_name_help": "Human-readable name shown in the operator directory and on your hosted instance.",
 			"contact_url_label": "Contact URL (optional)",
-			"contact_url_help": "Your own website, a contact page, or an onion service. Must be https:// or http://.",
+			"contact_url_help": "A web contact page (https://) or a messenger link — e.g. Telegram, Matrix, Signal, Discord, XMPP, SimpleX, Session, Briar, Cwtch or Jami.",
 			"submit": "Register operator",
 			"err_generic": "Registration failed. Please try again.",
 			"err_unknown": "Unexpected error. Please try again.",
@@ -4765,5 +4767,21 @@
 		"what_it_is": "The {score} is a trust score. It doesn't take an average at face value — it starts everyone near 3.00 and only lets you climb toward your true average as you rack up more trades. Five perfect ratings gets you most of the way there, not all the way.",
 		"why": "Why bother? Otherwise I do three fake trades with my friend, we give each other 5 stars, and I instantly look as trustworthy as someone with 200 real trades at 4.9. The trust score makes a spotless record earned rather than claimed.",
 		"drift": "As real trades pile up, {score} can drift up toward the plain average on its own."
+	},
+	"contact_protocol": {
+		"matrix": "Matrix",
+		"telegram": "Telegram",
+		"discord": "Discord",
+		"keybase": "Keybase",
+		"signal": "Signal",
+		"simplex": "SimpleX",
+		"xmpp": "XMPP",
+		"briar": "Briar",
+		"cwtch": "Cwtch",
+		"jami": "Jami",
+		"session": "Session",
+		"email": "Email",
+		"nostr": "Nostr",
+		"web": "Web"
 	}
 }

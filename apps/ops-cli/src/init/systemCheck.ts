@@ -136,15 +136,15 @@ function checkArch(): Check {
 
 function checkRamTotal(): Check {
 	const totalGB = totalmem() / 1024 / 1024 / 1024;
-	const status: CheckStatus = totalGB >= 2 ? 'ok' : totalGB >= 1 ? 'warn' : 'error';
+	const status: CheckStatus = totalGB >= 4 ? 'ok' : totalGB >= 2 ? 'warn' : 'error';
 	return {
 		name: 'RAM total',
 		actual: `${totalGB.toFixed(1)} GB`,
-		recommended: '≥2 GB',
+		recommended: '≥4 GB',
 		status,
 		note:
 			status === 'error'
-				? 'Morphit may OOM under load; recommend ≥2 GB RAM'
+				? 'Morphit may OOM under load; recommend ≥4 GB RAM'
 				: status === 'warn'
 					? 'tight; works for small instances'
 					: undefined
@@ -175,11 +175,11 @@ function checkDiskFree(): Check {
 		const availKb = parseInt(fields[3] ?? '', 10);
 		if (isNaN(availKb)) throw new Error('unparseable df output');
 		const availGB = availKb / 1024 / 1024;
-		const status: CheckStatus = availGB >= 20 ? 'ok' : availGB >= 10 ? 'warn' : 'error';
+		const status: CheckStatus = availGB >= 80 ? 'ok' : availGB >= 40 ? 'warn' : 'error';
 		return {
 			name: 'Disk free (/)',
 			actual: `${availGB.toFixed(0)} GB`,
-			recommended: '≥20 GB',
+			recommended: '≥80 GB',
 			status,
 			note:
 				status === 'error'
@@ -192,7 +192,7 @@ function checkDiskFree(): Check {
 		return {
 			name: 'Disk free (/)',
 			actual: 'unknown',
-			recommended: '≥20 GB',
+			recommended: '≥80 GB',
 			status: 'warn',
 			note: 'could not measure (df failed)'
 		};
