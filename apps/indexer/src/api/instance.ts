@@ -270,7 +270,7 @@ export function instanceRoute(
 			transportI2p: Boolean(config.instanceI2pB32Address || config.instanceI2pNameAddress),
 			priceFederated: config.blurtRpcEndpoints.length === 0,
 			frontendLocal: FRONTEND_IS_LOCAL_ONLY,
-			upgradeHidden: false, // TODO(stage 3b wiring): hidden IPFS upgrade in upgrade.ts
+			upgradeHidden: true, // v1.16.1: hidden IPFS-over-Tor/I2P upgrade wired + fail-closed in upgrade.ts
 			matrixClean: matrixHomeserverIsHidden(config.instanceMatrixHomeserver)
 		};
 		const body: InstanceResponse = {
@@ -298,11 +298,11 @@ export function instanceRoute(
 			relay_account: config.relayAccount,
 			operator_tag: config.instanceOperatorTag ?? null,
 			// Keystone gate — an HONEST strict-AND of every private-transport leg
-			// (clearnetGate.ts). chainHidden + priceFederated + frontendLocal hold on
-			// a hidden-only node today; upgradeHidden is false until the hidden IPFS
-			// upgrade fetch is wired into upgrade.ts, and matrixClean is a placeholder
-			// until the matrix-bot homeserver is surfaced here — so this correctly
-			// stays FALSE for now and flips itself the moment the last legs land.
+			// (clearnetGate.ts). As of v1.16.1 all legs are real on a hidden-only
+			// node: chain over onion/i2p, dual Tor+I2P transports, federation price,
+			// local frontend, the fail-closed hidden IPFS upgrade, and matrixClean
+			// derived from the configured homeserver. So this flips TRUE the moment a
+			// node satisfies them all, and `clearnet_eliminated_missing` lists any gap.
 			clearnet_eliminated: computeClearnetEliminated(clearnetLegs),
 			clearnet_eliminated_missing: clearnetEliminationMissing(clearnetLegs),
 			treasury: getTreasuryAddresses(),

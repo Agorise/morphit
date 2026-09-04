@@ -1453,6 +1453,7 @@ CREATE TABLE IF NOT EXISTS known_instances (
 	cached_alt_networks   JSONB,
 	cached_indexed_block  BIGINT,
 	cached_chain_lag_sec  INT,
+	cached_clearnet_eliminated BOOLEAN NOT NULL DEFAULT FALSE,
 
 	-- Counter for the back-off + drop logic.  Resets to 0 on any
 	-- successful probe.  Once it hits the 7-day-failure ceiling
@@ -2967,3 +2968,16 @@ COMMENT ON COLUMN operators.last_action_block_num IS
     'Block of the most recent morphit op this operator account signed (advanced '
     'on every register; seeded to registered_in_block). The federation probe '
     'compares it to chain head to classify clearnet_blocked (alive) vs unreachable.';
+
+-- ─── v59: known_instances.cached_clearnet_eliminated (zero-clearnet directory label) ───
+-- The peer's clearnet_eliminated gate, captured by the federation probe from its
+-- /v1/instance, so the directory card can show the strong "Zero use of clearnet
+-- internet" claim (v1.16.1). Additive with a false default; the probe overwrites
+-- it every cycle, older peers that don't report it stay false.
+ALTER TABLE known_instances
+    ADD COLUMN IF NOT EXISTS cached_clearnet_eliminated BOOLEAN NOT NULL DEFAULT FALSE;
+
+COMMENT ON COLUMN known_instances.cached_clearnet_eliminated IS
+    'The peer''s clearnet_eliminated gate (from its /v1/instance), cached by the '
+    'federation probe. TRUE only when the peer proved every private-transport leg. '
+    'Drives the strong "Zero use of clearnet internet" directory label. v1.16.1.';

@@ -2148,7 +2148,8 @@
 		"registered_label": "ثبت‌شده",
 		"last_probed_label": "آخرین بررسی",
 		"this_instance": "شما اینجا هستید",
-		"live": "زنده"
+		"live": "زنده",
+		"clearnet_eliminated": "بدون هیچ‌گونه استفاده از اینترنت کلیرنت"
 	},
 	"locale": {
 		"switcher_aria": "تغییر زبان"

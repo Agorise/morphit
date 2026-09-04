@@ -103,6 +103,7 @@
  *   5 — preflight check failed (network, permissions, ...)
  */
 
+import { tryResolveHiddenUpgrade, type HiddenUpgradeResolution } from '../init/hiddenUpgradeResolve.js';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, readdirSync, statSync, copyFileSync, cpSync, readlinkSync, chmodSync } from 'node:fs';
 import { join, dirname, basename, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -1204,6 +1205,31 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		return 5;
 	}
 
+	// v1.16.1 — HIDDEN-ONLY upgrade. When no explicit local tarball was given and
+	// this node is hidden-only (clearnet RPC pool empty), fetch the release from a
+	// federation peer's IPFS gateway over Tor/I2P, verified against the on-chain
+	// SHA-256 (fail-closed: throws rather than touch clearnet). The verified
+	// tarball is then handed to the SAME offline apply path below — only the trust
+	// gate is overridden (its anchor is the on-chain SHA, not a GPG sig/primary).
+	let hiddenResolution: HiddenUpgradeResolution | null = null;
+	if (offline === null) {
+		try {
+			hiddenResolution = await tryResolveHiddenUpgrade({
+				configEnvPaths: ['/etc/morphit/morphit.config.env', join(installDir, 'morphit.config.env')],
+				onProgress: (m) => info(m)
+			});
+		} catch (err) {
+			printError(
+				`Hidden-only upgrade could not be completed privately (staying on the current version): ` +
+					`${err instanceof Error ? err.message : String(err)}`
+			);
+			return 5; // fail-closed — never fall back to a clearnet mirror
+		}
+		if (hiddenResolution !== null) {
+			offline = { tarballPath: hiddenResolution.tarballPath, sigPath: null, tag: `v${hiddenResolution.version}` };
+		}
+	}
+
 	// The PRIMARY is the trusted hash anchor. We fetch each source's
 	// release listing; `primaryRelease` (if reachable) anchors the
 	// SHA-256, while a mirror release lets us still SEE + (if signed)
@@ -1414,12 +1440,19 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		cleanupTmp(tmpDir);
 		return 5;
 	}
-	const trust = decideTrust({
-		bytesFromPrimary,
-		sigVerified,
-		hashMatched,
-		hashFromPrimary: expectedHash !== null
-	});
+	const trust =
+		hiddenResolution !== null
+			? {
+					allowed: true,
+					proof: 'hidden-federation-onchain-sha256',
+					reason: `Fetched over Tor/I2P from ${hiddenResolution.servedBy} and verified against the on-chain SHA-256 for ${latestTag}.`
+				}
+			: decideTrust({
+					bytesFromPrimary,
+					sigVerified,
+					hashMatched,
+					hashFromPrimary: expectedHash !== null
+				});
 	if (!trust.allowed) {
 		printError(`Cannot verify the integrity of release ${latestTag}.\n  ${trust.reason}`);
 		cleanupTmp(tmpDir);

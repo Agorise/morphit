@@ -15,10 +15,11 @@ const check = (n: string, c: boolean): void => { if (c) { console.log(`  ✓ ${n
 
 console.log('\n── tor-routed-probe (cp704) ───────────────────────────\n');
 const hsf = read('apps/indexer/src/indexer/hiddenServiceFetch.ts');
+const ht = read('packages/hidden-transport/src/index.ts');
 check('SOCKS5 connector + hidden-service fetch exist (Tor 9050 / i2pd 4444)',
 	/socks5ConnectRequest/.test(hsf) && /fetchJsonViaHiddenService/.test(hsf) && /ProxyAgent/.test(hsf));
 check('a down LOCAL proxy is a distinct ProxyUnavailableError (not a peer fault)',
-	/class ProxyUnavailableError/.test(hsf));
+	/class ProxyUnavailableError/.test(ht) && /ProxyUnavailableError/.test(hsf));
 const fp = read('apps/indexer/src/indexer/federationProbe.ts');
 check('probeOne accepts an injected fetcher (clearnet vs hidden-service)', /fetchFn: <T>\(url: string\) => Promise<T> = fetchJson/.test(fp));
 check('the scheduler probes hidden-service origins via the proxy (real status)',

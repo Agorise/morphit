@@ -551,6 +551,22 @@ COMMENT ON COLUMN operators.last_action_block_num IS
 `
 	}
 
+	,{
+		version: 59,
+		description:
+			'known_instances.cached_clearnet_eliminated — the peer\'s clearnet-elimination gate, captured by the federation probe from its /v1/instance so the directory card can show the strong "Zero use of clearnet internet" claim (v1.16.1). Additive/nullable with a false default; the probe overwrites it every cycle, older peers that don\'t report it stay false.',
+		sql: `
+ALTER TABLE known_instances
+    ADD COLUMN IF NOT EXISTS cached_clearnet_eliminated BOOLEAN NOT NULL DEFAULT FALSE;
+
+COMMENT ON COLUMN known_instances.cached_clearnet_eliminated IS
+    'The peer''s clearnet_eliminated gate (from its /v1/instance), cached by the '
+    'federation probe. TRUE only when the peer proved every private-transport leg '
+    '(chain/Tor/I2P/price/frontend/upgrade/matrix). Drives the strong '
+    '"Zero use of clearnet internet" directory label. v1.16.1.';
+`
+	}
+
 	// Future migrations land here.  The v1 collapsed schema is the
 	// pre-launch baseline; from v37 forward, every new schema change is its
 	// own additive migration with its own version number.  No further

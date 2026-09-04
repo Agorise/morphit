@@ -2148,7 +2148,8 @@
 		"registered_label": "註冊時間",
 		"last_probed_label": "上次探測",
 		"this_instance": "當前所在",
-		"live": "即時"
+		"live": "即時",
+		"clearnet_eliminated": "完全不使用明網互聯網"
 	},
 	"locale": {
 		"switcher_aria": "切換語言"

@@ -67,6 +67,7 @@ const InstanceDirectoryEntrySchema = z
 		name: z.string().nullable(),
 		tagline: z.string().nullable(),
 		contact_url: z.string().nullable(),
+		clearnet_eliminated: z.boolean(),
 		alt_networks: z.unknown(),
 		status: z.enum(['good', 'quiet', 'stale', 'unreachable', 'mismatch']),
 		registered_at: z.string(),
@@ -157,7 +158,8 @@ const sampleInstance = {
 	last_probed_at: null,
 	indexed_block: null,
 	chain_lag_sec: null,
-	consecutive_failures: 0
+	consecutive_failures: 0,
+	clearnet_eliminated: false
 } satisfies InstanceDirectoryEntry;
 
 const sampleChatMessage = {

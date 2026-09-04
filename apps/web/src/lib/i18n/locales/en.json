@@ -2148,7 +2148,8 @@
 		"registered_label": "Registered",
 		"last_probed_label": "Last probed",
 		"this_instance": "You are here",
-		"live": "Live"
+		"live": "Live",
+		"clearnet_eliminated": "Zero use of clearnet internet"
 	},
 	"locale": {
 		"switcher_aria": "Change language"

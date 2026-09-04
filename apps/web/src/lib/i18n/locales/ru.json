@@ -2148,7 +2148,8 @@
 		"registered_label": "Зарегистрирован",
 		"last_probed_label": "Последняя проверка",
 		"this_instance": "Вы здесь",
-		"live": "В реальном времени"
+		"live": "В реальном времени",
+		"clearnet_eliminated": "Нулевое использование обычного интернета (clearnet)"
 	},
 	"locale": {
 		"switcher_aria": "Сменить язык"

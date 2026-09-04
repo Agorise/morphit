@@ -225,6 +225,8 @@ export interface ProbeOutcome {
 	status: ProbeStatus;
 	error: string | null;
 	cachedName: string | null;
+	/** v1.16.1 — the peer's clearnet_eliminated gate (false/absent on older peers). */
+	readonly cachedClearnetEliminated?: boolean;
 	cachedTagline: string | null;
 	cachedContactUrl: string | null;
 	cachedAltNetworks: unknown | null;
@@ -512,6 +514,7 @@ export class FederationProbeScheduler {
 					cached_alt_networks = $6,
 					cached_indexed_block = $7,
 					cached_chain_lag_sec = $8,
+					cached_clearnet_eliminated = $9,
 					consecutive_failures = 0
 				 WHERE origin = $1`,
 				[
@@ -522,7 +525,8 @@ export class FederationProbeScheduler {
 					outcome.cachedContactUrl,
 					outcome.cachedAltNetworks,
 					outcome.cachedIndexedBlock,
-					outcome.cachedChainLagSec
+					outcome.cachedChainLagSec,
+					outcome.cachedClearnetEliminated ?? false
 				]
 			);
 		} else {
@@ -790,6 +794,8 @@ interface InstanceShape {
 	name: string | null;
 	tagline: string | null;
 	contact_url: string | null;
+	// v1.16.1 — the peer's clearnet-elimination gate. Absent on older instances.
+	clearnet_eliminated?: boolean;
 	alt_networks: {
 		tor: string | null;
 		lokinet: string | null;
@@ -1222,6 +1228,7 @@ function mkGood(inst: InstanceShape, health: HealthShape, chainLagSec: number): 
 		cachedName: inst.name,
 		cachedTagline: inst.tagline,
 		cachedContactUrl: inst.contact_url,
+		cachedClearnetEliminated: inst.clearnet_eliminated ?? false,
 		cachedAltNetworks: normalizeAltNetworksForCache(inst.alt_networks),
 		cachedIndexedBlock: health.indexed_block,
 		cachedChainLagSec: chainLagSec
@@ -1235,6 +1242,7 @@ function mkQuiet(inst: InstanceShape, health: HealthShape, chainLagSec: number):
 		cachedName: inst.name,
 		cachedTagline: inst.tagline,
 		cachedContactUrl: inst.contact_url,
+		cachedClearnetEliminated: inst.clearnet_eliminated ?? false,
 		cachedAltNetworks: normalizeAltNetworksForCache(inst.alt_networks),
 		cachedIndexedBlock: health.indexed_block,
 		cachedChainLagSec: chainLagSec
@@ -1255,6 +1263,7 @@ function mkSyncing(inst: InstanceShape, health: HealthShape, chainLagSec: number
 		cachedName: inst.name,
 		cachedTagline: inst.tagline,
 		cachedContactUrl: inst.contact_url,
+		cachedClearnetEliminated: inst.clearnet_eliminated ?? false,
 		cachedAltNetworks: normalizeAltNetworksForCache(inst.alt_networks),
 		cachedIndexedBlock: health.indexed_block,
 		cachedChainLagSec: chainLagSec
@@ -1275,6 +1284,7 @@ function mkStaleBehind(inst: InstanceShape, health: HealthShape, chainLagSec: nu
 		cachedName: inst.name,
 		cachedTagline: inst.tagline,
 		cachedContactUrl: inst.contact_url,
+		cachedClearnetEliminated: inst.clearnet_eliminated ?? false,
 		cachedAltNetworks: normalizeAltNetworksForCache(inst.alt_networks),
 		cachedIndexedBlock: health.indexed_block,
 		cachedChainLagSec: chainLagSec

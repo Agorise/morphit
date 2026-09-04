@@ -156,6 +156,19 @@ async function main(): Promise<void> {
 		ok('peers with no hidden address are dropped', resolvePeerGateways([{ tor: 'x' }, {}]).length === 0);
 	}
 
+	// makeHiddenTarballFetcher: fail-closed on a non-hidden URL (refuse clearnet).
+	{
+		const { makeHiddenTarballFetcher } = await import('../src/init/hiddenUpgradeTransport.ts');
+		const fetcher = makeHiddenTarballFetcher({ proxy: { torSocks: '127.0.0.1:9050', i2pHttpProxy: '127.0.0.1:4444' } });
+		let refused = false;
+		try {
+			await fetcher('https://git.agorise.net/release.tar.gz', new AbortController().signal);
+		} catch (e) {
+			refused = /refusing to fetch a non-hidden URL/.test(String(e));
+		}
+		ok('transport refuses a clearnet URL (fail-closed, no open-internet fetch)', refused);
+	}
+
 	console.log('');
 	if (fails.length > 0) {
 		console.log(`\u2717 ${fails.length} of ${pass + fails.length} hidden-upgrade-fetch checks FAILED`);

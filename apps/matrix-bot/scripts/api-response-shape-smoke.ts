@@ -225,6 +225,8 @@ const InstanceResponseSchema = z
 		name: z.string().nullable(),
 		tagline: z.string().nullable(),
 		contact_url: z.string().nullable(),
+		clearnet_eliminated: z.boolean(),
+		clearnet_eliminated_missing: z.array(z.string()),
 		alt_networks: AltNetworksSchema,
 		fee_recipient: z.string(),
 		relay_account: z.string(),
@@ -246,6 +248,7 @@ const InstanceDirectoryEntrySchema = z
 		name: z.string().nullable(),
 		tagline: z.string().nullable(),
 		contact_url: z.string().nullable(),
+		clearnet_eliminated: z.boolean(),
 		alt_networks: z.unknown(), // shape varies; passthrough-tolerant
 		status: z.enum(['good', 'quiet', 'stale', 'unreachable', 'mismatch']),
 		registered_at: z.string(),
@@ -558,7 +561,9 @@ const sampleInstance = {
 		nostr: null
 	},
 	fee_recipient: '@morphit-fees',
-	relay_account: '@morphit-alice'
+	relay_account: '@morphit-alice',
+	clearnet_eliminated: false,
+	clearnet_eliminated_missing: []
 } satisfies InstanceResponse;
 
 const sampleInstanceDirEntry = {
@@ -575,7 +580,8 @@ const sampleInstanceDirEntry = {
 	last_probed_at: null,
 	indexed_block: null,
 	chain_lag_sec: null,
-	consecutive_failures: 0
+	consecutive_failures: 0,
+	clearnet_eliminated: false
 } satisfies InstanceDirectoryEntry;
 
 const sampleOrder = {

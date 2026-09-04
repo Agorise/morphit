@@ -1265,6 +1265,10 @@ export interface InstanceResponse {
 	};
 	readonly fee_recipient: string;
 	readonly relay_account: string;
+	/** v1.16.1 — this instance proved zero clearnet use (every private-transport leg). */
+	readonly clearnet_eliminated: boolean;
+	/** v1.16.1 — legs still preventing elimination (empty ⇔ eliminated). Operator diagnostic. */
+	readonly clearnet_eliminated_missing: readonly string[];
 	/** REVISIT-LIST item 5 — operator earnings.  When non-null,
 	 *  the frontend includes this on every order op as
 	 *  `operator_tag`, and the indexer credits 90% of BLURT-paid
@@ -1437,6 +1441,9 @@ export interface InstanceDirectoryEntry {
 	readonly name: string | null;
 	readonly tagline: string | null;
 	readonly contact_url: string | null;
+	/** v1.16.1 — the peer proved zero clearnet use (every private-transport leg).
+	 *  Drives the strong "Zero use of clearnet internet" directory label. */
+	readonly clearnet_eliminated: boolean;
 	readonly alt_networks: {
 		readonly tor: string | null;
 		readonly lokinet: string | null;

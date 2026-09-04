@@ -78,6 +78,7 @@ async function fetchAllRows(db: Database): Promise<DirectoryRow[]> {
 			ki.last_probed_at,
 			ki.cached_indexed_block,
 			ki.cached_chain_lag_sec,
+			ki.cached_clearnet_eliminated,
 			ki.consecutive_failures
 		 FROM known_instances ki
 		 LEFT JOIN operators op ON op.account = ki.operator_account

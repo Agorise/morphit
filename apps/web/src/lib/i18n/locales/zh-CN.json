@@ -2148,7 +2148,8 @@
 		"registered_label": "注册时间",
 		"last_probed_label": "上次探测",
 		"this_instance": "当前所在",
-		"live": "实时"
+		"live": "实时",
+		"clearnet_eliminated": "完全不使用明网互联网"
 	},
 	"locale": {
 		"switcher_aria": "切换语言"

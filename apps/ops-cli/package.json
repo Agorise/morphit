@@ -1,6 +1,6 @@
 {
   "name": "morphit-ops",
-  "version": "1.16.0",
+  "version": "1.16.1",
   "description": "Morphit operator CLI — status, drain queue, signups, abuse alerts. Read-mostly view into the indexer + relay shared database.",
   "type": "module",
   "private": true,
@@ -30,7 +30,9 @@
     "@beblurt/dblurt": "^0.17.0",
     "@morphit/node-health": "*",
     "pg": "^8.13.0",
-    "tsx": "^4.19.0"
+    "tsx": "^4.19.0",
+    "@morphit/hidden-transport": "*",
+    "undici": "^7.28.0"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",

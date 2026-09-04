@@ -22,6 +22,8 @@ export interface InstanceDirectoryEntry {
 	name: string | null;
 	tagline: string | null;
 	contact_url: string | null;
+	/** v1.16.1 — the peer proved zero clearnet use (drives the strong label). */
+	clearnet_eliminated: boolean;
 	alt_networks: {
 		tor: string | null;
 		lokinet: string | null;
@@ -56,6 +58,7 @@ export interface DirectoryRow {
 	last_probed_at: Date | null;
 	cached_indexed_block: string | number | null;
 	cached_chain_lag_sec: number | null;
+	cached_clearnet_eliminated?: boolean | null;
 	consecutive_failures: number;
 }
 
@@ -137,6 +140,7 @@ export function rowToEntry(r: DirectoryRow): InstanceDirectoryEntry {
 		name: r.cached_name,
 		tagline: r.cached_tagline,
 		contact_url: r.cached_contact_url,
+		clearnet_eliminated: r.cached_clearnet_eliminated ?? false,
 		alt_networks: mergeAltNetworks(
 			normalizeAltNetworks(r.cached_alt_networks),
 			normalizeAltNetworks(r.reg_alt_networks ?? null)
