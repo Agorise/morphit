@@ -405,7 +405,6 @@
 		},
 		"block": {
 			"busy": "Working…",
-			"failed": "Could not update block state. Please check your connection and try again.",
 			"confirm": {
 				"block": {
 					"title": "Block @{peer}?",
@@ -837,7 +836,25 @@
 		"unlock": "Unlock",
 		"password_too_short": "Password must be at least 8 characters.",
 		"lazy_load_failed": "Couldn't load this section.",
-		"ok": "OK"
+		"ok": "OK",
+		"broadcast_err": {
+			"no_account": "Saved locally. Publishing will be available once your account is registered.",
+			"locked": "Session is locked. Sign in again to broadcast.",
+			"generic": "Couldn't broadcast. Try again.",
+			"rejected": "Broadcast rejected by the network: {reason}",
+			"key_mismatch": "The unlocked identity isn't authorized to post for @{account}. Make sure the correct account is unlocked and that the account name on file matches it, then try again.",
+			"wrong_account": "This tab is signed in with a different account's keys than the one Morphit thinks you're using. Nothing was broadcast. Reload this page, or sign out of Morphit in your other browser tabs, then try again.",
+			"no_account_for_key": "The key in this session doesn't control any account on the blockchain. Nothing was broadcast. Sign out and sign back in with the right key.",
+			"lookup_failed": "Morphit couldn't reach its indexer to check which account this key controls, so it didn't broadcast anything. Check your connection and try again.",
+			"unreachable": "Couldn't reach your Morphit instance — or your instance couldn't reach the Blurt network. It may be offline, still syncing, or its connection to the chain may be blocked (some networks or countries filter it). Make sure your instance is online and can reach the network, then try again. (Details: {detail})",
+			"low_blurt": "Broadcasting costs a small BLURT fee — and a large update like an avatar costs more than a text change (the fee scales with the size of the update). Your account's liquid BLURT is too low to cover it. Add a little liquid BLURT to your account, then try again. (Chain: {reason})",
+			"too_large": "This image is too large for the blockchain. Choose a smaller or simpler image (a compact SVG, or a smaller photo), then try again. (Chain: {reason})",
+			"auth": "Your posting key isn't authorized to post for this account. Sign out and back in with the correct key, then try again. (Chain: {reason})",
+			"generic_detail": "Couldn't broadcast: {detail}. Please try again — if it keeps happening, that message is the exact cause to report.",
+			"offline": "You appear to be offline. Check your internet connection and try again — nothing was sent.",
+			"tx_expired": "Your device's clock is off, so the signed transaction expired before it reached the chain (they're valid for only a few seconds). Turn on automatic date & time to sync your clock, then try again. (Chain: {reason})",
+			"duplicate": "This looks like it already went through. Refresh the page to check your avatar before trying again. (Chain: {reason})"
+		}
 	},
 	"compare": {
 		"heading": "Compare orderbooks",
@@ -1759,8 +1776,6 @@
 			"self_review": "You can't leave feedback about yourself.",
 			"comment_too_long": "Comment is too long (max 256 characters).",
 			"comment_forbidden_char": "Comment contains characters we disallow.",
-			"broadcast_failed": "Couldn't submit feedback right now. Please try again in a moment.",
-			"no_account": "You need to register an account first.",
 			"locked": "Your session is locked. Unlock to submit."
 		},
 		"success_line": "Feedback submitted. Thanks!",
@@ -1797,8 +1812,6 @@
 			"comment_empty": "Reply cannot be empty.",
 			"comment_too_long": "Reply is too long (max 256 characters).",
 			"comment_forbidden_char": "Reply contains characters we disallow.",
-			"broadcast_failed": "Couldn't post your reply right now. Please try again in a moment.",
-			"no_account": "You need to register an account first.",
 			"locked": "Your session is locked. Unlock to post."
 		},
 		"reply_button": "Reply",
@@ -3486,6 +3499,7 @@
 		"privacy_body_2": "Every offer you post — along with the feedback and reviews you leave and receive — is public on the blockchain, for reputation-building, posterity, and your own research on other traders.",
 		"privacy_body_protected": "By contrast, your private conversations stay private. Direct messages between traders are end-to-end encrypted — they live on the blockchain only as ciphertext that you and your trade partner can read, never the operator, the indexers, or anyone else watching the chain. Morphit also collects no name, email, phone, or ID, and the payment details you exchange (such as a receiving address) move through that encrypted channel instead of the public orderbook.",
 		"privacy_body_3": "We encourage you to use a VPN, Tor, Lokinet, or I2P when accessing Morphit — anything that hides your IP from the server you're talking to is a good idea. We don't fingerprint your browser, we don't profile you, and we explicitly design our defenses against abuse so they don't punish privacy-conscious users. Our rate limits are crude (a handful of signups per user per day) and easily defeated by VPN rotation — that's a conscious tradeoff. We'd rather accept more abuse than make privacy-respecting users feel unwelcome. If a defense would require tracking you to work, we don't ship it.",
+		"privacy_body_zero_clearnet": "We go further than encouraging privacy — we prove it. A Morphit node can run with zero use of the clearnet internet: chain reads, prices, and software updates all travel over Tor and I2P, verified, and the directory awards a \"Zero use of clearnet internet\" badge only when all seven independent paths are provably hidden. It's per-node — a clearnet instance still uses clearnet by design — but it's real and running today: morphitlat operates entirely over Tor and I2P. For someone in a censored region, that is a marketplace node whose IP is never exposed and that cannot be switched off by blocking the open internet.",
 		"terms_heading": "Terms",
 		"terms_body": "Please abide by the Non-Aggression Principle (NAP). Cursing is acceptable, but just keep in mind that there are all ages that use Morphit. Elderly, teens and everyone in between. All OPINIONS are welcome here, but directed insults are not. Your buy/sell orders, your private chats and the feedback section are immutable, so wording is everything. State your opinion, then stop. Don't start fights. Do not post illegal or obviously objectionable stuff. Remember your manners, be nice. 💚💙"
 	},
@@ -4043,16 +4057,6 @@
 			"reminder_title": "💡 Display names are not unique.",
 			"reminder_body": "Anyone can use any name. The short key in parentheses is what really identifies you, and it cannot be copied by anyone else. Always check the key when you're trading.",
 			"save_and_broadcast": "Save & broadcast",
-			"broadcast_err": {
-				"no_account": "Saved locally. Publishing will be available once your account is registered.",
-				"locked": "Session is locked. Sign in again to broadcast.",
-				"generic": "Couldn't broadcast. Try again.",
-				"rejected": "Broadcast rejected by the network: {reason}",
-				"key_mismatch": "The unlocked identity isn't authorized to post for @{account}. Make sure the correct account is unlocked and that the account name on file matches it, then try again.",
-				"wrong_account": "This tab is signed in with a different account's keys than the one Morphit thinks you're using. Nothing was broadcast. Reload this page, or sign out of Morphit in your other browser tabs, then try again.",
-				"no_account_for_key": "The key in this session doesn't control any account on the blockchain. Nothing was broadcast. Sign out and sign back in with the right key.",
-				"lookup_failed": "Morphit couldn't reach its indexer to check which account this key controls, so it didn't broadcast anything. Check your connection and try again."
-			},
 			"broadcast_pending": "Publishing…",
 			"broadcast_ok_detail": "Your display name is now published for everyone to see."
 		},
@@ -4262,7 +4266,6 @@
 			"preview_label": "Preview",
 			"preview_display_name_placeholder": "Your name",
 			"preview_size": "{bytes} of {cap} maximum",
-			"preview_getting_large": "Getting close to the size limit — consider a simpler image or smaller source.",
 			"broadcast": "Broadcast avatar",
 			"cancel": "Discard",
 			"remove": "Remove avatar",
@@ -4271,6 +4274,7 @@
 				"unsupported_type": "That file type isn't supported. Use SVG, WebP, JPEG, PNG, or GIF.",
 				"empty_file": "That file is empty.",
 				"input_too_large": "That image is too large to upload. Please choose a file under 5 MB.",
+				"image_dimensions_too_large": "That image's dimensions are too large to process (max 12000×12000, ~40 megapixels). Downscale it — most photos only need to be a few hundred pixels — and try again.",
 				"parse_failed": "Couldn't parse this SVG. The file may be malformed.",
 				"svg_no_root": "That doesn't look like a valid SVG file.",
 				"svg_too_large": "This SVG is too complex to fit under the 6 KB on-chain limit. Try simplifying it — fewer paths, less detail, or a smaller viewBox.",

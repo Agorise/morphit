@@ -50,7 +50,8 @@
 	import { broadcastOrderComplete } from '$blurt/ops/order';
 	import { announceSettledElsewhere } from '$lib/chat/settledElsewhere';
 	import { runtimeSettledElsewhereDeps } from '$lib/chat/settledElsewhereRuntime';
-	import { BroadcastError, getUserBlurtAccount } from '$blurt/ops/profile';
+	import { getUserBlurtAccount } from '$blurt/ops/profile';
+	import { broadcastErrorMessage } from '$blurt/broadcastErrorClass';
 	import { publishFirstTradePost } from '$lib/syndication/publish';
 	import { isFirstTradeAnnounceEnabled } from '$lib/utils/syndicationPrefs';
 	import { redactPrivateKeys, type PrivateKeyMatch } from '$lib/security/privateKeyDetector';
@@ -475,42 +476,25 @@
 			onSuccess?.({ trx_id: result.trx_id });
 		} catch (err) {
 			console.warn('[LeaveFeedbackForm] broadcast failed:', err);
-			if (err instanceof BroadcastError) {
-				// Only certain BroadcastError codes have feedback-
-				// specific localized messages; others fall to the
-				// generic "broadcast failed" copy.  Without this
-				// guard, a future BroadcastError code (or a refactor
-				// that newly throws an existing one through this
-				// path) would render the literal i18n key like
-				// "feedback.error.missing_external_tx_id" to the user.
-				const FEEDBACK_CODES = new Set(['no_account', 'locked']);
-				if (FEEDBACK_CODES.has(err.code)) {
-					errorMessage = $_(`feedback.error.${err.code}`) as string;
-				} else {
-					errorMessage = $_('feedback.error.broadcast_failed') as string;
-				}
-			} else if (err instanceof FeedbackValidationError) {
-				// Same defensive guard as for BroadcastError above.
-				// Only certain validation codes have feedback-specific
-				// localized messages (the ones surfaced by user input);
-				// codes that should be unreachable from the UI
-				// (rating_out_of_range, order_permlink_bad_chars) fall
-				// to the generic copy if they ever leak through.
+			if (err instanceof FeedbackValidationError) {
+				// Feedback-DOMAIN validation (user input) keeps its specific copy;
+				// an unexpected code falls to the shared resolver rather than a
+				// bare "broadcast failed".
 				const VALIDATION_CODES = new Set([
 					'subject_invalid',
 					'self_review',
 					'comment_too_long',
 					'comment_forbidden_char'
 				]);
-				if (VALIDATION_CODES.has(err.code)) {
-					errorMessage = $_(`feedback.error.${err.code}`) as string;
-				} else {
-					errorMessage = $_('feedback.error.broadcast_failed') as string;
-				}
+				errorMessage = VALIDATION_CODES.has(err.code)
+					? ($_(`feedback.error.${err.code}`) as string)
+					: broadcastErrorMessage($_, err, getUserBlurtAccount() ?? '');
 			} else {
-				// Transport / chain / RPC failure. Use the generic
-				// broadcast-failed copy — the user can retry.
-				errorMessage = $_('feedback.error.broadcast_failed') as string;
+				// Every broadcast / chain / transport / key error → the SAME
+				// exhaustive, actionable copy used everywhere (common.broadcast_err),
+				// so a feedback failure names the exact problem + fix, not "broadcast
+				// failed, try again".
+				errorMessage = broadcastErrorMessage($_, err, getUserBlurtAccount() ?? '');
 			}
 		} finally {
 			submitting = false;

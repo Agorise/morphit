@@ -86,6 +86,7 @@
 	import sodium from 'libsodium-wrappers-sumo';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
 	import { broadcastNewOrder, BroadcastError } from '$blurt/ops/order';
+	import { broadcastErrorMessage } from '$blurt/broadcastErrorClass';
 	import { addPendingOrder } from '$lib/stores/pendingOrders';
 	import { orderPayloadToRecord, type OrderPayload } from '$lib/orders/payload';
 	import { computeFee, BASE_FEE_BLURT, resolveFeeRecipient, type FeeQuote } from '$lib/orders/fee';
@@ -2171,7 +2172,9 @@
 				if (/insufficient/i.test(msg) || /balance/i.test(msg)) {
 					broadcastError = $_('post_order.broadcast_error.body_insufficient_funds');
 				} else {
-					broadcastError = $_('post_order.broadcast_error.body_generic');
+					// Order-specific cases handled above; everything else (offline,
+					// unreachable, clock skew, duplicate, …) → the shared resolver.
+					broadcastError = broadcastErrorMessage($_, err, getUserBlurtAccount() ?? '');
 				}
 				phase = 'error';
 			}
@@ -2351,7 +2354,10 @@
 				) {
 					broadcastError = $_('post_order.broadcast_error.body_authority');
 				} else {
-					broadcastError = $_('post_order.broadcast_error.body_generic');
+					// Order-specific cases handled above; the shared resolver covers
+					// the rest — offline, instance↔chain blocked, clock skew,
+					// duplicate — and surfaces the raw reason if truly unknown.
+					broadcastError = broadcastErrorMessage($_, err, getUserBlurtAccount() ?? '');
 				}
 			}
 			phase = 'error';

@@ -31,6 +31,7 @@ import { get, writable } from 'svelte/store';
 // 2 MB dblurt chunk out of those routes' first paint — the chunk
 // loads only when the user actually triggers a profile broadcast.
 import { OP_IDS } from '$net/config';
+import { BroadcastError } from '../broadcastTransport';
 import type { LiveIdentity } from '$crypto/keygen';
 import { redactPrivateKeys } from '$lib/security/privateKeyDetector';
 import { isOrderLang } from '$i18n/locales';
@@ -257,20 +258,13 @@ export interface ProfilePayload {
  * chain broadcast, `{ ok: false, reason: 'no_account' }` if the user has
  * no Blurt account yet (local-only save is still fine in that case).
  */
-/**
- * Thrown when a broadcast can't proceed because of a structural issue
- * (not a transport failure). UI code catches this and maps `code` to a
- * localized message.
- */
-export class BroadcastError extends Error {
-	constructor(
-		public readonly code: 'no_account' | 'locked' | 'missing_external_tx_id' | 'key_mismatch',
-		message: string
-	) {
-		super(message);
-		this.name = 'BroadcastError';
-	}
-}
+// BroadcastError moved to ../broadcastTransport (v1.16.5) so the pure
+// broadcast-error classifier can import it without profile.ts's $app deps.
+// Re-exported here so existing `import { BroadcastError } from '$blurt/ops/profile'`
+// call sites keep working.
+export { BroadcastError };
+// (imported at the top for internal `throw new BroadcastError(...)`; re-exported
+//  here so existing `import { BroadcastError } from '$blurt/ops/profile'` works.)
 
 /** Pure body-builder for a profile op. Takes the payload plus
  *  an explicit `ts` (unix seconds) and returns the wire body

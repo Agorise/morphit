@@ -50,15 +50,13 @@
 	import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
 	import {
 		broadcastProfile,
-		BroadcastError,
 		getUserBlurtAccount,
 		setUserBlurtAccount
 	} from '$blurt/ops/profile';
 	import { formatPublicKeyBLT } from '$crypto/keygen';
-	import { AccountBindingError } from '$blurt/accountBinding';
 	import { verifyPostingKey } from '$crypto/postingVerify';
 	import { fetchAccountKeys } from '$blurt/accountKeys';
-	import { ChainRejectedError } from '$blurt/broadcastTransport';
+	import { broadcastErrorMessage } from '$blurt/broadcastErrorClass';
 	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 	import { checkWaiverEligibility } from '$lib/orders/listingFee';
 	import { setSelfAvatar, setSelfDisplayName } from '$lib/stores/selfProfile';
@@ -188,37 +186,10 @@
 	 *  is the difference between a user knowing their account is out of resource
 	 *  credits vs. staring at "couldn't broadcast, try again". */
 	function broadcastErrCopy(err: unknown): string {
-		// cp445 — an identity↔account mismatch is a HUMAN problem ("you have two
-		// accounts open in two tabs"), not a cryptographic one. It must never
-		// reach the user as a chain rejection with three key authorities dumped
-		// into a red box. Checked BEFORE ChainRejectedError, because the whole
-		// point is that the chain never sees this transaction.
-		if (err instanceof AccountBindingError) {
-			const owner = err.candidates[0] ?? '';
-			if (err.kind === 'key_not_in_authority' || err.kind === 'ambiguous') {
-				return $_('settings.display_name.broadcast_err.wrong_account', {
-					values: { account: owner }
-				});
-			}
-			if (err.kind === 'no_account_for_key') {
-				return $_('settings.display_name.broadcast_err.no_account_for_key');
-			}
-			return $_('settings.display_name.broadcast_err.lookup_failed');
-		}
-		if (err instanceof ChainRejectedError) {
-			return $_('settings.display_name.broadcast_err.rejected', {
-				values: { reason: err.message }
-			});
-		}
-		if (err instanceof BroadcastError && err.code === 'key_mismatch') {
-			return $_('settings.display_name.broadcast_err.key_mismatch', {
-				values: { account: getUserBlurtAccount() ?? '' }
-			});
-		}
-		if (err instanceof BroadcastError && (err.code === 'no_account' || err.code === 'locked')) {
-			return $_(`settings.display_name.broadcast_err.${err.code}`);
-		}
-		return $_('settings.display_name.broadcast_err.generic');
+		// Every broadcast failure must name the exact problem AND the fix in the
+		// UI — never a dead-end "try again", never "open DevTools". The shared
+		// resolver (common.broadcast_err.*) is used by every chain-write surface.
+		return broadcastErrorMessage($_, err, getUserBlurtAccount() ?? '');
 	}
 
 	// ── Short bio (≤128 chars, optional) — same local/broadcast model ──
@@ -397,7 +368,11 @@
 	 *  2.9 KB avatar was shown a red error saying it was near a limit it was
 	 *  nowhere near. the maintainer hit both. */
 	const AVATAR_CAP_BYTES = 6144;
-	const AVATAR_SOFT_WARN_BYTES = 4096;
+	// v1.16.5 — the soft "getting close" warn threshold is gone (the maintainer): a file
+	// comfortably under the cap needs no yellow nag. Only the hard cap warns.
+	/** The selected file's name, shown truncated so a very long or space-laden
+	 *  filename can never overflow the layout. */
+	let avatarFileName = $state('');
 	/** Non-empty while the user is resizing / encoding. Blocks the
 	 *  form during the brief (<500ms typical) browser work. */
 	let avatarProcessing = $state(false);
@@ -970,6 +945,14 @@
 		const target = e.target as HTMLInputElement;
 		const file = target.files?.[0];
 		if (!file) return;
+		// Ignore a new pick while the previous file is still processing or
+		// broadcasting — a double-fire would race the staged state. (The input is
+		// also disabled while busy; this is the belt-and-suspenders guard.)
+		if (avatarProcessing || avatarBroadcasting) {
+			target.value = '';
+			return;
+		}
+		avatarFileName = file.name;
 		avatarError = '';
 		avatarProcessing = true;
 		avatarBroadcastOk = false;
@@ -1007,6 +990,7 @@
 		// Discard the staged avatar without broadcasting. Restores
 		// the identicon preview; does NOT touch any previously
 		// broadcast avatar that's already on-chain.
+		avatarFileName = '';
 		avatarStagedSvg = '';
 		avatarStagedDataUri = '';
 		avatarStagedBytes = 0;
@@ -1015,8 +999,22 @@
 	}
 
 	async function broadcastAvatar(): Promise<void> {
+		// Idempotent: silently ignore an accidental double-click, or a click while
+		// a broadcast is already in flight, so we never fire (or pay the BLURT fee
+		// for) the same op twice. BusyButton also disables, but that only applies
+		// on the next render — this closes the same-tick double-click window.
+		if (avatarBroadcasting) return;
 		const live = $liveIdentity;
 		if (!live) return;
+		// Nothing staged (button shouldn't be reachable, but never broadcast an
+		// empty avatar).
+		if (!avatarStagedSvg && !avatarStagedDataUri) return;
+		// Your device is offline — say so plainly (and don't blame the instance),
+		// without wasting a broadcast attempt. Nothing was sent.
+		if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+			avatarBroadcastError = $_('common.broadcast_err.offline');
+			return;
+		}
 		const displayName = saved || (validation.ok ? validation.cleaned : '');
 		avatarBroadcasting = true;
 		avatarBroadcastError = '';
@@ -1551,11 +1549,11 @@
 			</div>
 		{/if}
 
-		<!-- File input -->
+		<!-- File input — the native control is visually hidden (sr-only) but fully
+		     functional via the label; we render the chosen filename ourselves,
+		     `truncate`d with the full name on hover, so a very long or space-laden
+		     filename can never overflow the card (the maintainer, v1.16.5). -->
 		<div class="mt-6">
-			<label for="avatar-file-input" class="sr-only">
-				{$_('settings.avatar.file_input_label')}
-			</label>
 			<input
 				id="avatar-file-input"
 				bind:this={avatarFileInput}
@@ -1563,8 +1561,25 @@
 				accept="image/svg+xml,image/webp,image/jpeg,image/png,image/gif"
 				onchange={handleAvatarFileSelected}
 				disabled={avatarProcessing || avatarBroadcasting}
-				class="block w-full text-sm text-ink-600 file:me-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-morphit-btn file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:text-ink-300"
+				class="sr-only"
 			/>
+			<div class="flex min-w-0 items-center gap-3">
+				<label
+					for="avatar-file-input"
+					class="shrink-0 cursor-pointer rounded-lg bg-morphit-btn px-4 py-2 text-sm font-semibold text-white hover:brightness-110 focus-within:outline-none focus-within:ring-2 focus-within:ring-morphit-emerald aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
+					aria-disabled={avatarProcessing || avatarBroadcasting}
+				>
+					{$_('settings.avatar.file_input_label')}
+				</label>
+				{#if avatarFileName}
+					<span
+						class="min-w-0 flex-1 truncate text-sm text-ink-600 dark:text-ink-300"
+						title={avatarFileName}
+					>
+						{avatarFileName}
+					</span>
+				{/if}
+			</div>
 			{#if avatarProcessing}
 				<p class="mt-2 text-sm text-ink-500">
 					{$_('settings.avatar.processing')}
@@ -1610,22 +1625,15 @@
 								}
 							})}
 						</p>
-						<!-- Three distinct states, because they call for three different
-						     actions. Previously ONE message ("getting close to the size
-						     limit") covered every case above a 2048 threshold that bore no
-						     relation to the real 6144 cap — so it fired on files that were
-						     comfortably fine, and said the same reassuring "getting close"
-						     about a file that was actually OVER the limit and could not be
-						     broadcast at all. -->
+						<!-- Only the hard cap warns now: if the processed avatar is over
+						     the 6144-byte limit it cannot be broadcast, so we say so. A
+						     file that is comfortably under the cap needs no nagging (the maintainer,
+						     v1.16.5) — the plain size readout above is enough. -->
 						{#if avatarStagedBytes > AVATAR_CAP_BYTES}
 							<p class="mt-1 text-red-600 dark:text-red-400">
 								{$_('settings.avatar.preview_too_large', {
 									values: { cap: formatBytes(AVATAR_CAP_BYTES) }
 								})}
-							</p>
-						{:else if avatarStagedBytes > AVATAR_SOFT_WARN_BYTES}
-							<p class="mt-1 text-amber-600 dark:text-amber-400">
-								{$_('settings.avatar.preview_getting_large')}
 							</p>
 						{/if}
 					</div>

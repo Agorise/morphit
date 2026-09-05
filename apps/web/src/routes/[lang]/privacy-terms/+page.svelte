@@ -28,6 +28,9 @@
 		<p class="text-ink-700 dark:text-ink-200">
 			{$_('privacy_terms.privacy_body_3')}
 		</p>
+		<p class="mt-3 text-ink-700 dark:text-ink-200">
+			{$_('privacy_terms.privacy_body_zero_clearnet')}
+		</p>
 	</section>
 
 	<section class="card">

@@ -35,7 +35,8 @@
 		validateFeedbackResponse,
 		FeedbackResponseValidationError
 	} from '$blurt/ops/feedbackResponse';
-	import { BroadcastError } from '$blurt/ops/profile';
+	import { getUserBlurtAccount } from '$blurt/ops/profile';
+	import { broadcastErrorMessage } from '$blurt/broadcastErrorClass';
 	import { redactPrivateKeys, type PrivateKeyMatch } from '$lib/security/privateKeyDetector';
 	import { saveDraft, loadDraftWithMeta, clearDraft } from '$lib/drafts';
 
@@ -181,24 +182,14 @@
 			onSuccess?.({ trx_id: result.trx_id, comment: outgoing });
 		} catch (err) {
 			console.warn('[RespondToFeedbackForm] broadcast failed:', err);
-			if (err instanceof BroadcastError) {
-				// Defensive guard: only the broadcast codes that have
-				// corresponding feedback_response keys map directly;
-				// others fall to broadcast_failed.
-				const FR_CODES = new Set(['no_account', 'locked']);
-				if (FR_CODES.has(err.code)) {
-					errorMessage = $_(`feedback_response.error.${err.code}`) as string;
-				} else {
-					errorMessage = $_('feedback_response.error.broadcast_failed') as string;
-				}
-			} else if (err instanceof FeedbackResponseValidationError) {
-				// All 4 FeedbackResponseValidationCode values have
-				// corresponding i18n keys (feedback_trx_id_invalid,
-				// comment_empty, comment_too_long,
-				// comment_forbidden_char) — no fallback needed.
+			if (err instanceof FeedbackResponseValidationError) {
+				// All 4 validation codes have i18n keys — domain-specific, keep.
 				errorMessage = $_(`feedback_response.error.${err.code}`) as string;
 			} else {
-				errorMessage = $_('feedback_response.error.broadcast_failed') as string;
+				// Every broadcast / chain / transport / key error → the shared,
+				// exhaustive, actionable copy (common.broadcast_err) — same as
+				// everywhere, no bare "broadcast failed".
+				errorMessage = broadcastErrorMessage($_, err, getUserBlurtAccount() ?? '');
 			}
 		} finally {
 			submitting = false;

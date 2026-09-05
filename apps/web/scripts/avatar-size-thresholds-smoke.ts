@@ -64,31 +64,24 @@ const check = (name: string, cond: boolean, detail = ''): void => {
 
 console.log('\n── avatar-size-thresholds (v1.8.10) ──────────────────\n');
 
-// ─── the module's canonical values ───────────────────────────────
+// ─── the module's canonical hard cap ─────────────────────────────
 const modCap = /export const MAX_AVATAR_BYTES\s*=\s*(\d+)/.exec(avatar)?.[1];
-const modWarn = /export const SOFT_WARN_AVATAR_BYTES\s*=\s*(\d+)/.exec(avatar)?.[1];
 check('the avatar module exports a hard cap', modCap !== undefined);
-check('the avatar module exports a soft-warn threshold', modWarn !== undefined);
-check(
-	`the soft-warn threshold (${modWarn ?? '?'}) is below the hard cap (${modCap ?? '?'})`,
-	modCap !== undefined && modWarn !== undefined && Number(modWarn) < Number(modCap),
-	'a warn threshold at or above the cap can never produce an "approaching" state'
-);
 
-// ─── the settings page mirrors them exactly ──────────────────────
+// ─── the settings page mirrors the cap; the soft warn is GONE (v1.16.5) ──
 const uiCap = /const AVATAR_CAP_BYTES\s*=\s*(\d+)/.exec(settingsCode)?.[1];
-const uiWarn = /const AVATAR_SOFT_WARN_BYTES\s*=\s*(\d+)/.exec(settingsCode)?.[1];
 check('the settings page declares a named cap constant', uiCap !== undefined);
-check('the settings page declares a named soft-warn constant', uiWarn !== undefined);
 check(
 	`the mirrored cap (${uiCap ?? '?'}) equals the module's (${modCap ?? '?'})`,
 	uiCap !== undefined && uiCap === modCap,
 	'the preview would state a maximum the code does not enforce'
 );
+// the maintainer (v1.16.5): the amber "getting close to the size limit" nag was removed —
+// a file comfortably under the cap needs no warning. Pin that it stays gone.
 check(
-	`the mirrored soft-warn (${uiWarn ?? '?'}) equals the module's (${modWarn ?? '?'})`,
-	uiWarn !== undefined && uiWarn === modWarn,
-	'the warning would fire at a size unrelated to the real limit'
+	'the soft-warn nag is gone from the UI (v1.16.5)',
+	!/AVATAR_SOFT_WARN_BYTES/.test(settingsCode) && !/preview_getting_large/.test(settingsCode),
+	're-introducing a soft warn brings back the clutter the maintainer removed'
 );
 
 // ─── no stray magic numbers left in the avatar preview ───────────
@@ -98,28 +91,16 @@ check(
 	'a literal byte count here is exactly how the 3072 lie survived'
 );
 check(
-	'the size comparisons use the named constants, not literals',
+	'the size comparison uses the named constant, not a literal',
 	!/avatarStagedBytes\s*>\s*\d+/.test(settingsCode),
 	'comparing against a literal re-introduces the drift this smoke exists to stop'
 );
 
-// ─── three distinct states, in the right order ───────────────────
-const overIdx = settingsCode.indexOf('avatarStagedBytes > AVATAR_CAP_BYTES');
-const warnIdx = settingsCode.indexOf('avatarStagedBytes > AVATAR_SOFT_WARN_BYTES');
+// ─── the one remaining state: over the hard cap ──────────────────
 check(
-	'an OVER-CAP state exists and is distinct from the approaching one',
-	overIdx !== -1 && warnIdx !== -1 && /preview_too_large/.test(settingsCode),
-	'one message for both states told an over-limit user they were merely "getting close"'
-);
-check(
-	'the over-cap branch is tested BEFORE the approaching branch',
-	overIdx !== -1 && warnIdx !== -1 && overIdx < warnIdx,
-	'checked second, every over-cap file would match "approaching" first and never report as too large'
-);
-check(
-	'the two states are mutually exclusive (else-if, not two independent ifs)',
-	/\{:else if\s+avatarStagedBytes\s*>\s*AVATAR_SOFT_WARN_BYTES\}/.test(settingsCode),
-	'independent ifs would render both messages at once for an over-cap file'
+	'the OVER-CAP state exists (the only size warning now)',
+	settingsCode.includes('avatarStagedBytes > AVATAR_CAP_BYTES') && /preview_too_large/.test(settingsCode),
+	'without the hard-cap branch an over-limit file broadcasts and is rejected on-chain'
 );
 
 // ─── the layout fix that stopped the text squishing ──────────────

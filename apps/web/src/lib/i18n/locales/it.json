@@ -405,7 +405,6 @@
 		},
 		"block": {
 			"busy": "In corso…",
-			"failed": "Impossibile aggiornare lo stato del blocco. Controlla la connessione e riprova.",
 			"confirm": {
 				"block": {
 					"title": "Bloccare @{peer}?",
@@ -837,7 +836,25 @@
 		"unlock": "Sblocca",
 		"password_too_short": "La password deve avere almeno 8 caratteri.",
 		"lazy_load_failed": "Impossibile caricare questa sezione.",
-		"ok": "Ho capito"
+		"ok": "Ho capito",
+		"broadcast_err": {
+			"no_account": "Salvato localmente. La pubblicazione sarà disponibile dopo la registrazione del tuo account.",
+			"locked": "Sessione bloccata. Accedi di nuovo per pubblicare.",
+			"generic": "Non siamo riusciti a trasmettere. Riprova.",
+			"rejected": "Pubblicazione rifiutata dalla rete: {reason}",
+			"key_mismatch": "L'identità sbloccata non è autorizzata a pubblicare per @{account}. Assicurati che sia sbloccato l'account corretto e che il nome account memorizzato corrisponda, poi riprova.",
+			"wrong_account": "Questa scheda ha effettuato l'accesso con le chiavi di un account diverso da quello che Morphit crede tu stia usando. Nulla è stato trasmesso. Ricarica questa pagina, oppure esci da Morphit nelle altre schede, e riprova.",
+			"no_account_for_key": "La chiave di questa sessione non controlla alcun account sulla blockchain. Nulla è stato trasmesso. Esci e rientra con la chiave corretta.",
+			"lookup_failed": "Morphit non è riuscito a contattare il suo indexer per verificare quale account controlla questa chiave, quindi non ha trasmesso nulla. Controlla la connessione e riprova.",
+			"unreachable": "Impossibile raggiungere la tua istanza Morphit — o la tua istanza non ha potuto raggiungere la rete Blurt. Potrebbe essere offline, ancora in sincronizzazione, o la sua connessione alla catena potrebbe essere bloccata (alcune reti o paesi la filtrano). Assicurati che la tua istanza sia online e possa raggiungere la rete, poi riprova. (Dettagli: {detail})",
+			"low_blurt": "La pubblicazione costa una piccola commissione in BLURT — e un aggiornamento grande come un avatar costa più di una modifica di testo (la commissione cresce con la dimensione). Il BLURT liquido del tuo account non basta a coprirla. Aggiungi un po' di BLURT liquido al tuo account, poi riprova. (Chain: {reason})",
+			"too_large": "Questa immagine è troppo grande per la blockchain. Scegli un'immagine più piccola o più semplice (un SVG compatto o una foto più piccola), poi riprova. (Chain: {reason})",
+			"auth": "La tua chiave di posting non è autorizzata a pubblicare per questo account. Esci e rientra con la chiave corretta, poi riprova. (Chain: {reason})",
+			"generic_detail": "Pubblicazione non riuscita: {detail}. Riprova — se continua, quel messaggio è la causa esatta da segnalare.",
+			"offline": "Sembri offline. Controlla la connessione a internet e riprova — non è stato inviato nulla.",
+			"tx_expired": "L'orologio del tuo dispositivo è sbagliato, quindi la transazione firmata è scaduta prima di raggiungere la catena (valgono solo pochi secondi). Attiva data e ora automatiche per sincronizzare l'orologio, poi riprova. (Chain: {reason})",
+			"duplicate": "Sembra sia già andata a buon fine. Aggiorna la pagina per controllare il tuo avatar prima di riprovare. (Chain: {reason})"
+		}
 	},
 	"compare": {
 		"heading": "Confronta orderbook",
@@ -1759,8 +1776,6 @@
 			"self_review": "Non puoi lasciare feedback su te stesso.",
 			"comment_too_long": "Il commento è troppo lungo (max 256 caratteri).",
 			"comment_forbidden_char": "Il commento contiene caratteri non ammessi.",
-			"broadcast_failed": "Non è stato possibile inviare il feedback adesso. Riprova tra un momento.",
-			"no_account": "Prima devi registrare un account.",
 			"locked": "La tua sessione è bloccata. Sbloccala per inviare."
 		},
 		"success_line": "Feedback inviato. Grazie!",
@@ -1797,8 +1812,6 @@
 			"comment_empty": "La risposta non può essere vuota.",
 			"comment_too_long": "Risposta troppo lunga (max 256 caratteri).",
 			"comment_forbidden_char": "La risposta contiene caratteri non ammessi.",
-			"broadcast_failed": "Non è stato possibile pubblicare la tua risposta adesso. Riprova tra un momento.",
-			"no_account": "Prima devi registrare un account.",
 			"locked": "La tua sessione è bloccata. Sbloccala per pubblicare."
 		},
 		"reply_button": "Rispondi",
@@ -3486,6 +3499,7 @@
 		"privacy_body_2": "Ogni offerta che pubblichi — insieme ai feedback e alle recensioni che lasci e ricevi — è pubblica sulla blockchain, per costruire reputazione, per memoria e per le tue ricerche sugli altri trader.",
 		"privacy_body_protected": "Al contrario, le tue conversazioni private restano private. I messaggi diretti tra trader sono cifrati end-to-end: risiedono sulla blockchain solo come testo cifrato che possono leggere soltanto tu e la tua controparte, mai l'operatore, gli indicizzatori o chiunque altro osservi la catena. Morphit inoltre non raccoglie alcun nome, e-mail, telefono o documento d'identità, e i dati di pagamento che scambi (come un indirizzo di ricezione) viaggiano attraverso quel canale cifrato anziché nel registro ordini pubblico.",
 		"privacy_body_3": "Ti incoraggiamo a usare una VPN, Tor, Lokinet o I2P quando accedi a Morphit — qualsiasi cosa che nasconda il tuo IP al server con cui parli è una buona idea. Non rileviamo l'impronta del tuo browser, non ti profiliamo, e progettiamo esplicitamente le nostre difese contro gli abusi in modo che non puniscano gli utenti attenti alla privacy. I nostri limiti di frequenza sono grossolani (pochi registrazioni per utente al giorno) e facilmente aggirabili ruotando VPN — è un compromesso cosciente. Preferiamo accettare più abusi che far sentire a disagio gli utenti che rispettano la propria privacy. Se una difesa richiedesse di tracciarti per funzionare, non la implementiamo.",
+		"privacy_body_zero_clearnet": "Andiamo oltre l'incoraggiare la privacy — la dimostriamo. Un nodo Morphit può funzionare senza alcun uso dell'internet clearnet: letture della catena, prezzi e aggiornamenti software viaggiano tutti su Tor e I2P, verificato, e la directory assegna il badge «Zero uso dell'internet clearnet» solo quando tutti e sette i percorsi indipendenti sono dimostrabilmente nascosti. È per singolo nodo — un'istanza clearnet continua a usare il clearnet per scelta — ma è reale e attivo oggi: morphitlat funziona interamente su Tor e I2P. Per chi si trova in una regione censurata, è un nodo di mercato il cui IP non è mai esposto e che non può essere spento bloccando l'internet aperto.",
 		"terms_heading": "Termini",
 		"terms_body": "Per favore rispetta il Principio di Non-Aggressione (PNA). Imprecare è accettabile, ma ricorda che Morphit è usato da persone di tutte le età — anziani, adolescenti e tutti quelli nel mezzo. Tutte le OPINIONI sono benvenute, gli insulti diretti no. I tuoi ordini di acquisto/vendita, le tue chat private e la sezione recensioni sono immutabili, quindi le parole contano. Dì la tua opinione e basta. Non iniziare litigi. Non pubblicare cose illegali o manifestamente offensive. Ricorda le buone maniere, sii gentile. 💚💙"
 	},
@@ -4043,16 +4057,6 @@
 			"reminder_title": "💡 I nomi visibili non sono unici.",
 			"reminder_body": "Chiunque può usare qualsiasi nome. La chiave corta tra parentesi è ciò che ti identifica davvero, e nessun altro può copiarla. Controlla sempre la chiave quando fai trading.",
 			"save_and_broadcast": "Salva e trasmetti",
-			"broadcast_err": {
-				"no_account": "Salvato localmente. La pubblicazione sarà disponibile dopo la registrazione del tuo account.",
-				"locked": "Sessione bloccata. Accedi di nuovo per pubblicare.",
-				"generic": "Non siamo riusciti a trasmettere. Riprova.",
-				"rejected": "Pubblicazione rifiutata dalla rete: {reason}",
-				"key_mismatch": "L'identità sbloccata non è autorizzata a pubblicare per @{account}. Assicurati che sia sbloccato l'account corretto e che il nome account memorizzato corrisponda, poi riprova.",
-				"wrong_account": "Questa scheda ha effettuato l'accesso con le chiavi di un account diverso da quello che Morphit crede tu stia usando. Nulla è stato trasmesso. Ricarica questa pagina, oppure esci da Morphit nelle altre schede, e riprova.",
-				"no_account_for_key": "La chiave di questa sessione non controlla alcun account sulla blockchain. Nulla è stato trasmesso. Esci e rientra con la chiave corretta.",
-				"lookup_failed": "Morphit non è riuscito a contattare il suo indexer per verificare quale account controlla questa chiave, quindi non ha trasmesso nulla. Controlla la connessione e riprova."
-			},
 			"broadcast_pending": "Pubblicazione in corso…",
 			"broadcast_ok_detail": "Il tuo nome visualizzato è ora pubblico per tutti."
 		},
@@ -4240,7 +4244,6 @@
 			"preview_label": "Anteprima",
 			"preview_display_name_placeholder": "Il tuo nome",
 			"preview_size": "{bytes} di {cap} massimo",
-			"preview_getting_large": "Si avvicina al limite di dimensione — considera un'immagine più semplice o una sorgente più piccola.",
 			"broadcast": "Trasmetti avatar",
 			"cancel": "Scarta",
 			"remove": "Rimuovi avatar",
@@ -4249,6 +4252,7 @@
 				"unsupported_type": "Quel tipo di file non è supportato. Usa SVG, WebP, JPEG, PNG o GIF.",
 				"empty_file": "Il file è vuoto.",
 				"input_too_large": "Questa immagine è troppo grande da caricare. Scegli un file sotto i 5 MB.",
+				"image_dimensions_too_large": "Le dimensioni di questa immagine sono troppo grandi da elaborare (max 12000×12000, ~40 megapixel). Riducila — alla maggior parte delle foto bastano poche centinaia di pixel — e riprova.",
 				"parse_failed": "Impossibile analizzare questo SVG. Il file potrebbe essere malformato.",
 				"svg_no_root": "Questo non sembra un file SVG valido.",
 				"svg_too_large": "Questo SVG è troppo complesso per stare sotto il limite on-chain di 6 KB. Prova a semplificarlo — meno tracciati, meno dettaglio o un viewBox più piccolo.",

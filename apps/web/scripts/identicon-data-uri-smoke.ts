@@ -133,6 +133,19 @@ check(
 			identiconDataUriFromString('morphitlat')
 		]).size === 3
 	);
+	// v1.16.5 — pin the ACTUAL render path. IdentityLabel (operators page, order
+	// rows, profiles, explorer…) seeds its identicon itself; a fix to
+	// identiconDataUriFromString alone does NOT reach it (the v1.16.4 miss). Assert
+	// it routes the account name through the shared hasher, never raw UTF-8.
+	const idLabel = readFileSync(
+		join(__dirname, '..', 'src', 'lib', 'components', 'IdentityLabel.svelte'),
+		'utf8'
+	);
+	check('IdentityLabel seeds the account via seedBytesFromString', /seedBytesFromString\(account\)/.test(idLabel));
+	check(
+		'IdentityLabel does not raw-UTF8-encode the account seed',
+		!/new TextEncoder\(\)\.encode\(account\)/.test(idLabel)
+	);
 }
 
 // ── Report ───────────────────────────────────────────────────────────

@@ -405,7 +405,6 @@
 		},
 		"block": {
 			"busy": "Verarbeitung…",
-			"failed": "Der Blockierstatus konnte nicht aktualisiert werden. Prüfe deine Verbindung und versuche es erneut.",
 			"confirm": {
 				"block": {
 					"title": "@{peer} blockieren?",
@@ -837,7 +836,25 @@
 		"unlock": "Entsperren",
 		"password_too_short": "Das Passwort muss mindestens 8 Zeichen haben.",
 		"lazy_load_failed": "Dieser Abschnitt konnte nicht geladen werden.",
-		"ok": "Verstanden"
+		"ok": "Verstanden",
+		"broadcast_err": {
+			"no_account": "Lokal gespeichert. Die Veröffentlichung ist verfügbar, sobald dein Konto registriert ist.",
+			"locked": "Sitzung gesperrt. Bitte neu anmelden, um zu veröffentlichen.",
+			"generic": "Konnte nicht übertragen werden. Versuche es erneut.",
+			"rejected": "Übertragung vom Netzwerk abgelehnt: {reason}",
+			"key_mismatch": "Die entsperrte Identität ist nicht berechtigt, für @{account} zu posten. Stelle sicher, dass das richtige Konto entsperrt ist und der hinterlegte Kontoname dazu passt, und versuche es erneut.",
+			"wrong_account": "Dieser Tab ist mit den Schlüsseln eines anderen Kontos angemeldet als dem, das Morphit für deins hält. Es wurde nichts gesendet. Lade diese Seite neu oder melde dich in deinen anderen Tabs von Morphit ab, und versuche es erneut.",
+			"no_account_for_key": "Der Schlüssel dieser Sitzung kontrolliert kein Konto auf der Blockchain. Es wurde nichts gesendet. Melde dich ab und mit dem richtigen Schlüssel wieder an.",
+			"lookup_failed": "Morphit konnte seinen Indexer nicht erreichen, um zu prüfen, welches Konto dieser Schlüssel kontrolliert, und hat deshalb nichts gesendet. Prüfe deine Verbindung und versuche es erneut.",
+			"unreachable": "Deine Morphit-Instanz war nicht erreichbar — oder deine Instanz konnte das Blurt-Netzwerk nicht erreichen. Sie ist evtl. offline, synchronisiert noch oder ihre Verbindung zur Chain ist blockiert (manche Netze/Länder filtern sie). Stelle sicher, dass deine Instanz online ist und das Netzwerk erreichen kann, und versuche es erneut. (Details: {detail})",
+			"low_blurt": "Das Senden kostet eine kleine BLURT-Gebühr — und eine große Änderung wie ein Avatar kostet mehr als eine Textänderung (die Gebühr steigt mit der Größe). Das liquide BLURT deines Kontos reicht nicht aus, um sie zu decken. Füge deinem Konto etwas liquides BLURT hinzu und versuche es erneut. (Chain: {reason})",
+			"too_large": "Dieses Bild ist zu groß für die Blockchain. Wähle ein kleineres oder einfacheres Bild (ein kompaktes SVG oder ein kleineres Foto) und versuche es erneut. (Chain: {reason})",
+			"auth": "Dein Posting-Schlüssel ist nicht berechtigt, für dieses Konto zu posten. Melde dich ab und mit dem richtigen Schlüssel wieder an, und versuche es erneut. (Chain: {reason})",
+			"generic_detail": "Senden fehlgeschlagen: {detail}. Bitte versuche es erneut — wenn es weiterhin auftritt, ist genau diese Meldung die Ursache zum Melden.",
+			"offline": "Du scheinst offline zu sein. Prüfe deine Internetverbindung und versuche es erneut — es wurde nichts gesendet.",
+			"tx_expired": "Die Uhr deines Geräts geht falsch, daher ist die signierte Transaktion abgelaufen, bevor sie die Chain erreichte (sie gelten nur wenige Sekunden). Aktiviere die automatische Datums- & Uhrzeiteinstellung und versuche es erneut. (Chain: {reason})",
+			"duplicate": "Das sieht so aus, als wäre es bereits durchgegangen. Lade die Seite neu, um deinen Avatar zu prüfen, bevor du es erneut versuchst. (Chain: {reason})"
+		}
 	},
 	"compare": {
 		"heading": "Orderbooks vergleichen",
@@ -1759,8 +1776,6 @@
 			"self_review": "Du kannst kein Feedback über dich selbst hinterlassen.",
 			"comment_too_long": "Kommentar ist zu lang (max. 256 Zeichen).",
 			"comment_forbidden_char": "Kommentar enthält nicht erlaubte Zeichen.",
-			"broadcast_failed": "Feedback konnte gerade nicht gesendet werden. Bitte gleich nochmal versuchen.",
-			"no_account": "Du musst erst ein Konto registrieren.",
 			"locked": "Deine Sitzung ist gesperrt. Entsperre sie zum Senden."
 		},
 		"success_line": "Feedback abgesendet. Danke!",
@@ -1797,8 +1812,6 @@
 			"comment_empty": "Antwort darf nicht leer sein.",
 			"comment_too_long": "Antwort ist zu lang (max. 256 Zeichen).",
 			"comment_forbidden_char": "Antwort enthält nicht erlaubte Zeichen.",
-			"broadcast_failed": "Deine Antwort konnte gerade nicht gesendet werden. Bitte gleich nochmal versuchen.",
-			"no_account": "Du musst erst ein Konto registrieren.",
 			"locked": "Deine Sitzung ist gesperrt. Entsperre sie zum Senden."
 		},
 		"reply_button": "Antworten",
@@ -3486,6 +3499,7 @@
 		"privacy_body_2": "Jedes Angebot, das du veröffentlichst — zusammen mit dem Feedback und den Bewertungen, die du abgibst und erhältst — ist öffentlich auf der Blockchain, zum Aufbau von Reputation, für die Nachwelt und für deine eigene Recherche über andere Trader.",
 		"privacy_body_protected": "Im Gegensatz dazu bleiben Ihre privaten Unterhaltungen privat. Direktnachrichten zwischen Händlern sind Ende-zu-Ende-verschlüsselt – sie liegen auf der Blockchain nur als Geheimtext vor, den ausschließlich Sie und Ihr Handelspartner lesen können, niemals der Betreiber, die Indexer oder sonst jemand, der die Kette beobachtet. Morphit erfasst außerdem keinen Namen, keine E-Mail, keine Telefonnummer und keinen Ausweis, und die Zahlungsdaten, die Sie austauschen (etwa eine Empfangsadresse), laufen über diesen verschlüsselten Kanal statt über das öffentliche Orderbuch.",
 		"privacy_body_3": "Wir ermutigen dich, ein VPN, Tor, Lokinet oder I2P zu verwenden, wenn du auf Morphit zugreifst — alles, was deine IP vor dem Server verbirgt, mit dem du sprichst, ist eine gute Idee. Wir nehmen keine Fingerabdrücke deines Browsers, wir profilieren dich nicht, und wir gestalten unsere Missbrauchsabwehr ausdrücklich so, dass sie datenschutzbewusste Benutzer nicht bestraft. Unsere Rate-Limits sind grob (einige Registrierungen pro Benutzer pro Tag) und durch VPN-Rotation leicht zu umgehen — das ist ein bewusster Kompromiss. Wir akzeptieren lieber mehr Missbrauch, als datenschutzbewusste Benutzer unwillkommen zu machen. Wenn eine Abwehr erfordern würde, dich zu tracken, um zu funktionieren, implementieren wir sie nicht.",
+		"privacy_body_zero_clearnet": "Wir gehen weiter, als nur Privatsphäre zu empfehlen — wir beweisen sie. Ein Morphit-Knoten kann ganz ohne Nutzung des Clearnet-Internets laufen: Chain-Abfragen, Preise und Software-Updates laufen allesamt über Tor und I2P, überprüft, und das Verzeichnis vergibt das Abzeichen „Null Nutzung des Clearnet-Internets“ erst, wenn alle sieben unabhängigen Wege nachweislich versteckt sind. Das gilt pro Knoten — eine Clearnet-Instanz nutzt weiterhin bewusst das Clearnet — aber es ist real und heute in Betrieb: morphitlat läuft ausschließlich über Tor und I2P. Für jemanden in einer zensierten Region ist das ein Marktplatz-Knoten, dessen IP nie preisgegeben wird und der nicht durch Sperren des offenen Internets abgeschaltet werden kann.",
 		"terms_heading": "Nutzungsbedingungen",
 		"terms_body": "Bitte halte dich an das Nichtangriffsprinzip (NAP). Fluchen ist okay, aber denke daran, dass Morphit von Menschen aller Altersgruppen genutzt wird — Ältere, Jugendliche und alle dazwischen. Alle MEINUNGEN sind willkommen, gezielte Beleidigungen nicht. Deine Kauf-/Verkaufsangebote, deine privaten Chats und der Bewertungsbereich sind unveränderlich — die Formulierung zählt. Sag deine Meinung, dann Schluss. Fang keinen Streit an. Poste nichts Illegales oder offensichtlich Anstößiges. Gute Manieren. Sei freundlich. 💚💙"
 	},
@@ -4043,16 +4057,6 @@
 			"reminder_title": "💡 Anzeigenamen sind nicht eindeutig.",
 			"reminder_body": "Jeder kann jeden Namen nutzen. Der kurze Schlüssel in Klammern ist es, der dich wirklich ausweist, und den kann niemand kopieren. Prüfe beim Handeln immer den Schlüssel.",
 			"save_and_broadcast": "Speichern & senden",
-			"broadcast_err": {
-				"no_account": "Lokal gespeichert. Die Veröffentlichung ist verfügbar, sobald dein Konto registriert ist.",
-				"locked": "Sitzung gesperrt. Bitte neu anmelden, um zu veröffentlichen.",
-				"generic": "Konnte nicht übertragen werden. Versuche es erneut.",
-				"rejected": "Übertragung vom Netzwerk abgelehnt: {reason}",
-				"key_mismatch": "Die entsperrte Identität ist nicht berechtigt, für @{account} zu posten. Stelle sicher, dass das richtige Konto entsperrt ist und der hinterlegte Kontoname dazu passt, und versuche es erneut.",
-				"wrong_account": "Dieser Tab ist mit den Schlüsseln eines anderen Kontos angemeldet als dem, das Morphit für deins hält. Es wurde nichts gesendet. Lade diese Seite neu oder melde dich in deinen anderen Tabs von Morphit ab, und versuche es erneut.",
-				"no_account_for_key": "Der Schlüssel dieser Sitzung kontrolliert kein Konto auf der Blockchain. Es wurde nichts gesendet. Melde dich ab und mit dem richtigen Schlüssel wieder an.",
-				"lookup_failed": "Morphit konnte seinen Indexer nicht erreichen, um zu prüfen, welches Konto dieser Schlüssel kontrolliert, und hat deshalb nichts gesendet. Prüfe deine Verbindung und versuche es erneut."
-			},
 			"broadcast_pending": "Veröffentlichung…",
 			"broadcast_ok_detail": "Dein Anzeigename ist jetzt für alle öffentlich sichtbar."
 		},
@@ -4240,7 +4244,6 @@
 			"preview_label": "Vorschau",
 			"preview_display_name_placeholder": "Dein Name",
 			"preview_size": "{bytes} von {cap} maximal",
-			"preview_getting_large": "Kommt dem Größenlimit nahe — versuche ein einfacheres Bild oder eine kleinere Quelle.",
 			"broadcast": "Avatar senden",
 			"cancel": "Verwerfen",
 			"remove": "Avatar entfernen",
@@ -4249,6 +4252,7 @@
 				"unsupported_type": "Dieser Dateityp wird nicht unterstützt. Verwende SVG, WebP, JPEG, PNG oder GIF.",
 				"empty_file": "Die Datei ist leer.",
 				"input_too_large": "Dieses Bild ist zu groß zum Hochladen. Bitte wähle eine Datei unter 5 MB.",
+				"image_dimensions_too_large": "Die Abmessungen dieses Bildes sind zu groß zum Verarbeiten (max. 12000×12000, ~40 Megapixel). Verkleinere es — die meisten Fotos brauchen nur ein paar hundert Pixel — und versuche es erneut.",
 				"parse_failed": "SVG konnte nicht geparst werden. Die Datei ist möglicherweise fehlerhaft.",
 				"svg_no_root": "Das sieht nicht nach einer gültigen SVG-Datei aus.",
 				"svg_too_large": "Dieses SVG ist zu komplex, um unter das 6-KB-On-chain-Limit zu passen. Vereinfache es — weniger Pfade, weniger Details oder eine kleinere viewBox.",

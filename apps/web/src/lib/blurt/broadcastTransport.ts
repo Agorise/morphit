@@ -59,6 +59,21 @@ export class BroadcastUnavailableError extends Error {
 	}
 }
 
+/**
+ * Thrown when a broadcast can't proceed because of a structural issue
+ * (not a transport failure). UI code catches this and maps `code` to a
+ * localized message.
+ */
+export class BroadcastError extends Error {
+	constructor(
+		public readonly code: 'no_account' | 'locked' | 'missing_external_tx_id' | 'key_mismatch',
+		message: string
+	) {
+		super(message);
+		this.name = 'BroadcastError';
+	}
+}
+
 function indexerUrl(path: string): URL {
 	return new URL(path, resolveOrigin(MORPHIT_INDEXER_ORIGIN));
 }

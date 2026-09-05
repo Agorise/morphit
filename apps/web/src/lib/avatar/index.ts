@@ -66,9 +66,61 @@ export const MAX_AVATAR_BYTES = 6144;
  *  prevent tab-DoS on a paste of a huge file.  Part 122 cp5-fix. */
 export const MAX_INPUT_FILE_BYTES = 5 * 1024 * 1024;
 
+// A small file can still be a pixel-bomb — e.g. a 2 MB PNG that decodes to
+// 30000×30000 (2.7 GB in memory). The 5 MB file cap above does not catch that,
+// and createImageBitmap would OOM/freeze the tab before any downstream check.
+// So we read the dimensions from the file HEADER and reject an over-large image
+// up front, with an accurate message (not the misleading "corrupt").
+export const MAX_AVATAR_SOURCE_PIXELS = 40_000_000; // 40 MP
+export const MAX_AVATAR_SOURCE_DIM = 12000; // per side
+
+/** Read a raster image's intrinsic pixel dimensions from its header bytes,
+ *  without decoding it. Handles PNG, GIF, JPEG, and WebP (VP8X). Returns null
+ *  for an unrecognised/too-short header (caller then falls through to decode,
+ *  whose try/catch is the backstop). PURE + testable. */
+export function readRasterDimensions(b: Uint8Array): { width: number; height: number } | null {
+	// PNG: \x89PNG\r\n\x1a\n then IHDR; width/height are BE uint32 at 16/20.
+	if (b.length >= 24 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) {
+		const be32 = (o: number): number => ((b[o]! << 24) | (b[o + 1]! << 16) | (b[o + 2]! << 8) | b[o + 3]!) >>> 0;
+		return { width: be32(16), height: be32(20) };
+	}
+	// GIF: "GIF8" then LE uint16 width/height at 6/8.
+	if (b.length >= 10 && b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x38) {
+		return { width: b[6]! | (b[7]! << 8), height: b[8]! | (b[9]! << 8) };
+	}
+	// WebP: "RIFF"...."WEBP" then a chunk; VP8X carries 24-bit (dim-1) at 24/27.
+	if (b.length >= 30 && b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50 && b[12] === 0x56 && b[13] === 0x50 && b[14] === 0x38 && b[15] === 0x58) {
+		const w = (b[24]! | (b[25]! << 8) | (b[26]! << 16)) + 1;
+		const h = (b[27]! | (b[28]! << 8) | (b[29]! << 16)) + 1;
+		return { width: w, height: h };
+	}
+	// JPEG: FFD8, then scan segments for an SOF marker carrying height/width BE.
+	if (b.length >= 4 && b[0] === 0xff && b[1] === 0xd8) {
+		let i = 2;
+		while (i + 9 < b.length) {
+			if (b[i] !== 0xff) {
+				i++;
+				continue;
+			}
+			const marker = b[i + 1]!;
+			// SOF0..SOF15 carry dimensions, except DHT(C4)/JPG(C8)/DAC(CC).
+			if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+				return { width: (b[i + 7]! << 8) | b[i + 8]!, height: (b[i + 5]! << 8) | b[i + 6]! };
+			}
+			if (marker === 0xd8 || marker === 0xd9 || (marker >= 0xd0 && marker <= 0xd7)) {
+				i += 2; // standalone markers, no length
+				continue;
+			}
+			const len = (b[i + 2]! << 8) | b[i + 3]!;
+			if (len < 2) break;
+			i += 2 + len;
+		}
+	}
+	return null;
+}
+
 /** Soft warning threshold — UI shows a "getting large" hint above
  *  this, still accepts up to the hard cap. */
-export const SOFT_WARN_AVATAR_BYTES = 4096;
 
 /** Pixel dimensions of the re-encoded raster output. 96 matches
  *  IdentityLabel's hero avatar size; anything larger is wasted
@@ -88,6 +140,7 @@ export type AvatarErrorCode =
 	| 'unsupported_type'
 	| 'empty_file'
 	| 'input_too_large'
+	| 'image_dimensions_too_large'
 	| 'parse_failed'
 	| 'svg_no_root'
 	| 'svg_too_large'
@@ -560,6 +613,23 @@ export async function reencodeRaster(file: Blob): Promise<AvatarResult> {
 		// SSR or test env with no DOM — callers should only invoke
 		// this from the browser.
 		return { ok: false, code: 'canvas_unavailable' };
+	}
+
+	// Reject a pixel-bomb (small file, enormous dimensions) BEFORE createImageBitmap
+	// can OOM/freeze the tab — read the dimensions from the header, don't decode.
+	try {
+		const head = new Uint8Array(await file.slice(0, 131072).arrayBuffer());
+		const dims = readRasterDimensions(head);
+		if (
+			dims &&
+			(dims.width * dims.height > MAX_AVATAR_SOURCE_PIXELS ||
+				dims.width > MAX_AVATAR_SOURCE_DIM ||
+				dims.height > MAX_AVATAR_SOURCE_DIM)
+		) {
+			return { ok: false, code: 'image_dimensions_too_large' };
+		}
+	} catch {
+		// Couldn't read the header — fall through; the decode try/catch is the backstop.
 	}
 
 	// Decode the input. createImageBitmap is the fastest path and

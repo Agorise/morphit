@@ -93,8 +93,13 @@ check('the refusal names the account, so the user learns which tab they are in',
 
 // The user must never read a chain dump for a two-tab mistake.
 const settings = strip(read('src', 'routes', '[lang]', 'settings', '+page.svelte'));
-check('settings maps AccountBindingError to human copy BEFORE ChainRejectedError', settings.indexOf('err instanceof AccountBindingError') < settings.indexOf('err instanceof ChainRejectedError'));
-check('…with a "wrong account" message', /broadcast_err\.wrong_account/.test(settings));
+// v1.16.5 — the classification moved out of settings into the shared, tested
+// resolver (broadcastErrorClass.ts). Settings now calls broadcastErrorMessage;
+// the ordering + wording invariants live in the classifier.
+const classifier = strip(read('src', 'lib', 'blurt', 'broadcastErrorClass.ts'));
+check('settings routes broadcast errors through the shared resolver', /broadcastErrorMessage\(/.test(settings));
+check('classifier maps AccountBindingError to human copy BEFORE ChainRejectedError', classifier.indexOf('err instanceof AccountBindingError') < classifier.indexOf('err instanceof ChainRejectedError'));
+check('…with a "wrong account" key', /wrong_account/.test(classifier));
 
 // ── the alias trap that broke wallet-op-builders-smoke ──────────────
 // In `tsconfig.smoke.json`, `$blurt/*` resolves to apps/indexer/src/blurt/* —

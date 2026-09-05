@@ -39,6 +39,7 @@ import { printChainErrorHelp, classifyChainError, SUGGESTED_LIQUID_BLURT_BUFFER,
 import { isReservedTag } from '../../../indexer/src/indexer/confusables.ts';
 import { defaultRepoRoot } from '../lib/repoRoot.ts';
 import { loadInstanceEnv } from '../lib/instanceEnv.ts';
+import { operatorTagConflict, fetchRegisteredTag } from '../lib/operatorTagGuard.ts';
 
 export interface RegisterCtx {
 	readonly flags: Readonly<Record<string, string>>;
@@ -121,6 +122,28 @@ export async function runRegister(ctx: RegisterCtx): Promise<number> {
 		console.log('  Change your federation tag to one that identifies YOUR node');
 		console.log('  (your domain is a good choice) by re-running');
 		console.log('  `npx morphit-ops edit` (Operator tag), then re-run register.');
+		return 1;
+	}
+
+	// Pre-flight: the tag is IMMUTABLE. If this account already registered under
+	// a DIFFERENT tag, the on-chain handler rejects a re-register as
+	// `tag_immutable` and silently changes NOTHING — the operator broadcasts a
+	// valid-looking op but their display_name / origin / contact never update
+	// (the trap that left morphitlat's title stale for 10 hours). Catch it here,
+	// against the local indexer, before the irreversible confirm + any mana.
+	const registeredTag = await withSpinner(
+		'Checking your existing on-chain registration…',
+		() => fetchRegisteredTag(account)
+	);
+	if (operatorTagConflict(registeredTag, tag)) {
+		console.log(`✗ @${sanitizeForTerm(account)} is already registered under the tag "${sanitizeForTerm(registeredTag as string)}".`);
+		console.log('  The federation tag is PERMANENT. Re-registering under a different tag');
+		console.log(`  ("${sanitizeForTerm(tag)}") is rejected on-chain as tag_immutable and changes`);
+		console.log('  nothing — your display name, origin, and contact would NOT update.');
+		console.log('');
+		console.log(`  Set MORPHIT_INSTANCE_OPERATOR_TAG="${sanitizeForTerm(registeredTag as string)}" (via`);
+		console.log('  `npx morphit-ops edit` → Operator tag, or the config file) so it matches');
+		console.log('  your registered tag, then re-run register to update the other fields.');
 		return 1;
 	}
 

@@ -69,6 +69,8 @@
 	} from '$stores/chatSecurity';
 	import { blockedAccounts, loadBlocks, markBlocked, markUnblocked } from '$lib/chat/blocks';
 	import { broadcastBlock, broadcastUnblock } from '$blurt/ops/block';
+	import { broadcastErrorMessage } from '$blurt/broadcastErrorClass';
+	import { getUserBlurtAccount } from '$blurt/ops/profile';
 	import {
 		getChatAdmission,
 		getOrdersByAccount,
@@ -436,7 +438,7 @@
 			// the banner auto-clears after a few seconds.
 			console.error('block toggle failed', err);
 			pendingBlockAction = null;
-			showBlockError($_('chat.block.failed') as string);
+			showBlockError(broadcastErrorMessage($_, err, getUserBlurtAccount() ?? ''));
 		} finally {
 			blockActionBusy = false;
 		}

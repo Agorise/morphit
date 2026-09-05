@@ -41,7 +41,7 @@
 	import { _ } from 'svelte-i18n';
 	import { onDestroy } from 'svelte';
 	import { formatIdentity } from '$crypto/profile';
-	import { identiconDataUri } from '$crypto/identicon';
+	import { identiconDataUri, seedBytesFromString } from '$crypto/identicon';
 	import { selfProfile } from '$lib/stores/selfProfile';
 	import { truncatePublicKey } from '$lib/crypto/publicKeyDisplay';
 
@@ -213,7 +213,12 @@
 	// a mid-onboarding preview before the name exists).
 	const seedBytes = $derived.by(() => {
 		if (account && account.length > 0) {
-			return new TextEncoder().encode(account);
+			// v1.16.5 — avalanche-hash the name instead of raw UTF-8. Raw bytes
+			// collide on shared prefixes (the identicon reads bytes[0..7]), so
+			// `morphit` / `morphitir` / `morphitlat` rendered identical hearts on
+			// the operators page. Hashing diverges every byte; still deterministic
+			// per name, so the identicon stays a stable per-identity anchor.
+			return seedBytesFromString(account);
 		}
 		if (publicKey && publicKey.length > 0) return publicKey;
 		// Empty fallback — all-zero bytes produce a consistent but

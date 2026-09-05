@@ -405,7 +405,6 @@
 		},
 		"block": {
 			"busy": "Traitement…",
-			"failed": "Impossible de mettre à jour l'état du blocage. Vérifiez votre connexion et réessayez.",
 			"confirm": {
 				"block": {
 					"title": "Bloquer @{peer}?",
@@ -837,7 +836,25 @@
 		"unlock": "Déverrouiller",
 		"password_too_short": "Le mot de passe doit faire au moins 8 caractères.",
 		"lazy_load_failed": "Impossible de charger cette section.",
-		"ok": "Compris"
+		"ok": "Compris",
+		"broadcast_err": {
+			"no_account": "Enregistré localement. La publication sera disponible une fois votre compte enregistré.",
+			"locked": "Session verrouillée. Reconnectez-vous pour publier.",
+			"generic": "Impossible de diffuser. Réessaie.",
+			"rejected": "Diffusion refusée par le réseau : {reason}",
+			"key_mismatch": "L'identité déverrouillée n'est pas autorisée à publier pour @{account}. Vérifiez que le bon compte est déverrouillé et que le nom de compte enregistré correspond, puis réessayez.",
+			"wrong_account": "Cet onglet est connecté avec les clés d'un compte différent de celui que Morphit croit que vous utilisez. Rien n'a été diffusé. Rechargez cette page, ou déconnectez-vous de Morphit dans vos autres onglets, puis réessayez.",
+			"no_account_for_key": "La clé de cette session ne contrôle aucun compte sur la blockchain. Rien n'a été diffusé. Déconnectez-vous et reconnectez-vous avec la bonne clé.",
+			"lookup_failed": "Morphit n'a pas pu joindre son indexeur pour vérifier quel compte cette clé contrôle, donc rien n'a été diffusé. Vérifiez votre connexion et réessayez.",
+			"unreachable": "Impossible de joindre votre instance Morphit — ou votre instance n'a pas pu atteindre le réseau Blurt. Elle est peut-être hors ligne, encore en synchronisation, ou sa connexion à la chaîne est bloquée (certains réseaux ou pays la filtrent). Assurez-vous que votre instance est en ligne et peut atteindre le réseau, puis réessayez. (Détails : {detail})",
+			"low_blurt": "La diffusion coûte une petite commission en BLURT — et une mise à jour volumineuse comme un avatar coûte plus qu'une modification de texte (la commission augmente avec la taille). Le BLURT liquide de votre compte est insuffisant pour la couvrir. Ajoutez un peu de BLURT liquide à votre compte, puis réessayez. (Chaîne : {reason})",
+			"too_large": "Cette image est trop grande pour la blockchain. Choisissez une image plus petite ou plus simple (un SVG compact ou une photo plus petite), puis réessayez. (Chaîne : {reason})",
+			"auth": "Votre clé de publication n'est pas autorisée à publier pour ce compte. Déconnectez-vous et reconnectez-vous avec la bonne clé, puis réessayez. (Chaîne : {reason})",
+			"generic_detail": "Échec de la diffusion : {detail}. Réessayez — si cela persiste, ce message est la cause exacte à signaler.",
+			"offline": "Vous semblez hors ligne. Vérifiez votre connexion internet et réessayez — rien n'a été envoyé.",
+			"tx_expired": "L'horloge de votre appareil est décalée, donc la transaction signée a expiré avant d'atteindre la chaîne (elles ne sont valables que quelques secondes). Activez la date et l'heure automatiques pour synchroniser l'horloge, puis réessayez. (Chaîne : {reason})",
+			"duplicate": "Il semble que cela soit déjà passé. Actualisez la page pour vérifier votre avatar avant de réessayer. (Chaîne : {reason})"
+		}
 	},
 	"compare": {
 		"heading": "Comparer les orderbooks",
@@ -1759,8 +1776,6 @@
 			"self_review": "Tu ne peux pas te donner un avis à toi-même.",
 			"comment_too_long": "Commentaire trop long (max. 256 caractères).",
 			"comment_forbidden_char": "Le commentaire contient des caractères interdits.",
-			"broadcast_failed": "Impossible d'envoyer l'avis pour le moment. Réessaye dans un instant.",
-			"no_account": "Tu dois d'abord enregistrer un compte.",
 			"locked": "Ta session est verrouillée. Déverrouille pour envoyer."
 		},
 		"success_line": "Avis envoyé. Merci !",
@@ -1797,8 +1812,6 @@
 			"comment_empty": "La réponse ne peut pas être vide.",
 			"comment_too_long": "Réponse trop longue (max. 256 caractères).",
 			"comment_forbidden_char": "La réponse contient des caractères interdits.",
-			"broadcast_failed": "Impossible de publier ta réponse pour le moment. Réessaye dans un instant.",
-			"no_account": "Tu dois d'abord enregistrer un compte.",
 			"locked": "Ta session est verrouillée. Déverrouille pour publier."
 		},
 		"reply_button": "Répondre",
@@ -3486,6 +3499,7 @@
 		"privacy_body_2": "Chaque offre que vous publiez — ainsi que les avis et évaluations que vous laissez et recevez — est publique sur la blockchain, pour bâtir une réputation, pour la postérité et pour vos propres recherches sur les autres traders.",
 		"privacy_body_protected": "À l'inverse, vos conversations privées restent privées. Les messages directs entre traders sont chiffrés de bout en bout : ils ne figurent sur la blockchain que sous forme de texte chiffré que vous seuls, vous et votre partenaire d'échange, pouvez lire — jamais l'opérateur, les indexeurs, ni quiconque observe la chaîne. Morphit ne collecte pas non plus de nom, d'e-mail, de téléphone ni de pièce d'identité, et les informations de paiement que vous échangez (comme une adresse de réception) transitent par ce canal chiffré plutôt que par le carnet d'ordres public.",
 		"privacy_body_3": "Nous vous encourageons à utiliser un VPN, Tor, Lokinet ou I2P pour accéder à Morphit — tout ce qui cache votre IP au serveur avec lequel vous parlez est une bonne idée. Nous ne prenons pas d'empreintes de votre navigateur, nous ne vous profilons pas, et nous concevons explicitement nos défenses contre les abus pour ne pas pénaliser les utilisateurs soucieux de leur vie privée. Nos limites de débit sont grossières (quelques inscriptions par utilisateur par jour) et facilement contournées par rotation de VPN — c'est un compromis conscient. Nous préférons accepter plus d'abus que faire sentir les utilisateurs respectueux de la vie privée mal accueillis. Si une défense nécessitait de vous suivre pour fonctionner, nous ne l'implémentons pas.",
+		"privacy_body_zero_clearnet": "Nous allons plus loin qu'encourager la vie privée — nous la prouvons. Un nœud Morphit peut fonctionner sans aucune utilisation de l'internet clearnet : les lectures de la chaîne, les prix et les mises à jour logicielles passent tous par Tor et I2P, vérifié, et l'annuaire décerne le badge « Zéro utilisation de l'internet clearnet » uniquement lorsque les sept voies indépendantes sont prouvées cachées. C'est par nœud — une instance clearnet continue d'utiliser le clearnet à dessein — mais c'est réel et actif aujourd'hui : morphitlat fonctionne entièrement via Tor et I2P. Pour quelqu'un dans une région censurée, c'est un nœud de marché dont l'IP n'est jamais exposée et qu'on ne peut pas éteindre en bloquant l'internet ouvert.",
 		"terms_heading": "Conditions",
 		"terms_body": "Veuillez respecter le Principe de Non-Agression (PNA). Jurer est acceptable, mais gardez à l'esprit que Morphit s'utilise à tout âge — personnes âgées, adolescents, et tout le monde entre les deux. Toutes les OPINIONS sont les bienvenues, mais les insultes directes non. Vos ordres d'achat/vente, vos discussions privées et la section des avis sont immuables, donc les mots comptent. Dites votre avis, puis arrêtez. Ne cherchez pas la bagarre. Ne publiez rien d'illégal ou de manifestement choquant. Restez poli, soyez gentil. 💚💙"
 	},
@@ -4043,16 +4057,6 @@
 			"reminder_title": "💡 Les noms d'affichage ne sont pas uniques.",
 			"reminder_body": "N'importe qui peut utiliser n'importe quel nom. La clé courte entre parenthèses est ce qui vous identifie vraiment, et personne d'autre ne peut la copier. Vérifiez toujours la clé lorsque vous tradez.",
 			"save_and_broadcast": "Enregistrer et diffuser",
-			"broadcast_err": {
-				"no_account": "Enregistré localement. La publication sera disponible une fois votre compte enregistré.",
-				"locked": "Session verrouillée. Reconnectez-vous pour publier.",
-				"generic": "Impossible de diffuser. Réessaie.",
-				"rejected": "Diffusion refusée par le réseau : {reason}",
-				"key_mismatch": "L'identité déverrouillée n'est pas autorisée à publier pour @{account}. Vérifiez que le bon compte est déverrouillé et que le nom de compte enregistré correspond, puis réessayez.",
-				"wrong_account": "Cet onglet est connecté avec les clés d'un compte différent de celui que Morphit croit que vous utilisez. Rien n'a été diffusé. Rechargez cette page, ou déconnectez-vous de Morphit dans vos autres onglets, puis réessayez.",
-				"no_account_for_key": "La clé de cette session ne contrôle aucun compte sur la blockchain. Rien n'a été diffusé. Déconnectez-vous et reconnectez-vous avec la bonne clé.",
-				"lookup_failed": "Morphit n'a pas pu joindre son indexeur pour vérifier quel compte cette clé contrôle, donc rien n'a été diffusé. Vérifiez votre connexion et réessayez."
-			},
 			"broadcast_pending": "Publication…",
 			"broadcast_ok_detail": "Votre nom public est désormais publié pour tous."
 		},
@@ -4240,7 +4244,6 @@
 			"preview_label": "Aperçu",
 			"preview_display_name_placeholder": "Ton nom",
 			"preview_size": "{bytes} sur {cap} maximum",
-			"preview_getting_large": "Proche de la limite de taille — envisage une image plus simple ou une source plus petite.",
 			"broadcast": "Diffuser l'avatar",
 			"cancel": "Abandonner",
 			"remove": "Supprimer l'avatar",
@@ -4249,6 +4252,7 @@
 				"unsupported_type": "Ce type de fichier n'est pas pris en charge. Utilise SVG, WebP, JPEG, PNG ou GIF.",
 				"empty_file": "Le fichier est vide.",
 				"input_too_large": "Cette image est trop volumineuse pour être envoyée. Choisis un fichier de moins de 5 Mo.",
+				"image_dimensions_too_large": "Les dimensions de cette image sont trop grandes à traiter (max. 12000×12000, ~40 mégapixels). Réduisez-la — la plupart des photos n'ont besoin que de quelques centaines de pixels — puis réessayez.",
 				"parse_failed": "Impossible de parser ce SVG. Le fichier est peut-être mal formé.",
 				"svg_no_root": "Ça ne ressemble pas à un fichier SVG valide.",
 				"svg_too_large": "Ce SVG est trop complexe pour tenir sous la limite on-chain de 6 Ko. Essaie de le simplifier — moins de tracés, moins de détails ou un viewBox plus petit.",

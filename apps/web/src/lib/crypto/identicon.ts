@@ -271,7 +271,7 @@ export function identiconDataUri(bytes: Uint8Array, size = 64): string {
  * on-chain bytes) are already well-distributed and go to `identiconSvg` unhashed
  * (see the module header) — hashing those would be pointless, not harmful.
  */
-function stringSeedBytes(seed: string, n = 16): Uint8Array {
+export function seedBytesFromString(seed: string, n = 16): Uint8Array {
 	let h = 1779033703 ^ seed.length;
 	for (let i = 0; i < seed.length; i++) {
 		h = Math.imul(h ^ seed.charCodeAt(i), 3432918353);
@@ -289,6 +289,6 @@ function stringSeedBytes(seed: string, n = 16): Uint8Array {
 }
 
 export function identiconDataUriFromString(seed: string, size = 64): string {
-	const bytes = stringSeedBytes(seed);
+	const bytes = seedBytesFromString(seed);
 	return identiconDataUri(bytes, size);
 }
