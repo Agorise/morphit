@@ -116,6 +116,7 @@ SECTIONS = [
         ('IPs never logged at any layer',                                    ['Y','-','-','-','-'], None),
         ('First-visit chain check prefers a hidden node — no clearnet IP on Tor', ['Y','-','-','-','-'], None),
         ('Publisher-signed on-chain directory of privacy RPC nodes (auto-adopted)', ['Y','-','-','-','-'], None),
+        ('Runs 100% over Tor/I2P — zero clearnet, verified (chain, price, upgrades)', ['Y','-','-','-','-'], None),
         ('Chain reads cross-checked across independent nodes (forgery-resistant)', ['Y','-','-','-','-'], None),
         ('No fingerprinting via canvas / WebGL / fonts',                     ['Y','-','-','-','-'], None),
         ('All env vars marked secret are validated and redacted in logs',    ['Y','-','-','-','-'], None),

@@ -57,7 +57,12 @@ const cases: Array<[string, Exp]> = [
 	['data:text/html,x', null],
 	['file:///etc/passwd', null],
 	['vbscript:msgbox', null],
-	['not a url at all', null]
+	['not a url at all', null],
+	// v16-2 — userinfo phishing rejected (visible host impersonates a trusted one
+	// while navigation goes to the real host). Matches the on-chain gate's O1.2.
+	['https://matrix.to@evil.com', null],
+	['https://user:pw@evil.com/', null],
+	['https://t.me@phish.example/x', null]
 ];
 for (const [url, exp] of cases) {
 	const got = detectContactProtocol(url);

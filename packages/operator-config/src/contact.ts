@@ -78,6 +78,13 @@ export function detectContactProtocol(raw: string | null | undefined): ContactPr
 		const u = new URL(trimmed);
 		scheme = u.protocol.toLowerCase();
 		host = u.hostname.toLowerCase();
+		// v16-2: reject userinfo (`https://user:pw@host/`). Phishing pattern —
+		// the visible prefix can impersonate a trusted host (e.g.
+		// `https://matrix.to@evil.com`) while navigation goes to `host`. This
+		// mirrors the on-chain gate's O1.2 check; folding it into the shared
+		// detector makes isAllowedContactUrl + both entry validators enforce it
+		// too, so the "single canonical gate" no longer drifts from the handler.
+		if (u.username !== '' || u.password !== '') return null;
 	} catch {
 		// URI schemes with an opaque body that WHATWG-URL may reject
 		// (e.g. `session:05ab…`): fall back to a manual scheme extract.

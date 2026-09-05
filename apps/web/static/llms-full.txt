@@ -452,6 +452,8 @@ Why it matters: every mirror, every indexer, every relay is an extra path that a
 
 The more people who run Morphit, the harder it is for anyone to take it away from the rest of us. Running a Morphit node also earns you 90% of the Blurt-paid listing fees there.
 
+**An operator can go all the way.** A Morphit node can run with zero clearnet — chain reads, prices, and upgrades all over Tor and I2P, verified — earning the directory's "Zero use of clearnet internet" badge only when every path is provably hidden. On an instance like morphitlat, nothing the node does touches the open internet, so a censored operator stays reachable and never exposes an IP.
+
 ---
 
 ## Is Morphit vulnerable to hacking, data theft, or takedowns?

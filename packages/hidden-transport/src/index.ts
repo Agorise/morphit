@@ -38,6 +38,18 @@ export function hiddenServiceProxyConfigFromEnv(
 
 export type HiddenNetwork = 'tor' | 'i2p' | 'loki' | null;
 
+/** Classify a bare HOST (no scheme) into a hidden-service network, or null for
+ *  clearnet. Used to validate operator-published instance addresses (which are
+ *  bare `.onion`/`.b32.i2p` hosts, not URLs). Same strictness as the URL path:
+ *  a v3 onion is exactly 56 base32 chars. PURE. */
+export function hiddenHostNetworkOf(host: string): HiddenNetwork {
+	const h = host.trim().toLowerCase();
+	if (/^[a-z2-7]{56}\.onion$/.test(h)) return 'tor';
+	if (h.endsWith('.i2p')) return 'i2p';
+	if (h.endsWith('.loki')) return 'loki';
+	return null;
+}
+
 /** Classify a URL's host into a hidden-service network, or null for clearnet. */
 export function hiddenNetworkOf(url: string): HiddenNetwork {
 	let host: string;
@@ -46,10 +58,7 @@ export function hiddenNetworkOf(url: string): HiddenNetwork {
 	} catch {
 		return null;
 	}
-	if (/^[a-z2-7]{56}\.onion$/.test(host)) return 'tor';
-	if (host.endsWith('.i2p')) return 'i2p';
-	if (host.endsWith('.loki')) return 'loki';
-	return null;
+	return hiddenHostNetworkOf(host);
 }
 
 // ─── SOCKS5 wire helpers (pure — unit-tested without a socket) ────

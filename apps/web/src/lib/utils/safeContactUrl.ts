@@ -66,7 +66,12 @@ export function safeContactUrl(raw: string | null | undefined): string | null {
 	if (trimmed.length === 0) return null;
 	let scheme: string | null = null;
 	try {
-		scheme = new URL(trimmed).protocol;
+		const u = new URL(trimmed);
+		scheme = u.protocol;
+		// v16-2: reject userinfo (`https://user:pw@host/`) at render too, matching
+		// detectContactProtocol + the on-chain gate — so a phishing contact_url
+		// can never render as a link even if it reached this path unvetted.
+		if (u.username !== '' || u.password !== '') return null;
 	} catch {
 		const colonIdx = trimmed.indexOf(':');
 		if (colonIdx <= 0) return null;

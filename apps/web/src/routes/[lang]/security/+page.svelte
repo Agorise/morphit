@@ -60,6 +60,13 @@
 		</article>
 
 		<article class="card">
+			<h2 class="font-display text-xl font-bold">{$_('security.zero_clearnet_title')}</h2>
+			<p class="mt-2 text-ink-700 dark:text-ink-200">
+				{$_('security.zero_clearnet_body')}
+			</p>
+		</article>
+
+		<article class="card">
 			<h2 class="font-display text-xl font-bold">{$_('security.chat_title')}</h2>
 			<p class="mt-2 text-ink-700 dark:text-ink-200">
 				{chatBodyParts[0]}<code class="font-mono text-sm">docs/adr/0015-chat-crypto.md</code
