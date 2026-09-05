@@ -258,10 +258,37 @@ export function identiconDataUri(bytes: Uint8Array, size = 64): string {
  * deliberately, and the visual mismatch IS a useful signal that the
  * session shape changed.
  */
+/**
+ * Expand a low-entropy STRING seed (e.g. a Blurt account name) into well-mixed
+ * bytes. v1.16.4 fix: raw UTF-8 bytes collide on shared prefixes — the identicon
+ * reads bytes[0..7], so accounts like `morphit`, `morphitir` and `morphitlat`
+ * (identical first 7 bytes) rendered three near-identical hearts on the operators
+ * page. xmur3 avalanches the whole string into a 32-bit state, then a mulberry32
+ * stream expands it to N bytes, so a change ANYWHERE in the seed changes every
+ * output byte and prefix-sharing names diverge completely.
+ *
+ * This applies ONLY to string seeds. High-entropy byte seeds (public keys /
+ * on-chain bytes) are already well-distributed and go to `identiconSvg` unhashed
+ * (see the module header) — hashing those would be pointless, not harmful.
+ */
+function stringSeedBytes(seed: string, n = 16): Uint8Array {
+	let h = 1779033703 ^ seed.length;
+	for (let i = 0; i < seed.length; i++) {
+		h = Math.imul(h ^ seed.charCodeAt(i), 3432918353);
+		h = (h << 13) | (h >>> 19);
+	}
+	let a = h >>> 0;
+	const out = new Uint8Array(n);
+	for (let i = 0; i < n; i++) {
+		a = (a + 0x6d2b79f5) | 0;
+		let t = Math.imul(a ^ (a >>> 15), 1 | a);
+		t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+		out[i] = ((t ^ (t >>> 14)) >>> 0) & 0xff;
+	}
+	return out;
+}
+
 export function identiconDataUriFromString(seed: string, size = 64): string {
-	// TextEncoder is universally available in browsers + Node 18+.
-	// We only seed identicons in browser contexts (SSR avoids
-	// identicon generation entirely), so this is safe.
-	const bytes = new TextEncoder().encode(seed);
+	const bytes = stringSeedBytes(seed);
 	return identiconDataUri(bytes, size);
 }

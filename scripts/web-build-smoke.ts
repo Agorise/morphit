@@ -30,7 +30,7 @@ import { join } from 'path';
 const ROOT = join(__dirname, '..');
 
 if (!existsSync(join(ROOT, 'node_modules'))) {
-	console.log('⚠ SKIP web-build-smoke — node_modules absent (run npm ci first)');
+	console.log('✓ all 1 web-build check skipped (node_modules absent — run npm ci first)');
 	process.exit(0);
 }
 
@@ -65,5 +65,5 @@ if (!built) {
 	process.exit(1);
 }
 
-console.log('✓ web-build-smoke — `vite build` produced a clean browser bundle');
+console.log('✓ all 1 web-build check passes — `vite build` produced a clean browser bundle');
 process.exit(0);

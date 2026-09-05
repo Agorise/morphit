@@ -32,7 +32,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { identiconSvg, identiconDataUri } from '../src/lib/crypto/identicon.ts';
+import { identiconSvg, identiconDataUri, identiconDataUriFromString } from '../src/lib/crypto/identicon.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -110,6 +110,30 @@ check(
 	!/data:image\/svg\+xml,\$\{encodeURIComponent/.test(identiconSrc),
 	'reverting to percent-encoding reintroduces the WebKit broken-image bug'
 );
+
+// ── v1.16.4 regression: shared-prefix STRING seeds must not collide ──
+// Raw UTF-8 bytes made "morphit" / "morphitir" / "morphitlat" render three
+// near-identical hearts on the operators page — they share their first 7 bytes
+// and the identicon reads bytes[0..7]. The string seed is now avalanche-hashed
+// (identicon.ts stringSeedBytes) so any change anywhere in the name diverges.
+{
+	const prefixSeeds = ['morphit', 'morphitir', 'morphitlat', 'morphittime', 'time', 'agorise'];
+	const uris = prefixSeeds.map((s) => identiconDataUriFromString(s));
+	const distinct = new Set(uris).size;
+	check(
+		`shared-prefix string seeds produce distinct identicons (${distinct}/${prefixSeeds.length})`,
+		distinct === prefixSeeds.length,
+		`collision among: ${prefixSeeds.join(', ')}`
+	);
+	check(
+		'the operators-page trio (morphit / morphitir / morphitlat) all differ',
+		new Set([
+			identiconDataUriFromString('morphit'),
+			identiconDataUriFromString('morphitir'),
+			identiconDataUriFromString('morphitlat')
+		]).size === 3
+	);
+}
 
 // ── Report ───────────────────────────────────────────────────────────
 if (failures.length > 0) {
