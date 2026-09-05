@@ -11,7 +11,7 @@
  *     (the on-chain gate, the two entry validators, the render sanitizer), so a
  *     new scheme can never be accepted by one and rejected by another.
  */
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { detectContactProtocol, isAllowedContactUrl, CONTACT_URL_SCHEMES } from '@morphit/operator-config';
 
@@ -80,22 +80,56 @@ check('canonical set excludes http:', !(CONTACT_URL_SCHEMES as readonly string[]
 check('canonical set includes https:', (CONTACT_URL_SCHEMES as readonly string[]).includes('https:'));
 
 // ── B. 4-consumer parity: each references the canonical gate, none keeps a
-//       hardcoded https-only contact_url check ──
-const consumers: Array<[string, string, RegExp]> = [
+//       hardcoded https-only contact_url check. The two Node consumers import
+//       the package root; the two web consumers MUST import the browser-safe
+//       ./contact subpath (importing the root drags index.ts's node:fs/path/util
+//       env-loader into the browser bundle — a build break, v1.16.2). ──
+const consumers: Array<[string, string, RegExp, 'root' | 'contact']> = [
 	[
 		'indexer on-chain gate',
 		'apps/indexer/src/indexer/handlers/operatorRegister.ts',
-		/CONTACT_URL_SCHEMES/
+		/CONTACT_URL_SCHEMES/,
+		'root'
 	],
-	['ops-cli register prompt', 'apps/ops-cli/src/init/steps.ts', /isAllowedContactUrl/],
-	['web register validator', 'apps/web/src/lib/blurt/ops/operatorRegister.ts', /isAllowedContactUrl/],
-	['render sanitizer', 'apps/web/src/lib/utils/safeContactUrl.ts', /CONTACT_URL_SCHEMES/]
+	['ops-cli register prompt', 'apps/ops-cli/src/init/steps.ts', /isAllowedContactUrl/, 'root'],
+	[
+		'web register validator',
+		'apps/web/src/lib/blurt/ops/operatorRegister.ts',
+		/isAllowedContactUrl/,
+		'contact'
+	],
+	['render sanitizer', 'apps/web/src/lib/utils/safeContactUrl.ts', /CONTACT_URL_SCHEMES/, 'contact']
 ];
-for (const [name, path, needle] of consumers) {
+for (const [name, path, needle, entry] of consumers) {
 	const src = read(path);
 	check(`${name} uses the canonical allowlist`, needle.test(src), `expected ${needle} in ${path}`);
-	check(`${name} imports @morphit/operator-config`, /@morphit\/operator-config/.test(src));
+	if (entry === 'contact')
+		check(
+			`${name} imports the browser-safe @morphit/operator-config/contact`,
+			/@morphit\/operator-config\/contact/.test(src)
+		);
+	else check(`${name} imports @morphit/operator-config`, /@morphit\/operator-config/.test(src));
 }
+
+// ── C. browser-safety invariant: NO apps/web/src file may import the package
+//       ROOT (only the ./contact subpath), or the Node-only env-loader lands in
+//       the browser bundle and `vite build` fails (v1.16.2 regression guard). ──
+function walk(dir: string): string[] {
+	const out: string[] = [];
+	for (const e of readdirSync(join(REPO, dir), { withFileTypes: true })) {
+		const rel = `${dir}/${e.name}`;
+		if (e.isDirectory()) out.push(...walk(rel));
+		else if (/\.(ts|svelte|js)$/.test(e.name)) out.push(rel);
+	}
+	return out;
+}
+const rootImport = /from\s+['"]@morphit\/operator-config['"]/;
+const offenders = walk('apps/web/src').filter((f) => rootImport.test(read(f)));
+check(
+	'no apps/web file imports the node-deps operator-config root (browser-safety)',
+	offenders.length === 0,
+	offenders.length ? `root import in: ${offenders.join(', ')}` : ''
+);
 
 console.log(fail === 0 ? `✓ all ${pass} contact-protocol checks hold` : `✗ ${fail} failed (${pass} passed)`);
 process.exit(fail === 0 ? 0 : 1);

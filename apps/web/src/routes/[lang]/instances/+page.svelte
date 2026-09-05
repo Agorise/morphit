@@ -10,7 +10,7 @@
 	import { getInstances } from '$indexer/client';
 	import { safeContactUrl, safeInstanceOrigin } from '$lib/utils/safeContactUrl';
 	import CopyButton from '$lib/components/CopyButton.svelte';
-	import { detectContactProtocol } from '@morphit/operator-config';
+	import { detectContactProtocol } from '@morphit/operator-config/contact';
 	import { formatDayMonth, formatDayMonthTime } from '$i18n/formatters';
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';

@@ -1,4 +1,4 @@
-import { CONTACT_URL_SCHEMES } from '@morphit/operator-config';
+import { CONTACT_URL_SCHEMES } from '@morphit/operator-config/contact';
 /**
  * URL-scheme allowlist for operator-supplied `contact_url`
  * values that get rendered as `<a href={...}>`.

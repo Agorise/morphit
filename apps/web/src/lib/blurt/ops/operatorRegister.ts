@@ -1,4 +1,4 @@
-import { isAllowedContactUrl } from '@morphit/operator-config';
+import { isAllowedContactUrl } from '@morphit/operator-config/contact';
 /**
  * Morphit — operator register op broadcaster.
  *
