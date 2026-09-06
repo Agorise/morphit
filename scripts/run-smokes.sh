@@ -138,6 +138,7 @@ SMOKES=(
 	"apps/relay:account-create-op-smoke"
 	"apps/relay:vapid-key-validation-smoke"
 	"apps/ops-cli:hidden-upgrade-fetch-smoke"
+	"apps/ops-cli:hidden-upgrade-detection-smoke"
 	"apps/ops-cli:ops-cli-smoke"
 	"apps/ops-cli:account-suggestion-smoke"
 	"apps/ops-cli:altnet-address-format-smoke"

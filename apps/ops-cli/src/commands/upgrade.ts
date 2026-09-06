@@ -1221,7 +1221,16 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	if (offline === null) {
 		try {
 			hiddenResolution = await tryResolveHiddenUpgrade({
-				configEnvPaths: ['/etc/morphit/morphit.config.env', join(installDir, 'morphit.config.env')],
+				// The hidden-only signal lives where the RPC pool is actually
+				// written — indexer.env — NOT morphit.config.env (the v1.16.6 bug).
+				// The resolver prefers the local indexer's clearnet_eliminated and
+				// only falls back to these files if it can't reach the indexer.
+				configEnvPaths: [
+					'/etc/morphit/indexer.env',
+					join(installDir, 'indexer.env'),
+					'/etc/morphit/morphit.config.env',
+					join(installDir, 'morphit.config.env')
+				],
 				onProgress: (m) => info(m)
 			});
 		} catch (err) {

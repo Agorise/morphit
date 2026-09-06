@@ -27,6 +27,15 @@ import { makeHiddenTarballFetcher } from './hiddenUpgradeTransport.js';
  *  local address, never clearnet. */
 const LOCAL_INDEXER_BASES = ['http://127.0.0.1:8081', 'http://172.18.0.1:8081', 'http://172.17.0.1:8081'];
 
+/** Concise, host-only label for a hidden gateway base, tagged with its network,
+ *  so the CLI can name EXACTLY which hidden services served the upgrade. */
+export function hiddenGatewayLabel(gatewayBase: string): string {
+	const host = gatewayBase.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+	const net = host.includes('.i2p') ? 'I2P' : host.endsWith('.onion') ? 'Tor' : 'hidden';
+	const short = host.length > 24 ? `${host.slice(0, 12)}…${host.slice(-8)}` : host;
+	return `${short} (${net})`;
+}
+
 /** Read the deployed indexer config env to decide hidden-only, without needing
  *  the indexer to answer. hidden-only ⇔ the clearnet RPC pool is empty. */
 export function isHiddenOnlyFromEnvFile(candidatePaths: readonly string[]): boolean {
@@ -38,12 +47,40 @@ export function isHiddenOnlyFromEnvFile(candidatePaths: readonly string[]): bool
 		} catch {
 			continue;
 		}
-		const m = text.match(/^\s*MORPHIT_INDEXER_RPC_ENDPOINTS\s*=\s*(.*)$/m);
+		// [ \t]* (NOT \s*) around/after '=' — \s* matches newlines, so an empty
+		// `MORPHIT_INDEXER_RPC_ENDPOINTS=` would greedily capture the NEXT line and
+		// read as non-empty, mis-detecting a hidden-only node as clearnet (v1.16.6).
+		const m = text.match(/^[ \t]*MORPHIT_INDEXER_RPC_ENDPOINTS[ \t]*=[ \t]*(.*)$/m);
 		if (!m) return false; // key absent → treat as clearnet (safe default)
 		const val = (m[1] ?? '').trim().replace(/^["']|["']$/g, '').trim();
 		return val === ''; // empty clearnet pool ⇒ hidden-only
 	}
 	return false; // no config found → not hidden-only (safe default)
+}
+
+/**
+ * Authoritative hidden-only decision (v1.16.6). PRIMARY: the local indexer's
+ * `/v1/instance` `clearnet_eliminated` — the SAME seven-leg gate that earns the
+ * directory badge, so the upgrade path can never disagree with what the node
+ * advertises. FALLBACK (only if the local indexer is unreachable mid-upgrade):
+ * the config-file heuristic.
+ *
+ * This replaces relying on the file heuristic alone, which silently mis-defaulted
+ * a hidden-only node to CLEARNET because it read `morphit.config.env` while the
+ * RPC pool actually lives in `indexer.env` — the bug that let morphitlat fetch
+ * its own upgrade over git.agorise.net (v1.16.6 fix).
+ */
+export async function isHiddenOnly(
+	bases: readonly string[],
+	configEnvPaths: readonly string[]
+): Promise<boolean> {
+	try {
+		const inst = await getJson<{ clearnet_eliminated?: unknown }>(bases, '/v1/instance', 4000);
+		if (typeof inst.clearnet_eliminated === 'boolean') return inst.clearnet_eliminated;
+	} catch {
+		// local indexer unreachable — fall through to the config-file heuristic
+	}
+	return isHiddenOnlyFromEnvFile(configEnvPaths);
 }
 
 async function getJson<T>(bases: readonly string[], path: string, timeoutMs = 5000): Promise<T> {
@@ -89,10 +126,10 @@ export async function tryResolveHiddenUpgrade(opts: {
 	readonly indexerBases?: readonly string[];
 	onProgress?: (msg: string) => void;
 }): Promise<HiddenUpgradeResolution | null> {
-	if (!isHiddenOnlyFromEnvFile(opts.configEnvPaths)) return null;
-
 	const bases = opts.indexerBases ?? LOCAL_INDEXER_BASES;
-	opts.onProgress?.('hidden-only node — resolving the release from the federation over Tor/I2P…');
+	if (!(await isHiddenOnly(bases, opts.configEnvPaths))) return null;
+
+	opts.onProgress?.('hidden-only node — resolving the release from the federation over Tor/I2P (zero clearnet)…');
 
 	// 1. Target: version + on-chain SHA + IPNS name, from the LOCAL indexer.
 	const rel = await getJson<ReleaseTargetResponse>(bases, '/v1/release');
@@ -101,6 +138,7 @@ export async function tryResolveHiddenUpgrade(opts: {
 	if (!/^[0-9a-f]{64}$/i.test(sha) || ipns === '') {
 		throw new Error('hidden upgrade: on-chain release has no source_sha256 / ipns_name yet — cannot verify; staying put (fail-closed)');
 	}
+	opts.onProgress?.(`target v${rel.version}, IPNS ${ipns} — verifying against the on-chain SHA-256 (no clearnet)`);
 
 	// 2. Peers: federation directory → hidden gateway bases (auto-discovered).
 	const dir = await getJson<DirectoryResponse>(bases, '/v1/instances');
@@ -115,6 +153,12 @@ export async function tryResolveHiddenUpgrade(opts: {
 	if (peerGateways.length === 0) {
 		throw new Error('hidden upgrade: no federation peer exposes a hidden IPFS gateway yet — staying put (fail-closed)');
 	}
+	// Tell the operator EXACTLY which hidden services are in play — a zero-clearnet
+	// node should never be left guessing where its bytes came from.
+	const shown = peerGateways.slice(0, 4).map((g) => hiddenGatewayLabel(g)).join(', ');
+	opts.onProgress?.(
+		`fetching over ${peerGateways.length} hidden gateway${peerGateways.length === 1 ? '' : 's'} (Tor/I2P): ${shown}${peerGateways.length > 4 ? ', …' : ''}`
+	);
 
 	// 3. Fetch + verify (raced, SHA-checked, fail-closed) over Tor/I2P.
 	const fetchTarball = makeHiddenTarballFetcher({ proxy: hiddenServiceProxyConfigFromEnv() });
@@ -130,6 +174,8 @@ export async function tryResolveHiddenUpgrade(opts: {
 	const tarballPath = join(tdir, name);
 	writeFileSync(tarballPath, result.bytes);
 	writeFileSync(`${tarballPath}.sha256`, `${sha}  ${name}\n`);
-	opts.onProgress?.(`verified release fetched from ${result.peer} — applying`);
+	opts.onProgress?.(
+		`verified release fetched over Tor/I2P from ${hiddenGatewayLabel(result.peer)} — applying (zero clearnet, no git.agorise.net / mirrors touched)`
+	);
 	return { tarballPath, version: rel.version, servedBy: result.peer };
 }
