@@ -66,6 +66,7 @@ check('detector prefers the indexer /v1/instance clearnet_eliminated', /\/v1\/in
 check('the file heuristic keys off MORPHIT_INDEXER_RPC_ENDPOINTS', /MORPHIT_INDEXER_RPC_ENDPOINTS/.test(resolver));
 check('upgrade caller reads indexer.env (the v1.16.6 fix)', /indexer\.env/.test(upgrade) && /configEnvPaths:/.test(upgrade));
 check('resolver reports the hidden gateway used', /hiddenGatewayLabel\(result\.peer\)/.test(resolver));
+check('resolver reads peer hidden addrs from alt_networks (v1.16.8)', /i\.alt_networks|an\.tor|an\.i2p_b32/.test(resolver));
 check('resolver states "zero clearnet"', /zero clearnet/i.test(resolver));
 
 console.log(fail === 0 ? `✓ all ${pass} hidden-upgrade-detection checks hold` : `✗ ${fail} failed (${pass} passed)`);

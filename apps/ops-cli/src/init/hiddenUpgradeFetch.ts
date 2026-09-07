@@ -152,6 +152,8 @@ export async function fetchHiddenUpgrade(
 	throw new Error(
 		`hidden-upgrade: no federation peer served a tarball matching the on-chain SHA-256 for ${target.version} ` +
 			`(tried ${gateways.length} peer gateway(s); staying on current version, fail-closed). ` +
+			`For hidden-only nodes to upgrade, a federation peer must expose its IPFS gateway over Tor/I2P ` +
+			`(that peer: morphit-ops → Web firewall / IPFS gateway). ` +
 			`Reasons: ${failures.slice(0, 6).join('; ')}`
 	);
 }

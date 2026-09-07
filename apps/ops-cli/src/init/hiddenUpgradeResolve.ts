@@ -106,7 +106,12 @@ interface ReleaseTargetResponse {
 	distribution: { source_sha256?: string; ipns_name?: string } | null;
 }
 interface DirectoryResponse {
-	instances?: Array<{ reg_alt_networks?: unknown; tor?: string | null; i2p_b32?: string | null }>;
+	instances?: Array<{
+		alt_networks?: { tor?: string | null; i2p_b32?: string | null } | null;
+		reg_alt_networks?: unknown;
+		tor?: string | null;
+		i2p_b32?: string | null;
+	}>;
 }
 
 export interface HiddenUpgradeResolution {
@@ -143,15 +148,24 @@ export async function tryResolveHiddenUpgrade(opts: {
 	// 2. Peers: federation directory → hidden gateway bases (auto-discovered).
 	const dir = await getJson<DirectoryResponse>(bases, '/v1/instances');
 	const rows: PeerDirectoryRow[] = (dir.instances ?? []).map((i) => {
-		const alt = (i.reg_alt_networks ?? {}) as { tor?: unknown; i2p_b32?: unknown };
+		// /v1/instances nests the hidden addresses under `alt_networks` (v1.16.8
+		// fix — the v1.16.6 resolver read `i.tor`/`i.reg_alt_networks`, which don't
+		// exist on the response, so it found ZERO peers and always reported
+		// "no hidden gateway"). Read alt_networks first; keep the others as fallbacks.
+		const an = (i.alt_networks ?? {}) as { tor?: unknown; i2p_b32?: unknown };
+		const ra = (i.reg_alt_networks ?? {}) as { tor?: unknown; i2p_b32?: unknown };
+		const pick = (...vals: unknown[]): string | null => {
+			for (const v of vals) if (typeof v === 'string' && v.trim() !== '') return v.trim();
+			return null;
+		};
 		return {
-			tor: typeof i.tor === 'string' ? i.tor : typeof alt.tor === 'string' ? alt.tor : null,
-			i2p_b32: typeof i.i2p_b32 === 'string' ? i.i2p_b32 : typeof alt.i2p_b32 === 'string' ? alt.i2p_b32 : null
+			tor: pick(an.tor, ra.tor, i.tor),
+			i2p_b32: pick(an.i2p_b32, ra.i2p_b32, i.i2p_b32)
 		};
 	});
 	const peerGateways = resolvePeerGateways(rows);
 	if (peerGateways.length === 0) {
-		throw new Error('hidden upgrade: no federation peer exposes a hidden IPFS gateway yet — staying put (fail-closed)');
+		throw new Error('hidden upgrade: no federation peer advertises a Tor/I2P address in the directory yet — staying put (fail-closed)');
 	}
 	// Tell the operator EXACTLY which hidden services are in play — a zero-clearnet
 	// node should never be left guessing where its bytes came from.
