@@ -9,10 +9,12 @@
  *
  * Rules:
  *   - Must parse as a URL
- *   - Protocol must be https: (http: rejected because the page
- *     itself is served over https, and mixed-content would be
- *     blocked by the browser anyway — but we want to give a
- *     specific error rather than a silent network failure)
+ *   - Protocol must be http: or https:. Zero-clearnet instances
+ *     (.onion / .i2p / .loki) are served over http — the transport
+ *     already encrypts — so http is accepted; clearnet is https.
+ *     Other schemes (ftp:, javascript:, data:, …) are rejected.
+ *   - A bare host with no scheme defaults to http:// for hidden-
+ *     network suffixes, https:// otherwise.
  *   - Host must be non-empty and max 253 chars (RFC 1034)
  *   - No userinfo in the URL (`https://a:b@host` is suspicious)
  *   - Returns the canonical origin (scheme + host + optional
@@ -42,6 +44,10 @@ const MAX_INPUT_CHARS = 256;
  *  parsing has stripped scheme/port. */
 const MAX_HOST_CHARS = 253;
 
+/** Hidden-network host suffixes served over plain http (the transport
+ *  encrypts). `.b32.i2p` ends in `.i2p`, so it's covered. */
+const HIDDEN_NETWORK_TLDS = /\.(onion|i2p|loki)$/i;
+
 export function validateInstanceUrl(raw: string): InstanceUrlValidation {
 	const trimmed = raw.trim();
 	if (trimmed.length === 0) return { ok: false, reason: 'empty' };
@@ -49,11 +55,17 @@ export function validateInstanceUrl(raw: string): InstanceUrlValidation {
 		return { ok: false, reason: 'too_long' };
 	}
 
-	// Prepend https:// if the user didn't type a scheme. This is a
-	// convenience — pasting "morphit.io" should work — but we
-	// re-validate the parsed scheme below, so a user who DID type
-	// "http://" still gets rejected with the specific error.
-	const withScheme = /^[a-z][a-z0-9+.-]*:/i.test(trimmed) ? trimmed : `https://${trimmed}`;
+	// Prepend a scheme if the user didn't type one. Hidden-network hosts
+	// (.onion/.i2p/.loki) are served over http, so default THOSE to http://;
+	// everything else defaults to https://. A user who typed an explicit scheme
+	// keeps it (re-validated below).
+	let withScheme: string;
+	if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) {
+		withScheme = trimmed;
+	} else {
+		const bareHost = trimmed.split(/[/?#]/, 1)[0] ?? trimmed;
+		withScheme = (HIDDEN_NETWORK_TLDS.test(bareHost) ? 'http://' : 'https://') + trimmed;
+	}
 
 	let url: URL;
 	try {
@@ -62,7 +74,9 @@ export function validateInstanceUrl(raw: string): InstanceUrlValidation {
 		return { ok: false, reason: 'malformed' };
 	}
 
-	if (url.protocol !== 'https:') {
+	// Accept http AND https so zero-clearnet instances (.onion/.i2p over http)
+	// and clearnet (https) both work. Reject anything else (ftp:, data:, …).
+	if (url.protocol !== 'https:' && url.protocol !== 'http:') {
 		return { ok: false, reason: 'invalid_scheme' };
 	}
 

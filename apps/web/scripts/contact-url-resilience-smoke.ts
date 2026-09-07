@@ -58,8 +58,12 @@ check('upgrade auto-repairs a bad contact URL in config', /normalizeContactUrl\(
 const vj = read('scripts/build-verify-json.mjs');
 check('readConfigEnvValue checks the install-root config', /\/opt\/morphit\/morphit\.config\.env/.test(vj));
 check('readConfigEnvValue walks up from REPO_ROOT', /walkUp/.test(vj));
+check('upgrade stamps operator_tag into verify.json BEFORE deploy (v1.16.9)', /readOperatorTagFromConfig\(\)/.test(upSrc) && /patchVerifyJsonOperatorTag\(buildDir/.test(upSrc) && upSrc.indexOf('patchVerifyJsonOperatorTag(buildDir') < upSrc.indexOf('deployFrontendBuild(buildDir, webRoot)'));
 
 // ── 6. bunkerweb WAF exemption for the JSON APIs ──
+const ops = read('apps/web/src/routes/[lang]/operators/+page.svelte');
+check('operators page uses the shared scheme-aware contact policy (all schemes, not https-only)', /normalizeContactUrl\(op\.contact_url\)/.test(ops) && /detectContactProtocol/.test(ops));
+check('operators page no longer https-only-rejects contacts', !/u\.protocol !== 'https:'/.test(ops));
 const bw = read('ops/ansible/roles/bunkerweb/templates/bunkerweb.env.j2');
 check('bunkerweb exempts /v1/ + /relay/ from ModSecurity', /CUSTOM_CONF_MODSEC_/.test(bw) && /ruleEngine=Off/.test(bw) && /v1\|relay/.test(bw));
 check('upgrade self-heals the bunkerweb WAF exemption (no ansible re-run)', /CUSTOM_CONF_MODSEC_morphit_json_api_off=/.test(upSrc) && /\/etc\/bunkerweb\/bunkerweb\.env/.test(upSrc) && /compose[\s\S]{0,40}up.{0,6}-d/.test(upSrc));

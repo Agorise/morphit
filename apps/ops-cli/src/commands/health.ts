@@ -406,10 +406,11 @@ export function checkCanary(filePath: string, now: Date): CanaryStatus {
 			generatedAt: null,
 			validThrough: null,
 			detail:
-				'not published yet — the canary embeds live freshness proofs (a recent ' +
-				'Blurt chain-head, a BTC price, a news headline), so it needs network and ' +
-				'publishes on its own once this box is online. To sign one now, run ' +
-				'sudo morphit-ops harden (or scripts/canary/setup.sh on your operator machine).'
+				'not published yet — this is pending, not a failure. The canary embeds live ' +
+				'freshness proofs (a recent Blurt chain-head, a BTC price, a news headline), so ' +
+				'it publishes once this box is online. If you already ran harden, the weekly timer ' +
+				'is armed — publish one right now with:  bash ~/.morphit/update-canary.sh  — or ' +
+				're-run sudo morphit-ops harden.'
 		};
 	}
 	let txt: string;
@@ -2039,10 +2040,16 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 
 	// ── Canary block ──
 	console.log('');
+	// v1.16.9 — a MISSING canary is "not published yet" (pending / todo), not a
+	// failure: on a same-box setup the weekly timer can be armed before the first
+	// publish runs, so build/canary.txt isn't there yet. Only an OVERDUE canary
+	// (one that WAS published and then expired — the timer died) is a real red-✗
+	// signal. Showing 'missing' as red ✗ made same-box operators think their setup
+	// broke. 'missing'/'stale'/'unparsable' → yellow ⚠ with an actionable detail.
 	const canaryTag =
 		canary.state === 'fresh'
 			? c.green('✓')
-			: canary.state === 'overdue' || canary.state === 'missing'
+			: canary.state === 'overdue'
 				? c.red('✗')
 				: c.yellow('⚠');
 	console.log(`  ${c.bold('Canary')}    ${canaryTag} ${canary.state}`);

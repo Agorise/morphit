@@ -148,7 +148,7 @@ expect(
 		const codesRaw = get(content, 'BAD_BEHAVIOR_STATUS_CODES');
 		const codes = (codesRaw ?? '').split(/\s+/).filter(Boolean);
 		expect(`${label}: BAD_BEHAVIOR_STATUS_CODES is set`, codes.length > 0, 'must be set explicitly');
-		for (const banned of ['403', '404', '429']) {
+		for (const banned of ['400', '403', '404', '429']) {
 			expect(
 				`${label}: bad-behavior does NOT count ${banned}`,
 				!codes.includes(banned),
@@ -157,8 +157,18 @@ expect(
 		}
 	}
 
-	// example ↔ ansible parity on the security-critical knobs
-	for (const key of ['LIMIT_REQ_RATE_1', 'LIMIT_REQ_RATE_2', 'BAD_BEHAVIOR_STATUS_CODES']) {
+	// v1.16.9 — the upgrade self-heal must be MULTI-STRATEGY (the maintainer's mandate):
+// all three fixes, tried more than one way, verified against the container.
+const up = readFileSync(resolve(root, 'apps/ops-cli/src/commands/upgrade.ts'), 'utf8');
+expect('self-heal: healBunkerWebWaf exists + is called', /function healBunkerWebWaf\(/.test(up) && /\bhealBunkerWebWaf\(\);/.test(up));
+expect('self-heal fixes MAX_CLIENT_SIZE (413)', /MAX_CLIENT_SIZE/.test(up) && /RELAY_BODY_FLOOR/.test(up));
+expect('self-heal drops 400 from bad-behavior (403 ban)', /BAD_BEHAVIOR_STATUS_CODES/.test(up) && /c !== '400'/.test(up));
+expect('self-heal tries the ModSec exemption BOTH as env var AND as a file', /CUSTOM_CONF_MODSEC_morphit_json_api_off/.test(up) && /morphit-json-api-off\.conf/.test(up));
+expect('self-heal has a reload FALLBACK chain (not one method)', /strategies: Array<\(\) => boolean>/.test(up) && /docker-compose/.test(up));
+expect('self-heal VERIFIES the rule loaded in the running container', /grep -rl '\$\{RULE_ID\}'/.test(up) && /verified live inside BunkerWeb/.test(up));
+
+// example ↔ ansible parity on the security-critical knobs
+	for (const key of ['LIMIT_REQ_RATE_1', 'LIMIT_REQ_RATE_2', 'BAD_BEHAVIOR_STATUS_CODES', 'MAX_CLIENT_SIZE']) {
 		expect(
 			`example↔ansible agree on ${key}`,
 			get(envExample, key) === get(ansible, key),

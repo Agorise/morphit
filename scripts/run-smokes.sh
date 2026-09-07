@@ -28,6 +28,7 @@ SMOKES=(
 	"apps/indexer:hidden-service-dispatcher-smoke"
 	"apps/indexer:contact-protocol-smoke"
 	"apps/web:contact-url-resilience-smoke"
+	"apps/web:instance-url-validator-smoke"
 	"apps/indexer:clearnet-legs-source-guard-smoke"
 	"apps/indexer:rpc-probe-failure-reason-smoke"
 	"apps/indexer:indexer-config-boot-smoke"

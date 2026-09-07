@@ -535,6 +535,19 @@ jobs:
           set -eu
           bash scripts/build-offline-bundle.sh
           ls -lh morphit-*-offline.tar.gz* || true
+          # v1.16.9 — anchor the offline bundle's SHA-256 so a hidden / air-gapped
+          # node can verify an offline upgrade against the chain (via its own
+          # indexer) with NO hand-signed .asc. Append to distribution-anchor.env
+          # (written earlier, attached to the release + sourced by the payload
+          # builder at ELI5 Block 4). Best-effort: if the bundle wasn't produced,
+          # nothing is appended and offline_sha256 is simply omitted this release.
+          if [ -f distribution-anchor.env ] && ls morphit-*-offline.tar.gz.sha256 >/dev/null 2>&1; then
+            OFF_SHA=$(awk '{print $1}' morphit-*-offline.tar.gz.sha256 | head -n1)
+            if [ -n "${OFF_SHA:-}" ]; then
+              echo "export MORPHIT_BUILD_OFFLINE_SHA256=${OFF_SHA}" >> distribution-anchor.env
+              echo "anchored offline_sha256=${OFF_SHA}"
+            fi
+          fi
 
       - name: Verify offline bundle was produced (loud, non-blocking)
         # cp675 — the build step above is best-effort (continue-on-error), so a

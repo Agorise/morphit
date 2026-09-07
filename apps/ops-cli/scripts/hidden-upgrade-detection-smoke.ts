@@ -67,6 +67,14 @@ check('the file heuristic keys off MORPHIT_INDEXER_RPC_ENDPOINTS', /MORPHIT_INDE
 check('upgrade caller reads indexer.env (the v1.16.6 fix)', /indexer\.env/.test(upgrade) && /configEnvPaths:/.test(upgrade));
 check('resolver reports the hidden gateway used', /hiddenGatewayLabel\(result\.peer\)/.test(resolver));
 check('resolver reads peer hidden addrs from alt_networks (v1.16.8)', /i\.alt_networks|an\.tor|an\.i2p_b32/.test(resolver));
+
+// v1.16.9 — offline upgrade verifies against the on-chain SHA (no hand-signed .asc)
+const payload = readFileSync(join(REPO, 'apps/indexer/scripts/release-build-payload.ts'), 'utf8');
+check('decideTrust accepts an on-chain-anchored SHA-256 as a trust path', /hashFromChain/.test(upgrade) && /onchain-anchored-sha256/.test(upgrade));
+check('offline path reads the on-chain SHA from the local indexer', /readOnchainReleaseSha\(/.test(upgrade) && /\/v1\/release/.test(upgrade));
+check('offline path picks offline_sha256 for a -offline bundle', /offline_sha256/.test(upgrade) && /-offline\\.tar\\.gz\$/.test(upgrade));
+check('the release payload emits offline_sha256', /offline_sha256/.test(payload) && /MORPHIT_BUILD_OFFLINE_SHA256/.test(payload));
+check('upgrade skips the IPFS self-seed on a -offline bundle (v1.16.9)', /Skipping the IPFS self-seed/.test(upgrade));
 check('resolver states "zero clearnet"', /zero clearnet/i.test(resolver));
 
 console.log(fail === 0 ? `✓ all ${pass} hidden-upgrade-detection checks hold` : `✗ ${fail} failed (${pass} passed)`);

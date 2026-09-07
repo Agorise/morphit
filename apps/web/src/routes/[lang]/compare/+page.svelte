@@ -202,6 +202,13 @@
 				autocomplete="off"
 				autocapitalize="none"
 				spellcheck="false"
+				oninput={() => {
+					// The previous comparison's error is about the OLD input — clear it
+					// the moment the user edits the field so the message never lies about
+					// what's currently in the box. The live inline validation below
+					// re-evaluates on its own (it's derived from the input).
+					if (fetchError) fetchError = '';
+				}}
 				onkeydown={(e) => {
 					if (e.key === 'Enter' && canCompare) void runComparison();
 				}}

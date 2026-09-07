@@ -142,6 +142,32 @@ if [ "$MODE" = remote ]; then
 	say ""
 fi
 
+# ─── 2b. LOCAL mode — make the served dir writable so the FIRST publish lands ──
+# On a fresh VPS the served build/ dir is root-owned, so a non-root
+# `bash setup.sh` runs the first publish, can't write canary.txt into build/, and
+# ends on "Permission denied" — leaving /canary.txt a 404 even though the admin
+# "finished". The remote mode already hands build/ to its SSH login; do the same
+# for local mode so the canary publishes IMMEDIATELY on setup, every time.
+# (v1.16.9 — setup must publish now, not defer to the weekly timer.)
+if [ "$MODE" = local ] && [ "${MORPHIT_CANARY_DEFER_FIRST_REFRESH:-}" != "1" ] && [ ! -w "$SERVE_DIR" ]; then
+	if [ "$(id -u)" = 0 ]; then
+		: # running as root — can already write the served dir
+	elif command -v sudo >/dev/null 2>&1; then
+		info "The served dir $SERVE_DIR isn't writable by '$USER' — handing it over so your canary can publish right now."
+		sudo mkdir -p "$SERVE_DIR" 2>/dev/null || true
+		if sudo chown "$USER" "$SERVE_DIR" 2>/dev/null; then
+			info "Made $SERVE_DIR writable for your canary uploads."
+		else
+			warn "Couldn't adjust $SERVE_DIR ownership. The first publish may hit 'Permission denied'."
+			warn "Fix it once by hand:  sudo chown $USER $SERVE_DIR  — then re-run this setup."
+		fi
+	else
+		warn "The served dir $SERVE_DIR isn't writable and sudo isn't available, so the first"
+		warn "publish will fail. chown $SERVE_DIR to '$USER' (as root), then re-run this setup."
+	fi
+	say ""
+fi
+
 # ─── 3. Signing key (find, or offer to create one) ───────────────
 
 # Existing secret-key fingerprints, newest last.
@@ -387,7 +413,17 @@ if [ "${MORPHIT_CANARY_DEFER_FIRST_REFRESH:-}" = "1" ]; then
 else
 	say "Signing and publishing your first canary now..."
 	if bash "$REFRESH"; then
-		info "First canary published. Check ${INSTANCE_ORIGIN%/}/canary.txt in a browser."
+		# Verify it actually LANDED in the served dir. A refresh can succeed at
+		# signing yet fail to PLACE the file (e.g. a root-owned build/), which would
+		# leave /canary.txt a 404 despite a "published" message. Don't claim success
+		# on a file that isn't there.
+		if [ "$MODE" = local ] && [ ! -s "$SERVE_DIR/canary.txt" ]; then
+			warn "The refresh ran, but $SERVE_DIR/canary.txt is not there — the served dir"
+			warn "isn't writable, so nothing was published. Fix ownership and re-run:"
+			warn "    sudo chown $USER $SERVE_DIR && bash $REFRESH"
+		else
+			info "First canary published. Check ${INSTANCE_ORIGIN%/}/canary.txt in a browser."
+		fi
 	else
 		die "the first refresh failed — see the messages above. Fix, then re-run: bash $REFRESH"
 	fi

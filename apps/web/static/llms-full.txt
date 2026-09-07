@@ -843,6 +843,22 @@ If you need fully metadata-private messaging, use something like Session (getses
 
 ---
 
+## My chat message or new conversation isn't showing up — is it lost or broken?
+
+**FAQ key:** `chat_message_not_showing`
+
+Almost certainly not lost. Morphit chat lives on the blockchain, so a brand-new conversation sometimes needs a few seconds to appear — and it can show on one side before the other, especially when the two people are on different Morphit instances.
+
+• Your message is written to the chain the moment you send it; your counterparty usually sees it within a few seconds.
+
+• A conversation you just started can take a short moment to appear in your own inbox while your instance catches up. Sending another message, or refreshing the page, makes it appear.
+
+• Once a conversation exists, new messages in it are fast.
+
+So if a new chat looks empty or missing right after you start it, wait a few seconds and refresh — it will be there, and nothing was lost. If it is still missing after a minute, tell your instance's operator, because your instance may be behind on reading the chain.
+
+---
+
 ## What happens if I lose my chat key?
 
 **FAQ key:** `chat_key_loss`
@@ -1228,6 +1244,24 @@ When to use which:
 Both happen instantly — your in-memory keys are wiped in the same moment in both cases. The only difference is whether the encrypted backup stays on disk.
 
 Note: Lock Session is only meaningful if you chose "Password (fast)" during onboarding. If you chose "Seed every time (most private)," Lock Session and Sign Out produce the same result because no keystore was ever persisted.
+
+---
+
+## Why does Morphit ask for my posting key when I log in, instead of the password I set?
+
+**FAQ key:** `login_password_vs_key`
+
+Your posting key (your private key) is your real login — the password does not replace it. The password only unlocks a copy of your key that Morphit saved, encrypted, in ONE browser, so you don't have to paste the long key every time on that same computer.
+
+Which one you are asked for depends on whether a saved key is still on this device:
+
+• If you used **Sign Out**, Morphit erased the saved key from this browser on purpose, for safety — so there is nothing to unlock and it asks for your posting key again. This is normal, not a bug.
+
+• If you only **Locked** the session, or just closed the tab, the encrypted key is still here — so it asks for your **password** and unlocks instantly, no key needed.
+
+• On a **different computer, browser, or phone**, it always asks for the posting key first, because your key was never saved there.
+
+Morphit never keeps your key on a server — only you have it — so a new device cannot be unlocked with a password alone. Tip: for the fast password login next time, use **Lock** (or just close the tab) instead of **Sign Out**.
 
 ---
 
@@ -2395,7 +2429,7 @@ Your orders, chat, balances and the block explorer all go through your operator'
 
 ## Metadata
 
-Total FAQ entries: 144
+Total FAQ entries: 146
 Canonical URL: https://morphit.io/faq
 License: AGPL-3.0 (content may be quoted/redistributed)
 Source of truth: https://git.agorise.net/agorise/morphit

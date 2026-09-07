@@ -41,6 +41,12 @@ function check(desc: string, ok: boolean): void {
 
 const setupPath = join(REPO, 'scripts/canary/setup.sh');
 const setup = readFileSync(setupPath, 'utf8');
+// v1.16.9 — local (same-box) setup must publish the canary IMMEDIATELY: make
+// the served build/ writable so the first publish lands, and verify it landed.
+check('local mode hands the served dir over so the first publish lands (not root-owned 404)',
+  /MODE" = local[\s\S]{0,600}chown "\$USER" "\$SERVE_DIR"/.test(setup));
+check('first publish is verified to actually land in the served dir',
+  /-s "\$SERVE_DIR\/canary\.txt"/.test(setup) && /nothing was published/.test(setup));
 const initTs = readFileSync(join(REPO, 'apps/ops-cli/src/commands/init.ts'), 'utf8');
 const upgradeTs = readFileSync(join(REPO, 'apps/ops-cli/src/commands/upgrade.ts'), 'utf8');
 

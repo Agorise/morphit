@@ -60,6 +60,17 @@ check(
 	/get\(liveIdentity\)/.test(importPage) &&
 		/formatPublicKeyBLT\(\s*booted\.posting\.publicKey\s*\)/.test(importPage)
 );
+// v1.16.9 — the WIF field must resist Firefox's on-load autofill (which ignores
+// autocomplete="off" on password fields and dumps a saved site password in).
+check(
+	'WIF field starts readonly (unlocked on focus) to dodge Firefox autofill',
+	/readonly=\{wifFieldLocked\}/.test(importPage) &&
+		/wifFieldLocked = false/.test(importPage)
+);
+check(
+	'WIF field has a unique, non-credential name/id (not matched to a saved login)',
+	/name="morphit-posting-wif-import"/.test(importPage)
+);
 check(
 	'seed/keyfile path does NOT gate the pubkey capture on the seed-only `full` again',
 	!/pendingPubKeysBLT = \[await formatPublicKeyBLT\(full\.keys\.posting\.publicKey\)\]/.test(

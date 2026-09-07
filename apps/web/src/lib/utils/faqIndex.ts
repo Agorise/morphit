@@ -73,6 +73,7 @@ export const FAQ_KEYS = [
 
 	// ─── 5. Chat & communication ───────────────────────────────
 	'what_is_morphit_chat',
+	'chat_message_not_showing',
 	'chat_privacy',
 	'chat_inbox_features',
 	'chat_anti_spam',
@@ -116,6 +117,7 @@ export const FAQ_KEYS = [
 	'private_key_warning',
 	'lost_keys',
 	'lock_vs_signout',
+	'login_password_vs_key',
 	'auto_lock_timeout',
 	'qr_login',
 
@@ -351,10 +353,22 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 	// chat_vs_feedback_visibility). The two "what's visible vs what's
 	// private" entries also bridge to the feedback cluster.
 	what_is_morphit_chat: [
+		'chat_message_not_showing',
 		'chat_privacy',
 		'chat_inbox_features',
 		'chat_identity_key',
 		'chat_vs_feedback_visibility'
+	],
+	chat_message_not_showing: [
+		'what_is_morphit_chat',
+		'chat_inbox_features',
+		'why_chat_on_chain'
+	],
+	login_password_vs_key: [
+		'lock_vs_signout',
+		'auto_lock_timeout',
+		'qr_login',
+		'lost_keys'
 	],
 	chat_identity_key: [
 		'what_is_morphit_chat',

@@ -609,6 +609,17 @@ body {
 		color 180ms ease-out;
 }
 
+/* A small gap so the glyph isn't smashed against the label text. Logical
+ * properties (inline-start/end) keep the gap on the TEXT-facing side of the
+ * arrow in both LTR and RTL — the arrow-right sits after the label, the
+ * arrow-left before it. Uses em so it scales with the label's font size. */
+.nav-arrow-right {
+	margin-inline-start: 0.3em;
+}
+.nav-arrow-left {
+	margin-inline-end: 0.3em;
+}
+
 /* No underline on any interactive element that carries an arrow — covers
  * <button> "Learn more ⇨" affordances (e.g. the Tooltip) as well as <a>. */
 :where(a, button, [role='link'], [role='button']):has(.nav-arrow) {

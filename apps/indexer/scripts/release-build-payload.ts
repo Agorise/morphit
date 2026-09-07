@@ -129,6 +129,8 @@ interface Inputs {
 	 *  whole block.  source_sha256 + gpg_fingerprint are required TOGETHER
 	 *  when either is set; ipfs_cid + mirrors are independently optional. */
 	sourceSha256: string;
+	/** v1.16.9 — the `-offline` self-contained bundle's SHA-256 (optional). */
+	offlineSha256: string;
 	gpgFingerprint: string;
 	ipfsCid: string;
 	/** v1.9.x — stable IPNS name (`k51…`), the "always latest" pointer. Empty = omit. */
@@ -223,6 +225,9 @@ async function gatherInputs(): Promise<Inputs> {
 		'Source tarball SHA-256 (64 hex; empty to omit distribution)',
 		process.env.MORPHIT_BUILD_SOURCE_SHA256 ?? ''
 	);
+	// v1.16.9 — the `-offline` bundle's SHA-256. Env-only (no prompt): it comes
+	// from release.yml's offline-bundle build, and is optional (omitted if unset).
+	const offlineSha256 = (process.env.MORPHIT_BUILD_OFFLINE_SHA256 ?? '').trim();
 	const gpgFingerprint = await ask(
 		'GPG signing-key fingerprint (40 or 64 hex, spaces ok)',
 		process.env.MORPHIT_BUILD_GPG_FINGERPRINT ?? ''
@@ -254,6 +259,7 @@ async function gatherInputs(): Promise<Inputs> {
 		xmrPiconero,
 		blurtBase,
 		sourceSha256,
+		offlineSha256,
 		gpgFingerprint,
 		ipfsCid,
 		ipnsName,
@@ -268,6 +274,7 @@ async function gatherInputs(): Promise<Inputs> {
  *  forbids spaces) accepts a copy-pasted fingerprint. */
 function buildDistribution(i: Inputs): ReleaseDistributionBlock | null {
 	const sha = i.sourceSha256.trim().toLowerCase();
+	const offlineSha = (i.offlineSha256 ?? '').trim().toLowerCase();
 	const fpr = i.gpgFingerprint.replace(/\s+/g, '').toUpperCase();
 	const cid = i.ipfsCid.trim();
 	const ipns = i.ipnsName.trim();
@@ -332,6 +339,10 @@ function buildDistribution(i: Inputs): ReleaseDistributionBlock | null {
 	}
 
 	const value: Record<string, unknown> = { source_sha256: sha, gpg_fingerprint: fpr };
+	// v1.16.9 — the self-contained `-offline` bundle's SHA-256, so a hidden /
+	// air-gapped node can verify an offline upgrade against the chain (via its own
+	// indexer) with no hand-signed .asc. Optional; omitted if not provided.
+	if (/^[0-9a-f]{64}$/.test(offlineSha)) value.offline_sha256 = offlineSha;
 	if (cid !== '') value.ipfs_cid = cid;
 	if (ipns !== '') value.ipns_name = ipns;
 	if (ipnsRec !== '') value.ipns_record = ipnsRec;

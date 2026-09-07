@@ -55,6 +55,12 @@
 	// field is wrong and why. Grandma needs the field pointed at, not just
 	// a paragraph at the top of the form.
 	let wifKeyInvalid = $state(false);
+	// Firefox ignores autocomplete="off" on password fields and dumps a saved
+	// site password into the FIRST password field on load — here that was the WIF
+	// key box. Start the field readonly so the browser skips it during autofill,
+	// then unlock it the instant the user focuses it (they still paste/type
+	// normally). No "generate password" popup, unlike autocomplete="new-password".
+	let wifFieldLocked = $state(true);
 	let seedInvalid = $state(false);
 	let keyfilePwInvalid = $state(false);
 	// The error banner's element, so we can scroll it into view when an
@@ -1042,9 +1048,12 @@
 					<div class="relative">
 						<input
 							type="password"
+							name="morphit-posting-wif-import"
+							id="morphit-posting-wif-import"
 							maxlength="64"
 							bind:value={postingWif}
 							autocomplete="off"
+							readonly={wifFieldLocked}
 							spellcheck="false"
 							oninput={() => {
 								wifKeyInvalid = false;
@@ -1062,6 +1071,9 @@
 								}
 							}}
 							onfocus={() => {
+								// Unlock on first focus so the user can paste/type — the readonly
+								// start-state is only there to dodge Firefox's on-load autofill.
+								wifFieldLocked = false;
 								wifKeyInvalid = false;
 								wifStatus = 'idle';
 							}}

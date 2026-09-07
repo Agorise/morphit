@@ -11,6 +11,8 @@
 	import { getProfilesBatch } from '$lib/indexer/profileCache';
 	import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
 	import type { OperatorRecord, ProfileResponse } from '@morphit/indexer-client';
+	import CopyButton from '$lib/components/CopyButton.svelte';
+	import { normalizeContactUrl, detectContactProtocol } from '@morphit/operator-config/contact';
 
 	// Loading states are explicit so empty-data and failed-fetch
 	// don't look the same. `null` means "haven't asked yet"; the
@@ -68,39 +70,12 @@
 		return formatDayMonth(iso);
 	}
 
-	/** Re-validate the operator's contact URL at render time.
-	 *  Returns the cleaned URL string when safe, or null when not.
-	 *  The indexer's operatorRegister handler enforces https-only +
-	 *  no userinfo + length cap; this is defense-in-depth against a
-	 *  malicious indexer response that returns a hostile value
-	 *  (parallel to the IdentityLabel pattern for Nostr / Blurt
-	 *  media URLs and the G2.2 SVG re-sanitization).
-	 *
-	 *  Length cap mirrors the indexer's CONTACT_URL_MAX (2048).
-	 *
-	 *  Sally finding OPS2 (Part 69) — investigated and confirmed
-	 *  intentional: this is NOT a drop-in for the project's shared
-	 *  `safeContactUrl` helper at $lib/utils/safeContactUrl.  The
-	 *  shared helper allows http/mailto/matrix/xmpp/nostr schemes
-	 *  for the instances directory + footer (Tor onions etc).
-	 *  Operator registration is stricter (https-only) per the
-	 *  indexer-side contract; consolidating to the shared helper
-	 *  would silently relax the operator validation.  Kept inline. */
-	function validateContactUrl(raw: string): string | null {
-		if (typeof raw !== 'string' || raw.length === 0 || raw.length > 2048) {
-			return null;
-		}
-		let u: URL;
-		try {
-			u = new URL(raw);
-		} catch {
-			return null;
-		}
-		if (u.protocol !== 'https:') return null;
-		if (u.username !== '' || u.password !== '') return null;
-		if (u.hostname.length === 0) return null;
-		return u.toString();
-	}
+	// Contact links are created with the shared, scheme-aware contact policy
+	// (normalizeContactUrl → detectContactProtocol), matching the instances page.
+	// It accepts every allowlisted scheme (mailto, matrix, xmpp, https, session,
+	// cwtch, …) and repairs a bare email to mailto:, so an operator's email /
+	// Matrix / XMPP / Discord-invite contact renders — not just https (the old
+	// https-only validator here silently dropped everything else, v1.16.9).
 
 	// Part 121 cp7 — per-locale internal-link wrapper.  See
 	// $i18n/path.localePath() + the analogous helper in
@@ -259,15 +234,25 @@
 							{formatDate(op.registered_at)}
 						</span>
 						{#if op.contact_url}
-							{@const safeContactUrl = validateContactUrl(op.contact_url)}
-							{#if safeContactUrl}
-								<a
-									href={safeContactUrl}
-									rel="noopener noreferrer nofollow"
-									class="truncate text-morphit-emerald hover:underline"
-								>
-									{$_('operators.contact')}
-								</a>
+							{@const safeContact = normalizeContactUrl(op.contact_url)}
+							{#if safeContact}
+								{@const cp = detectContactProtocol(safeContact)}
+								{#if cp && !cp.clickable}
+									<!-- session:/cwtch: etc. — not a browser-openable link; offer copy -->
+									<CopyButton
+										value={safeContact}
+										label={$_('operators.contact')}
+										class="inline-flex items-center text-morphit-emerald hover:underline"
+									/>
+								{:else}
+									<a
+										href={safeContact}
+										rel="noopener noreferrer nofollow"
+										class="truncate text-morphit-emerald hover:underline"
+									>
+										{$_('operators.contact')}
+									</a>
+								{/if}
 							{/if}
 						{/if}
 					</footer>

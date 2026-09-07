@@ -376,6 +376,26 @@ expect('HV-1e an unparseable string passes through', ensureHealthPath('not a url
 	);
 	// help text advertises the command + the endpoint.
 	expect('HV-5f help text documents `health` and /v1/health', /health \[--url=URL\]/.test(main) || /\/v1\/health/.test(main));
+
+	// v1.16.9 — a MISSING (not-yet-published) canary must render as a pending ⚠,
+	// not a red ✗ (that alarmed same-box operators into thinking setup broke).
+	// Only an OVERDUE canary (published then expired) is the red-✗ signal.
+	const healthSrc = readFileSync(
+		join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'commands', 'health.ts'),
+		'utf8'
+	);
+	expect(
+		'HV-5g missing canary is NOT lumped into the red ✗ branch (pending, not failed)',
+		!/=== 'overdue' \|\| canary\.state === 'missing'/.test(healthSrc)
+	);
+	expect(
+		'HV-5h overdue canary is the red ✗ signal',
+		/canary\.state === 'overdue'[\s\S]{0,40}c\.red\('✗'\)/.test(healthSrc)
+	);
+	expect(
+		'HV-5i missing-canary detail gives the direct publish command',
+		/update-canary\.sh/.test(healthSrc) && /pending, not a failure/.test(healthSrc)
+	);
 }
 
 // ─── HV-6: bridge-gateway auto-probe (the #13 fix) ──────────────────

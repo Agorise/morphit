@@ -229,12 +229,17 @@ const SCENARIOS: readonly Scenario[] = [
 		mustHave: ['Sally finding H3 follow-up', 'daily_ceiling_voucher_external_warning']
 	},
 	{
-		name: 'OPS2 — /operators inline validateContactUrl documented as intentional',
+		name: 'OPS2 — /operators contact uses the shared scheme-aware policy (all schemes, not https-only)',
 		file: 'src/routes/[lang]/operators/+page.svelte',
 		mustHave: [
-			'Sally finding OPS2',
-			// Confirm the inline helper still https-only (stricter
-			// than the shared safeContactUrl).
+			// v1.16.9 — the operators page now renders email/Matrix/XMPP/etc. via the
+			// shared policy (repairing a bare email to mailto:), matching /instances.
+			'normalizeContactUrl(op.contact_url)',
+			'detectContactProtocol'
+		],
+		mustNotHave: [
+			// the old https-only inline validator must not come back — it silently
+			// dropped every non-https contact (email/Matrix/XMPP/…).
 			"u.protocol !== 'https:'"
 		]
 	}

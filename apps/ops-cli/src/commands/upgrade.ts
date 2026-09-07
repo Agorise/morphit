@@ -475,7 +475,11 @@ export function selectReleaseAssets(
 	return { tarball, sha, sig };
 }
 
-type IntegrityProof = 'gpg-signature' | 'primary-https-hash' | 'primary-anchored-hash';
+type IntegrityProof =
+	| 'gpg-signature'
+	| 'primary-https-hash'
+	| 'primary-anchored-hash'
+	| 'onchain-anchored-sha256';
 
 interface TrustDecision {
 	readonly allowed: boolean;
@@ -493,12 +497,24 @@ export function decideTrust(args: {
 	sigVerified: boolean;
 	hashMatched: boolean;
 	hashFromPrimary: boolean;
+	hashFromChain?: boolean;
 }): TrustDecision {
 	if (args.sigVerified) {
 		return {
 			allowed: true,
 			proof: 'gpg-signature',
 			reason: 'GPG signature verified against the release-signer keys shipped in the install.'
+		};
+	}
+	// v1.16.9 — a SHA-256 anchored ON-CHAIN by @morphit's signed release broadcast
+	// (read from the LOCAL indexer, no clearnet) is a valid trust anchor too — it
+	// lets a hidden / air-gapped node apply an offline tarball with no hand-signing.
+	if (args.hashMatched && args.hashFromChain) {
+		return {
+			allowed: true,
+			proof: 'onchain-anchored-sha256',
+			reason:
+				'SHA-256 matched the release hash @morphit published on-chain (read from your local indexer — no clearnet).'
 		};
 	}
 	if (args.hashMatched && args.hashFromPrimary) {
@@ -514,9 +530,9 @@ export function decideTrust(args: {
 		allowed: false,
 		proof: null,
 		reason:
-			'No trusted integrity proof: the release is unsigned and the trusted primary could not ' +
-			'provide the expected hash. Refusing to install a mirror-supplied tarball that can only ' +
-			'be checked against the mirror\u2019s own checksum.'
+			'No trusted integrity proof: the release is unsigned and neither the trusted primary nor the ' +
+			'on-chain anchor could provide the expected hash. Refusing to install a mirror-supplied tarball ' +
+			'that can only be checked against the mirror\u2019s own checksum.'
 	};
 }
 
@@ -1373,6 +1389,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	// ─── 5. Obtain the tarball + verify (mirror-aware, integrity-anchored) ─
 	const tmpDir = mkTempDir();
 	let expectedHash: string | null = null;
+	let expectedHashFromChain = false;
 	const tarballPath = join(tmpDir, chosenAssets.tarball.name);
 	let bytesFromPrimary = false;
 	let bytesSource: ReleaseSource | null = null;
@@ -1399,6 +1416,22 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		// it is never used as a network source offline.
 		bytesSource = { host: 'local-file', repo: offline.tarballPath, isPrimary: false };
 		info(`Using local offline tarball (${chosenAssets.tarball.name}); no network required.`);
+		// v1.16.9 — a hidden / air-gapped node has a TRUSTED anchor even with NO
+		// .asc: the release SHA-256 that @morphit published ON-CHAIN via its signed
+		// release broadcast, which the LOCAL indexer serves at /v1/release over the
+		// node's own (possibly hidden) RPC — zero clearnet. If the offline tarball's
+		// hash matches that, we trust it with no hand-signing. `offline_sha256`
+		// anchors the self-contained `-offline` bundle; `source_sha256` the standard
+		// tarball. (A valid .asc, if present, still wins in decideTrust below.)
+		if (offline.sigPath === null) {
+			const wantOffline = /-offline\.tar\.gz$/.test(offline.tarballPath);
+			const onchainSha = await readOnchainReleaseSha(latestTag, wantOffline);
+			if (onchainSha) {
+				expectedHash = onchainSha;
+				expectedHashFromChain = true;
+				info('  Verifying against the release SHA-256 published on-chain (read from your local indexer).');
+			}
+		}
 	} else {
 		// 5a. Trust anchor: the SHA-256 always comes from the PRIMARY.
 		if (primaryRelease) {
@@ -1473,7 +1506,8 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 					bytesFromPrimary,
 					sigVerified,
 					hashMatched,
-					hashFromPrimary: expectedHash !== null
+					hashFromPrimary: expectedHash !== null && !expectedHashFromChain,
+					hashFromChain: expectedHashFromChain && hashMatched
 				});
 	if (!trust.allowed) {
 		printError(`Cannot verify the integrity of release ${latestTag}.\n  ${trust.reason}`);
@@ -1903,6 +1937,22 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 			webRootBackup = join(tmpDir, 'web-root-backup');
 			cpSync(webRoot, webRootBackup, { recursive: true });
 			info(`Redeploying ${buildDir} → ${webRoot}...`);
+			// v1.16.9 — the PREBUILT frontend ships verify.json with
+			// operator_tag=null (the release build has no operator), and the
+			// on-server frontend build (build-verify-json.mjs) doesn't run on a
+			// prebuilt upgrade — so verify.json read null even though the tag IS
+			// set + registered on-chain. Stamp THIS operator's tag into the served
+			// verify.json from the on-disk config, so it matches /v1/instance and
+			// the directory. (operator_tag here is informational; fee attribution
+			// comes from the runtime indexer config, unaffected.)
+			try {
+				const opTag = readOperatorTagFromConfig();
+				if (opTag && patchVerifyJsonOperatorTag(buildDir, opTag)) {
+					info(`Stamped operator_tag "${sanitizeForTerm(opTag)}" into verify.json.`);
+				}
+			} catch {
+				/* non-fatal — verify.json's operator_tag is informational */
+			}
 			deployFrontendBuild(buildDir, webRoot);
 			// Preserve the operator's web-root ownership (www-data, or whatever
 			// the web server runs as) so the freshly-copied files stay readable.
@@ -2062,36 +2112,11 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		}
 	}
 
-	// v1.16.7 — self-heal the bunkerweb WAF so the /v1/ + /relay/ JSON APIs are
-	// exempt from ModSecurity CRS (paranoia flagged the base64 avatar payload and
-	// 403'd a legitimate broadcast). Applied here so operators get the fix from
-	// `morphit-ops upgrade` alone — no ansible re-run. The bunkerweb.env template
-	// already carries this line for fresh installs; this patches an existing one.
-	try {
-		const bwEnv = '/etc/bunkerweb/bunkerweb.env';
-		if (existsSync(bwEnv)) {
-			const txt = readFileSync(bwEnv, 'utf8');
-			if (!txt.includes('CUSTOM_CONF_MODSEC_morphit_json_api_off=')) {
-				const rule =
-					'CUSTOM_CONF_MODSEC_morphit_json_api_off=SecRule REQUEST_URI "@rx ^/(v1|relay)/" "id:1990001,phase:1,t:none,nolog,pass,ctl:ruleEngine=Off"';
-				writeFileSync(bwEnv, `${txt.replace(/\n*$/, '')}\n${rule}\n`, 'utf8');
-				info('Exempted the /v1/ + /relay/ JSON APIs from the bunkerweb WAF (fixes the avatar-broadcast 403).');
-				// env_file changes need a container RECREATE (a plain restart re-uses
-				// the old env), so `compose up -d`; fall back across compose variants.
-				const composeFile = '/etc/bunkerweb/docker-compose.yml';
-				const recreate =
-					spawnSync('docker', ['compose', '-f', composeFile, 'up', '-d'], { encoding: 'utf8' }).status === 0 ||
-					spawnSync('docker-compose', ['-f', composeFile, 'up', '-d'], { encoding: 'utf8' }).status === 0;
-				info(
-					recreate
-						? 'Reloaded bunkerweb to apply the WAF exemption.'
-						: 'NOTE: could not auto-reload bunkerweb — run `docker compose -f /etc/bunkerweb/docker-compose.yml up -d` to apply the WAF exemption.'
-				);
-			}
-		}
-	} catch {
-		/* non-fatal — the exemption is also applied by re-running the installer */
-	}
+	// v1.16.9 — SELF-HEAL the BunkerWeb WAF so the /v1/ + /relay/ JSON APIs work,
+	// the way the maintainer insists: trap every condition, try each fix more than one way,
+	// VERIFY it took against the running container, fall through, never throw. See
+	// healBunkerWebWaf() for the three live-confirmed failure modes it fixes.
+	healBunkerWebWaf();
 
 	for (const svc of SERVICES_TO_RESTART) {
 		const isActive = spawnSync('systemctl', ['is-active', '--quiet', svc]).status === 0;
@@ -2348,6 +2373,17 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 			).status === 0;
 		if (!existsSync(seedScript)) {
 			/* older tree without the seed script — skip silently */
+		} else if (/-offline\.tar\.gz$/.test(tarballPath)) {
+			// v1.16.9 — the offline BUNDLE is a different artifact (it vendors
+			// node_modules + OS packages + Docker images) than the standard release
+			// tarball the on-chain CID anchors, so hashing it can NEVER match the
+			// anchor. Attempting the seed only prints an alarming "CID MISMATCH".
+			// Skip it cleanly — the box is fully upgraded; hosting is optional.
+			info('');
+			info('Skipping the IPFS self-seed: an offline bundle is a different artifact than the');
+			info('standard release tarball the on-chain CID anchors, so it can never match by design.');
+			info('  (To also host releases from this box, drop the standard morphit-<ver>.tar.gz here');
+			info('   and run `morphit-ops harden` → "Seed this release to IPFS".)');
 		} else if (!ipfsHostingUp) {
 			info('');
 			info('IPFS release hosting is not set up on this box — skipping the self-seed.');
@@ -2400,6 +2436,269 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────
+
+/** Parse an nginx/BunkerWeb size string ("1m", "512k", "64k", "1024") to bytes,
+ *  or null if unparseable. */
+function parseNginxSize(s: string): number | null {
+	const m = /^(\d+)\s*([kmg]?)$/i.exec(s.trim());
+	if (!m) return null;
+	const mult: Record<string, number> = { '': 1, k: 1024, m: 1024 * 1024, g: 1024 * 1024 * 1024 };
+	const factor = mult[(m[2] ?? '').toLowerCase()];
+	if (factor === undefined) return null;
+	return Number(m[1]) * factor;
+}
+
+/** First running docker container whose name matches `want` but not `avoid`. */
+function dockerContainer(want: RegExp, avoid: RegExp | null): string | null {
+	try {
+		const out = spawnSync('docker', ['ps', '--format', '{{.Names}}'], { encoding: 'utf8', timeout: 8000 });
+		if (out.status !== 0) return null;
+		for (const name of (out.stdout ?? '').split('\n').map((x) => x.trim()).filter(Boolean)) {
+			if (want.test(name) && (avoid === null || !avoid.test(name))) return name;
+		}
+	} catch {
+		/* docker not present */
+	}
+	return null;
+}
+
+/** v1.16.9 — SELF-HEAL the BunkerWeb WAF so the /v1/ + /relay/ JSON APIs work.
+ *  the maintainer's mandate: trap every condition, try each fix more than one way, VERIFY it
+ *  took against the RUNNING container, fall through, never throw. Fixes three
+ *  live-box-confirmed failure modes that 4xx a legitimate avatar/order broadcast:
+ *    A. MAX_CLIENT_SIZE too small  → 413 on the ~8 KB avatar broadcast.
+ *    B. bad-behavior counts routine API 400s → bans the client IP → 403 on all.
+ *    C. ModSecurity CRS flags the base64 avatar payload → 403.
+ *  Best-effort + idempotent: a non-BunkerWeb deploy just no-ops; a steady-state
+ *  box where everything is already applied skips the reload. */
+function healBunkerWebWaf(): void {
+	const bwEnv = '/etc/bunkerweb/bunkerweb.env';
+	try {
+		if (!existsSync(bwEnv)) return; // not a BunkerWeb deployment — nothing to heal
+	} catch {
+		return;
+	}
+
+	const bw = dockerContainer(/bunkerweb/i, /scheduler|ui|db|redis|autoconf/i);
+	const sched = dockerContainer(/scheduler/i, null);
+	const RULE_ID = '1990001';
+	const MODSEC_RULE =
+		`SecRule REQUEST_URI "@rx ^/(v1|relay)/" "id:${RULE_ID},phase:1,t:none,nolog,pass,ctl:ruleEngine=Off"`;
+	const RELAY_BODY_FLOOR = 64 * 1024; // the relay's own body cap; BunkerWeb must allow ≥ this
+	let changed = false;
+
+	let env = '';
+	try {
+		env = readFileSync(bwEnv, 'utf8');
+	} catch {
+		return;
+	}
+	const getVal = (key: string): string | null => {
+		const m = new RegExp(`^${key}=(.*)$`, 'm').exec(env);
+		return m ? (m[1] ?? null) : null;
+	};
+	const setVal = (key: string, val: string): void => {
+		if (new RegExp(`^${key}=`, 'm').test(env)) {
+			env = env.replace(new RegExp(`^${key}=.*$`, 'm'), `${key}=${val}`);
+		} else {
+			env = `${env.replace(/\n*$/, '')}\n${key}=${val}\n`;
+		}
+		changed = true;
+	};
+
+	// ── Fix A: MAX_CLIENT_SIZE — avatar/order broadcasts must not 413. ──
+	try {
+		const cur = getVal('MAX_CLIENT_SIZE');
+		const curBytes = cur !== null ? parseNginxSize(cur) : null;
+		if (cur === null || curBytes === null || curBytes < RELAY_BODY_FLOOR) {
+			setVal('MAX_CLIENT_SIZE', '1m');
+			info('WAF: set MAX_CLIENT_SIZE=1m so avatar/order broadcasts are not rejected 413.');
+		}
+	} catch {
+		/* keep going */
+	}
+
+	// ── Fix B: bad-behavior must NOT ban on routine API 400s. ──
+	try {
+		const cur = getVal('BAD_BEHAVIOR_STATUS_CODES');
+		const codes = (cur ?? '400 401 403 404 405 429 444').trim().split(/\s+/).filter((c) => c !== '400');
+		const joined = codes.join(' ');
+		if (cur === null || cur.trim() !== joined) {
+			setVal('BAD_BEHAVIOR_STATUS_CODES', joined);
+			info('WAF: removed 400 from bad-behavior triggers (a JSON API returns 400 routinely; it must not ban traders).');
+		}
+	} catch {
+		/* keep going */
+	}
+
+	// ── Fix C, strategy 1: the ModSec exemption as an env var. ──
+	try {
+		if (!/^CUSTOM_CONF_MODSEC_morphit_json_api_off=/m.test(env)) {
+			setVal('CUSTOM_CONF_MODSEC_morphit_json_api_off', MODSEC_RULE);
+		}
+	} catch {
+		/* keep going */
+	}
+
+	if (changed) {
+		try {
+			writeFileSync(bwEnv, env, 'utf8');
+		} catch {
+			/* couldn't write env — the file strategy + reload below may still apply */
+		}
+	}
+
+	// ── Fix C, strategy 2 (the one PROVEN to load): drop the rule as a FILE in the
+	//    scheduler's config tree, which BunkerWeb renders even when the env var is
+	//    ignored. Only counts as a change if it wasn't already there. ──
+	if (sched !== null) {
+		try {
+			const root =
+				(spawnSync('docker', [
+					'exec', sched, 'sh', '-c',
+					'for d in /data/configs /etc/bunkerweb/configs /data/config; do [ -d "$d" ] && { echo "$d"; break; }; done'
+				], { encoding: 'utf8', timeout: 8000 }).stdout ?? '').trim() || '/data/configs';
+			const conf = `${root}/modsec/morphit-json-api-off.conf`;
+			const already =
+				(spawnSync('docker', [
+					'exec', sched, 'sh', '-c', `test -s '${conf}' && grep -q '${RULE_ID}' '${conf}' && echo yes`
+				], { encoding: 'utf8', timeout: 8000 }).stdout ?? '').includes('yes');
+			if (!already) {
+				spawnSync('docker', [
+					'exec', sched, 'sh', '-c',
+					`mkdir -p '${root}/modsec' && printf '%s\\n' ${JSON.stringify(MODSEC_RULE)} > '${conf}'`
+				], { encoding: 'utf8', timeout: 8000 });
+				changed = true;
+			}
+		} catch {
+			/* keep going */
+		}
+	}
+
+	// Nothing to do (steady state) — skip the reload + its verify wait entirely.
+	if (!changed) return;
+
+	// ── Apply: reload via a fallback chain; stop at the first that succeeds. ──
+	const composeFiles = ['/etc/bunkerweb/docker-compose.yml', '/opt/morphit/docker-compose.yml'];
+	const strategies: Array<() => boolean> = [
+		() => sched !== null && spawnSync('docker', ['restart', sched], { encoding: 'utf8', timeout: 60000 }).status === 0,
+		...composeFiles.flatMap((f) =>
+			existsSync(f)
+				? [
+						() => spawnSync('docker', ['compose', '-f', f, 'up', '-d'], { encoding: 'utf8', timeout: 120000 }).status === 0,
+						() => spawnSync('docker-compose', ['-f', f, 'up', '-d'], { encoding: 'utf8', timeout: 120000 }).status === 0
+					]
+				: []
+		),
+		() => bw !== null && spawnSync('docker', ['restart', bw], { encoding: 'utf8', timeout: 60000 }).status === 0
+	];
+	let reloaded = false;
+	for (const strat of strategies) {
+		try {
+			if (strat()) {
+				reloaded = true;
+				break;
+			}
+		} catch {
+			/* try the next strategy */
+		}
+	}
+
+	// ── VERIFY against the running container (observe, don't assume). ──
+	if (bw !== null && reloaded) {
+		try {
+			spawnSync('sleep', ['20'], { timeout: 25000 }); // let the scheduler regenerate
+			const loaded =
+				((spawnSync('docker', [
+					'exec', bw, 'sh', '-c', `grep -rl '${RULE_ID}' /etc/bunkerweb /data 2>/dev/null | head -1`
+				], { encoding: 'utf8', timeout: 10000 }).stdout ?? '').trim().length > 0);
+			info(
+				loaded
+					? 'WAF: /v1/ + /relay/ exemption verified live inside BunkerWeb; avatar/order broadcasts unblocked.'
+					: 'WAF: settings written; the exemption applies on the next scheduler cycle (a few minutes).'
+			);
+		} catch {
+			/* verification is best-effort */
+		}
+	} else if (!reloaded) {
+		info('WAF: settings written; could not auto-reload — they apply on the next `docker compose up -d`.');
+	}
+}
+
+/** Read the release's on-chain SHA-256 anchor from the LOCAL indexer's
+ *  /v1/release (served over the node's OWN RPC — no clearnet). Returns the
+ *  `-offline` bundle hash when `wantOffline`, else the standard-tarball hash,
+ *  and ONLY when the served release version matches `tag` (never trust a stale
+ *  or different release's hash). Best-effort: null if unreachable / absent /
+ *  version-mismatch. v1.16.9 — lets a hidden/air-gapped node apply an offline
+ *  tarball with no hand-signed .asc. */
+async function readOnchainReleaseSha(tag: string, wantOffline: boolean): Promise<string | null> {
+	const bases = ['http://127.0.0.1:8081', 'http://172.18.0.1:8081', 'http://172.17.0.1:8081'];
+	const want = tag.replace(/^v/, '');
+	for (const base of bases) {
+		try {
+			const ctrl = new AbortController();
+			const timer = setTimeout(() => ctrl.abort(), 5000);
+			const res = await fetch(`${base}/v1/release`, { signal: ctrl.signal });
+			clearTimeout(timer);
+			if (!res.ok) continue;
+			// Cap the body before parsing — /v1/release is tiny; refuse an absurd
+			// response rather than parse it (hardening: no bare res.json()).
+			const txt = await res.text();
+			if (txt.length > 65536) continue;
+			const body = JSON.parse(txt) as {
+				version?: string;
+				distribution?: { source_sha256?: string; offline_sha256?: string } | null;
+			};
+			if ((body.version ?? '').replace(/^v/, '') !== want) continue; // stale/other release
+			const d = body.distribution ?? {};
+			const sha = wantOffline ? d.offline_sha256 : d.source_sha256;
+			if (typeof sha === 'string' && /^[0-9a-f]{64}$/i.test(sha)) return sha.toLowerCase();
+		} catch {
+			/* try the next base */
+		}
+	}
+	return null;
+}
+
+/** Read this operator's tag from the on-disk config (the authoritative,
+ *  root-owned files), robustly. Uses [ \t]* (NOT \s*) around '=' so an empty
+ *  value can't swallow the next line. Last non-empty wins. v1.16.9. */
+function readOperatorTagFromConfig(): string | null {
+	const files = [
+		'/etc/morphit/indexer.env',
+		'/opt/morphit/morphit.config.env',
+		'/etc/morphit/morphit.config.env'
+	];
+	let found: string | null = null;
+	for (const f of files) {
+		try {
+			if (!existsSync(f)) continue;
+			const m = readFileSync(f, 'utf8').match(
+				/^[ \t]*MORPHIT_INSTANCE_OPERATOR_TAG[ \t]*=[ \t]*(.*)$/m
+			);
+			if (!m) continue;
+			const v = (m[1] ?? '').trim().replace(/^["']|["']$/g, '').trim();
+			if (v !== '') found = v;
+		} catch {
+			/* unreadable — skip */
+		}
+	}
+	return found;
+}
+
+/** Stamp `operator_tag` into a build's verify.json without disturbing its
+ *  formatting or the (asset) hash_manifest. Returns true if it changed the file. */
+function patchVerifyJsonOperatorTag(buildDir: string, tag: string): boolean {
+	const p = join(buildDir, 'verify.json');
+	if (!existsSync(p)) return false;
+	const txt = readFileSync(p, 'utf8');
+	const patched = txt.replace(/("operator_tag"[ \t]*:[ \t]*)(null|"[^"]*")/, `$1${JSON.stringify(tag)}`);
+	if (patched === txt) return false;
+	writeFileSync(p, patched);
+	return true;
+}
+
 
 function readLocalReleaseInfo(installDir: string): ReleaseInfo | null {
 	const p = join(installDir, 'release-info.json');

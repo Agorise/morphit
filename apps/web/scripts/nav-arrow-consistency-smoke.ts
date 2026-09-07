@@ -58,6 +58,11 @@ check('app.css slides nav-arrow-left on hover', /:hover\s+\.nav-arrow-left/.test
 check('app.css greens the arrow on hover', /:hover\s+\.nav-arrow\b/.test(css) && /--morphit-emerald/.test(css));
 check('app.css removes underline on links carrying an arrow', /:has\(\.nav-arrow\)/.test(css));
 check("app.css mirrors the arrow under RTL", /\[dir='rtl'\]\s*\.nav-arrow/.test(css));
+check(
+	'app.css gives the arrow a text-facing gap (not smashed against the label)',
+	/\.nav-arrow-right\s*\{[^}]*margin-inline-start/.test(css) &&
+		/\.nav-arrow-left\s*\{[^}]*margin-inline-end/.test(css)
+);
 
 const priorities = readFileSync(join(SRC, 'lib', 'components', 'PrioritiesSection.svelte'), 'utf-8');
 check('homepage cards use nav-arrow', /nav-arrow nav-arrow-right/.test(priorities));
