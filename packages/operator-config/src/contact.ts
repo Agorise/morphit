@@ -146,3 +146,28 @@ export const CONTACT_URL_SCHEMES = [
 export function isAllowedContactUrl(raw: string | null | undefined): boolean {
 	return detectContactProtocol(raw) !== null;
 }
+
+/**
+ * Coerce a raw contact value into a safe, allowlisted contact URL, or undefined.
+ *
+ * - already a valid contact URL → returned unchanged;
+ * - a BARE email (`user@host.tld`, no scheme) → repaired to `mailto:user@host.tld`
+ *   (the #1 operator mistake — a bare email typed into the branding step, which
+ *   is NOT a URL and used to fail the indexer's config validation and brick the
+ *   whole instance, v1.16.7);
+ * - anything else invalid → undefined (dropped), never an error.
+ *
+ * Shared by the indexer (lenient runtime load), the `edit → branding` input
+ * validator, and the upgrade auto-repair, so all three agree.
+ */
+export function normalizeContactUrl(raw: string | null | undefined): string | undefined {
+	const trimmed = (raw ?? '').trim();
+	if (trimmed === '') return undefined;
+	if (isAllowedContactUrl(trimmed)) return trimmed;
+	// Bare email with no scheme → try mailto:.
+	if (/^[^\s:@]+@[^\s:@]+\.[^\s:@]+$/.test(trimmed)) {
+		const asMailto = `mailto:${trimmed}`;
+		if (isAllowedContactUrl(asMailto)) return asMailto;
+	}
+	return undefined;
+}

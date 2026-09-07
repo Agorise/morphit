@@ -104,6 +104,7 @@
  */
 
 import { tryResolveHiddenUpgrade, type HiddenUpgradeResolution } from '../init/hiddenUpgradeResolve.js';
+import { normalizeContactUrl } from '@morphit/operator-config';
 import { withSpinner } from '../init/spinner.ts';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, readdirSync, statSync, copyFileSync, cpSync, readlinkSync, chmodSync } from 'node:fs';
 import { join, dirname, basename, resolve } from 'node:path';
@@ -2037,6 +2038,59 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		}
 	} catch {
 		/* non-fatal — the node still works over clearnet */
+	}
+
+	// v1.16.7 — self-heal a bare-email contact URL that an older `edit → branding`
+	// wrote (e.g. `you@host.tld`, no scheme). Not a valid URL, it used to fail the
+	// indexer's config validation and crash-loop the node. Normalize it to
+	// `mailto:` so the file is correct + re-broadcastable. (The indexer now also
+	// tolerates it at runtime, but we fix the source of truth.)
+	for (const cfg of ['/opt/morphit/morphit.config.env', '/etc/morphit/indexer.env']) {
+		try {
+			if (!existsSync(cfg)) continue;
+			const txt = readFileSync(cfg, 'utf8');
+			const m = txt.match(/^([ \t]*MORPHIT_INSTANCE_CONTACT_URL[ \t]*=[ \t]*)(.*)$/m);
+			if (!m) continue;
+			const rawVal = (m[2] ?? '').trim().replace(/^["']|["']$/g, '');
+			const fixed = normalizeContactUrl(rawVal);
+			if (rawVal !== '' && fixed && fixed !== rawVal) {
+				writeFileSync(cfg, txt.replace(m[0], `${m[1] ?? ''}${fixed}`), 'utf8');
+				info(`Repaired an invalid contact URL in ${cfg}: "${sanitizeForTerm(rawVal)}" → "${sanitizeForTerm(fixed)}"`);
+			}
+		} catch {
+			/* non-fatal — the indexer tolerates a bad contact URL at runtime now */
+		}
+	}
+
+	// v1.16.7 — self-heal the bunkerweb WAF so the /v1/ + /relay/ JSON APIs are
+	// exempt from ModSecurity CRS (paranoia flagged the base64 avatar payload and
+	// 403'd a legitimate broadcast). Applied here so operators get the fix from
+	// `morphit-ops upgrade` alone — no ansible re-run. The bunkerweb.env template
+	// already carries this line for fresh installs; this patches an existing one.
+	try {
+		const bwEnv = '/etc/bunkerweb/bunkerweb.env';
+		if (existsSync(bwEnv)) {
+			const txt = readFileSync(bwEnv, 'utf8');
+			if (!txt.includes('CUSTOM_CONF_MODSEC_morphit_json_api_off=')) {
+				const rule =
+					'CUSTOM_CONF_MODSEC_morphit_json_api_off=SecRule REQUEST_URI "@rx ^/(v1|relay)/" "id:1990001,phase:1,t:none,nolog,pass,ctl:ruleEngine=Off"';
+				writeFileSync(bwEnv, `${txt.replace(/\n*$/, '')}\n${rule}\n`, 'utf8');
+				info('Exempted the /v1/ + /relay/ JSON APIs from the bunkerweb WAF (fixes the avatar-broadcast 403).');
+				// env_file changes need a container RECREATE (a plain restart re-uses
+				// the old env), so `compose up -d`; fall back across compose variants.
+				const composeFile = '/etc/bunkerweb/docker-compose.yml';
+				const recreate =
+					spawnSync('docker', ['compose', '-f', composeFile, 'up', '-d'], { encoding: 'utf8' }).status === 0 ||
+					spawnSync('docker-compose', ['-f', composeFile, 'up', '-d'], { encoding: 'utf8' }).status === 0;
+				info(
+					recreate
+						? 'Reloaded bunkerweb to apply the WAF exemption.'
+						: 'NOTE: could not auto-reload bunkerweb — run `docker compose -f /etc/bunkerweb/docker-compose.yml up -d` to apply the WAF exemption.'
+				);
+			}
+		}
+	} catch {
+		/* non-fatal — the exemption is also applied by re-running the installer */
 	}
 
 	for (const svc of SERVICES_TO_RESTART) {

@@ -9,7 +9,7 @@
  */
 
 import { z } from 'zod';
-import { parseRoomAlias, MORPHIT_GENESIS_BLOCK, DEFAULT_BLURT_RPC_ENDPOINTS, DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS } from '@morphit/operator-config';
+import { parseRoomAlias, MORPHIT_GENESIS_BLOCK, DEFAULT_BLURT_RPC_ENDPOINTS, DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS, normalizeContactUrl } from '@morphit/operator-config';
 import { CANONICAL_TREASURY } from '$config/canonicalTreasury';
 
 /** Blurt account-name shape — the project-canonical regex (cp175 F-007):
@@ -1407,7 +1407,10 @@ const envSchema = z.object({
 	// works.
 	MORPHIT_INSTANCE_NAME: z.string().max(64).optional(),
 	MORPHIT_INSTANCE_TAGLINE: z.string().max(200).optional(),
-	MORPHIT_INSTANCE_CONTACT_URL: z.string().url().optional(),
+	// v1.16.7 — accept ANY string here (non-fatal). A bad contact URL (e.g. a
+	// bare email typed into `edit → branding`) must never fail config validation
+	// and crash-loop the whole indexer. It's normalized/dropped below.
+	MORPHIT_INSTANCE_CONTACT_URL: z.string().optional(),
 	MORPHIT_INSTANCE_TOR_ADDRESS: z.string().max(80).optional(),
 	// Optional: the Matrix homeserver the alert bot uses, IF one runs. The
 	// clearnet-elimination gate checks it — a clearnet homeserver voids the
@@ -1867,7 +1870,19 @@ export function loadConfig(): Config {
 		verboseHealth: e.MORPHIT_INDEXER_VERBOSE_HEALTH,
 		instanceName: e.MORPHIT_INSTANCE_NAME,
 		instanceTagline: e.MORPHIT_INSTANCE_TAGLINE,
-		instanceContactUrl: e.MORPHIT_INSTANCE_CONTACT_URL,
+		instanceContactUrl: (() => {
+			const norm = normalizeContactUrl(e.MORPHIT_INSTANCE_CONTACT_URL);
+			const raw = (e.MORPHIT_INSTANCE_CONTACT_URL ?? '').trim();
+			if (raw !== '' && norm !== raw) {
+				// eslint-disable-next-line no-console
+				console.warn(
+					norm
+						? `[config] MORPHIT_INSTANCE_CONTACT_URL '${raw}' repaired to '${norm}' (a contact URL needs a scheme, e.g. mailto:)`
+						: `[config] MORPHIT_INSTANCE_CONTACT_URL '${raw}' is not a valid contact URL — ignoring it (the instance runs fine without a contact link)`
+				);
+			}
+			return norm;
+		})(),
 		instanceTorAddress: e.MORPHIT_INSTANCE_TOR_ADDRESS,
 		instanceMatrixHomeserver: e.MORPHIT_INSTANCE_MATRIX_HOMESERVER,
 		instanceLokinetAddress: e.MORPHIT_INSTANCE_LOKINET_ADDRESS,

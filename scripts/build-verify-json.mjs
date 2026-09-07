@@ -131,9 +131,22 @@ function readGitCommit() {
  *  absent in a dev checkout; a manual /opt/morphit layout may keep the operator
  *  tag in any of them. Strips surrounding quotes. */
 function readConfigEnvValue(key) {
+	// v1.16.7 — the upgrade's frontend build can run from a subdir (apps/web), so
+	// REPO_ROOT-relative paths alone missed the install-root morphit.config.env and
+	// left operator_tag wrongly null even when the tag WAS set (timeapp). Check the
+	// absolute install locations too, and walk up from REPO_ROOT.
+	const walkUp = [];
+	let dir = REPO_ROOT;
+	for (let i = 0; i < 6; i++) {
+		walkUp.push(resolve(dir, 'morphit.config.env'), resolve(dir, 'morphit.env'));
+		const parent = resolve(dir, '..');
+		if (parent === dir) break;
+		dir = parent;
+	}
 	const files = [
-		resolve(REPO_ROOT, 'morphit.env'),
-		resolve(REPO_ROOT, 'morphit.config.env'),
+		...walkUp,
+		'/opt/morphit/morphit.config.env',
+		'/etc/morphit/morphit.config.env',
 		'/etc/morphit/indexer.env'
 	];
 	let found = null;
@@ -142,7 +155,7 @@ function readConfigEnvValue(key) {
 		try {
 			txt = readFileSync(file, 'utf8');
 		} catch {
-			continue; // file absent (dev checkout, or this layout doesn't use it)
+			continue; // file absent / unreadable (dev checkout, or this layout doesn't use it)
 		}
 		for (const line of txt.split('\n')) {
 			const m = line.match(/^\s*([A-Za-z0-9_]+)\s*=\s*(.*)$/);

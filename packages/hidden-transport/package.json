@@ -1,6 +1,6 @@
 {
   "name": "@morphit/hidden-transport",
-  "version": "1.16.6",
+  "version": "1.16.7",
   "private": true,
   "type": "module",
   "description": "Dependency-free hidden-network transport primitives (SOCKS5 connector for Tor .onion, host/port parsing, network classification, proxy config) shared by the indexer's hidden-service fetch and the ops-cli hidden upgrade fetch, so the two can never drift. Pure node:net + buffers — no external deps, so it bundles and installs fully offline.",

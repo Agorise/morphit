@@ -28,6 +28,7 @@
  */
 
 import { resolve } from 'node:path';
+import { normalizeContactUrl } from '@morphit/operator-config';
 import { defaultRepoRoot } from '../lib/repoRoot.ts';
 import {
 	existsSync,
@@ -289,8 +290,30 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 			existing.contactUrl
 		);
 		if (contactR.changed) {
-			configUpdates.set('MORPHIT_INSTANCE_CONTACT_URL', contactR.value);
-			contactChanged = true;
+			// v1.16.7 — validate + repair before writing. A bare email (the common
+			// mistake) has no scheme, so it is NOT a URL; writing it verbatim used
+			// to fail the indexer's config validation and crash-loop the whole
+			// instance. Normalize `x@y` → `mailto:x@y`, and refuse anything we can't
+			// make into an allowlisted contact URL.
+			const rawContact = (contactR.value ?? '').trim();
+			if (rawContact === '') {
+				configUpdates.set('MORPHIT_INSTANCE_CONTACT_URL', '');
+				contactChanged = true;
+			} else {
+				const normalized = normalizeContactUrl(rawContact);
+				if (!normalized) {
+					console.log(`✗ "${sanitizeForTerm(rawContact)}" isn't a usable contact link.`);
+					console.log('  Use a full link with a scheme: mailto:you@example.com,');
+					console.log('  https://…, matrix:…, xmpp:…, nostr:…  (a bare email alone is not a URL).');
+					console.log('  Leaving the contact URL unchanged.');
+				} else {
+					if (normalized !== rawContact) {
+						console.log(`  → repaired "${sanitizeForTerm(rawContact)}" to "${sanitizeForTerm(normalized)}"`);
+					}
+					configUpdates.set('MORPHIT_INSTANCE_CONTACT_URL', normalized);
+					contactChanged = true;
+				}
+			}
 		}
 
 		const seoTitleR = await editField(
