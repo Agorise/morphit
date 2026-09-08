@@ -109,8 +109,8 @@ if (/text\.length\s*>\s*RELEASE_JSON_MAX_BYTES/.test(codeOnly)) {
 /* ---------------- scenario 4: no bare await res.json() in release fetch ---------------- */
 
 // After cp160, the release fetch MUST use res.text() + JSON.parse with
-// the cap in between, not bare res.json().  The downloadTo() path uses
-// res.arrayBuffer() (binary archive) which is fine and separate.
+// the cap in between, not bare res.json().  The downloadTo() path streams
+// the binary archive to disk with an IDLE timeout (v1.16.13) — separate.
 // Count bare res.json() occurrences in code (not comments).
 const bareJsonCount = (codeOnly.match(/await\s+res\.json\(\)/g) || []).length;
 if (bareJsonCount === 0) {
@@ -120,6 +120,26 @@ if (bareJsonCount === 0) {
 		'no bare `await res.json()` in upgrade.ts',
 		`found ${bareJsonCount} occurrence(s); release-metadata fetch must cap body before parse`
 	);
+}
+
+/* ---------------- scenario 4b: tarball download survives a slow link (v1.16.13) ---------------- */
+
+// The tarball download must NOT use a fixed total deadline (the old 30s cap
+// guillotined healthy-but-slow downloads — the maintainer/morphitir over a throttled a filtered network
+// link). It streams to disk and uses an IDLE/stall timeout that re-arms on each
+// chunk, so a slow-but-progressing transfer completes; only a true stall aborts.
+if (/UPGRADE_STALL_TIMEOUT_MS/.test(codeOnly) && /getReader\(\)/.test(codeOnly)) {
+	pass('downloadTo streams with a stall (idle) timeout — slow links complete');
+} else {
+	fail(
+		'downloadTo streams with a stall (idle) timeout',
+		'expected UPGRADE_STALL_TIMEOUT_MS + res.body.getReader() streaming in downloadTo'
+	);
+}
+if (/clearTimeout\(timer\);\s*\n\s*timer = setTimeout\(\(\) => controller\.abort\(\), UPGRADE_STALL_TIMEOUT_MS\)/.test(codeOnly)) {
+	pass('the stall timer RE-ARMS on progress (arm() resets on each chunk)');
+} else {
+	fail('the stall timer re-arms on progress', 'expected an arm() that clears + resets the timer on each chunk');
 }
 
 /* ---------------- scenario 5: cap value is sane ---------------- */

@@ -106,7 +106,7 @@
 import { tryResolveHiddenUpgrade, type HiddenUpgradeResolution } from '../init/hiddenUpgradeResolve.js';
 import { normalizeContactUrl, INSTANCE_ENV } from '@morphit/operator-config';
 import { withSpinner } from '../init/spinner.ts';
-import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, readdirSync, statSync, copyFileSync, cpSync, readlinkSync, chmodSync } from 'node:fs';
+import { readFileSync, writeFileSync, createWriteStream, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, readdirSync, statSync, copyFileSync, cpSync, readlinkSync, chmodSync } from 'node:fs';
 import { join, dirname, basename, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -2179,6 +2179,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	if (!selfHealReexeced) {
 		healBunkerWebWaf();
 		healIpfsGatewayExposure();
+		healFrontendConfig();
 	}
 
 	for (const svc of SERVICES_TO_RESTART) {
@@ -2516,6 +2517,38 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────
+
+/** v1.16.13 — SELF-HEAL: rebuild the compose-managed frontend so a shipped
+ *  nginx.conf change (e.g. the v1.16.12 `/v1/broadcast` body cap) lands on the
+ *  SAME upgrade. The frontend's nginx.conf is BAKED into its image, so the main
+ *  upgrade flow's restart alone keeps a stale config — and because this runs from
+ *  the NEW binary in the re-exec self-heal phase (like the WAF/IPFS heals), a
+ *  config fix applies on the release that ships it, not one upgrade later
+ *  (the maintainer/morphitir: the nginx fix sat undeployed because the driving orchestrator
+ *  only restarted the frontend). Self-contained + best-effort; no-ops if there's
+ *  no compose-managed frontend. Docker layer-caching makes a no-change rebuild
+ *  cheap, so running it every upgrade is fine. */
+export function healFrontendConfig(): void {
+	try {
+		// This runs from <installDir>/apps/ops-cli/dist/main.js — derive installDir
+		// from that path, falling back to the standard /opt/morphit.
+		let installDir = '/opt/morphit';
+		const self = process.argv[1] ?? '';
+		const m = /^(.*)\/apps\/ops-cli\/dist\//.exec(self);
+		if (m && m[1] && existsSync(join(m[1], 'ops', 'bunkerweb', 'frontend', 'nginx.conf'))) {
+			installDir = m[1];
+		}
+		const buildDir = join(installDir, 'apps', 'web', 'build');
+		const name = findFrontendContainer(buildDir);
+		if (name !== null) {
+			// restartFrontendContainer refreshes the build-context nginx.conf from
+			// the upgraded repo and rebuilds when compose-managed (else restarts).
+			restartFrontendContainer(name, installDir);
+		}
+	} catch {
+		/* best-effort — never fail the self-heal phase over the frontend */
+	}
+}
 
 /** v1.16.10 — SELF-HEAL: expose this box's Kubo gateway over Tor/I2P so it is a
  *  federation seeder, automatically, on upgrade (the maintainer's mandate: every instance a
@@ -2989,6 +3022,10 @@ function readLocalReleaseInfo(installDir: string): ReleaseInfo | null {
  *  Conservative 30s; release-archive downloads are typically a
  *  few hundred KB and complete in under a second. */
 const UPGRADE_FETCH_TIMEOUT_MS = 30_000;
+// Idle (no-bytes) timeout for streaming the release tarball — abort only if the
+// transfer STALLS this long, so a slow-but-steady link (the maintainer/morphitir, a filtered network)
+// can finish a large download instead of hitting a fixed total deadline.
+const UPGRADE_STALL_TIMEOUT_MS = 90_000;
 
 // cp191 — fetch a release-metadata URL with all the safety the
 // upgrade path needs: a hard timeout, manual redirect handling
@@ -3086,14 +3123,45 @@ async function fetchLatestRelease(host: string, repo: string): Promise<ForgejoRe
 
 async function downloadTo(url: string, dest: string): Promise<void> {
 	const controller = new AbortController();
-	const timer = setTimeout(() => controller.abort(), UPGRADE_FETCH_TIMEOUT_MS);
+	// IDLE timeout, not a total deadline: abort only if NO bytes arrive for
+	// UPGRADE_STALL_TIMEOUT_MS. A slow-but-progressing download (a 13 MB tarball
+	// over a throttled/filtered link — the maintainer/morphitir in a filtered network) must COMPLETE; the
+	// old fixed 30 s cap guillotined healthy slow downloads mid-transfer. We also
+	// STREAM to disk instead of buffering the whole file in memory.
+	let timer!: ReturnType<typeof setTimeout>;
+	const arm = (): void => {
+		clearTimeout(timer);
+		timer = setTimeout(() => controller.abort(), UPGRADE_STALL_TIMEOUT_MS);
+	};
+	arm();
 	try {
 		const res = await fetch(url, { signal: controller.signal });
 		if (!res.ok) {
 			throw new Error(`HTTP ${res.status} from ${url}`);
 		}
-		const buf = Buffer.from(await res.arrayBuffer());
-		writeFileSync(dest, buf);
+		if (res.body === null) {
+			// No readable stream (unusual) — fall back to a buffered read.
+			writeFileSync(dest, Buffer.from(await res.arrayBuffer()));
+			return;
+		}
+		const out = createWriteStream(dest);
+		const reader = res.body.getReader();
+		try {
+			for (;;) {
+				const { done, value } = await reader.read();
+				if (done) break;
+				arm(); // progress made — reset the stall timer
+				if (value && value.length > 0) {
+					if (!out.write(Buffer.from(value))) {
+						await new Promise<void>((resolve) => out.once('drain', resolve));
+					}
+				}
+			}
+		} finally {
+			await new Promise<void>((resolve, reject) =>
+				out.end((err?: Error | null) => (err ? reject(err) : resolve()))
+			);
+		}
 	} finally {
 		clearTimeout(timer);
 	}

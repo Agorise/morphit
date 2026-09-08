@@ -125,16 +125,36 @@ const ALLOWLIST: readonly AllowlistEntry[] = [
 		package: 'vitest',
 		maxSeverity: 'critical',
 		acceptedTitles: [
-			'When Vitest UI server is listening, arbitrary file can be read and executed'
+			'When Vitest UI server is listening, arbitrary file can be read and executed',
+			'Vitest: Path Traversal / Arbitrary File Read via @vitest/mocker Redirect Mock'
 		],
-		lastReviewed: '2026-06-01',
+		lastReviewed: '2026-09-08',
 		rationale:
-			'Dev/test-only dependency (never shipped to operators). The vulnerable ' +
-			'code path is the Vitest UI server: Morphit invokes vitest only as ' +
-			'`vitest run` / `vitest` (no `--ui`), has NO `@vitest/ui` dependency, and ' +
-			'never starts the UI server in CI or locally — so the listening-server ' +
-			'file-read/exec surface is not installed or reachable here. Reviewed cp184. ' +
-			'Revisit if a vitest 2.1.x patch ships or if `@vitest/ui` is ever added.'
+			'Dev/test-only dependency (never shipped to operators). Both advisories are ' +
+			'test-time surfaces, not reachable in the deployed product: (1) the Vitest UI ' +
+			'server file-read/exec — Morphit runs only `vitest run` / `vitest` (no `--ui`), ' +
+			'has NO `@vitest/ui` dependency, and never starts the UI server; (2) the ' +
+			'@vitest/mocker "Redirect Mock" path-traversal/arbitrary-file-read triggers only ' +
+			'while executing a test suite that uses mocker redirects against attacker-supplied ' +
+			'paths — Morphit\'s own test files control their mocks, and vitest is never run ' +
+			'against untrusted test input, in CI or locally. Neither path exists in the ' +
+			'production runtime (indexer/relay/frontend ship no vitest). Reviewed cp184; ' +
+			're-reviewed 2026-09-08 for the @vitest/mocker advisory. Revisit if a vitest 2.1.x ' +
+			'patch ships or if `@vitest/ui` / untrusted-input test runs are ever added.'
+	},
+	{
+		package: 'js-yaml',
+		maxSeverity: 'high',
+		acceptedTitles: ['js-yaml: maxTotalMergeKeys does not limit CPU use for empty merge sources'],
+		lastReviewed: '2026-09-08',
+		rationale:
+			'Dev/lint-only dependency — reached solely via eslint → @eslint/eslintrc → js-yaml, ' +
+			'used to parse ESLint config at lint time. Never shipped to operators and never ' +
+			'invoked at runtime (the production indexer/relay/frontend ship no eslint/js-yaml). ' +
+			'The advisory is a CPU-DoS parsing YAML merge keys; the only YAML js-yaml parses ' +
+			'here is Morphit\'s own committed ESLint config, which is trusted and not ' +
+			'attacker-controlled. Reviewed 2026-09-08. Drop this row once eslint\'s pinned ' +
+			'@eslint/eslintrc moves to a js-yaml with the fix in range.'
 	},
 	{
 		package: 'vite',

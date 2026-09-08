@@ -323,9 +323,10 @@ async function main(): Promise<number> {
 	// upgrade instead of the next one. Not listed in help; operators never call it.
 	if (args.subcommand === '__post-upgrade-selfheal') {
 		try {
-			const { healBunkerWebWaf, healIpfsGatewayExposure } = await import('./commands/upgrade.ts');
+			const { healBunkerWebWaf, healIpfsGatewayExposure, healFrontendConfig } = await import('./commands/upgrade.ts');
 			healBunkerWebWaf();
 			healIpfsGatewayExposure();
+			healFrontendConfig();
 		} catch {
 			/* best-effort — the upgrade falls back to its in-process heals */
 		}

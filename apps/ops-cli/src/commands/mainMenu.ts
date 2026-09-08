@@ -218,6 +218,13 @@ export function itemSuffix(subcommand: string, ann?: MenuAnnotations): string {
 		if (cur !== null) parts.push(`now: ${cur}`);
 		if (latest !== null) parts.push(`latest: ${latest}`);
 		let s = '  ' + fmt.dim(`(${parts.join('  ')})`);
+		if (cur !== null && latest === null) {
+			// The update check couldn't reach the release server (e.g. a slow or
+			// filtered link timed out). Say so explicitly — a FAILED check must not
+			// look like "up to date" (the maintainer/morphitir: a network-timed-out check
+			// silently dropped the marker, making a still-outdated node look current).
+			s += '  ' + fmt.dim('(couldn\u2019t check for updates \u2014 network)');
+		}
 		if (cur !== null && latest !== null && cur !== latest) {
 			// beta11 item 3 — bold BRIGHT yellow (\x1b[1;93m) so the
 			// "update available" marker stays vivid on pale terminal

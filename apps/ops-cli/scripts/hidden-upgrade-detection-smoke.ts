@@ -78,6 +78,7 @@ check('upgrade offline path seeds the BUNDLED canonical tarball (hidden nodes be
 check('upgrade offline path still skips cleanly when no canonical tarball is bundled', /Skipping the IPFS self-seed/.test(upgrade) && /does not carry the canonical/.test(upgrade));
 check('upgrade re-execs the JUST-BUILT binary for self-heals (v1.16.11 — no more upgrade-twice)', /__post-upgrade-selfheal/.test(upgrade) && /selfHealReexeced/.test(upgrade));
 check('upgrade falls back to in-process heals if the re-exec is unavailable', /if \(!selfHealReexeced\)/.test(upgrade) && /healBunkerWebWaf\(\);/.test(upgrade));
+check('v1.16.13: the self-heal phase rebuilds the frontend (nginx.conf change applies same-upgrade)', /healFrontendConfig\(\)/.test(upgrade));
 check('resolver states "zero clearnet"', /zero clearnet/i.test(resolver));
 
 console.log(fail === 0 ? `✓ all ${pass} hidden-upgrade-detection checks hold` : `✗ ${fail} failed (${pass} passed)`);

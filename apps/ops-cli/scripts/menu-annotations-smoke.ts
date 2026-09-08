@@ -50,6 +50,8 @@ const truthy = (n: string, c: boolean, d = '') => {
 {
 	const s = strip(itemSuffix('upgrade', { currentVersion: 'v1.0.0-beta.5', latestVersion: null, latestIsOffline: false, unresolvedFlags: null, relayBalanceStatus: null }));
 	truthy('upgrade: latest unknown → "now:" only, graceful', s.includes('now: v1.0.0-beta.5') && !s.includes('latest:'), s);
+	// v1.16.13 — a failed check must SAY so, not look up-to-date (the maintainer/morphitir)
+	truthy('upgrade: latest unknown → shows a network note (not a silent up-to-date)', /couldn|network/i.test(s) && !s.includes('update available'), s);
 }
 truthy('upgrade: both unknown → empty suffix', itemSuffix('upgrade', { currentVersion: null, latestVersion: null, latestIsOffline: false, unresolvedFlags: null, relayBalanceStatus: null }) === '');
 
@@ -193,6 +195,7 @@ truthy('rootTag: unknown subcommand NOT tagged', rootTag('definitely-not-a-comma
 
 console.log('');
 console.log(`${pass} passed, ${fail} failed`);
+
 if (fail > 0) {
 	console.log('\u2717 menu-annotations smoke FAILED');
 	process.exit(1);
