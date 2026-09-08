@@ -38,6 +38,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import assert from 'node:assert';
 
 import {
 	resolveWebRoot,
@@ -356,8 +357,18 @@ function tmp(prefix: string): string {
 		},
 		{
 			id: 'FD-14b',
-			re: /restartFrontendContainer\(plan\.restartContainer\)/,
+			re: /restartFrontendContainer\(plan\.restartContainer, installDir\)/,
 			desc: 'runUpgrade restarts the detected container (restartFrontendContainer)'
+		},
+		{
+			id: 'FD-31',
+			re: /up', '-d', '--build', service/,
+			desc: 'v1.16.12: compose-managed frontend is REBUILT (nginx.conf is baked, a restart keeps it stale)'
+		},
+		{
+			id: 'FD-32',
+			re: /Refreshed the frontend nginx\.conf from the upgraded release/,
+			desc: 'v1.16.12: rebuild refreshes the build-context nginx.conf from the upgraded repo first'
 		},
 		{
 			id: 'FD-14c',
@@ -512,3 +523,15 @@ if (fail > 0) {
 }
 console.log('\u2713 upgrade rebuilds + redeploys the static frontend, with rollback');
 console.log(`\u2713 all ${pass} upgrade-frontend-deploy scenarios passed`);
+
+// v1.16.12 — the frontend nginx `/v1/broadcast` needs a body cap large enough for
+// an avatar broadcast; the plain `/v1/` cap (4k) 413'd it at this proxy (the maintainer/timeapp).
+{
+	const ngxRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+	const ngx = readFileSync(join(ngxRoot, 'ops', 'bunkerweb', 'frontend', 'nginx.conf'), 'utf8');
+	const bcast = ngx.slice(ngx.indexOf('location /v1/broadcast'));
+	const cap = /location \/v1\/broadcast[\s\S]*?client_max_body_size\s+(\d+)k/.exec(bcast);
+	const kb = cap ? parseInt(cap[1], 10) : 0;
+	assert(/location \/v1\/broadcast/.test(ngx), 'frontend nginx has a dedicated /v1/broadcast location');
+	assert(kb >= 64, `/v1/broadcast body cap must be >= 64k for avatar broadcasts (got ${kb}k)`);
+}

@@ -474,6 +474,21 @@ const ALLOWLIST: ReadonlySet<string> = new Set([
 	'MORPHIT_INSTANCE_ORIGIN'
 ]);
 
+/**
+ * v1.16.12 — SINGLE SOURCE OF TRUTH for the per-instance config env-var NAMES.
+ * The same literal strings were hardcoded across the indexer, ops-cli, register,
+ * edit, and the upgrade self-heal; import + reference these constants instead so
+ * a rename happens in one place (the maintainer: centralize the constants). NOTE the VALUES
+ * are per-instance config, not global constants — `OPERATOR_TAG` is `time.relay`
+ * on one box and `morphit.io` on another — so it's the NAMES that centralize here.
+ */
+export const INSTANCE_ENV = {
+	OPERATOR_TAG: 'MORPHIT_INSTANCE_OPERATOR_TAG',
+	ORIGIN: 'MORPHIT_INSTANCE_ORIGIN',
+	NAME: 'MORPHIT_INSTANCE_NAME',
+	CONTACT_URL: 'MORPHIT_INSTANCE_CONTACT_URL'
+} as const;
+
 export interface LoadResult {
 	/** Path that was read, or null if no file existed. */
 	readonly file: string | null;

@@ -853,7 +853,9 @@
 			"generic_detail": "Échec de la diffusion : {detail}. Réessayez — si cela persiste, ce message est la cause exacte à signaler.",
 			"offline": "Vous semblez hors ligne. Vérifiez votre connexion internet et réessayez — rien n'a été envoyé.",
 			"tx_expired": "L'horloge de votre appareil est décalée, donc la transaction signée a expiré avant d'atteindre la chaîne (elles ne sont valables que quelques secondes). Activez la date et l'heure automatiques pour synchroniser l'horloge, puis réessayez. (Chaîne : {reason})",
-			"duplicate": "Il semble que cela soit déjà passé. Actualisez la page pour vérifier votre avatar avant de réessayer. (Chaîne : {reason})"
+			"duplicate": "Il semble que cela soit déjà passé. Actualisez la page pour vérifier votre avatar avant de réessayer. (Chaîne : {reason})",
+			"waf_too_large": "Le pare-feu web de ton instance a refusé cet envoi car trop volumineux (413). Demande à l'opérateur d'augmenter la limite de taille de requête — une mise à jour de Morphit le corrige automatiquement.",
+			"waf_blocked": "Le pare-feu web de ton instance a bloqué cette requête (403). Demande à l'opérateur d'exempter l'API /v1/ — une mise à jour de Morphit le corrige automatiquement."
 		}
 	},
 	"compare": {
@@ -2689,6 +2691,7 @@
 		"earnings_lifetime": "Gains (total)",
 		"registered_on": "Enregistré le",
 		"contact": "Contact",
+		"tag_label": "Étiquette de l'opérateur",
 		"error": {
 			"load_failed": "Impossible de charger les opérateurs."
 		}

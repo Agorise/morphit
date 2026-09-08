@@ -23,8 +23,14 @@ import type { MiddlewareHandler } from 'hono';
 
 const BODY_BEARING_METHODS = new Set(['POST', 'PUT', 'PATCH']);
 
-export function bodyCap(maxBytes: number): MiddlewareHandler {
+export function bodyCap(defaultMax: number, broadcastMax?: number): MiddlewareHandler {
 	return async (c, next) => {
+		// /v1/broadcast carries an avatar (base64 image) + a signed, possibly
+		// multi-op tx — far larger than a read query. Give it its own (larger) cap
+		// so the small read default doesn't 413 every legitimate write (the maintainer/timeapp:
+		// a 4 KB default silently rejected every avatar upload as 413).
+		const maxBytes =
+			broadcastMax !== undefined && c.req.path.startsWith('/v1/broadcast') ? broadcastMax : defaultMax;
 		const method = c.req.method.toUpperCase();
 		const isBodyBearing = BODY_BEARING_METHODS.has(method);
 		const lengthHeader = c.req.header('content-length');

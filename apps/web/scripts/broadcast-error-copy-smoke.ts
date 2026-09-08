@@ -32,6 +32,11 @@ check('fee-insufficiency reason → low_blurt', classifyChainReason('insufficien
 check('unaffordable-fee reason → low_blurt', classifyChainReason('account does not have enough BLURT for the fee') === 'low_blurt');
 check('size reason → too_large', classifyChainReason('custom_json payload too large, exceeds maximum size') === 'too_large');
 check('auth reason → auth', classifyChainReason('missing required posting authority') === 'auth');
+
+// v1.16.12 — a WAF status must classify SPECIFICALLY, not as generic 'unreachable'
+check('unreachable w/ 413 → waf_too_large (names the body-size fix)', classifyBroadcastError(new BroadcastUnavailableError('POST /v1/broadcast failed (status 413)'), 'gets.owner').key === 'waf_too_large');
+check('unreachable w/ 403 → waf_blocked (names the WAF exemption fix)', classifyBroadcastError(new BroadcastUnavailableError('blocked (status 403)'), 'gets.owner').key === 'waf_blocked');
+check('unreachable w/o a status → still generic unreachable', classifyBroadcastError(new BroadcastUnavailableError('connection refused'), 'gets.owner').key === 'unreachable');
 check('clock/expiry reason → tx_expired', classifyChainReason('transaction expiration exceeds head block time') === 'tx_expired');
 check('tapos reason → tx_expired', classifyChainReason('TaPoS reference block mismatch') === 'tx_expired');
 check('duplicate reason → duplicate', classifyChainReason('duplicate transaction') === 'duplicate');

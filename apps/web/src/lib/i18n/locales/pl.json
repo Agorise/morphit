@@ -853,7 +853,9 @@
 			"generic_detail": "Nie udało się rozgłosić: {detail}. Spróbuj ponownie — jeśli problem się powtarza, ta wiadomość to dokładna przyczyna do zgłoszenia.",
 			"offline": "Wygląda na to, że jesteś offline. Sprawdź połączenie z internetem i spróbuj ponownie — nic nie zostało wysłane.",
 			"tx_expired": "Zegar Twojego urządzenia jest przestawiony, więc podpisana transakcja wygasła, zanim dotarła do łańcucha (są ważne tylko kilka sekund). Włącz automatyczną datę i godzinę, aby zsynchronizować zegar, i spróbuj ponownie. (Łańcuch: {reason})",
-			"duplicate": "Wygląda na to, że to już przeszło. Odśwież stronę, aby sprawdzić awatar przed ponowną próbą. (Łańcuch: {reason})"
+			"duplicate": "Wygląda na to, że to już przeszło. Odśwież stronę, aby sprawdzić awatar przed ponowną próbą. (Łańcuch: {reason})",
+			"waf_too_large": "Zapora sieciowa twojej instancji odrzuciła to przesłanie jako zbyt duże (413). Poproś operatora o zwiększenie limitu rozmiaru żądania — aktualizacja Morphit naprawia to automatycznie.",
+			"waf_blocked": "Zapora sieciowa twojej instancji zablokowała to żądanie (403). Poproś operatora o wyłączenie API /v1/ — aktualizacja Morphit naprawia to automatycznie."
 		}
 	},
 	"compare": {
@@ -2689,6 +2691,7 @@
 		"earnings_lifetime": "Zarobki (łącznie)",
 		"registered_on": "Zarejestrowano",
 		"contact": "Kontakt",
+		"tag_label": "Tag operatora",
 		"error": {
 			"load_failed": "Nie udało się załadować operatorów."
 		}

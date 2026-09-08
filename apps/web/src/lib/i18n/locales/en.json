@@ -853,7 +853,9 @@
 			"generic_detail": "Couldn't broadcast: {detail}. Please try again — if it keeps happening, that message is the exact cause to report.",
 			"offline": "You appear to be offline. Check your internet connection and try again — nothing was sent.",
 			"tx_expired": "Your device's clock is off, so the signed transaction expired before it reached the chain (they're valid for only a few seconds). Turn on automatic date & time to sync your clock, then try again. (Chain: {reason})",
-			"duplicate": "This looks like it already went through. Refresh the page to check your avatar before trying again. (Chain: {reason})"
+			"duplicate": "This looks like it already went through. Refresh the page to check your avatar before trying again. (Chain: {reason})",
+			"waf_too_large": "Your instance's web firewall rejected this upload as too large (413). Ask the operator to raise its request body-size limit — a Morphit upgrade fixes this automatically.",
+			"waf_blocked": "Your instance's web firewall blocked this request (403). Ask the operator to exempt the /v1/ API — a Morphit upgrade fixes this automatically."
 		}
 	},
 	"compare": {
@@ -2689,6 +2691,7 @@
 		"earnings_lifetime": "Earnings (lifetime)",
 		"registered_on": "Registered",
 		"contact": "Contact",
+		"tag_label": "Operator tag",
 		"error": {
 			"load_failed": "Couldn't load operators."
 		}

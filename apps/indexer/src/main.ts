@@ -476,7 +476,7 @@ async function main(): Promise<void> {
 	// Middleware chain, applied to every request in order.
 	app.use('*', security);
 	app.use('*', cors(config.allowedOrigins));
-	app.use('*', bodyCap(config.maxRequestBodyBytes));
+	app.use('*', bodyCap(config.maxRequestBodyBytes, config.maxBroadcastBodyBytes));
 
 	// Versioned API routes. Each route gets its own rate-limit tier
 	// per ADR-0008: list endpoints (orderbook, per-account order

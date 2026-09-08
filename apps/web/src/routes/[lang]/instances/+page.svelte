@@ -215,6 +215,15 @@
 
 	onMount(() => {
 		if (!browser) return;
+		// Paint the directory IMMEDIATELY from the fast one-shot REST query, THEN
+		// attach the live stream on top. The SSE stream can be slow to first-flush
+		// (buffered by a WAF/proxy despite X-Accel-Buffering), and because a
+		// buffered-but-connected stream never fires `error`, the old stream-first
+		// path left the page stuck on "Loading directory…" for minutes on some
+		// instances (the maintainer/timeapp). REST-first makes the cards appear at once;
+		// applySnapshot is idempotent, so the stream simply layers live updates
+		// over the initial paint without flicker.
+		void fallbackLoad();
 		startStream();
 	});
 

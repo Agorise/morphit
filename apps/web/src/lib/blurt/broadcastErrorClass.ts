@@ -66,9 +66,16 @@ export function classifyBroadcastError(err: unknown, account: string): Broadcast
 		return { key: err.code };
 
 	// Transport couldn't reach the instance / chain — the most common opaque
-	// failure (offline or still-syncing instance). Now named + actionable.
-	if (err instanceof BroadcastUnavailableError)
-		return { key: 'unreachable', values: { detail: shortDetail(err.message) } };
+	// failure (offline or still-syncing instance). Now named + actionable, and for
+	// a WAF status we name the EXACT layer + fix (the maintainer: the code must say what's
+	// wrong, not a generic "couldn't reach" — timeapp's recurring avatar 413).
+	if (err instanceof BroadcastUnavailableError) {
+		const detail = shortDetail(err.message);
+		const status = /\b(41[0-9]|4[0-9][0-9]|5[0-9][0-9])\b/.exec(err.message ?? '')?.[1] ?? '';
+		if (status === '413') return { key: 'waf_too_large', values: { detail } };
+		if (status === '403') return { key: 'waf_blocked', values: { detail } };
+		return { key: 'unreachable', values: { detail } };
+	}
 
 	// Chain rejected the tx — classify the reason into an actionable fix where we
 	// recognise it, else surface the raw reason.

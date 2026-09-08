@@ -853,7 +853,9 @@
 			"generic_detail": "Senden fehlgeschlagen: {detail}. Bitte versuche es erneut — wenn es weiterhin auftritt, ist genau diese Meldung die Ursache zum Melden.",
 			"offline": "Du scheinst offline zu sein. Prüfe deine Internetverbindung und versuche es erneut — es wurde nichts gesendet.",
 			"tx_expired": "Die Uhr deines Geräts geht falsch, daher ist die signierte Transaktion abgelaufen, bevor sie die Chain erreichte (sie gelten nur wenige Sekunden). Aktiviere die automatische Datums- & Uhrzeiteinstellung und versuche es erneut. (Chain: {reason})",
-			"duplicate": "Das sieht so aus, als wäre es bereits durchgegangen. Lade die Seite neu, um deinen Avatar zu prüfen, bevor du es erneut versuchst. (Chain: {reason})"
+			"duplicate": "Das sieht so aus, als wäre es bereits durchgegangen. Lade die Seite neu, um deinen Avatar zu prüfen, bevor du es erneut versuchst. (Chain: {reason})",
+			"waf_too_large": "Die Web-Firewall deiner Instanz hat diesen Upload als zu groß abgelehnt (413). Bitte den Betreiber, das Anfrage-Größenlimit zu erhöhen — ein Morphit-Upgrade behebt das automatisch.",
+			"waf_blocked": "Die Web-Firewall deiner Instanz hat diese Anfrage blockiert (403). Bitte den Betreiber, die /v1/-API auszunehmen — ein Morphit-Upgrade behebt das automatisch."
 		}
 	},
 	"compare": {
@@ -2689,6 +2691,7 @@
 		"earnings_lifetime": "Einnahmen (gesamt)",
 		"registered_on": "Registriert",
 		"contact": "Kontakt",
+		"tag_label": "Betreiber-Tag",
 		"error": {
 			"load_failed": "Konnte Operatoren nicht laden."
 		}

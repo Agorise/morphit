@@ -234,8 +234,9 @@ const SCENARIOS: readonly Scenario[] = [
 		mustHave: [
 			// v1.16.9 — the operators page now renders email/Matrix/XMPP/etc. via the
 			// shared policy (repairing a bare email to mailto:), matching /instances.
-			'normalizeContactUrl(op.contact_url)',
-			'detectContactProtocol'
+			'normalizeContactUrl(',
+			'detectContactProtocol',
+			'instanceContactByTag'
 		],
 		mustNotHave: [
 			// the old https-only inline validator must not come back — it silently

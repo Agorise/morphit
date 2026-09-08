@@ -1,25 +1,23 @@
 /**
  * Morphit indexer — CORS middleware.
  *
- * Read-only API — allows GET + OPTIONS from configured origins.
- * No credentials (no cookies, no auth), so Access-Control-Allow-
- * Credentials is not set and the frontend can reuse the default
- * fetch mode.
+ * Read-only API — allows GET + OPTIONS from ANY origin. The orderbook and other
+ * /v1 reads are PUBLIC data with NO credentials (no cookies, no auth), so
+ * `Access-Control-Allow-Origin: *` is safe — and it's REQUIRED for the
+ * cross-instance features (the /compare orderbook diff fetches a *peer's*
+ * /v1/orders from the browser; a per-instance allowlist could never scale to the
+ * whole federation, which is why compare failed with a CORS NetworkError). We
+ * never set Access-Control-Allow-Credentials, so `*` can't leak anything.
+ *
+ * `allowedOrigins` is kept for callers/tests but no longer gates the header —
+ * a public read API has nothing to gate.
  */
 
 import type { MiddlewareHandler } from 'hono';
 
-export function cors(allowedOrigins: readonly string[]): MiddlewareHandler {
-	const allowSet = new Set(allowedOrigins);
-
+export function cors(_allowedOrigins: readonly string[] = []): MiddlewareHandler {
 	return async (c, next) => {
-		const origin = c.req.header('origin');
-		const allowed = origin && allowSet.has(origin);
-
-		if (allowed && origin) {
-			c.header('access-control-allow-origin', origin);
-			c.header('vary', 'Origin');
-		}
+		c.header('access-control-allow-origin', '*');
 		c.header('access-control-allow-methods', 'GET, OPTIONS');
 		c.header('access-control-allow-headers', 'content-type');
 		c.header('access-control-max-age', '600');

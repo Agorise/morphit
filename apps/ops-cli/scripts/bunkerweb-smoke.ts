@@ -166,6 +166,8 @@ expect('self-heal drops 400 from bad-behavior (403 ban)', /BAD_BEHAVIOR_STATUS_C
 expect('self-heal tries the ModSec exemption BOTH as env var AND as a file', /CUSTOM_CONF_MODSEC_morphit_json_api_off/.test(up) && /morphit-json-api-off\.conf/.test(up));
 expect('self-heal has a reload FALLBACK chain (not one method)', /strategies: Array<\(\) => boolean>/.test(up) && /docker-compose/.test(up));
 expect('self-heal VERIFIES the rule loaded in the running container', /grep -rl '\$\{RULE_ID\}'/.test(up) && /verified live inside BunkerWeb/.test(up));
+expect('self-heal PROBES a real-sized body against the live endpoint (413 detect)', /v1\/broadcast/.test(up) && /50 \* 1024|A'\.repeat/.test(up));
+expect('self-heal escalates the ModSec request-body limit (the real 413 source when client_max_body_size is generous)', /SecRequestBodyNoFilesLimit/.test(up) && /SecRequestBodyLimitAction ProcessPartial/.test(up));
 
 // example ↔ ansible parity on the security-critical knobs
 	for (const key of ['LIMIT_REQ_RATE_1', 'LIMIT_REQ_RATE_2', 'BAD_BEHAVIOR_STATUS_CODES', 'MAX_CLIENT_SIZE']) {

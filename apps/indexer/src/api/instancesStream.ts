@@ -137,6 +137,18 @@ export function instancesStreamRoute(db: Database): Hono {
 					}
 				};
 
+				// ─── Flush-forcing preamble ────
+				// A compressing/buffering proxy (e.g. BunkerWeb with gzip/brotli
+				// enabled) can hold an SSE stream in its buffer until it fills —
+				// ignoring `no-transform` and `X-Accel-Buffering: no` — which stalls
+				// the initial snapshot for MINUTES (the maintainer/timeapp: the directory stuck
+				// on "Loading…" while morphit.io, not compressing that path, was
+				// instant). Push ~2 KB of SSE comment FIRST: EventSource ignores
+				// `:`-prefixed lines, so it's invisible to the client, but it fills
+				// the proxy/compressor buffer and forces an immediate flush so the
+				// real snapshot below reaches the browser at once — through any proxy.
+				safePush(`:${' '.repeat(2048)}\n\n`);
+
 				// ─── Initial snapshot ────
 				try {
 					const rows = await fetchAllRows(db);

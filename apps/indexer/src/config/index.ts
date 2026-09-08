@@ -169,6 +169,7 @@ export interface Config {
 	/** Hard cap on request body size. Indexer has no POSTs currently
 	 *  but the middleware runs anyway; tiny limit reflects that. */
 	readonly maxRequestBodyBytes: number;
+	readonly maxBroadcastBodyBytes: number;
 
 	/** Morphit's official posting pubkey, used to verify release ops.
 	 *  Must match MORPHIT_OFFICIAL_POSTING_PUBKEY on the frontend. */
@@ -932,6 +933,11 @@ const envSchema = z.object({
 	MORPHIT_INDEXER_LIST_RATE_PER_MIN: z.coerce.number().int().positive().default(120),
 	MORPHIT_INDEXER_RESOURCE_RATE_PER_MIN: z.coerce.number().int().positive().default(600),
 	MORPHIT_INDEXER_MAX_BODY_BYTES: z.coerce.number().int().positive().default(4096),
+	// v1.16.12 — /v1/broadcast carries avatars + signed txs, so it needs a far
+	// larger cap than the small read default (4 KB 413'd every avatar upload).
+	// 128 KB: comfortably above a ~8 KB avatar broadcast, at/above the relay's
+	// own 64 KB body cap which is the authoritative limiter.
+	MORPHIT_INDEXER_MAX_BROADCAST_BODY_BYTES: z.coerce.number().int().positive().default(131072),
 	MORPHIT_INDEXER_DB_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
 
 	MORPHIT_INDEXER_OFFICIAL_POSTING_PUBKEY: z
@@ -1749,6 +1755,7 @@ export function loadConfig(): Config {
 		listRatePerMin: e.MORPHIT_INDEXER_LIST_RATE_PER_MIN,
 		resourceRatePerMin: e.MORPHIT_INDEXER_RESOURCE_RATE_PER_MIN,
 		maxRequestBodyBytes: e.MORPHIT_INDEXER_MAX_BODY_BYTES,
+		maxBroadcastBodyBytes: e.MORPHIT_INDEXER_MAX_BROADCAST_BODY_BYTES,
 
 		officialPostingPubkey: e.MORPHIT_INDEXER_OFFICIAL_POSTING_PUBKEY,
 		officialAccountName: e.MORPHIT_INDEXER_OFFICIAL_ACCOUNT_NAME,

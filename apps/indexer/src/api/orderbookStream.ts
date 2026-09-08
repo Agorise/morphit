@@ -345,6 +345,13 @@ export function orderbookStreamRoute(db: Database, poller: Poller, operatorAccou
 					}
 				};
 
+				// Flush-forcing preamble (see instancesStream): a compressing/buffering
+				// proxy (BunkerWeb gzip/brotli) can hold an SSE stream's first bytes until
+				// its buffer fills, ignoring no-transform/X-Accel-Buffering and stalling the
+				// stream for minutes (the maintainer/timeapp). ~2 KB of SSE comment fills+flushes that
+				// buffer at once; EventSource ignores ':'-prefixed lines, so it's invisible.
+				safePush(':' + ' '.repeat(2048) + '\n\n');
+
 				/** Untrack an order and tell this subscriber to drop it.
 				 *
 				 *  Extracted (v1.7.0) because the provisional head-block path needs the

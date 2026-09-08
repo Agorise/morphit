@@ -7,10 +7,14 @@
 	import { _ } from 'svelte-i18n';
 	import Head from '$components/Head.svelte';
 	import IdentityLabel from '$components/IdentityLabel.svelte';
-	import { getOperators } from '$indexer/client';
+	import { getOperators, getInstances } from '$indexer/client';
 	import { getProfilesBatch } from '$lib/indexer/profileCache';
 	import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
 	import type { OperatorRecord, ProfileResponse } from '@morphit/indexer-client';
+	// v1.16.12 — instance contact_url keyed by operator tag, used as a fallback
+	// when an operator's ON-CHAIN registration carries no contact (its instance may
+	// still publish one — e.g. time.relay shows on /instances but not /operators).
+	let instanceContactByTag = $state<Record<string, string>>({});
 	import CopyButton from '$lib/components/CopyButton.svelte';
 	import { normalizeContactUrl, detectContactProtocol } from '@morphit/operator-config/contact';
 
@@ -34,6 +38,16 @@
 
 
 	onMount(async () => {
+		void getInstances({}).then((r) => {
+			if (!r.ok) return;
+			const next: Record<string, string> = {};
+			for (const inst of r.data.instances) {
+				if (inst.operator_tag && inst.contact_url && !next[inst.operator_tag]) {
+					next[inst.operator_tag] = inst.contact_url;
+				}
+			}
+			instanceContactByTag = next;
+		});
 		const res = await getOperators();
 		if (res.ok) {
 			operators = [...res.data.operators];
@@ -198,7 +212,10 @@
 						{/if}
 					</header>
 
-					<p class="mt-2 text-sm">
+					<p class="mt-2 flex items-center gap-2 text-sm">
+						<span class="flex-none text-xs uppercase tracking-wider text-ink-500"
+							>{$_('operators.tag_label')}</span
+						>
 						<code
 							class="rounded bg-ink-200 px-1.5 py-0.5 text-xs text-morphit-emerald dark:bg-ink-800"
 						>
@@ -233,8 +250,8 @@
 							{$_('operators.registered_on')}
 							{formatDate(op.registered_at)}
 						</span>
-						{#if op.contact_url}
-							{@const safeContact = normalizeContactUrl(op.contact_url)}
+						{#if op.contact_url || instanceContactByTag[op.tag]}
+							{@const safeContact = normalizeContactUrl(op.contact_url || instanceContactByTag[op.tag] || '')}
 							{#if safeContact}
 								{@const cp = detectContactProtocol(safeContact)}
 								{#if cp && !cp.clickable}

@@ -104,7 +104,7 @@
  */
 
 import { tryResolveHiddenUpgrade, type HiddenUpgradeResolution } from '../init/hiddenUpgradeResolve.js';
-import { normalizeContactUrl } from '@morphit/operator-config';
+import { normalizeContactUrl, INSTANCE_ENV } from '@morphit/operator-config';
 import { withSpinner } from '../init/spinner.ts';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, readdirSync, statSync, copyFileSync, cpSync, readlinkSync, chmodSync } from 'node:fs';
 import { join, dirname, basename, resolve } from 'node:path';
@@ -1023,7 +1023,48 @@ function findFrontendContainer(buildDir: string): string | null {
  *  upgraded and the build is fresh on disk); we warn with the manual
  *  command instead.  No compose file, no name assumption — just restart the
  *  exact container we detected.  IMPURE. */
-function restartFrontendContainer(name: string): void {
+function restartFrontendContainer(name: string, installDir: string): void {
+	// The frontend nginx.conf is BAKED into the image at build time, so a plain
+	// restart keeps a STALE config (the maintainer/timeapp: the `/v1/` 4 KB body cap that
+	// 413'd every avatar upload survived every restart + every backend upgrade).
+	// When the container is compose-managed, REBUILD it after refreshing its
+	// build-context nginx.conf from the upgraded repo, so config fixes actually
+	// ship. Falls back to a plain restart when it isn't compose-managed.
+	const label = (key: string): string =>
+		(
+			spawnSync('docker', ['inspect', name, '--format', `{{ index .Config.Labels "${key}" }}`], {
+				encoding: 'utf8',
+				timeout: 10_000
+			}).stdout ?? ''
+		).trim();
+	const configFile = (label('com.docker.compose.project.config_files').split(',')[0] ?? '').trim();
+	const workDir = label('com.docker.compose.project.working_dir');
+	const service = label('com.docker.compose.service');
+
+	if (configFile !== '' && existsSync(configFile) && service !== '') {
+		try {
+			// Build context is <workdir>/frontend; refresh its nginx.conf from the
+			// upgraded repo so the rebuild bakes the CURRENT config.
+			const srcConf = join(installDir, 'ops', 'bunkerweb', 'frontend', 'nginx.conf');
+			const dstConf = join(workDir !== '' ? workDir : dirname(configFile), 'frontend', 'nginx.conf');
+			if (existsSync(srcConf) && existsSync(dirname(dstConf))) {
+				copyFileSync(srcConf, dstConf);
+				info('Refreshed the frontend nginx.conf from the upgraded release.');
+			}
+		} catch {
+			/* best-effort — the rebuild still recreates the container */
+		}
+		info(`Rebuilding the frontend container "${name}" so it serves the current config + build...`);
+		const rebuilt =
+			spawnSync('docker', ['compose', '-f', configFile, 'up', '-d', '--build', service], { stdio: 'inherit', timeout: 300_000 }).status === 0 ||
+			spawnSync('docker-compose', ['-f', configFile, 'up', '-d', '--build', service], { stdio: 'inherit', timeout: 300_000 }).status === 0;
+		if (rebuilt) {
+			info(`\u2713 Frontend container "${name}" rebuilt (config changes applied).`);
+			return;
+		}
+		warn('Could not rebuild the frontend via compose; falling back to a restart.');
+	}
+
 	info(`Restarting the frontend container "${name}" so it serves the new build...`);
 	const res = spawnSync('docker', ['restart', name], { stdio: 'inherit' });
 	if (res.status !== 0) {
@@ -1829,13 +1870,21 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		// Either restores the canary immediately with no manual step; if BOTH miss,
 		// the reminder near the end fires (and the weekly timer republishes on its
 		// own regardless, well before the 14-day staleness window).
-		const hadCanary = existsSync(join(backupDir, 'apps', 'web', 'build', 'canary.txt'));
-		if (hadCanary) {
-			const haveCanaryUnit =
-				spawnSync('systemctl', ['cat', 'morphit-canary.service'], {
-					stdio: 'ignore',
-					timeout: 10_000
-				}).status === 0;
+		// Auto-restore the canary if one is SET UP on this box — not merely if the
+		// backup still held canary.txt. A prior upgrade can wipe the served file
+		// before the weekly timer re-publishes, so gating on the backup file skipped
+		// same-machine operators whose canary was mid-cycle (the maintainer: timeapp — the
+		// upgrade broke his same-machine canary and didn't renew it). Detect the
+		// setup two independent ways: the systemd unit, or the owner's refresh
+		// script — and if EITHER exists, restore now regardless of the backup file.
+		const hadCanaryFile = existsSync(join(backupDir, 'apps', 'web', 'build', 'canary.txt'));
+		const haveCanaryUnit =
+			spawnSync('systemctl', ['cat', 'morphit-canary.service'], { stdio: 'ignore', timeout: 10_000 }).status === 0;
+		const pw = spawnSync('getent', ['passwd', String(canaryDirUid)], { encoding: 'utf8' });
+		const refreshTarget =
+			pw.status === 0 && typeof pw.stdout === 'string' ? parsePasswdRefreshTarget(pw.stdout) : null;
+		const haveRefreshScript = refreshTarget !== null && existsSync(refreshTarget.refreshScript);
+		if (hadCanaryFile || haveCanaryUnit || haveRefreshScript) {
 			if (haveCanaryUnit) {
 				info('');
 				info('Restoring your warrant canary automatically (running its scheduled refresh now)...');
@@ -1850,26 +1899,19 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 					info("(Couldn't trigger the canary service automatically; see the note below.)");
 				}
 			}
-			if (!canaryAutoRefreshed) {
-				const pw = spawnSync('getent', ['passwd', String(canaryDirUid)], { encoding: 'utf8' });
-				const target =
-					pw.status === 0 && typeof pw.stdout === 'string' ? parsePasswdRefreshTarget(pw.stdout) : null;
-				if (target && existsSync(target.refreshScript)) {
-					info('');
-					info(
-						`Restoring your warrant canary automatically (running your refresh as ${target.user})...`
-					);
-					const refresh = spawnSync('sudo', ['-n', '-u', target.user, '-H', 'bash', target.refreshScript], {
-						stdio: 'ignore',
-						timeout: 90_000,
-						env: { ...process.env, GPG_TTY: '' }
-					});
-					if (refresh.status === 0) {
-						canaryAutoRefreshed = true;
-						info('\u2713 Warrant canary restored automatically — nothing to do.');
-					} else {
-						info("(Couldn't refresh the canary automatically; restore it manually — see below.)");
-					}
+			if (!canaryAutoRefreshed && refreshTarget && haveRefreshScript) {
+				info('');
+				info(`Restoring your warrant canary automatically (running your refresh as ${refreshTarget.user})...`);
+				const refresh = spawnSync('sudo', ['-n', '-u', refreshTarget.user, '-H', 'bash', refreshTarget.refreshScript], {
+					stdio: 'ignore',
+					timeout: 90_000,
+					env: { ...process.env, GPG_TTY: '' }
+				});
+				if (refresh.status === 0) {
+					canaryAutoRefreshed = true;
+					info('\u2713 Warrant canary restored automatically — nothing to do.');
+				} else {
+					info("(Couldn't refresh the canary automatically; restore it manually — see below.)");
 				}
 			}
 		}
@@ -1972,7 +2014,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	if (plan.restartContainer) {
 		// Best-effort: the backend already upgraded and the build is fresh, so
 		// a docker hiccup must NOT roll the whole upgrade back.
-		restartFrontendContainer(plan.restartContainer);
+		restartFrontendContainer(plan.restartContainer, installDir);
 	}
 	if (plan.warn) {
 		warn(plan.warn);
@@ -2701,12 +2743,14 @@ export function healBunkerWebWaf(): void {
 		}
 	}
 
-	// Nothing to do (steady state) — skip the reload + its verify wait entirely.
-	if (!changed) return;
-
-	// ── Apply: reload via a fallback chain; stop at the first that succeeds. ──
-	const composeFiles = ['/etc/bunkerweb/docker-compose.yml', '/opt/morphit/docker-compose.yml'];
-	const strategies: Array<() => boolean> = [
+	// ── Apply: reload via a fallback chain (only when we changed the env); stop at
+	//    the first that succeeds. Even in steady state we still VERIFY below, because
+	//    an env value can be present yet never rendered into nginx (the recurring
+	//    413) — so we must observe the running limit, not trust `changed`.
+	let reloaded = false;
+	if (changed) {
+		const composeFiles = ['/etc/bunkerweb/docker-compose.yml', '/opt/morphit/docker-compose.yml'];
+		const strategies: Array<() => boolean> = [
 		() => sched !== null && spawnSync('docker', ['restart', sched], { encoding: 'utf8', timeout: 60000 }).status === 0,
 		...composeFiles.flatMap((f) =>
 			existsSync(f)
@@ -2718,36 +2762,97 @@ export function healBunkerWebWaf(): void {
 		),
 		() => bw !== null && spawnSync('docker', ['restart', bw], { encoding: 'utf8', timeout: 60000 }).status === 0
 	];
-	let reloaded = false;
-	for (const strat of strategies) {
-		try {
-			if (strat()) {
-				reloaded = true;
-				break;
+		let ok = false;
+		for (const strat of strategies) {
+			try {
+				if (strat()) {
+					ok = true;
+					break;
+				}
+			} catch {
+				/* try the next strategy */
 			}
-		} catch {
-			/* try the next strategy */
+		}
+		reloaded = ok;
+		if (!reloaded) {
+			info('WAF: settings written; could not auto-reload — they apply on the next `docker compose up -d`.');
 		}
 	}
 
-	// ── VERIFY against the running container (observe, don't assume). ──
-	if (bw !== null && reloaded) {
-		try {
-			spawnSync('sleep', ['20'], { timeout: 25000 }); // let the scheduler regenerate
-			const loaded =
-				((spawnSync('docker', [
-					'exec', bw, 'sh', '-c', `grep -rl '${RULE_ID}' /etc/bunkerweb /data 2>/dev/null | head -1`
-				], { encoding: 'utf8', timeout: 10000 }).stdout ?? '').trim().length > 0);
+	// ── VERIFY against the RUNNING container — ALWAYS, even in steady state,
+	//    because an env value can be present yet never rendered into nginx (the
+	//    recurring 413). Observe the real limits; don't trust that setting = applied.
+	if (bw === null) return;
+	if (reloaded) spawnSync('sleep', ['20'], { timeout: 25000 }); // let the scheduler regenerate
+
+	// (1) ModSec /v1/ + /relay/ exemption actually loaded?
+	try {
+		const loaded =
+			(spawnSync('docker', ['exec', bw, 'sh', '-c', `grep -rl '${RULE_ID}' /etc/bunkerweb /data 2>/dev/null | head -1`], {
+				encoding: 'utf8',
+				timeout: 10000
+			}).stdout ?? '').trim().length > 0;
+		if (loaded) info('WAF: /v1/ + /relay/ exemption verified live inside BunkerWeb.');
+	} catch {
+		/* best-effort */
+	}
+
+	// (2) BODY SIZE — prove a real-sized broadcast is NOT rejected 413, and if it
+	//     is, ESCALATE: the MAX_CLIENT_SIZE env sometimes never renders into nginx,
+	//     so drop a raw `client_max_body_size` directive as a config FILE (the
+	//     mechanism BunkerWeb reliably honors) and reload. Figure it out, per the maintainer.
+	try {
+		const origin = readInstanceEnvValue(INSTANCE_ENV.ORIGIN);
+		if (origin) {
+			const target = `${origin.replace(/\/+$/, '')}/v1/broadcast`;
+			const probe = (): string => {
+				// ~50 KB: under the relay's 64 KB cap, far above a real avatar broadcast.
+				const blob = 'A'.repeat(50 * 1024);
+				const r = spawnSync(
+					'curl',
+					['-s', '-o', '/dev/null', '-w', '%{http_code}', '--max-time', '12', '-X', 'POST', target, '-H', 'content-type: application/json', '--data', `{"probe":"${blob}"}`],
+					{ encoding: 'utf8', timeout: 20000 }
+				);
+				return (r.stdout ?? '').trim();
+			};
+			let code = probe();
+			if (code === '413' && sched !== null) {
+				info('WAF: a real-sized broadcast is still 413 — the MAX_CLIENT_SIZE env did not render; escalating via a config file.');
+				const root =
+					(spawnSync('docker', ['exec', sched, 'sh', '-c', 'for d in /data/configs /etc/bunkerweb/configs; do [ -d "$d" ] && { echo "$d"; break; }; done'], {
+						encoding: 'utf8',
+						timeout: 8000
+					}).stdout ?? '').trim() || '/data/configs';
+				// (a) nginx client_max_body_size (server context) — harmless if already large.
+				spawnSync(
+					'docker',
+					['exec', sched, 'sh', '-c', `mkdir -p '${root}/server-http' && printf '%s\\n' 'client_max_body_size 1m;' > '${root}/server-http/morphit-body-size.conf'`],
+					{ encoding: 'utf8', timeout: 8000 }
+				);
+				// (b) THE actual 413 source when client_max_body_size is already generous:
+				//     ModSecurity's request-body limit. `ruleEngine=Off` for /v1/ does NOT
+				//     lift it (it's enforced during body-reading, before rules), so raise
+				//     the no-files limit and set ProcessPartial so ModSec never rejects a
+				//     legitimate avatar/order broadcast on size (the maintainer/timeapp: the recurring
+				//     413 was ModSec, not nginx — client_max_body_size was 1G/10m).
+				spawnSync(
+					'docker',
+					['exec', sched, 'sh', '-c', `mkdir -p '${root}/modsec' && printf '%s\\n' 'SecRequestBodyLimit 13107200' 'SecRequestBodyNoFilesLimit 1048576' 'SecRequestBodyLimitAction ProcessPartial' > '${root}/modsec/morphit-body-limit.conf'`],
+					{ encoding: 'utf8', timeout: 8000 }
+				);
+				spawnSync('docker', ['restart', sched], { encoding: 'utf8', timeout: 60000 });
+				spawnSync('docker', ['restart', bw], { encoding: 'utf8', timeout: 60000 });
+				spawnSync('sleep', ['20'], { timeout: 25000 });
+				code = probe();
+			}
 			info(
-				loaded
-					? 'WAF: /v1/ + /relay/ exemption verified live inside BunkerWeb; avatar/order broadcasts unblocked.'
-					: 'WAF: settings written; the exemption applies on the next scheduler cycle (a few minutes).'
+				code === '413'
+					? `WAF: broadcast body limit STILL 413 after escalation — capture \`docker exec ${bw} nginx -T 2>/dev/null | grep client_max_body_size\` and send it.`
+					: `WAF: broadcast body limit OK (a ~50 KB POST returned ${code || '?'}, not 413) — avatar/order uploads fit.`
 			);
-		} catch {
-			/* verification is best-effort */
 		}
-	} else if (!reloaded) {
-		info('WAF: settings written; could not auto-reload — they apply on the next `docker compose up -d`.');
+	} catch {
+		/* best-effort — never fail the upgrade over a probe */
 	}
 }
 
@@ -2790,19 +2895,19 @@ async function readOnchainReleaseSha(tag: string, wantOffline: boolean): Promise
 /** Read this operator's tag from the on-disk config (the authoritative,
  *  root-owned files), robustly. Uses [ \t]* (NOT \s*) around '=' so an empty
  *  value can't swallow the next line. Last non-empty wins. v1.16.9. */
-function readOperatorTagFromConfig(): string | null {
+/** Read a MORPHIT_INSTANCE_* value from the on-disk config files (first hit). */
+function readInstanceEnvValue(key: string): string | null {
 	const files = [
 		'/etc/morphit/indexer.env',
 		'/opt/morphit/morphit.config.env',
-		'/etc/morphit/morphit.config.env'
+		'/etc/morphit/morphit.config.env',
+		'/opt/morphit/indexer.env'
 	];
 	let found: string | null = null;
 	for (const f of files) {
 		try {
 			if (!existsSync(f)) continue;
-			const m = readFileSync(f, 'utf8').match(
-				/^[ \t]*MORPHIT_INSTANCE_OPERATOR_TAG[ \t]*=[ \t]*(.*)$/m
-			);
+			const m = readFileSync(f, 'utf8').match(new RegExp(`^[ \\t]*${key}[ \\t]*=[ \\t]*(.*)$`, 'm'));
 			if (!m) continue;
 			const v = (m[1] ?? '').trim().replace(/^["']|["']$/g, '').trim();
 			if (v !== '') found = v;
@@ -2811,6 +2916,44 @@ function readOperatorTagFromConfig(): string | null {
 		}
 	}
 	return found;
+}
+
+/** This operator's tag, most-authoritative-first: the on-disk config, then the
+ *  ON-CHAIN registration the local indexer serves in /v1/instances (matched to
+ *  this instance's own origin). The on-chain fallback fixes the case where the
+ *  tag was registered on-chain but never written to the local config — which
+ *  otherwise left verify.json's operator_tag null forever (the maintainer: still null). */
+function readOperatorTagFromConfig(): string | null {
+	const fromConfig = readInstanceEnvValue(INSTANCE_ENV.OPERATOR_TAG);
+	if (fromConfig) return fromConfig;
+	// Fallback: ask the running indexer for this instance's on-chain tag.
+	try {
+		const origin = readInstanceEnvValue(INSTANCE_ENV.ORIGIN);
+		if (!origin) return null;
+		const norm = (s: string): string => s.replace(/\/+$/, '').toLowerCase();
+		for (const base of ['http://127.0.0.1:8081', 'http://172.18.0.1:8081', 'http://172.17.0.1:8081']) {
+			const r = spawnSync('curl', ['-s', '--max-time', '6', `${base}/v1/instances`], {
+				encoding: 'utf8',
+				timeout: 10_000
+			});
+			if (r.status !== 0 || !r.stdout) continue;
+			let body: unknown;
+			try {
+				body = JSON.parse(r.stdout);
+			} catch {
+				continue;
+			}
+			const list: Array<{ origin?: string; operator_tag?: string }> = Array.isArray(body)
+				? (body as Array<{ origin?: string; operator_tag?: string }>)
+				: ((body as { instances?: Array<{ origin?: string; operator_tag?: string }> }).instances ?? []);
+			const self = list.find((e) => typeof e.origin === 'string' && norm(e.origin) === norm(origin));
+			const tag = self?.operator_tag;
+			if (typeof tag === 'string' && tag.trim() !== '') return tag.trim();
+		}
+	} catch {
+		/* best-effort — verify.json's operator_tag is informational */
+	}
+	return null;
 }
 
 /** Stamp `operator_tag` into a build's verify.json without disturbing its

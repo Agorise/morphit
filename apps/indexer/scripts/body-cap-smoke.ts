@@ -37,15 +37,17 @@ console.log('\n── bodyCap middleware smoke ───────────
 interface FakeContext {
 	req: {
 		method: string;
+		path: string;
 		header: (name: string) => string | undefined;
 	};
 	json: (body: unknown, status?: number) => { __body: unknown; __status: number };
 }
 
-function mkCtx(method: string, headers: Record<string, string | undefined>): FakeContext {
+function mkCtx(method: string, headers: Record<string, string | undefined>, path = '/v1/orders'): FakeContext {
 	return {
 		req: {
 			method,
+			path,
 			header: (name: string): string | undefined => headers[name.toLowerCase()]
 		},
 		json: (body: unknown, status?: number) => ({
@@ -86,6 +88,23 @@ await scenario('POST with Content-Length over cap rejects 413', async () => {
 	if (nextCalled) throw new Error('next() should not have been called');
 	if (result.__status !== 413) throw new Error(`expected 413, got ${result.__status}`);
 });
+
+// v1.16.12 — route-aware: /v1/broadcast gets a LARGER cap (avatars + txs),
+// while read routes keep the small default (a 4 KB default 413'd avatar uploads).
+{
+	const rw = bodyCap(4096, 131072);
+	await scenario('route-aware: 8 KB body on /v1/broadcast PASSES (uses the larger cap)', async () => {
+		const c = mkCtx('POST', { 'content-length': '8000' }, '/v1/broadcast');
+		let nextCalled = false;
+		await rw(c as unknown as Parameters<typeof rw>[0], async () => { nextCalled = true; });
+		if (!nextCalled) throw new Error('8 KB broadcast should pass the larger cap');
+	});
+	await scenario('route-aware: 8 KB body on a READ route still 413s (small default cap)', async () => {
+		const c = mkCtx('POST', { 'content-length': '8000' }, '/v1/orders');
+		const result = (await rw(c as unknown as Parameters<typeof rw>[0], async () => {})) as unknown as { __status: number };
+		if (result.__status !== 413) throw new Error(`read route should 413, got ${result.__status}`);
+	});
+}
 
 await scenario('POST with Transfer-Encoding: chunked rejects 411', async () => {
 	const c = mkCtx('POST', { 'transfer-encoding': 'chunked' });

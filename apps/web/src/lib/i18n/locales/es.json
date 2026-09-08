@@ -853,7 +853,9 @@
 			"generic_detail": "No se pudo publicar: {detail}. Inténtalo de nuevo — si persiste, ese mensaje es la causa exacta a reportar.",
 			"offline": "Parece que estás sin conexión. Revisa tu conexión a internet y vuelve a intentarlo — no se envió nada.",
 			"tx_expired": "El reloj de tu dispositivo está mal, así que la transacción firmada expiró antes de llegar a la cadena (solo son válidas unos segundos). Activa la fecha y hora automáticas para sincronizar el reloj y vuelve a intentarlo. (Cadena: {reason})",
-			"duplicate": "Parece que ya se realizó. Actualiza la página para revisar tu avatar antes de volver a intentarlo. (Cadena: {reason})"
+			"duplicate": "Parece que ya se realizó. Actualiza la página para revisar tu avatar antes de volver a intentarlo. (Cadena: {reason})",
+			"waf_too_large": "El firewall web de tu instancia rechazó esta subida por ser demasiado grande (413). Pide al operador que aumente el límite de tamaño de la petición — una actualización de Morphit lo corrige automáticamente.",
+			"waf_blocked": "El firewall web de tu instancia bloqueó esta petición (403). Pide al operador que exima la API /v1/ — una actualización de Morphit lo corrige automáticamente."
 		}
 	},
 	"compare": {
@@ -2689,6 +2691,7 @@
 		"earnings_lifetime": "Ganancias (total)",
 		"registered_on": "Registrado",
 		"contact": "Contacto",
+		"tag_label": "Etiqueta del operador",
 		"error": {
 			"load_failed": "No se pudo cargar los operadores."
 		}
