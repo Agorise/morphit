@@ -14,6 +14,7 @@
 import {
 	fetchHiddenUpgrade,
 	hiddenReleaseUrl,
+	hiddenReleaseUrls,
 	type HiddenUpgradeTarget,
 	type HiddenUpgradeDeps
 } from '../src/init/hiddenUpgradeFetch.ts';
@@ -72,6 +73,23 @@ async function main(): Promise<void> {
 	ok(
 		'builds IPNS gateway URL on the peer hidden origin',
 		hiddenReleaseUrl('http://abc.onion', target) === `http://abc.onion/ipns/${encodeURIComponent(target.ipnsName)}/morphit-latest.tar.gz`
+	);
+
+	// v1.16.10 — CID-first: when the on-chain ipfs_cid is present, the FIRST url
+	// tried is the content-addressed /ipfs/<cid>/ (exact canonical bytes), with
+	// /ipns/ as fallback. This is what makes the hidden upgrade robust to a peer
+	// whose IPNS is stale/divergent.
+	ok(
+		'hiddenReleaseUrls puts the on-chain CID url FIRST, then IPNS fallback',
+		(() => {
+			const t = { ...target, ipfsCid: 'bafybeid45grd5gej6zuwx2sexugyxfo3zglmjfopuhndzdcmyka634enn4' };
+			const urls = hiddenReleaseUrls('http://abc.onion', t);
+			return urls.length === 2 && urls[0] === 'http://abc.onion/ipfs/bafybeid45grd5gej6zuwx2sexugyxfo3zglmjfopuhndzdcmyka634enn4/morphit-latest.tar.gz' && urls[1].includes('/ipns/');
+		})()
+	);
+	ok(
+		'hiddenReleaseUrls falls back to IPNS-only when no CID is anchored',
+		(() => { const urls = hiddenReleaseUrls('http://abc.onion', target); return urls.length === 1 && urls[0].includes('/ipns/'); })()
 	);
 
 	// Happy path: one good peer.

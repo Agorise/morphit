@@ -39,7 +39,7 @@ const check = (name: string, cond: boolean): void => {
 // ── ipfs role defaults ──
 const defaults = raw('ops/ansible/roles/ipfs/defaults/main.yml');
 check('defaults: gateway loopback bind unchanged', defaults.includes('morphit_ipfs_gateway_addr: "/ip4/127.0.0.1/tcp/8082"'));
-check('defaults: expose toggle exists + defaults false', /morphit_ipfs_gateway_expose:\s*false/.test(defaults));
+check('defaults: expose toggle defaults TRUE (v1.16.10 — every instance a Tor/I2P seeder)', /morphit_ipfs_gateway_expose:\s*true/.test(defaults));
 check('defaults: exposed bind is all-interfaces :8082', /morphit_ipfs_gateway_expose_addr:\s*"\/ip4\/0\.0\.0\.0\/tcp\/8082"/.test(defaults));
 
 // ── ipfs role tasks ──
@@ -53,6 +53,14 @@ const fe = raw('ops/bunkerweb/frontend/nginx.conf');
 check('frontend: /ipfs/ location present', /location \/ipfs\/ \{/.test(fe));
 check('frontend: /ipns/ location present', /location \/ipns\/ \{/.test(fe));
 check('frontend: gateway upstream is host.docker.internal:8082', (fe.match(/host\.docker\.internal:8082/g) ?? []).length >= 2);
+
+// ── v1.16.10 upgrade self-heal: auto-expose on existing instances ──
+const up = raw('apps/ops-cli/src/commands/upgrade.ts');
+check('upgrade: self-heals IPFS gateway exposure + is called', /function healIpfsGatewayExposure\(/.test(up) && /\bhealIpfsGatewayExposure\(\);/.test(up));
+check('upgrade: exposes the all-interfaces bind :8082', /\/ip4\/0\.0\.0\.0\/tcp\/8082/.test(up));
+check('upgrade: sets NoFetch true BEFORE the bind (never briefly an open proxy)', /Gateway\.NoFetch.*true/.test(up) && up.indexOf('NoFetch') < up.indexOf("Addresses.Gateway', EXPOSE_ADDR"));
+check('upgrade: VERIFIES the gateway is live on the bridge (curl 127.0.0.1:8082)', /127\.0\.0\.1:8082/.test(up));
+check('upgrade: no-ops on a non-IPFS box (repo presence gate)', /repoCandidates/.test(up) && /not an IPFS-hosting node/.test(up));
 check('frontend: intercepts errors to a clean 404', fe.includes('proxy_intercept_errors on;') && /location @ipfs_unavailable \{[\s\S]*?return 404;/.test(fe));
 
 // ── bare-metal nginx (single host — reaches gateway on loopback) ──

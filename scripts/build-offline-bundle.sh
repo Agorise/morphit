@@ -265,6 +265,20 @@ if [ "${1:-}" != "--no-tar" ]; then
 	OUT="morphit-v${VER}-offline.tar.gz"
 	log "6/6  Packaging ${OUT} (this includes node_modules + vendor — it will be large)…"
 	STAGE="$(mktemp -d)"
+	# v1.16.10 — ship the CANONICAL standard tarball inside the bundle so a
+	# hidden-only node that upgrades offline can seed the REAL bytes (the CID that
+	# matches the on-chain anchor) and become a Tor/I2P seeder itself — not just a
+	# consumer. It goes under ./.canonical-release/ (a subdir the root-anchored
+	# `./morphit-*.tar.gz*` exclude below does NOT match). ~13 MB on a ~700 MB
+	# bundle. Best-effort: if the canonical tarball isn't beside us (non-CI build),
+	# the bundle just ships without it and the offline seed cleanly skips.
+	rm -rf ./.canonical-release
+	if [ -f "morphit-v${VER}.tar.gz" ]; then
+		mkdir -p ./.canonical-release
+		cp "morphit-v${VER}.tar.gz" ./.canonical-release/ 2>/dev/null || true
+		[ -f "morphit-v${VER}.tar.gz.sha256" ] && cp "morphit-v${VER}.tar.gz.sha256" ./.canonical-release/ 2>/dev/null || true
+		log "     Shipping canonical morphit-v${VER}.tar.gz inside the bundle (hidden nodes seed it)."
+	fi
 	# Include node_modules + vendor; exclude only VCS/build junk.  --strip nothing:
 	# the tarball's top-level is the repo, same shape as the source tarball.
 	# --no-wildcards-match-slash is CRITICAL: without it GNU tar lets `*` cross `/`,
@@ -284,6 +298,7 @@ if [ "${1:-}" != "--no-tar" ]; then
 		-czf "${STAGE}/${OUT}" .
 	mv "${STAGE}/${OUT}" "./${OUT}"
 	rmdir "${STAGE}"
+	rm -rf ./.canonical-release  # don't leave it in the working tree after packaging
 	# Fail LOUD if packaging dropped a critical piece.  The docker images and kubo
 	# are saved as .tar.gz, and a stray `--exclude='*.tar.gz'` once silently dropped
 	# them — the bundle looked fine (~316MB) but could not install offline (cp646).

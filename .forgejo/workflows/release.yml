@@ -378,7 +378,7 @@ jobs:
             exit 0
           fi
           # 3. Compute the DETERMINISTIC directory CID (offline: no upload, no daemon).
-          CID="$("$IPFS_BIN" add -rQ --cid-version 1 --only-hash "$STAGE" 2>/dev/null || true)"
+          CID="$("$IPFS_BIN" add -rQ --cid-version 1 --chunker=size-262144 --raw-leaves --only-hash "$STAGE" 2>/dev/null || true)"
           if [ -z "${CID:-}" ]; then
             echo "WARNING: ipfs add --only-hash produced no CID — no ipfs_cid this run." >&2
             exit 0

@@ -106,7 +106,7 @@ log "ipfs add (timeout ${ADD_TIMEOUT}s)…"
 # Run in the background with a spinner so a slow add (large tree, busy daemon,
 # or a Tor-routed box) never looks frozen. CID is captured via a temp file.
 _cidfile="$(mktemp)"
-ipfs --timeout="${ADD_TIMEOUT}s" add -rQ --cid-version 1 "$STAGE" >"$_cidfile" 2>/dev/null &
+ipfs --timeout="${ADD_TIMEOUT}s" add -rQ --cid-version 1 --chunker=size-262144 --raw-leaves "$STAGE" >"$_cidfile" 2>/dev/null &
 _spin "$!" "hashing + storing $TAG into IPFS…"
 wait "$!" 2>/dev/null || true
 CID="$(cat "$_cidfile" 2>/dev/null | tr -d '[:space:]')"

@@ -69,7 +69,7 @@ const guard = stripHash(read('scripts/verify-cid-public.sh'));
 		['verifies the Kubo checksum (sha512sum)', /sha512sum/.test(yml)],
 		['stages via the shared stage-release-dir.sh', /ops\/ipfs\/stage-release-dir\.sh/.test(yml)],
 		['uses the LOCAL just-built tarball (MORPHIT_STAGE_TARBALL)', /MORPHIT_STAGE_TARBALL/.test(yml)],
-		['computes the CID with ipfs add --only-hash (cidv1)', /add -rQ --cid-version 1 --only-hash/.test(yml)],
+		['computes the CID with ipfs add --only-hash (cidv1)', /add -rQ --cid-version 1 .*--only-hash/.test(yml)],
 		['records the CID to ipfs-cid.txt', /ipfs-cid\.txt/.test(yml)]
 	];
 	for (const [n, okp] of checks) okp ? ok(`release.yml: ${n}`) : bad(`release.yml: ${n}`);
@@ -116,6 +116,8 @@ const guard = stripHash(read('scripts/verify-cid-public.sh'));
 	const checks: Array<[string, boolean]> = [
 		['stages via the shared stage-release-dir.sh', /stage-release-dir\.sh/.test(seed)],
 		['adds the directory (ipfs add --cid-version 1)', /add -rQ --cid-version 1/.test(seed)],
+		['seed + anchor pin the SAME DAG params (chunker+raw-leaves) so every Kubo reproduces the CID (v1.16.10)',
+			/--chunker=size-262144 --raw-leaves/.test(seed) && /--chunker=size-262144 --raw-leaves/.test(yml)],
 		['ASSERTS the CID equals the expected/anchored one', /"\$CID" != "\$EXPECTED"/.test(seed) && /MISMATCH/i.test(seed)],
 		['fails loud (exit 1) on CID mismatch', /MISMATCH[\s\S]*exit 1/i.test(seed)],
 		['announces it (ipfs routing provide)', /routing provide/.test(seed)],

@@ -2118,6 +2118,12 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	// healBunkerWebWaf() for the three live-confirmed failure modes it fixes.
 	healBunkerWebWaf();
 
+	// v1.16.10 — make EVERY instance a Tor/I2P seeder automatically. Expose the
+	// Kubo gateway (bridge-reachable + NoFetch so it serves ONLY pinned releases)
+	// so hidden-only nodes can fetch the release over this box's .onion/.i2p — no
+	// admin ever has to enable it. Best-effort + verified; no-ops on a non-IPFS box.
+	healIpfsGatewayExposure();
+
 	for (const svc of SERVICES_TO_RESTART) {
 		const isActive = spawnSync('systemctl', ['is-active', '--quiet', svc]).status === 0;
 		if (!isActive) {
@@ -2374,16 +2380,33 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		if (!existsSync(seedScript)) {
 			/* older tree without the seed script — skip silently */
 		} else if (/-offline\.tar\.gz$/.test(tarballPath)) {
-			// v1.16.9 — the offline BUNDLE is a different artifact (it vendors
-			// node_modules + OS packages + Docker images) than the standard release
-			// tarball the on-chain CID anchors, so hashing it can NEVER match the
-			// anchor. Attempting the seed only prints an alarming "CID MISMATCH".
-			// Skip it cleanly — the box is fully upgraded; hosting is optional.
-			info('');
-			info('Skipping the IPFS self-seed: an offline bundle is a different artifact than the');
-			info('standard release tarball the on-chain CID anchors, so it can never match by design.');
-			info('  (To also host releases from this box, drop the standard morphit-<ver>.tar.gz here');
-			info('   and run `morphit-ops harden` → "Seed this release to IPFS".)');
+			// v1.16.10 — a hidden-only node that upgrades offline should ALSO become
+			// a Tor/I2P seeder, not just a consumer (the maintainer: every instance a seeder).
+			// The offline bundle now ships the CANONICAL standard tarball under
+			// .canonical-release/; if it's there, seed THAT — its CID matches the
+			// on-chain anchor. Only skip when it's absent (an older bundle), where
+			// hashing the -offline bundle itself could never match the anchor.
+			const canonical = join(installDir, '.canonical-release', `morphit-${latestTag}.tar.gz`);
+			if (ipfsHostingUp && existsSync(canonical)) {
+				info('');
+				info(`Seeding ${latestTag} to IPFS from the bundled canonical tarball (this box becomes a Tor/I2P origin host) …`);
+				const seedEnv = ['env', 'IPFS_PATH=/var/lib/ipfs/.ipfs'];
+				try {
+					chmodSync(dirname(canonical), 0o755);
+					chmodSync(canonical, 0o644);
+					seedEnv.push(`MORPHIT_STAGE_TARBALL=${canonical}`);
+				} catch {
+					/* couldn't relax perms — the seed's download mode has no clearnet here, so it'll no-op */
+				}
+				spawnSync('sudo', ['-u', 'ipfs', ...seedEnv, 'sh', seedScript, latestTag], {
+					stdio: 'inherit',
+					timeout: 1_200_000
+				});
+			} else {
+				info('');
+				info('Skipping the IPFS self-seed: this offline bundle does not carry the canonical');
+				info('tarball, so its bytes can\u2019t match the on-chain CID. (Newer bundles seed automatically.)');
+			}
 		} else if (!ipfsHostingUp) {
 			info('');
 			info('IPFS release hosting is not set up on this box — skipping the self-seed.');
@@ -2436,6 +2459,94 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────
+
+/** v1.16.10 — SELF-HEAL: expose this box's Kubo gateway over Tor/I2P so it is a
+ *  federation seeder, automatically, on upgrade (the maintainer's mandate: every instance a
+ *  hidden seeder, zero manual steps). Safe because Gateway.NoFetch=true means the
+ *  gateway serves ONLY the release CIDs this node has pinned — never an arbitrary
+ *  CID, so it is not an open proxy. Trap-everything + verified against the running
+ *  daemon; a box without IPFS hosting no-ops. */
+function healIpfsGatewayExposure(): void {
+	// Locate the Kubo repo (a couple of known layouts) — its presence is what
+	// tells us this box hosts IPFS at all.
+	const repoCandidates = ['/var/lib/ipfs/.ipfs', '/var/lib/ipfs', '/opt/ipfs/.ipfs'];
+	let repo = '';
+	for (const c of repoCandidates) {
+		try {
+			if (existsSync(join(c, 'config'))) {
+				repo = c;
+				break;
+			}
+		} catch {
+			/* next */
+		}
+	}
+	if (repo === '') return; // no Kubo repo → not an IPFS-hosting node
+	const EXPOSE_ADDR = '/ip4/0.0.0.0/tcp/8082';
+	const USER = 'ipfs';
+
+	// Run an `ipfs` subcommand against the repo, as the ipfs user when we're root.
+	const ipfs = (args: string[]): { ok: boolean; out: string } => {
+		const asUser = process.getuid?.() === 0;
+		const cmd = asUser ? 'sudo' : 'env';
+		const pre = asUser
+			? ['-u', USER, 'env', `IPFS_PATH=${repo}`, 'ipfs']
+			: [`IPFS_PATH=${repo}`, 'ipfs'];
+		try {
+			const r = spawnSync(cmd, [...pre, ...args], { encoding: 'utf8', timeout: 20000 });
+			return { ok: r.status === 0, out: `${r.stdout ?? ''}${r.stderr ?? ''}`.trim() };
+		} catch {
+			return { ok: false, out: '' };
+		}
+	};
+
+	// Already exposed + safe? Then skip the restart (steady state).
+	const curGw = ipfs(['config', 'Addresses.Gateway']);
+	const curNoFetch = ipfs(['config', 'Gateway.NoFetch']);
+	const alreadyExposed = curGw.ok && curGw.out.includes('0.0.0.0');
+	const alreadyNoFetch = curNoFetch.ok && /true/i.test(curNoFetch.out);
+	if (alreadyExposed && alreadyNoFetch) return;
+
+	let changed = false;
+	// NoFetch FIRST (so we never briefly expose an open proxy), then the bind.
+	if (!alreadyNoFetch && ipfs(['config', '--json', 'Gateway.NoFetch', 'true']).ok) changed = true;
+	if (!alreadyExposed && ipfs(['config', 'Addresses.Gateway', EXPOSE_ADDR]).ok) changed = true;
+	if (!changed) {
+		info('IPFS: gateway exposure could not be set (config unavailable) — will apply on the next installer run.');
+		return;
+	}
+	info('IPFS: exposing the release gateway over this box\u2019s .onion/.i2p (NoFetch: serves only pinned releases).');
+
+	// Restart Kubo so the new bind takes effect, and make sure the IPNS
+	// rebroadcaster (anti-stale) is running — fallback across unit names.
+	const restarted = ['ipfs.service', 'kubo.service', 'ipfs'].some(
+		(u) => spawnSync('systemctl', ['restart', u], { encoding: 'utf8', timeout: 40000 }).status === 0
+	);
+	spawnSync('systemctl', ['enable', '--now', 'morphit-ipns-rebroadcast.service'], { encoding: 'utf8', timeout: 20000 });
+	if (!restarted) {
+		info('IPFS: gateway configured; restart the ipfs service to apply (systemctl restart ipfs).');
+		return;
+	}
+
+	// VERIFY against the running daemon: the gateway must answer on the bridge.
+	try {
+		spawnSync('sleep', ['4'], { timeout: 6000 });
+		const probe = spawnSync(
+			'curl',
+			['-s', '-o', '/dev/null', '-w', '%{http_code}', '--max-time', '6', 'http://127.0.0.1:8082/'],
+			{ encoding: 'utf8', timeout: 10000 }
+		);
+		const code = (probe.stdout ?? '').trim();
+		// Any HTTP response (even 404/400) proves the gateway is now listening.
+		info(
+			/^[0-9]{3}$/.test(code)
+				? 'IPFS: gateway is live on the bridge \u2014 this instance now serves the release over Tor/I2P.'
+				: 'IPFS: gateway restart done; it should be reachable shortly over Tor/I2P.'
+		);
+	} catch {
+		/* verification is best-effort */
+	}
+}
 
 /** Parse an nginx/BunkerWeb size string ("1m", "512k", "64k", "1024") to bytes,
  *  or null if unparseable. */

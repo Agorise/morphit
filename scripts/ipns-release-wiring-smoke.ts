@@ -106,7 +106,7 @@ const stripHash = (s: string) =>
 		['NO commercial pinner referenced', !/pinata|pinFileToIPFS|PINATA_JWT|lighthouse|storacha/i.test(yml)],
 		['installs pinned Kubo (version + SHA-512 + verify)', /KUBO_VERSION/.test(yml) && /KUBO_SHA512/.test(yml) && /sha512sum/.test(yml)],
 		['stages via the shared stage-release-dir.sh', /ops\/ipfs\/stage-release-dir\.sh/.test(yml)],
-		['computes the dir CID with ipfs add --only-hash (cidv1)', /add -rQ --cid-version 1 --only-hash/.test(yml)],
+		['computes the dir CID with ipfs add --only-hash (cidv1)', /add -rQ --cid-version 1 .*--only-hash/.test(yml)],
 		['records the CID to ipfs-cid.txt', /ipfs-cid\.txt/.test(yml)],
 		['stager: stable morphit-latest.tar.gz', /morphit-latest\.tar\.gz/.test(stage)],
 		['stager: notes come from the tarball via tar -O, not an external fetch', !/curl[^\n]*RELEASE-NOTES/i.test(stage) && !/curl[^\n]*\.asc/i.test(stage) && /tar -xzf[^\n]*-O/.test(stage)],

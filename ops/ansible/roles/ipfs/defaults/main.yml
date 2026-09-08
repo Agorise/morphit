@@ -43,18 +43,18 @@ morphit_ipfs_gateway_addr: "/ip4/127.0.0.1/tcp/8082"
 # its Kubo gateway on the frontend, that node can fetch the signed release over
 # our hidden addresses at /ipfs/<cid> — no clearnet, no third-party pinning.
 #
-# OFF by default: the gateway stays loopback-only (the posture above) and the
-# frontend's /ipfs + /ipns locations cleanly return 404. Set true to bind the
-# gateway to all interfaces so the BunkerWeb/frontend container can reach it via
-# host.docker.internal — the SAME reachability model the relay + indexer already
-# use (public inbound stays closed by UFW default-deny; only the Docker bridge
-# reaches it). Combined with Gateway.NoFetch below, an exposed gateway can serve
-# ONLY the CIDs this node has pinned (its own ~12 MB release) — never an
-# arbitrary CID, so it is NOT an open IPFS proxy.
-#
-# UNVALIDATED IN CI — this rides live-box validation on an instance that already
-# runs IPFS hosting (morphit.io). Leave false unless you have verified it there.
-morphit_ipfs_gateway_expose: false
+# ON by default (v1.16.10): EVERY Morphit instance should be a Tor/I2P seeder so
+# the federation self-heals hidden upgrades and zero-clearnet instances can
+# proliferate — an admin must never have to enable this by hand. Binding the
+# gateway to all interfaces lets the BunkerWeb/frontend container reach it via
+# host.docker.internal (the SAME reachability model the relay + indexer use;
+# public inbound stays closed by UFW default-deny, only the Docker bridge reaches
+# it), and the frontend's /ipfs + /ipns locations are already served over this
+# instance's existing .onion / .i2p. Combined with Gateway.NoFetch=true below, an
+# exposed gateway serves ONLY the CIDs this node has pinned (its own ~12 MB
+# release) — never an arbitrary CID, so it is NOT an open IPFS proxy. A node
+# without IPFS hosting simply has nothing to expose.
+morphit_ipfs_gateway_expose: true
 # The bridge-reachable bind used when exposed (mirrors the relay/indexer
 # all-interfaces bind). Keep the port aligned with the frontend nginx /ipfs
 # upstream (host.docker.internal:8082).

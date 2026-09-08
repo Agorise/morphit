@@ -26,6 +26,13 @@
 export interface HiddenUpgradeTarget {
 	/** On-chain stable IPNS name for the release (distribution.ipns_name). */
 	readonly ipnsName: string;
+	/** On-chain content-addressed CID for the release dir (distribution.ipfs_cid).
+	 *  v1.16.10 — fetching `/ipfs/<cid>/<path>` returns the EXACT canonical bytes
+	 *  from any peer that has the CID pinned, regardless of that peer's IPNS
+	 *  freshness. This is what makes the hidden upgrade robust to stale / divergent
+	 *  peers (the IPNS-only fetch resolved each peer's "latest", which could be an
+	 *  old or offline-staged tarball → SHA mismatch → nothing to install). */
+	readonly ipfsCid?: string;
 	/** On-chain SHA-256 of the release tarball (distribution.source_sha256), lower-hex. */
 	readonly expectedSha256: string;
 	/** On-chain version string (for logging / the "which release" contract). */
@@ -60,6 +67,24 @@ export function hiddenReleaseUrl(gatewayBase: string, target: HiddenUpgradeTarge
 	const base = gatewayBase.replace(/\/+$/, '');
 	const path = target.path.replace(/^\/+/, '');
 	return `${base}/ipns/${encodeURIComponent(target.ipnsName)}/${path}`;
+}
+
+/** v1.16.10 — the URLs to try on a peer, in order of preference:
+ *  1. the on-chain CID (`/ipfs/<cid>/<path>`) — content-addressed, so it returns
+ *     the EXACT canonical bytes regardless of the peer's (possibly stale) IPNS;
+ *  2. the IPNS pointer (`/ipns/<name>/<path>`) — the fallback for a peer that has
+ *     "latest" but not that specific CID pinned.
+ *  A peer serving old / offline-staged content will fail the CID fetch (it doesn't
+ *  have those bytes) instead of handing back a wrong tarball that only fails later
+ *  at the SHA check — so the canonical peer wins the race faster. */
+export function hiddenReleaseUrls(gatewayBase: string, target: HiddenUpgradeTarget): string[] {
+	const base = gatewayBase.replace(/\/+$/, '');
+	const path = target.path.replace(/^\/+/, '');
+	const urls: string[] = [];
+	const cid = (target.ipfsCid ?? '').trim();
+	if (/^[a-z0-9]{46,}$/i.test(cid)) urls.push(`${base}/ipfs/${cid}/${path}`);
+	urls.push(`${base}/ipns/${encodeURIComponent(target.ipnsName)}/${path}`);
+	return urls;
 }
 
 /** A federation directory row as the local indexer exposes it: the peer's
@@ -112,16 +137,25 @@ export async function fetchHiddenUpgrade(
 	const raceLimit = Math.max(1, deps.raceLimit ?? 4);
 	const failures: string[] = [];
 
-	// One peer attempt: fetch → hash → verify. Returns the result or throws.
+	// One peer attempt: try the CID URL (exact canonical bytes) then the IPNS
+	// fallback; the first that fetches AND matches the on-chain SHA wins. A peer
+	// serving stale/divergent content matches neither and is rejected.
 	const attempt = async (gw: string, signal: AbortSignal): Promise<HiddenUpgradeResult> => {
-		const url = hiddenReleaseUrl(gw, target);
-		deps.onProgress?.(`fetching release from ${gw} over the hidden network…`);
-		const bytes = await deps.fetchTarball(url, signal);
-		const got = (await deps.sha256(bytes)).trim().toLowerCase();
-		if (got !== expected) {
-			throw new Error(`sha_mismatch:${gw}:${got}`); // stale/tampered → reject this peer
+		const urls = hiddenReleaseUrls(gw, target);
+		let lastErr = '';
+		for (const url of urls) {
+			try {
+				deps.onProgress?.(`fetching release from ${url} over the hidden network…`);
+				const bytes = await deps.fetchTarball(url, signal);
+				const got = (await deps.sha256(bytes)).trim().toLowerCase();
+				if (got === expected) return { bytes, peer: gw };
+				lastErr = `sha_mismatch:${url}:${got}`; // stale/tampered → try next url
+			} catch (err) {
+				if (signal.aborted) throw err; // a sibling won; stop
+				lastErr = String(err instanceof Error ? err.message : err);
+			}
 		}
-		return { bytes, peer: gw };
+		throw new Error(lastErr || `no_release:${gw}`);
 	};
 
 	// Race peers in batches; first VERIFIED win aborts the rest.

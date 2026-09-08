@@ -140,7 +140,7 @@ check('release.yml NEVER broadcasts to the chain (no spending key in CI)', !/rel
 // future edit can't silently drop the automation or re-introduce a paid pinner.
 check(
 	'release.yml computes the CID with the pinned Kubo, no pinning service',
-	/add -rQ --cid-version 1 --only-hash/.test(releaseYml) &&
+	/add -rQ --cid-version 1 .*--only-hash/.test(releaseYml) &&
 		/ops\/ipfs\/stage-release-dir\.sh/.test(releaseYml) &&
 		!/pinata|pinFileToIPFS|PINATA_JWT/i.test(releaseYml)
 );

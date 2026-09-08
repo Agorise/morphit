@@ -103,7 +103,7 @@ async function getJson<T>(bases: readonly string[], path: string, timeoutMs = 50
 
 interface ReleaseTargetResponse {
 	version: string;
-	distribution: { source_sha256?: string; ipns_name?: string } | null;
+	distribution: { source_sha256?: string; ipns_name?: string; ipfs_cid?: string } | null;
 }
 interface DirectoryResponse {
 	instances?: Array<{
@@ -140,6 +140,7 @@ export async function tryResolveHiddenUpgrade(opts: {
 	const rel = await getJson<ReleaseTargetResponse>(bases, '/v1/release');
 	const sha = rel.distribution?.source_sha256?.trim() ?? '';
 	const ipns = rel.distribution?.ipns_name?.trim() ?? '';
+	const cid = rel.distribution?.ipfs_cid?.trim() ?? '';
 	if (!/^[0-9a-f]{64}$/i.test(sha) || ipns === '') {
 		throw new Error('hidden upgrade: on-chain release has no source_sha256 / ipns_name yet — cannot verify; staying put (fail-closed)');
 	}
@@ -177,7 +178,7 @@ export async function tryResolveHiddenUpgrade(opts: {
 	// 3. Fetch + verify (raced, SHA-checked, fail-closed) over Tor/I2P.
 	const fetchTarball = makeHiddenTarballFetcher({ proxy: hiddenServiceProxyConfigFromEnv() });
 	const result = await fetchHiddenUpgrade(
-		{ ipnsName: ipns, expectedSha256: sha, version: rel.version, path: 'morphit-latest.tar.gz' },
+		{ ipnsName: ipns, ipfsCid: cid, expectedSha256: sha, version: rel.version, path: 'morphit-latest.tar.gz' },
 		{ peerGateways, fetchTarball, sha256: (b) => createHash('sha256').update(b).digest('hex'), onProgress: opts.onProgress }
 	);
 
