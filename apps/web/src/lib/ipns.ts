@@ -18,7 +18,7 @@
  *     cost of one DNS lookup + one third-party gateway. The labeled fallback.
  * (w3name is gone — it stored records off the DHT, so gateways never resolved them.)
  */
-export const MORPHIT_IPNS_NAME = 'k51qzi5uqu5dhsa0lbq7pkci906lvm3pu12jvddho7dl1cpl42pqbrh3nra4c8';
+export const MORPHIT_IPNS_NAME = 'k51qzi5uqu5dgkxmhwchxq4f9yiggxqyine7ang3xdz1ohmwc8csya1sqtcicf';
 
 /** The permanent, DNS-free, third-party-free NATIVE IPNS URL for the latest release
  *  tarball. Resolves over the public DHT in an IPFS-capable client (Brave, IPFS

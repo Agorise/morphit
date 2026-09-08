@@ -2112,17 +2112,32 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		}
 	}
 
-	// v1.16.9 — SELF-HEAL the BunkerWeb WAF so the /v1/ + /relay/ JSON APIs work,
-	// the way the maintainer insists: trap every condition, try each fix more than one way,
-	// VERIFY it took against the running container, fall through, never throw. See
-	// healBunkerWebWaf() for the three live-confirmed failure modes it fixes.
-	healBunkerWebWaf();
-
-	// v1.16.10 — make EVERY instance a Tor/I2P seeder automatically. Expose the
-	// Kubo gateway (bridge-reachable + NoFetch so it serves ONLY pinned releases)
-	// so hidden-only nodes can fetch the release over this box's .onion/.i2p — no
-	// admin ever has to enable it. Best-effort + verified; no-ops on a non-IPFS box.
-	healIpfsGatewayExposure();
+	// v1.16.11 — run the self-heals from the JUST-INSTALLED binary, not this
+	// (older) orchestrator, so a self-heal shipped in THIS release applies on THIS
+	// upgrade instead of one release later. The new ops-cli dist was rebuilt above,
+	// so re-exec it for a dedicated self-heal phase. If that binary is too old to
+	// know the hidden subcommand (or the re-exec fails), fall back to running the
+	// heals in-process — the upgrade must never fail over self-healing.
+	//   Heals (see their definitions): healBunkerWebWaf() — the BunkerWeb WAF
+	//   (413/403 on /v1/ + /relay/); healIpfsGatewayExposure() — expose the Kubo
+	//   gateway over Tor/I2P (NoFetch-safe) so every instance is a seeder.
+	let selfHealReexeced = false;
+	try {
+		const newCli = join(installDir, 'apps', 'ops-cli', 'dist', 'main.js');
+		if (existsSync(newCli)) {
+			const r = spawnSync(process.execPath, [newCli, '__post-upgrade-selfheal'], {
+				stdio: 'inherit',
+				timeout: 300_000
+			});
+			selfHealReexeced = r.status === 0;
+		}
+	} catch {
+		/* fall back to in-process below */
+	}
+	if (!selfHealReexeced) {
+		healBunkerWebWaf();
+		healIpfsGatewayExposure();
+	}
 
 	for (const svc of SERVICES_TO_RESTART) {
 		const isActive = spawnSync('systemctl', ['is-active', '--quiet', svc]).status === 0;
@@ -2466,7 +2481,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
  *  gateway serves ONLY the release CIDs this node has pinned — never an arbitrary
  *  CID, so it is not an open proxy. Trap-everything + verified against the running
  *  daemon; a box without IPFS hosting no-ops. */
-function healIpfsGatewayExposure(): void {
+export function healIpfsGatewayExposure(): void {
 	// Locate the Kubo repo (a couple of known layouts) — its presence is what
 	// tells us this box hosts IPFS at all.
 	const repoCandidates = ['/var/lib/ipfs/.ipfs', '/var/lib/ipfs', '/opt/ipfs/.ipfs'];
@@ -2582,7 +2597,7 @@ function dockerContainer(want: RegExp, avoid: RegExp | null): string | null {
  *    C. ModSecurity CRS flags the base64 avatar payload → 403.
  *  Best-effort + idempotent: a non-BunkerWeb deploy just no-ops; a steady-state
  *  box where everything is already applied skips the reload. */
-function healBunkerWebWaf(): void {
+export function healBunkerWebWaf(): void {
 	const bwEnv = '/etc/bunkerweb/bunkerweb.env';
 	try {
 		if (!existsSync(bwEnv)) return; // not a BunkerWeb deployment — nothing to heal

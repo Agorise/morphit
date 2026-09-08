@@ -76,6 +76,8 @@ check('offline path picks offline_sha256 for a -offline bundle', /offline_sha256
 check('the release payload emits offline_sha256', /offline_sha256/.test(payload) && /MORPHIT_BUILD_OFFLINE_SHA256/.test(payload));
 check('upgrade offline path seeds the BUNDLED canonical tarball (hidden nodes become seeders, v1.16.10)', /\.canonical-release/.test(upgrade) && /becomes a Tor\/I2P origin host/.test(upgrade));
 check('upgrade offline path still skips cleanly when no canonical tarball is bundled', /Skipping the IPFS self-seed/.test(upgrade) && /does not carry the canonical/.test(upgrade));
+check('upgrade re-execs the JUST-BUILT binary for self-heals (v1.16.11 — no more upgrade-twice)', /__post-upgrade-selfheal/.test(upgrade) && /selfHealReexeced/.test(upgrade));
+check('upgrade falls back to in-process heals if the re-exec is unavailable', /if \(!selfHealReexeced\)/.test(upgrade) && /healBunkerWebWaf\(\);/.test(upgrade));
 check('resolver states "zero clearnet"', /zero clearnet/i.test(resolver));
 
 console.log(fail === 0 ? `✓ all ${pass} hidden-upgrade-detection checks hold` : `✗ ${fail} failed (${pass} passed)`);

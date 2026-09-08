@@ -15,6 +15,7 @@ import {
 	fetchHiddenUpgrade,
 	hiddenReleaseUrl,
 	hiddenReleaseUrls,
+	resolvePeerGateways,
 	type HiddenUpgradeTarget,
 	type HiddenUpgradeDeps
 } from '../src/init/hiddenUpgradeFetch.ts';
@@ -85,6 +86,13 @@ async function main(): Promise<void> {
 			const t = { ...target, ipfsCid: 'bafybeid45grd5gej6zuwx2sexugyxfo3zglmjfopuhndzdcmyka634enn4' };
 			const urls = hiddenReleaseUrls('http://abc.onion', t);
 			return urls.length === 2 && urls[0] === 'http://abc.onion/ipfs/bafybeid45grd5gej6zuwx2sexugyxfo3zglmjfopuhndzdcmyka634enn4/morphit-latest.tar.gz' && urls[1].includes('/ipns/');
+		})()
+	);
+	ok(
+		'resolvePeerGateways yields BOTH i2p and tor for a peer with both (v1.16.11 — onion no longer dropped)',
+		(() => {
+			const g = resolvePeerGateways([{ i2p_b32: 'abc.b32.i2p', tor: 'xyz.onion' }]);
+			return g.includes('http://abc.b32.i2p') && g.includes('http://xyz.onion');
 		})()
 	);
 	ok(

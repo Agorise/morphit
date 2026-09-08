@@ -318,6 +318,20 @@ async function main(): Promise<number> {
 	// MORPHIT_OPS_DATABASE_URL etc. would be a chicken-and-egg
 	// problem.  Same for `--check-only`: it just runs the
 	// system check and exits, no DB needed.
+	// v1.16.11 — hidden subcommand re-exec'd by the upgrade AFTER it rebuilds the
+	// new dist, so the self-heals from the JUST-INSTALLED version run on THIS
+	// upgrade instead of the next one. Not listed in help; operators never call it.
+	if (args.subcommand === '__post-upgrade-selfheal') {
+		try {
+			const { healBunkerWebWaf, healIpfsGatewayExposure } = await import('./commands/upgrade.ts');
+			healBunkerWebWaf();
+			healIpfsGatewayExposure();
+		} catch {
+			/* best-effort — the upgrade falls back to its in-process heals */
+		}
+		return 0;
+	}
+
 	if (args.subcommand === 'init') {
 		// Color decision before init starts — TTY-aware default
 		// is fine here; operators interactive-running an init

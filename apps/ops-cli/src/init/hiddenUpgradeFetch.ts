@@ -108,8 +108,11 @@ export function resolvePeerGateways(rows: readonly PeerDirectoryRow[]): string[]
 	for (const r of rows) {
 		const b32 = typeof r.i2p_b32 === 'string' ? r.i2p_b32.trim() : '';
 		const onion = typeof r.tor === 'string' ? r.tor.trim() : '';
+		// v1.16.11 — push BOTH transports for a peer that has them (was `else if`,
+		// which dropped every onion whenever an I2P address was present, so Tor was
+		// never tried). The fetch races them; either reaching the peer is a win.
 		if (b32.endsWith('.b32.i2p')) i2p.push(`http://${b32}`);
-		else if (onion.endsWith('.onion')) tor.push(`http://${onion}`);
+		if (onion.endsWith('.onion')) tor.push(`http://${onion}`);
 	}
 	return [...new Set([...i2p, ...tor])];
 }

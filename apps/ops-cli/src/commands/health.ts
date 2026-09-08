@@ -2072,6 +2072,19 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 						: c.yellow('⚠');
 	console.log(`  ${c.bold('IPFS/IPNS release seeding')}  ${seedTag} ${ipfsSeeding.state}`);
 	console.log(`      ${c.dim(ipfsSeeding.detail)}`);
+	// v1.16.11 — a seeder is only useful to hidden-only nodes if they can DISCOVER
+	// it: peer discovery reads each instance's on-chain alt_addresses (its .onion /
+	// .b32.i2p), and the release rides that same hidden address at /ipfs. So remind
+	// the operator to publish those addresses. Only shown when actually seeding.
+	if (ipfsSeeding.state === 'ok') {
+		console.log(
+			`      ${c.dim('Hidden-only nodes find this seeder via your on-chain address. If you run Tor/I2P')}`
+		);
+		console.log(
+			`      ${c.dim('(morphit-ops → Set up a Tor/I2P address), publish it with `morphit-ops register`')}`
+		);
+		console.log(`      ${c.dim('so they can fetch the release from you over the hidden network.')}`);
+	}
 
 	console.log('');
 	console.log('━'.repeat(60));
