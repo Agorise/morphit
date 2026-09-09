@@ -13,6 +13,12 @@
       "category": "not-reachable",
       "title": "ip-address: misclassification of IPv4-mapped/NAT64 IPv6 addresses can bypass SSRF and trust-boundary"
     },
+    "GHSA-2883-xcg3-v3hh": {
+      "package": "js-yaml",
+      "severity": "high",
+      "category": "dev-build-only",
+      "title": "js-yaml: maxTotalMergeKeys does not limit CPU use for empty merge sources (reached only via eslint \\u2192 @eslint/eslintrc at lint time; never shipped or run in production; parses only Morphit's own trusted ESLint config)"
+    },
     "GHSA-29g2-3rmr-qm68": {
       "package": "@sveltejs/kit",
       "severity": "moderate",
