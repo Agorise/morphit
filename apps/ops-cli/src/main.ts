@@ -232,7 +232,7 @@ function printHelp(): void {
 		'  flags [--type=reciprocity|related]  Moderation flags raised',
 		'  block <account> [reason]        Hide an account\u2019s listings on THIS instance (local; no posting key)',
 		'  unblock <account>               Un-hide an account\u2019s listings on this instance',
-		'  fast-sync                       Restore the newest federation snapshot (minutes, not days) — recommended for a fresh node',
+		'  fast-sync [--from-file <path>]   Restore the newest federation snapshot (or import a peer snapshot .tar.gz) — recommended for a fresh node',
 		'  fast-forward [BLOCK]            Advance the indexer cursor to a recent block (skip a long sync)',
 		'',
 		'Global flags:',

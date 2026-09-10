@@ -87,6 +87,22 @@ export function resolvePreferredLangs(
 	return [isOrderLang(uiLocale) ? uiLocale : 'en'];
 }
 
+/**
+ * The orderbook language FILTER seed. Returns an EXPLICIT saved (local mirror) or
+ * on-chain preferred set, else EMPTY (= all languages). Unlike resolvePreferredLangs
+ * it does NOT fall back to the UI locale: browsing the site in Italian must not
+ * silently hide non-Italian orders, and the hidden filter re-appeared on every
+ * refresh (the maintainer/timeapp). An empty seed shows every order; the user opts into a
+ * language filter deliberately.
+ */
+export function resolveOrderbookLangFilter(chainLangs: readonly string[] | null): string[] {
+	const local = readLocalPreferredLangs();
+	if (local && local.length > 0) return local;
+	const fromChain = clean(chainLangs);
+	if (fromChain.length > 0) return fromChain;
+	return [];
+}
+
 /** The primary preferred language (the settings default), = resolved set [0]. */
 export function resolvePrimaryLang(chainLangs: readonly string[] | null, uiLocale: string): string {
 	return resolvePreferredLangs(chainLangs, uiLocale)[0]!;

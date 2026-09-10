@@ -18,6 +18,10 @@ import { stepRelayAccount, stepActiveKey, stepFeesAccount, type ActiveKeyResult 
 import { collectInstallInputs, askInstallMode, askTorOnly } from './collectInstallInputs.ts';
 import { buildAnsibleVars, validateInstallInputs } from './ansibleVars.ts';
 import { assembleInstall } from './assembleInstall.ts';
+import {
+	armReachabilityRevert,
+	confirmReachabilityOrRevert
+} from './reachabilityRevert.ts';
 import { collectInstallSummary, printInstallSummary, allComponentsUp } from './installSummary.ts';
 import { renderRemediationReport, getRemediationJournal } from './remediation.ts';
 import { promptSaveSecrets, type SecretToSave } from './saveSecrets.ts';
@@ -221,6 +225,12 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 	console.log('\n══════════════════════════════════════════════════════════');
 	console.log('Installing your node — this part is automatic, sit tight…');
 	console.log('══════════════════════════════════════════════════════════\n');
+	// Arm the reachability dead-man's-switch BEFORE the playbook run (which applies
+	// the hardening role's SSH + firewall changes). Snapshot only — nothing is
+	// scheduled until we reach the confirm step below, so an aborted/failed run
+	// never triggers a revert. No-ops off a systemd/root box.
+	const reachabilityGuard = armReachabilityRevert();
+
 	const res = await assembleInstall({
 		vars: {
 			...buildAnsibleVars(inputs),
@@ -240,6 +250,12 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 		console.log(`\n  ${res.reason}\n`);
 		return 1;
 	}
+
+	// The playbook (with the hardening role) just changed SSH + the firewall. Before
+	// anything else, make the operator prove they can still get in — or the box
+	// auto-reverts. This is the net that catches any reachability regression the
+	// per-cause guards didn't (the maintainer: harden stranded the flagship twice tonight).
+	await confirmReachabilityOrRevert(reachabilityGuard);
 
 	// A glance-able confirmation of what actually came up + is healthy — asked for
 	// by a live operator who (reasonably) didn't want to trust a bare "installed"

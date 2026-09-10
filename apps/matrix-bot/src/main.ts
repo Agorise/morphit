@@ -28,6 +28,7 @@ import { createDryRunSender, createMatrixSender, type MatrixSender } from './mat
 import { createHealthServer } from './health.ts';
 import { tailJournalctl } from './journalctl.ts';
 import { startDigestScheduler } from './digest.ts';
+import { rmSync } from 'node:fs';
 
 async function main(): Promise<void> {
 	// ─── Opt-in gate ──
@@ -66,11 +67,40 @@ async function main(): Promise<void> {
 	if (config.dryRun) {
 		sender = createDryRunSender();
 	} else {
-		sender = await createMatrixSender(
-			config.homeserver,
-			config.accessToken,
-			`${config.stateDbPath}.matrix-storage`
-		);
+		const cryptoStorePath = `${config.stateDbPath}.matrix-storage`;
+		try {
+			sender = await createMatrixSender(config.homeserver, config.accessToken, cryptoStorePath);
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
+			// E2EE crypto-state conflict: the bot's device already has one-time keys
+			// registered on the homeserver, but this box's local crypto store is fresh
+			// (common after a reinstall, or reusing the SAME access token on a new box).
+			// A stale store can never reconcile with the server's keys, so clear it and
+			// tell the operator to mint a fresh token — instead of crash-looping on an
+			// opaque stack trace (the maintainer/morphit.io reinstall).
+			if (/already exists/i.test(msg) && /one[- ]?time key|signed_curve25519/i.test(msg)) {
+				try {
+					rmSync(cryptoStorePath, { recursive: true, force: true });
+				} catch {
+					/* best-effort */
+				}
+				console.error(
+					'\nmorphit-matrix-bot: Matrix end-to-end-encryption setup failed.\n\n' +
+						"  This bot token's device already has encryption keys on the homeserver,\n" +
+						'  but the local crypto store here was fresh — which happens after a\n' +
+						'  reinstall, or when the same access token is reused on a new box.\n\n' +
+						'  FIX: get a NEW access token for the bot account (log it in again so it\n' +
+						'  registers a fresh device), set MORPHIT_MATRIX_BOT_ACCESS_TOKEN in\n' +
+						'  /etc/morphit/matrix-bot.env, and restart. The stale crypto store was\n' +
+						'  cleared for you, so the fresh token will start clean.\n\n' +
+						'  Alerts are OFF until then; the rest of your node is unaffected.\n'
+				);
+				// Clean exit (not a failure) so systemd does not crash-loop — this needs
+				// an operator action, not a restart.
+				process.exit(0);
+			}
+			throw err;
+		}
 	}
 
 	// Healthcheck endpoint — systemd readiness probe + the `/self-test`

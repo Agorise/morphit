@@ -304,6 +304,19 @@ else bad('isValidEnsName');
 	}
 }
 
+{
+	const aaSrc = readFileSync(join(OPS, 'src', 'commands', 'altAddress.ts'), 'utf8');
+	const hasOffer = /async function offerFrontendServing\(/.test(aaSrc);
+	const calledOnValidate = /if \(res\.ok\) \{\s*await offerFrontendServing\(/.test(aaSrc);
+	if (hasOffer && calledOnValidate)
+		ok('option 5 offers to serve the frontend on a newly-set vanity address');
+	else
+		bad(
+			'option 5 offers to serve the frontend on a newly-set vanity address',
+			`offer=${hasOffer} calledOnValidate=${calledOnValidate}`
+		);
+}
+
 console.log('');
 console.log(`${pass} passed, ${fail} failed`);
 if (fail > 0) {

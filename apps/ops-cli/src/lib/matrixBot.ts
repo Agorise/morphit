@@ -29,7 +29,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, statSync } from 'node:fs';
 
 import { parseMxid, type MatrixMxid } from '@morphit/operator-config';
 
@@ -255,6 +255,29 @@ export function writeAlertMxid(value: string, path: string = MATRIX_BOT_ENV_PATH
 	return true;
 }
 
+/**
+ * Atomically set BOTH the alert MXID and the access token in one env file. Used by
+ * `morphit-ops matrix` to persist morphit-ops-minted credentials with NO
+ * hand-editing — written to the live matrix-bot.env (so the bot works now) AND to
+ * the operator config (so a re-render keeps them). Creates the file if it doesn't
+ * exist yet (the operator config may not have the keys before first use).
+ */
+export function writeMatrixCreds(
+	mxid: string,
+	token: string,
+	path: string = MATRIX_BOT_ENV_PATH
+): boolean {
+	try {
+		const base = existsSync(path) ? readFileSync(path, 'utf-8') : '';
+		let next = upsertEnvKey(base, KEY_MXID, mxid);
+		next = upsertEnvKey(next, KEY_TOKEN, token);
+		writeFileSync(path, next, { mode: 0o600 });
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 // ─── systemd glue (sudo-aware, mirrors lib/restartServices.ts + mcp.ts) ──
 
 /** A process runner: returns the exit status (null on spawn error). */
@@ -332,4 +355,49 @@ export function syncMatrixBotService(
 		if (status !== 0) ok = false;
 	}
 	return { action: opts.restart ? 'enable-restart' : 'enable-start', ok };
+}
+
+/**
+ * Upsert ONLY the alert MXID into the operator config (morphit.config.env),
+ * PRESERVING that file's existing mode (0640 — group-readable so the service users
+ * can source it). The secret token is NEVER written here; it stays 0600 in
+ * matrix-bot.env. Used so the MXID persists across an Ansible re-render without
+ * widening the token's exposure (v1.17.0 security review).
+ */
+export function writeConfigMxid(mxid: string, path: string): boolean {
+	try {
+		if (!existsSync(path)) return false;
+		const mode = statSync(path).mode & 0o777;
+		const next = upsertEnvKey(readFileSync(path, 'utf-8'), KEY_MXID, mxid);
+		writeFileSync(path, next, { mode });
+		return true;
+	} catch {
+		return false;
+	}
+}
+export async function mintMatrixToken(
+	homeserver: string,
+	user: string,
+	password: string
+): Promise<string | null> {
+	const base = homeserver.replace(/\/+$/, '');
+	try {
+		const res = await fetch(`${base}/_matrix/client/v3/login`, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({
+				type: 'm.login.password',
+				identifier: { type: 'm.id.user', user },
+				password,
+				initial_device_display_name: `morphit-alerts-${Date.now()}`
+			})
+		});
+		if (!res.ok) return null;
+		const data = (await res.json()) as { access_token?: unknown };
+		return typeof data.access_token === 'string' && data.access_token.length > 0
+			? data.access_token
+			: null;
+	} catch {
+		return null;
+	}
 }

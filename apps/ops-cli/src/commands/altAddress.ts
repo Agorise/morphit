@@ -57,6 +57,42 @@ function cleanPrefix(raw: string): string {
 
 /** Walk the operator through one network. Returns the validated address to
  *  save, or null if they backed out. */
+/**
+ * After a Tor/I2P/Lokinet address is set, offer to also SERVE the frontend on it
+ * (not just advertise it on-chain). The site is carried over a hidden address by a
+ * tunnel pointing at the frontend container port — the same way the .onion is
+ * served. We give the per-network wiring at the moment the address is set, but
+ * deliberately do NOT auto-rewrite lokinet.ini / i2pd configs here: a bad tunnel
+ * edit takes the site down, and it must be verified against the live box. Guidance
+ * + a clear yes/no, not a blind mutation (the maintainer).
+ */
+async function offerFrontendServing(net: AltNet, addr: string): Promise<void> {
+	console.log('');
+	const want = await askYesNo(
+		`Also serve the site itself on ${sanitizeForTerm(addr)} (not only advertise it)?`,
+		false
+	);
+	if (!want) {
+		console.log('  OK — advertised on-chain only, not served here. You can wire it up later.');
+		return;
+	}
+	console.log('');
+	console.log('  Serving the frontend over a hidden address means pointing its tunnel at the');
+	console.log('  frontend container port — exactly like your .onion is already served:');
+	if (net === 'lokinet') {
+		console.log('    • In lokinet.ini, add a SNApp service that forwards to the frontend');
+		console.log('      port; keep your keyfile line so the .loki stays stable; then:');
+		console.log('        sudo systemctl restart lokinet');
+	} else if (net === 'i2p') {
+		console.log('    • In i2pd tunnels.conf, add a SERVER tunnel to the frontend port; then:');
+		console.log('        sudo systemctl restart i2pd');
+	} else {
+		console.log('    • Point the hidden service at the frontend port, then restart it.');
+	}
+	console.log('  Then open the address in a Tor/I2P/Lokinet-capable browser to confirm the');
+	console.log('  site loads. `morphit-ops health` lists served addresses under "Reachable at".');
+}
+
 async function collectAddress(net: AltNet): Promise<string | null> {
 	const script = GEN_SCRIPT[net];
 
@@ -111,13 +147,16 @@ async function collectAddress(net: AltNet): Promise<string | null> {
 		console.log('with OXEN coin in the Oxen wallet (optional, costs money).');
 	}
 
-	// Capture + validate, looping on bad input.
+// Capture + validate, looping on bad input.
 	console.log('');
 	for (;;) {
 		const pasted = await ask('Paste the address here (or press Enter to go back)', '');
 		if (pasted.trim().length === 0) return null;
 		const res = validateAltAddress(net, pasted);
-		if (res.ok) return res.value;
+		if (res.ok) {
+			await offerFrontendServing(net, res.value);
+			return res.value;
+		}
 		console.log(`  ✗ ${res.reason}`);
 		console.log('  Try again, or press Enter to go back.');
 	}

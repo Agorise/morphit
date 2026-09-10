@@ -15,6 +15,7 @@
 import { ask as realAsk, askChoice as realAskChoice, examples as realExamples, askPassword as realAskPassword, step } from './prompt.ts';
 import { checkDomainPointsHere } from './systemCheck.ts';
 import { withSpinner } from './spinner.ts';
+import { mintMatrixToken } from '../lib/matrixBot.ts';
 import {
 	randomSecret,
 	validateDomain,
@@ -111,6 +112,7 @@ export async function collectInstallInputs(
 	const ask = deps.ask ?? realAsk;
 	const examples = deps.examples ?? realExamples;
 	const askSecret = deps.askSecret ?? realAskPassword;
+	const askChoice = deps.askChoice ?? realAskChoice;
 	const print = deps.print ?? ((s: string): void => console.log(s));
 	const req = { ask, examples, print };
 
@@ -223,13 +225,34 @@ export async function collectInstallInputs(
 	let matrixAlertToken: string | undefined;
 	let matrixAlertMxid: string | undefined;
 	let installMatrixBotDeferred = false;
-	const alertToken = (
-		await askSecret('Alert bot access token (paste \u2014 not shown; Enter to skip alerts)')
-	).trim();
-	if (alertToken.length > 0) {
-		matrixAlertToken = alertToken;
+	const alertMethod = await askChoice('Set up operator alerts now?', [
+		'Enter the bot account username + password (I mint the token for you — no Element steps)',
+		'Paste an existing bot access token',
+		'Skip for now'
+	]);
+	if (alertMethod === 0 || alertMethod === 1) {
 		const hs = (await ask('Alert bot homeserver', 'https://matrix.org')).trim();
 		matrixAlertHomeserver = hs.length > 0 ? hs : 'https://matrix.org';
+		if (alertMethod === 0) {
+			const user = (await ask('Bot account username (local part, no @ or :server)')).trim();
+			const pass = (await askSecret('Bot account password (not shown)')).trim();
+			if (user.length > 0 && pass.length > 0) {
+				const minted = await mintMatrixToken(matrixAlertHomeserver, user, pass);
+				if (minted !== null) {
+					matrixAlertToken = minted;
+					print('  \u2713 Minted a fresh access token.\n');
+				} else {
+					print(
+						'  \u2717 Login failed \u2014 skipping alerts for now (add later with `morphit-ops matrix setup`).\n'
+					);
+				}
+			}
+		} else {
+			const t = (await askSecret('Alert bot access token (paste \u2014 not shown)')).trim();
+			if (t.length > 0) matrixAlertToken = t;
+		}
+	}
+	if (matrixAlertToken) {
 		// Default the recipient to the operator's own contact account, but ONLY
 		// if that contact was a personal @user (a #room would leak private alerts,
 		// and validateAlertMxid rejects it anyway).
@@ -247,14 +270,11 @@ export async function collectInstallInputs(
 			print(`  \u2717 That ${verdict}.  Try again.\n`);
 		}
 	} else {
-		// No token pasted. Offer to install the bot NOW anyway, so it's fully
-		// staged (unit + crypto/sqlite deps) and the operator only has to drop in
-		// a token later via `morphit-ops matrix` — no reinstall, no rebuild.
+		// No token. Offer to install the bot NOW anyway, so it's fully staged (unit
+		// + crypto/sqlite deps) and the operator only has to run `morphit-ops matrix
+		// setup` later — no reinstall, no rebuild.
 		const installAnyway = (
-			await ask(
-				'Install the alert bot now anyway, ready for a token later? [y/N]',
-				'N'
-			)
+			await ask('Install the alert bot now anyway, ready for a token later? [y/N]', 'N')
 		)
 			.trim()
 			.toLowerCase();

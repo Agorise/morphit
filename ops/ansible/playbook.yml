@@ -404,7 +404,11 @@
           entered, backups scheduled, HTTPS/TLS valid, and the AIDE
           baseline built:
 
-            sudo morphit-ops        →  option 13 (Node health)
+            sudo morphit-ops health          (or the menu → option 14, "Node health")
+
+          Re-run it any time to watch the indexer catch up to the chain
+          head, confirm the relay is up, and see anything still pending
+          (like the warrant canary not yet signed).
 
           All green there means your services came up. When you have
           a moment, the security/host checklist in

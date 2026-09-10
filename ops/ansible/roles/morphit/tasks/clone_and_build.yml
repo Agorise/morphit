@@ -1,11 +1,20 @@
 # Clone the repo + npm install + build.
 ---
-# Source the code two ways:
-#   • REMOTE install (no local source given): git clone at the pinned ref.
-#   • LOCAL install (morphit_local_source_path set — the release the operator
-#     downloaded + extracted): copy THAT into place, so the node runs exactly
-#     the bytes they downloaded, not whatever is on git. `morphit-ops install`
-#     sets morphit_local_source_path to the extracted release directory.
+# Silence npm's noise for EVERY npm/npx call on this box (all users) — not just
+# the workspace install below. The per-command env we set on the workspace
+# install doesn't cover the MCP-deploy `npm install` or `npx morphit-ops`, so the
+# "New major version of npm available!" update-notifier still leaked (the maintainer:
+# should be gone on fresh installs AND upgrades). Writing the GLOBAL npmrc fixes
+# it system-wide, including future `morphit-ops upgrade` runs.
+- name: Silence npm update-notifier + fund globally (all npm/npx calls)
+  ansible.builtin.command:
+    cmd: "npm config set {{ item }} --location=global"
+  loop:
+    - "update-notifier false"
+    - "fund false"
+  changed_when: false
+  become: true
+
 - name: Clone morphit repo (remote install — no local source given)
   ansible.builtin.git:
     repo: "{{ morphit_repo_url }}"
@@ -17,6 +26,7 @@
   become_user: "{{ morphit_service_user }}"
   when: (morphit_local_source_path | default('')) | length == 0
   # The repo is owned by the service user so npm runs as it.
+
 
 - name: Ensure the repo dir exists (local install — copying the downloaded release)
   ansible.builtin.file:

@@ -39,6 +39,7 @@ import { resolve, join, dirname } from 'node:path';
 
 import { askChoice } from '../init/prompt.ts';
 import { stepBunkerWeb, stepHardening, stepBackup } from '../init/steps.ts';
+import { configureMatrixAlerts } from './matrix.ts';
 import { renderHardeningChecklist, renderBackupEnv } from '../init/render.ts';
 import { sanitizeForTerm } from '../render/term.ts';
 
@@ -120,6 +121,7 @@ export async function runHarden(ctx: HardenCtx): Promise<number> {
 			'Set up IPFS release hosting (help keep Morphit releases alive)',
 			'Seed this release to IPFS now (make this box an origin host after an upgrade)',
 			'Set up warrant canary + PGP contact key (transparency signals for your users)',
+			'Set up Matrix operator alerts (I mint the bot token for you — no hand-editing)',
 			'Show the fully-automated path (Ansible playbook)',
 			'Done'
 		]);
@@ -297,6 +299,8 @@ export async function runHarden(ctx: HardenCtx): Promise<number> {
 			console.log('  Full reference: OPERATIONS.md §36 (warrant canary).');
 			console.log('');
 		} else if (choice === 7) {
+			await configureMatrixAlerts(ctx.colorEnabled);
+		} else if (choice === 8) {
 			printAnsiblePath();
 		} else {
 			// Done

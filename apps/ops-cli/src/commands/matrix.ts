@@ -35,8 +35,9 @@
  * is unit-testable without a live systemd, a real sudo, or touching /etc.
  */
 
-import { askYesNo } from '../init/prompt.ts';
+import { askYesNo, ask, askPassword, askChoice } from '../init/prompt.ts';
 import { checkService, type ServiceState } from './health.ts';
+import { rmSync } from 'node:fs';
 import {
 	MATRIX_BOT_ENV_PATH,
 	matrixBotReadiness,
@@ -44,6 +45,9 @@ import {
 	readMatrixBotHealthcheckPort,
 	syncMatrixBotService,
 	writeAlertMxid,
+	writeMatrixCreds,
+	writeConfigMxid,
+	mintMatrixToken,
 	type MatrixBotEnv,
 	type MatrixBotReadiness,
 	type MatrixBotSyncResult
@@ -66,6 +70,151 @@ export interface MatrixDeps {
 	readonly confirm?: (question: string, defaultYes: boolean) => Promise<boolean>;
 	readonly selfTest?: (port: number) => Promise<MatrixSelfTestResult>;
 	readonly readHealthcheckPort?: (path?: string) => number;
+	/** The guided setup flow (injectable so the lifecycle smoke can stub it). */
+	readonly configure?: (colorEnabled: boolean, deps: MatrixDeps) => Promise<number>;
+}
+
+/** Where morphit-ops persists operator config (source of truth that survives an
+ *  Ansible re-render). Overridable for tests / non-standard installs. */
+const OPERATOR_CONFIG_PATH =
+	process.env.MORPHIT_CONFIG_ENV_PATH ?? '/opt/morphit/morphit.config.env';
+/** The matrix-bot's E2EE crypto store — cleared when we set a fresh token so a
+ *  new device never collides with stale one-time keys (the reinstall bug). */
+const MATRIX_CRYPTO_STORE = '/var/lib/morphit-matrix-bot/state.db.matrix-storage';
+
+/**
+ * The full, hand-editing-free Matrix alert setup: collect the recipient MXID + the
+ * bot's credentials, MINT a fresh token (or accept a pasted one), persist BOTH the
+ * MXID and token to the live env AND the operator config, clear the stale E2EE
+ * store, enable + start the bot, and send a test. Used by option 16, the install
+ * wizard, and harden — so entering a Matrix address wires everything automatically
+ * (the maintainer: "NO hand editing of any files or string variables").
+ */
+export async function configureMatrixAlerts(
+	colorEnabled: boolean,
+	deps: MatrixDeps = {}
+): Promise<number> {
+	const c = colorEnabled;
+	const green = (s: string): string => (c ? `\u001b[32m${s}\u001b[0m` : s);
+	const yellow = (s: string): string => (c ? `\u001b[33m${s}\u001b[0m` : s);
+	const dim = (s: string): string => (c ? `\u001b[2m${s}\u001b[0m` : s);
+	const sync = deps.sync ?? ((run: boolean, restart: boolean) => syncMatrixBotService(run, { restart }));
+
+	// Never block on stdin in a non-interactive context (a piped/CI invocation, or
+	// a smoke driving the status flow) — this whole flow is interactive by nature.
+	if (!process.stdin.isTTY) {
+		console.log('  Run `morphit-ops matrix setup` in an interactive terminal to set up alerts.');
+		return 1;
+	}
+
+	console.log('');
+	console.log('  Matrix operator alerts — the bot DMs you when something needs attention.');
+	console.log(dim('  It logs in as its OWN bot account and DMs alerts to YOUR account.'));
+	console.log('');
+
+	// 1. Recipient MXID (yours), validated — never a #room.
+	let mxid = '';
+	for (;;) {
+		const raw = (await ask('Your personal Matrix address to receive alerts (e.g. @you:matrix.org)')).trim();
+		if (raw === '') {
+			console.log('  Nothing entered — aborted, no changes made.');
+			return 1;
+		}
+		if (raw.startsWith('#') || parseMxid(raw) === null) {
+			console.log(yellow('  That is not a personal MXID (want @user:server, not a #room). Try again.'));
+			continue;
+		}
+		mxid = raw;
+		break;
+	}
+
+	// 2. Bot homeserver (where the bot account lives — usually the MXID's server).
+	const defHome = `https://${mxid.slice(mxid.indexOf(':') + 1)}`;
+	const homeserver = ((await ask(`Bot account's Matrix homeserver [${defHome}]`)).trim() || defHome).replace(
+		/\/+$/,
+		''
+	);
+
+	// 3. Credentials — mint from username+password (recommended), or paste a token.
+	const method = await askChoice('How should the bot sign in?', [
+		"Enter the bot account's username + password (I'll mint a fresh token — recommended)",
+		'Paste an existing access token'
+	]);
+	let token = '';
+	if (method === 0) {
+		const user = (await ask('Bot account username (just the local part, no @ or :server)')).trim();
+		const password = await askPassword('Bot account password');
+		if (user === '' || password === '') {
+			console.log('  Username/password empty — aborted, no changes made.');
+			return 1;
+		}
+		console.log(dim('  Minting a fresh access token (a new device — avoids E2EE key collisions)…'));
+		const minted = await mintMatrixToken(homeserver, user, password);
+		if (minted === null) {
+			console.log(yellow('  ✗ Login failed. Check the username, password, and homeserver, then retry.'));
+			console.log(dim('    (Nothing was changed.)'));
+			return 1;
+		}
+		token = minted;
+		console.log(green('  ✓ Fresh token minted.'));
+	} else {
+		token = (await ask('Paste the bot access token')).trim();
+		if (token === '') {
+			console.log('  No token entered — aborted, no changes made.');
+			return 1;
+		}
+	}
+
+	// 4. Persist. The SECRET token goes ONLY to the 0600 matrix-bot.env; the config
+	//    gets the non-secret MXID (mode preserved) so it survives an Ansible
+	//    re-render without ever exposing the token in the group-readable config.
+	const liveOk = writeMatrixCreds(mxid, token, MATRIX_BOT_ENV_PATH);
+	const cfgOk = writeConfigMxid(mxid, OPERATOR_CONFIG_PATH);
+	if (!liveOk) {
+		console.log(yellow(`  ✗ Could not write ${MATRIX_BOT_ENV_PATH}. Are you running with sudo?`));
+		return 1;
+	}
+	if (!cfgOk) {
+		console.log(
+			yellow(`  ⚠ Wrote the live env but not the operator config — alerts work now, but the`)
+		);
+		console.log(yellow('    recipient may not persist across a re-install/harden. Re-run with sudo.'));
+	} else {
+		console.log(green('  ✓ Saved (token 0600 in the bot env; recipient in the operator config).'));
+	}
+
+	// 5. Clear the stale E2EE store so the fresh token starts clean.
+	try {
+		rmSync(MATRIX_CRYPTO_STORE, { recursive: true, force: true });
+	} catch {
+		/* best effort */
+	}
+
+	// 6. Enable + start.
+	const res = sync(true, true);
+	console.log('');
+	if (!res.ok) {
+		console.log(yellow('  ✗ Saved, but the bot did not start cleanly.'));
+		console.log('    Check:  journalctl -u morphit-matrix-bot -n 30 --no-pager');
+		return 1;
+	}
+	console.log(green('  ✓ matrix-bot enabled + started.'));
+
+	// 7. Test — DM the operator so they SEE it working (best-effort).
+	const port = (deps.readHealthcheckPort ?? readMatrixBotHealthcheckPort)(MATRIX_BOT_ENV_PATH);
+	const selfTest = deps.selfTest ?? postSelfTest;
+	try {
+		const t = await selfTest(port);
+		if (t.ok && t.sent.length > 0) {
+			console.log(green(`  ✓ Test alert sent to ${t.sent.join(', ')} — check your Matrix client.`));
+			console.log(dim('    The first message arrives as an invite/request — accept it once.'));
+		} else {
+			console.log(dim('  Bot is up; run `morphit-ops matrix test` in a moment to send a test DM.'));
+		}
+	} catch {
+		console.log(dim('  Bot is up; run `morphit-ops matrix test` in a moment to send a test DM.'));
+	}
+	return 0;
 }
 
 /** Shape returned by the bot's loopback `/self-test` route. */
@@ -147,14 +296,28 @@ export async function runMatrix(ctx: MatrixCtx, deps: MatrixDeps = {}): Promise<
 	const yellow = (s: string): string => paint('\u001b[33m', s);
 
 	const action = (ctx.positional[0] ?? 'status').toLowerCase();
-	if (action !== 'status' && action !== 'set' && action !== 'clear' && action !== 'test') {
+	if (
+		action !== 'status' &&
+		action !== 'set' &&
+		action !== 'setup' &&
+		action !== 'clear' &&
+		action !== 'test'
+	) {
 		console.log(yellow(`  Unknown action: ${action}`));
 		console.log('  Usage:');
+		console.log('    morphit-ops matrix setup                 guided setup — mints the token for you');
 		console.log('    morphit-ops matrix set @you:matrix.org   set / edit the alert username');
 		console.log('    morphit-ops matrix clear                 remove it (stops the bot)');
 		console.log('    morphit-ops matrix test                  send yourself a test alert');
 		console.log('    morphit-ops matrix                        show status');
 		return 1;
+	}
+
+	// ─── setup ───────────────────────────────────────────────────────
+	// The full hand-editing-free flow: recipient MXID + bot creds → mint token →
+	// persist to live env AND operator config → clear E2EE store → start → test.
+	if (action === 'setup') {
+		return (deps.configure ?? configureMatrixAlerts)(ctx.colorEnabled, deps);
 	}
 
 	// ─── test ────────────────────────────────────────────────────────
@@ -371,6 +534,16 @@ export async function runMatrix(ctx: MatrixCtx, deps: MatrixDeps = {}): Promise<
 	}
 
 	const running = state === 'active' || state === 'activating';
+
+	// Nothing validly configured yet → offer the guided setup (mints the token,
+	// wires it to config + live env, starts + tests) instead of leaving the operator
+	// to hand-edit an env file (the maintainer: no hand-editing).
+	if (!readiness.run && !running) {
+		const ok = await confirm('Set up Matrix alerts now (I mint the bot token for you)?', true);
+		if (ok) return (deps.configure ?? configureMatrixAlerts)(ctx.colorEnabled, deps);
+		console.log('  No change made.  Run `morphit-ops matrix setup` any time.');
+		return 0;
+	}
 
 	// Offer the beneficial action: ready+stopped → start; not-ready+running → stop.
 	if (readiness.run && !running) {

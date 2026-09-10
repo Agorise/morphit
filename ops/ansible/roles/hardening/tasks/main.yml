@@ -69,3 +69,7 @@
 - name: §34 fail2ban
   ansible.builtin.import_tasks: fail2ban.yml
   tags: [hardening_fail2ban, fail2ban, '34']
+
+- name: §37.99 Post-harden reachability self-test (never hand back an unreachable box)
+  ansible.builtin.import_tasks: verify.yml
+  tags: [hardening_verify, verify, '37']

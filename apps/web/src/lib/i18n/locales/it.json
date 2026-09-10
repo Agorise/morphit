@@ -2835,7 +2835,7 @@
 			"body": "Puoi sfogliare qui, ma serve un nome account per scrivere ai venditori o pubblicare i tuoi ordini.",
 			"cta": "Scegli un nome"
 		},
-		"fee_rejected_check": "Hai pubblicato un ordine ma non lo vedi? Controlla lo stato della commissione",
+		"fee_rejected_check": "Hai pubblicato un ordine ma non lo vedi? Controlla lo stato della commissione (fee)",
 		"card": {
 			"pay_with_label": "Posso pagare con",
 			"accept_label": "Accetto",

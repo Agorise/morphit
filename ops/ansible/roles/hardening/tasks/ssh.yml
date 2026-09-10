@@ -56,14 +56,14 @@
 - name: Detect an existing SSH public key (root or any human user) — lockout guard
   ansible.builtin.shell: |
     set -o pipefail
-    found=0
-    for f in /root/.ssh/authorized_keys /home/*/.ssh/authorized_keys; do
+    KRE='^(ssh-(rsa|ed25519|dss)|ecdsa-sha2-|sk-(ssh-ed25519|ecdsa-sha2)-)'
+    any=0; nonroot=0
+    if [ -f /root/.ssh/authorized_keys ] && grep -qE "$KRE" /root/.ssh/authorized_keys; then any=1; fi
+    for f in /home/*/.ssh/authorized_keys; do
       [ -f "$f" ] || continue
-      if grep -qE '^(ssh-(rsa|ed25519|dss)|ecdsa-sha2-|sk-(ssh-ed25519|ecdsa-sha2)-)' "$f"; then
-        found=1
-      fi
+      if grep -qE "$KRE" "$f"; then any=1; nonroot=1; fi
     done
-    printf '%s' "$found"
+    printf '%s:%s' "$any" "$nonroot"
   args:
     executable: /bin/bash
   register: morphit_ssh_key_probe
@@ -71,9 +71,10 @@
   failed_when: false
   when: morphit_sshd_config.stat.exists
 
-- name: Record whether a key-based SSH login exists
+- name: Record SSH key presence (any key, and a non-root key)
   ansible.builtin.set_fact:
-    morphit_ssh_key_present: "{{ morphit_sshd_config.stat.exists and (morphit_ssh_key_probe.stdout | default('0') | trim) == '1' }}"
+    morphit_ssh_key_present: "{{ morphit_sshd_config.stat.exists and ((morphit_ssh_key_probe.stdout | default('0:0') | trim).split(':')[0]) == '1' }}"
+    morphit_nonroot_ssh_key_present: "{{ morphit_sshd_config.stat.exists and ((morphit_ssh_key_probe.stdout | default('0:0') | trim).split(':')[1]) == '1' }}"
 
 - name: WARN — password login LEFT ON because no SSH key was found (would lock you out)
   ansible.builtin.debug:
@@ -98,14 +99,25 @@
   when: morphit_sshd_config.stat.exists
   notify: Restart sshd
 
-- name: Ensure root login is disabled in main sshd_config
+- name: Set root SSH login policy in main sshd_config (key-only if root is the only keyed user)
   ansible.builtin.lineinfile:
     path: /etc/ssh/sshd_config
     regexp: '^#?PermitRootLogin'
-    line: 'PermitRootLogin no'
+    line: "PermitRootLogin {{ 'no' if morphit_nonroot_ssh_key_present else 'prohibit-password' }}"
     validate: '/usr/sbin/sshd -t -f %s'
   when: morphit_sshd_config.stat.exists and morphit_ssh_key_present
   notify: Restart sshd
+
+- name: NOTE — root is your ONLY key login; kept key-only so you are not locked out
+  ansible.builtin.debug:
+    msg: >-
+      Your SSH key is authorized for ROOT only (no non-root user has a key). Root
+      login was kept as KEY-ONLY (PermitRootLogin prohibit-password) so you can
+      still get in — it was NOT disabled, which would have locked you out of your
+      own server. To fully disable root SSH later: create a non-root sudo user, add
+      your key to /home/<user>/.ssh/authorized_keys, confirm you can ssh in as that
+      user WITHOUT a password, then re-run `sudo morphit-ops` -> Harden.
+  when: morphit_sshd_config.stat.exists and morphit_ssh_key_present and not morphit_nonroot_ssh_key_present
 
 - name: Ensure password auth is disabled in main sshd_config
   ansible.builtin.lineinfile:

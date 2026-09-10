@@ -26,3 +26,54 @@
 - name: Enable UFW
   community.general.ufw:
     state: enabled
+
+# ── Docker firewall re-assertion (the "site dark after harden" fix) ──
+# Enabling/reloading UFW FLUSHES nftables, which wipes the DOCKER / DOCKER-FORWARD
+# chains Docker installs for container port-publishing. Without rebuilding them,
+# external traffic reaches the box but the DNAT-forward to the frontend container
+# is DROPPED — the public site goes dark while the box looks perfectly healthy to
+# itself (local curl works; the world times out). Docker rebuilds ALL its chains
+# on daemon restart, so restart it AFTER UFW settles whenever Docker is present,
+# then VERIFY the NAT rules actually came back rather than assuming (the maintainer/morphit.io).
+- name: Detect whether Docker is managing container firewall rules
+  ansible.builtin.command: systemctl is-active docker
+  register: morphit_docker_active
+  changed_when: false
+  failed_when: false
+
+- name: Re-assert Docker's firewall chains after the UFW change
+  ansible.builtin.systemd:
+    name: docker
+    state: restarted
+  when: (morphit_docker_active.stdout | default('') | trim) == 'active'
+
+- name: Wait for the Docker daemon to come back
+  ansible.builtin.command: systemctl is-active docker
+  register: morphit_docker_recheck
+  changed_when: false
+  failed_when: false
+  retries: 12
+  delay: 5
+  until: (morphit_docker_recheck.stdout | default('') | trim) == 'active'
+  when: (morphit_docker_active.stdout | default('') | trim) == 'active'
+
+- name: Verify Docker re-created its NAT/port-forwarding rules
+  ansible.builtin.shell: |
+    set -o pipefail
+    iptables -t nat -S DOCKER 2>/dev/null | grep -c 'DNAT' || echo 0
+  register: morphit_docker_dnat
+  changed_when: false
+  failed_when: false
+  when: (morphit_docker_active.stdout | default('') | trim) == 'active'
+
+- name: FAIL LOUDLY if Docker's port-forwarding did not come back (site would be dark)
+  ansible.builtin.fail:
+    msg: >-
+      Docker's NAT/port-forwarding rules are empty after the firewall change, which
+      means the public site is unreachable from the internet even though the box
+      looks healthy locally. Recover with:  sudo systemctl restart docker  then
+      confirm from OUTSIDE the box:  curl -skI https://YOUR_DOMAIN/  . This is a
+      hard stop so harden never silently leaves the site dark.
+  when:
+    - (morphit_docker_active.stdout | default('') | trim) == 'active'
+    - (morphit_docker_dnat.stdout | default('0') | trim | int) == 0

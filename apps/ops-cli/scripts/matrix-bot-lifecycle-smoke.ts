@@ -250,7 +250,10 @@ async function main(): Promise<void> {
 					syncs.push({ run, restart });
 					return { action: run ? 'enable-restart' : 'disable-stop', ok: true };
 				},
-				confirm: async () => opts.confirmYes ?? true
+				confirm: async () => opts.confirmYes ?? true,
+				// The guided setup flow is exercised by its own smoke; here we stub it
+				// so status→setup routing (not-ready + not-running) resolves cleanly.
+				configure: async () => 0
 			}
 		};
 	}

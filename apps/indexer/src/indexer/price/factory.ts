@@ -184,11 +184,10 @@ export const CP130_ASSET_DEFAULTS: Record<string, AssetPriceSourceOptions> = {
 		// CEXes (Kraken/Binance/Coinbase/OKX/Bybit) don't list BLURT —
 		// Blurt's own api.blurt.blog/price_info feed is the PRIMARY source
 		// of truth (blurtPriceFeed below); it falls back to the aggregators
-		// (Coingecko + CoinPaprika + CryptoCompare, plus CoinCap/Messari
+		// (Coingecko + CoinPaprika, plus CoinCap/Messari
 		// when keyed) averaged, then morphit_native.  These ids are
 		// best-effort and must be verified against each live API on deploy;
 		// a wrong id returns null and is harmlessly excluded.
-		cryptocompareSymbol: 'BLURT',
 		coincapId: 'blurt',
 		messariSlug: 'blurt',
 		blurtPriceFeed: true,
@@ -201,7 +200,6 @@ export const CP130_ASSET_DEFAULTS: Record<string, AssetPriceSourceOptions> = {
 		coingeckoCoinId: 'bitcoin',
 		coinpaprikaId: 'btc-bitcoin',
 		krakenPair: 'XBTUSD',
-		cryptocompareSymbol: 'BTC',
 		binanceSymbol: 'BTCUSDT',
 		coinbaseProduct: 'BTC-USD',
 		okxInstId: 'BTC-USDT',
@@ -222,7 +220,6 @@ export const CP130_ASSET_DEFAULTS: Record<string, AssetPriceSourceOptions> = {
 		// Kraken is the CEX that still covers it, plus the aggregators.
 		// (coinloreId omitted — verify CoinLore's XMR numeric id on
 		// deploy before wiring it; until then CoinLore skips XMR.)
-		cryptocompareSymbol: 'XMR',
 		coincapId: 'monero',
 		messariSlug: 'monero',
 		staticFloor: 200,

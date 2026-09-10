@@ -1,0 +1,85 @@
+# §37.99 — Post-harden reachability self-test.
+#
+# Harden mutates SSH + the firewall, and a mistake in either strands the operator
+# (SSH lockout) or the users (public site dark). Before declaring success we
+# actively RE-CHECK the reachability signals and FAIL LOUDLY on a regression —
+# never hand back a box that harden just cut off. Both of tonight's failure modes
+# (the maintainer/morphit.io: root-only SSH lockout; Docker forward-chain wiped by UFW) would
+# have been caught here. Observe running state, don't assume (ARCHITECTURAL MANDATE).
+---
+- name: Self-test — a key-based SSH login path still exists
+  ansible.builtin.shell: |
+    set -o pipefail
+    prl=$(sshd -T 2>/dev/null | awk '/^permitrootlogin/{print $2}')
+    pka=$(sshd -T 2>/dev/null | awk '/^pubkeyauthentication/{print $2}')
+    nonroot=0
+    for f in /home/*/.ssh/authorized_keys; do [ -s "$f" ] && nonroot=1; done
+    rootkey=0
+    [ -s /root/.ssh/authorized_keys ] && rootkey=1
+    # A login path exists if pubkey auth is on AND either root can still log in by
+    # key (prl != no) with a root key present, or some non-root user has a key.
+    if [ "$pka" = "yes" ] && { { [ "$prl" != "no" ] && [ "$rootkey" = "1" ]; } || [ "$nonroot" = "1" ]; }; then
+      echo OK
+    else
+      echo LOCKOUT
+    fi
+  register: morphit_ssh_selftest
+  changed_when: false
+  failed_when: false
+
+- name: FAIL if harden left no key-based SSH login path (lockout guard, defence in depth)
+  ansible.builtin.fail:
+    msg: >-
+      Post-harden self-test: no key-based SSH login path remains (root login
+      disabled with no root key, and no non-root user has an authorized key).
+      Refusing to finish — add a non-root sudo user with your key, confirm you can
+      ssh in as that user, then re-run harden.
+  when: (morphit_ssh_selftest.stdout | default('') | trim) == 'LOCKOUT'
+
+- name: Self-test — UFW allows the public web ports (80/443 inbound)
+  ansible.builtin.shell: |
+    set -o pipefail
+    s=$(ufw status 2>/dev/null || true)
+    echo "$s" | grep -qE '(^|[[:space:]])80(/tcp)?[[:space:]]' && \
+    echo "$s" | grep -qE '(^|[[:space:]])443(/tcp)?[[:space:]]' && echo OK || echo MISSING
+  register: morphit_web_ports
+  changed_when: false
+  failed_when: false
+  # Clearnet-only check: a hidden-only (Tor/I2P) box serves via a hidden service to
+  # a LOCAL frontend port and deliberately has no public 80/443, so skip it there.
+  when: not (morphit_tor_only | default(false))
+
+- name: WARN if the public web ports are not open
+  ansible.builtin.debug:
+    msg: >-
+      Post-harden self-test: UFW does not appear to allow BOTH 80 and 443 inbound —
+      the public site will be unreachable. Fix with:
+      sudo ufw allow 80/tcp && sudo ufw allow 443/tcp && sudo systemctl restart docker
+  when:
+    - not (morphit_tor_only | default(false))
+    - (morphit_web_ports.stdout | default('') | trim) != 'OK'
+
+- name: Self-test — the box serves HTTPS to itself (proxy/frontend alive)
+  ansible.builtin.uri:
+    url: https://127.0.0.1/
+    method: HEAD
+    validate_certs: false
+    status_code: [200, 301, 302, 403]
+    timeout: 5
+  register: morphit_https_selftest
+  changed_when: false
+  failed_when: false
+  # Clearnet-only: a hidden-only box has no clearnet TLS listener (it fans Tor out
+  # to a local HTTP frontend), so this would always "fail" there — skip it.
+  when: not (morphit_tor_only | default(false))
+
+- name: Post-harden reachability self-test summary
+  ansible.builtin.debug:
+    msg: >-
+      Post-harden self-test — SSH key-login: {{ (morphit_ssh_selftest.stdout | default('?') | trim) }};
+      {% if morphit_tor_only | default(false) %}mode: hidden-only (clearnet web checks skipped — served over Tor/I2P);
+      {% else %}web ports 80/443: {{ (morphit_web_ports.stdout | default('?') | trim) }};
+      local HTTPS: {{ morphit_https_selftest.status | default('no-response') }};
+      Docker port-forwarding was verified during the UFW step;
+      {% endif %}
+      If access is broken despite this, run: sudo systemctl restart docker

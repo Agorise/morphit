@@ -204,9 +204,32 @@ export async function runInstall(ctx: InstallCtx): Promise<number> {
 		console.log('  Skipped. Run `npx morphit-ops harden` any time.');
 	}
 
-	// ─── 5. Offer the PATH symlink (kill the npx friction) ──────
+	// ─── 5. Warrant canary (transparency signal) ───────────────
 	console.log('');
-	console.log('Step 5 — convenience.');
+	console.log('Step 5 — warrant canary (a transparency signal for your users).');
+	console.log('  A signed /canary.txt you refresh on a schedule; if it ever goes stale,');
+	console.log('  users infer something changed (a gag order, a seizure). It is SIGNED with');
+	console.log('  your key — ideally on a machine OFF this server — so the guided setup runs');
+	console.log('  there, not here. This is a genuinely good thing to set up early.');
+	const wantCanary = await askYesNo('Set up a warrant canary now?', true);
+	if (wantCanary) {
+		const canarySetup = join(safeCwd() ?? defaultRepoRoot(), 'scripts', 'canary', 'setup.sh');
+		console.log('');
+		console.log('  Run the guided setup on your SIGNING machine (home box / laptop — the');
+		console.log('  one holding your signing key, not necessarily this server):');
+		console.log('');
+		console.log(`    bash ${canarySetup}`);
+		console.log('');
+		console.log('  It walks through key choice, the first signed canary, and the weekly');
+		console.log('  refresh timer. `morphit-ops health` shows the canary status afterwards.');
+	} else {
+		console.log('  Skipped. Set one up any time — `morphit-ops harden` → warrant canary, or');
+		console.log('  bash scripts/canary/setup.sh on your signing machine.');
+	}
+
+	// ─── 6. Offer the PATH symlink (kill the npx friction) ──────
+	console.log('');
+	console.log('Step 6 — convenience.');
 	await offerPathSymlink();
 
 	console.log('');

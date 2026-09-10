@@ -301,6 +301,95 @@ results.push({
 	});
 }
 
+// ─── Scenario 9b: hardening never locks out a root-only-keyed box ──
+// Disabling root login when the ONLY authorized key belongs to root locks the
+// operator out (the maintainer/morphit.io). Hardening must set `PermitRootLogin no` ONLY when
+// a NON-root keyed user exists, and `prohibit-password` (key-only root, still
+// reachable) otherwise — both in ssh.yml and the drop-in template.
+{
+	const sshSrc = readFileSync(join(ROLES_DIR, 'hardening', 'tasks', 'ssh.yml'), 'utf-8');
+	const tplSrc = readFileSync(
+		join(ROLES_DIR, 'hardening', 'templates', '99-morphit-hardening.conf.j2'),
+		'utf-8'
+	);
+	const probesNonroot =
+		/morphit_nonroot_ssh_key_present/.test(sshSrc) && /morphit_nonroot_ssh_key_present/.test(tplSrc);
+	const taskGated = /PermitRootLogin \{\{ 'no' if morphit_nonroot_ssh_key_present/.test(sshSrc);
+	const tplGated =
+		/morphit_nonroot_ssh_key_present[\s\S]{0,60}PermitRootLogin no/.test(tplSrc) &&
+		/PermitRootLogin prohibit-password/.test(tplSrc);
+	results.push({
+		name: 'hardening never locks out a root-only-keyed box (PermitRootLogin no gated on a non-root key)',
+		ok: probesNonroot && taskGated && tplGated,
+		detail: !probesNonroot
+			? 'missing morphit_nonroot_ssh_key_present probe/fact'
+			: !taskGated
+				? "ssh.yml PermitRootLogin not gated on the non-root fact (expected {{ 'no' if morphit_nonroot_ssh_key_present ...)"
+				: !tplGated
+					? 'template must gate PermitRootLogin no on the non-root key AND fall back to prohibit-password'
+					: undefined
+	});
+}
+
+// ─── Scenario 9c: harden re-asserts Docker's firewall chains after UFW ──
+// Enabling UFW flushes nftables and wipes Docker's DOCKER/DOCKER-FORWARD chains,
+// taking the public site dark while the box looks healthy locally (the maintainer/morphit.io).
+// ufw.yml must restart Docker after the UFW change AND verify the NAT rules came
+// back (fail loud if not), never assume.
+{
+	const ufwSrc = readFileSync(join(ROLES_DIR, 'hardening', 'tasks', 'ufw.yml'), 'utf-8');
+	const restartsDocker = /name:\s*docker\s*\n\s*state:\s*restarted/.test(ufwSrc);
+	const detectsDocker = /systemctl is-active docker/.test(ufwSrc);
+	const verifiesNat = /iptables -t nat -S DOCKER/.test(ufwSrc) && /ansible\.builtin\.fail/.test(ufwSrc);
+	const afterEnable =
+		ufwSrc.indexOf('state: enabled') < ufwSrc.indexOf('state: restarted') &&
+		ufwSrc.indexOf('state: enabled') !== -1;
+	results.push({
+		name: 'harden re-asserts + verifies Docker firewall chains after enabling UFW',
+		ok: restartsDocker && detectsDocker && verifiesNat && afterEnable,
+		detail: !detectsDocker
+			? 'ufw.yml does not detect Docker (systemctl is-active docker)'
+			: !restartsDocker
+				? 'ufw.yml does not restart Docker after the UFW change'
+				: !afterEnable
+					? 'Docker restart must come AFTER "Enable UFW"'
+					: !verifiesNat
+						? 'ufw.yml does not verify Docker NAT rules returned (iptables -t nat -S DOCKER + fail)'
+						: undefined
+	});
+}
+
+// ─── Scenario 9d: harden runs a post-harden reachability self-test ──
+// The final step re-checks that harden didn't strand anyone: a key-based SSH
+// login path still exists (fail loud on lockout) and the public web ports are
+// open, so harden never hands back a box it just cut off (the maintainer).
+{
+	const mainSrc = readFileSync(join(ROLES_DIR, 'hardening', 'tasks', 'main.yml'), 'utf-8');
+	const verifyExists = existsSync(join(ROLES_DIR, 'hardening', 'tasks', 'verify.yml'));
+	const verifySrc = verifyExists
+		? readFileSync(join(ROLES_DIR, 'hardening', 'tasks', 'verify.yml'), 'utf-8')
+		: '';
+	const imported = /import_tasks:\s*verify\.yml/.test(mainSrc);
+	const importedLast = mainSrc.lastIndexOf('verify.yml') > mainSrc.lastIndexOf('ufw.yml');
+	const sshLockoutFail = /LOCKOUT/.test(verifySrc) && /ansible\.builtin\.fail/.test(verifySrc);
+	const webPortCheck = /ufw status/.test(verifySrc) && /443/.test(verifySrc);
+	results.push({
+		name: 'harden runs a post-harden self-test (SSH lockout fail + web-port check, after UFW)',
+		ok: verifyExists && imported && importedLast && sshLockoutFail && webPortCheck,
+		detail: !verifyExists
+			? 'hardening/tasks/verify.yml missing'
+			: !imported
+				? 'verify.yml not imported in main.yml'
+				: !importedLast
+					? 'verify.yml must be imported AFTER ufw.yml (run last)'
+					: !sshLockoutFail
+						? 'verify.yml does not fail loud on an SSH lockout'
+						: !webPortCheck
+							? 'verify.yml does not check the public web ports'
+							: undefined
+	});
+}
+
 // ─── Scenario 10: every drop-in write into a package .d/ dir ensures the dir ──
 // TWO separate releases were lost to this exact class — a hardening drop-in
 // written into a package-owned .d/ directory the package did NOT create

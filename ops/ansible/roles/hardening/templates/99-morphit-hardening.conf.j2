@@ -5,7 +5,14 @@
 # Protocol + auth posture
 Protocol 2
 {% if morphit_ssh_key_present | default(false) %}
+{% if morphit_nonroot_ssh_key_present | default(false) %}
 PermitRootLogin no
+{% else %}
+# Root is your ONLY key-based login on this box — keep it KEY-ONLY (not disabled)
+# so you are never locked out. Add a non-root sudo user with your key, verify you
+# can ssh in as that user, then re-run Harden to disable root entirely.
+PermitRootLogin prohibit-password
+{% endif %}
 PasswordAuthentication no
 ChallengeResponseAuthentication no
 KbdInteractiveAuthentication no

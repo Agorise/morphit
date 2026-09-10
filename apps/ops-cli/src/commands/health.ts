@@ -42,6 +42,7 @@ import { classifySeeding, resolveHealthDiskPath, type SeedingProblem } from '@mo
 
 import { defaultRepoRoot } from '../lib/repoRoot.ts';
 import { parseCanaryTimestamp } from '../canaryTime.ts';
+import { startDotsSpinner } from '../init/spinner.ts';
 
 export interface HealthCtx {
 	readonly flags: Readonly<Record<string, string>>;
@@ -1595,6 +1596,11 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 	const c = color(ctx.colorEnabled);
 	const json = ctx.flags.json === 'true';
 	const now = new Date();
+	// The report gathers a lot of live values (indexer + relay probes, per-RPC
+	// reachability, systemctl, TLS, CPU/mem/disk), which takes a beat. Without
+	// feedback the prompt looks hung, so show a spinner immediately — but never in
+	// --json mode (it would corrupt machine-readable stdout) (the maintainer).
+	const stopSpinner = json ? null : startDotsSpinner('Generating your health report…');
 	const gateways = bridgeGatewayHosts(networkInterfaces());
 
 	// ── Indexer: resolve primary, then auto-probe bridge gateways ──
@@ -1639,6 +1645,9 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 		indexer.kind === 'synced' || indexer.kind === 'behind' || indexer.kind === 'unknown'
 			? await fetchRpcEndpoints(indexerProbe.url)
 			: null;
+
+	// Gathering done — clear the spinner line before any report/JSON output.
+	stopSpinner?.();
 
 	if (json) {
 		console.log(
@@ -1802,10 +1811,20 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 		// table), so it stays a rolled-up summary.
 		if (s.priceFeeds !== null) {
 			const denom = s.priceFeed?.denomination ?? 'USD';
+			// A source that is up for SOME asset but "never answered" for another is
+			// NOT down — that exchange just doesn't list this asset (e.g. no BLURT
+			// market on coingecko/coinpaprika). Label those "n/a — no market"
+			// (neutral), not red "down", so an operator isn't alarmed (the maintainer).
+			const upSomewhere = new Set<string>();
+			for (const f of s.priceFeeds.feeds) {
+				if (!f.isCrypto) continue;
+				for (const src of f.sources) if (src.ok) upSomewhere.add(src.name);
+			}
 			for (const f of s.priceFeeds.feeds) {
 				if (f.isCrypto) {
 					for (const src of f.sources) {
-						const status = src.ok ? c.green('on  ') : c.red('down');
+						const noMarket = !src.ok && src.lastOkAgeS === null && upSomewhere.has(src.name);
+						const status = src.ok ? c.green('on  ') : noMarket ? c.dim('n/a ') : c.red('down');
 						const px =
 							src.ok && src.price !== null
 								? `1 ${f.label} \u2248 ${src.price} ${denom}`
@@ -1814,7 +1833,9 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 							src.lastOkAgeS === null
 								? src.ok
 									? ''
-									: c.dim(' (never answered)')
+									: noMarket
+										? c.dim(` (no ${f.label} market on this source)`)
+										: c.dim(' (never answered)')
 								: c.dim(` (${fmtUptime(src.lastOkAgeS)} ago)`);
 						console.log(
 							`      Price feed:    ${status} \u2014 ${px} (${safe(src.name)})${age}`
@@ -1932,7 +1953,9 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 	console.log(`  ${c.bold('System')}    ${c.dim('(this host)')}`);
 	console.log(
 		`      CPU:           ${
-			sys.cpuPct === null ? c.dim('unavailable') : pctColored(c, sys.cpuPct, `${sys.cpuPct}%`)
+			sys.cpuPct === null
+				? c.dim('unavailable')
+				: pctColored(c, sys.cpuPct, `${sys.cpuPct}% used, ${100 - sys.cpuPct}% free`)
 		}`
 	);
 	console.log(
@@ -1942,7 +1965,9 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 				: pctColored(
 						c,
 						sys.memPct,
-						`${sys.memUsedGB} / ${sys.memTotalGB} GB (${sys.memPct ?? '?'}%)`
+						`${sys.memUsedGB} / ${sys.memTotalGB} GB used (${sys.memPct ?? '?'}%), ${(
+							sys.memTotalGB - sys.memUsedGB
+						).toFixed(1)} GB free`
 					)
 		}`
 	);
@@ -2072,18 +2097,33 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 						: c.yellow('⚠');
 	console.log(`  ${c.bold('IPFS/IPNS release seeding')}  ${seedTag} ${ipfsSeeding.state}`);
 	console.log(`      ${c.dim(ipfsSeeding.detail)}`);
-	// v1.16.11 — a seeder is only useful to hidden-only nodes if they can DISCOVER
-	// it: peer discovery reads each instance's on-chain alt_addresses (its .onion /
-	// .b32.i2p), and the release rides that same hidden address at /ipfs. So remind
-	// the operator to publish those addresses. Only shown when actually seeding.
-	if (ipfsSeeding.state === 'ok') {
+	// v1.16.14 — show this instance's OWN reachable addresses (clearnet + every
+	// hidden service it advertises), so the operator sees concretely that the
+	// release + site are served over clearnet, Tor and I2P — not just a generic
+	// "if you run Tor/I2P" nudge (the maintainer). Read from the loaded operator config.
+	const addrRows: Array<[string, string | undefined]> = [
+		['Clearnet', process.env.MORPHIT_INSTANCE_ORIGIN],
+		['Tor', process.env.MORPHIT_INSTANCE_TOR_ADDRESS],
+		['I2P', process.env.MORPHIT_INSTANCE_I2P_B32_ADDRESS],
+		['I2P name', process.env.MORPHIT_INSTANCE_I2P_NAME_ADDRESS],
+		['Lokinet', process.env.MORPHIT_INSTANCE_LOKINET_ADDRESS],
+		['ENS', process.env.MORPHIT_INSTANCE_ENS_NAME]
+	];
+	const addrsPresent = addrRows.filter(([, v]) => (v ?? '').trim() !== '');
+	const hasHidden = addrsPresent.some(([label]) => label === 'Tor' || label === 'I2P');
+	if (addrsPresent.length > 0) {
+		console.log(`      ${c.dim('Reachable at (release + site served on all of these):')}`);
+		for (const [label, v] of addrsPresent) {
+			console.log(`        ${c.dim(`${label.padEnd(9)}`)}${v}`);
+		}
+	}
+	if (ipfsSeeding.state === 'ok' && !hasHidden) {
 		console.log(
-			`      ${c.dim('Hidden-only nodes find this seeder via your on-chain address. If you run Tor/I2P')}`
+			`      ${c.dim('No hidden address yet — run  morphit-ops → Set up a Tor/I2P address,  then')}`
 		);
 		console.log(
-			`      ${c.dim('(morphit-ops → Set up a Tor/I2P address), publish it with `morphit-ops register`')}`
+			`      ${c.dim('`morphit-ops register`, so hidden-only nodes can fetch the release over Tor/I2P.')}`
 		);
-		console.log(`      ${c.dim('so they can fetch the release from you over the hidden network.')}`);
 	}
 
 	console.log('');

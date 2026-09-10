@@ -17,6 +17,35 @@
 # References: docs/OPERATIONS.md §16 "Canonical Matrix routing".
 
 ---
+# morphit-ops writes the recipient MXID into the operator config (morphit.config.env)
+# and the secret access token into /etc/morphit/matrix-bot.env (0600). On a re-render
+# we must PRESERVE both so `morphit-ops matrix` stays the source of truth with no
+# hand-editing. The token is read back from the 0600 live env (NOT the 0640
+# group-readable config — the token must never be group-readable), the MXID from the
+# config. Shell grep, robust across the Ansible floor (2.10+).
+- name: Read morphit-ops-managed Matrix creds (MXID from config; token preserved from the 0600 live env)
+  ansible.builtin.shell: |
+    set -o pipefail
+    cfg="{{ morphit_config_env_path | default('/opt/morphit/morphit.config.env') }}"
+    live="/etc/morphit/matrix-bot.env"
+    mxid=$(grep -E '^MORPHIT_MATRIX_BOT_ALERT_MXID=' "$cfg" 2>/dev/null | tail -1 | cut -d= -f2-)
+    tok=$(grep -E '^MORPHIT_MATRIX_BOT_ACCESS_TOKEN=' "$live" 2>/dev/null | tail -1 | cut -d= -f2-)
+    printf 'TOKEN=%s\nMXID=%s\n' "$tok" "$mxid"
+  args:
+    executable: /bin/bash
+  register: morphit_cfg_matrix
+  changed_when: false
+  failed_when: false
+
+- name: Prefer morphit-ops-managed Matrix creds (preserve on re-render) over the vault
+  ansible.builtin.set_fact:
+    matrix_bot_access_token: "{{ _tok if (_tok | length) > 0 else (matrix_bot_access_token | default('')) }}"
+    matrix_bot_alert_mxid: "{{ _mxid if (_mxid | length) > 0 else (matrix_bot_alert_mxid | default('')) }}"
+  vars:
+    _lines: "{{ morphit_cfg_matrix.stdout_lines | default([]) }}"
+    _tok: "{{ (_lines | select('match', '^TOKEN=') | map('regex_replace', '^TOKEN=', '') | first | default('')) | trim }}"
+    _mxid: "{{ (_lines | select('match', '^MXID=') | map('regex_replace', '^MXID=', '') | first | default('')) | trim }}"
+
 # A token means the operator wants the bot RUNNING now; without one we still
 # install the unit + its deps so it's ready the moment they add a token via
 # `morphit-ops matrix` (health then reads "token needed", not "not installed").

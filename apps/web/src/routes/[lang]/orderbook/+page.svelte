@@ -49,7 +49,7 @@
 	import FiatCurrencySelect from '$components/FiatCurrencySelect.svelte';
 	import PaymentFilterSelect from '$components/PaymentFilterSelect.svelte';
 	import LanguageFilterSelect from '$components/LanguageFilterSelect.svelte';
-	import { resolvePreferredLangs } from '$lib/stores/preferredLangs';
+	import { resolveOrderbookLangFilter } from '$lib/stores/preferredLangs';
 
 	import { getOrderbook, getHealth } from '$lib/indexer/client';
 	import { displayNamesForMethods } from '$lib/payments/display';
@@ -946,6 +946,8 @@
 		void paymentMethods;
 		void minTrades;
 		void sortMode;
+		void langFilter.length;
+		void langFilter.join('\u0001');
 		scheduleRefetch();
 	});
 
@@ -1034,10 +1036,11 @@
 	}
 
 	onMount(() => {
-		// Seed the language filter default once: preferred set (local mirror) →
-		// current UI locale. Empty selection = all languages.
+		// Seed the language filter once: an EXPLICIT saved/chain preference, else
+		// EMPTY (all languages). It must NOT default to the UI locale — that hid
+		// non-locale orders and re-appeared on every page refresh (the maintainer/timeapp).
 		if (!langFilterSeeded) {
-			langFilter = resolvePreferredLangs(null, currentLang);
+			langFilter = resolveOrderbookLangFilter(null);
 			langFilterSeeded = true;
 		}
 		fetchFirstPage();

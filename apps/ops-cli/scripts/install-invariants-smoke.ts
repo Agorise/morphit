@@ -268,6 +268,20 @@ if (docFails === 0) {
 	);
 }
 
+/* -------- invariant: install wizard explicitly offers a warrant canary -------- */
+{
+	const installSrc = readText('apps/ops-cli/src/commands/install.ts');
+	const hasCanaryStep =
+		/warrant canary/i.test(installSrc) &&
+		/askYesNo\('Set up a warrant canary now\?'/.test(installSrc);
+	if (hasCanaryStep) pass('install wizard explicitly offers a warrant-canary step');
+	else
+		fail(
+			'install wizard explicitly offers a warrant-canary step',
+			'expected an askYesNo("Set up a warrant canary now?") step in install.ts'
+		);
+}
+
 /* ---------------- report ---------------- */
 
 let failed = 0;
