@@ -45,7 +45,7 @@ check('role preserves the token from the 0600 live env + MXID from config (survi
 
 // Layer 4 — wired into all three entry points.
 check('wired into `matrix setup` + status→setup offer', /action === 'setup'/.test(matrix) && /deps\.configure \?\? configureMatrixAlerts/.test(matrix));
-check('wired into the install wizard (mint option)', /mintMatrixToken/.test(wizard) && /I mint the token for you/.test(wizard));
+check('install wizard collects a token + defers minting to `morphit-ops matrix setup`', /Alert bot access token/.test(wizard) && /morphit-ops matrix setup/.test(wizard));
 check('wired into harden (guided Matrix setup option)', /configureMatrixAlerts\(ctx\.colorEnabled\)/.test(harden));
 
 
