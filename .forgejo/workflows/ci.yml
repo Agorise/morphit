@@ -68,7 +68,6 @@ jobs:
         uses: actions/setup-node@1e60f620b9541d16bece96c5465dc8ee9832be0b # v4.0.3
         with:
           node-version: 22
-          cache: npm
 
       - name: Install workspace dependencies
         run: npm ci --ignore-scripts --no-audit --no-fund
@@ -92,7 +91,6 @@ jobs:
         uses: actions/setup-node@1e60f620b9541d16bece96c5465dc8ee9832be0b # v4.0.3
         with:
           node-version: 22
-          cache: npm
 
       - name: Install workspace dependencies
         # --ignore-scripts skips native-build steps (better-sqlite3
@@ -116,7 +114,6 @@ jobs:
         uses: actions/setup-node@1e60f620b9541d16bece96c5465dc8ee9832be0b # v4.0.3
         with:
           node-version: 22
-          cache: npm
 
       - name: Install workspace dependencies
         # --ignore-scripts is safe here — svelte-check doesn't
@@ -151,30 +148,25 @@ jobs:
     # against a warm DB; 15 minutes is generous headroom for the
     # postgres service to become healthy + npm ci on a cold cache.
     timeout-minutes: 15
-    # ── Why an explicit `docker run` instead of a `services:` block (cp426) ──
-    # This project's Forgejo runner uses act_runner's HOST executor: jobs run
-    # directly on the host, not in an ephemeral container (see `hostexecutor`
-    # in the run logs). On a host executor a GitHub-style `services:` block does
-    # NOT hand the job an isolated Postgres on localhost:5432 with our creds —
-    # the first attempt (task 895) reached *a* Postgres on localhost:5432 that
-    # had no `morphit_test` role and failed with 28P01 (either the host's own
-    # Postgres, or a service container that never received our env). So we start
-    # our OWN throwaway container explicitly, pass credentials directly as -e,
-    # and bind it to a NON-standard loopback port (55432) so it can never
-    # collide with a Postgres already running on the host's 5432.
-    #
-    # Requires the runner's job steps to be able to invoke `docker` (this host
-    # already runs its Docker stack, so the CLI is present). If a future run
-    # fails at the "Start throwaway Postgres" step with a docker permission /
-    # not-found error, add the runner's user to the `docker` group on the host
-    # (a one-time host change, not a repo change) — the tests themselves are
-    # unaffected.
-    #
-    # The harness (apps/indexer/test/integration/harness.ts) CREATEs a random
-    # schema per suite, runs the PRODUCTION migration path (runMigrations), and
-    # DROP SCHEMA … CASCADE on teardown — so an EMPTY database is all we need.
-    # Tests SKIP when TEST_DATABASE_URL is unset (INTEGRATION_ENABLED); setting
-    # it in the run step is what turns them on.
+    # Postgres runs as a SERVICE SIDECAR — container-executor-native. The runner
+    # starts it on the job's network; the job reaches it at host `postgres:5432`.
+    # (Previously this used an in-job `docker run`, which only worked on the old
+    # HOST-executor runner; a container-executor job has no in-job docker CLI.)
+    # The harness CREATEs a random schema per suite, runs the production migration
+    # path, and DROPs it on teardown — an empty DB is all we need. Tests SKIP unless
+    # TEST_DATABASE_URL is set (that env is what turns them on).
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: morphit_test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: morphit_test
+        options: >-
+          --health-cmd "pg_isready -U morphit_test -d morphit_test"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 20
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
@@ -182,38 +174,6 @@ jobs:
         uses: actions/setup-node@1e60f620b9541d16bece96c5465dc8ee9832be0b # v4.0.3
         with:
           node-version: 22
-          cache: npm
-
-      - name: Start throwaway Postgres 16 (own container, loopback port 55432)
-        run: |
-          # Remove any leftover from a previous run on this persistent host.
-          docker rm -f morphit-ci-pg >/dev/null 2>&1 || true
-          docker run -d --name morphit-ci-pg \
-            -e POSTGRES_USER=morphit_test \
-            -e POSTGRES_PASSWORD=test \
-            -e POSTGRES_DB=morphit_test \
-            -p 127.0.0.1:55432:5432 \
-            postgres:16
-          # Wait until it accepts connections (pg_isready INSIDE the container,
-          # so the host needs no psql client). Fail loudly if it never comes up
-          # rather than letting the tests fail later with a vague error.
-          #
-          # `-h 127.0.0.1` forces a TCP check. During its first boot the
-          # postgres image runs a TEMPORARY socket-only server (listen_addresses='')
-          # to execute initdb, then stops it and starts the real server. A
-          # socket pg_isready (no -h) gives a false "ready" against that temp
-          # server, and the very next check lands in the stop/restart window
-          # with "no response" (task 1505). TCP is only ever answered by the
-          # real server, so it can't false-positive on the initdb phase.
-          for i in $(seq 1 30); do
-            if docker exec morphit-ci-pg pg_isready -h 127.0.0.1 -p 5432 -U morphit_test -d morphit_test >/dev/null 2>&1; then
-              echo "postgres ready after ${i}s"
-              break
-            fi
-            echo "waiting for postgres (${i}/30)..."
-            sleep 1
-          done
-          docker exec morphit-ci-pg pg_isready -h 127.0.0.1 -p 5432 -U morphit_test -d morphit_test
 
       - name: Install workspace dependencies
         # --ignore-scripts is SAFE here: the indexer integration tests use
@@ -226,13 +186,9 @@ jobs:
       - name: Run indexer integration tests
         working-directory: apps/indexer
         env:
-          # 127.0.0.1:55432 → our own container above (NOT the host's 5432).
-          TEST_DATABASE_URL: postgres://morphit_test:test@127.0.0.1:55432/morphit_test
+          # The `postgres` service sidecar (declared above), reachable by name.
+          TEST_DATABASE_URL: postgres://morphit_test:test@postgres:5432/morphit_test
         run: npm run test:integration
-
-      - name: Tear down Postgres
-        if: always()
-        run: docker rm -f morphit-ci-pg >/dev/null 2>&1 || true
 
   ansible-lint:
     name: ansible-lint (playbook quality gate)
@@ -253,13 +209,13 @@ jobs:
           # `Dir::Etc::sourceparts=-` makes apt ignore sources.list.d;
           # the retry loop rides out a brief base-mirror hiccup.
           for i in 1 2 3; do
-            sudo apt-get update -qq \
+            apt-get update -qq \
               -o Dir::Etc::sourceparts=- \
               -o APT::Get::List-Cleanup=0 && break
             echo "apt-get update attempt $i failed; retrying in 5s..."
             sleep 5
           done
-          sudo apt-get install -y --no-install-recommends \
+          apt-get install -y --no-install-recommends \
             python3 python3-pip python3-venv
           # Use --break-system-packages because Ubuntu 24.04 marks
           # the system Python as externally managed.  This is a
@@ -295,7 +251,6 @@ jobs:
         uses: actions/setup-node@1e60f620b9541d16bece96c5465dc8ee9832be0b # v4.0.3
         with:
           node-version: 22
-          cache: npm
 
       - name: Install build tools (for better-sqlite3 native build)
         run: |
@@ -303,13 +258,13 @@ jobs:
           # base Ubuntu repos so a flaky third-party repo in the runner
           # image (e.g. repo.zabbix.com) can't fail this install.
           for i in 1 2 3; do
-            sudo apt-get update -qq \
+            apt-get update -qq \
               -o Dir::Etc::sourceparts=- \
               -o APT::Get::List-Cleanup=0 && break
             echo "apt-get update attempt $i failed; retrying in 5s..."
             sleep 5
           done
-          sudo apt-get install -y --no-install-recommends \
+          apt-get install -y --no-install-recommends \
             build-essential python3
 
       - name: Install workspace dependencies (with native build)
@@ -320,7 +275,7 @@ jobs:
 
       - name: Install ansible-lint (for ansible-lint-smoke)
         run: |
-          sudo apt-get install -y --no-install-recommends \
+          apt-get install -y --no-install-recommends \
             python3-pip
           pip3 install --break-system-packages --quiet \
             ansible ansible-lint
