@@ -94,7 +94,13 @@ function mockDeps(opts: { ensureOk?: boolean; exitCode?: number; postInstallExit
 		// installer interprets that (a failed list-hosts is no longer misread as
 		// "0 hosts"). Default to a clean "1 host" so the happy path proceeds; a
 		// dedicated check below drives hostCount to 0 to prove the guard aborts.
-		probeHosts: () => ({ exitCode: 0, output: `hosts (${opts.hostCount ?? 1}):\n      localhost` })
+		probeHosts: () => ({ exitCode: 0, output: `hosts (${opts.hostCount ?? 1}):\n      localhost` }),
+		// Inject the OS pre-check reader so the smoke is deterministic regardless of
+		// the host OS. Without this, assembleInstall reads the REAL /etc/os-release —
+		// which is Ubuntu "noble" on the old host executor (passed) but Debian on the
+		// node:20-bookworm container executor, so the noble-base gate early-returned
+		// and failed 20/22. A noble os-release keeps the happy path deterministic.
+		readOsRelease: () => 'ID=ubuntu\nVERSION_CODENAME=noble\nUBUNTU_CODENAME=noble\n'
 	};
 }
 function newTrace(): Trace {
