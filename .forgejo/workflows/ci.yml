@@ -236,6 +236,12 @@ jobs:
     # 45 minutes gives 2.5× headroom over the current observed
     # runtime.
     timeout-minutes: 45
+    # The container executor gives V8 a ~2 GB default old-space heap; the memory
+    # stress smoke (orderbook-provisional-removal-memory) allocates near that and
+    # OOM'd on the CI container (it has more headroom locally). Raise the heap for
+    # every smoke subprocess in this job so a legitimate memory test doesn't crash.
+    env:
+      NODE_OPTIONS: --max-old-space-size=3072
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 

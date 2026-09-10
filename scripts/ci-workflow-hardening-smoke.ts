@@ -246,40 +246,39 @@ if (noRunsOn.length === 0) {
 
 /* ---------------- report ---------------- */
 
-/* ---------------- invariant 4 (cp190): apt-get update is repo-scoped ----------------
+/* ---------------- invariant 4: apt-get update is container-executor-clean ----------------
  *
- * CI runs 523/524 died when the runner base image's third-party
- * repo (repo.zabbix.com) served a corrupt index and `apt-get
- * update` exited 100 — before any Morphit step ran.  We install
- * nothing from those repos, so every `apt-get update` in a
- * workflow must be scoped to the base Ubuntu sources with
- * `Dir::Etc::sourceparts=-`, which makes apt ignore
- * /etc/apt/sources.list.d/ entirely.  This pins that so a future
- * edit can't silently reintroduce a bare, flake-prone update.
+ * The runner is now a CONTAINER executor: jobs run as root inside node:20-bookworm.
+ * The old `Dir::Etc::sourceparts=-` scoping (a workaround for the previous HOST
+ * executor's third-party Ubuntu repos) actively BREAKS apt on this clean Debian
+ * image — it nulls the real sources, so `apt-get update` produces an empty package
+ * list and installs fail ("no installation candidate"). And `sudo` isn't installed
+ * in the image. So every `apt-get update` must be PLAIN: no sudo, and no
+ * `Dir::Etc::sourceparts` override. This pins that so a future edit can't
+ * reintroduce either host-executor-ism.
  */
 for (const wf of workflowFiles) {
 	const text = readFileSync(wf, 'utf8');
 	const rel = relative(REPO_ROOT, wf);
-	// Find each `apt-get update` occurrence that is actual command
-	// text (skip comment lines beginning with #).
 	const updateLines = text
 		.split('\n')
 		.filter((ln) => /apt-get update/.test(ln) && !/^\s*#/.test(ln));
 	if (updateLines.length === 0) {
-		// No apt usage in this workflow — nothing to harden.
-		pass(`${rel}: no unscoped apt-get update`);
+		pass(`${rel}: no apt-get update`);
 		continue;
 	}
-	// Every workflow that runs apt-get update must also carry the
-	// sourceparts scoping somewhere in the file (the flag sits on a
-	// continuation line of the same command).
-	if (/Dir::Etc::sourceparts=-/.test(text)) {
-		pass(`${rel}: apt-get update is scoped to base repos (Dir::Etc::sourceparts=-)`);
-	} else {
+	if (/Dir::Etc::sourceparts/.test(text)) {
 		fail(
-			`${rel}: apt-get update is scoped to base repos (Dir::Etc::sourceparts=-)`,
-			'found apt-get update without Dir::Etc::sourceparts=- — a flaky third-party repo in the runner image can fail it (see CI runs 523/524)'
+			`${rel}: apt-get update is container-executor-clean (no source-list override)`,
+			'found Dir::Etc::sourceparts — that host-executor flag nulls apt sources on node:20-bookworm (empty package list → install fails)'
 		);
+	} else if (updateLines.some((ln) => /\bsudo\b/.test(ln))) {
+		fail(
+			`${rel}: apt-get update is container-executor-clean (no sudo)`,
+			'found `sudo apt-get update` — the container executor runs jobs as root and has no sudo'
+		);
+	} else {
+		pass(`${rel}: apt-get update is container-executor-clean (plain, root, real sources)`);
 	}
 }
 

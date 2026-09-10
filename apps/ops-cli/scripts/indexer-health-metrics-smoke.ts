@@ -86,8 +86,8 @@ check(
 {
 	const playbook = read('ops/ansible/playbook.yml');
 	check(
-		'post-install summary points to the one-command verification (option 13)',
-		/morphit-ops\s+→\s+option 13/.test(playbook) || /option 13 \(Node health\)/.test(playbook)
+		'post-install summary points to the one-command verification (morphit-ops health / option 14)',
+		/morphit-ops health/.test(playbook) || /option 14/.test(playbook)
 	);
 }
 

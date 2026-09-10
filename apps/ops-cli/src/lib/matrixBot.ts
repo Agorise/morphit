@@ -385,6 +385,7 @@ export async function mintMatrixToken(
 		const res = await fetch(`${base}/_matrix/client/v3/login`, {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
+			signal: AbortSignal.timeout(15000),
 			body: JSON.stringify({
 				type: 'm.login.password',
 				identifier: { type: 'm.id.user', user },
