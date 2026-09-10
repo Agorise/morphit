@@ -200,26 +200,18 @@ jobs:
 
       - name: Install Python 3.12 + ansible-lint
         run: |
-          # cp190 — update ONLY the base Ubuntu repos, not the
-          # third-party repos in /etc/apt/sources.list.d/ that the
-          # runner base image ships (e.g. repo.zabbix.com).  We
-          # install nothing from those repos, and a transient
-          # Hash-Sum-mismatch on one of them (CI runs 523/524 died
-          # exactly this way) must not fail an unrelated apt install.
-          # `Dir::Etc::sourceparts=-` makes apt ignore sources.list.d;
-          # the retry loop rides out a brief base-mirror hiccup.
+          # Container-executor job runs as root in node:20-bookworm — plain
+          # apt-get (no sudo, no source-list overrides). The retry loop rides out
+          # a brief mirror hiccup.
           for i in 1 2 3; do
-            apt-get update -qq \
-              -o Dir::Etc::sourceparts=- \
-              -o APT::Get::List-Cleanup=0 && break
+            apt-get update -qq && break
             echo "apt-get update attempt $i failed; retrying in 5s..."
             sleep 5
           done
           apt-get install -y --no-install-recommends \
             python3 python3-pip python3-venv
-          # Use --break-system-packages because Ubuntu 24.04 marks
-          # the system Python as externally managed.  This is a
-          # CI runner; the host is ephemeral.
+          # --break-system-packages: Debian marks the system Python as externally
+          # managed. This is an ephemeral CI container.
           pip3 install --break-system-packages --quiet \
             ansible ansible-lint
 
@@ -254,13 +246,10 @@ jobs:
 
       - name: Install build tools (for better-sqlite3 native build)
         run: |
-          # cp190 — see the ansible-lint job: scope apt update to the
-          # base Ubuntu repos so a flaky third-party repo in the runner
-          # image (e.g. repo.zabbix.com) can't fail this install.
+          # cp190 — see the ansible-lint job: plain apt-get as root in the
+          # node:20-bookworm container (no sudo, no source-list overrides).
           for i in 1 2 3; do
-            apt-get update -qq \
-              -o Dir::Etc::sourceparts=- \
-              -o APT::Get::List-Cleanup=0 && break
+            apt-get update -qq && break
             echo "apt-get update attempt $i failed; retrying in 5s..."
             sleep 5
           done

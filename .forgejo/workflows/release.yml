@@ -132,9 +132,7 @@ jobs:
           # runner image (e.g. repo.zabbix.com) can't fail the release
           # build.  Matches the ci.yml hardening.
           for i in 1 2 3; do
-            apt-get update -qq \
-              -o Dir::Etc::sourceparts=- \
-              -o APT::Get::List-Cleanup=0 && break
+            apt-get update -qq && break
             echo "apt-get update attempt $i failed; retrying in 5s..."
             sleep 5
           done
