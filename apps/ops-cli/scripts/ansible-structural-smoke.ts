@@ -434,6 +434,55 @@ results.push({
 	});
 }
 
+// ─── Scenario 9g: no apostrophe in a #-comment INSIDE an inline shell block ──
+// Ansible runs split_args over the WHOLE `shell:`/`command:` free-form string
+// BEFORE the shell strips `#` comments, so a lone apostrophe in a shell comment
+// (e.g. `# don't clobber`) reads as an unbalanced quote and the playbook fails to
+// load with "failed at splitting arguments" (the maintainer/v1.17.1 — a `don't` in the
+// service-user key-propagation task tanked ansible-lint). Regex smokes can't see
+// this, so pin it: scan every role task file, track when we're inside a shell/
+// command `|` block, and flag a comment line whose single-quote count is odd.
+{
+	// Enumerate every roles/<role>/tasks/*.yml with the smoke's existing helpers.
+	const taskFiles: string[] = [];
+	for (const role of readdirSync(ROLES_DIR)) {
+		const tasksDir = join(ROLES_DIR, role, 'tasks');
+		if (!existsSync(tasksDir)) continue;
+		for (const f of readdirSync(tasksDir)) {
+			if (f.endsWith('.yml')) taskFiles.push(join(tasksDir, f));
+		}
+	}
+	const offenders: string[] = [];
+	for (const tf of taskFiles) {
+		const lines = readFileSync(tf, 'utf-8').split('\n');
+		let inShell = false;
+		let blockIndent = -1;
+		for (const raw of lines) {
+			const indent = raw.length - raw.trimStart().length;
+			if (/(ansible\.builtin\.)?(shell|command):\s*\|/.test(raw)) {
+				inShell = true;
+				blockIndent = indent;
+				continue;
+			}
+			if (inShell) {
+				if (raw.trim() !== '' && indent <= blockIndent) {
+					inShell = false;
+				} else {
+					const t = raw.trim();
+					if (t.startsWith('#') && (t.split("'").length - 1) % 2 === 1) {
+						offenders.push(`${tf.replace(`${REPO_ROOT}/`, '')}: ${t}`);
+					}
+				}
+			}
+		}
+	}
+	results.push({
+		name: 'no lone apostrophe in a #-comment inside an inline shell/command block (split_args safe)',
+		ok: offenders.length === 0,
+		detail: offenders.length === 0 ? undefined : `unbalanced-quote comment(s): ${offenders.slice(0, 3).join(' | ')}`
+	});
+}
+
 // ─── Scenario 10: every drop-in write into a package .d/ dir ensures the dir ──
 // TWO separate releases were lost to this exact class — a hardening drop-in
 // written into a package-owned .d/ directory the package did NOT create
