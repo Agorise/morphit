@@ -17,6 +17,22 @@
     proto: tcp
   loop: "{{ ufw_allowed_inbound_ports }}"
 
+# An IPFS origin host must accept inbound swarm connections on 4001, or public
+# gateways can't dial in to fetch the seeded release and the on-chain CID never
+# resolves. Stock ufw only opens 22/80/443, so a fresh IPFS-hosting install went
+# publicly-silent on IPFS until the operator opened 4001 by hand (the maintainer/morphit.io
+# v1.17.0). Open it automatically — BOTH tcp and udp (Kubo uses QUIC on udp/4001)
+# — whenever this box hosts IPFS.
+- name: Allow the IPFS swarm port (4001 tcp+udp) when this box hosts IPFS
+  community.general.ufw:
+    rule: allow
+    port: "4001"
+    proto: "{{ item }}"
+  loop:
+    - tcp
+    - udp
+  when: enable_ipfs | default(true) | bool
+
 - name: Rate-limit SSH (auto-block brute-force from same source)
   community.general.ufw:
     rule: limit

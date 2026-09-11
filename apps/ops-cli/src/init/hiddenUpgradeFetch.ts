@@ -189,8 +189,11 @@ export async function fetchHiddenUpgrade(
 	throw new Error(
 		`hidden-upgrade: no federation peer served a tarball matching the on-chain SHA-256 for ${target.version} ` +
 			`(tried ${gateways.length} peer gateway(s); staying on current version, fail-closed). ` +
-			`For hidden-only nodes to upgrade, a federation peer must expose its IPFS gateway over Tor/I2P ` +
-			`(that peer: morphit-ops → Web firewall / IPFS gateway). ` +
+			`Two ways forward: (1) upgrade OFFLINE + privately now — copy morphit-${target.version}.tar.gz onto ` +
+			`this box (USB/LAN) and run \`sudo morphit-ops upgrade --from-file=<path>\`; it verifies the tarball ` +
+			`against the SHA-256 @morphit anchored on-chain (read from your own indexer — zero clearnet), so it's ` +
+			`fully verified. (2) Have a federation peer expose its IPFS gateway over Tor/I2P so the private ` +
+			`auto-upgrade can find it (that peer: morphit-ops → set up Tor/I2P, which serves /ipfs/ automatically). ` +
 			`Reasons: ${failures.slice(0, 6).join('; ')}`
 	);
 }

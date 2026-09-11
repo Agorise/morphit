@@ -99,18 +99,26 @@ if [ "${MORPHIT_CANARY_DEFER_FIRST_REFRESH:-}" != "1" ]; then
 fi
 
 # ─── 2. Which deployment? ────────────────────────────────────────
-
-say "Where does your Morphit instance run?"
-say "  1) On THIS computer — home hosting (sign + serve right here)"
-say "  2) On a remote server / VPS (sign here, upload the canary there)"
+# MORPHIT_CANARY_MODE (local|remote) skips this prompt — set by the upgrade's
+# turnkey same-box offer so the admin isn't asked to pick a mode they've already
+# chosen by saying "yes".
 MODE=""
-while [ -z "$MODE" ]; do
-	case "$(ask 'Enter 1 or 2' '1')" in
-		1) MODE=local ;;
-		2) MODE=remote ;;
-		*) say "Please enter 1 or 2." ;;
-	esac
-done
+case "${MORPHIT_CANARY_MODE:-}" in
+	local) MODE=local ;;
+	remote) MODE=remote ;;
+esac
+if [ -z "$MODE" ]; then
+	say "Where does your Morphit instance run?"
+	say "  1) On THIS computer — home hosting (sign + serve right here)"
+	say "  2) On a remote server / VPS (sign here, upload the canary there)"
+	while [ -z "$MODE" ]; do
+		case "$(ask 'Enter 1 or 2' '1')" in
+			1) MODE=local ;;
+			2) MODE=remote ;;
+			*) say "Please enter 1 or 2." ;;
+		esac
+	done
+fi
 say ""
 
 REMOTE_SSH=""
@@ -137,6 +145,53 @@ if [ "$MODE" = remote ]; then
 		else
 			info "(Couldn't auto-adjust the served dir; if your first upload hits"
 			info " 'Permission denied', see the one-time chown in RUN-A-MORPHIT-NODE.md §9.)"
+		fi
+	fi
+
+	# ── Dedicated passphrase-less upload key + alias (turnkey unattended autorenew) ──
+	# The weekly systemd timer runs with NO TTY. If the operator's normal SSH key has
+	# a passphrase, the upload prompts with nowhere to type → the refresh fails and the
+	# canary silently goes STALE, which reads as a FALSE warrant-canary trip. Offer a
+	# dedicated, passphrase-less key used ONLY for the canary upload, behind an ssh
+	# alias so it never touches the interactive key. This is the exact manual dance an
+	# operator otherwise does by hand (the maintainer/morphit.io v1.17.0). The key logs into ONE
+	# account for ONE path — fine for an always-on signing box. Every step degrades
+	# gracefully back to the normal login, so a failure never blocks setup.
+	if confirm "Set up a dedicated key so the weekly refresh NEVER prompts you (recommended)?"; then
+		CKEY="$HOME/.ssh/morphit-canary"
+		if [ ! -f "$CKEY" ]; then
+			ssh-keygen -t ed25519 -N '' -C morphit-canary-upload -f "$CKEY" >/dev/null 2>&1 \
+				&& info "Created $CKEY (no passphrase — for unattended uploads)." \
+				|| warn "Couldn't create the dedicated key; keeping your normal SSH login."
+		fi
+		if [ -f "$CKEY" ]; then
+			PUB="$(cat "$CKEY.pub")"
+			# Authorize it over the connection we already proved works; dedupe so
+			# re-running setup never stacks duplicate keys.
+			if ssh -o BatchMode=yes "$REMOTE_SSH" \
+				"install -d -m700 ~/.ssh; touch ~/.ssh/authorized_keys; chmod 600 ~/.ssh/authorized_keys; grep -qF '$PUB' ~/.ssh/authorized_keys || printf '%s\n' '$PUB' >> ~/.ssh/authorized_keys" 2>/dev/null; then
+				# Target the SAME account the working login resolves to (ask the server
+				# who we are, so an implicit-user login still aliases correctly).
+				_chost="${REMOTE_SSH##*@}"
+				_cuser="$(ssh -o BatchMode=yes "$REMOTE_SSH" 'id -un' 2>/dev/null || echo root)"
+				ALIAS=morphit-canary-upload
+				touch "$HOME/.ssh/config"; chmod 600 "$HOME/.ssh/config"
+				if ! grep -qiE "^[[:space:]]*Host[[:space:]]+$ALIAS([[:space:]]|\$)" "$HOME/.ssh/config"; then
+					printf '\nHost %s\n    HostName %s\n    User %s\n    IdentityFile %s\n    IdentitiesOnly yes\n' \
+						"$ALIAS" "$_chost" "$_cuser" "$CKEY" >> "$HOME/.ssh/config"
+					info "Wrote SSH alias '$ALIAS' → $_cuser@$_chost (dedicated key only)."
+				fi
+				# Prove the alias connects with ZERO prompts, then route the canary
+				# through it (this REMOTE_SSH is what the generated refresh script uses).
+				if ssh -o BatchMode=yes -o ConnectTimeout=10 "$ALIAS" 'true' 2>/dev/null; then
+					REMOTE_SSH="$ALIAS"
+					info "Unattended uploads ready — the weekly refresh runs with no prompts."
+				else
+					warn "The dedicated alias didn't connect silently; keeping your normal SSH login."
+				fi
+			else
+				warn "Couldn't authorize the dedicated key on the server; keeping your normal SSH login."
+			fi
 		fi
 	fi
 	say ""
@@ -197,7 +252,7 @@ else
 	say "create one for you now. It's what signs your canary so readers can verify it."
 	confirm "Create a signing key now?" || die "a signing key is required; re-run once you have one."
 	kname="$(ask 'A name for the key (e.g. Jane, or your instance name)' "${MORPHIT_CANARY_OPERATOR_NAME:-}")"
-	kemail="$(ask 'An email for the key (e.g. you@example.com)' '')"
+	kemail="$(ask 'An email for the key (e.g. you@example.com)' "${MORPHIT_CANARY_OPERATOR_EMAIL:-}")"
 	[ -n "$kname" ] && [ -n "$kemail" ] || die "a name and email are needed to create the key."
 	say "Creating your key (no passphrase, so the weekly refresh can run on its own)..."
 	# A passphrase-less key lets the timer sign unattended. On a home box this is
@@ -317,6 +372,25 @@ say ""
 
 # ─── 6. Install the weekly timer (systemd user timer, or cron) ───
 
+# Resolve node's directory NOW and pin it into the service's PATH. A systemd
+# service runs with a minimal PATH and does NOT source the operator's shell rc,
+# so an nvm / version-manager node (which lives only in the interactive shell's
+# PATH) is invisible to the timer → the weekly run dies with "node not found" and
+# the canary silently goes stale (the maintainer/morphit.io v1.17.0). Detecting it here makes
+# autorenew work out of the box regardless of how node was installed.
+NODE_BIN="$(command -v node 2>/dev/null || true)"
+SERVICE_PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+if [ -n "$NODE_BIN" ]; then
+	NODE_DIR="$(dirname "$NODE_BIN")"
+	case ":$SERVICE_PATH:" in
+		*":$NODE_DIR:"*) : ;;                       # already covered by the base PATH
+		*) SERVICE_PATH="$NODE_DIR:$SERVICE_PATH" ;; # prepend the (nvm/etc.) node dir
+	esac
+else
+	warn "Could not locate 'node' now; the weekly timer may fail with 'node not found'."
+	warn "After installing node, add its bin dir to Environment=PATH in the canary service."
+fi
+
 TIMER_OK=0
 if command -v systemctl >/dev/null 2>&1 && systemctl --user show-environment >/dev/null 2>&1; then
 	UNIT_DIR="$HOME/.config/systemd/user"
@@ -327,6 +401,7 @@ Description=Refresh the Morphit warrant canary
 
 [Service]
 Type=oneshot
+Environment=PATH=$SERVICE_PATH
 ExecStart=$REFRESH
 UEOF
 	cat > "$UNIT_DIR/morphit-canary.timer" <<'UEOF'
@@ -366,6 +441,7 @@ Description=Refresh the Morphit warrant canary
 [Service]
 Type=oneshot
 User=root
+Environment=PATH=$SERVICE_PATH
 ExecStart=$REFRESH
 UEOF
 	cat > /etc/systemd/system/morphit-canary.timer <<'UEOF'

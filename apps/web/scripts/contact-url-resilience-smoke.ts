@@ -59,6 +59,11 @@ const vj = read('scripts/build-verify-json.mjs');
 check('readConfigEnvValue checks the install-root config', /\/opt\/morphit\/morphit\.config\.env/.test(vj));
 check('readConfigEnvValue walks up from REPO_ROOT', /walkUp/.test(vj));
 check('upgrade stamps operator_tag into verify.json BEFORE deploy (v1.16.9)', /readOperatorTagFromConfig\(\)/.test(upSrc) && /patchVerifyJsonOperatorTag\(buildDir/.test(upSrc) && upSrc.indexOf('patchVerifyJsonOperatorTag(buildDir') < upSrc.indexOf('deployFrontendBuild(buildDir, webRoot)'));
+// v1.17.1 — the stamp must precede the CONTAINER path too, not just bare-metal.
+// It lived inside `if (plan.copyToWebRoot)`, so every containerized (bind-mount)
+// instance served operator_tag=null (the maintainer/morphitir). Pin that the stamp runs
+// before restartFrontendContainer so a container-served box gets stamped.
+check('upgrade stamps operator_tag BEFORE the container restart too (not bare-metal-only)', /patchVerifyJsonOperatorTag\(buildDir/.test(upSrc) && upSrc.indexOf('patchVerifyJsonOperatorTag(buildDir') < upSrc.indexOf('restartFrontendContainer(plan.restartContainer'));
 
 // ── 6. bunkerweb WAF exemption for the JSON APIs ──
 const ops = read('apps/web/src/routes/[lang]/operators/+page.svelte');

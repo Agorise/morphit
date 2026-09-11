@@ -92,6 +92,36 @@ check(
 		/PUBKEY="\$STAGE\/pgp_keys\.asc"/.test(setup)
 );
 
+// ─── v1.17.1: turnkey unattended autorenew (the maintainer/morphit.io v1.17.0) ─
+// The weekly timer runs with no TTY, so both of these must hold or the canary
+// silently goes stale (a FALSE warrant-canary trip):
+//   1) the generated systemd service pins node's PATH, or an nvm/version-manager
+//      node makes the timer die with "node not found".
+check(
+	'canary service pins node PATH (nvm-proof unattended autorenew)',
+	/NODE_BIN="\$\(command -v node/.test(setup) && /Environment=PATH=\$SERVICE_PATH/.test(setup)
+);
+//   2) remote mode offers a dedicated passphrase-less upload key wired behind an
+//      ssh alias, so the timer never prompts for a passphrase.
+check(
+	'remote setup offers a dedicated passphrase-less upload key',
+	/ssh-keygen -t ed25519 -N ''/.test(setup) && /CKEY="\$HOME\/\.ssh\/morphit-canary"/.test(setup)
+);
+check(
+	'the dedicated key is wired behind an ssh alias using ONLY that key',
+	/morphit-canary-upload/.test(setup) && /IdentitiesOnly yes/.test(setup) && /REMOTE_SSH="\$ALIAS"/.test(setup)
+);
+
+// v1.17.1: the upgrade's turnkey same-box offer drives setup.sh non-interactively.
+check(
+	'setup.sh honors MORPHIT_CANARY_MODE to skip the mode prompt',
+	/MORPHIT_CANARY_MODE/.test(setup) && /case "\$\{MORPHIT_CANARY_MODE/.test(setup)
+);
+check(
+	'setup.sh honors MORPHIT_CANARY_OPERATOR_EMAIL as the key-email default',
+	/MORPHIT_CANARY_OPERATOR_EMAIL/.test(setup)
+);
+
 // ─── the weekly refresh delivers to the SERVED build/ dir (cp431) ─
 check('the refresh runs generate.sh to sign a fresh canary', /scripts\/canary\/generate\.sh/.test(setup));
 check(

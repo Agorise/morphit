@@ -135,5 +135,26 @@ else
 	log "routing provide did not complete (non-fatal) — the daemon reprovides on its own schedule."
 fi
 
+# 6. Self-verify we are a USABLE seeder. The whole point is that OTHER instances —
+# especially hidden-only ones (the maintainer/morphitlat, which kept stranding on upgrades) —
+# can fetch this release FROM us. `ipfs add` succeeding only proves we PINNED it;
+# it does NOT prove the gateway actually SERVES it over the path a peer uses
+# (/ipfs/<cid>/morphit-latest.tar.gz). Check that now against the local gateway, so
+# a broken seeder (gateway down, not exposed to the frontend, or NoFetch pruned it)
+# is caught LOUDLY at seed time instead of the federation silently losing a seeder.
+GW_PORT="$(ipfs config Addresses.Gateway 2>/dev/null | sed -n 's#.*/tcp/\([0-9]\{1,5\}\).*#\1#p' | head -1)"
+[ -n "$GW_PORT" ] || GW_PORT=8082
+if command -v curl >/dev/null 2>&1 && \
+	curl -fsS --max-time 45 -o /dev/null "http://127.0.0.1:${GW_PORT}/ipfs/${CID}/morphit-latest.tar.gz" 2>/dev/null; then
+	log "✓ local IPFS gateway serves the release — this box is a working seeder over every"
+	log "  transport that reaches its frontend (clearnet + any Tor .onion / I2P you've configured)."
+else
+	log "⚠ WARNING: the local IPFS gateway is NOT serving $CID (checked 127.0.0.1:${GW_PORT})."
+	log "  The content is pinned, but peers can't fetch it from you — this box is NOT a usable"
+	log "  seeder, so a hidden-only instance may be unable to upgrade from the federation."
+	log "  Fix: ensure the Kubo gateway is running and exposed (enable_ipfs / morphit_ipfs_gateway_expose),"
+	log "  then re-run the upgrade. To serve over Tor/I2P too, set up a hidden address (morphit-ops → Tor/I2P)."
+fi
+
 echo "$CID"
 log "done. Resolve: https://ipfs.io/ipfs/$CID/metadata.json  |  ipns://<name>/morphit-latest.tar.gz"

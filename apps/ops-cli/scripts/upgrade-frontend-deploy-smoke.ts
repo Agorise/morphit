@@ -362,8 +362,23 @@ function tmp(prefix: string): string {
 		},
 		{
 			id: 'FD-31',
-			re: /up', '-d', '--build', service/,
-			desc: 'v1.16.12: compose-managed frontend is REBUILT (nginx.conf is baked, a restart keeps it stale)'
+			re: /up', '-d', '--build', '--force-recreate', service/,
+			desc: 'v1.17.1: compose-managed frontend is rebuilt with --force-recreate (a byte-identical image otherwise leaves the container bound to the STALE pre-upgrade build inode)'
+		},
+		{
+			id: 'FD-33',
+			re: /serving this build[\s\S]*?after a restart/,
+			desc: 'v1.17.1: the served-version check SELF-HEALS a stale serve (restart + re-verify) before warning, instead of only printing a manual command'
+		},
+		{
+			id: 'FD-34',
+			re: /footer links to a warrant canary/,
+			desc: 'v1.17.1: upgrade OFFERS a turnkey canary when the footer /canary.txt link would 404 (dead-link/SEO fix)'
+		},
+		{
+			id: 'FD-35',
+			re: /deadFooterLink[\s\S]*?MORPHIT_CANARY_MODE: 'local'/,
+			desc: 'v1.17.1: the canary offer is gated on a genuinely dead link and drives setup.sh in same-box (local) mode'
 		},
 		{
 			id: 'FD-32',
@@ -386,14 +401,16 @@ function tmp(prefix: string): string {
 
 	// FD-20 (beta11 regression guard): cp236's name/compose-based approach is
 	// fully GONE — no `recreateBunkerwebFrontend`, no `bunkerwebFrontendPresent`,
-	// no hardcoded `name=^/morphit-frontend$` docker filter, no
-	// `--force-recreate frontend`. Their presence would mean the old broken
-	// publish path crept back.
+	// no hardcoded `name=^/morphit-frontend$` docker filter, no HARDCODED
+	// `--force-recreate frontend` (a literal service name). Their presence would
+	// mean the old broken publish path crept back. NOTE: `--force-recreate` on the
+	// DYNAMICALLY-DETECTED `service` (restartFrontendContainer, v1.17.1) is correct
+	// and required — only the hardcoded-`frontend` form is the ghost.
 	const ghosts: Array<{ re: RegExp; what: string }> = [
 		{ re: /recreateBunkerwebFrontend/, what: 'recreateBunkerwebFrontend()' },
 		{ re: /bunkerwebFrontendPresent/, what: 'bunkerwebFrontendPresent()' },
 		{ re: /name=\^\/morphit-frontend\$/, what: 'hardcoded morphit-frontend docker filter' },
-		{ re: /--force-recreate/, what: 'docker compose --force-recreate' }
+		{ re: /--force-recreate['",\s]+frontend\b/, what: 'hardcoded --force-recreate frontend (cp236 ghost)' }
 	];
 	const ghostHits = ghosts.filter((g) => g.re.test(upgradeSrc)).map((g) => g.what);
 	if (ghostHits.length === 0) {

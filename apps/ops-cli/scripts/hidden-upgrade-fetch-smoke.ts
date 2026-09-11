@@ -121,12 +121,17 @@ async function main(): Promise<void> {
 	// All peers stale/tampered → fail-closed throw.
 	{
 		let threw = false;
+		let msg = '';
 		try {
 			await fetchHiddenUpgrade(target, deps({ 'http://s1.onion': { bytes: STALE }, 'http://s2.onion': { bytes: STALE } }));
-		} catch {
+		} catch (e) {
 			threw = true;
+			msg = e instanceof Error ? e.message : String(e);
 		}
 		ok('all peers stale → throws (fail-closed, no clearnet fallback)', threw);
+		// v1.17.1 — the fail-closed message must point a stranded hidden node at the
+		// offline, still-verified escape hatch, not just "wait for a peer".
+		ok('fail-closed message surfaces the offline --from-file private path', /--from-file/.test(msg) && /on-chain/i.test(msg));
 	}
 
 	// No peers → fail-closed throw.

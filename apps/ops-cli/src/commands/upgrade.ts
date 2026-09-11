@@ -1055,9 +1055,16 @@ function restartFrontendContainer(name: string, installDir: string): void {
 			/* best-effort — the rebuild still recreates the container */
 		}
 		info(`Rebuilding the frontend container "${name}" so it serves the current config + build...`);
+		// --force-recreate is LOAD-BEARING: on an upgrade the rebuilt image is
+		// usually byte-identical (same nginx.conf), so a plain `up --build` sees no
+		// change and leaves the RUNNING container in place — still bind-mounted to
+		// the pre-upgrade apps/web/build inode (step 7 renamed the install to .bak),
+		// so it serves the STALE build (the maintainer/morphitir v1.17.0: upgrade reported
+		// success while /verify.json stayed 1.16.13). Forcing the recreate re-binds
+		// the mount to the freshly-extracted build, fixing config AND content.
 		const rebuilt =
-			spawnSync('docker', ['compose', '-f', configFile, 'up', '-d', '--build', service], { stdio: 'inherit', timeout: 300_000 }).status === 0 ||
-			spawnSync('docker-compose', ['-f', configFile, 'up', '-d', '--build', service], { stdio: 'inherit', timeout: 300_000 }).status === 0;
+			spawnSync('docker', ['compose', '-f', configFile, 'up', '-d', '--build', '--force-recreate', service], { stdio: 'inherit', timeout: 300_000 }).status === 0 ||
+			spawnSync('docker-compose', ['-f', configFile, 'up', '-d', '--build', '--force-recreate', service], { stdio: 'inherit', timeout: 300_000 }).status === 0;
 		if (rebuilt) {
 			info(`\u2713 Frontend container "${name}" rebuilt (config changes applied).`);
 			return;
@@ -1972,6 +1979,23 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	});
 
 	let webRootBackup: string | null = null;
+	// Stamp THIS operator's tag into the served verify.json from the on-disk config
+	// BEFORE either deploy path. The PREBUILT frontend ships operator_tag=null, and
+	// BOTH deployment models serve THIS file: bare-metal copies buildDir → webRoot,
+	// and the containerized frontend bind-mounts buildDir directly. Previously the
+	// stamp lived ONLY inside the copyToWebRoot branch, so every CONTAINERIZED
+	// instance (BunkerWeb/custom bind-mount) served operator_tag=null despite a
+	// correct config + on-chain registration (the maintainer/morphitir v1.17.0). operator_tag
+	// here is INFORMATIONAL (matches /v1/instance + the directory); fee attribution
+	// comes from the runtime indexer config and is unaffected either way.
+	try {
+		const opTag = readOperatorTagFromConfig();
+		if (opTag && patchVerifyJsonOperatorTag(buildDir, opTag)) {
+			info(`Stamped operator_tag "${sanitizeForTerm(opTag)}" into verify.json.`);
+		}
+	} catch {
+		/* non-fatal — verify.json's operator_tag is informational */
+	}
 	if (plan.copyToWebRoot) {
 		try {
 			// Snapshot the current web root so a deploy failure (or a later
@@ -1979,22 +2003,6 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 			webRootBackup = join(tmpDir, 'web-root-backup');
 			cpSync(webRoot, webRootBackup, { recursive: true });
 			info(`Redeploying ${buildDir} → ${webRoot}...`);
-			// v1.16.9 — the PREBUILT frontend ships verify.json with
-			// operator_tag=null (the release build has no operator), and the
-			// on-server frontend build (build-verify-json.mjs) doesn't run on a
-			// prebuilt upgrade — so verify.json read null even though the tag IS
-			// set + registered on-chain. Stamp THIS operator's tag into the served
-			// verify.json from the on-disk config, so it matches /v1/instance and
-			// the directory. (operator_tag here is informational; fee attribution
-			// comes from the runtime indexer config, unaffected.)
-			try {
-				const opTag = readOperatorTagFromConfig();
-				if (opTag && patchVerifyJsonOperatorTag(buildDir, opTag)) {
-					info(`Stamped operator_tag "${sanitizeForTerm(opTag)}" into verify.json.`);
-				}
-			} catch {
-				/* non-fatal — verify.json's operator_tag is informational */
-			}
 			deployFrontendBuild(buildDir, webRoot);
 			// Preserve the operator's web-root ownership (www-data, or whatever
 			// the web server runs as) so the freshly-copied files stay readable.
@@ -2048,20 +2056,50 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 						`"Load it now" update prompt within ~60s.`
 				);
 			} else if (verdict === 'stale') {
-				warn(
-					`The frontend being SERVED is still the old build (version ` +
-						`${servedVersion}); this upgrade built ${builtVersion}. The ` +
-						`"Load it now" update prompt will NOT appear until the served ` +
-						`build matches. ` +
-						(plan.restartContainer
-							? `Your frontend container "${plan.restartContainer}" is serving ` +
-								`a stale copy: if it bind-mounts ${buildDir}, ` +
-								`"docker restart ${plan.restartContainer}" should fix it; if ` +
-								`it BAKES the build into its image, rebuild that image so it ` +
-								`includes the new build.`
-							: `Check that ${webRoot} received the new build and that your ` +
-								`web server is not caching /verify.json or /service-worker.js.`)
-				);
+				// Actively self-heal before giving up. The usual cause is a running
+				// container still bound to the PRE-upgrade build inode (the install
+				// dir was renamed to .bak under it). A restart re-binds it to the
+				// freshly-extracted build. Try it, re-verify, and only warn (with the
+				// manual command) if it is STILL stale — never fail the upgrade.
+				let healed = false;
+				if (plan.restartContainer) {
+					info(
+						`The served frontend is still the old build (${servedVersion}); ` +
+							`restarting "${plan.restartContainer}" so it re-binds the new build...`
+					);
+					spawnSync('docker', ['restart', plan.restartContainer], {
+						stdio: 'inherit',
+						timeout: 60_000
+					});
+					let reServed = await resolveServedVersion(plan, webRoot);
+					for (let attempt = 0; reServed === null && attempt < 5; attempt++) {
+						await new Promise((r) => setTimeout(r, 2000));
+						reServed = await resolveServedVersion(plan, webRoot);
+					}
+					if (classifyFrontendVerify(builtVersion, reServed) === 'fresh') {
+						healed = true;
+						info(
+							`\u2713 Verified the live frontend is serving this build ` +
+								`(version ${builtVersion}) after a restart. Returning visitors ` +
+								`get the "Load it now" prompt within ~60s.`
+						);
+					}
+				}
+				if (!healed) {
+					warn(
+						`The frontend being SERVED is still the old build (version ` +
+							`${servedVersion}); this upgrade built ${builtVersion}. The ` +
+							`"Load it now" update prompt will NOT appear until the served ` +
+							`build matches. ` +
+							(plan.restartContainer
+								? `Your frontend container "${plan.restartContainer}" is serving ` +
+									`a stale copy even after a restart: if it BAKES the build into ` +
+									`its image, rebuild that image; otherwise confirm it bind-mounts ` +
+									`${buildDir} and is not caching /verify.json.`
+								: `Check that ${webRoot} received the new build and that your ` +
+									`web server is not caching /verify.json or /service-worker.js.`)
+					);
+				}
 			}
 			// verdict === 'unknown': the box couldn't read its own served
 			// /verify.json (e.g. a Tor-only node, or a home box whose NAT won't
@@ -2072,6 +2110,82 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		} catch {
 			// verification is best-effort; never fail the upgrade over it
 		}
+	}
+
+	// ─── 9d-bis. Offer a warrant canary when the footer link would 404 (v1.17.1) ──
+	//
+	// The site footer UNCONDITIONALLY links /canary.txt. If this box serves no
+	// canary AND has no way to make one, that link is a permanent 404 — bad for
+	// visitors and terrible for SEO (the maintainer/morphitir: registered, upgraded, but the
+	// footer canary link was dead). Offer a turnkey SAME-BOX setup: it generates a
+	// signing key, signs the first canary, and schedules the weekly refresh — the
+	// admin says "yes" once and accepts a couple of pre-filled defaults, nothing
+	// more. Skip SILENTLY when:
+	//   • non-interactive (cron / MORPHIT_AUTO_UPGRADE) — can't prompt,
+	//   • a canary is already served (link works),
+	//   • an on-box morphit-canary.service exists (it'll refresh on its own), or
+	//   • the box WAS serving a canary before this upgrade — that's a REMOTE
+	//     (laptop-signed) operator whose next refresh re-uploads canary.txt; setting
+	//     up a second, on-box canary would fight their real one.
+	try {
+		const canaryBuildDir = join(installDir, 'apps', 'web', 'build');
+		const servedCanary = existsSync(join(canaryBuildDir, 'canary.txt'));
+		const backupHadCanary = existsSync(join(backupDir, 'apps', 'web', 'build', 'canary.txt'));
+		const haveCanaryUnit =
+			spawnSync('systemctl', ['cat', 'morphit-canary.service'], {
+				stdio: 'ignore',
+				timeout: 10_000
+			}).status === 0;
+		const deadFooterLink = !servedCanary && !backupHadCanary && !haveCanaryUnit;
+		if (deadFooterLink && !forceYes && process.stdin.isTTY === true) {
+			info('');
+			const wantsCanary = await promptYes(
+				`Your site footer links to a warrant canary, but this box has none set up, ` +
+					`so that link is a dead 404 (bad for visitors and SEO). A warrant canary is a ` +
+					`signed, auto-refreshed notice that you've received no secret legal orders — a ` +
+					`strong trust signal for a no-KYC marketplace.\n` +
+					`Set one up now, right here on this box? It's automatic — I generate a signing ` +
+					`key, sign the first canary, and schedule the weekly refresh (a couple of ` +
+					`Enter-to-accept defaults, nothing to look up).`
+			);
+			if (wantsCanary) {
+				const setupScript = join(installDir, 'scripts', 'canary', 'setup.sh');
+				const tag = readOperatorTagFromConfig() ?? 'morphit';
+				let host = '';
+				try {
+					const origin = readInstanceEnvValue(INSTANCE_ENV.ORIGIN);
+					if (origin) host = new URL(origin).hostname;
+				} catch {
+					/* Tor-only or unset origin — fall back to the tag below */
+				}
+				const email = `canary@${host || `${tag}.local`}`;
+				const res = spawnSync('bash', [setupScript], {
+					stdio: 'inherit',
+					timeout: 600_000,
+					env: {
+						...process.env,
+						MORPHIT_CANARY_MODE: 'local',
+						MORPHIT_CANARY_SERVE_DIR: canaryBuildDir,
+						MORPHIT_CANARY_OPERATOR_NAME: tag,
+						MORPHIT_CANARY_OPERATOR_EMAIL: email
+					}
+				});
+				if (res.status === 0) {
+					info('\u2713 Warrant canary set up and scheduled — the footer link now resolves.');
+				} else {
+					warn(
+						`Canary setup didn't finish; you can run it anytime: sudo bash ${setupScript}`
+					);
+				}
+			} else {
+				info(
+					`No problem — skipping the canary. Set it up anytime with: ` +
+						`sudo bash ${join(installDir, 'scripts', 'canary', 'setup.sh')}`
+				);
+			}
+		}
+	} catch {
+		// best-effort — the canary offer must NEVER fail or hang the upgrade
 	}
 
 	// ─── 9e. Refresh systemd unit files from the new templates ──

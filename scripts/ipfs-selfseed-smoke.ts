@@ -121,6 +121,10 @@ const guard = stripHash(read('scripts/verify-cid-public.sh'));
 		['ASSERTS the CID equals the expected/anchored one', /"\$CID" != "\$EXPECTED"/.test(seed) && /MISMATCH/i.test(seed)],
 		['fails loud (exit 1) on CID mismatch', /MISMATCH[\s\S]*exit 1/i.test(seed)],
 		['announces it (ipfs routing provide)', /routing provide/.test(seed)],
+		['self-verifies the LOCAL gateway actually serves the release (usable seeder, not just pinned) — v1.17.1',
+			/Addresses\.Gateway/.test(seed) &&
+				/127\.0\.0\.1:\$\{GW_PORT\}\/ipfs\/\$\{CID\}\/morphit-latest\.tar\.gz/.test(seed) &&
+				/NOT a usable/.test(seed)],
 		['rejects a non-vX.Y.Z tag', /v\[0-9\]/.test(seed)],
 		['shows a braille spinner during ipfs add + announce (no frozen terminal)', /_spin\b/.test(seed) && /⠋/.test(seed)]
 	];

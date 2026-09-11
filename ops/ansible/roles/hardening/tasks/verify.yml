@@ -59,6 +59,30 @@
     - not (morphit_tor_only | default(false))
     - (morphit_web_ports.stdout | default('') | trim) != 'OK'
 
+- name: Self-test — UFW allows the IPFS swarm port (4001) when this box hosts IPFS
+  ansible.builtin.shell: |
+    set -o pipefail
+    s=$(ufw status 2>/dev/null || true)
+    echo "$s" | grep -qE '(^|[[:space:]])4001(/(tcp|udp))?([[:space:]]|$)' && echo OK || echo MISSING
+  register: morphit_ipfs_port
+  changed_when: false
+  failed_when: false
+  # Only meaningful on an IPFS origin host. Stock ufw opens 22/80/443 only, so a
+  # reinstalled seeder silently went publicly-dark on IPFS (the maintainer/morphit.io v1.17.0)
+  # — the ufw role now opens 4001 automatically, and this proves it actually took.
+  when: enable_ipfs | default(true) | bool
+
+- name: WARN if the IPFS swarm port is not open on an IPFS host
+  ansible.builtin.debug:
+    msg: >-
+      Post-harden self-test: this box hosts IPFS but UFW does not appear to allow
+      4001 — public gateways can't fetch your seeded releases, so the on-chain
+      distribution CID won't resolve. Fix with:
+      sudo ufw allow 4001/tcp && sudo ufw allow 4001/udp && sudo systemctl restart ipfs
+  when:
+    - enable_ipfs | default(true) | bool
+    - (morphit_ipfs_port.stdout | default('') | trim) != 'OK'
+
 - name: Self-test — the box serves HTTPS to itself (proxy/frontend alive)
   ansible.builtin.uri:
     url: https://127.0.0.1/
@@ -81,5 +105,7 @@
       {% else %}web ports 80/443: {{ (morphit_web_ports.stdout | default('?') | trim) }};
       local HTTPS: {{ morphit_https_selftest.status | default('no-response') }};
       Docker port-forwarding was verified during the UFW step;
+      {% endif %}
+      {% if enable_ipfs | default(true) %}IPFS swarm 4001: {{ (morphit_ipfs_port.stdout | default('?') | trim) }};
       {% endif %}
       If access is broken despite this, run: sudo systemctl restart docker

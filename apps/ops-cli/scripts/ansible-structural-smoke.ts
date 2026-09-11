@@ -390,6 +390,50 @@ results.push({
 	});
 }
 
+// ─── Scenario 9e: an IPFS origin host opens swarm port 4001 (tcp+udp) ──
+// Stock ufw opens only 22/80/443; an IPFS-hosting box must ALSO accept inbound
+// 4001 or public gateways can't fetch the seeded release and the on-chain CID
+// never resolves (the maintainer/morphit.io v1.17.0). Gated on enable_ipfs (default true, to
+// match the playbook), both protocols (Kubo's QUIC transport uses udp/4001).
+{
+	const ufwSrc = readFileSync(join(ROLES_DIR, 'hardening', 'tasks', 'ufw.yml'), 'utf-8');
+	const has4001 = /port:\s*"4001"/.test(ufwSrc);
+	const bothProtos = /loop:\s*\n\s*-\s*tcp\s*\n\s*-\s*udp/.test(ufwSrc);
+	const gatedDefaultTrue = /enable_ipfs \| default\(true\)/.test(ufwSrc);
+	results.push({
+		name: 'IPFS origin host opens swarm port 4001 tcp+udp (gated on enable_ipfs default true)',
+		ok: has4001 && bothProtos && gatedDefaultTrue,
+		detail: !has4001
+			? 'ufw.yml does not open port 4001'
+			: !bothProtos
+				? 'ufw.yml must open 4001 for BOTH tcp and udp (Kubo QUIC)'
+				: !gatedDefaultTrue
+					? 'the 4001 rule must gate on enable_ipfs | default(true) — else a default IPFS-hosting install leaves 4001 closed'
+					: undefined
+	});
+}
+
+// ─── Scenario 9f: the morphit service user inherits the operator's login keys ──
+// The warrant-canary upload can target morphit@ (it owns the served build dir). A
+// fresh OS + reinstall only re-keys root, so without this the upload fails
+// "Permission denied (publickey)" until the operator hand-adds the key
+// (the maintainer/morphit.io v1.17.0). base/tasks/main.yml mirrors root's + any sudo user's
+// login keys into the morphit user, idempotently, so it survives a reinstall.
+{
+	const baseSrc = readFileSync(join(ROLES_DIR, 'base', 'tasks', 'main.yml'), 'utf-8');
+	const propagates =
+		/Propagate operator SSH login keys to the morphit service user/.test(baseSrc) &&
+		/\/root\/\.ssh\/authorized_keys/.test(baseSrc) &&
+		/morphit_service_home/.test(baseSrc);
+	results.push({
+		name: 'morphit service user inherits operator login keys (canary upload survives a reinstall)',
+		ok: propagates,
+		detail: propagates
+			? undefined
+			: 'base/tasks/main.yml must mirror root/sudo login keys into the morphit service user'
+	});
+}
+
 // ─── Scenario 10: every drop-in write into a package .d/ dir ensures the dir ──
 // TWO separate releases were lost to this exact class — a hardening drop-in
 // written into a package-owned .d/ directory the package did NOT create

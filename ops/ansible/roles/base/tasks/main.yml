@@ -107,6 +107,50 @@
     group: "{{ morphit_service_group }}"
     recurse: true
 
+# The warrant-canary upload can target the morphit@ service account (it owns the
+# served apps/web/build dir). On a fresh OS + Morphit reinstall, only root gets
+# re-keyed, so the morphit user has no authorized_keys and the upload fails with
+# "Permission denied (publickey)" (the maintainer/morphit.io v1.17.0). Mirror the operator's
+# real LOGIN keys — root's, plus any non-root sudo user's — into the morphit user
+# so the upload just works, and keeps working across reinstalls with no manual
+# step. Multi-source + idempotent + self-healing: it degrades quietly if no keys
+# are present yet (a later re-run picks them up), and never clobbers a key the
+# operator added by hand (existing morphit keys are merged in).
+- name: Propagate operator SSH login keys to the morphit service user (canary upload survives a reinstall)
+  ansible.builtin.shell: |
+    set -o pipefail
+    dest_dir="{{ morphit_service_home }}/.ssh"
+    dest="$dest_dir/authorized_keys"
+    tmp="$(mktemp)"
+    # Every place a human login key legitimately lives on this box.
+    for f in /root/.ssh/authorized_keys /home/*/.ssh/authorized_keys; do
+      [ -s "$f" ] && cat "$f" >> "$tmp"
+    done
+    # Keep any key already on the morphit user (don't clobber a manual add).
+    [ -s "$dest" ] && cat "$dest" >> "$tmp"
+    # Real key lines only, deduped; ignore blanks/comments.
+    merged="$(grep -E '^(ssh-|ecdsa-|sk-)' "$tmp" 2>/dev/null | sort -u || true)"
+    rm -f "$tmp"
+    if [ -z "$merged" ]; then echo NOKEYS; exit 0; fi
+    install -d -o "{{ morphit_service_user }}" -g "{{ morphit_service_group }}" -m 700 "$dest_dir"
+    before=""; [ -f "$dest" ] && before="$(cat "$dest")"
+    printf '%s\n' "$merged" > "$dest"
+    chown "{{ morphit_service_user }}:{{ morphit_service_group }}" "$dest"
+    chmod 600 "$dest"
+    [ "$before" = "$merged" ] && echo UNCHANGED || echo UPDATED
+  register: morphit_key_propagate
+  changed_when: "'UPDATED' in (morphit_key_propagate.stdout | default(''))"
+  failed_when: false
+
+- name: Note operator-key propagation outcome
+  ansible.builtin.debug:
+    msg: >-
+      morphit service-user authorized_keys:
+      {{ 'refreshed from your login keys (canary upload as morphit@ will work)'
+         if 'UPDATED' in (morphit_key_propagate.stdout | default(''))
+         else ('already current' if 'UNCHANGED' in (morphit_key_propagate.stdout | default(''))
+         else 'no login keys found yet — add your key to /root/.ssh/authorized_keys and re-run, or the canary can upload as root instead') }}
+
 # Part 122 cp5 F12 — the shipped morphit-relay.service specifies
 # `User=morphit-relay / Group=morphit-relay`.  Without this task,
 # `systemctl start morphit-relay` fails with "user morphit-relay
