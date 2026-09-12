@@ -26,7 +26,7 @@
 import { Hono } from 'hono';
 
 import type { Config } from '$config';
-import { computeClearnetEliminated, clearnetEliminationMissing, FRONTEND_IS_LOCAL_ONLY, matrixHomeserverIsHidden } from '$indexer/clearnetGate';
+import { computeClearnetEliminated, clearnetEliminationMissing, clearnetLegsFromConfig } from '$indexer/clearnetGate';
 import { hiddenHostNetworkOf } from '@morphit/hidden-transport';
 
 export interface InstanceResponse {
@@ -265,17 +265,7 @@ export function instanceRoute(
 	const app = new Hono();
 
 	app.get('/', (c) => {
-		const clearnetLegs = {
-			chainHidden: config.blurtRpcEndpoints.length === 0 && config.hiddenRpcEndpoints.length > 0,
-			transportTor: hiddenHostNetworkOf(config.instanceTorAddress ?? '') === 'tor',
-			transportI2p:
-				hiddenHostNetworkOf(config.instanceI2pB32Address ?? '') === 'i2p' ||
-				hiddenHostNetworkOf(config.instanceI2pNameAddress ?? '') === 'i2p',
-			priceFederated: config.blurtRpcEndpoints.length === 0,
-			frontendLocal: FRONTEND_IS_LOCAL_ONLY,
-			upgradeHidden: true, // v1.16.1: hidden IPFS-over-Tor/I2P upgrade wired + fail-closed in upgrade.ts
-			matrixClean: matrixHomeserverIsHidden(config.instanceMatrixHomeserver)
-		};
+		const clearnetLegs = clearnetLegsFromConfig(config);
 		const body: InstanceResponse = {
 			name: config.instanceName ?? null,
 			tagline: config.instanceTagline ?? null,

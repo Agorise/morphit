@@ -105,10 +105,10 @@
 
 import { tryResolveHiddenUpgrade, type HiddenUpgradeResolution } from '../init/hiddenUpgradeResolve.js';
 import { normalizeContactUrl, INSTANCE_ENV } from '@morphit/operator-config';
-import { withSpinner } from '../init/spinner.ts';
+import { withSpinner, startDotsSpinner } from '../init/spinner.ts';
 import { readFileSync, writeFileSync, createWriteStream, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, readdirSync, statSync, copyFileSync, cpSync, readlinkSync, chmodSync } from 'node:fs';
 import { join, dirname, basename, resolve } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 
@@ -1224,6 +1224,65 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	process.env.npm_config_fund = 'false';
 	process.env.npm_config_audit = 'false';
 
+/**
+ * Run a child process while the braille spinner turns, then replay its output.
+ *
+ * WHY NOT spawnSync: spawnSync BLOCKS the event loop, so no setInterval can
+ * fire and a spinner wrapped around it would sit frozen — worse than none. The
+ * async spawn keeps the loop turning so the spinner actually animates.
+ *
+ * Output is captured rather than inherited, because a spinner and a child both
+ * writing to the same TTY corrupt each other's lines. It is replayed verbatim
+ * once the step finishes, so nothing is lost — the operator just sees it as a
+ * block after the step instead of dribbling out during it.
+ *
+ * the maintainer's standing rule: NO STEP RUNS SILENT. Every pause long enough to look
+ * like a hang gets a spinner, so an admin always knows work is happening.
+ */
+async function runStepWithSpinner(
+	label: string,
+	cmd: string,
+	args: readonly string[],
+	opts: { cwd?: string; timeoutMs?: number } = {}
+): Promise<number> {
+	const stop = startDotsSpinner(label);
+	try {
+		return await new Promise<number>((resolveStep) => {
+			const child = spawn(cmd, [...args], {
+				cwd: opts.cwd,
+				stdio: ['ignore', 'pipe', 'pipe']
+			});
+			let buf = '';
+			child.stdout?.on('data', (d: Buffer) => {
+				buf += d.toString();
+			});
+			child.stderr?.on('data', (d: Buffer) => {
+				buf += d.toString();
+			});
+			let timer: NodeJS.Timeout | null = null;
+			if (opts.timeoutMs !== undefined) {
+				timer = setTimeout(() => {
+					try {
+						child.kill('SIGKILL');
+					} catch {
+						/* already gone */
+					}
+				}, opts.timeoutMs);
+			}
+			const finish = (code: number): void => {
+				if (timer !== null) clearTimeout(timer);
+				stop();
+				if (buf.trim() !== '') process.stdout.write(buf.endsWith('\n') ? buf : buf + '\n');
+				resolveStep(code);
+			};
+			child.on('error', () => finish(1));
+			child.on('close', (code) => finish(code ?? 1));
+		});
+	} finally {
+		stop();
+	}
+}
+
 	// cp674 — before we spawn any child npm, strip an inherited offline flag.
 	// The ansible launcher runs us via `npm exec --offline`; that flag would
 	// otherwise force the upgrade's `npm ci` (and the MCP redeploy's
@@ -1409,8 +1468,27 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	console.log('');
 	info(`Newer release available: ${latestTag}`);
 	console.log('');
+	// A hidden-only node fetches the tarball over Tor/I2P, so `latest.body` (the
+	// Forgejo release body) is empty — morphitlat's operator saw a blank "Release
+	// notes:" heading and upgraded blind. The tarball itself ships RELEASE-NOTES.md,
+	// so read it from there when the body is empty: same bytes the SHA-256 already
+	// covers, no clearnet, nothing new to trust.
+	let notesBody = latest.body.trim();
+	if (notesBody === '' && offline?.tarballPath) {
+		try {
+			const r = spawnSync(
+				'tar',
+				['-xzOf', offline.tarballPath, '--wildcards', '*/RELEASE-NOTES.md'],
+				{ encoding: 'utf8', timeout: 60_000, maxBuffer: 8 * 1024 * 1024 }
+			);
+			if (r.status === 0 && typeof r.stdout === 'string') notesBody = r.stdout.trim();
+		} catch {
+			/* notes are a courtesy; never block an upgrade on them */
+		}
+	}
+	if (notesBody === '') notesBody = '(no release notes available for this source)';
 	info('Release notes:');
-	for (const line of latest.body.trim().split('\n')) {
+	for (const line of notesBody.split('\n')) {
 		// cp139-C-19: defense-in-depth.  latest.body is the release
 		// body fetched from Forgejo — upstream-trusted content but
 		// not source-controlled review-gated (a compromised release-
@@ -1753,8 +1831,13 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		if (existsSync(bundleMarker)) {
 			info('Offline bundle detected (prebuilt node_modules) — skipping npm ci; no registry needed.');
 		} else {
-			info('Running npm ci in installed dir (this can take a minute)...');
-			runOrThrow('npm', ['ci', '--no-audit', '--no-fund'], { cwd: installDir });
+			const ciCode = await runStepWithSpinner(
+				'Installing dependencies (npm ci) — this can take a minute…',
+				'npm',
+				['ci', '--no-audit', '--no-fund'],
+				{ cwd: installDir }
+			);
+			if (ciCode !== 0) throw new Error(`npm ci exited ${ciCode}`);
 		}
 	} catch (err) {
 		warn('npm ci failed; rolling back.');
@@ -2349,9 +2432,12 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		const mcpWasActive =
 			spawnSync('systemctl', ['is-active', '--quiet', 'morphit-mcp.service']).status === 0;
 		info('Redeploying the MCP server (vendored tree) for the new version...');
-		const dep = spawnSync('bash', [deployScript, installDir, mcpDest, mcpUser], {
-			stdio: 'inherit'
-		});
+		const depCode = await runStepWithSpinner(
+			'Redeploying the MCP server…',
+			'bash',
+			[deployScript, installDir, mcpDest, mcpUser]
+		);
+		const dep = { status: depCode };
 		if (dep.status !== 0) {
 			warn(
 				`MCP redeploy failed (deploy-mcp.sh exit ${dep.status ?? 'signal'}); morphit-mcp ` +
@@ -2563,7 +2649,12 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	try {
 		const healScript = join(installDir, 'ops', 'ipfs', 'morphit-gateway-firewall-heal.sh');
 		if (existsSync(healScript)) {
-			spawnSync('sh', [healScript], { stdio: 'inherit', timeout: 180_000 });
+			await runStepWithSpinner(
+				'Checking the frontend can reach this box\u2019s IPFS gateway…',
+				'sh',
+				[healScript],
+				{ timeoutMs: 180_000 }
+			);
 		}
 	} catch {
 		/* never fail an upgrade over the firewall self-heal */
@@ -2598,14 +2689,26 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 			};
 			const cfg = join(installDir, 'morphit.config.env');
 			const idxEnv = '/etc/morphit/indexer.env';
+			// morphit.env is the OTHER carried-forward config file, and on all three
+			// live instances it is where the origin and hidden addresses actually are.
+			const altCfg = join(installDir, 'morphit.env');
+			// BunkerWeb's SERVER_NAME is the last resort and, in practice, the one
+			// source that is always populated: the edge cannot serve the site without
+			// it. Both real instances turned out to have neither MORPHIT_INSTANCE_ORIGIN
+			// nor MORPHIT_INDEXER_PUBLIC_ORIGIN recorded anywhere.
 			const origin =
-				readKey(cfg, 'MORPHIT_INSTANCE_ORIGIN') || readKey(idxEnv, 'MORPHIT_INDEXER_PUBLIC_ORIGIN');
+				readKey(cfg, 'MORPHIT_INSTANCE_ORIGIN') ||
+				readKey(altCfg, 'MORPHIT_INSTANCE_ORIGIN') ||
+				readKey(idxEnv, 'MORPHIT_INDEXER_PUBLIC_ORIGIN') ||
+				readKey(altCfg, 'MORPHIT_INDEXER_PUBLIC_ORIGIN') ||
+				readKey(join(installDir, 'ops', 'bunkerweb', 'bunkerweb.env'), 'SERVER_NAME').split(/\s+/)[0] ||
+				'';
 			if (origin) seedAddrArgs.push(`MORPHIT_SEED_ORIGIN=${origin}`);
 
 			// Our OWN onion. Never read it from indexer.env — that file lists other
 			// people's Blurt RPC onions, and probing one would report a stranger's
 			// node as our working seeder.
-			let onion = readKey(cfg, 'MORPHIT_INSTANCE_TOR_ADDRESS');
+			let onion = readKey(cfg, 'MORPHIT_INSTANCE_TOR_ADDRESS') || readKey(altCfg, 'MORPHIT_INSTANCE_TOR_ADDRESS');
 			if (!onion) {
 				const found = spawnSync(
 					'sh',
@@ -2617,7 +2720,10 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 			if (onion) seedAddrArgs.push(`MORPHIT_SEED_ONION=${onion}`);
 
 			const i2p =
-				readKey(cfg, 'MORPHIT_INSTANCE_I2P_B32_ADDRESS') || readKey(cfg, 'MORPHIT_INSTANCE_I2P_ADDRESS');
+				readKey(cfg, 'MORPHIT_INSTANCE_I2P_B32_ADDRESS') ||
+				readKey(altCfg, 'MORPHIT_INSTANCE_I2P_B32_ADDRESS') ||
+				readKey(cfg, 'MORPHIT_INSTANCE_I2P_ADDRESS') ||
+				readKey(altCfg, 'MORPHIT_INSTANCE_I2P_ADDRESS');
 			if (i2p) seedAddrArgs.push(`MORPHIT_SEED_I2P=${i2p}`);
 		} catch {
 			/* detection is a nicety; the seed still runs and says what it could not find */
@@ -2649,10 +2755,12 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 				} catch {
 					/* couldn't relax perms — the seed's download mode has no clearnet here, so it'll no-op */
 				}
-				spawnSync('sudo', ['-u', 'ipfs', ...seedEnv, 'sh', seedScript, latestTag], {
-					stdio: 'inherit',
-					timeout: 1_200_000
-				});
+				await runStepWithSpinner(
+					`Seeding ${latestTag} to IPFS\u2026`,
+					'sudo',
+					['-u', 'ipfs', ...seedEnv, 'sh', seedScript, latestTag],
+					{ timeoutMs: 1_200_000 }
+				);
 			} else {
 				info('');
 				info('Skipping the IPFS self-seed: this offline bundle does not carry the canonical');
@@ -2681,12 +2789,13 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 					/* couldn't relax perms — let the seed download mode handle it */
 				}
 			}
-			const seedRes = spawnSync(
+			const seedRes = await runStepWithSpinner(
+				`Seeding ${latestTag} to IPFS\u2026`,
 				'sudo',
 				['-u', 'ipfs', ...seedEnv, 'sh', seedScript, latestTag],
-				{ stdio: 'inherit', timeout: 1_200_000 }
+				{ timeoutMs: 1_200_000 }
 			);
-			if (seedRes.status === 0) {
+			if (seedRes === 0) {
 				info(`✓ Seeded ${latestTag} to IPFS.`);
 			} else {
 				warn(
@@ -2735,9 +2844,16 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 			// instance that matters most. Idempotent: re-copying an identical unit
 			// and re-enabling an already-enabled timer are both no-ops.
 			try {
+				// Install the PUBLISH units too. Only the canonical box should ever
+				// publish, so they stay inert until enabled — but they have to be
+				// PRESENT to be enableable, and morphit.io is a manual install Ansible
+				// never touches. Without this, even a first hand-made publish would
+				// never get a recurring timer, and the snapshot would go stale again.
 				const units = [
 					'morphit-snapshot-mirror.service',
-					'morphit-snapshot-mirror.timer'
+					'morphit-snapshot-mirror.timer',
+					'morphit-snapshot-publish.service',
+					'morphit-snapshot-publish.timer'
 				];
 				let installed = 0;
 				for (const u of units) {
@@ -2756,13 +2872,28 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 					stdio: 'ignore',
 					timeout: 60_000
 				});
+				// Enable publishing ONLY where the operator has opted in by dropping the
+				// env file. Explicit and reversible: exactly one instance in the
+				// federation should publish, and an upgrade must never make a box start
+				// signing snapshots under its own account by surprise.
+				if (existsSync('/etc/morphit/snapshot-publish.env')) {
+					spawnSync('systemctl', ['enable', '--now', 'morphit-snapshot-publish.timer'], {
+						stdio: 'ignore',
+						timeout: 60_000
+					});
+					info('  This box is configured as the federation snapshot publisher (timer armed).');
+				}
 			} catch {
 				/* the timer is a convenience; the mirror below still runs this upgrade */
 			}
 
 			info('');
-			info('Refreshing this instance\u2019s federation-snapshot mirror (helps new nodes fast-sync from you) \u2026');
-			spawnSync('bash', [mirrorScript], { stdio: 'inherit', timeout: 1_800_000 });
+			await runStepWithSpinner(
+				'Refreshing the federation-snapshot mirror (helps new nodes fast-sync from you)\u2026',
+				'bash',
+				[mirrorScript],
+				{ timeoutMs: 1_800_000 }
+			);
 		}
 	} catch {
 		/* best-effort; never fail an upgrade over snapshot mirroring */

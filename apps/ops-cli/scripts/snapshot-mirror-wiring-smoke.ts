@@ -234,6 +234,104 @@ ok('timer install is idempotent (skips an identical unit already in place)', /==
 
 ok('npm update-notifier is silenced at the last step that can emit it', /npm_config_update_notifier=false/.test(deployMcp));
 
+// The first heal probe asked for /api/v0/version — kubo's RPC API (port 5001),
+// not a gateway path — and took wget's exit code as the verdict. The gateway
+// 404'd it, busybox wget exited non-zero, and the script declared every box
+// unreachable regardless of the firewall. Confirmed on morphit.io, where the
+// seeder proved the same gateway was serving /ipfs/ fine in the same run.
+ok(
+	'heal probes a GATEWAY path, never the RPC API (the gateway on 8082 serves only /ipfs/ and /ipns/)',
+	!/api\/v0\/version/.test(heal.replace(/^\s*#.*$/gm, '')) &&
+		/host\.docker\.internal:\$\{PORT\}\/ipfs\//.test(heal)
+);
+ok(
+	'heal treats ANY HTTP reply as reachable — a 400/404 proves the hop, only a timeout or refusal does not',
+	/\*HTTP\/\*\) return 0/.test(heal)
+);
+ok(
+	'seeder falls back to BunkerWeb SERVER_NAME for the origin (the one key that is always set)',
+	/bunkerweb\.env/.test(seed) && /SERVER_NAME/.test(seed)
+);
+ok(
+	'upgrade resolves the origin from SERVER_NAME too',
+	/bunkerweb\.env'\), 'SERVER_NAME'/.test(upgrade)
+);
+
+// ── J. v1.17.4 — what three real upgrades showed ────────────────────
+// the maintainer's standing rule: NO STEP RUNS SILENT. Every pause long enough to look like
+// a hang must turn the braille spinner.
+ok('upgrade wraps its silent steps in a spinner', /runStepWithSpinner/.test(upgrade));
+ok(
+	'the spinner runner uses async spawn, not spawnSync (spawnSync BLOCKS the event loop, so a wrapped spinner would sit frozen)',
+	/spawn\(cmd/.test(upgrade) && /startDotsSpinner/.test(upgrade)
+);
+for (const step of ['npm ci', 'MCP server', 'IPFS', 'snapshot mirror']) {
+	ok(`  …including: ${step}`, new RegExp(step.replace(/ /g, '\\s')).test(upgrade));
+}
+
+// All three instances reported "no public origin"/"no hidden address" while
+// plainly having both: the settings live in morphit.env, which nothing read.
+ok('seeder reads morphit.env, not just morphit.config.env', /ALTCFG=\/opt\/morphit\/morphit\.env/.test(seed));
+ok('seeder looks for hidden addresses in morphit.env too', /"\$CFG" "\$ALTCFG"/.test(seed));
+ok('upgrade reads morphit.env root-side too', /morphit\.env'\)/.test(upgrade));
+ok(
+	'the no-hidden-address line no longer claims the box "seeds over clearnet only" (it said that on a zero-clearnet node)',
+	!/seeds over clearnet only/.test(seed)
+);
+
+// A hidden-only node has no release page, so notes came out blank.
+ok('release notes fall back to the tarball on the hidden path', /RELEASE-NOTES\.md/.test(upgrade));
+
+// Operator-facing output must not assert consequences a check did not establish.
+ok(
+	'heal no longer asserts hidden peers CANNOT upgrade from an unverified check',
+	!/CANNOT upgrade from this box/.test(heal)
+);
+ok('heal says plainly that its check can be wrong', /can be wrong/.test(heal));
+ok('heal states that nothing about it blocks the upgrade', /blocks the upgrade/.test(heal));
+
+// ── K. self-row parity (v1.17.4) ────────────────────────────────────
+// A node's own directory card was built from columns only the NETWORK probe
+// writes — and the probe is skipped for self. So the one instance that had
+// actually earned the 🏅 badge (morphitlat, zero-clearnet) was the only one that
+// could not see it on its own site, and its status disagreed with every peer.
+const probe = read('apps/indexer/src/indexer/federationProbe.ts');
+const poller = read('apps/indexer/src/indexer/poller.ts');
+const gate = read('apps/indexer/src/indexer/clearnetGate.ts');
+const instApi = read('apps/indexer/src/api/instance.ts');
+
+ok('the clearnet legs have ONE definition, shared by /v1/instance and the probe',
+	/export function clearnetLegsFromConfig/.test(gate) && /clearnetLegsFromConfig\(config\)/.test(instApi));
+ok('the self row writes its own cached_clearnet_eliminated', /cached_clearnet_eliminated = COALESCE/.test(probe));
+ok('…from the locally computed gate', /localClearnetEliminated/.test(probe) && /localClearnetEliminated/.test(poller));
+ok('COALESCE keeps a peer-observed value when we have none (never clobbers with null)',
+	/COALESCE\(\$7, cached_clearnet_eliminated\)/.test(probe));
+ok('the self row applies the same orderbook-activity rule peers apply to it',
+	/selfStatus = 'quiet'/.test(probe) && /ORDERBOOK_ACTIVITY_GRACE_DAYS/.test(probe));
+ok('the self activity lookup can never break the self tick', /label refinement only/.test(probe));
+ok(
+	'self status is relabelled only on POSITIVE evidence — an unanswered lookup never marks a busy instance quiet',
+	/answered === false/.test(probe) && /Only ever relabel on POSITIVE evidence/.test(probe)
+);
+
+// ── L. dry-run + publisher self-install (v1.17.4) ───────────────────
+const boot = read('apps/indexer/scripts/snapshot-bootstrap.ts');
+ok('fast-sync has a --verify-only dry run', /has\('verify-only'\)/.test(boot));
+ok(
+	'the dry run stops BEFORE any database work, so it is safe from a laptop with no indexer DB',
+	boot.indexOf("has('verify-only')") < boot.indexOf('restoring into the indexer DB')
+);
+ok('the dry run still proves the bytes (it runs after the sha256/manifest gates)',
+	boot.indexOf('refusing.') < boot.indexOf("has('verify-only')"));
+ok('the dry run says plainly that nothing was written', /nothing was written/.test(boot));
+
+ok('upgrade installs the PUBLISH units too (Ansible never runs on a manual install)',
+	/morphit-snapshot-publish\.service/.test(upgrade) && /morphit-snapshot-publish\.timer/.test(upgrade));
+ok(
+	'publishing is enabled ONLY on explicit opt-in — an upgrade must never make a box start signing snapshots by surprise',
+	/snapshot-publish\.env/.test(upgrade)
+);
+
 console.log('');
 if (fails.length > 0) {
 	console.error(`✗ ${fails.length} snapshot-mirror-wiring scenario(s) failed:`);

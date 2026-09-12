@@ -323,6 +323,27 @@ async function main(): Promise<void> {
 			die('refused: --i-trust-this-source not given.');
 		}
 
+		// ── --verify-only: stop here, touch no database ────────────
+		// A DRY RUN. Everything above is the real consumer path — resolve the
+		// signed op from chain, pick a mirror by transport, download, and prove
+		// the bytes against the on-chain SHA-256 and the manifest. Everything
+		// below writes to Postgres. Splitting there means an operator can test the
+		// whole fetch-and-verify pipeline from a laptop with no indexer DB at all,
+		// and with no chance of clobbering one — which is exactly the rehearsal
+		// you want BEFORE a brand-new instance depends on it working.
+		if (has('verify-only')) {
+			process.stderr.write(
+				`\n✓ DRY RUN PASSED — fetched and verified, nothing was written.\n` +
+					`    snapshot block : ${manifest.lastAppliedBlock.toLocaleString()}\n` +
+					`    chain          : ${manifest.chainId}\n` +
+					`    sha256         : verified against the on-chain op\n` +
+					`    indexer        : v${manifest.indexerVersion ?? 'unknown'} · schema v${manifest.schemaVersion}\n` +
+					`  A real fast-sync would now restore this into the indexer DB and replay\n` +
+					`  the short tail since that block. Re-run without --verify-only to do it.\n`
+			);
+			return;
+		}
+
 		// ── gate 4: don't clobber a DB that already has real data ─
 		const st = await db
 			.query<{ last_applied_block: string }>('SELECT last_applied_block::text FROM indexer_state LIMIT 1')

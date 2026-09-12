@@ -144,6 +144,12 @@ fi
 #   (a) through the FRONTEND (what the .onion/.b32.i2p actually expose), and
 #   (b) back over each configured hidden address, end to end.
 CFG=/opt/morphit/morphit.config.env
+# The OTHER config file. morphit.env is carried forward on every upgrade
+# alongside morphit.config.env, and on all three live instances it is where the
+# origin and the Tor/I2P addresses actually live — reading only morphit.config.env
+# is why every box reported "no public origin" and "no hidden address" while
+# plainly having both. The canary script searched here and found them; this did not.
+ALTCFG=/opt/morphit/morphit.env
 GW_PORT="$(ipfs config Addresses.Gateway 2>/dev/null | sed -n 's#.*/tcp/\([0-9]\{1,5\}\).*#\1#p' | head -1)" || true
 [ -n "${GW_PORT:-}" ] || GW_PORT=8082
 REL_PATH="/ipfs/${CID}/morphit-latest.tar.gz"
@@ -184,7 +190,10 @@ _hostsrc=""
 for _src in \
 	"env:${MORPHIT_SEED_ORIGIN:-}" \
 	"cfg:$(sed -n 's#^[[:space:]]*MORPHIT_INSTANCE_ORIGIN=[[:space:]]*##p' "$CFG" 2>/dev/null | tail -1)" \
-	"idx:$(sed -n 's#^[[:space:]]*MORPHIT_INDEXER_PUBLIC_ORIGIN=[[:space:]]*##p' /etc/morphit/indexer.env 2>/dev/null | tail -1)"
+	"alt:$(sed -n 's#^[[:space:]]*MORPHIT_INSTANCE_ORIGIN=[[:space:]]*##p' "$ALTCFG" 2>/dev/null | tail -1)" \
+	"idx:$(sed -n 's#^[[:space:]]*MORPHIT_INDEXER_PUBLIC_ORIGIN=[[:space:]]*##p' /etc/morphit/indexer.env 2>/dev/null | tail -1)" \
+	"alx:$(sed -n 's#^[[:space:]]*MORPHIT_INDEXER_PUBLIC_ORIGIN=[[:space:]]*##p' "$ALTCFG" 2>/dev/null | tail -1)" \
+	"waf:$(sed -n 's#^[[:space:]]*SERVER_NAME=[[:space:]]*##p' /opt/morphit/ops/bunkerweb/bunkerweb.env 2>/dev/null | tail -1 | cut -d' ' -f1)"
 do
 	_tag=${_src%%:*}
 	_val=${_src#*:}
@@ -214,7 +223,8 @@ elif [ "$_fe" = "200" ]; then
 	log "✓ local gateway and the frontend both serve the release (clearnet path OK, host from ${_hostsrc})."
 elif [ -z "$_fe" ]; then
 	log "• Frontend check skipped: no public origin found (looked in MORPHIT_SEED_ORIGIN,"
-	log "  MORPHIT_INSTANCE_ORIGIN in $CFG, MORPHIT_INDEXER_PUBLIC_ORIGIN in /etc/morphit/indexer.env)."
+	log "  MORPHIT_INSTANCE_ORIGIN in $CFG, MORPHIT_INDEXER_PUBLIC_ORIGIN in /etc/morphit/indexer.env,"
+	log "  SERVER_NAME in /opt/morphit/ops/bunkerweb/bunkerweb.env)."
 	log "  Set MORPHIT_INSTANCE_ORIGIN=https://<your-domain> in $CFG to enable this check."
 	log "  The hidden checks below still prove the real peer path end to end."
 elif [ "$_fe" = "403" ] || [ "$_fe" = "429" ]; then
@@ -240,9 +250,9 @@ _onion="${MORPHIT_SEED_ONION:-}"
 # MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS — other people's Blurt RPC onions — and
 # grepping it would pick up a THIRD PARTY's address, probe it, and report
 # "✓ Tor: the .onion serves the release" about a node that isn't ours.
-[ -n "$_onion" ] || _onion=$(grep -hoE '[a-z2-7]{56}\.onion' "$CFG" /var/lib/tor/*/hostname 2>/dev/null | head -1) || true
+[ -n "$_onion" ] || _onion=$(grep -hoE '[a-z2-7]{56}\.onion' "$CFG" "$ALTCFG" /var/lib/tor/*/hostname 2>/dev/null | head -1) || true
 _i2p="${MORPHIT_SEED_I2P:-}"
-[ -n "$_i2p" ] || _i2p=$(grep -hoE '[a-z2-7]{52}\.b32\.i2p' "$CFG" 2>/dev/null | head -1) || true
+[ -n "$_i2p" ] || _i2p=$(grep -hoE '[a-z2-7]{52}\.b32\.i2p' "$CFG" "$ALTCFG" 2>/dev/null | head -1) || true
 if [ -n "${_onion:-}" ]; then
 	_sp=$(ss -lnt 2>/dev/null | grep -oE '127\.0\.0\.1:(9050|9150)' | head -1 | cut -d: -f2) || true
 	[ -n "${_sp:-}" ] || _sp=9050
@@ -256,8 +266,9 @@ if [ -n "${_i2p:-}" ]; then
 		|| log "⚠ I2P: the .b32.i2p did NOT serve the release (HTTP ${_i:-timeout}); I2P tunnels are slow to warm up — re-check before treating it as broken."
 fi
 if [ -z "${_onion:-}" ] && [ -z "${_i2p:-}" ]; then
-	log "• No hidden address configured — this box seeds over clearnet only."
-	log "  Add one (morphit-ops → Set up a Tor/I2P address) so hidden-only nodes can upgrade from you."
+	log "• No Tor/I2P address found in the config, so the hidden checks were skipped."
+	log "  (If this box does have one it is simply not recorded in $CFG or $ALTCFG —"
+	log "   peers may well reach it fine; only this self-check could not confirm it.)"
 fi
 
 echo "$CID"

@@ -71,8 +71,28 @@ esac
 # uses wget). Probe the gateway's own version endpoint: tiny, always present,
 # and it does not depend on any particular CID being pinned yet.
 probe() {
-	docker exec "$CONTAINER" wget -q -T 6 -O /dev/null \
-		"http://host.docker.internal:${PORT}/api/v0/version" 2>/dev/null
+	# We are testing REACHABILITY, not content — so ANY HTTP reply proves the
+	# container-to-host path is open, including a 400 or 404.
+	#
+	# Two things were wrong with the first version of this probe, and together they
+	# made it report "cannot reach" on every box regardless of the firewall:
+	#   1. It asked for /api/v0/version. That is kubo's RPC API (port 5001), NOT a
+	#      gateway path. The gateway on 8082 serves /ipfs/ and /ipns/ and nothing
+	#      else, so the request 404'd even on a perfectly healthy node.
+	#   2. It treated wget's exit code as the verdict. busybox wget exits non-zero
+	#      on any HTTP error, so a 404 looked identical to a dropped packet.
+	# Bare /ipfs/ is deliberate: the gateway rejects it instantly with a 400,
+	# proving the hop without resolving a CID or touching the network — so the
+	# probe stays fast and cannot be confused by an unpinned or slow-to-fetch CID.
+	_out=$(docker exec "$CONTAINER" wget -O /dev/null -T 6 \
+		"http://host.docker.internal:${PORT}/ipfs/" 2>&1)
+	_rc=$?
+	[ "$_rc" = 0 ] && return 0
+	# A timeout or refusal never produces an HTTP status line; an HTTP error does.
+	case "$_out" in
+		*HTTP/*) return 0 ;;
+	esac
+	return 1
 }
 
 if probe; then
@@ -80,8 +100,8 @@ if probe; then
 	exit 0
 fi
 
-log "frontend container CANNOT reach the host IPFS gateway on ${PORT}."
-log "  hidden (.onion/.b32.i2p) release fetches would 404 from this box — healing."
+log "the frontend could not reach the host IPFS gateway on ${PORT} on first try."
+log "  making sure the container-to-host path is open (this is routine) …"
 
 # Is the gateway even listening? If not, this is not a firewall problem and
 # adding rules would be cargo-culting. Say so plainly and stop.
@@ -141,12 +161,13 @@ if [ -n "$HEALED" ]; then
 	exit 0
 fi
 
-log "⚠ could not heal automatically. The frontend still cannot reach the gateway."
-log "  Hidden-only peers CANNOT upgrade from this box until this is fixed."
-log "  Try, in order:"
+log "• Could not confirm the frontend can reach the gateway on ${PORT}."
+log "  This check runs from inside the container and can be wrong; peers may well"
+log "  be fetching from this box fine. Nothing here blocks the upgrade."
+log "  If hidden (.onion/.b32.i2p) fetches DO fail from this box, try:"
 log "    sudo ufw allow from ${CIDR} to any port ${PORT} proto tcp"
 log "    sudo docker restart ${CONTAINER}"
 log "  Then confirm from inside the container (a TIMEOUT means the firewall is"
 log "  still dropping it; 'refused' means the gateway is not bound to 0.0.0.0):"
-log "    sudo docker exec ${CONTAINER} wget -q -T 6 -O - http://host.docker.internal:${PORT}/api/v0/version"
+log "    sudo docker exec ${CONTAINER} wget -O /dev/null -T 6 http://host.docker.internal:${PORT}/ipfs/"
 exit 0

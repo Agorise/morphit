@@ -117,6 +117,11 @@ export interface FederationProbeConfig {
 	 *  so a self-probe spuriously reports 'unreachable'. When set, the
 	 *  matching directory row is marked reachable locally instead. */
 	readonly selfOrigin?: string;
+	/** Our OWN clearnet-elimination gate, computed from local config exactly as
+	 *  /v1/instance computes it. The self row is never network-probed, so this is
+	 *  the ONLY way `cached_clearnet_eliminated` gets written for us — without it
+	 *  the badge is invisible on the operator's own directory card. */
+	readonly localClearnetEliminated?: () => boolean;
 	/** F4 — our own relay account (MORPHIT_INDEXER_RELAY_ACCOUNT). When set
 	 *  together with onSharedRelayAccount, the probe flags any OTHER instance
 	 *  that advertises this same relay account (welcome-bonus double-spend
@@ -575,7 +580,36 @@ export class FederationProbeScheduler {
 		// our own directory row no longer sits at a misleading 'good'
 		// during initial sync — it shows 'syncing' until caught up.
 		const lagBlocks = this.config.localLagBlocks?.() ?? null;
-		const selfStatus: ProbeStatus = selfReachableStatus(lagBlocks);
+		let selfStatus: ProbeStatus = selfReachableStatus(lagBlocks);
+		// Apply the SAME orderbook-activity rule peers apply to us. Without this the
+		// self row can only ever be 'good' or 'syncing', so an operator sees "Good"
+		// on their own card while every peer shows "Quiet" — the same instance
+		// labelled two different ways, with nothing to explain the difference.
+		if (selfStatus === 'good') {
+			try {
+				const act = await this.db.query<{ recent: boolean }>(
+					`SELECT EXISTS (
+					   SELECT 1 FROM orders
+					    WHERE created_at > NOW() - ($1 || ' days')::interval
+					 ) AS recent`,
+					[String(ORDERBOOK_ACTIVITY_GRACE_DAYS)]
+				);
+				// Only ever relabel on POSITIVE evidence. A missing row means the
+				// lookup told us nothing — not that the orderbook is idle — and
+				// treating "unknown" as "quiet" would mark a busy instance quiet the
+				// first time the query misbehaved.
+				const answered = act.rows[0]?.recent;
+				if (answered === false) {
+					const ageMs = Date.now() - new Date(inst.registered_at_time).getTime();
+					const isNewInstance = ageMs < ORDERBOOK_ACTIVITY_GRACE_DAYS * 24 * 60 * 60 * 1000;
+					if (!isNewInstance) selfStatus = 'quiet';
+				}
+			} catch {
+				/* activity is a label refinement only — never let it break the self tick */
+			}
+		}
+		// Score our own gate from local config, the same inputs /v1/instance uses.
+		const selfClearnet = this.config.localClearnetEliminated?.() ?? null;
 		const branding = this.config.selfBranding?.() ?? null;
 		if (branding) {
 			await this.db.query(
@@ -587,6 +621,7 @@ export class FederationProbeScheduler {
 					cached_tagline = $4,
 					cached_contact_url = $5,
 					cached_alt_networks = $6,
+					cached_clearnet_eliminated = COALESCE($7, cached_clearnet_eliminated),
 					consecutive_failures = 0
 				 WHERE origin = $1`,
 				[
@@ -595,7 +630,8 @@ export class FederationProbeScheduler {
 					branding.name,
 					branding.tagline,
 					branding.contactUrl,
-					branding.altNetworks
+					branding.altNetworks,
+					selfClearnet
 				]
 			);
 			return;

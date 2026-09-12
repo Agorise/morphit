@@ -22,6 +22,7 @@ import type pg from 'pg';
 import type { Config } from '$config';
 import type { BlurtClient } from '$blurt/client';
 import type { Database } from '$db/pool';
+import { computeClearnetEliminated, clearnetLegsFromConfig } from './clearnetGate.ts';
 import { applyBlock } from '$indexer/dispatcher';
 import { reconcileOperatorRegistrations } from '$indexer/reconcileRegistrations';
 import { consumeInOrderWithPrefetch } from '$indexer/prefetch';
@@ -349,6 +350,11 @@ export class Poller {
 			// so this is the ONLY way its cached_name/tagline/contact/alt
 			// columns get populated — without it the operator's own
 			// directory card is stuck on the operator-account fallback.
+			// v1.17.4: our own clearnet gate, so the operator's OWN card can show the
+			// 🏅 badge. Peers saw it (their probe reads our /v1/instance); we never
+			// wrote it for ourselves, so morphitlat — a zero-clearnet node — was the
+			// only instance that could not see its own badge.
+			localClearnetEliminated: () => computeClearnetEliminated(clearnetLegsFromConfig(config)),
 			selfBranding: () => ({
 				name: config.instanceName ?? null,
 				tagline: config.instanceTagline ?? null,

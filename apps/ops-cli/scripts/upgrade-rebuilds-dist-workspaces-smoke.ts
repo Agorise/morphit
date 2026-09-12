@@ -52,9 +52,16 @@ function rebuildsBothWorkspaces(src: string): boolean {
 	);
 }
 
+/** The exact npm-ci invocation both invariant 2 and its tamper check anchor on. */
+const NPM_CI_CALL = "['ci', '--no-audit', '--no-fund']";
+
 /** Invariant 2: the rebuild loop is positioned AFTER the npm ci call. */
 function rebuildAfterNpmCi(src: string): boolean {
-	const ci = src.indexOf("runOrThrow('npm', ['ci'");
+	// v1.17.4: npm ci moved from runOrThrow to runStepWithSpinner (spawnSync blocks
+	// the event loop, so a spinner around it would sit frozen). The INVARIANT is
+	// unchanged — deps must be installed before the dist rebuild — so anchor on the
+	// step, not on the spelling of the call.
+	const ci = src.indexOf(NPM_CI_CALL);
 	const loop = src.indexOf("for (const wsDir of ['ops-cli', 'mcp-server']");
 	return ci !== -1 && loop !== -1 && ci < loop;
 }
@@ -92,7 +99,7 @@ else bad('a dist rebuild failure is not handled non-fatally');
 {
 	// Simulate moving the rebuild before npm ci by deleting the npm ci call
 	// that precedes it — invariant 2 must then fail.
-	const mutated = src.replace("runOrThrow('npm', ['ci', '--no-audit', '--no-fund'], { cwd: installDir });", '');
+	const mutated = src.replace(NPM_CI_CALL, '');
 	if (mutated === src) bad('tamper wiring error: could not remove the npm ci call');
 	else if (rebuildAfterNpmCi(mutated)) bad('tamper NOT caught: removing npm ci still passes invariant 2 (toothless)');
 	else ok('tamper caught: removing the npm ci step turns invariant 2 red');

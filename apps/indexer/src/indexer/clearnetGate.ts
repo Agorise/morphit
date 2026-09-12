@@ -1,3 +1,4 @@
+import { hiddenHostNetworkOf } from '@morphit/hidden-transport';
 /**
  * clearnetGate — computes the `clearnet_eliminated` flag (v1.15.x stage 4).
  *
@@ -81,3 +82,35 @@ export function matrixHomeserverIsHidden(homeserverUrl: string | null | undefine
  *  fails CI otherwise), so the served bundle a node ships auto-loads nothing
  *  external. Exposed as a constant the runtime gate can trust. */
 export const FRONTEND_IS_LOCAL_ONLY = true;
+
+/**
+ * Assemble the seven legs from config alone.
+ *
+ * Extracted so the SELF row in the federation directory can be scored with the
+ * exact same inputs `/v1/instance` serves to peers. Before this, a node's own
+ * `cached_clearnet_eliminated` was only ever written by the network probe —
+ * which is skipped for self — so the column sat at its `false` default forever
+ * and the one instance that had actually earned the badge was the only one that
+ * could not see it on its own directory card. (Same defect class as cp311, one
+ * column over.)
+ */
+export function clearnetLegsFromConfig(cfg: {
+	blurtRpcEndpoints: readonly unknown[];
+	hiddenRpcEndpoints: readonly unknown[];
+	instanceTorAddress?: string | null;
+	instanceI2pB32Address?: string | null;
+	instanceI2pNameAddress?: string | null;
+	instanceMatrixHomeserver?: string | null;
+}): ClearnetEliminationLegs {
+	return {
+		chainHidden: cfg.blurtRpcEndpoints.length === 0 && cfg.hiddenRpcEndpoints.length > 0,
+		transportTor: hiddenHostNetworkOf(cfg.instanceTorAddress ?? '') === 'tor',
+		transportI2p:
+			hiddenHostNetworkOf(cfg.instanceI2pB32Address ?? '') === 'i2p' ||
+			hiddenHostNetworkOf(cfg.instanceI2pNameAddress ?? '') === 'i2p',
+		priceFederated: cfg.blurtRpcEndpoints.length === 0,
+		frontendLocal: FRONTEND_IS_LOCAL_ONLY,
+		upgradeHidden: true,
+		matrixClean: matrixHomeserverIsHidden(cfg.instanceMatrixHomeserver)
+	};
+}

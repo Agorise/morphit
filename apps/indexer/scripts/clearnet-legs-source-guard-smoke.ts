@@ -37,15 +37,22 @@ check('b32 i2p → i2p', hiddenHostNetworkOf('x'.repeat(52) + '.b32.i2p') === 'i
 check('named i2p → i2p', hiddenHostNetworkOf('morphit.i2p') === 'i2p');
 check('loki → loki', hiddenHostNetworkOf('abc.loki') === 'loki');
 
-// ── v16-1: instance.ts derives the transport legs through the validator, not Boolean()
+// ── v16-1: the transport legs are derived through the validator, not Boolean()
+// v1.17.4: the legs moved OUT of instance.ts into clearnetGate.clearnetLegsFromConfig,
+// so /v1/instance and the federation probe's self row score an instance with
+// identical inputs. The invariant is unchanged — legs must be validated through
+// hiddenHostNetworkOf — so check it where the legs now live, and additionally
+// assert instance.ts no longer keeps a second copy that could drift.
 const instance = read('apps/indexer/src/api/instance.ts');
-check('instance imports hiddenHostNetworkOf', /hiddenHostNetworkOf/.test(instance) && /@morphit\/hidden-transport/.test(instance));
+const legs = read('apps/indexer/src/indexer/clearnetGate.ts');
+check('the legs source imports hiddenHostNetworkOf', /hiddenHostNetworkOf/.test(legs) && /@morphit\/hidden-transport/.test(legs));
 check(
 	'transportTor validated via hiddenHostNetworkOf',
-	/transportTor:\s*hiddenHostNetworkOf\([^)]*\)\s*===\s*'tor'/.test(instance)
+	/transportTor:\s*hiddenHostNetworkOf\([^)]*\)\s*===\s*'tor'/.test(legs)
 );
-check('transportI2p validated via hiddenHostNetworkOf', /transportI2p:[\s\S]{0,160}hiddenHostNetworkOf/.test(instance));
-check('old unvalidated Boolean() derivation is gone', !/transportTor:\s*Boolean\(/.test(instance));
+check('transportI2p validated via hiddenHostNetworkOf', /transportI2p:[\s\S]{0,160}hiddenHostNetworkOf/.test(legs));
+check('old unvalidated Boolean() derivation is gone', !/transportTor:\s*Boolean\(/.test(legs) && !/transportTor:\s*Boolean\(/.test(instance));
+check('instance.ts keeps NO second copy of the legs (single source of truth)', !/transportTor:/.test(instance));
 
 // ── H-1a: the hidden-only upgrade path fail-closes rather than touch a clearnet mirror
 const upgrade = read('apps/ops-cli/src/commands/upgrade.ts');
