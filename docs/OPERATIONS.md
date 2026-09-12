@@ -11955,3 +11955,69 @@ MORPHIT_INDEXER_I2P_HTTP_PROXY=127.0.0.1:4444
 Only genuine `.onion` / `.b32.i2p` hosts are accepted in `MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS` — a clearnet URL is rejected, so this knob can never be used to point the pool at a private internal address. Leaving it empty keeps the node clearnet-only with no behavioural change.
 
 > **Trust reminder:** reaching a node over Tor/I2P hides *where* you read, not *whether* the data is true. That's exactly why hidden endpoints go through the same quorum cross-check as clearnet ones — a node that serves a forged block is caught regardless of transport.
+
+---
+
+## 52. Fast-sync and the federation snapshot mirror
+
+A brand-new indexer starts with an empty database. Deriving it honestly means replaying millions of blocks over RPC, which takes days — and considerably longer over Tor or I2P. **Fast-sync** skips that: the node restores a ready-made copy of a synced database and replays only the short gap since the copy was taken. It is on by default, and it is the difference between a new instance being useful in minutes and being useful next week.
+
+Fast-sync depends on exactly one artifact: a small indexer snapshot (about 600 kB today) that `@morphit` anchors on-chain via a signed `indexer_snapshot_v1` operation. This section is about how that artifact gets made, how it stays reachable, and what your box does about it.
+
+### One signer, many mirrors
+
+Only the canonical instance **generates and anchors** the snapshot. It exports its own indexer DB, pins the tarball, and broadcasts the CID and SHA-256 on-chain under one signature. That means there is exactly one trust decision in the whole system, and no operator ever has to judge whose database view to accept.
+
+Every other instance **mirrors** it: pins that same CID to its own Kubo node and re-serves the bytes. Serving costs nothing extra — your frontend already proxies `/ipfs/` to the local gateway, so a pinned snapshot is immediately reachable over your clearnet origin, your `.onion` and your `.b32.i2p` alike, with no new routes and no new ports.
+
+Mirroring is **not** a trust claim. A newcomer proves every downloaded byte against the SHA-256 that `@morphit` signed, so a broken or hostile mirror is caught by arithmetic rather than by reputation. That is precisely why the whole federation can mirror without anyone being vetted — and why losing any single box, including the canonical one, no longer stops new instances from coming online.
+
+### Why this matters for Tor/I2P-only nodes
+
+Before mirroring existed, a newcomer could fetch the snapshot from the canonical box's HTTPS mirror or a handful of public clearnet IPFS gateways. A zero-clearnet node can reach none of those. The result was backwards: the nodes whose privacy posture we most want to encourage were the only ones condemned to a multi-day replay.
+
+With mirrors in place, a hidden-only newcomer fetches from a peer's `.onion` or `.b32.i2p` over the transport it already speaks, and **never opens a clearnet socket to do it**. If no peer advertises a hidden address yet, fast-sync refuses and falls back to a full replay rather than quietly reaching for a clearnet gateway — finishing faster is not worth deanonymising the box.
+
+### What runs on your instance
+
+| Job | Who runs it | When |
+| --- | --- | --- |
+| `morphit-snapshot-mirror.timer` → `ops/snapshot-mirror.sh` | every instance with IPFS hosting | weekly, ~15 min after boot, and on every `morphit-ops upgrade` |
+| `morphit-snapshot-publish.timer` → `ops/snapshot-autopublish.sh` | canonical publisher only (`morphit_snapshot_publisher: true`) | daily |
+
+The mirror job:
+
+1. reads the newest signed `indexer_snapshot_v1` op from chain, over whatever transport your node already uses (hidden RPC included — no clearnet required);
+2. refuses outright if the snapshot is for a different chain;
+3. pins the CID to your Kubo;
+4. reads the pinned content back and **verifies it against the on-chain SHA-256** — if it does not match, the pin is removed and your box serves nothing rather than serving something a newcomer will reject;
+5. unpins the snapshot it was serving before and runs a repo GC. One live snapshot per box, never a growing pile — nobody wants last month's copy when this month's exists.
+
+Every step is best-effort. A box that cannot mirror right now is not a broken box; it just is not helping yet, and it retries on its next run.
+
+**Why weekly rather than monthly:** a mirror must not lag the publisher. The canonical box anchors a fresh snapshot daily and a newcomer looks up the *newest* anchored CID, so a mirror that last refreshed a month ago is holding a CID nobody is asking for. Weekly keeps mirrors in step for roughly 600 kB, and the job is a cheap no-op when nothing has changed. The timer is anchored to "7 days since the last run" with a randomised delay, so the federation does not all wake and hit the DHT at the same hour.
+
+### Turning it off, and turning publishing on
+
+Mirroring rides on IPFS release hosting. A box without Kubo skips it silently; to opt out entirely, disable the timer:
+
+```
+sudo systemctl disable --now morphit-snapshot-mirror.timer
+```
+
+Publishing is **off by default** and should stay that way. An ordinary instance must never start anchoring snapshots under its own account just because it was installed with defaults. Exactly one instance in the federation publishes; set `morphit_snapshot_publisher: true` only on that box.
+
+### Checking it
+
+```
+systemctl list-timers 'morphit-snapshot-*'
+sudo systemctl start morphit-snapshot-mirror.service   # run it now
+journalctl -u morphit-snapshot-mirror.service -n 50
+cat /var/lib/morphit/snapshot-mirror.json              # which snapshot you serve
+```
+
+A healthy run ends with a line confirming the SHA-256 matched and that this instance now mirrors the federation snapshot. If it reports that no snapshot has been anchored yet, there is nothing to mirror and nothing to fix.
+
+### Fast-syncing a new node
+
+On a fresh box the install wizard offers fast-sync by default; `morphit-ops fast-sync` runs it at any time. It picks sources in this order: your own gateway if you run one, then federation peers over Tor and I2P, then the signed HTTPS mirror, then public IPFS gateways — with the clearnet tiers omitted entirely on a hidden-only node. Whatever answers first is verified against the on-chain hash before anything is restored, so which mirror served you affects only your wait, never your safety.

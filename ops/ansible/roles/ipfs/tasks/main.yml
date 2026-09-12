@@ -243,3 +243,85 @@
     state: started
     enabled: true
   failed_when: false
+
+# ─── Federation snapshot: mirror (every instance) ────────────────────
+# Fast-sync is what gets a brand-new node from an empty database to a live
+# orderbook in minutes instead of days, and it depends on one small (~600 kB)
+# artifact: the indexer snapshot @morphit anchors on-chain. Until now nothing
+# installed a job to keep that artifact reachable from anywhere but the canonical
+# box and a few public clearnet IPFS gateways — which made morphit.io a single
+# point of failure for every new instance, and made fast-sync impossible for the
+# zero-clearnet nodes we most want more of.
+#
+# This box pins the anchored CID and re-serves it. Serving is free: the frontend
+# already proxies /ipfs/, so a pinned snapshot is immediately reachable over this
+# instance's clearnet origin AND its .onion AND its .b32.i2p. Mirroring is not a
+# trust claim — a newcomer proves every byte against the signed on-chain sha256 —
+# so every instance can do it without being vetted.
+- name: Install the federation snapshot-mirror systemd service
+  ansible.builtin.copy:
+    src: "{{ morphit_repo_path | default('/opt/morphit') }}/ops/systemd/morphit-snapshot-mirror.service"
+    dest: /etc/systemd/system/morphit-snapshot-mirror.service
+    owner: root
+    group: root
+    mode: '0644'
+    remote_src: true
+  notify: Reload systemd
+
+- name: Install the federation snapshot-mirror systemd timer
+  ansible.builtin.copy:
+    src: "{{ morphit_repo_path | default('/opt/morphit') }}/ops/systemd/morphit-snapshot-mirror.timer"
+    dest: /etc/systemd/system/morphit-snapshot-mirror.timer
+    owner: root
+    group: root
+    mode: '0644'
+    remote_src: true
+  notify: Reload systemd
+
+- name: Enable + start the federation snapshot-mirror timer
+  # Best-effort, exactly like the pin + rebroadcast timers above: a fresh or
+  # offline box has no chain to read yet, but the timer stays enabled and the job
+  # self-heals on its next run once the node is online.
+  ansible.builtin.systemd:
+    name: morphit-snapshot-mirror.timer
+    state: started
+    enabled: true
+    daemon_reload: true
+  failed_when: false
+
+# ─── Federation snapshot: publish (canonical publisher only) ─────────
+# Only the canonical box EXPORTS its own indexer DB and ANCHORS the result
+# on-chain, so there is exactly one signature and no new trust decision for any
+# operator to make. Everyone else mirrors the result (above). Off by default:
+# an ordinary instance must never start publishing snapshots under its own
+# account just because it was installed with defaults.
+- name: Install the snapshot-publish systemd service (canonical publisher)
+  ansible.builtin.copy:
+    src: "{{ morphit_repo_path | default('/opt/morphit') }}/ops/systemd/morphit-snapshot-publish.service"
+    dest: /etc/systemd/system/morphit-snapshot-publish.service
+    owner: root
+    group: root
+    mode: '0644'
+    remote_src: true
+  notify: Reload systemd
+  when: morphit_snapshot_publisher | default(false) | bool
+
+- name: Install the snapshot-publish systemd timer (canonical publisher)
+  ansible.builtin.copy:
+    src: "{{ morphit_repo_path | default('/opt/morphit') }}/ops/systemd/morphit-snapshot-publish.timer"
+    dest: /etc/systemd/system/morphit-snapshot-publish.timer
+    owner: root
+    group: root
+    mode: '0644'
+    remote_src: true
+  notify: Reload systemd
+  when: morphit_snapshot_publisher | default(false) | bool
+
+- name: Enable + start the snapshot-publish timer (canonical publisher)
+  ansible.builtin.systemd:
+    name: morphit-snapshot-publish.timer
+    state: started
+    enabled: true
+    daemon_reload: true
+  failed_when: false
+  when: morphit_snapshot_publisher | default(false) | bool

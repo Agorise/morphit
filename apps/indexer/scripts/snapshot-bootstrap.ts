@@ -45,6 +45,12 @@ import {
 	type IndexerSnapshotPayload,
 	type SelectedSnapshotOp
 } from '../src/blurt/indexerSnapshotOp.ts';
+import {
+	buildSnapshotSources,
+	extractPeerAddressesFromHistory,
+	hasUsableSource,
+	type SnapshotSource
+} from '../src/blurt/snapshotMirrors.ts';
 
 const has = (name: string): boolean => process.argv.includes(`--${name}`);
 function flag(name: string): string | undefined {
@@ -69,11 +75,46 @@ function ipfsGateways(): string[] {
 const sha256File = (path: string): string =>
 	createHash('sha256').update(readFileSync(path)).digest('hex');
 
-/** Download `url` → `dest` (resumable), returning true on success. Never throws. */
-function download(url: string, dest: string): boolean {
-	const r = spawnSync('curl', ['-fSL', '--connect-timeout', '20', '-C', '-', '-o', dest, url], {
-		stdio: ['ignore', 'inherit', 'inherit']
-	});
+/** This box's own kubo gateway, when it runs one. Read from kubo rather than
+ *  assumed, and null when kubo is absent (a fresh node usually has none yet). */
+function localKuboGateway(): string | null {
+	const env = process.env.MORPHIT_LOCAL_IPFS_GATEWAY;
+	if (env && env.trim() !== '') return env.trim();
+	const r = spawnSync('ipfs', ['config', 'Addresses.Gateway'], { encoding: 'utf8', timeout: 8000 });
+	if (r.status !== 0 || typeof r.stdout !== 'string') return null;
+	const m = /\/ip4\/([0-9.]+)\/tcp\/(\d{1,5})/.exec(r.stdout);
+	if (!m) return null;
+	// A gateway bound to 0.0.0.0 is still reached over loopback from here.
+	const host = m[1] === '0.0.0.0' ? '127.0.0.1' : m[1];
+	return `http://${host}:${m[2]}`;
+}
+
+/** Tor SOCKS + I2P HTTP proxy, overridable for non-default installs. */
+const TOR_SOCKS = process.env.MORPHIT_TOR_SOCKS ?? '127.0.0.1:9050';
+const I2P_HTTP_PROXY = process.env.MORPHIT_I2P_HTTP_PROXY ?? 'http://127.0.0.1:4444';
+
+/**
+ * Download `url` → `dest` (resumable), returning true on success. Never throws.
+ *
+ * Routes by TRANSPORT: a .onion goes through the Tor SOCKS port with
+ * --socks5-hostname (so the hostname is resolved INSIDE Tor — a plain --socks5
+ * would leak the lookup to the local resolver), and a .b32.i2p through the i2pd
+ * HTTP proxy. Hidden transports get a far longer budget: Tor and especially I2P
+ * tunnels are slow to warm up, and a too-tight timeout would report a working
+ * private mirror as dead and push the node toward clearnet.
+ */
+function download(url: string, dest: string, source?: SnapshotSource): boolean {
+	const transport = source?.transport ?? 'clearnet';
+	const args = ['-fSL', '--connect-timeout', '20', '-C', '-', '-o', dest];
+	if (transport === 'tor') {
+		args.push('--socks5-hostname', TOR_SOCKS, '--max-time', '600');
+	} else if (transport === 'i2p') {
+		args.push('-x', I2P_HTTP_PROXY, '--max-time', '900');
+	} else {
+		args.push('--max-time', '600');
+	}
+	args.push(url);
+	const r = spawnSync('curl', args, { stdio: ['ignore', 'inherit', 'inherit'] });
 	return r.status === 0;
 }
 
@@ -119,22 +160,53 @@ async function acquireFromChain(
 		die(`snapshot op is for chain '${op.chain_id}', this node indexes '${config.chainId}'. Refusing.`);
 	}
 
-	// Sources: the signed https mirror first (fast, reliable for a big file), then
-	// the CID via public IPFS gateways. Every source is proven against op.sha256,
-	// so trust does not depend on WHICH source answered.
-	const sources: string[] = [];
-	if (op.forgejo_url) sources.push(op.forgejo_url);
-	for (const g of ipfsGateways()) sources.push(`${g}/ipfs/${op.ipfs_cid}`);
+	// Sources. Trust comes from op.sha256 (which @morphit signed and we prove every
+	// downloaded byte against), so WHICH copy answers is purely a reachability
+	// question — which lets us fan out to the whole federation.
+	//
+	// Before this, the list was `forgejo_url` + public clearnet IPFS gateways, and
+	// that quietly made fast-sync clearnet-only: a Tor/I2P-only node could reach
+	// none of them, so the nodes we most want to exist were the ones that had to
+	// sit through a multi-day replay. Peers re-serve the same CID over their own
+	// .onion / .b32.i2p, so we try those FIRST — on the transport this box already
+	// speaks — and a hidden-only node never falls through to clearnet at all.
+	const peers = extractPeerAddressesFromHistory(history);
+	const hiddenOnly = config.blurtRpcEndpoints.length === 0;
+	const built = buildSnapshotSources({
+		cid: op.ipfs_cid,
+		forgejoUrl: op.forgejo_url ?? null,
+		peers,
+		publicGateways: ipfsGateways(),
+		localGateway: localKuboGateway(),
+		hiddenOnly
+	});
+	if (!hasUsableSource(built)) {
+		die(
+			hiddenOnly
+				? 'this node is hidden-only and no federation peer advertises a Tor/I2P address on-chain yet, ' +
+					'so the snapshot cannot be fetched privately. Refusing to reach for a clearnet gateway. ' +
+					'Full replay still works: set MORPHIT_INDEXER_START_BLOCK to genesis and start the indexer.'
+				: 'no usable snapshot source could be built from the on-chain op.'
+		);
+	}
+	process.stderr.write(
+		`  ${built.length} source${built.length === 1 ? '' : 's'} to try` +
+			`${peers.length > 0 ? ` (${peers.length} federation peer${peers.length === 1 ? '' : 's'} over Tor/I2P)` : ''}` +
+			`${hiddenOnly ? ' — hidden-only: clearnet sources omitted' : ''}\n`
+	);
+	const sources: string[] = built.map((s) => s.url);
+	const sourceByUrl = new Map(built.map((s) => [s.url, s]));
 
 	const tarPath = join(work, 'snapshot.tar.gz');
 	const manifestPath = join(work, MANIFEST_FILENAME);
 	const dumpPath = join(work, DUMP_FILENAME);
 	for (const url of sources) {
-		process.stderr.write(`\nsnapshot: fetching ${url} …\n`);
+		const src = sourceByUrl.get(url);
+		process.stderr.write(`\nsnapshot: fetching from ${src?.label ?? url} …\n`);
 		rmSync(tarPath, { force: true });
 		rmSync(manifestPath, { force: true });
 		rmSync(dumpPath, { force: true });
-		if (!download(url, tarPath)) {
+		if (!download(url, tarPath, src)) {
 			process.stderr.write('  ✗ download failed — trying the next source.\n');
 			continue;
 		}

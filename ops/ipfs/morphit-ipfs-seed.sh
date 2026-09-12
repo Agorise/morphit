@@ -135,25 +135,96 @@ else
 	log "routing provide did not complete (non-fatal) — the daemon reprovides on its own schedule."
 fi
 
-# 6. Self-verify we are a USABLE seeder. The whole point is that OTHER instances —
-# especially hidden-only ones (the maintainer/morphitlat, which kept stranding on upgrades) —
-# can fetch this release FROM us. `ipfs add` succeeding only proves we PINNED it;
-# it does NOT prove the gateway actually SERVES it over the path a peer uses
-# (/ipfs/<cid>/morphit-latest.tar.gz). Check that now against the local gateway, so
-# a broken seeder (gateway down, not exposed to the frontend, or NoFetch pruned it)
-# is caught LOUDLY at seed time instead of the federation silently losing a seeder.
-GW_PORT="$(ipfs config Addresses.Gateway 2>/dev/null | sed -n 's#.*/tcp/\([0-9]\{1,5\}\).*#\1#p' | head -1)"
-[ -n "$GW_PORT" ] || GW_PORT=8082
-if command -v curl >/dev/null 2>&1 && \
-	curl -fsS --max-time 45 -o /dev/null "http://127.0.0.1:${GW_PORT}/ipfs/${CID}/morphit-latest.tar.gz" 2>/dev/null; then
-	log "✓ local IPFS gateway serves the release — this box is a working seeder over every"
-	log "  transport that reaches its frontend (clearnet + any Tor .onion / I2P you've configured)."
+# 6. Self-verify we are a USABLE seeder — along the path a PEER actually uses.
+# `ipfs add` only proves we PINNED it. The v1.17.1 check then curled the LOCAL
+# gateway (127.0.0.1:8082) and announced "working seeder over every transport" —
+# a FALSE ✓: on morphit.io that passed for weeks while UFW dropped the
+# container-to-host connect, so the frontend returned 404 for every hidden
+# request and morphitlat could not upgrade at all. So check the real hops:
+#   (a) through the FRONTEND (what the .onion/.b32.i2p actually expose), and
+#   (b) back over each configured hidden address, end to end.
+CFG=/opt/morphit/morphit.config.env
+GW_PORT="$(ipfs config Addresses.Gateway 2>/dev/null | sed -n 's#.*/tcp/\([0-9]\{1,5\}\).*#\1#p' | head -1)" || true
+[ -n "${GW_PORT:-}" ] || GW_PORT=8082
+REL_PATH="/ipfs/${CID}/morphit-latest.tar.gz"
+# Reachability probes use the SMALL sibling file in the same CID directory, not
+# the ~33 MB tarball: identical nginx → gateway → kubo hop, but a Tor/I2P body
+# fetch of the tarball routinely outruns a sane curl timeout and would report a
+# healthy node as broken (the real upgrader allows 600s; we can't sit that long
+# here). If metadata.json resolves end to end, so does the tarball beside it.
+PROBE_PATH="/ipfs/${CID}/metadata.json"
+# POSIX sh ONLY. `${@:3}` is a BASHISM: /bin/sh is dash on Ubuntu and dies with
+# "Bad substitution" the first time this is called — which aborted this whole
+# self-verify block (and the CID echo below it) on every real box in v1.17.2.
+# And NEVER let curl's exit status escape: a refused/timed-out probe is exactly
+# what we are here to diagnose, and under `set -e` a non-zero command
+# substitution would kill the script before it could report anything.
+_code() {
+	_cu=$1
+	_ct=${2:-45}
+	shift 2
+	curl -s -o /dev/null -w '%{http_code}' --max-time "$_ct" "$@" "$_cu" 2>/dev/null || true
+}
+
+# (a) Local gateway, then the FRONTEND — the hop peers actually traverse.
+# BunkerWeb fronts the site with SERVER_NAME=<this instance's hostname> and
+# MULTISITE=no, so a request addressed to 127.0.0.1 arrives with the WRONG
+# SNI/Host and is 403'd on EVERY path — including on a perfectly healthy box.
+# Probing that way would turn v1.17.1's false ✓ into an equally wrong false ✗
+# for every operator at once. So pin the REAL hostname to the loopback address:
+# correct SNI + Host, connection still never leaves the box.
+_gw=$(_code "http://127.0.0.1:${GW_PORT}${PROBE_PATH}" 20)
+_host=$(sed -n 's#^[[:space:]]*MORPHIT_INSTANCE_ORIGIN=[[:space:]]*##p' "$CFG" 2>/dev/null \
+	| tail -1 | sed -e 's#^"\(.*\)"$#\1#' -e "s#^'\(.*\)'\$#\1#" -e 's#^https\{0,1\}://##' -e 's#[/:].*$##')
+if [ -n "$_host" ]; then
+	_fe=$(_code "https://${_host}${PROBE_PATH}" 45 -k --resolve "${_host}:443:127.0.0.1")
+	# BunkerWeb rate-limits (2 r/s); a 429 here is our own probing, not a fault.
+	if [ "$_fe" = "429" ]; then
+		sleep 3
+		_fe=$(_code "https://${_host}${PROBE_PATH}" 45 -k --resolve "${_host}:443:127.0.0.1")
+	fi
 else
-	log "⚠ WARNING: the local IPFS gateway is NOT serving $CID (checked 127.0.0.1:${GW_PORT})."
-	log "  The content is pinned, but peers can't fetch it from you — this box is NOT a usable"
-	log "  seeder, so a hidden-only instance may be unable to upgrade from the federation."
-	log "  Fix: ensure the Kubo gateway is running and exposed (enable_ipfs / morphit_ipfs_gateway_expose),"
-	log "  then re-run the upgrade. To serve over Tor/I2P too, set up a hidden address (morphit-ops → Tor/I2P)."
+	_fe=""
+fi
+
+if [ "$_gw" != "200" ]; then
+	log "⚠ WARNING: the local IPFS gateway is NOT serving $CID (127.0.0.1:${GW_PORT} → ${_gw:-none})."
+	log "  Content is pinned but unreachable — this box is NOT a usable seeder."
+elif [ "$_fe" = "200" ]; then
+	log "✓ local gateway and the frontend both serve the release (clearnet path OK)."
+elif [ -z "$_fe" ]; then
+	log "• Frontend check skipped: no MORPHIT_INSTANCE_ORIGIN in $CFG to probe with."
+	log "  The hidden checks below still prove the real peer path end to end."
+elif [ "$_fe" = "403" ] || [ "$_fe" = "429" ]; then
+	log "• Frontend check inconclusive (HTTP ${_fe}) — the edge refused our own local probe."
+	log "  Not a seeding fault on its own; the hidden checks below are authoritative."
+else
+	log "⚠ WARNING: the gateway serves $CID but the FRONTEND does not (HTTP ${_fe:-timeout})."
+	log "  Peers fetch through the frontend, so this box is NOT a usable seeder yet."
+	log "  Usual cause: the firewall drops the container-to-host connect to ${GW_PORT}. Fix:"
+	log "    sudo ufw allow from 172.20.0.0/16 to any port ${GW_PORT} proto tcp"
+	log "  (morphit-ops upgrade now applies this automatically; run it again, or:"
+	log "   sudo sh /opt/morphit/ops/ipfs/morphit-gateway-firewall-heal.sh)"
+fi
+
+# (b) End-to-end over each hidden address the operator actually advertises.
+_onion=$(grep -hoE '[a-z2-7]{56}\.onion' "$CFG" /var/lib/tor/*/hostname 2>/dev/null | head -1) || true
+_i2p=$(grep -hoE '[a-z2-7]{52}\.b32\.i2p' "$CFG" 2>/dev/null | head -1) || true
+if [ -n "${_onion:-}" ]; then
+	_sp=$(ss -lnt 2>/dev/null | grep -oE '127\.0\.0\.1:(9050|9150)' | head -1 | cut -d: -f2) || true
+	[ -n "${_sp:-}" ] || _sp=9050
+	_t=$(_code "http://${_onion}${PROBE_PATH}" 180 --socks5-hostname "127.0.0.1:${_sp}")
+	[ "$_t" = "200" ] && log "✓ Tor: the .onion serves the release — hidden-only peers can upgrade from this box." \
+		|| log "⚠ Tor: the .onion did NOT serve the release (HTTP ${_t:-timeout}) — hidden peers cannot fetch it here."
+fi
+if [ -n "${_i2p:-}" ]; then
+	_i=$(_code "http://${_i2p}${PROBE_PATH}" 240 -x "http://127.0.0.1:4444")
+	[ "$_i" = "200" ] && log "✓ I2P: the .b32.i2p serves the release — hidden-only peers can upgrade from this box." \
+		|| log "⚠ I2P: the .b32.i2p did NOT serve the release (HTTP ${_i:-timeout}); I2P tunnels are slow to warm up — re-check before treating it as broken."
+fi
+if [ -z "${_onion:-}" ] && [ -z "${_i2p:-}" ]; then
+	log "• No hidden address configured — this box seeds over clearnet only."
+	log "  Add one (morphit-ops → Set up a Tor/I2P address) so hidden-only nodes can upgrade from you."
 fi
 
 echo "$CID"

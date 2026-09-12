@@ -483,6 +483,28 @@ results.push({
 	});
 }
 
+// ─── Scenario 9h: the bunkerweb net may reach the IPFS GATEWAY (8082) ──
+// The frontend proxies /ipfs/ + /ipns/ to the gateway on the host. Without a ufw
+// allow for that port, UFW default-deny DROPS the container-to-host connect,
+// nginx times out and returns its stock 404 — so every hidden (.onion/.b32.i2p)
+// release fetch fails and hidden-only nodes can never upgrade from this peer.
+// That single missing rule stranded morphitlat for weeks (diagnosed 2026-09-11);
+// it sits beside the identical relay/indexer/MCP rules and is gated on IPFS.
+{
+	const bwSrc = readFileSync(join(ROLES_DIR, 'bunkerweb', 'tasks', 'main.yml'), 'utf-8');
+	const hasRule = /reach the IPFS gateway/.test(bwSrc);
+	const scoped = /morphit_ipfs_gateway_expose_addr[\s\S]{0,200}?enable_ipfs/.test(bwSrc);
+	results.push({
+		name: 'bunkerweb Docker net is allowed to reach the IPFS gateway port (hidden seeding works)',
+		ok: hasRule && scoped,
+		detail: !hasRule
+			? 'roles/bunkerweb/tasks/main.yml has no ufw allow for the IPFS gateway port — hidden /ipfs/ fetches will 404'
+			: !scoped
+				? 'the gateway rule must derive its port from morphit_ipfs_gateway_expose_addr and be gated on enable_ipfs'
+				: undefined
+	});
+}
+
 // ─── Scenario 10: every drop-in write into a package .d/ dir ensures the dir ──
 // TWO separate releases were lost to this exact class — a hardening drop-in
 // written into a package-owned .d/ directory the package did NOT create

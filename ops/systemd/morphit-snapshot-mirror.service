@@ -1,0 +1,30 @@
+[Unit]
+Description=Morphit federation-snapshot mirror — pin + re-serve the anchored indexer snapshot
+Documentation=https://git.agorise.net/agorise/morphit
+After=network-online.target morphit-indexer.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Runs as root because it drives kubo and writes the mirror-state file under
+# /var/lib/morphit. It only ever PINS content whose sha256 was signed on-chain
+# by @morphit, and verifies that hash before keeping the pin, so a bad or
+# hostile copy can never end up being served from this box.
+User=root
+Group=root
+
+EnvironmentFile=-/etc/morphit/snapshot-mirror.env
+ExecStart=/opt/morphit/ops/snapshot-mirror.sh
+
+# ─── Hardening ─────────────────────────────────────────────────
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectControlGroups=true
+ProtectKernelTunables=true
+RestrictSUIDSGID=true
+# The snapshot is small (~600 kB today) but a cold IPFS fetch over a slow or
+# hidden transport can still take a while; don't let it wedge a timer slot.
+TimeoutStartSec=1800
+
+[Install]
+WantedBy=multi-user.target

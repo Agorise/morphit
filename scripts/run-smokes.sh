@@ -639,6 +639,8 @@ SMOKES=(
 	"apps/indexer:snapshot-manifest-smoke"
 	"apps/indexer:chain-snapshot-op-smoke"
 	"apps/indexer:indexer-snapshot-op-smoke"
+	"apps/indexer:snapshot-mirrors-smoke"
+	"apps/ops-cli:snapshot-mirror-wiring-smoke"
 	"apps/indexer:snapshot-oplog-verify-smoke"
 	"apps/indexer:rpc-directory-op-smoke"
 	"apps/indexer:fx-source-smoke"

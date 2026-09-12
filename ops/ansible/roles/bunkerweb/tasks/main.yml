@@ -165,6 +165,25 @@
     proto: tcp
   when: morphit_mcp_enabled | bool
 
+# The frontend nginx proxies /ipfs/ + /ipns/ to the IPFS gateway on the host
+# (host.docker.internal:8082). Without this rule UFW's default-deny DROPS that
+# container-to-host connect, nginx times out and returns its stock 404 — so every
+# hidden (.onion/.b32.i2p) release fetch fails and hidden-only nodes can never
+# upgrade from this peer (the maintainer/morphit.io, diagnosed 2026-09-11: morphitlat was
+# stranded for weeks by exactly this). The gateway is read-only and serves only
+# pinned releases (NoFetch), and this opens it ONLY to the pinned bunkerweb CIDR —
+# never the public. Same shape as the relay/indexer/MCP rules above, gated on this
+# box actually hosting IPFS.
+- name: Allow the bunkerweb Docker network to reach the IPFS gateway (hidden release seeding)
+  community.general.ufw:
+    rule: allow
+    src: 172.20.0.0/16
+    port: "{{ (morphit_ipfs_gateway_expose_addr | default('/ip4/0.0.0.0/tcp/8082')).split('/') | last }}"
+    proto: tcp
+  when:
+    - enable_ipfs | default(true) | bool
+    - morphit_ipfs_gateway_expose | default(true) | bool
+
 - name: Build the BunkerWeb frontend image
   # `docker_compose_v2` with build: always surfaces Docker's build progress
   # (e.g. "image bunkerweb-frontend: Built") as Ansible WARNINGs — which reads

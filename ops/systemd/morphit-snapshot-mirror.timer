@@ -1,0 +1,28 @@
+[Unit]
+Description=Morphit federation-snapshot mirror timer — monthly
+Documentation=https://git.agorise.net/agorise/morphit
+Requires=morphit-snapshot-mirror.service
+
+[Timer]
+# WEEKLY, plus once shortly after boot. Upgrades refresh the mirror immediately
+# (morphit-ops upgrade runs the same job), so this timer exists for the box that
+# never upgrades again: without it, a long-running stable node would go on
+# advertising the snapshot it happened to have when it was installed.
+#
+# Why weekly and not monthly: a mirror must not lag the PUBLISHER. The canonical
+# box anchors a fresh snapshot daily, and a newcomer looks up the newest anchored
+# CID — so a mirror that refreshed a month ago is holding a CID nobody is asking
+# for, and is no help to the node in front of it. Weekly keeps mirrors in step at
+# a cost of roughly 600 kB, and the job is a cheap no-op when nothing changed.
+#
+# Anchored to "7 days after the last run" via Persistent=true rather than a fixed
+# weekday, so the whole federation does not wake up and hit the DHT at the same
+# hour. RandomizedDelaySec spreads it further.
+OnBootSec=15min
+OnUnitActiveSec=7d
+RandomizedDelaySec=6h
+Persistent=true
+Unit=morphit-snapshot-mirror.service
+
+[Install]
+WantedBy=timers.target

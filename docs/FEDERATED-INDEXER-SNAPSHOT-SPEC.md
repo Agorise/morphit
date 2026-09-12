@@ -1,5 +1,50 @@
 # Federated indexer-DB snapshot — publish / import pipeline spec
 
+> ## ⚠ SUPERSEDED IN PART (v1.17.2) — read this box first
+>
+> This document is the ORIGINAL design spec. The pipeline shipped in v1.17.2, but
+> two of the spec's load-bearing assumptions turned out to be wrong, and the
+> design that shipped is simpler as a result. Keep the spec for its reasoning and
+> its threat model; do not treat §6, §7 or §12 as a description of the code.
+>
+> **1. The snapshot is SMALL.** The spec sizes everything around a multi-gigabyte
+> tarball (staging inside the kubo repo, `--nocopy`, disk pre-checks, "a big
+> file"). The real artifact is **under 600 kB** — e.g.
+> `morphit-indexer-snapshot-63503209-2026-09-09.tar.gz`. That single fact changes
+> the economics: mirroring is cheap enough for *every* instance to do
+> unconditionally, so there is no reason to centralise distribution.
+>
+> **2. One signer, many mirrors — not many publishers.** §13 asked whether other
+> instances should also sign their own snapshots. The answer is no. Only
+> `@morphit` exports and anchors (`indexer_snapshot_v1`), so there is exactly one
+> signature and **no new trust decision for any operator to make**. Every other
+> instance pins that CID and re-serves the bytes over its own clearnet origin,
+> `.onion` and `.b32.i2p`. A newcomer proves every byte against the signed
+> on-chain SHA-256, so which mirror answered is a SPEED question, never a trust
+> question — a hostile mirror is caught by arithmetic rather than by reputation.
+>
+> **What that makes moot:** most of §7's Tier 0–3 ladder. With one signer, the
+> trust surface is identical to running `@morphit`'s software release, which the
+> operator already does. Tier 0 (full replay) remains the escape hatch and is
+> still reachable; Tier 2/3 background re-verification was designed to hedge
+> *many* publishers of varying trustworthiness and is not implemented.
+>
+> **What the spec got right and shipped as written:** the manifest v2 fields and
+> three-way SHA agreement (§4), the frozen `indexer_snapshot_v1` op and its
+> fail-closed validation (§5), the caught-up publish guard (§6), the fail-closed
+> edge cases (§10), and the no-secret-columns invariant (§2).
+>
+> **What v1.17.2 added that the spec did not anticipate:** hidden-transport source
+> ordering. The spec's import path (§7 step 2) is `IPNS → IPFS gateway →
+> forgejo_url`, all of which are clearnet — which would have left fast-sync
+> unusable for exactly the zero-clearnet nodes the project most wants. The shipped
+> resolver tries the local gateway, then federation peers over Tor/I2P, then
+> clearnet, and **omits the clearnet tiers entirely on a hidden-only node**,
+> failing closed to a full replay rather than deanonymising the box to finish
+> faster.
+>
+> Current behaviour is documented in **OPERATIONS.md §52**.
+
 **Goal:** a brand-new Morphit node reaches a live, correct orderbook in **well under an
 hour** instead of replaying ~3.75M blocks over (often slow / censored) RPC for days.
 The frontend is already immediate (static, v1.13.2); this closes the *indexer* gap.

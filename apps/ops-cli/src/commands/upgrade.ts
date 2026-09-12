@@ -1320,10 +1320,25 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	if (offline !== null) {
 		latest = synthOfflineRelease(offline.tag, offline.tarballPath, offline.sigPath);
 		info(`Offline upgrade — using local tarball: ${offline.tarballPath}`);
-		if (offline.sigPath === null) {
+		// A HIDDEN-federation fetch carries no sibling .asc by design: its trust
+		// anchor is the SHA-256 @morphit published ON-CHAIN, read from this node's
+		// own indexer (hidden-federation-onchain-sha256) — strictly stronger than a
+		// local-keyring signature check, and it needs no clearnet. Warning about a
+		// missing .asc there is FALSE and alarming: it says the tarball "will be
+		// refused" moments before the upgrade verifies and proceeds (the maintainer/morphitlat
+		// v1.17.1). Only warn for a hand-supplied --from-file tarball, which really
+		// does require the signature.
+		if (offline.sigPath === null && hiddenResolution === null) {
+			// Accurate wording matters here: an unsigned --from-file tarball is NOT
+			// automatically refused. Below, a missing .asc falls back to the release
+			// SHA-256 @morphit published ON-CHAIN (read from this node's own
+			// indexer), and the upgrade proceeds if the bytes match. Claiming it
+			// "will be refused" and then succeeding is the same class of false
+			// alarm as the hidden-path warning this release just removed.
 			warn(
-				'No sibling .asc signature next to the tarball. An offline upgrade REQUIRES a ' +
-					'GPG-signed release (verified against the local signer keys); an unsigned tarball will be refused.'
+				'No sibling .asc signature next to the tarball. This upgrade will fall back to the ' +
+					'release SHA-256 published on-chain; it is refused only if neither a valid signature ' +
+					'nor a matching on-chain hash can be established.'
 			);
 		}
 	} else {
@@ -2531,6 +2546,27 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		/* best-effort reminder; never fail an upgrade over a missing dir */
 	}
 
+	// ─── 11b. Heal the frontend → IPFS-gateway path BEFORE seeding ──
+	// v1.17.2 codified the "allow the bunkerweb network to reach the IPFS
+	// gateway" firewall rule in the Ansible bunkerweb role — but morphit.io is a
+	// MANUAL /opt/morphit install that Ansible never touches, and an Ansible box
+	// only picks the rule up on a re-harden. So the fix for the defect that
+	// stranded morphitlat for weeks would not have reached the boxes that have
+	// it. Run the self-heal here, as root, on EVERY upgrade: it observes the real
+	// container-to-host path and repairs it in place (ufw → iptables → restart),
+	// so an instance admin never has to be told to paste a firewall command.
+	// Ordered BEFORE the seed so the seed's own per-transport verify runs against
+	// an already-healed path. Best-effort and non-fatal by construction — the
+	// script always exits 0 and can never fail an upgrade.
+	try {
+		const healScript = join(installDir, 'ops', 'ipfs', 'morphit-gateway-firewall-heal.sh');
+		if (existsSync(healScript)) {
+			spawnSync('sh', [healScript], { stdio: 'inherit', timeout: 180_000 });
+		}
+	} catch {
+		/* never fail an upgrade over the firewall self-heal */
+	}
+
 	// ─── 12. Self-seed this release to IPFS (become an origin host) ──
 	// v1.9.3: if this box runs IPFS release hosting (Kubo installed + the ipfs
 	// service active — the opt-in `morphit-ops harden` → "Set up IPFS release
@@ -2619,6 +2655,41 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		}
 	} catch {
 		/* best-effort; never fail an upgrade over IPFS seeding */
+	}
+
+	// ─── 12b. Refresh this box's federation-snapshot mirror ──────────
+	// Fast-sync gets a new node from an empty database to a live orderbook in
+	// minutes instead of days. It needs one small (~600 kB) artifact: the indexer
+	// snapshot @morphit anchors on-chain. If only the canonical box serves it,
+	// morphit.io is a single point of failure for every new instance — and a
+	// zero-clearnet newcomer, which can reach neither morphit.io's clearnet origin
+	// nor a public IPFS gateway, cannot fast-sync at all.
+	//
+	// So every instance mirrors it. Pinning it here means this box re-serves the
+	// snapshot over its own clearnet origin, .onion and .b32.i2p, and a newcomer
+	// fetches from whichever peer is nearest on the transport it already speaks.
+	// That is a reachability contribution, never a trust claim: the newcomer
+	// proves every byte against the signed on-chain sha256, so a bad mirror is
+	// caught by arithmetic. The job also runs weekly on a timer, so a box that
+	// never upgrades again keeps its mirror current.
+	//
+	// Ordered AFTER the seed so a slow IPFS fetch can't delay the release work,
+	// and best-effort throughout: the script always exits 0.
+	try {
+		const mirrorScript = join(installDir, 'ops', 'snapshot-mirror.sh');
+		const ipfsUp =
+			spawnSync(
+				'sh',
+				['-c', 'command -v ipfs >/dev/null 2>&1 && systemctl is-active --quiet ipfs'],
+				{ stdio: 'ignore', timeout: 8000 }
+			).status === 0;
+		if (existsSync(mirrorScript) && ipfsUp) {
+			info('');
+			info('Refreshing this instance\u2019s federation-snapshot mirror (helps new nodes fast-sync from you) \u2026');
+			spawnSync('bash', [mirrorScript], { stdio: 'inherit', timeout: 1_800_000 });
+		}
+	} catch {
+		/* best-effort; never fail an upgrade over snapshot mirroring */
 	}
 
 	// ─── 13. Cleanup — remove the download scratch (incl. the ~13 MB

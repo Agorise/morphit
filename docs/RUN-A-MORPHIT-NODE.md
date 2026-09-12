@@ -202,6 +202,8 @@ bash scripts/canary/setup.sh
 
 It offers to make you a signing key and then re-signs the canary weekly on its own. An upgrade clears the served folder, so the canary needs re-laying afterward — if you sign on the **same box**, the upgrade now does that for you; if you sign on a **separate laptop** (recommended for a VPS, so the key never sits on the server), it reminds you to run `bash ~/.morphit/update-canary.sh` once. Full reasoning: `OPERATIONS.md` §36.
 
+**Helping the next node start fast.** Your instance keeps a pinned copy of the federation's indexer snapshot — a small (~600 kB) file that lets a brand-new node be useful in minutes instead of replaying the chain for days. It refreshes itself weekly and after every upgrade, and it serves over your web address, your `.onion` and your `.i2p` alike, so a newcomer running Tor-only can start up without ever touching the clearnet. There is nothing to set up and nothing to watch: it is automatic wherever IPFS hosting is on. You are not vouching for anything by mirroring — the newcomer checks the file against a fingerprint published on the blockchain, so a bad copy is caught by maths, not by trust. Detail: `OPERATIONS.md` §52.
+
 **If an honest user gets flagged.** Morphit auto-flags accounts that review each other to inflate ratings, and honest people can occasionally trip it. To undo: `sudo morphit-ops` → **Moderation** → **Clear a flag**, name the accounts — instant, reversible, and instance-local. Details in `OPERATIONS.md`.
 
 ---

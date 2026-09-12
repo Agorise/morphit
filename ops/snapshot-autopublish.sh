@@ -74,16 +74,39 @@ mkdir -p "$OUT"
 log "exporting indexer snapshot → $OUT …"
 TARBALL="$(cd "$REPO" && "$TSX" --tsconfig "$TSCFG" apps/indexer/scripts/snapshot-export.ts --out "$OUT" 2>/dev/null | tail -1)" || die "snapshot-export failed"
 [ -n "$TARBALL" ] && [ -f "$TARBALL" ] || die "snapshot-export did not produce a tarball"
-log "exported: $TARBALL"
+# Log the size on EVERY run. The snapshot is tiny today (~600 kB), which is what
+# makes it cheap for every instance in the federation to mirror. It grows with
+# orders, chat and reputation rows, though, and the mirroring model only stays
+# comfortable into the tens of MB — so the number belongs in the journal where
+# the trend is visible long before it becomes a problem.
+SNAP_BYTES="$(stat -c %s "$TARBALL" 2>/dev/null || echo 0)"
+log "exported: $TARBALL ($((SNAP_BYTES / 1024)) kB)"
+if [ "$SNAP_BYTES" -gt 52428800 ]; then
+	log "NOTE: this snapshot is over 50 MB. Still workable, but every mirroring"
+	log "  instance now fetches that much per refresh — worth reviewing cadence or"
+	log "  an orderbook-only variant before it grows much further."
+fi
 
 # ── 3. PIN ─────────────────────────────────────────────────────────
 log "pinning to kubo + publishing IPNS …"
 PIN_ENV=()
 [ -n "${MORPHIT_SNAPSHOT_FORGEJO_URL:-}" ] && PIN_ENV+=("FORGEJO_URL=$MORPHIT_SNAPSHOT_FORGEJO_URL")
-env "${PIN_ENV[@]}" bash "$REPO/ops/pin-indexer-snapshot.sh" "$TARBALL" || die "pin-indexer-snapshot failed"
-# pin-indexer-snapshot.sh writes the payload next to the kubo repo; find the newest.
-PAYLOAD="$(find / -maxdepth 6 -name 'indexer-snapshot-payload-*.json' -newer "$TARBALL" 2>/dev/null | head -1)"
-[ -n "$PAYLOAD" ] || PAYLOAD="$(find /var/lib/ipfs /opt/morphit -name 'indexer-snapshot-payload-*.json' 2>/dev/null | xargs -r ls -1t 2>/dev/null | head -1)"
+# Capture stdout so we can read the payload path the pin script TELLS us, while
+# still showing the operator its progress output (which goes to stderr).
+PIN_OUT="$(env "${PIN_ENV[@]}" bash "$REPO/ops/pin-indexer-snapshot.sh" "$TARBALL")" || die "pin-indexer-snapshot failed"
+printf '%s\n' "$PIN_OUT"
+# pin-indexer-snapshot.sh knows the exact path it wrote and prints it on a line
+# with a stable prefix, so read that. The previous version scanned the whole
+# filesystem (`find / -maxdepth 6`) for a freshly-modified payload json — slow on
+# a real box, and liable to pick up an unrelated file from an earlier run.
+PAYLOAD="$(printf '%s' "$PIN_OUT" | sed -n 's/^MORPHIT_SNAPSHOT_PAYLOAD=//p' | tail -1)"
+if [ -z "$PAYLOAD" ] || [ ! -f "$PAYLOAD" ]; then
+	# FALLBACK: an older pin script (or one whose stdout was swallowed) emits no
+	# locator. Look only where it actually writes, newest first — never a whole-
+	# filesystem scan.
+	log "pin script emitted no payload locator — falling back to a scoped search."
+	PAYLOAD="$(find /var/lib/ipfs /opt/morphit -name 'indexer-snapshot-payload-*.json' 2>/dev/null | xargs -r ls -1t 2>/dev/null | head -1)"
+fi
 [ -n "$PAYLOAD" ] && [ -f "$PAYLOAD" ] || die "could not locate the emitted payload json"
 log "payload: $PAYLOAD"
 

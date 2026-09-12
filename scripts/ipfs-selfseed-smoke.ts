@@ -121,10 +121,20 @@ const guard = stripHash(read('scripts/verify-cid-public.sh'));
 		['ASSERTS the CID equals the expected/anchored one', /"\$CID" != "\$EXPECTED"/.test(seed) && /MISMATCH/i.test(seed)],
 		['fails loud (exit 1) on CID mismatch', /MISMATCH[\s\S]*exit 1/i.test(seed)],
 		['announces it (ipfs routing provide)', /routing provide/.test(seed)],
-		['self-verifies the LOCAL gateway actually serves the release (usable seeder, not just pinned) — v1.17.1',
+		// The frontend hop must be probed with the instance's REAL hostname pinned
+		// to loopback. The first version of this check used `https://127.0.0.1/…`,
+		// which BunkerWeb (SERVER_NAME=<domain>, MULTISITE=no) 403s on every path —
+		// including on a perfectly healthy box — so it would have told every
+		// operator at once that their firewall was broken. Pin --resolve here so
+		// that shape can never come back.
+		['self-verifies the REAL peer path — gateway AND frontend (correct SNI/Host), then each hidden transport',
 			/Addresses\.Gateway/.test(seed) &&
-				/127\.0\.0\.1:\$\{GW_PORT\}\/ipfs\/\$\{CID\}\/morphit-latest\.tar\.gz/.test(seed) &&
-				/NOT a usable/.test(seed)],
+				/--resolve/.test(seed) &&
+				/MORPHIT_INSTANCE_ORIGIN/.test(seed) &&
+				!/https:\/\/127\.0\.0\.1\$\{/.test(seed) &&
+				/socks5-hostname/.test(seed) &&
+				/127\.0\.0\.1:4444/.test(seed) &&
+				/NOT a usable seeder/.test(seed)],
 		['rejects a non-vX.Y.Z tag', /v\[0-9\]/.test(seed)],
 		['shows a braille spinner during ipfs add + announce (no frozen terminal)', /_spin\b/.test(seed) && /⠋/.test(seed)]
 	];

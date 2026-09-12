@@ -160,6 +160,10 @@ cat > "$PAYLOAD" <<JSON
 JSON
 chown "$KUBO_USER" "$PAYLOAD" 2>/dev/null || true
 ok "wrote $PAYLOAD"
+# Machine-readable locator for the caller (snapshot-autopublish.sh). Emitted on
+# STDOUT with a stable prefix so the automation never has to go hunting the
+# filesystem for a file this script already knows the exact path of.
+echo "MORPHIT_SNAPSHOT_PAYLOAD=$PAYLOAD"
 echo ""; sed 's/^/    /' "$PAYLOAD"
 
 hdr "8. Verify public-gateway reachability BEFORE broadcasting (guard)"
@@ -180,4 +184,5 @@ echo "  2. In the Morphit repo (dry-run, then real — prompts for the @morphit 
 echo "       node_modules/.bin/tsx --tsconfig tsconfig.smoke.json apps/indexer/scripts/indexer-snapshot-broadcast.ts indexer-snapshot-payload-${LAST_BLOCK}.json --dry-run"
 echo "       node_modules/.bin/tsx --tsconfig tsconfig.smoke.json apps/indexer/scripts/indexer-snapshot-broadcast.ts indexer-snapshot-payload-${LAST_BLOCK}.json"
 echo ""
-echo "  A fresh node then fast-syncs with:  snapshot-bootstrap.ts --from-chain --i-trust-signer $CHAIN_ID"
+echo "  A fresh node then fast-syncs with:  morphit-ops fast-sync"
+echo "  (or directly: snapshot-bootstrap.ts --from-chain --i-trust-signer)"

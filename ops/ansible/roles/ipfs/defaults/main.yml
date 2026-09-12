@@ -68,3 +68,10 @@ morphit_ipfs_release_url: "http://127.0.0.1:{{ morphit_indexer_bind_port | defau
 morphit_ipfs_pin_on_calendar: "hourly"
 # Seconds allowed for a single pin fetch.
 morphit_ipfs_pin_timeout: 900
+
+# Does THIS box publish the canonical federation indexer snapshot (export its own
+# DB, pin it, and anchor it on-chain as @morphit)? Exactly one instance in the
+# federation should — morphit.io. Every other instance MIRRORS that published
+# snapshot instead, which needs no key, no signature, and no trust decision.
+# Leave false unless this is the canonical publisher.
+morphit_snapshot_publisher: false

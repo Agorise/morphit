@@ -1418,9 +1418,18 @@ export function checkIpfsSeeding(f: IpfsSeedingFacts): IpfsSeedingStatus {
 		case 'ok': {
 			const pinAge = f.pinRanMs !== null ? formatBackupAge(f.pinRanMs) : 'pending first run';
 			const rebAge = f.rebroadcastRanMs !== null ? formatBackupAge(f.rebroadcastRanMs) : 'pending first run';
+			// Say ONLY what these facts prove. They are systemd timer outcomes: the
+			// release is pinned locally and the IPNS record was rebroadcast. They do
+			// NOT prove a peer can fetch it — on morphit.io both ran happily for weeks
+			// while the firewall dropped the frontend's connect to the gateway, so every
+			// hidden fetch 404'd (the maintainer/timeapp flagged the old wording as misleading;
+			// morphitlat was stranded by exactly that gap). The upgrade's seed step does
+			// the real end-to-end reachability check and reports per transport.
 			return {
 				state: 'ok',
-				detail: `pinning the signed release to IPFS (last ${pinAge}) + rebroadcasting the IPNS record to the DHT (last ${rebAge})`
+				detail:
+					`pinned to IPFS locally (last ${pinAge}) + IPNS record rebroadcast to the DHT (last ${rebAge}); ` +
+					'this confirms the local jobs ran, not that peers can fetch \u2014 the upgrade\u2019s seed step verifies reachability per transport'
 			};
 		}
 	}
