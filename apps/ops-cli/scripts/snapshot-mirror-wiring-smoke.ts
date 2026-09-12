@@ -187,6 +187,53 @@ ok(
 		/OPERATIONS\.md §52/.test(read('docs/FEDERATED-INDEXER-SNAPSHOT-SPEC.md'))
 );
 
+// ── I. v1.17.3 — the real-upgrade regressions ───────────────────────
+const canarySetup = read('scripts/canary/setup.sh');
+const canaryGen = read('scripts/canary/generate.sh');
+const deployMcp = read('ops/scripts/deploy-mcp.sh');
+
+// `grep` exits 1 on no-match; `pipefail` propagates it; a command-substitution
+// assignment returning non-zero aborts the script. This killed canary SETUP right
+// after the operator-name prompt on every instance whose config lacked the key,
+// and sat in the weekly REFRESH too, where it would have let a published canary
+// go stale silently. Guard both.
+for (const [name, body] of [
+	['canary setup.sh', canarySetup],
+	['canary generate.sh', canaryGen]
+] as const) {
+	const risky = body
+		.split('\n')
+		.filter((l) => !l.trim().startsWith('#'))
+		.filter((l) => /^\s*\w+="?\$\(/.test(l) && /\bgrep\b/.test(l) && !/\|\|\s*true/.test(l));
+	ok(
+		`${name}: no grep-in-assignment can abort the script under \`set -euo pipefail\``,
+		risky.length === 0,
+		risky.map((l) => l.trim().slice(0, 80)).join(' | ')
+	);
+}
+ok('canary setup falls back to more than one source for the instance origin', /MORPHIT_INSTANCE_ORIGIN/.test(canarySetup));
+ok('canary setup offers a Tor-only box its .onion as the origin default', /var\/lib\/tor/.test(canarySetup));
+
+// The seeder runs as the unprivileged `ipfs` user and cannot read Tor's hostname
+// file, so every instance reported "no hidden address configured".
+ok('upgrade resolves the box\u2019s own addresses as root and passes them down', /seedAddrArgs/.test(upgrade));
+ok('seeder accepts the caller-resolved addresses', /MORPHIT_SEED_ONION/.test(seed) && /MORPHIT_SEED_ORIGIN/.test(seed));
+ok('seeder tries more than one source for the public origin', /MORPHIT_INDEXER_PUBLIC_ORIGIN/.test(seed));
+ok(
+	'seeder NEVER reads a hidden address from indexer.env (that file lists OTHER operators\u2019 Blurt RPC onions \u2014 probing one would report a stranger\u2019s node as our seeder)',
+	/deliberately NOT \/etc\/morphit\/indexer\.env/.test(seed) &&
+		!/_onion=\$\(grep[^\n]*indexer\.env/.test(seed)
+);
+ok('seeder names where it looked when it finds no origin', /looked in MORPHIT_SEED_ORIGIN/.test(seed));
+
+// Ansible never runs on a hand-built install, so the upgrade must install the
+// timer itself or the whole feature is inert on the canonical box.
+ok('upgrade installs + enables the mirror timer itself (Ansible never runs on a manual install)',
+	/enable', '--now', 'morphit-snapshot-mirror\.timer/.test(upgrade));
+ok('timer install is idempotent (skips an identical unit already in place)', /=== incoming\) continue/.test(upgrade));
+
+ok('npm update-notifier is silenced at the last step that can emit it', /npm_config_update_notifier=false/.test(deployMcp));
+
 console.log('');
 if (fails.length > 0) {
 	console.error(`✗ ${fails.length} snapshot-mirror-wiring scenario(s) failed:`);

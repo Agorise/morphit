@@ -131,6 +131,18 @@ fs.writeFileSync(p, JSON.stringify(pkg, null, 2) + "\n");
 # already exists, and points npm_config_cache at vendor/npm-cache so what it
 # fetches lands there.
 if [ -d "$REPO_DIR/vendor/npm-cache" ] && [ -z "${MORPHIT_MCP_CACHE_WARM:-}" ]; then
+# Silence npm's "New major version of npm available!" banner and the funding
+# notice for the installs this script runs. upgrade.ts already exports these for
+# the children it spawns, but this is the LAST npm an upgrade runs and its
+# notifier writes on process exit — which is why the banner surfaced AFTER the
+# upgrade's own success message, reading like part of the result. Setting them
+# here too means the suppression holds however this script is invoked (upgrade,
+# a bare `sudo bash deploy-mcp.sh`, or a sudo that reset the environment).
+export npm_config_update_notifier=false
+export NPM_CONFIG_UPDATE_NOTIFIER=false
+export npm_config_fund=false
+export npm_config_audit=false
+
 	( cd "$DEST" && npm install --omit=dev --no-audit --no-fund --offline --cache "$REPO_DIR/vendor/npm-cache" )
 else
 	( cd "$DEST" && npm install --omit=dev --no-audit --no-fund )

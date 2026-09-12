@@ -174,8 +174,28 @@ _code() {
 # for every operator at once. So pin the REAL hostname to the loopback address:
 # correct SNI + Host, connection still never leaves the box.
 _gw=$(_code "http://127.0.0.1:${GW_PORT}${PROBE_PATH}" 20)
-_host=$(sed -n 's#^[[:space:]]*MORPHIT_INSTANCE_ORIGIN=[[:space:]]*##p' "$CFG" 2>/dev/null \
-	| tail -1 | sed -e 's#^"\(.*\)"$#\1#' -e "s#^'\(.*\)'\$#\1#" -e 's#^https\{0,1\}://##' -e 's#[/:].*$##')
+# Origin, from the first source that actually has one. This USED to read a single
+# key from a single file, and on both real instances that key is absent — so the
+# frontend check silently skipped on the canonical clearnet box, the one place it
+# matters most. MORPHIT_SEED_ORIGIN is resolved by the caller (upgrade.ts, running
+# as root) and wins when present; the rest are fallbacks for a hand-run seed.
+_host=""
+_hostsrc=""
+for _src in \
+	"env:${MORPHIT_SEED_ORIGIN:-}" \
+	"cfg:$(sed -n 's#^[[:space:]]*MORPHIT_INSTANCE_ORIGIN=[[:space:]]*##p' "$CFG" 2>/dev/null | tail -1)" \
+	"idx:$(sed -n 's#^[[:space:]]*MORPHIT_INDEXER_PUBLIC_ORIGIN=[[:space:]]*##p' /etc/morphit/indexer.env 2>/dev/null | tail -1)"
+do
+	_tag=${_src%%:*}
+	_val=${_src#*:}
+	[ -n "$_val" ] || continue
+	_val=$(printf '%s' "$_val" | sed -e 's#^"\(.*\)"$#\1#' -e "s#^'\(.*\)'\$#\1#" -e 's#^https\{0,1\}://##' -e 's#[/:].*$##')
+	if [ -n "$_val" ]; then
+		_host=$_val
+		_hostsrc=$_tag
+		break
+	fi
+done
 if [ -n "$_host" ]; then
 	_fe=$(_code "https://${_host}${PROBE_PATH}" 45 -k --resolve "${_host}:443:127.0.0.1")
 	# BunkerWeb rate-limits (2 r/s); a 429 here is our own probing, not a fault.
@@ -191,9 +211,11 @@ if [ "$_gw" != "200" ]; then
 	log "⚠ WARNING: the local IPFS gateway is NOT serving $CID (127.0.0.1:${GW_PORT} → ${_gw:-none})."
 	log "  Content is pinned but unreachable — this box is NOT a usable seeder."
 elif [ "$_fe" = "200" ]; then
-	log "✓ local gateway and the frontend both serve the release (clearnet path OK)."
+	log "✓ local gateway and the frontend both serve the release (clearnet path OK, host from ${_hostsrc})."
 elif [ -z "$_fe" ]; then
-	log "• Frontend check skipped: no MORPHIT_INSTANCE_ORIGIN in $CFG to probe with."
+	log "• Frontend check skipped: no public origin found (looked in MORPHIT_SEED_ORIGIN,"
+	log "  MORPHIT_INSTANCE_ORIGIN in $CFG, MORPHIT_INDEXER_PUBLIC_ORIGIN in /etc/morphit/indexer.env)."
+	log "  Set MORPHIT_INSTANCE_ORIGIN=https://<your-domain> in $CFG to enable this check."
 	log "  The hidden checks below still prove the real peer path end to end."
 elif [ "$_fe" = "403" ] || [ "$_fe" = "429" ]; then
 	log "• Frontend check inconclusive (HTTP ${_fe}) — the edge refused our own local probe."
@@ -208,8 +230,19 @@ else
 fi
 
 # (b) End-to-end over each hidden address the operator actually advertises.
-_onion=$(grep -hoE '[a-z2-7]{56}\.onion' "$CFG" /var/lib/tor/*/hostname 2>/dev/null | head -1) || true
-_i2p=$(grep -hoE '[a-z2-7]{52}\.b32\.i2p' "$CFG" 2>/dev/null | head -1) || true
+# Hidden addresses, widest net first. This script runs as the unprivileged `ipfs`
+# user, and /var/lib/tor/<svc>/ is mode 700 owned by debian-tor — so the glob that
+# used to be the only real source expanded to NOTHING and every instance reported
+# "no hidden address configured" even with a live .onion. The caller resolves these
+# as root and passes them down; the file reads remain as a hand-run fallback.
+_onion="${MORPHIT_SEED_ONION:-}"
+# NOTE: deliberately NOT /etc/morphit/indexer.env. That file holds
+# MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS — other people's Blurt RPC onions — and
+# grepping it would pick up a THIRD PARTY's address, probe it, and report
+# "✓ Tor: the .onion serves the release" about a node that isn't ours.
+[ -n "$_onion" ] || _onion=$(grep -hoE '[a-z2-7]{56}\.onion' "$CFG" /var/lib/tor/*/hostname 2>/dev/null | head -1) || true
+_i2p="${MORPHIT_SEED_I2P:-}"
+[ -n "$_i2p" ] || _i2p=$(grep -hoE '[a-z2-7]{52}\.b32\.i2p' "$CFG" 2>/dev/null | head -1) || true
 if [ -n "${_onion:-}" ]; then
 	_sp=$(ss -lnt 2>/dev/null | grep -oE '127\.0\.0\.1:(9050|9150)' | head -1 | cut -d: -f2) || true
 	[ -n "${_sp:-}" ] || _sp=9050

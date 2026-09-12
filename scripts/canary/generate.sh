@@ -144,9 +144,19 @@ if [ "$CANARY_TOR_ONLY" = 1 ]; then
 	# fetch goes over Tor natively. (MORPHIT_CANARY_BLURT_RPC is a single URL.)
 	if [ -z "${MORPHIT_CANARY_BLURT_RPC:-}" ]; then
 		_hidden="${MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS:-}"
-		[ -z "$_hidden" ] && [ -r /etc/morphit/indexer.env ] && \
-			_hidden="$(grep -E '^MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS=' /etc/morphit/indexer.env | head -1 | cut -d= -f2- | tr -d '"')"
-		_onion="$(printf '%s' "$_hidden" | tr ',' '\n' | grep -i '\.onion' | head -1 | tr -d '[:space:]')"
+		# `|| true` on BOTH greps is load-bearing under `set -euo pipefail`: grep
+		# exits 1 when it matches nothing, pipefail propagates that through the rest
+		# of the pipeline, and a command-substitution assignment returning non-zero
+		# aborts the script. An indexer.env without this key — or a node with no
+		# .onion RPC among its endpoints — would kill the WEEKLY CANARY REFRESH
+		# outright, letting the canary go stale on its own timer with no error an
+		# operator would ever see. (Same defect that made setup.sh die silently right
+		# after the operator-name prompt.)
+		if [ -z "$_hidden" ] && [ -r /etc/morphit/indexer.env ]; then
+			_hidden="$(grep -E '^MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS=' /etc/morphit/indexer.env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"')" || true
+		fi
+		_onion="$(printf '%s' "${_hidden:-}" | tr ',' '\n' | grep -i '\.onion' | head -1 | tr -d '[:space:]')" || true
+		: "${_onion:=}"
 		if [ -n "$_onion" ]; then
 			export MORPHIT_CANARY_BLURT_RPC="$_onion"
 			echo "canary: tor-only — auto-selected hidden Blurt RPC $_onion for the chain-head fetch" >&2

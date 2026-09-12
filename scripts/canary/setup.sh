@@ -288,12 +288,41 @@ OPERATOR_NAME="$(ask 'Operator name (e.g. morphit.io)' "${MORPHIT_CANARY_OPERATO
 # tor-only routing and leaks freshness fetches over clearnet.
 _origin_default="${MORPHIT_CANARY_INSTANCE_ORIGIN:-}"
 if [ -z "$_origin_default" ]; then
+	# NOTE: the `|| true` is load-bearing under `set -euo pipefail`. `grep` exits 1
+	# when it matches nothing, `pipefail` propagates that through the `| tail`, and
+	# a command substitution assignment that returns non-zero aborts the script.
+	# So any readable file WITHOUT this key — which is every instance whose config
+	# predates it — killed setup.sh silently right after the operator-name prompt,
+	# and nobody could set up a canary at all. It died on the FIRST miss, even when
+	# a later file in the list did have the key.
 	for _f in /opt/morphit/morphit.config.env /opt/morphit/morphit.env /etc/morphit/indexer.env; do
 		[ -r "$_f" ] || continue
-		_v="$(grep -E '^(export +)?MORPHIT_INDEXER_PUBLIC_ORIGIN=' "$_f" | tail -1 | sed -E "s/^(export +)?MORPHIT_INDEXER_PUBLIC_ORIGIN=//; s/^[\"']//; s/[\"']$//")"
-		[ -n "$_v" ] && { _origin_default="$_v"; break; }
+		_v="$(grep -E '^(export +)?MORPHIT_INDEXER_PUBLIC_ORIGIN=' "$_f" 2>/dev/null | tail -1 | sed -E "s/^(export +)?MORPHIT_INDEXER_PUBLIC_ORIGIN=//; s/^[\"']//; s/[\"']$//")" || true
+		if [ -n "${_v:-}" ]; then
+			_origin_default="$_v"
+			break
+		fi
 	done
+	# Second source: the instance origin the operator set for the site itself.
+	if [ -z "$_origin_default" ]; then
+		for _f in /opt/morphit/morphit.config.env /opt/morphit/morphit.env; do
+			[ -r "$_f" ] || continue
+			_v="$(grep -E '^(export +)?MORPHIT_INSTANCE_ORIGIN=' "$_f" 2>/dev/null | tail -1 | sed -E "s/^(export +)?MORPHIT_INSTANCE_ORIGIN=//; s/^[\"']//; s/[\"']$//")" || true
+			if [ -n "${_v:-}" ]; then
+				_origin_default="$_v"
+				break
+			fi
+		done
+	fi
+	# Third source: a Tor-only box's real origin IS its .onion, and only root can
+	# read it. Without this a hidden-only operator has no default to accept, and
+	# the canary's tor-only auto-detection never fires.
+	if [ -z "$_origin_default" ]; then
+		_v="$(cat /var/lib/tor/*/hostname 2>/dev/null | grep -oE '[a-z2-7]{56}\.onion' | head -1)" || true
+		[ -n "${_v:-}" ] && _origin_default="http://$_v"
+	fi
 fi
+: "${_origin_default:=}"
 INSTANCE_ORIGIN="$(ask 'Your instance URL (e.g. https://morphit.io)' "$_origin_default")"
 OPERATOR_ACCOUNT="$(ask 'Your Blurt operator account, no @ (e.g. morphit)' "${MORPHIT_CANARY_OPERATOR_ACCOUNT:-}")"
 [ -n "$OPERATOR_NAME" ] && [ -n "$INSTANCE_ORIGIN" ] && [ -n "$OPERATOR_ACCOUNT" ] \

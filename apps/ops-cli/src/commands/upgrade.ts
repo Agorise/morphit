@@ -1220,7 +1220,9 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	// operator can't (and shouldn't) act on. Silence them for every child npm
 	// this upgrade spawns (ci, install, the workspace builds).
 	process.env.npm_config_update_notifier = 'false';
+	process.env.NPM_CONFIG_UPDATE_NOTIFIER = 'false';
 	process.env.npm_config_fund = 'false';
+	process.env.npm_config_audit = 'false';
 
 	// cp674 — before we spawn any child npm, strip an inherited offline flag.
 	// The ansible launcher runs us via `npm exec --offline`; that flag would
@@ -2579,6 +2581,47 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	// the ipfs service user.
 	try {
 		const seedScript = join(installDir, 'ops', 'ipfs', 'morphit-ipfs-seed.sh');
+		// Resolve this box's own public + hidden addresses HERE, as root, and hand
+		// them to the seed script. The script runs as the unprivileged `ipfs` user,
+		// and /var/lib/tor/<svc>/ is mode 700 owned by debian-tor — so its own
+		// lookup silently found nothing and every instance reported "no hidden
+		// address configured" even with a live .onion, leaving the per-transport
+		// verification inert on exactly the boxes it was written for.
+		const seedAddrArgs: string[] = [];
+		try {
+			const readKey = (file: string, key: string): string => {
+				if (!existsSync(file)) return '';
+				const m = new RegExp(`^\\s*(?:export\\s+)?${key}\\s*=\\s*(.+)$`, 'm').exec(
+					readFileSync(file, 'utf8')
+				);
+				return m ? m[1]!.trim().replace(/^["']|["']$/g, '') : '';
+			};
+			const cfg = join(installDir, 'morphit.config.env');
+			const idxEnv = '/etc/morphit/indexer.env';
+			const origin =
+				readKey(cfg, 'MORPHIT_INSTANCE_ORIGIN') || readKey(idxEnv, 'MORPHIT_INDEXER_PUBLIC_ORIGIN');
+			if (origin) seedAddrArgs.push(`MORPHIT_SEED_ORIGIN=${origin}`);
+
+			// Our OWN onion. Never read it from indexer.env — that file lists other
+			// people's Blurt RPC onions, and probing one would report a stranger's
+			// node as our working seeder.
+			let onion = readKey(cfg, 'MORPHIT_INSTANCE_TOR_ADDRESS');
+			if (!onion) {
+				const found = spawnSync(
+					'sh',
+					['-c', "cat /var/lib/tor/*/hostname 2>/dev/null | grep -oE '[a-z2-7]{56}\\.onion' | head -1"],
+					{ encoding: 'utf8', timeout: 10_000 }
+				);
+				onion = (found.stdout ?? '').trim();
+			}
+			if (onion) seedAddrArgs.push(`MORPHIT_SEED_ONION=${onion}`);
+
+			const i2p =
+				readKey(cfg, 'MORPHIT_INSTANCE_I2P_B32_ADDRESS') || readKey(cfg, 'MORPHIT_INSTANCE_I2P_ADDRESS');
+			if (i2p) seedAddrArgs.push(`MORPHIT_SEED_I2P=${i2p}`);
+		} catch {
+			/* detection is a nicety; the seed still runs and says what it could not find */
+		}
 		const ipfsHostingUp =
 			spawnSync(
 				'sh',
@@ -2598,7 +2641,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 			if (ipfsHostingUp && existsSync(canonical)) {
 				info('');
 				info(`Seeding ${latestTag} to IPFS from the bundled canonical tarball (this box becomes a Tor/I2P origin host) …`);
-				const seedEnv = ['env', 'IPFS_PATH=/var/lib/ipfs/.ipfs'];
+				const seedEnv = ['env', 'IPFS_PATH=/var/lib/ipfs/.ipfs', ...seedAddrArgs];
 				try {
 					chmodSync(dirname(canonical), 0o755);
 					chmodSync(canonical, 0o644);
@@ -2628,7 +2671,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 			// copies it instead of curling. The tarball is a public release artifact,
 			// so make it + its dir readable by the `ipfs` service user that runs the
 			// seed. Falls back to download mode if the tarball isn't present.
-			const seedEnv = ['env', 'IPFS_PATH=/var/lib/ipfs/.ipfs'];
+			const seedEnv = ['env', 'IPFS_PATH=/var/lib/ipfs/.ipfs', ...seedAddrArgs];
 			if (existsSync(tarballPath)) {
 				try {
 					chmodSync(tmpDir, 0o755);
@@ -2684,6 +2727,39 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 				{ stdio: 'ignore', timeout: 8000 }
 			).status === 0;
 		if (existsSync(mirrorScript) && ipfsUp) {
+			// Install + enable the weekly timer ourselves. The Ansible ipfs role does
+			// this too, but morphit.io is a MANUAL /opt/morphit install that Ansible
+			// never touches — the exact defect class that left the gateway firewall
+			// rule undelivered. Without this, the canonical box would never install
+			// either snapshot timer and the whole feature would sit inert on the one
+			// instance that matters most. Idempotent: re-copying an identical unit
+			// and re-enabling an already-enabled timer are both no-ops.
+			try {
+				const units = [
+					'morphit-snapshot-mirror.service',
+					'morphit-snapshot-mirror.timer'
+				];
+				let installed = 0;
+				for (const u of units) {
+					const src = join(installDir, 'ops', 'systemd', u);
+					if (!existsSync(src)) continue;
+					const dest = join('/etc/systemd/system', u);
+					const incoming = readFileSync(src, 'utf8');
+					if (existsSync(dest) && readFileSync(dest, 'utf8') === incoming) continue;
+					writeFileSync(dest, incoming);
+					installed++;
+				}
+				if (installed > 0) {
+					spawnSync('systemctl', ['daemon-reload'], { stdio: 'ignore', timeout: 60_000 });
+				}
+				spawnSync('systemctl', ['enable', '--now', 'morphit-snapshot-mirror.timer'], {
+					stdio: 'ignore',
+					timeout: 60_000
+				});
+			} catch {
+				/* the timer is a convenience; the mirror below still runs this upgrade */
+			}
+
 			info('');
 			info('Refreshing this instance\u2019s federation-snapshot mirror (helps new nodes fast-sync from you) \u2026');
 			spawnSync('bash', [mirrorScript], { stdio: 'inherit', timeout: 1_800_000 });

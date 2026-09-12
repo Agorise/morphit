@@ -506,7 +506,7 @@
 								</div>
 								<p class="text-xs text-ink-500">
 								{#if inst.clearnet_eliminated}
-									🛡️ {$_('instances.clearnet_eliminated')}
+									🏅 {$_('instances.clearnet_eliminated')}
 								{:else if isHiddenServiceOrigin(inst.origin)}
 									{$_('instances.no_clearnet')}
 								{:else}
