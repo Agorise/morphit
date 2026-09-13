@@ -76,11 +76,27 @@ const say = (m: string): void => {
 const IPFS_REPO = process.env.IPFS_PATH ?? '/var/lib/ipfs/.ipfs';
 const IPFS_USER = process.env.MORPHIT_IPFS_USER ?? 'ipfs';
 
+/**
+ * How to become the kubo user.
+ *
+ * NOT sudo: it is setuid-root and refuses to run under systemd's
+ * NoNewPrivileges=true, failing with "unable to open /etc/sudoers: Operation not
+ * permitted". That is invisible when you run the job by hand as root and fatal
+ * the moment the timer runs it. `runuser` is not setuid — it only works if you
+ * are already root — so dropping privileges with it is unaffected. sudo remains
+ * a fallback for hosts without runuser.
+ */
+const DROP_PRIV: readonly string[] = spawnSync('sh', ['-c', 'command -v runuser'], { encoding: 'utf8' })
+	.status === 0
+	? ['runuser', '-u', IPFS_USER, '--']
+	: ['sudo', '-n', '-u', IPFS_USER];
+
 /** Run kubo as the repo's owner. Never throws; returns stdout (trimmed) or null. */
 function ipfs(args: readonly string[], timeoutMs = 120_000): string | null {
+	const [cmd, ...pre] = DROP_PRIV;
 	const r = spawnSync(
-		'sudo',
-		['-n', '-u', IPFS_USER, 'env', `IPFS_PATH=${IPFS_REPO}`, 'ipfs', ...args],
+		cmd!,
+		[...pre, 'env', `IPFS_PATH=${IPFS_REPO}`, 'ipfs', ...args],
 		{ encoding: 'utf8', timeout: timeoutMs }
 	);
 	if (r.status !== 0) return null;
@@ -189,7 +205,7 @@ async function main(): Promise<void> {
 	// dump against the on-chain sha256 exactly as a fresh node would, so this box
 	// can never become a mirror that serves something a newcomer will reject.
 	const catCmd =
-		`sudo -n -u ${IPFS_USER} env IPFS_PATH=${IPFS_REPO} ipfs cat ${op.ipfs_cid} 2>/dev/null` +
+		`${DROP_PRIV.join(' ')} env IPFS_PATH=${IPFS_REPO} ipfs cat ${op.ipfs_cid} 2>/dev/null` +
 		` | tar -xzO indexer.sql.gz 2>/dev/null`;
 	const tar = spawnSync('sh', ['-c', catCmd], {
 		encoding: 'buffer',

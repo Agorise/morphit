@@ -335,6 +335,22 @@ ok(
 	!/MORPHIT_INDEXER_CHAIN_ID \?\?=/.test(boot) && /still needs MORPHIT_INDEXER_CHAIN_ID/.test(boot)
 );
 ok('the pin script reports snapshot size in kB, not a floored 0 MB', /SIZE_BYTES\/1024\)\) kB/.test(pinScript));
+
+// The publish timer failed on a box where a hand-run publish always worked:
+// PrivateTmp=true puts /tmp on its own tmpfs, and rename() cannot cross devices.
+const exportTs = read('apps/indexer/scripts/snapshot-export.ts');
+ok(
+	'snapshot-export survives a cross-device move (PrivateTmp puts /tmp on another filesystem, so rename() fails with EXDEV under systemd)',
+	/EXDEV/.test(exportTs) && /copyFileSync/.test(exportTs) && /unlinkSync/.test(exportTs)
+);
+ok(
+	'…and still rethrows anything that is NOT EXDEV rather than masking a real failure',
+	/code !== 'EXDEV'\) throw e/.test(exportTs)
+);
+ok(
+	'the publish script no longer discards the export\u2019s stderr (the cause of a failed export used to be thrown away)',
+	!/snapshot-export\.ts --out "\$OUT" 2>\/dev\/null/.test(autopub) && /its output was/.test(autopub)
+);
 ok(
 	'the dry run never queries Postgres — the server-version lookup is the first DB touch and sits BEFORE the early exit',
 	/if \(has\('verify-only'\)\) \{\n\t\t\thostPgMajor = manifest\.pgMajor;/.test(boot)
@@ -347,8 +363,38 @@ ok(
 // The mirror ran bare `ipfs` as root, so kubo looked in /root/.ipfs — an empty
 // repo with no daemon — and refused to fetch a CID the box was already serving.
 const mirrorTs2 = read('apps/indexer/scripts/snapshot-mirror.ts');
-ok('mirror runs kubo as the repo owner, not as root', /'-n', '-u', IPFS_USER, 'env', `IPFS_PATH=/.test(mirrorTs2));
-ok('mirror pipes ipfs cat through the same user', /sudo -n -u \$\{IPFS_USER\} env IPFS_PATH=/.test(mirrorTs2));
+ok('mirror runs kubo as the repo owner, not as root', /IPFS_USER/.test(mirrorTs2) && /IPFS_PATH=\$\{IPFS_REPO\}/.test(mirrorTs2));
+ok('mirror pipes ipfs cat through the same privilege drop', /DROP_PRIV\.join\(' '\)/.test(mirrorTs2));
+// sudo is setuid-root and REFUSES to run under NoNewPrivileges=true, which both
+// snapshot units set. runuser is not setuid, so dropping privileges still works.
+for (const [name, body] of [
+	['mirror', mirrorTs2],
+	['pin script', pinScript]
+] as const) {
+	ok(`${name}: prefers runuser over sudo (sudo cannot run under NoNewPrivileges)`, /runuser/.test(body));
+	// Never rely on an inherited HOME to find a daemon's repo: `sudo -u` sets it,
+	// `runuser -u X --` does not, so the same code works by hand and fails on a timer.
+	ok(`${name}: passes IPFS_PATH explicitly instead of trusting HOME`, /IPFS_PATH=/.test(body));
+}
+ok(
+	'pin script resolves IPFS_PATH BEFORE its first kubo call',
+	pinScript.indexOf('IPFS_PATH="$(tr') < pinScript.indexOf('_IPFS_PROBE=')
+);
+// The script restarts ipfs.service itself (step 3), so its own probe must
+// tolerate a daemon that is briefly absent instead of declaring it unreachable.
+ok('pin script waits for the kubo API instead of failing on the first miss', /_i" -lt 15/.test(pinScript));
+ok('…and reports what ipfs actually said when it finally gives up', /ipfs said/.test(pinScript));
+// Third time tonight a swallowed child error cost a debugging round trip.
+for (const [name, body] of [
+	['pin script', pinScript],
+	['publish script', autopub]
+] as const) {
+	ok(`${name}: no failure path discards the child's output`, !/2>\/dev\/null 2>&1/.test(body));
+}
+ok(
+	'both snapshot units still set NoNewPrivileges (the fix is the right tool, not weaker hardening)',
+	/NoNewPrivileges=true/.test(mirrorSvc) && /NoNewPrivileges=true/.test(publishSvc)
+);
 ok(
 	'mirror startup guard proves the REPO is reachable, not just that the binary exists (`--version` needs no repo, so it cannot tell "no kubo" from "wrong repo")',
 	/ipfs\(\['id'/.test(mirrorTs2) && !/ipfs\(\['--version'\]/.test(mirrorTs2)
@@ -376,6 +422,32 @@ ok(
 	![pinScript, autopub, read('ops/snapshot-mirror.sh'), read('ops/ipfs/morphit-ipfs-seed.sh')].some((b) =>
 		/\|\s*python3\s+-\s*<</.test(b)
 	)
+);
+
+// ── N. the release guard must not gate on a third party ─────────────
+// It downloaded the FULL ~33 MB tarball through a public gateway on every poll
+// round, so each round waited on a cold multi-megabyte transfer. On a healthy
+// release that routinely burned the whole budget ("40+ rounds"), while the
+// instance's own origin — the path the federation actually uses, and the one the
+// seeder had verified seconds earlier — was never consulted at all.
+const guard = read('scripts/verify-cid-public.sh');
+ok('the guard checks THIS instance\u2019s own origin first', /SELF_ORIGIN/.test(guard));
+ok(
+	'…and passes on that alone, without waiting on any public gateway',
+	/That is the path the federation uses/.test(guard)
+);
+ok(
+	'public gateways are checked for RESOLVABILITY (metadata.json), not a 33 MB download',
+	/_serves_metadata/.test(guard) &&
+		!/curl -fsSL --max-time 150[^\n]*morphit-latest\.tar\.gz/.test(guard)
+);
+ok(
+	'the tarball warm-up is backgrounded and explicitly not waited on',
+	/not waited on/.test(guard) && /tar\.gz" >\/dev\/null 2>&1 & \)/.test(guard)
+);
+ok(
+	'a failure distinguishes "your own box is broken" from "third parties are slow"',
+	/NOT just slow propagation/.test(guard)
 );
 
 console.log('');

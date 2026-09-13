@@ -21,7 +21,16 @@
  * result in as indexer.sql.gz next to a manifest.json — the format is stable.
  */
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync, renameSync, readFileSync } from 'node:fs';
+import {
+	mkdtempSync,
+	writeFileSync,
+	mkdirSync,
+	rmSync,
+	renameSync,
+	readFileSync,
+	copyFileSync,
+	unlinkSync
+} from 'node:fs';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -106,7 +115,20 @@ async function main(): Promise<void> {
 			if (tar.status !== 0) throw new Error(`tar failed (exit ${tar.status ?? 'signal'})`);
 
 			const finalPath = join(outDir, finalName);
-			renameSync(tmpTar, finalPath);
+			// rename() cannot cross filesystems. Under systemd this job runs with
+			// PrivateTmp=true, which mounts a private tmpfs at /tmp — a DIFFERENT
+			// device from /opt/morphit — so the move fails with EXDEV even though the
+			// identical command works in an interactive shell, where /tmp is just part
+			// of the root filesystem. That is why the publish timer failed on a box
+			// where a hand-run publish had always succeeded. Fall back to copy+unlink,
+			// which works across devices and leaves the same result.
+			try {
+				renameSync(tmpTar, finalPath);
+			} catch (e) {
+				if ((e as NodeJS.ErrnoException).code !== 'EXDEV') throw e;
+				copyFileSync(tmpTar, finalPath);
+				unlinkSync(tmpTar);
+			}
 			process.stderr.write(
 				`\n✓ snapshot written: ${finalPath}\n` +
 					`  chain ${chainId} · schema v${schemaVersion} · block ${lastAppliedBlock.toLocaleString()} · pg ${pgMajor}\n` +

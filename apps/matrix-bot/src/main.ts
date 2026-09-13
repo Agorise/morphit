@@ -29,6 +29,7 @@ import { createHealthServer } from './health.ts';
 import { tailJournalctl } from './journalctl.ts';
 import { startDigestScheduler } from './digest.ts';
 import { rmSync } from 'node:fs';
+import { join } from 'node:path';
 
 async function main(): Promise<void> {
 	// ─── Opt-in gate ──
@@ -80,7 +81,13 @@ async function main(): Promise<void> {
 			// opaque stack trace (the maintainer/morphit.io reinstall).
 			if (/already exists/i.test(msg) && /one[- ]?time key|signed_curve25519/i.test(msg)) {
 				try {
-					rmSync(cryptoStorePath, { recursive: true, force: true });
+					// Remove ONLY the crypto store. This used to delete the whole storage
+					// directory, which also holds state.json (the sync token) and the
+					// persisted DM-room map — so recovering from a key conflict would
+					// force a full re-sync AND make the bot forget which room it DMs in,
+					// spawning yet another room in the operator's inbox. The key conflict
+					// lives in the crypto subdirectory; nothing else needs to go.
+					rmSync(join(cryptoStorePath, 'crypto'), { recursive: true, force: true });
 				} catch {
 					/* best-effort */
 				}

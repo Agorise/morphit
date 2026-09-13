@@ -78,10 +78,53 @@ hdr "1. Locate kubo + its repo root"
 KUBO_PID="$(pgrep -x ipfs | head -1 || true)"
 [ -n "$KUBO_PID" ] || die "no running 'ipfs' (kubo) daemon found."
 KUBO_USER="$(ps -o user= -p "$KUBO_PID" | tr -d ' ')"
-IPFS(){ sudo -u "$KUBO_USER" ipfs "$@"; }
-IPFS id >/dev/null 2>&1 || die "cannot reach the kubo API as user '$KUBO_USER'."
+# Drop to the kubo user WITHOUT sudo where possible. `sudo` is setuid-root and
+# refuses to run under systemd's NoNewPrivileges=true ("unable to open
+# /etc/sudoers: Operation not permitted") — which is why this worked by hand and
+# failed the moment the publish timer ran it. `runuser` is not setuid: it only
+# works when you are ALREADY root, so it is unaffected by NoNewPrivileges and is
+# the right tool for dropping privileges. sudo stays as a fallback for hosts
+# without runuser.
+# Work out the repo FIRST, then pass it explicitly on every call. Order matters:
+# the reachability probe used to run before IPFS_PATH was known, relying on the
+# drop-to-user tool to set HOME for us. `sudo -u` does set HOME to the target
+# user's home, so kubo found ~/.ipfs and it worked by hand; `runuser -u X --`
+# does NOT (that needs -l), so HOME stayed /root, kubo looked in /root/.ipfs, and
+# the probe failed with a misleading "cannot reach the kubo API". Never depend on
+# an inherited HOME to locate a daemon's repo.
 IPFS_PATH="$(tr '\0' '\n' < "/proc/$KUBO_PID/environ" 2>/dev/null | grep -m1 '^IPFS_PATH=' | cut -d= -f2- || true)"
 [ -n "$IPFS_PATH" ] || IPFS_PATH="$(getent passwd "$KUBO_USER" | cut -d: -f6)/.ipfs"
+if command -v runuser >/dev/null 2>&1; then
+	IPFS(){ runuser -u "$KUBO_USER" -- env IPFS_PATH="$IPFS_PATH" ipfs "$@"; }
+else
+	IPFS(){ sudo -n -u "$KUBO_USER" env IPFS_PATH="$IPFS_PATH" ipfs "$@"; }
+fi
+# Keep the probe's error. `>/dev/null 2>&1` here meant a failure said only
+# "cannot reach the kubo API", which is indistinguishable between "ipfs is not on
+# PATH", "the API file is unreadable" and "the daemon refused the connection" —
+# three very different fixes.
+# Wait for the daemon rather than failing on the first miss. THIS SCRIPT ITSELF
+# restarts ipfs.service in step 3 to enable filestore, so a run that follows a
+# restart — or a retry that races one — can legitimately find the API down for a
+# few seconds. The old one-shot probe turned that into a hard "cannot reach the
+# kubo API", which is what made the publish timer look permanently broken while
+# the same command worked by hand moments later. Bounded: ~30s, then give up
+# loudly with what ipfs actually said.
+_IPFS_PROBE=""
+_i=0
+while [ "$_i" -lt 15 ]; do
+	if _IPFS_PROBE="$(IPFS id 2>&1)"; then break; fi
+	_i=$((_i + 1))
+	[ "$_i" -eq 1 ] && printf '  … kubo API not answering yet; waiting (it may have just restarted)\n'
+	sleep 2
+done
+if [ "$_i" -ge 15 ]; then
+	bad "cannot reach the kubo API as user '$KUBO_USER' with IPFS_PATH=$IPFS_PATH (waited 30s)."
+	printf '    ipfs said: %s\n' "$(printf '%s' "$_IPFS_PROBE" | head -3 | tr '\n' ' ')"
+	printf '    PATH=%s\n' "$PATH"
+	printf '    check: systemctl status ipfs\n'
+	exit 1
+fi
 [ -d "$IPFS_PATH" ] || IPFS_PATH="/var/lib/ipfs"
 [ -d "$IPFS_PATH" ] || die "could not locate the IPFS repo root."
 WORKDIR="${WORKDIR:-$IPFS_PATH/indexer-snapshots}"
@@ -121,7 +164,15 @@ else
 	UNIT="$(systemctl list-units --type=service --no-legend 2>/dev/null | awk '{print $1}' | grep -iE 'ipfs|kubo' | head -1 || true)"
 	[ -n "$UNIT" ] && { systemctl restart "$UNIT" && ok "restarted $UNIT"; }
 	for _ in $(seq 1 20); do sleep 3; IPFS id >/dev/null 2>&1 && break; done
-	IPFS id >/dev/null 2>&1 || die "kubo did not come back after restart."
+	# Wait for it. A daemon needs seconds to reopen its API, so a single immediate
+	# probe here is a coin flip — and when it lost, the NEXT run found a kubo that
+	# had just restarted and died at the step-1 probe instead.
+	_j=0
+	while [ "$_j" -lt 15 ]; do
+		IPFS id >/dev/null 2>&1 && break
+		_j=$((_j + 1)); sleep 2
+	done
+	[ "$_j" -lt 15 ] || die "kubo did not come back within 30s after restart (check: systemctl status ipfs)."
 	ok "filestore enabled"
 fi
 

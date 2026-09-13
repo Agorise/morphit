@@ -72,7 +72,18 @@ mkdir -p "$OUT"
 
 # ── 2. EXPORT ──────────────────────────────────────────────────────
 log "exporting indexer snapshot → $OUT …"
-TARBALL="$(cd "$REPO" && "$TSX" --tsconfig "$TSCFG" apps/indexer/scripts/snapshot-export.ts --out "$OUT" 2>/dev/null | tail -1)" || die "snapshot-export failed"
+# Keep stderr. It used to be sent to /dev/null so only the tarball path landed on
+# stdout — which meant a failed export reported nothing but "snapshot-export
+# failed", with the actual cause discarded. Capture stderr to a file, echo it on
+# failure, and still take the path from the last stdout line.
+EXPORT_ERR="$(mktemp)"
+TARBALL="$(cd "$REPO" && "$TSX" --tsconfig "$TSCFG" apps/indexer/scripts/snapshot-export.ts --out "$OUT" 2>"$EXPORT_ERR" | tail -1)" || {
+	log "snapshot-export failed; its output was:"
+	sed 's/^/    /' "$EXPORT_ERR" >&2 || true
+	rm -f "$EXPORT_ERR"
+	die "snapshot-export failed"
+}
+rm -f "$EXPORT_ERR"
 [ -n "$TARBALL" ] && [ -f "$TARBALL" ] || die "snapshot-export did not produce a tarball"
 # Log the size on EVERY run. The snapshot is tiny today (~600 kB), which is what
 # makes it cheap for every instance in the federation to mirror. It grows with
@@ -93,8 +104,17 @@ PIN_ENV=()
 [ -n "${MORPHIT_SNAPSHOT_FORGEJO_URL:-}" ] && PIN_ENV+=("FORGEJO_URL=$MORPHIT_SNAPSHOT_FORGEJO_URL")
 # Capture stdout so we can read the payload path the pin script TELLS us, while
 # still showing the operator its progress output (which goes to stderr).
-PIN_OUT="$(env "${PIN_ENV[@]}" bash "$REPO/ops/pin-indexer-snapshot.sh" "$TARBALL")" || die "pin-indexer-snapshot failed"
-printf '%s\n' "$PIN_OUT"
+# Stream pin's output AND keep a copy. The previous form captured stdout into a
+# variable that was only printed on SUCCESS — so when pin failed, everything it
+# had said (including WHY) was discarded, leaving nothing in the journal but
+# "pin-indexer-snapshot failed". tee gives the operator the live output; the log
+# file gives us the payload locator. PIPESTATUS[0] is pin's exit code, not tee's.
+PIN_LOG="$(mktemp)"
+env "${PIN_ENV[@]}" bash "$REPO/ops/pin-indexer-snapshot.sh" "$TARBALL" 2>&1 | tee "$PIN_LOG"
+PIN_RC="${PIPESTATUS[0]}"
+PIN_OUT="$(cat "$PIN_LOG")"
+rm -f "$PIN_LOG"
+[ "$PIN_RC" -eq 0 ] || die "pin-indexer-snapshot failed (exit $PIN_RC) — see its output above"
 # pin-indexer-snapshot.sh knows the exact path it wrote and prints it on a line
 # with a stable prefix, so read that. The previous version scanned the whole
 # filesystem (`find / -maxdepth 6`) for a freshly-modified payload json — slow on

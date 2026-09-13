@@ -147,11 +147,17 @@ const guard = stripHash(read('scripts/verify-cid-public.sh'));
 		['polls independent public gateways', /MORPHIT_GUARD_GATEWAYS/.test(guard) && /ipfs\.io/.test(guard) && /dweb\.link/.test(guard)],
 		['fetches the CID metadata.json', /metadata\.json/.test(guard)],
 		['confirms the expected version (not just any 200)', /WANT_VER/.test(guard) && /grep -q/.test(guard)],
-		// cp591 — metadata.json (one tiny block) resolving is NOT proof the ~12MB
-		// tarball downloads; the guard must fetch morphit-latest.tar.gz IN FULL
-		// (curl -f → a truncated/partial transfer is rejected) before anchoring the
-		// CID, which also warms the gateway for the first visitors.
-		['also verifies the FULL tarball downloads (morphit-latest.tar.gz via curl -f)', /TARURL="[^"]*morphit-latest\.tar\.gz"/.test(guard) && /curl -fsSL[^\n]*\$TARURL/.test(guard)],
+		// cp591 asked the guard to fetch morphit-latest.tar.gz IN FULL before
+		// anchoring. That intent was right — a resolvable metadata.json does not
+		// prove the tarball serves — but the cost was wrong: the tarball reached
+		// ~33 MB and the guard pulled it through a PUBLIC gateway on every poll
+		// round, so a healthy release routinely burned the entire budget waiting on
+		// a cold third-party transfer, while this instance's OWN origin (the path the
+		// federation actually uses, verified by the seeder seconds earlier) was never
+		// consulted. The tarball is still warmed — in the BACKGROUND, never waited on.
+		['still warms the full tarball, but never blocks the ceremony on it',
+			/morphit-latest\.tar\.gz/.test(guard) && /not waited on/.test(guard)],
+		['checks this instance\u2019s own origin before any third party', /SELF_ORIGIN/.test(guard)],
 		['passes on the FIRST gateway that serves (exit 0 in the loop)', /exit 0/.test(guard)],
 		['fails loud → no broadcast (exit 1)', /DO NOT BROADCAST[\s\S]*exit 1/i.test(guard)],
 		['backs off across rounds (retry cold content)', /ATTEMPTS/.test(guard) && /sleep/.test(guard)]

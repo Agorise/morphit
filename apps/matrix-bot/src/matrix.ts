@@ -17,7 +17,7 @@ import {
 	SimpleFsStorageProvider,
 	RustSdkCryptoStorageProvider
 } from 'matrix-bot-sdk';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { MatrixMxid } from '@morphit/operator-config';
 
@@ -54,32 +54,97 @@ export async function createMatrixSender(
 ): Promise<MatrixSender> {
 	mkdirSync(storageDir, { recursive: true });
 	const storage = new SimpleFsStorageProvider(join(storageDir, 'state.json'));
-	mkdirSync(dirname(join(storageDir, 'crypto')), { recursive: true });
-	// RustSdkCryptoStoreType is a const enum re-exported from
-	// @matrix-org/matrix-sdk-crypto-nodejs.  Accessing const-enum
-	// members under TS isolatedModules is forbidden; the second
-	// arg is optional (the SDK default is fine for our use), so
-	// we just omit it.
-	const crypto = new RustSdkCryptoStorageProvider(join(storageDir, 'crypto'));
-	const client = new MatrixClient(homeserver, accessToken, storage, crypto);
-	// crypto.prepare() takes the list of rooms to bootstrap for
-	// E2E session-state.  We start with an empty list — DM rooms
-	// for each operator MXID are created lazily on first send via
-	// client.dms.getOrCreateDm() which handles its own crypto
-	// setup for the new room.
-	await client.crypto.prepare([]);
 
-	/** DM rooms are looked up on first DM to each recipient and
-	 *  cached for the bot's lifetime.  Matrix protocol: a DM is
-	 *  just a private 2-person room marked as such; finding-or-
-	 *  creating one is matrix-bot-sdk's `dms.getOrCreateDm`. */
+	/**
+	 * End-to-end encryption is OFF by default, deliberately.
+	 *
+	 * These are operator alerts — "your disk is full", "a unit failed" — sent to
+	 * the operator's own account. They are not secrets. With encryption on, every
+	 * alert had to be decryptable by a device the bot had never verified, and in
+	 * practice most arrived as "Unable to decrypt message". An alert you cannot
+	 * read is worth nothing, so the default trades a confidentiality property
+	 * nobody needed for one that always works.
+	 *
+	 * Set MORPHIT_MATRIX_ENCRYPT=1 to restore E2EE. Do that only if you have
+	 * verified the bot's device from your client, otherwise you get unreadable
+	 * alerts again. Note the alert TEXT still travels over TLS to the homeserver
+	 * either way; what changes is whether the homeserver operator could read it.
+	 */
+	const wantEncryption = (process.env.MORPHIT_MATRIX_ENCRYPT ?? '').trim() === '1';
+	let client: MatrixClient;
+	if (wantEncryption) {
+		mkdirSync(dirname(join(storageDir, 'crypto')), { recursive: true });
+		// RustSdkCryptoStoreType is a const enum re-exported from
+		// @matrix-org/matrix-sdk-crypto-nodejs.  Accessing const-enum
+		// members under TS isolatedModules is forbidden; the second
+		// arg is optional (the SDK default is fine for our use), so
+		// we just omit it.
+		const crypto = new RustSdkCryptoStorageProvider(join(storageDir, 'crypto'));
+		client = new MatrixClient(homeserver, accessToken, storage, crypto);
+		await client.crypto.prepare([]);
+	} else {
+		client = new MatrixClient(homeserver, accessToken, storage);
+	}
+
+	/**
+	 * DM rooms, remembered ACROSS RESTARTS.
+	 *
+	 * This used to be an in-memory Map only. The bot restarts on every upgrade,
+	 * so the map started empty each time and `dms.getOrCreateDm` — which relies on
+	 * `m.direct` account data the SDK does not reliably maintain — created a NEW
+	 * room instead of finding the old one. The operator's Matrix inbox filled up
+	 * with a separate room per restart, and because each new room needs its own
+	 * Megolm session shared to already-verified devices, most of those alerts
+	 * arrived as "Unable to decrypt message". One bug, two symptoms.
+	 *
+	 * The room id is now written next to the bot's other state, so a restart
+	 * reuses the same room. getOrCreateDm is only consulted when we have nothing
+	 * on file.
+	 */
+	const roomMapPath = join(storageDir, 'dm-rooms.json');
+
+	function loadRoomMap(): Record<string, string> {
+		try {
+			if (!existsSync(roomMapPath)) return {};
+			const v: unknown = JSON.parse(readFileSync(roomMapPath, 'utf8'));
+			if (v === null || typeof v !== 'object' || Array.isArray(v)) return {};
+			const out: Record<string, string> = {};
+			for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+				if (typeof val === 'string' && val.startsWith('!')) out[k] = val;
+			}
+			return out;
+		} catch {
+			return {};
+		}
+	}
+
+	function saveRoomMap(map: Record<string, string>): void {
+		try {
+			writeFileSync(roomMapPath, JSON.stringify(map, null, 2) + '\n');
+		} catch {
+			/* a bot that cannot persist still works; it just re-resolves next start */
+		}
+	}
+
 	const dmRoomCache = new Map<MatrixMxid, string>();
+	for (const [k, v] of Object.entries(loadRoomMap())) dmRoomCache.set(k as MatrixMxid, v);
 
 	async function getDmRoom(to: MatrixMxid): Promise<string> {
 		const cached = dmRoomCache.get(to);
-		if (cached !== undefined) return cached;
+		if (cached !== undefined) {
+			// Trust it only if we are still in the room. If the operator left or the
+			// room was upgraded, fall through and resolve a fresh one rather than
+			// sending alerts into a room nobody reads.
+			try {
+				await client.getRoomStateEvent(cached, 'm.room.create', '');
+				return cached;
+			} catch {
+				dmRoomCache.delete(to);
+			}
+		}
 		const roomId = await client.dms.getOrCreateDm(to);
 		dmRoomCache.set(to, roomId);
+		saveRoomMap(Object.fromEntries(dmRoomCache));
 		return roomId;
 	}
 
