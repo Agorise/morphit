@@ -40,10 +40,15 @@ MANIFEST_JSON="$(tar -xzO -f "$TARBALL" manifest.json 2>/dev/null)" || die "coul
 # Pull + validate the fields we need. python exits non-zero (→ die) on anything
 # missing/malformed, so a bad manifest can never produce a half-formed op.
 read -r FMT CHAIN_ID SCHEMA_VERSION LAST_BLOCK DUMP_SHA256 INDEXER_VERSION < <(
-	printf '%s' "$MANIFEST_JSON" | python3 - <<'PY'
-import json,sys,re
+	# The manifest goes in through the ENVIRONMENT, not a pipe. `python3 -` reads
+	# the PROGRAM from stdin, and the heredoc below already claims stdin — so a
+	# piped `printf ... |` was silently discarded and json.load(sys.stdin) always
+	# saw an empty stream ("Expecting value: line 1 column 1"). That is why this
+	# script could never publish, and why no snapshot had ever been anchored.
+	MANIFEST_JSON="$MANIFEST_JSON" python3 - <<'PY'
+import json,os,sys,re
 try:
-    m=json.load(sys.stdin)
+    m=json.loads(os.environ["MANIFEST_JSON"])
 except Exception as e:
     sys.stderr.write(f"manifest JSON parse failed: {e}\n"); sys.exit(1)
 def need(k):
@@ -65,7 +70,9 @@ PY
 [ -n "$DUMP_SHA256" ] || die "could not read dumpSha256 from manifest."
 SIZE_BYTES="$(stat -c %s "$TARBALL")"
 ok "manifest: chain ${CHAIN_ID} · schema v${SCHEMA_VERSION} · block ${LAST_BLOCK} · dumpSha256 ${DUMP_SHA256:0:12}… · indexer v${INDEXER_VERSION}"
-ok "tarball size: $((SIZE_BYTES/1024/1024)) MB"
+# Report kB, not MB. Integer division floored a 583,544-byte snapshot to "0 MB",
+# which reads like the export failed. These artifacts are ~600 kB by design.
+ok "tarball size: $((SIZE_BYTES/1024)) kB"
 
 hdr "1. Locate kubo + its repo root"
 KUBO_PID="$(pgrep -x ipfs | head -1 || true)"

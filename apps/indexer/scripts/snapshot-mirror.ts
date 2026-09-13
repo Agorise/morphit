@@ -61,9 +61,28 @@ const say = (m: string): void => {
 	process.stderr.write(`snapshot-mirror: ${m}\n`);
 };
 
-/** Run kubo. Never throws; returns stdout (trimmed) or null. */
+/**
+ * Where kubo's repo lives, and who owns it.
+ *
+ * This job runs as ROOT (systemd User=root, so it can write the state file), but
+ * the kubo daemon runs as the `ipfs` user with its repo at /var/lib/ipfs/.ipfs.
+ * Invoking a bare `ipfs` as root makes kubo look in /root/.ipfs — a different,
+ * empty repo with no daemon behind it — so every command that needs the repo
+ * fails while `ipfs --version` (which needs no repo) happily succeeds. That is
+ * exactly how this shipped: the startup guard passed and `pin add` then failed
+ * on a box that was already serving the very CID it was trying to fetch.
+ * Drop to the daemon's own user and point at its repo, as the seeder does.
+ */
+const IPFS_REPO = process.env.IPFS_PATH ?? '/var/lib/ipfs/.ipfs';
+const IPFS_USER = process.env.MORPHIT_IPFS_USER ?? 'ipfs';
+
+/** Run kubo as the repo's owner. Never throws; returns stdout (trimmed) or null. */
 function ipfs(args: readonly string[], timeoutMs = 120_000): string | null {
-	const r = spawnSync('ipfs', [...args], { encoding: 'utf8', timeout: timeoutMs });
+	const r = spawnSync(
+		'sudo',
+		['-n', '-u', IPFS_USER, 'env', `IPFS_PATH=${IPFS_REPO}`, 'ipfs', ...args],
+		{ encoding: 'utf8', timeout: timeoutMs }
+	);
 	if (r.status !== 0) return null;
 	return typeof r.stdout === 'string' ? r.stdout.trim() : '';
 }
@@ -103,8 +122,12 @@ function writeState(s: MirrorState): void {
 async function main(): Promise<void> {
 	// kubo is optional on a Morphit box. No kubo, nothing to mirror — and that is
 	// a normal configuration, not an error.
-	if (ipfs(['--version'], 10_000) === null) {
-		say('this box does not run IPFS — nothing to mirror. (Optional: morphit-ops harden → "Set up IPFS release hosting".)');
+	// `--version` needs no repo, so it cannot tell "no kubo" from "wrong repo".
+	// Ask for something that requires a reachable daemon instead.
+	if (ipfs(['id', '-f=<id>'], 15_000) === null) {
+		say(`could not reach the kubo daemon as user '${IPFS_USER}' with IPFS_PATH=${IPFS_REPO}.`);
+		say('  If this box hosts IPFS, check: systemctl status ipfs');
+		say('  If it does not, nothing to mirror — this is fine.');
 		return;
 	}
 
@@ -165,7 +188,10 @@ async function main(): Promise<void> {
 	// CID; it does not prove they are the bytes @morphit signed. Check the inner
 	// dump against the on-chain sha256 exactly as a fresh node would, so this box
 	// can never become a mirror that serves something a newcomer will reject.
-	const tar = spawnSync('sh', ['-c', `ipfs cat ${op.ipfs_cid} 2>/dev/null | tar -xzO indexer.sql.gz 2>/dev/null`], {
+	const catCmd =
+		`sudo -n -u ${IPFS_USER} env IPFS_PATH=${IPFS_REPO} ipfs cat ${op.ipfs_cid} 2>/dev/null` +
+		` | tar -xzO indexer.sql.gz 2>/dev/null`;
+	const tar = spawnSync('sh', ['-c', catCmd], {
 		encoding: 'buffer',
 		timeout: 300_000,
 		maxBuffer: 512 * 1024 * 1024

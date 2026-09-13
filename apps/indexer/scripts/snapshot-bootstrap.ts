@@ -239,6 +239,28 @@ async function main(): Promise<void> {
 		);
 	}
 
+	// A --verify-only run restores nothing and serves nothing, so most of the
+	// indexer config is irrelevant to it — yet loadConfig() demands the lot, and an
+	// operator rehearsing from a laptop had to invent four environment variables
+	// (and know the tsconfig alias incantation) before it would start. Supply
+	// placeholders for the ones a dry run provably never touches.
+	//
+	// CHAIN ID IS DELIBERATELY NOT DEFAULTED. It is the gate that stops a node
+	// restoring another chain's state, and guessing mainnet here would silently
+	// weaken that check for anyone on a testnet. Ask for it, and say why.
+	if (has('verify-only')) {
+		process.env.MORPHIT_INDEXER_DATABASE_URL ??= 'postgres://verify-only-unused';
+		process.env.MORPHIT_INDEXER_PUBLIC_ORIGIN ??= 'https://verify-only.invalid';
+		process.env.MORPHIT_INDEXER_OFFICIAL_POSTING_PUBKEY ??=
+			'BLT1111111111111111111111111111111114T1Anm';
+		if ((process.env.MORPHIT_INDEXER_CHAIN_ID ?? '') === '') {
+			die(
+				'--verify-only still needs MORPHIT_INDEXER_CHAIN_ID (64-char hex). It is the gate that ' +
+					'stops a node accepting another chain\u2019s snapshot, so it is never guessed. Copy it from ' +
+					'/etc/morphit/indexer.env on any instance you trust.'
+			);
+		}
+	}
 	const config = loadConfig();
 	const db = createDatabase(config);
 	const work = mkdtempSync(join(tmpdir(), 'morphit-snap-restore-'));
@@ -285,11 +307,25 @@ async function main(): Promise<void> {
 		}
 
 		// ── gate 2: compatible with THIS build/host ───────────────
-		const pv = await db.query<{ n: string }>("SELECT current_setting('server_version_num') AS n");
+		// The server-version lookup is the FIRST thing that touches Postgres, and it
+		// sits after the download because it needs the manifest's pgMajor to compare
+		// against. A --verify-only run is not restoring anything, so the local
+		// server's version is irrelevant to it — and demanding a reachable database
+		// here defeats the whole point of a dry run that anyone can execute from a
+		// laptop. Substitute the snapshot's own pgMajor so the compatibility check
+		// still runs (it can then only compare chain and schema, which is exactly
+		// what a dry run should be checking).
+		let hostPgMajor: number;
+		if (has('verify-only')) {
+			hostPgMajor = manifest.pgMajor;
+		} else {
+			const pv = await db.query<{ n: string }>("SELECT current_setting('server_version_num') AS n");
+			hostPgMajor = Math.floor(parseInt(pv.rows[0]!.n, 10) / 10000);
+		}
 		const target: TargetFacts = {
 			chainId: config.chainId,
 			codeSchemaVersion: latestSchemaVersion(),
-			pgMajor: Math.floor(parseInt(pv.rows[0]!.n, 10) / 10000)
+			pgMajor: hostPgMajor
 		};
 		const verdict = verifyManifestCompatible(manifest, target);
 		for (const w of verdict.warnings) process.stderr.write(`  note: ${w}\n`);

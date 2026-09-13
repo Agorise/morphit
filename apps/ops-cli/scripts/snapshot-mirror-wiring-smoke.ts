@@ -319,17 +319,63 @@ const boot = read('apps/indexer/scripts/snapshot-bootstrap.ts');
 ok('fast-sync has a --verify-only dry run', /has\('verify-only'\)/.test(boot));
 ok(
 	'the dry run stops BEFORE any database work, so it is safe from a laptop with no indexer DB',
-	boot.indexOf("has('verify-only')") < boot.indexOf('restoring into the indexer DB')
+	boot.indexOf('DRY RUN PASSED') < boot.indexOf('restoring into the indexer DB')
 );
-ok('the dry run still proves the bytes (it runs after the sha256/manifest gates)',
-	boot.indexOf('refusing.') < boot.indexOf("has('verify-only')"));
+// Anchor on the EXIT itself, not on the first `has('verify-only')` — there is now
+// an earlier one that defaults unused config, and indexOf would find that instead.
+ok('the dry run still proves the bytes (it exits after the sha256/manifest gates)',
+	boot.indexOf('refusing.') < boot.indexOf('DRY RUN PASSED'));
 ok('the dry run says plainly that nothing was written', /nothing was written/.test(boot));
+ok(
+	'the dry run defaults the config it never uses, so a rehearsal needs no invented env vars',
+	/MORPHIT_INDEXER_DATABASE_URL \?\?=/.test(boot) && /MORPHIT_INDEXER_PUBLIC_ORIGIN \?\?=/.test(boot)
+);
+ok(
+	'…but NEVER defaults the chain id — that is the gate against restoring another chain\u2019s state',
+	!/MORPHIT_INDEXER_CHAIN_ID \?\?=/.test(boot) && /still needs MORPHIT_INDEXER_CHAIN_ID/.test(boot)
+);
+ok('the pin script reports snapshot size in kB, not a floored 0 MB', /SIZE_BYTES\/1024\)\) kB/.test(pinScript));
+ok(
+	'the dry run never queries Postgres — the server-version lookup is the first DB touch and sits BEFORE the early exit',
+	/if \(has\('verify-only'\)\) \{\n\t\t\thostPgMajor = manifest\.pgMajor;/.test(boot)
+);
+ok(
+	'…and the compatibility gate still runs in dry-run mode (chain + schema are exactly what it should check)',
+	/pgMajor: hostPgMajor/.test(boot) && /verifyManifestCompatible\(manifest, target\)/.test(boot)
+);
+
+// The mirror ran bare `ipfs` as root, so kubo looked in /root/.ipfs — an empty
+// repo with no daemon — and refused to fetch a CID the box was already serving.
+const mirrorTs2 = read('apps/indexer/scripts/snapshot-mirror.ts');
+ok('mirror runs kubo as the repo owner, not as root', /'-n', '-u', IPFS_USER, 'env', `IPFS_PATH=/.test(mirrorTs2));
+ok('mirror pipes ipfs cat through the same user', /sudo -n -u \$\{IPFS_USER\} env IPFS_PATH=/.test(mirrorTs2));
+ok(
+	'mirror startup guard proves the REPO is reachable, not just that the binary exists (`--version` needs no repo, so it cannot tell "no kubo" from "wrong repo")',
+	/ipfs\(\['id'/.test(mirrorTs2) && !/ipfs\(\['--version'\]/.test(mirrorTs2)
+);
 
 ok('upgrade installs the PUBLISH units too (Ansible never runs on a manual install)',
 	/morphit-snapshot-publish\.service/.test(upgrade) && /morphit-snapshot-publish\.timer/.test(upgrade));
 ok(
 	'publishing is enabled ONLY on explicit opt-in — an upgrade must never make a box start signing snapshots by surprise',
 	/snapshot-publish\.env/.test(upgrade)
+);
+
+// ── M. the publish path actually runs (v1.17.4) ─────────────────────
+// `python3 -` reads the PROGRAM from stdin. Piping data in while ALSO supplying
+// the program via a heredoc silently discards the pipe, so json.load(sys.stdin)
+// sees an empty stream. pin-indexer-snapshot.sh did exactly that, which is why
+// it could never publish and why no indexer_snapshot_v1 had ever been anchored.
+ok(
+	'pin script passes the manifest via the ENVIRONMENT, never a pipe that a heredoc would swallow',
+	/MANIFEST_JSON="\$MANIFEST_JSON" python3 -/.test(pinScript) &&
+		/json\.loads\(os\.environ\["MANIFEST_JSON"\]\)/.test(pinScript)
+);
+ok(
+	'no shipped script pipes data into `python3 -` while also heredoc-ing the program',
+	![pinScript, autopub, read('ops/snapshot-mirror.sh'), read('ops/ipfs/morphit-ipfs-seed.sh')].some((b) =>
+		/\|\s*python3\s+-\s*<</.test(b)
+	)
 );
 
 console.log('');
