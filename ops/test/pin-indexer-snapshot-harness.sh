@@ -79,6 +79,17 @@ esac
 exit 0
 STUB
 
+# Both privilege-drop tools FAIL, exactly as they do on morphit.io under this
+# unit's hardening: sudo refuses (setuid under NoNewPrivileges) and runuser
+# cannot setuid (no CAP_SETUID). The script must fall through to talking to kubo
+# directly as root, which is all that is needed since the CLI just reads
+# $IPFS_PATH/api and speaks HTTP.
+if [ "${HARNESS_BREAK_PRIVDROP:-0}" = "1" ]; then
+	printf '#!/usr/bin/env bash\necho "runuser: cannot set user id: Operation not permitted" >&2\nexit 1\n' > "$BIN/runuser"
+	printf '#!/usr/bin/env bash\necho "sudo: unable to open /etc/sudoers: Operation not permitted" >&2\nexit 1\n' > "$BIN/sudo"
+	chmod +x "$BIN/runuser" "$BIN/sudo"
+fi
+
 # `systemctl` stub — the script restarts ipfs.service in step 3.
 printf '#!/usr/bin/env bash\nexit 0\n' > "$BIN/systemctl"
 # `runuser` stub — exec through, preserving the env the script set.
@@ -160,6 +171,28 @@ fi
 case "$OUT3" in
 	*"ipfs said:"*) ok "reports what ipfs actually said when it gives up" ;;
 	*) no "gave up without reporting the child's error — the swallowed-output bug is back" ;;
+esac
+
+# ── 6. Both privilege-drop tools blocked → must still work as root ───
+# This is the morphit.io failure exactly: sudo refused under NoNewPrivileges,
+# then runuser could not setuid either. Guessing which tool a host permits is
+# how this job failed five times in one evening; it must probe and adapt.
+export HARNESS_BREAK_PRIVDROP=1
+printf '#!/usr/bin/env bash\necho "runuser: cannot set user id: Operation not permitted" >&2\nexit 1\n' > "$BIN/runuser"
+printf '#!/usr/bin/env bash\necho "sudo: unable to open /etc/sudoers: Operation not permitted" >&2\nexit 1\n' > "$BIN/sudo"
+chmod +x "$BIN/runuser" "$BIN/sudo"
+export HARNESS_PROBE_FAILURES=0
+: > "$HARNESS_PROBE_COUNT"
+OUT4="$(bash "$PIN" "$TARBALL" 2>&1)"; RC4=$?
+if [ "$RC4" -eq 0 ]; then
+	ok "still publishes when BOTH sudo and runuser are blocked (falls back to root)"
+else
+	no "failed when sudo and runuser are blocked (exit $RC4) — the morphit.io failure"
+	printf '%s\n' "$OUT4" | sed 's/^/      /' | tail -6
+fi
+case "$OUT4" in
+	*"strategy: direct"*) ok "reports which strategy it chose" ;;
+	*) no "did not report choosing the direct strategy" ;;
 esac
 
 echo ""

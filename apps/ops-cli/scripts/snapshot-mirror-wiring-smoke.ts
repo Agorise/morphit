@@ -378,8 +378,16 @@ for (const [name, body] of [
 }
 ok(
 	'pin script resolves IPFS_PATH BEFORE its first kubo call',
-	pinScript.indexOf('IPFS_PATH="$(tr') < pinScript.indexOf('_IPFS_PROBE=')
+	pinScript.indexOf('IPFS_PATH="$(tr') < pinScript.indexOf('_try_strategy')
 );
+// BOTH privilege-drop tools failed on morphit.io for DIFFERENT reasons — sudo
+// refused under NoNewPrivileges, runuser lacked CAP_SETUID. The job runs as root
+// and the kubo CLI only reads $IPFS_PATH/api then speaks HTTP, so no user switch
+// is needed at all. Probe and adapt rather than assume which tool a host allows.
+ok('pin script PROBES how to reach kubo instead of assuming', /_try_strategy/.test(pinScript));
+ok('…and can talk to kubo directly as root, needing no privilege drop at all', /direct\)\s+env IPFS_PATH=/.test(pinScript));
+ok('…trying direct first, then runuser, then sudo', /for _s in direct runuser sudo/.test(pinScript));
+ok('…and reporting which strategy it chose', /strategy: \$IPFS_STRATEGY/.test(pinScript));
 // The script restarts ipfs.service itself (step 3), so its own probe must
 // tolerate a daemon that is briefly absent instead of declaring it unreachable.
 ok('pin script waits for the kubo API instead of failing on the first miss', /_i" -lt 15/.test(pinScript));

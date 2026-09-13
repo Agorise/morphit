@@ -644,6 +644,7 @@ SMOKES=(
 	"apps/ops-cli:systemd-execstart-executable-smoke"
 	"apps/ops-cli:publish-path-execution-smoke"
 	"apps/ops-cli:mirror-path-execution-smoke"
+	"apps/ops-cli:monitor-dedup-execution-smoke"
 	"apps/matrix-bot:dm-room-persistence-smoke"
 	"apps/indexer:snapshot-oplog-verify-smoke"
 	"apps/indexer:rpc-directory-op-smoke"

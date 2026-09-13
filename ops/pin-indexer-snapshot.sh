@@ -94,37 +94,60 @@ KUBO_USER="$(ps -o user= -p "$KUBO_PID" | tr -d ' ')"
 # an inherited HOME to locate a daemon's repo.
 IPFS_PATH="$(tr '\0' '\n' < "/proc/$KUBO_PID/environ" 2>/dev/null | grep -m1 '^IPFS_PATH=' | cut -d= -f2- || true)"
 [ -n "$IPFS_PATH" ] || IPFS_PATH="$(getent passwd "$KUBO_USER" | cut -d: -f6)/.ipfs"
-if command -v runuser >/dev/null 2>&1; then
-	IPFS(){ runuser -u "$KUBO_USER" -- env IPFS_PATH="$IPFS_PATH" ipfs "$@"; }
-else
-	IPFS(){ sudo -n -u "$KUBO_USER" env IPFS_PATH="$IPFS_PATH" ipfs "$@"; }
-fi
-# Keep the probe's error. `>/dev/null 2>&1` here meant a failure said only
-# "cannot reach the kubo API", which is indistinguishable between "ipfs is not on
-# PATH", "the API file is unreadable" and "the daemon refused the connection" —
-# three very different fixes.
-# Wait for the daemon rather than failing on the first miss. THIS SCRIPT ITSELF
-# restarts ipfs.service in step 3 to enable filestore, so a run that follows a
-# restart — or a retry that races one — can legitimately find the API down for a
-# few seconds. The old one-shot probe turned that into a hard "cannot reach the
-# kubo API", which is what made the publish timer look permanently broken while
-# the same command worked by hand moments later. Bounded: ~30s, then give up
-# loudly with what ipfs actually said.
-_IPFS_PROBE=""
-_i=0
-while [ "$_i" -lt 15 ]; do
-	if _IPFS_PROBE="$(IPFS id 2>&1)"; then break; fi
-	_i=$((_i + 1))
-	[ "$_i" -eq 1 ] && printf '  … kubo API not answering yet; waiting (it may have just restarted)\n'
-	sleep 2
+# How do we talk to kubo? PICK A STRATEGY THAT ACTUALLY WORKS rather than
+# assuming one. We are already root, and the kubo CLI only reads $IPFS_PATH/api
+# and then speaks HTTP to the daemon — so no user switch is needed at all in the
+# normal case. The privilege-drop variants are fallbacks for unusual setups.
+#
+# Both drop-privilege tools have failed here under systemd for DIFFERENT reasons:
+#   sudo    — setuid-root, refused under NoNewPrivileges=true
+#             ("unable to open /etc/sudoers: Operation not permitted")
+#   runuser — "cannot set user id: Operation not permitted" (no CAP_SETUID in
+#             this unit's context, despite the same options working when runuser
+#             was the unit's own ExecStart)
+# Guessing which one a given host allows is exactly how this job failed five
+# times in one evening. So probe, in cheapest-and-most-likely-first order, and
+# use the first that answers.
+_try_strategy() {
+	case "$1" in
+		direct)  env IPFS_PATH="$IPFS_PATH" ipfs id >/dev/null 2>&1 ;;
+		runuser) command -v runuser >/dev/null 2>&1 && runuser -u "$KUBO_USER" -- env IPFS_PATH="$IPFS_PATH" ipfs id >/dev/null 2>&1 ;;
+		sudo)    command -v sudo >/dev/null 2>&1 && sudo -n -u "$KUBO_USER" env IPFS_PATH="$IPFS_PATH" ipfs id >/dev/null 2>&1 ;;
+	esac
+}
+IPFS_STRATEGY=""
+_last_probe_err=""
+for _s in direct runuser sudo; do
+	if _try_strategy "$_s"; then IPFS_STRATEGY="$_s"; break; fi
 done
-if [ "$_i" -ge 15 ]; then
-	bad "cannot reach the kubo API as user '$KUBO_USER' with IPFS_PATH=$IPFS_PATH (waited 30s)."
-	printf '    ipfs said: %s\n' "$(printf '%s' "$_IPFS_PROBE" | head -3 | tr '\n' ' ')"
+if [ -z "$IPFS_STRATEGY" ]; then
+	# None answered yet. kubo may simply be restarting — this script restarts it
+	# itself in step 3 — so wait before declaring defeat.
+	printf '  … kubo API not answering yet; waiting (it may have just restarted)\n'
+	_i=0
+	while [ "$_i" -lt 15 ] && [ -z "$IPFS_STRATEGY" ]; do
+		sleep 2
+		_i=$((_i + 1))
+		for _s in direct runuser sudo; do
+			if _try_strategy "$_s"; then IPFS_STRATEGY="$_s"; break; fi
+		done
+	done
+fi
+if [ -z "$IPFS_STRATEGY" ]; then
+	_last_probe_err="$(env IPFS_PATH="$IPFS_PATH" ipfs id 2>&1 | head -2 | tr '\n' ' ')"
+	bad "cannot reach the kubo API with IPFS_PATH=$IPFS_PATH (tried direct, runuser, sudo; waited 30s)."
+	printf '    ipfs said: %s\n' "$_last_probe_err"
 	printf '    PATH=%s\n' "$PATH"
 	printf '    check: systemctl status ipfs\n'
 	exit 1
 fi
+case "$IPFS_STRATEGY" in
+	direct)  IPFS(){ env IPFS_PATH="$IPFS_PATH" ipfs "$@"; } ;;
+	runuser) IPFS(){ runuser -u "$KUBO_USER" -- env IPFS_PATH="$IPFS_PATH" ipfs "$@"; } ;;
+	sudo)    IPFS(){ sudo -n -u "$KUBO_USER" env IPFS_PATH="$IPFS_PATH" ipfs "$@"; } ;;
+esac
+ok "kubo reachable (strategy: $IPFS_STRATEGY, IPFS_PATH=$IPFS_PATH)"
+
 [ -d "$IPFS_PATH" ] || IPFS_PATH="/var/lib/ipfs"
 [ -d "$IPFS_PATH" ] || die "could not locate the IPFS repo root."
 WORKDIR="${WORKDIR:-$IPFS_PATH/indexer-snapshots}"
