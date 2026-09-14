@@ -1,6 +1,20 @@
 #!/usr/bin/env bash
 # Morphit — run all tsx-runnable smoke scenarios.
 set -u
+
+# ─── Alert repeat-suppression OFF for the whole suite ────────────────
+# emit() suppresses an identical (module, event, payload) for 6h, which is right
+# for a sidecar on a timer and WRONG for a test suite: smokes drive monitors and
+# assert on the events they emit, and CI runs the suite three times in a row
+# ("triple-pulse") specifically to catch state leaking between runs. With dedup
+# on, pulse 1 emitted and wrote state, then pulse 2 emitted nothing and the
+# assertion read that as "the error branch never fired" — a false failure about
+# monitor logic, caused entirely by alert cadence.
+#
+# Set here rather than in each smoke so no future smoke has to remember. The
+# suppression itself is covered by ops/test/emit-dedup-harness.sh, which turns
+# it back on explicitly against its own isolated state dir.
+export MORPHIT_EMIT_DEDUP=0
 repo="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$repo"
 
@@ -645,6 +659,7 @@ SMOKES=(
 	"apps/ops-cli:publish-path-execution-smoke"
 	"apps/ops-cli:mirror-path-execution-smoke"
 	"apps/ops-cli:monitor-dedup-execution-smoke"
+	"apps/ops-cli:emit-dedup-execution-smoke"
 	"apps/ops-cli:fast-sync-execution-smoke"
 	"apps/matrix-bot:dm-room-persistence-smoke"
 	"apps/indexer:snapshot-oplog-verify-smoke"

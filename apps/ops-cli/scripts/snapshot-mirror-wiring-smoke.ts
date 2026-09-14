@@ -548,6 +548,20 @@ ok(
 	'the systemd monitor opts OUT of generic dedup (it would swallow a real re-failure)',
 	/export MORPHIT_EMIT_DEDUP=0/.test(read('ops/scripts/morphit-systemd-monitor.sh'))
 );
+// CI runs the whole suite three times to catch state leaking between runs. With
+// dedup on, pulse 1 emitted and wrote state, pulse 2 emitted nothing, and a
+// smoke read that as "the error branch never fired" — a false failure about
+// monitor logic caused purely by alert cadence. Suite-wide, so no future smoke
+// has to remember.
+ok(
+	'the smoke suite disables alert suppression suite-wide (CI runs it three times over)',
+	/export MORPHIT_EMIT_DEDUP=0/.test(read('scripts/run-smokes.sh'))
+);
+ok(
+	'…and the suppression still has its own harness, so the feature is not left untested',
+	read('ops/test/emit-dedup-harness.sh').length > 0 &&
+		/MORPHIT_EMIT_DEDUP=1/.test(read('ops/test/emit-dedup-harness.sh'))
+);
 
 // ── T. rehearsing fast-sync needs no incantation ────────────────────
 const fs2 = read('apps/ops-cli/src/commands/fastSync.ts');
