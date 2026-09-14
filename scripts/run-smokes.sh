@@ -645,6 +645,7 @@ SMOKES=(
 	"apps/ops-cli:publish-path-execution-smoke"
 	"apps/ops-cli:mirror-path-execution-smoke"
 	"apps/ops-cli:monitor-dedup-execution-smoke"
+	"apps/ops-cli:fast-sync-execution-smoke"
 	"apps/matrix-bot:dm-room-persistence-smoke"
 	"apps/indexer:snapshot-oplog-verify-smoke"
 	"apps/indexer:rpc-directory-op-smoke"

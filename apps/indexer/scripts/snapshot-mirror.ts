@@ -45,6 +45,8 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname } from 'node:path';
 import { loadConfig } from '../src/config/index.ts';
+import { installHiddenServiceDispatcher } from '../src/indexer/hiddenServiceDispatcher.ts';
+import { hiddenServiceProxyConfigFromEnv } from '../src/indexer/hiddenServiceFetch.ts';
 import { BlurtClient } from '../src/blurt/client.ts';
 import {
 	selectNewestSnapshotOp,
@@ -135,6 +137,32 @@ function writeState(s: MirrorState): void {
 	}
 }
 
+
+/**
+ * Route .onion / .b32.i2p fetches through Tor and i2pd.
+ *
+ * WITHOUT THIS, a hidden-only node cannot read the chain from a standalone
+ * script at all. `installHiddenServiceDispatcher` was only ever called from the
+ * indexer SERVICE (main.ts), so the service reads the chain happily over I2P
+ * while any script run beside it sends the same request straight at a
+ * `.b32.i2p` hostname with no proxy and gets `fetch failed`. That is exactly
+ * what stopped morphitlat — a zero-clearnet box — from mirroring, and it would
+ * have stopped fast-sync there too.
+ *
+ * Same clearnet policy as the service: a node with no clearnet RPC endpoints
+ * fails closed rather than quietly reaching for the open internet.
+ */
+function installHiddenRouting(config: ReturnType<typeof loadConfig>): void {
+	try {
+		installHiddenServiceDispatcher(
+			hiddenServiceProxyConfigFromEnv(process.env),
+			config.blurtRpcEndpoints.length === 0 ? 'refuse' : 'allow'
+		);
+	} catch {
+		/* a clearnet box works fine without it; never block on this */
+	}
+}
+
 async function main(): Promise<void> {
 	// kubo is optional on a Morphit box. No kubo, nothing to mirror — and that is
 	// a normal configuration, not an error.
@@ -148,6 +176,7 @@ async function main(): Promise<void> {
 	}
 
 	const config = loadConfig();
+	installHiddenRouting(config);
 	const signer = (flag('signer') ?? INDEXER_SNAPSHOT_SIGNER_DEFAULT).toLowerCase();
 	const limit = Math.max(1, Math.min(10_000, parseInt(flag('history-limit') ?? '1000', 10) || 1000));
 
@@ -194,7 +223,27 @@ async function main(): Promise<void> {
 	);
 
 	// Pin it. This is the fetch: kubo pulls the block from whoever has it.
-	say('pinning to this box\u2019s IPFS node …');
+	// Wait for PEERS, not just for the API. `ipfs id` answers seconds after the
+	// daemon starts, but fetching content needs a populated swarm — and this
+	// script runs right after an upgrade that restarts kubo. On morphitir the
+	// swarm was literally 0 peers at this point, so `pin add` sat through its full
+	// 10-minute budget waiting on a DHT that did not exist yet, then gave up. One
+	// manual connect took it from 0 to 466, which is what proved the cause.
+	let peers = 0;
+	for (let i = 0; i < 30; i++) {
+		const out = ipfs(['swarm', 'peers'], 20_000);
+		peers = out === null || out === '' ? 0 : out.split('\n').filter((l) => l.trim() !== '').length;
+		if (peers > 0) break;
+		if (i === 0) say('kubo has no peers yet (it may have just restarted) — waiting before fetching …');
+		await new Promise((r) => setTimeout(r, 2000));
+	}
+	if (peers === 0) {
+		say('kubo still has no swarm peers after 60s — cannot fetch the snapshot yet. Will retry on the next run.');
+		say('  (Nothing is broken; this box just is not a mirror yet. Check: systemctl status ipfs)');
+		return;
+	}
+
+	say(`pinning to this box\u2019s IPFS node (${peers} peer${peers === 1 ? '' : 's'}) …`);
 	if (ipfs(['pin', 'add', '--progress=false', op.ipfs_cid], 600_000) === null) {
 		say('could not fetch/pin the snapshot right now — will retry on the next run. (Nothing is broken; this box just is not a mirror yet.)');
 		return;

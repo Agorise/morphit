@@ -78,6 +78,10 @@ createServer((req, res) => {
 }).listen(Number(port), '127.0.0.1');
 RPC
 PORT=45917
+# The canned get_account_history result the hidden-proxy stubs will serve.
+cat > "$WORK/history.json" <<HJSON
+[[282,{"op":["custom_json",{"id":"indexer_snapshot_v1","required_posting_auths":["morphit"],"json":"{\\"ipfs_cid\\":\\"$CID\\",\\"sha256\\":\\"$DUMP_SHA\\",\\"chain_id\\":\\"$CHAIN_ID\\",\\"schema_version\\":59,\\"last_applied_block\\":63610645,\\"size_bytes\\":$SIZE,\\"indexer_version\\":\\"1.17.8\\"}"}],"timestamp":"2026-09-13T00:00:00"}]]
+HJSON
 node "$WORK/rpc.mjs" "$PORT" "$CID" "$DUMP_SHA" "$CHAIN_ID" "$SIZE" &
 RPC_PID=$!
 sleep 1
@@ -91,6 +95,11 @@ echo "IPFS_PATH=\${IPFS_PATH:-UNSET} argv=\$*" >> "$WORK/ipfs-calls.log"
 case "\$*" in
 	"id"*) echo '{"ID":"12D3KooWHarness"}' ;;
 	"cat "*) cat "$TARBALL" ;;
+	"swarm peers"*)
+		# HARNESS_NO_PEERS=1 simulates a kubo that has just restarted and has an
+		# empty swarm — morphitir's exact state when the mirror ran and burned
+		# its full 10-minute fetch budget on a DHT that did not exist yet.
+		[ "\${HARNESS_NO_PEERS:-0}" = "1" ] || printf '/ip4/1.2.3.4/tcp/4001/p2p/12D3KooWStubPeer\n' ;;
 	"pin ls"*) echo "$CID recursive" ;;
 	"pin add"*) : ;;
 	"pin rm"*) : ;;
@@ -169,6 +178,79 @@ case "$OUT2" in
 	*"MISMATCH"*|*"unpinning"*) ok "refuses a snapshot whose bytes do not match the signed sha256" ;;
 	*) no "accepted a snapshot with a WRONG sha256 — it would serve bad bytes to newcomers" ;;
 esac
+
+# Restore a correct-sha RPC first: the preceding case deliberately serves a bad
+# hash, and a zero-peer test must not be confounded by a mismatch.
+kill "$RPC_PID" 2>/dev/null; RPC_PID=""
+node "$WORK/rpc.mjs" "$PORT" "$CID" "$DUMP_SHA" "$CHAIN_ID" "$SIZE" &
+RPC_PID=$!
+sleep 1
+
+# ── A kubo with NO peers must defer, not burn the fetch budget ────────
+# The API answers seconds after a restart, but fetching content needs a swarm.
+# morphitir sat through a 10-minute `pin add` against 0 peers, then gave up.
+rm -f "$WORK/mirror-state.json"
+OUT_NP="$(cd "$REPO" && env HARNESS_NO_PEERS=1 \
+	MORPHIT_INDEXER_LOCAL_RPC_ENDPOINTS="http://127.0.0.1:$PORT" \
+	MORPHIT_INDEXER_RPC_ENDPOINTS="" \
+	"$TSX" --tsconfig "$REPO/tsconfig.smoke.json" "$MIRROR_TS" --signer morphit 2>&1)"
+case "$OUT_NP" in
+	*"no peers yet"*|*"no swarm peers"*)
+		ok "defers when kubo has no swarm peers instead of stalling on an empty DHT" ;;
+	*)
+		no "did not notice an empty swarm — it would stall for the full fetch budget"
+		printf '%s\n' "$OUT_NP" | sed 's/^/      /' | tail -3 ;;
+esac
+case "$OUT_NP" in
+	*"verified against"*) no "  …and it somehow pinned anyway with zero peers" ;;
+	*) ok "  …and does not claim to have mirrored anything" ;;
+esac
+
+# ── A hidden-only node must ROUTE chain reads through Tor AND i2pd ────
+# `installHiddenServiceDispatcher` is what sends .onion/.b32.i2p fetches through
+# the proxies. It was called ONLY from the indexer SERVICE, so the service read
+# the chain fine over I2P while a script beside it aimed the same request at a
+# .b32.i2p hostname with no proxy and got "fetch failed". That is what stopped
+# morphitlat mirroring, and it would have stopped fast-sync there too.
+#
+# Tor and I2P are DIFFERENT code paths (SOCKS5 connector vs undici ProxyAgent),
+# so both are exercised. The proxy log is the real assertion: it proves the
+# request TRAVERSED a proxy rather than reaching the origin directly.
+PLOG="$WORK/proxy.log"; : > "$PLOG"
+MORPHIT_STUB_BODY="$(cat "$WORK/history.json")" node "$REPO/ops/test/lib/hidden-proxy-stubs.mjs" \
+	45941 45942 45943 "$PLOG" > "$WORK/stubs-ready" 2>&1 &
+STUB_PID=$!
+for _i in $(seq 1 40); do grep -q stubs-ready "$WORK/stubs-ready" 2>/dev/null && break; sleep 0.2; done
+
+for net in i2p tor; do
+	if [ "$net" = "i2p" ]; then
+		HIDDEN_RPC="http://$(printf 'b%.0s' $(seq 52)).b32.i2p"
+	else
+		HIDDEN_RPC="http://$(printf 'a%.0s' $(seq 56)).onion"
+	fi
+	rm -f "$WORK/mirror-state.json"
+	: > "$PLOG"
+	OUT_H="$(cd "$REPO" && env \
+		MORPHIT_INDEXER_LOCAL_RPC_ENDPOINTS="" \
+		MORPHIT_INDEXER_RPC_ENDPOINTS="" \
+		MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS="$HIDDEN_RPC" \
+		MORPHIT_INDEXER_TOR_SOCKS="127.0.0.1:45943" \
+		MORPHIT_INDEXER_I2P_HTTP_PROXY="127.0.0.1:45942" \
+		"$TSX" --tsconfig "$REPO/tsconfig.smoke.json" "$MIRROR_TS" --signer morphit 2>&1)"
+	case "$OUT_H" in
+		*"newest snapshot"*|*"already mirroring"*|*"verified against"*)
+			ok "hidden-only node reads the chain over ${net}" ;;
+		*)
+			no "hidden-only chain read over ${net} FAILED (dispatcher not installed?)"
+			printf '%s\n' "$OUT_H" | sed 's/^/      /' | tail -3 ;;
+	esac
+	if [ -s "$PLOG" ]; then
+		ok "  …and the request genuinely traversed the ${net} proxy"
+	else
+		no "  …but NOTHING traversed the ${net} proxy — it reached the origin directly"
+	fi
+done
+kill "$STUB_PID" 2>/dev/null
 
 # ── A foreign chain must be refused before any bandwidth is spent ─────
 kill "$RPC_PID" 2>/dev/null; RPC_PID=""

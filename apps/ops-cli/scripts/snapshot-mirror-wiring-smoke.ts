@@ -458,6 +458,62 @@ ok(
 	/NOT just slow propagation/.test(guard)
 );
 
+// ── O. hidden-only nodes must route chain reads (v1.17.8) ───────────
+// `installHiddenServiceDispatcher` is what sends .onion/.b32.i2p fetches through
+// Tor/i2pd. It was called ONLY from the indexer service (main.ts), so the service
+// read the chain happily over I2P while any standalone script beside it sent the
+// same request straight at a .b32.i2p hostname with no proxy and got
+// "fetch failed". That is what stopped morphitlat — a zero-clearnet box — from
+// mirroring, and it would have stopped fast-sync there too.
+for (const rel of [
+	'apps/indexer/scripts/snapshot-mirror.ts',
+	'apps/indexer/scripts/snapshot-bootstrap.ts'
+]) {
+	const src = read(rel);
+	ok(`${rel}: installs the hidden-service dispatcher`, /installHiddenServiceDispatcher/.test(src));
+	ok(
+		`${rel}: …and fails CLOSED on a hidden-only node rather than reaching for clearnet`,
+		/blurtRpcEndpoints\.length === 0 \? 'refuse' : 'allow'/.test(src)
+	);
+	// Anchor on the line immediately after config load, NOT on where
+	// `callCondenser` appears in the file: in snapshot-bootstrap that call lives
+	// in a helper defined near the top but invoked much later, so comparing
+	// textual positions reports a false failure. Textual order is not execution
+	// order — the third guard I have written tonight that confused the two.
+	ok(
+		`${rel}: …installed immediately after the config is loaded, before any chain read`,
+		/const config = loadConfig\(\);\n\tinstallHiddenRouting\(config\);/.test(src)
+	);
+}
+
+// ── P. the kubo Host header (v1.17.8) ───────────────────────────────
+// A kubo gateway treats an unrecognised DNS-style Host as a possible DNSLink
+// domain. With Gateway.NoFetch=true it cannot resolve one, so the request HANGS
+// and nginx returns its stock 404 — which is what silently broke morphitir's
+// clearnet /ipfs/ route while its Tor/I2P paths kept working. Proven on the box:
+// Host: host.docker.internal timed out, Host: 127.0.0.1 answered instantly.
+const ngx = read('ops/bunkerweb/frontend/nginx.conf');
+const ipfsBlocks = ngx.split(/location \/ipfs\/|location \/ipns\//).slice(1);
+ok('nginx has both IPFS gateway blocks', ipfsBlocks.length === 2, `found ${ipfsBlocks.length}`);
+for (const [i, blk] of ipfsBlocks.entries()) {
+	const head = blk.slice(0, 400);
+	ok(
+		`nginx IPFS block ${i + 1}: forwards an IP literal Host, never the client's $host`,
+		/proxy_set_header Host 127\.0\.0\.1;/.test(head) && !/proxy_set_header Host \$host;/.test(head)
+	);
+}
+ok(
+	'…and NOT `localhost` (kubo ships localhost as a SUBDOMAIN gateway — it would redirect /ipfs/<cid>)',
+	!/proxy_set_header Host localhost;/.test(ngx)
+);
+ok('the heal probe sends the same Host so it stops lying', /--header='Host: 127\.0\.0\.1'/.test(heal));
+
+// ── Q. the mirror must wait for PEERS, not just a live API ──────────
+// morphitir's swarm was 0 when the mirror ran right after an upgrade restart;
+// `pin add` then sat through its whole 10-minute budget on an empty DHT.
+ok('mirror waits for a non-empty swarm before fetching', /swarm', 'peers'/.test(mirrorTs2));
+ok('…and defers cleanly rather than stalling', /no swarm peers after/.test(mirrorTs2));
+
 console.log('');
 if (fails.length > 0) {
 	console.error(`✗ ${fails.length} snapshot-mirror-wiring scenario(s) failed:`);

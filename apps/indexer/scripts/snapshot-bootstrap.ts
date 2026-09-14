@@ -27,6 +27,8 @@ import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadConfig } from '../src/config/index.ts';
+import { installHiddenServiceDispatcher } from '../src/indexer/hiddenServiceDispatcher.ts';
+import { hiddenServiceProxyConfigFromEnv } from '../src/indexer/hiddenServiceFetch.ts';
 import { createDatabase } from '../src/db/pool.ts';
 import { latestSchemaVersion } from '../src/db/migrations.ts';
 import { BlurtClient } from '../src/blurt/client.ts';
@@ -228,6 +230,32 @@ async function acquireFromChain(
 	die('every source failed to yield a snapshot matching the on-chain sha256. Try again later, set --gateway, or do a full replay.');
 }
 
+
+/**
+ * Route .onion / .b32.i2p fetches through Tor and i2pd.
+ *
+ * WITHOUT THIS, a hidden-only node cannot read the chain from a standalone
+ * script at all. `installHiddenServiceDispatcher` was only ever called from the
+ * indexer SERVICE (main.ts), so the service reads the chain happily over I2P
+ * while any script run beside it sends the same request straight at a
+ * `.b32.i2p` hostname with no proxy and gets `fetch failed`. That is exactly
+ * what stopped morphitlat — a zero-clearnet box — from mirroring, and it would
+ * have stopped fast-sync there too.
+ *
+ * Same clearnet policy as the service: a node with no clearnet RPC endpoints
+ * fails closed rather than quietly reaching for the open internet.
+ */
+function installHiddenRouting(config: ReturnType<typeof loadConfig>): void {
+	try {
+		installHiddenServiceDispatcher(
+			hiddenServiceProxyConfigFromEnv(process.env),
+			config.blurtRpcEndpoints.length === 0 ? 'refuse' : 'allow'
+		);
+	} catch {
+		/* a clearnet box works fine without it; never block on this */
+	}
+}
+
 async function main(): Promise<void> {
 	const fromChain = has('from-chain');
 	const snapshotPath = process.argv[2];
@@ -262,6 +290,7 @@ async function main(): Promise<void> {
 		}
 	}
 	const config = loadConfig();
+	installHiddenRouting(config);
 	const db = createDatabase(config);
 	const work = mkdtempSync(join(tmpdir(), 'morphit-snap-restore-'));
 

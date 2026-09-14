@@ -84,7 +84,13 @@ probe() {
 	# Bare /ipfs/ is deliberate: the gateway rejects it instantly with a 400,
 	# proving the hop without resolving a CID or touching the network — so the
 	# probe stays fast and cannot be confused by an unpinned or slow-to-fetch CID.
+	# --header='Host: 127.0.0.1' is REQUIRED, not cosmetic. wget would otherwise
+	# send Host: host.docker.internal, which a kubo gateway treats as a possible
+	# DNSLink domain; with Gateway.NoFetch=true it cannot resolve one and the
+	# request HANGS. That made this probe report "unreachable" on a box whose
+	# gateway was perfectly healthy — the firewall was never the problem.
 	_out=$(docker exec "$CONTAINER" wget -O /dev/null -T 6 \
+		--header='Host: 127.0.0.1' \
 		"http://host.docker.internal:${PORT}/ipfs/" 2>&1)
 	_rc=$?
 	[ "$_rc" = 0 ] && return 0
@@ -169,5 +175,5 @@ log "    sudo ufw allow from ${CIDR} to any port ${PORT} proto tcp"
 log "    sudo docker restart ${CONTAINER}"
 log "  Then confirm from inside the container (a TIMEOUT means the firewall is"
 log "  still dropping it; 'refused' means the gateway is not bound to 0.0.0.0):"
-log "    sudo docker exec ${CONTAINER} wget -O /dev/null -T 6 http://host.docker.internal:${PORT}/ipfs/"
+log "    sudo docker exec ${CONTAINER} wget -O /dev/null -T 6 --header='Host: 127.0.0.1' http://host.docker.internal:${PORT}/ipfs/"
 exit 0
