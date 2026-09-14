@@ -2705,18 +2705,45 @@ async function runStepWithSpinner(
 				'';
 			if (origin) seedAddrArgs.push(`MORPHIT_SEED_ORIGIN=${origin}`);
 
+			// CONFIG and ROUTER addresses are resolved SEPARATELY, never as a
+			// fallback chain, so the seed step can COMPARE them.
+			//
+			// morphitlat advertised a .b32.i2p its own i2pd did not host — the key
+			// file had been regenerated at some point and the config was never
+			// reconciled. Every peer's I2P fetch to that box failed for an unknown
+			// length of time, masked by its .onion still working, and the seeder's
+			// own check blamed "slow tunnels". Tor and i2pd both publish the truth
+			// locally, so a stale address is detectable in one comparison — this is
+			// the check that would have found it immediately.
+			//
 			// Our OWN onion. Never read it from indexer.env — that file lists other
 			// people's Blurt RPC onions, and probing one would report a stranger's
 			// node as our working seeder.
-			let onion = readKey(cfg, 'MORPHIT_INSTANCE_TOR_ADDRESS') || readKey(altCfg, 'MORPHIT_INSTANCE_TOR_ADDRESS');
-			if (!onion) {
-				const found = spawnSync(
+			const cfgOnion =
+				readKey(cfg, 'MORPHIT_INSTANCE_TOR_ADDRESS') || readKey(altCfg, 'MORPHIT_INSTANCE_TOR_ADDRESS');
+			// What Tor actually hosts. HiddenServiceDir/hostname is the authority.
+			const routerOnion = (
+				spawnSync(
 					'sh',
 					['-c', "cat /var/lib/tor/*/hostname 2>/dev/null | grep -oE '[a-z2-7]{56}\\.onion' | head -1"],
 					{ encoding: 'utf8', timeout: 10_000 }
-				);
-				onion = (found.stdout ?? '').trim();
-			}
+				).stdout ?? ''
+			).trim();
+			// What i2pd actually hosts, from its own console. No root needed.
+			const routerI2p = (
+				spawnSync(
+					'sh',
+					[
+						'-c',
+						"curl -s --max-time 8 'http://127.0.0.1:7070/?page=i2p_tunnels' 2>/dev/null " +
+							"| grep -oE '[a-z2-7]{52}\\.b32\\.i2p' | head -1"
+					],
+					{ encoding: 'utf8', timeout: 15_000 }
+				).stdout ?? ''
+			).trim();
+			if (routerOnion) seedAddrArgs.push(`MORPHIT_ROUTER_ONION=${routerOnion}`);
+			if (routerI2p) seedAddrArgs.push(`MORPHIT_ROUTER_I2P=${routerI2p}`);
+			const onion = cfgOnion || routerOnion;
 			if (onion) seedAddrArgs.push(`MORPHIT_SEED_ONION=${onion}`);
 
 			const i2p =

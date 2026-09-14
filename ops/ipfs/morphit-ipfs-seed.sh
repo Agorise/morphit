@@ -253,6 +253,42 @@ _onion="${MORPHIT_SEED_ONION:-}"
 [ -n "$_onion" ] || _onion=$(grep -hoE '[a-z2-7]{56}\.onion' "$CFG" "$ALTCFG" /var/lib/tor/*/hostname 2>/dev/null | head -1) || true
 _i2p="${MORPHIT_SEED_I2P:-}"
 [ -n "$_i2p" ] || _i2p=$(grep -hoE '[a-z2-7]{52}\.b32\.i2p' "$CFG" "$ALTCFG" 2>/dev/null | head -1) || true
+# ── Does the config match what the ROUTER actually hosts? ────────────
+# morphitlat advertised a .b32.i2p its own i2pd did not host: the tunnel key had
+# been regenerated and the config never reconciled. Peers' I2P fetches to it
+# failed for an unknown period, hidden by its .onion still working, and this very
+# check blamed "slow tunnels" instead of saying the address was wrong. Tor and
+# i2pd both publish the truth locally, so the mismatch is one comparison away.
+_addr_mismatch=0
+if [ -n "${MORPHIT_ROUTER_ONION:-}" ] && [ -n "${_onion:-}" ] && [ "$MORPHIT_ROUTER_ONION" != "$_onion" ]; then
+	_addr_mismatch=1
+	log "⚠ CONFIG/ROUTER MISMATCH — your .onion is advertised wrong."
+	log "    config says : $_onion"
+	log "    tor hosts   : $MORPHIT_ROUTER_ONION"
+	log "  Peers use the ADVERTISED address, so they cannot reach this box over Tor."
+	log "  Fix: set MORPHIT_INSTANCE_TOR_ADDRESS=$MORPHIT_ROUTER_ONION in $CFG,"
+	log "  then re-publish: morphit-ops → 'Re-publish my registration on-chain'."
+fi
+if [ -n "${MORPHIT_ROUTER_I2P:-}" ] && [ -n "${_i2p:-}" ] && [ "$MORPHIT_ROUTER_I2P" != "$_i2p" ]; then
+	_addr_mismatch=1
+	log "⚠ CONFIG/ROUTER MISMATCH — your .b32.i2p is advertised wrong."
+	log "    config says : $_i2p"
+	log "    i2pd hosts  : $MORPHIT_ROUTER_I2P"
+	log "  Peers use the ADVERTISED address, so they cannot reach this box over I2P."
+	log "  Fix: set MORPHIT_INSTANCE_I2P_B32_ADDRESS=$MORPHIT_ROUTER_I2P in $CFG,"
+	log "  then re-publish: morphit-ops → 'Re-publish my registration on-chain'."
+fi
+# Nothing configured, but the router IS hosting one? Say so — that address is
+# useless to the federation until it is advertised.
+if [ -z "${_onion:-}" ] && [ -n "${MORPHIT_ROUTER_ONION:-}" ]; then
+	log "• Tor is hosting $MORPHIT_ROUTER_ONION but it is not in your config, so peers never learn it."
+	_onion="$MORPHIT_ROUTER_ONION"
+fi
+if [ -z "${_i2p:-}" ] && [ -n "${MORPHIT_ROUTER_I2P:-}" ]; then
+	log "• i2pd is hosting $MORPHIT_ROUTER_I2P but it is not in your config, so peers never learn it."
+	_i2p="$MORPHIT_ROUTER_I2P"
+fi
+
 if [ -n "${_onion:-}" ]; then
 	_sp=$(ss -lnt 2>/dev/null | grep -oE '127\.0\.0\.1:(9050|9150)' | head -1 | cut -d: -f2) || true
 	[ -n "${_sp:-}" ] || _sp=9050
@@ -262,8 +298,26 @@ if [ -n "${_onion:-}" ]; then
 fi
 if [ -n "${_i2p:-}" ]; then
 	_i=$(_code "http://${_i2p}${PROBE_PATH}" 240 -x "http://127.0.0.1:4444")
-	[ "$_i" = "200" ] && log "✓ I2P: the .b32.i2p serves the release — hidden-only peers can upgrade from this box." \
-		|| log "⚠ I2P: the .b32.i2p did NOT serve the release (HTTP ${_i:-timeout}); I2P tunnels are slow to warm up — re-check before treating it as broken."
+	if [ "$_i" = "200" ]; then
+		log "✓ I2P: the .b32.i2p serves the release — hidden-only peers can upgrade from this box."
+	elif [ -z "${_i:-}" ] || [ "$_i" = "000" ]; then
+		# No HTTP reply at all: the local proxy is unreachable or the tunnel has
+		# not been built yet. THIS is the case that genuinely warrants patience.
+		log "• I2P: no reply through the local i2pd proxy yet (tunnels take a few minutes to build after a restart)."
+		log "  Re-check before treating it as broken: systemctl status i2pd"
+	else
+		# An HTTP status came BACK, so i2pd answered — the tunnel works and the
+		# far end is the problem. Saying "tunnels are slow to warm up" here is
+		# what talked an operator out of investigating a genuinely wrong address
+		# for an unknown length of time. Do not explain away a real answer.
+		log "⚠ I2P: i2pd replied HTTP ${_i} — the proxy works, so this is NOT a warm-up delay."
+		if [ "$_addr_mismatch" = "1" ]; then
+			log "  See the CONFIG/ROUTER MISMATCH above — that is almost certainly the cause."
+		else
+			log "  Check that $_i2p is the destination i2pd actually hosts:"
+			log "    curl -s 'http://127.0.0.1:7070/?page=i2p_tunnels' | grep -o '"'"'[a-z2-7]\{52\}\.b32\.i2p'"'"'"
+		fi
+	fi
 fi
 if [ -z "${_onion:-}" ] && [ -z "${_i2p:-}" ]; then
 	log "• No Tor/I2P address found in the config, so the hidden checks were skipped."

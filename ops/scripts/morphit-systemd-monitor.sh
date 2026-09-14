@@ -65,6 +65,13 @@ watch_units="$all_morphit $EXTRA_WATCH"
 # a database: this must keep working on a box where anything could be broken,
 # and an unwritable state dir degrades to the OLD behaviour (alert every scan)
 # rather than to silence.
+# This monitor tracks failed→recovered→failed explicitly, which is STRICTLY
+# better than emit()'s generic "same payload within a window" suppression — and
+# the two would fight: a re-failure after a recovery carries the SAME payload as
+# the original failure, so the generic window would swallow it. Silently losing
+# a real re-failure is the one outcome worse than repeating an alert, so this
+# monitor opts out and relies on its own state machine.
+export MORPHIT_EMIT_DEDUP=0
 ALERT_STATE_DIR="${MORPHIT_MONITOR_STATE_DIR:-/var/lib/morphit/monitor-state}"
 mkdir -p "$ALERT_STATE_DIR" 2>/dev/null || true
 _alert_state_file() { printf '%s/%s' "$ALERT_STATE_DIR" "$(printf '%s' "$1" | tr -c 'A-Za-z0-9._-' '_')"; }

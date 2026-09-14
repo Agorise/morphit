@@ -91,9 +91,15 @@ function runEmit(journalStream: string | null): EmitResult {
 	} else {
 		env.JOURNAL_STREAM = journalStream;
 	}
+	// Repeat-suppression OFF for this smoke. emit() now emits an identical
+	// (module, event, payload) at most once per window, which is right for a
+	// sidecar on a timer and wrong here: this checks WHERE a record is routed,
+	// and calls emit repeatedly with the same payload to do it. Leaving dedup on
+	// made the second and later calls produce no output and the smoke read that
+	// as "nothing was written" — a false failure about routing.
 	const script =
 		`. "${EMIT_SH}"; ` +
-		`export MORPHIT_EMIT_MODULE=tamper MORPHIT_EMIT_TAG=morphit-host-monitor; ` +
+		`export MORPHIT_EMIT_MODULE=tamper MORPHIT_EMIT_TAG=morphit-host-monitor MORPHIT_EMIT_DEDUP=0; ` +
 		`emit info bundle_hash_mismatch '{"note":"routing-smoke"}'`;
 	const r = spawnSync('bash', ['-c', script], { encoding: 'utf8', env });
 	let catCalled = false;

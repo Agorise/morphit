@@ -12021,3 +12021,56 @@ A healthy run ends with a line confirming the SHA-256 matched and that this inst
 ### Fast-syncing a new node
 
 On a fresh box the install wizard offers fast-sync by default; `morphit-ops fast-sync` runs it at any time. It picks sources in this order: your own gateway if you run one, then federation peers over Tor and I2P, then the signed HTTPS mirror, then public IPFS gateways — with the clearnet tiers omitted entirely on a hidden-only node. Whatever answers first is verified against the on-chain hash before anything is restored, so which mirror served you affects only your wait, never your safety.
+
+### Publishing: the first snapshot, and automating it afterwards
+
+There is no bootstrap path for the **very first** snapshot on a new federation —
+nothing is anchored, so there is nothing for a mirror to find. It is a one-time
+manual sequence on the canonical box:
+
+```
+sudo touch /etc/morphit/snapshot-publish.env        # opt in (empty is fine)
+sudo systemctl enable --now morphit-snapshot-publish.timer
+sudo systemctl start morphit-snapshot-publish.service
+```
+
+The job exports, pins, announces and writes a payload, then stops and prints two
+commands. Run those on a machine that holds the publisher's key: copy the payload
+down and broadcast it. Nothing exists on-chain until you sign there, which is why
+the key never has to live on the server.
+
+**Automating it.** Put a *dedicated* posting key — never your release-signing key
+— in `/etc/morphit/snapshot-publish.env` as `MORPHIT_SNAPSHOT_SIGNING_WIF=…`, and
+the daily timer anchors on its own with no manual step. Do this only once you have
+watched a manual publish succeed end to end.
+
+**An optional HTTPS mirror.** Setting `MORPHIT_SNAPSHOT_FORGEJO_URL` in the same
+file adds a plain-HTTPS download link to the published record. It is a convenience
+for a newcomer with no peer list; the CID and your own origins already cover the
+federation, so it is safe to leave unset.
+
+### Rehearsing fast-sync without touching anything
+
+```
+sudo morphit-ops fast-sync --rehearse
+```
+
+Finds the newest anchored snapshot, downloads it over whichever transport this
+node uses, verifies it against the on-chain fingerprint, and stops. Nothing is
+written; your database and running indexer are untouched, so it is safe on a
+production box. On a hidden-only node it will refuse clearnet sources outright
+rather than quietly using one.
+
+### If an upgrade reports an address mismatch
+
+Your privacy-network router publishes what it is really hosting, and the upgrade
+compares that against what you advertise. If they differ, peers cannot reach you
+on the address they were given. Change the setting the message names in
+`/opt/morphit/morphit.config.env`, then re-publish so the federation learns it:
+
+```
+sudo morphit-ops        # → "Re-publish my registration on-chain"
+```
+
+Restart the indexer first if you edited the file while it was running, so the new
+value is the one that gets published.

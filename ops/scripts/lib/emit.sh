@@ -139,8 +139,45 @@ emit() {
         echo "emit: MORPHIT_EMIT_MODULE and MORPHIT_EMIT_TAG must be set" >&2
         return 1
     fi
-    _emit_ts=$(iso_now)
     _emit_payload=${3:-'{}'}
+
+    # ─── Repeat suppression ──────────────────────────────────────
+    # Sidecars run on timers, so an UNCHANGED condition was re-announced on
+    # every scan — a CRITICAL every few minutes for one fact the operator
+    # already knows. That is how someone learns to ignore alerts, which is a
+    # worse outcome than sending none. The systemd monitor got explicit
+    # failed/recovered handling; every OTHER sidecar needs something generic,
+    # so it lives here and covers all of them at once.
+    #
+    # An identical (module, event, payload) is emitted at most once per
+    # MORPHIT_EMIT_REPEAT_SEC (default 6h). It is SUPPRESSION, not silence:
+    # a persistent problem still re-announces on that cadence, so nothing is
+    # forgotten, and any CHANGE to the payload emits immediately.
+    #
+    # Fails OPEN: if the state dir cannot be written we emit as before.
+    # Losing an alert is far worse than repeating one.
+    if [ "${MORPHIT_EMIT_DEDUP:-1}" = "1" ]; then
+        _emit_state_dir="${MORPHIT_EMIT_STATE_DIR:-/var/lib/morphit/emit-state}"
+        if mkdir -p "$_emit_state_dir" 2>/dev/null; then
+            _emit_key=$(printf '%s|%s|%s' "$MORPHIT_EMIT_MODULE" "$2" "$_emit_payload" \
+                        | (sha1sum 2>/dev/null || shasum 2>/dev/null) | cut -c1-40)
+            if [ -n "$_emit_key" ]; then
+                _emit_state_file="$_emit_state_dir/$_emit_key"
+                _emit_repeat="${MORPHIT_EMIT_REPEAT_SEC:-21600}"
+                if [ -f "$_emit_state_file" ]; then
+                    _emit_age=$(( $(date +%s) - $(stat -c %Y "$_emit_state_file" 2>/dev/null || echo 0) ))
+                    if [ "$_emit_age" -lt "$_emit_repeat" ]; then
+                        return 0
+                    fi
+                fi
+                : > "$_emit_state_file" 2>/dev/null || true
+                # Keep the dir from growing without bound on a long-lived box.
+                find "$_emit_state_dir" -type f -mmin +$(( _emit_repeat / 30 )) -delete 2>/dev/null || true
+            fi
+        fi
+    fi
+
+    _emit_ts=$(iso_now)
     _emit_line=$(printf '{"ts":"%s","level":"%s","module":"%s","event":"%s","context":%s}' \
                  "$_emit_ts" "$1" "$MORPHIT_EMIT_MODULE" "$2" "$_emit_payload")
     # Route to the journal so matrix-bot — which tails `journalctl -u <unit>`

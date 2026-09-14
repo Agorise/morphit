@@ -514,6 +514,47 @@ ok('the heal probe sends the same Host so it stops lying', /--header='Host: 127\
 ok('mirror waits for a non-empty swarm before fetching', /swarm', 'peers'/.test(mirrorTs2));
 ok('…and defers cleanly rather than stalling', /no swarm peers after/.test(mirrorTs2));
 
+// ── R. config vs router address verification (v1.17.9) ──────────────
+// morphitlat advertised a .b32.i2p its own i2pd did not host — the tunnel key
+// had been regenerated and the config never reconciled. Peers' I2P fetches to
+// it failed for an unknown period, hidden by its .onion still working, and the
+// seeder blamed "slow tunnels". Both routers publish the truth locally.
+ok('upgrade reads what TOR actually hosts, separately from the config', /MORPHIT_ROUTER_ONION/.test(upgrade));
+ok('upgrade reads what I2PD actually hosts, from its console', /MORPHIT_ROUTER_I2P/.test(upgrade) && /i2p_tunnels/.test(upgrade));
+ok('seeder COMPARES config against router and names the mismatch', /CONFIG\/ROUTER MISMATCH/.test(seed));
+ok('…and prints the exact key to change plus the re-publish step', /MORPHIT_INSTANCE_I2P_B32_ADDRESS=\$MORPHIT_ROUTER_I2P/.test(seed) && /Re-publish my registration/.test(seed));
+ok('…and reports an address the router hosts but the config never advertises', /peers never learn it/.test(seed));
+
+// A check must not explain away its own finding. The old wording ("tunnels are
+// slow to warm up") talked an operator out of investigating a real fault.
+ok(
+	'an HTTP status back through i2pd is NOT called a warm-up delay',
+	/the proxy works, so this is NOT a warm-up delay/.test(seed)
+);
+ok('…while a genuine no-reply still gets the patience it deserves', /tunnels take a few minutes to build/.test(seed));
+
+// ── S. generic alert repeat-suppression (v1.17.9) ───────────────────
+const emitLib = read('ops/scripts/lib/emit.sh');
+ok('emit() suppresses an identical repeat', /MORPHIT_EMIT_DEDUP/.test(emitLib));
+ok('…but re-announces on a cadence so nothing is forgotten', /MORPHIT_EMIT_REPEAT_SEC/.test(emitLib));
+ok(
+	'…and FAILS OPEN when state cannot be written (losing an alert beats repeating one)',
+	/if mkdir -p "\$_emit_state_dir" 2>\/dev\/null; then/.test(emitLib)
+);
+// A monitor with its OWN failed→recovered→failed state machine must opt out:
+// a re-failure after a recovery carries the same payload as the original, so a
+// generic same-payload window would silently swallow it.
+ok(
+	'the systemd monitor opts OUT of generic dedup (it would swallow a real re-failure)',
+	/export MORPHIT_EMIT_DEDUP=0/.test(read('ops/scripts/morphit-systemd-monitor.sh'))
+);
+
+// ── T. rehearsing fast-sync needs no incantation ────────────────────
+const fs2 = read('apps/ops-cli/src/commands/fastSync.ts');
+ok('fast-sync has a rehearse mode', /ctx\.flags\.rehearse/.test(fs2) && /verifyOnly: true/.test(fs2));
+ok('…that runs BEFORE the restore guards (nothing is written, so they do not apply)',
+	fs2.indexOf('REHEARSAL') < fs2.indexOf('never restore under a LIVE indexer'));
+
 console.log('');
 if (fails.length > 0) {
 	console.error(`✗ ${fails.length} snapshot-mirror-wiring scenario(s) failed:`);

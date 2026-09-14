@@ -51,6 +51,10 @@ chmod +x "$BIN"/*
 
 export PATH="$BIN:$PATH"
 export MORPHIT_MONITOR_STATE_DIR="$WORK/state"
+# Isolate emit()'s generic suppression state too. Without this the harness
+# inherits /var/lib/morphit/emit-state from the host and leftover entries
+# suppress everything, so every assertion reads "nothing was emitted".
+export MORPHIT_EMIT_STATE_DIR="$WORK/emit-state"
 
 scan(){ bash "$MON" 2>&1 | grep -oE '"event":"[a-z_]+"' | sed 's/.*:"//;s/"//' | tr '\n' ' '; }
 

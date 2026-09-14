@@ -34,6 +34,23 @@ interface StateRow {
 
 export async function runFastSync(ctx: CommandCtx): Promise<number> {
 	section('Fast-sync from a federation snapshot');
+
+	// --rehearse / --verify-only: prove the whole consumer path works WITHOUT
+	// touching the database. Runs before every guard below, because none of them
+	// apply: nothing is restored, so a live indexer and existing data are both
+	// irrelevant. Safe on a production box.
+	if (ctx.flags.rehearse === 'true' || ctx.flags['verify-only'] === 'true') {
+		info('REHEARSAL — this finds, downloads and verifies the newest snapshot, then stops.');
+		info('Nothing is written. Your database and your running indexer are untouched.');
+		info('Use it to prove a new node COULD fast-sync from the federation right now.');
+		blank();
+		return fastSyncFromChain({
+			repoRoot: defaultRepoRoot(),
+			signer: ctx.flags.signer,
+			verifyOnly: true
+		});
+	}
+
 	const force = ctx.flags.force === 'true';
 	const fromFile =
 		ctx.flags['from-file'] !== undefined && ctx.flags['from-file'] !== 'true'
@@ -180,6 +197,12 @@ export function fastSyncFromChain(opts: {
 	signer?: string;
 	force?: boolean;
 	skipVerify?: boolean;
+	/** Rehearse only: find, fetch and VERIFY the snapshot, then stop before the
+	 *  database is touched. Rehearsing used to mean a raw tsx command line, a
+	 *  --tsconfig flag and inventing MORPHIT_INDEXER_CHAIN_ID by hand — which no
+	 *  operator was ever going to do, so the one claim that most needed testing
+	 *  went untested until it failed on a live box. */
+	verifyOnly?: boolean;
 }): number {
 	const repo = opts.repoRoot;
 	const tsx = join(repo, 'node_modules', '.bin', 'tsx');
@@ -190,6 +213,7 @@ export function fastSyncFromChain(opts: {
 		'--from-chain',
 		'--i-trust-signer'
 	];
+	if (opts.verifyOnly) bootstrapArgs.push('--verify-only');
 	if (opts.signer) bootstrapArgs.push('--signer', opts.signer);
 	if (opts.force) bootstrapArgs.push('--force');
 	if (opts.skipVerify) bootstrapArgs.push('--skip-verify');
