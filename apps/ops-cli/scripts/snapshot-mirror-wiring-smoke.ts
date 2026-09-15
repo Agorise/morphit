@@ -440,6 +440,51 @@ ok(
 // seeder had verified seconds earlier — was never consulted at all.
 const guard = read('scripts/verify-cid-public.sh');
 ok('the guard checks THIS instance\u2019s own origin first', /SELF_ORIGIN/.test(guard));
+// The fast path existed but the ceremony never passed an origin, and block 4
+// runs on a LAPTOP where no /opt/morphit config exists — so it fell through to
+// polling public gateways and a release stalled for 50+ rounds. A capability
+// nobody can reach is not a feature.
+ok('…and accepts that origin as an ARGUMENT, so the ceremony cannot forget it',
+	/\[ -n "\$\{3:-\}" \] && MORPHIT_GUARD_SELF_ORIGIN="\$3"/.test(guard));
+ok('…and says so plainly when no origin is known, instead of silently grinding',
+	/no instance origin known here/.test(guard));
+// The generated ceremony must PASS it. Block 4 runs on a laptop, so without an
+// explicit origin the guard has no fast path — which is exactly how this shipped.
+// The ceremony no longer runs the gateway check AT ALL. Block 3 already asserts
+// the produced CID equals the anchored one AND that it serves over this
+// instance's clearnet origin, .onion and .b32.i2p — the paths instances actually
+// fetch from. A public gateway seeing it adds nothing, arrives minutes later, and
+// lets a third party we do not depend on gate a release. Three attempts were
+// spent making that check faster before the right answer — delete it — was taken.
+const ceremony = read('scripts/eli5-release.sh');
+// Match the SHAPE, not the quoting: any line that both invokes the script and
+// references the CID variable is the gating form. An escaping-sensitive regex
+// let a reintroduced gate slip straight past this check once already.
+ok(
+	'the ceremony does NOT gate a release on a public gateway',
+	!ceremony
+		.split('\n')
+		.some(
+			(l) =>
+				!l.trim().startsWith('#') &&
+				l.includes('verify-cid-public.sh') &&
+				l.includes('MORPHIT_BUILD_IPFS_CID')
+		)
+);
+ok('…and says why, so nobody re-adds it', /no public-gateway check here/.test(ceremony));
+ok(
+	'…while the check remains available as a MANUAL command',
+	/verify-cid-public\.sh <cid>/.test(ceremony)
+);
+// A third party we do not depend on must never be able to stall a release.
+// Polling public gateways did exactly that — for 50+ rounds on a healthy
+// release. It is now OPT-IN; the default takes one look and decides.
+ok('public-gateway POLLING is opt-in, so a slow third party cannot stall a release',
+	/MORPHIT_GUARD_POLL_PUBLIC:-0/.test(guard));
+ok('…the default path takes a single look at each gateway, with no sleep',
+	/else\n\tfor gw in \$GATEWAYS; do/.test(guard));
+ok('…and a failure names the one-second re-run instead of suggesting a wait',
+	/passes in about a second/.test(guard));
 ok(
 	'…and passes on that alone, without waiting on any public gateway',
 	/That is the path the federation uses/.test(guard)

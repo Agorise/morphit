@@ -104,9 +104,10 @@ curl -fsSL https://morphit.io/verify.json -o ~/verify.json
 node apps/web/scripts/verify-json-to-release-manifest.mjs ~/verify.json > apps/web/build-manifest.release.json
 MORPHIT_BUILD_VERSION=${VERSION} MORPHIT_BUILD_BLURT_BASE=125 MORPHIT_BUILD_HASH_MANIFEST_FILE=apps/web/build-manifest.release.json npx tsx apps/indexer/scripts/release-build-payload.ts < /dev/null > release.json
 npx tsx apps/indexer/scripts/release-broadcast.ts release.json --dry-run
-[ -n "\$MORPHIT_BUILD_IPFS_CID" ] && sh scripts/verify-cid-public.sh "\$MORPHIT_BUILD_IPFS_CID" ${VERSION}
 \`\`\`
-The dry-run's printed payload should carry a \`distribution\` block (source_sha256 + gpg_fingerprint + \`ipfs_cid\` + \`ipns_name\` + the auto-baked GitHub + Codeberg mirror list). If it does not, the anchor env was not sourced. The final line is the **guard**: it confirms the \`ipfs_cid\` your VPS just seeded in Block 3 is reachable on a public gateway. If it fails, DO NOT run Block 5 — either the seed hasn't propagated yet (wait a minute and re-run the guard) or this box isn't hosting IPFS.
+The dry-run's printed payload should carry a \`distribution\` block (source_sha256 + gpg_fingerprint + \`ipfs_cid\` + \`ipns_name\` + the auto-baked GitHub + Codeberg mirror list). If it does not, the anchor env was not sourced.
+
+There is deliberately **no public-gateway check here**. Block 3 already asserted that the CID your box produced equals the one in the anchor, and verified it serves over this instance's clearnet origin, its \`.onion\` and its \`.b32.i2p\` — the paths instances actually fetch from. A public gateway seeing it adds nothing to that, arrives minutes later, and depends on a third party we do not rely on. It used to gate this block and could stall a healthy release for half an hour. To confirm outside reachability by choice, it is a manual command that never blocks the ceremony: \`sh scripts/verify-cid-public.sh <cid> ${VERSION} https://morphit.io\`.
 
 ---
 

@@ -12074,3 +12074,53 @@ sudo morphit-ops        # → "Re-publish my registration on-chain"
 
 Restart the indexer first if you edited the file while it was running, so the new
 value is the one that gets published.
+
+### Adding a vanity `.loki` or `.i2p` address
+
+**Your server must hold the private key.** There is no way around it: the daemon
+proves ownership of the address on every connection. Import it so it is not
+sitting in plaintext:
+
+```
+sudo morphit-ops import-altnet-key --network=lokinet --in=/path/to/seed.private
+sudo morphit-ops import-altnet-key --network=i2p     --in=/path/to/eep.dat
+```
+
+It is encrypted with your passphrase into the keystore. Your original file is
+deliberately NOT deleted — move that copy offline.
+
+**The two are not equivalent, and the difference matters.**
+
+A `.loki` name is an ONS record on the Oxen chain. Once it confirms, every
+Lokinet user resolves it. It is genuinely global.
+
+A `.i2p` name is **not** cryptographic. The real address is always the
+`.b32.i2p`; `morphit.i2p` is an address-book entry pointing at it. It resolves
+only for users whose router subscribes to a registry that carries the entry — so
+it will work for some people immediately, for others later, and for some never.
+That is an I2P property, not something Morphit can change. Keep publishing the
+`.b32.i2p` as the address of record; treat the name as a convenience.
+
+**The frontend needs no change.** It listens with `server_name _` (a catch-all)
+and alt-network traffic reaches it directly, bypassing the web firewall — which
+is why an `.onion` works while clearnet goes through the WAF. No `SERVER_NAME`
+edit, no certificate, nothing.
+
+**You edit the daemon config by hand, on purpose.** Morphit will not rewrite
+`lokinet.ini` or the i2pd tunnel config for you: a bad tunnel edit takes the site
+off the network, and that is not a risk worth automating. Add the SNApp service
+(with a `keyfile=` line so the address stays stable) or the i2pd server tunnel
+pointing at the frontend port, then restart the daemon.
+
+**Then record the addresses and re-publish**, or peers never learn them:
+
+```
+sudo morphit-ops        # → "Set up a Tor / Lokinet / I2P address"
+sudo morphit-ops        # → "Re-publish my registration on-chain"
+```
+
+**Finally, confirm the router really hosts what you advertise.** The next upgrade
+compares your config against what Tor and i2pd actually serve and prints a
+`CONFIG/ROUTER MISMATCH` if they differ. One instance advertised a `.b32.i2p` its
+own router had stopped hosting — every peer's fetch failed, for an unknown
+period, hidden by its other address still working. Do not skip this check.
