@@ -1215,14 +1215,11 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	const forceYes = opts.flags['yes'] === 'true' || process.env.MORPHIT_AUTO_UPGRADE === '1';
 	const jsonOutput = opts.flags['json'] === 'true';
 
-	// We vendor a pinned npm/node with the release, so npm's "New major version
-	// available!" update-notifier and the funding banner are just noise the
-	// operator can't (and shouldn't) act on. Silence them for every child npm
-	// this upgrade spawns (ci, install, the workspace builds).
-	process.env.npm_config_update_notifier = 'false';
-	process.env.NPM_CONFIG_UPDATE_NOTIFIER = 'false';
-	process.env.npm_config_fund = 'false';
-	process.env.npm_config_audit = 'false';
+	// npm banner suppression now happens at CLI STARTUP (see main.ts). It was
+	// here, which was too late: npm defers its "New major version available!"
+	// notice to process EXIT, so a child spawned before this line printed it
+	// anyway — an operator saw it after a clean upgrade, advising an npm upgrade
+	// they must not perform, since the release vendors a pinned npm/node.
 
 /**
  * Run a child process while the braille spinner turns, then replay its output.
@@ -2843,11 +2840,18 @@ async function runStepWithSpinner(
 			if (seedRes === 0) {
 				info(`✓ Seeded ${latestTag} to IPFS.`);
 			} else {
+				// Say what is actually unfinished. "Did not complete" left an operator
+				// unsure whether peers could fetch from this box at all: the CID had
+				// been announced, but the Tor/I2P verification had not run. Name that,
+				// and give a command that WORKS — the raw script needs a tag argument,
+				// so pointing at it bare produces a usage error.
 				warn(
-					'IPFS self-seed did not complete (non-fatal). Retry any time with ' +
-						'`morphit-ops harden` → "Seed this release to IPFS". The release is ' +
-						'unaffected — git mirrors + the on-chain SHA-256 are the anchors.'
+					'IPFS self-seed did not finish its checks (non-fatal). The release itself is ' +
+						'unaffected — git mirrors + the on-chain SHA-256 are the anchors — but this ' +
+						'box has NOT confirmed it serves the release over Tor/I2P, so hidden-only ' +
+						'peers may not be able to upgrade from it yet. Re-run the checks with:'
 				);
+				warn('    sudo morphit-ops harden   → "Seed this release to IPFS"');
 			}
 		}
 	} catch {

@@ -263,6 +263,19 @@ function printVersion(): void {
 // ─── Main ────────────────────────────────────────────────────────
 
 async function main(): Promise<number> {
+	// Silence npm's update-notifier and banners for EVERY child this process
+	// spawns, from the very first line.
+	//
+	// This used to be set inside the upgrade command. Too late and too narrow:
+	// npm defers its "New major version available!" notice to process EXIT, so a
+	// child spawned before that line still printed it — an operator saw the
+	// notice after a clean upgrade, advising an npm upgrade they must not perform
+	// (the release vendors a pinned npm/node). Set it here so nothing can miss it.
+	process.env.npm_config_update_notifier = 'false';
+	process.env.NPM_CONFIG_UPDATE_NOTIFIER = 'false';
+	process.env.npm_config_fund = 'false';
+	process.env.npm_config_audit = 'false';
+
 	let args = parseArgs(process.argv.slice(2));
 
 	// Honor --no-color before initColor so the help-print uses

@@ -711,6 +711,36 @@ ok(
 	/e\.consecutiveFailures > 0 \? 2 : 0/.test(poolSrc)
 );
 
+// ── X. operator-facing output must be honest and actionable ─────────
+// After a clean upgrade an operator saw: a raw shell error, an npm notice
+// advising an upgrade they must NOT perform (the release vendors a pinned
+// npm/node), and a warning whose suggested retry command produced a usage
+// error because the script needs a tag argument.
+const opsMain = read('apps/ops-cli/src/main.ts');
+const upgradeSrc = read('apps/ops-cli/src/commands/upgrade.ts');
+
+// npm defers its notice to process EXIT, so suppressing it inside a command is
+// too late for children spawned before that line.
+ok(
+	'npm banners are silenced at CLI STARTUP, not partway through a command',
+	/npm_config_update_notifier = 'false'/.test(opsMain)
+);
+ok(
+	'…and the late, partial suppression inside upgrade is gone',
+	!/npm_config_update_notifier = 'false'/.test(upgradeSrc)
+);
+
+// The seed failure said "did not complete", which left it unclear whether peers
+// could fetch at all — the CID HAD been announced; only the hidden checks had not run.
+ok(
+	'a failed self-seed names what is actually unfinished (the Tor/I2P checks)',
+	/has NOT confirmed it serves the release over Tor\/I2P/.test(upgradeSrc)
+);
+ok(
+	'…and points at a command that works (the raw script needs a tag)',
+	/sudo morphit-ops harden/.test(upgradeSrc)
+);
+
 console.log('');
 if (fails.length > 0) {
 	console.error(`✗ ${fails.length} snapshot-mirror-wiring scenario(s) failed:`);

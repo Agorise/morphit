@@ -205,6 +205,13 @@ do
 		break
 	fi
 done
+# Initialise BEFORE the case below: this script runs under `set -u`, and the
+# hidden-origin check reads $_fe. On a CLEARNET box the case does not match, so
+# _fe stayed unset and the read aborted the whole seed step ("_fe: parameter not
+# set") — after announcing the CID but before the Tor/I2P verification. The test
+# that was supposed to cover this pre-set _fe itself, so it never saw the bug.
+_fe=""
+
 # A HIDDEN origin cannot be probed this way, and must not be reported as broken.
 # This check dials 127.0.0.1:443 — the clearnet edge. A zero-clearnet box has no
 # 443 listener at all; it serves through its Tor/I2P tunnels to a different local
