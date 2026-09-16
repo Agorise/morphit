@@ -403,9 +403,23 @@ export async function runPeerPriceSampleCycle(
 		sustainedHours = PEER_DISAGREEMENT_SUSTAINED_HOURS,
 		alertCooldownHours = PEER_ALERT_COOLDOWN_HOURS,
 		minObservations = PEER_MIN_OBSERVATIONS,
-		fetchTimeoutMs = PEER_FETCH_TIMEOUT_MS,
+		fetchTimeoutMs: fetchTimeoutMsRaw = PEER_FETCH_TIMEOUT_MS,
 		hiddenOnly = false
 	} = cfg;
+
+	// A hidden-only node reaches every peer over Tor/I2P (see hiddenOnly above),
+	// where a fresh connection must build circuits before any data moves — 30-60s
+	// is ordinary. The 10s default is chosen to "rather skip an unresponsive peer
+	// than block the sample cycle", which is right for clearnet and catastrophic
+	// here: EVERY peer fetch aborts, so a zero-clearnet instance silently collects
+	// NO peer observations at all and loses the cross-check that detects a
+	// manipulated price feed. It fails quietly by design, so nobody would notice.
+	//
+	// This is the FIFTH layer of the same flat-timeout mistake found in one
+	// session (dispatcher, indexer client, RPC pool, relay client, this).
+	const fetchTimeoutMs = hiddenOnly
+		? Math.max(fetchTimeoutMsRaw, Number(process.env.MORPHIT_HIDDEN_RPC_TIMEOUT_MS ?? 60_000))
+		: fetchTimeoutMsRaw;
 
 	// Step 1: discover peers from federation directory.  Only query
 	// peers that the federation prober has vetted as good/quiet

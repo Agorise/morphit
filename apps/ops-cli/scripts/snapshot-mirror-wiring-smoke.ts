@@ -566,6 +566,57 @@ ok('…and defers cleanly rather than stalling', /no swarm peers after/.test(mir
 // seeder blamed "slow tunnels". Both routers publish the truth locally.
 ok('upgrade reads what TOR actually hosts, separately from the config', /MORPHIT_ROUTER_ONION/.test(upgrade));
 ok('upgrade reads what I2PD actually hosts, from its console', /MORPHIT_ROUTER_I2P/.test(upgrade) && /i2p_tunnels/.test(upgrade));
+// …SCOPED to Morphit's own tunnel. Taking the first b32 on the page is only
+// correct on a router hosting one destination; a box with several tunnels got a
+// stranger's address compared against its own and was told its CORRECT config
+// was "advertised wrong" — while the next line confirmed that address served
+// fine. A check that cries wolf is worse than no check.
+ok('…scoped to the morphit tunnel, not just the first b32 on the page',
+	/grep -i 'morphit'/.test(upgrade) && !/\| grep -oE '\[a-z2-7\]\{52\}\\\\\.b32\\\\\.i2p' \| head -1/.test(upgrade));
+ok('…and stays SILENT when no morphit tunnel is identifiable', /cannot tell which destination is ours/.test(upgrade));
+// The clearnet frontend probe dials 127.0.0.1:443. A zero-clearnet box has no
+// 443 listener — it serves through its Tor/I2P tunnels on another local port —
+// so the probe ALWAYS failed there and reported "the FRONTEND does not serve
+// this" about an instance whose .onion and .b32.i2p checks passed two lines
+// later. Third cry-wolf of this shape; the hidden checks are authoritative.
+ok(
+	'the clearnet frontend probe is skipped when the origin is a HIDDEN address',
+	/\*\.onion\|\*\.b32\.i2p\|\*\.i2p\|\*\.loki\)/.test(seed) && /skip-hidden/.test(seed)
+);
+ok('…and says why, rather than reporting a working box as broken',
+	/not reachable over the clearnet edge/.test(seed));
+
+// ── U. RPC timeout must follow the transport (v1.17.11) ─────────────
+// A flat 10s RPC timeout aborted EVERY standalone chain read on a zero-clearnet
+// box — permanently, not just after a restart — because a fresh .onion/.b32.i2p
+// connection must build circuits or tunnels first (30-60s is normal). The
+// long-lived indexer service survived on warm tunnels and continuous retries,
+// which is precisely why this looked like a script bug instead of a timeout.
+const rpcClient = read('apps/indexer/src/blurt/client.ts');
+ok('the RPC timeout depends on the transport, not a flat value',
+	/hiddenHostNetworkOf\(new URL\(url\)\.hostname\)/.test(rpcClient));
+ok('…clearnet keeps its short timeout', /hiddenNet === null \? 10_000/.test(rpcClient));
+ok('…hidden transports get far longer, and it is tunable',
+	/MORPHIT_HIDDEN_RPC_TIMEOUT_MS \?\? 60_000/.test(rpcClient));
+
+// FIVE layers of the same flat-timeout mistake were found in one session. Each
+// fix was real and each hid the next, so guard EVERY layer — when one is fixed,
+// check the next one down.
+ok('layer 4: the RELAY client is transport-aware too (it may hold .onion RPC endpoints)',
+	/hiddenHostNetworkOf\(new URL\(url\)\.hostname\)/.test(read('apps/relay/src/blurt/client.ts')));
+ok(
+	'layer 5: peer PRICE fetches get the hidden floor — a zero-clearnet node otherwise silently collects NO peer observations and loses its price cross-check',
+	/hiddenOnly\n\t\t\? Math\.max\(fetchTimeoutMsRaw/.test(read('apps/indexer/src/indexer/price/peerPriceMonitor.ts'))
+);
+ok('…and a clearnet node keeps the short peer timeout',
+	/: fetchTimeoutMsRaw;/.test(read('apps/indexer/src/indexer/price/peerPriceMonitor.ts')));
+// FOURTH layer of the same mistake, found by the v1.17.11 deep-deep: the RELAY's
+// client had the identical flat 10s, and relay config explicitly ALLOWS
+// .onion/.i2p endpoints. When one layer is fixed, check the next one down.
+const relayClient = read('apps/relay/src/blurt/client.ts');
+ok('the RELAY client is transport-aware too (its config allows hidden endpoints)',
+	/hiddenHostNetworkOf\(new URL\(url\)\.hostname\)/.test(relayClient));
+ok('…and keeps the short budget for clearnet', /hiddenNet === null \? 10_000/.test(relayClient));
 ok('seeder COMPARES config against router and names the mismatch', /CONFIG\/ROUTER MISMATCH/.test(seed));
 ok('…and prints the exact key to change plus the re-publish step', /MORPHIT_INSTANCE_I2P_B32_ADDRESS=\$MORPHIT_ROUTER_I2P/.test(seed) && /Re-publish my registration/.test(seed));
 ok('…and reports an address the router hosts but the config never advertises', /peers never learn it/.test(seed));
@@ -613,6 +664,52 @@ const fs2 = read('apps/ops-cli/src/commands/fastSync.ts');
 ok('fast-sync has a rehearse mode', /ctx\.flags\.rehearse/.test(fs2) && /verifyOnly: true/.test(fs2));
 ok('…that runs BEFORE the restore guards (nothing is written, so they do not apply)',
 	fs2.indexOf('REHEARSAL') < fs2.indexOf('never restore under a LIVE indexer'));
+
+// ── V. every RPC consumer must use the WHOLE node list ──────────────
+// 20 nodes exist so that any one going down is a non-event. The indexer merged
+// the on-chain morphit_rpc_v1 directory into its pool; the RELAY never did, so
+// it ran on the handful baked into its config. That is backwards: the relay is
+// the component that BROADCASTS (signups, transfers), so during a clearnet
+// outage it is the one that most needs the hidden-service nodes to fall back on.
+const relayMain = read('apps/relay/src/main.ts');
+const indexerMain = read('apps/indexer/src/main.ts');
+
+ok('the indexer merges the on-chain RPC directory', /mergeRpcEndpoints\(dirEndpoints\)/.test(indexerMain));
+ok('the RELAY merges it too (it is the one that broadcasts)', /mergeRpcEndpoints\(dirEndpoints\)/.test(relayMain));
+ok('…and its client exposes the merge', /mergeRpcEndpoints\(urls: readonly string\[\]\)/.test(relayClient));
+ok(
+	'…best-effort, so a split deployment keeps its configured endpoints rather than failing to boot',
+	/rpc_directory WHERE id = 1[\s\S]{0,600}catch \{/.test(relayMain)
+);
+
+// ── W. node health is SHARED, not relearned blind every run ─────────
+// Health was in-memory only, so every one-shot process (mirror, fast-sync, any
+// script) tried endpoints in CONFIG ORDER and paid a full timeout on whatever
+// was dead first — a wasted minute on a hidden endpoint the long-lived indexer
+// already knew was down. Hand-pruning a node that blipped is precisely the
+// manual work the pool exists to remove.
+const poolSrc = read('packages/rpc-pool/src/index.ts');
+ok('the pool can persist endpoint health', /healthStatePath/.test(poolSrc));
+// Match the CALL SITES, not the definition: deleting every call left the
+// method declared and an earlier version of this check still passed, which is
+// exactly the "capability nobody can reach" it was meant to prevent. It must be
+// invoked on BOTH success and failure — knowing which node is DOWN is what
+// saves a one-shot run from paying a full timeout on it.
+ok(
+	'…and saves it AUTOMATICALLY on success AND failure (a capability nobody can reach is not a feature)',
+	(poolSrc.match(/this\.maybeSaveHealthState\(\);/g) ?? []).length >= 2 &&
+		/HEALTH_STATE_SAVE_INTERVAL_MS/.test(poolSrc)
+);
+ok('…restoring failure history but NEVER a cooldown (a node down a minute ago may be up now)',
+	/Only LATENCY and FAILURE history are restored/.test(poolSrc));
+ok('…and ignoring stale state entirely', /HEALTH_STATE_MAX_AGE_MS/.test(poolSrc));
+ok('both the indexer and the relay share that state file',
+	/healthStatePath: process\.env\.MORPHIT_RPC_HEALTH_STATE/.test(read('apps/indexer/src/blurt/client.ts')) &&
+		/healthStatePath: process\.env\.MORPHIT_RPC_HEALTH_STATE/.test(relayClient));
+ok(
+	'ordering distinguishes never-tried from never-succeeded, so a dead node is not bootstrapped first',
+	/e\.consecutiveFailures > 0 \? 2 : 0/.test(poolSrc)
+);
 
 console.log('');
 if (fails.length > 0) {

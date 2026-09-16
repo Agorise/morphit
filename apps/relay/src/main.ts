@@ -190,6 +190,34 @@ async function main(): Promise<void> {
 	}
 
 	const db = createDatabase(cfg);
+
+	// ─── Merge the on-chain RPC directory into the relay's pool ──────────
+	// The indexer has always re-hydrated this on boot; the relay never did, so it
+	// ran on the handful of nodes baked into its config while the indexer used
+	// every published one. The relay is the component that BROADCASTS, so during
+	// a clearnet outage it is the one that most needs the hidden-service nodes.
+	//
+	// Best-effort by design: the table lives in the indexer's schema, which is the
+	// SAME database in the default single-box deployment. On a split deployment
+	// the query simply fails and the relay keeps its configured endpoints — no
+	// worse than before, never a boot failure.
+	try {
+		const dir = await db.query<{ endpoints: string[] }>(
+			`SELECT endpoints FROM rpc_directory WHERE id = 1`
+		);
+		const dirEndpoints = dir.rows[0]?.endpoints ?? [];
+		if (dirEndpoints.length > 0) {
+			const added = blurt.mergeRpcEndpoints(dirEndpoints);
+			if (added.length > 0) {
+				bootLog.info('rpc_directory_merged', {
+					added: added.length,
+					total: blurt.endpointSnapshot().length
+				});
+			}
+		}
+	} catch {
+		/* split deployment or pre-migration DB — keep the configured endpoints */
+	}
 	const availLimiter = new Limiter(cfg.availabilityRatePerMin, 60_000);
 	const createLimiter = new Limiter(cfg.createRatePerHour, 60 * 60_000);
 	// ADR-0010 §4 long-window companion to createLimiter. 24h bucket.

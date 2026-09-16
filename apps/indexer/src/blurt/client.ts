@@ -35,6 +35,7 @@
  *     opt-in to hedging via the `userFacing` option
  */
 
+import { hiddenHostNetworkOf } from '@morphit/hidden-transport';
 import { Client } from '@beblurt/dblurt';
 import { morphitUserAgent } from './userAgent';
 import { INDEXER_VERSION } from '$api/health';
@@ -226,7 +227,17 @@ function clientFor(url: string): Client {
 		// native UA is confirmed in production node logs and every other call site
 		// names itself (rpcHealth got its own header too); `rpc-user-agent-smoke`
 		// guards that no raw fetch is left anonymous.
-		c = new Client(url, { timeout: 10_000, userAgent: morphitUserAgent(INDEXER_VERSION) });
+		// The timeout MUST depend on the transport. 10s is right for clearnet and
+		// far too short for a hidden service: a fresh .onion or .b32.i2p connection
+		// has to build circuits or tunnels first, which routinely takes 30-60s. A
+		// zero-clearnet box therefore aborted EVERY standalone chain read at 10s —
+		// permanently, not just after a restart — while the long-lived indexer
+		// service survived on warm tunnels and continuous retries, which is exactly
+		// why this looked like a script bug rather than a timeout.
+		const hiddenNet = hiddenHostNetworkOf(new URL(url).hostname);
+		const timeoutMs =
+			hiddenNet === null ? 10_000 : Number(process.env.MORPHIT_HIDDEN_RPC_TIMEOUT_MS ?? 60_000);
+		c = new Client(url, { timeout: timeoutMs, userAgent: morphitUserAgent(INDEXER_VERSION) });
 		clientCache.set(url, c);
 	}
 	return c;
@@ -285,7 +296,21 @@ export class BlurtClient {
 				...(config.localRpcEndpoints ?? []),
 				...config.blurtRpcEndpoints,
 				...(config.hiddenRpcEndpoints ?? [])
-			]
+			],
+			// Share what we learn about node health with SHORT-LIVED processes.
+			//
+			// The long-lived indexer discovers within seconds which of ~20 endpoints
+			// are fast and which are down. Every one-shot run (the mirror job,
+			// fast-sync, any script) previously started blind and worked through
+			// endpoints in CONFIG ORDER, paying a full timeout on whatever happened
+			// to be dead first — a wasted minute per run on a hidden endpoint the
+			// indexer already knew was down.
+			//
+			// The point of running many endpoints is to always use the best one
+			// available. Hand-pruning a node that blipped is precisely the manual
+			// work this pool exists to remove, so the knowledge is shared instead.
+			// Fail-open: an unwritable or stale file changes nothing.
+			healthStatePath: process.env.MORPHIT_RPC_HEALTH_STATE ?? '/var/lib/morphit/rpc-health.json'
 		});
 	}
 

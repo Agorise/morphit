@@ -2735,8 +2735,26 @@ async function runStepWithSpinner(
 					'sh',
 					[
 						'-c',
+						// SCOPE THIS TO MORPHIT'S OWN TUNNEL. The first version took the
+						// first .b32.i2p on the page, which is only correct on a router
+						// hosting exactly one destination. A box running several tunnels
+						// got a stranger's address compared against its own and was told
+						// its correct config was "advertised wrong" — while the line right
+						// below confirmed that same address served fine. A check that
+						// cries wolf is worse than no check.
+						//
+						// The console renders one <div> per tunnel containing its NAME and
+						// its b32, so split on tags and keep only the entry whose name
+						// matches. If no tunnel is identifiable as ours, emit NOTHING —
+						// silence is correct when we cannot tell which destination is ours.
 						"curl -s --max-time 8 'http://127.0.0.1:7070/?page=i2p_tunnels' 2>/dev/null " +
-							"| grep -oE '[a-z2-7]{52}\\.b32\\.i2p' | head -1"
+							// Splitting on '<' keeps each tunnel's NAME together with its
+							// href, which carries the b32 — the bare `.b32.i2p` text lands in
+							// the following fragment, so read the href and append the suffix.
+							"| tr '<' '\\n' " +
+							"| grep -i 'morphit' " +
+							"| grep -oE 'b32=[a-z2-7]{52}' | head -1 | cut -d= -f2 " +
+							"| sed 's/$/.b32.i2p/'"
 					],
 					{ encoding: 'utf8', timeout: 15_000 }
 				).stdout ?? ''

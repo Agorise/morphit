@@ -130,12 +130,23 @@ check(
 );
 check(
 	'12 the indexer dblurt Client passes the native userAgent option (0.17.0)',
-	/new Client\(url, \{ timeout: 10_000, userAgent: morphitUserAgent\(INDEXER_VERSION\) \}\)/.test(client),
+	// The timeout is no longer a literal — it is transport-aware, since a hidden
+	// endpoint needs a far longer budget than clearnet. This check is about the
+	// native userAgent option, so match THAT and leave the timeout to the
+	// rpc-pool smoke, which owns it.
+	/new Client\(url, \{ timeout: [A-Za-z0-9_]+, userAgent: morphitUserAgent\(INDEXER_VERSION\) \}\)/.test(
+		client
+	),
 	'dblurt native userAgent means dblurt traffic identifies itself without the wrapper'
 );
 check(
 	'13 the relay dblurt Client passes the native userAgent option',
-	/new Client\(url, \{ timeout: 10_000, userAgent: morphitUserAgent\(VERSION\) \}\)/.test(relayClient),
+	// Same as the indexer above: the timeout is transport-aware now, so match the
+	// userAgent option rather than a literal budget. The rpc-pool smoke owns
+	// timeout behaviour; this check owns identification.
+	/new Client\(url, \{ timeout: [A-Za-z0-9_]+, userAgent: morphitUserAgent\(VERSION\) \}\)/.test(
+		relayClient
+	),
 	'the relay was anonymous before this; its only outbound RPC is the dblurt Client'
 );
 check(

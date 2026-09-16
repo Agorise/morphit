@@ -205,6 +205,24 @@ do
 		break
 	fi
 done
+# A HIDDEN origin cannot be probed this way, and must not be reported as broken.
+# This check dials 127.0.0.1:443 — the clearnet edge. A zero-clearnet box has no
+# 443 listener at all; it serves through its Tor/I2P tunnels to a different local
+# port. So on such a box the probe ALWAYS fails, and it reported "the FRONTEND
+# does not serve this" about an instance whose .onion and .b32.i2p checks passed
+# two lines later. The hidden checks below are authoritative for those boxes —
+# they test the real peer path — so skip the clearnet probe rather than cry wolf.
+case "$_host" in
+	*.onion|*.b32.i2p|*.i2p|*.loki)
+		_fe="skip-hidden"
+		;;
+esac
+if [ "$_fe" = "skip-hidden" ]; then
+	log "• Frontend check skipped: this instance's origin is a hidden address ($_host),"
+	log "  which is not reachable over the clearnet edge. The Tor/I2P checks below cover it."
+	_fe=""
+	_host=""
+fi
 if [ -n "$_host" ]; then
 	_fe=$(_code "https://${_host}${PROBE_PATH}" 45 -k --resolve "${_host}:443:127.0.0.1")
 	# BunkerWeb rate-limits (2 r/s); a 429 here is our own probing, not a fault.

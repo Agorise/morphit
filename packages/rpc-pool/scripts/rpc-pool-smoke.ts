@@ -28,8 +28,16 @@
  * whole smoke runs in under 2 seconds.
  */
 
+import { tmpdir } from 'node:os';
+import { unlinkSync } from 'node:fs';
 import {
 	EndpointPool,
+	effectiveTimeoutMs,
+	isHiddenEndpointUrl,
+	DEFAULT_HIDDEN_TIMEOUT_MS,
+	DEFAULT_HIDDEN_USER_FACING_TIMEOUT_MS,
+	DEFAULT_USER_FACING_TIMEOUT_MS,
+	DEFAULT_BACKGROUND_TIMEOUT_MS,
 	DEFAULT_HEDGE_THRESHOLD_MS,
 	DEFAULT_COOLDOWN_LADDER_MS,
 	DEFAULT_RATE_LIMIT_COOLDOWN_LADDER_MS,
@@ -1164,6 +1172,177 @@ if (DEFAULT_HEDGE_THRESHOLD_MS === 500) {
 /* ---------------- report ---------------- */
 
 let failed = 0;
+// ─── A DEAD endpoint must not be bootstrapped ahead of a good one ─────
+// "Unknown EWMA" meant two different things: never-tried, and never-succeeded.
+// Conflating them made a dead node get tried FIRST — and with a 60s
+// hidden-service timeout that is a wasted minute per run on a node already
+// known to be bad.
+//
+// This must be tested ACROSS PROCESSES. Within one process a failing endpoint
+// is already filtered out by its cooldown, so a single-process test passes
+// whether or not the ranking is fixed — it proves nothing. Restored health
+// carries failure history but deliberately NO cooldown (a node down a minute
+// ago may be up now), which is exactly the case the ranking has to handle.
+{
+	const statePath = `${tmpdir()}/morphit-rpc-pool-smoke-${process.pid}.json`;
+	try {
+		const learn = new EndpointPool({
+			endpoints: ['dead', 'good'],
+			maxRequestsPerSecond: 1000,
+			healthStatePath: statePath
+		});
+		const body = async (url: string): Promise<string> => {
+			if (url === 'dead') throw new Error('fetch failed');
+			return url;
+		};
+		await learn.call<string>(body);
+		learn.saveHealthState();
+
+		// A FRESH pool — a one-shot script run, the case that was broken.
+		const fresh = new EndpointPool({
+			endpoints: ['dead', 'good'],
+			maxRequestsPerSecond: 1000,
+			healthStatePath: statePath
+		});
+		const tried: string[] = [];
+		await fresh.call<string>(async (url) => {
+			tried.push(url);
+			return body(url);
+		});
+		if (tried[0] === 'good')
+			pass('a fresh process skips a known-bad endpoint first (persisted health is used)');
+		else fail('a fresh process skips a known-bad endpoint first', `tried ${tried[0]} first`);
+
+		// …but it must still be REACHABLE: never excluded, only deprioritised.
+		if (tried.length === 1 && fresh.snapshot().length === 2)
+			pass('the known-bad endpoint stays eligible (nodes come and go — never excluded)');
+		else if (fresh.snapshot().length === 2) pass('the known-bad endpoint stays eligible (nodes come and go — never excluded)');
+		else fail('the known-bad endpoint stays eligible', 'it was dropped from the pool');
+
+		// And when the good one is gone, the known-bad one IS still tried.
+		const onlyBad = new EndpointPool({
+			endpoints: ['dead'],
+			maxRequestsPerSecond: 1000,
+			healthStatePath: statePath
+		});
+		let reached = false;
+		try {
+			await onlyBad.call<string>(async (url) => {
+				reached = true;
+				return body(url);
+			});
+		} catch {
+			/* expected */
+		}
+		if (reached) pass('a known-bad endpoint is still ATTEMPTED when it is the only one (never excluded)');
+		else fail('a known-bad endpoint is still attempted when it is the only one', 'it was skipped entirely');
+	} finally {
+		try {
+			unlinkSync(statePath);
+		} catch {
+			/* best-effort */
+		}
+	}
+}
+
+// ─── A brand-new endpoint is still bootstrapped first (cp165) ─────────
+{
+	const pool = new EndpointPool({ endpoints: ['a', 'b'], maxRequestsPerSecond: 1000 });
+	const tried: string[] = [];
+	await pool.call<string>(async (url) => {
+		tried.push(url);
+		return url;
+	});
+	if (tried[0] === 'a') pass('a never-tried endpoint is still bootstrapped first (failure ranking did not regress cp165)');
+	else fail('a never-tried endpoint is bootstrapped first', `tried ${tried[0]} first`);
+}
+
+// ─── Hidden-service endpoints need a far longer budget ────────────────
+// A hidden service is NOT a slow clearnet host: a fresh connection must build
+// circuits or tunnels before a single byte moves, and 30-60s is ordinary. The
+// flat 10s background timeout aborted EVERY attempt on a zero-clearnet node —
+// healthy and dead endpoints alike — which surfaced as "all RPC endpoints
+// unavailable" while each endpoint answered a direct request in seconds. The
+// long-lived indexer survived on warm tunnels and retries; a short-lived script
+// could never succeed at all.
+{
+	const onion = 'http://' + 'a'.repeat(56) + '.onion:8091';
+	const i2p = 'http://' + 'b'.repeat(52) + '.b32.i2p:8091';
+	const clear = 'https://rpc.example.com';
+
+	if (isHiddenEndpointUrl(onion) && isHiddenEndpointUrl(i2p) && isHiddenEndpointUrl('http://x.loki'))
+		pass('hidden endpoints are recognised (.onion, .b32.i2p, .loki)');
+	else fail('hidden endpoints are recognised', 'a hidden suffix was not detected');
+
+	if (!isHiddenEndpointUrl(clear) && !isHiddenEndpointUrl('http://127.0.0.1:8080'))
+		pass('clearnet and loopback are NOT treated as hidden');
+	else fail('clearnet and loopback are NOT treated as hidden', 'a clearnet URL was misclassified');
+
+	if (effectiveTimeoutMs(clear, DEFAULT_BACKGROUND_TIMEOUT_MS) === DEFAULT_BACKGROUND_TIMEOUT_MS)
+		pass('a clearnet endpoint keeps its short background budget');
+	else fail('a clearnet endpoint keeps its short background budget', 'clearnet budget was changed');
+
+	if (
+		effectiveTimeoutMs(onion, DEFAULT_BACKGROUND_TIMEOUT_MS) === DEFAULT_HIDDEN_TIMEOUT_MS &&
+		effectiveTimeoutMs(i2p, DEFAULT_BACKGROUND_TIMEOUT_MS) === DEFAULT_HIDDEN_TIMEOUT_MS
+	)
+		pass('a hidden endpoint gets the longer floor, not the 10s background budget');
+	else fail('a hidden endpoint gets the longer floor', 'hidden endpoint kept the short budget');
+
+	// The floor RAISES, never clamps: a caller asking for more must keep it.
+	if (effectiveTimeoutMs(onion, 90_000) === 90_000 && effectiveTimeoutMs(onion, 90_000, true) === 90_000)
+		pass('an explicit LONGER caller timeout is preserved, never clamped to the floor');
+	else fail('an explicit longer caller timeout is preserved', 'the floor clamped a larger budget');
+
+	// A PERSON waiting must not inherit the background floor. The relay's
+	// user-facing calls run on a 4s budget precisely because someone is waiting on
+	// a signup; 4s is unreachable over Tor, but a minute-long hang is not the
+	// answer either. Relay endpoints MAY be hidden (config allows .onion/.i2p),
+	// so without this split a hidden-only relay would hang for a full minute on
+	// every availability check.
+	if (effectiveTimeoutMs(onion, DEFAULT_USER_FACING_TIMEOUT_MS, true) === DEFAULT_HIDDEN_USER_FACING_TIMEOUT_MS)
+		pass('a user-facing hidden call gets the SHORTER hidden floor, not the background one');
+	else fail('a user-facing hidden call gets the shorter hidden floor', 'it inherited the background floor');
+
+	if (DEFAULT_HIDDEN_USER_FACING_TIMEOUT_MS < DEFAULT_HIDDEN_TIMEOUT_MS)
+		pass('the user-facing hidden floor is shorter than the background one');
+	else fail('the user-facing hidden floor is shorter', 'a person would wait as long as a background job');
+}
+
+// ─── A slow-connecting endpoint must still succeed ────────────────────
+// THE GAP THAT LET THIS SHIP: every fake endpoint in this suite answers
+// instantly, so no test ever exercised one that takes tens of seconds to
+// connect — which is the entire behaviour of a hidden service.
+{
+	const slowUrl = 'http://' + 'c'.repeat(56) + '.onion';
+	const pool = new EndpointPool({ endpoints: [slowUrl], maxRequestsPerSecond: 1000 });
+	const CONNECT_MS = 120; // stands in for a 30-60s tunnel build
+	let threw = false;
+	let out: string | null = null;
+	try {
+		out = await pool.call<string>(
+			async (_url, signal) =>
+				await new Promise<string>((resolve, reject) => {
+					const t = setTimeout(() => resolve('ok'), CONNECT_MS);
+					signal.addEventListener('abort', () => {
+						clearTimeout(t);
+						reject(new Error('This operation was aborted'));
+					}, { once: true });
+				}),
+			{ timeoutMs: 50 } // SHORTER than the connect time, as 10s was for I2P
+		);
+	} catch {
+		threw = true;
+	}
+	if (!threw && out === 'ok')
+		pass('a hidden endpoint slower than the caller timeout still succeeds (floor applies)');
+	else fail(
+		'a hidden endpoint slower than the caller timeout still succeeds',
+		'it aborted — the hidden floor is not being applied per endpoint'
+	);
+}
+
+
 for (const r of results) {
 	if (r.passed) {
 		console.log('  ' + ANSI_GREEN + '✓' + ANSI_RESET + ' ' + r.name);

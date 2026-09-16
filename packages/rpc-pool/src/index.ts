@@ -44,6 +44,8 @@
  */
 
 /** Per-endpoint health + latency state. */
+import { existsSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
+
 export interface EndpointState {
 	readonly url: string;
 	/** Exponential weighted moving average of successful-call latency
@@ -169,6 +171,63 @@ export const DEFAULT_USER_FACING_TIMEOUT_MS = 4_000;
  *  user-perceived latency budget. */
 export const DEFAULT_BACKGROUND_TIMEOUT_MS = 10_000;
 
+/** Per-call timeout for an endpoint reached over Tor/I2P/Lokinet.
+ *
+ *  A hidden service is NOT a slow clearnet host — a fresh connection must build
+ *  circuits or tunnels before a single byte moves, and 30-60s is ordinary. The
+ *  flat 10s background timeout therefore aborted EVERY attempt on a zero-clearnet
+ *  node, on healthy and dead endpoints alike, which read as "all RPC endpoints
+ *  unavailable" while each endpoint answered a direct request in seconds. The
+ *  long-lived indexer service survived on warm tunnels and continuous retries;
+ *  any short-lived process could never succeed at all.
+ *
+ *  Applied PER ENDPOINT, not per call: a pool may hold both kinds, and a
+ *  clearnet endpoint must keep its short budget. */
+export const DEFAULT_HIDDEN_TIMEOUT_MS = 60_000;
+
+/** How long persisted endpoint health stays useful. Beyond this the file says
+ *  nothing about which node is fastest NOW, so it is ignored rather than acted
+ *  on — nodes come and go constantly. */
+export const HEALTH_STATE_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+
+/** Debounce for automatic health persistence — a busy poller must not write on
+ *  every single call. */
+export const HEALTH_STATE_SAVE_INTERVAL_MS = 30_000;
+
+/** Is this URL reached over a hidden network? Deliberately a local suffix test:
+ *  the pool has no dependency on the transport package and should not grow one
+ *  for a hostname check. */
+export function isHiddenEndpointUrl(url: string): boolean {
+	try {
+		return /\.(onion|i2p|loki)$/i.test(new URL(url).hostname);
+	} catch {
+		return false;
+	}
+}
+
+/** Floor for a USER-FACING call over a hidden network.
+ *
+ *  A human is waiting, so the background floor is far too long — but the 4s
+ *  clearnet budget is unreachable over Tor/I2P, so a hidden-only relay would
+ *  fail every availability check during signup. This is the compromise: long
+ *  enough for a tunnel to build, short enough that a stuck call still gives up
+ *  while the person is plausibly still there. */
+export const DEFAULT_HIDDEN_USER_FACING_TIMEOUT_MS = 25_000;
+
+/** The budget this endpoint actually needs. Never SHORTENS an explicit caller
+ *  timeout — only raises the floor for a hidden endpoint that cannot meet it.
+ *
+ *  `userFacing` picks WHICH floor: a background job may wait a full minute, a
+ *  person may not. Without this split the relay's user-facing calls — which
+ *  deliberately run on a 4s budget — would have inherited the 60s background
+ *  floor, turning a snappy failure into a minute-long hang on a hidden-only
+ *  relay. */
+export function effectiveTimeoutMs(url: string, timeoutMs: number, userFacing = false): number {
+	if (!isHiddenEndpointUrl(url)) return timeoutMs;
+	const floor = userFacing ? DEFAULT_HIDDEN_USER_FACING_TIMEOUT_MS : DEFAULT_HIDDEN_TIMEOUT_MS;
+	return Math.max(timeoutMs, floor);
+}
+
 /** Heuristic — is this error a transport failure (worth rotating
  *  off + cooling down) or an application-level error from the
  *  upstream RPC (pass through to caller, keep endpoint warm)?
@@ -230,6 +289,25 @@ export function isRateLimitError(err: unknown): boolean {
 /** Options for constructing an EndpointPool. */
 export interface EndpointPoolOptions {
 	readonly endpoints: readonly string[];
+	/** Where to persist per-endpoint health between processes.
+	 *
+	 *  Health is otherwise IN-MEMORY ONLY, which is fine for the long-lived
+	 *  indexer — it learns within seconds which nodes are fast and which are
+	 *  down. But every SHORT-LIVED process (the mirror job, fast-sync, any
+	 *  one-shot script) starts blind and tries endpoints in CONFIG ORDER,
+	 *  paying a full timeout on whatever happens to be dead or slow first.
+	 *  With ~20 endpoints, and a 60s floor on hidden ones, that is a minute
+	 *  wasted per run on a node the long-lived process already knew was down.
+	 *
+	 *  The whole point of running many endpoints is to always use the best one
+	 *  available; requiring an operator to hand-prune a node that blipped is
+	 *  exactly the manual work this pool exists to remove. Persisting the
+	 *  health it already tracks lets a one-shot run start from knowledge
+	 *  instead of from nothing.
+	 *
+	 *  Fail-open: unreadable or corrupt state is ignored and the pool behaves
+	 *  exactly as it does today. */
+	readonly healthStatePath?: string;
 	/** Override the default cooldown ladder.  Length determines max
 	 *  ladder depth; consecutive failures beyond the length stay at
 	 *  the deepest cooldown. */
@@ -268,6 +346,7 @@ export interface CallOptions {
 	/** Per-call timeout.  Defaults to DEFAULT_USER_FACING_TIMEOUT_MS
 	 *  when `hedge: true`, DEFAULT_BACKGROUND_TIMEOUT_MS otherwise. */
 	readonly timeoutMs?: number;
+
 	/** When true, hedge against the second-best endpoint if the
 	 *  primary's EWMA is above the pool's degradation threshold.
 	 *  Background callers should leave this false. */
@@ -295,7 +374,67 @@ export interface CallOptions {
  */
 export class EndpointPool {
 	private readonly endpoints: EndpointState[];
+	private readonly healthStatePath: string | undefined;
+	private lastHealthSaveAt = 0;
 	private readonly cooldownLadder: readonly number[];
+
+	/**
+	 * Seed endpoint health from a previous process, so a one-shot run starts
+	 * from what is already known instead of trying endpoints in config order.
+	 *
+	 * Only LATENCY and FAILURE history are restored — never a cooldown, because
+	 * a node that was down five minutes ago may be up now and must get a fair
+	 * chance immediately. Nodes come and go constantly; this biases ORDER, it
+	 * does not exclude anyone.
+	 *
+	 * Stale state is ignored entirely: knowledge older than the freshness window
+	 * says nothing useful about which node is fastest right now.
+	 */
+	private loadHealthState(): void {
+		if (this.healthStatePath === undefined) return;
+		try {
+			if (!existsSync(this.healthStatePath)) return;
+			const raw: unknown = JSON.parse(readFileSync(this.healthStatePath, 'utf8'));
+			if (raw === null || typeof raw !== 'object') return;
+			const rec = raw as { savedAt?: unknown; endpoints?: unknown };
+			const savedAt = typeof rec.savedAt === 'number' ? rec.savedAt : 0;
+			if (Date.now() - savedAt > HEALTH_STATE_MAX_AGE_MS) return;
+			const eps = rec.endpoints;
+			if (eps === null || typeof eps !== 'object') return;
+			for (const ep of this.endpoints) {
+				const v = (eps as Record<string, unknown>)[ep.url];
+				if (v === null || typeof v !== 'object') continue;
+				const e = v as { ewmaLatencyMs?: unknown; consecutiveFailures?: unknown };
+				if (typeof e.ewmaLatencyMs === 'number' && Number.isFinite(e.ewmaLatencyMs)) {
+					ep.ewmaLatencyMs = e.ewmaLatencyMs;
+				}
+				if (typeof e.consecutiveFailures === 'number' && Number.isFinite(e.consecutiveFailures)) {
+					ep.consecutiveFailures = Math.max(0, Math.trunc(e.consecutiveFailures));
+				}
+			}
+		} catch {
+			/* fail-open: unreadable state must never break the pool */
+		}
+	}
+
+	/** Write current health back. Best-effort and atomic-ish; never throws. */
+	saveHealthState(): void {
+		if (this.healthStatePath === undefined) return;
+		try {
+			const out: Record<string, { ewmaLatencyMs: number | null; consecutiveFailures: number }> = {};
+			for (const ep of this.endpoints) {
+				out[ep.url] = {
+					ewmaLatencyMs: ep.ewmaLatencyMs,
+					consecutiveFailures: ep.consecutiveFailures
+				};
+			}
+			const tmp = `${this.healthStatePath}.tmp`;
+			writeFileSync(tmp, JSON.stringify({ savedAt: Date.now(), endpoints: out }));
+			renameSync(tmp, this.healthStatePath);
+		} catch {
+			/* best-effort */
+		}
+	}
 	private readonly rateLimitLadder: readonly number[];
 	private readonly jitterFraction: number;
 	private readonly random: () => number;
@@ -316,6 +455,8 @@ export class EndpointPool {
 			lastSuccessAt: 0,
 			nextAllowedAt: 0
 		}));
+		this.healthStatePath = options.healthStatePath;
+		this.loadHealthState();
 		this.cooldownLadder = options.cooldownLadderMs ?? DEFAULT_COOLDOWN_LADDER_MS;
 		if (this.cooldownLadder.length === 0) {
 			throw new Error('EndpointPool: cooldown ladder must be non-empty');
@@ -458,7 +599,7 @@ export class EndpointPool {
 		for (let i = 0; i < lastDitchOrder.length; i++) {
 			const ep = lastDitchOrder[i]!;
 			try {
-				const result = await this.attemptSingle(ep, fn, timeoutMs);
+				const result = await this.attemptSingle(ep, fn, timeoutMs, hedge);
 				return result;
 			} catch (err) {
 				if (isTransportError(err)) {
@@ -493,7 +634,7 @@ export class EndpointPool {
 			primaryEwma > this.hedgeThresholdMs;
 
 		if (!shouldHedge) {
-			return this.attemptSingle(primary, fn, timeoutMs);
+			return this.attemptSingle(primary, fn, timeoutMs, true);
 		}
 
 		// Hedged path: fire primary, schedule hedge after stagger,
@@ -506,7 +647,14 @@ export class EndpointPool {
 		const primaryCtl = new AbortController();
 		const hedgeCtl = new AbortController();
 		const timeoutCtl = new AbortController();
-		const timeoutHandle = setTimeout(() => timeoutCtl.abort(), timeoutMs);
+		// Hedged path: the budget must cover BOTH endpoints in play, so take the
+		// larger floor. Hedging a hidden endpoint against a clearnet one must not
+		// inherit the clearnet budget and abort the hidden leg before it connects.
+		const hedgeTimeoutMs = Math.max(
+			effectiveTimeoutMs(primary.url, timeoutMs, true),
+			hedgeAgainst === undefined ? 0 : effectiveTimeoutMs(hedgeAgainst.url, timeoutMs, true)
+		);
+		const timeoutHandle = setTimeout(() => timeoutCtl.abort(), hedgeTimeoutMs);
 
 		const linkSignal = (parent: AbortSignal, child: AbortController) => {
 			if (parent.aborted) {
@@ -625,10 +773,11 @@ export class EndpointPool {
 	private async attemptSingle<T>(
 		ep: EndpointState,
 		fn: (url: string, signal: AbortSignal) => Promise<T>,
-		timeoutMs: number
+		timeoutMs: number,
+		userFacing = false
 	): Promise<T> {
 		const ctl = new AbortController();
-		const handle = setTimeout(() => ctl.abort(), timeoutMs);
+		const handle = setTimeout(() => ctl.abort(), effectiveTimeoutMs(ep.url, timeoutMs, userFacing));
 		try {
 			await this.pace(ep, ctl.signal);
 			// Start the latency clock AFTER pacing — see pace()'s note on EWMA.
@@ -676,21 +825,53 @@ export class EndpointPool {
 	 *  unknowns first is a strict improvement: each endpoint gets
 	 *  one measurement, then fastest-EWMA-first kicks in. */
 	private sortByLatency(eps: EndpointState[]): EndpointState[] {
+		// "Unknown EWMA" means two very different things, and conflating them is
+		// what made a DEAD endpoint get tried first on every run: an endpoint that
+		// has never SUCCEEDED has a null EWMA, so the bootstrap rule treated a node
+		// that keeps failing exactly like a brand-new one. With a 60s hidden-service
+		// timeout that cost a full minute per run on a node already known to be bad.
+		//
+		// Split them by failure history. Never EXCLUDE anyone — nodes come and go
+		// constantly and one that was down a minute ago may be up now — this only
+		// decides who is asked FIRST:
+		//   1. never-tried (null EWMA, no failures) — bootstrap, unchanged (cp165)
+		//   2. known-good — fastest EWMA first
+		//   3. failing-with-no-successful-measurement — last, but still tried
+		const rank = (e: EndpointState): number =>
+			e.ewmaLatencyMs === null ? (e.consecutiveFailures > 0 ? 2 : 0) : 1;
 		return eps.sort((a, b) => {
-			// Both unknown → preserve declaration order (stable).
-			if (a.ewmaLatencyMs === null && b.ewmaLatencyMs === null) return 0;
-			// One unknown → unknown wins (bootstrap it).
-			if (a.ewmaLatencyMs === null) return -1;
-			if (b.ewmaLatencyMs === null) return 1;
+			const ra = rank(a);
+			const rb = rank(b);
+			if (ra !== rb) return ra - rb;
+			// Same rank and both unknown → preserve declaration order (stable);
+			// among failing ones, fewer recent failures first.
+			if (a.ewmaLatencyMs === null || b.ewmaLatencyMs === null) {
+				return a.consecutiveFailures - b.consecutiveFailures;
+			}
 			// Both known → fastest EWMA first.
 			return a.ewmaLatencyMs - b.ewmaLatencyMs;
 		});
+	}
+
+	/** Persist health automatically, at most once every few seconds.
+	 *
+	 *  Deliberately NOT left to callers: an earlier version required an explicit
+	 *  saveHealthState() call, which nothing made — a capability nobody can reach
+	 *  is not a feature. Debounced so a busy poller does not write on every call,
+	 *  and best-effort so a read-only filesystem changes nothing. */
+	private maybeSaveHealthState(): void {
+		if (this.healthStatePath === undefined) return;
+		const now = Date.now();
+		if (now - this.lastHealthSaveAt < HEALTH_STATE_SAVE_INTERVAL_MS) return;
+		this.lastHealthSaveAt = now;
+		this.saveHealthState();
 	}
 
 	private recordSuccess(ep: EndpointState, latencyMs: number): void {
 		ep.consecutiveFailures = 0;
 		ep.cooldownUntil = 0;
 		ep.lastSuccessAt = Date.now();
+		this.maybeSaveHealthState();
 		if (ep.ewmaLatencyMs === null) {
 			ep.ewmaLatencyMs = latencyMs;
 		} else {
@@ -700,6 +881,9 @@ export class EndpointPool {
 
 	private recordFailure(ep: EndpointState, rateLimited = false): void {
 		ep.consecutiveFailures++;
+		// Persist failures too, not just successes — knowing which node is DOWN is
+		// exactly what saves a one-shot run from paying a full timeout on it.
+		this.maybeSaveHealthState();
 		// A 429 parks the endpoint on the longer rate-limit ladder; any
 		// other transport failure uses the generic ladder.  Both are
 		// indexed by the shared consecutive-failure count.

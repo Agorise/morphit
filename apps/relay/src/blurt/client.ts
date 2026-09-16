@@ -21,6 +21,7 @@
  * only need to verify one rotation implementation.
  */
 
+import { hiddenHostNetworkOf } from '@morphit/hidden-transport';
 import { Client, PrivateKey } from '@beblurt/dblurt';
 import { EndpointPool } from '@morphit/rpc-pool';
 import { VERSION } from '../api/health.ts';
@@ -256,7 +257,11 @@ export class BlurtClient {
 			);
 		}
 		this.pool = new EndpointPool({
-			endpoints: [...endpointUrls]
+			endpoints: [...endpointUrls],
+			// Same shared health file as the indexer: both learn which of the
+			// configured nodes are fast and which are down, and one-shot processes
+			// start from that knowledge instead of trying endpoints in config order.
+			healthStatePath: process.env.MORPHIT_RPC_HEALTH_STATE ?? '/var/lib/morphit/rpc-health.json'
 		});
 		this.fallbackAccountCreationFeeBlurt = fallbackAccountCreationFeeBlurt;
 	}
@@ -264,6 +269,21 @@ export class BlurtClient {
 	/** Expose pool snapshot for /v1/health diagnostics. */
 	endpointSnapshot(): ReturnType<EndpointPool['snapshot']> {
 		return this.pool.snapshot();
+	}
+
+	/**
+	 * Merge nodes from the on-chain RPC directory into the live pool.
+	 *
+	 * The indexer has always done this; the relay did not — so the indexer ran on
+	 * the full published node list while the relay stayed on the handful baked
+	 * into its config. That is backwards: the RELAY is the component that
+	 * BROADCASTS (signups, transfers), so when clearnet nodes have an outage it
+	 * is the one that most needs the hidden-service nodes to fall back on.
+	 *
+	 * Returns the URLs actually added (already-known ones are ignored).
+	 */
+	mergeRpcEndpoints(urls: readonly string[]): string[] {
+		return this.pool.mergeEndpoints(urls);
 	}
 
 	/**
@@ -728,7 +748,17 @@ const clientCache = new Map<string, Client>();
 function clientFor(url: string): Client {
 	let c = clientCache.get(url);
 	if (c === undefined) {
-		c = new Client(url, { timeout: 10_000, userAgent: morphitUserAgent(VERSION) });
+		// Transport-aware, exactly as the indexer's client is. The relay MAY be
+		// configured with .onion/.i2p RPC endpoints (config explicitly allows them),
+		// and a fresh hidden connection must build circuits before any data moves —
+		// 30-60s is ordinary. A flat 10s aborts every such call. This was the FOURTH
+		// layer of the same mistake found in one session; the others were the
+		// indexer's client, the RPC pool, and the standalone scripts' missing
+		// dispatcher. When one layer is fixed, check the next one down.
+		const hiddenNet = hiddenHostNetworkOf(new URL(url).hostname);
+		const timeoutMs =
+			hiddenNet === null ? 10_000 : Number(process.env.MORPHIT_HIDDEN_RPC_TIMEOUT_MS ?? 60_000);
+		c = new Client(url, { timeout: timeoutMs, userAgent: morphitUserAgent(VERSION) });
 		clientCache.set(url, c);
 	}
 	return c;
