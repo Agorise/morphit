@@ -21,6 +21,7 @@
  */
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync, statSync } from 'node:fs';
+import { inspectI2pKeyFile } from '../lib/i2pDestination.ts';
 import { defaultRepoRoot } from '../lib/repoRoot.ts';
 import { resolve, dirname, join } from 'node:path';
 import { askPassword, askYesNo } from '../init/prompt.ts';
@@ -34,6 +35,32 @@ export interface ImportAltnetKeyCtx {
 }
 
 const VALID_NETWORKS: ReadonlySet<AltNetwork> = new Set(['tor', 'lokinet', 'i2p']);
+
+
+/** The `.b32.i2p` address this instance currently advertises, if any.
+ *  Read from the address KEY — never by scanning for the first b32 in the file,
+ *  which on a box that also lists other nodes' hidden addresses would pick up a
+ *  stranger's and compare the key against the wrong thing. */
+function readConfiguredI2pAddress(): string | null {
+	const repo = defaultRepoRoot();
+	for (const key of ['MORPHIT_INSTANCE_I2P_B32_ADDRESS', 'MORPHIT_INSTANCE_I2P_ADDRESS']) {
+		for (const file of [join(repo, 'morphit.config.env'), join(repo, 'morphit.env')]) {
+			try {
+				if (!existsSync(file)) continue;
+				const m = new RegExp(`^\\s*(?:export\\s+)?${key}\\s*=\\s*(.+)$`, 'm').exec(
+					readFileSync(file, 'utf8')
+				);
+				if (m) {
+					const v = m[1]!.trim().replace(/^["']|["']$/g, '');
+					if (v.endsWith('.b32.i2p')) return v;
+				}
+			} catch {
+				/* unreadable config must never block an import */
+			}
+		}
+	}
+	return null;
+}
 
 export async function runImportAltnetKey(ctx: ImportAltnetKeyCtx): Promise<number> {
 	const network = ctx.flags.network;
@@ -80,6 +107,71 @@ export async function runImportAltnetKey(ctx: ImportAltnetKeyCtx): Promise<numbe
 			`Note: Tor v3 hs_ed25519_secret_key is normally 96 bytes; this file is\n` +
 				`${plaintext.length} bytes.  Continuing — this is a hint, not an error.\n`
 		);
+	}
+
+	// For I2P, do better than a length hint: DERIVE the address this key hosts
+	// and show it. A length check cannot tell a correct key from a plausible
+	// wrong one, and importing the wrong key surfaces much later as "peers
+	// cannot reach this box" — the same shape of failure as advertising an
+	// address your router does not host. The derived address is the one fact
+	// that settles it, and the operator can compare it to what they registered.
+	if (net === 'i2p') {
+		const insp = inspectI2pKeyFile(plaintext);
+		if (insp.address === null) {
+			console.log(`This does not look like an I2P private-key file: ${insp.problem ?? 'unknown'}`);
+			const goOn = await askYesNo('Import it anyway?', false);
+			if (!goOn) {
+				console.log('Nothing was written.');
+				return 1;
+			}
+		} else if (insp.destinationOnly) {
+			// This is the address, not the key. Importing it cannot work: i2pd
+			// cannot prove ownership, so the address would silently never serve —
+			// and the operator would only find out when peers could not reach them.
+			console.log('');
+			console.log(`  ✗ That is your PUBLIC address, not a private key.`);
+			console.log(`    It decodes to ${insp.destinationBytes} bytes — a destination and nothing more.`);
+			console.log(`    Address:  ${insp.address}`);
+			console.log('');
+			console.log(`    i2pd cannot host with this: without the private half it cannot prove`);
+			console.log(`    ownership, so ${insp.address.slice(0, 16)}… would never serve.`);
+			console.log('');
+			console.log(`    Look for the PRIVATE key file from whatever generated the address —`);
+			console.log(`    commonly eepPriv.dat or <name>.dat. Morphit's own installer writes`);
+			console.log(`    one at 679 bytes (908 base64 characters). On a configured box it is`);
+			console.log(`    what the "keys =" line in i2pd's tunnels.conf points at.`);
+			console.log('');
+			console.log('Nothing was written.');
+			return 1;
+		} else {
+			console.log(
+				`  ✓ Valid I2P private key (destination ${insp.destinationBytes} bytes` +
+					`${insp.wasBase64 ? ', decoded from base64' : ''}).`
+			);
+			console.log(`    This key hosts:  ${insp.address}`);
+			const configured = readConfiguredI2pAddress();
+			if (configured !== null && configured !== '') {
+				if (configured === insp.address) {
+					console.log(`    Matches the address in your config. This is the right key.`);
+				} else {
+					console.log('');
+					console.log(`    ⚠ Your config advertises a DIFFERENT address:`);
+					console.log(`        config: ${configured}`);
+					console.log(`        key:    ${insp.address}`);
+					console.log(`      Peers use the ADVERTISED one, so these must agree. Either this is`);
+					console.log(`      the wrong key file, or your config needs updating to the address`);
+					console.log(`      above (then re-publish your registration).`);
+					const goOn = await askYesNo('Import this key anyway?', false);
+					if (!goOn) {
+						console.log('Nothing was written.');
+						return 1;
+					}
+				}
+			} else {
+				console.log(`    Set MORPHIT_INSTANCE_I2P_B32_ADDRESS to this address so peers learn it.`);
+			}
+			console.log('');
+		}
 	}
 
 	const repoRoot = ctx.flags.out ? resolve(ctx.flags.out) : defaultRepoRoot();

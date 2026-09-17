@@ -287,6 +287,31 @@ _onion="${MORPHIT_SEED_ONION:-}"
 # "✓ Tor: the .onion serves the release" about a node that isn't ours.
 [ -n "$_onion" ] || _onion=$(grep -hoE '[a-z2-7]{56}\.onion' "$CFG" "$ALTCFG" /var/lib/tor/*/hostname 2>/dev/null | head -1) || true
 _i2p="${MORPHIT_SEED_I2P:-}"
+# Read the ADDRESS KEY, not the first b32 anywhere in the file.
+#
+# A bare pattern grep with `head -1` takes whichever b32 appears first, which is
+# only this instance's address if nothing else in the file has one. Hidden RPC
+# endpoints, peer hints or a vanity-name comment can all carry someone else's
+# b32 — and then the config/router check compares a STRANGER's address against
+# the router's and cries wolf. That is exactly how the i2pd console scrape got
+# this wrong, and the same mistake one file over.
+#
+# Key first (modern, then legacy), and only fall back to a bare pattern when no
+# key is set at all.
+if [ -z "$_i2p" ]; then
+	for _k in MORPHIT_INSTANCE_I2P_B32_ADDRESS MORPHIT_INSTANCE_I2P_ADDRESS; do
+		for _f in "$CFG" "$ALTCFG"; do
+			[ -r "$_f" ] || continue
+			_v=$(sed -n "s#^[[:space:]]*\(export *\)\{0,1\}${_k}[[:space:]]*=[[:space:]]*##p" "$_f" 2>/dev/null | tail -1) || true
+			_v=$(printf '%s' "${_v:-}" | sed -e 's#^"\(.*\)"$#\1#' -e "s#^'\(.*\)'\$#\1#" -e 's#[[:space:]]*$##')
+			case "${_v:-}" in
+				*.b32.i2p) _i2p="$_v"; break ;;
+			esac
+		done
+		[ -n "$_i2p" ] && break
+	done
+fi
+# Last resort only: no key set anywhere.
 [ -n "$_i2p" ] || _i2p=$(grep -hoE '[a-z2-7]{52}\.b32\.i2p' "$CFG" "$ALTCFG" 2>/dev/null | head -1) || true
 # ── Does the config match what the ROUTER actually hosts? ────────────
 # morphitlat advertised a .b32.i2p its own i2pd did not host: the tunnel key had

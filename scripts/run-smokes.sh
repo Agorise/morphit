@@ -662,6 +662,7 @@ SMOKES=(
 	"apps/ops-cli:emit-dedup-execution-smoke"
 	"apps/ops-cli:seed-probe-execution-smoke"
 	"apps/ops-cli:canary-prompt-execution-smoke"
+	"apps/ops-cli:alt-address-execution-smoke"
 	"apps/ops-cli:fast-sync-execution-smoke"
 	"apps/matrix-bot:dm-room-persistence-smoke"
 	"apps/indexer:snapshot-oplog-verify-smoke"

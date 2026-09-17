@@ -79,6 +79,31 @@ export async function runRegister(ctx: RegisterCtx): Promise<number> {
 	if (contactUrl !== null) {
 		console.log(`  Contact URL:  ${sanitizeForTerm(contactUrl)}`);
 	}
+	// SHOW the alt addresses this op will publish, before it is signed.
+	//
+	// They were carried into the payload but never displayed, so an operator
+	// confirmed a PERMANENT on-chain op without seeing which addresses it
+	// announced. That is precisely how an instance came to publish a stale
+	// .b32.i2p its router no longer hosted: every peer's I2P fetch to it failed
+	// for an unknown period, and the one moment someone could have caught it —
+	// the confirmation prompt — showed them nothing.
+	//
+	// Peers reach you at whatever this op says, so it is the single most
+	// important thing on this screen after the account.
+	const altShown: [string, string | null | undefined][] = [
+		['Tor', altAddresses.tor],
+		['I2P (b32)', altAddresses.i2p_b32],
+		['I2P (name)', altAddresses.i2p_name],
+		['Lokinet', altAddresses.lokinet],
+		['ENS', altAddresses.ens]
+	];
+	const altPresent = altShown.filter(([, v]) => v !== null && v !== undefined && v !== '');
+	if (altPresent.length > 0) {
+		console.log('  Alt addresses (peers will use these — check them):');
+		for (const [label, value] of altPresent) {
+			console.log(`    ${label.padEnd(11)} ${sanitizeForTerm(String(value))}`);
+		}
+	}
 	// The tag we register MUST be the same tag the relay attributes
 	// earnings to — MORPHIT_INSTANCE_OPERATOR_TAG, set by the wizard.
 	// Registering anything else would mean your on-chain identity and
