@@ -224,13 +224,21 @@ case "$_host" in
 		_fe="skip-hidden"
 		;;
 esac
+# Use a SEPARATE flag, not an emptied _host.
+#
+# Clearing _host to suppress the clearnet probe also tripped the pre-existing
+# "no public origin found" branch, so a hidden-only box printed BOTH skip
+# messages — the second telling a correctly-configured operator to set
+# MORPHIT_INSTANCE_ORIGIN, which would be wrong for them. Overloading one
+# variable as both a value and a signal is what caused it.
+_fe_skip_hidden=0
 if [ "$_fe" = "skip-hidden" ]; then
 	log "• Frontend check skipped: this instance's origin is a hidden address ($_host),"
 	log "  which is not reachable over the clearnet edge. The Tor/I2P checks below cover it."
 	_fe=""
-	_host=""
+	_fe_skip_hidden=1
 fi
-if [ -n "$_host" ]; then
+if [ -n "$_host" ] && [ "$_fe_skip_hidden" = "0" ]; then
 	_fe=$(_code "https://${_host}${PROBE_PATH}" 45 -k --resolve "${_host}:443:127.0.0.1")
 	# BunkerWeb rate-limits (2 r/s); a 429 here is our own probing, not a fault.
 	if [ "$_fe" = "429" ]; then
@@ -246,6 +254,8 @@ if [ "$_gw" != "200" ]; then
 	log "  Content is pinned but unreachable — this box is NOT a usable seeder."
 elif [ "$_fe" = "200" ]; then
 	log "✓ local gateway and the frontend both serve the release (clearnet path OK, host from ${_hostsrc})."
+elif [ "$_fe_skip_hidden" = "1" ]; then
+	: # already explained above — a hidden origin has no clearnet edge to probe
 elif [ -z "$_fe" ]; then
 	log "• Frontend check skipped: no public origin found (looked in MORPHIT_SEED_ORIGIN,"
 	log "  MORPHIT_INSTANCE_ORIGIN in $CFG, MORPHIT_INDEXER_PUBLIC_ORIGIN in /etc/morphit/indexer.env,"

@@ -75,8 +75,54 @@ case "$initsrc" in
 	*) no "init ask() does not fall back to its default" ;;
 esac
 
-# ── the source must actually consult each fact ───────────────────────
 src="$(cat "$SRC")"
+
+# ── the canary REMINDER must match the operator's actual setup ───────
+# The old text said "NOT urgent: it republishes on its own at the next
+# scheduled (weekly) refresh" unconditionally. True only where a
+# morphit-canary.timer exists. An operator signing on a separate computer has no
+# such timer, so nothing republishes — and believing that line means a canary
+# going stale past 14 days and showing visitors a FALSE tamper warning.
+case "$src" in
+	*"morphit-canary.timer"*) ok "the reminder checks whether a scheduled refresh actually exists" ;;
+	*) no "the reminder still assumes a weekly refresh every box has" ;;
+esac
+case "$src" in
+	*"This box has NO scheduled refresh"*)
+		ok "…and tells a remote signer plainly that nothing here will republish it" ;;
+	*) no "a remote signer is not told their canary will NOT self-refresh" ;;
+esac
+case "$src" in
+	*"it republishes on its own at the next scheduled"*)
+		no "the unconditional weekly-refresh claim is still present" ;;
+	*) ok "…the unconditional weekly-refresh claim is gone" ;;
+esac
+
+# ── the frontend must not be rebuilt twice per upgrade ───────────────
+# The main flow refreshes nginx.conf and rebuilds; the self-heal did it again
+# seconds later — two container restarts, two brief outages, every upgrade.
+case "$src" in
+	*"Frontend already serves the current nginx.conf"*)
+		ok "the self-heal skips when the container already has this config" ;;
+	*) no "the self-heal rebuilds unconditionally — two restarts per upgrade" ;;
+esac
+case "$src" in
+	*"/etc/nginx/conf.d/morphit.conf"*)
+		ok "…decided by asking the container what it serves, not by assuming" ;;
+	*) no "the skip is not based on the container's actual config" ;;
+esac
+
+# ── the seed script must print ONE skip message, not two ─────────────
+# Clearing _host to suppress the clearnet probe also tripped the "no public
+# origin found" branch, so a hidden-only box printed BOTH — the second telling a
+# correctly-configured operator to set MORPHIT_INSTANCE_ORIGIN.
+seedsrc="$(cat "$REPO/ops/ipfs/morphit-ipfs-seed.sh")"
+case "$seedsrc" in
+	*"_fe_skip_hidden"*) ok "the seed script uses a separate flag, not an emptied _host" ;;
+	*) no "the seed script still overloads _host as a signal" ;;
+esac
+
+# ── the source must actually consult each fact ───────────────────────
 case "$src" in
 	*"canary-seen"*) ok "source writes/reads a persistent remote-signer marker" ;;
 	*) no "source has no persistent marker — one missed refresh will nag again" ;;

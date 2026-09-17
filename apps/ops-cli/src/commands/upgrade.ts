@@ -2671,21 +2671,36 @@ async function runStepWithSpinner(
 	try {
 		// cp622: skip the reminder when we already restored it automatically above.
 		if (!canaryAutoRefreshed && existsSync(join(backupDir, 'apps', 'web', 'build', 'canary.txt'))) {
+			// Tell the operator the truth for THEIR setup.
+			//
+			// The old text said "NOT urgent: it republishes on its own at the next
+			// scheduled (weekly) refresh" unconditionally. That is true only where a
+			// morphit-canary.timer exists. An operator who signs on a SEPARATE
+			// computer has no such timer, so nothing here will republish anything —
+			// and if they believed that line and skipped their refresh, the canary
+			// would go stale past 14 days and show visitors a false tamper warning.
+			// Reassuring someone about a schedule they do not have is worse than
+			// saying nothing.
+			const haveCanaryTimer =
+				spawnSync('systemctl', ['cat', 'morphit-canary.timer'], {
+					stdio: 'ignore',
+					timeout: 10_000
+				}).status === 0;
 			info('');
 			info('\u2139 Your warrant canary needs re-signing after this upgrade.');
-			info('  Redeploying the frontend clears the signed file — this is normal, and');
-			info('  NOT urgent: it republishes on its own at the next scheduled (weekly)');
-			info('  refresh, well before the 14-day staleness window. To restore it right');
-			info('  now, use whichever matches your setup:');
+			info('  Redeploying the frontend clears the signed file — this is normal.');
+			if (haveCanaryTimer) {
+				info('  NOT urgent: this box runs a scheduled (weekly) refresh, which will');
+				info('  republish it well before the 14-day staleness window. To restore it now:');
+				info('          sudo systemctl start morphit-canary.service');
+				info('      or  sudo morphit-ops  \u2192  Harden this server  (it re-lays the canary)');
+			} else {
+				info('  This box has NO scheduled refresh, so nothing here will republish it —');
+				info('  your signing key lives on another computer. Re-sign THERE, or the canary');
+				info('  goes stale after 14 days and visitors see a false tamper warning:');
+				info('          bash ~/.morphit/update-canary.sh');
+			}
 			info('');
-			info('    \u2022 Appliance / guided install (the usual case) — re-run its refresh:');
-			info('          sudo systemctl start morphit-canary.service');
-			info('      or  sudo morphit-ops  \u2192  Harden this server  (it re-lays the canary)');
-			info('    \u2022 Signing on a SEPARATE computer (a public server whose key is kept');
-			info('      off-box) — run your refresh there:');
-			info('          bash ~/.morphit/update-canary.sh');
-			info('');
-			info('  Never set one up? Run  sudo morphit-ops  \u2192  Harden this server.');
 			info('  More detail: OPERATIONS.md \u00a736 (warrant canary).');
 		}
 	} catch {
@@ -3043,9 +3058,42 @@ export function healFrontendConfig(): void {
 		const buildDir = join(installDir, 'apps', 'web', 'build');
 		const name = findFrontendContainer(buildDir);
 		if (name !== null) {
-			// restartFrontendContainer refreshes the build-context nginx.conf from
-			// the upgraded repo and rebuilds when compose-managed (else restarts).
-			restartFrontendContainer(name, installDir);
+			// SKIP when the running container ALREADY has this config.
+			//
+			// The main upgrade flow also refreshes nginx.conf and rebuilds, so on any
+			// reasonably current orchestrator this heal rebuilt and RESTARTED the
+			// frontend a second time, seconds after the first — two restarts, two
+			// brief outages, on every upgrade forever. The rebuild is cheap thanks to
+			// layer caching, but the RESTART is not free: it is downtime on a working
+			// instance for no change.
+			//
+			// The heal still matters when the driving binary is old enough not to
+			// rebuild (which is why it exists), so decide on evidence rather than
+			// assuming either way: ask the container what config it is actually
+			// serving and compare it to the repo's. Identical → nothing to heal.
+			const repoConf = join(installDir, 'ops', 'bunkerweb', 'frontend', 'nginx.conf');
+			let alreadyCurrent = false;
+			try {
+				if (existsSync(repoConf)) {
+					const live = spawnSync(
+						'docker',
+						['exec', name, 'cat', '/etc/nginx/conf.d/morphit.conf'],
+						{ encoding: 'utf8', timeout: 20_000 }
+					);
+					if (live.status === 0 && typeof live.stdout === 'string') {
+						alreadyCurrent = live.stdout === readFileSync(repoConf, 'utf8');
+					}
+				}
+			} catch {
+				/* cannot tell → fall through and heal, as before */
+			}
+			if (alreadyCurrent) {
+				info('Frontend already serves the current nginx.conf — no rebuild needed.');
+			} else {
+				// restartFrontendContainer refreshes the build-context nginx.conf from
+				// the upgraded repo and rebuilds when compose-managed (else restarts).
+				restartFrontendContainer(name, installDir);
+			}
 		}
 	} catch {
 		/* best-effort — never fail the self-heal phase over the frontend */
