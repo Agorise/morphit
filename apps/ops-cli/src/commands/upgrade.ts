@@ -2233,7 +2233,68 @@ async function runStepWithSpinner(
 				stdio: 'ignore',
 				timeout: 10_000
 			}).status === 0;
-		const deadFooterLink = !servedCanary && !backupHadCanary && !haveCanaryUnit;
+
+		// A REMOTE (laptop-signed) operator must be remembered PERMANENTLY.
+		//
+		// The backup check alone is too fragile: it only remembers one upgrade back.
+		// An operator who signs off-box re-uploads canary.txt after each upgrade, so
+		// missing ONE refresh — because the previous upgrade errored, say — made the
+		// next one conclude the box had never had a canary and offer to set up a
+		// second, on-box one that would fight their real key. That happened, and the
+		// prompt stopped an unattended upgrade dead waiting for an answer.
+		//
+		// So: the first time a canary is seen, write a marker and never ask again.
+		const canaryMarker = '/var/lib/morphit/canary-seen';
+		if (servedCanary || backupHadCanary) {
+			try {
+				mkdirSync(dirname(canaryMarker), { recursive: true });
+				writeFileSync(canaryMarker, `seen ${new Date().toISOString()}\n`);
+			} catch {
+				/* best-effort; the checks below still work without it */
+			}
+		}
+		const everHadCanary = existsSync(canaryMarker);
+
+		// And ask the LIVE SITE, which is what the footer link actually hits. The
+		// build dir is only one way a canary can be served.
+		let liveCanary = false;
+		try {
+			// Local reader: the shared one is defined further down, out of scope here.
+			// Both config files are checked — settings live in either, depending on
+			// how the instance was installed.
+			const readCfgKey = (key: string): string => {
+				for (const f of [
+					join(installDir, 'morphit.config.env'),
+					join(installDir, 'morphit.env')
+				]) {
+					if (!existsSync(f)) continue;
+					const m = new RegExp(`^\\s*(?:export\\s+)?${key}\\s*=\\s*(.+)$`, 'm').exec(
+						readFileSync(f, 'utf8')
+					);
+					if (m) return m[1]!.trim().replace(/^["']|["']$/g, '');
+				}
+				return '';
+			};
+			const origin = readCfgKey('MORPHIT_INSTANCE_ORIGIN');
+			if (origin !== '') {
+				const host = origin.replace(/^https?:\/\//, '').replace(/[/:].*$/, '');
+				liveCanary =
+					spawnSync(
+						'sh',
+						[
+							'-c',
+							`curl -fsS -o /dev/null --max-time 15 -k --resolve ${host}:443:127.0.0.1 ` +
+								`https://${host}/canary.txt`
+						],
+						{ stdio: 'ignore', timeout: 20_000 }
+					).status === 0;
+			}
+		} catch {
+			/* a failed probe must never cause a prompt on its own */
+		}
+
+		const deadFooterLink =
+			!servedCanary && !backupHadCanary && !haveCanaryUnit && !everHadCanary && !liveCanary;
 		if (deadFooterLink && !forceYes && process.stdin.isTTY === true) {
 			info('');
 			const wantsCanary = await promptYes(
@@ -3895,7 +3956,26 @@ function pruneOldBackups(installDir: string): void {
 	}
 }
 
+/** How long to wait for an answer when stdin is NOT a terminal. Piped answers
+ *  arrive at once; a stuck pipe must not wedge an upgrade. */
+const NON_TTY_ANSWER_TIMEOUT_MS = 20_000;
+
 async function promptYes(message: string): Promise<boolean> {
+	// NEVER block forever, but DO accept piped answers.
+	//
+	// The hazard is not "stdin is not a terminal" — feeding answers through a
+	// pipe is ordinary automation and must keep working. The hazard is stdin that
+	// never delivers: an open pipe, `ssh -T`, or a systemd unit with stdin
+	// attached, where readline waits for input that can never arrive and the
+	// upgrade hangs silently after printing a question nobody sees. (With
+	// /dev/null stdin — plain cron — readline gets EOF and returns, so that case
+	// was already safe; I checked before assuming.)
+	//
+	// So: a human at a terminal gets unlimited time to answer, while a
+	// non-terminal stdin gets a bounded wait — long enough for piped input, which
+	// arrives at once, and short enough that a stuck pipe cannot wedge an
+	// upgrade. Declining on timeout leaves the box as it was; hanging leaves an
+	// upgrade half-open.
 	// Use Node's readline.  We don't `import readline from 'node:readline/promises'`
 	// at the module top to keep the cost off the --check-only path.
 	const readline = await import('node:readline/promises');
@@ -3903,7 +3983,29 @@ async function promptYes(message: string): Promise<boolean> {
 		input: process.stdin,
 		output: process.stdout
 	});
-	const answer = (await rl.question(`${message}\n[y/N]: `)).trim().toLowerCase();
+	const interactive = process.stdin.isTTY === true;
+	let answer = '';
+	try {
+		if (interactive) {
+			answer = (await rl.question(`${message}\n[y/N]: `)).trim().toLowerCase();
+		} else {
+			const ac = new AbortController();
+			const timer = setTimeout(() => ac.abort(), NON_TTY_ANSWER_TIMEOUT_MS);
+			try {
+				answer = (await rl.question(`${message}\n[y/N]: `, { signal: ac.signal }))
+					.trim()
+					.toLowerCase();
+			} finally {
+				clearTimeout(timer);
+			}
+		}
+	} catch {
+		// Aborted (or stdin closed) — decline, and say so, since nobody saw the
+		// question.
+		rl.close();
+		info('(no answer on stdin — declining. Set MORPHIT_AUTO_UPGRADE=1 to proceed unattended.)');
+		return false;
+	}
 	rl.close();
 	return answer === 'y' || answer === 'yes';
 }

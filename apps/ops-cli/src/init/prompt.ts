@@ -44,12 +44,33 @@ export function stripTerminalControlSequences(s: string): string {
 
 /** Ask a free-form string question.  Returns the trimmed response.
  *  If `defaultValue` is provided, an empty response yields the default. */
+/** How long to wait for an answer when stdin is NOT a terminal. */
+export const NON_TTY_ANSWER_TIMEOUT_MS = Number(process.env.MORPHIT_PROMPT_TIMEOUT_MS ?? 20_000);
+
 export async function ask(question: string, defaultValue?: string): Promise<string> {
+	// NEVER block forever, but DO accept piped answers. Feeding answers through a
+	// pipe is ordinary automation; the hazard is stdin that never delivers (an
+	// open pipe, `ssh -T`, a unit with stdin attached), where readline waits for
+	// input that cannot arrive. A terminal gets unlimited time; anything else gets
+	// a bounded wait, then falls back to the documented default.
 	const rl = createInterface({ input: stdin, output: stdout });
 	try {
 		const promptStr =
 			defaultValue !== undefined ? `${question} [${defaultValue}]\n> ` : `${question}\n> `;
-		const ans = await rl.question(promptStr);
+		let ans: string;
+		if (stdin.isTTY === true) {
+			ans = await rl.question(promptStr);
+		} else {
+			const ac = new AbortController();
+			const timer = setTimeout(() => ac.abort(), NON_TTY_ANSWER_TIMEOUT_MS);
+			try {
+				ans = await rl.question(promptStr, { signal: ac.signal });
+			} catch {
+				return defaultValue ?? '';
+			} finally {
+				clearTimeout(timer);
+			}
+		}
 		const trimmed = ans.trim();
 		if (trimmed === '' && defaultValue !== undefined) return defaultValue;
 		return trimmed;
