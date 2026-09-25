@@ -55,11 +55,14 @@ async function main(): Promise<void> {
 		const st = await db.query<{ chain_id: string; last_applied_block: string }>(
 			'SELECT chain_id, last_applied_block::text FROM indexer_state LIMIT 1'
 		);
-		if (st.rows.length === 0) throw new Error('indexer_state is empty — is this a synced indexer DB?');
+		if (st.rows.length === 0)
+			throw new Error('indexer_state is empty — is this a synced indexer DB?');
 		const chainId = st.rows[0]!.chain_id;
 		const lastAppliedBlock = parseInt(st.rows[0]!.last_applied_block, 10);
 
-		const sv = await db.query<{ v: number | null }>('SELECT max(version) AS v FROM schema_migrations');
+		const sv = await db.query<{ v: number | null }>(
+			'SELECT max(version) AS v FROM schema_migrations'
+		);
 		const schemaVersion = sv.rows[0]?.v ?? 0;
 
 		const pv = await db.query<{ n: string }>("SELECT current_setting('server_version_num') AS n");
@@ -99,17 +102,23 @@ async function main(): Promise<void> {
 			const chainRows =
 				obCols.rows.length === 0
 					? ''
-					: `printf '%s\\n' "COPY public.operator_blocks (${cols}) FROM stdin;"; ` +
-						`psql -X -q -v ON_ERROR_STOP=1 "$DBURL" -c "\\copy (SELECT ${cols} FROM public.operator_blocks` +
-						`${hasOrigin ? " WHERE origin <> 'local'" : ''}) TO STDOUT"; printf '%s\\n' '\\.'; `;
+					: // `&&`, never `;`: every step must succeed or the group fails
+						// (a missing or failing psql used to leave these rows out while
+						// the export exited 0 — the group's status was its last printf's).
+						` && printf '%s\\n' "COPY public.operator_blocks (${cols}) FROM stdin;"` +
+						` && psql -X -q -v ON_ERROR_STOP=1 "$DBURL" -c "\\copy (SELECT ${cols} FROM public.operator_blocks` +
+						`${hasOrigin ? " WHERE origin <> 'local'" : ''}) TO STDOUT" && printf '%s\\n' '\\.'`;
 			const dump = spawnSync(
 				'bash',
 				[
 					'-c',
 					`set -o pipefail; { pg_dump --clean --if-exists --no-owner --no-privileges ` +
-						`${exportExclusionArgs().join(' ')} "$DBURL"; ${chainRows}} | gzip -c > "${join(work, DUMP_FILENAME)}"`
+						`${exportExclusionArgs().join(' ')} "$DBURL"${chainRows}; } | gzip -c > "${join(work, DUMP_FILENAME)}"`
 				],
-				{ env: { ...process.env, DBURL: config.databaseUrl }, stdio: ['ignore', 'inherit', 'inherit'] }
+				{
+					env: { ...process.env, DBURL: config.databaseUrl },
+					stdio: ['ignore', 'inherit', 'inherit']
+				}
 			);
 			if (dump.status !== 0) throw new Error(`pg_dump failed (exit ${dump.status ?? 'signal'})`);
 

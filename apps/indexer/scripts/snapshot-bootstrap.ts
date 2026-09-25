@@ -35,7 +35,11 @@ import { latestSchemaVersion } from '../src/db/migrations.ts';
 import { BlurtClient } from '../src/blurt/client.ts';
 import { distrustRestoredPostingKeys } from '../src/indexer/postingKeyBackfill.ts';
 import { resolveTrustedSnapshotOp } from '../src/blurt/snapshotOpTrust.ts';
-import { sanitizeDumpFile, newRestrictKey, DumpRefusedError } from '../src/db/snapshotDumpSanitize.ts';
+import {
+	sanitizeDumpFile,
+	newRestrictKey,
+	DumpRefusedError
+} from '../src/db/snapshotDumpSanitize.ts';
 import { scrubRestoredLocalState, dropRoutinesNotInSchema } from '../src/db/snapshotLocalState.ts';
 import {
 	parseManifest,
@@ -74,8 +78,17 @@ function die(msg: string): never {
  *  kubo gateway, if the box runs one, is tried first. */
 function ipfsGateways(): string[] {
 	const env = process.env.MORPHIT_IPFS_GATEWAYS;
-	if (env && env.trim()) return env.split(',').map((s) => s.trim().replace(/\/+$/, '')).filter(Boolean);
-	return ['http://127.0.0.1:8080', 'https://ipfs.io', 'https://dweb.link', 'https://cloudflare-ipfs.com'];
+	if (env && env.trim())
+		return env
+			.split(',')
+			.map((s) => s.trim().replace(/\/+$/, ''))
+			.filter(Boolean);
+	return [
+		'http://127.0.0.1:8080',
+		'https://ipfs.io',
+		'https://dweb.link',
+		'https://cloudflare-ipfs.com'
+	];
 }
 
 const sha256File = (path: string): string =>
@@ -136,10 +149,15 @@ async function acquireFromChain(
 	work: string
 ): Promise<SelectedSnapshotOp> {
 	const signer = (flag('signer') ?? INDEXER_SNAPSHOT_SIGNER_DEFAULT).toLowerCase();
-	const limit = Math.max(1, Math.min(10_000, parseInt(flag('history-limit') ?? '1000', 10) || 1000));
+	const limit = Math.max(
+		1,
+		Math.min(10_000, parseInt(flag('history-limit') ?? '1000', 10) || 1000)
+	);
 	const pinnedPubkey = snapshotSignerPubkey(config, signer);
 
-	process.stderr.write(`\nsnapshot: reading @${signer}'s chain history for the newest indexer_snapshot_v1 …\n`);
+	process.stderr.write(
+		`\nsnapshot: reading @${signer}'s chain history for the newest indexer_snapshot_v1 …\n`
+	);
 	const blurt = new BlurtClient(config);
 	// v1.18.0 deep-deep (rv2-1): this used to be ONE callCondenser — the
 	// fastest endpoint alone decided which op (and so which dump) this node
@@ -156,7 +174,9 @@ async function acquireFromChain(
 			minAgree: 2
 		});
 	} catch (e) {
-		die(`could not read @${signer}'s snapshot op from the chain: ${e instanceof Error ? e.message : String(e)}`);
+		die(
+			`could not read @${signer}'s snapshot op from the chain: ${e instanceof Error ? e.message : String(e)}`
+		);
 	}
 	if (!resolved.ok) {
 		die(
@@ -174,7 +194,9 @@ async function acquireFromChain(
 
 	// Early chain gate — refuse before spending bandwidth on another chain's state.
 	if (op.chain_id !== config.chainId) {
-		die(`snapshot op is for chain '${op.chain_id}', this node indexes '${config.chainId}'. Refusing.`);
+		die(
+			`snapshot op is for chain '${op.chain_id}', this node indexes '${config.chainId}'. Refusing.`
+		);
 	}
 
 	// Sources. Trust comes from op.sha256 (which @morphit signed and we prove every
@@ -201,8 +223,8 @@ async function acquireFromChain(
 		die(
 			hiddenOnly
 				? 'this node is hidden-only and no federation peer advertises a Tor/I2P address on-chain yet, ' +
-					'so the snapshot cannot be fetched privately. Refusing to reach for a clearnet gateway. ' +
-					'Full replay still works: set MORPHIT_INDEXER_START_BLOCK to genesis and start the indexer.'
+						'so the snapshot cannot be fetched privately. Refusing to reach for a clearnet gateway. ' +
+						'Full replay still works: set MORPHIT_INDEXER_START_BLOCK to genesis and start the indexer.'
 				: 'no usable snapshot source could be built from the on-chain op.'
 		);
 	}
@@ -227,7 +249,9 @@ async function acquireFromChain(
 			process.stderr.write('  ✗ download failed — trying the next source.\n');
 			continue;
 		}
-		const untar = spawnSync('tar', ['-xzf', tarPath, '-C', work], { stdio: ['ignore', 'inherit', 'inherit'] });
+		const untar = spawnSync('tar', ['-xzf', tarPath, '-C', work], {
+			stdio: ['ignore', 'inherit', 'inherit']
+		});
 		if (untar.status !== 0 || !existsSync(manifestPath) || !existsSync(dumpPath)) {
 			process.stderr.write('  ✗ archive did not unpack cleanly — trying the next source.\n');
 			continue;
@@ -242,9 +266,10 @@ async function acquireFromChain(
 		process.stderr.write('  ✓ downloaded + sha256 matches the signed on-chain op.\n');
 		return sel;
 	}
-	die('every source failed to yield a snapshot matching the on-chain sha256. Try again later, set --gateway, or do a full replay.');
+	die(
+		'every source failed to yield a snapshot matching the on-chain sha256. Try again later, set --gateway, or do a full replay.'
+	);
 }
-
 
 /**
  * The public key a snapshot op from `signer` must be signed with (rv2-1).
@@ -266,16 +291,52 @@ function snapshotSignerPubkey(config: ReturnType<typeof loadConfig>, signer: str
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
 /**
- * Does this psql understand `\restrict`? The restore depends on it: it is what
- * makes psql refuse every meta-command in the dump (see snapshotDumpSanitize).
- * It shipped in PostgreSQL 18 and in the August 2025 minor releases of 13–17.
+ * Can this box restore a snapshot safely? The restore depends on psql's
+ * `\restrict`: it is what makes psql refuse every meta-command in the dump (see
+ * snapshotDumpSanitize). It shipped in PostgreSQL 18 and in the August 2025
+ * minor releases of 13–17.
+ *
+ * Three different answers, because each needs a different fix: psql is not
+ * installed at all; psql cannot reach the indexer's database; or psql is there
+ * and connected but does not know `\restrict`. The last one used to be the
+ * answer for all three, so a missing client or a stopped database read as
+ * "your psql is too old".
  */
-function psqlSupportsRestrict(dbUrl: string): boolean {
-	const r = spawnSync('psql', ['-X', '-q', '-v', 'ON_ERROR_STOP=1', dbUrl], {
+type PsqlReadiness =
+	| { ok: true }
+	| { ok: false; why: 'missing' }
+	| { ok: false; why: 'unreachable'; detail: string }
+	| { ok: false; why: 'too-old' };
+
+function psqlReadiness(dbUrl: string): PsqlReadiness {
+	const connect = spawnSync(
+		'psql',
+		['-X', '-q', '-v', 'ON_ERROR_STOP=1', '-c', 'SELECT 1', dbUrl],
+		{
+			stdio: ['ignore', 'ignore', 'pipe'],
+			encoding: 'utf8',
+			timeout: 30_000
+		}
+	);
+	if ((connect.error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT')
+		return { ok: false, why: 'missing' };
+	if (connect.status !== 0) {
+		// psql's own words, without the connection string (it can carry the password).
+		const detail =
+			(connect.stderr ?? '')
+				.split(dbUrl)
+				.join('<database url>')
+				.trim()
+				.split('\n')[0]
+				?.replace(/[\u0000-\u001f\u007f]/g, '') ?? '';
+		return { ok: false, why: 'unreachable', detail };
+	}
+	const probe = spawnSync('psql', ['-X', '-q', '-v', 'ON_ERROR_STOP=1', dbUrl], {
 		input: '\\restrict k0\n\\unrestrict k0\n',
-		stdio: ['pipe', 'ignore', 'ignore']
+		stdio: ['pipe', 'ignore', 'ignore'],
+		timeout: 30_000
 	});
-	return r.status === 0;
+	return probe.status === 0 ? { ok: true } : { ok: false, why: 'too-old' };
 }
 
 /**
@@ -350,7 +411,9 @@ async function main(): Promise<void> {
 		if (fromChain) {
 			chainOp = await acquireFromChain(config, work);
 		} else {
-			const untar = spawnSync('tar', ['-xzf', snapshotPath!, '-C', work], { stdio: ['ignore', 'inherit', 'inherit'] });
+			const untar = spawnSync('tar', ['-xzf', snapshotPath!, '-C', work], {
+				stdio: ['ignore', 'inherit', 'inherit']
+			});
 			if (untar.status !== 0) die('could not extract the snapshot archive.');
 		}
 		const manifestPath = join(work, MANIFEST_FILENAME);
@@ -376,11 +439,17 @@ async function main(): Promise<void> {
 			// Cross-check the SIGNED op against the manifest. Any disagreement means
 			// the tarball's metadata was tampered with relative to what @signer signed.
 			const mism: string[] = [];
-			if (manifest.chainId !== op.chain_id) mism.push(`chain_id (manifest ${manifest.chainId} ≠ op ${op.chain_id})`);
-			if (manifest.schemaVersion !== op.schema_version) mism.push(`schema_version (manifest ${manifest.schemaVersion} ≠ op ${op.schema_version})`);
-			if (manifest.lastAppliedBlock !== op.last_applied_block) mism.push(`last_applied_block (manifest ${manifest.lastAppliedBlock} ≠ op ${op.last_applied_block})`);
+			if (manifest.chainId !== op.chain_id)
+				mism.push(`chain_id (manifest ${manifest.chainId} ≠ op ${op.chain_id})`);
+			if (manifest.schemaVersion !== op.schema_version)
+				mism.push(`schema_version (manifest ${manifest.schemaVersion} ≠ op ${op.schema_version})`);
+			if (manifest.lastAppliedBlock !== op.last_applied_block)
+				mism.push(
+					`last_applied_block (manifest ${manifest.lastAppliedBlock} ≠ op ${op.last_applied_block})`
+				);
 			if (mism.length > 0) {
-				for (const m of mism) process.stderr.write(`  ✗ signed op disagrees with the manifest: ${m}\n`);
+				for (const m of mism)
+					process.stderr.write(`  ✗ signed op disagrees with the manifest: ${m}\n`);
 				die('the tarball was altered relative to the on-chain op — refusing.');
 			}
 		}
@@ -461,7 +530,9 @@ async function main(): Promise<void> {
 
 		// ── gate 4: don't clobber a DB that already has real data ─
 		const st = await db
-			.query<{ last_applied_block: string }>('SELECT last_applied_block::text FROM indexer_state LIMIT 1')
+			.query<{
+				last_applied_block: string;
+			}>('SELECT last_applied_block::text FROM indexer_state LIMIT 1')
 			.catch(() => ({ rows: [] as Array<{ last_applied_block: string }> }));
 		const existing = st.rows.length > 0 ? parseInt(st.rows[0]!.last_applied_block, 10) : -1;
 		if (existing > config.startBlock && !has('force')) {
@@ -481,10 +552,25 @@ async function main(): Promise<void> {
 		// `\restrict` mode with a key only this run knows, so psql itself refuses
 		// any meta-command anywhere in the dump, and the whole restore is ONE
 		// transaction — any failure leaves the existing database as it was.
-		process.stderr.write(`\nsnapshot: restoring into the indexer DB (this replaces existing objects)…\n`);
-		if (!psqlSupportsRestrict(config.databaseUrl)) {
+		process.stderr.write(
+			`\nsnapshot: restoring into the indexer DB (this replaces existing objects)…\n`
+		);
+		const psql = psqlReadiness(config.databaseUrl);
+		if (!psql.ok) {
+			if (psql.why === 'missing') {
+				die(
+					'psql is not installed on this box, and the restore needs it. Install the postgresql-client ' +
+						'package (a release from August 2025 or later) and re-run. Nothing was changed.'
+				);
+			}
+			if (psql.why === 'unreachable') {
+				die(
+					`psql could not reach the indexer's database${psql.detail ? ` (${psql.detail})` : ''}. Check that ` +
+						'Postgres is running and DATABASE_URL is right, then re-run. Nothing was changed.'
+				);
+			}
 			die(
-				'this box\'s psql is too old to restore a snapshot safely (it needs \\restrict, added in the ' +
+				"this box's psql is too old to restore a snapshot safely (it needs \\restrict, added in the " +
 					'August 2025 PostgreSQL client releases: 13.22, 14.19, 15.14, 16.10, 17.6 or 18). Update the ' +
 					'postgresql-client package and re-run. Nothing was changed.'
 			);
@@ -502,11 +588,22 @@ async function main(): Promise<void> {
 			if (e instanceof DumpRefusedError) {
 				die(`refusing this snapshot: ${e.message}. Nothing was changed.`);
 			}
-			die(`could not read the snapshot dump: ${e instanceof Error ? e.message : String(e)}. Nothing was changed.`);
+			die(
+				`could not read the snapshot dump: ${e instanceof Error ? e.message : String(e)}. Nothing was changed.`
+			);
 		}
 		const restore = spawnSync(
 			'psql',
-			['-X', '-q', '-v', 'ON_ERROR_STOP=1', '--single-transaction', '-f', sqlPath, config.databaseUrl],
+			[
+				'-X',
+				'-q',
+				'-v',
+				'ON_ERROR_STOP=1',
+				'--single-transaction',
+				'-f',
+				sqlPath,
+				config.databaseUrl
+			],
 			{ stdio: ['ignore', 'ignore', 'inherit'] }
 		);
 		if (restore.status !== 0) {
@@ -523,7 +620,8 @@ async function main(): Promise<void> {
 		if (after.rows.length === 0) die('post-restore indexer_state is empty — restore did not take.');
 		const gotBlock = parseInt(after.rows[0]!.last_applied_block, 10);
 		const gotChain = after.rows[0]!.chain_id;
-		if (gotChain !== manifest.chainId) die(`post-restore chain_id '${gotChain}' != manifest '${manifest.chainId}'.`);
+		if (gotChain !== manifest.chainId)
+			die(`post-restore chain_id '${gotChain}' != manifest '${manifest.chainId}'.`);
 
 		process.stderr.write(
 			`\n✓ restored to block ${gotBlock.toLocaleString()} (chain ${gotChain}).\n`
@@ -560,12 +658,19 @@ async function main(): Promise<void> {
 		try {
 			const scrubbed = await scrubRestoredLocalState(db);
 			if (scrubbed > 0) {
-				process.stderr.write(`  local-only rows from the publisher left out: ${scrubbed.toLocaleString()}.\n`);
+				process.stderr.write(
+					`  local-only rows from the publisher left out: ${scrubbed.toLocaleString()}.\n`
+				);
 			}
-			const schemaSql = readFileSync(join(REPO_ROOT, 'apps', 'indexer', 'src', 'db', 'schema.sql'), 'utf8');
+			const schemaSql = readFileSync(
+				join(REPO_ROOT, 'apps', 'indexer', 'src', 'db', 'schema.sql'),
+				'utf8'
+			);
 			const dropped = await dropRoutinesNotInSchema(db, schemaSql);
 			if (dropped.length > 0) {
-				process.stderr.write(`  removed ${dropped.length} object(s) the snapshot added that Morphit does not define:\n`);
+				process.stderr.write(
+					`  removed ${dropped.length} object(s) the snapshot added that Morphit does not define:\n`
+				);
 				for (const d of dropped.slice(0, 20)) process.stderr.write(`      ${d}\n`);
 			}
 		} catch (err) {

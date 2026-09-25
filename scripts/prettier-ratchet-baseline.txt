@@ -96,8 +96,6 @@ apps/indexer/scripts/rss-orderbook-filters-smoke.ts
 apps/indexer/scripts/rss-orderbook-smoke.ts
 apps/indexer/scripts/schema-migration-coverage-smoke.ts
 apps/indexer/scripts/shared-relay-account-guard-smoke.ts
-apps/indexer/scripts/snapshot-bootstrap.ts
-apps/indexer/scripts/snapshot-export.ts
 apps/indexer/scripts/snapshot-manifest-smoke.ts
 apps/indexer/scripts/snapshot-mirror.ts
 apps/indexer/scripts/snapshot-mirrors-smoke.ts
@@ -791,7 +789,6 @@ scripts/canary-tor-only-routing-smoke.ts
 scripts/canary/verify.ts
 scripts/chat-inbox-instant-subject-smoke.ts
 scripts/chat-wire-payload-contract-smoke.ts
-scripts/ci-workflow-hardening-smoke.ts
 scripts/collect-install-inputs-smoke.ts
 scripts/csp-header-consistency-smoke.ts
 scripts/ddns-role-smoke.ts

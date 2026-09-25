@@ -1102,6 +1102,30 @@ The first upgrade to 1.18.0 is still run by the previous version's upgrade
 program, so a few of these protections take effect from the next upgrade on.
 OPERATIONS.md §25b lists which.
 
+### Found by the release's first CI run
+
+- **A snapshot export could leave out rows and still report success.** The
+  export writes one table in two steps: the database dump, then that table's
+  shared rows added by a second tool. If the second tool failed, its failure was
+  swallowed and the snapshot was published without those rows. Every step now
+  has to succeed, or the export stops and says so. A new test runs the export
+  with each database tool broken in turn and expects it to refuse.
+- **"Your psql is too old" was the answer to three different problems.**
+  Restoring a snapshot needs a recent `psql` (August 2025 or later). When psql
+  was not installed at all, or could not reach the database, the restore still
+  said it was too old. It now says which of the three it is, so the fix it
+  suggests is the right one. It still changes nothing in all three cases, and it
+  never prints the database address (which can hold the password).
+- **The test machine itself had an old psql.** Its restore tests died at that
+  check before they read the snapshot. Some of them looked like passes, because
+  "refused, and nothing changed" is also what those tests expect from a hostile
+  snapshot. The test machine now installs the current PostgreSQL 16 client tools
+  from PostgreSQL's own package repository. Their signing key is checked
+  against its published fingerprint before anything is installed. Before any
+  test runs, the machine also proves that psql accepts the safety mode the
+  restore relies on. A check on the test setup keeps all of that in place, and a
+  new test fails outright on any machine whose psql lacks it.
+
 ### Also fixed
 
 - **Starting a chat now works on a privacy-only instance.** Opening a

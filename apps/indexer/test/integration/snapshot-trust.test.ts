@@ -17,7 +17,16 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as http from 'node:http';
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+	chmodSync,
+	existsSync,
+	mkdtempSync,
+	readFileSync,
+	readdirSync,
+	rmSync,
+	symlinkSync,
+	writeFileSync
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -359,6 +368,22 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 			expect(LOCAL_ONLY_TABLES.filter((t) => CHAIN_DERIVED_TABLES.includes(t))).toEqual([]);
 		});
 
+		it('an export whose database tools fail says so — never a quietly incomplete snapshot', async () => {
+			// CI found this: with no working psql on the box, the chain rows of
+			// operator_blocks were silently left out and the export still exited 0,
+			// because the brace group's status was its LAST command's (a printf).
+			for (const tool of ['psql', 'pg_dump']) {
+				const bin = mkdtempSync(join(work, `broken-${tool}-`));
+				writeFileSync(join(bin, tool), '#!/bin/sh\necho "stub $0 failing" >&2\nexit 2\n');
+				chmodSync(join(bin, tool), 0o755);
+				const r = await run('snapshot-export.ts', ['--out', join(work, `out-broken-${tool}`)], {
+					...env(SRC),
+					PATH: `${bin}:${process.env.PATH ?? ''}`
+				});
+				expect(r.code, `export with a failing ${tool} exited ${r.code}`).not.toBe(0);
+			}
+		}, 120_000);
+
 		it('the real export leaves out every local-only row and ownership (rv2-5, rv2-8)', () => {
 			const w = mkdtempSync(join(work, 'x-'));
 			spawnSync('tar', ['-xzf', baseTar, '-C', w]);
@@ -399,6 +424,75 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 			expect(r.code).not.toBe(0);
 			expect(await dstIntact()).toBe(true);
 		}, 60_000);
+
+		it("this box's psql accepts \\restrict — without it every restore test here passes for the wrong reason", () => {
+			// The refusal tests above assert "non-zero exit, database intact". A box
+			// whose psql lacks \restrict gives exactly that too, before the dump is
+			// ever read — so on such a box they prove nothing. Say so, here.
+			const r = spawnSync('psql', ['-X', '-q', '-v', 'ON_ERROR_STOP=1', TEST_DATABASE_URL!], {
+				input: '\\restrict k0\n\\unrestrict k0\n',
+				encoding: 'utf8'
+			});
+			expect(r.error, 'psql is not installed on this box').toBeUndefined();
+			expect(r.status, `this box's psql does not accept \\restrict: ${r.stderr}`).toBe(0);
+		});
+
+		it('a box that cannot restore is told WHY: psql missing, database unreachable and psql too old are three different answers', async () => {
+			const t = tarball(work, baseTar, (s) => s);
+			// Only what the restore needs before it reaches psql — and no psql.
+			const noPsql = mkdtempSync(join(work, 'no-psql-'));
+			for (const tool of ['tar', 'gzip']) {
+				const at = spawnSync('sh', ['-c', `command -v ${tool}`], {
+					encoding: 'utf8'
+				}).stdout.trim();
+				symlinkSync(at, join(noPsql, tool));
+			}
+			symlinkSync(process.execPath, join(noPsql, 'node'));
+			// A psql that connects fine but predates \restrict.
+			const oldPsql = mkdtempSync(join(work, 'old-psql-'));
+			const realPsql = spawnSync('sh', ['-c', 'command -v psql'], {
+				encoding: 'utf8'
+			}).stdout.trim();
+			writeFileSync(
+				join(oldPsql, 'psql'),
+				'#!/bin/sh\nfor a in "$@"; do [ "$a" = "-c" ] && exec ' +
+					realPsql +
+					' "$@"; done\ncat >/dev/null\necho "invalid command \\\\restrict" >&2\nexit 3\n'
+			);
+			chmodSync(join(oldPsql, 'psql'), 0o755);
+			const closed = new URL(dbUrl(DST));
+			closed.port = '1';
+
+			const cases = {
+				missing: { PATH: noPsql },
+				unreachable: { MORPHIT_INDEXER_DATABASE_URL: closed.toString() },
+				tooOld: { PATH: `${oldPsql}:${process.env.PATH ?? ''}` }
+			};
+			const said: Record<string, string> = {};
+			for (const [name, over] of Object.entries(cases)) {
+				await freshDst();
+				const r = await run('snapshot-bootstrap.ts', [t.tar, '--i-trust-this-source', '--force'], {
+					...env(DST),
+					...over
+				});
+				expect(r.code, `${name}: ${r.err}`).not.toBe(0);
+				expect(await dstIntact(), `${name}: the database was touched`).toBe(true);
+				said[name] = r.err.trim().split('\n').pop() ?? '';
+				// The connection string can carry the password: never echoed.
+				expect(r.err, `${name}: the database URL was printed`).not.toContain(
+					new URL(dbUrl(DST)).password ? `:${new URL(dbUrl(DST)).password}@` : dbUrl(DST)
+				);
+			}
+			// Only the box whose psql really is too old is told to upgrade it.
+			expect(said.tooOld).toMatch(/too old/);
+			expect(said.missing, 'a box with no psql was told its psql is too old').not.toMatch(
+				/too old/
+			);
+			expect(said.unreachable, 'a stopped database was reported as an old psql').not.toMatch(
+				/too old/
+			);
+			expect(new Set(Object.values(said)).size, JSON.stringify(said)).toBe(3);
+		}, 120_000);
 
 		it('an older-style dump (owner, local rows, foreign code) restores under another role and is tidied (rv2-8, rv2-5, rv2-1c)', async () => {
 			await freshDst();

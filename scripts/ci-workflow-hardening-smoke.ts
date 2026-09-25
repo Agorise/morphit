@@ -178,7 +178,10 @@ for (const wf of workflowFiles) {
 }
 
 if (allJobs.length === 0) {
-	fail('at least one job parsed from workflows', 'parser found zero jobs — convention drift suspected');
+	fail(
+		'at least one job parsed from workflows',
+		'parser found zero jobs — convention drift suspected'
+	);
 }
 
 /* ---------------- invariant 1: every job has timeout-minutes ---------------- */
@@ -193,7 +196,9 @@ if (noTimeout.length === 0) {
 		'every CI job declares timeout-minutes',
 		`missing timeout-minutes: ${noTimeout
 			.map((j) => `${j.workflow}::${j.name} (line ${j.startLine})`)
-			.join('; ')}.  cp145 added this invariant — without timeout-minutes, a hung step burns the runner's default ceiling (often unlimited on Forgejo).  Pick a value 2-3x the observed runtime of the job and add \`timeout-minutes: N\` directly under runs-on.`
+			.join(
+				'; '
+			)}.  cp145 added this invariant — without timeout-minutes, a hung step burns the runner's default ceiling (often unlimited on Forgejo).  Pick a value 2-3x the observed runtime of the job and add \`timeout-minutes: N\` directly under runs-on.`
 	);
 }
 
@@ -202,7 +207,8 @@ if (noTimeout.length === 0) {
 const TIMEOUT_MIN = 1;
 const TIMEOUT_MAX = 90;
 const outOfRange = allJobs.filter(
-	(j) => j.timeoutMinutes !== null && (j.timeoutMinutes < TIMEOUT_MIN || j.timeoutMinutes > TIMEOUT_MAX)
+	(j) =>
+		j.timeoutMinutes !== null && (j.timeoutMinutes < TIMEOUT_MIN || j.timeoutMinutes > TIMEOUT_MAX)
 );
 if (outOfRange.length === 0) {
 	pass(`every timeout-minutes is in sane range (${TIMEOUT_MIN}..${TIMEOUT_MAX})`);
@@ -211,13 +217,21 @@ if (outOfRange.length === 0) {
 		`every timeout-minutes is in sane range (${TIMEOUT_MIN}..${TIMEOUT_MAX})`,
 		`out-of-range timeouts: ${outOfRange
 			.map((j) => `${j.workflow}::${j.name}=${j.timeoutMinutes}`)
-			.join('; ')}.  Values <${TIMEOUT_MIN} are typos; values >${TIMEOUT_MAX} defeat the purpose of having a ceiling.  If a job genuinely needs >${TIMEOUT_MAX}min, consider splitting it into stages.`
+			.join(
+				'; '
+			)}.  Values <${TIMEOUT_MIN} are typos; values >${TIMEOUT_MAX} defeat the purpose of having a ceiling.  If a job genuinely needs >${TIMEOUT_MAX}min, consider splitting it into stages.`
 	);
 }
 
 /* ---------------- invariant 3: concrete runs-on (no -latest) ---------------- */
 
-const movingTargetAliases = ['ubuntu-latest', 'macos-latest', 'windows-latest', 'macos-12', 'macos-11'];
+const movingTargetAliases = [
+	'ubuntu-latest',
+	'macos-latest',
+	'windows-latest',
+	'macos-12',
+	'macos-11'
+];
 const movingTarget = allJobs.filter(
 	(j) => j.runsOn !== null && movingTargetAliases.includes(j.runsOn)
 );
@@ -230,7 +244,9 @@ if (movingTarget.length === 0) {
 		'every job pins runs-on to a concrete OS version',
 		`moving-target aliases: ${movingTarget
 			.map((j) => `${j.workflow}::${j.name}=${j.runsOn}`)
-			.join('; ')}.  Use a concrete version like ubuntu-24.04 — moving-target aliases break reproducibility when GitHub/Forgejo rotates what -latest points at.`
+			.join(
+				'; '
+			)}.  Use a concrete version like ubuntu-24.04 — moving-target aliases break reproducibility when GitHub/Forgejo rotates what -latest points at.`
 	);
 }
 
@@ -279,6 +295,51 @@ for (const wf of workflowFiles) {
 		);
 	} else {
 		pass(`${rel}: apt-get update is container-executor-clean (plain, root, real sources)`);
+	}
+}
+
+/* ---------------- invariant 5: the integration job has the client tools its suites run ----------------
+ *
+ * v1.18.0 (CI run 2061). The snapshot suites run the REAL export (pg_dump + psql
+ * \copy) and the REAL restore, which refuses a psql without `\restrict` (16.10+).
+ * The job container's own client is not that: every restore died with "psql is
+ * too old" before reading the dump — which the refusal tests could not tell
+ * apart from a real refusal. The integration job must install the 16.x client
+ * from PGDG, trust that repository only by the key's checked fingerprint, and
+ * prove `\restrict` works, all before the tests run.
+ */
+{
+	const ci = join(WORKFLOWS_DIR, 'ci.yml');
+	const text = readFileSync(ci, 'utf8');
+	const start = text.search(/^ {2}integration:\s*$/m);
+	const rest = start < 0 ? '' : text.slice(start + 1);
+	const nextJob = rest.search(/^ {2}[A-Za-z0-9_-]+:\s*$/m);
+	const job = nextJob < 0 ? rest : rest.slice(0, nextJob);
+	const code = job
+		.split('\n')
+		.filter((ln) => !/^\s*#/.test(ln))
+		.join('\n');
+	const at = (re: RegExp): number => code.search(re);
+	const tests = at(/npm run test:integration/);
+	const install = at(/apt-get install[^\n]*postgresql-client-16/);
+	const fingerprint = at(/B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8/);
+	const signedBy = at(/signed-by=[^\]\s]+apt\.postgresql\.org/);
+	const restrict = at(/\\\\restrict k0[^\n]*\|\s*psql[^\n]*ON_ERROR_STOP=1/);
+	const name =
+		'.forgejo/workflows/ci.yml: the integration job installs psql/pg_dump 16 with \\restrict before its tests';
+	if (start < 0 || tests < 0) {
+		fail(name, 'could not find the integration job or its `npm run test:integration` step');
+	} else if (install < 0 || install > tests) {
+		fail(name, 'no `apt-get install … postgresql-client-16` before the integration tests');
+	} else if (signedBy < 0 || fingerprint < 0 || fingerprint > install) {
+		fail(
+			name,
+			'the PGDG repository must be added with signed-by and its key checked against the fingerprint B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8 before anything is installed from it'
+		);
+	} else if (restrict < 0 || restrict < install || restrict > tests) {
+		fail(name, 'nothing proves, before the tests, that the installed psql accepts \\restrict');
+	} else {
+		pass(name);
 	}
 }
 
